@@ -5068,6 +5068,7 @@ void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp,
      * which is what an aggregate is for. */
     add(nb_path_strategy->reserved_names());
     add(nb_mpu_strategy->reserved_names());
+    reserved_names.exact.emplace_back(nsfs::BUCKET_META_LOCK);
     reserved_names.prefixes.emplace_back(nsfs::TMP_LINK_PREFIX);
     reserved_names.prefixes.emplace_back(nsfs::UNLINK_TMP_PREFIX);
     reserved_names.prefixes.emplace_back(nsfs::CLONE_PARENT_PREFIX);
@@ -8040,6 +8041,17 @@ int NSFSBucket::release_nsfs_state(const DoutPrefixProvider* dpp)
     }
   }
 
+  ret = write_bucket_state(dpp, [&]() -> int {
+    return ((::unlinkat(dir->get_fd(),
+			std::string(nsfs::BUCKET_META_LOCK).c_str(), 0) < 0) &&
+	    (errno != ENOENT)) ? -errno : 0;
+  });
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: removing " << nsfs::BUCKET_META_LOCK
+      << " from bucket " << get_name() << ": " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
   /* The version lockfile too:  it is the gateway's mutex, which NooBaa
    * never writes, and no object.  `.versions` stays:  it is NooBaa's
    * layout as much as ours, so it is not ours alone to remove. */
@@ -10478,6 +10490,12 @@ int NSFSBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
   RGWBucketInfo bak_info = info;
   ret = bucket_state_strategy()->load(dpp, dir->get_fd(), get_name(),
 				      attrs, info);
+  /* what the directory holds, which a write compares with */
+  loaded_attrs = attrs;
+  loaded_info.reset();
+  if (ret == 0) {
+    loaded_info = info;
+  }
   if (ret == -ENOENT) {
     /* No nsfs state.  A base bucket may still have a record in
      * NooBaa's store, and that is where its versioning lives.  When
@@ -10803,6 +10821,76 @@ int NSFSBucket::put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::re
   return write_attrs(dpp, y);
 }
 
+/* The bucket_info a write leaves:  `cur`, what the directory holds now,
+ * with each field the handle changed -- `now` against `was`, what it
+ * loaded -- taken from `now`, and `flags` bit by bit.  The fields are
+ * the ones an operation changes.  A change to one not listed is found by
+ * putting the listed ones back and comparing, and the handle's whole
+ * info is then taken, as every write took it before, and logged. */
+static RGWBucketInfo merge_bucket_info(const DoutPrefixProvider* dpp,
+				       const std::string& bucket,
+				       const RGWBucketInfo& was,
+				       const RGWBucketInfo& now,
+				       RGWBucketInfo cur)
+{
+  /* by ==, and by encoding where a type has none */
+  auto differs = [](const auto& a, const auto& b) {
+    if constexpr (requires { a == b; }) {
+      return !(a == b);
+    } else {
+      using ceph::encode;
+      bufferlist abl, bbl;
+      encode(a, abl);
+      encode(b, bbl);
+      return !abl.contents_equal(bbl);
+    }
+  };
+  RGWBucketInfo rest = now;
+  auto take = [&](auto field) {
+    if (differs(now.*field, was.*field)) {
+      cur.*field = now.*field;
+    }
+    rest.*field = was.*field;
+  };
+
+  const uint32_t flipped = now.flags ^ was.flags;
+  cur.flags = (cur.flags & ~flipped) | (now.flags & flipped);
+  rest.flags = was.flags;
+  take(&RGWBucketInfo::owner);
+  take(&RGWBucketInfo::quota);
+  take(&RGWBucketInfo::requester_pays);
+  take(&RGWBucketInfo::has_website);
+  take(&RGWBucketInfo::website_conf);
+  take(&RGWBucketInfo::swift_versioning);
+  take(&RGWBucketInfo::swift_ver_location);
+  take(&RGWBucketInfo::obj_lock);
+  take(&RGWBucketInfo::sync_policy);
+  take(&RGWBucketInfo::mdsearch_config);
+
+  if (differs(rest, was)) {
+    ldpp_dout(dpp, 0) << "ERROR: bucket " << bucket << ":  a write changed a "
+      << "field of its bucket_info the merge does not list;  writing the "
+      << "handle's whole info, which can undo a concurrent write" << dendl;
+    return now;
+  }
+  return cur;
+}
+
+/* Write what this handle changed of the bucket's metadata, and nothing
+ * else (DECISIONS.md 2026-11-05).
+ *
+ * A request loads the bucket, changes one thing and writes.  Writing
+ * the whole of what it loaded undid whatever another request wrote in
+ * between:  a policy write removed a tag set written after its load,
+ * and an attribute write turned versioning back off.  So the attributes
+ * go as a delta against what was loaded, each set or removal atomic on
+ * its own, and bucket_info, the one value holding many fields, is
+ * re-read and merged field by field under the bucket's metadata lock.
+ *
+ * The lock is version_lock()'s, on `.bucket_meta_lock` at the root:  an
+ * OFD lock, or GPFS's cluster-wide LWE right where it has one.  No
+ * -ECANCELED and retry, which is RADOS's answer and costs a round trip
+ * a race. */
 int NSFSBucket::write_attrs(const DoutPrefixProvider* dpp, optional_yield y)
 {
   int ret = dir->open(dpp);
@@ -10810,14 +10898,92 @@ int NSFSBucket::write_attrs(const DoutPrefixProvider* dpp, optional_yield y)
     return ret;
   }
 
+  int lfd = -1;
+  ret = write_bucket_state(dpp, [&]() -> int {
+    lfd = ::openat(dir->get_fd(), std::string(nsfs::BUCKET_META_LOCK).c_str(),
+		   O_RDWR | O_CREAT | O_NOFOLLOW | O_CLOEXEC,
+		   nsfs::file_create_mode());
+    return (lfd < 0) ? -errno : 0;
+  });
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: opening " << nsfs::BUCKET_META_LOCK
+      << " of bucket " << get_name() << ": " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+  /* In the tree like any object:  NooBaa's object mode, and, when the
+   * gateway made it, its directory's owner, as `.versions/.lock` has
+   * (open_versions_lockfile()), so the bucket's own identity can read
+   * it. */
+  struct statx lstx{};
+  if ((statx_ids(lfd, lstx) == 0) && (lstx.stx_uid == ::geteuid())) {
+    (void) nsfs::apply_create_mode(dpp, lfd, nsfs::file_create_mode(), y);
+    struct statx dstx{};
+    if ((statx_ids(dir->get_fd(), dstx) == 0) &&
+	((dstx.stx_uid != lstx.stx_uid) || (dstx.stx_gid != lstx.stx_gid))) {
+      (void) chown_raised(dpp, lfd, "", dstx.stx_uid, dstx.stx_gid);
+    }
+  }
+  /* closes the descriptor when it goes */
+  auto lock = driver->get_fs_strategy()->version_lock(dpp, lfd);
+
+  /* What the directory holds now, which another handle may have written
+   * since this one loaded.  Read as load_bucket() reads it. */
+  Attrs disk;
+  ret = dir->read_attrs(dpp, y, disk);
+  if (ret < 0) {
+    return ret;
+  }
+  RGWBucketInfo cur = info;
+  ret = bucket_state_strategy()->load(dpp, dir->get_fd(), get_name(), disk,
+				      cur);
+  if ((ret < 0) && (ret != -ENOENT)) {
+    return ret;
+  }
+  /* Merged where both the directory and this handle's load have one;
+   * otherwise the handle's, which is how a base bucket's state from
+   * NooBaa's record is first written down. */
+  const RGWBucketInfo out = ((ret == 0) && loaded_info)
+    ? merge_bucket_info(dpp, get_name(), *loaded_info, info, cur) : info;
+
+  Attrs set;
+  for (const auto& [k, v] : attrs) {
+    auto i = loaded_attrs.find(k);
+    if ((i == loaded_attrs.end()) || !i->second.contents_equal(v)) {
+      set[k] = v;
+    }
+  }
+  std::vector<std::string> rm;
+  for (const auto& [k, v] : loaded_attrs) {
+    if (!attrs.contains(k)) {
+      rm.push_back(k);
+    }
+  }
+
   bufferlist bl;
-  encode(info, bl);
+  encode(out, bl);
   Attrs extra_attrs;
   extra_attrs[nsfs::BUCKET_INFO_KEY] = bl;
-
-  return write_bucket_state(dpp, [&]() -> int {
-    return dir->write_attrs(dpp, y, attrs, &extra_attrs);
+  ret = write_bucket_state(dpp, [&]() -> int {
+    return dir->write_attrs(dpp, y, set, &extra_attrs, AttrWriteMode::DELTA,
+			    &rm);
   });
+  if (ret < 0) {
+    return ret;
+  }
+
+  /* The handle now holds what the directory does:  its own changes and
+   * what another wrote, so its next write compares with that. */
+  for (const auto& [k, v] : set) {
+    disk[k] = v;
+  }
+  for (const auto& k : rm) {
+    disk.erase(k);
+  }
+  attrs = disk;
+  loaded_attrs = disk;
+  info = out;
+  loaded_info = out;
+  return 0;
 }
 
 int NSFSBucket::check_empty(const DoutPrefixProvider* dpp, optional_yield y)

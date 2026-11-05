@@ -966,6 +966,129 @@ public:
   }
 };
 
+/* Two writers of one bucket's state, each on its own handle, as two
+ * concurrent requests are, interleaved by hand.  The second must not
+ * silently undo the first.  RGW wraps a bucket write in
+ * retry_raced_bucket_write() (rgw_op.h), which refreshes the bucket and
+ * retries on -ECANCELED, so the second write either carries the first's
+ * state or is refused with -ECANCELED (the lost-update race,
+ * NSFS_WORK_PLAN.md §3). */
+class NSFSBucketRaceTest : public NSFSBucketTest {
+public:
+  std::unique_ptr<rgw::sal::Bucket> handle() {
+    std::unique_ptr<rgw::sal::Bucket> h;
+    EXPECT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname}, &h,
+				  null_yield), 0);
+    return h;
+  }
+
+  static rgw::sal::Attrs one(const char* key, const std::string& v) {
+    bufferlist bl;
+    bl.append(v);
+    return {{key, bl}};
+  }
+};
+
+TEST_F(NSFSBucketRaceTest, AnAttributeWriteKeepsAnotherHandlesAttribute)
+{
+  auto a = handle();
+  auto b = handle();
+
+  auto tags = one(RGW_ATTR_TAGS, "tags-from-a");
+  ASSERT_EQ(a->merge_and_store_attrs(env->dpp, tags, null_yield), 0);
+  auto policy = one(RGW_ATTR_IAM_POLICY, "{\"Version\":\"2012-10-17\"}");
+  const int r = b->merge_and_store_attrs(env->dpp, policy, null_yield);
+  if (r == -ECANCELED) {
+    return;   /* refused, for the caller to refresh and retry */
+  }
+  ASSERT_EQ(r, 0);
+
+  auto fresh = handle();
+  EXPECT_TRUE(fresh->get_attrs().contains(RGW_ATTR_IAM_POLICY));
+  EXPECT_TRUE(fresh->get_attrs().contains(RGW_ATTR_TAGS))
+      << "b's write, from a handle loaded before a's, removed a's tags";
+}
+
+TEST_F(NSFSBucketRaceTest, AnAttributeWriteKeepsAnotherHandlesVersioning)
+{
+  auto a = handle();
+  auto b = handle();
+  ASSERT_FALSE(a->versioned());
+
+  a->get_info().flags |= BUCKET_VERSIONED;
+  ASSERT_EQ(a->put_info(env->dpp, false, real_time(), null_yield), 0);
+  auto tags = one(RGW_ATTR_TAGS, "tags-from-b");
+  const int r = b->merge_and_store_attrs(env->dpp, tags, null_yield);
+  if (r == -ECANCELED) {
+    return;
+  }
+  ASSERT_EQ(r, 0);
+
+  auto fresh = handle();
+  EXPECT_TRUE(fresh->get_attrs().contains(RGW_ATTR_TAGS));
+  EXPECT_TRUE(fresh->versioned())
+      << "b's write, from a handle loaded before a's, turned versioning "
+      << "back off";
+}
+
+/* The delete ops erase an attribute from the map and write:  a write
+ * that is a delta still removes, and leaves another handle's write. */
+TEST_F(NSFSBucketRaceTest, ARemovalStillRemoves)
+{
+  auto seed = handle();
+  auto tags = one(RGW_ATTR_TAGS, "tags-to-remove");
+  ASSERT_EQ(seed->merge_and_store_attrs(env->dpp, tags, null_yield), 0);
+
+  auto a = handle();
+  auto b = handle();
+  auto policy = one(RGW_ATTR_IAM_POLICY, "{\"Version\":\"2012-10-17\"}");
+  ASSERT_EQ(a->merge_and_store_attrs(env->dpp, policy, null_yield), 0);
+  b->get_attrs().erase(RGW_ATTR_TAGS);
+  ASSERT_EQ(b->put_info(env->dpp, false, real_time(), null_yield), 0);
+
+  auto fresh = handle();
+  EXPECT_FALSE(fresh->get_attrs().contains(RGW_ATTR_TAGS));
+  EXPECT_TRUE(fresh->get_attrs().contains(RGW_ATTR_IAM_POLICY));
+}
+
+/* An attribute can be its own presence:  PutBucketPolicy with
+ * ConfirmRemoveSelfBucketAccess stores RGW_ATTR_IAM_POLICY_REMOVE_SELF_ACCESS
+ * empty (rgw_op.cc).  A delta write keeps it, where MERGE would skip an
+ * empty value as "leave it alone". */
+TEST_F(NSFSBucketRaceTest, AnEmptyAttributeIsWritten)
+{
+  auto a = handle();
+  rgw::sal::Attrs flag{{RGW_ATTR_IAM_POLICY_REMOVE_SELF_ACCESS, bufferlist{}}};
+  ASSERT_EQ(a->merge_and_store_attrs(env->dpp, flag, null_yield), 0);
+  EXPECT_TRUE(handle()->get_attrs().contains(
+      RGW_ATTR_IAM_POLICY_REMOVE_SELF_ACCESS));
+
+  a->get_attrs().erase(RGW_ATTR_IAM_POLICY_REMOVE_SELF_ACCESS);
+  ASSERT_EQ(a->put_info(env->dpp, false, real_time(), null_yield), 0);
+  EXPECT_FALSE(handle()->get_attrs().contains(
+      RGW_ATTR_IAM_POLICY_REMOVE_SELF_ACCESS));
+}
+
+/* The metadata lock is scaffolding:  not listed, and not content, so a
+ * bucket holding only it is empty and can be removed.  It carries
+ * NooBaa's object mode, as every file in the tree does. */
+TEST_F(NSFSBucketRaceTest, TheMetaLockIsScaffolding)
+{
+  auto a = handle();
+  auto tags = one(RGW_ATTR_TAGS, "t");
+  ASSERT_EQ(a->merge_and_store_attrs(env->dpp, tags, null_yield), 0);
+  const sf::path lock{bucket_path() / std::string(nsfs::BUCKET_META_LOCK)};
+  ASSERT_TRUE(sf::exists(lock));
+  EXPECT_EQ(file_mode(lock), nsfs::file_create_mode());
+
+  rgw::sal::Bucket::ListParams params;
+  rgw::sal::Bucket::ListResults results;
+  ASSERT_EQ(a->list(env->dpp, params, 100, results, null_yield), 0);
+  EXPECT_TRUE(results.objs.empty());
+  EXPECT_EQ(static_cast<rgw::sal::NSFSBucket*>(a.get())
+	      ->check_empty(env->dpp, null_yield), 0);
+}
+
 /* A File is opened O_NOFOLLOW (the symlink policy, DECISIONS.md 2026-10-22).
  * A File stands only for a regular file -- get_ent() and stat() refuse
  * anything else -- so the case is the race:  the entry stat'ed as a

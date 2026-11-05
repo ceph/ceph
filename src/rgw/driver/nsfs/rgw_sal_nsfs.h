@@ -242,10 +242,17 @@ class Directory;
  * MERGE is the object contract, matching RGWRados::set_attrs():  the
  * incoming set is added or overwritten, nothing else is touched, and
  * removals are named explicitly in rmattrs.
+ *
+ * DELTA is a bucket write's (NSFSBucket::write_attrs(), DECISIONS.md
+ * 2026-11-05):  MERGE's shape -- the set given and the removals named,
+ * nothing else touched -- with an empty value written rather than
+ * skipped, because a bucket attribute can be its own presence:
+ * ConfirmRemoveSelfBucketAccess is stored empty (rgw_op.cc).
  */
 enum class AttrWriteMode {
   REPLACE_ALL,
   MERGE,
+  DELTA,
 };
 
 class FSEnt {
@@ -2189,6 +2196,13 @@ private:
    * not translate whole:  why.  A client's load is then refused
    * (DECISIONS.md 2026-11-02). */
   std::string untranslated;
+  /* What this handle loaded of the bucket's metadata from its
+   * directory, before any fallback filled it in:  a write applies only
+   * what differs from it, so two handles writing different things do
+   * not undo each other (DECISIONS.md 2026-11-05).  No info when the
+   * directory held none. */
+  Attrs loaded_attrs;
+  std::optional<RGWBucketInfo> loaded_info;
 
 public:
   /* Whether this is a bucket of RGW's own, such as an upload's staging
