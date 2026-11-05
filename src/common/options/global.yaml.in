@@ -833,6 +833,17 @@ options:
   min: -15
   max: 32
   with_legacy: true
+  validator: |
+    [](std::string *value, std::string *error_message) {
+      int64_t f = strict_si_cast<int64_t>(*value, error_message);
+      if (!error_message->empty()) {
+        return -EINVAL;
+      } else if (f == 8) {
+        *error_message = "zlib deflate does not support a window of 8, use 9";
+        return -EINVAL;
+      }
+      return 0;
+    }
 # regular zstd compression level
 - name: compressor_zstd_level
   type: int
