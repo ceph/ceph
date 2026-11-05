@@ -33,10 +33,10 @@
 #include <cstdint>
 #include <iostream>
 #include <list>
-#include <vector>
 #include <map>
 #include <string>
 #include <unordered_set>
+#include <vector>
 
 namespace ceph {
   class Formatter;
