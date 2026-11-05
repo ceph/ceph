@@ -17,7 +17,6 @@
 #define CEPH_NVMEOF_TYPES_H
 
 #ifdef WITH_NVMEOF_GATEWAY_MONITOR_CLIENT
-#include <vector>
 #include "mon/NVMeofGwMon.h"
 #include "messages/MNVMeofGwMap.h"
 #include "messages/MNVMeofGwBeacon.h"
@@ -42,8 +41,8 @@ class NVMeofGwMapDencoder {
     f->dump_stream("NVMeofGwMap") << m;
   }
 
-  static std::vector<NVMeofGwMapDencoder> generate_test_instances() {
-    std::vector<NVMeofGwMapDencoder> ls;
+  static std::list<NVMeofGwMapDencoder> generate_test_instances() {
+    std::list<NVMeofGwMapDencoder> ls;
     std::string pool = "pool1";
     std::string group = "grp1";
     auto group_key = std::make_pair(pool, group);
@@ -87,8 +86,8 @@ class MNVMeofGwMapDencoder {
     f->dump_stream("MNVMeofGwMap") << m;
   }
 
-  static std::vector<MNVMeofGwMapDencoder> generate_test_instances() {
-    std::vector<MNVMeofGwMapDencoder> ls;
+  static std::list<MNVMeofGwMapDencoder> generate_test_instances() {
+    std::list<MNVMeofGwMapDencoder> ls;
     std::map<NvmeGroupKey, NvmeGwMonClientStates> map;
     std::string pool = "pool1";
     std::string group = "grp1";
@@ -146,8 +145,8 @@ class MNVMeofGwBeaconDencoder {
     f->dump_stream("MNVMeofGwBeacon") << m;
   }
 
-  static std::vector<MNVMeofGwBeaconDencoder> generate_test_instances() {
-    std::vector<MNVMeofGwBeaconDencoder> ls;
+  static std::list<MNVMeofGwBeaconDencoder> generate_test_instances() {
+    std::list<MNVMeofGwBeaconDencoder> ls;
     std::string gw_id = "GW";
     std::string gw_pool = "pool";
     std::string gw_group = "group";
