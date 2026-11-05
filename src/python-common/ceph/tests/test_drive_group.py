@@ -57,6 +57,24 @@ def test_DriveGroup(test_input):
         assert dg.data_devices.paths[0].path == '/dev/sda'
 
 
+def test_DriveGroup_paths_round_trip():
+    dg = DriveGroupSpec.from_json(yaml.safe_load("""service_type: osd
+service_id: testing_drivegroup
+placement:
+  host_pattern: hostname
+data_devices:
+  paths:
+  - path: /dev/sda
+    crush_device_class: ssd
+  - /dev/sdb
+"""))
+    assert dg.to_json()['spec']['data_devices'] == {
+        'paths': [{'path': '/dev/sda', 'crush_device_class': 'ssd'}, '/dev/sdb']}
+    loaded = DriveGroupSpec.from_json(dg.to_json())
+    assert [(d.path, d.crush_device_class) for d in loaded.data_devices.paths] == [
+        ('/dev/sda', 'ssd'), ('/dev/sdb', None)]
+
+
 
 @pytest.mark.parametrize("match,test_input",
 [
