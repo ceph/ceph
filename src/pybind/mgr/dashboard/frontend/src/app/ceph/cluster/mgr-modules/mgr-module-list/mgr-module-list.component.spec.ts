@@ -146,7 +146,7 @@ describe('MgrModuleListComponent', () => {
       tick(mgrModuleService.REFRESH_INTERVAL);
       tick(mgrModuleService.REFRESH_INTERVAL);
       tick(mgrModuleService.REFRESH_INTERVAL);
-      expect(mgrModuleService.enable).toHaveBeenCalledWith('foo');
+      expect(mgrModuleService.enable).toHaveBeenCalledWith('foo', false);
       expect(mgrModuleService.list).toHaveBeenCalledTimes(2);
       expect(component.table.refreshBtn).toHaveBeenCalled();
     }));
