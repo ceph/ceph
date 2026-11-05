@@ -727,7 +727,7 @@ bool sanity_check_endpoints(const DoutPrefixProvider *dpp, rgw::sal::RadosStore*
     if (zonegroup.endpoints.empty()) {
       ldpp_dout(dpp, -1)
 	<< __PRETTY_FUNCTION__ << ":" << __LINE__
-	<< " WARNING: Cluster is is misconfigured! "
+	<< " WARNING: Cluster is misconfigured! "
 	<< " Zonegroup " << zonegroup.get_name()
 	<< " (" << zonegroup.get_id() << ") in Realm id ( "
   << period.get_realm() << ") "
@@ -737,7 +737,7 @@ bool sanity_check_endpoints(const DoutPrefixProvider *dpp, rgw::sal::RadosStore*
       if (zone.endpoints.empty()) {
 	ldpp_dout(dpp, -1)
 	  << __PRETTY_FUNCTION__ << ":" << __LINE__
-	  << " ERROR: Cluster is is misconfigured! "
+	  << " ERROR: Cluster is misconfigured! "
 	  << " Zone " << zone.name << " (" << zone.id << ") in Zonegroup "
 	  << zonegroup.get_name() << " ( " << zonegroup.get_id()
 	  << ") in Realm id ( " << period.get_realm() << ") "
@@ -756,7 +756,7 @@ RGWCoroutine* create_meta_log_trim_cr(const DoutPrefixProvider *dpp, rgw::sal::R
   if (!sanity_check_endpoints(dpp, store)) {
     ldpp_dout(dpp, -1)
       << __PRETTY_FUNCTION__ << ":" << __LINE__
-      << " ERROR: Cluster is is misconfigured! Refusing to trim." << dendl;
+      << " ERROR: Cluster is misconfigured! Refusing to trim." << dendl;
       return nullptr;
   }
   if (store->svc()->zone->is_meta_master()) {
@@ -787,7 +787,7 @@ RGWCoroutine* create_admin_meta_log_trim_cr(const DoutPrefixProvider *dpp, rgw::
   if (!sanity_check_endpoints(dpp, store)) {
     ldpp_dout(dpp, -1)
       << __PRETTY_FUNCTION__ << ":" << __LINE__
-      << " ERROR: Cluster is is misconfigured! Refusing to trim." << dendl;
+      << " ERROR: Cluster is misconfigured! Refusing to trim." << dendl;
       return nullptr;
   }
   if (store->svc()->zone->is_meta_master()) {
