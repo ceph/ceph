@@ -286,7 +286,9 @@ public:
   void handle_client_file_migrate(const MDRequestRef& mdr, CInode *cur,
                                   const std::string& value);
   void _file_migrate_wait_flush(std::shared_ptr<FileMigrate> fm);
-  bool _file_migrate_maybe_cold(std::shared_ptr<FileMigrate> fm);
+  bool _file_migrate_find_versions(std::shared_ptr<FileMigrate> fm);
+  void _file_migrate_copy_step(std::shared_ptr<FileMigrate> fm, uint64_t i,
+                               size_t k);
   void _file_migrate_start_copy(std::shared_ptr<FileMigrate> fm);
   void _file_migrate_issue(std::shared_ptr<FileMigrate> fm);
   void _file_migrate_op_finish(std::shared_ptr<FileMigrate> fm, int r);
