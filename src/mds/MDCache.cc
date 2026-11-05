@@ -10402,6 +10402,9 @@ void MDCache::dispatch_request(const MDRequestRef& mdr)
     case CEPH_MDS_OP_REPAIR_INODESTATS:
       repair_inode_stats_work(mdr);
       break;
+    case CEPH_MDS_OP_FILE_MIGRATE:
+      mds->server->dispatch_file_migrate(mdr);
+      break;
     case CEPH_MDS_OP_RDLOCK_FRAGSSTATS:
       rdlock_dirfrags_stats_work(mdr);
       break;
