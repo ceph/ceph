@@ -4251,7 +4251,10 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
 							      ack, client));
   if (need_flush && !*need_flush &&
       ((change_max && new_max) || // max INCREASE
-       _need_flush_mdlog(in, dirty)))
+       _need_flush_mdlog(in, dirty) ||
+       // a freeze, of the inode for a peer rename or of the subtree it is
+       // in for an export, waits for this update's auth pin
+       in->is_freezing()))
     *need_flush = true;
 
   return true;
@@ -5404,6 +5407,36 @@ void Locker::mark_updated_scatterlock(ScatterLock *lock)
     dout(10) << "mark_updated_scatterlock " << *lock
 	     << " - added at " << now << dendl;
   }
+}
+
+/*
+ * Move a stable scatterlock towards MIX so that it can be wrlocked, as
+ * wrlock_start() does, for a caller that waits for WAIT_STABLE itself: the
+ * auth scatters it, a replica asks the auth to.  Returns false if nothing
+ * was done to move the lock, i.e. a replica whose auth cannot be asked
+ * while the cluster is degraded, so that the caller does not wait for a
+ * change that nobody started.
+ */
+bool Locker::scatter_for_wrlock(ScatterLock *lock)
+{
+  ceph_assert(lock->is_stable());
+  CInode *in = static_cast<CInode *>(lock->get_parent());
+  if (in->is_auth()) {
+    if (lock->get_state() != LOCK_MIX)
+      scatter_mix(lock);
+    return true;
+  }
+  mds_rank_t auth = in->authority().first;
+  if (mds->is_cluster_degraded() &&
+      !mds->mdsmap->is_clientreplay_or_active_or_stopping(auth)) {
+    dout(10) << __func__ << " auth mds." << auth << " not active, can't "
+	     << "request scatter on " << *lock << " on " << *in << dendl;
+    return false;
+  }
+  dout(10) << __func__ << " requesting scatter from auth on " << *lock
+	   << " on " << *in << dendl;
+  mds->send_message_mds(make_message<MLock>(lock, LOCK_AC_REQSCATTER, mds->get_nodeid()), auth);
+  return true;
 }
 
 /*
