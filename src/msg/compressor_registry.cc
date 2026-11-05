@@ -52,7 +52,8 @@ std::vector<uint32_t> CompressorRegistry::_parse_method_list(const std::string& 
     if (alg_type) {
       methods.push_back(*alg_type);
     } else {
-      ldout(cct,5) << "WARNING: unknown algorithm method " << method << dendl;
+      lderr(cct) << "unknown compression algorithm '" << method
+                 << "', valid: none, snappy, zlib, zstd, lz4, brotli" << dendl;
     }
   });
 
