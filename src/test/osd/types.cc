@@ -105,7 +105,7 @@ TEST(pg_pool_t, encodeDecode)
                           CEPH_FEATUREMASK_SERVER_MIMIC |
                           CEPH_FEATUREMASK_SERVER_NAUTILUS;
   {
-    std::list<pg_pool_t> pools = pg_pool_t::generate_test_instances();
+    std::vector<pg_pool_t> pools = pg_pool_t::generate_test_instances();
     for(auto p1 : pools){
       bufferlist bl;
       p1.encode(bl, features);
@@ -119,7 +119,7 @@ TEST(pg_pool_t, encodeDecode)
 
   {
     // test reef
-    std::list<pg_pool_t> pools = pg_pool_t::generate_test_instances();
+    std::vector<pg_pool_t> pools = pg_pool_t::generate_test_instances();
     for(auto p1 : pools){
       bufferlist bl;
       p1.encode(bl, features|CEPH_FEATUREMASK_SERVER_REEF);

@@ -16,6 +16,7 @@
 #ifndef CEPH_OSD_HITSET_H
 #define CEPH_OSD_HITSET_H
 
+#include <vector>
 #include <string_view>
 
 #include <boost/scoped_ptr.hpp>
@@ -109,7 +110,7 @@ public:
     void encode(ceph::buffer::list &bl) const;
     void decode(ceph::buffer::list::const_iterator& bl);
     void dump(ceph::Formatter *f) const;
-    static std::list<HitSet::Params> generate_test_instances();
+    static std::vector<HitSet::Params> generate_test_instances();
 
     friend std::ostream& operator<<(std::ostream& out, const HitSet::Params& p);
   };
@@ -162,7 +163,7 @@ public:
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static std::list<HitSet> generate_test_instances();
+  static std::vector<HitSet> generate_test_instances();
 
 private:
   void reset_to_type(impl_type_t type);

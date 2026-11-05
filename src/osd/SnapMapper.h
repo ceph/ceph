@@ -146,7 +146,7 @@ public:
     void encode(ceph::buffer::list &bl) const;
     void decode(ceph::buffer::list::const_iterator &bp);
     void dump(ceph::Formatter *f) const;
-    static std::list<object_snaps> generate_test_instances();
+    static std::vector<object_snaps> generate_test_instances();
   };
 
   struct Mapping {
@@ -171,8 +171,8 @@ public:
       f->dump_unsigned("snap", snap);
       f->dump_stream("hoid") << hoid;
     }
-    static std::list<Mapping> generate_test_instances() {
-      std::list<Mapping> o;
+    static std::vector<Mapping> generate_test_instances() {
+      std::vector<Mapping> o;
       o.emplace_back();
       o.emplace_back();
       o.back().snap = 1;

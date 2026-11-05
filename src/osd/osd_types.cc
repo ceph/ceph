@@ -253,9 +253,9 @@ void osd_reqid_t::dump(Formatter *f) const
   f->dump_unsigned("tid", tid);
 }
 
-list<osd_reqid_t> osd_reqid_t::generate_test_instances()
+vector<osd_reqid_t> osd_reqid_t::generate_test_instances()
 {
-  list<osd_reqid_t> o;
+  vector<osd_reqid_t> o;
   o.emplace_back();
   o.push_back(osd_reqid_t(entity_name_t::CLIENT(123), 1, 45678));
   return o;
@@ -318,9 +318,9 @@ void object_locator_t::dump(Formatter *f) const
   f->dump_int("hash", hash);
 }
 
-list<object_locator_t> object_locator_t::generate_test_instances()
+vector<object_locator_t> object_locator_t::generate_test_instances()
 {
-  list<object_locator_t> o;
+  vector<object_locator_t> o;
   o.emplace_back();
   o.push_back(object_locator_t(123));
   o.push_back(object_locator_t(123, 876));
@@ -372,9 +372,9 @@ void request_redirect_t::dump(Formatter *f) const
   f->close_section(); // locator
 }
 
-list<request_redirect_t> request_redirect_t::generate_test_instances()
+vector<request_redirect_t> request_redirect_t::generate_test_instances()
 {
-  list<request_redirect_t> o;
+  vector<request_redirect_t> o;
   object_locator_t loc(1, "redir_obj");
   o.push_back(request_redirect_t());
   o.push_back(request_redirect_t(loc, 0));
@@ -435,9 +435,9 @@ void objectstore_perf_stat_t::decode(ceph::buffer::list::const_iterator &bl)
   DECODE_FINISH(bl);
 }
 
-std::list<objectstore_perf_stat_t> objectstore_perf_stat_t::generate_test_instances()
+std::vector<objectstore_perf_stat_t> objectstore_perf_stat_t::generate_test_instances()
 {
-  std::list<objectstore_perf_stat_t> o;
+  std::vector<objectstore_perf_stat_t> o;
   o.push_back(objectstore_perf_stat_t());
   o.push_back(objectstore_perf_stat_t());
   o.back().os_commit_latency_ns = 20000000;
@@ -725,14 +725,14 @@ void osd_stat_t::decode(ceph::buffer::list::const_iterator &bl)
   DECODE_FINISH(bl);
 }
 
-std::list<osd_stat_t> osd_stat_t::generate_test_instances()
+std::vector<osd_stat_t> osd_stat_t::generate_test_instances()
 {
-  std::list<osd_stat_t> o;
+  std::vector<osd_stat_t> o;
 
   o.emplace_back();
 
   o.emplace_back();
-  list<store_statfs_t> ll = store_statfs_t::generate_test_instances();
+  vector<store_statfs_t> ll = store_statfs_t::generate_test_instances();
   o.back().statfs = ll.back();
   o.back().hb_peers.push_back(7);
   o.back().snap_trim_queue_len = 8;
@@ -1001,9 +1001,9 @@ void pg_t::dump(Formatter *f) const
   f->dump_unsigned("seed", m_seed);
 }
 
-list<pg_t> pg_t::generate_test_instances()
+vector<pg_t> pg_t::generate_test_instances()
 {
-  list<pg_t> o;
+  vector<pg_t> o;
   o.emplace_back();
   o.push_back(pg_t(1, 2));
   o.push_back(pg_t(13123, 3));
@@ -1195,9 +1195,9 @@ void coll_t::dump(Formatter *f) const
   f->dump_string("name", to_str());
 }
 
-list<coll_t> coll_t::generate_test_instances()
+vector<coll_t> coll_t::generate_test_instances()
 {
-  list<coll_t> o;
+  vector<coll_t> o;
   o.push_back(coll_t());
   o.push_back(coll_t(spg_t(pg_t(1, 0), shard_id_t::NO_SHARD)));
   o.push_back(coll_t(o.back().get_temp()));
@@ -1479,9 +1479,9 @@ void pool_snap_info_t::decode(ceph::buffer::list::const_iterator& bl)
   DECODE_FINISH(bl);
 }
 
-list<pool_snap_info_t> pool_snap_info_t::generate_test_instances()
+vector<pool_snap_info_t> pool_snap_info_t::generate_test_instances()
 {
-  list<pool_snap_info_t> o;
+  vector<pool_snap_info_t> o;
   o.emplace_back();
   o.emplace_back();
   o.back().snapid = 1;
@@ -1704,9 +1704,9 @@ void pool_opts_t::decode(ceph::buffer::list::const_iterator& bl)
   DECODE_FINISH(bl);
 }
 
-std::list<pool_opts_t> pool_opts_t::generate_test_instances()
+std::vector<pool_opts_t> pool_opts_t::generate_test_instances()
 {
-  std::list<pool_opts_t> o;
+  std::vector<pool_opts_t> o;
   o.emplace_back();
   return o;
 }
@@ -2549,9 +2549,9 @@ bool pg_pool_t::stretch_set_can_peer(const set<int>& want, const OSDMap& osdmap,
   return true;
 }
 
-list<pg_pool_t> pg_pool_t::generate_test_instances()
+vector<pg_pool_t> pg_pool_t::generate_test_instances()
 {
-  list<pg_pool_t> o;
+  vector<pg_pool_t> o;
 
   pg_pool_t a;
   o.push_back(pg_pool_t(a));
@@ -2894,9 +2894,9 @@ void object_stat_sum_t::decode(ceph::buffer::list::const_iterator& bl)
   DECODE_FINISH(bl);
 }
 
-list<object_stat_sum_t> object_stat_sum_t::generate_test_instances()
+vector<object_stat_sum_t> object_stat_sum_t::generate_test_instances()
 {
-  list<object_stat_sum_t> o;
+  vector<object_stat_sum_t> o;
 
   object_stat_sum_t a;
 
@@ -3102,9 +3102,9 @@ void object_stat_collection_t::decode(ceph::buffer::list::const_iterator& bl)
   DECODE_FINISH(bl);
 }
 
-list<object_stat_collection_t> object_stat_collection_t::generate_test_instances()
+vector<object_stat_collection_t> object_stat_collection_t::generate_test_instances()
 {
-  list<object_stat_collection_t> o;
+  vector<object_stat_collection_t> o;
 
   object_stat_collection_t a;
   o.push_back(object_stat_collection_t(a));
@@ -3475,9 +3475,9 @@ void pg_stat_t::decode(ceph::buffer::list::const_iterator &bl)
   DECODE_FINISH(bl);
 }
 
-list<pg_stat_t> pg_stat_t::generate_test_instances()
+vector<pg_stat_t> pg_stat_t::generate_test_instances()
 {
-  list<pg_stat_t> o;
+  vector<pg_stat_t> o;
 
   pg_stat_t a;
   o.push_back(pg_stat_t(a));
@@ -3512,7 +3512,7 @@ list<pg_stat_t> pg_stat_t::generate_test_instances()
   a.objects_scrubbed = 0;
   a.objects_trimmed = 0;
   a.snaptrim_duration = 0.123;
-  list<object_stat_collection_t> l = object_stat_collection_t::generate_test_instances();
+  vector<object_stat_collection_t> l = object_stat_collection_t::generate_test_instances();
   a.stats = l.back();
   a.log_size = 99;
   a.ondisk_log_size = 88;
@@ -3645,9 +3645,9 @@ ostream& operator<<(ostream& out, const store_statfs_t &s)
   return out;
 }
 
-list<store_statfs_t> store_statfs_t::generate_test_instances()
+vector<store_statfs_t> store_statfs_t::generate_test_instances()
 {
-  list<store_statfs_t> o;
+  vector<store_statfs_t> o;
   store_statfs_t a;
   o.push_back(store_statfs_t(a));
   a.total = 234;
@@ -3748,15 +3748,15 @@ void pool_stat_t::decode(ceph::buffer::list::const_iterator &bl)
   DECODE_FINISH(bl);
 }
 
-list<pool_stat_t> pool_stat_t::generate_test_instances()
+vector<pool_stat_t> pool_stat_t::generate_test_instances()
 {
-  list<pool_stat_t> o;
+  vector<pool_stat_t> o;
 
   pool_stat_t a;
   o.push_back(pool_stat_t(a));
 
-  list<object_stat_collection_t> l = object_stat_collection_t::generate_test_instances();
-  list<store_statfs_t> ll = store_statfs_t::generate_test_instances();
+  vector<object_stat_collection_t> l = object_stat_collection_t::generate_test_instances();
+  vector<store_statfs_t> ll = store_statfs_t::generate_test_instances();
   a.stats = l.back();
   a.store_stats = ll.back();
   a.log_size = 123;
@@ -3901,9 +3901,9 @@ void pg_history_t::dump(Formatter *f) const
   f->dump_stream("rebuild_active_accum") << rebuild_active_accum;
 }
 
-list<pg_history_t> pg_history_t::generate_test_instances()
+vector<pg_history_t> pg_history_t::generate_test_instances()
 {
-  list<pg_history_t> o;
+  vector<pg_history_t> o;
   o.emplace_back();
   o.emplace_back();
   o.back().epoch_created = 1;
@@ -4083,12 +4083,12 @@ void pg_info_t::dump(Formatter *f) const
   f->close_section();
 }
 
-list<pg_info_t> pg_info_t::generate_test_instances()
+vector<pg_info_t> pg_info_t::generate_test_instances()
 {
-  list<pg_info_t> o;
+  vector<pg_info_t> o;
   o.emplace_back();
   o.emplace_back();
-  list<pg_history_t> h = pg_history_t::generate_test_instances();
+  vector<pg_history_t> h = pg_history_t::generate_test_instances();
   o.back().history = h.back();
   o.back().pgid = spg_t(pg_t(1, 2), shard_id_t::NO_SHARD);
   o.back().last_update = eversion_t(3, 4);
@@ -4097,11 +4097,11 @@ list<pg_info_t> pg_info_t::generate_test_instances()
   o.back().log_tail = eversion_t(7, 8);
   o.back().last_backfill = hobject_t(object_t("objname"), "key", 123, 456, -1, "");
   {
-    list<pg_stat_t> s = pg_stat_t::generate_test_instances();
+    vector<pg_stat_t> s = pg_stat_t::generate_test_instances();
     o.back().stats = s.back();
   }
   {
-    list<pg_hit_set_history_t> s = pg_hit_set_history_t::generate_test_instances();
+    vector<pg_hit_set_history_t> s = pg_hit_set_history_t::generate_test_instances();
     o.back().hit_set = s.back();
   }
   return o;
@@ -4152,9 +4152,9 @@ void pg_notify_t::dump(Formatter *f) const
   f->dump_object("past_intervals", past_intervals);
 }
 
-list<pg_notify_t> pg_notify_t::generate_test_instances()
+vector<pg_notify_t> pg_notify_t::generate_test_instances()
 {
-  list<pg_notify_t> o;
+  vector<pg_notify_t> o;
 
   o.emplace_back();
   o.push_back(pg_notify_t(shard_id_t(3), shard_id_t::NO_SHARD, 1, 1,
@@ -4345,9 +4345,9 @@ std::string PastIntervals::pg_interval_t::fmt_print() const
       acting, primary, maybe_went_rw ? " maybe_went_rw" : "");
 }
 
-auto PastIntervals::pg_interval_t::generate_test_instances() -> list<pg_interval_t>
+auto PastIntervals::pg_interval_t::generate_test_instances() -> vector<pg_interval_t>
 {
-  list<pg_interval_t> o;
+  vector<pg_interval_t> o;
   o.emplace_back();
   o.emplace_back();
   o.back().up.push_back(1);
@@ -4411,7 +4411,7 @@ struct compact_interval_t {
   std::string fmt_print() const {
     return fmt::format("([{},{}] acting={})", first, last, acting);
   }
-  static list<compact_interval_t> generate_test_instances() {
+  static vector<compact_interval_t> generate_test_instances() {
     /* Not going to be used, we'll generate pi_compact_rep directly */
     return {};
   }
@@ -4532,8 +4532,8 @@ public:
     f->close_section();
     f->close_section();
   }
-  static list<pi_compact_rep> generate_test_instances() {
-    list<pi_compact_rep> o;
+  static vector<pi_compact_rep> generate_test_instances() {
+    vector<pi_compact_rep> o;
     using ival = PastIntervals::pg_interval_t;
     using ivallst = std::list<ival>;
     o.push_back(
@@ -4650,9 +4650,9 @@ void PastIntervals::decode(ceph::buffer::list::const_iterator &bl)
   DECODE_FINISH(bl);
 }
 
-list<PastIntervals> PastIntervals::generate_test_instances()
+vector<PastIntervals> PastIntervals::generate_test_instances()
 {
-  list<PastIntervals> o;
+  vector<PastIntervals> o;
   {
     for (auto &&i: pi_compact_rep::generate_test_instances()) {
       // takes ownership of contents
@@ -5012,11 +5012,11 @@ void pg_query_t::dump(Formatter *f) const
   history.dump(f);
   f->close_section();
 }
-list<pg_query_t> pg_query_t::generate_test_instances()
+vector<pg_query_t> pg_query_t::generate_test_instances()
 {
-  list<pg_query_t> o;
+  vector<pg_query_t> o;
   o.push_back(pg_query_t());
-  list<pg_history_t> h = pg_history_t::generate_test_instances();
+  vector<pg_history_t> h = pg_history_t::generate_test_instances();
   o.push_back(pg_query_t(pg_query_t::INFO, shard_id_t(1), shard_id_t(2), h.back(), 4));
   o.push_back(pg_query_t(pg_query_t::MISSING, shard_id_t(2), shard_id_t(3), h.back(), 4));
   o.push_back(pg_query_t(pg_query_t::LOG, shard_id_t(0), shard_id_t(0),
@@ -5063,9 +5063,9 @@ void pg_lease_t::dump(Formatter *f) const
   f->dump_stream("interval") << interval;
 }
 
-std::list<pg_lease_t> pg_lease_t::generate_test_instances()
+std::vector<pg_lease_t> pg_lease_t::generate_test_instances()
 {
-  std::list<pg_lease_t> o;
+  std::vector<pg_lease_t> o;
   o.push_back(pg_lease_t());
   o.push_back(pg_lease_t());
   o.back().readable_until = make_timespan(1.5);
@@ -5101,9 +5101,9 @@ void pg_lease_ack_t::dump(Formatter *f) const
   f->dump_stream("readable_until_ub") << readable_until_ub;
 }
 
-std::list<pg_lease_ack_t> pg_lease_ack_t::generate_test_instances()
+std::vector<pg_lease_ack_t> pg_lease_ack_t::generate_test_instances()
 {
-  std::list<pg_lease_ack_t> o;
+  std::vector<pg_lease_ack_t> o;
   o.push_back(pg_lease_ack_t());
   o.push_back(pg_lease_ack_t());
   o.back().readable_until_ub = make_timespan(3.4);
@@ -5143,8 +5143,8 @@ void pg_ls_response_t::dump(ceph::Formatter *f) const {
   f->close_section();
 }
 
-std::list<pg_ls_response_t> pg_ls_response_t::generate_test_instances() {
-  std::list<pg_ls_response_t> o;
+std::vector<pg_ls_response_t> pg_ls_response_t::generate_test_instances() {
+  std::vector<pg_ls_response_t> o;
   o.emplace_back();
   o.emplace_back();
   o.back().handle = hobject_t(object_t("hi"), "key", 1, 2, -1, "");
@@ -5426,9 +5426,9 @@ void ObjectModDesc::dump(Formatter *f) const
   f->close_section();
 }
 
-list<ObjectModDesc> ObjectModDesc::generate_test_instances()
+vector<ObjectModDesc> ObjectModDesc::generate_test_instances()
 {
-  list<ObjectModDesc> o;
+  vector<ObjectModDesc> o;
   map<string, std::optional<ceph::buffer::list> > attrs;
   attrs[OI_ATTR];
   attrs[SS_ATTR];
@@ -5576,9 +5576,9 @@ void ObjectCleanRegions::dump(Formatter *f) const
   f->close_section();
 }
 
-list<ObjectCleanRegions> ObjectCleanRegions::generate_test_instances()
+vector<ObjectCleanRegions> ObjectCleanRegions::generate_test_instances()
 {
-  list<ObjectCleanRegions> o;
+  vector<ObjectCleanRegions> o;
   o.push_back(ObjectCleanRegions());
   o.push_back(ObjectCleanRegions());
   o.back().mark_data_region_dirty(4096, 40960);
@@ -5827,9 +5827,9 @@ void pg_log_entry_t::dump(Formatter *f) const
   }
 }
 
-list<pg_log_entry_t> pg_log_entry_t::generate_test_instances()
+vector<pg_log_entry_t> pg_log_entry_t::generate_test_instances()
 {
-  list<pg_log_entry_t> o;
+  vector<pg_log_entry_t> o;
   o.push_back(pg_log_entry_t());
   hobject_t oid(object_t("objname"), "key", 123, 456, 0, "");
   o.push_back(pg_log_entry_t(MODIFY, oid, eversion_t(1,2), eversion_t(3,4),
@@ -5923,9 +5923,9 @@ void pg_log_dup_t::dump(Formatter *f) const
   }
 }
 
-list<pg_log_dup_t> pg_log_dup_t::generate_test_instances()
+vector<pg_log_dup_t> pg_log_dup_t::generate_test_instances()
 {
-  list<pg_log_dup_t> o;
+  vector<pg_log_dup_t> o;
   o.push_back(pg_log_dup_t());
   o.push_back(pg_log_dup_t(eversion_t(1,2),
 			   1,
@@ -6051,9 +6051,9 @@ void pg_log_t::dump(Formatter *f) const
   f->close_section();
 }
 
-list<pg_log_t> pg_log_t::generate_test_instances()
+vector<pg_log_t> pg_log_t::generate_test_instances()
 {
-  list<pg_log_t> o;
+  vector<pg_log_t> o;
   o.emplace_back();
 
   // this is nonsensical:
@@ -6242,8 +6242,8 @@ void pg_nls_response_template<librados::ListObjectImpl>::dump(ceph::Formatter *f
 }
 
 template<>
-std::list<pg_nls_response_template<librados::ListObjectImpl>> pg_nls_response_template<librados::ListObjectImpl>::generate_test_instances() {
-  std::list<pg_nls_response_template<librados::ListObjectImpl>> o;
+std::vector<pg_nls_response_template<librados::ListObjectImpl>> pg_nls_response_template<librados::ListObjectImpl>::generate_test_instances() {
+  std::vector<pg_nls_response_template<librados::ListObjectImpl>> o;
   o.emplace_back();
   o.emplace_back();
   o.back().handle = hobject_t(object_t("hi"), "key", 1, 2, -1, "");
@@ -6366,9 +6366,9 @@ void object_copy_cursor_t::dump(Formatter *f) const
   f->dump_unsigned("omap_complete", (int)omap_complete);
 }
 
-list<object_copy_cursor_t> object_copy_cursor_t::generate_test_instances()
+vector<object_copy_cursor_t> object_copy_cursor_t::generate_test_instances()
 {
-  list<object_copy_cursor_t> o;
+  vector<object_copy_cursor_t> o;
   o.emplace_back();
   o.emplace_back();
   o.back().attr_complete = true;
@@ -6475,13 +6475,13 @@ void object_copy_data_t::decode(ceph::buffer::list::const_iterator& bl)
   DECODE_FINISH(bl);
 }
 
-list<object_copy_data_t> object_copy_data_t::generate_test_instances()
+vector<object_copy_data_t> object_copy_data_t::generate_test_instances()
 {
-  list<object_copy_data_t> o;
+  vector<object_copy_data_t> o;
 
   o.push_back(object_copy_data_t());
 
-  list<object_copy_cursor_t> cursors = object_copy_cursor_t::generate_test_instances();
+  vector<object_copy_cursor_t> cursors = object_copy_cursor_t::generate_test_instances();
   auto ci = cursors.begin();
   o.back().cursor = *(ci++);
 
@@ -6575,9 +6575,9 @@ void pg_create_t::dump(Formatter *f) const
   f->dump_int("split_bits", split_bits);
 }
 
-list<pg_create_t> pg_create_t::generate_test_instances()
+vector<pg_create_t> pg_create_t::generate_test_instances()
 {
-  list<pg_create_t> o;
+  vector<pg_create_t> o;
   o.emplace_back();
   o.push_back(pg_create_t(1, pg_t(3, 4), 2));
   return o;
@@ -6626,9 +6626,9 @@ void pg_hit_set_info_t::dump(Formatter *f) const
   f->dump_stream("using_gmt") << using_gmt;
 }
 
-list<pg_hit_set_info_t> pg_hit_set_info_t::generate_test_instances()
+vector<pg_hit_set_info_t> pg_hit_set_info_t::generate_test_instances()
 {
-  list<pg_hit_set_info_t> ls;
+  vector<pg_hit_set_info_t> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().begin = utime_t(1, 2);
@@ -6683,9 +6683,9 @@ void pg_hit_set_history_t::dump(Formatter *f) const
   f->close_section();
 }
 
-list<pg_hit_set_history_t> pg_hit_set_history_t::generate_test_instances()
+vector<pg_hit_set_history_t> pg_hit_set_history_t::generate_test_instances()
 {
-  list<pg_hit_set_history_t> ls;
+  vector<pg_hit_set_history_t> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().current_last_update = eversion_t(1, 2);
@@ -6799,9 +6799,9 @@ void OSDSuperblock::dump(Formatter *f) const
   f->dump_stream("maps") << get_maps();
 }
 
-list<OSDSuperblock> OSDSuperblock::generate_test_instances()
+vector<OSDSuperblock> OSDSuperblock::generate_test_instances()
 {
-  list<OSDSuperblock> o;
+  vector<OSDSuperblock> o;
   OSDSuperblock z;
   o.push_back(OSDSuperblock(z));
   z.cluster_fsid.parse("01010101-0101-0101-0101-010101010101");
@@ -6892,9 +6892,9 @@ void SnapSet::dump(Formatter *f) const
   f->close_section();
 }
 
-list<SnapSet> SnapSet::generate_test_instances()
+vector<SnapSet> SnapSet::generate_test_instances()
 {
-  list<SnapSet> o;
+  vector<SnapSet> o;
   o.emplace_back();
   o.emplace_back();
   o.back().seq = 123;
@@ -7023,9 +7023,9 @@ std::string watch_info_t::fmt_print() const
 }
 
 
-list<watch_info_t> watch_info_t::generate_test_instances()
+vector<watch_info_t> watch_info_t::generate_test_instances()
 {
-  list<watch_info_t> o;
+  vector<watch_info_t> o;
   o.emplace_back();
   o.emplace_back();
   o.back().cookie = 123;
@@ -7082,8 +7082,8 @@ void watch_item_t::dump(ceph::Formatter *f) const {
   f->close_section();
 }
 
-std::list<watch_item_t> watch_item_t::generate_test_instances() {
-  std::list<watch_item_t> o;
+std::vector<watch_item_t> watch_item_t::generate_test_instances() {
+  std::vector<watch_item_t> o;
   entity_addr_t ea;
   ea.set_type(entity_addr_t::TYPE_LEGACY);
   ea.set_nonce(1000);
@@ -7123,12 +7123,12 @@ void obj_list_watch_response_t::dump(ceph::Formatter *f) const {
   f->close_section();
 }
 
-std::list<obj_list_watch_response_t> obj_list_watch_response_t::generate_test_instances() {
-  std::list<obj_list_watch_response_t> o;
+std::vector<obj_list_watch_response_t> obj_list_watch_response_t::generate_test_instances() {
+  std::vector<obj_list_watch_response_t> o;
   entity_addr_t ea;
   o.emplace_back();
   o.emplace_back();
-  std::list<watch_item_t> test_watchers = watch_item_t::generate_test_instances();
+  std::vector<watch_item_t> test_watchers = watch_item_t::generate_test_instances();
   for (auto &e : test_watchers) {
     o.back().entries.push_back(e);
   }
@@ -7177,8 +7177,8 @@ void clone_info::dump(ceph::Formatter *f) const {
   f->dump_unsigned("size", size);
 }
 
-std::list<clone_info> clone_info::generate_test_instances() {
-  std::list<clone_info> o;
+std::vector<clone_info> clone_info::generate_test_instances() {
+  std::vector<clone_info> o;
   o.emplace_back();
   o.emplace_back();
   o.back().cloneid = 1;
@@ -7220,8 +7220,8 @@ void obj_list_snap_response_t::dump(ceph::Formatter *f) const {
   f->close_section();
 }
 
-std::list<obj_list_snap_response_t> obj_list_snap_response_t::generate_test_instances() {
-  std::list<obj_list_snap_response_t> o;
+std::vector<obj_list_snap_response_t> obj_list_snap_response_t::generate_test_instances() {
+  std::vector<obj_list_snap_response_t> o;
   o.emplace_back();
   o.emplace_back();
   clone_info cl;
@@ -7274,9 +7274,9 @@ void chunk_info_t::dump(Formatter *f) const
   f->dump_unsigned("flags", flags);
 }
 
-std::list<chunk_info_t> chunk_info_t::generate_test_instances()
+std::vector<chunk_info_t> chunk_info_t::generate_test_instances()
 {
-  std::list<chunk_info_t> o;
+  std::vector<chunk_info_t> o;
   o.emplace_back();
   o.emplace_back();
   o.back().length = 123;
@@ -7539,9 +7539,9 @@ void object_manifest_t::dump(Formatter *f) const
   }
 }
 
-list<object_manifest_t> object_manifest_t::generate_test_instances()
+vector<object_manifest_t> object_manifest_t::generate_test_instances()
 {
-  list<object_manifest_t> o;
+  vector<object_manifest_t> o;
   o.push_back(object_manifest_t());
   o.back().type = TYPE_REDIRECT;
   return o;
@@ -7762,9 +7762,9 @@ void object_info_t::dump(Formatter *f) const
   f->close_section();
 }
 
-list<object_info_t> object_info_t::generate_test_instances()
+vector<object_info_t> object_info_t::generate_test_instances()
 {
-  list<object_info_t> o;
+  vector<object_info_t> o;
   o.push_back(object_info_t());
   
   // fixme
@@ -7823,9 +7823,9 @@ ostream &operator<<(ostream &out, const ObjectRecoveryProgress &prog)
   return out << prog.fmt_print();
 }
 
-list<ObjectRecoveryProgress> ObjectRecoveryProgress::generate_test_instances()
+vector<ObjectRecoveryProgress> ObjectRecoveryProgress::generate_test_instances()
 {
-  list<ObjectRecoveryProgress> o;
+  vector<ObjectRecoveryProgress> o;
   o.emplace_back();
   o.back().first = false;
   o.back().data_complete = true;
@@ -7915,9 +7915,9 @@ void ObjectRecoveryInfo::decode(ceph::buffer::list::const_iterator &bl,
   }
 }
 
-list<ObjectRecoveryInfo> ObjectRecoveryInfo::generate_test_instances()
+vector<ObjectRecoveryInfo> ObjectRecoveryInfo::generate_test_instances()
 {
-  list<ObjectRecoveryInfo> o;
+  vector<ObjectRecoveryInfo> o;
   o.emplace_back();
   o.back().soid = hobject_t(sobject_t("key", CEPH_NOSNAP));
   o.back().version = eversion_t(0,0);
@@ -7963,9 +7963,9 @@ std::string ObjectRecoveryInfo::fmt_print() const
 }
 
 // -- PushReplyOp --
-list<PushReplyOp> PushReplyOp::generate_test_instances()
+vector<PushReplyOp> PushReplyOp::generate_test_instances()
 {
-  list<PushReplyOp> o;
+  vector<PushReplyOp> o;
   o.emplace_back();
   o.emplace_back();
   o.back().soid = hobject_t(sobject_t("asdf", 2));
@@ -8038,9 +8038,9 @@ uint64_t PushReplyOp::cost(CephContext *cct) const
 }
 
 // -- PullOp --
-list<PullOp> PullOp::generate_test_instances()
+vector<PullOp> PullOp::generate_test_instances()
 {
-  list<PullOp> o;
+  vector<PullOp> o;
   o.emplace_back();
   o.emplace_back();
   o.back().soid = hobject_t(sobject_t("asdf", 2));
@@ -8117,9 +8117,9 @@ uint64_t PullOp::cost(CephContext *cct) const
 }
 
 // -- PushOp --
-list<PushOp> PushOp::generate_test_instances()
+vector<PushOp> PushOp::generate_test_instances()
 {
-  list<PushOp> o;
+  vector<PushOp> o;
   o.emplace_back();
   o.emplace_back();
   o.back().soid = hobject_t(sobject_t("asdf", 2));
@@ -8294,14 +8294,14 @@ void ScrubMap::dump(Formatter *f) const
   f->close_section();
 }
 
-list<ScrubMap> ScrubMap::generate_test_instances()
+vector<ScrubMap> ScrubMap::generate_test_instances()
 {
-  list<ScrubMap> o;
+  vector<ScrubMap> o;
   o.emplace_back();
   o.emplace_back();
   o.back().valid_through = eversion_t(1, 2);
   o.back().incr_since = eversion_t(3, 4);
-  list<object> obj = object::generate_test_instances();
+  vector<object> obj = object::generate_test_instances();
   o.back().objects[hobject_t(object_t("foo"), "fookey", 123, 456, 0, "")] = obj.back();
   obj.pop_back();
   o.back().objects[hobject_t(object_t("bar"), string(), 123, 456, 0, "")] = obj.back();
@@ -8397,9 +8397,9 @@ void ScrubMap::object::dump(Formatter *f) const
   f->close_section();
 }
 
-auto ScrubMap::object::generate_test_instances() -> list<object>
+auto ScrubMap::object::generate_test_instances() -> vector<object>
 {
-  list<object> o;
+  vector<object> o;
 
   o.emplace_back();
   o.emplace_back();
@@ -8503,8 +8503,8 @@ void pool_pg_num_history_t::dump(ceph::Formatter *f) const {
   f->close_section();
 }
 
-std::list<pool_pg_num_history_t> pool_pg_num_history_t::generate_test_instances() {
-  std::list<pool_pg_num_history_t> ls;
+std::vector<pool_pg_num_history_t> pool_pg_num_history_t::generate_test_instances() {
+  std::vector<pool_pg_num_history_t> ls;
   ls.emplace_back();
   return ls;
 }
