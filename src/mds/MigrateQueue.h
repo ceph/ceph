@@ -68,6 +68,9 @@ public:
 
   void tick();
 
+  // A stopping rank gives its sub-jobs back; it may stop once this is true.
+  bool drained(std::ostream& ss);
+
   // Messages from the other ranks; each is resent until it has had an effect.
   void dispatch(const cref_t<Message>& m);
 
@@ -109,7 +112,7 @@ private:
     uint64_t failed = 0;
     uint64_t gone = 0;       // deleted before we got to them
     uint64_t other = 0;      // symlinks and the like
-    uint64_t not_auth = 0;   // files and dirfrags on another rank
+    uint64_t not_auth = 0;   // left behind on another rank by an abort
     uint64_t bytes = 0;
     std::list<Note> head_only_files;  // the latest few
     std::list<Note> errors;           // the latest few
@@ -182,6 +185,7 @@ private:
     std::vector<Item> pending;       // a stack, which keeps the queue small
     std::string hold;                // why nothing starts now
     unsigned failures_in_a_row = 0;
+    uint64_t idle_seen = 0;      // the origin wrote down we were idle at this
 
     bool live() const {
       return state == State::RUNNING || state == State::PAUSED;
@@ -199,6 +203,7 @@ private:
     Item item;
     bool opened = false;
     bool scanned = false;
+    bool redo = false;          // this rank stops: someone else must do it
     std::vector<frag_t> frags_done;
     std::vector<inodeno_t> files;
     size_t next = 0;
@@ -249,6 +254,7 @@ private:
   void _tell_rank(uint64_t id, mds_rank_t rank, uint64_t seen);
   void _tell_ranks(const Job& job);
   void _tick_links();
+  void _give_back();
   void _check_gone_ranks(Job& job);
   std::string _clash(const std::string& path, int64_t pool) const;
   void _handle_items(mds_rank_t from, const cref_t<MMDSMigrate>& m);
@@ -297,6 +303,7 @@ private:
   std::map<inodeno_t, FileInFlight> files_in_flight;
   unsigned slots = 0;   // files being worked on, or looked up
   bool kicking = false;
+  bool warned_stopping = false;
   std::string hold;
 };
 
