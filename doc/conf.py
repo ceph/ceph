@@ -182,7 +182,8 @@ breathe_build_directory = os.path.join(top_level, "build-doc")
 breathe_projects = {"Ceph": os.path.join(top_level, breathe_build_directory)}
 breathe_projects_source = {
     "Ceph": (os.path.join(top_level, "src/include/rados"),
-             ["rados_types.h", "librados.h"])
+             ["rados_types.h", "librados.h", "librados.hpp", "rados_types.hpp",
+             "cls_traits.hpp"])
 }
 breathe_domain_by_extension = {'py': 'py',
                                'c': 'c', 'h': 'c',
