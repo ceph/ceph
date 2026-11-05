@@ -99,7 +99,7 @@ describe('PrometheusAlertFormatter', () => {
       NotificationType.error,
       'Some alert (active)',
       'Some alert is active <a href="http://some-alert" target="_blank">' +
-        '<i class="fa fa-line-chart"></i></a>',
+        '<i class="analytics"></i></a>',
       undefined,
       'Prometheus'
     );
@@ -138,7 +138,7 @@ describe('PrometheusAlertFormatter', () => {
       NotificationType.warning,
       'Warning alert (active)',
       'Warning alert is active <a href="http://warning-alert" target="_blank">' +
-        '<i class="fa fa-line-chart"></i></a>',
+        '<i class="analytics"></i></a>',
       undefined,
       'Prometheus'
     );
