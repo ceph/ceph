@@ -53,8 +53,16 @@ def name_to_json(names):
     convert the list of names to json
     """
     namedict = []
-    for i in range(len(names)):
-        namedict.append({'name': names[i].decode('utf-8')})
+    for i, n in enumerate(names):
+        if type(n) is bytes:
+            n = n.decode('utf-8')
+        elif type(n) is cephfs.Utf8BytesWrapper:
+            n = str(n)
+        else:
+            raise TypeError('"n" should be of type bytes or Utf8Bytes. '
+                            f'n = {n} type(n) = {type(n)}')
+
+        namedict.append({'name': n})
     return json.dumps(namedict, indent=4, sort_keys=True)
 
 
@@ -133,6 +141,11 @@ class VolumeClient(CephfsClient["Module"]):
                     return self.volume_exception_to_retval(ve)
             return wrapper
         elif ve is not None:
+            # prefix with "ERROR" so that it stands out in logs
+            log.error(f'ERROR: {ve}')
+            # log traceback too since error is being returned
+            log.error(ve.traceback)
+
             # used as a method on self with a VolumeException argument
             return ve.to_tuple()
         else:
@@ -348,7 +361,7 @@ class VolumeClient(CephfsClient["Module"]):
                     self.purge_queue.queue_job(volname)
         except VolumeException as ve:
             if ve.errno == -errno.EAGAIN and not force:
-                ve = VolumeException(ve.errno, ve.error_str + " (use --force to override)")
+                ve = VolumeException(ve.errno, ve.errmsg + " (use --force to override)")
                 ret = self.volume_exception_to_retval(ve)
             elif not (ve.errno == -errno.ENOENT and force):
                 ret = self.volume_exception_to_retval(ve)
@@ -928,12 +941,15 @@ class VolumeClient(CephfsClient["Module"]):
         groupname  = kwargs['group_name']
         force      = kwargs['force']
 
+        should_purge = False
         try:
             with open_volume(self, volname) as fs_handle:
                 with open_group(fs_handle, self.volspec, groupname) as group:
                     op = SubvolumeOpType.SNAP_REMOVE_FORCE if force else SubvolumeOpType.SNAP_REMOVE
                     with open_subvol(self.mgr, fs_handle, self.volspec, group, subvolname, op) as subvolume:
-                        subvolume.remove_snapshot(snapname, force)
+                        should_purge = subvolume.remove_snapshot(snapname, force)
+            if should_purge:
+                self.purge_queue.queue_job(volname)
         except VolumeException as ve:
             # ESTALE serves as an error to state that subvolume is currently stale due to internal removal and,
             # we should tickle the purge jobs to purge the same
