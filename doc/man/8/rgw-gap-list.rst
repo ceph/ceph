@@ -14,6 +14,9 @@ Synopsis
 Description
 ===========
 
+WARNING:  This bash gap list script is being deprecated.
+          Please see the new rgw-gap-list.py script.
+
 :program:`rgw-gap-list` is an *EXPERIMENTAL* RADOS gateway user
 administration utility. It produces a listing of bucket index entries
 that have missing backing RADOS objects. It places the results and

@@ -10,6 +10,13 @@
 # the number of times the massive data set must be iterated to complete
 # the task.
 
+##########################################################
+#
+# WARNING: This bash gap list script is being deprecated.
+#          Please see the new rgw-gap-list.py script.
+#
+##########################################################
+
 # IMPORTANT: Affects order produced by 'sort'.
 export LC_ALL=C
 
@@ -167,6 +174,15 @@ NOTE: Multithread listing may increase performance but may also increase
 EOF
   exit 1
 }
+
+>&2 cat << EOF
+##########################################################
+#
+# WARNING: This bash gap list script is being deprecated.
+#          Please see the new rgw-gap-list.py script.
+#
+##########################################################
+EOF
 
 multithread=0
 error=0
