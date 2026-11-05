@@ -3,7 +3,7 @@
 #ifndef CEPH_OLD_INODE_H
 #define CEPH_OLD_INODE_H
 
-#include <list>
+#include <vector>
 #include <memory> // for std::allocator
 #include <string>
 
@@ -20,7 +20,7 @@ struct old_inode_t {
   void encode(ceph::buffer::list &bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static std::list<old_inode_t> generate_test_instances();
+  static std::vector<old_inode_t> generate_test_instances();
 };
 
 // These methods may be moved back to mdstypes.cc when we have pmr
@@ -58,13 +58,13 @@ void old_inode_t<Allocator>::dump(ceph::Formatter *f) const
 }
 
 template<template<typename> class Allocator>
-auto old_inode_t<Allocator>::generate_test_instances() -> std::list<old_inode_t<Allocator>>
+auto old_inode_t<Allocator>::generate_test_instances() -> std::vector<old_inode_t<Allocator>>
 {
-  std::list<old_inode_t<Allocator>> ls;
+  std::vector<old_inode_t<Allocator>> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().first = 2;
-  std::list<inode_t<Allocator>> ils = inode_t<Allocator>::generate_test_instances();
+  std::vector<inode_t<Allocator>> ils = inode_t<Allocator>::generate_test_instances();
   ls.back().inode = ils.back();
   ls.back().xattrs["user.foo"] = ceph::buffer::copy("asdf", 4);
   ls.back().xattrs["user.unprintable"] = ceph::buffer::copy("\000\001\002", 3);

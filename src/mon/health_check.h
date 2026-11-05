@@ -6,6 +6,7 @@
 #include <iosfwd>
 #include <map>
 #include <string>
+#include <vector>
 
 #include "include/container_ios.h"
 #include "include/health.h"
@@ -70,8 +71,8 @@ struct health_check_t {
     }
   }
 
-  static std::list<health_check_t> generate_test_instances() {
-    std::list<health_check_t> ls;
+  static std::vector<health_check_t> generate_test_instances() {
+    std::vector<health_check_t> ls;
     ls.emplace_back();
     ls.back().severity = HEALTH_WARN;
     ls.emplace_back();
@@ -112,8 +113,8 @@ struct health_mute_t {
     f->dump_int("count", count);
   }
 
-  static std::list<health_mute_t> generate_test_instances() {
-    std::list<health_mute_t> ls;
+  static std::vector<health_mute_t> generate_test_instances() {
+    std::vector<health_mute_t> ls;
     ls.emplace_back();
     ls.emplace_back();
     ls.back().code = "OSD_DOWN";
@@ -152,8 +153,8 @@ struct health_check_map_t {
     }
   }
 
-  static std::list<health_check_map_t> generate_test_instances() {
-    std::list<health_check_map_t> ls;
+  static std::vector<health_check_map_t> generate_test_instances() {
+    std::vector<health_check_map_t> ls;
 
     ls.emplace_back();
     ls.emplace_back();
