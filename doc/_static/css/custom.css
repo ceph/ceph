@@ -31,3 +31,27 @@ div.section > ul > li > p {
     margin-block-start : 0.6em;
     margin-block-end : 0.6em;
 }
+
+/* Named diagrams retain their IDs when cloned into the fullscreen viewer. */
+:is(#ceph-releases-gantt, #ceph-releases-timeline) {
+    --ceph-release-label-color: #404040;
+}
+
+.mermaid-fullscreen-modal.dark-theme
+:is(#ceph-releases-gantt, #ceph-releases-timeline) {
+    --ceph-release-label-color: #e0e0e0;
+}
+
+/* Override Mermaid's SVG-scoped rules, including important task-label fills. */
+:is(#ceph-releases-gantt, #ceph-releases-timeline) svg text[class],
+:is(#ceph-releases-gantt, #ceph-releases-timeline) svg .grid .tick text {
+    fill: var(--ceph-release-label-color) !important;
+}
+
+#ceph-releases-gantt svg .task[class*="done"] {
+    fill: #526b82;
+}
+
+#ceph-releases-gantt svg .taskText[class] {
+    fill: #fff !important;
+}
