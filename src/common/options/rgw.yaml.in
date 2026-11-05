@@ -42,7 +42,7 @@ options:
   services:
   - rgw
   with_legacy: true
-# According to AWS S3, An website routing config can have up to 50 rules.
+# According to AWS S3, a website routing config can have up to 50 rules.
 - name: rgw_website_routing_rules_max_num
   type: int
   level: advanced
@@ -54,7 +54,7 @@ options:
 - name: rgw_disable_s3select
   type: bool
   level: advanced
-  desc: disable the s3select operation; RGW will report an error and will return ERR_INVALID_REQUEST.
+  desc: Disable the s3select operation; RGW will report an error and will return ERR_INVALID_REQUEST.
   default: false
   services:
   - rgw
@@ -62,7 +62,7 @@ options:
 - name: rgw_parquet_buffer_size
   type: size
   level: advanced
-  desc: the Maximum parquet buffer size, a limit to memory consumption for parquet reading operations.
+  desc: The maximum parquet buffer size, a limit to memory consumption for parquet reading operations.
   default: 16_M
   services:
   - rgw
@@ -288,7 +288,7 @@ options:
   type: str
   level: advanced
   desc: Alternative location for RGW configuration.
-  long_desc: If this is set, the different Ceph system configurables (such as the keyring file will be located in the path that is specified here.
+  long_desc: If this is set, the different Ceph system configurables (such as the keyring file) will be located in the path that is specified here.
   fmt_desc: Sets the location of the data files for Ceph RADOS Gateway.
   default: /var/lib/ceph/radosgw/$cluster-$id
   services:
@@ -300,13 +300,9 @@ options:
   type: str
   level: advanced
   desc: A list of RESTful APIs for RGW to enable
-  fmt_desc: |
-    Enables the specified APIs.
-
-      .. note:: Enabling the ``S3`` API is a requirement for
-                any ``radosgw`` instance that is meant to
-                participate in a `multi-site <../multisite>`_
-                configuration.
+  note: Enabling the ``s3`` API is a requirement for
+    any ``radosgw`` instance that is meant to
+    participate in a :ref:`multisite` configuration.
   default: s3, s3website, swift, swift_auth, admin, sts, iam, notifications
   services:
   - rgw
@@ -429,8 +425,8 @@ options:
   type: int
   level: advanced
   desc: Number of LCWorker tasks that will be run in parallel
-  long_desc: Number of LCWorker tasks that will run in parallel--used to permit >1
-    bucket/index shards to be processed simultaneously
+  long_desc: Number of LCWorker tasks that will run in parallel. Used to permit >1
+    bucket/index shards to be processed simultaneously.
   fmt_desc: This option specifies the number of lifecycle worker threads
     to run in parallel, thereby processing bucket and index
     shards simultaneously.
@@ -442,8 +438,8 @@ options:
   type: int
   level: advanced
   desc: Number of workpool threads per LCWorker
-  long_desc: Number of threads in per-LCWorker workpools--used to accelerate per-bucket
-    processing
+  long_desc: Number of threads in per-LCWorker workpools. Used to accelerate per-bucket
+    processing.
   fmt_desc: This option specifies the number of threads in each lifecycle
     workers work pool. This option can help accelerate processing each bucket.
   default: 3
@@ -473,10 +469,10 @@ options:
 - name: rgw_lc_debug_interval
   type: int
   level: dev
-  desc: The number of seconds that simulate one "day" in order to debug RGW LifeCycle.
+  desc: The number of seconds that simulate one "day" in order to debug RGW lifecycle.
     Do *not* modify for a production cluster.
-  long_desc: For debugging RGW LifeCycle, the number of seconds that are equivalent to
-    one simulated "day". Values less than 1 are ignored and do not change LifeCycle behavior.
+  long_desc: For debugging RGW lifecycle, the number of seconds that are equivalent to
+    one simulated "day". Values less than 1 are ignored and do not change lifecycle behavior.
     For example, during debugging if one wanted every 10 minutes to be equivalent to one day,
     then this would be set to 600, the number of seconds in 10 minutes.
   default: -1
@@ -518,7 +514,7 @@ options:
   level: advanced
   desc: Restore cycle run time
   long_desc: The amount of time between the start of consecutive runs of the restore
-    processing threads. If the thread runs takes more than this period, it will
+    processing threads. If the thread runs more than this period, it will
     not wait before running again.
   fmt_desc: The cycle time for restore state processing.
   default: 15_min
@@ -1591,7 +1587,7 @@ options:
   level: advanced
   desc: Should RGW log operations on bucket that does not exist
   long_desc: This config option applies to the ops log. When this option is set, the
-    ops log will log operations that are sent to non existing buckets. These operations
+    ops log will log operations that are sent to nonexistent buckets. These operations
     inherently fail, and do not correspond to a specific user.
   fmt_desc: Enables Ceph Object Gateway to log a request for a non-existent
     bucket.
@@ -1757,7 +1753,7 @@ options:
   long_desc: This is the max number of entries that will be held in the usage log,
     before it will be flushed to the backend. Note that the usage log is periodically
     flushed, even if number of entries does not reach this threshold. A usage log
-    entry corresponds to one or more operations on a single bucket.i
+    entry corresponds to one or more operations on a single bucket.
   fmt_desc: The number of dirty merged entries in the usage log before
     flushing synchronously.
   default: 1024
@@ -3947,7 +3943,7 @@ options:
     write and read object data. This is the default cache backend chosen by the D4N filter.
     Only the SSD cache backend uses this path for object data storage since the RedisDriver
     uses a Redis server instead and there are no additional cache backend implementations
-    available at the moment. 
+    available at the moment.
   default: /tmp/rgw_d4n_datacache/
   services:
   - rgw
@@ -3967,8 +3963,8 @@ options:
   level: advanced
   desc: clear the contents of the persistent datacache on start
   long_desc: The local SSD cache uses this option to clear the contents of the path supplied
-    by the rgw_d4n_l1_datacache_persistent_path config option on start. If false, the path's 
-    contents will be retained. 
+    by the rgw_d4n_l1_datacache_persistent_path config option on start. If false, the path's
+    contents will be retained.
   default: true
   services:
   - rgw
@@ -4000,7 +3996,7 @@ options:
   level: advanced
   desc: specifies the maximum number of worker threads that may be used by libaio
   long_desc: This option is used by the SSD cache backend during initialization to set the maximum
-    number of worker threads libaio may use. It does not apply to the Redis cache backend. 
+    number of worker threads libaio may use. It does not apply to the Redis cache backend.
   default: 20
   services:
   - rgw
@@ -4013,7 +4009,7 @@ options:
   desc: specifies the maximum number of simultaneous I/O requests that libaio expects to enqueue
   long_desc: This option is used by the SSD cache backend during initialization to set the maximum
     number of simultaneous I/O requests that libaio can expect to enqueue. It
-    does not apply to the Redis cache backend. 
+    does not apply to the Redis cache backend.
   default: 64
   services:
   - rgw
@@ -4023,13 +4019,13 @@ options:
 - name: rgw_lfuda_sync_frequency
   type: int
   level: advanced
-  desc: LFUDA variables' sync frequency in seconds 
-  long_desc: By default, the D4N cache uses the Least Frequently Used with Dynamic Aging (LFUDA) 
-    cache replacement policy. This class globally stores values that are used by the policy's 
+  desc: LFUDA variables' sync frequency in seconds
+  long_desc: By default, the D4N cache uses the Least Frequently Used with Dynamic Aging (LFUDA)
+    cache replacement policy. This class globally stores values that are used by the policy's
     algorithm. However, strong consistency for these values is not necessary and adds additional
     overhead to support. As a result, a thread periodically retrieves these global values and posts
     updates when certain conditions are satisfied. This Redis thread completes this logic in a loop
-    that is called once every interval, with the interval being set by this option.  
+    that is called once every interval, with the interval being set by this option.
   default: 60
   services:
   - rgw
@@ -4041,7 +4037,7 @@ options:
   level: advanced
   desc: The d4n write cache
   default: false
-  services: 
+  services:
   - rgw
   flags:
   - startup
@@ -4218,7 +4214,7 @@ options:
 - name: rgw_luarocks_location
   type: str
   level: advanced
-  desc: Directory where luarocks install packages from allowlist
+  desc: Directory where LuaRocks installs packages from allowlist
   default: /tmp/rgw_luarocks/$name
   services:
   - rgw
@@ -4265,12 +4261,12 @@ options:
 - name: rgw_allow_notification_secrets_in_cleartext
   type: bool
   level: advanced
-  desc: Allows sending secrets (e.g. passwords) over non encrypted HTTP messages.
+  desc: Allows sending secrets (e.g. passwords) over non-encrypted HTTP messages.
   long_desc: When bucket notification endpoint require secrets (e.g. passwords),
-    we allow the topic creation only over HTTPS messages. 
+    we allow the topic creation only over HTTPS messages.
     This parameter can be set to "true" to bypass this check.
-    Use this only if radosgw is on a trusted private network, and the message 
-    broker cannot be configured without password authentication. Otherwise, this will 
+    Use this only if radosgw is on a trusted private network, and the message
+    broker cannot be configured without password authentication. Otherwise, this will
     leak the credentials of your message broker and compromise its security.
   default: false
   services:
@@ -4301,10 +4297,10 @@ options:
   desc: address for the D4N Redis connection
   long_desc: The current D4N implementation supports one Redis node
     which the D4N directory, policy, and overall filter communicate
-    with. This default value is also the address that a Redis server 
+    with. This default value is also the address that a Redis server
     with no additional configuration will use.
   default: 127.0.0.1:6379
-  services: 
+  services:
   - rgw
   flags:
   - startup
@@ -4314,7 +4310,7 @@ options:
   level: advanced
   desc: This is the interval in seconds for invoking write cache cleaning process
   default: 1000
-  services: 
+  services:
   - rgw
   flags:
   - startup
@@ -4355,10 +4351,10 @@ options:
 - name: rgw_lua_max_memory_per_state
   type: uint
   level: advanced
-  desc: Max size of memory used by a single lua state
-  long_desc: This is the maximum size in bytes that a lua state can allocate for its own use.
-    Note that this does not include any memory that can be accessed from lua, but managed by the RGW.
-    If not set, it would use a default of 128K. If set to zero, the amount of memory would 
+  desc: Max size of memory used by a single Lua state
+  long_desc: This is the maximum size in bytes that a Lua state can allocate for its own use.
+    Note that this does not include any memory that can be accessed from Lua, but managed by the RGW.
+    If not set, it would use a default of 128K. If set to zero, the amount of memory would
     only be limited by the system.
   default: 128000
   services:
@@ -4423,10 +4419,10 @@ options:
   - rgw_bucket_counters_cache
   with_legacy: true
 - name: rgw_kafka_connection_idle
-  type: uint 
+  type: uint
   level: advanced
-  desc: Time in seconds to delete idle kafka connections
-  long_desc: A conection will be considered "idle" if no messages
+  desc: Time in seconds to delete idle Kafka connections
+  long_desc: A connection will be considered "idle" if no messages
     are sent to it for more than the time defined.
     Note that the connection will not be considered idle, even if it is down,
     as long as there are attempts to send messages to it.
@@ -4435,19 +4431,19 @@ options:
   - rgw
   with_legacy: true
 - name: rgw_kafka_sleep_timeout
-  type: uint 
+  type: uint
   level: advanced
-  desc: Time in milliseconds to sleep while polling for kafka replies
-  long_desc: This will be used to prevent busy waiting for the kafka replies
+  desc: Time in milliseconds to sleep while polling for Kafka replies
+  long_desc: This will be used to prevent busy waiting for the Kafka replies
     As well as for the cases where the broker is down and we try to reconnect.
     The same values times 3 will be used to sleep if there were no messages
-    sent or received across all kafka connections
+    sent or received across all Kafka connections
   default: 10
   services:
   - rgw
   with_legacy: true
 - name: rgw_kafka_message_timeout
-  type: uint 
+  type: uint
   level: advanced
   desc: This is the maximum time in milliseconds to deliver a message (including retries)
   long_desc: Delivery error occurs when the message timeout is exceeded.
@@ -4459,9 +4455,9 @@ options:
 - name: rgw_d4n_l1_datacache_address
   type: str
   level: advanced
-  desc: local Redis cache address 
+  desc: local Redis cache address
   long_desc: This is the address used to configure the Redis cache backend connection. The default
-    value is the same address used by Redis without any additional configuration. The SSD cache 
+    value is the same address used by Redis without any additional configuration. The SSD cache
     does not use this option.
   default: 127.0.0.1:6379
   services:
@@ -4470,7 +4466,7 @@ options:
   - startup
   with_legacy: true
 - name: rgw_bucket_logging_obj_roll_time
-  type: uint 
+  type: uint
   level: advanced
   desc: Default time in seconds for the bucket logging object to roll
   long_desc: Object roll time can be provided in the bucket logging configuration.
@@ -4493,7 +4489,7 @@ options:
 - name: rgw_lua_enable
   type: bool
   level: advanced
-  desc: Enable lua scripting.
+  desc: Enable Lua scripting.
   default: true
   services:
   - rgw
@@ -4504,9 +4500,9 @@ options:
 - name: rgw_d4n_backend_address
   type: str
   level: advanced
-  desc: The backend address used by D4N cache 
+  desc: The backend address used by D4N cache
   default: 127.0.0.1:6379
-  services: 
+  services:
   - rgw
   flags:
   - startup
