@@ -202,6 +202,7 @@ private:
     Job *job = nullptr;
     Item item;
     bool opened = false;
+    int open_r = 0;
     bool scanned = false;
     bool redo = false;          // this rank stops: someone else must do it
     std::vector<frag_t> frags_done;
@@ -271,7 +272,8 @@ private:
   void _start_dir(Job& job);
   void _scan_dir(DirWork *dw);
   void _scan_frag(DirWork *dw, CDir *dir);
-  void _start_file(DirWork *dw, inodeno_t ino, unsigned tries, bool opened);
+  void _start_file(DirWork *dw, inodeno_t ino, unsigned tries, bool opened,
+                   int open_r = 0);
   void _file_migrated(DirWork *dw, inodeno_t ino, unsigned tries, int r,
                       const Server::FileMigrateResult& res);
   void _wait_cleanup(DirWork *dw, inodeno_t ino);

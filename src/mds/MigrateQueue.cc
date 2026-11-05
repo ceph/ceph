@@ -1251,10 +1251,19 @@ void MigrateQueue::_scan_dir(DirWork *dw)
   CInode *in = mdcache->get_inode(ino);
   if (!in && !dw->opened) {
     dw->opened = true;
-    mdcache->open_ino(ino, mds->get_metadata_pool(), _scan_again(dw));
+    mdcache->open_ino(ino, mds->get_metadata_pool(),
+      new MDSInternalContextWrapper(mds, new LambdaContext([this, dw](int r) {
+        dw->open_r = r;
+        _scan_dir(dw);
+        _kick();
+      })));
     return;
   }
-  if (!in || !in->is_dir()) {
+  if (!in && dw->open_r < 0 && dw->open_r != -ENOENT && dw->open_r != -ENODATA) {
+    // Not known to be gone: a transient failure must not skip a subtree.
+    dw->prog.failed++;
+    _note(dw->prog.errors, ino, dw->open_r);
+  } else if (!in || !in->is_dir()) {
     dw->prog.gone++;            // removed since it was queued
   } else {
     // The inode may well be on another rank: what counts is the dirfrags.
@@ -1346,7 +1355,7 @@ void MigrateQueue::_scan_frag(DirWork *dw, CDir *dir)
 }
 
 void MigrateQueue::_start_file(DirWork *dw, inodeno_t ino, unsigned tries,
-                               bool opened)
+                               bool opened, int open_r)
 {
   dw->in_flight++;
   slots++;
@@ -1357,10 +1366,10 @@ void MigrateQueue::_start_file(DirWork *dw, inodeno_t ino, unsigned tries,
   if (!in && !opened) {
     // Trimmed since the scan, or a hard link's primary elsewhere.
     mdcache->open_ino(ino, -1, new MDSInternalContextWrapper(mds,
-      new LambdaContext([this, dw, ino, tries](int) {
+      new LambdaContext([this, dw, ino, tries](int r) {
         dw->in_flight--;
         slots--;
-        _start_file(dw, ino, tries, true);
+        _start_file(dw, ino, tries, true, r);
         _kick();
       })));
     return;
@@ -1368,6 +1377,9 @@ void MigrateQueue::_start_file(DirWork *dw, inodeno_t ino, unsigned tries,
 
   if (job.state == State::ABORTED) {
     // leave it
+  } else if (!in && open_r < 0 && open_r != -ENOENT && open_r != -ENODATA) {
+    dw->prog.failed++;  // not known to be gone
+    _note(dw->prog.errors, ino, open_r);
   } else if (!in || in->get_projected_inode()->nlink == 0) {
     dw->prog.gone++;
   } else if (!in->is_file()) {
