@@ -1014,6 +1014,15 @@ function test_mon_mds()
   check_response "Error ENOENT"
   ceph fs add_data_pool cephfs foobarbaz >& $TMPFILE || true
   check_response "Error ENOENT"
+  # a data pool with objects in it is not removed without being sure
+  rados -p data2 put rm_data_pool_guard /etc/hostname
+  for i in $(seq 1 60); do
+    [ "$(ceph df -f json | jq '.pools[] | select(.name == "data2") | .stats.objects')" = 1 ] && break
+    sleep 1
+  done
+  expect_false ceph fs rm_data_pool cephfs $data2_pool
+  ceph fs rm_data_pool cephfs $data2_pool --yes-i-really-mean-it
+  # already gone: still succeeds, flag or not
   ceph fs rm_data_pool cephfs $data2_pool
   ceph fs rm_data_pool cephfs $data3_pool
   ceph osd pool delete data2 data2 --yes-i-really-really-mean-it

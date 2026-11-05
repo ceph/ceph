@@ -82,12 +82,20 @@ as an alternate location to store file data.
 
 ::
 
-    ceph fs rm_data_pool <file system name> <pool name/id>
+    ceph fs rm_data_pool <file system name> <pool name/id> [--yes-i-really-mean-it]
 
 This command removes the specified pool from the list of data pools for the
 file system.  If any files have layouts for the removed data pool, the file
 data will become unavailable. The default data pool (when creating the file
 system) cannot be removed.
+
+The Monitors cannot see which files use a pool, so as a precaution this command
+refuses to remove a pool that still holds objects, unless
+``--yes-i-really-mean-it`` is added.  A pool can hold objects that no file's
+current layout points to and that are still needed.  The check uses the pool
+statistics
+that the OSDs last reported, which can be some seconds old, so a pool that was
+written to just now might still look empty.
 
 ::
 
