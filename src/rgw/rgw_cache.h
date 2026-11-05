@@ -45,7 +45,7 @@ struct ObjectMetaInfo {
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-  static std::list<ObjectMetaInfo> generate_test_instances();
+  static std::vector<ObjectMetaInfo> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(ObjectMetaInfo)
 
@@ -90,7 +90,7 @@ struct ObjectCacheInfo {
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-  static std::list<ObjectCacheInfo> generate_test_instances();
+  static std::vector<ObjectCacheInfo> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(ObjectCacheInfo)
 
@@ -122,7 +122,7 @@ struct RGWCacheNotifyInfo {
     DECODE_FINISH(ibl);
   }
   void dump(Formatter *f) const;
-  static std::list<RGWCacheNotifyInfo> generate_test_instances();
+  static std::vector<RGWCacheNotifyInfo> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(RGWCacheNotifyInfo)
 inline std::ostream& operator <<(std::ostream& m, const RGWCacheNotifyInfo& cni) {

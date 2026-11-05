@@ -33,6 +33,7 @@
 
 #include "common/ceph_argparse.h"
 #include "common/ceph_context.h"
+#include "common/dout.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
 
@@ -325,6 +326,26 @@ TEST_F(SigV4CanonicalHeaders, MinioGoStreamingTrailerPutObjectIsAccepted)
   ASSERT_TRUE(canon);
   EXPECT_NE(
       canon->find("x-amz-trailer:x-amz-checksum-crc32c\n"), std::string::npos);
+}
+
+TEST_F(SigV4CanonicalHeaders, SigningKeyInlineAndSpilledBuffers)
+{
+  const NoDoutPrefix dpp(cct, ceph_subsys_rgw);
+  // Independent HMAC-SHA256 vectors cover both sides of the inline boundary:
+  const std::pair<size_t, const char*> cases[] = {
+    {0, "672a5203025ef8b61d8ee3cfeeaff1ded0260bb87a37ee930ffc38be518b812b"},
+    {40, "59fa3fdfc729940fba5ec717c21c8e947efd2b639d6d2369a4d13046cc74e98c"},
+    {60, "c0b2adddfce5e2b8a66aecb2134d0e2daae7cc1bb0a8e3bed88d95e3fe6cadcf"},
+    {61, "e549f898e80ac601fcd3ffa1f919358e81740dfd7a8f1a5adceac4f9f62e69aa"},
+    {256, "c6aaf85c4c3e8d2c0a89e552ac35f180126fc6199d9fccfe2cdca09d0c86e577"}
+  };
+  for (const auto& [length, expected] : cases) {
+    SCOPED_TRACE(length);
+    const auto signature = rgw::auth::s3::get_v4_signature(
+      "20150830/us-east-1/iam/aws4_request", cct, std::string(length, 'x'),
+      "inline-storage-signature-test", &dpp);
+    EXPECT_EQ(expected, std::string_view(signature));
+  }
 }
 
 } // anonymous namespace

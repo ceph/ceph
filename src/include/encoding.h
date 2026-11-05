@@ -1094,18 +1094,21 @@ inline void decode(std::unordered_set<T,Hash,Pred,Alloc>& m,
 }
 
 // deque
-template<class T, class Alloc>
+template<class T, class Alloc, typename traits = denc_traits<T>>
+requires encoding_detail::needs_legacy_encoding<traits>
 inline void encode(const std::deque<T,Alloc>& ls, bufferlist& bl,
                    uint64_t features)
 {
   encoding_detail::encode_range(ls, bl, features);
 }
-template<class T, class Alloc>
+template<class T, class Alloc, typename traits = denc_traits<T>>
+requires encoding_detail::needs_legacy_encoding<traits>
 inline void encode(const std::deque<T,Alloc>& ls, bufferlist& bl)
 {
   encoding_detail::encode_range(ls, bl);
 }
-template<class T, class Alloc>
+template<class T, class Alloc, typename traits = denc_traits<T>>
+requires encoding_detail::needs_legacy_encoding<traits>
 inline void decode(std::deque<T,Alloc>& ls, bufferlist::const_iterator& p)
 {
   encoding_detail::decode_by_emplace_back(ls, p);

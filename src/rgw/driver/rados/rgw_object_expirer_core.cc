@@ -74,7 +74,7 @@ static void objexp_get_shard(int shard_num,
   *shard = objexp_hint_get_shardname(shard_num);
 }
 
-static int objexp_hint_parse(const DoutPrefixProvider *dpp, CephContext *cct, cls_timeindex_entry &ti_entry,
+static int objexp_hint_parse(const DoutPrefixProvider *dpp, CephContext *cct, const cls_timeindex_entry& ti_entry,
                              objexp_hint_entry *hint_entry)
 {
   try {
@@ -126,7 +126,7 @@ int RGWObjExpStore::objexp_hint_list(const DoutPrefixProvider *dpp,
                                const ceph::real_time& end_time,
                                const int max_entries,
                                const string& marker,
-                               list<cls_timeindex_entry>& entries, /* out */
+                               vector<cls_timeindex_entry>& entries, /* out */
                                string *out_marker,                 /* out */
                                bool *truncated)                    /* out */
 {
@@ -228,20 +228,17 @@ int RGWObjectExpirer::garbage_single_object(const DoutPrefixProvider *dpp, objex
 }
 
 void RGWObjectExpirer::garbage_chunk(const DoutPrefixProvider *dpp, 
-                                  list<cls_timeindex_entry>& entries,      /* in  */
+                                  const vector<cls_timeindex_entry>& entries, /* in  */
                                   bool& need_trim)                         /* out */
 {
   need_trim = false;
 
-  for (list<cls_timeindex_entry>::iterator iter = entries.begin();
-       iter != entries.end();
-       ++iter)
-  {
+  for (const auto& entry : entries) {
     objexp_hint_entry hint;
-    ldpp_dout(dpp, 15) << "got removal hint for: " << iter->key_ts.sec() \
-        << " - " << iter->key_ext << dendl;
+    ldpp_dout(dpp, 15) << "got removal hint for: " << entry.key_ts.sec() \
+        << " - " << entry.key_ext << dendl;
 
-    int ret = objexp_hint_parse(dpp, driver->ctx(), *iter, &hint);
+    int ret = objexp_hint_parse(dpp, driver->ctx(), entry, &hint);
     if (ret < 0) {
       ldpp_dout(dpp, 1) << "cannot parse removal hint for " << hint.obj_key << dendl;
       continue;
@@ -316,7 +313,7 @@ bool RGWObjectExpirer::process_single_shard(const DoutPrefixProvider *dpp,
     real_time rt_last = last_run.to_real_time();
     real_time rt_start = round_start.to_real_time();
 
-    list<cls_timeindex_entry> entries;
+    vector<cls_timeindex_entry> entries;
     ret = exp_store.objexp_hint_list(dpp, shard, rt_last, rt_start,
                                      num_entries, marker, entries,
                                      &out_marker, &truncated);

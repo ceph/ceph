@@ -15,11 +15,9 @@
 
 #pragma once
 
-#include <algorithm>
-#include <iterator>
-#include <list>
 #include <string>
 #include <vector>
+#include <utility>
 #include "services/svc_sys_obj.h"
 
 class DoutPrefixProvider;
@@ -29,9 +27,9 @@ class RGWMetadataLister {
   RGWSI_SysObj::Pool::Op listing;
 
   virtual void filter_transform(std::vector<std::string>& oids,
-                                std::list<std::string>& keys) {
+                                std::vector<std::string>& keys) {
     // use all oids as keys
-    std::move(oids.begin(), oids.end(), std::back_inserter(keys));
+    keys = std::move(oids);
   }
 
  public:
@@ -47,7 +45,7 @@ class RGWMetadataLister {
   }
 
   int get_next(const DoutPrefixProvider* dpp, int max,
-               std::list<std::string>& keys, bool* truncated)
+               std::vector<std::string>& keys, bool* truncated)
   {
     keys.clear();
     std::vector<std::string> oids;
