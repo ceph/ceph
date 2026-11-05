@@ -1,5 +1,11 @@
 >=22.0.0
 
+* CephFS: A client with ``client_reconnect_stale`` that reconnects after being
+  blocklisted now discards the data it had buffered and returns ``EIO`` from
+  ``fsync()`` and ``close()`` on files that were open at the time. It used to
+  write that data out after the reconnect, over what other clients had written
+  since.
+
 * RBD: The ``schedule_time`` field in the output of
   ``rbd mirror snapshot schedule status`` and
   ``rbd trash purge schedule status`` has been renamed to
