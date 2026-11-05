@@ -22,13 +22,23 @@ When a Complete or Abort request finds the upload in this pending state, it cann
 
 Complete can address this by guarding its head object write with an assertion that the lock has not expired. As long as the osd rejects the write after its lease has expired, mutual exclusion is preserved.
 
-The assert_locked() method from cls_lock can't be used for this, because the lock is held on a different rados object. What we can do is pass the lock's current expiration timestamp with the request, and have the osd check that before applying the write. This involves comparing a timestamp generated on radosgw against the osd's current time, so is subject to clock skew. We'll want to set some reasonable limit on acceptable skew (10 seconds?), and subtract that from the expiration values we send.
+The assert_locked() method from cls_lock can't be used for this, because the lock is held on a different rados object. What we can do is pass the lock's current expiration timestamp with the request, and have the osd check that before applying the write.
 
 Rados doesn't provide an existing primitive for current time comparisons, so we'll need to introduce a new cls method for this. cls_rgw_obj_check_mtime() from cls_rgw is a good example to copy. Until osds upgrade to a release that supports this new method, calls will fail with EOPNOTSUPP errors. Radosgw should handle these errors by retrying the head object write without this guard.
 
 By rejecting this head object write that commits the multipart upload, we can guarantee that other requests that successfully acquire the lock will be able to detect its completion. Abort should use the same guard for its write operations, at least on the first part objects consulted for completion.
 
 ETIMEDOUT errors from rados_osd_op_timeout need special handling for CompleteMultipartUpload. In other error cases, this multipart lock is released before sending the http response. But because ETIMEDOUT indicates that the osd may still apply the write operation later, at least up to the expiration time we sent, we can't release this lock early and must let it expire naturally. This prevents a later Complete/Abort request from acquiring the lock and racing with that earlier write operation.
+
+##### Time Synchronization
+
+This design involves comparing a timestamp generated on radosgw against the osd's current time, so is subject to clock skew between daemons. We'd need to set some reasonable upper bound on acceptable skew, and subtract that from the expiration values we send.
+
+Open questions:
+- can we generally expect osd clocks to be synchronized?
+- do all ceph containers enable time synchronization by default? is it reliable?
+- how do we make this safe for non-containerized deployments? document the need for synchronization? cluster warnings on skew between osds?
+- if we can rely on sync between osds, what about radosgws? if not, we'll need to extend cls_lock to return the osd's expiration time so we only compare timestamps between osds
 
 #### 2. Detecting Completion
 
