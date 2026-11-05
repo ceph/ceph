@@ -99,6 +99,15 @@
  *    then: everything is either acked, so seen by the idle rank, or would make
  *    a rank not idle.  A rank taking a new item after it said so runs again.
  *
+ * A rank that is stopping gives what its sub-jobs did not do back to the
+ * origin, and refuses more, and does not stop before the origin wrote down
+ * that it is idle.  That makes it wait for an origin that is down.  What is
+ * refused stays with the origin until the rank is gone, and then goes to who
+ * holds it by then.  A job whose own origin rank stops waits for the rank in
+ * its queue object.  Moving a job elsewhere would be the one thing that
+ * changes who the sub-jobs report to, and a job can be aborted first; the
+ * rank warns about it when it stops, and carries on if it is started again.
+ *
  * Whom to hand to is what the cache says.  It can be out of date, or the
  * subtree can move on: the rank that receives something it does not hold hands
  * it over again, and the walk just follows.
@@ -909,8 +918,66 @@ void MigrateQueue::tick()
 {
   if (!ready || load_failed)
     return;
+  if (mds->is_stopping())
+    _give_back();
   _tick_links();
   _kick(true);
+}
+
+/*
+ * Files in progress finish.  The rest of a directory being worked on goes back
+ * with it: walking it again elsewhere skips what has moved.
+ */
+void MigrateQueue::_give_back()
+{
+  if (!warned_stopping) {
+    warned_stopping = true;
+    for (const auto& [id, job] : jobs) {
+      if (job.live() && !job.is_sub())
+        mds->clog->warn() << "migration job " << id << " of " << job.path
+                          << " waits in " << oid << " until this rank is "
+                          << "started again, or abort it";
+    }
+  }
+  for (auto& [id, job] : jobs) {
+    if (!job.is_sub() || !job.live())
+      continue;
+    for (Item item : job.pending) {
+      _rm(dir_key(id, item));
+      item.where = MDS_RANK_NONE;
+      _hand_over(job, job.origin_rank, item);
+    }
+    job.pending.clear();
+    std::vector<DirWork*> dirs;
+    for (auto& dw : active) {
+      if (dw->job == &job)
+        dirs.push_back(dw.get());
+    }
+    for (DirWork *dw : dirs)
+      _maybe_finish_dir(dw);
+    _maybe_finish_job(job);
+    _save_job(job);
+    _flush(_on_durable(job));
+  }
+}
+
+bool MigrateQueue::drained(std::ostream& ss)
+{
+  if (!ready || load_failed)
+    return true;
+  unsigned waiting = 0;
+  for (const auto& [id, job] : jobs) {
+    if (!job.is_sub() || job.over || !mds->mdsmap->is_in(job.origin_rank))
+      continue;
+    const auto l = job.links.find(job.origin_rank);
+    const uint64_t accepted = l == job.links.end() ? 0 : l->second.accepted;
+    if (job.state != State::DONE || job.idle_seen != accepted)
+      waiting++;
+  }
+  if (waiting || slots)
+    ss << waiting << " migration sub-jobs still to hand back, " << slots
+       << " files in progress";
+  return !waiting && !slots;
 }
 
 void MigrateQueue::dump(Formatter *f) const
@@ -1407,11 +1474,17 @@ void MigrateQueue::_slot_done(DirWork *dw)
 void MigrateQueue::_maybe_finish_dir(DirWork *dw)
 {
   Job& job = *dw->job;
+  if (job.is_sub() && job.live() && mds->is_stopping() && dw->scanned &&
+      (dw->next < dw->files.size() || !dw->retries.empty())) {
+    dw->redo = true;
+    dw->files.resize(dw->next);
+    dw->retries.clear();
+  }
   if (!dw->scanned || dw->in_flight || dw->next < dw->files.size() ||
       !dw->retries.empty())
     return;
 
-  dw->prog.dirs = dw->item.file ? 0 : 1;
+  dw->prog.dirs = dw->item.file || dw->redo ? 0 : 1;
   job.done.add(dw->prog);
   _rm(dir_key(job.id, dw->item));
   if (job.live()) {
@@ -1422,6 +1495,11 @@ void MigrateQueue::_maybe_finish_dir(DirWork *dw)
     }
     for (const Item& item : dw->remote)
       _route(job, item);
+    if (dw->redo) {
+      Item item = dw->item;
+      item.where = MDS_RANK_NONE;
+      _route(job, item);
+    }
   }
 
   active.remove_if([dw](const auto& p) { return p.get() == dw; });
@@ -1786,6 +1864,13 @@ void MigrateQueue::_handle_items(mds_rank_t from,
       _send_ack(from, m->origin, m->job, last, 0, "");
       return;
     }
+    if (mds->is_stopping()) {
+      uint64_t accepted = job ? _link(*job, from).accepted : 0;
+      bool repeat = accepted >= last;
+      _send_ack(from, m->origin, m->job, accepted, repeat ? 0 : -ESHUTDOWN,
+                repeat ? "" : "this rank is stopping");
+      return;
+    }
     if (!job) {
       const std::string clash = _clash(path, pool);
       if (!clash.empty()) {
@@ -1823,6 +1908,7 @@ void MigrateQueue::_handle_items(mds_rank_t from,
   if (any && job->state == State::DONE) {
     job->state = State::RUNNING;  // more came in after it reported
     job->finished = utime_t();
+    job->idle_seen = 0;
   }
   _save_job(*job);
   Context *handed = _on_durable(*job);
@@ -1930,7 +2016,12 @@ void MigrateQueue::_handle_control(const cref_t<MMDSMigrate>& m)
     job->over = true;
     _save_job(*job);
     _report(*job);              // for the record, in case it was an abort
-  } else if (control_seq > job->control_seq) {
+    _flush(nullptr);
+    return;
+  }
+  if (seen)
+    job->idle_seen = seen;
+  if (control_seq > job->control_seq) {
     job->control_seq = control_seq;
     if (paused && job->state == State::RUNNING) {
       job->state = State::PAUSED;

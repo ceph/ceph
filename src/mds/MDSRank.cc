@@ -790,7 +790,12 @@ void MDSRankDispatcher::tick()
 
   // shut down?
   if (is_stopping()) {
-    if (mdcache->shutdown_pass()) {
+    migrate_queue->tick();
+    std::ostringstream mq;
+    if (!migrate_queue->drained(mq)) {
+      // Before anything else: the sub-jobs still need the journal.
+      clog->info() << "MDS rank " << whoami << " waiting: " << mq.str();
+    } else if (mdcache->shutdown_pass()) {
       uint64_t pq_progress = 0 ;
       uint64_t pq_total = 0;
       size_t pq_in_flight = 0;
