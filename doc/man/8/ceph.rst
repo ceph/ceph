@@ -484,11 +484,12 @@ Usage::
 
 Subcommand ``rm_data_pool``  removes the specified pool from the file system's list of
 data pools. File data on this pool will become unavailable. Default data pool
-cannot be removed.
+cannot be removed. A pool that still holds objects is removed only with
+``--yes-i-really-mean-it``.
 
 Usage::
 
-    ceph fs rm_data_pool <fs-name> <pool name/id>
+    ceph fs rm_data_pool <fs-name> <pool name/id> {--yes-i-really-mean-it}
 
 Subcommand ``set`` sets or updates a file system setting value for the given file system name.
 

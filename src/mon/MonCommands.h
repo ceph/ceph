@@ -466,7 +466,8 @@ COMMAND("fs add_data_pool name=fs_name,type=CephString "
 	"name=pool,type=CephString",
 	"add data pool <pool>", "mds", "rw")
 COMMAND("fs rm_data_pool name=fs_name,type=CephString "
-	"name=pool,type=CephString",
+	"name=pool,type=CephString "
+	"name=yes_i_really_mean_it,type=CephBool,req=false",
 	"remove data pool <pool>", "mds", "rw")
 COMMAND_WITH_FLAG("fs set_default name=fs_name,type=CephString",
 		  "set the default to the named filesystem",

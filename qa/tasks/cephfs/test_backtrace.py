@@ -120,7 +120,9 @@ class TestBacktrace(CephFSTestCase):
         self.fs.add_data_pool(extra_data_pool_name_2)
         self.mount_a.setfattr("dir_x/file_x", "ceph.file.layout.pool", extra_data_pool_name_2)
         self.mount_a.run_shell(["setfattr", "-x", "ceph.dir.layout", "dir_x"])
-        self.run_ceph_cmd("fs", "rm_data_pool", self.fs.name, extra_data_pool_name_1)
+        # the pool still holds file_x's old backtrace
+        self.run_ceph_cmd("fs", "rm_data_pool", self.fs.name, extra_data_pool_name_1,
+                          "--yes-i-really-mean-it")
         self.fs.flush()
 
         # quick test to check if the mds has handled backtrace update failure
