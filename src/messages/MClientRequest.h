@@ -34,7 +34,6 @@
  *  
  */
 
-#include <list>
 #include <map>
 #include <ostream>
 #include <string>
@@ -78,8 +77,8 @@ struct SnapPayload {
       f->dump_string(i.first.c_str(), i.second);
     }
   }
-  static std::list<SnapPayload> generate_test_instances() {
-    std::list<SnapPayload> o;
+  static std::vector<SnapPayload> generate_test_instances() {
+    std::vector<SnapPayload> o;
     o.emplace_back();
     o.emplace_back();
     o.back().metadata["key1"] = "val1";
@@ -150,8 +149,8 @@ public:
       f->dump_unsigned("dname_len", item.dname_len);
     }
 
-    static std::list<Release> generate_test_instances() {
-      std::list<Release> ls;
+    static std::vector<Release> generate_test_instances() {
+      std::vector<Release> ls;
       ls.emplace_back();
       ls.emplace_back();
       ls.back().item.dname_len = 4;

@@ -17,6 +17,7 @@
 #ifndef CEPH_MDS_ERESETJOURNAL_H
 #define CEPH_MDS_ERESETJOURNAL_H
 
+#include <deque>
 #include "../LogEvent.h"
 #include "../SegmentBoundary.h"
 
@@ -33,7 +34,7 @@ class EResetJournal : public LogEvent, public SegmentBoundary {
   void encode(bufferlist& bl, uint64_t features) const override;
   void decode(bufferlist::const_iterator& bl) override;
   void dump(Formatter *f) const override;
-  static std::list<EResetJournal> generate_test_instances();
+  static std::deque<EResetJournal> generate_test_instances();
   void print(std::ostream& out) const override {
     out << "EResetJournal";
   }

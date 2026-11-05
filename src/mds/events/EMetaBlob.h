@@ -16,6 +16,7 @@
 #ifndef CEPH_MDS_EMETABLOB_H
 #define CEPH_MDS_EMETABLOB_H
 
+#include <deque>
 #include <string_view>
 
 #include "../CInode.h"
@@ -105,7 +106,7 @@ public:
     void encode(bufferlist& bl, uint64_t features) const;
     void decode(bufferlist::const_iterator &bl);
     void dump(Formatter *f) const;
-    static std::list<EMetaBlob::fullbit> generate_test_instances();
+    static std::deque<EMetaBlob::fullbit> generate_test_instances();
 
     void update_inode(MDSRank *mds, CInode *in);
     bool is_dirty() const { return (state & STATE_DIRTY); }
@@ -168,7 +169,7 @@ public:
       out << std::endl;
     }
     void dump(Formatter *f) const;
-    static std::list<remotebit> generate_test_instances();
+    static std::vector<remotebit> generate_test_instances();
   };
   WRITE_CLASS_ENCODER(remotebit)
 
@@ -189,7 +190,7 @@ public:
     void encode(bufferlist& bl) const;
     void decode(bufferlist::const_iterator &bl);
     void dump(Formatter *f) const;
-    static std::list<nullbit> generate_test_instances();
+    static std::vector<nullbit> generate_test_instances();
     void print(std::ostream& out) const {
       out << " nullbit dn " << dn << " [" << dnfirst << "," << dnlast << "] dnv " << dnv
 	  << " dirty=" << dirty << std::endl;
@@ -306,7 +307,7 @@ public:
     void encode(bufferlist& bl, uint64_t features) const;
     void decode(bufferlist::const_iterator &bl);
     void dump(Formatter *f) const;
-    static std::list<dirlump> generate_test_instances();
+    static std::deque<dirlump> generate_test_instances();
   };
   WRITE_CLASS_ENCODER_FEATURES(dirlump)
 
@@ -356,7 +357,7 @@ private:
   entity_name_t get_client_name() const {return client_name;}
 
   void dump(Formatter *f) const;
-  static std::list<EMetaBlob> generate_test_instances();
+  static std::deque<EMetaBlob> generate_test_instances();
 
   // for replay, in certain cases
   //LogSegment *_segment;

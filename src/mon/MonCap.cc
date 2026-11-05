@@ -38,7 +38,6 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "MonCap "
 
-using std::list;
 using std::map;
 using std::ostream;
 using std::pair;
@@ -556,9 +555,9 @@ void MonCap::dump(Formatter *f) const
   f->dump_string("text", text);
 }
 
-list<MonCap> MonCap::generate_test_instances()
+vector<MonCap> MonCap::generate_test_instances()
 {
-  list<MonCap> ls;
+  vector<MonCap> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().parse("allow *");

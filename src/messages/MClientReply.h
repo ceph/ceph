@@ -329,8 +329,8 @@ public:
     f->dump_unsigned("created_ino", created_ino);
     f->dump_stream("delegated_inos") << delegated_inos;
   }
-  static std::list<openc_response_t> generate_test_instances() {
-    std::list<openc_response_t> ls;
+  static std::vector<openc_response_t> generate_test_instances() {
+    std::vector<openc_response_t> ls;
     ls.emplace_back();
     ls.emplace_back();
     ls.back().created_ino = 1;

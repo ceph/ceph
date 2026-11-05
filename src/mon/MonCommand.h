@@ -63,8 +63,8 @@ struct MonCommand {
     f->dump_unsigned("flags", flags);
   }
 
-  static std::list<MonCommand> generate_test_instances() {
-    std::list<MonCommand> ls;
+  static std::vector<MonCommand> generate_test_instances() {
+    std::vector<MonCommand> ls;
     ls.emplace_back();
     ls.emplace_back();
     ls.back().cmdstring = "foo";
