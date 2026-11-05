@@ -307,11 +307,6 @@ public:
     return c;
   }
 
-  template<class C>
-  [[deprecated("prefer to_context()")]]
-  static ContextType *list_to_context(C& contexts) {
-    return to_context(contexts);
-  }
 };
 
 typedef C_ContextsBase<Context, Context> C_Contexts;
