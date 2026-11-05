@@ -237,17 +237,27 @@ TEST(STSJwksCache, ClearDropsEveryIssuer)
   EXPECT_EQ(jwks_a, look(cache, "iss1", registered, "a", t0() + 3s));
 }
 
-TEST(STSJwksCache, FullCacheIsClearedForNewIssuer)
+TEST(STSJwksCache, FullCacheEvictsOldestEntry)
 {
   JWKSCache cache(2);
   cache.store(scoped("iss1"), "aa", jwks_a, t0());
-  cache.store(scoped("iss2"), "aa", jwks_ab, t0());
-  cache.store(scoped("iss1"), "aa", jwks_c, t0() + 1s); // update does not evict
+  cache.store(scoped("iss2"), "aa", jwks_ab, t0() + 1s);
+  cache.store(scoped("iss1"), "aa", jwks_c, t0() + 2s);
   EXPECT_EQ(2u, cache.size());
-  cache.store(scoped("iss3"), "aa", jwks_ab, t0() + 2s); // new issuer on a full cache
-  EXPECT_EQ(1u, cache.size());
-  EXPECT_FALSE(look(cache, "iss1", registered, "c", t0() + 3s));
-  EXPECT_EQ(jwks_ab, look(cache, "iss3", registered, "a", t0() + 3s));
+  EXPECT_EQ(jwks_ab, look(cache, "iss2", registered, "a", t0() + 2s));
+  cache.store(scoped("iss3"), "aa", jwks_ab, t0() + 3s);
+  EXPECT_EQ(2u, cache.size());
+  EXPECT_FALSE(look(cache, "iss2", registered, "a", t0() + 4s));
+  EXPECT_EQ(jwks_c, look(cache, "iss1", registered, "c", t0() + 4s));
+  EXPECT_EQ(jwks_ab, look(cache, "iss3", registered, "a", t0() + 4s));
+}
+
+TEST(STSJwksCache, ZeroCapacityDoesNotStore)
+{
+  JWKSCache cache(0);
+  cache.store(scoped("iss"), "aa", jwks_a, t0());
+  EXPECT_EQ(0u, cache.size());
+  EXPECT_FALSE(look(cache, "iss", registered, "a", t0()));
 }
 
 TEST(STSJwksCache, SameIssuerIsIsolatedAcrossAccounts)

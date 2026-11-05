@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 #pragma once
 
+#include <algorithm>
 #include <chrono>
 #include <functional>
 #include <map>
@@ -113,6 +114,9 @@ class JWKSCache {
              time_point now,
              const cert_digest_fn& digest = {})
   {
+    if (max_entries == 0) {
+      return;
+    }
     jwks_keys_map keys;
     for (auto& [kid, x5c] : jwks_keys(jwks)) {
       auto& thumbprints = keys[kid];
@@ -127,8 +131,11 @@ class JWKSCache {
     }
     std::lock_guard l{lock};
     if (entries.size() >= max_entries && entries.find(cache_key) == entries.end()) {
-      // issuers are registered providers, this is not expected in practice
-      entries.clear();
+      auto oldest = std::min_element(entries.begin(), entries.end(),
+          [](const auto& a, const auto& b) {
+            return a.second.stored_at < b.second.stored_at;
+          });
+      entries.erase(oldest);
     }
     entries[cache_key] = Entry{std::move(jwks), std::move(keys),
                          std::move(cert_thumbprint), now};
