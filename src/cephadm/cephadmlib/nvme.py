@@ -54,10 +54,19 @@ def describe_device(device_path: str) -> Dict[str, Any]:
                     '(expected /dev/nvmeXnY)')
 
     namespace = os.path.basename(device_path)
+
+    # A namespace the host does not have is reported as a fact rather than an
+    # error. The caller treats an error as "the probe is broken" and aborts OSD
+    # creation; no OSD can be created on a device that is not here, so there is
+    # nothing to abort. Every other failure still raises.
+    if not os.path.isdir(f'/sys/class/block/{namespace}'):
+        return {'device': device_path, 'present': False}
+
     nsid = _read_nsid(namespace)
     vendor, device = _read_pci_ids(namespace)
     return {
         'device': device_path,
+        'present': True,
         'pci_vendor': vendor,
         'pci_device': device,
         'nsid': nsid,
