@@ -194,7 +194,7 @@ struct bluestore_bdev_label_t {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& p);
   void dump(ceph::Formatter *f) const;
-  static std::list<bluestore_bdev_label_t> generate_test_instances();
+  static std::vector<bluestore_bdev_label_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(bluestore_bdev_label_t)
 
@@ -212,7 +212,7 @@ struct bluestore_cnode_t {
     DENC_FINISH(p);
   }
   void dump(ceph::Formatter *f) const;
-  static std::list<bluestore_cnode_t> generate_test_instances();
+  static std::vector<bluestore_cnode_t> generate_test_instances();
 };
 WRITE_CLASS_DENC(bluestore_cnode_t)
 
@@ -256,7 +256,7 @@ struct bluestore_pextent_t : public bluestore_interval_t<uint64_t, uint32_t>
   }
 
   void dump(ceph::Formatter *f) const;
-  static std::list<bluestore_pextent_t> generate_test_instances();
+  static std::vector<bluestore_pextent_t> generate_test_instances();
 };
 WRITE_CLASS_DENC(bluestore_pextent_t)
 
@@ -312,8 +312,8 @@ struct bluestore_extent_ref_map_t {
       f->dump_unsigned("length", length);
       f->dump_unsigned("refs", refs);
     }
-    static std::list<record_t> generate_test_instances() {
-      std::list<record_t> o;
+    static std::vector<record_t> generate_test_instances() {
+      std::vector<record_t> o;
       o.emplace_back();
       o.push_back(record_t(123, 456));
       return o;
@@ -386,7 +386,7 @@ struct bluestore_extent_ref_map_t {
   }
 
   void dump(ceph::Formatter *f) const;
-  static std::list<bluestore_extent_ref_map_t> generate_test_instances();
+  static std::vector<bluestore_extent_ref_map_t> generate_test_instances();
 };
 WRITE_CLASS_DENC(bluestore_extent_ref_map_t)
 WRITE_CLASS_DENC(bluestore_extent_ref_map_t::record_t)
@@ -629,7 +629,7 @@ struct bluestore_blob_use_tracker_t {
   }
 
   void dump(ceph::Formatter *f) const;
-  static std::list<bluestore_blob_use_tracker_t> generate_test_instances();
+  static std::vector<bluestore_blob_use_tracker_t> generate_test_instances();
 private:
   void allocate(uint32_t _num_au);
   void release(uint32_t _num_au, uint32_t* ptr);
@@ -752,7 +752,7 @@ public:
   }
 
   void dump(ceph::Formatter *f) const;
-  static std::list<bluestore_blob_t> generate_test_instances();
+  static std::vector<bluestore_blob_t> generate_test_instances();
 
   bool has_flag(unsigned f) const {
     return flags & f;
@@ -1280,7 +1280,7 @@ struct bluestore_shared_blob_t {
 
 
   void dump(ceph::Formatter *f) const;
-  static std::list<bluestore_shared_blob_t> generate_test_instances();
+  static std::vector<bluestore_shared_blob_t> generate_test_instances();
 
   bool empty() const {
     return ref_map.empty();
@@ -1305,7 +1305,7 @@ struct bluestore_onode_t {
       denc_varint(v.bytes, p);
     }
     void dump(ceph::Formatter *f) const;
-    static std::list<shard_info> generate_test_instances();
+    static std::vector<shard_info> generate_test_instances();
   };
   std::vector<shard_info> extent_map_shards; ///< extent std::map shards (if any)
 
@@ -1463,7 +1463,7 @@ struct bluestore_onode_t {
   }
 
   void dump(ceph::Formatter *f) const;
-  static std::list<bluestore_onode_t> generate_test_instances();
+  static std::vector<bluestore_onode_t> generate_test_instances();
 };
 WRITE_CLASS_DENC(bluestore_onode_t::shard_info)
 WRITE_CLASS_DENC_FEATURED(bluestore_onode_t)
@@ -1488,7 +1488,7 @@ struct bluestore_deferred_op_t {
     DENC_FINISH(p);
   }
   void dump(ceph::Formatter *f) const;
-  static std::list<bluestore_deferred_op_t> generate_test_instances();
+  static std::vector<bluestore_deferred_op_t> generate_test_instances();
 };
 WRITE_CLASS_DENC(bluestore_deferred_op_t)
 
@@ -1509,7 +1509,7 @@ struct bluestore_deferred_transaction_t {
     DENC_FINISH(p);
   }
   void dump(ceph::Formatter *f) const;
-  static std::list<bluestore_deferred_transaction_t> generate_test_instances();
+  static std::vector<bluestore_deferred_transaction_t> generate_test_instances();
 };
 WRITE_CLASS_DENC(bluestore_deferred_transaction_t)
 
@@ -1532,7 +1532,7 @@ struct bluestore_compression_header_t {
     DENC_FINISH(p);
   }
   void dump(ceph::Formatter *f) const;
-  static std::list<bluestore_compression_header_t> generate_test_instances();
+  static std::vector<bluestore_compression_header_t> generate_test_instances();
 };
 WRITE_CLASS_DENC(bluestore_compression_header_t)
 
