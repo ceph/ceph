@@ -59,11 +59,11 @@ class CephadmHttpServer(threading.Thread):
     def restart(self) -> None:
         self.cherrypy_restart_event.set()
 
-    def _sample_agent_pool(self) -> Optional[Tuple[int, int]]:
-        """Sample the shared /data + /node-proxy Cheroot worker pool."""
-        stats = getattr(self.mgr, 'agent_metadata_stats', None)
+    def _read_agent_pool(self) -> Optional[Tuple[int, int]]:
+        """Return (idle workers, queued connections) of the shared /data +
+        /node-proxy Cheroot worker pool, or None if it cannot be read."""
         adapter = self.agent_adapter
-        if not stats or not adapter:
+        if not adapter:
             return None
         try:
             httpserver = getattr(adapter, 'httpserver', None)
@@ -77,12 +77,27 @@ class CephadmHttpServer(threading.Thread):
             if callable(queued):
                 queued = queued()
             if isinstance(idle, int) and isinstance(queued, int):
-                stats.record_pool(idle, queued)
                 return idle, queued
         except Exception as e:
-            # Diagnostics must never interfere with the HTTP server lifecycle.
-            self.mgr.log.debug(f'Unable to sample cephadm-agent HTTP worker pool: {e}')
+            # Must never interfere with the HTTP server lifecycle.
+            self.mgr.log.debug(f'Unable to read cephadm-agent HTTP worker pool: {e}')
         return None
+
+    def agent_requests_queued(self) -> bool:
+        """True if connections are waiting for a free agent endpoint worker.
+        False if the queue is empty or its state is unknown."""
+        pool = self._read_agent_pool()
+        return pool is not None and pool[1] > 0
+
+    def _sample_agent_pool(self) -> Optional[Tuple[int, int]]:
+        """Sample the shared /data + /node-proxy Cheroot worker pool."""
+        stats = getattr(self.mgr, 'agent_metadata_stats', None)
+        if not stats:
+            return None
+        pool = self._read_agent_pool()
+        if pool is not None:
+            stats.record_pool(*pool)
+        return pool
 
     def _stop_adapters(self) -> None:
         adapters_to_stop = {

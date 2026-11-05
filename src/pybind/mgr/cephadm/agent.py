@@ -1,6 +1,7 @@
 import cherrypy
 import cephadm.cherrypy_compression_in  # noqa: F401
 import json
+import math
 import socket
 import ssl
 import threading
@@ -28,6 +29,22 @@ if TYPE_CHECKING:
 
 
 CEPHADM_AGENT_CERT_DURATION = (365 * 5)
+
+# Wall-clock time (seconds since the epoch) at which the agent sent a report.
+AGENT_SENT_AT_HEADER = 'X-Cephadm-Agent-Sent-At'
+
+
+def _agent_sent_at() -> Optional[float]:
+    """Return the agent send time of the current request, or None if the
+    header is missing or invalid (older agents do not send it)."""
+    try:
+        value = cherrypy.request.headers.get(AGENT_SENT_AT_HEADER)
+        if value is None:
+            return None
+        sent_at = float(value)
+    except (AttributeError, TypeError, ValueError):
+        return None
+    return sent_at if math.isfinite(sent_at) else None
 
 
 def _agent_stats_request_start(mgr: "CephadmOrchestrator", endpoint: str) -> None:
@@ -88,6 +105,9 @@ class AgentEndpoint:
     # an agent stuck on a hung mgr from waiting a whole (possibly long)
     # report period before it can notice a new target.
     MAX_REPORT_TIMEOUT_SECONDS = 120
+    # Allowance for clock skew between agent hosts and the mgr when deciding
+    # that an agent has stopped waiting for its reply.
+    STALE_REPORT_SKEW_MARGIN_SECONDS = 5
 
     def __init__(self, mgr: "CephadmOrchestrator") -> None:
         self.mgr = mgr
@@ -845,6 +865,17 @@ class HostData:
     @cherrypy.expose
     def index(self) -> Dict[str, Any]:
         stats = getattr(self.mgr, 'agent_metadata_stats', None)
+        agent_sent_at = _agent_sent_at()
+        # Check the age before parsing the body: a stale report is dropped
+        # without doing any of the per-report work.
+        stale_age = self._stale_report_age(agent_sent_at)
+        if stale_age is not None:
+            if stats:
+                stats.record_stale_drop(stale_age)
+            self.mgr.log.debug(
+                f'Dropping agent report from {cherrypy.request.remote.ip}: sent '
+                f'{stale_age:.1f}s ago, after its agent stopped waiting for the reply')
+            raise cherrypy.HTTPError(503, 'Agent report is stale and was not processed')
         data: Optional[Dict[str, Any]] = self.get_data()
         if data is None:
             # Unreadable body / invalid JSON. Keep the existing response but
@@ -866,13 +897,6 @@ class HostData:
             host = data['host']
             counter = self.mgr.agent_cache.agent_counter.get(host)
             if stats:
-                agent_sent_at = None
-                try:
-                    value = cherrypy.request.headers.get('X-Cephadm-Agent-Sent-At')
-                    if value is not None:
-                        agent_sent_at = float(value)
-                except (TypeError, ValueError):
-                    pass
                 stats.record_valid_report(host, agent_sent_at)
                 stats.record_report_state(
                     first_contact=counter is None,
@@ -899,6 +923,29 @@ class HostData:
                     jitter_seconds=jitter_seconds,
                 )
         return results
+
+    def _stale_report_age(self, agent_sent_at: Optional[float]) -> Optional[float]:
+        """Return the report age in seconds if the report must be dropped,
+        else None.
+
+        A report is dropped when it is older than the agent report timeout
+        plus a clock-skew margin, and other requests are queued at the
+        endpoint. By then the agent has stopped waiting for the reply and
+        sends a full report again on its next cycle, so processing this one
+        only delays the reports behind it. Requiring a queue keeps a host
+        whose clock is behind from having every report dropped while the mgr
+        is idle.
+        """
+        if agent_sent_at is None or not self.mgr.agent_drop_stale_reports:
+            return None
+        endpoint = self.mgr.http_server.agent
+        max_age = endpoint.get_report_timeout() + endpoint.STALE_REPORT_SKEW_MARGIN_SECONDS
+        age = time.time() - agent_sent_at
+        if age <= max_age:
+            return None
+        if not self.mgr.http_server.agent_requests_queued():
+            return None
+        return age
 
     def check_request_fields(self, data: Dict[str, Any]) -> None:
         fields = '{' + ', '.join([key for key in data.keys()]) + '}'

@@ -449,6 +449,18 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             desc='Multiplied by agent refresh rate to calculate how long agent must not report before being marked down'
         ),
         Option(
+            'agent_drop_stale_reports',
+            type='bool',
+            default=True,
+            level=OptionLevel.DEV,
+            desc='Drop agent metadata reports the agent has stopped waiting for, without processing them',
+            long_desc='A report is dropped when it is older than the agent report '
+                      'timeout (see "ceph orch agent show-config") plus a margin for '
+                      'clock skew, and other requests are queued at the agent endpoint. '
+                      'The agent sends a full report again on its next cycle. A dropped '
+                      'report does not count as a sign of life from the agent.'
+        ),
+        Option(
             'hw_monitoring',
             type='bool',
             default=False,
@@ -695,6 +707,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.agent_initial_startup_delay_max = 0
             self.agent_jitter_seconds = 0
             self.agent_down_multiplier = 0.0
+            self.agent_drop_stale_reports = True
             self.agent_starting_port = 0
             self.agent_metadata_compresion_enabled = True
             self.hw_monitoring = False
