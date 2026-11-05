@@ -23,6 +23,9 @@ void ApplyServerSideEncryptionByDefault::decode_xml(XMLObj *obj) {
   check_known_children(obj, {"KMSMasterKeyID", "SSEAlgorithm"});
   RGWXMLDecoder::decode_xml("KMSMasterKeyID", kmsMasterKeyID, obj, false);
   RGWXMLDecoder::decode_xml("SSEAlgorithm", sseAlgorithm, obj, true);
+  if (sseAlgorithm != "AES256" && sseAlgorithm != "aws:kms") {
+    throw RGWXMLDecoder::err("invalid SSEAlgorithm: '" + sseAlgorithm + "'");
+  }
 }
 
 void ApplyServerSideEncryptionByDefault::dump_xml(Formatter *f) const {
