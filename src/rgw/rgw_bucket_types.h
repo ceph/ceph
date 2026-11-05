@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include <vector>
 #include <fmt/format.h>
 
 #include "rgw_pool_types.h"
@@ -161,7 +162,7 @@ struct rgw_bucket {
 
   void dump(ceph::Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static std::list<rgw_bucket> generate_test_instances();
+  static std::vector<rgw_bucket> generate_test_instances();
 
   rgw_bucket& operator=(const rgw_bucket&) = default;
 

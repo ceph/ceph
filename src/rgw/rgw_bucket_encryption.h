@@ -4,6 +4,7 @@
 #pragma once
 #include <algorithm>
 #include <utility>
+#include <vector>
 #include <include/types.h>
 #include "include/encoding.h"
 
@@ -167,6 +168,6 @@ public:
   void decode_xml(XMLObj *obj);
   void dump_xml(Formatter *f) const;
   void dump(Formatter *f) const;
-  static std::list<RGWBucketEncryptionConfig> generate_test_instances();
+  static std::vector<RGWBucketEncryptionConfig> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(RGWBucketEncryptionConfig)

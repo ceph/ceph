@@ -22,6 +22,7 @@ using namespace rados::cls::lock;
 using std::list;
 using std::map;
 using std::string;
+using std::vector;
 
 static void generate_lock_id(locker_id_t& i, int n, const string& cookie)
 {
@@ -40,9 +41,9 @@ void cls_lock_lock_op::dump(Formatter *f) const
   f->dump_int("flags", (int)flags);
 }
 
-list<cls_lock_lock_op> cls_lock_lock_op::generate_test_instances()
+vector<cls_lock_lock_op> cls_lock_lock_op::generate_test_instances()
 {
-  list<cls_lock_lock_op> o;
+  vector<cls_lock_lock_op> o;
   cls_lock_lock_op i;
   i.name = "name";
   i.type = ClsLockType::SHARED;
@@ -62,9 +63,9 @@ void cls_lock_unlock_op::dump(Formatter *f) const
   f->dump_string("cookie", cookie);
 }
 
-list<cls_lock_unlock_op> cls_lock_unlock_op::generate_test_instances()
+vector<cls_lock_unlock_op> cls_lock_unlock_op::generate_test_instances()
 {
-  list<cls_lock_unlock_op> o;
+  vector<cls_lock_unlock_op> o;
   cls_lock_unlock_op i;
   i.name = "name";
   i.cookie = "cookie";
@@ -80,9 +81,9 @@ void cls_lock_break_op::dump(Formatter *f) const
   f->dump_stream("locker") << locker;
 }
 
-list<cls_lock_break_op> cls_lock_break_op::generate_test_instances()
+vector<cls_lock_break_op> cls_lock_break_op::generate_test_instances()
 {
-  list<cls_lock_break_op> o;
+  vector<cls_lock_break_op> o;
   cls_lock_break_op i;
   i.name = "name";
   i.cookie = "cookie";
@@ -97,9 +98,9 @@ void cls_lock_get_info_op::dump(Formatter *f) const
   f->dump_string("name", name);
 }
 
-list<cls_lock_get_info_op> cls_lock_get_info_op::generate_test_instances()
+vector<cls_lock_get_info_op> cls_lock_get_info_op::generate_test_instances()
 {
-  list<cls_lock_get_info_op> o;
+  vector<cls_lock_get_info_op> o;
   cls_lock_get_info_op i;
   i.name = "name";
   o.push_back(std::move(i));
@@ -139,9 +140,9 @@ void cls_lock_get_info_reply::dump(Formatter *f) const
   f->close_section();
 }
 
-list<cls_lock_get_info_reply> cls_lock_get_info_reply::generate_test_instances()
+vector<cls_lock_get_info_reply> cls_lock_get_info_reply::generate_test_instances()
 {
-  list<cls_lock_get_info_reply> o;
+  vector<cls_lock_get_info_reply> o;
   cls_lock_get_info_reply i;
   i.lock_type = ClsLockType::SHARED;
   i.tag = "tag";
@@ -171,9 +172,9 @@ void cls_lock_list_locks_reply::dump(Formatter *f) const
   f->close_section();
 }
 
-list<cls_lock_list_locks_reply> cls_lock_list_locks_reply::generate_test_instances()
+vector<cls_lock_list_locks_reply> cls_lock_list_locks_reply::generate_test_instances()
 {
-  list<cls_lock_list_locks_reply> o;
+  vector<cls_lock_list_locks_reply> o;
   cls_lock_list_locks_reply i;
   i.locks.push_back("lock1");
   i.locks.push_back("lock2");
@@ -192,9 +193,9 @@ void cls_lock_assert_op::dump(Formatter *f) const
   f->dump_string("tag", tag);
 }
 
-list<cls_lock_assert_op> cls_lock_assert_op::generate_test_instances()
+vector<cls_lock_assert_op> cls_lock_assert_op::generate_test_instances()
 {
-  list<cls_lock_assert_op> o;
+  vector<cls_lock_assert_op> o;
   cls_lock_assert_op i;
   i.name = "name";
   i.type = ClsLockType::SHARED;
@@ -214,9 +215,9 @@ void cls_lock_set_cookie_op::dump(Formatter *f) const
   f->dump_string("new_cookie", new_cookie);
 }
 
-list<cls_lock_set_cookie_op> cls_lock_set_cookie_op::generate_test_instances()
+vector<cls_lock_set_cookie_op> cls_lock_set_cookie_op::generate_test_instances()
 {
-  list<cls_lock_set_cookie_op> o;
+  vector<cls_lock_set_cookie_op> o;
   cls_lock_set_cookie_op i;
   i.name = "name";
   i.type = ClsLockType::SHARED;
@@ -227,4 +228,3 @@ list<cls_lock_set_cookie_op> cls_lock_set_cookie_op::generate_test_instances()
   o.emplace_back();
   return o;
 }
-

@@ -254,9 +254,9 @@ bool ACLOwner::empty() const
       ), id);
 }
 
-list<ACLPermission> ACLPermission::generate_test_instances()
+vector<ACLPermission> ACLPermission::generate_test_instances()
 {
-  list<ACLPermission> o;
+  vector<ACLPermission> o;
   ACLPermission p;
   p.set_permissions(RGW_PERM_WRITE_ACP);
   o.push_back(std::move(p));
@@ -303,9 +303,9 @@ void ACLGrant::dump(Formatter *f) const
   encode_json("permission", permission, f);
 }
 
-list<ACLGrant> ACLGrant::generate_test_instances()
+vector<ACLGrant> ACLGrant::generate_test_instances()
 {
-  list<ACLGrant> o;
+  vector<ACLGrant> o;
   ACLGrant g1;
   g1.set_canon(rgw_user{"rgw"}, "Mr. RGW", RGW_PERM_READ);
   o.push_back(std::move(g1));
@@ -318,19 +318,19 @@ list<ACLGrant> ACLGrant::generate_test_instances()
   return o;
 }
 
-list<ACLGranteeType> ACLGranteeType::generate_test_instances()
+vector<ACLGranteeType> ACLGranteeType::generate_test_instances()
 {
-  list<ACLGranteeType> o;
+  vector<ACLGranteeType> o;
   o.push_back(ACLGranteeType(ACL_TYPE_CANON_USER));
   o.emplace_back();
   return o;
 }
 
-list<RGWAccessControlList> RGWAccessControlList::generate_test_instances()
+vector<RGWAccessControlList> RGWAccessControlList::generate_test_instances()
 {
-  list<RGWAccessControlList> o;
+  vector<RGWAccessControlList> o;
   RGWAccessControlList acl;
-  list<ACLGrant> grants = ACLGrant::generate_test_instances();
+  vector<ACLGrant> grants = ACLGrant::generate_test_instances();
   for (ACLGrant& grant : grants) {
     acl.add_grant(grant);
   }
@@ -339,9 +339,9 @@ list<RGWAccessControlList> RGWAccessControlList::generate_test_instances()
   return o;
 }
 
-list<ACLOwner> ACLOwner::generate_test_instances()
+vector<ACLOwner> ACLOwner::generate_test_instances()
 {
-  list<ACLOwner> o;
+  vector<ACLOwner> o;
   ACLOwner owner;
   owner.id = "rgw";
   owner.display_name = "Mr. RGW";
@@ -350,10 +350,10 @@ list<ACLOwner> ACLOwner::generate_test_instances()
   return o;
 }
 
-list<RGWAccessControlPolicy> RGWAccessControlPolicy::generate_test_instances()
+vector<RGWAccessControlPolicy> RGWAccessControlPolicy::generate_test_instances()
 {
-  list<RGWAccessControlPolicy> o;
-  list<RGWAccessControlList> acl_list = RGWAccessControlList::generate_test_instances();
+  vector<RGWAccessControlPolicy> o;
+  vector<RGWAccessControlList> acl_list = RGWAccessControlList::generate_test_instances();
   for (auto& acl : acl_list) {
     RGWAccessControlPolicy p;
     p.acl = acl;
