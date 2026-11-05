@@ -102,6 +102,9 @@ class NodeProxyEndpoint:
         # self.ssl_ctx.load_verify_locations(cadata=self.ssl_root_crt)
         self.redfish_token: str = ''
         self.redfish_session_location: str = ''
+        self._cp_config = {
+            'hooks.before_handler': self._check_get_keyring,
+        }
 
     def _cp_dispatch(self, vpath: List[str]) -> "NodeProxyEndpoint":
         if len(vpath) > 1:  # /{hostname}/<endpoint>
@@ -118,6 +121,22 @@ class NodeProxyEndpoint:
                     cherrypy.request.params['id'] = _id
         # /<endpoint>
         return self
+
+    def _check_get_keyring(self) -> None:
+        """Require a node-proxy keyring on GET requests."""
+        if cherrypy.request.method != 'GET':
+            return
+        cephx: Dict[str, Any] = {}
+        name = cherrypy.request.headers.get('Cephx-Name')
+        secret = cherrypy.request.headers.get('Cephx-Secret')
+        if name is not None:
+            cephx['name'] = name
+        if secret is not None:
+            cephx['secret'] = secret
+        self.validate_node_proxy_data({'cephx': cephx})
+        hostname = cherrypy.request.params.get('hostname')
+        if hostname and cephx['name'][11:] != hostname:
+            raise cherrypy.HTTPError(403, f'Got wrong keyring from agent on host {hostname}.')
 
     @cherrypy.expose
     @cherrypy.tools.allow(methods=['POST'])
