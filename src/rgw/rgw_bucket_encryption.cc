@@ -65,6 +65,10 @@ void ServerSideEncryptionConfiguration::dump_xml(Formatter *f) const {
 
 void RGWBucketEncryptionConfig::decode_xml(XMLObj *obj) {
   check_known_children(obj, {"Rule"});
+  // only the first Rule is decoded, so a second one would be dropped
+  if (auto rules = obj->find("Rule"); rules.get_next() && rules.get_next()) {
+    throw RGWXMLDecoder::err("more than one Rule");
+  }
   rule_exist = RGWXMLDecoder::decode_xml("Rule", rule, obj, true);
 }
 
