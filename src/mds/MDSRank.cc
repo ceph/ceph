@@ -2943,6 +2943,28 @@ void MDSRankDispatcher::handle_asok_command(
 	      }));
 	}));
     return;
+  } else if (command == "migrate status") {
+    std::lock_guard l(mds_lock);
+    migrate_queue->dump(f);
+  } else if (command == "migrate pause" || command == "migrate resume" ||
+             command == "migrate abort") {
+    auto c = command == "migrate pause" ? MigrateQueue::Control::PAUSE :
+             command == "migrate resume" ? MigrateQueue::Control::RESUME :
+             MigrateQueue::Control::ABORT;
+    std::optional<uint64_t> id;
+    int64_t i;
+    if (cmd_getval(cmdmap, "id", i))
+      id = i;
+    auto respond = new AsyncResponse(f, std::move(on_finish));
+    finisher->queue(
+      new LambdaContext(
+        [this, respond, c, id](int) {
+          std::lock_guard l(mds_lock);
+          int r = migrate_queue->control(c, id, respond->ss, respond);
+          if (r < 0)
+            respond->complete(r);
+        }));
+    return;
   } else if (command == "scrub abort") {
     if (!is_active()) {
       *css << "MDS is not active";

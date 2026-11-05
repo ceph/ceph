@@ -365,6 +365,25 @@ void MDSDaemon::set_up_admin_socket()
 				     asok_hook,
 				     "scrub and inode and output results");
   ceph_assert(r == 0);
+  r = admin_socket->register_command("migrate status",
+                                     asok_hook,
+                                     "Show the directory migrations of this rank");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command("migrate pause "
+                                     "name=id,type=CephInt,req=false",
+                                     asok_hook,
+                                     "Pause a directory migration, or all of them");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command("migrate resume "
+                                     "name=id,type=CephInt,req=false",
+                                     asok_hook,
+                                     "Resume a directory migration, or all of them");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command("migrate abort "
+                                     "name=id,type=CephInt,req=false",
+                                     asok_hook,
+                                     "Abort a directory migration, or all of them");
+  ceph_assert(r == 0);
   r = admin_socket->register_command("scrub abort",
                                      asok_hook,
                                      "Abort in progress scrub operations(s)");
