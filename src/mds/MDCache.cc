@@ -15036,6 +15036,15 @@ void MDCache::aggregate_snap_sets(const std::vector<std::unique_ptr<SnapSetConte
 	auto next_it = it1 + 1;
 	dout(20) << __func__ << ": [next cloneid: " << next_it->cloneid << " snaps: " << next_it->snaps
 		 << " overlap: " << next_it->overlap << "]" << dendl;
+	if (it1->size == 0 && next_it->size == 0) {
+	  // truncating an already empty object under a newer snap context
+	  // still clones it. the object is empty on both sides of this clone,
+	  // so there is no extent to report.
+	  dout(10) << __func__ << ": empty on both sides, nothing changed" << dendl;
+	  ++it1;
+	  continue;
+	}
+
 	auto sz = next_it->size;
 	if (sz == 0) {
 	  // this object is a hole in the file.
