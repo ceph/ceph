@@ -1230,13 +1230,24 @@ options:
   - mds
   flags:
   - runtime
+- name: mds_migrate_inject_drop
+  type: float
+  level: dev
+  desc: test only, share of the messages between ranks about directory migrations
+    to ignore on receipt
+  default: 0
+  services:
+  - mds
+  flags:
+  - runtime
 - name: mds_kill_file_migrate_at
   type: int
   level: dev
   desc: test only, abort at a point of a file migration
   long_desc: 1 while copying, 2 once the new layout is journaled, 3 while clearing
     the old pool, 4 with the old pool cleared but that not yet journaled,
-    5 after a copy without the lock.
+    5 after a copy without the lock, 6 with a hand-over to another rank durable
+    but not sent, 7 with one received and durable but not acked.
   default: 0
   services:
   - mds

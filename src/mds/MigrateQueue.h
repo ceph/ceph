@@ -26,9 +26,11 @@
 #include <vector>
 
 #include "include/buffer.h"
+#include "include/cephfs/types.h"
 #include "include/frag.h"
 #include "include/types.h"
 #include "include/utime.h"
+#include "msg/MessageRef.h"
 
 #include "Server.h"
 
@@ -37,6 +39,8 @@ class CInode;
 class Context;
 class MDSContext;
 class MDSRank;
+class Message;
+class MMDSMigrate;
 namespace ceph { class Formatter; }
 
 /*
@@ -64,6 +68,9 @@ public:
 
   void tick();
 
+  // Messages from the other ranks; each is resent until it has had an effect.
+  void dispatch(const cref_t<Message>& m);
+
   // On job id, or on every job if none is given.  fin runs when it is durable.
   int control(Control c, std::optional<uint64_t> id, std::ostream& ss,
               Context *fin);
@@ -77,6 +84,7 @@ private:
     inodeno_t ino;
     frag_t fg;          // the root frag stands for the whole directory
     bool file = false;
+    mds_rank_t where = MDS_RANK_NONE;  // who holds it, as far as we know
     void encode(ceph::buffer::list& bl) const;
     void decode(ceph::buffer::list::const_iterator& p);
   };
@@ -110,6 +118,44 @@ private:
     void decode(ceph::buffer::list::const_iterator& p);
   };
 
+  // What the sub-job on another rank last said about itself.
+  struct Report {
+    uint64_t job = 0;           // its id on that rank
+    uint8_t state = 0;
+    std::string reason;
+    std::string hold;
+    uint64_t accepted = 0;      // the last item it took from the origin
+    bool idle = false;          // durably nothing left, all it found handed in
+    uint64_t dirs_active = 0;
+    uint64_t dirs_queued = 0;
+    uint64_t files_in_progress = 0;
+    Progress total;
+    void encode(ceph::buffer::list& bl) const;
+    void decode(ceph::buffer::list::const_iterator& p);
+  };
+
+  /*
+   * One direction of hand-overs and the other, between a job and its sub-job
+   * on another rank.  Items get a number per link and sit in the queue object
+   * as hand.<id>.<rank>.<seq> until the peer has them durably.
+   */
+  struct Link {
+    mds_rank_t rank = MDS_RANK_NONE;
+    uint64_t sent = 0;          // the last number given out
+    uint64_t acked = 0;         // what the peer has durably, cumulative
+    uint64_t accepted = 0;      // the last number taken from the peer
+    Report report;              // origin only
+
+    // not persisted
+    std::map<uint64_t, Item> out;  // numbered sent back to acked
+    uint64_t durable = 0;       // only what we would remember goes out
+    uint64_t on_wire = 0;
+    utime_t last_sent;
+    std::string refused;        // why the peer does not take them
+    void encode(ceph::buffer::list& bl) const;
+    void decode(ceph::buffer::list::const_iterator& p);
+  };
+
   struct Job {
     uint64_t id = 0;
     inodeno_t root;
@@ -121,6 +167,13 @@ private:
     utime_t started, finished;
     Progress done;
 
+    // A sub-job does on this rank a part of a job started on another: the
+    // origin.  Everything it finds on a third rank goes through the origin.
+    mds_rank_t origin_rank = MDS_RANK_NONE;
+    uint64_t origin_job = 0;
+    bool over = false;          // the origin told us it is finished with it
+    std::map<mds_rank_t, Link> links;
+
     // not persisted
     std::vector<Item> pending;       // a stack, which keeps the queue small
     std::string hold;                // why nothing starts now
@@ -129,6 +182,9 @@ private:
     bool live() const {
       return state == State::RUNNING || state == State::PAUSED;
     }
+    bool is_sub() const { return origin_rank != MDS_RANK_NONE; }
+    // A sub-job with nothing to do can get more until the origin is finished.
+    bool open() const { return live() || (is_sub() && !over); }
     void encode(ceph::buffer::list& bl) const;
     void decode(ceph::buffer::list::const_iterator& p);
   };
@@ -150,6 +206,7 @@ private:
     };
     std::list<Retry> retries;
     std::set<inodeno_t> subdirs;
+    std::vector<Item> remote;   // found on other ranks
     Progress prog;
   };
 
@@ -160,6 +217,7 @@ private:
 
   static std::string job_key(uint64_t id);
   static std::string dir_key(uint64_t id, const Item& item);
+  static std::string hand_key(uint64_t id, mds_rank_t rank, uint64_t seq);
 
   void _load_next(const std::string& after);
   void _load_done();
@@ -171,6 +229,30 @@ private:
   void _rm(const std::string& key);
   void _flush(Context *fin);
   void _commit();
+
+  Job *_find_sub(mds_rank_t origin, uint64_t id);
+  Link& _link(Job& job, mds_rank_t rank);
+  bool _settled(const Job& job, const Link& l) const;
+  void _route(Job& job, const Item& item);
+  void _hand_over(Job& job, mds_rank_t to, const Item& item);
+  Context *_on_durable(const Job& job);
+  void _send_items(Job& job, Link& l, bool resend);
+  void _send_msg(int op, mds_rank_t to, mds_rank_t origin, uint64_t id,
+                 ceph::buffer::list&& bl);
+  void _send_ack(mds_rank_t to, mds_rank_t origin, uint64_t id,
+                 uint64_t accepted, int err, const std::string& reason);
+  void _report(Job& job);
+  void _tell_rank(uint64_t id, mds_rank_t rank, uint64_t seen);
+  void _tell_ranks(const Job& job);
+  void _tick_links();
+  void _check_gone_ranks(Job& job);
+  std::string _clash(const std::string& path, int64_t pool) const;
+  void _handle_items(mds_rank_t from, const cref_t<MMDSMigrate>& m);
+  void _handle_ack(mds_rank_t from, const cref_t<MMDSMigrate>& m);
+  void _handle_report(mds_rank_t from, const cref_t<MMDSMigrate>& m);
+  void _handle_control(const cref_t<MMDSMigrate>& m);
+  Progress _total(const Job& job, uint64_t *dirs_active = nullptr,
+                  uint64_t *in_flight = nullptr) const;
 
   void _kick(bool tick = false);
   bool _start_something();
