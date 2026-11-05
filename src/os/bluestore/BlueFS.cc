@@ -4897,12 +4897,12 @@ int BlueFS::open_for_write(
       dout(20) << " stamp=#" << std::hex << file->stamp << std::dec << dendl;
     }
     (*h)->writer_type = BlueFS::WRITER_WAL;
-    if (logger && !overwrite) {
+    if (logger && create) {
       logger->inc(l_bluefs_files_written_wal);
     }
   } else if (boost::algorithm::ends_with(filename, ".sst")) {
     (*h)->writer_type = BlueFS::WRITER_SST;
-    if (logger) {
+    if (logger && create) {
       logger->inc(l_bluefs_files_written_sst);
     }
   }
