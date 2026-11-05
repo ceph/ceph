@@ -71,8 +71,8 @@ void WriteLogCacheEntry::dump(Formatter *f) const {
   f->dump_unsigned("entry_index", entry_index);
 }
 
-std::list<WriteLogCacheEntry> WriteLogCacheEntry::generate_test_instances() {
-  std::list<WriteLogCacheEntry> ls;
+std::vector<WriteLogCacheEntry> WriteLogCacheEntry::generate_test_instances() {
+  std::vector<WriteLogCacheEntry> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().sync_gen_number = 1;
@@ -102,8 +102,8 @@ void WriteLogPoolRoot::dump(Formatter *f) const {
   f->dump_unsigned("first_valid_entry", first_valid_entry);
 }
 
-std::list<WriteLogPoolRoot> WriteLogPoolRoot::generate_test_instances() {
-  std::list<WriteLogPoolRoot> ls;
+std::vector<WriteLogPoolRoot> WriteLogPoolRoot::generate_test_instances() {
+  std::vector<WriteLogPoolRoot> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().layout_version = 2;

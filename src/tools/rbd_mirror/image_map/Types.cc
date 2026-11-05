@@ -105,8 +105,8 @@ void PolicyData::dump(Formatter *f) const {
   std::visit(DumpVisitor(f, "policy_meta_type"), policy_meta);
 }
 
-std::list<PolicyData> PolicyData::generate_test_instances() {
-  std::list<PolicyData> o;
+std::vector<PolicyData> PolicyData::generate_test_instances() {
+  std::vector<PolicyData> o;
   o.push_back(PolicyData(PolicyMetaNone()));
   return o;
 }
