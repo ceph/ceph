@@ -202,8 +202,22 @@ int LFUDAPolicy::init(CephContext* cct, const DoutPrefixProvider* dpp, asio::io_
           const DoutPrefixProvider* dpp, const std::string& key, const std::string& version, bool deleteMarker, const std::string& bucket_id,
 			    const rgw_obj_key& obj_key, const std::string& instance, optional_yield y, std::string& restore_val) {
     std::string dirty_obj_key = rgw::sal::get_cache_block_prefix(bucket_id, obj_key.name, version);
+    // Offset + length of this file if it is a data block ("bucket#version#name#offset#len"), else 0.
+    // Used to rebuild the size of an object that has no HEAD in the directory.
+    uint64_t block_end = 0;
+    if (auto blk = rgw::sal::parse_block_from_cache(key); blk) {
+      block_end = blk->blockID + blk->size;
+    }
     //Since there could be multiple data blocks of an object, we check if o_entries_map has already been populated for an object
-    if (!find_obj_entry(dirty_obj_key)) {
+    if (auto existing = find_obj_entry(dirty_obj_key); existing) {
+      // An entry restored as INVALID is removed by do_delete(), which walks the data blocks up
+      // to e->size. Make sure that size covers every block found on disk.
+      std::lock_guard<std::mutex> l(lfuda_cleaning_lock);
+      auto it = o_entries_map.find(dirty_obj_key);
+      if (it != o_entries_map.end() && it->second.second == State::INVALID && existing->size < block_end) {
+        existing->size = block_end;
+      }
+    } else {
       rgw::d4n::CacheBlock block;
       if (instance == "null") {
         block.cacheObj.objName = rgw::sal::get_versioned_head_block_name("null", obj_key.name);
@@ -215,12 +229,27 @@ int LFUDAPolicy::init(CephContext* cct, const DoutPrefixProvider* dpp, asio::io_
       block.size = 0;
       // An invalid cached marker must remain restorable after its directory cleanup commits.
       const bool invalid_marker = deleteMarker && "1" == restore_val;
-      if (const int ret = invalid_marker
-              ? cacheDriver->get_attrs(dpp, key, block.cacheObj.attrs, y)
-              : blockDir.get(dpp, y, &block, std::nullopt); ret < 0) {
+      const int ret = invalid_marker
+          ? cacheDriver->get_attrs(dpp, key, block.cacheObj.attrs, y)
+          : blockDir.get(dpp, y, &block, std::nullopt);
+      if (-ENOENT == ret && !invalid_marker) {
+        /* No HEAD in the directory: the object was deleted (for example, a crash after do_delete()
+           removed the directory entries but before it removed the local files), or this is a delete
+           marker that never committed. Nothing is written back, but the local files must still be
+           removed: track the object as INVALID so that cleaning() calls do_delete(). Its size is
+           rebuilt from the data block keys (see block_end above). Without this, block_callback
+           restores the blocks as dirty, which are never cleaned or evicted. */
+        ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): no HEAD in directory for " << dirty_obj_key
+                           << ", restoring as INVALID for cleanup" << dendl;
+        std::lock_guard<std::mutex> l(lfuda_cleaning_lock);
+        create_obj_entry(dpp, dirty_obj_key, version, deleteMarker, deleteMarker ? 0 : block_end,
+                         ceph::real_clock::now(), rgw_user{}, std::string{}, std::string{},
+                         bucket_id, obj_key, State::INVALID);
+        return;
+      }
+      if (ret < 0) {
         const auto whence = std::source_location::current();
         detail::log_message(dpp, whence, "failed to restore object attributes: {}", ret);
-
         return;
       }
       rgw::sal::Attrs attrs = std::move(block.cacheObj.attrs);
@@ -934,6 +963,13 @@ void LFUDAPolicy::update_dirty_object(const DoutPrefixProvider* dpp, const std::
   ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): Before acquiring lock, adding entry: " << key << dendl;
 
   std::unique_lock<std::mutex> l(lfuda_cleaning_lock);
+  // The key includes the version, so an existing entry is the same dirty object. Adding it
+  // again would leak a second LFUDAObjEntry: create_obj_entry()'s emplace into o_entries_map
+  // fails, but the new entry is still inserted into per_obj_versions.
+  if (o_entries_map.find(key) != o_entries_map.end()) {
+    ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): entry already tracked, key=" << key << dendl;
+    return;
+  }
   LFUDAObjEntry* e = create_obj_entry(dpp, key, version, deleteMarker, size, creationTime, user, etag, bucket_name, bucket_id, obj_key, state);
   if (nullptr == e) {
     return;
@@ -1627,9 +1663,17 @@ int LFUDAPolicy::do_writeback(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, o
       return 0;  // Already cleaned by another RGW
     }
   } else if (ret == -ENOENT) {
+    /* set_head_block_dir_entry() writes the version-specific HEAD for every committed dirty
+       object, in the same transaction as its other HEADs, and HEADs are never evicted. Its
+       absence means the version was deleted, or (for a delete marker) that it never committed.
+       Nothing is written back. Return -ECANCELED, as the re-check in Step 3 does, so that
+       cleaning() moves the entry to INVALID and do_delete() removes the local copy.
+       Returning -ENOENT would drop the entry and leave its local files dirty: never written
+       back, never evicted. */
     ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__
-                       << "(): versioned HEAD not found, object may be deleted, key=" << e->key << dendl;
-    return ret;
+                       << "(): versioned HEAD not found (deleted or never committed), removing local copy, key="
+                       << e->key << dendl;
+    return -ECANCELED;
   } else {
     ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__
                       << "(): Failed to get versioned HEAD, ret=" << ret << dendl;

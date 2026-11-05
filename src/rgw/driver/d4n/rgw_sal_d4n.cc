@@ -46,6 +46,7 @@
 #include "d4n_directory_redis.h"
 #include "d4n_directory_fdb.h"
 #include "rgw_ssd_driver.h"
+#include "common/strtol.h"
 
 namespace rgw::sal {
 
@@ -1619,7 +1620,7 @@ int D4NFilterObject::calculate_version(const DoutPrefixProvider* dpp, optional_y
 
 int D4NFilterObject::write_if_space_available(const DoutPrefixProvider* dpp, const std::string& key, const bufferlist& bl, uint64_t len, const Attrs& attrs, 
                                                uint64_t ofs, const std::string& version, const bool& dirty, const rgw_user user, const std::string& bucketName, 
-                                               uint8_t op, optional_yield y, rgw::d4n::CacheBlock* block) {
+                                               uint8_t op, optional_yield y, rgw::d4n::CacheBlock* block, bool update_policy) {
   // Fast path: enough space exists, reserve and return
   auto cacheDriver = driver->get_cache_driver();
   uint64_t size = len;
@@ -1647,78 +1648,14 @@ int D4NFilterObject::write_if_space_available(const DoutPrefixProvider* dpp, con
 
   ret = driver->get_cache_driver()->put(dpp, key, bl, len, attrs, y);
   if (ret == 0) {
-    driver->get_policy_driver()->get_cache_policy()->update(dpp, key, ofs, len, version, dirty, user, bucketName, op, y, block);
+    if (update_policy) {
+      driver->get_policy_driver()->get_cache_policy()->update(dpp, key, ofs, len, version, dirty, user, bucketName, op, y, block);
+    }
   } else {
     ldpp_dout(dpp, 0) << __func__ << "(): ERROR: Cache driver put call failed, ret=" << ret << dendl;
     rollback_reservation();
     return ret;
   }
-  return 0;
-}
-
-/* This method creates a delete marker for dirty objects:
-1. creates a head block entry in cache driver - so that data can be restored from this when rgw goes down
-2. calls set_head_block_dir_entry to set block entries for a delete marker */
-int D4NFilterObject::create_delete_marker(const DoutPrefixProvider* dpp, optional_yield y,
-                                          const std::string& forced_version, bool remote,
-                                          std::optional<rgw::d4n::Transaction> txn)
-{
-  this->delete_marker = true;
-  if (!forced_version.empty()) {
-    // On the remote RGW (or when the caller has already minted the version), reuse it so
-    // the same delete marker version exists on both RGWs.
-    this->version = forced_version;
-  } else {
-    char buf[OBJ_INSTANCE_LEN + 1];
-    gen_rand_alphanumeric_no_underscore(dpp->get_cct(), buf, OBJ_INSTANCE_LEN);
-    this->version = buf;
-  }
-  ldpp_dout(dpp, 20) << "D4NFilterObject::" << __func__ << "(): generating delete marker: " << version << dendl;
-  if (this->get_bucket()->versioned() && !this->get_bucket()->versioning_enabled()) { //if versioning is suspended
-    this->set_instance("null");
-  } else {
-    this->set_instance(version);
-  }
-
-  auto m_time = real_clock::now();
-
-  this->set_mtime(m_time);
-  this->set_accounted_size(0); //setting 0 as this is a delete marker
-  this->set_obj_size(0); // setting 0 as this is a delete marker
-  ldpp_dout(dpp, 20) << "D4NFilterObject::" << __func__ << " size is: " << this->get_size() << dendl;
-  rgw::sal::Attrs attrs;
-  this->set_attrs_from_obj_state(dpp, y, attrs, true);
-  bufferlist bl_val;
-  bl_val.append(std::to_string(this->delete_marker));
-  attrs[RGW_CACHE_ATTR_DELETE_MARKER] = std::move(bl_val);
-  std::string key = get_cache_block_prefix(this, this->version);
-
-  bufferlist bl;
-  ldpp_dout(dpp, 20) << "D4NFilterObject::" << __func__ << "(): key is: " << key << dendl;
-  ldpp_dout(dpp, 20) << "D4NFilterObject::" << __func__ << "(): version stored in update method is: " << version << dendl;
-  // These cache and policy effects are outside the directory transaction.
-  // Handle FoundationDB unknown_commit: their directory/payload reconciliation remains a TODO:
-  auto ret = write_if_space_available(dpp, key, bl, bl.length(), attrs, 0, version, true, std::get<rgw_user>(this->get_bucket()->get_owner()),
-                                       this->get_bucket()->get_name(), rgw::d4n::RefCount::NOOP, y, nullptr); // bl.length() is equal to 0
-  if (ret == 0) {
-  // On the remote RGW directory entries must NOT be modified — directory state is owned
-  // by the local RGW. We still cache the (dirty) head block and track it for cleaning.
-  if (!remote) {
-    ret = this->set_head_block_dir_entry(dpp, y, attrs, true, true, txn);
-    if (ret < 0) {
-      ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): BlockDirectory set method failed for head object, ret=" << ret << dendl;
-      return ret;
-    }
-  }
-  auto creationTime = this->get_mtime();
-  ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): key=" << key << dendl;
-  std::string objEtag;
-  driver->get_policy_driver()->get_cache_policy()->update_dirty_object(dpp, key, version, true, this->get_accounted_size(), creationTime, std::get<rgw_user>(this->get_bucket()->get_owner()), objEtag, this->get_bucket()->get_name(), this->get_bucket()->get_bucket_id(), this->get_key(), rgw::d4n::RefCount::NOOP, y);
-  } else {
-    ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Write failed for key, ret=" << ret << dendl;
-    return ret;
-  }
-
   return 0;
 }
 
@@ -3357,10 +3294,10 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(
 
 int D4NFilterObject::D4NFilterDeleteOp::send_remote_delete(const DoutPrefixProvider* dpp,
                                                            optional_yield y,
-                                                           const std::string& objName,
                                                            const std::string& version,
                                                            bool objDirty,
-                                                           const std::string& dm_version)
+                                                           const std::string& dm_version,
+                                                           ceph::real_time dm_mtime)
 {
   auto& user = source->get_bucket()->get_owner();
   std::string remote_addr = dpp->get_cct()->_conf->rgw_d4n_remote_cache_address;
@@ -3373,7 +3310,7 @@ int D4NFilterObject::D4NFilterDeleteOp::send_remote_delete(const DoutPrefixProvi
 
   rgw::d4n::RemoteCacheDeleteOp::RemoteCacheDeleteOpData op {
     source->get_bucket()->get_name(),
-    objName,
+    source->get_name(), // the S3 object name, not the HEAD's directory name ("_" + name for a name starting with "_")
     0,
     0,
     version,
@@ -3385,6 +3322,10 @@ int D4NFilterObject::D4NFilterDeleteOp::send_remote_delete(const DoutPrefixProvi
 
   // Pass delete marker version if one was created
   op.delete_marker_version = dm_version;
+  if (!dm_version.empty()) {
+    op.delete_marker_mtime = std::to_string(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(dm_mtime.time_since_epoch()).count());
+  }
 
   std::unique_ptr<rgw::d4n::RemoteCacheDeleteOp> remote_delete =
     std::make_unique<rgw::d4n::RemoteCacheDeleteOp>(source->driver, op);
@@ -3400,24 +3341,73 @@ int D4NFilterObject::D4NFilterDeleteOp::send_remote_delete(const DoutPrefixProvi
   return 0;
 }
 
+int D4NFilterObject::D4NFilterDeleteOp::drop_clean_null_head(const DoutPrefixProvider* dpp,
+                                                              optional_yield y,
+                                                              rgw::d4n::Transaction& txn)
+{
+  /* set_head_block_dir_entry() writes "_:null_<name>" (and "_:<version>_<name>") for clean
+     objects too. A simple delete in a suspended bucket replaces the null version on the backend
+     with a null delete marker, so these entries would keep serving the old data to
+     GET ?versionId=null. A dirty null version is left alone: its cleanup belongs to the cleaner. */
+  auto blockDir = source->driver->get_block_dir();
+  rgw::d4n::CacheBlock null_head {
+    .cacheObj = {
+      .objName = get_versioned_head_block_name("null", source->get_name()),
+      .bucketName = source->get_bucket()->get_bucket_id(),
+    },
+    .blockID = 0,
+    .size = 0,
+  };
+  int ret = blockDir->get(dpp, y, &null_head, std::ref(txn));
+  if (ret == -ENOENT) {
+    return 0;
+  }
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to get null head, ret=" << ret << dendl;
+    return ret;
+  }
+  if (null_head.cacheObj.dirty) {
+    ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): null version is dirty, leaving it, version="
+                       << null_head.version << dendl;
+    return 0;
+  }
+  const std::string null_version = null_head.version;
+  if ((ret = blockDir->del(dpp, y, &null_head, std::ref(txn))) < 0 && ret != -ENOENT) {
+    ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to delete null head, ret=" << ret << dendl;
+    return ret;
+  }
+  if (!null_version.empty()) {
+    null_head.cacheObj.objName = get_versioned_head_block_name(null_version, source->get_name());
+    if ((ret = blockDir->del(dpp, y, &null_head, std::ref(txn))) < 0 && ret != -ENOENT) {
+      ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to delete null version alias, ret=" << ret << dendl;
+      return ret;
+    }
+  }
+  return 0;
+}
+
 int D4NFilterObject::D4NFilterDeleteOp::update_directory_entries(const DoutPrefixProvider* dpp,
                                                                   optional_yield y,
                                                                   rgw::d4n::Transaction& txn,
                                                                   bool objDirty,
                                                                   const std::string& version,
                                                                   const std::string& objName,
-                                                                  rgw::d4n::CacheBlock& block,
-                                                                  const std::string& dm_version,
-                                                                  bool& delete_marker_created)
+                                                                  rgw::d4n::CacheBlock& block)
 {
   auto blockDir = source->driver->get_block_dir();
   auto objDir = source->driver->get_obj_dir();
   auto bucketDir = source->driver->get_bucket_dir();
   int ret = 0;
-  delete_marker_created = false;
 
   // Versioned buckets
   if (source->get_bucket()->versioned()) {
+    /* set_head_block_dir_entry() also writes "_:<version>_<name>" for null-instance objects and
+       when versioning is suspended. Remove it with the head it aliases, or it outlives the object:
+       HEADs are never evicted, and do_writeback() reads this entry to decide whether a dirty
+       version is still live. For a real instance it is the instance entry itself (deleted twice
+       here, which is harmless). */
+    const bool has_ver_alias = source->get_instance() == "null" || !source->get_bucket()->versioning_enabled();
+
     /* 1. clean objects - no latest head entry as latest entry to be retrieved from backend now
         hence delete only versioned head object */
     if (!objDirty && !source->is_cache_request()) {
@@ -3435,7 +3425,28 @@ int D4NFilterObject::D4NFilterDeleteOp::update_directory_entries(const DoutPrefi
           ldpp_dout(dpp, 0) << "Failed to delete head object in block directory for: " << block.cacheObj.objName << ", ret=" << ret << dendl;
         }
       }
-    } else if (objDirty || source->is_cache_request()) { //2. dirty objects - 1. add delete marker for simple request 2. delete version if given and correctly promote latest version if needed
+      if (has_ver_alias) {
+        rgw::d4n::CacheBlock version_block = block;
+        version_block.cacheObj.objName = get_versioned_head_block_name(block.version, source->get_name());
+        if ((ret = blockDir->del(dpp, y, &version_block, std::ref(txn))) < 0 && ret != -ENOENT) {
+          ldpp_dout(dpp, 0) << "Failed to delete version-specific head object in block directory for: "
+                            << version_block.cacheObj.objName << ", ret=" << ret << dendl;
+          return ret;
+        }
+      }
+      if (!source->have_instance() && !source->get_bucket()->versioning_enabled()) {
+        if ((ret = drop_clean_null_head(dpp, y, txn)) < 0) {
+          return ret;
+        }
+      }
+    } else if (objDirty || source->is_cache_request()) { //2. dirty objects - delete version if given and correctly promote latest version if needed (delete markers for simple requests are created by delete_obj())
+      // delete_obj() creates the delete marker for a simple delete and does not call this method.
+      if (block.cacheObj.objName == objName) {
+        ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): ERROR: simple delete of a dirty object reached "
+                          << "update_directory_entries; delete marker must be created by delete_obj()" << dendl;
+        return -EINVAL;
+      }
+
       // Lambda: Delete or tombstone a block based on dirty status
       auto delete_or_tombstone = [&](rgw::d4n::CacheBlock* blk, const char* desc) -> int {
         if (objDirty) {
@@ -3453,17 +3464,6 @@ int D4NFilterObject::D4NFilterDeleteOp::update_directory_entries(const DoutPrefi
       if (ret < 0) {
         ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to get latest entry, ret=" << ret << dendl;
         return ret;
-      }
-
-      // Simple delete request - create delete marker
-      if (block.cacheObj.objName == objName) {
-        ret = source->create_delete_marker(dpp, y, dm_version, /*remote=*/false, txn);
-        if (ret < 0) {
-          ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to create delete marker, ret=" << ret << dendl;
-          return ret;
-        }
-        delete_marker_created = true;
-        return 0;
       }
 
       // Version-specific delete
@@ -3489,14 +3489,14 @@ int D4NFilterObject::D4NFilterDeleteOp::update_directory_entries(const DoutPrefi
           ret = blockDir->get(dpp, y, &version_block, txn);
           if (ret < 0) {
             ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to get versioned entry, ret=" << ret << dendl;
-            return ret;
+            return ret; // returning 0 would commit a partial delete
           }
 
           version_block.cacheObj.objName = latest_block.cacheObj.objName;
           ret = blockDir->set(dpp, y, &version_block, txn);
           if (ret < 0) {
             ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to promote version, ret=" << ret << dendl;
-            return ret;
+            return ret; // returning 0 would commit a partial delete
           }
 
           // Update bucket directory for promoted version (FDB only)
@@ -3531,8 +3531,8 @@ int D4NFilterObject::D4NFilterDeleteOp::update_directory_entries(const DoutPrefi
         }
       }
 
-      // Delete/tombstone unique version belonging to versioning suspended buckets
-      if (source->get_bucket()->versioned() && !source->get_bucket()->versioning_enabled()) {
+      // Delete/tombstone the version-specific alias (null instance or versioning suspended)
+      if (has_ver_alias) {
         rgw::d4n::CacheBlock version_block = block;
         version_block.cacheObj.objName = get_versioned_head_block_name(block.version, source->get_name());
         ret = delete_or_tombstone(&version_block, "versioned entry");
@@ -3559,25 +3559,9 @@ int D4NFilterObject::D4NFilterDeleteOp::update_directory_entries(const DoutPrefi
 
   // Non-versioned buckets
   if (!source->get_bucket()->versioned()) {
-    // Check for active GET leases before HEAD deletion
-    if (objDirty) {
-      auto* lease = source->driver->get_lease();
-      if (lease) {
-        std::string lease_prefix = rgw::sal::get_lease_resource_prefix(
-          source->get_bucket()->get_bucket_id(),
-          source->get_name(),
-          version,
-          "GET");
-        auto result = lease->any_active(dpp, lease_prefix);
-
-        // The lease lookup failed; preserve the existing log-and-continue policy:
-        if (!result) {
-          ldpp_dout(dpp, 1) << "D4NFilterObject::" << __func__ << "(): lease check failed, error=" << result.error() << dendl;
-        }
-      }
-    }
-
-    // For dirty objects: tombstone, for clean objects: delete
+    // For dirty objects: tombstone, for clean objects: delete.
+    // No GET lease check is needed here: tombstoning does not remove data, and do_delete()
+    // defers the actual removal of a dirty object while a GET lease is active.
     if (objDirty) {
       block.invalid = true;
       ret = blockDir->set(dpp, y, &block, txn);
@@ -3590,7 +3574,7 @@ int D4NFilterObject::D4NFilterDeleteOp::update_directory_entries(const DoutPrefi
       if (block.cacheObj.objName == objName) {
         block.cacheObj.objName = get_versioned_head_block_name("null", source->get_name());
       } else {
-        block.cacheObj.objName = source->get_name();
+        block.cacheObj.objName = objName; // latest HEAD name ("_" prefixed for names starting with '_')
       }
       block.invalid = true;
       ret = blockDir->set(dpp, y, &block, txn);
@@ -3618,7 +3602,7 @@ int D4NFilterObject::D4NFilterDeleteOp::update_directory_entries(const DoutPrefi
       if (block.cacheObj.objName == objName) {
         block.cacheObj.objName = get_versioned_head_block_name("null", source->get_name());
       } else {
-        block.cacheObj.objName = source->get_name();
+        block.cacheObj.objName = objName; // latest HEAD name ("_" prefixed for names starting with '_')
       }
       ret = blockDir->del(dpp, y, &block, txn);
       if (ret < 0) {
@@ -3664,6 +3648,207 @@ int D4NFilterObject::D4NFilterDeleteOp::update_directory_entries(const DoutPrefi
   return 0;
 }
 
+/* Delete marker creation for dirty objects.
+   The work is split so that only directory writes happen inside a retried transaction:
+     1. make_delete_marker_spec()   - fix version, instance, mtime and attrs once
+     2. put_delete_marker_head()    - write the head to the local cache before the commit, so that a
+                                      crash after the commit still leaves a local copy to write back
+        send_remote_delete()        - (delete_obj) replicate to the remote RGW, also before the commit
+     3. stage_delete_marker_dir()   - set the head block directory entries (inside the transaction)
+     4. track_delete_marker()       - register with the cache policy, once, after the commit
+   remove_delete_marker_head() undoes step 2 if the transaction does not commit. */
+D4NFilterObject::ObjectSnapshot D4NFilterObject::snapshot_object()
+{
+  return ObjectSnapshot{
+    .instance = this->get_instance(),
+    .version = this->version,
+    .delete_marker_version = this->delete_marker_version,
+    .delete_marker = this->delete_marker,
+    .mtime = this->get_mtime(),
+    .size = this->get_size(),
+    .accounted_size = this->get_accounted_size(),
+  };
+}
+
+void D4NFilterObject::restore_object(const ObjectSnapshot& s)
+{
+  if (s.instance.empty()) {
+    this->clear_instance();
+  } else {
+    this->set_instance(s.instance);
+  }
+  this->version = s.version;
+  this->delete_marker_version = s.delete_marker_version;
+  this->delete_marker = s.delete_marker;
+  ceph::real_time mtime = s.mtime;
+  this->set_mtime(mtime);
+  this->set_obj_size(s.size);
+  this->set_accounted_size(s.accounted_size);
+}
+
+void D4NFilterObject::apply_delete_marker_state(const DeleteMarkerSpec& spec)
+{
+  this->delete_marker = true;
+  this->version = spec.version;
+  this->set_instance(spec.instance);
+  ceph::real_time mtime = spec.mtime;
+  this->set_mtime(mtime);
+  this->set_accounted_size(0); //setting 0 as this is a delete marker
+  this->set_obj_size(0); // setting 0 as this is a delete marker
+}
+
+void D4NFilterObject::set_delete_marker_mtime(const DoutPrefixProvider* dpp, const std::string& ns)
+{
+  auto parsed = ceph::parse<uint64_t>(ns);
+  if (!parsed) {
+    ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): ignoring invalid delete marker mtime '" << ns << "'" << dendl;
+    delete_marker_mtime.reset();
+    return;
+  }
+  delete_marker_mtime = ceph::real_time(std::chrono::nanoseconds(*parsed));
+}
+
+D4NFilterObject::DeleteMarkerSpec
+D4NFilterObject::make_delete_marker_spec(const DoutPrefixProvider* dpp, optional_yield y,
+                                         const std::string& forced_version,
+                                         std::optional<ceph::real_time> forced_mtime)
+{
+  DeleteMarkerSpec spec;
+  if (!forced_version.empty()) {
+    // On the remote RGW (or when the caller has already minted the version), reuse it so
+    // the same delete marker version exists on both RGWs.
+    spec.version = forced_version;
+  } else {
+    char buf[OBJ_INSTANCE_LEN + 1];
+    gen_rand_alphanumeric_no_underscore(dpp->get_cct(), buf, OBJ_INSTANCE_LEN);
+    spec.version = buf;
+  }
+  if (this->get_bucket()->versioned() && !this->get_bucket()->versioning_enabled()) { //if versioning is suspended
+    spec.instance = "null";
+  } else {
+    spec.instance = spec.version;
+  }
+  // On the remote RGW, use the local RGW's mtime so that both copies (and whichever RGW writes
+  // the delete marker back) agree on it.
+  spec.mtime = forced_mtime ? *forced_mtime : real_clock::now();
+
+  // The attrs are derived from object state, so build them with the delete marker state
+  // applied, then restore the caller's state: this method must leave `this` unchanged.
+  const auto saved = snapshot_object();
+  apply_delete_marker_state(spec);
+  this->set_attrs_from_obj_state(dpp, y, spec.attrs, true);
+  bufferlist bl_val;
+  bl_val.append(std::to_string(true));
+  spec.attrs[RGW_CACHE_ATTR_DELETE_MARKER] = std::move(bl_val);
+  spec.cache_key = get_cache_block_prefix(this, spec.version);
+  restore_object(saved);
+
+  ldpp_dout(dpp, 20) << "D4NFilterObject::" << __func__ << "(): delete marker version: " << spec.version
+                     << " instance: " << spec.instance << " key: " << spec.cache_key << dendl;
+  return spec;
+}
+
+int D4NFilterObject::put_delete_marker_head(const DoutPrefixProvider* dpp, optional_yield y,
+                                            const DeleteMarkerSpec& spec)
+{
+  bufferlist bl; // a delete marker head has no data
+  int ret = write_if_space_available(dpp, spec.cache_key, bl, bl.length(), spec.attrs, 0, spec.version, true,
+                                     std::get<rgw_user>(this->get_bucket()->get_owner()),
+                                     this->get_bucket()->get_name(), rgw::d4n::RefCount::NOOP, y, nullptr,
+                                     /*update_policy=*/false);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Write failed for key=" << spec.cache_key
+                      << ", ret=" << ret << dendl;
+  }
+  return ret;
+}
+
+void D4NFilterObject::remove_delete_marker_head(const DoutPrefixProvider* dpp, optional_yield y,
+                                                const DeleteMarkerSpec& spec)
+{
+  int ret = driver->get_cache_driver()->delete_data(dpp, spec.cache_key, y);
+  if (ret < 0 && ret != -ENOENT) {
+    ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): failed to remove uncommitted delete marker head, key="
+                      << spec.cache_key << ", ret=" << ret << dendl;
+  }
+}
+
+int D4NFilterObject::stage_delete_marker_dir(const DoutPrefixProvider* dpp, optional_yield y,
+                                             const DeleteMarkerSpec& spec, rgw::d4n::Transaction& txn)
+{
+  // set_head_block_dir_entry() reads the object's instance, version and mtime. The caller restores the original
+  // state at the start of every attempt, so this has no effect on a replay.
+  apply_delete_marker_state(spec);
+  rgw::sal::Attrs attrs = spec.attrs; // set_head_block_dir_entry() takes a non-const reference
+  int ret = this->set_head_block_dir_entry(dpp, y, attrs, true, true, std::ref(txn));
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): BlockDirectory set method failed for head object, ret=" << ret << dendl;
+  }
+  return ret;
+}
+
+void D4NFilterObject::track_delete_marker(const DoutPrefixProvider* dpp, optional_yield y,
+                                          const DeleteMarkerSpec& spec)
+{
+  auto policy = driver->get_policy_driver()->get_cache_policy();
+  const rgw_user owner = std::get<rgw_user>(this->get_bucket()->get_owner());
+  policy->update(dpp, spec.cache_key, 0, 0, spec.version, true, owner, this->get_bucket()->get_name(),
+                 rgw::d4n::RefCount::NOOP, y, nullptr);
+  ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): key=" << spec.cache_key << dendl;
+  std::string objEtag;
+  policy->update_dirty_object(dpp, spec.cache_key, spec.version, true, 0, spec.mtime, owner, objEtag,
+                              this->get_bucket()->get_name(), this->get_bucket()->get_bucket_id(),
+                              this->get_key(), rgw::d4n::RefCount::NOOP, y);
+}
+
+int D4NFilterObject::delete_marker_in_directory(const DoutPrefixProvider* dpp, optional_yield y,
+                                                const DeleteMarkerSpec& spec)
+{
+  // set_head_block_dir_entry() writes "_:<version>_<name>" for every delete marker: it is the
+  // instance entry when versioning is enabled, and the version-specific entry when suspended.
+  rgw::d4n::CacheBlock blk {
+    .cacheObj = {
+      .objName = get_versioned_head_block_name(spec.version, this->get_name()),
+      .bucketName = this->get_bucket()->get_bucket_id(),
+    },
+    .blockID = 0,
+    .size = 0,
+  };
+  int ret = driver->get_block_dir()->get(dpp, y, &blk, std::nullopt);
+  if (ret == -ENOENT) {
+    return 0;
+  }
+  if (ret < 0) {
+    return ret;
+  }
+  return (blk.deleteMarker && blk.version == spec.version) ? 1 : 0;
+}
+
+int D4NFilterObject::delete_applied_in_directory(const DoutPrefixProvider* dpp, optional_yield y,
+                                                 const std::string& version)
+{
+  /* Every delete tombstones (dirty) or removes (clean) "_:<version>_<name>": it is the instance
+     entry for a real instance, and the version-specific alias otherwise. A PUT writes a different
+     version's key, so it cannot make this entry live again. A missing or tombstoned entry may also
+     come from a concurrent delete of the same version; the object is deleted either way. */
+  rgw::d4n::CacheBlock blk {
+    .cacheObj = {
+      .objName = get_versioned_head_block_name(version, this->get_name()),
+      .bucketName = this->get_bucket()->get_bucket_id(),
+    },
+    .blockID = 0,
+    .size = 0,
+  };
+  int ret = driver->get_block_dir()->get(dpp, y, &blk, std::nullopt);
+  if (ret == -ENOENT) {
+    return 1;
+  }
+  if (ret < 0) {
+    return ret;
+  }
+  return blk.invalid ? 1 : 0;
+}
+
 int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
                                                    optional_yield y, uint32_t flags)
 {
@@ -3673,53 +3858,63 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
   rgw::d4n::CacheBlock block;
   const bool cache_request = source->cache_request;
   std::string objName = source->get_name();
-  const bool remote_cache_request = source->is_remote_cache_request();
-  // Retain one marker ID throughout replay and for owner reconciliation.
-  std::string dm_version = remote_cache_request ? source->get_delete_marker_version() : std::string{};
+  bool remote_cache_request = source->is_remote_cache_request();
   bool objDirty = false;
   std::string version;
   bool delete_marker_created = false;
 
   // Retry the directory transaction through its owning backend.
   bool head_missing = false;
-  bool remote_delete_marker_created = false;
+  bool remote_delete_marker_requested = false;
+  // Version of the head found by the last attempt; update_directory_entries() modifies `block`.
+  std::string head_version;
+  bool head_is_delete_marker = false;
 
-  // Own the request fields that marker creation changes.
-  const std::string request_instance = source->get_instance();
-  const std::string request_version = source->get_object_version();
-  const auto request_mtime = source->get_mtime();
-  const auto request_size = source->get_size();
-  const auto request_accounted_size = source->get_accounted_size();
-  const bool request_delete_marker = source->is_delete_marker();
-  const auto restore_request = [&, this] {
-    source->set_instance(request_instance);
-    source->set_object_version(request_version);
-    source->delete_marker = request_delete_marker;
+  /* Delete marker creation must be safe to retry:
+     - every attempt starts from the object state the request arrived with (orig_snapshot), because
+       staging a delete marker changes the object's instance, version, mtime and size;
+     - the delete marker's version, mtime and attrs are decided once (dm_spec), so every attempt
+       writes the same directory entries;
+     - the local head is written outside the transaction, before the commit that needs it, and is
+       removed again unless the delete marker commits; the cache policy is told about it only once,
+       after the commit.
+     Whether a delete marker is needed depends on the object being dirty, which is only known
+     reliably inside the transaction. So the transaction decides: if a delete marker is needed and
+     its head has not been written yet, the attempt stops with STAGE_DELETE_MARKER before writing
+     anything, the head is written, and the transaction runs once more. Clean deletes never write a
+     local head; dirty simple deletes pay one extra, read-only, aborted transaction. */
+  constexpr int STAGE_DELETE_MARKER = -ERESTART;
+  const auto orig_snapshot = source->snapshot_object();
+  std::optional<DeleteMarkerSpec> dm_spec;
+  bool need_dm_stage = false;
+  bool dm_keep_local = false;
+  auto dm_rollback = make_scope_guard([&]() {
+    if (dm_spec && !dm_keep_local) {
+      source->remove_delete_marker_head(dpp, y, *dm_spec);
+    }
+  });
 
-    // SAL's setter takes a mutable reference; keep the saved value immutable.
-    auto mtime = request_mtime;
-    source->set_mtime(mtime);
-    source->set_obj_size(request_size);
-    source->set_accounted_size(request_accounted_size);
-  };
-
-  const auto txn_result = source->driver->retry_transaction(dpp, y,
-      [&, this](rgw::d4n::Transaction& txn) -> int {
-        restore_request();
+  auto attempt = [this, dpp, y, cache_request, remote_cache_request, &orig_snapshot, &dm_spec, &need_dm_stage, &attrs, &head_oid_in_cache, &block, &objDirty, &version, &objName, &delete_marker_created, &head_missing, &remote_delete_marker_requested, &head_version, &head_is_delete_marker](rgw::d4n::Transaction& txn) -> int {
+        source->restore_object(orig_snapshot);
         attrs.clear();
         head_oid_in_cache.clear();
         version.clear();
         block = {};
         objDirty = false;
         head_missing = false;
-        remote_delete_marker_created = false;
+        remote_delete_marker_requested = false;
         delete_marker_created = false;
+        need_dm_stage = false;
+        head_version.clear();
+        head_is_delete_marker = false;
 
         const int head_ret = source->check_head_exists_in_cache_get_oid(
             dpp, head_oid_in_cache, block, y, txn);
         if (head_ret < 0) {
           return head_ret;
         }
+        head_version = block.version;
+        head_is_delete_marker = block.deleteMarker;
 
         // Clean versioned objects have no latest cache head. A suspended DELETE must
         // still invalidate their cached null instance before delegating to the backend.
@@ -3750,6 +3945,15 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
             return -ENOENT;
           }
           head_missing = true;
+          /* A clean object in a versioned bucket has no plain head, so a simple delete lands here.
+             When versioning is suspended, the backend delete replaces the null version: drop
+             its cached heads in this transaction. */
+          if (!remote_cache_request && !source->have_instance() && source->get_bucket()->versioned()
+              && !source->get_bucket()->versioning_enabled()) {
+            if (int r = drop_clean_null_head(dpp, y, txn); r < 0) {
+              return r;
+            }
+          }
           return 0;
         }
 
@@ -3760,14 +3964,10 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
 
         // ===== REMOTE RGW PATH =====
         if (dpp->get_cct()->_conf->rgw_d4n_remote_delete_enabled && remote_cache_request) {
-          if (!dm_version.empty()) {
-            if (const int marker_ret = source->create_delete_marker(dpp, y, dm_version, true, txn);
-                marker_ret < 0) {
-              rgw::d4n::detail::log_message(dpp, std::source_location::current(),
-                "failed to replicate delete marker, ret={}", marker_ret);
-              return marker_ret;
-            }
-            remote_delete_marker_created = true;
+          if (!orig_snapshot.delete_marker_version.empty()) {
+            // The remote RGW does not modify directory entries (they are owned by the local
+            // RGW), so the delete marker is replicated after the transaction, not inside it.
+            remote_delete_marker_requested = true;
             return 0;
           }
 
@@ -3776,33 +3976,130 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
 
         // ===== LOCAL RGW PATH =====
         if (!remote_cache_request) {
-          bool will_create_dm = objDirty
-                              && source->get_bucket()->versioned()
-                              && !source->have_instance();
-          if (will_create_dm && dm_version.empty()) {
-            char dm_buf[OBJ_INSTANCE_LEN + 1];
-            gen_rand_alphanumeric_no_underscore(dpp->get_cct(), dm_buf, OBJ_INSTANCE_LEN);
-            dm_version = dm_buf;
-            source->set_delete_marker_version(dm_version);
+          objName = get_latest_head_block_name(source->get_name());
+
+          /* A simple delete (head found under the plain name, i.e. no instance) of a dirty object
+             in a versioned bucket creates a delete marker; nothing else in the directory changes.
+             This is the only place that decides it; update_directory_entries() handles every
+             other case. */
+          const bool dm_needed = source->get_bucket()->versioned()
+                              && (objDirty || source->is_cache_request())
+                              && block.cacheObj.objName == objName;
+          if (dm_needed) {
+            if (!dm_spec) {
+              // Stop before writing anything; the head is written outside the transaction.
+              need_dm_stage = true;
+              return STAGE_DELETE_MARKER;
+            }
+            int dm_ret = source->stage_delete_marker_dir(dpp, y, *dm_spec, txn);
+            if (dm_ret < 0) {
+              ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to create delete marker, ret=" << dm_ret << dendl;
+              return dm_ret;
+            }
+            delete_marker_created = true;
+            return 0;
           }
 
-          const auto head_name = get_latest_head_block_name(source->get_name());
-          int update_ret = update_directory_entries(dpp, y, txn, objDirty, version, head_name, block, dm_version, delete_marker_created);
+          int update_ret = update_directory_entries(dpp, y, txn, objDirty, version, objName, block);
           if (update_ret < 0) {
             ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): update_directory_entries failed, ret=" << update_ret << dendl;
             return update_ret;
           }
         }
         return 0;
-      });
+      };
+
+  auto txn_result = source->driver->retry_transaction(dpp, y, attempt);
+  if (need_dm_stage && rgw::d4n::rejected_with(txn_result, STAGE_DELETE_MARKER)) {
+    // A delete marker is needed: write its head, then run the transaction again. The second run
+    // re-reads everything, so if the object was cleaned in between it creates no delete marker
+    // and dm_rollback removes the head.
+    dm_spec = source->make_delete_marker_spec(dpp, y, "");
+    if (int r = source->put_delete_marker_head(dpp, y, *dm_spec); r < 0) {
+      ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): failed to write delete marker head, ret=" << r << dendl;
+      dm_spec.reset(); // nothing to roll back
+      source->restore_object(orig_snapshot);
+      return r;
+    }
+    /* Replicate the delete marker to the remote RGW before the local commit, so that an
+       acknowledged delete marker always has two copies. If the send fails, nothing has been
+       committed: the request fails and dm_rollback removes the local head. If the local commit
+       then fails (or the second run creates no delete marker), the remote copy has no directory
+       entry; the remote's do_writeback() finds no version-specific HEAD and removes it.
+       version and objDirty were set by the first, stopped, run. */
+    if (!remote_cache_request && dpp->get_cct()->_conf->rgw_d4n_remote_delete_enabled) {
+      if (int r = send_remote_delete(dpp, y, version, objDirty, dm_spec->version, dm_spec->mtime); r < 0) {
+        ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): failed to replicate delete marker to remote RGW, ret=" << r << dendl;
+        source->restore_object(orig_snapshot);
+        return r;
+      }
+    }
+    txn_result = source->driver->retry_transaction(dpp, y, attempt);
+  }
 
   // Handle FoundationDB unknown_commit: reconcile before replay, which could create another marker:
-  if (const int ret = handle_transaction_result(dpp, txn_result); 0 > ret) {
-    restore_request();
-    return ret;
+  int ret_txn = handle_transaction_result(dpp, txn_result,
+    [this, dpp, y, &dm_spec, &delete_marker_created, &dm_keep_local, &head_missing, &remote_cache_request, &head_version](const auto&) -> int {
+      /* The commit may or may not have been applied, and replaying it is not safe (a
+         replay could create another delete marker). For a delete marker, read the directory
+         to find out whether it was applied. Any other delete returns an error to the client. */
+      if (!dm_spec || !delete_marker_created) {
+        /* The remote RGW never writes the directory. A missing head writes at most the
+           null-head cleanup (drop_clean_null_head), which is safe to lose: continue with the
+           backend delete. */
+        if (head_missing || remote_cache_request) {
+          return 0;
+        }
+        /* Find out whether the delete was applied. If so, continue with the post-commit steps
+           (all of them are safe to repeat). If it was not, or this cannot be told, return an
+           error: a commit that lands later is repaired by cleaning, as before. */
+        int applied = source->delete_applied_in_directory(dpp, y, head_version);
+        if (applied == 1) {
+          ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): uncertain commit was applied, version="
+                             << head_version << dendl;
+          return 0;
+        }
+        if (applied < 0) {
+          ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): could not verify uncertain commit, ret="
+                            << applied << dendl;
+        }
+        return -EIO;
+      }
+      int committed = source->delete_marker_in_directory(dpp, y, *dm_spec);
+      if (committed == 1) {
+        ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): uncertain commit was applied, delete marker version="
+                           << dm_spec->version << dendl;
+        return 0;
+      }
+      if (committed < 0) {
+        /* Cannot tell. Keep the local head and track it: if the delete marker is in the
+           directory it will be written back; if not, do_writeback() finds no directory entry
+           and drops it. */
+        ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): could not verify uncertain commit, ret=" << committed
+                          << "; keeping delete marker version=" << dm_spec->version << " for cleaning" << dendl;
+        dm_keep_local = true;
+        source->apply_delete_marker_state(*dm_spec);
+        source->track_delete_marker(dpp, y, *dm_spec);
+      }
+      return -EIO;
+    });
+
+  if (ret_txn < 0) {
+    if (!dm_keep_local) {
+      source->restore_object(orig_snapshot);
+    }
+    return ret_txn;
   }
-    
+
   if (head_missing) {
+    /* The remote RGW never deletes from the backend: the local RGW owns that. The remote
+       request carries no versionId, so next->delete_obj() here would be a simple DELETE (an
+       extra delete marker in a versioned bucket), and could remove an object PUT after the local
+       delete. No head means nothing is cached here to clean up. */
+    if (remote_cache_request) {
+      ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): remote delete, head object not found; nothing to do" << dendl;
+      return 0;
+    }
     ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): head object not found; calling next->delete_obj" << dendl;
     next->params = params;
     const int ret = next->delete_obj(dpp, y, flags);
@@ -3810,7 +4107,16 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
     return ret;
   }
 
-  if (remote_delete_marker_created) {
+  if (remote_delete_marker_requested) {
+    // Replicate the delete marker forwarded by the local RGW, with the same version.
+    auto remote_dm = source->make_delete_marker_spec(dpp, y, orig_snapshot.delete_marker_version,
+                                                     source->get_delete_marker_mtime());
+    if (int r = source->put_delete_marker_head(dpp, y, remote_dm); r < 0) {
+      ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): failed to replicate delete marker, ret=" << r << dendl;
+      return r;
+    }
+    source->apply_delete_marker_state(remote_dm);
+    source->track_delete_marker(dpp, y, remote_dm);
     result.delete_marker = true;
     result.version_id = source->get_instance();
     return 0;
@@ -3818,16 +4124,22 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
 
   // Special case: delete marker created for simple delete in versioned bucket
   if (delete_marker_created) {
+    dm_keep_local = true;
+    source->apply_delete_marker_state(*dm_spec);
+    source->set_delete_marker_version(dm_spec->version);
+    source->track_delete_marker(dpp, y, *dm_spec);
     result.delete_marker = true;
     // Suspended versioning exposes the null instance, rather than D4N's internal version.
     result.version_id = source->get_instance();
-    if (!remote_cache_request && dpp->get_cct()->_conf->rgw_d4n_remote_delete_enabled) {
-      auto ret = send_remote_delete(dpp, y, objName, version, objDirty, dm_version);
-      if (ret < 0) {
-        return ret;
-      }
-    }
+    // Already replicated to the remote RGW before the commit.
     return 0;
+  }
+
+  /* A dirty delete never reaches the backend, so next->result is not available: report the
+     deleted version, and whether it was a delete marker, as the backend would. */
+  if (objDirty && !remote_cache_request) {
+    result.version_id = source->get_instance();
+    result.delete_marker = head_is_delete_marker;
   }
 
   // After directory transaction completes, invalidate dirty objects for cleanup by do_delete
@@ -3842,16 +4154,20 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
   }
 
   // Cache entry deletion - executed by both local RGW and remote RGW (when low free space)
-  int size;
+  uint64_t size;
   if (objDirty) {
-    std::string size_str;
-    if (attrs.find(RGW_CACHE_ATTR_OBJECT_SIZE) != attrs.end()) {
-      size_str = attrs.find(RGW_CACHE_ATTR_OBJECT_SIZE)->second.to_str();
-    } else {
+    auto size_it = attrs.find(RGW_CACHE_ATTR_OBJECT_SIZE);
+    if (size_it == attrs.end()) {
       ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to retrieve size for: " << block.cacheObj.objName << dendl;
       return -EINVAL;
     }
-    size = stoi(size_str);
+    auto parsed = ceph::parse<uint64_t>(size_it->second.to_str());
+    if (!parsed) {
+      ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Invalid size '" << size_it->second.to_str()
+                        << "' for: " << block.cacheObj.objName << dendl;
+      return -EINVAL;
+    }
+    size = *parsed;
   } else { //for clean objects
     size = this->source->get_size();
   }
@@ -3878,8 +4194,13 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
         }
 
         std::string key = get_key_in_cache(get_cache_block_prefix(source, version), std::to_string(fst), std::to_string(cur_len));
+        /* The directory transaction has committed, so do not fail the request: that would skip the
+           backend delete and the remote send, and a client retry could create a second delete
+           marker. A block left behind is reclaimed later: do_delete() for dirty objects
+           (invalidated above), eviction for clean ones (the policy entry remains). */
         if (auto ret = source->delete_cache_entry(dpp, key, y); ret < 0) {
-          return ret;
+          ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to delete cache entry " << key
+                            << ", ret=" << ret << "; leaving it for cleanup" << dendl;
         }
         fst += cur_len;
       }
@@ -3887,7 +4208,8 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
   }
 
   // Backend delete only for clean objects
-  // Dirty objects: backend delete handled by do_writeback (if concurrent) or not needed (never written)
+  // Dirty objects: the dirty version is handled by do_writeback (if concurrent) or do_delete; an
+  // older written-back copy of a non-versioned or null-version object is removed at the end
   if (!objDirty) {
     if (cache_request && remote_cache_request) {
       // Skip backend delete for cache_request, but send remote delete below
@@ -3902,10 +4224,33 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
     }
   }
 
-  // Send delete to remote RGW at the end (after all local operations complete)
-  if (!remote_cache_request && dpp->get_cct()->_conf->rgw_d4n_remote_delete_enabled) {
-    auto ret = send_remote_delete(dpp, y, objName, version, objDirty, dm_version);
-    if (ret < 0) {
+  // Send delete to remote RGW at the end (after all local operations complete).
+  // No delete marker was created on this path, so no delete marker version is sent.
+  /* The delete is complete; the remote copy is only stale data, so a failure is logged, not
+     returned (a client retry could create a second delete marker). The remote cleans up on its
+     own: a dirty copy's do_writeback() finds the version-specific HEAD missing or tombstoned and
+     hands it to do_delete(); a clean copy's blocks are keyed by version and are evicted. A clean
+     delete is not sent at all: the backend delete is done here. */
+  if (objDirty && !remote_cache_request && dpp->get_cct()->_conf->rgw_d4n_remote_delete_enabled) {
+    if (auto ret = send_remote_delete(dpp, y, version, objDirty, std::string{}); ret < 0) {
+      ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): remote delete failed, ret=" << ret
+                        << "; remote copy will be cleaned up by the remote RGW" << dendl;
+    }
+  }
+
+  /* A dirty delete of a non-versioned object or of the null version leaves behind any older copy
+     already written back to the backend under the same key: do_delete()/do_writeback() only clean
+     up the dirty version, and a GET falls back to the backend on the tombstoned head and would
+     return that older copy. Remove it here. This runs after the commit (a failed commit must not
+     remove the backend copy); on failure the error is returned and a client retry finds the
+     tombstoned head missing and calls next->delete_obj() again. The result is not taken from
+     next->result: it describes the dirty version deleted above. */
+  if (objDirty && !remote_cache_request && !cache_request &&
+      (!source->get_bucket()->versioned() || source->get_instance() == "null")) {
+    next->params = params;
+    ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): dirty delete; calling next->delete_obj to remove any older backend copy" << dendl;
+    if (auto ret = next->delete_obj(dpp, y, flags); ret < 0 && ret != -ENOENT) {
+      ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): backend delete of older copy failed, ret=" << ret << dendl;
       return ret;
     }
   }

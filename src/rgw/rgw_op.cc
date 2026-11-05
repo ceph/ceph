@@ -6207,6 +6207,9 @@ void RGWDeleteObj::execute(optional_yield y)
           if (auto dm_version = s->info.env->get_optional("HTTP_X_RGW_CACHE_DELETE_MARKER_VERSION"); dm_version) {
             d4n_obj->set_delete_marker_version(dm_version.get());
           }
+          if (auto dm_mtime = s->info.env->get_optional("HTTP_X_RGW_CACHE_DELETE_MARKER_MTIME"); dm_mtime) {
+            d4n_obj->set_delete_marker_mtime(this, dm_mtime.get());
+          }
         }
       }
 #endif

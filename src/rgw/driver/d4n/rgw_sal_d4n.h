@@ -553,6 +553,7 @@ class D4NFilterObject : public FilterObject {
     bool cache_request{false};
     bool remote_cache_request{false}; //sent by another rgw
     std::string delete_marker_version; //version of a delete marker to replicate on the remote rgw
+    std::optional<ceph::real_time> delete_marker_mtime; //mtime of that delete marker, as set by the local rgw
     std::optional<held_lease> read_lease; // Present after successful GET lease acquisition.
     uint64_t blk_offset;
     uint64_t blk_len;
@@ -656,16 +657,19 @@ class D4NFilterObject : public FilterObject {
                                     bool objDirty,
                                     const std::string& version,
                                     const std::string& objName,
-                                    rgw::d4n::CacheBlock& block,
-                                    const std::string& dm_version,
-                                    bool& delete_marker_created);
+                                    rgw::d4n::CacheBlock& block);
+
+      // Suspended-versioning simple delete of a clean object: remove the cached null version's
+      // HEADs ("_:null_<name>" and its "_:<version>_<name>" alias), which the backend replaces
+      // with a null delete marker.
+      int drop_clean_null_head(const DoutPrefixProvider* dpp, optional_yield y, rgw::d4n::Transaction& txn);
 
       int send_remote_delete(const DoutPrefixProvider* dpp,
                             optional_yield y,
-                            const std::string& objName,
                             const std::string& version,
                             bool objDirty,
-                            const std::string& dm_version);
+                            const std::string& dm_version,
+                            ceph::real_time dm_mtime = {});
     };
 
     D4NFilterObject(std::unique_ptr<Object> _next, D4NFilterDriver* _driver) : FilterObject(std::move(_next)),
@@ -742,10 +746,48 @@ class D4NFilterObject : public FilterObject {
     rgw::sal::Object* get_destination_object(const DoutPrefixProvider* dpp) { return dest_object; }
     bool is_multipart() { return multipart; }
     int set_attr_crypt_parts(const DoutPrefixProvider* dpp, optional_yield y, rgw::sal::Attrs& attrs);
-    int create_delete_marker(const DoutPrefixProvider* dpp, optional_yield y,
-                             const std::string& forced_version = "",
-                             bool remote = false,
-                             std::optional<rgw::d4n::Transaction> txn = std::nullopt);
+    /* Delete marker creation is split so that the directory part can be replayed by
+       retry_transaction() without side effects:
+         make_delete_marker_spec()   - decide version/instance/mtime/attrs once (no I/O, leaves `this` unchanged)
+         put_delete_marker_head()    - write the 0-byte head to the local cache (no policy update)
+         stage_delete_marker_dir()   - directory writes only; safe to run on every attempt
+         track_delete_marker()       - register with the cache policy; call once, after commit
+         remove_delete_marker_head() - roll back put_delete_marker_head() */
+    struct DeleteMarkerSpec {
+      std::string version;
+      std::string instance;   // "null" if versioning is suspended, else version
+      ceph::real_time mtime;
+      std::string cache_key;
+      rgw::sal::Attrs attrs;
+    };
+    /* Fields of the object that delete marker creation changes. delete_obj() restores these
+       at the start of every transaction attempt so that a replay runs as the original request. */
+    struct ObjectSnapshot {
+      std::string instance;
+      std::string version;
+      std::string delete_marker_version;
+      bool delete_marker{false};
+      ceph::real_time mtime;
+      uint64_t size{0};
+      uint64_t accounted_size{0};
+    };
+    ObjectSnapshot snapshot_object();
+    void restore_object(const ObjectSnapshot& s);
+    // forced_version/forced_mtime: reuse the local RGW's delete marker version and mtime (remote RGW).
+    DeleteMarkerSpec make_delete_marker_spec(const DoutPrefixProvider* dpp, optional_yield y,
+                                             const std::string& forced_version,
+                                             std::optional<ceph::real_time> forced_mtime = std::nullopt);
+    void apply_delete_marker_state(const DeleteMarkerSpec& spec);
+    int put_delete_marker_head(const DoutPrefixProvider* dpp, optional_yield y, const DeleteMarkerSpec& spec);
+    void remove_delete_marker_head(const DoutPrefixProvider* dpp, optional_yield y, const DeleteMarkerSpec& spec);
+    int stage_delete_marker_dir(const DoutPrefixProvider* dpp, optional_yield y, const DeleteMarkerSpec& spec,
+                                rgw::d4n::Transaction& txn);
+    void track_delete_marker(const DoutPrefixProvider* dpp, optional_yield y, const DeleteMarkerSpec& spec);
+    // Returns 1 if the delete marker's version-specific head is in the directory, 0 if not, < 0 on error.
+    int delete_marker_in_directory(const DoutPrefixProvider* dpp, optional_yield y, const DeleteMarkerSpec& spec);
+    // Returns 1 if a delete of `version` is applied in the directory (its version-specific head is
+    // missing or tombstoned), 0 if the head is still live, < 0 on error.
+    int delete_applied_in_directory(const DoutPrefixProvider* dpp, optional_yield y, const std::string& version);
     bool is_delete_marker() { return delete_marker; }
     bool exists(void) override { if (exists_in_cache) { return true;} return next->exists(); };
     bool load_obj_from_store() { return load_from_store; }
@@ -766,13 +808,17 @@ class D4NFilterObject : public FilterObject {
     // the delete op does not create a delete marker.
     const std::string get_delete_marker_version() { return delete_marker_version; }
     void set_delete_marker_version(const std::string& v) { delete_marker_version = v; }
+    // mtime of the delete marker to be replicated, in nanoseconds since the epoch (as sent by the
+    // local RGW). An unparsable value is ignored, and the remote RGW falls back to its own clock.
+    void set_delete_marker_mtime(const DoutPrefixProvider* dpp, const std::string& ns);
+    std::optional<ceph::real_time> get_delete_marker_mtime() const { return delete_marker_mtime; }
     bool get_remote_block_only() const { return block_only; }
     void set_remote_obj_size(uint64_t size) { obj_size = size; }
     void set_remote_block_only(bool flag) { block_only = flag; }
     uint64_t get_remote_obj_size() const { return obj_size; }
 	int write_if_space_available(const DoutPrefixProvider* dpp, const std::string& key, const bufferlist& bl, uint64_t len, const Attrs& attrs,
 								  uint64_t offset, const std::string& version, const bool& dirty, const rgw_user user, const std::string& bucketName,
-								  uint8_t op, optional_yield y, rgw::d4n::CacheBlock* block);
+								  uint8_t op, optional_yield y, rgw::d4n::CacheBlock* block, bool update_policy = true);
 };
 
 /* Prefix provider to be used when spawning a new coroutine for

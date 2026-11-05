@@ -55,6 +55,7 @@ class RemoteCacheOp {
       uint64_t obj_size = 0;
       std::string instance_id = "";
       std::string delete_marker_version = ""; // non-empty only when a DELETE creates a delete marker to replicate
+      std::string delete_marker_mtime = "";   // that delete marker's mtime, nanoseconds since the epoch
     };
     RemoteCacheOp(rgw::sal::Driver* driver, RemoteCacheOpData& op) : driver(driver), op(op), cb(in_bl) {}
     virtual ~RemoteCacheOp() = default; 
