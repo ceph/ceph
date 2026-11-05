@@ -65,9 +65,12 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
     def mark_subvolume(self):
         # set subvolume attr, on subvolume root, marking it as a CephFS subvolume
         # subvolume root is where snapshots would be taken, and hence is the <uuid> dir for v1 subvolumes
+        subvol_path = self.path
+        # never mark the group/volume directory or anything outside the group
+        self._validate_path_within_group(subvol_path)
         try:
             # MDS treats this as a noop for already marked subvolume
-            self.fs.setxattr(self.path, 'ceph.dir.subvolume', b'1', 0)
+            self.fs.setxattr(subvol_path, 'ceph.dir.subvolume', b'1', 0)
         except cephfs.InvalidValue:
             raise VolumeException(-errno.EINVAL, "invalid value specified for ceph.dir.subvolume")
         except cephfs.Error as e:
