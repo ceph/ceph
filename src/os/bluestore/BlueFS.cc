@@ -4849,12 +4849,7 @@ int BlueFS::open_for_write(
 
   map<string,FileRef>::iterator q = dir->file_map.lower_bound(filename);
   if (q == dir->file_map.end() || q->first != filename) {
-    if (overwrite) {
-      dout(20) << __func__ << " dir " << dirname << " (" << dir
-	       << ") file " << filename
-	       << " does not exist" << dendl;
-      return -ENOENT;
-    }
+    dout(20) << __func__ << " creating " << dirname << "/" << filename << dendl;
     file = ceph::make_ref<File>();
     file->fnode.ino = ++ino_last;
     file->vselector_hint = vselector->get_hint_by_dir(dirname);
@@ -4867,14 +4862,17 @@ int BlueFS::open_for_write(
   } else {
     // overwrite existing file?
     file = q->second;
+    if (overwrite && boost::algorithm::ends_with(filename, ".log") && conf_wal_envelope_mode) {
+      dout(20) << __func__ << " " << dirname << "/" << filename
+        << " is envelope mode, cannot reuse allocs" << dendl;
+      overwrite = false;
+    }
     if (overwrite) {
-      dout(20) << __func__ << " dir " << dirname << " (" << dir
-	       << ") file " << filename
-	       << " already exists, overwrite in place" << dendl;
+      dout(20) << __func__ << " overwrite, reuse allocs " << dirname << "/" << filename << dendl;
+      vselector->sub_usage(file->vselector_hint, file->fnode.size); // 0 size, but no same file count
+      file->fnode.size = 0;
     } else {
-      dout(20) << __func__ << " dir " << dirname << " (" << dir
-	       << ") file " << filename
-	       << " already exists, truncate + overwrite" << dendl;
+      dout(20) << __func__ << " truncate + overwrite " << dirname << "/" << filename << dendl;
       vselector->sub_usage(file->vselector_hint, file->fnode);
       file->fnode.size = 0;
       vselector->add_usage(file->vselector_hint, file->fnode.size, true); // restore file count
