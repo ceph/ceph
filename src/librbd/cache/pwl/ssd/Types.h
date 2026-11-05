@@ -4,6 +4,7 @@
 #ifndef CEPH_LIBRBD_CACHE_SSD_TYPES_H
 #define CEPH_LIBRBD_CACHE_SSD_TYPES_H
   
+#include <vector>
 #include "acconfig.h"
     
 #include "common/Formatter.h"
@@ -28,8 +29,8 @@ struct SuperBlock{
     f->dump_object("super", root);
   }
 
-  static std::list<SuperBlock> generate_test_instances() {
-    std::list<SuperBlock> ls;
+  static std::vector<SuperBlock> generate_test_instances() {
+    std::vector<SuperBlock> ls;
     ls.emplace_back();
     ls.emplace_back();
     ls.back().root.layout_version = 3;

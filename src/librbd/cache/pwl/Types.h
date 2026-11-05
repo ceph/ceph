@@ -290,7 +290,7 @@ struct WriteLogCacheEntry {
   }
   #endif
   void dump(ceph::Formatter *f) const;
-  static std::list<WriteLogCacheEntry> generate_test_instances();
+  static std::vector<WriteLogCacheEntry> generate_test_instances();
 };
 
 struct WriteLogPoolRoot {
@@ -323,7 +323,7 @@ struct WriteLogPoolRoot {
   #endif
 
   void dump(ceph::Formatter *f) const;
-  static std::list<WriteLogPoolRoot> generate_test_instances();
+  static std::vector<WriteLogPoolRoot> generate_test_instances();
 };
 
 static inline io::Extent image_extent(const BlockExtent& block_extent) {

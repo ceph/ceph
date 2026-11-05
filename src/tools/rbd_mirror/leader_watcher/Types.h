@@ -100,7 +100,7 @@ struct NotifyMessage {
   void decode(bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 
-  static std::list<NotifyMessage> generate_test_instances();
+  static std::vector<NotifyMessage> generate_test_instances();
 };
 
 WRITE_CLASS_ENCODER(NotifyMessage);
