@@ -112,6 +112,10 @@ class AgentEndpoint:
     # Allowance for clock skew between agent hosts and the mgr when deciding
     # that an agent has stopped waiting for its reply.
     STALE_REPORT_SKEW_MARGIN_SECONDS = 5
+    # Listen backlog of the endpoint socket (cheroot default: 5). Large enough
+    # for an ACK fan-out to every host of a few-hundred-host cluster; the
+    # kernel caps it at net.core.somaxconn.
+    LISTEN_BACKLOG = 512
 
     def __init__(self, mgr: "CephadmOrchestrator") -> None:
         self.mgr = mgr
@@ -152,6 +156,10 @@ class AgentEndpoint:
             (self.host_data, '/data', with_stats('data')),
             (self.node_proxy_endpoint, '/node-proxy', with_stats('node-proxy')),
         ]
+
+    def get_server_options(self) -> Dict[str, Any]:
+        """cheroot server options for the agent endpoint."""
+        return {'request_queue_size': self.LISTEN_BACKLOG}
 
     def configure_tls(self) -> Dict[str, str]:
         self.mgr.cert_mgr.register_self_signed_cert_key_pair(CephadmAgent.TYPE)

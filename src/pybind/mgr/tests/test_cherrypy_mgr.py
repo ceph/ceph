@@ -114,6 +114,23 @@ class TestCherryPyMgr(unittest.TestCase):
 
     @mock.patch('cherrypy_mgr.ServerAdapter')
     @mock.patch('cherrypy_mgr.WSGIServer')
+    def test_mount_with_server_options(self, mock_wsgi_server, mock_server_adapter):
+        tree = mock.MagicMock(spec=cherrypy._cptree.Tree)
+        bind_addr = ('127.0.0.1', 8083)
+        options = {'request_queue_size': 512}
+
+        CherryPyMgr.mount(tree, 'opts_app', bind_addr, server_options=options)
+
+        mock_wsgi_server.assert_called_with(
+            bind_addr=bind_addr,
+            wsgi_app=tree,
+            numthreads=30,
+            server_name='Ceph-Mgr',
+            request_queue_size=512,
+        )
+
+    @mock.patch('cherrypy_mgr.ServerAdapter')
+    @mock.patch('cherrypy_mgr.WSGIServer')
     def test_mount_engine_already_started(self, mock_wsgi_server, mock_server_adapter):
         self.mock_engine.state = cherrypy.engine.states.STARTED
 
