@@ -1,5 +1,10 @@
 >=22.0.0
 
+* CephFS: The new ``client_reconnect_stale_interval`` option sets how often a
+  client with ``client_reconnect_stale`` may reconnect by itself after being
+  blocklisted: it used to be a fixed 30 minutes, which stays the default, and 0
+  now means no limit. The first such reconnect is always allowed.
+
 * RBD: The ``schedule_time`` field in the output of
   ``rbd mirror snapshot schedule status`` and
   ``rbd trash purge schedule status`` has been renamed to
