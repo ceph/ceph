@@ -2695,6 +2695,7 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_manifest_detail(
     OSDOp& osd_op = *p;
     ceph_osd_op& op = osd_op.op;
     if (op.op == CEPH_OSD_OP_SET_REDIRECT ||
+	op.op == CEPH_OSD_OP_REMOVE_CLONES ||
 	op.op == CEPH_OSD_OP_SET_CHUNK ||
 	op.op == CEPH_OSD_OP_UNSET_MANIFEST ||
 	op.op == CEPH_OSD_OP_TIER_PROMOTE ||
@@ -6234,6 +6235,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_CACHE_PIN:
     case CEPH_OSD_OP_CACHE_UNPIN:
     case CEPH_OSD_OP_SET_REDIRECT:
+    case CEPH_OSD_OP_REMOVE_CLONES:
     case CEPH_OSD_OP_SET_CHUNK:
     case CEPH_OSD_OP_TIER_PROMOTE:
     case CEPH_OSD_OP_TIER_FLUSH:
@@ -7340,6 +7342,78 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  ctx->delta_stats.num_objects_pinned--;
 	  ctx->delta_stats.num_wr++;
 	}
+      }
+      break;
+
+    case CEPH_OSD_OP_REMOVE_CLONES:
+      ++ctx->num_write;
+      result = 0;
+      {
+	// Forget this object's whole history, with the snapshots still alive,
+	// because the caller has moved it elsewhere.  The seq goes as well, so
+	// that a read at a snapid resolves to the head and gets forwarded.
+	//
+	// Only a redirect may do this, or snapshot data would simply be lost,
+	// and it must be the last op, since it cannot be undone if one fails.
+	if (soid.snap != CEPH_NOSNAP ||
+	    !oi.has_manifest() || !oi.manifest.is_redirect() ||
+	    &osd_op != &ops.back()) {
+	  result = -EINVAL;
+	  break;
+	}
+	SnapSet& ss = ctx->new_snapset;
+	std::vector<ObjectContextRef> clones;
+	for (snapid_t snap : ss.clones) {
+	  hobject_t coid = soid;
+	  coid.snap = snap;
+	  if (is_degraded_or_backfilling_object(coid)) {
+	    result = -EAGAIN;
+	    break;
+	  }
+	  ObjectContextRef cobc = get_object_context(coid, false);
+	  if (!cobc) {
+	    result = -EIO;
+	    break;
+	  }
+	  if (!ctx->lock_manager.get_snaptrimmer_write(coid, cobc, false)) {
+	    result = -EBUSY;
+	    break;
+	  }
+	  clones.push_back(cobc);
+	}
+	if (result < 0)
+	  break;
+	for (auto& cobc : clones) {
+	  object_info_t& coi = cobc->obs.oi;
+	  const hobject_t coid = coi.soid;
+	  std::set<snapid_t> old_snaps(ss.clone_snaps[coid.snap].begin(),
+				       ss.clone_snaps[coid.snap].end());
+	  ctx->delta_stats.num_bytes -= ss.get_clone_bytes(coid.snap);
+	  ctx->delta_stats.num_objects--;
+	  ctx->delta_stats.num_object_clones--;
+	  if (coi.is_dirty())
+	    ctx->delta_stats.num_objects_dirty--;
+	  if (coi.is_omap())
+	    ctx->delta_stats.num_objects_omap--;
+	  if (coi.is_whiteout())
+	    ctx->delta_stats.num_whiteouts--;
+	  if (coi.is_cache_pinned())
+	    ctx->delta_stats.num_objects_pinned--;
+	  ctx->log.push_back(
+	    pg_log_entry_t(pg_log_entry_t::DELETE, coid, ctx->at_version,
+			   coi.version, 0, osd_reqid_t(), ctx->mtime, 0));
+	  t->add_obc(cobc);
+	  t->remove(coid);
+	  t->update_snaps(coid, std::move(old_snaps), std::set<snapid_t>());
+	  cobc->obs.exists = false;
+	  coi = object_info_t(coid);
+	  ctx->at_version.version++;
+	}
+	ss.clones.clear();
+	ss.clone_overlap.clear();
+	ss.clone_size.clear();
+	ss.clone_snaps.clear();
+	ss.seq = 0;
       }
       break;
 

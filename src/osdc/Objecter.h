@@ -616,6 +616,9 @@ struct ObjectOperation {
     ceph::buffer::list bl;
     add_data(CEPH_OSD_OP_DELETE, 0, 0, bl);
   }
+  void remove_clones() {
+    add_op(CEPH_OSD_OP_REMOVE_CLONES);
+  }
   void mapext(uint64_t off, uint64_t len) {
     ceph::buffer::list bl;
     add_data(CEPH_OSD_OP_MAPEXT, off, len, bl);
