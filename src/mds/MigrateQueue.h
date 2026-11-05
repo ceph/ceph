@@ -129,6 +129,7 @@ private:
     uint64_t dirs_active = 0;
     uint64_t dirs_queued = 0;
     uint64_t files_in_progress = 0;
+    uint64_t control_seq = 0;   // the last pause or resume it applied
     Progress total;
     void encode(ceph::buffer::list& bl) const;
     void decode(ceph::buffer::list::const_iterator& p);
@@ -172,6 +173,9 @@ private:
     mds_rank_t origin_rank = MDS_RANK_NONE;
     uint64_t origin_job = 0;
     bool over = false;          // the origin told us it is finished with it
+    // Counts the operator's pauses and resumes.  A sub-job pausing on its own
+    // after failures is not to be undone by the origin wanting it to run.
+    uint64_t control_seq = 0;
     std::map<mds_rank_t, Link> links;
 
     // not persisted
