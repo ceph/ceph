@@ -2865,6 +2865,92 @@ class TestMirroring(CephFSTestCase):
         self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
         self.assertEqual([], mismatches)
 
+    @retry_assert(timeout=120, interval=2)
+    def wait_for_object_clone_sizes(self, oid, expected_sizes):
+        """Wait for LIST_SNAPS sizes on a data object (oldest clone first, head last)."""
+        out = self.fs.rados(['--format=json', 'listsnaps', oid],
+                            pool=self.fs.get_data_pool_name(),
+                            stdout=BytesIO()).stdout.getvalue()
+        sizes = [clone['size'] for clone in json.loads(out)['clones']]
+        log.debug(f'listsnaps {oid}: sizes={sizes}')
+        self.assertEqual(expected_sizes, sizes)
+
+    def test_cephfs_mirror_blockdiff_empty_clones(self):
+        """Blockdiff must handle an object that is empty on both sides of a snapshot.
+
+        MDS truncation (TRIMTRUNC) leaves objects in place with size 0, and
+        truncating such an object again under a newer snap context clones it
+        even though it stays empty. LIST_SNAPS then returns adjacent entries
+        of size 0. aggregate_snap_sets() treats an empty newer entry as a hole
+        and falls back to the size of the older entry. That is 0 as well, so
+        interval_set::insert() aborts the MDS on ceph_assert(len > 0).
+
+        The file must cover the object in both snapshots, otherwise
+        file_blockdiff() never scans it. mtimes are pinned so that snapdiff
+        reports the file; see test_cephfs_mirror_sparse_file_sync().
+        """
+        self.setup_mount_b(mds_perm='rw')
+        self.config_set('client.mirror',
+                        'cephfs_mirror_blockdiff_min_file_size', 16777216)
+        peer_spec = "client.mirror_remote@ceph"
+        dir_name = 'd0'
+        file_path = f'{dir_name}/f'
+        object_size = 4194304
+        num_objects = 8  # 32MB with the default layout
+
+        def regrow_file(mtime):
+            # Write to the last object only, leaving the others empty. fsync
+            # gets the new size to the MDS before the snapshot is taken.
+            self.mount_a.run_shell(['dd', 'if=/dev/urandom', f'of={file_path}',
+                                    'bs=1M', 'seek=31', 'count=1',
+                                    'conv=notrunc,fsync'])
+            self.mount_a.run_shell(['touch', '-m', '-d', mtime, file_path])
+
+        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        self.peer_add(self.primary_fs_name, self.primary_fs_id,
+                      peer_spec, self.secondary_fs_name)
+        self.mount_a.run_shell(['mkdir', dir_name])
+        self.add_directory(self.primary_fs_name, self.primary_fs_id,
+                           f'/{dir_name}')
+
+        self.mount_a.run_shell(['dd', 'if=/dev/urandom', f'of={file_path}',
+                                'bs=1M', 'count=32', 'conv=fsync'])
+        ino = self.mount_a.path_to_ino(file_path)
+        oids = [f'{ino:x}.{objno:08x}' for objno in range(num_objects)]
+
+        # No snapshots yet: the objects stay behind, empty and without clones.
+        self.mount_a.run_shell(['truncate', '-s', '0', file_path])
+        for oid in oids:
+            self.wait_for_object_clone_sizes(oid, [0])
+
+        regrow_file('2020-01-01 00:00:00 UTC')
+        self.mount_a.run_shell(['mkdir', f'{dir_name}/.snap/snap_a'])
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               peer_spec, f'/{dir_name}', 'snap_a', 1)
+        self.verify_snapshot(dir_name, 'snap_a')
+
+        # Truncating under snap_a clones the empty objects: [clone 0, head 0].
+        self.mount_a.run_shell(['truncate', '-s', '0', file_path])
+        for oid in oids[:-1]:
+            self.wait_for_object_clone_sizes(oid, [0, 0])
+        self.wait_for_object_clone_sizes(oids[-1], [object_size, 0])
+
+        active_gid = self.fs.get_rank()['gid']
+
+        regrow_file('2020-01-01 00:00:02 UTC')
+        self.mount_a.run_shell(['mkdir', f'{dir_name}/.snap/snap_b'])
+
+        # Without the fix, this incremental sync's blockdiff crashes the MDS,
+        # so this times out: look for the assert in the MDS log.
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               peer_spec, f'/{dir_name}', 'snap_b', 2)
+        self.verify_snapshot(dir_name, 'snap_b')
+        self.assertEqual(active_gid, self.fs.get_rank()['gid'])
+
+        self.remove_directory(self.primary_fs_name, self.primary_fs_id,
+                              f'/{dir_name}')
+        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+
     def test_cephfs_mirror_incremental_sync_with_directory_rename(self):
         """Unchanged descendants survive directory renames and replacements."""
         self.setup_mount_b(mds_perm='rw')
