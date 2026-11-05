@@ -35,6 +35,13 @@ tasks:
         - test_telemetry_tentacle.sh
 - print: "**** done end telemetry tentacle..."
 
+- print: "**** done start upgrade split_reads setup..."
+- workunit:
+    clients:
+      client.0:
+        - test_upgrade_split_reads.sh setup
+- print: "**** done end upgrade split_reads setup..."
+
 - print: "**** done start parallel"
 - parallel:
     - workload
@@ -47,3 +54,10 @@ tasks:
       client.0:
         - test_telemetry_tentacle_x.sh
 - print: "**** done end telemetry x..."
+
+- print: "**** done start upgrade split_reads verify..."
+- workunit:
+    clients:
+      client.0:
+        - test_upgrade_split_reads.sh verify
+- print: "**** done end upgrade split_reads verify..."
