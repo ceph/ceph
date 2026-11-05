@@ -6,8 +6,9 @@ from unittest.mock import MagicMock
 import pytest
 
 from ceph.deployment.inventory import Device
+from ceph.utils import datetime_now
 from cephadm.agent_metrics import AgentMetadataStats
-from cephadm.inventory import HostCache
+from cephadm.inventory import AgentCache, HostCache
 
 
 ENTRY_SIZE = 65536
@@ -172,3 +173,99 @@ class TestDeviceWrites:
         assert _skipped(mgr, 'agent_request', 'devices') == 1
         assert _skipped(mgr, 'background', 'devices') == 0
         assert 'skipped' in stats.format_plain('mgr.x')
+
+
+def _agent_writes(mgr: MagicMock) -> List[Any]:
+    return [c.args for c in mgr.set_store.call_args_list if c.args[0].startswith('agent.')]
+
+
+def _agent_cache(mgr: MagicMock) -> AgentCache:
+    cache = AgentCache(mgr)
+    cache.agent_counter['host1'] = 1
+    cache.agent_keys['host1'] = 'secret'
+    cache.agent_ports['host1'] = 4721
+    return cache
+
+
+class TestAgentWrites:
+
+    def test_unchanged_agent_state_is_not_rewritten(self) -> None:
+        mgr = _fake_mgr()
+        cache = _agent_cache(mgr)
+        cache.save_agent('host1')
+        assert len(_agent_writes(mgr)) == 1
+
+        mgr.set_store.reset_mock()
+        cache.save_agent('host1')
+        assert _agent_writes(mgr) == []
+        assert _skipped(mgr, 'background', 'agent') == 1
+
+    def test_report_time_is_not_persisted(self) -> None:
+        mgr = _fake_mgr()
+        cache = _agent_cache(mgr)
+        cache.agent_timestamp['host1'] = datetime_now()
+        cache.save_agent('host1')
+        (key, value), = _agent_writes(mgr)
+        assert key == 'agent.host1'
+        assert 'agent_timestamp' not in json.loads(value)
+
+        # a new report only moves the timestamp: no write
+        mgr.set_store.reset_mock()
+        cache.agent_timestamp['host1'] = datetime_now() + datetime.timedelta(seconds=60)
+        cache.save_agent('host1')
+        assert _agent_writes(mgr) == []
+
+    @pytest.mark.parametrize('change', ['counter', 'ports', 'keys', 'deps'])
+    def test_changed_agent_state_is_written(self, change: str) -> None:
+        mgr = _fake_mgr()
+        cache = _agent_cache(mgr)
+        cache.save_agent('host1')
+        mgr.set_store.reset_mock()
+
+        if change == 'counter':
+            cache.agent_counter['host1'] += 1
+        elif change == 'ports':
+            cache.agent_ports['host1'] = 4722
+        elif change == 'keys':
+            cache.agent_keys['host1'] = 'other'
+        else:
+            cache.update_agent_config_deps('host1', ['dep'], datetime_now())
+        cache.save_agent('host1')
+        assert len(_agent_writes(mgr)) == 1
+
+    def test_failed_write_is_retried(self) -> None:
+        mgr = _fake_mgr()
+        cache = _agent_cache(mgr)
+        mgr.set_store.side_effect = RuntimeError('mon unavailable')
+        with pytest.raises(RuntimeError):
+            cache.save_agent('host1')
+
+        mgr.set_store.side_effect = None
+        mgr.set_store.reset_mock()
+        cache.save_agent('host1')
+        assert len(_agent_writes(mgr)) == 1
+
+    def test_load_ignores_a_stored_report_time(self) -> None:
+        mgr = _fake_mgr()
+        mgr.inventory = {'host1': {}}
+        deps = {'deps': ['dep'], 'last_config': '2020-01-01T00:00:00.000000Z'}
+        stored = {
+            'agent_config_deps': dict(deps),
+            'agent_counter': 3,
+            'agent_keys': 'secret',
+            'agent_ports': 4721,
+            'agent_timestamp': '2020-01-01T00:00:00.000000Z',
+        }
+        mgr.get_store_prefix.return_value = {'agent.host1': json.dumps(stored)}
+        cache = AgentCache(mgr)
+        cache.load()
+        assert cache.agent_counter['host1'] == 3
+        assert 'host1' not in cache.agent_timestamp
+
+        # the first save after a mgr start rewrites the entry without it
+        cache.save_agent('host1')
+        (key, value), = _agent_writes(mgr)
+        assert json.loads(value) == {
+            'agent_config_deps': deps,
+            'agent_counter': 3, 'agent_keys': 'secret', 'agent_ports': 4721,
+        }
