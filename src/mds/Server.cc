@@ -7086,8 +7086,9 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
  * oldest clone first, under snap contexts that give the copy the same clones
  * and the same seq, so any read at any snapid sees what it saw before.  The
  * layout of all the versions is then changed in place, without a cow.
- * Finally each old object loses its clones and becomes a redirect to the
- * copy.  That frees the old pool, and it is what keeps clients correct: they
+ * Finally each old object becomes a redirect to the copy and loses its
+ * clones, which MDCache::migrate_cleanup does in the background, and resumes
+ * after a failover.  That frees the old pool, and keeps clients correct: they
  * may cache the old layout of a snapshot inode, and snap caps cannot be
  * revoked, so the OSD has to forward their reads.  Operations on a redirect
  * are forwarded too, so the MDS must use IGNORE_REDIRECT on them.  The inode
@@ -7100,7 +7101,7 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
  * pool until the snapshots are deleted.
  */
 struct Server::FileMigrate {
-  enum Phase { SCAN, CLEAN, COPY, REMOVE };
+  enum Phase { SCAN, CLEAN, COPY };
   struct Object {
     bool exists = false;
     bool head = false;
@@ -7148,6 +7149,14 @@ void Server::handle_client_file_migrate(const MDRequestRef& mdr, CInode *cur,
   const cref_t<MClientRequest> &req = mdr->client_request;
   if (!cur->is_file() || req->get_op() == CEPH_MDS_OP_RMXATTR) {
     respond_to_request(mdr, -EINVAL);
+    return;
+  }
+
+  // An earlier migration is still clearing its old pool.  A client that
+  // resends its request after a failover ends up here too.
+  if (cur->get_projected_inode()->migrating_from >= 0) {
+    cur->add_waiter(CInode::WAIT_TRUNC, new C_MDS_RetryRequest(mdcache, mdr));
+    mdlog->flush();
     return;
   }
 
@@ -7370,6 +7379,7 @@ void Server::_file_migrate_copy_step(std::shared_ptr<FileMigrate> fm,
   }
   auto fin = new C_OnFinisher(
     new C_IO_Wrapper(mds, new LambdaContext([this, fm, i, k](int r) {
+      ceph_assert(g_conf().get_val<int64_t>("mds_kill_file_migrate_at") != 1);
       if (fm->whole && (r == 0 || r == -ENOENT) &&
           k < fm->objects[i].clones.size()) {
         _file_migrate_copy_step(fm, i, k + 1);
@@ -7389,8 +7399,7 @@ void Server::_file_migrate_issue(std::shared_ptr<FileMigrate> fm)
     uint64_t i = fm->next++;
     object_t oid = file_object_t(fm->in->ino(), i);
 
-    if (fm->whole && fm->phase != FileMigrate::SCAN &&
-        fm->phase != FileMigrate::CLEAN && !fm->objects[i].exists)
+    if (fm->whole && fm->phase == FileMigrate::COPY && !fm->objects[i].exists)
       continue;  // nothing at any version
 
     fm->in_flight++;
@@ -7424,38 +7433,16 @@ void Server::_file_migrate_issue(std::shared_ptr<FileMigrate> fm)
       continue;
     }
 
-    SnapContext snapc;
+    // Moving back into a pool that holds redirects from an earlier migration.
     ObjectOperation op;
-    object_locator_t oloc = OSDMap::file_to_object_locator(fm->from);
-    int flags = 0;
-    if (fm->phase == FileMigrate::CLEAN) {
-      op.remove();
-      oloc = OSDMap::file_to_object_locator(fm->to);
-      flags = CEPH_OSD_FLAG_IGNORE_REDIRECT;
-    } else if (fm->whole) {
-      const auto& obj = fm->objects[i];
-      if (!obj.head)
-        op.create(false);
-      op.set_redirect(oid, CEPH_NOSNAP, OSDMap::file_to_object_locator(fm->to),
-                      0, 0);
-      if (!obj.clones.empty())
-        op.remove_clones();
-      flags = CEPH_OSD_FLAG_IGNORE_REDIRECT;
-    } else {
-      snapc = fm->in->find_snaprealm()->get_snap_context();
-      // The first object keeps its xattrs: the old pool's backtrace there
-      // points readers at the new pool.
-      if (i == 0)
-        op.truncate(0);
-      else
-        op.remove();
-    }
+    op.remove();
     auto fin = new C_OnFinisher(
       new C_IO_Wrapper(mds, new LambdaContext([this, fm](int r) {
         _file_migrate_op_finish(fm, r);
       })), mds->finisher);
-    mds->objecter->mutate(oid, oloc, op, snapc, ceph::real_clock::now(), flags,
-                          fin);
+    mds->objecter->mutate(oid, OSDMap::file_to_object_locator(fm->to), op,
+                          SnapContext(), ceph::real_clock::now(),
+                          CEPH_OSD_FLAG_IGNORE_REDIRECT, fin);
   }
 }
 
@@ -7495,11 +7482,6 @@ void Server::_file_migrate_op_finish(std::shared_ptr<FileMigrate> fm, int r)
     else
       _file_migrate_copied(fm);
     break;
-  case FileMigrate::REMOVE:
-    // The file already reads from the new pool: an old object left behind
-    // only costs space.
-    respond_to_request(fm->mdr, 0);
-    break;
   }
 }
 
@@ -7512,6 +7494,8 @@ void Server::_file_migrate_copied(std::shared_ptr<FileMigrate> fm)
   auto pi = cur->project_inode(mdr);
   pi.inode->add_old_pool(fm->from.pool_id);
   pi.inode->layout = fm->to;
+  pi.inode->migrating_from = fm->from.pool_id;
+  pi.inode->set_migrate_whole(fm->whole);
   if (fm->whole) {
     pi.inode->set_has_redirects(true);
   } else {
@@ -7549,18 +7533,10 @@ void Server::_file_migrate_copied(std::shared_ptr<FileMigrate> fm)
 void Server::_file_migrate_logged(std::shared_ptr<FileMigrate> fm)
 {
   dout(10) << __func__ << " " << *fm->in << " now in pool " << fm->to.pool_id
-           << ", " << fm->num_remove << " old objects, whole " << fm->whole
-           << dendl;
-  _file_migrate_remove(fm);
-}
-
-void Server::_file_migrate_remove(std::shared_ptr<FileMigrate> fm)
-{
-  fm->phase = FileMigrate::REMOVE;
-  fm->next = 0;
-  _file_migrate_issue(fm);
-  if (fm->in_flight == 0)
-    respond_to_request(fm->mdr, 0);
+           << ", whole " << fm->whole << dendl;
+  ceph_assert(g_conf().get_val<int64_t>("mds_kill_file_migrate_at") != 2);
+  mdcache->migrate_cleanup(fm->in, fm->mdr->ls);
+  respond_to_request(fm->mdr, 0);
 }
 
 const Server::XattrHandler Server::xattr_handlers[] = {

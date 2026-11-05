@@ -6677,6 +6677,255 @@ void MDCache::purge_redirects(CInode *in, uint64_t size)
   }
 }
 
+/*
+ * Clear the old pool of a file migration (see ceph.file.migrate in Server.cc).
+ *
+ * This runs once the new layout is journaled, with migrating_from in the same
+ * event, so it needs neither the client nor the file's locks, and the data is
+ * already safe in the new pool.  Like a truncate it holds its log segment back
+ * until it is done, and replay restarts it.  Every step can be repeated, so
+ * there is no difference between running it the first time and resuming it.
+ */
+struct MDCache::MigrateCleanup {
+  enum Phase { SCAN, REMOVE };
+  struct Object {
+    bool exists = false;
+    bool head = false;
+    bool clones = false;
+  };
+  CInode *in = nullptr;
+  LogSegmentRef ls;
+  file_layout_t from, to;
+  bool whole = false;
+  uint64_t num = 0;
+  Phase phase = SCAN;
+  std::vector<Object> objects;
+  uint64_t next = 0;
+  unsigned in_flight = 0;
+  int err = 0;
+  unsigned tries = 0;
+};
+
+static const unsigned MIGRATE_CLEANUP_MAX_OPS = 16;
+static const unsigned MIGRATE_CLEANUP_MAX_TRIES = 60;
+
+class C_MDC_MigrateLogged : public MDCacheLogContext {
+  CInode *in;
+  MutationRef mut;
+public:
+  C_MDC_MigrateLogged(MDCache *m, CInode *i, MutationRef& u) :
+    MDCacheLogContext(m), in(i), mut(u) {}
+  void finish(int r) override {
+    ceph_assert(r == 0);
+    mdcache->_migrate_logged(in, mut);
+  }
+};
+
+void MDCache::migrate_cleanup(CInode *in, LogSegmentRef const& ls)
+{
+  ls->migrating_inodes.insert(in);
+  in->get(CInode::PIN_TRUNCATING);
+  in->auth_pin(this);
+  _migrate_cleanup(in, ls);
+}
+
+void MDCache::_migrate_cleanup(CInode *in, LogSegmentRef const& ls)
+{
+  const auto& pi = in->get_projected_inode();
+  ceph_assert(pi->migrating_from >= 0);
+  auto mc = std::make_shared<MigrateCleanup>();
+  mc->in = in;
+  mc->ls = ls;
+  mc->to = pi->layout;
+  mc->from = pi->layout;
+  mc->from.pool_id = pi->migrating_from;
+  mc->whole = pi->get_migrate_whole();
+  uint64_t ever = std::max({pi->size, pi->get_max_size(), pi->max_size_ever});
+  if (ever)
+    mc->num = Striper::get_num_objects(mc->from, ever);
+  mc->objects.resize(mc->num);
+  mc->phase = mc->whole ? MigrateCleanup::SCAN : MigrateCleanup::REMOVE;
+  dout(10) << __func__ << " " << *in << " pool " << mc->from.pool_id << ", "
+           << mc->num << " objects, whole " << mc->whole << dendl;
+  _migrate_issue(mc);
+  if (mc->in_flight == 0)
+    _migrate_finish(mc);
+}
+
+void MDCache::_migrate_issue(std::shared_ptr<MigrateCleanup> mc)
+{
+  while (mc->err == 0 && mc->next < mc->num &&
+         mc->in_flight < MIGRATE_CLEANUP_MAX_OPS) {
+    uint64_t i = mc->next++;
+    object_t oid = file_object_t(mc->in->ino(), i);
+    object_locator_t oloc = OSDMap::file_to_object_locator(mc->from);
+
+    if (mc->phase == MigrateCleanup::SCAN) {
+      auto ss = std::make_shared<std::pair<librados::snap_set_t,int>>();
+      ObjectOperation op;
+      op.list_snaps(&ss->first, &ss->second);
+      mc->in_flight++;
+      auto fin = new C_OnFinisher(
+        new C_IO_Wrapper(mds, new LambdaContext([this, mc, ss, i](int r) {
+          if (r == 0) {
+            auto& obj = mc->objects[i];
+            obj.exists = true;
+            for (const auto& c : ss->first.clones) {
+              if (c.cloneid == librados::SNAP_HEAD)
+                obj.head = true;
+              else
+                obj.clones = true;
+            }
+          }
+          _migrate_op_finish(mc, r);
+        })), mds->finisher);
+      // An object already done is a redirect: don't ask the new pool.
+      mds->objecter->read(oid, oloc, op, LIBRADOS_SNAP_DIR, nullptr,
+                          CEPH_OSD_FLAG_IGNORE_REDIRECT, fin);
+      continue;
+    }
+
+    SnapContext snapc;
+    ObjectOperation op;
+    int flags = 0;
+    if (mc->whole) {
+      const auto& obj = mc->objects[i];
+      if (!obj.exists)
+        continue;
+      if (!obj.head)
+        op.create(false);
+      op.set_redirect(oid, CEPH_NOSNAP, OSDMap::file_to_object_locator(mc->to),
+                      0, 0);
+      if (obj.clones)
+        op.remove_clones();
+      flags = CEPH_OSD_FLAG_IGNORE_REDIRECT;
+    } else {
+      snapc = mc->in->find_snaprealm()->get_snap_context();
+      // The first object keeps its xattrs: the old pool's backtrace there
+      // points readers at the new pool.
+      if (i == 0)
+        op.truncate(0);
+      else
+        op.remove();
+    }
+    mc->in_flight++;
+    auto fin = new C_OnFinisher(
+      new C_IO_Wrapper(mds, new LambdaContext([this, mc](int r) {
+        _migrate_op_finish(mc, r);
+      })), mds->finisher);
+    mds->objecter->mutate(oid, oloc, op, snapc, ceph::real_clock::now(), flags,
+                          fin);
+  }
+}
+
+void MDCache::_migrate_op_finish(std::shared_ptr<MigrateCleanup> mc, int r)
+{
+  mc->in_flight--;
+  ceph_assert(g_conf().get_val<int64_t>("mds_kill_file_migrate_at") != 3 ||
+              mc->phase != MigrateCleanup::REMOVE || mc->next < mc->num / 2 + 1);
+  if (r < 0 && r != -ENOENT && mc->err == 0) {
+    dout(0) << __func__ << " " << *mc->in << ": " << cpp_strerror(r) << dendl;
+    mc->err = r;
+  }
+  _migrate_issue(mc);
+  if (mc->in_flight)
+    return;
+
+  // Recovery or a reader holds an object for now.
+  if ((mc->err == -EBUSY || mc->err == -EAGAIN) &&
+      ++mc->tries < MIGRATE_CLEANUP_MAX_TRIES) {
+    dout(10) << __func__ << " retrying " << *mc->in << dendl;
+    mc->err = 0;
+    mc->next = 0;
+    mds->timer.add_event_after(5.0, new LambdaContext([this, mc](int) {
+      _migrate_issue(mc);
+      if (mc->in_flight == 0)
+        _migrate_finish(mc);
+    }));
+    return;
+  }
+  if (mc->err == 0 && mc->phase == MigrateCleanup::SCAN) {
+    mc->phase = MigrateCleanup::REMOVE;
+    mc->next = 0;
+    _migrate_issue(mc);
+    if (mc->in_flight)
+      return;
+  }
+  _migrate_finish(mc);
+}
+
+void MDCache::_migrate_finish(std::shared_ptr<MigrateCleanup> mc)
+{
+  CInode *in = mc->in;
+  // The file reads from the new pool: what is left behind only costs space.
+  if (mc->err) {
+    mds->clog->warn() << "migration of " << in->ino() << " left objects in pool "
+                      << mc->from.pool_id << ": " << cpp_strerror(mc->err);
+  }
+  ceph_assert(g_conf().get_val<int64_t>("mds_kill_file_migrate_at") != 4);
+  dout(10) << __func__ << " " << *in << dendl;
+
+  mc->ls->migrating_inodes.erase(in);
+
+  MutationRef mut(new MutationImpl());
+  mut->ls = mds->mdlog->get_current_segment();
+  auto pi = in->project_inode(mut);
+  pi.inode->version = in->pre_dirty();
+  pi.inode->migrating_from = -1;
+  pi.inode->set_migrate_whole(false);
+
+  EUpdate *le = new EUpdate(mds->mdlog, "file migrate finish");
+  predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY);
+  le->metablob.add_primary_dentry(in->get_projected_parent_dn(), in, true);
+  mds->mdlog->submit_entry(le, new C_MDC_MigrateLogged(this, in, mut));
+  if (in->is_waiter_for(CInode::WAIT_TRUNC))
+    mds->mdlog->flush();
+}
+
+void MDCache::_migrate_logged(CInode *in, MutationRef& mut)
+{
+  dout(10) << __func__ << " " << *in << dendl;
+  mut->apply();
+  mds->locker->drop_locks(mut.get());
+  mut->cleanup();
+
+  in->put(CInode::PIN_TRUNCATING);
+  in->auth_unpin(this);
+
+  MDSContext::vec waiters;
+  in->take_waiting(CInode::WAIT_TRUNC, waiters);
+  mds->queue_waiters(waiters);
+}
+
+void MDCache::note_replayed_migrate(CInode *in, LogSegmentRef const& ls)
+{
+  if (in->last != CEPH_NOSNAP)
+    return;
+  auto p = replayed_migrates.find(in);
+  if (in->get_inode()->migrating_from >= 0) {
+    if (p == replayed_migrates.end()) {
+      dout(20) << __func__ << " " << *in << " in segment " << ls->seq << dendl;
+      replayed_migrates[in] = ls;
+      ls->migrating_inodes.insert(in);
+      in->get(CInode::PIN_TRUNCATING);
+    }
+  } else if (p != replayed_migrates.end()) {
+    p->second->migrating_inodes.erase(in);
+    in->put(CInode::PIN_TRUNCATING);
+    replayed_migrates.erase(p);
+  }
+}
+
+void MDCache::start_recovered_migrates()
+{
+  dout(10) << __func__ << " " << replayed_migrates.size() << dendl;
+  for (auto& [in, ls] : replayed_migrates) {
+    in->auth_pin(this);
+    _migrate_cleanup(in, ls);
+  }
+  replayed_migrates.clear();
+}
+
 void MDCache::truncate_inode(CInode *in, LogSegmentRef const& ls)
 {
   const auto& pi = in->get_projected_inode();
@@ -7772,6 +8021,13 @@ void MDCache::standby_trim_segment(LogSegmentRef const& ls)
     auto it = ls->truncating_inodes.begin();
     CInode *in = *it;
     ls->truncating_inodes.erase(it);
+    in->put(CInode::PIN_TRUNCATING);
+  }
+  while (!ls->migrating_inodes.empty()) {
+    auto it = ls->migrating_inodes.begin();
+    CInode *in = *it;
+    ls->migrating_inodes.erase(it);
+    replayed_migrates.erase(in);
     in->put(CInode::PIN_TRUNCATING);
   }
 }

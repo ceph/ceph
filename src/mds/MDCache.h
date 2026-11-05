@@ -935,6 +935,15 @@ private:
   // truncate
   void truncate_inode(CInode *in, LogSegmentRef const& ls);
   void purge_redirects(CInode *in, uint64_t size);
+  struct MigrateCleanup;
+  void migrate_cleanup(CInode *in, LogSegmentRef const& ls);
+  void note_replayed_migrate(CInode *in, LogSegmentRef const& ls);
+  void start_recovered_migrates();
+  void _migrate_cleanup(CInode *in, LogSegmentRef const& ls);
+  void _migrate_issue(std::shared_ptr<MigrateCleanup> mc);
+  void _migrate_op_finish(std::shared_ptr<MigrateCleanup> mc, int r);
+  void _migrate_finish(std::shared_ptr<MigrateCleanup> mc);
+  void _migrate_logged(CInode *in, MutationRef& mut);
   void _truncate_inode(CInode *in, LogSegmentRef const& ls);
   void truncate_inode_finish(CInode *in, LogSegmentRef const& ls);
   void truncate_inode_write_finish(CInode *in, LogSegmentRef const& ls,
@@ -1398,6 +1407,7 @@ private:
   std::unique_ptr<PerfCounters> logger;
 
   Filer filer;
+  std::map<CInode*, LogSegmentRef> replayed_migrates;
   std::array<xlist<ClientLease*>, client_lease_pools> client_leases{};
 
   /* subtree keys and each tree's non-recursive nested subtrees (the "bounds") */

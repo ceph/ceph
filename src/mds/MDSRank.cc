@@ -2190,6 +2190,7 @@ void MDSRank::recovery_done(int oldstate)
     return;
 
   mdcache->start_recovered_truncates();
+  mdcache->start_recovered_migrates();
   mdcache->start_purge_inodes();
   mdcache->start_files_to_recover();
 

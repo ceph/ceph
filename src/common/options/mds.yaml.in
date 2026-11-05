@@ -1210,6 +1210,17 @@ options:
   fmt_desc: Ceph will inject MDS failure in the rename code
     (for developers only).
   with_legacy: true
+- name: mds_kill_file_migrate_at
+  type: int
+  level: dev
+  desc: test only, abort at a point of a file migration
+  long_desc: 1 while copying, 2 once the new layout is journaled, 3 while clearing
+    the old pool, 4 with the old pool cleared but that not yet journaled.
+  default: 0
+  services:
+  - mds
+  flags:
+  - runtime
 - name: mds_kill_openc_at
   type: int
   level: dev
