@@ -10377,11 +10377,11 @@ TEST_F(NSFSNooBaaBucketTest, CompletesAnUploadTheyStarted)
  * The bucket is marked and converting, so its staging layout is RGW's,
  * while the upload is still in NooBaa's.  Uploads are converted after the
  * walk over objects, so stopping at the first upload event leaves exactly
- * that state.  No client write converts anything:  the part waits, and
- * with the conversion stopped it is answered with the retryable 503 and
- * nothing is written (DECISIONS.md 2026-10-21).  Once adoption finishes
+ * that state.  No client writes to a bucket until it is adopted:  the
+ * part is refused with InvalidBucketState, there being no queue, and
+ * nothing is written (DECISIONS.md 2026-11-02).  Once adoption finishes
  * the same part is taken, and the completion assembles all four. */
-TEST_F(NSFSNooBaaBucketTest, APartUploadedMidAdoptionWaitsForIt)
+TEST_F(NSFSNooBaaBucketTest, APartUploadedMidAdoptionIsRefused)
 {
   TestTree tree;
   make_noobaa_tree(bucket_path(), TreeShape::with_upload, tree);
@@ -10397,9 +10397,6 @@ TEST_F(NSFSNooBaaBucketTest, APartUploadedMidAdoptionWaitsForIt)
   ASSERT_TRUE(sf::is_directory(tree.staging))
       << "the control:  the upload is still in NooBaa's staging";
 
-  /* the wait is the gate's bound;  shortened, as the gate's own tests do */
-  driver->set_gate_waits(std::chrono::milliseconds(20),
-			 std::chrono::milliseconds(20));
   rgw_placement_rule placement;
   const std::string extra(tree.part_size, 'z');
   auto part = [&](rgw::sal::MultipartUpload* u) {
@@ -10412,14 +10409,14 @@ TEST_F(NSFSNooBaaBucketTest, APartUploadedMidAdoptionWaitsForIt)
   {
     auto upload = bucket->get_multipart_upload(tree.key, rgw::sal::no_authenticated_user, tree.upload_id);
     const auto before = tree_snapshot(bucket_path());
-    EXPECT_EQ(part(upload.get()), -ERR_SERVICE_UNAVAILABLE)
+    EXPECT_EQ(part(upload.get()), -ERR_INVALID_BUCKET_STATE)
 	<< "a part was taken into an upload the adoption had not reached";
     EXPECT_EQ(tree_snapshot(bucket_path()), before)
-	<< "the waiting part wrote something";
+	<< "the refused part wrote something";
     std::map<int, std::string> none;
     EXPECT_EQ(complete_mp(bucket.get(), upload.get(), owner, tree.key, none),
-	      -ERR_SERVICE_UNAVAILABLE)
-	<< "the completion did not wait for the adoption";
+	      -ERR_INVALID_BUCKET_STATE)
+	<< "the completion was taken before the adoption";
   }
 
   /* adoption finishes;  the same part is taken, and all four complete */
@@ -10744,12 +10741,13 @@ TEST_F(NSFSConvertingBucketTest, ReadsNooBaaDirectoryObjects)
   EXPECT_EQ(c.listed_size, 9u);
 }
 
-/* A write to a directory object the sweep has not reached waits for the
- * sweep and converts nothing (DECISIONS.md 2026-10-21, correcting
- * 2026-10-13):  before the sweep it is answered with the retryable 503
- * and the object is unchanged;  after it, the same write takes effect.
- * Each case reads the object at all three points. */
-TEST_F(NSFSConvertingBucketTest, ADeleteBeforeTheSweepWaitsForIt)
+/* A write to a bucket being converted is refused until its adoption
+ * completes, and converts nothing (DECISIONS.md 2026-11-02):  before the
+ * sweep it is answered with InvalidBucketState, there being no queue to
+ * adopt it, and the object is unchanged;  after it, the same write takes
+ * effect.  Each case reads the object at all three points, on a NooBaa
+ * directory object, which the sweep rewrites the most. */
+TEST_F(NSFSConvertingBucketTest, ADeleteBeforeTheSweepIsRefused)
 {
   lay_noobaa_directory_object(bucket_path() / "e", "", "text/x-e", "e");
   lay_noobaa_directory_object(bucket_path() / "c", "dir bytes", "text/x-c", "c");
@@ -10757,7 +10755,7 @@ TEST_F(NSFSConvertingBucketTest, ADeleteBeforeTheSweepWaitsForIt)
   for (const char* k : {"e/", "c/"}) {
     auto obj = bucket->get_object(rgw_obj_key(k));
     EXPECT_EQ(obj->get_delete_op(rgw::sal::no_authenticated_user)->delete_obj(env->dpp, null_yield, 0),
-	      -ERR_SERVICE_UNAVAILABLE) << k;
+	      -ERR_INVALID_BUCKET_STATE) << k;
     EXPECT_TRUE(client_view(bucket.get(), env->dpp, k).exists)
 	<< k << " was deleted before the sweep reached it";
   }
@@ -10773,11 +10771,11 @@ TEST_F(NSFSConvertingBucketTest, ADeleteBeforeTheSweepWaitsForIt)
   }
 }
 
-TEST_F(NSFSConvertingBucketTest, APutBeforeTheSweepWaitsForIt)
+TEST_F(NSFSConvertingBucketTest, APutBeforeTheSweepIsRefused)
 {
   lay_noobaa_directory_object(bucket_path() / "c", "dir bytes", "text/x-c", "c");
   put_object(driver.get(), bucket.get(), env->dpp, acl_owner, "c/", "new body",
-	     "text/x-new", -ERR_SERVICE_UNAVAILABLE);
+	     "text/x-new", -ERR_INVALID_BUCKET_STATE);
   const ClientView v0 = client_view(bucket.get(), env->dpp, "c/");
   ASSERT_TRUE(v0.exists);
   EXPECT_EQ(v0.body, "dir bytes") << "the PUT took effect before the sweep";
@@ -10797,7 +10795,7 @@ TEST_F(NSFSConvertingBucketTest, APutBeforeTheSweepWaitsForIt)
   EXPECT_EQ(v1.listed_size, 8u);
 }
 
-TEST_F(NSFSConvertingBucketTest, AnAttributeWrittenBeforeTheSweepWaitsForIt)
+TEST_F(NSFSConvertingBucketTest, AnAttributeWrittenBeforeTheSweepIsRefused)
 {
   lay_noobaa_directory_object(bucket_path() / "e", "", "text/x-e", "e");
 
@@ -10810,7 +10808,7 @@ TEST_F(NSFSConvertingBucketTest, AnAttributeWrittenBeforeTheSweepWaitsForIt)
     ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
     EXPECT_EQ(obj->set_obj_attrs(env->dpp, &attrs, nullptr, null_yield,
 				 rgw::sal::FLAG_LOG_OP, rgw_user()),
-	      -ERR_SERVICE_UNAVAILABLE);
+	      -ERR_INVALID_BUCKET_STATE);
   }
   EXPECT_EQ(client_view(bucket.get(), env->dpp, "e/").probe, "e")
       << "the attribute was written before the sweep";
@@ -10853,8 +10851,17 @@ TEST_F(NSFSBucketTest, AFileWithNoRecordedIdIsTheNullVersion)
  * NooBaa's name for the record. */
 TEST_F(NSFSConvertingBucketTest, AnUnreachedVersionKeepsItsRecordedId)
 {
+  /* versioning on, past the gate a converting bucket keeps for clients;
+   * what is under test is the read */
+  std::map<std::string, std::string> out;
+  ASSERT_EQ(driver->driver_hint(env->dpp, "inject-lift-adoption-gate",
+				{{"enable", "true"}, {"bucket", testname}},
+				&out), 0);
   bucket->get_info().flags |= BUCKET_VERSIONED;
   ASSERT_EQ(bucket->put_info(env->dpp, false, real_time(), null_yield), 0);
+  ASSERT_EQ(driver->driver_hint(env->dpp, "inject-lift-adoption-gate",
+				{{"enable", "false"}, {"bucket", testname}},
+				&out), 0);
   write_nb_object("w");
   const std::string recorded = "mtime-abc123-ino-def456";
   ASSERT_EQ(::setxattr((bucket_path() / "w").c_str(), "user.noobaa.version_id",
@@ -10964,127 +10971,70 @@ TEST_F(NSFSBucketTest, DoesNotListNooBaaDirectoryObjectWithoutTheMarker)
   }
 }
 
-/* Writing over a converting object drops the foreign spelling.
- *
- * The REPLACE_ALL prune walks the on-disk names and asks the chain for
- * the logical key;  a superseded NooBaa attribute then resolves to
- * the key being written and lands in to_remove.  Without the chain in
- * the prune it parses as nothing, is left alone, and the object ends
- * up carrying both spellings of its content type -- with the reader
- * preferring whichever the chain asks first. */
-TEST_F(NSFSConvertingBucketTest, WritingPrunesTheForeignSpelling)
+/* An ordinary object's write is refused while its bucket converts, as a
+ * directory object's is (DECISIONS.md 2026-11-02):  the bucket is
+ * converting with its gate open, which is the state of every conversion
+ * that stopped partway, and no client mutates it until it is adopted.
+ * Each write leaves the object as NooBaa wrote it;  once the sweep has
+ * run the same writes take effect, in the bucket's spelling only. */
+TEST_F(NSFSConvertingBucketTest, AnOrdinaryObjectsWriteIsRefusedWhileConverting)
 {
   write_nb_object("theirs.bin");
   const sf::path p{bucket_path() / "theirs.bin"};
-
-  auto obj = bucket->get_object(rgw_obj_key("theirs.bin"));
-  ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
+  for (const auto& [k, v] : {std::pair{"a", "1"}, std::pair{"b", "2"}}) {
+    const std::string n = std::string("user.noobaa.tag.") + k;
+    ASSERT_EQ(::setxattr(p.c_str(), n.c_str(), v, strlen(v), 0), 0) << n;
+  }
+  auto names = [&p]() {
+    char buf[8192];
+    const ssize_t nlen = ::listxattr(p.c_str(), buf, sizeof(buf));
+    std::set<std::string> out;
+    for (const char* q = buf; (nlen > 0) && (q < buf + nlen);
+	 q += strlen(q) + 1) {
+      out.insert(q);
+    }
+    return out;
+  };
+  const auto before = names();
 
   Attrs attrs;
   bufferlist ct;
   ct.append("application/octet-stream");
   attrs[RGW_ATTR_CONTENT_TYPE] = ct;
-  ASSERT_EQ(obj->set_obj_attrs(env->dpp, &attrs, nullptr, null_yield,
-			       rgw::sal::FLAG_LOG_OP, rgw_user()), 0);
-
-  char buf[8192];
-  ssize_t nlen = ::listxattr(p.c_str(), buf, sizeof(buf));
-  ASSERT_GT(nlen, 0);
-  std::set<std::string> names;
-  for (const char* q = buf; q < buf + nlen; q += strlen(q) + 1) {
-    names.insert(q);
-  }
-  EXPECT_TRUE(names.contains("user.nsfs.rgw.content_type"));
-  EXPECT_FALSE(names.contains("user.noobaa.content_type"))
-      << "the object carries both spellings of its content type";
-}
-
-/* A removal on an object the sweep has not reached is the effect after
- * adoption, as a write is.
- *
- * The bucket is converting with its gate open, which is the state of
- * every conversion that stopped partway.  DeleteObjectTagging removes
- * the key under the bucket's spelling;  the object carries NooBaa's,
- * one attribute per tag, which the fallback reads.  Read once the
- * removal is done and again once the sweep has run, and the tags must
- * be gone both times. */
-TEST_F(NSFSConvertingBucketTest, TagsDeletedBeforeTheSweepStayDeleted)
-{
-  const sf::path p{bucket_path() / "tagged.bin"};
-  write_file(p, "bytes");
-  for (const auto& [k, v] : {std::pair{"a", "1"}, std::pair{"b", "2"}}) {
-    const std::string n = std::string("user.noobaa.tag.") + k;
-    ASSERT_EQ(::setxattr(p.c_str(), n.c_str(), v, strlen(v), 0), 0) << n;
-  }
-
-  auto tags_of = [this](const char* when) {
-    auto rd = bucket->get_object(rgw_obj_key("tagged.bin"));
-    EXPECT_EQ(rd->load_obj_state(env->dpp, null_yield), 0) << when;
-    EXPECT_EQ(rd->get_obj_attrs(null_yield, env->dpp), 0) << when;
-    RGWObjTags t;
-    auto i = rd->get_attrs().find(RGW_ATTR_TAGS);
-    if (i != rd->get_attrs().end()) {
-      auto bufit = i->second.cbegin();
-      t.decode(bufit);
-    }
-    return t.get_tags().size();
-  };
-
-  /* the precondition:  the fallback reads their tags */
-  ASSERT_EQ(tags_of("before the removal"), 2u);
-
-  auto obj = bucket->get_object(rgw_obj_key("tagged.bin"));
-  ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
-  EXPECT_EQ(obj->delete_obj_attrs(env->dpp, RGW_ATTR_TAGS, null_yield,
-				  rgw_user()), 0);
-  EXPECT_EQ(tags_of("after the removal"), 0u)
-      << "the removed tags read back through the fallback";
-
-  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
-  ASSERT_EQ(b->convert_tree(env->dpp, null_yield, nullptr, nullptr), 0);
-  EXPECT_EQ(tags_of("after the sweep"), 0u)
-      << "the sweep brought the removed tags back";
-}
-
-/* And the same removal arriving as an attribute write's delete set,
- * which takes write_attrs()'s other path. */
-TEST_F(NSFSConvertingBucketTest, TagsRemovedByAnAttributeWriteStayRemoved)
-{
-  const sf::path p{bucket_path() / "tagged.bin"};
-  write_file(p, "bytes");
-  for (const auto& [k, v] : {std::pair{"a", "1"}, std::pair{"b", "2"}}) {
-    const std::string n = std::string("user.noobaa.tag.") + k;
-    ASSERT_EQ(::setxattr(p.c_str(), n.c_str(), v, strlen(v), 0), 0) << n;
-  }
-
-  auto tags_of = [this](const char* when) {
-    auto rd = bucket->get_object(rgw_obj_key("tagged.bin"));
-    EXPECT_EQ(rd->load_obj_state(env->dpp, null_yield), 0) << when;
-    EXPECT_EQ(rd->get_obj_attrs(null_yield, env->dpp), 0) << when;
-    RGWObjTags t;
-    auto i = rd->get_attrs().find(RGW_ATTR_TAGS);
-    if (i != rd->get_attrs().end()) {
-      auto bufit = i->second.cbegin();
-      t.decode(bufit);
-    }
-    return t.get_tags().size();
-  };
-
-  ASSERT_EQ(tags_of("before the removal"), 2u);
-
-  auto obj = bucket->get_object(rgw_obj_key("tagged.bin"));
-  ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
   Attrs del;
   del[RGW_ATTR_TAGS] = bufferlist{};
-  EXPECT_EQ(obj->set_obj_attrs(env->dpp, nullptr, &del, null_yield,
-			       rgw::sal::FLAG_LOG_OP, rgw_user()), 0);
-  EXPECT_EQ(tags_of("after the removal"), 0u)
-      << "the removed tags read back through the fallback";
+  auto writes = [&]() {
+    std::vector<int> rets;
+    auto obj = bucket->get_object(rgw_obj_key("theirs.bin"));
+    EXPECT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
+    rets.push_back(obj->set_obj_attrs(env->dpp, &attrs, nullptr, null_yield,
+				      rgw::sal::FLAG_LOG_OP, rgw_user()));
+    rets.push_back(obj->set_obj_attrs(env->dpp, nullptr, &del, null_yield,
+				      rgw::sal::FLAG_LOG_OP, rgw_user()));
+    rets.push_back(obj->delete_obj_attrs(env->dpp, RGW_ATTR_TAGS, null_yield,
+					 rgw_user()));
+    return rets;
+  };
+  for (const int r : writes()) {
+    EXPECT_EQ(r, -ERR_INVALID_BUCKET_STATE);
+  }
+  EXPECT_EQ(names(), before) << "a refused write changed the object";
 
   auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
   ASSERT_EQ(b->convert_tree(env->dpp, null_yield, nullptr, nullptr), 0);
-  EXPECT_EQ(tags_of("after the sweep"), 0u)
-      << "the sweep brought the removed tags back";
+  for (const int r : writes()) {
+    EXPECT_EQ(r, 0);
+  }
+  const auto after = names();
+  EXPECT_TRUE(after.contains("user.nsfs.rgw.content_type"));
+  for (const auto& n : after) {
+    EXPECT_FALSE(n.starts_with("user.noobaa.")) << n;
+  }
+  auto rd = bucket->get_object(rgw_obj_key("theirs.bin"));
+  ASSERT_EQ(rd->load_obj_state(env->dpp, null_yield), 0);
+  ASSERT_EQ(rd->get_obj_attrs(null_yield, env->dpp), 0);
+  EXPECT_EQ(rd->get_attrs().count(RGW_ATTR_TAGS), 0u)
+      << "the tags survived their removal after the sweep";
 }
 
 /* Object lock:  three plain NooBaa attributes, two encoded nsfs
@@ -11683,6 +11633,62 @@ TEST_F(NSFSUpgradeTest, TheMarkersAreNotBucketAttributes)
   }
   ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
   no_marker(bucket->get_attrs());
+}
+
+/* A key NooBaa spreads over several names -- tags, one per tag;
+ * retention, two;  legal hold -- leaves none of them behind.  Only the
+ * names on the file say which those are, and conversion used to remove
+ * the one disk_name() gives, which for these is none of them:  the
+ * object kept NooBaa's spelling beside the bucket's, unread.  A directory
+ * object's move from the directory to its sentinel removes them the same
+ * way. */
+TEST_F(NSFSUpgradeTest, ConversionLeavesNoSpreadNooBaaName)
+{
+  nb_object("locked.bin", "text/plain");
+  nb_folder("photos", "application/directory");
+  const sf::path p{bucket_path() / "locked.bin"};
+  const sf::path d{bucket_path() / "photos"};
+  auto set = [](const sf::path& at, const std::string& n,
+		const std::string& v) {
+    ASSERT_EQ(::setxattr(at.c_str(), n.c_str(), v.data(), v.size(), 0), 0)
+	<< n;
+  };
+  for (const auto& at : {p, d}) {
+    set(at, "user.noobaa.tag.a", "1");
+    set(at, "user.noobaa.tag.b", "2");
+  }
+  set(p, "user.noobaa.legal_hold", "ON");
+  set(p, "user.noobaa.retention_mode", "COMPLIANCE");
+  set(p, "user.noobaa.retention_date", "2030-01-01T00:00:00.000Z");
+
+  ASSERT_EQ(upgrade(nullptr, nullptr), 0);
+
+  for (const auto& at : {p, d, d / ".folder"}) {
+    for (const auto& n : xattr_names(at)) {
+      EXPECT_FALSE(n.starts_with("user.noobaa.")) << at << ":  " << n;
+    }
+  }
+
+  /* and what they recorded is carried */
+  auto obj = bucket->get_object(rgw_obj_key("locked.bin"));
+  ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
+  ASSERT_EQ(obj->get_obj_attrs(null_yield, env->dpp), 0);
+  auto& attrs = obj->get_attrs();
+  ASSERT_TRUE(attrs.contains(RGW_ATTR_TAGS));
+  RGWObjTags tags;
+  auto ti = attrs[RGW_ATTR_TAGS].cbegin();
+  tags.decode(ti);
+  EXPECT_EQ(tags.get_tags().size(), 2u);
+  ASSERT_TRUE(attrs.contains(RGW_ATTR_OBJECT_LEGAL_HOLD));
+  RGWObjectLegalHold hold;
+  auto hi = attrs[RGW_ATTR_OBJECT_LEGAL_HOLD].cbegin();
+  hold.decode(hi);
+  EXPECT_EQ(hold.get_status(), "ON");
+  ASSERT_TRUE(attrs.contains(RGW_ATTR_OBJECT_RETENTION));
+  RGWObjectRetention ret;
+  auto ri = attrs[RGW_ATTR_OBJECT_RETENTION].cbegin();
+  ret.decode(ri);
+  EXPECT_EQ(ret.get_mode(), "COMPLIANCE");
 }
 
 /* Everything in the tree ends up in nsfs names, and the marker is gone. */
@@ -12553,8 +12559,9 @@ TEST_F(NSFSUpgradeTest, HoldsOffMutationsAndNotReads)
       EXPECT_EQ(rd->load_obj_state(env->dpp, null_yield), 0);
       EXPECT_EQ(rd->get_obj_attrs(null_yield, env->dpp), 0);
 
-      /* a write does not.  Not -EBUSY:  503 is what a client retries,
-       * and the operation will succeed once the rewrite is done. */
+      /* a write does not:  the bucket is converting, and no client
+       * writes to it until it is adopted (DECISIONS.md 2026-11-02);
+       * InvalidBucketState, there being no queue to adopt it */
       auto wr = bucket->get_object(rgw_obj_key("gated.bin"));
       EXPECT_EQ(wr->load_obj_state(env->dpp, null_yield), 0);
       Attrs a;
@@ -12563,7 +12570,7 @@ TEST_F(NSFSUpgradeTest, HoldsOffMutationsAndNotReads)
       a[RGW_ATTR_CONTENT_TYPE] = v;
       EXPECT_EQ(wr->set_obj_attrs(env->dpp, &a, nullptr, null_yield,
 				  rgw::sal::FLAG_LOG_OP, rgw_user()),
-		-ERR_SERVICE_UNAVAILABLE);
+		-ERR_INVALID_BUCKET_STATE);
       return 0;
     };
 
@@ -12582,11 +12589,13 @@ TEST_F(NSFSUpgradeTest, HoldsOffMutationsAndNotReads)
 			      rgw::sal::FLAG_LOG_OP, rgw_user()), 0);
 }
 
-/* A stopped conversion reopens the gate.
+/* A stopped conversion reopens the gate, and a client write is still
+ * refused until the resumed walk finishes (DECISIONS.md 2026-11-02).
  *
- * The bucket stays marked and half-converted, which is a state it can
- * be served in -- so leaving mutations held off until somebody
- * resumes would turn a partial conversion into an outage. */
+ * The bucket stays marked and half-converted, which it is read in;  the
+ * gate is the walk's and goes with it, so nothing stale holds a
+ * resumption off.  What refuses the write is that the bucket is not
+ * adopted.  Resumed and finished, the same write is taken. */
 TEST_F(NSFSUpgradeTest, AStoppedConversionReopensTheGate)
 {
   nb_object("a.bin", "text/plain");
@@ -12608,6 +12617,12 @@ TEST_F(NSFSUpgradeTest, AStoppedConversionReopensTheGate)
   bufferlist v;
   v.append("text/html");
   a[RGW_ATTR_CONTENT_TYPE] = v;
+  EXPECT_EQ(wr->set_obj_attrs(env->dpp, &a, nullptr, null_yield,
+			      rgw::sal::FLAG_LOG_OP, rgw_user()),
+	    -ERR_INVALID_BUCKET_STATE);
+
+  ASSERT_EQ(b->convert_tree(env->dpp, null_yield, nullptr, nullptr), 0);
+  ASSERT_FALSE(b->is_converting());
   EXPECT_EQ(wr->set_obj_attrs(env->dpp, &a, nullptr, null_yield,
 			      rgw::sal::FLAG_LOG_OP, rgw_user()), 0);
 }

@@ -1681,15 +1681,6 @@ public:
    * its writer's complete(). */
   int reject_unadopted(const DoutPrefixProvider* dpp, NSFSBucket* bucket,
 		       MutationPurpose purpose);
-  /* Wait, as a write waits at a closed gate, until `done()` holds or the
-   * bound passes;  woken when a conversion opens the gate again.  A write
-   * that needs a conversion first waits for it and converts nothing
-   * (DECISIONS.md 2026-10-21).  Never called holding a slot:  the
-   * conversion drains slots before it walks.  0, or
-   * -ERR_SERVICE_UNAVAILABLE. */
-  int wait_for_conversion(const DoutPrefixProvider* dpp,
-			  const std::string& bucket,
-			  const std::function<bool()>& done);
   void mutation_leave(const std::string& bucket);
 
   /* Hold mutations off, and wait for the ones already running.
@@ -2367,12 +2358,6 @@ public:
   nsfs::XattrStrategy* xattr_fallback() const;
   nsfs::PathStrategy* path_fallback() const;
   nsfs::MPUStrategy* mpu_fallback() const;
-  /* Whether the upload `meta` is still where NooBaa staged it in a bucket
-   * whose adoption is underway:  the conversion has not reached it, and
-   * a write to it waits.  Conversion removes NooBaa's staging for an
-   * upload once it has re-staged it. */
-  bool upload_awaits_conversion(const DoutPrefixProvider* dpp,
-				const std::string& meta);
   bool is_converting() const { return converting; }
   /* empty when what is served is what NooBaa served */
   const std::string& untranslated_by() const { return untranslated; }
@@ -2398,14 +2383,6 @@ public:
 		   nsfs::convert_cb_t* cb,
 		   nsfs::ConvertProgress* progress);
 
-  /* Whether a client write may change the directory object stored at
-   * `dir`.  Returns 0 unless the object is still in NooBaa's format:
-   * then -ERR_SERVICE_UNAVAILABLE in a bucket whose adoption has not
-   * reached it -- the write waits for the conversion and converts
-   * nothing (DECISIONS.md 2026-10-21) -- and -EOPNOTSUPP in a bucket
-   * that is not being converted. */
-  int admit_write(const DoutPrefixProvider* dpp, optional_yield y,
-		  nsfs::Directory* dir, const std::string& key);
 
 private:
   /* Re-stage the uploads still in the other format.  Part of
@@ -2857,11 +2834,6 @@ public:
   int fill_cache(const DoutPrefixProvider *dpp, optional_yield y, nsfs::fill_cache_cb_t& cb);
   int stat(const DoutPrefixProvider *dpp);
   int make_ent(nsfs::ObjectType type);
-  /* Before a change to this object:  whether the write may proceed,
-   * which a directory object still in NooBaa's format does not until
-   * the bucket's adoption reaches it (NSFSBucket::admit_write()).  Must
-   * be called under the bucket's mutation guard. */
-  int admit_write(const DoutPrefixProvider* dpp, optional_yield y);
 
   /* Put the authenticated user on the entry, so the open and the
    * attribute write that follow are that user's rather than the

@@ -2317,7 +2317,8 @@ static int get_x_attrs(optional_yield y, const DoutPrefixProvider* dpp, int fd,
 		       const nsfs::XattrStrategy* alt = nullptr,
 		       const nsfs::FSIdentity& id = {},
 		       std::string_view skip = {},
-		       std::vector<std::string>* unknown = nullptr)
+		       std::vector<std::string>* unknown = nullptr,
+		       std::vector<std::string>* names = nullptr)
 {
   /* The whole read as the identity:  each value needs read
    * permission on the object.  Nested with_identity() calls below are harmless -- a thread
@@ -2348,6 +2349,9 @@ static int get_x_attrs(optional_yield y, const DoutPrefixProvider* dpp, int fd,
     keylen = strlen(keyptr) + 1;
     std::string xattr_name(keyptr);
     std::string key;
+    if (names) {
+      names->push_back(xattr_name);
+    }
 
     if (!skip.empty() && xattr_name.starts_with(skip)) {
       buflen -= keylen;
@@ -2506,61 +2510,10 @@ static int remove_x_attr(const DoutPrefixProvider *dpp, optional_yield y,
                          int fd, const std::string &key,
                          const std::string &display,
                          const nsfs::XattrStrategy* xs,
-                         const nsfs::XattrStrategy* alt = nullptr,
                          nsfs::FSStrategy* fs = nullptr,
                          const nsfs::FSIdentity& id = {})
 {
   int ret;
-
-  /* Through the fallback as well, as a write is.  Mid-upgrade an
-   * object the conversion has not reached carries the key in NooBaa's
-   * spelling, which the fallback reads, so removing the key removes
-   * every spelling either format gives it.  A spelling the file lacks
-   * is not a failure:  it carries one or the other. */
-  if (alt) {
-    std::vector<std::string> current;
-    if (fs) {
-      nsfs::xattr_map_t raw;
-      ret = fs->get_xattrs(dpp, fd, raw, y, id);
-      if (ret < 0) {
-	return ret;
-      }
-      current.reserve(raw.size());
-      for (auto& [n, _] : raw) {
-	current.emplace_back(n);
-      }
-    }
-    std::vector<std::string> names;
-    for (const auto* s : {xs, alt}) {
-      nsfs::xattr_map_t none_to_write;
-      bufferlist none;
-      if (fs && s->disk_attrs(key, none, current, none_to_write, names)) {
-	continue;
-      }
-      std::string n{s->disk_name(key)};
-      if (!n.empty()) {
-	names.push_back(std::move(n));
-      }
-    }
-    if (fs) {
-      return fs->remove_xattrs(dpp, fd, names, y, id);
-    }
-    for (const auto& n : names) {
-      /* no strategy here, so the identity is applied directly */
-      const int rret = nsfs::with_identity(dpp, id, [&]() -> int {
-	if ((fremovexattr(fd, n.c_str()) < 0) && (errno != ENODATA)) {
-	  return -errno;
-	}
-	return 0;
-      }, y);
-      if (rret < 0) {
-	ldpp_dout(dpp, 0) << "ERROR: could not remove attribute " << n
-	  << " for " << display << ": " << cpp_strerror(-rret) << dendl;
-	return rret;
-      }
-    }
-    return 0;
-  }
 
   /* A key one format spreads over several names cannot be removed by
    * naming one.  Object tags are one attribute per tag in NooBaa's format,
@@ -2851,10 +2804,12 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
 
   need_fsync = true;
 
-  /* this entry's own names, where it has them;  see own_xattr_strategy */
+  /* this entry's own names, where it has them;  see own_xattr_strategy.
+   * Only the bucket's format:  no client writes to a bucket being
+   * converted (DECISIONS.md 2026-11-02), so nothing written here has
+   * NooBaa's spelling beside it. */
   const XattrStrategy* xs = own_xattr_strategy ? own_xattr_strategy
 					       : xattr_strategy;
-  const XattrStrategy* xf = own_xattr_strategy ? nullptr : xattr_fallback;
 
   /* An empty value means "leave this attr alone", matching
    * RGWRados::set_attrs().  MERGE only:  under REPLACE_ALL a name absent
@@ -2930,16 +2885,11 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
       fs_strategy->get_xattrs(dpp, afd, old_raw, y, aid);
 
       for (auto& [disk_name, _] : old_raw) {
-        /* Only names a strategy claims are pruned, so the bucket's
-         * markers, which neither claims, survive (MARKER_XATTR_PREFIX).
-         * Through the fallback as well.  A superseded NooBaa attribute
-         * then resolves to the key about to be written and
-         * lands in to_remove, which is how a converting object stops
-         * carrying both spellings of the same fact. */
+        /* Only names the strategy claims are pruned, so the bucket's
+         * markers, which it does not claim, survive
+         * (MARKER_XATTR_PREFIX). */
         std::string logical;
-        if (!xs->parse_disk_name(disk_name, logical) &&
-            (!xf ||
-             !xf->parse_disk_name(disk_name, logical))) {
+        if (!xs->parse_disk_name(disk_name, logical)) {
           continue;
         }
         if (to_write.find(disk_name) == to_write.end()) {
@@ -2955,50 +2905,14 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
          * it.  DeleteObjectTagging arrives here, and without this it
          * removed the one nsfs name and left NooBaa's tags. */
         bufferlist none;
-        /* and through the fallback, for the spelling an object the
-         * conversion has not reached still carries */
-        for (const auto* s : {xs, xf}) {
-          if (!s) {
-            continue;
-          }
-          if (s->disk_attrs(key, none, disk_names(), to_write,
-                            to_remove)) {
-            continue;
-          }
-          std::string disk_name{s->disk_name(key)};
-          if (!disk_name.empty() &&
-              (to_write.find(disk_name) == to_write.end())) {
-            to_remove.push_back(std::move(disk_name));
-          }
-        }
-      }
-    }
-
-    /* One logical key, one spelling.
-     *
-     * MERGE touches only the keys it was given, which is the object
-     * contract and must stay that way -- so the wholesale prune above
-     * is not available here.  What is needed is narrower:  a key we
-     * are writing may already be on this file under the other
-     * format's name, and leaving it there gives the object two
-     * spellings of one fact.  The read would keep finding nsfs's, so
-     * nothing would look wrong, and the conversion would never finish
-     * because the foreign attribute never goes away.
-     *
-     * Only where a fallback exists, which is only mid-upgrade.  The
-     * design record had this landing in the REPLACE_ALL prune with no
-     * new logic;  that was wrong, because objects do not write that
-     * way. */
-    if (xf) {
-      for (auto& [disk_name, _] : to_write) {
-        std::string logical;
-        if (!xs->parse_disk_name(disk_name, logical)) {
+        if (xs->disk_attrs(key, none, disk_names(), to_write,
+                           to_remove)) {
           continue;
         }
-        std::string foreign = xf->disk_name(logical);
-        if (!foreign.empty() && (foreign != disk_name) &&
-            (to_write.find(foreign) == to_write.end())) {
-          to_remove.push_back(std::move(foreign));
+        std::string disk_name{xs->disk_name(key)};
+        if (!disk_name.empty() &&
+            (to_write.find(disk_name) == to_write.end())) {
+          to_remove.push_back(std::move(disk_name));
         }
       }
     }
@@ -3042,13 +2956,13 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
   if (mode == AttrWriteMode::REPLACE_ALL) {
     Attrs old_attrs;
     ret = get_x_attrs(y, dpp, afd, old_attrs, get_name(), xs,
-		    xf, aid);
+		    nullptr, aid);
     if (ret >= 0) {
       for (auto& it : old_attrs) {
         if (attrs.find(it.first) == attrs.end() &&
             (!extra_attrs || extra_attrs->find(it.first) == extra_attrs->end())) {
-          remove_x_attr(dpp, y, afd, it.first, get_name(), xs, xf,
-			nullptr, aid);
+          remove_x_attr(dpp, y, afd, it.first, get_name(), xs, nullptr,
+			aid);
         }
       }
     }
@@ -3056,8 +2970,7 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
     for (auto& key : *rmattrs) {
       if (attrs.find(key) == attrs.end() &&
           (!extra_attrs || extra_attrs->find(key) == extra_attrs->end())) {
-        remove_x_attr(dpp, y, afd, key, get_name(), xs, xf,
-		      nullptr, aid);
+        remove_x_attr(dpp, y, afd, key, get_name(), xs, nullptr, aid);
       }
     }
   }
@@ -8698,6 +8611,28 @@ static constexpr uint64_t CONVERT_REWRITE_CAPS =
 static constexpr uint64_t CONVERT_CHOWN_CAPS =
   nsfs::cap_bit(CAP_CHOWN);
 
+/* The names on the file that hold `key` in NooBaa's spelling, added to
+ * `out`.  One name for most keys;  for one NooBaa spreads over several
+ * -- tags, one per tag;  retention, two;  legal hold -- the ones its
+ * disk_attrs() finds in `names`, the file's own.  disk_name() alone
+ * names none of those, and conversion left them on the file. */
+static void foreign_names(const nsfs::XattrStrategy* nb,
+			  const std::string& key,
+			  const std::vector<std::string>& names,
+			  const std::string& ours,
+			  std::vector<std::string>& out)
+{
+  nsfs::xattr_map_t none_written;
+  bufferlist none;
+  if (nb->disk_attrs(key, none, names, none_written, out)) {
+    return;
+  }
+  const std::string foreign = nb->disk_name(key);
+  if (!foreign.empty() && (foreign != ours)) {
+    out.push_back(foreign);
+  }
+}
+
 /* Rewrite one file's attributes into the bucket's format.
  *
  * Not through FSEnt::write_attrs(), which does the write and the prune
@@ -8720,9 +8655,9 @@ static int convert_attrs(const DoutPrefixProvider* dpp, optional_yield y,
 			 const std::vector<std::string>* leave_alone = nullptr)
 {
   Attrs attrs;
-  std::vector<std::string> unknown;
+  std::vector<std::string> unknown, names;
   int ret = get_x_attrs(y, dpp, fd, attrs, display, xs, xattr_fallback, {},
-			{}, &unknown);
+			{}, &unknown, &names);
   if (ret < 0) {
     return ret;
   }
@@ -8746,13 +8681,10 @@ static int convert_attrs(const DoutPrefixProvider* dpp, optional_yield y,
       continue;
     }
     const std::string disk_name = xs->disk_name(key);
-    const std::string foreign = xattr_fallback->disk_name(key);
     if (!disk_name.empty()) {
       to_write.try_emplace(disk_name, attr_on_disk(xs, key, bl));
     }
-    if (!foreign.empty() && (foreign != disk_name)) {
-      to_remove.push_back(foreign);
-    }
+    foreign_names(xattr_fallback, key, names, disk_name, to_remove);
   }
 
   /* Record the owner:  the bucket's (DECISIONS.md 2026-10-11).
@@ -9108,9 +9040,9 @@ static int convert_directory_object(const DoutPrefixProvider* dpp,
   /* Not `user.nsfs.`:  on the bucket root those are the bucket's own
    * state, which is not the object's to carry, and nothing else in
    * NooBaa's format has them. */
-  std::vector<std::string> unknown;
+  std::vector<std::string> unknown, names;
   ret = get_x_attrs(y, dpp, dir_fd, dattrs, ev.key, xs, xattr_fallback, {},
-		    "user.nsfs.", &unknown);
+		    "user.nsfs.", &unknown, &names);
   if (ret < 0) {
     return ret;
   }
@@ -9193,10 +9125,7 @@ static int convert_directory_object(const DoutPrefixProvider* dpp,
    * syscall. */
   std::vector<std::string> gone;
   for (const auto& [key, bl] : dattrs) {
-    const std::string foreign = xattr_fallback->disk_name(key);
-    if (!foreign.empty()) {
-      gone.push_back(foreign);
-    }
+    foreign_names(xattr_fallback, key, names, xs->disk_name(key), gone);
   }
   if (!gone.empty()) {
     /* upgrade command;  see convert_attrs, whose raise this needs as
@@ -9441,32 +9370,6 @@ static int convert_directory(const DoutPrefixProvider* dpp, optional_yield y,
  * in the part's own file is what the nsfs assembly reads for a
  * diverted part, so both nsfs layouts complete it.
  */
-int NSFSBucket::admit_write(const DoutPrefixProvider* dpp,
-			    optional_yield y, nsfs::Directory* dir,
-			    const std::string& key)
-{
-  nsfs::PathStrategy::DirectoryObject dobj{};
-  if (!dir->directory_object(dpp, dobj)) {
-    return 0;
-  }
-  if (!converting) {
-    ldpp_dout(dpp, 1) << "nsfs: rejecting a change to the directory object "
-      << key << " in bucket " << get_name() << ":  it is in NooBaa's "
-      << "format, and the bucket is not being converted" << dendl;
-    return -EOPNOTSUPP;
-  }
-  /* A write that needs a conversion first waits for it and converts
-   * nothing (DECISIONS.md 2026-10-21).  Here inside the mutation slot, so
-   * no conversion is running -- it would hold the gate -- and the one
-   * that stopped short of this object is resumed by its command or by
-   * the next adoption pass:  the write is answered with the retryable
-   * 503 rather than waiting for a resume nothing has started. */
-  ldpp_dout(dpp, 4) << "nsfs: the directory object " << key << " in bucket "
-    << get_name() << " has not been converted;  rejecting a write until "
-    << "the bucket's adoption reaches it" << dendl;
-  return -ERR_SERVICE_UNAVAILABLE;
-}
-
 int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
 				optional_yield y,
 				nsfs::convert_cb_t* cb,
@@ -9980,11 +9883,12 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
  * is the thing being prevented.
  */
 
-/* A bucket not taken over takes no client writes (DECISIONS.md
- * 2026-10-21, the gate):  no `user.nsfs.marker.extensions` means the
- * bucket is NooBaa's until adoption marks it, and InvalidBucketState
- * says the request is not valid in the bucket's current state, which a
- * command can change. */
+/* A bucket not adopted takes no client writes (DECISIONS.md 2026-10-21,
+ * the gate;  2026-11-02):  no `user.nsfs.marker.extensions` means the
+ * bucket is NooBaa's until adoption marks it, and
+ * `user.nsfs.marker.converting` that its walk has not finished, whether
+ * it is running or stopped.  InvalidBucketState says the request is not
+ * valid in the bucket's current state, which a command can change. */
 int NSFSDriver::reject_unadopted(const DoutPrefixProvider* dpp,
 				 NSFSBucket* b, MutationPurpose purpose)
 {
@@ -9995,7 +9899,8 @@ int NSFSDriver::reject_unadopted(const DoutPrefixProvider* dpp,
   if (pret < 0) {
     return pret;
   }
-  if (b->extended() || adoption_gate_lifted(b->get_name())) {
+  if ((b->extended() && !b->is_converting()) ||
+      adoption_gate_lifted(b->get_name())) {
     return 0;
   }
   unadopted_writes_rejected.fetch_add(1, std::memory_order_relaxed);
@@ -10008,45 +9913,6 @@ int NSFSDriver::reject_unadopted(const DoutPrefixProvider* dpp,
     return -ERR_SERVICE_UNAVAILABLE;
   }
   return -ERR_INVALID_BUCKET_STATE;
-}
-
-int NSFSDriver::wait_for_conversion(const DoutPrefixProvider* dpp,
-				    const std::string& bucket,
-				    const std::function<bool()>& done)
-{
-  if (done()) {
-    return 0;
-  }
-  std::unique_lock l{gate_lock};
-  if (gate_cond.wait_for(l, mutation_gate_wait, done)) {
-    return 0;
-  }
-  ldpp_dout(dpp, 4) << "nsfs: bucket " << bucket << " has not been converted "
-    << "this far;  rejecting a write after waiting "
-    << mutation_gate_wait.count() << "ms" << dendl;
-  return -ERR_SERVICE_UNAVAILABLE;
-}
-
-bool NSFSBucket::upload_awaits_conversion(const DoutPrefixProvider* dpp,
-					  const std::string& meta)
-{
-  if ((resolve_profile(dpp) < 0) || !converting) {
-    return false;
-  }
-  auto* nb_mpu = mpu_fallback();
-  if (!nb_mpu || (dir->open(dpp) < 0)) {
-    return false;
-  }
-  auto root = nb_mpu->staging_root(dpp, dir->get_fd());
-  if (!root) {
-    return false;
-  }
-  std::string path = nb_mpu->staging_dir_name(meta);
-  if (*root != ".") {
-    path = *root + "/" + path;
-  }
-  return ::faccessat(dir->get_fd(), path.c_str(), F_OK,
-		     AT_SYMLINK_NOFOLLOW | AT_EACCESS) == 0;
 }
 
 NSFSMutationGuard::NSFSMutationGuard(const DoutPrefixProvider* dpp,
@@ -11764,10 +11630,6 @@ int NSFSObject::copy_object(const ACLOwner& owner,
                       << dendl;
     return -EINVAL;
   }
-  ret = dobj->admit_write(dpp, y);
-  if (ret < 0) {
-    return ret;
-  }
   bool has_instance = !get_key().instance.empty();
 
   ldpp_dout(dpp, 10) << "copy_object: src=" << get_key()
@@ -13354,10 +13216,7 @@ int NSFSObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
   if (mg.result() < 0) {
     return mg.result();
   }
-  int ret = admit_write(dpp, y);
-  if (ret < 0) {
-    return ret;
-  }
+  int ret;
   std::vector<std::string> rmattrs;
   if (delattrs) {
     for (auto& it : *delattrs) {
@@ -13475,10 +13334,6 @@ int NSFSObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
   if (mg.result() < 0) {
     return mg.result();
   }
-  int ret = admit_write(dpp, y);
-  if (ret < 0) {
-    return ret;
-  }
   state.attrset[attr_name] = attr_val;
   {
     const int pret = pin_identity_for_attrs(dpp, authenticated_user, y);
@@ -13588,10 +13443,7 @@ int NSFSObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr
   if (mg.result() < 0) {
     return mg.result();
   }
-  int ret = admit_write(dpp, y);
-  if (ret < 0) {
-    return ret;
-  }
+  int ret;
   state.attrset.erase(attr_name);
 
   /* No open here.  One outside the retry fails as the authenticated user and
@@ -13622,7 +13474,7 @@ int NSFSObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr
     return remove_x_attr(dpp, y,
 			 (use_fd >= 0) ? use_fd : ent->get_fd(),
 			 attr_name, get_name(),
-			 xattr_strategy(), xattr_fallback(),
+			 xattr_strategy(),
 			 driver->get_fs_strategy(),
 			 (use_fd >= 0) ? nsfs::FSIdentity::none()
 				       : ent->get_identity());
@@ -14067,58 +13919,12 @@ int NSFSObject::stat(const DoutPrefixProvider* dpp)
   return 0;
 }
 
-int NSFSObject::admit_write(const DoutPrefixProvider* dpp,
-			    optional_yield y)
-{
-  const std::string& k = state.obj.key.name;
-  if (k.empty() || (k.back() != '/') || !state.obj.key.ns.empty()) {
-    return 0;
-  }
-  NSFSBucket* b = static_cast<NSFSBucket*>(bucket);
-  /* the reader's limit too:  NooBaa versions a directory object
-   * differently, and neither side handles that yet */
-  if (b->get_info().versioned()) {
-    return 0;
-  }
-
-  std::vector<std::unique_ptr<nsfs::Directory>> chain;
-  nsfs::Directory* leaf_dir{nullptr};
-  std::string leaf;
-  int ret = nsfs::resolve_key_path(dpp, b->get_dir(), state.obj.key,
-				   get_fname(/*use_version=*/false),
-				   driver->get_reserved_names(),
-				   b->is_internal(), /*create_dirs=*/false,
-				   driver->ctx(), chain, leaf_dir, leaf,
-				   /* conversion is the gateway's */
-				   nsfs::FSIdentity::none(), nullptr);
-  if (ret == -ENOENT) {
-    /* no directory, so no object to convert */
-    return 0;
-  }
-  if (ret < 0) {
-    return ret;
-  }
-  ret = b->admit_write(dpp, y, leaf_dir, k);
-  if (ret < 0) {
-    return ret;
-  }
-
-  /* An entry built to read the NooBaa format describes an object that
-   * is no longer there;  the next stat() finds the converted one. */
-  if (dynamic_cast<nsfs::NooBaaDirectoryObject*>(ent.get())) {
-    ent.reset();
-    dir_chain.clear();
-    return stat(dpp);
-  }
-  return 0;
-}
-
 int NSFSObject::make_ent(ObjectType type)
 {
   /* A NooBaaDirectoryObject is for reading:  a writer needs the sentinel
-   * itself, and admit_write() has rejected a write to one the
-   * bucket's adoption has not converted yet, so by the time a write is
-   * published the object is in RGW's format. */
+   * itself, and no client writes to a bucket until its adoption has
+   * converted every directory object (reject_unadopted()), so by the time
+   * a write is published the object is in RGW's format. */
   if (ent && !dynamic_cast<nsfs::NooBaaDirectoryObject*>(ent.get())) {
     return 0;
   }
@@ -15092,12 +14898,6 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
 		       static_cast<NSFSBucket*>(source->get_bucket()));
   if (mg.result() < 0) {
     return mg.result();
-  }
-  {
-    const int cret = source->admit_write(dpp, y);
-    if (cret < 0) {
-      return cret;
-    }
   }
   /* Who this delete is for.  Resolved once, here, rather than at
    * each site that needs it:  a delete in a versioned bucket links
@@ -16402,18 +16202,6 @@ int NSFSMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct, 
   if (mg.result() < 0) {
     return mg.result();
   }
-  /* An upload NooBaa staged that this bucket's adoption has not
-   * reached:  the guard waited out a running conversion, so the one that
-   * stopped short of it is resumed by its command or the next pass, and
-   * the write is answered with the retryable 503 rather than waiting in
-   * the slot (DECISIONS.md 2026-10-21). */
-  if (static_cast<NSFSBucket*>(bucket)->upload_awaits_conversion(
-	dpp, mp_obj.meta)) {
-    ldpp_dout(dpp, 4) << "nsfs: upload " << mp_obj.meta << " has not been "
-      << "converted;  rejecting until the bucket's adoption reaches it"
-      << dendl;
-    return -ERR_SERVICE_UNAVAILABLE;
-  }
   int ret;
 
   ret = load(dpp);
@@ -16488,25 +16276,6 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
   NSFSMutationGuard mg(dpp, driver, static_cast<NSFSBucket*>(bucket));
   if (mg.result() < 0) {
     return mg.result();
-  }
-  /* An upload NooBaa staged that this bucket's adoption has not
-   * reached:  the guard waited out a running conversion, so the one that
-   * stopped short of it is resumed by its command or the next pass, and
-   * the write is answered with the retryable 503 rather than waiting in
-   * the slot (DECISIONS.md 2026-10-21). */
-  if (static_cast<NSFSBucket*>(bucket)->upload_awaits_conversion(
-	dpp, mp_obj.meta)) {
-    ldpp_dout(dpp, 4) << "nsfs: upload " << mp_obj.meta << " has not been "
-      << "converted;  rejecting until the bucket's adoption reaches it"
-      << dendl;
-    return -ERR_SERVICE_UNAVAILABLE;
-  }
-  {
-    const int cret =
-      static_cast<NSFSObject*>(target_obj)->admit_write(dpp, y);
-    if (cret < 0) {
-      return cret;
-    }
   }
   /* who the object will belong to.  Denied where it cannot be applied,
    * as the writers deny it, rather than made as the gateway. */
@@ -17212,14 +16981,6 @@ int NSFSMultipartWriter::prepare(optional_yield y)
     if (gret < 0) {
       return gret;
     }
-    /* and an upload NooBaa staged, which this bucket's adoption has not
-     * reached, is waited for:  this writer stages in RGW's layout */
-    const std::string& meta = mp_cache_key.upload_meta;
-    const int wret = driver->wait_for_conversion(dpp, bucket->get_name(),
-      [this, &meta] { return !bucket->upload_awaits_conversion(dpp, meta); });
-    if (wret < 0) {
-      return wret;
-    }
   }
 
   /* Resolve and pin before anything else this operation does.
@@ -17764,10 +17525,7 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
   if (mg.result() < 0) {
     return mg.result();
   }
-  int ret = obj->admit_write(rctx.dpp, rctx.y);
-  if (ret < 0) {
-    return ret;
-  }
+  int ret = 0;
   if (uring_write) {
     ret = uring_write->drain();
   } else {
