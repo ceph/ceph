@@ -935,6 +935,7 @@ private:
   // truncate
   void truncate_inode(CInode *in, LogSegmentRef const& ls);
   void purge_redirects(CInode *in, uint64_t size);
+  static std::string migrate_namespace(uint32_t gen);
   struct MigrateCleanup;
   void migrate_cleanup(CInode *in, LogSegmentRef const& ls);
   void note_replayed_migrate(CInode *in, LogSegmentRef const& ls);

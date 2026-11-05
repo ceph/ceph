@@ -6655,25 +6655,37 @@ public:
   }
 };
 
+std::string MDCache::migrate_namespace(uint32_t gen)
+{
+  return gen ? "ceph_migrate_" + std::to_string(gen) : std::string();
+}
+
 /*
- * Remove the redirects a migrated file left in its old pools.  The purge only
- * removes the backtrace there, and that removal would be forwarded.  A failure
- * leaves an empty object behind, which is harmless, so nothing waits for this.
+ * Remove the redirects a migrated file left behind, in every pool it has been
+ * in and every namespace it has had.  The purge only removes the backtrace in
+ * old pools, and that removal would be forwarded.  A failure leaves an empty
+ * object behind, which is harmless, so nothing waits for this.
  */
 void MDCache::purge_redirects(CInode *in, uint64_t size)
 {
   const auto& pi = in->get_projected_inode();
   const uint64_t num = Striper::get_num_objects(pi->layout, size);
-  for (const auto &p : pi->old_pools) {
-    if (p == pi->layout.pool_id)
-      continue;
-    dout(10) << __func__ << " " << num << " objects in pool " << p << " of "
-             << *in << dendl;
-    file_layout_t old_layout = pi->layout;
-    old_layout.pool_id = p;
-    filer.purge_range(in->ino(), &old_layout, SnapContext(), 0, num,
-                      ceph::real_clock::now(), CEPH_OSD_FLAG_IGNORE_REDIRECT,
-                      new LambdaContext([](int) {}));
+  std::set<int64_t> pools = {pi->layout.pool_id};
+  for (const auto &p : pi->old_pools)
+    pools.insert(p);
+  for (int64_t p : pools) {
+    for (uint32_t gen = 0; gen <= pi->migrate_gen; gen++) {
+      file_layout_t old_layout = pi->layout;
+      old_layout.pool_id = p;
+      old_layout.pool_ns = migrate_namespace(gen);
+      if (p == pi->layout.pool_id && old_layout.pool_ns == pi->layout.pool_ns)
+        continue;
+      dout(10) << __func__ << " " << num << " objects in pool " << p
+               << " namespace '" << old_layout.pool_ns << "' of " << *in << dendl;
+      filer.purge_range(in->ino(), &old_layout, SnapContext(), 0, num,
+                        ceph::real_clock::now(), CEPH_OSD_FLAG_IGNORE_REDIRECT,
+                        new LambdaContext([](int) {}));
+    }
   }
 }
 
