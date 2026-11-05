@@ -7211,14 +7211,62 @@ void Server::handle_client_dir_migrate(const MDRequestRef& mdr, CInode *cur,
   if (check_layout_vxattr(mdr, "layout.pool", value, &to) < 0)
     return;
 
-  MigrateQueue *queue = mds->migrate_queue;
-  if (!queue->is_ready()) {
-    queue->wait_for_ready(new C_MDS_RetryRequest(mdcache, mdr));
+  // The job first, so that a refused one leaves the directory as it was.  A
+  // client resending this after a failover finds a clashing job and gets EBUSY,
+  // with the layout possibly unset; it can be set by hand.
+  if (!mdr->more()->rdonly_checks) {
+    MigrateQueue *queue = mds->migrate_queue;
+    if (!queue->is_ready()) {
+      queue->wait_for_ready(new C_MDS_RetryRequest(mdcache, mdr));
+      return;
+    }
+    queue->enqueue(cur, to.pool_id, new LambdaContext([this, mdr](int r) {
+      if (r < 0) {
+        respond_to_request(mdr, r);
+        return;
+      }
+      mdr->more()->rdonly_checks = true;
+      dispatch_client_request(mdr);
+    }));
     return;
   }
-  queue->enqueue(cur, to.pool_id, new LambdaContext([this, mdr](int r) {
-    respond_to_request(mdr, r);
-  }));
+
+  // New files go to the new pool too, or the directory would never be done.
+  if (!xlock_policylock(mdr, cur, true))
+    return;
+  MutationImpl::LockOpVec lov;
+  lov.add_xlock(&cur->authlock);
+  if (!mds->locker->acquire_locks(mdr, lov))
+    return;
+
+  file_layout_t layout;
+  if (cur->get_projected_inode()->has_layout())
+    layout = cur->get_projected_inode()->layout;
+  else if (mdr->dir_layout != file_layout_t())
+    layout = mdr->dir_layout;
+  else
+    layout = mdcache->default_file_layout;
+  if (cur->get_projected_inode()->has_layout() && layout.pool_id == to.pool_id) {
+    respond_to_request(mdr, 0);
+    return;
+  }
+  layout.pool_id = to.pool_id;
+
+  auto pi = cur->project_inode(mdr);
+  pi.inode->layout = layout;
+  pi.inode->change_attr++;
+  pi.inode->ctime = mdr->get_op_stamp();
+  if (mdr->get_op_stamp() > pi.inode->rstat.rctime)
+    pi.inode->rstat.rctime = mdr->get_op_stamp();
+  pi.inode->version = cur->pre_dirty();
+
+  mdr->no_early_reply = true;
+  mdr->ls = mdlog->get_current_segment();
+  EUpdate *le = new EUpdate(mdlog, "dir migrate layout");
+  le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
+  mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY);
+  mdcache->journal_dirty_inode(mdr.get(), &le->metablob, cur);
+  journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(this, mdr, cur));
 }
 
 /*
