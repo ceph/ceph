@@ -1239,6 +1239,29 @@ void ECCommon::RecoveryBackend::handle_recovery_push(
     cursor += len;
   }
 
+  // NEW: Execute the clone instructions packed by the primary!
+  for (auto& [clone_oid, intervals] : op.recovery_info.clone_subset) {
+    ghobject_t clone_ghobj(clone_oid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard);
+    for (auto [off, len] : intervals) {
+      // Translate the global logical object bounds to physical shard bounds
+      uint64_t shard_off = sinfo.object_size_to_shard_size(off, get_parent()->whoami_shard().shard);
+      uint64_t shard_len = sinfo.object_size_to_shard_size(len, get_parent()->whoami_shard().shard);
+      
+      if (shard_len > 0) {
+        m->t.clone_range(coll, clone_ghobj, tobj, shard_off, shard_len, shard_off);
+        
+        // Prevent Ceph from accidentally truncating the file by updating our size tracker
+        if (shard_off + shard_len > tobj_size) {
+          tobj_size = shard_off + shard_len;
+        }
+        
+        dout(10) << __func__ << ": cloning from " << clone_ghobj 
+                 << " logical " << off << "~" << len 
+                 << " physical " << shard_off << "~" << shard_len << dendl;
+      }
+    }
+  }
+
   if (op.before_progress.first) {
     ceph_assert(op.attrset.contains(OI_ATTR));
     m->t.setattrs(
@@ -1675,6 +1698,7 @@ void ECCommon::RecoveryBackend::continue_recovery_op(
         PushOp &pop = m->pushes[pg_shard].back();
         pop.soid = op.hoid;
         pop.version = op.recovery_info.oi.get_version_for_shard(pg_shard.shard);
+        pop.recovery_info = op.recovery_info;
 
         op.returned_data->get_sparse_buffer(pg_shard.shard, pop.data, pop.data_included);
         ceph_assert(pop.data.length() == pop.data_included.size());
@@ -1812,7 +1836,15 @@ ECCommon::RecoveryBackend::recover_object(
     } else {
       ceph_abort_msg("neither obc nor head set for a snap object");
     }
+  } else {
+    // Feed the snapshot history to the head object for overlap math
+    if (obc && obc->ssc) {
+      op.recovery_info.ss = obc->ssc->snapset;
+    } else if (head && head->ssc) {
+      op.recovery_info.ss = head->ssc->snapset;
+    }
   }
+
   bool omap_dirty_in_missing = false;
   bool omap_shard_missing = false;
   for (set<pg_shard_t>::const_iterator i =
@@ -1835,6 +1867,83 @@ ECCommon::RecoveryBackend::recover_object(
       }
     }
   }
+
+  interval_set<uint64_t> copy_subset;
+  if (obc && obc->obs.oi.size) {
+    copy_subset.insert(0, obc->obs.oi.size);
+  }
+  map<hobject_t, interval_set<uint64_t>> clone_subsets;
+
+  if (cct->_conf->osd_recover_clone_overlap) {
+    interval_set<uint64_t> prev = copy_subset;
+    hobject_t c = hoid;
+    
+    // 1. Check for overlap against strictly older snapshots
+    for (int x = (int)op.recovery_info.ss.clones.size() - 1; x >= 0; x--) {
+      c.snap = op.recovery_info.ss.clones[x];
+      if (c.snap >= hoid.snap) continue;
+
+      prev.intersection_of(op.recovery_info.ss.clone_overlap[c.snap]);
+      if (prev.empty()) continue;
+
+      // NEW: Safety check! Ensure ALL target shards actually have this clone on their disk.
+      bool clone_missing = false;
+      for (auto shard : op.missing_on) {
+        if (get_parent()->get_shard_missing(shard).is_missing(c)) {
+          clone_missing = true;
+          break;
+        }
+      }
+      
+      if (clone_missing) {
+        dout(10) << __func__ << " " << hoid << " replica is missing clone " << c 
+                << ", falling back to network push" << dendl;
+        continue; // Skip this clone, try the next one or fall back to full push
+      }
+
+      dout(10) << "RecoveryBackend:recover_object " << hoid << " HAS prev "
+               << c << " overlap " << prev << dendl;
+      
+      clone_subsets[c] = prev;
+      copy_subset.subtract(prev);
+      break; 
+    }
+
+    // 2. NEW: If recovering a snapshot and bytes are still missing, clone from HEAD!
+    if (hoid.is_snap() && !copy_subset.empty()) {
+      hobject_t head_obj = hoid;
+      head_obj.snap = CEPH_NOSNAP;
+      
+      interval_set<uint64_t> head_overlap = copy_subset;
+      // The overlap between a snap and head is stored at the snap's index
+      head_overlap.intersection_of(op.recovery_info.ss.clone_overlap[hoid.snap]);
+      
+      if (!head_overlap.empty()) {
+        // NEW: Safety check for HEAD as well, just to be bulletproof.
+        bool head_missing = false;
+        for (auto shard : op.missing_on) {
+          if (get_parent()->get_shard_missing(shard).is_missing(head_obj)) {
+            head_missing = true;
+            break;
+          }
+        }
+
+        if (head_missing) {
+          dout(10) << __func__ << " " << hoid << " replica is missing HEAD " << head_obj 
+                  << ", falling back to network push" << dendl;
+        } else {
+          dout(10) << "RecoveryBackend:recover_object " << hoid << " cloning from HEAD overlap " 
+                  << head_overlap << dendl;
+          clone_subsets[head_obj] = head_overlap;
+          copy_subset.subtract(head_overlap);
+        }
+      }
+    }
+  }
+
+  op.recovery_info.copy_subset = copy_subset;
+  op.recovery_info.clone_subset = clone_subsets;
+  
   if (!get_parent()->get_pool().supports_omap()) {
     op.recovery_progress.omap_complete = true;
   } else {
