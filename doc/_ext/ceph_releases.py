@@ -121,6 +121,7 @@ class CephReleases(Directive):
 
 RELEASES_TEMPLATE = '''
 .. mermaid::
+   :name: ceph-releases-gantt
 
    gantt
        dateFormat  YYYY-MM-DD
@@ -286,6 +287,7 @@ class CephTimeline(Directive):
 
 TIMELINE_TEMPLATE = '''
 .. mermaid::
+   :name: ceph-releases-timeline
 
    gantt
        dateFormat  YYYY-MM-DD
