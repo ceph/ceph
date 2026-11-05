@@ -386,7 +386,6 @@ function TEST_one_zone_recovers_from_old_copies() {
 # rather than abort on proposing the monmap again.
 function TEST_one_zone_while_monmap_changes() {
     local dir=$1
-    local -x CEPH_ARGS="$CEPH_ARGS"
     two_zone_cluster $dir || return 1
     ceph osd pool create data0 erasure --num_zones 2 --k 2 --m 1 || return 1
     wait_for_clean || return 1
@@ -399,14 +398,17 @@ function TEST_one_zone_while_monmap_changes() {
     test "$leader" = a -o "$leader" = b || return 1
     local peon=a
     test $leader != a || peon=b
-    local addr=CEPH_MON_${leader^^}
-    CEPH_ARGS=${CEPH_ARGS/--mon-host=$CEPH_MON /--mon-host=${!addr} }
-    local epoch=$(ceph mon dump -f json | jq .epoch)
+    # the leader's own monmap: a peon serves no reads while a change is
+    # proposed
+    local asok=$(get_asok_path mon.$leader)
+    local epoch now
+    epoch=$(CEPH_ARGS='' ceph --admin-daemon $asok mon_status | jq -e .monmap.epoch) || return 1
     kill -STOP $(cat $dir/mon.$peon.pid) || return 1
     ceph mon set-weight a 1 &
     local weight=$!
     sleep 1
-    test "$(ceph mon dump -f json | jq .epoch)" = $epoch || return 1
+    now=$(CEPH_ARGS='' ceph --admin-daemon $asok mon_status | jq -e .monmap.epoch) || return 1
+    test "$now" = "$epoch" || return 1
     ceph osd pool set data0 num_zones 1 --crush_rule data0-one-zone \
         --yes-i-really-mean-it &
     local one_zone=$!
