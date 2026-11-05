@@ -72,6 +72,15 @@ public:
 private:
   enum class State : uint8_t { RUNNING, PAUSED, DONE, ABORTED };
 
+  // Something to walk: a directory, or part of one, or a single file.
+  struct Item {
+    inodeno_t ino;
+    frag_t fg;          // the root frag stands for the whole directory
+    bool file = false;
+    void encode(ceph::buffer::list& bl) const;
+    void decode(ceph::buffer::list::const_iterator& p);
+  };
+
   struct Note {
     inodeno_t ino;
     std::string path;
@@ -113,7 +122,7 @@ private:
     Progress done;
 
     // not persisted
-    std::vector<inodeno_t> pending;  // a stack, which keeps the queue small
+    std::vector<Item> pending;       // a stack, which keeps the queue small
     std::string hold;                // why nothing starts now
     unsigned failures_in_a_row = 0;
 
@@ -127,7 +136,7 @@ private:
   // A directory being worked on: scanned, then its files migrated.
   struct DirWork {
     Job *job = nullptr;
-    inodeno_t ino;
+    Item item;
     bool opened = false;
     bool scanned = false;
     std::vector<frag_t> frags_done;
@@ -150,13 +159,14 @@ private:
   };
 
   static std::string job_key(uint64_t id);
-  static std::string dir_key(uint64_t id, inodeno_t ino);
+  static std::string dir_key(uint64_t id, const Item& item);
 
   void _load_next(const std::string& after);
   void _load_done();
   void _load_failed(int r);
 
   void _save_job(const Job& job);
+  void _queue_item(Job& job, const Item& item);
   void _set(const std::string& key, ceph::buffer::list&& bl);
   void _rm(const std::string& key);
   void _flush(Context *fin);

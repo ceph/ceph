@@ -21,8 +21,8 @@
  * each file with Server::file_migrate().  What makes it survive a failover is
  * a work list in one omap object of the metadata pool, mds<rank>_migratequeue:
  *
- *   job.<id>         the job: root, target pool, state, counters
- *   dir.<id>.<ino>   a directory with work left in it
+ *   job.<id>                 the job: root, target pool, state, counters
+ *   dir.<id>.<ino>.<frag>    a directory, or a part of it, with work left in it
  *
  * Only directories are recorded, never files.  A directory stays listed until
  * every file in it has been moved and its old pool cleared.  Then one write
@@ -100,6 +100,26 @@ static const char *state_name(uint8_t s)
 {
   static const char *names[] = {"running", "paused", "done", "aborted"};
   return s < 4 ? names[s] : "unknown";
+}
+
+void MigrateQueue::Item::encode(bufferlist& bl) const
+{
+  using ceph::encode;
+  ENCODE_START(1, 1, bl);
+  encode(ino, bl);
+  encode(fg, bl);
+  encode(file, bl);
+  ENCODE_FINISH(bl);
+}
+
+void MigrateQueue::Item::decode(bufferlist::const_iterator& p)
+{
+  using ceph::decode;
+  DECODE_START(1, p);
+  decode(ino, p);
+  decode(fg, p);
+  decode(file, p);
+  DECODE_FINISH(p);
 }
 
 void MigrateQueue::Note::encode(bufferlist& bl) const
@@ -263,10 +283,11 @@ std::string MigrateQueue::job_key(uint64_t id)
   return k;
 }
 
-std::string MigrateQueue::dir_key(uint64_t id, inodeno_t ino)
+std::string MigrateQueue::dir_key(uint64_t id, const Item& item)
 {
-  char k[48];
-  snprintf(k, sizeof(k), "dir.%016" PRIx64 ".%016" PRIx64, id, uint64_t(ino));
+  char k[56];
+  snprintf(k, sizeof(k), "dir.%016" PRIx64 ".%016" PRIx64 ".%08x", id,
+           uint64_t(item.ino), unsigned(item.fg));
   return k;
 }
 
@@ -329,7 +350,7 @@ void MigrateQueue::_load_failed(int r)
 
 void MigrateQueue::_load_done()
 {
-  std::vector<std::pair<uint64_t,inodeno_t>> dirs;
+  std::vector<std::pair<uint64_t,Item>> dirs;
   try {
     for (auto& [key, val] : loaded) {
       if (key.compare(0, 4, "job.") == 0) {
@@ -338,9 +359,12 @@ void MigrateQueue::_load_done()
         job.decode(p);
         last_id = std::max(last_id, job.id);
         jobs[job.id] = std::move(job);
-      } else if (key.compare(0, 4, "dir.") == 0 && key.size() == 37) {
-        dirs.emplace_back(std::stoull(key.substr(4, 16), nullptr, 16),
-                          inodeno_t(std::stoull(key.substr(21), nullptr, 16)));
+      } else if (key.compare(0, 4, "dir.") == 0 && key.size() == 46) {
+        Item item;
+        item.ino = inodeno_t(std::stoull(key.substr(21, 16), nullptr, 16));
+        item.fg = frag_t(std::stoul(key.substr(38), nullptr, 16));
+        item.file = val.length() > 0;
+        dirs.emplace_back(std::stoull(key.substr(4, 16), nullptr, 16), item);
       }
     }
   } catch (const std::exception& e) {
@@ -352,12 +376,12 @@ void MigrateQueue::_load_done()
   }
   loaded.clear();
 
-  for (auto& [id, ino] : dirs) {
+  for (auto& [id, item] : dirs) {
     auto p = jobs.find(id);
     if (p == jobs.end() || !p->second.live())
-      _rm(dir_key(id, ino));    // a split write was cut short
+      _rm(dir_key(id, item));   // a split write was cut short
     else
-      p->second.pending.push_back(ino);
+      p->second.pending.push_back(item);
   }
   for (auto& [id, job] : jobs) {
     dout(1) << "job " << id << " " << job.path << " to pool " << job.pool_name
@@ -385,6 +409,15 @@ void MigrateQueue::_save_job(const Job& job)
   bufferlist bl;
   job.encode(bl);
   _set(job_key(job.id), std::move(bl));
+}
+
+void MigrateQueue::_queue_item(Job& job, const Item& item)
+{
+  bufferlist bl;
+  if (item.file)
+    bl.append('f');
+  _set(dir_key(job.id, item), std::move(bl));
+  job.pending.push_back(item);
 }
 
 void MigrateQueue::_set(const std::string& key, bufferlist&& bl)
@@ -514,11 +547,12 @@ void MigrateQueue::enqueue(CInode *in, int64_t pool, Context *fin)
     return o.get_pool_name(pool);
   });
   job.started = ceph_clock_now();
-  job.pending.push_back(in->ino());
   mds->clog->info() << "migration job " << job.id << " of " << path
                     << " to pool " << job.pool_name << " started";
 
-  _set(dir_key(job.id, in->ino()), {});
+  Item root;
+  root.ino = in->ino();
+  _queue_item(job, root);
   _save_job(job);
   _flush(fin);
   _kick();
@@ -551,8 +585,8 @@ void MigrateQueue::_abort_job(Job& job, const std::string& reason)
   job.reason = reason;
   job.finished = ceph_clock_now();
   job.hold.clear();
-  for (inodeno_t ino : job.pending)
-    _rm(dir_key(job.id, ino));
+  for (const Item& item : job.pending)
+    _rm(dir_key(job.id, item));
   job.pending.clear();
 
   std::vector<DirWork*> dirs;
@@ -561,7 +595,7 @@ void MigrateQueue::_abort_job(Job& job, const std::string& reason)
       dirs.push_back(dw.get());
   }
   for (DirWork *dw : dirs) {
-    _rm(dir_key(job.id, dw->ino));
+    _rm(dir_key(job.id, dw->item));
     dw->files.clear();
     dw->next = 0;
     dw->retries.clear();
@@ -815,9 +849,10 @@ void MigrateQueue::_start_dir(Job& job)
 {
   auto dw = std::make_unique<DirWork>();
   dw->job = &job;
-  dw->ino = job.pending.back();
+  dw->item = job.pending.back();
   job.pending.pop_back();
-  dout(10) << "job " << job.id << " dir " << dw->ino << dendl;
+  dout(10) << "job " << job.id << " dir " << dw->item.ino << " "
+           << dw->item.fg << dendl;
   active.push_back(std::move(dw));
   _scan_dir(active.back().get());
 }
@@ -845,28 +880,37 @@ void MigrateQueue::_note(std::list<Note>& l, inodeno_t ino, int err)
 void MigrateQueue::_scan_dir(DirWork *dw)
 {
   Job& job = *dw->job;
+  const inodeno_t ino = dw->item.ino;
   if (job.state == State::ABORTED) {
+    dw->scanned = true;
+    _maybe_finish_dir(dw);
+    return;
+  }
+  if (dw->item.file) {
+    dw->files.push_back(ino);
     dw->scanned = true;
     _maybe_finish_dir(dw);
     return;
   }
 
   MDCache *mdcache = mds->mdcache;
-  CInode *in = mdcache->get_inode(dw->ino);
+  CInode *in = mdcache->get_inode(ino);
   if (!in && !dw->opened) {
     dw->opened = true;
-    mdcache->open_ino(dw->ino, mds->get_metadata_pool(), _scan_again(dw));
+    mdcache->open_ino(ino, mds->get_metadata_pool(), _scan_again(dw));
     return;
   }
   if (!in || !in->is_dir()) {
     dw->prog.gone++;            // removed since it was queued
   } else if (!in->is_auth()) {
     dw->prog.not_auth++;
-    _note(dw->prog.errors, dw->ino, -EXDEV);
+    _note(dw->prog.errors, ino, -EXDEV);
   } else {
     frag_vec_t frags;
     in->dirfragtree.get_leaves(frags);
     for (const frag_t fg : frags) {
+      if (!dw->item.fg.contains(fg) && !fg.contains(dw->item.fg))
+        continue;
       // A frag split since we saw it is covered; one merged since is seen
       // again, and files and subdirs are just inode numbers to dedup.
       if (std::any_of(dw->frags_done.begin(), dw->frags_done.end(),
@@ -876,7 +920,7 @@ void MigrateQueue::_scan_dir(DirWork *dw)
       CDir *dir = in->get_or_open_dirfrag(mdcache, fg);
       if (mds->damage_table.is_dirfrag_damaged(dir)) {
         dw->prog.failed++;
-        _note(dw->prog.errors, dw->ino, -EIO);
+        _note(dw->prog.errors, ino, -EIO);
       } else if (!dir->is_auth()) {
         if (dir->is_ambiguous_auth()) {
           dir->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, _scan_again(dw));
@@ -887,7 +931,7 @@ void MigrateQueue::_scan_dir(DirWork *dw)
           return;
         }
         dw->prog.not_auth++;
-        _note(dw->prog.errors, dw->ino, -EXDEV);
+        _note(dw->prog.errors, ino, -EXDEV);
       } else if (!dir->can_auth_pin()) {
         dir->add_waiter(CDir::WAIT_UNFREEZE, _scan_again(dw));
         return;
@@ -904,7 +948,7 @@ void MigrateQueue::_scan_dir(DirWork *dw)
     dw->prog.already += dw->files.end() - end;  // two links in one directory
     dw->files.erase(end, dw->files.end());
   }
-  dout(10) << "job " << job.id << " dir " << dw->ino << ": "
+  dout(10) << "job " << job.id << " dir " << ino << ": "
            << dw->files.size() << " files to move, " << dw->subdirs.size()
            << " subdirs" << dendl;
   dw->scanned = true;
@@ -1065,15 +1109,16 @@ void MigrateQueue::_maybe_finish_dir(DirWork *dw)
       !dw->retries.empty())
     return;
 
-  dw->prog.dirs = 1;
+  dw->prog.dirs = dw->item.file ? 0 : 1;
   job.done.add(dw->prog);
+  _rm(dir_key(job.id, dw->item));
   if (job.live()) {
     for (inodeno_t ino : dw->subdirs) {
-      _set(dir_key(job.id, ino), {});
-      job.pending.push_back(ino);
+      Item item;
+      item.ino = ino;
+      _queue_item(job, item);
     }
   }
-  _rm(dir_key(job.id, dw->ino));
 
   active.remove_if([dw](const auto& p) { return p.get() == dw; });
   _maybe_finish_job(job);
