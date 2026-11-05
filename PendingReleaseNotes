@@ -1,5 +1,13 @@
 >=22.0.0
 
+* CephFS: A libcephfs client (ceph-fuse, NFS-Ganesha, other gateways) can now
+  opt into NFS-style consistency, per mount. With ``client_close_to_open``,
+  file data is flushed before ``close()`` returns and revalidated on ``open()``
+  and around advisory locks. ``client_attr_cache_timeout`` and
+  ``client_dentry_cache_timeout`` answer ``stat()``, lookups and ``readdir()``
+  from what the client has for that many seconds after it lost the
+  capabilities. All default to off.
+
 * RBD: The ``schedule_time`` field in the output of
   ``rbd mirror snapshot schedule status`` and
   ``rbd trash purge schedule status`` has been renamed to
