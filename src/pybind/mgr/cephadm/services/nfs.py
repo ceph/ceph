@@ -228,9 +228,13 @@ class NFSService(CephService):
         entity: AuthEntity = self.get_auth_entity(f'{daemon_id}-rgw')
 
         logger.info('Creating key for %s' % entity)
+        if self.rgw_profile_supported():
+            osd_caps = 'profile rgw'
+        else:
+            osd_caps = 'allow rwx tag rgw *=*'
         keyring = self.get_keyring_with_caps(entity,
                                              ['mon', 'allow r',
-                                              'osd', 'allow rwx tag rgw *=*'])
+                                              'osd', osd_caps])
 
         return keyring
 
