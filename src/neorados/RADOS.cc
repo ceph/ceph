@@ -1138,7 +1138,10 @@ void RADOS::delete_selfmanaged_snap_(std::int64_t pool,
 
 bool RADOS::get_self_managed_snaps_mode(std::int64_t pool) const {
   return impl->objecter->with_osdmap([pool](const OSDMap& osdmap) {
-    const auto pgpool = osdmap.get_pg_pool(pool);
+    int64_t poolid = pool;
+    if (auto root = osdmap.get_pool_migration_root(poolid); root >= 0)
+      poolid = root;
+    const auto pgpool = osdmap.get_pg_pool(poolid);
     if (!pgpool) {
       throw bs::system_error(errc::pool_dne);
     }
@@ -1152,6 +1155,8 @@ bool RADOS::get_self_managed_snaps_mode(std::string_view pool) const {
     if (poolid < 0) {
       throw bs::system_error(errc::pool_dne);
     }
+    if (auto root = osdmap.get_pool_migration_root(poolid); root >= 0)
+      poolid = root;
     const auto pgpool = osdmap.get_pg_pool(poolid);
     if (!pgpool) {
       throw bs::system_error(errc::pool_dne);
@@ -1162,7 +1167,10 @@ bool RADOS::get_self_managed_snaps_mode(std::string_view pool) const {
 
 std::vector<std::uint64_t> RADOS::list_snaps(std::int64_t pool) const {
   return impl->objecter->with_osdmap([pool](const OSDMap& osdmap) {
-    const auto pgpool = osdmap.get_pg_pool(pool);
+    int64_t poolid = pool;
+    if (auto root = osdmap.get_pool_migration_root(poolid); root >= 0)
+      poolid = root;
+    const auto pgpool = osdmap.get_pg_pool(poolid);
     if (!pgpool) {
       throw bs::system_error(bs::error_code(errc::pool_dne));
     }
@@ -1180,6 +1188,8 @@ std::vector<std::uint64_t> RADOS::list_snaps(std::string_view pool) const {
     if (poolid < 0) {
       throw bs::system_error(errc::pool_dne);
     }
+    if (auto root = osdmap.get_pool_migration_root(poolid); root >= 0)
+      poolid = root;
     const auto pgpool = osdmap.get_pg_pool(poolid);
     if (!pgpool) {
       throw bs::system_error(errc::pool_dne);
@@ -1194,7 +1204,10 @@ std::vector<std::uint64_t> RADOS::list_snaps(std::string_view pool) const {
 
 std::uint64_t RADOS::lookup_snap(std::int64_t pool, std::string_view snap) const {
   return impl->objecter->with_osdmap([pool, snap](const OSDMap& osdmap) {
-    const auto pgpool = osdmap.get_pg_pool(pool);
+    int64_t poolid = pool;
+    if (auto root = osdmap.get_pool_migration_root(poolid); root >= 0)
+      poolid = root;
+    const auto pgpool = osdmap.get_pg_pool(poolid);
     if (!pgpool) {
       throw bs::system_error(errc::pool_dne);
     }
@@ -1211,6 +1224,8 @@ std::uint64_t RADOS::lookup_snap(std::string_view pool, std::string_view snap) c
     if (poolid < 0) {
       throw bs::system_error(errc::pool_dne);
     }
+    if (auto root = osdmap.get_pool_migration_root(poolid); root >= 0)
+      poolid = root;
     const auto pgpool = osdmap.get_pg_pool(poolid);
     if (!pgpool) {
       throw bs::system_error(errc::pool_dne);
@@ -1224,7 +1239,10 @@ std::uint64_t RADOS::lookup_snap(std::string_view pool, std::string_view snap) c
 
 std::string RADOS::get_snap_name(std::int64_t pool, std::uint64_t snap) const {
   return impl->objecter->with_osdmap([pool, snap](const OSDMap& osdmap) {
-    const auto pgpool = osdmap.get_pg_pool(pool);
+    int64_t poolid = pool;
+    if (auto root = osdmap.get_pool_migration_root(poolid); root >= 0)
+      poolid = root;
+    const auto pgpool = osdmap.get_pg_pool(poolid);
     if (!pgpool) {
       throw bs::system_error(errc::pool_dne);
     }
@@ -1242,6 +1260,8 @@ std::string RADOS::get_snap_name(std::string_view pool,
     if (poolid < 0) {
       throw bs::system_error(errc::pool_dne);
     }
+    if (auto root = osdmap.get_pool_migration_root(poolid); root >= 0)
+      poolid = root;
     const auto pgpool = osdmap.get_pg_pool(poolid);
     if (!pgpool) {
       throw bs::system_error(bs::error_code(errc::pool_dne));
@@ -1257,7 +1277,10 @@ std::string RADOS::get_snap_name(std::string_view pool,
 ceph::real_time RADOS::get_snap_timestamp(std::int64_t pool,
 					  std::uint64_t snap) const {
   return impl->objecter->with_osdmap([pool, snap](const OSDMap& osdmap) {
-    const auto pgpool = osdmap.get_pg_pool(pool);
+    int64_t poolid = pool;
+    if (auto root = osdmap.get_pool_migration_root(poolid); root >= 0)
+      poolid = root;
+    const auto pgpool = osdmap.get_pg_pool(poolid);
     if (!pgpool) {
       throw bs::system_error(errc::pool_dne);
     }
@@ -1275,6 +1298,8 @@ ceph::real_time RADOS::get_snap_timestamp(std::string_view pool,
     if (poolid < 0) {
       throw bs::system_error(errc::pool_dne);
     }
+    if (auto root = osdmap.get_pool_migration_root(poolid); root >= 0)
+      poolid = root;
     const auto pgpool = osdmap.get_pg_pool(poolid);
     if (!pgpool) {
       throw bs::system_error(errc::pool_dne);

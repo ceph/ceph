@@ -1482,7 +1482,7 @@ protected:
   void stop_pool_migration_revoked();
   void stop_pool_migration_error(int error_code);
   void on_pool_migration_source_suspended() override;
-  void on_pool_migration_target_reserved() override;
+  void on_pool_migration_target_reserved(HBHandle *handle) override;
   void on_pool_migration_target_suspended(bool toofull) override;
 
   // -- copyfrom --
@@ -1681,13 +1681,13 @@ public:
     OpRequestRef& op,
     ThreadPool::TPHandle &handle) override;
   bool should_use_coroutine(MOSDOp* m);
-  void do_op_impl(OpRequestRef op);
-  void do_op(OpRequestRef& op);
+  void do_op_impl(OpRequestRef op, ThreadPool::TPHandle *handle = nullptr);
+  void do_op(OpRequestRef& op, ThreadPool::TPHandle *handle = nullptr);
   void on_coroutine_complete();
   void record_write_error(OpRequestRef op, const hobject_t &soid,
 			  MOSDOpReply *orig_reply, int r,
 			  OpContext *ctx_for_op_returns=nullptr);
-  void do_pg_op(OpRequestRef op);
+  void do_pg_op(OpRequestRef op, ThreadPool::TPHandle *handle = nullptr);
   void do_scan(
     OpRequestRef op,
     ThreadPool::TPHandle &handle);
@@ -1715,13 +1715,14 @@ public:
   int start_cls_gather(OpContext *ctx, std::map<std::string, bufferlist> *src_objs, const std::string& pool,
 		       const char *cls, const char *method, bufferlist& inbl);
 
-  void handle_pool_migration_copy_failure(hobject_t oid, int r);
+  void handle_pool_migration_copy_failure(hobject_t oid, int r, bool stale = false);
   void handle_pool_migration_quiesce_complete();
 
   void pool_migration_source_start_delete_head(hobject_t oid);
   void pool_migration_source_start_delete(hobject_t oid);
   bool pool_migration_source_delete(hobject_t oid);
-  void pool_migration_target_delete(const pg_t& source_pg, const hobject_t& watermark);
+  void pool_migration_target_delete(const pg_t& source_pg, const hobject_t& watermark,
+                                    HBHandle *handle = nullptr);
 
 private:
   int do_scrub_ls(const MOSDOp *op, OSDOp *osd_op);

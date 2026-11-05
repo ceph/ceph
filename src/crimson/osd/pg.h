@@ -695,7 +695,7 @@ public:
   void on_pool_migration_source_suspended() final {
     recovery_handler->on_pool_migration_source_suspended();
   }
-  void on_pool_migration_target_reserved() final {
+  void on_pool_migration_target_reserved(HBHandle *handle) final {
     recovery_handler->on_pool_migration_target_reserved();
   }
   void on_pool_migration_target_suspended(bool toofull) final {

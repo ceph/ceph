@@ -4463,7 +4463,6 @@ bool OSDMonitor::prepare_pg_migrated_pool(MonOpRequestRef op)
     if (!(g_conf()->osd_pool_default_flag_nopgchange) && !(target_p.has_flag(pg_pool_t::FLAG_CRIMSON))) {
       target_p.unset_flag(pg_pool_t::FLAG_NOPGCHANGE);
     }
-    target_p.pg_autoscale_mode = pg_pool_t::pg_autoscale_mode_t::ON;
     target_p.migration_src.reset();
     target_p.last_change = pending_inc.epoch;
   } else if (source_p.lowest_migrated_pg == 0) {
@@ -8905,19 +8904,6 @@ int OSDMonitor::prepare_new_pool(string& name,
   }
 
   if (source_pool_id) {
-    // Check if there are any previous migration sources pointing to the current migration source
-    // If there is change its migration_target value to point to the current migration target
-    for (auto& [pool_id, pool_ptr] : osdmap.get_pools()) {
-      if (!have_pg_pool(pool_id)) {
-        continue;  // Skip pools being deleted
-      }
-      if (std::as_const(*this).get_pg_pool(pool_id).migration_target == source_pool_id.value()) {
-        get_pg_pool(pool_id).migration_target = pool;
-        dout(10) << "Updating transitive migration pointer: pool " << pool_id
-                 << " now points to " << pool << " (was " << source_pool_id.value() << ")" << dendl;
-      }
-    }
-
     if (!have_pg_pool(source_pool_id.value())) {
       dout(10) << "Source pool " << source_pool_id.value() << " does not exist or is being deleted" << dendl;
       return -ENOENT;
@@ -8947,6 +8933,20 @@ int OSDMonitor::prepare_new_pool(string& name,
       }
     }
 
+    // All checks that can fail have passed. Now mutate other stubs in
+    // pending_inc. Any previous migration source that pointed at this source is
+    // re-pointed at the new target.
+    for (auto& [pool_id, pool_ptr] : osdmap.get_pools()) {
+      if (!have_pg_pool(pool_id)) {
+        continue;  // Skip pools being deleted
+      }
+      if (std::as_const(*this).get_pg_pool(pool_id).migration_target == source_pool_id.value()) {
+        get_pg_pool(pool_id).migration_target = pool;
+        dout(10) << "Updating transitive migration pointer: pool " << pool_id
+                 << " now points to " << pool << " (was " << source_pool_id.value() << ")" << dendl;
+      }
+    }
+
     spi->migration_src.reset();
     spi->migration_target = pool;
     pi->migration_src = source_pool_id.value();
@@ -8963,7 +8963,6 @@ int OSDMonitor::prepare_new_pool(string& name,
       pi->set_flag(pg_pool_t::FLAG_EC_OVERWRITES);
     }
     spi->pg_autoscale_mode = pg_pool_t::pg_autoscale_mode_t::OFF;
-    pi->pg_autoscale_mode = pg_pool_t::pg_autoscale_mode_t::OFF;
 
     // FLAG_NOPGCHANGE only blocks new admin pg_num commands, not the mgr-driven
     // convergence toward pg_num_target or an in-flight merge (pg_num_pending <
@@ -14539,7 +14538,13 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
       const pg_pool_t *src = osdmap.get_pg_pool(pool_id);
       if (src->is_migrating()) {
-        ss << "Cannot migrate from a pool which is part of an ongoing migration";
+        ss << "Cannot migrate pool '" << poolstr << "': it is part of an ongoing migration.";
+        err = -EINVAL;
+        goto reply_no_propose;
+      }
+      if (!src->tiers.empty() || src->is_tier()) {
+        ss << "Cannot migrate pool '" << poolstr << "': it is part of a cache "
+           << "tier relationship.";
         err = -EINVAL;
         goto reply_no_propose;
       }

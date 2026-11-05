@@ -1590,6 +1590,9 @@ int Objecter::pool_snap_by_name(int64_t poolid, const char *snap_name,
 {
   shared_lock rl(rwlock);
 
+  int64_t root = osdmap->get_pool_migration_root(poolid);
+  if (root >= 0)
+    poolid = root;
   auto& pools = osdmap->get_pools();
   auto iter = pools.find(poolid);
   if (iter == pools.end()) {
@@ -1612,6 +1615,9 @@ int Objecter::pool_snap_get_info(int64_t poolid, snapid_t snap,
 {
   shared_lock rl(rwlock);
 
+  int64_t root = osdmap->get_pool_migration_root(poolid);
+  if (root >= 0)
+    poolid = root;
   auto& pools = osdmap->get_pools();
   auto iter = pools.find(poolid);
   if (iter == pools.end()) {
@@ -1630,6 +1636,9 @@ int Objecter::pool_snap_list(int64_t poolid, vector<uint64_t> *snaps)
 {
   shared_lock rl(rwlock);
 
+  int64_t root = osdmap->get_pool_migration_root(poolid);
+  if (root >= 0)
+    poolid = root;
   const pg_pool_t *pi = osdmap->get_pg_pool(poolid);
   if (!pi)
     return -ENOENT;
@@ -4450,13 +4459,19 @@ void Objecter::list_nobjects(NListContext *list_context, Context *onfinish)
   if (pool->is_migrating()) {
     switch (list_context->current_stage) {
       case NListContext::TGT_READ: //case 0  when you set up for a pool migration read, then start with loading the state of the tgt pool
-        if (pool->is_migration_src()) {
-          list_context->src_pool_id = list_context->pool_id;
-          list_context->tgt_pool_id = *pool->migration_target;
-        }
-        if (pool->is_migration_target()) {
-          list_context->src_pool_id = *pool->migration_src;
-          list_context->tgt_pool_id = list_context->pool_id;
+        {
+          // A client that opened an old source pool by name holds a stub
+          // that may not be the current migration source pool.
+          int64_t tip_id = pool->is_migration_src()
+                           ? *pool->migration_target
+                           : list_context->pool_id;
+          const pg_pool_t *tip = osdmap->get_pg_pool(tip_id);
+          list_context->tgt_pool_id = tip_id;
+          if (tip && tip->migration_src) {
+            list_context->src_pool_id = *tip->migration_src;
+          } else {
+            list_context->src_pool_id = tip_id;
+          }
         }
         pool = osdmap->get_pg_pool(list_context->tgt_pool_id); //set the pool to the tgt pool
         list_context->pool_id = list_context->tgt_pool_id;

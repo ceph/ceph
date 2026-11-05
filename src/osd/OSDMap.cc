@@ -1806,10 +1806,11 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
 	features |= CEPH_FEATURE_CRUSH_TUNABLES5;
     }
     if (pool.second.is_migrating()) {
-      features |= CEPH_FEATURE_SERVER_UMBRELLA;
+      features |= CEPH_FEATUREMASK_SERVER_UMBRELLA;
     }
   }
-  mask |= CEPH_FEATURE_OSDHASHPSPOOL | CEPH_FEATURE_OSD_CACHEPOOL;
+  mask |= CEPH_FEATURE_OSDHASHPSPOOL | CEPH_FEATURE_OSD_CACHEPOOL |
+          CEPH_FEATUREMASK_SERVER_UMBRELLA;
 
   if (osd_primary_affinity) {
     for (int i = 0; i < max_osd; ++i) {

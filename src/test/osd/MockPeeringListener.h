@@ -410,7 +410,7 @@ class MockPeeringListener : public PeeringState::PeeringListener {
     pool_migration_source_reserved = true;
   }
 
-  void on_pool_migration_target_reserved() override {
+  void on_pool_migration_target_reserved(HBHandle *handle) override {
     pool_migration_target_reserved = true;
   }
 
