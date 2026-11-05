@@ -9,8 +9,8 @@
 #include "include/encoding.h"
 #include <iosfwd>
 #include <list>
-#include <vector>
 #include <string>
+#include <vector>
 
 namespace ceph {
 class Formatter;
