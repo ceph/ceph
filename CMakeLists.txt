@@ -475,10 +475,12 @@ endif()
 
 option(WITH_CPUTRACE "Enable Cputrace support via the admin socket" OFF)
 
-# Determine default for WITH_CEPH_LOCKSTAT based on compiler/version
+# Determine default for WITH_CEPH_LOCKSTAT based on OS/arch/compiler.
+# Lockstat defaults ON only for Linux x86 with a supported toolchain.
 set(_lockstat_default OFF)
 
-if(CMAKE_SYSTEM_PROCESSOR MATCHES "i386|i686|amd64|x86_64|AMD64")
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux"
+    AND CMAKE_SYSTEM_PROCESSOR MATCHES "i386|i686|amd64|x86_64|AMD64")
   foreach(_lang IN ITEMS C CXX)
     if(DEFINED CMAKE_${_lang}_COMPILER_ID AND DEFINED CMAKE_${_lang}_COMPILER_VERSION)
       if(CMAKE_${_lang}_COMPILER_ID STREQUAL "GNU"
