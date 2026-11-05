@@ -5,7 +5,6 @@ set(jerasure_utils_src
   ErasureCodeJerasure.cc)
 
 add_library(jerasure_utils OBJECT ${jerasure_utils_src})
-target_link_libraries(jerasure_utils legacy-option-headers)
 
 # jerasure_init is ceph's own glue code for galois field initialization,
 # not part of the jerasure library itself.

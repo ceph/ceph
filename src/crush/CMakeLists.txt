@@ -9,4 +9,3 @@ set(crush_srcs
   CrushLocation.cc)
 
 add_library(crush_objs OBJECT ${crush_srcs})
-target_link_libraries(crush_objs PUBLIC legacy-option-headers)

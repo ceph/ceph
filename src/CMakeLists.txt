@@ -580,7 +580,6 @@ set(libcommon_files
 set_source_files_properties(ceph_ver.c
   APPEND PROPERTY OBJECT_DEPENDS ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h)
 add_library(common-objs OBJECT ${libcommon_files})
-target_link_libraries(common-objs legacy-option-headers)
 target_compile_definitions(common-objs PRIVATE
   $<TARGET_PROPERTY:${FMT_LIB},INTERFACE_COMPILE_DEFINITIONS>)
 
@@ -685,8 +684,7 @@ endif()
 
 add_library(common STATIC ${ceph_common_objs})
 target_link_libraries(common
-  ${ceph_common_deps}
-  legacy-option-headers)
+  ${ceph_common_deps})
 if(WITH_JAEGER)
 add_dependencies(common jaeger_base)
 endif()
@@ -704,7 +702,6 @@ if(ENABLE_COVERAGE)
   target_link_libraries(ceph-common gcov)
 endif(ENABLE_COVERAGE)
 
-target_link_libraries(ceph-common legacy-option-headers)
 
 if(WITH_JAEGER)
 add_dependencies(ceph-common jaeger_base)
@@ -767,8 +764,6 @@ add_subdirectory(osdc)
 add_subdirectory(perfglue)
 
 add_library(rados_snap_set_diff_obj OBJECT librados/snap_set_diff.cc)
-target_link_libraries(rados_snap_set_diff_obj
-  PRIVATE legacy-option-headers)
 
 option(WITH_LIBRADOSSTRIPER "build with libradosstriper support" ON)
 
@@ -1171,8 +1166,7 @@ if(WITH_RBD)
     add_library(krbd STATIC krbd.cc
       $<TARGET_OBJECTS:parse_secret_objs>)
     target_link_libraries(krbd
-      keyutils::keyutils
-      legacy-option-headers)
+      keyutils::keyutils)
   endif()
   add_subdirectory(librbd)
   if(WITH_FUSE)

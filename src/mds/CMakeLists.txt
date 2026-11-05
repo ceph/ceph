@@ -54,7 +54,7 @@ set(mds_srcs
   ${CMAKE_SOURCE_DIR}/src/mgr/MDSPerfMetricTypes.cc)
 add_library(mds STATIC ${mds_srcs})
 target_link_libraries(mds PRIVATE
-  legacy-option-headers Boost::url
+  Boost::url
   heap_profiler cpu_profiler osdc ${LUA_LIBRARIES}
   PUBLIC dmclock::dmclock)
 target_include_directories(mds PRIVATE "${LUA_INCLUDE_DIR}")

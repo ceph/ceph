@@ -4,7 +4,6 @@ add_library(os STATIC
 
 target_link_libraries(os
   PRIVATE
-    legacy-option-headers
     ${FMT_LIB})
 
 add_subdirectory(memstore)
