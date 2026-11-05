@@ -20,9 +20,9 @@ Pools provide:
   (for example, ``m = 2`` in the default erasure code profile).
 
 - **Placement Groups**: The :ref:`autoscaler <pg-autoscaler>` sets the number
-  of placement groups (PGs) for the pool. In a typical configuration, the
-  target number of PGs is approximately one-hundred and fifty PGs per OSD. This
-  provides reasonable balancing without consuming excessive computing
+  of placement groups (PGs) for the pool, aiming for the number of PG replicas
+  per OSD set by :confval:`mon_target_pg_per_osd`. This provides reasonable
+  balancing without consuming excessive computing
   resources. When setting up multiple pools, set an appropriate number of PGs
   for each pool and for the cluster as a whole. Each PG belongs to a specific
   pool: when multiple pools use the same OSDs, make sure that the **sum** of PG
