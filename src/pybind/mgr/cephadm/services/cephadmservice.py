@@ -429,6 +429,13 @@ class CephadmService(metaclass=ABCMeta):
     ) -> TLSCredentials:
         return EMPTY_TLS_CREDENTIALS
 
+    def _other_daemons_in_service(self, daemon: DaemonDescription) -> List[DaemonDescription]:
+        """Daemons of the same service as `daemon`, excluding `daemon` itself."""
+        return [
+            d for d in self.mgr.cache.get_daemons_by_service(daemon.service_name())
+            if d.name() != daemon.name()
+        ]
+
     def get_certificates(self,
                          daemon_spec: CephadmDaemonDeploySpec,
                          ips: List[str] = [],
