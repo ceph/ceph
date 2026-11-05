@@ -119,6 +119,19 @@ struct RGWOLHPendingInfo {
 };
 WRITE_CLASS_ENCODER(RGWOLHPendingInfo)
 
+// Structure to hold accumulated OLH log operations across multiple batches
+struct RGWOLHLogOps {
+  bool need_to_link = false;
+  bool need_to_remove = false;
+  uint64_t link_epoch = 0;
+  cls_rgw_obj_key key;
+  bool delete_marker = false;
+  std::string link_op_tag;
+  std::set<cls_rgw_obj_key> remove_instances;
+  uint64_t last_ver = 0;  // Track the last version from all batches
+  std::map<uint64_t, std::vector<rgw_bucket_olh_log_entry>> all_logs;  // All log entries for pending attr removal
+};
+
 struct RGWUsageBatch {
   std::map<ceph::real_time, rgw_usage_log_entry> m;
 
@@ -1493,13 +1506,21 @@ int restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
                                 std::map<uint64_t, std::vector<rgw_bucket_olh_log_entry> > *log, bool *is_truncated, optional_yield y);
   int bucket_index_trim_olh_log(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, RGWObjState& obj_state, const rgw_obj& obj_instance, uint64_t ver, optional_yield y);
   int bucket_index_clear_olh(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, const std::string& olh_tag, const rgw_obj& obj_instance, optional_yield y);
-  int apply_olh_log(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx, RGWObjState& obj_state,
-		    RGWBucketInfo& bucket_info, const rgw_obj& obj,
-                    bufferlist& obj_tag, std::map<uint64_t, std::vector<rgw_bucket_olh_log_entry> >& log,
-                    uint64_t *plast_ver, optional_yield y, bool null_verid,
-		    rgw_zone_set *zones_trace = nullptr,
-		    bool log_op = true,
-		    const bool force = false);
+  int accumulate_olh_log_operations(const DoutPrefixProvider *dpp,
+                                      RGWObjState& state,
+                                      std::map<uint64_t, std::vector<rgw_bucket_olh_log_entry> >& log,
+                                      RGWOLHLogOps& ops);
+  int execute_olh_log_operations(const DoutPrefixProvider *dpp,
+                                  RGWObjectCtx& obj_ctx,
+                                  RGWObjState& state,
+                                  RGWBucketInfo& bucket_info,
+                                  const rgw_obj& obj,
+                                  const RGWOLHLogOps& ops,
+                                  optional_yield y,
+                                  bool null_verid,
+                                  rgw_zone_set* zones_trace,
+                                  bool log_op,
+                                  const bool force);
   int update_olh(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx, RGWObjState *state,
 		 RGWBucketInfo& bucket_info, const rgw_obj& obj, optional_yield y,
 		 rgw_zone_set *zones_trace = nullptr, bool null_verid = false,

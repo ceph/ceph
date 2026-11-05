@@ -10055,84 +10055,64 @@ static int decode_olh_info(const DoutPrefixProvider *dpp, CephContext* cct, cons
   }
 }
 
-int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
-			    RGWObjectCtx& obj_ctx,
-			    RGWObjState& state,
-			    RGWBucketInfo& bucket_info,
-			    const rgw_obj& obj,
-			    bufferlist& olh_tag,
-			    std::map<uint64_t, std::vector<rgw_bucket_olh_log_entry> >& log,
-			    uint64_t *plast_ver,
-			    optional_yield y,
-			    bool null_verid,
-			    rgw_zone_set* zones_trace,
-			    bool log_op,
-			    const bool force)
+int RGWRados::accumulate_olh_log_operations(
+    const DoutPrefixProvider* dpp, RGWObjState& state,
+    std::map<uint64_t, std::vector<rgw_bucket_olh_log_entry>>& log,
+    RGWOLHLogOps& ops)
 {
   if (log.empty()) {
+    ldpp_dout(dpp, 20) << "accumulate_olh_log_operations: log is empty" << dendl;
     return 0;
   }
 
-  librados::ObjectWriteOperation op;
-
-  uint64_t last_ver = log.rbegin()->first;
-  *plast_ver = last_ver;
-
-  map<uint64_t, vector<rgw_bucket_olh_log_entry> >::iterator iter = log.begin();
-
-  op.cmpxattr(RGW_ATTR_OLH_ID_TAG, CEPH_OSD_CMPXATTR_OP_EQ, olh_tag);
-  op.cmpxattr(RGW_ATTR_OLH_VER, CEPH_OSD_CMPXATTR_OP_GTE, last_ver);
-
-  bufferlist ver_bl;
-  string last_ver_s = to_string(last_ver);
-  ver_bl.append(last_ver_s.c_str(), last_ver_s.size());
-  op.setxattr(RGW_ATTR_OLH_VER, ver_bl);
-
-  struct timespec mtime_ts = real_clock::to_timespec(state.mtime);
-  op.mtime2(&mtime_ts);
-
-  bool need_to_link = false;
-  uint64_t link_epoch = 0;
-  cls_rgw_obj_key key;
-  bool delete_marker = false;
-  std::string link_op_tag;  // op_tag of the LINK_OLH entry
-  set<cls_rgw_obj_key> remove_instances;
-  bool need_to_remove = false;
-
-  // decode current epoch and instance
-  auto olh_ver = state.attrset.find(RGW_ATTR_OLH_VER);
-  if (olh_ver != state.attrset.end()) {
-    std::string str = olh_ver->second.to_str();
-    std::string err;
-    link_epoch = strict_strtoll(str.c_str(), 10, &err);
+  // Track the last version from this batch
+  uint64_t batch_last_ver = log.rbegin()->first;
+  if (batch_last_ver > ops.last_ver) {
+    ops.last_ver = batch_last_ver;
   }
-  auto olh_info = state.attrset.find(RGW_ATTR_OLH_INFO);
-  if (olh_info != state.attrset.end()) {
-    RGWOLHInfo info;
-    int r = decode_olh_info(dpp, cct, olh_info->second, &info);
-    if (r < 0) {
-      return r;
+
+  // Store all log entries for pending attribute removal later
+  for (const auto& [epoch, entries] : log) {
+    ops.all_logs[epoch].insert(ops.all_logs[epoch].end(), entries.begin(), entries.end());
+  }
+
+  // Initialize link_epoch and key from state if this is the first batch
+  if (ops.link_epoch == 0) {
+    auto olh_ver = state.attrset.find(RGW_ATTR_OLH_VER);
+    if (olh_ver != state.attrset.end()) {
+      std::string str = olh_ver->second.to_str();
+      std::string err;
+      ops.link_epoch = strict_strtoll(str.c_str(), 10, &err);
     }
-    info.target.key.get_index_key(&key);
-    delete_marker = info.removed;
+  }
+  if (ops.key.name.empty()) {
+    auto olh_info = state.attrset.find(RGW_ATTR_OLH_INFO);
+    if (olh_info != state.attrset.end()) {
+      RGWOLHInfo info;
+      int r = decode_olh_info(dpp, cct, olh_info->second, &info);
+      if (r < 0) {
+        ldpp_dout(dpp, 20) << "accumulate_olh_log_operations: decode_olh_info failed" << dendl;
+        return r;
+      }
+      info.target.key.get_index_key(&ops.key);
+      ops.delete_marker = info.removed;
+    }
   }
 
-  for (iter = log.begin(); iter != log.end(); ++iter) {
-    vector<rgw_bucket_olh_log_entry>::iterator viter = iter->second.begin();
-    for (; viter != iter->second.end(); ++viter) {
-      rgw_bucket_olh_log_entry& entry = *viter;
-
-      ldpp_dout(dpp, 20) << "olh_log_entry: epoch=" << iter->first << " op=" << (int)entry.op
+  // Process this batch of log entries
+  for (const auto& [epoch, entries] : log) {
+    for (const auto& entry : entries) {
+      ldpp_dout(dpp, 20) << "olh_log_entry: epoch=" << epoch << " op=" << (int)entry.op
                      << " key=" << entry.key.name << "[" << entry.key.instance << "] "
                      << (entry.delete_marker ? "(delete)" : "") << dendl;
 
-      if (link_epoch == entry.epoch)
-        ldpp_dout(dpp, 1) << "apply_olh_log epoch collision detected for " << entry.key
+      if (ops.link_epoch == entry.epoch)
+        ldpp_dout(dpp, 1) << "accumulate_olh_log_operations epoch collision detected for " << entry.key
                           << "; incoming op: " << entry.op << "(" << entry.op_tag << ")" << dendl;
 
       switch (entry.op) {
       case CLS_RGW_OLH_OP_REMOVE_INSTANCE:
-        remove_instances.insert(entry.key);
+        ops.remove_instances.insert(entry.key);
         break;
       case CLS_RGW_OLH_OP_LINK_OLH:
         if (!entry.delete_marker) {
@@ -10143,45 +10123,83 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
           // that removal. a null delete marker linked after it does not
           // bring the removed null version back. a DeleteObject names the
           // null version "null", a write of it an empty instance
-          remove_instances.erase(entry.key);
+          ops.remove_instances.erase(entry.key);
           if (entry.key.instance.empty()) {
-            remove_instances.erase(cls_rgw_obj_key(entry.key.name, "null"));
+            ops.remove_instances.erase(cls_rgw_obj_key(entry.key.name, "null"));
           } else if (entry.key.instance == "null") {
-            remove_instances.erase(cls_rgw_obj_key(entry.key.name, ""));
+            ops.remove_instances.erase(cls_rgw_obj_key(entry.key.name, ""));
           }
         }
         // only overwrite a link of the same epoch if its key sorts before
-        // or there is a CLS_RGW_OLH_OP_UNLINK_OLH before this op in this batch
-        if (need_to_remove || link_epoch < entry.epoch || key.instance.empty() ||
-            key.instance > entry.key.instance) {
-          ldpp_dout(dpp, 20) << "apply_olh_log applying key=" << entry.key << " epoch=" << iter->first << " delete_marker=" << entry.delete_marker
-              << " over current=" << key << " epoch=" << link_epoch << " delete_marker=" << delete_marker << dendl;
+        // or there is a CLS_RGW_OLH_OP_UNLINK_OLH before this op
+        if (ops.need_to_remove || ops.link_epoch < entry.epoch || ops.key.empty() ||
+            ops.key.instance > entry.key.instance) {
+          ldpp_dout(dpp, 20) << "accumulate_olh_log_operations applying key=" << entry.key << " epoch=" << epoch << " delete_marker=" << entry.delete_marker
+              << " over current=" << ops.key << " epoch=" << ops.link_epoch << " delete_marker=" << ops.delete_marker << dendl;
 
-          if (need_to_remove) {
+          if (ops.need_to_remove) {
             // cancel the instance removal if it's linked again -- e.g. coming from a multisite remote zone
-            remove_instances.erase(entry.key);
+            ops.remove_instances.erase(entry.key);
           }
-          need_to_link = true;
-          need_to_remove = false;
-          key = entry.key;
-          link_epoch = entry.epoch;
-          delete_marker = entry.delete_marker;
-          link_op_tag = entry.op_tag;
+          ops.need_to_link = true;
+          ops.need_to_remove = false;
+          ops.key = entry.key;
+          ops.link_epoch = entry.epoch;
+          ops.delete_marker = entry.delete_marker;
+          ops.link_op_tag = entry.op_tag;
         } else {
-          ldpp_dout(dpp, 20) << "apply_olh skipping key=" << entry.key<< " epoch=" << iter->first << " delete_marker=" << entry.delete_marker
-              << " before current=" << key << " epoch=" << link_epoch << " delete_marker=" << delete_marker << dendl;
+          ldpp_dout(dpp, 20) << "accumulate_olh_log_operations skipping key=" << entry.key<< " epoch=" << epoch << " delete_marker=" << entry.delete_marker
+              << " before current=" << ops.key << " epoch=" << ops.link_epoch << " delete_marker=" << ops.delete_marker << dendl;
         }
         break;
       case CLS_RGW_OLH_OP_UNLINK_OLH:
-        need_to_remove = true;
-        need_to_link = false;
+        ops.need_to_remove = true;
+        ops.need_to_link = false;
         break;
       case CLS_RGW_OLH_OP_STALE:
         break;
       default:
-        ldpp_dout(dpp, 0) << "ERROR: apply_olh_log: invalid op: " << (int)entry.op << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: accumulate_olh_log_operations: invalid op: " << (int)entry.op << dendl;
         return -EIO;
       }
+    }
+  }
+  return 0;
+}
+
+int RGWRados::execute_olh_log_operations(const DoutPrefixProvider *dpp,
+                                          RGWObjectCtx& obj_ctx,
+                                          RGWObjState& state,
+                                          RGWBucketInfo& bucket_info,
+                                          const rgw_obj& obj,
+                                          const RGWOLHLogOps& ops,
+                                          optional_yield y,
+                                          bool null_verid,
+                                          rgw_zone_set* zones_trace,
+                                          bool log_op,
+                                          const bool force)
+{
+  if (ops.last_ver == 0) {
+    return 0;  // No operations to execute
+  }
+
+  librados::ObjectWriteOperation op;
+
+  bufferlist olh_tag_bl = state.olh_tag;
+  op.cmpxattr(RGW_ATTR_OLH_ID_TAG, CEPH_OSD_CMPXATTR_OP_EQ, olh_tag_bl);
+  op.cmpxattr(RGW_ATTR_OLH_VER, CEPH_OSD_CMPXATTR_OP_GTE, ops.last_ver);
+
+  bufferlist ver_bl;
+  string last_ver_s = to_string(ops.last_ver);
+  ver_bl.append(last_ver_s.c_str(), last_ver_s.size());
+  op.setxattr(RGW_ATTR_OLH_VER, ver_bl);
+
+  struct timespec mtime_ts = real_clock::to_timespec(state.mtime);
+  op.mtime2(&mtime_ts);
+
+  // Remove pending attributes for all accumulated log entries
+  for (const auto& [epoch, entries] : ops.all_logs) {
+    for (const auto& entry : entries) {
       string attr_name = RGW_ATTR_OLH_PENDING_PREFIX;
       attr_name.append(entry.op_tag);
       op.rmxattr(attr_name.c_str());
@@ -10197,23 +10215,21 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
   const rgw_bucket& bucket = obj.bucket;
 
   bufferlist bl;
-  if (need_to_link) {
-    rgw_obj target(bucket, key);
+  if (ops.need_to_link) {
+    rgw_obj target(bucket, ops.key);
     RGWOLHInfo info;
     info.target = target;
-    info.removed = delete_marker;
+    info.removed = ops.delete_marker;
     encode(info, bl);
     op.setxattr(RGW_ATTR_OLH_INFO, bl);
   }
 
   /* first remove object instances */
-  for (set<cls_rgw_obj_key>::iterator liter = remove_instances.begin();
-       liter != remove_instances.end(); ++liter) {
-    const cls_rgw_obj_key& key = *liter;
+  for (const auto& key : ops.remove_instances) {
     rgw_obj obj_instance(bucket, key);
     int ret = delete_obj(dpp, obj_ctx, bucket_info, obj_instance, 0, y,
-			 null_verid, RGW_BILOG_FLAG_VERSIONED_OP,
-			 ceph::real_time(), zones_trace, log_op, force, true /* skip_olh_obj_update */);
+                         null_verid, RGW_BILOG_FLAG_VERSIONED_OP,
+                         ceph::real_time(), zones_trace, log_op, force, true /* skip_olh_obj_update */);
     if (ret < 0 && ret != -ENOENT) {
       ldpp_dout(dpp, 0) << "ERROR: delete_obj() returned " << ret << " obj_instance=" << obj_instance << dendl;
       return ret;
@@ -10231,24 +10247,24 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
 
   // apply the same changes to the cached olh state
   state.attrset[RGW_ATTR_OLH_VER] = ver_bl;
-  if (need_to_link) {
+  if (ops.need_to_link) {
     state.attrset[RGW_ATTR_OLH_INFO] = bl;
   }
-  for (const auto& [epoch, entries] : log) {
+  for (const auto& [epoch, entries] : ops.all_logs) {
     for (const auto& entry : entries) {
       state.attrset.erase(RGW_ATTR_OLH_PENDING_PREFIX + entry.op_tag);
     }
   }
 
-  if (need_to_remove) {
+  if (ops.need_to_remove) {
     string olh_tag(state.olh_tag.c_str(), state.olh_tag.length());
-    r = clear_olh(dpp, obj_ctx, obj, bucket_info, ref, olh_tag, last_ver, y);
+    r = clear_olh(dpp, obj_ctx, obj, bucket_info, ref, olh_tag, ops.last_ver, y);
     if (r < 0 && r != -ECANCELED) {
       ldpp_dout(dpp, 0) << "ERROR: could not clear olh, r=" << r << dendl;
       return r;
     }
   } else {
-    r = bucket_index_trim_olh_log(dpp, bucket_info, state, obj, last_ver, y);
+    r = bucket_index_trim_olh_log(dpp, bucket_info, state, obj, ops.last_ver, y);
     if (r < 0 && r != -ECANCELED) {
       ldpp_dout(dpp, 0) << "ERROR: could not trim olh log, r=" << r << dendl;
       return r;
@@ -10345,19 +10361,30 @@ int RGWRados::update_olh(const DoutPrefixProvider* dpp,
   map<uint64_t, vector<rgw_bucket_olh_log_entry> > log;
   bool is_truncated;
   uint64_t ver_marker = 0;
+  RGWOLHLogOps ops;
+  int ret = 0;
 
+  // First, accumulate all log batches
   do {
     int ret = bucket_index_read_olh_log(dpp, bucket_info, *state, obj, ver_marker, &log, &is_truncated, y);
     if (ret < 0) {
       return ret;
     }
-    ret = apply_olh_log(dpp, obj_ctx, *state, bucket_info, obj,
-			state->olh_tag, log, &ver_marker, y,
-			null_verid, zones_trace, log_op, force);
+    ret = accumulate_olh_log_operations(dpp, *state, log, ops);
     if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: accumulate_olh_log_operations failed ret=" << ret << dendl;
       return ret;
     }
+    ver_marker = ops.last_ver;
   } while (is_truncated);
+
+  // Then, execute all accumulated operations at once
+  ret = execute_olh_log_operations(dpp, obj_ctx, *state, bucket_info, obj, ops, y,
+                                        null_verid, zones_trace, log_op, force);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: execute_olh_log_operations failed ret=" << ret << dendl;
+    return ret;
+  }
 
   return 0;
 }
