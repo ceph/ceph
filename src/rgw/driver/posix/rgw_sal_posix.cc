@@ -19,6 +19,7 @@
 #include "rgw_pubsub_push.h"
 #include "rgw_pubsub.h"
 #include "rgw_s3_filter.h"
+#include "rgw_s3vector.h"
 #include <cstdint>
 #include "rgw_multi.h"
 #include "include/scope_guard.h"
@@ -491,6 +492,17 @@ int POSIXDriver::load_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b,
   return (*bucket)->load_bucket(dpp, y);
 }
 
+/* S3Vectors - load_vector_bucket */
+int POSIXDriver::load_vector_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b, std::unique_ptr<VectorBucket>* bucket, optional_yield y)
+{
+  // Use "s3vector" namespace to separate vector buckets from regular S3 buckets
+  // This ensures they can coexist with the same name
+  std::optional<std::string> vector_ns{"s3vector"};
+  *bucket = std::make_unique<POSIXVectorBucket>(this, root_dir.get(), b, vector_ns);
+  return (*bucket)->load_bucket(dpp, y);
+}
+/* S3Vectors - load_vector_bucket */
+
 std::unique_ptr<Bucket> POSIXDriver::get_bucket(const RGWBucketInfo& i)
 {
   /* Don't need to fetch the bucket info, use the provided one */
@@ -701,6 +713,117 @@ int POSIXDriver::list_buckets(const DoutPrefixProvider* dpp, const rgw_owner& ow
   return 0;
 }
 
+/* S3Vectors - list_vector_buckets */
+int POSIXDriver::list_vector_buckets(const DoutPrefixProvider* dpp, const rgw_owner& owner,
+                             const std::string& tenant, const std::string& marker,
+                             const std::string& end_marker, uint64_t max,
+                             BucketList &result, optional_yield y)
+{
+  DIR* dir;
+  struct dirent* entry;
+  int dfd;
+  int ret;
+
+  result.buckets.clear();
+
+  /* it's not sufficient to dup(root_fd), as as the new fd would share
+   * the file position of root_fd */
+  dfd = copy_dir_fd(get_root_fd());
+  if (dfd == -1) {
+    ret = errno;
+    ldpp_dout(dpp, 0) << "ERROR: could not open root to list buckets: "
+      << cpp_strerror(ret) << dendl;
+    return -errno;
+  }
+
+  dir = fdopendir(dfd);
+  if (dir == NULL) {
+    ret = errno;
+    ldpp_dout(dpp, 0) << "ERROR: could not open root to list buckets: "
+      << cpp_strerror(ret) << dendl;
+    ::close(dfd);
+    return -ret;
+  }
+
+  auto cleanup_guard = make_scope_guard(
+    [&dir]
+      {
+        closedir(dir);
+        // dfd is also closed
+      }
+    );
+
+  errno = 0;
+  while ((entry = readdir(dir)) != NULL) {
+    struct statx stx;
+
+    ret = statx(get_root_fd(), entry->d_name, AT_SYMLINK_NOFOLLOW, STATX_ALL, &stx);
+    if (ret < 0) {
+      ret = errno;
+      if (ret == ENOENT) {
+        errno = 0;
+        continue;
+      }
+      ldpp_dout(dpp, 0) << "ERROR: could not stat object " << entry->d_name << ": "
+        << cpp_strerror(ret) << dendl;
+      return -ret;
+    }
+
+    if (!S_ISDIR(stx.stx_mode)) {
+      /* Not a bucket, skip it */
+      errno = 0;
+      continue;
+    }
+    // Vector buckets use .s3vector_ prefix, skip other dotfiles
+    const std::string_view s3vector_prefix = ".s3vector_";
+    std::string_view dname(entry->d_name);
+    if (entry->d_name[0] == '.' && !dname.starts_with(s3vector_prefix)) {
+      /* Skip non-vector dotfiles */
+      errno = 0;
+      continue;
+    }
+    // Skip regular buckets (those without the .s3vector_ prefix)
+    if (!dname.starts_with(s3vector_prefix)) {
+      errno = 0;
+      continue;
+    }
+    // Extract the actual bucket name from .s3vector_<encoded_name>
+    std::string bucket_name = url_decode(entry->d_name + s3vector_prefix.length());
+    std::unique_ptr<VectorBucket> bucket;
+    ret = load_vector_bucket(dpp, rgw_bucket("", bucket_name), &bucket, null_yield);
+    if (ret < 0) {
+      if (ret == -ENOENT) {
+        errno = 0;
+        continue;
+      }
+      return ret;
+    }
+    if (bucket->get_owner() != owner) {
+      continue;
+    }
+    RGWBucketEnt ent;
+    ent.bucket.name = bucket_name;  // Already decoded above
+    ent.creation_time = ceph::real_clock::from_time_t(stx.stx_btime.tv_sec);
+    // TODO: ent.size and ent.count
+
+    result.buckets.push_back(std::move(ent));
+    errno = 0;
+    if (result.buckets.size() == max){
+      result.next_marker = ent.bucket.marker;
+      break;
+    }
+  }
+  ret = errno;
+  if (ret != 0) {
+    ldpp_dout(dpp, 0) << "ERROR: could not list vector buckets for " << owner << ": "
+      << cpp_strerror(ret) << dendl;
+    return -ret;
+  }
+
+  return 0;
+}
+/* S3Vectors - list_vector_buckets */
+
 int POSIXBucket::create(const DoutPrefixProvider* dpp,
 			const CreateParams& params,
 			optional_yield y)
@@ -750,6 +873,58 @@ int POSIXBucket::create(const DoutPrefixProvider* dpp,
 
   return 0;
 }
+
+/* S3Vectors - create */
+int POSIXVectorBucket::create(const DoutPrefixProvider* dpp,
+                        const CreateParams& params,
+                        optional_yield y)
+{
+  info.owner = params.owner;
+
+  if (params.marker.empty()) {
+    char buf[17];
+    gen_rand_alphanumeric(driver->ctx(), buf, sizeof(buf) - 1);
+    buf[16] = '\0';
+    info.bucket.marker = info.bucket.name + "." + buf;
+    info.bucket.bucket_id = info.bucket.marker;
+  } else {
+    info.bucket.marker = params.marker;
+    info.bucket.bucket_id = params.bucket_id;
+  }
+
+  info.zonegroup = params.zonegroup_id;
+  info.placement_rule = params.placement_rule;
+  info.swift_versioning = params.swift_ver_location.has_value();
+  if (params.swift_ver_location) {
+    info.swift_ver_location = *params.swift_ver_location;
+  }
+  if (params.obj_lock_enabled) {
+    info.flags |= BUCKET_VERSIONED | BUCKET_OBJ_LOCK_ENABLED;
+  }
+  info.requester_pays = false;
+  if (params.creation_time) {
+    info.creation_time = *params.creation_time;
+  } else {
+    info.creation_time = ceph::real_clock::now();
+  }
+  if (params.quota) {
+    info.quota = *params.quota;
+  }
+
+  int ret = set_attrs(params.attrs);
+  if (ret < 0) {
+    return ret;
+  }
+
+  bool existed = false;
+  ret = create(dpp, y, &existed);
+  if (ret < 0) {
+    return ret;
+  }
+
+  return 0;
+}
+/* S3Vectors - create */
 
 int POSIXUser::load_user_from_cache_or_db(const DoutPrefixProvider* dpp, bool& cache_hit)
 {
@@ -1574,6 +1749,15 @@ int POSIXBucket::fill_cache(const DoutPrefixProvider* dpp, optional_yield y,
   return dir->fill_cache(dpp, y, cb, posix::FSEnt::FLAG_NONE);
 }
 
+/* S3Vectors - fill_cache */
+// TO-DO: Check if this function is required or not
+int POSIXVectorBucket::fill_cache(const DoutPrefixProvider* dpp, optional_yield y,
+                            fill_cache_cb_t& cb)
+{
+  return dir->fill_cache(dpp, y, cb, posix::FSEnt::FLAG_NONE);
+}
+/* S3Vectors - fill_cache */
+
 int POSIXBucket::list(const DoutPrefixProvider* dpp, ListParams& params,
 		    int max, ListResults& results, optional_yield y)
 {
@@ -1780,6 +1964,40 @@ int POSIXBucket::remove(const DoutPrefixProvider* dpp,
   return ret;
 }
 
+/* S3Vectors - remove */
+int POSIXVectorBucket::remove(const DoutPrefixProvider* dpp,
+                        bool delete_children,
+                        optional_yield y)
+{
+  // Vector buckets are stored in .s3vector_<name> directories (due to namespace),
+  // which are separate from backing S3 buckets stored in <name> directories.
+  // When delete_children=true, also delete all indexes from the backing bucket.
+
+  int ret = 0;
+  if (delete_children) {
+    // Delete all indexes stored in the backing bucket via LanceDB
+    ret = rgw::s3vector::remove_indexes(dpp, driver, &info.bucket.tenant, get_name(), true, y);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: failed to remove indexes for vector bucket "
+                        << get_name() << ": " << cpp_strerror(ret) << dendl;
+      return ret;
+    }
+  }
+
+  ret = dir->remove(dpp, y, delete_children, nullptr);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to remove vector bucket directory "
+                      << get_name() << ": " << cpp_strerror(ret) << dendl;
+    return ret;
+  }
+
+  driver->get_bucket_cache()->invalidate_bucket(dpp, get_name());
+
+  ldpp_dout(dpp, 10) << "Successfully removed vector bucket " << get_name() << dendl;
+  return 0;
+}
+/* S3Vectors - remove */
+
 int POSIXBucket::remove_bypass_gc(int concurrent_max,
 				  bool keep_index_consistent,
 				  optional_yield y,
@@ -1826,6 +2044,47 @@ int POSIXBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
 
   return 0;
 }
+
+/* S3Vectors - load_bucket */
+int POSIXVectorBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
+{
+  int ret;
+
+  if (get_name()[0] == '.') {
+    /* Skip dotfiles */
+    return -ERR_INVALID_OBJECT_NAME;
+  }
+  ret = dir->stat(dpp);
+  if (ret < 0) {
+    return ret;
+  }
+
+  mtime = ceph::real_clock::from_time_t(dir->get_stx().stx_mtime.tv_sec);
+  info.creation_time = ceph::real_clock::from_time_t(dir->get_stx().stx_btime.tv_sec);
+
+  ret = dir->open(dpp);
+  if (ret < 0) {
+    return ret;
+  }
+
+  ret = dir->read_attrs(dpp, y, attrs);
+  if (ret < 0) {
+    return ret;
+  }
+
+  RGWBucketInfo bak_info = info;;
+  ret = posix::decode_attr(attrs, RGW_POSIX_ATTR_VECTOR_BUCKET_INFO, info);
+  if (ret < 0) {
+    // TODO dang: fake info up (UID to owner conversion?)
+    info = bak_info;
+  } else {
+    // Don't leave info visible in attributes
+    attrs.erase(RGW_POSIX_ATTR_VECTOR_BUCKET_INFO);
+  }
+
+  return 0;
+}
+/* S3Vectors - load_bucket */
 
 int POSIXBucket::set_acl(const DoutPrefixProvider* dpp,
 			 RGWAccessControlPolicy& acl,
@@ -1933,6 +2192,26 @@ int POSIXBucket::put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::r
   return write_attrs(dpp, y);
 }
 
+/* S3Vectors - put_info */
+int POSIXVectorBucket::put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time _mtime, optional_yield y)
+{
+  mtime = _mtime;
+
+  struct timespec ts[2];
+  ts[0].tv_nsec = UTIME_OMIT;
+  ts[1] = ceph::real_clock::to_timespec(mtime);
+  int ret = utimensat(dir->get_parent()->get_fd(), get_fname().c_str(), ts, AT_SYMLINK_NOFOLLOW);
+  if (ret < 0) {
+    ret = errno;
+    ldpp_dout(dpp, 0) << "ERROR: could not set mtime on bucket " << get_name() << ": "
+      << cpp_strerror(ret) << dendl;
+    return -ret;
+  }
+
+  return write_attrs(dpp, y);
+}
+/* S3Vectors - put_info */
+
 int POSIXBucket::write_attrs(const DoutPrefixProvider* dpp, optional_yield y)
 {
   int ret = dir->open(dpp);
@@ -1948,6 +2227,26 @@ int POSIXBucket::write_attrs(const DoutPrefixProvider* dpp, optional_yield y)
   return dir->write_attrs(dpp, y, attrs, &extra_attrs);
 }
 
+/* S3Vectors - write_attrs */
+int POSIXVectorBucket::write_attrs(const DoutPrefixProvider* dpp, optional_yield y)
+{
+  int ret = dir->open(dpp);
+  if (ret < 0) {
+    return ret;
+  }
+
+  // Vector buckets use a separate xattr (RGW_POSIX_ATTR_VECTOR_BUCKET_INFO) from
+  // regular S3 buckets (RGW_POSIX_ATTR_BUCKET_INFO). This allows them to share
+  // physical directories in RGW backend mode without metadata conflicts.
+  bufferlist bl;
+  encode(info, bl);
+  Attrs extra_attrs;
+  extra_attrs[RGW_POSIX_ATTR_VECTOR_BUCKET_INFO] = bl;
+
+  return dir->write_attrs(dpp, y, attrs, &extra_attrs);
+}
+/* S3Vectors - write_attrs */
+
 int POSIXBucket::check_empty(const DoutPrefixProvider* dpp, optional_yield y)
 {
   return dir->for_each(dpp, [](const char* name) {
@@ -1959,6 +2258,20 @@ int POSIXBucket::check_empty(const DoutPrefixProvider* dpp, optional_yield y)
     return 0;
   });
 }
+
+/* S3Vectors - check_empty */
+int POSIXVectorBucket::check_empty(const DoutPrefixProvider* dpp, optional_yield y)
+{
+  return dir->for_each(dpp, [](const char* name) {
+    /* for_each filters out "." and "..", so reaching here is not empty */
+    std::string_view check_name = name;
+    if (!check_name.starts_with(".multipart")) { // incomplete uploads can be deleted
+      return -ENOTEMPTY;
+    }
+    return 0;
+  });
+}
+/* S3Vectors - check_empty */
 
 int POSIXBucket::check_quota(const DoutPrefixProvider *dpp, RGWQuota& quota, uint64_t obj_size,
 				optional_yield y, bool check_size_only)
@@ -1979,6 +2292,20 @@ int POSIXBucket::try_refresh_info(const DoutPrefixProvider* dpp, ceph::real_time
 
   return dir->read_attrs(dpp, y, attrs);
 }
+
+/* S3Vectors - try_refresh_info */
+int POSIXVectorBucket::try_refresh_info(const DoutPrefixProvider* dpp, ceph::real_time* pmtime, optional_yield y)
+{
+  *pmtime = mtime;
+
+  int ret = dir->open(dpp);
+  if (ret < 0) {
+    return ret;
+  }
+
+  return dir->read_attrs(dpp, y, attrs);
+}
+/* S3Vectors - try_refresh_info */
 
 int POSIXBucket::read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch,
 			    uint64_t end_epoch, uint32_t max_entries,
@@ -2100,13 +2427,60 @@ int POSIXBucket::create(const DoutPrefixProvider* dpp, optional_yield y, bool* e
     return ret;
   }
 
-  return write_attrs(dpp, y);
+  // Ensure directory is open before writing attrs
+  ret = dir->open(dpp);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: POSIXBucket failed to open directory after create: "
+                       << get_fname() << " : " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
+  ret = write_attrs(dpp, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: POSIXBucket write_attrs failed for: " << get_fname()
+                       << " : " << cpp_strerror(-ret) << dendl;
+  }
+
+  return ret;
 }
+
+/* S3Vectors - create */
+int POSIXVectorBucket::create(const DoutPrefixProvider* dpp, optional_yield y, bool* existed)
+{
+  int ret = dir->create(dpp, existed);
+  if (ret < 0) {
+    return ret;
+  }
+
+  // Ensure directory is open before writing attrs
+  ret = dir->open(dpp);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: POSIXVectorBucket failed to open directory after create: "
+                       << get_fname() << " : " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
+  ret = write_attrs(dpp, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: POSIXVectorBucket write_attrs failed for: " << get_fname()
+                       << " : " << cpp_strerror(-ret) << dendl;
+  }
+
+  return ret;
+}
+/* S3Vectors - create */
 
 std::string POSIXBucket::get_fname()
 {
   return bucket_fname(get_name(), ns);
 }
+
+/* S3Vectors - get_fname */
+std::string POSIXVectorBucket::get_fname()
+{
+  return bucket_fname(get_name(), ns);
+}
+/* S3Vectors - get_fname */
 
 int POSIXBucket::rename(const DoutPrefixProvider* dpp, optional_yield y, Object* target_obj)
 {
@@ -2129,6 +2503,30 @@ int POSIXBucket::rename(const DoutPrefixProvider* dpp, optional_yield y, Object*
 
   return dir->rename(dpp, y, dst_dir, get_fname());
 }
+
+/* S3Vectors - rename */
+int POSIXVectorBucket::rename(const DoutPrefixProvider* dpp, optional_yield y, Object* target_obj)
+{
+  int ret;
+  posix::Directory* dst_dir = dir->get_parent();
+
+  info.bucket.name = target_obj->get_key().get_oid();
+  ns.reset();
+
+  if (!target_obj->get_instance().empty()) {
+    /* This is a versioned object.  Need to handle versioneddirectory */
+    POSIXObject *to = static_cast<POSIXObject *>(target_obj);
+    ret = to->open(dpp, true, false);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: could not open target obj " << to->get_name() << dendl;
+      return ret;
+    }
+    dst_dir = static_cast<posix::Directory *>(to->get_fsent());
+  }
+
+  return dir->rename(dpp, y, dst_dir, get_fname());
+}
+/* S3Vectors - rename */
 
 int POSIXObject::delete_object(const DoutPrefixProvider* dpp,
 				optional_yield y,

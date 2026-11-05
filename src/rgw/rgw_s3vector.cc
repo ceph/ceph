@@ -1267,9 +1267,11 @@ namespace rgw::s3vector {
         creation_time = get_table_creation_time(table, dpp);
         lancedb_table_free(table);
       } else {
-        ldpp_dout(dpp, 1) << "ERROR: s3vector failed to open index: " << name << " in: " << configuration.vector_bucket_name
-          << " while listing, error: " << (open_error_message ? open_error_message : "unknown") << dendl;
+        // Skip indexes that can't be opened (deleted but still in LanceDB's cached table list)
+        ldpp_dout(dpp, 10) << "INFO: s3vector skipping index: " << name << " in: " << configuration.vector_bucket_name
+          << " (failed to open, likely deleted), error: " << (open_error_message ? open_error_message : "unknown") << dendl;
         lancedb_free_string(open_error_message);
+        continue;
       }
       reply.indexes.emplace_back(
           creation_time,

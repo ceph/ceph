@@ -34,6 +34,7 @@ using DeleteResult = rgw::sal::Object::DeleteOp::Result;
 
 extern const std::string ATTR_PREFIX;
 #define RGW_POSIX_ATTR_BUCKET_INFO "bucket-info"
+#define RGW_POSIX_ATTR_VECTOR_BUCKET_INFO "vector-bucket-info"
 #define RGW_POSIX_ATTR_MPUPLOAD "multipart-upload"
 #define RGW_POSIX_ATTR_OBJECT_TYPE "object-type"
 #define RGW_POSIX_ATTR_DELETE_MARKER "delete-marker"

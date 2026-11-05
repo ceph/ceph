@@ -66,7 +66,7 @@ using parse_buffer = rgw::asio::parse_buffer;
 
 // use mmap/mprotect to allocate 512k coroutine stacks
 auto make_stack_allocator() {
-  return boost::context::protected_fixedsize_stack{512*1024};
+  return boost::context::protected_fixedsize_stack{2048*1024};
 }
 
 static constexpr std::chrono::milliseconds BACKOFF_MAX_WAIT(5000);
