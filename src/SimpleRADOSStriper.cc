@@ -397,7 +397,7 @@ int SimpleRADOSStriper::set_metadata(uint64_t new_size, bool update_size)
   auto op = librados::ObjectWriteOperation();
   if (new_size > allocated) {
     uint64_t mask = (1<<object_size)-1;
-    new_allocated = min_growth + ((size + mask) & ~mask); /* round up base 2 */
+    new_allocated = min_growth + ((new_size + mask) & ~mask); /* round up base 2 */
     op.setxattr(XATTR_ALLOCATED, uint2bl(new_allocated));
     do_op = true;
     if (logger) logger->inc(P_UPDATE_ALLOCATED);
