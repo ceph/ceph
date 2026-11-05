@@ -157,6 +157,7 @@ class MgrClient;
 class Finisher;
 class Server;
 class ScrubStack;
+class MigrateQueue;
 class C_ExecAndReply;
 class QuiesceDbManager;
 class QuiesceAgent;
@@ -434,6 +435,7 @@ class MDSRank {
     MDLog *mdlog = nullptr;
     MDBalancer *balancer = nullptr;
     ScrubStack *scrubstack = nullptr;
+    MigrateQueue *migrate_queue = nullptr;
     DamageTable damage_table;
 
     InoTable *inotable = nullptr;

@@ -14,6 +14,7 @@
  */
 
 #include "Server.h"
+#include "MigrateQueue.h"
 #include "RetryMessage.h"
 #include "RetryRequest.h"
 #include "BatchOp.h"
@@ -6504,6 +6505,9 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
   } else if (name == "ceph.file.migrate.pool"sv) {
     handle_client_file_migrate(mdr, cur, value);
     return;
+  } else if (name == "ceph.dir.migrate.pool"sv) {
+    handle_client_dir_migrate(mdr, cur, value);
+    return;
   } else if (name.compare(0, 10, "ceph.quota") == 0) {
     if (!cur->is_dir()) {
       respond_to_request(mdr, -EINVAL);
@@ -7187,6 +7191,34 @@ void Server::handle_client_file_migrate(const MDRequestRef& mdr, CInode *cur,
     return;
 
   _file_migrate_begin(mdr, cur, to.pool_id);
+}
+
+/*
+ * ceph.dir.migrate.pool: move all the regular files below a directory, in the
+ * background; see MigrateQueue.  The client's reply says that the job is
+ * durable, not that it is done.
+ */
+void Server::handle_client_dir_migrate(const MDRequestRef& mdr, CInode *cur,
+                                       const std::string& value)
+{
+  const cref_t<MClientRequest> &req = mdr->client_request;
+  if (!cur->is_dir() || req->get_op() == CEPH_MDS_OP_RMXATTR) {
+    respond_to_request(mdr, -EINVAL);
+    return;
+  }
+
+  file_layout_t to = mdcache->default_file_layout;
+  if (check_layout_vxattr(mdr, "layout.pool", value, &to) < 0)
+    return;
+
+  MigrateQueue *queue = mds->migrate_queue;
+  if (!queue->is_ready()) {
+    queue->wait_for_ready(new C_MDS_RetryRequest(mdcache, mdr));
+    return;
+  }
+  queue->enqueue(cur, to.pool_id, new LambdaContext([this, mdr](int r) {
+    respond_to_request(mdr, r);
+  }));
 }
 
 /*

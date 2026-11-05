@@ -1218,6 +1218,14 @@ options:
     locked only to check that it did not change. If it did, it is copied again
     with the lock held. Smaller files are always copied with the lock held.
   default: 64_M
+- name: mds_migrate_max_files
+  type: uint
+  level: advanced
+  desc: maximum number of files a directory migration works on at a time
+  long_desc: Applies to all the ceph.dir.migrate.pool jobs of a rank together, and
+    also bounds the directories being scanned. Each file uses up to 16 OSD ops at a
+    time. 0 stops the jobs from starting anything new.
+  default: 4
   services:
   - mds
   flags:

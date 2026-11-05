@@ -301,6 +301,8 @@ public:
   bool _file_migrate_precopy(const MDRequestRef& mdr, CInode *cur,
                              const file_layout_t& to);
   void _file_migrate_precopied(std::shared_ptr<FileMigrate> fm);
+  void handle_client_dir_migrate(const MDRequestRef& mdr, CInode *cur,
+                                 const std::string& value);
   void _file_migrate_begin(const MDRequestRef& mdr, CInode *cur, int64_t pool);
   void _file_migrate_reply(const MDRequestRef& mdr, int r);
   void _file_migrate_wait_flush(std::shared_ptr<FileMigrate> fm);
@@ -533,6 +535,7 @@ private:
     return xattr_name.rfind("ceph.dir.layout", 0) == 0 ||
            xattr_name.rfind("ceph.file.layout", 0) == 0 ||
            xattr_name == "ceph.file.migrate.pool"sv ||
+           xattr_name == "ceph.dir.migrate.pool"sv ||
            xattr_name.rfind("ceph.quota", 0) == 0 ||
            xattr_name.rfind("ceph.alternate_name", 0) == 0 ||
            xattr_name == "ceph.quiesce.block"sv ||
