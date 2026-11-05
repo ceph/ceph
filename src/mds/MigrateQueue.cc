@@ -55,8 +55,53 @@
  * not found.  Hard links are followed, even out of the tree: every link leads
  * to the one inode, which moves once.  Snapshot directories are not walked:
  * the migration of a file takes care of its snapshots or, when it cannot,
- * reports that.  A dirfrag or file on another rank is counted in not_auth and
- * left alone.
+ * reports that.
+ *
+ * Ranks.  A walk that meets a dirfrag or a file held by another rank hands it
+ * over, and that rank walks on in a sub-job: a job of its own in its own queue
+ * object, which knows the origin, the rank and job that started it all.  It
+ * follows that a failover of a rank costs what it costs with one rank, whoever
+ * started the job.  What had to be new is the hand-over and knowing the end:
+ *
+ *  - A sub-job talks to its origin only, it does not know the other sub-jobs.
+ *    What it finds on a third rank goes through the origin.  The origin alone
+ *    decides the job is done, and it knows of all that was ever handed over,
+ *    so the job's whole state is in one place.  A tree or a chain of ranks,
+ *    each waiting for what it handed on, would make every hand-over cheaper
+ *    and everything else harder.  There are as many hand-overs as boundaries
+ *    between subtrees, not as many as directories.
+ *
+ *  - An item goes hand.<id>.<rank>.<seq> in the sender's object in the very
+ *    write that takes its parent off the list, and only then on the wire.  The
+ *    receiver writes it down as dir.<id>.<ino>.<frag>, together with the
+ *    highest number it took, and only then acks; a repeat is recognised by its
+ *    number.  The sender drops the key on the ack, and resends until then.
+ *    Either side can fail at any point, and either side can lose a message:
+ *    the item is in at least one object and not walked twice unless a
+ *    directory is, which is safe, see above.  Numbers are never reused after a
+ *    crash for something else, since nothing leaves before it is durable.
+ *
+ *  - A sub-job reports on its own, every tick, until the origin says it can
+ *    stop; the reply to a report steers it.  An origin thus needs no retries
+ *    of its own, and a rank back from a failure finds out what it missed.
+ *    Counters in a report are totals, not increments, so a lost or repeated
+ *    one does not matter.
+ *
+ *  - A sub-job with nothing left, that had all it handed in acked, says it is
+ *    idle, stating the highest item number it took, after that is durable.
+ *    The job is done when the origin has nothing left itself and every rank
+ *    was idle at the last number given to it.  Nothing can be in transit
+ *    then: everything is either acked, so seen by the idle rank, or would make
+ *    a rank not idle.  A rank taking a new item after it said so runs again.
+ *
+ * Whom to hand to is what the cache says.  It can be out of date, or the
+ * subtree can move on: the rank that receives something it does not hold hands
+ * it over again, and the walk just follows.
+ *
+ * Why not an MClientRequest, as for a quota realm?  That has no reply to wait
+ * for, goes to the inode's auth and not the dirfrag's, and it would be one
+ * unrelated job per hand-over, with clashes between them.  Scrub's MMDSScrub
+ * has the right shape, but scrub starts over if a rank fails.
  */
 
 #include "MigrateQueue.h"
@@ -67,6 +112,7 @@
 #include "common/debug.h"
 #include "common/errno.h"
 #include "include/ceph_fs.h"
+#include "messages/MMDSMigrate.h"
 #include "osd/OSDMap.h"
 #include "osdc/Objecter.h"
 
@@ -96,6 +142,10 @@ static const double BUSY_RETRY_INTERVAL = 5.0;
 // In a row: most likely it is the pool, and the rest of the tree would fail too.
 static const unsigned MAX_FAILURES_IN_A_ROW = 32;
 
+// Of a message.  An ack lets the next ones go.
+static const size_t MAX_ITEMS_PER_MSG = 256;
+static const double RESEND_INTERVAL = 5.0;
+
 static const char *state_name(uint8_t s)
 {
   static const char *names[] = {"running", "paused", "done", "aborted"};
@@ -109,6 +159,7 @@ void MigrateQueue::Item::encode(bufferlist& bl) const
   encode(ino, bl);
   encode(fg, bl);
   encode(file, bl);
+  encode(where, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -119,6 +170,7 @@ void MigrateQueue::Item::decode(bufferlist::const_iterator& p)
   decode(ino, p);
   decode(fg, p);
   decode(file, p);
+  decode(where, p);
   DECODE_FINISH(p);
 }
 
@@ -231,10 +283,68 @@ void MigrateQueue::Progress::decode(bufferlist::const_iterator& p)
   DECODE_FINISH(p);
 }
 
-void MigrateQueue::Job::encode(bufferlist& bl) const
+void MigrateQueue::Report::encode(bufferlist& bl) const
 {
   using ceph::encode;
   ENCODE_START(1, 1, bl);
+  encode(job, bl);
+  encode(state, bl);
+  encode(reason, bl);
+  encode(hold, bl);
+  encode(accepted, bl);
+  encode(idle, bl);
+  encode(dirs_active, bl);
+  encode(dirs_queued, bl);
+  encode(files_in_progress, bl);
+  total.encode(bl);
+  ENCODE_FINISH(bl);
+}
+
+void MigrateQueue::Report::decode(bufferlist::const_iterator& p)
+{
+  using ceph::decode;
+  DECODE_START(1, p);
+  decode(job, p);
+  decode(state, p);
+  decode(reason, p);
+  decode(hold, p);
+  decode(accepted, p);
+  decode(idle, p);
+  decode(dirs_active, p);
+  decode(dirs_queued, p);
+  decode(files_in_progress, p);
+  total.decode(p);
+  DECODE_FINISH(p);
+}
+
+void MigrateQueue::Link::encode(bufferlist& bl) const
+{
+  using ceph::encode;
+  ENCODE_START(1, 1, bl);
+  encode(rank, bl);
+  encode(sent, bl);
+  encode(acked, bl);
+  encode(accepted, bl);
+  report.encode(bl);
+  ENCODE_FINISH(bl);
+}
+
+void MigrateQueue::Link::decode(bufferlist::const_iterator& p)
+{
+  using ceph::decode;
+  DECODE_START(1, p);
+  decode(rank, p);
+  decode(sent, p);
+  decode(acked, p);
+  decode(accepted, p);
+  report.decode(p);
+  DECODE_FINISH(p);
+}
+
+void MigrateQueue::Job::encode(bufferlist& bl) const
+{
+  using ceph::encode;
+  ENCODE_START(2, 1, bl);
   encode(id, bl);
   encode(root, bl);
   encode(path, bl);
@@ -245,13 +355,20 @@ void MigrateQueue::Job::encode(bufferlist& bl) const
   encode(started, bl);
   encode(finished, bl);
   done.encode(bl);
+  encode(origin_rank, bl);
+  encode(origin_job, bl);
+  encode(over, bl);
+  uint32_t n = links.size();
+  encode(n, bl);
+  for (const auto& [rank, l] : links)
+    l.encode(bl);
   ENCODE_FINISH(bl);
 }
 
 void MigrateQueue::Job::decode(bufferlist::const_iterator& p)
 {
   using ceph::decode;
-  DECODE_START(1, p);
+  DECODE_START(2, p);
   decode(id, p);
   decode(root, p);
   decode(path, p);
@@ -264,6 +381,19 @@ void MigrateQueue::Job::decode(bufferlist::const_iterator& p)
   decode(started, p);
   decode(finished, p);
   done.decode(p);
+  if (struct_v >= 2) {
+    decode(origin_rank, p);
+    decode(origin_job, p);
+    decode(over, p);
+    uint32_t n;
+    decode(n, p);
+    links.clear();
+    while (n--) {
+      Link l;
+      l.decode(p);
+      links[l.rank] = std::move(l);
+    }
+  }
   DECODE_FINISH(p);
 }
 
@@ -288,6 +418,14 @@ std::string MigrateQueue::dir_key(uint64_t id, const Item& item)
   char k[56];
   snprintf(k, sizeof(k), "dir.%016" PRIx64 ".%016" PRIx64 ".%08x", id,
            uint64_t(item.ino), unsigned(item.fg));
+  return k;
+}
+
+std::string MigrateQueue::hand_key(uint64_t id, mds_rank_t rank, uint64_t seq)
+{
+  char k[56];
+  snprintf(k, sizeof(k), "hand.%016" PRIx64 ".%04x.%016" PRIx64, id,
+           unsigned(rank), seq);
   return k;
 }
 
@@ -351,6 +489,13 @@ void MigrateQueue::_load_failed(int r)
 void MigrateQueue::_load_done()
 {
   std::vector<std::pair<uint64_t,Item>> dirs;
+  struct Hand {
+    uint64_t id;
+    mds_rank_t rank;
+    uint64_t seq;
+    Item item;
+  };
+  std::vector<Hand> hands;
   try {
     for (auto& [key, val] : loaded) {
       if (key.compare(0, 4, "job.") == 0) {
@@ -365,6 +510,14 @@ void MigrateQueue::_load_done()
         item.fg = frag_t(std::stoul(key.substr(38), nullptr, 16));
         item.file = val.length() > 0;
         dirs.emplace_back(std::stoull(key.substr(4, 16), nullptr, 16), item);
+      } else if (key.compare(0, 5, "hand.") == 0 && key.size() == 43) {
+        Hand h;
+        h.id = std::stoull(key.substr(5, 16), nullptr, 16);
+        h.rank = std::stoul(key.substr(22, 4), nullptr, 16);
+        h.seq = std::stoull(key.substr(27), nullptr, 16);
+        auto p = val.cbegin();
+        h.item.decode(p);
+        hands.push_back(std::move(h));
       }
     }
   } catch (const std::exception& e) {
@@ -383,10 +536,27 @@ void MigrateQueue::_load_done()
     else
       p->second.pending.push_back(item);
   }
+  for (auto& h : hands) {
+    auto p = jobs.find(h.id);
+    Link *l = nullptr;
+    if (p != jobs.end() && p->second.live()) {
+      auto q = p->second.links.find(h.rank);
+      if (q != p->second.links.end() && h.seq > q->second.acked)
+        l = &q->second;
+    }
+    if (l) {
+      l->out[h.seq] = h.item;
+      l->sent = std::max(l->sent, h.seq);
+    } else {
+      _rm(hand_key(h.id, h.rank, h.seq));
+    }
+  }
   for (auto& [id, job] : jobs) {
     dout(1) << "job " << id << " " << job.path << " to pool " << job.pool_name
             << ": " << state_name(uint8_t(job.state)) << ", "
             << job.pending.size() << " dirs left" << dendl;
+    for (auto& [rank, l] : job.links)
+      l.durable = l.sent;       // it was read back
     _maybe_finish_job(job);
   }
   _flush(nullptr);
@@ -443,8 +613,9 @@ void MigrateQueue::_flush(Context *fin)
  * One write at a time; whatever piles up meanwhile goes into the next one.
  * Up to MAX_KEYS_PER_WRITE keys, which is all of it unless a directory has
  * more subdirectories than that, go in one atomic write.  When split, the
- * dir. keys sort first and removals go last, so a cut leaves a directory to
- * walk again, never a subdirectory lost.
+ * dir. and hand. keys sort before job. keys and removals go last, so a cut
+ * leaves a directory to walk again or a hand-over to take again, never a
+ * subdirectory lost.
  */
 void MigrateQueue::_commit()
 {
@@ -452,7 +623,6 @@ void MigrateQueue::_commit()
     return;
   if (to_set.empty() && to_rm.empty()) {
     finish_contexts(g_ceph_context, to_finish);
-    to_finish.clear();
     return;
   }
 
@@ -521,7 +691,7 @@ void MigrateQueue::enqueue(CInode *in, int64_t pool, Context *fin)
   };
   const std::string prefix = as_prefix(path);
   for (auto& [id, job] : jobs) {
-    if (!job.live())
+    if (!job.open())
       continue;
     if (job.root == in->ino() && job.pool == pool) {
       _flush(fin);      // maybe a resent request
@@ -566,16 +736,30 @@ void MigrateQueue::_maybe_finish_job(Job& job)
     if (dw->job == &job)
       return;
   }
+  for (const auto& [rank, l] : job.links) {
+    if (!_settled(job, l))
+      return;
+  }
   job.state = State::DONE;
   job.finished = ceph_clock_now();
   job.hold.clear();
-  const auto& d = job.done;
+  _save_job(job);
+  if (job.is_sub()) {
+    // What it found elsewhere is the origin's now, and this will soon be too.
+    _flush(new LambdaContext([this, id = job.id](int) {
+      auto p = jobs.find(id);
+      if (p != jobs.end() && p->second.state == State::DONE)
+        _report(p->second);
+    }));
+    return;
+  }
+  const Progress d = _total(job);
   mds->clog->info() << "migration job " << job.id << " of " << job.path
                     << " to pool " << job.pool_name << " done: " << d.moved
                     << " files moved (" << d.head_only << " head only), "
                     << d.already << " already there, " << d.failed
-                    << " failed, " << d.not_auth << " on other ranks";
-  _save_job(job);
+                    << " failed";
+  _tell_ranks(job);
 }
 
 void MigrateQueue::_abort_job(Job& job, const std::string& reason)
@@ -588,6 +772,13 @@ void MigrateQueue::_abort_job(Job& job, const std::string& reason)
   for (const Item& item : job.pending)
     _rm(dir_key(job.id, item));
   job.pending.clear();
+  for (auto& [rank, l] : job.links) {
+    for (auto& [seq, item] : l.out) {
+      _rm(hand_key(job.id, rank, seq));
+      job.done.not_auth++;
+    }
+    l.out.clear();
+  }
 
   std::vector<DirWork*> dirs;
   for (auto& dw : active) {
@@ -600,9 +791,11 @@ void MigrateQueue::_abort_job(Job& job, const std::string& reason)
     dw->next = 0;
     dw->retries.clear();
     dw->subdirs.clear();
+    dw->remote.clear();
     _maybe_finish_dir(dw);
   }
   _save_job(job);
+  _tell_ranks(job);
 }
 
 // Remember a few finished jobs for the status output, not all of them forever.
@@ -613,7 +806,7 @@ void MigrateQueue::_trim_jobs()
     finished += !job.live();
   for (auto p = jobs.begin();
        p != jobs.end() && finished > MAX_FINISHED_JOBS; ) {
-    bool busy = p->second.live();
+    bool busy = p->second.live() || (p->second.is_sub() && !p->second.over);
     for (auto& dw : active)
       busy = busy || dw->job == &p->second;
     if (busy) {
@@ -675,6 +868,9 @@ int MigrateQueue::control(Control c, std::optional<uint64_t> id,
 
 void MigrateQueue::tick()
 {
+  if (!ready || load_failed)
+    return;
+  _tick_links();
   _kick(true);
 }
 
@@ -762,7 +958,10 @@ void MigrateQueue::_check_job(Job& job)
   if (job.state != State::RUNNING)
     return;
   if (!mds->mdsmap->is_data_pool(job.pool)) {
-    _abort_job(job, "the pool is no longer a data pool of this file system");
+    if (job.is_sub())
+      job.hold = "the pool is no longer a data pool, up to the origin";
+    else
+      _abort_job(job, "the pool is no longer a data pool of this file system");
     return;
   }
   bool full = mds->objecter->with_osdmap([&job](const OSDMap& o) {
@@ -902,10 +1101,8 @@ void MigrateQueue::_scan_dir(DirWork *dw)
   }
   if (!in || !in->is_dir()) {
     dw->prog.gone++;            // removed since it was queued
-  } else if (!in->is_auth()) {
-    dw->prog.not_auth++;
-    _note(dw->prog.errors, ino, -EXDEV);
   } else {
+    // The inode may well be on another rank: what counts is the dirfrags.
     frag_vec_t frags;
     in->dirfragtree.get_leaves(frags);
     for (const frag_t fg : frags) {
@@ -917,7 +1114,19 @@ void MigrateQueue::_scan_dir(DirWork *dw)
                       [fg](frag_t d) { return d.contains(fg); }))
         continue;
 
-      CDir *dir = in->get_or_open_dirfrag(mdcache, fg);
+      Item part;
+      part.ino = ino;
+      part.fg = fg;
+      CDir *dir = in->get_dirfrag(fg);
+      if (!dir && !in->is_auth()) {
+        // Not known here, so not held here; the inode's auth does know.
+        part.where = in->authority().first;
+        dw->remote.push_back(part);
+        dw->frags_done.push_back(fg);
+        continue;
+      }
+      if (!dir)
+        dir = in->get_or_open_dirfrag(mdcache, fg);
       if (mds->damage_table.is_dirfrag_damaged(dir)) {
         dw->prog.failed++;
         _note(dw->prog.errors, ino, -EIO);
@@ -926,12 +1135,8 @@ void MigrateQueue::_scan_dir(DirWork *dw)
           dir->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, _scan_again(dw));
           return;
         }
-        if (mds->is_cluster_degraded()) {
-          mds->wait_for_cluster_recovered(_scan_again(dw));
-          return;
-        }
-        dw->prog.not_auth++;
-        _note(dw->prog.errors, ino, -EXDEV);
+        part.where = dir->authority().first;
+        dw->remote.push_back(part);
       } else if (!dir->can_auth_pin()) {
         dir->add_waiter(CDir::WAIT_UNFREEZE, _scan_again(dw));
         return;
@@ -950,7 +1155,7 @@ void MigrateQueue::_scan_dir(DirWork *dw)
   }
   dout(10) << "job " << job.id << " dir " << ino << ": "
            << dw->files.size() << " files to move, " << dw->subdirs.size()
-           << " subdirs" << dendl;
+           << " subdirs, " << dw->remote.size() << " to hand over" << dendl;
   dw->scanned = true;
   _maybe_finish_dir(dw);
 }
@@ -1013,8 +1218,12 @@ void MigrateQueue::_start_file(DirWork *dw, inodeno_t ino, unsigned tries,
   } else if (!in->is_file()) {
     dw->prog.other++;
   } else if (!in->is_auth()) {
-    dw->prog.not_auth++;
-    _note(dw->prog.errors, ino, -EXDEV);
+    // A hard link to a file held elsewhere, or exported since the scan.
+    Item item;
+    item.ino = ino;
+    item.file = true;
+    item.where = in->authority().first;
+    dw->remote.push_back(item);
   } else if (in->get_projected_inode()->layout.pool_id == job.pool ||
              files_in_flight.count(ino)) {
     dw->prog.already++;         // a second link to it
@@ -1053,8 +1262,13 @@ void MigrateQueue::_file_migrated(DirWork *dw, inodeno_t ino, unsigned tries,
     when += BUSY_RETRY_INTERVAL;
     dw->retries.push_back({ino, tries + 1, when});
   } else if (r == -EXDEV) {
-    dw->prog.not_auth++;
-    _note(dw->prog.errors, ino, r);
+    // Exported while it waited for a lock.
+    Item item;
+    item.ino = ino;
+    item.file = true;
+    if (CInode *in = mds->mdcache->get_inode(ino))
+      item.where = in->authority().first;
+    dw->remote.push_back(item);
   } else {
     dw->prog.failed++;
     _note(dw->prog.errors, ino, r);
@@ -1118,10 +1332,499 @@ void MigrateQueue::_maybe_finish_dir(DirWork *dw)
       item.ino = ino;
       _queue_item(job, item);
     }
+    for (const Item& item : dw->remote)
+      _route(job, item);
   }
 
   active.remove_if([dw](const auto& p) { return p.get() == dw; });
   _maybe_finish_job(job);
   _save_job(job);
+  _flush(_on_durable(job));
+}
+
+/* --- other ranks ---------------------------------------------------------- */
+
+MigrateQueue::Job *MigrateQueue::_find_sub(mds_rank_t origin, uint64_t id)
+{
+  for (auto& [i, job] : jobs) {
+    if (job.origin_rank == origin && job.origin_job == id)
+      return &job;
+  }
+  return nullptr;
+}
+
+MigrateQueue::Link& MigrateQueue::_link(Job& job, mds_rank_t rank)
+{
+  Link& l = job.links[rank];
+  l.rank = rank;
+  return l;
+}
+
+// Is all that went over this link finished?  Only the origin cares about more
+// than that the items arrived.
+bool MigrateQueue::_settled(const Job& job, const Link& l) const
+{
+  if (!l.out.empty())
+    return false;
+  return job.is_sub() || l.sent == 0 ||
+         (l.report.idle && l.report.accepted >= l.sent);
+}
+
+/*
+ * A sub-job gives everything to the origin, and the origin gives it to the
+ * rank said to hold it.  If nobody knows, or that rank has left, the origin
+ * walks it itself, and sees whose it is by then.
+ */
+void MigrateQueue::_route(Job& job, const Item& item)
+{
+  const mds_rank_t self = mds->get_nodeid();
+  if (job.is_sub()) {
+    _hand_over(job, job.origin_rank, item);
+  } else if (item.where < 0 || item.where == self ||
+             !mds->mdsmap->is_in(item.where)) {
+    _queue_item(job, item);
+  } else {
+    _hand_over(job, item.where, item);
+  }
+}
+
+void MigrateQueue::_hand_over(Job& job, mds_rank_t to, const Item& item)
+{
+  Link& l = _link(job, to);
+  const uint64_t seq = ++l.sent;
+  dout(10) << "job " << job.id << " hands " << item.ino << " " << item.fg
+           << (item.file ? " file" : "") << " to mds." << to << " as " << seq
+           << dendl;
+  l.out[seq] = item;
+  bufferlist bl;
+  item.encode(bl);
+  _set(hand_key(job.id, to, seq), std::move(bl));
+}
+
+// To flush with: lets the items handed over so far go out.
+Context *MigrateQueue::_on_durable(const Job& job)
+{
+  std::map<mds_rank_t, uint64_t> upto;
+  for (const auto& [rank, l] : job.links) {
+    if (l.durable < l.sent)
+      upto[rank] = l.sent;
+  }
+  if (upto.empty())
+    return nullptr;
+  return new LambdaContext([this, id = job.id, upto = std::move(upto)](int) {
+    ceph_assert(g_conf().get_val<int64_t>("mds_kill_file_migrate_at") != 6);
+    auto p = jobs.find(id);
+    if (p == jobs.end())
+      return;
+    for (const auto& [rank, seq] : upto) {
+      Link& l = _link(p->second, rank);
+      l.durable = std::max(l.durable, seq);
+      _send_items(p->second, l, false);
+    }
+  });
+}
+
+void MigrateQueue::_send_msg(int op, mds_rank_t to, mds_rank_t origin,
+                             uint64_t id, bufferlist&& bl)
+{
+  auto m = make_message<MMDSMigrate>(op, origin, id, std::move(bl));
+  mds->send_message_mds(m, to);
+}
+
+/*
+ * One message at a time on a link.  An origin holds back while its job is
+ * paused; a sub-job always hands in what it found, it has no use for it.
+ */
+void MigrateQueue::_send_items(Job& job, Link& l, bool resend)
+{
+  if (!job.is_sub() && job.state != State::RUNNING)
+    return;
+  if (l.out.empty() || (!resend && l.on_wire > l.acked))
+    return;
+
+  using ceph::encode;
+  std::vector<std::pair<uint64_t, const Item*>> items;
+  for (auto p = l.out.begin();
+       p != l.out.end() && p->first <= l.durable &&
+         items.size() < MAX_ITEMS_PER_MSG; ++p)
+    items.emplace_back(p->first, &p->second);
+  if (items.empty())
+    return;
+
+  bufferlist bl;
+  encode(job.root, bl);
+  encode(job.path, bl);
+  encode(job.pool, bl);
+  encode(job.pool_name, bl);
+  encode(uint32_t(items.size()), bl);
+  for (const auto& [seq, item] : items) {
+    encode(seq, bl);
+    item->encode(bl);
+  }
+  l.on_wire = items.back().first;
+  l.last_sent = ceph_clock_now();
+  dout(10) << "job " << job.id << " sends " << items.size() << " items up to "
+           << l.on_wire << " to mds." << l.rank << dendl;
+  const mds_rank_t origin = job.is_sub() ? job.origin_rank : mds->get_nodeid();
+  _send_msg(MMDSMigrate::OP_ITEMS, l.rank, origin,
+            job.is_sub() ? job.origin_job : job.id, std::move(bl));
+}
+
+void MigrateQueue::_send_ack(mds_rank_t to, mds_rank_t origin, uint64_t id,
+                             uint64_t accepted, int err,
+                             const std::string& reason)
+{
+  using ceph::encode;
+  bufferlist bl;
+  encode(accepted, bl);
+  encode(err, bl);
+  encode(reason, bl);
+  _send_msg(MMDSMigrate::OP_ACK, to, origin, id, std::move(bl));
+}
+
+MigrateQueue::Progress MigrateQueue::_total(const Job& job,
+                                            uint64_t *dirs_active,
+                                            uint64_t *in_flight) const
+{
+  Progress p = job.done;
+  for (const auto& dw : active) {
+    if (dw->job == &job) {
+      p.add(dw->prog);
+      if (dirs_active)
+        (*dirs_active)++;
+      if (in_flight)
+        *in_flight += dw->in_flight;
+    }
+  }
+  if (!job.is_sub()) {
+    for (const auto& [rank, l] : job.links)
+      p.add(l.report.total);
+  }
+  return p;
+}
+
+void MigrateQueue::_report(Job& job)
+{
+  Report r;
+  r.job = job.id;
+  r.state = uint8_t(job.state);
+  r.reason = job.reason;
+  r.hold = job.hold;
+  r.accepted = _link(job, job.origin_rank).accepted;
+  r.idle = job.state == State::DONE;
+  r.dirs_queued = job.pending.size();
+  r.total = _total(job, &r.dirs_active, &r.files_in_progress);
+  bufferlist bl;
+  r.encode(bl);
+  _send_msg(MMDSMigrate::OP_REPORT, job.origin_rank, job.origin_rank,
+            job.origin_job, std::move(bl));
+}
+
+/*
+ * What the reports get in reply, and what goes out at once when the job
+ * changes.  The caller sees to it that what it says is durable by now.  seen:
+ * the origin has written down that the rank was idle at that number.
+ */
+void MigrateQueue::_tell_rank(uint64_t id, mds_rank_t rank, uint64_t seen)
+{
+  using ceph::encode;
+  auto p = jobs.find(id);
+  bool over = p == jobs.end() || !p->second.live();
+  bufferlist bl;
+  encode(over, bl);
+  encode(seen, bl);
+  _send_msg(MMDSMigrate::OP_CONTROL, rank, mds->get_nodeid(), id,
+            std::move(bl));
+}
+
+void MigrateQueue::_tell_ranks(const Job& job)
+{
+  if (job.is_sub() || job.links.empty())
+    return;
+  std::vector<mds_rank_t> ranks;
+  for (const auto& [rank, l] : job.links)
+    ranks.push_back(rank);
+  _flush(new LambdaContext([this, id = job.id, ranks = std::move(ranks)](int) {
+    for (mds_rank_t rank : ranks)
+      _tell_rank(id, rank, 0);
+  }));
+}
+
+void MigrateQueue::_tick_links()
+{
+  const utime_t now = ceph_clock_now();
+  for (auto& [id, job] : jobs) {
+    if (!job.is_sub() && job.live()) {
+      _check_gone_ranks(job);
+      _maybe_finish_job(job);
+    }
+    for (auto& [rank, l] : job.links) {
+      if (now - l.last_sent >= RESEND_INTERVAL)
+        _send_items(job, l, true);
+    }
+    if (job.is_sub() && !job.over)
+      _report(job);
+  }
+}
+
+/*
+ * A rank down:stopped is not coming back soon, and whatever it did not take
+ * goes elsewhere.  What it did take it finished or gave back: it does not stop
+ * before that.
+ */
+void MigrateQueue::_check_gone_ranks(Job& job)
+{
+  for (auto& [rank, l] : job.links) {
+    if (mds->mdsmap->is_in(rank))
+      continue;
+    const uint64_t taken = l.report.accepted;
+    for (auto& [seq, item] : l.out) {
+      _rm(hand_key(job.id, rank, seq));
+      if (seq > taken) {
+        Item i = item;
+        i.where = MDS_RANK_NONE;
+        _queue_item(job, i);
+      }
+    }
+    if (!l.out.empty() || l.sent != taken) {
+      dout(1) << "job " << job.id << ": mds." << rank << " has stopped, took "
+              << taken << " of " << l.sent << dendl;
+      l.out.clear();
+      l.sent = l.acked = l.on_wire = l.durable = taken;
+      l.refused.clear();
+      _save_job(job);
+    }
+  }
+}
+
+// Two jobs on overlapping trees are a problem only if they pull apart.
+std::string MigrateQueue::_clash(const std::string& path, int64_t pool) const
+{
+  auto as_prefix = [](std::string p) {
+    if (p.back() != '/')
+      p += '/';
+    return p;
+  };
+  const std::string prefix = as_prefix(path);
+  for (const auto& [id, job] : jobs) {
+    if (!job.open() || job.pool == pool)
+      continue;
+    const std::string other = as_prefix(job.path);
+    if (prefix.starts_with(other) || other.starts_with(prefix))
+      return "job " + std::to_string(id) + " of " + job.path + " to pool " +
+             job.pool_name + " on mds." + std::to_string(mds->get_nodeid());
+  }
+  return "";
+}
+
+void MigrateQueue::dispatch(const cref_t<Message>& m)
+{
+  // Everything is sent again if it had no effect, by whoever needs it.
+  if (!ready || load_failed)
+    return;
+  const double drop = g_conf().get_val<double>("mds_migrate_inject_drop");
+  if (drop > 0 && drop * RAND_MAX > rand()) {
+    dout(10) << "dropping " << *m << dendl;
+    return;
+  }
+  auto msg = ref_cast<MMDSMigrate>(m);
+  const mds_rank_t from = mds_rank_t(m->get_source().num());
+  try {
+    switch (msg->op) {
+    case MMDSMigrate::OP_ITEMS:
+      _handle_items(from, msg);
+      break;
+    case MMDSMigrate::OP_ACK:
+      _handle_ack(from, msg);
+      break;
+    case MMDSMigrate::OP_REPORT:
+      _handle_report(from, msg);
+      break;
+    case MMDSMigrate::OP_CONTROL:
+      _handle_control(msg);
+      break;
+    default:
+      derr << "bad op in " << *m << dendl;
+    }
+  } catch (const ceph::buffer::error& e) {
+    derr << "bad " << *m << " from mds." << from << ": " << e.what() << dendl;
+  }
+  _kick();
+}
+
+void MigrateQueue::_handle_items(mds_rank_t from,
+                                 const cref_t<MMDSMigrate>& m)
+{
+  using ceph::decode;
+  inodeno_t root;
+  std::string path, pool_name;
+  int64_t pool;
+  uint32_t n;
+  auto p = m->data.cbegin();
+  decode(root, p);
+  decode(path, p);
+  decode(pool, p);
+  decode(pool_name, p);
+  decode(n, p);
+  std::vector<std::pair<uint64_t, Item>> items(n);
+  for (auto& [seq, item] : items) {
+    decode(seq, p);
+    item.decode(p);
+  }
+  const uint64_t last = items.empty() ? 0 : items.back().first;
+
+  const bool origin = m->origin == mds->get_nodeid();
+  Job *job = nullptr;
+  if (origin) {
+    auto q = jobs.find(m->job);
+    if (q == jobs.end() || !q->second.live()) {
+      _send_ack(from, m->origin, m->job, last, 0, "");  // it is over
+      return;
+    }
+    job = &q->second;
+  } else {
+    job = _find_sub(m->origin, m->job);
+    if (job && (job->over || job->state == State::ABORTED)) {
+      _send_ack(from, m->origin, m->job, last, 0, "");
+      return;
+    }
+    if (!job) {
+      const std::string clash = _clash(path, pool);
+      if (!clash.empty()) {
+        dout(5) << "refusing " << *m << ": " << clash << dendl;
+        _send_ack(from, m->origin, m->job, 0, -EBUSY, clash);
+        return;
+      }
+      job = &jobs[++last_id];
+      job->id = last_id;
+      job->root = root;
+      job->path = path;
+      job->pool = pool;
+      job->pool_name = pool_name;
+      job->started = ceph_clock_now();
+      job->origin_rank = m->origin;
+      job->origin_job = m->job;
+      dout(1) << "job " << job->id << ": part of job " << m->job << " of mds."
+              << m->origin << ", " << path << " to pool " << pool_name << dendl;
+    }
+  }
+
+  Link& l = _link(*job, from);
+  bool any = false;
+  for (const auto& [seq, item] : items) {
+    if (seq <= l.accepted)
+      continue;                 // a repeat: its ack got lost
+    any = true;
+    if (origin)
+      _route(*job, item);
+    else
+      _queue_item(*job, item);
+    l.accepted = seq;
+  }
+  if (any && job->state == State::DONE) {
+    job->state = State::RUNNING;  // more came in after it reported
+    job->finished = utime_t();
+  }
+  _save_job(*job);
+  Context *handed = _on_durable(*job);
+  _flush(new LambdaContext(
+    [this, handed, from, o = m->origin, id = m->job, accepted = l.accepted](int) {
+      ceph_assert(g_conf().get_val<int64_t>("mds_kill_file_migrate_at") != 7);
+      _send_ack(from, o, id, accepted, 0, "");
+      if (handed)
+        handed->complete(0);
+    }));
+}
+
+void MigrateQueue::_handle_ack(mds_rank_t from, const cref_t<MMDSMigrate>& m)
+{
+  using ceph::decode;
+  uint64_t accepted;
+  int32_t err;
+  std::string reason;
+  auto p = m->data.cbegin();
+  decode(accepted, p);
+  decode(err, p);
+  decode(reason, p);
+
+  Job *job = nullptr;
+  if (m->origin == mds->get_nodeid()) {
+    auto q = jobs.find(m->job);
+    if (q != jobs.end() && !q->second.is_sub())
+      job = &q->second;
+  } else {
+    job = _find_sub(m->origin, m->job);
+  }
+  if (!job)
+    return;
+  Link& l = _link(*job, from);
+  l.refused = reason;
+  if (!err)
+    l.refused.clear();
+  if (accepted > l.acked) {
+    l.acked = accepted;
+    for (auto q = l.out.begin(); q != l.out.end() && q->first <= accepted; ) {
+      _rm(hand_key(job->id, from, q->first));
+      q = l.out.erase(q);
+    }
+    _save_job(*job);
+    _flush(nullptr);
+  }
+  if (err) {
+    dout(5) << "job " << job->id << ": mds." << from << " refuses: " << reason
+            << dendl;
+    return;                     // the tick tries again
+  }
+  l.on_wire = std::max(l.on_wire, accepted);
+  _send_items(*job, l, false);
+  _maybe_finish_job(*job);
+}
+
+void MigrateQueue::_handle_report(mds_rank_t from,
+                                  const cref_t<MMDSMigrate>& m)
+{
+  Report r;
+  auto p = m->data.cbegin();
+  r.decode(p);
+
+  auto q = jobs.find(m->job);
+  if (q == jobs.end() || q->second.is_sub()) {
+    _tell_rank(m->job, from, 0);
+    return;
+  }
+  Job& job = q->second;
+  Link& l = _link(job, from);
+  // Worth keeping across a failover only when it says the rank is finished.
+  const bool idler = r.idle && (!l.report.idle ||
+                                r.accepted != l.report.accepted);
+  l.report = std::move(r);
+  if (idler)
+    _save_job(job);
+  _maybe_finish_job(job);
+  const uint64_t seen = l.report.idle ? l.report.accepted : 0;
+  _flush(new LambdaContext([this, id = m->job, from, seen](int) {
+    _tell_rank(id, from, seen);
+  }));
+}
+
+void MigrateQueue::_handle_control(const cref_t<MMDSMigrate>& m)
+{
+  using ceph::decode;
+  bool over;
+  uint64_t seen;
+  auto p = m->data.cbegin();
+  decode(over, p);
+  decode(seen, p);
+
+  Job *job = _find_sub(m->origin, m->job);
+  if (!job || job->over)
+    return;
+  if (over) {
+    if (job->live())
+      _abort_job(*job, "the job is over on its origin");
+    job->over = true;
+    _save_job(*job);
+    _report(*job);              // for the record, in case it was an abort
+  }
   _flush(nullptr);
 }

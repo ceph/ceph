@@ -1224,6 +1224,7 @@ bool MDSRank::is_valid_message(const cref_t<Message> &m) {
       type == MSG_MDS_INODEFILECAPS ||
       type == MSG_MDS_SCRUB ||
       type == MSG_MDS_SCRUB_STATS ||
+      type == MSG_MDS_MIGRATE ||
       type == CEPH_MSG_CLIENT_CAPS ||
       type == CEPH_MSG_CLIENT_CAPRELEASE ||
       type == CEPH_MSG_CLIENT_LEASE) {
@@ -1324,6 +1325,11 @@ void MDSRank::handle_message(const cref_t<Message> &m)
     case MSG_MDS_SCRUB_STATS:
       ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MDS);
       scrubstack->dispatch(m);
+      break;
+
+    case MSG_MDS_MIGRATE:
+      ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MDS);
+      migrate_queue->dispatch(m);
       break;
 
     default:
