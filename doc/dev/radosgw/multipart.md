@@ -28,6 +28,8 @@ Rados doesn't provide an existing primitive for current time comparisons, so we'
 
 By rejecting this head object write that commits the multipart upload, we can guarantee that other requests that successfully acquire the lock will be able to detect its completion. Abort should use the same guard for its write operations, at least on the first part objects consulted for completion.
 
+ETIMEDOUT errors from rados_osd_op_timeout need special handling for CompleteMultipartUpload. In other error cases, this multipart lock is released before sending the http response. But because ETIMEDOUT indicates that the osd may still apply the write operation later, at least up to the expiration time we sent, we can't release this lock early and must let it expire naturally. This prevents a later Complete/Abort request from acquiring the lock and racing with that earlier write operation.
+
 #### 2. Detecting Completion
 
 Whenever a Complete/Abort request takes over exclusive access from a previous writer, it must first determine whether the upload already completed or aborted: either that head object still exists, it did exist but was deleted/overwritten, or abort started garbage collecting parts. In any of these cases, treat the request as already completed - just finish cleanup (calling cleanup_orphaned_parts() and deleting the multipart meta object) before returning.
