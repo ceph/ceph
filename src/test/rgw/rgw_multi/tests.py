@@ -15,7 +15,14 @@ from itertools import combinations
 from itertools import zip_longest
 from io import StringIO
 
+import urllib.error
+import urllib.parse
+import urllib.request
+
 import boto3
+from botocore.auth import S3SigV4Auth
+from botocore.awsrequest import AWSRequest
+from botocore.credentials import Credentials as BotoCredentials
 from botocore.exceptions import ClientError
 
 from nose.tools import eq_ as eq
@@ -1627,6 +1634,85 @@ def test_zg_master_zone_delete():
     # contain a dangling master_zone, this must succeed
     rm_zg.delete(master_cluster)
     master_zg.period.update(master_zone, commit=True)
+
+def get_current_period_id(zone):
+    cmd = ['period', 'get-current'] + zone.zone_args()
+    period_json, _ = zone.cluster.admin(cmd, read_only=True)
+    return json.loads(period_json)['current_period']
+
+def check_no_staging_period(zones, expected_period_id):
+    """ for a while, check that every zone stays on the expected period """
+    staging_id = realm.id + ':staging'
+    for _ in range(6):
+        for zone in zones:
+            period_id = get_current_period_id(zone)
+            assert period_id != staging_id, \
+                "zone %s took the uncommitted staging period" % zone.name
+            eq(period_id, expected_period_id)
+        time.sleep(config.checkpoint_delay)
+
+def test_failed_period_commit_not_distributed():
+    zonegroup = realm.master_zonegroup()
+    master_zone = zonegroup.master_zone
+    zones = [z for zg in realm.current_period.zonegroups for z in zg.zones]
+    if len(zones) < 2:
+        raise SkipTest("test_failed_period_commit_not_distributed skipped. Requires 2 or more zones.")
+    realm_meta_checkpoint(realm)
+
+    # 'period update --commit' leaves the staging period behind, one epoch
+    # older than the period it committed
+    zonegroup.period.update(master_zone, commit=True)
+    realm_meta_checkpoint(realm)
+    period_id = get_current_period_id(master_zone)
+
+    # committing that staging period again fails on the epoch check, and must
+    # not hand it to the period pusher
+    _, retcode = zonegroup.period.commit(master_zone, check_retcode=False)
+    eq(retcode, errno.EINVAL)
+
+    check_no_staging_period(zones, period_id)
+    realm_meta_checkpoint(realm)
+
+def push_period(zone, credentials, period_json):
+    """ POST a period to the zone's /admin/realm/period, as the period pusher
+    does, and return the http status """
+    period = json.loads(period_json)
+    query = urllib.parse.urlencode({'period': period['id'], 'epoch': period['epoch']},
+                                   quote_via=urllib.parse.quote)
+    url = '%s/admin/realm/period?%s' % (zone.gateways[0].endpoint(), query)
+    request = AWSRequest(method='POST', url=url, data=period_json.encode())
+    S3SigV4Auth(BotoCredentials(credentials.access_key, credentials.secret),
+                's3', zone.zonegroup.name).add_auth(request)
+    prepared = request.prepare()
+    try:
+        with urllib.request.urlopen(urllib.request.Request(
+                prepared.url, data=prepared.body, headers=dict(prepared.headers),
+                method='POST'), timeout=60) as response:
+            return response.status
+    except urllib.error.HTTPError as e:
+        return e.code
+
+def test_staging_period_push_rejected():
+    zonegroup = realm.master_zonegroup()
+    master_zone = zonegroup.master_zone
+    others = [z for z in zonegroup.zones if z != master_zone]
+    if not others:
+        raise SkipTest("test_staging_period_push_rejected skipped. Requires 2 or more zones in master zonegroup.")
+    zone = others[0]
+    realm_meta_checkpoint(realm)
+    period_id = get_current_period_id(zone)
+
+    # leave a staging period on the master zone
+    master_zone.cluster.admin(['period', 'update'] + master_zone.zone_args())
+    staging_json, _ = master_zone.cluster.admin(
+            ['period', 'get', '--staging'] + master_zone.zone_args(), read_only=True)
+
+    # push it to another zone the way an older gateway's period pusher does
+    system_key = master_zone.data['system_key']
+    admin_creds = Credentials(system_key['access_key'], system_key['secret_key'])
+    eq(push_period(zone, admin_creds, staging_json), 400)
+
+    check_no_staging_period([zone], period_id)
 
 def test_zonegroup_rename():
     master_zg = realm.master_zonegroup()
