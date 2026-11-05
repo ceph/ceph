@@ -36,7 +36,8 @@ static const std::array feature_names
   "client_mds_auth_caps",
   "charmap",
   "blockdiff",
-  "quarantine"
+  "quarantine",
+  "rados_fsync"
 };
 static_assert(feature_names.size() == CEPHFS_FEATURE_MAX + 1);
 
