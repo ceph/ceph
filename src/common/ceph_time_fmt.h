@@ -21,10 +21,12 @@
 // concept helpers for the formatters:
 
 template <typename TimeP>
-concept SteadyTimepoint = TimeP::clock::is_steady;
+concept UnsteadyTimepoint = !TimeP::clock::is_steady &&
+    !std::same_as<typename TimeP::clock, std::chrono::system_clock> &&
+    !std::same_as<typename TimeP::clock, std::chrono::utc_clock>;
 
 template <typename TimeP>
-concept UnsteadyTimepoint = ! TimeP::clock::is_steady;
+concept SteadyTimepoint = TimeP::clock::is_steady;
 
 namespace fmt {
 template <UnsteadyTimepoint T>
