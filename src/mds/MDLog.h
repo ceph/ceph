@@ -307,6 +307,7 @@ private:
   void _maybe_expired(LogSegmentRef const& ls, int op_prio);
   void _expired(LogSegmentRef const& ls);
   void _trim_expired_segments(auto& locker, MDSContext* ctx=nullptr);
+  uint64_t count_removable_expired_segments() const;
   void write_head(MDSContext *onfinish);
 
   void trim();

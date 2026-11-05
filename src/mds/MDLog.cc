@@ -757,6 +757,10 @@ void MDLog::trim()
 
   unsigned new_expiring_segments = 0;
 
+  // Expired segments that the next removal pass will drop. Expired segments
+  // beyond that still occupy the journal, so they are not subtracted below.
+  const uint64_t removable_expired = count_removable_expired_segments();
+
   if (pre_segments_size > 0) {
     ceph_assert(segments.size() >= pre_segments_size);
   }
@@ -782,7 +786,10 @@ void MDLog::trim()
       break;
     }
 
-    unsigned num_remaining_segments = (segments.size() - expired_segments.size() - expiring_segments.size());
+    // Expired segments the next removal pass will drop are not counted, since
+    // they will leave the journal. Expired segments behind an unexpired one, or
+    // behind a major segment the walk cannot reach, still occupy the journal.
+    uint64_t num_remaining_segments = segments.size() - expiring_segments.size() - removable_expired;
     dout(10) << __func__ << ": new_expiring_segments=" << new_expiring_segments
 	     << ", num_remaining_segments=" << num_remaining_segments
 	     << ", max_segments=" << max_segments << dendl;
@@ -940,6 +947,27 @@ void MDLog::_maybe_expired(LogSegmentRef const& ls, int op_prio)
 
   dout(10) << "_maybe_expired " << *ls << dendl;
   try_expire(ls, op_prio);
+}
+
+// Number of expired segments that the next _trim_expired_segments() pass will
+// remove. That pass walks the segments from the oldest. At a major segment it
+// removes everything before it, provided at least one segment before it was
+// expired. The walk stops at the first segment that is not expired. This
+// follows the same order, so the count matches what the walk removes.
+uint64_t MDLog::count_removable_expired_segments() const
+{
+  uint64_t seen = 0;       // expired segments passed so far
+  uint64_t removable = 0;
+  for (const auto& [seq, ls] : segments) {
+    if (major_segments.count(seq) && seen > 0) {
+      removable = seen;
+    }
+    if (!expired_segments.count(ls)) {
+      break;
+    }
+    seen++;
+  }
+  return removable;
 }
 
 void MDLog::_trim_expired_segments(auto& locker, MDSContext* ctx)
