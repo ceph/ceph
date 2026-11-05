@@ -3163,6 +3163,31 @@ void Client::_handle_full_flag(int64_t pool)
   }
 }
 
+/*
+ * Drop all buffered dirty data after this client has been blocklisted,
+ * before it can write to the OSDs again (reconnecting with a new address,
+ * or its blocklist entry going away).
+ *
+ * The writes the objecter cancelled with -EBLOCKLISTED leave their buffers
+ * dirty again in the ObjectCacher, and caps the client lost when its
+ * sessions were reset are not always followed by a purge (a session closed
+ * before we learn we are blocklisted only releases clean data). Flushing
+ * that data later would overwrite whatever other clients wrote after the
+ * eviction. Like the kernel client's recover_session=clean, discard it and
+ * report the loss: open handles get -EIO from fsync() and close().
+ */
+void Client::_discard_dirty_data_after_blocklist()
+{
+  for (auto& [vino, inode] : inode_map) {
+    if (inode->oset.dirty_or_tx) {
+      lderr(cct) << __func__ << ": discarding dirty data of " << *inode
+                 << " written before the blocklist" << dendl;
+      objectcacher->purge_set(&inode->oset);
+      inode->set_async_err(-EIO);
+    }
+  }
+}
+
 void Client::handle_osd_map(const MConstRef<MOSDMap>& m)
 {
   std::scoped_lock cl(client_lock);
@@ -3193,6 +3218,10 @@ void Client::handle_osd_map(const MConstRef<MOSDMap>& m)
     // Handle case where we were blocklisted but no longer are
     blocklisted = objecter->with_osdmap([myaddrs](const OSDMap &o){
         return o.is_blocklisted(myaddrs);});
+    // The entry was removed or expired: the OSDs accept this address
+    // again, so drop what we buffered while we were fenced off.
+    if (!blocklisted)
+      _discard_dirty_data_after_blocklist();
   }
 
   // Always subscribe to next osdmap for blocklisted client
@@ -7602,6 +7631,10 @@ void Client::tick()
   if (blocklisted && (is_mounted() || is_unmounting()) &&
       last_auto_reconnect + std::chrono::seconds(30 * 60) < now &&
       cct->_conf.get_val<bool>("client_reconnect_stale")) {
+    // Data buffered before the blocklist is not ours to write any more:
+    // other clients may have changed the files since. Drop it before we
+    // come back with an address the OSDs accept.
+    _discard_dirty_data_after_blocklist();
     messenger->client_reset();
     fd_gen++; // invalidate open files
     blocklisted = false;

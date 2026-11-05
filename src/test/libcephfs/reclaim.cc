@@ -17,6 +17,7 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <signal.h>
 #include <sys/stat.h>
 #include <dirent.h>
 #include <sys/uio.h>
@@ -34,6 +35,8 @@
 #include <vector>
 #include <thread>
 #include <atomic>
+#include <chrono>
+#include <future>
 
 #define	CEPHFS_RECLAIM_TIMEOUT		60
 
@@ -252,6 +255,207 @@ TEST(LibCephFS, ReclaimResetAfterMDSFailover) {
 
   ceph_unmount(cmount);
   ceph_release(cmount);
+}
+
+/* Evict a client session from MDS rank 0 by its global id. */
+static int evict_session(struct ceph_mount_info *admin, uint64_t id)
+{
+  std::string cmd = "{\"prefix\": \"client evict\", \"filters\": [\"id=" +
+                    std::to_string(id) + "\"]}";
+  const char *cmdv[1] = {cmd.c_str()};
+  char *outbuf = nullptr, *outs = nullptr;
+  size_t outbuf_len = 0, outs_len = 0;
+  int ret = ceph_mds_command(admin, "0", cmdv, 1, nullptr, 0,
+                             &outbuf, &outbuf_len, &outs, &outs_len);
+  if (outbuf) ceph_buffer_free(outbuf);
+  if (outs) ceph_buffer_free(outs);
+  return ret;
+}
+
+/* Wait until the client can create files again, i.e. it has reconnected. */
+static bool wait_reconnected(struct ceph_mount_info *cmount,
+                             const std::string& dir, int timeout)
+{
+  for (int i = 0; i < timeout; ++i) {
+    std::string path = dir + "/probe" + std::to_string(i);
+    auto f = std::async(std::launch::async, [&] {
+      return ceph_open(cmount, path.c_str(), O_CREAT|O_EXCL|O_WRONLY, 0644);
+    });
+    if (f.wait_for(std::chrono::seconds(timeout - i)) != std::future_status::ready)
+      return false;
+    int fd = f.get();
+    if (fd >= 0) {
+      ceph_close(cmount, fd);
+      return true;
+    }
+    sleep(1);
+  }
+  return false;
+}
+
+static void write_all(int fd, const void *buf, size_t len)
+{
+  ASSERT_EQ(write(fd, buf, len), (ssize_t)len);
+}
+
+static void read_all(int fd, void *buf, size_t len)
+{
+  ASSERT_EQ(read(fd, buf, len), (ssize_t)len);
+}
+
+static const size_t discard_dirty_len = 65536;
+
+/*
+ * Client A of ReconnectStaleDiscardsDirtyData, run in a process of its
+ * own (a fork would share the parent's messenger nonce). Skipped unless
+ * started by that test, which passes the pipes and directory in the
+ * environment. A buffers a write, reports its id, waits to be told to go
+ * on, then reports whether it reconnected and what fsync() returned.
+ */
+TEST(LibCephFS, ReconnectStaleDiscardsDirtyDataClientA) {
+  const char *fds = getenv("CEPHFS_TEST_DISCARD_DIRTY_FDS");
+  const char *dir = getenv("CEPHFS_TEST_DISCARD_DIRTY_DIR");
+  if (!fds || !dir) {
+    GTEST_SKIP() << "only run by ReconnectStaleDiscardsDirtyData";
+  }
+  int rfd, wfd;
+  ASSERT_EQ(sscanf(fds, "%d,%d", &rfd, &wfd), 2);
+  std::string path = std::string(dir) + "/f";
+
+  struct ceph_mount_info *a;
+  ASSERT_EQ(ceph_create(&a, nullptr), 0);
+  ASSERT_EQ(ceph_conf_read_file(a, nullptr), 0);
+  ASSERT_EQ(ceph_conf_parse_env(a, nullptr), 0);
+  ASSERT_EQ(ceph_conf_set(a, "client_reconnect_stale", "true"), 0);
+  // keep the write in A's cache until the eviction
+  ASSERT_EQ(ceph_conf_set(a, "client_oc_max_dirty_age", "600"), 0);
+  ASSERT_EQ(ceph_mount(a, "/"), 0);
+  ASSERT_EQ(ceph_mkdir(a, dir, 0755), 0);
+
+  std::string olddata(discard_dirty_len, 'A');
+  int fd = ceph_open(a, path.c_str(), O_CREAT|O_RDWR, 0644);
+  ASSERT_GE(fd, 0);
+  ASSERT_EQ(ceph_write(a, fd, olddata.data(), discard_dirty_len, 0),
+            (int)discard_dirty_len);
+  uint64_t id = ceph_get_instance_id(a);
+  write_all(wfd, &id, sizeof(id));
+
+  char go;
+  read_all(rfd, &go, 1);
+  int64_t res[2];
+  res[0] = wait_reconnected(a, dir, 60);
+  res[1] = ceph_fsync(a, fd, 0);
+  write_all(wfd, res, sizeof(res));
+  ceph_close(a, fd);
+  ceph_unmount(a);
+  ceph_release(a);
+}
+
+/*
+ * A client that reconnects on its own after being blocklisted
+ * (client_reconnect_stale) must not write data it buffered before the
+ * eviction: another client may have written the file since. The stale
+ * data is discarded, and fsync() of the old handle reports EIO.
+ *
+ * Client A is stopped (SIGSTOP) while it is evicted, as a client is that
+ * hangs or is partitioned: when it resumes it sees its MDS session reset
+ * before it learns that it is blocklisted, the order in which the dirty
+ * data used to survive.
+ *
+ * The first automatic reconnect of a client is only allowed once the
+ * host's monotonic clock is past 30 minutes (see
+ * client_reconnect_stale_interval); on a freshly booted host this test
+ * is skipped.
+ */
+TEST(LibCephFS, ReconnectStaleDiscardsDirtyData) {
+  if (getenv("CEPHFS_TEST_DISCARD_DIRTY_FDS")) {
+    GTEST_SKIP() << "running as client A";
+  }
+  struct timespec ts;
+  ASSERT_EQ(clock_gettime(CLOCK_MONOTONIC, &ts), 0);
+  if (ts.tv_sec < 31 * 60) {
+    GTEST_SKIP() << "host up for less than 30 minutes";
+  }
+
+  const size_t len = discard_dirty_len;
+  static int run = 0;  // --gtest_repeat
+  std::string dir = "reconnect_discard_dirty." + std::to_string(getpid()) +
+                    "." + std::to_string(run++);
+  std::string path = dir + "/f";
+
+  int to_child[2], to_parent[2];
+  ASSERT_EQ(pipe(to_child), 0);
+  ASSERT_EQ(pipe(to_parent), 0);
+
+  pid_t pid = fork();
+  ASSERT_GE(pid, 0);
+  if (pid == 0) {
+    close(to_child[1]);
+    close(to_parent[0]);
+    std::string fds = std::to_string(to_child[0]) + "," +
+                      std::to_string(to_parent[1]);
+    setenv("CEPHFS_TEST_DISCARD_DIRTY_FDS", fds.c_str(), 1);
+    setenv("CEPHFS_TEST_DISCARD_DIRTY_DIR", dir.c_str(), 1);
+    const char *argv[] = {
+      "ceph_test_libcephfs_reclaim",
+      "--gtest_filter=LibCephFS.ReconnectStaleDiscardsDirtyDataClientA",
+      nullptr};
+    execv("/proc/self/exe", const_cast<char **>(argv));
+    _exit(127);
+  }
+  close(to_child[0]);
+  close(to_parent[1]);
+
+  uint64_t id;
+  read_all(to_parent[0], &id, sizeof(id));
+
+  struct ceph_mount_info *b;
+  ASSERT_EQ(ceph_create(&b, nullptr), 0);
+  ASSERT_EQ(ceph_conf_read_file(b, nullptr), 0);
+  ASSERT_EQ(ceph_conf_parse_env(b, nullptr), 0);
+  ASSERT_EQ(ceph_mount(b, "/"), 0);
+
+  // A is stopped and evicted (and blocklisted); B writes the same range.
+  ASSERT_EQ(kill(pid, SIGSTOP), 0);
+  ASSERT_EQ(evict_session(b, id), 0);
+  std::string newdata(len, 'B');
+  int fdb = ceph_open(b, path.c_str(), O_WRONLY, 0);
+  ASSERT_GE(fdb, 0);
+  ASSERT_EQ(ceph_write(b, fdb, newdata.data(), len, 0), (int)len);
+  ASSERT_EQ(ceph_fsync(b, fdb, 0), 0);
+  ASSERT_EQ(ceph_close(b, fdb), 0);
+
+  // A resumes, reconnects and flushes its old handle.
+  ASSERT_EQ(kill(pid, SIGCONT), 0);
+  write_all(to_child[1], "g", 1);
+  int64_t res[2];
+  read_all(to_parent[0], res, sizeof(res));
+  int status;
+  ASSERT_EQ(waitpid(pid, &status, 0), pid);
+  ASSERT_TRUE(WIFEXITED(status) && WEXITSTATUS(status) == 0) << status;
+  ASSERT_EQ(res[0], 1) << "A did not reconnect";
+  EXPECT_EQ(res[1], -EIO) << "fsync of A's old handle";
+
+  ceph_unmount(b);
+  ceph_release(b);
+
+  // Read back through a new client: B's cache would still show B's data
+  // even if A's write had reached the OSDs (A wrote without caps, so
+  // nothing invalidated it).
+  struct ceph_mount_info *c;
+  ASSERT_EQ(ceph_create(&c, nullptr), 0);
+  ASSERT_EQ(ceph_conf_read_file(c, nullptr), 0);
+  ASSERT_EQ(ceph_conf_parse_env(c, nullptr), 0);
+  ASSERT_EQ(ceph_mount(c, "/"), 0);
+  std::string got(len, '\0');
+  int fdc = ceph_open(c, path.c_str(), O_RDONLY, 0);
+  ASSERT_GE(fdc, 0);
+  ASSERT_EQ(ceph_read(c, fdc, got.data(), len, 0), (int)len);
+  ceph_close(c, fdc);
+  EXPECT_TRUE(got == newdata) << "stale data from the evicted client: "
+                              << got.substr(0, 16) << "...";
+  ceph_unmount(c);
+  ceph_release(c);
 }
 
 static int update_root_mode()
