@@ -6,6 +6,7 @@
 #include <map>
 #include <optional>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 #include <boost/algorithm/string/predicate.hpp>
@@ -54,6 +55,18 @@ using cert_digest_fn = std::function<std::string(const std::string&)>;
 // the caller so the policy can be tested without a clock.
 class JWKSCache {
  public:
+  struct Key {
+    std::string account;
+    std::string provider_namespace;
+    std::string issuer;
+
+    bool operator<(const Key& other) const
+    {
+      return std::tie(account, provider_namespace, issuer) <
+             std::tie(other.account, other.provider_namespace, other.issuer);
+    }
+  };
+
   using clock = ceph::coarse_mono_clock;
   using time_point = clock::time_point;
 
@@ -61,20 +74,22 @@ class JWKSCache {
 
   // Reuse only while the endpoint certificate and the token key's stored
   // x5c thumbprints are still registered, and the entry is within TTL.
-  std::optional<std::string> lookup(const std::string& iss,
+  std::optional<std::string> lookup(const Key& cache_key,
                                     const std::vector<std::string>& thumbprints,
                                     const std::optional<std::string>& token_kid,
                                     std::chrono::seconds ttl,
-                                    time_point now) const
+                                    time_point now,
+                                    bool verify_endpoint) const
   {
     std::lock_guard l{lock};
-    auto it = entries.find(iss);
+    auto it = entries.find(cache_key);
     if (it == entries.end() || now - it->second.stored_at >= ttl) {
       return std::nullopt;
     }
     const auto& entry = it->second;
-    if (!entry.cert_thumbprint.empty() &&
-        !is_registered(entry.cert_thumbprint, thumbprints)) {
+    if (verify_endpoint &&
+        (entry.cert_thumbprint.empty() ||
+         !is_registered(entry.cert_thumbprint, thumbprints))) {
       return std::nullopt;
     }
     if (!token_kid) {
@@ -92,7 +107,7 @@ class JWKSCache {
 
   // cert_thumbprint: the endpoint certificate seen at fetch time, empty if
   // the endpoint was not verified. digest computes each x5c thumbprint.
-  void store(const std::string& iss,
+  void store(const Key& cache_key,
              std::string cert_thumbprint,
              std::string jwks,
              time_point now,
@@ -111,11 +126,11 @@ class JWKSCache {
       }
     }
     std::lock_guard l{lock};
-    if (entries.size() >= max_entries && entries.find(iss) == entries.end()) {
+    if (entries.size() >= max_entries && entries.find(cache_key) == entries.end()) {
       // issuers are registered providers, this is not expected in practice
       entries.clear();
     }
-    entries[iss] = Entry{std::move(jwks), std::move(keys),
+    entries[cache_key] = Entry{std::move(jwks), std::move(keys),
                          std::move(cert_thumbprint), now};
   }
 
@@ -163,7 +178,7 @@ class JWKSCache {
 
   const size_t max_entries;
   mutable ceph::mutex lock = ceph::make_mutex("rgw::auth::sts::JWKSCache");
-  std::map<std::string, Entry> entries;
+  std::map<Key, Entry> entries;
 };
 
 } // namespace rgw::auth::sts::detail

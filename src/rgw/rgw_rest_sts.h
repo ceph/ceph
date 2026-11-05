@@ -68,6 +68,7 @@ class WebTokenEngine : public rgw::auth::Engine {
   std::string get_jwks(const DoutPrefixProvider* dpp, const std::string& iss,
                        const std::vector<std::string>& thumbprints,
                        const std::optional<std::string>& token_kid,
+                       const detail::JWKSCache::Key& cache_key,
                        optional_yield y) const;
 
   std::tuple<boost::optional<WebTokenEngine::token_t>, boost::optional<WebTokenEngine::principal_tags_t>, bool>
@@ -75,7 +76,7 @@ class WebTokenEngine : public rgw::auth::Engine {
 
  bool validate_signature_using_n_e(const DoutPrefixProvider* dpp, const jwt::decoded_jwt& decoded, const std::string &algorithm, const std::string& n, const std::string& e) const;
 
-  void validate_signature (const DoutPrefixProvider* dpp, const jwt::decoded_jwt& decoded, const std::string& algorithm, const std::string& iss, const std::vector<std::string>& thumbprints, optional_yield y) const;
+  void validate_signature (const DoutPrefixProvider* dpp, const jwt::decoded_jwt& decoded, const std::string& algorithm, const std::string& iss, const std::vector<std::string>& thumbprints, const detail::JWKSCache::Key& cache_key, optional_yield y) const;
 
   result_t authenticate(const DoutPrefixProvider* dpp,
                         const std::string& token,

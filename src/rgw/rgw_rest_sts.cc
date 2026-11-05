@@ -314,7 +314,9 @@ WebTokenEngine::get_from_jwt(const DoutPrefixProvider* dpp, const std::string& t
     if (decoded.has_algorithm()) {
       auto& algorithm = decoded.get_algorithm();
       try {
-        validate_signature(dpp, decoded, algorithm, iss, provider.thumbprints, y);
+        const detail::JWKSCache::Key cache_key{
+            get_role_tenant(role_arn), provider.tenant, iss};
+        validate_signature(dpp, decoded, algorithm, iss, provider.thumbprints, cache_key, y);
       } catch (const std::exception& e) {
         throw std::system_error(EACCES, std::system_category());
       }
@@ -670,7 +672,7 @@ WebTokenEngine::fetch_jwks(const DoutPrefixProvider* dpp, const string& iss, con
 }
 
 std::string
-WebTokenEngine::get_jwks(const DoutPrefixProvider* dpp, const string& iss, const vector<string>& thumbprints, const std::optional<std::string>& token_kid, optional_yield y) const
+WebTokenEngine::get_jwks(const DoutPrefixProvider* dpp, const string& iss, const vector<string>& thumbprints, const std::optional<std::string>& token_kid, const detail::JWKSCache::Key& cache_key, optional_yield y) const
 {
   const std::chrono::seconds ttl{cct->_conf.get_val<uint64_t>("rgw_sts_jwks_cache_ttl")};
   if (ttl.count() == 0) {
@@ -678,8 +680,12 @@ WebTokenEngine::get_jwks(const DoutPrefixProvider* dpp, const string& iss, const
     return fetch_jwks(dpp, iss, thumbprints, y).document;
   }
 
+  const bool verify_endpoint =
+      cct->_conf.get_val<bool>("rgw_enable_jwks_url_verification") &&
+      !thumbprints.empty();
   const auto now = detail::JWKSCache::clock::now();
-  if (auto cached = jwks_cache.lookup(iss, thumbprints, token_kid, ttl, now)) {
+  if (auto cached = jwks_cache.lookup(cache_key, thumbprints, token_kid, ttl, now,
+                                      verify_endpoint)) {
     ldpp_dout(dpp, 20) << "Using cached JWKS for issuer " << iss << dendl;
     return *cached;
   }
@@ -695,20 +701,20 @@ WebTokenEngine::get_jwks(const DoutPrefixProvider* dpp, const string& iss, const
         return get_cert_thumbprint("-----BEGIN CERTIFICATE-----\n" + x5c + "\n-----END CERTIFICATE-----");
       };
     }
-    jwks_cache.store(iss, std::move(fetched.cert_thumbprint), fetched.document, now, digest);
+    jwks_cache.store(cache_key, std::move(fetched.cert_thumbprint), fetched.document, now, digest);
   }
   return fetched.document;
 }
 
 void
-WebTokenEngine::validate_signature(const DoutPrefixProvider* dpp, const jwt::decoded_jwt& decoded, const string& algorithm, const string& iss, const vector<string>& thumbprints, optional_yield y) const
+WebTokenEngine::validate_signature(const DoutPrefixProvider* dpp, const jwt::decoded_jwt& decoded, const string& algorithm, const string& iss, const vector<string>& thumbprints, const detail::JWKSCache::Key& cache_key, optional_yield y) const
 {
   if (algorithm != "HS256" && algorithm != "HS384" && algorithm != "HS512") {
     std::optional<std::string> token_kid;
     if (decoded.has_key_id()) {
       token_kid = decoded.get_key_id();
     }
-    const auto jwks = get_jwks(dpp, iss, thumbprints, token_kid, y);
+    const auto jwks = get_jwks(dpp, iss, thumbprints, token_kid, cache_key, y);
 
     JSONParser parser;
     if (parser.parse(jwks.c_str(), jwks.length())) {
