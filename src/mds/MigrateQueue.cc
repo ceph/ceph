@@ -274,6 +274,9 @@ std::string MigrateQueue::dir_key(uint64_t id, inodeno_t ino)
 
 void MigrateQueue::load()
 {
+  if (loading)
+    return;
+  loading = true;
   dout(10) << __func__ << " " << oid << dendl;
   _load_next("");
 }
