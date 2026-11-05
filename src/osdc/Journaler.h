@@ -59,6 +59,7 @@
 #define CEPH_JOURNALER_H
 
 #include <list>
+#include <vector>
 #include <map>
 
 #include "Filer.h"
@@ -196,9 +197,9 @@ public:
          << std::dec;
     }
 
-    static std::list<Header> generate_test_instances()
+    static std::vector<Header> generate_test_instances()
     {
-      std::list<Header> ls;
+      std::vector<Header> ls;
 
       ls.push_back(Header());
 
