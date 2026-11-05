@@ -2012,11 +2012,16 @@ std::optional<ECCommon::read_request_t> prepare_sparse_read_request(
     // the same region from disk, making it safe to zero-pad any sparse holes 
     // uniformly during decode.
     shard_extent_set_t uniform_want(sinfo.get_k_plus_m());
+    const uint64_t shard_limit = sinfo.object_size_to_shard_size(
+        object_size, sinfo.get_shard(raw_shard_id_t(0)));
     for (const shard_id_t shard : sinfo.get_data_shards()) {
       for (const auto &read : to_read) {
         auto &&[off, len] = sinfo.chunk_aligned_ro_range_to_shard_ro_range(
             read.offset, read.size);
-        uniform_want[shard].union_insert(off, len);
+        if (off >= shard_limit) {
+          continue;
+        }
+        uniform_want[shard].union_insert(off, std::min(len, shard_limit - off));
       }
     }
     req.shard_want_to_read = std::move(uniform_want);
