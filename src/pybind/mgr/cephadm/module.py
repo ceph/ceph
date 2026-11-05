@@ -2968,10 +2968,19 @@ Then run the following:
     def get_nvme_device_info(self, host: str, device_path: str) -> Dict[str, Any]:
         """Describe one NVMe namespace on a host.
 
-        Returns the PCI ids, the namespace id and both Identify structures as
-        hex, exactly as `cephadm nvme-info` reported them. Nothing is
-        interpreted here; a caller that needs a field reads it out of the
-        Identify data itself.
+        Two shapes come back, and a caller must look at ``present`` before
+        reading anything else:
+
+        - the namespace is there: ``present`` is True, alongside the PCI ids,
+          the namespace id and both Identify structures as hex, exactly as
+          `cephadm nvme-info` reported them;
+        - the host has no such namespace: ``{'device': ..., 'present': False}``
+          and nothing more, so reading ``nsid`` or ``identify_controller``
+          raises KeyError. That is a fact about the host rather than a failed
+          probe -- every real failure raises instead.
+
+        Nothing is interpreted here; a caller that needs a field reads it out
+        of the Identify data itself.
 
         :param host: (str) host name
         :param device_path: (str) NVMe namespace path, e.g. /dev/nvme0n1

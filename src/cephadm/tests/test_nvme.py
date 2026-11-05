@@ -97,6 +97,41 @@ class TestDevicePathValidation:
         assert ioctl.commands == []
 
 
+class TestAbsentNamespace:
+    """A namespace the host does not have is a fact, not a failed probe.
+
+    The caller reads an error as "something is broken" and aborts OSD
+    creation; it must be able to tell that apart from a device that simply
+    is not there, which no OSD can be created on anyway.
+    """
+
+    def test_an_absent_namespace_reports_not_present(self, cephadm_fs):
+        info = nvme.describe_device('/dev/nvme9n9')
+        assert info['present'] is False
+        assert info['device'] == '/dev/nvme9n9'
+
+    def test_an_absent_namespace_is_not_an_error(self, cephadm_fs):
+        # No raise: the distinction is the point.
+        nvme.describe_device('/dev/nvme9n9')
+
+    def test_an_absent_namespace_issues_no_commands(self, cephadm_fs):
+        ioctl = FakeIoctl()
+        with mock.patch('cephadmlib.nvme.fcntl.ioctl', ioctl):
+            nvme.describe_device('/dev/nvme9n9')
+        assert ioctl.commands == []
+
+    def test_a_present_namespace_says_so(self, drive):
+        assert describe(FakeIoctl())['present'] is True
+
+    def test_a_present_namespace_with_unreadable_sysfs_still_errors(self, cephadm_fs):
+        # The block directory exists, so the device is there; failing to read
+        # its ids is a real fault and must not be reported as absent.
+        cephadm_fs.create_file('/sys/class/block/nvme0n1/uevent', contents='x')
+        cephadm_fs.create_file(DEVICE, contents='')
+        with pytest.raises(Error):
+            describe(FakeIoctl())
+
+
 class TestIdentifyCommands:
     def test_the_passthru_struct_is_the_kernel_size(self):
         assert struct.calcsize(nvme._PASSTHRU_FORMAT) == 72
@@ -192,7 +227,7 @@ class TestOutput:
         # not mean another change here.
         info = describe(FakeIoctl())
         assert set(info) == {
-            'device', 'pci_vendor', 'pci_device', 'nsid',
+            'device', 'present', 'pci_vendor', 'pci_device', 'nsid',
             'identify_controller', 'identify_namespace',
         }
 
@@ -213,11 +248,6 @@ class TestPciIds:
 
     def test_a_namespace_with_no_pci_ids_is_an_error(self, cephadm_fs):
         cephadm_fs.create_file('/sys/class/block/nvme0n1/nsid', contents='1\n')
-        cephadm_fs.create_file(DEVICE, contents='')
-        with pytest.raises(Error):
-            describe(FakeIoctl())
-
-    def test_an_unknown_namespace_is_an_error(self, cephadm_fs):
         cephadm_fs.create_file(DEVICE, contents='')
         with pytest.raises(Error):
             describe(FakeIoctl())
