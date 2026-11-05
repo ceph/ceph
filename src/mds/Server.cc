@@ -12723,11 +12723,11 @@ bool Server::build_snap_diff(
 
   diff_mask = diff_mask != 0 ? diff_mask : CEPH_SNAPDIFF_MTIME; // to preserve backward compatibility with the original impl.
 
-  // Revoke every pending snapflush in this fragment, then scan once.
-  // Parking the request on the first inode restarts that scan after each
-  // flush, so a directory of newly snapped files is one cap round trip and
-  // one full walk per file.
-  auto await_pending_snapflushes = [&]() -> bool {
+  // Batch pending snapflushes from the current entry to the end of the
+  // fragment when the scan encounters an unreadable filelock. Replies that
+  // need no snapflush can then stop at their page boundary without walking
+  // the rest of the fragment again.
+  auto await_pending_snapflushes = [&](auto start) -> bool {
     auto file_rdlock_target = [&](CInode *in) -> SimpleLock* {
       SimpleLock *lock = &in->filelock;
       // A snap inode's filelock in LOCK_SNAP_SYNC does not gather client caps.
@@ -12749,7 +12749,7 @@ bool Server::build_snap_diff(
     std::vector<SimpleLock*> pending_locks;
     int visited = 0;
     const int hb_grace = mds->heartbeat_reset_grace();
-    for (auto jit = it; jit != dir->end(); ++jit) {
+    for (auto jit = start; jit != dir->end(); ++jit) {
       if (hb_grace > 0 && (++visited % hb_grace) == 0) {
 	mds->heartbeat_reset();
       }
@@ -12758,7 +12758,8 @@ bool Server::build_snap_diff(
       if (dn->state_test(CDentry::STATE_PURGING)) {
 	continue;
       }
-      if (dn->last < snapid_prev || dn->first > snapid) {
+      if (dn->last < snapid_prev || dn->first > snapid ||
+	  (snapid_prev < dn->first && dn->last < snapid)) {
 	continue;
       }
 
@@ -12840,11 +12841,8 @@ bool Server::build_snap_diff(
     return false;
   };
 
-  if (!await_pending_snapflushes()) {
-    return false;
-  }
-
   while(it != dir->end()) {
+    auto current = it;
     CDentry* dn = it->second;
     dout(20) << __func__ << " " << it->first << "->" << *dn << dendl;
     ++it;
@@ -12926,6 +12924,17 @@ bool Server::build_snap_diff(
 	break;
       }
     } else {
+      if (snapid_prev < dn->first && snapid > dn->last) {
+	dout(20) << __func__ << " skipping inner modification " << dn->get_name() << " "
+	  << dn->first << "/" << dn->last << dendl;
+	continue;
+      }
+
+      if (snapflush_pending(in) && !in->filelock.can_rdlock(-1) &&
+	  !await_pending_snapflushes(current)) {
+	return false;
+      }
+
       if (snapid_prev >= dn->first && snapid <= dn->last) {
         // A multiversion inode can be COWed without COWing its dentry.
         // Do not infer that the inode is unchanged solely because this
@@ -13004,10 +13013,6 @@ bool Server::build_snap_diff(
         if (!add_result_cb(dn, in, true))
           break;
         continue;
-      } else if (snapid_prev < dn->first && snapid > dn->last) {
-	dout(20) << __func__ << " skipping inner modification " << dn->get_name() << " "
-	  << dn->first << "/" << dn->last << dendl;
-	continue;
       }
       if (before.valid() && before.dn->get_name() != dn->get_name()) {
         if (!insert_deleted(before)) {
