@@ -809,11 +809,18 @@ int PyModule::load_subclass_of(const char* base_class, PyObject** py_class)
 PyModule::~PyModule()
 {
   if (pMyThreadState.ts != nullptr) {
-    Gil gil(pMyThreadState, true);
-    Py_XDECREF(pClass);
-    Py_XDECREF(pStandbyClass);
-    Py_XDECREF(pPickleModule);
     if (use_main_interpreter) {
+      // Main interpreter thread state is borrowed; decref via temporary thread state.
+      Gil gil(pMyThreadState, true);
+      Py_XDECREF(pClass);
+      Py_XDECREF(pStandbyClass);
+      Py_XDECREF(pPickleModule);
+    } else {
+      // Py_EndInterpreter() requires pMyThreadState.ts to be the current thread state.
+      PyEval_RestoreThread(pMyThreadState.ts);
+      Py_XDECREF(pClass);
+      Py_XDECREF(pStandbyClass);
+      Py_XDECREF(pPickleModule);
       Py_EndInterpreter(pMyThreadState.ts);
     }
     pMyThreadState.ts = nullptr;
