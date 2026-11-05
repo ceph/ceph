@@ -16845,22 +16845,8 @@ int BlueStore::invalidate_allocation_file_on_bluefs()
     return 0;
   }
 
-
   ret = bluefs->open_for_write(allocator_dir, allocator_file, &p_handle, true);
-  if (ret != 0) {
-    derr << __func__ << "::NCB:: Failed open_for_write with error-code "
-         << ret << dendl;
-    return -1;
-  }
-
-  dout(5) << "invalidate using bluefs->truncate(p_handle, 0)" << dendl;
-  ret = bluefs->truncate(p_handle, 0);
-  if (ret != 0) {
-    derr << __func__ << "::NCB:: Failed truncaste with error-code "
-         << ret << dendl;
-    bluefs->close_writer(p_handle);
-    return -1;
-  }
+  ceph_assert(ret == 0 && "failed to clear allocator file");
 
   bluefs->fsync(p_handle);
   bluefs->close_writer(p_handle);
@@ -16952,11 +16938,9 @@ int BlueStore::store_allocator(Allocator* src_allocator)
     }
   }
   bluefs->compact_log();
-  // reuse previous file-allocation if exists
-  ret = bluefs->stat(allocator_dir, allocator_file, nullptr, nullptr);
-  bool overwrite_file = (ret == 0);
+
   BlueFS::FileWriter *p_handle = nullptr;
-  ret = bluefs->open_for_write(allocator_dir, allocator_file, &p_handle, overwrite_file);
+  ret = bluefs->open_for_write(allocator_dir, allocator_file, &p_handle, true);
   if (ret != 0) {
     derr <<  __func__ << "Failed open_for_write with error-code " << ret << dendl;
     return -1;

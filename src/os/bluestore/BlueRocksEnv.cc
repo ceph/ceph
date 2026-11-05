@@ -401,7 +401,7 @@ rocksdb::Status BlueRocksEnv::ReuseWritableFile(
   int r = fs->rename(old_dir, old_file, new_dir, new_file);
   if (r < 0)
     return err_to_status(r);
-
+  // rename OK => new_dir/new_file exists
   BlueFS::FileWriter *h;
   r = fs->open_for_write(new_dir, new_file, &h, true);
   if (r < 0)
