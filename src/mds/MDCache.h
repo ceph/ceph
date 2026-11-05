@@ -934,6 +934,7 @@ private:
 
   // truncate
   void truncate_inode(CInode *in, LogSegmentRef const& ls);
+  void purge_redirects(CInode *in, uint64_t size);
   void _truncate_inode(CInode *in, LogSegmentRef const& ls);
   void truncate_inode_finish(CInode *in, LogSegmentRef const& ls);
   void truncate_inode_write_finish(CInode *in, LogSegmentRef const& ls,

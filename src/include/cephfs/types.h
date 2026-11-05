@@ -781,6 +781,7 @@ struct inode_t {
 
   static const uint8_t F_EPHEMERAL_DISTRIBUTED_PIN = (1<<0);
   static const uint8_t F_QUIESCE_BLOCK             = (1<<1);
+  static const uint8_t F_HAS_REDIRECTS             = (1<<2);
 
   inode_t()
   {
@@ -891,6 +892,13 @@ struct inode_t {
   }
   bool get_quiesce_block() const {
     return get_flag(F_QUIESCE_BLOCK);
+  }
+  // Objects in old_pools redirect to this file's data; see ceph.file.migrate.
+  void set_has_redirects(bool v) {
+    set_flag(v, F_HAS_REDIRECTS);
+  }
+  bool get_has_redirects() const {
+    return get_flag(F_HAS_REDIRECTS);
   }
 
   bool has_charmap() const {

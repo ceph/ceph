@@ -6655,6 +6655,28 @@ public:
   }
 };
 
+/*
+ * Remove the redirects a migrated file left in its old pools.  The purge only
+ * removes the backtrace there, and that removal would be forwarded.  A failure
+ * leaves an empty object behind, which is harmless, so nothing waits for this.
+ */
+void MDCache::purge_redirects(CInode *in, uint64_t size)
+{
+  const auto& pi = in->get_projected_inode();
+  const uint64_t num = Striper::get_num_objects(pi->layout, size);
+  for (const auto &p : pi->old_pools) {
+    if (p == pi->layout.pool_id)
+      continue;
+    dout(10) << __func__ << " " << num << " objects in pool " << p << " of "
+             << *in << dendl;
+    file_layout_t old_layout = pi->layout;
+    old_layout.pool_id = p;
+    filer.purge_range(in->ino(), &old_layout, SnapContext(), 0, num,
+                      ceph::real_clock::now(), CEPH_OSD_FLAG_IGNORE_REDIRECT,
+                      new LambdaContext([](int) {}));
+  }
+}
+
 void MDCache::truncate_inode(CInode *in, LogSegmentRef const& ls)
 {
   const auto& pi = in->get_projected_inode();
