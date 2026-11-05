@@ -782,6 +782,7 @@ struct inode_t {
   static const uint8_t F_EPHEMERAL_DISTRIBUTED_PIN = (1<<0);
   static const uint8_t F_QUIESCE_BLOCK             = (1<<1);
   static const uint8_t F_HAS_REDIRECTS             = (1<<2);
+  static const uint8_t F_MIGRATE_WHOLE             = (1<<3);
 
   inode_t()
   {
@@ -899,6 +900,13 @@ struct inode_t {
   }
   bool get_has_redirects() const {
     return get_flag(F_HAS_REDIRECTS);
+  }
+  // With migrating_from set: did the snapshots move too?
+  void set_migrate_whole(bool v) {
+    set_flag(v, F_MIGRATE_WHOLE);
+  }
+  bool get_migrate_whole() const {
+    return get_flag(F_MIGRATE_WHOLE);
   }
 
   bool has_charmap() const {
@@ -1029,6 +1037,8 @@ struct inode_t {
   version_t last_scrub_version = 0;// (parent) start version of last complete scrub
 
   version_t backtrace_version = 0;
+  // The pool a migration left objects in that are still to be cleared.
+  int64_t migrating_from = -1;
 
   snapid_t oldest_snap;
 
@@ -1060,7 +1070,7 @@ inline bool operator!=(std::vector<uint8_t,Allocator<uint8_t>> l,
 template<template<typename> class Allocator>
 void inode_t<Allocator>::encode(ceph::buffer::list &bl, uint64_t features) const
 {
-  ENCODE_START(20, 6, bl);
+  ENCODE_START(21, 6, bl);
 
   encode(ino, bl);
   encode(rdev, bl);
@@ -1122,13 +1132,14 @@ void inode_t<Allocator>::encode(ceph::buffer::list &bl, uint64_t features) const
 
   encode(optmetadata, bl, features);
 
+  encode(migrating_from, bl);
   ENCODE_FINISH(bl);
 }
 
 template<template<typename> class Allocator>
 void inode_t<Allocator>::decode(ceph::buffer::list::const_iterator &p)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(19, 6, 6, p);
+  DECODE_START_LEGACY_COMPAT_LEN(21, 6, 6, p);
 
   decode(ino, p);
   decode(rdev, p);
@@ -1242,6 +1253,12 @@ void inode_t<Allocator>::decode(ceph::buffer::list::const_iterator &p)
 
   if (struct_v >= 20) {
     decode(optmetadata, p);
+  }
+
+  if (struct_v >= 21) {
+    decode(migrating_from, p);
+  } else {
+    migrating_from = -1;
   }
 
   DECODE_FINISH(p);

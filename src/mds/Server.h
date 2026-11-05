@@ -294,7 +294,6 @@ public:
   void _file_migrate_op_finish(std::shared_ptr<FileMigrate> fm, int r);
   void _file_migrate_copied(std::shared_ptr<FileMigrate> fm);
   void _file_migrate_logged(std::shared_ptr<FileMigrate> fm);
-  void _file_migrate_remove(std::shared_ptr<FileMigrate> fm);
   void handle_client_getvxattr(const MDRequestRef& mdr);
   void handle_client_setxattr(const MDRequestRef& mdr);
   void handle_client_removexattr(const MDRequestRef& mdr);
