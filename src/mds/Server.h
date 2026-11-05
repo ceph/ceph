@@ -282,6 +282,14 @@ public:
                           std::string value,
                           file_layout_t *layout);
   void handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur);
+  struct FileMigrate;
+  void handle_client_file_migrate(const MDRequestRef& mdr, CInode *cur,
+                                  const std::string& value);
+  void _file_migrate_wait_flush(std::shared_ptr<FileMigrate> fm);
+  void _file_migrate_issue(std::shared_ptr<FileMigrate> fm);
+  void _file_migrate_op_finish(std::shared_ptr<FileMigrate> fm, int r);
+  void _file_migrate_copied(std::shared_ptr<FileMigrate> fm);
+  void _file_migrate_logged(std::shared_ptr<FileMigrate> fm);
   void handle_client_getvxattr(const MDRequestRef& mdr);
   void handle_client_setxattr(const MDRequestRef& mdr);
   void handle_client_removexattr(const MDRequestRef& mdr);
@@ -500,6 +508,7 @@ private:
   static bool is_ceph_vxattr(std::string_view xattr_name) {
     return xattr_name.rfind("ceph.dir.layout", 0) == 0 ||
            xattr_name.rfind("ceph.file.layout", 0) == 0 ||
+           xattr_name == "ceph.file.migrate.pool"sv ||
            xattr_name.rfind("ceph.quota", 0) == 0 ||
            xattr_name.rfind("ceph.alternate_name", 0) == 0 ||
            xattr_name == "ceph.quiesce.block"sv ||

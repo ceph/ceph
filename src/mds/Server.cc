@@ -55,6 +55,7 @@
 #include "msg/Messenger.h"
 
 #include "osdc/Objecter.h"
+#include "osdc/Striper.h"
 
 #include "events/EUpdate.h"
 #include "events/EPeerUpdate.h"
@@ -6494,7 +6495,10 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
     pi.inode->add_old_pool(old_pool);
     pi.inode->layout = layout;
     pip = pi.inode.get();
-  } else if (name.compare(0, 10, "ceph.quota") == 0) { 
+  } else if (name == "ceph.file.migrate.pool"sv) {
+    handle_client_file_migrate(mdr, cur, value);
+    return;
+  } else if (name.compare(0, 10, "ceph.quota") == 0) {
     if (!cur->is_dir()) {
       respond_to_request(mdr, -EINVAL);
       return;
@@ -7069,6 +7073,235 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
   auto* c = new C_MDS_inode_update_finish(this, mdr, cur, false, false, adjust_realm);
   journal_and_reply(mdr, cur, dn, le, c);
   return;
+}
+
+/*
+ * ceph.file.migrate.pool: move a regular file's data to another data pool.
+ *
+ * The filelock is held exclusively and Fb is revoked, so no client can read
+ * or write the file meanwhile and none still buffers data for it.  Each
+ * object is copied OSD-side (copy-from) into the new
+ * pool, the new layout is journaled, and then the old objects are removed
+ * with the realm's snap context.  RADOS keeps a clone of every object an
+ * existing snapshot still needs, and the snapshotted inode keeps the old
+ * layout, so snapshot reads keep going to the old pool until the snapshot
+ * is deleted and the OSDs trim the clones.
+ */
+struct Server::FileMigrate {
+  MDRequestRef mdr;
+  CInode *in = nullptr;
+  file_layout_t from, to;
+  uint32_t truncate_seq = 0;
+  uint64_t truncate_size = 0;
+  uint64_t num_copy = 0;    // objects that can hold data: [0, size)
+  uint64_t num_remove = 0;  // objects that may exist in the old pool
+  bool removing = false;
+  uint64_t next = 0;
+  unsigned in_flight = 0;
+  int err = 0;
+};
+
+static const unsigned FILE_MIGRATE_MAX_OPS = 16;
+
+class C_MDS_file_migrated : public ServerLogContext {
+  std::shared_ptr<Server::FileMigrate> fm;
+public:
+  C_MDS_file_migrated(Server *s, std::shared_ptr<Server::FileMigrate> f) :
+    ServerLogContext(s, f->mdr), fm(std::move(f)) {}
+  void finish(int r) override {
+    ceph_assert(r == 0);
+    mdr->apply();
+    server->_file_migrate_logged(fm);
+  }
+};
+
+void Server::handle_client_file_migrate(const MDRequestRef& mdr, CInode *cur,
+                                        const std::string& value)
+{
+  const cref_t<MClientRequest> &req = mdr->client_request;
+  if (!cur->is_file() || req->get_op() == CEPH_MDS_OP_RMXATTR) {
+    respond_to_request(mdr, -EINVAL);
+    return;
+  }
+
+  file_layout_t to = cur->get_projected_inode()->layout;
+  if (check_layout_vxattr(mdr, "layout.pool", value, &to) < 0)
+    return;
+
+  MutationImpl::LockOpVec lov;
+  lov.add_xlock(&cur->filelock);
+  if (!mds->locker->acquire_locks(mdr, lov))
+    return;
+
+  const auto& pi = cur->get_projected_inode();
+  if (!pi->fscrypt_auth.empty() ||
+      pi->inline_data.version != CEPH_INLINE_NONE) {
+    respond_to_request(mdr, -EINVAL);
+    return;
+  }
+  // Objects past truncate_size may still hold data from before the
+  // truncation; a copy stamped with the current truncate_seq would expose it.
+  if (pi->is_truncating()) {
+    respond_to_request(mdr, -EBUSY);
+    return;
+  }
+  if (to.pool_id == pi->layout.pool_id) {
+    respond_to_request(mdr, 0);
+    return;
+  }
+
+  auto fm = std::make_shared<FileMigrate>();
+  fm->mdr = mdr;
+  fm->in = cur;
+  fm->from = pi->layout;
+  fm->to = pi->layout;
+  fm->to.pool_id = to.pool_id;
+  mdr->no_early_reply = true;
+
+  // The xlock stops writes but leaves clients Fb, and data they still buffer
+  // would be flushed to the old pool after the copy.  Revoke it, as a
+  // truncate of a snapshotted file does.
+  if (cur->get_caps_issued() & CEPH_CAP_FILE_BUFFER) {
+    cur->filelock.set_xlock_snap_sync(new C_MDSInternalNoop);
+    mds->locker->issue_caps(cur);
+  }
+  _file_migrate_wait_flush(fm);
+}
+
+void Server::_file_migrate_wait_flush(std::shared_ptr<FileMigrate> fm)
+{
+  if (fm->mdr->killed) {
+    dout(10) << __func__ << " request killed: " << *fm->mdr << dendl;
+    return;
+  }
+  CInode *cur = fm->in;
+  if (cur->get_caps_issued() & CEPH_CAP_FILE_BUFFER) {
+    dout(20) << __func__ << " waiting for clients to flush " << *cur << dendl;
+    mds->timer.add_event_after(0.1, new LambdaContext([this, fm](int) {
+      _file_migrate_wait_flush(fm);
+    }));
+    return;
+  }
+
+  // Only now is the size final: flushing clients may have extended the file.
+  const auto& pi = cur->get_projected_inode();
+  fm->truncate_seq = pi->truncate_seq;
+  fm->truncate_size = pi->truncate_size;
+  if (pi->size)
+    fm->num_copy = Striper::get_num_objects(fm->from, pi->size);
+  uint64_t ever = std::max({pi->size, pi->get_max_size(), pi->max_size_ever});
+  if (ever)
+    fm->num_remove = Striper::get_num_objects(fm->from, ever);
+
+  dout(10) << __func__ << " " << *cur << " pool " << fm->from.pool_id
+           << " -> " << fm->to.pool_id << ", copying " << fm->num_copy
+           << " objects" << dendl;
+  _file_migrate_issue(fm);
+  if (fm->num_copy == 0)
+    _file_migrate_copied(fm);
+}
+
+void Server::_file_migrate_issue(std::shared_ptr<FileMigrate> fm)
+{
+  uint64_t total = fm->removing ? fm->num_remove : fm->num_copy;
+  while (fm->err == 0 && fm->next < total &&
+         fm->in_flight < FILE_MIGRATE_MAX_OPS) {
+    uint64_t i = fm->next++;
+    object_t oid = file_object_t(fm->in->ino(), i);
+    const SnapContext& snapc = fm->in->find_snaprealm()->get_snap_context();
+    ObjectOperation op;
+    object_locator_t oloc;
+    if (!fm->removing) {
+      op.copy_from2(oid, CEPH_NOSNAP,
+                    OSDMap::file_to_object_locator(fm->from), 0,
+                    CEPH_OSD_COPY_FROM_FLAG_IGNORE_OVERLAY |
+                    CEPH_OSD_COPY_FROM_FLAG_IGNORE_CACHE |
+                    CEPH_OSD_COPY_FROM_FLAG_TRUNCATE_SEQ,
+                    fm->truncate_seq, fm->truncate_size,
+                    CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
+      oloc = OSDMap::file_to_object_locator(fm->to);
+    } else {
+      // The first object keeps its xattrs: the old pool's backtrace there
+      // points readers at the new pool.
+      if (i == 0)
+        op.truncate(0);
+      else
+        op.remove();
+      oloc = OSDMap::file_to_object_locator(fm->from);
+    }
+    fm->in_flight++;
+    auto fin = new C_OnFinisher(
+      new C_IO_Wrapper(mds, new LambdaContext([this, fm](int r) {
+        _file_migrate_op_finish(fm, r);
+      })), mds->finisher);
+    mds->objecter->mutate(oid, oloc, op, snapc, ceph::real_clock::now(), 0, fin);
+  }
+}
+
+void Server::_file_migrate_op_finish(std::shared_ptr<FileMigrate> fm, int r)
+{
+  fm->in_flight--;
+  if (r < 0 && r != -ENOENT && fm->err == 0) {
+    dout(0) << __func__ << " " << *fm->in
+            << (fm->removing ? " removing old object" : " copying object")
+            << " failed: " << cpp_strerror(r) << dendl;
+    fm->err = r;
+  }
+  _file_migrate_issue(fm);
+  if (fm->in_flight)
+    return;
+
+  if (fm->mdr->killed) {
+    dout(10) << __func__ << " request killed: " << *fm->mdr << dendl;
+    return;
+  }
+  if (!fm->removing) {
+    // On error the new pool may hold copies; a retry overwrites them.
+    if (fm->err) {
+      respond_to_request(fm->mdr, fm->err);
+      return;
+    }
+    _file_migrate_copied(fm);
+  } else {
+    // The file already reads from the new pool: an old object left behind
+    // only costs space.
+    respond_to_request(fm->mdr, 0);
+  }
+}
+
+void Server::_file_migrate_copied(std::shared_ptr<FileMigrate> fm)
+{
+  const MDRequestRef& mdr = fm->mdr;
+  CInode *cur = fm->in;
+  const cref_t<MClientRequest> &req = mdr->client_request;
+
+  auto pi = cur->project_inode(mdr);
+  pi.inode->add_old_pool(fm->from.pool_id);
+  pi.inode->layout = fm->to;
+  pi.inode->change_attr++;
+  pi.inode->ctime = mdr->get_op_stamp();
+  if (mdr->get_op_stamp() > pi.inode->rstat.rctime)
+    pi.inode->rstat.rctime = mdr->get_op_stamp();
+  pi.inode->version = cur->pre_dirty();
+  pi.inode->update_backtrace();
+
+  mdr->ls = mdlog->get_current_segment();
+  EUpdate *le = new EUpdate(mdlog, "file migrate");
+  le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
+  mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY);
+  mdcache->journal_dirty_inode(mdr.get(), &le->metablob, cur);
+  journal_and_reply(mdr, cur, 0, le, new C_MDS_file_migrated(this, fm));
+}
+
+void Server::_file_migrate_logged(std::shared_ptr<FileMigrate> fm)
+{
+  dout(10) << __func__ << " " << *fm->in << " now in pool " << fm->to.pool_id
+           << ", removing " << fm->num_remove << " old objects" << dendl;
+  fm->removing = true;
+  fm->next = 0;
+  _file_migrate_issue(fm);
+  if (fm->num_remove == 0)
+    respond_to_request(fm->mdr, 0);
 }
 
 const Server::XattrHandler Server::xattr_handlers[] = {
