@@ -7080,14 +7080,28 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
  *
  * The filelock is held exclusively and Fb is revoked, so no client can read
  * or write the file meanwhile and none still buffers data for it.  Each
- * object is copied OSD-side (copy-from) into the new
- * pool, the new layout is journaled, and then the old objects are removed
- * with the realm's snap context.  RADOS keeps a clone of every object an
- * existing snapshot still needs, and the snapshotted inode keeps the old
- * layout, so snapshot reads keep going to the old pool until the snapshot
- * is deleted and the OSDs trim the clones.
+ * object is copied OSD-side (copy-from) into the new pool, the new layout is
+ * journaled, and then the old objects are removed.
+ *
+ * Normally the file is cowed and the old objects are removed under the
+ * realm's snap context: the snapshotted inode keeps the old layout, RADOS
+ * keeps a clone of every object a snapshot still needs, and those stay in
+ * the old pool until the snapshots are deleted.
+ *
+ * A cold file can do better.  If no snapshot differs from the head, every
+ * snapshot can move with it: the copies are written with an empty snap
+ * context, so reads at any snapid find them; the inode is changed in place,
+ * without a cow, so all snapshots get the new layout; and the old objects
+ * are not removed but become redirects to the copies.  No clone is left,
+ * and no data.  The redirects matter because a client may cache the old
+ * layout of a snapshot inode, and snap caps cannot be revoked: the OSD
+ * forwards such a client's reads, whenever they arrive.  Operations on a
+ * redirect are forwarded too, so the MDS must use IGNORE_REDIRECT on them.
+ * The inode is flagged so that they get removed with the file, or before the
+ * file moves back into that pool.
  */
 struct Server::FileMigrate {
+  enum Phase { SCAN, CLEAN, COPY, REMOVE };
   MDRequestRef mdr;
   CInode *in = nullptr;
   file_layout_t from, to;
@@ -7095,13 +7109,18 @@ struct Server::FileMigrate {
   uint64_t truncate_size = 0;
   uint64_t num_copy = 0;    // objects that can hold data: [0, size)
   uint64_t num_remove = 0;  // objects that may exist in the old pool
-  bool removing = false;
+  Phase phase = COPY;
+  bool cold = false;        // snapshots move with the head
+  snapid_t oldest_snap = 0; // oldest snapshot that sees the head dentry
   uint64_t next = 0;
   unsigned in_flight = 0;
   int err = 0;
 };
 
 static const unsigned FILE_MIGRATE_MAX_OPS = 16;
+// A snapshot this long before a file's birth time cannot have seen the file,
+// whatever the skew between the client and MDS clocks.
+static const double FILE_MIGRATE_BIRTH_MARGIN = 3600;
 
 class C_MDS_file_migrated : public ServerLogContext {
   std::shared_ptr<Server::FileMigrate> fm;
@@ -7193,9 +7212,70 @@ void Server::_file_migrate_wait_flush(std::shared_ptr<FileMigrate> fm)
   if (ever)
     fm->num_remove = Striper::get_num_objects(fm->from, ever);
 
-  dout(10) << __func__ << " " << *cur << " pool " << fm->from.pool_id
+  if (_file_migrate_maybe_cold(fm)) {
+    dout(10) << __func__ << " " << *cur << " may be cold, oldest snap "
+             << fm->oldest_snap << ", scanning " << fm->num_remove
+             << " objects" << dendl;
+    fm->cold = true;
+    fm->phase = FileMigrate::SCAN;
+    _file_migrate_issue(fm);
+    if (fm->num_remove)
+      return;
+  }
+  _file_migrate_start_copy(fm);
+}
+
+/*
+ * Can the file's snapshots move with it, as far as the MDS can tell?  The
+ * objects are checked afterwards.  Any doubt means no: the file then takes
+ * the normal path, which is always safe but leaves clones in the old pool.
+ */
+bool Server::_file_migrate_maybe_cold(std::shared_ptr<FileMigrate> fm)
+{
+  CInode *cur = fm->in;
+  // Versions in old_inodes would need the new layout too.
+  if (cur->is_multiversion() || !cur->client_need_snapflush.empty())
+    return false;
+
+  CDentry *dn = cur->get_projected_parent_dn();
+  SnapRealm *realm = cur->find_snaprealm();
+  std::map<snapid_t,const SnapInfo*> infomap;
+  realm->get_snap_info(infomap);
+  const utime_t btime = cur->get_projected_inode()->btime;
+  for (const auto& [snap, info] : infomap) {
+    if (snap >= dn->first) {
+      fm->oldest_snap = snap;
+      return true;
+    }
+    // Older than the head dentry.  Either the file did not exist yet, or a
+    // separate snapped inode exists, maybe in another directory after a
+    // rename, and it would keep the old layout.
+    utime_t limit = info->stamp;
+    limit += FILE_MIGRATE_BIRTH_MARGIN;
+    if (limit > btime)
+      return false;
+  }
+  return false;  // no snapshot sees this file: nothing to gain
+}
+
+void Server::_file_migrate_start_copy(std::shared_ptr<FileMigrate> fm)
+{
+  // Moving back into a pool that holds redirects from an earlier migration:
+  // a write there would be forwarded to the pool we are leaving.
+  if (fm->phase != FileMigrate::CLEAN && fm->num_remove &&
+      fm->in->get_projected_inode()->get_has_redirects() &&
+      fm->in->get_projected_inode()->old_pools.count(fm->to.pool_id)) {
+    fm->phase = FileMigrate::CLEAN;
+    fm->next = 0;
+    _file_migrate_issue(fm);
+    return;
+  }
+
+  dout(10) << __func__ << " " << *fm->in << " pool " << fm->from.pool_id
            << " -> " << fm->to.pool_id << ", copying " << fm->num_copy
-           << " objects" << dendl;
+           << " objects, cold " << fm->cold << dendl;
+  fm->phase = FileMigrate::COPY;
+  fm->next = 0;
   _file_migrate_issue(fm);
   if (fm->num_copy == 0)
     _file_migrate_copied(fm);
@@ -7203,15 +7283,49 @@ void Server::_file_migrate_wait_flush(std::shared_ptr<FileMigrate> fm)
 
 void Server::_file_migrate_issue(std::shared_ptr<FileMigrate> fm)
 {
-  uint64_t total = fm->removing ? fm->num_remove : fm->num_copy;
+  uint64_t total = fm->phase == FileMigrate::COPY ? fm->num_copy : fm->num_remove;
   while (fm->err == 0 && fm->next < total &&
          fm->in_flight < FILE_MIGRATE_MAX_OPS) {
     uint64_t i = fm->next++;
     object_t oid = file_object_t(fm->in->ino(), i);
-    const SnapContext& snapc = fm->in->find_snaprealm()->get_snap_context();
+    fm->in_flight++;
+
+    if (fm->phase == FileMigrate::SCAN) {
+      auto ss = std::make_shared<std::pair<librados::snap_set_t,int>>();
+      ObjectOperation op;
+      op.list_snaps(&ss->first, &ss->second);
+      auto fin = new C_OnFinisher(
+        new C_IO_Wrapper(mds, new LambdaContext([this, fm, ss](int r) {
+          // An object not there at all cannot differ from any snapshot.
+          if (r == 0) {
+            for (const auto& c : ss->first.clones) {
+              if (c.cloneid != librados::SNAP_HEAD)
+                fm->cold = false;
+            }
+            if (ss->first.seq >= fm->oldest_snap)
+              fm->cold = false;
+          } else if (r != -ENOENT) {
+            fm->cold = false;
+          }
+          _file_migrate_op_finish(fm, 0);
+        })), mds->finisher);
+      mds->objecter->read(oid, OSDMap::file_to_object_locator(fm->from), op,
+                          LIBRADOS_SNAP_DIR, nullptr, 0, fin);
+      continue;
+    }
+
+    // An empty snap context on a cold file: see the comment above.
+    SnapContext snapc;
+    if (!fm->cold && fm->phase != FileMigrate::CLEAN)
+      snapc = fm->in->find_snaprealm()->get_snap_context();
     ObjectOperation op;
     object_locator_t oloc;
-    if (!fm->removing) {
+    int flags = 0;
+    if (fm->phase == FileMigrate::CLEAN) {
+      op.remove();
+      oloc = OSDMap::file_to_object_locator(fm->to);
+      flags = CEPH_OSD_FLAG_IGNORE_REDIRECT;
+    } else if (fm->phase == FileMigrate::COPY) {
       op.copy_from2(oid, CEPH_NOSNAP,
                     OSDMap::file_to_object_locator(fm->from), 0,
                     CEPH_OSD_COPY_FROM_FLAG_IGNORE_OVERLAY |
@@ -7221,20 +7335,24 @@ void Server::_file_migrate_issue(std::shared_ptr<FileMigrate> fm)
                     CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
       oloc = OSDMap::file_to_object_locator(fm->to);
     } else {
-      // The first object keeps its xattrs: the old pool's backtrace there
-      // points readers at the new pool.
-      if (i == 0)
+      if (fm->cold && i < fm->num_copy) {
+        op.set_redirect(oid, CEPH_NOSNAP,
+                        OSDMap::file_to_object_locator(fm->to), 0, 0);
+      } else if (i == 0) {
+        // The first object keeps its xattrs: the old pool's backtrace there
+        // points readers at the new pool.
         op.truncate(0);
-      else
+      } else {
         op.remove();
+      }
       oloc = OSDMap::file_to_object_locator(fm->from);
     }
-    fm->in_flight++;
     auto fin = new C_OnFinisher(
       new C_IO_Wrapper(mds, new LambdaContext([this, fm](int r) {
         _file_migrate_op_finish(fm, r);
       })), mds->finisher);
-    mds->objecter->mutate(oid, oloc, op, snapc, ceph::real_clock::now(), 0, fin);
+    mds->objecter->mutate(oid, oloc, op, snapc, ceph::real_clock::now(), flags,
+                          fin);
   }
 }
 
@@ -7243,7 +7361,8 @@ void Server::_file_migrate_op_finish(std::shared_ptr<FileMigrate> fm, int r)
   fm->in_flight--;
   if (r < 0 && r != -ENOENT && fm->err == 0) {
     dout(0) << __func__ << " " << *fm->in
-            << (fm->removing ? " removing old object" : " copying object")
+            << (fm->phase == FileMigrate::REMOVE ? " removing old object"
+                                                 : " copying object")
             << " failed: " << cpp_strerror(r) << dendl;
     fm->err = r;
   }
@@ -7255,17 +7374,31 @@ void Server::_file_migrate_op_finish(std::shared_ptr<FileMigrate> fm, int r)
     dout(10) << __func__ << " request killed: " << *fm->mdr << dendl;
     return;
   }
-  if (!fm->removing) {
+  switch (fm->phase) {
+  case FileMigrate::SCAN:
+    fm->phase = FileMigrate::COPY;
+    _file_migrate_start_copy(fm);
+    break;
+  case FileMigrate::CLEAN:
+    if (fm->err) {
+      respond_to_request(fm->mdr, fm->err);
+      return;
+    }
+    _file_migrate_start_copy(fm);
+    break;
+  case FileMigrate::COPY:
     // On error the new pool may hold copies; a retry overwrites them.
     if (fm->err) {
       respond_to_request(fm->mdr, fm->err);
       return;
     }
     _file_migrate_copied(fm);
-  } else {
+    break;
+  case FileMigrate::REMOVE:
     // The file already reads from the new pool: an old object left behind
     // only costs space.
     respond_to_request(fm->mdr, 0);
+    break;
   }
 }
 
@@ -7278,10 +7411,14 @@ void Server::_file_migrate_copied(std::shared_ptr<FileMigrate> fm)
   auto pi = cur->project_inode(mdr);
   pi.inode->add_old_pool(fm->from.pool_id);
   pi.inode->layout = fm->to;
-  pi.inode->change_attr++;
-  pi.inode->ctime = mdr->get_op_stamp();
-  if (mdr->get_op_stamp() > pi.inode->rstat.rctime)
-    pi.inode->rstat.rctime = mdr->get_op_stamp();
+  if (fm->cold) {
+    pi.inode->set_has_redirects(true);
+  } else {
+    pi.inode->change_attr++;
+    pi.inode->ctime = mdr->get_op_stamp();
+    if (mdr->get_op_stamp() > pi.inode->rstat.rctime)
+      pi.inode->rstat.rctime = mdr->get_op_stamp();
+  }
   pi.inode->version = cur->pre_dirty();
   pi.inode->update_backtrace();
 
@@ -7289,15 +7426,28 @@ void Server::_file_migrate_copied(std::shared_ptr<FileMigrate> fm)
   EUpdate *le = new EUpdate(mdlog, "file migrate");
   le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY);
-  mdcache->journal_dirty_inode(mdr.get(), &le->metablob, cur);
+  if (fm->cold) {
+    // No cow: the head dentry stays the one version of the file that all its
+    // snapshots see, and the ctime stays too, since they must not change.
+    le->metablob.add_primary_dentry(cur->get_projected_parent_dn(), cur,
+                                    true, true, true);
+  } else {
+    mdcache->journal_dirty_inode(mdr.get(), &le->metablob, cur);
+  }
   journal_and_reply(mdr, cur, 0, le, new C_MDS_file_migrated(this, fm));
 }
 
 void Server::_file_migrate_logged(std::shared_ptr<FileMigrate> fm)
 {
   dout(10) << __func__ << " " << *fm->in << " now in pool " << fm->to.pool_id
-           << ", removing " << fm->num_remove << " old objects" << dendl;
-  fm->removing = true;
+           << ", " << fm->num_remove << " old objects, cold " << fm->cold
+           << dendl;
+  _file_migrate_remove(fm);
+}
+
+void Server::_file_migrate_remove(std::shared_ptr<FileMigrate> fm)
+{
+  fm->phase = FileMigrate::REMOVE;
   fm->next = 0;
   _file_migrate_issue(fm);
   if (fm->num_remove == 0)
