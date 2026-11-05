@@ -8,6 +8,7 @@
 
 #include "encoding.h"
 
+#include <vector>
 #include <ostream>
 
 #include <boost/uuid/uuid.hpp>
@@ -59,7 +60,7 @@ struct uuid_d {
   }
 
   void dump(ceph::Formatter *f) const;
-  static std::list<uuid_d> generate_test_instances();
+  static std::vector<uuid_d> generate_test_instances();
 };
 WRITE_CLASS_DENC_BOUNDED(uuid_d)
 

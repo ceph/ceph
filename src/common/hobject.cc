@@ -8,10 +8,10 @@
 #include <fmt/compile.h>
 #include <fmt/core.h>
 
-using std::list;
 using std::ostream;
 using std::set;
 using std::string;
+using std::vector;
 
 using ceph::bufferlist;
 using ceph::Formatter;
@@ -194,9 +194,9 @@ void hobject_t::dump(Formatter *f) const
   f->dump_string("namespace", nspace);
 }
 
-list<hobject_t> hobject_t::generate_test_instances()
+vector<hobject_t> hobject_t::generate_test_instances()
 {
-  list<hobject_t> o;
+  vector<hobject_t> o;
   o.emplace_back();
   o.emplace_back();
   o.back().max = true;
@@ -497,9 +497,9 @@ void ghobject_t::dump(Formatter *f) const
   f->dump_int("max", (int)max);
 }
 
-list<ghobject_t> ghobject_t::generate_test_instances()
+vector<ghobject_t> ghobject_t::generate_test_instances()
 {
-  list<ghobject_t> o;
+  vector<ghobject_t> o;
   o.emplace_back();
   o.emplace_back();
   o.back().hobj.max = true;
