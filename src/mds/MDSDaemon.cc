@@ -416,7 +416,8 @@ void MDSDaemon::set_up_admin_socket()
   ceph_assert(r == 0);
   r = admin_socket->register_command("export dir "
                                      "name=path,type=CephString "
-                                     "name=rank,type=CephInt",
+                                     "name=rank,type=CephInt "
+                                     "name=frag,type=CephString,req=false",
                                      asok_hook,
                                      "migrate a subtree to named MDS");
   ceph_assert(r == 0);
