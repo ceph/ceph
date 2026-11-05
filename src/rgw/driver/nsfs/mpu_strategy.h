@@ -363,7 +363,7 @@ public:
    *
    * The caller writes its own attribute either way.  A base bucket
    * therefore carries both records:  NooBaa's, which NooBaa's gateway
-   * and the nsfs listing read, and the nsfs one under `user.nsfs.`,
+   * and the nsfs listing read, and the nsfs one under `user.nsfs:`,
    * which is inert to NooBaa and is where the checksum lives.  S3
    * requires a checksum agreed at CreateMultipartUpload to reach
    * CompleteMultipartUpload,

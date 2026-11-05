@@ -323,7 +323,7 @@ path and the chosen model does not block it.
 **The intent record.**  One xattr on the *source* `.versions/` directory,
 written before the first move and cleared after the leaf lands:
 
-    user.nsfs.rename_intent = leaf \0 tenant \0 bucket \0 key \0 flags
+    user.nsfs:rename_intent = leaf \0 tenant \0 bucket \0 key \0 flags
 
 Two xattr operations for the whole move, whatever the version count.  It
 carries *what the move was*, never how far it got — recovery derives the

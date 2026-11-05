@@ -77,12 +77,14 @@ struct Format {
  * XattrStrategy claims.  parse_disk_name() refuses it in both formats,
  * so a marker never reaches an S3 attribute set, and a REPLACE_ALL
  * write, which prunes only names a strategy claims, never removes one
- * (DECISIONS.md 2026-11-02).  Still under user.nsfs., so what looks for
+ * (DECISIONS.md 2026-11-02).  Still under user.nsfs:, so what looks for
  * any nsfs state on a directory -- carries_nsfs_state(),
  * release_nsfs_state(), the sentinel's read -- finds the markers too.
  * No attribute key may begin "marker.", or its disk name would fall in
- * here. */
-inline constexpr const char* MARKER_XATTR_PREFIX = "user.nsfs.marker.";
+ * here.  Under the ':' for the reason xattr_strategy.cc gives:  NooBaa
+ * user metadata cannot forge one, even on a bucket's root directory
+ * object, whose metadata NooBaa keeps on the bucket's directory. */
+inline constexpr const char* MARKER_XATTR_PREFIX = "user.nsfs:marker.";
 
 /* The marker.  A physical xattr name, deliberately NOT routed through
  * XattrStrategy::disk_name().
@@ -90,7 +92,7 @@ inline constexpr const char* MARKER_XATTR_PREFIX = "user.nsfs.marker.";
  * Reading it through a strategy would mean choosing the strategy first,
  * and choosing the strategy is what the marker is for.  It is read with
  * its own fgetxattr, before any strategy is consulted. */
-inline constexpr const char* EXTENSIONS_XATTR = "user.nsfs.marker.extensions";
+inline constexpr const char* EXTENSIONS_XATTR = "user.nsfs:marker.extensions";
 
 /* The tree still holds structure somebody else wrote.
  *
@@ -112,7 +114,7 @@ inline constexpr const char* EXTENSIONS_XATTR = "user.nsfs.marker.extensions";
  * fall back to, and guessing from the one that happens to be
  * compiled in is how the wrong parser gets applied to the right
  * bytes. */
-inline constexpr const char* CONVERTING_XATTR = "user.nsfs.marker.converting";
+inline constexpr const char* CONVERTING_XATTR = "user.nsfs:marker.converting";
 inline constexpr const char* CONVERTING_FROM_NOOBAA = "noobaa";
 
 /* WHETHER THE DIRECTORY EXISTS FOR THIS BUCKET, OR PREDATES IT.
@@ -142,7 +144,7 @@ inline constexpr const char* CONVERTING_FROM_NOOBAA = "noobaa";
  * gateway made it for that bucket, and taking it over does not change
  * that.  Defaulting adopted buckets to 0 would leave every migrated
  * bucket undeletable. */
-inline constexpr const char* OWNS_STORAGE_XATTR = "user.nsfs.marker.owns_storage";
+inline constexpr const char* OWNS_STORAGE_XATTR = "user.nsfs:marker.owns_storage";
 
 /* THE VALUE IS A SET, NOT A LEVEL.
  *
@@ -202,9 +204,9 @@ inline constexpr uint32_t EXT_RGW_META    = 0x8;
  * -- NooBaa stores no ACL, so the nsfs one is not NooBaa's thing under
  * another name, it is something extra.
  *
- * An attribute both formats keep, differing only in spelling or
- * packing, needs no bit:  EXT_RGW_META already says which spelling
- * this tree is in.  Object tags were mapped without one and object
+ * An attribute both formats keep, differing only in name or packing,
+ * needs no bit:  EXT_RGW_META already says whether this tree holds
+ * RGW attributes or NooBaa's.  Object tags were mapped without one and object
  * lock will be.  An earlier comment here expected them to "move into
  * shared" by defining bits;  that was written when neither had any
  * representation in this driver, and mapping them put them in shared
@@ -224,7 +226,7 @@ inline constexpr uint32_t EXTENSIONS_KNOWN =
  *            value, so it is the one profile with no mask.
  * shared  -- RGW's metadata representation on NooBaa's layout.  One
  *            bit, and that is the whole of it:  an attribute whose
- *            spelling differs is covered by EXT_RGW_META, so a feature
+ *            name differs is covered by EXT_RGW_META, so a feature
  *            both formats have needs nothing added when it is mapped.
  *            Object tags landed that way and so will object lock.
  * strong  -- everything this build can serve, which is everything

@@ -1450,7 +1450,7 @@ TEST_F(NSFSBucketTest, AStaleUserWriteIsRefused)
 TEST_F(NSFSBucketTest, UnreadableStateFailsClosedAndAbsentDoesNot)
 {
   const sf::path bpath{bp / "root" / testname};
-  static constexpr const char* key = "user.nsfs.bucket_info";
+  static constexpr const char* key = "user.nsfs:bucket_info";
 
   /* the control:  as created, it loads */
   ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0)
@@ -1477,7 +1477,7 @@ TEST_F(NSFSBucketTest, UnreadableStateDoesNotDenyTheListingOrTheProfile)
 {
   const sf::path bpath{bp / "root" / testname};
   const std::string junk{"not an encoded RGWBucketInfo"};
-  ASSERT_EQ(::setxattr(bpath.c_str(), "user.nsfs.bucket_info",
+  ASSERT_EQ(::setxattr(bpath.c_str(), "user.nsfs:bucket_info",
 		       junk.data(), junk.size(), 0), 0);
 
   rgw::sal::BucketList result;
@@ -4142,13 +4142,13 @@ TEST_F(NSFSObjectTest, XattrOnDisk)
   /* neither is written any more -- see NSFSObjectTest.ObjectAttrs.
    * Asserted absent rather than dropped, because their reappearance
    * would mean something started writing them again. */
-  EXPECT_FALSE(xattr_names.contains("user.nsfs.object_type"));
-  EXPECT_FALSE(xattr_names.contains("user.nsfs.owner"));
+  EXPECT_FALSE(xattr_names.contains("user.nsfs:object_type"));
+  EXPECT_FALSE(xattr_names.contains("user.nsfs:owner"));
 
-  // user-supplied attrs use user.nsfs.* prefix
-  EXPECT_TRUE(xattr_names.contains("user.nsfs." + ATTR1));
+  // user-supplied attrs use user.nsfs:* prefix
+  EXPECT_TRUE(xattr_names.contains("user.nsfs:" + ATTR1));
 
-  // RGW common attrs use user.nsfs.rgw.* prefix (etag present only if set)
+  // RGW common attrs use user.nsfs:rgw.* prefix (etag present only if set)
   // The write_object helper doesn't set an explicit etag, so skip that check
 
   // no old-style prefixes
@@ -4797,7 +4797,7 @@ TEST_F(NSFSBucketTest, DeletingABucketTheGatewayMadeRemovesTheDirectory)
  * The directory may be a fileset junction or anything else an
  * administrator made and pointed the gateway at;  removing it is the
  * one unrecoverable thing this path can do.  What goes instead is
- * everything the gateway wrote -- the whole user.nsfs. namespace --
+ * everything the gateway wrote -- the whole user.nsfs: namespace --
  * which returns the directory to the state it was in before it was
  * adopted.
  *
@@ -4829,7 +4829,7 @@ TEST_F(NSFSBucketTest, DeletingAnAdoptedBucketLeavesItsDirectory)
   const ssize_t len = ::listxattr(d.c_str(), buf, sizeof(buf));
   ASSERT_GE(len, 0);
   for (const char* q = buf; q < buf + len; q += strlen(q) + 1) {
-    EXPECT_FALSE(std::string_view(q).starts_with("user.nsfs."))
+    EXPECT_FALSE(std::string_view(q).starts_with("user.nsfs:"))
 	<< q << " survived the delete";
   }
 }
@@ -5670,7 +5670,7 @@ TEST_F(NSFSImpersonatedAssembleTest, StridedInputsAreReadAsTheUploader)
  * wrapper asks before it takes the capability. */
 class NSFSGatewayAttrReadTest : public NSFSImpersonatedAssembleTest {
 protected:
-  static constexpr const char* attr = "user.nsfs.test";
+  static constexpr const char* attr = "user.nsfs:test";
   int ofd{-1};
 
   void SetUp() override {
@@ -6911,15 +6911,15 @@ TEST(PrefixedXattr, OwnerIsRecordedOrNone)
 /* Three results, and the third is the one worth pinning.  An ACL has
  * nowhere to go, so the name is empty and the write path skips it --
  * which is what NooBaa's own gateway does.  An nsfs key with no
- * counterpart lands under user.nsfs., inert to NooBaa. */
+ * counterpart lands under user.nsfs:, inert to NooBaa. */
 TEST(NooBaaXattr, WhatHasNowhereToGo)
 {
   nsfs::NooBaaXattrStrategy nb;
 
   EXPECT_TRUE(nb.disk_name(RGW_ATTR_ACL).empty());
 
-  EXPECT_EQ(nb.disk_name("bucket_info"), "user.nsfs.bucket_info");
-  EXPECT_EQ(nb.disk_name("rename_intent"), "user.nsfs.rename_intent");
+  EXPECT_EQ(nb.disk_name("bucket_info"), "user.nsfs:bucket_info");
+  EXPECT_EQ(nb.disk_name("rename_intent"), "user.nsfs:rename_intent");
 
   /* and not the wrong third result:  never the key unchanged, which
    * would write under a name neither format owns */
@@ -6928,7 +6928,7 @@ TEST(NooBaaXattr, WhatHasNowhereToGo)
 
 /* Neither format claims a marker (DECISIONS.md 2026-11-02), so none
  * reaches an attribute set and no REPLACE_ALL prunes one.  The control is
- * a neighbour under user.nsfs. that each still claims. */
+ * a neighbour under user.nsfs: that each still claims. */
 TEST(MarkerXattr, NeitherFormatClaimsAMarker)
 {
   nsfs::PrefixedXattrStrategy prefixed;
@@ -6942,7 +6942,7 @@ TEST(MarkerXattr, NeitherFormatClaimsAMarker)
 	  << m;
       EXPECT_FALSE(xs->parse_disk_name(m, key)) << xs->name() << ":  " << m;
     }
-    EXPECT_TRUE(xs->parse_disk_name("user.nsfs.bucket_info", key))
+    EXPECT_TRUE(xs->parse_disk_name("user.nsfs:bucket_info", key))
 	<< xs->name();
     EXPECT_EQ(key, "bucket_info");
   }
@@ -8155,7 +8155,7 @@ TEST_F(NSFSNooBaaBucketTest, TheRootObjectReadsTheSameBeforeAndAfterConversion)
   }
 }
 
-/* Only what RGW wrote under `user.nsfs.` is the bucket's state.  Any
+/* Only what RGW wrote under `user.nsfs:` is the bucket's state.  Any
  * other name on a bucket directory with no root object marker is
  * neither bucket state nor an object, and is left as it is. */
 TEST_F(NSFSNooBaaBucketTest, AStrayAttributeOnTheBucketDirectoryIsNotBucketState)
@@ -8199,11 +8199,11 @@ TEST_F(NSFSNooBaaBucketTest, ConversionKeepsAnEmptyDirectoryObjectsStoredMD5)
 
 /* The root object in NooBaa's format:  the marker and its attributes on
  * the bucket's own directory, which also carries the bucket's state
- * under `user.nsfs.`.  Only the object's are its attributes. */
+ * under `user.nsfs:`.  Only the object's are its attributes. */
 TEST_F(NSFSNooBaaBucketTest, TheRootObjectReadsWithoutTheBucketsState)
 {
   lay_noobaa_directory_object(bucket_path(), "root bytes", "text/x-root", "root");
-  ASSERT_EQ(::getxattr(bucket_path().c_str(), "user.nsfs.bucket_info",
+  ASSERT_EQ(::getxattr(bucket_path().c_str(), "user.nsfs:bucket_info",
 		       nullptr, 0) > 0, true)
       << "the bucket directory carries no state;  nothing here would be "
 	 "proving the exclusion";
@@ -8295,7 +8295,7 @@ static std::map<std::string, bool> listed_versions(rgw::sal::Bucket* bucket,
 /* ------------------------------------------------------------------ *
  * The gate on a bucket not taken over (DECISIONS.md 2026-10-21).
  *
- * A bucket directory without `user.nsfs.marker.extensions` has not been
+ * A bucket directory without `user.nsfs:marker.extensions` has not been
  * taken over, and a client's write to it is rejected with
  * InvalidBucketState.  The status code is the weakest evidence there
  * is, so each case also compares the tree before and after, byte for
@@ -8836,7 +8836,7 @@ public:
    * attribute;  a bucket NooBaa made carries no such thing. */
   void remove_rgw_bucket_info() {
     ASSERT_EQ(::removexattr((bp / "root" / testname).c_str(),
-			    "user.nsfs.bucket_info"), 0);
+			    "user.nsfs:bucket_info"), 0);
   }
 
   /* `path` names the bucket's real directory.
@@ -10590,7 +10590,7 @@ TEST_F(NSFSBucketTest, ObjectsInAMarkedBucketKeepNsfsNames)
   for (const char* q = buf; q < buf + nlen; q += strlen(q) + 1) {
     names.insert(q);
   }
-  EXPECT_TRUE(names.contains("user.nsfs.rgw.content_type"));
+  EXPECT_TRUE(names.contains("user.nsfs:rgw.content_type"));
   EXPECT_FALSE(names.contains("user.noobaa.content_type"));
 }
 
@@ -10939,7 +10939,7 @@ TEST_F(NSFSBucketTest, ABucketThatDoesNotOwnItsDirectoryIsStillRejectedWhileNotE
 
   EXPECT_EQ(bucket->remove(env->dpp, false, null_yield, rgw::sal::no_authenticated_user), -ENOTEMPTY)
       << "a non-empty bucket was deleted";
-  EXPECT_GT(::getxattr(bucket_path().c_str(), "user.nsfs.bucket_info",
+  EXPECT_GT(::getxattr(bucket_path().c_str(), "user.nsfs:bucket_info",
 		       nullptr, 0), 0)
       << "the rejected delete unadopted the bucket anyway";
 
@@ -10948,7 +10948,7 @@ TEST_F(NSFSBucketTest, ABucketThatDoesNotOwnItsDirectoryIsStillRejectedWhileNotE
   EXPECT_EQ(bucket->remove(env->dpp, false, null_yield, rgw::sal::no_authenticated_user), 0);
   EXPECT_TRUE(sf::is_directory(bucket_path()))
       << "the directory the bucket did not own was deleted";
-  EXPECT_LT(::getxattr(bucket_path().c_str(), "user.nsfs.bucket_info",
+  EXPECT_LT(::getxattr(bucket_path().c_str(), "user.nsfs:bucket_info",
 		       nullptr, 0), 0)
       << "the bucket's record survived its deletion";
 }
@@ -10976,7 +10976,7 @@ TEST_F(NSFSBucketTest, DoesNotListNooBaaDirectoryObjectWithoutTheMarker)
  * converting with its gate open, which is the state of every conversion
  * that stopped partway, and no client mutates it until it is adopted.
  * Each write leaves the object as NooBaa wrote it;  once the sweep has
- * run the same writes take effect, in the bucket's spelling only. */
+ * run the same writes take effect, as RGW attributes only. */
 TEST_F(NSFSConvertingBucketTest, AnOrdinaryObjectsWriteIsRefusedWhileConverting)
 {
   write_nb_object("theirs.bin");
@@ -11026,7 +11026,7 @@ TEST_F(NSFSConvertingBucketTest, AnOrdinaryObjectsWriteIsRefusedWhileConverting)
     EXPECT_EQ(r, 0);
   }
   const auto after = names();
-  EXPECT_TRUE(after.contains("user.nsfs.rgw.content_type"));
+  EXPECT_TRUE(after.contains("user.nsfs:rgw.content_type"));
   for (const auto& n : after) {
     EXPECT_FALSE(n.starts_with("user.noobaa.")) << n;
   }
@@ -11143,7 +11143,7 @@ TEST_F(NSFSBucketTest, ObjectLockInAMarkedBucketStaysEncoded)
   }
   EXPECT_FALSE(names.contains("user.noobaa.legal_hold"))
       << "wrote their shape in a bucket of ours";
-  EXPECT_TRUE(names.contains("user.nsfs.rgw.object-legal-hold"));
+  EXPECT_TRUE(names.contains("user.nsfs:rgw.object-legal-hold"));
 }
 
 /* Storage class:  a plain rename that was missed, and a bogus
@@ -11386,17 +11386,17 @@ public:
   }
 };
 
-/* A bucket's own state is named in the nsfs spelling whatever its format
+/* A bucket's own state is held as RGW attributes whatever its format
  * (DECISIONS.md 2026-10-13), so a base bucket writes it there and the
  * upgrade has nothing to rewrite.
  *
  * Before, a base bucket named it through NooBaa's strategy, which put
- * RGW_ATTR_IAM_POLICY under `user.nsfs.user.rgw.iam-policy`, and the
- * upgrade carried a step to respell it. */
-TEST_F(NSFSUpgradeTest, ABaseBucketWritesItsStateInTheNsfsSpelling)
+ * RGW_ATTR_IAM_POLICY under `user.nsfs:user.rgw.iam-policy`, and the
+ * upgrade carried a step to rename it. */
+TEST_F(NSFSUpgradeTest, ABaseBucketWritesItsStateAsRGWAttributes)
 {
-  static constexpr const char* base_name = "user.nsfs.user.rgw.iam-policy";
-  static constexpr const char* nsfs_name = "user.nsfs.rgw.iam-policy";
+  static constexpr const char* base_name = "user.nsfs:user.rgw.iam-policy";
+  static constexpr const char* nsfs_name = "user.nsfs:rgw.iam-policy";
   const std::string policy{"{\"Version\":\"2012-10-17\"}"};
 
   bufferlist bl;
@@ -11410,7 +11410,7 @@ TEST_F(NSFSUpgradeTest, ABaseBucketWritesItsStateInTheNsfsSpelling)
 
   auto before = xattr_names(bucket_path());
   EXPECT_TRUE(before.contains(nsfs_name))
-      << "a base bucket did not write its state in the nsfs spelling";
+      << "a base bucket did not write its state as RGW attributes";
   EXPECT_FALSE(before.contains(base_name));
 
   /* and reads it back, as the bucket it is */
@@ -11436,8 +11436,8 @@ TEST_F(NSFSUpgradeTest, ABaseBucketWritesItsStateInTheNsfsSpelling)
 
 /* .versions/ is a reserved name, so the tree walk skips it.  It skipped
  * the version entries with it until convert_versions() existed, which
- * left every one of them in NooBaa's spelling while the bucket read in
- * nsfs's. */
+ * left every one of them with NooBaa attributes while the bucket read
+ * RGW's. */
 TEST_F(NSFSUpgradeTest, ConvertsVersionEntries)
 {
   const std::string v1{"mtime-dlyy3p93o4mt-ino-430o2"};
@@ -11459,10 +11459,10 @@ TEST_F(NSFSUpgradeTest, ConvertsVersionEntries)
        std::vector<std::pair<std::string, std::string>>{
 	 {"photo.jpg", v1}, {"my_photo.jpg", v2}}) {
     auto names = xattr_names(version_path(leaf, vid));
-    EXPECT_TRUE(names.contains("user.nsfs.rgw.content_type"))
+    EXPECT_TRUE(names.contains("user.nsfs:rgw.content_type"))
 	<< leaf << " version kept no content type we can read";
     EXPECT_FALSE(names.contains("user.noobaa.content_type"))
-	<< leaf << " version kept their spelling;  a later write would "
+	<< leaf << " version kept their attribute;  a later write would "
 	<< "add ours beside it";
   }
 }
@@ -11517,9 +11517,9 @@ TEST_F(NSFSUpgradeTest, TheConversionCountsEveryLinkByWhatItResolvesTo)
 }
 
 /* The severe one.  NooBaa's delete marker is user.noobaa.delete_marker and
- * nsfs's is user.nsfs.delete_marker;  every read resolves the name
+ * nsfs's is user.nsfs:delete_marker;  every read resolves the name
  * through the bucket's strategy, and there is no chaining reader, so a
- * marker left in NooBaa's spelling stops being a marker once the mask is
+ * marker left as a NooBaa attribute stops being a marker once the mask is
  * written.  The object it deleted comes back -- 200 with no bytes where
  * S3 owes 404 -- and nothing reports it. */
 TEST_F(NSFSUpgradeTest, ADeleteMarkerStillReadsAsOneAfterConversion)
@@ -11534,7 +11534,7 @@ TEST_F(NSFSUpgradeTest, ADeleteMarkerStillReadsAsOneAfterConversion)
   EXPECT_EQ(prog.versions, 1u);
 
   auto names = xattr_names(version_path("gone.bin", vid));
-  EXPECT_TRUE(names.contains("user.nsfs.delete_marker"))
+  EXPECT_TRUE(names.contains("user.nsfs:delete_marker"))
       << "the marker is no longer a marker;  the deleted object is back";
   EXPECT_FALSE(names.contains("user.noobaa.delete_marker"));
 }
@@ -11551,7 +11551,7 @@ TEST_F(NSFSUpgradeTest, ConversionCapturesTheOwnerOfAVersion)
 
   for (const auto& p : {version_path("doc.txt", vid),
 			version_path("doc.txt", dmid)}) {
-    ASSERT_FALSE(xattr_names(p).contains("user.nsfs.rgw.acl"))
+    ASSERT_FALSE(xattr_names(p).contains("user.nsfs:rgw.acl"))
 	<< "nothing to prove:  " << p << " already had an ACL";
   }
 
@@ -11561,10 +11561,10 @@ TEST_F(NSFSUpgradeTest, ConversionCapturesTheOwnerOfAVersion)
 
   for (const auto& p : {version_path("doc.txt", vid),
 			version_path("doc.txt", dmid)}) {
-    EXPECT_TRUE(xattr_names(p).contains("user.nsfs.rgw.acl"))
+    EXPECT_TRUE(xattr_names(p).contains("user.nsfs:rgw.acl"))
 	<< p << " has no owner after conversion, so it lists as unknown";
     char buf[4096];
-    ssize_t len = ::getxattr(p.c_str(), "user.nsfs.rgw.acl", buf, sizeof(buf));
+    ssize_t len = ::getxattr(p.c_str(), "user.nsfs:rgw.acl", buf, sizeof(buf));
     ASSERT_GT(len, 0);
     bufferlist bl;
     bl.append(buf, len);
@@ -11639,7 +11639,7 @@ TEST_F(NSFSUpgradeTest, TheMarkersAreNotBucketAttributes)
  * retention, two;  legal hold -- leaves none of them behind.  Only the
  * names on the file say which those are, and conversion used to remove
  * the one disk_name() gives, which for these is none of them:  the
- * object kept NooBaa's spelling beside the bucket's, unread.  A directory
+ * object kept NooBaa's attributes beside the RGW ones, unread.  A directory
  * object's move from the directory to its sentinel removes them the same
  * way. */
 TEST_F(NSFSUpgradeTest, ConversionLeavesNoSpreadNooBaaName)
@@ -11691,6 +11691,83 @@ TEST_F(NSFSUpgradeTest, ConversionLeavesNoSpreadNooBaaName)
   EXPECT_EQ(ret.get_mode(), "COMPLIANCE");
 }
 
+/* NooBaa user metadata whose key begins "nsfs." is user metadata, served
+ * as found and after conversion.  NooBaa stores it as `user.` + the key,
+ * so it lands under `user.nsfs.`;  ours is under `user.nsfs:`, which no
+ * header name can reach (DECISIONS.md 2026-11-05).  Before the rename
+ * the first of these read as our content type and the second as a
+ * marker. */
+TEST_F(NSFSUpgradeTest, NooBaaMetadataUnderNsfsStaysMetadata)
+{
+  nb_object("aliased.bin", "text/plain");
+  const sf::path p{bucket_path() / "aliased.bin"};
+  const std::map<std::string, std::string> meta{
+    {"nsfs.rgw.content_type", "not/ours"},
+    {"nsfs.marker.converting", "noobaa"},
+  };
+  for (const auto& [k, v] : meta) {
+    const std::string n = "user." + k;
+    ASSERT_EQ(::setxattr(p.c_str(), n.c_str(), v.data(), v.size(), 0), 0)
+	<< n;
+  }
+
+  auto check = [&](const char* when) {
+    auto obj = bucket->get_object(rgw_obj_key("aliased.bin"));
+    ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0) << when;
+    ASSERT_EQ(obj->get_obj_attrs(null_yield, env->dpp), 0) << when;
+    auto& attrs = obj->get_attrs();
+    ASSERT_TRUE(attrs.contains(RGW_ATTR_CONTENT_TYPE)) << when;
+    EXPECT_EQ(rgw_bl_str(attrs[RGW_ATTR_CONTENT_TYPE]), "text/plain")
+	<< when;
+    for (const auto& [k, v] : meta) {
+      const std::string key = std::string(RGW_ATTR_META_PREFIX) + k;
+      ASSERT_TRUE(attrs.contains(key)) << when << ":  " << key;
+      EXPECT_EQ(rgw_bl_str(attrs[key]), v) << when << ":  " << key;
+    }
+  };
+  check("served as found");
+
+  ASSERT_EQ(upgrade(nullptr, nullptr), 0);
+  check("converted");
+
+  /* carried as RGW user metadata, and nothing under the old prefix */
+  const auto names = xattr_names(p);
+  EXPECT_TRUE(names.contains("user.nsfs:rgw.x-amz-meta-nsfs.rgw.content_type"));
+  EXPECT_TRUE(names.contains("user.nsfs:rgw.x-amz-meta-nsfs.marker.converting"));
+  for (const auto& n : names) {
+    EXPECT_FALSE(n.starts_with("user.nsfs.")) << n;
+  }
+}
+
+/* A NooBaa bucket's root directory object keeps its metadata on the
+ * bucket's directory, so `x-amz-meta-nsfs.marker.extensions` lands
+ * beside where our marker would go.  It is not our marker:  the bucket
+ * is still base, and the metadata is the root object's. */
+TEST_F(NSFSUpgradeTest, RootMetadataCannotForgeAMarker)
+{
+  set_u64_xattr(bucket_path(), "user.noobaa.dir_content", 0);
+  const std::string v{"3"};
+  ASSERT_EQ(::setxattr(bucket_path().c_str(),
+		       "user.nsfs.marker.extensions", v.data(), v.size(), 0),
+	    0);
+
+  std::unique_ptr<rgw::sal::Bucket> fresh;
+  ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname},
+				&fresh, null_yield), 0);
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(fresh.get());
+  EXPECT_STREQ(b->profile_name(), "base");
+
+  ASSERT_EQ(upgrade(nullptr, nullptr), 0);
+  auto obj = bucket->get_object(rgw_obj_key("/"));
+  ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
+  ASSERT_EQ(obj->get_obj_attrs(null_yield, env->dpp), 0);
+  auto& attrs = obj->get_attrs();
+  const std::string key =
+    std::string(RGW_ATTR_META_PREFIX) + "nsfs.marker.extensions";
+  ASSERT_TRUE(attrs.contains(key));
+  EXPECT_EQ(rgw_bl_str(attrs[key]), v);
+}
+
 /* Everything in the tree ends up in nsfs names, and the marker is gone. */
 TEST_F(NSFSUpgradeTest, ConvertsTheTree)
 {
@@ -11710,8 +11787,8 @@ TEST_F(NSFSUpgradeTest, ConvertsTheTree)
 
   for (const char* k : {"flat.bin", "deep/nested.bin"}) {
     auto names = xattr_names(bucket_path() / k);
-    EXPECT_TRUE(names.contains("user.nsfs.rgw.content_type")) << k;
-    EXPECT_TRUE(names.contains("user.nsfs.rgw.etag")) << k;
+    EXPECT_TRUE(names.contains("user.nsfs:rgw.content_type")) << k;
+    EXPECT_TRUE(names.contains("user.nsfs:rgw.etag")) << k;
     EXPECT_FALSE(names.contains("user.noobaa.content_type")) << k;
     EXPECT_FALSE(names.contains("user.content_md5")) << k;
   }
@@ -11722,7 +11799,7 @@ TEST_F(NSFSUpgradeTest, ConvertsTheTree)
   EXPECT_FALSE(xattr_names(bucket_path() / "photos")
 		   .contains("user.noobaa.dir_content"));
   EXPECT_TRUE(xattr_names(bucket_path() / "photos" / ".folder")
-		  .contains("user.nsfs.rgw.content_type"));
+		  .contains("user.nsfs:rgw.content_type"));
 
   /* and the values survived the move */
   auto obj = bucket->get_object(rgw_obj_key("flat.bin"));
@@ -11750,7 +11827,7 @@ TEST_F(NSFSUpgradeTest, ReportsEachPhase)
 
   nsfs::ConvertProgress prog;
   ASSERT_EQ(upgrade(&cb, &prog), 0);
-  /* No bucket phases:  the bucket's own state is in the nsfs spelling
+  /* No bucket phases:  the bucket's own state is held as RGW attributes
    * in every format, so there is nothing of it to convert */
   ASSERT_EQ(seen.size(), 6u) << "three phases for each of two objects";
 
@@ -11767,10 +11844,10 @@ TEST_F(NSFSUpgradeTest, ReportsEachPhase)
 /* A reader held at `written` sees the new value, not the old.
  *
  * That instant is the only state the conversion creates which did not
- * exist before -- both spellings on the file at once -- and it is
- * where "nsfs first" in the read chain stops being incidental.  The
- * callback is what makes it reachable:  without a hold there is no
- * way to arrive inside one item's conversion.
+ * exist before -- the RGW and NooBaa attributes on the file at once --
+ * and it is where "nsfs first" in the read chain stops being
+ * incidental.  The callback is what makes it reachable:  without a hold
+ * there is no way to arrive inside one item's conversion.
  */
 TEST_F(NSFSUpgradeTest, AReaderHeldAtWrittenSeesTheNewValue)
 {
@@ -11783,9 +11860,9 @@ TEST_F(NSFSUpgradeTest, AReaderHeldAtWrittenSeesTheNewValue)
 	  (ev.key != "held.bin")) {
 	return 0;
       }
-      /* both spellings are on the file right now */
+      /* both attributes are on the file right now */
       auto names = xattr_names(bucket_path() / "held.bin");
-      EXPECT_TRUE(names.contains("user.nsfs.rgw.content_type"));
+      EXPECT_TRUE(names.contains("user.nsfs:rgw.content_type"));
       EXPECT_TRUE(names.contains("user.noobaa.content_type"));
 
       auto rd = bucket->get_object(rgw_obj_key("held.bin"));
@@ -14041,7 +14118,7 @@ TEST(NooBaaSchema, ObjectAttributesKnownAreNooBaasAtThePin)
 			"user.noobaa.restore.request",
 			"user.noobaa.migrate.staged",
 			"user.content_md5", "user.storage_class", "user.colour",
-			"user.nsfs.bucket_info"}) {
+			"user.nsfs:bucket_info"}) {
     EXPECT_TRUE(ns::object_attribute_known(n)) << n;
   }
   for (const char* n : {"user.noobaa.encryption", "user.noobaa.tag",
@@ -19181,7 +19258,7 @@ TEST_F(NSFSPlacedBucketTest, ARowServesTheBucketFromItsStoredPath)
   /* size 0 asks for the length;  a real buffer would have to be big
    * enough for an encoded RGWBucketInfo, and the question here is only
    * whether the attribute is there. */
-  EXPECT_GT(::getxattr(at.c_str(), "user.nsfs.bucket_info", nullptr, 0), 0)
+  EXPECT_GT(::getxattr(at.c_str(), "user.nsfs:bucket_info", nullptr, 0), 0)
       << "the bucket's own state did not land at " << at;
   EXPECT_FALSE(sf::exists(bp / "root" / "placed"))
       << "a placed bucket also appeared under the data root";
@@ -19245,7 +19322,7 @@ TEST_F(NSFSPlacedBucketTest, ThePathIsBoundPerLookup)
   attrs["user.rgw.probe"] = bl;
   ASSERT_EQ(b->merge_and_store_attrs(env->dpp, attrs, null_yield), 0);
 
-  EXPECT_GT(::getxattr(second.c_str(), "user.nsfs.bucket_info", nullptr,
+  EXPECT_GT(::getxattr(second.c_str(), "user.nsfs:bucket_info", nullptr,
 		       0), 0)
       << "the second lookup did not follow the moved row";
 }
@@ -19535,7 +19612,7 @@ TEST_F(NSFSPlacedBucketTest, CreationOverAnExistingDirectoryIsRejected)
   cp.owner = owner;
   EXPECT_EQ(b->create(env->dpp, cp, null_yield, rgw::sal::no_authenticated_user), -EEXIST);
 
-  EXPECT_LT(::getxattr(pre.c_str(), "user.nsfs.bucket_info", nullptr, 0), 0)
+  EXPECT_LT(::getxattr(pre.c_str(), "user.nsfs:bucket_info", nullptr, 0), 0)
       << "the rejected creation wrote to the directory";
   nsfs::BucketPlacement row;
   EXPECT_EQ(driver->get_identity_db()->get_bucket_placement(
@@ -20110,7 +20187,7 @@ public:
     EXPECT_GE(len, 0);
     for (const char* q = buf; (len > 0) && (q < buf + len);
 	 q += strlen(q) + 1) {
-      if (std::string_view(q).starts_with("user.nsfs.")) {
+      if (std::string_view(q).starts_with("user.nsfs:")) {
 	out.emplace_back(q);
       }
     }
@@ -20372,7 +20449,7 @@ TEST_F(NSFSPlaceBucketTest, ABucketOverAnotherUidsDirectoryTakesItsState)
 
   int premise = 0;
   std::thread fresh([&] {
-    premise = (::setxattr(at.c_str(), "user.nsfs.probe", "x", 1, 0) < 0)
+    premise = (::setxattr(at.c_str(), "user.nsfs:probe", "x", 1, 0) < 0)
 	? -errno : 0;
   });
   fresh.join();
@@ -20598,7 +20675,7 @@ TEST_F(NSFSPlacedBucketTest, TheTenantSelectsTheRow)
   bl.append("z");
   attrs["user.rgw.probe"] = bl;
   ASSERT_EQ(loaded->merge_and_store_attrs(env->dpp, attrs, null_yield), 0);
-  EXPECT_GT(::getxattr(a.c_str(), "user.nsfs.bucket_info", nullptr, 0), 0)
+  EXPECT_GT(::getxattr(a.c_str(), "user.nsfs:bucket_info", nullptr, 0), 0)
       << "the tenanted bucket did not resolve to its row";
 }
 

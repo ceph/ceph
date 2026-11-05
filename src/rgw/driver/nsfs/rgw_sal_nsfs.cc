@@ -98,7 +98,7 @@ const int64_t READ_SIZE = 128 * 1024;
 // required alignment for O_DIRECT reads/writes (rgw_nsfs_direct_io)
 const int64_t DIRECT_IO_ALIGN = 4096;
 
-/* The on-disk spelling of an attribute, and which attributes are nsfs's
+/* The on-disk name of an attribute, and which attributes are nsfs's
  * to read at all, belong to XattrStrategy (xattr_strategy.h). */
 
 /* Where a bucket's own state comes from belongs to BucketStateStrategy
@@ -2807,7 +2807,7 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
   /* this entry's own names, where it has them;  see own_xattr_strategy.
    * Only the bucket's format:  no client writes to a bucket being
    * converted (DECISIONS.md 2026-11-02), so nothing written here has
-   * NooBaa's spelling beside it. */
+   * a NooBaa attribute beside it. */
   const XattrStrategy* xs = own_xattr_strategy ? own_xattr_strategy
 					       : xattr_strategy;
 
@@ -4225,7 +4225,7 @@ int NooBaaDirectoryObject::read_attrs(const DoutPrefixProvider* dpp,
     return ret;
   }
   return get_x_attrs(y, dpp, parent->get_fd(), attrs, parent->get_name(),
-		     xattr_strategy, xattr_fallback, identity, "user.nsfs.",
+		     xattr_strategy, xattr_fallback, identity, "user.nsfs:",
 		     unknown);
 }
 
@@ -6013,7 +6013,7 @@ int NSFSDriver::check_owner_can_create_at(const DoutPrefixProvider* dpp,
     W_OK | X_OK, y);
 }
 
-/* Whether `path` carries any user.nsfs.* attribute:  1 if it does, 0 if
+/* Whether `path` carries any user.nsfs:* attribute:  1 if it does, 0 if
  * not, else a negative errno.  More attributes than fit counts as
  * carrying them, since a directory nothing wrote to has few. */
 static int carries_nsfs_state(const std::string& path)
@@ -6024,7 +6024,7 @@ static int carries_nsfs_state(const std::string& path)
     return (errno == ERANGE) ? 1 : -errno;
   }
   for (const char* q = names; q < names + len; q += std::strlen(q) + 1) {
-    if (std::string_view(q).starts_with("user.nsfs.")) {
+    if (std::string_view(q).starts_with("user.nsfs:")) {
       return 1;
     }
   }
@@ -7998,7 +7998,7 @@ int NSFSBucket::set_owns_storage(const DoutPrefixProvider* dpp, bool owns)
  * the driver did not already have to handle.
  *
  * Of the attributes, the whole nsfs namespace goes, not a list of
- * names.  user.nsfs. is exactly what the gateway wrote, so naming the
+ * names.  user.nsfs: is exactly what the gateway wrote, so naming the
  * prefix cannot leave behind an attribute a later version adds;
  * anything of NooBaa's, or anyone else's, is not the gateway's to
  * remove. */
@@ -8016,7 +8016,7 @@ int NSFSBucket::release_nsfs_state(const DoutPrefixProvider* dpp)
     return ret;
   }
 
-  static constexpr std::string_view nsfs_prefix{"user.nsfs."};
+  static constexpr std::string_view nsfs_prefix{"user.nsfs:"};
   for (const auto& [name, _] : present) {
     if (! std::string_view(name).starts_with(nsfs_prefix)) {
       continue;
@@ -8062,7 +8062,7 @@ int NSFSBucket::remove_bypass_gc(int concurrent_max,
 /* The extensions marker, read with its own fgetxattr.
  *
  * Not through XattrStrategy:  choosing the strategy is what the marker
- * decides, and a noobaa strategy would not claim a user.nsfs.* name at
+ * decides, and a noobaa strategy would not claim a user.nsfs:* name at
  * all.  See bucket_profile.h. */
 int NSFSBucket::resolve_profile(const DoutPrefixProvider* dpp)
 {
@@ -8344,7 +8344,7 @@ void NSFSBucket::apply_format()
   dir->set_mpu_strategy(mpu_strategy());
   dir->set_xattr_fallback(xattr_fallback());
   dir->set_path_fallback(path_fallback());
-  /* the bucket's own state, in the nsfs spelling whatever the format */
+  /* the bucket's own state, as RGW attributes whatever the format */
   dir->set_own_xattr_strategy(driver->get_xattr_strategy());
 }
 
@@ -8508,7 +8508,7 @@ int NSFSBucket::set_profile(const DoutPrefixProvider* dpp, optional_yield y,
    * if it failed, and re-issuing set_profile() would not retry it --
    * the re-issue takes the target == current path, not this one.
    *
-   * The bucket's state is written in the nsfs spelling whatever the
+   * The bucket's state is written as RGW attributes whatever the
    * format (DECISIONS.md 2026-10-13), so it needs no rewriting
    * afterwards. */
   if (current == nsfs::EXTENSIONS_BASE) {
@@ -8636,10 +8636,10 @@ static void foreign_names(const nsfs::XattrStrategy* nb,
 /* Rewrite one file's attributes into the bucket's format.
  *
  * Not through FSEnt::write_attrs(), which does the write and the prune
- * in one call.  The phases have to be separable:  `written` -- both
- * spellings on disk -- is the only state the conversion creates that
- * did not exist before, and a caller that cannot be held there cannot
- * observe it.
+ * in one call.  The phases have to be separable:  `written` -- the RGW
+ * attribute and the NooBaa one both on disk -- is the only state the
+ * conversion creates that did not exist before, and a caller that
+ * cannot be held there cannot observe it.
  *
  * `fd` is the file carrying the attributes, which for a directory
  * object in the nsfs format is the sentinel and in NooBaa's is the directory.
@@ -9037,12 +9037,12 @@ static int convert_directory_object(const DoutPrefixProvider* dpp,
   ev.index = progress.objects + progress.directory_objects;
 
   Attrs dattrs;
-  /* Not `user.nsfs.`:  on the bucket root those are the bucket's own
+  /* Not `user.nsfs:`:  on the bucket root those are the bucket's own
    * state, which is not the object's to carry, and nothing else in
    * NooBaa's format has them. */
   std::vector<std::string> unknown, names;
   ret = get_x_attrs(y, dpp, dir_fd, dattrs, ev.key, xs, xattr_fallback, {},
-		    "user.nsfs.", &unknown, &names);
+		    "user.nsfs:", &unknown, &names);
   if (ret < 0) {
     return ret;
   }
@@ -9838,7 +9838,7 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
  *
  * Idempotent.  An item already converted reads through the nsfs
  * strategy, writes back the same bytes under the same names, and
- * prunes a foreign spelling that is not there.
+ * prunes a NooBaa attribute that is not there.
  */
 /* How long a mutation waits on a closed gate before giving up, and how
  * long an upgrade waits for the mutations already running.
@@ -9884,9 +9884,9 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
  */
 
 /* A bucket not adopted takes no client writes (DECISIONS.md 2026-10-21,
- * the gate;  2026-11-02):  no `user.nsfs.marker.extensions` means the
+ * the gate;  2026-11-02):  no `user.nsfs:marker.extensions` means the
  * bucket is NooBaa's until adoption marks it, and
- * `user.nsfs.marker.converting` that its walk has not finished, whether
+ * `user.nsfs:marker.converting` that its walk has not finished, whether
  * it is running or stopped.  InvalidBucketState says the request is not
  * valid in the bucket's current state, which a command can change. */
 int NSFSDriver::reject_unadopted(const DoutPrefixProvider* dpp,
@@ -10046,14 +10046,14 @@ int NSFSBucket::convert_tree(const DoutPrefixProvider* dpp, optional_yield y,
   auto reopen = make_scope_guard(
       [this] { driver->gate_open(get_name()); });
 
-  /* The bucket's own state needs nothing:  it is named in the nsfs
-   * spelling in every format (DECISIONS.md 2026-10-13).
+  /* The bucket's own state needs nothing:  it is held as RGW
+   * attributes in every format (DECISIONS.md 2026-10-13).
    *
    * The root object does.  NooBaa stores it as any directory object,
    * with the bucket's own directory as the directory, so it is
    * converted as one, before the walk -- which reaches only the
    * directories beneath.  convert_directory_object() takes nothing under
-   * `user.nsfs.`, which on this directory is the bucket's state. */
+   * `user.nsfs:`, which on this directory is the bucket's state. */
   ret = dir->open(dpp);
   if (ret < 0) {
     return ret;
@@ -11864,7 +11864,7 @@ int NSFSObject::copy_object(const ACLOwner& owner,
    * AttrWriteMode::REPLACE_ALL would do this generically and is the
    * wrong tool:  it prunes every name that parses as an nsfs name and
    * is absent from the write set, which on a versioned object includes
-   * user.nsfs.version_id and the delete marker.  Removing a name the
+   * user.nsfs:version_id and the delete marker.  Removing a name the
    * object does not carry is a no-op -- remove_xattrs() ignores
    * ENODATA -- so this is safe where the destination is fresh. */
   Attrs stale_meta;
@@ -13458,7 +13458,7 @@ int NSFSObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr
   /* with the identity:  fremovexattr of a `user.*` name needs write
    * permission on the file, tested against the calling thread, so as
    * the gateway this fails on an identity's 0660 object --
-   * "could not remove attribute user.nsfs.rgw.x-amz-tagging ...
+   * "could not remove attribute user.nsfs:rgw.x-amz-tagging ...
    * Permission denied", a 403 from DeleteObjectTagging.  The
    * parameter has been here all along and no caller passed one. */
   ret = with_cross_account_retry(dpp, nsfs::AccessClass::object_attrs,
@@ -14831,7 +14831,7 @@ static void cache_promoted_current(NSFSDriver* driver,
   /* One descriptor, one attribute sweep.  get_x_attrs(xs) lists and reads
    * every xattr on the file, and XattrStrategy::parse_disk_name() accepts
    * both the
-   * user.nsfs.rgw. and user.nsfs. prefixes -- so the digest, the version
+   * user.nsfs:rgw. and user.nsfs: prefixes -- so the digest, the version
    * id and the delete-marker flag all arrive in pattrs, and the separate
    * fgetxattr() for each is redundant with the sweep. */
   Attrs pattrs;
@@ -17839,7 +17839,7 @@ void NSFSDriver::get_features(std::map<std::string, std::string>& features)
    *                   serves them is the next two rows.
    *   extensions      the extension set this build implements, as the
    *                   integer it writes into
-   *                   user.nsfs.marker.extensions.  A bucket without that
+   *                   user.nsfs:marker.extensions.  A bucket without that
    *                   marker is read as NooBaa wrote it and the
    *                   extension-only interfaces are rejected on it.
    *   bucket_profile  the profile a bucket created here is marked with,

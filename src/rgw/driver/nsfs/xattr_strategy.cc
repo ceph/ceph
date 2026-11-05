@@ -32,9 +32,16 @@ namespace rgw { namespace sal { namespace nsfs {
  *
  * RGW's own attributes arrive named user.rgw.* and are re-prefixed rather
  * than stored as they come, so that this driver's namespace and a
- * generic one cannot collide on a tree something else also writes. */
-static const std::string NSFS_XATTR_PREFIX = "user.nsfs.";
-static const std::string NSFS_RGW_XATTR_PREFIX = "user.nsfs.rgw.";
+ * generic one cannot collide on a tree something else also writes.
+ *
+ * The ':' is what keeps NooBaa out (DECISIONS.md 2026-11-05).  NooBaa
+ * stores user metadata as "user." and the rest of the x-amz-meta-
+ * header's name (`s3_utils.js:119`, `namespace_fs.js:299`), and a header
+ * name is an HTTP token, which has no ':'.  So no NooBaa object carries
+ * a name under this prefix, and `x-amz-meta-nsfs.rgw.etag` is the user
+ * metadata it was written as, not our ETag. */
+static const std::string NSFS_XATTR_PREFIX = "user.nsfs:";
+static const std::string NSFS_RGW_XATTR_PREFIX = "user.nsfs:rgw.";
 static const std::string RGW_ATTR_PFX = "user.rgw.";
 
 std::string PrefixedXattrStrategy::disk_name(const std::string& key) const
@@ -146,7 +153,7 @@ static const NBKeyMap NB_KEYS[] = {
 /* Three results, not two.
  *
  * A key NooBaa keeps goes to NooBaa's name.  An nsfs key with no
- * counterpart -- bucket_info, rename intent -- goes under user.nsfs.,
+ * counterpart -- bucket_info, rename intent -- goes under user.nsfs:,
  * where it is inert to them;  the convergence report already records
  * that we write bucket_info on a base bucket for exactly that reason.
  * Only an S3 attribute they deliberately do not keep is dropped, and
@@ -211,7 +218,8 @@ bool NooBaaXattrStrategy::parse_disk_name(const std::string& disk,
     return false;
   }
 
-  /* what is left under user. is user metadata */
+  /* What is left under user. is user metadata, `user.nsfs.*` included:
+   * a client's key that begins "nsfs." */
   if (disk.compare(0, NB_USER_PREFIX.size(), NB_USER_PREFIX) == 0) {
     key = std::string(RGW_ATTR_META_PREFIX) +
 	  disk.substr(NB_USER_PREFIX.size());
@@ -375,7 +383,7 @@ bool NooBaaXattrStrategy::disk_attrs(const std::string& key,
 				     xattr_map_t& to_write,
 				     std::vector<std::string>& to_remove) const
 {
-  /* Only ever a removal.  NooBaa's spelling is read and never written
+  /* Only ever a removal.  A NooBaa attribute is read and never written
    * (DECISIONS.md 2026-10-21);  what reaches here empty is a conversion,
    * or a removal on a bucket being converted, taking a key one format
    * spreads over several names off the object.  A value to write is not

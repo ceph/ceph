@@ -153,7 +153,7 @@ public:
  * hand a NooBaa value to a ceph decoder.
  *
  * It is not only a cross-format problem.  nsfs_apply_non_md5_etag() writes
- * user.nsfs.rgw.etag as mtime-<b36>-ino-<b36> rather than an MD5 digest
+ * user.nsfs:rgw.etag as mtime-<b36>-ino-<b36> rather than an MD5 digest
  * when rgw_non_md5_etag is set:  one key, two value formats, chosen by a
  * config var at the write site rather than by the format.
  *
@@ -164,8 +164,8 @@ public:
  * NooBaa stores and how, which does not exist yet.  See the decomposition
  * plan, S5. */
 
-/* nsfs's own layout:  logical keys under user.nsfs., with RGW's own
- * user.rgw. attributes re-prefixed to user.nsfs.rgw. so that the two
+/* nsfs's own layout:  logical keys under user.nsfs:, with RGW's own
+ * user.rgw. attributes re-prefixed to user.nsfs:rgw. so that the two
  * namespaces cannot collide, and ownership decoded from RGW_ATTR_ACL.
  *
  * Named for the prefixing, which is what distinguishes it:  the NooBaa

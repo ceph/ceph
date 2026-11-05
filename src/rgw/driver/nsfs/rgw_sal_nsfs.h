@@ -54,7 +54,7 @@ class NSFSObject;
 
 /* What a mutation's slot is for (DECISIONS.md 2026-10-21, the gate).
  *
- * A bucket without `user.nsfs.marker.extensions` has not been taken
+ * A bucket without `user.nsfs:marker.extensions` has not been taken
  * over, and a client's write to it is rejected until adoption marks it.  Two
  * writers are not a client's:  adoption, which writes a bucket's state
  * before it marks it, and a copy's source, which is read and not
@@ -96,9 +96,9 @@ mp_cache_bucket_split(const std::string& field)
  * Three phases, because the interesting state is inside an item and
  * not between two of them.  `before` is the old format, which the read
  * fallback strategy serves.  `written` is the only genuinely new state
- * -- the target format is on disk and the old spelling has not gone --
+ * -- the target format is on disk and the old attribute has not gone --
  * and it is where asking the nsfs strategy first stops being incidental.
- * `pruned` is one spelling left, and the item is native.
+ * `pruned` is the RGW attribute alone, and the item is native.
  *
  * A non-zero return stops the conversion with the marker still set, so
  * the same hook that sequences a reader injects a failure and leaves a
@@ -590,7 +590,7 @@ public:
  *
  *   - stat is the sentinel's when the object has content, and the
  *     directory's when it is empty, with the size from the marker
- *   - attributes are read from the directory, without the `user.nsfs.`
+ *   - attributes are read from the directory, without the `user.nsfs:`
  *     names:  on the bucket root those are the bucket's own state, and
  *     nothing else in NooBaa's format carries them
  *   - data is the sentinel's, or nothing

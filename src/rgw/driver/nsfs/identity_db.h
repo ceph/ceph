@@ -109,7 +109,7 @@ struct Identity {
  * "the default".
  *
  * Whether the bucket owns its directory is not here:  it is kept on the
- * directory itself, as user.nsfs.marker.owns_storage, and nowhere else
+ * directory itself, as user.nsfs:marker.owns_storage, and nowhere else
  * (DECISIONS.md 2026-10-13). */
 struct BucketPlacement {
   std::string bucket_name;

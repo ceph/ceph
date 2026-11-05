@@ -26,7 +26,7 @@ namespace rgw { namespace sal { namespace nsfs {
  *
  * NooBaa's field name, so the provenance of the value is readable on
  * disk;  the XattrStrategy supplies the prefix, making it
- * `user.nsfs.force_md5_etag` in the nsfs format.  The value is NooBaa's
+ * `user.nsfs:force_md5_etag` in the nsfs format.  The value is NooBaa's
  * literal -- `true` or `false` -- and the attribute is absent when
  * NooBaa's record did not mention it, which keeps the tri-state
  * NooBaa's cascade depends on.  See `ACCOUNT_IMPORT.md` §6.1a. */
