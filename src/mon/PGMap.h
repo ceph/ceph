@@ -286,6 +286,7 @@ public:
     mempool::pgmap::set<pg_t> pg_remove;
     utime_t stamp;
     per_osd_pool_statfs_t pool_statfs_updates;
+    mempool::pgmap::set<std::pair<int64_t, int>> pool_statfs_rm;  // <pool, osd>
 
   private:
     mempool::pgmap::map<int32_t,osd_stat_t> osd_stat_updates;
@@ -333,6 +334,7 @@ public:
         osd_stat_rm.empty() &&
         pg_remove.empty() &&
         pool_statfs_updates.empty() &&
+        pool_statfs_rm.empty() &&
         osdmap_epoch == 0 &&
         pg_scan == 0;
     }
