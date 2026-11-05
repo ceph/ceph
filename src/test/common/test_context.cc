@@ -22,16 +22,81 @@
  */
 
 #include <iostream> // for std::cout
+#include <list>
+#include <vector>
 
 #include "gtest/gtest.h"
 #include "include/types.h"
 #include "include/msgr.h"
+#include "include/Context.h"
 #include "common/ceph_context.h"
 #include "common/config_proxy.h"
 #include "common/Formatter.h"
 #include "log/Log.h"
 
 using namespace std;
+
+namespace {
+
+class SequenceContext final : public Context
+{
+  std::vector<int>& completed;
+  int& destroyed;
+  const int value;
+
+public:
+  SequenceContext(std::vector<int>& completed, int& destroyed, const int value)
+    : completed(completed), destroyed(destroyed), value(value)
+  {}
+
+  ~SequenceContext() override {
+    ++destroyed;
+  }
+
+  void finish(const int result) override {
+    EXPECT_EQ(7, result);
+    completed.push_back(value);
+  }
+};
+
+template<class Sequence>
+void check_context_factory()
+{
+  std::vector<int> completed;
+  int destroyed = 0;
+  Sequence contexts;
+  EXPECT_EQ(nullptr, C_Contexts::to_context(contexts));
+
+  contexts.push_back(new SequenceContext(completed, destroyed, 1));
+  Context *single = C_Contexts::to_context(contexts);
+  ASSERT_NE(nullptr, single);
+  EXPECT_TRUE(contexts.empty());
+  EXPECT_EQ(0, destroyed);
+  single->complete(7);
+  EXPECT_EQ(1, destroyed);
+
+  contexts.push_back(new SequenceContext(completed, destroyed, 2));
+  contexts.push_back(new SequenceContext(completed, destroyed, 3));
+  Context *batch = C_Contexts::to_context(contexts);
+  ASSERT_NE(nullptr, batch);
+  EXPECT_TRUE(contexts.empty());
+  EXPECT_EQ(1, destroyed);
+  batch->complete(7);
+  EXPECT_EQ((std::vector<int> {1, 2, 3}), completed);
+  EXPECT_EQ(3, destroyed);
+}
+
+} // anonymous namespace
+
+TEST(Context, factory_owns_list_sequences)
+{
+  check_context_factory<std::list<Context *>>();
+}
+
+TEST(Context, factory_owns_vector_sequences)
+{
+  check_context_factory<std::vector<Context *>>();
+}
 
 TEST(CephContext, do_command)
 {
