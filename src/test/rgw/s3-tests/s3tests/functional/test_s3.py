@@ -7277,6 +7277,25 @@ def test_cors_header_option():
 
     _cors_request_and_check(requests.options, obj_url, {'Origin': 'example.origin','Access-Control-Request-Headers':'x-amz-meta-header2','Access-Control-Request-Method':'GET'}, 403, None, None)
 
+def test_cors_preflight_without_cors_config():
+    bucket_name = _setup_bucket_object_acl('public-read', 'public-read')
+    client = get_client()
+
+    e = assert_raises(ClientError, client.get_bucket_cors, Bucket=bucket_name)
+    status = _get_status(e.response)
+    assert status == 404
+
+    url = _get_post_url(bucket_name)
+    obj_url = '{u}/{o}'.format(u=url, o='foo')
+    headers = {'Origin': 'example.origin', 'Access-Control-Request-Method': 'GET'}
+
+    _cors_request_and_check(requests.options, url, headers, 403, None, None)
+    _cors_request_and_check(requests.options, obj_url, headers, 403, None, None)
+
+    # the gateway still serves requests after the refused preflights
+    response = client.get_object(Bucket=bucket_name, Key='foo')
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+
 def _test_cors_options_presigned_method(client, method, cannedACL=None):
     bucket_name = _setup_bucket_object_acl('public-read', 'public-read', client=client)
     params = {'Bucket': bucket_name, 'Key': 'foo'}
