@@ -78,7 +78,7 @@ void RestoreEntry::decode_json(JSONObj *obj)
   status = static_cast<rgw::sal::RGWRestoreStatus>(st);
 }
 
-void RestoreEntry::generate_test_instances(std::list<RestoreEntry*>& l)
+void RestoreEntry::generate_test_instances(std::vector<RestoreEntry*>& l)
 {
   auto p = new RestoreEntry;
   rgw_bucket bk("tenant1", "bucket1");

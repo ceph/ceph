@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <vector>
 #include "cls/rgw/cls_rgw_types.h"
 #include "cls_rgw_gc_const.h"
 #include "include/rados/cls_traits.hpp"
@@ -32,8 +33,8 @@ struct cls_rgw_gc_queue_init_op {
     f->dump_unsigned("num_deferred_entries", num_deferred_entries);
   }
 
-  static std::list<cls_rgw_gc_queue_init_op> generate_test_instances() {
-    std::list<cls_rgw_gc_queue_init_op> o;
+  static std::vector<cls_rgw_gc_queue_init_op> generate_test_instances() {
+    std::vector<cls_rgw_gc_queue_init_op> o;
     o.emplace_back();
     o.back().size = 1024;
     o.back().num_deferred_entries = 512;

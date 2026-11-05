@@ -4,6 +4,7 @@
 #ifndef CEPH_CLS_USER_TYPES_H
 #define CEPH_CLS_USER_TYPES_H
 
+#include <vector>
 #include "include/encoding.h"
 #include "include/types.h"
 #include "include/utime.h"
@@ -90,7 +91,7 @@ struct cls_user_bucket {
   }
 
   void dump(ceph::Formatter *f) const;
-  static std::list<cls_user_bucket> generate_test_instances();
+  static std::vector<cls_user_bucket> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(cls_user_bucket)
 
@@ -154,7 +155,7 @@ struct cls_user_bucket_entry {
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const;
-  static std::list<cls_user_bucket_entry> generate_test_instances();
+  static std::vector<cls_user_bucket_entry> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(cls_user_bucket_entry)
 
@@ -184,7 +185,7 @@ struct cls_user_stats {
   }
 
   void dump(ceph::Formatter *f) const;
-  static std::list<cls_user_stats> generate_test_instances();
+  static std::vector<cls_user_stats> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(cls_user_stats)
 
@@ -212,7 +213,7 @@ struct cls_user_header {
   }
 
   void dump(ceph::Formatter *f) const;
-  static std::list<cls_user_header> generate_test_instances();
+  static std::vector<cls_user_header> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(cls_user_header)
 
@@ -231,7 +232,7 @@ struct cls_user_account_header {
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter* f) const;
-  static std::list<cls_user_account_header> generate_test_instances();
+  static std::vector<cls_user_account_header> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(cls_user_account_header)
 
@@ -259,7 +260,7 @@ struct cls_user_account_resource {
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter* f) const;
-  static std::list<cls_user_account_resource> generate_test_instances();
+  static std::vector<cls_user_account_resource> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(cls_user_account_resource)
 

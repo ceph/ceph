@@ -5,6 +5,7 @@
 #define CEPH_CLS_LOG_TYPES_H
 
 #include <string>
+#include <vector>
 
 #include "include/buffer.h"
 #include "include/encoding.h"
@@ -70,8 +71,8 @@ struct entry {
     JSONDecoder::decode_json("id", id, obj);
   }
 
-  static std::list<cls::log::entry> generate_test_instances() {
-    std::list<cls::log::entry> l;
+  static std::vector<cls::log::entry> generate_test_instances() {
+    std::vector<cls::log::entry> l;
     l.emplace_back();
     l.emplace_back();
     l.back().id = "test_id";
@@ -108,8 +109,8 @@ struct header {
     f->dump_string("max_marker", max_marker);
     f->dump_stream("max_time") << max_time;
   }
-  static std::list<header> generate_test_instances() {
-    std::list<header> o;
+  static std::vector<header> generate_test_instances() {
+    std::vector<header> o;
     o.emplace_back();
     o.emplace_back();
     o.back().max_marker = "test_marker";
