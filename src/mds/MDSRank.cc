@@ -61,6 +61,7 @@
 #include "osdc/Objecter.h"
 #include "common/HeartbeatMap.h"
 #include "ScrubStack.h"
+#include "MigrateQueue.h"
 #include "events/ESubtreeMap.h"
 #include "events/ELid.h"
 #include "Mutation.h"
@@ -522,6 +523,7 @@ MDSRank::MDSRank(
   balancer = new MDBalancer(this, messenger, monc);
 
   scrubstack = new ScrubStack(mdcache, clog, finisher);
+  migrate_queue = new MigrateQueue(this);
 
   inotable = new InoTable(this);
   snapserver = new SnapServer(this, monc);
@@ -555,6 +557,7 @@ MDSRank::~MDSRank()
     hb = nullptr;
   }
 
+  if (migrate_queue) { delete migrate_queue; migrate_queue = nullptr; }
   if (scrubstack) { delete scrubstack; scrubstack = NULL; }
   if (mdcache) { delete mdcache; mdcache = NULL; }
   if (mdlog) { delete mdlog; mdlog = NULL; }
@@ -763,6 +766,7 @@ void MDSRankDispatcher::tick()
     }
     mdcache->find_stale_fragment_freeze();
     mdcache->migrator->find_stale_export_freeze();
+    migrate_queue->tick();
 
     if (mdsmap->get_tableserver() == whoami) {
       snapserver->check_osd_map(false);
@@ -2185,6 +2189,8 @@ void MDSRank::recovery_done(int oldstate)
 {
   dout(1) << "recovery_done -- successful recovery!" << dendl;
   ceph_assert(is_clientreplay() || is_active());
+
+  migrate_queue->load();
 
   if (oldstate == MDSMap::STATE_CREATING)
     return;
