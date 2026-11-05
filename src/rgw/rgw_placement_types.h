@@ -4,6 +4,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 #include "include/types.h"
 
@@ -94,8 +95,8 @@ struct rgw_placement_rule {
     f->dump_string("storage_class", get_storage_class());
   }
 
-  static std::list<rgw_placement_rule> generate_test_instances() {
-    std::list<rgw_placement_rule> o;
+  static std::vector<rgw_placement_rule> generate_test_instances() {
+    std::vector<rgw_placement_rule> o;
     o.emplace_back();
     o.push_back(rgw_placement_rule("name", "storage_class"));
     return o;

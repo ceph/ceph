@@ -97,8 +97,8 @@ void RGWMetadataLogData::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("status", status, obj);
 }
 
-std::list<RGWMetadataLogData> RGWMetadataLogData::generate_test_instances() {
-  std::list<RGWMetadataLogData> l;
+std::vector<RGWMetadataLogData> RGWMetadataLogData::generate_test_instances() {
+  std::vector<RGWMetadataLogData> l;
   l.emplace_back();
   l.emplace_back();
   l.back().read_version = obj_version();

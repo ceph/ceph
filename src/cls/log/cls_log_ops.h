@@ -41,9 +41,9 @@ struct add_op {
     encode_json("monotonic_inc", monotonic_inc, f);
   }
 
-  static std::list<add_op> generate_test_instances() {
+  static std::vector<add_op> generate_test_instances() {
     using namespace std::literals;
-    std::list<add_op> l;
+    std::vector<add_op> l;
     l.emplace_back();
     l.emplace_back();
     l.back().entries.emplace_back();
@@ -91,9 +91,9 @@ struct list_op {
     f->dump_stream("to_time") << to_time;
     f->dump_int("max_entries", max_entries);
   }
-  static std::list<list_op> generate_test_instances() {
+  static std::vector<list_op> generate_test_instances() {
     using namespace std::literals;
-    std::list<list_op> ls;
+    std::vector<list_op> ls;
     ls.emplace_back();
     ls.emplace_back();
     ls.back().from_time = ceph::real_time{1s + 2ns};
@@ -133,9 +133,9 @@ struct list_ret {
     f->dump_string("marker", marker);
     f->dump_bool("truncated", truncated);
   }
-  static std::list<list_ret> generate_test_instances() {
+  static std::vector<list_ret> generate_test_instances() {
     using namespace std::literals;
-    std::list<list_ret> ls;
+    std::vector<list_ret> ls;
     ls.emplace_back();
     ls.emplace_back();
     ls.back().entries.emplace_back();
@@ -189,9 +189,9 @@ struct trim_op {
     f->dump_string("from_marker", from_marker);
     f->dump_string("to_marker", to_marker);
   }
-  static std::list<trim_op> generate_test_instances() {
+  static std::vector<trim_op> generate_test_instances() {
     using namespace std::literals;
-    std::list<trim_op> ls;
+    std::vector<trim_op> ls;
     ls.emplace_back();
     ls.emplace_back();
     ls.back().from_time = ceph::real_time{1s + 2ns};
@@ -221,8 +221,8 @@ struct info_op {
   void dump(ceph::Formatter* f) const {
   }
 
-  static std::list<info_op> generate_test_instances() {
-    std::list<info_op> ls;
+  static std::vector<info_op> generate_test_instances() {
+    std::vector<info_op> ls;
     ls.emplace_back();
     return ls;
   }

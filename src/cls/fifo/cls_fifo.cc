@@ -57,8 +57,8 @@ struct entry_header {
   void dump(ceph::Formatter *f) const {
     f->dump_stream("mtime") << mtime;
   }
-  static std::list<entry_header> generate_test_instances() {
-    std::list<entry_header> ls;
+  static std::vector<entry_header> generate_test_instances() {
+    std::vector<entry_header> ls;
     ls.emplace_back();
     ls.emplace_back();
     ls.back().mtime = ceph::real_clock::now();
