@@ -285,7 +285,15 @@ public:
   struct FileMigrate;
   void handle_client_file_migrate(const MDRequestRef& mdr, CInode *cur,
                                   const std::string& value);
+  std::shared_ptr<FileMigrate> _file_migrate_new(const MDRequestRef& mdr,
+                                                 CInode *cur,
+                                                 const file_layout_t& to);
+  bool _file_migrate_precopy(const MDRequestRef& mdr, CInode *cur,
+                             const file_layout_t& to);
+  void _file_migrate_precopied(std::shared_ptr<FileMigrate> fm);
   void _file_migrate_wait_flush(std::shared_ptr<FileMigrate> fm);
+  void _file_migrate_prepare(std::shared_ptr<FileMigrate> fm);
+  std::map<inodeno_t, std::shared_ptr<FileMigrate>> file_migrates;
   bool _file_migrate_find_versions(std::shared_ptr<FileMigrate> fm);
   void _file_migrate_copy_step(std::shared_ptr<FileMigrate> fm, uint64_t i,
                                size_t k);
