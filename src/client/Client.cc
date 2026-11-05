@@ -7600,8 +7600,10 @@ void Client::tick()
   trim_cache(true);
 
   if (blocklisted && (is_mounted() || is_unmounting()) &&
-      last_auto_reconnect + std::chrono::seconds(30 * 60) < now &&
-      cct->_conf.get_val<bool>("client_reconnect_stale")) {
+      cct->_conf.get_val<bool>("client_reconnect_stale") &&
+      (last_auto_reconnect == ceph::coarse_mono_time() ||
+       last_auto_reconnect +
+         cct->_conf.get_val<std::chrono::seconds>("client_reconnect_stale_interval") < now)) {
     messenger->client_reset();
     fd_gen++; // invalidate open files
     blocklisted = false;
