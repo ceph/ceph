@@ -4609,16 +4609,9 @@ int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
   return 0;
 }
 
-void BlueStore::_close_db()
+void BlueStore::_save_statfs_to_db()
 {
-  dout(10) << __func__ << ":read_only=" << db_was_opened_read_only
-           << " fm=" << fm
-           << " destage_alloc_file=" << need_to_destage_allocation_file
-           << " per_pool=" << per_pool_stat_collection
-           << " pool stats=" << osd_pools.size()
-           << dendl;
-  bool do_destage = !db_was_opened_read_only && need_to_destage_allocation_file;
-  if (do_destage && is_statfs_recoverable()) {
+  { // useless indent to keep diff minimal
     auto t = db->get_transaction();
     store_statfs_t s;
     if (per_pool_stat_collection) {
@@ -4661,6 +4654,88 @@ void BlueStore::_close_db()
     int r = db->submit_transaction_sync(t);
     dout(10) << __func__ << " statfs persisted." << dendl;
     ceph_assert(r >= 0);
+  }
+}
+
+void BlueStore::_statfs_to_bufferlist(bufferlist& stats_out)
+{
+  store_statfs_t s;
+  if (per_pool_stat_collection) {
+    std::lock_guard l(vstatfs_lock);
+    for (auto& p : osd_pools) {
+      string key;
+      get_pool_stat_key(p.first, &key);
+      if (!p.second.is_empty()) {
+        encode(key, stats_out);
+        p.second.encode(stats_out);
+        p.second.publish(&s); // for dout
+        dout(10) << __func__ << " persisting: " << p.first << "->" << s << dendl;
+      }
+    }
+  } else {
+    string key = BLUESTORE_GLOBAL_STATFS_KEY;
+    std::lock_guard l(vstatfs_lock);
+    bufferlist bl;
+    vstatfs.encode(bl);
+    encode(key, stats_out);
+    encode(bl, stats_out);
+    vstatfs.publish(&s); // for dout
+    dout(10) << __func__ << "persisting: " << s << dendl;
+  }
+}
+
+// this is a adaptation of _open_statfs() for bufferlist
+void BlueStore::_statfs_from_bufferlist(const bufferlist& stats_in)
+{
+  osd_pools.clear();
+  vstatfs.reset();
+
+  auto it = stats_in.cbegin();
+  try {
+    string key;
+    decode(key, it);
+    if (key == BLUESTORE_GLOBAL_STATFS_KEY) {
+      vstatfs.decode(it);
+      dout(10) << __func__ << " store_statfs is found" << dendl;
+      per_pool_stat_collection = false;
+      _check_legacy_statfs_alert();
+    } else {
+      it = stats_in.cbegin(); // start from beginning again
+      while (!it.end()) {
+        decode(key, it);
+        uint64_t pool_id;
+        int r = get_key_pool_stat(key, &pool_id);
+        ceph_assert(r == 0);
+        auto& st = osd_pools[pool_id];
+        st.decode(it);
+        vstatfs += st;
+        dout(10) << __func__ << " pool " << std::hex << pool_id
+                 << " statfs(hex) " << st << std::dec << dendl;
+      }
+      dout(10) << __func__ << " per-pool statfs is enabled" << dendl;
+      per_pool_stat_collection = true;
+    }
+  } catch (ceph::buffer::error& e) {
+    derr << __func__ << " failed to decode statfs, using empty" << dendl;
+    osd_pools.clear();
+    vstatfs.reset();
+  }
+  dout(10) << __func__ << " statfs " << std::hex
+           << vstatfs  << std::dec << dendl;
+}
+
+
+void BlueStore::_close_db()
+{
+  dout(10) << __func__ << ":read_only=" << db_was_opened_read_only
+           << " fm=" << fm
+           << " destage_alloc_file=" << need_to_destage_allocation_file
+           << " per_pool=" << per_pool_stat_collection
+           << " pool stats=" << osd_pools.size()
+           << dendl;
+  bool do_destage = !db_was_opened_read_only && need_to_destage_allocation_file;
+  if (do_destage && is_statfs_recoverable()) {
+    _save_statfs_to_db();
   }
   ceph_assert(db);
   delete db;

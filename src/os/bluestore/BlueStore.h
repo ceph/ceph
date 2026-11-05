@@ -1415,6 +1415,9 @@ private:
   int _open_db(bool create,
 	       bool to_repair_db=false,
 	       bool read_only = false);
+  void _save_statfs_to_db();
+  void _statfs_to_bufferlist(bufferlist& statsout);
+  void _statfs_from_bufferlist(const bufferlist& statsin);
   void _close_db();
   int _open_fm(KeyValueDB::Transaction t,
                bool read_only,
