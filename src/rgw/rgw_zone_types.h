@@ -24,6 +24,8 @@
 #include <set>
 #include <map>
 #include <list>
+#include <ranges>
+#include <vector>
 #include <boost/optional.hpp>
 
 #include <fmt/format.h>
@@ -79,7 +81,7 @@ struct RGWNameToId {
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static std::list<RGWNameToId> generate_test_instances();
+  static std::vector<RGWNameToId> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(RGWNameToId)
 
@@ -123,7 +125,7 @@ struct RGWZoneStorageClass {
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static std::list<RGWZoneStorageClass> generate_test_instances();
+  static std::vector<RGWZoneStorageClass> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(RGWZoneStorageClass)
 
@@ -211,7 +213,7 @@ public:
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static std::list<RGWZoneStorageClasses> generate_test_instances();
+  static std::vector<RGWZoneStorageClasses> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(RGWZoneStorageClasses)
 
@@ -308,7 +310,7 @@ struct RGWZonePlacementInfo {
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static std::list<RGWZonePlacementInfo> generate_test_instances();
+  static std::vector<RGWZonePlacementInfo> generate_test_instances();
 
 };
 WRITE_CLASS_ENCODER(RGWZonePlacementInfo)
@@ -399,7 +401,7 @@ struct RGWZone {
   }
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static std::list<RGWZone> generate_test_instances();
+  static std::vector<RGWZone> generate_test_instances();
 
   bool is_read_only() const { return read_only; }
 
@@ -591,8 +593,8 @@ struct RGWZoneGroupTierS3Glacier {
   }
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static std::list<RGWZoneGroupTierS3Glacier> generate_test_instances() {
-    std::list<RGWZoneGroupTierS3Glacier> o;
+  static std::vector<RGWZoneGroupTierS3Glacier> generate_test_instances() {
+    std::vector<RGWZoneGroupTierS3Glacier> o;
     o.emplace_back();
     o.back().glacier_restore_days = 2;
     o.back().glacier_restore_tier_type = GlacierRestoreTierType::Expedited;
@@ -695,8 +697,8 @@ struct RGWZoneGroupPlacementTier {
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static std::list<RGWZoneGroupPlacementTier> generate_test_instances() {
-    std::list<RGWZoneGroupPlacementTier> o;
+  static std::vector<RGWZoneGroupPlacementTier> generate_test_instances() {
+    std::vector<RGWZoneGroupPlacementTier> o;
     o.emplace_back();
     o.emplace_back();
     o.back().tier_type = RGWTierType::CLOUD_S3;
@@ -754,8 +756,8 @@ struct RGWZoneGroupPlacementTarget {
   }
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static std::list<RGWZoneGroupPlacementTarget> generate_test_instances() {
-    std::list<RGWZoneGroupPlacementTarget> o;
+  static std::vector<RGWZoneGroupPlacementTarget> generate_test_instances() {
+    std::vector<RGWZoneGroupPlacementTarget> o;
     o.emplace_back();
     o.back().storage_classes.insert(RGW_STORAGE_CLASS_STANDARD);
     o.emplace_back();

@@ -6,7 +6,7 @@
 
 #include <cstdint>
 #include <iostream>
-#include <list>
+#include <vector>
 #include <string>
 
 #include "common/Formatter.h"
@@ -67,7 +67,7 @@ struct obj_version {
   }
 
   void decode_json(JSONObj *obj);
-  static std::list<obj_version> generate_test_instances();
+  static std::vector<obj_version> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(obj_version)
 
@@ -112,8 +112,8 @@ struct obj_version_cond {
     f->dump_unsigned("cond", cond);
   }
 
-  static std::list<obj_version_cond> generate_test_instances() {
-    std::list<obj_version_cond> o;
+  static std::vector<obj_version_cond> generate_test_instances() {
+    std::vector<obj_version_cond> o;
     o.emplace_back();
     o.emplace_back();
     o.back().ver.ver = 1;

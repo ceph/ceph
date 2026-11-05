@@ -4,6 +4,7 @@
 #ifndef CEPH_CLS_QUEUE_TYPES_H
 #define CEPH_CLS_QUEUE_TYPES_H
 
+#include <vector>
 #include <errno.h>
 
 #include "common/Formatter.h"
@@ -42,8 +43,8 @@ struct cls_queue_entry
     f->dump_string("marker", marker);
     f->dump_unsigned("data_len", data.length());
   }
-  static std::list<cls_queue_entry> generate_test_instances() {
-    std::list<cls_queue_entry> o;
+  static std::vector<cls_queue_entry> generate_test_instances() {
+    std::vector<cls_queue_entry> o;
     o.emplace_back();
     o.emplace_back();
     o.back().data.append(std::string_view("data"));
@@ -100,8 +101,8 @@ struct cls_queue_marker
     f->dump_unsigned("offset", offset);
     f->dump_unsigned("gen", gen);
   }
-  static std::list<cls_queue_marker> generate_test_instances() {
-    std::list<cls_queue_marker> o;
+  static std::vector<cls_queue_marker> generate_test_instances() {
+    std::vector<cls_queue_marker> o;
     o.emplace_back();
     o.emplace_back();
     o.back().offset = 1024;
@@ -151,8 +152,8 @@ struct cls_queue_head
     f->dump_unsigned("tail_offset", tail.offset);
     f->dump_unsigned("tail_gen", tail.gen);
   }
-  static std::list<cls_queue_head> generate_test_instances() {
-    std::list<cls_queue_head> o;
+  static std::vector<cls_queue_head> generate_test_instances() {
+    std::vector<cls_queue_head> o;
     o.emplace_back();
     o.emplace_back();
     o.back().max_head_size = 1024;

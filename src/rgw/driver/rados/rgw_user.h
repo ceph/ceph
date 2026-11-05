@@ -60,8 +60,8 @@ struct RGWUID
   void dump(Formatter *f) const {
     f->dump_string("user_id", id);
   }
-  static std::list<RGWUID> generate_test_instances() {
-    std::list<RGWUID> o;
+  static std::vector<RGWUID> generate_test_instances() {
+    std::vector<RGWUID> o;
     o.emplace_back();
     o.emplace_back();
     o.back().id = "test:tester";

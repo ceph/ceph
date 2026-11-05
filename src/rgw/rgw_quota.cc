@@ -1038,9 +1038,9 @@ void RGWQuotaInfo::dump(Formatter *f) const
   f->dump_int("max_objects", max_objects);
 }
 
-std::list<RGWQuotaInfo> RGWQuotaInfo::generate_test_instances()
+std::vector<RGWQuotaInfo> RGWQuotaInfo::generate_test_instances()
 {
-  std::list<RGWQuotaInfo> o;
+  std::vector<RGWQuotaInfo> o;
   o.emplace_back();
   o.emplace_back();
   o.back().enabled = true;
