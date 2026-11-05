@@ -1,4 +1,5 @@
 import datetime
+import time
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 import pytest
@@ -14,10 +15,27 @@ from cephadm.agent_metrics import AgentMetadataStats
 from cephadm.http_server import CephadmHttpServer
 
 
+def _clock(monotonic, wall=None):
+    """Fake the clock seen by cephadm.agent_metrics only.
+
+    Patching 'cephadm.agent_metrics.time.monotonic' would replace
+    time.monotonic for the whole process. Any other thread, or a finalizer
+    run by the garbage collector (e.g. a leaked ThreadPool from an earlier
+    test joining its workers), would then consume the side_effect values or
+    block on them, and the test run can hang.
+    """
+    fake = SimpleNamespace(monotonic=MagicMock(side_effect=monotonic), time=time.time)
+    if isinstance(wall, list):
+        fake.time = MagicMock(side_effect=wall)
+    elif wall is not None:
+        fake.time = MagicMock(return_value=wall)
+    return patch('cephadm.agent_metrics.time', fake)
+
+
 def test_agent_request_store_attribution_and_shape() -> None:
     stats = AgentMetadataStats()
 
-    with patch('cephadm.agent_metrics.time.monotonic', side_effect=[10.0, 10.1, 10.2, 10.3, 10.4]):
+    with _clock(monotonic=[10.0, 10.1, 10.2, 10.3, 10.4]):
         stats.begin_agent_request()
         stats.record_report_shape({'ls': '[{}]', 'volume': '[{}]'})
         stats.record_report_state(first_contact=False, stale_ack=True)
@@ -56,7 +74,7 @@ def test_request_hooks_count_node_proxy_and_finish_data_request() -> None:
     mgr.http_server._sample_agent_pool.assert_called_once_with()
 
     mgr.http_server._sample_agent_pool.reset_mock()
-    with patch('cephadm.agent_metrics.time.monotonic', side_effect=[10.0, 10.1, 10.2]):
+    with _clock(monotonic=[10.0, 10.1, 10.2]):
         _agent_stats_request_start(mgr, 'data')
         stats.record_store('agent', 0.020)
         _agent_stats_request_end(mgr, 'data')
@@ -144,8 +162,8 @@ def test_recent_rates_intervals_and_pacing() -> None:
     stats._since_monotonic = 99.0
     stats._since = datetime.datetime.fromtimestamp(999.0, tz=datetime.timezone.utc)
 
-    with patch('cephadm.agent_metrics.time.monotonic', side_effect=[100.0, 100.2, 100.3, 100.4, 101.0, 101.2, 101.3, 101.4, 101.5]), \
-            patch('cephadm.agent_metrics.time.time', side_effect=[1000.1, 1001.1, 1001.5]):
+    with _clock(monotonic=[100.0, 100.2, 100.3, 100.4, 101.0, 101.2, 101.3, 101.4, 101.5],
+                wall=[1000.1, 1001.1, 1001.5]):
         stats.begin_agent_request()
         stats.record_valid_report('host1', 1000.0)
         stats.record_store('host', 0.010)
@@ -303,7 +321,7 @@ def test_slow_agent_request_logs_debug_per_request_store_breakdown() -> None:
     logger = MagicMock()
     stats = AgentMetadataStats(logger)
 
-    with patch('cephadm.agent_metrics.time.monotonic', side_effect=[10.0, 10.1, 10.2, 10.3, 10.4, 11.5]):
+    with _clock(monotonic=[10.0, 10.1, 10.2, 10.3, 10.4, 11.5]):
         stats.begin_agent_request()
         stats.record_request_pool_start(0, 12)
         stats.record_report_shape({'host': 'node1', 'ls': [{}], 'volume': '[{}]'})
@@ -333,7 +351,7 @@ def test_fast_agent_request_does_not_log_slow_breakdown() -> None:
     logger = MagicMock()
     stats = AgentMetadataStats(logger)
 
-    with patch('cephadm.agent_metrics.time.monotonic', side_effect=[10.0, 10.1, 10.5]):
+    with _clock(monotonic=[10.0, 10.1, 10.5]):
         stats.begin_agent_request()
         stats.record_report_shape({'host': 'node1'})
         stats.record_store('agent', 0.100)
@@ -347,7 +365,7 @@ def test_very_slow_agent_request_logs_at_info() -> None:
     logger = MagicMock()
     stats = AgentMetadataStats(logger)
 
-    with patch('cephadm.agent_metrics.time.monotonic', side_effect=[10.0, 10.1, 15.1]):
+    with _clock(monotonic=[10.0, 10.1, 15.1]):
         stats.begin_agent_request()
         stats.record_report_shape({'host': 'node1'})
         stats.record_store('agent', 5.0)
@@ -376,20 +394,20 @@ def test_request_errors_are_flagged_in_service_time() -> None:
     stats = AgentMetadataStats()
 
     # Bad metadata and handler errors raised while handling the request.
-    with patch('cephadm.agent_metrics.time.monotonic', side_effect=[1.0, 1.1]):
+    with _clock(monotonic=[1.0, 1.1]):
         stats.begin_agent_request()
         stats.record_bad_metadata()
         stats.finish_agent_request()
-    with patch('cephadm.agent_metrics.time.monotonic', side_effect=[2.0, 2.1]):
+    with _clock(monotonic=[2.0, 2.1]):
         stats.begin_agent_request()
         stats.record_handler_error()
         stats.finish_agent_request()
     # Non-2xx response reported by the end-of-request hook.
-    with patch('cephadm.agent_metrics.time.monotonic', side_effect=[3.0, 3.1]):
+    with _clock(monotonic=[3.0, 3.1]):
         stats.begin_agent_request()
         stats.finish_agent_request(error=True)
     # The error flag must not leak into the next request on the same thread.
-    with patch('cephadm.agent_metrics.time.monotonic', side_effect=[4.0, 4.1]):
+    with _clock(monotonic=[4.0, 4.1]):
         stats.begin_agent_request()
         stats.finish_agent_request()
 
@@ -414,11 +432,10 @@ def test_service_time_max_start_timestamp_and_p99() -> None:
 
     # 99 fast requests (100-500ms) and one slow outlier (2-3s).
     for i in range(99):
-        with patch('cephadm.agent_metrics.time.monotonic', side_effect=[float(i), i + 0.2]):
+        with _clock(monotonic=[float(i), i + 0.2]):
             stats.begin_agent_request()
             stats.finish_agent_request()
-    with patch('cephadm.agent_metrics.time.monotonic', side_effect=[200.0, 202.5]), \
-            patch('cephadm.agent_metrics.time.time', return_value=1760000000.0):
+    with _clock(monotonic=[200.0, 202.5], wall=1760000000.0):
         stats.begin_agent_request()
         stats.finish_agent_request()
 
@@ -431,7 +448,7 @@ def test_service_time_max_start_timestamp_and_p99() -> None:
     assert req['p99_bucket_upper_ms'] == 500.0
 
     # A faster request must not move the max timestamp.
-    with patch('cephadm.agent_metrics.time.monotonic', side_effect=[300.0, 300.1]):
+    with _clock(monotonic=[300.0, 300.1]):
         stats.begin_agent_request()
         stats.finish_agent_request()
     assert stats.snapshot('mgr.a')['request_latency']['max_started_at'] == req['max_started_at']
@@ -445,7 +462,7 @@ def test_p99_without_samples_and_in_open_bucket() -> None:
     stats = AgentMetadataStats()
     assert stats.snapshot('mgr.a')['request_latency']['p99_bucket_upper_ms'] is None
 
-    with patch('cephadm.agent_metrics.time.monotonic', side_effect=[0.0, 12.0]):
+    with _clock(monotonic=[0.0, 12.0]):
         stats.begin_agent_request()
         stats.finish_agent_request()
     assert stats.snapshot('mgr.a')['request_latency']['p99_bucket_upper_ms'] == pytest.approx(12000.0)
@@ -473,7 +490,7 @@ def test_queue_peak_timestamp() -> None:
 def test_format_plain_shows_service_time_and_peak_timestamps() -> None:
     stats = AgentMetadataStats()
     stats.record_pool(0, 7)
-    with patch('cephadm.agent_metrics.time.monotonic', side_effect=[1.0, 2.5]):
+    with _clock(monotonic=[1.0, 2.5]):
         stats.begin_agent_request()
         stats.finish_agent_request(error=True)
 
