@@ -15467,6 +15467,10 @@ def test_put_bucket_encryption_misspelled_blocked_encryption_types():
 def test_put_bucket_encryption_misspelled_encryption_type():
     _test_put_bucket_encryption_malformed('<Rule><BlockedEncryptionTypes><EncryptionTypes>SSE-C</EncryptionTypes></BlockedEncryptionTypes></Rule>')
 
+@pytest.mark.bucket_encryption
+def test_put_bucket_encryption_two_rules():
+    _test_put_bucket_encryption_malformed('<Rule>' + _sse_s3_by_default + '</Rule><Rule><BlockedEncryptionTypes><EncryptionType>SSE-C</EncryptionType></BlockedEncryptionTypes></Rule>')
+
 
 @pytest.mark.sse_s3
 def test_get_bucket_encryption_s3():
