@@ -429,6 +429,13 @@ class CephadmService(metaclass=ABCMeta):
     ) -> TLSCredentials:
         return EMPTY_TLS_CREDENTIALS
 
+    def _other_daemons_in_service(self, daemon: DaemonDescription) -> List[DaemonDescription]:
+        """Daemons of the same service as `daemon`, excluding `daemon` itself."""
+        return [
+            d for d in self.mgr.cache.get_daemons_by_service(daemon.service_name())
+            if d.name() != daemon.name()
+        ]
+
     def get_certificates(self,
                          daemon_spec: CephadmDaemonDeploySpec,
                          ips: List[str] = [],
@@ -1029,10 +1036,7 @@ class CephadmService(metaclass=ABCMeta):
         # If TLS is disabled, we may not have a meaningful source anymore
         cert_source = spec.certificate_source if spec.ssl else None
 
-        daemons = [
-            d for d in self.mgr.cache.get_daemons_by_service(svc_name)
-            if d.name() != daemon.name()
-        ]
+        daemons = self._other_daemons_in_service(daemon)
         remaining_on_host = [d for d in daemons if d.hostname == host]
         if remaining_on_host:
             logger.info(
