@@ -394,14 +394,17 @@ namespace PriorityCache
     }
 
     // If this is the last priority, divide up any remaining memory based
-    // solely on the ratios.
+    // solely on the ratios, on top of what the loop above granted the caches
+    // that asked at this priority.
     if (pri == Priority::LAST) {
       uint64_t total_assigned = 0;
       for (auto it = caches.begin(); it != caches.end(); it++) {
         double ratio = it->second->get_cache_ratio();
         int64_t fair_share = static_cast<int64_t>(*mem_avail * ratio);
-        it->second->set_cache_bytes(Priority::LAST, fair_share);
-        total_assigned += fair_share;
+        if (fair_share > 0) {
+          it->second->add_cache_bytes(Priority::LAST, fair_share);
+          total_assigned += fair_share;
+        }
       }
       *mem_avail -= total_assigned;
       return;
