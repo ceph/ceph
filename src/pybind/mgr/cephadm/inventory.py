@@ -2146,6 +2146,8 @@ class AgentCache():
         self.agent_keys = {}  # type: Dict[str, str]
         self.agent_ports = {}  # type: Dict[str, int]
         self.sending_agent_message = {}  # type: Dict[str, bool]
+        # host -> value last written to the store for that agent
+        self._persisted_agent = {}  # type: Dict[str, str]
 
     def load(self):
         # type: () -> None
@@ -2165,8 +2167,10 @@ class AgentCache():
                     conf_deps['last_config'] = str_to_datetime(conf_deps['last_config'])
                 self.agent_config_deps[host] = conf_deps
                 self.agent_counter[host] = int(j.get('agent_counter', 1))
-                self.agent_timestamp[host] = str_to_datetime(
-                    j.get('agent_timestamp', datetime_to_str(datetime_now())))
+                # Older releases persisted 'agent_timestamp' on every report.
+                # It is no longer written, so a stored value can be arbitrarily
+                # old: ignore it. _agent_down() starts the clock for a host
+                # with no timestamp, as it did after a failover before.
                 self.agent_keys[host] = str(j.get('agent_keys', ''))
                 agent_port = int(j.get('agent_ports', 0))
                 if agent_port:
@@ -2198,10 +2202,16 @@ class AgentCache():
             j['agent_keys'] = self.agent_keys[host]
         if host in self.agent_ports:
             j['agent_ports'] = self.agent_ports[host]
-        if host in self.agent_timestamp:
-            j['agent_timestamp'] = datetime_to_str(self.agent_timestamp[host])
 
-        _timed_set_store(self.mgr, AGENT_CACHE_PREFIX + host, json.dumps(j), 'agent')
+        # save_agent() runs on every agent report. The last-report time is not
+        # persisted (it would make every report a mon write), so in steady
+        # state nothing here changes and the write is skipped.
+        value = json.dumps(j)
+        if self._persisted_agent.get(host) == value:
+            _record_store_skipped(self.mgr, 'agent')
+            return
+        _timed_set_store(self.mgr, AGENT_CACHE_PREFIX + host, value, 'agent')
+        self._persisted_agent[host] = value
 
     def update_agent_config_deps(self, host: str, deps: List[str], stamp: datetime.datetime) -> None:
         self.agent_config_deps[host] = {
