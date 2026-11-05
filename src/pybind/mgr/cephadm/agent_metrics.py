@@ -180,6 +180,8 @@ class AgentMetadataStats:
             }
             self._bad_metadata = 0
             self._handler_errors = 0
+            self._stale_dropped = 0
+            self._stale_drop_max_age_s = 0.0
             self._reports_with_nonempty_ls = 0
             self._reports_with_devices = 0
             self._first_contact_reports = 0
@@ -348,6 +350,11 @@ class AgentMetadataStats:
         with self._lock:
             self._bad_metadata += 1
 
+    def record_stale_drop(self, age_s: float) -> None:
+        with self._lock:
+            self._stale_dropped += 1
+            self._stale_drop_max_age_s = max(self._stale_drop_max_age_s, age_s)
+
     def record_handler_error(self) -> None:
         self._mark_agent_request_error()
         with self._lock:
@@ -478,6 +485,8 @@ class AgentMetadataStats:
                     'unique_hosts': len(self._unique_reporting_hosts),
                     'bad_metadata': self._bad_metadata,
                     'handler_errors': self._handler_errors,
+                    'stale_dropped': self._stale_dropped,
+                    'stale_drop_max_age_s': round(self._stale_drop_max_age_s, 3),
                     'with_nonempty_ls': self._reports_with_nonempty_ls,
                     'with_devices': self._reports_with_devices,
                     'first_contact': self._first_contact_reports,
@@ -552,6 +561,8 @@ class AgentMetadataStats:
             f"  sent timestamps:    {reports['sent_timestamped']}",
             f"  bad metadata:       {reports['bad_metadata']}",
             f"  handler errors:     {reports['handler_errors']}",
+            f"  stale dropped:      {reports['stale_dropped']}",
+            f"  stale max age:      {reports['stale_drop_max_age_s']:.3f} s",
             f"  non-empty ls:      {reports['with_nonempty_ls']}",
             f"  with devices:       {reports['with_devices']}",
             f"  first contact:      {reports['first_contact']}",
