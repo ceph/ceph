@@ -2816,6 +2816,9 @@ int RGWUserMetadataHandler::put(std::string& entry, RGWMetadataObject *obj,
   // store the updated user info
   auto newobj = static_cast<RGWUserMetadataObject*>(obj);
   RGWUserCompleteInfo& uci = newobj->get_uci();
+  if (!rgw_metadata_attrs_valid(dpp, uci.attrs)) {
+    return -EINVAL;
+  }
   auto pattrs = (uci.has_attrs ? &uci.attrs : nullptr);
   auto mtime = obj->get_mtime();
 

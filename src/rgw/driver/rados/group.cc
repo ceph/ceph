@@ -432,6 +432,9 @@ class MetadataHandler : public RGWMetadataHandler {
     if (new_info.id != group_id) {
       return -EINVAL;
     }
+    if (!rgw_metadata_attrs_valid(dpp, group_obj->get().attrs)) {
+      return -EINVAL;
+    }
 
     // read existing metadata
     RGWGroupInfo old_info;

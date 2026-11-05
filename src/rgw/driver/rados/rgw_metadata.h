@@ -148,3 +148,8 @@ void rgw_shard_name(const std::string& prefix, unsigned max_shards, const std::s
 void rgw_shard_name(const std::string& prefix, unsigned max_shards, const std::string& section, const std::string& key, std::string& name);
 void rgw_shard_name(const std::string& prefix, unsigned shard_id, std::string& name);
 
+// metadata reads only return attrs under RGW_ATTR_PREFIX, but a put would
+// write any other name as a raw xattr, such as the one cls_version keeps
+bool rgw_metadata_attrs_valid(const DoutPrefixProvider* dpp,
+                              const std::map<std::string, bufferlist>& attrs);
+

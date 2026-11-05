@@ -3053,6 +3053,10 @@ int RGWBucketInstanceMetadataHandler::put(std::string& entry, RGWMetadataObject*
     return STATUS_NO_APPLY;
   }
 
+  if (!rgw_metadata_attrs_valid(dpp, bci.attrs)) {
+    return -EINVAL;
+  }
+
   // read existing bucket instance
   std::optional old = RGWBucketCompleteInfo{};
   int ret = svc_bucket->read_bucket_instance_info(entry, &old->info, nullptr,
