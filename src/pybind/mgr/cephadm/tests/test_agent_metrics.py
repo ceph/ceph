@@ -277,9 +277,15 @@ def test_host_data_store_writes_are_attributed_to_agent_request() -> None:
                 patch('cephadm.agent.cherrypy.request', request):
             _agent_stats_request_start(mgr, 'data')
             try:
-                HostData(mgr).index()
+                response = HostData(mgr).index()
             finally:
                 _agent_stats_request_end(mgr, 'data')
+
+        # the reply carries the pacing values the agent adopts
+        agent = mgr.http_server.agent
+        assert response['refresh_period'] == agent.compute_agents_refrsh_rate()
+        assert response['jitter_seconds'] == agent.get_jitter()
+        assert response['report_timeout'] == agent.get_report_timeout()
 
         result = mgr.agent_metadata_stats.snapshot('mgr.a')
         assert result['reports']['total'] == 1

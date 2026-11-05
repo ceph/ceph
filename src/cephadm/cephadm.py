@@ -2072,6 +2072,7 @@ class CephadmAgent(DaemonForm):
                 self.metadata_compresion_enabled = bool(config.get('metadata_compresion_enabled', False))
                 self.initial_startup_delay_max = int(config.get('initial_startup_delay_max', 0))
                 self.jitter_seconds = int(config.get('jitter_seconds', 0))
+                self.report_timeout = int(config['report_timeout'])
                 self.host = config['host']
                 # Older agent.json files do not contain this field. Keep the
                 # existing image inference fallback for upgrade compatibility.
@@ -2179,6 +2180,8 @@ class CephadmAgent(DaemonForm):
                                               endpoint='/data',
                                               ssl_ctx=self.ssl_ctx,
                                               compress=self.metadata_compresion_enabled,
+                                              # wait up to the report period set by the mgr
+                                              timeout=self.report_timeout,
                                               headers={
                                                   'X-Cephadm-Agent-Sent-At': str(time.time())
                                               })
@@ -2190,6 +2193,8 @@ class CephadmAgent(DaemonForm):
                     self.loop_interval = int(response_json['refresh_period'])
                 if 'jitter_seconds' in response_json:
                     self.jitter_seconds = int(response_json['jitter_seconds'])
+                if 'report_timeout' in response_json:
+                    self.report_timeout = int(response_json['report_timeout'])
                 total_request_time = datetime.timedelta(seconds=(time.monotonic() - send_time)).total_seconds()
                 logger.info(f'Received mgr response: "{response_json["result"]}" {total_request_time} seconds after sending request.')
             except Exception as e:

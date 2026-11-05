@@ -194,3 +194,16 @@ class TestAgentEndpointAuto:
         assert config.compute_agents_refrsh_rate() == 133
         assert config.get_initial_delay() == 66
         assert config.get_jitter() == 66  # 50% of refresh rate
+
+    def test_report_timeout_follows_refresh_rate(self):
+        # The agent waits up to one refresh period for the reply
+        assert AgentEndpoint(FakeMgr(num_hosts=10)).get_report_timeout() == 20
+        assert AgentEndpoint(FakeMgr(num_hosts=305)).get_report_timeout() == 76
+        mgr = FakeMgr(num_hosts=10)
+        mgr.agent_refresh_rate = 45
+        assert AgentEndpoint(mgr).get_report_timeout() == 45
+
+    def test_report_timeout_is_capped(self):
+        # 1000 hosts: refresh rate 133 s, timeout capped
+        mgr = FakeMgr(num_hosts=1000)
+        assert AgentEndpoint(mgr).get_report_timeout() == AgentEndpoint.MAX_REPORT_TIMEOUT_SECONDS
