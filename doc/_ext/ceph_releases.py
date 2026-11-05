@@ -5,6 +5,7 @@
 #   https://bitbucket.org/prometheus/sphinxcontrib-htsql/src/331a542c29a102eec9f8cba44797e53a49de2a49/sphinxcontrib/htsql.py?at=default&fileviewer=file-view-default
 # into the glory that follows:
 import json
+import os
 import yaml
 import jinja2
 import sphinx
@@ -14,6 +15,10 @@ from docutils import nodes
 from sphinx.util import logging
 
 logger = logging.getLogger(__name__)
+
+
+def note_extension_dependency(env):
+    env.note_dependency(os.path.relpath(__file__, env.srcdir))
 
 
 class CephReleases(Directive):
@@ -27,6 +32,7 @@ class CephReleases(Directive):
         current = self.arguments[1] == 'current'
         document = self.state.document
         env = document.settings.env
+        note_extension_dependency(env)
         rel_filename, filename = env.relfn2path(filename)
         env.note_dependency(filename)
         try:
@@ -180,6 +186,7 @@ class ReleasesGantt(Directive):
         filename = self.arguments[0]
         document = self.state.document
         env = document.settings.env
+        note_extension_dependency(env)
         rel_filename, filename = env.relfn2path(filename)
         env.note_dependency(filename)
         lines = self._render_time_line(filename)
@@ -200,6 +207,7 @@ class CephTimeline(Directive):
         filename = self.arguments[0]
         document = self.state.document
         env = document.settings.env
+        note_extension_dependency(env)
         rel_filename, filename = env.relfn2path(filename)
         env.note_dependency(filename)
         try:
@@ -332,6 +340,7 @@ class TimeLineGantt(Directive):
         display_releases = self.arguments[1].split()
         document = self.state.document
         env = document.settings.env
+        note_extension_dependency(env)
         rel_filename, filename = env.relfn2path(filename)
         env.note_dependency(filename)
         lines = self._render_time_line(filename, display_releases)
