@@ -7085,7 +7085,11 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
  * ceph.file.migrate.pool: move a regular file's data to another data pool.
  *
  * The filelock is held exclusively and Fb is revoked, so no client can read
- * or write the file meanwhile and none still buffers data for it.
+ * or write the file meanwhile and none still buffers data for it.  For a big
+ * file with no writers that happens only at the end: it is copied first, with
+ * clients still using it, and locked to check that it did not change, by its
+ * change_attr, mtime and size, once the clients have flushed.  If it did, it
+ * is simply copied again, locked.
  *
  * Whenever every snapshot version of the inode can be found, the snapshots
  * move too.  Each object's history is listed and replayed into the new pool,
@@ -7128,6 +7132,13 @@ struct Server::FileMigrate {
   Phase phase = COPY;
   bool whole = false;       // the snapshots move too
   uint32_t gen = 0;         // namespace generation of the target
+  // Copying before the lock is taken.
+  bool precopying = false;
+  bool precopied = false;
+  bool precopy_failed = false;
+  uint64_t seen_change_attr = 0;
+  utime_t seen_mtime;
+  uint64_t seen_size = 0;
   bool dir_fetched = false;
   bool fetching = false;
   std::vector<CInode*> versions;  // snapped inodes of this file
@@ -7175,6 +7186,16 @@ void Server::handle_client_file_migrate(const MDRequestRef& mdr, CInode *cur,
   if (check_layout_vxattr(mdr, "layout.pool", value, &to) < 0)
     return;
 
+  // Not with the file still being copied without a lock for someone else:
+  // both write the same objects.
+  auto running = file_migrates.find(cur->ino());
+  if (running != file_migrates.end() && running->second->mdr != mdr) {
+    respond_to_request(mdr, -EBUSY);
+    return;
+  }
+  if (running == file_migrates.end() && _file_migrate_precopy(mdr, cur, to))
+    return;
+
   MutationImpl::LockOpVec lov;
   lov.add_xlock(&cur->filelock);
   if (!mds->locker->acquire_locks(mdr, lov))
@@ -7193,25 +7214,19 @@ void Server::handle_client_file_migrate(const MDRequestRef& mdr, CInode *cur,
     return;
   }
   if (to.pool_id == pi->layout.pool_id) {
+    file_migrates.erase(cur->ino());
     respond_to_request(mdr, 0);
     return;
   }
 
-  auto fm = std::make_shared<FileMigrate>();
-  fm->mdr = mdr;
-  fm->in = cur;
-  fm->from = pi->layout;
-  fm->to = pi->layout;
-  fm->to.pool_id = to.pool_id;
-  fm->gen = pi->migrate_gen;
-  if (pi->get_has_redirects() && pi->old_pools.count(to.pool_id)) {
-    // Clients may be limited to the namespace a file was created in.
-    if (!pi->layout.pool_ns.empty() && pi->migrate_gen == 0) {
-      respond_to_request(mdr, -EOPNOTSUPP);
+  std::shared_ptr<FileMigrate> fm;
+  if (running != file_migrates.end()) {
+    fm = running->second;
+  } else {
+    fm = _file_migrate_new(mdr, cur, to);
+    if (!fm)
       return;
-    }
-    fm->gen++;
-    fm->to.pool_ns = MDCache::migrate_namespace(fm->gen);
+    file_migrates[cur->ino()] = fm;
   }
   mdr->no_early_reply = true;
 
@@ -7225,10 +7240,85 @@ void Server::handle_client_file_migrate(const MDRequestRef& mdr, CInode *cur,
   _file_migrate_wait_flush(fm);
 }
 
+/* Returns null having replied, if the file cannot go there. */
+std::shared_ptr<Server::FileMigrate> Server::_file_migrate_new(
+  const MDRequestRef& mdr, CInode *cur, const file_layout_t& to)
+{
+  const auto& pi = cur->get_projected_inode();
+  auto fm = std::make_shared<FileMigrate>();
+  fm->mdr = mdr;
+  fm->in = cur;
+  fm->from = pi->layout;
+  fm->to = pi->layout;
+  fm->to.pool_id = to.pool_id;
+  fm->gen = pi->migrate_gen;
+  if (pi->get_has_redirects() && pi->old_pools.count(to.pool_id)) {
+    // Clients may be limited to the namespace a file was created in.
+    if (!pi->layout.pool_ns.empty() && pi->migrate_gen == 0) {
+      respond_to_request(mdr, -EOPNOTSUPP);
+      return nullptr;
+    }
+    fm->gen++;
+    fm->to.pool_ns = MDCache::migrate_namespace(fm->gen);
+  }
+  return fm;
+}
+
+/*
+ * Start copying without the lock, if that is worth it.  Returns true if it
+ * did: the request comes back here when the copy is done.  No locks or auth
+ * pins are held meanwhile, since a pin would stall any export of the subtree
+ * for as long as the copy takes.
+ */
+bool Server::_file_migrate_precopy(const MDRequestRef& mdr, CInode *cur,
+                                   const file_layout_t& to)
+{
+  const auto& pi = cur->get_projected_inode();
+  uint64_t min = g_conf().get_val<Option::size_t>("mds_file_migrate_precopy_min");
+  if (pi->size < min || to.pool_id == pi->layout.pool_id ||
+      !pi->fscrypt_auth.empty() || pi->inline_data.version != CEPH_INLINE_NONE ||
+      pi->is_truncating() || !pi->client_ranges.empty() ||
+      (cur->get_caps_wanted() & CEPH_CAP_ANY_FILE_WR))
+    return false;
+
+  auto fm = _file_migrate_new(mdr, cur, to);
+  if (!fm)
+    return true;
+  fm->precopying = true;
+  fm->seen_change_attr = pi->change_attr;
+  fm->seen_mtime = pi->mtime;
+  fm->seen_size = pi->size;
+  file_migrates[cur->ino()] = fm;
+  mdr->pin(cur);
+  dout(10) << __func__ << " " << *cur << dendl;
+  _file_migrate_prepare(fm);
+  return true;
+}
+
+/* The copy without the lock is done: on to the lock. */
+void Server::_file_migrate_precopied(std::shared_ptr<FileMigrate> fm)
+{
+  ceph_assert(g_conf().get_val<int64_t>("mds_kill_file_migrate_at") != 5);
+  if (fm->mdr->killed) {
+    file_migrates.erase(fm->in->ino());
+    return;
+  }
+  // An object changing under copy-from fails it with ERANGE.  Whatever went
+  // wrong, the copy with the lock held will do better or report it properly.
+  fm->precopy_failed = fm->err != 0;
+  fm->err = 0;
+  fm->precopying = false;
+  fm->precopied = true;
+  if (!fm->in->is_auth())
+    file_migrates.erase(fm->in->ino());  // exported: the new rank starts over
+  dispatch_client_request(fm->mdr);
+}
+
 void Server::_file_migrate_wait_flush(std::shared_ptr<FileMigrate> fm)
 {
   if (fm->mdr->killed) {
     dout(10) << __func__ << " request killed: " << *fm->mdr << dendl;
+    file_migrates.erase(fm->in->ino());
     return;
   }
   CInode *cur = fm->in;
@@ -7240,7 +7330,37 @@ void Server::_file_migrate_wait_flush(std::shared_ptr<FileMigrate> fm)
     return;
   }
 
-  // Only now is the size final: flushing clients may have extended the file.
+  if (fm->precopied) {
+    const auto& pi = cur->get_projected_inode();
+    auto versions = fm->versions;
+    bool same = !fm->precopy_failed &&
+                pi->layout.pool_id == fm->from.pool_id &&
+                pi->change_attr == fm->seen_change_attr &&
+                pi->mtime == fm->seen_mtime && pi->size == fm->seen_size &&
+                pi->migrate_gen + (fm->gen > pi->migrate_gen ? 1 : 0) == fm->gen;
+    if (same && fm->whole)
+      same = _file_migrate_find_versions(fm) && versions == fm->versions;
+    if (same && !fm->fetching) {
+      dout(10) << __func__ << " " << *cur << " did not change" << dendl;
+      _file_migrate_copied(fm);
+      return;
+    }
+    if (fm->fetching)
+      return;
+    dout(10) << __func__ << " " << *cur << " changed: copying it again" << dendl;
+    fm->precopied = false;
+    fm->whole = false;
+    fm->versions.clear();
+    fm->objects.clear();
+    fm->num_copy = fm->num_remove = 0;
+  }
+  _file_migrate_prepare(fm);
+}
+
+void Server::_file_migrate_prepare(std::shared_ptr<FileMigrate> fm)
+{
+  CInode *cur = fm->in;
+  // With the lock the size is final: flushing clients may have extended it.
   const auto& pi = cur->get_projected_inode();
   fm->truncate_seq = pi->truncate_seq;
   fm->truncate_size = pi->truncate_size;
@@ -7309,7 +7429,10 @@ bool Server::_file_migrate_find_versions(std::shared_ptr<FileMigrate> fm)
     dir->fetch(new MDSInternalContextWrapper(mds,
       new LambdaContext([this, fm](int) {
         fm->fetching = false;
-        _file_migrate_wait_flush(fm);
+        if (fm->precopying)
+          _file_migrate_prepare(fm);
+        else
+          _file_migrate_wait_flush(fm);
       })), true);
     return false;
   }
@@ -7345,8 +7468,12 @@ void Server::_file_migrate_start_copy(std::shared_ptr<FileMigrate> fm)
   fm->phase = FileMigrate::COPY;
   fm->next = 0;
   _file_migrate_issue(fm);
-  if (fm->in_flight == 0)
-    _file_migrate_copied(fm);
+  if (fm->in_flight == 0) {
+    if (fm->precopying)
+      _file_migrate_precopied(fm);
+    else
+      _file_migrate_copied(fm);
+  }
 }
 
 /*
@@ -7458,6 +7585,7 @@ void Server::_file_migrate_op_finish(std::shared_ptr<FileMigrate> fm, int r)
 
   if (fm->mdr->killed) {
     dout(10) << __func__ << " request killed: " << *fm->mdr << dendl;
+    file_migrates.erase(fm->in->ino());
     return;
   }
   switch (fm->phase) {
@@ -7469,8 +7597,13 @@ void Server::_file_migrate_op_finish(std::shared_ptr<FileMigrate> fm, int r)
     _file_migrate_start_copy(fm);
     break;
   case FileMigrate::COPY:
+    if (fm->precopying) {
+      _file_migrate_precopied(fm);
+      return;
+    }
     // On error the new pool may hold copies; a retry overwrites them.
     if (fm->err) {
+      file_migrates.erase(fm->in->ino());
       respond_to_request(fm->mdr, fm->err);
       return;
     }
@@ -7530,6 +7663,7 @@ void Server::_file_migrate_logged(std::shared_ptr<FileMigrate> fm)
   dout(10) << __func__ << " " << *fm->in << " now in pool " << fm->to.pool_id
            << ", whole " << fm->whole << dendl;
   ceph_assert(g_conf().get_val<int64_t>("mds_kill_file_migrate_at") != 2);
+  file_migrates.erase(fm->in->ino());
   mdcache->migrate_cleanup(fm->in, fm->mdr->ls);
   respond_to_request(fm->mdr, 0);
 }
