@@ -87,6 +87,11 @@
  *    Counters in a report are totals, not increments, so a lost or repeated
  *    one does not matter.
  *
+ *  - Pause, resume and abort are given to the origin.  They are done when
+ *    durable there, reach the sub-jobs at once if they can, and by the reply
+ *    to the next report if not: a rank down at the time applies them when it
+ *    is back.  Files in progress on a rank finish.
+ *
  *  - A sub-job with nothing left, that had all it handed in acked, says it is
  *    idle, stating the highest item number it took, after that is durable.
  *    The job is done when the origin has nothing left itself and every rank
@@ -296,6 +301,7 @@ void MigrateQueue::Report::encode(bufferlist& bl) const
   encode(dirs_active, bl);
   encode(dirs_queued, bl);
   encode(files_in_progress, bl);
+  encode(control_seq, bl);
   total.encode(bl);
   ENCODE_FINISH(bl);
 }
@@ -313,6 +319,7 @@ void MigrateQueue::Report::decode(bufferlist::const_iterator& p)
   decode(dirs_active, p);
   decode(dirs_queued, p);
   decode(files_in_progress, p);
+  decode(control_seq, p);
   total.decode(p);
   DECODE_FINISH(p);
 }
@@ -358,6 +365,7 @@ void MigrateQueue::Job::encode(bufferlist& bl) const
   encode(origin_rank, bl);
   encode(origin_job, bl);
   encode(over, bl);
+  encode(control_seq, bl);
   uint32_t n = links.size();
   encode(n, bl);
   for (const auto& [rank, l] : links)
@@ -385,6 +393,7 @@ void MigrateQueue::Job::decode(bufferlist::const_iterator& p)
     decode(origin_rank, p);
     decode(origin_job, p);
     decode(over, p);
+    decode(control_seq, p);
     uint32_t n;
     decode(n, p);
     links.clear();
@@ -758,7 +767,7 @@ void MigrateQueue::_maybe_finish_job(Job& job)
                     << " to pool " << job.pool_name << " done: " << d.moved
                     << " files moved (" << d.head_only << " head only), "
                     << d.already << " already there, " << d.failed
-                    << " failed";
+                    << " failed" << (d.failed ? ": it is not complete" : "");
   _tell_ranks(job);
 }
 
@@ -830,17 +839,32 @@ int MigrateQueue::control(Control c, std::optional<uint64_t> id,
     ss << "no job " << *id;
     return -ENOENT;
   }
+  if (id && jobs[*id].is_sub()) {
+    const Job& job = jobs[*id];
+    ss << "job " << *id << " is a part of job " << job.origin_job
+       << " of mds." << job.origin_rank << ", steer that one";
+    return -EINVAL;
+  }
   unsigned changed = 0;
+  unsigned ranks = 0;
+  unsigned parts = 0;
   for (auto& [i, job] : jobs) {
     if (id && i != *id)
       continue;
+    if (job.is_sub()) {
+      parts += job.live();
+      continue;
+    }
+    bool any = false;
+    bool rank_paused = false;
+    for (const auto& [rank, l] : job.links)
+      rank_paused = rank_paused || l.report.state == uint8_t(State::PAUSED);
     switch (c) {
     case Control::PAUSE:
       if (job.state == State::RUNNING) {
         job.state = State::PAUSED;
         job.reason = "paused by the operator";
-        _save_job(job);
-        changed++;
+        any = true;
       }
       break;
     case Control::RESUME:
@@ -848,19 +872,34 @@ int MigrateQueue::control(Control c, std::optional<uint64_t> id,
         job.state = State::RUNNING;
         job.reason.clear();
         job.failures_in_a_row = 0;
-        _save_job(job);
-        changed++;
+        any = true;
+      } else if (job.state == State::RUNNING && rank_paused) {
+        any = true;             // a rank paused by itself
       }
       break;
     case Control::ABORT:
       if (job.live()) {
         _abort_job(job, "aborted by the operator");
         changed++;
+        ranks += job.links.size();
       }
       break;
     }
+    if (any) {
+      job.control_seq++;
+      _save_job(job);
+      _tell_ranks(job);
+      changed++;
+      ranks += job.links.size();
+    }
   }
   ss << changed << " jobs changed";
+  if (ranks)
+    ss << ", " << ranks << " sub-jobs told; one on a rank that is down follows "
+       << "when the rank is back, files in progress finish";
+  if (parts)
+    ss << ", left alone " << parts << " parts of jobs of other ranks: steer "
+       << "those on their origin rank";
   _flush(fin);
   _kick();
   return 0;
@@ -885,15 +924,22 @@ void MigrateQueue::dump(Formatter *f) const
 
   f->open_array_section("jobs");
   for (const auto& [id, job] : jobs) {
-    Progress p = job.done;
     uint64_t dirs_active = 0;
     uint64_t in_flight = 0;
-    for (const auto& dw : active) {
-      if (dw->job == &job) {
-        p.add(dw->prog);
-        dirs_active++;
-        in_flight += dw->in_flight;
-      }
+    const Progress p = _total(job, &dirs_active, &in_flight);
+    for (const auto& [rank, l] : job.links) {
+      dirs_active += job.is_sub() ? 0 : l.report.dirs_active;
+      in_flight += job.is_sub() ? 0 : l.report.files_in_progress;
+    }
+    uint64_t dirs_queued = job.pending.size();
+    uint64_t handed = 0;
+    uint64_t unacked = 0;
+    bool settled = true;
+    for (const auto& [rank, l] : job.links) {
+      dirs_queued += job.is_sub() ? 0 : l.report.dirs_queued;
+      handed += l.sent;
+      unacked += l.out.size();
+      settled = settled && _settled(job, l);
     }
     f->open_object_section("job");
     f->dump_unsigned("id", id);
@@ -906,9 +952,19 @@ void MigrateQueue::dump(Formatter *f) const
     f->dump_stream("started") << job.started;
     if (!job.live())
       f->dump_stream("finished") << job.finished;
+    if (job.is_sub()) {
+      // Numbers of this rank alone.
+      f->dump_int("origin_rank", job.origin_rank);
+      f->dump_unsigned("origin_job", job.origin_job);
+      f->dump_string("see", "the whole job: migrate status on mds rank " +
+                     std::to_string(job.origin_rank));
+    }
+    // Everything went, or was at least tried: failures are listed below.
+    f->dump_bool("complete", job.state == State::DONE && !job.is_sub() &&
+                 p.failed == 0 && p.not_auth == 0);
     f->dump_unsigned("dirs_done", p.dirs);
     f->dump_unsigned("dirs_active", dirs_active);
-    f->dump_unsigned("dirs_queued", job.pending.size());
+    f->dump_unsigned("dirs_queued", dirs_queued);
     f->dump_unsigned("files_in_progress", in_flight);
     f->dump_unsigned("files_moved", p.moved);
     f->dump_unsigned("files_head_only", p.head_only);
@@ -918,6 +974,38 @@ void MigrateQueue::dump(Formatter *f) const
     f->dump_unsigned("not_regular", p.other);
     f->dump_unsigned("not_auth", p.not_auth);
     f->dump_unsigned("bytes_moved", p.bytes);
+    f->dump_unsigned("items_handed_over", handed);
+    f->dump_unsigned("items_not_taken_yet", unacked);
+    f->dump_bool("other_ranks_finished", settled);
+    f->open_array_section("ranks");
+    for (const auto& [rank, l] : job.links) {
+      const Report& r = l.report;
+      f->open_object_section("rank");
+      f->dump_int("rank", rank);
+      f->dump_string("rank_state", !mds->mdsmap->is_in(rank) ? "stopped" :
+                     ceph_mds_state_name(mds->mdsmap->get_state(rank)));
+      f->dump_unsigned("items_sent", l.sent);
+      f->dump_unsigned("items_acked", l.acked);
+      f->dump_unsigned("items_taken", l.accepted);
+      f->dump_string("refused", l.refused);
+      if (!job.is_sub()) {
+        f->dump_unsigned("job", r.job);
+        f->dump_string("state", r.job ? state_name(r.state) : "no report yet");
+        f->dump_string("reason", r.reason);
+        f->dump_string("held_back", r.hold);
+        f->dump_bool("finished", _settled(job, l));
+        f->dump_bool("control_applied", r.control_seq == job.control_seq);
+        f->dump_unsigned("dirs_done", r.total.dirs);
+        f->dump_unsigned("dirs_active", r.dirs_active);
+        f->dump_unsigned("dirs_queued", r.dirs_queued);
+        f->dump_unsigned("files_in_progress", r.files_in_progress);
+        f->dump_unsigned("files_moved", r.total.moved);
+        f->dump_unsigned("files_failed", r.total.failed);
+        f->dump_unsigned("bytes_moved", r.total.bytes);
+      }
+      f->close_section();
+    }
+    f->close_section();
     f->open_array_section("head_only");
     for (const auto& n : p.head_only_files)
       n.dump(f);
@@ -1456,6 +1544,7 @@ void MigrateQueue::_send_items(Job& job, Link& l, bool resend)
   encode(job.path, bl);
   encode(job.pool, bl);
   encode(job.pool_name, bl);
+  encode(job.control_seq, bl);
   encode(uint32_t(items.size()), bl);
   for (const auto& [seq, item] : items) {
     encode(seq, bl);
@@ -1512,6 +1601,7 @@ void MigrateQueue::_report(Job& job)
   r.hold = job.hold;
   r.accepted = _link(job, job.origin_rank).accepted;
   r.idle = job.state == State::DONE;
+  r.control_seq = job.control_seq;
   r.dirs_queued = job.pending.size();
   r.total = _total(job, &r.dirs_active, &r.files_in_progress);
   bufferlist bl;
@@ -1530,9 +1620,15 @@ void MigrateQueue::_tell_rank(uint64_t id, mds_rank_t rank, uint64_t seen)
   using ceph::encode;
   auto p = jobs.find(id);
   bool over = p == jobs.end() || !p->second.live();
+  bool paused = !over && p->second.state == State::PAUSED;
+  uint64_t control_seq = over ? 0 : p->second.control_seq;
+  std::string reason = over ? "" : p->second.reason;
   bufferlist bl;
   encode(over, bl);
   encode(seen, bl);
+  encode(paused, bl);
+  encode(control_seq, bl);
+  encode(reason, bl);
   _send_msg(MMDSMigrate::OP_CONTROL, rank, mds->get_nodeid(), id,
             std::move(bl));
 }
@@ -1659,12 +1755,14 @@ void MigrateQueue::_handle_items(mds_rank_t from,
   inodeno_t root;
   std::string path, pool_name;
   int64_t pool;
+  uint64_t control_seq;
   uint32_t n;
   auto p = m->data.cbegin();
   decode(root, p);
   decode(path, p);
   decode(pool, p);
   decode(pool_name, p);
+  decode(control_seq, p);
   decode(n, p);
   std::vector<std::pair<uint64_t, Item>> items(n);
   for (auto& [seq, item] : items) {
@@ -1704,6 +1802,7 @@ void MigrateQueue::_handle_items(mds_rank_t from,
       job->started = ceph_clock_now();
       job->origin_rank = m->origin;
       job->origin_job = m->job;
+      job->control_seq = control_seq;
       dout(1) << "job " << job->id << ": part of job " << m->job << " of mds."
               << m->origin << ", " << path << " to pool " << pool_name << dendl;
     }
@@ -1812,9 +1911,15 @@ void MigrateQueue::_handle_control(const cref_t<MMDSMigrate>& m)
   using ceph::decode;
   bool over;
   uint64_t seen;
+  bool paused;
+  uint64_t control_seq;
+  std::string reason;
   auto p = m->data.cbegin();
   decode(over, p);
   decode(seen, p);
+  decode(paused, p);
+  decode(control_seq, p);
+  decode(reason, p);
 
   Job *job = _find_sub(m->origin, m->job);
   if (!job || job->over)
@@ -1825,6 +1930,18 @@ void MigrateQueue::_handle_control(const cref_t<MMDSMigrate>& m)
     job->over = true;
     _save_job(*job);
     _report(*job);              // for the record, in case it was an abort
+  } else if (control_seq > job->control_seq) {
+    job->control_seq = control_seq;
+    if (paused && job->state == State::RUNNING) {
+      job->state = State::PAUSED;
+      job->reason = reason;
+    } else if (!paused && job->state == State::PAUSED) {
+      job->state = State::RUNNING;
+      job->reason.clear();
+      job->failures_in_a_row = 0;
+    }
+    _save_job(*job);
+    _report(*job);
   }
   _flush(nullptr);
 }
