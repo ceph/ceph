@@ -191,6 +191,10 @@ class AgentMetadataStats:
                 scope: {category: _new_latency_stats() for category in _STORE_CATEGORIES}
                 for scope in _STORE_SCOPES
             }
+            self._skipped = {
+                scope: {category: 0 for category in _STORE_CATEGORIES}
+                for scope in _STORE_SCOPES
+            }
             self._pool_samples = 0
             self._pool_idle_current: Optional[int] = None
             self._pool_idle_min: Optional[int] = None
@@ -380,6 +384,15 @@ class AgentMetadataStats:
                 store_time[category] += duration_s
                 store_calls[category] += 1
 
+    def record_store_skipped(self, category: str) -> None:
+        """Count a cache write that was skipped because nothing changed."""
+        if category not in _STORE_CATEGORIES:
+            return
+        in_agent_request = getattr(self._local, 'in_agent_request', False)
+        scope = 'agent_request' if in_agent_request else 'background'
+        with self._lock:
+            self._skipped[scope][category] += 1
+
     def record_pool(self, idle: int, queued: int) -> None:
         with self._lock:
             self._pool_samples += 1
@@ -468,7 +481,10 @@ class AgentMetadataStats:
             agent_to_worker_delay = self._latency_snapshot(self._agent_to_worker_delay)
             stores = {
                 scope: {
-                    category: self._latency_snapshot(self._stores[scope][category])
+                    category: dict(
+                        self._latency_snapshot(self._stores[scope][category]),
+                        skipped=self._skipped[scope][category],
+                    )
                     for category in _STORE_CATEGORIES
                 }
                 for scope in _STORE_SCOPES
@@ -620,23 +636,25 @@ class AgentMetadataStats:
             f"  agent calls/sec:    {persistence['recent_agent_call_rate']['avg_per_sec']:.3f}",
             f"  background calls/s: {persistence['recent_background_call_rate']['avg_per_sec']:.3f}",
             f"  store time/request: {persistence['agent_request_store_time_pct']:.2f}%",
-            '  category       calls      avg ms      max ms',
+            '  category       calls      avg ms      max ms  skipped',
         ])
         for category in _STORE_CATEGORIES:
             item = persistence['agent_request'][category]
             lines.append(
                 f"  {category:<12} {item['count']:>7} {item['avg_ms']:>11.3f} {item['max_ms']:>11.3f}"
+                f" {item['skipped']:>8}"
             )
 
         lines.extend([
             '',
             'Other cephadm persistence:',
-            '  category       calls      avg ms      max ms',
+            '  category       calls      avg ms      max ms  skipped',
         ])
         for category in _STORE_CATEGORIES:
             item = persistence['background'][category]
             lines.append(
                 f"  {category:<12} {item['count']:>7} {item['avg_ms']:>11.3f} {item['max_ms']:>11.3f}"
+                f" {item['skipped']:>8}"
             )
 
         lines.extend([
