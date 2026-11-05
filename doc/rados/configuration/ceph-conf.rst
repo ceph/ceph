@@ -488,6 +488,35 @@ example, ``osd/rack:foo`` would refer to all OSD daemons under the ``foo`` CRUSH
 When configuration options are displayed, the section name and any mask are presented
 in separate fields or columns to make them more readable.
 
+.. _ceph-conf-mgr-module-options:
+
+Manager Module Options
+----------------------
+
+Configuration options for Manager modules have names of the form
+``mgr/<module>/<option>``, for example ``mgr/cephadm/daemon_cache_timeout``.
+Manager modules read their options only from the Monitor configuration
+database, so set them with a command of the following form:
+
+.. prompt:: bash $
+
+   ceph config set mgr mgr/<module>/<option> <value>
+
+A Manager module does not see options of this form in a daemon's local
+``ceph.conf`` file. To copy options from a ``ceph.conf`` file into the
+Monitor configuration database, use ``ceph config assimilate-conf``, which is
+described in :ref:`configuring-ceph-api`. The command copies every option in
+the file that the Monitors can manage, not only Manager module options, and it
+does not change the file. The file passed to ``cephadm bootstrap --config`` is
+handled this way: during bootstrap, cephadm copies its options into the
+Monitor configuration database.
+
+Some Manager modules also keep data, such as keys and credentials, in the
+separate key-value store that ``ceph config-key`` manages, under names that
+also begin with ``mgr/<module>/``. These entries are not configuration
+options: list them with ``ceph config-key ls`` rather than ``ceph config ls``,
+and set them with ``ceph config-key set``.
+
 .. _configuring-ceph-api:
 
 Configuration Commands
