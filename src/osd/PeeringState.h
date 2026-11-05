@@ -44,6 +44,7 @@ struct PGPool {
 
   pg_pool_t info;
   SnapContext snapc;   // the default pool snapc, ready to go.
+  bool pool_snaps_mode = false;
 
   PGPool(OSDMapRef map, int64_t i, const pg_pool_t& info,
 	 const std::string& name)
@@ -51,7 +52,15 @@ struct PGPool {
       id(i),
       name(name),
       info(info) {
-    snapc = info.get_snap_context();
+    const pg_pool_t *snap_pi = &this->info;
+    int64_t root = map->get_pool_migration_root(i);
+    if (root >= 0 && root != i) {
+      if (const pg_pool_t *rpi = map->get_pg_pool(root)) {
+        snap_pi = rpi;
+      }
+    }
+    pool_snaps_mode = snap_pi->is_pool_snaps_mode();
+    snapc = snap_pi->get_snap_context();
   }
 
   void update(OSDMapRef map);
@@ -447,7 +456,7 @@ public:
     virtual void on_recovery_cancelled() = 0;
     virtual void on_pool_migration_source_reserved() = 0;
     virtual void on_pool_migration_source_suspended() = 0;
-    virtual void on_pool_migration_target_reserved() = 0;
+    virtual void on_pool_migration_target_reserved(HBHandle *handle) = 0;
     virtual void on_pool_migration_target_suspended(bool toofull) = 0;
 
     // ================recovery space accounting ================

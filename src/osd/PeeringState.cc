@@ -105,14 +105,24 @@ void PGPool::update(OSDMapRef map)
   info = *pi;
   name = map->get_pool_name(id);
 
+  // Pool snaps live on the migration chain root
+  const pg_pool_t *snap_pi = pi;
+  int64_t root = map->get_pool_migration_root(id);
+  if (root >= 0 && root != id) {
+    if (const pg_pool_t *rpi = map->get_pg_pool(root)) {
+      snap_pi = rpi;
+    }
+  }
+
   bool updated = false;
   if ((map->get_epoch() != cached_epoch + 1) ||
-      (pi->get_snap_epoch() == map->get_epoch())) {
+      (snap_pi->get_snap_epoch() == map->get_epoch())) {
     updated = true;
   }
 
-  if (info.is_pool_snaps_mode() && updated) {
-    snapc = pi->get_snap_context();
+  pool_snaps_mode = snap_pi->is_pool_snaps_mode();
+  if (pool_snaps_mode && updated) {
+    snapc = snap_pi->get_snap_context();
   }
   cached_epoch = map->get_epoch();
 }
@@ -6467,7 +6477,8 @@ PeeringState::MigratingTarget::MigratingTarget(my_context ctx)
   ps->state_clear(PG_STATE_MIGRATION_UNFOUND);
   ps->state_clear(PG_STATE_MIGRATION_ERROR);
   ps->state_set(PG_STATE_MIGRATING);
-  pl->on_pool_migration_target_reserved();
+  pl->on_pool_migration_target_reserved(
+    context< PeeringMachine >().get_recovery_ctx().handle);
   pl->publish_stats_to_osd();
 }
 
@@ -6494,6 +6505,7 @@ boost::statechart::result
 PeeringState::MigratingTarget::react(const StopTargetPoolMigration &c)
 {
   DECLARE_LOCALS;
+  context< Active >().pool_migration_target_reservation_requested = false;
   migration_release_reservations();
   return transit<Clean>();
 }
@@ -6511,7 +6523,6 @@ boost::statechart::result
 PeeringState::MigratingTarget::react(const RemotePoolMigrationRejectedTooFull &)
 {
   DECLARE_LOCALS;
-  ps->state_set(PG_STATE_MIGRATION_TOOFULL);
   pl->on_pool_migration_target_suspended(true);
   migration_release_reservations();
   return transit<Clean>();
@@ -6521,7 +6532,6 @@ boost::statechart::result
 PeeringState::MigratingTarget::react(const RemotePoolMigrationRevokedTooFull &)
 {
   DECLARE_LOCALS;
-  ps->state_set(PG_STATE_MIGRATION_TOOFULL);
   pl->on_pool_migration_target_suspended(true);
   migration_release_reservations();
   return transit<Clean>();
@@ -6717,6 +6727,7 @@ boost::statechart::result
 PeeringState::WaitRemotePoolMigrationReserved::react(const StopTargetPoolMigration &evt)
 {
   DECLARE_LOCALS;
+  context< Active >().pool_migration_target_reservation_requested = false;
   ps->state_clear(PG_STATE_MIGRATION_WAIT);
   migration_release_reservations();
   return transit<Clean>();
