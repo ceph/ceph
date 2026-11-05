@@ -2596,10 +2596,13 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op, ThreadPool::TPHandle *handle)
     // If we're not the primary of this OSD, we just return -EAGAIN. Otherwise,
     // we have to wait for the object.
     if (is_primary()) {
-      // Missing the specific snap we need; requeue and wait for recovery.
+      // Missing the specific snap we need; requeue and wait.
       // Normally only happens on a read/cache, but can be a pool migration write.
       ceph_assert(!op->may_write() || m->has_flag(CEPH_OSD_FLAG_MAP_SNAP_CLONE));
-      wait_for_unreadable_object(missing_oid, op);
+      if (is_unreadable_object(missing_oid))
+	wait_for_unreadable_object(missing_oid, op);
+      else
+	wait_for_degraded_object(missing_oid, op);  // missing on a peer only
       return;
     }
   } else if (r == 0) {
@@ -7689,6 +7692,8 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  hobject_t coid = soid;
 	  coid.snap = snap;
 	  if (is_degraded_or_backfilling_object(coid)) {
+	    // -EAGAIN here means the op was requeued: the client gets no reply.
+	    wait_for_degraded_object(coid, ctx->op);
 	    result = -EAGAIN;
 	    break;
 	  }
