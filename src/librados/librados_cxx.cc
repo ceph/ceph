@@ -137,6 +137,13 @@ void librados::ObjectOperation::cmpxattr(const char *name, uint8_t op, uint64_t 
   o->cmpxattr(name, op, CEPH_OSD_CMPXATTR_MODE_U64, bl);
 }
 
+void librados::ObjectOperation::remove_clones()
+{
+  ceph_assert(impl);
+  ::ObjectOperation *o = &impl->o;
+  o->remove_clones();
+}
+
 void librados::ObjectOperation::assert_version(uint64_t ver)
 {
   ceph_assert(impl);
