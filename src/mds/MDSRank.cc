@@ -2152,6 +2152,9 @@ void MDSRank::active_start()
 {
   dout(1) << "active_start" << dendl;
 
+  // A rank back from down:stopped comes here without recovery_done().
+  migrate_queue->load();
+
   m_is_active = true;
   mds_dmclock_scheduler->set_mds_is_active(true);
   mds_dmclock_scheduler->try_enable_qos_feature();

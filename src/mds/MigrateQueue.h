@@ -184,6 +184,7 @@ private:
   MDSRank *mds;
   std::string oid;
 
+  bool loading = false;
   bool ready = false;
   bool load_failed = false;
   std::vector<MDSContext*> ready_waiters;
