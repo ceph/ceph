@@ -1,5 +1,6 @@
 import datetime
 import enum
+import hashlib
 from copy import copy
 import ipaddress
 import itertools
@@ -65,6 +66,12 @@ def _timed_set_store(mgr: 'CephadmOrchestrator', key: str, value: Optional[str],
         raise
     finally:
         stats.record_store(category, time.monotonic() - start, error=error)
+
+
+def _record_store_skipped(mgr: 'CephadmOrchestrator', category: str) -> None:
+    stats = getattr(mgr, 'agent_metadata_stats', None)
+    if stats:
+        stats.record_store_skipped(category)
 
 
 class HostCacheStatus(enum.Enum):
@@ -917,6 +924,8 @@ class HostCache():
         self.last_network_update = {}   # type: Dict[str, datetime.datetime]
         self.last_device_update = {}   # type: Dict[str, datetime.datetime]
         self.last_device_change = {}   # type: Dict[str, datetime.datetime]
+        # host -> digest of the device list last written to the store
+        self._persisted_devices_digest = {}  # type: Dict[str, str]
         self.last_tuned_profile_update = {}  # type: Dict[str, datetime.datetime]
         self.daemon_refresh_queue = []  # type: List[str]
         self.device_refresh_queue = []  # type: List[str]
@@ -1285,6 +1294,16 @@ class HostCache():
 
         _timed_set_store(self.mgr, HOST_CACHE_PREFIX + host, json.dumps(j), 'host')
 
+    @staticmethod
+    def _devices_digest(devs: List[Dict[str, Any]], cache_size: Optional[int]) -> str:
+        # 'created' is set to the time a report was parsed, so it changes on
+        # every refresh even when the devices don't. Device.__eq__ ignores it
+        # for the same reason. The entry size limit decides the sharding, so
+        # it is part of the digest too.
+        stable = [{k: v for k, v in d.items() if k != 'created'} for d in devs]
+        payload = json.dumps([cache_size, stable], sort_keys=True, default=str)
+        return hashlib.sha256(payload.encode('utf-8')).hexdigest()
+
     def save_host_devices(self, host: str) -> None:
         host = normalize_hostname(host)
         if host not in self.devices or not self.devices[host]:
@@ -1300,6 +1319,15 @@ class HostCache():
 
         dev_cache_counter: int = 0
         cache_size: int = self.mgr.get_foreign_ceph_option('mon', 'mon_config_key_max_entry_size')
+
+        # save_host() runs on every agent report and refresh, while the
+        # device list rarely changes. Skip the write when the store already
+        # holds the same devices.
+        digest = self._devices_digest(devs, cache_size)
+        if self._persisted_devices_digest.get(host) == digest:
+            _record_store_skipped(self.mgr, 'devices')
+            return
+
         if cache_size is not None and cache_size != 0 and byte_len(json.dumps(devs)) > cache_size - 1024:
             # no guarantee all device entries take up the same amount of space
             # splitting it up so there's one more entry than we need should be fairly
@@ -1326,6 +1354,8 @@ class HostCache():
                 json.dumps({'devices': devs, 'entries': 1}),
                 'devices',
             )
+        # only after every entry was written: a failed write retries next time
+        self._persisted_devices_digest[host] = digest
 
     def load_host_devices(self, host: str) -> List[inventory.Device]:
         dev_cache_counter: int = 0
@@ -1383,6 +1413,7 @@ class HostCache():
             del self.last_network_update[host]
         if host in self.last_device_change:
             del self.last_device_change[host]
+        self._persisted_devices_digest.pop(host, None)
         if host in self.last_tuned_profile_update:
             del self.last_tuned_profile_update[host]
         if host in self.daemon_config_deps:
