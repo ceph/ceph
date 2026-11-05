@@ -57,7 +57,7 @@ Scaling-out with NVMe-oF gateway
 
 The NVMe-oF gateway supports scale-out. NVMe-oF gateway scale-out supports:
 Up to four NVMe-oF gateway groups.
-Up to eight NVMe-oF gateways in a gateway group.
+Up to eight NVMe-oF gateways in a gateway group (the tested limit; the default configuration allows 16).
 Up to 128 NVMe-oF subsystems within a gateway group.
 Up to 128 hosts per NVMe-oF subsystem.
 4096 namespaces per gateway group.
