@@ -29,7 +29,6 @@
 #include <concepts>
 #include <cstddef>
 #include <iosfwd>
-#include <list>
 #include <string_view>
 #include <vector>
 
@@ -128,7 +127,7 @@ public:
   using const_iterator = path_component_iterator< path_t::const_iterator >;
   using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
-  static std::list<filepath> generate_test_instances();
+  static std::vector<filepath> generate_test_instances();
 
   filepath() = default;
   filepath(std::nullptr_t) = delete;

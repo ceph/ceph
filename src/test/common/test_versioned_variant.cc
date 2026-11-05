@@ -329,7 +329,7 @@ TEST(Variant, GenerateTestInstances)
   std::bitset<std::variant_size_v<Variant>> bits;
   ASSERT_TRUE(bits.none());
 
-  std::list<Variant> instances;
+  std::vector<Variant> instances;
   generate_test_instances(instances);
 
   for (const auto& v : instances) {
