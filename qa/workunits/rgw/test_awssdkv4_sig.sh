@@ -51,7 +51,6 @@ fi
 
 alt_maven_repo="https://maven-central.storage-download.googleapis.com/maven2"
 
-gradle_settings="~/.gradle/init.gradle"
 maven_settings="/tmp/test_awssdkv4_sig-settings-${$}.xml"
 
 # insures all subdirectories exist for the file path given as $1
@@ -63,17 +62,6 @@ insure_subdir() {
 	mkdir -p $dir
     fi
 }
-
-insure_subdir $gradle_settings
-cat >${gradle_settings} <<EOF
-pluginManagement {
-    repositories {
-        maven {
-            url "$alt_maven_repo"
-        }
-    }
-}
-EOF
 
 insure_subdir $maven_settings
 cat >$maven_settings <<EOF
@@ -95,6 +83,6 @@ export MVNW_REPOURL="$alt_maven_repo"
 ./mvnw clean package -s $maven_settings
 ./mvnw test -Dtest=PutObjects -s $maven_settings
 
-rm -f $maven_settings $gradle_savings
+rm -f $maven_settings
 
 exit
