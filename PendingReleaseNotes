@@ -7,6 +7,16 @@
   ``cpu_isa_level`` host fact (e.g. ``x86-64-v2``). The check can be disabled
   with ``ceph config set mgr mgr/cephadm/upgrade_cpu_isa_check false``, e.g.
   when running custom-built images targeting an older CPU generation.
+* CephFS: Added a multi-tiered scoring matrix to the MDS Monitor to dynamically
+  prioritize standby promotion during failover events. The `mds_join_fs` configuration
+  variable is now checked in combination with infrastructure topology rules to enforce
+  node anti-affinity constraints. An isolated, generic standby daemon (Score 5) will
+  now be chosen over a preferred standby daemon targeting that file system if the
+  preferred standby resides on the same physical host as the failed active rank (Score 3).
+  This safely mitigates localized hardware failure boundaries during rapid automatic
+  recovery cycles. This behavior can be disabled per file system using the command
+  `ceph fs set <fs_name> standby_enable_host_anti_affinity false` (default: true)
+  to restore legacy strict 'mds_join_fs' prioritization.
 
 * RADOS: PG autoscaler allows overlapping roots. Each root receives a PG target based
   on its OSDs, with OSDs shared across multiple roots contributing proportionally
