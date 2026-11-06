@@ -870,9 +870,6 @@ int D4NFilterObject::copy_object(const ACLOwner& owner,
   read_op->params.if_nomatch = if_nomatch;
   if (auto ret = read_op->prepare(y, dpp); ret < 0) {
     ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): prepare method failed with ret: " << ret << dendl;
-    if (ret == -ERR_NOT_MODIFIED) {
-      ret = ERR_PRECONDITION_FAILED;
-    }
     return ret;
   }
 
