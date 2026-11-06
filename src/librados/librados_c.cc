@@ -828,6 +828,15 @@ extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_service_update_status)(
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_service_update_status);
 
+extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_service_update_health)(
+  rados_t cluster,
+  std::vector<DaemonHealthMetric>&& health_metrics)
+{
+  librados::RadosClient *client = (librados::RadosClient *)cluster;
+  return client->service_daemon_update_health(std::move(health_metrics));
+}
+LIBRADOS_C_API_BASE_DEFAULT(rados_service_update_health);
+
 static void do_out_buffer(bufferlist& outbl, char **outbuf, size_t *outbuflen)
 {
   if (outbuf) {
