@@ -15,6 +15,8 @@
 
 #include "group.h"
 
+#include <limits>
+
 #include <boost/algorithm/string.hpp>
 #include "common/errno.h"
 #include "account.h"
@@ -208,18 +210,15 @@ int write(const DoutPrefixProvider* dpp,
     }
   } // old_info
 
-  if (!same_name && !info.name.empty()) {
-    // read new account name object
-    NameObj nameobj;
-    nameobj.obj = get_name_obj(zone, info.account_id, info.name);
-    int r = read_name(dpp, y, sysobj, nameobj);
-    if (r == -ENOENT) {
-      // write the new name object below
-    } else if (r == 0) {
-      ldpp_dout(dpp, 1) << "ERROR: group name obj " << nameobj.obj
-          << " already taken for group id " << nameobj.data.id << dendl;
-      return -EEXIST;
-    } else if (r < 0) {
+  const bool link_new_account_name = !same_name && !info.name.empty();
+  if (link_new_account_name) {
+    const auto& groups_obj = account::get_groups_obj(zone, info.account_id);
+    int r = groups::add(dpp, y, rados, groups_obj, info, true,
+                        std::numeric_limits<uint32_t>::max());
+    if (r < 0) {
+      ldpp_dout(dpp, 1) << "ERROR: group name " << info.name
+          << " already exists in account " << info.account_id
+          << ": " << cpp_strerror(r) << dendl;
       return r;
     }
   }
@@ -235,6 +234,10 @@ int write(const DoutPrefixProvider* dpp,
     if (r < 0) {
       ldpp_dout(dpp, 1) << "ERROR: failed to write group obj " << obj
           << " with: " << cpp_strerror(r) << dendl;
+      if (link_new_account_name) {
+        const auto& groups_obj = account::get_groups_obj(zone, info.account_id);
+        std::ignore = groups::remove(dpp, y, rados, groups_obj, info.name);
+      }
       return r;
     }
   }
@@ -256,7 +259,7 @@ int write(const DoutPrefixProvider* dpp,
           << old_info->account_id << ": " << cpp_strerror(r) << dendl;
     } // not fatal
   }
-  if (!same_name && !info.name.empty()) {
+  if (link_new_account_name) {
     // write the new name object
     NameObj nameobj;
     nameobj.obj = get_name_obj(zone, info.account_id, info.name);
@@ -265,17 +268,15 @@ int write(const DoutPrefixProvider* dpp,
 
     int r = write_name(dpp, y, sysobj, nameobj);
     if (r < 0) {
-      ldpp_dout(dpp, 20) << "WARNING: failed to write name obj "
+      ldpp_dout(dpp, 1) << "ERROR: failed to write name obj "
           << nameobj.obj << " with: " << cpp_strerror(r) << dendl;
-    } // not fatal
-    // link the new name to its account
-    const auto& users = account::get_groups_obj(zone, info.account_id);
-    r = groups::add(dpp, y, rados, users, info, false,
-                    std::numeric_limits<uint32_t>::max());
-    if (r < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: could not link to account "
-          << info.account_id << ": " << cpp_strerror(r) << dendl;
-    } // not fatal
+      const auto& groups_obj = account::get_groups_obj(zone, info.account_id);
+      std::ignore = groups::remove(dpp, y, rados, groups_obj, info.name);
+      const rgw_raw_obj group_obj = get_group_obj(zone, info.id);
+      std::ignore = rgw_delete_system_obj(dpp, &sysobj, group_obj.pool,
+                                          group_obj.oid, &objv, y);
+      return r;
+    }
   }
 
   return 0;
