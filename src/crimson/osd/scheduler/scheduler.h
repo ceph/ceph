@@ -17,7 +17,6 @@
 
 #include <seastar/core/future.hh>
 #include <ostream>
-#include <optional>
 
 #include "crimson/common/config_proxy.h"
 #include "common/mclock_common.h"
@@ -25,9 +24,6 @@
 namespace crimson::osd::scheduler {
 
 using client_t = uint64_t;
-// Strict priorities sort ahead of the ordinary weighted queue, including
-// strict priority zero. A disengaged optional denotes ordinary scheduling.
-using priority_t = std::optional<uint64_t>;
 
 struct params_t {
   int cost = 1;
@@ -39,9 +35,9 @@ struct params_t {
 // What an operation may wait on while it holds a throttle slot.  This is
 // about dependencies, not QoS: SchedulerClass decides the order in which
 // operations are admitted, while the level decides whether an operation can
-// be admitted at all.  An operation at a level only waits on operations at
-// lower levels, so as long as the lower levels always have slots of their
-// own, every slot holder eventually finishes.
+// be admitted at all. A slot holder must only depend on operations at lower
+// levels. Reserving their capacity prevents throttle cycles; progress also
+// requires the scheduler to service those dependencies.
 enum class throttle_level_t : uint8_t {
   // only does local work, and is waited on by other slot holders: RepRequest,
   // EC sub-ops, recovery pushes and pulls, ScrubScan
@@ -75,19 +71,17 @@ public:
   // to other items already scheduled.
   virtual void enqueue_front(item_t &&item) = 0;
 
-  virtual priority_t get_strict_priority(const params_t &params) const = 0;
-
-  // Match the scheduler's fairness domain when staging candidates. WPQ
-  // rotates between owners; mClock groups them into a single class/profile.
-  virtual client_t get_queue_owner(const params_t &params) const {
-    return params.owner;
-  }
-
   // Returns true iff there are no ops scheduled
   virtual bool empty() const = 0;
 
-  // Return next op to be processed
-  virtual WorkItem dequeue() = 0;
+  // Choose among operations whose dependency level is at most max_level.
+  // A blocked operation must neither hide eligible work nor consume QoS
+  // service. Return monostate when every queued operation is blocked, or
+  // a timestamp when eligible work is waiting for an mClock tag.
+  virtual WorkItem dequeue(throttle_level_t max_level) = 0;
+
+  // Fail and remove queued operations when their throttler stops.
+  virtual void abort(std::exception_ptr error) = 0;
 
   // Dump formatted representation for the queue
   virtual void dump(ceph::Formatter &f) const = 0;

@@ -5,7 +5,6 @@
 
 #include <algorithm>
 #include <numeric>
-#include <ranges>
 #include "common/Formatter.h"
 #include "crimson/common/log.h"
 
@@ -100,141 +99,54 @@ void OperationThrottler::initialize_scheduler(CephContext *cct, ConfigProxy &con
   update_from_config(conf);
 }
 
-OperationThrottler::QueueKey OperationThrottler::queue_key(const item_t &item) const
-{
-  return {
-    .level = item.level,
-    .klass = item.params.klass,
-    .priority = scheduler->get_strict_priority(item.params),
-    .owner = scheduler->get_queue_owner(item.params),
-  };
-}
-
 uint64_t OperationThrottler::count_from(const level_counts_t &counts, size_t level)
 {
   return std::accumulate(counts.begin() + level, counts.end(), uint64_t{0});
 }
 
-bool OperationThrottler::fits(throttle_level_t level, const level_counts_t &counts) const
+bool OperationThrottler::available(throttle_level_t level) const
 {
   if (!max_in_progress) {
     return true;
   }
   // An admission counts against its own level and every level below it.
   for (size_t l = 0; l <= std::to_underlying(level); ++l) {
-    if (count_from(counts, l) >= max_in_progress - reserved_per_level * l) {
+    // A lower live limit must still leave room for the dependencies of
+    // running higher-level operations. Their own level stays capped, so
+    // new work cannot replace them until they have drained.
+    const auto limit = std::max(max_in_progress - reserved_per_level * l,
+      count_from(in_progress, l + 1) + reserved_per_level);
+    if (count_from(in_progress, l) >= limit) {
       return false;
     }
   }
   return true;
 }
 
-bool OperationThrottler::available(throttle_level_t level) const
+seastar::future<> OperationThrottler::background_task()
 {
-  return fits(level, in_progress);
-}
-
-bool OperationThrottler::can_feed(const QueueKey &key, const PendingQueue &queue) const
-{
-  return !queue.items.empty() &&
-    (queue.candidates == 0 || fits(key.level, committed));
-}
-
-void OperationThrottler::feed()
-{
-  for (auto &[key, queue] : waiting) {
-    while (can_feed(key, queue)) {
-      scheduler->enqueue(std::move(queue.items.front()));
-      queue.items.pop_front();
-      ++queue.candidates;
-      ++committed[std::to_underlying(key.level)];
-    }
-  }
-}
-
-bool OperationThrottler::has_parked_admissible() const
-{
-  return std::ranges::any_of(parked, [this](const auto &item) {
-    return available(item.level);
-  });
-}
-
-bool OperationThrottler::admit_parked()
-{
-  auto admissible = parked | std::views::filter([this](const auto &item) {
-    return available(item.level);
-  });
-  // max_element keeps the first candidate when priorities are equal.
-  auto next = std::ranges::max_element(admissible, {}, [this](const auto &item) {
-    return scheduler->get_strict_priority(item.params);
-  });
-  if (next == admissible.end()) {
-    return false;
-  }
-  auto item = std::move(*next);
-  parked.erase(next.base());
-  admit(item);
-  return true;
-}
-
-void OperationThrottler::admit(crimson::osd::scheduler::item_t &item)
-{
-  LOG_PREFIX(OperationThrottler::admit);
-  const auto level = std::to_underlying(item.level);
-  if (item.level == throttle_level_t::leaf) {
-    ++committed[level];
-  } else {
-    auto queue = waiting.find(queue_key(item));
-    ceph_assert(queue != waiting.end() && queue->second.candidates > 0);
-    --queue->second.candidates;
-    if (queue->second.empty()) {
-      waiting.erase(queue);
-    }
-  }
-  ++in_progress[level];
-  --pending;
-  DEBUG("Waking up a work item at level {}: in_progress={}, pending={}",
-        static_cast<int>(item.level), count_from(in_progress), pending);
-  item.wake.set_value();
-}
-
-seastar::future<> OperationThrottler::background_task() {
   LOG_PREFIX(OperationThrottler::background_task);
   while (!stopped) {
-    co_await cv.wait([this] {
-      return stopped ||
-        has_parked_admissible() ||
-        std::ranges::any_of(waiting, [this](const auto &entry) {
-          return can_feed(entry.first, entry.second);
-        }) ||
-        (!scheduler->empty() && available(throttle_level_t::leaf));
-    });
-
-    while (!stopped) {
-      feed();
-      std::optional<double> when_ready;
-      // Give newly arrived strict-priority work a chance before choosing
-      // among parked candidates. Ordinary candidates retain dequeue order.
-      if (!scheduler->empty() && available(throttle_level_t::leaf)) {
-        auto work = scheduler->dequeue();
-        if (auto item = std::get_if<crimson::osd::scheduler::item_t>(&work)) {
-          const bool admissible = available(item->level);
-          parked.push_back(std::move(*item));
-          if (!admissible) {
-            // Keep looking: a blocked strict-priority candidate can hide a
-            // runnable strict-priority candidate ahead of ordinary parked work.
-            continue;
-          }
-        } else if (auto when = std::get_if<double>(&work)) {
-          when_ready = *when;
-        } else {
-          ceph_abort("Unexpected scheduler result");
-        }
+    if (!scheduler->empty() && available(throttle_level_t::leaf)) {
+      // Eligibility is a prefix of the levels: if a level has room, all
+      // its dependencies do too. Let QoS choose within that prefix.
+      auto level = throttle_level_t::foreground;
+      while (!available(level)) {
+        level = static_cast<throttle_level_t>(std::to_underlying(level) - 1);
       }
-      if (admit_parked()) {
+      auto work = scheduler->dequeue(level);
+      if (auto item = std::get_if<item_t>(&work)) {
+        const auto index = std::to_underlying(item->level);
+        ceph_assert(available(item->level) && pending[index] > 0);
+        ++in_progress[index];
+        --pending[index];
+        DEBUG("Waking up a work item at level {}: in_progress={}, pending={}",
+              index, count_from(in_progress), count_from(pending));
+        item->wake.set_value();
+        co_await seastar::maybe_yield();
         continue;
       }
-      if (when_ready) {
+      if (auto when_ready = std::get_if<double>(&work)) {
         const auto delay = ceph::real_clock::from_double(*when_ready) -
                            ceph::real_clock::now();
         if (delay > decltype(delay)::zero()) {
@@ -246,8 +158,10 @@ seastar::future<> OperationThrottler::background_task() {
         }
         continue;
       }
-      break;
     }
+    // No admissible work. Enqueue, release, config changes and stop all
+    // signal this wait; a nonempty queue alone must not make it spin.
+    co_await cv.wait();
   }
 
   DEBUG("Background task exiting cleanly");
@@ -264,11 +178,10 @@ void OperationThrottler::release_throttle(throttle_level_t level)
 {
   LOG_PREFIX(OperationThrottler::release_throttle);
   const auto index = std::to_underlying(level);
-  ceph_assert(in_progress[index] > 0 && committed[index] > 0);
+  ceph_assert(in_progress[index] > 0);
   --in_progress[index];
-  --committed[index];
   DEBUG("Updated counters during release_throttle: level={}, in_progress={}, pending={}",
-        static_cast<int>(level), count_from(in_progress), pending);
+        static_cast<int>(level), count_from(in_progress), count_from(pending));
   wake();
 }
 
@@ -276,32 +189,37 @@ seastar::future<> OperationThrottler::acquire_throttle(
   crimson::osd::scheduler::params_t params,
   throttle_level_t level)
 {
+  if (stopped) {
+    return seastar::make_exception_future<>(
+      crimson::common::system_shutdown_exception{});
+  }
   crimson::osd::scheduler::item_t item{params, level, seastar::promise<>()};
   auto fut = item.wake.get_future();
-  if (level == throttle_level_t::leaf) {
-    scheduler->enqueue(std::move(item));
-  } else {
-    waiting[queue_key(item)].items.push_back(std::move(item));
-  }
-  ++pending;
+  scheduler->enqueue(std::move(item));
+  ++pending[std::to_underlying(level)];
   wake();
   return fut;
 }
 
 seastar::future<> OperationThrottler::stop()
 {
-  if (!started) {
+  if (stopped) {
     co_return;
   }
 
   stopped = true;
   cv.broadcast();
 
-  if (bg_future && !bg_future->available()) {
+  if (bg_future) {
     co_await std::move(*bg_future);
   }
 
   bg_future.reset();
+  if (scheduler) {
+    scheduler->abort(std::make_exception_ptr(
+      crimson::common::system_shutdown_exception{}));
+  }
+  pending = {};
   started = false;
 }
 
@@ -334,21 +252,11 @@ void OperationThrottler::dump_detail(Formatter *f) const
     f->open_object_section("level");
     f->dump_unsigned("level", l);
     f->dump_unsigned("in_progress", in_progress[l]);
-    const auto level = static_cast<throttle_level_t>(l);
-    const auto parked_count = std::ranges::count(parked, level, &item_t::level);
-    uint64_t unfed_count = 0;
-    for (const auto &[key, queue] : waiting) {
-      if (key.level == level) {
-        unfed_count += queue.items.size();
-      }
-    }
-    f->dump_unsigned("parked", parked_count);
-    f->dump_unsigned("in_scheduler", committed[l] - in_progress[l] - parked_count);
-    f->dump_unsigned("unfed", unfed_count);
+    f->dump_unsigned("pending", pending[l]);
     f->close_section();
   }
   f->close_section();
-  f->dump_unsigned("pending", pending);
+  f->dump_unsigned("pending", count_from(pending));
   f->dump_unsigned("background_task started", started);
   f->dump_unsigned("background_task stopped", stopped);
 

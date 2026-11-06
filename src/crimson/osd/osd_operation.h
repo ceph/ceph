@@ -4,9 +4,6 @@
 #pragma once
 
 #include <array>
-#include <compare>
-#include <deque>
-#include <map>
 #include <utility>
 
 #include "crimson/common/operation.h"
@@ -376,7 +373,8 @@ private:
 };
 /**
  * Limit concurrent operations while reserving capacity for their dependencies.
- * The scheduler orders candidates; dependency levels decide which can run.
+ * Dependency levels decide which operations can run; the scheduler chooses
+ * among those operations and charges QoS service only when they are admitted.
  */
 class OperationThrottler : public BlockerT<OperationThrottler>,
 			private md_config_obs_t {
@@ -454,32 +452,10 @@ private:
 
   using level_counts_t = std::array<uint64_t, num_levels>;
   // All levels share max_in_progress. Each higher level leaves one slot
-  // for each level below it. Committed includes running and fed candidates.
+  // for each level below it.
   uint64_t max_in_progress = 0;
   level_counts_t in_progress = {};
-  level_counts_t committed = {};
-
-  struct QueueKey {
-    throttle_level_t level;
-    SchedulerClass klass;
-    crimson::osd::scheduler::priority_t priority;
-    crimson::osd::scheduler::client_t owner;
-
-    auto operator<=>(const QueueKey&) const = default;
-  };
-  struct PendingQueue {
-    std::deque<crimson::osd::scheduler::item_t> items;
-    size_t candidates = 0;
-
-    bool empty() const { return items.empty() && candidates == 0; }
-  };
-  // One extra candidate per fairness domain keeps other classes, strict
-  // priorities, and WPQ owners visible when a level has no capacity.
-  std::map<QueueKey, PendingQueue> waiting;
-  // Equal-priority candidates retain their scheduler dequeue order.
-  std::deque<crimson::osd::scheduler::item_t> parked;
-
-  uint64_t pending = 0;
+  level_counts_t pending = {};
   bool started = false;
   bool stopped = false;
 
@@ -492,14 +468,7 @@ private:
     crimson::osd::scheduler::params_t params,
     throttle_level_t level);
 
-  QueueKey queue_key(const crimson::osd::scheduler::item_t &item) const;
   static uint64_t count_from(const level_counts_t &counts, size_t level = 0);
-  bool fits(throttle_level_t level, const level_counts_t &counts) const;
-  bool can_feed(const QueueKey &key, const PendingQueue &queue) const;
-  void feed();
-  bool has_parked_admissible() const;
-  bool admit_parked();
-  void admit(crimson::osd::scheduler::item_t &item);
   void release_throttle(throttle_level_t level);
   seastar::future<> background_task();
 };
