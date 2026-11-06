@@ -692,6 +692,7 @@ if $IMPERSONATE; then
 	if $IMPERSONATE_CLEAN; then
 		if $GPFS; then
 			sudo rm -rf "$GPFS_ROOT/root"
+			mkdir -p "$GPFS_ROOT/root"
 		else
 			sudo rm -rf "$BUILD_DIR/dev/rgw/$STORE/root"
 		fi
