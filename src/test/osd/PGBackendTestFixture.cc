@@ -32,12 +32,8 @@ void PGBackendTestFixture::initialize_scrub_infra()
   snap_reader = TestScrubBackend::create_snap_reader();
 }
 
-void PGBackendTestFixture::setup_ec_pool()
+void PGBackendTestFixture::setup_osdmap(int num_osds)
 {
-  CephContext *cct = g_ceph_context;
-
-  int num_osds = num_zones * (k + m);
-
   osdmap = std::make_shared<OSDMap>();
   osdmap->set_max_osd(num_osds);
 
@@ -69,6 +65,12 @@ void PGBackendTestFixture::setup_ec_pool()
   // Apply the incremental to set state, weight, and features
   // This will properly calculate up_osd_features
   osdmap->apply_incremental(inc);
+}
+
+void PGBackendTestFixture::setup_ec_pool()
+{
+  int num_osds = get_instance_count();
+  setup_osdmap(num_osds + spare_osds);
 
   pg_pool_t pool = OSDMapTestHelpers::create_ec_pool(k, m, stripe_unit * k, pool_flags, pool_id, num_zones);
   OSDMapTestHelpers::add_pool(osdmap, pool_id, pool);
@@ -117,7 +119,7 @@ void PGBackendTestFixture::setup_ec_pool()
 
   // Create per-OSD stores and fixtures (store + LRU only — no collection here,
   // because collections are per-PG not per-OSD and belong in TestPG).
-  for (int i = 0; i < num_osds; i++) {
+  for (int i = 0; i < num_osds + spare_osds; i++) {
     auto osd_fixture = std::make_unique<OsdTestFixture>(i);
     osd_fixture->store = MockStore::create(g_ceph_context, i);
     ASSERT_TRUE(osd_fixture->store);
@@ -174,14 +176,8 @@ void PGBackendTestFixture::setup_ec_pool()
       shard_listener->set_event_loop(event_loop.get());
     shard_listener->set_osd(this);
 
-      // Create EC backend using the TestPG's collection
-      auto shard_ec_switch = std::make_unique<ECSwitch>(
-        shard_listener.get(), test_pg->coll, test_pg->ch, osd_fixture->store.get(),
-        cct, ec_impl, stripe_unit * k, *osd_fixture->lru);
-
-      // Store in TestPG
+      test_pg->backend = create_backend(test_pg, shard_listener.get());
       test_pg->backend_listener = std::move(shard_listener);
-      test_pg->backend = std::move(shard_ec_switch);
     }
   }
 
@@ -200,19 +196,13 @@ void PGBackendTestFixture::setup_ec_pool()
 
 void PGBackendTestFixture::setup_replicated_pool()
 {
-  CephContext *cct = g_ceph_context;
-
-  osdmap = std::make_shared<OSDMap>();
-  osdmap->set_max_osd(num_replicas);
-  osdmap->set_state(0, CEPH_OSD_EXISTS | CEPH_OSD_UP);
+  setup_osdmap(num_replicas + spare_osds);
 
   pg_pool_t pool;
   pool.type = pg_pool_t::TYPE_REPLICATED;
   pool.size = num_replicas;
   pool.min_size = min_size;
   pool.crush_rule = 0;
-
-  osdmap->inc_epoch();
 
   OSDMapTestHelpers::add_pool(osdmap, pool_id, pool);
 
@@ -228,21 +218,23 @@ void PGBackendTestFixture::setup_replicated_pool()
     acting.push_back(i);
   }
   OSDMapTestHelpers::set_pg_acting(osdmap, pgid, acting);
-  OSDMapTestHelpers::set_pg_acting_primary(osdmap, pgid, 0);
 
   spg_t replica_spgid(pgid, shard_id_t::NO_SHARD);
 
   const pg_pool_t* pool_ptr = OSDMapTestHelpers::get_pool(osdmap, pool_id);
   ceph_assert(pool_ptr != nullptr);
 
-  // Create per-OSD stores, fixtures, collections, and backends in one pass.
-  for (int i = 0; i < num_replicas; i++) {
+  for (int i = 0; i < num_replicas + spare_osds; i++) {
     auto osd_fixture = std::make_unique<OsdTestFixture>(i);
     osd_fixture->store = MockStore::create(g_ceph_context, i);
     ASSERT_TRUE(osd_fixture->store);
     osd_fixture->data_dir = osd_fixture->store->get_data_dir();
     osd_fixtures[i] = std::move(osd_fixture);
+  }
 
+  // Create collections and backends upfront unless the derived class creates
+  // TestPGs lazily (see should_create_test_pgs_upfront()).
+  for (int i = 0; i < num_replicas && should_create_test_pgs_upfront(); i++) {
     auto* osd_fix = osd_fixtures[i].get();
     pg_shard_t pg_whoami(i, shard_id_t::NO_SHARD);
 
@@ -280,11 +272,8 @@ void PGBackendTestFixture::setup_replicated_pool()
     replica_listener->set_event_loop(event_loop.get());
     replica_listener->set_osd(this);
 
-    auto replica_backend = std::make_unique<ReplicatedBackend>(
-      replica_listener.get(), test_pg->coll, test_pg->ch, osd_fix->store.get(), cct);
-
+    test_pg->backend = create_backend(test_pg, replica_listener.get());
     test_pg->backend_listener = std::move(replica_listener);
-    test_pg->backend = std::move(replica_backend);
   }
 
   setup_messenger();
@@ -297,6 +286,20 @@ void PGBackendTestFixture::setup_replicated_pool()
   register_backend_handler<MOSDPGPull>(MSG_OSD_PG_PULL);
 
   set_messenger_on_all_pgs();
+}
+
+std::unique_ptr<PGBackend> PGBackendTestFixture::create_backend(
+  TestPG *test_pg, MockPGBackendListener *listener)
+{
+  OsdTestFixture *osd_fixture = get_osd_fixture(test_pg->pg_whoami.osd);
+  if (pool_type == EC) {
+    return std::make_unique<ECSwitch>(
+      listener, test_pg->coll, test_pg->ch, osd_fixture->store.get(),
+      g_ceph_context, ec_impl, stripe_unit * k, *osd_fixture->lru);
+  }
+  return std::make_unique<ReplicatedBackend>(
+    listener, test_pg->coll, test_pg->ch, osd_fixture->store.get(),
+    g_ceph_context);
 }
 
 void PGBackendTestFixture::setup_messenger()
@@ -684,6 +687,14 @@ ObjectContextRef PGBackendTestFixture::get_object_context(
       int r = primary_backend->objects_get_attrs(hoid, &obc->attr_cache);
       ceph_assert(r == 0);
     }
+  } else {
+    std::map<std::string, ceph::buffer::list, std::less<>> disk_attrs;
+    if (!attrs) {
+      int r = get_primary_backend()->objects_get_attrs(hoid, &disk_attrs);
+      ceph_assert(r == 0);
+    }
+    obc->ssc = get_primary_listener()->get_snapset_context(
+      hoid, attrs ? *attrs : disk_attrs);
   }
   
   // Cache the OBC (matches PrimaryLogPG line 12019 lookup_or_create)
