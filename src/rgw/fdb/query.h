@@ -18,10 +18,12 @@
 
 #include "common/container_concepts.h"
 #include "interval.h"
+#include "fdb_errors.h"
 
 #include <string>
 #include <vector>
 #include <optional>
+#include <stdexcept>
 #include <string_view>
 
 #include <cstddef>
@@ -133,7 +135,7 @@ constexpr std::string successor(const std::string_view prefix)
   return std::move(*upper);
  }
 
- throw libfdb_exception("requested prefix has no finite successor");
+ throw libfdb_exception(std::errc::invalid_argument, "requested prefix has no finite successor");
 }
 
 struct interval_bound final
@@ -410,6 +412,23 @@ constexpr query_options options_of(const ExprT& expr)
  return {};
 }
 
+template <expression LHS_T, expression RHS_T>
+constexpr query_options combined_options(const LHS_T& lhs, const RHS_T& rhs)
+{
+ const auto left = options_of(lhs);
+ const auto right = options_of(rhs);
+
+ if (left == right or right == query_options {}) {
+  return left;
+ }
+ if (left == query_options {}) {
+  return right;
+ }
+
+ throw libfdb_exception(std::errc::invalid_argument,
+   "conflicting query options; configure operands consistently");
+}
+
 template <expression ExprT>
 requires configured_expression<std::remove_cvref_t<ExprT>>
 constexpr decltype(auto) core_expression_of(ExprT&& expr)
@@ -525,7 +544,8 @@ constexpr interval universal()
 constexpr bool is_universal(const interval& x)
 {
  // This is a selector-shape check, not full expression normalization.
- return x == universal();
+ return x.begin_key.empty() and x.end_key == byte_string_domain::keyspace_limit_view() and
+        x.begin_inclusive and not x.end_inclusive;
 }
 
 constexpr interval singleton(const concepts::libfdb_key auto& key)
@@ -585,7 +605,7 @@ constexpr auto with_options(ExprT&& expr, const query_options& options)
 
 constexpr interval intersection(interval lhs, const interval& rhs)
 {
- return detail::to_select(core::intersection(lhs, rhs), lhs.options);
+ return detail::to_select(core::intersection(lhs, rhs), detail::combined_options(lhs, rhs));
 }
 
 template <typename LHS_T, typename RHS_T>
@@ -593,9 +613,10 @@ requires expression<LHS_T> and expression<RHS_T> and
         (not (query_interval<LHS_T> and query_interval<RHS_T>))
 constexpr auto intersection(LHS_T&& lhs, RHS_T&& rhs)
 {
- return detail::with_options_of(lhs,
+ const auto options = detail::combined_options(lhs, rhs);
+ return detail::configure(
   core::intersection(detail::core_expression_of(std::forward<LHS_T>(lhs)),
-                     detail::core_expression_of(std::forward<RHS_T>(rhs))));
+                     detail::core_expression_of(std::forward<RHS_T>(rhs))), options);
 }
 
 template <typename LHS_T, typename RHS_T>
@@ -614,9 +635,10 @@ template <typename LHS_T, typename RHS_T>
 requires expression<LHS_T> and expression<RHS_T>
 constexpr auto set_union(LHS_T&& lhs, RHS_T&& rhs)
 {
- return detail::with_options_of(lhs,
+ const auto options = detail::combined_options(lhs, rhs);
+ return detail::configure(
   core::set_union(detail::core_expression_of(std::forward<LHS_T>(lhs)),
-                  detail::core_expression_of(std::forward<RHS_T>(rhs))));
+                  detail::core_expression_of(std::forward<RHS_T>(rhs))), options);
 }
 
 template <expression ExprT>
@@ -664,10 +686,14 @@ constexpr auto compile_intervals(const ExprT& expr)
 template <std::size_t Capacity, expression ExprT>
 constexpr auto compile_intervals(const ExprT& expr)
 {
- core::static_interval_set<byte_string_domain, Capacity> out;
+ core::static_interval_set<byte_string_domain, Capacity, interval> out {empty()};
 
- for_each_interval(expr, [&out](const interval& x) {
-  ceph::util::emplace_append(out, core_interval::between(x.lower(), x.upper()));
+ for_each_interval(expr, [&out](interval x) {
+  try {
+   ceph::util::emplace_append(out, std::move(x));
+  } catch (const std::length_error& error) {
+   throw libfdb_exception(std::errc::value_too_large, error.what());
+  }
  });
 
  return out;

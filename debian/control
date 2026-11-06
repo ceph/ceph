@@ -19,6 +19,7 @@ Build-Depends: autoconf-archive,
                dh-exec,
                dh-python,
                flex,
+               foundationdb-clients (>= 7.3) <pkg.ceph.fdb>,
                git,
                golang,
                gperf,
@@ -1102,6 +1103,7 @@ Description: debugging symbols for rbd-nbd
 Package: ceph-common
 Architecture: linux-any
 Depends: adduser (>= 3.11),
+         ${fdb:Depends},
          librbd1 (= ${binary:Version}),
          python3-cephfs (= ${binary:Version}),
          python3-ceph-argparse (= ${binary:Version}),
@@ -1460,6 +1462,7 @@ Package: librgw2
 Architecture: linux-any
 Section: libs
 Depends: librados2 (= ${binary:Version}),
+         ${fdb:Depends},
          liblua5.3-0,
          ${misc:Depends},
          ${shlibs:Depends},
@@ -1505,6 +1508,7 @@ Description: RADOS client library (development files)
 Package: radosgw
 Architecture: linux-any
 Depends: ceph-common (= ${binary:Version}),
+         ${fdb:Depends},
          librgw2 (= ${binary:Version}),
          media-types | mime-support,
          ${misc:Depends},
