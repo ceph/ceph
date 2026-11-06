@@ -1,7 +1,8 @@
+import socket
 import ssl
-from unittest.mock import patch
+from unittest.mock import MagicMock, call, patch
 
-from cephadm.agent import AgentMessageThread
+from cephadm.agent import AGENT_MESSAGE_TIMEOUT_S, AgentMessageThread
 from cephadm.services.agent import CephadmAgent
 from .fixtures import with_cephadm_module
 
@@ -57,3 +58,80 @@ def test_agent_message_uses_shared_client_context():
         get_ctx.assert_called_once()
         generate_cert.assert_not_called()
         assert mgr.agent_cache.sending_agent_message[host] is False
+
+
+def _fake_sockets(connect_errors):
+    """
+    Raw and TLS socket mocks for AgentMessageThread.run(). Each connect()
+    raises the next item of connect_errors; None means it succeeds.
+    """
+    raw, tls = [], []
+    errors = list(connect_errors)
+
+    def make_raw(*args, **kwargs):
+        sock = MagicMock(name='raw')
+        sock.__enter__.return_value = sock
+        raw.append(sock)
+        return sock
+
+    def wrap_socket(sock, server_hostname=None):
+        secure = MagicMock(name='tls')
+        secure.__enter__.return_value = secure
+        err = errors.pop(0)
+        if err is not None:
+            secure.connect.side_effect = err
+        secure.recv.return_value = b'ACK'
+        tls.append(secure)
+        return secure
+
+    ctx = MagicMock(name='ssl_ctx')
+    ctx.wrap_socket.side_effect = wrap_socket
+    return ctx, make_raw, raw, tls
+
+
+def _run_message(mgr, ctx, make_raw):
+    host = 'test'
+    agent = mgr.http_server.agent
+    thread = AgentMessageThread(host, 1234, {'counter': 1}, mgr)
+    with patch.object(agent, 'get_client_ssl_context', return_value=ctx), \
+            patch('cephadm.agent.socket.socket', side_effect=make_raw), \
+            patch('cephadm.agent.time.sleep') as sleep:
+        thread.run()
+    return thread, sleep
+
+
+def test_agent_message_sets_socket_timeout_and_closes_socket():
+    with with_cephadm_module() as mgr:
+        ctx, make_raw, raw, tls = _fake_sockets([None])
+        thread, _ = _run_message(mgr, ctx, make_raw)
+        assert thread.get_agent_response() == 'ACK'
+        raw[0].settimeout.assert_called_once_with(AGENT_MESSAGE_TIMEOUT_S)
+        # the timeout is set before the TLS socket connects
+        assert raw[0].method_calls[0] == call.settimeout(AGENT_MESSAGE_TIMEOUT_S)
+        tls[0].__exit__.assert_called_once()
+        raw[0].__exit__.assert_called_once()
+        assert mgr.agent_cache.sending_agent_message['test'] is False
+
+
+def test_agent_message_timeout_is_not_retried():
+    with with_cephadm_module() as mgr:
+        ctx, make_raw, raw, tls = _fake_sockets([socket.timeout('timed out')])
+        with patch.object(mgr.log, 'error') as log_error:
+            _, sleep = _run_message(mgr, ctx, make_raw)
+        assert len(tls) == 1
+        sleep.assert_not_called()
+        assert 'Timed out' in log_error.call_args[0][0]
+        tls[0].__exit__.assert_called_once()
+        assert mgr.agent_cache.sending_agent_message['test'] is False
+
+
+def test_agent_message_refused_connection_is_still_retried():
+    with with_cephadm_module() as mgr:
+        ctx, make_raw, raw, tls = _fake_sockets([ConnectionRefusedError(), None])
+        thread, sleep = _run_message(mgr, ctx, make_raw)
+        assert len(tls) == 2
+        sleep.assert_called_once_with(3)
+        assert thread.get_agent_response() == 'ACK'
+        # the socket of the failed attempt is closed too
+        tls[0].__exit__.assert_called_once()
+        assert mgr.agent_cache.sending_agent_message['test'] is False

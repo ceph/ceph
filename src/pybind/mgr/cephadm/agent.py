@@ -29,6 +29,10 @@ if TYPE_CHECKING:
 
 CEPHADM_AGENT_CERT_DURATION = (365 * 5)
 
+# Timeout for one message to an agent: it applies to the TCP connect, the
+# TLS handshake, sending the message and waiting for the reply.
+AGENT_MESSAGE_TIMEOUT_S = 10.0
+
 
 def _agent_stats_request_start(mgr: "CephadmOrchestrator", endpoint: str) -> None:
     """Start lightweight diagnostics for requests sharing the agent HTTP pool."""
@@ -1077,18 +1081,28 @@ class AgentMessageThread(threading.Thread):
             return
         for retry_wait in [3, 5]:
             try:
-                agent_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                secure_agent_socket = ssl_ctx.wrap_socket(agent_socket, server_hostname=self.addr)
-                secure_agent_socket.connect((self.addr, self.port))
-                msg = (bytes_len + self.data)
-                secure_agent_socket.sendall(msg.encode('utf-8'))
-                self.agent_response = secure_agent_socket.recv(1024).decode()
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as agent_socket:
+                    agent_socket.settimeout(AGENT_MESSAGE_TIMEOUT_S)
+                    with ssl_ctx.wrap_socket(agent_socket, server_hostname=self.addr) as secure_agent_socket:
+                        secure_agent_socket.connect((self.addr, self.port))
+                        msg = (bytes_len + self.data)
+                        secure_agent_socket.sendall(msg.encode('utf-8'))
+                        self.agent_response = secure_agent_socket.recv(1024).decode()
                 self.mgr.log.debug(f'Received "{self.agent_response}" from agent on host {self.host}')
                 if self.daemon_spec:
                     self.mgr.agent_cache.agent_config_successfully_delivered(self.daemon_spec)
                     self.mgr.log.info(
                         f'HTTP config push to agent on {self.host} acknowledged; '
                         f'agent config deps updated (deps={self.daemon_spec.deps})')
+                self.mgr.agent_cache.sending_agent_message[self.host] = False
+                return
+            except socket.timeout:
+                # The host accepted nothing, or the agent didn't answer, within
+                # the timeout. Retrying would hold this thread for another
+                # timeout; the next report or _check_agent will try again.
+                self.mgr.log.error(
+                    f'Timed out after {AGENT_MESSAGE_TIMEOUT_S:g} s talking to agent on host '
+                    f'{self.host}. Agent config deps left unchanged for retry')
                 self.mgr.agent_cache.sending_agent_message[self.host] = False
                 return
             except ConnectionError as e:
