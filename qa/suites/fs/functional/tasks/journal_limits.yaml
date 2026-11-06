@@ -1,0 +1,11 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - MDS_TRIM
+      - MDSs behind on trimming
+      - has reached the hard limit
+      - MDS_JOURNAL_HARD_LIMIT
+tasks:
+- cephfs_test_runner:
+    modules:
+    - tasks.cephfs.test_journal_limits

@@ -14,6 +14,8 @@
  */
 
 #include "Server.h"
+
+#include <algorithm>
 #include "RetryMessage.h"
 #include "RetryRequest.h"
 #include "BatchOp.h"
@@ -2796,6 +2798,58 @@ void Server::dispatch_client_request(const MDRequestRef& mdr)
     respond_to_request(mdr, -EROFS);
     return;
   }
+
+  // While the daemon is stopping, a client mutation that would hit the hard limit
+  // is refused rather than parked, so shutdown cannot stall on the journal.
+  if (req->may_write() && mdlog->is_hard_limit_reached() && mds->is_daemon_stopping()) {
+    dout(1) << __func__ << ": daemon stopping and journal over hard limit, refusing request" << dendl;
+    respond_to_request(mdr, -EAGAIN);
+    return;
+  }
+
+  // Journal back-pressure. Only live, new client mutations are throttled or parked.
+  // Replayed and reconnecting requests must run so the journal can make progress,
+  // and nothing is gated while the MDS is not active.
+  if (req->may_write() && mds->is_active() &&
+      !req->is_replay() && !mdr->is_queued_for_replay()) {
+
+    // Hard limit: park the request on the MDLog. It is resumed once trimming
+    // brings the journal back under the limit, or when the limit is changed.
+    if (mdlog->is_hard_limit_reached()) {
+      static utime_t last_warn;
+      utime_t now = ceph_clock_now();
+      if (now - last_warn > utime_t(60, 0)) {
+        mds->clog->warn() << "MDS journal size (" << mdlog->get_num_segments()
+                          << " segments) has reached the hard limit ("
+                          << mdlog->get_hard_limit_segments()
+                          << "); client mutating operations are blocked until the journal is trimmed";
+        last_warn = now;
+      }
+      dout(1) << __func__ << ": journal hard limit reached, parking request " << *req << dendl;
+      mdlog->add_hard_limit_waiter(new C_MDS_RetryRequest(mdcache, mdr));
+      return;
+    }
+
+    // Soft band (warn < segments <= hard): delay each new mutation by an amount
+    // that grows with backlog. Applied once per request so the retry is not re-delayed.
+    if (!mdr->is_admission_delayed() && mdlog->is_trim_slow()) {
+      const uint64_t warn = mdlog->get_warn_segments();
+      const uint64_t hard = mdlog->get_hard_limit_segments();
+      const uint64_t cur = mdlog->get_num_segments();
+      if (hard > warn && cur > warn) {
+        const double min_delay = mdlog->get_admission_min_delay();  // at the warn threshold
+        const double max_delay = mdlog->get_admission_max_delay();  // near the hard limit
+        double ratio = std::min(1.0, double(cur - warn) / double(hard - warn));
+        double delay_sec = min_delay + ratio * (max_delay - min_delay);
+        dout(10) << __func__ << ": journal above warn threshold, delaying mutation by "
+                 << delay_sec << "s" << dendl;
+        mdr->mark_admission_delayed();
+        mds->timer.add_event_after(delay_sec, new C_MDS_RetryRequest(mdcache, mdr));
+        return;
+      }
+    }
+  }
+
   if (mdr->has_more() && mdr->more()->peer_error) {
     dout(10) << " got error from peers" << dendl;
     respond_to_request(mdr, mdr->more()->peer_error);

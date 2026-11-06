@@ -123,7 +123,8 @@ class FailHandler : public FileSystemCommandHandler
     cmd_getval(cmdmap, "yes_i_really_mean_it", confirm);
     if (!confirm &&
 	mon->mdsmon()->has_health_warnings({
-	  MDS_HEALTH_TRIM, MDS_HEALTH_CACHE_OVERSIZED}, mds_gids_to_fail)) {
+	  MDS_HEALTH_TRIM, MDS_HEALTH_CACHE_OVERSIZED,
+	  MDS_HEALTH_JOURNAL_HARD_LIMIT}, mds_gids_to_fail)) {
       ss << errmsg_for_unhealthy_mds;
       return -EPERM;
     }
