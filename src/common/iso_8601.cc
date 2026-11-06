@@ -18,6 +18,9 @@ using namespace std::literals;
 using enum iso_8601_mode;
 
 namespace {
+using duration = chrono::duration<__int128, std::nano>;
+using time_point = chrono::sys_time<duration>;
+
 constexpr auto digits = "0123456789"sv;
 
 struct succeed {
@@ -112,41 +115,11 @@ inline auto between(std::uint16_t min, std::uint16_t max)
   return [min, max](auto x) { return x > min && x < max; };
 }
 
-template <typename Rep, typename Period>
-inline std::optional<real_time> bounded_sub(
-    ceph::real_time time, chrono::duration<Rep, Period> decrement)
-{
-  auto delta = chrono::duration_cast<timespan>(chrono::abs(decrement));
-  if (decrement > decrement.zero()) {
-    if (time.time_since_epoch() < delta) return std::nullopt;
-    time -= delta;
-  } else {
-    if (time > real_time::max() - delta) return std::nullopt;
-    time += delta;
-  }
-  return time;
-}
-
-template <typename Rep, typename Period>
-inline std::optional<real_time> bounded_add(
-    ceph::real_time time, chrono::duration<Rep, Period> increment)
-{
-  auto delta = chrono::duration_cast<timespan>(chrono::abs(increment));
-  if (increment > increment.zero()) {
-    if (time > real_time::max() - delta) return std::nullopt;
-    time += delta;
-  } else {
-    if (time.time_since_epoch() < delta) return std::nullopt;
-    time -= delta;
-  }
-  return time;
-}
-
-std::optional<real_time> read_date(std::string_view& remaining, iso_8601_mode mode)
+std::optional<time_point> read_date(std::string_view& remaining, iso_8601_mode mode)
 {
   std::optional<chrono::day> day;
   std::optional<chrono::month> month;
-  auto year = consume_bounded<chrono::year>(remaining, 4, between(1969, 2555));
+  auto year = consume_bounded<chrono::year>(remaining, 4, between(1968, 2555));
   if (!year) return std::nullopt;
   if (auto em = consume_next_field<chrono::month>(remaining, mode, '-'); !em) {
     return std::nullopt;
@@ -166,13 +139,7 @@ std::optional<real_time> read_date(std::string_view& remaining, iso_8601_mode mo
   if (!ymd.ok()) {
     return std::nullopt;
   }
-  if (chrono::sys_days(ymd) > chrono::sys_days(2554y / 7 / 21d))
-    // 21 July 2554 is the last day `ceph::real_time` can represent.
-    return std::nullopt;
-  // On Linux `system_clock::to_time_t` is not usable for large, unsigned values
-  return real_clock::from_time_t(
-      chrono::duration_cast<chrono::seconds>(chrono::sys_days(ymd).time_since_epoch())
-          .count());
+  return chrono::time_point_cast<duration>(chrono::sys_days(ymd));
 }
 
 inline std::optional<chrono::nanoseconds> parse_nanoseconds(
@@ -202,17 +169,16 @@ inline std::optional<chrono::nanoseconds> parse_nanoseconds(
   return nanosecond;
 }
 
-std::optional<real_time> add_time(std::string_view& remaining,
-                                  iso_8601_mode mode, real_time midnight)
+std::optional<time_point> add_time(std::string_view& remaining,
+                                   iso_8601_mode mode, time_point midnight)
 {
-  std::optional<real_time> time = midnight;
+  time_point time = midnight;
 
   // HH
   {
     auto hours = consume_bounded<chrono::hours>(remaining, 2, less(24));
     if (!hours) return std::nullopt;
-    time = bounded_add(*time, *hours);
-    if (!time) return std::nullopt;
+    time += *hours;
   }
 
   // HH:MM
@@ -221,22 +187,19 @@ std::optional<real_time> add_time(std::string_view& remaining,
       !minutes) {
     return std::nullopt;
   } else if (*minutes) {
-    time = bounded_add(*time, **minutes);
-    if (!time) return std::nullopt;
+    time += **minutes;
     // HH:MM:SS
     if (auto seconds = consume_next_field<chrono::seconds>(remaining, mode, ':',
                                                            less(60));
         !seconds) {
       return std::nullopt;
     } else if (*seconds) {
-      time = bounded_add(*time, **seconds);
-      if (!time) return std::nullopt;
+      time += **seconds;
       // HH::MM::SS.fff…
       if (optional_delimiter(remaining, ".,")) {
         auto nanoseconds = parse_nanoseconds(remaining);
         if (!nanoseconds) return std::nullopt;
-        time = bounded_add(*time, *nanoseconds);
-        if (!time) return std::nullopt;
+        time += *nanoseconds;
       }
     }
   }
@@ -270,15 +233,17 @@ std::optional<real_time> add_time(std::string_view& remaining,
   } else {
     return std::nullopt;
   }
-  return bounded_sub(*time, offset);
+  return time - offset;
 }
 } // namespace
 
 std::optional<real_time> from_iso_8601(const std::string_view s,
                                        const iso_8601_mode mode) noexcept
 {
-  auto remaining = s;
   assert(mode >= iso_8601_mode::strict && mode <= iso_8601_mode::lax);
+  auto remaining = s;
+  constexpr auto epoch = time_point(duration(0));
+  constexpr auto doomsday =  time_point(duration(timespan::max()));
 
   auto time = read_date(remaining, mode);
   if (!time) return std::nullopt;
@@ -287,7 +252,12 @@ std::optional<real_time> from_iso_8601(const std::string_view s,
     if (!optional_delimiter(remaining, mode == lax ? "Tt "sv : "T"sv)) return std::nullopt;
     time = add_time(remaining, mode, *time);
   }
+  if (!time) return std::nullopt;
   if (!remaining.empty()) return std::nullopt;
-  return time;
+
+  if (*time < epoch || *time > doomsday) {
+    return std::nullopt;
+  }
+  return real_time(chrono::duration_cast<timespan>(time->time_since_epoch()));
 }
 } // namespace ceph
