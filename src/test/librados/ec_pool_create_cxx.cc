@@ -4,6 +4,7 @@
 #include <climits>
 #include <errno.h>
 #include <optional>
+#include <sstream>
 #include <string>
 #include "gtest/gtest.h"
 #include "include/rados/librados.hpp"
@@ -396,7 +397,8 @@ TEST(ECPoolCreatePP, ConflictingProfile) {
   cluster.shutdown();
 }
 
-// Test that profile with matching parameters allows pool creation
+// Test that a profile matching the one pool create makes, the default
+// profile with the given k and m, allows pool creation
 TEST(ECPoolCreatePP, MatchingProfileAllowsPoolCreation) {
   Rados cluster;
   ASSERT_EQ("", connect_cluster_pp(cluster));
@@ -404,10 +406,21 @@ TEST(ECPoolCreatePP, MatchingProfileAllowsPoolCreation) {
   const std::string pool_name = get_temp_pool_name("ec_match_");
   const std::string profile_name = pool_name + "-k4-m2";
 
+  bufferlist outbl;
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd erasure-code-profile get\", \"name\": \"default\"}",
+    {}, &outbl, NULL));
+  std::string profile = "\"k=4\", \"m=2\"";
+  std::istringstream lines(outbl.to_str());
+  for (std::string line; std::getline(lines, line);) {
+    if (!line.empty() && !line.starts_with("k=") && !line.starts_with("m=")) {
+      profile += ", \"" + line + "\"";
+    }
+  }
   std::string cmd = "{\"prefix\": \"osd erasure-code-profile set\", "
     "\"name\": \"" + profile_name + "\", "
-    "\"profile\": [\"k=4\", \"m=2\"]}";
-  bufferlist outbl;
+    "\"profile\": [" + profile + "]}";
+  outbl.clear();
   ASSERT_EQ(0, cluster.mon_command(std::move(cmd), {}, &outbl, NULL));
 
   ASSERT_EQ(0, create_ec_pool_with_params(cluster, pool_name, 4, 2));
