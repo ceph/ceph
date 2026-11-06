@@ -96,6 +96,7 @@ void MgrOpRequest::mark_flag_point(uint8_t flag, const char *s) {
 void MgrOpRequest::mark_flag_point_string(uint8_t flag, const string& s) {
   [[maybe_unused]] uint8_t old_flags = hit_flag_points;
   mark_event(s);
+  last_event_detail = s;
   hit_flag_points |= flag;
   latest_flag_point = flag;
 
