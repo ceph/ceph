@@ -1042,6 +1042,55 @@ PHP Example
 	rados_shutdown($r);
 
 
+Object Size, I/O Rate, and Omap
+===============================
+
+How an application divides its data into RADOS objects affects both its
+performance and the capacity that it consumes.
+
+Object Size
+-----------
+
+A write that would make an object larger than :confval:`osd_max_object_size`
+(128 MiB by default) fails with ``EFBIG``, and deep scrub reports any larger
+object as an error. RBD, CephFS, and RGW split data into 4 MiB objects by
+default, and objects of a similar size suit most applications.
+
+Very small objects cost per-object metadata, and each replica or shard of an
+object occupies at least :confval:`bluestore_min_alloc_size` on its OSD. In
+Tentacle and later, erasure-coded pools with :ref:`EC optimizations
+<rados_ops_erasure_coding_optimizations>` enabled no longer pad small objects
+to a full stripe, which greatly reduces their space amplification.
+
+Very large objects concentrate I/O on one placement group and make each
+object's recovery and scrub take longer.
+
+I/O Rate
+--------
+
+Writes to an object always go through its primary OSD. Reads do too, unless
+the client sets the ``LIBRADOS_OPERATION_BALANCE_READS`` or
+``LIBRADOS_OPERATION_LOCALIZE_READS`` flag on the read operation. On
+replicated pools these flags let a replica serve the read. Since Umbrella,
+``LIBRADOS_OPERATION_BALANCE_READS`` on an erasure-coded pool sends the read
+to the shard that stores the data.
+
+To scale I/O, spread frequently accessed data across many objects. The
+:ref:`read balancer <read_balancer>` and :ref:`primary affinity
+<rados_ops_primary_affinity>` spread primaries across OSDs, but not the reads
+of a single object.
+
+Omap
+----
+
+An object can also hold omap data: key/value pairs that the OSD stores in its
+RocksDB database instead of in the object's data. Omap suits indexes and small
+metadata. Replicated pools support omap. Since Umbrella, erasure-coded pools
+with EC optimizations enabled do too, except Crimson pools. Deep scrub raises
+the ``LARGE_OMAP_OBJECTS`` health warning for an object with more than 200,000
+keys or more than 1 GiB of omap values. See :ref:`health-checks`.
+
+
 
 .. _user ID: ../../operations/user-management#command-line-usage
 .. _CAPS: ../../operations/user-management#authorization-capabilities
