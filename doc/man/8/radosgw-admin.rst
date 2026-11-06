@@ -787,6 +787,12 @@ Options
 
    The zone endpoints.
 
+.. option:: --admin-endpoints=<list>
+
+   The zonegroup endpoints for system traffic, such as period push and
+   requests from other zonegroups. Client redirects keep using the zonegroup
+   endpoints. An empty value (``--admin-endpoints=``) clears the list.
+
 .. option:: --index-pool=<pool>
 
    The placement target index pool.

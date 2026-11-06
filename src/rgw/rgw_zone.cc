@@ -129,6 +129,7 @@ void RGWZoneGroup::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("api_name", api_name, obj);
   JSONDecoder::decode_json("is_master", is_master, obj);
   JSONDecoder::decode_json("endpoints", endpoints, obj);
+  JSONDecoder::decode_json("admin_endpoints", admin_endpoints, obj);
   JSONDecoder::decode_json("hostnames", hostnames, obj);
   JSONDecoder::decode_json("hostnames_s3website", hostnames_s3website, obj);
   JSONDecoder::decode_json("master_zone", master_zone, obj);
@@ -479,6 +480,7 @@ void RGWZoneGroup::dump(Formatter *f) const
   encode_json("api_name", api_name, f);
   encode_json("is_master", is_master, f);
   encode_json("endpoints", endpoints, f);
+  encode_json("admin_endpoints", admin_endpoints, f);
   encode_json("hostnames", hostnames, f);
   encode_json("hostnames_s3website", hostnames_s3website, f);
   encode_json("master_zone", master_zone, f);
@@ -945,6 +947,20 @@ std::string get_zonegroup_endpoint(const RGWZoneGroup& info)
     return z->second.endpoints.front();
   }
   return "";
+}
+
+const std::list<std::string>& get_zonegroup_system_endpoints(
+    const RGWZoneGroup& info, const std::list<std::string>& legacy_endpoints)
+{
+  if (uses_legacy_system_endpoints(info)) {
+    return legacy_endpoints;
+  }
+  return info.admin_endpoints;
+}
+
+bool uses_legacy_system_endpoints(const RGWZoneGroup& info)
+{
+  return info.admin_endpoints.empty();
 }
 
 const RGWZoneGroup* find_zonegroup_by_id(const RGWZoneGroup& local_zonegroup,
@@ -2362,7 +2378,9 @@ std::list<RGWZoneGroup> RGWZoneGroup::generate_test_instances()
 {
   std::list<RGWZoneGroup> o;
   o.emplace_back();
-  o.emplace_back();
+  auto& zg = o.emplace_back("zonegroup-id", "zonegroup");
+  zg.endpoints = {"http://public.example.com"};
+  zg.admin_endpoints = {"http://sync1:8000", "http://sync2:8000"};
   return o;
 }
 

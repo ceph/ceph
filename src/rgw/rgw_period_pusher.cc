@@ -252,13 +252,21 @@ void RGWPeriodPusher::handle_notify(RGWZonesNeedPeriod&& period)
       auto& zonegroup = zg.second;
       if (zonegroup.get_id() == driver->get_zone()->get_zonegroup().get_id())
         continue;
-      if (zonegroup.endpoints.empty())
+      if (rgw::uses_legacy_system_endpoints(zonegroup)) {
+        ldout(cct, 1) << "WARNING: zonegroup " << zonegroup.get_name()
+            << " has no admin_endpoints, pushing the period to its endpoints. "
+               "This fallback is deprecated" << dendl;
+      }
+      const auto& system_endpoints =
+        rgw::get_zonegroup_system_endpoints(zonegroup, zonegroup.endpoints);
+      if (system_endpoints.empty())
         continue;
 
       hint = conns.emplace_hint(
           hint, std::piecewise_construct,
           std::forward_as_tuple(zonegroup.get_id()),
-          std::forward_as_tuple(cct, driver, zonegroup.get_id(), zonegroup.endpoints, zonegroup.api_name));
+          std::forward_as_tuple(cct, driver, zonegroup.get_id(),
+                                system_endpoints, zonegroup.api_name));
     }
   }
 

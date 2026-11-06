@@ -1671,6 +1671,51 @@ def test_zg_master_zone_delete():
     rm_zg.delete(master_cluster)
     master_zg.period.update(master_zone, commit=True)
 
+def test_period_push_uses_zonegroup_admin_endpoints():
+    if len(realm.current_period.zonegroups) < 2:
+        raise SkipTest('need at least 2 zonegroups to run this test')
+
+    master_zg = realm.master_zonegroup()
+    master_zone = master_zg.master_zone
+    master_cluster = master_zone.cluster
+    peer_zg = next(zg for zg in realm.current_period.zonegroups
+                   if zg != master_zg)
+    peer_zone = peer_zg.master_zone
+
+    data, _ = peer_zg.get(master_cluster)
+    orig_endpoints = data['endpoints']
+    peer_zone_endpoints = next(z['endpoints'] for z in data['zones']
+                               if z['id'] == peer_zone.id)
+    if not orig_endpoints or not peer_zone_endpoints:
+        raise SkipTest('peer zonegroup and its master zone need endpoints')
+
+    def peer_period_epoch(period_id):
+        out, _ = peer_zone.cluster.admin(['period', 'get'] + realm.realm_arg(),
+                                         read_only=True)
+        data = json.loads(out)
+        return data['epoch'] if data['id'] == period_id else -1
+
+    try:
+        # client endpoints are unreachable from the master zone; the period
+        # can only reach the peer zonegroup through admin_endpoints
+        peer_zg.modify(master_cluster,
+                       ['--endpoints=http://unreachable.invalid:1',
+                        '--admin-endpoints=' + ','.join(peer_zone_endpoints)])
+        period, _ = master_zg.period.update(master_zone, commit=True)
+
+        for _ in range(config.checkpoint_retries):
+            if peer_period_epoch(period['id']) >= period['epoch']:
+                break
+            time.sleep(config.checkpoint_delay)
+        else:
+            assert False, 'period epoch %d was not pushed to zonegroup %s' % (
+                period['epoch'], peer_zg.name)
+    finally:
+        peer_zg.modify(master_cluster,
+                       ['--endpoints=' + ','.join(orig_endpoints),
+                        '--admin-endpoints='])
+        master_zg.period.update(master_zone, commit=True)
+
 def test_zonegroup_rename():
     master_zg = realm.master_zonegroup()
     master_zone = master_zg.master_zone
