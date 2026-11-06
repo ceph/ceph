@@ -1117,6 +1117,10 @@ void PGMap::Incremental::dump(ceph::Formatter *f) const
     f->close_section();
   }
   f->close_section();
+  f->open_array_section("pool_statfs_removals");
+  for (auto p = pool_statfs_rm.begin(); p != pool_statfs_rm.end(); ++p)
+    f->dump_stream("poolid/osd") << *p;
+  f->close_section();
 
   f->open_array_section("osd_stat_removals");
   for (auto p = osd_stat_rm.begin(); p != osd_stat_rm.end(); ++p)
@@ -1149,6 +1153,7 @@ list<PGMap::Incremental> PGMap::Incremental::generate_test_instances()
   o.back().pg_remove.insert(pg_t(1,2));
   o.back().osd_stat_rm.insert(5);
   o.back().pool_statfs_updates[std::make_pair(1234,4)] = store_statfs_t();
+  o.back().pool_statfs_rm.insert(std::make_pair(1234,5));
   return o;
 }
 
@@ -1202,6 +1207,18 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
       }
       pool_sum_ref.add(statfs_inc);
     }
+  }
+
+  for (auto& p : inc.pool_statfs_rm) {
+    auto pool_statfs_iter = pool_statfs.find(p);
+    if (pool_statfs_iter == pool_statfs.end()) {
+      continue;
+    }
+    auto pool_sum_iter = pg_pool_sum.find(p.first);
+    if (pool_sum_iter != pg_pool_sum.end()) {
+      pool_sum_iter->second.sub(pool_statfs_iter->second);
+    }
+    pool_statfs.erase(pool_statfs_iter);
   }
 
   for (auto p = inc.get_osd_stat_updates().begin();
