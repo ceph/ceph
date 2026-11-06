@@ -132,6 +132,9 @@ User-visible PG States
 *backfill_wait*
   the PG is waiting in line to start backfill
 
+*backfill_pause*
+  the backfill is suspended due to the nobackfill flag set on the corresponding pool
+
 *incomplete*
   a pg is missing a necessary period of history from its
   log.  If you see this state, report a bug, and try to start any
