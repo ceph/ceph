@@ -12356,6 +12356,7 @@ int BlueStore::_deferred_replay(std::vector<std::string>* keys_to_remove)
   }
   dtr_deferred_replay_start();
   IOContext ioctx(cct, nullptr);
+  bool written = false;
   KeyValueDB::Iterator it = db->get_iterator(PREFIX_DEFERRED);
   for (it->lower_bound(string()); it->valid(); /*iterator update outside*/) {
     dout(20) << __func__ << " replay " << pretty_binary_string(it->key())
@@ -12379,6 +12380,7 @@ int BlueStore::_deferred_replay(std::vector<std::string>* keys_to_remove)
             bufferlist t;
             op.data.splice(0, e.length, &t);
             bdev->aio_write(e.offset, t, &ioctx, false);
+            written = true;
           }
         }
       } else {
@@ -12400,6 +12402,11 @@ int BlueStore::_deferred_replay(std::vector<std::string>* keys_to_remove)
       dout(20) << __func__ << " wait done" << dendl;
       ioctx.release_running_aios();
     }
+  }
+  if (written) {
+    // the callers remove the keys of these writes next, and the DB may be
+    // on another device: make the data stable first
+    bdev->flush();
   }
   dtr_deferred_replay_end();
   dout(10) << __func__ << " completed " << count << " events" << dendl;
