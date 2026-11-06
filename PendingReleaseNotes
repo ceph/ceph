@@ -6,6 +6,9 @@
   ``next_scheduled_time``. Scripts or tools that parse this output
   must be updated accordingly.
 
+* libcephsqlite: concurrent readers is now supported. The VFS implements the
+  full sqlite3 locking protocol.
+
 * RBD: The ``rbd mirror snapshot schedule add`` and
   ``rbd trash purge schedule add`` commands now accept a ``w`` suffix to
   specify the schedule interval in weeks (e.g. ``2w``), in addition to the

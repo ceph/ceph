@@ -221,8 +221,9 @@ and also simple to use. SQLite can be used to bridge that gap.
 Parallel Access
 ^^^^^^^^^^^^^^^
 
-The VFS does not yet support concurrent readers. All database access is protected
-by a single exclusive lock.
+Starting in the Vampire release (v22.2.0), the VFS supports concurrent readers.
+The full sqlite3 locking protocol is implemented. Before Vampire, the VFS used
+an exclusive lock for all access types which serialized access to the database.
 
 
 Export or Extract Database out of RADOS
