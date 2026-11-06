@@ -1406,18 +1406,10 @@ class Object {
     virtual Bucket* get_bucket(void) const = 0;
     /** Set the bucket containing this object */
     virtual void set_bucket(Bucket* b) = 0;
-    /** Get the sharding hash representation of this object */
-    virtual std::string get_hash_source(void) = 0;
-    /** Set the sharding hash representation of this object */
-    virtual void set_hash_source(std::string s) = 0;
     /** Build an Object Identifier string for this object */
     virtual std::string get_oid(void) const = 0;
-    /** True if this object is stored in the extra data pool */
-    virtual bool get_in_extra_data(void) = 0;
     /** True if this object exists in the store */
     virtual bool exists(void) = 0;
-    /** Set the in_extra_data field */
-    virtual void set_in_extra_data(bool i) = 0;
     /** Helper to sanitize object size, offset, and end values */
     int range_to_ofs(uint64_t obj_size, int64_t &ofs, int64_t &end);
     /** Set the cached size of this object */

@@ -886,12 +886,8 @@ public:
   virtual void set_short_zone_id(uint32_t id) override { return next->set_short_zone_id(id); }
   virtual Bucket* get_bucket(void) const override { return bucket; };
   virtual void set_bucket(Bucket* b) override;
-  virtual std::string get_hash_source(void) override { return next->get_hash_source(); };
-  virtual void set_hash_source(std::string s) override { return next->set_hash_source(s); };
   virtual std::string get_oid(void) const override { return next->get_oid(); };
-  virtual bool get_in_extra_data(void) override { return next->get_in_extra_data(); };
   virtual bool exists(void) override { return next->exists(); };
-  virtual void set_in_extra_data(bool i) override { return next->set_in_extra_data(i); };
   int range_to_ofs(uint64_t obj_size, int64_t &ofs, int64_t &end) {
     return next->range_to_ofs(obj_size, ofs, end);
   };
