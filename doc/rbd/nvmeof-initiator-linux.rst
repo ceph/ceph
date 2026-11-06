@@ -39,7 +39,7 @@ Installation
 
    - '-l 1800' is recommended to allow the initiator to continue trying to connect to GWs for 1800 seconds. This is helpful in cases that the GW is temporarily unavailable for any reason.      
 
-   - '-s 8009' is the port address of the Discovery controller. The connect-all command will connect to the DC first, and then will use the information it retrns to connect to the GWs. 
+   - '-s 8009' is the port address of the Discovery controller. The connect-all command will connect to the DC first, and then will use the information it returns to connect to the GWs. 
 
 Next steps
 ==========
@@ -53,7 +53,9 @@ Verify that the initiator is set up correctly:
    
      nvme list-subsys
 
-     example output: 
+   Example output:
+
+   .. code-block:: none
 
      nvme-subsys<X> - NQN=<NQN>
      \
@@ -71,6 +73,11 @@ Verify that the initiator is set up correctly:
 
 3. Create a filesystem on the desired device:
 
+   .. warning:: ``mkfs.ext4`` erases all data on the device. In the
+      ``nvme list`` output, choose a device whose model is
+      ``Ceph bdev Controller``. Mount an ext4 file system on only one
+      host at a time.
+
    .. prompt:: bash #
    
       mkfs.ext4 NVME_NODE_PATH
@@ -85,7 +92,7 @@ Verify that the initiator is set up correctly:
    
       mount NVME_NODE_PATH /mnt/nvmeof
 
-5. List the NVME-oF files:
+5. List the NVMe-oF files:
 
    .. prompt:: bash #
    
