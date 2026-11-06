@@ -2395,6 +2395,13 @@ bool OSDMap::check_pg_upmaps(
       to_cancel->push_back(pg);
       continue;
     }
+    if (!keeps_zone_blocks(*pi, crush_rule, up)) {
+      ldout(cct, 0) << __func__ << " pg " << pg << " upmap " << up
+                    << " puts a zone block in more than one zone"
+                    << dendl;
+      to_cancel->push_back(pg);
+      continue;
+    }
     // below we check against crush-topology changing..
     auto rule_entry = rule_weight_map.find(crush_rule);
     if (rule_entry == rule_weight_map.end()) {
@@ -3332,6 +3339,29 @@ bool OSDMap::acting_set_writeable(const pg_pool_t& pool,
 {
   return num_acting_below_min_size(pool, acting) == 0 &&
     pool.stretch_set_can_peer(acting, *this, out);
+}
+
+bool OSDMap::keeps_zone_blocks(const pg_pool_t& pool, int crush_rule,
+                               const std::vector<int>& up) const
+{
+  if (!pool.is_erasure() || !pool.is_stretch_pool() ||
+      pool.get_num_zones() <= 1) {
+    return true;
+  }
+  std::map<int, int> block_zone, zone_block;
+  for (unsigned i = 0; i < up.size(); ++i) {
+    if (up[i] == CRUSH_ITEM_NONE) {
+      continue;
+    }
+    const int block = pool.get_shard_zone(shard_id_t(i));
+    const int zone = crush->get_parent_of_type(
+      up[i], pool.peering_crush_bucket_barrier, crush_rule);
+    if (block_zone.emplace(block, zone).first->second != zone ||
+        zone_block.emplace(zone, block).first->second != block) {
+      return false;
+    }
+  }
+  return true;
 }
 
 void OSDMap::_get_temp_osds(const pg_pool_t& pool, pg_t pg,

@@ -565,6 +565,35 @@ TEST_F(StretchECMinSizeTest, TwoDeviceClassRule_ZonesAreDatacenters)
     two_class, {0, N, 2, N}));
 }
 
+// calc_ec_acting_stretch() serves each zone block from one zone, so an upmap
+// that puts a block's shards in two zones leaves the PG unable to peer.
+TEST_F(StretchECMinSizeTest, CleanPGUpmapsCancelsUpmapAcrossZoneBlocks)
+{
+  const pg_t pgid(0, 1);
+  OSDMap::Incremental in(osdmap->get_epoch() + 1);
+  in.fsid = osdmap->get_fsid();
+  for (int osd = 0; osd < 8; ++osd) {
+    in.new_weight[osd] = CEPH_OSD_IN;
+  }
+  osdmap->apply_incremental(in);
+  auto has_upmap_after_clean = [&](const vector<int32_t> &up) {
+    OSDMap::Incremental inc(osdmap->get_epoch() + 1);
+    inc.fsid = osdmap->get_fsid();
+    inc.new_pg_upmap[pgid] =
+      mempool::osdmap::vector<int32_t>(up.begin(), up.end());
+    osdmap->apply_incremental(inc);
+    OSDMap::Incremental clean(osdmap->get_epoch() + 1);
+    clean.fsid = osdmap->get_fsid();
+    osdmap->clean_pg_upmaps(g_ceph_context, &clean);
+    osdmap->apply_incremental(clean);
+    return osdmap->have_pg_upmaps(pgid);
+  };
+  // zone dc0 is OSDs 0-2, dc1 OSDs 3-5; each block is 3 positions
+  EXPECT_TRUE(has_upmap_after_clean({1, 0, 2, 4, 3, 5}));
+  EXPECT_TRUE(has_upmap_after_clean({3, 4, 5, 0, 1, 2}));
+  EXPECT_FALSE(has_upmap_after_clean({0, 1, 3, 2, 4, 5}));
+}
+
 // A datacenter with no OSDs, e.g. a site still being built, cannot hold any
 // of the pool and must not add a deficit.
 TEST_F(StretchECMinSizeTest, EmptyDatacenterUnderRoot_NoDeficit)

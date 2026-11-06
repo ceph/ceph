@@ -893,6 +893,11 @@ public:
                             const std::vector<int>& acting,
                             std::ostream *out = nullptr) const;
 
+  /// Whether up keeps each zone block of an erasure coded pool over zones in
+  /// one zone of its own, as peering needs.
+  bool keeps_zone_blocks(const pg_pool_t& pool, int crush_rule,
+                         const std::vector<int>& up) const;
+
   bool subtree_type_is_down(CephContext *cct, int id, int subtree_type, std::set<int> *down_in_osds, std::set<int> *up_in_osds,
                             std::set<int> *subtree_up, std::unordered_map<int, std::set<int> > *subtree_type_down) const;
 

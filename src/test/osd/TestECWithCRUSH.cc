@@ -502,9 +502,44 @@ protected:
                                        0xffffffff, pool_id, ""));
   }
 
+  // Sets a pg-upmap as the monitor does: it cleans the pending map's upmaps
+  // before it commits.
+  void upmap_through_monitor(const vector<int> &upmap) {
+    auto next = std::make_shared<OSDMap>();
+    next->deepish_copy_from(*osdmap);
+    OSDMap::Incremental inc(next->get_epoch() + 1);
+    inc.fsid = next->get_fsid();
+    inc.new_pg_upmap[pgid] =
+      mempool::osdmap::vector<int32_t>(upmap.begin(), upmap.end());
+    OSDMap pending;
+    pending.deepish_copy_from(*next);
+    pending.apply_incremental(inc);
+    pending.clean_pg_upmaps(g_ceph_context, &inc);
+    next->apply_incremental(inc);
+    update_osdmap_with_peering(next);
+    event_loop->run_until_idle();
+  }
+
   std::optional<ScopedConfig> trim_min;
   std::optional<ScopedConfig> trim_max;
 };
+
+// A pg-upmap that puts OSDs of both zones in each zone block.  Peering
+// serves each block from one zone, and with this upmap it cannot keep min_size
+// in both, so the PG would stay peered for as long as the upmap stayed (seen
+// in teuthology job 722871).  The monitor cancels such an upmap.
+TEST_F(TestECStretchPeering, UpmapAcrossZoneBlocksKeepsPGActive)
+{
+  ASSERT_TRUE(all_shards_active());
+  vector<int> acting;
+  int primary;
+  osdmap->pg_to_acting_osds(pgid, &acting, &primary);
+  upmap_through_monitor({acting[5], acting[4], acting[1],
+                         acting[3], acting[2], acting[0]});
+  EXPECT_FALSE(osdmap->have_pg_upmaps(pgid));
+  EXPECT_TRUE(get_primary_test_pg()->get_peering_state()->is_active())
+    << get_state_name(0);
+}
 
 // Losing a whole zone leaves the PG peered until degraded stretch mode names the surviving zone as mandatory.
 TEST_F(TestECStretchPeering, ZoneLoss_PeeredUntilDegradedStretchMode)
