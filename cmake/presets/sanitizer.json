@@ -1,0 +1,93 @@
+{
+  "version": 10,
+  "include": [
+    "base.json"
+  ],
+  "configurePresets": [
+    {
+      "name": "asan",
+      "hidden": true,
+      "cacheVariables": {
+        "WITH_ASAN": "ON"
+      }
+    },
+    {
+      "name": "asan-leak",
+      "hidden": true,
+      "cacheVariables": {
+        "WITH_ASAN": "ON",
+        "WITH_ASAN_LEAK": "ON"
+      }
+    },
+    {
+      "name": "tsan",
+      "hidden": true,
+      "cacheVariables": {
+        "WITH_TSAN": "ON"
+      }
+    },
+    {
+      "name": "ubsan",
+      "hidden": true,
+      "cacheVariables": {
+        "WITH_UBSAN": "ON"
+      }
+    },
+    {
+      "name": "asan-debug",
+      "displayName": "ASAN Debug",
+      "description": "Debug build with AddressSanitizer",
+      "inherits": ["debug", "asan"],
+      "binaryDir": "${sourceDir}/cmake-build-debug-asan"
+    },
+    {
+      "name": "asan-release",
+      "displayName": "ASAN Release",
+      "description": "RelWithDebInfo build with AddressSanitizer",
+      "inherits": ["release", "asan"],
+      "binaryDir": "${sourceDir}/cmake-build-release-asan"
+    },
+    {
+      "name": "asan-leak-debug",
+      "displayName": "ASAN+LSan Debug",
+      "description": "Debug build with AddressSanitizer and leak detection",
+      "inherits": ["debug", "asan-leak"],
+      "binaryDir": "${sourceDir}/cmake-build-debug-asan-leak"
+    },
+    {
+      "name": "asan-leak-release",
+      "displayName": "ASAN+LSan Release",
+      "description": "RelWithDebInfo build with AddressSanitizer and leak detection",
+      "inherits": ["release", "asan-leak"],
+      "binaryDir": "${sourceDir}/cmake-build-release-asan-leak"
+    },
+    {
+      "name": "tsan-debug",
+      "displayName": "TSAN Debug",
+      "description": "Debug build with ThreadSanitizer",
+      "inherits": ["debug", "tsan"],
+      "binaryDir": "${sourceDir}/cmake-build-debug-tsan"
+    },
+    {
+      "name": "tsan-release",
+      "displayName": "TSAN Release",
+      "description": "RelWithDebInfo build with ThreadSanitizer",
+      "inherits": ["release", "tsan"],
+      "binaryDir": "${sourceDir}/cmake-build-release-tsan"
+    },
+    {
+      "name": "ubsan-debug",
+      "displayName": "UBSAN Debug",
+      "description": "Debug build with UndefinedBehaviorSanitizer",
+      "inherits": ["debug", "ubsan"],
+      "binaryDir": "${sourceDir}/cmake-build-debug-ubsan"
+    },
+    {
+      "name": "ubsan-release",
+      "displayName": "UBSAN Release",
+      "description": "RelWithDebInfo build with UndefinedBehaviorSanitizer",
+      "inherits": ["release", "ubsan"],
+      "binaryDir": "${sourceDir}/cmake-build-release-ubsan"
+    }
+  ]
+}
