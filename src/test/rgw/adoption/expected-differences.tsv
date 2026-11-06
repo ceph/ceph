@@ -1,0 +1,198 @@
+# The expected-difference list:  the differences between two corpus
+# captures of one tree that are accounted for.  Read by `corpus-compare`
+# (s3-tests-rs, src/bin/corpus-compare.rs;  the rules are
+# s3_tests_rs::corpus::compare), which `standup.rs compare` runs.
+#
+# The diff gates:  a difference not matched by a row here fails the
+# comparison.  That is the point -- a comparison whose negative case
+# cannot occur proves nothing -- so every row is a claim that someone
+# has to defend, and a row with no reason is not a row.
+#
+# Seven tab-separated columns:
+#
+#   pair      which two captures.  noobaa:unadopted is the NooBaa run
+#             against the unadopted RGW run -- RGW over the tree after
+#             `import`, the identities imported and every bucket still in
+#             NooBaa's format;  a difference no row accounts for is an
+#             adoption defect.  unadopted:converted is that run against
+#             the converted RGW run, after `adopt`;  a difference no row
+#             accounts for is a conversion defect.
+#   when      the modality this row applies in -- md5-off, md5-on, or
+#             blank for both.  A modality is a property of the tree,
+#             fixed when NooBaa wrote its objects, so the two are two
+#             trees and one file covers both rather than two drifting.
+#   artifact  manifest | inventory | run
+#   subject   which subject the row is about:  `object <key>` or
+#             `bucket <name>` for a manifest, a path for an inventory;
+#             blank for any.  A row about one object must name it, or it
+#             excuses the same difference on every object
+#   key       manifest:  the field, third column
+#             inventory: xattr:<name>, type, mode, owner, or size
+#             run:       the stem whose artifact is absent entirely
+#             `*` matches any run of characters, anywhere.  The first
+#             row that matches a difference is the one that accounts for it.
+#   class     each a statement about the one pair the row names:
+#             equal      values must be identical
+#             recognize:<r>  both values pass through normalizer <r>,
+#                        then must be identical -- so the row still
+#                        asserts both are the same *kind* of value
+#             differs    values may differ
+#             vanishes   present on the left, must be absent on the right
+#             appears    absent on the left, must be present on the right
+#             absent     present on one side only, either side
+#             filtered   should never appear;  the writer drops it
+#             known      a known defect, not yet fixed:  matches any difference
+#                        and still fails the comparison, reported under its
+#                        own heading.  Never a way to make a run pass
+#   reason    why, in one line.  Required.
+#
+# NEVER key a row on a literal value from their side.  Their ETag and
+# version id embed an mtime whose low 8 bits are lost to a double in
+# their C++ (fs_napi.cpp:360), one `int64_t` from being fixed;  a row
+# that names the string breaks on their next release instead of
+# failing honestly.  Key on the field.
+#
+# Every row here was checked against a full run of the conversion
+# profile (`standup.rs conversion`, 2026-10-13):  each matched a
+# difference in that run, or is a guard that should match none -- an
+# `equal` or `filtered` row.  corpus-compare lists the rows that matched
+# nothing after each run;  a row that is not a guard and turns up there
+# is stale.
+
+# ---- named objects, first:  the first matching row accounts for one --
+# `.noobaa-nsfs-k-under-temp` is a client's object whose name starts
+# with NooBaa's temp prefix.  NooBaa stores it and its listing hides it
+# -- the prefix it hides is wider than its temp directory,
+# `.noobaa-nsfs_<bucket id>` -- and RGW lists it, which is correct
+# (DECISIONS.md 2026-10-12).  The corpus asserts the RGW side in observe
+# mode;  these rows account for NooBaa's.
+
+# `k-maxlens/...` is a 1024-byte key, each component under NAME_MAX,
+# that NooBaa accepts.  RGW's listing cache holds at most
+# mdb_env_get_maxkeysize() - 1 bytes of name, so after import the key is
+# not listed -- and one such entry empties its whole bucket's listing
+# (PUNCHLIST.md, OPEN).  Known, not expected:  it must keep failing until
+# LMDB is built with a larger key size.
+noobaa:unadopted		manifest	object k-maxlens/*	*	known	PUNCHLIST.md "one over-long name in a foreign tree empties the whole listing":  the LMDB listing cache cannot hold a key over its maximum key size;  fix by building LMDB with a larger one
+
+# `m-collide-content-md5` carries user metadata named content_md5.  NooBaa
+# stores user metadata as user.<key>, so it lands in user.content_md5, the
+# attribute NooBaa keeps the ETag in -- a collision, and a NooBaa defect.
+# NooBaa reports that attribute twice, as the ETag and, by design, as
+# metadata;  RGW reports it as the ETag only (DECISIONS.md 2026-10-13).
+noobaa:unadopted		manifest	object m-collide-content-md5	meta.content_md5	vanishes	NooBaa reports user.content_md5 as metadata as well as the ETag, by design (their test_namespace_fs.js:242);  here a client's content_md5 metadata collided with it.  RGW reports the attribute as the ETag alone (DECISIONS.md 2026-10-13)
+
+noobaa:unadopted		manifest	object .noobaa-nsfs-k-under-temp	listed	absent	NooBaa's listing hides every name starting with .noobaa-nsfs (namespace_fs.js:787);  RGW lists the object, as it should
+noobaa:unadopted		manifest	object .noobaa-nsfs-k-under-temp	size	absent	same:  the size comes from the listing
+noobaa:unadopted		manifest	object .noobaa-nsfs-k-under-temp	etag	absent	same:  the ETag comes from the listing
+noobaa:unadopted		manifest	object .noobaa-nsfs-k-under-temp	body-*	absent	same:  the corpus reads back only what was listed
+
+# ---- the content proof, in either modality --------------------------
+# The strongest rows here, and the only ones that witness bytes:  the
+# suite digests each body it GETs and records `body-md5` itself, so
+# three captures are three independent reads of the same bytes by two
+# gateways.  Nothing else in either artifact looks at content -- the
+# manifest records what S3 says and the inventory what is on disk.
+# Validation is the suite's job and not the gateway's;  `DECISIONS.md`
+# 2026-10-09.
+
+noobaa:unadopted		manifest		body-md5	equal	adoption writes one attribute per bucket and rewrites no object, so every byte must read back the same
+unadopted:converted		manifest		body-md5	equal	conversion rewrites metadata, not content;  a difference here is data loss
+noobaa:unadopted		manifest		body-len	equal	same, and it localises a truncation to the length rather than the digest
+
+# ---- adoption:  what the ETag says, by modality ---------------------
+# **nsfs never hashes an object on a read** (`ETAG_STRATEGY.md`).  An
+# object this gateway did not write is answered with the `mtime-ino`
+# token synthesized from its `statx`, per read, persisted nowhere --
+# whatever `rgw_non_md5_etag` says, because that option governs what a
+# *writer* digests.  NooBaa does the same thing for the same reason.
+# So in md5-off both sides report a token;  in md5-on they stored a
+# digest and we forward it.
+
+# The observing pass makes no copy, so it has no CopyObject result.  Ahead
+# of the md5-off recognize rows below, which would otherwise account for it first.
+noobaa:unadopted		manifest		copy.reported-etag	absent	what CopyObject's own response said.  An observing pass makes no copy;  what the destination holds is in head-etag, which does compare
+noobaa:unadopted		manifest		copy.reported-version-id	absent	same
+noobaa:unadopted	md5-off	manifest	object k-dirobj/	etag	differs	a directory object with content:  NooBaa's listing reports the directory's stat (namespace_fs.js:762, their own "GAP" comment) where its HEAD reports .folder's (:1008), so the ETag its listing gives -- the keys axis records the listing's ETag as `etag` -- carries the directory's inode;  RGW reports .folder's from both, as S3 requires one ETag per object.  NooBaa's defect, before the general row so it accounts for only this object (NOOBAA_WRITE_SURFACE.md)
+noobaa:unadopted	md5-off	manifest		etag	recognize:synthetic-identity	both report a file-instance token, and the values differ:  their mtime component loses its low 8 bits to a double in fs_napi.cpp:360, which we do not reproduce.  Recognized rather than tolerated, so a side that started reporting a digest fails
+noobaa:unadopted	md5-off	manifest		listed-etag	recognize:synthetic-identity	same value by the same path, through ListObjects
+noobaa:unadopted	md5-off	manifest		head-etag	recognize:synthetic-identity	same value by the same path, through HeadObject
+noobaa:unadopted	md5-on	manifest		etag	equal	NooBaa stored user.content_md5 and we forward it unchanged -- xattr_strategy.cc:128 -- so the two agree by construction rather than by recomputation
+unadopted:converted	md5-on	manifest		etag	equal	conversion renames the attribute into our layout and must preserve its value
+
+# ---- adoption:  everything else ------------------------------------
+# In base profile we add nothing to their tree, so the inventory should
+# be *identical* here apart from what adoption itself writes.  An
+# inventory difference in this pair that no row names is a defect.
+
+noobaa:unadopted		manifest		listed-owner	differs	_get_object_owner() returns undefined always, so NooBaa objects have no owner;  answering from the inode uid is an RGW addition
+noobaa:unadopted		manifest		version.*.owner	differs	same cause as listed-owner, per version
+noobaa:unadopted		manifest		ownership-controls	differs	NooBaa has no setting, and its GetBucketOwnershipControls error carries no code, so the axis reads Unknown;  RGW, serving the same bucket before adoption, returns OwnershipControlsNotFoundError
+unadopted:converted		manifest		ownership-controls	differs	adoption writes BucketOwnerEnforced on every bucket it adopts, because RGW records the bucket's owner on every object (DECISIONS.md 2026-10-11, the object-owner plan);  NooBaa has no setting, and before adoption the bucket reads as NooBaa's, OwnershipControlsNotFoundError
+noobaa:unadopted		manifest		in-flight-initiator	differs	NooBaa records no initiator for an upload and reports a placeholder;  RGW reports the bucket's owner, deduced (DECISIONS.md 2026-10-11, step 3b)
+noobaa:unadopted		manifest		in-flight-owner	differs	same as in-flight-initiator
+noobaa:unadopted		manifest		log-target-policy	absent	the outcome of applying a policy to the log target, which only the generating pass does;  an observing pass applies nothing (generate.rs)
+noobaa:unadopted		manifest		request-payment.payer-read	absent	NooBaa answers 501 NotImplemented to PutBucketRequestPayment, so its pass reads no payer back;  RGW reports its default payer, BucketOwner
+noobaa:unadopted		manifest	object sc-configured	error	absent	NooBaa rejects the configured class with InvalidStorageClass, so the object is never written;  an outcome of a write, which only the generating pass has
+noobaa:unadopted		manifest	object sc-configured	declared-class	absent	same object:  the observing pass derives the class it would have asked for (storage.rs), and NooBaa's pass, rejected, recorded none
+noobaa:unadopted		manifest		observed	absent	an observing pass's finding that an object it derived was never written;  the generating pass knows that from its own rejected write, recorded as `error`
+noobaa:unadopted		inventory		xattr:security.selinux	filtered	not written by either gateway;  the host's policy put it there and it differs per machine.  The inventory writer drops it rather than listing it here
+noobaa:unadopted		manifest		put-*	absent	the outcome of a write, and only the capture that wrote has one.  An observing pass -- how capture/rgw is taken, since it must not create objects in the tree it is describing -- records no put-status, put-refused or put-message.  Keyed on the prefix because a refused key has three of them.  `capture-mode` on the bucket says which kind of capture a manifest is
+noobaa:unadopted		manifest		capture-mode	differs	it says which kind of capture this is, so it differs by construction -- and the rows above are conditioned on it.  Listed rather than filtered, because a reader comparing two manifests needs to see which is which before trusting anything else
+noobaa:unadopted		manifest		*-failed	absent	head-failed, tagging-failed and their kind are recorded when an operation *this pass* performed failed.  An observing pass performs none, so it has neither the failure nor the key it failed on -- the gateway refused to create it
+noobaa:unadopted		manifest		head-status	absent	same:  the status of a HEAD this pass made against a key it failed to write
+noobaa:unadopted		manifest		delete-marker-id-reported	absent	whether the DELETE returned a version id -- an outcome of a delete an observing pass does not make.  The marker itself is in the tree and is listed
+noobaa:unadopted		manifest		versions-before-suspend	absent	the axis counts what its own puts reported either side of suspending the bucket.  An observing pass suspends nothing and puts nothing;  what the tree holds is in version.* instead
+noobaa:unadopted		manifest		versions-after-suspend	absent	same
+noobaa:unadopted		manifest		*.accepted	absent	bucket configuration:  whether applying it succeeded.  An observing pass applies nothing -- and must not, since clearing and re-applying would destroy the configuration it is there to describe
+noobaa:unadopted		manifest		*.error	absent	bucket configuration:  the code a failed apply returned.  Emitted with <none> when it was accepted, so it is always present in a generating capture and never in an observing one
+noobaa:unadopted		manifest		warmed-with	differs	the key count a warming listing saw, taken partway through the run -- so it reports the harness's own sequence rather than the tree, and differs between any two passes that build the tree differently.  A fact about the capture, not about what was captured
+noobaa:unadopted		manifest		*.gained	absent	which stored names changed when the configuration was applied.  Differential, so it needs a before and an after that only an applying pass has
+noobaa:unadopted		manifest		*.present	absent	the observing pass's counterpart to `.gained`:  which stored names are there, absolutely rather than differentially.  Present only in an observed capture, which is the same kind of row in the other direction
+unadopted:converted		manifest		*.present	differs	which stored names hold the bucket's configuration:  before adoption, the fields of NooBaa's configuration store, `buckets/<name>.json`, which P5 reads in place;  adoption writes them as RGW's attributes on the bucket directory
+noobaa:unadopted		manifest		parts-listed	absent	from ListParts, which needs an upload id -- an outcome only the pass that created the upload has.  An observing capture does not ask
+noobaa:unadopted		manifest		part.*.size	absent	same:  the per-part facts come from ListParts on an upload still in flight
+
+# ---- conversion:  the layout changes wholesale ----------------------
+# These rows are the definition of conversion being complete:  nothing
+# on the left may survive on the right.
+
+unadopted:converted		inventory	*.folder	*	appears	an empty directory object has no sentinel in NooBaa's layout, only user.noobaa.dir_content on the directory;  conversion creates the nsfs sentinel for it, empty, with the directory's mtime (convert_directory_object())
+unadopted:converted		inventory	.noobaa-nsfs_*/multipart-uploads/*	*	vanishes	conversion re-stages an upload still in flight out of NooBaa's temp directory (NSFSBucket::convert_uploads);  its record, parts and directory go
+unadopted:converted		inventory	.multipart_*	*	appears	and into nsfs's staging directory, `.multipart_<key>.<upload id>`, one file per part with a `.meta` record
+unadopted:converted		inventory		xattr:user.nsfs.*	appears	conversion writes each object's attributes in the nsfs spelling and marks the bucket (`user.nsfs.extensions`).  Appears, not absent:  an nsfs name that vanished would be a loss, since a bucket's own state is in the nsfs spelling before conversion too (DECISIONS.md 2026-10-13)
+unadopted:converted		inventory		xattr:user.noobaa.*	vanishes	their internal namespace becomes user.nsfs.* -- NB_KEYS, xattr_strategy.cc:127
+unadopted:converted		inventory		xattr:user.storage_class	vanishes	NB_KEYS maps it;  it is the one name their own reader hides from user metadata, via XATTR_METADATA_IGNORE_LIST
+unadopted:converted		inventory		xattr:user.content_md5	vanishes	maps to RGW_ATTR_ETAG alone, so a converted object stops carrying the key -- a decision, not a defect, recorded in docs/NOOBAA_WRITE_SURFACE.md
+unadopted:converted		inventory		xattr:user.*	vanishes	user metadata is plain user.<k> in their layout and user.nsfs.rgw.x-amz-meta-<k> in ours.  Ordered after the rows above, which are narrower
+
+# ---- not yet classifiable ------------------------------------------
+# One item, with no class asserted because it needs a measurement
+# rather than an argument:
+#
+#   inventory  mode    C1 normalizes permissions and their files are
+#       0660 in the capture.  What conversion writes has not been
+#       measured against a tree they wrote.
+#
+# ---- checked, and not problems -------------------------------------
+# Kept so they are not re-raised.
+#
+#   version.mtime-<...>-ino-<...>.* field names **align**.  NooBaa
+#       stores every version id in user.noobaa.version_id -- the
+#       current version included -- and we forward the stored string
+#       (NB_KEYS, xattr_strategy.cc:131) rather than recomputing it.
+#       One tree, one set of ids, all three captures.
+#
+#   *.error is **fixed in the generator**, not here:  the field is
+#       emitted whether or not a configuration was rejected, with
+#       <none> where it was not, so a capability divergence is one
+#       changed value rather than a removed line and an added one.
+#       Same for log-target-policy, whose subject was a random bucket
+#       name and is now derived.
+#
+#   the ETag a sideloaded object reports is a synthetic token on both
+#       sides and in every configuration, because neither gateway
+#       hashes an object it did not write -- nsfs synthesizes from the
+#       statx on read (ETAG_STRATEGY.md), NooBaa does the same.  So the
+#       md5-off rows above are about two tokens, never a token against
+#       a digest.

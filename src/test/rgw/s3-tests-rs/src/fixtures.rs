@@ -1,0 +1,634 @@
+use aws_sdk_s3::primitives::ByteStream;
+use aws_sdk_s3::Client as S3Client;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::Mutex;
+
+use crate::cleanup::nuke_bucket;
+use crate::client::get_client;
+use crate::config::get_config;
+use crate::random::{generate_random, DEFAULT_PART_SIZE};
+
+static BUCKET_COUNTER: AtomicU64 = AtomicU64::new(1);
+
+static CREATED_BUCKETS: Mutex<Vec<String>> = Mutex::new(Vec::new());
+
+static SERVER_DEAD: AtomicBool = AtomicBool::new(false);
+
+/// Register a bucket for cleanup that was created directly (not via get_new_bucket).
+pub fn register_bucket_for_cleanup(_client: &S3Client, name: &str) {
+    CREATED_BUCKETS.lock().unwrap().push(name.to_string());
+}
+
+/// Nuke all tracked buckets using a fresh client.
+async fn cleanup_tracked_buckets_inner() {
+    let buckets: Vec<String> = {
+        let mut guard = CREATED_BUCKETS.lock().unwrap();
+        std::mem::take(&mut *guard)
+    };
+
+    if buckets.is_empty() {
+        return;
+    }
+
+    let client = get_client();
+    let mut set = tokio::task::JoinSet::new();
+    for name in buckets {
+        let c = client.clone();
+        set.spawn(async move {
+            if let Err(e) = nuke_bucket(&c, &name).await {
+                eprintln!("cleanup: failed to nuke {name}: {e:?}");
+            }
+        });
+    }
+
+    while set.join_next().await.is_some() {}
+
+    /* Backstop.  The pass above is best-effort:  it nukes as the *main*
+     * client whatever the bucket's owner, it gets one attempt with no
+     * retry, and it only knows about buckets that were tracked.  Sweep
+     * the prefix afterwards to catch what it missed.
+     *
+     * This is safe to do per test because the bucket prefix carries a
+     * per-process random component (choose_bucket_prefix), so the sweep
+     * only ever matches this process's own buckets -- under nextest each
+     * test is its own process, and concurrent tests have different
+     * prefixes.  It also sweeps as each configured category's own client,
+     * which is the only way a non-main-owned bucket can be removed at
+     * all. */
+    crate::cleanup::nuke_all_prefixed_public(&get_config().bucket_prefix).await;
+}
+
+/// RAII guard that cleans up all tracked buckets when dropped.
+/// Add `let _guard = TestGuard::setup();` as the first line of each test.
+pub struct TestGuard;
+
+impl TestGuard {
+    pub fn setup() -> Self {
+        if std::env::var("S3TEST_FAST_FAIL").is_ok() {
+            if SERVER_DEAD.load(Ordering::Relaxed) {
+                panic!("s3tests: server unreachable (fast-fail)");
+            }
+            let cfg = get_config();
+            let addr_str = format!("{}:{}", cfg.default_host, cfg.default_port);
+            let timeout = std::time::Duration::from_millis(500);
+            let reachable = std::net::ToSocketAddrs::to_socket_addrs(&addr_str)
+                .ok()
+                .and_then(|mut addrs| addrs.next())
+                .map(|sa| std::net::TcpStream::connect_timeout(&sa, timeout).is_ok())
+                .unwrap_or(false);
+            if !reachable {
+                SERVER_DEAD.store(true, Ordering::Relaxed);
+                panic!("s3tests: server at {addr_str} unreachable — fast-fail engaged");
+            }
+        }
+        Self
+    }
+}
+
+impl Drop for TestGuard {
+    fn drop(&mut self) {
+        if std::env::var("S3TEST_NO_CLEANUP").is_ok() {
+            return;
+        }
+
+        let has_buckets = CREATED_BUCKETS
+            .lock()
+            .map(|g| !g.is_empty())
+            .unwrap_or(false);
+
+        if !has_buckets {
+            return;
+        }
+
+        // Spawn a separate thread with its own runtime, since we can't
+        // create a nested runtime on the tokio test thread. A fresh
+        // client is created inside the new runtime to avoid connection
+        // pool issues across runtimes.
+        std::thread::spawn(|| {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("Failed to create cleanup runtime");
+
+            rt.block_on(cleanup_tracked_buckets_inner());
+        })
+        .join()
+        .ok();
+    }
+}
+
+/* Registers the name it hands out, so cleanup covers a bucket however it
+ * was created.
+ *
+ * Most tests create buckets through get_new_bucket(), which tracked them
+ * already.  But 116 call sites do `client.create_bucket()` directly --
+ * they still need a prefixed name, so they come here first -- and only
+ * two of them ever called register_bucket_for_cleanup().  The rest were
+ * invisible to cleanup and leaked;  a baseline run left 174 buckets
+ * behind, enough to exhaust the 1000-bucket user quota in five runs and
+ * then fail the whole suite with TooManyBuckets.
+ *
+ * Registering here rather than at each creation means no call site has to
+ * remember, and a future test cannot forget.  Registering a name that is
+ * never created is harmless:  nuke_bucket()'s first delete returns
+ * NoSuchBucket, which it treats as success. */
+pub fn get_new_bucket_name() -> String {
+    let cfg = get_config();
+    let num = BUCKET_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let name = format!("{}{}", cfg.bucket_prefix, num);
+    CREATED_BUCKETS.lock().unwrap().push(name.clone());
+    name
+}
+
+pub async fn get_new_bucket(client: Option<&S3Client>) -> String {
+    let name = get_new_bucket_name();
+    let default_client;
+    let c = match client {
+        Some(c) => c,
+        None => {
+            default_client = get_client();
+            &default_client
+        }
+    };
+    c.create_bucket()
+        .bucket(&name)
+        .send()
+        .await
+        .expect("Failed to create bucket");
+    /* already registered by get_new_bucket_name() */
+    name
+}
+
+pub async fn create_objects(client: &S3Client, bucket_name: &str, keys: &[&str]) {
+    for key in keys {
+        client
+            .put_object()
+            .bucket(bucket_name)
+            .key(*key)
+            .body(ByteStream::from(key.as_bytes().to_vec()))
+            .send()
+            .await
+            .unwrap_or_else(|e| panic!("Failed to put object {key}: {e}"));
+    }
+}
+
+pub async fn create_objects_in_new_bucket(keys: &[&str]) -> String {
+    let client = get_client();
+    let bucket_name = get_new_bucket(Some(&client)).await;
+    create_objects(&client, &bucket_name, keys).await;
+    bucket_name
+}
+
+pub struct MultipartUploadResult {
+    pub upload_id: String,
+    pub data: Vec<u8>,
+    pub parts: Vec<aws_sdk_s3::types::CompletedPart>,
+}
+
+pub async fn multipart_upload(
+    client: &S3Client,
+    bucket_name: &str,
+    key: &str,
+    size: usize,
+    part_size: Option<usize>,
+    content_type: Option<&str>,
+    metadata: Option<std::collections::HashMap<String, String>>,
+    tagging: Option<&str>,
+) -> MultipartUploadResult {
+    let part_size = part_size.unwrap_or(DEFAULT_PART_SIZE);
+
+    let mut req = client.create_multipart_upload().bucket(bucket_name).key(key);
+    if let Some(ct) = content_type {
+        req = req.content_type(ct);
+    }
+    if let Some(md) = metadata {
+        for (k, v) in md {
+            req = req.metadata(k, v);
+        }
+    }
+    if let Some(t) = tagging {
+        req = req.tagging(t);
+    }
+    let resp = req.send().await.expect("create_multipart_upload failed");
+    let upload_id = resp.upload_id().unwrap().to_string();
+
+    let mut all_data = Vec::new();
+    let mut parts = Vec::new();
+
+    for (i, chunk) in generate_random(size, part_size).into_iter().enumerate() {
+        let part_num = (i + 1) as i32;
+        all_data.extend_from_slice(&chunk);
+        let resp = client
+            .upload_part()
+            .bucket(bucket_name)
+            .key(key)
+            .upload_id(&upload_id)
+            .part_number(part_num)
+            .body(ByteStream::from(chunk))
+            .send()
+            .await
+            .expect("upload_part failed");
+
+        parts.push(
+            aws_sdk_s3::types::CompletedPart::builder()
+                .e_tag(resp.e_tag().unwrap_or_default())
+                .part_number(part_num)
+                .build(),
+        );
+    }
+
+    MultipartUploadResult {
+        upload_id,
+        data: all_data,
+        parts,
+    }
+}
+
+pub struct MultipartCopyResult {
+    pub upload_id: String,
+    pub parts: Vec<aws_sdk_s3::types::CompletedPart>,
+}
+
+pub async fn multipart_copy(
+    client: &S3Client,
+    src_bucket: &str,
+    src_key: &str,
+    dest_bucket: &str,
+    dest_key: &str,
+    size: usize,
+    part_size: Option<usize>,
+    version_id: Option<&str>,
+) -> MultipartCopyResult {
+    let part_size = part_size.unwrap_or(DEFAULT_PART_SIZE);
+
+    let resp = client
+        .create_multipart_upload()
+        .bucket(dest_bucket)
+        .key(dest_key)
+        .send()
+        .await
+        .expect("create_multipart_upload failed");
+    let upload_id = resp.upload_id().unwrap().to_string();
+
+    let mut copy_source = format!("{}/{}", src_bucket, src_key);
+    if let Some(vid) = version_id {
+        copy_source = format!("{}?versionId={}", copy_source, vid);
+    }
+
+    let mut parts = Vec::new();
+    for (i, start_offset) in (0..size).step_by(part_size).enumerate() {
+        let end_offset = std::cmp::min(start_offset + part_size - 1, size - 1);
+        let part_num = (i + 1) as i32;
+        let range = format!("bytes={}-{}", start_offset, end_offset);
+
+        let resp = client
+            .upload_part_copy()
+            .bucket(dest_bucket)
+            .key(dest_key)
+            .copy_source(&copy_source)
+            .part_number(part_num)
+            .upload_id(&upload_id)
+            .copy_source_range(&range)
+            .customize()
+            .mutate_request(crate::http::zero_content_length)
+            .send()
+            .await
+            .expect("upload_part_copy failed");
+
+        let etag = resp
+            .copy_part_result()
+            .and_then(|r| r.e_tag())
+            .unwrap_or_default();
+        parts.push(
+            aws_sdk_s3::types::CompletedPart::builder()
+                .e_tag(etag)
+                .part_number(part_num)
+                .build(),
+        );
+    }
+
+    MultipartCopyResult { upload_id, parts }
+}
+
+pub async fn create_key_with_random_content(
+    client: &S3Client,
+    key: &str,
+    bucket_name: Option<&str>,
+    size: Option<usize>,
+) -> String {
+    let owned_bucket;
+    let bname = match bucket_name {
+        Some(b) => b,
+        None => {
+            owned_bucket = get_new_bucket(Some(client)).await;
+            &owned_bucket
+        }
+    };
+    let sz = size.unwrap_or(7 * 1024 * 1024);
+    let data = generate_random(sz, sz);
+    let body = data.into_iter().next().unwrap_or_default();
+    client
+        .put_object()
+        .bucket(bname)
+        .key(key)
+        .body(ByteStream::from(body))
+        .send()
+        .await
+        .expect("put_object failed for random content");
+    bname.to_string()
+}
+
+pub async fn check_configure_versioning_retry(
+    client: &S3Client,
+    bucket_name: &str,
+    status: &str,
+    expected: &str,
+) {
+    client
+        .put_bucket_versioning()
+        .bucket(bucket_name)
+        .versioning_configuration(
+            aws_sdk_s3::types::VersioningConfiguration::builder()
+                .status(status.parse::<aws_sdk_s3::types::BucketVersioningStatus>().unwrap())
+                .build(),
+        )
+        .send()
+        .await
+        .expect("put_bucket_versioning failed");
+
+    for _ in 0..5 {
+        let resp = client
+            .get_bucket_versioning()
+            .bucket(bucket_name)
+            .send()
+            .await
+            .expect("get_bucket_versioning failed");
+        let read_status = resp
+            .status()
+            .map(|s| s.as_str().to_string())
+            .unwrap_or_default();
+        if read_status == expected {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    }
+    panic!("versioning status never reached {expected}");
+}
+
+/* --- PrivateUser ------------------------------------------------------ */
+
+/// An IAM user of one test module's own, with its own access key and,
+/// under impersonation, its own identity row.
+///
+/// Three modules used to borrow `main_user_id` or `alt_user_id` and
+/// rewrite the identity row of whichever they took, while 590 other
+/// tests authenticate as those two.  A row absent or changed for the
+/// length of one test is a 403 for whoever else is mid-request, and
+/// that 403 is the gateway behaving correctly:  with no identity the
+/// request is denied.  The failures rotated between runs and were called noise
+/// for a week.  A test that borrows global mutable state is not
+/// flaky, it is wrong.
+///
+/// `tag` names the borrower, so two modules cannot collide on the
+/// name.  Needs the IAM root credentials, so a backend without them
+/// gets `None` and the caller skips rather than borrowing.
+pub struct PrivateUser {
+    pub name: String,
+    /// Its owner key:  what a bucket it creates is owned by, and what
+    /// an identity row is keyed on.
+    pub id: String,
+    pub access_key: String,
+    pub secret_key: String,
+    pub client: aws_sdk_s3::Client,
+}
+
+impl PrivateUser {
+    /// A plain RGW user, created through Admin Ops, and not a user
+    /// inside an IAM account.
+    ///
+    /// The distinction is load-bearing.  A bucket created by a user
+    /// inside an account is owned by the *account*, and the driver
+    /// keys a custom-bucket-path allowlist on the bucket's owner
+    /// (`rgw_sal_nsfs.cc:5340`, `get_identity(to_string(owner))`).
+    /// So that user's own row is never the one consulted, and a test
+    /// using one would be back to borrowing shared state -- the
+    /// account's row instead of the main user's.  A plain RGW user is
+    /// its own owner.
+    pub async fn create(tag: &str) -> Option<PrivateUser> {
+        let cfg = get_config();
+        let uid = format!("{}priv{tag}", cfg.iam_name_prefix);
+
+        /* leave nothing from a failed run */
+        let _ = crate::admin::admin_request(
+            reqwest::Method::DELETE, "/admin/user",
+            &format!("uid={}&purge-data", crate::admin::q(&uid)), None).await;
+
+        let r = crate::admin::admin_request(
+            reqwest::Method::PUT, "/admin/user",
+            &format!("uid={}&display-name={}",
+                     crate::admin::q(&uid), crate::admin::q(tag)), None).await;
+        if r.status != 200 {
+            eprintln!("PrivateUser({tag}): create returned {}: {}",
+                      r.status, r.body);
+            return None;
+        }
+        let j: serde_json::Value = serde_json::from_str(&r.body).ok()?;
+        let k = j.get("keys")?.get(0)?;
+        let akid = k.get("access_key")?.as_str()?.to_string();
+        let sk = k.get("secret_key")?.as_str()?.to_string();
+
+        Some(PrivateUser {
+            name: uid.clone(),
+            id: uid,
+            client: crate::client::build_s3_client(&akid, &sk),
+            access_key: akid,
+            secret_key: sk,
+        })
+    }
+
+    /// Give it a POSIX identity.  Only meaningful under impersonation;
+    /// returns whether the row was written.
+    pub async fn bind(&self, uid: &str, gid: &str, groups: Option<&str>)
+        -> bool {
+        let mut p: Vec<(&str, &str)> = vec![
+            ("identity", &self.id), ("uid", uid), ("gid", gid)];
+        if let Some(g) = groups {
+            p.push(("groups", g));
+        }
+        crate::admin::nsfs_put_identity(&p).await.status == 200
+    }
+
+    /// Give it a POSIX identity by name, which the gateway resolves
+    /// through nsswitch, as NooBaa's `distinguished_name` is.  Returns
+    /// whether the row was written.
+    pub async fn bind_name(&self, name: &str) -> bool {
+        crate::admin::nsfs_put_identity(&[
+            ("identity", &self.id), ("distinguished_name", name)])
+            .await.status == 200
+    }
+}
+
+impl Drop for PrivateUser {
+    fn drop(&mut self) {
+        if std::env::var("S3TEST_NO_CLEANUP").is_ok() {
+            return;
+        }
+        /* Drop cannot await, so a thread with its own runtime, as
+         * TestGuard does for buckets. */
+        let id = self.id.clone();
+        std::thread::spawn(move || {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all().build().expect("cleanup runtime");
+            rt.block_on(async {
+                let _ = crate::admin::nsfs_delete_identity(&id).await;
+                let _ = crate::admin::admin_request(
+                    reqwest::Method::DELETE, "/admin/user",
+                    &format!("uid={}&purge-data", crate::admin::q(&id)),
+                    None).await;
+            });
+        }).join().ok();
+    }
+}
+
+/* --- PrivateAccount --------------------------------------------------- */
+
+/// An IAM account of one test's own, with an account root whose IAM
+/// client creates the users the test needs inside it.
+///
+/// For the tests that turn on a user inside an account being served as
+/// the account.  They set the account's identity row, and the suite's
+/// `[iam root]` account is provisioned for the whole run and used by
+/// every IAM test at once, so setting its row is the interference
+/// [`PrivateUser`] exists to remove, one level up.
+///
+/// The IAM credential is given the `accounts` cap, which Admin Ops
+/// requires to create one.  Granting is additive and idempotent, as
+/// `grant_user_caps` says.
+pub struct PrivateAccount {
+    /// The account id:  what its buckets are owned by, and what its
+    /// identity row is keyed on.
+    pub id: String,
+    pub name: String,
+    root_uid: String,
+    root_access_key: String,
+    root_secret_key: String,
+    /// The account root's IAM client.
+    pub root: aws_sdk_iam::Client,
+}
+
+impl PrivateAccount {
+    /// `tag` names the test, as for [`PrivateUser`].  `None` where
+    /// accounts cannot be made, so the caller skips.
+    pub async fn create(tag: &str) -> Option<PrivateAccount> {
+        let cfg = get_config();
+        let r = crate::admin::grant_user_caps(&cfg.iam_user_id, "accounts=*")
+            .await;
+        if r.status != 200 {
+            eprintln!("PrivateAccount({tag}): granting accounts returned {}: {}",
+                      r.status, r.body);
+            return None;
+        }
+
+        /* POST creates and PUT modifies here, the reverse of
+         * /admin/user (rgw_rest_account.cc, adminops.rst "Create
+         * Account");  a PUT of an absent account is a 404. */
+        let name = format!("{}acct{tag}", cfg.iam_name_prefix);
+        let r = crate::admin::admin_request(
+            reqwest::Method::POST, "/admin/account",
+            &format!("name={}", crate::admin::q(&name)), None).await;
+        if r.status != 200 {
+            eprintln!("PrivateAccount({tag}): create returned {}: {}",
+                      r.status, r.body);
+            return None;
+        }
+        let j: serde_json::Value = serde_json::from_str(&r.body).ok()?;
+        let id = j.get("id")?.as_str()?.to_string();
+
+        let root_uid = format!("{}acct{tag}root", cfg.iam_name_prefix);
+        let r = crate::admin::admin_request(
+            reqwest::Method::PUT, "/admin/user",
+            &format!("uid={}&display-name={}&account-id={}&account-root=true",
+                     crate::admin::q(&root_uid), crate::admin::q(&root_uid),
+                     crate::admin::q(&id)), None).await;
+        let keys = (r.status == 200)
+            .then(|| serde_json::from_str::<serde_json::Value>(&r.body).ok())
+            .flatten()
+            .and_then(|j| {
+                let k = j.get("keys")?.get(0)?;
+                Some((k.get("access_key")?.as_str()?.to_string(),
+                      k.get("secret_key")?.as_str()?.to_string()))
+            });
+        let (akid, sk) = keys.clone().unwrap_or_default();
+        let account = PrivateAccount {
+            id, name, root_uid,
+            root: crate::client::build_iam_client(&akid, &sk),
+            root_access_key: akid,
+            root_secret_key: sk,
+        };
+        if keys.is_none() {
+            eprintln!("PrivateAccount({tag}): creating its root returned {}: {}",
+                      r.status, r.body);
+            return None;		/* dropping it removes the account */
+        }
+        Some(account)
+    }
+}
+
+impl Drop for PrivateAccount {
+    fn drop(&mut self) {
+        if std::env::var("S3TEST_NO_CLEANUP").is_ok() {
+            return;
+        }
+        /* An account with users in it cannot be removed, and the REST
+         * delete has no purge, so the users go first:  those a failed
+         * test left behind, through the root, then the root itself. */
+        let (id, root_uid) = (self.id.clone(), self.root_uid.clone());
+        let (akid, sk) = (self.root_access_key.clone(),
+                          self.root_secret_key.clone());
+        std::thread::spawn(move || {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all().build().expect("cleanup runtime");
+            rt.block_on(async {
+                if !akid.is_empty() {
+                    let root = crate::client::build_iam_client(&akid, &sk);
+                    remove_account_users(&root).await;
+                }
+                let _ = crate::admin::admin_request(
+                    reqwest::Method::DELETE, "/admin/user",
+                    &format!("uid={}&purge-data", crate::admin::q(&root_uid)),
+                    None).await;
+                let _ = crate::admin::nsfs_delete_identity(&id).await;
+                let _ = crate::admin::admin_request(
+                    reqwest::Method::DELETE, "/admin/account",
+                    &format!("id={}", crate::admin::q(&id)), None).await;
+            });
+        }).join().ok();
+    }
+}
+
+/// Every user the root can see, with the keys and inline policies that
+/// would otherwise stop its deletion.
+async fn remove_account_users(root: &aws_sdk_iam::Client) {
+    let Ok(users) = root.list_users().send().await else {
+        return;
+    };
+    for u in users.users() {
+        let name = u.user_name();
+        let _ = crate::admin::nsfs_delete_identity(u.user_id()).await;
+        if let Ok(keys) = root.list_access_keys().user_name(name).send().await {
+            for k in keys.access_key_metadata() {
+                if let Some(kid) = k.access_key_id() {
+                    let _ = root.delete_access_key().user_name(name)
+                        .access_key_id(kid).send().await;
+                }
+            }
+        }
+        if let Ok(pols) = root.list_user_policies().user_name(name).send().await {
+            for pn in pols.policy_names() {
+                let _ = root.delete_user_policy().user_name(name)
+                    .policy_name(pn).send().await;
+            }
+        }
+        let _ = root.delete_user().user_name(name).send().await;
+    }
+}
