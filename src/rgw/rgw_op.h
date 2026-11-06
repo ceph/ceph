@@ -1176,7 +1176,7 @@ public:
   void send_response() override = 0;
   const char* name() const override { return "delete_bucket_website"; }
   std::string canonical_name() const override { return fmt::format("REST.{}.WEBSITE", s->info.method); }
-  RGWOpType get_type() override { return RGW_OP_SET_BUCKET_WEBSITE; }
+  RGWOpType get_type() override { return RGW_OP_DELETE_BUCKET_WEBSITE; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
 
@@ -2820,7 +2820,7 @@ public:
   void execute(optional_yield y) override;
 
   const char* name() const override { return "delete_bucket_meta_search"; }
-  virtual RGWOpType delete_type() { return RGW_OP_DEL_BUCKET_META_SEARCH; }
+  RGWOpType get_type() override { return RGW_OP_DEL_BUCKET_META_SEARCH; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
 

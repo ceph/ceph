@@ -25,6 +25,8 @@ public:
   PerfCountersCollectionImpl* get_perf_collection();
   void dump_formatted(ceph::Formatter *f, bool schema,
                       select_labeled_t dump_labeled,
+                      select_histograms_t histograms =
+                          select_histograms_t::exclude,
                       const std::string &logger = "",
                       const std::string &counter = "");
 };

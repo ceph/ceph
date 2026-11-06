@@ -287,7 +287,8 @@ public:
     cmd_getval(cmdmap, "counter", counter);
 
     crimson::common::local_perf_coll().dump_formatted(f.get(), false,
-      select_labeled_t::unlabeled, logger, counter);
+      select_labeled_t::unlabeled, select_histograms_t::exclude, logger,
+      counter);
     co_return std::move(f);
   }
 };
