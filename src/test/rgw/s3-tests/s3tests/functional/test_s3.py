@@ -11229,6 +11229,47 @@ def test_lifecycle_cloud_transition_versioned_current_delete_marker():
     status, error_code = _get_status_and_error_code(e.response)
     assert status == 404
 
+@pytest.mark.lifecycle
+@pytest.mark.lifecycle_transition
+@pytest.mark.cloud_transition
+@pytest.mark.fails_on_aws
+@pytest.mark.fails_on_dbstore
+def test_lifecycle_cloud_transition_suspended_current_delete_marker():
+    cloud_sc = get_cloud_storage_class()
+    if cloud_sc is None:
+        pytest.skip('[s3 cloud] section missing cloud_storage_class')
+
+    retain_head_object = get_cloud_retain_head_object()
+    if retain_head_object is not None and retain_head_object == "true":
+        pytest.skip('[s3 cloud] retain_head_object is enabled; the current version stays as a stub')
+
+    bucket = get_new_bucket()
+    client = get_client()
+    check_configure_versioning_retry(bucket, "Enabled", "Enabled")
+    null_ids, _ = create_multiple_versions(client, bucket, 'test_null', 1)
+    versioned_ids, _ = create_multiple_versions(client, bucket, 'test_versioned', 2)
+    check_configure_versioning_retry(bucket, "Suspended", "Suspended")
+    # test_null's current version is the null version, test_versioned's is versioned
+    client.put_object(Bucket=bucket, Key='test_null', Body='null version')
+
+    rules = [{'ID': 'rule1', 'Transitions': [{'Days': 1, 'StorageClass': cloud_sc}], 'Prefix': '', 'Status': 'Enabled'}]
+    client.put_bucket_lifecycle_configuration(Bucket=bucket, LifecycleConfiguration={'Rules': rules})
+
+    lc_interval = get_lc_debug_interval()
+    time.sleep(10 * lc_interval)
+
+    # a null delete marker replaces the transitioned null version and the
+    # versioned ones stay as noncurrent
+    response = client.list_object_versions(Bucket=bucket)
+    for key, version_ids in (('test_null', null_ids), ('test_versioned', versioned_ids)):
+        versions = [v for v in response.get('Versions', []) if v['Key'] == key]
+        delete_markers = [dm for dm in response.get('DeleteMarkers', []) if dm['Key'] == key]
+        assert sorted(v['VersionId'] for v in versions) == sorted(version_ids)
+        assert not any(v['IsLatest'] for v in versions)
+        assert len(delete_markers) == 1
+        assert delete_markers[0]['VersionId'] == 'null'
+        assert delete_markers[0]['IsLatest'] == True
+
 @pytest.mark.cloud_restore
 @pytest.mark.fails_on_aws
 @pytest.mark.fails_on_dbstore
