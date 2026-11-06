@@ -1106,7 +1106,7 @@ class TestMirroring(CephFSTestCase):
         """Restore mirror remote client caps used by the mirror test suite."""
         self.get_ceph_cmd_result(
             'auth', 'caps', 'client.mirror_remote',
-            'mds', 'allow rwps',
+            'mds', 'allow *',
             'mon', 'allow r',
             'osd', "allow rw tag cephfs *=*",
             'mgr', 'allow r')
