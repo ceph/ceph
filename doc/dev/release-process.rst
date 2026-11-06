@@ -238,15 +238,15 @@ job manually on the Jenkins server.  This job:
   or 'fat' container image and pushes it to quay.ceph.io/ceph/prerelease
 
 Finally, when all appropriate testing and verification is done on the
-container images, run ``make-manifest-list.py --promote`` from the ceph
+container images, run ``make-manifest-list.py --promote --version <ver>`` from the Ceph
 source tree (at ``container/make-manifest-list.py``) to promote them to
 their final release location on ``quay.io/ceph/ceph`` (you must ensure
 you're logged into ``quay.io/ceph`` with appropriate permissions):
 
     .. prompt:: bash
 
-       cd <ceph-checkout>/src/container
-       ./make-manifest-list.py --promote
+       cd <ceph-checkout>/container
+       ./make-manifest-list.py --promote --version <ver>
 
 The --promote step should only be performed as the final step in releasing
 containers, when the container images have been tested to be good.
