@@ -24,6 +24,7 @@
 #include <string>
 
 #include "common/config.h"
+#include "include/byte_u_t.h"
 #include "include/ceph_features.h"
 #include "include/util.h" // for ceph_data_stats_t
 
@@ -53,6 +54,7 @@
 
 #include "include/ceph_assert.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mon
 
 using std::cerr;
@@ -760,7 +762,7 @@ int main(int argc, const char **argv)
     encode(v, final);
     encode(mapbl, final);
 
-    auto t(std::make_shared<MonitorDBStore::Transaction>());
+    auto t(std::make_shared<MonitorDBStoreTransaction>());
     // save it
     t->put("monmap", v, mapbl);
     t->put("monmap", "latest", final);

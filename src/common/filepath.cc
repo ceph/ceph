@@ -16,6 +16,7 @@
 #include "filepath.h"
 #include "common/Formatter.h"
 #include "common/strescape.h"
+#include "include/encoding_string.h"
 
 #include <ostream>
 

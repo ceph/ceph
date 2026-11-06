@@ -5,11 +5,13 @@
 #include <fmt/format.h>
 
 #include "common/hobject.h"
+#include "common/hobject_fmt.h"
 #include "crimson/os/alienstore/alien_store.h"
 #include "crimson/os/futurized_collection.h"
 #include "crimson/os/futurized_store.h"
 #include "include/expected.hpp"
 #include "objectstore_tool.h"
+#include "osd/osd_types_fmt.h"
 #include "seastar/core/future.hh"
 #include "seastar/core/smp.hh"
 

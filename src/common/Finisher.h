@@ -23,11 +23,11 @@
 #include <string>
 #include <vector>
 
-#include "include/Context.h"
 #include "common/Thread.h"
 #include "common/ceph_mutex.h"
 
 namespace TOPNSPC::common { class PerfCounters; }
+class Context;
 
 /// Finisher queue length performance counter ID.
 enum {
@@ -137,29 +137,6 @@ class Finisher {
   /// Construct a named Finisher that logs its queue length.
   Finisher(CephContext *cct_, std::string_view name, std::string &&tn);
   ~Finisher();
-};
-
-/// Context that is completed asynchronously on the supplied finisher.
-class C_OnFinisher : public Context {
-  Context *con;
-  Finisher *fin;
-public:
-  C_OnFinisher(Context *c, Finisher *f) : con(c), fin(f) {
-    ceph_assert(fin != NULL);
-    ceph_assert(con != NULL);
-  }
-
-  ~C_OnFinisher() override {
-    if (con != nullptr) {
-      delete con;
-      con = nullptr;
-    }
-  }
-
-  void finish(int r) override {
-    fin->queue(con, r);
-    con = nullptr;
-  }
 };
 
 class ContextQueue {

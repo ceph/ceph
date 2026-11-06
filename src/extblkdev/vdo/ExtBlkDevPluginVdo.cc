@@ -22,6 +22,7 @@
 #include "ceph_ver.h"
 #include "ExtBlkDevPluginVdo.h"
 #include "common/ceph_context.h"
+#include "common/PluginRegistry.h"
 
 
 // This plugin does not require any capabilities to be set

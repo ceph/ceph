@@ -307,7 +307,7 @@ public:
 private:
   void update_from_paxos(bool *need_bootstrap) override;
   void create_pending() override;  // prepare a new pending
-  void encode_pending(MonitorDBStore::TransactionRef t) override;
+  void encode_pending(MonitorDBStoreTransactionRef t) override;
   void on_active() override;
   void on_restart() override;
   void on_shutdown() override;
@@ -316,13 +316,13 @@ private:
   void load_osdmap_manifest();
   bool should_prune() const;
   void _prune_update_trimmed(
-      MonitorDBStore::TransactionRef tx,
+      MonitorDBStoreTransactionRef tx,
       version_t first);
   void prune_init(osdmap_manifest_t& manifest);
   bool _prune_sanitize_options() const;
   bool is_prune_enabled() const;
   bool is_prune_supported() const;
-  bool do_prune(MonitorDBStore::TransactionRef tx);
+  bool do_prune(MonitorDBStoreTransactionRef tx);
 
   // Priority cache control
   uint32_t mon_osd_cache_size = 0;  ///< Number of cached OSDMaps
@@ -350,7 +350,7 @@ private:
    * we haven't delegated full version stashing to paxosservice for some time
    * now, making this function useless in current context.
    */
-  void encode_full(MonitorDBStore::TransactionRef t) override { }
+  void encode_full(MonitorDBStoreTransactionRef t) override { }
   /**
    * do not let paxosservice periodically stash full osdmaps, or we will break our
    * locally-managed full maps.  (update_from_paxos loads the latest and writes them
@@ -366,7 +366,7 @@ private:
    * This ensures that anyone post-sync will have enough to rebuild their
    * full osdmaps.
    */
-  void encode_trim_extra(MonitorDBStore::TransactionRef tx, version_t first) override;
+  void encode_trim_extra(MonitorDBStoreTransactionRef tx, version_t first) override;
 
   void update_msgr_features();
   /**
@@ -582,7 +582,7 @@ private:
     int64_t pool,
     snapid_t start, snapid_t end,
     epoch_t epoch,
-    MonitorDBStore::TransactionRef t);
+    MonitorDBStoreTransactionRef t);
 
   bool prepare_set_flag(MonOpRequestRef op, int flag);
   bool prepare_unset_flag(MonOpRequestRef op, int flag);
