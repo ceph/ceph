@@ -14855,6 +14855,109 @@ def test_object_lock_uploading_obj():
     client.put_object_legal_hold(Bucket=bucket_name, Key=key, LegalHold={'Status':'OFF'})
     client.delete_object(Bucket=bucket_name, Key=key, VersionId=response['VersionId'], BypassGovernanceRetention=True)
 
+def _put_bucket_policy(client, user_id, bucket_name, actions, effect="Allow"):
+    policy = json.dumps({
+        "Version": "2012-10-17",
+        "Statement": [{
+            "Effect": effect,
+            "Principal": {"AWS": [f"arn:aws:iam:::user/{user_id}"]},
+            "Action": actions,
+            "Resource": [f"arn:aws:s3:::{bucket_name}", f"arn:aws:s3:::{bucket_name}/*"],
+        }]
+    })
+    client.put_bucket_policy(Bucket=bucket_name, Policy=policy)
+
+def _assert_access_denied(fn, **kwargs):
+    e = assert_raises(ClientError, fn, **kwargs)
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 403
+    assert error_code == 'AccessDenied'
+
+_lock_retention_args = {'ObjectLockMode': 'GOVERNANCE',
+                        'ObjectLockRetainUntilDate': datetime.datetime(2140,1,1,tzinfo=pytz.UTC)}
+_lock_legal_hold_args = {'ObjectLockLegalHoldStatus': 'ON'}
+
+@pytest.mark.object_lock
+@pytest.mark.fails_on_dbstore
+def test_object_lock_put_object_lock_headers_permission_denied():
+    # lock headers on PutObject also need s3:PutObjectRetention/s3:PutObjectLegalHold
+    bucket_name = get_new_bucket_name()
+    client = get_client()
+    client.create_bucket(Bucket=bucket_name, ObjectLockEnabledForBucket=True)
+    _put_bucket_policy(client, get_main_user_id(), bucket_name,
+                       ['s3:PutObjectRetention', 's3:PutObjectLegalHold'], effect='Deny')
+
+    _assert_access_denied(client.put_object, Bucket=bucket_name, Key='retained', Body='abc',
+                          **_lock_retention_args)
+    _assert_access_denied(client.put_object, Bucket=bucket_name, Key='held', Body='abc',
+                          **_lock_legal_hold_args)
+    # without lock headers s3:PutObject is enough
+    client.put_object(Bucket=bucket_name, Key='plain', Body='abc')
+
+@pytest.mark.object_lock
+@pytest.mark.fails_on_dbstore
+def test_object_lock_copy_object_lock_headers_permission_denied():
+    bucket_name = get_new_bucket_name()
+    client = get_client()
+    client.create_bucket(Bucket=bucket_name, ObjectLockEnabledForBucket=True)
+    client.put_object(Bucket=bucket_name, Key='src', Body='abc')
+    copy_source = {'Bucket': bucket_name, 'Key': 'src'}
+    _put_bucket_policy(client, get_main_user_id(), bucket_name,
+                       ['s3:PutObjectRetention', 's3:PutObjectLegalHold'], effect='Deny')
+
+    _assert_access_denied(client.copy_object, Bucket=bucket_name, Key='retained',
+                          CopySource=copy_source, **_lock_retention_args)
+    _assert_access_denied(client.copy_object, Bucket=bucket_name, Key='held',
+                          CopySource=copy_source, **_lock_legal_hold_args)
+    client.copy_object(Bucket=bucket_name, Key='plain', CopySource=copy_source)
+
+@pytest.mark.object_lock
+@pytest.mark.fails_on_dbstore
+def test_object_lock_multipart_lock_headers_permission_denied():
+    bucket_name = get_new_bucket_name()
+    client = get_client()
+    client.create_bucket(Bucket=bucket_name, ObjectLockEnabledForBucket=True)
+    _put_bucket_policy(client, get_main_user_id(), bucket_name,
+                       ['s3:PutObjectRetention', 's3:PutObjectLegalHold'], effect='Deny')
+
+    _assert_access_denied(client.create_multipart_upload, Bucket=bucket_name, Key='retained',
+                          **_lock_retention_args)
+    _assert_access_denied(client.create_multipart_upload, Bucket=bucket_name, Key='held',
+                          **_lock_legal_hold_args)
+    upload_id = client.create_multipart_upload(Bucket=bucket_name, Key='plain')['UploadId']
+    client.abort_multipart_upload(Bucket=bucket_name, Key='plain', UploadId=upload_id)
+
+@pytest.mark.object_lock
+@pytest.mark.fails_on_dbstore
+def test_object_lock_put_object_lock_headers_permission_allowed():
+    # s3:PutObject alone doesn't allow lock headers; each lock permission
+    # allows only its own headers
+    bucket_name = get_new_bucket_name()
+    client = get_client()
+    alt_client = get_alt_client()
+    alt_user_id = get_alt_user_id()
+    client.create_bucket(Bucket=bucket_name, ObjectLockEnabledForBucket=True)
+
+    _put_bucket_policy(client, alt_user_id, bucket_name, ['s3:PutObject'])
+    _assert_access_denied(alt_client.put_object, Bucket=bucket_name, Key='retained',
+                          Body='abc', **_lock_retention_args)
+    alt_client.put_object(Bucket=bucket_name, Key='plain', Body='abc')
+
+    _put_bucket_policy(client, alt_user_id, bucket_name,
+                       ['s3:PutObject', 's3:PutObjectRetention'])
+    alt_client.put_object(Bucket=bucket_name, Key='retained', Body='abc', **_lock_retention_args)
+    _assert_access_denied(alt_client.put_object, Bucket=bucket_name, Key='held',
+                          Body='abc', **_lock_legal_hold_args)
+
+    _put_bucket_policy(client, alt_user_id, bucket_name,
+                       ['s3:PutObject', 's3:PutObjectLegalHold'])
+    alt_client.put_object(Bucket=bucket_name, Key='held', Body='abc', **_lock_legal_hold_args)
+    response = alt_client.head_object(Bucket=bucket_name, Key='held')
+    assert response['ObjectLockLegalHoldStatus'] == 'ON'
+    # the alt user owns these objects, so it clears the legal hold
+    alt_client.put_object_legal_hold(Bucket=bucket_name, Key='held',
+                                     VersionId=response['VersionId'], LegalHold={'Status': 'OFF'})
+
 @pytest.mark.fails_on_dbstore
 def test_object_lock_changing_mode_from_governance_with_bypass():
     bucket_name = get_new_bucket_name()

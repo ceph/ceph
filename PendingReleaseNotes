@@ -29,6 +29,14 @@
 
 * RGW: The "Bytes Sent" field is always set to "-" when bucket-logging is enabled
   in Standard mode.
+* RGW: PutObject, CopyObject and CreateMultipartUpload requests that set object
+  lock retention (``x-amz-object-lock-mode``,
+  ``x-amz-object-lock-retain-until-date``) or a legal hold
+  (``x-amz-object-lock-legal-hold``) now also require the
+  ``s3:PutObjectRetention`` or ``s3:PutObjectLegalHold`` permission, as on AWS.
+  Users that are only granted ``s3:PutObject`` by a policy, or that are
+  explicitly denied these actions, get ``403 AccessDenied`` for such requests.
+  Without a policy decision, permission falls back to the bucket ACL as before.
 
 * RGW: Changing ``rgw_dynamic_resharding`` used to turn queuing buckets
   for reshard on or off while not affecting resharding itself until the

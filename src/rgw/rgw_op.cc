@@ -4615,6 +4615,32 @@ int RGWPutObj::init_processing(optional_yield y) {
   return RGWOp::init_processing(y);
 }
 
+namespace {
+
+/* Setting object lock retention or a legal hold while writing an object
+ * requires s3:PutObjectRetention or s3:PutObjectLegalHold in addition to
+ * s3:PutObject, as for PutObjectRetention and PutObjectLegalHold. Check the
+ * request headers, as some ops only parse them in execute(). */
+int verify_object_lock_headers_permission(const DoutPrefixProvider* dpp,
+                                          req_state* s)
+{
+  const auto arn = ARN(s->object->get_obj());
+  if ((s->info.env->exists("HTTP_X_AMZ_OBJECT_LOCK_MODE") ||
+       s->info.env->exists("HTTP_X_AMZ_OBJECT_LOCK_RETAIN_UNTIL_DATE")) &&
+      !verify_bucket_permission(dpp, s, arn, rgw::IAM::s3PutObjectRetention)) {
+    ldpp_dout(dpp, 4) << "object lock retention headers require s3:PutObjectRetention" << dendl;
+    return -EACCES;
+  }
+  if (s->info.env->exists("HTTP_X_AMZ_OBJECT_LOCK_LEGAL_HOLD") &&
+      !verify_bucket_permission(dpp, s, arn, rgw::IAM::s3PutObjectLegalHold)) {
+    ldpp_dout(dpp, 4) << "object lock legal hold header requires s3:PutObjectLegalHold" << dendl;
+    return -EACCES;
+  }
+  return 0;
+}
+
+} // anonymous namespace
+
 int RGWPutObj::verify_permission(optional_yield y)
 {
   if (! copy_source.empty()) {
@@ -4682,6 +4708,10 @@ int RGWPutObj::verify_permission(optional_yield y)
     return -EACCES;
   }
 
+  // object lock headers on an UploadPart request don't apply to anything
+  if (!s->info.args.exists("uploadId")) {
+    return verify_object_lock_headers_permission(this, s);
+  }
   return 0;
 }
 
@@ -6592,6 +6622,11 @@ int RGWCopyObj::verify_permission(optional_yield y)
     return -EACCES;
   }
 
+  op_ret = verify_object_lock_headers_permission(this, s);
+  if (op_ret < 0) {
+    return op_ret;
+  }
+
   op_ret = init_dest_policy();
   if (op_ret < 0) {
     return op_ret;
@@ -7559,7 +7594,7 @@ int RGWInitMultipart::verify_permission(optional_yield y)
     return -EACCES;
   }
 
-  return 0;
+  return verify_object_lock_headers_permission(this, s);
 }
 
 void RGWInitMultipart::pre_exec()
