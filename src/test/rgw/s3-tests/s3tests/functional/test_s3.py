@@ -8963,6 +8963,40 @@ def test_lifecycle_expiration_versioning_enabled():
 @pytest.mark.lifecycle
 @pytest.mark.lifecycle_expiration
 @pytest.mark.fails_on_aws
+@pytest.mark.versioning
+def test_lifecycle_expiration_versioning_suspended():
+    bucket_name = get_new_bucket()
+    client = get_client()
+    check_configure_versioning_retry(bucket_name, "Enabled", "Enabled")
+    a_ids, _ = create_multiple_versions(client, bucket_name, "test1/a", 1)
+    b_ids, _ = create_multiple_versions(client, bucket_name, "test1/b", 2)
+    check_configure_versioning_retry(bucket_name, "Suspended", "Suspended")
+    # test1/a's current version is the null version, test1/b's is versioned
+    client.put_object(Bucket=bucket_name, Key="test1/a", Body="null")
+
+    rules=[{'ID': 'rule1', 'Expiration': {'Days': 1}, 'Prefix': 'test1/', 'Status':'Enabled'}]
+    lifecycle = {'Rules': rules}
+    client.put_bucket_lifecycle_configuration(Bucket=bucket_name, LifecycleConfiguration=lifecycle)
+
+    lc_interval = get_lc_debug_interval()
+
+    time.sleep(3*lc_interval)
+
+    # a null delete marker replaces the null version and the versioned ones
+    # stay as noncurrent
+    response = client.list_object_versions(Bucket=bucket_name)
+    for key, version_ids in (("test1/a", a_ids), ("test1/b", b_ids)):
+        versions = [v for v in response.get('Versions', []) if v['Key'] == key]
+        delete_markers = [dm for dm in response.get('DeleteMarkers', []) if dm['Key'] == key]
+        assert sorted(v['VersionId'] for v in versions) == sorted(version_ids)
+        assert not any(v['IsLatest'] for v in versions)
+        assert len(delete_markers) == 1
+        assert delete_markers[0]['VersionId'] == 'null'
+        assert delete_markers[0]['IsLatest'] == True
+
+@pytest.mark.lifecycle
+@pytest.mark.lifecycle_expiration
+@pytest.mark.fails_on_aws
 def test_lifecycle_expiration_tags1():
     bucket_name = get_new_bucket()
     client = get_client()
