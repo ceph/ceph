@@ -1403,6 +1403,7 @@ private:
     alloc_recovery_policy_t policy = alloc_recovery_policy_t::strict,
     bool replay_deferred = false);
   void _close_db_and_around();
+  int _maybe_reshard_db();
   void _close_around_db();
 
   int _prepare_db_environment(bool create, bool read_only,
