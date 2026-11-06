@@ -2836,9 +2836,11 @@ public:
 	   bool temp_file = false);
   int close();
   int write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y);
+  /* `only`, if given, is what to write in place of the whole loaded
+   * set:  an attribute operation's change (DECISIONS.md 2026-11-05). */
   int write_attrs(const DoutPrefixProvider* dpp, optional_yield y,
 		  const std::vector<std::string>* rmattrs = nullptr,
-		  int use_fd = -1);
+		  int use_fd = -1, const Attrs* only = nullptr);
   int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, bool excl = false);
   std::string gen_temp_fname();
   const std::string get_fname(bool use_version);

@@ -13662,9 +13662,16 @@ int NSFSObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
   if (ret < 0) {
     return ret;
   }
+  /* What was asked for, and not the whole set this handle loaded:
+   * rewriting the rest put back what another request had changed since
+   * the load, its tags or its ACL, as RGWRados::set_attrs() never does
+   * (DECISIONS.md 2026-11-05).  Each attribute is its own xattr, so no
+   * lock is needed. */
+  const Attrs none;
   return with_cross_account_retry(dpp, nsfs::AccessClass::object_attrs,
 				  [&](int use_fd) -> int {
-    return write_attrs(dpp, y, &rmattrs, use_fd);
+    return write_attrs(dpp, y, &rmattrs, use_fd,
+		       setattrs ? setattrs : &none);
   });
 }
 
@@ -13769,9 +13776,11 @@ int NSFSObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
       return pret;
     }
   }
+  /* the one attribute, for the reason set_obj_attrs() gives */
+  const Attrs one{{attr_name, attr_val}};
   return with_cross_account_retry(dpp, nsfs::AccessClass::object_attrs,
 				  [&](int use_fd) -> int {
-    return write_attrs(dpp, y, nullptr, use_fd);
+    return write_attrs(dpp, y, nullptr, use_fd, &one);
   });
 }
 
@@ -14671,7 +14680,7 @@ int NSFSObject::write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp
 
 int NSFSObject::write_attrs(const DoutPrefixProvider* dpp, optional_yield y,
 			    const std::vector<std::string>* rmattrs,
-			    int use_fd)
+			    int use_fd, const Attrs* only)
 {
   /* an object nothing has loaded has no entry yet:  open it, as
    * delete_obj_attrs() does, rather than dereference one */
@@ -14680,6 +14689,11 @@ int NSFSObject::write_attrs(const DoutPrefixProvider* dpp, optional_yield y,
     if (ret < 0) {
       return ret;
     }
+  }
+  if (only) {
+    Attrs part = *only;
+    return ent->write_attrs(dpp, y, part, nullptr, AttrWriteMode::MERGE,
+			    rmattrs, use_fd);
   }
   return ent->write_attrs(dpp, y, state.attrset, nullptr,
 			  AttrWriteMode::MERGE, rmattrs, use_fd);

@@ -8058,6 +8058,65 @@ static void put_object(rgw::sal::Driver* driver, rgw::sal::Bucket* bucket,
 			     nullptr, nullptr, nullptr, rctx, 0), expect) << key;
 }
 
+/* Two writers of one object's attributes, each on its own handle loaded
+ * before the other wrote, as two concurrent requests are, interleaved
+ * by hand.  RGW asks for one attribute written (modify_obj_attrs()) or a
+ * named set (set_obj_attrs()), and RADOS writes only those
+ * (RGWRados::set_attrs()), so a write of the tags and a write of the ACL
+ * both survive, whichever lands last (NSFS_WORK_PLAN.md §3). */
+TEST_F(NSFSBucketRaceTest, AnObjectAttributeWriteKeepsAnotherHandlesAttribute)
+{
+  put_object(driver.get(), bucket.get(), env->dpp, acl_owner, "k", "body",
+	     "text/plain");
+  /* tags already there, so each handle holds a value of the attribute
+   * the other changes */
+  {
+    RGWObjTags old;
+    old.add_tag("from", "before");
+    bufferlist obl;
+    old.encode(obl);
+    auto seed = bucket->get_object(rgw_obj_key("k"));
+    ASSERT_EQ(seed->load_obj_state(env->dpp, null_yield), 0);
+    ASSERT_EQ(seed->modify_obj_attrs(RGW_ATTR_TAGS, obl, null_yield, env->dpp,
+				     rgw_user()), 0);
+  }
+  auto a = bucket->get_object(rgw_obj_key("k"));
+  auto b = bucket->get_object(rgw_obj_key("k"));
+  /* as the ops load before writing:  the object, then its attributes */
+  for (auto* h : {a.get(), b.get()}) {
+    ASSERT_EQ(h->load_obj_state(env->dpp, null_yield), 0);
+    ASSERT_EQ(h->get_obj_attrs(null_yield, env->dpp), 0);
+  }
+
+  RGWObjTags tags;
+  tags.add_tag("from", "a");
+  bufferlist tbl;
+  tags.encode(tbl);
+  ASSERT_EQ(a->modify_obj_attrs(RGW_ATTR_TAGS, tbl, null_yield, env->dpp,
+				rgw_user()), 0);
+
+  RGWAccessControlPolicy policy;
+  policy.create_default(acl_owner.id, "from-b");
+  rgw::sal::Attrs acl;
+  policy.encode(acl[RGW_ATTR_ACL]);
+  ASSERT_EQ(b->set_obj_attrs(env->dpp, &acl, nullptr, null_yield,
+			     rgw::sal::FLAG_LOG_OP, rgw_user()), 0);
+
+  auto fresh = bucket->get_object(rgw_obj_key("k"));
+  ASSERT_EQ(fresh->load_obj_state(env->dpp, null_yield), 0);
+  ASSERT_EQ(fresh->get_obj_attrs(null_yield, env->dpp), 0);
+  const auto& attrs = fresh->get_attrs();
+  ASSERT_TRUE(attrs.contains(RGW_ATTR_ACL));
+  EXPECT_TRUE(attrs.at(RGW_ATTR_ACL).contents_equal(acl[RGW_ATTR_ACL]))
+      << "a's tag write, from a handle loaded before b's, put the old ACL "
+      << "back";
+  ASSERT_TRUE(attrs.contains(RGW_ATTR_TAGS))
+      << "b's ACL write, from a handle loaded before a's, removed a's tags";
+  EXPECT_TRUE(attrs.at(RGW_ATTR_TAGS).contents_equal(tbl))
+      << "b's ACL write, from a handle loaded before a's, put the old tags "
+      << "back";
+}
+
 /* A directory object as NooBaa lays it down:  the marker and the
  * object's attributes on the directory, and the bytes in `.folder` only
  * when there are any (`namespace_fs.js`, _create_empty_dir_content). */

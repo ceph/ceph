@@ -5193,11 +5193,13 @@ options:
 - name: rgw_nsfs_gpfs_lwe_locking
   type: bool
   level: advanced
-  desc: Use GPFS LWE for cluster-wide version locking (experimental)
+  desc: Use GPFS LWE for cluster-wide version and bucket metadata locking (experimental)
   long_desc: >
     When enabled, versioned object operations (PUT, DELETE with version
-    demote/promote) use GPFS Lightweight Event (LWE) exclusive rights
-    for locking instead of Linux OFD locks.  LWE rights are coordinated
+    demote/promote) and writes of a bucket's metadata (its attributes
+    and bucket info, under the bucket's .bucket_meta_lock) use GPFS
+    Lightweight Event (LWE) exclusive rights for locking instead of
+    Linux OFD locks.  LWE rights are coordinated
     by the GPFS token manager across all nodes mounting the filesystem,
     which is required for correctness when multiple RGW gateways share
     a GPFS filesystem.  OFD locks only serialize within a single kernel.
