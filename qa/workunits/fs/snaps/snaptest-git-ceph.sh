@@ -13,17 +13,13 @@ export GIT_TRACE_PACKET=1
 export GIT_TRACE=1
 export GIT_CURL_VERBOSE=1
 
-# try it again if the clone is slow and the second time
-retried=false
-trap -- 'retry' EXIT
-retry() {
+# try it again if the clone is slow or fails
+rm -rf ceph
+timeout 1800 git clone https://git.ceph.com/ceph.git || {
     rm -rf ceph
     # double the timeout value
     timeout 3600 git clone https://git.ceph.com/ceph.git
 }
-rm -rf ceph
-timeout 1800 git clone https://git.ceph.com/ceph.git
-trap - EXIT
 cd ceph
 
 # disable the debug logs for git clone
