@@ -104,6 +104,13 @@
   limits the number of concurrent background fetches.  This reduces latency in
   large directories while retaining cache warmth for hot directories.
 
+* BlueStore: The data cache budget is now split among the cache shards by the
+  bytes each shard holds (new option ``bluestore_cache_data_shard_weighted``,
+  default ``true``). A placement group always uses the same shard, so the even
+  split left part of the budget unused on most OSDs. The bytes beyond an even
+  split are asked of the memory autotuner at the lowest priority, so the data
+  cache grows into unclaimed memory and never takes another cache's recent
+  content. Set the option to ``false`` for the even split.
 * BlueStore: The experimental PMEM device backend has been removed, together
   with the ``pmem`` value of the ``bdev_type`` option and the DML/DSA offload
   path. The hardware it targeted, Intel Optane DC persistent memory, was
