@@ -35,6 +35,13 @@
   next realm reload. Now changes to ``rgw_dynamic_resharding`` require a
   restart. Running RGWs will ignore the change.
 
+* RGW: ``AssumeRoleWithWebIdentity`` now caches each OIDC provider's discovery
+  document and JWKS for ``rgw_sts_jwks_cache_ttl`` seconds (default 300). A
+  token whose key id is in the cached key set is verified without contacting
+  the provider; a token with an unknown key id, or without one, fetches the
+  keys as before, so provider key rotation is still honored. Set
+  ``rgw_sts_jwks_cache_ttl`` to ``0`` to restore the previous behaviour.
+
 * RGW: The Elasticsearch sync module is deprecated in Vampire and will
   be removed in the X release. People wanting to continue using
   Elasticsearch can populate it with bucket notifications. The
