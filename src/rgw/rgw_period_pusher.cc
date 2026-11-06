@@ -214,6 +214,11 @@ void RGWPeriodPusher::handle_notify(RGWRealmNotify type,
 // expects the caller to hold a lock on mutex
 void RGWPeriodPusher::handle_notify(RGWZonesNeedPeriod&& period)
 {
+  if (period.get_id() == RGWPeriod::get_staging_id(period.get_realm())) {
+    ldout(cct, 0) << "WARNING: not pushing uncommitted staging period "
+        << period.get_id() << dendl;
+    return;
+  }
   if (period.get_realm_epoch() < realm_epoch) {
     ldout(cct, 10) << "period's realm epoch " << period.get_realm_epoch()
         << " is not newer than current realm epoch " << realm_epoch
