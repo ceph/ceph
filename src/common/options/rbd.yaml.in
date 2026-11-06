@@ -880,3 +880,14 @@ options:
   default: 0
   services:
   - rbd
+- name: rbd_luks_insecure_fast_kdf
+  type: bool
+  level: dev
+  desc: format LUKS images with a fast, insecure key derivation
+  long_desc: For testing only; keyslots formatted with it stay weakly
+    protected.
+  default: false
+  services:
+  - rbd
+  flags:
+  - no_mon_update

@@ -96,9 +96,13 @@ void FormatRequest<I>::send() {
 
   // format (create LUKS header)
   auto stripe_period = m_image_ctx->get_stripe_period();
+  // Local config only: image and pool overrides must not weaken keyslots.
+  const bool insecure_fast_mode = m_insecure_fast_mode ||
+    m_image_ctx->cct->_conf.template get_val<bool>(
+      "rbd_luks_insecure_fast_kdf");
   r = m_header.format(type, cipher, reinterpret_cast<char*>(key), key_size,
                       "xts-plain64", sector_size, stripe_period,
-                      m_insecure_fast_mode);
+                      insecure_fast_mode);
   if (r != 0) {
     finish(r);
     return;

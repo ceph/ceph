@@ -511,6 +511,12 @@ public:
     _image_number = 0;
     ASSERT_EQ("", connect_cluster(&_cluster));
     ASSERT_EQ("", connect_cluster_pp(_rados));
+    if (is_librados_test_stub(_rados)) {
+      // Full LUKS key derivation takes seconds; keep it for real clusters.
+      ASSERT_EQ(0, rados_conf_set(_cluster, "rbd_luks_insecure_fast_kdf",
+                                  "true"));
+      ASSERT_EQ(0, _rados.conf_set("rbd_luks_insecure_fast_kdf", "true"));
+    }
 
     create_optional_data_pool();
   }
