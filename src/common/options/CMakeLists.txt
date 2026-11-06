@@ -111,6 +111,11 @@ target_sources(legacy-option-headers
   PRIVATE
     ${legacy_options_headers})
 
+# Expose the generated headers through a custom target so that targets
+# in parent directories can depend on their generation.
+add_custom_target(ceph-legacy-option-header-files
+  DEPENDS ${legacy_options_headers})
+
 include(AddCephTest)
 add_ceph_test(validate-options
   ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/validate-options.py ${options_yamls})
