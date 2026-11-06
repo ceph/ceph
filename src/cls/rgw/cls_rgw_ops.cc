@@ -232,6 +232,46 @@ void rgw_cls_refresh_instance_op::dump(Formatter *f) const
   encode_json("key", key, f);
 }
 
+list<rgw_cls_check_olh_list_op> rgw_cls_check_olh_list_op::generate_test_instances()
+{
+  list<rgw_cls_check_olh_list_op> o;
+  rgw_cls_check_olh_list_op op;
+  op.key.name = "name";
+  o.push_back(std::move(op));
+  o.emplace_back();
+  return o;
+}
+
+void rgw_cls_check_olh_list_op::dump(Formatter *f) const
+{
+  encode_json("key", key, f);
+}
+
+list<rgw_cls_check_olh_list_ret> rgw_cls_check_olh_list_ret::generate_test_instances()
+{
+  list<rgw_cls_check_olh_list_ret> o;
+  rgw_cls_check_olh_list_ret r;
+  r.orphaned.push_back("orphaned");
+  r.wrong_current.push_back("wrong_current");
+  r.bad_version_marker = true;
+  r.restored_instance = true;
+  r.unresolved = true;
+  r.busy = true;
+  o.push_back(std::move(r));
+  o.emplace_back();
+  return o;
+}
+
+void rgw_cls_check_olh_list_ret::dump(Formatter *f) const
+{
+  encode_json("orphaned", orphaned, f);
+  encode_json("wrong_current", wrong_current, f);
+  encode_json("bad_version_marker", bad_version_marker, f);
+  encode_json("restored_instance", restored_instance, f);
+  encode_json("unresolved", unresolved, f);
+  encode_json("busy", busy, f);
+}
+
 list<rgw_cls_unlink_instance_op> rgw_cls_unlink_instance_op::generate_test_instances()
 {
   list<rgw_cls_unlink_instance_op> o;

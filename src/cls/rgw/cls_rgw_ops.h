@@ -253,6 +253,79 @@ struct rgw_cls_refresh_instance_op {
 };
 WRITE_CLASS_ENCODER(rgw_cls_refresh_instance_op)
 
+struct rgw_cls_check_olh_list_op {
+  cls_rgw_obj_key key; // only the name is used
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(key, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(ceph::buffer::list::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(key, bl);
+    DECODE_FINISH(bl);
+  }
+
+  static std::list<rgw_cls_check_olh_list_op> generate_test_instances();
+  void dump(ceph::Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(rgw_cls_check_olh_list_op)
+
+/*
+ * Problems found with the versioned list entries of an object. The index
+ * keys listed are raw omap keys of the list entries.
+ */
+struct rgw_cls_check_olh_list_ret {
+  // list entries that have no matching instance entry
+  std::list<std::string> orphaned;
+  // list entries whose CURRENT flag (or that of their instance entry)
+  // disagrees with the olh
+  std::list<std::string> wrong_current;
+  // the plain entry of the object is missing or is not a version marker
+  bool bad_version_marker = false;
+  // the instance entry of the version the olh points to is missing, and is
+  // restored from that version's list entry
+  bool restored_instance = false;
+  // the instance entry of the version the olh points to is missing, and no
+  // list entry identifies that version; its list entries are left alone
+  bool unresolved = false;
+  // the object has operations in progress and was not checked
+  bool busy = false;
+
+  bool needs_fix() const {
+    return !orphaned.empty() || !wrong_current.empty() || bad_version_marker ||
+        restored_instance;
+  }
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(orphaned, bl);
+    encode(wrong_current, bl);
+    encode(bad_version_marker, bl);
+    encode(restored_instance, bl);
+    encode(unresolved, bl);
+    encode(busy, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(ceph::buffer::list::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(orphaned, bl);
+    decode(wrong_current, bl);
+    decode(bad_version_marker, bl);
+    decode(restored_instance, bl);
+    decode(unresolved, bl);
+    decode(busy, bl);
+    DECODE_FINISH(bl);
+  }
+
+  static std::list<rgw_cls_check_olh_list_ret> generate_test_instances();
+  void dump(ceph::Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(rgw_cls_check_olh_list_ret)
+
 struct rgw_cls_unlink_instance_op : cls_rgw_bi_log_related_op {
   // this represents a remote epoch during multisite sync
   uint64_t olh_epoch{0};
@@ -1925,6 +1998,8 @@ constexpr auto bucket_read_olh_log = ClsMethod<RdTag, ClassId>(RGW_BUCKET_READ_O
 constexpr auto bucket_trim_olh_log = ClsMethod<RdWrTag, ClassId>(RGW_BUCKET_TRIM_OLH_LOG);
 constexpr auto bucket_clear_olh = ClsMethod<RdWrTag, ClassId>(RGW_BUCKET_CLEAR_OLH);
 constexpr auto bucket_refresh_instance = ClsMethod<RdWrTag, ClassId>(RGW_BUCKET_REFRESH_INSTANCE);
+constexpr auto bucket_check_olh_list = ClsMethod<RdTag, ClassId>(RGW_BUCKET_CHECK_OLH_LIST);
+constexpr auto bucket_fix_olh_list = ClsMethod<RdWrTag, ClassId>(RGW_BUCKET_FIX_OLH_LIST);
 
 // Object
 constexpr auto obj_remove = ClsMethod<RdWrTag, ClassId>(RGW_OBJ_REMOVE);

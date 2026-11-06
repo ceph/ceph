@@ -58,6 +58,12 @@
   FIFO-backed bilogs can only be trimmed from the front.
 * RGW: S3 Select is deprecated. The default value of ``rgw_disable_s3select``
   changed from ``false`` to ``true``.
+* RGW: New command ``radosgw-admin bucket check olh-list [--fix]`` finds and
+  repairs version list entries of versioned buckets that disagree with their
+  OLH, such as null versions left flagged as current by racing PUT and DELETE
+  requests, which made ``ListObjectVersions`` report several latest versions.
+  It needs OSDs that support the new ``cls_rgw`` methods. After a fix, run
+  ``radosgw-admin bucket check --fix`` to recalculate the bucket stats.
 
 * RGW: Fixed a bug in same-account evaluation of bucket policy statements that
   allow the account principal. Users and roles in that account now require a
