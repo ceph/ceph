@@ -29,6 +29,14 @@
 
 * RGW: The "Bytes Sent" field is always set to "-" when bucket-logging is enabled
   in Standard mode.
+* RGW: Swift object expiration no longer deletes object versions that are
+  protected by an S3 object lock retention period or legal hold. Swift requests
+  that set ``X-Delete-At`` or ``X-Delete-After`` earlier than the version's
+  retain-until date (including the bucket's default retention for new objects),
+  or on a version under legal hold, are rejected with ``403 Forbidden``. If a
+  version becomes protected after its expiration time was set, the object
+  expirer postpones its deletion until the retention ends or the legal hold is
+  released.
 
 * RGW: Changing ``rgw_dynamic_resharding`` used to turn queuing buckets
   for reshard on or off while not affecting resharding itself until the
