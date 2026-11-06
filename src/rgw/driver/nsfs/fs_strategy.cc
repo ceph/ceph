@@ -999,10 +999,24 @@ SafeResult GPFSStrategy::safe_link(const DoutPrefixProvider* dpp,
                                     const nsfs::FSIdentity& id)
 {
   return nsfs::with_identity_r(dpp, id, [&]() -> SafeResult {
-  /* verify the source still matches expectations before linking */
-  if (!stat_matches(src_dir_fd, src_name, expected_mtime_ns, expected_ino)) {
-    ldpp_dout(dpp, 5) << "gpfs safe_link: source mismatch or gone"
-      << " src=" << src_name << dendl;
+  /* verify the source still matches expectations before linking;  a
+   * stat the identity is refused is a denial, as linkat()'s is, so the
+   * caller may perform it as the gateway */
+  struct statx stx;
+  if (nsfs::statx(src_dir_fd, src_name.c_str(), 0, STATX_INO | STATX_MTIME,
+                  &stx) < 0) {
+    const int err = errno;
+    if ((err == EACCES) || (err == EPERM)) {
+      return SafeResult::DENIED;
+    }
+    ldpp_dout(dpp, 5) << "gpfs safe_link: source gone src=" << src_name
+      << ": " << cpp_strerror(err) << dendl;
+    return SafeResult::MISMATCH;
+  }
+  if ((statx_mtime_ns(stx) != expected_mtime_ns) ||
+      (stx.stx_ino != expected_ino)) {
+    ldpp_dout(dpp, 5) << "gpfs safe_link: source mismatch src=" << src_name
+      << dendl;
     return SafeResult::MISMATCH;
   }
 
