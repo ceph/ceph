@@ -37,6 +37,7 @@ export class PoolResourceSidebarComponent implements OnInit, OnDestroy {
   poolActions: CdTableAction[] = [];
   poolSelection = new CdTableSelection();
   monAllowPoolDelete = false;
+  poolIsMigrating = false;
   sidebarItems: SidebarItem[] = [];
   permissions: Permissions;
 
@@ -71,7 +72,11 @@ export class PoolResourceSidebarComponent implements OnInit, OnDestroy {
   }
 
   get headerTags(): string[] {
-    return [this.poolDataProtection, ...this.poolApplications].filter((tag) => !!tag);
+    const tags = [this.poolDataProtection, ...this.poolApplications].filter((tag) => !!tag);
+    if (this.poolIsMigrating) {
+      tags.unshift($localize`Migrating`);
+    }
+    return tags;
   }
 
   get headerActions(): ResourceHeaderAction[] {
@@ -138,6 +143,7 @@ export class PoolResourceSidebarComponent implements OnInit, OnDestroy {
 
         this.poolDataProtection = getPoolDataProtection(poolData);
         this.poolApplications = mapPoolApplications(poolData?.application_metadata || []);
+        this.poolIsMigrating = !!(poolData?.migration_src || poolData?.migration_target);
         this.poolSelection.selected = poolData ? [poolData] : [];
         this.buildPoolActions();
       })

@@ -1,6 +1,7 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
+import { Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
@@ -22,7 +23,22 @@ import { SummaryService } from '~/app/shared/services/summary.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, expectItemTasks, Mocks } from '~/testing/unit-test-helper';
-import { Pool, transformPgStatus } from '../pool';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import {
+  addPoolMigrationFlag,
+  getPoolBusyReason,
+  isPoolMigrationFlagEnabled,
+  isReleaseAtLeast,
+  Pool,
+  PoolAction,
+  PoolBusyReason,
+  transformPgStatus
+} from '../pool';
+import { PoolMigrationClusterSettingsModalComponent } from '../pool-migration-cluster-settings-modal/pool-migration-cluster-settings-modal.component';
+import { PoolMigrationOsdReleaseModalComponent } from '../pool-migration-osd-release-modal/pool-migration-osd-release-modal.component';
+import { PoolBusyModalComponent } from '../pool-busy-modal/pool-busy-modal.component';
+import { ConfirmationModalComponent } from '~/app/shared/components/confirmation-modal/confirmation-modal.component';
+import { DeleteGuardModalComponent } from '~/app/shared/components/delete-guard-modal/delete-guard-modal.component';
 import { PoolListComponent } from './pool-list.component';
 
 describe('PoolListComponent', () => {
@@ -289,6 +305,7 @@ describe('PoolListComponent', () => {
         _.merge(Mocks.getPool('a', 0), {
           application_metadata: ['Block'],
           cdIsBinary: true,
+          migrationTag: null,
           pg_status: '',
           stats: {
             bytes_used: { latest: 0, rate: 0, rates: [] },
@@ -504,6 +521,420 @@ describe('PoolListComponent', () => {
       component.monAllowPoolDelete$.next(false);
       component.enablePoolDeletion();
       expect(component.monAllowPoolDelete$.value).toBe(false);
+    });
+  });
+
+  describe('isReleaseAtLeast', () => {
+    it('should return true when current equals minimum', () => {
+      expect(isReleaseAtLeast('umbrella', 'umbrella')).toBe(true);
+    });
+
+    it('should return true when current is newer than minimum', () => {
+      expect(isReleaseAtLeast('umbrella', 'squid')).toBe(true);
+    });
+
+    it('should return false when current is older than minimum', () => {
+      expect(isReleaseAtLeast('reef', 'umbrella')).toBe(false);
+    });
+
+    it('should return false for unknown release names', () => {
+      expect(isReleaseAtLeast('unknown', 'umbrella')).toBe(false);
+    });
+
+    it('should be case-insensitive', () => {
+      expect(isReleaseAtLeast('Umbrella', 'UMBRELLA')).toBe(true);
+    });
+  });
+
+  describe('pool migration flag helpers', () => {
+    it('should detect the flag in a list or wildcard', () => {
+      expect(isPoolMigrationFlagEnabled('*')).toBe(true);
+      expect(isPoolMigrationFlagEnabled('poolmigration')).toBe(true);
+      expect(isPoolMigrationFlagEnabled('other, poolmigration')).toBe(true);
+    });
+
+    it('should not detect the flag when it is missing or the value is not a string', () => {
+      expect(isPoolMigrationFlagEnabled('other')).toBe(false);
+      expect(isPoolMigrationFlagEnabled('')).toBe(false);
+      expect(isPoolMigrationFlagEnabled(undefined)).toBe(false);
+    });
+
+    it('should add the flag preserving existing features', () => {
+      expect(addPoolMigrationFlag(undefined)).toBe('poolmigration');
+      expect(addPoolMigrationFlag('')).toBe('poolmigration');
+      expect(addPoolMigrationFlag('other')).toBe('other,poolmigration');
+      expect(addPoolMigrationFlag('other, another')).toBe('other,another,poolmigration');
+    });
+
+    it('should keep the value untouched when the flag is already enabled', () => {
+      expect(addPoolMigrationFlag('*')).toBe('*');
+      expect(addPoolMigrationFlag('poolmigration')).toBe('poolmigration');
+    });
+  });
+
+  describe('getPoolBusyReason', () => {
+    const pool = (changes: Partial<Pool> = {}): Pool => ({
+      ...Mocks.getPool('test', 1),
+      ...changes
+    });
+
+    it('should return null for an idle pool', () => {
+      expect(getPoolBusyReason(pool())).toBeNull();
+    });
+
+    it('should detect a pool that is the source or target of a migration', () => {
+      expect(getPoolBusyReason(pool({ migration_src: 0 }))).toBe(PoolBusyReason.MIGRATING);
+      expect(getPoolBusyReason(pool({ migration_target: 2 }))).toBe(PoolBusyReason.MIGRATING);
+    });
+
+    it('should detect a pool whose PG count is being adjusted', () => {
+      expect(getPoolBusyReason(pool({ pg_num: 32, pg_num_target: 64 }))).toBe(
+        PoolBusyReason.PG_CHANGE
+      );
+      expect(getPoolBusyReason(pool({ pg_placement_num: 32, pg_placement_num_target: 64 }))).toBe(
+        PoolBusyReason.PG_CHANGE
+      );
+    });
+
+    it('should detect any other running task', () => {
+      expect(getPoolBusyReason(pool({ cdExecuting: 'Updating...' }))).toBe(PoolBusyReason.TASK);
+    });
+
+    it('should prefer the specific cause over the generic running task', () => {
+      expect(getPoolBusyReason(pool({ migration_src: 0, cdExecuting: 'Migrating' }))).toBe(
+        PoolBusyReason.MIGRATING
+      );
+      expect(
+        getPoolBusyReason(pool({ pg_num: 32, pg_num_target: 64, cdExecuting: 'Updating' }))
+      ).toBe(PoolBusyReason.PG_CHANGE);
+    });
+  });
+
+  describe('migratePool prerequisites', () => {
+    let modalShow: jest.SpyInstance;
+    let navigate: jest.SpyInstance;
+    let configurationService: ConfigurationService;
+
+    const flagConfig = (value?: string) => ({
+      value: value === undefined ? [] : [{ section: 'global', value }]
+    });
+    const umbrellaInfo = {
+      require_osd_release: 'umbrella',
+      require_min_compat_client: 'umbrella'
+    };
+
+    beforeEach(() => {
+      modalShow = jest.spyOn(TestBed.inject(ModalCdsService), 'show').mockImplementation();
+      navigate = jest.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+      configurationService = TestBed.inject(ConfigurationService);
+      component.selection.selected = [Mocks.getPool('test pool', 1)];
+    });
+
+    const mockCluster = (info: object, config: object) => {
+      spyOn(poolService, 'getInfo').and.returnValue(of(info));
+      spyOn(configurationService, 'get').and.returnValue(of(config));
+    };
+
+    it('should keep the migrate, edit, and delete actions enabled regardless of cluster state', () => {
+      const migrateAction = component.tableActions.find(
+        (a) => a.name === component.actionLabels.MIGRATE
+      );
+      const editAction = component.tableActions.find((a) => a.name === component.actionLabels.EDIT);
+      const deleteAction = component.tableActions.find(
+        (a) => a.name === component.actionLabels.DELETE
+      );
+      expect(migrateAction.disable).toBeUndefined();
+      expect(editAction.disable).toBeUndefined();
+      expect(deleteAction.disable).toBeUndefined();
+    });
+
+    it('should show the OSD release modal when require_osd_release is older than umbrella', () => {
+      mockCluster({ ...umbrellaInfo, require_osd_release: 'tentacle' }, flagConfig());
+      component.migratePool();
+      expect(modalShow).toHaveBeenCalledWith(PoolMigrationOsdReleaseModalComponent);
+      expect(navigate).not.toHaveBeenCalled();
+    });
+
+    it('should check the OSD release before the other prerequisites', () => {
+      mockCluster({}, flagConfig());
+      component.migratePool();
+      expect(modalShow).toHaveBeenCalledTimes(1);
+      expect(modalShow).toHaveBeenCalledWith(PoolMigrationOsdReleaseModalComponent);
+      expect(configurationService.get).not.toHaveBeenCalled();
+    });
+
+    it('should ask for both settings when the flag and min compat client are missing', () => {
+      mockCluster(
+        { require_osd_release: 'umbrella', require_min_compat_client: 'reef' },
+        flagConfig()
+      );
+      component.migratePool();
+      expect(modalShow).toHaveBeenCalledWith(
+        PoolMigrationClusterSettingsModalComponent,
+        expect.objectContaining({ needsFlag: true, needsMinCompatClient: true })
+      );
+      expect(navigate).not.toHaveBeenCalled();
+    });
+
+    it('should only ask for the flag when min compat client is already set', () => {
+      mockCluster(umbrellaInfo, flagConfig('other'));
+      component.migratePool();
+      expect(modalShow).toHaveBeenCalledWith(
+        PoolMigrationClusterSettingsModalComponent,
+        expect.objectContaining({
+          needsFlag: true,
+          needsMinCompatClient: false,
+          flagValue: 'other'
+        })
+      );
+    });
+
+    it('should only ask for min compat client when the flag is already enabled', () => {
+      mockCluster(
+        { require_osd_release: 'umbrella', require_min_compat_client: 'reef' },
+        flagConfig('poolmigration')
+      );
+      component.migratePool();
+      expect(modalShow).toHaveBeenCalledWith(
+        PoolMigrationClusterSettingsModalComponent,
+        expect.objectContaining({ needsFlag: false, needsMinCompatClient: true })
+      );
+    });
+
+    it('should navigate to the migrate form when the modal completes', () => {
+      mockCluster(umbrellaInfo, flagConfig());
+      component.migratePool();
+      const { onComplete } = modalShow.mock.calls[0][1];
+      expect(navigate).not.toHaveBeenCalled();
+      onComplete();
+      expect(navigate).toHaveBeenCalledWith(['/pool/migrate', 'test%20pool']);
+    });
+
+    it('should navigate to the migrate form when every prerequisite is met', () => {
+      mockCluster(umbrellaInfo, flagConfig('poolmigration'));
+      component.migratePool();
+      expect(modalShow).not.toHaveBeenCalled();
+      expect(navigate).toHaveBeenCalledWith(['/pool/migrate', 'test%20pool']);
+    });
+
+    describe('pool state prerequisites', () => {
+      const selectPool = (changes: Partial<Pool>) =>
+        (component.selection.selected = [{ ...Mocks.getPool('test pool', 1), ...changes }]);
+
+      it('should show the busy modal when the pool is already migrating', () => {
+        mockCluster(umbrellaInfo, flagConfig('poolmigration'));
+        selectPool({ migration_src: 0, cdExecuting: 'Migrating' });
+        component.migratePool();
+        expect(modalShow).toHaveBeenCalledWith(PoolBusyModalComponent, {
+          reason: PoolBusyReason.MIGRATING,
+          taskDescription: 'Migrating',
+          action: PoolAction.MIGRATE
+        });
+        expect(navigate).not.toHaveBeenCalled();
+      });
+
+      it('should show the busy modal when the PG count is changing', () => {
+        mockCluster(umbrellaInfo, flagConfig('poolmigration'));
+        selectPool({ pg_num: 32, pg_num_target: 64 });
+        component.migratePool();
+        expect(modalShow).toHaveBeenCalledWith(
+          PoolBusyModalComponent,
+          expect.objectContaining({ reason: PoolBusyReason.PG_CHANGE, action: PoolAction.MIGRATE })
+        );
+        expect(navigate).not.toHaveBeenCalled();
+      });
+
+      it('should show the busy modal with the task description for any other task', () => {
+        mockCluster(umbrellaInfo, flagConfig('poolmigration'));
+        selectPool({ cdExecuting: 'Deleting...' });
+        component.migratePool();
+        expect(modalShow).toHaveBeenCalledWith(PoolBusyModalComponent, {
+          reason: PoolBusyReason.TASK,
+          taskDescription: 'Deleting...',
+          action: PoolAction.MIGRATE
+        });
+      });
+
+      it('should report cluster prerequisites first, even if the pool is busy', () => {
+        mockCluster(umbrellaInfo, flagConfig());
+        selectPool({ migration_src: 0 });
+        component.migratePool();
+        expect(modalShow).toHaveBeenCalledTimes(1);
+        expect(modalShow).toHaveBeenCalledWith(
+          PoolMigrationClusterSettingsModalComponent,
+          expect.anything()
+        );
+      });
+
+      it('should check the pool again once the cluster settings modal completes', () => {
+        mockCluster(umbrellaInfo, flagConfig());
+        selectPool({ pg_num: 32, pg_num_target: 64 });
+        component.migratePool();
+        const { onComplete } = modalShow.mock.calls[0][1];
+        onComplete();
+        expect(modalShow).toHaveBeenLastCalledWith(
+          PoolBusyModalComponent,
+          expect.objectContaining({ reason: PoolBusyReason.PG_CHANGE, action: PoolAction.MIGRATE })
+        );
+        expect(navigate).not.toHaveBeenCalled();
+      });
+    });
+  });
+
+  describe('editPool', () => {
+    let modalShow: jest.SpyInstance;
+    let navigate: jest.SpyInstance;
+
+    beforeEach(() => {
+      modalShow = jest.spyOn(TestBed.inject(ModalCdsService), 'show').mockImplementation();
+      navigate = jest.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    });
+
+    const selectPool = (changes: Partial<Pool> = {}) =>
+      (component.selection.selected = [{ ...Mocks.getPool('test pool', 1), ...changes }]);
+
+    it('should navigate to the edit form when the pool is idle', () => {
+      selectPool();
+      component.editPool();
+      expect(modalShow).not.toHaveBeenCalled();
+      expect(navigate).toHaveBeenCalledWith(['/pool/edit', 'test%20pool']);
+    });
+
+    it('should show the busy modal when the pool is migrating', () => {
+      selectPool({ migration_src: 0, cdExecuting: 'Migrating' });
+      component.editPool();
+      expect(modalShow).toHaveBeenCalledWith(PoolBusyModalComponent, {
+        reason: PoolBusyReason.MIGRATING,
+        taskDescription: 'Migrating',
+        action: PoolAction.EDIT
+      });
+      expect(navigate).not.toHaveBeenCalled();
+    });
+
+    it('should show the busy modal when PG count is changing', () => {
+      selectPool({ pg_num: 32, pg_num_target: 64 });
+      component.editPool();
+      expect(modalShow).toHaveBeenCalledWith(PoolBusyModalComponent, {
+        reason: PoolBusyReason.PG_CHANGE,
+        taskDescription: undefined,
+        action: PoolAction.EDIT
+      });
+      expect(navigate).not.toHaveBeenCalled();
+    });
+
+    it('should show the busy modal for any other running task', () => {
+      selectPool({ cdExecuting: 'Updating...' });
+      component.editPool();
+      expect(modalShow).toHaveBeenCalledWith(PoolBusyModalComponent, {
+        reason: PoolBusyReason.TASK,
+        taskDescription: 'Updating...',
+        action: PoolAction.EDIT
+      });
+      expect(navigate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('deletePoolModal with busy pool', () => {
+    let modalShow: jest.SpyInstance;
+
+    beforeEach(() => {
+      modalShow = jest.spyOn(TestBed.inject(ModalCdsService), 'show').mockImplementation();
+    });
+
+    const selectPool = (changes: Partial<Pool> = {}) =>
+      (component.selection.selected = [{ ...Mocks.getPool('test pool', 1), ...changes }]);
+
+    it('should show the busy modal when the pool is migrating', () => {
+      selectPool({ migration_src: 0, cdExecuting: 'Migrating' });
+      component.deletePoolModal();
+      expect(modalShow).toHaveBeenCalledWith(PoolBusyModalComponent, {
+        reason: PoolBusyReason.MIGRATING,
+        taskDescription: 'Migrating',
+        action: PoolAction.DELETE
+      });
+    });
+
+    it('should show the busy modal when PG count is changing', () => {
+      selectPool({ pg_num: 32, pg_num_target: 64 });
+      component.deletePoolModal();
+      expect(modalShow).toHaveBeenCalledWith(PoolBusyModalComponent, {
+        reason: PoolBusyReason.PG_CHANGE,
+        taskDescription: undefined,
+        action: PoolAction.DELETE
+      });
+    });
+
+    it('should show the busy modal for any other running task', () => {
+      selectPool({ cdExecuting: 'Updating...' });
+      component.deletePoolModal();
+      expect(modalShow).toHaveBeenCalledWith(PoolBusyModalComponent, {
+        reason: PoolBusyReason.TASK,
+        taskDescription: 'Updating...',
+        action: PoolAction.DELETE
+      });
+    });
+
+    it('should show delete confirmation when the pool is idle and deletion is allowed', () => {
+      component.monAllowPoolDelete$.next(true);
+      selectPool();
+      component.deletePoolModal();
+      expect(modalShow).toHaveBeenCalledWith(
+        DeleteConfirmationModalComponent,
+        expect.objectContaining({ itemNames: ['test pool'] })
+      );
+    });
+
+    it('should show confirmation modal to enable deletion when monAllowPoolDelete is false and user has perms', () => {
+      component.monAllowPoolDelete$.next(false);
+      component.permissions.configOpt.read = true;
+      component.permissions.pool.read = true;
+      selectPool();
+      component.deletePoolModal();
+      expect(modalShow).toHaveBeenCalledWith(
+        ConfirmationModalComponent,
+        expect.objectContaining({ titleText: "Can't delete test pool" })
+      );
+    });
+
+    it('should show delete guard modal when monAllowPoolDelete is false and user has no perms', () => {
+      component.monAllowPoolDelete$.next(false);
+      component.permissions.configOpt.read = false;
+      selectPool();
+      component.deletePoolModal();
+      expect(modalShow).toHaveBeenCalledWith(
+        DeleteGuardModalComponent,
+        expect.objectContaining({ resourceName: 'test pool' })
+      );
+    });
+  });
+
+  describe('transformPoolsData with migration', () => {
+    it('should set cdExecuting to Migrating when pool has migration_src', () => {
+      const pool = _.merge(Mocks.getPool('target', 1), {
+        migration_src: 0,
+        stats: {}
+      });
+      const result = component.transformPoolsData([pool]);
+      expect(result[0].cdExecuting).toBe('Migrating');
+    });
+
+    it('should set cdExecuting to Migrating when pool has migration_target', () => {
+      const pool = _.merge(Mocks.getPool('source', 0), {
+        migration_target: 1,
+        stats: {}
+      });
+      const result = component.transformPoolsData([pool]);
+      expect(result[0].cdExecuting).toBe('Migrating');
+    });
+
+    it('should not override cdExecuting if already set by a task', () => {
+      const pool = _.merge(Mocks.getPool('target', 1), {
+        migration_src: 0,
+        cdExecuting: 'Updating... 50%',
+        stats: {}
+      });
+      const result = component.transformPoolsData([pool]);
+      expect(result[0].cdExecuting).toBe('Updating... 50%');
     });
   });
 });

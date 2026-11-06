@@ -30,6 +30,9 @@ export enum URLVerbs {
   /* Add an existing item to a container */
   ADD = 'add',
 
+  /* Migrate an existing item to a new target */
+  MIGRATE = 'migrate',
+
   /* Non-standard verbs */
   COPY = 'copy',
   CLONE = 'clone',
@@ -93,7 +96,10 @@ export enum ActionLabels {
 
   /* Hosts */
   MAINTENANCE = 'Maintenance',
-  DRAIN = 'Drain'
+  DRAIN = 'Drain',
+
+  /* Pool migration */
+  MIGRATE = 'Migrate'
 }
 
 @Injectable({

@@ -7,7 +7,7 @@
       Running tasks
     </div>
 
-    @for (task of executingTasks; track task.begin_time) {
+    @for (task of executingTasks; track task.name) {
       <div class="notification-wrapper">
         <div class="notification-item task-item">
           <cd-icon type="infoCircle"></cd-icon>
