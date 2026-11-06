@@ -5,8 +5,6 @@
 
 #include <cassert>
 #include <chrono>
-#include <iomanip>
-#include <sstream>
 
 #include "common/ceph_time.h"
 
@@ -15,13 +13,6 @@
 namespace ceph {
 
 namespace chrono = std::chrono;
-using chrono::duration_cast;
-using std::setw;
-using std::size_t;
-using std::stringstream;
-using std::string;
-using std::uint16_t;
-
 using namespace std::literals;
 
 namespace {
@@ -32,13 +23,13 @@ struct succeed {
 };
 
 template <typename Field, typename Validate = succeed>
-std::optional<Field> consume_bounded(std::string_view& remaining, size_t bound,
+std::optional<Field> consume_bounded(std::string_view& remaining, std::size_t bound,
                                      Validate validate = {})
 {
   auto view = remaining.substr(0, bound);
   if (view.size() != bound)
     return std::nullopt;
-  if (auto val = parse<uint16_t>(view); val && validate(*val)) {
+  if (auto val = parse<std::uint16_t>(view); val && validate(*val)) {
     remaining.remove_prefix(view.size());
     return Field(*val);
   }
@@ -121,7 +112,7 @@ std::optional<real_time> read_date(std::string_view& remaining)
     return std::nullopt;
   // On Linux `system_clock::to_time_t` is not usable for large, unsigned values
   return real_clock::from_time_t(
-      duration_cast<chrono::seconds>(chrono::sys_days(ymd).time_since_epoch())
+      chrono::duration_cast<chrono::seconds>(chrono::sys_days(ymd).time_since_epoch())
           .count());
 }
 
@@ -129,7 +120,7 @@ inline std::optional<chrono::nanoseconds> parse_nanoseconds(
     std::string_view& remaining)
 {
   constexpr auto digits = "0123456789"sv;
-  constexpr uint64_t pow10[] = {
+  constexpr std::uint64_t pow10[] = {
       1,         10,         100,
       1'000,     10'000,     100'000,
       1'000'000, 10'000'000, 100'000'000};
@@ -236,56 +227,5 @@ std::optional<real_time> from_iso_8601(const std::string_view s,
   }
   if (!remaining.empty()) return std::nullopt;
   return time;
-}
-
-string to_iso_8601(const real_time t,
-		   const iso_8601_format f,
-                   std::string_view date_separator,
-                   std::string_view time_separator) noexcept {
-  assert(f >= iso_8601_format::Y && f <= iso_8601_format::YMDhmsn);
-  stringstream out(std::ios_base::out);
-
-  auto sec = real_clock::to_time_t(t);
-  auto nsec =
-      duration_cast<chrono::nanoseconds>(t.time_since_epoch() % (1s)).count();
-
-  struct tm bt;
-  gmtime_r(&sec, &bt);
-  out.fill('0');
-
-  out << 1900 + bt.tm_year;
-  if (f == iso_8601_format::Y) {
-    return out.str();
-  }
-
-  out << date_separator << setw(2) << bt.tm_mon + 1;
-  if (f == iso_8601_format::YM) {
-    return out.str();
-  }
-
-  out << date_separator << setw(2) << bt.tm_mday;
-  if (f == iso_8601_format::YMD) {
-    return out.str();
-  }
-
-  out << 'T' << setw(2) << bt.tm_hour;
-  if (f == iso_8601_format::YMDh) {
-    out << 'Z';
-    return out.str();
-  }
-
-  out << time_separator << setw(2) << bt.tm_min;
-  if (f == iso_8601_format::YMDhm) {
-    out << 'Z';
-    return out.str();
-  }
-
-  out << time_separator << setw(2) << bt.tm_sec;
-  if (f == iso_8601_format::YMDhms) {
-    out << 'Z';
-    return out.str();
-  }
-  out << '.' << setw(9) << nsec << 'Z';
-  return out.str();
 }
 } // namespace ceph

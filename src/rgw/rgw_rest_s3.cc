@@ -6697,7 +6697,7 @@ AWSSignerV4::prepare(const DoutPrefixProvider *dpp,
 
   map<string, string> extra_headers;
 
-  std::string date = ceph::to_iso_8601_no_separators(timestamp, ceph::iso_8601_format::YMDhms);
+  std::string date = ceph::to_iso_8601(timestamp, ceph::iso_8601_format::BasicYMDhms);
 
   std::string credential_scope = gen_v4_scope(timestamp, region, service);
 
