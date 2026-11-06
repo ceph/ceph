@@ -805,16 +805,45 @@ static constexpr uint64_t RAISED_CREATE_CAPS = nsfs::cap_bit(CAP_DAC_OVERRIDE);
 static constexpr uint64_t RAISED_CHOWN_CAPS = nsfs::cap_bit(CAP_CHOWN);
 
 /* Give what a raised create made to `uid` and `gid`:  `name` in `dirfd`,
- * or `dirfd` itself where `name` is empty. */
+ * or `dirfd` itself where `name` is empty.  Nothing is done where it is
+ * theirs already, as an entry the identity made itself is.
+ *
+ * GPFS returns EPERM from fchownat by a non-root process holding
+ * CAP_CHOWN now and then while other threads work in the same directory
+ * (Scale 6.0.0.2;  root's never fails), and a retry at once fails too;
+ * every one measured succeeded within 11ms.  With CAP_CHOWN held nothing
+ * else here returns EPERM, so it is retried after 100us, 1ms, 10ms and
+ * 100ms, each wait a nanosleep(2). */
 static int chown_raised(const DoutPrefixProvider* dpp, int dirfd,
 			const char* name, uid_t uid, gid_t gid)
 {
   const int flags = AT_SYMLINK_NOFOLLOW | (*name ? 0 : AT_EMPTY_PATH);
-  const int ret = nsfs::with_capabilities(dpp, RAISED_CHOWN_CAPS,
-					  [&]() -> int {
-    return (::fchownat(dirfd, name, uid, gid, flags) < 0)
-	? -errno : 0;
-  });
+  struct statx stx;
+  if ((nsfs::statx(dirfd, name, flags, STATX_UID | STATX_GID, &stx) == 0) &&
+      (stx.stx_uid == uid) && (stx.stx_gid == gid)) {
+    return 0;
+  }
+  static constexpr long retry_after_ns[] = {
+    100'000, 1'000'000, 10'000'000, 100'000'000
+  };
+  auto give = [&]() -> int {
+    return nsfs::with_capabilities(dpp, RAISED_CHOWN_CAPS, [&]() -> int {
+      return (::fchownat(dirfd, name, uid, gid, flags) < 0) ? -errno : 0;
+    });
+  };
+  int ret = give();
+  size_t retries = 0;
+  for (; (ret == -EPERM) && (retries < std::size(retry_after_ns)); ++retries) {
+    struct timespec wait = { 0, retry_after_ns[retries] };
+    while ((::nanosleep(&wait, &wait) < 0) && (errno == EINTR)) {
+    }
+    ret = give();
+  }
+  if (retries > 0) {
+    ldpp_dout(dpp, 1) << "nsfs: giving " << name << " to uid " << uid
+      << " returned EPERM;  " << retries << " retries, then "
+      << (ret == 0 ? "success" : cpp_strerror(-ret)) << dendl;
+  }
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: could not give " << name << " to uid "
       << uid << ": " << cpp_strerror(-ret) << dendl;
