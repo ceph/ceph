@@ -102,7 +102,7 @@ public:
   seastar::future<store_statfs_t> stat() const override;
   seastar::future<store_statfs_t> pool_statfs(int64_t pool_id) const override;
   unsigned get_max_attr_name_length() const override;
-  seastar::future<struct stat> stat(
+  stat_ertr::future<struct stat> stat(
     CollectionRef,
     const ghobject_t&,
     uint32_t op_flags = 0) override;

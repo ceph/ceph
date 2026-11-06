@@ -129,14 +129,14 @@ add_ceph_unittest(unittest-crimson-coroutine
 
 add_executable(unittest-crimson-scrub
   test_crimson_scrub.cc
-  ${PROJECT_SOURCE_DIR}/src/crimson/osd/scrub/scrub_machine.cc
-  ${PROJECT_SOURCE_DIR}/src/crimson/osd/scrub/scrub_validator.cc
-  ${PROJECT_SOURCE_DIR}/src/osd/ECUtilL.cc
-  ${PROJECT_SOURCE_DIR}/src/osd/ECUtil.cc)
+  ${PROJECT_SOURCE_DIR}/src/crimson/osd/scrub/scrub_validator.cc)
 target_link_libraries(
   unittest-crimson-scrub
+  crimson
   crimson-common
   crimson::gtest)
+add_ceph_unittest(unittest-crimson-scrub
+  --memory 256M --smp 1)
 
 add_executable(unittest-crimson-watch-notify
   test_watch_notify.cc
@@ -155,5 +155,13 @@ target_link_libraries(
 target_compile_options(unittest-crimson-watch-notify PRIVATE -UNDEBUG)
 add_ceph_unittest(unittest-crimson-watch-notify
   --memory 256M --smp 1)
+
+add_executable(ceph_test_crimson_scrub_scheduling
+  test_crimson_scrub_scheduling.cc
+)
+target_link_libraries(ceph_test_crimson_scrub_scheduling
+  librados
+)
+install(TARGETS ceph_test_crimson_scrub_scheduling DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 add_subdirectory(cbt)
