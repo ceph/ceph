@@ -22,7 +22,6 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
 
-using std::list;
 using std::map;
 using std::set;
 using std::string;

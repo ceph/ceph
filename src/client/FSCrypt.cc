@@ -411,23 +411,22 @@ int FSCryptKeyStore::master_key_spec_len(const struct fscrypt_key_specifier& spe
 
 
 
-int FSCryptKeyStore::maybe_add_user(std::list<int>* users, int user)
+int FSCryptKeyStore::maybe_add_user(std::vector<int>& users, int user)
 {
   ldout(cct, 10) << __FILE__ << ":" << __LINE__ << " user=" << user << dendl;
 
-  auto it = std::find(users->begin(), users->end(), user);
-  if (it != users->end()) {
+  if (std::ranges::find(users, user) != std::end(users)) {
     ldout(cct, 10) << "maybe_add_user user already added!" << dendl;
     return -EEXIST;
   }
   
   ldout(cct, 10) << "maybe_add_user is not found!, adding" << dendl;
-  users->push_back(user);
-  ldout(cct, 10) << "maybe_add_user size is now=" << users->size() << dendl;
+  users.push_back(user);
+  ldout(cct, 10) << "maybe_add_user size is now=" << std::size(users) << dendl;
   return 0;
 }
 
-int FSCryptKeyStore::maybe_remove_user(struct fscrypt_remove_key_arg* arg, std::list<int>* users, int user)
+int FSCryptKeyStore::maybe_remove_user(struct fscrypt_remove_key_arg* arg, std::vector<int>& users, int user)
 {
   ldout(cct, 10) << __FILE__ << ":" << __LINE__ << " user=" << user << dendl;
   uint32_t status_flags = arg->removal_status_flags;
@@ -436,12 +435,11 @@ int FSCryptKeyStore::maybe_remove_user(struct fscrypt_remove_key_arg* arg, std::
     return -EINVAL;
   }
 
-  auto it = std::find(users->begin(), users->end(), user);
-  if (it != users->end()) {
-    users->erase(it);
+  if (auto it = std::ranges::find(users, user); it != std::end(users)) {
+    users.erase(it);
   }
 
-  if (users->size() != 0) {
+  if (!std::empty(users)) {
     //set bits for removed for requested user
     status_flags |= FSCRYPT_KEY_REMOVAL_STATUS_FLAG_OTHER_USERS;
     arg->removal_status_flags = status_flags;
@@ -468,7 +466,7 @@ int FSCryptKeyStore::create(const char *k, int klen, FSCryptKeyHandlerRef& key_h
     key_handler = iter->second;
 
     auto& users = key_handler->get_users();
-    r = maybe_add_user(&users, user);
+    r = maybe_add_user(users, user);
 
     if (r == -EEXIST) {
       return 0; //returns 0 regardless
@@ -478,7 +476,7 @@ int FSCryptKeyStore::create(const char *k, int klen, FSCryptKeyHandlerRef& key_h
     key_handler = std::make_shared<FSCryptKeyHandler>(++epoch, key);
 
     auto& users = key_handler->get_users();
-    r = maybe_add_user(&users, user);
+    r = maybe_add_user(users, user);
     if (r == -EEXIST) {
       return 0; //returns 0 regardless
     }
@@ -528,7 +526,7 @@ int FSCryptKeyStore::invalidate(struct fscrypt_remove_key_arg* arg, int user)
   }
 
   auto& users = kh->get_users();
-  r = maybe_remove_user(arg, &users, user);
+  r = maybe_remove_user(arg, users, user);
   if (r == -EUSERS) {
     r = 0;
     goto out;
@@ -537,7 +535,7 @@ int FSCryptKeyStore::invalidate(struct fscrypt_remove_key_arg* arg, int user)
   kh->present = false;
 
   //do a final clean up
-  if (!kh->present && kh->di->get_inodes().empty()) {
+  if (!kh->present && kh->di->empty()) {
     kh->reset(++epoch, nullptr);
     m.erase(id);
   } else {

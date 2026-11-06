@@ -8,11 +8,11 @@
 #include "include/int_types.h"
 #include "librbd/exclusive_lock/Policy.h"
 #include "librbd/operation/ObjectMapIterate.h"
-#include <atomic>
-#include <string>
-#include <list>
 #include <map>
 #include <set>
+#include <deque>
+#include <atomic>
+#include <string>
 #include <boost/function.hpp>
 
 class Context;
@@ -142,7 +142,7 @@ private:
 
   mutable ceph::mutex m_queue_lock;
   std::set<Operation> m_in_flight_ops;
-  std::map<Operation, std::list<Context *>> m_queued_ops;
+  std::map<Operation, std::deque<Context *>> m_queued_ops;
 
   int invoke_async_request(Operation op,
                            exclusive_lock::OperationRequestType request_type,

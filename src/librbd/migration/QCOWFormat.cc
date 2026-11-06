@@ -145,8 +145,8 @@ public:
   }
 
 private:
-  typedef std::tuple<uint64_t, uint64_t, bufferlist*, Context*> Completion;
-  typedef std::list<Completion> Completions;
+  using Completion = std::tuple<uint64_t, uint64_t, bufferlist *, Context *>;
+  using Completions = std::vector<Completion>;
 
   QCOWFormat* qcow_format;
   boost::asio::strand<boost::asio::io_context::executor_type> m_strand;
@@ -234,7 +234,7 @@ private:
     // complete the IO back to caller
     boost::asio::post(*qcow_format->m_image_ctx->asio_engine,
                       [r, cluster, completions=std::move(completions)]() {
-      for (auto completion : completions) {
+      for (const auto& completion : completions) {
         if (r >= 0) {
           std::get<2>(completion)->substr_of(
             cluster->cluster_data_bl,

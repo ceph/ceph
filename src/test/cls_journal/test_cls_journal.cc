@@ -9,6 +9,7 @@
 #include "gtest/gtest.h"
 #include <errno.h>
 #include <set>
+#include <list>
 #include <string>
 
 using namespace cls::journal;
@@ -16,6 +17,28 @@ using ceph::test::PoolType;
 using ceph::test::pool_type_name;
 using ceph::test::create_pool_by_type;
 using ceph::test::destroy_pool_by_type;
+
+TEST(ObjectSetPositionEncoding, FormerListWireCompatibility) {
+  ObjectSetPosition position({{0, 234, 120}, {3, 235, 121}});
+  bufferlist encoded;
+  encode(position, encoded);
+
+  std::list<ObjectPosition> former_positions = {
+    {0, 234, 120},
+    {3, 235, 121}
+  };
+  bufferlist former_encoding;
+  ENCODE_START(1, 1, former_encoding);
+  encode(former_positions, former_encoding);
+  ENCODE_FINISH(former_encoding);
+
+  ASSERT_TRUE(encoded.contents_equal(former_encoding));
+
+  auto iterator = former_encoding.cbegin();
+  ObjectSetPosition decoded;
+  decode(decoded, iterator);
+  ASSERT_EQ(position, decoded);
+}
 
 static bool is_sparse_read_supported(librados::IoCtx &ioctx,
                                      const std::string &oid) {

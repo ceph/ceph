@@ -7,10 +7,10 @@
 #include "include/rados/librados.hpp"
 #include "common/ceph_mutex.h"
 #include "cls/rbd/cls_rbd_types.h"
-#include <list>
 #include <map>
 #include <set>
 #include <string>
+#include <vector>
 
 struct Context;
 namespace librbd { class ImageCtx; }
@@ -65,7 +65,7 @@ private:
    *
    * @endverbatim
    */
-  typedef std::list<Context*> Contexts;
+  using Contexts = std::vector<Context *>;
   typedef std::set<std::string> GlobalImageIds;
   typedef std::map<std::string, cls::rbd::MirrorImageSiteStatus>
       GlobalImageStatus;

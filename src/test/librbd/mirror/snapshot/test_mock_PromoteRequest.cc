@@ -14,6 +14,8 @@
 #include "librbd/mirror/snapshot/PromoteRequest.h"
 #include "librbd/mirror/snapshot/Utils.h"
 
+#include <vector>
+
 namespace librbd {
 
 namespace {
@@ -29,11 +31,11 @@ namespace image {
 
 template <>
 struct ListWatchersRequest<MockTestImageCtx> {
-  std::list<obj_watch_t> *watchers;
+  std::vector<obj_watch_t> *watchers;
   Context* on_finish = nullptr;
   static ListWatchersRequest* s_instance;
   static ListWatchersRequest *create(MockTestImageCtx &image_ctx, int flags,
-                                     std::list<obj_watch_t> *watchers,
+                                     std::vector<obj_watch_t> *watchers,
                                      Context *on_finish) {
     ceph_assert(s_instance != nullptr);
     s_instance->watchers = watchers;
@@ -145,7 +147,6 @@ CreatePrimaryRequest<MockTestImageCtx>* CreatePrimaryRequest<MockTestImageCtx>::
 } // namespace snapshot
 } // namespace mirror
 } // namespace librbd
-
 // template definitions
 #include "librbd/mirror/snapshot/PromoteRequest.cc"
 template class librbd::mirror::snapshot::PromoteRequest<librbd::MockTestImageCtx>;
@@ -201,7 +202,7 @@ public:
   void expect_list_watchers(
       MockTestImageCtx &mock_image_ctx,
       MockListWatchersRequest &mock_list_watchers_request,
-      const std::list<obj_watch_t> &watchers, int r) {
+      const std::vector<obj_watch_t> &watchers, int r) {
     EXPECT_CALL(mock_list_watchers_request, send())
       .WillOnce(
         Invoke([&mock_image_ctx, &mock_list_watchers_request, watchers, r]() {
@@ -386,4 +387,3 @@ TEST_F(TestMockMirrorSnapshotPromoteRequest, ErrorCannotRollback) {
 } // namespace snapshot
 } // namespace mirror
 } // namespace librbd
-

@@ -6,6 +6,7 @@
 #include "common/errno.h"
 #include <boost/lexical_cast.hpp>
 #include <regex>
+#include <vector>
 
 namespace librbd {
 namespace migration {
@@ -95,7 +96,7 @@ void merge_snapshot_delta(const io::SnapIds& snap_ids,
   ceph_assert(snap_id_it != snap_ids.end());
 
   // merge any snapshot intervals that were not requested
-  std::list<io::SparseExtents*> pending_sparse_extents;
+  std::vector<io::SparseExtents *> pending_sparse_extents;
   for (auto& [snap_key, sparse_extents] : orig_snapshot_delta) {
     // advance to next valid requested snap id
     while (snap_id_it != snap_ids.end() && *snap_id_it < snap_key.first) {

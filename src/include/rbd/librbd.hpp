@@ -616,6 +616,10 @@ public:
   int is_exclusive_lock_owner(bool *is_owner);
   int lock_acquire(rbd_lock_mode_t lock_mode);
   int lock_release();
+  /// Replace lock owners with the current exclusive-lock owners.
+  int lock_get_owners(rbd_lock_mode_t *lock_mode,
+                      std::vector<std::string>& lock_owners);
+  /// Compatibility overload for list-based callers.
   int lock_get_owners(rbd_lock_mode_t *lock_mode,
                       std::list<std::string> *lock_owners);
   int lock_break(rbd_lock_mode_t lock_mode, const std::string &lock_owner);
@@ -680,6 +684,10 @@ public:
   int list_descendants(std::vector<linked_image_spec_t> *images);
 
   /* advisory locking (see librbd.h for details) */
+  /// Replace lockers with the current advisory locks.
+  int list_lockers(std::vector<locker_t>& lockers,
+                   bool *exclusive, std::string *tag);
+  /// Compatibility overload for list-based callers.
   int list_lockers(std::list<locker_t> *lockers,
 		   bool *exclusive, std::string *tag);
   int lock_exclusive(const std::string& cookie);
@@ -898,6 +906,9 @@ public:
   int update_watch(UpdateWatchCtx *ctx, uint64_t *handle);
   int update_unwatch(uint64_t handle);
 
+  /// Replace watchers with the image's current watchers.
+  int list_watchers(std::vector<image_watcher_t>& watchers);
+  /// Compatibility overload for list-based callers.
   int list_watchers(std::list<image_watcher_t> &watchers);
 
   int config_list(std::vector<config_option_t> *options);

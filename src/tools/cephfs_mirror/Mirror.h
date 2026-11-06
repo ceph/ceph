@@ -6,6 +6,7 @@
 
 #include <map>
 #include <set>
+#include <deque>
 #include <vector>
 
 #include "common/ceph_mutex.h"
@@ -79,7 +80,7 @@ private:
     bool mirroring_enabled = true;
     bool action_in_progress = false;
     bool restarting = false;
-    std::list<Context *> action_ctxs;
+    std::deque<Context *> action_ctxs;
     std::unique_ptr<FSMirror> fs_mirror;
   };
 

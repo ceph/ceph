@@ -4,8 +4,8 @@
 #ifndef CEPH_LIBRBD_IO_QOS_IMAGE_DISPATCH_H
 #define CEPH_LIBRBD_IO_QOS_IMAGE_DISPATCH_H
 
-#include <list>
 #include <memory>
+#include <vector>
 
 #include "librbd/io/ImageDispatchInterface.h"
 #include "include/int_types.h"
@@ -109,7 +109,7 @@ public:
 private:
   ImageCtxT* m_image_ctx;
 
-  std::list<std::pair<uint64_t, TokenBucketThrottle*> > m_throttles;
+  std::vector<std::pair<uint64_t, std::unique_ptr<TokenBucketThrottle>>> m_throttles;
   uint64_t m_qos_enabled_flag = 0;
   uint64_t m_qos_exclude_ops = 0;
 

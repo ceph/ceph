@@ -6,10 +6,11 @@
 
 #include "json_spirit/json_spirit.h"
 
-#include <iostream>
-#include <list>
 #include <map>
 #include <string>
+#include <vector>
+#include <iostream>
+
 #include <boost/program_options.hpp>
 
 namespace ceph { class Formatter; }
@@ -39,7 +40,7 @@ public:
 
 private:
   std::string name;
-  std::list<std::pair<std::string, std::string>> items;
+  std::vector<std::pair<std::string, std::string>> items;
 };
 
 std::ostream& operator<<(std::ostream& os, Schedule &s);

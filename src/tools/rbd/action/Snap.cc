@@ -12,8 +12,9 @@
 #include "common/Formatter.h"
 #include "common/TextTable.h"
 #include <iostream>
-#include <boost/program_options.hpp>
+#include <boost/algorithm/string/join.hpp>
 #include <boost/bind/bind.hpp>
+#include <boost/program_options.hpp>
 
 namespace rbd {
 namespace action {
@@ -81,9 +82,9 @@ int do_list_snaps(librbd::Image& image, Formatter *f, bool all_snaps, librados::
     }
   }
 
-  std::list<std::pair<int64_t, std::string>> pool_list;
-  rados.pool_list2(pool_list);
-  std::map<int64_t, std::string> pool_map(pool_list.begin(), pool_list.end());
+  std::vector<std::pair<int64_t, std::string>> pools;
+  rados.pool_list(pools);
+  std::map<int64_t, std::string> pool_map(std::begin(pools), std::end(pools));
 
   for (std::vector<librbd::snap_info_t>::iterator s = snaps.begin();
        s != snaps.end(); ++s) {
@@ -298,7 +299,7 @@ int do_purge_snaps(librbd::Image& image, bool no_progress)
   } else if (0 == snaps.size()) {
     return 0;
   } else {
-    std::list<std::string> protect;
+    std::vector<std::string> protect;
     snaps.erase(remove_if(snaps.begin(),
                           snaps.end(),
                           boost::bind(utils::is_not_user_snap_namespace, &image, _1)),
@@ -317,7 +318,8 @@ int do_purge_snaps(librbd::Image& image, bool no_progress)
     }
 
     if (!protect.empty()) {
-      std::cout << "rbd: error removing snapshot(s) '" << protect << "', which "
+      std::cout << "rbd: error removing snapshot(s) '"
+                << boost::algorithm::join(protect, ",") << "', which "
                 << (1 == protect.size() ? "is" : "are")
                 << " protected - these must be unprotected with "
                 << "`rbd snap unprotect`."

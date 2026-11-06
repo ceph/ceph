@@ -11,7 +11,6 @@
 #include "librbd/Utils.h"
 #include "librbd/Types.h"
 #include "librbd/io/Types.h"
-#include <list>
 #include <utility>
 #include <vector>
 
@@ -64,8 +63,6 @@ public:
   }
 
 protected:
-  typedef std::list<ObjectDispatchSpec*> ObjectRequests;
-
   ImageCtxT &m_image_ctx;
   AioCompletion *m_aio_comp;
   Extents m_image_extents;
@@ -115,8 +112,6 @@ private:
 template <typename ImageCtxT = ImageCtx>
 class AbstractImageWriteRequest : public ImageRequest<ImageCtxT> {
 protected:
-  using typename ImageRequest<ImageCtxT>::ObjectRequests;
-
   AbstractImageWriteRequest(ImageCtxT &image_ctx, AioCompletion *aio_comp,
                             Extents &&image_extents, ImageArea area,
                             const char *trace_name,
@@ -155,8 +150,6 @@ public:
   }
 
 protected:
-  using typename ImageRequest<ImageCtxT>::ObjectRequests;
-
   aio_type_t get_aio_type() const override {
     return AIO_TYPE_WRITE;
   }
@@ -193,8 +186,6 @@ public:
   }
 
 protected:
-  using typename ImageRequest<ImageCtxT>::ObjectRequests;
-
   aio_type_t get_aio_type() const override {
     return AIO_TYPE_DISCARD;
   }
@@ -229,8 +220,6 @@ public:
   }
 
 protected:
-  using typename ImageRequest<ImageCtxT>::ObjectRequests;
-
   void update_timestamp() override {
   }
   void send_request() override;
@@ -261,8 +250,6 @@ public:
   }
 
 protected:
-  using typename ImageRequest<ImageCtxT>::ObjectRequests;
-
   aio_type_t get_aio_type() const override {
     return AIO_TYPE_WRITESAME;
   }
@@ -284,8 +271,6 @@ private:
 template <typename ImageCtxT = ImageCtx>
 class ImageCompareAndWriteRequest : public AbstractImageWriteRequest<ImageCtxT> {
 public:
-  using typename ImageRequest<ImageCtxT>::ObjectRequests;
-
   ImageCompareAndWriteRequest(ImageCtxT &image_ctx, AioCompletion *aio_comp,
                               Extents &&image_extents, ImageArea area,
                               bufferlist &&cmp_bl, bufferlist &&bl,

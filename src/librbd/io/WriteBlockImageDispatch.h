@@ -13,7 +13,7 @@
 #include "librbd/io/ReadResult.h"
 #include "librbd/io/Types.h"
 
-#include <list>
+#include <vector>
 #include <shared_mutex> // for std::shared_lock
 
 struct Context;
@@ -102,7 +102,7 @@ public:
 private:
   struct C_BlockedWrites;
 
-  typedef std::list<Context*> Contexts;
+  typedef std::vector<Context*> Contexts;
 
   ImageCtxT* m_image_ctx;
 

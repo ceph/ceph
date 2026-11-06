@@ -13,7 +13,10 @@
 #include "journal/ReplayEntry.h"
 #include "journal/ReplayHandler.h"
 #include "journal/Settings.h"
-#include <list>
+#include <span>
+#include <array>
+#include <vector>
+#include <iterator>
 
 void register_test_journal_entries() {
 }
@@ -21,9 +24,68 @@ void register_test_journal_entries() {
 namespace librbd {
 namespace journal {
 
+namespace {
+
+bufferlist encode_legacy_mirror_peer_client_data(
+    const MirrorPeerClientMeta& meta,
+    std::span<const MirrorPeerSyncPoint> sync_points) {
+  using ceph::encode;
+
+  bufferlist encoded;
+  ENCODE_START(2, 1, encoded);
+  encode(static_cast<uint32_t>(MirrorPeerClientMeta::TYPE), encoded);
+  encode(meta.image_id, encoded);
+  encode(static_cast<uint32_t>(meta.state), encoded);
+  encode(meta.sync_object_count, encoded);
+  encode(static_cast<uint32_t>(sync_points.size()), encoded);
+
+  for (const auto& sync_point : sync_points) {
+    sync_point.encode(encoded);
+  }
+
+  encode(meta.snap_seqs, encoded);
+  ENCODE_FINISH(encoded);
+
+  return encoded;
+}
+
+} // namespace
+
+TEST(JournalTypes, MirrorPeerSyncPointSequenceCompatibility) {
+  const std::array legacy_sync_points {
+    MirrorPeerSyncPoint {{}, "snap 1", "", 12},
+    MirrorPeerSyncPoint {{}, "snap 2", "snap 1", 34}
+  };
+  MirrorPeerClientMeta meta {
+    "remote-image",
+    MirrorPeerClientMeta::SyncPoints {
+      std::cbegin(legacy_sync_points), std::cend(legacy_sync_points)
+    },
+    {{1, 2}, {3, 4}}
+  };
+  meta.state = MIRROR_PEER_STATE_REPLAYING;
+  meta.sync_object_count = 57;
+
+  const auto legacy_bytes = encode_legacy_mirror_peer_client_data(
+    meta, legacy_sync_points);
+
+  bufferlist current_bytes;
+  ClientData {meta}.encode(current_bytes);
+  ASSERT_TRUE(current_bytes.contents_equal(legacy_bytes));
+
+  ClientData decoded;
+  auto cursor = legacy_bytes.cbegin();
+  decoded.decode(cursor);
+  EXPECT_EQ(meta, std::get<MirrorPeerClientMeta>(decoded.client_meta));
+
+  bufferlist reencoded;
+  decoded.encode(reencoded);
+  EXPECT_TRUE(reencoded.contents_equal(legacy_bytes));
+}
+
 class TestJournalEntries : public TestFixture {
 public:
-  typedef std::list<::journal::Journaler *> Journalers;
+  using Journalers = std::vector<::journal::Journaler *>;
 
   struct ReplayHandler : public ::journal::ReplayHandler {
     ceph::mutex lock = ceph::make_mutex("ReplayHandler::lock");
@@ -52,9 +114,7 @@ public:
   Journalers m_journalers;
 
   void TearDown() override {
-    for (Journalers::iterator it = m_journalers.begin();
-         it != m_journalers.end(); ++it) {
-      ::journal::Journaler *journaler = *it;
+    for (auto *journaler : m_journalers) {
       journaler->stop_replay();
       journaler->shut_down();
       delete journaler;
