@@ -531,7 +531,14 @@ the OSD is destroyed and redeployed with the appropriate option value(s).
 Upgrading to a later Ceph release will *not* change the value used by OSDs that
 were deployed under older releases or with other settings.
 
+To set this value for only the OSDs that a specific cephadm OSD service spec
+deploys, add it to the spec's ``config`` section, as shown in
+:ref:`cephadm-osd-additional-options`. A config option masked by device class
+does not work for this purpose, because an OSD's device class is assigned after
+the OSD is created.
+
 .. confval:: bluestore_min_alloc_size
 .. confval:: bluestore_min_alloc_size_hdd
 .. confval:: bluestore_min_alloc_size_ssd
 .. confval:: bluestore_use_optimal_io_size_for_min_alloc_size
+.. confval:: osd_spec_max_min_alloc_size

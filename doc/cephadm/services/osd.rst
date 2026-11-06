@@ -840,11 +840,49 @@ but you wish to use at most two of them per host as OSDs, specify a ``limit``:
 .. note:: ``limit`` is usually appropriate in only certain specific scenarios.
 
 
+.. _cephadm-osd-additional-options:
+
 Additional Options
 ------------------
 
 There are multiple optional settings that specify the way OSDs are deployed.
 Add these options to an OSD spec for them to take effect.
+
+This example sets :confval:`bluestore_min_alloc_size` for the OSDs that it
+deploys to match the indirection unit of a specific coarse-IU QLC SSD SKU. The
+value takes effect only at OSD creation and cannot be changed afterward without
+redeploying the OSD. It must be a power of 2, in bytes, and must not exceed
+:confval:`osd_spec_max_min_alloc_size`.
+
+.. code-block:: yaml
+
+    service_type: osd
+    service_id: coarse_iu_qlc
+    service_name: osd.coarse_iu_qlc
+    placement:
+      host_pattern: '*'
+    config:
+      bluestore_min_alloc_size: 16384
+    spec:
+      data_devices:
+        model: SBFPF2BV614T      # 61.44 TB Solidigm P5336
+
+This example selects devices by size instead of by model, and deploys two OSDs
+on each.
+
+.. code-block:: yaml
+
+    service_type: osd
+    service_id: coarse_iu_qlc_split
+    service_name: osd.coarse_iu_qlc_split
+    placement:
+      host_pattern: '*'
+    config:
+      bluestore_min_alloc_size: 16384
+    spec:
+      data_devices:
+        size: '50T:'             # a 61.44 TB drive reports as 55.88 TB
+      osds_per_device: 2
 
 This example deploys encrypted OSDs on all unused drives.  Note that if Linux
 MD mirroring is used for the boot, ``/var/log``, or other volumes this spec *may*

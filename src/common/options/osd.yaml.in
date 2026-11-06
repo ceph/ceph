@@ -850,6 +850,16 @@ options:
   default: 90
   min: 4
   with_legacy: true
+- name: osd_spec_max_min_alloc_size
+  type: size
+  level: advanced
+  desc: Maximum bluestore_min_alloc_size, in bytes, that an OSD service spec may set.
+  long_desc: The orchestrator rejects an OSD service spec whose config sets
+    bluestore_min_alloc_size above this value. bluestore_min_alloc_size is fixed
+    at creation for the life of each OSD.
+  default: 64_K
+  see_also:
+  - bluestore_min_alloc_size
 - name: osd_max_pgls
   type: uint
   level: advanced
