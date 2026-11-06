@@ -17,9 +17,12 @@
 #include "include/compat.h"
 #include "include/cephfs/libcephfs.h"
 #include "include/ceph_fs.h"
+#include <atomic>
+#include <cstdlib>
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <memory>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -181,6 +184,116 @@ TEST(LibCephFS, MulticlientRevokeCaps) {
   thread2.join();
 }
 
+static void append_worker(struct ceph_mount_info *cmount, const char *path,
+			  char tag, int64_t buf_size, int rounds,
+			  std::atomic<bool> *go, std::atomic<int> *errors)
+{
+  std::unique_ptr<char[]> buf(new char[buf_size]);
+  memset(buf.get(), tag, buf_size);
+
+  int fd = ceph_open(cmount, path, O_CREAT|O_WRONLY|O_APPEND, 0644);
+  if (fd < 0) {
+    errors->fetch_add(1);
+    printf("append_worker: failed to open %s: %s\n", path, strerror(-fd));
+    return;
+  }
+
+  while (!go->load()) {
+    std::this_thread::yield();
+  }
+
+  for (int i = 0; i < rounds; i++) {
+    int r = ceph_write(cmount, fd, buf.get(), buf_size, -1);
+    if (r != buf_size) {
+      errors->fetch_add(1);
+      printf("append_worker: write failed: %d (%s)\n", r,
+             r < 0 ? strerror(-r) : "short write");
+      break;
+    }
+    // give the other writer a chance to acquire caps, so that the
+    // next _lseek(SEEK_END) sees a stale EOF while we wait for Fwx
+    usleep(rand() % 500);
+  }
+
+  ceph_close(cmount, fd);
+}
+
+// Test that O_APPEND writes always land at the EOF that is current
+// once the client actually acquires Fwx caps, even when another
+// client extended the file in the meantime (tracker #7333).
+TEST(LibCephFS, MulticlientAppend) {
+  struct ceph_mount_info *ca, *cb;
+  ASSERT_EQ(ceph_create(&ca, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(ca, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(ca, NULL));
+  ASSERT_EQ(ceph_mount(ca, NULL), 0);
+
+  ASSERT_EQ(ceph_create(&cb, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cb, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cb, NULL));
+  ASSERT_EQ(ceph_mount(cb, NULL), 0);
+
+  char name[32];
+  snprintf(name, sizeof(name), "append.%d", getpid());
+
+  const int64_t buf_size = 1 << 20;
+  const int rounds = 32;
+
+  std::atomic<bool> go{false};
+  std::atomic<int> errors{0};
+
+  std::thread thread_a(append_worker, ca, name, 'A', buf_size, rounds,
+		       &go, &errors);
+  std::thread thread_b(append_worker, cb, name, 'B', buf_size, rounds,
+		       &go, &errors);
+  go = true;
+
+  thread_a.join();
+  thread_b.join();
+
+  ASSERT_EQ(0, errors.load());
+
+  /*
+   * Both writers used O_APPEND, so every write must land at the EOF
+   * that was current when it acquired Fwx.  Any write reusing a
+   * stale EOF would overwrite data and leave the file shorter than
+   * the total written.
+   */
+  int fdr = ceph_open(ca, name, O_RDONLY, 0644);
+  ASSERT_LE(0, fdr);
+
+  struct stat st;
+  ASSERT_EQ(0, ceph_fstat(ca, fdr, &st));
+  ASSERT_EQ(2 * rounds * buf_size, st.st_size);
+
+  std::unique_ptr<char[]> buf(new char[buf_size]);
+  int64_t pos = 0;
+  int a_blocks = 0, b_blocks = 0;
+  while (pos < st.st_size) {
+    int64_t got = ceph_read(ca, fdr, buf.get(), buf_size, pos);
+    ASSERT_EQ(buf_size, got);
+
+    // every block is written entirely by one client
+    char tag = buf[0];
+    ASSERT_TRUE(tag == 'A' || tag == 'B');
+    for (int64_t i = 1; i < buf_size; i++) {
+      ASSERT_EQ(tag, buf[i]);
+    }
+    if (tag == 'A')
+      a_blocks++;
+    else
+      b_blocks++;
+    pos += got;
+  }
+  ASSERT_EQ(rounds, a_blocks);
+  ASSERT_EQ(rounds, b_blocks);
+
+  ceph_close(ca, fdr);
+  ASSERT_EQ(0, ceph_unlink(ca, name));
+
+  ceph_shutdown(ca);
+  ceph_shutdown(cb);
+}
 
 // Test that client #2 can successfully read snap metadata mutation made by
 // client #1.
