@@ -452,6 +452,10 @@ different plugin). This makes it possible to change an erasure coded pool's prof
 for example to change the plugin or change the k and m values, which cannot otherwise
 be changed in place.
 
+Every client must be able to follow a pool migration. Linux kernel clients and
+clients of earlier releases can't. While a migration is in progress, the
+Monitors and OSDs refuse clients and MDSs that can't follow it.
+
 
 .. _associate-pool-to-application:
 

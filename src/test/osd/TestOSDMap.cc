@@ -502,6 +502,45 @@ TEST_F(OSDMapTest, Features) {
   // FIXME: test tiering feature bits
 }
 
+TEST_F(OSDMapTest, PoolMigrationFeatures) {
+  // Clients must support pool migration only while a migration is active
+  set_up_map();
+  const uint64_t needed = OSDMap::POOL_MIGRATION_FEATURES;
+  auto client_requires_migration = [&] {
+    uint64_t mask;
+    uint64_t features = osdmap.get_features(CEPH_ENTITY_TYPE_CLIENT, &mask);
+    EXPECT_EQ(needed, mask & needed);
+    return (features & needed) == needed;
+  };
+  ASSERT_FALSE(client_requires_migration());
+
+  {
+    OSDMap::Incremental inc(osdmap.get_epoch() + 1);
+    pg_pool_t source = *osdmap.get_pg_pool(my_rep_pool);
+    pg_pool_t target = *osdmap.get_pg_pool(my_ec_pool);
+    source.migration_target = my_ec_pool;
+    target.migration_src = my_rep_pool;
+    inc.new_pools[my_rep_pool] = source;
+    inc.new_pools[my_ec_pool] = target;
+    osdmap.apply_incremental(inc);
+  }
+  ASSERT_TRUE(client_requires_migration());
+
+  // finished; the source stays behind as a stub
+  {
+    OSDMap::Incremental inc(osdmap.get_epoch() + 1);
+    pg_pool_t target = *osdmap.get_pg_pool(my_ec_pool);
+    target.migration_src.reset();
+    inc.new_pools[my_ec_pool] = target;
+    osdmap.apply_incremental(inc);
+  }
+  ASSERT_FALSE(client_requires_migration());
+
+  // Luminous to Nautilus send bit 54 for OSD_HITSET_GMT
+  uint64_t nautilus = CEPH_FEATUREMASK_SERVER_NAUTILUS | (1ull << 54);
+  ASSERT_NE(needed, nautilus & needed);
+}
+
 TEST_F(OSDMapTest, MapPG) {
   set_up_map();
 

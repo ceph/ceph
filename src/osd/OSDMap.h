@@ -996,6 +996,13 @@ public:
                                      std::set<int> skip,
                                      std::set<int> *want) const;
 
+  /// Features of a peer that can follow a pool migration.  Luminous to
+  /// Nautilus still send bit 54 (OSD_HITSET_GMT), so require SERVER_OCTOPUS
+  /// too.
+  static constexpr uint64_t POOL_MIGRATION_FEATURES =
+    CEPH_FEATUREMASK_POOL_MIGRATION |
+    CEPH_FEATUREMASK_SERVER_OCTOPUS;
+
   /**
    * get feature bits required by the current structure
    *

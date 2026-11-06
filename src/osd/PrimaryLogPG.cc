@@ -2465,13 +2465,14 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op, ThreadPool::TPHandle *handle)
   }
 
   // pool migration
+  if (pi->is_migrating() &&
+      !op->has_features(OSDMap::POOL_MIGRATION_FEATURES)) {
+    // a client that can't follow the migration; the mons and OSDs
+    // refuse connections from these while a migration is active
+    osd->reply_op_error(op, -EIO);
+    return;
+  }
   if (pi->is_migration_src()) {
-    if (!op->has_features(CEPH_FEATUREMASK_SERVER_VAMPIRE)) {
-      // client doesn't support pool migration - meant to
-      // be blocked by min_compat_client
-      osd->reply_op_error(op, -EIO);
-      return;
-    }
     bool migrated = m->get_hobj().is_snap() ?
                     m->get_hobj().get_head() < pool_migration_watermark.get_head() :
                     m->get_hobj() < pool_migration_watermark;
