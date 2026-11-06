@@ -117,6 +117,23 @@ void HybridAllocatorBase<T>::init_rm_free(uint64_t offset, uint64_t length)
 }
 
 template <typename T>
+int64_t HybridAllocatorBase<T>::claim_range(
+  uint64_t offset,
+  uint64_t length,
+  PExtentVector *extents)
+{
+  if (length == 0) {
+    return 0;
+  }
+  std::lock_guard l(T::get_lock());
+  int64_t claimed = T::_claim_range(offset, length, extents);
+  if (bmap_alloc) {
+    claimed += bmap_alloc->claim_range(offset, length, extents);
+  }
+  return claimed;
+}
+
+template <typename T>
 void HybridAllocatorBase<T>::_spillover_range(uint64_t start, uint64_t end)
 {
   auto size = end - start;
