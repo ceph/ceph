@@ -698,6 +698,11 @@ int fix_lc_shard_entry(const DoutPrefixProvider *dpp,
 		       rgw::sal::Lifecycle* sal_lc,
 		       rgw::sal::Bucket* bucket);
 
+// returns the marker to resume a listing after the given @entry
+// an empty instance resumes before all versions of the name,
+// so a null version is named "null" instead
+rgw_obj_key list_resume_marker(const rgw_bucket_dir_entry& entry, bool list_versions);
+
 std::string s3_expiration_header(
   DoutPrefixProvider* dpp,
   const rgw_obj_key& obj_key,
