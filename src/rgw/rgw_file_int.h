@@ -15,6 +15,7 @@
 #include <chrono>
 #include <thread>
 #include <mutex>
+#include <shared_mutex>
 #include <vector>
 #include <deque>
 #include <algorithm>
@@ -187,6 +188,9 @@ namespace rgw {
   {
     struct rgw_file_handle fh;
     std::mutex mtx;
+    /* xattr calls take it shared; write_finish takes it exclusive while it
+     * commits the object, as that replaces all xattrs */
+    std::shared_mutex xattr_mtx;
 
     RGWLibFS* fs;
     RGWFileHandle* bucket;
@@ -2452,6 +2456,9 @@ public:
   off_t real_ofs;
   size_t bytes_written;
   bool eio;
+  /* client xattrs (RGW_ATTR_META_PREFIX*) read by write_finish() and
+   * re-applied by exec_finish(); only live during that call */
+  std::map<std::string, buffer::list> saved_xattrs;
   rgw::op_counters::CountersContainer counters;
 
   RGWWriteRequest(rgw::sal::Driver* driver, const RGWProcessEnv& penv,
