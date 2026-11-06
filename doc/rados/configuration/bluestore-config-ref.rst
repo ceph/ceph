@@ -207,6 +207,19 @@ with a hierarchy of priorities.  But if priority information is not available,
 the values specified in the ``bluestore_cache_meta_ratio`` and
 ``bluestore_cache_kv_ratio`` options are used as fallback cache ratios.
 
+The caches are not the only memory an OSD uses. The RocksDB write-ahead log
+and memtables, client messages in flight and the PG log are bounded by limits
+that are sized for the default ``osd_memory_target`` of 4 GiB, and the
+autotuner cannot shrink them. When ``osd_memory_target`` is set below 4 GiB,
+the OSD scales those limits down by ``osd_memory_target`` / 4 GiB, as long as
+each one is still at its default: ``osd_client_message_size_cap``,
+``osd_target_pg_log_entries_per_osd`` and ``osd_pg_log_dups_tracked``, and,
+by the square root of that ratio and when the OSD starts, the RocksDB
+``max_total_wal_size`` in ``bluestore_rocksdb_options``. At a 1 GiB target,
+for example, the first three become a quarter of their defaults and the
+write-ahead log half. A limit that is set explicitly is used as is, and so
+is a ``bluestore_rocksdb_options`` set for any reason.
+
 .. confval:: bluestore_cache_autotune
 .. confval:: osd_memory_target
 .. confval:: bluestore_cache_autotune_interval

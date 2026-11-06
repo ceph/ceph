@@ -111,6 +111,14 @@ add_executable(unittest_pglog
   )
 add_ceph_unittest(unittest_pglog)
 target_link_libraries(unittest_pglog osd os global ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES})
+
+# unittest_osd_memory_target_defaults
+add_executable(unittest_osd_memory_target_defaults
+  test_osd_memory_target_defaults.cc
+  )
+add_ceph_unittest(unittest_osd_memory_target_defaults)
+target_link_libraries(unittest_osd_memory_target_defaults osd os global ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES})
+
 # unittest_peeringstate
 add_executable(unittest_peeringstate
   TestPeeringState.cc
@@ -274,6 +282,7 @@ set(OSD_UNITTESTS
   unittest_extent_cache_l
   unittest_hitset
   unittest_mclock_scheduler
+  unittest_osd_memory_target_defaults
   unittest_osd_osdcap
   unittest_osd_types
   unittest_osdscrub
