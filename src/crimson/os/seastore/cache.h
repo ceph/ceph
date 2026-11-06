@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <iterator>
 #include <unordered_map>
 
 #include "seastar/core/shared_future.hh"
@@ -1371,6 +1372,7 @@ public:
       }
     }
     std::vector<TCachedExtentRef<T>> extents;
+    extents.reserve(std::size(results));
     for (auto &result : results) {
       auto ret = CachedExtent::make_cached_extent_ref<T>(std::move(result.bp));
       assert(is_rewrite_generation(
@@ -2244,7 +2246,7 @@ void stage_visibility_handoff(Transaction& t,
     bool extent_fully_loaded = extent->is_fully_loaded();
     assert(new_length > old_length);
     pinboard->increase_cached_size(*extent, new_length - old_length, p_src);
-    return seastar::do_with(to_read.ranges, [extent, this, FNAME](auto &read_ranges) {
+    return seastar::do_with(std::move(to_read.ranges), [extent, this, FNAME](auto &read_ranges) {
       return ExtentPlacementManager::read_ertr::parallel_for_each(
           read_ranges, [extent, this, FNAME](auto &read_range) {
         SUBDEBUG(seastore_cache, "reading extent {} 0x{:x}~0x{:x} ...",
@@ -2386,7 +2388,7 @@ void stage_visibility_handoff(Transaction& t,
       }
       for (auto &range : to_read.ranges) {
 	auto range_paddr = extent->get_paddr() + range.offset;
-	ranges_to_read.emplace_back(range_to_read_t{range_paddr, range});
+	ranges_to_read.emplace_back(range_to_read_t{range_paddr, std::move(range)});
       }
       extents_read.back().fully_loaded = extent->is_fully_loaded();
     }

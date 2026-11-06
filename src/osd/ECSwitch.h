@@ -267,10 +267,11 @@ public:
       return -EOPNOTSUPP;
     }
 
-    ec_align_t align{off, len, op_flags};
-    std::list<std::pair<ec_align_t, std::pair<bufferlist*, Context*>>> to_read;
-    to_read.push_back({ align, { bl, nullptr } });
-    return optimized.objects_read_sync(hoid, object_size, to_read, *coro);
+    std::vector<async_read_request> requests;
+    requests.push_back({{off, len, op_flags}, bl, nullptr});
+
+    return optimized.objects_read_sync(
+      hoid, object_size, std::move(requests), *coro);
   }
 
   int objects_read_local(const hobject_t &hoid, uint64_t off, uint64_t len,
@@ -304,19 +305,17 @@ public:
   void objects_read_async(
     const hobject_t &hoid,
     uint64_t object_size,
-    const std::list<std::pair<ec_align_t,
-                              std::pair<ceph::buffer::list*, Context*>>> &
-    to_read,
+    std::vector<async_read_request> &&requests,
     Context *on_complete, bool fast_read = false) override
   {
     if (is_optimized()) {
-      optimized.objects_read_async(hoid, object_size, to_read, on_complete,
-                                   fast_read);
+      optimized.objects_read_async(
+        hoid, object_size, std::move(requests), on_complete, fast_read);
+      return;
     }
-    else {
-      legacy.objects_read_async(hoid, object_size, to_read, on_complete,
-                                fast_read);
-    }
+
+    legacy.objects_read_async(
+      hoid, object_size, std::move(requests), on_complete, fast_read);
   }
 
   bool auto_repair_supported() const override

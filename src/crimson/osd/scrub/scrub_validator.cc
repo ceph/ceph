@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 #include <ranges>
+#include <vector>
 
 #include "osd/osd_types_fmt.h"
 
@@ -323,12 +324,11 @@ object_evaluation_t evaluate_object(
   return ret;
 }
 
-using clone_meta_list_t = std::list<std::pair<hobject_t, object_info_t>>;
 std::optional<inconsistent_snapset_wrapper> evaluate_snapset(
   DoutPrefixProvider &dpp,
   const hobject_t &hoid,
   const std::optional<SnapSet> &maybe_snapset,
-  const clone_meta_list_t &clones)
+  const auto& clones)
 {
   LOG_PREFIX(evaluate_snapset);
   /* inconsistent_snapset_t has several error codes that seem to pertain to
@@ -433,8 +433,8 @@ chunk_result_t validate_chunk(
 
   const std::set<hobject_t> object_set = get_object_set(in);
 
-  std::list<std::pair<hobject_t, SnapSet>> heads;
-  clone_meta_list_t clones;
+  std::vector<std::pair<hobject_t, SnapSet>> heads;
+  std::vector<std::pair<hobject_t, object_info_t>> clones;
   for (const auto &oid: object_set) {
     object_evaluation_t eval = evaluate_object(policy, oid, in);
     add_object_to_stats(policy, eval, &ret.stats);
@@ -458,31 +458,33 @@ chunk_result_t validate_chunk(
     }
   }
 
+  auto head = std::begin(heads);
+  auto clone = std::begin(clones);
+  const auto heads_end = std::end(heads);
+  const auto clones_end = std::end(clones);
   const hobject_t max_oid = hobject_t::get_max();
-  while (heads.size() || clones.size()) {
-    const hobject_t &next_head = heads.size() ? heads.front().first : max_oid;
-    const hobject_t &next_clone = clones.size() ? clones.front().first : max_oid;
-    hobject_t head_to_process = std::min(next_head, next_clone).get_head();
 
-    clone_meta_list_t clones_to_process;
-    auto clone_iter = clones.begin();
-    while (clone_iter != clones.end() && clone_iter->first < head_to_process)
-      ++clone_iter;
-    clones_to_process.splice(
-      clones_to_process.end(), clones, clones.begin(), clone_iter);
+  while (head != heads_end || clone != clones_end) {
+    const hobject_t &next_head = head != heads_end ? head->first : max_oid;
+    const hobject_t &next_clone = clone != clones_end ? clone->first : max_oid;
+    const auto head_to_process = std::min(next_head, next_clone).get_head();
 
-    const auto head_meta = [&]() -> std::optional<SnapSet> {
-      if (head_to_process == next_head) {
-	auto ret = std::move(heads.front().second);
-	heads.pop_front();
-	return ret;
-      } else {
-	return std::nullopt;
-      }
-    }();
+    const auto clones_begin = clone;
+    while (clone != clones_end && clone->first < head_to_process) {
+      ++clone;
+    }
+
+    const auto clones_to_process =
+      std::ranges::subrange {clones_begin, clone};
+
+    std::optional<SnapSet> head_metadata;
+    if (head_to_process == next_head) {
+      head_metadata.emplace(std::move(head->second));
+      ++head;
+    }
 
     if (auto result = evaluate_snapset(
-	  dpp, head_to_process, head_meta, clones_to_process); result) {
+	  dpp, head_to_process, head_metadata, clones_to_process); result) {
       ret.snapset_errors.push_back(*result);
     }
   }

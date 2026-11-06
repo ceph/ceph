@@ -123,7 +123,7 @@ TEST_F(mClockSchedulerTest, TestEmpty) {
 
   ASSERT_FALSE(q.empty());
 
-  std::list<OpSchedulerItem> reqs;
+  std::vector<OpSchedulerItem> reqs;
 
   reqs.push_back(get_item(q.dequeue()));
   reqs.push_back(get_item(q.dequeue()));

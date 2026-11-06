@@ -1056,8 +1056,6 @@ int PGBackendTestFixture::read_object(
     bool completed = false;
     int completion_result = -1;
 
-    std::list<std::pair<ec_align_t, std::pair<bufferlist*, Context*>>> to_read;
-
     ec_align_t align(offset, length, 0);
 
     Context *read_complete = new LambdaContext([&completed, &completion_result](int r) {
@@ -1065,7 +1063,8 @@ int PGBackendTestFixture::read_object(
       completion_result = r;
     });
 
-    to_read.push_back(std::make_pair(align, std::make_pair(&out_data, read_complete)));
+    std::vector<PGBackend::async_read_request> requests;
+    requests.push_back({align, &out_data, read_complete});
 
     Context *on_complete = new LambdaContext([](int r) {
     });
@@ -1078,7 +1077,7 @@ int PGBackendTestFixture::read_object(
     ec_switch->objects_read_async(
       hoid,
       object_size,
-      to_read,
+      std::move(requests),
       on_complete,
       false
     );

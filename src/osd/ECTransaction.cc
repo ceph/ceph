@@ -499,7 +499,7 @@ void ECTransaction::accumulate_omap_updates(
   const std::vector<std::pair<OmapUpdateType, ceph::buffer::list>>& updates,
   std::optional<ceph::buffer::list>& out_header,
   std::map<std::string, std::optional<ceph::buffer::list>>& key_updates,
-  std::list<std::pair<std::string, std::optional<std::string>>>& removed_ranges)
+  std::vector<std::pair<std::string, std::optional<std::string>>>& removed_ranges)
 {
   // Handle clear_omap flag
   if (clear_omap) {
@@ -562,7 +562,7 @@ void ECTransaction::apply_omap_to_transactions(
   bool clear_omap,
   const std::optional<ceph::buffer::list>& header,
   const std::map<std::string, std::optional<ceph::buffer::list>>& key_updates,
-  const std::list<std::pair<std::string, std::optional<std::string>>>& removed_ranges,
+  const std::vector<std::pair<std::string, std::optional<std::string>>>& removed_ranges,
   const DoutPrefixProvider* dpp)
 {
   for (auto &&[shard, t] : transactions) {
@@ -656,7 +656,7 @@ void ECTransaction::OmapCloneVisitor::apply_to_clone() {
 
 void ECTransaction::Generate::apply_omap_updates_without_journal() {
   std::map<std::string, std::optional<ceph::buffer::list>> key_updates;
-  std::list<std::pair<std::string, std::optional<std::string>>> removed_ranges;
+  std::vector<std::pair<std::string, std::optional<std::string>>> removed_ranges;
   std::optional<ceph::buffer::list> header_out;
   
   accumulate_omap_updates(

@@ -62,7 +62,7 @@ public:
    */
   paddr_t alloc_extent(size_t size) override; // allocator, return blocks
 
-  allocate_ret_bare alloc_extents(
+  alloc_paddr_results_t alloc_extents(
     size_t size, paddr_t hint) override; // allocator, return blocks
 
   void complete_allocation(paddr_t addr, size_t size) override;

@@ -457,12 +457,6 @@ private:
     object_data_t &object_data,
     extent_len_t size);
 
-  clone_ret clone_extents(
-    context_t ctx,
-    object_data_t &object_data,
-    lba_mapping_list_t &pins,
-    laddr_t data_base);
-
   enum op_type_t : uint8_t {
     OVERWRITE,
     ZERO,

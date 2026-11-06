@@ -15,7 +15,7 @@ std::ostream& operator<<(std::ostream& os, const aio_t& aio)
   return os;
 }
 
-int aio_queue_t::submit_batch(aio_iter begin, aio_iter end, 
+int aio_queue_t::submit_batch(aio_iter first, aio_iter last,
 			      void *priv,
 			      int *retries, int submit_retries, int initial_delay_us)
 {
@@ -24,16 +24,16 @@ int aio_queue_t::submit_batch(aio_iter begin, aio_iter end,
   uint64_t delay = initial_delay_us;
   int r;
 
-  aio_iter cur = begin;
+  aio_iter cur = first;
 #if defined(HAVE_LIBAIO)
   struct aio_t *piocb[max_iodepth];
 #endif
   int done = 0;
   int pushed = 0; //used for LIBAIO only
   int pulled = 0;
-  while (cur != end || pushed < pulled) {
+  while (cur != last || pushed < pulled) {
 #if defined(HAVE_LIBAIO)
-    while (cur != end && pulled < max_iodepth) {
+    while (cur != last && pulled < max_iodepth) {
       cur->priv = priv;
       piocb[pulled] = &(*cur);
       ++pulled;

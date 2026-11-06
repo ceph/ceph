@@ -4,6 +4,7 @@
 #pragma once
 
 #include <iosfwd>
+#include <vector>
 
 #include <boost/intrusive_ptr.hpp>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
@@ -26,6 +27,8 @@ struct alloc_paddr_result {
   paddr_t start;
   extent_len_t len;
 };
+
+using alloc_paddr_results_t = std::vector<alloc_paddr_result>;
 
 enum class rbm_extent_state_t {
   FREE,		// not allocated
@@ -75,9 +78,7 @@ public:
   // allocator, return start addr of allocated blocks
   virtual paddr_t alloc_extent(size_t size) = 0;
 
-  using allocate_ret_bare = std::list<alloc_paddr_result>;
-  using allo_extents_ret = allocate_ertr::future<allocate_ret_bare>;
-  virtual allocate_ret_bare alloc_extents(size_t size, paddr_t hint) = 0;
+  virtual alloc_paddr_results_t alloc_extents(size_t size, paddr_t hint) = 0;
 
   virtual void mark_space_used(paddr_t paddr, size_t len) = 0;
   virtual void mark_space_free(paddr_t paddr, size_t len) = 0;
@@ -118,4 +119,3 @@ get_rb_device(const std::string &device, device_type_t dtype, device_id_t id);
 
 std::ostream &operator<<(std::ostream &out, const rbm_extent_state_t &state);
 }
-
