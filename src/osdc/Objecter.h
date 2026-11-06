@@ -20,6 +20,7 @@
 #include <list>
 #include <map>
 #include <mutex>
+#include <optional>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -64,6 +65,7 @@
 
 #include "messages/MOSDOp.h"
 #include "msg/Dispatcher.h"
+#include "osdc/OSDShardRouter.h"
 
 #include "osd/OSDMap.h"
 #include "osd/error_code.h"
@@ -1893,6 +1895,7 @@ public:
     bool sort_bitwise = false; ///< whether the hobject_t sort order is bitwise
     bool recovery_deletes = false; ///< whether the deletes are performed during recovery instead of peering
     bool allows_ecoptimizations = false; ///< whether EC plugin optimizations are enabled.
+    bool crimson_pool = false; ///< pool has FLAG_CRIMSON: its ops may be sent to the PG's reactor
     uint32_t peering_crush_bucket_count = 0;
     uint32_t peering_crush_bucket_target = 0;
     uint32_t peering_crush_bucket_barrier = 0;
@@ -2010,7 +2013,12 @@ public:
 
     op_target_t target;
 
-    ConnectionRef con = nullptr;  // for rx buffer only
+    /// connection the op was last sent on: the session's main connection,
+    /// or a crimson reactor connection chosen by OSDSession::router
+    ConnectionRef con = nullptr;
+    /// the PG `con` was chosen for (target.actual_pgid may change before a
+    /// resend, and the router must release the PG it pinned)
+    spg_t route_pgid;
     uint64_t features = CEPH_FEATURES_SUPPORTED_DEFAULT; // explicitly specified op features
 
     osdc_opvec ops;
@@ -2514,6 +2522,9 @@ public:
     spg_t pgid;
     uint64_t id;
     hobject_t begin, end;
+    /// the connection it arrived on: the OSD keeps it per session, so it is
+    /// gone when that connection is
+    ConnectionRef con;
   };
 
   struct OSDSession : public RefCountedObject {
@@ -2557,6 +2568,22 @@ public:
     ConnectionRef con;
     int num_locks;
     std::unique_ptr<std::mutex[]> completion_locks;
+
+    /// crimson: ops go to the reactor that runs their PG (guarded by lock,
+    /// except owns()/index_of())
+    using router_t =
+      OSDShardRouter<spg_t, ConnectionRef, ceph::coarse_mono_clock>;
+    router_t router;
+
+    /// c is this session's main connection or one of its reactor
+    /// connections (no lock: the router's lookup is lock-free)
+    bool owns_connection(const ConnectionRef& c) const {
+      return c == con || router.owns(c);
+    }
+
+    /// last keepalive sent on `con` while its PGs are routed elsewhere,
+    /// so the main connection does not idle out (guarded by lock)
+    ceph::coarse_mono_clock::time_point last_keepalive{};
 
     OSDSession(CephContext *cct, int o, boost::asio::io_context::executor_type ex) :
       osd(o), strand(ex), incarnation(0), con(NULL),
@@ -2613,6 +2640,8 @@ public:
 
   ceph::timespan mon_timeout;
   ceph::timespan osd_timeout;
+  /// crimson_objecter_shard_routing; changed at runtime by handle_conf_change()
+  std::atomic<bool> shard_routing{false};
 
   uint64_t min_split_replica_read_size;
 
@@ -2715,6 +2744,48 @@ private:
   void _command_cancel_map_check(CommandOp *op);
 
   void _kick_requests(OSDSession *session, std::map<uint64_t, LingerOp *>& lresend);
+
+  // crimson reactor routing (OSDSession::router); session lock held
+  /// the connection to send op on, pinned until _unroute_op()
+  ConnectionRef _route_op(Op *op);
+  void _unroute_op(OSDSession *s, Op *op);
+  /// forget all reactor connections; the caller resends what was on them
+  void _drop_reactor_conns(OSDSession *s);
+  /// reactor connection `index` reset: forget it and resend, in tid order,
+  /// only the ops that were on it or held by its backoffs (rwlock unique)
+  void _retire_reactor_conn(OSDSession *s, int index,
+                            std::map<uint64_t, LingerOp *>& lresend);
+  /// give up on reactor connections that carry ops but delivered no reply
+  /// for a while (likely dead without a reset); from tick()
+  void _retire_stale_reactor_conns(
+    const std::vector<std::pair<int, ConnectionRef>>& stale,
+    std::unique_lock<ceph::shared_mutex>& wl);
+
+  // Reactor ports found unreachable, per OSD host (its msgr2 address with
+  // port and nonce cleared), shared by every session in this client: a
+  // firewall that only exposes the main port is then probed once per
+  // backoff, not once per session or PG. Own lock: the reply path, which
+  // clears an entry, holds rwlock shared.
+  struct reactor_block_t {
+    ceph::coarse_mono_clock::time_point until;
+    ceph::coarse_mono_clock::duration backoff;
+  };
+  static constexpr ceph::coarse_mono_clock::duration reactor_block_initial =
+    std::chrono::minutes(10);
+  static constexpr ceph::coarse_mono_clock::duration reactor_block_max =
+    std::chrono::hours(4);
+  std::mutex reactor_block_lock;
+  std::map<entity_addr_t, reactor_block_t> reactor_blocks;
+  /// reactor_blocks is not empty: lets the op path skip the lock
+  std::atomic<bool> any_reactor_blocks{false};
+  entity_addr_t _reactor_host(const OSDSession *s) const;
+  /// a reactor connection to `s`'s OSD never got through: block its host
+  void _block_reactor_ports(OSDSession *s);
+  /// one did get through: forget the block
+  void _unblock_reactor_ports(OSDSession *s);
+  /// the block for `s`'s host ends after `now`: until when
+  std::optional<ceph::coarse_mono_clock::time_point>
+  _reactor_ports_blocked(OSDSession *s, ceph::coarse_mono_clock::time_point now);
   void _linger_ops_resend(std::map<uint64_t, LingerOp *>& lresend,
 			  std::unique_lock<ceph::shared_mutex>& ul);
 

@@ -4,6 +4,7 @@
 #pragma once
 
 #include <map>
+#include <vector>
 #include <algorithm>
 
 #include <seastar/core/future.hh>
@@ -47,6 +48,17 @@ public:
 
   seastar::future<> dump_store_shards(Formatter *f) const;
 
+  /// Port on which each reactor accepts client connections (0 = none), set
+  /// once at startup on every core.
+  void set_client_shard_ports(std::vector<uint16_t> ports) {
+    client_shard_ports = std::move(ports);
+  }
+  /// This reactor's client port, 0 if it has none.
+  uint16_t get_local_client_shard_port() const {
+    const auto core = seastar::this_shard_id();
+    return core < client_shard_ports.size() ? client_shard_ports[core] : 0;
+  }
+
   /// Map to cores in [min_core_mapping, core_mapping_limit)
   PGShardMapping(core_id_t min_core_mapping, core_id_t core_mapping_limit, uint32_t store_shard_nums)
     : store_shard_nums(store_shard_nums) {
@@ -79,6 +91,7 @@ public:
 
 private:
 
+  std::vector<uint16_t> client_shard_ports;
   uint32_t store_shard_nums;
   // only in shard 0
   //<core_id, num_pgs>

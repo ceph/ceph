@@ -1467,7 +1467,7 @@ ProtocolV2::server_connect()
       throw std::system_error(
           make_error_code(crimson::net::error::bad_peer_address));
     }
-    if (!messenger.get_myaddrs().contains(client_ident.target_addr())) {
+    if (!messenger.is_my_addr(client_ident.target_addr())) {
       logger().warn("{} peer is trying to reach {} which is not us ({})",
                     conn, client_ident.target_addr(), messenger.get_myaddrs());
       throw std::system_error(
@@ -1517,10 +1517,22 @@ ProtocolV2::server_connect()
                     conn, conn.policy.lossy, lossy);
     }
 
-    // Looks good so far, let's check if there is already an existing connection
-    // to this peer.
+    // A lossy session to one of our reactor ports (a shard-aware Objecter:
+    // a client, or an MDS, MGR, ... that embeds one) coexists with that
+    // peer's other sessions. Sessions to the main port keep per-address
+    // replacement.
+    if (conn.policy.lossy &&
+        messenger.is_client_shard_port(client_ident.target_addr().get_port())) {
+      conn.multi_session = true;
+      conn.shard_target_addr = client_ident.target_addr();
+    }
 
-    SocketConnectionRef existing_conn = messenger.lookup_conn(conn.peer_addr);
+    // Looks good so far, let's check if there is already an existing connection
+    // to this peer. A multi-session connection never replaces (or is
+    // replaced by) another session from the same address.
+
+    SocketConnectionRef existing_conn =
+      conn.multi_session ? nullptr : messenger.lookup_conn(conn.peer_addr);
 
     if (existing_conn) {
       return handle_existing_connection(existing_conn);
@@ -1763,9 +1775,13 @@ void ProtocolV2::execute_accepting()
                     conn, ceph_entity_type_name(_peer_type),
                     conn.policy.lossy, conn.policy.server,
                     conn.policy.standby, conn.policy.resetcheck);
-      if (!messenger.get_myaddr().is_blank_ip() &&
-          (messenger.get_myaddr().get_port() != _my_addr_from_peer.get_port() ||
-          messenger.get_myaddr().get_nonce() != _my_addr_from_peer.get_nonce())) {
+      // a client that connected to one of our reactor ports sees that port
+      const auto& mine = messenger.get_myaddr();
+      const bool port_ok =
+        mine.get_port() == _my_addr_from_peer.get_port() ||
+        messenger.is_client_shard_port(_my_addr_from_peer.get_port());
+      if (!mine.is_blank_ip() &&
+          (!port_ok || mine.get_nonce() != _my_addr_from_peer.get_nonce())) {
         logger().warn("{} my_addr_from_peer {} port/nonce doesn't match myaddr {}",
                       conn, _my_addr_from_peer, messenger.get_myaddr());
         throw std::system_error(
@@ -1978,8 +1994,14 @@ ProtocolV2::send_server_ident()
     flags = flags | CEPH_MSG_CONNECT_LOSSY;
   }
 
+  // A client on one of our reactor ports checks that we identify as the
+  // address it dialled: name that address first, then our usual ones.
+  entity_addrvec_t ident_addrs = messenger.get_myaddrs();
+  if (conn.shard_target_addr) {
+    ident_addrs.v.insert(ident_addrs.v.begin(), *conn.shard_target_addr);
+  }
   auto server_ident = ServerIdentFrame::Encode(
-          messenger.get_myaddrs(),
+          ident_addrs,
           messenger.get_myname().num(),
           global_seq,
           conn.policy.features_supported,

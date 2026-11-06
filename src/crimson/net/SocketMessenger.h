@@ -70,6 +70,24 @@ public:
     auth_shard = shard;
   }
 
+  void set_client_shard_ports(bool on) override {
+    assert(seastar::this_shard_id() == sid);
+    client_shard_ports = on;
+  }
+
+  /// Port bound for each reactor (0 = none); empty without client shard
+  /// ports. Set by bind(); read-only afterwards, so any shard may read it.
+  std::vector<uint16_t> get_client_shard_ports() const override {
+    return shard_ports;
+  }
+
+  /// port is one of my reactor ports
+  bool is_client_shard_port(uint16_t port) const;
+
+  /// addr is one of my addresses, or (with client shard ports) the same
+  /// host/type/nonce on one of my reactor ports
+  bool is_my_addr(const entity_addr_t& addr) const;
+
   bind_ertr::future<> bind(const entity_addrvec_t& addr) override;
 
   seastar::future<> start(const dispatchers_t& dispatchers) override;
@@ -165,6 +183,16 @@ public:
 #endif
 
   seastar::future<> mark_down(const entity_addr_t& a) final {
+    if (!multi_session_conns.empty()) {
+      return mark_down_multi_session(a).then([this, a] {
+        return mark_down_registered(a);
+      });
+    }
+    return mark_down_registered(a);
+  }
+private:
+  seastar::future<> mark_down_multi_session(const entity_addr_t& a);
+  seastar::future<> mark_down_registered(const entity_addr_t& a) {
     auto conn = lookup_conn(a);
     if (conn) {
       return seastar::smp::submit_to(
@@ -205,7 +233,13 @@ private:
 
   ShardedServerSocket *listener = nullptr;
   ChainedDispatchers dispatchers;
+  bool client_shard_ports = false;
+  std::vector<uint16_t> shard_ports;
   std::map<entity_addr_t, SocketConnectionRef> connections;
+  /// Multi-session connections are not keyed by address: one client
+  /// (one entity_addr incl. nonce) may hold several concurrent sessions,
+  /// e.g. shard-steered connections, and none replaces another.
+  std::set<SocketConnectionRef> multi_session_conns;
   std::set<SocketConnectionRef> accepting_conns;
   std::vector<SocketConnectionRef> closing_conns;
   ceph::net::PolicySet<Throttle> policy_set;
