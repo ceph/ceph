@@ -28,6 +28,12 @@ security fixes.
 .. ceph_releases:: releases.yml current
 
 
+Release timeline
+----------------
+
+.. ceph_timeline_gantt:: releases.yml umbrella tentacle squid
+.. ceph_timeline:: releases.yml umbrella tentacle squid
+
 Archived Releases
 -----------------
 
@@ -59,11 +65,6 @@ receive bug fixes or backports).
    Bobtail (v0.56.*) <bobtail>
    Argonaut (v0.48.*) <argonaut>
 
-Release timeline
-----------------
-
-.. ceph_timeline_gantt:: releases.yml umbrella tentacle squid
-.. ceph_timeline:: releases.yml umbrella tentacle squid
 
 .. _Umbrella: umbrella
 .. _21.2.0: umbrella#v21-2-0-umbrella
