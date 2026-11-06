@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <charconv>
 #include <climits>
+#include <mutex>
 #include <sqlite3.h>
 
 #include "common/errno.h"
@@ -71,6 +72,19 @@ bool groups_from_text(const std::string& text, std::vector<uint32_t>& out)
 }
 
 namespace {
+
+/* The connection is dbstore's, shared by every thread
+ * (SQLITE_OPEN_FULLMUTEX):  a step and the sqlite3_changes() or
+ * sqlite3_extended_errcode() read after it are two calls, and another
+ * thread's statement between them replaces what the second returns.
+ * The connection's mutex, held across both, keeps them together;  it is
+ * recursive in that mode, so the step takes it again.  A BasicLockable
+ * for std::lock_guard. */
+struct ConnectionMutex {
+  sqlite3_mutex* m;
+  void lock() { sqlite3_mutex_enter(m); }
+  void unlock() { sqlite3_mutex_leave(m); }
+};
 
 /* Bind a std::string that may be absent.  An empty string is stored
  * as SQL NULL for the optional text columns, because "not set" and
@@ -490,6 +504,8 @@ int IdentityDB::put_noobaa_id(const DoutPrefixProvider* dpp,
   sqlite3_bind_text(st, 1, noobaa_id.c_str(), -1, SQLITE_TRANSIENT);
   sqlite3_bind_text(st, 2, owner_key.c_str(), -1, SQLITE_TRANSIENT);
 
+  ConnectionMutex conn{sqlite3_db_mutex(handle())};
+  std::lock_guard held{conn};
   if (sqlite3_step(st) != SQLITE_DONE) {
     if (sqlite3_extended_errcode(handle()) == SQLITE_CONSTRAINT_PRIMARYKEY) {
       ldpp_dout(dpp, 4) << "NooBaa id " << noobaa_id
@@ -555,6 +571,8 @@ int IdentityDB::put_adoption_completion(const DoutPrefixProvider* dpp,
   sqlite3_bind_text(st, 5, c.gateway_version.c_str(), -1, SQLITE_TRANSIENT);
   sqlite3_bind_int64(st, 6, c.extensions);
 
+  ConnectionMutex conn{sqlite3_db_mutex(handle())};
+  std::lock_guard held{conn};
   if (sqlite3_step(st) != SQLITE_DONE) {
     if (sqlite3_extended_errcode(handle()) == SQLITE_CONSTRAINT_PRIMARYKEY) {
       return -EEXIST;
@@ -641,6 +659,8 @@ int IdentityDB::put_abandoned(const DoutPrefixProvider* dpp,
   sqlite3_bind_text(st, 5, r.reason.c_str(), -1, SQLITE_TRANSIENT);
   sqlite3_bind_text(st, 6, r.at.c_str(), -1, SQLITE_TRANSIENT);
 
+  ConnectionMutex conn{sqlite3_db_mutex(handle())};
+  std::lock_guard held{conn};
   if (sqlite3_step(st) != SQLITE_DONE) {
     if (sqlite3_extended_errcode(handle()) == SQLITE_CONSTRAINT_PRIMARYKEY) {
       return -EEXIST;
@@ -665,6 +685,8 @@ int IdentityDB::remove_abandoned(const DoutPrefixProvider* dpp,
   }
   auto finalize = make_scope_guard([st] { sqlite3_finalize(st); });
   sqlite3_bind_text(st, 1, noobaa_id.c_str(), -1, SQLITE_TRANSIENT);
+  ConnectionMutex conn{sqlite3_db_mutex(handle())};
+  std::lock_guard held{conn};
   if (sqlite3_step(st) != SQLITE_DONE) {
     ldpp_dout(dpp, 0) << "ERROR: " << sqlite3_errmsg(handle()) << dendl;
     return -EIO;
@@ -1224,6 +1246,8 @@ int IdentityDB::write_bucket_placement(const DoutPrefixProvider* dpp,
   sqlite3_bind_text(st, 3, bp.path.c_str(), -1, SQLITE_TRANSIENT);
   sqlite3_bind_text(st, 4, bp.owner.c_str(), -1, SQLITE_TRANSIENT);
 
+  ConnectionMutex conn{sqlite3_db_mutex(handle())};
+  std::lock_guard held{conn};
   if (sqlite3_step(st) != SQLITE_DONE) {
     const int ext = sqlite3_extended_errcode(handle());
     ldpp_dout(dpp, 4) << "bucket placement " << bp.bucket_name << " at "

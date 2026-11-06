@@ -15363,6 +15363,124 @@ TEST_F(NSFSIdentityDBTest, BucketPlacementRoundTrips)
   EXPECT_EQ(db->remove_bucket_placement(env->dpp, "elsewhere", ""), 0);
 }
 
+/* A write's result is its own, whatever other threads do on the
+ * connection meanwhile.
+ *
+ * The connection is dbstore's, shared by every thread, and a write's
+ * result is read after its step:  sqlite3_changes() for a placement
+ * insert and an abandoned-row removal, sqlite3_extended_errcode() for a
+ * duplicate.  Read as a separate call, either can return another
+ * thread's statement's instead.  On rhel97-gpfs a bucket create was
+ * answered 409 this way while its row went in, and the row stayed with
+ * no directory.  Three kinds of thread run together:  inserts, each
+ * then repeated as a duplicate;  removals of a row that is not there,
+ * which change nothing;  and abandoned rows written and removed, which
+ * change one.  Every result must be the one its own statement earned. */
+TEST_F(NSFSIdentityDBTest, AWritesResultIsItsOwnUnderConcurrency)
+{
+  /* On tmpfs, where one exists:  on a disk each write waits for its
+   * commit to sync, few statements land between a step and its read,
+   * and the race goes unseen. */
+  const sf::path dir = sf::is_directory("/dev/shm")
+    ? sf::path{"/dev/shm"} / ("nsfs-identity-" + std::to_string(::getpid()))
+    : bp / "identity-concurrency";
+  sf::create_directories(dir);
+  auto remove_dir = make_scope_guard([&dir] { sf::remove_all(dir); });
+  auto sdb = std::make_unique<nsfs::IdentityDB>((dir / "identity").string(),
+						 env->cct.get());
+  ASSERT_EQ(sdb->Initialize("", -1), 0);
+
+  constexpr int inserters = 8;
+  constexpr int removers = 8;
+  constexpr int abandoners = 4;
+  constexpr int each = 200;
+  std::atomic<bool> stop{false};
+  std::atomic<int> wrong_insert{0};
+  std::atomic<int> wrong_duplicate{0};
+  std::atomic<int> wrong_removal{0};
+  std::atomic<int> wrong_absent_removal{0};
+  std::atomic<int> failed{0};
+
+  std::vector<std::thread> ts;
+  for (int t = 0; t < inserters; ++t) {
+    ts.emplace_back([&, t] {
+      for (int i = 0; i < each; ++i) {
+	nsfs::BucketPlacement bp;
+	bp.owner = "RGW00000000000000001";
+	bp.bucket_name = "p" + std::to_string(t) + "-" + std::to_string(i);
+	bp.path = "/ibm/gpfs/fs1/" + bp.bucket_name;
+	if (sdb->insert_bucket_placement(env->dpp, bp) != 0) {
+	  ++wrong_insert;
+	}
+	if (sdb->insert_bucket_placement(env->dpp, bp) != -EEXIST) {
+	  ++wrong_duplicate;
+	}
+      }
+    });
+  }
+  std::vector<std::thread> rivals;
+  for (int t = 0; t < removers; ++t) {
+    rivals.emplace_back([&, t] {
+      const std::string absent = "absent-" + std::to_string(t);
+      while (!stop.load()) {
+	if (sdb->remove_bucket_placement(env->dpp, absent, "") != 0) {
+	  ++failed;
+	}
+      }
+    });
+  }
+  for (int t = 0; t < abandoners; ++t) {
+    rivals.emplace_back([&, t] {
+      nsfs::AbandonedRecord r;
+      r.noobaa_id = "nb-" + std::to_string(t);
+      r.kind = "bucket";
+      r.name = "abandoned-" + std::to_string(t);
+      r.stage = "not imported";
+      r.reason = "concurrency";
+      r.at = "2026-11-06T00:00:00Z";
+      while (!stop.load()) {
+	if (sdb->put_abandoned(env->dpp, r) != 0) {
+	  ++failed;
+	  return;
+	}
+	if (sdb->remove_abandoned(env->dpp, r.noobaa_id) != 0) {
+	  ++wrong_removal;
+	}
+	if (sdb->remove_abandoned(env->dpp, r.noobaa_id) != -ENOENT) {
+	  ++wrong_absent_removal;
+	}
+      }
+    });
+  }
+  for (auto& t : ts) {
+    t.join();
+  }
+  stop = true;
+  for (auto& t : rivals) {
+    t.join();
+  }
+
+  EXPECT_EQ(failed.load(), 0);
+  EXPECT_EQ(wrong_insert.load(), 0)
+      << "inserts that went in returned another statement's result";
+  EXPECT_EQ(wrong_duplicate.load(), 0)
+      << "duplicates returned another statement's error code";
+  EXPECT_EQ(wrong_removal.load(), 0)
+      << "removals of a row returned another statement's count";
+  EXPECT_EQ(wrong_absent_removal.load(), 0)
+      << "removals of no row returned another statement's count";
+
+  for (int t = 0; t < inserters; ++t) {
+    for (int i = 0; i < each; ++i) {
+      const std::string name = "p" + std::to_string(t) + "-"
+	+ std::to_string(i);
+      nsfs::BucketPlacement got;
+      ASSERT_EQ(sdb->get_bucket_placement(env->dpp, name, "", got), 0)
+	  << name << " has no row";
+    }
+  }
+}
+
 /* The tenant is part of the key.
  *
  * dbstore's own bucket table makes BucketName unique and leaves the
