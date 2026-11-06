@@ -75,6 +75,9 @@ class FreelistManager;
 class BlueStoreRepairer;
 class SimpleBitmap;
 
+namespace rocksdb {
+  class Env;
+}
 //#define DEBUG_CACHE
 //#define DEBUG_DEFERRED
 #ifdef WITH_CPUTRACE
@@ -901,6 +904,7 @@ private:
   utime_t next_dump_on_bluefs_alloc_failure;
 
   KeyValueDB *db = nullptr;
+  rocksdb::Env* db_env = nullptr;
   BlockDevice *bdev = nullptr;
   std::string freelist_type;
   FreelistManager *fm = nullptr;

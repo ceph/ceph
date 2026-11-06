@@ -4538,6 +4538,7 @@ int BlueStore::_prepare_db_environment(bool create, bool read_only,
   FreelistManager::setup_merge_operators(db, freelist_type);
   db->set_merge_operator(PREFIX_STAT, merge_op);
   db->set_cache_size(cache_kv_ratio * cache_size);
+  db_env = env;
   return 0;
 }
 
