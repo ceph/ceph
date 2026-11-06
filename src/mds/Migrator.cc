@@ -2388,7 +2388,7 @@ void Migrator::export_finish(CDir *dir)
   mdcache->show_subtrees();
   audit();
 
-  mdcache->trim(num_dentries); // try trimming exported dentries
+  mdcache->trim(num_dentries, true); // try trimming exported dentries
 
   // send pending import_maps?
   mdcache->maybe_send_pending_resolves();
@@ -3102,7 +3102,7 @@ void Migrator::import_reverse(CDir *dir)
   // log our failure
   mds->mdlog->submit_entry(new EImportFinish(dir, false));	// log failure
 
-  mdcache->trim(num_dentries); // try trimming dentries
+  mdcache->trim(num_dentries, true); // try trimming dentries
 
   // notify bystanders; wait in aborting state
   stat.state = IMPORT_ABORTING;

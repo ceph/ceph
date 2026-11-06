@@ -815,7 +815,10 @@ private:
   size_t get_cache_size() { return lru.lru_get_size(); }
 
   // trimming
-  std::pair<bool, uint64_t> trim(uint64_t count=0);
+  /* With nonauth_only, trim no auth dentry past count unless the cache is
+   * too full: only the replicas an export or a reverted import left at the
+   * bottom of the LRU. */
+  std::pair<bool, uint64_t> trim(uint64_t count=0, bool nonauth_only=false);
 
   bool trim_non_auth_subtree(CDir *directory);
   void standby_trim_segment(LogSegmentRef const& ls);
@@ -1549,7 +1552,8 @@ private:
 
   void identify_files_to_recover();
 
-  std::pair<bool, uint64_t> trim_lru(uint64_t count, expiremap& expiremap);
+  std::pair<bool, uint64_t> trim_lru(uint64_t count, expiremap& expiremap,
+				      bool nonauth_only=false);
   bool trim_dentry(CDentry *dn, expiremap& expiremap);
   void trim_dirfrag(CDir *dir, CDir *con, expiremap& expiremap);
   bool trim_inode(CDentry *dn, CInode *in, CDir *con, expiremap&);
