@@ -1524,7 +1524,8 @@ public:
 
       if (sync_status < 0) {
         // write actual sync failures for 'radosgw-admin sync error list'
-        if (sync_status != -EBUSY && sync_status != -EAGAIN) {
+        if (sync_status != -EBUSY && sync_status != -EAGAIN &&
+            sync_status != -ESTALE) {
           yield call(sync_env->error_logger->log_error_cr(dpp, sc->conn->get_remote_id(), "data",
                                                           to_string(complete->bs, complete->gen),
                                                           -sync_status, string("failed to sync bucket instance: ") + cpp_strerror(-sync_status)));
@@ -1539,7 +1540,21 @@ public:
                                               complete->timestamp));
           if (retcode < 0) {
             tn->log(0, SSTR("ERROR: failed to log sync failure in error repo: retcode=" << retcode));
+          } else if (sync_status == -ESTALE) {
+            // the bucket can't be resolved until our period catches up with
+            // the source zone's (RGWSyncGetBucketInfoCR). the entry is parked
+            // in the error repo, so don't fail the shard over it: that would
+            // restart the shard and retry the whole error repo at once instead
+            // of on its own backoff
+            sync_status = 0;
           }
+        } else if (sync_status == -ESTALE) {
+          // an entry without a timestamp can't be parked. for an out-of-band
+          // notification its datalog entry follows and is parked then, so
+          // don't fail the shard over it either. clear retcode too, it still
+          // holds the -ESTALE and is picked up below
+          sync_status = 0;
+          retcode = 0;
         }
       } else if (complete->retry) {
         yield call(rgw::error_repo::remove_cr(sync_env->driver->getRados()->get_rados_handle(), error_repo,
@@ -1761,10 +1776,14 @@ public:
           if (first_shard) {
             first_shard = false;
             yield call(shard_cr);
-            if (retcode < 0) {
+            if (retcode < 0 && retcode != -ESTALE) {
               drain_all();
               return set_cr_error(retcode);
             }
+            /* -ESTALE: the bucket can't be resolved until our period catches
+             * up with the source zone's (RGWSyncGetBucketInfoCR) and the
+             * entry CR could not park this shard. don't give the bucket up:
+             * the loop writes its remaining shards to the error repo */
           } else {
             yield_spawn_window(shard_cr, sc->lcc.adj_concurrency(cct->_conf->rgw_data_sync_spawn_window),
                               [&](uint64_t stack_id, int ret) {
@@ -5259,6 +5278,7 @@ class RGWGetBucketPeersCR : public RGWCoroutine {
 
   std::shared_ptr<rgw_bucket_get_sync_policy_result> source_policy;
   std::shared_ptr<rgw_bucket_get_sync_policy_result> target_policy;
+  RGWRESTConn *source_conn{nullptr};
 
   RGWSyncTraceNodeRef tn;
 
@@ -5368,6 +5388,9 @@ public:
                                          SSTR( "target=" << target_bucket.value_or(rgw_bucket())
                                                << ":source=" << target_bucket.value_or(rgw_bucket())
                                                << ":source_zone=" << source_zone.value_or(rgw_zone_id("*")).id))) {
+        if (source_zone) {
+          source_conn = sync_env->svc->zone->get_zone_conn(*source_zone);
+        }
       }
 
   int operate(const DoutPrefixProvider *dpp) override;
@@ -5416,7 +5439,9 @@ int RGWRunBucketSourcesSyncCR::operate(const DoutPrefixProvider *dpp)
     yield call(new RGWGetBucketPeersCR(sync_env, std::nullopt, sc->source_zone,
                                        sync_pair.source_bs.bucket, &pipes, tn));
     if (retcode < 0 && retcode != -ENOENT) {
-      tn->log(0, SSTR("ERROR: failed to read sync status for bucket. error: " << retcode));
+      if (retcode != -ESTALE) {
+        tn->log(0, SSTR("ERROR: failed to read sync status for bucket. error: " << retcode));
+      }
       return set_cr_error(retcode);
     }
 
@@ -5470,6 +5495,8 @@ class RGWSyncGetBucketInfoCR : public RGWCoroutine {
   RGWBucketInfo *pbucket_info;
   map<string, bufferlist> *pattrs;
   RGWMetaSyncEnv meta_sync_env;
+  RGWRESTConn *source_conn; // data sync source zone, may be null
+  RGWRealm source_realm;
 
   RGWSyncTraceNodeRef tn;
 
@@ -5478,12 +5505,14 @@ public:
                          const rgw_bucket& _bucket,
                          RGWBucketInfo *_pbucket_info,
                          map<string, bufferlist> *_pattrs,
+                         RGWRESTConn *_source_conn,
                          const RGWSyncTraceNodeRef& _tn_parent)
     : RGWCoroutine(_sync_env->cct),
       sync_env(_sync_env),
       bucket(_bucket),
       pbucket_info(_pbucket_info),
       pattrs(_pattrs),
+      source_conn(_source_conn),
       tn(sync_env->sync_tracer->add_node(_tn_parent, "get_bucket_info",
                                          SSTR(bucket))) {
   }
@@ -5516,6 +5545,34 @@ int RGWSyncGetBucketInfoCR::operate(const DoutPrefixProvider *dpp)
       }
 
       yield call(new RGWGetBucketInstanceInfoCR(sync_env->async_rados, sync_env->driver, bucket, pbucket_info, pattrs, dpp));
+      if (retcode == -ENOENT && source_conn) {
+        /* the metadata master answered 404 and RGWMetaSyncSingleEntryCR took
+         * that as deleted. that only holds if our period is the realm's
+         * current one: a zone that missed a period push still asks the old
+         * master (possibly itself) about buckets created on the new one.
+         * compare realm epochs with the zone that logged the entry */
+        yield {
+          const auto& realm_id = sync_env->svc->zone->get_realm().get_id();
+          rgw_http_param_pair pairs[] = { { "id", realm_id.c_str() },
+                                          { nullptr, nullptr } };
+          call(new RGWReadRESTResourceCR<RGWRealm>(cct, source_conn,
+                                                   sync_env->http_manager,
+                                                   "/admin/realm", pairs,
+                                                   &source_realm));
+        }
+        if (retcode < 0) {
+          tn->log(0, SSTR("ERROR: failed to read the source zone's realm to check whether bucket=" << bucket_str{bucket} << " was deleted: " << cpp_strerror(-retcode)));
+          /* don't let a 404 on the realm pass for a deleted bucket */
+          return set_cr_error(retcode == -ENOENT ? -EIO : retcode);
+        }
+        if (source_realm.get_epoch() > sync_env->svc->zone->get_current_period().get_realm_epoch()) {
+          /* -ESTALE: RGWDataSyncSingleEntryCR parks the entry in the error
+           * repo without failing the shard */
+          tn->log(0, SSTR("WARNING: deferring sync of bucket=" << bucket_str{bucket} << ": not found on the master of local period realm epoch " << sync_env->svc->zone->get_current_period().get_realm_epoch() << " but the source zone is on realm epoch " << source_realm.get_epoch()));
+          return set_cr_error(-ESTALE);
+        }
+        retcode = -ENOENT;
+      }
     }
     if (retcode < 0) {
       tn->log(0, SSTR("ERROR: failed to retrieve bucket info for bucket=" << bucket_str{bucket}));
@@ -5585,6 +5642,7 @@ class RGWSyncGetBucketSyncPolicyHandlerCR : public RGWCoroutine {
   rgw_bucket_get_sync_policy_params get_policy_params;
 
   std::shared_ptr<rgw_bucket_get_sync_policy_result> policy;
+  RGWRESTConn *source_conn;
 
   RGWSyncTraceNodeRef tn;
 
@@ -5595,11 +5653,13 @@ public:
                          std::optional<rgw_zone_id> zone,
                          const rgw_bucket& _bucket,
                          std::shared_ptr<rgw_bucket_get_sync_policy_result>& _policy,
+                         RGWRESTConn *_source_conn,
                          const RGWSyncTraceNodeRef& _tn_parent)
     : RGWCoroutine(_sync_env->cct),
       sync_env(_sync_env),
       bucket(_bucket),
       policy(_policy),
+      source_conn(_source_conn),
       tn(sync_env->sync_tracer->add_node(_tn_parent, "get_sync_policy_handler",
                                          SSTR(bucket))) {
     get_policy_params.zone = zone;
@@ -5631,6 +5691,7 @@ public:
                                               bucket, 
                                               nullptr,
                                               nullptr,
+                                              source_conn,
                                               tn));
         if (retcode < 0) {
           return set_cr_error(retcode);
@@ -5655,6 +5716,7 @@ int RGWGetBucketPeersCR::operate(const DoutPrefixProvider *dpp)
                                                          nullopt,
                                                          *target_bucket,
                                                          target_policy,
+                                                         source_conn,
                                                          tn));
       if (retcode < 0 &&
           retcode != -ENOENT) {
@@ -5670,6 +5732,7 @@ int RGWGetBucketPeersCR::operate(const DoutPrefixProvider *dpp)
                                                          source_zone,
                                                          *source_bucket,
                                                          source_policy,
+                                                         source_conn,
                                                          tn));
       if (retcode < 0 &&
           retcode != -ENOENT) {
@@ -5709,6 +5772,7 @@ int RGWGetBucketPeersCR::operate(const DoutPrefixProvider *dpp)
                                                              nullopt,
                                                              *hiter,
                                                              target_policy,
+                                                             source_conn,
                                                              tn));
           if (retcode < 0 &&
               retcode != -ENOENT) {
@@ -5726,6 +5790,7 @@ int RGWGetBucketPeersCR::operate(const DoutPrefixProvider *dpp)
         yield call(new RGWSyncGetBucketInfoCR(sync_env, siiter->first,
                                               &siiter->second.bucket_info,
                                               &siiter->second.attrs,
+                                              source_conn,
                                               tn));
       }
     }
@@ -5892,16 +5957,20 @@ int RGWSyncBucketCR::operate(const DoutPrefixProvider *dpp)
   reenter(this) {
     // read source/destination bucket info
     yield call(new RGWSyncGetBucketInfoCR(env, sync_pair.source_bs.bucket, &sync_pipe.source_bucket_info,
-                                          &sync_pipe.source_bucket_attrs, tn));
+                                          &sync_pipe.source_bucket_attrs, sc->conn, tn));
     if (retcode < 0) {
-      tn->log(0, SSTR("ERROR: failed to retrieve bucket info for bucket=" << bucket_str{sync_pair.source_bs.bucket}));
+      if (retcode != -ESTALE) {
+        tn->log(0, SSTR("ERROR: failed to retrieve bucket info for bucket=" << bucket_str{sync_pair.source_bs.bucket}));
+      }
       return set_cr_error(retcode);
     }
 
     yield call(new RGWSyncGetBucketInfoCR(env, sync_pair.dest_bucket, &sync_pipe.dest_bucket_info,
-                                          &sync_pipe.dest_bucket_attrs, tn));
+                                          &sync_pipe.dest_bucket_attrs, sc->conn, tn));
     if (retcode < 0) {
-      tn->log(0, SSTR("ERROR: failed to retrieve bucket info for bucket=" << bucket_str{sync_pair.source_bs.bucket}));
+      if (retcode != -ESTALE) {
+        tn->log(0, SSTR("ERROR: failed to retrieve bucket info for bucket=" << bucket_str{sync_pair.source_bs.bucket}));
+      }
       return set_cr_error(retcode);
     }
 

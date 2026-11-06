@@ -1533,6 +1533,78 @@ def test_failover_failback():
             log.info('restoring original master zone=%s', orig.name)
             set_master_zone(orig, ['--yes-i-really-mean-it'])
 
+def test_bucket_created_during_master_outage():
+    zonegroup = realm.master_zonegroup()
+    if len(zonegroup.zones) < 2:
+        raise SkipTest("test_bucket_created_during_master_outage requires 2 or more zones")
+
+    orig = zonegroup.master_zone
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    orig_conn = next(z for z in zonegroup_conns.rw_zones if z.zone == orig)
+    secondary_conn = next(z for z in zonegroup_conns.rw_zones if z.zone != orig)
+    secondary = secondary_conn.zone
+
+    def current_period(zone):
+        cmd = ['period', 'get-current'] + zone.zone_args()
+        out, _ = zone.cluster.admin(cmd, read_only=True)
+        return json.loads(out)['current_period']
+
+    def wait_for_current_period(zone, period_id, timeout):
+        log.info('waiting for zone=%s to reach period=%s', zone.name, period_id)
+        for _ in range(timeout // config.checkpoint_delay):
+            if current_period(zone) == period_id:
+                return
+            time.sleep(config.checkpoint_delay)
+        assert False, 'zone=%s did not reach period=%s' % (zone.name, period_id)
+
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # the period commit on the secondary pushes the new period to every zone
+    # and retries a failed push after rgw_period_push_interval. make that
+    # retry wait long enough for the old master to come back and run data
+    # sync on its old period before the new period reaches it
+    push_interval = 150
+    orig_stopped = False
+    try:
+        secondary.cluster.ceph_admin(['config', 'set', 'client', 'rgw_period_push_interval', str(push_interval)])
+        secondary.cluster.ceph_admin(['config', 'set', 'client', 'rgw_period_push_interval_max', str(push_interval)])
+        time.sleep(config.reconfigure_delay)
+
+        orig.stop()
+        orig_stopped = True
+        old_period = realm.current_period.id
+        set_master_zone(secondary, ['--yes-i-really-mean-it'])
+
+        bucket_name = gen_bucket_name()
+        log.info('create bucket zone=%s name=%s', secondary_conn.name, bucket_name)
+        secondary_conn.create_bucket(bucket_name)
+        secondary_conn.s3_client.put_object(Bucket=bucket_name, Key='during-outage', Body='during')
+
+        # the old master comes back on its old period, in which it is still
+        # the metadata master, and its data sync meets the datalog entry of
+        # the new bucket before the new period reaches it
+        orig.start()
+        orig_stopped = False
+        assert_equal(current_period(orig), old_period)
+        wait_for_current_period(orig, realm.current_period.id, push_interval + 60)
+
+        # the bucket's metadata arrives with the new period, its objects only
+        # if the datalog entry was not dropped
+        zone_meta_checkpoint(orig)
+        zone_bucket_checkpoint(orig, secondary, bucket_name)
+        if orig.has_buckets():
+            orig_conn.check_bucket_eq(secondary_conn, bucket_name)
+    finally:
+        try:
+            if orig_stopped:
+                orig.start()
+            if zonegroup.master_zone != orig:
+                log.info('restoring original master zone=%s', orig.name)
+                set_master_zone(orig, ['--yes-i-really-mean-it'])
+        finally:
+            secondary.cluster.ceph_admin(['config', 'rm', 'client', 'rgw_period_push_interval'])
+            secondary.cluster.ceph_admin(['config', 'rm', 'client', 'rgw_period_push_interval_max'])
+
 def test_datalog_autotrim():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
