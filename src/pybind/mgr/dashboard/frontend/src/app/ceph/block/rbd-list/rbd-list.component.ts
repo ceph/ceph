@@ -219,7 +219,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
       name: this.actionLabels.PROMOTE,
       visible: () => this.selection.first() != null && !this.selection.first().primary,
       disable: () =>
-        this.selection.first().mirror_mode === 'Disabled'
+        this.selection.first()?.mirror_mode === 'Disabled'
           ? 'Mirroring needs to be enabled on the image to perform this action'
           : ''
     };
@@ -230,7 +230,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
       name: this.actionLabels.DEMOTE,
       visible: () => this.selection.first() != null && this.selection.first().primary,
       disable: () =>
-        this.selection.first().mirror_mode === 'Disabled'
+        this.selection.first()?.mirror_mode === 'Disabled'
           ? 'Mirroring needs to be enabled on the image to perform this action'
           : ''
     };

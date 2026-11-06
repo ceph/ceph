@@ -297,7 +297,13 @@ export abstract class PageHelper {
 
     // Convert action to SentenceCase and Confirms deletion
     const actionUpperCase = action.charAt(0).toUpperCase() + action.slice(1);
-    cy.get('cd-modal .custom-control-label').click();
+    cy.get('cd-modal').then(($modal) => {
+      if ($modal.find('#resource_name').length) {
+        cy.get('cd-modal #resource_name').type(name);
+      } else {
+        cy.get('cd-modal .custom-control-label').click();
+      }
+    });
     cy.contains('cd-modal button', actionUpperCase).click();
 
     // Wait for modal to close
