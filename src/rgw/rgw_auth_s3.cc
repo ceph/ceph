@@ -1603,17 +1603,27 @@ bool AWSv4ComplMulti::complete()
 
     size_t tbuf_pos = 0;
 
-    static constexpr size_t trailer_buf_size = 256;
-    boost::container::static_vector<char, trailer_buf_size> trailer_vec;
+    /* The buffer must hold the largest legitimate trailer section: a signed
+     * SHA512 trailer is ~290 bytes, so 256 was too small and silently cut
+     * such requests. Size it well above that and size the vector so the
+     * copy and recv_body below write within bounds rather than past the end
+     * of an empty static_vector. */
+    static constexpr size_t trailer_buf_size = 1024;
+    boost::container::static_vector<char, trailer_buf_size> trailer_vec(
+        trailer_buf_size);
 
     std::copy(parsing_buf.begin(), parsing_buf.begin() + lf_bytes,
               trailer_vec.begin());
     tbuf_pos += lf_bytes;
 
+    /* Fill to trailer_buf_size, not trailer_buf_size - 1: the reserved byte
+     * capped every read so tbuf_pos could never reach trailer_buf_size, which
+     * left the overflow check below dead and truncated an over-long section
+     * instead of rejecting it. */
     while (tbuf_pos < trailer_buf_size) {
       const size_t received =
           io_base_t::recv_body(trailer_vec.data() + tbuf_pos,
-			       trailer_buf_size - tbuf_pos - 1);
+			       trailer_buf_size - tbuf_pos);
       dout(30) << "AWSv4ComplMulti: recv trailer received=" << received
                << dendl;
       if (received == 0) {
