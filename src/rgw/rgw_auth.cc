@@ -1273,9 +1273,17 @@ bool rgw::auth::RoleApplier::is_identity(const Principal& p) const {
     return match_account_or_tenant(role.account, role.tenant, p.get_account())
         && match_principal(role.path, role.name, no_subuser, p.get_id());
   } else if (p.is_assumed_role()) {
-    string role_session = role.name + "/" + token_attrs.role_session_name; //role/role-session
-    return p.get_account() == role.tenant
-        && p.get_role_session() == role_session;
+    // account roles can match both account- and tenant-based arns, as
+    // above.  The session is named by role name, as AWS names it, or by
+    // path and name, as AssumedRoleUser::generateAssumedRoleUser() does
+    const string by_name = role.name + "/" + token_attrs.role_session_name;
+    std::string_view path = role.path;
+    if (!path.empty()) {
+      path.remove_prefix(1); // leading / was matched by ":assumed-role/"
+    }
+    const string by_path = string(path) + by_name;
+    return match_account_or_tenant(role.account, role.tenant, p.get_account())
+        && (p.get_role_session() == by_name || p.get_role_session() == by_path);
   } else {
     string oidc_id;
     if (token_attrs.user_id.ns.empty()) {
