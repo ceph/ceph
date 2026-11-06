@@ -3,6 +3,11 @@
 
 #pragma once
 
+#include <boost/intrusive/list.hpp>
+#include <memory>
+#include <vector>
+#include "common/ceph_mutex.h"
+
 struct RGWKmipWorker;
 class RGWKMIPManagerImpl: public RGWKMIPManager {
 protected:
@@ -17,9 +22,10 @@ protected:
   boost::intrusive::list<Request, boost::intrusive::member_hook< Request,
   boost::intrusive::list_member_hook<>, &Request::req_hook>> requests;
   bool going_down = false;
-  RGWKmipWorker *worker = 0;
+  std::vector<std::unique_ptr<RGWKmipWorker>> workers;
 public:
-  RGWKMIPManagerImpl(CephContext *cct) : RGWKMIPManager(cct) {};
+  RGWKMIPManagerImpl(CephContext *cct);
+  ~RGWKMIPManagerImpl() override;
   int add_request(RGWKMIPTransceiver *);
   int start();
   void stop();
