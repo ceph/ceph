@@ -74,3 +74,68 @@ particular client/file descriptor in a parallel application:
             being read by another file descriptor */
             application_specific_barrier();
         }
+
+Close-to-open consistency
+=========================
+
+``lazyio_propagate()`` and ``lazyio_synchronize()`` require an application that
+knows when it shares a file and with whom.  Most applications do not, but many
+of them are perfectly happy with the weaker consistency that NFS provides,
+where a file that is written and closed is seen by the clients that open it
+afterwards, and nothing is promised while the file stays open.
+
+Setting ``client_close_to_open`` makes the client provide exactly that for
+regular files, without any application changes:
+
+* Data written to a file, and the size and mtime that describe it, reach the
+  cluster before ``close()`` returns.
+* An ``open()`` sees everything that other clients wrote and closed before it
+  started.
+* Taking an advisory lock (``flock()``, ``fcntl()``) revalidates like an open
+  does, and releasing one flushes like a close does, so applications that
+  coordinate with locks rather than with open and close keep working.
+* Reads never serve data that is older than
+  ``client_close_to_open_timeout`` (one minute by default, comparable to the
+  ``acregmax`` mount option of NFS).  Setting it to zero leaves ``open()`` and
+  locking as the only points where a cache is revalidated.  Through
+  ``ceph-fuse``, reads the kernel answers out of its page cache never reach
+  the client, so for them only ``open()`` and locking revalidate: the kernel
+  page cache is dropped on an open that found the cache unprotected.
+
+Only file data consistency changes.  Directory listings, dentries, inode
+attributes, permissions and quota remain as consistent as they always were.
+
+In exchange:
+
+* While a file is open, a write by another client does not invalidate the
+  cache, so reads may return data that is up to
+  ``client_close_to_open_timeout`` old.
+* Clients that write overlapping regions of the same file at the same time
+  can lose each other's writes, because writeback happens at page or object
+  granularity rather than in the byte ranges the application wrote.  Writers
+  have to be serialized with close/open or with locks.
+* ``mmap()`` of a shared file is not made coherent between clients.
+
+Opens with ``O_DIRECT`` or ``O_SYNC`` keep the stricter semantics they asked
+for, and ``O_APPEND`` is excluded as well, because clients that cache the end
+of a file would silently overwrite each other's appends.  What any of these
+descriptors write is still flushed when they are closed, so that the clients
+that open the file afterwards see it.  Snapshots and directories are
+unaffected.
+
+The option only affects files opened after it was set, and it only makes a
+difference for files that are open for writing on one client while other
+clients have them open too.  In every other case the MDS keeps the client
+caches coherent by itself and close-to-open costs nothing: no cache is dropped
+and no extra request is sent to the MDS.
+
+The most useful place for this mode is a gateway that re-exports CephFS with a
+protocol that promises close-to-open to its own clients anyway, such as NFS
+without delegations, where the stronger guarantees of CephFS are paid for but
+never observed.
+
+.. note:: Only libcephfs and ceph-fuse implement this.  The kernel client
+   supports LazyIO itself, via ``ioctl(fd, CEPH_IOC_LAZYIO)``, together with
+   ``sync_file_range(2)`` to propagate and ``posix_fadvise(2)``
+   (``POSIX_FADV_DONTNEED``) to invalidate, but it has no close-to-open mode
+   of its own.

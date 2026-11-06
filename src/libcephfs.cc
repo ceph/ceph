@@ -2520,6 +2520,33 @@ extern "C" int ceph_ll_lazyio(class ceph_mount_info *cmount,
   return (cmount->get_client()->ll_lazyio(fh, enable));
 }
 
+extern "C" double ceph_ll_attr_ttl(class ceph_mount_info *cmount, Inode *in)
+{
+  return cmount->get_client()->ll_attr_ttl(in);
+}
+
+extern "C" double ceph_ll_dentry_ttl(class ceph_mount_info *cmount,
+				     Inode *parent, const char *name)
+{
+  return cmount->get_client()->ll_dentry_ttl(parent, name);
+}
+
+extern "C" int ceph_ll_keep_page_cache(class ceph_mount_info *cmount, Fh *fh)
+{
+  return cmount->get_client()->ll_keep_page_cache(fh) ? 1 : 0;
+}
+
+extern "C" int ceph_ll_open_invalidates_attrs(class ceph_mount_info *cmount,
+					      Fh *fh)
+{
+  return cmount->get_client()->ll_open_invalidates_attrs(fh) ? 1 : 0;
+}
+
+extern "C" int ceph_ll_flush(class ceph_mount_info *cmount, Fh *fh)
+{
+  return cmount->get_client()->ll_flush(fh);
+}
+
 extern "C" int ceph_ll_delegation(struct ceph_mount_info *cmount, Fh *fh,
 				  unsigned cmd, ceph_deleg_cb_t cb, void *priv)
 {

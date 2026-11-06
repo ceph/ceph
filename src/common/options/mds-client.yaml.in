@@ -337,6 +337,97 @@ options:
   - mds_client
   flags:
   - startup
+- name: client_close_to_open
+  type: bool
+  level: advanced
+  desc: Relax file data consistency to close-to-open
+  long_desc: Keep caching file data even while the file is open for writing on
+    another client, and only guarantee that data written before a file was
+    closed is visible to opens that begin after the close.  This is the
+    consistency model that NFS provides.  Data is flushed when the last
+    descriptor for a file is closed, and the cache is revalidated on open and
+    when an advisory lock is taken.  Applications that share a file without
+    serializing their access with close/open or file locks may read stale
+    data.  Only files opened after this option was set are affected.
+  fmt_desc: Relax file data consistency from POSIX to close-to-open, as
+    provided by NFS.  See :doc:`/cephfs/lazyio`.
+  default: false
+  services:
+  - mds_client
+  see_also:
+  - client_close_to_open_timeout
+  - client_force_lazyio
+  flags:
+  - runtime
+- name: client_close_to_open_timeout
+  type: secs
+  level: advanced
+  desc: Maximum time close-to-open reads may be served from a cache the MDS is
+    not protecting
+  long_desc: Upper bound on how long a client with client_close_to_open enabled
+    keeps serving reads from a cache that is no longer protected by the MDS,
+    comparable to the acregmax mount option of NFS.  The cache is revalidated
+    on the first read after the interval has expired.  Setting this to zero
+    disables the timer, which leaves open() and locking as the only points
+    where a cache is revalidated.
+  fmt_desc: Set how long a client may serve cached file data of a shared file
+    without revalidating it, when ``client_close_to_open`` is enabled.  Zero
+    disables revalidation on read.
+  default: 1_min
+  services:
+  - mds_client
+  see_also:
+  - client_close_to_open
+  flags:
+  - runtime
+- name: client_attr_cache_timeout
+  type: secs
+  level: advanced
+  desc: How long inode attributes may be served from cache without the
+    capabilities that protect them
+  long_desc: With this set, stat() is answered from the copy of the inode the
+    client already has, even when the MDS has taken away the capabilities that
+    would keep that copy up to date, as long as it was fetched from the MDS
+    less than this long ago.  This is what the acregmin/acregmax and
+    acdirmin/acdirmax mount options of NFS do, and it turns a walk over a tree
+    the client holds no capabilities on -- a large directory on a busy MDS,
+    say -- from one round trip per file into one round trip per file per
+    interval.  In exchange, a change made by another client can go unnoticed
+    for that long.  Zero keeps the POSIX behaviour of always asking the MDS.
+  fmt_desc: Set how long a client may answer ``stat()`` from a cached inode
+    that the MDS is no longer keeping up to date.  Zero, the default, asks the
+    MDS whenever the client does not hold the relevant capabilities.
+  default: 0
+  services:
+  - mds_client
+  see_also:
+  - client_dentry_cache_timeout
+  - client_close_to_open
+  flags:
+  - runtime
+- name: client_dentry_cache_timeout
+  type: secs
+  level: advanced
+  desc: How long cached names and directory listings may be used without the
+    Fs capability on the parent directory
+  long_desc: With this set, lookups and readdir are answered from the names the
+    client already has, even when the MDS has taken away the Fs capability on
+    the directory that would keep them up to date, as long as they were fetched
+    from the MDS less than this long ago.  A file another client created is
+    then not seen until the interval has passed, and one it removed is still
+    listed; that is the trade NFS makes with acdirmin/acdirmax.  Zero keeps the
+    POSIX behaviour of asking the MDS whenever the directory is shared.
+  fmt_desc: Set how long a client may answer lookups and directory listings
+    from a cache that the MDS is no longer keeping up to date.  Zero, the
+    default, asks the MDS whenever the client does not hold ``Fs`` on the
+    directory.
+  default: 0
+  services:
+  - mds_client
+  see_also:
+  - client_attr_cache_timeout
+  flags:
+  - runtime
 - name: fuse_use_invalidate_cb
   type: bool
   level: advanced

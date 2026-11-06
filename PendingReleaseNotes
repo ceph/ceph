@@ -1,5 +1,13 @@
 >=22.0.0
 
+* CephFS: A libcephfs client (ceph-fuse, NFS-Ganesha, other gateways) can now
+  opt into NFS-style consistency, per mount. With ``client_close_to_open``,
+  file data is flushed before ``close()`` returns and revalidated on ``open()``
+  and around advisory locks. ``client_attr_cache_timeout`` and
+  ``client_dentry_cache_timeout`` answer ``stat()``, lookups and ``readdir()``
+  from what the client has for that many seconds after it lost the
+  capabilities. All default to off.
+
 * RBD: The ``schedule_time`` field in the output of
   ``rbd mirror snapshot schedule status`` and
   ``rbd trash purge schedule status`` has been renamed to
@@ -77,6 +85,11 @@
   and ``retain_current_version`` enabled, by a cloud-tiered stub, leaving its
   data only on the cloud endpoint.
 
+* RGW: The default value of ``rgw_rest_conn_connect_to_resolved_ips`` changed
+  from ``false`` to ``true``.
+* RGW: The default value of ``rgw_rest_conn_ip_fail_timeout_secs`` changed
+  from ``2`` to ``30`` seconds.
+
 * ``src/script/ceph-backport.sh`` now runs on macOS in addition to Linux: it
   re-execs under GNU bash >= 4 when the system bash is too old, and honors a
   ``$GETOPT`` environment override so GNU getopt can be selected
@@ -84,6 +97,8 @@
 
 * CephFS: Added a multi-tiered scoring matrix to the MDS Monitor to dynamically
   prioritize standby promotion during failover events. The ``mds_join_fs`` configuration
+* CephFS: Added a multi-tiered scoring matrix to the MDS Monitor to dynamically
+  prioritize standby promotion during failover events. The `mds_join_fs` configuration
   variable is now checked in combination with infrastructure topology rules to enforce
   node anti-affinity constraints. An isolated, generic standby daemon (Score 5) will
   now be chosen over a preferred standby daemon targeting that file system if the
@@ -92,6 +107,8 @@
   recovery cycles. This behavior can be disabled per file system using the command
   ``ceph fs set <fs_name> standby_enable_host_anti_affinity false`` (default:
   ``true``) to restore legacy strict ``mds_join_fs`` prioritization.
+  `ceph fs set <fs_name> standby_enable_host_anti_affinity false` (default: true)
+  to restore legacy strict 'mds_join_fs' prioritization.
 
 * CephFS: New MDS configuration options for non-blocking dirfrag prefetch have
   been added. ``mds_dir_prefetch_backend``, when enabled with
@@ -158,6 +175,28 @@
   ``--namespace-isolated``, but only subvolumes created afterwards inherit the
   isolation. See the "Subvolume groups" section of ``doc/cephfs/fs-volumes.rst``
   for the restrictions that apply when converting an existing group.
+  ``mds_dir_prefetch_backend_hit_threshold`` (default 16) accesses to the same
+  dirfrag, avoiding wasted full-omap reads for directories that are only hit
+  a few times in random workloads.  ``mds_dir_prefetch_backend_max`` (default 1)
+  limits the number of concurrent background fetches.  This reduces latency in
+  large directories while retaining cache warmth for hot directories.
+* CephFS: libcephfs and ceph-fuse can now be configured to provide close-to-open
+  consistency for file data, the model that NFS uses, with the new
+  ``client_close_to_open`` option.  Clients keep caching a file that is being
+  written by another client, flush before ``close()`` returns, and revalidate on
+  ``open()``, on advisory locking and after ``client_close_to_open_timeout``.
+  Metadata consistency is unchanged.  Applications that write overlapping regions
+  of a shared file at the same time must not use it.  See the LazyIO section of
+  the documentation.
+* CephFS: libcephfs and ceph-fuse can now serve inode attributes and directory
+  contents from a cache that is revalidated on a timer rather than by the MDS,
+  the way NFS does with its ``acregmax``/``acdirmax`` mount options.  The new
+  ``client_attr_cache_timeout`` and ``client_dentry_cache_timeout`` options
+  (both zero, i.e. off, by default) say for how long.  This turns a walk over a
+  tree the client holds no capabilities on from one MDS round trip per file
+  into one round trip per file per interval, at the cost of seeing another
+  client's changes that late.  See the attribute caching section of the
+  documentation.
 
 * CephFS: The ``client_force_lazyio`` configuration option is now correctly marked
   as not supporting runtime updates. Previously, the configuration schema indicated

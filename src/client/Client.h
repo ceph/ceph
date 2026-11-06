@@ -258,6 +258,7 @@ struct dir_result_t {
   uint64_t ordered_count;
   unsigned cache_index;
   int start_shared_gen;  // dir shared_gen at start of readdir
+  utime_t start_stamp;   // when the readdir that fills this one started
   UserPerm perms;
 
   frag_t buffer_frag;
@@ -661,6 +662,11 @@ public:
   int ll_lookup(Inode *parent, const char *name, struct stat *attr,
 		Inode **out, const UserPerm& perms);
   int ll_lookup_inode(struct inodeno_t ino, const UserPerm& perms, Inode **inode);
+  // how long a FUSE kernel may cache what ll_lookup()/ll_getattr() answered
+  double ll_attr_ttl(Inode *in);
+  bool ll_keep_page_cache(Fh *fh);
+  bool ll_open_invalidates_attrs(Fh *fh);
+  double ll_dentry_ttl(Inode *parent, const char *name);
   int ll_lookup_vino(vinodeno_t vino, const UserPerm& perms, Inode **inode);
   int ll_lookupx(Inode *parent, const char *name, Inode **out,
 			struct ceph_statx *stx, unsigned want, unsigned flags,
@@ -1029,6 +1035,10 @@ public:
   bool get_fuse_default_permissions() const {
     return fuse_default_permissions;
   }
+  // before mounting: the FUSE mount checks permissions, the client need not
+  void set_fuse_default_permissions(bool v) {
+    fuse_default_permissions = v;
+  }
 
   bool get_fscrypt_as() const {
     return fscrypt_as;
@@ -1151,6 +1161,11 @@ protected:
     unsigned int mask = 0;
     bool is_rename = false;
     bool require_target = true;
+    // resolve the last component only through what the MDS keeps coherent
+    // for us (caps, leases, Fs), never an unprotected cache: for opens, and
+    // implied for any walk that is about to create or replace the name
+    // (require_target = false)
+    bool authoritative = false;
   };
   int path_walk(InodeRef dirinode, const filepath& fp, struct walk_dentry_result* result, const UserPerm& perms, const PathWalk_ExtraOptions& extra_options, std::string trimmed_path=std::string());
   int path_walk(InodeRef dirinode, const filepath& fp, InodeRef *end, const UserPerm& perms, const PathWalk_ExtraOptions& extra_options);
@@ -2108,7 +2123,8 @@ private:
 		 const UserPerm& perms);
 
   int _lookup(const InodeRef& dir, const std::string& name, std::string& alternate_name,
-              int mask, InodeRef *target, const UserPerm& perm, bool is_rename=false);
+              int mask, InodeRef *target, const UserPerm& perm, bool is_rename=false,
+              bool authoritative=false);
 
   int _link(Inode *diri_from, const char* path_from, Inode* diri_to, const char* path_to, const UserPerm& perm, std::string alternate_name);
   int _unlink(Inode *dir, const char *name, const UserPerm& perm);
@@ -2138,7 +2154,14 @@ private:
 	       const UserPerm& perms);
   int _ll_setattrx(Inode *in, struct ceph_statx *stx, int mask,
 		   const UserPerm& perms, InodeRef *inp = 0);
-  int _getattr(const InodeRef& in, int mask, const UserPerm& perms, bool force=false);
+  int _getattr(const InodeRef& in, int mask, const UserPerm& perms,
+               bool force=false, bool allow_cached=true);
+  bool _attr_cache_valid(const Inode *in, int mask) const;
+  void _forget_cached_attrs(Inode *in);
+  bool _dentry_cache_valid(const Dentry *dn) const;
+  bool _ll_lookup_revalidates(Inode *parent, const char *name);
+  double _cache_ttl(utime_t since, std::chrono::seconds timeout) const;
+  bool _dir_cache_valid(const Inode *diri) const;
   int _readlink(const InodeRef& diri, const char* relpath, char *buf, size_t size, const UserPerm& perms);
   int _getxattr(Inode *in, const char *name, void *value, size_t len,
 		const UserPerm& perms);
@@ -2185,7 +2208,8 @@ private:
   int _flush(Fh *fh);
 
   int _fsync(Fh *fh, bool syncdataonly);
-  int _fsync(Inode *in, bool syncdataonly);
+  int _fsync(Inode *in, bool syncdataonly, bool wait_unsafe=true);
+  void _forget_stale_names(Inode *in);
   int _sync_fs();
   int clear_suid_sgid(Inode *in, const UserPerm& perms, bool defer=false);
   int _fallocate(Fh *fh, int mode, int64_t offset, int64_t length);
@@ -2193,6 +2217,9 @@ private:
   int _setlk(Fh *fh, struct flock *fl, uint64_t owner, int sleep);
   int _flock(Fh *fh, int cmd, uint64_t owner);
   int _lazyio(Fh *fh, int enable);
+  int _lazyio_synchronize(Inode *in, const UserPerm& perms);
+  void _mark_lazyio_cache_stale(Inode *in);
+  bool _is_close_to_open(int flags) const;
 
   Dentry *get_or_create(Inode *dir, const std::string& name);
 
@@ -2374,6 +2401,8 @@ private:
 
   ceph::coarse_mono_time last_auto_reconnect;
   std::chrono::seconds caps_release_delay, mount_timeout;
+  std::chrono::seconds close_to_open_timeout;
+  std::chrono::seconds attr_cache_timeout, dentry_cache_timeout;
   int injected_write_delay_secs;
   // trace generation
   std::ofstream traceout;
@@ -2425,6 +2454,7 @@ private:
 
   bool is_fuse = false;
   bool client_permissions;
+  bool close_to_open;
   bool fuse_default_permissions;
   bool respect_subvolume_snapshot_visibility;
 

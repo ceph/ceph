@@ -84,6 +84,14 @@ In other words, when it comes to POSIX, ::
 
   HDFS < NFS < CephFS < {XFS, ext4}
 
+The consistency of file data can be relaxed to the close-to-open model that NFS
+uses, for workloads that share files and do not need more than that; see
+:doc:`/cephfs/lazyio`.
+
+Inode attributes and directory contents can likewise be served from a cache
+that is revalidated on a timer rather than by the MDS, the way NFS does with
+``acregmax`` and ``acdirmax``; see :doc:`/cephfs/attribute-caching`.
+
 
 fsync() and error reporting
 ---------------------------

@@ -248,6 +248,8 @@ struct Inode : RefCountedObject {
   std::map<ceph_tid_t, int> flushing_cap_tids;
   int shared_gen = 0;
   int cache_gen = 0;
+  // cache_gen when ceph-fuse last let the kernel keep its page cache
+  int fuse_cache_gen = -1;
   int snap_caps = 0;
   int snap_cap_refs = 0;
   xlist<Inode*>::item delay_cap_item, dirty_cap_item, flushing_cap_item;
@@ -262,6 +264,24 @@ struct Inode : RefCountedObject {
   std::map<int,int> cap_refs;
 
   ObjectCacher::ObjectSet oset; // ORDER DEPENDENCY: ino
+
+  // When the inode stat these attributes were filled from was sampled on the
+  // MDS.  Attribute caching serves them without the capabilities that protect
+  // them until client_attr_cache_timeout has passed since then.  Zero while we
+  // have never seen an authoritative stat of this inode.
+  utime_t attr_cached_at;
+  // Same, for xattrs.  The MDS only sends them to a client that holds or asks
+  // for Xs, so a stat that refreshes the attributes says nothing about them.
+  utime_t xattr_cached_at;
+  // Same, for the listing of a directory that is marked I_COMPLETE.
+  utime_t dir_cached_at;
+
+  // Set while the object cache is (or has been) used without holding Fc/Fb,
+  // which LazyIO allows.  The MDS does not keep such a cache coherent, so it
+  // has to be revalidated explicitly before it can be trusted again.
+  bool lazyio_cache_stale = false;
+  // when that happened, i.e. the last time the cache was known to be good
+  ceph::coarse_mono_time lazyio_validated_at;
 
   uint64_t reported_size = 0;
   uint64_t wanted_max_size = 0;

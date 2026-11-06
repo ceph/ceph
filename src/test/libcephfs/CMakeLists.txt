@@ -31,6 +31,7 @@ if(WITH_LIBCEPHFS)
     deleg.cc
     monconfig.cc
     client_cache.cc
+    attrcache.cc
   )
   target_link_libraries(ceph_test_libcephfs
     ceph-common
@@ -134,6 +135,7 @@ if(WITH_LIBCEPHFS)
 
   add_executable(ceph_test_libcephfs_lazyio
     lazyio.cc
+    cto.cc
   )
   target_link_libraries(ceph_test_libcephfs_lazyio
     cephfs
