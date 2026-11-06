@@ -11,6 +11,7 @@
 
 #include <set>
 #include <ostream>
+#include <sstream>
 #include <string>
 #include <shared_mutex>
 #include <boost/circular_buffer.hpp>
@@ -129,9 +130,9 @@ public:
 
   int hook_to_admin_command();
   int call(std::string_view command, const cmdmap_t& cmdmap,
-	   const bufferlist&,
-	   Formatter *f,
+	   const ceph::buffer::list&,
+	   ceph::Formatter *f,
 	   std::ostream& ss,
-	   bufferlist& out) override;
+	   ceph::buffer::list& out) override;
   std::string get_active_names();
 };
