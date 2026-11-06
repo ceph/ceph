@@ -14,7 +14,7 @@
 #include "common/Throttle.h"
 #include "common/errno.h"
 #include "common/perf_counters_key.h"
-#include "common/split.h"
+#include "include/str_lib.h"
 
 #include "rgw_common.h"
 #include "rgw_zone.h"

@@ -4,7 +4,7 @@
 #include "rgw_torrent.h"
 #include <ctime>
 #include <fmt/format.h>
-#include "common/split.h"
+#include "include/str_lib.h"
 #include "rgw_sal.h"
 
 #define ANNOUNCE           "announce"

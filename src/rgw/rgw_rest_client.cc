@@ -10,7 +10,7 @@
 #include "rgw_http_errors.h"
 
 #include "common/strtol.h"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 #include "rgw_crypt_sanitize.h"
 
 #define dout_context g_ceph_context
@@ -299,9 +299,7 @@ static bool identify_scope(const DoutPrefixProvider *dpp,
     return false;
   }
 
-  vector<string> vec;
-
-  get_str_vec(host, ".", vec);
+  auto vec = ceph::split_strings(host, ".");
 
   string ser = service;
   if (service.empty()) {
@@ -765,9 +763,7 @@ void set_str_from_headers(map<string, string>& out_headers, const string& header
 static int parse_rgwx_mtime(const DoutPrefixProvider *dpp, CephContext *cct, const string& s, ceph::real_time *rt)
 {
   string err;
-  vector<string> vec;
-
-  get_str_vec(s, ".", vec);
+  const auto vec = ceph::split_strings(s, ".");
 
   if (vec.empty()) {
     return -EINVAL;
