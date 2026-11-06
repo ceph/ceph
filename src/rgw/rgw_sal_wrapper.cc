@@ -1389,8 +1389,6 @@ int rgw_multipart_complete( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_pt
   std::unique_ptr<rgw::sal::Object> target_obj = bucket->get_object(make_obj_key(obj_id));
   
   std::unique_ptr<rgw::sal::Object> meta_obj = upload->get_meta_obj();
-  meta_obj->set_in_extra_data(true);
-  meta_obj->set_hash_source(target_obj->get_name());
   
   /* Take a cls lock on meta_obj to prevent racing completions (or retries)
    * from deleting the parts. This matches the behavior in frontend
