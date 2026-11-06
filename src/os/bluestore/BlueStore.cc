@@ -4687,9 +4687,10 @@ void BlueStore::_statfs_to_bufferlist(bufferlist& stats_out)
   }
 }
 
-// this is a adaptation of _open_statfs() for bufferlist
-void BlueStore::_statfs_from_bufferlist(const bufferlist& stats_in)
+// this is a adaptation of _load_statfs_from_db() for bufferlist
+bool BlueStore::_statfs_from_bufferlist(const bufferlist& stats_in)
 {
+  bool decoded = false;
   osd_pools.clear();
   vstatfs.reset();
 
@@ -4718,6 +4719,7 @@ void BlueStore::_statfs_from_bufferlist(const bufferlist& stats_in)
       dout(10) << __func__ << " per-pool statfs is enabled" << dendl;
       per_pool_stat_collection = true;
     }
+    decoded = true;
   } catch (ceph::buffer::error& e) {
     derr << __func__ << " failed to decode statfs, using empty" << dendl;
     osd_pools.clear();
@@ -4725,8 +4727,54 @@ void BlueStore::_statfs_from_bufferlist(const bufferlist& stats_in)
   }
   dout(10) << __func__ << " statfs " << std::hex
            << vstatfs  << std::dec << dendl;
+  return decoded;
 }
 
+void BlueStore::_save_statfs_to_file() {
+  using namespace rocksdb;
+  bufferlist stat_bl;
+  _statfs_to_bufferlist(stat_bl);
+
+  db_env->CreateDirIfMissing(statfs_cache_dir);
+  std::unique_ptr<WritableFile> handle;
+  db_env->NewWritableFile(statfs_cache_dir_file, &handle,EnvOptions());
+  handle->Append(Slice(stat_bl.c_str(), stat_bl.length()));
+  handle->Close();
+  handle.reset();
+}
+
+bool BlueStore::_load_statfs_from_file() {
+  using namespace rocksdb;
+  bool result = false;
+  bufferlist stat_bl;
+  std::unique_ptr<SequentialFile> handle;
+  Status s = db_env->NewSequentialFile(statfs_cache_dir_file, &handle, EnvOptions());
+  if (s.ok()) {
+    rocksdb::Slice slice;
+    do {
+      constexpr size_t bufsize = 4096;
+      char buffer[bufsize];
+      s = handle->Read(bufsize, &slice, &buffer[0]);
+      if (s.ok() && !slice.empty()) {
+        stat_bl.append(slice.data(), slice.size());
+        continue;
+      }
+    } while (false);
+  }
+  if (stat_bl.length() == 0) {
+    dout(5) << "Empty " << statfs_cache_dir_file << dendl;
+  } else {
+    handle.reset();
+    bool decoded = _statfs_from_bufferlist(stat_bl);
+    if (decoded) {
+      dout(5) << "Loading " << statfs_cache_dir_file << " OK" << dendl;
+      result = true;
+    } else {
+      dout(5) << "Failed decoding " << statfs_cache_dir_file << dendl;
+    }
+  }
+  return result;
+}
 
 void BlueStore::_close_db()
 {
@@ -4872,6 +4920,11 @@ void BlueStore::_set_per_pool_omap()
 }
 
 void BlueStore::_open_statfs()
+{
+  _load_statfs_from_db();
+}
+
+void BlueStore::_load_statfs_from_db()
 {
   osd_pools.clear();
   vstatfs.reset();

@@ -381,6 +381,10 @@ public:
 
   /////////////////////////////
 
+  static constexpr std::string statfs_cache_dir = "cache";
+  static constexpr std::string statfs_cache_file = "statfs";
+  static constexpr std::string statfs_cache_dir_file = "cache/statfs";
+
   Estimator* create_estimator();
 
   static constexpr uint32_t OBJECT_MAX_SIZE = 0xffffffff; // 32 bits
@@ -1420,8 +1424,11 @@ private:
 	       bool to_repair_db=false,
 	       bool read_only = false);
   void _save_statfs_to_db();
+  void _load_statfs_from_db();
   void _statfs_to_bufferlist(bufferlist& statsout);
-  void _statfs_from_bufferlist(const bufferlist& statsin);
+  bool _statfs_from_bufferlist(const bufferlist& statsin);
+  void _save_statfs_to_file();
+  bool _load_statfs_from_file();
   void _close_db();
   int _open_fm(KeyValueDB::Transaction t,
                bool read_only,
