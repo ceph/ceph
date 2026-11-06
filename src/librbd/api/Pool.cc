@@ -150,7 +150,7 @@ private:
 
     auto it = m_out_bl.cbegin();
     for ([[maybe_unused]] auto snap_seq : m_snapc.snaps) {
-      uint64_t size;
+      uint64_t size = 0;
       if (r == 0) {
         uint8_t order;
         r = cls_client::get_size_finish(&it, &size, &order);

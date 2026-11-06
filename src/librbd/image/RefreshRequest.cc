@@ -752,7 +752,7 @@ Context *RefreshRequest<I>::handle_v2_get_snapshots(int *result) {
         *result = cls_client::get_snapshot_name_finish(&it, &snap_name);
       }
 
-      uint64_t snap_size;
+      uint64_t snap_size = 0;
       if (*result >= 0) {
         uint8_t order;
         *result = cls_client::get_size_finish(&it, &snap_size, &order);

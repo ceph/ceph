@@ -221,7 +221,8 @@ void DeepCopyRequest<I>::send_copy_object_map() {
   ldout(m_cct, 20) << dendl;
 
   Context *finish_op_ctx = nullptr;
-  int r;
+  // if exclusive_lock is null, start_op() is never called and never sets r
+  int r = -ERESTART;
   if (dst_image_ctx.exclusive_lock != nullptr) {
     finish_op_ctx = dst_image_ctx.exclusive_lock->start_op(&r);
   }
@@ -261,7 +262,8 @@ void DeepCopyRequest<I>::handle_copy_object_map(int r) {
 
 template <typename I>
 void DeepCopyRequest<I>::send_refresh_object_map() {
-  int r;
+  // if exclusive_lock is null, start_op() is never called and never sets r
+  int r = -ERESTART;
   Context *finish_op_ctx = nullptr;
   {
     std::shared_lock owner_locker{m_dst_image_ctx->owner_lock};
