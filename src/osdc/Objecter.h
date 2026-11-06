@@ -1509,6 +1509,19 @@ struct ObjectOperation {
     osd_op.op.assert_ver.ver = ver;
   }
 
+  void assert_before(struct timespec stamp, uint32_t error_code) {
+    OSDOp& osd_op = add_op(CEPH_OSD_OP_ASSERT_TIME);
+    osd_op.op.assert_time.before.stamp.tv_sec = stamp.tv_sec;
+    osd_op.op.assert_time.before.stamp.tv_nsec = stamp.tv_nsec;
+    osd_op.op.assert_time.before.error_code = error_code;
+  }
+  void assert_after(struct timespec stamp, uint32_t error_code) {
+    OSDOp& osd_op = add_op(CEPH_OSD_OP_ASSERT_TIME);
+    osd_op.op.assert_time.after.stamp.tv_sec = stamp.tv_sec;
+    osd_op.op.assert_time.after.stamp.tv_nsec = stamp.tv_nsec;
+    osd_op.op.assert_time.after.error_code = error_code;
+  }
+
   void get_internal_versions(boost::system::error_code* ec,
                              buffer::list *pbl) {
   	add_op(CEPH_OSD_OP_GET_INTERNAL_VERSIONS);
