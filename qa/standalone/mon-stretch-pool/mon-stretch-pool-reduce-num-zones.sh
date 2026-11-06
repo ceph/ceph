@@ -436,4 +436,4 @@ function TEST_pg_temp_while_size_changes() {
             grep -F 'num of osds (6) > pool size (3)'" || return 1
 }
 
-main mon-stretch-reduce-num-zones "$@"
+main mon-stretch-pool-reduce-num-zones "$@"
