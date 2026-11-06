@@ -8,6 +8,33 @@
 namespace cephfs {
 namespace mirror {
 
+const std::string &priority_mode_name(PriorityMode mode) {
+  switch (mode) {
+  case PriorityMode::PER_THREAD:
+    return PRIORITY_MODE_PER_THREAD;
+  case PriorityMode::THREAD_SHARED:
+  default:
+    return PRIORITY_MODE_THREAD_SHARED;
+  }
+}
+
+bool priority_mode_from_name(std::string_view name, PriorityMode *mode) {
+  if (name == PRIORITY_MODE_THREAD_SHARED) {
+    *mode = PriorityMode::THREAD_SHARED;
+    return true;
+  }
+  if (name == PRIORITY_MODE_PER_THREAD) {
+    *mode = PriorityMode::PER_THREAD;
+    return true;
+  }
+  return false;
+}
+
+std::ostream& operator<<(std::ostream& out, PriorityMode mode) {
+  out << priority_mode_name(mode);
+  return out;
+}
+
 std::ostream& operator<<(std::ostream& out, const Filesystem &filesystem) {
   out << "{fscid=" << filesystem.fscid << ", fs_name=" << filesystem.fs_name << "}";
   return out;
