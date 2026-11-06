@@ -487,7 +487,7 @@ TEST_P(TestECFailoverWithPeering, AsyncRecoveryKeepsEachZoneAtMinSize) {
     }
   }
   EXPECT_LE(async_in_zone1, spare);
-  EXPECT_EQ(0u, osdmap->stretch_num_acting_below_min_size(*pool, ps->get_acting()));
+  EXPECT_EQ(0u, osdmap->num_acting_below_min_size(*pool, ps->get_acting()));
 }
 
 TEST_P(TestECFailoverWithPeering, OSDFailureWithPeering) {

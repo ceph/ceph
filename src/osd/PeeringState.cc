@@ -1182,21 +1182,15 @@ unsigned PeeringState::get_recovery_priority()
   } else {
     // XXX: This priority boost isn't so much about inactive, but about data-at-risk
     if (is_degraded()) {
-      unsigned num_avail_no_missing_below_min_size = 0;
-      if (pool.info.is_stretch_pool()) {
-        vector<int> avail_osds;
-        for (auto& s : info.stats.avail_no_missing) {
-          avail_osds.push_back(s.osd);
-        }
-        num_avail_no_missing_below_min_size = get_osdmap()->stretch_num_acting_below_min_size(pool.info, avail_osds);
+      vector<int> avail_osds;
+      for (auto& s : info.stats.avail_no_missing) {
+        avail_osds.push_back(s.osd);
       }
-      if (num_avail_no_missing_below_min_size) {
+      if (unsigned below = get_osdmap()->num_acting_below_min_size(
+            pool.info, avail_osds)) {
         base = OSD_RECOVERY_INACTIVE_PRIORITY_BASE;
-        ret = base + num_avail_no_missing_below_min_size;
-      } else if(info.stats.avail_no_missing.size() < pool.info.min_size) {
-      base = OSD_RECOVERY_INACTIVE_PRIORITY_BASE;
-      // inactive: no. of replicas < min_size, highest priority since it blocks IO
-      ret = base + (pool.info.min_size - info.stats.avail_no_missing.size());
+        // inactive: no. of replicas < min_size, highest priority since it blocks IO
+        ret = base + below;
       }
     }
 
@@ -1218,18 +1212,11 @@ unsigned PeeringState::get_backfill_priority()
   if (state & PG_STATE_FORCED_BACKFILL) {
     ret = OSD_BACKFILL_PRIORITY_FORCED;
   } else {
-    unsigned num_acting_below_min_size = 0;
-    if (pool.info.is_stretch_pool()) {
-      num_acting_below_min_size = get_osdmap()->stretch_num_acting_below_min_size(pool.info, acting);
-    }
-    if (num_acting_below_min_size) {
+    if (unsigned below = get_osdmap()->num_acting_below_min_size(
+          pool.info, acting)) {
       base = OSD_BACKFILL_INACTIVE_PRIORITY_BASE;
       // inactive: no. of replicas < min_size, highest priority since it blocks IO
-      ret = base + num_acting_below_min_size;
-    } else if (actingset.size() < pool.info.min_size) {
-      base = OSD_BACKFILL_INACTIVE_PRIORITY_BASE;
-      // inactive: no. of replicas < min_size, highest priority since it blocks IO
-      ret = base + (pool.info.min_size - actingset.size());
+      ret = base + below;
 
     } else if (is_undersized()) {
       // undersized: OSD_BACKFILL_DEGRADED_PRIORITY_BASE + num missing replicas
@@ -2637,31 +2624,19 @@ void PeeringState::calc_replicated_acting_stretch(
 
 bool PeeringState::recoverable(const vector<int> &want) const
 {
-  unsigned num_want_acting = 0;
   set<pg_shard_t> have;
   for (int i = 0; i < (int)want.size(); ++i) {
     if (want[i] != CRUSH_ITEM_NONE) {
-      ++num_want_acting;
       have.insert(
         pg_shard_t(
           want[i],
           pool.info.is_erasure() ? shard_id_t(i) : shard_id_t::NO_SHARD));
     }
   }
-  if (!pool.info.is_stretch_pool()) {
-    if (num_want_acting < pool.info.min_size) {
-      if (!cct->_conf.get_val<bool>("osd_allow_recovery_below_min_size")) {
-        psdout(10) << "failed, recovery below min size not enabled" << dendl;
-        return false;
-      }
-    }
-  } else {
-    if (get_osdmap()->stretch_num_acting_below_min_size(pool.info, want)) {
-      if (!cct->_conf.get_val<bool>("osd_allow_recovery_below_min_size")) {
-        psdout(10) << "failed, recovery below min size not enabled" << dendl;
-        return false;
-      }
-    }
+  if (get_osdmap()->num_acting_below_min_size(pool.info, want) &&
+      !cct->_conf.get_val<bool>("osd_allow_recovery_below_min_size")) {
+    psdout(10) << "failed, recovery below min size not enabled" << dendl;
+    return false;
   }
 
   if (missing_loc.get_recoverable_predicate()(have)) {
@@ -2730,7 +2705,7 @@ void PeeringState::choose_async_recovery_ec(
     candidate_want[cur_shard.shard.id] = CRUSH_ITEM_NONE;
     ceph_assert(want_acting_size > 0);
     if (recoverable(candidate_want) &&
-        osdmap->async_recovery_can_shrink(pool.info, candidate_want)) {
+        osdmap->acting_set_writeable(pool.info, candidate_want)) {
       want->swap(candidate_want);
       async_recovery->insert(cur_shard);
       --want_acting_size;
@@ -2788,7 +2763,7 @@ void PeeringState::choose_async_recovery_replicated(
     for (auto it = candidate_want.begin(); it != candidate_want.end(); ++it) {
       if (*it == cur_shard.osd) {
 	candidate_want.erase(it);
-        if (osdmap->async_recovery_can_shrink(pool.info, candidate_want)) {
+        if (osdmap->acting_set_writeable(pool.info, candidate_want)) {
 	  want->swap(candidate_want);
 	  async_recovery->insert(cur_shard);
 	}

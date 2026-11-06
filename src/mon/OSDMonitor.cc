@@ -1545,11 +1545,10 @@ void OSDMonitor::prime_pg_temp(
   if (acting.empty())
     return;  // if previously empty now we can be no worse off
   const pg_pool_t *pool = next.get_pg_pool(pgid.pool());
+  // acting.size() counts the holes of an EC acting set, as before
   bool below_min_size = pool &&
-    ((pool->is_stretch_pool() &&
-      next.stretch_num_acting_below_min_size(*pool, acting)) ||
-      (!pool->is_stretch_pool() &&
-       acting.size() < pool->min_size));
+    (pool->is_stretch_pool() ? next.num_acting_below_min_size(*pool, acting)
+                             : acting.size() < pool->min_size);
   if (below_min_size) {
     return;  // can be no worse off than before
   }

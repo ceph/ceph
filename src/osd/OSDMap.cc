@@ -556,11 +556,15 @@ void OSDMap::get_stretch_zones(const pg_pool_t& pool,
   }
 }
 
-unsigned OSDMap::stretch_num_acting_below_min_size(const pg_pool_t& pool,
-                                                   const vector<int>& acting) const
+unsigned OSDMap::num_acting_below_min_size(const pg_pool_t& pool,
+                                           const vector<int>& acting) const
 {
   if (!pool.is_stretch_pool()) {
-    return 0;
+    const unsigned num_acting = std::count_if(
+      acting.begin(), acting.end(), [](int osd) {
+        return osd != CRUSH_ITEM_NONE;
+      });
+    return num_acting < pool.min_size ? pool.min_size - num_acting : 0;
   }
   // Special case for 3-zone clusters with 2 peering crush buckets, and pools
   // of one zone (stretch values from an older 'osd pool stretch set')
@@ -3322,15 +3326,12 @@ bool OSDMap::undo_pre_tentacle_primaryfirst(spg_t *pgid) const
   return true;
 }
 
-bool OSDMap::async_recovery_can_shrink(const pg_pool_t& pool,
-                                       const std::vector<int>& candidate_want) const
+bool OSDMap::acting_set_writeable(const pg_pool_t& pool,
+                                  const std::vector<int>& acting,
+                                  std::ostream *out) const
 {
-  if (pool.is_stretch_pool()) {
-    return stretch_num_acting_below_min_size(pool, candidate_want) == 0 &&
-      pool.stretch_set_can_peer(candidate_want, *this, NULL);
-  }
-  return std::count_if(candidate_want.begin(), candidate_want.end(),
-                       [](int osd) { return osd != CRUSH_ITEM_NONE; }) >= pool.min_size;
+  return num_acting_below_min_size(pool, acting) == 0 &&
+    pool.stretch_set_can_peer(acting, *this, out);
 }
 
 void OSDMap::_get_temp_osds(const pg_pool_t& pool, pg_t pg,
