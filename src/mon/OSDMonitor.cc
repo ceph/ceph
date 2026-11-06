@@ -2008,9 +2008,8 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
         if (!pool.has_flag(pg_pool_t::FLAG_OMAP) &&
             (pool.is_replicated() ||
              (pool.allows_ecoptimizations() && !pool.is_crimson()))) {
-          pg_pool_t p = pool;
-          p.flags |= pg_pool_t::FLAG_OMAP;
-          pending_inc.new_pools[pool_id] = p;
+          auto it = pending_inc.new_pools.try_emplace(pool_id, pool).first;
+          it->second.flags |= pg_pool_t::FLAG_OMAP;
           dout(10) << __func__ << " replicated pool " << pool_id
                    << " has OMAP support auto-enabled" << dendl;
         }
