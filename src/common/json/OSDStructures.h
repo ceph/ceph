@@ -133,6 +133,8 @@ struct OSDPoolMigrateRequest {
     std::optional<int> pg_num;
     std::optional<bool> enable_ec_optimizations = std::nullopt;
     std::optional<bool> yes_i_really_mean_it = std::nullopt;
+    std::optional<std::string> pool_type = std::nullopt;
+    std::optional<std::string> erasure_code_profile = std::nullopt;
 
     void dump(Formatter* f) const;
     void decode_json(JSONObj* obj);
