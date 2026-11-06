@@ -522,7 +522,6 @@ static int read_obj_policy(const DoutPrefixProvider *dpp,
     std::unique_ptr<rgw::sal::MultipartUpload> upload;
     upload = bucket->get_multipart_upload(dpp, y, object->get_name(), upload_id);
     mpobj = upload->get_meta_obj();
-    mpobj->set_in_extra_data(true);
     object = mpobj.get();
   }
   policy = get_iam_policy_from_attr(s->cct, bucket_attrs, s->bucket_tenant);
@@ -7844,8 +7843,6 @@ void RGWCompleteMultipart::execute(optional_yield y)
   list<rgw_obj_index_key> remove_objs; /* objects to be removed from index listing */
 
   std::unique_ptr<rgw::sal::Object> meta_obj = upload->get_meta_obj();
-  meta_obj->set_in_extra_data(true);
-  meta_obj->set_hash_source(s->object->get_name());
 
   /* take a cls lock on meta_obj to prevent racing completions (or retries)
      from deleting the parts*/
@@ -8172,7 +8169,6 @@ void RGWAbortMultipart::execute(optional_yield y)
 
   upload = s->bucket->get_multipart_upload(this, y, s->object->get_name(), upload_id);
   meta_obj = upload->get_meta_obj();
-  meta_obj->set_in_extra_data(true);
   meta_obj->get_obj_attrs(s->yield, this);
 
   jspan_context trace_ctx(false, false);

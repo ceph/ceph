@@ -705,6 +705,14 @@ class RadosObject : public StoreObject {
     RGWObjManifest* get_manifest() { return manifest; }
     RGWObjectCtx& get_ctx() { return *rados_ctx; }
 
+    // for multipart meta object
+    void set_in_extra_data(bool i) {
+      state.obj.set_in_extra_data(i);
+    }
+    void set_hash_source(std::string s) {
+      state.obj.index_hash_source = std::move(s);
+    }
+
   private:
     int read_attrs(const DoutPrefixProvider* dpp, RGWRados::Object::Read &read_op, optional_yield y, rgw_obj* target_obj = nullptr);
 };

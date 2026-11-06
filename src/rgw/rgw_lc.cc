@@ -1005,7 +1005,6 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
       // take the completion's lock, as AbortMultipartUpload does. a
       // completion that holds it may have written a head over these parts
       auto meta_obj = mpu->get_meta_obj();
-      meta_obj->set_in_extra_data(true);
       const ceph::timespan dur = std::chrono::seconds(
         cct->_conf.get_val<int64_t>("rgw_mp_lock_max_time"));
       ret = mpu->try_lock(this, dur, y);

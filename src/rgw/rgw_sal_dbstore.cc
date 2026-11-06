@@ -825,8 +825,6 @@ namespace rgw::sal {
   int DBMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct, optional_yield y)
   {
     std::unique_ptr<rgw::sal::Object> meta_obj = get_meta_obj();
-    meta_obj->set_in_extra_data(true);
-    meta_obj->set_hash_source(mp_obj.get_key());
     int ret;
 
     std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = meta_obj->get_delete_op();
@@ -1092,9 +1090,7 @@ namespace rgw::sal {
     }
 
     /* We need either attributes or placement, so we need a read */
-    std::unique_ptr<rgw::sal::Object> meta_obj;
-    meta_obj = get_meta_obj();
-    meta_obj->set_in_extra_data(true);
+    std::unique_ptr<rgw::sal::Object> meta_obj = get_meta_obj();
 
     multipart_upload_info upload_info;
     bufferlist headbl;
