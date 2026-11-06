@@ -4,8 +4,12 @@
 #include "iso_8601.h"
 
 #include <cassert>
+#include <cstddef>
+#include <cstdint>
 #include <expected>
 #include <chrono>
+#include <optional>
+#include <string_view>
 #include <utility>
 
 #include "common/ceph_time.h"
@@ -16,6 +20,7 @@ namespace ceph {
 namespace chrono = std::chrono;
 using namespace std::literals;
 using enum iso_8601_mode;
+using enum iso_8601_bound;
 
 namespace {
 using duration = chrono::duration<__int128, std::nano>;
@@ -86,7 +91,6 @@ auto consume_next_field(std::string_view& remaining, iso_8601_mode mode,
     } else {
       return std::nullopt;
     }
-    std::unreachable();
   }
 
   if (mode == strict || mode == lax) {
@@ -110,16 +114,11 @@ inline auto less(std::uint16_t max)
   return [max](auto x) { return x < max; };
 }
 
-inline auto between(std::uint16_t min, std::uint16_t max)
-{
-  return [min, max](auto x) { return x > min && x < max; };
-}
-
 std::optional<time_point> read_date(std::string_view& remaining, iso_8601_mode mode)
 {
   std::optional<chrono::day> day;
   std::optional<chrono::month> month;
-  auto year = consume_bounded<chrono::year>(remaining, 4, between(1968, 2555));
+  auto year = consume_bounded<chrono::year>(remaining, 4);
   if (!year) return std::nullopt;
   if (auto em = consume_next_field<chrono::month>(remaining, mode, '-'); !em) {
     return std::nullopt;
@@ -238,24 +237,31 @@ std::optional<time_point> add_time(std::string_view& remaining,
 } // namespace
 
 std::optional<real_time> from_iso_8601(const std::string_view s,
-                                       const iso_8601_mode mode) noexcept
+                                       const iso_8601_mode mode,
+                                       iso_8601_bound bound) noexcept
 {
   assert(mode >= iso_8601_mode::strict && mode <= iso_8601_mode::lax);
   auto remaining = s;
   constexpr auto epoch = time_point(duration(0));
-  constexpr auto doomsday =  time_point(duration(timespan::max()));
+  constexpr auto doomsday = time_point(duration(timespan::max()));
 
   auto time = read_date(remaining, mode);
-  if (!time) return std::nullopt;
+  if (!time)
+    return std::nullopt;
 
   if (!remaining.empty()) {
-    if (!optional_delimiter(remaining, mode == lax ? "Tt "sv : "T"sv)) return std::nullopt;
+    if (!optional_delimiter(remaining, mode == lax ? "Tt "sv : "T"sv))
+      return std::nullopt;
     time = add_time(remaining, mode, *time);
   }
-  if (!time) return std::nullopt;
-  if (!remaining.empty()) return std::nullopt;
+  if (!time)
+    return std::nullopt;
+  if (!remaining.empty())
+    return std::nullopt;
 
-  if (*time < epoch || *time > doomsday) {
+  if (bound == saturate_above && *time > doomsday) {
+    time = doomsday;
+  } else if (*time < epoch || *time > doomsday) {
     return std::nullopt;
   }
   return real_time(chrono::duration_cast<timespan>(time->time_since_epoch()));

@@ -518,6 +518,49 @@ TEST(from_iso_8601, epoch) {
   EXPECT_EQ(epoch, from_iso_8601("1970-01-01T00:00:00.000000000Z"));
 }
 
+TEST(from_iso_8601, saturation) {
+  using enum ceph::iso_8601_bound;
+  const auto doomsday = real_time::max();
+
+  EXPECT_EQ(doomsday,
+            from_iso_8601("9999", iso_8601_mode::strict, saturate_above));
+  EXPECT_EQ(doomsday,
+            from_iso_8601("9999-12", iso_8601_mode::strict, saturate_above));
+  EXPECT_EQ(doomsday,
+            from_iso_8601("9999-12-31", iso_8601_mode::strict, saturate_above));
+  EXPECT_EQ(doomsday, from_iso_8601("9999-12-31T23Z", iso_8601_mode::strict,
+                                    saturate_above));
+  EXPECT_EQ(doomsday, from_iso_8601("9999-12-31T23:59Z", iso_8601_mode::strict,
+                                    saturate_above));
+  EXPECT_EQ(doomsday, from_iso_8601("9999-12-31T23:59:59Z",
+                                    iso_8601_mode::strict, saturate_above));
+  EXPECT_EQ(doomsday, from_iso_8601("9999-12-31T23:59:59.999999999Z",
+                                    iso_8601_mode::strict, saturate_above));
+
+  EXPECT_EQ(doomsday,
+            from_iso_8601("2554-07-22", iso_8601_mode::strict, saturate_above));
+  EXPECT_EQ(doomsday, from_iso_8601("2554-07-21T23:34:33.709551616Z",
+                                    iso_8601_mode::strict, saturate_above));
+
+  EXPECT_EQ(doomsday, from_iso_8601("9999-12-31T23:59:59+14:00",
+                                    iso_8601_mode::strict, saturate_above));
+  EXPECT_EQ(doomsday, from_iso_8601("2554-07-22T01:34:33.709551616+02:00",
+                                    iso_8601_mode::strict, saturate_above));
+
+  EXPECT_FALSE(from_iso_8601("1969", iso_8601_mode::strict, saturate_above));
+  EXPECT_FALSE(from_iso_8601("1969-12", iso_8601_mode::strict, saturate_above));
+  EXPECT_FALSE(from_iso_8601("1969-12-31", iso_8601_mode::strict,
+                             saturate_above));
+  EXPECT_FALSE(from_iso_8601("1969-12-31T23Z", iso_8601_mode::strict,
+                             saturate_above));
+  EXPECT_FALSE(from_iso_8601("1969-12-31T23:59Z", iso_8601_mode::strict,
+                             saturate_above));
+  EXPECT_FALSE(from_iso_8601("1969-12-31T23:59:59Z", iso_8601_mode::strict,
+                             saturate_above));
+  EXPECT_FALSE(from_iso_8601("1969-12-31T23:59:59.999999999Z",
+                             iso_8601_mode::strict, saturate_above));
+}
+
 TEST(from_iso_8601, tz) {
   // Smallpox eradication declared: 1980-05-08T16:10+02:00 in Geneva
   const auto ref = ceph::real_clock::from_time_t(326643000);

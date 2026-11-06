@@ -44,11 +44,20 @@ enum class iso_8601_mode {
   lax
 };
 
+enum class iso_8601_bound {
+  error, ///< Return std::nullopt on out-of-epoch value
+  saturate_above ///< Times after the epoch return the maximum timepoint.
+                 /// Times before it return std::nullopt;
+};
+
 // Parse a superset of the ISO 8601 time format
 //
-// \param[in] time The time to parse
-// \param[in] mode The mode determines parsing behavior as described
-//                 in \ref iso_8601_mode
+// \param[in] time     The time to parse
+// \param[in] mode     The mode determines parsing behavior as described
+//                     in \ref iso_8601_mode
+// \param[in] saturate If true, clamp times beyond the maximum we can represent
+//                     rather than returning std::nullopt. Times before the epoch
+//                     are still errors.
 //
 // Contract:
 //     - Resolution is supported to nanosecond granularity. Longer
@@ -72,8 +81,8 @@ enum class iso_8601_mode {
 // \return A ceph::real_time or std::nullopt if invalid.
 
 std::optional<ceph::real_time> from_iso_8601(
-    std::string_view time,
-    iso_8601_mode mode = iso_8601_mode::strict) noexcept;
+    std::string_view time, iso_8601_mode mode = iso_8601_mode::strict,
+    iso_8601_bound bound = iso_8601_bound::error) noexcept;
 
 enum class iso_8601_format {
   // Extended ISO-8601 (Used in the W3C profile)
