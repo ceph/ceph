@@ -147,6 +147,9 @@ WebTokenEngine::is_cert_valid(const vector<string>& thumbprints, const string& c
   std::unique_ptr<BIO, decltype(&BIO_free_all)> keybio(BIO_new(BIO_s_mem()), BIO_free_all);
   string pw="";
   std::unique_ptr<X509, decltype(&X509_free)> x_509cert(PEM_read_bio_X509(certbio.get(), nullptr, nullptr, const_cast<char*>(pw.c_str())), X509_free);
+  if (!x_509cert) {
+    return false;
+  }
   const EVP_MD* fprint_type = EVP_sha1();
   unsigned int fprint_size;
   unsigned char fprint[EVP_MAX_MD_SIZE];
