@@ -5784,6 +5784,7 @@ int BlueStore::mount_readonly()
     }
   });
 
+  // replay pending deferred, but do not prepare keys for removal
   r = _deferred_replay(nullptr);
   if (r < 0) {
     return r;
@@ -5838,8 +5839,6 @@ int BlueStore::_mount_readonly()
   if (r < 0) {
     goto out_db;
   }
-  // replay pending deferred, but do not prepare keys for removal
-  _deferred_replay(nullptr);
   return 0;
 
 out_db:
