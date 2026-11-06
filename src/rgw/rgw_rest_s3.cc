@@ -1025,7 +1025,7 @@ int RGWPutObjTags_ObjStore_S3::get_params(optional_yield y)
   RGWObjTagging_S3 tagging;
 
   try {
-    RGWXMLDecoder::decode_xml("Tagging", tagging, &parser);
+    RGWXMLDecoder::decode_xml("Tagging", tagging, &parser, true);
   } catch (RGWXMLDecoder::err& err) {
     ldpp_dout(this, 5) << "Malformed tagging request: " << err << dendl;
     return -ERR_MALFORMED_XML;
@@ -1116,7 +1116,7 @@ int RGWPutBucketTags_ObjStore_S3::get_params(const DoutPrefixProvider *dpp, opti
 
   RGWObjTagging_S3 tagging;
   try {
-    RGWXMLDecoder::decode_xml("Tagging", tagging, &parser);
+    RGWXMLDecoder::decode_xml("Tagging", tagging, &parser, true);
   } catch (RGWXMLDecoder::err& err) {
 
     ldpp_dout(dpp, 5) << "Malformed tagging request: " << err << dendl;
@@ -3517,7 +3517,7 @@ int RGWPostObj_ObjStore_S3::get_tags()
     RGWObjTagging_S3 tagging;
 
     try {
-      RGWXMLDecoder::decode_xml("Tagging", tagging, &parser);
+      RGWXMLDecoder::decode_xml("Tagging", tagging, &parser, true);
     } catch (RGWXMLDecoder::err& err) {
       ldpp_dout(this, 5) << "Malformed tagging request: " << err << dendl;
       return -EINVAL;
