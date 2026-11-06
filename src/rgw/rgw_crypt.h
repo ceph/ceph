@@ -442,3 +442,36 @@ static inline std::string get_str_attribute(const std::map<std::string, bufferli
 }
 
 int rgw_remove_sse_s3_bucket_key(req_state *s, optional_yield y);
+
+/**
+ * Checks whether an SSE-KMS key id is allowed under the configured
+ * rgw_crypt_s3_kms_key_scope policy. This is a pure function (no req_state)
+ * so it can be unit tested directly.
+ *
+ * \params
+ * scope_mode - "tenant" or "owner" (any other value is treated as "none",
+ *              i.e. always allowed, matching the feature's default-off behavior)
+ * separator - rgw_crypt_s3_kms_key_scope_separator; the key id is expected
+ *             to be of the form "<expected_owner><separator><opaque-id>"
+ * expected_owner - the tenant or owner id the key id's prefix must equal
+ * key_id - the client-supplied (or bucket-default) KMS key id
+ * err_message - set to a human-readable reason when access is denied
+ * \return 0 if the key id is allowed, -EACCES otherwise
+ */
+int rgw_crypt_sse_kms_key_scope_check(std::string_view scope_mode,
+                                      std::string_view separator,
+                                      std::string_view expected_owner,
+                                      std::string_view key_id,
+                                      std::string* err_message);
+
+/**
+ * req_state-aware wrapper around rgw_crypt_sse_kms_key_scope_check(): reads
+ * rgw_crypt_s3_kms_key_scope and rgw_crypt_s3_kms_key_scope_separator from
+ * config, and derives the expected owner from s->user (scope "tenant") or
+ * s->bucket_owner (scope "owner"). Used both on the object write path
+ * (rgw_s3_prepare_encrypt) and by RGWPutBucketEncryption.
+ *
+ * \return 0 if the key id is allowed, -EACCES (with err_message set) otherwise
+ */
+int rgw_s3_validate_kms_key_scope(req_state* s, std::string_view key_id,
+                                  std::string& err_message);
