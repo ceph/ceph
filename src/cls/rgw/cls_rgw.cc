@@ -1144,6 +1144,50 @@ static int complete_remove_obj(cls_method_context_t hctx,
   return ret;
 }
 
+// link_olh may copy the instance entry onto the list entry before
+// complete_op clears the pending tag. listing reads the list entry.
+// versioned_epoch is set by link_olh. once the instance entry is finished,
+// refresh the list entry from it.
+static int update_versioned_list_key(cls_method_context_t hctx,
+                                     const rgw_bucket_dir_entry& completed,
+                                     const std::string& instance_idx,
+                                     rgw_bucket_dir_header& header)
+{
+  if (completed.versioned_epoch == 0) {
+    return 0;
+  }
+
+  std::string list_idx;
+  rgw_bucket_dir_entry key_entry = completed;
+  get_list_index_key(key_entry, &list_idx);
+  if (list_idx == instance_idx) {
+    return 0;
+  }
+
+  rgw_bucket_dir_entry list_entry;
+  int rc = read_index_entry(hctx, list_idx, &list_entry);
+  if (rc == -ENOENT) {
+    CLS_LOG(10, "%s: no list entry idx=%s", __func__, escape_str(list_idx).c_str());
+    return 0;
+  }
+  if (rc < 0) {
+    CLS_LOG(1, "ERROR: %s: failed to read list entry idx=%s rc=%d",
+            __func__, escape_str(list_idx).c_str(), rc);
+    return rc;
+  }
+
+  list_entry.exists = completed.exists;
+  list_entry.meta = completed.meta;
+  list_entry.tag = completed.tag;
+  list_entry.pending_map = completed.pending_map;
+  list_entry.ver = completed.ver;
+  list_entry.locator = completed.locator;
+
+  CLS_LOG(20, "%s: updating list entry idx=%s exists=%d",
+          __func__, escape_str(list_idx).c_str(), (int)list_entry.exists);
+  return write_entry(hctx, list_entry, list_idx, header);
+}
+
 int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   const ConfigProxy& conf = cls_get_config(hctx);
@@ -1339,6 +1383,13 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     if (rc < 0) {
       CLS_LOG_BITX(bitx_inst, 1,
 		   "ERROR: %s: unable to set map value at key=%s, rc=%d",
+		   __func__, escape_str(idx).c_str(), rc);
+      return rc;
+    }
+    rc = update_versioned_list_key(hctx, entry, idx, header);
+    if (rc < 0) {
+      CLS_LOG_BITX(bitx_inst, 1,
+		   "ERROR: %s: failed to update versioned list key, key=%s, rc=%d",
 		   __func__, escape_str(idx).c_str(), rc);
       return rc;
     }
