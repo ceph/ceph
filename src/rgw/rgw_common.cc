@@ -408,7 +408,10 @@ void dump(req_state* s)
     s->formatter->open_object_section("Error");
   if (!s->err.err_code.empty())
     s->formatter->dump_string("Code", s->err.err_code);
-  s->formatter->dump_string("Message", s->err.message);
+  if (!s->err.message.empty())
+    s->formatter->dump_string("Message", s->err.message);
+  else
+    s->formatter->dump_string("Message", s->err.err_code);
   if (!s->bucket_name.empty())	// TODO: connect to expose_bucket
     s->formatter->dump_string("BucketName", s->bucket_name);
   if (!s->trans_id.empty())	// TODO: connect to expose_bucket or another toggle
