@@ -277,6 +277,14 @@
 
   * Updated the default for ``rgw_gc_max_queue_size`` to account for the extra space from removing ``rgw_gc_max_deferred_entries_size``.
 
+* RGW: The Admin Ops user API now accepts the ``tenant`` request parameter on
+  user info, modify and remove, as user create already does. A tenant may
+  still be embedded in ``uid`` (``tenant$uid``) on all operations; if the
+  parameter and ``uid`` name different tenants, the request now fails with
+  ``EINVAL`` rather than one spelling being silently ignored. User create's
+  existing behavior (the parameter overwrites the tenant embedded in ``uid``)
+  is unchanged.
+
 * RGW: The default value of ``rgw_thread_pool_size`` has been reduced from 512 to 128.
   Benchmarks showed that the lower thread count improves throughput and reduces latency
   on NVMe and HDD based environments. Users with specific workload requirements can
