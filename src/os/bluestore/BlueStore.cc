@@ -4273,6 +4273,8 @@ int BlueStore::_open_db_and_around(
   if (r < 0)
     goto out_fm;
 
+  _open_statfs();
+
   if (bdev_label_multi) {
     _main_bdev_label_try_reserve();
   }
@@ -5916,6 +5918,8 @@ int BlueStore::_mount_readonly()
   }
   // replay pending deferred, but do not prepare keys for removal
   _deferred_replay(nullptr);
+
+  _open_statfs();
   return 0;
 
 out_db:
@@ -11024,7 +11028,6 @@ int BlueStore::_open_super_meta()
 
   _set_per_pool_omap();
 
-  _open_statfs();
   _set_alloc_sizes();
   _set_throttle_params();
 
