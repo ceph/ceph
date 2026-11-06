@@ -1342,6 +1342,33 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
 		   __func__, escape_str(idx).c_str(), rc);
       return rc;
     }
+
+    if (entry.flags & rgw_bucket_dir_entry::FLAG_VER) {
+      // Metadata updates do not relink the version through the OLH. Refresh
+      // its existing list entry in this transaction so lifecycle sees the
+      // same mtime as an object read. Preserve the listing's current flag
+      // and ordering; completing an update must not promote an old version.
+      string list_idx;
+      get_list_index_key(entry, &list_idx);
+      rgw_bucket_dir_entry listed;
+      rc = read_index_entry(hctx, list_idx, &listed);
+      if (rc == 0) {
+        listed.meta = entry.meta;
+        listed.ver = entry.ver;
+        listed.tag = entry.tag;
+        listed.index_ver = entry.index_ver;
+        rc = write_entry(hctx, listed, list_idx, header);
+        if (rc < 0) {
+          CLS_LOG(0, "ERROR: %s: updating version list entry key=%s rc=%d",
+                  __func__, escape_str(list_idx).c_str(), rc);
+          return rc;
+        }
+      } else if (rc != -ENOENT) {
+        CLS_LOG(0, "ERROR: %s: reading version list entry key=%s rc=%d",
+                __func__, escape_str(list_idx).c_str(), rc);
+        return rc;
+      }
+    }
   } // CLS_RGW_OP_ADD
 
   if (log_op) {
