@@ -4,6 +4,7 @@
 #include "rgw_bucket.h"
 
 #include "common/errno.h"
+#include "common/strtol.h"
 
 #define dout_subsys ceph_subsys_rgw
 

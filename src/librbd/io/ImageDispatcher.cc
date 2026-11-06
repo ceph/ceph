@@ -16,6 +16,7 @@
 #include "librbd/io/WriteBlockImageDispatch.h"
 
 #include <shared_mutex> // for std::shared_lock
+#include <boost/variant.hpp>
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix

@@ -13,6 +13,7 @@
 #include "common/ContextCompletion.h"
 #include "common/dout.h"
 #include "common/errno.h"
+#include "osd/osd_types.h"
 #include "osdc/Striper.h"
 
 #include <boost/lambda/bind.hpp>

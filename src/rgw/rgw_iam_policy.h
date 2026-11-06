@@ -17,7 +17,6 @@
 #include <boost/container/flat_set.hpp>
 #include <boost/optional.hpp>
 #include <boost/thread/shared_mutex.hpp>
-#include <boost/variant.hpp>
 
 #include <fmt/format.h>
 #include <fmt/ostream.h>

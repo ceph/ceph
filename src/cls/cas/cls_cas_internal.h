@@ -5,8 +5,6 @@
 
 #include <string>
 
-#include "boost/variant.hpp"
-
 #include "include/stringify.h"
 #include "common/Formatter.h"
 #include "common/hobject.h"

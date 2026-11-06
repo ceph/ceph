@@ -19,6 +19,7 @@
 #include "rgw_rest_iam.h"
 #include "rgw_rest_user_policy.h"
 #include "rgw_sal.h"
+#include "rgw_zone.h"
 #include "services/svc_zone.h"
 
 #define dout_subsys ceph_subsys_rgw

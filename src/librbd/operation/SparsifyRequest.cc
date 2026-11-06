@@ -6,6 +6,7 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "include/err.h"
+#include "include/intarith.h"
 #include "librbd/AsyncObjectThrottle.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"

@@ -10,6 +10,7 @@
 
 #include "common/ceph_json.h"
 #include "common/split.h"
+#include "include/container_ios.h"
 #include "rgw_common.h"
 #include "driver/rados/rgw_user.h"
 #include "rgw_acl_swift.h"

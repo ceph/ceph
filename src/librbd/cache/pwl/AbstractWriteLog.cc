@@ -5,6 +5,7 @@
 #include "include/buffer.h"
 #include "include/Context.h"
 #include "include/ceph_assert.h"
+#include "include/intarith.h"
 #include "common/Clock.h" // for ceph_clock_now()
 #include "common/debug.h"
 #include "common/deleter.h"

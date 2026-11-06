@@ -32,7 +32,7 @@
 #include "include/common_fwd.h"
 #include "include/compat.h"
 
-#include "common/cmdparse.h"
+#include "common/cmdparse_fwd.h"
 #include "common/code_environment.h"
 #include "msg/msg_types.h"
 #ifdef WITH_CRIMSON
