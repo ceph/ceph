@@ -295,6 +295,44 @@ void mount_check_alloc()
 
 
 
+/*
+ * The test verifies that deferred replay makes the data it wrote stable
+ * before it returns: its callers remove the deferred (L) keys right after.
+ * With bdev_inject_crash set, a flush of a block device exits the process
+ * with 1, so:
+ * - replay flushes the main device: exit 1
+ * - replay ends without a flush: exit 2
+ * Auto compactions are off, so BlueFS doesn't flush in between.
+ */
+void mount_check_flush()
+{
+  std::unique_ptr<ObjectStore> store;
+  store = ObjectStore::create(g_ceph_context,
+                              "bluestore",
+                              "bluestore.test_temp_dir",
+                              "store_test_temp_journal");
+  BlueStore* bs = dynamic_cast<BlueStore*>(store.get());
+  ceph_assert(bs);
+  bs->dtr_deferred_replay_start =
+    [&](){
+      std::cout << "deferred replay starts, a flush now exits" << std::endl;
+      // large enough that the aio thread's own crash timer never fires
+      g_ceph_context->_conf.set_val_or_die("bdev_inject_crash", "1000000");
+      g_ceph_context->_conf.apply_changes(nullptr);
+    };
+  bs->dtr_deferred_replay_end =
+    [&](){
+      std::cout << "deferred replay ended without a flush" << std::endl;
+      _exit(2);
+    };
+  std::cout << "mounting..." << std::endl;
+  store->mount();
+  ceph_assert(false && "should exit() earlier");
+}
+
+
+
+
 int argc;
 char **argv;
 
@@ -321,6 +359,36 @@ void say_good_bye() {
 int main(int _argc, char **_argv) {
   argc = _argc;
   argv = _argv;
+
+  pid_t flush_test = fork();
+  if (flush_test == 0) {
+    std::cout << "3. Testing that deferred replay flushes its writes" << std::endl;
+    pid_t child = fork();
+    if (child == 0) {
+      auto cct = setup_env();
+      create_deferred_and_terminate();
+      ceph_assert(false && "should exit() earlier");
+    }
+    std::cout << "Waiting for fill omap and create deferred..." << std::endl;
+    int stat;
+    waitpid(child, &stat, 0);
+    ceph_assert(WIFEXITED(stat) && WEXITSTATUS(stat) == 0);
+    std::cout << "done and subprocess terminated." << std::endl;
+    child = fork();
+    if (child == 0) {
+      auto cct = setup_env();
+      g_ceph_context->_conf->bluestore_rocksdb_options +=
+          ",disable_auto_compactions=true";
+      mount_check_flush();
+    }
+    waitpid(child, &stat, 0);
+    std::cout << "mount exited with " << WEXITSTATUS(stat) << std::endl;
+    ceph_assert(WIFEXITED(stat) && WEXITSTATUS(stat) == 1);
+    _exit(0);
+  }
+  int flush_stat;
+  waitpid(flush_test, &flush_stat, 0);
+  ceph_assert(WIFEXITED(flush_stat) && WEXITSTATUS(flush_stat) == 0);
 
   pid_t first_test = fork();
   if (first_test == 0) {
