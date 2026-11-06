@@ -197,15 +197,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
   cmd_getval(cmdmap, "prefix", prefix);
 
   bufferlist odata;
-  if (prefix == "osd pool default get") {
-    stringstream out;
-    dump_pool_defaults(f.get(), out);
-    if (f) {
-      f->flush(odata);
-    } else {
-      odata.append(out.str());
-    }
-  } else if (prefix == "config help") {
+  if (prefix == "config help") {
     stringstream ss;
     string name;
     cmd_getval(cmdmap, "key", name);
@@ -480,6 +472,14 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
     }
     odata.append(conf.str());
     err = 0;
+  } else if (prefix == "osd pool default get") {
+    stringstream out;
+    dump_pool_defaults(f.get(), out);
+    if (f) {
+      f->flush(odata);
+    } else {
+      odata.append(out.str());
+    }
   } else {
     return false;
   }
@@ -613,44 +613,6 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
       pending[key].reset();
     }
     goto update;
-  } else if (prefix == "osd pool default set") {
-    // k and m are kept in the OSDMap's default profile
-    if ((cmdmap.contains("k") || cmdmap.contains("m")) &&
-        !mon.osdmon()->is_writeable()) {
-      mon.osdmon()->wait_for_writeable(op, new C_RetryMessage(this, op));
-      return false;
-    }
-    // a rule that the pending OSDMap update removes is found gone once the
-    // update has committed
-    if (string rule; cmd_getval(cmdmap, "rule", rule) && rule != "none") {
-      const int id = mon.osdmon()->osdmap.crush->get_rule_id(rule);
-      if (id >= 0 && mon.osdmon()->crush_rule_removal_pending(rule, id)) {
-        mon.osdmon()->wait_for_finished_proposal(
-          op, new C_RetryMessage(this, op));
-        return false;
-      }
-    }
-    std::optional<map<string,string>> default_profile;
-    err = prepare_pool_default_set(cmdmap, ss, &default_profile);
-    if (err) {
-      goto reply;
-    }
-    if (default_profile) {
-      if (!has_pending_changes()) {
-        pending.clear();
-        mon.osdmon()->propose_default_profile(*default_profile);
-        mon.osdmon()->wait_for_finished_proposal(
-          op, new Monitor::C_Command(
-            mon, op, 0, ss.str(), mon.osdmon()->get_last_committed() + 1));
-        return false;
-      }
-      // commit with the options
-      paxos.plug();
-      mon.osdmon()->propose_default_profile(*default_profile);
-      paxos.unplug();
-    }
-    pending_description = "osd pool default set";
-    goto update;
   } else if (prefix == "config reset") {
     int64_t revert_to = -1;
     cmd_getval(cmdmap, "num", revert_to);
@@ -759,6 +721,44 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
     if (updated) {
       goto update;
     }
+  } else if (prefix == "osd pool default set") {
+    // k and m are kept in the OSDMap's default profile
+    if ((cmdmap.contains("k") || cmdmap.contains("m")) &&
+        !mon.osdmon()->is_writeable()) {
+      mon.osdmon()->wait_for_writeable(op, new C_RetryMessage(this, op));
+      return false;
+    }
+    // a rule that the pending OSDMap update removes is found gone once the
+    // update has committed
+    if (string rule; cmd_getval(cmdmap, "rule", rule) && rule != "none") {
+      const int id = mon.osdmon()->osdmap.crush->get_rule_id(rule);
+      if (id >= 0 && mon.osdmon()->crush_rule_removal_pending(rule, id)) {
+        mon.osdmon()->wait_for_finished_proposal(
+          op, new C_RetryMessage(this, op));
+        return false;
+      }
+    }
+    std::optional<map<string,string>> default_profile;
+    err = prepare_pool_default_set(cmdmap, ss, &default_profile);
+    if (err) {
+      goto reply;
+    }
+    if (default_profile) {
+      if (!has_pending_changes()) {
+        pending.clear();
+        mon.osdmon()->propose_default_profile(*default_profile);
+        mon.osdmon()->wait_for_finished_proposal(
+          op, new Monitor::C_Command(
+            mon, op, 0, ss.str(), mon.osdmon()->get_last_committed() + 1));
+        return false;
+      }
+      // commit with the options
+      paxos.plug();
+      mon.osdmon()->propose_default_profile(*default_profile);
+      paxos.unplug();
+    }
+    pending_description = "osd pool default set";
+    goto update;
   } else {
     ss << "unknown command " << prefix;
     err = -EINVAL;
