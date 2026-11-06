@@ -1699,7 +1699,14 @@ gRPC API as a client.
 # common
 #################################################################################
 %prep
+%if "%{getenv:CEPH_BUILD_NORMALIZE_PATHS}" == "true"
+# CI builds unpack into a version-free directory so compiler-cache keys do not
+# change with every sha (see make-debs.sh for the deb equivalent).
+%setup -q -c -T -n ceph
+tar --strip-components=1 -xf %{SOURCE0}
+%else
 %autosetup -p1 -n @TARBALL_BASENAME@
+%endif
 
 %build
 
