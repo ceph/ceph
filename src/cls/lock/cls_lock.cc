@@ -139,7 +139,8 @@ static int lock_obj(cls_method_context_t hctx,
                     const string& description,
                     uint8_t flags,
                     const string& cookie,
-                    const string& tag)
+                    const string& tag,
+                    utime_t& expiration)
 {
   bool exclusive = cls_lock_is_exclusive(lock_type);
   lock_info_t linfo;
@@ -220,7 +221,6 @@ static int lock_obj(cls_method_context_t hctx,
 
   linfo.lock_type = lock_type;
   linfo.tag = tag;
-  utime_t expiration;
   if (!duration.is_zero()) {
     expiration = ceph_clock_now();
     expiration += duration;
@@ -265,9 +265,14 @@ static int lock_op(cls_method_context_t hctx,
     return -EINVAL;
   }
 
-  return lock_obj(hctx,
-                  op.name, op.type, op.duration, op.description,
-                  op.flags, op.cookie, op.tag);
+  cls_lock_lock_reply reply;
+  int r = lock_obj(hctx,
+                   op.name, op.type, op.duration, op.description,
+                   op.flags, op.cookie, op.tag, reply.expires_at);
+  if (r == 0 && out) {
+    encode(reply, *out, cls_get_client_features(hctx));
+  }
+  return r;
 }
 
 /**
