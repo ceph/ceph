@@ -863,6 +863,16 @@ public:
     std::ostringstream oss;
     messaging::osd::OSDPoolMigrateRequest pool_mig_request{source_name, pg_num,
       enable_ec_optimizations, true};
+    if (pg_num.has_value() || enable_ec_optimizations.has_value()) {
+      // Setting any parameter stops the mon inheriting the pool type from the
+      // source, so it would default to replicated. Pass the source's type and
+      // EC profile explicitly.
+      auto const source_info = get_pool_all(source_name);
+      if (source_info.erasure_code_profile.has_value()) {
+        pool_mig_request.pool_type = "erasure";
+        pool_mig_request.erasure_code_profile = source_info.erasure_code_profile;
+      }
+    }
     encode_json("OSDPoolMigrateRequest", pool_mig_request, formatter.get());
     formatter.get()->flush(oss);
 
