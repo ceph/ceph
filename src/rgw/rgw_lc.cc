@@ -823,7 +823,14 @@ static int remove_expired_obj(const DoutPrefixProvider* dpp,
   del_op->params.obj_owner.id = rgw_user{meta.owner};
   del_op->params.obj_owner.display_name = meta.owner_display_name;
   del_op->params.bucket_owner = bucket_info.owner;
-  del_op->params.unmod_since = meta.mtime;
+  // a null delete marker over the listed null version must not carry this,
+  // since that version has this mtime and cls_rgw would drop the marker
+  if (remove_indeed || !o.key.instance.empty()) {
+    del_op->params.unmod_since = meta.mtime;
+  }
+  // a marker still loses to a null version written after the listing, but
+  // not to an older one written in the same second
+  del_op->params.high_precision_time = !remove_indeed;
 
   uint32_t flags = (!remove_indeed || !zonegroup_lc_check(dpp, oc.driver->get_zone()))
                    ? rgw::sal::FLAG_LOG_OP : 0;
@@ -1362,8 +1369,8 @@ public:
         oc.batch_counters->record_dm_expired();
       }
     } else {
-      /* ! o.is_delete_marker() */
-      r = remove_expired_obj(oc.dpp, y, oc, !oc.bucket->versioning_enabled(),
+      /* ! o.is_delete_marker(); a suspended bucket gets a null delete marker */
+      r = remove_expired_obj(oc.dpp, y, oc, !oc.bucket->versioned(),
                              {rgw::notify::ObjectExpirationCurrent,
                               rgw::notify::LifecycleExpirationDelete},
                              lifecycle_delete_object_op);
