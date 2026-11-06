@@ -4,18 +4,22 @@
 #include "iso_8601.h"
 
 #include <cassert>
+#include <expected>
 #include <chrono>
+#include <utility>
 
 #include "common/ceph_time.h"
 
 #include "common/strtol.h"
 
 namespace ceph {
-
 namespace chrono = std::chrono;
 using namespace std::literals;
+using enum iso_8601_mode;
 
 namespace {
+constexpr auto digits = "0123456789"sv;
+
 struct succeed {
   bool operator()(const auto&...) {
     return true;
@@ -45,6 +49,57 @@ std::optional<char> optional_delimiter(std::string_view& remaining,
     return c;
   }
   return std::nullopt;
+}
+
+struct fail {};
+
+template <typename Field, typename Validate = succeed>
+auto consume_next_field(std::string_view& remaining, iso_8601_mode mode,
+                        char separator, Validate validate = {})
+    // We need a tristate to differentiate between "Something",
+    // "Nothing", and "Error" and it was either this or
+    // std::optional<std::optional<Field>>.
+    //
+    // This seemed marginally clearer.
+    -> std::expected<std::optional<Field>, fail>
+{
+  if (remaining.empty()) {
+    return std::nullopt;
+  }
+
+  if (mode == basic) {
+    if (remaining.front() == separator) {
+      return std::unexpected(fail{});
+    }
+
+    // So we don't try to process the timezone marker
+    if (digits.contains(remaining.front())) {
+      auto f = consume_bounded<Field>(remaining, 2, validate);
+      if (!f) {
+        return std::unexpected(fail{});
+      } else {
+        return f;
+      }
+    } else {
+      return std::nullopt;
+    }
+    std::unreachable();
+  }
+
+  if (mode == strict || mode == lax) {
+    if (remaining.front() == separator) {
+      remaining.remove_prefix(1);
+      auto f = consume_bounded<Field>(remaining, 2, validate);
+      if (!f) {
+        return std::unexpected(fail{});
+      } else {
+        return f;
+      }
+    } else {
+      return std::nullopt;
+    }
+  }
+  std::unreachable();
 }
 
 inline auto less(std::uint16_t max)
@@ -87,20 +142,24 @@ inline std::optional<real_time> bounded_add(
   return time;
 }
 
-std::optional<real_time> read_date(std::string_view& remaining)
+std::optional<real_time> read_date(std::string_view& remaining, iso_8601_mode mode)
 {
   std::optional<chrono::day> day;
   std::optional<chrono::month> month;
   auto year = consume_bounded<chrono::year>(remaining, 4, between(1969, 2555));
   if (!year) return std::nullopt;
-  if (optional_delimiter(remaining, "-")) {
-    if (!(month = consume_bounded<chrono::month>(remaining, 2)))
+  if (auto em = consume_next_field<chrono::month>(remaining, mode, '-'); !em) {
+    return std::nullopt;
+  } else if (*em) {
+    month = **em;
+    if (auto ed = consume_next_field<chrono::day>(remaining, mode, '-'); !ed) {
       return std::nullopt;
-    if (optional_delimiter(remaining, "-")) {
-      if (!(day = consume_bounded<chrono::day>(remaining, 2)))
-        return std::nullopt;
+    } else if (*ed) {
+      day = **ed;
     }
   }
+  // ISO-8601 basic disallow YYYYMM as it clashes with the deprecated YYMMDD format.
+  if (month && !day && mode == basic) return std::nullopt;
   if ((!month || !day) && !remaining.empty()) return std::nullopt;
   chrono::year_month_day ymd = (*year) / month.value_or(chrono::month(1)) /
                                day.value_or(chrono::day(1));
@@ -119,7 +178,6 @@ std::optional<real_time> read_date(std::string_view& remaining)
 inline std::optional<chrono::nanoseconds> parse_nanoseconds(
     std::string_view& remaining)
 {
-  constexpr auto digits = "0123456789"sv;
   constexpr std::uint64_t pow10[] = {
       1,         10,         100,
       1'000,     10'000,     100'000,
@@ -145,7 +203,7 @@ inline std::optional<chrono::nanoseconds> parse_nanoseconds(
 }
 
 std::optional<real_time> add_time(std::string_view& remaining,
-                                  bool lax, real_time midnight)
+                                  iso_8601_mode mode, real_time midnight)
 {
   std::optional<real_time> time = midnight;
 
@@ -158,20 +216,21 @@ std::optional<real_time> add_time(std::string_view& remaining,
   }
 
   // HH:MM
-  if (optional_delimiter(remaining, ":")) {
-    auto minutes = consume_bounded<chrono::minutes>(remaining, 2, less(60));
-    if (!minutes)
-      return std::nullopt;
-    time = bounded_add(*time, *minutes);
+  if (auto minutes = consume_next_field<chrono::minutes>(remaining, mode, ':',
+                                                         less(60));
+      !minutes) {
+    return std::nullopt;
+  } else if (*minutes) {
+    time = bounded_add(*time, **minutes);
     if (!time) return std::nullopt;
-
     // HH:MM:SS
-    if (optional_delimiter(remaining, ":")) {
-      auto seconds = consume_bounded<chrono::seconds>(remaining, 2, less(60));
-      if (!seconds) return std::nullopt;
-      time = bounded_add(*time, *seconds);
+    if (auto seconds = consume_next_field<chrono::seconds>(remaining, mode, ':',
+                                                           less(60));
+        !seconds) {
+      return std::nullopt;
+    } else if (*seconds) {
+      time = bounded_add(*time, **seconds);
       if (!time) return std::nullopt;
-
       // HH::MM::SS.fff…
       if (optional_delimiter(remaining, ".,")) {
         auto nanoseconds = parse_nanoseconds(remaining);
@@ -189,8 +248,12 @@ std::optional<real_time> add_time(std::string_view& remaining,
     if (!hours)
       return std::nullopt;
     offset += *hours;
+
     if (auto colon = optional_delimiter(remaining, ":"); colon) {
-      if (remaining.empty())
+      // `strict` mode allows the separator to be left out because a
+      // surprising number of clients emit it, but basic doesn't allow
+      // it ever.
+      if (remaining.empty() || mode == basic)
         return std::nullopt;
     }
     if (!remaining.empty()) {
@@ -200,9 +263,9 @@ std::optional<real_time> add_time(std::string_view& remaining,
     }
     offset *= signum;
     if (offset < -12h || offset > 14h) return std::nullopt;
-  } else if (optional_delimiter(remaining, lax ? "Zz"sv : "Z"sv)) {
+  } else if (optional_delimiter(remaining, mode == lax ? "Zz"sv : "Z"sv)) {
     // Explicit UTC
-  } else if (lax && remaining.empty()) {
+  } else if (mode == lax && remaining.empty()) {
     // Allow unterminated
   } else {
     return std::nullopt;
@@ -216,14 +279,13 @@ std::optional<real_time> from_iso_8601(const std::string_view s,
 {
   auto remaining = s;
   assert(mode >= iso_8601_mode::strict && mode <= iso_8601_mode::lax);
-  auto lax = (mode == iso_8601_mode::lax);
 
-  auto time = read_date(remaining);
+  auto time = read_date(remaining, mode);
   if (!time) return std::nullopt;
 
   if (!remaining.empty()) {
-    if (!optional_delimiter(remaining, lax ? "Tt "sv : "T"sv)) return std::nullopt;
-    time = add_time(remaining, lax, *time);
+    if (!optional_delimiter(remaining, mode == lax ? "Tt "sv : "T"sv)) return std::nullopt;
+    time = add_time(remaining, mode, *time);
   }
   if (!remaining.empty()) return std::nullopt;
   return time;
