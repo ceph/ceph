@@ -16,7 +16,7 @@
 #ifndef CEPH_SNAPSERVER_H
 #define CEPH_SNAPSERVER_H
 
-#include <list>
+#include <vector>
 #include <map>
 #include <set>
 
@@ -69,7 +69,7 @@ public:
   }
 
   void dump(Formatter *f) const;
-  static std::list<SnapServer> generate_test_instances();
+  static std::vector<SnapServer> generate_test_instances();
 
   bool force_update(snapid_t last, snapid_t v2_since,
 		    std::map<snapid_t, SnapInfo>& _snaps);

@@ -21,12 +21,11 @@
 // Python.h comes first because otherwise it clobbers ceph's assert
 #include <Python.h>
 
+#include <deque>
 #include <stack>
 #include <string>
-#include <string_view>
 #include <sstream>
-#include <memory>
-#include <list>
+#include <string_view>
 
 #include "common/JSONFormatter.h"
 #include "include/ceph_assert.h"
@@ -132,14 +131,13 @@ protected:
   PyObject *cursor;
   std::stack<PyObject *> stack;
 private:
-  class PendingStream {
-    public:
+  struct PendingStream {
     PyObject *cursor;
     std::string name;
     std::stringstream stream;
   };
 
-  std::list<std::shared_ptr<PendingStream> > pending_streams;
+  std::deque<PendingStream> pending_streams;
 
 };
 
@@ -268,4 +266,3 @@ private:
 };
 
 #endif
-

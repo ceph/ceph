@@ -25,7 +25,7 @@
 
 #include <cstdint>
 #include <iosfwd>
-#include <list>
+#include <vector>
 #include <map>
 #include <string>
 
@@ -59,7 +59,7 @@ struct EntityAuth {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static std::list<EntityAuth> generate_test_instances();
+  static std::vector<EntityAuth> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(EntityAuth)
 
@@ -72,7 +72,7 @@ struct AuthCapsInfo {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static std::list<AuthCapsInfo> generate_test_instances();
+  static std::vector<AuthCapsInfo> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(AuthCapsInfo)
 
@@ -100,7 +100,7 @@ struct AuthTicket {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static std::list<AuthTicket> generate_test_instances();
+  static std::vector<AuthTicket> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(AuthTicket)
 
@@ -189,7 +189,7 @@ struct ExpiringCryptoKey {
     decode(expiration, bl);
   }
   void dump(ceph::Formatter *f) const;
-  static std::list<ExpiringCryptoKey> generate_test_instances();
+  static std::vector<ExpiringCryptoKey> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(ExpiringCryptoKey)
 
@@ -247,7 +247,7 @@ struct RotatingSecrets {
 
   void dump();
   void dump(ceph::Formatter *f) const;
-  static std::list<RotatingSecrets> generate_test_instances();
+  static std::vector<RotatingSecrets> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(RotatingSecrets)
 

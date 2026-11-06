@@ -174,8 +174,8 @@ struct MDSHealthMetric
     f->close_section();
   }
 
-  static std::list<MDSHealthMetric> generate_test_instances() {
-    std::list<MDSHealthMetric> ls;
+  static std::vector<MDSHealthMetric> generate_test_instances() {
+    std::vector<MDSHealthMetric> ls;
     ls.push_back(MDSHealthMetric());
     ls.back().type = MDS_HEALTH_CACHE_OVERSIZED;
     ls.push_back(MDSHealthMetric(MDS_HEALTH_TRIM, HEALTH_WARN, "MDS is behind on trimming"));
@@ -226,8 +226,8 @@ struct MDSHealth
     f->close_section();
   }
 
-  static std::list<MDSHealth> generate_test_instances() {
-    std::list<MDSHealth> ls;
+  static std::vector<MDSHealth> generate_test_instances() {
+    std::vector<MDSHealth> ls;
     ls.emplace_back();
     ls.emplace_back();
     ls.back().metrics.push_back(MDSHealthMetric(MDS_HEALTH_TRIM, HEALTH_WARN,

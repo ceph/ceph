@@ -347,9 +347,9 @@ public:
 	on_commit.splice(on_commit.end(), i.on_commit);
 	on_applied_sync.splice(on_applied_sync.end(), i.on_applied_sync);
     }
-    *out_on_applied = C_Contexts::list_to_context(on_applied);
-    *out_on_commit = C_Contexts::list_to_context(on_commit);
-    *out_on_applied_sync = C_Contexts::list_to_context(on_applied_sync);
+    *out_on_applied = C_Contexts::to_context(on_applied);
+    *out_on_commit = C_Contexts::to_context(on_commit);
+    *out_on_applied_sync = C_Contexts::to_context(on_applied_sync);
   }
   static void collect_contexts(
     std::vector<Transaction>& t,
@@ -372,17 +372,17 @@ public:
     contexts.splice(contexts.end(), t.on_applied);
     contexts.splice(contexts.end(), t.on_commit);
     contexts.splice(contexts.end(), t.on_applied_sync);
-    return C_Contexts::list_to_context(contexts);
+    return C_Contexts::to_context(contexts);
   }
 
   Context *get_on_applied() {
-    return C_Contexts::list_to_context(on_applied);
+    return C_Contexts::to_context(on_applied);
   }
   Context *get_on_commit() {
-    return C_Contexts::list_to_context(on_commit);
+    return C_Contexts::to_context(on_commit);
   }
   Context *get_on_applied_sync() {
-    return C_Contexts::list_to_context(on_applied_sync);
+    return C_Contexts::to_context(on_applied_sync);
   }
 
   void set_fadvise_flags(uint32_t flags) {

@@ -11,11 +11,14 @@
  * Foundation.  See file COPYING.
  */
 
+#include <iterator>
+
 #include "nvmeof/NVMeofGwUtils.h"
 
 void determine_subsystem_changes(const BeaconSubsystems& old_subsystems,
                                 BeaconSubsystems& new_subsystems) {
   BeaconSubsystems result;
+  result.reserve(std::size(old_subsystems) + std::size(new_subsystems));
 
   // for each subsystem in new_subsystems, check if it's added or changed
   for (const auto& new_sub : new_subsystems) {
@@ -50,4 +53,3 @@ void determine_subsystem_changes(const BeaconSubsystems& old_subsystems,
 
   new_subsystems = std::move(result);
 }
-
