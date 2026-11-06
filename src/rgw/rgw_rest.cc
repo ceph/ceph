@@ -747,6 +747,14 @@ void dump_range(req_state* const s,
   return dump_header(s, "Content-Range", std::string_view(range_buf, len));
 }
 
+void dump_unsatisfied_range(req_state* const s, const uint64_t total)
+{
+  char range_buf[64];
+  const size_t len = snprintf(range_buf, sizeof(range_buf), "bytes */%llu",
+                              static_cast<unsigned long long>(total));
+  dump_header(s, "Content-Range", std::string_view(range_buf, len));
+}
+
 
 int dump_body(req_state* const s,
               const char* const buf,
