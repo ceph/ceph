@@ -2240,6 +2240,8 @@ class AgentCache():
         for d in self._per_host_maps():
             d.pop(host, None)
         self.mgr.set_store(AGENT_CACHE_PREFIX + host, None)
+        # the entry is gone from the store: the next save_agent() must write
+        self._persisted_agent.pop(host, None)
 
     def rm_all_agents(self) -> None:
         hosts: Set[str] = set()

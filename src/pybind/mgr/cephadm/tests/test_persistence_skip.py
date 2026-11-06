@@ -269,3 +269,18 @@ class TestAgentWrites:
             'agent_config_deps': deps,
             'agent_counter': 3, 'agent_keys': 'secret', 'agent_ports': 4721,
         }
+
+    def test_rm_agent_forgets_the_written_value(self) -> None:
+        mgr = _fake_mgr()
+        cache = _agent_cache(mgr)
+        cache.save_agent('host1')
+        cache.rm_agent('host1')
+
+        # an agent redeployed with the same state is written again: the
+        # stored entry was deleted
+        mgr.set_store.reset_mock()
+        cache.agent_counter['host1'] = 1
+        cache.agent_keys['host1'] = 'secret'
+        cache.agent_ports['host1'] = 4721
+        cache.save_agent('host1')
+        assert len(_agent_writes(mgr)) == 1
