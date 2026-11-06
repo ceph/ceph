@@ -119,6 +119,17 @@ using rgw::IAM::iamListAttachedGroupPolicies;
 using rgw::IAM::iamSimulateCustomPolicy;
 using rgw::IAM::iamSimulatePrincipalPolicy;
 using rgw::IAM::iamGetAccountSummary;
+using rgw::IAM::iamGetPolicy;
+using rgw::IAM::iamListPolicies;
+using rgw::IAM::iamCreatePolicyVersion;
+using rgw::IAM::iamDeletePolicyVersion;
+using rgw::IAM::iamGetPolicyVersion;
+using rgw::IAM::iamSetDefaultPolicyVersion;
+using rgw::IAM::iamListPolicyVersions;
+using rgw::IAM::iamTagPolicy;
+using rgw::IAM::iamUntagPolicy;
+using rgw::IAM::iamListPolicyTags;
+using rgw::IAM::iamListEntitiesForPolicy;
 using rgw::IAM::snsGetTopicAttributes;
 using rgw::IAM::snsListTopics;
 using rgw::Service;
@@ -797,6 +808,17 @@ TEST_F(ManagedPolicyTest, IAMReadOnlyAccess)
   act[iamSimulateCustomPolicy] = 1;
   act[iamSimulatePrincipalPolicy] = 1;
   act[iamGetAccountSummary] = 1;
+  act[rgw::IAM::iamGetPolicy] = 1;
+  act[rgw::IAM::iamListPolicies] = 1;
+  act[rgw::IAM::iamCreatePolicyVersion] = 1;
+  act[rgw::IAM::iamDeletePolicyVersion] = 1;
+  act[rgw::IAM::iamGetPolicyVersion] = 1;
+  act[rgw::IAM::iamSetDefaultPolicyVersion] = 1;
+  act[rgw::IAM::iamListPolicyVersions] = 1;
+  act[rgw::IAM::iamTagPolicy] = 1;
+  act[rgw::IAM::iamUntagPolicy] = 1;
+  act[rgw::IAM::iamListPolicyTags] = 1;
+  act[rgw::IAM::iamListEntitiesForPolicy] = 1;
 
   EXPECT_EQ(act, p->statements[0].action);
 }
