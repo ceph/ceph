@@ -29,6 +29,10 @@
 
 * RGW: The "Bytes Sent" field is always set to "-" when bucket-logging is enabled
   in Standard mode.
+* RGW: Failed requests in the ops log now record ``error_ret`` (internal errno or
+  RGW error code). HTTP error mapping uses distinct S3 ``Code`` values for
+  connection failures (e.g. ``ConnectionReset``) and bucket resharding
+  (``BucketResharding``) instead of ``UnknownError``.
 
 * RGW: Changing ``rgw_dynamic_resharding`` used to turn queuing buckets
   for reshard on or off while not affecting resharding itself until the
