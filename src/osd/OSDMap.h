@@ -1520,14 +1520,12 @@ public:
 private:
   int calc_rbs_fair(
     CephContext *cct,
-    OSDMap& tmp_osd_map,
     int64_t pool_id,
     const pg_pool_t *pgpool,
     read_balance_info_t &rb_info) const;
 
   int calc_rbs_size_optimal(
     CephContext *cct,
-    OSDMap& tmp_osd_map,
     int64_t pool_id,
     const pg_pool_t *pgpool,
     read_balance_info_t &p_rb_info) const;
