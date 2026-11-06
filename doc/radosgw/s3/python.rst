@@ -180,6 +180,8 @@ The output of this will look something like::
    http://objects.dreamhost.com/my-bucket-name/hello.txt
    http://objects.dreamhost.com/my-bucket-name/secret_plans.txt?Signature=XXXXXXXXXXXXXXXXXXXXXXXXXXX&Expires=1316027075&AWSAccessKeyId=XXXXXXXXXXXXXXXXXXX
 
+.. _radosgw-s3-python-extensions:
+
 Using S3 API Extensions 
 -----------------------
 
