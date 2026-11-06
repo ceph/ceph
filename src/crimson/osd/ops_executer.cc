@@ -509,6 +509,38 @@ OpsExecuter::call_errorator::future<> OpsExecuter::do_assert_ver(
   return seastar::now();
 }
 
+OpsExecuter::call_errorator::future<> OpsExecuter::do_assert_time(
+  OSDOp& osd_op,
+  const ObjectState& os)
+{
+  const utime_t now = ceph_clock_now();
+
+  const utime_t before(osd_op.op.assert_time.before.stamp);
+  if (!before.is_zero()) {
+    if (osd_op.op.assert_time.before.error_code == 0) {
+      return crimson::ct_error::invarg::make();
+    }
+    if (now > before) {
+      return crimson::stateful_ec{
+        std::error_code(osd_op.op.assert_time.before.error_code,
+                        std::generic_category()) };
+    }
+  }
+
+  const utime_t after(osd_op.op.assert_time.after.stamp);
+  if (!after.is_zero()) {
+    if (osd_op.op.assert_time.after.error_code == 0) {
+      return crimson::ct_error::invarg::make();
+    }
+    if (now < after) {
+      return crimson::stateful_ec{
+        std::error_code(osd_op.op.assert_time.after.error_code,
+                        std::generic_category()) };
+    }
+  }
+  return seastar::now();
+}
+
 OpsExecuter::list_snaps_iertr::future<> OpsExecuter::do_list_snaps(
   OSDOp& osd_op,
   const ObjectState& os,
@@ -860,6 +892,10 @@ OpsExecuter::do_execute_op(OSDOp& osd_op)
   case CEPH_OSD_OP_ASSERT_VER:
     return do_read_op([this, &osd_op](auto&, const auto& os) {
       return do_assert_ver(osd_op, os);
+    });
+  case CEPH_OSD_OP_ASSERT_TIME:
+    return do_read_op([this, &osd_op](auto&, const auto& os) {
+      return do_assert_time(osd_op, os);
     });
   case CEPH_OSD_OP_LIST_SNAPS:
     return do_snapset_op([this, &osd_op](const auto &os, const auto &ss) {

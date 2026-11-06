@@ -323,6 +323,9 @@ private:
   call_errorator::future<> do_assert_ver(
     OSDOp& osd_op,
     const ObjectState& os);
+  call_errorator::future<> do_assert_time(
+    OSDOp& osd_op,
+    const ObjectState& os);
 
   using list_snaps_ertr = read_errorator::extend<
     crimson::ct_error::invarg>;
