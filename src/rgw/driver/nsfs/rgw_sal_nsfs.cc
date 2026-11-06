@@ -19727,7 +19727,8 @@ bool NSFSDriver::awaits_adoption(const DoutPrefixProvider* dpp,
 }
 
 /* A user's credentials as a request resolves them -- its own row, else
- * its account's -- for the hints that act as a user.  -ENOENT for an
+ * its account's, and a role session's as resolve_role_credentials() --
+ * for the hints that act as a user.  -ENOENT for an
  * empty user, or one with no record, or one whose record cannot be
  * applied. */
 static int hint_credentials(const DoutPrefixProvider* dpp, NSFSDriver* driver,
@@ -19738,15 +19739,8 @@ static int hint_credentials(const DoutPrefixProvider* dpp, NSFSDriver* driver,
   if (who.empty()) {
     return -ENOENT;
   }
-  rgw_account_id account;
-  {
-    std::unique_ptr<User> u = driver->get_user(who);
-    if (u->load_user(dpp, null_yield) == 0) {
-      account = u->get_info().account_id;
-    }
-  }
-  const int ret = nsfs::resolve_credentials(dpp, *driver->get_identity_db(),
-					    who, account, cred, null_yield);
+  const int ret = resolve_credentials_for(dpp, driver, rgw_owner{who},
+					  null_yield, nullptr, cred);
   return (ret == -EPERM) ? -ENOENT : ret;
 }
 
@@ -20979,8 +20973,9 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
      *   result=no-identity         the user has no identity row
      *   result=permitted | refused
      *
-     * `user` is an rgw_user string, `tenant$id` for a tenant's;  empty
-     * is anonymous, which has no identity.  `tenant` names the bucket's
+     * `user` is an rgw_user string, `tenant$id` for a tenant's and
+     * `tenant$role$<role id>` for a role session;  empty is anonymous,
+     * which has no identity.  `tenant` names the bucket's
      * tenant, if it has one. */
     auto put = [out](const char* v) {
       if (out) {
@@ -21003,7 +20998,7 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
     }
 
     /* resolved as a request resolves it:  the user's row, else its
-     * account's */
+     * account's, and a role session's as resolve_role_credentials() */
     nsfs::Credentials cred;
     int ret = hint_credentials(dpp, this, u_it->second, cred);
     if (ret == -ENOENT) {
