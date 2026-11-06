@@ -7,6 +7,9 @@
 #include <utility>
 #include <boost/optional.hpp>
 
+#include "common/async/call_once.h"
+#include "common/web_cache.h"
+#include "include/expected.hpp"
 #include "rgw_auth.h"
 #include "rgw_rest_s3.h"
 #include "rgw_common.h"
@@ -80,28 +83,27 @@ public:
 class SecretCache {
   using token_envelope_t = rgw::keystone::TokenEnvelope;
 
+public:
   struct secret_entry {
     token_envelope_t token;
-    std::string secret;
+    boost::optional<std::string> secret;
     utime_t expires;
-    std::list<std::string>::iterator lru_iter;
   };
+  using result_t = tl::expected<secret_entry, int>;
+  using value_t = ceph::async::once_result<result_t>;
+  using value_ptr = std::shared_ptr<value_t>;
 
+private:
   const boost::intrusive_ptr<CephContext> cct;
 
-  std::map<std::string, secret_entry> secrets;
-  std::list<std::string> secrets_lru;
-
-  std::mutex lock;
-
-  const size_t max;
+  webcache::WebCache<std::string, value_t> cache;
 
   const utime_t s3_token_expiry_length;
 
   SecretCache()
     : cct(g_ceph_context),
-      lock(),
-      max(cct->_conf->rgw_keystone_token_cache_size),
+      cache(cct.get(), "keystone-secret-cache",
+            cct->_conf->rgw_keystone_token_cache_size),
       s3_token_expiry_length(cct->_conf->rgw_keystone_token_cache_ttl, 0) {
   }
 
@@ -117,16 +119,21 @@ public:
     return instance;
   }
 
-  bool find(const std::string& token_id, token_envelope_t& token, std::string& secret);
-  boost::optional<boost::tuple<token_envelope_t, std::string>> find(const std::string& token_id) {
-    token_envelope_t token_envlp;
-    std::string secret;
-    if (find(token_id, token_envlp, secret)) {
-      return boost::make_tuple(token_envlp, secret);
-    }
-    return boost::none;
+  value_ptr lookup_or_insert(const std::string& access_key_id) {
+    return cache.lookup_or(access_key_id, std::make_shared<value_t>());
   }
-  void add(const std::string& token_id, const token_envelope_t& token, const std::string& secret);
+  void remove(const std::string& access_key_id, const value_ptr& value) {
+    cache.remove_if(access_key_id, value);
+  }
+  void add(const std::string& access_key_id, value_ptr value) {
+    cache.add(access_key_id, std::move(value));
+  }
+  utime_t expiry() const {
+    return ceph_clock_now() + s3_token_expiry_length;
+  }
+  bool enabled() const {
+    return cct->_conf->rgw_keystone_token_cache_size > 0;
+  }
 }; /* class SecretCache */
 
 class EC2Engine : public rgw::auth::s3::AWSEngine {
