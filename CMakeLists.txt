@@ -915,7 +915,7 @@ else()
   set(BOOST_J ${DEFAULT_BOOST_J} CACHE STRING "max jobs for Boost build") # override w/-DBOOST_J=<n>
   set(Boost_USE_STATIC_LIBS ON)
   include(BuildBoost)
-  build_boost(1.87
+  build_boost(1.92
     COMPONENTS ${BOOST_COMPONENTS} ${BOOST_HEADER_COMPONENTS})
   if(WITH_ASAN)
     # Boost.Context is built ucontext-only here (context-impl=ucontext); define
