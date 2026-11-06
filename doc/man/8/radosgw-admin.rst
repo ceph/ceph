@@ -861,6 +861,11 @@ Options
     Option for the 'user stats' command. When specified, it will update user stats with
     the current stats reported by the user's buckets indexes.
 
+.. option:: --stats
+
+    Option for the 'account list' command. When specified, it will list each
+    account's info and storage stats instead of only its ID.
+
 .. option:: --show-config
 
     Show configuration.
