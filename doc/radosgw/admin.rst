@@ -410,7 +410,7 @@ form:
 
 ::
 
-    --caps="[users|buckets|metadata|usage|zone|amz-cache|info|bilog|mdlog|datalog|user-policy|oidc-provider|roles|ratelimit|user-info-without-keys|accounts]=[\*|read|write|read, write]"
+    --caps="[users|buckets|metadata|usage|zone|amz-cache|info|bilog|mdlog|datalog|user-policy|oidc-provider|roles|ratelimit|user-info-without-keys|accounts|migration]=[\*|read|write|read, write]"
 
 For example:
 

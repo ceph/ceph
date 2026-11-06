@@ -2383,6 +2383,38 @@ inline int get_system_versioning_params(req_state *s,
   return 0;
 } /* get_system_versioning_params */
 
+/* rgwx-migration-*: honored only for users with the migration=write cap.
+ * mtime is in the format of the Rgwx-Mtime response header. */
+inline int get_migration_params(req_state *s, std::string *version_id,
+                                ceph::real_time *mtime)
+{
+  if (!s->user || s->user->get_caps().check_cap("migration", RGW_CAP_WRITE) != 0) {
+    return 0;
+  }
+
+  std::string vid = s->info.args.sys_get(RGW_SYS_PARAM_PREFIX "migration-version-id");
+  // a system rgwx-version-id takes precedence
+  if (!vid.empty() && version_id->empty()) {
+    *version_id = std::move(vid);
+  }
+
+  const std::string mtime_str = s->info.args.sys_get(RGW_SYS_PARAM_PREFIX "migration-mtime");
+  if (mtime_str.empty()) {
+    return 0;
+  }
+  int ret = parse_rgwx_mtime(s, mtime_str, mtime);
+  if (ret < 0) {
+    return ret;
+  }
+  if (s->bucket->get_info().obj_lock_enabled()) {
+    s->err.message = "mtime cannot be set on buckets with object lock enabled";
+    ldpp_subdout(s, rgw, 4) << "ERROR: " << s->err.message << dendl;
+    return -ERR_INVALID_BUCKET_STATE;
+  }
+
+  return 0;
+} /* get_migration_params */
+
 static inline void format_xattr(std::string &xattr)
 {
   /* If the extended attribute is not valid UTF-8, we encode it using

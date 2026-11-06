@@ -54,6 +54,11 @@
   ``--yes-i-really-mean-it``, because such a trim has no upper bound and can
   remove bilog entries that other zones have not synced yet.
 
+* RGW: Users with the new ``migration=write`` capability can keep an object's
+  original mtime and version id on upload, using the ``rgwx-migration-mtime``
+  and ``rgwx-migration-version-id`` query params. This helps migrating data
+  from other S3 services. See :ref:`radosgw-migration`.
+
 * RGW: ``radosgw-admin bilog trim`` no longer accepts ``--start-marker``, since
   FIFO-backed bilogs can only be trimmed from the front.
 * RGW: S3 Select is deprecated. The default value of ``rgw_disable_s3select``
