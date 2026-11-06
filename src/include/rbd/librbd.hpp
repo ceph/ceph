@@ -501,8 +501,14 @@ public:
                       IoCtx& image_io_ctx, const char *image_name);
   int group_image_remove(IoCtx& io_ctx, const char *group_name,
                          IoCtx& image_io_ctx, const char *image_name);
+  int group_image_remove(IoCtx& io_ctx, const char *group_name,
+                         IoCtx& image_io_ctx, const char *image_name,
+                         bool force);
   int group_image_remove_by_id(IoCtx& io_ctx, const char *group_name,
                                IoCtx& image_io_ctx, const char *image_id);
+  int group_image_remove_by_id(IoCtx& io_ctx, const char *group_name,
+                               IoCtx& image_io_ctx, const char *image_id,
+                               bool force);
   int group_image_list(IoCtx& io_ctx, const char *group_name,
                        std::vector<group_image_info_t> *images,
                        size_t group_image_info_size);
