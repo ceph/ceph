@@ -43,6 +43,7 @@ import ssl
 import threading
 import time
 from cherrypy.process.servers import ServerAdapter
+from cheroot import errors
 from cheroot.server import HTTPConnection
 from cheroot.wsgi import Server as WSGIServer
 from cheroot.ssl.builtin import BuiltinSSLAdapter
@@ -121,10 +122,11 @@ class DeferredHandshakeSSLAdapter(BuiltinSSLAdapter):
         try:
             s = self.context.wrap_socket(sock, server_side=True,
                                          do_handshake_on_connect=False)
-        except OSError:
+
+        except OSError as e:
             # the client is gone already
             sock.close()
-            return None, {}
+            raise errors.FatalSSLAlert(*e.args) from e
         return s, {'wsgi.url_scheme': 'https', 'HTTPS': 'on'}
 
 
