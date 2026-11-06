@@ -518,7 +518,7 @@ struct rgw_cls_bi_entry {
   void decode_json(JSONObj *obj, cls_rgw_obj_key *effective_key = NULL);
   static std::list<rgw_cls_bi_entry> generate_test_instances();
   bool get_info(cls_rgw_obj_key *key, RGWObjCategory *category,
-		rgw_bucket_category_stats *accounted_stats) const;
+		rgw_bucket_category_stats *accounted_stats, std::string *storage_class) const;
 };
 WRITE_CLASS_ENCODER(rgw_cls_bi_entry)
 
@@ -857,12 +857,13 @@ struct rgw_bucket_dir_header {
   cls_rgw_bucket_instance_entry new_instance;
   bool syncstopped;
   uint32_t reshardlog_entries;
+  std::optional<std::unordered_map<std::string, rgw_bucket_category_stats>> storage_class_stats;
 
   rgw_bucket_dir_header() : tag_timeout(0), ver(0), master_ver(0), syncstopped(false),
                             reshardlog_entries(0) {}
 
   void encode(ceph::buffer::list &bl) const {
-    ENCODE_START(8, 2, bl);
+    ENCODE_START(9, 2, bl);
     encode(stats, bl);
     encode(tag_timeout, bl);
     encode(ver, bl);
@@ -871,10 +872,11 @@ struct rgw_bucket_dir_header {
     encode(new_instance, bl);
     encode(syncstopped,bl);
     encode(reshardlog_entries, bl);
+    encode(storage_class_stats, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(8, 2, 2, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(9, 2, 2, bl);
     decode(stats, bl);
     if (struct_v > 2) {
       decode(tag_timeout, bl);
@@ -903,6 +905,10 @@ struct rgw_bucket_dir_header {
     } else {
       reshardlog_entries = 0;
     }
+    if (struct_v >= 9) {
+      decode(storage_class_stats, bl);
+    }
+
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const;
@@ -984,9 +990,11 @@ struct rgw_usage_data {
 
   rgw_usage_data() : bytes_sent(0), bytes_received(0), ops(0), successful_ops(0) {}
   rgw_usage_data(uint64_t sent, uint64_t received) : bytes_sent(sent), bytes_received(received), ops(0), successful_ops(0) {}
+  rgw_usage_data(uint64_t sent, uint64_t received, std::string stg_cls) : bytes_sent(sent), bytes_received(received), ops(0), successful_ops(0) {}
 
-  void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(1, 1, bl);
+
+    void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(2, 1, bl);
     encode(bytes_sent, bl);
     encode(bytes_received, bl);
     encode(ops, bl);
@@ -995,7 +1003,7 @@ struct rgw_usage_data {
   }
 
   void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(bytes_sent, bl);
     decode(bytes_received, bl);
     decode(ops, bl);
@@ -1029,7 +1037,7 @@ struct rgw_usage_log_entry {
   rgw_usage_log_entry(std::string& o, std::string& p, std::string& b) : owner(o), payer(p), bucket(b), epoch(0) {}
 
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(4, 1, bl);
+    ENCODE_START(5, 1, bl);
     encode(owner.to_str(), bl);
     encode(bucket, bl);
     encode(epoch, bl);
@@ -1045,7 +1053,7 @@ struct rgw_usage_log_entry {
 
 
    void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(4, bl);
+    DECODE_START(5, bl);
     std::string s;
     decode(s, bl);
     owner.from_str(s);
@@ -1103,6 +1111,12 @@ struct rgw_usage_log_entry {
 
   void add_usage(const std::string& category, const rgw_usage_data& data) {
     usage_map[category].aggregate(data);
+    total_usage.aggregate(data);
+  }
+
+  void add_usage(const std::string &storage_class, const std::string &category, const rgw_usage_data &data) {
+    usage_map[category].aggregate(data);
+    usage_map[storage_class + "::" + category].aggregate(data);
     total_usage.aggregate(data);
   }
 

@@ -563,6 +563,7 @@ int RGWSI_BucketIndex_RADOS::clean_index(const DoutPrefixProvider *dpp,
 int RGWSI_BucketIndex_RADOS::read_stats(const DoutPrefixProvider *dpp,
                                         const RGWBucketInfo& bucket_info,
                                         RGWBucketEnt *result,
+                                        std::optional<std::unordered_map<std::string, RGWBucketEnt>> *storage_class_ents,
                                         optional_yield y)
 {
   vector<rgw_bucket_dir_header> headers;
@@ -573,19 +574,43 @@ int RGWSI_BucketIndex_RADOS::read_stats(const DoutPrefixProvider *dpp,
     return r;
   }
 
-  result->count = 0; 
-  result->size = 0; 
-  result->size_rounded = 0; 
-
+  result->count = 0;
+  result->size = 0;
+  result->size_rounded = 0;
+  if (storage_class_ents) {
+    *storage_class_ents = std::unordered_map<std::string, RGWBucketEnt>{};
+  }
+  bool has_missing_storage_classes = false;
   auto hiter = headers.begin();
   for (; hiter != headers.end(); ++hiter) {
     RGWObjCategory category = RGWObjCategory::Main;
     auto iter = (hiter->stats).find(category);
+    bool stats_has_value = false;
     if (iter != hiter->stats.end()) {
       struct rgw_bucket_category_stats& stats = iter->second;
       result->count += stats.num_entries;
       result->size += stats.total_size;
       result->size_rounded += stats.total_size_rounded;
+      stats_has_value = stats.num_entries > 0;
+    }
+    if (has_missing_storage_classes || !stats_has_value) {
+      continue;
+    }
+    if (!hiter->storage_class_stats.has_value()) {
+      if (storage_class_ents) {
+        storage_class_ents->reset();
+      }
+      has_missing_storage_classes = true;
+      continue;
+    }
+    if (storage_class_ents) {
+      auto& sc_ents = storage_class_ents->value();
+      for (const auto& [storage_class, stats] : *hiter->storage_class_stats) {
+        sc_ents[storage_class].count += stats.num_entries;
+        sc_ents[storage_class].size += stats.total_size;
+        sc_ents[storage_class].size_rounded += stats.total_size_rounded;
+        sc_ents[storage_class].bucket = result->bucket;
+      }
     }
   }
 
