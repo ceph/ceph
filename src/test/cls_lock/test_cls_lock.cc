@@ -73,6 +73,25 @@ class TestClsLock : public ceph::test::ClsTestFixture {
   // Inherits: rados, ioctx, pool_name, pool_type, SetUp(), TearDown()
 };
 
+TEST_P(TestClsLock, TestLockReturn) {
+  string oid = "foo";
+  Lock l("lock");
+  utime_t dur(5, 0);
+  l.set_duration(dur);
+
+  utime_t start = ceph_clock_now();
+
+  librados::ObjectWriteOperation op;
+  bufferlist out;
+  l.lock_exclusive(&op, &out);
+  ASSERT_EQ(0, ioctx.operate(oid, &op, librados::OPERATION_RETURNVEC));
+
+  cls_lock_lock_reply reply;
+  auto p = out.cbegin();
+  decode(reply, p);
+  ASSERT_GE(reply.expires_at, start + dur);
+}
+
 TEST_P(TestClsLock, TestMultiLocking) {
   ClsLockType lock_type_shared = ClsLockType::SHARED;
   ClsLockType lock_type_exclusive = ClsLockType::EXCLUSIVE;
