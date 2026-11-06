@@ -27,6 +27,11 @@
   ``lockers`` field rather than the truth value of the returned object
   to determine whether any clients hold the lock.
 
+* RGW: HTTP responses for unsupported but recognized methods on a REST
+  handler now include an ``Allow`` header (RFC 9110). Unrecognized methods
+  (for example ``PATCH`` or ``TRACE``) are answered with ``501 Not
+  Implemented`` instead of ``405 Method Not Allowed``.
+
 * RGW: The "Bytes Sent" field is always set to "-" when bucket-logging is enabled
   in Standard mode.
 

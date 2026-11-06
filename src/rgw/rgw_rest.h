@@ -585,6 +585,9 @@ public:
 
   virtual RGWOp* get_op(void);
   virtual void put_op(RGWOp* op);
+
+  /** RFC 9110 §15.5.6: methods this handler can dispatch for the current request. */
+  virtual std::string list_allowed_methods();
 };
 
 class RGWHandler_REST_SWIFT;
