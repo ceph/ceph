@@ -1,0 +1,52 @@
+# git stress, as in fs/snaps/snaptest-git-ceph.sh but without snapshots,
+# which NFS does not expose: clone ceph.git onto the NFS mount, check out
+# a series of old releases and verify each checkout byte for byte
+#
+# An operation stuck on the hard NFS mount can outlive SIGTERM, so every
+# timeout escalates to SIGKILL. The outer one fails a stalled job well
+# before the job time limit would leave it dead.
+tasks:
+- exec:
+    client.0:
+      - |
+        timeout -k 60 5h bash -ex <<'EOF'
+        # A create in flight when ganesha is killed can be retried by the
+        # NFS client after the restart and fail with EEXIST, as the reply
+        # cache does not survive. That includes git's own lock files, which
+        # would then block every later attempt, so clear them first. Only
+        # the commands writing the tree and the index are retried: git diff
+        # and git fsck stay strict and catch any bad data this leaves behind.
+        retry() {
+            for i in 1 2 3 4 5; do
+                find .git -name '*.lock' -delete
+                "$@" && return 0
+                sleep 10
+            done
+            return 1
+        }
+        MNT=$(findmnt -n -t nfs,nfs4 -o TARGET | head -n 1)
+        test -n "$MNT"
+        DIR=$(mktemp -d -p "$MNT" git-ceph.XXXXXX)
+        cd "$DIR"
+        timeout -k 60 3600 git clone -q --no-checkout https://git.ceph.com/ceph.git || {
+            rm -rf ceph
+            timeout -k 60 7200 git clone -q --no-checkout https://git.ceph.com/ceph.git
+        }
+        cd ceph
+        retry git reset -q --hard HEAD
+        for v in $(seq 1 90); do
+            # there is no v0.48 tag
+            if [ $v -eq 48 ]; then
+                continue
+            fi
+            retry git reset -q --hard v0.$v
+            # rebuild the index without stat data, so that git diff
+            # rereads and hashes every file in the checkout
+            rm -f .git/index
+            retry git reset -q
+            git diff --exit-code --stat
+        done
+        git fsck --full --no-progress
+        cd /
+        rm -rf "$DIR"
+        EOF

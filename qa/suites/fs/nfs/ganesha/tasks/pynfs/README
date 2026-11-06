@@ -1,0 +1,37 @@
+This suite runs the pynfs NFSv4.0, 4.1 and 4.2 server conformance tests
+against the ganesha (FSAL_CEPH) export, one job per version. pynfs uses its
+own NFS client, so there is no kernel mount here.
+
+Delegations are enabled (cephadm's ganesha config disables them) so that the
+DELEG tests exercise libcephfs delegations.
+
+pynfs always exits 0. The pynfs task parses its JSON results and fails the
+job on any failed test that is not listed under known_failures in
+2-pynfs.yaml. The known failures, and why they fail:
+
+  COMP3 LINK8 LOOK7 OPEN13 RM5 RNM8 RNM9 SEC6   (4.0; COMP3 RNM8 RNM9 on 4.1/4.2)
+    Names that are not valid UTF-8 are expected to be rejected with
+    NFS4ERR_INVAL. Ganesha does not validate UTF-8 by default.
+
+  WRT16 WRT17   (4.0)
+    pynfs bug: float division under python3 in st_write.py makes the tests
+    error out before checking the server.
+
+  PUTFH3   (4.0)
+    A filehandle of a removed file is still usable (NFS4_OK, not
+    NFS4ERR_STALE). The test notes that a server is allowed to do this.
+
+  DELEG7   (4.1, 4.2)
+    Ganesha ignores the callback security parameters set by BACKCHANNEL_CTL;
+    CB_RECALL is sent with the credentials given at CREATE_SESSION.
+
+  DELEG24 DELEG25   (4.1, 4.2)
+    Ganesha does not support the FATTR4_OPEN_ARGUMENTS attribute, which the
+    CB_GETATTR tests require.
+
+  ALLOC1 ALLOC2 ALLOC3   (4.2)
+    ALLOCATE returns NFS4ERR_NOTSUPP: libcephfs fallocate() does not support
+    mode 0 (plain preallocation).
+
+When a ganesha, libcephfs or pynfs fix lands, drop the test from
+known_failures. The task logs any known failure that did not fail.

@@ -1,0 +1,36 @@
+# qa/workunits/kernel_untar_build.sh, but with a cleanup that survives ganesha
+# restarts. A remove in flight when ganesha stops can be retried by the NFS
+# client after the restart and fail with ENOENT, as the reply cache does not
+# survive, so the strict rm -r of the workunit fails with nothing left behind.
+# rm -f ignores only that error: any other failure, or anything still there
+# afterwards, fails the job.
+overrides:
+  check-counter:
+    counters:
+      mds:
+        - "mds.dir_split"
+tasks:
+- exec:
+    client.0:
+      - |
+        timeout -k 60 5h bash -ex <<'EOF'
+        MNT=$(findmnt -n -t nfs,nfs4 -o TARGET | head -n 1)
+        test -n "$MNT"
+        DIR=$(mktemp -d -p "$MNT" kernel_untar.XXXXXX)
+        cd "$DIR"
+        wget -O linux.tar.xz https://download.ceph.com/qa/linux-6.19.6.tar.xz
+        mkdir t
+        cd t
+        tar xJf ../linux.tar.xz
+        cd linux*
+        make defconfig
+        make -j$(grep -c processor /proc/cpuinfo)
+        cd ..
+        if ! rm -rf linux* || [ -n "$(ls -A)" ]; then
+            echo "rm -rf failed, it left behind:"
+            find .
+            exit 1
+        fi
+        cd /
+        rm -rf "$DIR"
+        EOF
