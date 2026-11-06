@@ -319,6 +319,12 @@
 /* Defined if pthread_rwlockattr_setkind_np() is available */
 #cmakedefine HAVE_PTHREAD_RWLOCKATTR_SETKIND_NP
 
+/* Defined if PTHREAD_MUTEX_ADAPTIVE_NP is available */
+#cmakedefine HAVE_PTHREAD_MUTEX_ADAPTIVE_NP
+
+/* Use adaptive mutex as ceph::mutex (perf experiment) */
+#cmakedefine WITH_CEPH_ADAPTIVE_MUTEX
+
 /* Defined if blkin enabled */
 #cmakedefine WITH_BLKIN
 
