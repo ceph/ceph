@@ -4,8 +4,9 @@
 #pragma once
 #include <algorithm>
 #include <utility>
+#include "include/encoding_string.h"
+#include "include/encoding_vector.h"
 #include <include/types.h>
-#include "include/encoding.h"
 
 class XMLObj;
 namespace ceph { class Formatter; }
