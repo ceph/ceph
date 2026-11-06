@@ -345,6 +345,7 @@ check "limit check: --uid missing value" 1 bucket limit check --uid
 check_cluster "limit check: no args (all users)" 0 -- bucket limit check
 check_cluster "limit check: --warnings-only" 0 -- bucket limit check --warnings-only
 check_cluster "limit check: nonexistent --uid (empty listing, exit 0)" 0 -- bucket limit check --uid no_such_user
+check_cluster "limit check: nonexistent --bucket" 2 -- bucket limit check --bucket no-such-bucket
 
 # flags before the 'check' leaf; all paths exit 0
 check_cluster "limit check: --uid before subcommand" 0 -- bucket --uid no_such_user limit check
@@ -1902,6 +1903,8 @@ check_bucket "integration: bucket chown" 0 -- bucket chown --bucket "$_test_buck
 # bucket limit check for the test user: JSON with user_id + buckets
 check_bucket "integration: limit check --uid" 0 -- bucket limit check --uid "$_test_uid"
 check_bucket "integration: limit check --uid --warnings-only" 0 -- bucket limit check --uid "$_test_uid" --warnings-only
+check_bucket "integration: limit check --bucket" 0 -- bucket limit check --bucket "$_test_bucket"
+check_bucket "integration: limit check --uid --bucket" 0 -- bucket limit check --uid "$_test_uid" --bucket "$_test_bucket"
 
 # bucket set-min-shards: set the dynamic-resharding minimum on the (Normal)
 # test bucket; succeeds with no output (exit 0). Exercises -b, the =form,
