@@ -68,6 +68,7 @@ function(add_datum_example name expected_output)
 endfunction()
 
 add_datum_example(read_plan read_plan)
+add_datum_example(developer_flow developer_flow)
 add_datum_example(01_hello_fragments 01_hello_fragments)
 add_datum_example(01_hello_fragments_variation 01_hello_fragments)
 add_datum_example(02_seat_selection 02_seat_selection)

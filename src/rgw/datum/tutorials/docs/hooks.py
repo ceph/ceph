@@ -181,6 +181,10 @@ def on_files(files, config):
         "and [expected output](expected/read_plan.txt). See "
         "[Build and run](build-and-run.md#run-the-interactive-read-planner-example) "
         "to build and check its starting selection.",
+        "", "## Developer’s guide", "",
+        "[Decode and prepare a reply](examples/developer_flow.cpp) with "
+        "[expected output](expected/developer_flow.txt). "
+        "The [developer’s guide](developer-guide.md) explains its contracts.",
     ]) + "\n")
 
     archive = io.BytesIO()
@@ -216,6 +220,8 @@ def on_page_markdown(markdown, page, config, **kwargs):
             target = "index.md"
         elif path == "docs/lookup.md":
             target = "lookup.md"
+        elif path in {"docs/developer-guide.md", "tutorials/docs/developer-guide.md"}:
+            target = "developer-guide.md" + separator + anchor
         elif path == "expected.json" or path.startswith(("examples/", "expected/", "figures/")):
             target = destination
         else:

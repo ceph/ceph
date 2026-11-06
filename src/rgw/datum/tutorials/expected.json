@@ -1,5 +1,6 @@
 {
   "read_plan": "[0, 4) MiB\n[12, 20) MiB\n[40, 42) MiB\n",
+  "developer_flow": "returned: 7\noffered: 3, consumed: 2, accepted: 1\nresume index: 2\nmalformed page: no reply published\n",
   "01_hello_fragments": "hello, world!\n",
   "02_half_interval_interlude": "A: [1, 2, 3, 4, 5]\nB: [3, 4, 5, 6, 7]\nA union B: [1, 2, 3, 4, 5, 6, 7]\nA intersection B: [3, 4, 5]\nA minus B: [1, 2]\n",
   "02_half_interval_interlude_variation": "A: [1, 2, 3, 4, 5]\nB: [7, 8, 9]\nA union B: [1, 2, 3, 4, 5, 7, 8, 9]\nA intersection B: []\nA minus B: [1, 2, 3, 4, 5]\n",

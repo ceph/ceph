@@ -11,6 +11,9 @@ Read the [tutorial](tutorial.md), starting with
 The [build appendix](tutorial.md#appendix-a-building-and-running) gives the setup,
 build, run, and output-check commands.
 
+The short [developer’s guide](docs/developer-guide.md) explains the design approach, with a
+[complete example](examples/developer_flow.cpp) of decoding, progress, and staged publication.
+
 The landing page's interactive read planner combines overlapping requests, cached data, and a
 limit on how much data to read per batch. Its [complete program](examples/read_plan.cpp) is a
 regular C++23 example: [build and check it](tutorial.md#run-the-interactive-read-planner-example)
