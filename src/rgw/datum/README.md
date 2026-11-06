@@ -14,6 +14,9 @@ Read the [tutorial](tutorials/tutorial.md) for small, runnable examples, or use 
 [documentation overview](../../../doc/dev/radosgw/datum/index.rst) to find the
 tutorial, design, build instructions, and index together.
 
+The short [developer’s guide](tutorials/docs/developer-guide.md) connects value handling,
+evaluation, ownership, progress, errors, and publication when designing or porting a handler.
+
 Examples abbreviate the library namespace with `namespace datum = ceph::salad::datum;`
 and use the standard headers for the storage and algorithms shown.
 

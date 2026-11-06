@@ -80,7 +80,7 @@ def source_read(app, docname, source):
         return
     navigation = 'Provisional documentation · ' + ' · '.join(f':doc:`{label} <{name}>`' for label, name in [
         ('Datum', 'index'), ('Tutorial', 'tutorial'), ('Datum in practice', 'in-practice'),
-        ('Design', 'design'),
+        ('Developer’s guide', 'developer-guide'), ('Design', 'design'),
         ('Domain Vocabulary: Ceph', '18-ceph-bytes'),
         ('Build and run', 'build-and-run'), ('Examples', 'examples'), ('Index', 'lookup')])
     if not source[0].startswith('.. datum-source:: '):
@@ -106,8 +106,8 @@ def source_read(app, docname, source):
         path = COURSE.parent / 'README.md'
         app.env.note_dependency(str(path))
         content = '# Design and reference\n\n' + path.read_text(encoding='utf-8').split('\n', 1)[1]
-    elif key == 'lookup':
-        path = COURSE / 'docs/lookup.md'
+    elif key in {'lookup', 'developer-guide'}:
+        path = COURSE / 'docs' / (key + '.md')
         app.env.note_dependency(str(path))
         content = path.read_text(encoding='utf-8')
     elif key == 'build-and-run':
@@ -133,6 +133,10 @@ def source_read(app, docname, source):
                     '[expected output](expected/read_plan.txt). '
                     'See [Build and run](build-and-run.rst#run-the-interactive-read-planner-example) '
                     'to build and check its starting selection.\n')
+        content += ('\n## Developer’s guide\n\n'
+                    '[Decode and prepare a reply](examples/developer_flow.cpp) with '
+                    '[expected output](expected/developer_flow.txt). '
+                    'The [developer’s guide](developer-guide.rst) explains its contracts.\n')
     elif key == 'tutorial':
         content = text[:sections[0].start()].replace('# Datum tutorials', '# Tutorial', 1)
     else:
@@ -180,6 +184,8 @@ def doctree_read(app, tree):
             target = ('index', '')
         elif path == 'docs/lookup.md':
             target = ('lookup', '')
+        elif path in {'docs/developer-guide.md', 'tutorials/docs/developer-guide.md'}:
+            target = ('developer-guide', anchor)
         elif path == 'https://github.com/chardan/ceph/blob/jfw-datum/src/rgw/datum/README.md':
             target = ('design', anchor)
         elif path.endswith(('.rst', '.md')) and '/' not in path:
