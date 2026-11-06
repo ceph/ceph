@@ -434,6 +434,109 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             clients_per_pool=clients_per_pool,
         )
 
+    def cluster_update(self,
+                       cluster_id: str,
+                       placement: Optional[str] = None,
+                       ingress: Optional[bool] = None,
+                       virtual_ip: Optional[str] = None,
+                       ingress_mode: Optional[IngressType] = None,
+                       port: Optional[int] = None,
+                       bind_addrs: Optional[str] = None,
+                       monitoring_port: Optional[int] = None,
+                       enable_rdma: bool = False,
+                       rdma_port: Optional[int] = None,
+                       enable_nfsv3: bool = False,
+                       ingress_placement: Optional[str] = None,
+                       networks: Optional[List[str]] = None) -> None:
+        """Python API for updating an existing NFS cluster by re-applying the spec."""
+        # None leaves the deployed bind addresses in place. An empty string
+        # clears them.
+        ip_addrs = None
+        if bind_addrs is not None:
+            ip_addrs = {}
+            for pair in bind_addrs.split(',') if bind_addrs else []:
+                if ':' in pair:
+                    host, ip = pair.split(':', 1)
+                    ip_addrs[host.strip()] = ip.strip()
+
+        # Re-apply the deployed specs. Settings the editor cannot represent
+        # (TLS, KMIP, metrics, monitoring bindings) are copied from the
+        # current services and only the requested fields change.
+        existing_nfs = self._described_spec('nfs', f'nfs.{cluster_id}')
+        ingress_service = f'ingress.nfs.{cluster_id}'
+        existing_ingress = self._described_spec('ingress', ingress_service)
+        disabling_ingress = ingress is False or not virtual_ip
+
+        if existing_nfs is None:
+            # Nothing is deployed yet, so there are no hidden settings to keep.
+            if disabling_ingress:
+                self._remove_ingress_service(ingress_service, existing_ingress)
+            return self.nfs._call_orch_apply_nfs(
+                cluster_id=cluster_id,
+                placement=placement,
+                virtual_ip=virtual_ip,
+                ingress_mode=ingress_mode,
+                port=port,
+                enable_nfsv3=enable_nfsv3,
+                ip_addrs=ip_addrs,
+                monitoring_port=monitoring_port,
+                enable_rdma=enable_rdma,
+                rdma_port=rdma_port,
+                ingress_placement=ingress_placement,
+                networks=networks,
+            )
+
+        nfs_spec, ingress_spec = self.nfs.prepare_cluster_update(
+            existing_nfs,
+            None if disabling_ingress else existing_ingress,
+            cluster_id=cluster_id,
+            placement=placement,
+            virtual_ip=None if disabling_ingress else virtual_ip,
+            ingress_mode=ingress_mode,
+            port=port,
+            enable_nfsv3=enable_nfsv3,
+            ip_addrs=ip_addrs,
+            monitoring_port=monitoring_port,
+            enable_rdma=enable_rdma,
+            rdma_port=rdma_port,
+            ingress_placement=ingress_placement,
+            networks=networks,
+        )
+        if disabling_ingress:
+            self._remove_ingress_service(ingress_service, existing_ingress)
+            try:
+                return self.nfs.apply_prepared_cluster_update(nfs_spec, None)
+            except Exception:
+                self._restore_ingress_service(cluster_id, existing_ingress)
+                raise
+        return self.nfs.apply_prepared_cluster_update(nfs_spec, ingress_spec)
+
+    def _described_spec(self, service_type: str, service_name: str) -> Optional[Any]:
+        completion = self.describe_service(
+            service_type=service_type, service_name=service_name)
+        services = orchestrator.raise_if_exception(completion)
+        if not services:
+            return None
+        return services[0].spec
+
+    def _remove_ingress_service(self, ingress_service: str, existing_ingress: Optional[Any]) -> None:
+        # An empty describe result means there is nothing to remove. A removal
+        # failure must stop the update so the client endpoint is not left half-changed.
+        if existing_ingress is None:
+            return
+        completion = self.remove_service(ingress_service)
+        orchestrator.raise_if_exception(completion)
+
+    def _restore_ingress_service(self, cluster_id: str, existing_ingress: Optional[Any]) -> None:
+        if existing_ingress is None:
+            return
+        try:
+            orchestrator.raise_if_exception(self.apply_ingress(existing_ingress))
+        except Exception:
+            log.exception(
+                "Failed to restore ingress service ingress.nfs.%s after the NFS update failed",
+                cluster_id)
+
     def cluster_rm(self, cluster_id: str) -> None:
         """Python API for removing an NFS cluster (no CLI EmptyResponder wrapper)."""
         return self.nfs.delete_nfs_cluster(cluster_id=cluster_id)

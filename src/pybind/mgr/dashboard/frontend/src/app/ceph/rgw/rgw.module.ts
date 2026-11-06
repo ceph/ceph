@@ -132,6 +132,7 @@ import { RgwBucketLifecycleListComponent } from './rgw-bucket-lifecycle-list/rgw
 import { RgwRateLimitComponent } from './rgw-rate-limit/rgw-rate-limit.component';
 import { RgwRateLimitDetailsComponent } from './rgw-rate-limit-details/rgw-rate-limit-details.component';
 import { NfsClusterComponent } from '../nfs/nfs-cluster/nfs-cluster.component';
+import { NfsClusterFormComponent } from '../nfs/nfs-cluster-form/nfs-cluster-form.component';
 import { SmbModule } from '../smb/smb.module';
 import { smbParentRoute } from '../smb/smb.routes';
 import { RgwTopicListComponent } from './rgw-topic-list/rgw-topic-list.component';
@@ -578,6 +579,22 @@ const routes: Routes = [
         path: '',
         component: NfsClusterComponent,
         data: { pageHeader: NFS_PAGE_HEADER }
+      },
+      {
+        path: 'cluster',
+        children: [
+          { path: '', component: NfsClusterComponent },
+          {
+            path: URLVerbs.CREATE,
+            component: NfsClusterFormComponent,
+            data: { breadcrumbs: ActionLabels.CREATE }
+          },
+          {
+            path: `${URLVerbs.EDIT}/:cluster_id`,
+            component: NfsClusterFormComponent,
+            data: { breadcrumbs: ActionLabels.EDIT, editing: true }
+          }
+        ]
       },
       {
         path: URLVerbs.CREATE,
