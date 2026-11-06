@@ -377,7 +377,9 @@ extern const char *ceph_osd_state_name(int s);
 	f(PG_HITSET_GET, __CEPH_OSD_OP(RD, PG, 4),	"pg-hitset-get")    \
 	f(PGNLS,	__CEPH_OSD_OP(RD, PG, 5),	"pgnls")	    \
 	f(PGNLS_FILTER,	__CEPH_OSD_OP(RD, PG, 6),	"pgnls-filter")     \
-	f(SCRUBLS, __CEPH_OSD_OP(RD, PG, 7), "scrubls")
+	f(SCRUBLS, __CEPH_OSD_OP(RD, PG, 7), "scrubls")                     \
+									    \
+	f(ASSERT_TIME, __CEPH_OSD_OP(RD, DATA, 1),	"assert-time")      \
 
 enum {
 #define GENERATE_ENUM_ENTRY(op, opcode, str)	CEPH_OSD_OP_##op = (opcode),
@@ -683,6 +685,16 @@ struct ceph_osd_op {
 			__le32 chunk_size;
 			__u8 type;              /* CEPH_OSD_CHECKSUM_OP_TYPE_* */
 		} __attribute__ ((packed)) checksum;
+		struct {
+			struct {
+				struct ceph_timespec stamp;
+				__u32 error_code;
+			} __attribute__ ((packed)) before;
+			struct {
+				struct ceph_timespec stamp;
+				__u32 error_code;
+			} __attribute__ ((packed)) after;
+		} __attribute__ ((packed)) assert_time;
 	} __attribute__ ((packed));
 	__le32 payload_len;
 } __attribute__ ((packed));
