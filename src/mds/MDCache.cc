@@ -57,6 +57,7 @@
 #include "messages/MCacheExpire.h"
 #include "messages/MClientCaps.h"
 #include "messages/MClientQuota.h"
+#include "messages/MClientReply.h"
 #include "messages/MClientRequest.h"
 #include "messages/MClientSnap.h"
 #include "messages/MDentryLink.h"
@@ -10059,6 +10060,12 @@ void MDCache::request_forward(const MDRequestRef& mdr, mds_rank_t who, int port)
   } else {
     dout(7) << "request_forward drop " << *mdr << " req " << *mdr->client_request
             << " was from mds" << dendl;
+    // the requesting mds holds the stray dentry until it gets a reply,
+    // see Server::handle_client_reply()
+    if (mdr->client_request->get_op() == CEPH_MDS_OP_RENAME) {
+      auto reply = make_message<MClientReply>(*mdr->client_request, -EAGAIN);
+      mds->send_message(reply, mdr->client_request->get_connection());
+    }
   }
   request_cleanup(mdr);
 }
