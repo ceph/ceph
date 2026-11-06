@@ -162,9 +162,7 @@ inline void populate_monotonic(lfdb::database_handle dbh, const int N, std::stri
    lfdb::set(txn, make_key(n, prefix), make_value(n));
   }
 
-  if (false == lfdb::commit(txn)) {
-   throw std::runtime_error(fmt::format("unable to commit transaction; {} entries, {} stride", total, stride));
-  }
+  lfdb::commit(txn);
  }
 }
 

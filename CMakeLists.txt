@@ -600,6 +600,7 @@ option(WITH_RADOSGW_KAFKA_ENDPOINT "RADOS Gateway's pubsub support for Kafka pus
 option(WITH_SYSTEM_RDKAFKA "build against system librdkafka instead of the bundled submodule" OFF)
 option(WITH_RADOSGW_LUA_PACKAGES "RADOS Gateway's support for dynamically adding lua packagess" ON)
 option(WITH_RADOSGW_FDB "FoundationDB support for RADOS Gateway (experimental)" OFF)
+include(cmake/modules/LibfdbConcurrency.cmake)
 option(WITH_RADOSGW_DBSTORE "DBStore backend for RADOS Gateway" ON)
 option(WITH_RADOSGW_DAOS "DAOS backend for RADOS Gateway" OFF)
 if(WITH_RADOSGW_DAOS)
@@ -690,6 +691,7 @@ if(WITH_RADOSGW_FDB)
 
  CPMAddPackage("gh:eyalz800/zpp_bits@4.5.1")
  message("-- enabled zpp_bits")
+
 
 # JFW: sadly, I'm having trouble getting FoundationDB to build, but this is VERY close
 # to "just working". But, how would we install the RPMs, etc.? This will need looking at
