@@ -141,6 +141,17 @@ namespace rados {
         encode(op, in);
         rados_op->exec(method::get_info, in);
       }
+      void get_lock_info_start(ObjectReadOperation *rados_op,
+			       const std::string& name,
+                               ceph::bufferlist* obl,
+                               int* prval)
+      {
+        bufferlist in;
+        cls_lock_get_info_op op;
+        op.name = name;
+        encode(op, in);
+        rados_op->exec(method::get_info, in, obl, prval);
+      }
 
       int get_lock_info_finish(bufferlist::const_iterator *iter,
 			       map<locker_id_t, locker_info_t> *lockers,
