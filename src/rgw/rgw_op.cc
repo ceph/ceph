@@ -3812,11 +3812,11 @@ static int check_owner_max_buckets(const DoutPrefixProvider* dpp,
     remaining = s->user->get_max_buckets();
   }
 
-  if (remaining < 0) {
-    return -EPERM;
-  }
-  if (!remaining) { // unlimited
+  if (remaining < 0) { // unlimited
     return 0;
+  }
+  if (!remaining) {
+    return -EPERM;
   }
 
   const uint64_t chunk_size = dpp->get_cct()->_conf->rgw_list_buckets_max_chunk;
