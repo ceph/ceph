@@ -821,14 +821,16 @@ def _check_share_rgw(share: resources.Share, staging: Staging) -> None:
 
     # Validate bucket exists (skip for external clusters)
     if not is_external_cluster:
-        if not rgw.validate_rgw_bucket(
-            staging._tool_execer,
-            share.rgw.bucket,
-            valid_user_id,
-        ):
+        try:
+            rgw.validate_rgw_bucket(
+                staging._tool_execer,
+                share.rgw.bucket,
+                valid_user_id,
+            )
+        except ValueError as e:
             raise ErrorResult(
                 share,
-                msg=f"RGW bucket '{share.rgw.bucket}' does not exist or is not accessible",
+                msg=f"RGW bucket '{share.rgw.bucket}' is not usable: {e}",
             )
     # For external clusters, skip bucket validation
     # User must ensure bucket exists on external cluster
