@@ -148,6 +148,32 @@ TEST(ConfigMap, add_option)
 }
 
 
+TEST(ConfigMap, normalize_option_values)
+{
+  boost::intrusive_ptr<CephContext> cct{
+    new CephContext(CEPH_ENTITY_TYPE_CLIENT), false};
+  struct test_t {
+    const char *name;
+    const char *input;
+    const char *expected;
+  };
+  const test_t tests[] = {
+    {"debug_ms", "7", "7/7"},
+    {"rbd_default_features", "invalid", "0"},
+    {"osd_min_split_replica_read_size", "8K", "8K"},
+    {"osd_min_split_replica_read_size", "invalid", "invalid"},
+  };
+  for (const auto &[name, input, expected] : tests) {
+    SCOPED_TRACE(name);
+    SCOPED_TRACE(input);
+    ConfigMap cm;
+    ASSERT_EQ(cm.add_option(cct.get(), name, "global", input,
+      [&](const std::string &key) { return cct->_conf.find_option(key); }), 0);
+    ASSERT_EQ(cm.global.options.size(), 1);
+    EXPECT_EQ(cm.global.options.begin()->second.raw_value, expected);
+  }
+}
+
 TEST(ConfigMap, result_sections)
 {
   ConfigMap cm;

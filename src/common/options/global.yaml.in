@@ -1,7 +1,6 @@
 # -*- mode: YAML -*-
 ---
 headers: |
-  #include "common/strtol.h"
   #include "osdc/SplitOp.h"
 options:
 - name: host
@@ -3065,11 +3064,9 @@ options:
     reads, all reads will be at least this size before a client will split it
     across multiple replicas. Set to 0 to disable read splitting for replica pools.
   validator: |
-    [](std::string *value, std::string *error_message) {
-      uint64_t f = strict_si_cast<uint64_t>(*value, error_message);
-      if (!error_message->empty()) {
-        return -EINVAL;
-      } else if (f < SplitOp::REPLICA_MIN_SPLIT_SIZE && f != 0) {
+    [](const Option::value_t &value, std::string *error_message) {
+      const auto size = std::get<uint64_t>(value);
+      if (size < SplitOp::REPLICA_MIN_SPLIT_SIZE && size != 0) {
         *error_message = "value must be 4096 or greater"
                          " or set to zero to disable splitting";
         return -EINVAL;
@@ -5535,15 +5532,13 @@ options:
     // on the number of threads that entered malloc/free/*. Unfortunately,
     // RocksDB sharding in BlueStore dramatically lifted the number of
     // threads spawn during RocksDB's init.
-    .set_validator([](std::string *value, std::string *error_message) {
-      if (const bool parsed_value = strict_strtob(value->c_str(), error_message);
-        error_message->empty() && parsed_value) {
+    .set_validator([](const Option::value_t &value, std::string *error_message) {
+      if (std::get<bool>(value)) {
         *error_message = "invalid BlueStore sharding configuration."
                          " Be aware any change takes effect only on mkfs!";
         return -EINVAL;
-      } else {
-        return 0;
       }
+      return 0;
     })
     #endif
 - name: bluestore_rocksdb_cfs

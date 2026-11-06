@@ -6,7 +6,6 @@ headers: |
   #include <regex>
   // rbd feature and io operation validation
   #include "include/stringify.h"
-  #include "common/strtol.h"
   #include "librbd/Features.h"
   #include "librbd/io/IoOperations.h"
 options:
@@ -18,10 +17,11 @@ options:
   services:
   - rbd
   validator: |
-    [](std::string *value, std::string *error_message) {
+    [](Option::value_t &new_value, std::string *error_message) {
+      auto &value = std::get<std::string>(new_value);
       std::regex pattern("^[^@/]+$");
-      if (!std::regex_match (*value, pattern)) {
-        *value = "rbd";
+      if (!std::regex_match(value, pattern)) {
+        value = "rbd";
         *error_message = "invalid RBD default pool, resetting to 'rbd'";
       }
       return 0;
@@ -33,10 +33,11 @@ options:
   services:
   - rbd
   validator: |
-    [](std::string *value, std::string *error_message) {
+    [](Option::value_t &new_value, std::string *error_message) {
+      auto &value = std::get<std::string>(new_value);
       std::regex pattern("^[^@/]*$");
-      if (!std::regex_match (*value, pattern)) {
-        *value = "";
+      if (!std::regex_match(value, pattern)) {
+        value = "";
         *error_message = "ignoring invalid RBD data pool";
       }
       return 0;
@@ -57,12 +58,13 @@ options:
   flags:
   - runtime
   validator: |
-    [](std::string *value, std::string *error_message) {
+    [](Option::value_t &new_value, std::string *error_message) {
+      auto &value = std::get<std::string>(new_value);
       std::stringstream ss;
-      uint64_t features = librbd::rbd_features_from_string(*value, &ss);
+      uint64_t features = librbd::rbd_features_from_string(value, &ss);
       // Leave this in integer form to avoid breaking Cinder.  Someday
       // we would like to present this in string form instead...
-      *value = stringify(features);
+      value = stringify(features);
       if (ss.str().size()) {
         return -EINVAL;
       }
@@ -320,11 +322,8 @@ options:
   min: 4_K
   max: 32_M
   validator: |
-    [](std::string *value, std::string *error_message) {
-      uint64_t f = strict_si_cast<uint64_t>(*value, error_message);
-      if (!error_message->empty()) {
-        return -EINVAL;
-      } else if (!std::has_single_bit(f)) {
+    [](const Option::value_t &value, std::string *error_message) {
+      if (!std::has_single_bit(std::get<uint64_t>(value))) {
         *error_message = "value must be a power of two";
         return -EINVAL;
       }
@@ -768,12 +767,13 @@ options:
   flags:
   - runtime
   validator: |
-    [](std::string *value, std::string *error_message) {
+    [](Option::value_t &new_value, std::string *error_message) {
+        auto &value = std::get<std::string>(new_value);
         std::ostringstream ss;
-        uint64_t exclude_ops = librbd::io::rbd_io_operations_from_string(*value, &ss);
+        uint64_t exclude_ops = librbd::io::rbd_io_operations_from_string(value, &ss);
         // Leave this in integer form to avoid breaking Cinder.  Someday
         // we would like to present this in string form instead...
-        *value = stringify(exclude_ops);
+        value = stringify(exclude_ops);
         if (ss.str().size()) {
           return -EINVAL;
         }

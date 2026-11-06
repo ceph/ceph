@@ -270,39 +270,46 @@ TEST(Option, validation)
   opt_int.set_min_max(5, 10);
 
   std::string msg;
-  EXPECT_EQ(-EINVAL, opt_int.validate(Option::value_t(int64_t(4)), &msg));
-  EXPECT_EQ(-EINVAL, opt_int.validate(Option::value_t(int64_t(11)), &msg));
-  EXPECT_EQ(0, opt_int.validate(Option::value_t(int64_t(7)), &msg));
+  Option::value_t input = int64_t{4};
+  EXPECT_EQ(-EINVAL, opt_int.validate(input, &msg));
+  input = int64_t{11};
+  EXPECT_EQ(-EINVAL, opt_int.validate(input, &msg));
+  input = int64_t{7};
+  EXPECT_EQ(0, opt_int.validate(input, &msg));
 
   Option opt_enum("foo", Option::TYPE_STR, Option::LEVEL_BASIC);
   opt_enum.set_enum_allowed({"red", "blue"});
-  EXPECT_EQ(0, opt_enum.validate(Option::value_t(std::string("red")), &msg));
-  EXPECT_EQ(0, opt_enum.validate(Option::value_t(std::string("blue")), &msg));
-  EXPECT_EQ(-EINVAL, opt_enum.validate(Option::value_t(std::string("green")), &msg));
+  input = std::string{"red"};
+  EXPECT_EQ(0, opt_enum.validate(input, &msg));
+  input = std::string{"blue"};
+  EXPECT_EQ(0, opt_enum.validate(input, &msg));
+  input = std::string{"green"};
+  EXPECT_EQ(-EINVAL, opt_enum.validate(input, &msg));
 
-  Option opt_validator("foo", Option::TYPE_INT, Option::LEVEL_BASIC);
-  opt_validator.set_validator([](std::string *value, std::string *error_message){
-      if (*value == std::string("one")) {
-        *value = "1";
+  Option opt_validator("foo", Option::TYPE_STR, Option::LEVEL_BASIC);
+  opt_validator.set_validator([](Option::value_t &new_value, std::string*) {
+      auto &value = std::get<std::string>(new_value);
+      if (value == "one") {
+        value = "1";
         return 0;
-      } else if (*value == std::string("666")) {
+      } else if (value == "666") {
         return -EINVAL;
       } else {
         return 0;
       }
   });
 
-  std::string input = "666";  // An explicitly forbidden value
-  EXPECT_EQ(-EINVAL, opt_validator.pre_validate(&input, &msg));
-  EXPECT_EQ(input, "666");
+  input = std::string{"666"};  // An explicitly forbidden value
+  EXPECT_EQ(-EINVAL, opt_validator.validate(input, &msg));
+  EXPECT_EQ(std::get<std::string>(input), "666");
 
-  input = "123";  // A permitted value with no special behaviour
-  EXPECT_EQ(0, opt_validator.pre_validate(&input, &msg));
-  EXPECT_EQ(input, "123");
+  input = std::string{"123"};  // A permitted value with no special behaviour
+  EXPECT_EQ(0, opt_validator.validate(input, &msg));
+  EXPECT_EQ(std::get<std::string>(input), "123");
 
-  input = "one";  // A value that has a magic conversion
-  EXPECT_EQ(0, opt_validator.pre_validate(&input, &msg));
-  EXPECT_EQ(input, "1");
+  input = std::string{"one"};  // A value that has a magic conversion
+  EXPECT_EQ(0, opt_validator.validate(input, &msg));
+  EXPECT_EQ(std::get<std::string>(input), "1");
 }
 
 /*
