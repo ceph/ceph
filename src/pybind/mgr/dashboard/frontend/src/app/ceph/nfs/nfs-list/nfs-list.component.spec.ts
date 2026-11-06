@@ -12,8 +12,10 @@ import { TableActionsComponent } from '~/app/shared/datatable/table-actions/tabl
 import { ExecutingTask } from '~/app/shared/models/executing-task';
 import { Summary } from '~/app/shared/models/summary.model';
 import { SummaryService } from '~/app/shared/services/summary.service';
+import { CdDatePipe } from '~/app/shared/pipes/cd-date.pipe';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskListService } from '~/app/shared/services/task-list.service';
-import { SharedModule } from '~/app/shared/shared.module';
+import { CommonModule } from '@angular/common';
 import { configureTestBed, expectItemTasks, PermissionHelper } from '~/testing/unit-test-helper';
 import { NfsDetailsComponent } from '../nfs-details/nfs-details.component';
 import { NfsListComponent, RgwExportType } from './nfs-list.component';
@@ -37,10 +39,14 @@ describe('NfsListComponent', () => {
       BrowserAnimationsModule,
       HttpClientTestingModule,
       RouterTestingModule,
-      SharedModule,
+      CommonModule,
       NgbNavModule
     ],
-    providers: [TaskListService]
+    providers: [
+      TaskListService,
+      { provide: ModalCdsService, useValue: { show: jest.fn(), dismissAll: jest.fn() } },
+      { provide: CdDatePipe, useValue: { transform: (d: any) => d } }
+    ]
   });
 
   beforeEach(() => {
@@ -54,6 +60,26 @@ describe('NfsListComponent', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  describe('shares list', () => {
+    beforeEach(() => {
+      component.clusterId = 'demo-nfs-cluster';
+      spyOn(nfsService, 'list').and.returnValue(of([]));
+      component.ngOnInit();
+    });
+
+    it('should use Create share action, share columns, and cluster create link', () => {
+      expect(component.tableActions[0].name).toBe('Create share');
+      expect(component.columns.map((c) => c.prop)).toEqual([
+        'pseudo',
+        'path',
+        'protocols',
+        'clients'
+      ]);
+      const createLink = component.tableActions[0].routerLink as () => any;
+      expect(createLink()).toEqual(['/cephfs/nfs/create', { cluster_id: 'demo-nfs-cluster' }]);
+    });
   });
 
   describe('edit action routerLink', () => {
@@ -119,7 +145,7 @@ describe('NfsListComponent', () => {
     });
 
     it('should call error function on init when summary service fails', () => {
-      spyOn(component.table, 'reset');
+      component.table = { reset: jest.fn() } as any;
       summaryService['summaryDataSource'].error(undefined);
       expect(component.table.reset).toHaveBeenCalled();
     });
@@ -206,39 +232,39 @@ describe('NfsListComponent', () => {
 
     expect(tableActions).toEqual({
       'create,update,delete': {
-        actions: ['Create', 'Edit', 'Delete'],
+        actions: ['Create share', 'Edit', 'Delete'],
         primary: {
-          multiple: 'Create',
-          executing: 'Create',
-          single: 'Create',
-          no: 'Create'
+          multiple: 'Create share',
+          executing: 'Create share',
+          single: 'Create share',
+          no: 'Create share'
         }
       },
       'create,update': {
-        actions: ['Create', 'Edit'],
+        actions: ['Create share', 'Edit'],
         primary: {
-          multiple: 'Create',
-          executing: 'Create',
-          single: 'Create',
-          no: 'Create'
+          multiple: 'Create share',
+          executing: 'Create share',
+          single: 'Create share',
+          no: 'Create share'
         }
       },
       'create,delete': {
-        actions: ['Create', 'Delete'],
+        actions: ['Create share', 'Delete'],
         primary: {
-          multiple: 'Create',
-          executing: 'Create',
-          single: 'Create',
-          no: 'Create'
+          multiple: 'Create share',
+          executing: 'Create share',
+          single: 'Create share',
+          no: 'Create share'
         }
       },
       create: {
-        actions: ['Create'],
+        actions: ['Create share'],
         primary: {
-          multiple: 'Create',
-          executing: 'Create',
-          single: 'Create',
-          no: 'Create'
+          multiple: 'Create share',
+          executing: 'Create share',
+          single: 'Create share',
+          no: 'Create share'
         }
       },
       'update,delete': {

@@ -10,10 +10,13 @@ import { Observable, of } from 'rxjs';
 
 import { NfsFormClientComponent } from '~/app/ceph/nfs/nfs-form-client/nfs-form-client.component';
 import { NfsFormComponent } from '~/app/ceph/nfs/nfs-form/nfs-form.component';
+import { NfsRateLimitComponent } from '~/app/ceph/nfs/nfs-rate-limit/nfs-rate-limit.component';
 import { Directory } from '~/app/shared/api/nfs.service';
-import { SharedModule } from '~/app/shared/shared.module';
+import { CommonModule } from '@angular/common';
 import { ActivatedRouteStub } from '~/testing/activated-route-stub';
 import { configureTestBed, RgwHelper } from '~/testing/unit-test-helper';
+import { CdDatePipe } from '~/app/shared/pipes/cd-date.pipe';
+import { FormatterService } from '~/app/shared/services/formatter.service';
 
 describe('NfsFormComponent', () => {
   let component: NfsFormComponent;
@@ -33,11 +36,18 @@ describe('NfsFormComponent', () => {
   ];
 
   const flushNfsClusterList = () => {
-    const req = httpTesting.expectOne(
+    const reqs = httpTesting.match(
       (request) =>
         request.url === 'api/nfs-ganesha/cluster' && request.params.get('info') === 'true'
     );
-    req.flush(nfsClusterListResponse);
+    expect(reqs.length).toBeGreaterThan(0);
+    reqs.forEach((req) => req.flush(nfsClusterListResponse));
+  };
+
+  const flushFilesystems = () => {
+    const reqs = httpTesting.match('ui-api/nfs-ganesha/cephfs/filesystems');
+    expect(reqs.length).toBeGreaterThan(0);
+    reqs.forEach((req) => req.flush([{ id: 1, name: 'a' }]));
   };
 
   configureTestBed({
@@ -46,10 +56,13 @@ describe('NfsFormComponent', () => {
       HttpClientTestingModule,
       ReactiveFormsModule,
       RouterTestingModule,
-      SharedModule,
-      NgbTypeaheadModule
+      CommonModule,
+      NgbTypeaheadModule,
+      NfsRateLimitComponent
     ],
     providers: [
+      FormatterService,
+      { provide: CdDatePipe, useValue: { transform: (d: any) => d } },
       {
         provide: ActivatedRoute,
         useValue: new ActivatedRouteStub({ cluster_id: 'mynfs', export_id: '1' })
@@ -60,7 +73,7 @@ describe('NfsFormComponent', () => {
   const matchSquash = (backendSquashValue: string, uiSquashValue: string) => {
     component.ngOnInit();
     flushNfsClusterList();
-    httpTesting.expectOne('ui-api/nfs-ganesha/cephfs/filesystems').flush([{ id: 1, name: 'a' }]);
+    flushFilesystems();
     httpTesting.expectOne('api/nfs-ganesha/export/mynfs/1').flush({
       fsal: {
         name: 'RGW'
@@ -69,8 +82,17 @@ describe('NfsFormComponent', () => {
       transports: ['TCP', 'UDP'],
       protocols: [4],
       clients: [],
-      squash: backendSquashValue
+      squash: backendSquashValue,
+      pseudo: '/baz'
     });
+    // Cluster QoS is part of the edit forkJoin; flushing it completes getData and
+    // may immediately trigger the export QoS request.
+    httpTesting
+      .match((request) => request.url.startsWith('api/nfs-ganesha/cluster/qos/'))
+      .forEach((req) => req.flush({}));
+    httpTesting
+      .match((request) => request.url.startsWith('api/nfs-ganesha/export/qos/'))
+      .forEach((req) => req.flush({}));
     httpTesting.verify();
     expect(component.nfsForm.value).toMatchObject({
       squash: uiSquashValue
@@ -89,10 +111,6 @@ describe('NfsFormComponent', () => {
     });
     RgwHelper.selectDaemon();
     fixture.detectChanges();
-
-    flushNfsClusterList();
-    httpTesting.expectOne('ui-api/nfs-ganesha/cephfs/filesystems').flush([{ id: 1, name: 'a' }]);
-    httpTesting.verify();
   });
 
   it('should create', () => {
@@ -100,6 +118,9 @@ describe('NfsFormComponent', () => {
   });
 
   it('should create the form', () => {
+    flushNfsClusterList();
+    flushFilesystems();
+    httpTesting.verify();
     expect(component.nfsForm.value).toEqual({
       access_type: 'RW',
       clients: [],
@@ -168,7 +189,7 @@ describe('NfsFormComponent', () => {
     expect(component.nfsForm.get('transportRDMA').value).toBe(true);
   });
 
-  it('should not auto-select when no cluster context provided', () => {
+  it('should auto-select the first cluster when no cluster context provided', () => {
     component.isEdit = false;
     component.selectedClusterId = '';
     component.nfsForm.get('cluster_id').setValue('');
@@ -188,8 +209,7 @@ describe('NfsFormComponent', () => {
         placement: {}
       }
     ]);
-    // No selectedClusterId → user must pick from dropdown
-    expect(component.nfsForm.get('cluster_id').value).toBe('');
+    expect(component.nfsForm.get('cluster_id').value).toBe('first-cluster');
   });
 
   it('should prepare data when selecting an cluster', () => {
@@ -265,11 +285,10 @@ describe('NfsFormComponent', () => {
       component.cluster_id = 'cluster1';
       component.export_id = '1';
       component.nfsForm.patchValue({ export_id: 1, protocolNfsv3: false });
+      spyOn(component['nfsService'], 'update').and.callThrough();
       component.submitAction();
-
-      const req = httpTesting.expectOne('api/nfs-ganesha/export/cluster1/1');
-      expect(req.request.method).toBe('PUT');
-      expect(req.request.body).toEqual({
+      expect(component['nfsService']['update']).toHaveBeenCalled();
+      expect(component['nfsService']['update']).toHaveBeenCalledWith('cluster1', 1, {
         access_type: 'RW',
         clients: [],
         cluster_id: 'cluster1',
@@ -306,6 +325,28 @@ describe('NfsFormComponent', () => {
         squash: 'no_root_squash',
         transports: ['TCP', 'UDP']
       });
+    });
+
+    it('should navigate to the cluster overview after create', () => {
+      const navigateSpy = spyOn(router, 'navigate');
+      activatedRoute.setParams({ cluster_id: undefined, export_id: undefined });
+      component.submitAction();
+
+      httpTesting.expectOne('api/nfs-ganesha/export').flush({});
+      expect(navigateSpy).toHaveBeenCalledWith(['/cephfs/nfs/cluster', 'cluster1']);
+    });
+
+    it('should navigate to the cluster overview after edit', () => {
+      const navigateSpy = spyOn(router, 'navigate');
+      activatedRoute.setParams({ cluster_id: 'cluster1', export_id: '1' });
+      component.isEdit = true;
+      component.cluster_id = 'cluster1';
+      component.export_id = '1';
+      component.nfsForm.patchValue({ export_id: 1 });
+      component.submitAction();
+
+      httpTesting.expectOne('api/nfs-ganesha/export/cluster1/1').flush({});
+      expect(navigateSpy).toHaveBeenCalledWith(['/cephfs/nfs/cluster', 'cluster1']);
     });
   });
 

@@ -25,7 +25,7 @@
           label="Cluster"
           cdRequiredField="Cluster"
           id="cluster_id"
-          (change)="clusterChangeHandler()"
+          (change)="registerClusterIdChange($event.target.value)"
           [invalid]="nfsForm.controls.cluster_id.invalid && nfsForm.controls.cluster_id.dirty"
           [invalidText]="clusterError"
           [skeleton]="allClusters === null"
@@ -700,7 +700,15 @@
           }
         </ng-template>
       </div>
-
+      <!--Enable Disable Bandwidth -->
+      <cd-nfs-rate-limit-form
+        [action]="action"
+        [isEdit]="isEdit"
+        [type]="'export'"
+        (emitErrors)="childCompErrorHandler($event)"
+        [clusterDataConfig]="clusterAllConfig"
+        [exportDataConfig]="exportAllConfig"
+      ></cd-nfs-rate-limit-form>
       <!-- Clients -->
       <cd-nfs-form-client
         [form]="nfsForm"

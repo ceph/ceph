@@ -245,6 +245,20 @@ class NFSGaneshaUiControllerTest(ControllerTestCase):
 
 
 class NFSGaneshaClusterTest(ControllerTestCase):
+    _cluster_info = {
+        'mycluster': {
+            'virtual_ip': None,
+            'backend': [{'hostname': 'host1', 'ip': '10.0.0.1', 'port': 2049, 'status': 'running'}],
+            'placement': {'count': 1},
+            'enable_nfsv3': False,
+            'enable_rdma': False,
+            'deployment_type': 'standalone',
+            'ingress_mode': None,
+            'port': None,
+            'monitor_port': None
+        }
+    }
+
     @classmethod
     def setup_server(cls):
         NotificationQueue.start_queue()
@@ -394,3 +408,45 @@ class NFSGaneshaClusterTest(ControllerTestCase):
         self._delete('/api/nfs-ganesha/cluster/myc',
                      version=APIVersion(1, 0))
         self.assertStatus(400)
+
+    def test_get_cluster(self):
+        mgr.remote = Mock(return_value=self._cluster_info)
+
+        self._get('/api/nfs-ganesha/cluster/mycluster', version=APIVersion.EXPERIMENTAL)
+        self.assertStatus(200)
+        self.assertJsonBody({'name': 'mycluster', **self._cluster_info['mycluster']})
+
+    def test_get_cluster_not_found(self):
+        mgr.remote = Mock(return_value={})
+
+        self._get('/api/nfs-ganesha/cluster/nonexistent', version=APIVersion.EXPERIMENTAL)
+        self.assertStatus(200)
+        self.assertJsonBody(None)
+
+    def test_get_cluster_qos(self):
+        mgr.remote = Mock(return_value={
+            'enable_qos': False,
+            'enable_bw_control': False,
+            'enable_iops_control': False,
+            'combined_rw_bw_control': False,
+        })
+
+        self._get('/api/nfs-ganesha/cluster/qos/test1')
+        self.assertStatus(200)
+        mgr.remote.assert_called_with('nfs', 'get_cluster_qos', 'test1', True)
+
+    def test_disable_cluster_qos_bw(self):
+        mgr.remote = Mock(return_value=None)
+
+        self._request('/api/nfs-ganesha/cluster/qos/bw', 'PATCH',
+                      {'cluster_id': 'test1', 'disable_qos': True})
+        self.assertStatus(200)
+        mgr.remote.assert_called_with('nfs', 'disable_cluster_qos_bw', 'test1')
+
+    def test_disable_cluster_qos_ops(self):
+        mgr.remote = Mock(return_value=None)
+
+        self._request('/api/nfs-ganesha/cluster/qos/ops', 'PATCH',
+                      {'cluster_id': 'test1', 'qos_type': 'PerShare', 'disable_ops': True})
+        self.assertStatus(200)
+        mgr.remote.assert_called_with('nfs', 'disable_cluster_qos_ops', 'test1')

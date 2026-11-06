@@ -1,10 +1,13 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { Router } from '@angular/router';
+import { RouterTestingModule } from '@angular/router/testing';
 import { of, throwError } from 'rxjs';
 import { take } from 'rxjs/operators';
 
 import { NfsService } from '~/app/shared/api/nfs.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
+import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
 
@@ -20,7 +23,7 @@ describe('NfsClusterComponent', () => {
 
   configureTestBed({
     declarations: [NfsClusterComponent],
-    imports: [HttpClientTestingModule, SharedModule]
+    imports: [HttpClientTestingModule, RouterTestingModule, SharedModule]
   });
 
   beforeEach(() => {
@@ -151,7 +154,7 @@ describe('NfsClusterComponent', () => {
       );
     });
 
-    it('should show a dash when no backends are running', async () => {
+    it('should mark status Stopped when no backends are running', async () => {
       await expectClusterRows(
         [
           {
@@ -163,11 +166,11 @@ describe('NfsClusterComponent', () => {
           } as NFSCluster
         ],
         [],
-        [{ name: 'cluster1', status: '-' }]
+        [{ name: 'cluster1', status: 'Stopped' }]
       );
     });
 
-    it('should show a dash when backends are missing', async () => {
+    it('should mark status Unknown when backends are missing', async () => {
       await expectClusterRows(
         [
           {
@@ -180,8 +183,16 @@ describe('NfsClusterComponent', () => {
         ],
         [],
         [
-          { name: 'cluster1', status: '-', eventsLink: ['/services', 'nfs.cluster1', 'events'] },
-          { name: 'cluster2', status: '-', eventsLink: ['/services', 'nfs.cluster2', 'events'] }
+          {
+            name: 'cluster1',
+            status: 'Unknown',
+            eventsLink: ['/services', 'nfs.cluster1', 'events']
+          },
+          {
+            name: 'cluster2',
+            status: 'Unknown',
+            eventsLink: ['/services', 'nfs.cluster2', 'events']
+          }
         ]
       );
     });
@@ -242,6 +253,28 @@ describe('NfsClusterComponent', () => {
           protocol: 'NFSv3, NFSv4'
         })
       ]);
+    });
+  });
+
+  it('should link cluster name to the cephfs cluster overview page', () => {
+    Object.defineProperty(TestBed.inject(Router), 'url', {
+      get: () => '/cephfs/nfs/cluster'
+    });
+    component.ngOnInit();
+    expect(component.columns[0].prop).toBe('name');
+    expect(component.columns[0].cellTransformation).toBe(CellTemplate.redirect);
+    expect(component.columns[0].customTemplateConfig).toEqual({
+      redirectLink: ['/cephfs/nfs/cluster', '::prop', 'overview']
+    });
+  });
+
+  it('should link cluster name to the rgw cluster overview page', () => {
+    Object.defineProperty(TestBed.inject(Router), 'url', {
+      get: () => '/rgw/nfs/cluster'
+    });
+    component.ngOnInit();
+    expect(component.columns[0].customTemplateConfig).toEqual({
+      redirectLink: ['/rgw/nfs/cluster', '::prop', 'overview']
     });
   });
 });

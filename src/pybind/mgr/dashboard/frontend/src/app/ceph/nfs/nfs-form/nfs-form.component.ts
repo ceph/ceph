@@ -9,8 +9,15 @@ import {
 import { ActivatedRoute, Router } from '@angular/router';
 
 import _ from 'lodash';
-import { forkJoin, Observable, of } from 'rxjs';
-import { catchError, debounceTime, distinctUntilChanged, map, mergeMap } from 'rxjs/operators';
+import { concat, forkJoin, Observable, of } from 'rxjs';
+import {
+  catchError,
+  debounceTime,
+  distinctUntilChanged,
+  last,
+  map,
+  mergeMap
+} from 'rxjs/operators';
 
 import { RGW_USER_EXPORT_PATH, SUPPORTED_FSAL } from '~/app/ceph/nfs/models/nfs.fsal';
 import { Directory, NfsService } from '~/app/shared/api/nfs.service';
@@ -31,10 +38,16 @@ import { NfsFormClientComponent } from '../nfs-form-client/nfs-form-client.compo
 import { getFsalFromRoute, getPathfromFsal } from '../utils';
 import { CephfsSubvolumeService } from '~/app/shared/api/cephfs-subvolume.service';
 import { CephfsSubvolumeGroupService } from '~/app/shared/api/cephfs-subvolume-group.service';
+import { CephfsSubvolume } from '~/app/shared/models/cephfs-subvolume.model';
+import { CephfsSubvolumeGroup } from '~/app/shared/models/cephfs-subvolume-group.model';
 import { RgwUserService } from '~/app/shared/api/rgw-user.service';
 import { RgwExportType } from '../nfs-list/nfs-list.component';
 import { DEFAULT_SUBVOLUME_GROUP } from '~/app/shared/constants/cephfs.constant';
 import { NFSCluster, NFSClusterOption } from '../models/nfs.model';
+import { NfsRateLimitComponent } from '../nfs-rate-limit/nfs-rate-limit.component';
+import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { NotificationService } from '~/app/shared/services/notification.service';
+import { NFSBwIopConfig, RateLimitType } from '../models/nfs-cluster-config';
 
 @Component({
   selector: 'cd-nfs-form',
@@ -50,6 +63,8 @@ export class NfsFormComponent extends CdForm implements OnInit {
     RGW_BUCKET_CREATE: '/rgw/bucket/create'
   };
 
+  @ViewChild(NfsRateLimitComponent, { static: false })
+  nfsRateLimitComponent!: NfsRateLimitComponent;
   clients: any[] = [];
 
   permission: Permission;
@@ -62,28 +77,31 @@ export class NfsFormComponent extends CdForm implements OnInit {
   allClusters: NFSClusterOption[] = null;
   icons = Icons;
 
-  allFsNames: any[] = null;
+  allFsNames: string[] = null;
 
-  allRGWUsers: any[] = null;
+  allRGWUsers: string[] = null;
 
   storageBackend: SUPPORTED_FSAL;
   storageBackendError: string = null;
 
   defaultAccessType = { RGW: 'RO' };
-  nfsAccessType: any[] = [];
-  nfsSquash: any[] = [];
+  nfsAccessType: { value: string; help: string }[] = [];
+  nfsSquash: string[] = [];
 
   action: string;
   resource: string;
-
-  allsubvolgrps: any[] = [];
-  allsubvols: any[] = [];
+  bandwidthObj: NFSBwIopConfig;
+  bandwidthIopsObj: NFSBwIopConfig;
+  allsubvolgrps: CephfsSubvolumeGroup[] = [];
+  allsubvols: CephfsSubvolume[] = [];
 
   selectedFsName: string = '';
   selectedSubvolGroup: string = '';
   selectedSubvol: string = '';
   selectedClusterId: string = '';
   defaultSubVolGroup = DEFAULT_SUBVOLUME_GROUP;
+  exportAllConfig: NFSBwIopConfig;
+  clusterAllConfig: NFSBwIopConfig;
 
   pathDataSource = (text$: Observable<string>) => {
     return text$.pipe(
@@ -114,7 +132,8 @@ export class NfsFormComponent extends CdForm implements OnInit {
     private rgwSiteService: RgwSiteService,
     private formBuilder: CdFormBuilder,
     private taskWrapper: TaskWrapperService,
-    public actionLabels: ActionLabelsI18n
+    public actionLabels: ActionLabelsI18n,
+    private notificationService: NotificationService
   ) {
     super();
     this.permission = this.authStorageService.getPermissions().pool;
@@ -153,6 +172,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
             }
           }
           promises.push(this.nfsService.get(this.cluster_id, this.export_id));
+          promises.push(this.nfsService.getClusterBandwidthOpsConfig(this.cluster_id));
           this.getData(promises);
         }
       );
@@ -176,11 +196,6 @@ export class NfsFormComponent extends CdForm implements OnInit {
           }
         }
       );
-
-      if (this.storageBackend === SUPPORTED_FSAL.RGW) {
-        this.nfsForm.get('rgw_export_type').setValue('bucket');
-        this.setBucket();
-      }
       this.getData(promises);
     }
   }
@@ -189,11 +204,22 @@ export class NfsFormComponent extends CdForm implements OnInit {
     forkJoin(promises).subscribe((data: any[]) => {
       this.resolveClusters(data[0]);
       this.resolveFsals(data[1]);
-      if (data[2]) {
-        this.resolveModel(data[2]);
+      if (this.isEdit) {
+        data[2] ? this.resolveModel(data[2]) : '';
+        data[3] ? (this.clusterAllConfig = data[3]) : '';
+        this.getExportData(data[2].pseudo);
+      } else {
+        this.cluster_id ? (data[2] ? (this.clusterAllConfig = data[2]) : '') : '';
       }
       this.loadingReady();
     });
+  }
+  getExportData(pseudoPath: string) {
+    this.nfsService
+      .getExportBandwidthOpsConfig(this.cluster_id, pseudoPath)
+      .subscribe((obj: {}) => {
+        this.exportAllConfig = obj;
+      });
   }
 
   isSelectedClusterRdmaEnabled(): boolean {
@@ -225,14 +251,14 @@ export class NfsFormComponent extends CdForm implements OnInit {
     (subvolgrp === this.defaultSubVolGroup
       ? this.subvolService.get(fs_name)
       : this.subvolService.get(fs_name, subvolgrp)
-    ).subscribe((data: any) => {
+    ).subscribe((data: CephfsSubvolume[]) => {
       this.allsubvols = data;
     });
     this.setUpVolumeValidation();
   }
 
   getSubVolGrp(fs_name: string) {
-    this.subvolgrpService.get(fs_name).subscribe((data: any) => {
+    this.subvolgrpService.get(fs_name).subscribe((data: CephfsSubvolumeGroup[]) => {
       this.allsubvolgrps = data;
     });
   }
@@ -475,12 +501,14 @@ export class NfsFormComponent extends CdForm implements OnInit {
       cluster_id: cluster.name,
       enable_rdma: cluster.enable_rdma ?? false
     }));
-    if (!this.isEdit && this.selectedClusterId) {
-      const target = this.allClusters.find((c) => c.cluster_id === this.selectedClusterId);
-      if (target) {
-        this.nfsForm.get('cluster_id').setValue(target.cluster_id);
-        this.nfsForm.get('transportRDMA').setValue(target.enable_rdma);
-      }
+    if (!this.isEdit && this.allClusters.length > 0) {
+      const preselected =
+        this.selectedClusterId &&
+        this.allClusters.find((c) => c.cluster_id === this.selectedClusterId);
+      this.nfsForm
+        .get('cluster_id')
+        .setValue(preselected ? preselected.cluster_id : this.allClusters[0].cluster_id);
+      this.clusterChangeHandler();
     }
   }
 
@@ -511,7 +539,12 @@ export class NfsFormComponent extends CdForm implements OnInit {
       this.nfsForm.patchValue({
         subvolume_group: this.selectedSubvolGroup
       });
-      this.getSubVol();
+      (this.selectedSubvolGroup === this.defaultSubVolGroup
+        ? this.subvolService.get(this.selectedFsName)
+        : this.subvolService.get(this.selectedFsName, this.selectedSubvolGroup)
+      ).subscribe((data: CephfsSubvolume[]) => {
+        this.allsubvols = data;
+      });
     }
     if (!_.isEmpty(this.selectedSubvol)) {
       this.nfsForm.patchValue({
@@ -521,7 +554,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
     }
   }
 
-  resolveFilesystems(filesystems: any[]) {
+  resolveFilesystems(filesystems: string[]) {
     this.allFsNames = filesystems;
     if (!this.isEdit) {
       this.resolveRouteParams();
@@ -555,7 +588,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
     this.nfsForm.get('fsal.user_id').enable();
     this.nfsForm.get('path').setValue('');
     this.nfsForm.get('path').disable();
-    this.rgwUserService.list().subscribe((users: any) => {
+    this.rgwUserService.list().subscribe((users: string[]) => {
       this.allRGWUsers = users;
     });
   }
@@ -597,13 +630,11 @@ export class NfsFormComponent extends CdForm implements OnInit {
     }
   }
 
-  getAccessTypeHelp(accessType: string) {
-    const accessTypeItem = this.nfsAccessType.find((currentAccessTypeItem) => {
-      if (accessType === currentAccessTypeItem.value) {
-        return currentAccessTypeItem;
-      }
-    });
-    return _.isObjectLike(accessTypeItem) ? accessTypeItem.help : '';
+  getAccessTypeHelp(accessType: string): string {
+    const accessTypeItem = this.nfsAccessType.find(
+      (currentAccessTypeItem) => accessType === currentAccessTypeItem.value
+    );
+    return accessTypeItem?.help ?? '';
   }
 
   getId() {
@@ -616,7 +647,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
     return '';
   }
 
-  private getPathTypeahead(path: any) {
+  private getPathTypeahead(path: string) {
     if (!_.isString(path) || path === '/') {
       return of([]);
     }
@@ -644,11 +675,13 @@ export class NfsFormComponent extends CdForm implements OnInit {
       return of([]);
     }
   }
+  childCompErrorHandler(event: Event) {
+    this.nfsForm.addControl('rateLimit', event);
+  }
 
   submitAction() {
     let action: Observable<any>;
     const requestModel = this.buildRequest();
-
     if (this.isEdit) {
       action = this.taskWrapper.wrapTaskAroundCall({
         task: new FinishedTask('nfs/edit', {
@@ -670,8 +703,78 @@ export class NfsFormComponent extends CdForm implements OnInit {
 
     action.subscribe({
       error: (errorResponse: CdHttpErrorResponse) => this.setFormErrors(errorResponse),
-      complete: () => this.router.navigate([`/${getPathfromFsal(this.storageBackend)}/nfs`])
+      complete: () => {
+        const rateLimitCalls: Observable<any>[] = [];
+        this.bandwidthObj = this.nfsRateLimitComponent?.getRateLimitFormValue();
+        this.bandwidthIopsObj = this.nfsRateLimitComponent?.getRateLimitOpsFormValue();
+        if (
+          this.bandwidthObj &&
+          this.clusterAllConfig?.enable_bw_control === this.bandwidthObj?.enable_qos
+        ) {
+          rateLimitCalls.push(this.buildRateLimitCall(RateLimitType.Bandwidth));
+        }
+        if (
+          this.bandwidthIopsObj &&
+          this.clusterAllConfig?.enable_iops_control === this.bandwidthIopsObj?.enable_ops
+        ) {
+          rateLimitCalls.push(this.buildRateLimitCall(RateLimitType.Iops));
+        }
+        if (rateLimitCalls.length > 0) {
+          concat(...rateLimitCalls)
+            .pipe(last())
+            .subscribe({
+              error: () => this.handleSubmitError(),
+              complete: () => {
+                this.handleSubmitComplete($localize`Update Rate Limit For Export`);
+                this.navigateToClusterOverview(requestModel.cluster_id);
+              }
+            });
+        } else {
+          this.navigateToClusterOverview(requestModel.cluster_id);
+        }
+      }
     });
+  }
+
+  private navigateToClusterOverview(clusterId?: string): void {
+    const id = clusterId || this.cluster_id || this.nfsForm.getValue('cluster_id');
+    const base = `/${getPathfromFsal(this.storageBackend)}/nfs`;
+    this.router.navigate(id ? [`${base}/cluster`, id] : [base]);
+  }
+
+  private buildRateLimitCall(type: RateLimitType): Observable<any> {
+    const cluster_id = this.nfsForm.getValue('cluster_id');
+    const pseudo_path = this.nfsForm.getValue('pseudo');
+
+    if (type === RateLimitType.Bandwidth) {
+      const rateLimitObj: any = {
+        ...this.bandwidthObj,
+        pseudo_path,
+        disable_qos: !this.bandwidthObj.enable_qos,
+        cluster_id
+      };
+      delete rateLimitObj.enable_qos;
+      delete rateLimitObj.qos_type;
+      return this.nfsService.enableQosForExports(rateLimitObj);
+    } else {
+      const rateLimitObj: any = {
+        ...this.bandwidthIopsObj,
+        pseudo_path,
+        disable_ops: !this.bandwidthIopsObj.enable_ops,
+        cluster_id
+      };
+      delete rateLimitObj.enable_ops;
+      delete rateLimitObj.qos_type;
+      return this.nfsService.enableQosOpsForExports(rateLimitObj);
+    }
+  }
+
+  private handleSubmitError() {
+    this.nfsForm.setErrors({ cdSubmitButton: true });
+  }
+
+  private handleSubmitComplete(notificationTitle: string) {
+    this.notificationService.show(NotificationType.success, notificationTitle);
   }
 
   private setFormErrors(errorResponse: CdHttpErrorResponse) {
@@ -763,7 +866,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
       requestModel.fsal.sec_label_xattr = requestModel.sec_label_xattr;
     }
     delete requestModel.sec_label_xattr;
-
+    delete requestModel.rateLimit;
     return requestModel;
   }
 
@@ -782,5 +885,12 @@ export class NfsFormComponent extends CdForm implements OnInit {
         catchError(() => of({ pathNameNotAllowed: true }))
       );
     };
+  }
+
+  registerClusterIdChange(value: string) {
+    this.clusterChangeHandler();
+    this.nfsService.getClusterBandwidthOpsConfig(value).subscribe((clusterData: NFSBwIopConfig) => {
+      this.clusterAllConfig = clusterData;
+    });
   }
 }
