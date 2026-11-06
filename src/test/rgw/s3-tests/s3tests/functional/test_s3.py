@@ -15155,6 +15155,45 @@ def test_put_public_block():
     assert resp['PublicAccessBlockConfiguration']['IgnorePublicAcls'] == access_conf['IgnorePublicAcls']
     assert resp['PublicAccessBlockConfiguration']['RestrictPublicBuckets'] == access_conf['RestrictPublicBuckets']
 
+def _test_put_public_block_malformed(elements):
+    bucket_name = get_new_bucket()
+    client = get_client()
+
+    access_conf = {'BlockPublicAcls': True,
+                   'IgnorePublicAcls': False,
+                   'BlockPublicPolicy': True,
+                   'RestrictPublicBuckets': False}
+    client.put_public_access_block(Bucket=bucket_name, PublicAccessBlockConfiguration=access_conf)
+
+    # boto3 won't serialize elements outside its model, so swap in the raw body
+    body = ('<PublicAccessBlockConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">'
+            + elements + '</PublicAccessBlockConfiguration>').encode()
+    lf = (lambda **kwargs: kwargs['params'].update(body=body))
+    client.meta.events.register_first('before-call.s3.PutPublicAccessBlock', lf)
+    e = assert_raises(ClientError, client.put_public_access_block, Bucket=bucket_name,
+                      PublicAccessBlockConfiguration=access_conf)
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 400
+    assert error_code == 'MalformedXML'
+
+    # the configuration stored before is unchanged
+    resp = client.get_public_access_block(Bucket=bucket_name)
+    assert resp['PublicAccessBlockConfiguration'] == access_conf
+
+def test_put_public_block_misspelled():
+    _test_put_public_block_malformed('<BlockPublicAcl>true</BlockPublicAcl>')
+
+def test_put_public_block_wrong_case():
+    _test_put_public_block_malformed('<blockPublicAcls>true</blockPublicAcls>')
+
+def test_put_public_block_unknown_element():
+    _test_put_public_block_malformed('<BlockPublicAcls>true</BlockPublicAcls>'
+                                     '<BlockEverything>true</BlockEverything>')
+
+def test_put_public_block_duplicate():
+    _test_put_public_block_malformed('<BlockPublicAcls>false</BlockPublicAcls>'
+                                     '<BlockPublicAcls>true</BlockPublicAcls>')
+
 
 def test_block_public_put_bucket_acls():
     #client = get_svc_client(svc='s3control', client_config=Config(s3={'addressing_style': 'path'}))
