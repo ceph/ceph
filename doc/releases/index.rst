@@ -9,13 +9,11 @@ Ceph Releases (index)
 
 .. ceph_releases_gantt:: releases.yml
 
+
 .. _active-releases:
 
 Active Releases
 ---------------
-
-The following Ceph releases are actively maintained and receive periodic backports and
-security fixes.
 
 .. toctree::
    :maxdepth: 1
@@ -25,13 +23,16 @@ security fixes.
    Tentacle (v20.2.*) <tentacle>
    Squid (v19.2.*) <squid>
 
+.. ceph_timeline_gantt:: releases.yml umbrella tentacle squid
+
+The following Ceph releases are actively maintained and receive periodic backports and
+security fixes.
+
 .. ceph_releases:: releases.yml current
 
+Release History
+---------------
 
-Release timeline
-----------------
-
-.. ceph_timeline_gantt:: releases.yml umbrella tentacle squid
 .. ceph_timeline:: releases.yml umbrella tentacle squid
 
 Archived Releases
