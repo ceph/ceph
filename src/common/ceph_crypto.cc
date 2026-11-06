@@ -50,24 +50,25 @@ void zeroize_for_security(void* const s, const size_t n) {
 }
 
 ssl::OpenSSLDigest::OpenSSLDigest(const EVP_MD * _type)
+  : OpenSSLDigest(_type, 0) {
+}
+
+ssl::OpenSSLDigest::OpenSSLDigest(const EVP_MD * _type, const int ctx_flags)
   : mpContext(EVP_MD_CTX_create())
   , mpType(_type) {
+  // Flags go on before the first EVP_DigestInit_ex(); init and final leave
+  // them in place, so they hold across Restart().
+  EVP_MD_CTX_set_flags(mpContext, ctx_flags);
   this->Restart();
 }
 
 ssl::OpenSSLDigest::~OpenSSLDigest() {
   EVP_MD_CTX_destroy(mpContext);
-  if (mpType_FIPS) {
-#if OPENSSL_VERSION_NUMBER >= 0x30000000L
-    EVP_MD_free(mpType_FIPS);
-#endif  // OPENSSL_VERSION_NUMBER >= 0x30000000L
-  }
 }
 
 ssl::OpenSSLDigest::OpenSSLDigest(OpenSSLDigest&& o) noexcept
   : mpContext(std::exchange(o.mpContext, nullptr)),
-    mpType(std::exchange(o.mpType, nullptr)),
-    mpType_FIPS(std::exchange(o.mpType_FIPS, nullptr))
+    mpType(std::exchange(o.mpType, nullptr))
 {
 }
 
@@ -75,27 +76,41 @@ ssl::OpenSSLDigest& ssl::OpenSSLDigest::operator=(OpenSSLDigest&& o) noexcept
 {
   std::swap(mpContext, o.mpContext);
   std::swap(mpType, o.mpType);
-  std::swap(mpType_FIPS, o.mpType_FIPS);
   return *this;
 }
 
 void ssl::OpenSSLDigest::Restart() {
-  if (mpType_FIPS) {
-    EVP_DigestInit_ex(mpContext, mpType_FIPS, NULL);
-  } else {
-    EVP_DigestInit_ex(mpContext, mpType, NULL);
-  }
+  EVP_DigestInit_ex(mpContext, mpType, NULL);
 }
 
-void ssl::OpenSSLDigest::SetFlags(int flags) {
-  if (flags == EVP_MD_CTX_FLAG_NON_FIPS_ALLOW && OpenSSL_version_num() >= 0x30000000L && mpType == EVP_md5() && !mpType_FIPS) {
+const EVP_MD *ssl::MD5NonCrypto::digest_type() {
 #if OPENSSL_VERSION_NUMBER >= 0x30000000L
-    mpType_FIPS = EVP_MD_fetch(NULL, "MD5", "fips=no");
-#endif  // OPENSSL_VERSION_NUMBER >= 0x30000000L
-  } else {
-    EVP_MD_CTX_set_flags(mpContext, flags);
-  }
-  this->Restart();
+  // An explicit "fips=no" query term overrides the same term in the
+  // default property query, and matches the default provider's MD5
+  // (which does not define the "fips" property at all).
+  // Process-lifetime cache, deliberately never freed.
+  static const EVP_MD * const md = []() -> const EVP_MD * {
+    if (EVP_MD * const fetched = EVP_MD_fetch(nullptr, "MD5", "fips=no")) {
+      return fetched;
+    }
+    return EVP_md5();  // no provider offers non-FIPS MD5; legacy fallback
+  }();
+  return md;
+#else
+  // Pre-3.0: plain MD5; ctx_flags() supplies the FIPS exemption.
+  return EVP_md5();
+#endif
+}
+
+int ssl::MD5NonCrypto::ctx_flags() {
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+  // The flag has no effect from 3.0 on; digest_type()'s query does the work.
+  return 0;
+#else
+  // Stock 1.1.1 ignores this flag, but FIPS-patched 1.1.1 builds (RHEL 8)
+  // check it in EVP_DigestInit_ex() and refuse MD5 in FIPS mode without it.
+  return EVP_MD_CTX_FLAG_NON_FIPS_ALLOW;
+#endif
 }
 
 void ssl::OpenSSLDigest::Update(const unsigned char *input, size_t length) {
