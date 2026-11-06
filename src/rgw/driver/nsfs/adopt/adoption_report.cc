@@ -40,7 +40,10 @@ const FindingKindText kind_texts[] = {
   {"ldap_configured",
    "NooBaa's LDAP-backed AssumeRoleWithWebIdentity is not carried:  a "
    "client holding an LDAP web identity token cannot get a session",
-   "issue those clients tokens from an OIDC provider registered with RGW"},
+   "register an OIDC provider in each account whose roles those clients "
+   "assume, add it to those roles' trust policies as a Federated "
+   "principal, and have the clients assume the roles by their RGW ARNs "
+   "with tokens from it"},
   {"collision",
    "nothing is imported, and the pass stops",
    "remove one of the records that share the _id, then run adoption "
