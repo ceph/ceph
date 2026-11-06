@@ -1,0 +1,5 @@
+overrides:
+  ceph:
+    conf:
+      global:
+        rados_replica_read_policy: balance
