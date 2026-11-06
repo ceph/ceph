@@ -5375,7 +5375,7 @@ static int rgw_get_bucket_resharding(cls_method_context_t hctx,
 
 CLS_INIT(rgw)
 {
-  CLS_LOG(1, "Loaded rgw class!");
+  CLS_LOG(0, "Loaded rgw class!");
 
   cls_handle_t h_class;
   cls_method_handle_t h_rgw_bucket_init_index;

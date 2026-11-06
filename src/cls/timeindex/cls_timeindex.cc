@@ -244,7 +244,7 @@ static int cls_timeindex_trim(cls_method_context_t hctx,
 
 CLS_INIT(timeindex)
 {
-  CLS_LOG(1, "Loaded timeindex class!");
+  CLS_LOG(0, "Loaded timeindex class!");
 
   cls_handle_t h_class;
   cls_method_handle_t h_timeindex_add;

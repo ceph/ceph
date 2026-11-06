@@ -122,7 +122,7 @@ static int cls_queue_remove_entries(cls_method_context_t hctx, bufferlist *in, b
 
 CLS_INIT(queue)
 {
-  CLS_LOG(1, "Loaded queue class!");
+  CLS_LOG(0, "Loaded queue class!");
 
   cls_handle_t h_class;
   cls_method_handle_t h_queue_init;

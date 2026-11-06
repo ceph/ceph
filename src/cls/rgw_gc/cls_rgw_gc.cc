@@ -515,7 +515,7 @@ static int cls_rgw_gc_queue_update_entry(cls_method_context_t hctx, bufferlist *
 
 CLS_INIT(rgw_gc)
 {
-  CLS_LOG(1, "Loaded rgw gc class!");
+  CLS_LOG(0, "Loaded rgw gc class!");
 
   cls_handle_t h_class;
   cls_method_handle_t h_rgw_gc_queue_init;
