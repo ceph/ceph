@@ -591,7 +591,7 @@ def test_agent_get_ls(_ls_subset, _ls, cephadm_fs):
 @mock.patch("cephadm.CephadmAgent.pull_conf_settings")
 @mock.patch("cephadm.time.time", return_value=1234.5)
 def test_agent_run(_time, _pull_conf_settings, _port_in_use, _gatherer_start,
-                   _listener_start, _is_alive, _load_verify_locations,
+                   _listener_start, _listener_setup, _is_alive, _load_verify_locations,
                     _HF_dump, _list_networks, _urlopen, _RQ_init, _wait, _clear):
     target_ip = '192.168.0.0'
     target_port = '9999'
@@ -636,7 +636,7 @@ def test_agent_run(_time, _pull_conf_settings, _port_in_use, _gatherer_start,
 
     class FakeHTTPResponse():
         def __init__(self):
-            pass
+            self.status = 200
 
         def __enter__(self):
             return self
@@ -672,6 +672,7 @@ def test_agent_run(_time, _pull_conf_settings, _port_in_use, _gatherer_start,
             agent.target_ip = target_ip
             agent.target_port = target_port
             agent.loop_interval = refresh_period
+            agent.report_timeout = refresh_period
             agent.starting_port = listener_port
             agent.host = host
             agent.device_enhanced_scan = device_enhanced_scan
@@ -701,8 +702,8 @@ def test_agent_run(_time, _pull_conf_settings, _port_in_use, _gatherer_start,
         }
         _RQ_init.assert_called_with(
             f'https://{target_ip}:{target_port}/data',
-            json.dumps(expected_data).encode('ascii'),
-            {
+            data=json.dumps(expected_data).encode('ascii'),
+            headers={
                 'X-Cephadm-Agent-Sent-At': '1234.5',
                 'Content-Type': 'application/json',
             }

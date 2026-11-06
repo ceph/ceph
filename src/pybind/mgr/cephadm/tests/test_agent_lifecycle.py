@@ -184,9 +184,6 @@ class TestAgentApplyAndRemove:
             assert 'agent' not in cephadm_module.spec_store
 
     @pytest.mark.parametrize('applied', [
-        # hand-written spec: no ssl, which leaves agents with empty
-        # listener credentials
-        ServiceSpec('agent', placement=PlacementSpec(host_pattern='*')),
         # no placement: used to fail with a KeyError on the placement defaults
         ServiceSpec('agent'),
         # subset of hosts
@@ -208,12 +205,19 @@ class TestAgentApplyAndRemove:
             assert not spec.unmanaged
             cephadm_module.use_agent = False
 
+    @pytest.mark.parametrize('applied', [
+        CephadmAgentHelpers.agent_spec(),
+        # hand-written spec without ssl: the spec itself enables ssl, so
+        # it is already canonical
+        ServiceSpec('agent', placement=PlacementSpec(host_pattern='*')),
+    ])
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
     @mock.patch("cephadm.module.CephadmOrchestrator._kick_serve_loop")
-    def test_apply_canonical_spec_no_warning(self, _kick, cephadm_module: CephadmOrchestrator):
+    def test_apply_canonical_spec_no_warning(self, _kick, cephadm_module: CephadmOrchestrator,
+                                             applied):
         with with_host(cephadm_module, 'test'):
             cephadm_module.use_agent = True
-            msg = cephadm_module._apply_service_spec(CephadmAgentHelpers.agent_spec())
+            msg = cephadm_module._apply_service_spec(applied)
             assert 'WARNING' not in msg
             _assert_canonical_agent_spec(cephadm_module.spec_store.active_specs['agent'])
             cephadm_module.use_agent = False

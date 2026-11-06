@@ -13,6 +13,7 @@ from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, DaemonDeplo
 from cephadm.services.service_registry import service_registry
 from cephadm.tlsobject_types import TLSCredentials, EMPTY_TLS_CREDENTIALS
 from cephadm.module import CephadmOrchestrator
+from cephadm.serve import CephadmServe
 from orchestrator import OrchestratorError
 from cephadm.tests.fixtures import with_host, with_service, async_side_effect
 
@@ -93,35 +94,38 @@ class TestAgent:
         _get_ceph_volume_image.assert_called_with(cephadm_module)
 
     @patch(
-        "cephadm.services.agent.CephadmAgent._get_ceph_volume_image",
+        "cephadm.services.cephadmservice.CephadmAgent._get_ceph_volume_image",
         return_value="quay.io/ceph/ceph:test"
     )
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_agent_spec_without_ssl_gets_listener_credentials(
             self, _run_cephadm, _get_ceph_volume_image, cephadm_module: CephadmOrchestrator):
-        # A hand-written agent spec (or one stored by tentacle) has no
-        # 'ssl'. The agent must still be deployed with a cephadm-signed
-        # listener certificate and key.
+        # A stored agent spec without 'ssl' (written by hand or by an older
+        # release) must still deploy the agent with a cephadm-signed
+        # listener certificate and key. 'orch apply' normalizes agent specs,
+        # so put the spec in the store directly.
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+        cephadm_module.use_agent = True
         agent_spec = ServiceSpec.from_json({'service_type': 'agent',
                                             'placement': {'host_pattern': '*'}})
         with with_host(cephadm_module, 'test'):
-            with with_service(cephadm_module, agent_spec):
-                deploys = [c for c in _run_cephadm.call_args_list
-                           if c.args[1] == 'agent.test' and c.args[2] == ['_orch', 'deploy']]
-                assert deploys
-                config = json.loads(deploys[-1].kwargs['stdin'])['config_blobs']
-                assert config['listener.crt'].startswith('-----BEGIN CERTIFICATE-----')
-                assert 'PRIVATE KEY-----' in config['listener.key']
-                tls_creds = cephadm_module.cert_mgr.get_self_signed_tls_credentials('agent', 'test')
-                assert tls_creds.cert == config['listener.crt']
-                assert tls_creds.key == config['listener.key']
+            cephadm_module.spec_store.save(agent_spec)
+            CephadmServe(cephadm_module)._apply_all_services()
+            deploys = [c for c in _run_cephadm.call_args_list
+                       if c.args[1] == 'agent.test' and c.args[2] == ['_orch', 'deploy']]
+            assert deploys
+            config = json.loads(deploys[-1].kwargs['stdin'])['config_blobs']
+            assert config['listener.crt'].startswith('-----BEGIN CERTIFICATE-----')
+            assert 'PRIVATE KEY-----' in config['listener.key']
+            tls_creds = cephadm_module.cert_mgr.get_self_signed_tls_credentials('agent', 'test')
+            assert tls_creds.cert == config['listener.crt']
+            assert tls_creds.key == config['listener.key']
 
     @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: cephadm_root_ca)
     @patch("cephadm.services.cephadmservice.CephadmService.get_certificates",
            lambda instance, dspec, ips=None, fqdns=None: EMPTY_TLS_CREDENTIALS)
     @patch(
-        "cephadm.services.agent.CephadmAgent._get_ceph_volume_image",
+        "cephadm.services.cephadmservice.CephadmAgent._get_ceph_volume_image",
         return_value="quay.io/ceph/ceph:test"
     )
     @patch("cephadm.serve.CephadmServe._run_cephadm")

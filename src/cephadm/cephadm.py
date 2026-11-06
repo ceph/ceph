@@ -1724,6 +1724,10 @@ class CephadmAgent(DaemonForm):
         self.listener_cert_path = os.path.join(self.daemon_dir, 'listener.crt')
         self.listener_key_path = os.path.join(self.daemon_dir, 'listener.key')
         self.listener_port = ''
+        # optional agent.json settings, same defaults as pull_conf_settings()
+        self.metadata_compresion_enabled = False
+        self.initial_startup_delay_max = 0
+        self.jitter_seconds = 0
         self.ack = 1
         self.event = Event()
         self.mgr_listener = MgrListener(self)
