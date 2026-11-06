@@ -1,5 +1,14 @@
 set(MAX_COMPILE_MEM 3500 CACHE INTERNAL "maximum memory used by each compiling job (in MiB)")
-set(MAX_LINK_MEM 4500 CACHE INTERNAL "maximum memory used by each linking job (in MiB)")
+if(CMAKE_INTERPROCEDURAL_OPTIMIZATION OR
+   "${CMAKE_CXX_FLAGS} ${CMAKE_EXE_LINKER_FLAGS}" MATCHES "-flto")
+  set(_lto TRUE)
+endif()
+if(_lto)
+  # ld, the WPA stage and its LTRANS jobs of a single LTO link
+  set(MAX_LINK_MEM 6000 CACHE INTERNAL "maximum memory used by each linking job (in MiB)")
+else()
+  set(MAX_LINK_MEM 4500 CACHE INTERNAL "maximum memory used by each linking job (in MiB)")
+endif()
 
 cmake_host_system_information(RESULT _num_cores QUERY NUMBER_OF_LOGICAL_CORES)
 cmake_host_system_information(RESULT _total_mem QUERY TOTAL_PHYSICAL_MEMORY)
@@ -52,4 +61,17 @@ if(NINJA_MAX_LINK_JOBS)
     avg_link_job_pool=${NINJA_MAX_LINK_JOBS}
     heavy_link_job_pool=${_heavy_link_jobs})
   set(CMAKE_JOB_POOL_LINK avg_link_job_pool)
+  if(_lto)
+    # without a jobserver, -flto=auto runs an LTRANS job per CPU thread in
+    # every link, so share the threads among the heavy links instead
+    math(EXPR _ltrans_jobs "${_num_cores} / ${_heavy_link_jobs}")
+    if(_ltrans_jobs EQUAL 0)
+      set(_ltrans_jobs 1)
+    endif()
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+      add_link_options(-flto=${_ltrans_jobs})
+    elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+      add_link_options(-flto-jobs=${_ltrans_jobs})
+    endif()
+  endif()
 endif()
