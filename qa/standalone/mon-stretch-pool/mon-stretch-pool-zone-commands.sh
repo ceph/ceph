@@ -51,9 +51,9 @@ function TEST_pool_set_on_two_zones() {
     test "$(pool_field e min_size)" = 3 || return 1
 }
 
-# A pool over zones has at most 128 OSDs: num_zones 2 is refused for a pool of
-# more than 64 shards. A rule generated for so many shards is refused for the
-# zones' size first, so the pool is given a rule over two zones.
+# A PG has at most 128 OSDs: num_zones 2 is refused for a pool of more than 64
+# shards. A rule generated for so many shards is refused for the zones' size
+# first, so the pool is given a rule over two zones.
 function TEST_num_zones_osd_limit() {
     local dir=$1
     two_zone_cluster $dir || return 1
@@ -65,7 +65,7 @@ function TEST_num_zones_osd_limit() {
     ceph osd erasure-code-profile set small plugin=jerasure k=2 m=1 \
         crush-failure-domain=osd || return 1
     ceph osd crush rule create-erasure two_zones small 2 || return 1
-    expect_failure $dir "a pool can have at most 128 OSDs" \
+    expect_failure $dir "a PG can have at most 128 OSDs" \
         ceph osd pool set wide num_zones 2 --crush_rule two_zones || return 1
     test "$(pool_field wide size)" = 65 || return 1
     test "$(pool_field wide num_zones)" = 1 || return 1
