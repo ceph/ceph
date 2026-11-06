@@ -6,9 +6,23 @@
 #include "rgw_xml.h"
 #include "common/ceph_json.h"
 
+#include <initializer_list>
+#include <string_view>
+
+// a misspelled or misplaced element would otherwise read as absent
+static void check_known_children(XMLObj *obj, std::initializer_list<std::string_view> known) {
+  auto iter = obj->find_first();
+  for (std::string name; iter.get_name(name); iter.get_next()) {
+    if (std::find(known.begin(), known.end(), name) == known.end()) {
+      throw RGWXMLDecoder::err("unknown element " + name);
+    }
+  }
+}
+
 void ApplyServerSideEncryptionByDefault::decode_xml(XMLObj *obj) {
+  check_known_children(obj, {"KMSMasterKeyID", "SSEAlgorithm"});
   RGWXMLDecoder::decode_xml("KMSMasterKeyID", kmsMasterKeyID, obj, false);
-  RGWXMLDecoder::decode_xml("SSEAlgorithm", sseAlgorithm, obj, false);
+  RGWXMLDecoder::decode_xml("SSEAlgorithm", sseAlgorithm, obj, true);
 }
 
 void ApplyServerSideEncryptionByDefault::dump_xml(Formatter *f) const {
@@ -19,10 +33,13 @@ void ApplyServerSideEncryptionByDefault::dump_xml(Formatter *f) const {
 }
 
 void ServerSideEncryptionConfiguration::decode_xml(XMLObj *obj) {
+  check_known_children(obj, {"ApplyServerSideEncryptionByDefault", "BucketKeyEnabled",
+                             "BlockedEncryptionTypes"});
   RGWXMLDecoder::decode_xml("ApplyServerSideEncryptionByDefault", applyServerSideEncryptionByDefault, obj, false);
   RGWXMLDecoder::decode_xml("BucketKeyEnabled", bucketKeyEnabled, obj, false);
 
   if (XMLObj *blocked = obj->find_first("BlockedEncryptionTypes"); blocked) {
+    check_known_children(blocked, {"EncryptionType"});
     RGWXMLDecoder::decode_xml("EncryptionType", blockedEncryptionTypes, blocked);
     for (const auto& type : blockedEncryptionTypes) {
       if (type != "SSE-C" && type != "NONE") {
@@ -47,7 +64,12 @@ void ServerSideEncryptionConfiguration::dump_xml(Formatter *f) const {
 }
 
 void RGWBucketEncryptionConfig::decode_xml(XMLObj *obj) {
-  rule_exist = RGWXMLDecoder::decode_xml("Rule", rule, obj);
+  check_known_children(obj, {"Rule"});
+  // only the first Rule is decoded, so a second one would be dropped
+  if (auto rules = obj->find("Rule"); rules.get_next() && rules.get_next()) {
+    throw RGWXMLDecoder::err("more than one Rule");
+  }
+  rule_exist = RGWXMLDecoder::decode_xml("Rule", rule, obj, true);
 }
 
 void RGWBucketEncryptionConfig::dump_xml(Formatter *f) const {
