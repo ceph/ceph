@@ -2385,7 +2385,7 @@ public:
           sc(_sc), sync_env(_sc->env),
           pool(_pool),
           shard_id(_shard_id),
-          sync_marker(_marker), objv(objv) {
+          sync_marker(_marker), sync_status(sync_status), objv(objv) {
     tn = sync_env->sync_tracer->add_node(_tn_parent, "shard", std::to_string(shard_id));
   }
 
