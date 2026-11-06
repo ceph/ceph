@@ -1,0 +1,17 @@
+# ceph.alternate_name backup uses ceph-fuse. The kernel client treats
+# ceph.fscrypt.auth as a read-only vxattr, so setxattr returns EOPNOTSUPP.
+# The copied tree has no hardlinks: fuse getxattr/setxattr are inode-based,
+# and an inode with more than one link cannot name which dentry's
+# alternate_name to use.
+teuthology:
+  postmerge:
+  - if not is_fuse() then reject() end
+tasks:
+  - workunit:
+      clients:
+        all:
+          - fs/fscrypt_cli_setup.sh
+  - cephfs_test_runner:
+      fail_on_skip: false
+      modules:
+        - tasks.cephfs.test_fscrypt.TestFSCryptBackup
