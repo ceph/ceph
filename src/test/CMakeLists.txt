@@ -706,6 +706,10 @@ add_ceph_test(run-cli-tests ${CMAKE_CURRENT_SOURCE_DIR}/run-cli-tests)
 
 add_ceph_test(smoke.sh ${CMAKE_CURRENT_SOURCE_DIR}/smoke.sh)
 
+# perf counters that hold bytes or latencies must declare their unit
+add_ceph_test(check-perf-counter-units.py
+  ${CMAKE_CURRENT_SOURCE_DIR}/check-perf-counter-units.py ${CMAKE_SOURCE_DIR}/src)
+
 # unittest_admin_socket
 add_executable(unittest_admin_socket
   admin_socket.cc

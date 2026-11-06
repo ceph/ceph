@@ -3793,7 +3793,8 @@ void MDSRank::create_logger()
     // useful dir/inode/subtree stats
     mds_plb.set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
     mds_plb.add_u64(l_mds_root_rfiles, "root_rfiles", "root inode rfiles");
-    mds_plb.add_u64(l_mds_root_rbytes, "root_rbytes", "root inode rbytes");
+    mds_plb.add_u64(l_mds_root_rbytes, "root_rbytes", "root inode rbytes",
+                    nullptr, PerfCountersBuilder::PRIO_DEBUGONLY, unit_t(UNIT_BYTES));
     mds_plb.add_u64(l_mds_root_rsnaps, "root_rsnaps", "root inode rsnaps");
     mds_plb.add_u64_counter(l_mds_dir_fetch_complete,
 			    "dir_fetch_complete", "Fetch complete dirfrag");
@@ -3883,7 +3884,8 @@ void MDSRank::create_logger()
     mdm_plb.add_u64(l_mdm_cap, "cap", "Capabilities");
     mdm_plb.add_u64_counter(l_mdm_capa, "cap+", "Capabilities added");
     mdm_plb.add_u64_counter(l_mdm_caps, "cap-", "Capabilities removed");
-    mdm_plb.add_u64(l_mdm_heap, "heap", "Heap size");
+    mdm_plb.add_u64(l_mdm_heap, "heap", "Heap size",
+                    nullptr, PerfCountersBuilder::PRIO_DEBUGONLY, unit_t(UNIT_BYTES));
 
     mlogger = mdm_plb.create_perf_counters();
     g_ceph_context->get_perfcounters_collection()->add(mlogger);

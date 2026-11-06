@@ -2107,6 +2107,14 @@ class Module(MgrModule, OrchestratorClientMixin):
                 value = self._perfvalue_to_value(
                     counter_info['type'], counter_info['value'])
 
+                # Name the unit in HELP: time counters are always in
+                # seconds, and other counters may declare bytes
+                unit = ''
+                if counter_info['type'] & self.PERFCOUNTER_TIME:
+                    unit = ' (seconds)'
+                elif counter_info.get('units') == self.BYTES:
+                    unit = ' (bytes)'
+
                 # Represent the long running avgs as sum/count pairs
                 if counter_info['type'] & self.PERFCOUNTER_LONGRUNAVG:
                     _path = path + '_sum'
@@ -2114,7 +2122,7 @@ class Module(MgrModule, OrchestratorClientMixin):
                         self.metrics[_path] = Metric(
                             stattype,
                             _path,
-                            counter_info['description'] + ' Total',
+                            counter_info['description'] + ' Total' + unit,
                             label_names,
                         )
                     self.metrics[_path].set(value, labels)
@@ -2132,7 +2140,7 @@ class Module(MgrModule, OrchestratorClientMixin):
                         self.metrics[path] = Metric(
                             stattype,
                             path,
-                            counter_info['description'],
+                            counter_info['description'] + unit,
                             label_names,
                         )
                     self.metrics[path].set(value, labels)
