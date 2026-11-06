@@ -7218,6 +7218,12 @@ void RGWPutLC::execute(optional_yield y)
       op_ret = -ERR_BAD_DIGEST;
       return;
     }
+    if (content_md5_bin->size() != CEPH_CRYPTO_MD5_DIGESTSIZE) {
+      s->err.message = "The Content-MD5 you specified is not valid.";
+      ldpp_dout(this, 5) << s->err.message << dendl;
+      op_ret = -ERR_INVALID_DIGEST;
+      return;
+    }
   }
 
   if (!parser.init()) {

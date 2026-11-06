@@ -9433,6 +9433,50 @@ def test_lifecycle_set_invalid_date():
     status, error_code = _get_status_and_error_code(e.response)
     assert status == 400
 
+def _set_lifecycle_content_md5(client, mangle):
+    # boto3 won't send a Content-MD5 of our choosing, so derive one from the body it sends
+    def add_md5(**kwargs):
+        digest = mangle(hashlib.md5(kwargs['params']['body']).digest())
+        kwargs['params']['headers']['Content-MD5'] = base64.b64encode(digest).decode()
+    client.meta.events.register('before-call.s3.PutBucketLifecycleConfiguration', add_md5)
+
+@pytest.mark.lifecycle
+def test_lifecycle_set_content_md5():
+    bucket_name = get_new_bucket()
+    client = get_client()
+    _set_lifecycle_content_md5(client, lambda digest: digest)
+
+    rules=[{'ID': 'rule1', 'Expiration': {'Days': 1}, 'Prefix': 'test1/', 'Status':'Enabled'}]
+    client.put_bucket_lifecycle_configuration(Bucket=bucket_name, LifecycleConfiguration={'Rules': rules})
+    response = client.get_bucket_lifecycle_configuration(Bucket=bucket_name)
+    assert response['Rules'] == rules
+
+def _test_lifecycle_set_bad_content_md5(mangle):
+    bucket_name = get_new_bucket()
+    client = get_client()
+    rules=[{'ID': 'rule1', 'Expiration': {'Days': 1}, 'Prefix': 'test1/', 'Status':'Enabled'}]
+    client.put_bucket_lifecycle_configuration(Bucket=bucket_name, LifecycleConfiguration={'Rules': rules})
+
+    _set_lifecycle_content_md5(client, mangle)
+    new_rules=[{'ID': 'rule2', 'Expiration': {'Days': 2}, 'Prefix': 'test2/', 'Status':'Enabled'}]
+    e = assert_raises(ClientError, client.put_bucket_lifecycle_configuration, Bucket=bucket_name,
+                      LifecycleConfiguration={'Rules': new_rules})
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 400
+    assert error_code == 'InvalidDigest'
+
+    # the configuration stored before is unchanged
+    response = client.get_bucket_lifecycle_configuration(Bucket=bucket_name)
+    assert response['Rules'] == rules
+
+@pytest.mark.lifecycle
+def test_lifecycle_set_content_md5_extra_byte():
+    _test_lifecycle_set_bad_content_md5(lambda digest: digest + b'\x00')
+
+@pytest.mark.lifecycle
+def test_lifecycle_set_content_md5_truncated():
+    _test_lifecycle_set_bad_content_md5(lambda digest: digest[:15])
+
 @pytest.mark.lifecycle
 @pytest.mark.lifecycle_expiration
 @pytest.mark.fails_on_aws
