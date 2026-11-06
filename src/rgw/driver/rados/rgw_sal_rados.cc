@@ -2996,9 +2996,10 @@ std::unique_ptr<Writer> RadosStore::get_atomic_writer(const DoutPrefixProvider *
 				 olh_epoch, unique_tag, obj->get_trace());
 }
 
-const std::string& RadosStore::get_compression_type(const rgw_placement_rule& rule)
+const std::string& RadosStore::get_compression_type(const rgw_placement_rule& rule,
+                                                    std::optional<uint64_t> size)
 {
-      return svc()->zone->get_zone_params().get_compression_type(rule);
+      return svc()->zone->get_zone_params().get_compression_type(rule, size);
 }
 
 bool RadosStore::valid_placement(const rgw_placement_rule& rule)
@@ -4453,6 +4454,7 @@ int RadosMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y, 
     upload_info.dest_placement = dest_placement;
     upload_info.cksum_type = cksum_type;
     upload_info.cksum_flags = cksum_flags;
+    upload_info.compression_type = compression_type;
 
     if (obj_legal_hold) {
       upload_info.obj_legal_hold_exist = true;
@@ -4908,6 +4910,7 @@ int RadosMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield
   }
   cksum_type = upload_info.cksum_type;
   cksum_flags = upload_info.cksum_flags;
+  compression_type = upload_info.compression_type;
   placement = upload_info.dest_placement;
   upload_information = upload_info;
   *rule = &placement;

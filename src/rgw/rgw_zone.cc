@@ -303,15 +303,24 @@ void RGWDefaultSystemMetaObjInfo::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("default_id", default_id, obj);
 }
 
-const string& RGWZoneParams::get_compression_type(const rgw_placement_rule& placement_rule) const
+const string& RGWZoneParams::get_compression_type(const rgw_placement_rule& placement_rule,
+                                                  std::optional<uint64_t> size) const
 {
   static const std::string NONE{"none"};
   auto p = placement_pools.find(placement_rule.name);
   if (p == placement_pools.end()) {
     return NONE;
   }
-  const auto& type = p->second.get_compression_type(placement_rule.get_storage_class());
-  return !type.empty() ? type : NONE;
+  const auto& storage_class = placement_rule.get_storage_class();
+  const auto& type = p->second.get_compression_type(storage_class);
+  if (type.empty()) {
+    return NONE;
+  }
+  // an unknown size is never below the min size
+  if (size && *size < p->second.get_compression_min_size(storage_class)) {
+    return NONE;
+  }
+  return type;
 }
 
 // run an MD5 hash on the zone_id and return the first 32 bits
@@ -742,6 +751,9 @@ void RGWZoneStorageClass::dump(Formatter *f) const
   if (compression_type) {
     encode_json("compression_type", compression_type.get(), f);
   }
+  if (compression_min_size) {
+    encode_json("compression_min_size", compression_min_size.get(), f);
+  }
 }
 
 list<RGWZoneStorageClass> RGWZoneStorageClass::generate_test_instances()
@@ -751,6 +763,7 @@ list<RGWZoneStorageClass> RGWZoneStorageClass::generate_test_instances()
   o.emplace_back();
   o.back().data_pool = rgw_pool("pool1");
   o.back().compression_type = "zlib";
+  o.back().compression_min_size = 4096;
   return o;
 }
 
@@ -758,6 +771,7 @@ void RGWZoneStorageClass::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("data_pool", data_pool, obj);
   JSONDecoder::decode_json("compression_type", compression_type, obj);
+  JSONDecoder::decode_json("compression_min_size", compression_min_size, obj);
 }
 
 void RGWTierACLMapping::decode_json(JSONObj *obj)

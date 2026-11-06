@@ -894,6 +894,12 @@ Options
 
     Placement target compression algorithm (lz4|snappy|zlib|zstd).
 
+.. option:: --compression-min-size=<size>
+
+    Placement target minimum object size to compress, in bytes. An IEC
+    suffix is accepted, e.g. 64K or 64KiB for 65536 bytes. Smaller objects are
+    stored uncompressed. The default of 0 compresses objects of any size.
+
 .. option:: --yes-i-really-mean-it
 
     Required as a guardrail for certain destructive operations.

@@ -454,6 +454,8 @@ protected:
   bool range_parsed;
   bool skip_manifest;
   bool skip_decrypt{false};
+  std::string skip_decompress_types; // compression types to send as stored
+  bool decompress_skipped{false};
   bool sync_cloudtiered{false};
   utime_t gc_invalidate_time;
   bool is_slo;
@@ -1340,6 +1342,7 @@ protected:
   int multipart_part_num = 0;
   rgw::cksum::Type multipart_cksum_type{rgw::cksum::Type::none};
   uint16_t multipart_cksum_flags{rgw::cksum::Cksum::FLAG_CKSUM_NONE};
+  std::optional<std::string> multipart_compression_type;
   jspan_ptr multipart_trace;
 
   boost::optional<ceph::real_time> delete_at;
