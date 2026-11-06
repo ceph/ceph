@@ -384,6 +384,13 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   static const int STATE_DISTEPHEMERALPIN       = (1<<20);
   static const int STATE_RANDEPHEMERALPIN       = (1<<21);
   static const int STATE_CLIENTWRITEABLE	= (1<<22);
+  /* On a replica: the auth of this directory found it large enough for a
+   * ceph.dir.pin.distributed.tree policy above it to distribute it (see
+   * mds_export_ephemeral_distributed_tree_min_entries).  The auth decides
+   * from the size, and every other rank follows it, so that all of them
+   * place the fragments the same way.  Unused on the auth.
+   */
+  static const int STATE_DISTTREELARGE		= (1<<23);
 
   // orphan inode needs notification of releasing reference
   static const int STATE_ORPHAN =	STATE_NOTIFYREF;
@@ -394,7 +401,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   static const int MASK_STATE_EXPORT_KEPT =
     (STATE_FROZEN|STATE_AMBIGUOUSAUTH|STATE_EXPORTINGCAPS|
      STATE_QUEUEDEXPORTPIN|STATE_TRACKEDBYOFT|STATE_DELAYEDEXPORTPIN|
-     STATE_DISTEPHEMERALPIN|STATE_RANDEPHEMERALPIN);
+     STATE_DISTEPHEMERALPIN|STATE_RANDEPHEMERALPIN|STATE_DISTTREELARGE);
 
   /* These are for "permanent" state markers that are passed around between
    * MDS. Nothing protects/updates it like a typical MDS lock.
@@ -1041,14 +1048,34 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   void set_export_pin(mds_rank_t rank);
   void queue_export_pin(mds_rank_t target);
   void maybe_export_pin(bool update=false);
+  // re-evaluate the pins of the fragmented directories below this one
+  // that are in cache, after a ceph.dir.pin.distributed.tree change
+  void maybe_export_pin_fragmented_descendants();
 
   void set_ephemeral_pin(bool dist, bool rand);
   void clear_ephemeral_pin(bool dist, bool rand);
 
   void setxattr_ephemeral_dist(bool val=false);
+  void setxattr_ephemeral_dist_tree(bool val=false);
   bool is_ephemeral_dist() const {
     return state_test(STATE_DISTEPHEMERALPIN);
   }
+  // distributed by a ceph.dir.pin.distributed.tree policy above it, rather
+  // than by ceph.dir.pin.distributed on itself
+  bool is_ephemeral_dist_tree() const {
+    return is_ephemeral_dist() && !get_inode()->get_ephemeral_distributed_pin();
+  }
+  // the rank that dirfrag @fg of this ephemerally distributed directory is
+  // pinned to
+  mds_rank_t get_ephemeral_dist_rank(frag_t fg) const;
+  // fragmented, and large enough for a ceph.dir.pin.distributed.tree policy
+  // above it to distribute its fragments
+  bool is_dist_tree_fragmented() const;
+  // on a replica, take the decision of the auth on the size
+  void set_dist_tree_large(bool large);
+  // whether a dirstat size change from @before to @after may change the
+  // decision of the auth on the size
+  bool dist_tree_size_crossed(int64_t before, int64_t after) const;
 
   double get_ephemeral_rand() const;
   void maybe_ephemeral_rand(double threshold=-1.0);

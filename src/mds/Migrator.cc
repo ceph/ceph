@@ -1873,6 +1873,8 @@ void Migrator::finish_export_inode(CInode *in, mds_rank_t peer,
   
   // mark auth
   ceph_assert(in->is_auth());
+  // as a replica, keep to the decision on the size made here
+  in->set_dist_tree_large(in->is_dist_tree_fragmented());
   in->state_clear(CInode::STATE_AUTH);
   in->replica_nonce = CInode::EXPORT_NONCE;
   
