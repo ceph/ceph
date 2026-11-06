@@ -133,6 +133,7 @@ TEST_F(TestReplicaPeering, DeferredBackfillStartsAfterRecovery) {
 
   run_recovery("obj");
   verify_object("obj");
+  EXPECT_FALSE(primary_is_clean());
   ASSERT_NO_FATAL_FAILURE(apply_requested_pg_temp());
 
   EXPECT_EQ(3, get_primary_shard_from_osdmap());

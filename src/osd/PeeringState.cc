@@ -7445,7 +7445,8 @@ PeeringState::Recovering::react(const DoPoolMigration &evt)
   // transit any async_recovery_targets back into acting
   // so pg won't have to stay undersized for long
   // as pool migration might take a long time to complete..
-  if (!ps->async_recovery_targets.empty()) {
+  if (!ps->async_recovery_targets.empty() ||
+      !ps->deferred_backfill_targets.empty()) {
     pg_shard_t get_log_shard;
     // FIXME: Uh-oh we have to check this return value; choose_acting can fail!
     ps->choose_acting(get_log_shard, true);
@@ -7540,7 +7541,8 @@ PeeringState::Recovered::Recovered(my_context ctx)
   }
 
   if (context< Active >().all_replicas_activated  &&
-      ps->async_recovery_targets.empty()) {
+      ps->async_recovery_targets.empty() &&
+      ps->deferred_backfill_targets.empty()) {
     if (context< Active >().pool_migration_target_reservation_requested) {
       post_event(StartTargetPoolMigration(
         context< Active >().pool_migration_target_reservation_num_bytes,
