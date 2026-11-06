@@ -359,6 +359,14 @@ namespace librbd {
     journal::Policy *get_journal_policy() const;
     void set_journal_policy(journal::Policy *policy);
 
+    /**
+     * Set an external ContextWQ implementation.
+     * The ContextWQ must remain valid for the lifetime of the image or until replaced.
+     *
+     * @param context_wq Shared pointer to external ContextWQ implementation
+     */
+    void set_context_wq(std::shared_ptr<asio::ContextWQ> context_wq);
+
     void rebuild_data_io_context();
     IOContext get_data_io_context() const;
     IOContext duplicate_data_io_context() const;
