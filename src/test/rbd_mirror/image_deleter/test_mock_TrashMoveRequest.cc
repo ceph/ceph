@@ -495,6 +495,32 @@ TEST_F(TestMockImageDeleterTrashMoveRequest, GetMirrorInfoLocalPrimary) {
   ASSERT_EQ(-EPERM, ctx.wait());
 }
 
+// Test sequence:
+// 1. Report the local GROUP image as primary.
+// 2. Request moving it to trash for resync.
+// Expected: Return -EPERM and keep primary-image protection in place.
+TEST_F(TestMockImageDeleterTrashMoveRequest,
+       ResyncRejectsLocalPrimaryGroupImage) {
+  InSequence seq;
+  expect_mirror_image_get_image_id("image id", 0);
+
+  MockGetMirrorInfoRequest mock_get_mirror_info_request;
+  expect_get_mirror_info(mock_get_mirror_info_request,
+                         {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT,
+                          "global image id",
+                          cls::rbd::MIRROR_IMAGE_TYPE_GROUP,
+                          cls::rbd::MIRROR_IMAGE_STATE_ENABLED},
+                         librbd::mirror::PROMOTION_STATE_PRIMARY,
+                         "remote mirror uuid", 0);
+
+  C_SaferCond ctx;
+  auto req = MockTrashMoveRequest::create(
+    m_local_io_ctx, "global image id", true,
+    m_local_image_ctx->op_work_queue, &ctx);
+  req->send();
+  ASSERT_EQ(-EPERM, ctx.wait());
+}
+
 TEST_F(TestMockImageDeleterTrashMoveRequest, GetMirrorInfoOrphan) {
   InSequence seq;
   expect_mirror_image_get_image_id("image id", 0);

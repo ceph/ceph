@@ -10,6 +10,7 @@
 #include "librbd/ObjectMap.h"
 #include "librbd/Operations.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "osdc/Striper.h"
 
 #include <shared_mutex> // for std::shared_lock
@@ -94,12 +95,29 @@ void SnapshotCreateRequest<I>::send_create_snap() {
                    SNAP_CREATE_FLAG_SKIP_NOTIFY_QUIESCE;
   std::shared_lock owner_locker{m_dst_image_ctx->owner_lock};
   m_dst_image_ctx->operations->execute_snap_create(
-      m_snap_namespace, m_snap_name.c_str(), ctx, 0U, flags, m_prog_ctx);
+      m_snap_namespace, m_snap_name.c_str(),
+      util::create_async_context_callback(*m_dst_image_ctx, ctx),
+      0U, flags, m_prog_ctx);
 }
 
 template <typename I>
 void SnapshotCreateRequest<I>::handle_create_snap(int r) {
   ldout(m_cct, 20) << "r=" << r << dendl;
+
+  if (r == -EEXIST && std::holds_alternative<
+        cls::rbd::ImageSnapshotNamespaceGroup>(m_snap_namespace)) {
+    // A restart can lose the ID mapping while the copied group snapshot
+    // remains. Reuse it only if its name and full namespace still match.
+    std::shared_lock image_locker{m_dst_image_ctx->image_lock};
+    auto snap_it = m_dst_image_ctx->snap_ids.find({m_snap_namespace, m_snap_name});
+    if (snap_it != m_dst_image_ctx->snap_ids.end()) {
+      auto info_it = m_dst_image_ctx->snap_info.find(snap_it->second);
+      if (info_it != m_dst_image_ctx->snap_info.end() &&
+          info_it->second.snap_namespace == m_snap_namespace) {
+        r = 0;
+      }
+    }
+  }
 
   if (r < 0) {
     lderr(m_cct) << "failed to create snapshot '" << m_snap_name << "': "
@@ -120,11 +138,7 @@ void SnapshotCreateRequest<I>::send_create_object_map() {
 
   m_dst_image_ctx->image_lock.lock_shared();
   auto snap_it = m_dst_image_ctx->snap_ids.find(
-      {cls::rbd::UserSnapshotNamespace(), m_snap_name});
-  if (snap_it == m_dst_image_ctx->snap_ids.end()) {
-    snap_it = m_dst_image_ctx->snap_ids.find(
-      {cls::rbd::ImageSnapshotNamespaceGroup(), m_snap_name});
-  }
+      {m_snap_namespace, m_snap_name});
   if (snap_it == m_dst_image_ctx->snap_ids.end()) {
     lderr(m_cct) << "failed to locate snap: " << m_snap_name << dendl;
     m_dst_image_ctx->image_lock.unlock_shared();

@@ -53,7 +53,7 @@ public:
       const std::string& global_group_id,
       const cls::rbd::MirrorGroupSiteStatus& mirror_group_site_status,
       bool immediate_update,
-      bool skip_image_statuses_update);
+      bool preserve_existing_image_statuses);
   void remove_mirror_group_status(const std::string& global_group_id,
                                   bool immediate_update, Context* on_finish);
   void remove_refresh_mirror_group_status(const std::string& global_group_id,

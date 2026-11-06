@@ -124,8 +124,10 @@ void GroupEnableRequest<I>::prepare_group_images() {
     &GroupEnableRequest<I>::handle_prepare_group_images>(this);
 
   auto req = snapshot::GroupPrepareImagesRequest<I>::create(m_group_ioctx,
-    m_group_id, m_image_ctxs, m_images, nullptr, &m_mirror_peer_uuids, "", // no specific image
-    snapshot::GroupPrepareImagesRequest<I>::OP_ENABLE, false, ctx);
+    m_group_id, m_image_ctxs, m_images, nullptr, &m_mirror_peer_uuids,
+    "", // no specific image
+    snapshot::GroupPrepareImagesRequest<I>::OP_ENABLE,
+    m_mirror_group.state == cls::rbd::MIRROR_GROUP_STATE_ENABLING, ctx);
   req->send();
 }
 
@@ -177,7 +179,93 @@ void GroupEnableRequest<I>::validate_images() {
     }
   }
 
+  list_group_snapshots();
+}
+
+template <typename I>
+void GroupEnableRequest<I>::list_group_snapshots() {
+  ldout(m_cct, 10) << dendl;
+
+  m_group_snaps.clear();
+
+  auto ctx = util::create_context_callback<
+    GroupEnableRequest<I>,
+    &GroupEnableRequest<I>::handle_list_group_snapshots>(this);
+
+  auto req = group::ListSnapshotsRequest<I>::create(
+    m_group_ioctx, m_group_id, true, true, &m_group_snaps, ctx);
+
+  req->send();
+}
+
+template <typename I>
+void GroupEnableRequest<I>::handle_list_group_snapshots(int r) {
+  ldout(m_cct, 10) << "r=" << r << dendl;
+
+  if (r < 0) {
+    lderr(m_cct) << "failed to list group snapshots: " << cpp_strerror(r)
+                 << dendl;
+    m_ret_val = r;
+    close_images();
+    return;
+  }
+
+  r = validate_snapshot_dependencies();
+  if (r < 0) {
+    m_ret_val = r;
+    close_images();
+    return;
+  }
+
   set_mirror_group_enabling();
+}
+
+template <typename I>
+int GroupEnableRequest<I>::validate_snapshot_dependencies() {
+  // A member can retain user snapshots from a group it has left. This group
+  // cannot mirror the other group's snapshot metadata.
+  for (auto image_ctx : m_image_ctxs) {
+    std::shared_lock image_locker{image_ctx->image_lock};
+    for (const auto& [snap_id, snap_info] : image_ctx->snap_info) {
+      auto group_ns = std::get_if<cls::rbd::ImageSnapshotNamespaceGroup>(
+        &snap_info.snap_namespace);
+      if (group_ns != nullptr &&
+          (group_ns->group_pool != m_group_ioctx.get_id() ||
+           group_ns->group_id != m_group_id)) {
+        lderr(m_cct) << "cannot enable mirror group: image '"
+                     << image_ctx->id << "' has user group snapshot snap-id="
+                     << snap_id << " belonging to another group '"
+                     << group_ns->group_id << "' in pool "
+                     << group_ns->group_pool << dendl;
+        return -EINVAL;
+      }
+    }
+  }
+
+  std::set<std::pair<int64_t, std::string>> current_images;
+  for (const auto &image : m_images) {
+    current_images.emplace(image.spec.pool_id, image.spec.image_id);
+  }
+
+  for (const auto &group_snap : m_group_snaps) {
+    if (cls::rbd::get_group_snap_namespace_type(group_snap.snapshot_namespace) !=
+        cls::rbd::GROUP_SNAPSHOT_NAMESPACE_TYPE_USER) {
+      continue;
+    }
+
+    for (const auto &image_snap : group_snap.snaps) {
+      if (current_images.contains({image_snap.pool, image_snap.image_id})) {
+        continue;
+      }
+
+      lderr(m_cct) << "cannot enable mirror group: snapshot '"
+                   << group_snap.name << "' references image '"
+                   << image_snap.image_id << "' outside the group" << dendl;
+      return -EINVAL;
+    }
+  }
+
+  return 0;
 }
 
 template <typename I>
@@ -224,29 +312,6 @@ void GroupEnableRequest<I>::handle_set_mirror_group_enabling(int r) {
 template <typename I>
 void GroupEnableRequest<I>::check_primary_group_snap_complete() {
   ldout(m_cct, 10) << dendl;
-
-  auto ctx = util::create_context_callback<
-    GroupEnableRequest<I>,
-    &GroupEnableRequest<I>::handle_check_primary_group_snap_complete>(
-      this);
-
-  auto req = group::ListSnapshotsRequest<I>::create(
-    m_group_ioctx, m_group_id, true, true, &m_group_snaps, ctx);
-
-  req->send();
-}
-
-template <typename I>
-void GroupEnableRequest<I>::handle_check_primary_group_snap_complete(int r) {
-  ldout(m_cct, 10) << "r=" << r << dendl;
-
-  if (r < 0) {
-    lderr(m_cct) << "failed to list group snapshots: " << cpp_strerror(r)
-                 << dendl;
-    m_ret_val = r;
-    close_images();
-    return;
-  }
 
   // Inspect the latest mirror group snapshot. If it is primary and complete,
   // resume group enable from that snapshot. Otherwise, create a new primary
@@ -450,9 +515,9 @@ void GroupEnableRequest<I>::create_primary_image_snapshots() {
   m_global_image_ids.resize(num_images);
 
   uuid_d uuid_gen;
-  for (size_t i = 0; i < num_images; i++) {
+  for (auto& global_image_id : m_global_image_ids) {
     uuid_gen.generate_random();
-    m_global_image_ids[i] = uuid_gen.to_string();
+    global_image_id = uuid_gen.to_string();
   }
 
   auto ctx = librbd::util::create_context_callback<
@@ -624,7 +689,47 @@ void GroupEnableRequest<I>::handle_group_unlink_peer(int r) {
                  << cpp_strerror(r) << dendl;
   }
 
-  notify_mirroring_watcher();
+  notify_group_memberships_updated();
+}
+
+template <typename I>
+void GroupEnableRequest<I>::notify_group_memberships_updated() {
+  ldout(m_cct, 10) << dendl;
+
+  auto ctx = util::create_context_callback<GroupEnableRequest<I>,
+    &GroupEnableRequest<I>::handle_notify_group_memberships_updated>(this);
+  auto gather_ctx = new C_Gather(m_cct, ctx);
+
+  for (size_t i = 0; i < m_image_ctxs.size(); ++i) {
+    // The group is already stored as ENABLED. Publish each member first so
+    // ImageMap can add both the zero-weight image and the group owner with
+    // the final group count.
+    auto image_ctx = m_image_ctxs[i];
+    MirroringWatcher<I>::notify_group_membership_updated(image_ctx->md_ctx,
+      image_ctx->id, m_global_image_ids[i], m_group_id,
+      m_mirror_group.global_group_id,
+      m_image_ctxs.size(), librbd::mirroring_watcher::GROUP_MEMBERSHIP_ATTACH,
+      gather_ctx->new_sub());
+  }
+
+  gather_ctx->activate();
+}
+
+template <typename I>
+void GroupEnableRequest<I>::handle_notify_group_memberships_updated(int r) {
+  ldout(m_cct, 10) << "r=" << r << dendl;
+
+  if (r < 0) {
+    lderr(m_cct) << "failed to notify group membership updates: "
+                 << cpp_strerror(r) << dendl;
+  }
+
+  if (m_image_ctxs.empty()) {
+    // An empty group has no membership notification to publish its owner.
+    notify_mirroring_watcher();
+  } else {
+    close_images();
+  }
 }
 
 template <typename I>

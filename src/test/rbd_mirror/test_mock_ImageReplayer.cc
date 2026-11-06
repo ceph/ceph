@@ -178,7 +178,8 @@ struct MockReplayer : public Replayer {
   MOCK_CONST_METHOD0(get_error_code, int());
   MOCK_CONST_METHOD0(get_error_description, std::string());
   MOCK_METHOD1(prune_snapshot, void(uint64_t snapshot_id));
-  MOCK_METHOD1(set_remote_snap_id_end_limit, void(uint64_t snapshot_id));
+  MOCK_METHOD2(set_remote_snap_id_end_limit,
+    void(uint64_t snapshot_id, const cls::rbd::GroupSpec& local_group_spec));
   MOCK_METHOD0(get_remote_snap_id_end_limit, uint64_t());
 };
 
@@ -410,6 +411,12 @@ public:
   MockImageReplayer *m_image_replayer = nullptr;
 };
 
+// Test sequence:
+// 1. Bootstrap and start an image replayer.
+// 2. Request snapshot pruning while running, then stop and request pruning
+//   again.
+// Expected: The running engine accepts pruning; the stopped replayer reports
+//   that it cannot accept it.
 TEST_F(TestMockImageReplayer, StartStop) {
   // START
 
@@ -443,6 +450,9 @@ TEST_F(TestMockImageReplayer, StartStop) {
   ASSERT_EQ(image_replayer::HEALTH_STATE_OK,
             m_image_replayer->get_health_state());
 
+  EXPECT_CALL(mock_replayer, prune_snapshot(123));
+  ASSERT_TRUE(m_image_replayer->prune_snapshot(123));
+
   // STOP
   expect_shut_down(mock_replayer, 0);
   expect_close(mock_state_builder, 0);
@@ -451,6 +461,7 @@ TEST_F(TestMockImageReplayer, StartStop) {
   C_SaferCond stop_ctx;
   m_image_replayer->stop(&stop_ctx);
   ASSERT_EQ(0, stop_ctx.wait());
+  ASSERT_FALSE(m_image_replayer->prune_snapshot(123));
   ASSERT_EQ(image_replayer::HEALTH_STATE_OK,
             m_image_replayer->get_health_state());
 }
@@ -539,6 +550,48 @@ TEST_F(TestMockImageReplayer, BootstrapRemoteDeleted) {
   expect_close(mock_state_builder, 0);
 
   expect_trash_move(mock_image_deleter, "global image id", false, 0);
+  expect_mirror_image_status_exists(false);
+
+  create_image_replayer(mock_threads);
+
+  C_SaferCond start_ctx;
+  m_image_replayer->start(&start_ctx);
+  ASSERT_EQ(0, start_ctx.wait());
+}
+
+// Test sequence:
+// 1. Report that the remote image was deleted.
+// 2. Return -EROFS from the first trash move, then allow a later retry.
+// Expected: The image replayer retries cleanup after the old owner releases
+//   its lock.
+TEST_F(TestMockImageReplayer, BootstrapRemoteDeletedTrashMoveRetry) {
+  create_local_image();
+  librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
+
+  MockThreads mock_threads(m_threads);
+  expect_work_queue_repeatedly(mock_threads);
+  expect_add_event_after_repeatedly(mock_threads);
+
+  MockImageDeleter mock_image_deleter;
+
+  expect_set_mirror_image_status_repeatedly();
+
+  InSequence seq;
+
+  MockBootstrapRequest mock_bootstrap_request;
+  MockStateBuilder mock_state_builder;
+  expect_send(mock_bootstrap_request, mock_state_builder, mock_local_image_ctx,
+    false, false, -ENOLINK);
+
+  expect_close(mock_state_builder, 0);
+
+  EXPECT_CALL(mock_image_deleter, trash_move("global image id", false, _))
+    .WillOnce(WithArg<2>(Invoke([this](Context* ctx) {
+      m_threads->work_queue->queue(ctx, -EROFS);
+    })))
+    .WillOnce(WithArg<2>(Invoke([this](Context* ctx) {
+      m_threads->work_queue->queue(ctx, 0);
+    })));
   expect_mirror_image_status_exists(false);
 
   create_image_replayer(mock_threads);

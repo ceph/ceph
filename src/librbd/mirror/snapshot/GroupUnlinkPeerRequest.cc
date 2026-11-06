@@ -12,8 +12,8 @@
 #include "librbd/api/Utils.h"
 #include "librbd/api/Group.h"
 #include "librbd/group/ListSnapshotsRequest.h"
-//#include "librbd/mirror/snapshot/UnlinkPeerRequest.h"
 #include "librbd/mirror/snapshot/GroupUnlinkPeerRequest.h"
+#include "librbd/mirror/snapshot/RemoveGroupSnapshotRequest.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -313,8 +313,8 @@ void GroupUnlinkPeerRequest<I>::remove_group_snapshot(
 
   m_group_snap_id = group_snap.id;
 
-  C_Gather *gather_ctx = new C_Gather(m_cct, ctx);
   if (group_snap.state == cls::rbd::GROUP_SNAPSHOT_STATE_CREATING) {
+    C_Gather *gather_ctx = new C_Gather(m_cct, ctx);
     for (size_t i = 0; i < m_image_ctxs->size(); ++i) {
       ImageCtx *ictx = (*m_image_ctxs)[i];
       for (auto it = ictx->snap_info.rbegin();
@@ -339,34 +339,13 @@ void GroupUnlinkPeerRequest<I>::remove_group_snapshot(
     return;
   }
 
-  //TODO: Handle dynamic group membership
-  if (!m_image_ctxs->empty() && m_image_ctx_map.empty()) {
-    for (size_t i = 0; i < m_image_ctxs->size(); ++i) {
-      ImageCtx *ictx = (*m_image_ctxs)[i];
-      m_image_ctx_map[ictx->id] = ictx;
-    }
-  }
-
-  for (auto &snap : group_snap.snaps) {
-    if (snap.snap_id == CEPH_NOSNAP) {
-      continue;
-    }
-    ImageCtx *ictx = nullptr;
-    if (m_image_ctx_map.find(snap.image_id) != m_image_ctx_map.end()) {
-      ictx = m_image_ctx_map[snap.image_id];
-    }
-
-    if (!ictx) {
-      ldout(m_cct, 10) << "failed to remove individual snapshot: " << dendl;
-      continue;
-    }
-
-    ldout(m_cct, 10) << "removing individual snapshot: "
-                     << snap.snap_id << ", from image id:"
-                     << snap.image_id << dendl;
-    remove_image_snapshot(ictx, snap.snap_id, gather_ctx);
-  }
-  gather_ctx->activate();
+  m_group_snap = std::move(group_snap);
+  auto remove_ctx = create_context_callback<
+    GroupUnlinkPeerRequest,
+    &GroupUnlinkPeerRequest<I>::handle_remove_complete_group_snapshot>(this);
+  auto req = RemoveGroupSnapshotRequest<I>::create(
+    m_group_io_ctx, m_group_id, &m_group_snap, m_image_ctxs, remove_ctx);
+  req->send();
 }
 
 template <typename I>
@@ -381,6 +360,20 @@ void GroupUnlinkPeerRequest<I>::handle_remove_group_snapshot(int r) {
   }
 
   remove_snap_metadata();
+}
+
+template <typename I>
+void GroupUnlinkPeerRequest<I>::handle_remove_complete_group_snapshot(int r) {
+  ldout(m_cct, 10) << "r=" << r << dendl;
+
+  if (r < 0 && r != -ENOENT) {
+    lderr(m_cct) << "failed to remove group snapshot: "
+                 << cpp_strerror(r) << dendl;
+    finish(r);
+    return;
+  }
+
+  list_group_snaps();
 }
 
 template <typename I>

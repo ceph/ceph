@@ -145,6 +145,10 @@ public:
                                             const cls::rbd::ParentImageSpec &spec,
                                             uint64_t parent_overlap,
                                             Context *on_finish) {
+    ON_CALL(*mock_local_image_ctx.op_work_queue, queue(_, _))
+      .WillByDefault(Invoke([this](Context* ctx, int r) {
+        m_work_queue->queue(ctx, r);
+      }));
     return new MockSnapshotCreateRequest(&mock_local_image_ctx, snap_name, snap_namespace, size,
                                          spec, parent_overlap, on_finish);
   }
@@ -170,6 +174,47 @@ TEST_F(TestMockDeepCopySnapshotCreateRequest, SnapCreate) {
                                                       {}, 0, &ctx);
   request->send();
   ASSERT_EQ(0, ctx.wait());
+}
+
+// Test sequence: Retry a group snapshot left by an interrupted copy.
+// Reuse its ID and initialize its object map; reject a different namespace.
+TEST_F(TestMockDeepCopySnapshotCreateRequest, RetryExistingGroupSnapshot) {
+  for (bool matching : {true, false}) {
+    librbd::MockTestImageCtx mock_image_ctx(*m_image_ctx);
+    librbd::MockExclusiveLock mock_exclusive_lock;
+    mock_image_ctx.exclusive_lock = &mock_exclusive_lock;
+    MockSetHeadRequest mock_set_head_request;
+    cls::rbd::ImageSnapshotNamespaceGroup expected_ns{3, "group", "snap"};
+    auto existing_ns = expected_ns;
+    if (!matching) {
+      existing_ns.group_snapshot_id = "other-snap";
+    }
+    const std::string snap_name = ".group.3_group_snap";
+    mock_image_ctx.snap_ids[{existing_ns, snap_name}] = 10;
+    mock_image_ctx.snap_info.emplace(10, SnapInfo{
+      snap_name, existing_ns, m_image_size, {}, 0, 0, {}});
+
+    InSequence seq;
+    expect_set_head(mock_set_head_request, 0);
+    expect_start_op(mock_exclusive_lock);
+    EXPECT_CALL(*mock_image_ctx.operations,
+                execute_snap_create(_, StrEq(snap_name), _, 0, _, _))
+      .WillOnce(WithArg<2>(Invoke([](Context* ctx) {
+        // Model the inline -EEXIST callback while the owner lock is held.
+        ctx->complete(-EEXIST);
+      })));
+    if (matching) {
+      expect_test_features(mock_image_ctx, RBD_FEATURE_OBJECT_MAP, true);
+      expect_start_op(mock_exclusive_lock);
+      expect_object_map_resize(mock_image_ctx, 10, 0);
+    }
+
+    C_SaferCond ctx;
+    auto request = create_request(mock_image_ctx, snap_name, expected_ns,
+                                  m_image_size, {}, 0, &ctx);
+    request->send();
+    ASSERT_EQ(matching ? 0 : -EEXIST, ctx.wait());
+  }
 }
 
 TEST_F(TestMockDeepCopySnapshotCreateRequest, SetHeadError) {
