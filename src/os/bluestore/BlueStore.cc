@@ -12378,6 +12378,8 @@ int BlueStore::_deferred_replay(std::vector<std::string>* keys_to_remove)
           for (auto& e : op.extents) {
             bufferlist t;
             op.data.splice(0, e.length, &t);
+            logger->inc(l_bluestore_submitted_deferred_writes);
+            logger->inc(l_bluestore_submitted_deferred_write_bytes, t.length());
             bdev->aio_write(e.offset, t, &ioctx, false);
             written = true;
           }
