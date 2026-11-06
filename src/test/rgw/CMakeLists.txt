@@ -179,6 +179,13 @@ target_link_libraries(unittest_rgw_bucket_metadata unit-main ${rgw_libs})
 add_executable(unittest_rgw_reshard_wait test_rgw_reshard_wait.cc)
 add_ceph_unittest(unittest_rgw_reshard_wait)
 target_link_libraries(unittest_rgw_reshard_wait ${rgw_libs})
+
+# unittest_rgw_acl_swift
+add_executable(unittest_rgw_acl_swift
+  test_rgw_acl_swift.cc
+  $<TARGET_OBJECTS:unit-main>)
+add_ceph_unittest(unittest_rgw_acl_swift)
+target_link_libraries(unittest_rgw_acl_swift ${rgw_libs})
 endif()
 
 set(test_rgw_a_src test_rgw_common.cc)
