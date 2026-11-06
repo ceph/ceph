@@ -24,6 +24,8 @@
 #include "os/kv.h"
 #include "common/pretty_binary.h"
 
+#include <string_view>
+
 #define dout_context cct
 #define dout_subsys ceph_subsys_bluestore
 
@@ -245,18 +247,209 @@ struct LruOnodeCacheShard : public bluestore::OnodeCacheShard {
       boost::intrusive::list_member_hook<>,
       &bluestore::Onode::lru_item> > list_t;
 
-  list_t lru;
+  list_t lru;        ///< onodes used again after their first use; front = most recent
+  list_t probation;  ///< onodes used once so far; FIFO, front = newest; trimmed
+                     ///< first once above its share (_probation_max), else
+                     ///< after lru's tail
 
   explicit LruOnodeCacheShard(CephContext *cct) : bluestore::OnodeCacheShard(cct) {}
 
-  void _add(bluestore::Onode* o, int level) override
+  /// With a probation ratio of 0 every onode is admitted on first use (one LRU).
+  bool _admission() const
   {
-    o->set_cached();
-    if (o->pin_nref == 1) {
-      (level > 0) ? lru.push_front(*o) : lru.push_back(*o);
-      o->cache_age_bin = age_bins.front();
-      *(o->cache_age_bin) += 1;
+    return probation_ratio.load() > 0;
+  }
+  /// How many onodes probation may hold; beyond that it is trimmed even when
+  /// the shard as a whole is under max: a share of the shard, what came in
+  /// during the last few age bins, or a floor, whichever is more. The second
+  /// term gives every onode a few seconds to be used again however fast a
+  /// scan brings onodes in. The floor holds a backfill scan: it reads up to
+  /// osd_backfill_scan_max (512) objects of one PG at once, all in one shard,
+  /// and pushes them over the next seconds. Both keep admission possible
+  /// however small the tuner has made the shard (its budget follows the
+  /// binned onodes, which under a scan are probation itself).
+  static constexpr uint32_t PROBATION_BINS = 4;
+  /// Arrivals on probation in each of the last PROBATION_BINS age bins,
+  /// newest first. The age bins themselves count every onode by its last
+  /// touch, the main LRU's hot set included, so a bound taken from them
+  /// would grow by the hot set under a scan and the shard, once over
+  /// budget, would evict the hot set to keep that much scan residue.
+  std::array<uint64_t, PROBATION_BINS> probation_arrivals = {};
+  void shift_bins() override
+  {
+    std::lock_guard l(lock);
+    for (uint32_t i = PROBATION_BINS - 1; i > 0; i--) {
+      probation_arrivals[i] = probation_arrivals[i - 1];
     }
+    probation_arrivals[0] = 0;
+    OnodeCacheShard::shift_bins();
+  }
+  uint64_t _probation_max() const
+  {
+    double r = probation_ratio.load();
+    if (r <= 0) {
+      return 0;
+    }
+    uint64_t recent = 0;
+    for (uint64_t n : probation_arrivals) {
+      recent += n;
+    }
+    return std::max<uint64_t>({probation_floor.load(), (uint64_t)(max.load() * std::min(r, 1.0)),
+                               recent});
+  }
+  /// The keys of the onodes lru evicted most recently, as many as the
+  /// shard's budget, oldest first. A miss on one of them is a hot onode the
+  /// budget could not hold: it goes back to lru rather than through
+  /// probation, where under a budget below the hot set it would be evicted
+  /// before its second later use, so that lru never grew back. A key
+  /// evicted again moves to the back. The keys are hashes: a collision
+  /// promotes a stranger, which lru then ages out as any other.
+  using ghost_list_t = mempool::bluestore_cache_other::list<uint64_t>;
+  ghost_list_t ghosts;
+  /// key -> its place in ghosts
+  mempool::bluestore_cache_other::unordered_map<uint64_t, ghost_list_t::iterator>
+    ghost_pos;
+
+  /// 64 bits of the whole object id. std::hash<ghobject_t> is the 32-bit
+  /// placement hash, which same-named objects of two pools share.
+  static uint64_t _ghost_key(const bluestore::Onode* o)
+  {
+    const hobject_t& h = o->oid.hobj;
+    std::hash<std::string_view> hs;
+    uint64_t k = hs(h.oid.name);
+    auto mix = [&k](uint64_t v) {
+      k ^= v + 0x9e3779b97f4a7c15ULL + (k << 6) + (k >> 2);
+    };
+    mix(hs(h.nspace));
+    mix(hs(h.get_key()));
+    mix(h.pool);
+    mix(h.snap.val);
+    mix(h.get_hash());
+    mix(o->oid.generation);
+    mix(o->oid.shard_id.id);
+    return k;
+  }
+  /// remember an onode lru evicts
+  void _ghost_add(const bluestore::Onode* o)
+  {
+    auto [it, fresh] = ghost_pos.try_emplace(_ghost_key(o), ghosts.end());
+    if (!fresh) {
+      ghosts.erase(it->second);
+    }
+    ghosts.push_back(it->first);
+    it->second = std::prev(ghosts.end());
+    // a few at a time, as _trim_to does: a budget cut may leave many over
+    uint64_t cap = std::max<uint64_t>(1, max.load());
+    for (int i = 0; i < 4 && ghosts.size() > cap; i++) {
+      ghost_pos.erase(ghosts.front());
+      ghosts.pop_front();
+    }
+  }
+  /// was the arriving onode evicted from lru lately? forget it either way
+  bool _ghost_take(const bluestore::Onode* o)
+  {
+    auto it = ghost_pos.find(_ghost_key(o));
+    if (it == ghost_pos.end()) {
+      return false;
+    }
+    ghosts.erase(it->second);
+    ghost_pos.erase(it);
+    return true;
+  }
+  list_t& _list_of(bluestore::Onode* o)
+  {
+    return o->cache_promoted ? lru : probation;
+  }
+  /// stamp the onode into the newest age bin, moving its count there
+  void _stamp(bluestore::Onode* o)
+  {
+    if (o->cache_age_bin == age_bins.front()) {
+      return;  // the common case on the unpin path: touched again this bin
+    }
+    if (o->cache_age_bin) {
+      *(o->cache_age_bin) -= 1;
+    }
+    o->cache_age_bin = age_bins.front();
+    *(o->cache_age_bin) += 1;
+  }
+  void _link_front(list_t& l, bluestore::Onode* o)
+  {
+    l.push_front(*o);
+    _stamp(o);
+  }
+  void _unlink(bluestore::Onode* o)
+  {
+    *(o->cache_age_bin) -= 1;
+    o->cache_age_bin.reset();
+    list_t& l = _list_of(o);
+    l.erase(l.iterator_to(*o));
+  }
+  /// A use of the onode ended (its last pin was dropped): admit, promote or
+  /// refresh it.  An onode enters probation on its first use and moves to lru
+  /// only after it is used in two age bins later than the one it came in: the
+  /// touches of one op sequence fall into one bin, and one pass over an
+  /// object (scrub, a backfill that lists and then pushes, a write never read
+  /// back) gives at most one later use.  Lock held, o->exists.
+  void _touch(bluestore::Onode* o)
+  {
+    bool linked = o->lru_item.is_linked();
+    bool popped = o->cache_popped;  // unlinked by a trim while in use
+    o->cache_popped = false;
+    if (!o->cache_promoted) {
+      bool later = o->cache_age_bin && o->cache_age_bin != age_bins.front();
+      if (_admission() && !(later && o->cache_later_hit)) {
+        if (later) {
+          // first use in a later bin: note it, and stamp this bin (an
+          // onode with a stamp is linked: every unlink clears it)
+          ceph_assert(linked);
+          o->cache_later_hit = true;
+          _stamp(o);
+        }
+        if (!linked) {
+          if (!popped && _ghost_take(o)) {
+            // an arrival that lru evicted lately: a hot onode the budget
+            // could not hold, back to lru as a plain LRU would have it
+            o->cache_promoted = true;
+            _link_front(lru, o);
+            dout(20) << __func__ << " " << this << " " << o->oid
+                     << " promoted, evicted lately" << dendl;
+            return;
+          }
+          _link_front(probation, o);
+          if (!popped) {
+            probation_arrivals[0]++;
+          }
+          dout(20) << __func__ << " " << this << " " << o->oid << " on probation"
+                   << dendl;
+        }
+        return; // stays on probation
+      }
+      if (linked) {
+        _unlink(o);
+      }
+      o->cache_promoted = true;
+      _link_front(lru, o);
+      dout(20) << __func__ << " " << this << " " << o->oid << " promoted" << dendl;
+      return;
+    }
+    if (linked) {
+      // move onode within LRU
+      lru.erase(lru.iterator_to(*o));
+      _link_front(lru, o);
+      dout(20) << __func__ << " " << this << " " << o->oid << " touched" << dendl;
+    } else {
+      _link_front(lru, o);
+      dout(20) << __func__ << " " << this << " " << o->oid << " unpinned" << dendl;
+    }
+  }
+
+  void _add(bluestore::Onode* o) override
+  {
+    // every caller holds a reference besides the onode map's, so the onode
+    // is pinned here; it is linked when that reference is dropped
+    // (maybe_unpin), on probation or, if it does not exist, not at all
+    ceph_assert(o->pin_nref > 1);
+    o->set_cached();
     ++num; // we count both pinned and unpinned entries
     dout(20) << __func__ << " " << this << " " << o->oid << " added, num="
              << num << dendl;
@@ -265,9 +458,13 @@ struct LruOnodeCacheShard : public bluestore::OnodeCacheShard {
   {
     o->clear_cached();
     if (o->lru_item.is_linked()) {
-      *(o->cache_age_bin) -= 1;
-      lru.erase(lru.iterator_to(*o));
+      _unlink(o);
     }
+    // if re-added after a split, a promoted onode keeps its place in lru and a
+    // non-promoted one starts over on probation
+    o->cache_age_bin.reset();
+    o->cache_later_hit = false;
+    o->cache_popped = false;
     ceph_assert(num);
     --num;
     dout(20) << __func__ << " " << this << " " << " " << o->oid << " removed, num=" << num << dendl;
@@ -283,34 +480,23 @@ struct LruOnodeCacheShard : public bluestore::OnodeCacheShard {
       ocs = o->c->get_onode_cache();
       ocs->lock.lock();
     }
+    if (ocs != this) {
+      // the onode is in another shard's lists now: that shard does the work
+      ocs->lock.unlock();
+      ocs->maybe_unpin(o);
+      return;
+    }
     if (o->is_cached() && o->pin_nref == 1) {
-      if(!o->lru_item.is_linked()) {
-        if (o->exists) {
-	  lru.push_front(*o);
-	  o->cache_age_bin = age_bins.front();
-	  *(o->cache_age_bin) += 1;
-	  dout(20) << __func__ << " " << this << " " << o->oid << " unpinned"
-                   << dendl;
-        } else {
-	  ceph_assert(num);
-	  --num;
-	  o->clear_cached();
-	  dout(20) << __func__ << " " << this << " " << o->oid << " removed"
-                   << dendl;
-          // remove will also decrement nref
-          o->c->onode_space._remove(o->oid);
-        }
-      } else if (o->exists) {
-        // move onode within LRU
-        lru.erase(lru.iterator_to(*o));
-        lru.push_front(*o);
-        if (o->cache_age_bin != age_bins.front()) {
-          *(o->cache_age_bin) -= 1;
-          o->cache_age_bin = age_bins.front();
-          *(o->cache_age_bin) += 1;
-        }
-        dout(20) << __func__ << " " << this << " " << o->oid << " touched"
+      if (o->exists) {
+        _touch(o);
+      } else if (!o->lru_item.is_linked()) {
+	ceph_assert(num);
+	--num;
+	o->clear_cached();
+	dout(20) << __func__ << " " << this << " " << o->oid << " removed"
                  << dendl;
+        // remove will also decrement nref
+        o->c->onode_space._remove(o->oid);
       }
     }
     ocs->lock.unlock();
@@ -318,27 +504,67 @@ struct LruOnodeCacheShard : public bluestore::OnodeCacheShard {
 
   void _trim_to(uint64_t new_size) override
   {
-    if (new_size >= lru.size()) {
-      return; // don't even try
-    } 
-    uint64_t n = num - new_size; // note: we might get empty LRU
-                                 // before n == 0 due to pinned
-                                 // entries. And hence being unable
-                                 // to reach new_size target.
-    while (n-- > 0 && lru.size() > 0) {
-      bluestore::Onode *o = &lru.back();
-      lru.pop_back();
+    if (!_admission() && !ghosts.empty()) {
+      // nothing takes them with admission off
+      ghosts.clear();
+      ghost_pos.clear();
+    }
+    uint64_t linked = lru.size() + probation.size();
+    uint64_t pmax = _probation_max();
+    // the promoted onodes come first: over budget, probation may hold only
+    // what the budget leaves after them, whatever its guarantee says, so
+    // the hot set goes only when it does not fit by itself. Newcomers keep
+    // half of probation's share all the same, so that a working set that
+    // shifts can prove itself against a stale LRU, as it would in a plain
+    // LRU; a hot set that fills the budget loses at most that much.
+    if (new_size > 0) {
+      uint64_t room = new_size > lru.size() ? new_size - lru.size() : 0;
+      uint64_t reserve = std::max<uint64_t>(
+        1, new_size * std::min(probation_ratio.load(), 1.0) / 2);
+      pmax = std::min(pmax, std::max(room, reserve));
+    }
+    // probation beyond its share goes first, even when the shard as a whole
+    // fits; a few at a time, as _trim_some does, unless this is a flush
+    // with admission off (ratio 0) probation is not trimmed on its own: what
+    // is on it stays until used, and is admitted then
+    uint64_t over = _admission() && probation.size() > pmax ? probation.size() - pmax : 0;
+    int32_t max_steps = cct->_conf->bluestore_cache_meta_evict_limit;
+    if (new_size > 0 && max_steps >= 2) {
+      over = std::min<uint64_t>(over, max_steps);
+    }
+    // only what is linked can go: a pinned onode over the budget, such as
+    // the one being added when _trim_some runs, must not cost a linked one
+    // its place; it is trimmed once it is linked. As before, nothing is
+    // evicted while the lists fit the budget, whatever is pinned besides;
+    // over budget, exactly the lists' overshoot goes, where the pinned
+    // count used to be evicted on top of it.
+    uint64_t n = new_size < linked ? linked - new_size : 0;
+    n = std::max(n, over);
+    while (n-- > 0 && (lru.size() + probation.size()) > 0) {
+      list_t& l = (!probation.empty() && (probation.size() > pmax || lru.empty()))
+        ? probation : lru;
+      bluestore::Onode *o = &l.back();
+      l.pop_back();
 
       dout(20) << __func__ << "  rm " << o->oid << " "
                << o->nref << " " << o->cached << dendl;
 
       *(o->cache_age_bin) -= 1;
       if (o->pin_nref > 1) {
+        // still in use: it returns to its list when that use ends. The use
+        // in progress is not a later one, so its stamp goes; a later use
+        // earned before stays earned, and the return is not an arrival.
+        o->cache_age_bin.reset();
+        o->cache_popped = true;
         dout(20) << __func__ << " " << this << " " << " " << " " << o->oid << dendl;
       } else {
 	ceph_assert(num);
         --num;
         o->clear_cached();
+        o->cache_age_bin.reset();  // unlinked onodes carry no stamp
+        if (&l == &lru && o->exists && _admission()) {
+          _ghost_add(o);  // a deleted object's name may be reused
+        }
         o->c->onode_space._remove(o->oid);
       }
     }
@@ -350,13 +576,15 @@ struct LruOnodeCacheShard : public bluestore::OnodeCacheShard {
     }
     _rm(o);
     ceph_assert(o->nref > 1);
-    to->_add(o, 0);
+    to->_add(o);
   }
-  void add_stats(uint64_t *onodes, uint64_t *pinned_onodes) override
+  void add_stats(uint64_t *onodes, uint64_t *pinned_onodes,
+                 uint64_t *probation_onodes) override
   {
     std::lock_guard l(lock);
     *onodes += num;
-    *pinned_onodes += num - lru.size();
+    *pinned_onodes += num - lru.size() - probation.size();
+    *probation_onodes += probation.size();
   }
 #ifdef DEBUG_CACHE
   void _audit(const char *when) override

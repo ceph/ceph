@@ -219,6 +219,8 @@ public:
 		    ECBackendL* ecbackend);
   struct RecoveryOp {
     hobject_t hoid;
+    bool cache_dont_need = false;  ///< from RecoveryHandle::cache_dont_need;
+                                    ///< crimson sets nothing and keeps caching
     eversion_t v;
     std::set<pg_shard_t> missing_on;
     std::set<shard_id_t> missing_on_shards;
