@@ -740,9 +740,10 @@ std::unique_ptr<Writer> FilterDriver::get_atomic_writer(const DoutPrefixProvider
   return std::make_unique<FilterWriter>(std::move(writer), obj);
 }
 
-const std::string& FilterDriver::get_compression_type(const rgw_placement_rule& rule)
+const std::string& FilterDriver::get_compression_type(const rgw_placement_rule& rule,
+                                                      std::optional<uint64_t> size)
 {
-  return next->get_compression_type(rule);
+  return next->get_compression_type(rule, size);
 }
 
 bool FilterDriver::valid_placement(const rgw_placement_rule& rule)
@@ -1311,6 +1312,7 @@ int FilterMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
   next->obj_legal_hold = obj_legal_hold;
   next->obj_retention = obj_retention;
   next->cksum_type = cksum_type;
+  next->compression_type = compression_type;
   return next->init(dpp, y, owner, dest_placement, attrs);
 }
 
@@ -1379,6 +1381,7 @@ int FilterMultipartUpload::get_info(const DoutPrefixProvider *dpp,
   this->obj_legal_hold = next->obj_legal_hold;
   this->obj_retention = next->obj_retention;
   this->cksum_type = next->cksum_type;
+  this->compression_type = next->compression_type;
   return 0;
 }
 

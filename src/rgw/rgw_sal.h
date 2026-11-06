@@ -725,8 +725,10 @@ class Driver {
 				  uint64_t olh_epoch,
 				  const std::string& unique_tag) = 0;
 
-    /** Get the compression type of a placement rule */
-    virtual const std::string& get_compression_type(const rgw_placement_rule& rule) = 0;
+    /** Get the compression type of a placement rule, or "none" for an object
+     * whose logical size is known to be below the rule's compression min size */
+    virtual const std::string& get_compression_type(const rgw_placement_rule& rule,
+                                                    std::optional<uint64_t> size = std::nullopt) = 0;
     /** Check to see if this placement rule is valid */
     virtual bool valid_placement(const rgw_placement_rule& rule) = 0;
 
@@ -1553,6 +1555,11 @@ public:
 
   // only a few (currently CRC) checksums are not composite
   uint16_t cksum_flags{rgw::cksum::Cksum::FLAG_COMPOSITE};
+
+  // compression type frozen at upload init. drivers that persist it with the
+  // upload info restore it in get_info(); unset means not frozen, so parts
+  // use the current placement config
+  std::optional<std::string> compression_type;
 
   MultipartUpload() = default;
   virtual ~MultipartUpload() = default;
