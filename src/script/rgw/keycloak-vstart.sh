@@ -112,6 +112,19 @@ curl -sf -X POST "http://localhost:${KC_PORT}/admin/realms" \
 	-d '{"realm":"'"$KC_REALM"'","enabled":true,"accessTokenLifespan":1800}' \
 	2>/dev/null || true
 
+# Keycloak 24 drops a user attribute its user profile does not declare,
+# and the tags attribute below is not one it could declare by name
+echo "==> admitting unmanaged user attributes"
+USER_PROFILE=$(curl -sf \
+	"http://localhost:${KC_PORT}/admin/realms/${KC_REALM}/users/profile" \
+	-H "Authorization: Bearer $ADMIN_TOKEN" | \
+	jq -c '.unmanagedAttributePolicy = "ENABLED"')
+curl -sf -X PUT \
+	"http://localhost:${KC_PORT}/admin/realms/${KC_REALM}/users/profile" \
+	-H "Authorization: Bearer $ADMIN_TOKEN" \
+	-H "Content-Type: application/json" \
+	-d "$USER_PROFILE" >/dev/null
+
 # --- create client ---
 
 echo "==> creating client $KC_CLIENT"
@@ -134,6 +147,18 @@ CLIENT_SECRET=$(curl -sf \
 	-H "Authorization: Bearer $ADMIN_TOKEN" | jq -r '.value')
 
 echo "    client_uuid=$CLIENT_UUID"
+
+# --- map the tags attribute into the token (ignore if exists) ---
+# as teuthology's keycloak task does;  without it the principal tags
+# never reach a token
+
+echo "==> mapping the tags attribute into the token"
+curl -sf -X POST \
+	"http://localhost:${KC_PORT}/admin/realms/${KC_REALM}/clients/${CLIENT_UUID}/protocol-mappers/models" \
+	-H "Authorization: Bearer $ADMIN_TOKEN" \
+	-H "Content-Type: application/json" \
+	-d '{"protocol":"openid-connect","name":"https://aws.amazon.com/tags","protocolMapper":"oidc-usermodel-attribute-mapper","config":{"user.attribute":"https://aws.amazon.com/tags","claim.name":"https://aws\\.amazon\\.com/tags","jsonType.label":"JSON","access.token.claim":"true","userinfo.token.claim":"true","multivalued":"true"}}' \
+	2>/dev/null || true
 
 # --- create user ---
 
