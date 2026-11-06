@@ -610,9 +610,8 @@ void PGRecovery::enqueue_push(
   if (!added)
     return;
   peering_state.prepare_backfill_for_missing(obj, v, peers);
-  // release the budget_retry_releaser now that we're dispatching a real
-  // push -- recover_object_with_throttle will acquire its own slot
-  budget_retry_releaser.reset();
+  // get_backfill_throttle() transfers any retry reservation to this push.
+  // Releasing it here would make the same work acquire and pay for QoS twice.
   std::ignore = recover_object_with_throttle(obj, v).\
   handle_exception_interruptible([] (auto) {
     ceph_abort_msg("got exception on backfill's push");
