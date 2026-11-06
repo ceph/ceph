@@ -4315,7 +4315,8 @@ void OSDMap::dump_osd(int id, Formatter *f) const
 void OSDMap::dump_pool(CephContext *cct,
 		       int64_t pid,
                        const pg_pool_t &pdata,
-		       ceph::Formatter *f) const
+		       ceph::Formatter *f,
+		       bool with_read_balance) const
 {
   std::string name("<unknown>");
   const auto &pni = pool_name.find(pid);
@@ -4325,7 +4326,9 @@ void OSDMap::dump_pool(CephContext *cct,
   f->dump_int("pool", pid);
   f->dump_string("pool_name", name);
   pdata.dump(f);
-  dump_read_balance_score(cct, pid, pdata, f);
+  if (with_read_balance) {
+    dump_read_balance_score(cct, pid, pdata, f);
+  }
   f->close_section(); // pool
 }
 
@@ -4431,7 +4434,7 @@ void OSDMap::dump(Formatter *f, CephContext *cct) const
   f->dump_bool("allow_crimson", allow_crimson);
   f->open_array_section("pools");
   for (const auto &[pid, pdata] : pools) {
-    dump_pool(cct, pid, pdata, f);
+    dump_pool(cct, pid, pdata, f, true);
   }
   f->close_section();
 
