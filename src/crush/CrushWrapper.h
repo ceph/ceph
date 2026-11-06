@@ -620,6 +620,21 @@ public:
   void find_takes_by_rule(int rule, std::set<int> *roots) const;
 
   /**
+   * return a device class a rule selects from
+   *
+   * "step take <root> class <class>" is compiled into a take of <class>'s
+   * shadow bucket, so a class can be read back from a rule's take targets.
+   * A rule may name several, and which of those comes back is unspecified:
+   * the take targets are collected into a set, so the order the steps were
+   * written in is not preserved. Callers wanting more than "is any class
+   * named here" need a different question.
+   *
+   * @param rule the rule id
+   * @returns a class id, or nullopt if no take is pinned to a class
+   */
+  std::optional<int> get_rule_device_class(int rule) const;
+
+  /**
    * find tree roots
    *
    * These are parentless nodes in the map.
