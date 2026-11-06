@@ -1559,9 +1559,9 @@ public:
   int delete_tier_obj(lc_op_ctx& oc, optional_yield y) {
     int ret = 0;
 
-    /* If bucket has versioning enabled, create delete_marker for current version
+    /* If bucket is versioned, create delete_marker for current version
      */
-    if (! oc.bucket->versioning_enabled()) {
+    if (! oc.bucket->versioned()) {
       ret =
 	remove_expired_obj(oc.dpp, y, oc, true, {/* no delete notify expected */},
                            lifecycle_delete_object_op);
