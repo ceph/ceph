@@ -1597,8 +1597,16 @@ test_create_group_with_images_then_mirror_with_regular_snapshots()
   if [ "${scenario}" = 'remove_snap' ]; then
     group_snap_remove "${primary_cluster}" "${pool}/${group}" "${snap}"
     check_group_snap_doesnt_exist "${primary_cluster}" "${pool}/${group}" "${snap}"
-    mirror_group_snapshot_and_wait_for_sync_complete "${secondary_cluster}" "${primary_cluster}" "${pool}"/"${group}"
+    sleep 20
+    # verify `regular_snap` not pruned on secondary during idle cycles
+    # it should be pruned only after taking next mirror snapshot on remote
+    check_group_snap_exists "${secondary_cluster}" "${pool}/${group}" "${snap}"
+    local group_snap_id
+    mirror_group_snapshot "${primary_cluster}" "${pool}/${group}" group_snap_id
+    wait_for_group_snap_present "${secondary_cluster}" "${pool}/${group}" "${group_snap_id}"
+    # if mirror snapshot is present => local user snapshots with no remote user snapshots should already be pruned
     check_group_snap_doesnt_exist "${secondary_cluster}" "${pool}/${group}" "${snap}"
+    wait_for_group_synced "${primary_cluster}" "${pool}"/"${group}" "${secondary_cluster}" "${pool}"/"${group}"
   else
     check_group_snap_exists "${primary_cluster}" "${pool}/${group}" "${snap}"
     check_group_snap_exists "${secondary_cluster}" "${pool}/${group}" "${snap}"
