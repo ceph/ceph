@@ -234,12 +234,16 @@ public:
   }
 
   template<typename CallbackInitial, typename Callback, typename...Args>
-  void with_devices2(CallbackInitial&& cbi,  // with lock taken
+  void with_devices2(CallbackInitial&& cbi,  // called first, no lock held
 		     Callback&& cb,          // for each device
 		     Args&&... args) const {
-    std::shared_lock l{lock};
+    const decltype(devices) devices_copy = [&] {
+      // Don't hold the lock any longer than necessary
+      std::shared_lock l{lock};
+      return devices;
+    }();
     cbi();
-    for (auto& i : devices) {
+    for (auto& i : devices_copy) {
       std::forward<Callback>(cb)(*i.second, std::forward<Args>(args)...);
     }
   }
