@@ -27,6 +27,7 @@
 
 #include "sim_recs.h"
 
+#include "include/ceph_assert.h"
 
 namespace crimson {
   namespace qos_simulation {
@@ -263,7 +264,7 @@ namespace crimson {
 	    } // for
 	    ops_count += i.args.req_params.count;
 	  } else {
-	    assert(false);
+	    ceph_abort();
 	  }
 	} // for loop
 

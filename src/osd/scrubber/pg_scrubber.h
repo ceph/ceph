@@ -423,7 +423,7 @@ class PgScrubber : public ScrubPgIF,
   void stats_of_handled_objects(const object_stat_sum_t& delta_stats,
 				const hobject_t& soid) override
   {
-    ceph_assert(false);
+    ceph_abort();
   }
 
   /**
@@ -618,12 +618,12 @@ class PgScrubber : public ScrubPgIF,
 
   void add_to_stats(const object_stat_sum_t& stat) override
   {
-    ceph_assert(0 && "expecting a PrimaryLogScrub object");
+    ceph_abort_msg("expecting a PrimaryLogScrub object");
   }
 
   void submit_digest_fixes(const digests_fixes_t& fixes) override
   {
-    ceph_assert(0 && "expecting a PrimaryLogScrub object");
+    ceph_abort_msg("expecting a PrimaryLogScrub object");
   }
 
   CephContext* get_pg_cct() const final { return m_pg->cct; }

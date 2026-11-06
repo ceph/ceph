@@ -24,8 +24,6 @@
  * -DUSE_PROP_HEAP).
  */
 
-#include <assert.h>
-
 #include <cmath>
 #include <memory>
 #include <map>
@@ -46,6 +44,8 @@
 #include "../support/src/run_every.h"
 #include "dmclock_util.h"
 #include "dmclock_recs.h"
+
+#include "include/ceph_assert.h"
 
 #ifdef PROFILE
 #include "profile.h"
@@ -156,7 +156,7 @@ namespace crimson {
 	ready(false),
 	arrival(time)
       {
-	assert(cost > 0);
+	ceph_assert(cost > 0);
 	Time max_time = time;
 	if (time - anticipation_timeout < prev_tag.arrival)
 	  max_time -= anticipation_timeout;
@@ -180,7 +180,7 @@ namespace crimson {
 			 false,
 			 cost);
 
-	assert(reservation < max_tag || proportion < max_tag);
+	ceph_assert(reservation < max_tag || proportion < max_tag);
       }
 
       RequestTag(const RequestTag& prev_tag,
@@ -207,8 +207,8 @@ namespace crimson {
 	ready(false),
 	arrival(_arrival)
       {
-	assert(cost > 0);
-	assert(reservation < max_tag || proportion < max_tag);
+	ceph_assert(cost > 0);
+	ceph_assert(reservation < max_tag || proportion < max_tag);
       }
 
       RequestTag(const RequestTag& other) :
@@ -856,10 +856,10 @@ namespace crimson {
 	erase_max(standard_erase_max),
 	cleaning_job(check_time, std::bind(&PriorityQueueBase::do_clean, this))
       {
-	assert(_erase_age >= _idle_age);
-	assert(_check_time < _idle_age);
+	ceph_assert(_erase_age >= _idle_age);
+	ceph_assert(_check_time < _idle_age);
 	// AtLimit::Reject depends on ImmediateTagCalc
-	assert(at_limit != AtLimit::Reject || !IsDelayed);
+	ceph_assert(at_limit != AtLimit::Reject || !IsDelayed);
       }
 
       inline const ClientInfo* get_cli_info(ClientRec& client) const {
@@ -877,7 +877,7 @@ namespace crimson {
 	// only calculate a tag if the request is going straight to the front
 	if (!client.has_request()) {
 	  const ClientInfo* client_info = get_cli_info(client);
-	  assert(client_info);
+	  ceph_assert(client_info);
 	  tag = RequestTag(client.get_req_tag(), *client_info,
 			   params, time, cost, anticipation_timeout);
 
@@ -892,7 +892,7 @@ namespace crimson {
 			     const ReqParams& params, Time time, Cost cost) {
 	// calculate the tag unconditionally
 	const ClientInfo* client_info = get_cli_info(client);
-	assert(client_info);
+	ceph_assert(client_info);
 	RequestTag tag(client.get_req_tag(), *client_info,
 		       params, time, cost, anticipation_timeout);
 
@@ -1019,7 +1019,7 @@ namespace crimson {
 	  // perform delayed tag calculation on the next request
 	  ClientReq& next_first = top.next_request();
 	  const ClientInfo* client_info = get_cli_info(top);
-	  assert(client_info);
+	  ceph_assert(client_info);
 	  next_first.tag = RequestTag(tag, *client_info,
 				      top.cur_delta, top.cur_rho,
 				      next_first.tag.arrival,
@@ -1095,7 +1095,7 @@ namespace crimson {
 
 	// means the client was cleaned from map; should never happen
 	// as long as cleaning times are long enough
-	assert(client_map.end() != client_it);
+	ceph_assert(client_map.end() != client_it);
 	ClientRec& client = *client_it->second;
 	reduce_reservation_tags(TagCalc{}, client, tag);
 
@@ -1170,7 +1170,7 @@ namespace crimson {
 	}
 	if (limit_heap.top().has_request()) {
 	  const auto& next = limit_heap.top().next_request();
-	  assert(!next.tag.ready || max_tag == next.tag.proportion);
+	  ceph_assert(!next.tag.ready || max_tag == next.tag.proportion);
 	  next_call = min_not_0_time(next_call, next.tag.limit);
 	}
 	if (next_call < TimeMax) {
@@ -1439,7 +1439,7 @@ namespace crimson {
 	  // to avoid nesting, break out and let code below handle this case
 	  break;
 	default:
-	  assert(false);
+	  ceph_abort();
 	}
 
 	// we'll only get here if we're returning an entry
@@ -1477,7 +1477,7 @@ namespace crimson {
 	  ++this->prop_sched_count;
 	  break;
 	default:
-	  assert(false);
+          ceph_abort();
 	}
 
 #ifdef PROFILE
@@ -1710,7 +1710,7 @@ namespace crimson {
 	  ++this->prop_sched_count;
 	  break;
 	default:
-	  assert(false);
+	  ceph_abort();
 	}
       } // submit_request
 
@@ -1750,7 +1750,7 @@ namespace crimson {
 	  submit_request(next_req.heap_id);
 	  break;
 	default:
-	  assert(false);
+	  ceph_abort();
 	}
 	return next_req.type;
       }
