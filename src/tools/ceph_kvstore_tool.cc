@@ -48,7 +48,7 @@ void usage(const char *pname)
     << "  set <prefix> <key> [ver <N>|in <file>]\n"
     << "  rm <prefix> <key>\n"
     << "  rm-prefix <prefix>\n"
-    << "  store-copy <path> [num-keys-per-tx] [rocksdb|...] \n"
+    << "  store-copy <path> [num-keys-per-tx] [rocksdb|...]  (type required for bluestore-kv)\n"
     << "  store-crc <path>\n"
     << "  compact\n"
     << "  compact-prefix <prefix>\n"
