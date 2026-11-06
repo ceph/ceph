@@ -350,4 +350,4 @@ EOF
     test "$(ceph osd pool get q size | awk '{print $2}')" = 4 || return 1
 }
 
-main osd-pool-set-replica "$@"
+main mon-stretch-pool-set-replica "$@"

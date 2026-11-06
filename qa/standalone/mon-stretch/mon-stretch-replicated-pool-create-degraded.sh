@@ -163,4 +163,4 @@ EOF
     cmp $dir/crushmap.bin $dir/obj || return 1
 }
 
-main mon-stretch-pool-create-degraded "$@"
+main mon-stretch-replicated-pool-create-degraded "$@"

@@ -163,4 +163,4 @@ function TEST_single_zone_erasure_placement_defaults() {
     ! ceph osd crush rule ls | grep -qx erasure-code || return 1
 }
 
-main mon-stretch-replicated-placement-options "$@"
+main mon-stretch-pool-replicated-placement-options "$@"
