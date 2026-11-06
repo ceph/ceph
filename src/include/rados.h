@@ -380,6 +380,8 @@ extern const char *ceph_osd_state_name(int s);
 	f(SCRUBLS,      __CEPH_OSD_OP(RD, PG, 7),       "scrubls")          \
 	f(PG_POOL_MIGRATION_RESERVE, __CEPH_OSD_OP(WR, PG, 8), "pg-pool-migration-reserve") \
 	f(PG_POOL_MIGRATION_RELEASE, __CEPH_OSD_OP(WR, PG, 9), "pg-pool-migration-release") \
+									    \
+	f(ASSERT_TIME_RANGE, __CEPH_OSD_OP(RD, DATA, 45), "assert-time")    \
 
 enum {
 #define GENERATE_ENUM_ENTRY(op, opcode, str)	CEPH_OSD_OP_##op = (opcode),
@@ -696,6 +698,10 @@ struct ceph_osd_op {
 		        __le64 num_bytes;
 		        __le64 num_objects;
 		} __attribute__ ((packed)) pool_migration_reserve;
+		struct {
+			struct ceph_timespec after;
+			struct ceph_timespec before;
+		} __attribute__ ((packed)) assert_time_range;
 	} __attribute__ ((packed));
 	__le32 payload_len;
 } __attribute__ ((packed));
