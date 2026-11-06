@@ -18,6 +18,7 @@
 
 #include "messages/PaxosServiceMessage.h"
 #include "common/cmdparse.h" // for cmdmap_from_json()
+#include "include/container_ios.h"
 
 #include <vector>
 #include <string>
