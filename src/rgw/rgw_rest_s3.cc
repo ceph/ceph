@@ -4208,10 +4208,11 @@ void RGWGetACLs_ObjStore_S3::send_response()
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
-  end_header(s, this, to_mime_type(s->format));
   dump_start(s);
-  rgw_flush_formatter(s, s->formatter);
-  dump_body(s, acls);
+  s->formatter->write_raw_data(acls.c_str());
+  // get_len() must include the footer that end_header() flushes
+  s->formatter->output_footer();
+  end_header(s, this, to_mime_type(s->format), s->formatter->get_len());
 }
 
 int RGWPutACLs_ObjStore_S3::get_params(optional_yield y)
