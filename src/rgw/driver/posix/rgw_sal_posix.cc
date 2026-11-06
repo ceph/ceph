@@ -3153,6 +3153,7 @@ int POSIXBucket::purge_instance(const DoutPrefixProvider* dpp, optional_yield y)
 
 std::unique_ptr<MultipartUpload> POSIXBucket::get_multipart_upload(
 				  const DoutPrefixProvider* dpp,
+				  optional_yield y,
 				  const std::string& oid,
 				  std::optional<std::string> upload_id,
 				  ACLOwner owner, ceph::real_time mtime)
