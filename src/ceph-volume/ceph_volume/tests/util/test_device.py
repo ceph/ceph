@@ -477,6 +477,45 @@ class TestDevice(object):
         assert not disk.used_by_ceph
 
     @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
+    def test_is_lvm_member_with_udev_alias(self, fake_call, device_info, monkeypatch):
+        """
+        Test that is_lvm_member correctly identifies LVM membership when
+        the PV name returned by LVM is a udev alias (e.g., /dev/disk-ssd)
+        rather than the actual device path (e.g., /dev/sdc).
+        
+        This simulates the container environment where LVM returns udev aliases.
+        """
+        # Device is accessed via its real path
+        lsblk = {"TYPE": "disk", "NAME": "sdc"}
+        data = {"/dev/sdc": {"size": "10737418240"}}
+        device_info(devices=data, lsblk=lsblk)
+        
+        # Simulate LVM returning a udev alias as pv_name
+        vg = api.VolumeGroup(
+            pv_name='/dev/disk-ssd',  # udev alias
+            vg_name='ceph-vg',
+            vg_free_count=1000,
+            vg_extent_size=4194304
+        )
+        monkeypatch.setattr("ceph_volume.util.device.lvm.get_all_devices_vgs", lambda: [vg])
+        
+        # Mock get_device_lvs to return empty list (mock the correct module)
+        monkeypatch.setattr("ceph_volume.util.device.lvm.get_device_lvs", lambda x: [])
+        
+        # Mock os.path.realpath to simulate the alias resolving to the real path
+        original_realpath = os.path.realpath
+        def mock_realpath(path):
+            if path == '/dev/disk-ssd':
+                return '/dev/sdc'
+            return original_realpath(path)
+        monkeypatch.setattr(os.path, 'realpath', mock_realpath)
+        
+        disk = device.Device("/dev/sdc")
+        assert disk.is_lvm_member
+        assert len(disk.vgs) == 1
+        assert disk.vgs[0].vg_name == 'ceph-vg'
+
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_get_device_id(self, fake_call, device_info):
         lsblk = {"TYPE": "disk", "NAME": "sda"}
         device_info(lsblk=lsblk)
