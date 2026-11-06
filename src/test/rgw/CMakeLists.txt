@@ -546,6 +546,12 @@ add_executable(unittest_rgw_auth_sigv4 test_rgw_auth_sigv4.cc)
 add_ceph_unittest(unittest_rgw_auth_sigv4)
 target_link_libraries(unittest_rgw_auth_sigv4 ${rgw_libs} ${UNITTEST_LIBS})
 
+# unittest_rgw_auth_disable_signature_url
+add_executable(unittest_rgw_auth_disable_signature_url
+  test_rgw_auth_disable_signature_url.cc)
+add_ceph_unittest(unittest_rgw_auth_disable_signature_url)
+target_link_libraries(unittest_rgw_auth_disable_signature_url ${rgw_libs} ${UNITTEST_LIBS})
+
 # unittest_rgw_http_client
 add_executable(unittest_rgw_http_client test_rgw_http_client.cc)
 add_ceph_unittest(unittest_rgw_http_client)
