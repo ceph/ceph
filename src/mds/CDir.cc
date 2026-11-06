@@ -1920,7 +1920,12 @@ CDentry *CDir::_load_dentry(
 
       // link to inode?
       CInode *in = mdcache->get_inode(ino);   // we may or may not have it.
-      if (in) {
+      if (in && in->state_test(CInode::STATE_PURGING)) {
+        // Nothing may take a new reference on a purging inode. Leave the
+        // dentry unlinked, as if we did not have the inode in cache.
+        dout(10) << "_fetched  got remote link " << ino << " to purging " << *in
+                 << ", not linking" << dendl;
+      } else if (in) {
         dn->link_remote(dn->get_linkage(), in);
         dout(12) << "_fetched  got remote link " << ino << " which we have " << *in << dendl;
       } else {
@@ -2115,7 +2120,9 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
     dout(10) << " snap_purged_thru " << fnode->snap_purged_thru
 	     << " < " << realm->get_last_destroyed()
 	     << ", snap purge based on " << *snaps << dendl;
-    if (get_num_snap_items() == 0) {
+    // a partial fetch should not advance the marker otherwise a later
+    // fetch will skip the stale check for snap dentries it never saw.
+    if (complete && get_num_snap_items() == 0) {
       const_cast<snapid_t&>(fnode->snap_purged_thru) = realm->get_last_destroyed();
       force_dirty = true;
     }

@@ -892,6 +892,86 @@ touch pin/placeholder
 
         self.await_data_pool_empty()
 
+    def test_stale_snap_remote_dentry_purging_stray(self):
+        """
+        That a stale remote snap dentry is not loaded and linked to a stray
+        inode that is being purged.
+
+        Unlinking a multiversion inode (here: a directory) that is covered by
+        a snapshot leaves a remote snap dentry (<name>_<snapid>) in the parent
+        dirfrag pointing at the stray. Once the snapshot is removed, that
+        dentry is stale. A partial (keyed) dirfrag fetch used to advance
+        fnode.snap_purged_thru without examining the snap keys, so a later
+        complete fetch skipped the stale check, loaded the stale remote dentry
+        and linked it to the purging stray -- tripping the get_num_ref() == 0
+        assert in MDCache::remove_inode().
+
+        See: https://tracker.ceph.com/issues/80206
+        """
+        self.fs.set_allow_new_snaps(True)
+        # Named lookups do keyed (partial) dirfrag fetches only, so that
+        # nothing but the scrub below fetches p/d's dirfrag completely.
+        self.config_set('mds', 'mds_dir_prefetch', False)
+
+        self.mount_a.run_shell(["mkdir", "-p", "p/d"])
+        d_ino = self.mount_a.path_to_ino("p/d")
+
+        # Hold the directory open to keep its stray from being purged until
+        # the test lets go of it.
+        p = self.mount_a.open_dir_background("p/d/sub")
+        self.mount_a.run_shell(["mkdir", "p/.snap/s1"])
+        self.mount_a.run_shell(["rmdir", "p/d/sub"])
+
+        # Commit p/d's dirfrag (with the remote snap dentry) and the stray's
+        # backtrace.
+        self.fs.rank_tell(["flush", "journal"])
+        snap_keys = [k for k in self.fs.list_dirfrag(d_ino)
+                     if k.startswith("sub_") and k != "sub_head"]
+        log.info(f"remote snap dentry keys: {snap_keys}")
+        self.assertEqual(len(snap_keys), 1)
+
+        # Fresh MDS: the stray is reloaded (pinned by the client's caps), the
+        # remote snap dentry is not in cache.
+        self.fs.rank_fail()
+        self.fs.wait_for_daemons()
+        gid = self.fs.get_rank()['gid']
+
+        # Make the remote snap dentry stale.
+        self.mount_a.run_shell(["rmdir", "p/.snap/s1"])
+        self.fs.rank_tell(["flush", "journal"])
+        self.assertEqual(self.get_mdc_stat("strays_enqueued"), 0)
+
+        # Keep the stray in its purge window: _purge_stray_purged() runs once
+        # the purge queue persists the item, but the purge_stray EUpdate is
+        # held back by the paused MDLog.
+        self.fs.rank_asok(["config", "set", "mds_log_pause", "true"])
+        try:
+            self.mount_a.kill_background(p)
+            self._wait_for_counter("mds_cache", "strays_enqueued", 1)
+
+            # Keyed fetch of p/d's dirfrag: the lookup of a name that never
+            # existed fails with ENOENT...
+            try:
+                self.fs.run_scrub(["start", "/p/d/missing"])
+            except CommandFailedError:
+                pass
+            # ... followed by a complete fetch.
+            self.fs.run_scrub(["start", "/p/d"])
+            self.assertTrue(self.fs.wait_until_scrub_complete(sleep=5, timeout=60))
+        finally:
+            self.fs.rank_asok(["config", "set", "mds_log_pause", "false"])
+
+        self.wait_until_equal(
+            lambda: self.get_mdc_stat("num_strays"),
+            expect_val=0, timeout=60
+        )
+        self.assertEqual(self.fs.get_rank()['gid'], gid)
+
+        # The stale remote snap dentry must have been purged from disk.
+        self.fs.rank_tell(["flush", "journal"])
+        self.assertEqual(
+            [k for k in self.fs.list_dirfrag(d_ino) if k in snap_keys], [])
+
     def test_fancy_layout(self):
         """
         purge stray file with fancy layout
