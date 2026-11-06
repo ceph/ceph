@@ -191,13 +191,15 @@ int RGWSI_Bucket_SObj::read_bucket_entrypoint_info(const string& key,
                                                    optional_yield y,
                                                    const DoutPrefixProvider *dpp,
                                                    rgw_cache_entry_info *cache_info,
-                                                   boost::optional<obj_version> refresh_version)
+                                                   boost::optional<obj_version> refresh_version,
+                                                   boost::optional<obj_version> expected_version)
 {
   const rgw_pool& pool = get_entrypoint_pool();
   bufferlist bl;
   int ret = rgw_get_system_obj(svc.sysobj, pool, key, bl,
                                objv_tracker, pmtime, y, dpp,
-                               pattrs, cache_info, refresh_version);
+                               pattrs, cache_info, refresh_version, false,
+                               expected_version);
   if (ret < 0) {
     return ret;
   }
@@ -261,14 +263,17 @@ int RGWSI_Bucket_SObj::read_bucket_instance_info(const string& key,
                                                  optional_yield y,
                                                  const DoutPrefixProvider *dpp,
                                                  rgw_cache_entry_info *cache_info,
-                                                 boost::optional<obj_version> refresh_version)
+                                                 boost::optional<obj_version> refresh_version,
+                                                 boost::optional<obj_version> expected_version)
 {
   string cache_key("bi/");
   cache_key.append(key);
 
   if (auto e = binfo_cache->find(cache_key)) {
-    if (refresh_version &&
-        e->info.objv_tracker.read_version.compare(&(*refresh_version))) {
+    if ((refresh_version &&
+         e->info.objv_tracker.read_version.compare(&(*refresh_version))) ||
+        (expected_version &&
+         !e->info.objv_tracker.read_version.compare(&(*expected_version)))) {
       ldpp_dout(dpp, -1) << "WARNING: The bucket info cache is inconsistent. This is "
         << "a failure that should be debugged. I am a nice machine, "
         << "so I will try to recover." << dendl;
@@ -287,7 +292,8 @@ int RGWSI_Bucket_SObj::read_bucket_instance_info(const string& key,
   rgw_cache_entry_info ci;
 
   int ret = do_read_bucket_instance_info(key, &e.info, &e.mtime, &e.attrs,
-                                         &ci, refresh_version, y, dpp);
+                                         &ci, refresh_version,
+                                         expected_version, y, dpp);
   *info = e.info;
 
   if (ret < 0) {
@@ -329,6 +335,7 @@ int RGWSI_Bucket_SObj::do_read_bucket_instance_info(const string& key,
                                                     real_time *pmtime, map<string, bufferlist> *pattrs,
                                                     rgw_cache_entry_info *cache_info,
                                                     boost::optional<obj_version> refresh_version,
+                                                    boost::optional<obj_version> expected_version,
                                                     optional_yield y,
                                                     const DoutPrefixProvider *dpp)
 {
@@ -338,7 +345,8 @@ int RGWSI_Bucket_SObj::do_read_bucket_instance_info(const string& key,
   RGWObjVersionTracker objv;
 
   int ret = rgw_get_system_obj(svc.sysobj, pool, oid, bl, &objv, pmtime, y,
-                               dpp, pattrs, cache_info, refresh_version);
+                               dpp, pattrs, cache_info, refresh_version, false,
+                               expected_version);
   if (ret < 0) {
     return ret;
   }

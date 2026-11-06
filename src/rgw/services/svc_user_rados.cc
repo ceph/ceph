@@ -108,7 +108,8 @@ int RGWSI_User_RADOS::read_user_info(const rgw_user& user,
                                rgw_cache_entry_info * const cache_info,
                                map<string, bufferlist> * const pattrs,
                                optional_yield y,
-                               const DoutPrefixProvider *dpp)
+                               const DoutPrefixProvider *dpp,
+                               boost::optional<obj_version> expected_version)
 {
   if(user.id == RGW_USER_ANON_ID) {
     ldpp_dout(dpp, 20) << "RGWSI_User_RADOS::read_user_info(): anonymous user" << dendl;
@@ -121,7 +122,8 @@ int RGWSI_User_RADOS::read_user_info(const rgw_user& user,
   const std::string key = get_meta_key(user);
   int ret = rgw_get_system_obj(svc.sysobj, pool, key, bl,
                                objv_tracker, pmtime, y, dpp,
-                               pattrs, cache_info);
+                               pattrs, cache_info, boost::none, false,
+                               expected_version);
   if (ret < 0) {
     return ret;
   }

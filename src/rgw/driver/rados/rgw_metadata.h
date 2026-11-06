@@ -60,7 +60,9 @@ public:
 
   virtual RGWMetadataObject *get_meta_obj(JSONObj *jo, const obj_version& objv, const ceph::real_time& mtime) = 0;
 
-  virtual int get(std::string& entry, RGWMetadataObject **obj, optional_yield, const DoutPrefixProvider *dpp) = 0;
+  virtual int get(std::string& entry, RGWMetadataObject **obj, optional_yield y,
+                  const DoutPrefixProvider *dpp,
+                  boost::optional<obj_version> expected_version = boost::none) = 0;
   virtual int put(std::string& entry,
                   RGWMetadataObject *obj,
                   RGWObjVersionTracker& objv_tracker,
@@ -112,7 +114,8 @@ public:
 
   RGWMetadataHandler *get_handler(const std::string& type);
 
-  int get(std::string& metadata_key, Formatter *f, optional_yield y, const DoutPrefixProvider *dpp);
+  int get(std::string& metadata_key, Formatter *f, optional_yield y, const DoutPrefixProvider *dpp,
+          boost::optional<obj_version> expected_version = boost::none);
   int put(std::string& metadata_key, bufferlist& bl, optional_yield y,
           const DoutPrefixProvider *dpp,
           RGWMDLogSyncType sync_mode,

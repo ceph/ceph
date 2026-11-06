@@ -123,6 +123,7 @@ int RGWSI_SysObj_Cache::read(const DoutPrefixProvider *dpp,
 			     bool raw_attrs,
                              rgw_cache_entry_info *cache_info,
                              boost::optional<obj_version> refresh_version,
+                             boost::optional<obj_version> expected_version,
                              optional_yield y)
 {
   rgw_pool pool;
@@ -130,7 +131,8 @@ int RGWSI_SysObj_Cache::read(const DoutPrefixProvider *dpp,
   if (ofs != 0) {
     return RGWSI_SysObj_Core::read(dpp, read_state, objv_tracker, obj, obl,
                                    ofs, end, pmtime, psize, attrs, raw_attrs,
-                                   cache_info, refresh_version, y);
+                                   cache_info, refresh_version,
+                                   expected_version, y);
   }
 
   normalize_pool_and_obj(obj.pool, obj.oid, pool, oid);
@@ -146,9 +148,14 @@ int RGWSI_SysObj_Cache::read(const DoutPrefixProvider *dpp,
   if (attrs)
     flags |= CACHE_FLAG_XATTRS;
   
+  /* refresh_version is the version the caller already holds and wants to move
+   * past, so a match means the cache has nothing newer. expected_version is
+   * the version the caller requires, so a mismatch means the cache missed an
+   * update and must be re-read. */
   int r = cache.get(dpp, name, info, flags, cache_info);
   if (r == 0 &&
-      (!refresh_version || !info.version.compare(&(*refresh_version)))) {
+      (!refresh_version || !info.version.compare(&(*refresh_version))) &&
+      (!expected_version || info.version.compare(&(*expected_version)))) {
     if (info.status < 0)
       return info.status;
 
@@ -199,7 +206,7 @@ int RGWSI_SysObj_Cache::read(const DoutPrefixProvider *dpp,
 			 (attrs ? &unfiltered_attrset : nullptr),
 			 true, /* cache unfiltered attrs */
 			 cache_info,
-                         refresh_version, y);
+                         refresh_version, expected_version, y);
   if (r < 0) {
     if (r == -ENOENT) { // only update ENOENT, we'd rather retry other errors
       info.status = r;

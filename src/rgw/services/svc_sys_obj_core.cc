@@ -136,6 +136,7 @@ int RGWSI_SysObj_Core::read(const DoutPrefixProvider *dpp,
 			    bool raw_attrs,
                             rgw_cache_entry_info *cache_info,
                             boost::optional<obj_version>,
+                            boost::optional<obj_version>,
                             optional_yield y)
 {
   auto& read_state = static_cast<GetObjState&>(_read_state);
