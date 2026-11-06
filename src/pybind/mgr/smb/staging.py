@@ -821,14 +821,16 @@ def _check_share_rgw(share: resources.Share, staging: Staging) -> None:
 
     # Validate bucket exists (skip for external clusters)
     if not is_external_cluster:
-        if not rgw.validate_rgw_bucket(
-            staging._tool_execer,
-            share.rgw.bucket,
-            valid_user_id,
-        ):
+        try:
+            rgw.validate_rgw_bucket(
+                staging._tool_execer,
+                share.rgw.bucket,
+                valid_user_id,
+            )
+        except ValueError as e:
             raise ErrorResult(
                 share,
-                msg=f"RGW bucket '{share.rgw.bucket}' does not exist or is not accessible",
+                msg=f"RGW bucket '{share.rgw.bucket}' is not usable: {e}",
             )
     # For external clusters, skip bucket validation
     # User must ensure bucket exists on external cluster
@@ -1237,6 +1239,56 @@ def _is_external_cluster(cluster_id: str, staging: Staging) -> bool:
     )
 
 
+def _local_shares_using_rgw_credential(
+    rgw_cred: resources.RGWCredential, staging: Staging
+) -> List[resources.Share]:
+    """Return the shares on local (non-external) clusters that reference
+    the given RGW credential, preferring staged versions of the shares.
+    """
+    found: List[resources.Share] = []
+    for cid, sid in ShareEntry.ids(staging):
+        ekey = (str(ShareEntry.namespace), f'{cid}.{sid}')
+        incoming = staging.incoming.get(ekey)
+        if incoming is not None:
+            if (
+                not isinstance(incoming, resources.Share)
+                or incoming.intent != Intent.PRESENT
+            ):
+                continue
+            share = incoming
+        else:
+            try:
+                share = ShareEntry.from_store(
+                    staging.destination_store, cid, sid
+                ).get_share()
+            except KeyError:
+                continue
+        if (
+            share.rgw
+            and share.rgw.credential_ref == rgw_cred.rgw_credential_id
+            and not _is_external_cluster(share.cluster_id, staging)
+        ):
+            found.append(share)
+    return found
+
+
+def _rgw_credential_user_changed(
+    rgw_cred: resources.RGWCredential, staging: Staging
+) -> bool:
+    """Return True if a stored credential with this id names a different user.
+
+    A new credential, or one whose keys are being rotated for the same user,
+    returns False.
+    """
+    try:
+        stored = RGWCredentialEntry.from_store(
+            staging.destination_store, rgw_cred.rgw_credential_id
+        ).get_rgw_credential()
+    except KeyError:
+        return False
+    return stored.user_id != rgw_cred.user_id
+
+
 def _check_rgw_credential_present(
     rgw_cred: resources.RGWCredential, staging: Staging
 ) -> None:
@@ -1250,60 +1302,55 @@ def _check_rgw_credential_present(
                     'unknown_id': rgw_cred.linked_to_cluster,
                 },
             )
+        # Credentials linked to an external cluster must not be validated
+        # against the local RGW, as radosgw-admin has no visibility into the
+        # remote cluster.
+        if _is_external_cluster(rgw_cred.linked_to_cluster, staging):
+            return
 
-        # Validate credentials against RGW (skip for external clusters)
-        if not _is_external_cluster(rgw_cred.linked_to_cluster, staging):
-            try:
-                rgw.validate_rgw_credentials(
-                    staging._tool_execer,
-                    rgw_cred.user_id,
-                    rgw_cred.access_key_id,
-                    rgw_cred.secret_access_key,
-                )
-            except ValueError as e:
-                raise ErrorResult(
-                    rgw_cred,
-                    msg=f"RGW credentials in '{rgw_cred.rgw_credential_id}' are not usable: {e}",
-                )
-    else:
-        # No linked_to_cluster: check if any staged share references this credential
-        # on a local (non-external) cluster, and validate in that case.
-        # Credentials used only with external clusters must not be validated against
-        # the local RGW, as radosgw-admin has no visibility into the remote cluster.
-        for cid, sid in ShareEntry.ids(staging):
-            ekey = (str(ShareEntry.namespace), f'{cid}.{sid}')
-            incoming = staging.incoming.get(ekey)
-            if incoming is not None:
-                if not isinstance(incoming, resources.Share):
-                    continue
-                share = incoming
-            else:
-                try:
-                    share = ShareEntry.from_store(
-                        staging.destination_store, cid, sid
-                    ).get_share()
-                except KeyError:
-                    continue
-            if (
-                share.rgw
-                and share.rgw.credential_ref == rgw_cred.rgw_credential_id
-                and not _is_external_cluster(share.cluster_id, staging)
-            ):
-                # At least one local-cluster share uses this credential — validate it.
-                try:
-                    rgw.validate_rgw_credentials(
-                        staging._tool_execer,
-                        rgw_cred.user_id,
-                        rgw_cred.access_key_id,
-                        rgw_cred.secret_access_key,
-                    )
-                except ValueError as e:
-                    raise ErrorResult(
-                        rgw_cred,
-                        msg=f"RGW credentials in '{share.rgw.credential_ref}' are not usable: {e}",
-                    )
-                # Validated successfully; no need to check remaining shares.
-                return
+    # Without linked_to_cluster, only validate if a share on a local
+    # (non-external) cluster references this credential.
+    shares: Optional[List[resources.Share]] = None
+    if not rgw_cred.linked_to_cluster:
+        shares = _local_shares_using_rgw_credential(rgw_cred, staging)
+        if not shares:
+            return
+
+    try:
+        rgw.validate_rgw_credentials(
+            staging._tool_execer,
+            rgw_cred.user_id,
+            rgw_cred.access_key_id,
+            rgw_cred.secret_access_key,
+        )
+    except ValueError as e:
+        raise ErrorResult(
+            rgw_cred,
+            msg=f"RGW credentials in '{rgw_cred.rgw_credential_id}' are not usable: {e}",
+        )
+
+    # If the credential now names a different user than the one stored, check
+    # that the new user owns the bucket of each share using it. Rotating keys
+    # for the same user must not depend on the current state of the buckets.
+    if not _rgw_credential_user_changed(rgw_cred, staging):
+        return
+    if shares is None:
+        shares = _local_shares_using_rgw_credential(rgw_cred, staging)
+    for share in shares:
+        assert share.rgw  # appease mypy
+        try:
+            rgw.validate_rgw_bucket(
+                staging._tool_execer, share.rgw.bucket, rgw_cred.user_id
+            )
+        except ValueError as e:
+            raise ErrorResult(
+                rgw_cred,
+                msg=(
+                    f"RGW credential '{rgw_cred.rgw_credential_id}' cannot be "
+                    f"used by share '{share.cluster_id}.{share.share_id}': "
+                    f"bucket '{share.rgw.bucket}' is not usable: {e}"
+                ),
+            )
 
 
 @cross_check_resource.register
