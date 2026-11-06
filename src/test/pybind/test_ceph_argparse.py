@@ -1081,6 +1081,13 @@ class TestOSD(TestArgparse):
                                     'poolname', '128', '128',
                                     'erasure', 'A-Za-z0-9-_.', 'rule^^'])
         self._assert_valid_command(['osd', 'pool', 'create', 'poolname'])
+        # every argument from before the ones taken by name only, the last
+        # two flags included, is still positional
+        self._assert_valid_command(['osd', 'pool', 'create',
+                                    'poolname', '128', '128',
+                                    'replicated', 'profile', 'rule',
+                                    '0', '3', '1', '512', 'on', 'false',
+                                    '0', '0.0', 'false', 'true', 'false'])
         self.assertEqual({}, validate_command(sigdict, ['osd', 'pool', 'create']))
         # invalid pg_num and pgp_num, like "-1", could spill over to
         # erasure_code_profile and rule as they are valid profile and rule
@@ -1161,6 +1168,9 @@ class TestOSD(TestArgparse):
                     'recovery_op_priority'):
             self._assert_valid_command(['osd', 'pool',
                                        'set', 'poolname', var, 'value'])
+        # yes_i_really_mean_it is still positional
+        self._assert_valid_command(['osd', 'pool',
+                                    'set', 'poolname', 'size', '1', 'true'])
         self.assertEqual({}, validate_command(sigdict, ['osd', 'pool',
                                                         'set']))
         self.assertEqual({}, validate_command(sigdict, ['osd', 'pool',

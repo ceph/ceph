@@ -140,6 +140,8 @@ void MonmapMonitor::create_pending()
   pending_map.epoch++;
   pending_map.last_changed = ceph_clock_now();
   pending_map.removed_ranks.clear();
+  dout(20) << __func__ << " epoch " << pending_map.epoch
+     << dendl;
 }
 
 void MonmapMonitor::encode_pending(MonitorDBStore::TransactionRef t)
@@ -316,6 +318,14 @@ bool MonmapMonitor::preprocess_command(MonOpRequestRef op)
   MonSession *session = op->get_session();
   if (!session) {
     mon.reply_command(op, -EACCES, "access denied", get_last_committed());
+    return true;
+  }
+
+  if ((prefix == "mon enable_stretch_mode" ||
+       prefix == "mon disable_stretch_mode") &&
+      mon.osdmon()->num_zones_supported()) {
+    // stretch mode follows the pools, which OSDMonitor changes
+    mon.osdmon()->dispatch(op);
     return true;
   }
 
@@ -1209,7 +1219,7 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
       goto reply_no_propose;
     }
     mon.osdmon()->try_enable_stretch_mode(ss, &okay, &errcode, false,
-              dividing_bucket, 2, pools, new_crush_rule, crush);
+              dividing_bucket, 2, pools, new_crush_rule, crush, true);
     if (!okay) {
       err = errcode;
       goto reply_no_propose;
@@ -1220,7 +1230,7 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
     mon.osdmon()->try_enable_stretch_mode(ss, &okay, &errcode, true,
               dividing_bucket,
               2, // right now we only support 2 sites
-              pools, new_crush_rule, crush);
+              pools, new_crush_rule, crush, true);
     ceph_assert(okay == true);
     request_proposal(mon.osdmon());
   } else if (prefix == "mon disable_stretch_mode") {
@@ -1385,7 +1395,6 @@ void MonmapMonitor::validate_and_enable_stretch_mode(
     *errcode = -ENOENT;
     return;
   }
-  
   // Get CRUSH subtrees and dividing_id
   int dividing_id = *crush.get_validated_type_id(dividing_bucket);
   vector<int> subtrees;
@@ -1405,13 +1414,12 @@ void MonmapMonitor::validate_and_enable_stretch_mode(
       subtree_names.insert(subtree_name);
     }
   }
-  
   if (subtree_names.size() != 2) {
     ss << "Could not get names for both CRUSH subtrees";
     *errcode = -EINVAL;
     return;
   }
-  
+
   // Build map of monitor names to their location at dividing_bucket level
   map<string,string> mon_name_to_crush_loc;
   for (const auto& [mon_name, mon_info] : monmap.mon_info) {
@@ -1574,6 +1582,20 @@ void MonmapMonitor::trigger_healthy_stretch_mode()
 {
   dout(20) << __func__ << dendl;
   pending_map.stretch_marked_down_mons.clear();
+  propose_pending();
+}
+
+void MonmapMonitor::clear_stretch_mode_state()
+{
+  dout(10) << __func__ << " clearing per-pool stretch mode state from monmap" << dendl;
+  ceph_assert(paxos.is_plugged());
+
+  pending_map.stretch_mode_enabled = false;
+  pending_map.tiebreaker_mon = "";
+  pending_map.disallowed_leaders.clear();
+  pending_map.stretch_marked_down_mons.clear();
+  pending_map.last_changed = ceph_clock_now();
+
   propose_pending();
 }
 

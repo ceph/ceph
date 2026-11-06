@@ -1138,7 +1138,8 @@ void PG::read_state(ObjectStore *store)
 	oss,
 	cct->_conf->osd_ignore_stale_divergent_priors,
 	pool.info.allows_ecoptimizations(),
-	cct->_conf->osd_debug_verify_missing_on_start);
+        cct->_conf->osd_debug_verify_missing_on_start,
+        &pool.info);
 
       if (oss.tellp())
 	osd->clog->error() << oss.str();

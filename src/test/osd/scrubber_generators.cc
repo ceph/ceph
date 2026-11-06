@@ -53,9 +53,10 @@ std::pair<bufferlist, std::vector<snapid_t>> create_object_snapset(
 }
 
 RealObjsConf ScrubGenerator::make_erasure_code_configuration(int8_t k,
-                                                             int8_t m) {
+                                                             int8_t m,
+                                                             int num_zones) {
   RealObjsConf erasure_code_configuration;
-  for (shard_id_t i{0}; i < k + m; ++i) {
+  for (shard_id_t i{0}; i < (k + m) * num_zones; ++i) {
     RealObj erasure_code_obj = ScrubDatasets::erasure_code_obj;
     erasure_code_obj.ghobj.shard_id = i;
     erasure_code_configuration.objs.push_back(erasure_code_obj);

@@ -142,6 +142,7 @@
  */ 
 
 #include <map>
+#include <optional>
 #include <set>
 #include <vector>
 #include <ostream>
@@ -224,8 +225,26 @@ namespace ceph {
      * @return a rule on success or a negative errno on error.
      */
     virtual int create_rule(const std::string &name,
-			    CrushWrapper &crush,
-			    std::ostream *ss) const = 0;
+                            CrushWrapper &crush,
+                            std::ostream *ss) const {
+      return create_rule(name, 1, "", "", "", std::nullopt, crush, ss);
+    }
+
+    /**
+     * @param device_class selects the device class of the generated rule:
+     *   std::nullopt inherits the profile's crush-device-class, while an
+     *   explicit value is used verbatim -- an empty string forces a rule with
+     *   no device class, which lets a pool drop an inherited class without
+     *   editing its profile.
+     */
+    virtual int create_rule(const std::string &name,
+                            int num_zones,
+                            const std::string &root,
+                            const std::string &zone_failure_domain,
+                            const std::string &osd_failure_domain,
+                            const std::optional<std::string> &device_class,
+                            CrushWrapper &crush,
+                            std::ostream *ss) const = 0;
 
     /**
      * Return the number of chunks created by a call to the **encode**

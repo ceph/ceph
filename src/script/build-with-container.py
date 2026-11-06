@@ -226,6 +226,7 @@ _CONTAINER_SOURCES = [
     "src/script/lib-build.sh",
     "src/script/run-make.sh",
     "ceph.spec.in",
+    "debian/control",
     "do_cmake.sh",
     "install-deps.sh",
     "run-make-check.sh",
