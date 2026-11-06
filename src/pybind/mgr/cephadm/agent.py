@@ -29,6 +29,14 @@ if TYPE_CHECKING:
 
 CEPHADM_AGENT_CERT_DURATION = (365 * 5)
 
+# Timeout in seconds for each step of a mgr->agent message (TCP connect, TLS
+# handshake, send, reply). A host that drops packets can't hold a message
+# worker longer than a few multiples of this.
+AGENT_MESSAGE_TIMEOUT = 10.0
+# Pause before the single retry of a refused connection, which covers an
+# agent whose listener is still starting after a deploy.
+AGENT_MESSAGE_RETRY_WAIT = 2.0
+
 
 class AgentEndpoint:
 
@@ -879,6 +887,12 @@ class AgentMessage:
         return json.dumps(data)
 
     def send(self) -> None:
+        """Send the message and wait for the agent's reply.
+
+        A refused or reset connection is retried once after
+        AGENT_MESSAGE_RETRY_WAIT seconds. A timeout or any other error is
+        not retried.
+        """
         self.mgr.log.debug(f'Sending message to agent on host {self.host}')
         self.addr = self.mgr.inventory.get_addr(self.host) if self.host in self.mgr.inventory else self.host
         try:
@@ -898,14 +912,15 @@ class AgentMessage:
         except Exception as e:
             self.mgr.log.error(f'Failed to get length of json payload: {e}')
             return
-        for retry_wait in [3, 5]:
+        for attempt in (1, 2):
             try:
-                agent_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                secure_agent_socket = ssl_ctx.wrap_socket(agent_socket, server_hostname=self.addr)
-                secure_agent_socket.connect((self.addr, self.port))
-                msg = (bytes_len + data)
-                secure_agent_socket.sendall(msg.encode('utf-8'))
-                self.agent_response = secure_agent_socket.recv(1024).decode()
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as agent_socket:
+                    agent_socket.settimeout(AGENT_MESSAGE_TIMEOUT)
+                    with ssl_ctx.wrap_socket(agent_socket, server_hostname=self.addr) as secure_agent_socket:
+                        secure_agent_socket.connect((self.addr, self.port))
+                        msg = (bytes_len + data)
+                        secure_agent_socket.sendall(msg.encode('utf-8'))
+                        self.agent_response = secure_agent_socket.recv(1024).decode()
                 self.mgr.log.debug(f'Received "{self.agent_response}" from agent on host {self.host}')
                 if self.daemon_spec:
                     self.mgr.agent_cache.agent_config_successfully_delivered(self.daemon_spec)
@@ -914,22 +929,25 @@ class AgentMessage:
                         f'agent config deps updated (deps={self.daemon_spec.deps})')
                 return
             except ConnectionError as e:
-                # if it's a connection error, possibly try to connect again.
-                # We could have just deployed agent and it might not be ready
-                self.mgr.log.debug(
-                    f'Retrying connection to agent on {self.host} in {str(retry_wait)} seconds. Connection failed with: {e}')
-                time.sleep(retry_wait)
+                # The agent may have just been deployed and its listener may
+                # not be up yet: retry a refused or reset connection once.
+                if attempt == 1:
+                    self.mgr.log.debug(
+                        f'Retrying connection to agent on {self.host} in {AGENT_MESSAGE_RETRY_WAIT} seconds. Connection failed with: {e}')
+                    time.sleep(AGENT_MESSAGE_RETRY_WAIT)
+                    continue
+                # Leave agent config deps unchanged so _check_agent can retry next cycle.
+                self.mgr.log.error(
+                    f'Could not connect to agent on host {self.host}: {e}. '
+                    f'Agent config deps left unchanged for retry')
+                return
             except Exception as e:
-                # if it's not a connection error, something has gone wrong. Give up.
+                # A timeout, TLS or other error: give up on this message.
                 # Leave agent config deps unchanged so _check_agent can retry.
                 self.mgr.log.error(
                     f'Failed to contact agent on host {self.host}: {e}. '
                     f'Agent config deps left unchanged for retry')
                 return
-        # Leave agent config deps unchanged so _check_agent can retry next cycle.
-        self.mgr.log.error(
-            f'Could not connect to agent on host {self.host}. '
-            f'Agent config deps left unchanged for retry')
 
     def get_agent_response(self) -> str:
         return self.agent_response
