@@ -2108,6 +2108,7 @@ exit 0
 %{_bindir}/rbd-replay-many
 %{_bindir}/rbdmap
 %{_bindir}/rgw-gap-list
+%{_bindir}/rgw-gap-list.py
 %{_bindir}/rgw-gap-list-comparator
 %{_bindir}/rgw-orphan-list
 %{_bindir}/rgw-policy-check
@@ -2145,6 +2146,7 @@ exit 0
 %{_mandir}/man8/rbd-replay-prep.8*
 %{_mandir}/man8/rgw-orphan-list.8*
 %{_mandir}/man8/rgw-gap-list.8*
+%{_mandir}/man8/rgw-gap-list.py.8*
 %{_mandir}/man8/rgw-policy-check.8*
 %{_mandir}/man8/rgw-policy-test.8*
 %{_mandir}/man8/rgw-restore-bucket-index.8*
