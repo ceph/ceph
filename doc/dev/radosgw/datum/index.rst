@@ -63,6 +63,7 @@ and native Ceph integration.
 
    Tutorial <tutorial>
    Datum in practice <in-practice>
+   Developer’s guide <developer-guide>
    Design and reference <design>
    Build and run <build-and-run>
    Complete examples <examples>

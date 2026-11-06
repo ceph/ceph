@@ -82,6 +82,9 @@ without keeping it alive.
   </a>
 </div>
 
+Read the short [developer’s guide](developer-guide.md) for practical design principles,
+ownership, progress, errors, and a comparison of related programming approaches.
+
 Find a task or look up a term in the [index](lookup.md), or explore the
 [annotated references](references.md).
 

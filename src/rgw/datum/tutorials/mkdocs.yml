@@ -18,6 +18,7 @@ nav:
   - Tutorial:
       - Contents: tutorial/index.md
   - 'Domain Vocabulary: Ceph': tutorial/18-ceph-bytes.md
+  - Developer’s guide: developer-guide.md
   - Design: design.md
   - Build and run: build-and-run.md
   - Examples: examples.md
