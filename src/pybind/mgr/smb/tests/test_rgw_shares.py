@@ -1,3 +1,5 @@
+from typing import Optional
+
 import json
 
 import pytest
@@ -7,32 +9,48 @@ import smb.external
 
 
 class _FakeToolExecer:
-    """Mock tool executor for testing RGW operations."""
+    """Mock tool executor for testing RGW operations.
+
+    Buckets are owned by 'testuser' unless overridden via the ``owners``
+    mapping of bucket name to owner user id (or account id).  The
+    ``accounts`` mapping of user id to account id makes ``user info``
+    report an ``account_id`` for that user.
+    """
+
+    def __init__(self, owners: Optional[dict[str, str]] = None) -> None:
+        self.owners: dict[str, str] = dict(owners or {})
+        self.accounts: dict[str, str] = {}
 
     def tool_exec(self, cmd: list[str]) -> tuple[int, str, str]:
         """Mock tool_exec that returns success for RGW commands."""
         # Check if this is a radosgw-admin bucket stats command
         if 'radosgw-admin' in cmd and 'bucket' in cmd and 'stats' in cmd:
             # Return mock bucket stats with owner field
+            bucket = cmd[cmd.index('--bucket') + 1]
             bucket_stats = json.dumps(
-                {'owner': 'testuser', 'bucket': 'my-bucket', 'usage': {}}
+                {
+                    'owner': self.owners.get(bucket, 'testuser'),
+                    'bucket': bucket,
+                    'usage': {},
+                }
             )
             return (0, bucket_stats, '')
         # Check if this is a radosgw-admin user info command
         if 'radosgw-admin' in cmd and 'user' in cmd and 'info' in cmd:
             # Return mock user info with credentials
-            user_info = json.dumps(
-                {
-                    'user_id': 'testuser',
-                    'keys': [
-                        {
-                            'access_key': 'AUTO_FETCHED_ACCESS_KEY',
-                            'secret_key': 'AUTO_FETCHED_SECRET_KEY',
-                        }
-                    ],
-                }
-            )
-            return (0, user_info, '')
+            info: dict = {
+                'user_id': 'testuser',
+                'keys': [
+                    {
+                        'access_key': 'AUTO_FETCHED_ACCESS_KEY',
+                        'secret_key': 'AUTO_FETCHED_SECRET_KEY',
+                    }
+                ],
+            }
+            uid = cmd[cmd.index('--uid') + 1]
+            if uid in self.accounts:
+                info['account_id'] = self.accounts[uid]
+            return (0, json.dumps(info), '')
         # Default response for other commands
         return (0, '{}', '')
 
@@ -242,6 +260,7 @@ def test_apply_rgw_share_with_credentials(thandler):
             user_id='rgwuser',
         ),
     )
+    thandler._tool_execer.owners['test-bucket'] = 'rgwuser'
     rg = thandler.apply([cluster, share])
     assert rg.success, rg.to_simplified()
 
@@ -418,6 +437,7 @@ def test_multiple_rgw_shares_same_cluster(thandler):
             user_id='user2',
         ),
     )
+    thandler._tool_execer.owners.update(bucket1='user1', bucket2='user2')
     rg = thandler.apply([cluster, share1, share2])
     assert rg.success, rg.to_simplified()
 
@@ -475,6 +495,9 @@ def test_rgw_credential_reuse_same_user(thandler):
             user_id='shareduser',
         ),
     )
+    thandler._tool_execer.owners.update(
+        bucket1='shareduser', bucket2='shareduser'
+    )
     rg = thandler.apply([cluster, share1, share2])
     assert rg.success, rg.to_simplified()
 
@@ -498,6 +521,144 @@ def test_rgw_credential_reuse_same_user(thandler):
         thandler.internal_store.data[('rgw_creds', cred1_ref)]['user_id']
         == 'shareduser'
     )
+
+
+def test_rgw_bucket_owned_by_different_user(thandler):
+    """Test that a share fails when the bucket is owned by a different valid user."""
+    from smb.rgw import validate_rgw_bucket
+
+    # user1 and user2 are both valid RGW users, but bucket1 belongs to user1
+    thandler._tool_execer.owners['bucket1'] = 'user1'
+
+    # Direct validation: passes for the owner, raises for any other user
+    validate_rgw_bucket(thandler._tool_execer, 'bucket1', 'user1')
+    with pytest.raises(ValueError):
+        validate_rgw_bucket(thandler._tool_execer, 'bucket1', 'user2')
+
+    cluster = _cluster(
+        cluster_id='ownermismatch',
+        auth_mode=smb.enums.AuthMode.USER,
+        user_group_settings=[
+            smb.resources.UserGroupSource(
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
+            ),
+        ],
+    )
+    # Negative: user2 is not the owner of bucket1, so the share is rejected
+    bad_share = smb.resources.Share(
+        cluster_id='ownermismatch',
+        share_id='badshare',
+        name='RGW Bad Share',
+        rgw=smb.resources.RGWStorage(bucket='bucket1', user_id='user2'),
+    )
+    rg = thandler.apply([cluster, bad_share])
+    assert rg.success is False
+    assert (
+        'shares',
+        'ownermismatch.badshare',
+    ) not in thandler.internal_store.data
+
+    # Positive control: same bucket with its real owner is accepted
+    good_share = smb.resources.Share(
+        cluster_id='ownermismatch',
+        share_id='goodshare',
+        name='RGW Good Share',
+        rgw=smb.resources.RGWStorage(bucket='bucket1', user_id='user1'),
+    )
+    rg = thandler.apply([cluster, good_share])
+    assert rg.success is True
+    assert (
+        'shares',
+        'ownermismatch.goodshare',
+    ) in thandler.internal_store.data
+
+
+def test_rgw_bucket_owned_by_account(thandler):
+    """Buckets created by account users are owned by the account id."""
+    from smb.rgw import validate_rgw_bucket
+
+    account = 'RGW33567154695143645'
+    thandler._tool_execer.owners['acctbucket'] = account
+    thandler._tool_execer.accounts.update(
+        acctuser=account, otheruser='RGW00000000000000001'
+    )
+
+    # Member of the owning account is accepted; others are rejected
+    validate_rgw_bucket(thandler._tool_execer, 'acctbucket', 'acctuser')
+    with pytest.raises(ValueError):
+        validate_rgw_bucket(thandler._tool_execer, 'acctbucket', 'otheruser')
+    with pytest.raises(ValueError):
+        validate_rgw_bucket(thandler._tool_execer, 'acctbucket', 'plainuser')
+
+    cluster = _cluster(
+        cluster_id='acctcluster',
+        auth_mode=smb.enums.AuthMode.USER,
+        user_group_settings=[
+            smb.resources.UserGroupSource(
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
+            ),
+        ],
+    )
+    # Auto-created credential path
+    share = smb.resources.Share(
+        cluster_id='acctcluster',
+        share_id='acctshare',
+        name='RGW Account Share',
+        rgw=smb.resources.RGWStorage(bucket='acctbucket', user_id='acctuser'),
+    )
+    rg = thandler.apply([cluster, share])
+    assert rg.success, rg.to_simplified()
+
+    # Without user_id the owner is an account id, which is not a user
+    nouser = smb.resources.Share(
+        cluster_id='acctcluster',
+        share_id='acctnouser',
+        name='RGW Account No User',
+        rgw=smb.resources.RGWStorage(bucket='acctbucket'),
+    )
+    rg = thandler.apply([cluster, nouser])
+    assert rg.success is False
+    assert 'provide a member user_id' in str(rg.to_simplified())
+
+    # Explicit credential_ref path
+    cred = smb.resources.RGWCredential(
+        rgw_credential_id='acctcred',
+        user_id='acctuser',
+        access_key_id='AUTO_FETCHED_ACCESS_KEY',
+        secret_access_key='AUTO_FETCHED_SECRET_KEY',
+    )
+    share2 = smb.resources.Share(
+        cluster_id='acctcluster',
+        share_id='acctshare2',
+        name='RGW Account Share 2',
+        rgw=smb.resources.RGWStorage(
+            bucket='acctbucket', credential_ref='acctcred'
+        ),
+    )
+    rg = thandler.apply([cluster, cred, share2])
+    assert rg.success, rg.to_simplified()
+
+
+def test_rgw_bucket_owner_check_user_lookup_failure():
+    """A failed user lookup is reported as such, not as an owner mismatch."""
+    from smb.rgw import validate_rgw_bucket
+
+    class _UserInfoFailsToolExecer(_FakeToolExecer):
+        def tool_exec(self, cmd):
+            if 'user' in cmd and 'info' in cmd:
+                return (1, '', 'ERROR: could not fetch user info')
+            return super().tool_exec(cmd)
+
+    executor = _UserInfoFailsToolExecer()
+    executor.owners['bucket1'] = 'user1'
+
+    # Owner matches directly: no user lookup is needed, so it still passes
+    validate_rgw_bucket(executor, 'bucket1', 'user1')
+
+    # Owner differs: the account lookup fails and the error says so
+    with pytest.raises(ValueError, match='could not be looked up') as exc:
+        validate_rgw_bucket(executor, 'bucket1', 'user2')
+    assert 'not by user' not in str(exc.value)
 
 
 # ---- priv-store credential isolation tests ----
@@ -680,6 +841,7 @@ def test_multi_share_stub_covers_all_rgw_shares(split_handler):
             user_id='u2',
         ),
     )
+    h._tool_execer.owners.update(bucket1='u1', bucket2='u2')
     rg = h.apply([cluster, share1, share2])
     assert rg.success, rg.to_simplified()
 
@@ -1115,6 +1277,7 @@ def test_rgw_share_acl_configuration(thandler):
             user_id='acluser',
         ),
     )
+    thandler._tool_execer.owners['acl-bucket'] = 'acluser'
     rg = thandler.apply([cluster, share])
     assert rg.success, rg.to_simplified()
 
@@ -1271,15 +1434,17 @@ def test_tenant_aware_bucket_validation():
 
     executor = _TenantAwareFakeToolExecer()
 
-    # Validate bucket with tenant-aware user_id
-    result = validate_rgw_bucket(
+    # Validate bucket with tenant-aware user_id (raises on failure)
+    validate_rgw_bucket(
         executor, 'tenant-bucket', user_id='mytenant$tenantuser'
     )
-    assert result is True
 
     # Validate bucket with plain user_id
-    result = validate_rgw_bucket(executor, 'my-bucket', user_id='testuser')
-    assert result is True
+    validate_rgw_bucket(executor, 'my-bucket', user_id='testuser')
+
+    # Validate bucket with an empty tenant prefix ("$user"): the owner is
+    # reported without the "$", so it must still match
+    validate_rgw_bucket(executor, 'my-bucket', user_id='$testuser')
 
 
 def test_fetch_rgw_credentials_with_tenant():
@@ -1910,6 +2075,134 @@ def test_credential_only_update_with_valid_creds():
     assert (
         rg2.success
     ), 'Expected credential-only update with valid creds to succeed'
+
+
+def test_credential_update_to_non_owner_user_rejected(thandler):
+    """Changing the user on a credential must re-check bucket ownership.
+
+    The share was created while 'user1' owned the bucket.  Updating the
+    credential (without re-staging the share) to 'user2' passes the key
+    check, but user2 does not own the bucket, so it must be rejected.
+    """
+    thandler._tool_execer.owners['ownedbucket'] = 'user1'
+
+    cluster = _cluster(
+        cluster_id='credowner',
+        auth_mode=smb.enums.AuthMode.USER,
+        user_group_settings=[
+            smb.resources.UserGroupSource(
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
+            ),
+        ],
+    )
+    cred = smb.resources.RGWCredential(
+        rgw_credential_id='owner-cred',
+        user_id='user1',
+        access_key_id='AUTO_FETCHED_ACCESS_KEY',
+        secret_access_key='AUTO_FETCHED_SECRET_KEY',
+        linked_to_cluster='credowner',
+    )
+    share = smb.resources.Share(
+        cluster_id='credowner',
+        share_id='ownershare',
+        name='Credential Owner Share',
+        rgw=smb.resources.RGWStorage(
+            bucket='ownedbucket',
+            credential_ref='owner-cred',
+        ),
+    )
+    rg = thandler.apply([cluster, cred, share])
+    assert rg.success, rg.to_simplified()
+
+    # Credential switched to a user that does not own the bucket
+    bad_cred = smb.resources.RGWCredential(
+        rgw_credential_id='owner-cred',
+        user_id='user2',
+        access_key_id='AUTO_FETCHED_ACCESS_KEY',
+        secret_access_key='AUTO_FETCHED_SECRET_KEY',
+        linked_to_cluster='credowner',
+    )
+    rg = thandler.apply([bad_cred])
+    assert rg.success is False
+    assert 'ownedbucket' in str(rg.to_simplified())
+
+    # Same for a credential that is not linked to a cluster
+    unlinked = smb.resources.RGWCredential(
+        rgw_credential_id='owner-cred',
+        user_id='user2',
+        access_key_id='AUTO_FETCHED_ACCESS_KEY',
+        secret_access_key='AUTO_FETCHED_SECRET_KEY',
+    )
+    rg = thandler.apply([unlinked])
+    assert rg.success is False
+
+    # Switching to the account that owns the bucket is accepted
+    thandler._tool_execer.accounts['user2'] = 'RGW33567154695143645'
+    thandler._tool_execer.owners['ownedbucket'] = 'RGW33567154695143645'
+    rg = thandler.apply([bad_cred])
+    assert rg.success, rg.to_simplified()
+
+
+def test_credential_update_same_user_skips_bucket_owner_check(thandler):
+    """Re-applying a credential for the same user must not be blocked by a
+    share whose bucket has since changed owner (e.g. during key rotation).
+    """
+    thandler._tool_execer.owners['rotbucket'] = 'user1'
+
+    cluster = _cluster(
+        cluster_id='credrotate',
+        auth_mode=smb.enums.AuthMode.USER,
+        user_group_settings=[
+            smb.resources.UserGroupSource(
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
+            ),
+        ],
+    )
+    cred = smb.resources.RGWCredential(
+        rgw_credential_id='rotate-cred',
+        user_id='user1',
+        access_key_id='AUTO_FETCHED_ACCESS_KEY',
+        secret_access_key='AUTO_FETCHED_SECRET_KEY',
+        linked_to_cluster='credrotate',
+    )
+    share = smb.resources.Share(
+        cluster_id='credrotate',
+        share_id='rotshare',
+        name='Credential Rotate Share',
+        rgw=smb.resources.RGWStorage(
+            bucket='rotbucket',
+            credential_ref='rotate-cred',
+        ),
+    )
+    rg = thandler.apply([cluster, cred, share])
+    assert rg.success, rg.to_simplified()
+
+    # The bucket is re-linked to another owner behind SMB's back
+    thandler._tool_execer.owners['rotbucket'] = 'user2'
+
+    # Same user, linked and unlinked: no ownership re-check
+    rg = thandler.apply([cred])
+    assert rg.success, rg.to_simplified()
+    unlinked = smb.resources.RGWCredential(
+        rgw_credential_id='rotate-cred',
+        user_id='user1',
+        access_key_id='AUTO_FETCHED_ACCESS_KEY',
+        secret_access_key='AUTO_FETCHED_SECRET_KEY',
+    )
+    rg = thandler.apply([unlinked])
+    assert rg.success, rg.to_simplified()
+
+    # Changing the user does trigger the check
+    changed = smb.resources.RGWCredential(
+        rgw_credential_id='rotate-cred',
+        user_id='user3',
+        access_key_id='AUTO_FETCHED_ACCESS_KEY',
+        secret_access_key='AUTO_FETCHED_SECRET_KEY',
+        linked_to_cluster='credrotate',
+    )
+    rg = thandler.apply([changed])
+    assert rg.success is False
+    assert 'rotbucket' in str(rg.to_simplified())
 
 
 def test_share_staged_with_stale_credential():
