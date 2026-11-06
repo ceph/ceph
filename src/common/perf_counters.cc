@@ -257,6 +257,25 @@ void PerfCounters::set(int idx, uint64_t amt)
   }
 }
 
+void PerfCounters::set_max(int idx, uint64_t amt)
+{
+#ifndef WITH_CRIMSON
+  if (!m_cct->_conf->perf)
+    return;
+#endif
+
+  ceph_assert(idx > m_lower_bound);
+  ceph_assert(idx < m_upper_bound);
+  perf_counter_data_any_d& data(m_data[idx - m_lower_bound - 1]);
+  if (!(data.type & PERFCOUNTER_U64))
+    return;
+  ceph_assert(!(data.type & PERFCOUNTER_LONGRUNAVG));
+
+  uint64_t cur = data.u64.load();
+  while (amt > cur && !data.u64.compare_exchange_weak(cur, amt)) {
+  }
+}
+
 uint64_t PerfCounters::get(int idx) const
 {
 #ifndef WITH_CRIMSON

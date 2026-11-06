@@ -8,7 +8,18 @@
 #include <vector>
 
 #include "include/Context.h"
+#include "include/common_fwd.h"
 #include "common/ceph_mutex.h"
+
+enum {
+  l_readahead_first = 26000,
+  l_readahead_observes,     // reads observed by readahead state
+  l_readahead_resets,       // non-sequential reads that reset RA state
+  l_readahead_sequential,   // consecutive (offset == last_pos) reads
+  l_readahead_issued,       // readahead extents issued
+  l_readahead_issued_bytes, // bytes of issued readahead extents
+  l_readahead_last,
+};
 
 /**
    This class provides common state and logic for code that needs to perform readahead
@@ -108,6 +119,12 @@ public:
    */
   void set_alignments(const std::vector<uint64_t> &alignments);
 
+  /**
+     Optional shared PerfCounters (e.g. Client's standalone "readahead" section).
+     Null means counters are disabled.  Not owned by this object.
+   */
+  void set_perf_counters(PerfCounters *l);
+
 private:
   /**
      Records that a read request has been received.
@@ -162,6 +179,9 @@ private:
 
   /// Waiters for pending readahead
   std::list<Context *> m_pending_waiting;
+
+  /// Shared optional counters; not owned
+  PerfCounters *m_logger = nullptr;
 };
 
 #endif
