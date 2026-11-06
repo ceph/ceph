@@ -12,8 +12,10 @@
 #include "Formatter.h"
 #include "include/stringify.h"
 
+using std::list;
 using std::pair;
 using std::string;
+using std::vector;
 
 using ceph::bufferlist;
 using ceph::decode;
