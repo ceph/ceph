@@ -649,6 +649,35 @@ bool AuthMonitor::check_health()
     }
   }
 
+  {
+    auto ttl = cct->_conf.get_val<std::chrono::seconds>("mon_auth_pending_key_ttl");
+    auto now = ceph_clock_now();
+    std::vector<std::string> stale_pending_keys;
+    for (auto const& [entity, auth] : mon.get_secrets()) {
+      if (auth.pending_key.empty()) {
+        continue;
+      }
+      if (now < auth.pending_key.get_created()) {
+        continue;
+      }
+      utime_t age = now - auth.pending_key.get_created();
+      if (age.sec() > ttl.count()) {
+        std::ostringstream ss;
+        ss << "entity " << entity << " has an uncommitted pending key created at "
+           << auth.pending_key.get_created();
+        stale_pending_keys.push_back(ss.str());
+      }
+    }
+    if (!stale_pending_keys.empty()) {
+      std::ostringstream summary;
+      summary << stale_pending_keys.size() << " auth entities have an uncommitted pending key";
+      auto& check = next.add("AUTH_PENDING_KEY_NOT_COMMITTED", HEALTH_WARN, summary.str(), stale_pending_keys.size());
+      for (auto& detail : stale_pending_keys) {
+        check.detail.push_back(detail);
+      }
+    }
+  }
+
   return next != get_health_checks(); /* should propose */
 }
 
@@ -1008,6 +1037,7 @@ bool AuthMonitor::preprocess_command(MonOpRequestRef op)
   cmd_getval(cmdmap, "prefix", prefix);
   if (prefix == "auth add" ||
       prefix == "auth rotate" ||
+      prefix == "auth rotate-pending" ||
       prefix == "auth dump-keys" ||
       prefix == "auth wipe-rotating-service-keys" ||
       prefix == "auth del" ||
@@ -1123,7 +1153,10 @@ int AuthMonitor::import_keyring(KeyRing& keyring)
       dout(0) << "import: no caps supplied" << dendl;
       return -EINVAL;
     }
-    int err = add_entity(p->first, p->second);
+    EntityAuth auth = p->second;
+    // pending keys are only created by the *-pending commands
+    auth.pending_key.clear();
+    int err = add_entity(p->first, auth);
     ceph_assert(err == 0);
   }
   return 0;
@@ -1714,6 +1747,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
       new_inc.key.create(g_ceph_context, key_type);
     }
     new_inc.caps = encoded_caps;
+    new_inc.pending_key.clear();
 
     err = add_entity(auth_inc.name, new_inc);
     ceph_assert(err == 0);
@@ -1724,6 +1758,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 						   get_last_committed() + 1));
     return true;
   } else if ((prefix == "auth get-or-create-pending" ||
+	      prefix == "auth rotate-pending" ||
 	      prefix == "auth clear-pending" ||
 	      prefix == "auth commit-pending")) {
     if (mon.monmap->min_mon_release < ceph_release_t::quincy) {
@@ -1760,10 +1795,19 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
       }
     }
 
-    if (prefix == "auth get-or-create-pending") {
+    if (prefix == "auth get-or-create-pending" ||
+        prefix == "auth rotate-pending") {
       KeyRing kr;
       bool exists = false;
       if (!entity_auth.pending_key.empty()) {
+	if (cmdmap.count("key_type") &&
+	    (int)entity_auth.pending_key.get_type() != key_type) {
+	  ss << "entity " << entity << " already has a pending key of type "
+	     << CryptoManager::get_key_type_name(entity_auth.pending_key.get_type())
+	     << "; run `auth clear-pending` first";
+	  err = -EEXIST;
+	  goto done;
+	}
 	kr.add(entity, entity_auth.key, entity_auth.pending_key);
 	err = 0;
 	exists = true;
@@ -2087,6 +2131,8 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
     }
 
     entity_auth.key.create(g_ceph_context, key_type);
+    // a full rotation supersedes any pending key
+    entity_auth.pending_key.clear();
 
     KeyServerData::Incremental auth_inc;
     auth_inc.op = KeyServerData::AUTH_INC_ADD;
