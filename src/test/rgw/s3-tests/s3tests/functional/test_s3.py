@@ -4283,6 +4283,48 @@ def test_object_acl_default():
             ],
         )
 
+def _test_acl_head(client_method, params):
+    client = get_client()
+    response = getattr(client, client_method)(**params)
+    length = response['ResponseMetadata']['HTTPHeaders']['content-length']
+
+    url = client.generate_presigned_url(ClientMethod=client_method, Params=params, HttpMethod='HEAD')
+    _, _, netloc, resource = url.split('/', 3)
+    req = 'HEAD /{resource} HTTP/1.1\r\nHost: {netloc}\r\nConnection: close\r\n\r\n'.format(
+            resource=resource, netloc=netloc)
+
+    host = get_config_host()
+    s = socket.create_connection((host, get_config_port()), timeout=5)
+    if get_config_is_secure():
+        ctx = ssl.create_default_context()
+        if not get_config_ssl_verify():
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+        s = ctx.wrap_socket(s, server_hostname=host)
+    s.sendall(req.encode())
+    data = b''
+    chunk = s.recv(4096)
+    while chunk:
+        data += chunk
+        chunk = s.recv(4096)
+    s.close()
+
+    headers, _, body = data.partition(b'\r\n\r\n')
+    lines = headers.decode().split('\r\n')
+    assert lines[0].startswith('HTTP/1.1 200')
+    assert 'Content-Length: ' + length in lines
+    assert body == b''
+
+@pytest.mark.fails_on_aws
+def test_bucket_acl_head():
+    bucket_name = get_new_bucket()
+    _test_acl_head('get_bucket_acl', {'Bucket': bucket_name})
+
+@pytest.mark.fails_on_aws
+def test_object_acl_head():
+    bucket_name = _create_objects(keys=['foo'])
+    _test_acl_head('get_object_acl', {'Bucket': bucket_name, 'Key': 'foo'})
+
 def test_object_acl_canned_during_create():
     bucket_name = get_new_bucket()
     client = get_client()
