@@ -3,7 +3,7 @@ import ssl
 from unittest.mock import MagicMock, call, patch
 
 from cephadm.agent import AGENT_MESSAGE_TIMEOUT_S, AgentMessageThread
-from cephadm.services.agent import CephadmAgent
+from cephadm.services.cephadmservice import CephadmAgent
 from .fixtures import with_cephadm_module
 
 

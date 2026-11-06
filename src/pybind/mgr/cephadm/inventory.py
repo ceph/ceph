@@ -1793,9 +1793,17 @@ class HostCache():
         # spec. Since offline/maintenance hosts aren't considered in that process anyway
         # we don't want to return False if the host without up-to-date metadata is in one
         # of those two categories.
-        unreachable = {spec.hostname for spec in self.get_unreachable_hosts()}
-        return all(self.host_metadata_up_to_date(h)
-                   for h in self.get_hosts() if h not in unreachable)
+        # The unreachable hosts are only looked up once a host that is not up
+        # to date is found; in steady state every host is up to date.
+        unreachable: Optional[Set[str]] = None
+        for h in self.get_hosts():
+            if self.host_metadata_up_to_date(h):
+                continue
+            if unreachable is None:
+                unreachable = {spec.hostname for spec in self.get_unreachable_hosts()}
+            if h not in unreachable:
+                return False
+        return True
 
     def add_daemon(self, host, dd):
         # type: (str, orchestrator.DaemonDescription) -> None
