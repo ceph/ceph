@@ -1916,3 +1916,16 @@ options:
   - mds
   flags:
   - runtime
+- name: mds_debug_rejoin_ack_delay
+  type: float
+  level: dev
+  desc: Test-only delay (seconds) inserted before a recovering MDS sends its
+    cache rejoin acks, after undef dirfrags have been fetched. Lets a surviving
+    peer trim and send a cache expire while the recovering rank is still
+    processing expires, widening the race in tracker 80407. Developers only.
+  default: 0
+  services:
+  - mds
+  flags:
+  - runtime
+  with_legacy: true
