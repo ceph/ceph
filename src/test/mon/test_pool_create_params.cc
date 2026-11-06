@@ -527,18 +527,18 @@ TEST_F(PoolParamsTest, NumZonesThreeWithRaisedLimit) {
   EXPECT_EQ(0, check(with({{"num_zones", int64_t(3)}}), c)) << ss.str();
 }
 
-// Test an EC pool of up to 128 OSDs is accepted
+// Test an EC pool of up to 128 OSDs in each PG is accepted
 TEST_F(PoolParamsTest, ErasureSize128Succeeds) {
   EXPECT_EQ(0, check(with({{"num_zones", int64_t(2)}, {"k", int64_t(40)},
                            {"m", int64_t(24)}}, ERASURE))) << ss.str();
 }
 
-// Test failure for an EC pool of more than 128 OSDs, whose shard ids would
-// not fit in a shard_id_t
+// Test failure for an EC pool of more than 128 OSDs in each PG, whose shard
+// ids would not fit in a shard_id_t
 TEST_F(PoolParamsTest, ErasureSizeAbove128Fails) {
   EXPECT_EQ(-EINVAL, check(with({{"num_zones", int64_t(2)}, {"k", int64_t(40)},
                                  {"m", int64_t(25)}}, ERASURE)));
-  EXPECT_EQ("a pool can have at most 128 OSDs, but 2 zones of k+m=65 need 130",
+  EXPECT_EQ("a PG can have at most 128 OSDs, but 2 zones of k+m=65 need 130",
             ss.str());
 }
 

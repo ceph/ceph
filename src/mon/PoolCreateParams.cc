@@ -418,7 +418,7 @@ int check_pool_params(const PoolCreateParams& p,
         return -EINVAL;
       }
       if (p.num_zones * (*k + *m) > MAX_POOL_SIZE) {
-        *ss << "a pool can have at most " << MAX_POOL_SIZE << " OSDs, but "
+        *ss << "a PG can have at most " << MAX_POOL_SIZE << " OSDs, but "
             << p.num_zones << " zones of k+m=" << (*k + *m) << " need "
             << p.num_zones * (*k + *m) << p.from_default("k");
         return -EINVAL;

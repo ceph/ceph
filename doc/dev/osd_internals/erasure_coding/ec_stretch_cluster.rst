@@ -492,7 +492,7 @@ The values that result, given or default, are then checked:
   to ``replica`` ("pool min_size must be between 1 and replica, which is set to <n>").
 * Erasure coded pools: ``k`` at least 2 ("k=<k> must be >= 2"), ``m`` at least 1 ("m=<m> must be
   >= 1"), ``k+m`` at most 127 ("(k+m)=<k+m> must be <= 127", as shard ids are 8-bit signed
-  integers), and ``num_zones × (k+m)`` at most 128 ("a pool can have at most 128 OSDs, but <n>
+  integers), and ``num_zones × (k+m)`` at most 128 ("a PG can have at most 128 OSDs, but <n>
   zones of k+m=<k+m> need <size>"). An LRC profile skips these checks, because the LRC plugin
   checks its own ``k``, ``m`` and ``l`` and adds local parity chunks. ``m`` greater than ``k``
   is allowed; the plugin can reject values when it normalizes the profile (ISA rejects ``m``
@@ -1280,7 +1280,7 @@ Going to two zones:
   generated, must pass the placement check of :ref:`The CRUSH Rule of a Pool
   <ecsc-the-rule-of-a-pool>`. The pool's zone type is ``--zone_failure_domain``, else that of the
   rule, else ``osd_pool_default_zone_failure_domain``.
-* ``size`` becomes ``2 × replica`` or ``2 × (k+m)``, at most 128 OSDs, and ``min_size`` is reset to
+* ``size`` becomes ``2 × replica`` or ``2 × (k+m)``, at most 128, and ``min_size`` is reset to
   its per-zone default (:ref:`Configuration Options <ecsc-configuration-options>`).
 * The ``peering_crush_bucket_*`` fields are set (:ref:`peering_crush_bucket Values
   <ecsc-peering-crush-bucket-values>`), the ``nonprimary_shards`` are recomputed, and stretch mode

@@ -100,7 +100,7 @@ int check_command_line(const PoolCreateParams& p, PoolCommand command,
 // multiple of num_zones.
 void size_over_default_zones_as_replica(PoolCreateParams& p);
 
-// The most OSDs a pool can have: each shard id must fit in a shard_id_t.
+// The most OSDs a PG can have: each shard id must fit in a shard_id_t.
 constexpr int64_t MAX_POOL_SIZE = 128;
 
 // The most copies of a replicated pool: its size, or its replica in each
