@@ -106,11 +106,13 @@ void RGWBucketReshard::calculate_preferred_shards(
     std::min(default_min_objs_per_shard,
 	     (uint64_t) std::ceil(max_objs_per_shard / 100.0));
 
+  const uint32_t min_shards = std::max(min_dynamic_shards, min_layout_shards);
+
   if (current_num_shards < max_dynamic_shards &&
       num_objs > current_num_shards * max_objs_per_shard) {
     need_resharding = true;
     verb = "expansion";
-  } else if (current_num_shards > min_dynamic_shards &&
+  } else if (current_num_shards > min_shards &&
 	     num_objs < current_num_shards * min_objs_per_shard) {
     need_resharding = true;
     verb = "reduction";
@@ -125,10 +127,6 @@ void RGWBucketReshard::calculate_preferred_shards(
     std::max(min_dynamic_shards,
 	     std::min(max_dynamic_shards,
 		      (uint32_t) (num_objs * multiplier / max_objs_per_shard)));
-  if (calculated_num_shards == current_num_shards) {
-    need_resharding = false;
-    return;
-  }
 
   if (prefer_prime) {
     calculated_num_shards = nearest_prime(calculated_num_shards);
@@ -136,7 +134,12 @@ void RGWBucketReshard::calculate_preferred_shards(
 
   calculated_num_shards =
     std::min(max_dynamic_shards,
-	     std::max({ calculated_num_shards, min_dynamic_shards, min_layout_shards }));
+	     std::max(calculated_num_shards, min_shards));
+
+  if (calculated_num_shards == current_num_shards) {
+    need_resharding = false;
+    return;
+  }
 
   ldpp_dout(dpp, 20) << __func__ << ": reshard " << verb <<
     " suggested; current average (objects/shard) is " <<
@@ -1714,7 +1717,7 @@ int RGWReshard::process_entry(const cls_rgw_reshard_entry& entry,
 
     // if we no longer need resharding or currently need to expand
     // number of shards, drop this request
-    if (! needs_resharding || suggested_shard_count > current_shard_count) {
+    if (! needs_resharding || suggested_shard_count >= current_shard_count) {
       return clean_up("reshard reduction no longer appropriate");
     }
 
