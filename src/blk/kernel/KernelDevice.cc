@@ -1494,14 +1494,22 @@ int KernelDevice::aio_read(
   uint64_t off,
   uint64_t len,
   bufferlist *pbl,
-  IOContext *ioc)
+  IOContext *ioc,
+  bool buffered)
 {
   dout(5) << __func__ << " 0x" << std::hex << off << "~" << len << std::dec
+	  << " " << buffermode(buffered)
 	  << dendl;
 
   int r = 0;
 #ifdef HAVE_LIBAIO
-  if (aio && dio) {
+  // A buffered read goes to the descriptor that was not opened O_DIRECT, so
+  // the page cache can serve it, and is done synchronously: libaio blocks on
+  // such a descriptor at submit, which would stall every read batched with
+  // it.  Callers wait for their aios anyway, so this only gives up the
+  // parallelism across the extents of one read, and a page cache hit returns
+  // at once.
+  if (aio && dio && !buffered) {
     ceph_assert(is_valid_io(off, len));
     _aio_log_start(ioc, off, len);
     ioc->pending_aios.push_back(aio_t(ioc, fd_directs[WRITE_LIFE_NOT_SET]));
@@ -1518,7 +1526,7 @@ int KernelDevice::aio_read(
   } else
 #endif
   {
-    r = read(off, len, pbl, ioc, false);
+    r = read(off, len, pbl, ioc, buffered);
   }
 
   return r;
