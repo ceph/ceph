@@ -468,39 +468,19 @@ Cursor RGWSI_MDLog::init_oldest_log_period(optional_yield y, const DoutPrefixPro
 
   // if it's already in the history, return it
   auto cursor = period_history->lookup(state.oldest_realm_epoch);
-  if (cursor) {
-    return cursor;
-  } else {
+  if (!cursor) {
     cursor = find_oldest_period(dpp, y, cfgstore);
     state.oldest_realm_epoch = cursor.get_epoch();
     state.oldest_period_id = cursor.get_period().get_id();
     ldpp_dout(dpp, 10) << "rewriting mdlog history" << dendl;
     ret = write_history(dpp, state, &objv, y);
     if (ret < 0 && ret != -ECANCELED) {
-    ldpp_dout(dpp, 1) << "failed to write mdlog history: "
+      ldpp_dout(dpp, 1) << "failed to write mdlog history: "
           << cpp_strerror(ret) << dendl;
-    return Cursor{ret};
+      return Cursor{ret};
     }
-    return cursor;
   }
-
-  // pull the oldest period by id
-  RGWPeriod period;
-  ret = period_puller->pull(dpp, state.oldest_period_id, period, y, cfgstore);
-  if (ret < 0) {
-    ldpp_dout(dpp, 1) << "failed to read period id=" << state.oldest_period_id
-        << " for mdlog history: " << cpp_strerror(ret) << dendl;
-    return Cursor{ret};
-  }
-  // verify its realm_epoch
-  if (period.get_realm_epoch() != state.oldest_realm_epoch) {
-    ldpp_dout(dpp, 1) << "inconsistent mdlog history: read period id="
-        << period.get_id() << " with realm_epoch=" << period.get_realm_epoch()
-        << ", expected realm_epoch=" << state.oldest_realm_epoch << dendl;
-    return Cursor{-EINVAL};
-  }
-  // attach the period to our history
-  return period_history->attach(dpp, std::move(period), y, cfgstore);
+  return cursor;
 }
 
 Cursor RGWSI_MDLog::read_oldest_log_period(optional_yield y, const DoutPrefixProvider *dpp) const
