@@ -226,6 +226,34 @@ Standby MDS daemons are always displayed. Information about restricted MDS
 daemons and file systems may become available by other means, such as by
 running ``ceph health detail``.
 
+To authorize a client for every file system in the cluster, give ``*`` as
+the file system name. Quote the ``*`` so that the shell does not expand it:
+
+.. prompt:: bash #
+
+   ceph fs authorize '*' client.alluser / rw
+
+The MDS and Monitor capabilities that this command creates have no
+``fsname``, and the OSD capability matches the data pools of every file
+system:
+
+.. prompt:: bash #
+
+   ceph auth get client.alluser
+
+::
+
+    [client.alluser]
+        key = AQDgvexqAAAAABAAQow+GdyuCoaJMOza4InJ4A==
+        caps mds = "allow rw"
+        caps mon = "allow r"
+        caps osd = "allow rw tag cephfs data=*"
+
+An MDS or Monitor capability without ``fsname`` applies to every file
+system. There is no ``fsname=*``: ``fsname`` takes the name of one file
+system, and ``ceph auth`` rejects a capability that contains ``fsname=*``.
+To grant access to every file system, omit ``fsname``.
+
 MDS communication restriction
 =============================
 
