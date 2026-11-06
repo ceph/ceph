@@ -33,6 +33,9 @@ class ClientIO : public io::RestfulClient,
   bool keepalive = false;
   bool expect100continue = false;
   bool sent100continue = false;
+  // complete_header() leaves the headers in txbuf, so that they go out in
+  // one write with the start of the body
+  bool header_pending = false;
 
  public:
   ClientIO(parser_type& parser, bool is_ssl,
@@ -50,9 +53,7 @@ class ClientIO : public io::RestfulClient,
   size_t send_content_length(uint64_t len) override;
   size_t complete_header() override;
 
-  size_t send_body(const char* buf, size_t len) override {
-    return write_data(buf, len);
-  }
+  size_t send_body(const char* buf, size_t len) override;
 
   RGWEnv& get_env() noexcept override {
     return env;

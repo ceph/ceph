@@ -132,10 +132,12 @@ Options
 
               ``1`` Disable Nagle's algorithm for all sockets.
 
-              ``0`` Keep the default: Nagle's algorithm enabled.
+              ``0`` Enable Nagle's algorithm. Small responses, such as a GET
+              of a 4 KiB object, can then wait for the client's delayed
+              acknowledgement, about 40 ms on Linux.
 
 :Type: Integer (0 or 1)
-:Default: ``0``
+:Default: ``1``
 
 ``max_connection_backlog``
 
