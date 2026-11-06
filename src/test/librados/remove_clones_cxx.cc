@@ -849,9 +849,10 @@ TEST_P(RemoveClones, ReplicaLostMidway)
 }
 
 // A clone that a returning replica has not recovered yet must not be removed.
-// The op waits for it, like any op on a degraded object, and goes on by itself.
-// It used to return -EAGAIN, which to execute_ctx() means that an op has queued
-// itself: nothing replied, and the client hung.
+// The op waits for it, like any op on a degraded object: that recovers the one
+// object, even with norecover set, and the op goes on by itself.  It used to
+// return -EAGAIN, which to execute_ctx() means that an op has queued itself:
+// nothing replied, and the client hung.
 TEST_P(RemoveClones, ReplicaLostWaitsForDegradedClone)
 {
   if (!disruptive_tests_enabled()) {
@@ -887,15 +888,12 @@ TEST_P(RemoveClones, ReplicaLostWaitsForDegradedClone)
   AioCompletion* c = rados.aio_create_completion();
   auto release = make_scope_guard([&] { c->release(); });
   ASSERT_EQ(0, ioctx.aio_operate("o", c, &op, OPERATION_IGNORE_REDIRECT));
-  std::this_thread::sleep_for(std::chrono::seconds(5));
-  EXPECT_FALSE(c->is_complete()) << "it did not wait for the clone";
-
-  ASSERT_EQ(0, osd_flag("unset", "norecover"));
   for (int i = 0; i < 60 && !c->is_complete(); ++i) {
     std::this_thread::sleep_for(std::chrono::seconds(1));
   }
   ASSERT_TRUE(c->is_complete()) << "the op was lost";
   EXPECT_EQ(0, c->get_return_value());
+  ASSERT_EQ(0, osd_flag("unset", "norecover"));
   use_snapc(true);
   wait_for_clean(pool_name);
 
