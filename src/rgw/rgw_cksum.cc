@@ -17,6 +17,7 @@
 #include "rgw_cksum_digest.h"
 #include <cstdint>
 #include <memory>
+#include <utility>
 #include "rgw_crc_digest.h"
 
 extern "C" {
@@ -72,9 +73,7 @@ namespace rgw::cksum {
 	  cck3 =  crc32iscsi_comb(cck1, cck2, len1);
 	  break;
 	default:
-	  /* unreachable (already checked by outer switch/case) */
-	  // TODO change to std::unreachable() once we are C++23
-	  goto out;
+	  std::unreachable();
 	}
         /* and byteswap */
 	cck3 = rgw::digest::byteswap(cck3);
