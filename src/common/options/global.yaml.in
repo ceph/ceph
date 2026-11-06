@@ -2148,6 +2148,15 @@ options:
   flags:
   - cluster_create
   with_legacy: true
+- name: mon_debug_hide_client_features
+  type: uint
+  level: dev
+  desc: Feature bits the Monitors ignore in new client sessions
+  long_desc: The Monitors treat clients that connect while this is set as if they
+    lacked these features. Tests use it to stand in for older clients.
+  default: 0
+  services:
+  - mon
 - name: mon_inject_transaction_delay_max
   type: float
   level: dev
