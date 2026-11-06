@@ -9,10 +9,12 @@
  * LGPL-2.1 (see COPYING-LGPL2.1) or later
  */
 
-#include <gtest/gtest.h>
 #include <cmath>
+#include <vector>
+
+#include <gtest/gtest.h>
+
 #include "common/bit_vector.hpp"
-#include <boost/assign/list_of.hpp>
 
 using namespace ceph;
 
@@ -158,29 +160,27 @@ TYPED_TEST(BitVectorTest, partial_decode_encode) {
   ASSERT_EQ(bit_vector.get_footer_offset() + 4, object_byte_offset);
   ASSERT_EQ(4ULL, byte_length);
 
-  typedef std::pair<uint64_t, uint64_t> Extent;
-  typedef std::list<Extent> Extents;
+  using Extent = std::pair<uint64_t, uint64_t>;
+  const std::vector<Extent> extents {
+    {0, 1},
+    {(bit_vector.BLOCK_SIZE * elements_per_byte) - 2, 4},
+    {(bit_vector.BLOCK_SIZE * elements_per_byte) + 2, 2},
+    {(2 * bit_vector.BLOCK_SIZE * elements_per_byte) - 2, 4},
+    {(2 * bit_vector.BLOCK_SIZE * elements_per_byte) + 2, 2},
+    {2, 2 * bit_vector.BLOCK_SIZE}
+  };
 
-  Extents extents = boost::assign::list_of(
-    std::make_pair(0, 1))(
-    std::make_pair((bit_vector.BLOCK_SIZE * elements_per_byte) - 2, 4))(
-    std::make_pair((bit_vector.BLOCK_SIZE * elements_per_byte) + 2, 2))(
-    std::make_pair((2 * bit_vector.BLOCK_SIZE * elements_per_byte) - 2, 4))(
-    std::make_pair((2 * bit_vector.BLOCK_SIZE * elements_per_byte) + 2, 2))(
-    std::make_pair(2, 2 * bit_vector.BLOCK_SIZE));
-  for (Extents::iterator it = extents.begin(); it != extents.end(); ++it) {
+  for (const auto& [element_offset, element_length] : extents) {
     bufferlist footer_bl;
     uint64_t footer_byte_offset;
     uint64_t footer_byte_length;
-    bit_vector.get_data_crcs_extents(it->first, it->second, &footer_byte_offset,
+    bit_vector.get_data_crcs_extents(element_offset, element_length, &footer_byte_offset,
                                      &footer_byte_length);
     ASSERT_TRUE(footer_byte_offset + footer_byte_length <= bl.length());
     footer_bl.substr_of(bl, footer_byte_offset, footer_byte_length);
     auto footer_it = footer_bl.cbegin();
-    bit_vector.decode_data_crcs(footer_it, it->first);
+    bit_vector.decode_data_crcs(footer_it, element_offset);
 
-    uint64_t element_offset = it->first;
-    uint64_t element_length = it->second;
     uint64_t data_byte_offset;
     bit_vector.get_data_extents(element_offset, element_length,
                                 &data_byte_offset, &object_byte_offset,
@@ -196,7 +196,7 @@ TYPED_TEST(BitVectorTest, partial_decode_encode) {
     bit_vector.encode_data(data_bl, data_byte_offset, byte_length);
 
     footer_bl.clear();
-    bit_vector.encode_data_crcs(footer_bl, it->first, it->second);
+    bit_vector.encode_data_crcs(footer_bl, element_offset, element_length);
 
     bufferlist updated_bl;
     updated_bl.substr_of(bl, 0,

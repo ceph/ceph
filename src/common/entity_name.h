@@ -16,6 +16,7 @@
 #pragma once
 
 #include <array>
+#include <vector>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -44,7 +45,7 @@ struct EntityName
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static std::list<EntityName> generate_test_instances();
+  static std::vector<EntityName> generate_test_instances();
   const std::string& to_str() const;
   const char *to_cstr() const;
   bool from_str(std::string_view s);

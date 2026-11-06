@@ -220,7 +220,7 @@ public:
 
   bool operator==(const BitVector &b) const;
 
-  static std::list<BitVector> generate_test_instances();
+  static std::vector<BitVector> generate_test_instances();
 private:
   bufferlist m_data;
   uint64_t m_size;
@@ -617,8 +617,8 @@ typename BitVector<_b>::Reference& BitVector<_b>::Reference::operator=(uint8_t v
 }
 
 template <uint8_t _b>
-auto BitVector<_b>::generate_test_instances() -> std::list<BitVector> {
-  std::list<BitVector> o;
+auto BitVector<_b>::generate_test_instances() -> std::vector<BitVector> {
+  std::vector<BitVector> o;
 
   o.emplace_back();
 

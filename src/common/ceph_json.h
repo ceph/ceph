@@ -857,8 +857,8 @@ public:
         break;
     }
   }
-  static std::list<JSONFormattable> generate_test_instances() {
-    std::list<JSONFormattable> o;
+  static std::vector<JSONFormattable> generate_test_instances() {
+    std::vector<JSONFormattable> o;
     o.emplace_back();
     o.emplace_back();
     o.back().set_type(FMT_VALUE);
