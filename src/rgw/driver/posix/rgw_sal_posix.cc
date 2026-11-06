@@ -2656,10 +2656,22 @@ int POSIXDriver::load_owner_by_email(const DoutPrefixProvider* dpp,
   RGWUserInfo uinfo;
   int ret = get_user_db()->get_user(dpp, "email", std::string{email},
 				   uinfo, nullptr, nullptr);
+  if (ret == 0) {
+    owner = std::move(uinfo.user_id);
+    return 0;
+  }
+  if (ret != -ENOENT) {
+    return ret;
+  }
+  /* else an account's, as RADOS's email index holds both */
+  RGWAccountInfo info;
+  Attrs attrs;
+  RGWObjVersionTracker objv;
+  ret = load_account_by_email(dpp, y, email, info, attrs, objv);
   if (ret < 0) {
     return ret;
   }
-  owner = std::move(uinfo.user_id);
+  owner = info.id;
   return 0;
 }
 
