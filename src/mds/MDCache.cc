@@ -3251,7 +3251,45 @@ void MDCache::handle_mds_recovery(mds_rank_t who)
 void MDCache::set_recovery_set(set<mds_rank_t>& s) 
 {
   dout(7) << "set_recovery_set " << s << dendl;
+
+  // a rank leaves the recovery set when it finishes stopping.  it then
+  // holds no subtrees or cache and will never send us a resolve, rejoin
+  // or rejoin ack, so stop waiting for it.
+  bool resolve_changed = false;
+  bool rejoin_changed = false;
+  bool rejoin_ack_changed = false;
+  for (const auto& r : recovery_set) {
+    if (s.count(r))
+      continue;
+    dout(10) << " mds." << r << " left the recovery set" << dendl;
+    if (resolve_gather.erase(r))
+      resolve_changed = true;
+    discard_delayed_resolve(r);
+    if (rejoin_gather.erase(r))
+      rejoin_changed = true;
+    if (rejoin_ack_gather.erase(r))
+      rejoin_ack_changed = true;
+  }
   recovery_set = s;
+
+  if (resolve_changed &&
+      resolve_ack_gather.empty() && resolve_need_rollback.empty())
+    maybe_resolve_finish();
+
+  if (mds->is_rejoin() && rejoin_gather.empty()) {
+    if (rejoin_changed && rejoin_ack_gather.count(mds->get_nodeid())) {
+      rejoin_gather_finish();
+    } else if (rejoin_ack_changed && rejoin_ack_gather.empty()) {
+      // as handle_cache_rejoin_ack() does for the last ack
+      while (!rejoin_eval_locks.empty()) {
+	SimpleLock *lock = rejoin_eval_locks.front();
+	rejoin_eval_locks.pop_front();
+	if (!lock->is_stable())
+	  mds->locker->eval_gather(lock);
+      }
+      open_snaprealms();
+    }
+  }
 }
 
 
