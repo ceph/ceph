@@ -3728,7 +3728,8 @@ int BlueStore::_init_alloc()
       derr << __func__ << "::NCB::Please change the value of bluestore_allocation_from_file to TRUE in your ceph.conf file" << dendl;
       return -ENOTSUP; // Operation not supported
     }
-    if (restore_allocator(alloc, &num, &bytes) == 0) {
+    bool statfs_restored = _load_statfs_from_file();
+    if (statfs_restored && (restore_allocator(alloc, &num, &bytes) == 0)) {
       dout(5) << __func__ << "::NCB::restore_allocator() completed successfully alloc=" << alloc << dendl;
 
       if (before_expansion_bdev_size > 0 &&
@@ -4612,6 +4613,7 @@ int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
   return 0;
 }
 
+// now only useful for transition file<->db storage
 void BlueStore::_save_statfs_to_db()
 {
   { // useless indent to keep diff minimal
@@ -4769,6 +4771,7 @@ bool BlueStore::_load_statfs_from_file() {
     if (decoded) {
       dout(5) << "Loading " << statfs_cache_dir_file << " OK" << dendl;
       result = true;
+      statfs_loaded = true;
     } else {
       dout(5) << "Failed decoding " << statfs_cache_dir_file << dendl;
     }
@@ -4786,6 +4789,7 @@ void BlueStore::_close_db()
            << dendl;
   bool do_destage = !db_was_opened_read_only && need_to_destage_allocation_file;
   if (do_destage && is_statfs_recoverable()) {
+    _save_statfs_to_file();
     _save_statfs_to_db();
   }
   ceph_assert(db);
@@ -4921,7 +4925,11 @@ void BlueStore::_set_per_pool_omap()
 
 void BlueStore::_open_statfs()
 {
-  _load_statfs_from_db();
+  if (statfs_loaded) {
+    //we loaded statfs already, either from file or by reconstruction from onodes
+  } else {
+    _load_statfs_from_db();
+  }
 }
 
 void BlueStore::_load_statfs_from_db()
@@ -17774,6 +17782,7 @@ int BlueStore::reconstruct_allocations(SimpleBitmap *sbmap, read_alloc_stats_t &
   }
   vstatfs = stats.actual_store_vstatfs;
   vstatfs.publish(&s);
+  statfs_loaded = true;
   dout(5) << __func__ << " recovered " << s
           << dendl;
 

@@ -1137,6 +1137,7 @@ private:
   ceph::mutex vstatfs_lock = ceph::make_mutex("BlueStore::vstatfs_lock");
   volatile_statfs vstatfs;
   osd_pools_map osd_pools; // protected by vstatfs_lock as well
+  bool statfs_loaded = false;
 
   bool per_pool_stat_collection = true;
 
