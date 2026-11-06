@@ -571,7 +571,7 @@ void SetUpMigrationTest(rados_t *cluster,
 
   // Set Min Compat Client
   {
-    std::string c = "{\"prefix\": \"osd set-require-min-compat-client\", \"version\": \"umbrella\"}";
+    std::string c = "{\"prefix\": \"osd set-require-min-compat-client\", \"version\": \"vampire\"}";
     const char *cmd[2] = { c.c_str(), 0 };
     char *outbuf, *outs;
     size_t outbuflen, outslen;

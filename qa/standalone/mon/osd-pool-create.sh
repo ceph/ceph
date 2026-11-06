@@ -334,9 +334,9 @@ function TEST_osd_pool_create_migrate_from() {
   #write some data to the image
   rbd bench -p $REPPOOL_NAME --image vol0 --io-size 1K --io-threads 1 --io-total 10000K --io-pattern rand --io-type write || return 1
 
-  #pool migration is experimental and needs min compat client umbrella
+  #pool migration is experimental and needs min compat client vampire
   ceph config set global enable_experimental_unrecoverable_data_corrupting_features poolmigration || return 1
-  ceph osd set-require-min-compat-client umbrella || return 1
+  ceph osd set-require-min-compat-client vampire || return 1
 
   #disable autoscaling
   ceph osd pool set noautoscale || return 1

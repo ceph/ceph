@@ -14551,18 +14551,18 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         goto reply_no_propose;
       }
 
-      if (osdmap.require_min_compat_client < ceph_release_t::umbrella) {
+      if (osdmap.require_min_compat_client < ceph_release_t::vampire) {
         ss << "require_min_compat_client "
            << osdmap.require_min_compat_client
-           << " < umbrella, which is required for pool migration. "
-           << "Try 'ceph osd set-require-min-compat-client umbrella' "
+           << " < vampire, which is required for pool migration. "
+           << "Try 'ceph osd set-require-min-compat-client vampire' "
            << "before using the new feature";
         err = -EPERM;
         goto reply_no_propose;
       }
 
-      if (osdmap.require_osd_release < ceph_release_t::umbrella) {
-        ss << "All OSDs must be upgraded to umbrella or "
+      if (osdmap.require_osd_release < ceph_release_t::vampire) {
+        ss << "All OSDs must be upgraded to vampire or "
            << "later before using pool migration";
         err = -EPERM;
         goto reply_no_propose;

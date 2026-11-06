@@ -2205,9 +2205,9 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
   uint8_t v = 34;
   // NOTE: any new encoding dependencies must be reflected by
   // SIGNIFICANT_FEATURES
-  // TODO: the v34 migration fields currently piggy-back on SERVER_UMBRELLA.
-  // Pool migration ships in VAMPIRE, so once SERVER_VAMPIRE is introduced,
-  // gate v = 34 on SERVER_VAMPIRE instead of reusing SERVER_UMBRELLA.
+  if (!HAVE_SIGNIFICANT_FEATURE(features, SERVER_VAMPIRE)) {
+    v = 33;
+  }
   if (!HAVE_SIGNIFICANT_FEATURE(features, SERVER_UMBRELLA)) {
     v = 32;
   }
