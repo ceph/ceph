@@ -2585,6 +2585,35 @@ class TestCephadm(object):
         assert not retval.exception_str
         assert cephadm_module.inventory._inventory[hostname]['status'] == 'maintenance'
 
+    @mock.patch("cephadm.CephadmOrchestrator._host_ok_to_stop")
+    @mock.patch("cephadm.module.HostCache.get_daemon_types")
+    @mock.patch("cephadm.module.HostCache.get_hosts")
+    def test_maintenance_enter_force_note(self, _hosts, _get_daemon_types, _host_ok, cephadm_module: CephadmOrchestrator):
+        hostname = 'host1'
+        err_str = 'unsafe to stop osd(s) at this time'
+        _host_ok.return_value = 1, err_str
+        _get_daemon_types.return_value = ['osd']
+        _hosts.return_value = [hostname, 'other_host']
+        cephadm_module.inventory.add_host(HostSpec(hostname))
+
+        # without --force, point at --force for the warnings
+        with pytest.raises(OrchestratorError) as e:
+            cephadm_module.enter_host_maintenance(hostname)
+        _host_ok.assert_called_with(hostname, False)
+        assert err_str in str(e.value)
+        assert 'Warnings can be bypassed with the --force flag' in str(e.value)
+        assert '--yes-i-really-mean-it' not in str(e.value)
+
+        # with --force, what is left cannot be bypassed by --force
+        with pytest.raises(OrchestratorError) as e:
+            cephadm_module.enter_host_maintenance(hostname, force=True)
+        _host_ok.assert_called_with(hostname, True)
+        assert err_str in str(e.value)
+        assert '--force does not bypass this check' in str(e.value)
+        assert '--yes-i-really-mean-it' in str(e.value)
+        assert 'Warnings can be bypassed' not in str(e.value)
+        assert not cephadm_module.inventory._inventory[hostname]['status']
+
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
     @mock.patch("cephadm.module.HostCache.get_daemon_types")
     @mock.patch("cephadm.module.HostCache.get_hosts")
