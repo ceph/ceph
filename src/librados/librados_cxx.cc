@@ -144,6 +144,20 @@ void librados::ObjectOperation::assert_version(uint64_t ver)
   o->assert_version(ver);
 }
 
+void librados::ObjectOperation::assert_before(timespec stamp, uint32_t error_code)
+{
+  ceph_assert(impl);
+  ::ObjectOperation *o = &impl->o;
+  o->assert_before(stamp, error_code);
+}
+
+void librados::ObjectOperation::assert_after(timespec stamp, uint32_t error_code)
+{
+  ceph_assert(impl);
+  ::ObjectOperation *o = &impl->o;
+  o->assert_after(stamp, error_code);
+}
+
 void librados::ObjectOperation::assert_exists()
 {
   ceph_assert(impl);

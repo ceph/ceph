@@ -2887,6 +2887,38 @@ CEPH_RADOS_API void rados_write_op_assert_exists(rados_write_op_t write_op);
 CEPH_RADOS_API void rados_write_op_assert_version(rados_write_op_t write_op, uint64_t ver);
 
 /**
+ * Guard an operation with an assertion that the osd executes the operation
+ * before the given time. The requested error code is returned on a failed
+ * assertion.
+ *
+ * Note that time comparisons between clients and osds are subject to
+ * clock skew.
+ *
+ * @param write_op operation to add this action to
+ * @param t timestamp for comparison against osd's current time
+ * @param error_code error to return on failed assertion
+ */
+CEPH_RADOS_API void rados_write_op_assert_before(rados_write_op_t write_op,
+                                                 struct timespec t,
+                                                 uint32_t error_code);
+
+/**
+ * Guard an operation with an assertion that the osd executes the operation
+ * after the given time. The requested error code is returned on a failed
+ * assertion.
+ *
+ * Note that time comparisons between clients and osds are subject to
+ * clock skew.
+ *
+ * @param write_op operation to add this action to
+ * @param t timestamp for comparison against osd's current time
+ * @param error_code error to return on failed assertion
+ */
+CEPH_RADOS_API void rados_write_op_assert_after(rados_write_op_t write_op,
+                                                struct timespec t,
+                                                uint32_t error_code);
+
+/**
  * Ensure that given object range (extent) satisfies comparison.
  *
  * @param write_op operation to add this action to
@@ -3292,6 +3324,38 @@ CEPH_RADOS_API void rados_read_op_assert_exists(rados_read_op_t read_op);
  * @param ver object version number
  */
 CEPH_RADOS_API void rados_read_op_assert_version(rados_read_op_t read_op, uint64_t ver);
+
+/**
+ * Guard an operation with an assertion that the osd executes the operation
+ * before the given time. The requested error code is returned on a failed
+ * assertion.
+ *
+ * Note that time comparisons between clients and osds are subject to
+ * clock skew.
+ *
+ * @param read_op operation to add this action to
+ * @param t timestamp for comparison against osd's current time
+ * @param error_code error to return on failed assertion
+ */
+CEPH_RADOS_API void rados_read_op_assert_before(rados_read_op_t read_op,
+                                                struct timespec t,
+                                                uint32_t error_code);
+
+/**
+ * Guard an operation with an assertion that the osd executes the operation
+ * after the given time. The requested error code is returned on a failed
+ * assertion.
+ *
+ * Note that time comparisons between clients and osds are subject to
+ * clock skew.
+ *
+ * @param read_op operation to add this action to
+ * @param t timestamp for comparison against osd's current time
+ * @param error_code error to return on failed assertion
+ */
+CEPH_RADOS_API void rados_read_op_assert_after(rados_read_op_t read_op,
+                                               struct timespec t,
+                                               uint32_t error_code);
 
 /**
  * Ensure that given object range (extent) satisfies comparison.

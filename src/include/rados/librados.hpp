@@ -381,6 +381,17 @@ inline namespace v14_2_0 {
     void assert_exists();
 
     /**
+     * Guard an operation with an assertion that the osd executes the operation
+     * before/after the given time. The requested error code is returned on
+     * a failed assertion.
+     *
+     * Note that time comparisons between clients and osds are subject to
+     * clock skew.
+     */
+    void assert_before(timespec t, uint32_t error_code = ECANCELED);
+    void assert_after(timespec t, uint32_t error_code = ECANCELED);
+
+    /**
      * get key/value pairs for specified keys
      *
      * @param assertions [in] comparison assertions

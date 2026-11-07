@@ -3633,6 +3633,24 @@ extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_write_op_assert_version)(
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_write_op_assert_version);
 
+extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_write_op_assert_before)(
+  rados_write_op_t write_op,
+  struct timespec stamp,
+  uint32_t error_code)
+{
+  to_object_operation(write_op)->assert_before(stamp, error_code);
+}
+LIBRADOS_C_API_BASE_DEFAULT(rados_write_op_assert_before);
+
+extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_write_op_assert_after)(
+  rados_write_op_t write_op,
+  struct timespec stamp,
+  uint32_t error_code)
+{
+  to_object_operation(write_op)->assert_after(stamp, error_code);
+}
+LIBRADOS_C_API_BASE_DEFAULT(rados_write_op_assert_after);
+
 extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_write_op_assert_exists)(
   rados_write_op_t write_op)
 {
@@ -4113,6 +4131,24 @@ extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_read_op_assert_version)(
   tracepoint(librados, rados_read_op_assert_version_exit);
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_read_op_assert_version);
+
+extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_read_op_assert_before)(
+  rados_read_op_t read_op,
+  struct timespec stamp,
+  uint32_t error_code)
+{
+  to_object_operation(read_op)->assert_before(stamp, error_code);
+}
+LIBRADOS_C_API_BASE_DEFAULT(rados_read_op_assert_before);
+
+extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_read_op_assert_after)(
+  rados_read_op_t read_op,
+  struct timespec stamp,
+  uint32_t error_code)
+{
+  to_object_operation(read_op)->assert_after(stamp, error_code);
+}
+LIBRADOS_C_API_BASE_DEFAULT(rados_read_op_assert_after);
 
 extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_read_op_assert_exists)(
   rados_read_op_t read_op)

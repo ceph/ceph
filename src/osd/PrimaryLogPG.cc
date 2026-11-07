@@ -6703,6 +6703,30 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       }
       break;
 
+    case CEPH_OSD_OP_ASSERT_TIME:
+      ++ctx->num_read;
+      {
+        const utime_t now = ceph_clock_now();
+
+        const utime_t before(op.assert_time.before.stamp);
+        if (!before.is_zero()) {
+          if (op.assert_time.before.error_code == 0) {
+            result = -EINVAL;
+          } else if (now > before) {
+            result = -op.assert_time.before.error_code;
+          }
+        }
+        const utime_t after(op.assert_time.after.stamp);
+        if (!after.is_zero()) {
+          if (op.assert_time.after.error_code == 0) {
+            result = -EINVAL;
+          } else if (now < after) {
+            result = -op.assert_time.after.error_code;
+          }
+        }
+      }
+      break;
+
     case CEPH_OSD_OP_GET_INTERNAL_VERSIONS: {
       ++ctx->num_read;
       std::map<shard_id_t, eversion_t> out;
