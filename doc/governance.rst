@@ -88,7 +88,8 @@ alternative to Maintainer-based membership allowed by Charter section 2.b.
 
  * Members may be developers, users, or other community members
  * Members can be nominated and added/removed by existing members via a
-   supermajority vote
+   supermajority vote, and are removed for inactivity as described in
+   :ref:`csc-participation`
  * Anyone may attend steering committee meetings as a non-voting participant
  * The list below is the authoritative membership; the CSC email list and
    the Ceph website follow it
@@ -96,6 +97,66 @@ alternative to Maintainer-based membership allowed by Charter section 2.b.
 
 .. note:: A "supermajority" is a 2/3 majority of votes on a particular item
           in an election. Abstaining does not bias a vote.
+
+.. _csc-participation:
+
+Participation and Inactivity
+----------------------------
+
+CSC members are expected to take an active part in the governance of the
+project.  At a minimum, this means casting a ballot in CSC votes.  An
+abstention counts as participation.
+
+Notice on a missed vote
+^^^^^^^^^^^^^^^^^^^^^^^
+
+When a member does not participate in a CSC vote, the Co-Chairs send that
+member a written notice stating that:
+
+ * they missed the vote
+ * they will be removed if they remain inactive as described below
+ * they may request an exception
+
+Removal for inactivity
+^^^^^^^^^^^^^^^^^^^^^^
+
+A member is considered inactive, and is removed from the membership list,
+when both of the following hold:
+
+ * they have not participated in two or more consecutive CSC votes, and
+ * at least 60 days have passed since the notice for the first of those
+   missed votes
+
+No CSC vote is required.  Removal follows solely from these criteria.
+
+Exceptions
+^^^^^^^^^^
+
+The Co-Chairs may grant an exception in cases of documented leave, health or
+personal emergencies, or other exceptional circumstances communicated in
+advance.  Exceptions are requested by email to the Co-Chairs.
+
+Reinstatement
+^^^^^^^^^^^^^
+
+A removed member remains eligible for future nomination.  A removed member
+who re-engages may also be added back during the next voting cycle.
+
+Roster upkeep
+^^^^^^^^^^^^^
+
+The Co-Chairs maintain the membership list below and publish a record of
+each member's most recent participation.  The inactivity review is carried
+out as part of every voting cycle, and its results are published.
+
+Initial adoption
+^^^^^^^^^^^^^^^^
+
+When this policy is adopted, no member is removed for votes missed before
+adoption.  Instead, the Co-Chairs send all current members a one-time notice
+asking them to confirm their continued interest in serving.  Members who do
+not respond within a window set by the Co-Chairs are removed.  The process
+above applies from then on.
 
 Voting
 ------
