@@ -1729,6 +1729,19 @@ int CrushWrapper::get_parent_of_type(int item, int type, int rule) const
   return 0; // not found
 }
 
+int CrushWrapper::get_nonshadow_parent_of_type(int item, int type,
+					      int rule) const
+{
+  int parent = get_parent_of_type(item, type, rule);
+  if (parent < 0 && is_shadow_item(parent)) {
+    int id, class_id;
+    if (split_id_class(parent, &id, &class_id) == 0) {
+      return id;
+    }
+  }
+  return parent;
+}
+
 void CrushWrapper::get_subtree_of_type(int type, vector<int> *subtrees) const
 {
   set<int> roots;
