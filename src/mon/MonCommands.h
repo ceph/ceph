@@ -271,6 +271,8 @@ COMMAND("report name=tags,type=CephString,n=N,req=false",
 	"mon", "r")
 COMMAND("features", "report of connected features",
         "mon", "r")
+COMMAND("features extended", "report of connected extended features",
+        "mon", "r")
 COMMAND("quorum_status", "report status of monitor quorum",
 	"mon", "r")
 COMMAND("mon ok-to-stop "

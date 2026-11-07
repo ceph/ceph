@@ -4068,7 +4068,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     rdata.append(ds);
     rs = "";
     r = 0;
-  } else if (prefix == "features") {
+  } else if (prefix == "features" || prefix == "features extended") {
     if (!is_leader() && !is_peon()) {
       dout(10) << " waiting for quorum" << dendl;
       waitfor_quorum.push_back(new C_RetryMessage(this, op));
@@ -4082,7 +4082,13 @@ void Monitor::handle_command(MonOpRequestRef op)
       f.reset(Formatter::create("json-pretty"));
     FeatureMap fm;
     get_combined_feature_map(&fm);
-    f->dump_object("features", fm);
+    if (prefix == "features") {
+      f->dump_object("features", fm);
+    } else {
+      f->open_object_section("extended_features");
+      fm.dump_ext(f.get());
+      f->close_section();
+    }
     f->flush(rdata);
     rs = "";
     r = 0;
