@@ -113,6 +113,11 @@ class CephadmServe:
                     if self.mgr.migration.is_migration_ongoing():
                         continue
 
+                    # Must run before _apply_all_services(): only an active
+                    # agent spec is applied, and use_agent owns that spec.
+                    if self.mgr.agent_helpers._handle_use_agent_setting():
+                        continue
+
                     if self._apply_all_services():
                         continue  # did something, refresh
 
@@ -125,9 +130,6 @@ class CephadmServe:
                     self._check_for_moved_osds()
 
                     self._retry_failed_operations()
-
-                    if self.mgr.agent_helpers._handle_use_agent_setting():
-                        continue
 
                     if self.mgr.node_proxy_service.handle_hw_monitoring_setting():
                         continue
@@ -672,14 +674,17 @@ class CephadmServe:
         # end up stuck between wanting metadata to be up to date to apply specs
         # and needing to apply the agent spec to get up to date metadata
         if self.mgr.use_agent and not self.mgr.cache.all_host_metadata_up_to_date():
-            self.log.info('Metadata not up to date on all hosts. Skipping non agent specs')
-            try:
-                specs.append(self.mgr.spec_store['agent'].spec)
-            except Exception as e:
-                self.log.debug(f'Failed to find agent spec: {e}')
-                self.mgr.agent_helpers._apply_agent()
+            self.mgr.agent_helpers.report_use_agent_waiting()
+            agent_spec = self.mgr.spec_store.active_specs.get('agent')
+            if agent_spec is None:
+                # A missing or deleted agent spec is (re)created by
+                # _handle_use_agent_setting(); a deleted one is never applied.
+                self.log.debug('No active agent spec')
+                self.mgr.agent_helpers._handle_use_agent_setting()
                 return r
+            specs.append(agent_spec)
         else:
+            self.mgr.agent_helpers.report_use_agent_waiting()
             _specs: List[ServiceSpec] = []
             for sn, spec in self.mgr.spec_store.active_specs.items():
                 _specs.append(spec)
