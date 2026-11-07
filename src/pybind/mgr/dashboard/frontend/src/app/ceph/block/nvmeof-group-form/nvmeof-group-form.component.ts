@@ -294,10 +294,20 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
 
   private getSelectedOrPreselectedHosts(): string[] {
     const selected = this.gatewayNodeComponent?.getSelectedHostnames?.() || [];
+    const visibleHosts = this.gatewayNodeComponent?.hosts;
+    if (this.editing && Array.isArray(visibleHosts)) {
+      const visible = new Set(
+        visibleHosts.map((host) => host?.hostname).filter((hostname: string) => !!hostname)
+      );
+      const retained = (this.preSelectedHostnames || []).filter(
+        (hostname) => !visible.has(hostname)
+      );
+      return Array.from(new Set([...retained, ...selected]));
+    }
+
     if (selected.length > 0) {
       return selected;
     }
-    // Edit: fall back to loaded placement while table selection syncs
     return this.editing ? this.preSelectedHostnames : [];
   }
 
