@@ -4122,12 +4122,28 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
     xattr_version = 0;
   }
 
-  bufferlist optmdbl;
-  {
-    decltype(InodeStat::optmetadata) optmetadata;
-    using kind_t = decltype(optmetadata)::optkind_t;
+  // Only directories carry a charmap, and only when one has been configured,
+  // and only quarantined inodes carry a quarantine mark, so the usual encoding
+  // is empty and constant. Compute its length once rather than staging it in
+  // a bufferlist per encoded inode; readdir encodes every inode in the
+  // directory. Both that length and the else branch below must encode the
+  // same type as the non-empty case, hence the one alias.
+  using optmetadata_t = decltype(InodeStat::optmetadata);
+  static const unsigned empty_optmetadata_len = []() {
+    bufferlist tmp;
+    optmetadata_t empty;
+    encode(empty, tmp);
+    return tmp.length();
+  }();
 
-    auto* csp = get_charmap();
+  auto* csp = get_charmap();
+  const bool quarantined = has_quarantined();
+  const bool have_optmetadata = csp || quarantined;
+  bufferlist optmdbl;
+  if (have_optmetadata) {
+    optmetadata_t optmetadata;
+    using kind_t = optmetadata_t::optkind_t;
+
     if (csp) {
       dout(25) << *csp << dendl;
       auto& opt = optmetadata.get_or_create_opt(kind_t::CHARMAP);
@@ -4136,7 +4152,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
       dout(25) << "cs now " << cs << dendl;
     }
 
-    if (has_quarantined()) {
+    if (quarantined) {
       auto& opt = optmetadata.get_or_create_opt(kind_t::QUARANTINE);
       auto& qs = opt.template get_meta< quarantine_md_t >();
       dout(25) << "qtine now " << qs << dendl;
@@ -4144,6 +4160,8 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
 
     encode(optmetadata, optmdbl);
   }
+  const unsigned optmetadata_len = have_optmetadata ? optmdbl.length()
+                                                    : empty_optmetadata_len;
 
   // do we have room?
   if (max_bytes) {
@@ -4158,7 +4176,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
       sizeof(struct ceph_dir_layout) // dir_layout
       + 4 + file_i->fscrypt_auth.size() // len + data
       + 4 + file_i->fscrypt_file.size() // len + data
-      + optmdbl.length()
+      + optmetadata_len
       ;
 
     if (xattr_version) {
@@ -4372,8 +4390,15 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
       !file_i->fscrypt_auth.empty(),
       file_i->fscrypt_auth,
       file_i->fscrypt_file);
-    encode_nohead(optmdbl, bl);
-    encode(get_subvolume_id(), bl);
+    if (have_optmetadata) {
+      encode_nohead(optmdbl, bl);
+    } else {
+      optmetadata_t empty;
+      encode(empty, bl);
+    }
+    // get_subvolume_id() would walk the parent chain to re-derive the realm
+    // already found above.
+    encode(realm ? realm->get_subvolume_ino() : inodeno_t(0), bl);
     // encode inodestat
     ENCODE_FINISH(bl);
   }
