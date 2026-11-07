@@ -22,6 +22,7 @@
         [count]="count"
         [maxLimit]="25"
         (updateSelection)="updateSelection($event)"
+        (columnVisibilityChange)="onColumnVisibilityChange($event)"
         [toolHeader]="!hideToolHeader"
       >
         <div class="table-actions">
@@ -81,7 +82,7 @@
       <cd-label
         [key]="service['type']"
         [value]="service['count']"
-        class="me-1"
+        class="cds-mr-1"
       ></cd-label>
     </span>
   }
