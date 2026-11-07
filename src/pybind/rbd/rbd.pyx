@@ -40,6 +40,7 @@ try:
 except ImportError:
     from collections import Iterable
 from datetime import datetime, timezone
+import calendar
 import errno
 from itertools import chain
 import time
@@ -878,7 +879,7 @@ class RBD(object):
         :type threshold: float
         """
         if expire_ts:
-            expire_epoch_ts = time.mktime(expire_ts.timetuple())
+            expire_epoch_ts = calendar.timegm(expire_ts.utctimetuple())
         else:
             expire_epoch_ts = 0
 
