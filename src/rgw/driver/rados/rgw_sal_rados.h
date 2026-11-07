@@ -912,6 +912,7 @@ public:
   virtual int abort(const DoutPrefixProvider* dpp, CephContext* cct, optional_yield y) override;
   virtual int complete(const DoutPrefixProvider* dpp,
 		       optional_yield y, CephContext* cct,
+		       ceph::real_time meta_locked_until,
 		       std::map<int, std::string>& part_etags,
 		       std::list<rgw_obj_index_key>& remove_objs,
 		       uint64_t& accounted_size, bool& compressed,
@@ -968,6 +969,8 @@ public:
 
   virtual int try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y) override;
   virtual int unlock(const DoutPrefixProvider* dpp, optional_yield y) override;
+
+  void set_locked_until(ceph::real_time t) { locked_until = t; }
 };
 
 class LCRadosSerializer : public StoreLCSerializer {

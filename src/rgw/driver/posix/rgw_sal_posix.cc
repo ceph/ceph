@@ -3555,7 +3555,7 @@ int MPPOSIXSerializer::try_lock(const DoutPrefixProvider *dpp, ceph::timespan du
 
   POSIXBucket* b = static_cast<POSIXBucket*>(obj->get_bucket());
   if (b->get_dir()->get_type() == ObjectType::MULTIPART && b->get_dir_fd(dpp) > 0) {
-    locked = true;
+    locked_until = ceph::real_clock::now() + dur;
     return 0;
   }
 
@@ -4331,6 +4331,7 @@ int POSIXMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct,
 
 int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
 				    optional_yield y, CephContext* cct,
+				    ceph::real_time meta_locked_until,
 				    std::map<int, std::string>& part_etags,
 				    std::list<rgw_obj_index_key>& remove_objs,
 				    uint64_t& accounted_size, bool& compressed,

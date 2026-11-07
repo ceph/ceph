@@ -668,6 +668,29 @@ struct rgw_cls_obj_check_mtime {
 };
 WRITE_CLASS_ENCODER(rgw_cls_obj_check_mtime)
 
+struct rgw_cls_obj_check_expiry_op {
+  ceph::real_time expires_at;
+  int error_code = -1;
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(expires_at, bl);
+    encode(error_code, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(ceph::buffer::list::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(expires_at, bl);
+    decode(error_code, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(ceph::Formatter *f) const;
+  static std::list<rgw_cls_obj_check_expiry_op> generate_test_instances();
+};
+WRITE_CLASS_ENCODER(rgw_cls_obj_check_expiry_op)
+
 struct rgw_cls_usage_log_add_op {
   rgw_usage_log_info info;
   rgw_user user;
@@ -1931,6 +1954,7 @@ constexpr auto obj_remove = ClsMethod<RdWrTag, ClassId>(RGW_OBJ_REMOVE);
 constexpr auto obj_store_pg_ver = ClsMethod<WrTag, ClassId>(RGW_OBJ_STORE_PG_VER);
 constexpr auto obj_check_attrs_prefix = ClsMethod<RdTag, ClassId>(RGW_OBJ_CHECK_ATTRS_PREFIX);
 constexpr auto obj_check_mtime = ClsMethod<RdTag, ClassId>(RGW_OBJ_CHECK_MTIME);
+constexpr auto obj_check_expiry = ClsMethod<RdTag, ClassId>(RGW_OBJ_CHECK_EXPIRY);
 
 // Bucket Index (BI) / Resharding
 constexpr auto bi_get = ClsMethod<RdTag, ClassId>(RGW_BI_GET);

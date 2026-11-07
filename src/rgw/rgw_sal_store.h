@@ -438,17 +438,19 @@ public:
 
 class StoreMPSerializer : public MPSerializer {
 protected:
-  std::atomic<bool> locked;
+  std::atomic<std::optional<ceph::real_time>> locked_until;
   std::string oid;
 public:
-  StoreMPSerializer() : locked(false) {}
-  StoreMPSerializer(std::string _oid) : locked(false), oid(_oid) {}
+  StoreMPSerializer() {}
+  StoreMPSerializer(std::string _oid) : oid(std::move(_oid)) {}
   virtual ~StoreMPSerializer() = default;
 
   virtual void clear_locked() override {
-    locked = false;
+    locked_until = std::nullopt;
   }
-  virtual bool is_locked() override { return locked; }
+  virtual std::optional<ceph::real_time> is_locked_until() override {
+    return locked_until;
+  }
 
   virtual void print(std::ostream& out) const override { out << oid; }
 };

@@ -432,6 +432,20 @@ void rgw_cls_bucket_update_stats_op::dump(Formatter *f) const
   encode_json("dec_stats", dec_s, f);
 }
 
+void rgw_cls_obj_check_expiry_op::dump(ceph::Formatter *f) const
+{
+  encode_json("expires_at", utime_t{expires_at}, f);
+  encode_json("error_code", error_code, f);
+}
+
+auto rgw_cls_obj_check_expiry_op::generate_test_instances()
+  -> std::list<rgw_cls_obj_check_expiry_op>
+{
+  std::list<rgw_cls_obj_check_expiry_op> o;
+  o.emplace_back();
+  return o;
+}
+
 void cls_rgw_bi_log_list_op::dump(Formatter *f) const
 {
   f->dump_string("marker", marker);

@@ -3494,6 +3494,12 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
     meta.set_mtime = real_clock::now();
   }
 
+  if (meta.expires_at) {
+    // require the head write to apply before multipart lock expiration
+    cls_rgw_obj_check_expiry(op, *meta.expires_at,
+                             ERR_MULTIPART_COMPLETE_TIMEOUT);
+  }
+
   if (target->get_bucket_info().obj_lock_enabled() && target->get_bucket_info().obj_lock.has_rule() && meta.flags == PUT_OBJ_CREATE) {
     auto iter = attrs.find(RGW_ATTR_OBJECT_RETENTION);
     if (iter == attrs.end()) {

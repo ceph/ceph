@@ -152,6 +152,10 @@ void cls_rgw_remove_obj(librados::ObjectWriteOperation& o, std::list<std::string
 void cls_rgw_obj_store_pg_ver(librados::ObjectWriteOperation& o, const std::string& attr);
 void cls_rgw_obj_check_attrs_prefix(librados::ObjectOperation& o, const std::string& prefix, bool fail_if_exist);
 void cls_rgw_obj_check_mtime(librados::ObjectOperation& o, const ceph::real_time& mtime, bool high_precision_time, RGWCheckMTimeType type);
+// return the given error if the osd processes the operation after expires_at.
+// note that this client-provided timestamp is compared against the osd's clock
+// so may be subject to clock skew
+void cls_rgw_obj_check_expiry(librados::ObjectOperation& o, ceph::real_time expires_at, int error_code);
 
 int cls_rgw_bi_get(librados::IoCtx& io_ctx, const std::string oid,
                    BIIndexType index_type, const cls_rgw_obj_key& key,

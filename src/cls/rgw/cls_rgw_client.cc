@@ -220,6 +220,17 @@ void cls_rgw_obj_check_mtime(librados::ObjectOperation& o, const real_time& mtim
   o.exec(method::obj_check_mtime, in);
 }
 
+void cls_rgw_obj_check_expiry(librados::ObjectOperation& o, ceph::real_time expires_at, int error_code)
+{
+  const rgw_cls_obj_check_expiry_op call {
+    .expires_at = expires_at,
+    .error_code = error_code
+  };
+  bufferlist in;
+  encode(call, in);
+  o.exec(method::obj_check_expiry, in);
+}
+
 int cls_rgw_bi_get(librados::IoCtx& io_ctx, const string oid,
                    BIIndexType index_type, const cls_rgw_obj_key& key,
                    rgw_cls_bi_entry *entry)

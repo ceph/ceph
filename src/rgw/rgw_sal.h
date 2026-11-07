@@ -1592,6 +1592,7 @@ public:
   /** Complete this upload, making it available as a normal object */
   virtual int complete(const DoutPrefixProvider* dpp,
 		       optional_yield y, CephContext* cct,
+		       ceph::real_time meta_locked_until,
 		       std::map<int, std::string>& part_etags,
 		       std::list<rgw_obj_index_key>& remove_objs,
 		       uint64_t& accounted_size, bool& compressed,
@@ -1679,8 +1680,8 @@ public:
   virtual ~MPSerializer() = default;
 
   virtual void clear_locked() = 0;
-  /** Check to see if locked */
-  virtual bool is_locked() = 0;
+  /** If locked, return the lock's expiration time */
+  virtual std::optional<ceph::real_time> is_locked_until() = 0;
 };
 
 /** @brief Abstraction of a serializer for Lifecycle

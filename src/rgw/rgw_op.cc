@@ -7986,7 +7986,8 @@ void RGWCompleteMultipart::execute(optional_yield y)
     return;
   }
 
-  if (!serializer->is_locked()) {
+  std::optional locked_until = serializer->is_locked_until();
+  if (!locked_until) {
     // lock renewal failed, it's not safe to commit the head object
     op_ret = -ERR_INTERNAL_ERROR;
     s->err.message = "This multipart completion is already in progress";
@@ -7994,7 +7995,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
   }
 
   op_ret =
-    upload->complete(this, y, s->cct, parts->parts, remove_objs, accounted_size,
+    upload->complete(this, y, s->cct, *locked_until, parts->parts, remove_objs, accounted_size,
                      compressed, cs_info, ofs, s->req_id, s->owner, olh_epoch,
                      s->object.get(), processed_prefixes, if_match, if_nomatch);
 
@@ -8132,7 +8133,7 @@ bool RGWCompleteMultipart::check_previously_completed(const RGWMultiCompleteUplo
 void RGWCompleteMultipart::complete()
 {
   /* release exclusive lock iff not already */
-  if (unlikely(serializer.get() && serializer->is_locked())) {
+  if (unlikely(serializer.get() && serializer->is_locked_until())) {
     int r = serializer->unlock(this, s->yield);
     if (r < 0) {
       ldpp_dout(this, 0) << "WARNING: failed to unlock " << *serializer.get() << dendl;

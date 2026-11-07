@@ -999,6 +999,7 @@ public:
   virtual int abort(const DoutPrefixProvider* dpp, CephContext* cct, optional_yield y) override;
   virtual int complete(const DoutPrefixProvider* dpp,
 		       optional_yield y, CephContext* cct,
+		       ceph::real_time meta_locked_until,
 		       std::map<int, std::string>& part_etags,
 		       std::list<rgw_obj_index_key>& remove_objs,
 		       uint64_t& accounted_size, bool& compressed,
@@ -1040,7 +1041,7 @@ public:
   virtual int try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y) override;
   virtual int unlock(const DoutPrefixProvider* dpp, optional_yield y) override;
   virtual void clear_locked() override { next->clear_locked(); }
-  virtual bool is_locked() override { return next->is_locked(); }
+  virtual std::optional<ceph::real_time> is_locked_until() override { return next->is_locked_until(); }
   virtual void print(std::ostream& out) const override { return next->print(out); }
 };
 
