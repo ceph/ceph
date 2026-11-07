@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=too-many-public-methods
+# pylint: disable=too-many-lines
 
 from __future__ import absolute_import
 
 import time
+from urllib.parse import quote
 
 from .helper import DashboardTestCase, JLeaf, JList, JObj
 
@@ -333,11 +335,12 @@ class RbdTest(DashboardTestCase):
                     assert False, "Unexcepted image '{}' in result list".format(img['name'])
 
     def test_create(self):
-        rbd_name = 'test_rbd'
+        rbd_name = 'test_rbd%2F%252F'
+        encoded_name = quote(rbd_name, safe='')
         self.create_image('rbd', None, rbd_name, 10240)
         self.assertStatus(201)
 
-        img = self.get_image('rbd', None, 'test_rbd')
+        img = self.get_image('rbd', None, encoded_name)
         self.assertStatus(200)
 
         self._validate_image(img, name=rbd_name, size=10240,
@@ -347,7 +350,10 @@ class RbdTest(DashboardTestCase):
                                             'fast-diff', 'layering',
                                             'object-map'])
 
-        self.remove_image('rbd', None, rbd_name)
+        self.remove_image('rbd', None, encoded_name)
+        self.assertStatus(204)
+        self.get_image('rbd', None, encoded_name)
+        self.assertStatus(404)
 
     def test_create_with_configuration(self):
         pool = 'rbd'
