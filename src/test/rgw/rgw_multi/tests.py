@@ -143,6 +143,60 @@ def check_bucket_instance_metadata(zone, bucket):
 
     return True
 
+# returns the whole metadata entry, ver and data, as seen by this zone
+def meta_entry(zone_conn, key):
+    out, _ = zone_conn.zone.cluster.admin(
+        ['metadata', 'get', key] + zone_conn.zone.zone_args(),
+        check_retcode=False, read_only=True)
+    try:
+        return json.loads(out)
+    except ValueError:
+        return {}
+
+def instance_owner(zone_conn, key):
+    return meta_entry(zone_conn, 'bucket.instance:' + key).get(
+        'data', {}).get('bucket_info', {}).get('owner')
+
+def entrypoint_owner(zone_conn, name):
+    return meta_entry(zone_conn, 'bucket:' + name).get('data', {}).get('owner')
+
+class MetaSyncStoreDelay:
+    """ Make a zone's metadata sync sleep between fetching a bucket.instance
+    entry and storing it (the existing delay_meta_sync_bucket_instance_store
+    injection).
+
+    The sleep is a fixed delay_sec, it is not released by clearing the config.
+    Clearing only stops the delay for entries that start after it.
+    """
+    def __init__(self, zone, delay_sec=60, poll_interval=1):
+        self.cluster = zone.cluster
+        self.delay_sec = delay_sec
+        self.poll_interval = poll_interval
+        self.config_delay = 10 # time for the config to be effective
+
+    def engage(self):
+        self.cluster.ceph_admin(['config', 'set', 'client', 'rgw_inject_delay_sec',
+                                 str(self.delay_sec)])
+        self.cluster.ceph_admin(['config', 'set', 'client', 'rgw_inject_delay_pattern',
+                                 'delay_meta_sync_bucket_instance_store'])
+        time.sleep(self.config_delay)
+
+    def release(self):
+        self.cluster.ceph_admin(['config', 'rm', 'client', 'rgw_inject_delay_pattern'])
+        self.cluster.ceph_admin(['config', 'rm', 'client', 'rgw_inject_delay_sec'])
+        time.sleep(self.config_delay)
+
+    def __enter__(self):
+        self.cluster.ceph_admin(['config', 'set', 'client', 'rgw_meta_sync_poll_interval',
+                                 str(self.poll_interval)])
+        return self
+
+    def __exit__(self, *exc):
+        self.cluster.ceph_admin(['config', 'rm', 'client', 'rgw_inject_delay_pattern'])
+        self.cluster.ceph_admin(['config', 'rm', 'client', 'rgw_inject_delay_sec'])
+        self.cluster.ceph_admin(['config', 'rm', 'client', 'rgw_meta_sync_poll_interval'])
+        return False
+
 def parse_meta_sync_status(meta_sync_status_json):
     log.debug('current meta sync status=%s', meta_sync_status_json)
     sync_status = json.loads(meta_sync_status_json)
@@ -7415,3 +7469,98 @@ def test_stale_bucket_owner_after_concurrent_chown():
         for uid in (uid_a, uid_b1, uid_b2):
             master.zone.cluster.admin(['user', 'rm', '--uid', uid, '--purge-data'],
                                       check_retcode=False)
+
+def create_bucket_with_two_owners(zonegroup_conns, tag):
+    """ Create a bucket on the master and two users it can be linked to.
+
+    Returns (master, secondary, bucket, instance_key, [uid_1, uid_2]).
+    """
+    if len(zonegroup_conns.rw_zones) < 2:
+        raise SkipTest('requires at least 2 read-write zones')
+    master = zonegroup_conns.master_zone
+    secondary = next(z for z in zonegroup_conns.rw_zones if z != master)
+    # a non-account user creates the bucket so that 'bucket link' can move it
+    creator = zonegroup_conns.non_account_zones[zonegroup_conns.zones.index(master)]
+
+    uids = [run_prefix + '-' + tag + '1', run_prefix + '-' + tag + '2']
+    for uid in uids:
+        master.zone.cluster.admin(['user', 'create', '--uid', uid, '--display-name', uid] +
+                                  master.zone.zone_args())
+
+    bucket = creator.create_bucket(gen_bucket_name())
+    stats_json, _ = master.zone.cluster.admin(
+        ['bucket', 'stats', '--bucket', bucket.name] + master.zone.zone_args(),
+        read_only=True)
+    instance_key = bucket.name + ':' + json.loads(stats_json)['id']
+    return master, secondary, bucket, instance_key, uids
+
+def link_bucket(master, bucket, uid):
+    master.zone.cluster.admin(
+        ['bucket', 'link', '--bucket', bucket.name, '--uid', uid] +
+        master.zone.zone_args())
+
+def remove_users(master, uids):
+    for uid in uids:
+        master.zone.cluster.admin(['user', 'rm', '--uid', uid, '--purge-data'] +
+                                  master.zone.zone_args(), check_retcode=False)
+
+def test_stale_metadata_applied_after_concurrent_updates():
+    """ Metadata sync does not apply an older bucket.instance update after a newer one
+
+    Delay the first update between fetch and store
+    (delay_meta_sync_bucket_instance_store), apply a second update meanwhile.
+    Without the fix the delayed entry stores its stale fetch last.
+    """
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    master, secondary, bucket, instance_key, (uid_b1, uid_b2) = \
+        create_bucket_with_two_owners(zonegroup_conns, 'own')
+    delay = MetaSyncStoreDelay(secondary.zone)
+    try:
+        zonegroup_meta_checkpoint(zonegroup)
+        owner_0 = instance_owner(secondary, instance_key)
+        assert owner_0, 'secondary has no owner for bucket.instance:%s' % instance_key
+
+        with delay:
+            delay.engage()
+
+            # first update: fetched, then sleeps before the store
+            link_bucket(master, bucket, uid_b1)
+            assert instance_owner(master, instance_key) == uid_b1, \
+                'master did not record the first update'
+
+            # the entrypoint is not delayed: new owner there, old owner on the
+            # instance means the instance entry is sleeping, not just queued
+            def instance_update_delayed():
+                return (entrypoint_owner(secondary, bucket.name) == uid_b1 and
+                        instance_owner(secondary, instance_key) == owner_0)
+
+            delayed = False
+            for _ in range(15):
+                time.sleep(2)
+                if instance_update_delayed():
+                    time.sleep(3)
+                    delayed = instance_update_delayed()
+                    break
+                if instance_owner(secondary, instance_key) == uid_b1:
+                    break # applied without a delay
+            assert delayed, 'could not delay the bucket.instance update on the secondary'
+
+            # the second update must not be delayed
+            delay.release()
+
+            link_bucket(master, bucket, uid_b2)
+            assert instance_owner(master, instance_key) == uid_b2, \
+                'master did not record the second update'
+
+            # the sleeping entry resumes after delay_sec
+            zone_meta_checkpoint(secondary.zone)
+
+            # read before the cleanup below removes the bucket
+            owner = instance_owner(secondary, instance_key)
+    finally:
+        remove_users(master, (uid_b1, uid_b2))
+
+    assert owner == uid_b2, \
+        'secondary bucket.instance owner is %r, expected the latest update %r: ' \
+        'metadata sync applied the older update after the newer one' % (owner, uid_b2)
