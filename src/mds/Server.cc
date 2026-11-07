@@ -2124,6 +2124,13 @@ void Server::force_clients_readonly()
 void Server::journal_and_reply(const MDRequestRef& mdr, CInode *in, CDentry *dn, LogEvent *le, MDSLogContextBase *fin)
 {
   dout(10) << "journal_and_reply tracei " << in << " tracedn " << dn << dendl;
+
+#ifdef WITH_MDS_NOTIFY
+  // MDS change notification: classify namespace ops here, where the
+  // affected dentries and the EUpdate op type are available pre-commit.
+  if (mds->change_notifier)
+    mds->change_notifier->journal_op(le, in, dn);
+#endif
   ceph_assert(!mdr->has_completed);
 
   // note trace items for eventual reply.
