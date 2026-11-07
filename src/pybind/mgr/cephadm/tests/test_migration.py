@@ -18,6 +18,8 @@ from cephadm.inventory import SPEC_STORE_PREFIX
 from cephadm.migrations import LAST_MIGRATION
 from cephadm.tests.fixtures import _run_cephadm, wait, with_host, receive_agent_metadata_all_hosts
 from cephadm.serve import CephadmServe
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
+from cephadm.services.service_registry import service_registry
 from orchestrator import DaemonDescription
 from tests import mock
 
@@ -484,6 +486,166 @@ def test_migrate_grafana_custom_certs(mock_get_cert_issuer_info, cephadm_module:
     assert cephadm_module.cert_mgr.get_key('grafana_ssl_key', host='host1')
     assert cephadm_module.cert_mgr.get_key('grafana_ssl_key', host='host2')
     assert cephadm_module.spec_store._specs['grafana'].certificate_source == CertificateSource.REFERENCE.value
+
+
+def _expired_self_signed_cert(organisation: str, common_name: str):
+    from datetime import datetime, timedelta, timezone
+    from cryptography import x509
+    from cryptography.x509.oid import NameOID
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    name = x509.Name([
+        x509.NameAttribute(NameOID.ORGANIZATION_NAME, organisation),
+        x509.NameAttribute(NameOID.COMMON_NAME, common_name),
+    ])
+    now = datetime.now(timezone.utc)
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(name)
+        .issuer_name(name)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - timedelta(days=30))
+        .not_valid_after(now - timedelta(days=1))
+        .sign(key, hashes.SHA256())
+    )
+    cert_pem = cert.public_bytes(serialization.Encoding.PEM).decode()
+    key_pem = key.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.TraditionalOpenSSL,
+        serialization.NoEncryption(),
+    ).decode()
+    return cert_pem, key_pem
+
+
+def _setup_tentacle_grafana(cephadm_module: CephadmOrchestrator, hosts, legacy_certs, legacy_keys):
+    from datetime import datetime, timezone
+
+    spec = GrafanaSpec(ssl=True, certificate_source=CertificateSource.CEPHADM_SIGNED.value)
+    cephadm_module.spec_store._specs = {'grafana': spec}
+    cephadm_module.spec_store.spec_created['grafana'] = datetime.now(timezone.utc)
+    cephadm_module.cache.daemons = {
+        h: {f'grafana.{h}': DaemonDescription('grafana', h, h)} for h in hosts
+    }
+    if legacy_certs:
+        cephadm_module.set_store('cert_store.cert.grafana_cert', json.dumps(legacy_certs))
+    if legacy_keys:
+        cephadm_module.set_store('cert_store.key.grafana_key', json.dumps(legacy_keys))
+
+
+def _grafana_source(cephadm_module: CephadmOrchestrator) -> str:
+    return cephadm_module.spec_store._specs['grafana'].certificate_source
+
+
+def test_migrate_11_12_tentacle_grafana_user_certs(cephadm_module: CephadmOrchestrator):
+    """User-provided Tentacle Grafana certs are carried over as editable pairs and the spec uses them."""
+    from mgr_util import create_self_signed_cert
+
+    cert1, key1 = create_self_signed_cert('Acme', 'host1.example.com')
+    cert2, key2 = create_self_signed_cert('Acme', 'host2.example.com')
+    _setup_tentacle_grafana(
+        cephadm_module, ['host1', 'host2'],
+        {'host1': {'cert': cert1, 'user_made': True},
+         # Squid custom certs were carried into the Tentacle store without user_made
+         'host2': {'cert': cert2, 'user_made': False}},
+        {'host1': {'key': key1, 'user_made': True},
+         'host2': {'key': key2, 'user_made': False}},
+    )
+
+    assert cephadm_module.migration.migrate_11_12() is True
+
+    cert_mgr = cephadm_module.cert_mgr
+    assert cert_mgr.get_cert('grafana_ssl_cert', host='host1') == cert1
+    assert cert_mgr.get_key('grafana_ssl_key', host='host1') == key1
+    assert cert_mgr.get_cert('grafana_ssl_cert', host='host2') == cert2
+    assert cert_mgr.get_key('grafana_ssl_key', host='host2') == key2
+    for host in ['host1', 'host2']:
+        assert cert_mgr.is_cert_editable('grafana_ssl_cert', host=host)
+        assert cert_mgr.key_store.get_tlsobject('grafana_ssl_key', host=host).editable
+    assert _grafana_source(cephadm_module) == CertificateSource.REFERENCE.value
+
+    # migrated keys are kept when the service reconciles its certificates
+    grafana = service_registry.get_service('grafana')
+    grafana.reconcile_certificates(CephadmDaemonDeploySpec(host='host1', daemon_id='host1',
+                                                           service_name='grafana', daemon_type='grafana'))
+    assert cert_mgr.get_key('grafana_ssl_key', host='host1') == key1
+
+
+def test_migrate_11_12_tentacle_grafana_cephadm_certs(cephadm_module: CephadmOrchestrator):
+    """Cephadm-generated Tentacle and Squid Grafana certs are left for cephadm to regenerate."""
+    from mgr_util import create_self_signed_cert
+
+    root_signed = cephadm_module.cert_mgr.generate_cert(['host1'], ['10.0.0.1'])
+    squid_cert, squid_key = create_self_signed_cert('Ceph', 'cephadm')
+    _setup_tentacle_grafana(
+        cephadm_module, ['host1', 'host2'],
+        {'host1': {'cert': root_signed.cert, 'user_made': False},
+         'host2': {'cert': squid_cert, 'user_made': False}},
+        {'host1': {'key': root_signed.key, 'user_made': False},
+         'host2': {'key': squid_key, 'user_made': False}},
+    )
+
+    assert cephadm_module.migration.migrate_11_12() is True
+
+    for host in ['host1', 'host2']:
+        assert not cephadm_module.cert_mgr.cert_exists('grafana_ssl_cert', host=host)
+    assert _grafana_source(cephadm_module) == CertificateSource.CEPHADM_SIGNED.value
+
+
+def test_migrate_11_12_tentacle_grafana_partial_hosts(cephadm_module: CephadmOrchestrator):
+    """The spec keeps cephadm-signed when some Grafana hosts have no usable user-provided cert."""
+    from mgr_util import create_self_signed_cert
+
+    cert1, key1 = create_self_signed_cert('Acme', 'host1.example.com')
+    cert2, _ = create_self_signed_cert('Acme', 'host2.example.com')
+    cert3, key3 = _expired_self_signed_cert('Acme', 'host3.example.com')
+    _setup_tentacle_grafana(
+        cephadm_module, ['host1', 'host2', 'host3'],
+        {'host1': {'cert': cert1, 'user_made': True},
+         'host2': {'cert': cert2, 'user_made': True},
+         'host3': {'cert': cert3, 'user_made': True}},
+        {'host1': {'key': key1, 'user_made': True},
+         'host3': {'key': key3, 'user_made': True}},
+    )
+
+    assert cephadm_module.migration.migrate_11_12() is True
+
+    cert_mgr = cephadm_module.cert_mgr
+    assert cert_mgr.get_cert('grafana_ssl_cert', host='host1') == cert1
+    assert not cert_mgr.cert_exists('grafana_ssl_cert', host='host2')  # no key
+    assert not cert_mgr.cert_exists('grafana_ssl_cert', host='host3')  # expired
+    assert _grafana_source(cephadm_module) == CertificateSource.CEPHADM_SIGNED.value
+
+
+def test_migrate_11_12_tentacle_grafana_keeps_existing_certs(cephadm_module: CephadmOrchestrator):
+    """Certs already provisioned under the new names take precedence over the Tentacle ones."""
+    from mgr_util import create_self_signed_cert
+
+    old_cert, old_key = create_self_signed_cert('Acme', 'old.example.com')
+    new_cert, new_key = create_self_signed_cert('Acme', 'new.example.com')
+    _setup_tentacle_grafana(
+        cephadm_module, ['host1'],
+        {'host1': {'cert': old_cert, 'user_made': True}},
+        {'host1': {'key': old_key, 'user_made': True}},
+    )
+    cephadm_module.cert_mgr.save_cert('grafana_ssl_cert', new_cert, host='host1', user_made=True, editable=True)
+    cephadm_module.cert_mgr.save_key('grafana_ssl_key', new_key, host='host1', user_made=True, editable=True)
+
+    assert cephadm_module.migration.migrate_11_12() is True
+
+    assert cephadm_module.cert_mgr.get_cert('grafana_ssl_cert', host='host1') == new_cert
+    assert cephadm_module.cert_mgr.get_key('grafana_ssl_key', host='host1') == new_key
+    assert _grafana_source(cephadm_module) == CertificateSource.REFERENCE.value
+
+
+def test_migrate_11_12_without_tentacle_grafana_certs(cephadm_module: CephadmOrchestrator):
+    """Clusters without Tentacle Grafana cert entries complete the migration unchanged."""
+    _setup_tentacle_grafana(cephadm_module, ['host1'], {}, {})
+
+    assert cephadm_module.migration.migrate_11_12() is True
+    assert _grafana_source(cephadm_module) == CertificateSource.CEPHADM_SIGNED.value
 
 
 def test_migrate_cert_store(cephadm_module: CephadmOrchestrator):
