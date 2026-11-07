@@ -2547,6 +2547,84 @@ TEST_F(OSDMapTest, BUG_48884)
   }
 }
 
+TEST_F(OSDMapTest, BUG_48896) {
+  // https://tracker.ceph.com/issues/48896
+  // straw2 returns the first item of a bucket whose items all have weight 0,
+  // so a rule with one take per datacenter keeps mapping PGs to dc-0 after
+  // all of its OSDs are crush-reweighted to 0 while still in.
+  set_up_map(4, true);
+  for (int i = 0; i < 4; i++) {
+    vector<string> move_to = {
+      "root=default",
+      "datacenter=dc-" + stringify(i / 2),
+      "host=host-" + stringify(i)};
+    ASSERT_EQ(0, crush_move(osdmap, "osd." + stringify(i), move_to));
+  }
+  CrushWrapper crush;
+  get_crush(osdmap, crush);
+  int rno;
+  for (rno = 0; rno < crush.get_max_rules(); rno++) {
+    if (!crush.rule_exists(rno))
+      break;
+  }
+  int host_type = crush.get_type_id("host");
+  int steps = 6;
+  crush_rule *rule = crush_make_rule(steps, pg_pool_t::TYPE_REPLICATED);
+  int step = 0;
+  crush_rule_set_step(rule, step++, CRUSH_RULE_TAKE, crush.get_item_id("dc-0"), 0);
+  crush_rule_set_step(rule, step++, CRUSH_RULE_CHOOSELEAF_FIRSTN, 1, host_type);
+  crush_rule_set_step(rule, step++, CRUSH_RULE_EMIT, 0, 0);
+  crush_rule_set_step(rule, step++, CRUSH_RULE_TAKE, crush.get_item_id("dc-1"), 0);
+  crush_rule_set_step(rule, step++, CRUSH_RULE_CHOOSELEAF_FIRSTN, 1, host_type);
+  crush_rule_set_step(rule, step++, CRUSH_RULE_EMIT, 0, 0);
+  ASSERT_EQ(steps, step);
+  ASSERT_GE(crush_add_rule(crush.get_crush_map(), rule, rno), 0);
+  crush.set_rule_name(rno, "rule_per_dc");
+  crush.adjust_item_weightf(g_ceph_context, 0, 0.0);
+  crush.adjust_item_weightf(g_ceph_context, 1, 0.0);
+  {
+    OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+    pending_inc.crush.clear();
+    crush.encode(pending_inc.crush, CEPH_FEATURES_SUPPORTED_DEFAULT);
+    osdmap.apply_incremental(pending_inc);
+  }
+
+  const unsigned pg_num = 32;
+  int64_t pool_id;
+  {
+    OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+    pending_inc.new_pool_max = osdmap.get_pool_max();
+    pool_id = ++pending_inc.new_pool_max;
+    pg_pool_t empty;
+    auto p = pending_inc.get_new_pool(pool_id, &empty);
+    p->size = 2;
+    p->min_size = 1;
+    p->set_pg_num(pg_num);
+    p->set_pgp_num(pg_num);
+    p->type = pg_pool_t::TYPE_REPLICATED;
+    p->crush_rule = rno;
+    p->set_flag(pg_pool_t::FLAG_HASHPSPOOL);
+    pending_inc.new_pool_names[pool_id] = "pool";
+    osdmap.apply_incremental(pending_inc);
+  }
+  for (unsigned ps = 0; ps < pg_num; ps++) {
+    vector<int> up;
+    osdmap.pg_to_up_acting_osds(pg_t(ps, pool_id), &up, nullptr, nullptr, nullptr);
+    ASSERT_EQ(2u, up.size());
+    ASSERT_EQ(0, up[0]);
+  }
+
+  OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+  osdmap.calc_pg_upmaps(g_ceph_context, 1, 10, {pool_id}, &pending_inc);
+  ASSERT_TRUE(pending_inc.new_pg_upmap.empty());
+  for (auto& [pg, items] : pending_inc.new_pg_upmap_items) {
+    for (auto& [from, to] : items) {
+      ASSERT_NE(0, to);
+      ASSERT_NE(1, to);
+    }
+  }
+}
+
 TEST_P(OSDMapTest, BUG_51842) {
     set_up_map(3, true);
     OSDMap tmp; // use a tmpmap here, so we do not dirty origin map..
