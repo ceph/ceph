@@ -24,7 +24,7 @@ const OVERVIEW_STATUS_MAP: Record<OverviewFieldStatusType, OverviewStatusMeta> =
     textClass: 'cd-status-text--danger'
   },
   info: {
-    icon: ICON_TYPE.infoCircle,
+    icon: 'infoCircle',
     textClass: 'cd-status-text--info'
   }
 };
