@@ -24,7 +24,7 @@ export class UrlsCollection extends PageHelper {
 
     // OSDs
     osds: { url: '#/osd', id: 'cd-osd-list' },
-    'create osds': { url: '#/osd/create', id: 'cd-osd-form' },
+    'create osds': { url: '#/osd/(modal:create)', id: 'cd-osd-form' },
 
     // Configuration
     configuration: { url: '#/configuration', id: 'cd-configuration' },
