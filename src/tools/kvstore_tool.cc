@@ -81,11 +81,12 @@ int StoreTool::load_bluestore(const string& path, bool read_only, bool to_repair
 #endif // WITH_BLUESTORE
 
 
-uint32_t StoreTool::traverse(const string& prefix,
-                             const bool do_crc,
-                             const bool pretty_binary_key,
-                             const bool do_value_dump,
-                             ostream *out)
+int StoreTool::traverse(const string& prefix,
+                        const bool do_crc,
+                        const bool pretty_binary_key,
+                        const bool do_value_dump,
+                        ostream *out,
+                        uint32_t *crc_out)
 {
   KeyValueDB::WholeSpaceIterator iter = db->get_wholespace_iterator();
 
@@ -132,13 +133,21 @@ uint32_t StoreTool::traverse(const string& prefix,
     iter->next();
   }
 
-  return crc;
+  if (iter->status() != 0) {
+    std::cerr << "error reading the store, the output is incomplete"
+              << std::endl;
+    return -EIO;
+  }
+  if (crc_out) {
+    *crc_out = crc;
+  }
+  return 0;
 }
 
-void StoreTool::list(const string& prefix, const bool do_crc,
-                     const bool pretty_binary_key, const bool do_value_dump)
+int StoreTool::list(const string& prefix, const bool do_crc,
+                    const bool pretty_binary_key, const bool do_value_dump)
 {
-  traverse(prefix, do_crc, pretty_binary_key, do_value_dump,& std::cout);
+  return traverse(prefix, do_crc, pretty_binary_key, do_value_dump, &std::cout);
 }
 
 bool StoreTool::exists(const string& prefix)
@@ -378,6 +387,12 @@ int StoreTool::copy_store_to(const string& type, const string& other_path,
               << std::endl;
 
   } while (it->valid());
+
+  if (it->status() != 0) {
+    std::cerr << "error reading the store, the copy is incomplete"
+              << std::endl;
+    return -EIO;
+  }
 
   print_summary(total_keys, total_size, total_txs, store_path, other_path,
                 duration());
