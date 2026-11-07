@@ -22,6 +22,7 @@
 using namespace std;
 
 static void ipv4(struct sockaddr_in *addr, const char *s) {
+  memset(addr, 0, sizeof(*addr));
   int err;
 
   addr->sin_family = AF_INET;
@@ -30,6 +31,7 @@ static void ipv4(struct sockaddr_in *addr, const char *s) {
 }
 
 static void ipv6(struct sockaddr_in6 *addr, const char *s) {
+  memset(addr, 0, sizeof(*addr));
   int err;
 
   addr->sin6_family = AF_INET6;
@@ -42,7 +44,7 @@ static char eth1[] = "eth1";
 
 TEST(CommonIPAddr, TestNotFound)
 {
-  struct ifaddrs one, two;
+  struct ifaddrs one{}, two{};
   struct sockaddr_in a_one;
   struct sockaddr_in6 a_two;
   struct sockaddr_in net;
@@ -66,7 +68,7 @@ TEST(CommonIPAddr, TestNotFound)
 
 TEST(CommonIPAddr, TestV4_Simple)
 {
-  struct ifaddrs one, two;
+  struct ifaddrs one{}, two{};
   struct sockaddr_in a_one;
   struct sockaddr_in6 a_two;
   struct sockaddr_in net;
@@ -91,7 +93,7 @@ TEST(CommonIPAddr, TestV4_Simple)
 
 TEST(CommonIPAddr, TestV4_Prefix25)
 {
-  struct ifaddrs one, two;
+  struct ifaddrs one{}, two{};
   struct sockaddr_in a_one;
   struct sockaddr_in a_two;
   struct sockaddr_in net;
@@ -116,7 +118,7 @@ TEST(CommonIPAddr, TestV4_Prefix25)
 
 TEST(CommonIPAddr, TestV4_Prefix16)
 {
-  struct ifaddrs one, two;
+  struct ifaddrs one{}, two{};
   struct sockaddr_in a_one;
   struct sockaddr_in a_two;
   struct sockaddr_in net;
@@ -141,7 +143,7 @@ TEST(CommonIPAddr, TestV4_Prefix16)
 
 TEST(CommonIPAddr, TestV4_PrefixTooLong)
 {
-  struct ifaddrs one;
+  struct ifaddrs one{};
   struct sockaddr_in a_one;
   struct sockaddr_in net;
 
@@ -159,7 +161,7 @@ TEST(CommonIPAddr, TestV4_PrefixTooLong)
 
 TEST(CommonIPAddr, TestV4_PrefixZero)
 {
-  struct ifaddrs one, two;
+  struct ifaddrs one{}, two{};
   struct sockaddr_in6 a_one;
   struct sockaddr_in a_two;
   struct sockaddr_in net;
@@ -187,7 +189,7 @@ static char lo0[] = "lo:0";
 
 TEST(CommonIPAddr, TestV4_SkipLoopback)
 {
-  struct ifaddrs one, two, three;
+  struct ifaddrs one{}, two{}, three{};
   struct sockaddr_in a_one;
   struct sockaddr_in a_two;
   struct sockaddr_in a_three;
@@ -228,7 +230,7 @@ TEST(CommonIPAddr, TestV4_SkipLoopback)
 
 TEST(CommonIPAddr, TestV6_Simple)
 {
-  struct ifaddrs one, two;
+  struct ifaddrs one{}, two{};
   struct sockaddr_in a_one;
   struct sockaddr_in6 a_two;
   struct sockaddr_in6 net;
@@ -253,7 +255,7 @@ TEST(CommonIPAddr, TestV6_Simple)
 
 TEST(CommonIPAddr, TestV6_Prefix57)
 {
-  struct ifaddrs one, two;
+  struct ifaddrs one{}, two{};
   struct sockaddr_in6 a_one;
   struct sockaddr_in6 a_two;
   struct sockaddr_in6 net;
@@ -278,7 +280,7 @@ TEST(CommonIPAddr, TestV6_Prefix57)
 
 TEST(CommonIPAddr, TestV6_PrefixTooLong)
 {
-  struct ifaddrs one;
+  struct ifaddrs one{};
   struct sockaddr_in6 a_one;
   struct sockaddr_in6 net;
 
@@ -296,7 +298,7 @@ TEST(CommonIPAddr, TestV6_PrefixTooLong)
 
 TEST(CommonIPAddr, TestV6_PrefixZero)
 {
-  struct ifaddrs one, two;
+  struct ifaddrs one{}, two{};
   struct sockaddr_in a_one;
   struct sockaddr_in6 a_two;
   struct sockaddr_in6 net;
@@ -319,7 +321,7 @@ TEST(CommonIPAddr, TestV6_PrefixZero)
 
 TEST(CommonIPAddr, TestV6_SkipLoopback)
 {
-  struct ifaddrs one, two, three;
+  struct ifaddrs one{}, two{}, three{};
   struct sockaddr_in6 a_one;
   struct sockaddr_in6 a_two;
   struct sockaddr_in6 a_three;
@@ -681,7 +683,7 @@ TEST(CommonIPAddr, network_contains)
 
 TEST(pick_address, find_ip_in_subnet_list)
 {
-  struct ifaddrs one, two, three;
+  struct ifaddrs one{}, two{}, three{};
   struct sockaddr_in a_one;
   struct sockaddr_in a_two;
   struct sockaddr_in6 a_three;
@@ -750,7 +752,7 @@ TEST(pick_address, find_ip_in_subnet_list)
 
 TEST(pick_address, filtering)
 {
-  struct ifaddrs one, two, three;
+  struct ifaddrs one{}, two{}, three{};
   struct sockaddr_in a_one;
   struct sockaddr_in a_two;
   struct sockaddr_in6 a_three;
@@ -934,7 +936,7 @@ TEST(pick_address, filtering)
 
 TEST(pick_address, ipv4_ipv6_enabled)
 {
-  struct ifaddrs one;
+  struct ifaddrs one{};
   struct sockaddr_in a_one;
 
   one.ifa_next = NULL;
@@ -966,7 +968,7 @@ TEST(pick_address, ipv4_ipv6_enabled)
 
 TEST(pick_address, ipv4_ipv6_enabled2)
 {
-  struct ifaddrs one;
+  struct ifaddrs one{};
   struct sockaddr_in6 a_one;
 
   one.ifa_next = NULL;
