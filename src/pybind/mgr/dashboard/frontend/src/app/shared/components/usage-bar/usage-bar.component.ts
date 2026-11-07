@@ -1,26 +1,31 @@
-import { Component, Input, ElementRef, OnInit, TemplateRef } from '@angular/core';
-import { ChartTabularData, MeterChartOptions, Statuses } from '@carbon/charts-angular';
-import { StatusToCssMap } from '../../enum/usage-bar-chart.enum';
-import { CssHelper } from '../../classes/css-helper';
+import { ChangeDetectionStrategy, Component, Input, OnChanges, TemplateRef } from '@angular/core';
+
 import { DimlessBinaryPipe } from '../../pipes/dimless-binary.pipe';
 import { DimlessPipe } from '../../pipes/dimless.pipe';
 
-const PRIMARY_COLOR = 'primary'; // Default theme primary color variable
+export type UsageBarStatus = 'normal' | 'warning' | 'danger';
 
+/**
+ * A meter showing how much of a resource is used.
+ *
+ * It is drawn with plain HTML and CSS and needs no layout measurements, so
+ * it is cheap enough to be rendered in every row of a large table.
+ */
 @Component({
   selector: 'cd-usage-bar',
   templateUrl: './usage-bar.component.html',
   styleUrls: ['./usage-bar.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: false
 })
-export class UsageBarComponent implements OnInit {
+export class UsageBarComponent implements OnChanges {
   // Total amount of resource (e.g., disk, memory) available, in bytes.
   @Input({ required: true }) total: number = 0;
 
   // Amount of resource currently used, in bytes.
   @Input({ required: true }) used: number = 0;
 
-  // Optional label or title for the chart, used in legends and tooltips.
+  // Name of the resource, used as the accessible name of the meter.
   @Input() title: string = '';
 
   // Threshold (0–1) to mark the start of the "warning" zone (e.g., 0.5 = 50%).
@@ -38,23 +43,9 @@ export class UsageBarComponent implements OnInit {
   // Number of decimal places to show in formatted numbers.
   @Input() decimals: number = 2;
 
-  // Height of the chart component (CSS units like `rem`, `px`, `%`).
-  @Input() height: string = '2rem';
-
-  // Width of the chart component (CSS units like `rem`, `px`, `%`).
+  // Width of the meter (CSS units like `rem`, `px`, `%`). It never grows
+  // beyond its container.
   @Input() width: string = '15rem';
-
-  // Custom unit label for the total value (e.g., "B", "kB", "requests").
-  @Input() totalUnit: string = 'B';
-
-  // Whether chart animations are enabled (e.g., grow bars on change).
-  @Input() animations: boolean = false;
-
-  // Enables the legend section (useful for grouped charts).
-  @Input() legendEnabled: boolean = false;
-
-  // Enables the toolbar (for exporting, toggling datasets, etc., depending on chart lib).
-  @Input() toolbarEnabled: boolean = false;
 
   // Text to display when `total` is zero or there’s no data.
   @Input() noDataText: string = '-';
@@ -68,12 +59,6 @@ export class UsageBarComponent implements OnInit {
   // Optional custom label (e.g., <ng-template><div>Capacity</div></<ng-template>) (overrides default label).
   @Input() customLabel: TemplateRef<any> | string = '';
 
-  // Custom tooltip options passed directly to the chart library.
-  @Input() tooltipOptions?: MeterChartOptions['tooltip'] = {};
-
-  // Optional override for the default color scale (e.g., { Memory: "#ff0000" }).
-  @Input() customColorScale?: { [key: string]: string };
-
   /**
    * Optional custom formatter for the total value (overrides default formatter).
    * Example usage: (total) => `${total} requests`
@@ -86,12 +71,15 @@ export class UsageBarComponent implements OnInit {
    */
   @Input() customBreakdownFormatter?: (x: { used: number; total: number }) => string;
 
-  data: ChartTabularData = [];
-  options: MeterChartOptions = {};
+  usedPercent = 0;
+  status: UsageBarStatus = 'normal';
+  breakdownLabel = '';
+  totalLabel = '';
+  usedText = '';
+  availableText = '';
+  totalText = '';
 
   constructor(
-    private elementRef: ElementRef,
-    private cssHelper: CssHelper,
     private dimlessPipe: DimlessPipe,
     private dimlessBinaryPipe: DimlessBinaryPipe
   ) {}
@@ -100,90 +88,36 @@ export class UsageBarComponent implements OnInit {
     return this.customLabel instanceof TemplateRef;
   }
 
-  ngOnInit(): void {
-    const chartData: ChartTabularData = [{ group: this.title || '', value: this.used }];
-    let thresholds: MeterChartOptions['meter']['status']['ranges'] = [];
-    if (this.warningThreshold && this.errorThreshold) {
-      thresholds = [
-        {
-          range: [this.total * this.warningThreshold, this.total * this.errorThreshold],
-          status: Statuses.WARNING
-        },
-        { range: [this.total * this.errorThreshold, this.total], status: Statuses.DANGER }
-      ];
-    }
-    const colorScale = this.customColorScale || {
-      [this.title || '']: this.getStatusFromThresholds(this.used, thresholds)
-    };
-
-    const chartOptions: MeterChartOptions = {
-      legend: { enabled: this.legendEnabled },
-      toolbar: { enabled: this.toolbarEnabled },
-      tooltip: {
-        enabled: true,
-        ...this.tooltipOptions,
-        customHTML: this.tooltipOptions?.customHTML || (() => this.defaultTooltip())
-      },
-      animations: this.animations,
-      height: this.height,
-      width: this.width,
-      color: { scale: colorScale },
-      meter: {
-        showLabels: !this.customLabel,
-        proportional: {
-          total: this.total,
-          unit: this.totalUnit,
-          totalFormatter: () => this.getTotalFormatter(),
-          breakdownFormatter: () => this.getBreakdownFormatter()
-        }
-      }
-    };
-    if (thresholds.length > 0) {
-      chartOptions.meter = {
-        ...chartOptions.meter,
-        status: {
-          ranges: thresholds
-        }
-      };
-    }
-    this.data = chartData;
-    this.options = chartOptions;
+  ngOnChanges(): void {
+    const ratio = this.total > 0 ? this.used / this.total : 0;
+    this.usedPercent = Math.min(Math.max(ratio * 100, 0), 100);
+    this.status = this.getStatus(ratio);
+    this.breakdownLabel = this.getBreakdownFormatter();
+    this.totalLabel = this.getTotalFormatter();
+    this.usedText = this.formatValue(this.used);
+    this.availableText = this.formatValue(this.total - this.used);
+    this.totalText = this.formatValue(this.total);
   }
 
-  private getStatusFromThresholds(
-    value: number,
-    thresholds: MeterChartOptions['meter']['status']['ranges']
-  ): string {
-    for (const threshold of thresholds) {
-      const [min, max] = threshold.range;
-      if (value >= min && value < max) {
-        return this.getCssVariableValue(
-          StatusToCssMap[threshold.status as keyof typeof StatusToCssMap]
-        );
-      }
+  private getStatus(ratio: number): UsageBarStatus {
+    // Thresholds are only applied when both are known (e.g. OSD settings may
+    // still be loading, or report -1 on error).
+    if (!(this.warningThreshold > 0 && this.errorThreshold > 0)) {
+      return 'normal';
     }
-    return this.getCssVariableValue(PRIMARY_COLOR);
-  }
-
-  private getCssVariableValue(variableName: string): string {
-    return this.cssHelper.propertyValue(variableName, this.elementRef.nativeElement);
+    if (ratio >= this.errorThreshold) {
+      return 'danger';
+    }
+    if (ratio >= this.warningThreshold) {
+      return 'warning';
+    }
+    return 'normal';
   }
 
   private formatValue(value: number): string {
     return this.isBinary
       ? this.dimlessBinaryPipe.transform(value, this.decimals)
       : this.dimlessPipe.transform(value, this.decimals);
-  }
-
-  private defaultTooltip(): string {
-    const used = this.formatValue(this.used);
-    const available = this.formatValue(this.total - this.used);
-    const total = this.formatValue(this.total);
-    return `<div class="meter-tooltip">
-      <div><strong>Used:</strong> ${used}</div>
-      <div><strong>Available:</strong> ${available}</div>
-      <div><strong>Total:</strong> ${total}</div>
-    </div>`;
   }
 
   private getTotalFormatter(): string {
