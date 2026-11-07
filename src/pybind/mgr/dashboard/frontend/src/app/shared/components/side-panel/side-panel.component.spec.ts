@@ -58,4 +58,24 @@ describe('SidePanelComponent', () => {
     const header = fixture.nativeElement.querySelector('.panel-header');
     expect(header.textContent).toContain('Test header text');
   });
+
+  it('should hide the close button when showCloseButton is false', () => {
+    component.showCloseButton = false;
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('cds-icon-button')).toBeNull();
+  });
+
+  it('should remove the content padding when contentPadding is false', () => {
+    component.contentPadding = false;
+    fixture.detectChanges();
+
+    const panel = fixture.nativeElement.querySelector('cds-panel');
+    expect(panel.getAttribute('panel-padding')).toBe('none');
+  });
+
+  it('should keep the content padding by default', () => {
+    const panel = fixture.nativeElement.querySelector('cds-panel');
+    expect(panel.getAttribute('panel-padding')).toBeNull();
+  });
 });
