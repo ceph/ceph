@@ -8,6 +8,8 @@
 #include "cls/queue/cls_queue_ops.h"
 #include "cls/rgw_gc/cls_rgw_gc_const.h"
 #include "cls/queue/cls_queue_const.h"
+
+#include "rgw/datum/adapters/cls/queued_gc.h"
 #include "cls/rgw_gc/cls_rgw_gc_client.h"
 
 using std::list;
@@ -21,11 +23,7 @@ using namespace cls::rgw_gc;
 
 void cls_rgw_gc_queue_init(ObjectWriteOperation& op, uint64_t size, uint64_t num_deferred_entries)
 {
-  bufferlist in;
-  cls_rgw_gc_queue_init_op call;
-  call.size = size;
-  call.num_deferred_entries = num_deferred_entries;
-  encode(call, in);
+  auto in = ::cls::rgw::queued_gc_datum::encode_init(size, num_deferred_entries);
   op.exec(method::init, in);
 }
 
@@ -51,60 +49,40 @@ int cls_rgw_gc_queue_get_capacity(IoCtx& io_ctx, const string& oid, uint64_t& si
 
 void cls_rgw_gc_queue_enqueue(ObjectWriteOperation& op, uint32_t expiration_secs, const cls_rgw_gc_obj_info& info)
 {
-  bufferlist in;
-  cls_rgw_gc_set_entry_op call;
-  call.expiration_secs = expiration_secs;
-  call.info = info;
-  encode(call, in);
+  auto in = ::cls::rgw::gc_datum::encode_set(expiration_secs, info);
   op.exec(method::enqueue, in);
 }
 
 int cls_rgw_gc_queue_list_entries(IoCtx& io_ctx, const string& oid, const string& marker, uint32_t max, bool expired_only,
                                   list<cls_rgw_gc_obj_info>& entries, bool& truncated, string& next_marker)
 {
-  bufferlist in, out;
-  cls_rgw_gc_list_op op;
-  op.marker = marker;
-  op.max = max;
-  op.expired_only = expired_only;
-  encode(op, in);
+  auto in = ::cls::rgw::gc_datum::encode_list(marker, max, expired_only);
+  bufferlist out;
 
   int r = io_ctx.exec(oid, method::list_entries, in, out);
   if (r < 0)
     return r;
 
-  cls_rgw_gc_list_ret ret;
-  auto iter = out.cbegin();
   try {
-    decode(ret, iter);
+    auto candidate = ::cls::rgw::gc_datum::decode_reply<std::list<cls_rgw_gc_obj_info>>(out);
+    entries.swap(candidate.entries);
+    truncated = candidate.truncated;
+    next_marker = std::move(candidate.next_marker);
   } catch (ceph::buffer::error& err) {
     return -EIO;
   }
-
-  entries.swap(ret.entries);
-
-  truncated = ret.truncated;
-
-  next_marker = std::move(ret.next_marker);
 
   return 0;
 }
 
 void cls_rgw_gc_queue_remove_entries(ObjectWriteOperation& op, uint32_t num_entries)
 {
-  bufferlist in, out;
-  cls_rgw_gc_queue_remove_entries_op rem_op;
-  rem_op.num_entries = num_entries;
-  encode(rem_op, in);
+  auto in = ::cls::rgw::queued_gc_datum::encode_remove(num_entries);
   op.exec(method::remove_entries, in);
 }
 
 void cls_rgw_gc_queue_defer_entry(ObjectWriteOperation& op, uint32_t expiration_secs, const cls_rgw_gc_obj_info& info)
 {
-  bufferlist in;
-  cls_rgw_gc_queue_defer_entry_op defer_op;
-  defer_op.expiration_secs = expiration_secs;
-  defer_op.info = info;
-  encode(defer_op, in);
+  auto in = ::cls::rgw::gc_datum::encode_set(expiration_secs, info);
   op.exec(method::update_entry, in);
 }

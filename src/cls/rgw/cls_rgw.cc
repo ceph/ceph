@@ -4,6 +4,13 @@
 #include "include/types.h"
 
 #include <cerrno>
+#include <cstddef>
+#include <exception>
+#include <expected>
+#include <limits>
+#include <new>
+#include <optional>
+#include <type_traits>
 #include <map>
 #include <string>
 #include <vector>
@@ -16,6 +23,18 @@
 #include "objclass/objclass.h"
 #include "cls/rgw/cls_rgw_ops.h"
 #include "cls/rgw/cls_rgw_const.h"
+#include "rgw/datum/adapters/cls/bi.h"
+#include "rgw/datum/adapters/cls/bilog.h"
+#include "rgw/datum/adapters/cls/bucket.h"
+#include "rgw/datum/adapters/cls/gc.h"
+#include "rgw/datum/adapters/cls/lc.h"
+#include "rgw/datum/adapters/cls/multipart.h"
+#include "rgw/datum/adapters/cls/object.h"
+#include "rgw/datum/adapters/cls/olh.h"
+#include "rgw/datum/adapters/cls/reshard.h"
+#include "rgw/datum/adapters/cls/usage.h"
+#include "rgw/datum/adapters/cls/write.h"
+#include "common/container_concepts.h"
 #include "common/strtol.h"
 #include "common/escape.h"
 #include "osd/osd_types.h"
@@ -271,13 +290,10 @@ static int get_obj_vals(cls_method_context_t hctx,
    * outside the "ugly namespace"
    */
 
-  auto comp = [](const pair<std::string, bufferlist>& l, const std::string &r) {
-		return l.first < r;
-	      };
   std::string new_start = {static_cast<char>(BI_PREFIX_CHAR + 1)};
 
-  auto lower = pkeys->lower_bound(string{static_cast<char>(BI_PREFIX_CHAR)});
-  auto upper = std::lower_bound(lower, pkeys->end(), new_start, comp);
+  const auto lower = pkeys->lower_bound(string{static_cast<char>(BI_PREFIX_CHAR)});
+  const auto upper = pkeys->lower_bound(new_start);
   pkeys->erase(lower, upper);
 
   if (num_entries == (int)pkeys->size() || !(*pmore)) {
@@ -554,7 +570,7 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   auto iter = in->cbegin();
 
-  rgw_cls_list_op op;
+  ::cls::rgw::bucket_datum::request op;
   try {
     decode(op, iter);
   } catch (ceph::buffer::error& err) {
@@ -566,8 +582,8 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
           __func__, op.start_obj.to_string().c_str(), op.num_entries,
           op.filter_prefix.c_str(), op.delimiter.c_str(), (int)op.list_versions);
 
-  rgw_cls_list_ret ret;
-  rgw_bucket_dir& new_dir = ret.dir;
+  ::cls::rgw::bucket_datum::reply ret;
+  auto& new_dir = ret.dir;
   auto& name_entry_map = new_dir.m; // map of keys to entries
 
   int rc = read_bucket_header(hctx, &new_dir.header);
@@ -801,7 +817,7 @@ int rgw_bucket_update_stats(cls_method_context_t hctx, bufferlist *in, bufferlis
 {
   CLS_LOG(10, "entered %s", __func__);
   // decode request
-  rgw_cls_bucket_update_stats_op op;
+  ::cls::rgw::bucket_datum::stats_request op;
   auto iter = in->cbegin();
   try {
     decode(op, iter);
@@ -874,7 +890,7 @@ int rgw_bucket_set_tag_timeout(cls_method_context_t hctx, bufferlist *in, buffer
 {
   CLS_LOG(10, "entered %s", __func__);
   // decode request
-  rgw_cls_tag_timeout_op op;
+  ::cls::rgw::bucket_datum::timeout_request op;
   auto iter = in->cbegin();
   try {
     decode(op, iter);
@@ -944,7 +960,7 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
 	       __func__, oi.soid.oid.name.c_str(), oi.soid.get_key().c_str());
 
   // decode request
-  rgw_cls_obj_prepare_op op;
+  ::cls::rgw::write_datum::prepare_request op;
   auto iter = in->cbegin();
   try {
     decode(op, iter);
@@ -1053,6 +1069,19 @@ static void log_entry(const char *func, const char *str, rgw_bucket_olh_entry *e
 }
 
 template <class T>
+static int decode_omap_entry(const ::ceph::buffer::list& encoded, T& entry)
+{
+  auto cur_iter = encoded.cbegin();
+  try {
+    decode(entry, cur_iter);
+  } catch (ceph::buffer::error& err) {
+    CLS_LOG(1, "ERROR: %s: failed to decode entry", __func__);
+    return -EIO;
+  }
+  return 0;
+}
+
+template <class T>
 static int read_omap_entry(cls_method_context_t hctx, const std::string& name,
                            T* entry)
 {
@@ -1062,14 +1091,7 @@ static int read_omap_entry(cls_method_context_t hctx, const std::string& name,
     return rc;
   }
 
-  auto cur_iter = current_entry.cbegin();
-  try {
-    decode(*entry, cur_iter);
-  } catch (ceph::buffer::error& err) {
-    CLS_LOG(1, "ERROR: %s: failed to decode entry", __func__);
-    return -EIO;
-  }
-  return 0;
+  return decode_omap_entry(current_entry, *entry);
 }
 
 template <class T>
@@ -1157,7 +1179,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
 	       __func__, oi.soid.oid.name.c_str(), oi.soid.get_key().c_str());
 
   // decode request
-  rgw_cls_obj_complete_op op;
+  ::cls::rgw::write_datum::complete_request op;
   auto iter = in->cbegin();
   try {
     decode(op, iter);
@@ -1405,7 +1427,7 @@ static int read_olh(cls_method_context_t hctx,cls_rgw_obj_key& obj_key, rgw_buck
 }
 
 static void update_olh_log(rgw_bucket_olh_entry& olh_data_entry, OLHLogOp op, const string& op_tag,
-                           cls_rgw_obj_key& key, bool delete_marker, uint64_t epoch)
+                           const cls_rgw_obj_key& key, bool delete_marker, uint64_t epoch)
 {
   CLS_LOG(20, "%s: op=%d op_tag=%s key=%s epoch=%lu", __func__,
           op, op_tag.c_str(), key.to_string().c_str(), epoch);
@@ -1579,23 +1601,19 @@ public:
     return instance_entry.is_delete_marker();
   }
 
-  int find_next_key(cls_rgw_obj_key *next_key, bool *found) {
+  [[nodiscard]] std::expected<std::optional<cls_rgw_obj_key>, int> find_next_key() {
     string list_idx;
-    /* this instance has a previous list entry, remove that entry */
+    // Start after this version's listing entry and stay in its object namespace.
     get_list_index_key(instance_entry, &list_idx);
-    /* this is the current head, need to update! */
     map<string, bufferlist> keys;
     bool more;
-    string filter = key.name; /* list key starts with key name, filter it to avoid a case where we cross to
-                                 different namespace */
-    int ret = cls_cxx_map_get_vals(hctx, list_idx, filter, 1, &keys, &more);
+    int ret = cls_cxx_map_get_vals(hctx, list_idx, key.name, 1, &keys, &more);
     if (ret < 0) {
-      return ret;
+      return std::unexpected(ret);
     }
 
-    if (keys.size() < 1) {
-      *found = false;
-      return 0;
+    if (keys.empty()) {
+      return std::nullopt;
     }
 
     rgw_bucket_dir_entry next_entry;
@@ -1606,15 +1624,14 @@ public:
       decode(next_entry, iter);
     } catch (ceph::buffer::error& err) {
       CLS_LOG(0, "ERROR; failed to decode entry: %s", last->first.c_str());
-      return -EIO;
+      return std::unexpected(-EIO);
     }
 
-    *found = (key.name == next_entry.key.name);
-    if (*found) {
-      *next_key = next_entry.key;
+    if (key.name != next_entry.key.name) {
+      return std::nullopt;
     }
 
-    return 0;
+    return std::move(next_entry.key);
   }
 
   real_time mtime() {
@@ -1677,7 +1694,7 @@ public:
     return olh_data_entry;
   }
 
-  void update(cls_rgw_obj_key& key, bool delete_marker) {
+  void update(const cls_rgw_obj_key& key, bool delete_marker) {
     olh_data_entry.delete_marker = delete_marker;
     olh_data_entry.key = key;
   }
@@ -1693,7 +1710,8 @@ public:
     return 0;
   }
 
-  void update_log(OLHLogOp op, const string& op_tag, cls_rgw_obj_key& key, bool delete_marker, uint64_t epoch = 0) {
+  void update_log(OLHLogOp op, const string& op_tag, const cls_rgw_obj_key& key,
+                  bool delete_marker, uint64_t epoch = 0) {
     if (epoch == 0) {
       epoch = olh_data_entry.epoch;
     }
@@ -1813,7 +1831,7 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   string instance_idx;
 
   // decode request
-  rgw_cls_link_olh_op op;
+  ::cls::rgw::write_datum::link_request op;
   auto iter = in->cbegin();
   try {
     decode(op, iter);
@@ -2061,7 +2079,7 @@ static int rgw_bucket_refresh_instance(cls_method_context_t hctx, bufferlist *in
 {
   CLS_LOG(10, "entered %s", __func__);
 
-  rgw_cls_refresh_instance_op op;
+  ::cls::rgw::write_datum::refresh_request op;
   auto iter = in->cbegin();
   try {
     decode(op, iter);
@@ -2131,7 +2149,7 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
   string instance_idx;
 
   // decode request
-  rgw_cls_unlink_instance_op op;
+  ::cls::rgw::write_datum::unlink_request op;
   auto iter = in->cbegin();
   try {
     decode(op, iter);
@@ -2206,16 +2224,14 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
 
     if (olh_key == dest_key) {
       /* this is the current head, need to update the OLH! */
-      cls_rgw_obj_key next_key;
-      bool found = false;
-      ret = obj.find_next_key(&next_key, &found);
-      if (ret < 0) {
-        CLS_LOG(0, "ERROR: obj.find_next_key() returned ret=%d", ret);
-        return ret;
+      const auto next_result = obj.find_next_key();
+      if (!next_result) {
+        CLS_LOG(0, "ERROR: obj.find_next_key() returned ret=%d", next_result.error());
+        return next_result.error();
       }
 
-      if (found) {
-        BIVerObjEntry next(hctx, next_key);
+      if (const auto& next_key = *next_result; next_key) {
+        BIVerObjEntry next(hctx, *next_key);
         ret = next.init();
         if (ret < 0) {
           CLS_LOG(0, "ERROR: next.init() returned ret=%d", ret);
@@ -2230,21 +2246,21 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
         }
 
         CLS_LOG(20, "%s: updating olh log: link olh -> %s[%s] (is_delete=%d)", __func__,
-                next_key.name.c_str(), next_key.instance.c_str(), (int) next.is_delete_marker());
+                next_key->name.c_str(), next_key->instance.c_str(), (int) next.is_delete_marker());
 
-        olh.update(next_key, next.is_delete_marker());
-        olh.update_log(CLS_RGW_OLH_OP_LINK_OLH, op.op_tag, next_key, next.is_delete_marker(), now_epoch);
+        olh.update(*next_key, next.is_delete_marker());
+        olh.update_log(CLS_RGW_OLH_OP_LINK_OLH, op.op_tag, *next_key,
+                        next.is_delete_marker(), now_epoch);
         // use the next entry's versioned_epoch in the olh entry since it's the new head now
         olh.set_epoch(next_epoch);
       } else {
-        // next_key is empty, but we need to preserve its name in case this entry
-        // gets resharded, because this key is used for hash placement
-        next_key.name = dest_key.name;
-        olh.update(next_key, false);
+        // Preserve the name for hash placement even when no successor exists.
+        const cls_rgw_obj_key absent_key {dest_key.name};
+        olh.update(absent_key, false);
         if (olh.get_epoch() == 0) {
           olh.set_epoch(candidate_epoch);
         }
-        olh.update_log(CLS_RGW_OLH_OP_UNLINK_OLH, op.op_tag, next_key, false, now_epoch);
+        olh.update_log(CLS_RGW_OLH_OP_UNLINK_OLH, op.op_tag, absent_key, false, now_epoch);
         olh.set_exists(false);
         olh.set_pending_removal(true);
       }
@@ -2317,10 +2333,10 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
 }
 
 static int rgw_bucket_read_olh_log(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
-{
+try {
   CLS_LOG(10, "entered %s", __func__);
   // decode request
-  rgw_cls_read_olh_log_op op;
+  ::cls::rgw::olh_datum::request op;
   auto iter = in->cbegin();
   try {
     decode(op, iter);
@@ -2334,60 +2350,71 @@ static int rgw_bucket_read_olh_log(cls_method_context_t hctx, bufferlist *in, bu
     return -EINVAL;
   }
 
+  const auto tag = op.tag();
   rgw_bucket_olh_entry olh_data_entry;
   string olh_data_key;
   encode_olh_data_key(op.olh, &olh_data_key);
-  int ret = read_index_entry(hctx, olh_data_key, &olh_data_entry);
+  ::ceph::buffer::list encoded;
+  int ret = cls_cxx_map_get_val(hctx, olh_data_key, &encoded);
+  if (0 == ret) {
+    if (op.get_stales) {
+      // Validate the stored encoding and build the reply directly from
+      // the selected encoded log entries.
+      if (const auto status = ::cls::rgw::olh_datum::try_encode_stored_reply(
+            encoded, op.ver_marker, tag, *out); status.has_value()) {
+        return *status;
+      }
+    }
+    ret = decode_omap_entry(encoded, olh_data_entry);
+    // Release the stored buffer before building the reply from the decoded record.
+    encoded.clear();
+    if (0 == ret) {
+      log_entry("read_index_entry", "existing entry", &olh_data_entry);
+    }
+  }
   if (ret < 0 && ret != -ENOENT) {
     CLS_LOG(0, "ERROR: read_index_entry() olh_key=%s ret=%d", olh_data_key.c_str(), ret);
     return ret;
   }
 
-  if (olh_data_entry.tag != op.olh_tag) {
-    CLS_LOG(1, "NOTICE: %s: olh_tag_mismatch olh_data_entry.tag=%s op.olh_tag=%s", __func__, olh_data_entry.tag.c_str(), op.olh_tag.c_str());
+  if (olh_data_entry.tag != tag) {
+    const auto tag_length = static_cast<int>(std::min<std::size_t>(
+        tag.size(), std::numeric_limits<int>::max()));
+    CLS_LOG(1, "NOTICE: %s: olh_tag_mismatch olh_data_entry.tag=%s op.olh_tag=%.*s",
+            __func__, olh_data_entry.tag.c_str(), tag_length, tag.data());
     return -ECANCELED;
   }
 
-  rgw_cls_read_olh_log_ret op_ret;
-
-#define MAX_OLH_LOG_ENTRIES 1000
-  map<uint64_t, vector<rgw_bucket_olh_log_entry> >& log = olh_data_entry.pending_log;
-
-  if (log.begin()->first > op.ver_marker && log.size() <= MAX_OLH_LOG_ENTRIES) {
-    op_ret.log = log;
-    op_ret.is_truncated = false;
-  } else {
-    auto iter = log.upper_bound(op.ver_marker);
-
-    for (int i = 0; i < MAX_OLH_LOG_ENTRIES && iter != log.end(); ++i, ++iter) {
-      op_ret.log[iter->first] = iter->second;
+  // Bound the stored epoch range before stale filtering. Refilling a filtered page or
+  // deriving truncation from its surviving events would change native continuation semantics.
+  constexpr auto max_epochs = ::cls::rgw::olh_datum::max_page_epochs;
+  const auto& log = olh_data_entry.pending_log;
+  const auto page = [&] {
+    if (log.empty() || (log.size() <= max_epochs && op.ver_marker < log.begin()->first)) {
+      return std::ranges::subrange {log.begin(), log.end(), log.size()};
     }
-    op_ret.is_truncated = (iter != log.end());
-  }
+    const auto lower = log.upper_bound(op.ver_marker);
+    auto upper = lower;
+    const auto count = max_epochs - std::ranges::advance(upper, max_epochs, log.end());
 
-  // this is for backward compatibility
-  if (!op.get_stales) {
-    auto iter = op_ret.log.begin();
-    while (iter != op_ret.log.end()) {
-      std::erase_if(iter->second, [](const auto& e) { return e.op == CLS_RGW_OLH_OP_STALE; });
-      if (iter->second.empty()) {
-        iter = op_ret.log.erase(iter);
-      } else {
-        ++iter;
-      }
-    }
-  }
-
-  encode(op_ret, *out);
+    return std::ranges::subrange {lower, upper, static_cast<std::size_t>(count)};
+  }();
+  const bool truncated = page.end() != log.end();
+  ::cls::rgw::olh_datum::encode_reply(page, op.get_stales, truncated, *out);
 
   return 0;
+} catch (const std::bad_alloc&) {
+  return -ENOMEM;
+} catch (const std::exception& err) {
+  CLS_LOG(0, "ERROR: %s: %s", __func__, err.what());
+  return -EIO;
 }
 
 static int rgw_bucket_trim_olh_log(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(10, "entered %s", __func__);
   // decode request
-  rgw_cls_trim_olh_log_op op;
+  ::cls::rgw::write_datum::trim_request op;
   auto iter = in->cbegin();
   try {
     decode(op, iter);
@@ -2418,12 +2445,7 @@ static int rgw_bucket_trim_olh_log(cls_method_context_t hctx, bufferlist *in, bu
 
   /* remove all versions up to and including ver from the pending map */
   auto& log = olh_data_entry.pending_log;
-  auto liter = log.begin();
-  while (liter != log.end() && liter->first <= op.ver) {
-    auto rm_iter = liter;
-    ++liter;
-    log.erase(rm_iter);
-  }
+  log.erase(log.begin(), log.upper_bound(op.ver));
 
   struct rgw_bucket_dir_header header;
   int rc = read_bucket_header(hctx, &header);
@@ -2451,7 +2473,7 @@ static int rgw_bucket_clear_olh(cls_method_context_t hctx, bufferlist *in, buffe
 {
   CLS_LOG(10, "entered %s", __func__);
   // decode request
-  rgw_cls_bucket_clear_olh_op op;
+  ::cls::rgw::write_datum::clear_request op;
   auto iter = in->cbegin();
   try {
     decode(op, iter);
@@ -2538,7 +2560,6 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx,
   CLS_LOG_BITX(bitx_inst, 10, "ENTERING %s for object oid=%s key=%s",
 	       __func__, oi.soid.oid.name.c_str(), oi.soid.get_key().c_str());
 
-  bufferlist header_bl;
   rgw_bucket_dir_header header;
   bool header_changed = false;
 
@@ -2634,7 +2655,7 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx,
 		       __func__,
 		       cur_iter->first.c_str(),
 		       cur_iter->second.state,
-		       modify_op_str(iter->second.op).c_str());
+		       modify_op_str(cur_iter->second.op).c_str());
           cur_disk.pending_map.erase(cur_iter);
         }
       } // while
@@ -2750,7 +2771,7 @@ static int rgw_obj_remove(cls_method_context_t hctx, bufferlist *in, bufferlist 
 {
   CLS_LOG(10, "entered %s", __func__);
   // decode request
-  rgw_cls_obj_remove_op op;
+  ::cls::rgw::object_datum::remove_request op;
   auto iter = in->cbegin();
   try {
     decode(op, iter);
@@ -2824,7 +2845,7 @@ static int rgw_obj_store_pg_ver(cls_method_context_t hctx, bufferlist *in, buffe
 {
   CLS_LOG(10, "entered %s", __func__);
   // decode request
-  rgw_cls_obj_store_pg_ver_op op;
+  ::cls::rgw::object_datum::version_request op;
   auto iter = in->cbegin();
   try {
     decode(op, iter);
@@ -2849,7 +2870,7 @@ static int rgw_obj_check_attrs_prefix(cls_method_context_t hctx, bufferlist *in,
 {
   CLS_LOG(10, "entered %s", __func__);
   // decode request
-  rgw_cls_obj_check_attrs_prefix op;
+  ::cls::rgw::object_datum::prefix_request op;
   auto iter = in->cbegin();
   try {
     decode(op, iter);
@@ -2893,7 +2914,7 @@ static int rgw_obj_check_mtime(cls_method_context_t hctx, bufferlist *in, buffer
 {
   CLS_LOG(10, "entered %s", __func__);
   // decode request
-  rgw_cls_obj_check_mtime op;
+  ::cls::rgw::object_datum::mtime_request op;
   auto iter = in->cbegin();
   try {
     decode(op, iter);
@@ -2957,7 +2978,7 @@ static int rgw_bi_get_op(cls_method_context_t hctx, bufferlist *in, bufferlist *
 {
   CLS_LOG(10, "entered %s", __func__);
   // decode request
-  rgw_cls_bi_get_op op;
+  ::cls::rgw::bi_datum::get_request op;
   auto iter = in->cbegin();
   try {
     decode(op, iter);
@@ -2984,9 +3005,7 @@ static int rgw_bi_get_op(cls_method_context_t hctx, bufferlist *in, bufferlist *
       return -EINVAL;
   }
 
-  rgw_cls_bi_get_ret op_ret;
-
-  rgw_cls_bi_entry& entry = op_ret.entry;
+  ::cls::rgw::bi_datum::entry entry;
 
   entry.type = op.type;
   entry.idx = idx;
@@ -2997,7 +3016,7 @@ static int rgw_bi_get_op(cls_method_context_t hctx, bufferlist *in, bufferlist *
       return r;
   }
 
-  encode(op_ret, *out);
+  ::cls::rgw::bi_datum::encode(entry, *out);
 
   return 0;
 }
@@ -3006,7 +3025,7 @@ static int rgw_bi_put_op(cls_method_context_t hctx, bufferlist *in, bufferlist *
 {
   CLS_LOG(10, "entered %s", __func__);
   // decode request
-  rgw_cls_bi_put_op op;
+  ::cls::rgw::bi_datum::entry_put_request op;
   auto iter = in->cbegin();
   try {
     decode(op, iter);
@@ -3015,7 +3034,7 @@ static int rgw_bi_put_op(cls_method_context_t hctx, bufferlist *in, bufferlist *
     return -EINVAL;
   }
 
-  rgw_cls_bi_entry& entry = op.entry;
+  auto& entry = op.item;
   if (entry.type == BIIndexType::ReshardDeleted) {
     int r = cls_cxx_map_remove_key(hctx, entry.idx);
     if (r < 0) {
@@ -3033,7 +3052,7 @@ static int rgw_bi_put_op(cls_method_context_t hctx, bufferlist *in, bufferlist *
 
 static int rgw_bi_put_entries(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  rgw_cls_bi_put_entries_op op;
+  ::cls::rgw::bi_datum::put_request op;
   try {
     auto iter = in->cbegin();
     decode(op, iter);
@@ -3086,7 +3105,13 @@ static int rgw_bi_put_entries(cls_method_context_t hctx, bufferlist *in, bufferl
       cls_rgw_obj_key key;
       RGWObjCategory category;
       rgw_bucket_category_stats stats;
-      const bool account = entry.get_info(&key, &category, &stats);
+      bool account;
+      try {
+        account = entry.get_info(&key, &category, &stats);
+      } catch (const ceph::buffer::error&) {
+        CLS_LOG(0, "ERROR: %s: failed to decode existing BI payload", __func__);
+        return -EIO;
+      }
       if (account) {
         auto& dest = header.stats[category];
         dest.total_size -= stats.total_size;
@@ -3112,7 +3137,13 @@ static int rgw_bi_put_entries(cls_method_context_t hctx, bufferlist *in, bufferl
     cls_rgw_obj_key key;
     RGWObjCategory category;
     rgw_bucket_category_stats stats;
-    const bool account = entry.get_info(&key, &category, &stats);
+    bool account;
+    try {
+      account = cls_rgw_get_bi_entry_info(entry.type, entry.data, &key, &category, &stats);
+    } catch (const ceph::buffer::error&) {
+      CLS_LOG(0, "ERROR: %s: failed to decode incoming BI payload", __func__);
+      return -EINVAL;
+    }
     if (account) {
       auto& dest = header.stats[category];
       dest.total_size += stats.total_size;
@@ -3144,19 +3175,19 @@ enum class PlainEntriesRegion {
   Low, Both, High
 };
 
-
 /* Queries the omap for plain entries in the range of start_after_key
  * to end_key, non-inclusive. Both of those values must either be
  * before the "ugly namespace" or after it.
  *
  * Negative return values indicate errors. Non-negative return values
  * indicate number of entries retrieved. */
+template <typename EntriesT>
 static int list_plain_entries_help(cls_method_context_t hctx,
 				   const std::string& name_filter,
 				   const std::string& start_after_key, // exclusive
 				   const std::string& end_key, // exclusive
 				   uint32_t max,
-				   std::list<rgw_cls_bi_entry>* entries,
+				   EntriesT *entries,
 				   bool& end_key_reached,
 				   bool& more)
 {
@@ -3174,7 +3205,8 @@ static int list_plain_entries_help(cls_method_context_t hctx,
   }
 
   end_key_reached = false;
-  for (auto iter : raw_entries) {
+  ::ceph::util::maybe_reserve(*entries, entries->size() + raw_entries.size());
+  for (auto& iter : raw_entries) {
     if (!end_key.empty() && iter.first >= end_key) {
       CLS_LOG(20, "%s: end key reached at \"%s\"",
 	      __func__, escape_str(iter.first).c_str());
@@ -3205,18 +3237,18 @@ static int list_plain_entries_help(cls_method_context_t hctx,
       return count;
     }
 
-    rgw_cls_bi_entry entry;
+    typename EntriesT::value_type entry;
     entry.type = BIIndexType::Plain;
     entry.idx = iter.first;
-    entry.data = iter.second;
+    entry.data = std::move(iter.second);
 
-    entries->push_back(entry);
+    entries->push_back(std::move(entry));
     count++;
 
     CLS_LOG(20, "%s: adding entry %d entry.idx=\"%s\" e.key.name=\"%s\"",
 	    __func__,
 	    count,
-            escape_str(entry.idx).c_str(),
+            escape_str(iter.first).c_str(),
 	    escape_str(e.key.name).c_str());
 
     if (count >= int(max)) {
@@ -3237,11 +3269,12 @@ static int list_plain_entries_help(cls_method_context_t hctx,
  * The entries parameter is not cleared and additional entries are
  * appended to it.
  */
+template <typename EntriesT>
 static int list_plain_entries(cls_method_context_t hctx,
                               const std::string& name_filter,
                               const std::string& marker,
                               uint32_t max,
-                              std::list<rgw_cls_bi_entry>* entries,
+                              EntriesT *entries,
                               bool* pmore,
 			      const PlainEntriesRegion region = PlainEntriesRegion::Both)
 {
@@ -3297,32 +3330,39 @@ static int list_plain_entries(cls_method_context_t hctx,
   return int(entries->size() - start_size);
 }
 
-static int list_instance_entries(cls_method_context_t hctx,
+template <BIIndexType Kind, typename EntriesT>
+static int list_special_entries(cls_method_context_t hctx,
 				 const std::string& name, // filters entries for this obj
 				 const std::string& marker,
 				 uint32_t max,
-                                 std::list<rgw_cls_bi_entry>* entries,
+                                 EntriesT *entries,
 				 bool* pmore)
 {
   CLS_LOG(20, "%s: entry name=\"%s\" marker=\"%s\" max=%d",
 	  __func__, escape_str(name).c_str(),
 	  escape_str(marker).c_str(), (int)max);
 
-  // make first_instance_idx of the form \801000_[name]\00[instance]
   cls_rgw_obj_key key(name); // includes name, instance, and namespace, latter two empty
   string first_instance_idx;
-  encode_obj_versioned_data_key(key, &first_instance_idx);
+  static_assert(Kind == BIIndexType::Instance || Kind == BIIndexType::OLH);
+  constexpr bool instance = Kind == BIIndexType::Instance;
+  if constexpr (instance) {
+    encode_obj_versioned_data_key(key, &first_instance_idx);
+  } else {
+    encode_olh_data_key(key, &first_instance_idx);
+  }
 
   std::string start_after_key; // where we start after
   if (!name.empty()) {
     start_after_key = first_instance_idx;
   } else {
     start_after_key = BI_PREFIX_CHAR;
-    start_after_key.append(bucket_index_prefixes[BI_BUCKET_OBJ_INSTANCE_INDEX]);
+    start_after_key.append(bucket_index_prefixes[
+        instance ? BI_BUCKET_OBJ_INSTANCE_INDEX : BI_BUCKET_OLH_DATA_INDEX]);
   }
 
   // if a name was provided then it will be used to filter index
-  // entries; otherwise will filter my the instance prefix
+  // entries; otherwise filter by the selected index prefix
   std::string filter = start_after_key;
 
   // advance to marker if it's after our current start_after_key
@@ -3336,8 +3376,8 @@ static int list_instance_entries(cls_method_context_t hctx,
     return ret;
   }
 
-  // we need to include the exact match if a filter (name) is
-  // specified and the marker has not yet advanced (i.e., been set)
+  // Preserve native exact-key inclusion and its capacity arithmetic.
+  // The prefix filter is intentionally captured before advancing to the marker.
   bool found_first = (ret == 0) && (start_after_key != marker);
   if (found_first) {
     --max;
@@ -3357,11 +3397,12 @@ static int list_instance_entries(cls_method_context_t hctx,
     keys[start_after_key] = std::move(k);
   }
 
+  ::ceph::util::maybe_reserve(*entries, entries->size() + keys.size());
   for (auto iter = keys.begin(); iter != keys.end(); ++iter) {
-    rgw_cls_bi_entry entry;
-    entry.type = BIIndexType::Instance;
+    typename EntriesT::value_type entry;
+    entry.type = Kind;
     entry.idx = iter->first;
-    entry.data = iter->second;
+    entry.data = std::move(iter->second);
 
     // check if we're past the range of the prefix filter and if so,
     // we're done
@@ -3378,7 +3419,7 @@ static int list_instance_entries(cls_method_context_t hctx,
 
     auto biter = entry.data.cbegin();
 
-    rgw_bucket_dir_entry e;
+    std::conditional_t<instance, rgw_bucket_dir_entry, rgw_bucket_olh_entry> e;
     try {
       decode(e, biter);
     } catch (ceph::buffer::error& err) {
@@ -3395,120 +3436,16 @@ static int list_instance_entries(cls_method_context_t hctx,
       return count;
     }
 
-    entries->push_back(entry);
+    entries->push_back(std::move(entry));
     count++;
-    start_after_key = entry.idx;
   }
 
   return count;
-} // list_instance_entries
+} // list_special_entries
 
-static int list_olh_entries(cls_method_context_t hctx,
-			    const std::string& name, // filters entries for this obj
-			    const std::string& marker,
-			    uint32_t max,
-                            std::list<rgw_cls_bi_entry>* entries,
-			    bool* pmore)
-{
-  CLS_LOG(20, "%s: entry name=\"%s\" marker=\"%s\" max=%d",
-	  __func__, escape_str(name).c_str(),
-	  escape_str(marker).c_str(), (int)max);
-
-  // make first_instance_idx of the form \801000_[name]\00[instance]
-  cls_rgw_obj_key key(name); // includes name, instance, and namespace, latter two empty
-  std::string first_instance_idx;
-  encode_olh_data_key(key, &first_instance_idx);
-
-  std::string start_after_key;
-  if (!name.empty()) {
-    start_after_key = first_instance_idx;
-  } else {
-    start_after_key = BI_PREFIX_CHAR;
-    start_after_key.append(bucket_index_prefixes[BI_BUCKET_OLH_DATA_INDEX]);
-  }
-
-  // if a name was provided then it will be used to filter index
-  // entries; otherwise will filter my the olh prefix
-  std::string filter = start_after_key;
-
-  start_after_key = std::max(start_after_key, marker);
-
-  int count = 0;
-  std::map<std::string, bufferlist> keys;
-  int ret;
-  bufferlist k;
-  ret = cls_cxx_map_get_val(hctx, start_after_key, &k);
-  if (ret < 0 && ret != -ENOENT) {
-    return ret;
-  }
-    // we need to include the exact match if a filter (name) is
-   // specified and the marker has not yet advanced (i.e., been set)
-  bool found_first = (ret == 0) && (start_after_key != marker);
-  if (found_first) {
-    --max;
-  }
-  if (max > 0) {
-    ret = cls_cxx_map_get_vals(hctx, start_after_key, string(), max,
-			       &keys, pmore);
-    CLS_LOG(20, "%s: start_after_key=\"%s\", first_instance_idx=\"%s\", "
-	    "keys.size()=%d",
-	    __func__, escape_str(start_after_key).c_str(),
-	    escape_str(first_instance_idx).c_str(), (int)keys.size());
-    if (ret < 0) {
-      return ret;
-    }
-  }
-  if (found_first) {
-    keys[start_after_key] = std::move(k);
-  }
-
-  for (auto iter = keys.begin(); iter != keys.end(); ++iter) {
-    rgw_cls_bi_entry entry;
-    entry.type = BIIndexType::OLH;
-    entry.idx = iter->first;
-    entry.data = iter->second;
-
-    // check if we're past the range of the prefix filter and if so,
-    // we're done
-    if (!filter.empty() && entry.idx.compare(0, filter.size(), filter) != 0) {
-      if (pmore) {
-	*pmore = false;
-      }
-      return count;
-    }
-
-    CLS_LOG(20, "%s: entry.idx=\"%s\"",
-	    __func__, escape_str(entry.idx).c_str());
-
-    auto biter = entry.data.cbegin();
-
-    rgw_bucket_olh_entry e;
-    try {
-      decode(e, biter);
-    } catch (ceph::buffer::error& err) {
-      CLS_LOG(0, "ERROR: %s: failed to decode buffer (size=%d)",
-	      __func__, entry.data.length());
-      return -EIO;
-    }
-
-    if (!name.empty() && e.key.name != name) {
-      /* we are skipping the rest of the entries */
-      if (pmore) {
-	*pmore = false;
-      }
-      return count;
-    }
-
-    entries->push_back(entry);
-    count++;
-    start_after_key = entry.idx;
-  }
-
-  return count;
-} // list_olh_entries
-
+template <typename EntriesT>
 static int reshard_log_list_entries(cls_method_context_t hctx, const string& marker,
-                                    uint32_t max, list<rgw_cls_bi_entry>& entries, bool *truncated)
+                                    uint32_t max, EntriesT& entries, bool *truncated)
 {
   string start_key, end_key;
   start_key = BI_PREFIX_CHAR;
@@ -3530,6 +3467,7 @@ static int reshard_log_list_entries(cls_method_context_t hctx, const string& mar
     return ret;
   }
 
+  ::ceph::util::maybe_reserve(entries, entries.size() + keys.size());
   map<string, bufferlist>::iterator iter;
   for (iter = keys.begin(); iter != keys.end(); ++iter) {
     if (iter->first.compare(end_key) >= 0) {
@@ -3539,7 +3477,7 @@ static int reshard_log_list_entries(cls_method_context_t hctx, const string& mar
       return 0;
     }
 
-    rgw_cls_bi_entry entry;
+    typename EntriesT::value_type entry;
     auto biter = iter->second.cbegin();
     try {
       decode(entry, biter);
@@ -3553,7 +3491,7 @@ static int reshard_log_list_entries(cls_method_context_t hctx, const string& mar
 
     CLS_LOG(20, "reshard_log_list_entries key=%s bl.length=%d\n", entry.idx.c_str(), (int)iter->second.length());
 
-    entries.push_back(entry);
+    entries.push_back(std::move(entry));
   }
   return 0;
 }
@@ -3566,7 +3504,7 @@ static int check_index(cls_method_context_t hctx,
   calc_header->ver = existing_header.ver;
   calc_header->syncstopped = existing_header.syncstopped;
 
-  std::list<rgw_cls_bi_entry> entries;
+  std::vector<rgw_cls_bi_entry> entries;
   string start_obj;
   string filter_prefix;
 
@@ -3603,7 +3541,8 @@ static int check_index(cls_method_context_t hctx,
 
   start_obj = "";
   do {
-    int rc = list_instance_entries(hctx, filter_prefix, start_obj, CHECK_CHUNK_SIZE, &entries, &more);
+    int rc = list_special_entries<BIIndexType::Instance>(hctx, filter_prefix, start_obj,
+                                                        CHECK_CHUNK_SIZE, &entries, &more);
     if (rc < 0) {
       return rc;
     }
@@ -3661,7 +3600,7 @@ int rgw_bucket_rebuild_index(cls_method_context_t hctx, bufferlist *in, bufferli
 int rgw_bucket_check_index(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(10, "entered %s", __func__);
-  rgw_cls_check_index_ret ret;
+  ::cls::rgw::bucket_datum::check_reply ret;
   int rc = read_bucket_header(hctx, &ret.existing_header);
   if (rc < 0) {
     CLS_LOG(1, "ERROR: check_index(): failed to read header\n");
@@ -3682,8 +3621,8 @@ int rgw_bucket_check_index(cls_method_context_t hctx, bufferlist *in, bufferlist
  * or list all the entries in reshardlog namespace.
  *
  * It may not be obvious why this function calls three other "segment"
- * functions (list_plain_entries (twice), list_instance_entries,
- * list_olh_entries) that each list segments of the index space rather
+ * functions (list_plain_entries (twice), list_special_entries for
+ * instance and OLH records) that each list segments of the index space rather
  * than just move a marker through the space from start to end. The
  * reason is that a name filter may be provided in the op, and in that
  * case most entries will be skipped over, and small segments within
@@ -3703,10 +3642,10 @@ int rgw_bucket_check_index(cls_method_context_t hctx, bufferlist *in, bufferlist
 static int rgw_bi_list_op(cls_method_context_t hctx,
 			  bufferlist* in,
 			  bufferlist* out)
-{
+try {
   CLS_LOG(10, "entered %s", __func__);
   // decode request
-  rgw_cls_bi_list_op op;
+  ::cls::rgw::bi_datum::request op;
   auto iter = in->cbegin();
   try {
     decode(op, iter);
@@ -3725,7 +3664,7 @@ static int rgw_bi_list_op(cls_method_context_t hctx,
 	  op.max, max, op.reshardlog);
 
   int ret;
-  rgw_cls_bi_list_ret op_ret;
+  ::cls::rgw::bi_datum::reply op_ret;
 
   if (op.reshardlog) {
     ret = reshard_log_list_entries(hctx, op.marker, max,
@@ -3736,7 +3675,7 @@ static int rgw_bi_list_op(cls_method_context_t hctx,
     }
     CLS_LOG(20, "%s: returning %lu entries, is_truncated=%d",
 	    __func__, op_ret.entries.size(), op_ret.is_truncated);
-    encode(op_ret, *out);
+    encode(op.format, op_ret, *out);
     return 0;
   }
 
@@ -3758,7 +3697,7 @@ static int rgw_bi_list_op(cls_method_context_t hctx,
 	  __func__, ret, count);
 
   if (!more) {
-    ret = list_instance_entries(hctx, op.name_filter, op.marker,
+    ret = list_special_entries<BIIndexType::Instance>(hctx, op.name_filter, op.marker,
 				max - count, &op_ret.entries, &more);
     if (ret < 0) {
       CLS_LOG(0, "ERROR: %s: list_instance_entries returned ret=%d",
@@ -3772,7 +3711,7 @@ static int rgw_bi_list_op(cls_method_context_t hctx,
   }
 
   if (!more) {
-    ret = list_olh_entries(hctx, op.name_filter, op.marker, max - count,
+    ret = list_special_entries<BIIndexType::OLH>(hctx, op.name_filter, op.marker, max - count,
 			   &op_ret.entries, &more);
     if (ret < 0) {
       CLS_LOG(0, "ERROR: %s: list_olh_entries returned ret=%d",
@@ -3809,9 +3748,13 @@ static int rgw_bi_list_op(cls_method_context_t hctx,
 
   CLS_LOG(20, "%s: returning %lu entries, is_truncated=%d",
 	  __func__, op_ret.entries.size(), op_ret.is_truncated);
-  encode(op_ret, *out);
+  encode(op.format, op_ret, *out);
 
   return 0;
+} catch (const std::bad_alloc&) {
+  return -ENOMEM;
+} catch (const std::exception&) {
+  return -EIO;
 } // rgw_bi_list_op
 
 
@@ -3828,14 +3771,14 @@ int bi_log_record_decode(bufferlist& bl, rgw_bi_log_entry& e)
 }
 
 
+template <typename EntriesT>
 static int bi_log_iterate_entries(cls_method_context_t hctx,
 				  const string& marker,
 				  const string& end_marker,
 				  string& key_iter,
 				  uint32_t max_entries,
 				  bool *truncated,
-				  int (*cb)(cls_method_context_t, const string&, rgw_bi_log_entry&, void *),
-				  void *param)
+                                  EntriesT& entries)
 {
   CLS_LOG(10, "bi_log_iterate_range");
 
@@ -3901,9 +3844,13 @@ static int bi_log_iterate_entries(cls_method_context_t hctx,
     if (ret < 0)
       return ret;
 
-    ret = cb(hctx, key, e, param);
-    if (ret < 0)
-      return ret;
+    if constexpr (requires { entries.reserve(keys.size()); }) {
+      if (entries.empty()) {
+        entries.reserve(keys.size());
+      }
+    }
+    // The decoded entry has no further use in this iteration.
+    entries.push_back(std::move(e));
 
     if (i == num_keys - 1) {
       key_iter = key;
@@ -3913,21 +3860,14 @@ static int bi_log_iterate_entries(cls_method_context_t hctx,
   return 0;
 }
 
-static int bi_log_list_cb(cls_method_context_t hctx, const string& key, rgw_bi_log_entry& info, void *param)
-{
-  list<rgw_bi_log_entry> *l = (list<rgw_bi_log_entry> *)param;
-  l->push_back(info);
-  return 0;
-}
-
+template <typename EntriesT>
 static int bi_log_list_entries(cls_method_context_t hctx, const string& marker,
-			   uint32_t max, list<rgw_bi_log_entry>& entries, bool *truncated)
+			   uint32_t max, EntriesT& entries, bool *truncated)
 {
   string key_iter;
   string end_marker;
   int ret = bi_log_iterate_entries(hctx, marker, end_marker,
-                              key_iter, max, truncated,
-                              bi_log_list_cb, &entries);
+                              key_iter, max, truncated, entries);
   return ret;
 }
 
@@ -3936,7 +3876,7 @@ static int rgw_bi_log_list(cls_method_context_t hctx, bufferlist *in, bufferlist
   CLS_LOG(10, "entered %s", __func__);
   auto in_iter = in->cbegin();
 
-  cls_rgw_bi_log_list_op op;
+  ::cls::rgw::bilog_datum::list_request op;
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -3944,7 +3884,7 @@ static int rgw_bi_log_list(cls_method_context_t hctx, bufferlist *in, bufferlist
     return -EINVAL;
   }
 
-  cls_rgw_bi_log_list_ret op_ret;
+  ::cls::rgw::bilog_datum::reply op_ret;
   int ret = bi_log_list_entries(hctx, op.marker, op.max, op_ret.entries, &op_ret.truncated);
   if (ret < 0)
     return ret;
@@ -3959,7 +3899,7 @@ static int rgw_bi_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlist
   CLS_LOG(10, "entered %s", __func__);
   auto in_iter = in->cbegin();
 
-  cls_rgw_bi_log_trim_op op;
+  ::cls::rgw::bilog_datum::trim_request op;
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -4183,7 +4123,7 @@ static void usage_record_name_by_user(const string& user, uint64_t epoch, const 
   }
 }
 
-static int usage_record_decode(bufferlist& record_bl, rgw_usage_log_entry& e)
+static int usage_record_decode(const bufferlist& record_bl, rgw_usage_log_entry& e)
 {
   auto kiter = record_bl.cbegin();
   try {
@@ -4201,7 +4141,7 @@ static int rgw_user_usage_log_add(cls_method_context_t hctx, bufferlist *in, buf
   CLS_LOG(10, "entered %s", __func__);
 
   auto in_iter = in->cbegin();
-  rgw_cls_usage_log_add_op op;
+  ::cls::rgw::usage_datum::add_request op;
 
   try {
     decode(op, in_iter);
@@ -4213,7 +4153,7 @@ static int rgw_user_usage_log_add(cls_method_context_t hctx, bufferlist *in, buf
   const ConfigProxy& conf = cls_get_config(hctx);
   const bool key_transition = conf->rgw_usage_log_key_transition;
 
-  rgw_usage_log_info& info = op.info;
+  auto& info = op.info;
 
   for (auto iter = info.entries.begin(); iter != info.entries.end(); ++iter) {
     rgw_usage_log_entry& entry = *iter;
@@ -4281,7 +4221,7 @@ static int usage_handle_range(cls_method_context_t hctx, uint64_t start_epoch, u
 
   truncated = truncated_status;
 
-  for (auto log : usage_logs) {
+  for (const auto& log : usage_logs) {
     const string& key = log.first;
     rgw_usage_log_entry e;
 
@@ -4437,7 +4377,7 @@ int rgw_user_usage_log_read(cls_method_context_t hctx, bufferlist *in, bufferlis
   CLS_LOG(10, "entered %s", __func__);
 
   auto in_iter = in->cbegin();
-  rgw_cls_usage_log_read_op op;
+  ::cls::rgw::usage_datum::read_request op;
 
   try {
     decode(op, in_iter);
@@ -4446,7 +4386,7 @@ int rgw_user_usage_log_read(cls_method_context_t hctx, bufferlist *in, bufferlis
     return -EINVAL;
   }
 
-  rgw_cls_usage_log_read_ret ret_info;
+  ::cls::rgw::usage_datum::reply ret_info;
   map<rgw_user_bucket, rgw_usage_log_entry> *usage = &ret_info.usage;
   string iter = op.iter;
 #define MAX_ENTRIES 1000
@@ -4507,7 +4447,7 @@ int rgw_user_usage_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlis
     return ret;
 
   auto in_iter = in->cbegin();
-  rgw_cls_usage_log_trim_op op;
+  ::cls::rgw::usage_datum::trim_request op;
 
   try {
     decode(op, in_iter);
@@ -4554,7 +4494,7 @@ int rgw_usage_log_clear(cls_method_context_t hctx, bufferlist *in, bufferlist *o
  *
  * Since key-value data is listed in lexical order by keys, generally
  * the name entries are retrieved first and then the time entries.
- * When listing the entries via `gc_iterate_entries` one parameter is
+ * When listing the entries via `gc_list_entries` one parameter is
  * a marker, and if we were to pass "1_" (i.e.,
  * gc_index_prefixes[GC_OBJ_TIME_INDEX]), the listing would skip over
  * the 'name' entries and begin with the 'time' entries.
@@ -4697,7 +4637,7 @@ static int rgw_cls_gc_set_entry(cls_method_context_t hctx, bufferlist *in, buffe
   CLS_LOG(10, "entered %s", __func__);
   auto in_iter = in->cbegin();
 
-  cls_rgw_gc_set_entry_op op;
+  ::cls::rgw::gc_datum::set_request op;
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -4713,7 +4653,7 @@ static int rgw_cls_gc_defer_entry(cls_method_context_t hctx, bufferlist *in, buf
   CLS_LOG(10, "entered %s", __func__);
   auto in_iter = in->cbegin();
 
-  cls_rgw_gc_defer_entry_op op;
+  ::cls::rgw::gc_datum::defer_request op;
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -4724,18 +4664,12 @@ static int rgw_cls_gc_defer_entry(cls_method_context_t hctx, bufferlist *in, buf
   return gc_defer_entry(hctx, op.tag, op.expiration_secs);
 }
 
-static int gc_iterate_entries(cls_method_context_t hctx,
-			      const string& marker,
-			      bool expired_only,
-                              string& out_marker,
-			      uint32_t max_entries,
-			      bool *truncated,
-                              int (*cb)(cls_method_context_t,
-					const string&,
-					cls_rgw_gc_obj_info&,
-					void *),
-                              void *param)
+template <typename EntriesT>
+static int gc_list_entries(cls_method_context_t hctx, const string& marker,
+                            uint32_t max_entries, bool expired_only,
+                            EntriesT& entries, bool *truncated, string& out_marker)
 {
+  static_assert(std::is_nothrow_move_constructible_v<cls_rgw_gc_obj_info>);
   CLS_LOG(10, "gc_iterate_entries");
 
   map<string, bufferlist> keys;
@@ -4798,9 +4732,7 @@ static int gc_iterate_entries(cls_method_context_t hctx,
     if (ret < 0)
       return ret;
 
-    ret = cb(hctx, key, e, param);
-    if (ret < 0)
-      return ret;
+    entries.push_back(std::move(e));
     last_key = &(iter->first); // update when callback successful
   }
 
@@ -4814,29 +4746,12 @@ static int gc_iterate_entries(cls_method_context_t hctx,
   return 0;
 }
 
-static int gc_list_cb(cls_method_context_t hctx, const string& key, cls_rgw_gc_obj_info& info, void *param)
-{
-  list<cls_rgw_gc_obj_info> *l = (list<cls_rgw_gc_obj_info> *)param;
-  l->push_back(info);
-  return 0;
-}
-
-static int gc_list_entries(cls_method_context_t hctx, const string& marker,
-			   uint32_t max, bool expired_only,
-                           list<cls_rgw_gc_obj_info>& entries, bool *truncated, string& next_marker)
-{
-  int ret = gc_iterate_entries(hctx, marker, expired_only,
-                              next_marker, max, truncated,
-                              gc_list_cb, &entries);
-  return ret;
-}
-
 static int rgw_cls_gc_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(10, "entered %s", __func__);
   auto in_iter = in->cbegin();
 
-  cls_rgw_gc_list_op op;
+  ::cls::rgw::gc_datum::list_request op;
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -4844,7 +4759,7 @@ static int rgw_cls_gc_list(cls_method_context_t hctx, bufferlist *in, bufferlist
     return -EINVAL;
   }
 
-  cls_rgw_gc_list_ret op_ret;
+  ::cls::rgw::gc_datum::reply op_ret;
 #define GC_LIST_ENTRIES_DEFAULT 128
   int ret = gc_list_entries(hctx, op.marker, (op.max ? op.max : GC_LIST_ENTRIES_DEFAULT), op.expired_only,
    op_ret.entries, &op_ret.truncated, op_ret.next_marker);
@@ -4892,7 +4807,7 @@ static int rgw_cls_gc_remove(cls_method_context_t hctx, bufferlist *in, bufferli
   CLS_LOG(10, "entered %s", __func__);
   auto in_iter = in->cbegin();
 
-  cls_rgw_gc_remove_op op;
+  ::cls::rgw::gc_datum::remove_request op;
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -4908,7 +4823,7 @@ static int rgw_cls_lc_get_entry(cls_method_context_t hctx, bufferlist *in, buffe
   CLS_LOG(10, "entered %s", __func__);
   auto in_iter = in->cbegin();
 
-  cls_rgw_lc_get_entry_op op;
+  ::cls::rgw::lc_datum::marker_request op;
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -4921,7 +4836,7 @@ static int rgw_cls_lc_get_entry(cls_method_context_t hctx, bufferlist *in, buffe
   if (ret < 0)
     return ret;
 
-  cls_rgw_lc_get_entry_ret op_ret(std::move(lc_entry));
+  ::cls::rgw::lc_datum::entry_message op_ret {std::move(lc_entry)};
   encode(op_ret, *out);
   return 0;
 }
@@ -4932,7 +4847,7 @@ static int rgw_cls_lc_set_entry(cls_method_context_t hctx, bufferlist *in, buffe
   CLS_LOG(10, "entered %s", __func__);
   auto in_iter = in->cbegin();
 
-  cls_rgw_lc_set_entry_op op;
+  ::cls::rgw::lc_datum::entry_message op;
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -4952,7 +4867,7 @@ static int rgw_cls_lc_rm_entry(cls_method_context_t hctx, bufferlist *in, buffer
   CLS_LOG(10, "entered %s", __func__);
   auto in_iter = in->cbegin();
 
-  cls_rgw_lc_rm_entry_op op;
+  ::cls::rgw::lc_datum::entry_message op;
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -4968,8 +4883,8 @@ static int rgw_cls_lc_get_next_entry(cls_method_context_t hctx, bufferlist *in, 
 {
   CLS_LOG(10, "entered %s", __func__);
   auto in_iter = in->cbegin();
-  cls_rgw_lc_get_next_entry_ret op_ret;
-  cls_rgw_lc_get_next_entry_op op;
+  ::cls::rgw::lc_datum::entry_message op_ret;
+  ::cls::rgw::lc_datum::marker_request op;
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -4994,7 +4909,7 @@ static int rgw_cls_lc_get_next_entry(cls_method_context_t hctx, bufferlist *in, 
       return -EIO;
     }
   }
-  op_ret.entry = entry;
+  op_ret.entry = std::move(entry);
   encode(op_ret, *out);
   return 0;
 }
@@ -5003,7 +4918,7 @@ static int rgw_cls_lc_list_entries(cls_method_context_t hctx, bufferlist *in,
 				   bufferlist *out)
 {
   CLS_LOG(10, "entered %s", __func__);
-  cls_rgw_lc_list_entries_op op;
+  ::cls::rgw::lc_datum::list_request op;
   auto in_iter = in->cbegin();
   try {
     decode(op, in_iter);
@@ -5012,13 +4927,14 @@ static int rgw_cls_lc_list_entries(cls_method_context_t hctx, bufferlist *in,
     return -EINVAL;
   }
 
-  cls_rgw_lc_list_entries_ret op_ret(op.compat_v);
+  ::cls::rgw::lc_datum::list_reply op_ret {.compat_v = op.compat_v};
   map<string, bufferlist> vals;
   string filter_prefix;
   int ret = cls_cxx_map_get_vals(hctx, op.marker, filter_prefix, op.max_entries,
 				 &vals, &op_ret.is_truncated);
   if (ret < 0)
     return ret;
+  op_ret.entries.reserve(vals.size());
   for (auto it = vals.begin(); it != vals.end(); ++it) {
     cls_rgw_lc_entry entry;
     auto iter = it->second.cbegin();
@@ -5037,7 +4953,7 @@ static int rgw_cls_lc_list_entries(cls_method_context_t hctx, bufferlist *in,
 	return -EIO;
       }
     }
-   op_ret.entries.push_back(entry);
+   op_ret.entries.push_back(std::move(entry));
   }
   encode(op_ret, *out);
   return 0;
@@ -5048,7 +4964,7 @@ static int rgw_cls_lc_put_head(cls_method_context_t hctx, bufferlist *in, buffer
   CLS_LOG(10, "entered %s", __func__);
   auto in_iter = in->cbegin();
 
-  cls_rgw_lc_put_head_op op;
+  ::cls::rgw::lc_datum::head_message op;
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -5082,8 +4998,8 @@ static int rgw_cls_lc_get_head(cls_method_context_t hctx, bufferlist *in,  buffe
     head.start_date = 0;
     head.marker.clear();
   }
-  cls_rgw_lc_get_head_ret op_ret;
-  op_ret.head = head;
+  ::cls::rgw::lc_datum::head_message op_ret;
+  op_ret.head = std::move(head);
   encode(op_ret, *out);
   return 0;
 }
@@ -5091,7 +5007,7 @@ static int rgw_cls_lc_get_head(cls_method_context_t hctx, bufferlist *in,  buffe
 static int rgw_mp_upload_part_info_update(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(10, "entered %s", __func__);
-  cls_rgw_mp_upload_part_info_update_op op;
+  ::cls::rgw::multipart_datum::update_request op;
   auto in_iter = in->cbegin();
   try {
     decode(op, in_iter);
@@ -5136,7 +5052,7 @@ static int rgw_reshard_add(cls_method_context_t hctx, bufferlist *in, bufferlist
   CLS_LOG(10, "entered %s", __func__);
   auto in_iter = in->cbegin();
 
-  cls_rgw_reshard_add_op op;
+  ::cls::rgw::reshard_datum::add_request op;
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -5178,7 +5094,7 @@ static int rgw_reshard_add(cls_method_context_t hctx, bufferlist *in, bufferlist
 static int rgw_reshard_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(10, "entered %s", __func__);
-  cls_rgw_reshard_list_op op;
+  ::cls::rgw::reshard_datum::list_request op;
   auto in_iter = in->cbegin();
   try {
     decode(op, in_iter);
@@ -5186,7 +5102,7 @@ static int rgw_reshard_list(cls_method_context_t hctx, bufferlist *in, bufferlis
     CLS_LOG(1, "ERROR: rgw_cls_reshard_list(): failed to decode entry\n");
     return -EINVAL;
   }
-  cls_rgw_reshard_list_ret op_ret;
+  ::cls::rgw::reshard_datum::reply op_ret;
   map<string, bufferlist> vals;
   string filter_prefix;
 #define MAX_RESHARD_LIST_ENTRIES 1000
@@ -5195,9 +5111,12 @@ static int rgw_reshard_list(cls_method_context_t hctx, bufferlist *in, bufferlis
   int ret = cls_cxx_map_get_vals(hctx, op.marker, filter_prefix, max, &vals, &op_ret.is_truncated);
   if (ret < 0)
     return ret;
-  cls_rgw_reshard_entry entry;
+  if (0 < static_cast<int>(op.max)) {
+    op_ret.entries.reserve(vals.size());
+  }
   int i = 0;
   for (auto it = vals.begin(); i < (int)op.max && it != vals.end(); ++it, ++i) {
+    auto& entry = op_ret.entries.emplace_back();
     auto iter = it->second.cbegin();
     try {
       decode(entry, iter);
@@ -5205,7 +5124,6 @@ static int rgw_reshard_list(cls_method_context_t hctx, bufferlist *in, bufferlis
       CLS_LOG(1, "ERROR: rgw_cls_reshard_list(): failed to decode entry\n");
       return -EIO;
    }
-    op_ret.entries.push_back(entry);
   }
   encode(op_ret, *out);
   return 0;
@@ -5216,7 +5134,7 @@ static int rgw_reshard_get(cls_method_context_t hctx, bufferlist *in,  bufferlis
   CLS_LOG(10, "entered %s", __func__);
   auto in_iter = in->cbegin();
 
-  cls_rgw_reshard_get_op op;
+  ::cls::rgw::reshard_datum::entry_message op;
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -5232,8 +5150,8 @@ static int rgw_reshard_get(cls_method_context_t hctx, bufferlist *in,  bufferlis
     return ret;
   }
 
-  cls_rgw_reshard_get_ret op_ret;
-  op_ret.entry = entry;
+  ::cls::rgw::reshard_datum::entry_message op_ret;
+  op_ret.entry = std::move(entry);
   encode(op_ret, *out);
   return 0;
 }
@@ -5243,7 +5161,7 @@ static int rgw_reshard_remove(cls_method_context_t hctx, bufferlist *in, bufferl
   CLS_LOG(10, "entered %s", __func__);
   auto in_iter = in->cbegin();
 
-  cls_rgw_reshard_remove_op op;
+  ::cls::rgw::reshard_datum::remove_request op;
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -5275,7 +5193,7 @@ static int rgw_reshard_remove(cls_method_context_t hctx, bufferlist *in, bufferl
 static int rgw_set_bucket_resharding(cls_method_context_t hctx, bufferlist *in,  bufferlist *out)
 {
   CLS_LOG(10, "entered %s", __func__);
-  cls_rgw_set_bucket_resharding_op op;
+  ::cls::rgw::reshard_datum::instance_message op;
 
   auto in_iter = in->cbegin();
   try {
@@ -5300,7 +5218,7 @@ static int rgw_set_bucket_resharding(cls_method_context_t hctx, bufferlist *in, 
 static int rgw_clear_bucket_resharding(cls_method_context_t hctx, bufferlist *in,  bufferlist *out)
 {
   CLS_LOG(10, "entered %s", __func__);
-  cls_rgw_clear_bucket_resharding_op op;
+  ::cls::rgw::reshard_datum::empty_request op;
 
   auto in_iter = in->cbegin();
   try {
@@ -5325,7 +5243,7 @@ static int rgw_guard_bucket_resharding(cls_method_context_t hctx, bufferlist *in
 {
   CLS_LOG(10, "entered %s", __func__);
 
-  cls_rgw_guard_bucket_resharding_op op;
+  ::cls::rgw::reshard_datum::guard_request op;
   try {
     auto in_iter = in->cbegin();
     decode(op, in_iter);
@@ -5348,7 +5266,7 @@ static int rgw_get_bucket_resharding(cls_method_context_t hctx,
 				     bufferlist *in, bufferlist *out)
 {
   CLS_LOG(10, "entered %s", __func__);
-  cls_rgw_get_bucket_resharding_op op;
+  ::cls::rgw::reshard_datum::empty_request op;
 
   auto in_iter = in->cbegin();
   try {
@@ -5365,8 +5283,8 @@ static int rgw_get_bucket_resharding(cls_method_context_t hctx,
     return rc;
   }
 
-  cls_rgw_get_bucket_resharding_ret op_ret;
-  op_ret.new_instance = header.new_instance;
+  ::cls::rgw::reshard_datum::instance_message op_ret;
+  op_ret.entry = header.new_instance;
 
   encode(op_ret, *out);
 

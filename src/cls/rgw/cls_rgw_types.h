@@ -522,7 +522,13 @@ struct rgw_cls_bi_entry {
 };
 WRITE_CLASS_ENCODER(rgw_cls_bi_entry)
 
-enum OLHLogOp {
+// Interpret an opaque BI payload without requiring an owning BI record.
+bool cls_rgw_get_bi_entry_info(BIIndexType type, const ::ceph::buffer::list& data,
+                               cls_rgw_obj_key *key, RGWObjCategory *category,
+                               rgw_bucket_category_stats *accounted_stats);
+
+// Preserve the native 32-bit layout and admit every uint8 wire action.
+enum OLHLogOp : uint32_t {
   CLS_RGW_OLH_OP_UNKNOWN         = 0,
   // link OLH entry to a specific object version
   CLS_RGW_OLH_OP_LINK_OLH        = 1,
@@ -1046,7 +1052,7 @@ struct rgw_usage_log_entry {
 
    void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(4, bl);
-    std::string s;
+    std::string s CEPH_INDETERMINATE;
     decode(s, bl);
     owner.from_str(s);
     decode(bucket, bl);
@@ -1061,7 +1067,7 @@ struct rgw_usage_log_entry {
       decode(usage_map, bl);
     }
     if (struct_v >= 3) {
-      std::string p;
+      std::string p CEPH_INDETERMINATE;
       decode(p, bl);
       payer.from_str(p);
     }
@@ -1381,9 +1387,13 @@ struct cls_rgw_lc_entry {
     : start_time(0), status(0) {}
 
   cls_rgw_lc_entry(const cls_rgw_lc_entry& rhs) = default;
+  cls_rgw_lc_entry(cls_rgw_lc_entry&&) = default;
 
   cls_rgw_lc_entry(const std::string& b, uint64_t t, uint32_t s)
     : bucket(b), start_time(t), status(s) {};
+
+  cls_rgw_lc_entry& operator=(const cls_rgw_lc_entry&) = default;
+  cls_rgw_lc_entry& operator=(cls_rgw_lc_entry&&) = default;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);

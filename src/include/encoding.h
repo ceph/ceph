@@ -121,7 +121,7 @@ inline void encode(const bool &v, bufferlist& bl) {
   encode_raw(vv, bl);
 }
 inline void decode(bool &v, bufferlist::const_iterator& p) {
-  __u8 vv;
+  __u8 vv CEPH_INDETERMINATE;
   decode_raw(vv, p);
   v = vv;
 }
@@ -132,12 +132,12 @@ inline void decode(bool &v, bufferlist::const_iterator& p) {
 
 #define WRITE_INTTYPE_ENCODER(type, etype)				\
   inline void encode(type v, ::ceph::bufferlist& bl, uint64_t features=0) { \
-    ceph_##etype e;					                \
+    ceph_##etype e CEPH_INDETERMINATE;			        \
     e = v;                                                              \
     ::ceph::encode_raw(e, bl);						\
   }									\
   inline void decode(type &v, ::ceph::bufferlist::const_iterator& p) {	\
-    ceph_##etype e;							\
+    ceph_##etype e CEPH_INDETERMINATE;				\
     ::ceph::decode_raw(e, p);						\
     v = e;								\
   }
@@ -167,12 +167,12 @@ WRITE_INTTYPE_ENCODER(int16_t, le16)
   static_assert(std::numeric_limits<type>::is_iec559,			\
 	      "floating-point type not using IEEE754 format");		\
   inline void encode(type v, ::ceph::bufferlist& bl, uint64_t features=0) { \
-    ceph_##etype e;							\
+    ceph_##etype e CEPH_INDETERMINATE;				\
     e = std::bit_cast<itype>(v);					\
     ::ceph::encode_raw(e, bl);						\
   }									\
   inline void decode(type &v, ::ceph::bufferlist::const_iterator& p) {	\
-    ceph_##etype e;							\
+    ceph_##etype e CEPH_INDETERMINATE;				\
     ::ceph::decode_raw(e, p);						\
     itype raw = e;							\
     v = std::bit_cast<type>(raw);					\
@@ -240,7 +240,7 @@ inline void encode_assign(const auto& t, ::ceph::bufferlist& bl, uint64_t featur
 template<typename Int>
 inline void decode_assign(auto& t, ::ceph::bufferlist::const_iterator& p)
 {
-  Int i;
+  Int i CEPH_INDETERMINATE;
   ::decode(i, p);
   t = static_cast<std::remove_reference_t<decltype(t)>>(i);
 }
@@ -255,7 +255,7 @@ inline void encode_count(size_t n, bufferlist& bl)
 
 inline __u32 decode_count(bufferlist::const_iterator& p)
 {
-  __u32 n;
+  __u32 n CEPH_INDETERMINATE;
   decode(n, p);
   return n;
 }
@@ -1506,7 +1506,7 @@ inline void decode(T &o, const bufferlist& bl)
 #define ENCODE_START(v, compat, bl)			     \
   __u8 struct_v = v;                                         \
   __u8 struct_compat = compat;		                     \
-  ceph_le32 struct_len;				             \
+  ceph_le32 struct_len CEPH_INDETERMINATE;		     \
   auto filler = (bl).append_hole(			     \
     ::ceph::encoding_detail::struct_header_len());	     \
   const auto starting_bl_len = (bl).length();		     \
@@ -1616,7 +1616,7 @@ unsigned decode_legacy_struct_start(__u8 code_v, VersionT& struct_v,
   decode(struct_v, bl);
 
   if (compat_v <= struct_v) {
-    __u8 struct_compat;
+    __u8 struct_compat CEPH_INDETERMINATE;
     decode(struct_compat, bl);
     check_decode_compat(code_v, struct_v, struct_compat, func);
   }
@@ -1633,7 +1633,7 @@ unsigned decode_legacy_struct_start(__u8 code_v, VersionT& struct_v,
     return 0;
   }
 
-  __u32 struct_len;
+  __u32 struct_len CEPH_INDETERMINATE;
   decode(struct_len, bl);
   return checked_struct_end(bl, struct_len, func);
 }
@@ -1713,17 +1713,17 @@ void decode_unknown(PayloadT& payload, IteratorT& bl, const char *func)
  * @param bl bufferlist::iterator for the encoded data
  */
 #define DECODE_START(_v, bl)						\
-  StructVChecker<_v> struct_v;						\
-  __u8 struct_compat;							\
-  __u32 struct_len;							\
+  StructVChecker<_v> struct_v CEPH_INDETERMINATE;			\
+  __u8 struct_compat CEPH_INDETERMINATE;				\
+  __u32 struct_len CEPH_INDETERMINATE;				\
   using ::ceph::decode;							\
   unsigned struct_end = ::ceph::encoding_detail::decode_struct_start( \
     _v, struct_v.v, struct_compat, struct_len, bl, __PRETTY_FUNCTION__); \
   do {
 
 #define DECODE_START_UNCHECKED(v, bl)					\
-  __u8 struct_v, struct_compat;						\
-  __u32 struct_len;							\
+  __u8 struct_v CEPH_INDETERMINATE, struct_compat CEPH_INDETERMINATE; \
+  __u32 struct_len CEPH_INDETERMINATE;				\
   using ::ceph::decode;							\
   unsigned struct_end = ::ceph::encoding_detail::decode_struct_start( \
     v, struct_v, struct_compat, struct_len, bl, __PRETTY_FUNCTION__); \
@@ -1739,7 +1739,7 @@ void decode_unknown(PayloadT& payload, IteratorT& bl, const char *func)
  * local struct_v type. Keep shared behavior in decode_legacy_struct_start(). */
 #define __DECODE_START_LEGACY_COMPAT_LEN(_v, compatv, lenv, skip_v, bl)	\
   using ::ceph::decode;							\
-  StructVChecker<_v> struct_v;						\
+  StructVChecker<_v> struct_v CEPH_INDETERMINATE;			\
   unsigned struct_end = ::ceph::encoding_detail::decode_legacy_struct_start( \
     _v, struct_v.v, compatv, lenv, skip_v, bl, __PRETTY_FUNCTION__);	\
   do {
@@ -1761,7 +1761,7 @@ void decode_unknown(PayloadT& payload, IteratorT& bl, const char *func)
 
 #define DECODE_START_LEGACY_COMPAT_LEN(v, compatv, lenv, bl)		\
   using ::ceph::decode;							\
-  __u8 struct_v;							\
+  __u8 struct_v CEPH_INDETERMINATE;					\
   unsigned struct_end = ::ceph::encoding_detail::decode_legacy_struct_start( \
     v, struct_v, compatv, lenv, 0, bl, __PRETTY_FUNCTION__);		\
   do {

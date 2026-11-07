@@ -1062,6 +1062,53 @@ TEST(EncodingCompatibility, FloatingPointWireFormat)
                            uint64_t { 0x7ff8000000000001 });
 }
 
+TEST(EncodingCompatibility, ScalarDecodePreservesDestinationOnTruncation)
+{
+  const auto check = []<typename T>(const T value, const T previous) {
+    ::ceph::buffer::list encoded;
+    ::ceph::encode(value, encoded);
+
+    // Exercise both contiguous input and scalar fields split across buffers.
+    ::ceph::buffer::list fragmented;
+    for (const char byte : encoded.to_str()) {
+      fragmented.append(::ceph::buffer::copy(&byte, 1));
+    }
+    const auto verify = [&](const auto decode) {
+      for (const auto *input : {&encoded, &fragmented}) {
+        T destination = previous;
+        auto cursor = input->cbegin();
+        decode(destination, cursor);
+        EXPECT_EQ(value, destination);
+        EXPECT_TRUE(cursor.end());
+
+        for (unsigned size = 0; size < input->length(); ++size) {
+          ::ceph::buffer::list prefix;
+          prefix.substr_of(*input, 0, size);
+          cursor = prefix.cbegin();
+          destination = previous;
+          EXPECT_THROW(decode(destination, cursor), ::ceph::buffer::end_of_buffer);
+          EXPECT_EQ(previous, destination);
+        }
+      }
+    };
+    verify([](T& destination, auto& cursor) { ::ceph::decode(destination, cursor); });
+    if constexpr (denc_supported<T>) {
+      verify([](T& destination, auto& cursor) { ::denc(destination, cursor); });
+    }
+  };
+
+  check(false, true);
+  check(std::uint8_t {0xe1}, std::uint8_t {17});
+  check(std::uint16_t {0xe123}, std::uint16_t {17});
+  check(std::uint32_t {0xe1234567}, std::uint32_t {17});
+  check(std::uint64_t {0xe123456789abcdef}, std::uint64_t {17});
+  check(std::int16_t {-1234}, std::int16_t {17});
+  check(std::int32_t {-1234567}, std::int32_t {17});
+  check(std::int64_t {-123456789012345}, std::int64_t {17});
+  check(-3.5f, 17.0f);
+  check(-3.5, 17.0);
+}
+
 TEST(EncodingCompatibility, LegacySetContainersRoundTrip)
 {
   expect_encoding_compat_round_trip(
