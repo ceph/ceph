@@ -43,11 +43,24 @@ describe('RGW buckets page', () => {
 
       buckets.delete(bucket_name, null, null, true, false, false, true);
     });
+
+    it('should create bucket with object locking and zero retention period', () => {
+      buckets.navigateTo('create');
+      buckets.create(bucket_name, BucketsPageHelper.USERS[0], true, 0);
+      buckets.getFirstTableCell(bucket_name).should('exist');
+      buckets.delete(bucket_name, null, null, true, false, false, true);
+    });
   });
 
   describe('Invalid Input in Create and Edit tests', () => {
     it('should test invalid inputs in create fields', () => {
       buckets.testInvalidCreate();
+    });
+
+    it('should accept 0 as a valid object lock retention period', () => {
+      buckets.navigateTo('create');
+      cy.get('#bid').type(bucket_name);
+      buckets.testLockRetentionZeroIsValid();
     });
 
     it('should test invalid input in edit owner field', () => {
