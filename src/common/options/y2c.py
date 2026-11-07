@@ -154,12 +154,12 @@ def add_verbatim(verbatim):
     return verbatim + '\n'
 
 
-def yaml_to_cxx(opt, indent):
+def yaml_to_cxx(opt, indent, head, terminator):
     name = opt['name']
     typ = opt['type']
     ctyp = type_to_cxx(typ)
     level = level_to_cxx(opt['level'])
-    cxx = f'Option("{name}", {ctyp}, {level})\n'
+    cxx = head.format(name=name, ctyp=ctyp, level=level)
     cxx += set_desc(opt.get('desc'))
     cxx += set_long_desc(opt.get('long_desc'))
     cxx += set_default(opt.get('default'), typ)
@@ -177,14 +177,9 @@ def yaml_to_cxx(opt, indent):
         cxx += '\n'
     else:
         cxx = cxx.rstrip()
-    cxx += ',\n'
-    if indent > 0:
-        indented = []
-        for line in cxx.split('\n'):
-            if line:
-                indented.append(' ' * indent + line + '\n')
-        cxx = ''.join(indented)
-    return cxx
+    cxx += terminator
+    pad = ' ' * indent
+    return ''.join(f'{pad}{line}\n' for line in cxx.split('\n') if line)
 
 
 def type_to_h(t):
@@ -207,9 +202,10 @@ TEMPLATE_CC = '''#include "common/options.h"
 {headers}
 
 std::vector<Option> get_{name}_options() {{
-  return std::vector<Option>({{
+  std::vector<Option> result;
+  result.reserve({count});
 @body@
-  }});
+  return result;
 }}
 '''
 
@@ -237,8 +233,12 @@ class UniqueKeySafeLoader(yaml.SafeLoader):
 def translate(opts):
     if opts.raw:
         prelude, epilogue = '', ''
+        head = 'Option("{name}", {ctyp}, {level})\n'
+        terminator = ',\n'
     else:
         prelude, epilogue = TEMPLATE_CC.split('@body@')
+        head = 'result.emplace_back("{name}", {ctyp}, {level})\n'
+        terminator = ';\n'
 
     if opts.name:
         name = opts.name
@@ -252,11 +252,13 @@ def translate(opts):
          open(opts.legacy, 'w') as h_file:
         yml = yaml.load(infile, Loader=UniqueKeySafeLoader)
         headers = yml.get('headers', '')
-        cc_file.write(prelude.format(name=name, headers=headers))
         options = yml['options']
+        cc_file.write(prelude.format(name=name, headers=headers,
+                                     count=len(options)))
         for option in options:
             try:
-                cc_file.write(yaml_to_cxx(option, opts.indent) + '\n')
+                cc_file.write(yaml_to_cxx(option, opts.indent, head,
+                                          terminator) + '\n')
                 if option.get('with_legacy', False):
                     h_file.write(yaml_to_h(option) + '\n')
             except ValueError as e:
