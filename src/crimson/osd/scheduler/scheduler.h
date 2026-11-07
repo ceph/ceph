@@ -32,8 +32,26 @@ struct params_t {
   SchedulerClass klass;
 };
 
+// What an operation may wait on while it holds a throttle slot.  This is
+// about dependencies, not QoS: SchedulerClass decides the order in which
+// operations are admitted, while the level decides whether an operation can
+// be admitted at all. A slot holder must only depend on operations at lower
+// levels. Reserving their capacity prevents throttle cycles; progress also
+// requires the scheduler to service those dependencies.
+enum class throttle_level_t : uint8_t {
+  // only does local work, and is waited on by other slot holders: RepRequest,
+  // EC sub-ops, recovery pushes and pulls, ScrubScan
+  leaf,
+  // waits on leaf operations, local or remote: recover_object, backfill scans
+  recovery,
+  // waits on recovery and leaf operations: client requests, snaptrim
+  foreground,
+  count
+};
+
 struct item_t {
   params_t params;
+  throttle_level_t level = throttle_level_t::foreground;
   seastar::promise<> wake;
   int get_cost() const { return params.cost; }
   unsigned get_priority() const { return params.priority; }
@@ -56,8 +74,14 @@ public:
   // Returns true iff there are no ops scheduled
   virtual bool empty() const = 0;
 
-  // Return next op to be processed
-  virtual WorkItem dequeue() = 0;
+  // Choose among operations whose dependency level is at most max_level.
+  // A blocked operation must neither hide eligible work nor consume QoS
+  // service. Return monostate when every queued operation is blocked, or
+  // a timestamp when eligible work is waiting for an mClock tag.
+  virtual WorkItem dequeue(throttle_level_t max_level) = 0;
+
+  // Fail and remove queued operations when their throttler stops.
+  virtual void abort(std::exception_ptr error) = 0;
 
   // Dump formatted representation for the queue
   virtual void dump(ceph::Formatter &f) const = 0;

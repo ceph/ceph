@@ -92,7 +92,8 @@ RepRequest::interruptible_future<> RepRequest::with_pg_interruptible(
         std::max<int>(req->get_cost(), 1),
         req->get_priority(),
         static_cast<uint64_t>(req->from.osd),
-        SchedulerClass::immediate}));
+        SchedulerClass::immediate},
+      scheduler::throttle_level_t::leaf));
   auto [commit_fut, reply] = co_await pg->handle_rep_op(req);
 
   // Transitions from OrderedExclusive->OrderedConcurrent cannot block
