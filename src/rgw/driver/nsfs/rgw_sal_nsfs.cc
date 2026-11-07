@@ -13244,14 +13244,10 @@ int NSFSObject::NSFSFSIOObject::publish(const DoutPrefixProvider* dpp, uint32_t 
   }
   {
 
-  int ret = renameat_as(dpp, identity, driver->get_access_strategy(),
-			shadow_dir_fd, shadow_name.c_str(),
-			parent_fd, leaf_name.c_str());
-  if (ret < 0) {
-    return ret;
-  }
-
-  /* Stamp the version id, as the S3 write path does in link_temp_file().
+  /* Write the `version_id` attribute before the rename, as the S3 write
+   * path does in link_temp_file():  written after it, a listing that
+   * filled the bucket cache in between cached the object as the null
+   * version.
    *
    * demote_current_version() decides what a later write is demoting by
    * reading this xattr, and is_null_version_fd() treats its absence as
@@ -13260,9 +13256,9 @@ int NSFSObject::NSFSFSIOObject::publish(const DoutPrefixProvider* dpp, uint32_t 
    * third collided on that same slot, and the versions collapsed onto
    * one entry instead of accumulating.
    *
-   * shadow_fd still refers to this inode -- the rename moved the name,
-   * not the file -- so writing through it reaches the published
-   * object. */
+   * shadow_fd refers to the inode the rename publishes, and the rename
+   * moves the name, not the file, so the attribute is the published
+   * object's. */
   std::string ver_id;
   if (binfo.versioned()) {
     ver_id = NULL_VERSION_ID;
@@ -13280,6 +13276,13 @@ int NSFSObject::NSFSFSIOObject::publish(const DoutPrefixProvider* dpp, uint32_t 
 			  ver_id.size(), 0) < 0) ? -errno : 0;
     }, null_yield);
     src_obj->set_instance(ver_id);
+  }
+
+  int ret = renameat_as(dpp, identity, driver->get_access_strategy(),
+			shadow_dir_fd, shadow_name.c_str(),
+			parent_fd, leaf_name.c_str());
+  if (ret < 0) {
+    return ret;
   }
 
   /* update bucket listing cache */
@@ -14553,88 +14556,57 @@ int NSFSObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, 
   const bool as_gateway = ent->get_identity().active() &&
     driver->get_access_strategy()->permits(nsfs::AccessClass::data);
 
-  if (excl) {
-    /* If-None-Match:  * finds no object in a link, and the exclusive
-     * link would fail on it */
-    const int lret = unlink_if_link(dpp, ent->get_identity(),
-				    driver->get_access_strategy(),
-				    ent->get_parent()->get_fd(),
-				    ent->get_name().c_str());
-    if (lret < 0) {
-      return lret;
-    }
-  }
-
-  int ret;
-  if (as_gateway) {
-    ret = nsfs::with_capabilities(dpp, PUBLISH_AS_GATEWAY_CAPS,
-				  [&]() -> int {
-      return ent->link_temp_file(dpp, y, temp_fname, excl,
-				 /*as_gateway=*/true);
-    });
-    if (ret == 0) {
-      driver->publishes_as_gateway.fetch_add(1, std::memory_order_relaxed);
-      ldpp_dout(dpp, 10) << "nsfs: " << get_name()
-	<< ": the gateway performed the publish itself, which the access"
-	" model permits (" << driver->get_access_strategy()->name()
-	<< ")" << dendl;
-    }
-  } else {
-    ret = ent->link_temp_file(dpp, y, temp_fname, excl);
-  }
-  if (ret < 0)
-    return ret;
-
   NSFSBucket *b = static_cast<NSFSBucket *>(get_bucket());
   if (!b) {
     ldpp_dout(dpp, 0) << "ERROR: could not get bucket for " << get_name()
 		      << dendl;
     return -EINVAL;
   }
-
-  ret = open(dpp, y);
-  if (ret < 0) {
-    ldpp_dout(dpp, 20)
-        << "ERROR: NSFSAtomicWriter failed opening file" << dendl;
-    return ret;
-  }
-
-  ret = ent->stat(dpp, /*force=*/true);
-  if (ret < 0) {
-    ldpp_dout(dpp, 20)
-        << "ERROR: NSFSAtomicWriter failed stat after link" << dendl;
-    return ret;
-  }
-
-  /* The value into the map, then onto the object, and the second one
-   * checked.  complete() writes the attributes before it links
-   * (`write_attrs()` then `link_temp_file()`), and the statx this etag
-   * is derived from does not exist until the link -- so nothing will
-   * persist this map again and the attribute write is the only thing
-   * that reaches disk.  It used to run unchecked, so under
-   * impersonation the object published carrying the opaque etag
-   * RGWPutObj wrote while the client was told the derived one. */
-  if (nsfs_non_md5_etag_into_attrs(dpp, ent->get_stx(), get_attrs())) {
-    const int eret = nsfs_record_non_md5_etag(
-      dpp, ent->get_fd(), ent->get_stx(), xattr_strategy(),
-      ent->get_identity(), driver->etag_as_gateway_injected(), y);
-    if (eret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: could not record the etag on "
-        << get_name() << ": " << cpp_strerror(-eret)
-        << ";  the object would carry a different etag than the one "
-        << "returned to the client" << dendl;
-      return eret;
-    }
-  }
-
-  uint32_t flags = FSEnt::FLAG_NONE;
   const auto& binfo = b->get_info();
-  if (binfo.versioned()) {
-    int fd = ent->get_fd();
-    if (fd >= 0) {
-      const struct statx& stx = ent->get_stx();
-      std::string ver_id = binfo.versioning_enabled()
-        ? nsfs_version_id_from_statx(stx) : NULL_VERSION_ID;
+
+  /* The attributes derived from the inode -- the `version_id` attribute
+   * and a non-MD5 etag -- are written before the publish.  Written
+   * after it, they left a moment in which the object was in place
+   * without them:  a listing that filled the bucket cache then read no
+   * version id, cached the object as the null version, and that entry
+   * named nothing on disk, so it listed until the gateway restarted and
+   * every delete of it succeeded without removing it.  Both derive from
+   * the inode's mtime and ino, and the publish's link and rename change
+   * neither.  The write is into `complete()`'s map and onto the object:
+   * the map was written before this (`write_attrs()` then
+   * `link_temp_file()`), so the attribute write is the only thing that
+   * reaches disk. */
+  std::string ver_id;
+  auto write_derived_attrs = [&]() -> int {
+    const int fd = ent->get_fd();
+    if (fd < 0) {
+      return 0;
+    }
+    struct statx stx;
+    if (nsfs::statx(fd, "", AT_EMPTY_PATH, STATX_ALL, &stx) < 0) {
+      const int err = errno;
+      ldpp_dout(dpp, 0) << "ERROR: could not stat " << get_name()
+	<< " to derive its version id: " << cpp_strerror(err) << dendl;
+      return -err;
+    }
+    /* checked:  it used to run unchecked, so under impersonation the
+     * object published carrying the opaque etag RGWPutObj wrote while
+     * the client was told the derived one */
+    if (nsfs_non_md5_etag_into_attrs(dpp, stx, get_attrs())) {
+      const int eret = nsfs_record_non_md5_etag(
+	dpp, fd, stx, xattr_strategy(),
+	ent->get_identity(), driver->etag_as_gateway_injected(), y);
+      if (eret < 0) {
+	ldpp_dout(dpp, 0) << "ERROR: could not record the etag on "
+	  << get_name() << ": " << cpp_strerror(-eret)
+	  << ";  the object would carry a different etag than the one "
+	  << "returned to the client" << dendl;
+	return eret;
+      }
+    }
+    if (binfo.versioned()) {
+      ver_id = binfo.versioning_enabled()
+	? nsfs_version_id_from_statx(stx) : NULL_VERSION_ID;
       std::string xattr = xattr_strategy()->disk_name(RGW_NSFS_ATTR_VERSION_ID);
       /* As the identity that wrote the object, and checked.
        *
@@ -14658,12 +14630,82 @@ int NSFSObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, 
 	return 0;
       }, y);
       if (vret < 0) {
-        ldpp_dout(dpp, 0) << "ERROR: could not record the version id on "
-          << get_name() << ": " << cpp_strerror(-vret)
-          << ";  a later demote would file it as the null version"
-          << dendl;
-        return vret;
+	ldpp_dout(dpp, 0) << "ERROR: could not record the version id on "
+	  << get_name() << ": " << cpp_strerror(-vret)
+	  << ";  a later demote would file it as the null version"
+	  << dendl;
+	return vret;
       }
+    }
+    return 0;
+  };
+  /* inject-version-id-after-publish:  the order this replaced */
+  const bool after_publish =
+    driver->version_id_after_publish_injected(b->get_name());
+
+  if (excl) {
+    /* If-None-Match:  * finds no object in a link, and the exclusive
+     * link would fail on it */
+    const int lret = unlink_if_link(dpp, ent->get_identity(),
+				    driver->get_access_strategy(),
+				    ent->get_parent()->get_fd(),
+				    ent->get_name().c_str());
+    if (lret < 0) {
+      return lret;
+    }
+  }
+
+  int ret;
+  if (!after_publish) {
+    ret = write_derived_attrs();
+    if (ret < 0) {
+      return ret;
+    }
+  }
+  if (as_gateway) {
+    ret = nsfs::with_capabilities(dpp, PUBLISH_AS_GATEWAY_CAPS,
+				  [&]() -> int {
+      return ent->link_temp_file(dpp, y, temp_fname, excl,
+				 /*as_gateway=*/true);
+    });
+    if (ret == 0) {
+      driver->publishes_as_gateway.fetch_add(1, std::memory_order_relaxed);
+      ldpp_dout(dpp, 10) << "nsfs: " << get_name()
+	<< ": the gateway performed the publish itself, which the access"
+	" model permits (" << driver->get_access_strategy()->name()
+	<< ")" << dendl;
+    }
+  } else {
+    ret = ent->link_temp_file(dpp, y, temp_fname, excl);
+  }
+  if (ret < 0)
+    return ret;
+
+  driver->hold_after_publish(dpp, b->get_name());
+  if (after_publish) {
+    ret = write_derived_attrs();
+    if (ret < 0) {
+      return ret;
+    }
+  }
+
+  ret = open(dpp, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 20)
+        << "ERROR: NSFSAtomicWriter failed opening file" << dendl;
+    return ret;
+  }
+
+  ret = ent->stat(dpp, /*force=*/true);
+  if (ret < 0) {
+    ldpp_dout(dpp, 20)
+        << "ERROR: NSFSAtomicWriter failed stat after link" << dendl;
+    return ret;
+  }
+
+  uint32_t flags = FSEnt::FLAG_NONE;
+  if (binfo.versioned()) {
+    if (!ver_id.empty()) {
       set_instance(ver_id);
     }
     flags = FSEnt::FLAG_LIST_VERSIONS;
@@ -15472,6 +15514,18 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
     ldpp_dout(dpp, 10) << "delete_obj: version-specific vid="
       << req_version_id << " key=" << source->get_name() << dendl;
 
+    /* The cache entry for the version this names goes on every success,
+     * including the ones that find nothing on disk:  an entry with
+     * nothing behind it otherwise lists until the gateway restarts, and
+     * each delete of it succeeds and changes nothing. */
+    auto forget_version = [&]() {
+      cls_rgw_obj_key cache_key;
+      cache_key.name = source->get_key().get_index_key_name();
+      cache_key.instance = req_version_id;
+      source->driver->get_bucket_cache()->remove_entry(
+	dpp, b->get_name(), cache_key);
+    };
+
     /* resolve path to get parent dir for version lock;
      * stat without instance so we always get the object's parent
      * directory, not .versions/ */
@@ -15685,6 +15739,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
           ldpp_dout(dpp, 10) << "delete_obj: " << ver_name
             << " not found in .versions/ (already deleted?)" << dendl;
           ::close(vfd);
+          forget_version();
           result.version_id = req_version_id;
           return 0;
         }
@@ -15752,13 +15807,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
         ::close(vfd);
         result.version_id = req_version_id;
         result.delete_marker = is_dm;
-        {
-          cls_rgw_obj_key cache_key;
-          cache_key.name = source->get_key().get_index_key_name();
-          cache_key.instance = req_version_id;
-          source->driver->get_bucket_cache()->remove_entry(
-            dpp, b->get_name(), cache_key);
-        }
+        forget_version();
         /* if we deleted a DM from .versions/ and no current file
          * exists, promote the newest non-DM version */
         if (is_dm && parent_fd >= 0) {
@@ -15784,6 +15833,9 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
         return 0;
       }
     }
+    ldpp_dout(dpp, 10) << "delete_obj: version " << req_version_id
+      << " of " << source->get_name() << " is not on disk" << dendl;
+    forget_version();
     result.version_id = req_version_id;
     return 0;
   }
@@ -19864,6 +19916,29 @@ nsfs::CopyHints NSFSDriver::copy_hints_for(const rgw_owner& who)
   return nsfs::CopyHints{b->force_buffered, &b->buffered_bytes};
 }
 
+void NSFSDriver::hold_after_publish(const DoutPrefixProvider* dpp,
+				    const std::string& bucket)
+{
+  if (!inject_hold_after_publish_armed.load(std::memory_order_relaxed)) {
+    return;
+  }
+  std::unique_lock l{inject_hold_after_publish_lock};
+  if (!inject_hold_after_publish_buckets.contains(bucket)) {
+    return;
+  }
+  inject_hold_after_publish_waiting.insert(bucket);
+  const auto until = ceph::mono_clock::now() + std::chrono::minutes(1);
+  while (inject_hold_after_publish_buckets.contains(bucket) &&
+	 (ceph::mono_clock::now() < until)) {
+    inject_hold_after_publish_cond.wait_for(l, std::chrono::milliseconds(100));
+  }
+  if (inject_hold_after_publish_buckets.contains(bucket)) {
+    ldpp_dout(dpp, 0) << "inject-hold-after-publish: " << bucket
+      << " was not released within a minute;  the write goes on" << dendl;
+  }
+  inject_hold_after_publish_waiting.erase(bucket);
+}
+
 int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
 			    const std::string& hint,
 			    const std::map<std::string, std::string>& params,
@@ -20327,6 +20402,65 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
       (*out)["enabled"] = on ? "true" : "false";
       (*out)["bucket"] = b_it->second;
       (*out)["waiting"] = waiting ? "true" : "false";
+    }
+    return 0;
+  }
+
+  if (hint == "inject-hold-after-publish") {
+    /* hold a write in one bucket just after its publish, so a test can
+     * list the object in the moment before anything else is written;
+     * `waiting` is true once a write is held */
+    auto it = params.find("enable");
+    auto b_it = params.find("bucket");
+    if ((it == params.end()) || (b_it == params.end()) ||
+	b_it->second.empty()) {
+      return -EINVAL;
+    }
+    const bool on = (it->second == "true");
+    bool waiting;
+    {
+      std::lock_guard l{inject_hold_after_publish_lock};
+      if (on) {
+	inject_hold_after_publish_buckets.insert(b_it->second);
+      } else {
+	inject_hold_after_publish_buckets.erase(b_it->second);
+      }
+      inject_hold_after_publish_armed =
+	!inject_hold_after_publish_buckets.empty();
+      waiting = inject_hold_after_publish_waiting.contains(b_it->second);
+    }
+    inject_hold_after_publish_cond.notify_all();
+    if (out) {
+      (*out)["enabled"] = on ? "true" : "false";
+      (*out)["bucket"] = b_it->second;
+      (*out)["waiting"] = waiting ? "true" : "false";
+    }
+    return 0;
+  }
+
+  if (hint == "inject-version-id-after-publish") {
+    /* in one bucket, write the `version_id` attribute and a non-MD5
+     * etag after the publish, as the write path once did */
+    auto it = params.find("enable");
+    auto b_it = params.find("bucket");
+    if ((it == params.end()) || (b_it == params.end()) ||
+	b_it->second.empty()) {
+      return -EINVAL;
+    }
+    const bool on = (it->second == "true");
+    {
+      std::lock_guard l{inject_version_id_after_publish_lock};
+      if (on) {
+	inject_version_id_after_publish_buckets.insert(b_it->second);
+      } else {
+	inject_version_id_after_publish_buckets.erase(b_it->second);
+      }
+      inject_version_id_after_publish_armed =
+	!inject_version_id_after_publish_buckets.empty();
+    }
+    if (out) {
+      (*out)["enabled"] = on ? "true" : "false";
+      (*out)["bucket"] = b_it->second;
     }
     return 0;
   }

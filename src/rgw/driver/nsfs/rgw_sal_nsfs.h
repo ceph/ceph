@@ -1109,6 +1109,26 @@ protected:
   ceph::mutex inject_hold_adoption_lock =
       ceph::make_mutex("NSFSDriver::inject_hold_adoption_lock");
   ceph::condition_variable inject_hold_adoption_cond;
+  /* hold a write in these buckets just after its publish, until it is
+   * released, so a test can list the object while it is in place and
+   * nothing after the publish has run.  `waiting` is the held buckets
+   * a write has reached.  Keyed by bucket, as the attribute-read
+   * injection is */
+  std::set<std::string> inject_hold_after_publish_buckets;
+  std::set<std::string> inject_hold_after_publish_waiting;
+  std::atomic<bool> inject_hold_after_publish_armed{false};
+  ceph::mutex inject_hold_after_publish_lock =
+      ceph::make_mutex("NSFSDriver::inject_hold_after_publish_lock");
+  ceph::condition_variable inject_hold_after_publish_cond;
+  /* write the attributes derived from the inode -- the `version_id`
+   * attribute and a non-MD5 etag -- after the publish rather than
+   * before it, in these buckets:  the order that let a listing read a
+   * published object with no version id, so a test can show it fails
+   * on that order and passes on the one used */
+  std::set<std::string> inject_version_id_after_publish_buckets;
+  std::atomic<bool> inject_version_id_after_publish_armed{false};
+  ceph::mutex inject_version_id_after_publish_lock =
+      ceph::make_mutex("NSFSDriver::inject_version_id_after_publish_lock");
 
   /* Which POSIX identity a converted consumer chose for one named
    * object, so a test can assert the uid and not the status --  (n)
@@ -1897,6 +1917,18 @@ public:
     return inject_attr_read_fail_buckets.contains(bucket);
   }
   void record_attr_read_fail() { ++attr_read_fails_injected; }
+  bool version_id_after_publish_injected(const std::string& bucket) {
+    if (!inject_version_id_after_publish_armed.load(
+	  std::memory_order_relaxed)) {
+      return false;
+    }
+    std::lock_guard l{inject_version_id_after_publish_lock};
+    return inject_version_id_after_publish_buckets.contains(bucket);
+  }
+  /* waits while `bucket` is held, up to a minute, so a test that fails
+   * before releasing it cannot wedge the write for good */
+  void hold_after_publish(const DoutPrefixProvider* dpp,
+			  const std::string& bucket);
   bool attr_write_fail_injected(const std::string& bucket) {
     if (!inject_attr_write_fail_armed.load(std::memory_order_relaxed)) {
       return false;
