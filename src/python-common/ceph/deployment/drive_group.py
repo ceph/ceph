@@ -124,6 +124,8 @@ class DeviceSelection(object):
     def to_json(self):
         # type: () -> Dict[str, Any]
         ret: Dict[str, Any] = {}
+        if self.actuators:
+            ret['actuators'] = self.actuators
         if self.paths:
             ret['paths'] = [
                 {'path': p.path, 'crush_device_class': p.crush_device_class}
