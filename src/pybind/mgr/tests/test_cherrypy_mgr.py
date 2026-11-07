@@ -1,8 +1,20 @@
+import datetime
+import os
+import socket
+import ssl
+import tempfile
+import threading
+import time
 import unittest
 from unittest import mock
 import cherrypy
 import cherrypy_mgr
 import logging
+
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.x509.oid import NameOID
 
 from cherrypy_mgr import CherryPyMgr, CherryPyAccessFilter
 
@@ -147,7 +159,29 @@ class TestCherryPyMgr(unittest.TestCase):
         mock_builtin_ssl_adapter.assert_called_once_with(ssl_info['cert'], ssl_info['key'])
         self.assertEqual(mock_builtin_ssl_adapter.return_value.context, 'fake_context')
         self.assertEqual(server_instance.ssl_adapter, mock_builtin_ssl_adapter.return_value)
-    
+
+    @mock.patch('cherrypy_mgr.DeferredHandshakeSSLAdapter')
+    @mock.patch('cherrypy_mgr.BuiltinSSLAdapter')
+    @mock.patch('cherrypy_mgr.ServerAdapter')
+    @mock.patch('cherrypy_mgr.WSGIServer')
+    def test_mount_with_ssl_deferred_handshake(self, mock_wsgi_server, mock_server_adapter,
+                                               mock_builtin_ssl_adapter, mock_deferred_ssl_adapter):
+        tree = mock.MagicMock(spec=cherrypy._cptree.Tree)
+        ssl_info = {
+            'cert': '/path/to/cert.pem',
+            'key': '/path/to/key.pem',
+            'defer_handshake': True,
+        }
+
+        CherryPyMgr.mount(tree, 'deferred_app', ('127.0.0.1', 8080), ssl_info)
+
+        mock_builtin_ssl_adapter.assert_not_called()
+        mock_deferred_ssl_adapter.assert_called_once_with(ssl_info['cert'], ssl_info['key'])
+        self.assertEqual(mock_wsgi_server.return_value.ssl_adapter,
+                         mock_deferred_ssl_adapter.return_value)
+        self.assertEqual(mock_wsgi_server.return_value.ConnectionClass,
+                         cherrypy_mgr.DeferredHandshakeConnection)
+
     def test_get_server_config(self):
         tree = cherrypy._cptree.Tree()
         app_one = mock.Mock()
@@ -175,3 +209,99 @@ class TestCherryPyMgr(unittest.TestCase):
         # test non-existent app and mount point
         self.assertIsNone(CherryPyMgr.get_server_config('ghost_app'))
         self.assertIsNone(CherryPyMgr.get_server_config('test_app', '/missing'))
+
+
+def _self_signed_cert(directory: str):
+    key = ec.generate_private_key(ec.SECP256R1())
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, 'localhost')])
+    now = datetime.datetime.now(datetime.timezone.utc)
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(name)
+        .issuer_name(name)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - datetime.timedelta(minutes=1))
+        .not_valid_after(now + datetime.timedelta(days=1))
+        .add_extension(x509.SubjectAlternativeName([x509.DNSName('localhost')]), critical=False)
+        .sign(key, hashes.SHA256())
+    )
+    cert_path = os.path.join(directory, 'cert.pem')
+    key_path = os.path.join(directory, 'key.pem')
+    with open(cert_path, 'wb') as f:
+        f.write(cert.public_bytes(serialization.Encoding.PEM))
+    with open(key_path, 'wb') as f:
+        f.write(key.private_bytes(serialization.Encoding.PEM,
+                                  serialization.PrivateFormat.PKCS8,
+                                  serialization.NoEncryption()))
+    return cert_path, key_path
+
+
+class TestDeferredHandshakeSSLAdapter(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.cert, self.key = _self_signed_cert(self.tmp.name)
+        self.listener = socket.create_server(('127.0.0.1', 0))
+        self.port = self.listener.getsockname()[1]
+
+    def tearDown(self):
+        self.listener.close()
+        self.tmp.cleanup()
+
+    def test_wrap_leaves_the_handshake_to_the_first_read(self):
+        adapter = cherrypy_mgr.DeferredHandshakeSSLAdapter(self.cert, self.key)
+        client = socket.create_connection(('127.0.0.1', self.port))
+        server, _ = self.listener.accept()
+        server.settimeout(10)
+
+        # The client has not started its handshake. BuiltinSSLAdapter.wrap()
+        # would wait for it here; this one returns at once.
+        start = time.monotonic()
+        s, environ = adapter.wrap(server)
+        self.assertLess(time.monotonic() - start, 1.0)
+        self.assertEqual(environ, {'wsgi.url_scheme': 'https', 'HTTPS': 'on'})
+        self.assertIsNone(s.cipher())
+
+        def send_request():
+            ctx = ssl.create_default_context(cafile=self.cert)
+            with ctx.wrap_socket(client, server_hostname='localhost') as tls:
+                tls.sendall(b'GET / HTTP/1.1\r\n')
+        t = threading.Thread(target=send_request)
+        t.start()
+        line = s.makefile('rb').readline()
+        t.join(10)
+        self.assertEqual(line, b'GET / HTTP/1.1\r\n')
+        self.assertIsNotNone(s.cipher())
+        s.close()
+
+    def _connection(self, server_sock):
+        adapter = cherrypy_mgr.DeferredHandshakeSSLAdapter(self.cert, self.key)
+        s, _ = adapter.wrap(server_sock)
+        server = mock.MagicMock(protocol='HTTP/1.1', peercreds_enabled=False,
+                                peercreds_resolve_enabled=False)
+        return cherrypy_mgr.DeferredHandshakeConnection(server, s, adapter.makefile)
+
+    def test_failed_handshake_closes_quietly(self):
+        client = socket.create_connection(('127.0.0.1', self.port))
+        server_sock, _ = self.listener.accept()
+        server_sock.settimeout(10)
+        conn = self._connection(server_sock)
+        client.close()
+
+        self.assertFalse(conn.communicate())
+        conn.server.error_log.assert_not_called()
+        conn.socket.close()
+
+    def test_plain_http_gets_400(self):
+        client = socket.create_connection(('127.0.0.1', self.port))
+        server_sock, _ = self.listener.accept()
+        server_sock.settimeout(10)
+        conn = self._connection(server_sock)
+        client.sendall(b'GET / HTTP/1.1\r\nHost: localhost\r\n\r\n')
+
+        self.assertFalse(conn.communicate())
+        conn.server.error_log.assert_not_called()
+        client.settimeout(10)
+        self.assertTrue(client.recv(100).startswith(b'HTTP/1.1 400 Bad Request'))
+        client.close()
+        conn.socket.close()

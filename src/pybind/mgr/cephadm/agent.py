@@ -52,7 +52,7 @@ class AgentEndpoint:
             (self.node_proxy_endpoint, '/node-proxy', config),
         ]
 
-    def configure_tls(self) -> Dict[str, str]:
+    def configure_tls(self) -> Dict[str, Any]:
         self.mgr.cert_mgr.register_self_signed_cert_key_pair(CephadmAgent.TYPE)
         tls_pair = self._get_agent_certificates()
         self.cert_file = tempfile.NamedTemporaryFile()
@@ -67,6 +67,10 @@ class AgentEndpoint:
         return {
             'cert': self.cert_file.name,
             'key': self.key_file.name,
+            # Agents open a new connection for every report. Done on the
+            # accept thread, their handshakes queue up behind each other as
+            # the cluster grows.
+            'defer_handshake': True,
         }
 
     def _get_agent_certificates(self) -> TLSCredentials:
