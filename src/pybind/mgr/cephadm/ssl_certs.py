@@ -4,10 +4,28 @@ import ipaddress
 from datetime import datetime, timedelta
 from cryptography import x509
 from cryptography.x509.oid import NameOID
-from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.asymmetric import ec, rsa
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.backends import default_backend
 from ceph.deployment.tls_utils import SSLConfigException
+
+
+def _new_private_key(ecdsa: bool = False) -> Any:
+    # An ECDSA P-256 key is about a hundred times cheaper to sign with than
+    # RSA-4096, which a server does once per TLS handshake, and thousands of
+    # times cheaper to generate.
+    if ecdsa:
+        return ec.generate_private_key(ec.SECP256R1(), backend=default_backend())
+    return rsa.generate_private_key(
+        public_exponent=65537, key_size=4096, backend=default_backend())
+
+
+def is_ecdsa_cert(cert: str) -> bool:
+    try:
+        c = x509.load_pem_x509_certificate(cert.encode('utf-8'), backend=default_backend())
+    except ValueError:
+        return False
+    return isinstance(c.public_key(), ec.EllipticCurvePublicKey)
 
 
 class SSLCerts:
@@ -76,6 +94,7 @@ class SSLCerts:
         _addrs: Union[str, List[str]],
         custom_san_list: Optional[List[str]] = None,
         duration_in_days: Optional[int] = None,
+        ecdsa: bool = False,
     ) -> Tuple[str, str]:
 
         cert_duration_in_days = duration_in_days or self.certificate_duration_days
@@ -88,8 +107,7 @@ class SSLCerts:
         except Exception:
             valid_ips = False
 
-        private_key = rsa.generate_private_key(
-            public_exponent=65537, key_size=4096, backend=default_backend())
+        private_key = _new_private_key(ecdsa)
         public_key = private_key.public_key()
 
         builder = x509.CertificateBuilder()
@@ -131,7 +149,8 @@ class SSLCerts:
         new_duration_days: Optional[int] = None
     ) -> Tuple[str, str]:
         """
-        Renews a certificate, generating a new private key and extending its duration.
+        Renews a certificate, generating a new private key of the same type
+        (RSA or ECDSA) and extending its duration.
 
         :param old_cert: The existing certificate (PEM format) to be renewed.
         :param new_duration_days: The new validity duration for the certificate in days.
@@ -142,10 +161,9 @@ class SSLCerts:
             # Load the old certificate
             old_certificate = x509.load_pem_x509_certificate(old_cert.encode('utf-8'), backend=default_backend())
 
-            # Generate a new private key
-            new_private_key = rsa.generate_private_key(
-                public_exponent=65537, key_size=4096, backend=default_backend()
-            )
+            # Generate a new private key of the same type
+            new_private_key = _new_private_key(
+                ecdsa=isinstance(old_certificate.public_key(), ec.EllipticCurvePublicKey))
 
             # Extract existing SANs
             san_extension = old_certificate.extensions.get_extension_for_class(x509.SubjectAlternativeName)
