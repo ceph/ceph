@@ -45,14 +45,13 @@
     (updateSelection)="updateSelection($event)"
     (fetchData)="loadDaemonStatus()"
   >
-    <div class="table-actions">
-      <cd-table-actions
-        [permission]="permission"
-        [selection]="selection"
-        [tableActions]="tableActions"
-      >
-      </cd-table-actions>
-    </div>
+    <cd-table-actions
+      class="table-actions"
+      [permission]="permission"
+      [selection]="selection"
+      [tableActions]="tableActions"
+    >
+    </cd-table-actions>
   </cd-table>
 </section>
 
@@ -99,78 +98,75 @@
   }
   <div
     cdsGrid
-    class="cds-mb-3"
+    [useCssGrid]="true"
+    [fullWidth]="true"
+    class="cds-mb-6"
   >
-    <div cdsRow>
-      <div
-        cdsCol
-        [columnNumbers]="{ lg: 8, md: 8, sm: 8 }"
+    <div
+      cdsCol
+      [columnNumbers]="{ lg: 8, md: 4, sm: 2 }"
+    >
+      <p
+        class="cds--type-label-01 cds-mb-2"
+        i18n
       >
-        <p
-          class="cds--type-label-01 cds-mb-2"
-          i18n
-        >
-          Source filesystem
-        </p>
-        <div class="cds--type-body-compact-01">{{ row.local_fs_name }}</div>
-      </div>
-      <div
-        cdsCol
-        [columnNumbers]="{ lg: 6, md: 6, sm: 6 }"
+        Source filesystem
+      </p>
+      <div class="cds--type-body-compact-01">{{ row.local_fs_name }}</div>
+    </div>
+    <div
+      cdsCol
+      [columnNumbers]="{ lg: 8, md: 4, sm: 2 }"
+    >
+      <p
+        class="cds--type-label-01 cds-mb-2"
+        i18n
       >
-        <p
-          class="cds--type-label-01 cds-mb-2"
-          i18n
-        >
-          Destination cluster
-        </p>
-        <div class="cds--type-body-compact-01">{{ row.remote_cluster_name }}</div>
+        Destination cluster
+      </p>
+      <div class="cds--type-body-compact-01">{{ row.remote_cluster_name }}</div>
+    </div>
+    <div
+      cdsCol
+      [columnNumbers]="{ lg: 8, md: 4, sm: 2 }"
+      class="cds-mt-3"
+    >
+      <p
+        class="cds--type-label-01 cds-mb-2"
+        i18n
+      >
+        Current sync status
+      </p>
+      <div class="cds--type-body-compact-01">
+        @if (row.sync_status === MirroringSyncStatus.SYNCING) {
+          <cd-icon
+            type="success"
+            class="cds-mr-1"
+          ></cd-icon>
+        }
+        @if (row.sync_status === MirroringSyncStatus.ERROR) {
+          <cd-icon
+            type="danger"
+            class="cds-mr-1"
+          ></cd-icon>
+        }
+        {{ row.sync_status_label }}
       </div>
     </div>
     <div
-      cdsRow
-      class="cds-mt-3 cds-mb-6"
+      cdsCol
+      [columnNumbers]="{ lg: 8, md: 4, sm: 2 }"
+      class="cds-mt-3"
     >
-      <div
-        cdsCol
-        [columnNumbers]="{ lg: 8, md: 8, sm: 8 }"
+      <p
+        class="cds--type-label-01 cds-mb-2"
+        i18n
       >
-        <p
-          class="cds--type-label-01 cds-mb-2"
-          i18n
-        >
-          Current sync status
-        </p>
-        <div class="cds--type-body-compact-01">
-          @if (row.sync_status === MirroringSyncStatus.SYNCING) {
-            <cd-icon
-              type="success"
-              class="cds-mr-1"
-            ></cd-icon>
-          }
-          @if (row.sync_status === MirroringSyncStatus.ERROR) {
-            <cd-icon
-              type="danger"
-              class="cds-mr-1"
-            ></cd-icon>
-          }
-          {{ row.sync_status_label }}
-        </div>
-      </div>
-      <div
-        cdsCol
-        [columnNumbers]="{ lg: 6, md: 6, sm: 6 }"
-      >
-        <p
-          class="cds--type-label-01 cds-mb-2"
-          i18n
-        >
-          Replication scope
-        </p>
-        <div class="cds--type-body-compact-01">
-          {{ row.directory_count }}
-          <ng-container i18n>{row.directory_count, plural, =1 {path} other {paths}}</ng-container>
-        </div>
+        Replication scope
+      </p>
+      <div class="cds--type-body-compact-01">
+        {{ row.directory_count }}
+        <ng-container i18n>{row.directory_count, plural, =1 {path} other {paths}}</ng-container>
       </div>
     </div>
   </div>
