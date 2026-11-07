@@ -1460,7 +1460,7 @@ options:
   desc: Name of the RDMA device to use
   fmt_desc: The name of the RDMA device to use, as listed by ``ibv_devices``, for
     example ``mlx5_0``. If this is empty, Ceph uses the first RDMA device that it
-    finds.
+    finds. If no device has this name, the daemon aborts.
   with_legacy: true
 - name: ms_async_rdma_enable_hugepage
   type: bool
@@ -1565,11 +1565,15 @@ options:
     and the files ``/sys/class/infiniband/<device>/ports/<port>/gid_attrs/types/<index>``
     show its RoCE version. Builds that use the legacy experimental verbs API
     ignore this option and select the GID by :confval:`ms_async_rdma_local_gid`
-    and :confval:`ms_async_rdma_roce_ver`.
+    and :confval:`ms_async_rdma_roce_ver`. An index past the end of the GID table
+    makes the daemon abort. When :confval:`ms_async_rdma_cm` is ``true``, the RDMA
+    connection manager sets up each connection, and connections do not use this
+    index.
   default: 0
   see_also:
   - ms_async_rdma_local_gid
   - ms_async_rdma_roce_ver
+  - ms_async_rdma_cm
   with_legacy: true
 - name: ms_async_rdma_local_gid
   type: str
@@ -1603,8 +1607,12 @@ options:
   level: advanced
   desc: Service level of RDMA connections
   fmt_desc: The service level (SL) of RDMA connections. On RoCE, it sets the
-    priority code point (PCP) of the VLAN tag.
+    priority code point (PCP) of the VLAN tag. This option has no effect when
+    :confval:`ms_async_rdma_cm` is ``true``, because the RDMA connection manager
+    then sets up each connection.
   default: 3
+  see_also:
+  - ms_async_rdma_cm
   with_legacy: true
 - name: ms_async_rdma_dscp
   type: int
@@ -1613,8 +1621,11 @@ options:
   fmt_desc: The traffic class that Ceph sets in the global route header of RDMA
     connections. On RoCE v2, its upper six bits are the IP DSCP, so to mark traffic
     with DSCP *n*, set this option to 4 times *n*. The default, ``96``, is DSCP 24
-    (CS3).
+    (CS3). This option has no effect when :confval:`ms_async_rdma_cm` is ``true``,
+    because the RDMA connection manager then sets up each connection.
   default: 96
+  see_also:
+  - ms_async_rdma_cm
   with_legacy: true
 # when there are enough accept failures, indicating there are unrecoverable failures,
 # just do ceph_abort() . Here we make it configurable.
