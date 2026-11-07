@@ -1459,7 +1459,15 @@ class DaemonDescription(object):
     def __str__(self) -> str:
         return f"{self.name()} in status {self.status_desc} on {self.hostname}"
 
-    def to_json(self) -> dict:
+    _TIMESTAMP_FIELDS = ('last_refresh', 'created', 'started', 'last_deployed',
+                         'last_configured')
+
+    def _to_fields(self) -> Dict[str, Any]:
+        """
+        The fields that to_json() writes, with timestamps and events still
+        as objects. to_json() and __copy__() both start from this, so a
+        copy carries exactly what the JSON form carries.
+        """
         out: Dict[str, Any] = OrderedDict()
         out['daemon_type'] = self.daemon_type
         out['daemon_id'] = self.daemon_id
@@ -1488,17 +1496,25 @@ class DaemonDescription(object):
         out['pending_daemon_config'] = self.pending_daemon_config
         out['user_stopped'] = self.user_stopped
 
-        for k in ['last_refresh', 'created', 'started', 'last_deployed',
-                  'last_configured']:
+        for k in self._TIMESTAMP_FIELDS:
             if getattr(self, k):
-                out[k] = datetime_to_str(getattr(self, k))
+                out[k] = getattr(self, k)
 
         if self.events:
-            out['events'] = [e.to_json() for e in self.events]
+            out['events'] = self.events
 
         empty = [k for k, v in out.items() if v is None]
         for e in empty:
             del out[e]
+        return out
+
+    def to_json(self) -> dict:
+        out = self._to_fields()
+        for k in self._TIMESTAMP_FIELDS:
+            if k in out:
+                out[k] = datetime_to_str(out[k])
+        if 'events' in out:
+            out['events'] = [e.to_json() for e in out['events']]
         return out
 
     def to_dict(self) -> dict:
@@ -1544,12 +1560,19 @@ class DaemonDescription(object):
     @handle_type_error
     def from_json(cls, data: dict) -> 'DaemonDescription':
         c = data.copy()
-        event_strs = c.pop('events', [])
-        for k in ['last_refresh', 'created', 'started', 'last_deployed',
-                  'last_configured']:
+        for k in cls._TIMESTAMP_FIELDS:
             if k in c:
                 c[k] = str_to_datetime(c[k])
-        events = [OrchestratorEvent.from_json(e) for e in event_strs]
+        c['events'] = [OrchestratorEvent.from_json(e) for e in c.get('events', [])]
+        return cls._from_fields(c)
+
+    @classmethod
+    def _from_fields(cls, c: Dict[str, Any]) -> 'DaemonDescription':
+        """
+        Build an object from from_json() data whose timestamps and events
+        are already objects. Modifies ``c``.
+        """
+        events = c.pop('events', [])
         status_int = c.pop('status', None)
         if 'daemon_name' in c:
             del c['daemon_name']
@@ -1566,8 +1589,26 @@ class DaemonDescription(object):
         return cls(events=events, status=status, **c)
 
     def __copy__(self) -> 'DaemonDescription':
-        # feel free to change this:
-        return DaemonDescription.from_json(self.to_json())
+        """
+        Same result as ``from_json(self.to_json())``, without formatting
+        and re-parsing every timestamp: the copy goes through the same
+        _to_fields() and _from_fields() as the JSON round trip and skips
+        only the string conversion. As before, timestamps are converted to
+        UTC, events are new objects, and attributes that to_json() doesn't
+        write are reset to their defaults.
+        """
+        utc = datetime.timezone.utc
+        c = self._to_fields()
+        for k in self._TIMESTAMP_FIELDS:
+            if k in c:
+                c[k] = c[k].astimezone(utc)
+        if 'events' in c:
+            c['events'] = [
+                OrchestratorEvent(e.created.astimezone(utc), e.kind, e.subject,
+                                  e.level, e.message)
+                for e in c['events']
+            ]
+        return DaemonDescription._from_fields(c)
 
     @staticmethod
     def yaml_representer(dumper: 'yaml.Dumper', data: 'DaemonDescription') -> yaml.Node:
