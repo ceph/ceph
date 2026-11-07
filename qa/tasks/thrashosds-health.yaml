@@ -49,3 +49,5 @@ overrides:
       - pgs degraded
       - pgs undersized
       - is active.*backfill_toofull.*
+      - full ratio\(s\) out of order
+      - full_ratio .* < backfillfull_ratio
