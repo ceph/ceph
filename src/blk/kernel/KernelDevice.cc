@@ -233,8 +233,18 @@ int KernelDevice::open(const string& p)
   r = posix_fadvise(fd_buffereds[WRITE_LIFE_NOT_SET], 0, 0, POSIX_FADV_RANDOM);
   if (r) {
     r = -r;
-    derr << __func__ << " posix_fadvise got: " << cpp_strerror(r) << dendl;
-    goto out_fail;
+    if (r == -ENODEV) {
+      // posix_fadvise() is advisory. FreeBSD only implements it for
+      // regular files and returns ENODEV for anything else, which includes
+      // every disk device (disks are character devices there). There is no
+      // readahead to tune, so this is a no-op, not a failure.
+      dout(10) << __func__ << " posix_fadvise not supported on this device, "
+               << "ignoring: " << cpp_strerror(r) << dendl;
+      r = 0;
+    } else {
+      derr << __func__ << " posix_fadvise got: " << cpp_strerror(r) << dendl;
+      goto out_fail;
+    }
   }
 
   if (lock_exclusive) {
@@ -593,6 +603,34 @@ void KernelDevice::_aio_stop()
 
     aio_thread.join();
 
+#if defined(HAVE_POSIXAIO)
+    // The aio thread leaves its loop as soon as it sees aio_stop, which can
+    // be before the wakeup read above has completed, or before the thread
+    // collected it.  FreeBSD keeps a finished job until aio_return() is
+    // called for it, and looks that job up by the address of its aiocb.  A
+    // job left behind here stays in the kernel after wakeup_ctx (and with
+    // it this aio_t) is freed, and the next aio_t that is allocated at the
+    // same address gets the result of the leftover job instead of its own:
+    // the 4096 byte wakeup read hands its length to whatever request lands
+    // on that address next, and that request's own result follows the one
+    // after it ("aio to ... but returned" abort in _aio_thread()).
+    // Collect the job here.  This also keeps the kernel from writing into
+    // bl after it is gone.
+    for (auto& a : wakeup_ctx.running_aios) {
+      int e;
+      int tries = 0;
+      while ((e = aio_error(&a.aio)) == EINPROGRESS && tries++ < 10000) {
+	usleep(1000);
+      }
+      if (e == EINPROGRESS) {
+        derr << __func__ << " wakeup read still in progress after 10s"
+             << dendl;
+      } else if (e != EINVAL && e != -1) {
+        aio_return(&a.aio);
+      }
+    }
+#endif
+
     if (cct->_conf->bdev_debug_aio) {
       for (auto& i: wakeup_ctx.running_aios) {
 	debug_aio_unlink(i);
@@ -734,7 +772,7 @@ void KernelDevice::_aio_thread()
 		path.c_str(),
 		r,
 #if defined(HAVE_POSIXAIO)
-                aio[i]->aio.aiocb.aio_lio_opcode,
+                aio[i]->aio.aio_lio_opcode,
 #else
                 aio[i]->iocb.aio_lio_opcode,
 #endif
@@ -1185,7 +1223,7 @@ int KernelDevice::aio_write(
 
   _aio_log_start(ioc, off, len);
 
-#ifdef HAVE_LIBAIO
+#if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
   if (aio && dio && !buffered) {
     if (cct->_conf->bdev_inject_crash &&
 	rand() % cct->_conf->bdev_inject_crash == 0) {
@@ -1500,7 +1538,7 @@ int KernelDevice::aio_read(
 	  << dendl;
 
   int r = 0;
-#ifdef HAVE_LIBAIO
+#if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
   if (aio && dio) {
     ceph_assert(is_valid_io(off, len));
     _aio_log_start(ioc, off, len);
@@ -1646,6 +1684,13 @@ int KernelDevice::invalidate_cache(uint64_t off, uint64_t len)
   int r = posix_fadvise(fd_buffereds[WRITE_LIFE_NOT_SET], off, len, POSIX_FADV_DONTNEED);
   if (r) {
     r = -r;
+    if (r == -ENODEV || r == -EOPNOTSUPP) {
+      // No page cache to drop: FreeBSD returns ENODEV for anything that
+      // is not a regular file, including all disk devices.
+      dout(20) << __func__ << " 0x" << std::hex << off << "~" << len << std::dec
+               << " posix_fadvise not supported on this device, ignoring" << dendl;
+      return 0;
+    }
     derr << __func__ << " 0x" << std::hex << off << "~" << len << std::dec
 	 << " error: " << cpp_strerror(r) << dendl;
   }
