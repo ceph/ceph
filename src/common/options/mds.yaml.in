@@ -754,6 +754,26 @@ options:
   - mds
   flags:
   - runtime
+- name: mds_bal_split_bytes
+  type: size
+  level: advanced
+  desc: total size of a directory fragment's omap values before splitting
+  long_desc: The MDS splits a directory fragment when the encoded dentries and
+    inodes stored in the fragment's metadata pool object add up to more than
+    this many bytes, even if the fragment has fewer than mds_bal_split_size
+    entries. osd_deep_scrub_large_omap_object_value_sum_threshold should be
+    referred to when deciding this value along.
+    0 disables the check.
+  fmt_desc: The maximum total size of a directory fragment's metadata before
+    the MDS will split it into smaller bits.
+  default: 512_M
+  services:
+  - mds
+  see_also:
+  - mds_bal_split_size
+  - osd_deep_scrub_large_omap_object_value_sum_threshold
+  flags:
+  - runtime
 - name: mds_bal_split_rd
   type: float
   level: advanced
@@ -1077,6 +1097,18 @@ options:
   fmt_desc: Ceph will assert that various scatter/gather invariants
     are ``true`` (developers only).
   with_legacy: true
+- name: mds_verify_frag_bytes
+  type: bool
+  level: dev
+  desc: verify computed dentry value lengths against a full encode
+  long_desc: When enabled, each time the MDS computes the length of a dentry's
+    omap value for its directory fragment's byte total, it also encodes the
+    value in full and asserts that the two lengths match.
+  default: false
+  services:
+  - mds
+  flags:
+  - runtime
 - name: mds_debug_scatterstat
   type: bool
   level: dev
