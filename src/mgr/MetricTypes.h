@@ -5,7 +5,12 @@
 #define CEPH_MGR_METRIC_TYPES_H
 
 #include <boost/variant/static_visitor.hpp>
+
+#include <list>
+#include <map>
 #include <variant>
+
+#include "common/Formatter.h"
 #include "include/denc.h"
 #include "include/ceph_features.h"
 #include "mgr/OSDPerfMetricTypes.h"
