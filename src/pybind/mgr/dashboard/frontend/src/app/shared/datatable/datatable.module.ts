@@ -34,6 +34,7 @@ import ArrowDown from '@carbon/icons/es/caret--down/16';
 import ChevronDwon from '@carbon/icons/es/chevron--down/16';
 import CheckMarkIcon from '@carbon/icons/es/checkmark/32';
 import CubeIcon from '@carbon/icons/es/cube/32';
+import SettingsIcon from '@carbon/icons/es/settings/16';
 
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { FormlyModule } from '@ngx-formly/core';
@@ -154,7 +155,8 @@ export class DataTableModule {
       ArrowDown,
       ChevronDwon,
       CheckMarkIcon,
-      CubeIcon
+      CubeIcon,
+      SettingsIcon
     ]);
   }
 }
