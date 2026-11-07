@@ -9,7 +9,10 @@ Ceph client release the cluster expects of its clients. It is an
 operator-set hint that authorizes use of on-map features whose encoding
 or semantics older clients cannot parse.
 
-Setting the flag does not refuse older clients at connect time. Instead it
+Setting the flag does not refuse older clients at connect time, with one
+exception: once the flag is ``nautilus`` or later, the Monitors and OSDs
+refuse clients that lack CephX v2 message signatures (the ``CEPHX_V2``
+feature, which Linux kernel clients have from 4.19). Beyond that, the flag
 gates operator commands that would place feature bits into the OSDMap which
 only newer clients understand. Once those features are in active use,
 older clients can no longer parse the OSDMap; they lose the ability to
@@ -32,8 +35,7 @@ Before committing the change, the Monitors inspect connected clients, MDSs,
 and Managers. If any advertise release-feature bits that fall short of the
 target, the command is rejected with a message like::
 
-   cannot set require_min_compat_client to reef:
-     3 connected client(s) look like luminous (missing 0x...)
+   cannot set require_min_compat_client to reef: 3 connected client(s) look like luminous (missing 0x...); add --yes-i-really-mean-it to do it anyway
 
 Pass ``--yes-i-really-mean-it`` to proceed anyway. Those clients will be
 disconnected once any feature the flag unlocks is actually enabled on the
@@ -89,15 +91,15 @@ features in active use on the map:
    * - CRUSH tunables (any non-legacy)
      - ``argonaut``
 
-The last two rows are effectively always satisfied on modern clusters,
-since ``OSDHASHPSPOOL`` has been set by default on every pool since
-``dumpling`` and non-legacy CRUSH tunables have been the default since
-``argonaut``. They are listed for completeness; in practice the floor
-only ever sits at ``firefly`` or newer.
+The last two rows are always satisfied on modern clusters: ``OSDHASHPSPOOL``
+is set on every new pool by default
+(:confval:`osd_pool_default_flag_hashpspool`), and new clusters use the
+``jewel`` CRUSH tunables profile or newer. They are listed for completeness;
+in practice the floor only ever sits at ``firefly`` or newer.
 
 If the command fails and prints ``osdmap current utilizes features that
-require <release>; cannot set require_min_compat_client below that``,
-remove the feature that pins the floor (for example, clear all
+require <floor>; cannot set require_min_compat_client below that to
+<release>``, remove the feature that pins the floor (for example, clear all
 ``pg-upmap-primary`` entries) and retry.
 
 Features gated by the flag
@@ -137,7 +139,7 @@ kernel clients are present in the cluster, that column can be ignored.
        | ``ceph osd rm-pg-upmap``
        | ``ceph osd pg-upmap-items``
        | ``ceph osd rm-pg-upmap-items``
-       | ``ceph osd crush weight-set``
+       | ``ceph osd crush weight-set create`` (per-pool weight sets)
        | balancer ``upmap`` mode
      - ``luminous``
      - 4.13
@@ -158,12 +160,17 @@ kernel clients are present in the cluster, that column can be ignored.
    clients that encounter CRUSH MSR rules will fail to compute a PG
    mapping, causing **I/O errors**.  Do not enable either feature while
    kernel clients are present (use ``ceph features`` to check).  Note
-   that CRUSH MSR rules are added via ``osd setcrushmap`` and are
-   **not** gated by ``require_min_compat_client``, but they immediately
-   raise the features-in-use floor to ``squid``
-   (see `Lowering the flag`_).  To check whether either is active::
+   that CRUSH MSR rules raise the features-in-use floor to ``squid``
+   (see `Lowering the flag`_), whether they come in a CRUSH map injected
+   with ``osd setcrushmap`` or from an erasure-code profile that sets
+   ``crush-osds-per-failure-domain`` above 1.  When
+   ``require_min_compat_client`` is below ``squid``, the Monitors refuse
+   either change with ``new crush map requires client version squid but
+   require_min_compat_client is <release>``.  To check whether either
+   feature is in use::
 
-      ceph osd dump | grep -E "pg_upmap_primary|msr"
+      ceph osd dump | grep pg_upmap_primary
+      ceph osd crush rule dump | grep choosemsr
 
    See :ref:`read_balancer` for removal commands.
 
