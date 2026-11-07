@@ -73,3 +73,21 @@ class TestCommon(object):
         ns = parser.parse_args(['--data', '/dev/sdz'])
         assert ns.dmcrypt_open_opts is None
         assert ns.dmcrypt_format_opts is None
+
+    @patch('ceph_volume.util.arg_validators.disk.has_bluestore_label', return_value=False)
+    @patch('ceph_volume.util.arg_validators.Device')
+    def test_prepare_parser_hw_opal_only(self, mocked_device, _mock_bs_label):
+        mocked_device.return_value = MagicMock(
+            exists=True,
+            has_gpt_headers=False,
+            has_partitions=False,
+            used_by_ceph=False,
+            has_fs=False,
+            is_lv=False,
+            path='/dev/sdz',
+            vg_name='vg',
+            lv_name='lv',
+        )
+        parser = common.prepare_parser('ceph-volume lvm prepare', 'test')
+        ns = parser.parse_args(['--data', '/dev/sdz', '--hw-opal-only'])
+        assert ns.hw_opal_only is True

@@ -6,6 +6,7 @@ from textwrap import dedent
 from ceph_volume import terminal, decorators
 from ceph_volume.util import device, disk, prompt_bool, arg_validators, templates
 from ceph_volume.util import prepare
+from ceph_volume.util import encryption as encryption_utils
 from . import common
 from .create import Create
 from .prepare import Prepare
@@ -237,6 +238,16 @@ class Batch(object):
             help='Enable device encryption via dm-crypt',
         )
         parser.add_argument(
+            '--hw-opal-only',
+            dest='hw_opal_only',
+            action='store_true',
+            help=('Enable SED OPAL hardware-only encryption via cryptsetup '
+                  '--hw-opal-only (LUKS on the physical device, LVM on the mapper). '
+                  'Implies encrypted OSD setup. Mutually exclusive with --dmcrypt. '
+                  'Optional CEPH_VOLUME_OPAL_ADMIN_KEY overrides the OPAL admin '
+                  'password (defaults to the LUKS key / lockbox secret).'),
+        )
+        parser.add_argument(
             '--with-tpm',
             dest='with_tpm',
             help='Whether encrypted OSDs should be enrolled with TPM.',
@@ -336,6 +347,7 @@ class Batch(object):
         self.args = parser.parse_args(argv)
         if self.args.bluestore:
             self.args.objectstore = 'bluestore'
+        encryption_utils.validate_hw_opal_cli_args(self.args)
         self.parser = parser
         for dev_list in ['', 'db_', 'wal_']:
             setattr(self, '{}usable'.format(dev_list), [])
@@ -432,6 +444,7 @@ class Batch(object):
             'osd_type',
             'bluestore',
             'dmcrypt',
+            'hw_opal_only',
             'with_tpm',
             'tpm2_pcrs',
             'crush_device_class',
@@ -689,13 +702,18 @@ def get_physical_osds(devices: List[device.Device], args: argparse.Namespace) ->
             free_size -= abs_size.b
             osd_id = args.osd_ids.pop() if args.osd_ids else None
 
+            enc = None
+            if getattr(args, 'hw_opal_only', False):
+                enc = 'hw-opal-only'
+            elif args.dmcrypt:
+                enc = 'dmcrypt'
             ret.append(Batch.OSD(
                 dev.path,
                 rel_data_size,
                 abs_size,
                 args.osds_per_device,
                 osd_id,
-                'dmcrypt' if args.dmcrypt else None,
+                enc,
                 dev.symlink
             ))
 
@@ -705,18 +723,23 @@ def get_lvm_osds(lvs: List[device.Device], args: argparse.Namespace) -> List[Bat
     '''
     Goes through passed LVs and assigns planned osds
     '''
+    usable = [lv for lv in lvs if not lv.used_by_ceph]
+    if getattr(args, 'hw_opal_only', False) and usable:
+        raise RuntimeError(
+            '--hw-opal-only cannot be used with existing LVs; '
+            'pass raw devices or partitions'
+        )
     ret = []
-    for lv in lvs:
-        if lv.used_by_ceph:
-            continue
+    for lv in usable:
         osd_id = None
         if args.osd_ids:
             osd_id = args.osd_ids.pop()
+        enc = 'dmcrypt' if args.dmcrypt else None
         osd = Batch.OSD("{}/{}".format(lv.vg_name, lv.lv_name),
                         100.0,
                         disk.Size(b=int(lv.lvs[0].lv_size)),
                         1,
                         osd_id,
-                        'dmcrypt' if args.dmcrypt else None)
+                        enc)
         ret.append(osd)
     return ret
