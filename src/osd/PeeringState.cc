@@ -1794,8 +1794,25 @@ map<pg_shard_t, pg_info_t>::const_iterator PeeringState::find_best_info(
   return best;
 }
 
+/**
+ * log_tail_after_getlog
+ *
+ * The tail the primary's log will have once GetLog has merged the log of
+ * get_log_shard. GetLog requests that log from no further back than
+ * get_log_shard's own tail, so the merged log reaches back to the older
+ * of the two tails and no further. choose_acting() uses this to decide
+ * which shards can be recovered from the log, and GetLog to decide how
+ * far back to request the log: a shard choose_acting() accepts because
+ * it lies between get_log_shard's tail and the primary's is a shard
+ * GetLog requests the log back to. The two must agree.
+ */
+eversion_t PeeringState::log_tail_after_getlog(const pg_info_t &get_log_info) const
+{
+  return std::min(info.log_tail, get_log_info.log_tail);
+}
+
 void PeeringState::calc_ec_acting(
-  map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard,
+  const eversion_t &log_tail,
   unsigned size,
   const vector<int> &acting,
   const vector<int> &up,
@@ -1818,7 +1835,7 @@ void PeeringState::calc_ec_acting(
     if (up.size() > (unsigned)i && up[i] != CRUSH_ITEM_NONE &&
 	!all_info.find(pg_shard_t(up[i], shard_id_t(i)))->second.is_incomplete() &&
 	all_info.find(pg_shard_t(up[i], shard_id_t(i)))->second.last_update >=
-	auth_log_shard->second.log_tail) {
+	log_tail) {
       ss << " selecting up[i]: " << pg_shard_t(up[i], shard_id_t(i)) << std::endl;
       want[i] = up[i];
       continue;
@@ -1832,7 +1849,7 @@ void PeeringState::calc_ec_acting(
     if (acting.size() > (unsigned)i && acting[i] != CRUSH_ITEM_NONE &&
 	!all_info.find(pg_shard_t(acting[i], shard_id_t(i)))->second.is_incomplete() &&
 	all_info.find(pg_shard_t(acting[i], shard_id_t(i)))->second.last_update >=
-	auth_log_shard->second.log_tail) {
+	log_tail) {
       ss << " selecting acting[i]: " << pg_shard_t(acting[i], shard_id_t(i)) << std::endl;
       want[i] = acting[i];
     } else if (!restrict_to_up_acting) {
@@ -1842,7 +1859,7 @@ void PeeringState::calc_ec_acting(
 	ceph_assert(static_cast<int>(j->shard) == i);
 	if (!all_info.find(*j)->second.is_incomplete() &&
 	    all_info.find(*j)->second.last_update >=
-	    auth_log_shard->second.log_tail) {
+	    log_tail) {
 	  ss << " selecting stray: " << *j << std::endl;
 	  want[i] = j->osd;
 	  break;
@@ -2634,8 +2651,27 @@ bool PeeringState::choose_acting(pg_shard_t &get_log_shard_id,
 	ss);
     }
   } else {
+    // A shard can only be recovered from the log if it is not behind the
+    // tail of the log the primary will have after GetLog. With optimized
+    // EC that log comes from get_log_shard, which need not be
+    // auth_log_shard, and GetLog extends the primary's log back only as
+    // far as get_log_shard's tail. So a longer log on auth_log_shard (a
+    // parity shard, say) must not make a shard look contiguous.
+    eversion_t ec_log_tail = auth_log_shard->second.log_tail;
+    if (pool.info.allows_ecoptimizations()) {
+      const eversion_t built_tail =
+	log_tail_after_getlog(get_log_shard->second);
+      if (built_tail > ec_log_tail) {
+	psdout(10) << "judging contiguity against log tail " << built_tail
+		   << " (primary " << info.log_tail << ", osd."
+		   << get_log_shard->first << " "
+		   << get_log_shard->second.log_tail << ") instead of osd."
+		   << auth_log_shard->first << " " << ec_log_tail << dendl;
+	ec_log_tail = built_tail;
+      }
+    }
     calc_ec_acting(
-      auth_log_shard,
+      ec_log_tail,
       get_osdmap()->get_pg_size(info.pgid.pgid),
       acting,
       up,
@@ -7983,7 +8019,10 @@ PeeringState::GetLog::GetLog(my_context ctx)
        ++p) {
     if (*p == ps->pg_whoami) continue;
     pg_info_t& ri = ps->peer_info[*p];
-    if (ri.last_update < ps->info.log_tail && ri.last_update >= best.log_tail &&
+    // a peer behind our tail that the log we can get reaches back to
+    // (the same bound choose_acting() judged its contiguity by)
+    if (ri.last_update < ps->info.log_tail &&
+        ri.last_update >= ps->log_tail_after_getlog(best) &&
         ri.last_update < request_log_from)
       request_log_from = ri.last_update;
   }
@@ -8309,6 +8348,23 @@ PeeringState::GetMissing::GetMissing(my_context ctx)
   DECLARE_LOCALS;
   ps->log_weirdness();
   ceph_assert(!ps->acting_recovery_backfill.empty());
+
+  // Optimized EC: activate() resets a shard that is behind the log tail
+  // to empty, and only a backfill target is backfilled afterwards. An
+  // acting or async recovery shard that choose_acting() judged contiguous
+  // may be behind the log the primary has now (see note_behind_log_tail).
+  // Choose the acting set again before requesting any log, so that no
+  // reply is left in flight when GetLog runs again.
+  for (const auto &s : ps->acting_recovery_backfill) {
+    if (s != ps->get_primary()) {
+      note_behind_log_tail(s, "before requesting logs");
+    }
+  }
+  if (!behind_log_tail.empty()) {
+    rechoose_acting();
+    return;
+  }
+
   eversion_t since;
   for (auto i = ps->acting_recovery_backfill.begin();
        i != ps->acting_recovery_backfill.end();
@@ -8398,8 +8454,18 @@ boost::statechart::result PeeringState::GetMissing::react(const MLogRec& logevt)
 		       std::move(logevt.msg->missing),
 		       logevt.from);
 
+  // Optimized EC: proc_replica_log() applied the current pwlc to the
+  // shard's own info. The pwlc known when choose_acting() ran may have
+  // advanced this shard past the log tail; the pwlc adopted with the
+  // authoritative log since may no longer cover it.
+  note_behind_log_tail(logevt.from, "under the current pwlc");
+
   if (peer_missing_requested.empty()) {
-    if (ps->need_up_thru) {
+    if (!behind_log_tail.empty()) {
+      // Every requested log has arrived: nothing is left in flight that
+      // GetLog could take for the authoritative log.
+      rechoose_acting();
+    } else if (ps->need_up_thru) {
       psdout(10) << " still need up_thru update before going active"
 			 << dendl;
       post_event(NeedUpThru());
@@ -8410,6 +8476,58 @@ boost::statechart::result PeeringState::GetMissing::react(const MLogRec& logevt)
     }
   }
   return discard_event();
+}
+
+bool PeeringState::GetMissing::note_behind_log_tail(const pg_shard_t &shard,
+						    const char *why)
+{
+  DECLARE_LOCALS;
+  const pg_info_t &pi = ps->peer_info[shard];
+  if (!ps->pool.info.allows_ecoptimizations() ||
+      ps->is_backfill_target(shard) ||
+      pi.is_empty() ||
+      pi.last_update >= ps->pg_log.get_tail()) {
+    return false;
+  }
+  // activate() would reset this shard to empty without backfilling it: the
+  // PG would go clean with the shard empty, and the first write to it would
+  // assert in should_send_op().
+  psdout(1) << "osd." << shard << " last_update " << pi.last_update
+	    << " is behind the log tail " << ps->pg_log.get_tail()
+	    << " " << why << " and is not a backfill target" << dendl;
+  behind_log_tail.insert(shard);
+  return true;
+}
+
+void PeeringState::GetMissing::rechoose_acting()
+{
+  DECLARE_LOCALS;
+  auto &rechosen = context< Peering >().rechosen_behind_log_tail;
+  for (const auto &shard : behind_log_tail) {
+    if (rechosen.contains(shard)) {
+      // choose_acting() already ran again for this shard this interval
+      // and still did not make it a backfill target. Do not activate with
+      // a shard that would be reset without a backfill.
+      pl->get_clog_error() << ps->info.pgid << " osd." << shard
+			   << " is behind the log tail " << ps->pg_log.get_tail()
+			   << " after the acting set was chosen again for it;"
+			   << " not activating";
+      post_event(IsIncomplete());
+      return;
+    }
+  }
+  rechosen.insert(behind_log_tail.begin(), behind_log_tail.end());
+  psdout(1) << "choosing the acting set again for " << behind_log_tail
+	    << ", behind the log tail " << ps->pg_log.get_tail() << dendl;
+  // choose_acting() in GetLog sees these shards as not contiguous and
+  // makes them backfill targets; let it set backfill_targets anew.
+  ps->clear_recovery_state();
+  post_event(RechooseActing());
+}
+
+boost::statechart::result PeeringState::GetMissing::react(const RechooseActing&)
+{
+  return transit< GetLog >();
 }
 
 boost::statechart::result PeeringState::GetMissing::react(const QueryState& q)
