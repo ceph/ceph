@@ -963,6 +963,7 @@ class ServiceSpec(object):
             'jaeger-query': TracingSpec,
             'jaeger-tracing': TracingSpec,
             'node-proxy': NodeProxySpec,
+            'agent': AgentSpec,
             SMBSpec.service_type: SMBSpec,
         }.get(service_type, cls)
         if ret == ServiceSpec and not service_type:
@@ -4771,6 +4772,46 @@ class SMBSpec(ServiceSpec):
                 k: v.to_json() for k, v in self.ssl_certificates.items()
             }
         return obj
+
+
+class AgentSpec(ServiceSpec):
+    """
+    Spec of the cephadm agent service.
+
+    The agent listener always serves TLS with a cephadm-signed certificate:
+    without one the agent cannot be reached by the mgr. ``ssl`` and
+    ``certificate_source`` therefore default to ``true`` and
+    ``cephadm-signed`` when they are not set (as in specs written by hand or
+    stored by older releases), and any other value is rejected.
+    """
+
+    def __init__(self,
+                 service_type: str = 'agent',
+                 ssl: Optional[bool] = True,
+                 certificate_source: Optional[str] = None,
+                 **kwargs: Any) -> None:
+        assert service_type == 'agent'
+        super(AgentSpec, self).__init__(
+            'agent',
+            ssl=True if ssl is None else ssl,
+            certificate_source=(certificate_source
+                                or CertificateSource.CEPHADM_SIGNED.value),
+            **kwargs
+        )
+
+    def validate(self) -> None:
+        if self.ssl is not True:
+            raise SpecValidationError(
+                'The agent service always uses TLS: "ssl" must be true or unset')
+        if self.certificate_source != CertificateSource.CEPHADM_SIGNED.value:
+            raise SpecValidationError(
+                'The agent service only supports cephadm-signed certificates: '
+                f'"certificate_source" must be "{CertificateSource.CEPHADM_SIGNED.value}" '
+                f'or unset, got "{self.certificate_source}"')
+        super(AgentSpec, self).validate()
+
+
+yaml.add_representer(AgentSpec, ServiceSpec.yaml_representer)
 
 
 class NodeProxySpec(ServiceSpec):
