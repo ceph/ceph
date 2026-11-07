@@ -99,33 +99,35 @@ int KeyRing::from_ceph_context(CephContext *cct, std::ostream* os)
   return -ENOENT;
 }
 
-int KeyRing::set_modifier(const char *type,
-			  const char *val,
+int KeyRing::set_modifier(std::string_view type,
+			  std::string_view val,
 			  EntityName& name,
 			  map<string, bufferlist>& caps)
 {
-  if (!val)
-    return -EINVAL;
-
-  if (strcmp(type, "key") == 0) {
+  auto set_key_from_val = [&](void (KeyRing::*set)(EntityName&, CryptoKey&)) {
     CryptoKey key;
-    string l(val);
     try {
-      key.decode_base64(l);
+      key.decode_base64(string{val});
     } catch (const ceph::buffer::error& err) {
       return -EINVAL;
     }
-    set_key(name, key);
-  } else if (strncmp(type, "caps ", 5) == 0) {
-    const char *caps_entity = type + 5;
-    if (!*caps_entity)
+    (this->*set)(name, key);
+    return 0;
+  };
+
+  if (type == "key") {
+    return set_key_from_val(&KeyRing::set_key);
+  } else if (type == "pending key") {
+    return set_key_from_val(&KeyRing::set_pending_key);
+  } else if (type.starts_with("caps ")) {
+    std::string_view caps_entity = type.substr(5);
+    if (caps_entity.empty())
       return -EINVAL;
-    string l(val);
     bufferlist bl;
-    encode(l, bl);
-    caps[caps_entity] = bl;
+    encode(string{val}, bl);
+    caps[string{caps_entity}] = bl;
     set_caps(name, caps);
-  } else if (strcmp(type, "auid") == 0) {
+  } else if (type == "auid") {
     // just ignore it so we can still decode "old" keyrings that have an auid
   } else
     return -EINVAL;
@@ -193,7 +195,7 @@ void KeyRing::decode(bufferlist::const_iterator& bli)
         continue;
       string key;
       std::replace_copy(k.begin(), k.end(), back_inserter(key), '_', ' ');
-      ret = set_modifier(key.c_str(), val.c_str(), ename, caps);
+      ret = set_modifier(key, val, ename, caps);
       if (ret < 0) {
 	ostringstream oss;
 	oss << "error setting modifier for [" << name << "] type=" << key
