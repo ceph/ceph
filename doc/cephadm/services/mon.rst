@@ -36,11 +36,13 @@ the placement of daemons.
 .. _mon-service-spec:
 
 Service Specification
-=====================
+---------------------
 
 The Monitor service can be deployed or updated via a YAML specification
-file with ``ceph orch apply -i``. The following is a complete example
-showing all parameters available as of August 2026:
+file with ``ceph orch apply -i``. The following example shows the parameters
+of the Monitor service specification. It uses ``hosts`` for placement. The
+other ``placement`` fields cannot all be combined with ``hosts``; see
+`Placement Parameters`_.
 
 .. code-block:: yaml
 
@@ -50,20 +52,15 @@ showing all parameters available as of August 2026:
         - host1
         - host2
         - host3
-      count: 5
-      label: mon
-      host_pattern: "mon*"
-      count_per_host: 1
     config:
       mon_warn_on_pool_no_redundancy: "false"
     unmanaged: false
-    preview_only: false
     networks:
     - 10.1.2.0/24
     extra_container_args:
       - "--cpus=2"
     extra_entrypoint_args:
-      - "--mon-data=/var/lib/ceph/mon"
+      - "--debug_ms 2"
     custom_configs:
       - mount_path: /etc/custom/mon.conf
         content: |
@@ -81,16 +78,17 @@ showing all parameters available as of August 2026:
 
 .. note::
 
-   The ``placement`` fields (``hosts``, ``label``, ``host_pattern``,
-   ``count``, ``count_per_host``) are mutually exclusive in certain
-   combinations. See :ref:`orchestrator-cli-placement-spec` for details.
+   Cephadm rejects a placement that combines ``hosts`` with ``label``,
+   ``hosts`` with ``host_pattern``, or ``count`` with ``count_per_host``.
+   ``label`` and ``host_pattern`` can be used together; a host must then
+   match both.
 
 .. note::
 
    The ``mon`` service type does **not** use a ``service_id``.
 
 Top-level Parameters
---------------------
+~~~~~~~~~~~~~~~~~~~~
 
 The following parameters are available at the top level of the Monitor service
 specification:
@@ -112,7 +110,6 @@ specification:
 
         config:
           mon_warn_on_pool_no_redundancy: "false"
-          mon_osd_full_ratio: "0.95"
 
 ``unmanaged``
     Boolean (default: ``false``). When ``true``, cephadm will not
@@ -120,14 +117,20 @@ specification:
     must be manually added with ``ceph orch daemon add mon``.
 
 ``preview_only``
-    Boolean (default: ``false``). When ``true``, changes are previewed
-    but not applied.
+    Boolean (default: ``false``). Set by
+    ``ceph orch apply -i <file> --dry-run``. Do not set it in a specification
+    file: when it is ``true``, cephadm does not save or apply the
+    specification, and ``ceph orch apply`` still prints
+    ``Scheduled mon update...``. To see what a specification would change,
+    run ``ceph orch apply -i <file> --dry-run``.
 
 ``networks``
-    A list of IP networks in CIDR notation (e.g., ``10.1.2.0/24``) to
-    which Monitor daemons should bind. If specified, Monitors will only
-    be deployed on hosts with IP addresses matching one of the listed
-    networks.
+    A list of IP networks in CIDR notation (e.g., ``10.1.2.0/24``). If
+    specified, Monitors will be deployed only on hosts with IP addresses in
+    one of the listed networks. Write each network exactly as the subnet is
+    configured on the hosts. This field does not set the address that a
+    Monitor binds to. That address comes from the ``hostname:network`` form
+    of a ``hosts`` entry or from the ``public_network`` option.
 
     .. code-block:: yaml
 
@@ -155,7 +158,7 @@ specification:
     .. code-block:: yaml
 
         extra_entrypoint_args:
-          - "--mon-data=/var/lib/ceph/mon"
+          - "--debug_ms 2"
 
 ``custom_configs``
     A list of custom configuration files to mount inside the Monitor
@@ -171,7 +174,7 @@ specification:
               setting = value
 
 Placement Parameters
---------------------
+~~~~~~~~~~~~~~~~~~~~
 
 The ``placement`` section specifies the number of Monitors to deploy and
 the hosts on which they may be placed. The following sub-fields are
@@ -181,10 +184,11 @@ available:
     A list of hostnames where Monitors should be deployed. Each entry can
     be a simple hostname or an extended format with network and name:
 
-    - ``hostname`` — deploy on this host
-    - ``hostname:network`` — deploy on this host, binding to the specified
+    - ``hostname``: deploy on this host
+    - ``hostname:network``: deploy on this host, binding to the specified
       IP or network
-    - ``hostname=name`` — deploy with a custom daemon name suffix
+    - ``hostname=name``: deploy on this host and use ``name`` as the daemon
+      ID, so that the daemon is ``mon.<name>``
 
     .. code-block:: yaml
 
@@ -200,9 +204,10 @@ available:
     Mutually exclusive with ``count_per_host``.
 
 ``count_per_host``
-    Integer (>= 1). Number of daemons to deploy per matching host.
-    Requires ``label``, ``hosts``, or ``host_pattern`` to be set.
-    Mutually exclusive with ``count``.
+    Must be ``1`` for the ``mon`` service: cephadm rejects a larger value with
+    ``Cannot place more than one mon per host``. Requires ``label``, ``hosts``,
+    or ``host_pattern`` to be set. Cannot be combined with ``count``, or with
+    ``hosts`` entries that carry a network or a name.
 
 ``label``
     A host label string. Monitor daemons will be deployed on all hosts
@@ -232,7 +237,7 @@ available:
             pattern_type: regex
 
 ``mon``-Specific Parameters (``spec`` section)
------------------------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The following parameters are specific to the ``mon`` service and are placed
 under the ``spec:`` section:
@@ -274,7 +279,7 @@ under the ``spec:`` section:
        the flag may not be set until a ``redeploy`` command is issued.
 
 Complete Minimal Examples
--------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Deploy 5 Monitors on labeled hosts:
 
@@ -349,7 +354,7 @@ You can also specify two public networks by using a list of networks:
 
   .. prompt:: bash #
 
-     ceph config set mon public_network 10.1.2.0/24,192.168.0.1/24
+     ceph config set mon public_network 10.1.2.0/24,192.168.0.0/24
 
 
 Deploying Monitors on a Particular Network 
@@ -428,7 +433,7 @@ network ``10.1.2.0/24``, run the following commands:
 
   .. prompt:: bash #
 
-    ceph orch daemon rm *mon.<oldhost1>*
+    ceph orch daemon rm mon.<oldhost1> --force
 
   Update the ``public_network``:
 
