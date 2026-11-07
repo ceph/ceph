@@ -3967,7 +3967,8 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
 			     SnapRealm *dir_realm,
 			     snapid_t snapid,
 			     unsigned max_bytes,
-			     int getattr_caps)
+			     int getattr_caps,
+			     const SnapInfo *snap_info)
 {
   client_t client = session->get_client();
   ceph_assert(snapid);
@@ -4013,23 +4014,12 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
     }
   }
 
-  utime_t snap_btime;
-  std::map<std::string, std::string> snap_metadata;
   SnapRealm *realm = find_snaprealm();
-  if (snapid != CEPH_NOSNAP && realm) {
-    // add snapshot timestamp vxattr
-    map<snapid_t,const SnapInfo*> infomap;
-    realm->get_snap_info(infomap,
-                         snapid,  // min
-                         snapid); // max
-    if (!infomap.empty()) {
-      ceph_assert(infomap.size() == 1);
-      const SnapInfo *si = infomap.begin()->second;
-      snap_btime = si->stamp;
-      snap_metadata = si->metadata;
-    }
-  }
-
+  // The snapshot timestamp and metadata vxattrs.  Held as a pointer into the
+  // SnapInfo: it outlives this call, and copying its metadata map per encoded
+  // inode is pure waste when readdir encodes every inode in the directory.
+  if (!snap_info && snapid != CEPH_NOSNAP && realm)
+    snap_info = realm->find_snap_info(snapid);
 
   bool no_caps = !valid ||
 		 session->is_stale() ||
@@ -4361,14 +4351,15 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
       bl.append(inline_data);
     const mempool_inode *policy_i = ppolicy ? pi : oi;
     encode(policy_i->quota, bl);
+    static const std::map<std::string,std::string> no_snap_metadata;
     encode_contiguous(bl,
       layout.pool_ns,
       any_i->btime,
       any_i->change_attr,
       file_i->export_pin,
-      snap_btime,
+      snap_info ? snap_info->stamp : utime_t(),
       file_i->rstat.rsnaps,
-      snap_metadata,
+      snap_info ? snap_info->metadata : no_snap_metadata,
       !file_i->fscrypt_auth.empty(),
       file_i->fscrypt_auth,
       file_i->fscrypt_file);
