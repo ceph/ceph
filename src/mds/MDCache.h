@@ -1434,6 +1434,7 @@ private:
   // [rejoin]
   bool rejoins_pending = false;
   std::set<mds_rank_t> rejoin_gather;      // nodes from whom i need a rejoin
+  std::set<mds_rank_t> rejoin_weak_applied; // survivor: OP_WEAK already applied
   std::set<mds_rank_t> rejoin_sent;        // nodes i sent a rejoin to
   std::set<mds_rank_t> rejoin_ack_sent;    // nodes i sent a rejoin to
   std::set<mds_rank_t> rejoin_ack_gather;  // nodes from whom i need a rejoin ack
