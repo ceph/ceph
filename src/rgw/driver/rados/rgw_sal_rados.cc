@@ -73,6 +73,7 @@
 #include "rgw_restore.h"
 #include "rgw_multipart_meta_filter.h"
 #include "yield_completion.h"
+#include "rgw_user_ctl.h"
 
 #include "services/svc_bilog_rados.h"
 #include "services/svc_bi_rados.h"
@@ -2987,6 +2988,9 @@ std::unique_ptr<Writer> RadosStore::get_atomic_writer(const DoutPrefixProvider *
 				  const std::string& unique_tag)
 {
   RGWBucketInfo& bucket_info = obj->get_bucket()->get_info();
+  if (bucket_info.versioning_enabled() && !obj->have_instance()) {
+    obj->gen_rand_obj_instance_name();
+  }
   RGWObjectCtx& obj_ctx = static_cast<RadosObject*>(obj)->get_ctx();
   auto aio = rgw::make_throttle(ctx()->_conf->rgw_put_obj_min_window_size, y);
   return std::make_unique<RadosAtomicWriter>(dpp, y,
@@ -4590,6 +4594,10 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
            const char *if_match,
            const char *if_nomatch)
 {
+  if (bucket->get_info().versioning_enabled() &&
+      !target_obj->have_instance()) {
+    target_obj->gen_rand_obj_instance_name();
+  }
   char final_etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
   MD5 hash;
   // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
@@ -4657,8 +4665,7 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
         return ret;
       }
 
-      hex_to_buf(part->get_etag().c_str(), petag,
-		CEPH_CRYPTO_MD5_DIGESTSIZE);
+      rgw_part_etag_to_digest(part->get_etag(), petag);
       hash.Update((const unsigned char *)petag, sizeof(petag));
 
       RGWUploadPartInfo& obj_part = part->info;

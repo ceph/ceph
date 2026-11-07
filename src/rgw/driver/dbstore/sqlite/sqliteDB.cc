@@ -3,6 +3,7 @@
 
 #include "sqliteDB.h"
 #include "rgw_account.h"
+#include "common/iso_8601.h"
 
 using namespace std;
 
@@ -160,6 +161,24 @@ int SQLiteDB::InitPrepareParams(const DoutPrefixProvider *dpp,
   if (params->account_table.empty()) {
     params->account_table = getAccountTable();
   }
+  if (params->role_table.empty()) {
+    params->role_table = getRoleTable();
+  }
+  if (params->oidc_table.empty()) {
+    params->oidc_table = getOIDCTable();
+  }
+  if (params->group_table.empty()) {
+    params->group_table = getGroupTable();
+  }
+  if (params->group_users_table.empty()) {
+    params->group_users_table = getGroupUsersTable();
+  }
+  if (params->topic_table.empty()) {
+    params->topic_table = getTopicTable();
+  }
+  if (params->bucket_topic_mapping_table.empty()) {
+    params->bucket_topic_mapping_table = getBucketTopicMappingTable();
+  }
   if (params->user_table.empty()) {
     params->user_table = getUserTable();
   }
@@ -177,6 +196,12 @@ int SQLiteDB::InitPrepareParams(const DoutPrefixProvider *dpp,
   }
 
   p_params.account_table = params->account_table;
+  p_params.role_table = params->role_table;
+  p_params.oidc_table = params->oidc_table;
+  p_params.group_table = params->group_table;
+  p_params.group_users_table = params->group_users_table;
+  p_params.topic_table = params->topic_table;
+  p_params.bucket_topic_mapping_table = params->bucket_topic_mapping_table;
   p_params.user_table = params->user_table;
   p_params.bucket_table = params->bucket_table;
   p_params.quota_table = params->quota_table;
@@ -230,6 +255,62 @@ enum GetAccount {
   MaxGroups,
   AccountMaxBuckets,
   MaxAccessKeys,
+  AccountAttrs,
+};
+
+enum GetRole {
+  RoleID = 0,
+  RoleName,
+  RoleTenant,
+  RoleAccountID,
+  RolePath,
+  RoleARN,
+  TrustPolicy,
+  PermPolicies,
+  ManagedPolicies,
+  RoleTags,
+  RoleMaxSessionDuration,
+  RoleDescription,
+  RoleCreationDate,
+};
+
+enum GetOIDCProvider {
+  OIDCProviderURL = 0,
+  OIDCTenant,
+  OIDCClientIDs,
+  OIDCThumbprints,
+  OIDCProviderARN,
+  OIDCCreationDate,
+};
+
+enum GetGroup {
+  GroupID = 0,
+  GroupName,
+  GroupTenant,
+  GroupAccountID,
+  GroupPath,
+  GroupAttrsCol,
+};
+
+enum GetGroupUser {
+  GUGroupID = 0,
+  GUUserID,
+};
+
+enum GetTopic {
+  TopicNameCol = 0,
+  TopicTenantCol,
+  TopicOwnerCol,
+  TopicARNCol,
+  TopicDestCol,
+  TopicOpaqueDataCol,
+  TopicPolicyTextCol,
+  TopicObjVersionCol,
+  TopicObjVersionTagCol,
+};
+
+enum GetBucketTopicMapping {
+  BTMBucketName = 0,
 };
 
 enum GetUser {
@@ -238,8 +319,6 @@ enum GetUser {
   NS,
   DisplayName,
   UserEmail,
-  AccessKeysID,
-  AccessKeysSecret,
   AccessKeys,
   SwiftKeys,
   SubUsers,
@@ -258,6 +337,9 @@ enum GetUser {
   TYPE,
   MfaIDs,
   AssumedRoleARN,
+  UserAccountID,
+  UserPath,
+  UserCreateDate,
   UserAttrs,
   UserVersion,
   UserVersionTag,
@@ -392,6 +474,187 @@ static int list_account(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_stm
   op.account.info.max_buckets = sqlite3_column_int(stmt, AccountMaxBuckets);
   op.account.info.max_access_keys = sqlite3_column_int(stmt, MaxAccessKeys);
 
+  SQL_DECODE_BLOB_PARAM(dpp, stmt, AccountAttrs, op.account.account_attrs, sdb);
+
+  return 0;
+}
+
+static int list_role(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_stmt *stmt) {
+  if (!stmt)
+    return -1;
+
+  RGWRoleInfo rinfo;
+
+  rinfo.id = (const char*)sqlite3_column_text(stmt, RoleID);
+  rinfo.name = (const char*)sqlite3_column_text(stmt, RoleName);
+
+  const char *t = (const char*)sqlite3_column_text(stmt, RoleTenant);
+  if (t) rinfo.tenant = t;
+
+  const char *a = (const char*)sqlite3_column_text(stmt, RoleAccountID);
+  if (a) rinfo.account_id = a;
+
+  t = (const char*)sqlite3_column_text(stmt, RolePath);
+  if (t) rinfo.path = t;
+
+  t = (const char*)sqlite3_column_text(stmt, RoleARN);
+  if (t) rinfo.arn = t;
+
+  t = (const char*)sqlite3_column_text(stmt, TrustPolicy);
+  if (t) rinfo.trust_policy = t;
+
+  SQL_DECODE_BLOB_PARAM(dpp, stmt, PermPolicies, rinfo.perm_policy_map, sdb);
+  SQL_DECODE_BLOB_PARAM(dpp, stmt, ManagedPolicies, rinfo.managed_policies, sdb);
+  SQL_DECODE_BLOB_PARAM(dpp, stmt, RoleTags, rinfo.tags, sdb);
+
+  rinfo.max_session_duration = sqlite3_column_int64(stmt, RoleMaxSessionDuration);
+
+  t = (const char*)sqlite3_column_text(stmt, RoleDescription);
+  if (t) rinfo.description = t;
+
+  t = (const char*)sqlite3_column_text(stmt, RoleCreationDate);
+  if (t) rinfo.creation_date = t;
+
+  op.role.info = rinfo;
+  op.role.list_entries.push_back(rinfo);
+
+  return 0;
+}
+
+static int list_role_count(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_stmt *stmt) {
+  if (!stmt)
+    return -1;
+
+  RGWRoleInfo dummy;
+  dummy.id = std::to_string(sqlite3_column_int(stmt, 0));
+  op.role.list_entries.push_back(dummy);
+
+  return 0;
+}
+
+static int list_oidc_provider(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_stmt *stmt) {
+  if (!stmt)
+    return -1;
+
+  RGWOIDCProviderInfo info;
+
+  info.provider_url = (const char*)sqlite3_column_text(stmt, OIDCProviderURL);
+
+  const char *t = (const char*)sqlite3_column_text(stmt, OIDCTenant);
+  if (t) info.tenant = t;
+
+  SQL_DECODE_BLOB_PARAM(dpp, stmt, OIDCClientIDs, info.client_ids, sdb);
+  SQL_DECODE_BLOB_PARAM(dpp, stmt, OIDCThumbprints, info.thumbprints, sdb);
+
+  t = (const char*)sqlite3_column_text(stmt, OIDCProviderARN);
+  if (t) info.arn = t;
+
+  t = (const char*)sqlite3_column_text(stmt, OIDCCreationDate);
+  if (t) info.creation_date = t;
+
+  op.oidc.info = info;
+  op.oidc.list_entries.push_back(info);
+
+  return 0;
+}
+
+static int list_topic(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_stmt *stmt) {
+  if (!stmt)
+    return -1;
+
+  rgw_pubsub_topic topic;
+
+  topic.name = (const char*)sqlite3_column_text(stmt, TopicNameCol);
+
+  {
+    void *blob_ptr = NULL;
+    int blob_len = 0;
+    SQL_READ_BLOB(dpp, stmt, TopicOwnerCol, blob_ptr, blob_len);
+    if (blob_ptr && blob_len > 0) {
+      bufferlist bl;
+      bl.append(reinterpret_cast<char*>(blob_ptr), blob_len);
+      auto iter = bl.cbegin();
+      ceph::converted_variant::decode(topic.owner, iter);
+    }
+  }
+
+  const char *t = (const char*)sqlite3_column_text(stmt, TopicARNCol);
+  if (t) topic.arn = t;
+
+  SQL_DECODE_BLOB_PARAM(dpp, stmt, TopicDestCol, topic.dest, sdb);
+
+  t = (const char*)sqlite3_column_text(stmt, TopicOpaqueDataCol);
+  if (t) topic.opaque_data = t;
+
+  t = (const char*)sqlite3_column_text(stmt, TopicPolicyTextCol);
+  if (t) topic.policy_text = t;
+
+  op.topic.topic = topic;
+  op.topic.topic_version.ver = sqlite3_column_int64(stmt, TopicObjVersionCol);
+  t = (const char*)sqlite3_column_text(stmt, TopicObjVersionTagCol);
+  if (t) op.topic.topic_version.tag = t;
+
+  op.topic.list_entries.push_back(topic);
+
+  return 0;
+}
+
+static int list_bucket_topic_mapping(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_stmt *stmt) {
+  if (!stmt)
+    return -1;
+
+  const char *b = (const char*)sqlite3_column_text(stmt, BTMBucketName);
+  if (b) op.topic.bucket_list.push_back(b);
+
+  return 0;
+}
+
+static int list_group(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_stmt *stmt) {
+  if (!stmt)
+    return -1;
+
+  RGWGroupInfo info;
+
+  info.id = (const char*)sqlite3_column_text(stmt, GroupID);
+  info.name = (const char*)sqlite3_column_text(stmt, GroupName);
+
+  const char *t = (const char*)sqlite3_column_text(stmt, GroupTenant);
+  if (t) info.tenant = t;
+
+  t = (const char*)sqlite3_column_text(stmt, GroupAccountID);
+  if (t) info.account_id = t;
+
+  t = (const char*)sqlite3_column_text(stmt, GroupPath);
+  if (t) info.path = t;
+
+  SQL_DECODE_BLOB_PARAM(dpp, stmt, GroupAttrsCol, op.group.group_attrs, sdb);
+
+  op.group.info = info;
+  op.group.list_entries.push_back(info);
+
+  return 0;
+}
+
+static int list_group_count(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_stmt *stmt) {
+  if (!stmt)
+    return -1;
+
+  RGWGroupInfo dummy;
+  dummy.id = std::to_string(sqlite3_column_int(stmt, 0));
+  op.group.list_entries.push_back(dummy);
+
+  return 0;
+}
+
+static int list_group_user(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_stmt *stmt) {
+  if (!stmt)
+    return -1;
+
+  const char *uid = (const char*)sqlite3_column_text(stmt, 0);
+  if (uid) {
+    op.group.user_list.push_back(uid);
+  }
+
   return 0;
 }
 
@@ -432,11 +695,38 @@ static int list_user(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_stmt *
 
   SQL_DECODE_BLOB_PARAM(dpp, stmt, MfaIDs, op.user.uinfo.mfa_ids, sdb);
 
+  {
+    const char *acct = (const char*)sqlite3_column_text(stmt, UserAccountID);
+    if (acct) op.user.uinfo.account_id = acct;
+  }
+  {
+    const char *p = (const char*)sqlite3_column_text(stmt, UserPath);
+    if (p) op.user.uinfo.path = p;
+  }
+  {
+    const char *cd = (const char*)sqlite3_column_text(stmt, UserCreateDate);
+    if (cd) {
+      auto tp = ceph::from_iso_8601(cd, false);
+      if (tp) op.user.uinfo.create_date = *tp;
+    }
+  }
+
   SQL_DECODE_BLOB_PARAM(dpp, stmt, UserAttrs, op.user.user_attrs, sdb);
   op.user.user_version.ver = sqlite3_column_int(stmt, UserVersion);
   op.user.user_version.tag = (const char*)sqlite3_column_text(stmt, UserVersionTag);
 
   op.user.list_entries.push_back(op.user.uinfo);
+  return 0;
+}
+
+static int list_user_count(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_stmt *stmt) {
+  if (!stmt)
+    return -1;
+
+  RGWUserInfo dummy;
+  dummy.user_id.id = std::to_string(sqlite3_column_int(stmt, 0));
+  op.user.list_entries.push_back(dummy);
+
   return 0;
 }
 
@@ -628,6 +918,36 @@ int SQLiteDB::InitializeDBOps(const DoutPrefixProvider *dpp)
   dbops.InsertAccount = make_shared<SQLInsertAccount>(&this->db, this->getDBname(), cct);
   dbops.RemoveAccount = make_shared<SQLRemoveAccount>(&this->db, this->getDBname(), cct);
   dbops.GetAccount = make_shared<SQLGetAccount>(&this->db, this->getDBname(), cct);
+  dbops.InsertRole = make_shared<SQLInsertRole>(&this->db, this->getDBname(), cct);
+  dbops.RemoveRole = make_shared<SQLRemoveRole>(&this->db, this->getDBname(), cct);
+  dbops.GetRole = make_shared<SQLGetRole>(&this->db, this->getDBname(), cct);
+  dbops.ListRoles = make_shared<SQLListRoles>(&this->db, this->getDBname(), cct);
+  dbops.InsertOIDCProvider = make_shared<SQLInsertOIDCProvider>(&this->db, this->getDBname(), cct);
+  dbops.RemoveOIDCProvider = make_shared<SQLRemoveOIDCProvider>(&this->db, this->getDBname(), cct);
+  dbops.GetOIDCProvider = make_shared<SQLGetOIDCProvider>(&this->db, this->getDBname(), cct);
+  dbops.ListOIDCProviders = make_shared<SQLListOIDCProviders>(&this->db, this->getDBname(), cct);
+  dbops.InsertTopic = make_shared<SQLInsertTopic>(&this->db, this->getDBname(), cct);
+  dbops.RemoveTopic = make_shared<SQLRemoveTopic>(&this->db, this->getDBname(), cct);
+  dbops.GetTopic = make_shared<SQLGetTopic>(&this->db, this->getDBname(), cct);
+  dbops.ListTopics = make_shared<SQLListTopics>(&this->db, this->getDBname(), cct);
+  dbops.InsertBucketTopicMapping = make_shared<SQLInsertBucketTopicMapping>(&this->db, this->getDBname(), cct);
+  dbops.RemoveBucketTopicMapping = make_shared<SQLRemoveBucketTopicMapping>(&this->db, this->getDBname(), cct);
+  dbops.GetBucketTopicMapping = make_shared<SQLGetBucketTopicMapping>(&this->db, this->getDBname(), cct);
+  dbops.RemoveBucketFromTopicMappings = make_shared<SQLRemoveBucketFromTopicMappings>(&this->db, this->getDBname(), cct);
+  dbops.InsertGroup = make_shared<SQLInsertGroup>(&this->db, this->getDBname(), cct);
+  dbops.RemoveGroup = make_shared<SQLRemoveGroup>(&this->db, this->getDBname(), cct);
+  dbops.GetGroup = make_shared<SQLGetGroup>(&this->db, this->getDBname(), cct);
+  dbops.ListGroups = make_shared<SQLListGroups>(&this->db, this->getDBname(), cct);
+  dbops.InsertGroupUser = make_shared<SQLInsertGroupUser>(&this->db, this->getDBname(), cct);
+  dbops.RemoveGroupUser = make_shared<SQLRemoveGroupUser>(&this->db, this->getDBname(), cct);
+  dbops.ListGroupUsers = make_shared<SQLListGroupUsers>(&this->db, this->getDBname(), cct);
+  dbops.RemoveUserGroups = make_shared<SQLRemoveUserGroups>(&this->db, this->getDBname(), cct);
+  dbops.ListUserGroups = make_shared<SQLListUserGroups>(&this->db, this->getDBname(), cct);
+  dbops.InsertAccessKey = make_shared<SQLInsertAccessKey>(&this->db, this->getDBname(), cct);
+  dbops.RemoveAccessKey = make_shared<SQLRemoveAccessKey>(&this->db, this->getDBname(), cct);
+  dbops.RemoveUserAccessKeys = make_shared<SQLRemoveUserAccessKeys>(&this->db, this->getDBname(), cct);
+  dbops.GetAccountUser = make_shared<SQLGetAccountUser>(&this->db, this->getDBname(), cct);
+  dbops.ListAccountUsers = make_shared<SQLListAccountUsers>(&this->db, this->getDBname(), cct);
   dbops.InsertUser = make_shared<SQLInsertUser>(&this->db, this->getDBname(), cct);
   dbops.RemoveUser = make_shared<SQLRemoveUser>(&this->db, this->getDBname(), cct);
   dbops.GetUser = make_shared<SQLGetUser>(&this->db, this->getDBname(), cct);
@@ -757,10 +1077,14 @@ out:
 int SQLiteDB::createTables(const DoutPrefixProvider *dpp)
 {
   int ret = -1;
-  int ca = 0, cu = 0, cb = 0, cq = 0;
+  int ca = 0, cr = 0, co = 0, cg = 0, cgu = 0, cu = 0, cb = 0, cq = 0;
   DBOpParams params = {};
 
   params.account_table = getAccountTable();
+  params.role_table = getRoleTable();
+  params.oidc_table = getOIDCTable();
+  params.group_table = getGroupTable();
+  params.group_users_table = getGroupUsersTable();
   params.user_table = getUserTable();
   params.bucket_table = getBucketTable();
   params.quota_table = getQuotaTable();
@@ -768,7 +1092,31 @@ int SQLiteDB::createTables(const DoutPrefixProvider *dpp)
   if ((ca = createAccountTable(dpp, &params)))
     goto out;
 
+  if ((cr = createRoleTable(dpp, &params)))
+    goto out;
+
+  if ((co = createOIDCProviderTable(dpp, &params)))
+    goto out;
+
+  if ((cg = createGroupTable(dpp, &params)))
+    goto out;
+
+  if ((cgu = createGroupUsersTable(dpp, &params)))
+    goto out;
+
   if ((cu = createUserTable(dpp, &params)))
+    goto out;
+
+  if (createAccessKeysTable(dpp, &params))
+    goto out;
+
+  params.topic_table = getTopicTable();
+  params.bucket_topic_mapping_table = getBucketTopicMappingTable();
+
+  if (createTopicTable(dpp, &params))
+    goto out;
+
+  if (createBucketTopicMappingTable(dpp, &params))
     goto out;
 
   if ((cb = createBucketTable(dpp, &params)))
@@ -810,6 +1158,70 @@ int SQLiteDB::createAccountTable(const DoutPrefixProvider *dpp, DBOpParams *para
   return ret;
 }
 
+int SQLiteDB::createRoleTable(const DoutPrefixProvider *dpp, DBOpParams *params)
+{
+  int ret = -1;
+  string schema;
+
+  schema = CreateTableSchema("Role", params);
+
+  ret = exec(dpp, schema.c_str(), NULL);
+  if (ret)
+    ldpp_dout(dpp, 0)<<"CreateRoleTable failed" << dendl;
+
+  ldpp_dout(dpp, 20)<<"CreateRoleTable succeeded" << dendl;
+
+  return ret;
+}
+
+int SQLiteDB::createOIDCProviderTable(const DoutPrefixProvider *dpp, DBOpParams *params)
+{
+  int ret = -1;
+  string schema;
+
+  schema = CreateTableSchema("OIDCProvider", params);
+
+  ret = exec(dpp, schema.c_str(), NULL);
+  if (ret)
+    ldpp_dout(dpp, 0)<<"CreateOIDCProviderTable failed" << dendl;
+
+  ldpp_dout(dpp, 20)<<"CreateOIDCProviderTable succeeded" << dendl;
+
+  return ret;
+}
+
+int SQLiteDB::createGroupTable(const DoutPrefixProvider *dpp, DBOpParams *params)
+{
+  int ret = -1;
+  string schema;
+
+  schema = CreateTableSchema("Group", params);
+
+  ret = exec(dpp, schema.c_str(), NULL);
+  if (ret)
+    ldpp_dout(dpp, 0)<<"CreateGroupTable failed" << dendl;
+
+  ldpp_dout(dpp, 20)<<"CreateGroupTable succeeded" << dendl;
+
+  return ret;
+}
+
+int SQLiteDB::createGroupUsersTable(const DoutPrefixProvider *dpp, DBOpParams *params)
+{
+  int ret = -1;
+  string schema;
+
+  schema = CreateTableSchema("GroupUsers", params);
+
+  ret = exec(dpp, schema.c_str(), NULL);
+  if (ret)
+    ldpp_dout(dpp, 0)<<"CreateGroupUsersTable failed" << dendl;
+
+  ldpp_dout(dpp, 20)<<"CreateGroupUsersTable succeeded" << dendl;
+
+  return ret;
+}
+
 int SQLiteDB::createUserTable(const DoutPrefixProvider *dpp, DBOpParams *params)
 {
   int ret = -1;
@@ -822,6 +1234,54 @@ int SQLiteDB::createUserTable(const DoutPrefixProvider *dpp, DBOpParams *params)
     ldpp_dout(dpp, 0)<<"CreateUserTable failed" << dendl;
 
   ldpp_dout(dpp, 20)<<"CreateUserTable succeeded" << dendl;
+
+  return ret;
+}
+
+int SQLiteDB::createAccessKeysTable(const DoutPrefixProvider *dpp, DBOpParams *params)
+{
+  int ret = -1;
+  string schema;
+
+  schema = CreateTableSchema("AccessKeys", params);
+
+  ret = exec(dpp, schema.c_str(), NULL);
+  if (ret)
+    ldpp_dout(dpp, 0)<<"CreateAccessKeysTable failed" << dendl;
+
+  ldpp_dout(dpp, 20)<<"CreateAccessKeysTable succeeded" << dendl;
+
+  return ret;
+}
+
+int SQLiteDB::createTopicTable(const DoutPrefixProvider *dpp, DBOpParams *params)
+{
+  int ret = -1;
+  string schema;
+
+  schema = CreateTableSchema("Topic", params);
+
+  ret = exec(dpp, schema.c_str(), NULL);
+  if (ret)
+    ldpp_dout(dpp, 0)<<"CreateTopicTable failed" << dendl;
+
+  ldpp_dout(dpp, 20)<<"CreateTopicTable succeeded" << dendl;
+
+  return ret;
+}
+
+int SQLiteDB::createBucketTopicMappingTable(const DoutPrefixProvider *dpp, DBOpParams *params)
+{
+  int ret = -1;
+  string schema;
+
+  schema = CreateTableSchema("BucketTopicMapping", params);
+
+  ret = exec(dpp, schema.c_str(), NULL);
+  if (ret)
+    ldpp_dout(dpp, 0)<<"CreateBucketTopicMappingTable failed" << dendl;
+
+  ldpp_dout(dpp, 20)<<"CreateBucketTopicMappingTable succeeded" << dendl;
 
   return ret;
 }
@@ -1207,6 +1667,9 @@ int SQLInsertAccount::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *par
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.account.max_access_keys, sdb);
   SQL_BIND_INT(dpp, stmt, index, params->op.account.info.max_access_keys, sdb);
 
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.account.account_attrs, sdb);
+  SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.account.account_attrs, sdb);
+
 out:
   return rc;
 }
@@ -1319,6 +1782,1300 @@ out:
   return ret;
 }
 
+int SQLInsertRole::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  if (!*sdb) {
+    ldpp_dout(dpp, 0)<<"In SQLInsertRole - no db" << dendl;
+    goto out;
+  }
+
+  InitPrepareParams(dpp, p_params, params);
+
+  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareInsertRole");
+out:
+  return ret;
+}
+
+int SQLInsertRole::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.role.role_id, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.role.info.id.c_str(), sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.role.name, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.role.info.name.c_str(), sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.role.tenant, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.role.info.tenant.c_str(), sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.role.account_id, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.role.info.account_id.c_str(), sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.role.path, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.role.info.path.c_str(), sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.role.arn, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.role.info.arn.c_str(), sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.role.trust_policy, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.role.info.trust_policy.c_str(), sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.role.perm_policies, sdb);
+  SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.role.info.perm_policy_map, sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.role.managed_policies, sdb);
+  SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.role.info.managed_policies, sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.role.tags, sdb);
+  SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.role.info.tags, sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.role.max_session_duration, sdb);
+  SQL_BIND_INT(dpp, stmt, index, params->op.role.info.max_session_duration, sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.role.description, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.role.info.description.c_str(), sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.role.creation_date, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.role.info.creation_date.c_str(), sdb);
+
+out:
+  return rc;
+}
+
+int SQLInsertRole::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+
+  SQL_EXECUTE(dpp, params, stmt, NULL);
+out:
+  return ret;
+}
+
+int SQLRemoveRole::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  if (!*sdb) {
+    ldpp_dout(dpp, 0)<<"In SQLRemoveRole - no db" << dendl;
+    goto out;
+  }
+
+  InitPrepareParams(dpp, p_params, params);
+
+  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareRemoveRole");
+out:
+  return ret;
+}
+
+int SQLRemoveRole::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.role.role_id, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.role.info.id.c_str(), sdb);
+
+out:
+  return rc;
+}
+
+int SQLRemoveRole::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+
+  SQL_EXECUTE(dpp, params, stmt, NULL);
+out:
+  return ret;
+}
+
+int SQLGetRole::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  if (!*sdb) {
+    ldpp_dout(dpp, 0)<<"In SQLGetRole - no db" << dendl;
+    goto out;
+  }
+
+  InitPrepareParams(dpp, p_params, params);
+
+  if (params->op.query_str == "name") {
+    SQL_PREPARE(dpp, p_params, sdb, name_stmt, ret, "PrepareGetRole");
+  } else if (params->op.query_str == "name_account") {
+    SQL_PREPARE(dpp, p_params, sdb, name_account_stmt, ret, "PrepareGetRole");
+  } else {
+    SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareGetRole");
+  }
+out:
+  return ret;
+}
+
+int SQLGetRole::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  if (params->op.query_str == "name") {
+    SQL_BIND_INDEX(dpp, name_stmt, index, p_params.op.role.name, sdb);
+    SQL_BIND_TEXT(dpp, name_stmt, index, params->op.role.info.name.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, name_stmt, index, p_params.op.role.tenant, sdb);
+    SQL_BIND_TEXT(dpp, name_stmt, index, params->op.role.info.tenant.c_str(), sdb);
+  } else if (params->op.query_str == "name_account") {
+    SQL_BIND_INDEX(dpp, name_account_stmt, index, p_params.op.role.name, sdb);
+    SQL_BIND_TEXT(dpp, name_account_stmt, index, params->op.role.info.name.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, name_account_stmt, index, p_params.op.role.account_id, sdb);
+    SQL_BIND_TEXT(dpp, name_account_stmt, index, params->op.role.info.account_id.c_str(), sdb);
+  } else {
+    SQL_BIND_INDEX(dpp, stmt, index, p_params.op.role.role_id, sdb);
+    SQL_BIND_TEXT(dpp, stmt, index, params->op.role.info.id.c_str(), sdb);
+  }
+
+out:
+  return rc;
+}
+
+int SQLGetRole::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+
+  if (params->op.query_str == "name") {
+    SQL_EXECUTE(dpp, params, name_stmt, list_role);
+  } else if (params->op.query_str == "name_account") {
+    SQL_EXECUTE(dpp, params, name_account_stmt, list_role);
+  } else {
+    SQL_EXECUTE(dpp, params, stmt, list_role);
+  }
+
+out:
+  return ret;
+}
+
+int SQLListRoles::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  if (!*sdb) {
+    ldpp_dout(dpp, 0)<<"In SQLListRoles - no db" << dendl;
+    goto out;
+  }
+
+  InitPrepareParams(dpp, p_params, params);
+
+  if (params->op.query_str == "account") {
+    SQL_PREPARE(dpp, p_params, sdb, account_stmt, ret, "PrepareListRoles");
+  } else if (params->op.query_str == "count_account") {
+    SQL_PREPARE(dpp, p_params, sdb, count_stmt, ret, "PrepareListRoles");
+  } else {
+    SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareListRoles");
+  }
+out:
+  return ret;
+}
+
+int SQLListRoles::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  if (params->op.query_str == "account") {
+    SQL_BIND_INDEX(dpp, account_stmt, index, p_params.op.role.account_id, sdb);
+    SQL_BIND_TEXT(dpp, account_stmt, index, params->op.role.info.account_id.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, account_stmt, index, p_params.op.role.path, sdb);
+    SQL_BIND_TEXT(dpp, account_stmt, index, params->op.role.info.path.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, account_stmt, index, p_params.op.role.name, sdb);
+    SQL_BIND_TEXT(dpp, account_stmt, index, params->op.role.info.name.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, account_stmt, index, p_params.op.list_max_count, sdb);
+    SQL_BIND_INT(dpp, account_stmt, index, params->op.list_max_count, sdb);
+  } else if (params->op.query_str == "count_account") {
+    SQL_BIND_INDEX(dpp, count_stmt, index, p_params.op.role.account_id, sdb);
+    SQL_BIND_TEXT(dpp, count_stmt, index, params->op.role.info.account_id.c_str(), sdb);
+  } else {
+    SQL_BIND_INDEX(dpp, stmt, index, p_params.op.role.tenant, sdb);
+    SQL_BIND_TEXT(dpp, stmt, index, params->op.role.info.tenant.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, stmt, index, p_params.op.role.path, sdb);
+    SQL_BIND_TEXT(dpp, stmt, index, params->op.role.info.path.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, stmt, index, p_params.op.role.name, sdb);
+    SQL_BIND_TEXT(dpp, stmt, index, params->op.role.info.name.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, stmt, index, p_params.op.list_max_count, sdb);
+    SQL_BIND_INT(dpp, stmt, index, params->op.list_max_count, sdb);
+  }
+
+out:
+  return rc;
+}
+
+int SQLListRoles::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+
+  if (params->op.query_str == "account") {
+    SQL_EXECUTE(dpp, params, account_stmt, list_role);
+  } else if (params->op.query_str == "count_account") {
+    SQL_EXECUTE(dpp, params, count_stmt, list_role_count);
+  } else {
+    SQL_EXECUTE(dpp, params, stmt, list_role);
+  }
+
+out:
+  return ret;
+}
+
+int SQLInsertOIDCProvider::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  if (!*sdb) {
+    ldpp_dout(dpp, 0)<<"In SQLInsertOIDCProvider - no db" << dendl;
+    goto out;
+  }
+
+  InitPrepareParams(dpp, p_params, params);
+
+  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareInsertOIDCProvider");
+out:
+  return ret;
+}
+
+int SQLInsertOIDCProvider::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.oidc.provider_url, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.oidc.info.provider_url.c_str(), sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.oidc.tenant, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.oidc.info.tenant.c_str(), sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.oidc.client_ids, sdb);
+  SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.oidc.info.client_ids, sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.oidc.thumbprints, sdb);
+  SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.oidc.info.thumbprints, sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.oidc.provider_arn, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.oidc.info.arn.c_str(), sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.oidc.creation_date, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.oidc.info.creation_date.c_str(), sdb);
+
+out:
+  return rc;
+}
+
+int SQLInsertOIDCProvider::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+
+  SQL_EXECUTE(dpp, params, stmt, NULL);
+out:
+  return ret;
+}
+
+int SQLRemoveOIDCProvider::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  if (!*sdb) {
+    ldpp_dout(dpp, 0)<<"In SQLRemoveOIDCProvider - no db" << dendl;
+    goto out;
+  }
+
+  InitPrepareParams(dpp, p_params, params);
+
+  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareRemoveOIDCProvider");
+out:
+  return ret;
+}
+
+int SQLRemoveOIDCProvider::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.oidc.provider_url, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.oidc.info.provider_url.c_str(), sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.oidc.tenant, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.oidc.info.tenant.c_str(), sdb);
+
+out:
+  return rc;
+}
+
+int SQLRemoveOIDCProvider::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+
+  SQL_EXECUTE(dpp, params, stmt, NULL);
+out:
+  return ret;
+}
+
+int SQLGetOIDCProvider::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  if (!*sdb) {
+    ldpp_dout(dpp, 0)<<"In SQLGetOIDCProvider - no db" << dendl;
+    goto out;
+  }
+
+  InitPrepareParams(dpp, p_params, params);
+
+  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareGetOIDCProvider");
+out:
+  return ret;
+}
+
+int SQLGetOIDCProvider::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.oidc.provider_url, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.oidc.info.provider_url.c_str(), sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.oidc.tenant, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.oidc.info.tenant.c_str(), sdb);
+
+out:
+  return rc;
+}
+
+int SQLGetOIDCProvider::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+
+  SQL_EXECUTE(dpp, params, stmt, list_oidc_provider);
+out:
+  return ret;
+}
+
+int SQLListOIDCProviders::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  if (!*sdb) {
+    ldpp_dout(dpp, 0)<<"In SQLListOIDCProviders - no db" << dendl;
+    goto out;
+  }
+
+  InitPrepareParams(dpp, p_params, params);
+
+  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareListOIDCProviders");
+out:
+  return ret;
+}
+
+int SQLListOIDCProviders::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.oidc.tenant, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.oidc.info.tenant.c_str(), sdb);
+
+out:
+  return rc;
+}
+
+int SQLListOIDCProviders::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+
+  SQL_EXECUTE(dpp, params, stmt, list_oidc_provider);
+out:
+  return ret;
+}
+
+/* --- Topic operations --- */
+
+int SQLInsertTopic::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  if (!*sdb) { ldpp_dout(dpp, 0)<<"In SQLInsertTopic - no db" << dendl; goto out; }
+  InitPrepareParams(dpp, p_params, params);
+  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareInsertTopic");
+out:
+  return ret;
+}
+
+int SQLInsertTopic::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.topic.topic_name, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.topic.topic.name.c_str(), sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.topic.tenant, sdb);
+  {
+    /* extract tenant from owner variant */
+    std::string tenant;
+    if (auto* u = std::get_if<rgw_user>(&params->op.topic.topic.owner)) {
+      tenant = u->tenant;
+    } else if (auto* a = std::get_if<rgw_account_id>(&params->op.topic.topic.owner)) {
+      tenant = *a;
+    }
+    SQL_BIND_TEXT(dpp, stmt, index, tenant.c_str(), sdb);
+  }
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.topic.owner, sdb);
+  {
+    bufferlist owner_bl;
+    ceph::converted_variant::encode(params->op.topic.topic.owner, owner_bl);
+    SQL_BIND_BLOB(dpp, stmt, index, owner_bl.c_str(), owner_bl.length(), sdb);
+  }
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.topic.arn, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.topic.topic.arn.c_str(), sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.topic.dest, sdb);
+  SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.topic.topic.dest, sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.topic.opaque_data, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.topic.topic.opaque_data.c_str(), sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.topic.policy_text, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.topic.topic.policy_text.c_str(), sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.list_max_count, sdb);
+  SQL_BIND_INT(dpp, stmt, index, params->op.topic.topic_version.ver, sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.topic.bucket_name, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.topic.topic_version.tag.c_str(), sdb);
+
+out:
+  return rc;
+}
+
+int SQLInsertTopic::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+
+  SQL_EXECUTE(dpp, params, stmt, list_topic);
+out:
+  return ret;
+}
+
+int SQLRemoveTopic::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  if (!*sdb) { ldpp_dout(dpp, 0)<<"In SQLRemoveTopic - no db" << dendl; goto out; }
+  InitPrepareParams(dpp, p_params, params);
+  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareRemoveTopic");
+out:
+  return ret;
+}
+
+int SQLRemoveTopic::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.topic.topic_name, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.topic.topic.name.c_str(), sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.topic.tenant, sdb);
+  {
+    std::string tenant;
+    if (auto* u = std::get_if<rgw_user>(&params->op.topic.topic.owner)) {
+      tenant = u->tenant;
+    } else if (auto* a = std::get_if<rgw_account_id>(&params->op.topic.topic.owner)) {
+      tenant = *a;
+    }
+    SQL_BIND_TEXT(dpp, stmt, index, tenant.c_str(), sdb);
+  }
+
+out:
+  return rc;
+}
+
+int SQLRemoveTopic::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+
+  SQL_EXECUTE(dpp, params, stmt, list_topic);
+out:
+  return ret;
+}
+
+int SQLGetTopic::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  if (!*sdb) { ldpp_dout(dpp, 0)<<"In SQLGetTopic - no db" << dendl; goto out; }
+  InitPrepareParams(dpp, p_params, params);
+  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareGetTopic");
+out:
+  return ret;
+}
+
+int SQLGetTopic::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.topic.topic_name, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.topic.topic.name.c_str(), sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.topic.tenant, sdb);
+  {
+    std::string tenant;
+    if (auto* u = std::get_if<rgw_user>(&params->op.topic.topic.owner)) {
+      tenant = u->tenant;
+    } else if (auto* a = std::get_if<rgw_account_id>(&params->op.topic.topic.owner)) {
+      tenant = *a;
+    }
+    SQL_BIND_TEXT(dpp, stmt, index, tenant.c_str(), sdb);
+  }
+
+out:
+  return rc;
+}
+
+int SQLGetTopic::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+
+  SQL_EXECUTE(dpp, params, stmt, list_topic);
+out:
+  return ret;
+}
+
+int SQLListTopics::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  if (!*sdb) { ldpp_dout(dpp, 0)<<"In SQLListTopics - no db" << dendl; goto out; }
+  InitPrepareParams(dpp, p_params, params);
+
+  if (params->op.query_str == "owner") {
+    SQL_PREPARE(dpp, p_params, sdb, owner_stmt, ret, "PrepareListTopicsByOwner");
+  } else {
+    SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareListTopics");
+  }
+out:
+  return ret;
+}
+
+int SQLListTopics::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  if (params->op.query_str == "owner") {
+    SQL_BIND_INDEX(dpp, owner_stmt, index, p_params.op.topic.owner, sdb);
+    {
+      bufferlist owner_bl;
+      ceph::converted_variant::encode(params->op.topic.topic.owner, owner_bl);
+      SQL_BIND_BLOB(dpp, owner_stmt, index, owner_bl.c_str(), owner_bl.length(), sdb);
+    }
+
+    SQL_BIND_INDEX(dpp, owner_stmt, index, p_params.op.topic.topic_name, sdb);
+    SQL_BIND_TEXT(dpp, owner_stmt, index, params->op.topic.topic.name.c_str(), sdb);
+
+    SQL_BIND_INDEX(dpp, owner_stmt, index, p_params.op.list_max_count, sdb);
+    SQL_BIND_INT(dpp, owner_stmt, index, params->op.list_max_count, sdb);
+  } else {
+    SQL_BIND_INDEX(dpp, stmt, index, p_params.op.topic.tenant, sdb);
+    {
+      std::string tenant;
+      if (auto* u = std::get_if<rgw_user>(&params->op.topic.topic.owner)) {
+        tenant = u->tenant;
+      }
+      SQL_BIND_TEXT(dpp, stmt, index, tenant.c_str(), sdb);
+    }
+
+    SQL_BIND_INDEX(dpp, stmt, index, p_params.op.topic.topic_name, sdb);
+    SQL_BIND_TEXT(dpp, stmt, index, params->op.topic.topic.name.c_str(), sdb);
+
+    SQL_BIND_INDEX(dpp, stmt, index, p_params.op.list_max_count, sdb);
+    SQL_BIND_INT(dpp, stmt, index, params->op.list_max_count, sdb);
+  }
+
+out:
+  return rc;
+}
+
+int SQLListTopics::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+
+  if (params->op.query_str == "owner") {
+    SQL_EXECUTE(dpp, params, owner_stmt, list_topic);
+  } else {
+    SQL_EXECUTE(dpp, params, stmt, list_topic);
+  }
+out:
+  return ret;
+}
+
+/* --- Bucket-Topic Mapping operations --- */
+
+int SQLInsertBucketTopicMapping::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  if (!*sdb) { ldpp_dout(dpp, 0)<<"In SQLInsertBucketTopicMapping - no db" << dendl; goto out; }
+  InitPrepareParams(dpp, p_params, params);
+  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareInsertBucketTopicMapping");
+out:
+  return ret;
+}
+
+int SQLInsertBucketTopicMapping::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.topic.topic_name, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.topic.topic.name.c_str(), sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.topic.bucket_name, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.topic.bucket_name.c_str(), sdb);
+
+out:
+  return rc;
+}
+
+int SQLInsertBucketTopicMapping::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+
+  SQL_EXECUTE(dpp, params, stmt, list_bucket_topic_mapping);
+out:
+  return ret;
+}
+
+int SQLRemoveBucketTopicMapping::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  if (!*sdb) { ldpp_dout(dpp, 0)<<"In SQLRemoveBucketTopicMapping - no db" << dendl; goto out; }
+  InitPrepareParams(dpp, p_params, params);
+  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareRemoveBucketTopicMapping");
+out:
+  return ret;
+}
+
+int SQLRemoveBucketTopicMapping::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.topic.topic_name, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.topic.topic.name.c_str(), sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.topic.bucket_name, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.topic.bucket_name.c_str(), sdb);
+
+out:
+  return rc;
+}
+
+int SQLRemoveBucketTopicMapping::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+
+  SQL_EXECUTE(dpp, params, stmt, list_bucket_topic_mapping);
+out:
+  return ret;
+}
+
+int SQLGetBucketTopicMapping::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  if (!*sdb) { ldpp_dout(dpp, 0)<<"In SQLGetBucketTopicMapping - no db" << dendl; goto out; }
+  InitPrepareParams(dpp, p_params, params);
+  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareGetBucketTopicMapping");
+out:
+  return ret;
+}
+
+int SQLGetBucketTopicMapping::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.topic.topic_name, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.topic.topic.name.c_str(), sdb);
+
+out:
+  return rc;
+}
+
+int SQLGetBucketTopicMapping::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+
+  SQL_EXECUTE(dpp, params, stmt, list_bucket_topic_mapping);
+out:
+  return ret;
+}
+
+int SQLRemoveBucketFromTopicMappings::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  if (!*sdb) { ldpp_dout(dpp, 0)<<"In SQLRemoveBucketFromTopicMappings - no db" << dendl; goto out; }
+  InitPrepareParams(dpp, p_params, params);
+  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareRemoveBucketFromTopicMappings");
+out:
+  return ret;
+}
+
+int SQLRemoveBucketFromTopicMappings::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.topic.bucket_name, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.topic.bucket_name.c_str(), sdb);
+
+out:
+  return rc;
+}
+
+int SQLRemoveBucketFromTopicMappings::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+
+  SQL_EXECUTE(dpp, params, stmt, list_bucket_topic_mapping);
+out:
+  return ret;
+}
+
+int SQLInsertGroup::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  if (!*sdb) { ldpp_dout(dpp, 0)<<"In SQLInsertGroup - no db" << dendl; goto out; }
+  InitPrepareParams(dpp, p_params, params);
+  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareInsertGroup");
+out:
+  return ret;
+}
+
+int SQLInsertGroup::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.group.group_id, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.group.info.id.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.group.name, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.group.info.name.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.group.tenant, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.group.info.tenant.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.group.account_id, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.group.info.account_id.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.group.path, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.group.info.path.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.group.group_attrs, sdb);
+  SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.group.group_attrs, sdb);
+out:
+  return rc;
+}
+
+int SQLInsertGroup::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  SQL_EXECUTE(dpp, params, stmt, NULL);
+out:
+  return ret;
+}
+
+int SQLRemoveGroup::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  if (!*sdb) { ldpp_dout(dpp, 0)<<"In SQLRemoveGroup - no db" << dendl; goto out; }
+  InitPrepareParams(dpp, p_params, params);
+  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareRemoveGroup");
+out:
+  return ret;
+}
+
+int SQLRemoveGroup::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.group.group_id, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.group.info.id.c_str(), sdb);
+out:
+  return rc;
+}
+
+int SQLRemoveGroup::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  SQL_EXECUTE(dpp, params, stmt, NULL);
+out:
+  return ret;
+}
+
+int SQLGetGroup::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  if (!*sdb) { ldpp_dout(dpp, 0)<<"In SQLGetGroup - no db" << dendl; goto out; }
+  InitPrepareParams(dpp, p_params, params);
+  if (params->op.query_str == "name") {
+    SQL_PREPARE(dpp, p_params, sdb, name_stmt, ret, "PrepareGetGroup");
+  } else {
+    SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareGetGroup");
+  }
+out:
+  return ret;
+}
+
+int SQLGetGroup::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  if (params->op.query_str == "name") {
+    SQL_BIND_INDEX(dpp, name_stmt, index, p_params.op.group.name, sdb);
+    SQL_BIND_TEXT(dpp, name_stmt, index, params->op.group.info.name.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, name_stmt, index, p_params.op.group.account_id, sdb);
+    SQL_BIND_TEXT(dpp, name_stmt, index, params->op.group.info.account_id.c_str(), sdb);
+  } else {
+    SQL_BIND_INDEX(dpp, stmt, index, p_params.op.group.group_id, sdb);
+    SQL_BIND_TEXT(dpp, stmt, index, params->op.group.info.id.c_str(), sdb);
+  }
+out:
+  return rc;
+}
+
+int SQLGetGroup::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  if (params->op.query_str == "name") {
+    SQL_EXECUTE(dpp, params, name_stmt, list_group);
+  } else {
+    SQL_EXECUTE(dpp, params, stmt, list_group);
+  }
+out:
+  return ret;
+}
+
+int SQLListGroups::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  if (!*sdb) { ldpp_dout(dpp, 0)<<"In SQLListGroups - no db" << dendl; goto out; }
+  InitPrepareParams(dpp, p_params, params);
+  if (params->op.query_str == "count_account") {
+    SQL_PREPARE(dpp, p_params, sdb, count_stmt, ret, "PrepareListGroups");
+  } else {
+    SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareListGroups");
+  }
+out:
+  return ret;
+}
+
+int SQLListGroups::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  if (params->op.query_str == "count_account") {
+    SQL_BIND_INDEX(dpp, count_stmt, index, p_params.op.group.account_id, sdb);
+    SQL_BIND_TEXT(dpp, count_stmt, index, params->op.group.info.account_id.c_str(), sdb);
+  } else {
+    SQL_BIND_INDEX(dpp, stmt, index, p_params.op.group.account_id, sdb);
+    SQL_BIND_TEXT(dpp, stmt, index, params->op.group.info.account_id.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, stmt, index, p_params.op.group.path, sdb);
+    SQL_BIND_TEXT(dpp, stmt, index, params->op.group.info.path.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, stmt, index, p_params.op.group.name, sdb);
+    SQL_BIND_TEXT(dpp, stmt, index, params->op.group.info.name.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, stmt, index, p_params.op.list_max_count, sdb);
+    SQL_BIND_INT(dpp, stmt, index, params->op.list_max_count, sdb);
+  }
+out:
+  return rc;
+}
+
+int SQLListGroups::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  if (params->op.query_str == "count_account") {
+    SQL_EXECUTE(dpp, params, count_stmt, list_group_count);
+  } else {
+    SQL_EXECUTE(dpp, params, stmt, list_group);
+  }
+out:
+  return ret;
+}
+
+int SQLInsertGroupUser::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  if (!*sdb) { ldpp_dout(dpp, 0)<<"In SQLInsertGroupUser - no db" << dendl; goto out; }
+  InitPrepareParams(dpp, p_params, params);
+  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareInsertGroupUser");
+out:
+  return ret;
+}
+
+int SQLInsertGroupUser::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.group.group_id, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.group.info.id.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.group.user_id, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.group.user_id.c_str(), sdb);
+out:
+  return rc;
+}
+
+int SQLInsertGroupUser::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  SQL_EXECUTE(dpp, params, stmt, NULL);
+out:
+  return ret;
+}
+
+int SQLRemoveGroupUser::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  if (!*sdb) { ldpp_dout(dpp, 0)<<"In SQLRemoveGroupUser - no db" << dendl; goto out; }
+  InitPrepareParams(dpp, p_params, params);
+  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareRemoveGroupUser");
+out:
+  return ret;
+}
+
+int SQLRemoveGroupUser::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.group.group_id, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.group.info.id.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.group.user_id, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.group.user_id.c_str(), sdb);
+out:
+  return rc;
+}
+
+int SQLRemoveGroupUser::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  SQL_EXECUTE(dpp, params, stmt, NULL);
+out:
+  return ret;
+}
+
+int SQLRemoveUserGroups::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  if (!*sdb) { ldpp_dout(dpp, 0)<<"In SQLRemoveUserGroups - no db" << dendl; goto out; }
+  InitPrepareParams(dpp, p_params, params);
+  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareRemoveUserGroups");
+out:
+  return ret;
+}
+
+int SQLRemoveUserGroups::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.group.user_id, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.group.user_id.c_str(), sdb);
+out:
+  return rc;
+}
+
+int SQLRemoveUserGroups::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  SQL_EXECUTE(dpp, params, stmt, NULL);
+out:
+  return ret;
+}
+
+int SQLListUserGroups::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  if (!*sdb) { ldpp_dout(dpp, 0)<<"In SQLListUserGroups - no db" << dendl; goto out; }
+  InitPrepareParams(dpp, p_params, params);
+  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareListUserGroups");
+out:
+  return ret;
+}
+
+int SQLListUserGroups::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.group.user_id, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.group.user_id.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.group.name, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.group.info.name.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.list_max_count, sdb);
+  SQL_BIND_INT(dpp, stmt, index, params->op.list_max_count, sdb);
+out:
+  return rc;
+}
+
+int SQLListUserGroups::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  SQL_EXECUTE(dpp, params, stmt, list_group);
+out:
+  return ret;
+}
+
+int SQLInsertAccessKey::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  if (!*sdb) { ldpp_dout(dpp, 0)<<"In SQLInsertAccessKey - no db" << dendl; goto out; }
+  InitPrepareParams(dpp, p_params, params);
+  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareInsertAccessKey");
+out:
+  return ret;
+}
+
+int SQLInsertAccessKey::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.access_key_id, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.user.uinfo.access_keys.begin()->second.id.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.user_id, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.user.uinfo.user_id.id.c_str(), sdb);
+out:
+  return rc;
+}
+
+int SQLInsertAccessKey::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  SQL_EXECUTE(dpp, params, stmt, NULL);
+out:
+  return ret;
+}
+
+int SQLRemoveAccessKey::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  if (!*sdb) { ldpp_dout(dpp, 0)<<"In SQLRemoveAccessKey - no db" << dendl; goto out; }
+  InitPrepareParams(dpp, p_params, params);
+  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareRemoveAccessKey");
+out:
+  return ret;
+}
+
+int SQLRemoveAccessKey::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.access_key_id, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.user.uinfo.access_keys.begin()->second.id.c_str(), sdb);
+out:
+  return rc;
+}
+
+int SQLRemoveAccessKey::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  SQL_EXECUTE(dpp, params, stmt, NULL);
+out:
+  return ret;
+}
+
+int SQLRemoveUserAccessKeys::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  if (!*sdb) { ldpp_dout(dpp, 0)<<"In SQLRemoveUserAccessKeys - no db" << dendl; goto out; }
+  InitPrepareParams(dpp, p_params, params);
+  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareRemoveUserAccessKeys");
+out:
+  return ret;
+}
+
+int SQLRemoveUserAccessKeys::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.user_id, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.user.uinfo.user_id.id.c_str(), sdb);
+out:
+  return rc;
+}
+
+int SQLRemoveUserAccessKeys::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  SQL_EXECUTE(dpp, params, stmt, NULL);
+out:
+  return ret;
+}
+
+int SQLListGroupUsers::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  if (!*sdb) { ldpp_dout(dpp, 0)<<"In SQLListGroupUsers - no db" << dendl; goto out; }
+  InitPrepareParams(dpp, p_params, params);
+  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareListGroupUsers");
+out:
+  return ret;
+}
+
+int SQLListGroupUsers::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.group.group_id, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.group.info.id.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.group.user_id, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.group.user_id.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.list_max_count, sdb);
+  SQL_BIND_INT(dpp, stmt, index, params->op.list_max_count, sdb);
+out:
+  return rc;
+}
+
+int SQLListGroupUsers::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  SQL_EXECUTE(dpp, params, stmt, list_group_user);
+out:
+  return ret;
+}
+
+int SQLGetAccountUser::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  if (!*sdb) { ldpp_dout(dpp, 0)<<"In SQLGetAccountUser - no db" << dendl; goto out; }
+  InitPrepareParams(dpp, p_params, params);
+  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareGetAccountUser");
+out:
+  return ret;
+}
+
+int SQLGetAccountUser::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.account_id, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.user.uinfo.account_id.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.display_name, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.user.uinfo.display_name.c_str(), sdb);
+out:
+  return rc;
+}
+
+int SQLGetAccountUser::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  SQL_EXECUTE(dpp, params, stmt, list_user);
+out:
+  return ret;
+}
+
+int SQLListAccountUsers::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  if (!*sdb) { ldpp_dout(dpp, 0)<<"In SQLListAccountUsers - no db" << dendl; goto out; }
+  InitPrepareParams(dpp, p_params, params);
+  if (params->op.query_str == "count") {
+    SQL_PREPARE(dpp, p_params, sdb, count_stmt, ret, "PrepareListAccountUsers");
+  } else {
+    SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareListAccountUsers");
+  }
+out:
+  return ret;
+}
+
+int SQLListAccountUsers::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  if (params->op.query_str == "count") {
+    SQL_BIND_INDEX(dpp, count_stmt, index, p_params.op.user.account_id, sdb);
+    SQL_BIND_TEXT(dpp, count_stmt, index, params->op.user.uinfo.account_id.c_str(), sdb);
+  } else {
+    SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.account_id, sdb);
+    SQL_BIND_TEXT(dpp, stmt, index, params->op.user.uinfo.account_id.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.display_name, sdb);
+    SQL_BIND_TEXT(dpp, stmt, index, params->op.user.uinfo.display_name.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, stmt, index, p_params.op.list_max_count, sdb);
+    SQL_BIND_INT(dpp, stmt, index, params->op.list_max_count, sdb);
+  }
+out:
+  return rc;
+}
+
+int SQLListAccountUsers::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  if (params->op.query_str == "count") {
+    SQL_EXECUTE(dpp, params, count_stmt, list_user_count);
+  } else {
+    SQL_EXECUTE(dpp, params, stmt, list_user);
+  }
+out:
+  return ret;
+}
+
 int SQLInsertUser::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
 {
   int ret = -1;
@@ -1357,22 +3114,6 @@ int SQLInsertUser::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.user_email, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.user.uinfo.user_email.c_str(), sdb);
 
-  if (!params->op.user.uinfo.access_keys.empty()) {
-    string access_key;
-    string key;
-    map<string, RGWAccessKey>::const_iterator it =
-      params->op.user.uinfo.access_keys.begin();
-    const RGWAccessKey& k = it->second;
-    access_key = k.id;
-    key = k.key;
-
-    SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.access_keys_id, sdb);
-    SQL_BIND_TEXT(dpp, stmt, index, access_key.c_str(), sdb);
-
-    SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.access_keys_secret, sdb);
-    SQL_BIND_TEXT(dpp, stmt, index, key.c_str(), sdb);
-
-  }
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.access_keys, sdb);
   SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.user.uinfo.access_keys, sdb);
 
@@ -1423,6 +3164,18 @@ int SQLInsertUser::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params
 
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.mfa_ids, sdb);
   SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.user.uinfo.mfa_ids, sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.account_id, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.user.uinfo.account_id.c_str(), sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.path, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.user.uinfo.path.c_str(), sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.create_date, sdb);
+  {
+    auto cd_str = ceph::to_iso_8601(params->op.user.uinfo.create_date);
+    SQL_BIND_TEXT(dpp, stmt, index, cd_str.c_str(), sdb);
+  }
 
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.user_attrs, sdb);
   SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.user.user_attrs, sdb);
@@ -1519,16 +3272,11 @@ int SQLGetUser::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
   if (params->op.query_str == "email") { 
     SQL_BIND_INDEX(dpp, email_stmt, index, p_params.op.user.user_email, sdb);
     SQL_BIND_TEXT(dpp, email_stmt, index, params->op.user.uinfo.user_email.c_str(), sdb);
-  } else if (params->op.query_str == "access_key") { 
+  } else if (params->op.query_str == "access_key") {
     if (!params->op.user.uinfo.access_keys.empty()) {
-      string access_key;
-      map<string, RGWAccessKey>::const_iterator it =
-        params->op.user.uinfo.access_keys.begin();
-      const RGWAccessKey& k = it->second;
-      access_key = k.id;
-
-      SQL_BIND_INDEX(dpp, ak_stmt, index, p_params.op.user.access_keys_id, sdb);
-      SQL_BIND_TEXT(dpp, ak_stmt, index, access_key.c_str(), sdb);
+      const auto& k = params->op.user.uinfo.access_keys.begin()->second;
+      SQL_BIND_INDEX(dpp, ak_stmt, index, p_params.op.user.access_key_id, sdb);
+      SQL_BIND_TEXT(dpp, ak_stmt, index, k.id.c_str(), sdb);
     }
   } else if (params->op.query_str == "user_id") { 
     SQL_BIND_INDEX(dpp, userid_stmt, index, p_params.op.user.user_id, sdb);

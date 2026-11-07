@@ -4,17 +4,12 @@
 #include "common/ceph_json.h"
 
 #include "rgw_op.h"
-#include "rgw_user.h"
 #include "rgw_process_env.h"
 #include "rgw_rest_user.h"
 #include "rgw_sal.h"
 
 #include "include/str_list.h"
 #include "include/ceph_assert.h"
-
-#include "services/svc_zone.h"
-#include "services/svc_sys_obj.h"
-#include "rgw_zone.h"
 
 #define dout_subsys ceph_subsys_rgw
 

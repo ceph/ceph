@@ -795,7 +795,11 @@ namespace rgw::sal {
       const DoutPrefixProvider* dpp,
       optional_yield y)
   {
-        return 0;
+    if (dest_bucket->get_info().versioning_enabled() &&
+        !dest_object->have_instance()) {
+      dest_object->gen_rand_obj_instance_name();
+    }
+    return 0;
   }
 
   int DBObject::DBReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs, int64_t end, RGWGetDataCB* cb, optional_yield y)
@@ -953,6 +957,10 @@ namespace rgw::sal {
            const char *if_match,
            const char *if_nomatch)
   {
+    if (bucket->get_info().versioning_enabled() &&
+        !target_obj->have_instance()) {
+      target_obj->gen_rand_obj_instance_name();
+    }
     char final_etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
     MD5 hash;
     bool truncated;
@@ -1009,8 +1017,7 @@ namespace rgw::sal {
           return ret;
         }
 
-        hex_to_buf(part->get_etag().c_str(), petag,
-		  CEPH_CRYPTO_MD5_DIGESTSIZE);
+        rgw_part_etag_to_digest(part->get_etag(), petag);
         hash.Update((const unsigned char *)petag, sizeof(petag));
 
         RGWUploadPartInfo& obj_part = part->get_info();
@@ -1537,6 +1544,10 @@ namespace rgw::sal {
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,
 				  const std::string& unique_tag) {
+    if (obj->get_bucket()->get_info().versioning_enabled() &&
+        !obj->have_instance()) {
+      obj->gen_rand_obj_instance_name();
+    }
     return std::make_unique<DBAtomicWriter>(dpp, y, obj, this, owner,
                     ptail_placement_rule, olh_epoch, unique_tag);
   }

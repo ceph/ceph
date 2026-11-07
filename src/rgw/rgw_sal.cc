@@ -42,6 +42,10 @@
 #include "driver/posix/rgw_sal_posix.h"
 #include "driver/dbstore/config/store.h"
 #endif
+#ifdef WITH_RADOSGW_NSFS
+#include "driver/nsfs/rgw_sal_nsfs.h"
+#include "driver/dbstore/config/store.h"
+#endif
 #ifdef WITH_RADOSGW_D4N
 #include "driver/d4n/rgw_sal_d4n.h" 
 #endif
@@ -62,6 +66,9 @@ extern rgw::sal::Driver* newDBStore(CephContext *cct);
 #endif
 #ifdef WITH_RADOSGW_POSIX
 extern rgw::sal::Driver* newPOSIXDriver(CephContext *cct);
+#endif
+#ifdef WITH_RADOSGW_NSFS
+extern rgw::sal::Driver* newNSFSDriver(CephContext *cct);
 #endif
 #ifdef WITH_RADOSGW_DAOS
 extern rgw::sal::Driver* newDaosStore(CephContext *cct);
@@ -195,7 +202,22 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
   else if (cfg.store_name.compare("posix") == 0) {
     driver = newPOSIXDriver(cct);
 
-    if (driver->initialize(cct, dpp) < 0) {
+    if (static_cast<rgw::sal::POSIXDriver*>(driver)
+            ->set_run_lc_thread(use_lc_thread)
+            .initialize(cct, dpp) < 0) {
+      delete driver;
+      return nullptr;
+    }
+  }
+#endif
+
+#ifdef WITH_RADOSGW_NSFS
+  else if (cfg.store_name.compare("nsfs") == 0) {
+    driver = newNSFSDriver(cct);
+
+    if (static_cast<rgw::sal::NSFSDriver*>(driver)
+            ->set_run_lc_thread(use_lc_thread)
+            .initialize(cct, dpp) < 0) {
       delete driver;
       return nullptr;
     }
@@ -296,6 +318,17 @@ rgw::sal::Driver* DriverManager::init_raw_storage_provider(const DoutPrefixProvi
 #else
     driver = nullptr;
 #endif
+  } else if (cfg.store_name.compare("nsfs") == 0) {
+#ifdef WITH_RADOSGW_NSFS
+    driver = newNSFSDriver(cct);
+
+    if (driver->initialize(cct, dpp) < 0) {
+      delete driver;
+      return nullptr;
+    }
+#else
+    driver = nullptr;
+#endif
   } else if (cfg.store_name.compare("daos") == 0) {
 #ifdef WITH_RADOSGW_DAOS
     driver = newDaosStore(cct);
@@ -375,6 +408,11 @@ DriverManager::Config DriverManager::get_config(bool admin, CephContext* cct)
     cfg.store_name = "posix";
   }
 #endif
+#ifdef WITH_RADOSGW_NSFS
+  else if (config_store == "nsfs") {
+    cfg.store_name = "nsfs";
+  }
+#endif
 #ifdef WITH_RADOSGW_DAOS
   else if (config_store == "daos") {
     cfg.store_name = "daos";
@@ -420,6 +458,12 @@ auto DriverManager::create_config_store(const DoutPrefixProvider* dpp,
 #endif
 #ifdef WITH_RADOSGW_POSIX
     if (type == "posix") {
+      const auto uri = g_conf().get_val<std::string>("dbstore_config_uri");
+      return rgw::dbstore::create_config_store(dpp, uri);
+    }
+#endif
+#ifdef WITH_RADOSGW_NSFS
+    if (type == "nsfs") {
       const auto uri = g_conf().get_val<std::string>("dbstore_config_uri");
       return rgw::dbstore::create_config_store(dpp, uri);
     }
