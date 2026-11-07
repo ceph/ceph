@@ -2420,9 +2420,9 @@ def test_post_object_success_redirect_action():
     ("Content-Type" , "text/plain"),("success_action_redirect" , redirect_url),\
     ('file', ('bar'))])
 
-    r = requests.post(url, files=payload, verify=get_config_ssl_verify())
-    assert r.status_code == 200
-    url = r.url
+    r = requests.post(url, files=payload, verify=get_config_ssl_verify(), allow_redirects=False)
+    assert r.status_code == 303
+    url = r.headers['Location']
     response = client.get_object(Bucket=bucket_name, Key='foo.txt')
     assert url == '{rurl}?bucket={bucket}&key={key}&etag=%22{etag}%22'.format(\
     rurl = redirect_url, bucket = bucket_name, key = 'foo.txt', etag = response['ETag'].strip('"'))
