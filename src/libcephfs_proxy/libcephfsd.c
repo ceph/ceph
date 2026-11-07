@@ -4,7 +4,6 @@
 #include <unistd.h>
 #include <sys/uio.h>
 #include <getopt.h>
-#include <endian.h>
 #include <string.h>
 #include <stdarg.h>
 
