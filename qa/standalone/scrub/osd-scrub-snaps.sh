@@ -41,6 +41,99 @@ function run() {
     done
 }
 
+# Verify remove-clone-metadata cleans up the snapset, including clone_snaps,
+# while preserving neighboring clones. Check dry-run leaves metadata unchanged,
+# missing clone_snaps entries require --force, and removing all clone metadata
+# allows ordinary head removal without --force.
+function TEST_remove_clone_metadata() {
+    local dir=$1
+    local poolname=remove_clone_metadata
+    local TESTDATA=$dir/data
+    local osd=0
+    local JSON SNAP cloneid middle remaining
+    local -a clones
+
+    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mgr $dir x || return 1
+    run_osd $dir $osd || return 1
+    ceph osd set noscrub || return 1
+    ceph osd set nodeep-scrub || return 1
+    create_pool $poolname 1 1 || return 1
+    wait_for_clean || return 1
+
+    # Three clones exercise removal of the middle, oldest and newest clone.
+    dd if=/dev/urandom of=$TESTDATA bs=256 count=1 || return 1
+    rados -p $poolname put obj $TESTDATA || return 1
+    for SNAP in 1 2 3
+    do
+        rados -p $poolname mksnap snap${SNAP} || return 1
+        dd if=/dev/urandom of=$TESTDATA bs=256 count=$((SNAP + 1)) || return 1
+        rados -p $poolname put obj $TESTDATA || return 1
+    done
+    kill_daemons $dir TERM osd || return 1
+
+    # Don't need to use ceph_objectstore_tool() function because osd stopped
+    JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --head --op list obj)" || return 1
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" --format json dump > $dir/before.json || return 1
+    jq -e '.SnapSet.clones | length == 3' $dir/before.json || return 1
+    read -r -a clones <<< "$(jq -r '[.SnapSet.clones[].snap] | @tsv' $dir/before.json)"
+    middle=${clones[1]}
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" get-attr snapset > $dir/original.snapset || return 1
+
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" --dry-run remove-clone-metadata "$middle" || return 1
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" get-attr snapset > $dir/after.snapset || return 1
+    cmp $dir/original.snapset $dir/after.snapset || return 1
+
+    # A partially corrupt snapset must fail without persisting partial edits.
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" clear-snapset snaps || return 1
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" get-attr snapset > $dir/missing.snapset || return 1
+    if ceph-objectstore-tool --data-path $dir/${osd} "$JSON" remove-clone-metadata "$middle" 2> $dir/error; then
+        return 1
+    fi
+    grep -F "Clone $middle doesn't exist in clone_snaps" $dir/error || return 1
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" get-attr snapset > $dir/after.snapset || return 1
+    cmp $dir/missing.snapset $dir/after.snapset || return 1
+
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" --force --dry-run remove-clone-metadata "$middle" || return 1
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" get-attr snapset > $dir/after.snapset || return 1
+    cmp $dir/missing.snapset $dir/after.snapset || return 1
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" --force remove-clone-metadata "$middle" || return 1
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" --format json dump > $dir/after.json || return 1
+    jq --argjson middle "$middle" \
+        '.SnapSet.clones | map(select(.snap != $middle) | del(.overlap, .snaps))' \
+        $dir/before.json > $dir/expected.json || return 1
+    jq '.SnapSet.clones | map(del(.overlap, .snaps))' \
+        $dir/after.json > $dir/actual.json || return 1
+    cmp $dir/expected.json $dir/actual.json || return 1
+
+    # Restore the intact snapset, then verify normal removal preserves the
+    # other clones' sizes and snapshot membership (overlaps may change).
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" set-attr snapset $dir/original.snapset || return 1
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" remove-clone-metadata "$middle" || return 1
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" --format json dump > $dir/after.json || return 1
+    jq --argjson middle "$middle" \
+        '.SnapSet.clones | map(select(.snap != $middle) | del(.overlap))' \
+        $dir/before.json > $dir/expected.json || return 1
+    jq '.SnapSet.clones | map(del(.overlap))' \
+        $dir/after.json > $dir/actual.json || return 1
+    cmp $dir/expected.json $dir/actual.json || return 1
+
+    for cloneid in "${clones[0]}" "${clones[2]}"
+    do
+        ceph-objectstore-tool --data-path $dir/${osd} "$JSON" remove-clone-metadata "$cloneid" || return 1
+    done
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" --format json dump > $dir/after.json || return 1
+    jq -e '.SnapSet.clones == []' $dir/after.json || return 1
+
+    # SnapSet::dump only shows clone_snaps entries for listed clones, so its
+    # output alone cannot detect orphan entries.  Ordinary head removal checks
+    # clone_snaps directly and must now succeed without --force.
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" remove || return 1
+    remaining=$(ceph-objectstore-tool --data-path $dir/${osd} --head --op list obj) || return 1
+    test -z "$remaining" || return 1
+    return 0
+}
+
 function create_scenario() {
     local dir=$1
     local poolname=$2
