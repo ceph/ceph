@@ -9,6 +9,8 @@ current state of the Ceph cluster at time of upgrade. There are two CLI
 commands to manage this information. Version information from 
 before the introduction of this feature is not available.
 
+.. note:: Version tracking is not part of Tentacle or any earlier release.
+
 Viewing Version History
 =======================
 
@@ -39,7 +41,9 @@ recorded config dump is also displayed.
                 "daemon_types": null,
                 "hosts": null,
                 "services": null,
-                "limit": null
+                "limit": null,
+                "bucket_type": null,
+                "bucket_name": null
             }
         }
     }
@@ -127,13 +131,15 @@ Option ``--show-config``:
 Removing Version History (Not Recommended)
 ==========================================
 
+.. warning:: Removed version history cannot be recovered.
+
 .. prompt:: bash #
 
     ceph cephadm remove-cluster-version-history [--all] [--before <datetime>] [--after <datetime>]
 
 This command will allow users to delete version history and requires
 at least one of the three provided options to be passed. If ``--all`` is
-passed all version history is deleted, this option is incompatible
+passed, all version history is deleted. This option is incompatible
 with ``--before`` and ``--after`` and returns an error if either are passed
 with it. Supply ``--before`` to specify deletion of version history before
 the <datetime> specified. Supply ``--after`` to specify deletion of version
@@ -162,7 +168,9 @@ Option ``--all``:
                 "daemon_types": null,
                 "hosts": null,
                 "services": null,
-                "limit": null
+                "limit": null,
+                "bucket_type": null,
+                "bucket_name": null
             }
         }
     }
@@ -173,9 +181,15 @@ Option ``--all``:
 
 ::
 
-    {
-        No Cluster Version History Stored
-    }
+    Cluster Version History Deletion Successful
+
+.. prompt:: bash #
+
+    ceph cephadm get-cluster-version-history
+
+::
+
+    No Cluster Version History Stored
 
 Option ``--before``:
 
@@ -186,7 +200,7 @@ Option ``--before``:
             "version": "ceph version 18.2.8 (asdfac5eee07c13fa5048sd230242b866df) reef (stable)",
             "upgrade_type": "bootstrap",
             "status": "complete",
-            "command_options": null,
+            "command_options": null
         },
         "2026-06-23 00:51:29": {
             "version": "quay.io/ceph/ceph:v19.2.3",
@@ -198,7 +212,9 @@ Option ``--before``:
                 "daemon_types": null,
                 "hosts": null,
                 "services": null,
-                "limit": null
+                "limit": null,
+                "bucket_type": null,
+                "bucket_name": null
             }
         }
     }
@@ -206,6 +222,14 @@ Option ``--before``:
 .. prompt:: bash #
 
     ceph cephadm remove-cluster-version-history --before "2026-06-23 00:00:00"
+
+::
+
+    Cluster Version History Deletion Successful
+
+.. prompt:: bash #
+
+    ceph cephadm get-cluster-version-history
 
 .. code-block:: json
 
@@ -220,7 +244,9 @@ Option ``--before``:
                 "daemon_types": null,
                 "hosts": null,
                 "services": null,
-                "limit": null
+                "limit": null,
+                "bucket_type": null,
+                "bucket_name": null
             }
         }
     }
@@ -246,7 +272,9 @@ Option ``--after``:
                 "daemon_types": null,
                 "hosts": null,
                 "services": null,
-                "limit": null
+                "limit": null,
+                "bucket_type": null,
+                "bucket_name": null
             }
         }
     }
@@ -254,6 +282,14 @@ Option ``--after``:
 .. prompt:: bash #
 
     ceph cephadm remove-cluster-version-history --after "2026-06-23 00:00:00"
+
+::
+
+    Cluster Version History Deletion Successful
+
+.. prompt:: bash #
+
+    ceph cephadm get-cluster-version-history
 
 .. code-block:: json
 
@@ -287,7 +323,9 @@ Options ``--before`` and ``--after``:
                 "daemon_types": null,
                 "hosts": null,
                 "services": null,
-                "limit": null
+                "limit": null,
+                "bucket_type": null,
+                "bucket_name": null
             }
         },
         "2026-06-24 00:10:01": {
@@ -300,7 +338,9 @@ Options ``--before`` and ``--after``:
                 "daemon_types": null,
                 "hosts": null,
                 "services": null,
-                "limit": null
+                "limit": null,
+                "bucket_type": null,
+                "bucket_name": null
             }
         }
     }
@@ -308,6 +348,14 @@ Options ``--before`` and ``--after``:
 .. prompt:: bash #
 
     ceph cephadm remove-cluster-version-history --after "2026-06-22 23:00:00" --before "2026-06-24 00:00:00"
+
+::
+
+    Cluster Version History Deletion Successful
+
+.. prompt:: bash #
+
+    ceph cephadm get-cluster-version-history
 
 .. code-block:: json
 
@@ -328,7 +376,9 @@ Options ``--before`` and ``--after``:
                 "daemon_types": null,
                 "hosts": null,
                 "services": null,
-                "limit": null
+                "limit": null,
+                "bucket_type": null,
+                "bucket_name": null
             }
         }
     }
