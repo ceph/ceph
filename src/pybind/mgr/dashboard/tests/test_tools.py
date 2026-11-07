@@ -54,7 +54,7 @@ class FooResourceDetail(RESTController):
 class GenerateControllerRoutesController(BaseController):
     @Proxy()
     def __call__(self, path, **params):
-        pass
+        return path
 
 
 @APIRouter('/fooargs', secure=False)
@@ -142,10 +142,11 @@ class RESTControllerTest(ControllerTestCase):
         self.assertStatus(404)
 
     def test_generate_controller_routes(self):
-        # We just need to add this controller in setup_server():
-        # noinspection PyStatementEffect
-        # pylint: disable=pointless-statement
-        GenerateControllerRoutesController
+        for path, expected in (('', ''), ('foo//literal%252Fname/', 'foo//literal%2Fname/')):
+            with self.subTest(path=path):
+                self._get('/api/rgw/proxy/' + path)
+                self.assertStatus(200)
+                self.assertBody(expected)
 
 
 class RequestLoggingToolTest(ControllerTestCase):

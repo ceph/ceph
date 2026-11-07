@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+from urllib.parse import quote, urlencode
+
 from ..controllers import APIRouter, BaseController, Endpoint, RESTController, Router
 from ..tests import ControllerTestCase
 
@@ -83,9 +85,20 @@ class ControllersTest(ControllerTestCase):
         cls.setup_controllers([BTest, RTest], "/test")
 
     def test_1(self):
-        self._get('/test/ui/btest/{}/test1?opt=3'.format(100))
+        key = 'pool/literal%2F%252F测试'
+        opt = 'literal%2F%252F'
+        self._get('/test/ui/%62test/{}/test1?{}'.format(
+            quote(key, safe=''), urlencode({'opt': opt})))
         self.assertStatus(200)
-        self.assertJsonBody({'key': '100', 'opt': '3'})
+        self.assertJsonBody({'key': key, 'opt': opt})
+
+    def test_repeated_path_separators(self):
+        self._get('/test/ui//btest/key/test1')
+        self.assertStatus(404)
+
+    def test_invalid_utf8_path(self):
+        self._get('/test/ui/btest/%FF/test1')
+        self.assertStatus(400)
 
     def test_2(self):
         self._get('/test/ui/btest/{}/test2/{}?opt=3'.format(100, 200))
