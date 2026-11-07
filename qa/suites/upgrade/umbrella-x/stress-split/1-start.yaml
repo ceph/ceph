@@ -65,6 +65,12 @@ tasks:
 
 - ceph.healthy:
 
+- print: "**** create pools for the split_reads check ****"
+- workunit:
+    clients:
+      client.0:
+        - test_upgrade_split_reads.sh setup
+
 - print: "**** upgrading first half of cluster, with stress ****"
 - sequential: [ignore-auth-warn-cephadm]
 - parallel:
@@ -91,6 +97,12 @@ tasks:
 # cephadm unsets the mutes
 - sequential: [ignore-auth-warn-cephadm]
 - ceph.healthy:
+
+- print: "**** check split_reads after the upgrade ****"
+- workunit:
+    clients:
+      client.0:
+        - test_upgrade_split_reads.sh verify
 
 
 #################

@@ -1997,7 +1997,8 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
           if (pending_inc.new_pools.count(id) == 0) {
             pending_inc.new_pools[id] = pool;
           }
-          maybe_enable_pool_split_ops(pending_inc.new_pools[id]);
+          maybe_enable_pool_split_ops(pending_inc.new_pools[id],
+                                      tmp.require_osd_release);
         }
       }
 
@@ -2007,9 +2008,8 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
         if (!pool.has_flag(pg_pool_t::FLAG_OMAP) &&
             (pool.is_replicated() ||
              (pool.allows_ecoptimizations() && !pool.is_crimson()))) {
-          pg_pool_t p = pool;
-          p.flags |= pg_pool_t::FLAG_OMAP;
-          pending_inc.new_pools[pool_id] = p;
+          auto it = pending_inc.new_pools.try_emplace(pool_id, pool).first;
+          it->second.flags |= pg_pool_t::FLAG_OMAP;
           dout(10) << __func__ << " replicated pool " << pool_id
                    << " has OMAP support auto-enabled" << dendl;
         }
@@ -8592,7 +8592,7 @@ int OSDMonitor::prepare_new_pool(string& name,
     }
   }
 
-  maybe_enable_pool_split_ops(*pi);
+  maybe_enable_pool_split_ops(*pi, osdmap.require_osd_release);
 
   // Auto-enable omap support for replicated and fast EC pools
   // Omap is not supported by EC pools in crimson
@@ -8712,7 +8712,9 @@ OSDMonitor::enable_pool_ec_optimizations(pg_pool_t &p, bool enable,
   return {};
 }
 
-void OSDMonitor::maybe_enable_pool_split_ops(pg_pool_t &p) {
+void OSDMonitor::maybe_enable_pool_split_ops(pg_pool_t& p,
+                                             ceph_release_t require_osd_release)
+{
   if (p.is_erasure()) {
     ErasureCodeInterfaceRef erasure_code;
     stringstream tmp;
@@ -8741,7 +8743,7 @@ void OSDMonitor::maybe_enable_pool_split_ops(pg_pool_t &p) {
     }
   }
 
-  if (osdmap.require_osd_release >= ceph_release_t::umbrella &&
+  if (require_osd_release >= ceph_release_t::umbrella &&
       !p.has_flag(pg_pool_t::FLAG_CRIMSON)) {
     p.flags |= pg_pool_t::FLAG_CLIENT_SPLIT_READS;
   }
@@ -9287,7 +9289,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       ss << r.error().message;
       return r.error().error;
     }
-    maybe_enable_pool_split_ops(p);
+    maybe_enable_pool_split_ops(p, osdmap.require_osd_release);
     if (!was_enabled && p.allows_ecoptimizations()) {
       // Pools with allow_ec_optimizations set store pg_temp in a different
       // order to change the primary selection algorithm without breaking
