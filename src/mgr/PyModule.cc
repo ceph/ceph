@@ -430,6 +430,10 @@ int PyModule::load(PyThreadState *pMainThreadState)
 
     load_notify_types();
 
+    // A bad SHARED_STORE declaration only disables sharing, it must not
+    // stop the module itself from loading.
+    load_shared_store();
+
     // We've imported the module and found a MgrModule subclass, at this
     // point the module is considered loaded.  It might still not be
     // runnable though, can_run populated later...
@@ -580,6 +584,79 @@ int PyModule::load_notify_types()
   dout(10) << "Module " << get_name() << " notify_types " << notify_types << dendl;
 
   return 0;
+}
+
+int PyModule::load_shared_store()
+{
+  PyObject *ls = PyObject_GetAttrString(pClass, "SHARED_STORE");
+  if (ls == nullptr) {
+    // SHARED_STORE is optional - clear expected AttributeError
+    if (PyErr_ExceptionMatches(PyExc_AttributeError)) {
+      PyErr_Clear();
+      dout(10) << "Module " << get_name() << " has no SHARED_STORE member" << dendl;
+      return 0;
+    }
+    derr << "Error getting SHARED_STORE from " << get_name() << ": "
+         << handle_pyerror(true, module_name, "load_shared_store") << dendl;
+    return -EINVAL;
+  }
+
+  int r = 0;
+  if (!PyList_Check(ls)) {
+    derr << "Module " << get_name() << " has SHARED_STORE that is not a list"
+         << dendl;
+    Py_DECREF(ls);
+    return -EINVAL;
+  }
+
+  // Each entry is {'prefix': str, 'readers': [str, ...]}.  Entries that are
+  // not valid are skipped, which means nothing is shared through them.
+  const size_t list_size = PyList_Size(ls);
+  for (size_t i = 0; i < list_size; ++i) {
+    PyObject *item = PyList_GetItem(ls, i);
+    ceph_assert(item != nullptr);
+
+    PyObject *py_prefix = PyDict_Check(item) ?
+      PyDict_GetItemString(item, "prefix") : nullptr;
+    PyObject *py_readers = PyDict_Check(item) ?
+      PyDict_GetItemString(item, "readers") : nullptr;
+    if (py_prefix == nullptr || !PyUnicode_Check(py_prefix) ||
+        py_readers == nullptr || !PyList_Check(py_readers)) {
+      derr << "Module " << get_name() << " has SHARED_STORE entry " << i
+           << " that is not {'prefix': str, 'readers': [str, ...]}, ignoring it"
+           << dendl;
+      r = -EINVAL;
+      continue;
+    }
+
+    std::set<std::string> readers;
+    bool readers_ok = true;
+    for (Py_ssize_t j = 0; j < PyList_Size(py_readers); ++j) {
+      PyObject *reader = PyList_GetItem(py_readers, j);
+      ceph_assert(reader != nullptr);
+      if (!PyUnicode_Check(reader)) {
+        readers_ok = false;
+        break;
+      }
+      readers.insert(PyUnicode_AsUTF8(reader));
+    }
+    std::string err;
+    if (!readers_ok) {
+      err = "readers must be a list of strings";
+    } else if (!shared_store.add(PyUnicode_AsUTF8(py_prefix), readers, &err)) {
+      // err is set by add()
+    } else {
+      continue;
+    }
+    derr << "Module " << get_name() << " has invalid SHARED_STORE entry " << i
+         << ": " << err << ", ignoring it" << dendl;
+    r = -EINVAL;
+  }
+  Py_DECREF(ls);
+  dout(10) << "Module " << get_name() << " shares " << shared_store.size()
+           << " KV prefix(es)" << dendl;
+
+  return r;
 }
 
 int PyModule::load_commands()
