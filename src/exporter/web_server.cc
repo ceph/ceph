@@ -4,6 +4,7 @@
 #include "global/global_init.h"
 #include "global/global_context.h"
 #include "exporter/DaemonMetricCollector.h"
+#include "common/split.h"
 
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/ssl.hpp>   // SSL/TLS
@@ -17,6 +18,7 @@
 #include <iostream>
 #include <map>
 #include <memory>
+#include <stdexcept>
 #include <string>
 
 #define dout_context g_ceph_context
@@ -241,10 +243,62 @@ void run_http_server(const std::string& exporter_addr, short unsigned int port) 
 }
 
 void run_https_server(const std::string& exporter_addr, short unsigned int port, const std::string& cert_file, const std::string& key_file) {
-  ssl::context ssl_ctx(ssl::context::tlsv13);
+  ssl::context ssl_ctx(ssl::context::tls_server);
 
   ssl_ctx.use_certificate_chain_file(cert_file);
   ssl_ctx.use_private_key_file(key_file, ssl::context::pem);
+
+  // TLS protocol version / options. Uses the colon-separated options used by
+  // the RGW Beast frontend (e.g. "no_sslv3:no_tlsv1:no_tlsv1_1").
+  // Empty values leave the OpenSSL defaults in place.
+  std::string options = g_conf().get_val<std::string>("exporter_ssl_options");
+  if (!options.empty()) {
+    for (auto option : ceph::split(options, ":")) {
+      if (option == "default_workarounds") {
+        ssl_ctx.set_options(ssl::context::default_workarounds);
+      } else if (option == "no_compression") {
+        ssl_ctx.set_options(ssl::context::no_compression);
+      } else if (option == "no_sslv2") {
+        ssl_ctx.set_options(ssl::context::no_sslv2);
+      } else if (option == "no_sslv3") {
+        ssl_ctx.set_options(ssl::context::no_sslv3);
+      } else if (option == "no_tlsv1") {
+        ssl_ctx.set_options(ssl::context::no_tlsv1);
+      } else if (option == "no_tlsv1_1") {
+        ssl_ctx.set_options(ssl::context::no_tlsv1_1);
+      } else if (option == "no_tlsv1_2") {
+        ssl_ctx.set_options(ssl::context::no_tlsv1_2);
+      } else if (option == "single_dh_use") {
+        ssl_ctx.set_options(ssl::context::single_dh_use);
+      } else {
+        throw std::runtime_error("unknown exporter_ssl_options value: " + std::string(option));
+      }
+    }
+  }
+
+  std::string ciphers = g_conf().get_val<std::string>("exporter_ssl_ciphers");
+  if (!ciphers.empty()) {
+    int r = SSL_CTX_set_cipher_list(ssl_ctx.native_handle(), ciphers.c_str());
+    if (r == 0) {
+      throw std::runtime_error("no cipher could be selected from exporter_ssl_ciphers: " + ciphers);
+    }
+  }
+
+  std::string ciphersuites = g_conf().get_val<std::string>("exporter_ssl_ciphersuites");
+  if (!ciphersuites.empty()) {
+    int r = SSL_CTX_set_ciphersuites(ssl_ctx.native_handle(), ciphersuites.c_str());
+    if (r == 0) {
+      throw std::runtime_error("no cipher could be selected from exporter_ssl_ciphersuites: " + ciphersuites);
+    }
+  }
+
+  std::string groups = g_conf().get_val<std::string>("exporter_tls_groups");
+  if (!groups.empty()) {
+    int r = SSL_CTX_set1_groups_list(ssl_ctx.native_handle(), groups.c_str());
+    if (r == 0) {
+      throw std::runtime_error("openssl rejected exporter_tls_groups: " + groups);
+    }
+  }
 
   tcp::acceptor acceptor{*global_ioc, {net::ip::make_address(exporter_addr), port}};
   https_server(acceptor, ssl_ctx);
