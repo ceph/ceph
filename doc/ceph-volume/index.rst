@@ -73,6 +73,7 @@ and ``ceph-disk`` is fully disabled. Encryption is fully supported.
    systemd
    inventory
    drive-group
+   rotate-dmcrypt-key
    lvm/index
    lvm/activate
    lvm/batch
