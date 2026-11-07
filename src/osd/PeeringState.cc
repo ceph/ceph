@@ -2933,6 +2933,16 @@ void PeeringState::activate(
   send_notify = false;
 
   if (is_primary()) {
+    // Nothing in pwlc may reach past the log head that peering settled on:
+    // a range beyond it describes writes this interval rolled back, and a
+    // shard that applied it would advance its last_update and log head
+    // past the primary's. proc_master_log() trims the map, but a stale copy
+    // from a peer can be merged back afterwards (see pwlc_rolled_back());
+    // trim again before the map becomes the definitive copy.
+    if (consider_rollback_pwlc(pg_log.get_head())) {
+      psdout(1) << "pwlc reached past log head " << pg_log.get_head()
+		<< " at activation, rolled back" << dendl;
+    }
     // Update the epoch so that pwlc used by the primary during
     // peering becomes the definitive copy of pwlc
     info.partial_writes_last_complete_epoch = get_osdmap_epoch();
@@ -3349,6 +3359,7 @@ void PeeringState::proc_primary_info(
 
 void PeeringState::consider_adjusting_pwlc(eversion_t last_complete)
 {
+  bool rolled_back = false;
   for (const auto & [shard, versionrange] :
 	 info.partial_writes_last_complete) {
     auto [fromversion, toversion] = versionrange;
@@ -3365,16 +3376,21 @@ void PeeringState::consider_adjusting_pwlc(eversion_t last_complete)
       // A divergent update has advanced pwlc adhead of last_complete,
       // roll backwards to the last completed full write and then
       // let proc_master_log roll forward partial writes
+      rolled_back = true;
       info.partial_writes_last_complete[shard] = std::pair(last_complete,
 							   last_complete);
       psdout(10) << "shard " << shard << " pwlc rolled backward to "
 		 << info.partial_writes_last_complete[shard] << dendl;
     }
   }
+  if (rolled_back) {
+    pwlc_rolled_back();
+  }
 }
 
-void PeeringState::consider_rollback_pwlc(eversion_t last_complete)
+bool PeeringState::consider_rollback_pwlc(eversion_t last_complete)
 {
+  bool rolled_back = false;
   for (const auto & [shard, versionrange] :
 	 info.partial_writes_last_complete) {
     auto [fromversion, toversion] = versionrange;
@@ -3385,13 +3401,45 @@ void PeeringState::consider_rollback_pwlc(eversion_t last_complete)
       // OSD returns
       info.partial_writes_last_complete[shard] = std::pair(last_complete,
 							   last_complete);
+      rolled_back = true;
       psdout(10) << "shard " << shard << " pwlc rolled back to "
 		 << info.partial_writes_last_complete[shard] << dendl;
     } else if (last_complete < toversion) {
       info.partial_writes_last_complete[shard].second = last_complete;
+      rolled_back = true;
       psdout(10) << "shard " << shard << " pwlc rolled back to "
 		 << info.partial_writes_last_complete[shard] << dendl;
     }
+  }
+  if (rolled_back) {
+    pwlc_rolled_back();
+  }
+  return rolled_back;
+}
+
+// A rollback of pwlc during peering (consider_adjusting_pwlc,
+// consider_rollback_pwlc) used to leave the map's epoch alone. A peer that
+// logged the rolled-back writes holds a copy of the map from before the
+// rollback, stamped by an earlier activation or write, with that same epoch
+// and higher toversions, and update_peer_info() prefers the higher toversion
+// within one epoch. proc_replica_log() rolls the copy back when it rewinds
+// the peer's log, but the peer's own info reaches the primary by other ways
+// too: when a new map arrives while the primary waits for up_thru, the
+// stray notifies again and proc_replica_notify() merges its info. The
+// primary's map then grew past its log head again, activate() stamped it as
+// the definitive copy, and a shard that applied such a range advanced its
+// last_update and log head past the primary's; the first write of the
+// interval reused that version and asserted in PGLog::IndexedLog::add.
+// Give the rolled-back map the current epoch: every copy a peer holds
+// predates this interval.
+void PeeringState::pwlc_rolled_back()
+{
+  if (is_primary() &&
+      info.partial_writes_last_complete_epoch < get_osdmap_epoch()) {
+    info.partial_writes_last_complete_epoch = get_osdmap_epoch();
+    dirty_info = true;
+    psdout(10) << "pwlc rolled back, epoch now e"
+	       << info.partial_writes_last_complete_epoch << dendl;
   }
 }
 
