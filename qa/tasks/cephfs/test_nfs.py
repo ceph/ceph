@@ -832,7 +832,9 @@ class TestNFS(MgrTestCase):
                     }
                 ],
                 "deployment_type": "standalone",
+                "enable_nfsv3": False,
                 "enable_rdma": False,
+                "enable_nfs_metrics": False,
                 "virtual_ip": None,
             }
         }
