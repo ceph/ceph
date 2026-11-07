@@ -206,6 +206,58 @@ done
         # drop cache multiple times to clear replica pins
         self._wait_subtrees([], status=self.status, action=_drop)
 
+    def _cached_inodes(self, path, rank):
+        # the inodes under path in the cache of rank, path itself excluded
+        tree = self.fs.rank_asok(["dump", "tree", path, "1"], rank=rank,
+                                 status=self.status)
+        return len(tree) - 1
+
+    def _test_export_trim(self, fill, subtrees):
+        """
+        That exporting hot/, filled by fill, does not trim the dentries of
+        cold/, which the export does not touch, from the cache of the
+        exporter when the cache is far from full.
+        """
+
+        ncold = 1000
+        self.mount_a.run_shell_payload(f"mkdir cold hot && cd cold && touch $(seq {ncold})")
+        self.mount_a.run_shell_payload(f"cd hot && {fill}")
+        self._wait_subtrees([s for s in subtrees if s[0] != '/hot'],
+                            status=self.status, rank="all", path="/hot")
+        self.mount_a.remount() # release the caps that pin the cold inodes
+        self.assertEqual(self._cached_inodes("/cold", 0), ncold)
+
+        self.mount_a.setfattr("hot", "ceph.dir.pin", "1")
+        self._wait_subtrees(subtrees, status=self.status, rank="all", path="/hot")
+        self.assertEqual(self._cached_inodes("/cold", 0), ncold)
+
+    def test_export_trim_null_dentries(self):
+        """
+        That the null dentries of an exported dirfrag are not counted as
+        dentries to trim from the main LRU of the exporter.
+
+        See https://tracker.ceph.com/issues/81918
+        """
+
+        # keep one file: the balancer does not export an empty dirfrag
+        self._test_export_trim("touch $(seq 0 1000) && rm -f $(seq 1000)",
+                               [('/hot', 1)])
+
+    def test_export_trim_unexpirable_dentries(self):
+        """
+        That the exported dentries the exporter cannot trim yet are not made
+        up for with dentries of its own.
+
+        See https://tracker.ceph.com/issues/81918
+        """
+
+        # the subdirs stay on rank 0, which keeps their dentries pinned;
+        # a file in each, as rank 0 would hand back an empty one
+        nsub = 100
+        self._test_export_trim(f"mkdir $(seq {nsub}) && for d in $(seq {nsub}); "
+                               f"do touch $d/f && setfattr -n ceph.dir.pin -v 0 $d; done",
+                               [('/hot', 1)] + [(f'/hot/{i}', 0) for i in range(1, nsub + 1)])
+
     def test_open_file(self):
         """
         Test opening a file via a hard link that is not in the same mds as the inode.
