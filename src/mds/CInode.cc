@@ -1762,6 +1762,47 @@ void InodeStoreBase::decode_bare(bufferlist::const_iterator &bl,
 }
 
 
+bool InodeStoreBase::peek_bare(bufferlist::const_iterator &p,
+                               bool *is_dir, bool *has_old_inodes)
+{
+  // Follows decode_bare() and inode_t::decode().
+  using ceph::decode;
+  uint32_t mode;
+  {
+    DECODE_START_LEGACY_COMPAT_LEN(19, 6, 6, p);
+    if (!struct_end)
+      return false;  // no length to skip the rest of the inode_t by
+    inodeno_t ino;
+    uint32_t rdev;
+    utime_t ctime;
+    decode(ino, p);
+    decode(rdev, p);
+    decode(ctime, p);
+    decode(mode, p);
+    DECODE_FINISH(p);
+  }
+  auto skip_counted = [&p]() {  // a string, bufferptr or bufferlist
+    uint32_t len;
+    decode(len, p);
+    p += len;
+  };
+  if (S_ISLNK(mode))
+    skip_counted();  // symlink
+  uint32_t n;
+  decode(n, p);  // dirfragtree: n x (frag_t, int32_t)
+  p += n * (sizeof(uint32_t) + sizeof(int32_t));
+  decode(n, p);  // xattrs: n x (name, value)
+  for (uint32_t i = 0; i < n; i++) {
+    skip_counted();
+    skip_counted();
+  }
+  skip_counted();  // snap_blob
+  decode(n, p);  // old_inodes
+  *is_dir = S_ISDIR(mode);
+  *has_old_inodes = n > 0;
+  return true;
+}
+
 void InodeStoreBase::decode(bufferlist::const_iterator &bl, bufferlist& snap_blob)
 {
   DECODE_START_LEGACY_COMPAT_LEN(5, 4, 4, bl);

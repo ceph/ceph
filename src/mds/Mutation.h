@@ -461,6 +461,9 @@ struct MDRequestImpl : public MutationImpl {
   CDentry *straydn = nullptr;
   snapid_t snapid = CEPH_NOSNAP;
   snapid_t snapid_diff_other = CEPH_NOSNAP;
+  // dirfrag whose snapdiff entries a fetch_snapdiff() loaded and this
+  // request pinned
+  dirfrag_t snapdiff_fetched;
 
   CInode *tracei = nullptr;
   CDentry *tracedn = nullptr;

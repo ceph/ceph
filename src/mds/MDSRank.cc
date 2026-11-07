@@ -3799,6 +3799,12 @@ void MDSRank::create_logger()
 			    "dir_fetch_complete", "Fetch complete dirfrag");
     mds_plb.add_u64_counter(l_mds_dir_fetch_keys,
 			    "dir_fetch_keys", "Fetch keys from dirfrag");
+    mds_plb.add_u64_counter(l_mds_dir_fetch_snapdiff,
+			    "dir_fetch_snapdiff",
+			    "Fetch dirfrag for snapdiff, loading only entries that can differ");
+    mds_plb.add_u64_counter(l_mds_dir_fetch_snapdiff_skipped,
+			    "dir_fetch_snapdiff_skipped",
+			    "Dentries a snapdiff fetch did not load");
     mds_plb.add_u64_counter(l_mds_dir_fetch_background,
 			    "dir_fetch_background", "Background full dirfrag prefetch");
     mds_plb.add_u64_counter(l_mds_dir_commit, "dir_commit", "Directory commit");
