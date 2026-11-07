@@ -475,7 +475,7 @@ public:
   void encode_digest(const OSDMap& osdmap,
 		     ceph::buffer::list& bl, uint64_t features);
 
-  int64_t get_rule_avail(const OSDMap& osdmap, int ruleno) const;
+  int64_t get_rule_avail(const OSDMap& osdmap, int ruleno, int size = 0) const;
   void get_rules_avail(const OSDMap& osdmap,
 		       std::map<int,int64_t> *avail_map) const;
   void dump(ceph::Formatter *f, bool with_net = false) const;
