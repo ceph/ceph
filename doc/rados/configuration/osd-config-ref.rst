@@ -40,12 +40,11 @@ file. For example:
 General Settings
 ================
 
-The following settings provide a Ceph OSD Daemon's ID, and determine paths to
-data and journals. Ceph deployment scripts typically generate the UUID
-automatically.
+The following settings provide a Ceph OSD daemon's ID and determine the path
+to its data. Ceph deployment tools typically generate the UUID automatically.
 
-.. warning:: **DO NOT** change the default paths for data or journals, as it
-             makes it more problematic to troubleshoot Ceph later.
+.. warning:: **DO NOT** change the default data path, as it makes it
+             problematic to troubleshoot Ceph later.
 
 .. confval:: osd_uuid
 .. confval:: osd_data
@@ -54,23 +53,6 @@ automatically.
 .. confval:: osd_client_message_size_cap
 .. confval:: osd_class_dir
    :default: $libdir/rados-classes
-
-.. index:: OSD; journal settings
-
-Journal Settings
-================
-
-These settings applied only to the FileStore back end, which was
-deprecated in the Reef release and is no longer supported. They are
-retained here for reference when migrating legacy OSDs; see
-:ref:`rados_operations_bluestore_migration`. BlueStore manages its
-write-ahead log internally; see :doc:`bluestore-config-ref`.
-
-.. confval:: osd_journal
-.. confval:: osd_journal_size
-
-See `Journal Config Reference`_ for additional details.
-
 
 Monitor OSD Interaction
 =======================
@@ -413,6 +395,5 @@ Miscellaneous
 .. _mClock: ../mclock-config-ref
 .. _mClock backfill: ../mclock-config-ref#recovery-backfill-options
 .. _Pool & PG Config Reference: ../pool-pg-config-ref
-.. _Journal Config Reference: ../journal-ref
 .. _cache target dirty high ratio: ../../operations/pools#cache-target-dirty-high-ratio
 .. _mClock Config Reference: ../mclock-config-ref
