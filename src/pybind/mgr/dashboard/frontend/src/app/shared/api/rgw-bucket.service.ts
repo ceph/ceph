@@ -8,7 +8,7 @@ import { RgwRateLimitConfig } from '~/app/ceph/rgw/models/rgw-rate-limit';
 
 import { ApiClient } from '~/app/shared/api/api-client';
 import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
-import { cdEncode } from '~/app/shared/decorators/cd-encode';
+import { cdEncode, cdEncodeNot } from '~/app/shared/decorators/cd-encode';
 import { KmipConfig, VaultConfig } from '../models/rgw-encryption-config-keys';
 
 @cdEncode
@@ -47,7 +47,10 @@ export class RgwBucketService extends ApiClient {
     this.bucketRateLimitCache.clear();
   }
 
-  private invalidateBucketCache(bucket: string) {
+  // The callers already pass the URI-encoded bucket id (see @cdEncode), which is how
+  // the caches are keyed. Encoding it again would never match a tenanted bucket id
+  // such as 'tenant%2Fbucket' and leave stale entries behind.
+  private invalidateBucketCache(@cdEncodeNot bucket: string) {
     this.bucketDetailsCache.delete(bucket);
     this.bucketRateLimitCache.delete(bucket);
   }
@@ -312,7 +315,9 @@ export class RgwBucketService extends ApiClient {
   }
 
   setLifecycle(bucket_name: string, lifecycle: string, owner: string, tenant: string) {
-    const bid = tenant ? `${tenant}/${bucket_name}` : bucket_name;
+    // tenant and bucket_name are already encoded by @cdEncode, so only the separator
+    // needs encoding to build the same key that get() uses.
+    const bid = tenant ? `${tenant}${encodeURIComponent('/')}${bucket_name}` : bucket_name;
     return this.rgwDaemonService
       .request((params: HttpParams) => {
         params = params.appendAll({
