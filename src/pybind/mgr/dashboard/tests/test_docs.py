@@ -1,6 +1,7 @@
 # # -*- coding: utf-8 -*-
 
 import unittest
+from typing import Dict
 
 from ..api.doc import SchemaType
 from ..controllers import ENDPOINT_MAP, APIDoc, APIRouter, Endpoint, EndpointDoc, RESTController
@@ -134,6 +135,18 @@ class DocsTest(ControllerTestCase):
         paths = Docs().gen_paths(False)
         for key in paths:
             self.assertTrue(any(base in key.split('/')[1] for base in ['api', 'ui-api']))
+
+    def test_gen_schema_for_string_map(self):
+        responses = EndpointDoc(responses={200: {
+            'versions': (Dict[str, str], 'Name -> version'),
+        }}).resp
+        self.assertEqual(Docs._gen_schema_for_content(responses['200']), {
+            'type': 'object',
+            'properties': {'versions': {
+                'type': 'object',
+                'additionalProperties': {'type': 'string'},
+                'description': 'Name -> version'}},
+            'required': ['versions']})
 
     def test_gen_tags(self):
         outcome = Docs._gen_tags(False)
