@@ -51,6 +51,25 @@ struct cls_lock_lock_op
 };
 WRITE_CLASS_ENCODER(cls_lock_lock_op)
 
+struct cls_lock_lock_reply
+{
+  utime_t expires_at;
+
+  void encode(ceph::buffer::list &bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(expires_at, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(ceph::buffer::list::const_iterator &bl) {
+    DECODE_START(1, bl);
+    decode(expires_at, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(ceph::Formatter *f) const;
+  static std::list<cls_lock_lock_reply> generate_test_instances();
+};
+WRITE_CLASS_ENCODER(cls_lock_lock_reply)
+
 struct cls_lock_unlock_op
 {
   std::string name;

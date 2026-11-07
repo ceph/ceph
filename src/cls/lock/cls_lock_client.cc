@@ -34,7 +34,8 @@ namespace rados {
                 const std::string& name, ClsLockType type,
                 const std::string& cookie, const std::string& tag,
                 const std::string& description,
-                const utime_t& duration, uint8_t flags)
+                const utime_t& duration, uint8_t flags,
+                bufferlist* out)
       {
         cls_lock_lock_op op;
         op.name = name;
@@ -46,7 +47,7 @@ namespace rados {
         op.flags = flags;
         bufferlist in;
         encode(op, in);
-        rados_op->exec(method::lock, in);
+        rados_op->exec(method::lock, in, out, nullptr);
       }
 
       int lock(IoCtx *ioctx,
@@ -238,10 +239,10 @@ namespace rados {
         assert_locked(op, name, ClsLockType::EXCLUSIVE_EPHEMERAL, cookie, tag);
       }
 
-      void Lock::lock_shared(ObjectWriteOperation *op)
+      void Lock::lock_shared(ObjectWriteOperation *op, bufferlist* out)
       {
         lock(op, name, ClsLockType::SHARED,
-             cookie, tag, description, duration, flags);
+             cookie, tag, description, duration, flags, out);
       }
 
       int Lock::lock_shared(IoCtx *ioctx, const std::string& oid)
@@ -250,10 +251,10 @@ namespace rados {
                     cookie, tag, description, duration, flags);
       }
 
-      void Lock::lock_exclusive(ObjectWriteOperation *op)
+      void Lock::lock_exclusive(ObjectWriteOperation *op, bufferlist* out)
       {
         lock(op, name, ClsLockType::EXCLUSIVE,
-             cookie, tag, description, duration, flags);
+             cookie, tag, description, duration, flags, out);
       }
 
       int Lock::lock_exclusive(IoCtx *ioctx, const std::string& oid)
@@ -262,10 +263,11 @@ namespace rados {
                     cookie, tag, description, duration, flags);
       }
 
-      void Lock::lock_exclusive_ephemeral(ObjectWriteOperation *op)
+      void Lock::lock_exclusive_ephemeral(ObjectWriteOperation *op,
+                                          bufferlist* out)
       {
         lock(op, name, ClsLockType::EXCLUSIVE_EPHEMERAL,
-             cookie, tag, description, duration, flags);
+             cookie, tag, description, duration, flags, out);
       }
 
       int Lock::lock_exclusive_ephemeral(IoCtx *ioctx, const std::string& oid)
