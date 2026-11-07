@@ -1,0 +1,13 @@
+# Reproducers for mgmt-gateway bugs (see test_open_issues.py). The ones not
+# fixed yet are marked expectedFailure and do not fail the job; one passing
+# unexpectedly does, so the marker is dropped when its fix lands.
+tasks:
+- vip:
+- cephadm.shell:
+    host.a:
+      - ceph orch device ls --refresh
+- cephfs_test_runner:
+    # the reproducers are independent: report every one, not just the first
+    failfast: false
+    modules:
+      - tasks.cephadm_cases.services.mgmt_gateway.test_open_issues.TestMgmtGatewayOpenIssues
