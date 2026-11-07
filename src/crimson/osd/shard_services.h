@@ -584,6 +584,10 @@ public:
       });
   }
 
+  seastar::future<> set_pg_primary(spg_t pgid, bool is_primary) {
+    return pg_to_shard_mapping.set_pg_primary(pgid, is_primary);
+  }
+
   auto remove_pg(spg_t pgid) {
     local_state.pg_map.remove_pg(pgid);
     return pg_to_shard_mapping.remove_pg_mapping(pgid);
