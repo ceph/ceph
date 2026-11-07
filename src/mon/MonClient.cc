@@ -1031,9 +1031,10 @@ void MonClient::_finish_hunting(int auth_err)
   }
 
   had_a_connection = true;
-  _un_backoff();
 
   if (!auth_err) {
+    // a refusal keeps the backoff, so retries slow down
+    _un_backoff();
     last_rotating_renew_sent = utime_t();
     while (!waiting_for_session.empty()) {
       _send_mon_message(std::move(waiting_for_session.front()));
@@ -1107,6 +1108,11 @@ void MonClient::tick()
       send_log();
       last_send_log = now;
     }
+  } else if (authenticated) {
+    // every mon refused us, e.g. because the cluster now requires
+    // features we lack: keep trying, backing off, in case that changes
+    ldout(cct, 1) << "no mon session; trying again" << dendl;
+    return _reopen_session();
   }
 }
 
