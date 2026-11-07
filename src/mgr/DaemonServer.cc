@@ -1039,12 +1039,11 @@ public:
                          MgrOpRequestRef op_)
     : cmdctx(cmdctx_),
       op(op_)
-    {
-       if (op) {
-         op->mark_finish_mon_command();
-       }
-    }
+    {}
   void finish(int r) override {
+    if (op) {
+      op->mark_finish_mon_command();
+    }
     cmdctx->odata.claim_append(from_mon);
     cmdctx->reply(r, outs);
   }
