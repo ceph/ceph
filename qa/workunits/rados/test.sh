@@ -162,6 +162,12 @@ do
     if [ $vstart -eq 1 ]; then
         executable="./bin/$executable"
     fi
+    if [[ "$executable" == *"ceph_test_neorados_completions"* ]]; then
+        if ! command -v "$executable" >/dev/null 2>&1; then
+            echo "Skipping $executable (binary not available)"
+            continue
+        fi
+    fi
     if [ $parallel -eq 1 ]; then
         r=`printf '%25s' $f`
         ff=`echo $f | awk '{print $1}'`
