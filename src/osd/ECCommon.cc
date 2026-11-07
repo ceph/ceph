@@ -858,8 +858,12 @@ int ECCommon::ReadPipeline::send_all_remaining_reads(
 void ECCommon::ReadPipeline::kick_reads() {
   while (in_progress_client_reads.size() &&
          in_progress_client_reads.front().is_complete()) {
-         in_progress_client_reads.front().run();
-         in_progress_client_reads.pop_front();
+    // Off the list before it runs: the callback may issue another read, and
+    // a read that completes inside the call that issues it kicks again,
+    // which would run this entry a second time.
+    ClientAsyncReadStatus status = std::move(in_progress_client_reads.front());
+    in_progress_client_reads.pop_front();
+    status.run();
   }
 }
 
@@ -922,6 +926,18 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
   }
 
   op.trace.event("start ec write");
+
+  // While the PG is degraded or undersized every write lists all shards in
+  // its log entry, as the first write of an interval does. A partial write
+  // that skips a shard which is down or still recovering lets the next
+  // peering rebuild that shard's missing set without the entry: the shard
+  // then needs an older version of the object than the other shards do, and
+  // MissingLoc::add_active_missing asserts (tracker 73249).
+  if (get_parent()->pg_is_degraded_or_undersized()) {
+    for (auto &plan : op.plan.plans) {
+      plan.write_all_shards = true;
+    }
+  }
 
   map<hobject_t, ECUtil::shard_extent_map_t> written;
   op.generate_transactions(
@@ -1114,28 +1130,64 @@ void ECCommon::RMWPipeline::finish_rmw(OpRef const &op) {
   if (extent_cache.idle()) {
     if (op->version > get_parent()->get_log().get_can_rollback_to()) {
       dout(20) << __func__ << " cache idle " << op->version << dendl;
-      // submit a dummy, transaction-empty op to kick the rollforward
-      const auto tid = get_parent()->get_tid();
-      const auto nop = std::make_shared<ECDummyOp>(*this);
-      nop->hoid = op->hoid;
-      nop->trim_to = op->trim_to;
-      nop->pg_committed_to = op->version;
-      nop->tid = tid;
-      nop->reqid = op->reqid;
-      nop->pending_cache_ops = 1;
-      nop->pipeline = this;
-
-      tid_to_op_map[tid] = nop;
-      waiting_commit.push_back(nop);
-
-      /* The cache is idle (we checked above) and this IO never blocks for reads
-       * so we can skip the extent cache and immediately call the completion.
-       */
-      nop->cache_ready(nop->hoid, ECUtil::shard_extent_map_t(&sinfo));
+      rollforward_hoid = op->hoid;
+      rollforward_trim_to = op->trim_to;
+      rollforward_reqid = op->reqid;
+      if (!defer_rollforward || !defer_rollforward()) {
+        kick_rollforward();
+      }
     }
   }
 
   tid_to_op_map.erase(op->tid);
+}
+
+void ECCommon::RMWPipeline::kick_rollforward() {
+  // committed_to is the last version finish_rmw saw; a write that started
+  // since this was asked for carries pg_committed_to itself, and after an
+  // interval change (on_change) there is nothing to roll forward.
+  if (!extent_cache.idle() ||
+      committed_to <= get_parent()->get_log().get_can_rollback_to()) {
+    dout(20) << __func__ << " nothing to do: idle " << extent_cache.idle()
+             << " committed_to " << committed_to << dendl;
+    return;
+  }
+  dout(20) << __func__ << " " << committed_to << dendl;
+  // submit a dummy, transaction-empty op to kick the rollforward
+  const auto tid = get_parent()->get_tid();
+  const auto nop = std::make_shared<ECDummyOp>(*this);
+  nop->hoid = rollforward_hoid;
+  nop->trim_to = rollforward_trim_to;
+  nop->pg_committed_to = committed_to;
+  nop->tid = tid;
+  nop->reqid = rollforward_reqid;
+  nop->pending_cache_ops = 1;
+  nop->pipeline = this;
+
+  tid_to_op_map[tid] = nop;
+  waiting_commit.push_back(nop);
+
+  /* The cache is idle (we checked above) and this IO never blocks for reads
+   * so we can skip the extent cache and immediately call the completion.
+   */
+  nop->cache_ready(nop->hoid, ECUtil::shard_extent_map_t(&sinfo));
+}
+
+bool ECCommon::RMWPipeline::submit_unlogged(OpRef op) {
+  if (!extent_cache.idle()) {
+    return false;
+  }
+  const auto tid = get_parent()->get_tid();
+  op->tid = tid;
+  op->pg_committed_to = committed_to;
+  op->pending_cache_ops = 1;
+  op->pipeline = this;
+  tid_to_op_map[tid] = op;
+  waiting_commit.push_back(op);
+  dout(10) << __func__ << " " << *op << dendl;
+  // Like the rollforward kick: no reads, so skip the extent cache.
+  op->cache_ready(op->hoid, ECUtil::shard_extent_map_t(&sinfo));
+  return true;
 }
 
 void ECCommon::RMWPipeline::on_change() {
@@ -1148,6 +1200,9 @@ void ECCommon::RMWPipeline::on_change() {
   waiting_commit.clear();
   next_write_all_shards = false;
   first_write_in_interval = true;
+  rollforward_hoid = hobject_t();
+  rollforward_trim_to = eversion_t();
+  rollforward_reqid = osd_reqid_t();
 }
 
 void ECCommon::RMWPipeline::on_change2() {

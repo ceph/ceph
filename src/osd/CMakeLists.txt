@@ -49,6 +49,8 @@ set(osd_srcs
   ECExtentCache.cc
   ECTransaction.cc
   ECUtil.cc
+  ECWriteJournal.cc
+  ECJournalFlush.cc
   ECInject.cc
   ECInject.h
   Coroutines.h

@@ -15,6 +15,7 @@
 
 #pragma once
 
+#include <chrono>
 #include <boost/intrusive/list.hpp>
 #include <boost/intrusive/set.hpp>
 
@@ -23,6 +24,7 @@
 #include "ECListener.h"
 #include "ECTypes.h"
 #include "ECUtil.h"
+#include "ECWriteJournal.h"
 #include "OSD.h"
 #include "PGBackend.h"
 #include "erasure-code/ErasureCodeInterface.h"
@@ -42,9 +44,11 @@ struct ECSubReadReply;
 class ECSwitch;
 
 class ECSwitch;
+struct ECClassicalOp;
 
 class ECBackend : public ECCommon {
  public:
+  ~ECBackend();
   PGBackend::RecoveryHandle *open_recovery_op();
 
   void run_recovery_op(
@@ -112,9 +116,54 @@ class ECBackend : public ECCommon {
 
   void dump_recovery_info(ceph::Formatter *f) const;
 
-  void call_write_ordered(std::function<void(void)> &&cb) {
-    rmw_pipeline.call_write_ordered(std::move(cb));
-  }
+  void call_write_ordered(std::function<void(void)> &&cb);
+
+  void drain_journal_for_shutdown(std::function<void(int)> on_finish);
+  PGBackend::ec_journal_admission_t journal_admit(
+    const hobject_t& oid, const ObjectState& obs, const SnapSet& snapset,
+    snapid_t snap_seq, const std::vector<OSDOp>& ops, bool may_write);
+  bool journal_enrolled() const { return journal_state != nullptr; }
+  // Journal a write do_op admitted (PGBackend::ec_journal_write).
+  void journal_write(OpRequestRef op, ObjectContextRef obc);
+  eversion_t journal_version_now() const;
+  bool journal_object_dirty(const hobject_t& oid) const;
+  std::optional<eversion_t> journal_oldest_live(const hobject_t& oid,
+    std::optional<uint64_t> skip_stripe) const;
+  bool journal_ready(const hobject_t& oid) const;
+  // A journaled write of this request not yet materialized (PGBackend).
+  std::optional<PGBackend::ec_journal_request_t> journal_find_request(
+    const osd_reqid_t& reqid) const;
+  // Hold a resend of a journaled write whose record is in flight; it is
+  // answered when the record is durable (journal_record_committed).
+  void journal_hold_resend(const osd_reqid_t& reqid, OpRequestRef op);
+  // The metadata overlay of an object with records, and the newest user
+  // version a journaled write took (PGBackend).
+  std::optional<PGBackend::ec_journal_object_meta_t> journal_object_meta(
+    const hobject_t& oid) const;
+  version_t journal_newest_user_version() const;
+  // A direct write of these bytes of oid is being built: take the journaled
+  // stripes it overlaps (PGBackend::ec_journal_take_for_write).
+  PGBackend::ec_journal_take_t journal_take_for_write(
+    const hobject_t& oid, const interval_set<uint64_t>& written);
+  // A client read of this range of oid may be issued now
+  // (PGBackend::ec_journal_read_ready); if not, it is counted as waiting.
+  bool journal_read_ready(const hobject_t& oid, uint64_t offset,
+                          uint64_t length);
+  bool journal_flush_in_flight(const hobject_t& oid) const;
+  void journal_on_activate();
+  void journal_split(spg_t child, ObjectStore::Transaction& t);
+  void journal_object_recovered(const hobject_t& oid);
+  // Replay: records the primary's slots lack, read from another holder.
+  void journal_fetch_result(const hobject_t& slot,
+                            const ECUtil::shard_extent_map_t& data,
+                            shard_id_t shard);
+  void journal_fetch_finished();
+  // Replay: another holder's slot listing (its OMAP headers, read as the
+  // slot's attributes), and the end of one holder's listings.
+  void journal_headers_result(
+    shard_id_t shard, const hobject_t& slot,
+    const std::map<std::string, ceph::bufferlist, std::less<>>& headers);
+  void journal_headers_finished();
 
   void submit_transaction(
       const hobject_t &hoid,
@@ -219,6 +268,50 @@ class ECBackend : public ECCommon {
     uint32_t op_flags,
     ceph::buffer::list *bl
   );
+  // objects_read_async with the journal's blocks over the ranges read
+  // (none without a journal); journal_only: they are the whole answer;
+  // counted: the journal counts the read on its stripes (journal_read_done).
+  void issue_read_async(
+      const hobject_t &hoid,
+      uint64_t object_size,
+      const std::list<std::pair<ec_align_t,
+                                std::pair<ceph::buffer::list*, Context*>>> &
+      to_read,
+      Context *on_complete,
+      bool fast_read,
+      ECWriteJournal::Overlay overlay,
+      bool journal_only,
+      bool counted);
+  // Requeue the reads and direct writes parked for oid if nothing holds
+  // them back any more.
+  void journal_kick_reads(const hobject_t& oid);
+  // The shard reads of a client read of oid that the journal counted on
+  // their stripes (Journal::read_begin) are done.
+  void journal_read_done(
+      const hobject_t& oid,
+      const std::list<std::pair<ec_align_t,
+                                std::pair<ceph::buffer::list*, Context*>>> &
+      read);
+  struct JournalState;
+  std::unique_ptr<JournalState> journal_state;
+  // Defers the RMW pipeline's roll-forward kick by
+  // osd_ec_rollforward_delay_ms (RMWPipeline::defer_rollforward).
+  struct RollforwardKick;
+  std::unique_ptr<RollforwardKick> rollforward_kick;
+  void init_journal();
+  void pump_journal();
+  void remove_journal_slots();
+  void schedule_journal(std::chrono::milliseconds delay = std::chrono::milliseconds(0));
+  void reset_journal();
+  void dump_journal(ceph::Formatter* f) const;
+  bool journal_admission_open() const;
+  // A copy of a journaled write's record committed on a holder.
+  void journal_record_committed(pg_shard_t from, ceph_tid_t tid);
+  // Replay: every other holder's listing is in.
+  void journal_replay_listed();
+  void judge_replayed(ECWriteJournal::Record record);
+  void journal_fetch_next();
+  bool journal_blocked(const hobject_t& oid) const;
 
 public:
   struct ECRecoveryBackend : RecoveryBackend {

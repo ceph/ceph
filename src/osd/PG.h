@@ -693,6 +693,10 @@ public:
 
   void shutdown();
   virtual void on_shutdown() = 0;
+  // Called with PG lock held, BEFORE OSD messaging/work queues are stopped.
+  virtual void drain_ec_journal_for_shutdown(std::function<void(int)> done) {
+    done(0);
+  }
 
   Scrub::schedule_result_t start_scrubbing(
     const Scrub::SchedEntry& candidate,

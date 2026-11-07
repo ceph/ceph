@@ -1291,3 +1291,37 @@ TEST(ECCommon, decode8) {
 
   test_decode(k, m, chunk_size, object_size, want, acting_set);
 }
+
+// A completed client read is off the list before its callback runs. The
+// callback issues another read here, and a read with nothing to read
+// completes inside the call that issues it and kicks the list again.
+TEST(ECCommon, kick_reads_reentrant)
+{
+  const uint64_t swidth = 4096;
+  const unsigned int k = 4;
+  const unsigned int m = 2;
+
+  ECUtil::stripe_info_t s(k, m, swidth);
+  ECListenerStub listenerStub;
+  ErasureCodeInterfaceRef ec_impl(new MockErasureCode);
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+
+  int first = 0;
+  int second = 0;
+  pipeline.objects_read_and_reconstruct(
+    {}, false, 0,
+    make_gen_lambda_context<ECCommon::ec_extents_t&&>(
+      [&](ECCommon::ec_extents_t &&) {
+        ++first;
+        pipeline.objects_read_and_reconstruct(
+          {}, false, 0,
+          make_gen_lambda_context<ECCommon::ec_extents_t&&>(
+            [&](ECCommon::ec_extents_t &&) {
+              ++second;
+            }));
+      }));
+
+  ASSERT_EQ(1, first);
+  ASSERT_EQ(1, second);
+  ASSERT_TRUE(pipeline.in_progress_client_reads.empty());
+}

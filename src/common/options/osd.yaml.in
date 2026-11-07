@@ -2,6 +2,117 @@
 ---
 
 options:
+- name: osd_ec_journal_enable
+  type: bool
+  level: dev
+  desc: Enable the experimental EC write journal
+  long_desc: Experimental. With osd_ec_journal_pool, enrolls one optimized
+    EC pool (4+3, 8+3 or 12+3 with 4 KiB chunks) in a write journal. The
+    primary takes a small aligned overwrite as a record that m + 1 shards
+    hold, acknowledges it once they have committed it, and writes the stripe
+    out later, once, as an ordinary logged write. Client reads are served
+    through the journal by the primary; a new primary rebuilds the journal
+    from the slot objects. A graceful OSD shutdown drains for up to 30
+    seconds and leaves the rest to the next primaries. The record format has
+    no upgrade path, so drain the journal (osd_ec_journal_drain) before
+    changing builds. See doc/dev/ec-write-journal-poc.rst.
+  default: false
+  flags:
+  - startup
+- name: osd_ec_journal_pool
+  type: int
+  level: dev
+  desc: Pool ID enrolled in the EC write journal (-1 disables enrollment)
+  default: -1
+  flags:
+  - startup
+- name: osd_ec_journal_max_bytes
+  type: size
+  level: dev
+  desc: Maximum encoded journal bytes per PG including in-flight flushes
+  long_desc: The budget is split evenly over the PG's 16 slot objects, one
+    segment each (4 MiB segments at the default). A segment's slot is
+    reused once none of its records is live, and when the last segment
+    opens the stripes still live in the oldest one are flushed, so the
+    budget sets how long an incomplete stripe stays journaled. Each record
+    is charged its payload plus its OMAP header and key, about 4.15 KiB
+    for a 4 KiB write; RocksDB framing, WAL and compaction are not
+    counted. The primary keeps the PG's live journaled blocks in
+    memory, up to about 96% of this budget in payload, about 1.1 to 1.2
+    times it in process memory with the index. Size it from the
+    memory an OSD can give its primaries' journals and the slot data its
+    devices can hold for m + 1 holders per PG (see "Sizing the budget" in
+    doc/dev/ec-write-journal-poc.rst).
+  default: 64_M
+  min: 16_M
+  flags:
+  - startup
+- name: osd_ec_journal_max_flushes
+  type: uint
+  level: dev
+  desc: Stripe flushes the EC write journal keeps in flight per PG
+  long_desc: Each flush materializes one stripe with an ordinary EC write, and
+    reclaiming a sealed segment means flushing every live stripe it still holds.
+    Client writes to the PG stop being admitted while the log is full, so a low
+    limit bounds the PG's write rate at one flush round trip per stripe. Stripes
+    are independent; this is the number the flusher keeps outstanding.
+  default: 32
+  min: 1
+  max: 1024
+  flags:
+  - startup
+  see_also:
+  - osd_ec_journal_enable
+  - osd_ec_journal_max_bytes
+  with_legacy: false
+- name: osd_ec_journal_drain
+  type: bool
+  level: dev
+  desc: Drain the experimental journal and stop enrolling new writes
+  long_desc: Set it on every OSD of the enrolled pool. Enrollment stops, every
+    dirty stripe is flushed, and the dead segments and the slot objects are
+    removed. Poll ec_write_journal_poc in the PG query until bytes, records,
+    records_in_flight, writes_waiting and flushes_in_flight are zero.
+  default: false
+  flags:
+  - runtime
+- name: osd_ec_journal_max_write_bytes
+  type: size
+  level: dev
+  desc: Largest write across a stripe boundary that the EC write journal takes
+  long_desc: A write of whole 4 KiB blocks that crosses one stripe boundary is
+    journaled as one record per stripe, placed and committed together, if it
+    is no larger than this and than a stripe. Larger ones, and all of them at
+    0, run as ordinary EC writes and take the journaled stripes they overlap
+    with them. Every record is stored on each holder, so large records cost
+    device writes.
+  default: 32_K
+  flags:
+  - runtime
+  see_also:
+  - osd_ec_journal_enable
+  with_legacy: false
+- name: osd_ec_rollforward_delay_ms
+  type: uint
+  level: advanced
+  desc: How long a PG of the EC journal pool stays quiet before its roll-forward kick
+  long_desc: Applies only to the pool enrolled in the EC write journal;
+    every other pool sends the kick at once, as without this option.
+    Once the last write in flight has committed, the primary of an
+    optimized EC pool sends every shard that still holds rollback state an
+    empty transaction carrying pg_committed_to, so that it can discard that
+    state. Under load the pipeline is idle for a moment after about a third
+    of the writes, and each kick costs those shards a transaction with a full
+    PG info write and a message pair, and the next write's acknowledgement
+    queues behind its commit. With a nonzero delay the kick goes out only
+    after the pipeline has been quiet for that long (each write that finishes
+    starts the delay again), since every write carries pg_committed_to
+    itself. 0 sends it at once.
+  default: 200
+  min: 0
+  max: 10000
+  flags:
+  - runtime
 - name: osd_numa_prefer_iface
   type: bool
   level: advanced
