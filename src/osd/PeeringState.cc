@@ -148,6 +148,9 @@ PeeringState::PeeringState(
     missing_loc(spgid, this, dpp, cct),
     machine(this, cct, spgid, dpp, pl, &state_history)
 {
+  // advance_map() refreshes this on every map, but a PG created via
+  // handle_pg_create_info() may go active before any map is advanced.
+  readable_interval = pool.get_readable_interval(cct->_conf);
   machine.initiate();
 }
 
@@ -1300,6 +1303,16 @@ bool PeeringState::set_force_backfill(bool b)
 
 void PeeringState::schedule_renew_lease()
 {
+  if (readable_interval <= ceph::signedspan::zero()) {
+    // a zero interval would re-arm the renewal timer with no delay,
+    // flooding the replicas with MOSDPGLease messages
+    readable_interval = pool.get_readable_interval(cct->_conf);
+    if (readable_interval <= ceph::signedspan::zero()) {
+      readable_interval = std::chrono::seconds(1);
+    }
+    psdout(0) << "non-positive readable_interval; using "
+	      << readable_interval << dendl;
+  }
   pl->schedule_renew_lease(
     last_peering_reset,
     readable_interval / 2);
