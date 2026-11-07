@@ -3054,8 +3054,8 @@ int RGWPutObj_ObjStore_S3::get_params(optional_yield y)
   auto obj_lock_date_str = s->info.env->get("HTTP_X_AMZ_OBJECT_LOCK_RETAIN_UNTIL_DATE");
   auto obj_legal_hold_str = s->info.env->get("HTTP_X_AMZ_OBJECT_LOCK_LEGAL_HOLD");
   if (obj_lock_mode_str && obj_lock_date_str) {
-    boost::optional<ceph::real_time> date = ceph::from_iso_8601(obj_lock_date_str);
-    if (boost::none == date || ceph::real_clock::to_time_t(*date) <= ceph_clock_now()) {
+    auto date = ceph::from_iso_8601(obj_lock_date_str);
+    if (!date || ceph::real_clock::to_time_t(*date) <= ceph_clock_now()) {
         ret = -EINVAL;
         ldpp_dout(this,0) << "invalid x-amz-object-lock-retain-until-date value" << dendl;
         return ret;
@@ -4054,8 +4054,8 @@ int RGWCopyObj_ObjStore_S3::get_params(optional_yield y)
   auto obj_lock_date_str = s->info.env->get("HTTP_X_AMZ_OBJECT_LOCK_RETAIN_UNTIL_DATE");
   auto obj_legal_hold_str = s->info.env->get("HTTP_X_AMZ_OBJECT_LOCK_LEGAL_HOLD");
   if (obj_lock_mode_str && obj_lock_date_str) {
-    boost::optional<ceph::real_time> date = ceph::from_iso_8601(obj_lock_date_str);
-    if (boost::none == date || ceph::real_clock::to_time_t(*date) <= ceph_clock_now()) {
+    auto date = ceph::from_iso_8601(obj_lock_date_str);
+    if (!date || ceph::real_clock::to_time_t(*date) <= ceph_clock_now()) {
       s->err.message = "invalid x-amz-object-lock-retain-until-date value";
       ldpp_dout(this,0) << s->err.message << dendl;
       return -EINVAL;
@@ -4863,8 +4863,8 @@ int RGWInitMultipart_ObjStore_S3::get_params(optional_yield y)
   auto obj_lock_date_str = s->info.env->get("HTTP_X_AMZ_OBJECT_LOCK_RETAIN_UNTIL_DATE");
   auto obj_legal_hold_str = s->info.env->get("HTTP_X_AMZ_OBJECT_LOCK_LEGAL_HOLD");
   if (obj_lock_mode_str && obj_lock_date_str) {
-    boost::optional<ceph::real_time> date = ceph::from_iso_8601(obj_lock_date_str);
-    if (boost::none == date || ceph::real_clock::to_time_t(*date) <= ceph_clock_now()) {
+    auto date = ceph::from_iso_8601(obj_lock_date_str);
+    if (!date || ceph::real_clock::to_time_t(*date) <= ceph_clock_now()) {
       ldpp_dout(this,0) << "invalid x-amz-object-lock-retain-until-date value" << dendl;
       return -EINVAL;;
     }
@@ -6697,7 +6697,7 @@ AWSSignerV4::prepare(const DoutPrefixProvider *dpp,
 
   map<string, string> extra_headers;
 
-  std::string date = ceph::to_iso_8601_no_separators(timestamp, ceph::iso_8601_format::YMDhms);
+  std::string date = ceph::to_iso_8601(timestamp, ceph::iso_8601_format::BasicYMDhms);
 
   std::string credential_scope = gen_v4_scope(timestamp, region, service);
 
@@ -7627,7 +7627,7 @@ rgw::auth::s3::STSEngine::authenticate(
   if (! token.expiration.empty()) {
     std::string expiration = token.expiration;
     if (! expiration.empty()) {
-      boost::optional<real_clock::time_point> exp = ceph::from_iso_8601(expiration, false);
+      auto exp = ceph::from_iso_8601(expiration, ceph::iso_8601_mode::strict);
       if (exp) {
         real_clock::time_point now = real_clock::now();
         if (now >= *exp) {
