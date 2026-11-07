@@ -901,6 +901,7 @@ private:
   utime_t next_dump_on_bluefs_alloc_failure;
 
   KeyValueDB *db = nullptr;
+  void *db_env = nullptr; //this is rocksdb::Env
   BlockDevice *bdev = nullptr;
   std::string freelist_type;
   FreelistManager *fm = nullptr;
@@ -1387,9 +1388,11 @@ private:
   void _validate_bdev();
   void _close_bdev();
 
-  int _minimal_open_bluefs(bool create);
+  int _create_bluefs_vselector(BlueFSVolumeSelector* &vselector);
+  int _prepare_bluefs_devices(bool create);
   void _minimal_close_bluefs();
-  int _open_bluefs(bool create, bool read_only);
+  int _open_bluefs(bool read_only);
+  int _create_bluefs();
   void _close_bluefs();
 
   int _is_bluefs(bool create, bool* ret);
@@ -1405,6 +1408,9 @@ private:
   void _close_db_and_around();
   void _close_around_db();
 
+  int _create_rocksdb_fs();
+  int _open_rocksdb_fs(bool read_only);
+  int _open_rocksdb_env();
   int _prepare_db_environment(bool create, bool read_only,
 			      std::string* kv_dir, std::string* kv_backend);
 
@@ -1702,8 +1708,13 @@ public:
   }
   int umount() override;
 
-  int open_db_environment(KeyValueDB **pdb, bool read_only, bool to_repair);
-  int close_db_environment();
+  int create_db();
+  int open_db(bool read_only = false, bool to_repair = false);
+  int close_db();
+  KeyValueDB* get_db();
+
+  int open_bluefs(bool read_only = false);
+  int close_bluefs();
   BlueFS* get_bluefs();
 
   int write_meta(const std::string& key, const std::string& value) override;
@@ -1711,10 +1722,6 @@ public:
   int read_meta_check(const std::string& key, std::string *value);
 
   int read_meta_conf_check_env();
-
-  // open in read-only and limited mode
-  int cold_open();
-  int cold_close();
 
   int fsck(bool deep) override {
     return _fsck(deep ? FSCK_DEEP : FSCK_REGULAR, false);
