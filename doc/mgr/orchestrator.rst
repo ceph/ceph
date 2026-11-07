@@ -6,20 +6,26 @@ Orchestrator CLI
 ================
 
 This module provides a command line interface (CLI) for orchestrator modules.
-Orchestrator modules are ``ceph-mgr`` plugins that interface with external
-orchestration services.
+The commands are carried out by an orchestrator backend, a ``ceph-mgr`` module
+such as cephadm, which manages hosts directly over SSH, or Rook, which works
+through Kubernetes.
 
 Definition of Terms
 ===================
 
-The orchestrator CLI unifies multiple external orchestrators, so we need a
-common nomenclature for the orchestrator module: 
+The orchestrator CLI works with more than one backend, so it uses a common set
+of terms:
 
 +--------------------------------------+---------------------------------------+
-| *host*                               | hostname (not the DNS name) of the    |
-|                                      | physical host. Not the podname,       |
-|                                      | container name, or hostname inside    |
-|                                      | the container.                        |
+| *host*                               | The name of the host as the           |
+|                                      | orchestrator knows it. With cephadm,  |
+|                                      | this is the output of ``hostname`` on |
+|                                      | that host, which can be a bare host   |
+|                                      | name or a fully qualified domain name |
+|                                      | (see :ref:`cephadm-fqdn`). With Rook, |
+|                                      | it is the Kubernetes node name. Not   |
+|                                      | the pod name, container name, or host |
+|                                      | name inside a container.              |
 +--------------------------------------+---------------------------------------+
 | *service type*                       | The type of the service. e.g., nfs,   |
 |                                      | mds, osd, mon, rgw, mgr, iscsi        |
@@ -28,14 +34,18 @@ common nomenclature for the orchestrator module:
 |                                      | comprised of multiple service         |
 |                                      | instances on multiple hosts for HA    |
 |                                      |                                       |
-|                                      | * ``fs_name`` for mds type            |
-|                                      | * ``rgw_zone`` for rgw type           |
-|                                      | * ``ganesha_cluster_id`` for nfs type |
+|                                      | * the file system name for the        |
+|                                      |   ``mds`` type                        |
+|                                      | * a service ID that you choose for    |
+|                                      |   the ``rgw`` type (the realm, zone   |
+|                                      |   group, and zone are separate        |
+|                                      |   settings)                           |
+|                                      | * the NFS cluster ID for the ``nfs``  |
+|                                      |   type                                |
 +--------------------------------------+---------------------------------------+
-| *daemon*                             | A single instance of a service.       |
-|                                      | Usually a daemon, but maybe not       |
-|                                      | (e.g., might be a kernel service      |
-|                                      | like LIO or knfsd or whatever)        |
+| *daemon*                             | A single instance of a service on one |
+|                                      | host, for example one ``ceph-mds``    |
+|                                      | process.                              |
 |                                      |                                       |
 |                                      | This identifier should                |
 |                                      | uniquely identify the instance.       |
@@ -97,25 +107,32 @@ Stateless services (MDS/RGW/NFS/rbd-mirror/iSCSI)
 
 .. note::
 
-   The orchestrator will not configure the services. See the relevant
-   documentation for details about how to configure particular services. 
+   With cephadm, the orchestrator deploys and places the daemons and applies
+   the settings in the service specification. It does not create what a
+   service serves, such as a CephFS file system, an RGW realm and zone, or NFS
+   exports. See the relevant documentation for details about how to configure
+   particular services.
 
 The ``name`` parameter identifies the kind of the group of instances. The
 following short list explains the meaning of the ``name`` parameter:
 
 * A CephFS file system identifies a group of MDS daemons.
-* A zone name identifies a group of RGWs.
+* For RGW, ``name`` is a service ID that you choose. Set the realm and the
+  zone with ``--realm`` and ``--zone``; use both options or neither.
 
 Creating/growing/shrinking/removing services:
 
 .. prompt:: bash #
 
    ceph orch apply mds <fs_name> [--placement=<placement>] [--dry-run]
-   ceph orch apply rgw <name> [--realm=<realm>] [--zone=<zone>] [--port=<port>] [--ssl] [--placement=<placement>] [--dry-run]
-   ceph orch apply nfs <name> <pool> [--namespace=<namespace>] [--placement=<placement>] [--dry-run]
+   ceph orch apply rgw <name> [--realm=<realm>] [--zonegroup=<zonegroup>] [--zone=<zone>] [--port=<port>] [--ssl] [--placement=<placement>] [--dry-run]
+   ceph orch apply nfs <name> [--placement=<placement>] [--port=<port>] [--dry-run]
    ceph orch rm <service_name> [--force] [--force-delete-data]
 
 where ``placement`` is a :ref:`orchestrator-cli-placement-spec`.
+
+An NFS service keeps its configuration in the ``.nfs`` pool, in a namespace
+named after the NFS cluster ID (the service ID).
 
 For ``ceph orch rm``, ``--force`` may be required in some cases (for example when
 removing an OSD service that would leave OSDs behind).
@@ -141,27 +158,35 @@ Options
 
 .. option:: start
 
-   Start the daemon on the corresponding host.
+   Start every daemon of the service.
 
 .. option:: stop
 
-   Stop the daemon on the corresponding host.
+   Stop every daemon of the service. Cephadm refuses to stop the whole
+   ``mgr``, ``mon``, or ``osd`` service.
 
 .. option:: restart
 
-   Restart the daemon on the corresponding host.
+   Restart every daemon of the service.
 
 .. option:: redeploy
 
-   Redeploy the Ceph daemon on the corresponding host. This will recreate the daemon directory
-   structure under ``/var/lib/ceph/<fsid>/<daemon-name>`` (if it doesn't exist), refresh its
-   configuration files, regenerate its unit-files and restarts the systemd daemon.
+   Redeploy every daemon of the service. For each daemon, this recreates
+   the daemon directory ``/var/lib/ceph/<fsid>/<daemon-name>`` if it does not
+   exist, refreshes its configuration files, regenerates its systemd unit
+   files, and restarts it.
 
 .. option:: reconfig
 
-   Reconfigure the daemon on the corresponding host. This will refresh configuration files then restart the daemon.
+   Reconfigure the daemons of the service. This refreshes their configuration
+   files. Ceph daemons (``mon``, ``mgr``, ``osd``, ``mds``, ``rgw``,
+   ``rbd-mirror``, ``crash``, ``cephfs-mirror``, and ``ceph-exporter``) are not
+   restarted. Other daemons, such as Prometheus, Grafana, Alertmanager, or NFS,
+   are restarted so that they read the new files.
 
    .. note:: this command assumes the daemon directory ``/var/lib/ceph/<fsid>/<daemon-name>`` already exists.
+
+To act on a single daemon, use ``ceph orch daemon <action> <daemon-name>``.
 
 
 Configuring the Orchestrator CLI
@@ -220,22 +245,21 @@ This is an overview of the current implementation status of the orchestrators.
  apply alertmanager                  ❌      ✔
  apply node-exporter                 ❌      ✔
  apply rgw                           ✔       ✔
- apply container                     ⚪      ✔
+ apply -i <container spec>           ⚪      ✔
  apply snmp-gateway                  ❌      ✔
  host add                            ⚪      ✔
  host ls                             ✔      ✔
  host rm                             ⚪      ✔
  host maintenance enter              ❌      ✔
  host maintenance exit               ❌      ✔
- daemon status                       ⚪      ✔
  daemon {stop,start,...}             ⚪      ✔
- device {ident,fault}-(on,off}       ⚪      ✔
+ device light                        ⚪      ✔
  device ls                           ✔      ✔
- iscsi add                           ⚪     ✔
- mds add                             ⚪      ✔
- nfs add                             ⚪      ✔
- rbd-mirror add                      ⚪      ✔
- rgw add                             ⚪     ✔
+ daemon add iscsi                    ⚪      ✔
+ daemon add mds                      ⚪      ✔
+ daemon add nfs                      ⚪      ✔
+ daemon add rbd-mirror               ⚪      ✔
+ daemon add rgw                      ⚪      ✔
  ls                                  ✔      ✔
  ps                                  ✔      ✔
  status                              ✔      ✔
@@ -247,3 +271,6 @@ where
 * ⚪ = not yet implemented
 * ❌ = not applicable
 * ✔ = implemented
+
+The ``device light`` row is the ``ceph device light`` command, which has no
+``orch`` prefix.
