@@ -891,6 +891,13 @@ add_executable(unittest_features
 add_ceph_unittest(unittest_features)
 target_link_libraries(unittest_features global)
 
+# unittest_feature_set
+add_executable(unittest_feature_set
+  test_feature_set.cc
+  )
+add_ceph_unittest(unittest_feature_set)
+target_link_libraries(unittest_feature_set ceph-common)
+
 # unittest_crypto
 add_executable(unittest_crypto
   crypto.cc
