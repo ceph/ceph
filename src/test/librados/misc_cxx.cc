@@ -24,6 +24,7 @@
 #include "test/librados/test_cxx.h"
 #include "test/librados/test_pool_types.h"
 #include "cls/version/cls_version_ops.h"
+#include "cls/hello/cls_hello_ops.h"
 #include "cls/rbd/cls_rbd_types.h"
 #include "erasure-code/consistency/RadosCommands.h"
 
@@ -943,6 +944,36 @@ TEST_P(LibRadosMiscECPP, CompareExtentRange) {
   ObjectReadOperation read2;
   read2.cmpext(2097152, bl3, nullptr);
   ASSERT_EQ(0, ioctx.operate("foo", &read2, nullptr));
+}
+
+// On an optimized EC pool, a CALL whose method reads the object
+// (cls_cxx_read) runs in a coroutine. When an op before it starts an
+// async read, as a CHECKSUM does, the request runs again once that read
+// completes, and the CALL's read must still find its coroutine then.
+TEST_P(LibRadosMiscECPP, ClassReadAfterAsyncRead) {
+  SKIP_IF_CRIMSON();
+  if (!fast_ec) {
+    GTEST_SKIP() << "a CALL reads an EC object only with optimizations";
+  }
+  const std::string content(8192, 'h');
+  bufferlist data;
+  data.append(content);
+  ASSERT_EQ(0, ioctx.write_full("foo", data));
+
+  ObjectReadOperation op;
+  bufferlist init;
+  encode(uint32_t(-1), init);
+  bufferlist csum;
+  int csum_r = -1;
+  op.checksum(LIBRADOS_CHECKSUM_TYPE_CRC32C, init, 0, content.size(), 0,
+	      &csum, &csum_r);
+  bufferlist in, out;
+  int call_r = -1;
+  op.exec(cls::hello::method::replay, in, &out, &call_r);
+  ASSERT_EQ(0, ioctx.operate("foo", &op, nullptr));
+  EXPECT_EQ(0, csum_r);
+  EXPECT_EQ(0, call_r);
+  EXPECT_EQ(content.substr(0, 1100), out.to_str());
 }
 
 TEST_P(LibRadosMiscPP, MinCompatOSD) {
