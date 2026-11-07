@@ -1,0 +1,14 @@
+# Metadata pool: Replicated (default)
+# Data pool: Replicated
+
+tasks:
+- exec:
+    client.0:
+      - sudo ceph osd pool create datapool 4
+      - rbd pool init datapool
+
+overrides:
+  ceph:
+    conf:
+      client:
+        rbd default data pool: datapool

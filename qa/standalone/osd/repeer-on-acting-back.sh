@@ -163,20 +163,16 @@ function TEST_ceph_pg_repeer_on_simple_ec_and_rep_pools() {
 
   #setup erasure coded pool
   EC_POOL_NAME="ecpool"
-  METADATA_POOL_NAME="ecpool_metadata"
 
   ceph osd erasure-code-profile set ec-prof plugin=isa k=2 m=1 crush-failure-domain=osd
   
   ceph osd pool create $EC_POOL_NAME erasure ec-prof || return 1
   ceph osd pool set $EC_POOL_NAME allow_ec_overwrites true || return 1
+  ceph osd pool set $EC_POOL_NAME allow_ec_optimizations true || return 1
   ceph osd pool application enable $EC_POOL_NAME rbd || return 1
 
-  #create a metadata pool for the ec pool
-  ceph osd pool create $METADATA_POOL_NAME replicated || return 1
-  rbd pool init $METADATA_POOL_NAME || return 1
-
   #create an rbd image on the ec pool
-  rbd create -s 10G --data-pool $EC_POOL_NAME $METADATA_POOL_NAME/vol0 || return 1
+  rbd create -s 10G $EC_POOL_NAME/vol0 || return 1
   
   #create a replicated pool now
   REP_POOL_NAME="reppool"
@@ -189,7 +185,7 @@ function TEST_ceph_pg_repeer_on_simple_ec_and_rep_pools() {
 
   # Perform some I/O on both images
   rbd bench -p $REP_POOL_NAME --image vol0 --io-size 1K --io-threads 1 --io-total 10000K --io-pattern rand --io-type readwrite || return 1
-  rbd bench -p $METADATA_POOL_NAME --image vol0 --io-size 1K --io-threads 1 --io-total 10000K --io-pattern rand --io-type readwrite || return 1
+  rbd bench -p $EC_POOL_NAME --image vol0 --io-size 1K --io-threads 1 --io-total 10000K --io-pattern rand --io-type readwrite || return 1
 
   #Grab a list of all the pgs in the ec pool and the rep pool
   ec_pgs=$(ceph pg ls-by-pool $EC_POOL_NAME | grep [0-9]. | awk '{print $1}')

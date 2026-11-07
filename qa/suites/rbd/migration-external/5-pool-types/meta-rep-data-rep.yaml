@@ -1,3 +1,6 @@
+# Metadata pool: Replicated (default)
+# Data pool: Replicated
+
 tasks:
 - exec:
     cluster1.client.0:
