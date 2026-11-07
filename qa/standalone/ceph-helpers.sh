@@ -511,6 +511,7 @@ function activate_mon() {
 	--osd-pool-default-pg-autoscale-mode off \
 	--mon-osd-backfillfull-ratio .99 \
 	--mon-warn-on-insecure-global-id-reclaim-allowed=false \
+	--mon-warn-on-pool-min-size-too-low=false \
         "$@" || return 1
 }
 
