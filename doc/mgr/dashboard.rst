@@ -23,8 +23,10 @@ team at `SUSE <https://www.suse.com/>`_, with support from members of the Ceph
 community and from companies including `Red Hat <https://redhat.com/>`_.
 
 The dashboard module's backend code uses the CherryPy framework, and implements
-a custom REST API. The WebUI implementation is based on Angular/TypeScript and
-includes both functionality from the original dashboard and new features
+a custom REST API (see :ref:`mgr ceph api`). The documentation of this API
+can be accessed from any running dashboard (see :ref:`mgr ceph api docs`). The
+WebUI implementation is based on Angular/TypeScript and includes both
+functionality from the original dashboard and new features
 originally developed for the standalone version of openATTIC. The Ceph
 Dashboard module is implemented as an application that provides a graphical
 representation of information and statistics through a web server hosted by

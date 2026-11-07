@@ -85,6 +85,47 @@ An example:
    -H  "Authorization: Bearer <token>"
 
 
+.. _mgr ceph api docs:
+
+Accessing the API Documentation
+===============================
+
+Every running Ceph Dashboard serves documentation for the Ceph API that matches
+the version of Ceph that is running. This documentation is available in the
+following forms:
+
+* **Interactive documentation**: Click the help icon (**?**) in the top
+  navigation bar of the Dashboard and select **API**. This opens an
+  interactive `Swagger UI <https://swagger.io/tools/swagger-ui/>`_ page that
+  lists every endpoint together with its parameters, request bodies and
+  responses. The page can also be opened directly at::
+
+    https://<server_addr>:<ssl_server_port>/#/api-docs
+
+  To send requests from this page by using **Try it out**, first obtain a
+  token from the ``/api/auth`` endpoint (see `Authentication and
+  Authorization`_), then click **Authorize** and enter the token.
+
+* **OpenAPI specification**: The raw `OpenAPI 3.0
+  <https://spec.openapis.org/oas/v3.0.3>`_ specification, in JSON format, is
+  available at::
+
+    https://<server_addr>:<ssl_server_port>/docs/openapi.json
+
+  This document does not require authentication and can be loaded into any
+  OpenAPI-compatible tool, for example to generate API clients:
+
+  .. prompt:: bash $
+
+     curl -o openapi.json "https://example.com:8443/docs/openapi.json"
+
+If HTTPS is disabled, use ``http://<server_addr>:<server_port>`` as the base
+URL instead (see :ref:`dashboard-host-name-and-port`).
+
+The specification of the Ceph API for the current release is also included in
+the `Specification`_ section below.
+
+
 Specification
 =============
 
