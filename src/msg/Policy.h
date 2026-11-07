@@ -48,6 +48,9 @@ struct Policy {
   ceph::feature_set_t features_ext_required;
   /// Why the features are required, for peers we turn away.
   std::string features_required_reason;
+  /// The authenticator turns away peers that lack required features
+  /// (see Monitor::rejects_peer()), so msgr1 need not refuse them.
+  bool features_checked_by_auth = false;
   
   /// Specify features supported locally by the endpoint.
   static constexpr uint64_t features_supported{CEPH_FEATURES_SUPPORTED_DEFAULT};
