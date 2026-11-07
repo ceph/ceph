@@ -407,6 +407,7 @@ namespace rgw::sal {
 				string& marker,
 				const string& delim,
 				const int& max_uploads,
+                                const bool allow_unordered, // currently ignored
 				vector<std::unique_ptr<MultipartUpload>>& uploads,
 				map<string, bool> *common_prefixes,
 				bool *is_truncated, optional_yield y) {

@@ -8296,8 +8296,12 @@ void RGWListBucketMultiparts::execute(optional_yield y)
     }
   }
 
+  constexpr bool allow_unordered = false;
+
   op_ret = s->bucket->list_multiparts(this, prefix, marker_meta,
-				      delimiter, max_uploads, uploads,
+				      delimiter, max_uploads,
+                                      allow_unordered,
+                                      uploads,
 				      &common_prefixes, &is_truncated, y);
   if (op_ret < 0) {
     return;
