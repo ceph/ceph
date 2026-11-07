@@ -1619,7 +1619,7 @@ class RgwZone(RESTController):
     # pylint: disable=W0613
     def create(self, zone_name, zonegroup_name=None, default=False, master=False,
                zone_endpoints=None, access_key=None, secret_key=None, tier_type='',
-               sync_from: str = '', sync_from_all: str = ''):
+               sync_from: str = '', sync_from_rm: str = '', sync_from_all: str = ''):
         multisite_instance = RgwMultisite()
         result = multisite_instance.create_zone(zone_name, zonegroup_name, default,
                                                 master, zone_endpoints, access_key,
@@ -1670,13 +1670,14 @@ class RgwZone(RESTController):
             placement_target: str = '', data_pool: str = '', index_pool: str = '',
             data_extra_pool: str = '', storage_class: str = '', data_pool_class: str = '',
             compression: str = '', tier_type: str = '', sync_from: str = '',
-            sync_from_all: str = ''):
+            sync_from_rm: str = '', sync_from_all: str = ''):
         multisite_instance = RgwMultisite()
         result = multisite_instance.edit_zone(zone_name, new_zone_name, zonegroup_name, default,
                                               master, zone_endpoints, access_key, secret_key,
                                               placement_target, data_pool, index_pool,
                                               data_extra_pool, storage_class, data_pool_class,
-                                              compression, tier_type, sync_from, sync_from_all)
+                                              compression, tier_type, sync_from, sync_from_rm,
+                                              sync_from_all)
         return result
 
     @Endpoint()
