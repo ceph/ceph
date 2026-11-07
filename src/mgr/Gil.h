@@ -17,11 +17,16 @@
 
 #include <cassert>
 #include <functional>
+#include <string>
 
 struct _ts;
 typedef struct _ts PyThreadState;
 
 #include <pthread.h>
+
+extern thread_local const char *gil_thread_module_name;
+void gil_tag_thread_module(const std::string &name);
+const char *gil_get_last_holder();
 
 
 /**
@@ -59,7 +64,7 @@ class SafeThreadState
 // If in doubt, explicitly put a scope around the block of code you
 // know you need the GIL in.
 //
-// See the comment in Gil::Gil for when to set new_thread == true
+// See the comment in Gil::acquire for when to set new_thread == true
 //
 class Gil {
 public:
@@ -67,11 +72,16 @@ public:
   Gil& operator=(const Gil&) = delete;
 
   Gil(SafeThreadState &ts, bool new_thread = false);
+  Gil(SafeThreadState &ts, bool new_thread, const std::string &module_name);
   ~Gil();
 
 private:
+  void acquire(bool new_thread);
+
   SafeThreadState &pThreadState;
   PyThreadState *pNewThreadState = nullptr;
+  const char *pPreviousModuleName = nullptr;
+  bool pRestoreModuleName = false;
 };
 
 // because the Python runtime could relinquish the GIL when performing GC
