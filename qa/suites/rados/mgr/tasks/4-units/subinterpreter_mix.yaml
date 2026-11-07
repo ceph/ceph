@@ -1,0 +1,16 @@
+overrides:
+  ceph:
+    wait-for-scrub: false
+    conf:
+      mgr:
+        mgr_subinterpreter_modules: "crash"
+    log-ignorelist:
+      - \(MGR_INSIGHTS_WARNING\)
+      - \(insights_health_check
+      - \(RECENT_CRASH\)
+tasks:
+  - cephfs_test_runner:
+      modules:
+        - tasks.mgr.test_insights
+        - tasks.mgr.test_crash
+      fail_on_skip: false

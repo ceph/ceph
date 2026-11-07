@@ -76,6 +76,13 @@ public:
       std::string *err,
       bool *crash_dump = nullptr);
 
+  // Fast path for same sub-interpreter dispatch,
+  // which avoids the overhead of pickling/unpickling
+  PyObject *dispatch_remote_direct(
+      const std::string &method,
+      PyObject *args,
+      PyObject *kwargs);
+
   int handle_command(
     const ModuleCommand& module_command,
     const MgrSession& session,
