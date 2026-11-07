@@ -189,9 +189,9 @@ Request Parameters
 
 Example::
 
-  POST "<hostname>?Action=Action=CreateOpenIDConnectProvider
-    &ThumbprintList.list.1=F7D7B3515DD0D319DD219A43A9EA727AD6065287
-    &ClientIDList.list.1=app-profile-jsp
+  POST "<hostname>?Action=CreateOpenIDConnectProvider
+    &ThumbprintList.member.1=F7D7B3515DD0D319DD219A43A9EA727AD6065287
+    &ClientIDList.member.1=app-profile-jsp
     &Url=http://localhost:8080/auth/realms/quickstart"
 
 
@@ -210,7 +210,7 @@ Request Parameters
 
 Example::
 
-  POST "<hostname>?Action=Action=DeleteOpenIDConnectProvider
+  POST "<hostname>?Action=DeleteOpenIDConnectProvider
     &OpenIDConnectProviderArn=arn:aws:iam:::oidc-provider/localhost:8080/auth/realms/quickstart"
 
 
@@ -229,7 +229,7 @@ Request Parameters
 
 Example::
 
-  POST "<hostname>?Action=Action=GetOpenIDConnectProvider
+  POST "<hostname>?Action=GetOpenIDConnectProvider
     &OpenIDConnectProviderArn=arn:aws:iam:::oidc-provider/localhost:8080/auth/realms/quickstart"
 
 ListOpenIDConnectProviders
@@ -244,7 +244,7 @@ None
 
 Example::
 
-  POST "<hostname>?Action=Action=ListOpenIDConnectProviders
+  POST "<hostname>?Action=ListOpenIDConnectProviders
 
 AddClientIDToOpenIDConnectProvider
 ----------------------------------
@@ -266,7 +266,7 @@ Request Parameters
 
 Example::
 
-  POST "<hostname>?Action=Action=AddClientIDToOpenIDConnectProvider
+  POST "<hostname>?Action=AddClientIDToOpenIDConnectProvider
     &OpenIDConnectProviderArn=arn:aws:iam:::oidc-provider/localhost:8080/auth/realms/quickstart
     &ClientID=app-jee-jsp"
 
@@ -290,7 +290,7 @@ Request Parameters
 
 Example::
 
-  POST "<hostname>?Action=Action=RemoveClientIDFromOpenIDConnectProvider
+  POST "<hostname>?Action=RemoveClientIDFromOpenIDConnectProvider
     &OpenIDConnectProviderArn=arn:aws:iam:::oidc-provider/localhost:8080/auth/realms/quickstart
     &ClientID=app-jee-jsp"
 
@@ -315,6 +315,6 @@ Request Parameters
 
 Example::
 
-  POST "<hostname>?Action=Action=UpdateOpenIDConnectProviderThumbprint
+  POST "<hostname>?Action=UpdateOpenIDConnectProviderThumbprint
     &OpenIDConnectProviderArn=arn:aws:iam:::oidc-provider/localhost:8080/auth/realms/quickstart
-    &&ThumbprintList.list.1=ABCDB3515DD0D319DD219A43A9EA727AD6061234"
+    &ThumbprintList.member.1=ABCDB3515DD0D319DD219A43A9EA727AD6061234"
