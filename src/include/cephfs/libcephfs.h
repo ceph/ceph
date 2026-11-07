@@ -776,6 +776,25 @@ int ceph_open_snapdiff2(struct ceph_mount_info* cmount,
                         struct ceph_snapdiff_info2** out);
 
 /**
+ * Opens a snapdiff2 stream on subdirectory @name of an open stream.
+ *
+ * Unlike ceph_open_snapdiff2() on the subdirectory's path, it needs no
+ * requests to the MDS when @name is a directory that @parent's stream has
+ * returned, and the new stream skips the "." and ".." entries.
+ *
+ * @param parent snapdiff stream handle opened via ceph_open_snapdiff2() or
+ *               ceph_open_snapdiff2_at()
+ * @param name name of a subdirectory returned by @parent's stream
+ * @param out resulting snapdiff stream handle, read via
+ *            ceph_readdir_snapdiff2() and closed via ceph_close_snapdiff2()
+ * @returns 0 on success, -ENOENT if @name is not in the client cache (open it
+ *          with ceph_open_snapdiff2() instead), or another negative error code
+ */
+int ceph_open_snapdiff2_at(struct ceph_snapdiff_info2* parent,
+                           const char* name,
+                           struct ceph_snapdiff_info2** out);
+
+/**
  * Get the next snapshot delta entry.
  *
  * @param info snapdiff stream handle opened via ceph_open_snapdiff()
