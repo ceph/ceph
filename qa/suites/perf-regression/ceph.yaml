@@ -1,0 +1,17 @@
+meta:
+- desc: |
+   perf-regression is a regression testing suite.
+   Should be run on trial-perf machines.
+   On VMs performance results will be inconsistent
+   and can't be compared across runs
+   Use xfs beneath the osds.
+
+tasks:
+- install:
+- cephadm:
+    single_host_defaults: true
+    skip_dashboard: true
+    skip_monitoring_stack: true
+    allow_mismatched_release: true
+    log_to_file: true
+- ssh_keys:
