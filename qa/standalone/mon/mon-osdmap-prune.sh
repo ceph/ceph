@@ -9,7 +9,7 @@ function run() {
   local dir=$1
   shift
 
-  export CEPH_MON="127.0.0.1:7115"
+  export CEPH_MON="127.0.0.1:7235"
   export CEPH_ARGS
   CEPH_ARGS+="--fsid=$(uuidgen) --auth_cluster_required=none --auth_service_required=none --auth_client_required=none --mon-host=$CEPH_MON "
 

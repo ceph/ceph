@@ -6,7 +6,7 @@ function run() {
     local dir=$1
     shift
 
-    export CEPH_MON="127.0.0.1:7146" # git grep '\<7146\>' : there must be only one
+    export CEPH_MON="127.0.0.1:7245" # git grep '\<7245\>' : there must be only one
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth_cluster_required=none --auth_service_required=none --auth_client_required=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
