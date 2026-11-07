@@ -336,6 +336,18 @@ protected:
     new_epoch();
   }
 
+  // Helper to change the pool's pg_num, pgp_num and pg_num_pending
+  void set_pg_num(unsigned pg_num, unsigned pg_num_pending)
+  {
+    OSDMap::Incremental pending_inc(osdmap->get_epoch() + 1);
+    pending_inc.fsid = osdmap->get_fsid();
+    pg_pool_t *p = pending_inc.get_new_pool(pool_id, osdmap->get_pg_pool(pool_id));
+    p->set_pg_num(pg_num);
+    p->set_pgp_num(pg_num_pending);
+    p->set_pg_num_pending(pg_num_pending);
+    apply_incremental(pending_inc);
+  }
+
   // Helper - take OSD down by removing it from up/acting set
   void osd_down(int offset, int osd) {
     dout(0) << "= osd." << osd << "(" << offset << ") set down+out =" << dendl;
@@ -1836,6 +1848,117 @@ TEST_F(PeeringStateTest, Backfill) {
   test_peering();
   // Verify that we got to active+clean and that log entries were kept
   verify_all_active_clean(expected, expected_tail);
+}
+
+// A PG whose merge is pending is peered but not active, so it blocks I/O
+// until it is clean and has merged. When it needs backfill first, its
+// reservations must be able to preempt the backfill of a PG that is only
+// degraded: that backfill can be blocked on a copy-from whose source is in
+// the merging PG, and then neither can make progress.
+TEST_F(PeeringStateTest, MergePendingBackfillPriority) {
+  dout(0) << "== MergePendingBackfillPriority ==" << dendl;
+  // PG 0 is the merge target once pg_num_pending drops to 1
+  set_pg_num(2, 2);
+  test_create_peering_state();
+  test_init();
+  test_event_initialize();
+  test_append_log_entry();
+  eversion_t expected_tail = test_append_log_entry();
+  eversion_t expected = test_append_log_entry(shard_id_set(), shard_id_set(), false, true);
+  test_peering();
+  verify_all_active_clean(expected, expected_tail);
+  // Start the merge and swap out OSD 1 for OSD 9, so the PG needs backfill
+  set_pg_num(2, 1);
+  modify_up_acting(1, 9);
+  test_create_peering_state(9, 1);
+  test_init(9);
+  test_event_initialize(9);
+  test_peering();
+  PeeringState *ps = get_ps(acting_primary);
+  EXPECT_TRUE(ps->is_premerge());
+  EXPECT_TRUE(ps->is_peered());
+  EXPECT_FALSE(ps->is_active());
+  EXPECT_TRUE(ps->is_backfilling());
+  EXPECT_GE(get_listener(acting_primary)->io_reservation_priority,
+            (unsigned)OSD_BACKFILL_INACTIVE_PRIORITY_BASE);
+  EXPECT_GE(get_listener(9)->remote_recovery_reservation_priority,
+            (unsigned)OSD_BACKFILL_INACTIVE_PRIORITY_BASE);
+}
+
+// The primary's local backfill reservation is preempted while it waits for a
+// remote one. It no longer holds a local reservation, so it must stop waiting
+// rather than go on to backfill without one.
+TEST_F(PeeringStateTest, LocalBackfillPreemptedWhileWaitingForRemote) {
+  dout(0) << "== LocalBackfillPreemptedWhileWaitingForRemote ==" << dendl;
+  test_create_peering_state();
+  test_init();
+  test_event_initialize();
+  test_append_log_entry();
+  eversion_t expected_tail = test_append_log_entry();
+  eversion_t expected = test_append_log_entry(shard_id_set(), shard_id_set(), false, true);
+  test_peering();
+  verify_all_active_clean(expected, expected_tail);
+  // Swap out OSD 1 for OSD 9 and hold OSD 9's reservation grant
+  modify_up_acting(1, 9);
+  test_create_peering_state(9, 1);
+  test_init(9);
+  test_event_initialize(9);
+  get_listener(acting_primary)->inject_keep_preempt = true;
+  get_listener(9)->inject_remote_reservation_stall = true;
+  test_peering();
+  const std::string wait_remote = "Started/Primary/Active/WaitRemoteBackfillReserved";
+  ASSERT_EQ(wait_remote, get_listener(acting_primary)->last_state_entered);
+  // Preempt the primary's local reservation
+  auto &stalled = get_listener(acting_primary)->stalled_events;
+  auto preempt = std::find_if(stalled.begin(), stalled.end(), [](auto &evt) {
+    return evt->get_desc().find("DeferBackfill") != std::string::npos;
+  });
+  ASSERT_NE(preempt, stalled.end());
+  auto evt = *preempt;
+  stalled.erase(preempt);
+  get_ps(acting_primary)->handle_event(evt, get_ctx(acting_primary));
+  dispatch_all();
+  EXPECT_NE(wait_remote, get_listener(acting_primary)->last_state_entered);
+}
+
+// Forcing backfill while the primary waits for a remote reservation must
+// raise the priority of the request already queued on the backfill target,
+// otherwise it cannot preempt the reservation that it is waiting behind.
+TEST_F(PeeringStateTest, ForceBackfillWhileWaitingForRemote) {
+  dout(0) << "== ForceBackfillWhileWaitingForRemote ==" << dendl;
+  test_create_peering_state();
+  test_init();
+  test_event_initialize();
+  test_append_log_entry();
+  eversion_t expected_tail = test_append_log_entry();
+  eversion_t expected = test_append_log_entry(shard_id_set(), shard_id_set(), false, true);
+  test_peering();
+  verify_all_active_clean(expected, expected_tail);
+  // Swap out OSD 1 for OSD 9 and hold OSD 9's reservation grant
+  modify_up_acting(1, 9);
+  test_create_peering_state(9, 1);
+  test_init(9);
+  test_event_initialize(9);
+  get_listener(9)->inject_remote_reservation_stall = true;
+  test_peering();
+  ASSERT_EQ("Started/Primary/Active/WaitRemoteBackfillReserved",
+            get_listener(acting_primary)->last_state_entered);
+  ASSERT_LT(get_listener(9)->remote_recovery_reservation_priority,
+            (unsigned)OSD_BACKFILL_PRIORITY_FORCED);
+  // ceph pg force-backfill
+  auto evt = std::make_shared<PGPeeringEvent>(
+    osdmap->get_epoch(),
+    osdmap->get_epoch(),
+    PeeringState::SetForceBackfill());
+  get_ps(acting_primary)->handle_event(evt, get_ctx(acting_primary));
+  dispatch_all();
+  // Let any retry the primary scheduled run
+  dispatch_events(acting_primary, true);
+  dispatch_all();
+  EXPECT_EQ((unsigned)OSD_BACKFILL_PRIORITY_FORCED,
+            get_listener(acting_primary)->io_reservation_priority);
+  EXPECT_EQ((unsigned)OSD_BACKFILL_PRIORITY_FORCED,
+            get_listener(9)->remote_recovery_reservation_priority);
 }
 
 #if POOL_MIGRATION
