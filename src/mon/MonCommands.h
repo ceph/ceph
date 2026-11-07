@@ -1334,7 +1334,8 @@ COMMAND("osd pool set "
           "|use_gmt_hitset"
           "|write_fadvise_dontneed "
 	"name=val,type=CephString "
-	"name=yes_i_really_mean_it,type=CephBool,req=false",
+	"name=yes_i_really_mean_it,type=CephBool,req=false "
+	"name=yes_i_really_really_mean_it,type=CephBool,req=false",
 	"set pool parameter <var> to <val>", "osd", "rw")
 // 'val' is a CephString because it can include a unit.  Perhaps
 // there should be a Python type for validation/conversion of strings
