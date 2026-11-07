@@ -4582,6 +4582,46 @@ PerfCounters* OSD::create_recoverystate_perf()
   return recoverystate_perf;
 }
 
+/**
+ * Wait until the transactions queued on ch so far have committed. Their
+ * on-commit callbacks go to the context queue of the PG's shard, and
+ * the op threads of a stopping OSD delete what they find there without
+ * running it (ShardedOpWQ::_process()). So the waiter signals when it
+ * is released, whether it runs or not. Call it while the op threads
+ * run: a callback that reaches the queue after they stopped stays
+ * there with what it holds, and a FlushState, for one, holds its PG.
+ * Returns false when nothing was in flight.
+ */
+static bool wait_for_commit(ObjectStore::CollectionHandle& ch)
+{
+  struct released_t {
+    ceph::mutex lock = ceph::make_mutex("OSD::wait_for_commit");
+    ceph::condition_variable cond;
+    bool done = false;
+  };
+  class C_Released : public Context {
+    std::shared_ptr<released_t> r;
+  public:
+    explicit C_Released(std::shared_ptr<released_t> r) : r(std::move(r)) {}
+    ~C_Released() override {
+      std::lock_guard l(r->lock);
+      r->done = true;
+      r->cond.notify_all();
+    }
+    void finish(int) override {}
+  };
+  auto r = std::make_shared<released_t>();
+  Context *c = new C_Released(r);
+  if (ch->flush_commit(c)) {
+    // nothing in flight, and the store did not take c
+    delete c;
+    return false;
+  }
+  std::unique_lock l(r->lock);
+  r->cond.wait(l, [&r] { return r->done; });
+  return true;
+}
+
 int OSD::shutdown()
 {
   // vstart overwrites osd_fast_shutdown value in the conf file -> force the value here!
@@ -4702,6 +4742,18 @@ int OSD::shutdown()
     _get_pgs(&pgs);
     for (auto pg : pgs) {
       pg->shutdown();
+    }
+    // pg->shutdown() waits until the PG's transactions are submitted,
+    // not until they commit. The map that marks this OSD down starts a
+    // new interval in each PG just now, and the on-commit callback of
+    // that transaction holds the PG (FlushState). Should it reach the
+    // shard's context queue after the op threads stopped, it would keep
+    // the PG, and through it the PG's collection, past the PG's detach
+    // and the store's umount
+    for (auto pg : pgs) {
+      if (wait_for_commit(pg->ch)) {
+	dout(10) << "waited for the last commits of " << pg->pg_id << dendl;
+      }
     }
   }
 
