@@ -318,6 +318,129 @@ following commands:
    [root@mon1 ~]# grep "`cat ~/ceph.pub`"  /root/.ssh/authorized_keys
 
 
+.. _cephadm-troubleshooting-unreachable-agents:
+
+Unreachable Cephadm Agents
+==========================
+
+When the cephadm agent is enabled (``mgr/cephadm/use_agent`` is ``true``),
+there are two connections between each host and the manager:
+
+- The agent sends the host's metadata (daemons, devices, networks and facts)
+  to the manager at a regular interval.
+- The manager connects to the agent's listener port to ask it for fresh
+  metadata and to push configuration changes.
+
+An agent is *unreachable* when the first connection works but the second does
+not. It is reported by the ``CEPHADM_AGENT_UNREACHABLE`` health check (see
+:ref:`cephadm-agent-unreachable`). If an agent stops reporting altogether, it
+is reported by ``CEPHADM_AGENT_DOWN`` instead.
+
+While an agent is unreachable:
+
+- The manager keeps processing the metadata that the agent sends.
+- The manager retries the connection less and less often, up to once every 10
+  minutes, and logs a summary of the failed connections at most once a minute.
+- Service specifications are still applied, without waiting for that host's
+  metadata to be marked up to date. Upgrades still wait for it.
+
+The manager reconnects on its own as soon as the agent can be reached again.
+
+Finding the Affected Agents
+---------------------------
+
+To list the affected hosts and the last connection error for each, run the
+following command:
+
+.. prompt:: bash #
+
+   ceph health detail
+
+To see the state of the agent on every host, run the following command:
+
+.. prompt:: bash #
+
+   ceph cephadm agent-status
+
+Add a host name to show only that host, or ``--format json-pretty`` for every
+field, including when the manager last reached the agent. The output looks
+like this:
+
+.. code-block:: none
+
+   HOST   PORT  LAST REPORT  METADATA             LISTENER   MGR->AGENT                                  LAST ERROR
+   host1  4721  12s ago      up to date           listening  ok
+   host2  4721  9s ago       pending (counter 7)  failed     unreachable (3 failures)                    agent listener is down: SSLError: [SSL] PEM lib (_ssl.c:3874)
+   host3  4721  15s ago      pending (counter 4)  listening  unreachable (5 failures, retry in 412s)     could not connect to agent (connection to 10.0.0.3:4721 failed: [Errno 111] Connection refused)
+
+The ``LISTENER`` column is the state of the listener as reported by the agent
+itself (``unknown`` for agents that do not report it). ``ceph orch ps`` also
+shows the status of an affected agent daemon as ``running, unreachable`` or
+``running, listener down``.
+
+The Agent's Listener Is Down
+----------------------------
+
+If ``LISTENER`` is ``failed``, the agent could not open its listener port. The
+error is shown in ``LAST ERROR`` and in the agent's log. On the affected host,
+run the following command:
+
+.. prompt:: bash #
+
+   cephadm logs --name agent.<hostname>
+
+An ``SSLError`` (for example ``[SSL] PEM lib``) means that the agent was given
+an empty or invalid listener certificate or key. The agent service
+specification must have TLS enabled with certificates signed by cephadm.
+Check it by running the following command:
+
+.. prompt:: bash #
+
+   ceph orch ls agent --export
+
+The output must contain ``ssl: true`` and
+``certificate_source: cephadm-signed``. If it does not, add these two fields
+to the exported specification, apply it again with
+``ceph orch apply -i <file>``, and then redeploy the agents:
+
+.. prompt:: bash #
+
+   ceph orch redeploy agent
+
+An ``OSError`` such as ``Address already in use`` means that another process
+took the port after the agent selected it. Redeploy the agent on that host:
+
+.. prompt:: bash #
+
+   ceph orch daemon redeploy agent.<hostname>
+
+The Manager Cannot Connect to the Agent
+---------------------------------------
+
+If ``LISTENER`` is ``listening`` or ``unknown`` and ``LAST ERROR`` shows a
+connection error, check the network path from the host that runs the active
+manager to the agent's host and port (``PORT`` column):
+
+- ``Connection refused``: nothing is listening on the port. On the agent's
+  host, check that the port is open with ``ss -ltnp | grep <port>``. If it is
+  not, check the agent's log as described above and redeploy the agent.
+- ``timed out`` or ``No route to host``: a firewall is probably dropping the
+  connection. Allow the agent's port on the agent's host and on any firewall
+  between the two hosts. Cephadm uses ports starting at
+  ``mgr/cephadm/agent_starting_port`` (4721 by default).
+- ``certificate verify failed``: the agent's certificates do not match the
+  cephadm root CA, for example after it was replaced. Reconfiguring the agent
+  over SSH installs new certificates:
+
+  .. prompt:: bash #
+
+     ceph orch daemon reconfig agent.<hostname>
+
+After the cause is fixed, the agent is reached on the next retry. Agents that
+were redeployed or reconfigured are retried right away. ``MGR->AGENT`` then
+shows ``ok`` and the health check clears.
+
+
 Failed to Infer CIDR Network Error
 ==================================
 

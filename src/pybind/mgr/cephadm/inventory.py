@@ -7,6 +7,8 @@ import json
 import logging
 import math
 import socket
+import threading
+import time
 from typing import TYPE_CHECKING, Dict, List, Iterator, Optional, Any, Tuple, Set, Mapping, cast, \
     NamedTuple, Type, ValuesView, Union
 
@@ -40,6 +42,33 @@ logger = logging.getLogger(__name__)
 HOST_CACHE_PREFIX = "host."
 SPEC_STORE_PREFIX = "spec."
 AGENT_CACHE_PREFIX = 'agent.'
+# Back-off between mgr->agent messages to a host whose agent could not be
+# reached: AGENT_MSG_BACKOFF_BASE * 2^(failures - 1), capped at
+# AGENT_MSG_BACKOFF_MAX seconds.
+AGENT_MSG_BACKOFF_BASE = 30
+AGENT_MSG_BACKOFF_MAX = 600
+# Number of consecutive failed mgr->agent messages after which the agent is
+# considered unreachable.
+AGENT_UNREACHABLE_FAILURES = 3
+# Minimum time after an agent is (re)deployed before it can be reported as
+# unreachable. Its listener may still be starting.
+AGENT_UNREACHABLE_GRACE = 120
+# Minimum interval between two summaries of failed mgr->agent messages in
+# the mgr log. Per-message detail is logged at DEBUG.
+AGENT_FAILURE_SUMMARY_INTERVAL = 60
+# Agent listener states, as reported by the agent with its metadata
+AGENT_LISTENER_FAILED = 'failed'
+# Minimum time the serve loop holds back non-agent specs while waiting for
+# agents to report up-to-date metadata (see CephadmServe._apply_all_services).
+AGENT_METADATA_MAX_WAIT = 300
+
+
+def _monotonic() -> float:
+    # indirection so unit tests can move the clock without patching
+    # time.monotonic for every thread in the process
+    return time.monotonic()
+
+
 NODE_PROXY_CACHE_PREFIX = 'node_proxy'
 
 
@@ -1359,6 +1388,7 @@ class HostCache():
             del self.scheduled_daemon_actions[host]
         if host in self.last_client_files:
             del self.last_client_files[host]
+        self.mgr.agent_cache.reset_agent_reachability(host)
         self.mgr.set_store(HOST_CACHE_PREFIX + host, None)
 
     def get_hosts(self):
@@ -1518,6 +1548,12 @@ class HostCache():
                 # We do not refresh daemons on hosts in maintenance mode, so stored daemon statuses
                 # could be wrong. We must assume maintenance is working and daemons are stopped
                 dd.status = orchestrator.DaemonDescriptionStatus.stopped
+            elif dd.daemon_type == 'agent' and dd.status == orchestrator.DaemonDescriptionStatus.running:
+                # the agent reports, but the mgr can't connect to it
+                extra = self.mgr.agent_helpers.agent_status_desc(host)
+                if extra:
+                    base = dd.status_desc or orchestrator.DaemonDescriptionStatus.to_str(dd.status)
+                    dd.status_desc = f'{base}, {extra}'
             dd.events = self.mgr.events.get_for_daemon(dd.name())
             return dd
 
@@ -1752,14 +1788,27 @@ class HostCache():
             return False
         return True
 
+    def hosts_metadata_not_up_to_date(self, skip_unreachable_agents: bool = False) -> List[str]:
+        """
+        Hosts whose metadata is not up to date, other than offline and
+        maintenance hosts. With skip_unreachable_agents, also leave out hosts
+        whose agent the mgr can't reach: their metadata can't be marked up to
+        date until the agent is reachable again.
+        """
+        # this is primarily for telling if it's safe to try and apply a service
+        # spec. Since offline/maintenance hosts aren't considered in that process anyway
+        # we don't want to report a host without up-to-date metadata that is in one
+        # of those two categories.
+        unreachable = {h.hostname for h in self.get_unreachable_hosts()}
+        return [
+            h for h in self.get_hosts()
+            if not self.host_metadata_up_to_date(h)
+            and h not in unreachable
+            and not (skip_unreachable_agents and self.mgr.agent_cache.agent_unreachable(h))
+        ]
+
     def all_host_metadata_up_to_date(self) -> bool:
-        if [h for h in self.get_hosts() if (not self.host_metadata_up_to_date(h) and not self.is_host_unreachable(h))]:
-            # this function is primarily for telling if it's safe to try and apply a service
-            # spec. Since offline/maintenance hosts aren't considered in that process anyway
-            # we don't want to return False if the host without up-to-date metadata is in one
-            # of those two categories.
-            return False
-        return True
+        return not self.hosts_metadata_not_up_to_date()
 
     def add_daemon(self, host, dd):
         # type: (str, orchestrator.DaemonDescription) -> None
@@ -2068,6 +2117,37 @@ class NodeProxyCache:
         return results
 
 
+class AgentReachability():
+    """
+    mgr->agent reachability of the agent on one host.
+
+    Only kept in memory: after a mgr failover every agent starts as reachable
+    and is re-evaluated on the first message.
+    """
+
+    def __init__(self) -> None:
+        self.consecutive_failures = 0
+        self.total_failures = 0
+        self.last_error = ''
+        self.first_failure: Optional[datetime.datetime] = None
+        self.last_failure: Optional[datetime.datetime] = None
+        self.last_success: Optional[datetime.datetime] = None
+        # last successful SSH deploy/reconfig seen by this mgr
+        self.deployed_at: Optional[datetime.datetime] = None
+        # listener state reported by the agent ('' if the agent doesn't
+        # report it), and the error if it failed to start
+        self.listener_state = ''
+        self.listener_error = ''
+        # _monotonic() before which no message is sent to the agent
+        self.retry_after = 0.0
+
+    def backoff_seconds(self) -> float:
+        return max(self.retry_after - _monotonic(), 0.0)
+
+    def copy(self) -> 'AgentReachability':
+        return copy(self)
+
+
 class AgentCache():
     """
     AgentCache is used for storing metadata about agent daemons that must be kept
@@ -2083,6 +2163,13 @@ class AgentCache():
         self.agent_keys = {}  # type: Dict[str, str]
         self.agent_ports = {}  # type: Dict[str, int]
         self.sending_agent_message = {}  # type: Dict[str, bool]
+        # in-memory only, updated from AgentMessageThread
+        self._reachability_lock = threading.Lock()
+        self.agent_reachability = {}  # type: Dict[str, AgentReachability]
+        # failed messages per host and recovered hosts since the last summary
+        self._failures_since_summary = {}  # type: Dict[str, int]
+        self._recovered_since_summary = set()  # type: Set[str]
+        self._last_summary: Optional[float] = None
 
     def load(self):
         # type: () -> None
@@ -2156,6 +2243,132 @@ class AgentCache():
         if host not in self.sending_agent_message or not self.sending_agent_message[host]:
             return False
         return True
+
+    def record_agent_message_success(self, host: str) -> None:
+        with self._reachability_lock:
+            r = self.agent_reachability.setdefault(host, AgentReachability())
+            if r.consecutive_failures:
+                self.mgr.log.debug(
+                    f'Agent on host {host} is reachable again after '
+                    f'{r.consecutive_failures} failed message(s)')
+                self._recovered_since_summary.add(host)
+            r.consecutive_failures = 0
+            r.first_failure = None
+            r.retry_after = 0.0
+            r.last_success = datetime_now()
+
+    def record_agent_message_failure(self, host: str, error: str) -> int:
+        """
+        Record a failed mgr->agent message and back off before the next one.
+        Returns the number of consecutive failures.
+        """
+        with self._reachability_lock:
+            r = self.agent_reachability.setdefault(host, AgentReachability())
+            now = datetime_now()
+            r.consecutive_failures += 1
+            r.total_failures += 1
+            r.last_error = error
+            r.last_failure = now
+            if r.first_failure is None:
+                r.first_failure = now
+            delay = min(AGENT_MSG_BACKOFF_MAX,
+                        AGENT_MSG_BACKOFF_BASE * 2 ** min(r.consecutive_failures - 1, 16))
+            r.retry_after = _monotonic() + delay
+            self._failures_since_summary[host] = self._failures_since_summary.get(host, 0) + 1
+            self._recovered_since_summary.discard(host)
+            return r.consecutive_failures
+
+    def record_agent_deployed(self, host: str) -> None:
+        """
+        The agent on this host was (re)deployed or reconfigured over SSH.
+        Give the new agent a fresh start: drop any back-off, but keep the
+        failure totals for reporting.
+        """
+        with self._reachability_lock:
+            r = self.agent_reachability.setdefault(host, AgentReachability())
+            r.consecutive_failures = 0
+            r.first_failure = None
+            r.retry_after = 0.0
+            r.deployed_at = datetime_now()
+
+    def take_agent_message_summary(
+        self, min_interval: float = AGENT_FAILURE_SUMMARY_INTERVAL
+    ) -> Optional[Tuple[float, Dict[str, int], Set[str]]]:
+        """
+        Return (seconds covered, failed messages per host, recovered hosts)
+        since the last summary and start a new one. Returns None if the last
+        summary is less than min_interval seconds old.
+        """
+        with self._reachability_lock:
+            now = _monotonic()
+            if self._last_summary is not None and now - self._last_summary < min_interval:
+                return None
+            elapsed = now - self._last_summary if self._last_summary is not None else 0.0
+            res = (elapsed, self._failures_since_summary, self._recovered_since_summary)
+            self._failures_since_summary = {}
+            self._recovered_since_summary = set()
+            self._last_summary = now
+            return res
+
+    def record_agent_listener_state(self, host: str, state: str, error: str) -> None:
+        """
+        Record the listener state the agent reported with its metadata.
+
+        An agent whose listener failed to start can't be reached at all, so
+        flag it as unreachable at once instead of waiting for messages to
+        fail. When the agent reports its listener is back, drop the back-off
+        so the next message goes through.
+        """
+        with self._reachability_lock:
+            r = self.agent_reachability.setdefault(host, AgentReachability())
+            prev = r.listener_state
+            r.listener_state = state
+            r.listener_error = error
+            if state == AGENT_LISTENER_FAILED:
+                now = datetime_now()
+                if prev != AGENT_LISTENER_FAILED:
+                    self.mgr.log.debug(f'Agent on host {host} reports its listener is down: {error}')
+                r.last_error = f'agent listener is down: {error}'
+                r.last_failure = now
+                if r.first_failure is None:
+                    r.first_failure = now
+                r.consecutive_failures = max(r.consecutive_failures, AGENT_UNREACHABLE_FAILURES)
+            elif prev == AGENT_LISTENER_FAILED:
+                self.mgr.log.debug(f'Agent on host {host} reports its listener is {state or "up"}')
+                r.consecutive_failures = 0
+                r.first_failure = None
+                r.retry_after = 0.0
+                self._recovered_since_summary.add(host)
+
+    def agent_message_allowed(self, host: str) -> bool:
+        """
+        False while we are backing off after failed messages to this agent,
+        or while the agent reports that its listener is down.
+        """
+        with self._reachability_lock:
+            r = self.agent_reachability.get(host)
+            if r is None:
+                return True
+            if r.listener_state == AGENT_LISTENER_FAILED:
+                return False
+            return _monotonic() >= r.retry_after
+
+    def agent_unreachable(self, host: str) -> bool:
+        with self._reachability_lock:
+            r = self.agent_reachability.get(host)
+            return r is not None and r.consecutive_failures >= AGENT_UNREACHABLE_FAILURES
+
+    def get_agent_reachability(self, host: str) -> Optional[AgentReachability]:
+        with self._reachability_lock:
+            r = self.agent_reachability.get(host)
+            return r.copy() if r is not None else None
+
+    def reset_agent_reachability(self, host: Optional[str] = None) -> None:
+        with self._reachability_lock:
+            if host is None:
+                self.agent_reachability = {}
+            else:
+                self.agent_reachability.pop(host, None)
 
     def agent_config_successfully_delivered(self, daemon_spec: CephadmDaemonDeploySpec) -> None:
         # Agent successfully received new config (HTTP ACK or successful SSH
