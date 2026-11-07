@@ -91,6 +91,33 @@ options:
   fmt_desc: The number of seconds to wait before retrying backfill requests.
   default: 30
   with_legacy: true
+- name: osd_backfill_drain_full_priority_boost
+  type: int
+  level: advanced
+  desc: Priority boost for backfills that will free space on backfillfull or
+    full OSDs
+  long_desc: When a PG is remapped away from an OSD, the outgoing copy is only
+    removed once backfilling of the new copy has completed. If any such outgoing
+    (or stray) copy of a PG resides on an OSD that is backfillfull or full, the
+    PG's backfill reservation priority is increased by this amount, so that
+    backfills draining full OSDs are scheduled ahead of other backfills of the
+    same degradation level. The boosted priority is clamped to the upper bound of
+    the PG's base priority range, so these backfills never outrank more degraded
+    PGs. The pool recovery_priority setting shifts backfill priorities by up to
+    20; the default of 21 lets a backfill that drains a full OSD go first whatever
+    the pool priorities, while keeping most of their relative order among boosted
+    backfills. Set to 0 to disable.
+  fmt_desc: Additive priority boost applied to the backfill reservation priority
+    of PGs whose completed backfill will free space on a backfillfull or full
+    OSD. Set to 0 to disable.
+  default: 21
+  min: 0
+  max: 253
+  see_also:
+  - osd_max_backfills
+  - osd_min_recovery_priority
+  flags:
+  - runtime
 - name: osd_recovery_retry_interval
   type: float
   level: advanced

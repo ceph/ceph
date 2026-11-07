@@ -1663,6 +1663,8 @@ public:
   unsigned get_recovery_priority();
   /// get backfill reservation priority
   unsigned get_backfill_priority();
+  /// true if completing backfill will free space on a (backfill)full OSD
+  bool backfill_drains_full_osd(const OSDMapRef &osdmap) const;
   /// get priority for pg deletion
   unsigned get_delete_priority();
 

@@ -329,6 +329,7 @@ priority than requests to read or write data.
 .. confval:: osd_backfill_scan_min
 .. confval:: osd_backfill_scan_max
 .. confval:: osd_backfill_retry_interval
+.. confval:: osd_backfill_drain_full_priority_boost
 
 .. index:: OSD; osdmap
 
