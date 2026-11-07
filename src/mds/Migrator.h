@@ -247,6 +247,19 @@ protected:
   friend class C_MDS_ImportDirLoggedStart;
   friend class C_MDS_ImportDirLoggedFinish;
   friend class C_M_LoggedImportCaps;
+  friend class C_M_DropNullDentries;
+
+  // where a batch of drop_null_dentries() stopped
+  struct null_drop_pos_t {
+    std::string name;
+    snapid_t last = 0;
+    __u32 hash = 0;
+  };
+
+  bool drop_null_dentries(CDir *dir, unsigned max = 0,
+			  null_drop_pos_t *pos = nullptr);
+  bool drop_null_dentries_first(CDir *dir);
+  void continue_null_drop(dirfrag_t df, null_drop_pos_t pos);
 
   void handle_export_discover_ack(const cref_t<MExportDirDiscoverAck> &m);
   void export_frozen(CDir *dir, uint64_t tid);
@@ -307,10 +320,15 @@ protected:
 
   std::map<dirfrag_t, import_state_t>  import_state;
 
+  // dirfrags whose null dentries are dropped in batches before an
+  // export: false while dropping, true once done
+  std::map<dirfrag_t, bool> null_drops;
+
 private:
   MDSRank *mds;
   MDCache *mdcache;
   uint64_t max_export_size = 0;
+  uint64_t null_drop_batch = 0;
   bool inject_session_race = false;
 };
 
