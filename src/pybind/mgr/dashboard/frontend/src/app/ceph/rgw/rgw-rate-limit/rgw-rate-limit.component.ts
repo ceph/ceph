@@ -1,16 +1,39 @@
-import { AfterViewInit, Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
-import { GlobalRateLimitConfig, RgwRateLimitConfig } from '../models/rgw-rate-limit';
-import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
-import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
-import { CdValidators } from '~/app/shared/forms/cd-validators';
-import { AbstractControl, FormGroup, ValidationErrors, Validators } from '@angular/forms';
-import { FormatterService } from '~/app/shared/services/formatter.service';
-import { RgwUserService } from '~/app/shared/api/rgw-user.service';
+import {
+  AfterViewInit,
+  Component,
+  EventEmitter,
+  Input,
+  OnInit,
+  Output,
+  ViewChild
+} from '@angular/core';
+import {
+  AbstractControl,
+  FormGroup,
+  NgForm,
+  ValidationErrors,
+  ValidatorFn,
+  Validators
+} from '@angular/forms';
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
-import _ from 'lodash';
-import { NotificationService } from '~/app/shared/services/notification.service';
-import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { RgwUserService } from '~/app/shared/api/rgw-user.service';
 import { USER } from '~/app/shared/constants/app.constants';
+import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
+import { CdValidators } from '~/app/shared/forms/cd-validators';
+import { FormatterService } from '~/app/shared/services/formatter.service';
+import { NotificationService } from '~/app/shared/services/notification.service';
+import {
+  RGW_RATE_LIMIT_BANNER_FIELDS,
+  RGW_RATE_LIMIT_FIELDS,
+  RgwRateLimitField
+} from '../models/rgw-rate-limit-fields';
+import {
+  GlobalRateLimitConfig,
+  RgwRateLimitConfig,
+  RgwRateLimitScope
+} from '../models/rgw-rate-limit';
 
 @Component({
   selector: 'cd-rgw-rate-limit',
@@ -19,36 +42,47 @@ import { USER } from '~/app/shared/constants/app.constants';
   standalone: false
 })
 export class RgwRateLimitComponent implements OnInit, AfterViewInit {
-  globalRateLimit: GlobalRateLimitConfig['user_ratelimit' | 'bucket_ratelimit'];
-  form: CdFormGroup;
   @Input() type: string;
+  @Input() isEditing: boolean;
+  @Input() id: string;
 
   @Output() formValue = new EventEmitter();
   @Output() rateLimitFormGroup = new EventEmitter<FormGroup>();
 
-  @Input()
-  isEditing: boolean;
+  @ViewChild('frm')
+  formDir?: NgForm;
 
-  @Input() id: string;
+  globalRateLimit: RgwRateLimitScope;
+  form: CdFormGroup;
+
+  /**
+   * Operation limits, then byte limits. List and delete are with the other
+   * operation limits so both user and bucket forms render the same controls.
+   */
+  readonly rateLimitFields = RGW_RATE_LIMIT_FIELDS;
+  readonly globalBannerFields = RGW_RATE_LIMIT_BANNER_FIELDS;
 
   bid: string;
-  @Input() set allowBid(value: string) {
+
+  @Input()
+  set allowBid(value: string) {
     this.bid = value;
-    if (this.isEditing && !!this.bid && this.type == 'bucket') {
+    if (this.isEditing && !!this.bid && this.type === 'bucket') {
       this.getRateLimitFormValues();
     }
   }
+
   constructor(
     private formBuilder: CdFormBuilder,
     private rgwUserService: RgwUserService,
     private rgwBucketService: RgwBucketService,
-    private notificationService: NotificationService
+    private notificationService: NotificationService,
+    private formatter: FormatterService
   ) {
     this.createForm();
   }
 
   ngOnInit(): void {
-    // get the global rate Limit
     if (this.type === USER) {
       this.rgwUserService.getGlobalUserRateLimit().subscribe(
         (data: GlobalRateLimitConfig) => {
@@ -60,7 +94,9 @@ export class RgwRateLimitComponent implements OnInit, AfterViewInit {
           this.notificationService.show(NotificationType.error, error);
         }
       );
-      this.isEditing ? this.getRateLimitFormValues() : '';
+      if (this.isEditing) {
+        this.getRateLimitFormValues();
+      }
     } else {
       this.rgwBucketService.getGlobalBucketRateLimit().subscribe(
         (data: GlobalRateLimitConfig) => {
@@ -74,96 +110,100 @@ export class RgwRateLimitComponent implements OnInit, AfterViewInit {
       );
     }
   }
-  // rate limit form
-  private createForm() {
-    this.form = this.formBuilder.group({
-      rate_limit_enabled: [false],
-      rate_limit_max_readOps_unlimited: [true],
-      rate_limit_max_readOps: [
-        null,
-        [
-          CdValidators.composeIf(
-            {
-              rate_limit_enabled: true,
-              rate_limit_max_readOps_unlimited: false
-            },
-            [Validators.required, this.rateLimitIopmMaxSizeValidator]
-          )
-        ]
-      ],
-      rate_limit_max_writeOps_unlimited: [true],
-      rate_limit_max_writeOps: [
-        null,
-        [
-          CdValidators.composeIf(
-            {
-              rate_limit_enabled: true,
-              rate_limit_max_writeOps_unlimited: false
-            },
-            [Validators.required, this.rateLimitIopmMaxSizeValidator]
-          )
-        ]
-      ],
-      rate_limit_max_readBytes_unlimited: [true],
-      rate_limit_max_readBytes: [
-        null,
-        [
-          CdValidators.composeIf(
-            {
-              rate_limit_enabled: true,
-              rate_limit_max_readBytes_unlimited: false
-            },
-            [Validators.required, this.rateLimitBytesMaxSizeValidator]
-          )
-        ]
-      ],
-      rate_limit_max_writeBytes_unlimited: [true],
-      rate_limit_max_writeBytes: [
-        null,
-        [
-          CdValidators.composeIf(
-            {
-              rate_limit_enabled: true,
-              rate_limit_max_writeBytes_unlimited: false
-            },
-            [Validators.required, this.rateLimitBytesMaxSizeValidator]
-          )
-        ]
-      ]
-    });
+
+  ngAfterViewInit(): void {
+    this.rateLimitFormGroup.emit(this.form);
   }
+
+  getRateLimitFormValue(): RgwRateLimitConfig | null {
+    if (this._isRateLimitFormDirty()) {
+      return this._getRateLimitArgs();
+    }
+    return null;
+  }
+
+  /**
+   * Message for the active threshold input. Ops and byte limits share this so
+   * list and delete report the same required / size errors as read and write.
+   */
+  errorText(field: RgwRateLimitField): string {
+    const controlName = field.control;
+    if (this.form.showError(controlName, this.formDir, 'required')) {
+      return $localize`This field is required.`;
+    }
+    const sizeError = field.kind === 'ops' ? 'rateOpsMaxSize' : 'rateByteMaxSize';
+    if (this.form.showError(controlName, this.formDir, sizeError)) {
+      return $localize`The value is not valid.`;
+    }
+    if (this.form.showError(controlName, this.formDir, 'min')) {
+      return $localize`Enter a positive number.`;
+    }
+    return '';
+  }
+
+  /**
+   * Validate the rate limit operations maximum size.
+   */
+  rateLimitIopmMaxSizeValidator(control: AbstractControl): ValidationErrors | null {
+    return this.formatter.iopmMaxSizeValidator(control);
+  }
+
+  /**
+   * Validate the rate limit bytes maximum size, e.g. 30, 1K, 30 PiB/m or 1.9 MiB/m.
+   */
+  rateLimitBytesMaxSizeValidator(control: AbstractControl): ValidationErrors | null {
+    return this.formatter.performValidation(
+      control,
+      '^(\\d+(\\.\\d+)?)\\s*(B/m|K(B|iB/m)?|M(B|iB/m)?|G(B|iB/m)?|T(B|iB/m)?|P(B|iB/m)?)?$',
+      { rateByteMaxSize: true }
+    );
+  }
+
+  private createForm(): void {
+    const controls: Record<string, unknown> = {
+      rate_limit_enabled: [false]
+    };
+    for (const field of this.rateLimitFields) {
+      controls[field.unlimitedControl] = [true];
+      controls[field.control] = [null, [this.limitValidator(field)]];
+    }
+    this.form = this.formBuilder.group(controls);
+  }
+
+  /**
+   * Same conditional validator for every threshold: required and size-checked
+   * only while rate limiting is enabled and that threshold is not unlimited.
+   */
+  private limitValidator(field: RgwRateLimitField): ValidatorFn {
+    const sizeValidator =
+      field.kind === 'ops'
+        ? this.rateLimitIopmMaxSizeValidator.bind(this)
+        : this.rateLimitBytesMaxSizeValidator.bind(this);
+    return CdValidators.composeIf(
+      {
+        rate_limit_enabled: true,
+        [field.unlimitedControl]: false
+      },
+      [Validators.required, sizeValidator]
+    );
+  }
+
   /**
    * Helper function to populate Form Values
    * when edit rate limit edit is called.
    */
-  private populateFormValues(data: RgwRateLimitConfig) {
+  private populateFormValues(data: RgwRateLimitConfig): void {
     this.form.get('rate_limit_enabled').setValue(data.enabled);
-    this._setRateLimitProperty(
-      'rate_limit_max_readBytes',
-      'rate_limit_max_readBytes_unlimited',
-      data.max_read_bytes
-    );
-    this._setRateLimitProperty(
-      'rate_limit_max_writeBytes',
-      'rate_limit_max_writeBytes_unlimited',
-      data.max_write_bytes
-    );
-    this._setRateLimitProperty(
-      'rate_limit_max_readOps',
-      'rate_limit_max_readOps_unlimited',
-      data.max_read_ops
-    );
-    this._setRateLimitProperty(
-      'rate_limit_max_writeOps',
-      'rate_limit_max_writeOps_unlimited',
-      data.max_write_ops
-    );
+    for (const field of this.rateLimitFields) {
+      this._setRateLimitProperty(field.control, field.unlimitedControl, data[field.apiKey] ?? 0);
+    }
   }
+
   /**
    * Helper function to call api and get Rate Limit Values
    * on load for user and bucket
    */
-  private getRateLimitFormValues() {
+  private getRateLimitFormValues(): void {
     if (this.type === USER) {
       this.rgwUserService.getUserRateLimit(this.id).subscribe(
         (resp: GlobalRateLimitConfig) => {
@@ -184,76 +224,34 @@ export class RgwRateLimitComponent implements OnInit, AfterViewInit {
       );
     }
   }
-  /**
-   * Validate the rate limit bytes maximum size, e.g. 30, 1K, 30 PiB/m or 1.9 MiB/m.
-   */
-  rateLimitBytesMaxSizeValidator(control: AbstractControl): ValidationErrors | null {
-    return new FormatterService().performValidation(
-      control,
-      '^(\\d+(\\.\\d+)?)\\s*(B/m|K(B|iB/m)?|M(B|iB/m)?|G(B|iB/m)?|T(B|iB/m)?|P(B|iB/m)?)?$',
-      { rateByteMaxSize: true }
-    );
-  }
-  /**
-   * Validate the rate limit operations maximum size
-   */
-  rateLimitIopmMaxSizeValidator(control: AbstractControl): ValidationErrors | null {
-    return new FormatterService().iopmMaxSizeValidator(control);
-  }
-  getRateLimitFormValue() {
-    if (this._isRateLimitFormDirty()) return this._getRateLimitArgs();
-    return null;
-  }
-  ngAfterViewInit() {
-    this.rateLimitFormGroup.emit(this.form);
-  }
+
   /**
    * Check if the user rate limit has been modified.
    * @return {Boolean} Returns TRUE if the user rate limit has been modified.
    */
   private _isRateLimitFormDirty(): boolean {
-    return [
+    const paths = [
       'rate_limit_enabled',
-      'rate_limit_max_readOps_unlimited',
-      'rate_limit_max_readOps',
-      'rate_limit_max_writeOps_unlimited',
-      'rate_limit_max_writeOps',
-      'rate_limit_max_readBytes_unlimited',
-      'rate_limit_max_readBytes',
-      'rate_limit_max_writeBytes_unlimited',
-      'rate_limit_max_writeBytes'
-    ].some((path) => {
-      return this.form.get(path).dirty;
-    });
+      ...this.rateLimitFields.flatMap((field) => [field.unlimitedControl, field.control])
+    ];
+    return paths.some((path) => this.form.get(path).dirty);
   }
+
   /**
    * Helper function to get the arguments for the API request when the user
    * rate limit configuration has been modified.
    */
   private _getRateLimitArgs(): RgwRateLimitConfig {
-    const result: RgwRateLimitConfig = {
-      enabled: this.form.getValue('rate_limit_enabled'),
-      max_read_ops: 0,
-      max_write_ops: 0,
-      max_read_bytes: 0,
-      max_write_bytes: 0
-    };
-    if (!this.form.getValue('rate_limit_max_readOps_unlimited')) {
-      result['max_read_ops'] = this.form.getValue('rate_limit_max_readOps');
-    }
-    if (!this.form.getValue('rate_limit_max_writeOps_unlimited')) {
-      result['max_write_ops'] = this.form.getValue('rate_limit_max_writeOps');
-    }
-    if (!this.form.getValue('rate_limit_max_readBytes_unlimited')) {
-      // Convert the given value to bytes.
-      result['max_read_bytes'] = new FormatterService().toBytes(
-        this.form.getValue('rate_limit_max_readBytes')
-      );
-    }
-    if (!this.form.getValue('rate_limit_max_writeBytes_unlimited')) {
-      result['max_write_bytes'] = new FormatterService().toBytes(
-        this.form.getValue('rate_limit_max_writeBytes')
-      );
+    const result = { enabled: this.form.getValue('rate_limit_enabled') } as RgwRateLimitConfig;
+    for (const field of this.rateLimitFields) {
+      result[field.apiKey] = 0;
+      if (this.form.getValue(field.unlimitedControl)) {
+        continue;
+      }
+      result[field.apiKey] =
+        field.kind === 'bytes'
+          ? (this.formatter.toBytes(this.form.getValue(field.control)) ?? 0)
+          : this.form.getValue(field.control);
     }
     return result;
   }
@@ -262,8 +260,11 @@ export class RgwRateLimitComponent implements OnInit, AfterViewInit {
    * Helper function to map the values for the Rate Limit when the user
    * rate limit gets loaded for first time or edited.
    */
-
-  private _setRateLimitProperty(rateLimitKey: string, unlimitedKey: string, property: number) {
+  private _setRateLimitProperty(
+    rateLimitKey: string,
+    unlimitedKey: string,
+    property: number
+  ): void {
     if (property === 0) {
       this.form.get(unlimitedKey).setValue(true);
       this.form.get(rateLimitKey).setValue('');
