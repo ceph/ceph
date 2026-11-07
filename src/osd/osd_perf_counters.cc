@@ -148,6 +148,14 @@ PerfCounters *build_osd_logger(CephContext *cct) {
     l_osd_replica_read_served,
     "replica_read_served",
     "Count of replica reads served");
+  // Not one of the replica_read redirects: on a non-primary shard the
+  // read fails after do_op counted it in replica_read_served, and a
+  // read of the primary's own shard, never a replica_read, counts too.
+  osd_plb.add_u64_counter(
+    l_osd_ec_direct_read_redirect_eio,
+    "ec_direct_read_redirect_eio",
+    "Count of EC direct reads redirected to primary due to a shard read "
+    "error, the primary's own shard included");
 
   osd_plb.add_u64_counter(
     l_osd_sop, "subop", "Suboperations");

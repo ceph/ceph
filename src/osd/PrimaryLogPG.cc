@@ -6008,7 +6008,8 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
       int r = pgbackend->objects_read_local(
         soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata);
       if (r == -EIO) {
-        r = rep_repair_primary_object(soid, ctx);
+        // this shard cannot be read; the primary can rebuild it
+        r = bounce_ec_direct_read(soid, ctx, r);
       }
       if (r >= 0) {
         bytes_read = r;
@@ -6133,6 +6134,9 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
     int r = osd->store->fiemap(ch, ghobject_t(soid, ghobject_t::NO_GEN,
   			      info.pgid.shard),
   	       shard_offset, shard_length, m);
+    if (r == -EIO && ctx->op->ec_direct_read()) {
+      return bounce_ec_direct_read(soid, ctx, r);
+    }
     if (r < 0)  {
       return r;
     }
@@ -6140,7 +6144,11 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
     bufferlist data_bl;
     r = pgbackend->objects_readv_sync(soid, m, op.flags, &data_bl);
     if (r == -EIO) {
-      r = rep_repair_primary_object(soid, ctx);
+      // a shard-direct read goes back to the primary, which rebuilds
+      // the data, and is counted on the way
+      r = ctx->op->ec_direct_read() ?
+        bounce_ec_direct_read(soid, ctx, r) :
+        rep_repair_primary_object(soid, ctx);
     }
     if (r < 0) {
       dout(10) << " sparse_read failed r=" << r << " from object " << soid << dendl;
@@ -6151,7 +6159,12 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
     // Maybe at first, there is no much whole objects. With continued use, more
     // and more whole object exist. So from this point, for spare-read add
     // checksum make sense.
-    if ((uint64_t)r == oi.size && oi.is_data_digest()) {
+    // A shard-direct read returns one shard's chunks, which the
+    // whole-object digest does not cover. (ECBackend::objects_readv_sync
+    // returns 0, so today r == oi.size only for an empty object; this
+    // keeps it out should that return the byte count.)
+    if (!ctx->op->ec_direct_read() &&
+        (uint64_t)r == oi.size && oi.is_data_digest()) {
       uint32_t crc = data_bl.crc32c(-1);
       if (oi.data_digest != crc) {
         osd->clog->error() << info.pgid << std::hex
@@ -6182,6 +6195,39 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
   ctx->delta_stats.num_rd_kb += shift_round_up(bytes_read, 10);
   ctx->delta_stats.num_rd++;
   return 0;
+}
+
+/*
+ * A shard-direct read (CEPH_OSD_FLAG_EC_DIRECT_READ) reads this shard
+ * alone, so it has nothing to rebuild from when the shard cannot be
+ * read (a checksum or media error, which the store reports as -EIO).
+ * rep_repair_primary_object() answers it with -EAGAIN, and the Objecter
+ * resends the read to the primary as a plain read, which the ECBackend
+ * read pipeline serves by reading around the bad shard and decoding.
+ * The resend never carries EC_DIRECT_READ, so it cannot bounce again,
+ * even when this shard is the primary's own. Nothing here repairs the
+ * shard.
+ *
+ * Every bounce counts, and goes to the OSD log. The cluster log gets
+ * the 1st, 2nd, 4th, 8th... of this PG, so that a damaged shard that
+ * clients read over and over does not flood it.
+ */
+int PrimaryLogPG::bounce_ec_direct_read(
+  const hobject_t& soid, OpContext *ctx, int r)
+{
+  const uint64_t n = ++ec_direct_read_bounces;
+  dout(1) << info.pgid << " shard-direct read of " << soid << " failed: "
+          << cpp_strerror(r) << ", bounced to primary osd."
+          << get_primary().osd << " to reconstruct (" << n
+          << " in this pg)" << dendl;
+  if ((n & (n - 1)) == 0) {
+    osd->clog->warn() << info.pgid << " shard-direct read of " << soid
+                      << " failed: " << cpp_strerror(r)
+                      << ", bounced to primary osd." << get_primary().osd
+                      << " to reconstruct (" << n << " in this pg)";
+  }
+  osd->logger->inc(l_osd_ec_direct_read_redirect_eio);
+  return rep_repair_primary_object(soid, ctx);
 }
 
 int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
