@@ -204,6 +204,8 @@ ssize_t AsyncConnection::read(unsigned len, char *buffer,
     readCallback = callback;
     pendingReadLen = len;
     read_buffer = buffer;
+  } else {
+    readProgress = nullptr;
   }
   return r;
 }
@@ -262,6 +264,9 @@ ssize_t AsyncConnection::read_until(unsigned len, char *p)
       }
       state_offset += r;
       left -= r;
+      if (r > 0 && readProgress) {
+        readProgress(state_offset);
+      }
     } while (r > 0);
   } else {
     do {

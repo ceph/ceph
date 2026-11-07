@@ -2588,6 +2588,32 @@ TEST(BufferList, crc32c) {
   EXPECT_EQ((unsigned)0x5FA5C0CC, crc);
 }
 
+TEST(BufferPtr, crc32c_cache) {
+  bufferptr p(buffer::create(65536));
+  for (unsigned i = 0; i < p.length(); i++) {
+    p.c_str()[i] = i * 131;
+  }
+  bufferptr q(p, 1000, 30000);  // a ptr into the middle of the raw buffer
+  bufferlist bl;
+  bl.append(q);
+  const uint32_t want = bl.crc32c(-1);  // computes and caches (-1, want)
+  ASSERT_EQ(want, q.cached_crc32c(-1));
+  // another seed is adjusted from the cached one, as list::crc32c() does
+  bufferlist fresh;
+  fresh.append(q.c_str(), q.length());
+  EXPECT_EQ(fresh.crc32c(0x12345678), q.cached_crc32c(0x12345678));
+  // a different range of the same raw buffer isn't cached
+  EXPECT_FALSE(bufferptr(p, 1000, 29999).cached_crc32c(-1));
+
+  // a value set from outside is what list::crc32c() then returns
+  bufferptr r(p, 0, 4096);
+  bufferlist rbl;
+  rbl.append(r);
+  EXPECT_FALSE(r.cached_crc32c(-1));
+  r.set_crc32c_cache(-1, 0xdeadbeef);
+  EXPECT_EQ(0xdeadbeefu, rbl.crc32c(-1));
+}
+
 TEST(BufferList, crc32c_append) {
   bufferlist bl1;
   bufferlist bl2;
