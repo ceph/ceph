@@ -13,6 +13,8 @@
 
 #include "osdc/SplitOp.h"
 #include "osdc/Objecter.h"
+#include "crush/crush.h"   // CRUSH_ITEM_NONE
+#include "crush/CrushWrapper.h"
 #include "osd/osd_types.h"
 
 using namespace std::literals;
@@ -39,21 +41,20 @@ constexpr static uint64_t kReplicaMinShardReads = 2;
  */
 void ECSplitOp::init_reference_sub_read() {
   auto &target = orig_op->target;
-  shard_id_t primary_shard = target.actual_pgid.shard;
-  
-  // Search through the acting set to find which index has the primary shard
-  // For EC pools, the acting index directly corresponds to the shard
+  shard_id_t primary_abs_shard = target.actual_pgid.shard;
+
   for (size_t i = 0; i < target.acting.size(); i++) {
-    if (shard_id_t(i) == primary_shard) {
-      reference_sub_read = i;
+    if (shard_id_t(i) == primary_abs_shard) {
+      reference_sub_read = pg_shard_t(target.acting[i], primary_abs_shard);
+      reference_sub_read_key = i;
       ldout(cct, DBG_LVL) << __func__ << " set reference_sub_read=" << reference_sub_read
-                          << " for primary_shard=" << (int)primary_shard << dendl;
+                          << " for primary_abs_shard=" << (int)primary_abs_shard << dendl;
       return;
     }
   }
-  
+
   ldout(cct, DBG_LVL) << __func__ << " WARNING: Could not find primary shard "
-                << (int)primary_shard << " in acting set" << dendl;
+                << (int)primary_abs_shard << " in acting set" << dendl;
   abort = true;
 }
 
@@ -85,16 +86,16 @@ std::pair<SplitOp::extent_set, bufferlist> ECSplitOp::assemble_buffer_sparse_rea
   for (auto &&chunk_info : stripe_view) {
     shard_id_t shard = pi->get_shard(chunk_info.raw_shard);
     ceph_assert(shard != shard_id_t::NO_SHARD);
-    int shard_index = (int)shard;
+    int shard_index = (int)data_shards.at(shard);
     ldout(cct, DBG_LVL) << __func__ << " object_id=" << orig_op->target.base_oid << " tid=" << orig_op->tid << " chunk: " << chunk_info
         << " shard: " << shard << dendl;
     auto &details = sub_reads.at(shard_index).details.at(ops_index);
 
-    if (!map_iterators.contains(shard_index)) {
-      map_iterators.emplace(shard_index, details.e->begin());
+    if (!map_iterators.contains((int)chunk_info.raw_shard)) {
+      map_iterators.emplace((int)chunk_info.raw_shard, details.e->begin());
     }
 
-    extents_map::const_iterator &extent_iter = map_iterators.at(shard_index);
+    extents_map::const_iterator &extent_iter = map_iterators.at((int)chunk_info.raw_shard);
 
     uint64_t bl_len = 0;
     while (extent_iter != details.e->end() && extent_iter->first < chunk_info.ro_offset + stripe_view.chunk_size) {
@@ -144,7 +145,7 @@ void ECSplitOp::assemble_buffer_read(bufferlist &bl_out, int ops_index) const {
     ldout(cct, DBG_LVL) << __func__ << " object_id=" << orig_op->target.base_oid << " tid=" << orig_op->tid << " chunk info " << chunk_info << dendl;
     shard_id_t shard = pi->get_shard(chunk_info.raw_shard);
     ceph_assert(shard != shard_id_t::NO_SHARD);
-    int shard_index = (int)shard;
+    int shard_index = (int)data_shards.at(shard);
     auto &details = sub_reads.at(shard_index).details.at(ops_index);
     uint64_t src_len = details.bl.length();
     uint64_t buf_off = buffer_offset[(int)chunk_info.raw_shard];
@@ -181,6 +182,8 @@ void ECSplitOp::init_read(OSDOp &op, bool sparse, int ops_index, bool single_op)
   const pg_pool_t *pi = objecter.osdmap->get_pg_pool(target.base_oloc.pool);
   ceph_assert(pi);
 
+  std::optional<int> local_zone;
+
   uint64_t offset = op.op.extent.offset;
   uint64_t length = op.op.extent.length;
   uint64_t data_chunk_count = pi->get_ec_data_shard_count();
@@ -190,14 +193,14 @@ void ECSplitOp::init_read(OSDOp &op, bool sparse, int ops_index, bool single_op)
   // reached here! Zero-length reads are rejected earlier in the validate()
   // function (see lines 551-556), which returns {false, false} for any
   // operation with length == 0, preventing it from being split and processed.
-  ceph_assert( op.op.extent.length != 0);
+  ceph_assert(op.op.extent.length != 0);
   // No overflow: length >= 1 (asserted above), so offset + length - 1 <= offset + length.
   // Since offset and length are uint64_t, their sum cannot exceed UINT64_MAX in practice
   // due to object size limits and memory constraints. Even if offset + length == UINT64_MAX + 1
   // (impossible in uint64_t), subtracting 1 brings it back to UINT64_MAX (valid).
   uint64_t end_chunk = (offset + op.op.extent.length - 1) / chunk_size;
 
-  unsigned count = std::min(data_chunk_count, end_chunk - start_chunk + 1);
+  uint64_t count = std::min<uint64_t>(data_chunk_count, end_chunk - start_chunk + 1);
   // Primary is required if:
   // 1. Reading from multiple chunks (count > 1)
   // 2. Version information is needed (orig_op->objver)
@@ -217,36 +220,124 @@ void ECSplitOp::init_read(OSDOp &op, bool sparse, int ops_index, bool single_op)
   int first_shard = start_chunk % data_chunk_count;
   // Check all shards are online.
   for (unsigned i = first_shard; i < first_shard + count; i++) {
-    raw_shard_id_t raw_shard(i >= data_chunk_count ? i - data_chunk_count : i);
+    int rel_shard = (i >= data_chunk_count ? i - data_chunk_count : i);
+    raw_shard_id_t raw_shard(rel_shard);
     shard_id_t shard(pi->get_shard(raw_shard));
     if (shard == shard_id_t::NO_SHARD) {
+      ldout(cct, DBG_LVL) << __func__ << " ABORT: no shard mapping for "
+                          << "raw_shard=" << (int)raw_shard << dendl;
       abort = true;
       return;
     }
-    int shard_index = (int)shard;
+    if (!data_shards.contains(shard)) {
+      shard_id_t abs_shard = choose_read_shard(objecter, cct, target, localize,
+                                               shard, local_zone);
+      if (abs_shard == shard_id_t::NO_SHARD) {
+        ldout(cct, DBG_LVL) << __func__ << " ABORT: no available OSD for "
+                            << "shard=" << shard << dendl;
+        abort = true;
+        return;
+      }
+      data_shards.emplace(shard, abs_shard);
+    }
+    shard_id_t abs_shard = data_shards.at(shard);
+    if (!sub_reads.contains((int)abs_shard)) {
+      sub_reads.emplace((int)abs_shard, orig_op->ops.size() + 1, abs_shard);
+    }
+    auto &sr = sub_reads.at((int)abs_shard);
 
-    int direct_osd = target.acting[shard_index];
-    if (!objecter.osdmap->exists(direct_osd)) {
-      ldout(cct, DBG_LVL) << __func__ <<" ABORT: Missing OSD" << dendl;
-      abort = true;
-      return;
-    }
-    if (!sub_reads.contains(shard_index)) {
-      sub_reads.emplace(shard_index, orig_op->ops.size() + 1);
-    }
-    auto &d = sub_reads.at(shard_index).details[ops_index];
+    auto &d = sr.details[ops_index];
     if (sparse) {
       d.e.emplace();
-      sub_reads.at(shard_index).rd.sparse_read(offset, length, &(*d.e), &d.bl, &d.rval);
+      sr.rd.sparse_read(offset, length, &(*d.e), &d.bl, &d.rval);
     } else {
-      sub_reads.at(shard_index).rd.read(offset, length, &d.ec, &d.bl);
+      sr.rd.read(offset, length, &d.ec, &d.bl);
     }
   }
 
-  // If primary is required and we haven't created a sub_read for it yet, create one
-  if (primary_required && !sub_reads.contains(reference_sub_read)) {
-    sub_reads.emplace(reference_sub_read, orig_op->ops.size() + 1);
+  if (primary_required && !sub_reads.contains(reference_sub_read_key)) {
+    sub_reads.emplace(reference_sub_read_key, orig_op->ops.size() + 1,
+                      reference_sub_read.shard);
   }
+}
+
+int SplitOp::local_zone_for_acting_set(
+    const std::vector<int>& acting,
+    int num_zones,
+    int zone_size,
+    CrushWrapper* crush,
+    CephContext* cct,
+    const std::multimap<std::string, std::string>& crush_location)
+{
+  ceph_assert(zone_size > 0);
+  if (num_zones < 2 || !crush || crush_location.empty()) {
+    return 0;
+  }
+  if ((int)acting.size() < num_zones * zone_size) {
+    return 0;
+  }
+
+  int best_zone = 0;
+  int best_score = INT_MAX;
+
+  for (int zone = 0; zone < num_zones; ++zone) {
+    int representative_osd = CRUSH_ITEM_NONE;
+    for (int shard = zone * zone_size; shard < (zone + 1) * zone_size; ++shard) {
+      if (acting[shard] != CRUSH_ITEM_NONE) {
+        representative_osd = acting[shard];
+        break;
+      }
+    }
+    if (representative_osd == CRUSH_ITEM_NONE) {
+      continue;  // no valid OSD in this zone
+    }
+    int locality = crush->get_common_ancestor_distance(cct, representative_osd, crush_location);
+    if (locality >= 0 && locality < best_score) {
+      best_score = locality;
+      best_zone = zone;
+    }
+  }
+  return best_zone;
+}
+
+shard_id_t ECSplitOp::choose_read_shard(
+    Objecter &objecter,
+    CephContext *cct,
+    const Objecter::op_target_t &target,
+    bool localize,
+    shard_id_t shard,
+    std::optional<int> &local_zone)
+{
+  const pg_pool_t *pi = objecter.osdmap->get_pg_pool(target.base_oloc.pool);
+  ceph_assert(pi);
+  // CRUSH may have found fewer zones than the pool has
+  auto readable = [&](int zone) {
+    const unsigned pos = (int)pi->get_abs_shard(shard, zone);
+    return pos < target.acting.size() &&
+      objecter.osdmap->exists(target.acting[pos]);
+  };
+
+  if (localize) {
+    if (!local_zone) {
+      local_zone = local_zone_for_acting_set(
+          target.acting, pi->get_num_zones(), pi->get_zone_size(),
+          objecter.osdmap->crush.get(), cct, objecter.crush_location);
+    }
+    return readable(*local_zone) ? pi->get_abs_shard(shard, *local_zone)
+                                 : shard_id_t::NO_SHARD;
+  }
+
+  std::vector<int> zones;
+  for (int zone = 0; std::cmp_less(zone, pi->get_num_zones()); ++zone) {
+    if (readable(zone)) {
+      zones.push_back(zone);
+    }
+  }
+  if (zones.empty()) {
+    return shard_id_t::NO_SHARD;
+  }
+  int zone = zones.size() > 1 ? zones[rand() % zones.size()] : zones.front();
+  return pi->get_abs_shard(shard, zone);
 }
 
 #undef dout_prefix
@@ -255,16 +346,51 @@ void ECSplitOp::init_read(OSDOp &op, bool sparse, int ops_index, bool single_op)
 /**
  * @brief Initialize reference_sub_read to a random valid OSD.
  *
- * Collects the valid acting indices and picks one at random. Must be
+ * Collects the valid acting indices, only those of the local zone for a
+ * localized read of a stretch pool, and picks one at random. Must be
  * called after _calc_target() populates the acting set.
  */
 void ReplicaSplitOp::init_reference_sub_read() {
   auto &target = orig_op->target;
+  const pg_pool_t *pi = objecter.osdmap->get_pg_pool(target.base_oloc.pool);
+  ceph_assert(pi);
 
-  for (size_t i = 0; i < target.acting.size(); i++) {
-    int direct_osd = target.acting[i];
-    if (objecter.osdmap->exists(direct_osd)) {
-      valid_indices.push_back(i);
+  // When LOCALIZE_READS is set on a stretch replica pool, restrict sub-reads
+  // to replicas in the client's local zone only.  If fewer than two are
+  // available the split is aborted and the op goes to the nearest replica.
+  //
+  // For BALANCE_READS (localize=false) we use all available replicas.
+  if (localize && pi->is_stretch_pool() && pi->get_num_zones() > 1) {
+    // A replicated acting set is not ordered by zone: the local zone is that
+    // of the replica nearest the client.
+    CrushWrapper *crush = objecter.osdmap->crush.get();
+    std::map<int, std::vector<int>> zone_indices;
+    int local_zone = CRUSH_ITEM_NONE;
+    int best_distance = INT_MAX;
+    for (int i = 0; i < (int)target.acting.size(); i++) {
+      const int osd = target.acting[i];
+      if (!objecter.osdmap->exists(osd)) {
+        continue;
+      }
+      // the real bucket, which a client's crush_location names
+      const int zone = crush->get_parent_of_type(
+        osd, pi->peering_crush_bucket_barrier, -1);
+      zone_indices[zone].push_back(i);
+      const int distance = crush->get_common_ancestor_distance(
+        cct, osd, objecter.crush_location);
+      if (distance >= 0 && distance < best_distance) {
+        best_distance = distance;
+        local_zone = zone;
+      }
+    }
+    if (local_zone != CRUSH_ITEM_NONE) {
+      valid_indices = std::move(zone_indices[local_zone]);
+    }
+  } else {
+    for (int i = 0; i < (int)target.acting.size(); i++) {
+      if (objecter.osdmap->exists(target.acting[i])) {
+        valid_indices.push_back(i);
+      }
     }
   }
 
@@ -275,7 +401,9 @@ void ReplicaSplitOp::init_reference_sub_read() {
   }
 
   reference_valid_index = rand() % valid_indices.size();
-  reference_sub_read = valid_indices[reference_valid_index];
+  reference_sub_read_key = valid_indices[reference_valid_index];
+  reference_sub_read = pg_shard_t(target.acting[reference_sub_read_key],
+                                  shard_id_t::NO_SHARD);
 }
 
 /**
@@ -339,11 +467,6 @@ void ReplicaSplitOp::assemble_buffer_read(bufferlist &bl_out, int ops_index) con
  * @param single_op True if the whole op will be sent as a single op
  */
 void ReplicaSplitOp::init_read(OSDOp &op, bool sparse, int ops_index, bool single_op) {
-
-  auto &target = orig_op->target;
-  const pg_pool_t *pi = objecter.osdmap->get_pg_pool(target.base_oloc.pool);
-  ceph_assert(pi);
-
   // init_reference_sub_read() aborts on < 2 valid OSDs; checked by create().
   ceph_assert(valid_indices.size() >= 2);
 
@@ -375,7 +498,7 @@ void ReplicaSplitOp::init_read(OSDOp &op, bool sparse, int ops_index, bool singl
 
   for (int acting_index : chosen_indices) {
     if (!sub_reads.contains(acting_index)) {
-      sub_reads.emplace(acting_index, orig_op->ops.size() + 1);
+      sub_reads.emplace(acting_index, orig_op->ops.size() + 1, shard_id_t(acting_index));
     }
     auto &sr = sub_reads.at(acting_index);
     auto bl = &sr.details[ops_index].bl;
@@ -421,7 +544,7 @@ int SplitOp::assemble_rc() const {
     }
 
     // The non-reference indices only get reads, which only ever have zero RCs.
-    if (index == reference_sub_read) {
+    if (index == reference_sub_read_key) {
       rc = sub_read.rc;
     }
   }
@@ -456,16 +579,15 @@ bool SplitOp::version_mismatch() const {
 
 bool ECSplitOp::legacy_version_mismatch() const {
   // First we need to decode the version list from the reference.
-  ceph_assert(reference_sub_read != -1);
-  ceph_assert(sub_reads.contains(reference_sub_read));
-  ceph_assert(sub_reads.at(reference_sub_read).internal_version.has_value());
+  ceph_assert(!reference_sub_read.is_undefined());
+  ceph_assert(sub_reads.contains(reference_sub_read_key));
+  ceph_assert(sub_reads.at(reference_sub_read_key).internal_version.has_value());
 
   std::map<shard_id_t, eversion_t> ref_vers;
-  decode(ref_vers, sub_reads.at(reference_sub_read).internal_version->bl);
+  decode(ref_vers, sub_reads.at(reference_sub_read_key).internal_version->bl);
 
   for (auto & [shard_index, sub_read] : sub_reads) {
-      // Reference shard can't be different to itself.
-    if (shard_index == reference_sub_read) {
+    if (shard_index == reference_sub_read_key) {
       continue;
     }
 
@@ -473,7 +595,7 @@ bool ECSplitOp::legacy_version_mismatch() const {
     std::map<shard_id_t, eversion_t> shard_vers;
     decode(shard_vers, sub_read.internal_version->bl);
 
-    shard_id_t shard(shard_index);
+    shard_id_t shard = sub_read.abs_shard;
     if (!ref_vers.contains(shard)) {
       ldout(cct, DBG_LVL) << __func__ << ": "
          << "Reference shard version missing, failing split op." << dendl;
@@ -682,8 +804,8 @@ void SplitOp::complete() {
           break;
         }
         default: {
-          out_osd_op.outdata = std::move(sub_reads.at(reference_sub_read).details[ops_index].bl);
-          out_osd_op.rval = sub_reads.at(reference_sub_read).details[ops_index].rval;
+          out_osd_op.outdata = std::move(sub_reads.at(reference_sub_read_key).details[ops_index].bl);
+          out_osd_op.rval = sub_reads.at(reference_sub_read_key).details[ops_index].rval;
           break;
         }
       }
@@ -772,13 +894,12 @@ void SplitOp::init(OSDOp &op, int ops_index, bool single_op) {
     break;
   }
   default: {
-    // Invalid ops should have been rejected in validate.
-    // Ensure the reference sub_read entry exists
-    if (!sub_reads.contains(reference_sub_read)) {
-      sub_reads.emplace(reference_sub_read, orig_op->ops.size() + 1);
+    if (!sub_reads.contains(reference_sub_read_key)) {
+      sub_reads.emplace(reference_sub_read_key, orig_op->ops.size() + 1,
+                        shard_id_t(reference_sub_read_key));
     }
-    Details &d = sub_reads.at(reference_sub_read).details[ops_index];
-    orig_op->pass_thru_op(sub_reads.at(reference_sub_read).rd, ops_index, &d.bl, &d.rval);
+    Details &d = sub_reads.at(reference_sub_read_key).details[ops_index];
+    orig_op->pass_thru_op(sub_reads.at(reference_sub_read_key).rd, ops_index, &d.bl, &d.rval);
     break;
   }
   }
@@ -835,39 +956,6 @@ std::optional<raw_shard_id_t> containing_shard(const pg_pool_t *pi, uint64_t off
   }
 
   return raw_shard_id_t(offset / chunk_size % data_chunk_count);
-}
-
-/**
- * Validate operation flags for split operation eligibility.
- *
- * Checks that the operation has the required BALANCE_READS flag and
- * is not a write operation.
- *
- * @param pi The pool to validate against
- * @param op The operation to validate
- * @param cct CephContext for logging
- * @return true if flags are valid, false otherwise
- */
-bool validate_flags(const pg_pool_t *pi, Objecter::Op *op, CephContext *cct) {
-  if ((op->target.flags & CEPH_OSD_FLAG_BALANCE_READS) == 0) {
-    ldout(cct, DBG_LVL) << __func__ << " REJECT: Client rejects balanced read" << dendl;
-    return false;
-  }
-
-  // We really should not have a WRITE flagged as balanced read, but out of
-  // paranoia ignore it.
-  if (op->target.flags & CEPH_OSD_FLAG_WRITE) {
-    ldout(cct, DBG_LVL) << __func__ << " REJECT: Flagged as write!" << dendl;
-    return false;
-  }
-
-  if (pi->has_flag(pg_pool_t::FLAG_CRIMSON)) {
-    ldout(cct, DBG_LVL) << __func__ <<" ABORT: Crimson doesn't support"
-                                      " direct reads" << dendl;
-    return false;
-  }
-
-  return true;
 }
 
 /**
@@ -964,7 +1052,7 @@ std::pair<bool, bool> validate(Objecter::Op *op, Objecter &objecter,
   bool is_erasure = pi->is_erasure();
 
   // Validate flags
-  if (!validate_flags(pi, op, cct)) {
+  if (!SplitOp::validate_flags(pi, op->target.flags, cct)) {
     return {false, false};
   }
 
@@ -999,6 +1087,7 @@ void debug_op_summary(const std::string &str, Objecter::Op *op, CephContext *cct
     << " osd=" << target.osd
     << " force_osd=" << ((target.flags & CEPH_OSD_FLAG_FORCE_OSD) != 0)
     << " balance_reads=" << ((target.flags & CEPH_OSD_FLAG_BALANCE_READS) != 0)
+    << " localize_reads=" << ((target.flags & CEPH_OSD_FLAG_LOCALIZE_READS) != 0)
     << " ops.size()=" << op->ops.size()
     << " needs_version=" << (op->objver?"true":"false");
 
@@ -1059,14 +1148,18 @@ void SplitOp::prepare_single_op(Objecter::Op *op, Objecter &objecter, CephContex
       raw_shard_id_t raw_shard((o.op.extent.offset) / chunk_size % data_chunk_count);
       shard_id_t shard = pi->get_shard(raw_shard);
       if (shard != shard_id_t::NO_SHARD) {
-        int acting_index = (int)shard;
-        if (objecter.osdmap->exists(op->target.acting[acting_index])) {
-          op->target.flags |= CEPH_OSD_FLAG_EC_DIRECT_READ;
-          op->target.flags |= CEPH_OSD_FLAG_FORCE_OSD;
-          target.osd = target.acting[acting_index];
-          target.actual_pgid.reset_shard(shard);
-          target.used_replica = (target.acting_primary != target.osd);
-        }
+        std::optional<int> local_zone;
+        shard = ECSplitOp::choose_read_shard(
+            objecter, cct, target,
+            (target.flags & CEPH_OSD_FLAG_LOCALIZE_READS) != 0, shard,
+            local_zone);
+      }
+      if (shard != shard_id_t::NO_SHARD) {
+        op->target.flags |= CEPH_OSD_FLAG_EC_DIRECT_READ;
+        op->target.flags |= CEPH_OSD_FLAG_FORCE_OSD;
+        target.osd = target.acting[(int)shard];
+        target.actual_pgid.reset_shard(shard);
+        target.used_replica = (target.acting_primary != target.osd);
       }
       break;
     }
@@ -1166,9 +1259,10 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
   std::shared_ptr<SplitOp> split_read;
 
   if (pi->is_erasure()) {
-    split_read = std::make_shared<ECSplitOp>(op, objecter, cct, pi->size);
+    split_read = std::make_shared<ECSplitOp>(op, objecter, cct, pi->size, (target.flags & CEPH_OSD_FLAG_LOCALIZE_READS) != 0);
   } else {
-    split_read = std::make_shared<ReplicaSplitOp>(op, objecter, cct, pi->size);
+    split_read = std::make_shared<ReplicaSplitOp>(op, objecter, cct, pi->size,
+      (target.flags & CEPH_OSD_FLAG_LOCALIZE_READS) != 0);
   }
 
   // STAGE 3: Check if abort was set during construction
@@ -1186,7 +1280,7 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
   // Initialize reference_sub_read now that acting set is populated
   split_read->init_reference_sub_read();
 
-  if (split_read->reference_sub_read == -1) {
+  if (split_read->reference_sub_read_key == -1) {
     split_read->abort = true;
   }
 
@@ -1242,7 +1336,7 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
     auto fin = new Finisher(split_read, sub_read); // Self-destructs when called.
 
     version_t *objver = nullptr;
-    if (index == split_read->reference_sub_read) {
+    if (index == split_read->reference_sub_read_key) {
       objver = split_read->orig_op->objver;
     }
 
@@ -1256,11 +1350,11 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
     st.flags |= CEPH_OSD_FLAG_FAIL_ON_EAGAIN;
     if (pi->is_erasure()) {
       st.flags |= CEPH_OSD_FLAG_EC_DIRECT_READ;
-      st.actual_pgid.reset_shard(shard_id_t(index));
+      st.actual_pgid.reset_shard(shard_id_t(sub_read.abs_shard));
     } else {
       st.flags |= CEPH_OSD_FLAG_BALANCE_READS;
     }
-    st.osd = st.acting[index];
+    st.osd = st.acting[(int)sub_read.abs_shard];
 
     st.used_replica = (st.acting_primary != st.osd);
 
@@ -1273,6 +1367,33 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
 
   ldout(cct, DBG_LVL) << __func__ << " object_id=" << target.base_oid
     << " assigned parent tid=" << op->tid << dendl;
+
+  return true;
+}
+
+bool SplitOp::validate_flags(const pg_pool_t *pi, int flags, CephContext *cct) {
+  // Only a multi-zone pool splits a localized read; other localized reads go
+  // to the nearest replica, chosen by _calc_target().
+  bool localize = (flags & CEPH_OSD_FLAG_LOCALIZE_READS) &&
+                  pi->get_num_zones() > 1;
+  if (!(flags & CEPH_OSD_FLAG_BALANCE_READS) && !localize) {
+    ldout(cct, DBG_LVL) << __func__ << " REJECT: Neither BALANCE_READS nor "
+                        << "multi-zone LOCALIZE_READS set" << dendl;
+    return false;
+  }
+
+  // We really should not have a WRITE flagged as balanced read, but out of
+  // paranoia ignore it.
+  if (flags & CEPH_OSD_FLAG_WRITE) {
+    ldout(cct, DBG_LVL) << __func__ << " REJECT: Flagged as write!" << dendl;
+    return false;
+  }
+
+  if (pi->has_flag(pg_pool_t::FLAG_CRIMSON)) {
+    ldout(cct, DBG_LVL) << __func__ <<" ABORT: Crimson doesn't support"
+                                      " direct reads" << dendl;
+    return false;
+  }
 
   return true;
 }

@@ -3746,7 +3746,14 @@ function corrupt_scrub_erasure() {
     create_rbd_pool || return 1
     create_pool foo 1
 
-    create_ec_pool $poolname $allow_overwrites k=2 m=1 stripe_unit=2K --force || return 1
+    # pool create needs --yes-i-really-mean-it for a stripe unit that is not
+    # a multiple of 4096
+    ceph osd erasure-code-profile set myprofile crush-failure-domain=osd \
+        k=2 m=1 stripe_unit=2K --force || return 1
+    create_pool $poolname 1 1 erasure myprofile --yes-i-really-mean-it || return 1
+    if [ "$allow_overwrites" = "true" ]; then
+        ceph osd pool set $poolname allow_ec_overwrites true || return 1
+    fi
     wait_for_clean || return 1
 
     for i in $(seq 1 $total_objs) ; do

@@ -1156,7 +1156,9 @@ void DaemonServer::_check_offlines_pgs(
       report->bad_already_inactive.insert(q.first);
       dangerous = true;
     }
-    if (pg_acting.size() < pi->min_size) {
+    bool below_min_size = pi && osdmap.num_acting_below_min_size(
+      *pi, std::vector<int>(pg_acting.begin(), pg_acting.end()));
+    if (below_min_size) {
       report->bad_become_inactive.insert(q.first);
       dangerous = true;
     }

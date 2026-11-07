@@ -39,6 +39,41 @@
   be removed in the X release. People wanting to continue using
   Elasticsearch can populate it with bucket notifications. The
   upcoming S3 Inventory feature also covers some of the use case.
+
+* RADOS: Erasure-coded (FastEC) and replicated pools can be stretched over two
+  zones, one pool at a time, with ``ceph osd pool create --num_zones 2`` or
+  ``ceph osd pool set <pool> num_zones 2``. See "Upgrading from Earlier
+  Releases" in :ref:`stretch_mode`.
+
+  - When ``require_osd_release`` is raised to this release, each pool of a
+    cluster stretched with ``ceph mon enable_stretch_mode`` gets two zones and
+    a ``min_size`` counted in each zone (2 becomes 1, 3 becomes 2).
+  - From then on, ``osd_pool_default_size`` counts the copies in each zone of
+    a stretched pool, replacing ``mon_stretch_pool_size``. Only the value in
+    the ``global`` section of the configuration database is converted. A value
+    set in a Monitor's ``ceph.conf`` or in a ``mon`` section is not, and gives
+    new pools that many copies in each zone. The new
+    ``POOL_DEFAULT_CONFIG_OVERRIDE`` health warning reports such a value:
+    remove it.
+
+* RADOS: ``ceph osd pool create`` takes named parameters, such as
+  ``--pool_type``, ``--replica``, ``--k`` and ``--m``, and still accepts the
+  positional ones. A parameter that is not given comes from a pool creation
+  default, which ``ceph osd pool default set`` and ``ceph osd pool default
+  get`` manage. See :ref:`pool-creation-defaults`.
+
+* RADOS: An erasure code profile or CRUSH rule, other than the defaults, is
+  now deleted with the last pool that uses it. Scripts that reuse one after
+  deleting its pools must create it again.
+
+* RADOS: Changing an erasure code profile that a pool uses now needs
+  ``--yes-i-really-mean-it``: ``--force`` is no longer enough.
+
+* RADOS: When ``require_osd_release`` is raised to this release, each
+  erasure-coded pool that uses the ``default`` erasure code profile gets a
+  profile of its own, such as ``mypool-k2-m2``, as does each new pool created
+  without a named profile.
+
 * RGW: The default value of ``rgw_rest_conn_connect_to_resolved_ips`` changed
   from ``false`` to ``true``.
 
