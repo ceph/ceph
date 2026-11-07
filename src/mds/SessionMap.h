@@ -175,6 +175,9 @@ public:
   auto get_cap_acquisition() const {
     return cap_acquisition.get();
   }
+  auto get_cap_recall() const {
+    return cap_recall.get();
+  }
 
   inodeno_t take_ino(inodeno_t ino = 0) {
     if (ino) {
@@ -475,6 +478,8 @@ private:
 
   // cap acquisition via readdir
   DecayCounter cap_acquisition;
+  // caps asked back by recall, over the same period as cap_acquisition
+  DecayCounter cap_recall;
 
   // session start time -- used to track average session time
   // note that this is initialized in the constructor rather
