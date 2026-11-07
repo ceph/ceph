@@ -141,12 +141,12 @@ class TestLvm:
                        data_slots=1,
                        data_size=102400)
         self.lvm.args = args
-        m_create_lv.return_value = Volume(lv_name='lv_foo',
-                                          lv_path='/fake-path',
-                                          vg_name='vg_foo',
-                                          lv_tags='',
-                                          lv_uuid='abcd')
-        assert self.lvm.prepare_data_device('block', 'abcd') == m_create_lv.return_value
+        m_create_lv.return_value = (Volume(lv_name='lv_foo',
+                                           lv_path='/fake-path',
+                                           vg_name='vg_foo',
+                                           lv_tags='',
+                                           lv_uuid='abcd'), None)
+        assert self.lvm.prepare_data_device('block', 'abcd') == m_create_lv.return_value[0]
         assert self.lvm.args.data_size == 102400
 
     @patch('ceph_volume.objectstore.lvm.nvme_utils.preformat', Mock(return_value=True))
@@ -162,11 +162,11 @@ class TestLvm:
                        data_size=0)
         self.lvm.args = args
         self.lvm.objectstore = 'bluestore'
-        m_create_lv.return_value = Volume(lv_name='lv_foo',
-                                          lv_path='/fake-path',
-                                          vg_name='vg_foo',
-                                          lv_tags='',
-                                          lv_uuid='abcd')
+        m_create_lv.return_value = (Volume(lv_name='lv_foo',
+                                           lv_path='/fake-path',
+                                           vg_name='vg_foo',
+                                           lv_tags='',
+                                           lv_uuid='abcd'), None)
         self.lvm.prepare_data_device('block', 'abcd')
         assert self.lvm.skip_mkfs_discard is True
 
@@ -185,11 +185,11 @@ class TestLvm:
                            data_size=0)
             self.lvm.args = args
             self.lvm.objectstore = 'bluestore'
-            m_create_lv.return_value = Volume(lv_name='lv_foo',
-                                              lv_path='/fake-path',
-                                              vg_name='vg_foo',
-                                              lv_tags='',
-                                              lv_uuid='abcd')
+            m_create_lv.return_value = (Volume(lv_name='lv_foo',
+                                               lv_path='/fake-path',
+                                               vg_name='vg_foo',
+                                               lv_tags='',
+                                               lv_uuid='abcd'), None)
             self.lvm.prepare_data_device('block', 'abcd')
             m_preformat.assert_not_called()
             assert self.lvm.skip_mkfs_discard is False
@@ -324,11 +324,11 @@ class TestLvm:
                                               m_create_lv: MagicMock,
                                               m_set_tags: MagicMock,
                                               factory: Callable[..., Namespace]) -> None:
-        m_create_lv.return_value = Volume(lv_name='lv_foo',
-                                          lv_path='/fake-path',
-                                          vg_name='vg_foo',
-                                          lv_tags='',
-                                          lv_uuid='fake-uuid')
+        m_create_lv.return_value = (Volume(lv_name='lv_foo',
+                                           lv_path='/fake-path',
+                                           vg_name='vg_foo',
+                                           lv_tags='',
+                                           lv_uuid='fake-uuid'), None)
         args = factory(cluster_fsid='abcd',
                        osd_fsid='abc123',
                        crush_device_class='ssd',
