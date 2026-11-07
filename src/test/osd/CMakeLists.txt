@@ -123,6 +123,9 @@ target_link_libraries(unittest_peeringstate osd os global ${CMAKE_DL_LIBS} ${BLK
 add_library(pg_backend_test_fixture OBJECT
   PGBackendTestFixture.cc
   MockPGBackendListener.cc
+  # OsdTestFixture owns a MockPeeringListener, so its vtable is needed
+  # wherever the fixture is
+  MockPeeringListener.cc
   MockStore.cc
   ObjectTracker.cc
 )
@@ -131,7 +134,6 @@ target_link_libraries(pg_backend_test_fixture osd os global GTest::GTest)
 # ec_peering_test_fixture: object library for ECPeeringTestFixture implementation
 add_library(ec_peering_test_fixture OBJECT
   ECPeeringTestFixture.cc
-  MockPeeringListener.cc
 )
 target_link_libraries(ec_peering_test_fixture osd os global GTest::GTest)
 
