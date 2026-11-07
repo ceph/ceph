@@ -3,10 +3,10 @@ import { SmbShareFormComponent } from './smb-share-form.component';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { SharedModule } from '~/app/shared/shared.module';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { Router } from '@angular/router';
+import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 
 import {
   CheckboxModule,
@@ -26,6 +26,7 @@ import {
   SMB_RGW_CONTEXT,
   SmbContext
 } from '~/app/shared/constants/smb.constant';
+import { SMBCluster, SMBShare } from '../smb.model';
 
 describe('SmbShareFormComponent', () => {
   let component: SmbShareFormComponent;
@@ -104,6 +105,7 @@ describe('SmbShareFormComponent', () => {
       user_id: '',
       browseable: true,
       readonly: false,
+      persistent_handles: false,
       read_iops_limit: 0,
       write_iops_limit: 0,
       read_bw_limit: 0,
@@ -167,6 +169,111 @@ describe('SmbShareFormComponent', () => {
     navigateSpy.mockClear();
     component.handleTaskRequest('edit');
     expect(navigateSpy).toHaveBeenCalledWith([`${SMB_BASE_RGW}/cluster`, 'cluster1', 'overview']);
+  });
+
+  it('should default persistent_handles to false', () => {
+    expect(component.smbShareForm.get('persistent_handles').value).toBe(false);
+  });
+
+  describe('persistent handles', () => {
+    const patchCephfsShare = (persistentHandles: boolean) => {
+      component.clusterId = 'cluster1';
+      component.smbShareForm.patchValue({
+        share_id: 'share1',
+        name: 'My Share',
+        volume: 'fs1',
+        inputPath: '/',
+        persistent_handles: persistentHandles
+      });
+    };
+
+    const setRouteCluster = () => {
+      jest.spyOn(TestBed.inject(ActivatedRoute).snapshot, 'parent', 'get').mockReturnValue({
+        paramMap: convertToParamMap({ cluster_id: 'cluster1' })
+      } as any);
+    };
+
+    const mockCluster = (cluster: Partial<SMBCluster>) =>
+      jest.spyOn(TestBed.inject(SmbService), 'getCluster').mockReturnValue(
+        of({
+          cluster_id: 'cluster1',
+          resource_type: 'ceph.smb.cluster',
+          auth_mode: 'active-directory',
+          ...cluster
+        } as SMBCluster)
+      );
+
+    it('should omit availability when the value matches the cluster default', () => {
+      component['clusterPersistentHandles'] = true;
+      patchCephfsShare(true);
+      expect(component.buildRequest().share_resource.availability).toBeUndefined();
+
+      component['clusterPersistentHandles'] = false;
+      patchCephfsShare(false);
+      expect(component.buildRequest().share_resource.availability).toBeUndefined();
+    });
+
+    it('should send an override when the value differs from the cluster default', () => {
+      component['clusterPersistentHandles'] = false;
+      patchCephfsShare(true);
+      expect(component.buildRequest().share_resource.availability).toEqual({
+        persistent_handles: true
+      });
+
+      component['clusterPersistentHandles'] = true;
+      patchCephfsShare(false);
+      expect(component.buildRequest().share_resource.availability).toEqual({
+        persistent_handles: false
+      });
+    });
+
+    it('should keep an existing explicit override when it matches the default', () => {
+      component['clusterPersistentHandles'] = true;
+      component.shareResponse = {
+        availability: { persistent_handles: true }
+      } as SMBShare;
+      patchCephfsShare(true);
+      expect(component.buildRequest().share_resource.availability).toEqual({
+        persistent_handles: true
+      });
+    });
+
+    it('should only send an override when the user changed it if the default is unknown', () => {
+      component['clusterPersistentHandles'] = null;
+      patchCephfsShare(false);
+      expect(component.buildRequest().share_resource.availability).toBeUndefined();
+
+      component.smbShareForm.get('persistent_handles').markAsDirty();
+      expect(component.buildRequest().share_resource.availability).toEqual({
+        persistent_handles: false
+      });
+    });
+
+    it('should pre-fill from the cluster default when creating a share', () => {
+      mockCluster({ share_defaults: { availability: { persistent_handles: true } } });
+      setRouteCluster();
+      component.ngOnInit();
+      expect(component.smbShareForm.get('persistent_handles').value).toBe(true);
+      expect(component['clusterPersistentHandles']).toBe(true);
+    });
+
+    it('should not pre-fill when the cluster has persistent handles disabled', () => {
+      mockCluster({});
+      setRouteCluster();
+      component.ngOnInit();
+      expect(component.smbShareForm.get('persistent_handles').value).toBe(false);
+      expect(component['clusterPersistentHandles']).toBe(false);
+    });
+
+    it('should not fail when the cluster cannot be loaded', () => {
+      jest
+        .spyOn(TestBed.inject(SmbService), 'getCluster')
+        .mockReturnValue(throwError(() => new Error('failed')));
+      setRouteCluster();
+      component.ngOnInit();
+      expect(component.smbShareForm.get('persistent_handles').value).toBe(false);
+      expect(component['clusterPersistentHandles']).toBeNull();
+    });
   });
 
   describe('QoS', () => {

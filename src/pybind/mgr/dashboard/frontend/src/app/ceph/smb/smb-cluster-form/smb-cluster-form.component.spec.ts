@@ -7,12 +7,13 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { FormArray, ReactiveFormsModule, Validators } from '@angular/forms';
 
 import { ComboBoxModule, GridModule, InputModule, SelectModule } from 'carbon-components-angular';
-import { AUTHMODE, CLIENT_COMPAT } from '../smb.model';
+import { AUTHMODE, CLIENT_COMPAT, PERSISTENT_HANDLES_DURABILITY, SMBCluster } from '../smb.model';
 import { FOO_USERSGROUPS } from '../smb-usersgroups-form/smb-usersgroups-form.component.spec';
 import { of } from 'rxjs';
 import { By } from '@angular/platform-browser';
 import { USER } from '~/app/shared/constants/app.constants';
 import { SMB_CEPHFS_CONTEXT, SMB_CONTEXT } from '~/app/shared/constants/smb.constant';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 describe('SmbClusterFormComponent', () => {
   let component: SmbClusterFormComponent;
@@ -116,6 +117,118 @@ describe('SmbClusterFormComponent', () => {
   it('should delete domain', () => {
     component.deleteDomainSettingsModal();
     expect(component).toBeTruthy();
+  });
+
+  it('should default persistent_handles to false and durability to full_outage', () => {
+    expect(component.smbForm.get('persistent_handles').value).toBe(false);
+    expect(component.smbForm.get('persistent_handles_durability').value).toBe(
+      PERSISTENT_HANDLES_DURABILITY.FullOutage
+    );
+  });
+
+  it('should map persistent_handles true and durability to buildRequest', () => {
+    component.smbForm.get('cluster_id').setValue('test-cluster');
+    component.smbForm.get('auth_mode').setValue(AUTHMODE.ActiveDirectory);
+    component.smbForm.get('domain_settings').setValue('test-realm');
+    component.smbForm.get('persistent_handles').setValue(true);
+    component.smbForm
+      .get('persistent_handles_durability')
+      .setValue(PERSISTENT_HANDLES_DURABILITY.PartialOutage);
+    const request = (component as any).buildRequest();
+    expect(request.cluster_resource.persistent_handles).toBeUndefined();
+    expect(request.cluster_resource.share_defaults.availability.persistent_handles).toBe(true);
+    expect(request.cluster_resource.persistent_handles_durability).toBe(
+      PERSISTENT_HANDLES_DURABILITY.PartialOutage
+    );
+  });
+
+  it('should omit share_defaults and durability on create when persistent_handles is false', () => {
+    component.smbForm.get('cluster_id').setValue('test-cluster');
+    component.smbForm.get('auth_mode').setValue(AUTHMODE.ActiveDirectory);
+    component.smbForm.get('domain_settings').setValue('test-realm');
+    component.smbForm.get('persistent_handles').setValue(false);
+    const request = (component as any).buildRequest();
+    expect(request.cluster_resource.persistent_handles).toBeUndefined();
+    expect(request.cluster_resource.share_defaults).toBeUndefined();
+    expect(request.cluster_resource.persistent_handles_durability).toBeUndefined();
+  });
+
+  it('should not include persistent_handles in buildRequest when isRgw is true', () => {
+    (component as any).isRgw = true;
+    component.smbForm.get('cluster_id').setValue('test-cluster');
+    component.smbForm.get('auth_mode').setValue(AUTHMODE.ActiveDirectory);
+    component.smbForm.get('domain_settings').setValue('test-realm');
+    component.smbForm.get('persistent_handles').setValue(true);
+    const request = (component as any).buildRequest();
+    expect(request.cluster_resource.share_defaults).toBeUndefined();
+    expect(request.cluster_resource.persistent_handles_durability).toBeUndefined();
+  });
+
+  describe('editing persistent handles', () => {
+    beforeEach(() => {
+      component.isEdit = true;
+      component.clusterResponse = {
+        cluster_id: 'test-cluster',
+        resource_type: 'ceph.smb.cluster',
+        auth_mode: AUTHMODE.ActiveDirectory,
+        persistent_handles_durability: PERSISTENT_HANDLES_DURABILITY.PartialOutage,
+        share_defaults: {
+          acl_support: 'posix',
+          availability: { persistent_handles: true }
+        }
+      } as SMBCluster;
+      component.smbForm.get('cluster_id').setValue('test-cluster');
+      component.smbForm.get('auth_mode').setValue(AUTHMODE.ActiveDirectory);
+      component.smbForm.get('domain_settings').setValue('test-realm');
+      component.smbForm
+        .get('persistent_handles_durability')
+        .setValue(PERSISTENT_HANDLES_DURABILITY.PartialOutage);
+    });
+
+    it('should keep durability and unrelated share_defaults when persistent handles stay on', () => {
+      component.smbForm.get('persistent_handles').setValue(true);
+      const request = (component as any).buildRequest();
+      expect(request.cluster_resource.persistent_handles_durability).toBe(
+        PERSISTENT_HANDLES_DURABILITY.PartialOutage
+      );
+      expect(request.cluster_resource.share_defaults).toEqual({
+        acl_support: 'posix',
+        availability: { persistent_handles: true }
+      });
+    });
+
+    it('should keep durability and acl_support but drop the availability default when disabling', () => {
+      component.smbForm.get('persistent_handles').setValue(false);
+      const request = (component as any).buildRequest();
+      expect(request.cluster_resource.persistent_handles_durability).toBe(
+        PERSISTENT_HANDLES_DURABILITY.PartialOutage
+      );
+      expect(request.cluster_resource.share_defaults).toEqual({ acl_support: 'posix' });
+    });
+
+    it('should keep the durability control editable', () => {
+      expect(component.smbForm.get('persistent_handles_durability').disabled).toBe(false);
+    });
+
+    it('should ask for confirmation before disabling the cluster default', () => {
+      const modalService = TestBed.inject(ModalCdsService);
+      const showSpy = jest.spyOn(modalService, 'show').mockImplementation();
+      const requestSpy = jest.spyOn(component, 'handleTaskRequest').mockImplementation();
+      component.smbForm.get('persistent_handles').setValue(false);
+      component.submitAction();
+      expect(showSpy).toHaveBeenCalled();
+      expect(requestSpy).not.toHaveBeenCalled();
+    });
+
+    it('should not ask for confirmation when persistent handles stay enabled', () => {
+      const modalService = TestBed.inject(ModalCdsService);
+      const showSpy = jest.spyOn(modalService, 'show').mockImplementation();
+      const requestSpy = jest.spyOn(component, 'handleTaskRequest').mockImplementation();
+      component.smbForm.get('persistent_handles').setValue(true);
+      component.submitAction();
+      expect(showSpy).not.toHaveBeenCalled();
+      expect(requestSpy).toHaveBeenCalledWith('edit');
+    });
   });
 
   it('should get usersgroups resources on user authmode', () => {
