@@ -3208,12 +3208,12 @@ std::ostream& operator<<(std::ostream& out, const pg_info_t& pgi);
 struct pg_fast_info_t {
   eversion_t last_update;
   eversion_t last_complete;
-  version_t last_user_version;
+  version_t last_user_version = 0;
   std::map<shard_id_t,std::pair<eversion_t,eversion_t>> partial_writes_last_complete;
-  epoch_t partial_writes_last_complete_epoch;
+  epoch_t partial_writes_last_complete_epoch = 0;
   struct { // pg_stat_t stats
     eversion_t version;
-    version_t reported_seq;
+    version_t reported_seq = 0;
     utime_t last_fresh;
     utime_t last_active;
     utime_t last_peered;
@@ -3221,17 +3221,17 @@ struct pg_fast_info_t {
     utime_t last_unstale;
     utime_t last_undegraded;
     utime_t last_fullsized;
-    int64_t log_size;  // (also ondisk_log_size, which has the same value)
+    int64_t log_size = 0;  // (also ondisk_log_size, which has the same value)
     struct { // object_stat_collection_t stats;
       struct { // objct_stat_sum_t sum
-	int64_t num_bytes;    // in bytes
-	int64_t num_objects;
-	int64_t num_object_copies;
-	int64_t num_rd;
-	int64_t num_rd_kb;
-	int64_t num_wr;
-	int64_t num_wr_kb;
-	int64_t num_objects_dirty;
+	int64_t num_bytes = 0;    // in bytes
+	int64_t num_objects = 0;
+	int64_t num_object_copies = 0;
+	int64_t num_rd = 0;
+	int64_t num_rd_kb = 0;
+	int64_t num_wr = 0;
+	int64_t num_wr_kb = 0;
+	int64_t num_objects_dirty = 0;
       } sum;
     } stats;
   } stats;
