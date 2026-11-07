@@ -79,7 +79,6 @@ Additional Resources
    foundation
    ceph-volume/index
    crimson/crimson
-   releases/general
    releases/index
    security/index
    hardware-monitoring/index

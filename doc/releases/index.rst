@@ -1,13 +1,9 @@
 .. _ceph-releases-index:
+.. _ceph-releases-general:
 
 =====================
-Ceph Releases (index)
+Ceph Releases
 =====================
-
-.. toctree::
-   :maxdepth: 1
-
-.. ceph_releases_gantt:: releases.yml
 
 .. _active-releases:
 
@@ -17,6 +13,8 @@ Active Releases
 The following Ceph releases are actively maintained and receive periodic backports and
 security fixes.
 
+.. ceph_releases:: releases.yml current
+
 .. toctree::
    :maxdepth: 1
    :hidden:
@@ -25,14 +23,75 @@ security fixes.
    Tentacle (v20.2.*) <tentacle>
    Squid (v19.2.*) <squid>
 
-.. ceph_releases:: releases.yml current
+.. ceph_timeline_gantt:: releases.yml umbrella tentacle squid
 
+
+Understanding the release cycle
+-------------------------------
+
+Ceph has an annual major release cycle, officially targeting the month of
+March. Each major release series receives a name (e.g., 'Vampire') and a major
+release number (e.g., 22 for Vampire because 'V' is the 22nd letter of the
+English alphabet).
+
+Releases are generally named after a species of cephalopod or related term.
+
+Ceph follows a flavor of semantic versioning. Version numbers have three components, ``X.Y.Z``.  ``X`` identifies the release
+cycle (e.g., 22 for Vampire).  ``Y`` identifies the release type:
+
+* ``X.0.Z`` - development checkpoint tag in preparation for release ``X`` (both before or after branching off of the ``main`` branch).
+* ``X.1.Z`` - release candidates for ``X`` (for community testing on ephemeral clusters that are not critical)
+* ``X.2.Z`` - stable/bugfix releases (for production clusters)
+* ``X.3.0`` - development checkpoint tag on ``main`` after branching release X in preparation for release X+1.
+
+Generally, clusters will always run a ``X.2.Z`` release.
+
+Release candidates
+^^^^^^^^^^^^^^^^^^
+
+There is a feature freeze roughly two months prior to the planned
+initial stable release, after which focus shifts to stabilization and
+bug fixes only. Release candidates are published every 1-2 weeks and are
+intended for final testing and validation of the upcoming stable release.
+
+Stable releases
+^^^^^^^^^^^^^^^
+
+Once the initial stable release (``X.2.0``) is published, there are semi-regular
+point releases containing bug fixes and (very occasionally) feature
+backports.  Bug fixes are accumulated and included in the next point release.
+
+* Stable point releases occur approximately every 8 weeks.
+* Intended for production deployments
+* Bug fix backports for 2 full release cycles (2 years).
+* Online, rolling upgrade support and testing from the last two
+  stable releases.
+* Online, rolling upgrade support and testing from prior stable point
+  releases
+
+Lifetime of stable releases
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The lifetime of a stable release series is approximately 24 months
+(i.e., two 12 month release cycles) after the initial stable release
+(``X.2.0``). For example, the Tentacle series (``20.2.z``) will reach end-of-life
+(EOL) shortly after Vampire (``22.2.0``) is released. The lifetime of a release
+varies depending on how quickly stable releases are published.
+
+.. ceph_releases_gantt:: releases.yml
+
+Release History
+---------------
+
+The release history of the currently maintained release branches follows.
+
+.. ceph_timeline:: releases.yml umbrella tentacle squid
 
 Archived Releases
 -----------------
 
-The following older Ceph releases are no longer maintained (do not
-receive bug fixes or backports).
+The following older Ceph releases are no longer maintained; they will not
+receive bug fixes or backports.
 
 .. ceph_releases:: releases.yml eol
 
@@ -59,11 +118,6 @@ receive bug fixes or backports).
    Bobtail (v0.56.*) <bobtail>
    Argonaut (v0.48.*) <argonaut>
 
-Release timeline
-----------------
-
-.. ceph_timeline_gantt:: releases.yml umbrella tentacle squid
-.. ceph_timeline:: releases.yml umbrella tentacle squid
 
 .. _Umbrella: umbrella
 .. _21.2.0: umbrella#v21-2-0-umbrella
