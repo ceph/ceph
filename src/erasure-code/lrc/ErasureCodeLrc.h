@@ -22,6 +22,7 @@
 #include "include/err.h"
 #include "json_spirit/json_spirit.h"
 #include "erasure-code/ErasureCode.h"
+#include "erasure-code/lrc/ErasureCodeLrcLayers.h"
 
 #define ERROR_LRC_ARRAY			-(MAX_ERRNO + 1)
 #define ERROR_LRC_OBJECT		-(MAX_ERRNO + 2)
@@ -61,6 +62,7 @@ public:
     ceph::ErasureCodeProfile profile;
   };
   std::vector<Layer> layers;
+  std::string layer_plugin_default = "isa";
   std::string directory;
   unsigned int chunk_count;
   unsigned int data_chunk_count;

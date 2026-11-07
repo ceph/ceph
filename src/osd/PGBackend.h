@@ -704,7 +704,8 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      ObjectStore::CollectionHandle &ch,
      ObjectStore *store,
      CephContext *cct,
-     ECExtentCache::LRU &ec_extent_cache_lru);
+     ECExtentCache::LRU &ec_extent_cache_lru,
+     ceph_release_t require_osd_release);
 };
 
 #endif
