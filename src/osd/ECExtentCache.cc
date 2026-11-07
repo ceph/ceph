@@ -20,6 +20,25 @@ void ECExtentCache::Object::request(OpRef &op) {
 
   extent_set eset = op->get_pin_eset(line_size);
 
+  shard_extent_set_t obj_hole(pg.sinfo.get_k_plus_m());
+  if (op->projected_size > projected_size) {
+    /* This write is growing the size of the object. This essentially counts
+     * as a write (although the cache will not get populated). Future reads
+     * to this area will be skipped, but this makes them essentially zero
+     * reads. The op pins every line in the hole so that erase_line() cannot
+     * discard it before this op completes.
+     */
+    shard_extent_set_t read_mask(pg.sinfo.get_k_plus_m());
+
+    pg.sinfo.ro_size_to_read_mask(op->projected_size, obj_hole);
+    pg.sinfo.ro_size_to_read_mask(projected_size, read_mask);
+    obj_hole.subtract(read_mask);
+
+    extent_set hole_eset = obj_hole.get_extent_superset();
+    hole_eset.align(line_size);
+    eset.union_of(hole_eset);
+  }
+
   for (auto &&[start, len] : eset) {
     for (uint64_t to_pin = start; to_pin < start + len; to_pin += line_size) {
       LineRef l;
@@ -74,20 +93,7 @@ void ECExtentCache::Object::request(OpRef &op) {
     do_not_read.insert(requesting);
   }
   do_not_read.insert(op->writes);
-  if (op->projected_size > projected_size) {
-    /* This write is growing the size of the object. This essentially counts
-     * as a write (although the cache will not get populated). Future reads
-     * to this area will be skipped, but this makes them essentially zero
-     * reads.
-     */
-    shard_extent_set_t obj_hole(pg.sinfo.get_k_plus_m());
-    shard_extent_set_t read_mask(pg.sinfo.get_k_plus_m());
-
-    pg.sinfo.ro_size_to_read_mask(op->projected_size, obj_hole);
-    pg.sinfo.ro_size_to_read_mask(projected_size, read_mask);
-    obj_hole.subtract(read_mask);
-    do_not_read.insert(obj_hole);
-  }
+  do_not_read.insert(obj_hole);
 
   projected_size = op->projected_size;
 
@@ -100,7 +106,7 @@ void ECExtentCache::Object::request(OpRef &op) {
 }
 
 void ECExtentCache::Object::send_reads() {
-  if (reading || requesting.empty())
+  if (reading || invalidate_write_pending || requesting.empty())
     return; // Read busy
 
   reading_ops.swap(requesting_ops);
@@ -147,9 +153,14 @@ void ECExtentCache::Object::insert(shard_extent_map_t const &buffers) const {
 }
 
 void ECExtentCache::Object::write_done(shard_extent_map_t const &buffers,
-                                       uint64_t new_size) {
+                                       uint64_t new_size,
+                                       bool did_invalidate) {
   insert(buffers);
   current_size = new_size;
+  if (did_invalidate) {
+    invalidate_write_pending = false;
+    send_reads();
+  }
 }
 
 void ECExtentCache::Object::unpin(Op &op) const {
@@ -193,9 +204,9 @@ void ECExtentCache::Object::invalidate(const OpRef &invalidating_op) {
   requesting_ops.clear();
   reading_ops.clear();
 
-  /* Current size should reflect the actual size of the object, which was set
-   * by the previous write. We are going to replay all the writes now, so set
-   * the projected size to that of this op.
+  /* Replay from the size the invalidating op leaves. What it leaves (a clone,
+   * or the zeros of a truncate or recreate) is only on disk once its write
+   * has been issued, so the reads of the ops behind it wait for write_done().
    */
   projected_size = invalidating_op->projected_size;
 
@@ -205,11 +216,14 @@ void ECExtentCache::Object::invalidate(const OpRef &invalidating_op) {
 
   cache_invalidate_expected = false;
 
-  // We now need to reply all outstanding ops to regenerate the read
+  /* We now need to replay all outstanding ops to regenerate the read. The
+   * invalidating op is the first, and the only one whose reads are sent now.
+   */
   for (auto &op : pg.waiting_ops) {
     if (op->object.oid == oid) {
       op->read_done = false;
       request(op);
+      invalidate_write_pending = true;
     }
   }
 }
