@@ -9,8 +9,7 @@ import {
   AUTHENTICATION,
   ListenerItem,
   NvmeofInitiatorsResponse,
-  NvmeofSubsystem,
-  NvmeofSubsystemNamespace
+  NvmeofSubsystem
 } from '../models/nvmeof';
 import { HostStatus } from '../enum/host-status.enum';
 import { Host } from '../models/host.interface';
@@ -218,23 +217,17 @@ export class NvmeofService {
 
         const firstGroupName = groups[0].spec.group;
 
-        return forkJoin({
-          subsystems: this.listSubsystems(firstGroupName).pipe(
-            map((resp: unknown) => this.normalizeListResponse<NvmeofSubsystem>(resp, 'subsystems')),
-            catchError(() => observableOf([]))
-          ),
-          namespaces: this.listNamespaces(firstGroupName).pipe(
-            map((resp: unknown) =>
-              this.normalizeListResponse<NvmeofSubsystemNamespace>(resp, 'namespaces')
-            ),
-            catchError(() => observableOf([]))
-          )
-        }).pipe(
-          map(({ subsystems, namespaces }) => ({
-            hasGatewayGroups,
-            hasSubsystems: subsystems.length > 0,
-            hasNamespaces: namespaces.length > 0
-          })),
+        // namespace_count is already on each subsystem. Listing every namespace
+        // (and its host maskings) here duplicates the namespaces tab request.
+        return this.listSubsystems(firstGroupName).pipe(
+          map((resp: unknown) => {
+            const subsystems = this.normalizeListResponse<NvmeofSubsystem>(resp, 'subsystems');
+            return {
+              hasGatewayGroups,
+              hasSubsystems: subsystems.length > 0,
+              hasNamespaces: subsystems.some((subsystem) => (subsystem.namespace_count ?? 0) > 0)
+            };
+          }),
           catchError(() =>
             observableOf({ hasGatewayGroups, hasSubsystems: false, hasNamespaces: false })
           )
@@ -411,8 +404,10 @@ export class NvmeofService {
   }
 
   // Namespaces
-  listNamespaces(group: string, subsystemNQN: string = '*') {
-    return this.http.get(`${API_PATH}/subsystem/${subsystemNQN}/namespace?gw_group=${group}`);
+  listNamespaces(group: string, subsystemNQN: string = '*', includeHosts = false) {
+    return this.http.get(
+      `${API_PATH}/subsystem/${subsystemNQN}/namespace?gw_group=${group}&include_hosts=${includeHosts}`
+    );
   }
 
   getNamespace(subsystemNQN: string, nsid: string, group: string) {

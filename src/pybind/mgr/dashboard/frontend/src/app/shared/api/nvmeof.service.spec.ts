@@ -147,6 +147,32 @@ describe('NvmeofService', () => {
   });
 
   describe('test subsystems APIs', () => {
+    it('should derive setup state from subsystem namespace counts', () => {
+      let state: any;
+      service.fetchSetupState().subscribe((result) => {
+        state = result;
+      });
+
+      httpTesting
+        .expectOne(`${API_PATH}/gateway/group`)
+        .flush([[{ spec: { group: 'default' } }, { spec: { group: 'other' } }]]);
+      const subsystemsReq = httpTesting.expectOne(`${API_PATH}/subsystem?gw_group=default`);
+      expect(subsystemsReq.request.method).toBe('GET');
+      subsystemsReq.flush([
+        { nqn: 'nqn.1', namespace_count: 0 },
+        { nqn: 'nqn.2', namespace_count: 1024 }
+      ]);
+
+      expect(state).toEqual({
+        hasGatewayGroups: true,
+        hasSubsystems: true,
+        hasNamespaces: true
+      });
+      httpTesting.expectNone(
+        `${API_PATH}/subsystem/*/namespace?gw_group=default&include_hosts=false`
+      );
+    });
+
     it('should call listSubsystems', () => {
       service.listSubsystems(mockGroupName).subscribe();
       const req = httpTesting.expectOne(`${API_PATH}/subsystem?gw_group=${mockGroupName}`);
@@ -251,7 +277,7 @@ describe('NvmeofService', () => {
     it('should call listNamespaces', () => {
       service.listNamespaces(mockGroupName).subscribe();
       const req = httpTesting.expectOne(
-        `${API_PATH}/subsystem/*/namespace?gw_group=${mockGroupName}`
+        `${API_PATH}/subsystem/*/namespace?gw_group=${mockGroupName}&include_hosts=false`
       );
       expect(req.request.method).toBe('GET');
     });

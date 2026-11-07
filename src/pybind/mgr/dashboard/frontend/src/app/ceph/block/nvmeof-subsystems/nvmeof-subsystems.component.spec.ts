@@ -2,7 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpClientModule } from '@angular/common/http';
 import { ActivatedRoute, Router } from '@angular/router';
 import { BehaviorSubject, Subject, of } from 'rxjs';
-import { take } from 'rxjs/operators';
+import { skip, take } from 'rxjs/operators';
 import { RouterTestingModule } from '@angular/router/testing';
 import { SharedModule } from '~/app/shared/shared.module';
 
@@ -160,6 +160,40 @@ describe('NvmeofSubsystemsComponent', () => {
       done();
     });
     component.getSubsystems();
+  });
+
+  it('should render subsystems before initiator counts finish loading', (done) => {
+    const initiators$ = new Subject<any[]>();
+    const nvmeofService = TestBed.inject(NvmeofService) as unknown as MockNvmeOfService;
+    nvmeofService.getInitiators = () => initiators$.asObservable();
+
+    const emissions: any[] = [];
+    component.subsystems$.pipe(skip(1), take(2)).subscribe({
+      next: (subsystems) => emissions.push(subsystems),
+      complete: () => {
+        expect(emissions[0][0].nqn).toBe(mockSubsystems[0].nqn);
+        expect(emissions[0][0].initiator_count).toBeUndefined();
+        expect(emissions[1][0].initiator_count).toBe(0);
+        expect(emissions[1][0].auth).toBe('No authentication');
+        done();
+      }
+    });
+
+    component.getSubsystems();
+    expect(emissions.length).toBe(1);
+    initiators$.next([]);
+    initiators$.complete();
+  });
+
+  it('should keep the current rows while the default gateway group is unresolved', () => {
+    const before = component.subsystems;
+    component.groupHandler.group = null;
+    component.groupHandler.groupSelectionCleared = false;
+    component.groupHandler.gwGroupsEmpty = false;
+
+    component.getSubsystems();
+
+    expect(component.subsystems).toBe(before);
   });
 
   it('should clear selected group and stop fetching subsystems', () => {

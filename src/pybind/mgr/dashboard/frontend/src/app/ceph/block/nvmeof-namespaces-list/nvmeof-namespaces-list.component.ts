@@ -19,8 +19,8 @@ import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { NvmeofStateService } from '../nvmeof-state.service';
 import { GatewayGroupQueryHandlerService } from '../gateway-group-query-handler.service';
-import { BehaviorSubject, Observable, forkJoin, of, Subject } from 'rxjs';
-import { catchError, finalize, map, shareReplay, switchMap, takeUntil, tap } from 'rxjs/operators';
+import { BehaviorSubject, EMPTY, Observable, forkJoin, of, Subject } from 'rxjs';
+import { catchError, map, shareReplay, switchMap, takeUntil, tap } from 'rxjs/operators';
 import { CephServiceSpec } from '~/app/shared/models/service.interface';
 
 @Component({
@@ -41,7 +41,8 @@ export class NvmeofNamespacesListComponent implements OnInit, OnDestroy {
   tableActions: CdTableAction[];
   selection = new CdTableSelection();
   permission: Permission;
-  namespaces$: Observable<NvmeofSubsystemNamespace[]>;
+  namespaces?: (NvmeofSubsystemNamespace & { unique_id: string })[];
+  namespaces$: Observable<(NvmeofSubsystemNamespace & { unique_id: string })[]>;
   private namespaceSubject = new BehaviorSubject<void>(undefined);
 
   private destroy$ = new Subject<void>();
@@ -148,28 +149,32 @@ export class NvmeofNamespacesListComponent implements OnInit, OnDestroy {
     ];
 
     this.namespaces$ = this.namespaceSubject.pipe(
-      switchMap(() => {
-        if (!this.groupHandler.group) {
-          if (this.groupHandler.groupSelectionCleared) {
-            return of([]);
-          }
-          return this.fetchAllGroupsNamespaces();
-        }
-        return this.nvmeofService.listNamespaces(this.groupHandler.group).pipe(
-          map((res: NvmeofSubsystemNamespace[] | { namespaces: NvmeofSubsystemNamespace[] }) =>
-            this.normalizeAndDedup(res)
-          ),
-          catchError(() => of([]))
-        );
+      switchMap(() => this.queryNamespaces()),
+      tap((namespaces) => {
+        this.namespaces = namespaces;
+        this.setTableLoading(false);
       }),
-      tap(() => this.setTableLoading(false)),
-      finalize(() => this.setTableLoading(false)),
       shareReplay({ bufferSize: 1, refCount: true }),
       takeUntil(this.destroy$)
     );
+    this.namespaces$.subscribe();
     this.nvmeofStateService.refresh$
       .pipe(takeUntil(this.destroy$))
       .subscribe(() => this.listNamespaces());
+  }
+
+  private queryNamespaces() {
+    if (!this.groupHandler.group) {
+      if (this.groupHandler.groupSelectionCleared) {
+        return this.fetchAllGroupsNamespaces();
+      }
+      if (this.groupHandler.gwGroupsEmpty) {
+        return of([]);
+      }
+      // Default group is still being resolved. Keep the loading skeleton up.
+      return EMPTY;
+    }
+    return this.fetchNamespacesForGroup(this.groupHandler.group);
   }
 
   private normalizeAndDedup(
@@ -184,7 +189,14 @@ export class NvmeofNamespacesListComponent implements OnInit, OnDestroy {
         seen.add(key);
         return true;
       })
-      .map((ns) => ({ ...ns, unique_id: `${ns.nsid}_${ns['ns_subsystem_nqn']}` }));
+      .map((ns) => {
+        const row = {
+          ...ns,
+          unique_id: `${ns.nsid}_${ns['ns_subsystem_nqn']}`
+        } as NvmeofSubsystemNamespace & { unique_id: string; hosts?: string[] };
+        delete row.hosts;
+        return row;
+      });
   }
 
   private fetchAllGroupsNamespaces() {
