@@ -97,6 +97,14 @@ export class CreateClusterComponent implements OnInit, OnDestroy {
       }
     });
 
+    // Open tearsheet only when explicitly requested and welcome is not set
+    // (overview / hosts). Login uses ?welcome=true and must keep the landing page.
+    this.route.queryParams.subscribe((params) => {
+      if (!params['welcome'] && (params['form'] === true || params['form'] === 'true')) {
+        this.startClusterCreation = false;
+      }
+    });
+
     if (this.permissions.osd?.read) {
       this.osdService.getDeploymentOptions().subscribe((options) => {
         this.deploymentOption = options;

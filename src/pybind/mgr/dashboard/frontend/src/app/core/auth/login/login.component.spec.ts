@@ -43,23 +43,25 @@ describe('LoginComponent', () => {
 
   it('should not show create cluster wizard if cluster creation was successful', () => {
     component.postInstalled = true;
+    const router = TestBed.inject(Router);
+    const navigateByUrlSpy = spyOn(router, 'navigateByUrl').and.returnValue(Promise.resolve(true));
     component.login();
 
-    expect(routerNavigateSpy).toHaveBeenCalledTimes(1);
-    expect(routerNavigateSpy).toHaveBeenCalledWith(['/']);
+    expect(navigateByUrlSpy).toHaveBeenCalledWith('/');
+    expect(routerNavigateSpy).not.toHaveBeenCalled();
   });
 
-  it('should show create cluster wizard if cluster creation was failed', () => {
+  it('should navigate to add-storage?welcome=true when cluster is not post-installed', () => {
     component.postInstalled = false;
+    const router = TestBed.inject(Router);
+    const navigateByUrlSpy = spyOn(router, 'navigateByUrl').and.returnValue(Promise.resolve(true));
     spyOn(TestBed.inject(AuthStorageService), 'getPermissions').and.returnValue({
       configOpt: { create: true, read: true, update: true, delete: true }
     } as any);
     component.login();
 
-    expect(routerNavigateSpy).toHaveBeenCalledTimes(1);
-    expect(routerNavigateSpy).toHaveBeenCalledWith(['/add-storage'], {
-      queryParams: { welcome: true }
-    });
+    expect(navigateByUrlSpy).toHaveBeenCalledWith('/add-storage?welcome=true');
+    expect(routerNavigateSpy).not.toHaveBeenCalled();
   });
 
   it('should show inline error on failed login', () => {
