@@ -985,7 +985,7 @@ Password Policy
 By default the password policy feature is enabled, which includes the
 following checks:
 
-- Is the password longer than N characters?
+- Is the password at least N characters long?
 - Are the old and new password the same?
 
 The password policy feature can be switched on or off completely:
@@ -1043,14 +1043,15 @@ User Accounts
 ^^^^^^^^^^^^^
 
 The Ceph Dashboard supports multiple user accounts. Each user account
-consists of a username, a password (stored in encrypted form using ``bcrypt``),
+consists of a username, a password (stored as a ``bcrypt`` hash),
 an optional name, and an optional email address.
 
 If a new user is created via the Web UI, it is possible to set an option that the
 user must assign a new password when they log in for the first time.
 
-User accounts are stored in the monitors' configuration database, and are
-available to all ``ceph-mgr`` instances.
+User accounts are stored in the monitors' configuration key store
+(``ceph config-key``, key ``mgr/dashboard/accessdb_v2``), and are available to
+all ``ceph-mgr`` instances.
 
 We provide a set of CLI commands to manage user accounts:
 
@@ -1064,11 +1065,13 @@ We provide a set of CLI commands to manage user accounts:
   
   .. prompt:: bash #
 
-     ceph dashboard ac-user-create [--enabled] [--force-password] [--pwd_update_required] <username> -i <file-containing-password> [<rolename>] [<name>] [<email>] [<pwd_expiration_date>]
+     ceph dashboard ac-user-create [--enabled] [--force-password] [--pwd_update_required] [--pwd_expiration_date <timestamp>] <username> -i <file-containing-password> [<rolename>] [<name>] [<email>]
 
-  To bypass password policy checks use the `force-password` option.
-  Add the option `pwd_update_required` so that a newly created user has
-  to change their password after the first login.
+  To bypass password policy checks use the ``--force-password`` option.
+  Add the ``--pwd_update_required`` option so that a newly created user has
+  to change their password after the first login. ``--pwd_expiration_date``
+  takes a future Unix timestamp in seconds. Accounts are enabled by default;
+  ``--enabled=false`` creates a disabled account.
 
 - *Delete User*:
 
@@ -1088,8 +1091,9 @@ We provide a set of CLI commands to manage user accounts:
 
      ceph dashboard ac-user-set-password-hash <username> -i <file-containing-password-hash>
 
-  The hash must be a bcrypt hash and salt, e.g. ``$2b$12$Pt3Vq/rDt2y9glTPSV.VFegiLkQeIpddtkhoFetNApYmIJOY8gau2``.
-  This can be used to import users from an external database.
+  The hash must be a bcrypt hash and salt. This can be used to import users
+  from an external database. Do not use a hash copied from documentation:
+  anyone who knows the matching password can log in.
 
 - *Modify User (name, and email)*:
 
@@ -1134,12 +1138,20 @@ scopes are:
 - **rgw**: includes all features related to RADOS Gateway (RGW) management.
 - **cephfs**: includes all features related to CephFS management.
 - **nfs-ganesha**: includes all features related to NFS Ganesha management.
-- **manager**: include all features related to Ceph Manager
+- **manager**: includes all features related to Ceph Manager
   management.
-- **log**: include all features related to Ceph logs management.
-- **grafana**: include all features related to Grafana proxy.
-- **prometheus**: include all features related to Prometheus alert management.
-- **dashboard-settings**: allows to change dashboard settings.
+- **log**: includes all features related to Ceph logs management.
+- **grafana**: includes all features related to Grafana proxy.
+- **prometheus**: includes all features related to Prometheus alert management.
+- **dashboard-settings**: allows you to change dashboard settings.
+- **nvme-of**: includes all features related to NVMe-oF gateway
+  management.
+- **smb**: includes all features related to SMB management (Tentacle 20.2
+  and later).
+- **cephfs-mirror**: includes all features related to CephFS mirroring
+  (Umbrella 21 and later).
+- **user**: includes all features related to dashboard user and role
+  management.
 
 A *role* specifies a set of mappings between a *security scope* and a set of
 *permissions*. There are four types of permissions:
@@ -1149,11 +1161,13 @@ A *role* specifies a set of mappings between a *security scope* and a set of
 - **update**
 - **delete**
 
-See below for an example of a role specification, in the form of a Python dictionary::
+See below for an example of a role specification, as a Python dictionary
+(``ceph dashboard ac-role-show <rolename>`` prints roles in this form as
+JSON)::
 
   # example of a role
   {
-    'role': 'my_new_role',
+    'name': 'my_new_role',
     'description': 'My new role',
     'scopes_permissions': {
       'pool': ['read', 'create'],
@@ -1169,19 +1183,29 @@ The Dashboard provides a set of predefined roles that we call
 *system roles*, which can be used right away by a fresh Ceph Dashboard
 installation.
 
-The list of system roles are:
+The system roles are:
 
 - **administrator**: allows full permissions for all security scopes.
 - **read-only**: allows *read* permission for all security scopes except
-  dashboard settings.
-- **block-manager**: allows full permissions for *rbd-image*,
-  *rbd-mirroring*, and *iscsi* scopes.
-- **rgw-manager**: allows full permissions for the *rgw* scope
+  *dashboard-settings* and *config-opt*, and in Umbrella 21 and later also
+  except *user*.
+- **block-manager**: allows full permissions for the *rbd-image*,
+  *rbd-mirroring*, *iscsi* and *nvme-of* scopes.
+- **rgw-manager**: allows full permissions for the *rgw* scope.
 - **cluster-manager**: allows full permissions for the *hosts*, *osd*,
-  *monitor*, *manager*, and *config-opt* scopes.
+  *monitor*, *manager*, *config-opt* and *log* scopes.
 - **pool-manager**: allows full permissions for the *pool* scope.
-- **cephfs-manager**: allows full permissions for the *cephfs* scope, and
-  *read* permission for the *hosts* and *pool* scopes.
+- **cephfs-manager**: allows full permissions for the *cephfs* scope, and in
+  later releases also for the *cephfs-mirror* scope.
+- **ganesha-manager**: allows full permissions for the *nfs-ganesha*,
+  *cephfs* and *rgw* scopes.
+- **smb-manager** (Tentacle 20.2 and later): allows full permissions for the
+  *smb*, *cephfs* and *rgw* scopes.
+
+Each role also grants *read* permission on some related scopes, such as
+*grafana* and *prometheus*. These extra permissions differ between
+releases. To see the exact permissions of a role, run
+``ceph dashboard ac-role-show <rolename>``.
 
 The list of available roles can be retrieved with the following command:
 
@@ -1328,11 +1352,9 @@ Resolve IP address to hostname before redirect
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Redirection from a standby dashboard to the active dashboard is done via the
-manager's IP address, not via the manager's hostname. In virtualized
-environments, IP-address-based redirection reduces the incidence of error as
-compared to hostname-based resolution.  Because of the increased risk of error
-due to hostname-based resolution, the option for hostname resolution is
-disabled by default.
+manager's IP address, not via the manager's hostname, because resolving IP
+addresses to hostnames can be error prone in containerized environments.
+For this reason, the option for hostname resolution is disabled by default.
 
 However, in some situations it might be helpful to redirect via the hostname.
 For example, if the configured TLS certificate matches only the hostnames and
@@ -1350,14 +1372,6 @@ Disable hostname redirection by running the following command:
 .. prompt:: bash #
 
    ceph config set mgr mgr/dashboard/redirect_resolve_ip_addr False
-
-.. warning::
-
-   If you attempt to activate redirection by using the command above and you
-   get the error message ``EINVAL: unrecognized config option
-   'mgr/dashboard/redirect_resolve_ip_addr'``, then you might be running a
-   release of Ceph prior to version 17.2.6. This feature was introduced in
-   17.2.6, in this commit: https://github.com/ceph/ceph/pull/48219.
 
 HAProxy example configuration
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -1407,9 +1421,9 @@ redirection on standby nodes.
 Auditing API Requests
 ---------------------
 
-The REST API can log PUT, POST and DELETE requests to the Ceph
-audit log. This feature is disabled by default, but can be enabled with the
-following command:
+The REST API can log all requests other than ``GET`` requests (``PUT``,
+``POST``, ``PATCH``, and ``DELETE``) to the Ceph audit log. This feature is
+disabled by default, but can be enabled with the following command:
 
 .. prompt:: bash #
 
@@ -1417,21 +1431,30 @@ following command:
 
 If enabled, the following parameters are logged per each request:
 
-* from - The origin of the request, e.g. https://[::1]:44410
-* path - The REST API path, e.g. /api/auth
-* method - e.g. PUT, POST or DELETE
-* user - The name of the user, otherwise 'None'
+* ``from``: the origin of the request, for example ``https://[::1]:44410``.
+* ``path``: the REST API path, for example ``/api/auth``.
+* ``method``: ``PUT``, ``POST``, ``PATCH``, or ``DELETE``.
+* ``user``: the name of the user, or ``None``.
 
 The logging of the request payload (the arguments and their values) is enabled
-by default. Execute the following command to disable this behaviour:
+by default. Execute the following command to disable this behavior:
 
 .. prompt:: bash #
 
    ceph dashboard set-audit-api-log-payload <true|false>
 
-A log entry may look like this::
+A log entry, as shown by ``ceph -W audit``, may look like this::
 
-  2018-10-22 15:27:01.302514 mgr.x [INF] [DASHBOARD] from='https://[::ffff:127.0.0.1]:37022' path='/api/rgw/user/klaus' method='PUT' user='admin' params='{"max_buckets": "1000", "display_name": "Klaus Mustermann", "uid": "klaus", "suspended": "0", "email": "klaus.mustermann@ceph.com"}'
+  2026-10-19T15:27:01.302514+0000 mgr.x [INF] [DASHBOARD] from='https://[::ffff:127.0.0.1]:37022' path='/api/rgw/user/klaus' method='PUT' user='admin' params='{"max_buckets": "1000", "display_name": "Klaus Mustermann", "uid": "klaus", "suspended": "0", "email": "klaus.mustermann@ceph.com"}'
+
+API Documentation
+-----------------
+
+The Ceph Dashboard REST API is documented in :doc:`ceph_api/index`. A running
+Dashboard also serves interactive API documentation: click the help (``?``)
+icon at the top right of the page and select **API**.
+
+.. _configuring-nfs-ganesha-in-the-dashboard:
 
 .. _dashboard-nfs-ganesha-management:
 
@@ -1468,14 +1491,14 @@ If you are unsure of the location of the Ceph Dashboard, run the following comma
 
 ::
 
-    "https://host:port"
+    "https://host:port/"
 
 The command returns the URL where the Ceph Dashboard is located: ``https://<host>:<port>/``
 
 .. note::
 
     Many Ceph tools return results in JSON format. We suggest that
-    you install the `jq <https://stedolan.github.io/jq>`_ command-line
+    you install the `jq <https://jqlang.org/>`_ command-line
     utility to facilitate working with JSON data.
 
 
@@ -1489,7 +1512,7 @@ commands:
 
    .. prompt:: bash #
 
-      ceph mgr module ls | jq .enabled_modules
+      ceph mgr module ls -f json | jq .enabled_modules
 
    Ensure the Ceph Dashboard module is listed in the return value of the
    command. Example snipped output from the command above::
@@ -1497,7 +1520,7 @@ commands:
     [
       "dashboard",
       "iostat",
-      "restful"
+      "nfs"
     ]
 
 #. If it is not listed, activate the module with the following command:
@@ -1512,11 +1535,10 @@ commands:
      
      .. prompt:: bash #
 
-        ceph config get mgr log_to_file
+        ceph config show mgr.<id> log_to_file
 
-     ::
-
-        true
+     This shows the value that the running daemon uses. Daemons deployed by
+     cephadm do not log to files by default; see :ref:`cephadm-logs`.
 
    * Get the location of the log file (it's ``/var/log/ceph/<cluster-name>-<daemon-name>.log``
      by default):
@@ -1549,9 +1571,9 @@ commands:
 
         ceph config-key get mgr/dashboard/key
 
-   * If it doesn't return ``true``, run the following command to generate a self-signed
-     certificate or follow the instructions outlined in
-     :ref:`dashboard-ssl-tls-support`:
+   * If either command fails with ``Error ENOENT``, no certificate or key is
+     stored. Run the following command to generate a self-signed certificate,
+     or follow the instructions in :ref:`dashboard-ssl-tls-support`:
 
      .. prompt:: bash #
 
@@ -1582,7 +1604,7 @@ error, run through the procedural checks below:
    This command returns your user data. If the user does not exist, it will
    print::
 
-      Error ENOENT: User <username> does not exist
+      Error ENOENT: User '<username>' does not exist
 
 #. Check if the user is enabled:
 
@@ -1611,7 +1633,7 @@ When an error occurs on the backend, you will usually receive an error
 notification on the frontend. Run through the following scenarios to debug.
 
 #. Check the Ceph Dashboard and ``ceph-mgr`` logfile(s) for any errors. These can
-   found by searching for keywords, such as *500 Internal Server Error*,
+   be found by searching for keywords, such as *500 Internal Server Error*,
    followed by ``traceback``. The end of a traceback contains more details about
    what exact error occurred.
 #. Check your web browser's JavaScript Console for any errors.
@@ -1625,9 +1647,9 @@ Dashboard Debug Flag
 
 With this flag enabled, error traceback is included in backend responses.
 
-To enable this flag via the Ceph Dashboard, navigate from *Cluster* to *Manager
-modules*. Select *Dashboard module* and click the edit button. Click the
-*debug* checkbox and update.
+To enable this flag via the Ceph Dashboard, navigate from *Administration* to
+*Manager modules*. Select *Dashboard module* and click the edit button. Click
+the *debug* checkbox and update.
 
 To enable it via the CLI, run the following command:
 
@@ -1651,31 +1673,40 @@ debugging.
 #. Adjust the logging level of the Ceph Dashboard module via the Dashboard or
    CLI:
 
-   * Navigate from *Cluster* to *Manager modules*. Select *Dashboard module*
-     and click the edit button. Modify the ``log_level`` configuration.
+   * Navigate from *Administration* to *Manager modules*. Select *Dashboard
+     module* and click the edit button. Modify the ``log_level`` configuration.
    * To adjust it via the CLI, run the following command:
 
      .. prompt:: bash #
 
         ceph config set mgr mgr/dashboard/log_level debug
 
-3. High log levels can result in considerable log volume, which can
-easily fill up your filesystem or central log store. Set a calendar reminder for an hour, a day,
-or a week in the future to revert a temporary logging increase. Any current, non-default setting
-may be shown with the below command:
+#. High log levels can result in considerable log volume, which can
+   easily fill up your filesystem or central log store. Set a calendar
+   reminder for an hour, a day, or a week in the future to revert a temporary
+   logging increase. Any current, non-default setting may be shown with the
+   below command:
 
    .. prompt:: bash #
 
       ceph config dump | grep mgr/dashboard/log_level
 
    ::
+
       ...
       mgr advanced  mgr/dashboard/log_level debug
       ...
-    
+
+   To return both settings to their defaults, run:
+
    .. prompt:: bash #
 
-      ceph config reset 11
+      ceph config rm mgr mgr/dashboard/log_level
+      ceph tell mgr config set debug_mgr 2/5
+
+   Do not use ``ceph config reset`` for this. ``ceph config reset <num>``
+   reverts the configuration of the whole cluster to the historical version
+   ``<num>`` shown by ``ceph config log``.
 
 .. _centralized-logging:
 
@@ -1686,8 +1717,9 @@ To learn more about centralized logging, see :ref:`cephadm-monitoring-centralize
 
 1. Create the Loki service on any particular host using "Create Services" option.
 
-2. Similarly create the Promtail service which will be by default deployed 
-   on all the running hosts.
+2. Similarly create the Alloy service, which by default is deployed on all
+   the running hosts. In Squid 19.2 and Tentacle 20.2, create the Promtail
+   service instead.
 
 3. To see debug-level messages as well as info-level events, run the following command via CLI:
 
@@ -1702,21 +1734,26 @@ To learn more about centralized logging, see :ref:`cephadm-monitoring-centralize
       ceph config set global log_to_file true
       ceph config set global mon_cluster_log_to_file true
 
-5. Click on the Daemon Logs tab under Cluster -> Logs.
+5. Go to *Observability* > *Logs* and open the *Daemon Logs* tab (named
+   *Service instance logs* in later releases).
 
-6. You can find some pre-defined labels there on clicking the Log browser button such as filename,
-   job etc that can help you query the logs at one go.
+6. Click the *Label browser* button to see predefined labels, such as
+   ``filename`` and ``job``, that help you query the logs.
 
 7. You can query the logs with LogQL for advanced search and perform some
-   calculations as well - https://grafana.com/docs/loki/latest/logql/.
+   calculations as well - https://grafana.com/docs/loki/latest/query/.
 
 
 Reporting issues from Dashboard
 """""""""""""""""""""""""""""""
 
-Ceph-Dashboard provides two ways to create an issue in the Ceph Issue Tracker,
-either using the Ceph command line interface or by using the Ceph Dashboard
-user interface.
+The Ceph Dashboard and the ``feedback`` Manager module provide two ways to
+create an issue in the Ceph Issue Tracker: the command line and the
+dashboard user interface. Both need the ``feedback`` module:
+
+.. prompt:: bash #
+
+   ceph mgr module enable feedback
 
 To create an issue in the Ceph Issue Tracker, a user needs to have an account
 on the issue tracker. Under the ``my account`` tab in the Ceph Issue Tracker,
@@ -1725,32 +1762,33 @@ when creating a new issue. To store the Ceph API access key, in the CLI run:
 
 .. prompt:: bash #
 
-   ``ceph dashboard set-issue-tracker-api-key -i <file-containing-key>``
+   ceph feedback set api-key <api-key>
 
 Then on successful update, you can create an issue using:
 
 .. prompt:: bash #
 
-   ``ceph dashboard create issue <project> <tracker_type> <subject> <description>``
+   ceph feedback issue report <project> <tracker_type> <subject> <description>
+
+Quote a subject or a description that contains spaces.
 
 The available projects to create an issue on are:
-#. dashboard
-#. block
-#. object
-#. file_system
-#. ceph_manager
-#. orchestrator
-#. ceph_volume
-#. core_ceph
 
-The available tracker types are:
-#. bug
-#. feature
+- ``dashboard``
+- ``block``
+- ``object``
+- ``file_system``
+- ``ceph_manager``
+- ``orchestrator``
+- ``ceph_volume``
+- ``core_ceph``
+
+The available tracker types are ``bug`` and ``feature``.
 
 The subject and description are then set by the user.
 
-The user can also create an issue using the Dashboard user interface. The settings
-icon drop down menu on the top right of the navigation bar has the option to
-``Raise an issue``. On clicking it, a modal dialog opens that has the option to
-select the project and tracker from their respective drop down menus. The subject
-and multiline description are added by the user. The user can then submit the issue.
+You can also create an issue in the dashboard. Open the **Help** menu in
+the top navigation bar and select **Report an issue...**. If the
+``feedback`` module is not enabled, the dialog says so; in Tentacle 20.2
+and later it also offers to enable the module. Select the project and the
+issue type, enter a subject and a description, and submit the issue.
