@@ -1,0 +1,6 @@
+# mounted by client.0 (kernel), no snapshots: auto-upgrade moves its data
+# dir
+overrides:
+  volumes_upgrade:
+    subvolumes:
+      sv_io_0: bare
