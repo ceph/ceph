@@ -5274,6 +5274,24 @@ options:
   default: 0.04
   see_also:
   - bluestore_cache_size
+- name: bluestore_cache_data_shard_weighted
+  type: bool
+  level: advanced
+  desc: Size data cache shards by the bytes they hold
+  long_desc: A placement group always uses the same data cache shard, so the
+    shards fill unevenly. When true, each shard keeps 1/8 of an even split of
+    the data cache budget and the rest goes by the bytes each shard holds, so
+    the whole budget can be used. The bytes beyond an even split are asked of
+    the memory autotuner at the lowest priority, so the data cache grows into
+    unclaimed memory and never takes another cache's recent content. When
+    false, every shard gets an even split.
+  default: true
+  see_also:
+  - bluestore_cache_autotune
+  - bluestore_cache_meta_ratio
+  - bluestore_cache_kv_ratio
+  flags:
+  - runtime
 - name: bluestore_cache_meta_evict_limit
   type: int
   level: advanced

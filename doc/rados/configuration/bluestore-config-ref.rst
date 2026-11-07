@@ -215,6 +215,15 @@ the values specified in the ``bluestore_cache_meta_ratio`` and
 .. confval:: osd_memory_cache_min
 .. confval:: osd_memory_cache_resize_interval
 
+A placement group always uses the same data cache shard, so the shards fill
+unevenly. By default, shards that hold more data get a larger part of the data
+cache budget, so the whole budget can be used. The data cache asks the memory
+autotuner for the bytes beyond an even split at the lowest priority, so it
+grows into memory no other cache claims and never takes another cache's recent
+content. Disable ``bluestore_cache_data_shard_weighted`` to split evenly.
+
+.. confval:: bluestore_cache_data_shard_weighted
+
 
 Manual Cache Sizing
 ===================

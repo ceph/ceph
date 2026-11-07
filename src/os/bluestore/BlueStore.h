@@ -58,6 +58,7 @@
 
 #include "bluestore_types.h"
 #include "BlueStore_fwd.h"
+#include "BlueStore_cache_shards.h"
 #include "BlueFS.h"
 #include "common/EventTrace.h"
 #include "common/admin_socket.h"
@@ -1099,6 +1100,7 @@ private:
   double cache_data_ratio = 0;   ///< cache ratio dedicated to object data
   bool cache_autotune = false;   ///< cache autotune setting
   double cache_age_bin_interval = 0; ///< time to wait between cache age bin rotations
+  std::atomic<bool> cache_data_shard_weighted = {false}; ///< size data cache shards by the bytes they hold
   double cache_autotune_interval = 0; ///< time to wait between cache rebalancing
   std::vector<uint64_t> kv_bins; ///< kv autotune bins
   std::vector<uint64_t> kv_onode_bins; ///< kv onode autotune bins
@@ -1158,10 +1160,15 @@ private:
 
       virtual uint64_t _get_used_bytes() const = 0;
       virtual uint64_t _sum_bins(uint32_t start, uint32_t end) const = 0;
+      /// Fraction of the bytes held to ask the autotuner for; see DataCache.
+      virtual double _request_scale() const {
+        return 1.0;
+      }
 
       virtual int64_t request_cache_bytes(
           PriorityCache::Priority pri, uint64_t total_cache) const {
         int64_t assigned = get_cache_bytes(pri);
+        double scale = _request_scale();
 
         switch (pri) {
         case PriorityCache::Priority::PRI0:
@@ -1172,7 +1179,10 @@ private:
         case PriorityCache::Priority::LAST:
           {
             uint32_t max = get_bin_count();
-	    int64_t request = _get_used_bytes() - _sum_bins(0, max);
+	    // what the age bins did not ask for is asked for here, behind every
+	    // cache's binned content (see DataCache::_request_scale)
+	    int64_t request = _get_used_bytes() -
+	      static_cast<int64_t>(_sum_bins(0, max) * scale);
             return(request > assigned) ? request - assigned : 0;
           }
         default:
@@ -1181,7 +1191,7 @@ private:
             auto prev_pri = static_cast<PriorityCache::Priority>(pri - 1);
             uint64_t start = get_bins(prev_pri);
             uint64_t end = get_bins(pri);
-            int64_t request = _sum_bins(start, end);
+            int64_t request = static_cast<int64_t>(_sum_bins(start, end) * scale);
             return(request > assigned) ? request - assigned : 0;
 	  }
 	}
@@ -1321,6 +1331,26 @@ private:
           bytes += i->sum_bins(start, end);
         }
         return bytes;
+      }
+      // With weighted shard limits the cache can hold its whole commit, and
+      // the autotuner commits what is held plus headroom: asking for all of
+      // it by age would grow the commit at every balance out of the other
+      // caches' age bins. Ask by age only for what an even split would have
+      // held, as before the weighting, and for the rest at LAST, which the
+      // tuner serves from the memory no cache claimed by age. The commit
+      // grows into unclaimed memory and never into another cache's content.
+      double _request_scale() const override {
+        if (!store->cache_data_shard_weighted) {
+          return 1.0;
+        }
+        std::vector<uint64_t> held;
+        held.reserve(store->buffer_cache_shards.size());
+        for (auto i : store->buffer_cache_shards) {
+          // lockless, like _get_used_bytes()
+          held.push_back(i->_get_bytes());
+        }
+        return bluestore_cache_shards::even_split_fraction(
+          get_committed_size(), held);
       }
       virtual std::string get_cache_name() const {
         return "BlueStore Data Cache";
