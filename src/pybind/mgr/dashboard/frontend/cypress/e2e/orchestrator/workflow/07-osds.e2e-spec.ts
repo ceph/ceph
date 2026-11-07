@@ -8,6 +8,10 @@ describe('OSDs page', () => {
   beforeEach(() => {
     cy.login();
     osds.navigateTo();
+    // OSD creation from prior workflow specs can leave the UI busy; wait for
+    // the list to mount before assertions run.
+    cy.get('cd-osd-list', { timeout: 30000 }).should('be.visible');
+    cy.get('cd-osd-list cds-table', { timeout: 30000 }).should('exist');
   });
 
   it('should check if atleast 3 osds are created', { retries: 3 }, () => {
