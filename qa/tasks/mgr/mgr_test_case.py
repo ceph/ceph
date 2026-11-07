@@ -103,6 +103,11 @@ class MgrTestCase(CephTestCase):
     # stops, fails and restarts every mgr a second time.
     MODULE_PORTS: List[Tuple[str, str, int]] = []
 
+    # config version when the class's first test started: tearDown()
+    # resets the config only this far back, so what setUpClass() set, such
+    # as module ports and settings, is still there when the mgrs respawn
+    _class_conf_epoch = None
+
     @classmethod
     def setup_mgrs(cls):
         # for the port-in-use probes below; the map keeps the address
@@ -163,6 +168,27 @@ class MgrTestCase(CephTestCase):
         cls.mgr_cluster.mon_manager.raw_cluster_cmd('config', 'set', 'mds',
                                                     'defer_client_eviction_on_laggy_osds', 'false')
         cls.setup_mgrs()
+
+    @classmethod
+    def tearDownClass(cls):
+        if cls._class_conf_epoch is not None:
+            cls._class_conf_epoch = None
+            cls.mgr_cluster.mon_manager.raw_cluster_cmd(
+                "config", "reset", str(cls.ctx.conf_epoch))
+        super().tearDownClass()
+
+    def setUp(self):
+        super().setUp()
+        cls = type(self)
+        if cls._class_conf_epoch is None:
+            J = json.loads(self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                "config", "log", "1", "--format=json"))
+            cls._class_conf_epoch = J[0]["version"]
+
+    def _config_reset_epoch(self):
+        if self._class_conf_epoch is not None:
+            return self._class_conf_epoch
+        return super()._config_reset_epoch()
 
     @classmethod
     def _unload_module(cls, module_name):
