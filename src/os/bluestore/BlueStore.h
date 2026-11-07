@@ -75,6 +75,9 @@ class FreelistManager;
 class BlueStoreRepairer;
 class SimpleBitmap;
 
+namespace rocksdb {
+  class Env;
+}
 //#define DEBUG_CACHE
 //#define DEBUG_DEFERRED
 #ifdef WITH_CPUTRACE
@@ -377,6 +380,10 @@ public:
   friend class SocketHook;
 
   /////////////////////////////
+
+  static constexpr std::string statfs_cache_dir = "cache";
+  static constexpr std::string statfs_cache_file = "statfs";
+  static constexpr std::string statfs_cache_dir_file = "cache/statfs";
 
   Estimator* create_estimator();
 
@@ -901,6 +908,7 @@ private:
   utime_t next_dump_on_bluefs_alloc_failure;
 
   KeyValueDB *db = nullptr;
+  rocksdb::Env* db_env = nullptr;
   BlockDevice *bdev = nullptr;
   std::string freelist_type;
   FreelistManager *fm = nullptr;
@@ -1129,6 +1137,7 @@ private:
   ceph::mutex vstatfs_lock = ceph::make_mutex("BlueStore::vstatfs_lock");
   volatile_statfs vstatfs;
   osd_pools_map osd_pools; // protected by vstatfs_lock as well
+  bool statfs_loaded = false;
 
   bool per_pool_stat_collection = true;
 
@@ -1415,6 +1424,12 @@ private:
   int _open_db(bool create,
 	       bool to_repair_db=false,
 	       bool read_only = false);
+  void _save_statfs_to_db();
+  void _load_statfs_from_db();
+  void _statfs_to_bufferlist(bufferlist& statsout);
+  bool _statfs_from_bufferlist(const bufferlist& statsin);
+  void _save_statfs_to_file();
+  bool _load_statfs_from_file();
   void _close_db();
   int _open_fm(KeyValueDB::Transaction t,
                bool read_only,
