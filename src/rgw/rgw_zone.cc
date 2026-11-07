@@ -30,7 +30,6 @@ static std::string zone_info_oid_prefix = "zone_info.";
 std::string zone_names_oid_prefix = "zone_names.";
 std::string region_info_oid_prefix = "region_info.";
 std::string zone_group_info_oid_prefix = "zonegroup_info.";
-std::string default_region_info_oid = "default.region";
 std::string default_zone_group_info_oid = "default.zonegroup";
 std::string region_map_oid = "region_map";
 std::string default_zonegroup_name = "default";
