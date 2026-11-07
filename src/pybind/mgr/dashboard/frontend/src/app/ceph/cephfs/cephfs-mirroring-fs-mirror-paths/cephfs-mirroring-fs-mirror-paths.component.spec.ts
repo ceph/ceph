@@ -1361,23 +1361,9 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
       );
     });
 
-    it('should delete snapshot schedules before removing the mirror path', () => {
+    it('should remove the mirror path without deleting snapshot schedules', () => {
       const modalService = TestBed.inject(ModalCdsService) as any;
       const snapshotScheduleService = TestBed.inject(CephfsSnapshotScheduleService) as any;
-      snapshotScheduleService.getSnapshotSchedule.mockReturnValue(
-        of([
-          {
-            path: '/volumes/group/subvol/uuid/..',
-            rel_path: '/path1',
-            schedule: '1h',
-            start: '2024-01-01T00:00:00Z',
-            fs: 'test-fs',
-            subvol: 'subvol',
-            group: 'group'
-          }
-        ])
-      );
-      snapshotScheduleService.delete.mockReturnValue(of({}));
       cephfsService.removeMirrorDirectory.mockReturnValue(of({}));
       component.selection = new CdTableSelection([{ path: '/path1' }]);
       component.fsName = 'test-fs';
@@ -1385,15 +1371,7 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
       component.removePathModal();
       modalService.show.mock.calls[0][1].submitActionObservable().subscribe();
 
-      expect(snapshotScheduleService.delete).toHaveBeenCalledWith({
-        path: '/volumes/group/subvol/uuid/..',
-        schedule: '1h',
-        start: '2024-01-01T00:00:00Z',
-        fs: 'test-fs',
-        retentionPolicy: undefined,
-        subvol: 'subvol',
-        group: 'group'
-      });
+      expect(snapshotScheduleService.delete).not.toHaveBeenCalled();
       expect(cephfsService.removeMirrorDirectory).toHaveBeenCalledWith('test-fs', '/path1');
     });
   });
