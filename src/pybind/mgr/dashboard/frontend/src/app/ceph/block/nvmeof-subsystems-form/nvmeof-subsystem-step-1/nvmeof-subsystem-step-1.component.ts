@@ -33,6 +33,8 @@ export class NvmeofSubsystemsStepOneComponent implements OnInit, TearsheetStep {
   };
 
   hosts: ListenerItem[] = [];
+  gwGroupNetworkMasks: string[] = [];
+  hasGroupNetworkMask = false;
   LISTENER_MODE = {
     AUTO_FETCH: 'auto-fetch',
     MANUAL: 'manual'
@@ -68,9 +70,10 @@ export class NvmeofSubsystemsStepOneComponent implements OnInit, TearsheetStep {
       this.listenersOnly && this.subsystemNQN
         ? this.nvmeofService.listListeners(this.subsystemNQN, this.group)
         : of(null);
+    const groups$ = this.group ? this.nvmeofService.listGatewayGroups() : of(null);
 
-    forkJoin([hosts$, listeners$]).subscribe(
-      ([nvmeofGwNodes, existingListeners]: [Host[], any]) => {
+    forkJoin([hosts$, listeners$, groups$]).subscribe(
+      ([nvmeofGwNodes, existingListeners, gatewayGroups]: [Host[], any, any]) => {
         const listeners = Array.isArray(existingListeners)
           ? existingListeners
           : existingListeners?.listeners || [];
@@ -78,13 +81,41 @@ export class NvmeofSubsystemsStepOneComponent implements OnInit, TearsheetStep {
         this.hosts = nvmeofGwNodes
           .map((h) => ({ content: h.hostname, addr: h.addr }))
           .filter((h) => !consumedHosts.has(h.content));
+
+        const firstItem = gatewayGroups?.[0];
+        const groupsList: any[] = Array.isArray(firstItem)
+          ? firstItem
+          : Array.isArray(gatewayGroups)
+            ? gatewayGroups
+            : [];
+        const currentGroup = groupsList.find(
+          (g: any) => g?.spec?.group === this.group || g?.service_id === this.group
+        );
+        const masks = currentGroup?.spec?.listener_network_masks;
+        if (masks && masks.length > 0) {
+          this.gwGroupNetworkMasks = Array.isArray(masks) ? masks : [masks];
+          this.hasGroupNetworkMask = true;
+          this.formGroup.get('useGroupNetworkMask')?.setValue(true);
+          this.formGroup.get('groupNetworkMasks')?.setValue(this.gwGroupNetworkMasks);
+        } else {
+          this.gwGroupNetworkMasks = [];
+          this.hasGroupNetworkMask = false;
+          this.formGroup.get('useGroupNetworkMask')?.setValue(false);
+          this.formGroup.get('groupNetworkMasks')?.setValue([]);
+        }
       }
     );
   }
 
   createForm() {
     const subnetMaskValidators = [
-      CdValidators.composeIf({ listenerMode: this.LISTENER_MODE.AUTO_FETCH }, [Validators.required])
+      CdValidators.composeIf(
+        {
+          listenerMode: this.LISTENER_MODE.AUTO_FETCH,
+          useGroupNetworkMask: false
+        },
+        [Validators.required]
+      )
     ];
     // Empty array is a valid value for Validators.required in some paths; require
     // at least one selected listener when Add manually is active.
@@ -97,8 +128,11 @@ export class NvmeofSubsystemsStepOneComponent implements OnInit, TearsheetStep {
     ];
 
     if (this.listenersOnly) {
+      this.listenerMode = this.LISTENER_MODE.MANUAL;
       this.formGroup = new CdFormGroup({
-        listenerMode: new UntypedFormControl(this.LISTENER_MODE.AUTO_FETCH),
+        listenerMode: new UntypedFormControl(this.LISTENER_MODE.MANUAL),
+        useGroupNetworkMask: new UntypedFormControl(false),
+        groupNetworkMasks: new UntypedFormControl([]),
         subnetMask: new UntypedFormControl('', subnetMaskValidators),
         listeners: new UntypedFormControl([], listenersValidators)
       });
@@ -124,6 +158,8 @@ export class NvmeofSubsystemsStepOneComponent implements OnInit, TearsheetStep {
           ]
         }),
         listenerMode: new UntypedFormControl(this.LISTENER_MODE.AUTO_FETCH),
+        useGroupNetworkMask: new UntypedFormControl(false),
+        groupNetworkMasks: new UntypedFormControl([]),
         subnetMask: new UntypedFormControl('', subnetMaskValidators),
         listeners: new UntypedFormControl([], listenersValidators)
       });
@@ -131,6 +167,11 @@ export class NvmeofSubsystemsStepOneComponent implements OnInit, TearsheetStep {
 
     this.formGroup.get('listenerMode').valueChanges.subscribe((mode: string) => {
       this.listenerMode = mode;
+      this.formGroup.get('subnetMask')?.updateValueAndValidity();
+    });
+
+    this.formGroup.get('useGroupNetworkMask')?.valueChanges.subscribe(() => {
+      this.formGroup.get('subnetMask')?.updateValueAndValidity();
     });
   }
 

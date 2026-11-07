@@ -25,6 +25,7 @@ export interface NvmeofSubsystem {
   initiator_count?: number;
   has_dhchap_key: boolean;
   network_mask?: string[];
+  use_conf_listener_network_masks?: boolean;
 }
 
 export interface NvmeofSubsystemData extends NvmeofSubsystem {
@@ -214,4 +215,5 @@ export type DetailsStepType = {
   listeners: Array<string>;
   listenerMode?: string;
   subnetMask?: string;
+  useGroupNetworkMask?: boolean;
 };

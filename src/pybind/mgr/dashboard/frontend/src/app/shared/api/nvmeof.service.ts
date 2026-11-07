@@ -270,6 +270,7 @@ export class NvmeofService {
     gw_group: string;
     dhchap_key: string;
     network_mask?: string[];
+    use_conf_listener_network_masks?: boolean;
   }) {
     return this.http.post(`${API_PATH}/subsystem`, request, { observe: 'response' });
   }
