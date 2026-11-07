@@ -81,6 +81,7 @@ export class NvmeofStateService implements OnDestroy {
       'nvmeof/subsystem/create',
       'nvmeof/subsystem/delete',
       'nvmeof/namespace/create',
+      'nvmeof/namespace/edit',
       'nvmeof/namespace/delete'
     ].includes(task.name);
   }
