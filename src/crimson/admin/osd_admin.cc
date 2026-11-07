@@ -100,6 +100,58 @@ template std::unique_ptr<AdminSocketHook>
 make_asok_hook<SendBeaconHook>(crimson::osd::OSD& osd);
 
 /**
+ * An OSD admin hook: scrub the purged snaps
+ */
+class ScrubPurgedSnapsHook : public AdminSocketHook {
+public:
+  explicit ScrubPurgedSnapsHook(crimson::osd::OSD& osd) :
+    AdminSocketHook{"scrub_purged_snaps",
+		    "",
+		    "Scrub purged_snaps vs snapmapper index"},
+    osd(osd)
+  {}
+  seastar::future<tell_result_t> call(const cmdmap_t&,
+				      std::string_view format,
+				      ceph::bufferlist&& input) const final
+  {
+    LOG_PREFIX(AdminSocketHook::ScrubPurgedSnapsHook);
+    DEBUG("");
+    co_await osd.scrub_purged_snaps();
+    co_return tell_result_t();
+  }
+private:
+  crimson::osd::OSD& osd;
+};
+template std::unique_ptr<AdminSocketHook>
+make_asok_hook<ScrubPurgedSnapsHook>(crimson::osd::OSD& osd);
+
+/**
+ * An OSD admin hook: reset the superblock's purged_snaps_last
+ */
+class ResetPurgedSnapsLastHook : public AdminSocketHook {
+public:
+  explicit ResetPurgedSnapsLastHook(crimson::osd::OSD& osd) :
+    AdminSocketHook{"reset_purged_snaps_last",
+		    "",
+		    "Reset the superblock's purged_snaps_last"},
+    osd(osd)
+  {}
+  seastar::future<tell_result_t> call(const cmdmap_t&,
+				      std::string_view format,
+				      ceph::bufferlist&& input) const final
+  {
+    LOG_PREFIX(AdminSocketHook::ResetPurgedSnapsLastHook);
+    DEBUG("");
+    co_await osd.reset_purged_snaps_last();
+    co_return tell_result_t();
+  }
+private:
+  crimson::osd::OSD& osd;
+};
+template std::unique_ptr<AdminSocketHook>
+make_asok_hook<ResetPurgedSnapsLastHook>(crimson::osd::OSD& osd);
+
+/**
  * An OSD admin hook: run bench
  * Usage parameters:
  *   count=Count of bytes to write

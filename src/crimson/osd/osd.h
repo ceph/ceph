@@ -34,6 +34,7 @@
 #include "osd/PGPeeringEvent.h"
 
 class MCommand;
+class MMonGetPurgedSnapsReply;
 class MOSDMap;
 class MOSDPGPCT;
 class MOSDRepOpReply;
@@ -131,6 +132,21 @@ class OSD final : public crimson::net::Dispatcher,
   /// caching the total snap trim queue length across all PGs,
   /// updated periodically by the tick_timer
   uint64_t snap_trim_queue_total = 0;
+
+  /// the epochs (start, last] asked of the monitor by the pending
+  /// purged-snaps request
+  struct purged_snaps_request_t {
+    epoch_t start = 0;
+    epoch_t last = 0;
+  };
+  std::optional<purged_snaps_request_t> purged_snaps_request;
+  /// re-sends the purged-snaps request, if not answered in time (the
+  /// request or the reply may be lost with the monitor session)
+  seastar::timer<seastar::lowres_clock> purged_snaps_retry_timer;
+  bool purged_snaps_scrub_running = false;
+  /// held by the purged snaps scrub. Closed (i.e. waited for) before the
+  /// store is stopped.
+  seastar::gate purged_snaps_scrub_gate;
 
   DebugLevelGuard debug_level_guard;
 
@@ -272,8 +288,36 @@ private:
   seastar::future<> update_heartbeat_peers();
   friend class PGAdvanceMap;
 
+  // --- purged snaps (see osd/purged_snaps.h)
+
+  /// merge the rows of the purged_snaps object, if any of them overlap or
+  /// touch (as they may if written by Classic). Makes sure the object
+  /// exists.
+  seastar::future<> normalize_purged_snaps();
+
+  /// add to 't' the update of the purged_snaps rows with 'new_purged'.
+  /// handle_osd_map_lock must be held until 't' is committed.
+  seastar::future<> record_purged_snaps(
+    ceph::os::Transaction& t,
+    const ceph::osd::purged_snaps::by_epoch_t& new_purged);
+
+  /// before booting: ask the monitor for the purged snaps of the epochs
+  /// not yet recorded (since superblock.purged_snaps_last)
+  seastar::future<> get_purged_snaps(bool retry = false);
+  seastar::future<> handle_get_purged_snaps_reply(
+    Ref<MMonGetPurgedSnapsReply> m);
+
+  /// called on every tick: scrub the purged snaps once per scrub interval
+  void maybe_scrub_purged_snaps();
+
 public:
   seastar::future<> send_beacon();
+  /// find the clones still mapped to purged snaps (in all PGs), and
+  /// requeue those snaps for trimming
+  seastar::future<> scrub_purged_snaps();
+  /// forget which purged snaps were recorded: they are all fetched
+  /// from the monitor on the next boot
+  seastar::future<> reset_purged_snaps_last();
   seastar::future<double> run_bench(int64_t count,
     int64_t bsize,
     int64_t osize,
