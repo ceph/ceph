@@ -43,6 +43,7 @@
 #include "msg/Messenger.h"
 #include "msg/msg_types.h"
 #include "msg/async/AsyncMessenger.h"
+#include "include/ceph_features_ext.h"
 
 typedef boost::mt11213b gen_type;
 
@@ -66,6 +67,49 @@ typedef boost::mt11213b gen_type;
 } while(0);
 
 using namespace std;
+
+// Every connection a test makes must agree on the extended features
+// both ends offer, whatever faults, races and reconnects led to it.
+static std::atomic<int> ext_mismatches{0};
+
+static ceph::feature_set_t expected_ext_features(const Connection *con)
+{
+  if (con->is_loopback) {
+    return ceph_features_ext_supported();
+  }
+  auto& conf = g_ceph_context->_conf;
+  if (!con->is_msgr2() || conf.get_val<bool>("ms_v2_disable_ext_features")) {
+    return {};
+  }
+  return ceph_features_ext_supported() - ceph_parse_features_ext(
+    conf.get_val<std::string>("ms_v2_ext_features_hide"));
+}
+
+static void check_ext_features(Connection *con)
+{
+  if (!(con->get_features_ext() == expected_ext_features(con))) {
+    lderr(g_ceph_context) << __func__ << " " << con << " has "
+                          << con->get_features_ext() << " want "
+                          << expected_ext_features(con) << dendl;
+    ++ext_mismatches;
+  }
+}
+
+// Sets ms_v2_* options for one test and clears them afterwards.
+struct ExtFeaturesConf {
+  std::vector<std::string> keys;
+  void set(const std::string& k, const std::string& v) {
+    g_ceph_context->_conf.set_val_or_die(k, v);
+    g_ceph_context->_conf.apply_changes(nullptr);
+    keys.push_back(k);
+  }
+  ~ExtFeaturesConf() {
+    for (const auto& k : keys) {
+      g_ceph_context->_conf.rm_val(k);
+    }
+    g_ceph_context->_conf.apply_changes(nullptr);
+  }
+};
 
 class MessengerTest : public ::testing::TestWithParam<const char*> {
  public:
@@ -95,6 +139,7 @@ class MessengerTest : public ::testing::TestWithParam<const char*> {
     ASSERT_EQ(client_msgr->get_dispatch_queue_len(), 0);
     delete server_msgr;
     delete client_msgr;
+    ASSERT_EQ(0, ext_mismatches.exchange(0));
   }
 
 };
@@ -139,6 +184,7 @@ class FakeDispatcher : public Dispatcher {
   void ms_handle_fast_connect(Connection *con) override {
     std::scoped_lock l{lock};
     lderr(g_ceph_context) << __func__ << " " << con << dendl;
+    check_ext_features(con);
     auto s = con->get_priv();
     if (!s) {
       auto session = new Session(con);
@@ -150,6 +196,7 @@ class FakeDispatcher : public Dispatcher {
     cond.notify_all();
   }
   void ms_handle_fast_accept(Connection *con) override {
+    check_ext_features(con);
     last_accept = con->get_peer_addrs();
     if (last_accept_con_ptr) {
       *last_accept_con_ptr = con;
@@ -1755,6 +1802,7 @@ class SyntheticDispatcher : public Dispatcher {
 
   void ms_handle_fast_connect(Connection *con) override {
     std::lock_guard l{lock};
+    check_ext_features(con);
     list<uint64_t> c = conn_sent[con];
     for (list<uint64_t>::iterator it = c.begin();
          it != c.end(); ++it)
@@ -1765,6 +1813,7 @@ class SyntheticDispatcher : public Dispatcher {
   }
   void ms_handle_fast_accept(Connection *con) override {
     std::lock_guard l{lock};
+    check_ext_features(con);
     list<uint64_t> c = conn_sent[con];
     for (list<uint64_t>::iterator it = c.begin();
          it != c.end(); ++it)
@@ -2801,6 +2850,185 @@ TEST_P(MessengerTest, MarkdownTest) {
   delete server_msgr2;
 }
 
+// An auth server that records what the client's banner said, and can
+// turn the client away with a reason, as the monitor does.
+struct BannerAuthServer : public DummyAuthClientServer {
+  std::mutex lock;
+  bool seen = false;
+  bool banner_valid = false;
+  uint64_t banner_features = 0;
+  ceph::feature_set_t banner_ext;
+  std::string refuse;
+
+  explicit BannerAuthServer(CephContext *cct) : DummyAuthClientServer(cct) {}
+  int handle_auth_bad_method(Connection *con, AuthConnectionMeta *auth_meta,
+                             uint32_t old_auth_method, int result,
+                             const std::vector<uint32_t>& allowed_methods,
+                             const std::vector<uint32_t>& allowed_modes)
+    override {
+    return -EACCES;  // as MonClient does when no other method is left
+  }
+  int handle_auth_request(Connection *con, AuthConnectionMeta *auth_meta,
+                          bool more, uint32_t auth_method,
+                          const bufferlist& bl, bufferlist *reply) override {
+    std::lock_guard l{lock};
+    seen = true;
+    banner_valid = con->peer_banner_valid;
+    banner_features = con->peer_banner_features;
+    banner_ext = con->peer_banner_ext;
+    if (!refuse.empty()) {
+      con->refusal_reason = refuse;
+      con->refusal_missing_ext = {CEPH_FEATURE_EXT_DEV_TEST_A};
+      return -EPROTONOSUPPORT;
+    }
+    return 1;
+  }
+};
+
+class ExtFeaturesTest : public MessengerTest {
+public:
+  FakeDispatcher cli_dispatcher{false}, srv_dispatcher{true};
+  ConnectionRef srv_con;
+  BannerAuthServer banner_auth{g_ceph_context};
+
+  void start(const char *addr, const ceph::feature_set_t& required = {}) {
+    Messenger::Policy p = server_msgr->get_policy(entity_name_t::TYPE_CLIENT);
+    p.features_ext_required = required;
+    p.features_required_reason = "the test requires them";
+    server_msgr->set_policy(entity_name_t::TYPE_CLIENT, p);
+    server_msgr->set_auth_server(&banner_auth);
+    client_msgr->set_auth_client(&banner_auth);
+    srv_dispatcher.last_accept_con_ptr = &srv_con;
+    entity_addr_t bind_addr;
+    bind_addr.parse(addr);
+    server_msgr->bind(bind_addr);
+    server_msgr->add_dispatcher_head(&srv_dispatcher);
+    server_msgr->start();
+    client_msgr->add_dispatcher_head(&cli_dispatcher);
+    client_msgr->start();
+  }
+  ConnectionRef connect_and_ping() {
+    auto conn = client_msgr->connect_to(server_msgr->get_mytype(),
+                                        server_msgr->get_myaddrs());
+    EXPECT_EQ(conn->send_message(new MPing()), 0);
+    return conn;
+  }
+  bool wait_reply(std::chrono::seconds t = 10s) {
+    std::unique_lock l{cli_dispatcher.lock};
+    return cli_dispatcher.cond.wait_for(l, t, [&] {
+      return cli_dispatcher.got_new;
+    });
+  }
+  void stop() {
+    server_msgr->shutdown();
+    client_msgr->shutdown();
+    server_msgr->wait();
+    client_msgr->wait();
+  }
+};
+
+TEST_P(ExtFeaturesTest, Negotiated) {
+  start("v2:127.0.0.1");
+  auto conn = connect_and_ping();
+  ASSERT_TRUE(wait_reply());
+  ASSERT_EQ(ceph_features_ext_supported(), conn->get_features_ext());
+  ASSERT_TRUE(srv_con);
+  ASSERT_EQ(ceph_features_ext_supported(), srv_con->get_features_ext());
+  stop();
+  // the server knew all of it while authenticating the client
+  std::lock_guard l{banner_auth.lock};
+  ASSERT_TRUE(banner_auth.seen);
+  ASSERT_TRUE(banner_auth.banner_valid);
+  ASSERT_EQ(CEPH_FEATURES_SUPPORTED_DEFAULT, banner_auth.banner_features);
+  ASSERT_TRUE(banner_auth.banner_ext.contains(ceph_features_ext_supported()));
+}
+
+TEST_P(ExtFeaturesTest, Hidden) {
+  ExtFeaturesConf conf;
+  conf.set("ms_v2_ext_features_hide", "1");
+  start("v2:127.0.0.1");
+  auto conn = connect_and_ping();
+  ASSERT_TRUE(wait_reply());
+  ASSERT_EQ(ceph::feature_set_t{CEPH_FEATURE_EXT_DEV_TEST_A},
+            conn->get_features_ext());
+  stop();
+}
+
+TEST_P(ExtFeaturesTest, Required) {
+  start("v2:127.0.0.1", {CEPH_FEATURE_EXT_DEV_TEST_A});
+  auto conn = connect_and_ping();
+  ASSERT_TRUE(wait_reply());
+  stop();
+}
+
+TEST_P(ExtFeaturesTest, RefusedAtAuthWithReason) {
+  banner_auth.refuse = "refused by the test";
+  start("v2:127.0.0.1");
+  auto conn = connect_and_ping();
+  ASSERT_FALSE(wait_reply(3s));
+  ASSERT_EQ(-EPROTONOSUPPORT, conn->rejected_error);
+  ASSERT_EQ("refused by the test", conn->rejected_reason);
+  ASSERT_FALSE(srv_con);
+  stop();
+}
+
+TEST_P(ExtFeaturesTest, MissingIsRefusedAtIdentWithReason) {
+  ExtFeaturesConf conf;
+  conf.set("ms_v2_ext_features_hide", "0");
+  start("v2:127.0.0.1", {CEPH_FEATURE_EXT_DEV_TEST_A});
+  auto conn = connect_and_ping();
+  // retryable, as IDENT_MISSING_FEATURES always was, but with the reason
+  ASSERT_FALSE(wait_reply(3s));
+  ASSERT_EQ("the test requires them", conn->rejected_reason);
+  ASSERT_FALSE(srv_con);
+  stop();
+}
+
+TEST_P(ExtFeaturesTest, OldPeerIsRefused) {
+  ExtFeaturesConf conf;
+  conf.set("ms_v2_disable_ext_features", "true");
+  start("v2:127.0.0.1", {CEPH_FEATURE_EXT_DEV_TEST_A});
+  auto conn = connect_and_ping();
+  ASSERT_FALSE(wait_reply(3s));
+  ASSERT_TRUE(conn->rejected_reason.empty());
+  ASSERT_FALSE(srv_con);
+  stop();
+  std::lock_guard l{banner_auth.lock};
+  ASSERT_FALSE(banner_auth.banner_valid);
+}
+
+TEST_P(ExtFeaturesTest, OldPeers) {
+  ExtFeaturesConf conf;
+  conf.set("ms_v2_disable_ext_features", "true");
+  start("v2:127.0.0.1");
+  auto conn = connect_and_ping();
+  ASSERT_TRUE(wait_reply());
+  ASSERT_TRUE(conn->get_features_ext().empty());
+  stop();
+}
+
+TEST_P(ExtFeaturesTest, Msgr1IsRefused) {
+  start("v1:127.0.0.1", {CEPH_FEATURE_EXT_DEV_TEST_A});
+  auto conn = connect_and_ping();
+  ASSERT_FALSE(wait_reply(3s));
+  ASSERT_FALSE(srv_con);
+  stop();
+}
+
+TEST_P(ExtFeaturesTest, Msgr1) {
+  start("v1:127.0.0.1");
+  auto conn = connect_and_ping();
+  ASSERT_TRUE(wait_reply());
+  ASSERT_TRUE(conn->get_features_ext().empty());
+  stop();
+}
+
+INSTANTIATE_TEST_SUITE_P(
+  Messenger,
+  ExtFeaturesTest,
+  ::testing::Values("async+posix")
+);
+
 INSTANTIATE_TEST_SUITE_P(
   Messenger,
   MessengerTest,
@@ -2821,6 +3049,8 @@ int main(int argc, char **argv) {
   g_ceph_context->_conf.set_val("ms_die_on_bad_msg", "true");
   g_ceph_context->_conf.set_val("ms_die_on_old_message", "true");
   g_ceph_context->_conf.set_val("ms_max_backoff", "1");
+  // every test also checks that unknown extended feature bits are ignored
+  g_ceph_context->_conf.set_val("ms_v2_ext_features_grease", "true");
   common_init_finish(g_ceph_context);
 
   ::testing::InitGoogleTest(&argc, argv);

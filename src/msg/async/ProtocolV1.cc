@@ -2057,6 +2057,10 @@ CtPtr ProtocolV1::handle_connect_message_2() {
 
   uint64_t feat_missing =
       connection->policy.features_required & ~(uint64_t)connect_msg.features;
+  if (!connection->policy.features_ext_required.empty()) {
+    // msgr1 cannot carry extended features
+    feat_missing |= CEPH_FEATUREMASK_SERVER_VAMPIRE;
+  }
   if (feat_missing) {
     ldout(cct, 1) << __func__ << " peer missing required features " << std::hex
                   << feat_missing << std::dec << dendl;

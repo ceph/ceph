@@ -52,6 +52,7 @@
 
 DEFINE_MSGR2_FEATURE(0, 1, REVISION_1)   // msgr2.1
 DEFINE_MSGR2_FEATURE(1, 1, COMPRESSION)  // on-wire compression
+DEFINE_MSGR2_FEATURE(2, 1, EXTENDED_FEATURES)  // ceph_features_ext.h
 
 /*
  * Features supported.  Should be everything above.
@@ -59,6 +60,7 @@ DEFINE_MSGR2_FEATURE(1, 1, COMPRESSION)  // on-wire compression
 #define CEPH_MSGR2_SUPPORTED_FEATURES \
 	(CEPH_MSGR2_FEATURE_REVISION_1 | \
 	 CEPH_MSGR2_FEATURE_COMPRESSION | \
+         CEPH_MSGR2_FEATURE_EXTENDED_FEATURES | \
 	 0ULL)
 
 #define CEPH_MSGR2_REQUIRED_FEATURES (0ULL)
