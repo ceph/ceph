@@ -1,5 +1,6 @@
 .. _ceph-conf-common-settings:
 
+===============
 Common Settings
 ===============
 
@@ -12,10 +13,10 @@ assigned to a particular type of process. For example, some nodes might run
 other nodes might run ``ceph-mon`` daemons.
 
 Each node has a name. The name of a node can be found in its ``host`` setting.
-Monitors also specify a network address and port (that is, a domain name or IP
-address) that can be found in the ``addr`` setting. A basic configuration file
-typically specifies only minimal settings for each instance of monitor daemons.
-For example:
+Clients and daemons find the Monitors through the ``mon_host`` option, which
+lists their addresses or host names, or through DNS SRV records (see
+:ref:`mon-dns-lookup`). A basic configuration file typically specifies only
+minimal settings for each instance of monitor daemons. For example:
 
 
 
@@ -28,11 +29,7 @@ For example:
 
 .. important:: The ``host`` setting's value is the short name of the node. It
    is not an FQDN. It is **NOT** an IP address. To retrieve the name of the
-   node, enter ``hostname -s`` on the command line. Unless you are deploying
-   Ceph manually, do not use ``host`` settings for anything other than initial
-   monitor setup.  **DO NOT** specify the ``host`` setting under individual
-   daemons when using deployment tools like ``chef`` or ``cephadm``. Such tools
-   are designed to enter the appropriate values for you in the cluster map.
+   node, enter ``hostname -s`` on the command line.
 
 
 .. _ceph-network-config:
@@ -65,15 +62,16 @@ One example where temporary files are created by daemons is the use of the
 ``--daemon-output-file=:tmp:`` argument to the ``ceph tell`` command.
 
 
+.. _ceph-monitor-config:
+
 Monitors
 ========
 
 Ceph production clusters typically provision at least three :term:`Ceph
 Monitor` daemons to ensure availability in the event of a monitor instance
-crash. A minimum of three :term:`Ceph Monitor` daemons ensures that the Paxos
-algorithm is able to determine which version of the :term:`Ceph Cluster Map` is
-the most recent. It makes this determination by consulting a majority of Ceph
-Monitors in the quorum.
+crash. The Monitors use the Paxos algorithm to agree on the latest version of
+the :term:`Ceph Cluster Map`, and they can do so only while a majority of them
+(a quorum) are running and can reach each other.
 
 .. note:: You may deploy Ceph with a single monitor, but if the instance fails,
    the lack of other monitors might interrupt data-service availability.
@@ -91,15 +89,15 @@ corresponding directory. With metavariables fully expressed and a cluster named
 
     /var/lib/ceph/mon/ceph-a
 
+On hosts managed by cephadm, the Monitor's data is in
+``/var/lib/ceph/<fsid>/mon.<id>`` on the host, and cephadm mounts that
+directory at the default path inside the Monitor's container.
+
 For additional details, see the :ref:`monitor-config-reference`.
 
 
-.. _ceph-osd-config:
-
 Authentication
 ==============
-
-.. versionadded:: Bobtail 0.56
 
 Presently, CephX is the default and sole authentication mechanism for Ceph.
 Full documentation should be consulted in `Cephx Config Reference`_.
@@ -107,7 +105,7 @@ Full documentation should be consulted in `Cephx Config Reference`_.
 .. _Cephx Config Reference: ../auth-config-ref
 
 
-.. _ceph-monitor-config:
+.. _ceph-osd-config:
 
 
 OSDs
@@ -118,9 +116,12 @@ path::
 
     /var/lib/ceph/osd/$cluster-$id
 
-You or a deployment tool (for example, ``cephadm``) must create the
-corresponding directory. With metavariables fully expressed and a cluster named
-"ceph", the path specified in the above example evaluates to::
+You or a deployment tool must create the corresponding directory;
+``ceph-volume`` creates it when it activates an OSD. On hosts managed by
+cephadm, the OSD's data is in ``/var/lib/ceph/<fsid>/osd.<id>`` on the host,
+and cephadm mounts that directory at the default path inside the OSD's
+container. With metavariables fully expressed and a cluster named "ceph", the
+default path evaluates to::
 
     /var/lib/ceph/osd/ceph-0
 
@@ -177,11 +178,12 @@ Logging`_.
 Example ceph.conf
 =================
 
-Note that since the Mimic release the Monitors maintain a database of option
-settings: the *central config*.  Node-local ``ceph.conf`` files are still
-supported, but in most cases need only contain the first three lines shown
-below.  Maintaining full ``ceph.conf`` files across cluster nodes can be
-tedious and prone to omission and error, especially when daemons are containerized.
+The Monitors maintain a database of option settings: the *central config*.
+Node-local ``ceph.conf`` files are still supported, but in most cases they
+need only the ``[global]`` section with ``fsid`` and ``mon_host``, which is
+what ``ceph config generate-minimal-conf`` produces. Maintaining full
+``ceph.conf`` files across cluster nodes can be tedious and prone to omission
+and error, especially when daemons are containerized.
 The below file is provided as a reference example. Clusters running recent
 releases are best managed primary by central config, with a minimal ``ceph.conf``
 file that defines only how to reach the Monitors and thus rarely requires
@@ -208,17 +210,20 @@ documentation might lead readers to wrongly think that unique cluster names are
 required to use ``rbd-mirror``. They are not required.
 
 Custom cluster names are now considered deprecated and the ability to deploy
-them has already been removed from some tools, although existing custom-name
-deployments continue to operate. The ability to run and manage clusters with
-custom names might be progressively removed by future Ceph releases, so **it is
-strongly recommended to deploy all new clusters with the default name "ceph"**.
+them has already been removed from some tools. In Tentacle and later releases,
+the packaged systemd units (such as ``ceph-osd@`` and ``ceph-mon@``)
+no longer pass ``--cluster``, so they start only the daemons of a cluster named
+``ceph``. The ability to run and manage clusters with custom names might be
+progressively removed by future Ceph releases, so **it is strongly recommended
+to deploy all new clusters with the default name "ceph"**.
 
 Some Ceph CLI commands accept a ``--cluster`` (cluster name) option. This
 option is present only for the sake of backward compatibility. New tools and
 deployments cannot be relied upon to accommodate this option.
 
 If you need to allow multiple clusters to exist on the same host, use
-:ref:`cephadm`, which uses containers to fully isolate each cluster.
+:ref:`cephadm`, which runs each cluster's daemons in containers and keeps
+their data under the cluster's fsid (``/var/lib/ceph/<fsid>``).
 
 .. _Hardware Recommendations: ../../../start/hardware-recommendations
 .. _Network Configuration Reference: ../network-config-ref
