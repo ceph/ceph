@@ -129,6 +129,8 @@ increase or decrease the frequency and depth of scrubbing operations.
 .. confval:: osd_deep_scrub_stride
 .. confval:: osd_scrub_auto_repair
 .. confval:: osd_scrub_auto_repair_num_errors
+.. confval:: osd_deep_scrub_update_digest_min_age
+.. confval:: osd_scrub_retry_pg_state
 
 .. index:: OSD; operations settings
 
