@@ -7,6 +7,7 @@ import {
   RgwZonegroup,
   RgwZoneTreeNode
 } from '~/app/ceph/rgw/models/rgw-multisite';
+import { AllZonesResponse } from '~/app/ceph/rgw/models/rgw-storage-class.model';
 import { Icons } from '../enum/icons.enum';
 import { USER } from '~/app/shared/constants/app.constants';
 
@@ -23,7 +24,8 @@ export class RgwZoneService {
     zonegroup: RgwZonegroup,
     defaultZone: boolean,
     master: boolean,
-    endpoints: string
+    endpoints: string,
+    realmName?: string
   ) {
     let params = new HttpParams();
     params = params.appendAll({
@@ -36,7 +38,8 @@ export class RgwZoneService {
       secret_key: zone.system_key.secret_key,
       tier_type: zone.tier_type,
       sync_from: zone.sync_from,
-      sync_from_all: zone.sync_from_all
+      sync_from_all: zone.sync_from_all,
+      ...(realmName && { realm_name: realmName })
     });
     return this.http.post(`${this.url}`, null, { params: params });
   }
@@ -49,8 +52,8 @@ export class RgwZoneService {
     return this.http.get(`${this.url}/${zone.name}`);
   }
 
-  getAllZonesInfo(): Observable<object> {
-    return this.http.get(`${this.url}/get_all_zones_info`);
+  getAllZonesInfo(): Observable<AllZonesResponse> {
+    return this.http.get<AllZonesResponse>(`${this.url}/get_all_zones_info`);
   }
 
   delete(
@@ -84,7 +87,8 @@ export class RgwZoneService {
     dataExtraPool?: string,
     storageClass?: string,
     dataPoolClass?: string,
-    compression?: string
+    compression?: string,
+    realmName?: string
   ) {
     let requestBody = {
       zone_name: zone.name,
@@ -104,7 +108,8 @@ export class RgwZoneService {
       compression: compression,
       tier_type: zone.tier_type,
       sync_from: zone.sync_from,
-      sync_from_all: zone.sync_from_all
+      sync_from_all: zone.sync_from_all,
+      realm_name: realmName || null
     };
     return this.http.put(`${this.url}/${zone.name}`, requestBody);
   }
@@ -122,8 +127,10 @@ export class RgwZoneService {
     zoneIds.push(zone.id);
     nodes['name'] = zone.name;
     nodes['type'] = 'zone';
-    nodes['name'] = zone.name;
-    nodes['info'] = zone;
+    // Show the zone entry from the parent zonegroup's "zones" field when available;
+    // fall back to the full zone details for standalone zones.
+    const fullZoneDetails = zones?.find((z) => z.id === zone.id || z.name === zone.name);
+    nodes['info'] = zonegroup ? zone : fullZoneDetails || zone;
     nodes['icon'] = Icons.deploy;
     nodes['zone_zonegroup'] = zonegroup;
     nodes['parent'] = zonegroup ? zonegroup.name : '';

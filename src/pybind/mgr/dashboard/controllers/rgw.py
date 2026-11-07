@@ -1546,39 +1546,46 @@ class RgwZonegroup(RESTController):
 
     @allow_empty_body
     # pylint: disable=W0613
-    def get(self, zonegroup_name):
+    def get(self, zonegroup_name, realm_name: Optional[str] = None):
         multisite_instance = RgwMultisite()
-        result = multisite_instance.get_zonegroup(zonegroup_name)
+        result = multisite_instance.get_zonegroup(zonegroup_name, realm_name)
         return result
 
     @Endpoint('GET')
     @ReadPermission
-    def get_placement_target_by_placement_id(self, placement_id):
+    def get_placement_target_by_placement_id(self, placement_id, zonegroup_name: str = ''):
         multisite_instance = RgwMultisite()
-        result = multisite_instance.get_placement_by_placement_id(placement_id)
+        result = multisite_instance.get_placement_by_placement_id(placement_id, zonegroup_name)
         return result
 
     @Endpoint('DELETE', path='storage-class')
     @DeletePermission
-    def remove_storage_class(self, placement_id: str, storage_class: str, zone_name: str = ''):
+    def remove_storage_class(self, placement_id: str, storage_class: str, zone_name: str = '',
+                             zonegroup_name: str = '', realm_name: str = ''):
         multisite_instance = RgwMultisite()
-        result = multisite_instance.delete_placement_targets(placement_id, storage_class, zone_name)
+        result = multisite_instance.delete_placement_targets(placement_id, storage_class,
+                                                             zone_name, realm_name,
+                                                             zonegroup_name)
         return result
 
     @Endpoint('POST', path='storage-class')
     @CreatePermission
     # pylint: disable=W0102
-    def storage_class(self, zone_group, placement_targets: List[Dict[str, str]] = []):
+    def storage_class(self, zone_group, placement_targets: List[Dict[str, str]] = [],
+                      realm_name: Optional[str] = None):
         multisite_instance = RgwMultisite()
-        result = multisite_instance.add_placement_targets(zone_group, placement_targets)
+        result = multisite_instance.add_placement_targets(zone_group, placement_targets,
+                                                          realm_name)
         return result
 
     @Endpoint('PUT', path='storage-class')
     @CreatePermission
     # pylint: disable=W0102
-    def editStorageClass(self, zone_group, placement_targets: List[Dict[str, str]] = []):
+    def editStorageClass(self, zone_group, placement_targets: List[Dict[str, str]] = [],
+                         realm_name: Optional[str] = None):
         multisite_instance = RgwMultisite()
-        result = multisite_instance.modify_placement_targets(zone_group, placement_targets)
+        result = multisite_instance.modify_placement_targets(zone_group, placement_targets,
+                                                             realm_name)
         return result
 
     @Endpoint()
@@ -1602,10 +1609,10 @@ class RgwZonegroup(RESTController):
 
     @allow_empty_body
     # pylint: disable=W0613,W0102
-    def set(self, zonegroup_name: str, realm_name: str, new_zonegroup_name: str,
-            default: str = '', master: str = '', zonegroup_endpoints: str = '',
-            add_zones: List[str] = [], remove_zones: List[str] = [],
-            placement_targets: List[Dict[str, str]] = []):
+    def set(self, zonegroup_name: str, new_zonegroup_name: str,
+            realm_name: Optional[str] = None, default: str = '', master: str = '',
+            zonegroup_endpoints: str = '', add_zones: List[str] = [],
+            remove_zones: List[str] = [], placement_targets: List[Dict[str, str]] = []):
         multisite_instance = RgwMultisite()
         result = multisite_instance.edit_zonegroup(realm_name, zonegroup_name, new_zonegroup_name,
                                                    default, master, zonegroup_endpoints, add_zones,
@@ -1619,12 +1626,13 @@ class RgwZone(RESTController):
     # pylint: disable=W0613
     def create(self, zone_name, zonegroup_name=None, default=False, master=False,
                zone_endpoints=None, access_key=None, secret_key=None, tier_type='',
-               sync_from: str = '', sync_from_all: str = ''):
+               sync_from: str = '', sync_from_all: str = '',
+               realm_name: Optional[str] = None):
         multisite_instance = RgwMultisite()
         result = multisite_instance.create_zone(zone_name, zonegroup_name, default,
                                                 master, zone_endpoints, access_key,
                                                 secret_key, tier_type, sync_from,
-                                                sync_from_all)
+                                                sync_from_all, realm_name=realm_name)
         return result
 
     @allow_empty_body
@@ -1670,13 +1678,14 @@ class RgwZone(RESTController):
             placement_target: str = '', data_pool: str = '', index_pool: str = '',
             data_extra_pool: str = '', storage_class: str = '', data_pool_class: str = '',
             compression: str = '', tier_type: str = '', sync_from: str = '',
-            sync_from_all: str = ''):
+            sync_from_all: str = '', realm_name: Optional[str] = None):
         multisite_instance = RgwMultisite()
         result = multisite_instance.edit_zone(zone_name, new_zone_name, zonegroup_name, default,
                                               master, zone_endpoints, access_key, secret_key,
                                               placement_target, data_pool, index_pool,
                                               data_extra_pool, storage_class, data_pool_class,
-                                              compression, tier_type, sync_from, sync_from_all)
+                                              compression, tier_type, sync_from, sync_from_all,
+                                              realm_name)
         return result
 
     @Endpoint()
@@ -1708,19 +1717,22 @@ class RgwZone(RESTController):
     @Endpoint('POST', path='storage-class')
     @CreatePermission
     def create_storage_class(self, zone_name: str, placement_target: str, storage_class: str,
-                             data_pool: str, compression=''):
+                             data_pool: str, compression='', zonegroup_name: str = ''):
         return self.handle_storage_class(zone_name, placement_target, storage_class, data_pool,
-                                         operation='create', compression=compression)
+                                         operation='create', compression=compression,
+                                         zonegroup_name=zonegroup_name)
 
     @Endpoint('PUT', path='storage-class')
     @CreatePermission
     def edit_storage_class(self, zone_name: str, placement_target: str, storage_class: str,
-                           data_pool: str, compression=''):
+                           data_pool: str, compression='', zonegroup_name: str = ''):
         return self.handle_storage_class(zone_name, placement_target, storage_class, data_pool,
-                                         operation='edit', compression=compression)
+                                         operation='edit', compression=compression,
+                                         zonegroup_name=zonegroup_name)
 
     def handle_storage_class(self, zone_name: str, placement_target: str, storage_class: str,
-                             data_pool: str, operation: str, compression=''):
+                             data_pool: str, operation: str, compression='',
+                             zonegroup_name: str = ''):
         if not (placement_target and storage_class and data_pool):
             raise DashboardException(
                 msg='Failed to get placement target',
@@ -1736,7 +1748,8 @@ class RgwZone(RESTController):
                     placement_target=placement_target,
                     storage_class=storage_class,
                     data_pool=data_pool,
-                    compression=compression
+                    compression=compression,
+                    zonegroup_name=zonegroup_name
                 )
             elif operation == 'edit':
                 multisite_instance.edit_storage_class_zone(
@@ -1744,7 +1757,8 @@ class RgwZone(RESTController):
                     placement_target=placement_target,
                     storage_class=storage_class,
                     data_pool=data_pool,
-                    compression=compression
+                    compression=compression,
+                    zonegroup_name=zonegroup_name
                 )
         except DashboardException as e:
             raise DashboardException(e, http_status_code=404, component='rgw')

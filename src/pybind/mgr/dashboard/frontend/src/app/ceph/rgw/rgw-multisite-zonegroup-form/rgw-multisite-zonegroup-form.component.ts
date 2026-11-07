@@ -50,8 +50,10 @@ export class RgwMultisiteZonegroupFormComponent implements OnInit {
   removedZones: string[];
   isRemoveMasterZone = false;
   addedZones: string[];
-  disableDefault = false;
   disableMaster = false;
+  // True when this non-default zonegroup is eligible to become the default
+  // (only allowed when the zonegroup belongs to the default realm)
+  canSetDefault = false;
 
   constructor(
     public activeModal: NgbActiveModal,
@@ -155,20 +157,10 @@ export class RgwMultisiteZonegroupFormComponent implements OnInit {
         .get('zonegroup_endpoints')
         .setValue(this.info.data.endpoints.toString());
 
-      if (this.info.data.is_default) {
-        this.multisiteZonegroupForm.get('default_zonegroup').disable();
-      }
-      if (
-        !this.info.data.is_default &&
-        this.multisiteZonegroupForm.getValue('selectedRealm') !==
-          this.defaultsInfo['defaultRealmName']
-      ) {
-        this.multisiteZonegroupForm.get('default_zonegroup').disable();
-        this.disableDefault = true;
-      }
-      if (this.info.data.is_master || this.disableMaster) {
-        this.multisiteZonegroupForm.get('master_zonegroup').disable();
-      }
+      // Default is read-only on edit in both directions
+      this.multisiteZonegroupForm.get('default_zonegroup').disable();
+      // Master is read-only on edit in both directions
+      this.multisiteZonegroupForm.get('master_zonegroup').disable();
 
       this.zonegroupZoneNames = this.info.data.zones.map((zone: { [x: string]: any }) => {
         return zone['name'];
