@@ -5510,7 +5510,8 @@ bool OSDMap::try_pg_upmap(
     overfull, underfull,
     more_underfull,
     *orig,
-    out);
+    out,
+    pg.ps());
   if (r < 0)
     return false;
   if (*out == *orig)
@@ -6246,7 +6247,7 @@ int OSDMap::calc_pg_upmaps(
 	  continue;
 	}
 	ceph_assert(orig != out);
-	int pos = find_best_remap(cct, orig, out, existing, osd_deviation);
+	int pos = find_best_remap(cct, orig, out, existing, osd_deviation, pg.ps());
 	if (pos != -1) {
           // append new remapping pairs slowly
           // This way we can make sure that each tiny change will
@@ -6813,7 +6814,8 @@ int OSDMap::find_best_remap (
   const vector<int>& orig,
   const vector<int>& out,
   const set<int>& existing,
-  const map<int,float> osd_deviation) 
+  const map<int,float> osd_deviation,
+  uint32_t seed)
 {
   //
   // Find the best remap from the suggestions in orig and out - the best remap 
@@ -6822,7 +6824,11 @@ int OSDMap::find_best_remap (
   //
   int best_pos = -1;
   float max_dev = 0;
-  for (unsigned i = 0; i < out.size(); ++i) {
+  // Scan from a seed-dependent position so that ties (common: deviations
+  // are PG counts minus the same target) don't always go to the lowest
+  // position, i.e. the primary.
+  for (unsigned k = 0; k < out.size(); ++k) {
+    unsigned i = (k + seed) % out.size();
     if (orig[i] == out[i])
       continue; // skip invalid remappings
     if (existing.count(orig[i]) || existing.count(out[i]))
