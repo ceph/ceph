@@ -454,6 +454,8 @@ class TestFS(TestArgparse):
     def test_fs_remove_data_pool(self):
         self._assert_valid_command(['fs', 'rm_data_pool', 'default', '1'])
         self._assert_valid_command(['fs', 'rm_data_pool', 'default', 'foo'])
+        self._assert_valid_command(['fs', 'rm_data_pool', 'default', 'foo',
+                                    '--yes-i-really-mean-it'])
 
     def test_fs_rm(self):
         self._assert_valid_command(['fs', 'rm', 'default'])

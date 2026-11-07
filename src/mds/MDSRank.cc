@@ -61,6 +61,7 @@
 #include "osdc/Objecter.h"
 #include "common/HeartbeatMap.h"
 #include "ScrubStack.h"
+#include "MigrateQueue.h"
 #include "events/ESubtreeMap.h"
 #include "events/ELid.h"
 #include "Mutation.h"
@@ -522,6 +523,7 @@ MDSRank::MDSRank(
   balancer = new MDBalancer(this, messenger, monc);
 
   scrubstack = new ScrubStack(mdcache, clog, finisher);
+  migrate_queue = new MigrateQueue(this);
 
   inotable = new InoTable(this);
   snapserver = new SnapServer(this, monc);
@@ -555,6 +557,7 @@ MDSRank::~MDSRank()
     hb = nullptr;
   }
 
+  if (migrate_queue) { delete migrate_queue; migrate_queue = nullptr; }
   if (scrubstack) { delete scrubstack; scrubstack = NULL; }
   if (mdcache) { delete mdcache; mdcache = NULL; }
   if (mdlog) { delete mdlog; mdlog = NULL; }
@@ -763,6 +766,7 @@ void MDSRankDispatcher::tick()
     }
     mdcache->find_stale_fragment_freeze();
     mdcache->migrator->find_stale_export_freeze();
+    migrate_queue->tick();
 
     if (mdsmap->get_tableserver() == whoami) {
       snapserver->check_osd_map(false);
@@ -786,7 +790,12 @@ void MDSRankDispatcher::tick()
 
   // shut down?
   if (is_stopping()) {
-    if (mdcache->shutdown_pass()) {
+    migrate_queue->tick();
+    std::ostringstream mq;
+    if (!migrate_queue->drained(mq)) {
+      // Before anything else: the sub-jobs still need the journal.
+      clog->info() << "MDS rank " << whoami << " waiting: " << mq.str();
+    } else if (mdcache->shutdown_pass()) {
       uint64_t pq_progress = 0 ;
       uint64_t pq_total = 0;
       size_t pq_in_flight = 0;
@@ -1220,6 +1229,7 @@ bool MDSRank::is_valid_message(const cref_t<Message> &m) {
       type == MSG_MDS_INODEFILECAPS ||
       type == MSG_MDS_SCRUB ||
       type == MSG_MDS_SCRUB_STATS ||
+      type == MSG_MDS_MIGRATE ||
       type == CEPH_MSG_CLIENT_CAPS ||
       type == CEPH_MSG_CLIENT_CAPRELEASE ||
       type == CEPH_MSG_CLIENT_LEASE) {
@@ -1320,6 +1330,11 @@ void MDSRank::handle_message(const cref_t<Message> &m)
     case MSG_MDS_SCRUB_STATS:
       ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MDS);
       scrubstack->dispatch(m);
+      break;
+
+    case MSG_MDS_MIGRATE:
+      ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MDS);
+      migrate_queue->dispatch(m);
       break;
 
     default:
@@ -2148,6 +2163,9 @@ void MDSRank::active_start()
 {
   dout(1) << "active_start" << dendl;
 
+  // A rank back from down:stopped comes here without recovery_done().
+  migrate_queue->load();
+
   m_is_active = true;
   mds_dmclock_scheduler->set_mds_is_active(true);
   mds_dmclock_scheduler->try_enable_qos_feature();
@@ -2186,10 +2204,13 @@ void MDSRank::recovery_done(int oldstate)
   dout(1) << "recovery_done -- successful recovery!" << dendl;
   ceph_assert(is_clientreplay() || is_active());
 
+  migrate_queue->load();
+
   if (oldstate == MDSMap::STATE_CREATING)
     return;
 
   mdcache->start_recovered_truncates();
+  mdcache->start_recovered_migrates();
   mdcache->start_purge_inodes();
   mdcache->start_files_to_recover();
 
@@ -2936,6 +2957,28 @@ void MDSRankDispatcher::handle_asok_command(
 	      }));
 	}));
     return;
+  } else if (command == "migrate status") {
+    std::lock_guard l(mds_lock);
+    migrate_queue->dump(f);
+  } else if (command == "migrate pause" || command == "migrate resume" ||
+             command == "migrate abort") {
+    auto c = command == "migrate pause" ? MigrateQueue::Control::PAUSE :
+             command == "migrate resume" ? MigrateQueue::Control::RESUME :
+             MigrateQueue::Control::ABORT;
+    std::optional<uint64_t> id;
+    int64_t i;
+    if (cmd_getval(cmdmap, "id", i))
+      id = i;
+    auto respond = new AsyncResponse(f, std::move(on_finish));
+    finisher->queue(
+      new LambdaContext(
+        [this, respond, c, id](int) {
+          std::lock_guard l(mds_lock);
+          int r = migrate_queue->control(c, id, respond->ss, respond);
+          if (r < 0)
+            respond->complete(r);
+        }));
+    return;
   } else if (command == "scrub abort") {
     if (!is_active()) {
       *css << "MDS is not active";
@@ -3039,7 +3082,14 @@ void MDSRankDispatcher::handle_asok_command(
       r = -EINVAL;
       goto out;
     }
-    command_export_dir(f, path, (mds_rank_t)rank);
+    frag_t fg;
+    string frag;
+    if (cmd_getval(cmdmap, "frag", frag) && !fg.parse(frag.c_str())) {
+      *css << "malformed frag";
+      r = -EINVAL;
+      goto out;
+    }
+    command_export_dir(f, path, (mds_rank_t)rank, fg);
   } else if (command == "dump cache") {
     std::lock_guard l(mds_lock);
     int64_t timeout = 0;
@@ -3327,9 +3377,10 @@ void MDSRank::command_get_subtrees(Formatter *f)
 
 void MDSRank::command_export_dir(Formatter *f,
     std::string_view path,
-    mds_rank_t target)
+    mds_rank_t target,
+    frag_t fg)
 {
-  int r = _command_export_dir(path, target);
+  int r = _command_export_dir(path, target, fg);
   f->open_object_section("results");
   f->dump_int("return_code", r);
   f->close_section(); // results
@@ -3337,7 +3388,8 @@ void MDSRank::command_export_dir(Formatter *f,
 
 int MDSRank::_command_export_dir(
     std::string_view path,
-    mds_rank_t target)
+    mds_rank_t target,
+    frag_t fg)
 {
   auto fp = filepath(path, {.drop_trailing = true});
 
@@ -3353,9 +3405,9 @@ int MDSRank::_command_export_dir(
     derr << "bad path '" << path << "'" << dendl;
     return -ENOENT;
   }
-  CDir *dir = in->get_dirfrag(frag_t());
+  CDir *dir = in->get_dirfrag(fg);
   if (!dir || !(dir->is_auth())) {
-    derr << "bad export_dir path dirfrag frag_t() or dir not auth" << dendl;
+    derr << "bad export_dir path dirfrag " << fg << " or dir not auth" << dendl;
     return -EINVAL;
   }
 
