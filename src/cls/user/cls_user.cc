@@ -457,6 +457,8 @@ static int cls_user_reset_stats2(cls_method_context_t hctx,
   cls_user_header header;
   string from_index{op.marker}, prefix;
   cls_user_reset_stats2_ret ret;
+  /* continue from the stats accumulated by the previous calls */
+  ret.acc_stats = op.acc_stats;
 
   map<string, buffer::list> keys;
   int rc = cls_cxx_map_get_vals(hctx, from_index, prefix, MAX_ENTRIES,
