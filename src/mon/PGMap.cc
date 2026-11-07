@@ -3321,6 +3321,8 @@ void PGMap::get_health_checks(
 	summary += " experiencing BlueFS spillover";
       } else if (asum.first == "BLUESTORE_NO_COMPRESSION") {
 	summary += " have broken BlueStore compression";
+      } else if (asum.first == "BLUESTORE_INVALID_COMPRESSION_PARAMS") {
+	summary += " have invalid BlueStore compression parameters";
       } else if (asum.first == "BLUESTORE_LEGACY_STATFS") {
 	summary += " reporting legacy (not per-pool) BlueStore stats";
       } else if (asum.first == "BLUESTORE_DISK_SIZE_MISMATCH") {
