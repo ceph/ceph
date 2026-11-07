@@ -487,7 +487,7 @@ class Module(MgrModule, CherryPyConfig):
         try:
             rgw_service_manager = RgwServiceManager()
             rgw_service_manager.unset_rgw_hostname(daemon_name)
-            return 0, f'RGW hostname for daemon {daemon_name} resetted', ''
+            return 0, f'RGW hostname for daemon {daemon_name} reset', ''
         except Exception as error:
             return -errno.EINVAL, '', str(error)
 
