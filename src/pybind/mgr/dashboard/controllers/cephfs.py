@@ -12,7 +12,7 @@ import cherrypy
 from .. import mgr
 from ..exceptions import DashboardException
 from ..security import Scope
-from ..services.ceph_service import CephService
+from ..services.ceph_service import CephService, SendCommandError
 from ..services.cephfs import CephFS as CephFS_
 from ..services.cephfs import ensure_mirroring_client_caps, \
     get_subvolumegroup_path, is_unmanaged_volume_entry, unmanaged_volume_info
@@ -533,7 +533,12 @@ class CephFS(RESTController):
         except AttributeError:
             raise cherrypy.HTTPError(404,
                                      "No cephfs with id {0}".format(fs_id))
-        except RuntimeError:
+        except (RuntimeError, SendCommandError, cephfs.Error):
+            # MDS down: send_command may raise SendCommandError, or (via
+            # mgr_module → LibCephFS.mds_command2) cephfs.WouldBlock. Note
+            # cephfs.OSError/WouldBlock are NOT subclasses of builtin OSError.
+            if suppress_get_errors == 'True':
+                return {'status': ViewCache.VALUE_NONE, 'data': []}
             raise cherrypy.HTTPError(500,
                                      f"Could not fetch client(s), maybe there "
                                      f"is no active MDS on CephFS {fs_id} or "
@@ -799,7 +804,11 @@ class CephFSClients(object):
     def get(self, suppress_errors='True'):
         try:
             ret = CephService.send_command('mds', 'session ls', srv_spec='{0}:0'.format(self.fscid))
-        except RuntimeError:
+        except (RuntimeError, SendCommandError, cephfs.Error):
+            # When rank 0 is failed/unreachable, mgr send_command for MDS goes
+            # through LibCephFS.mds_command2 and raises cephfs.WouldBlock
+            # (cephfs.Error), not builtin OSError / RuntimeError. SendCommandError
+            # covers the rados path. Default suppress keeps /tabs usable.
             if suppress_errors == 'True':
                 ret = []
             else:
