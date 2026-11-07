@@ -1318,3 +1318,200 @@ if(DOXYGEN_FOUND)
     rgw
     COMMENT "Generate C++ documentation")
 endif()
+
+# Precompiled headers (WITH_PCH), for the targets measured to benefit.
+# Compile CPU per target with vs. without PCH, PCH build included, Debug:
+#
+#                            Clang    GCC
+#   common-common-objs        -69%   -27%
+#   rbd                       -67%   -21%
+#   common-objs               -48%   -23%
+#   bluestore                 -39%   -28%
+#   common-msg-objs           -39%   -26%
+#   ceph-mgr                  -28%   -12%
+#
+# Group payloads add a target's own entry headers to the core one.  With the
+# core payload alone, rgw, osd, mon, mds, unittest_librbd and
+# unittest_rbd_mirror saved only 8 to 29% with Clang.
+#
+#                            Clang    GCC
+#   librbd_plugin_pwl_cache   -67%   -34%
+#   rgw_common                -65%    -9%
+#   rbd_mirror_internal       -63%   -41%
+#   rgw_a                     -62%   -21%
+#   rbd_internal              -56%   -40%
+#   unittest_librbd           -55%   -24%
+#   rbd_mirror_test           -55%   -20%
+#   rbd_test                  -51%   -15%
+#   mon                       -51%   -16%
+#   osd                       -48%   -19%
+#   mds                       -47%   -22%
+#   unittest_rbd_mirror       -39%   -14%
+#
+# rgw_a_standalone and rgw_common_standalone build the same sources as rgw_a
+# and rgw_common.  With Clang, Release builds gained 11 to 74%.
+#
+# A change to a group header rebuilds all of the target's TUs.  That pays off
+# only if more of them include it than the share of cost they keep with the
+# payload: Monitor.h is in 64% of mon's TUs, which keep 49% of their cost.
+# BlueStore.h, MDCache.h and Objecter.h failed this.
+#
+# A target's size and per-file cost do not predict its gain, so measure before
+# adding one.  The payload hides a missing #include; builds without WITH_PCH
+# catch it.
+if(WITH_PCH)
+  # With ccache from WITH_CCACHE, the PCH targets compile through a script:
+  # - It appends pch_defines and time_macros, without which objects built
+  #   against a PCH never hit, to CCACHE_SLOPPINESS.  That replaces the
+  #   ccache.conf value, so it starts from the variable if set when building,
+  #   else from the ccache.conf value read here; ccache drops duplicates.
+  # - It deletes GCC's old .gch first: ccache hashes it as an input of the
+  #   compile replacing it, so that compile never hits, and GCC's output
+  #   differs on every run, so the objects using it miss too.  No other
+  #   compile names a .gch.
+  if(WITH_CCACHE AND CMAKE_CXX_COMPILER_LAUNCHER STREQUAL CCACHE_EXECUTABLE)
+    execute_process(
+      COMMAND ${CCACHE_EXECUTABLE} --get-config sloppiness
+      OUTPUT_VARIABLE ccache_sloppiness
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+      ERROR_QUIET)
+    string(CONFIGURE [=[
+      for a; do case $a in *.gch) rm -f "$a" ;; esac; done
+      s=${CCACHE_SLOPPINESS:-@ccache_sloppiness@}
+      CCACHE_SLOPPINESS="$s,pch_defines,time_macros" \
+        exec "@CCACHE_EXECUTABLE@" "$@"
+    ]=] script @ONLY)
+    file(WRITE ${CMAKE_BINARY_DIR}/ccache-pch.sh "${script}")
+    set(pch_launcher sh ${CMAKE_BINARY_DIR}/ccache-pch.sh)
+  endif()
+
+  # Gives each of <targets> a precompiled header of the headers in <payload>:
+  # <system> headers, or paths relative to src/.
+  function(ceph_pch_apply payload)
+    list(TRANSFORM payload PREPEND "${CMAKE_CURRENT_SOURCE_DIR}/" REGEX "^[^<]")
+    # A ">" would end the generator expression.
+    list(TRANSFORM payload REPLACE ">$" "$<ANGLE-R>")
+    list(TRANSFORM payload PREPEND "$<$<COMPILE_LANGUAGE:CXX>:")
+    list(TRANSFORM payload APPEND ">")
+    # Clang stores input mtimes in the PCH, so with ccache a rebuilt one
+    # differs and every object built against it misses.  Only with
+    # WITH_CCACHE, so that otherwise Clang keeps checking them.  With GCC,
+    # ccache and sccache can hash a PCH's preprocessed source, which lacks
+    # #defines, and return a stale PCH after a macro changed; -dD keeps them,
+    # and doesn't change objects.
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+      set(pch_option -dD)
+    elseif(WITH_CCACHE)
+      set(pch_option "SHELL:-Xclang -fno-pch-timestamp")
+    endif()
+    foreach(tgt IN LISTS ARGN)
+      # Some targets exist only with certain build options.
+      if(NOT TARGET ${tgt})
+        continue()
+      endif()
+      # fmt is not on the tree-wide include path with WITH_SYSTEM_FMT.  Not
+      # target_link_libraries(): CMake forbids mixing its plain signature,
+      # which several of these targets use, with the keyword one.
+      target_include_directories(${tgt} SYSTEM PRIVATE
+        $<TARGET_PROPERTY:${FMT_LIB},INTERFACE_INCLUDE_DIRECTORIES>)
+      target_compile_definitions(${tgt} PRIVATE
+        $<TARGET_PROPERTY:${FMT_LIB},INTERFACE_COMPILE_DEFINITIONS>)
+      target_compile_options(${tgt} PRIVATE
+        "$<$<COMPILE_LANGUAGE:CXX>:${pch_option}>")
+      if(pch_launcher)
+        set_property(TARGET ${tgt}
+          PROPERTY CXX_COMPILER_LAUNCHER ${pch_launcher})
+      endif()
+      target_precompile_headers(${tgt} PRIVATE ${payload})
+      # A PCH is built with its target's settings, and the compiler may use it
+      # without a warning even where a source's own settings differ.  Such
+      # sources are compiled without it.
+      get_target_property(dir ${tgt} SOURCE_DIR)
+      get_target_property(sources ${tgt} SOURCES)
+      list(FILTER sources EXCLUDE REGEX "\\$<")
+      list(TRANSFORM sources PREPEND "${dir}/" REGEX "^[^/]")
+      foreach(src IN LISTS sources)
+        foreach(prop COMPILE_FLAGS COMPILE_OPTIONS COMPILE_DEFINITIONS
+            INCLUDE_DIRECTORIES)
+          get_source_file_property(value ${src} TARGET_DIRECTORY ${tgt} ${prop})
+          if(value)
+            set_source_files_properties(${src} TARGET_DIRECTORY ${tgt}
+              PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
+          endif()
+        endforeach()
+      endforeach()
+    endforeach()
+  endfunction()
+
+  # Core payload: std, fmt, boost and Ceph headers frequent and expensive
+  # across these targets; target-specific ones go into the groups below, or
+  # every target would rebuild when they change.  Core changes, mostly to the
+  # generated option headers, rebuild these targets in most weeks anyway.
+  # dout.h is safe: dout_subsys and dout_prefix expand at the use site.  A TU
+  # that #undefs dout_prefix must define it again.
+  set(core
+    <algorithm>
+    <atomic>
+    <chrono>
+    <functional>
+    <iostream>
+    <map>
+    <memory>
+    <mutex>
+    <optional>
+    <regex>
+    <set>
+    <shared_mutex>
+    <sstream>
+    <string>
+    <string_view>
+    <thread>
+    <unordered_map>
+    <variant>
+    <vector>
+    <boost/variant.hpp>
+    <fmt/chrono.h>
+    <fmt/format.h>
+    <fmt/ostream.h>
+    common/ceph_context.h
+    common/ceph_mutex.h
+    common/ceph_time.h
+    common/cmdparse.h
+    common/config_proxy.h
+    common/dout.h
+    include/buffer.h
+    include/Context.h
+    include/denc.h
+    include/encoding.h
+    include/types.h
+    include/uuid.h
+    msg/msg_types.h)
+  ceph_pch_apply("${core}"
+    bluestore
+    ceph-mgr
+    common-common-objs
+    common-msg-objs
+    common-objs
+    rbd)
+  # Group payloads: the core one plus a group's own headers.
+  ceph_pch_apply("${core};librbd/ImageCtx.h"
+    librbd_plugin_pwl_cache
+    rbd_internal
+    rbd_mirror_internal
+    rbd_mirror_test
+    rbd_test)
+  ceph_pch_apply("${core};test/librbd/mock/MockImageCtx.h"
+    unittest_librbd
+    unittest_rbd_mirror)
+  ceph_pch_apply("${core};mds/MDSRank.h"
+    mds)
+  ceph_pch_apply("${core};mon/Monitor.h"
+    mon)
+  ceph_pch_apply("${core};osd/osd_types.h;osd/PG.h"
+    osd)
+  ceph_pch_apply("${core};rgw/rgw_common.h;rgw/rgw_sal.h"
+    rgw_a
+    rgw_a_standalone
+    rgw_common
+    rgw_common_standalone)
+endif()
