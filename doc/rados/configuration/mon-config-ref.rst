@@ -309,8 +309,10 @@ Storage Capacity
 ----------------
 
 When a Ceph Storage Cluster gets close to its maximum capacity
-(see ``mon_osd_full_ratio``), Ceph prevents you from writing to or reading from OSDs
-as a safety measure to prevent data loss. Therefore, letting a
+(see ``mon_osd_full_ratio``), affected pools are marked full and Ceph
+blocks **new data writes** to those pools as a safety measure to prevent data
+loss. RADOS read operations are not blocked by the full ratio itself (cluster
+reads can still be paused administratively with ``ceph osd pause``). Therefore, letting a
 production Ceph Storage Cluster approach its full ratio is not a good practice,
 because it sacrifices high availability. The default full ratio is ``.95``, or
 95% of capacity. This a very aggressive setting for a test cluster with a small
@@ -324,7 +326,7 @@ number of OSDs.
 A common scenario for test clusters involves a system administrator removing an
 OSD from the Ceph Storage Cluster, watching the cluster rebalance, then removing
 another OSD, and another, until at least one OSD eventually reaches the full
-ratio and the cluster locks up. We recommend a bit of capacity
+ratio and new writes to the affected pools fail with ``ENOSPC``. We recommend a bit of capacity
 planning even with a test cluster. Planning enables you to gauge how much spare
 capacity you will need in order to maintain high availability. Ideally, you want
 to plan for a series of Ceph OSD Daemon failures where the cluster can recover
@@ -337,8 +339,8 @@ Ceph Nodes with one OSD per host, each OSD reading from
 and writing to a 3TB drive. So this exemplary Ceph Storage Cluster has a maximum
 actual capacity of 99TB. With a ``mon osd full ratio`` of ``0.95``, if the Ceph
 Storage Cluster falls to 5TB of remaining capacity, the cluster will not allow
-Ceph clients to read and write data. So the Ceph Storage Cluster's operating
-capacity is 95TB, not 99TB.
+Ceph clients to write new data to full pools (reads continue). So the Ceph Storage Cluster's operating
+capacity for writes is 95TB, not 99TB.
 
 .. ditaa::
  +--------+  +--------+  +--------+  +--------+  +--------+  +--------+
