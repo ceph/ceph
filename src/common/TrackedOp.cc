@@ -299,7 +299,7 @@ bool OpTracker::dump_ops_in_flight(Formatter *f, bool print_only_blocked, set<st
     ceph_assert(NULL != sdata); 
     std::lock_guard locker(sdata->ops_in_flight_lock_sharded);
     for (auto& op : sdata->ops_in_flight_sharded) {
-      if (print_only_blocked && (now - op.get_initiated() <= complaint_time))
+      if (print_only_blocked && op.get_age(now) <= complaint_time)
         break;
       if (!op.filter_out(filters))
         continue;
@@ -538,7 +538,7 @@ void OpTracker::get_age_ms_histogram(pow2_hist_t *h)
     std::lock_guard locker(sdata->ops_in_flight_lock_sharded);
 
     for (auto& i : sdata->ops_in_flight_sharded) {
-      utime_t age = now - i.get_initiated();
+      utime_t age = i.get_age(now);
       uint32_t ms = (long)(age * 1000.0);
       h->add(ms);
     }
@@ -634,7 +634,7 @@ void TrackedOp::dump(utime_t now, Formatter *f, OpTracker::dumper lambda) const
     return;
   f->dump_string("description", get_desc());
   f->dump_stream("initiated_at") << get_initiated();
-  f->dump_float("age", now - get_initiated());
+  f->dump_float("age", get_age(now));
   f->dump_float("duration", get_duration());
   f->dump_bool("continuous", is_continuous());
   {
