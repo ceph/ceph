@@ -19,6 +19,7 @@
 #include <openssl/evp.h>
 
 #include "common/ceph_json.h"
+#include "common/dout_fmt.h"
 #include "common/errno.h"
 #include "include/scope_guard.h"
 
@@ -71,16 +72,16 @@ int read_key_store(const DoutPrefixProvider* dpp,
     }
     int ret = read_record_file(dpp, path, doc);
     if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: master keys: " << path << ": "
-	<< cpp_strerror(-ret) << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: master keys: {}: {}", path,
+			    cpp_strerror(-ret));
     }
     return ret;
   }
 
   const std::string& prog = settings.master_keys_get_executable;
   if (prog.empty()) {
-    ldpp_dout(dpp, 0) << "ERROR: NC_MASTER_KEYS_STORE_TYPE is "
-      "\"executable\" and NC_MASTER_KEYS_GET_EXECUTABLE is empty" << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: NC_MASTER_KEYS_STORE_TYPE is \"executable\" "
+			  "and NC_MASTER_KEYS_GET_EXECUTABLE is empty");
     return -ENOENT;
   }
 
@@ -138,8 +139,7 @@ int read_key_store(const DoutPrefixProvider* dpp,
     return ret;
   }
   if (!WIFEXITED(status) || (WEXITSTATUS(status) != 0)) {
-    ldpp_dout(dpp, 0) << "ERROR: " << prog << " did not exit cleanly ("
-      << status << ")" << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: {} did not exit cleanly ({})", prog, status);
     return -EIO;
   }
   return 0;
@@ -184,7 +184,7 @@ int NooBaaMasterKeys::load(const DoutPrefixProvider* dpp,
 
   JSONParser p;
   if (!p.parse(doc.data(), doc.size())) {
-    ldpp_dout(dpp, 0) << "ERROR: the master key store is not JSON" << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: the master key store is not JSON");
     return -EBADMSG;
   }
 
@@ -193,8 +193,8 @@ int NooBaaMasterKeys::load(const DoutPrefixProvider* dpp,
 
     JSONObj* all = p.find_obj("master_keys_by_id");
     if (!all) {
-      ldpp_dout(dpp, 0) << "ERROR: the master key store has no "
-	"master_keys_by_id" << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: the master key store has no "
+			    "master_keys_by_id");
       return -ENOKEY;
     }
     for (auto i = all->find_first(); !i.end(); ++i) {
@@ -212,34 +212,34 @@ int NooBaaMasterKeys::load(const DoutPrefixProvider* dpp,
        * `secret_is_plausible()` would then be the only thing to
        * notice. */
       if (k.cipher_type != "aes-256-gcm") {
-	ldpp_dout(dpp, 0) << "ERROR: master key " << k.id << " uses \""
-	  << k.cipher_type << "\", which this does not implement" << dendl;
+	ldpp_dout_fmt(dpp, 0, "ERROR: master key {} uses \"{}\", which this "
+			      "does not implement", k.id, k.cipher_type);
 	return -EPROTONOSUPPORT;
       }
       if ((from_base64(b64_key, k.key) < 0) ||
 	  (from_base64(b64_iv, k.iv) < 0)) {
-	ldpp_dout(dpp, 0) << "ERROR: master key " << k.id
-	  << " has a cipher_key or cipher_iv that is not base64" << dendl;
+	ldpp_dout_fmt(dpp, 0, "ERROR: master key {} has a cipher_key or "
+			      "cipher_iv that is not base64", k.id);
 	return -EBADMSG;
       }
       if (k.key.size() != 32) {
-	ldpp_dout(dpp, 0) << "ERROR: master key " << k.id << " is "
-	  << k.key.size() << " bytes, not 32" << dendl;
+	ldpp_dout_fmt(dpp, 0, "ERROR: master key {} is {} bytes, not 32", k.id,
+			      k.key.size());
 	return -EBADMSG;
       }
       /* 16, not GCM's usual 12.  Recorded rather than corrected:  the
        * length is set on the context below, and a key whose IV is some
        * third length would otherwise decrypt to garbage. */
       if (k.iv.empty() || (k.iv.size() > 64)) {
-	ldpp_dout(dpp, 0) << "ERROR: master key " << k.id << " has a "
-	  << k.iv.size() << "-byte IV" << dendl;
+	ldpp_dout_fmt(dpp, 0, "ERROR: master key {} has a {}-byte IV", k.id,
+			      k.iv.size());
 	return -EBADMSG;
       }
       by_id[k.id] = std::move(k);
     }
   } catch (const JSONDecoder::err& e) {
-    ldpp_dout(dpp, 0) << "ERROR: the master key store will not decode: "
-      << e.what() << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: the master key store will not decode: {}",
+			  e.what());
     return -EBADMSG;
   }
 
@@ -249,11 +249,11 @@ int NooBaaMasterKeys::load(const DoutPrefixProvider* dpp,
   /* No rotation exists in NC, so the active key is informational
    * here:  a record names the key that encrypted it. */
   if (!active_id.empty() && !have(active_id)) {
-    ldpp_dout(dpp, 4) << "nsfs: the active master key " << active_id
-      << " is not in the store" << dendl;
+    ldpp_dout_fmt(dpp, 4, "nsfs: the active master key {} is not in the store",
+			  active_id);
   }
-  ldpp_dout(dpp, 4) << "nsfs: loaded " << by_id.size()
-    << " NooBaa master key(s), active " << active_id << dendl;
+  ldpp_dout_fmt(dpp, 4, "nsfs: loaded {} NooBaa master key(s), active {}",
+			by_id.size(), active_id);
   return 0;
 }
 
@@ -266,8 +266,7 @@ int NooBaaMasterKeys::decrypt(const DoutPrefixProvider* dpp,
   if (i == by_id.end()) {
     /* §5:  a missing or rotated-out key is a hard failure.  There is
      * nothing to fall back to -- no other key opens this. */
-    ldpp_dout(dpp, 0) << "ERROR: no master key " << key_id
-      << " in the store" << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: no master key {} in the store", key_id);
     return -ENOKEY;
   }
   const NooBaaMasterKey& k = i->second;
@@ -316,10 +315,10 @@ int NooBaaMasterKeys::decrypt(const DoutPrefixProvider* dpp,
   if (!secret_is_plausible(out)) {
     /* This is the only report a wrong key produces.  The cipher
      * succeeded;  what came out is not a secret. */
-    ldpp_dout(dpp, 0) << "ERROR: a secret under master key " << key_id
-      << " decrypted to " << len << " bytes that are not a credential."
-      << "  The master key is wrong, or this is not the key that "
-      << "encrypted it." << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: a secret under master key {} decrypted to "
+			  "{} bytes that are not a credential.  The master "
+			  "key is wrong, or this is not the key that "
+			  "encrypted it.", key_id, len);
     out.clear();
     return -EKEYREJECTED;
   }

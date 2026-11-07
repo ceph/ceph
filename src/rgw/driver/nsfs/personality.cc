@@ -13,6 +13,7 @@
  *
  */
 
+#include "common/dout_fmt.h"
 #include "common/errno.h"
 
 #include "personality.h"
@@ -119,7 +120,7 @@ int PersonalityTable::find(const rgw_owner& key, PersonalityRef* out,
   if (it == by_key.end()) {
     ++stats.misses;
     if (dpp) {
-      ldpp_dout(dpp, 20) << "nsfs: personality miss for " << key << dendl;
+      ldpp_dout_fmt(dpp, 20, "nsfs: personality miss for {}", to_string(key));
     }
     return -ENOENT;
   }
@@ -131,11 +132,12 @@ int PersonalityTable::find(const rgw_owner& key, PersonalityRef* out,
   if (slots[slot].gen != current_generation(key)) {
     ++stats.stale;
     if (dpp) {
-      ldpp_dout(dpp, 20) << "nsfs: personality for " << key
-	<< " is stale (slot gen " << slots[slot].gen << ", now "
-	<< current_generation(key) << ");  out of the index"
-	<< (slots[slot].pins ? ", given back at its last unpin" : "")
-	<< dendl;
+      ldpp_dout_fmt(dpp, 20, "nsfs: personality for {} is stale (slot gen {}, "
+			     "now {});  out of the index{}", to_string(key),
+			     slots[slot].gen, current_generation(key),
+			     (slots[slot].pins
+			      ? ", given back at its last unpin"
+			      : ""));
     }
     invalidate(slot);
     ++stats.misses;
@@ -145,9 +147,10 @@ int PersonalityTable::find(const rgw_owner& key, PersonalityRef* out,
   ++slots[slot].pins;
   ++stats.hits;
   if (dpp) {
-    ldpp_dout(dpp, 20) << "nsfs: personality hit for " << key << " id "
-      << slots[slot].id << " uid " << slots[slot].cred.uid << " with "
-      << slots[slot].cred.groups.size() << " groups" << dendl;
+    ldpp_dout_fmt(dpp, 20, "nsfs: personality hit for {} id {} uid {} with {} "
+			   "groups", to_string(key), slots[slot].id,
+			   slots[slot].cred.uid,
+			   slots[slot].cred.groups.size());
   }
   *out = PersonalityRef(this, slot, slots[slot].id);
   return 0;
@@ -196,9 +199,9 @@ int PersonalityTable::place(const DoutPrefixProvider* dpp,
   const uint32_t slot = claim_slot(dpp);
   if (slot == slots.size()) {
     ++stats.exhausted;
-    ldpp_dout(dpp, 0) << "ERROR: every personality slot is held by a live"
-      " operation (" << slots.size() << " of " << slots.size() << ");"
-      " cannot serve " << key << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: every personality slot is held by a live "
+			  "operation ({} of {}); cannot serve {}", slots.size(),
+			  slots.size(), to_string(key));
     return -EBUSY;
   }
 
@@ -207,17 +210,17 @@ int PersonalityTable::place(const DoutPrefixProvider* dpp,
       : -ENOTSUP;
   if (id < 0) {
     ++stats.failed;
-    ldpp_dout(dpp, 0) << "ERROR: could not register a personality for "
-      << key << " (uid " << cred.uid << " gid " << cred.gid << "): "
-      << cpp_strerror(-id) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: could not register a personality for {} "
+			  "(uid {} gid {}): {}", to_string(key), cred.uid,
+			  cred.gid, cpp_strerror(-id));
     return id;
   }
   if (static_cast<size_t>(id) > MAX_PERSONALITIES) {
     /* Unnameable on an SQE.  Give it straight back rather than
      * store something that can never be used. */
     ++stats.failed;
-    ldpp_dout(dpp, 0) << "ERROR: personality id " << id << " exceeds the"
-      " range of sqe->personality" << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: personality id {} exceeds the range of "
+			  "sqe->personality", id);
     registrar->unregister_personality(dpp, static_cast<uint16_t>(id));
     return -EOVERFLOW;
   }

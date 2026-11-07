@@ -35,6 +35,7 @@
 
 #include "common/code_environment.h"
 #include "common/config_cacher.h"
+#include "common/dout_fmt.h"
 #include "common/errno.h"
 #include "global/global_context.h"
 #include "include/ceph_assert.h"
@@ -366,9 +367,9 @@ public:
     ScopedCredentials scope;
     const int ret = scope.push(cred);
     if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: could not assume uid " << cred.uid
-	<< " gid " << cred.gid << " to register a personality: "
-	<< cpp_strerror(-ret) << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: could not assume uid {} gid {} to "
+			    "register a personality: {}", cred.uid, cred.gid,
+			    cpp_strerror(-ret));
       return ret;
     }
     return posix_uring_register_personality(dpp);
@@ -629,16 +630,16 @@ int run_as(const DoutPrefixProvider* dpp, const Credentials& cred,
     if (tl_current_cred && same_identity(*tl_current_cred, cred)) {
       return fn();
     }
-    ldpp_dout(dpp, 0) << "ERROR: rejecting a call as uid " << cred.uid
-      << " on a thread already running as uid "
-      << (tl_current_cred ? tl_current_cred->uid : (uid_t)-1)
-      << ";  the work would have run as the wrong identity" << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: rejecting a call as uid {} on a thread "
+			  "already running as uid {};  the work would have "
+			  "run as the wrong identity", cred.uid,
+			  (tl_current_cred ? tl_current_cred->uid : (uid_t)-1));
     return -EDEADLK;
   }
   const int ret = impersonation_pool().run(&cred, fn, y);
   if (ret < 0) {
-    ldpp_dout(dpp, 10) << "impersonated call as uid " << cred.uid
-      << " returned " << cpp_strerror(-ret) << dendl;
+    ldpp_dout_fmt(dpp, 10, "impersonated call as uid {} returned {}", cred.uid,
+			   cpp_strerror(-ret));
   }
   return ret;
 }
@@ -713,11 +714,10 @@ int hold_thread_capabilities(const DoutPrefixProvider* dpp)
   tl_holds_read_search = true;
   /* an attribute read has no prefix provider to pass */
   if (dpp) {
-    ldpp_dout(dpp, 20) << "nsfs: this thread now holds CAP_DAC_READ_SEARCH"
-      << dendl;
+    ldpp_dout_fmt(dpp, 20, "nsfs: this thread now holds CAP_DAC_READ_SEARCH");
   } else {
-    ldout(g_ceph_context, 20) << "nsfs: this thread now holds "
-      "CAP_DAC_READ_SEARCH" << dendl;
+    ldout_fmt(g_ceph_context, 20, "nsfs: this thread now holds "
+	      "CAP_DAC_READ_SEARCH");
   }
   return 0;
 }
@@ -755,10 +755,10 @@ int with_capabilities(const DoutPrefixProvider* dpp, uint64_t caps,
   }
 
   if (tl_impersonating) {
-    ldpp_dout(dpp, 0) << "ERROR: rejecting a raise of capabilities 0x"
-      << std::hex << caps << std::dec << " on a thread running as uid "
-      << (tl_current_cred ? tl_current_cred->uid : (uid_t)-1)
-      << ";  the capability would be the identity's" << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: rejecting a raise of capabilities 0x{:x} "
+		  "on a thread running as uid {};  the capability would be "
+		  "the identity's", caps,
+		  (tl_current_cred ? tl_current_cred->uid : (uid_t)-1));
     return -EPERM;
   }
 
@@ -773,16 +773,16 @@ int with_capabilities(const DoutPrefixProvider* dpp, uint64_t caps,
   uint64_t missing = 0;
   const int ret = raised.push(caps, &missing);
   if (ret == -EPERM) {
-    ldpp_dout(dpp, 0) << "ERROR: capabilities 0x" << std::hex << missing
-      << std::dec << " are not in this gateway's permitted set, so they "
-      "cannot be raised;  the gateway was started without them (see "
-      "have_credential_capabilities() and the setcap step)" << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: capabilities 0x{:x} are not in this "
+		  "gateway's permitted set, so they cannot be raised;  the "
+		  "gateway was started without them (see "
+		  "have_credential_capabilities() and the setcap step)",
+		  missing);
     return -EPERM;
   }
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: could not raise capabilities 0x"
-      << std::hex << caps << std::dec << ": " << cpp_strerror(-ret)
-      << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: could not raise capabilities 0x{:x}: {}",
+		  caps, cpp_strerror(-ret));
     return -EIO;
   }
 
@@ -838,18 +838,18 @@ static int raise_for(const DoutPrefixProvider* dpp, const FSIdentity& id,
 {
   const int ret = with_capabilities(dpp, caps, fn);
   if (ret < 0) {
-    ldpp_dout(dpp, 4) << "nsfs: uid " << id.cred.uid << " was denied, and"
-      " the gateway's call failed even raised: " << cpp_strerror(-ret)
-      << dendl;
+    ldpp_dout_fmt(dpp, 4, "nsfs: uid {} was denied, and the gateway's call "
+			  "failed even raised: {}", id.cred.uid,
+			  cpp_strerror(-ret));
     return ret;
   }
   raised_ops.fetch_add(1, std::memory_order_relaxed);
   if (raised) {
     *raised = true;
   }
-  ldpp_dout(dpp, 10) << "nsfs: the filesystem denied uid " << id.cred.uid
-    << ", so the gateway performed it (access model " << model->name()
-    << ")" << dendl;
+  ldpp_dout_fmt(dpp, 10, "nsfs: the filesystem denied uid {}, so the gateway "
+			 "performed it (access model {})", id.cred.uid,
+			 model->name());
   return ret;
 }
 

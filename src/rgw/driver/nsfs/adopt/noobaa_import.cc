@@ -22,6 +22,7 @@
 #include "rapidjson/writer.h"
 
 #include "common/ceph_json.h"
+#include "common/dout_fmt.h"
 #include "common/errno.h"
 
 #include "rgw_account.h"
@@ -346,8 +347,7 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
       "the store has NSFS_ENABLE_DYNAMIC_SUPPLEMENTAL_GROUPS on and this "
       "gateway has rgw_nsfs_dynamic_supplemental_groups off;  set it to "
       "match before importing");
-    ldpp_dout(dpp, 0) << "ERROR: adoption:  " << result.failures.back()
-      << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: adoption:  {}", result.failures.back());
     return -EINVAL;
   }
 
@@ -906,18 +906,21 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
     result.role_policies_written += ri.perm_policy_map.size();
   }
 
-  ldpp_dout(dpp, 4) << "nsfs: imported " << result.accounts_created
-    << " accounts (" << result.accounts_skipped << " already present), "
-    << result.users_created << " users (" << result.users_skipped
-    << " already present), " << result.identity_rows << " identity rows, "
-    << result.user_rows << " user rows, "
-    << result.roles_created << " roles, " << result.grants_written
-    << " grants, anonymous "
-    << (result.anonymous_imported ? "imported"
-	: result.anonymous_present ? "already present" : "not in this store")
-    << ", " << result.failures.size() << " failures" << dendl;
+  ldpp_dout_fmt(dpp, 4, "nsfs: imported {} accounts ({} already present), {} "
+			"users ({} already present), {} identity rows, {} "
+			"user rows, {} roles, {} grants, anonymous {}, {} "
+			"failures", result.accounts_created,
+			result.accounts_skipped, result.users_created,
+			result.users_skipped, result.identity_rows,
+			result.user_rows, result.roles_created,
+			result.grants_written,
+			(result.anonymous_imported
+			 ? "imported"
+			 : result.anonymous_present
+			 ? "already present"
+			 : "not in this store"), result.failures.size());
   for (const auto& f : result.failures) {
-    ldpp_dout(dpp, 0) << "ERROR: import: " << f << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: import: {}", f);
   }
   return result.failures.empty() ? 0 : -EIO;
 }

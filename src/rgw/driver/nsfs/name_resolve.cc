@@ -19,7 +19,7 @@
 
 #include "common/ceph_context.h"
 #include "common/config.h"
-#include "common/dout.h"
+#include "common/dout_fmt.h"
 #include "common/errno.h"
 #include "impersonate.h"
 #include "name_resolve.h"
@@ -185,8 +185,8 @@ int NsswitchCache::resolve(const DoutPrefixProvider* dpp,
     ret = look_up(name, rn);
   }
   if ((ret != 0) && (ret != -ENOENT)) {
-    ldpp_dout(dpp, 0) << "ERROR: nsswitch lookup of " << name
-      << " failed: " << cpp_strerror(-ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: nsswitch lookup of {} failed: {}", name,
+			  cpp_strerror(-ret));
     return ret;
   }
   /* A first answer invalidates nothing:  no personality can have been
@@ -221,8 +221,8 @@ int NsswitchCache::groups_by_name(const DoutPrefixProvider* dpp,
     ret = look_up_groups(name, rn.gid, g);
   }
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: nsswitch group lookup of " << name
-      << " failed: " << cpp_strerror(-ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: nsswitch group lookup of {} failed: {}", name,
+			  cpp_strerror(-ret));
     return ret;
   }
   {
@@ -256,8 +256,8 @@ int NsswitchCache::groups_by_uid(const DoutPrefixProvider* dpp, uint32_t uid,
     ret = look_up_uid(uid, e);
   }
   if ((ret < 0) && (ret != -ENOENT)) {
-    ldpp_dout(dpp, 0) << "ERROR: nsswitch lookup of uid " << uid
-      << " failed: " << cpp_strerror(-ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: nsswitch lookup of uid {} failed: {}", uid,
+			  cpp_strerror(-ret));
     return ret;
   }
   {
@@ -334,9 +334,8 @@ int NsswitchCache::refresh(const DoutPrefixProvider* dpp,
   }
   bool changed;
   if ((ret != 0) && (ret != -ENOENT)) {
-    ldpp_dout(dpp, 0) << "ERROR: nsswitch lookup of " << name
-      << " failed: " << cpp_strerror(-ret)
-      << ";  dropping its resolution" << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: nsswitch lookup of {} failed: {};  dropping "
+			  "its resolution", name, cpp_strerror(-ret));
     changed = drop(name);
   } else {
     changed = store(name, ret, rn);
@@ -348,8 +347,8 @@ int NsswitchCache::refresh(const DoutPrefixProvider* dpp,
     }
   }
   if (changed) {
-    ldpp_dout(dpp, 4) << "resolution of " << name << " changed;"
-      "  invalidating identities" << dendl;
+    ldpp_dout_fmt(dpp, 4, "resolution of {} changed;  invalidating identities",
+			  name);
     note_all_identities_changed();
   }
   if ((ret != 0) && (ret != -ENOENT)) {
@@ -386,13 +385,12 @@ int NsswitchCache::refresh_uid(const DoutPrefixProvider* dpp, uint32_t uid)
     }
   }
   if ((ret < 0) && (ret != -ENOENT)) {
-    ldpp_dout(dpp, 0) << "ERROR: nsswitch lookup of uid " << uid
-      << " failed: " << cpp_strerror(-ret)
-      << ";  dropping its resolution" << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: nsswitch lookup of uid {} failed: {};  "
+			  "dropping its resolution", uid, cpp_strerror(-ret));
   }
   if (changed) {
-    ldpp_dout(dpp, 4) << "resolution of uid " << uid << " changed;"
-      "  invalidating identities" << dendl;
+    ldpp_dout_fmt(dpp, 4, "resolution of uid {} changed;  invalidating "
+			  "identities", uid);
     note_all_identities_changed();
   }
   if ((ret < 0) && (ret != -ENOENT)) {
@@ -438,18 +436,18 @@ void NsswitchCache::sweep_loop(NameSource source)
     for (const auto& name : t.names) {
       ResolvedName rn;
       if (resolve(&dpp, name, rn, null_yield) == -ENOENT) {
-	ldpp_dout(&dpp, 0) << "WARNING: an identity names " << name
-	  << ", which nsswitch does not know;  it is refused until it"
-	  " resolves" << dendl;
+	ldpp_dout_fmt(&dpp, 0, "WARNING: an identity names {}, which nsswitch "
+			       "does not know;  it is refused until it "
+			       "resolves", name);
       }
     }
     for (const auto uid : t.uids) {
       std::vector<uint32_t> g;
       if (groups_by_uid(&dpp, uid, g, null_yield) == -ENOENT) {
-	ldpp_dout(&dpp, 0) << "WARNING: an identity with no group list runs "
-	  "as uid " << uid << ", which nsswitch does not know;  under "
-	  "rgw_nsfs_dynamic_supplemental_groups it is refused until it "
-	  "resolves" << dendl;
+	ldpp_dout_fmt(&dpp, 0, "WARNING: an identity with no group list runs "
+			       "as uid {}, which nsswitch does not know;  "
+			       "under rgw_nsfs_dynamic_supplemental_groups it "
+			       "is refused until it resolves", uid);
       }
     }
   }
@@ -473,9 +471,8 @@ void NsswitchCache::start(NameSource source)
     return;
   }
   stopping = false;
-  ldout(cct, 1) << "nsfs: nsswitch-resolved identities swept every "
-    << cct->_conf.get_val<uint64_t>("rgw_nsfs_identity_resolve_ttl")
-    << " s" << dendl;
+  ldout_fmt(cct, 1, "nsfs: nsswitch-resolved identities swept every {} s",
+	    cct->_conf.get_val<uint64_t>("rgw_nsfs_identity_resolve_ttl"));
   sweeper = std::thread([this, source = std::move(source)] {
     sweep_loop(source);
   });

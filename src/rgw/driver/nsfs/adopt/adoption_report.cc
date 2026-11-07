@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <ctime>
 
+#include "common/dout_fmt.h"
 #include "common/errno.h"
 #include "common/JSONFormatter.h"
 #include "common/iso_8601.h"
@@ -244,12 +245,12 @@ int write_adoption_report(const DoutPrefixProvider* dpp,
   const int ret = safe_write_file(dir.c_str(), name.c_str(), bl.c_str(),
                                   bl.length(), 0640);
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: adoption: writing the report " << path
-      << ": " << cpp_strerror(-ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: adoption: writing the report {}: {}", path,
+                          cpp_strerror(-ret));
     return ret;
   }
-  ldpp_dout(dpp, 1) << "nsfs: adoption report:  " << path << ":  "
-    << r.findings.size() << " findings" << dendl;
+  ldpp_dout_fmt(dpp, 1, "nsfs: adoption report:  {}:  {} findings", path,
+                        r.findings.size());
   return 0;
 }
 

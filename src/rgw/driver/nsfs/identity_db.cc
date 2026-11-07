@@ -19,6 +19,7 @@
 #include <mutex>
 #include <sqlite3.h>
 
+#include "common/dout_fmt.h"
 #include "common/errno.h"
 #include "common/split.h"
 #include "include/scope_guard.h"
@@ -128,8 +129,8 @@ int row_to_identity(const DoutPrefixProvider* dpp, sqlite3_stmt* st,
   if (sqlite3_column_type(st, 3) != SQLITE_NULL) {
     std::vector<uint32_t> g;
     if (!groups_from_text(column_text(st, 3), g)) {
-      ldpp_dout(dpp, 0) << "ERROR: identity " << out.key
-	<< " has an unparsable supplemental group list" << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: identity {} has an unparsable "
+			    "supplemental group list", out.key);
       return -EBADMSG;
     }
     out.groups = std::move(g);
@@ -353,8 +354,7 @@ int IdentityDB::Initialize(std::string logfile, int loglevel)
 
   ret = exec(&dp, schema.c_str(), nullptr);
   if (ret < 0) {
-    ldpp_dout(&dp, 0) << "ERROR: could not create " << identity_table
-      << dendl;
+    ldpp_dout_fmt(&dp, 0, "ERROR: could not create {}", identity_table);
     return ret;
   }
 
@@ -380,9 +380,9 @@ int IdentityDB::put_identity(const DoutPrefixProvider* dpp, const Identity& id)
     nbp.pop_back();
   }
   if (!nbp.empty() && !placement_path_is_acceptable(nbp)) {
-    ldpp_dout(dpp, 0) << "ERROR: identity " << id.key << " rejected:  its "
-      << "new_buckets_path \"" << id.new_buckets_path << "\" is not an "
-      << "absolute canonical path" << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: identity {} rejected:  its new_buckets_path "
+			  "\"{}\" is not an absolute canonical path", id.key,
+			  id.new_buckets_path);
     return -EINVAL;
   }
   std::string allowed;
@@ -390,9 +390,9 @@ int IdentityDB::put_identity(const DoutPrefixProvider* dpp, const Identity& id)
     std::string bad;
     if (normalize_allowed_list(id.custom_bucket_path_allowed_list, allowed,
 			       bad) < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: identity " << id.key << " rejected:  its "
-	<< "custom_bucket_path_allowed_list entry \"" << bad << "\" is not "
-	<< "an absolute canonical path" << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: identity {} rejected:  its "
+			    "custom_bucket_path_allowed_list entry \"{}\" is "
+			    "not an absolute canonical path", id.key, bad);
       return -EINVAL;
     }
   }
@@ -407,8 +407,8 @@ int IdentityDB::put_identity(const DoutPrefixProvider* dpp, const Identity& id)
   sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
       != SQLITE_OK) {
-    ldpp_dout(dpp, 0) << "ERROR: preparing identity insert: "
-      << sqlite3_errmsg(handle()) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: preparing identity insert: {}",
+			  sqlite3_errmsg(handle()));
     return -EIO;
   }
   auto done = make_scope_guard([st] { sqlite3_finalize(st); });
@@ -434,8 +434,8 @@ int IdentityDB::put_identity(const DoutPrefixProvider* dpp, const Identity& id)
   if (sqlite3_step(st) != SQLITE_DONE) {
     /* a CHECK violation lands here, and it is the expected way an
      * invalid record is rejected */
-    ldpp_dout(dpp, 4) << "identity " << id.key << " rejected: "
-      << sqlite3_errmsg(handle()) << dendl;
+    ldpp_dout_fmt(dpp, 4, "identity {} rejected: {}", id.key,
+			  sqlite3_errmsg(handle()));
     return -EINVAL;
   }
   /* A row written is a reason to look its name up again, even the same
@@ -496,8 +496,8 @@ int IdentityDB::put_noobaa_id(const DoutPrefixProvider* dpp,
   sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
       != SQLITE_OK) {
-    ldpp_dout(dpp, 0) << "ERROR: preparing NooBaa id insert: "
-      << sqlite3_errmsg(handle()) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: preparing NooBaa id insert: {}",
+			  sqlite3_errmsg(handle()));
     return -EIO;
   }
   auto done = make_scope_guard([st] { sqlite3_finalize(st); });
@@ -508,12 +508,11 @@ int IdentityDB::put_noobaa_id(const DoutPrefixProvider* dpp,
   std::lock_guard held{conn};
   if (sqlite3_step(st) != SQLITE_DONE) {
     if (sqlite3_extended_errcode(handle()) == SQLITE_CONSTRAINT_PRIMARYKEY) {
-      ldpp_dout(dpp, 4) << "NooBaa id " << noobaa_id
-	<< " is already recorded" << dendl;
+      ldpp_dout_fmt(dpp, 4, "NooBaa id {} is already recorded", noobaa_id);
       return -EEXIST;
     }
-    ldpp_dout(dpp, 0) << "ERROR: recording NooBaa id " << noobaa_id << ": "
-      << sqlite3_errmsg(handle()) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: recording NooBaa id {}: {}", noobaa_id,
+			  sqlite3_errmsg(handle()));
     return -EIO;
   }
   return 0;
@@ -560,7 +559,7 @@ int IdentityDB::put_adoption_completion(const DoutPrefixProvider* dpp,
   sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
       != SQLITE_OK) {
-    ldpp_dout(dpp, 0) << "ERROR: " << sqlite3_errmsg(handle()) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: {}", sqlite3_errmsg(handle()));
     return -EIO;
   }
   auto finalize = make_scope_guard([st] { sqlite3_finalize(st); });
@@ -577,8 +576,8 @@ int IdentityDB::put_adoption_completion(const DoutPrefixProvider* dpp,
     if (sqlite3_extended_errcode(handle()) == SQLITE_CONSTRAINT_PRIMARYKEY) {
       return -EEXIST;
     }
-    ldpp_dout(dpp, 0) << "ERROR: writing the completion record: "
-      << sqlite3_errmsg(handle()) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: writing the completion record: {}",
+			  sqlite3_errmsg(handle()));
     return -EIO;
   }
   return 0;
@@ -594,7 +593,7 @@ int IdentityDB::get_adoption_completion(const DoutPrefixProvider* dpp,
   sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
       != SQLITE_OK) {
-    ldpp_dout(dpp, 0) << "ERROR: " << sqlite3_errmsg(handle()) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: {}", sqlite3_errmsg(handle()));
     return -EIO;
   }
   auto finalize = make_scope_guard([st] { sqlite3_finalize(st); });
@@ -604,7 +603,7 @@ int IdentityDB::get_adoption_completion(const DoutPrefixProvider* dpp,
     return -ENOENT;
   }
   if (step != SQLITE_ROW) {
-    ldpp_dout(dpp, 0) << "ERROR: " << sqlite3_errmsg(handle()) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: {}", sqlite3_errmsg(handle()));
     return -EIO;
   }
   c.completed_at = column_text(st, 0);
@@ -648,7 +647,7 @@ int IdentityDB::put_abandoned(const DoutPrefixProvider* dpp,
   sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
       != SQLITE_OK) {
-    ldpp_dout(dpp, 0) << "ERROR: " << sqlite3_errmsg(handle()) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: {}", sqlite3_errmsg(handle()));
     return -EIO;
   }
   auto finalize = make_scope_guard([st] { sqlite3_finalize(st); });
@@ -665,8 +664,8 @@ int IdentityDB::put_abandoned(const DoutPrefixProvider* dpp,
     if (sqlite3_extended_errcode(handle()) == SQLITE_CONSTRAINT_PRIMARYKEY) {
       return -EEXIST;
     }
-    ldpp_dout(dpp, 4) << "abandoning " << r.noobaa_id << " failed: "
-      << sqlite3_errmsg(handle()) << dendl;
+    ldpp_dout_fmt(dpp, 4, "abandoning {} failed: {}", r.noobaa_id,
+			  sqlite3_errmsg(handle()));
     return -EINVAL;
   }
   return 0;
@@ -680,7 +679,7 @@ int IdentityDB::remove_abandoned(const DoutPrefixProvider* dpp,
   sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
       != SQLITE_OK) {
-    ldpp_dout(dpp, 0) << "ERROR: " << sqlite3_errmsg(handle()) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: {}", sqlite3_errmsg(handle()));
     return -EIO;
   }
   auto finalize = make_scope_guard([st] { sqlite3_finalize(st); });
@@ -688,7 +687,7 @@ int IdentityDB::remove_abandoned(const DoutPrefixProvider* dpp,
   ConnectionMutex conn{sqlite3_db_mutex(handle())};
   std::lock_guard held{conn};
   if (sqlite3_step(st) != SQLITE_DONE) {
-    ldpp_dout(dpp, 0) << "ERROR: " << sqlite3_errmsg(handle()) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: {}", sqlite3_errmsg(handle()));
     return -EIO;
   }
   return (sqlite3_changes(handle()) == 0) ? -ENOENT : 0;
@@ -704,7 +703,7 @@ int IdentityDB::get_abandoned(const DoutPrefixProvider* dpp,
   sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
       != SQLITE_OK) {
-    ldpp_dout(dpp, 0) << "ERROR: " << sqlite3_errmsg(handle()) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: {}", sqlite3_errmsg(handle()));
     return -EIO;
   }
   auto finalize = make_scope_guard([st] { sqlite3_finalize(st); });
@@ -714,7 +713,7 @@ int IdentityDB::get_abandoned(const DoutPrefixProvider* dpp,
     return -ENOENT;
   }
   if (step != SQLITE_ROW) {
-    ldpp_dout(dpp, 0) << "ERROR: " << sqlite3_errmsg(handle()) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: {}", sqlite3_errmsg(handle()));
     return -EIO;
   }
   r = row_to_abandoned(st);
@@ -731,7 +730,7 @@ int IdentityDB::list_abandoned(const DoutPrefixProvider* dpp,
   sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
       != SQLITE_OK) {
-    ldpp_dout(dpp, 0) << "ERROR: " << sqlite3_errmsg(handle()) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: {}", sqlite3_errmsg(handle()));
     return -EIO;
   }
   auto finalize = make_scope_guard([st] { sqlite3_finalize(st); });
@@ -740,7 +739,7 @@ int IdentityDB::list_abandoned(const DoutPrefixProvider* dpp,
     out.push_back(row_to_abandoned(st));
   }
   if (rc != SQLITE_DONE) {
-    ldpp_dout(dpp, 0) << "ERROR: " << sqlite3_errmsg(handle()) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: {}", sqlite3_errmsg(handle()));
     return -EIO;
   }
   return 0;
@@ -756,7 +755,7 @@ int IdentityDB::owner_was_imported(const DoutPrefixProvider* dpp,
   sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
       != SQLITE_OK) {
-    ldpp_dout(dpp, 0) << "ERROR: " << sqlite3_errmsg(handle()) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: {}", sqlite3_errmsg(handle()));
     return -EIO;
   }
   auto finalize = make_scope_guard([st] { sqlite3_finalize(st); });
@@ -764,7 +763,7 @@ int IdentityDB::owner_was_imported(const DoutPrefixProvider* dpp,
 
   const int step = sqlite3_step(st);
   if ((step != SQLITE_ROW) && (step != SQLITE_DONE)) {
-    ldpp_dout(dpp, 0) << "ERROR: " << sqlite3_errmsg(handle()) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: {}", sqlite3_errmsg(handle()));
     return -EIO;
   }
   imported = (step == SQLITE_ROW);
@@ -1020,9 +1019,9 @@ int complete_file_credentials(const DoutPrefixProvider* dpp,
       return -ENOENT;
     }
     if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: the groups of uid " << inout.uid
-	<< ", which owns the file and no identity carries, could not be "
-	"looked up;  acting on its own rights" << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: the groups of uid {}, which owns the file "
+			    "and no identity carries, could not be looked up; "
+			    " acting on its own rights", inout.uid);
       return -ENODATA;
     }
     inout.groups.assign(g.begin(), g.end());
@@ -1035,21 +1034,22 @@ int complete_file_credentials(const DoutPrefixProvider* dpp,
   for (size_t i = 0; i < rows.size(); ++i) {
     ret = row_groups(dpp, db, rows[i], inout.uid, installs[i], null_yield);
     if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: the groups of identity " << rows[i].key
-	<< ", which carries uid " << inout.uid << ", could not be looked "
-	"up (" << cpp_strerror(-ret) << ");  acting on the file owner's "
-	"own rights" << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: the groups of identity {}, which carries "
+			    "uid {}, could not be looked up ({});  acting on "
+			    "the file owner's own rights", rows[i].key,
+			    inout.uid, cpp_strerror(-ret));
       return -ENODATA;
     }
   }
   const auto& first = rows.front();
   for (size_t i = 1; i < rows.size(); ++i) {
     if (installs[i] != installs[0]) {
-      ldpp_dout(dpp, 0) << "ERROR: uid " << inout.uid << " is carried by "
-	<< rows.size() << " identities whose supplemental group lists "
-	"differ (" << first.key << ", " << rows[i].key << ");  a file names "
-	"its owner by uid alone, so it cannot say which applies.  Acting on "
-	"the file owner's own rights instead" << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: uid {} is carried by {} identities whose "
+			    "supplemental group lists differ ({}, {});  a "
+			    "file names its owner by uid alone, so it cannot "
+			    "say which applies.  Acting on the file owner's "
+			    "own rights instead", inout.uid, rows.size(),
+			    first.key, rows[i].key);
       return -ENODATA;
     }
   }
@@ -1080,10 +1080,10 @@ int resolve_key(const DoutPrefixProvider* dpp, const IdentityDB& db,
     ResolvedName rn;
     ret = db.nsswitch_cache().resolve(dpp, id.distinguished_name, rn, y);
     if (ret < 0) {
-      ldpp_dout(dpp, 4) << "identity " << key << " names "
-	<< id.distinguished_name << ", which nsswitch did not resolve ("
-	<< cpp_strerror(-ret) << ");  denying it rather than serving it"
-	" unimpersonated" << dendl;
+      ldpp_dout_fmt(dpp, 4, "identity {} names {}, which nsswitch did not "
+			    "resolve ({});  denying it rather than serving it "
+			    "unimpersonated", key, id.distinguished_name,
+			    cpp_strerror(-ret));
       return -EPERM;
     }
     out.uid = rn.uid;
@@ -1106,10 +1106,10 @@ int resolve_key(const DoutPrefixProvider* dpp, const IdentityDB& db,
    * NooBaa's request does. */
   ret = row_groups(dpp, db, id, out.uid, out.groups, y);
   if (ret < 0) {
-    ldpp_dout(dpp, 4) << "identity " << key << " has no group list, and "
-      "nsswitch did not give uid " << out.uid << "'s groups ("
-      << cpp_strerror(-ret) << ");  denying it rather than serving it with "
-      "fewer groups than the site gives it" << dendl;
+    ldpp_dout_fmt(dpp, 4, "identity {} has no group list, and nsswitch did "
+			  "not give uid {}'s groups ({});  denying it rather "
+			  "than serving it with fewer groups than the site "
+			  "gives it", key, out.uid, cpp_strerror(-ret));
     return -EPERM;
   }
   return 0;
@@ -1210,9 +1210,8 @@ int IdentityDB::write_bucket_placement(const DoutPrefixProvider* dpp,
    * operator learns what was wrong with it
    * (`archive/NSFS_BUCKET_PLACEMENT_PLAN.md` §9). */
   if (!placement_path_is_acceptable(bp.path)) {
-    ldpp_dout(dpp, 4) << "bucket placement " << bp.bucket_name
-      << " rejected: \"" << bp.path
-      << "\" is not an absolute canonical path" << dendl;
+    ldpp_dout_fmt(dpp, 4, "bucket placement {} rejected: \"{}\" is not an "
+			  "absolute canonical path", bp.bucket_name, bp.path);
     return -EINVAL;
   }
 
@@ -1236,7 +1235,7 @@ int IdentityDB::write_bucket_placement(const DoutPrefixProvider* dpp,
   sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
       != SQLITE_OK) {
-    ldpp_dout(dpp, 0) << "ERROR: " << sqlite3_errmsg(handle()) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: {}", sqlite3_errmsg(handle()));
     return -EIO;
   }
   auto finalize = make_scope_guard([st] { sqlite3_finalize(st); });
@@ -1250,8 +1249,8 @@ int IdentityDB::write_bucket_placement(const DoutPrefixProvider* dpp,
   std::lock_guard held{conn};
   if (sqlite3_step(st) != SQLITE_DONE) {
     const int ext = sqlite3_extended_errcode(handle());
-    ldpp_dout(dpp, 4) << "bucket placement " << bp.bucket_name << " at "
-      << bp.path << " failed: " << sqlite3_errmsg(handle()) << dendl;
+    ldpp_dout_fmt(dpp, 4, "bucket placement {} at {} failed: {}",
+			  bp.bucket_name, bp.path, sqlite3_errmsg(handle()));
     if ((ext != SQLITE_CONSTRAINT_PRIMARYKEY) &&
 	(ext != SQLITE_CONSTRAINT_UNIQUE)) {
       return -EINVAL;
@@ -1266,9 +1265,9 @@ int IdentityDB::write_bucket_placement(const DoutPrefixProvider* dpp,
     return -EADDRINUSE;
   }
   if (sqlite3_changes(handle()) == 0) {
-    ldpp_dout(dpp, 4) << "bucket placement " << bp.bucket_name << " at "
-      << bp.path << " rejected: another bucket's directory contains it or "
-      << "lies inside it" << dendl;
+    ldpp_dout_fmt(dpp, 4, "bucket placement {} at {} rejected: another "
+			  "bucket's directory contains it or lies inside it",
+			  bp.bucket_name, bp.path);
     return -EADDRINUSE;
   }
   return 0;
@@ -1298,7 +1297,7 @@ int IdentityDB::get_bucket_placement(const DoutPrefixProvider* dpp,
   sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
       != SQLITE_OK) {
-    ldpp_dout(dpp, 0) << "ERROR: " << sqlite3_errmsg(handle()) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: {}", sqlite3_errmsg(handle()));
     return -EIO;
   }
   auto finalize = make_scope_guard([st] { sqlite3_finalize(st); });
@@ -1313,7 +1312,7 @@ int IdentityDB::get_bucket_placement(const DoutPrefixProvider* dpp,
     return -ENOENT;
   }
   if (step != SQLITE_ROW) {
-    ldpp_dout(dpp, 0) << "ERROR: " << sqlite3_errmsg(handle()) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: {}", sqlite3_errmsg(handle()));
     return -EIO;
   }
 
@@ -1332,7 +1331,7 @@ int IdentityDB::remove_bucket_placement(const DoutPrefixProvider* dpp,
   sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
       != SQLITE_OK) {
-    ldpp_dout(dpp, 0) << "ERROR: " << sqlite3_errmsg(handle()) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: {}", sqlite3_errmsg(handle()));
     return -EIO;
   }
   auto finalize = make_scope_guard([st] { sqlite3_finalize(st); });
@@ -1341,7 +1340,7 @@ int IdentityDB::remove_bucket_placement(const DoutPrefixProvider* dpp,
   sqlite3_bind_text(st, 2, tenant.c_str(), -1, SQLITE_TRANSIENT);
 
   if (sqlite3_step(st) != SQLITE_DONE) {
-    ldpp_dout(dpp, 0) << "ERROR: " << sqlite3_errmsg(handle()) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: {}", sqlite3_errmsg(handle()));
     return -EIO;
   }
   /* Removing a row that is not there is not a failure:  a bucket at
@@ -1364,7 +1363,7 @@ int IdentityDB::set_bucket_placement_owner(const DoutPrefixProvider* dpp,
   sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
       != SQLITE_OK) {
-    ldpp_dout(dpp, 0) << "ERROR: " << sqlite3_errmsg(handle()) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: {}", sqlite3_errmsg(handle()));
     return -EIO;
   }
   auto finalize = make_scope_guard([st] { sqlite3_finalize(st); });
@@ -1373,7 +1372,7 @@ int IdentityDB::set_bucket_placement_owner(const DoutPrefixProvider* dpp,
   sqlite3_bind_text(st, 3, tenant.c_str(), -1, SQLITE_TRANSIENT);
 
   if (sqlite3_step(st) != SQLITE_DONE) {
-    ldpp_dout(dpp, 0) << "ERROR: " << sqlite3_errmsg(handle()) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: {}", sqlite3_errmsg(handle()));
     return -EIO;
   }
   return 0;
@@ -1389,7 +1388,7 @@ int collect_placements(const DoutPrefixProvider* dpp, sqlite3* h,
 {
   sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(h, sql.c_str(), -1, &st, nullptr) != SQLITE_OK) {
-    ldpp_dout(dpp, 0) << "ERROR: " << sqlite3_errmsg(h) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: {}", sqlite3_errmsg(h));
     return -EIO;
   }
   auto finalize = make_scope_guard([st] { sqlite3_finalize(st); });
@@ -1400,7 +1399,7 @@ int collect_placements(const DoutPrefixProvider* dpp, sqlite3* h,
     out.push_back(row_to_placement(st));
   }
   if (rc != SQLITE_DONE) {
-    ldpp_dout(dpp, 0) << "ERROR: " << sqlite3_errmsg(h) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: {}", sqlite3_errmsg(h));
     return -EIO;
   }
   return 0;
@@ -1456,8 +1455,7 @@ int list_keys(const DoutPrefixProvider* dpp, sqlite3* db,
   out.clear();
   sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(db, sql.c_str(), -1, &st, nullptr) != SQLITE_OK) {
-    ldpp_dout(dpp, 0) << "ERROR: listing " << what << ": "
-      << sqlite3_errmsg(db) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: listing {}: {}", what, sqlite3_errmsg(db));
     return -EIO;
   }
   auto done = make_scope_guard([st] { sqlite3_finalize(st); });

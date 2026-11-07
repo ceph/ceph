@@ -17,6 +17,7 @@
 #include <map>
 #include <set>
 
+#include "common/dout_fmt.h"
 #include "common/errno.h"
 
 #include "rgw_account.h"
@@ -168,8 +169,8 @@ int build_import_plan(const DoutPrefixProvider* dpp, CephContext* cct,
 	 * which is the same thing a bucket's OwnerID holds, so reusing
 	 * it is what makes the two agree. */
 	e.account_id = owner;
-	ldpp_dout(dpp, 10) << "nsfs: import plan: " << id.name
-	  << " keeps account " << e.account_id << dendl;
+	ldpp_dout_fmt(dpp, 10, "nsfs: import plan: {} keeps account {}",
+			       id.name, e.account_id);
       }
     }
     if (e.account_id.empty()) {
@@ -440,26 +441,26 @@ int build_import_plan(const DoutPrefixProvider* dpp, CephContext* cct,
   fail_users_of_failed_accounts(plan);
 
   const auto failures = plan.failures();
-  ldpp_dout(dpp, 4) << "nsfs: import plan: " << plan.accounts()
-    << " accounts, " << plan.iam_users() << " IAM users, "
-    << failures.size() << " failures, "
-    << plan.collisions.size() << " collisions, " << plan.drift.size()
-    << " drifted, " << plan.raised.size() << " limits raised, "
-    << plan.widened.size() << " roots widened" << dendl;
+  ldpp_dout_fmt(dpp, 4, "nsfs: import plan: {} accounts, {} IAM users, {} "
+			"failures, {} collisions, {} drifted, {} limits "
+			"raised, {} roots widened", plan.accounts(),
+			plan.iam_users(), failures.size(),
+			plan.collisions.size(), plan.drift.size(),
+			plan.raised.size(), plan.widened.size());
   for (const auto& f : failures) {
-    ldpp_dout(dpp, 0) << "ERROR: import: " << f << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: import: {}", f);
   }
   for (const auto& c : plan.collisions) {
-    ldpp_dout(dpp, 0) << "ERROR: import: " << c << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: import: {}", c);
   }
   for (const auto& d : plan.drift) {
-    ldpp_dout(dpp, 0) << "WARNING: import: " << d << dendl;
+    ldpp_dout_fmt(dpp, 0, "WARNING: import: {}", d);
   }
   for (const auto& l : plan.raised) {
-    ldpp_dout(dpp, 0) << "NOTICE: import: " << l << dendl;
+    ldpp_dout_fmt(dpp, 0, "NOTICE: import: {}", l);
   }
   for (const auto& w : plan.widened) {
-    ldpp_dout(dpp, 0) << "NOTICE: import: " << w << dendl;
+    ldpp_dout_fmt(dpp, 0, "NOTICE: import: {}", w);
   }
   return ret;
 }

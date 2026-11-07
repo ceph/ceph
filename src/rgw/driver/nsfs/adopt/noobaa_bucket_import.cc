@@ -21,6 +21,7 @@
 #include "rapidjson/writer.h"
 
 #include "common/ceph_json.h"
+#include "common/dout_fmt.h"
 #include "common/errno.h"
 
 #include "rgw_bucket_logging.h"
@@ -246,7 +247,7 @@ int rewrite_policy_principals(const DoutPrefixProvider* dpp,
   rapidjson::Document d;
   d.Parse(doc.c_str(), doc.size());
   if (d.HasParseError() || !d.IsObject()) {
-    ldpp_dout(dpp, 0) << "ERROR: a bucket policy will not parse" << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: a bucket policy will not parse");
     return -EBADMSG;
   }
 
@@ -327,8 +328,7 @@ int import_one_bucket(const DoutPrefixProvider* dpp, optional_yield y,
     }
   }
   if (one.buckets.empty()) {
-    ldpp_dout(dpp, 4) << "nsfs: no NooBaa record for bucket "
-      << bucket_name << dendl;
+    ldpp_dout_fmt(dpp, 4, "nsfs: no NooBaa record for bucket {}", bucket_name);
     return -ENOENT;
   }
   return import_bucket_state(dpp, y, driver, config_root, one, mapping,
@@ -635,35 +635,35 @@ int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
     ++result.buckets_written;
   }
 
-  ldpp_dout(dpp, 4) << "nsfs: imported " << result.buckets_written
-    << " buckets, " << result.policies_rewritten << " policies rewritten, "
-    << result.policies_refused.size() << " rejected, "
-    << result.logging_carried << " logging configurations, "
-    << result.topics_written << " topics written, "
-    << result.notifications_carried << " notifications carried, "
-    << result.notifications_reported.size() << " notification reports, "
-    << result.notifications_need_operator.size()
-    << " needing the operator, "
-    << result.blocked.size() << " blocked by an identity, "
-    << result.failures.size() << " failures" << dendl;
+  ldpp_dout_fmt(dpp, 4, "nsfs: imported {} buckets, {} policies rewritten, {} "
+			"rejected, {} logging configurations, {} topics "
+			"written, {} notifications carried, {} notification "
+			"reports, {} needing the operator, {} blocked by an "
+			"identity, {} failures", result.buckets_written,
+			result.policies_rewritten,
+			result.policies_refused.size(), result.logging_carried,
+			result.topics_written, result.notifications_carried,
+			result.notifications_reported.size(),
+			result.notifications_need_operator.size(),
+			result.blocked.size(), result.failures.size());
   for (const auto& r : result.policies_refused) {
-    ldpp_dout(dpp, 0) << "ERROR: import: " << r << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: import: {}", r);
   }
   for (const auto& r : result.arns_matched) {
-    ldpp_dout(dpp, 0) << "WARNING: import: a policy statement now matches "
-      "an ARN NooBaa never matched:  " << r << dendl;
+    ldpp_dout_fmt(dpp, 0, "WARNING: import: a policy statement now matches an "
+			  "ARN NooBaa never matched:  {}", r);
   }
   for (const auto& r : result.notifications_reported) {
-    ldpp_dout(dpp, 0) << "WARNING: import: " << r << dendl;
+    ldpp_dout_fmt(dpp, 0, "WARNING: import: {}", r);
   }
   for (const auto& r : result.notifications_need_operator) {
-    ldpp_dout(dpp, 0) << "WARNING: import: " << r << dendl;
+    ldpp_dout_fmt(dpp, 0, "WARNING: import: {}", r);
   }
   for (const auto& w : result.blocked) {
-    ldpp_dout(dpp, 0) << "WARNING: import: not attempted, blocked:  " << w << dendl;
+    ldpp_dout_fmt(dpp, 0, "WARNING: import: not attempted, blocked:  {}", w);
   }
   for (const auto& f : result.failures) {
-    ldpp_dout(dpp, 0) << "ERROR: import: " << f << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: import: {}", f);
   }
   if (!result.failures.empty()) {
     return -EIO;

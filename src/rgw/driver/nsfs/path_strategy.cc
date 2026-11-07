@@ -20,7 +20,7 @@
 #include <unistd.h>
 #include <sys/xattr.h>
 
-#include "common/dout.h"
+#include "common/dout_fmt.h"
 #include "common/errno.h"
 #include "include/scope_guard.h"
 
@@ -227,9 +227,8 @@ bool NooBaaPathStrategy::directory_object(const DoutPrefixProvider* dpp,
   errno = 0;
   unsigned long long v = ::strtoull(buf, &end, 10);
   if (errno || (end == buf) || (*end != '\0')) {
-    ldpp_dout(dpp, 4) << "unreadable " << NB_XATTR_DIR_CONTENT
-		      << " (\"" << buf << "\");  not treating this "
-		      << "directory as an object" << dendl;
+    ldpp_dout_fmt(dpp, 4, "unreadable {} (\"{}\");  not treating this "
+		  "directory as an object", NB_XATTR_DIR_CONTENT, buf);
     return false;
   }
 
@@ -244,8 +243,8 @@ int NooBaaPathStrategy::clear_directory_object(const DoutPrefixProvider* dpp,
   if ((::fremovexattr(dir_fd, NB_XATTR_DIR_CONTENT) < 0) &&
       (errno != ENODATA)) {
     int ret = -errno;
-    ldpp_dout(dpp, 0) << "ERROR: removing " << NB_XATTR_DIR_CONTENT << ": "
-		      << cpp_strerror(-ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: removing {}: {}", NB_XATTR_DIR_CONTENT,
+		  cpp_strerror(-ret));
     return ret;
   }
   return 0;

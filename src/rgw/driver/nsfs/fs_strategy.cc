@@ -34,7 +34,7 @@
 #include "gpfs/gpfs.h"
 #include "gpfs/gpfs_fcntl.h"
 
-#include "common/dout.h"
+#include "common/dout_fmt.h"
 #include "include/scope_guard.h"
 #include "common/errno.h"
 
@@ -83,8 +83,7 @@ int POSIXStrategy::link_temp_file(int temp_fd, int dir_fd,
                      dir_fd, tmp_name.c_str(), AT_SYMLINK_FOLLOW);
   if (ret < 0) {
     ret = errno;
-    ldpp_dout(dpp, 0) << "ERROR: linkat for temp file: "
-      << cpp_strerror(ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: linkat for temp file: {}", cpp_strerror(ret));
     return -ret;
   }
 
@@ -92,8 +91,8 @@ int POSIXStrategy::link_temp_file(int temp_fd, int dir_fd,
   if (ret < 0) {
     ret = errno;
     ::unlinkat(dir_fd, tmp_name.c_str(), 0);
-    ldpp_dout(dpp, 0) << "ERROR: renameat for temp file: "
-      << cpp_strerror(ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: renameat for temp file: {}",
+                          cpp_strerror(ret));
     return -ret;
   }
 
@@ -196,8 +195,8 @@ bool probe_shares_extents(const DoutPrefixProvider* dpp,
 
   int sfd = ::open(src.c_str(), O_RDWR | O_CREAT | O_TRUNC, 0600);
   if (sfd < 0) {
-    ldpp_dout(dpp, 5) << "probe_shares_extents: cannot write in " << dir
-      << ": " << cpp_strerror(errno) << dendl;
+    ldpp_dout_fmt(dpp, 5, "probe_shares_extents: cannot write in {}: {}", dir,
+                          cpp_strerror(errno));
     return false;
   }
   auto close_src = make_scope_guard([sfd, &src] {
@@ -223,11 +222,14 @@ bool probe_shares_extents(const DoutPrefixProvider* dpp,
   const bool shares = (::ioctl(dfd, FICLONE, sfd) == 0);
   const int err = errno;
 
-  ldpp_dout(dpp, 1) << "nsfs: filesystem at " << dir
-    << (shares ? " shares extents (FICLONE)"
-               : " does not share extents;  copies fall back to a buffer")
-    << (shares ? "" : std::string(" (") + cpp_strerror(err) + ")")
-    << dendl;
+  ldpp_dout_fmt(dpp, 1, "nsfs: filesystem at {}{}{}", dir,
+                        (shares
+                         ? " shares extents (FICLONE)"
+                         : " does not share extents;  copies fall back to "
+                           "a buffer"),
+                        (shares
+                         ? ""
+                         : std::string(" (") + cpp_strerror(err) + ")"));
   return shares;
 }
 
@@ -248,8 +250,8 @@ int FSStrategy::link_temp_file_excl(int temp_fd, int dir_fd,
   if (ret < 0) {
     ret = errno;
     if (ret != EEXIST) {
-      ldpp_dout(dpp, 0) << "ERROR: exclusive linkat for temp file: "
-	<< cpp_strerror(ret) << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: exclusive linkat for temp file: {}",
+                            cpp_strerror(ret));
     }
     return -ret;
   }
@@ -286,15 +288,15 @@ int FSStrategy::copy_buffered(const DoutPrefixProvider* dpp, size_t bufsz,
     ssize_t nr = ::pread(src_fd, buf.get(), want, src_off);
     if (nr < 0) {
       int err = errno;
-      ldpp_dout(dpp, 0) << "ERROR: copy_range: pread at " << src_off
-        << " failed: " << cpp_strerror(err) << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: copy_range: pread at {} failed: {}",
+                            src_off, cpp_strerror(err));
       return -err;
     }
     if (nr == 0) {
       /* source is shorter than the caller believed;  the caller sized the
        * copy from its own statx, so this is a truncation under us */
-      ldpp_dout(dpp, 5) << "copy_range: short source at " << src_off
-        << ", " << len << " bytes unread" << dendl;
+      ldpp_dout_fmt(dpp, 5, "copy_range: short source at {}, {} bytes unread",
+                            src_off, len);
       break;
     }
 
@@ -304,8 +306,8 @@ int FSStrategy::copy_buffered(const DoutPrefixProvider* dpp, size_t bufsz,
                             dst_off + done);
       if (nw <= 0) {
         int err = (nw < 0) ? errno : EIO;
-        ldpp_dout(dpp, 0) << "ERROR: copy_range: pwrite at "
-          << (dst_off + done) << " failed: " << cpp_strerror(err) << dendl;
+        ldpp_dout_fmt(dpp, 0, "ERROR: copy_range: pwrite at {} failed: {}",
+                              (dst_off + done), cpp_strerror(err));
         return -err;
       }
       done += nw;
@@ -337,8 +339,8 @@ int FSStrategy::copy_range(const DoutPrefixProvider* dpp,
     ssize_t copied = ::copy_file_range(src_fd, &soff, dst_fd, &doff,
                                        len, 0);
     if (copied == 0) {
-      ldpp_dout(dpp, 5) << "copy_range: short source at " << soff
-        << ", " << len << " bytes unread" << dendl;
+      ldpp_dout_fmt(dpp, 5, "copy_range: short source at {}, {} bytes unread",
+                            soff, len);
       break;
     }
     if (copied < 0) {
@@ -347,8 +349,8 @@ int FSStrategy::copy_range(const DoutPrefixProvider* dpp,
                              src_fd, soff, dst_fd, doff, len, hints);
       }
       int err = errno;
-      ldpp_dout(dpp, 0) << "ERROR: copy_range: copy_file_range failed: "
-        << cpp_strerror(err) << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: copy_range: copy_file_range failed: {}",
+                            cpp_strerror(err));
       return -err;
     }
     len -= copied;
@@ -403,8 +405,7 @@ int POSIXStrategy::get_xattrs(const DoutPrefixProvider* dpp, int fd,
   ssize_t list_len = ::flistxattr(fd, namebuf, sizeof(namebuf));
   if (list_len < 0) {
     int err = errno;
-    ldpp_dout(dpp, 0) << "ERROR: flistxattr failed: "
-      << cpp_strerror(err) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: flistxattr failed: {}", cpp_strerror(err));
     return -err;
   }
   if (list_len == 0) {
@@ -444,8 +445,8 @@ int POSIXStrategy::get_xattrs(const DoutPrefixProvider* dpp, int fd,
         continue;
       }
       int err = errno;
-      ldpp_dout(dpp, 0) << "ERROR: fgetxattr " << p
-        << " failed: " << cpp_strerror(err) << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: fgetxattr {} failed: {}", p,
+                            cpp_strerror(err));
       return -err;
     }
 
@@ -471,11 +472,11 @@ int POSIXStrategy::set_xattrs(const DoutPrefixProvider* dpp, int fd,
        * raised, the access model performs it, or the caller fails and
        * says so -- so it is not an error here */
       if ((err == EACCES) || (err == EPERM)) {
-        ldpp_dout(dpp, 10) << "fsetxattr " << name
-          << " denied: " << cpp_strerror(err) << dendl;
+        ldpp_dout_fmt(dpp, 10, "fsetxattr {} denied: {}", name,
+                               cpp_strerror(err));
       } else {
-        ldpp_dout(dpp, 0) << "ERROR: fsetxattr " << name
-          << " failed: " << cpp_strerror(err) << dendl;
+        ldpp_dout_fmt(dpp, 0, "ERROR: fsetxattr {} failed: {}", name,
+                              cpp_strerror(err));
       }
       return -err;
     }
@@ -496,11 +497,11 @@ int POSIXStrategy::remove_xattrs(const DoutPrefixProvider* dpp, int fd,
       int err = errno;
       /* a denial is the caller's to handle, as set_xattrs()'s is */
       if ((err == EACCES) || (err == EPERM)) {
-        ldpp_dout(dpp, 10) << "fremovexattr " << name
-          << " denied: " << cpp_strerror(err) << dendl;
+        ldpp_dout_fmt(dpp, 10, "fremovexattr {} denied: {}", name,
+                               cpp_strerror(err));
       } else {
-        ldpp_dout(dpp, 0) << "ERROR: fremovexattr " << name
-          << " failed: " << cpp_strerror(err) << dendl;
+        ldpp_dout_fmt(dpp, 0, "ERROR: fremovexattr {} failed: {}", name,
+                              cpp_strerror(err));
       }
       return -err;
     }
@@ -562,14 +563,14 @@ int FSStrategy::clone_file_by_copy(const DoutPrefixProvider* dpp,
     oret = nsfs::with_capabilities(dpp, COPY_SOURCE_CAPS, open_src);
     if (oret == 0) {
       cross_account_sources.fetch_add(1, std::memory_order_relaxed);
-      ldpp_dout(dpp, 10) << "nsfs: clone_file: the filesystem denied the"
-	" identity the source " << src_name << " and the gateway read it,"
-	" which the access model permits" << dendl;
+      ldpp_dout_fmt(dpp, 10, "nsfs: clone_file: the filesystem denied the "
+                             "identity the source {} and the gateway read it, "
+                             "which the access model permits", src_name);
     }
   }
   if (oret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: clone_file: openat src=" << src_name
-      << " failed: " << cpp_strerror(-oret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: clone_file: openat src={} failed: {}",
+                          src_name, cpp_strerror(-oret));
     return oret;
   }
   auto close_src = make_scope_guard([&src_fd] {
@@ -606,9 +607,10 @@ int FSStrategy::clone_file_by_copy(const DoutPrefixProvider* dpp,
       });
     }
     if (dret == 0) {
-      ldpp_dout(dpp, 10) << "nsfs: clone_file: the filesystem denied the"
-	" identity the destination " << dst_name << " and the gateway made"
-	" it as theirs, which the access model permits" << dendl;
+      ldpp_dout_fmt(dpp, 10, "nsfs: clone_file: the filesystem denied the "
+                             "identity the destination {} and the gateway "
+                             "made it as theirs, which the access model "
+                             "permits", dst_name);
     } else if (dst_fd >= 0) {
       ::close(dst_fd);
       dst_fd = -1;
@@ -622,8 +624,8 @@ int FSStrategy::clone_file_by_copy(const DoutPrefixProvider* dpp,
       /* lost the race;  the caller joins the winner's file */
       return -EEXIST;
     }
-    ldpp_dout(dpp, 0) << "ERROR: clone_file: openat dst=" << dst_name
-      << " failed: " << cpp_strerror(-dret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: clone_file: openat dst={} failed: {}",
+                          dst_name, cpp_strerror(-dret));
     return dret;
   }
 
@@ -633,8 +635,8 @@ int FSStrategy::clone_file_by_copy(const DoutPrefixProvider* dpp,
   int ret = nsfs::statx(src_fd, "", AT_EMPTY_PATH, STATX_SIZE, &stx);
   if (ret < 0) {
     int err = errno;
-    ldpp_dout(dpp, 0) << "ERROR: clone_file: statx src=" << src_name
-      << " failed: " << cpp_strerror(err) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: clone_file: statx src={} failed: {}",
+                          src_name, cpp_strerror(err));
     ::close(dst_fd);
     return -err;
   }
@@ -646,8 +648,8 @@ int FSStrategy::clone_file_by_copy(const DoutPrefixProvider* dpp,
   ::close(dst_fd);
 
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: clone_file: copy " << src_name
-      << " → " << dst_name << " failed: " << cpp_strerror(-ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: clone_file: copy {} → {} failed: {}",
+                          src_name, dst_name, cpp_strerror(-ret));
     if (!dst_raised) {
       ::unlinkat(dst_dir_fd, dst_name.c_str(), 0);
     }
@@ -691,12 +693,12 @@ int FSStrategy::clone_fd_by_copy(const DoutPrefixProvider* dpp,
     }, y);
     if ((oret == -EACCES) && src_as_gateway) {
       cross_account_sources.fetch_add(1, std::memory_order_relaxed);
-      ldpp_dout(dpp, 10) << "nsfs: clone_fd: the filesystem denied the"
-	" identity the source and the gateway read it, which the access"
-	" model permits" << dendl;
+      ldpp_dout_fmt(dpp, 10, "nsfs: clone_fd: the filesystem denied the "
+                             "identity the source and the gateway read it, "
+                             "which the access model permits");
     } else if (oret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: clone_fd: reopening the source failed: "
-        << cpp_strerror(-oret) << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: clone_fd: reopening the source failed: {}",
+                            cpp_strerror(-oret));
       return oret;
     }
   }
@@ -710,8 +712,8 @@ int FSStrategy::clone_fd_by_copy(const DoutPrefixProvider* dpp,
   struct statx stx;
   if (nsfs::statx(src_fd, "", AT_EMPTY_PATH, STATX_SIZE, &stx) < 0) {
     int err = errno;
-    ldpp_dout(dpp, 0) << "ERROR: clone_fd: statx src failed: "
-      << cpp_strerror(err) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: clone_fd: statx src failed: {}",
+                          cpp_strerror(err));
     return -err;
   }
 
@@ -742,17 +744,18 @@ int FSStrategy::clone_fd_by_copy(const DoutPrefixProvider* dpp,
       });
     }
     if (ret == 0) {
-      ldpp_dout(dpp, 10) << "nsfs: clone_fd: the filesystem denied the"
-	" identity the destination " << dst_name << " and the gateway made"
-	" it as theirs, which the access model permits" << dendl;
+      ldpp_dout_fmt(dpp, 10, "nsfs: clone_fd: the filesystem denied the "
+                             "identity the destination {} and the gateway "
+                             "made it as theirs, which the access model "
+                             "permits", dst_name);
     }
   }
   if (ret < 0) {
     if (tmp_fd >= 0) {
       ::close(tmp_fd);
     }
-    ldpp_dout(dpp, 0) << "ERROR: clone_fd: O_TMPFILE failed: "
-      << cpp_strerror(-ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: clone_fd: O_TMPFILE failed: {}",
+                          cpp_strerror(-ret));
     return ret;
   }
   auto close_tmp = make_scope_guard([tmp_fd] { ::close(tmp_fd); });
@@ -765,8 +768,8 @@ int FSStrategy::clone_fd_by_copy(const DoutPrefixProvider* dpp,
     return r;
   }, y);
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: clone_fd: copy -> " << dst_name
-      << " failed: " << cpp_strerror(-ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: clone_fd: copy -> {} failed: {}", dst_name,
+                          cpp_strerror(-ret));
     return ret;
   }
 
@@ -842,22 +845,20 @@ std::unique_ptr<GPFSStrategy> GPFSStrategy::try_create(
   struct statfs sfs;
   if (::statfs(base_path.c_str(), &sfs) == 0) {
     if (sfs.f_type != GPFS_SUPER_MAGIC) {
-      ldpp_dout(dpp, 1) << "gpfs: base_path " << base_path
-        << " is not a GPFS filesystem (f_type=0x"
-        << std::hex << sfs.f_type << std::dec
-        << "), falling back to POSIX strategy" << dendl;
+      ldpp_dout_fmt(dpp, 1, "gpfs: base_path {} is not a GPFS filesystem "
+                            "(f_type=0x{:x}), falling back to POSIX strategy",
+                            base_path, sfs.f_type);
       return nullptr;
     }
   } else {
-    ldpp_dout(dpp, 0) << "gpfs: statfs(" << base_path
-      << ") failed: " << cpp_strerror(errno) << dendl;
+    ldpp_dout_fmt(dpp, 0, "gpfs: statfs({}) failed: {}", base_path,
+                          cpp_strerror(errno));
     return nullptr;
   }
 
   void* dl = dlopen(dl_path.c_str(), RTLD_NOW | RTLD_LOCAL);
   if (!dl) {
-    ldpp_dout(dpp, 5) << "gpfs: dlopen " << dl_path
-      << " failed: " << dlerror() << dendl;
+    ldpp_dout_fmt(dpp, 5, "gpfs: dlopen {} failed: {}", dl_path, dlerror());
     return nullptr;
   }
 
@@ -878,15 +879,15 @@ std::unique_ptr<GPFSStrategy> GPFSStrategy::try_create(
     dlsym(dl, "gpfs_fcntl"));
 
   if (!la || !lai || !ua) {
-    ldpp_dout(dpp, 0) << "gpfs: dlsym failed — missing symbols in "
-      << dl_path << dendl;
+    ldpp_dout_fmt(dpp, 0, "gpfs: dlsym failed — missing symbols in {}",
+                          dl_path);
     dlclose(dl);
     return nullptr;
   }
 
   if (!cs || !cc || !cu) {
-    ldpp_dout(dpp, 5) << "gpfs: clone symbols not available, "
-      << "clone_file will fall back to copy" << dendl;
+    ldpp_dout_fmt(dpp, 5, "gpfs: clone symbols not available, clone_file will "
+                          "fall back to copy");
   }
 
   /* LWE cluster-wide locking.
@@ -914,8 +915,8 @@ std::unique_ptr<GPFSStrategy> GPFSStrategy::try_create(
   if (lwe_enabled) {
     dmapi_dl = dlopen("libdmapi.so", RTLD_NOW | RTLD_LOCAL);
     if (!dmapi_dl) {
-      ldpp_dout(dpp, 5) << "gpfs: dlopen libdmapi.so failed: "
-        << dlerror() << ", LWE locking will fall back to OFD" << dendl;
+      ldpp_dout_fmt(dpp, 5, "gpfs: dlopen libdmapi.so failed: {}, LWE locking "
+                            "will fall back to OFD", dlerror());
     } else {
       dm_fd = reinterpret_cast<dm_fd_to_handle_t>(
         dlsym(dmapi_dl, "dm_fd_to_handle"));
@@ -936,31 +937,33 @@ std::unique_ptr<GPFSStrategy> GPFSStrategy::try_create(
       char sess_info[] = "ceph-rgw-nsfs";
       int ret = lcs(GPFS_LWE_NO_SESSION, sess_info, &session);
       if (ret < 0) {
-        ldpp_dout(dpp, 0) << "gpfs: lwe_create_session failed: "
-          << cpp_strerror(errno)
-          << ", LWE locking will fall back to OFD" << dendl;
+        ldpp_dout_fmt(dpp, 0, "gpfs: lwe_create_session failed: {}, LWE "
+                              "locking will fall back to OFD",
+                              cpp_strerror(errno));
         session = GPFS_LWE_NO_SESSION;
       } else {
         lwe_ok = true;
       }
     } else {
-      ldpp_dout(dpp, 5) << "gpfs: LWE/DMAPI symbols not available, "
-        << "version locking will fall back to OFD" << dendl;
+      ldpp_dout_fmt(dpp, 5, "gpfs: LWE/DMAPI symbols not available, version "
+                            "locking will fall back to OFD");
     }
   }
 
   bool batch_ok = batch_xattrs && fc;
   if (batch_xattrs && !fc) {
-    ldpp_dout(dpp, 5) << "gpfs: gpfs_fcntl symbol not available, "
-      << "batch xattr ops will fall back to POSIX" << dendl;
+    ldpp_dout_fmt(dpp, 5, "gpfs: gpfs_fcntl symbol not available, batch xattr "
+                          "ops will fall back to POSIX");
   }
 
   std::string features;
   if (clone_enabled) features += " clone";
   if (lwe_ok) features += " lwe";
   if (batch_ok) features += " batch-xattrs";
-  ldpp_dout(dpp, 1) << "gpfs: loaded " << dl_path
-    << (features.empty() ? "" : " (" + features.substr(1) + ")") << dendl;
+  ldpp_dout_fmt(dpp, 1, "gpfs: loaded {}{}", dl_path,
+                        (features.empty()
+                         ? ""
+                         : " (" + features.substr(1) + ")"));
 
   return std::unique_ptr<GPFSStrategy>(
     new GPFSStrategy(dl, dmapi_dl, la, lai, ua, cs, cc, cu, fc,
@@ -980,8 +983,8 @@ int GPFSStrategy::link_temp_file(int temp_fd, int dir_fd,
   int ret = fn_linkat(temp_fd, "", dir_fd, name.c_str(), AT_EMPTY_PATH);
   if (ret < 0) {
     ret = errno;
-    ldpp_dout(dpp, 0) << "ERROR: gpfs_linkat for temp file: "
-      << cpp_strerror(ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: gpfs_linkat for temp file: {}",
+                          cpp_strerror(ret));
     return -ret;
   }
   return 0;
@@ -1009,14 +1012,13 @@ SafeResult GPFSStrategy::safe_link(const DoutPrefixProvider* dpp,
     if ((err == EACCES) || (err == EPERM)) {
       return SafeResult::DENIED;
     }
-    ldpp_dout(dpp, 5) << "gpfs safe_link: source gone src=" << src_name
-      << ": " << cpp_strerror(err) << dendl;
+    ldpp_dout_fmt(dpp, 5, "gpfs safe_link: source gone src={}: {}", src_name,
+                          cpp_strerror(err));
     return SafeResult::MISMATCH;
   }
   if ((statx_mtime_ns(stx) != expected_mtime_ns) ||
       (stx.stx_ino != expected_ino)) {
-    ldpp_dout(dpp, 5) << "gpfs safe_link: source mismatch src=" << src_name
-      << dendl;
+    ldpp_dout_fmt(dpp, 5, "gpfs safe_link: source mismatch src={}", src_name);
     return SafeResult::MISMATCH;
   }
 
@@ -1036,8 +1038,8 @@ SafeResult GPFSStrategy::safe_link(const DoutPrefixProvider* dpp,
     if (err == EEXIST) {
       return SafeResult::MISMATCH;
     }
-    ldpp_dout(dpp, 0) << "ERROR: linkat failed: " << cpp_strerror(err)
-      << " src=" << src_name << " dst=" << dst_name << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: linkat failed: {} src={} dst={}",
+                          cpp_strerror(err), src_name, dst_name);
     if ((err == EACCES) || (err == EPERM)) {
       return SafeResult::DENIED;
     }
@@ -1072,8 +1074,8 @@ SafeResult GPFSStrategy::safe_unlink(const DoutPrefixProvider* dpp,
     if (err == ENOENT) {
       return SafeResult::OK;
     }
-    ldpp_dout(dpp, 0) << "ERROR: gpfs safe_unlink: openat " << name
-      << " failed: " << cpp_strerror(err) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: gpfs safe_unlink: openat {} failed: {}", name,
+                          cpp_strerror(err));
     if ((err == EACCES) || (err == EPERM)) {
       return SafeResult::DENIED;
     }
@@ -1095,8 +1097,8 @@ SafeResult GPFSStrategy::safe_unlink(const DoutPrefixProvider* dpp,
   ::close(fd);
 
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: gpfs_unlinkat failed: "
-      << cpp_strerror(err) << " name=" << name << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: gpfs_unlinkat failed: {} name={}",
+                          cpp_strerror(err), name);
     if (err == EEXIST) {
       return SafeResult::MISMATCH;
     }
@@ -1137,8 +1139,8 @@ int GPFSStrategy::clone_file(const DoutPrefixProvider* dpp,
                              bool src_as_gateway)
 {
   if (!has_clone()) {
-    ldpp_dout(dpp, 10) << "gpfs clone_file: clone symbols not available, "
-      << "falling back to copy" << dendl;
+    ldpp_dout_fmt(dpp, 10, "gpfs clone_file: clone symbols not available, "
+                           "falling back to copy");
     return clone_file_by_copy(dpp, src_dir_fd, src_name,
                               dst_dir_fd, dst_name, y, hints, excl, id,
                               src_as_gateway);
@@ -1171,8 +1173,7 @@ int GPFSStrategy::clone_file(const DoutPrefixProvider* dpp,
   std::string src_path = fd_path(src_dir_fd, src_name);
   std::string dst_path = fd_path(dst_dir_fd, dst_name);
   if (src_path.empty() || dst_path.empty()) {
-    ldpp_dout(dpp, 0) << "ERROR: gpfs clone_file: could not resolve paths"
-      << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: gpfs clone_file: could not resolve paths");
     return -EINVAL;
   }
 
@@ -1191,8 +1192,8 @@ int GPFSStrategy::clone_file(const DoutPrefixProvider* dpp,
   std::string snap_name = clone_parent_name(dst_name);
   std::string snap_path = fd_path(dst_dir_fd, snap_name);
   if (snap_path.empty()) {
-    ldpp_dout(dpp, 0) << "ERROR: gpfs clone_file: could not resolve snap path"
-      << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: gpfs clone_file: could not resolve snap "
+                          "path");
     return -EINVAL;
   }
 
@@ -1202,9 +1203,8 @@ int GPFSStrategy::clone_file(const DoutPrefixProvider* dpp,
   int ret = fn_clone_snap(src_path.c_str(), snap_path.c_str());
   if (ret < 0) {
     int err = errno;
-    ldpp_dout(dpp, 5) << "gpfs clone_file: clone_snap " << src_name
-      << " failed: " << cpp_strerror(err)
-      << ", falling back to copy" << dendl;
+    ldpp_dout_fmt(dpp, 5, "gpfs clone_file: clone_snap {} failed: {}, falling "
+                          "back to copy", src_name, cpp_strerror(err));
     return clone_file_by_copy(dpp, src_dir_fd, src_name,
                               dst_dir_fd, dst_name, y, hints, excl);
   }
@@ -1212,16 +1212,15 @@ int GPFSStrategy::clone_file(const DoutPrefixProvider* dpp,
   ret = fn_clone_copy(snap_path.c_str(), dst_path.c_str());
   if (ret < 0) {
     int err = errno;
-    ldpp_dout(dpp, 5) << "gpfs clone_file: clone_copy " << src_name
-      << " → " << dst_name << " failed: " << cpp_strerror(err)
-      << ", falling back to copy" << dendl;
+    ldpp_dout_fmt(dpp, 5, "gpfs clone_file: clone_copy {} → {} failed: {}, "
+                          "falling back to copy", src_name, dst_name,
+                          cpp_strerror(err));
     cleanup_clone(dpp, dst_dir_fd, dst_name);
     return clone_file_by_copy(dpp, src_dir_fd, src_name,
                               dst_dir_fd, dst_name, y, hints, excl);
   }
 
-  ldpp_dout(dpp, 10) << "gpfs clone_file: cloned " << src_name
-    << " → " << dst_name << dendl;
+  ldpp_dout_fmt(dpp, 10, "gpfs clone_file: cloned {} → {}", src_name, dst_name);
   return 0;
 }
 
@@ -1258,19 +1257,18 @@ void GPFSStrategy::cleanup_clone(const DoutPrefixProvider* dpp,
      * expected if the child hasn't been unlinked yet, or if
      * multiple clones share the same parent.  Log at debug
      * level; a future sweep can retry. */
-    ldpp_dout(dpp, 10) << "gpfs cleanup_clone: unsnap "
-      << snap_name << " failed: " << cpp_strerror(err)
-      << " (may still have children)" << dendl;
+    ldpp_dout_fmt(dpp, 10, "gpfs cleanup_clone: unsnap {} failed: {} (may "
+                           "still have children)", snap_name,
+                           cpp_strerror(err));
     return;
   }
 
   ret = ::unlinkat(dir_fd, snap_name.c_str(), 0);
   if (ret < 0) {
-    ldpp_dout(dpp, 5) << "gpfs cleanup_clone: unlink "
-      << snap_name << " failed: " << cpp_strerror(errno) << dendl;
+    ldpp_dout_fmt(dpp, 5, "gpfs cleanup_clone: unlink {} failed: {}", snap_name,
+                          cpp_strerror(errno));
   } else {
-    ldpp_dout(dpp, 10) << "gpfs cleanup_clone: removed "
-      << snap_name << dendl;
+    ldpp_dout_fmt(dpp, 10, "gpfs cleanup_clone: removed {}", snap_name);
   }
 }
 
@@ -1326,8 +1324,8 @@ int GPFSStrategy::get_xattrs(const DoutPrefixProvider* dpp, int fd,
   int ret = fn_fcntl(fd, &list_arg);
   if (ret < 0) {
     int err = errno;
-    ldpp_dout(dpp, 5) << "gpfs get_xattrs: LIST_XATTR failed: "
-      << cpp_strerror(err) << ", falling back to POSIX" << dendl;
+    ldpp_dout_fmt(dpp, 5, "gpfs get_xattrs: LIST_XATTR failed: {}, falling "
+                          "back to POSIX", cpp_strerror(err));
     return POSIXStrategy().get_xattrs(dpp, fd, attrs, null_yield);
   }
 
@@ -1405,8 +1403,8 @@ int GPFSStrategy::get_xattrs(const DoutPrefixProvider* dpp, int fd,
     ret = fn_fcntl(fd, get_buf);
     if (ret < 0) {
       int err = errno;
-      ldpp_dout(dpp, 5) << "gpfs get_xattrs: batch GET_XATTR failed: "
-        << cpp_strerror(err) << ", falling back to POSIX" << dendl;
+      ldpp_dout_fmt(dpp, 5, "gpfs get_xattrs: batch GET_XATTR failed: {}, "
+                            "falling back to POSIX", cpp_strerror(err));
       return POSIXStrategy().get_xattrs(dpp, fd, attrs, null_yield);
     }
 
@@ -1449,8 +1447,7 @@ int GPFSStrategy::get_xattrs(const DoutPrefixProvider* dpp, int fd,
     }
   }
 
-  ldpp_dout(dpp, 20) << "gpfs get_xattrs: batch read "
-    << attrs.size() << " xattrs" << dendl;
+  ldpp_dout_fmt(dpp, 20, "gpfs get_xattrs: batch read {} xattrs", attrs.size());
   return 0;
   }, y);
 }
@@ -1485,8 +1482,8 @@ int GPFSStrategy::set_xattrs(const DoutPrefixProvider* dpp, int fd,
       int ret = fn_fcntl(fd, buf);
       if (ret < 0) {
         int err = errno;
-        ldpp_dout(dpp, 5) << "gpfs set_xattrs: batch SET_XATTR failed: "
-          << cpp_strerror(err) << ", falling back to POSIX" << dendl;
+        ldpp_dout_fmt(dpp, 5, "gpfs set_xattrs: batch SET_XATTR failed: {}, "
+                              "falling back to POSIX", cpp_strerror(err));
         return POSIXStrategy().set_xattrs(dpp, fd, attrs, null_yield);
       }
       off = sizeof(gpfsFcntlHeader_t);
@@ -1511,13 +1508,13 @@ int GPFSStrategy::set_xattrs(const DoutPrefixProvider* dpp, int fd,
   int ret = fn_fcntl(fd, buf);
   if (ret < 0) {
     int err = errno;
-    ldpp_dout(dpp, 5) << "gpfs set_xattrs: batch SET_XATTR failed: "
-      << cpp_strerror(err) << ", falling back to POSIX" << dendl;
+    ldpp_dout_fmt(dpp, 5, "gpfs set_xattrs: batch SET_XATTR failed: {}, "
+                          "falling back to POSIX", cpp_strerror(err));
     return POSIXStrategy().set_xattrs(dpp, fd, attrs, null_yield);
   }
 
-  ldpp_dout(dpp, 20) << "gpfs set_xattrs: batch wrote "
-    << attrs.size() << " xattrs" << dendl;
+  ldpp_dout_fmt(dpp, 20, "gpfs set_xattrs: batch wrote {} xattrs",
+                         attrs.size());
   return 0;
   }, y);
 }
@@ -1563,13 +1560,13 @@ int GPFSStrategy::remove_xattrs(const DoutPrefixProvider* dpp, int fd,
   int ret = fn_fcntl(fd, buf);
   if (ret < 0) {
     int err = errno;
-    ldpp_dout(dpp, 5) << "gpfs remove_xattrs: batch delete failed: "
-      << cpp_strerror(err) << ", falling back to POSIX" << dendl;
+    ldpp_dout_fmt(dpp, 5, "gpfs remove_xattrs: batch delete failed: {}, "
+                          "falling back to POSIX", cpp_strerror(err));
     return POSIXStrategy().remove_xattrs(dpp, fd, names, null_yield);
   }
 
-  ldpp_dout(dpp, 20) << "gpfs remove_xattrs: batch deleted "
-    << names.size() << " xattrs" << dendl;
+  ldpp_dout_fmt(dpp, 20, "gpfs remove_xattrs: batch deleted {} xattrs",
+                         names.size());
   return 0;
   }, y);
 }
@@ -1604,8 +1601,8 @@ std::unique_ptr<VersionLockHandle> GPFSStrategy::version_lock(
   const DoutPrefixProvider* dpp, int lock_fd)
 {
   if (!has_lwe()) {
-    ldpp_dout(dpp, 10) << "gpfs version_lock: LWE not available, "
-      << "falling back to OFD" << dendl;
+    ldpp_dout_fmt(dpp, 10, "gpfs version_lock: LWE not available, falling "
+                           "back to OFD");
     return std::make_unique<OFDLockHandle>(lock_fd);
   }
 
@@ -1613,9 +1610,8 @@ std::unique_ptr<VersionLockHandle> GPFSStrategy::version_lock(
   size_t hlen = 0;
   int ret = fn_dm_fd_to_handle(lock_fd, &hanp, &hlen);
   if (ret < 0) {
-    ldpp_dout(dpp, 5) << "gpfs version_lock: dm_fd_to_handle failed: "
-      << cpp_strerror(errno)
-      << ", falling back to OFD" << dendl;
+    ldpp_dout_fmt(dpp, 5, "gpfs version_lock: dm_fd_to_handle failed: {}, "
+                          "falling back to OFD", cpp_strerror(errno));
     return std::make_unique<OFDLockHandle>(lock_fd);
   }
 
@@ -1625,15 +1621,13 @@ std::unique_ptr<VersionLockHandle> GPFSStrategy::version_lock(
                              GPFS_LWE_FLAG_WAIT, &token);
   if (ret < 0) {
     int err = errno;
-    ldpp_dout(dpp, 5) << "gpfs version_lock: lwe_request_right failed: "
-      << cpp_strerror(err)
-      << ", falling back to OFD" << dendl;
+    ldpp_dout_fmt(dpp, 5, "gpfs version_lock: lwe_request_right failed: {}, "
+                          "falling back to OFD", cpp_strerror(err));
     fn_dm_handle_free(hanp, hlen);
     return std::make_unique<OFDLockHandle>(lock_fd);
   }
 
-  ldpp_dout(dpp, 20) << "gpfs version_lock: acquired LWE exclusive right"
-    << dendl;
+  ldpp_dout_fmt(dpp, 20, "gpfs version_lock: acquired LWE exclusive right");
 
   /* LWE handle takes ownership of hanp and lock_fd */
   return std::make_unique<LWELockHandle>(
@@ -1686,17 +1680,17 @@ void init_create_modes(const DoutPrefixProvider* dpp, CephContext* cct)
   errno = 0;
   unsigned long u = ::strtoul(s.c_str(), &end, 8);
   if (errno || (end == s.c_str()) || (*end != '\0') || (u & ~0777ul)) {
-    ldpp_dout(dpp, 0) << "ERROR: rgw_nsfs_umask \"" << s << "\" is not an "
-      << "octal mode;  using 0007" << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: rgw_nsfs_umask \"{}\" is not an octal mode; "
+                          " using 0007", s);
     u = 0007;
   }
   g_file_mode = 0666 & ~mode_t(u);
   g_dir_mode = 0777 & ~mode_t(u);
   g_process_umask = read_process_umask();
-  ldpp_dout(dpp, 1) << "nsfs: creating files " << std::oct
-    << g_file_mode.load() << " and directories " << g_dir_mode.load()
-    << " (rgw_nsfs_umask " << u << ", process umask "
-    << g_process_umask.load() << ")" << std::dec << dendl;
+  ldpp_dout_fmt(dpp, 1, "nsfs: creating files {:o} and directories {:o} "
+                        "(rgw_nsfs_umask {:o}, process umask {:o})",
+                        g_file_mode.load(), g_dir_mode.load(), u,
+                        g_process_umask.load());
 }
 
 mode_t file_create_mode()

@@ -20,6 +20,7 @@
 #include "rapidjson/writer.h"
 
 #include "acconfig.h"
+#include "common/dout_fmt.h"
 #include "common/errno.h"
 
 #include "rgw_arn.h"
@@ -489,14 +490,14 @@ int import_bucket_notifications(const DoutPrefixProvider* dpp,
       objv.generate_new_write_ver(dpp->get_cct());
       ret = driver->write_topic_v2(topic, false, objv, y, dpp);
       if (ret < 0) {
-        ldpp_dout(dpp, 0) << "ERROR: import: " << bucket_name
-          << ": writing topic " << t.name << ": " << cpp_strerror(-ret) << dendl;
+        ldpp_dout_fmt(dpp, 0, "ERROR: import: {}: writing topic {}: {}",
+                              bucket_name, t.name, cpp_strerror(-ret));
         return ret;
       }
       ++result.topics_written;
     } else {
-      ldpp_dout(dpp, 0) << "ERROR: import: " << bucket_name
-        << ": reading topic " << t.name << ": " << cpp_strerror(-ret) << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: import: {}: reading topic {}: {}",
+                            bucket_name, t.name, cpp_strerror(-ret));
       return ret;
     }
 

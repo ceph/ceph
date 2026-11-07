@@ -23,6 +23,7 @@
 #include <cstdint>
 #include <memory>
 #include "common/dout.h"
+#include "common/fmt_common.h"
 #include "../posix/bucket_cache.h"
 #include "../posix/multipart_cache.h"
 #include "../posix/posixDB.h"
@@ -208,23 +209,26 @@ struct ObjectType {
     ceph::decode(type, bl);
     DECODE_FINISH(bl);
   }
+  /* empty for a value outside Type, as operator<< printed nothing */
+  const char* name() const {
+    switch (type) {
+    case UNKNOWN:
+      return "UNKNOWN";
+    case FILE:
+      return "FILE";
+    case DIRECTORY:
+      return "DIRECTORY";
+    case MULTIPART:
+      return "MULTIPART";
+    }
+    return "";
+  }
+  auto fmt_print_ctx(auto &ctx) const -> decltype(ctx.out()) {
+    return fmt::format_to(ctx.out(), "{}", name());
+  }
   friend inline std::ostream &operator<<(std::ostream &out,
                                          const ObjectType &t) {
-    switch (t.type) {
-    case UNKNOWN:
-      out << "UNKNOWN";
-      break;
-    case FILE:
-      out << "FILE";
-      break;
-    case DIRECTORY:
-      out << "DIRECTORY";
-      break;
-    case MULTIPART:
-      out << "MULTIPART";
-      break;
-    }
-    return out;
+    return out << t.name();
   }
 };
 WRITE_CLASS_ENCODER(ObjectType);

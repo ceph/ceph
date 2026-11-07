@@ -51,6 +51,7 @@
 #include "include/scope_guard.h"
 #include "common/Clock.h" // for ceph_clock_now()
 #include "common/async/spawn_throttle.h"
+#include "common/dout_fmt.h"
 #include "common/errno.h"
 #include "rgw_lc.h"
 
@@ -625,20 +626,20 @@ static int inherit_ids(const DoutPrefixProvider* dpp, int fd,
     return 0;
   }
   if (no_chown) {
-    ldpp_dout(dpp, 0) << "ERROR: not creating " << what
-      << " for uid " << src.stx_uid << ":" << src.stx_gid
-      << ":  chown is unavailable (injected)" << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: not creating {} for uid {}:{}:  chown is "
+			  "unavailable (injected)", what, src.stx_uid,
+			  src.stx_gid);
     return -EPERM;
   }
   if (::fchown(fd, src.stx_uid, src.stx_gid) < 0) {
     int ret = -errno;
-    ldpp_dout(dpp, 0) << "ERROR: cannot give " << what << " the uid "
-      << src.stx_uid << ":" << src.stx_gid << " of what it re-expresses: "
-      << cpp_strerror(-ret)
-      << (ret == -EPERM
-	  ? ";  the daemon needs CAP_CHOWN to convert a tree it does not own"
-	  : "")
-      << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: cannot give {} the uid {}:{} of what it "
+			  "re-expresses: {}{}", what, src.stx_uid, src.stx_gid,
+			  cpp_strerror(-ret),
+			  (ret == -EPERM
+			   ? ";  the daemon needs CAP_CHOWN to convert a tree "
+			     "it does not own"
+			   : ""));
     return ret;
   }
   return 0;
@@ -771,8 +772,8 @@ static bool credentials_from_recorded_owner(const DoutPrefixProvider* dpp,
   const int ret = nsfs::impersonation_enabled()
     ? nsfs::run_as(dpp, reader, read_owner, y) : read_owner();
   if (ret < 0) {
-    ldpp_dout(dpp, 10) << "credentials_from_recorded_owner: " << name
-      << " records no usable owner: " << cpp_strerror(-ret) << dendl;
+    ldpp_dout_fmt(dpp, 10, "credentials_from_recorded_owner: {} records no "
+			   "usable owner: {}", name, cpp_strerror(-ret));
     return false;
   }
 
@@ -784,9 +785,9 @@ static bool credentials_from_recorded_owner(const DoutPrefixProvider* dpp,
    * carries:  the uid is what protected_hardlinks asks about, and it
    * is the file's */
   inout.groups = std::move(named.groups);
-  ldpp_dout(dpp, 10) << "credentials_from_recorded_owner: " << name
-    << " names " << recorded.id << ", " << inout.groups.size()
-    << " groups" << dendl;
+  ldpp_dout_fmt(dpp, 10, "credentials_from_recorded_owner: {} names {}, {} "
+			 "groups", name, to_string(recorded.id),
+			 inout.groups.size());
   return true;
 }
 
@@ -840,13 +841,13 @@ static int chown_raised(const DoutPrefixProvider* dpp, int dirfd,
     ret = give();
   }
   if (retries > 0) {
-    ldpp_dout(dpp, 1) << "nsfs: giving " << name << " to uid " << uid
-      << " returned EPERM;  " << retries << " retries, then "
-      << (ret == 0 ? "success" : cpp_strerror(-ret)) << dendl;
+    ldpp_dout_fmt(dpp, 1, "nsfs: giving {} to uid {} returned EPERM;  {} "
+			  "retries, then {}", name, uid, retries,
+			  (ret == 0 ? "success" : cpp_strerror(-ret)));
   }
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: could not give " << name << " to uid "
-      << uid << ": " << cpp_strerror(-ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: could not give {} to uid {}: {}", name, uid,
+			  cpp_strerror(-ret));
   }
   return ret;
 }
@@ -927,8 +928,8 @@ static int unlink_if_link(const DoutPrefixProvider* dpp,
   if ((ret < 0) && (ret != -ENOENT)) {
     return ret;
   }
-  ldpp_dout(dpp, 10) << "nsfs: " << name
-    << " is a symbolic link, which is not an object;  unlinked" << dendl;
+  ldpp_dout_fmt(dpp, 10, "nsfs: {} is a symbolic link, which is not an "
+			 "object;  unlinked", name);
   return 0;
 }
 
@@ -951,8 +952,8 @@ static int refuse_directory_name(const DoutPrefixProvider* dpp,
       !S_ISDIR(stx.stx_mode)) {
     return 0;
   }
-  ldpp_dout(dpp, 4) << "nsfs: rejecting key " << name
-    << ":  a directory holds its name" << dendl;
+  ldpp_dout_fmt(dpp, 4, "nsfs: rejecting key {}:  a directory holds its name",
+			name);
   return -ERR_KEY_PATH_CONFLICT;
 }
 
@@ -1002,16 +1003,15 @@ static int promote_version(int parent_fd, const std::string& leaf,
                            optional_yield y,
                            PromoteResult* out = nullptr)
 {
-  ldpp_dout(dpp, 10) << "promote_version: enter leaf=" << leaf
-    << " parent_fd=" << parent_fd << dendl;
+  ldpp_dout_fmt(dpp, 10, "promote_version: enter leaf={} parent_fd={}", leaf,
+			 parent_fd);
   for (int attempt = 0; attempt < NSFS_VERSION_RETRIES; ++attempt) {
     /* bail if a current version already exists */
     struct statx cur_stx;
     if (nsfs::statx(parent_fd, leaf.c_str(), AT_SYMLINK_NOFOLLOW,
               STATX_INO, &cur_stx) == 0) {
-      ldpp_dout(dpp, 10) << "promote_version: " << leaf
-        << " current already exists (ino=" << cur_stx.stx_ino
-        << "), bail" << dendl;
+      ldpp_dout_fmt(dpp, 10, "promote_version: {} current already exists "
+			     "(ino={}), bail", leaf, cur_stx.stx_ino);
       return 0;
     }
 
@@ -1019,8 +1019,9 @@ static int promote_version(int parent_fd, const std::string& leaf,
                         HIDDEN_VERSIONS_PATH.c_str(), O_RDONLY | O_DIRECTORY);
     if (vfd < 0) {
       int err = -vfd;
-      ldpp_dout(dpp, err == ENOENT ? 10 : 0) << "promote_version: " << leaf
-        << " .versions/ not opened (errno=" << err << ")" << dendl;
+      ldpp_dout_fmt(dpp, err == ENOENT ? 10 : 0, "promote_version: {} "
+						 ".versions/ not opened "
+						 "(errno={})", leaf, err);
       /* no .versions/ is nothing to promote;  anything else is */
       return err == ENOENT ? 0 : -err;
     }
@@ -1066,13 +1067,12 @@ static int promote_version(int parent_fd, const std::string& leaf,
     }
 
     if (max_name.empty()) {
-      ldpp_dout(dpp, 10) << "promote_version: " << leaf
-        << " no versions to promote" << dendl;
+      ldpp_dout_fmt(dpp, 10, "promote_version: {} no versions to promote",
+			     leaf);
       ::close(vfd);
       return 0;
     }
-    ldpp_dout(dpp, 10) << "promote_version: " << leaf
-      << " candidate=" << max_name << dendl;
+    ldpp_dout_fmt(dpp, 10, "promote_version: {} candidate={}", leaf, max_name);
 
     struct statx cand_stx;
     if (nsfs::statx(vfd, max_name.c_str(), AT_SYMLINK_NOFOLLOW,
@@ -1089,9 +1089,8 @@ static int promote_version(int parent_fd, const std::string& leaf,
         nanosleep(&ts, nullptr);
         continue;
       }
-      ldpp_dout(dpp, 0) << "ERROR: promote_version: " << leaf
-        << " cannot stat candidate " << max_name << ": "
-        << cpp_strerror(err) << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: promote_version: {} cannot stat candidate "
+			    "{}: {}", leaf, max_name, cpp_strerror(err));
       return -err;
     }
 
@@ -1146,8 +1145,8 @@ static int promote_version(int parent_fd, const std::string& leaf,
                                   parent_fd, leaf,
                                   statx_mtime_ns(cand_stx),
                                   cand_stx.stx_ino, null_yield);
-      ldpp_dout(dpp, 10) << "promote_version: safe_link " << max_name
-        << " → " << leaf << " result=" << (int)sr << dendl;
+      ldpp_dout_fmt(dpp, 10, "promote_version: safe_link {} → {} result={}",
+			     max_name, leaf, (int)sr);
       if (sr != SafeResult::OK) {
         return 0;
       }
@@ -1155,24 +1154,25 @@ static int promote_version(int parent_fd, const std::string& leaf,
        * until this returns, so a failure here lists the object
        * twice, once current and once not. */
       if (::unlinkat(vfd, max_name.c_str(), 0) < 0) {
-        ldpp_dout(dpp, 0) << "ERROR: promote_version: " << leaf
-          << " promoted, but " << max_name << " stays in "
-          << HIDDEN_VERSIONS_PATH << ": " << cpp_strerror(errno)
-          << ";  the object lists twice" << dendl;
+        ldpp_dout_fmt(dpp, 0, "ERROR: promote_version: {} promoted, but {} "
+			      "stays in {}: {};  the object lists twice", leaf,
+			      max_name, HIDDEN_VERSIONS_PATH,
+			      cpp_strerror(errno));
       }
       /* remove non_current_timestamp on the promoted file */
       int pfd = ::openat(parent_fd, leaf.c_str(), O_RDONLY | O_NOFOLLOW);
       if (pfd < 0) {
-        ldpp_dout(dpp, 0) << "ERROR: promote_version: " << leaf
-          << " promoted, but it cannot be opened: " << cpp_strerror(errno)
-          << ";  it keeps its non-current timestamp" << dendl;
+        ldpp_dout_fmt(dpp, 0, "ERROR: promote_version: {} promoted, but it "
+			      "cannot be opened: {};  it keeps its "
+			      "non-current timestamp", leaf,
+			      cpp_strerror(errno));
         return 0;
       }
       std::string ts_x = xs->disk_name(RGW_NSFS_ATTR_NON_CURRENT_TS);
       if (::fremovexattr(pfd, ts_x.c_str()) < 0 && errno != ENODATA) {
-        ldpp_dout(dpp, 0) << "ERROR: promote_version: " << leaf
-          << " promoted, but its non-current timestamp stays: "
-          << cpp_strerror(errno) << dendl;
+        ldpp_dout_fmt(dpp, 0, "ERROR: promote_version: {} promoted, but its "
+			      "non-current timestamp stays: {}", leaf,
+			      cpp_strerror(errno));
       }
       if (out) {
         out->etag = etag_from_fd(pfd, xs);
@@ -1184,9 +1184,9 @@ static int promote_version(int parent_fd, const std::string& leaf,
     const int aret = nsfs::impersonation_enabled()
       ? nsfs::run_as(dpp, cand_owner, publish, y) : publish();
     if (aret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: promote_version: " << leaf
-        << " cannot run as uid " << cand_owner.uid << ", the owner of "
-        << max_name << ": " << cpp_strerror(-aret) << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: promote_version: {} cannot run as uid {}, "
+			    "the owner of {}: {}", leaf, cand_owner.uid,
+			    max_name, cpp_strerror(-aret));
       ::close(vfd);
       return aret;
     }
@@ -1208,15 +1208,16 @@ static int promote_version(int parent_fd, const std::string& leaf,
      * the same thing twice. */
     if (((sr == SafeResult::ERROR) || (sr == SafeResult::DENIED)) &&
         !named) {
-      ldpp_dout(dpp, 4) << "promote_version: " << leaf << " failed as uid "
-        << cand_owner.uid << ", which no identity record names;  retrying "
-        "as the gateway with DAC_OVERRIDE and FOWNER raised" << dendl;
+      ldpp_dout_fmt(dpp, 4, "promote_version: {} failed as uid {}, which no "
+			    "identity record names;  retrying as the gateway "
+			    "with DAC_OVERRIDE and FOWNER raised", leaf,
+			    cand_owner.uid);
       const int rret = nsfs::with_capabilities(dpp, PROMOTE_RESIDUE_CAPS,
                                                publish);
       if (rret < 0) {
-        ldpp_dout(dpp, 0) << "ERROR: promote_version: " << leaf
-          << " could not be published with capabilities raised: "
-          << cpp_strerror(-rret) << dendl;
+        ldpp_dout_fmt(dpp, 0, "ERROR: promote_version: {} could not be "
+			      "published with capabilities raised: {}", leaf,
+			      cpp_strerror(-rret));
       }
     }
 
@@ -1234,11 +1235,10 @@ static int promote_version(int parent_fd, const std::string& leaf,
       /* The link failed, and a retry fails the same way --
        * the strategy logged the errno.  What an operator needs is the
        * consequence, which no other line states. */
-      ldpp_dout(dpp, 0) << "ERROR: promote_version: " << leaf
-        << " not promoted from " << max_name << " as uid "
-        << cand_owner.uid << ";  the entry stays in "
-        << HIDDEN_VERSIONS_PATH
-        << ", so the bucket is not empty and will not delete" << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: promote_version: {} not promoted from {} "
+			    "as uid {};  the entry stays in {}, so the bucket "
+			    "is not empty and will not delete", leaf, max_name,
+			    cand_owner.uid, HIDDEN_VERSIONS_PATH);
       return -EIO;
     }
     /* MISMATCH — candidate changed, retry */
@@ -1246,10 +1246,10 @@ static int promote_version(int parent_fd, const std::string& leaf,
     nanosleep(&ts, nullptr);
   }
 
-  ldpp_dout(dpp, 0) << "ERROR: promote_version: " << leaf
-    << " not promoted after " << NSFS_VERSION_RETRIES
-    << " attempts;  the newest version stays in " << HIDDEN_VERSIONS_PATH
-    << ", so the bucket is not empty and will not delete" << dendl;
+  ldpp_dout_fmt(dpp, 0, "ERROR: promote_version: {} not promoted after {} "
+			"attempts;  the newest version stays in {}, so the "
+			"bucket is not empty and will not delete", leaf,
+			NSFS_VERSION_RETRIES, HIDDEN_VERSIONS_PATH);
   return -EAGAIN;
 }
 
@@ -1477,9 +1477,9 @@ static void clear_rename_intent(const DoutPrefixProvider* dpp,
   }, null_yield);
   ::close(vfd);
   if ((cret < 0) && (cret != -ENODATA)) {
-    ldpp_dout(dpp, 0) << "ERROR: could not clear a rename record:  "
-      << cpp_strerror(-cret) << ";  the next write to the key goes "
-      "through recovery" << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: could not clear a rename record:  {};  the "
+			  "next write to the key goes through recovery",
+			  cpp_strerror(-cret));
   }
 }
 
@@ -1595,10 +1595,10 @@ static int recover_rename_intent(const nsfs::XattrStrategy* xs,
 		    AT_SYMLINK_NOFOLLOW | AT_EACCESS) == 0);
 
   if (at_src == at_dst) {
-    ldpp_dout(dpp, 0) << "ERROR: rename recovery: " << in.leaf << " -> "
-      << in.bucket << "/" << in.key << " is present at "
-      << (at_src ? "both keys" : "neither key")
-      << ";  leaving the intent record for manual attention" << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: rename recovery: {} -> {}/{} is present at "
+			  "{};  leaving the intent record for manual attention",
+			  in.leaf, in.bucket, in.key,
+			  (at_src ? "both keys" : "neither key"));
     return -EBUSY;
   }
 
@@ -1638,9 +1638,10 @@ static int recover_rename_intent(const nsfs::XattrStrategy* xs,
 			   sname.c_str()) < 0) ? -errno : 0;
       });
       if (ret < 0) {
-	ldpp_dout(dpp, 0) << "ERROR: rename recovery: returning " << v.entry
-	  << " failed: " << cpp_strerror(-ret) << ";  the intent record stays "
-	  << "and " << in.leaf << " needs manual attention" << dendl;
+	ldpp_dout_fmt(dpp, 0, "ERROR: rename recovery: returning {} failed: "
+			      "{};  the intent record stays and {} needs "
+			      "manual attention", v.entry, cpp_strerror(-ret),
+			      in.leaf);
 	::close(dst_vfd);
 	::close(src_vfd);
 	return ret;
@@ -1650,9 +1651,9 @@ static int recover_rename_intent(const nsfs::XattrStrategy* xs,
     if (dst_vfd >= 0) {
       ::close(dst_vfd);
     }
-    ldpp_dout(dpp, 1) << "rename recovery: " << in.leaf
-      << " never committed;  returned " << n << " version(s) from "
-      << in.bucket << "/" << in.key << dendl;
+    ldpp_dout_fmt(dpp, 1, "rename recovery: {} never committed;  returned {} "
+			  "version(s) from {}/{}", in.leaf, n, in.bucket,
+			  in.key);
   } else {
     /* committed:  the history that did not make it follows the leaf, or, if
      * the move was sliced, was meant to be dropped */
@@ -1677,9 +1678,9 @@ static int recover_rename_intent(const nsfs::XattrStrategy* xs,
 	  return (::unlinkat(src_vfd, v.entry.c_str(), 0) < 0) ? -errno : 0;
 	});
 	if (ret < 0) {
-	  ldpp_dout(dpp, 0) << "ERROR: rename recovery: sliced version "
-	    << v.entry << " could not be removed: " << cpp_strerror(-ret)
-	    << dendl;
+	  ldpp_dout_fmt(dpp, 0, "ERROR: rename recovery: sliced version {} "
+				"could not be removed: {}", v.entry,
+				cpp_strerror(-ret));
 	  continue;
 	}
       } else {
@@ -1689,9 +1690,10 @@ static int recover_rename_intent(const nsfs::XattrStrategy* xs,
 			     dname.c_str()) < 0) ? -errno : 0;
 	});
 	if (ret < 0) {
-	  ldpp_dout(dpp, 0) << "ERROR: rename recovery: forwarding " << v.entry
-	    << " failed: " << cpp_strerror(-ret) << ";  the intent record "
-	    << "stays and " << in.leaf << " needs manual attention" << dendl;
+	  ldpp_dout_fmt(dpp, 0, "ERROR: rename recovery: forwarding {} "
+				"failed: {};  the intent record stays and {} "
+				"needs manual attention", v.entry,
+				cpp_strerror(-ret), in.leaf);
 	  ::close(dst_vfd);
 	  ::close(src_vfd);
 	  return ret;
@@ -1702,9 +1704,9 @@ static int recover_rename_intent(const nsfs::XattrStrategy* xs,
     if (dst_vfd >= 0) {
       ::close(dst_vfd);
     }
-    ldpp_dout(dpp, 1) << "rename recovery: " << in.leaf << " committed to "
-      << in.bucket << "/" << in.key << ";  " << (in.slice ? "dropped " :
-      "forwarded ") << n << " version(s)" << dendl;
+    ldpp_dout_fmt(dpp, 1, "rename recovery: {} committed to {}/{};  {}{} "
+			  "version(s)", in.leaf, in.bucket, in.key,
+			  (in.slice ? "dropped " : "forwarded "), n);
   }
 
   /* the record is on a directory its writer owns, so its removal is
@@ -1716,9 +1718,9 @@ static int recover_rename_intent(const nsfs::XattrStrategy* xs,
   });
   ::close(src_vfd);
   if ((cret < 0) && (cret != -ENODATA)) {
-    ldpp_dout(dpp, 0) << "ERROR: rename recovery: " << in.leaf
-      << " committed, but its record could not be removed:  "
-      << cpp_strerror(-cret) << ";  renames of it return -EBUSY" << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: rename recovery: {} committed, but its "
+			  "record could not be removed:  {};  renames of it "
+			  "return -EBUSY", in.leaf, cpp_strerror(-cret));
   }
 
   /* The cache cannot describe what recovery just changed:  a rekey expresses
@@ -1825,23 +1827,25 @@ version_lock_recovering(const DoutPrefixProvider* dpp, NSFSDriver* driver,
 
   RenameIntent in;
   if (! parse_rename_intent(rec, in)) {
-    ldpp_dout(dpp, 0) << "ERROR: .versions/ carries an unparseable "
-      << "rename_intent record (" << rec.size() << " bytes);  leaving it "
-      << "rather than guessing which move it described" << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: .versions/ carries an unparseable "
+			  "rename_intent record ({} bytes);  leaving it "
+			  "rather than guessing which move it described",
+			  rec.size());
     if (recovery_ret) {
       *recovery_ret = -EBUSY;
     }
     return vlock;
   }
 
-  ldpp_dout(dpp, 1) << "an earlier move of " << in.leaf << " out of this "
-    << "directory did not complete;  recovering it" << dendl;
+  ldpp_dout_fmt(dpp, 1, "an earlier move of {} out of this directory did not "
+			"complete;  recovering it", in.leaf);
   int ret = recover_rename_intent(xs, dpp, driver,
 				  bucket_name, parent_fd, in);
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: recovering the interrupted move of "
-      << in.leaf << " failed: " << cpp_strerror(-ret) << ";  the record "
-      << "stays and the next write to this directory will retry" << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: recovering the interrupted move of {} "
+			  "failed: {};  the record stays and the next write "
+			  "to this directory will retry", in.leaf,
+			  cpp_strerror(-ret));
     if (recovery_ret) {
       *recovery_ret = ret;
     }
@@ -1903,13 +1907,15 @@ static int demote_current_version(const DoutPrefixProvider* dpp,
 				  optional_yield y,
 				  const nsfs::XattrStrategy* alt = nullptr)
 {
-  ldpp_dout(dpp, 10) << "nsfs: demote enter leaf=" << leaf
-    << " enabled=" << ver_enabled << " as="
-    << (id.active() ? to_string(id.key) : std::string("gateway")) << dendl;
+  ldpp_dout_fmt(dpp, 10, "nsfs: demote enter leaf={} enabled={:d} as={}", leaf,
+			 ver_enabled,
+			 (id.active()
+			  ? to_string(id.key)
+			  : std::string("gateway")));
   int vfd = open_versions_dir(dpp, parent_fd, id, model);
   if (vfd < 0) {
-    ldpp_dout(dpp, 10) << "nsfs: demote " << leaf
-      << " has no .versions: " << cpp_strerror(-vfd) << dendl;
+    ldpp_dout_fmt(dpp, 10, "nsfs: demote {} has no .versions: {}", leaf,
+			   cpp_strerror(-vfd));
     return vfd;
   }
   auto close_vfd = make_scope_guard([vfd] { ::close(vfd); });
@@ -1918,8 +1924,8 @@ static int demote_current_version(const DoutPrefixProvider* dpp,
     std::string null_name = nsfs_ver_entry(leaf, NULL_VERSION_ID);
     const int uret = unlinkat_as(dpp, id, model, vfd, null_name.c_str());
     if ((uret < 0) && (uret != -ENOENT)) {
-      ldpp_dout(dpp, 4) << "nsfs: demote " << leaf << ":  unlinking "
-	<< null_name << ": " << cpp_strerror(-uret) << dendl;
+      ldpp_dout_fmt(dpp, 4, "nsfs: demote {}:  unlinking {}: {}", leaf,
+			    null_name, cpp_strerror(-uret));
       return uret;
     }
   }
@@ -1975,8 +1981,8 @@ static int demote_current_version(const DoutPrefixProvider* dpp,
       nsfs::FSIdentity::none());
     return (sr == SafeResult::DENIED) ? -EACCES : 0;
   }, y);
-  ldpp_dout(dpp, 10) << "nsfs: demote " << leaf << " -> " << ver_name
-    << " result=" << (int)sr << dendl;
+  ldpp_dout_fmt(dpp, 10, "nsfs: demote {} -> {} result={}", leaf, ver_name,
+			 (int)sr);
 
   if (sr == SafeResult::OK) {
     int demoted_fd = openat_as(dpp, id, model, vfd, ver_name.c_str(), O_RDONLY);
@@ -1996,9 +2002,8 @@ static int demote_current_version(const DoutPrefixProvider* dpp,
 			    now_ms.size(), 0) < 0) ? -errno : 0;
       }, y);
       if (tret < 0) {
-	ldpp_dout(dpp, 4) << "nsfs: demote " << leaf
-	  << ":  its non-current timestamp was not written: "
-	  << cpp_strerror(-tret) << dendl;
+	ldpp_dout_fmt(dpp, 4, "nsfs: demote {}:  its non-current timestamp "
+			      "was not written: {}", leaf, cpp_strerror(-tret));
       }
       /* While the fd that can return them is open.  cur_stx was taken
        * on the leaf before the link and safe_link moves no bytes, so
@@ -2017,12 +2022,12 @@ static int demote_current_version(const DoutPrefixProvider* dpp,
      * 403:  the request passed the bucket's policy and not the
      * tree's permissions, and saying 500 would name the gateway for
      * the tree's answer */
-    ldpp_dout(dpp, 4) << "version demote failed for " << leaf
-      << ":  the filesystem denied the writer" << dendl;
+    ldpp_dout_fmt(dpp, 4, "version demote failed for {}:  the filesystem "
+			  "denied the writer", leaf);
     return -EACCES;
   } else if (sr != SafeResult::OK) {
-    ldpp_dout(dpp, 0) << "ERROR: version demote failed for "
-      << leaf << " sr=" << (int)sr << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: version demote failed for {} sr={}", leaf,
+			  (int)sr);
     return -ERR_INTERNAL_ERROR;
   }
 
@@ -2134,8 +2139,8 @@ int resolve_key_path(const DoutPrefixProvider* dpp,
   if (!internal_bucket && key.ns.empty() &&
       key_hits_reserved_name(key.name, rn)) {
     if (dpp) {
-      ldpp_dout(dpp, 4) << "nsfs: rejecting key " << key.name
-	<< ":  a component names driver scaffolding" << dendl;
+      ldpp_dout_fmt(dpp, 4, "nsfs: rejecting key {}:  a component names "
+			    "driver scaffolding", key.name);
     }
     return create_dirs ? -ERR_INVALID_OBJECT_NAME : -ENOENT;
   }
@@ -2153,8 +2158,8 @@ int resolve_key_path(const DoutPrefixProvider* dpp,
      * 404, which says the object is absent when a conflicting one is
      * present. */
     if (dpp) {
-      ldpp_dout(dpp, 4) << "nsfs: rejecting key " << key.name
-	<< ":  a component of it is an existing object" << dendl;
+      ldpp_dout_fmt(dpp, 4, "nsfs: rejecting key {}:  a component of it is an "
+			    "existing object", key.name);
     }
     return -ERR_KEY_PATH_CONFLICT;
   }
@@ -2363,8 +2368,8 @@ static int get_x_attrs(optional_yield y, const DoutPrefixProvider* dpp, int fd,
   buflen = flistxattr(fd, namebuf, sizeof(namebuf));
   if (buflen < 0) {
     ret = errno;
-    ldpp_dout(dpp, 0) << "ERROR: could not list attributes for " << display << ": "
-      << cpp_strerror(ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: could not list attributes for {}: {}",
+			  display, cpp_strerror(ret));
     return -ret;
   }
 
@@ -2428,7 +2433,8 @@ static int get_x_attrs(optional_yield y, const DoutPrefixProvider* dpp, int fd,
 
     if (vallen < 0) {
       ret = errno;
-      ldpp_dout(dpp, 0) << "ERROR: could not get attribute " << keyptr << " for " << display << ": " << cpp_strerror(ret) << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: could not get attribute {} for {}: {}",
+			    keyptr, display, cpp_strerror(ret));
       return -ret;
     }
 
@@ -2445,9 +2451,10 @@ static int get_x_attrs(optional_yield y, const DoutPrefixProvider* dpp, int fd,
        * this driver, not in the tree, so say so loudly rather than hand
        * a NUL to a client. */
       if (vallen > 0 && vp[vallen - 1] == '\0') {
-	ldpp_dout(dpp, 0) << "ERROR: attribute " << key << " on " << display
-	  << " is already NUL-terminated on disk;  some write path skipped "
-	  << "attr_on_disk().  Not restoring." << dendl;
+	ldpp_dout_fmt(dpp, 0, "ERROR: attribute {} on {} is already "
+			      "NUL-terminated on disk;  some write path "
+			      "skipped attr_on_disk().  Not restoring.", key,
+			      display);
       } else {
 	bl.append('\0');
       }
@@ -2528,7 +2535,8 @@ static int write_x_attr(const DoutPrefixProvider* dpp, optional_yield y, int fd,
 	? -errno : 0;
   }, y);
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: could not write attribute " << attrname << " for " << display << ": " << cpp_strerror(-ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: could not write attribute {} for {}: {}",
+			  attrname, display, cpp_strerror(-ret));
     return ret;
   }
 
@@ -2596,8 +2604,8 @@ static int remove_x_attr(const DoutPrefixProvider *dpp, optional_yield y,
     return 0;
   }, y);
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: could not remove attribute " << attrname
-      << " for " << display << ": " << cpp_strerror(-ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: could not remove attribute {} for {}: {}",
+			  attrname, display, cpp_strerror(-ret));
     return ret;
   }
 
@@ -2638,9 +2646,10 @@ static int delete_directory_entries(int dir_fd, const char* dname,
   dir = fdopendir(dir_fd);
   if (dir == NULL) {
     ret = errno;
-    ldpp_dout(dpp, removal_log_level(ret)) << removal_log_prefix(ret)
-                      << "could not open directory " << dname
-                      << " for listing: " << cpp_strerror(ret) << dendl;
+    ldpp_dout_fmt(dpp, removal_log_level(ret), "{}could not open directory {} "
+					       "for listing: {}",
+					       removal_log_prefix(ret), dname,
+					       cpp_strerror(ret));
     ::close(dir_fd);
     return -ret;
   }
@@ -2668,9 +2677,10 @@ static int delete_directory_entries(int dir_fd, const char* dname,
 		      &stx);
     if (ret < 0) {
       ret = errno;
-      ldpp_dout(dpp, removal_log_level(ret)) << removal_log_prefix(ret)
-                        << "could not stat object " << entry->d_name
-                        << ": " << cpp_strerror(ret) << dendl;
+      ldpp_dout_fmt(dpp, removal_log_level(ret), "{}could not stat object {}: "
+						 "{}", removal_log_prefix(ret),
+						 entry->d_name,
+						 cpp_strerror(ret));
       closedir(dir);
       return -ret;
     }
@@ -2690,9 +2700,10 @@ static int delete_directory_entries(int dir_fd, const char* dname,
     ret = unlinkat(dir_fd, entry->d_name, 0);
     if (ret < 0) {
       ret = errno;
-      ldpp_dout(dpp, removal_log_level(ret)) << removal_log_prefix(ret)
-                        << "could not remove file " << entry->d_name
-                        << ": " << cpp_strerror(ret) << dendl;
+      ldpp_dout_fmt(dpp, removal_log_level(ret), "{}could not remove file {}: "
+						 "{}", removal_log_prefix(ret),
+						 entry->d_name,
+						 cpp_strerror(ret));
       closedir(dir);
       return -ret;
     }
@@ -2709,9 +2720,10 @@ static int delete_directory(int parent_fd, const char* dname, bool delete_childr
   int dir_fd = openat(parent_fd, dname, O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
   if (dir_fd < 0) {
     dir_fd = errno;
-    ldpp_dout(dpp, removal_log_level(dir_fd)) << removal_log_prefix(dir_fd)
-                      << "could not open subdir " << dname << ": "
-                      << cpp_strerror(dir_fd) << dendl;
+    ldpp_dout_fmt(dpp, removal_log_level(dir_fd), "{}could not open subdir "
+						  "{}: {}",
+						  removal_log_prefix(dir_fd),
+						  dname, cpp_strerror(dir_fd));
     return -dir_fd;
   }
   ret = delete_directory_entries(dir_fd, dname, delete_children, dpp, rn);
@@ -2723,9 +2735,10 @@ static int delete_directory(int parent_fd, const char* dname, bool delete_childr
   if (ret < 0) {
     ret = errno;
     if (errno != ENOENT) {
-      ldpp_dout(dpp, removal_log_level(ret)) << removal_log_prefix(ret)
-	<< "could not remove directory " << dname << ": "
-	<< cpp_strerror(ret) << dendl;
+      ldpp_dout_fmt(dpp, removal_log_level(ret), "{}could not remove "
+						 "directory {}: {}",
+						 removal_log_prefix(ret), dname,
+						 cpp_strerror(ret));
       return -ret;
     }
   }
@@ -2775,8 +2788,8 @@ int FSEnt::stat(const DoutPrefixProvider* dpp, bool force)
 		  AT_SYMLINK_NOFOLLOW, STATX_ALL, &stx);
   if (ret < 0) {
     ret = errno;
-    ldpp_dout(dpp, 0) << "ERROR: could not stat " << get_name() << ": "
-                  << cpp_strerror(ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: could not stat {}: {}", get_name(),
+			  cpp_strerror(ret));
     exist = false;
     return -ret;
   }
@@ -2951,9 +2964,9 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
      * every other writer off, below the gate.  Removals pass:  they are
      * how a conversion leaves nothing of NooBaa's behind. */
     if (!to_write.empty() && !xs->writes()) {
-      ldpp_dout(dpp, 0) << "ERROR: rejecting a write of " << to_write.size()
-	<< " attribute(s) to " << get_name() << " in the " << xs->name()
-	<< " format:  the driver never writes it" << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: rejecting a write of {} attribute(s) to "
+			    "{} in the {} format:  the driver never writes it",
+			    to_write.size(), get_name(), xs->name());
       return -ERR_INVALID_BUCKET_STATE;
     }
 
@@ -2975,9 +2988,9 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
 			 [](const auto& kv) { return kv.second.length() != 0; });
     };
     if (writing(attrs) || (extra_attrs && writing(*extra_attrs))) {
-      ldpp_dout(dpp, 0) << "ERROR: rejecting a write to " << get_name()
-	<< " in the " << xs->name() << " format:  the driver never writes it"
-	<< dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: rejecting a write to {} in the {} format: "
+			    " the driver never writes it", get_name(),
+			    xs->name());
       return -ERR_INVALID_BUCKET_STATE;
     }
   }
@@ -3179,10 +3192,9 @@ int File::create(const DoutPrefixProvider *dpp, optional_yield y,
     if (ret == EEXIST) {
       return 0;
     }
-    ldpp_dout(dpp, 0) << "ERROR: could not create object " << get_name()
-		      << " (flags 0x" << std::hex << flags << std::dec
-		      << ", as uid " << identity.cred.uid << "): "
-                      << cpp_strerror(ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: could not create object {} (flags 0x{:x}, "
+		  "as uid {}): {}", get_name(), flags, identity.cred.uid,
+		  cpp_strerror(ret));
     return -ret;
     }
 
@@ -3202,8 +3214,8 @@ int File::create(const DoutPrefixProvider *dpp, optional_yield y,
   ret = nsfs::apply_create_mode(dpp, fd, mode, y,
 				made_raised ? FSIdentity::none() : identity);
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: could not set the mode on " << get_name()
-		      << ": " << cpp_strerror(-ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: could not set the mode on {}: {}", get_name(),
+			  cpp_strerror(-ret));
     return ret;
   }
   if (made_raised) {
@@ -3254,23 +3266,22 @@ int File::open(const DoutPrefixProvider* dpp)
   /* POSIX decides access here and nowhere later, so this line is
    * what explains a permission outcome:  no identity under
    * impersonation means the open ran as the gateway. */
-  ldpp_dout(dpp, 20) << "nsfs: open " << get_name()
-    << (ro ? " O_RDONLY" : " O_RDWR")
-    << " as " << (identity.active() ? to_string(identity.key) : "the gateway")
-    << " -> " << ret << dendl;
+  ldpp_dout_fmt(dpp, 20, "nsfs: open {}{} as {} -> {}", get_name(),
+			 (ro ? " O_RDONLY" : " O_RDWR"),
+			 (identity.active()
+			  ? to_string(identity.key)
+			  : "the gateway"), ret);
   if (ret == -ELOOP) {
     /* O_NOFOLLOW met a link swapped in after the stat:  not an object */
-    ldpp_dout(dpp, 10) << "nsfs: " << get_name()
-      << " is a symbolic link, which is not an object" << dendl;
+    ldpp_dout_fmt(dpp, 10, "nsfs: {} is a symbolic link, which is not an "
+			   "object", get_name());
     return -ENOENT;
   }
   if (ret < 0) {
     ret = -ret;
-    ldpp_dout(dpp, 0) << "ERROR: could not open object " << get_name()
-		      << " (flags 0x" << std::hex << flags << std::dec
-		      << ", as uid " << identity.cred.uid
-		      << ", read_only " << read_only << "): "
-                      << cpp_strerror(ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: could not open object {} (flags 0x{:x}, "
+		  "as uid {}, read_only {:d}): {}", get_name(), flags,
+		  identity.cred.uid, read_only, cpp_strerror(ret));
     return -ret;
     }
 
@@ -3331,15 +3342,15 @@ int File::stat(const DoutPrefixProvider* dpp, bool force)
   if (S_ISLNK(stx.stx_mode)) {
     /* Not an object, so not cached as one:  a publish replaces the link
      * and stats this entry again, and must see what it published. */
-    ldpp_dout(dpp, 10) << "nsfs: " << get_name()
-      << " is a symbolic link, which is not an object" << dendl;
+    ldpp_dout_fmt(dpp, 10, "nsfs: {} is a symbolic link, which is not an "
+			   "object", get_name());
     stat_done = false;
     exist = false;
     return -ENOENT;
   }
   if (!S_ISREG(stx.stx_mode)) {
     /* Not a file */
-    ldpp_dout(dpp, 0) << "ERROR: " << get_name() << " is not a file" << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: {} is not a file", get_name());
     return -EINVAL;
   }
 
@@ -3369,8 +3380,8 @@ int File::write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp,
     ret = lseek(fd, ofs, SEEK_SET);
     if (ret < 0) {
       ret = errno;
-      ldpp_dout(dpp, 0) << "ERROR: could not seek object " << get_name() << " to "
-        << ofs << " :" << cpp_strerror(ret) << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: could not seek object {} to {} :{}",
+			    get_name(), ofs, cpp_strerror(ret));
       return -ret;
     }
   }
@@ -3384,8 +3395,8 @@ int File::write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp,
     }
     if (ret < 0) {
       ret = errno;
-      ldpp_dout(dpp, 0) << "ERROR: could not write object " << get_name() << ": "
-	<< cpp_strerror(ret) << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: could not write object {}: {}", get_name(),
+			    cpp_strerror(ret));
       return -ret;
     }
 
@@ -3441,8 +3452,8 @@ int File::read(int64_t ofs, int64_t left, bufferlist& bl,
     ret = ::pread(rfd, bp.c_str(), aligned_len, aligned_ofs);
     if (ret < 0) {
       ret = errno;
-      ldpp_dout(dpp, 0) << "ERROR: could not read object " << get_name() << ": "
-	<< cpp_strerror(ret) << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: could not read object {}: {}", get_name(),
+			    cpp_strerror(ret));
       return -ret;
     }
 
@@ -3460,16 +3471,16 @@ int File::read(int64_t ofs, int64_t left, bufferlist& bl,
     ret = lseek(rfd, ofs, SEEK_SET);
     if (ret < 0) {
       ret = errno;
-      ldpp_dout(dpp, 0) << "ERROR: could not seek object " << get_name() << " to "
-                        << ofs << " :" << cpp_strerror(ret) << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: could not seek object {} to {} :{}",
+			    get_name(), ofs, cpp_strerror(ret));
       return -ret;
     }
     ret = ::read(rfd, bp.c_str(), len);
   }
   if (ret < 0) {
     ret = errno;
-    ldpp_dout(dpp, 0) << "ERROR: could not read object " << get_name() << ": "
-      << cpp_strerror(ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: could not read object {}: {}", get_name(),
+			  cpp_strerror(ret));
     return -ret;
   }
 
@@ -3519,8 +3530,8 @@ int File::rename(const DoutPrefixProvider* dpp, optional_yield y,
 	? -errno : 0;
   }, y);
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: renameat " << fname << " -> " << dst_name
-		      << ": " << cpp_strerror(-ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: renameat {} -> {}: {}", fname, dst_name,
+			  cpp_strerror(-ret));
     return ret;
   }
 
@@ -3552,8 +3563,8 @@ int File::copy(const DoutPrefixProvider *dpp, optional_yield y,
        * refuse_directory_name();  removing the directory would delete
        * every key under it */
       if (del->get_type() != ObjectType::FILE) {
-	ldpp_dout(dpp, 4) << "nsfs: rejecting copy to " << dst_name
-			  << ":  a directory holds its name" << dendl;
+	ldpp_dout_fmt(dpp, 4, "nsfs: rejecting copy to {}:  a directory holds "
+			      "its name", dst_name);
 	return -ERR_KEY_PATH_CONFLICT;
       }
       /* as the authenticated user, whom copy_object() gave this entry:  the
@@ -3564,8 +3575,7 @@ int File::copy(const DoutPrefixProvider *dpp, optional_yield y,
       del->set_access_model(access_model);
       ret = del->remove(dpp, y, /*delete_children=*/true);
       if (ret < 0) {
-        ldpp_dout(dpp, 0) << "ERROR: could not remove dest " << dst_name
-                          << dendl;
+        ldpp_dout_fmt(dpp, 0, "ERROR: could not remove dest {}", dst_name);
         return ret;
       }
     }
@@ -3605,8 +3615,8 @@ int File::remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_ch
     return (::unlinkat(parent_fd, fname.c_str(), 0) < 0) ? -errno : 0;
   }, y);
   if ((ret < 0) && (ret != -ENOENT)) {
-    ldpp_dout(dpp, 0) << "ERROR: could not remove object " << get_name()
-		      << ": " << cpp_strerror(-ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: could not remove object {}: {}", get_name(),
+			  cpp_strerror(-ret));
     return ret;
   }
 
@@ -3645,13 +3655,13 @@ int File::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y,
   /* note that open() and stat() return already sign-reversed result codes */
   ret = open(dpp);
   if (ret < 0) {
-    ldpp_dout(dpp, 20) << "ERROR: NSFSAtomicWriter failed opening file" << dendl;
+    ldpp_dout_fmt(dpp, 20, "ERROR: NSFSAtomicWriter failed opening file");
     return ret;
   }
 
   ret = stat(dpp);
   if (ret < 0) {
-    ldpp_dout(dpp, 20) << "ERROR: NSFSAtomicWriter failed closing file" << dendl;
+    ldpp_dout_fmt(dpp, 20, "ERROR: NSFSAtomicWriter failed closing file");
     return ret;
   }
 
@@ -3671,7 +3681,8 @@ int Directory::create(const DoutPrefixProvider* dpp, optional_yield y,
 			 bool* existed, bool temp_file)
 {
   if (temp_file) {
-    ldpp_dout(dpp, 0) << "ERROR: cannot create directory with temp_file " << get_name() << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: cannot create directory with temp_file {}",
+			  get_name());
     return -EINVAL;
   }
 
@@ -3698,9 +3709,9 @@ int Directory::create(const DoutPrefixProvider* dpp, optional_yield y,
       return 0;
     }
     if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: could not create directory " << get_name()
-			<< " as uid " << identity.cred.uid << ": "
-			<< cpp_strerror(-ret) << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: could not create directory {} as uid {}: "
+			    "{}", get_name(), identity.cred.uid,
+			    cpp_strerror(-ret));
       return ret;
     }
     if (raised) {
@@ -3726,8 +3737,8 @@ int Directory::create(const DoutPrefixProvider* dpp, optional_yield y,
     ret = -ret;			/* both branches yield -errno */
     if (ret != EEXIST) {
       if (dpp)
-	ldpp_dout(dpp, 0) << "ERROR: could not create bucket " << get_name() << ": "
-	  << cpp_strerror(ret) << dendl;
+	ldpp_dout_fmt(dpp, 0, "ERROR: could not create bucket {}: {}",
+			      get_name(), cpp_strerror(ret));
       return -ret;
     } else if (existed != nullptr) {
       *existed = true;
@@ -3742,8 +3753,8 @@ int Directory::create(const DoutPrefixProvider* dpp, optional_yield y,
   if (made) {
     ret = nsfs::apply_create_mode_at(dpp, at, fname.c_str(), dir_mode);
     if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: could not set the mode on " << get_name()
-	<< ": " << cpp_strerror(-ret) << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: could not set the mode on {}: {}",
+			    get_name(), cpp_strerror(-ret));
       return ret;
     }
   }
@@ -3773,14 +3784,12 @@ int Directory::open(const DoutPrefixProvider* dpp)
     }
     if (!(access_model && access_model->permits(nsfs::AccessClass::path) &&
 	  ((r == -EACCES) || (r == -EPERM)))) {
-      ldpp_dout(dpp, 0) << "ERROR: could not open dir " << get_name()
-			<< " as uid " << identity.cred.uid << ": "
-			<< cpp_strerror(-r) << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: could not open dir {} as uid {}: {}",
+			    get_name(), identity.cred.uid, cpp_strerror(-r));
       return r;
     }
-    ldpp_dout(dpp, 10) << "nsfs: walk denied at " << get_name()
-		       << " as uid " << identity.cred.uid
-		       << ";  going on as the gateway" << dendl;
+    ldpp_dout_fmt(dpp, 10, "nsfs: walk denied at {} as uid {};  going on as "
+			   "the gateway", get_name(), identity.cred.uid);
   }
 
   /* The gateway searching a tree it may not own -- the same
@@ -3793,8 +3802,8 @@ int Directory::open(const DoutPrefixProvider* dpp)
   int ret = openat(pfd, fname.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
   if (ret < 0) {
     ret = errno;
-    ldpp_dout(dpp, 0) << "ERROR: could not open dir " << get_name() << ": "
-                  << cpp_strerror(ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: could not open dir {}: {}", get_name(),
+			  cpp_strerror(ret));
     return -ret;
   }
 
@@ -3824,7 +3833,7 @@ int Directory::stat(const DoutPrefixProvider* dpp, bool force)
 
   if (!S_ISDIR(stx.stx_mode)) {
     /* Not a directory */
-    ldpp_dout(dpp, 0) << "ERROR: " << get_name() << " is not a directory" << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: {} is not a directory", get_name());
     return -EINVAL;
   }
 
@@ -3892,8 +3901,8 @@ int Directory::for_each(const DoutPrefixProvider* dpp, const F& func)
   int dir_fd = ::dup(fd);
   if (dir_fd < 0) {
     ret = errno;
-    ldpp_dout(dpp, 0) << "ERROR: could not dup dir fd " << get_name() << ": "
-      << cpp_strerror(ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: could not dup dir fd {}: {}", get_name(),
+			  cpp_strerror(ret));
     return -ret;
   }
 
@@ -3901,8 +3910,8 @@ int Directory::for_each(const DoutPrefixProvider* dpp, const F& func)
   if (dir == NULL) {
     ret = errno;
     ::close(dir_fd);
-    ldpp_dout(dpp, 0) << "ERROR: could not open dir " << get_name() << " for listing: "
-      << cpp_strerror(ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: could not open dir {} for listing: {}",
+			  get_name(), cpp_strerror(ret));
     return -ret;
   }
 
@@ -3945,8 +3954,8 @@ int Directory::rename(const DoutPrefixProvider* dpp, optional_yield y, Directory
   ret = renameat2(parent_fd, src_name.c_str(), dst_dir->get_fd(), dst_name.c_str(), flags);
   if(ret < 0) {
     ret = errno;
-    ldpp_dout(dpp, 0) << "ERROR: renameat2 for shadow object could not finish: "
-	<< cpp_strerror(ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: renameat2 for shadow object could not "
+			  "finish: {}", cpp_strerror(ret));
     return -ret;
   }
 
@@ -3964,8 +3973,8 @@ int Directory::rename(const DoutPrefixProvider* dpp, optional_yield y, Directory
     if (ret == ENOENT) {
       return 0;
     }
-    ldpp_dout(dpp, 0) << "ERROR: could not stat object " << get_name() << ": "
-                  << cpp_strerror(ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: could not stat object {}: {}", get_name(),
+			  cpp_strerror(ret));
     return -ret;
   }
 
@@ -3977,8 +3986,8 @@ int Directory::rename(const DoutPrefixProvider* dpp, optional_yield y, Directory
   }
   if (ret < 0) {
     ret = errno;
-    ldpp_dout(dpp, 0) << "ERROR: could not remove old file " << get_name()
-                      << ": " << cpp_strerror(ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: could not remove old file {}: {}", get_name(),
+			  cpp_strerror(ret));
     return -ret;
   }
 
@@ -4005,8 +4014,8 @@ int Directory::copy(const DoutPrefixProvider *dpp, optional_yield y,
     } else if (ret >= 0) {
       /* a copy onto a directory is refused;  see File::copy() */
       if (del->get_type() != ObjectType::FILE) {
-	ldpp_dout(dpp, 4) << "nsfs: rejecting copy to " << dst_name
-			  << ":  a directory holds its name" << dendl;
+	ldpp_dout_fmt(dpp, 4, "nsfs: rejecting copy to {}:  a directory holds "
+			      "its name", dst_name);
 	return -ERR_KEY_PATH_CONFLICT;
       }
       /* as the authenticated user, whom copy_object() gave this entry:  the
@@ -4017,8 +4026,7 @@ int Directory::copy(const DoutPrefixProvider *dpp, optional_yield y,
       del->set_access_model(access_model);
       ret = del->remove(dpp, y, /*delete_children=*/true);
       if (ret < 0) {
-        ldpp_dout(dpp, 0) << "ERROR: could not remove dest " << dst_name
-                          << dendl;
+        ldpp_dout_fmt(dpp, 0, "ERROR: could not remove dest {}", dst_name);
         return ret;
       }
     }
@@ -4031,19 +4039,20 @@ int Directory::copy(const DoutPrefixProvider *dpp, optional_yield y,
 
   ret = dest->create(dpp, y);
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: could not create dest " << dest->get_name() << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: could not create dest {}", dest->get_name());
     return ret;
   }
 
   Attrs attrs;
   ret = read_attrs(dpp, y, attrs);
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: could not read attrs from " << get_name() << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: could not read attrs from {}", get_name());
     return ret;
   }
   ret = dest->write_attrs(dpp, y, attrs, nullptr);
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: could not write attrs to " << dest->get_name() << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: could not write attrs to {}",
+			  dest->get_name());
     return ret;
   }
 
@@ -4076,7 +4085,7 @@ int Directory::get_ent(const DoutPrefixProvider *dpp, optional_yield y, const st
 
   int ret = open(dpp);
   if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: could not open directory " << name << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: could not open directory {}", name);
       return ret;
   }
 
@@ -4090,10 +4099,12 @@ int Directory::get_ent(const DoutPrefixProvider *dpp, optional_yield y, const st
        * object it is about to create, which discards the result for
        * exactly that reason.  Logging it at 0 put an ERROR in the log
        * for every such request. */
-      ldpp_dout(dpp, (ret == ENOENT) ? 15 : 0)
-          << ((ret == ENOENT) ? "no object " : "ERROR: could not stat object ")
-          << name << " in dir " << get_name() << " : " << cpp_strerror(ret)
-          << dendl;
+      ldpp_dout_fmt(dpp, (ret == ENOENT) ? 15 : 0,
+		    "{}{} in dir {} : {}",
+		    ((ret == ENOENT)
+		     ? "no object "
+		     : "ERROR: could not stat object "),
+		    name, get_name(), cpp_strerror(ret));
       return -ret;
   }
   if (S_ISREG(nstx.stx_mode)) {
@@ -4117,13 +4128,13 @@ int Directory::get_ent(const DoutPrefixProvider *dpp, optional_yield y, const st
       nent = std::make_unique<Directory>(name, this, nstx, ctx);
       break;
     default:
-      ldpp_dout(dpp, 0) << "ERROR: invalid type " << type << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: invalid type {}", type);
       return -EINVAL;
     }
   } else if (S_ISLNK(nstx.stx_mode)) {
     /* not an object:  no object is at this name */
-    ldpp_dout(dpp, 10) << "nsfs: " << name << " in dir " << get_name()
-      << " is a symbolic link, which is not an object" << dendl;
+    ldpp_dout_fmt(dpp, 10, "nsfs: {} in dir {} is a symbolic link, which is "
+			   "not an object", name, get_name());
     return -ENOENT;
   } else {
     return -EINVAL;
@@ -4280,8 +4291,8 @@ int NooBaaDirectoryObject::copy(const DoutPrefixProvider* dpp, optional_yield y,
   } else if (ret >= 0) {
     /* a copy onto a directory is refused;  see File::copy() */
     if (del->get_type() != ObjectType::FILE) {
-      ldpp_dout(dpp, 4) << "nsfs: rejecting copy to " << name
-			<< ":  a directory holds its name" << dendl;
+      ldpp_dout_fmt(dpp, 4, "nsfs: rejecting copy to {}:  a directory holds "
+			    "its name", name);
       return -ERR_KEY_PATH_CONFLICT;
     }
     /* as the authenticated user;  see File::copy() */
@@ -4289,7 +4300,7 @@ int NooBaaDirectoryObject::copy(const DoutPrefixProvider* dpp, optional_yield y,
     del->set_access_model(access_model);
     ret = del->remove(dpp, y, /*delete_children=*/true);
     if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: could not remove dest " << name << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: could not remove dest {}", name);
       return ret;
     }
   }
@@ -4304,9 +4315,9 @@ int NooBaaDirectoryObject::copy(const DoutPrefixProvider* dpp, optional_yield y,
 static int reject_noobaa_directory_object_change(const DoutPrefixProvider* dpp,
 						 const std::string& dir)
 {
-  ldpp_dout(dpp, 1) << "nsfs: rejecting a change to the directory object at "
-    << dir << ":  it is in NooBaa's format, and converting it on write "
-    << "is not built" << dendl;
+  ldpp_dout_fmt(dpp, 1, "nsfs: rejecting a change to the directory object at "
+			"{}:  it is in NooBaa's format, and converting it on "
+			"write is not built", dir);
   return -EOPNOTSUPP;
 }
 
@@ -4380,8 +4391,8 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
       /* Not an object -- a link, or not a file or a directory -- or
        * removed since readdir returned it.  Ending the walk here would
        * end the listing here, since the cache keeps what it has. */
-      ldpp_dout(dpp, 10) << "nsfs: listing skips " << name << " in "
-	<< get_name() << ": " << cpp_strerror(-ret) << dendl;
+      ldpp_dout_fmt(dpp, 10, "nsfs: listing skips {} in {}: {}", name,
+			     get_name(), cpp_strerror(-ret));
       return 0;
     }
     if (ret < 0)
@@ -4433,8 +4444,9 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
 	if (ret < 0) {
 	  /* marked as holding content with no sentinel to hold it:
 	   * NooBaa cannot read it either */
-	  ldpp_dout(dpp, 1) << "nsfs: not listing the directory object "
-	    << path_prefix << name << "/:  " << cpp_strerror(-ret) << dendl;
+	  ldpp_dout_fmt(dpp, 1, "nsfs: not listing the directory object "
+				"{}{}/:  {}", path_prefix, name,
+				cpp_strerror(-ret));
 	} else {
 	  ret = cb(dpp, bde);
 	  if (ret < 0) {
@@ -4454,8 +4466,8 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
   });
 
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: could not list directory " << get_name() << ": "
-      << cpp_strerror(ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: could not list directory {}: {}", get_name(),
+			  cpp_strerror(ret));
     return ret;
   }
 
@@ -4479,15 +4491,15 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
       if (rename_intent_present_at(xattr_strategy, vfd, irec)) {
         RenameIntent in;
         if (parse_rename_intent(irec, in)) {
-          ldpp_dout(dpp, 0) << "WARNING: listing " << get_name()
-            << ": an interrupted move of " << in.leaf << " to " << in.bucket
-            << "/" << in.key << " has not been recovered;  this listing may "
-            << "report its history incompletely.  The next write to this "
-            << "directory will repair it" << dendl;
+          ldpp_dout_fmt(dpp, 0, "WARNING: listing {}: an interrupted move of "
+				"{} to {}/{} has not been recovered;  this "
+				"listing may report its history incompletely. "
+				" The next write to this directory will "
+				"repair it", get_name(), in.leaf, in.bucket,
+				in.key);
         } else {
-          ldpp_dout(dpp, 0) << "WARNING: listing " << get_name()
-            << ": .versions/ carries an unparseable rename_intent record"
-            << dendl;
+          ldpp_dout_fmt(dpp, 0, "WARNING: listing {}: .versions/ carries an "
+				"unparseable rename_intent record", get_name());
         }
       }
       DIR* vdir = fdopendir(vfd);
@@ -4648,9 +4660,8 @@ int MPDirectory::create(const DoutPrefixProvider* dpp, optional_yield y,
       return 0;
     }
     if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: could not create staging " << get_name()
-			<< " as uid " << identity.cred.uid << ": "
-			<< cpp_strerror(-ret) << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: could not create staging {} as uid {}: {}",
+			    get_name(), identity.cred.uid, cpp_strerror(-ret));
       return ret;
     }
     if (raised) {
@@ -4669,8 +4680,8 @@ int MPDirectory::create(const DoutPrefixProvider* dpp, optional_yield y,
     ret = -ret;			/* both branches yield -errno */
     if (ret != EEXIST) {
       if (dpp)
-	ldpp_dout(dpp, 0) << "ERROR: could not create bucket " << get_name() << ": "
-	  << cpp_strerror(ret) << dendl;
+	ldpp_dout_fmt(dpp, 0, "ERROR: could not create bucket {}: {}",
+			      get_name(), cpp_strerror(ret));
       return -ret;
     } else if (existed != nullptr) {
       *existed = true;
@@ -4683,8 +4694,8 @@ int MPDirectory::create(const DoutPrefixProvider* dpp, optional_yield y,
     ret = nsfs::apply_create_mode_at(dpp, parent->get_fd(), path.c_str(),
 				     dir_mode);
     if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: could not set the mode on " << get_name()
-	<< ": " << cpp_strerror(-ret) << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: could not set the mode on {}: {}",
+			    get_name(), cpp_strerror(-ret));
       return ret;
     }
   }
@@ -4763,8 +4774,8 @@ int MPDirectory::stat(const DoutPrefixProvider* dpp, bool force)
     ret = nsfs::statx(fd, name, AT_SYMLINK_NOFOLLOW, STATX_ALL, &stx);
     if (ret < 0) {
       ret = errno;
-      ldpp_dout(dpp, 0) << "ERROR: could not stat object " << name << ": "
-                        << cpp_strerror(ret) << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: could not stat object {}: {}", name,
+			    cpp_strerror(ret));
       return -ret;
     }
 
@@ -4929,8 +4940,7 @@ void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp,
   if (!fs_strategy) {
     fs_strategy = std::make_unique<nsfs::POSIXStrategy>();
   }
-  ldpp_dout(dpp, 1) << "nsfs: using " << fs_strategy->name()
-    << " fs strategy" << dendl;
+  ldpp_dout_fmt(dpp, 1, "nsfs: using {} fs strategy", fs_strategy->name());
   /* Probed unless the caller says otherwise.  The strided layout, the
    * extent guard and the divert path are reached only where a copy is
    * real, which on a developer machine is nowhere -- so a caller which
@@ -4957,8 +4967,8 @@ void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp,
   } else {
     mpu_strategy = std::make_unique<nsfs::StridedMPUStrategy>();
   }
-  ldpp_dout(dpp, 1) << "nsfs: using " << mpu_strategy->name()
-    << " multipart staging layout" << dendl;
+  ldpp_dout_fmt(dpp, 1, "nsfs: using {} multipart staging layout",
+			mpu_strategy->name());
 
   /* one implementation each;  the second of each is selected by the
    * bucket's recorded format and is not written yet */
@@ -4976,8 +4986,8 @@ void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp,
       nb_bucket_state_strategy =
 	std::make_unique<nsfs::NooBaaBucketStateStrategy>(nb_root,
 							  userDB.get());
-      ldpp_dout(dpp, 1) << "nsfs: reading NooBaa bucket state from "
-	<< nb_root << dendl;
+      ldpp_dout_fmt(dpp, 1, "nsfs: reading NooBaa bucket state from {}",
+			    nb_root);
 
       /* The mode, read beside the store it governs.  Read here and
        * not earlier because it means nothing without one. */
@@ -4993,15 +5003,15 @@ void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp,
 	  /* The option is an enum, so this is a deployment that got
 	   * past validation somehow;  the safe reading is the one that
 	   * changes nothing on disk. */
-	  ldpp_dout(dpp, 0) << "ERROR: rgw_nsfs_adoption_mode is \"" << m
-	    << "\", which is neither command nor automatic;  adopting "
-	    << "by command" << dendl;
+	  ldpp_dout_fmt(dpp, 0, "ERROR: rgw_nsfs_adoption_mode is \"{}\", "
+				"which is neither command nor automatic;  "
+				"adopting by command", m);
 	}
       }
-      ldpp_dout(dpp, 1) << "nsfs: adoption mode " << m
-	<< (adoption_mode == AdoptionMode::Command
-	      ? ";  nothing is adopted until a command asks" : "")
-	<< dendl;
+      ldpp_dout_fmt(dpp, 1, "nsfs: adoption mode {}{}", m,
+			    (adoption_mode == AdoptionMode::Command
+			     ? ";  nothing is adopted until a command asks"
+			     : ""));
     }
   }
 
@@ -5017,13 +5027,12 @@ void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp,
   }
   access_strategy_live.store(access_strategy.get(),
 			     std::memory_order_relaxed);
-  ldpp_dout(dpp, 1) << "nsfs: access model " << access_strategy->name()
-    << dendl;
+  ldpp_dout_fmt(dpp, 1, "nsfs: access model {}", access_strategy->name());
   if (userDB) {
-    ldpp_dout(dpp, 1) << "nsfs: user identity override "
-      << (userDB->user_identity_override() ? "on" : "off")
-      << ", role identity override "
-      << (userDB->role_identity_override() ? "on" : "off") << dendl;
+    ldpp_dout_fmt(dpp, 1, "nsfs: user identity override {}, role identity "
+			  "override {}",
+			  (userDB->user_identity_override() ? "on" : "off"),
+			  (userDB->role_identity_override() ? "on" : "off"));
   }
 
   nb_xattr_strategy = std::make_unique<nsfs::NooBaaXattrStrategy>();
@@ -5065,8 +5074,8 @@ void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp,
   shared_profile.format = &rgw_meta_format;
   extended_profile.extensions = nsfs::EXTENSIONS_STRONG;
   extended_profile.format = &rgw_meta_format;
-  ldpp_dout(dpp, 1) << "nsfs: new buckets are marked with extension set "
-    << new_bucket_extensions() << dendl;
+  ldpp_dout_fmt(dpp, 1, "nsfs: new buckets are marked with extension set {}",
+			new_bucket_extensions());
 
   /* Every strategy names some scaffolding, and the listing paths test one
    * name at a time;  assemble the union once so that no strategy is
@@ -5260,17 +5269,18 @@ void NSFSDriver::init_multipart_cache(const DoutPrefixProvider* dpp,
 	      wret = nsfs::run_as(&dp, owner, write_record, null_yield);
 	    }
 	    if (wret < 0) {
-	      ldpp_dout(&dp, 0) << "ERROR: could not write the record for part "
-		<< num << " of " << key.upload_meta << " as uid " << owner.uid
-		<< ": " << cpp_strerror(-wret) << ";  it is lost" << dendl;
+	      ldpp_dout_fmt(&dp, 0, "ERROR: could not write the record for "
+				    "part {} of {} as uid {}: {};  it is lost",
+				    num, key.upload_meta, owner.uid,
+				    cpp_strerror(-wret));
 	    }
 	  }
 	  return;
 	}
 
-	ldpp_dout(&dp, 4) << "no staging directory for " << key.upload_meta
-	  << " in bucket " << key.bucket_name << ";  its part records are "
-	  << "not written" << dendl;
+	ldpp_dout_fmt(&dp, 4, "no staging directory for {} in bucket {};  its "
+			      "part records are not written", key.upload_meta,
+			      key.bucket_name);
       };
     }
 
@@ -5285,7 +5295,7 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
   int ret = -1;
   base_path_ = g_conf().get_val<std::string>("rgw_nsfs_base_path");
 
-  ldpp_dout(dpp, 20) << "Initializing NSFS driver: " << base_path_ << dendl;
+  ldpp_dout_fmt(dpp, 20, "Initializing NSFS driver: {}", base_path_);
 
   /* Do not start in a mode we cannot honour.
    *
@@ -5303,12 +5313,13 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
     const bool have = nsfs::have_credential_capabilities(&missing);
 
     if (! have) {
-      ldpp_dout(dpp, -1) << "ERROR: rgw_nsfs_impersonate is set but this"
-	" process lacks " << missing << " in its permitted set.  Grant"
-	" them -- setcap cap_setuid,cap_setgid+p on the binary, or a"
-	" systemd unit with AmbientCapabilities=CAP_SETUID CAP_SETGID --"
-	" or unset rgw_nsfs_impersonate.  Note +p and not +ep:  nothing"
-	" here starts effective." << dendl;
+      ldpp_dout_fmt(dpp, -1, "ERROR: rgw_nsfs_impersonate is set but this "
+			     "process lacks {} in its permitted set.  Grant "
+			     "them -- setcap cap_setuid,cap_setgid+p on the "
+			     "binary, or a systemd unit with "
+			     "AmbientCapabilities=CAP_SETUID CAP_SETGID -- or "
+			     "unset rgw_nsfs_impersonate.  Note +p and not "
+			     "+ep:  nothing here starts effective.", missing);
       return -EPERM;
     } else if (g_conf().get_val<bool>("rgw_nsfs_io_uring_sqpoll")) {
       /* An SQPOLL ring's kernel thread reads an SQE after it is
@@ -5317,10 +5328,10 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
        * that the slot may be unregistered or reused, and the
        * operation fails or runs as whoever holds it now
        * (probes/persprobe.c, case S1). */
-      ldpp_dout(dpp, -1) << "ERROR: rgw_nsfs_io_uring_sqpoll cannot be"
-	" used with rgw_nsfs_impersonate:  the polling thread reads each"
-	" submission's personality after it is released.  Unset one of"
-	" them." << dendl;
+      ldpp_dout_fmt(dpp, -1, "ERROR: rgw_nsfs_io_uring_sqpoll cannot be used "
+			     "with rgw_nsfs_impersonate:  the polling thread "
+			     "reads each submission's personality after it is "
+			     "released.  Unset one of them.");
       return -EINVAL;
     } else {
       /* Every thread that serves an impersonated request creates an
@@ -5333,11 +5344,12 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
        * limit here so the arithmetic is visible before it bites. */
       struct rlimit rl{};
       if (::getrlimit(RLIMIT_MEMLOCK, &rl) == 0) {
-	ldpp_dout(dpp, 1) << "nsfs: impersonation enabled;  RLIMIT_MEMLOCK is "
-	  << rl.rlim_cur << " bytes, and each serving thread creates an"
-	  " io_uring ring charged against it" << dendl;
+	ldpp_dout_fmt(dpp, 1, "nsfs: impersonation enabled;  RLIMIT_MEMLOCK "
+			      "is {} bytes, and each serving thread creates "
+			      "an io_uring ring charged against it",
+			      rl.rlim_cur);
       } else {
-	ldpp_dout(dpp, 1) << "nsfs: impersonation enabled" << dendl;
+	ldpp_dout_fmt(dpp, 1, "nsfs: impersonation enabled");
       }
 
       /* Nothing is lowered here, because nothing starts effective:
@@ -5397,7 +5409,7 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
   if (use_lc_thread) {
     ret = userDB->createLCTables(dpp);
     if (ret < 0) {
-      ldpp_dout(dpp, 0) << "Failed to create LC tables, ret=" << ret << dendl;
+      ldpp_dout_fmt(dpp, 0, "Failed to create LC tables, ret={}", ret);
       return ret;
     }
     lc->start_processor();
@@ -5415,14 +5427,14 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
   init_sync_policy(dpp);
 
   if (!RGWPubSubEndpoint::init_all(cct)) {
-    ldpp_dout(dpp, 1) << "WARNING: failed to init notification endpoints" << dendl;
+    ldpp_dout_fmt(dpp, 1, "WARNING: failed to init notification endpoints");
   }
 
   if (int r = start_adoption(dpp); r < 0) {
     return r;
   }
 
-  ldpp_dout(dpp, 20) << "SUCCESS" << dendl;
+  ldpp_dout_fmt(dpp, 20, "SUCCESS");
   return 0;
 }
 
@@ -5435,15 +5447,15 @@ int NSFSDriver::open_base_path(const DoutPrefixProvider* dpp)
     nsfs::Directory d(base_path_, nullptr, ctx(), fs_strategy.get());
     int ret = d.open(dpp);
     if (ret == -ENOTDIR) {
-      ldpp_dout(dpp, 0) << " ERROR: base path (" << base_path_
-	<< "): was not a directory." << dendl;
+      ldpp_dout_fmt(dpp, 0, " ERROR: base path ({}): was not a directory.",
+			    base_path_);
       return ret;
     }
     if (ret == -ENOENT) {
       ret = d.create(dpp, null_yield);
       if (ret < 0) {
-	ldpp_dout(dpp, 0) << " ERROR: could not create base path ("
-	  << base_path_ << "): " << cpp_strerror(-ret) << dendl;
+	ldpp_dout_fmt(dpp, 0, " ERROR: could not create base path ({}): {}",
+			      base_path_, cpp_strerror(-ret));
 	return ret;
       }
     }
@@ -5451,8 +5463,8 @@ int NSFSDriver::open_base_path(const DoutPrefixProvider* dpp)
   base_fd = ::open(base_path_.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
   if (base_fd < 0) {
     const int ret = -errno;
-    ldpp_dout(dpp, 0) << " ERROR: could not open base path (" << base_path_
-      << "): " << cpp_strerror(-ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, " ERROR: could not open base path ({}): {}",
+			  base_path_, cpp_strerror(-ret));
     return ret;
   }
   return 0;
@@ -5462,7 +5474,7 @@ void NSFSDriver::init_sync_policy(const DoutPrefixProvider* dpp)
 {
   const auto& name = g_conf().get_val<std::string>("rgw_posix_sync_policy");
   if (rgw::posix::parse_sync_policy(name) != rgw::posix::SyncPolicy::RELAXED) {
-    ldpp_dout(dpp, 1) << "sync policy: " << name << dendl;
+    ldpp_dout_fmt(dpp, 1, "sync policy: {}", name);
     return;
   }
   const uint64_t interval_ms =
@@ -5474,8 +5486,8 @@ void NSFSDriver::init_sync_policy(const DoutPrefixProvider* dpp)
     note_bucket_filesystem(dpp, stx, base_fd);
   }
   sync_set->start();
-  ldpp_dout(dpp, 1) << "sync policy: relaxed (syncfs every " << interval_ms
-    << "ms, on every filesystem that holds a bucket)" << dendl;
+  ldpp_dout_fmt(dpp, 1, "sync policy: relaxed (syncfs every {}ms, on every "
+			"filesystem that holds a bucket)", interval_ms);
 }
 
 void NSFSDriver::note_bucket_filesystem(const DoutPrefixProvider* dpp,
@@ -5486,8 +5498,8 @@ void NSFSDriver::note_bucket_filesystem(const DoutPrefixProvider* dpp,
   }
   const dev_t dev = makedev(stx.stx_dev_major, stx.stx_dev_minor);
   if (sync_set->add(dev, fd)) {
-    ldpp_dout(dpp, 1) << "sync policy: relaxed now syncs filesystem "
-      << stx.stx_dev_major << ":" << stx.stx_dev_minor << dendl;
+    ldpp_dout_fmt(dpp, 1, "sync policy: relaxed now syncs filesystem {}:{}",
+			  stx.stx_dev_major, stx.stx_dev_minor);
   }
 }
 
@@ -5768,15 +5780,13 @@ NSFSDriver::placed_bucket_dir(const DoutPrefixProvider* dpp,
      * would not store is one it will not serve from either -- the
      * record is a store nsfs did not write (`RGW_NSFS_VADE_MECUM.md` §1). */
     if (!nsfs::placement_path_is_acceptable(path)) {
-      ldpp_dout(dpp, 0) << "ERROR: bucket " << name << ": their record "
-	<< "says " << path << ", which is not an absolute canonical path"
-	<< dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: bucket {}: their record says {}, which is "
+			    "not an absolute canonical path", name, path);
       return nullptr;
     }
   }
 
-  ldpp_dout(dpp, 10) << "nsfs: bucket " << name << " is placed at "
-    << path << dendl;
+  ldpp_dout_fmt(dpp, 10, "nsfs: bucket {} is placed at {}", name, path);
   return make_placed_dir(path);
 }
 
@@ -5883,8 +5893,8 @@ int NSFSDriver::new_bucket_path(const DoutPrefixProvider* dpp,
       nb_bucket_state_strategy.get());
     std::string recorded;
     if (nb_state->recorded_path(dpp, b.name, recorded) != -ENOENT) {
-      ldpp_dout(dpp, 1) << "nsfs: not creating bucket " << b.name
-	<< ":  a NooBaa bucket record holds the name" << dendl;
+      ldpp_dout_fmt(dpp, 1, "nsfs: not creating bucket {}:  a NooBaa bucket "
+			    "record holds the name", b.name);
       return -EEXIST;
     }
   }
@@ -5916,9 +5926,9 @@ int NSFSDriver::new_bucket_path(const DoutPrefixProvider* dpp,
     return ret;
   }
   if (imported) {
-    ldpp_dout(dpp, 1) << "nsfs: " << key << " has no new_buckets_path, and "
-      << "an account imported from NooBaa without one cannot create "
-      << "buckets" << dendl;
+    ldpp_dout_fmt(dpp, 1, "nsfs: {} has no new_buckets_path, and an account "
+			  "imported from NooBaa without one cannot create "
+			  "buckets", key);
     return -EACCES;
   }
   path = default_bucket_location() + "/" + dname;
@@ -5972,21 +5982,22 @@ int NSFSDriver::custom_bucket_path(const DoutPrefixProvider* dpp,
     if (nsfs::normalize_allowed_list(
 	  g_conf().get_val<std::string>("rgw_nsfs_custom_bucket_path_allowed_list"),
 	  list, bad) < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: rgw_nsfs_custom_bucket_path_allowed_list "
-	<< "entry \"" << bad << "\" is not an absolute canonical path;  "
-	<< "denying custom bucket paths" << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: rgw_nsfs_custom_bucket_path_allowed_list "
+			    "entry \"{}\" is not an absolute canonical path;  "
+			    "denying custom bucket paths", bad);
       return -EACCES;
     }
   }
   if (list.empty() || !nsfs::allowed_list_admits(list, asked)) {
-    ldpp_dout(dpp, 1) << "nsfs: custom bucket path " << asked << " denied:  "
-      << (list.empty() ? "no allowlist" : "not in the allowlist " + list)
-      << dendl;
+    ldpp_dout_fmt(dpp, 1, "nsfs: custom bucket path {} denied:  {}", asked,
+			  (list.empty()
+			   ? "no allowlist"
+			   : "not in the allowlist " + list));
     return -EACCES;
   }
   if (!nsfs::placement_path_is_acceptable(asked)) {
-    ldpp_dout(dpp, 1) << "nsfs: custom bucket path " << asked << " rejected:  "
-      << "not an absolute canonical path" << dendl;
+    ldpp_dout_fmt(dpp, 1, "nsfs: custom bucket path {} rejected:  not an "
+			  "absolute canonical path", asked);
     return -EINVAL;
   }
   path = asked;
@@ -6015,8 +6026,8 @@ int NSFSDriver::check_owner_access(const DoutPrefixProvider* dpp,
   if (ret == -ENOENT) {
     /* credentials that do not resolve are denied, not checked as the gateway
      * (`RGW_NSFS_VADE_MECUM.md` §12, "No authenticated user means refuse") */
-    ldpp_dout(dpp, 1) << "nsfs: " << to_string(owner) << " may not access "
-      << path << ":  no credentials resolve for it" << dendl;
+    ldpp_dout_fmt(dpp, 1, "nsfs: {} may not access {}:  no credentials "
+			  "resolve for it", to_string(owner), path);
     return -EACCES;
   }
   if (ret < 0) {
@@ -6038,8 +6049,8 @@ int NSFSDriver::check_owner_access(const DoutPrefixProvider* dpp,
     ::close(fd);
   }
   if (ret < 0) {
-    ldpp_dout(dpp, 1) << "nsfs: " << to_string(owner) << " (uid " << cred.uid
-      << ") may not access " << path << ":  " << cpp_strerror(-ret) << dendl;
+    ldpp_dout_fmt(dpp, 1, "nsfs: {} (uid {}) may not access {}:  {}",
+			  to_string(owner), cred.uid, path, cpp_strerror(-ret));
     return -EACCES;
   }
   return 0;
@@ -6114,9 +6125,9 @@ int NSFSDriver::check_clear_of_noobaa_paths(const DoutPrefixProvider* dpp,
       recorded.pop_back();
     }
     if (nested(path, recorded)) {
-      ldpp_dout(dpp, 1) << "nsfs: bucket " << name << ":  " << path
-	<< " is NooBaa bucket " << rec << "'s directory " << recorded
-	<< ", or nested with it" << dendl;
+      ldpp_dout_fmt(dpp, 1, "nsfs: bucket {}:  {} is NooBaa bucket {}'s "
+			    "directory {}, or nested with it", name, path, rec,
+			    recorded);
       return -EEXIST;
     }
   }
@@ -6130,20 +6141,20 @@ int NSFSDriver::place_bucket(const DoutPrefixProvider* dpp, optional_yield y,
 			     std::string* profile)
 {
   if (!nsfs::placement_path_is_acceptable(path)) {
-    ldpp_dout(dpp, 1) << "nsfs: not placing bucket " << name << " at "
-      << path << ":  not an absolute canonical path" << dendl;
+    ldpp_dout_fmt(dpp, 1, "nsfs: not placing bucket {} at {}:  not an "
+			  "absolute canonical path", name, path);
     return -EINVAL;
   }
   struct stat st;
   if (::stat(path.c_str(), &st) < 0) {
     int ret = -errno;
-    ldpp_dout(dpp, 1) << "nsfs: not placing bucket " << name << " at "
-      << path << ":  " << cpp_strerror(-ret) << dendl;
+    ldpp_dout_fmt(dpp, 1, "nsfs: not placing bucket {} at {}:  {}", name, path,
+			  cpp_strerror(-ret));
     return ret;
   }
   if (!S_ISDIR(st.st_mode)) {
-    ldpp_dout(dpp, 1) << "nsfs: not placing bucket " << name << " at "
-      << path << ":  not a directory" << dendl;
+    ldpp_dout_fmt(dpp, 1, "nsfs: not placing bucket {} at {}:  not a directory",
+			  name, path);
     return -EINVAL;
   }
 
@@ -6155,16 +6166,16 @@ int NSFSDriver::place_bucket(const DoutPrefixProvider* dpp, optional_yield y,
     Attrs aattrs;
     RGWObjVersionTracker objv;
     if (load_account_by_id(dpp, y, *a, ainfo, aattrs, objv) < 0) {
-      ldpp_dout(dpp, 1) << "nsfs: not placing bucket " << name << ":  "
-	<< "no account " << *a << dendl;
+      ldpp_dout_fmt(dpp, 1, "nsfs: not placing bucket {}:  no account {}", name,
+			    *a);
       return -ERR_NO_SUCH_USER;
     }
     acl_owner.display_name = ainfo.name;
   } else {
     std::unique_ptr<User> user = get_user(std::get<rgw_user>(owner));
     if (user->load_user(dpp, y) < 0) {
-      ldpp_dout(dpp, 1) << "nsfs: not placing bucket " << name << ":  "
-	<< "no user " << owner << dendl;
+      ldpp_dout_fmt(dpp, 1, "nsfs: not placing bucket {}:  no user {}", name,
+			    to_string(owner));
       return -ERR_NO_SUCH_USER;
     }
     /* A placed bucket's owner is an account, never a user (DECISIONS.md
@@ -6174,10 +6185,13 @@ int NSFSDriver::place_bucket(const DoutPrefixProvider* dpp, optional_yield y,
      * A user in an account is rejected as NooBaa's `bucket add` rejects
      * an IAM user:  the caller names the account. */
     const auto& account = user->get_info().account_id;
-    ldpp_dout(dpp, 1) << "nsfs: not placing bucket " << name << ":  "
-      << owner << (account.empty() ? " belongs to no account"
-		   : " is a user of account " + account + ";  name the account")
-      << ", and a placed bucket's owner must be an account" << dendl;
+    ldpp_dout_fmt(dpp, 1, "nsfs: not placing bucket {}:  {}{}, and a placed "
+			  "bucket's owner must be an account", name,
+			  to_string(owner),
+			  (account.empty()
+			   ? " belongs to no account"
+			   : " is a user of account " + account
+			     + ";  name the account"));
     return -EINVAL;
   }
 
@@ -6196,8 +6210,8 @@ int NSFSDriver::place_bucket(const DoutPrefixProvider* dpp, optional_yield y,
       nb_bucket_state_strategy.get());
     std::string recorded;
     if (nb_state->recorded_path(dpp, name, recorded) != -ENOENT) {
-      ldpp_dout(dpp, 1) << "nsfs: not placing bucket " << name
-	<< ":  a NooBaa bucket record holds the name" << dendl;
+      ldpp_dout_fmt(dpp, 1, "nsfs: not placing bucket {}:  a NooBaa bucket "
+			    "record holds the name", name);
       return -EEXIST;
     }
   }
@@ -6208,14 +6222,14 @@ int NSFSDriver::place_bucket(const DoutPrefixProvider* dpp, optional_yield y,
    * its path is checked here as the rows are, nesting included. */
   ret = carries_nsfs_state(path);
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: not placing bucket " << name << ":  "
-      << "reading the attributes of " << path << ": "
-      << cpp_strerror(-ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: not placing bucket {}:  reading the "
+			  "attributes of {}: {}", name, path,
+			  cpp_strerror(-ret));
     return ret;
   }
   if (ret > 0) {
-    ldpp_dout(dpp, 1) << "nsfs: not placing bucket " << name << ":  "
-      << path << " carries nsfs state, so it is or was a bucket's" << dendl;
+    ldpp_dout_fmt(dpp, 1, "nsfs: not placing bucket {}:  {} carries nsfs "
+			  "state, so it is or was a bucket's", name, path);
     return -EEXIST;
   }
   ret = check_clear_of_noobaa_paths(dpp, name, path);
@@ -6229,9 +6243,8 @@ int NSFSDriver::place_bucket(const DoutPrefixProvider* dpp, optional_yield y,
   bp.owner = to_string(owner);
   ret = userDB->insert_bucket_placement(dpp, bp);
   if (ret == -EADDRINUSE) {
-    ldpp_dout(dpp, 1) << "nsfs: not placing bucket " << name << ":  "
-      << path << " is another bucket's directory, or nested with one"
-      << dendl;
+    ldpp_dout_fmt(dpp, 1, "nsfs: not placing bucket {}:  {} is another "
+			  "bucket's directory, or nested with one", name, path);
     return -EEXIST;
   }
   if (ret < 0) {
@@ -6293,15 +6306,15 @@ int NSFSDriver::place_bucket(const DoutPrefixProvider* dpp, optional_yield y,
       bucket->release_nsfs_state(dpp);
     }
     userDB->remove_bucket_placement(dpp, name, "");
-    ldpp_dout(dpp, 0) << "ERROR: placing bucket " << name << " at " << path
-      << ": " << cpp_strerror(-ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: placing bucket {} at {}: {}", name, path,
+			  cpp_strerror(-ret));
     return ret;
   }
   if (profile) {
     *profile = bucket->profile_name();
   }
-  ldpp_dout(dpp, 1) << "nsfs: bucket " << name << " placed at " << path
-    << " for " << owner << ", profile " << bucket->profile_name() << dendl;
+  ldpp_dout_fmt(dpp, 1, "nsfs: bucket {} placed at {} for {}, profile {}", name,
+			path, to_string(owner), bucket->profile_name());
   return 0;
 }
 
@@ -6346,8 +6359,8 @@ int NSFSDriver::load_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b, 
   /* A bucket that cannot be adopted cannot be served (DECISIONS.md
    * 2026-10-29). */
   auto refuse = [&] {
-    ldpp_dout(dpp, 4) << "nsfs: bucket " << b.name << " is not served:  its "
-      << "adoption failed, and waits for an operator" << dendl;
+    ldpp_dout_fmt(dpp, 4, "nsfs: bucket {} is not served:  its adoption "
+			  "failed, and waits for an operator", b.name);
     bucket->reset();
     return -ERR_INVALID_BUCKET_STATE;
   };
@@ -6379,8 +6392,7 @@ int NSFSDriver::load_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b, 
     if (const auto& why =
 	  static_cast<NSFSBucket*>(bucket->get())->untranslated_by();
 	!why.empty()) {
-      ldpp_dout(dpp, 4) << "nsfs: bucket " << b.name << " is not served:  "
-	<< why << dendl;
+      ldpp_dout_fmt(dpp, 4, "nsfs: bucket {} is not served:  {}", b.name, why);
       bucket->reset();
       if (adoption_queue.load(std::memory_order_acquire) &&
 	  !adoption_complete()) {
@@ -6539,8 +6551,8 @@ int NSFSDriver::list_buckets(const DoutPrefixProvider* dpp, const rgw_owner& own
     int ret = userDB->list_bucket_placements_by_owner(
       dpp, key, tenant, after, end_marker, max - result.buckets.size(), rows);
     if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: could not list buckets for " << owner
-	<< ": " << cpp_strerror(-ret) << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: could not list buckets for {}: {}",
+			    to_string(owner), cpp_strerror(-ret));
       return ret;
     }
     if (rows.empty()) {
@@ -6560,8 +6572,8 @@ int NSFSDriver::list_buckets(const DoutPrefixProvider* dpp, const rgw_owner& own
 	 * that bucket closed.  The account's other buckets are fine. */
 	if ((ret == -ENOENT) || (ret == -ERR_NOT_IMPLEMENTED) ||
 	    (ret == -EBADMSG)) {
-	  ldpp_dout(dpp, 1) << "list_buckets: skipping " << row.bucket_name
-	    << ": " << cpp_strerror(-ret) << dendl;
+	  ldpp_dout_fmt(dpp, 1, "list_buckets: skipping {}: {}",
+				row.bucket_name, cpp_strerror(-ret));
 	  continue;
 	}
 	return ret;
@@ -6570,9 +6582,10 @@ int NSFSDriver::list_buckets(const DoutPrefixProvider* dpp, const rgw_owner& own
        * disagree only if an owner was changed somewhere that did not
        * update the row, which is a defect to see, not to paper over. */
       if (bucket->get_owner() != owner) {
-	ldpp_dout(dpp, 0) << "ERROR: bucket " << row.bucket_name
-	  << " is listed for " << owner << " but owned by "
-	  << bucket->get_owner() << ";  its placement row is stale" << dendl;
+	ldpp_dout_fmt(dpp, 0, "ERROR: bucket {} is listed for {} but owned by "
+			      "{};  its placement row is stale",
+			      row.bucket_name, to_string(owner),
+			      to_string(bucket->get_owner()));
 	continue;
       }
       RGWBucketEnt ent;
@@ -6744,9 +6757,9 @@ int NSFSBucket::create(const DoutPrefixProvider* dpp,
     }
     ret = driver->get_identity_db()->insert_bucket_placement(dpp, bp);
     if (ret == -EADDRINUSE) {
-      ldpp_dout(dpp, 0) << "ERROR: bucket " << get_name() << ":  "
-	<< bp.path << " is another bucket's directory, or nested with one"
-	<< dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: bucket {}:  {} is another bucket's "
+			    "directory, or nested with one", get_name(),
+			    bp.path);
       return -EEXIST;
     }
     if (ret < 0) {
@@ -6796,7 +6809,8 @@ int NSFSUser::read_attrs(const DoutPrefixProvider* dpp, optional_yield y)
   bool cache_hit;
   int ret = load_user_from_cache_or_db(dpp, cache_hit);
   if (cache_hit) {
-    ldpp_dout(dpp, 21) << "UserCache: read_attrs: cache hit for uid=" << this->get_id().id << dendl;
+    ldpp_dout_fmt(dpp, 21, "UserCache: read_attrs: cache hit for uid={}",
+			   this->get_id().id);
   }
   return ret;
 }
@@ -6818,7 +6832,8 @@ int NSFSUser::load_user(const DoutPrefixProvider* dpp, optional_yield y)
   bool cache_hit;
   int ret = load_user_from_cache_or_db(dpp, cache_hit);
   if (cache_hit) {
-    ldpp_dout(dpp, 21) << "UserCache: load_user: cache hit for uid=" << this->get_id().id << dendl;
+    ldpp_dout_fmt(dpp, 21, "UserCache: load_user: cache hit for uid={}",
+			   this->get_id().id);
   }
   return ret;
 }
@@ -6874,9 +6889,9 @@ int NSFSUser::copy_account_identity(const DoutPrefixProvider* dpp)
   row.key = key;
   ret = db->put_identity(dpp, row);
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: nsfs: user " << key << " was stored, but "
-      "its copy of account " << get_info().account_id << "'s identity was "
-      "not: " << cpp_strerror(-ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: nsfs: user {} was stored, but its copy of "
+			  "account {}'s identity was not: {}", key,
+			  get_info().account_id, cpp_strerror(-ret));
   }
   return ret;
 }
@@ -6887,7 +6902,8 @@ int NSFSUser::remove_user(const DoutPrefixProvider* dpp, optional_yield y)
   if (ret == 0) {
     driver->get_user_cache().invalidate_user(dpp, this->get_id().id);
   } else {
-    ldpp_dout(dpp, 0) << "ERROR: failed to remove user uid=" << this->get_id().id << " ret=" << ret << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: failed to remove user uid={} ret={}",
+			  this->get_id().id, ret);
   }
   return ret;
 }
@@ -7373,7 +7389,7 @@ int NSFSDriver::meta_list_keys_init(const DoutPrefixProvider *dpp,
    * listing would read as "there are none". */
   if ((section != "user") && (section != "bucket") &&
       (section != "account") && (section != "topic")) {
-    ldpp_dout(dpp, 1) << "nsfs: no metadata section " << section << dendl;
+    ldpp_dout_fmt(dpp, 1, "nsfs: no metadata section {}", section);
     return -ENOENT;
   }
   meta_list_handle* stuff = new meta_list_handle(section, marker);
@@ -7699,8 +7715,8 @@ if (max <= 0) {
     });
 
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: could not list bucket " << get_name() << ": "
-      << cpp_strerror(ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: could not list bucket {}: {}", get_name(),
+			  cpp_strerror(ret));
     results.objs.clear();
     return ret;
   }
@@ -7915,9 +7931,8 @@ int NSFSBucket::remove(const DoutPrefixProvider* dpp,
 	  ? -errno : 0;
     }, y);
     if (r < 0) {
-      ldpp_dout(dpp, 10) << "nsfs: bucket " << get_name() << ":  uid "
-	<< id.cred.uid << " may not delete it:  " << cpp_strerror(-r)
-	<< dendl;
+      ldpp_dout_fmt(dpp, 10, "nsfs: bucket {}:  uid {} may not delete it:  {}",
+			     get_name(), id.cred.uid, cpp_strerror(-r));
       return r;
     }
   }
@@ -7955,9 +7970,11 @@ int NSFSBucket::remove(const DoutPrefixProvider* dpp,
 	}
       }
       if (r < 0) {
-	ldpp_dout(dpp, removal_log_level(-r)) << removal_log_prefix(-r)
-	  << "removing " << root_folder << " from bucket " << get_name()
-	  << ": " << cpp_strerror(-r) << dendl;
+	ldpp_dout_fmt(dpp, removal_log_level(-r), "{}removing {} from bucket "
+						  "{}: {}",
+						  removal_log_prefix(-r),
+						  root_folder, get_name(),
+						  cpp_strerror(-r));
 	return r;
       }
     }
@@ -7972,9 +7989,9 @@ int NSFSBucket::remove(const DoutPrefixProvider* dpp,
 	return dir->remove(dpp, y, delete_children);
       });
       if (ret < 0) {
-	ldpp_dout(dpp, 0) << "ERROR: bucket " << get_name() << ":  its "
-	  << "directory could not be removed even raised: "
-	  << cpp_strerror(-ret) << dendl;
+	ldpp_dout_fmt(dpp, 0, "ERROR: bucket {}:  its directory could not be "
+			      "removed even raised: {}", get_name(),
+			      cpp_strerror(-ret));
       }
     }
   } else {
@@ -7989,8 +8006,8 @@ int NSFSBucket::remove(const DoutPrefixProvider* dpp,
   ret = driver->get_identity_db()->remove_bucket_placement(dpp, get_name(),
 							   get_tenant());
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: bucket " << get_name() << " was deleted, "
-      << "but its placement row was not:  " << cpp_strerror(-ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: bucket {} was deleted, but its placement "
+			  "row was not:  {}", get_name(), cpp_strerror(-ret));
     return ret;
   }
 
@@ -8032,8 +8049,8 @@ int NSFSBucket::set_owns_storage(const DoutPrefixProvider* dpp, bool owns)
 			0) < 0) ? -errno : 0;
   });
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: recording whether bucket " << get_name()
-      << " owns its storage: " << cpp_strerror(-ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: recording whether bucket {} owns its "
+			  "storage: {}", get_name(), cpp_strerror(-ret));
   }
   return ret;
 }
@@ -8076,8 +8093,8 @@ int NSFSBucket::release_nsfs_state(const DoutPrefixProvider* dpp)
 	      (errno != ENODATA)) ? -errno : 0;
     });
     if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: removing " << name << " from bucket "
-	<< get_name() << ": " << cpp_strerror(-ret) << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: removing {} from bucket {}: {}", name,
+			    get_name(), cpp_strerror(-ret));
       return ret;
     }
   }
@@ -8088,8 +8105,9 @@ int NSFSBucket::release_nsfs_state(const DoutPrefixProvider* dpp)
 	    (errno != ENOENT)) ? -errno : 0;
   });
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: removing " << nsfs::BUCKET_META_LOCK
-      << " from bucket " << get_name() << ": " << cpp_strerror(-ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: removing {} from bucket {}: {}",
+			  nsfs::BUCKET_META_LOCK, get_name(),
+			  cpp_strerror(-ret));
     return ret;
   }
 
@@ -8101,14 +8119,14 @@ int NSFSBucket::release_nsfs_state(const DoutPrefixProvider* dpp)
 	    (errno != ENOENT)) ? -errno : 0;
   });
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: removing " << VERSIONS_LOCKFILE
-      << " from bucket " << get_name() << ": " << cpp_strerror(-ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: removing {} from bucket {}: {}",
+			  VERSIONS_LOCKFILE, get_name(), cpp_strerror(-ret));
     return ret;
   }
 
-  ldpp_dout(dpp, 1) << "nsfs: bucket " << get_name()
-    << " removed;  its directory predates the bucket and is left in "
-    << "place with its contents" << dendl;
+  ldpp_dout_fmt(dpp, 1, "nsfs: bucket {} removed;  its directory predates the "
+			"bucket and is left in place with its contents",
+			get_name());
   return 0;
 }
 
@@ -8148,16 +8166,17 @@ int NSFSBucket::resolve_profile(const DoutPrefixProvider* dpp)
        * would write under NooBaa's names.  A filesystem without xattrs
        * cannot hold the nsfs format at all, so rejecting it costs nothing
        * that could have been served. */
-      ldpp_dout(dpp, 0) << "ERROR: bucket " << get_name() << " is on a "
-	<< "filesystem which does not support " << nsfs::EXTENSIONS_XATTR
-	<< ";  not serving it, because every profile would read as "
-	<< "base" << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: bucket {} is on a filesystem which does "
+			    "not support {};  not serving it, because every "
+			    "profile would read as base", get_name(),
+			    nsfs::EXTENSIONS_XATTR);
       return -ERR_NOT_IMPLEMENTED;
     }
     if (errno != ENODATA) {
       ret = -errno;
-      ldpp_dout(dpp, 0) << "ERROR: reading " << nsfs::EXTENSIONS_XATTR
-	<< " on bucket " << get_name() << ": " << cpp_strerror(-ret) << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: reading {} on bucket {}: {}",
+			    nsfs::EXTENSIONS_XATTR, get_name(),
+			    cpp_strerror(-ret));
       return ret;
     }
 
@@ -8175,8 +8194,7 @@ int NSFSBucket::resolve_profile(const DoutPrefixProvider* dpp)
      * by the nsfs path conventions. */
     profile = driver->get_base_profile();
     apply_format();
-    ldpp_dout(dpp, 20) << "bucket " << get_name() << " profile "
-      << profile->name() << dendl;
+    ldpp_dout_fmt(dpp, 20, "bucket {} profile {}", get_name(), profile->name());
     return 0;
   } else {
     buf[len] = '\0';
@@ -8184,9 +8202,9 @@ int NSFSBucket::resolve_profile(const DoutPrefixProvider* dpp)
     errno = 0;
     unsigned long v = ::strtoul(buf, &end, 10);
     if (errno || (end == buf) || (*end != '\0') || (v > UINT32_MAX)) {
-      ldpp_dout(dpp, 0) << "ERROR: bucket " << get_name() << " carries an "
-	<< "unreadable " << nsfs::EXTENSIONS_XATTR << " (\"" << buf
-	<< "\");  not serving it" << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: bucket {} carries an unreadable {} "
+			    "(\"{}\");  not serving it", get_name(),
+			    nsfs::EXTENSIONS_XATTR, buf);
       /* ERR_NOT_IMPLEMENTED, not ENOTSUP:  the latter has no entry in
        * rgw_common.cc's table and falls through to 500/UnknownError,
        * which tells a client we malfunctioned.  This is a deliberate
@@ -8198,10 +8216,10 @@ int NSFSBucket::resolve_profile(const DoutPrefixProvider* dpp)
 
   profile = driver->resolve_profile(extensions);
   if (! profile) {
-    ldpp_dout(dpp, 0) << "ERROR: bucket " << get_name() << " was written with "
-      << "extension set " << extensions << ", which this gateway does not "
-      << "implement (it implements " << nsfs::EXTENSIONS_KNOWN
-      << ");  not serving it" << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: bucket {} was written with extension set "
+			  "{}, which this gateway does not implement (it "
+			  "implements {});  not serving it", get_name(),
+			  extensions, nsfs::EXTENSIONS_KNOWN);
     /* 501 NotImplemented, and terminal.  Not -ENOTSUP:  it has no entry
      * in rgw_common.cc's table, falls through to 500/UnknownError, and
      * that is malformed enough that clients abend rather than report --
@@ -8234,9 +8252,9 @@ int NSFSBucket::resolve_profile(const DoutPrefixProvider* dpp)
 	/* A format we do not have a reader for.  The objects written in
 	 * it are unreadable whatever we do, and serving them through
 	 * the wrong parser turns that into wrong results. */
-	ldpp_dout(dpp, 0) << "ERROR: bucket " << get_name() << " is being "
-	  << "converted from \"" << from << "\", which this gateway "
-	  << "cannot read;  not serving it" << dendl;
+	ldpp_dout_fmt(dpp, 0, "ERROR: bucket {} is being converted from "
+			      "\"{}\", which this gateway cannot read;  not "
+			      "serving it", get_name(), from);
 	profile = nullptr;
 	return -ERR_NOT_IMPLEMENTED;
       }
@@ -8245,9 +8263,8 @@ int NSFSBucket::resolve_profile(const DoutPrefixProvider* dpp)
 
   apply_format();
 
-  ldpp_dout(dpp, 20) << "bucket " << get_name() << " profile "
-    << profile->name() << (converting ? " (converting from noobaa)" : "")
-    << dendl;
+  ldpp_dout_fmt(dpp, 20, "bucket {} profile {}{}", get_name(), profile->name(),
+			 (converting ? " (converting from noobaa)" : ""));
   return 0;
 }
 
@@ -8269,8 +8286,9 @@ int NSFSBucket::mark_converting(const DoutPrefixProvider* dpp)
 			v.data(), v.size(), 0) < 0) ? -errno : 0;
   });
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: writing " << nsfs::CONVERTING_XATTR
-      << " on bucket " << get_name() << ": " << cpp_strerror(-ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: writing {} on bucket {}: {}",
+			  nsfs::CONVERTING_XATTR, get_name(),
+			  cpp_strerror(-ret));
     return ret;
   }
 
@@ -8294,8 +8312,9 @@ int NSFSBucket::clear_converting(const DoutPrefixProvider* dpp)
 	    (errno != ENODATA)) ? -errno : 0;
   });
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: removing " << nsfs::CONVERTING_XATTR
-      << " from bucket " << get_name() << ": " << cpp_strerror(-ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: removing {} from bucket {}: {}",
+			  nsfs::CONVERTING_XATTR, get_name(),
+			  cpp_strerror(-ret));
     return ret;
   }
 
@@ -8321,8 +8340,9 @@ int NSFSBucket::unmark_extensions(const DoutPrefixProvider* dpp,
 	    (errno != ENODATA)) ? -errno : 0;
   });
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: removing " << nsfs::EXTENSIONS_XATTR
-      << " from bucket " << get_name() << ": " << cpp_strerror(-ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: removing {} from bucket {}: {}",
+			  nsfs::EXTENSIONS_XATTR, get_name(),
+			  cpp_strerror(-ret));
     return ret;
   }
 
@@ -8433,9 +8453,8 @@ int NSFSBucket::set_profile(const DoutPrefixProvider* dpp, optional_yield y,
 			    nsfs::ConvertProgress* progress)
 {
   if (! nsfs::is_named_profile(target)) {
-    ldpp_dout(dpp, 0) << "ERROR: not setting bucket " << get_name()
-      << " to extension set " << target << ":  no profile names it"
-      << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: not setting bucket {} to extension set {}:  "
+			  "no profile names it", get_name(), target);
     return -EINVAL;
   }
 
@@ -8453,8 +8472,8 @@ int NSFSBucket::set_profile(const DoutPrefixProvider* dpp, optional_yield y,
    * removed.  A bucket already in base asking for base is the no-op
    * below. */
   if ((target == nsfs::EXTENSIONS_BASE) && (current != target)) {
-    ldpp_dout(dpp, 0) << "ERROR: not returning bucket " << get_name()
-      << " to the base profile:  adoption is one-way" << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: not returning bucket {} to the base "
+			  "profile:  adoption is one-way", get_name());
     return -ERR_INVALID_BUCKET_STATE;
   }
 
@@ -8483,10 +8502,10 @@ int NSFSBucket::set_profile(const DoutPrefixProvider* dpp, optional_yield y,
    * check_empty() below would read it half converted.  Asking for the
    * profile it is converting to is the resume above. */
   if (converting) {
-    ldpp_dout(dpp, 0) << "ERROR: not setting bucket " << get_name()
-      << " to extension set " << target << ":  it is converting to "
-      << profile->name() << ", and its profile changes once it is adopted"
-      << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: not setting bucket {} to extension set {}:  "
+			  "it is converting to {}, and its profile changes "
+			  "once it is adopted", get_name(), target,
+			  profile->name());
     return -ERR_INVALID_BUCKET_STATE;
   }
 
@@ -8502,13 +8521,13 @@ int NSFSBucket::set_profile(const DoutPrefixProvider* dpp, optional_yield y,
        * The import writes through its own handle, so this one is
        * reloaded to carry what it wrote;  write_attrs() below would
        * otherwise put the pre-import state back. */
-      ldpp_dout(dpp, 1) << "nsfs: bucket " << get_name()
-	<< " leaves the base profile for extension set " << target << dendl;
+      ldpp_dout_fmt(dpp, 1, "nsfs: bucket {} leaves the base profile for "
+			    "extension set {}", get_name(), target);
       ret = driver->import_noobaa_bucket(dpp, y, get_name(), nullptr);
       if ((ret < 0) && (ret != -ENOENT)) {
-	ldpp_dout(dpp, 0) << "ERROR: not converting bucket "
-	  << get_name() << ":  its NooBaa record could not be imported: "
-	  << cpp_strerror(-ret) << dendl;
+	ldpp_dout_fmt(dpp, 0, "ERROR: not converting bucket {}:  its NooBaa "
+			      "record could not be imported: {}", get_name(),
+			      cpp_strerror(-ret));
 	return ret;
       }
       if (ret == 0) {
@@ -8529,10 +8548,10 @@ int NSFSBucket::set_profile(const DoutPrefixProvider* dpp, optional_yield y,
   if (current & ~target) {
     ret = check_empty(dpp, y);
     if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: not reducing bucket " << get_name()
-	<< " from " << profile->name() << " to extension set " << target
-	<< ":  it holds content, and the structures the dropped extensions "
-	<< "allowed stay in the tree" << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: not reducing bucket {} from {} to "
+			    "extension set {}:  it holds content, and the "
+			    "structures the dropped extensions allowed stay "
+			    "in the tree", get_name(), profile->name(), target);
       return ret;
     }
     if ((current & nsfs::EXT_SHADOW) && !(target & nsfs::EXT_SHADOW)) {
@@ -8541,9 +8560,9 @@ int NSFSBucket::set_profile(const DoutPrefixProvider* dpp, optional_yield y,
 			    AT_REMOVEDIR) < 0) && (errno != ENOENT)) ? -errno : 0;
       });
       if (ret < 0) {
-	ldpp_dout(dpp, 0) << "ERROR: removing " << HIDDEN_SHADOW_PATH
-	  << " from bucket " << get_name() << ": " << cpp_strerror(-ret)
-	  << dendl;
+	ldpp_dout_fmt(dpp, 0, "ERROR: removing {} from bucket {}: {}",
+			      HIDDEN_SHADOW_PATH, get_name(),
+			      cpp_strerror(-ret));
 	return ret;
       }
     }
@@ -8588,10 +8607,10 @@ int NSFSBucket::set_profile(const DoutPrefixProvider* dpp, optional_yield y,
   if (current == nsfs::EXTENSIONS_BASE) {
     ret = write_attrs(dpp, y);
     if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: not converting bucket " << get_name()
-	<< ":  its state could not be written, and converting would lose "
-	<< "what NooBaa's record was supplying: " << cpp_strerror(-ret)
-	<< dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: not converting bucket {}:  its state "
+			    "could not be written, and converting would lose "
+			    "what NooBaa's record was supplying: {}",
+			    get_name(), cpp_strerror(-ret));
       return ret;
     }
   }
@@ -8748,10 +8767,10 @@ static int convert_attrs(const DoutPrefixProvider* dpp, optional_yield y,
    * the bucket's conversion, which resumes once the release is
    * reviewed */
   if (!unknown.empty()) {
-    ldpp_dout(dpp, 0) << "ERROR: not converting " << display << ":  it "
-      << "carries " << unknown.front()
-      << (unknown.size() > 1 ? " and others" : "")
-      << ", which no reviewed release of NooBaa writes" << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: not converting {}:  it carries {}{}, which "
+			  "no reviewed release of NooBaa writes", display,
+			  unknown.front(),
+			  (unknown.size() > 1 ? " and others" : ""));
     return -ERR_INVALID_OBJECT_STATE;
   }
 
@@ -8977,8 +8996,8 @@ static int convert_versions(const DoutPrefixProvider* dpp, optional_yield y,
       /* there and unopenable:  passed over, it would be left in
        * NooBaa's format under a directory marked converted */
       ret = -errno;
-      ldpp_dout(dpp, 0) << "ERROR: not converting version " << name
-	<< " under " << prefix << ": " << cpp_strerror(-ret) << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: not converting version {} under {}: {}",
+			    name, prefix, cpp_strerror(-ret));
       return ret;
     }
     auto close_fd = make_scope_guard([fd] { ::close(fd); });
@@ -9067,10 +9086,10 @@ static int convert_directory_object(const DoutPrefixProvider* dpp,
     return ret;
   }
   if (!unknown.empty()) {
-    ldpp_dout(dpp, 0) << "ERROR: not converting directory object " << ev.key
-      << ":  it carries " << unknown.front()
-      << (unknown.size() > 1 ? " and others" : "")
-      << ", which no reviewed release of NooBaa writes" << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: not converting directory object {}:  it "
+			  "carries {}{}, which no reviewed release of NooBaa "
+			  "writes", ev.key, unknown.front(),
+			  (unknown.size() > 1 ? " and others" : ""));
     return -ERR_INVALID_OBJECT_STATE;
   }
 
@@ -9093,8 +9112,8 @@ static int convert_directory_object(const DoutPrefixProvider* dpp,
     return (sfd < 0) ? -errno : 0;
   });
   if ((ret < 0) && (ret != -ENOENT)) {
-    ldpp_dout(dpp, 0) << "ERROR: opening " << sname << " under " << key
-      << ": " << cpp_strerror(-ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: opening {} under {}: {}", sname, key,
+			  cpp_strerror(-ret));
     return ret;
   }
   auto close_sfd = make_scope_guard([&sfd] {
@@ -9143,8 +9162,8 @@ static int convert_directory_object(const DoutPrefixProvider* dpp,
     if (nsfs::statx(dir_fd, "", AT_EMPTY_PATH, STATX_BASIC_STATS,
 		    &reported) < 0) {
       ret = -errno;
-      ldpp_dout(dpp, 0) << "ERROR: cannot stat " << key << ": "
-			<< cpp_strerror(-ret) << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: cannot stat {}: {}", key,
+			    cpp_strerror(-ret));
       return ret;
     }
   }
@@ -9152,8 +9171,8 @@ static int convert_directory_object(const DoutPrefixProvider* dpp,
     struct statx sstx{};
     if (nsfs::statx(sfd, "", AT_EMPTY_PATH, STATX_MTIME, &sstx) < 0) {
       ret = -errno;
-      ldpp_dout(dpp, 0) << "ERROR: cannot stat " << sname << " under " << key
-	<< ": " << cpp_strerror(-ret) << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: cannot stat {} under {}: {}", sname, key,
+			    cpp_strerror(-ret));
       return ret;
     }
     reported.stx_mtime = sstx.stx_mtime;
@@ -9196,8 +9215,8 @@ static int convert_directory_object(const DoutPrefixProvider* dpp,
     };
     if (::futimens(fd, times) < 0) {
       r = -errno;
-      ldpp_dout(dpp, 0) << "ERROR: giving " << sname << " under " << key
-	<< " its directory's mtime: " << cpp_strerror(-r) << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: giving {} under {} its directory's mtime: "
+			    "{}", sname, key, cpp_strerror(-r));
     }
     return r;
   };
@@ -9236,8 +9255,8 @@ static int convert_directory_object(const DoutPrefixProvider* dpp,
       written = (ret == 0);
     }
     if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: making " << sname << " under "
-			<< key << ": " << cpp_strerror(-ret) << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: making {} under {}: {}", sname, key,
+			    cpp_strerror(-ret));
       return ret;
     }
   } else {
@@ -9252,9 +9271,8 @@ static int convert_directory_object(const DoutPrefixProvider* dpp,
   struct statx dstx{};
   ret = statx_ids(dir_fd, dstx);
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: cannot stat " << key
-      << " to give " << sname << " its owner: "
-      << cpp_strerror(-ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: cannot stat {} to give {} its owner: {}", key,
+			  sname, cpp_strerror(-ret));
     return ret;
   }
   ret = nsfs::with_capabilities(dpp, CONVERT_CHOWN_CAPS, [&]() -> int {
@@ -9273,9 +9291,8 @@ static int convert_directory_object(const DoutPrefixProvider* dpp,
 	return (::unlinkat(dir_fd, sname.c_str(), 0) < 0) ? -errno : 0;
       });
       if (uret < 0) {
-	ldpp_dout(dpp, 0) << "ERROR: could not remove " << sname
-	  << " after giving it its owner failed: " << cpp_strerror(-uret)
-	  << dendl;
+	ldpp_dout_fmt(dpp, 0, "ERROR: could not remove {} after giving it its "
+			      "owner failed: {}", sname, cpp_strerror(-uret));
       }
     }
     return ret;
@@ -9385,9 +9402,9 @@ static void count_link(const DoutPrefixProvider* dpp, int dir_fd,
       if ((err != ENOENT) && (err != ENOTDIR)) {
 	/* a filesystem error, not a kind of link:  counted, and the
 	 * conversion goes on, since a link is not converted */
-	ldpp_dout(dpp, 0) << "ERROR: nsfs: convert: link " << key << " -> "
-	  << to << " cannot be resolved: " << cpp_strerror(err)
-	  << ";  counted dangling" << dendl;
+	ldpp_dout_fmt(dpp, 0, "ERROR: nsfs: convert: link {} -> {} cannot be "
+			      "resolved: {};  counted dangling", key, to,
+			      cpp_strerror(err));
       }
     }
   } else {
@@ -9411,9 +9428,9 @@ static void count_link(const DoutPrefixProvider* dpp, int dir_fd,
       what = "is a file in the bucket";
     }
   }
-  ldpp_dout(dpp, 1) << "nsfs: convert: " << key << " is a symbolic link ("
-    << to << "), which " << what << ";  a link is not an object, and it "
-    << "is not served" << dendl;
+  ldpp_dout_fmt(dpp, 1, "nsfs: convert: {} is a symbolic link ({}), which {}; "
+			" a link is not an object, and it is not served", key,
+			to, what);
 }
 
 /* Whether the subtree at `fd` was converted to `converted_to`, the
@@ -9444,9 +9461,9 @@ static void mark_subtree_converted(const DoutPrefixProvider* dpp, int fd,
       ? -errno : 0;
   });
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: not marking " << prefix << " converted: "
-      << cpp_strerror(-ret) << ";  a resumed walk goes through it again"
-      << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: not marking {} converted: {};  a resumed "
+			  "walk goes through it again", prefix,
+			  cpp_strerror(-ret));
   }
 }
 
@@ -9529,8 +9546,8 @@ static int convert_directory(const DoutPrefixProvider* dpp, optional_yield y,
       /* there and unopenable:  passed over, it would be left in
        * NooBaa's format under a directory marked converted */
       ret = -errno;
-      ldpp_dout(dpp, 0) << "ERROR: not converting " << prefix << name
-	<< ": " << cpp_strerror(-ret) << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: not converting {}{}: {}", prefix, name,
+			    cpp_strerror(-ret));
       return ret;
     }
     auto close_fd = make_scope_guard([fd] { ::close(fd); });
@@ -9641,13 +9658,13 @@ static int remove_noobaa_temp_dir(const DoutPrefixProvider* dpp,
     return delete_directory(bucket_fd, tmp->c_str(), true, dpp, rn);
   });
   if ((ret < 0) && (ret != -ENOENT)) {
-    ldpp_dout(dpp, 0) << "ERROR: removing NooBaa's temp directory " << *tmp
-      << " from bucket " << bucket << ": " << cpp_strerror(-ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: removing NooBaa's temp directory {} from "
+			  "bucket {}: {}", *tmp, bucket, cpp_strerror(-ret));
     return ret;
   }
-  ldpp_dout(dpp, 1) << "nsfs: bucket " << bucket << ":  removed NooBaa's "
-    << "temp directory " << *tmp << ", with " << partial
-    << " unfinished writes of theirs" << dendl;
+  ldpp_dout_fmt(dpp, 1, "nsfs: bucket {}:  removed NooBaa's temp directory "
+			"{}, with {} unfinished writes of theirs", bucket, *tmp,
+			partial);
   return 0;
 }
 
@@ -9767,8 +9784,8 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
       if (::fsetxattr(staging_dir.get_fd(), nsfs::EXTENSIONS_XATTR, v.data(),
 		      v.size(), 0) < 0) {
 	ret = -errno;
-	ldpp_dout(dpp, 0) << "ERROR: marking the staging for " << meta
-			  << ": " << cpp_strerror(-ret) << dendl;
+	ldpp_dout_fmt(dpp, 0, "ERROR: marking the staging for {}: {}", meta,
+			      cpp_strerror(-ret));
 	return ret;
       }
     }
@@ -9783,8 +9800,8 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
 			 O_RDWR | O_NOFOLLOW | O_CREAT, nsfs::file_create_mode());
       if (mfd < 0) {
 	ret = -errno;
-	ldpp_dout(dpp, 0) << "ERROR: creating " << mname << " for "
-			  << meta << ": " << cpp_strerror(-ret) << dendl;
+	ldpp_dout_fmt(dpp, 0, "ERROR: creating {} for {}: {}", mname, meta,
+			      cpp_strerror(-ret));
 	return ret;
       }
       auto close_mfd = make_scope_guard([mfd] { ::close(mfd); });
@@ -9797,9 +9814,9 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
       struct statx tdstx{};
       ret = statx_ids(fallback_dir.get_fd(), tdstx);
       if (ret < 0) {
-	ldpp_dout(dpp, 0) << "ERROR: cannot stat the staging of " << meta
-	  << " to give " << mname << " its owner: " << cpp_strerror(-ret)
-	  << dendl;
+	ldpp_dout_fmt(dpp, 0, "ERROR: cannot stat the staging of {} to give "
+			      "{} its owner: {}", meta, mname,
+			      cpp_strerror(-ret));
 	return ret;
       }
       ret = nsfs::with_capabilities(dpp, CONVERT_CHOWN_CAPS, [&]() -> int {
@@ -9808,9 +9825,9 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
       });
       if (ret < 0) {
 	if (::unlinkat(staging_dir.get_fd(), mname.c_str(), 0) < 0) {
-	  ldpp_dout(dpp, 0) << "ERROR: could not remove " << mname
-	    << " after its creation failed: " << cpp_strerror(errno)
-	    << dendl;
+	  ldpp_dout_fmt(dpp, 0, "ERROR: could not remove {} after its "
+				"creation failed: {}", mname,
+				cpp_strerror(errno));
 	}
 	return ret;
       }
@@ -9836,8 +9853,8 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
 	return 0;
       });
       if (ret < 0) {
-	ldpp_dout(dpp, 0) << "ERROR: writing the upload record for " << meta
-			  << ": " << cpp_strerror(-ret) << dendl;
+	ldpp_dout_fmt(dpp, 0, "ERROR: writing the upload record for {}: {}",
+			      meta, cpp_strerror(-ret));
 	return ret;
       }
       ret = mpu->write_staged_upload(dpp, staging_dir.get_fd(), su);
@@ -9873,10 +9890,11 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
 	::close(pfd);
 	/* X4's third layer, as for an object */
 	if (!unknown.empty()) {
-	  ldpp_dout(dpp, 0) << "ERROR: not converting part " << pname
-	    << " of an upload in bucket " << get_name() << ":  it carries "
-	    << unknown.front() << (unknown.size() > 1 ? " and others" : "")
-	    << ", which no reviewed release of NooBaa writes" << dendl;
+	  ldpp_dout_fmt(dpp, 0, "ERROR: not converting part {} of an upload "
+				"in bucket {}:  it carries {}{}, which no "
+				"reviewed release of NooBaa writes", pname,
+				get_name(), unknown.front(),
+				(unknown.size() > 1 ? " and others" : ""));
 	  return -ERR_INVALID_OBJECT_STATE;
 	}
       }
@@ -9903,8 +9921,8 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
 	rec.cksum = cached.cksum;
       } else if (!nb_mpu->part_record(dpp, fallback_dir.get_fd(), pname, pattrs,
 				      rec)) {
-	ldpp_dout(dpp, 4) << "no record for " << pname << " of " << meta
-			  << ";  skipping it" << dendl;
+	ldpp_dout_fmt(dpp, 4, "no record for {} of {};  skipping it", pname,
+			      meta);
 	continue;
       }
 
@@ -9929,9 +9947,8 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
       if (rec.shared) {
 	auto sn = nb_mpu->shared_name(rec.stored);
 	if (!sn) {
-	  ldpp_dout(dpp, 0) << "ERROR: " << pname << " of " << meta
-			    << " says it shares a file the layout does not "
-			    << "name" << dendl;
+	  ldpp_dout_fmt(dpp, 0, "ERROR: {} of {} says it shares a file the "
+				"layout does not name", pname, meta);
 	  return -EIO;
 	}
 	sname = *sn;
@@ -9939,9 +9956,8 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
       int sfd = ::openat(fallback_dir.get_fd(), sname.c_str(), O_RDONLY | O_NOFOLLOW);
       if (sfd < 0) {
 	ret = -errno;
-	ldpp_dout(dpp, 0) << "ERROR: opening " << sname << " for " << pname
-			  << " of " << meta << ": " << cpp_strerror(-ret)
-			  << dendl;
+	ldpp_dout_fmt(dpp, 0, "ERROR: opening {} for {} of {}: {}", sname,
+			      pname, meta, cpp_strerror(-ret));
 	return ret;
       }
       auto close_sfd = make_scope_guard([sfd] { ::close(sfd); });
@@ -9951,8 +9967,8 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
 			 O_RDWR | O_NOFOLLOW | O_CREAT | O_TRUNC, nsfs::file_create_mode());
       if (dfd < 0) {
 	ret = -errno;
-	ldpp_dout(dpp, 0) << "ERROR: creating " << part_name << " for " << meta
-			  << ": " << cpp_strerror(-ret) << dendl;
+	ldpp_dout_fmt(dpp, 0, "ERROR: creating {} for {}: {}", part_name, meta,
+			      cpp_strerror(-ret));
 	return ret;
       }
       auto close_dfd = make_scope_guard([dfd] { ::close(dfd); });
@@ -9965,8 +9981,8 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
       struct statx pstx{};
       ret = statx_ids(sfd, pstx);
       if (ret < 0) {
-	ldpp_dout(dpp, 0) << "ERROR: cannot stat " << sname << " to give "
-	  << part_name << " its owner: " << cpp_strerror(-ret) << dendl;
+	ldpp_dout_fmt(dpp, 0, "ERROR: cannot stat {} to give {} its owner: {}",
+			      sname, part_name, cpp_strerror(-ret));
 	return ret;
       }
       ret = nsfs::with_capabilities(dpp, CONVERT_CHOWN_CAPS, [&]() -> int {
@@ -9975,9 +9991,9 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
       });
       if (ret < 0) {
 	if (::unlinkat(staging_dir.get_fd(), part_name.c_str(), 0) < 0) {
-	  ldpp_dout(dpp, 0) << "ERROR: could not remove " << part_name
-	    << " after its creation failed: " << cpp_strerror(errno)
-	    << dendl;
+	  ldpp_dout_fmt(dpp, 0, "ERROR: could not remove {} after its "
+				"creation failed: {}", part_name,
+				cpp_strerror(errno));
 	}
 	return ret;
       }
@@ -9986,8 +10002,8 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
 	ret = fs->copy_range(dpp, sfd, rec.offset, dfd, 0, rec.stored,
 			     driver->copy_hints_for(no_authenticated_user));
 	if (ret < 0) {
-	  ldpp_dout(dpp, 0) << "ERROR: copying part " << *num << " of "
-			    << meta << ": " << cpp_strerror(-ret) << dendl;
+	  ldpp_dout_fmt(dpp, 0, "ERROR: copying part {} of {}: {}", *num, meta,
+				cpp_strerror(-ret));
 	  return ret;
 	}
       }
@@ -10028,9 +10044,8 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
 	return 0;
       });
       if (ret < 0) {
-	ldpp_dout(dpp, 0) << "ERROR: writing the record for part " << *num
-			  << " of " << meta << ": " << cpp_strerror(-ret)
-			  << dendl;
+	ldpp_dout_fmt(dpp, 0, "ERROR: writing the record for part {} of {}: {}",
+			      *num, meta, cpp_strerror(-ret));
 	return ret;
       }
       nsfs::MPUStrategy::PartRecord outrec = rec;
@@ -10071,8 +10086,8 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
     struct statx tdstx{};
     ret = statx_ids(fallback_dir.get_fd(), tdstx);
     if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: cannot stat the staging of " << meta
-	<< " to give it its owner: " << cpp_strerror(-ret) << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: cannot stat the staging of {} to give it "
+			    "its owner: {}", meta, cpp_strerror(-ret));
       return ret;
     }
     fallback_dir.close();
@@ -10083,8 +10098,8 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
 			      driver->get_reserved_names());
     });
     if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: removing their staging for " << meta
-			<< ": " << cpp_strerror(-ret) << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: removing their staging for {}: {}", meta,
+			    cpp_strerror(-ret));
       return ret;
     }
 
@@ -10206,8 +10221,8 @@ int NSFSDriver::reject_unadopted(const DoutPrefixProvider* dpp,
     return 0;
   }
   unadopted_writes_rejected.fetch_add(1, std::memory_order_relaxed);
-  ldpp_dout(dpp, 4) << "nsfs: bucket " << b->get_name() << " is not adopted;"
-    << "  a client write waits for adoption" << dendl;
+  ldpp_dout_fmt(dpp, 4, "nsfs: bucket {} is not adopted;  a client write "
+			"waits for adoption", b->get_name());
   /* Under `automatic` the bucket is queued and its adoption needs no
    * command, so the write is worth retrying. */
   if (adoption_queue.load(std::memory_order_acquire) &&
@@ -10241,9 +10256,9 @@ int NSFSDriver::mutation_enter(const DoutPrefixProvider* dpp,
     const bool opened = gate_cond.wait_for(l, mutation_gate_wait,
 					   [&g] { return !g.closed; });
     if (!opened) {
-      ldpp_dout(dpp, 4) << "nsfs: bucket " << bucket << " is being rewritten;"
-	<< "  rejecting a mutation after waiting "
-	<< mutation_gate_wait.count() << "ms" << dendl;
+      ldpp_dout_fmt(dpp, 4, "nsfs: bucket {} is being rewritten;  rejecting a "
+			    "mutation after waiting {}ms", bucket,
+			    mutation_gate_wait.count());
       return -ERR_SERVICE_UNAVAILABLE;
     }
   }
@@ -10287,10 +10302,9 @@ int NSFSDriver::gate_close(const DoutPrefixProvider* dpp,
     if (!drained) {
       g.closed = false;
       gate_cond.notify_all();
-      ldpp_dout(dpp, 0) << "ERROR: bucket " << bucket << " still had "
-	<< g.inflight << " mutations running after "
-	<< gate_drain_wait.count() << "ms;  not starting the rewrite"
-	<< dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: bucket {} still had {} mutations running "
+			    "after {}ms;  not starting the rewrite", bucket,
+			    g.inflight, gate_drain_wait.count());
       return -ETIMEDOUT;
     }
   }
@@ -10395,14 +10409,13 @@ int NSFSBucket::convert_tree(const DoutPrefixProvider* dpp, optional_yield y,
 				 driver->get_reserved_names(), get_name());
   }
   if (ret != 0) {
-    ldpp_dout(dpp, 1) << "nsfs: converting bucket " << get_name()
-      << " stopped after " << prog.objects << " objects, "
-      << prog.directory_objects << " directory objects, "
-      << prog.versions << " versions and "
-      << prog.uploads << " uploads, passing "
-      << prog.directories_skipped << " converted subtrees: "
-      << cpp_strerror(-ret) << ";  the marker stays and a later run "
-      << "resumes" << dendl;
+    ldpp_dout_fmt(dpp, 1, "nsfs: converting bucket {} stopped after {} "
+			  "objects, {} directory objects, {} versions and {} "
+			  "uploads, passing {} converted subtrees: {};  the "
+			  "marker stays and a later run resumes", get_name(),
+			  prog.objects, prog.directory_objects, prog.versions,
+			  prog.uploads, prog.directories_skipped,
+			  cpp_strerror(-ret));
     return ret;
   }
 
@@ -10412,20 +10425,19 @@ int NSFSBucket::convert_tree(const DoutPrefixProvider* dpp, optional_yield y,
   }
   prog.complete = true;
 
-  ldpp_dout(dpp, 1) << "nsfs: bucket " << get_name() << " converted: "
-    << prog.objects << " objects, " << prog.directory_objects
-    << " directory objects, " << prog.versions << " versions, "
-    << prog.uploads << " uploads ("
-    << prog.parts << " parts), passing "
-    << prog.directories_skipped << " converted subtrees" << dendl;
+  ldpp_dout_fmt(dpp, 1, "nsfs: bucket {} converted: {} objects, {} directory "
+			"objects, {} versions, {} uploads ({} parts), passing "
+			"{} converted subtrees", get_name(), prog.objects,
+			prog.directory_objects, prog.versions, prog.uploads,
+			prog.parts, prog.directories_skipped);
   if (prog.links.total() > 0) {
-    ldpp_dout(dpp, 1) << "nsfs: bucket " << get_name() << " holds "
-      << prog.links.total() << " symbolic links, not served:  "
-      << prog.links.file << " to a file in the bucket, "
-      << prog.links.directory << " to a directory in the bucket, "
-      << prog.links.outside << " out of the bucket, "
-      << prog.links.dangling << " dangling, "
-      << prog.links.loop << " looping" << dendl;
+    ldpp_dout_fmt(dpp, 1, "nsfs: bucket {} holds {} symbolic links, not "
+			  "served:  {} to a file in the bucket, {} to a "
+			  "directory in the bucket, {} out of the bucket, {} "
+			  "dangling, {} looping", get_name(),
+			  prog.links.total(), prog.links.file,
+			  prog.links.directory, prog.links.outside,
+			  prog.links.dangling, prog.links.loop);
   }
   return 0;
 }
@@ -10448,8 +10460,9 @@ int NSFSBucket::mark_extensions(const DoutPrefixProvider* dpp,
     }, null_yield);
   });
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: writing " << nsfs::EXTENSIONS_XATTR
-      << " on bucket " << get_name() << ": " << cpp_strerror(-ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: writing {} on bucket {}: {}",
+			  nsfs::EXTENSIONS_XATTR, get_name(),
+			  cpp_strerror(-ret));
     return ret;
   }
 
@@ -10458,9 +10471,8 @@ int NSFSBucket::mark_extensions(const DoutPrefixProvider* dpp,
     /* The attribute is written and names nothing we serve.  Only a
      * caller passing a set we do not implement reaches this, and the
      * bucket is now unservable, which the next load reports. */
-    ldpp_dout(dpp, 0) << "ERROR: marked bucket " << get_name()
-      << " with extension set " << version << ", which resolves to no "
-      << "profile" << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: marked bucket {} with extension set {}, "
+			  "which resolves to no profile", get_name(), version);
     return -EINVAL;
   }
   apply_format();
@@ -10623,16 +10635,16 @@ int NSFSBucket::read_stats(const DoutPrefixProvider *dpp, optional_yield y,
     }
     if (ret < 0) {
       ret = errno;
-      ldpp_dout(dpp, 0) << "ERROR: could not get ent for object " << name << ": "
-	<< cpp_strerror(ret) << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: could not get ent for object {}: {}", name,
+			    cpp_strerror(ret));
       return -ret;
     }
 
     ret = dent->stat(dpp);
     if (ret < 0) {
       ret = errno;
-      ldpp_dout(dpp, 0) << "ERROR: could not stat object " << name << ": "
-	<< cpp_strerror(ret) << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: could not stat object {}: {}", name,
+			    cpp_strerror(ret));
       return -ret;
     }
 
@@ -10701,8 +10713,8 @@ static int chown_tree(const DoutPrefixProvider* dpp, int dirfd,
     }
     if (::fchownat(fd, de->d_name, uid, gid, AT_SYMLINK_NOFOLLOW) < 0) {
       int ret = -errno;
-      ldpp_dout(dpp, 0) << "ERROR: chown of " << name << " to " << uid
-	<< ":" << gid << ": " << cpp_strerror(-ret) << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: chown of {} to {}:{}: {}", name, uid, gid,
+			    cpp_strerror(-ret));
       return ret;
     }
     ++changed;
@@ -10763,11 +10775,13 @@ int NSFSBucket::chown(const DoutPrefixProvider* dpp,
       ret = nsfs::resolve_credentials(dpp, *db, new_owner, cred, y);
     }
     if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: bucket " << get_name() << ":  the new "
-	<< "owner " << to_string(new_owner) << " has "
-	<< ((ret == -EPERM) ? "a directory-backed identity, which is not "
-	    "consulted" : "no POSIX identity")
-	<< ";  rejecting the chown" << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: bucket {}:  the new owner {} has {};  "
+			    "rejecting the chown", get_name(),
+			    to_string(new_owner),
+			    ((ret == -EPERM)
+			     ? "a directory-backed identity, which is not "
+			       "consulted"
+			     : "no POSIX identity"));
       return ret;
     }
   }
@@ -10821,10 +10835,9 @@ int NSFSBucket::chown(const DoutPrefixProvider* dpp,
   }
   size_t changed = 0;
   ret = chown_tree(dpp, dir->get_fd(), cred.uid, cred.gid, changed);
-  ldpp_dout(dpp, 1) << "nsfs: bucket " << get_name() << " chowned to "
-    << to_string(new_owner) << " (" << cred.uid << ":" << cred.gid
-    << "), " << changed << " entries" << (ret < 0 ? ", incomplete" : "")
-    << dendl;
+  ldpp_dout_fmt(dpp, 1, "nsfs: bucket {} chowned to {} ({}:{}), {} entries{}",
+			get_name(), to_string(new_owner), cred.uid, cred.gid,
+			changed, (ret < 0 ? ", incomplete" : ""));
   return ret;
 }
 
@@ -10854,8 +10867,8 @@ int NSFSBucket::put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::re
 		      ts, AT_SYMLINK_NOFOLLOW) < 0) ? -errno : 0;
   });
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: could not set mtime on bucket " << get_name() << ": "
-      << cpp_strerror(-ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: could not set mtime on bucket {}: {}",
+			  get_name(), cpp_strerror(-ret));
     return ret;
   }
 
@@ -10909,9 +10922,10 @@ static RGWBucketInfo merge_bucket_info(const DoutPrefixProvider* dpp,
   take(&RGWBucketInfo::mdsearch_config);
 
   if (differs(rest, was)) {
-    ldpp_dout(dpp, 0) << "ERROR: bucket " << bucket << ":  a write changed a "
-      << "field of its bucket_info the merge does not list;  writing the "
-      << "handle's whole info, which can undo a concurrent write" << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: bucket {}:  a write changed a field of its "
+			  "bucket_info the merge does not list;  writing the "
+			  "handle's whole info, which can undo a concurrent "
+			  "write", bucket);
     return now;
   }
   return cur;
@@ -10947,8 +10961,9 @@ int NSFSBucket::write_attrs(const DoutPrefixProvider* dpp, optional_yield y)
     return (lfd < 0) ? -errno : 0;
   });
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: opening " << nsfs::BUCKET_META_LOCK
-      << " of bucket " << get_name() << ": " << cpp_strerror(-ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: opening {} of bucket {}: {}",
+			  nsfs::BUCKET_META_LOCK, get_name(),
+			  cpp_strerror(-ret));
     return ret;
   }
   /* In the tree like any object:  NooBaa's object mode, and, when the
@@ -11388,8 +11403,8 @@ int NSFSBucket::abort_multiparts_as(const DoutPrefixProvider* dpp,
     int ret = list_multiparts(dpp, empty, marker, empty, max, uploads,
 			      nullptr, &is_truncated, y, authenticated_user);
     if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: listing the uploads of bucket "
-	<< get_name() << " to abort them: " << cpp_strerror(-ret) << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: listing the uploads of bucket {} to abort "
+			    "them: {}", get_name(), cpp_strerror(-ret));
       return ret;
     }
     for (const auto& upload : uploads) {
@@ -11402,9 +11417,9 @@ int NSFSBucket::abort_multiparts_as(const DoutPrefixProvider* dpp,
 	ret = nsfs::with_capabilities(dpp, BUCKET_DELETE_CAPS, abort);
       }
       if ((ret < 0) && (ret != -ENOENT) && (ret != -ERR_NO_SUCH_UPLOAD)) {
-	ldpp_dout(dpp, 0) << "ERROR: aborting upload " << upload->get_meta()
-	  << " of bucket " << get_name() << ": " << cpp_strerror(-ret)
-	  << dendl;
+	ldpp_dout_fmt(dpp, 0, "ERROR: aborting upload {} of bucket {}: {}",
+			      upload->get_meta(), get_name(),
+			      cpp_strerror(-ret));
 	return ret;
       }
       ++num_aborted;
@@ -11412,8 +11427,8 @@ int NSFSBucket::abort_multiparts_as(const DoutPrefixProvider* dpp,
   } while (is_truncated);
 
   if (num_aborted) {
-    ldpp_dout(dpp, 4) << "nsfs: aborted " << num_aborted << " uploads in "
-      << "progress in bucket " << get_name() << dendl;
+    ldpp_dout_fmt(dpp, 4, "nsfs: aborted {} uploads in progress in bucket {}",
+			  num_aborted, get_name());
   }
   return 0;
 }
@@ -11466,9 +11481,11 @@ int NSFSBucket::make_dir(const DoutPrefixProvider* dpp, optional_yield y,
     return 0;
   }
   if (ret < 0) {
-    ldpp_dout(dpp, removal_log_level(-ret)) << removal_log_prefix(-ret)
-      << "could not create bucket " << dir->get_name() << " as uid "
-      << id.cred.uid << ": " << cpp_strerror(-ret) << dendl;
+    ldpp_dout_fmt(dpp, removal_log_level(-ret), "{}could not create bucket {} "
+						"as uid {}: {}",
+						removal_log_prefix(-ret),
+						dir->get_name(), id.cred.uid,
+						cpp_strerror(-ret));
     return ret;
   }
   return raised ? chown_raised_dir(dpp, pfd, leaf.c_str()) : 0;
@@ -11487,9 +11504,8 @@ int NSFSBucket::create(const DoutPrefixProvider* dpp, optional_yield y, bool* ex
    * nobody recorded is not ours to take.  Rejected before anything is
    * written to it. */
   if (!is_internal() && existed && *existed) {
-    ldpp_dout(dpp, 1) << "nsfs: not creating bucket " << get_name()
-      << ":  its directory " << dir->get_name() << " already exists"
-      << dendl;
+    ldpp_dout_fmt(dpp, 1, "nsfs: not creating bucket {}:  its directory {} "
+			  "already exists", get_name(), dir->get_name());
     return -EEXIST;
   }
 
@@ -11536,8 +11552,8 @@ int NSFSBucket::create(const DoutPrefixProvider* dpp, optional_yield y, bool* ex
 	       driver->unresolved_as_gateway_injected(who)) {
       ret = 0;
     } else if (ret == -ENOENT) {
-      ldpp_dout(dpp, 1) << "nsfs: bucket " << get_name() << " denied:  no "
-	"credentials resolve for " << who << dendl;
+      ldpp_dout_fmt(dpp, 1, "nsfs: bucket {} denied:  no credentials resolve "
+			    "for {}", get_name(), to_string(who));
       ret = -EACCES;
     }
   }
@@ -11559,9 +11575,9 @@ int NSFSBucket::create(const DoutPrefixProvider* dpp, optional_yield y, bool* ex
       ? remove_dir_as(dpp, y, id, driver->get_access_strategy(), true)
       : dir->remove(dpp, y, true);
     if (r < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: bucket " << get_name() << " failed, and "
-	<< "the directory it made, " << dir->get_name() << ", could not be "
-	<< "removed: " << cpp_strerror(-r) << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: bucket {} failed, and the directory it "
+			    "made, {}, could not be removed: {}", get_name(),
+			    dir->get_name(), cpp_strerror(-r));
     }
   }
   return ret;
@@ -11592,7 +11608,8 @@ int NSFSBucket::rename(const DoutPrefixProvider* dpp, optional_yield y, Object* 
     NSFSObject *to = static_cast<NSFSObject *>(target_obj);
     ret = to->open(dpp, y, true, false);
     if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: could not open target obj " << to->get_name() << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: could not open target obj {}",
+			    to->get_name());
       return ret;
     }
     dst_dir = static_cast<Directory *>(to->get_fsent());
@@ -11609,7 +11626,7 @@ int NSFSObject::delete_object(const DoutPrefixProvider* dpp,
 {
   NSFSBucket *b = static_cast<NSFSBucket*>(get_bucket());
   if (!b) {
-      ldpp_dout(dpp, 0) << "ERROR: could not get bucket for " << get_name() << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: could not get bucket for {}", get_name());
       return -EINVAL;
   }
 
@@ -11769,11 +11786,11 @@ int NSFSObject::rename(const DoutPrefixProvider* dpp, optional_yield y,
     std::vector<LeafVersion> pre_versions;
     if ((list_leaf_versions(src_parent_fd, src_leaf, pre_versions) == 0) &&
 	! pre_versions.empty()) {
-      ldpp_dout(dpp, 4) << "rename: source has " << pre_versions.size()
-	<< " non-current version(s) and " << db->get_name()
-	<< " cannot hold them;  rejecting the rename.  "
-	<< "FLAG_SLICE_VERSIONS moves the current version and drops the "
-	<< "history" << dendl;
+      ldpp_dout_fmt(dpp, 4, "rename: source has {} non-current version(s) and "
+			    "{} cannot hold them;  rejecting the rename.  "
+			    "FLAG_SLICE_VERSIONS moves the current version "
+			    "and drops the history", pre_versions.size(),
+			    db->get_name());
       return -EINVAL;
     }
   }
@@ -11803,8 +11820,8 @@ int NSFSObject::rename(const DoutPrefixProvider* dpp, optional_yield y,
     /* one intent record per directory:  writing a new one over a stuck
      * one would lose the only pointer to the stranded versions.
      * Unlike the other mutations, this caller cannot proceed. */
-    ldpp_dout(dpp, 0) << "ERROR: rename: failing while an earlier move out "
-      << "of this directory is unrecovered" << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: rename: failing while an earlier move out "
+			  "of this directory is unrecovered");
     return recovered;
   }
 
@@ -11842,11 +11859,10 @@ int NSFSObject::rename(const DoutPrefixProvider* dpp, optional_yield y,
   const bool slice = (flags & FLAG_SLICE_VERSIONS);
 
   if (! versions.empty() && ! dst_holds_history && ! slice) {
-    ldpp_dout(dpp, 4) << "rename: source has " << versions.size()
-      << " non-current version(s) and " << db->get_name()
-      << " cannot hold them;  rejecting the rename.  "
-      << "FLAG_SLICE_VERSIONS moves the current version and drops the "
-      << "history" << dendl;
+    ldpp_dout_fmt(dpp, 4, "rename: source has {} non-current version(s) and "
+			  "{} cannot hold them;  rejecting the rename.  "
+			  "FLAG_SLICE_VERSIONS moves the current version and "
+			  "drops the history", versions.size(), db->get_name());
     return -EINVAL;
   }
   const bool slicing = (! versions.empty() && ! dst_holds_history && slice);
@@ -11868,9 +11884,10 @@ int NSFSObject::rename(const DoutPrefixProvider* dpp, optional_yield y,
       const int rret = renameat_as(dpp, id, model, dst_vfd, dname.c_str(),
 				   src_vfd, versions[k].entry.c_str());
       if (rret < 0) {
-	ldpp_dout(dpp, 0) << "ERROR: rename rollback failed for " << dname
-	  << ": " << cpp_strerror(-rret) << ".  The intent record is left in "
-	  << "place;  " << src_leaf << " needs manual attention" << dendl;
+	ldpp_dout_fmt(dpp, 0, "ERROR: rename rollback failed for {}: {}.  The "
+			      "intent record is left in place;  {} needs "
+			      "manual attention", dname, cpp_strerror(-rret),
+			      src_leaf);
 	return false;
       }
     }
@@ -11897,14 +11914,15 @@ int NSFSObject::rename(const DoutPrefixProvider* dpp, optional_yield y,
 	ret = -EIO;
 	if (driver->rename_abandon_injected() == 1) {
 	  /* stand in for a crash:  versions moved, leaf not, record left */
-	  ldpp_dout(dpp, 4) << "rename: injected abandon after " << moved
-	    << " version(s);  leaving the intent record" << dendl;
+	  ldpp_dout_fmt(dpp, 4, "rename: injected abandon after {} "
+				"version(s);  leaving the intent record",
+				moved);
 	  ::close(src_vfd);
 	  ::close(dst_vfd);
 	  return ret;
 	}
-	ldpp_dout(dpp, 4) << "rename: injected failure after " << moved
-	  << " version(s);  rolling back" << dendl;
+	ldpp_dout_fmt(dpp, 4, "rename: injected failure after {} version(s);  "
+			      "rolling back", moved);
 	if (roll_back()) {
 	  clear_rename_intent(dpp, xattr_strategy(), src_parent_fd, id, model);
 	}
@@ -11915,9 +11933,9 @@ int NSFSObject::rename(const DoutPrefixProvider* dpp, optional_yield y,
       ret = renameat_as(dpp, id, model, src_vfd, versions[moved].entry.c_str(),
 			dst_vfd, dname.c_str());
       if (ret < 0) {
-	ldpp_dout(dpp, 0) << "ERROR: rename: moving version "
-	  << versions[moved].entry << " failed: " << cpp_strerror(-ret)
-	  << ";  rolling back" << dendl;
+	ldpp_dout_fmt(dpp, 0, "ERROR: rename: moving version {} failed: {};  "
+			      "rolling back", versions[moved].entry,
+			      cpp_strerror(-ret));
 	if (roll_back()) {
 	  clear_rename_intent(dpp, xattr_strategy(), src_parent_fd, id, model);
 	}
@@ -11931,8 +11949,8 @@ int NSFSObject::rename(const DoutPrefixProvider* dpp, optional_yield y,
   /* COMMIT:  the leaf */
   ret = src_file->rename(dpp, y, dst_dir, dst_leaf);
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: rename: moving " << src_leaf
-      << " failed: " << cpp_strerror(-ret) << ";  rolling back" << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: rename: moving {} failed: {};  rolling back",
+			  src_leaf, cpp_strerror(-ret));
     if (roll_back()) {
       clear_rename_intent(dpp, xattr_strategy(), src_parent_fd, id, model);
     }
@@ -11944,8 +11962,8 @@ int NSFSObject::rename(const DoutPrefixProvider* dpp, optional_yield y,
   if (driver->rename_abandon_injected() == 2) {
     /* stand in for a crash between the commit and the cleanup:  the leaf has
      * landed, so recovery must roll *forward* from here */
-    ldpp_dout(dpp, 4) << "rename: injected abandon after the leaf landed;  "
-      << "leaving the intent record" << dendl;
+    ldpp_dout_fmt(dpp, 4, "rename: injected abandon after the leaf landed;  "
+			  "leaving the intent record");
     if (src_vfd >= 0) { ::close(src_vfd); }
     if (dst_vfd >= 0) { ::close(dst_vfd); }
     return -EIO;
@@ -11961,8 +11979,8 @@ int NSFSObject::rename(const DoutPrefixProvider* dpp, optional_yield y,
       for (const auto& v : versions) {
 	const int uret = unlinkat_as(dpp, id, model, svfd, v.entry.c_str());
 	if (uret < 0) {
-	  ldpp_dout(dpp, 0) << "ERROR: rename: sliced version " << v.entry
-	    << " could not be removed: " << cpp_strerror(-uret) << dendl;
+	  ldpp_dout_fmt(dpp, 0, "ERROR: rename: sliced version {} could not "
+				"be removed: {}", v.entry, cpp_strerror(-uret));
 	}
       }
       ::close(svfd);
@@ -12017,10 +12035,10 @@ int NSFSObject::rename(const DoutPrefixProvider* dpp, optional_yield y,
     }
   }
 
-  ldpp_dout(dpp, 10) << "rename: " << sb->get_name() << "/" << src_leaf
-    << " -> " << db->get_name() << "/" << dest_key.name << " ("
-    << versions.size() << " version(s)"
-    << (slicing ? ", sliced" : "") << ")" << dendl;
+  ldpp_dout_fmt(dpp, 10, "rename: {}/{} -> {}/{} ({} version(s){})",
+			 sb->get_name(), src_leaf, db->get_name(),
+			 dest_key.name, versions.size(),
+			 (slicing ? ", sliced" : ""));
   return 0;
 }
 
@@ -12096,22 +12114,20 @@ int NSFSObject::copy_object(const ACLOwner& owner,
   }
 
   if (!db || !sb) {
-    ldpp_dout(dpp, 0) << "ERROR: could not get bucket to copy " << get_name()
-                      << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: could not get bucket to copy {}", get_name());
     return -EINVAL;
   }
   bool has_instance = !get_key().instance.empty();
 
-  ldpp_dout(dpp, 10) << "copy_object: src=" << get_key()
-    << " dst=" << dobj->get_key()
-    << " src_bucket=" << sb->get_name()
-    << " dst_bucket=" << db->get_name() << dendl;
+  ldpp_dout_fmt(dpp, 10, "copy_object: src={} dst={} src_bucket={} "
+			 "dst_bucket={}", get_key(), dobj->get_key(),
+			 sb->get_name(), db->get_name());
 
   // Source must exist, and we need to know if it's a shadow obj
   if (!check_exists(dpp)) {
     ret = errno;
-    ldpp_dout(dpp, 0) << "ERROR: could not stat object " << get_name() << ": "
-                      << cpp_strerror(ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: could not stat object {}: {}", get_name(),
+			  cpp_strerror(ret));
     return -ret;
   }
   if (identity.active() && ent) {
@@ -12201,8 +12217,7 @@ int NSFSObject::copy_object(const ACLOwner& owner,
     ret = copy(dpp, y, sb, db, dobj,
 	       driver->copy_hints_for(authenticated_user));
     if (ret < 0) {
-        ldpp_dout(dpp, 0) << "ERROR: failed to copy object " << get_key()
-                          << dendl;
+        ldpp_dout_fmt(dpp, 0, "ERROR: failed to copy object {}", get_key());
         return ret;
     }
   } else if (demote.did_demote && ent) {
@@ -12217,8 +12232,8 @@ int NSFSObject::copy_object(const ACLOwner& owner,
         dst_chain, dst_leaf_dir, dst_leaf_name,
         identity, driver->get_access_strategy());
     if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: copy_object: self-copy resolve_path failed: "
-        << cpp_strerror(-ret) << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: copy_object: self-copy resolve_path "
+			    "failed: {}", cpp_strerror(-ret));
       return ret;
     }
     /* the source as the authenticated user, and as the gateway where the
@@ -12348,9 +12363,9 @@ int NSFSObject::copy_object(const ACLOwner& owner,
       }
     }
     if (!stale_meta.empty()) {
-      ldpp_dout(dpp, 20) << "NSFSObject::copy: replacing in place, dropping "
-	<< stale_meta.size() << " superseded metadata attributes from "
-	<< get_key() << dendl;
+      ldpp_dout_fmt(dpp, 20, "NSFSObject::copy: replacing in place, dropping "
+			     "{} superseded metadata attributes from {}",
+			     stale_meta.size(), get_key());
     }
   }
 
@@ -12386,10 +12401,9 @@ int NSFSObject::copy_object(const ACLOwner& owner,
           ? -errno : 0;
       }, y);
       if (vret < 0) {
-        ldpp_dout(dpp, 0) << "ERROR: could not record the version id on "
-          << dobj->get_name() << ": " << cpp_strerror(-vret)
-          << ";  a later demote would file it as the null version"
-          << dendl;
+        ldpp_dout_fmt(dpp, 0, "ERROR: could not record the version id on {}: "
+			      "{};  a later demote would file it as the null "
+			      "version", dobj->get_name(), cpp_strerror(-vret));
         return vret;
       }
     }
@@ -12458,9 +12472,10 @@ int NSFSObject::copy_object(const ACLOwner& owner,
 	  dpp, y, dobj->get_key(), nsfs::FSEnt::FLAG_NONE,
 	  db->default_object_owner(dpp, y), bde);
       if (r < 0) {
-	ldpp_dout(dpp, 0) << "ERROR: could not compose the listing entry for "
-	  << dobj->get_key() << " after a copy: " << cpp_strerror(-r)
-	  << ";  it will not list until the cache misses" << dendl;
+	ldpp_dout_fmt(dpp, 0, "ERROR: could not compose the listing entry for "
+			      "{} after a copy: {};  it will not list until "
+			      "the cache misses", dobj->get_key(),
+			      cpp_strerror(-r));
       } else {
 	bcache->add_entry(dpp, db->get_name(), bde);
       }
@@ -12584,9 +12599,9 @@ int NSFSObject::fsio_allowed(const DoutPrefixProvider* dpp)
    * and not whether the bucket is marked.  Shared is marked, with
    * EXT_RGW_META and no shadow subtree. */
   if (! b->has_extension(nsfs::EXT_SHADOW)) {
-    ldpp_dout(dpp, 4) << "FSIO rejected on bucket " << b->get_name()
-      << " (profile " << b->profile_name() << "):  it does not carry "
-      << "EXT_SHADOW, so it must not acquire a shadow tree" << dendl;
+    ldpp_dout_fmt(dpp, 4, "FSIO rejected on bucket {} (profile {}):  it does "
+			  "not carry EXT_SHADOW, so it must not acquire a "
+			  "shadow tree", b->get_name(), b->profile_name());
     return -ENOTSUP;
   }
   return 0;
@@ -13771,9 +13786,10 @@ int NSFSObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp)
        * reviewed releases of NooBaa do not write may change what the
        * bytes mean or who may read them, so the object is not handed
        * out until the release is reviewed */
-      ldpp_dout(dpp, 0) << "ERROR: " << get_name() << " carries "
-	<< unknown.front() << (unknown.size() > 1 ? " and others" : "")
-	<< ", which no reviewed release of NooBaa writes;  not read" << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: {} carries {}{}, which no reviewed "
+			    "release of NooBaa writes;  not read", get_name(),
+			    unknown.front(),
+			    (unknown.size() > 1 ? " and others" : ""));
       state.attrset.clear();
       return -ERR_INVALID_OBJECT_STATE;
     }
@@ -13877,9 +13893,9 @@ int NSFSObject::with_cross_account_retry(const DoutPrefixProvider* dpp,
   }
 
   if (rret < 0) {
-    ldpp_dout(dpp, 4) << "nsfs: cross-account attribute operation on "
-      << get_name() << " failed even raised: " << cpp_strerror(-rret)
-      << dendl;
+    ldpp_dout_fmt(dpp, 4, "nsfs: cross-account attribute operation on {} "
+			  "failed even raised: {}", get_name(),
+			  cpp_strerror(-rret));
     return rret;
   }
   if (what == nsfs::AccessClass::data) {
@@ -13887,10 +13903,10 @@ int NSFSObject::with_cross_account_retry(const DoutPrefixProvider* dpp,
   } else {
     driver->cross_account_attrs_served.fetch_add(1, std::memory_order_relaxed);
   }
-  ldpp_dout(dpp, 10) << "nsfs: " << get_name()
-    << ": the filesystem denied the authenticated user and S3 authorised it,"
-    " so the gateway performed it (access model "
-    << driver->get_access_strategy()->name() << ")" << dendl;
+  ldpp_dout_fmt(dpp, 10, "nsfs: {}: the filesystem denied the authenticated "
+			 "user and S3 authorised it, so the gateway performed "
+			 "it (access model {})", get_name(),
+			 driver->get_access_strategy()->name());
   return rret;
 }
 
@@ -13962,7 +13978,8 @@ int NSFSObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr
 				       : ent->get_identity());
   });
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: could not remover attribute " << attr_name << " for " << get_name() << ": " << cpp_strerror(-ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: could not remover attribute {} for {}: {}",
+			  attr_name, get_name(), cpp_strerror(-ret));
     return ret;
   }
 
@@ -13973,9 +13990,8 @@ bool NSFSObject::is_expired()
 {
   utime_t delete_at;
   if (!decode_attr(state.attrset, RGW_ATTR_DELETE_AT, delete_at)) {
-    ldout(driver->ctx(), 0)
-        << "ERROR: " << __func__
-        << ": failed to decode " RGW_ATTR_DELETE_AT " attr" << dendl;
+    ldout_fmt(driver->ctx(), 0, "ERROR: {}: failed to decode "
+	      RGW_ATTR_DELETE_AT " attr", __func__);
     return false;
   }
 
@@ -14109,8 +14125,8 @@ int NSFSObject::chown(User& new_user, const DoutPrefixProvider* dpp, optional_yi
     auto p = i->second.cbegin();
     policy.decode(p);
   } catch (const buffer::error&) {
-    ldpp_dout(dpp, 0) << "ERROR: chown of " << get_name()
-      << ":  its ACL will not decode" << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: chown of {}:  its ACL will not decode",
+			  get_name());
     return -EIO;
   }
   RGWAccessControlList& acl = policy.get_acl();
@@ -14458,8 +14474,8 @@ int NSFSObject::get_owner(const DoutPrefixProvider *dpp, optional_yield y, std::
     acl_owner = static_cast<NSFSBucket*>(get_bucket())->default_object_owner(
 	dpp, y);
   } else if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: " << __func__
-        << ": unreadable " RGW_ATTR_ACL " attr" << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: {}{}", __func__,
+			  ": unreadable " RGW_ATTR_ACL " attr");
     return ret;
   }
 
@@ -14503,7 +14519,7 @@ int NSFSObject::open(const DoutPrefixProvider* dpp, optional_yield y,
   if (create) {
     ret = ent->create(dpp, y, nullptr, temp_file);
     if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: could not create " << ent->get_name() << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: could not create {}", ent->get_name());
       return ret;
     }
   }
@@ -14559,8 +14575,7 @@ int NSFSObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, 
 
   NSFSBucket *b = static_cast<NSFSBucket *>(get_bucket());
   if (!b) {
-    ldpp_dout(dpp, 0) << "ERROR: could not get bucket for " << get_name()
-		      << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: could not get bucket for {}", get_name());
     return -EINVAL;
   }
   const auto& binfo = b->get_info();
@@ -14586,8 +14601,8 @@ int NSFSObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, 
     struct statx stx;
     if (nsfs::statx(fd, "", AT_EMPTY_PATH, STATX_ALL, &stx) < 0) {
       const int err = errno;
-      ldpp_dout(dpp, 0) << "ERROR: could not stat " << get_name()
-	<< " to derive its version id: " << cpp_strerror(err) << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: could not stat {} to derive its version "
+			    "id: {}", get_name(), cpp_strerror(err));
       return -err;
     }
     /* checked:  it used to run unchecked, so under impersonation the
@@ -14598,10 +14613,10 @@ int NSFSObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, 
 	dpp, fd, stx, xattr_strategy(),
 	ent->get_identity(), driver->etag_as_gateway_injected(), y);
       if (eret < 0) {
-	ldpp_dout(dpp, 0) << "ERROR: could not record the etag on "
-	  << get_name() << ": " << cpp_strerror(-eret)
-	  << ";  the object would carry a different etag than the one "
-	  << "returned to the client" << dendl;
+	ldpp_dout_fmt(dpp, 0, "ERROR: could not record the etag on {}: {};  "
+			      "the object would carry a different etag than "
+			      "the one returned to the client", get_name(),
+			      cpp_strerror(-eret));
 	return eret;
       }
     }
@@ -14631,10 +14646,9 @@ int NSFSObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, 
 	return 0;
       }, y);
       if (vret < 0) {
-	ldpp_dout(dpp, 0) << "ERROR: could not record the version id on "
-	  << get_name() << ": " << cpp_strerror(-vret)
-	  << ";  a later demote would file it as the null version"
-	  << dendl;
+	ldpp_dout_fmt(dpp, 0, "ERROR: could not record the version id on {}: "
+			      "{};  a later demote would file it as the null "
+			      "version", get_name(), cpp_strerror(-vret));
 	return vret;
       }
     }
@@ -14671,10 +14685,9 @@ int NSFSObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, 
     });
     if (ret == 0) {
       driver->publishes_as_gateway.fetch_add(1, std::memory_order_relaxed);
-      ldpp_dout(dpp, 10) << "nsfs: " << get_name()
-	<< ": the gateway performed the publish itself, which the access"
-	" model permits (" << driver->get_access_strategy()->name()
-	<< ")" << dendl;
+      ldpp_dout_fmt(dpp, 10, "nsfs: {}: the gateway performed the publish "
+			     "itself, which the access model permits ({})",
+			     get_name(), driver->get_access_strategy()->name());
     }
   } else {
     ret = ent->link_temp_file(dpp, y, temp_fname, excl);
@@ -14692,15 +14705,13 @@ int NSFSObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, 
 
   ret = open(dpp, y);
   if (ret < 0) {
-    ldpp_dout(dpp, 20)
-        << "ERROR: NSFSAtomicWriter failed opening file" << dendl;
+    ldpp_dout_fmt(dpp, 20, "ERROR: NSFSAtomicWriter failed opening file");
     return ret;
   }
 
   ret = ent->stat(dpp, /*force=*/true);
   if (ret < 0) {
-    ldpp_dout(dpp, 20)
-        << "ERROR: NSFSAtomicWriter failed stat after link" << dendl;
+    ldpp_dout_fmt(dpp, 20, "ERROR: NSFSAtomicWriter failed stat after link");
     return ret;
   }
 
@@ -14811,9 +14822,9 @@ int NSFSObject::NSFSReadOp::prepare(optional_yield y, const DoutPrefixProvider* 
     }
     /* the identity this read will run as;  inactive only when
      * impersonation is off, or under inject-unresolved-as-gateway */
-    ldpp_dout(dpp, 20) << "nsfs: read " << source->get_name()
-      << " as '" << auth_user << "' resolved=" << identity.active()
-      << dendl;
+    ldpp_dout_fmt(dpp, 20, "nsfs: read {} as '{}' resolved={:d}",
+			   source->get_name(), to_string(auth_user),
+			   identity.active());
     /* Before stat(), which is what creates the entry and opens it.
      * A read op never writes the object. */
     source->set_access(identity, /*read_only=*/true);
@@ -14849,8 +14860,8 @@ int NSFSObject::NSFSReadOp::prepare(optional_yield y, const DoutPrefixProvider* 
    * everything below reports it. */
   bufferlist etag_bl;
   if (!source->get_attr(RGW_ATTR_ETAG, etag_bl)) {
-    ldpp_dout(dpp, 0) << "ERROR: " << source->get_name()
-      << " has no etag after get_obj_attrs()" << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: {} has no etag after get_obj_attrs()",
+			  source->get_name());
     return -EINVAL;
   }
 
@@ -14894,7 +14905,8 @@ int NSFSObject::NSFSReadOp::prepare(optional_yield y, const DoutPrefixProvider* 
 
     if (params.mod_ptr && !params.if_nomatch) {
       dest_weight.init(*params.mod_ptr, params.mod_zone_id, params.mod_pg_ver);
-      ldpp_dout(dpp, 10) << "If-Modified-Since: " << dest_weight << " Last-Modified: " << src_weight << dendl;
+      ldpp_dout_fmt(dpp, 10, "If-Modified-Since: {} Last-Modified: {}",
+			     dest_weight, src_weight);
       if (!(dest_weight < src_weight)) {
         return -ERR_NOT_MODIFIED;
       }
@@ -14902,7 +14914,8 @@ int NSFSObject::NSFSReadOp::prepare(optional_yield y, const DoutPrefixProvider* 
 
     if (params.unmod_ptr && !params.if_match) {
       dest_weight.init(*params.unmod_ptr, params.mod_zone_id, params.mod_pg_ver);
-      ldpp_dout(dpp, 10) << "If-UnModified-Since: " << dest_weight << " Last-Modified: " << src_weight << dendl;
+      ldpp_dout_fmt(dpp, 10, "If-UnModified-Since: {} Last-Modified: {}",
+			     dest_weight, src_weight);
       if (dest_weight < src_weight) {
         return -ERR_PRECONDITION_FAILED;
       }
@@ -14912,14 +14925,16 @@ int NSFSObject::NSFSReadOp::prepare(optional_yield y, const DoutPrefixProvider* 
 
   if (params.mod_ptr || params.unmod_ptr) {
     if (params.mod_ptr && !params.if_nomatch) {
-      ldpp_dout(dpp, 10) << "If-Modified-Since: " << *params.mod_ptr << " Last-Modified: " << source->get_mtime() << dendl;
+      ldpp_dout_fmt(dpp, 10, "If-Modified-Since: {} Last-Modified: {}",
+			     *params.mod_ptr, source->get_mtime());
       if (!(*params.mod_ptr < source->get_mtime())) {
         return -ERR_NOT_MODIFIED;
       }
     }
 
     if (params.unmod_ptr && !params.if_match) {
-      ldpp_dout(dpp, 10) << "If-Modified-Since: " << *params.unmod_ptr << " Last-Modified: " << source->get_mtime() << dendl;
+      ldpp_dout_fmt(dpp, 10, "If-Modified-Since: {} Last-Modified: {}",
+			     *params.unmod_ptr, source->get_mtime());
       if (*params.unmod_ptr < source->get_mtime()) {
         return -ERR_PRECONDITION_FAILED;
       }
@@ -14928,7 +14943,8 @@ int NSFSObject::NSFSReadOp::prepare(optional_yield y, const DoutPrefixProvider* 
 
   if (params.if_match) {
     std::string if_match_str = rgw_string_unquote(params.if_match);
-    ldpp_dout(dpp, 10) << "If-Match: " << if_match_str << " ETAG: " << etag_bl.c_str() << dendl;
+    ldpp_dout_fmt(dpp, 10, "If-Match: {} ETAG: {}", if_match_str,
+			   etag_bl.c_str());
 
     if (if_match_str.compare(0, etag_bl.length(), etag_bl.c_str(), etag_bl.length()) != 0) {
       return -ERR_PRECONDITION_FAILED;
@@ -14936,7 +14952,8 @@ int NSFSObject::NSFSReadOp::prepare(optional_yield y, const DoutPrefixProvider* 
   }
   if (params.if_nomatch) {
     std::string if_nomatch_str = rgw_string_unquote(params.if_nomatch);
-    ldpp_dout(dpp, 10) << "If-No-Match: " << if_nomatch_str << " ETAG: " << etag_bl.c_str() << dendl;
+    ldpp_dout_fmt(dpp, 10, "If-No-Match: {} ETAG: {}", if_nomatch_str,
+			   etag_bl.c_str());
     if (if_nomatch_str.compare(0, etag_bl.length(), etag_bl.c_str(), etag_bl.length()) == 0) {
       return -ERR_NOT_MODIFIED;
     }
@@ -14955,8 +14972,8 @@ int NSFSObject::NSFSReadOp::read(int64_t ofs, int64_t end, bufferlist& bl,
   /* see iterate() */
   if (nsfs::impersonation_enabled() && !identity.active() &&
       !reads_staging(source)) {
-    ldpp_dout(dpp, 0) << "ERROR: not reading " << source->get_name()
-      << " as the gateway;  this read pinned no identity" << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: not reading {} as the gateway;  this read "
+			  "pinned no identity", source->get_name());
     return -EACCES;
   }
 
@@ -15051,8 +15068,8 @@ static int pin_personality_for(const DoutPrefixProvider* dpp,
     /* This request specified no identity.  Under the switch that
      * is a gap in the call site rather than an anonymous request,
      * and serving it as the daemon is the thing to avoid. */
-    ldpp_dout(dpp, 0) << "ERROR: impersonation is on but this operation"
-      " carries no authenticated identity" << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: impersonation is on but this operation "
+			  "carries no authenticated identity");
     return -EACCES;
   }
 
@@ -15081,22 +15098,22 @@ static int pin_personality_for(const DoutPrefixProvider* dpp,
   if (ret == -ENOENT) {
     /* A valid account always has an identity record;  one without
      * is a provisioning fault, reported rather than repaired. */
-    ldpp_dout(dpp, 0) << "ERROR: no credentials resolve for " << who
-      << (account.empty() ? "" : " or its account ") << account
-      << ":  no identity row under it carries a uid;  impersonation is"
-      " enabled, so the request is denied rather than served as the"
-      " gateway" << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: no credentials resolve for {}{}{}:  no "
+			  "identity row under it carries a uid;  "
+			  "impersonation is enabled, so the request is denied "
+			  "rather than served as the gateway", to_string(who),
+			  (account.empty() ? "" : " or its account "), account);
     return -EACCES;
   }
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: could not resolve a POSIX identity for "
-      << who << ": " << cpp_strerror(-ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: could not resolve a POSIX identity for {}: "
+			  "{}", to_string(who), cpp_strerror(-ret));
     return ret;
   }
 
-  ldpp_dout(dpp, 20) << "nsfs: resolved " << who << " to uid " << cred.uid
-    << " gid " << cred.gid << " and " << cred.groups.size()
-    << " supplementary groups" << dendl;
+  ldpp_dout_fmt(dpp, 20, "nsfs: resolved {} to uid {} gid {} and {} "
+			 "supplementary groups", to_string(who), cred.uid,
+			 cred.gid, cred.groups.size());
   const int ret2 = nsfs::acquire_personality(dpp, who, cred, gen, &ref);
   if (ret2 == 0) {
     ident->key = who;
@@ -15144,8 +15161,8 @@ int NSFSObject::NSFSReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs,
    * gateway is the escalation impersonation exists to prevent */
   if (nsfs::impersonation_enabled() && !identity.active() &&
       !reads_staging(source)) {
-    ldpp_dout(dpp, 0) << "ERROR: not reading " << source->get_name()
-      << " as the gateway;  this read pinned no identity" << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: not reading {} as the gateway;  this read "
+			  "pinned no identity", source->get_name());
     return -EACCES;
   }
 
@@ -15176,8 +15193,8 @@ int NSFSObject::NSFSReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs,
           [dpp, cb, source = source](bufferlist& bl, int len) {
             int ret = cb->handle_data(bl, 0, len);
             if (ret < 0) {
-              ldpp_dout(dpp, 0) << " ERROR: callback failed on "
-                                << source->get_name() << ": " << ret << dendl;
+              ldpp_dout_fmt(dpp, 0, " ERROR: callback failed on {}: {}",
+				    source->get_name(), ret);
             }
             return ret;
           });
@@ -15228,8 +15245,8 @@ int NSFSObject::NSFSReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs,
       len = source->read(cur_ofs, left, slots[cur], dpp, y);
     }
     if (len < 0) {
-      ldpp_dout(dpp, 0) << " ERROR: could not read " << source->get_name() <<
-	  " ofs: " << cur_ofs << " error: " << cpp_strerror(len) << dendl;
+      ldpp_dout_fmt(dpp, 0, " ERROR: could not read {} ofs: {} error: {}",
+			    source->get_name(), cur_ofs, cpp_strerror(len));
       drain_prefetch();
       return len;
     } else if (len == 0) {
@@ -15254,7 +15271,8 @@ int NSFSObject::NSFSReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs,
 
     int ret = cb->handle_data(slots[cur], 0, len);
     if (ret < 0) {
-      ldpp_dout(dpp, 0) << " ERROR: callback failed on " << source->get_name() << ": " << ret << dendl;
+      ldpp_dout_fmt(dpp, 0, " ERROR: callback failed on {}: {}",
+			    source->get_name(), ret);
       drain_prefetch();
       return ret;
     }
@@ -15487,9 +15505,9 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
     }
   }
 
-  ldpp_dout(dpp, 10) << "delete_obj: key=" << source->get_name()
-    << " versioned=" << versioned << " ver_enabled=" << ver_enabled
-    << " req_version_id=" << req_version_id << dendl;
+  ldpp_dout_fmt(dpp, 10, "delete_obj: key={} versioned={:d} ver_enabled={:d} "
+			 "req_version_id={}", source->get_name(), versioned,
+			 ver_enabled, req_version_id);
 
   if (!versioned) {
     if (has_cond) {
@@ -15512,8 +15530,8 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
 
   /* versioned delete with specific versionId */
   if (!req_version_id.empty()) {
-    ldpp_dout(dpp, 10) << "delete_obj: version-specific vid="
-      << req_version_id << " key=" << source->get_name() << dendl;
+    ldpp_dout_fmt(dpp, 10, "delete_obj: version-specific vid={} key={}",
+			   req_version_id, source->get_name());
 
     /* The cache entry for the version this names goes on every success,
      * including the ones that find nothing on disk:  an entry with
@@ -15587,9 +15605,8 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
     ent = source->get_fsent();
 
     /* check if the requested version is the current */
-    ldpp_dout(dpp, 20) << "delete_obj: stat ret=" << ret
-      << " ent=" << (ent ? "yes" : "null")
-      << " req_version_id=" << req_version_id << dendl;
+    ldpp_dout_fmt(dpp, 20, "delete_obj: stat ret={} ent={} req_version_id={}",
+			   ret, (ent ? "yes" : "null"), req_version_id);
     if (ret == 0 && ent) {
       bool cur_match;
       if (req_version_id == NULL_VERSION_ID) {
@@ -15601,8 +15618,8 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
         cur_match = (chk_fd >= 0 &&
 		     is_null_version_fd(chk_fd, source->xattr_strategy(),
 					source->xattr_fallback()));
-        ldpp_dout(dpp, 20) << "delete_obj: null version check is_null="
-          << cur_match << dendl;
+        ldpp_dout_fmt(dpp, 20, "delete_obj: null version check is_null={:d}",
+			       cur_match);
       } else {
         int chk_fd = ent->get_fd();
         if (chk_fd < 0) {
@@ -15614,8 +15631,8 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
 				source->xattr_fallback())
           : nsfs_version_id_from_statx(ent->get_stx());
         cur_match = (req_version_id == cur_ver_id);
-        ldpp_dout(dpp, 10) << "delete_obj: cur_ver_id=" << cur_ver_id
-          << " cur_match=" << cur_match << dendl;
+        ldpp_dout_fmt(dpp, 10, "delete_obj: cur_ver_id={} cur_match={:d}",
+			       cur_ver_id, cur_match);
       }
       if (cur_match) {
         if (has_cond) {
@@ -15626,8 +15643,8 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
             return r;
           }
         }
-        ldpp_dout(dpp, 10) << "delete_obj: deleting current version "
-          << req_version_id << dendl;
+        ldpp_dout_fmt(dpp, 10, "delete_obj: deleting current version {}",
+			       req_version_id);
         result.version_id = req_version_id;
         /* resolve the object's parent directory and leaf name in the
          * bucket hierarchy (not .versions/) for promote_version */
@@ -15655,14 +15672,14 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
         }
         ret = source->delete_object(dpp, y, flags, nullptr, nullptr);
         if (ret < 0) {
-          ldpp_dout(dpp, 10) << "delete_obj: delete_object failed ret="
-            << ret << dendl;
+          ldpp_dout_fmt(dpp, 10, "delete_obj: delete_object failed ret={}",
+				 ret);
           if (promote_fd >= 0) { ::close(promote_fd); }
           return ret;
         }
         if (promote_fd >= 0) {
-          ldpp_dout(dpp, 10) << "delete_obj: promoting after delete of "
-            << promote_leaf << dendl;
+          ldpp_dout_fmt(dpp, 10, "delete_obj: promoting after delete of {}",
+				 promote_leaf);
           PromoteResult promoted;
           /* Reported where it fails, and not reported to the client:
            * the version the request named is gone, which is what the
@@ -15737,15 +15754,15 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
           return ver_fd;
         }
         if (ver_fd < 0) {
-          ldpp_dout(dpp, 10) << "delete_obj: " << ver_name
-            << " not found in .versions/ (already deleted?)" << dendl;
+          ldpp_dout_fmt(dpp, 10, "delete_obj: {} not found in .versions/ "
+				 "(already deleted?)", ver_name);
           ::close(vfd);
           forget_version();
           result.version_id = req_version_id;
           return 0;
         }
-        ldpp_dout(dpp, 10) << "delete_obj: unlinking " << ver_name
-          << " from .versions/" << dendl;
+        ldpp_dout_fmt(dpp, 10, "delete_obj: unlinking {} from .versions/",
+			       ver_name);
 
         /* read delete-marker flag */
         {
@@ -15799,8 +15816,8 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
           const int uret = unlinkat_as(dpp, identity, model, vfd,
                                        ver_name.c_str());
           if ((uret < 0) && (uret != -ENOENT)) {
-            ldpp_dout(dpp, 4) << "delete_obj: unlinking " << ver_name
-              << ": " << cpp_strerror(-uret) << dendl;
+            ldpp_dout_fmt(dpp, 4, "delete_obj: unlinking {}: {}", ver_name,
+				  cpp_strerror(-uret));
             ::close(vfd);
             return uret;
           }
@@ -15834,8 +15851,8 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
         return 0;
       }
     }
-    ldpp_dout(dpp, 10) << "delete_obj: version " << req_version_id
-      << " of " << source->get_name() << " is not on disk" << dendl;
+    ldpp_dout_fmt(dpp, 10, "delete_obj: version {} of {} is not on disk",
+			   req_version_id, source->get_name());
     forget_version();
     result.version_id = req_version_id;
     return 0;
@@ -15889,8 +15906,8 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
    * 2026-10-24), so its delete writes no marker:  204 and nothing
    * else, as NooBaa's delete_object() returns for it */
   if ((ret == -ENOENT) && source->names_directory) {
-    ldpp_dout(dpp, 10) << "delete_obj: " << source->get_name()
-      << " names a directory;  no delete marker" << dendl;
+    ldpp_dout_fmt(dpp, 10, "delete_obj: {} names a directory;  no delete "
+			   "marker", source->get_name());
     return 0;
   }
 
@@ -15962,8 +15979,8 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
     std::string null_name = nsfs_ver_entry(dm_leaf, NULL_VERSION_ID);
     const int uret = unlinkat_as(dpp, identity, model, vfd, null_name.c_str());
     if ((uret < 0) && (uret != -ENOENT)) {
-      ldpp_dout(dpp, 4) << "delete_obj: unlinking " << null_name
-        << ": " << cpp_strerror(-uret) << dendl;
+      ldpp_dout_fmt(dpp, 4, "delete_obj: unlinking {}: {}", null_name,
+			    cpp_strerror(-uret));
       ::close(vfd);
       return uret;
     }
@@ -16051,9 +16068,9 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
           return r;
         }, y);
         if (tret < 0) {
-          ldpp_dout(dpp, 4) << "delete_obj: " << ver_name
-            << " demoted, but its non-current timestamp was not written: "
-            << cpp_strerror(-tret) << dendl;
+          ldpp_dout_fmt(dpp, 4, "delete_obj: {} demoted, but its non-current "
+				"timestamp was not written: {}", ver_name,
+				cpp_strerror(-tret));
         }
         /* CAS unlink: remove current only if it still matches.  The
          * authenticated user's too:  the entry it removes is in the bucket
@@ -16076,8 +16093,8 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
          * silent give-up this used to be:  without it the delete
          * marker is written over a current version that was never
          * demoted, and the version history loses an entry */
-        ldpp_dout(dpp, 4) << "delete_obj: demote of " << dm_leaf
-          << " denied by the filesystem" << dendl;
+        ldpp_dout_fmt(dpp, 4, "delete_obj: demote of {} denied by the "
+			      "filesystem", dm_leaf);
         /* vfd is this function's;  parent_fd is the Directory's and
          * is not ours to close */
         ::close(vfd);
@@ -16101,8 +16118,8 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
     const int uret = unlinkat_as(dpp, identity, model, parent_fd,
                                  dm_leaf.c_str());
     if ((uret < 0) && (uret != -ENOENT)) {
-      ldpp_dout(dpp, 4) << "delete_obj: unlinking " << dm_leaf
-        << ": " << cpp_strerror(-uret) << dendl;
+      ldpp_dout_fmt(dpp, 4, "delete_obj: unlinking {}: {}", dm_leaf,
+			    cpp_strerror(-uret));
       ::close(vfd);
       return uret;
     }
@@ -16144,8 +16161,8 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
     return 0;
   }, y, &dm_raised);
   if (dmret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: delete_obj: could not create the delete"
-      " marker for " << dm_leaf << ": " << cpp_strerror(-dmret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: delete_obj: could not create the delete "
+			  "marker for {}: {}", dm_leaf, cpp_strerror(-dmret));
     ::close(vfd);
     return dmret;
   }
@@ -16225,9 +16242,9 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
     /* unnamed yet, so taken back whole;  the demote above stands, as
      * it does when the marker cannot be created or named */
     if (aret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: delete_obj: could not write the delete"
-	" marker's attributes for " << dm_leaf << ": "
-	<< cpp_strerror(-aret) << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: delete_obj: could not write the delete "
+			    "marker's attributes for {}: {}", dm_leaf,
+			    cpp_strerror(-aret));
       (void) unlinkat_as(dpp, identity, model, vfd, dm_tmp.c_str());
       ::close(vfd);
       return aret;
@@ -16239,8 +16256,8 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
       const int rret = renameat_as(dpp, identity, model, vfd, dm_tmp.c_str(),
                                    vfd, dm_name.c_str());
       if (rret < 0) {
-        ldpp_dout(dpp, 0) << "ERROR: delete_obj: naming the delete marker "
-          << dm_name << ": " << cpp_strerror(-rret) << dendl;
+        ldpp_dout_fmt(dpp, 0, "ERROR: delete_obj: naming the delete marker "
+			      "{}: {}", dm_name, cpp_strerror(-rret));
         ::close(vfd);
         return rret;
       }
@@ -16409,7 +16426,8 @@ int NSFSMultipartPart::load(const DoutPrefixProvider* dpp, optional_yield y,
   }
 
   if (!decode_attr(attrs, RGW_NSFS_ATTR_MPUPLOAD, info)) {
-    ldpp_dout(dpp, 0) << "ERROR: " << __func__ << ": failed to decode part info: " << key << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: {}: failed to decode part info: {}", __func__,
+			  key);
     return -EIO;
   }
 
@@ -16437,9 +16455,9 @@ int NSFSMultipartUpload::load(const DoutPrefixProvider *dpp, bool create)
 						 pb->get_dir()->get_fd())
 	: mpu_strategy()->staging_root(dpp, pb->get_dir()->get_fd());
     if (!root) {
-      ldpp_dout(dpp, 4) << "no staging root for bucket " << pb->get_name()
-			<< " in format " << pb->profile_name()
-			<< ";  not placing an upload" << dendl;
+      ldpp_dout_fmt(dpp, 4, "no staging root for bucket {} in format {};  not "
+			    "placing an upload", pb->get_name(),
+			    pb->profile_name());
       return -ENOTSUP;
     }
 
@@ -16451,9 +16469,8 @@ int NSFSMultipartUpload::load(const DoutPrefixProvider *dpp, bool create)
 						     driver->ctx());
       ret = staging_root_dir->open(dpp);
       if (ret < 0) {
-	ldpp_dout(dpp, 4) << "could not open staging root " << *root
-			  << " under " << pb->get_name() << ": "
-			  << cpp_strerror(-ret) << dendl;
+	ldpp_dout_fmt(dpp, 4, "could not open staging root {} under {}: {}",
+			      *root, pb->get_name(), cpp_strerror(-ret));
 	return ret;
       }
       staging_parent = staging_root_dir.get();
@@ -16536,8 +16553,8 @@ int NSFSMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
   /* Create the shadow bucket */
   ret = load(dpp, true);
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << " ERROR: could not get shadow dir for mp upload "
-      << get_key() << dendl;
+    ldpp_dout_fmt(dpp, 0, " ERROR: could not get shadow dir for mp upload {}",
+			  get_key());
     return ret;
   }
 
@@ -16669,8 +16686,8 @@ int NSFSMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext *
 	  }
 	  auto pf = std::make_unique<nsfs::File>(sname, dir, driver->ctx());
 	  if (const int sret = pf->stat(dpp, y); sret < 0) {
-	    ldpp_dout(dpp, 10) << "nsfs: list_parts skips " << sname
-	      << ": " << cpp_strerror(-sret) << dendl;
+	    ldpp_dout_fmt(dpp, 10, "nsfs: list_parts skips {}: {}", sname,
+				   cpp_strerror(-sret));
 	    return 0;
 	  }
 	  file::listing::MultipartPartInfo pi;
@@ -16850,8 +16867,8 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
 
     total_parts += parts.size();
     if (!truncated && total_parts != (int)part_etags.size()) {
-      ldpp_dout(dpp, 0) << "NOTICE: total parts mismatch: have: " << total_parts
-		       << " expected: " << part_etags.size() << dendl;
+      ldpp_dout_fmt(dpp, 0, "NOTICE: total parts mismatch: have: {} expected: "
+			    "{}", total_parts, part_etags.size());
       ret = -ERR_INVALID_PART;
       return ret;
     }
@@ -16867,16 +16884,16 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
 
       char petag[CEPH_CRYPTO_MD5_DIGESTSIZE];
       if (etags_iter->first != (int)obj_iter->first) {
-        ldpp_dout(dpp, 0) << "NOTICE: parts num mismatch: next requested: "
-			 << etags_iter->first << " next uploaded: "
-			 << obj_iter->first << dendl;
+        ldpp_dout_fmt(dpp, 0, "NOTICE: parts num mismatch: next requested: {} "
+			      "next uploaded: {}", etags_iter->first,
+			      obj_iter->first);
         ret = -ERR_INVALID_PART;
         return ret;
       }
       std::string part_etag = rgw_string_unquote(etags_iter->second);
       if (part_etag.compare(part->get_etag()) != 0) {
-        ldpp_dout(dpp, 0) << "NOTICE: etag mismatch: part: " << etags_iter->first
-			 << " etag: " << etags_iter->second << dendl;
+        ldpp_dout_fmt(dpp, 0, "NOTICE: etag mismatch: part: {} etag: {}",
+			      etags_iter->first, etags_iter->second);
         ret = -ERR_INVALID_PART;
         return ret;
       }
@@ -16892,8 +16909,10 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
       if ((handled_parts > 0) &&
           ((part_compressed != compressed) ||
             (cs_info.compression_type != obj_part.cs_info.compression_type))) {
-          ldpp_dout(dpp, 0) << "ERROR: compression type was changed during multipart upload ("
-                           << cs_info.compression_type << ">>" << obj_part.cs_info.compression_type << ")" << dendl;
+          ldpp_dout_fmt(dpp, 0, "ERROR: compression type was changed during "
+				"multipart upload ({}>>{})",
+				cs_info.compression_type,
+				obj_part.cs_info.compression_type);
           ret = -ERR_INVALID_PART;
           return ret;
       }
@@ -17095,8 +17114,8 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
   }
 
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: failed to rename assembled file to "
-                      << target_key << ": " << cpp_strerror(-ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: failed to rename assembled file to {}: {}",
+			  target_key, cpp_strerror(-ret));
     return ret;
   }
 
@@ -17129,10 +17148,9 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
         return r;
       }, y);
       if (vid_ret < 0) {
-        ldpp_dout(dpp, 0) << "ERROR: could not record the version id on "
-          << leaf_name << ": " << cpp_strerror(-vid_ret)
-          << ";  a later demote would file it as the null version"
-          << dendl;
+        ldpp_dout_fmt(dpp, 0, "ERROR: could not record the version id on {}: "
+			      "{};  a later demote would file it as the null "
+			      "version", leaf_name, cpp_strerror(-vid_ret));
       }
 
       auto* bcache = driver->get_bucket_cache();
@@ -17262,8 +17280,8 @@ int NSFSMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield 
       meta_obj = get_meta_obj();
       int ret = meta_obj->get_obj_attrs(y, dpp);
       if (ret < 0) {
-	ldpp_dout(dpp, 0) << " ERROR: could not get meta object for mp upload "
-	  << get_key() << dendl;
+	ldpp_dout_fmt(dpp, 0, " ERROR: could not get meta object for mp "
+			      "upload {}", get_key());
 	return ret;
       }
       *attrs = meta_obj->get_attrs();
@@ -17302,8 +17320,8 @@ int NSFSMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield 
       }
       ret = meta_obj->get_obj_attrs(y, dpp);
       if (ret < 0) {
-        ldpp_dout(dpp, 0) << " ERROR: could not get meta object for mp upload "
-                          << get_key() << dendl;
+        ldpp_dout_fmt(dpp, 0, " ERROR: could not get meta object for mp "
+			      "upload {}", get_key());
         return ret;
       }
 
@@ -17337,9 +17355,9 @@ int NSFSMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield 
 				       meta_obj->get_attrs(),
 				       mp_obj.upload_info, nullptr,
 				       &mp_obj.owner)) {
-	ldpp_dout(dpp, 0) << " ERROR: mp upload " << get_key()
-	  << " carries no record this gateway can read, in "
-	  << mpu_strategy()->name() << dendl;
+	ldpp_dout_fmt(dpp, 0, " ERROR: mp upload {} carries no record this "
+			      "gateway can read, in {}", get_key(),
+			      mpu_strategy()->name());
 	return -EIO;
       }
     }
@@ -17592,17 +17610,15 @@ int NSFSMultipartWriter::divert(uint64_t written)
 	dpp, shared_file->get_fd(), base_offset,
 	part_file->get_fd(), 0, written, driver->copy_hints_for(auth_user));
     if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: could not move part " << part_num
-			<< " out of the shared file: " << cpp_strerror(-ret)
-			<< dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: could not move part {} out of the shared "
+			    "file: {}", part_num, cpp_strerror(-ret));
       return ret;
     }
   }
 
-  ldpp_dout(dpp, 10) << "NSFSMultipartWriter::divert: part " << part_num
-		     << " exceeded its extent of " << (extent ? *extent : 0)
-		     << " after " << written << " bytes;  moved to its own"
-		     << " file" << dendl;
+  ldpp_dout_fmt(dpp, 10, "NSFSMultipartWriter::divert: part {} exceeded its "
+			 "extent of {} after {} bytes;  moved to its own file",
+			 part_num, (extent ? *extent : 0), written);
 
   shared_file->close();
   shared_file.reset();
@@ -17667,16 +17683,15 @@ int NSFSMultipartWriter::relocate(optional_yield y)
 					      tgt->offset, high_water,
 					      driver->copy_hints_for(auth_user));
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: could not move part " << part_num
-		      << " into " << tgt->name << ": " << cpp_strerror(-ret)
-		      << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: could not move part {} into {}: {}", part_num,
+			  tgt->name, cpp_strerror(-ret));
     return ret;
   }
 
-  ldpp_dout(dpp, 10) << "NSFSMultipartWriter::relocate: part " << part_num
-		     << " is " << high_water << " bytes and the stride is "
-		     << (extent ? *extent : 0) << ";  moved to "
-		     << tgt->name << " at " << tgt->offset << dendl;
+  ldpp_dout_fmt(dpp, 10, "NSFSMultipartWriter::relocate: part {} is {} bytes "
+			 "and the stride is {};  moved to {} at {}", part_num,
+			 high_water, (extent ? *extent : 0), tgt->name,
+			 tgt->offset);
 
   shared_file->close();
   shared_file = std::move(dst);
@@ -17768,10 +17783,9 @@ int NSFSMultipartWriter::complete(
   const uint64_t accounted_checked =
       accounted_size + driver->stored_size_delta_injected(upload_id);
   if (high_water != accounted_checked) {
-    ldpp_dout(dpp, 10) << "NSFSMultipartWriter::complete: part " << part_num
-		       << " stored " << high_water << " for accounted "
-		       << accounted_checked
-		       << " -- a filter changed the byte count" << dendl;
+    ldpp_dout_fmt(dpp, 10, "NSFSMultipartWriter::complete: part {} stored {} "
+			   "for accounted {} -- a filter changed the byte "
+			   "count", part_num, high_water, accounted_checked);
   }
 
   NSFSUploadPartInfo info;
@@ -17860,15 +17874,14 @@ int NSFSMultipartWriter::complete(
       }, rctx.y);
       if (lret == 0 || lret == -EEXIST) {
 	promoted = true;
-	ldpp_dout(dpp, 15) << "NSFSMultipartWriter::complete: established"
-			   << " stride " << high_water << " for "
-			   << mp_cache_key.upload_meta << dendl;
+	ldpp_dout_fmt(dpp, 15, "NSFSMultipartWriter::complete: established "
+			       "stride {} for {}", high_water,
+			       mp_cache_key.upload_meta);
       } else {
 	/* nothing is broken by failing to establish:  every part takes
 	 * its own file and assembly copies, which is the layout we had */
-	ldpp_dout(dpp, 5) << "NSFSMultipartWriter::complete: could not"
-			  << " promote part 1: " << cpp_strerror(-lret)
-			  << dendl;
+	ldpp_dout_fmt(dpp, 5, "NSFSMultipartWriter::complete: could not "
+			      "promote part 1: {}", cpp_strerror(-lret));
       }
     }
   }
@@ -17902,7 +17915,8 @@ int NSFSMultipartWriter::complete(
 
     ret = part_file->write_attrs(rctx.dpp, rctx.y, attrs, /*extra_attrs=*/nullptr);
     if (ret < 0) {
-      ldpp_dout(rctx.dpp, 20) << "ERROR: failed writing attrs for " << part_file->get_name() << dendl;
+      ldpp_dout_fmt(rctx.dpp, 20, "ERROR: failed writing attrs for {}",
+				  part_file->get_name());
       return ret;
     }
 
@@ -17931,7 +17945,7 @@ int NSFSMultipartWriter::complete(
   part_file->set_sync_on_close(false);
   ret = part_file->close();
   if (ret < 0) {
-    ldpp_dout(rctx.dpp, 20) << "ERROR: failed closing file" << dendl;
+    ldpp_dout_fmt(rctx.dpp, 20, "ERROR: failed closing file");
     return ret;
   }
 
@@ -17974,9 +17988,8 @@ int NSFSAtomicWriter::prepare(optional_yield y)
     const int cap = bc->max_key_size();
     const size_t klen = obj->get_name().size();
     if ((cap > 0) && (klen + 1 > static_cast<size_t>(cap))) {
-      ldpp_dout(dpp, 4) << "nsfs: rejecting key of " << klen
-	<< " bytes;  the listing cache holds at most " << (cap - 1)
-	<< dendl;
+      ldpp_dout_fmt(dpp, 4, "nsfs: rejecting key of {} bytes;  the listing "
+			    "cache holds at most {}", klen, (cap - 1));
       return -ERR_KEY_TOO_LONG;
     }
   }
@@ -18184,14 +18197,15 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
   obj->set_attrs(attrs);
   ret = obj->write_attrs(rctx.dpp, rctx.y);
   if (ret < 0) {
-    ldpp_dout(rctx.dpp, 20) << "ERROR: NSFSAtomicWriter failed writing attrs for "
-                       << obj->get_name() << dendl;
+    ldpp_dout_fmt(rctx.dpp, 20, "ERROR: NSFSAtomicWriter failed writing attrs "
+				"for {}", obj->get_name());
     return ret;
   }
 
   NSFSBucket *b = static_cast<NSFSBucket*>(obj->get_bucket());
   if (!b) {
-    ldpp_dout(dpp, 0) << "ERROR: could not get bucket for " << obj->get_name() << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: could not get bucket for {}",
+			  obj->get_name());
     return -EINVAL;
   }
 
@@ -18205,9 +18219,9 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
    * the request resolved, so a stale or unread `flags` shows up as a
    * PUT that quietly overwrites the current version instead of
    * keeping it. */
-  ldpp_dout(dpp, 10) << "nsfs: publish " << obj->get_name()
-    << " versioned=" << versioned << " enabled=" << ver_enabled
-    << " flags=0x" << std::hex << binfo.flags << std::dec << dendl;
+  ldpp_dout_fmt(dpp, 10, "nsfs: publish {} versioned={:d} enabled={:d} "
+			 "flags=0x{:x}", obj->get_name(), versioned,
+			 ver_enabled, binfo.flags);
 
   /* versioned PUT: demote current version to .versions/ before publishing */
   if (versioned) {
@@ -18256,8 +18270,7 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
     return -ERR_PRECONDITION_FAILED;
   }
   if (ret < 0) {
-    ldpp_dout(dpp, 20) << "ERROR: NSFSAtomicWriter failed writing temp file"
-                       << dendl;
+    ldpp_dout_fmt(dpp, 20, "ERROR: NSFSAtomicWriter failed writing temp file");
     return ret;
   }
 
@@ -18555,9 +18568,9 @@ int NSFSDriver::start_adoption(const DoutPrefixProvider* dpp)
     return r;
   }
   if (adoption_complete()) {
-    ldpp_dout(dpp, 1) << "nsfs: adoption completed at "
-      << completion->completed_at << " from " << completion->config_root
-      << ";  NooBaa's store is not read" << dendl;
+    ldpp_dout_fmt(dpp, 1, "nsfs: adoption completed at {} from {};  NooBaa's "
+			  "store is not read", completion->completed_at,
+			  completion->config_root);
   } else if (adoption_configured() &&
 	     (adoption_mode == AdoptionMode::Automatic) &&
 	     io_context && background_tasks) {
@@ -18566,18 +18579,18 @@ int NSFSDriver::start_adoption(const DoutPrefixProvider* dpp)
      * resolves through them;  each bucket waits in the queue, and one a
      * request reaches goes ahead of the rest. */
     if (int r = start_adoption_queue(dpp); r < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: adoption did not start: "
-	<< cpp_strerror(-r) << ";  the deployment is readable and a "
-	<< "restart will retry it" << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: adoption did not start: {};  the "
+			    "deployment is readable and a restart will retry "
+			    "it", cpp_strerror(-r));
     }
   } else if (adoption_configured() &&
 	     (adoption_mode == AdoptionMode::Automatic)) {
     nsfs::AdoptionFindings::Gathering gathering;
     std::map<std::string, std::string> counts;
     if (int r = run_adoption(dpp, null_yield, &counts); r < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: adoption did not finish: "
-	<< cpp_strerror(-r) << ";  the deployment is readable and a "
-	<< "restart will retry it" << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: adoption did not finish: {};  the "
+			    "deployment is readable and a restart will retry "
+			    "it", cpp_strerror(-r));
     }
     write_adoption_report(dpp, "run", counts);
   }
@@ -18619,8 +18632,8 @@ int NSFSDriver::adopt_identities(const DoutPrefixProvider* dpp,
   nsfs::NooBaaStoreContents contents;
   int ret = store.read(dpp, contents);
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: adoption: cannot read " << root << ": "
-      << cpp_strerror(-ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: adoption: cannot read {}: {}", root,
+			  cpp_strerror(-ret));
     put_report("ran", "false");
     put_report("error", cpp_strerror(-ret));
     return ret;
@@ -18632,8 +18645,7 @@ int NSFSDriver::adopt_identities(const DoutPrefixProvider* dpp,
   }
   if (!contents.unreadable.empty()) {
     for (const auto& u : contents.unreadable) {
-      ldpp_dout(dpp, 0) << "ERROR: adoption: " << u.path << ": " << u.why
-	<< dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: adoption: {}: {}", u.path, u.why);
       adoption_findings.add(nsfs::FindingKind::store_unreadable, u.path + ": " + u.why);
     }
     put_report("ran", "false");
@@ -18642,8 +18654,7 @@ int NSFSDriver::adopt_identities(const DoutPrefixProvider* dpp,
   }
   if (const auto skew = contents.version_skew(); !skew.empty()) {
     for (const auto& why : skew) {
-      ldpp_dout(dpp, 0) << "ERROR: adoption: " << root << ": " << why
-	<< dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: adoption: {}: {}", root, why);
       adoption_findings.add(nsfs::FindingKind::store_version, root + ": " + why);
     }
     put_report("ran", "false");
@@ -18657,8 +18668,8 @@ int NSFSDriver::adopt_identities(const DoutPrefixProvider* dpp,
   nsfs::NooBaaMasterKeys keys;
   ret = keys.load(dpp, contents.settings, root);
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: adoption: no usable master key: "
-      << cpp_strerror(-ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: adoption: no usable master key: {}",
+			  cpp_strerror(-ret));
     adoption_findings.add(nsfs::FindingKind::identity_failed,
 			  "no usable master key: " + cpp_strerror(-ret));
     put_report("ran", "false");
@@ -18669,7 +18680,7 @@ int NSFSDriver::adopt_identities(const DoutPrefixProvider* dpp,
   ret = nsfs::decrypt_store_secrets(dpp, keys, contents, failures);
   if (ret < 0) {
     for (const auto& r : failures) {
-      ldpp_dout(dpp, 0) << "ERROR: adoption: " << r << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: adoption: {}", r);
     }
     adoption_findings.add(nsfs::FindingKind::identity_failed, failures);
     put_report("ran", "false");
@@ -18735,27 +18746,27 @@ int NSFSDriver::adopt_identities(const DoutPrefixProvider* dpp,
   put_report("role_policies", std::to_string(ir.role_policies_written));
   put_report("unresolved_names", std::to_string(ir.unresolved_names.size()));
   for (const auto& u : ir.unresolved_names) {
-    ldpp_dout(dpp, 0) << "WARNING: adoption:  an identity names a user"
-      " nsswitch does not know:  " << u << dendl;
+    ldpp_dout_fmt(dpp, 0, "WARNING: adoption:  an identity names a user "
+			  "nsswitch does not know:  {}", u);
   }
   put_report("unresolved_uids", std::to_string(ir.unresolved_uids.size()));
   for (const auto& u : ir.unresolved_uids) {
-    ldpp_dout(dpp, 0) << "WARNING: adoption:  an identity with no group "
-      "list runs as a uid nsswitch does not know:  " << u << dendl;
+    ldpp_dout_fmt(dpp, 0, "WARNING: adoption:  an identity with no group list "
+			  "runs as a uid nsswitch does not know:  {}", u);
   }
   put_report("trust_narrowed", std::to_string(ir.trust_narrowed.size()));
   for (const auto& t : ir.trust_narrowed) {
-    ldpp_dout(dpp, 0) << "WARNING: adoption:  " << t << dendl;
+    ldpp_dout_fmt(dpp, 0, "WARNING: adoption:  {}", t);
   }
   put_report("arns_matched", std::to_string(ir.arns_matched.size()));
   put_report("role_config_superseded",
 	     std::to_string(ir.role_config_superseded.size()));
   for (const auto& s : ir.role_config_superseded) {
-    ldpp_dout(dpp, 0) << "WARNING: adoption:  " << s << dendl;
+    ldpp_dout_fmt(dpp, 0, "WARNING: adoption:  {}", s);
   }
   for (const auto& a : ir.arns_matched) {
-    ldpp_dout(dpp, 0) << "WARNING: adoption:  a trust policy now matches an "
-      "ARN NooBaa never matched:  " << a << dendl;
+    ldpp_dout_fmt(dpp, 0, "WARNING: adoption:  a trust policy now matches an "
+			  "ARN NooBaa never matched:  {}", a);
   }
   /* -EIO is some identities written and some not:  the rest of the pass
    * goes on, and adoption does not complete until each failure is fixed
@@ -18846,8 +18857,8 @@ int NSFSDriver::run_adoption(const DoutPrefixProvider* dpp,
 	continue;
       }
       ++failed;
-      ldpp_dout(dpp, 0) << "ERROR: adoption: bucket " << b.name << ": "
-	<< (one.count("error") ? one["error"] : one["why"]) << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: adoption: bucket {}: {}", b.name,
+			    (one.count("error") ? one["error"] : one["why"]));
     } else {
       ++adopted;
     }
@@ -18858,9 +18869,8 @@ int NSFSDriver::run_adoption(const DoutPrefixProvider* dpp,
     (*report)["buckets_failed"] = std::to_string(failed);
     (*report)["buckets_blocked"] = std::to_string(blocked);
   }
-  ldpp_dout(dpp, 1) << "nsfs: adopted " << root << ": " << adopted
-    << " buckets, " << failed << " failed, " << blocked
-    << " blocked by an identity" << dendl;
+  ldpp_dout_fmt(dpp, 1, "nsfs: adopted {}: {} buckets, {} failed, {} blocked "
+			"by an identity", root, adopted, failed, blocked);
   if (failed || blocked || (iret < 0)) {
     return -EIO;
   }
@@ -18979,8 +18989,8 @@ int NSFSDriver::abandon_noobaa_record(const DoutPrefixProvider* dpp,
     return ret;
   }
   if (adoption_complete()) {
-    ldpp_dout(dpp, 1) << "nsfs: not abandoning " << noobaa_id
-      << ":  adoption is complete" << dendl;
+    ldpp_dout_fmt(dpp, 1, "nsfs: not abandoning {}:  adoption is complete",
+			  noobaa_id);
     return -EEXIST;
   }
   if (!adoption_configured()) {
@@ -19005,8 +19015,8 @@ int NSFSDriver::abandon_noobaa_record(const DoutPrefixProvider* dpp,
     }
     std::string owner;
     if (userDB->get_owner_by_noobaa_id(dpp, id.id, owner) == 0) {
-      ldpp_dout(dpp, 1) << "nsfs: not abandoning identity " << id.name
-	<< ":  it is imported" << dendl;
+      ldpp_dout_fmt(dpp, 1, "nsfs: not abandoning identity {}:  it is imported",
+			    id.name);
       return -EEXIST;
     }
     r.kind = "identity";
@@ -19026,8 +19036,8 @@ int NSFSDriver::abandon_noobaa_record(const DoutPrefixProvider* dpp,
     if (userDB->get_owner_by_noobaa_id(dpp, role.owner, account) == 0) {
       auto written = get_role(role.name, "", rgw_account_id{account});
       if (written->load_by_name(dpp, y) == 0) {
-	ldpp_dout(dpp, 1) << "nsfs: not abandoning role " << role.name
-	  << ":  it is imported" << dendl;
+	ldpp_dout_fmt(dpp, 1, "nsfs: not abandoning role {}:  it is imported",
+			      role.name);
 	return -EEXIST;
       }
     }
@@ -19057,8 +19067,8 @@ int NSFSDriver::abandon_noobaa_record(const DoutPrefixProvider* dpp,
 	 * allowed, and said, since the bucket stays half-converted */
 	r.stage = "partly converted";
       } else if (std::strcmp(nb->profile_name(), "base")) {
-	ldpp_dout(dpp, 1) << "nsfs: not abandoning bucket " << b.name
-	  << ":  it is adopted" << dendl;
+	ldpp_dout_fmt(dpp, 1, "nsfs: not abandoning bucket {}:  it is adopted",
+			      b.name);
 	return -EEXIST;
       }
     }
@@ -19077,12 +19087,12 @@ int NSFSDriver::abandon_noobaa_record(const DoutPrefixProvider* dpp,
     std::lock_guard l{adoption_failures_mtx};
     adoption_failures.erase(r.name);
   }
-  ldpp_dout(dpp, 0) << "nsfs: abandoned " << r.kind << " " << r.name << " ("
-    << r.noobaa_id << "), " << r.stage << ":  " << r.reason << dendl;
+  ldpp_dout_fmt(dpp, 0, "nsfs: abandoned {} {} ({}), {}:  {}", r.kind, r.name,
+			r.noobaa_id, r.stage, r.reason);
   if (!r.dependent_buckets.empty()) {
-    ldpp_dout(dpp, 0) << "nsfs: " << r.name << " owns "
-      << r.dependent_buckets.size() << " bucket records, which will now fail "
-      << "their imports and block completion until each is decided" << dendl;
+    ldpp_dout_fmt(dpp, 0, "nsfs: {} owns {} bucket records, which will now "
+			  "fail their imports and block completion until each "
+			  "is decided", r.name, r.dependent_buckets.size());
   }
   /* the record may have been the last thing blocking completion, and
    * under `automatic` nothing else would look again */
@@ -19093,8 +19103,8 @@ int NSFSDriver::abandon_noobaa_record(const DoutPrefixProvider* dpp,
     /* no queue:  the identity import failed at startup, and this
      * record may be what stopped it */
     if (int r2 = start_adoption_queue(dpp); r2 < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: adoption did not start: "
-	<< cpp_strerror(-r2) << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: adoption did not start: {}",
+			    cpp_strerror(-r2));
     }
   }
   out = std::move(r);
@@ -19178,8 +19188,8 @@ bool NSFSDriver::reread_adoption_complete(const DoutPrefixProvider* dpp)
     return true;
   }
   if (int r = load_adoption_completion(dpp); r < 0) {
-    ldpp_dout(dpp, 1) << "nsfs: the completion record did not read: "
-      << cpp_strerror(-r) << ";  NooBaa's store is read" << dendl;
+    ldpp_dout_fmt(dpp, 1, "nsfs: the completion record did not read: {};  "
+			  "NooBaa's store is read", cpp_strerror(-r));
   }
   return adoption_complete();
 }
@@ -19195,7 +19205,7 @@ int NSFSDriver::observe_adoption_completion(
   std::map<std::string, std::string>* report)
 {
   auto not_yet = [&](const std::string& why) {
-    ldpp_dout(dpp, 1) << "nsfs: adoption not complete:  " << why << dendl;
+    ldpp_dout_fmt(dpp, 1, "nsfs: adoption not complete:  {}", why);
     if (report) {
       (*report)["complete"] = "false";
       (*report)["why_not_complete"] = why;
@@ -19268,8 +19278,8 @@ int NSFSDriver::observe_adoption_completion(
     return ret;
   }
   set_completion(std::move(c));
-  ldpp_dout(dpp, 0) << "nsfs: adoption is complete:  " << root << " is "
-    << "consumed and is not read again" << dendl;
+  ldpp_dout_fmt(dpp, 0, "nsfs: adoption is complete:  {} is consumed and is "
+			"not read again", root);
   if (report) {
     (*report)["complete"] = "true";
     (*report)["completed_at"] = completion->completed_at;
@@ -19337,8 +19347,8 @@ int NSFSDriver::import_noobaa_bucket(const DoutPrefixProvider* dpp,
    * what set_profile() leaving base calls before it rewrites a tree */
   if (const auto skew = contents.version_skew(); !skew.empty()) {
     for (const auto& why : skew) {
-      ldpp_dout(dpp, 0) << "ERROR: not importing bucket " << bucket_name
-	<< ": " << root << ": " << why << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: not importing bucket {}: {}: {}",
+			    bucket_name, root, why);
     }
     put_report("configured", "false");
     put_report("version_skew", std::to_string(skew.size()));
@@ -19355,8 +19365,8 @@ int NSFSDriver::import_noobaa_bucket(const DoutPrefixProvider* dpp,
       if ((u.path != path) && !u.path.starts_with(connections)) {
 	continue;
       }
-      ldpp_dout(dpp, 0) << "ERROR: not importing bucket " << bucket_name
-	<< ": " << u.path << ": " << u.why << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: not importing bucket {}: {}: {}",
+			    bucket_name, u.path, u.why);
       put_report("configured", "false");
       put_report("unreadable", u.why);
       return -EBADMSG;
@@ -19376,8 +19386,8 @@ int NSFSDriver::import_noobaa_bucket(const DoutPrefixProvider* dpp,
     nsfs::NooBaaMasterKeys keys;
     ret = keys.load(dpp, contents.settings, root);
     if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: not importing bucket " << bucket_name
-	<< ": no usable master key: " << cpp_strerror(-ret) << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: not importing bucket {}: no usable master "
+			    "key: {}", bucket_name, cpp_strerror(-ret));
       put_report("configured", "false");
       put_report("error", "master keys");
       return ret;
@@ -19386,8 +19396,8 @@ int NSFSDriver::import_noobaa_bucket(const DoutPrefixProvider* dpp,
     ret = nsfs::decrypt_store_secrets(dpp, keys, contents, failures);
     if (ret < 0) {
       for (const auto& r : failures) {
-	ldpp_dout(dpp, 0) << "ERROR: not importing bucket " << bucket_name
-	  << ": " << r << dendl;
+	ldpp_dout_fmt(dpp, 0, "ERROR: not importing bucket {}: {}", bucket_name,
+			      r);
       }
       put_report("configured", "false");
       put_report("error", "secrets");
@@ -19519,9 +19529,9 @@ int NSFSDriver::rewrite_unadopted_policy(const DoutPrefixProvider* dpp,
       ret = imported_identity_mapping(dpp, contents, *built);
     }
     if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: bucket " << bucket << ":  NooBaa's "
-	"principals cannot be mapped (" << cpp_strerror(-ret) << ");  its "
-	"policy is not served" << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: bucket {}:  NooBaa's principals cannot be "
+			    "mapped ({});  its policy is not served", bucket,
+			    cpp_strerror(-ret));
       attrs.erase(i);
       return ret;
     }
@@ -19537,7 +19547,7 @@ int NSFSDriver::rewrite_unadopted_policy(const DoutPrefixProvider* dpp,
       ? std::string("its policy does not parse")
       : "its policy names principals the import has not written (" +
 	nsfs::describe_unresolved(*m, unresolved) + ")";
-    ldpp_dout(dpp, 1) << "nsfs: bucket " << bucket << ":  " << why << dendl;
+    ldpp_dout_fmt(dpp, 1, "nsfs: bucket {}:  {}", bucket, why);
     if (untranslated.empty()) {
       untranslated = why;
     }
@@ -19728,19 +19738,21 @@ int NSFSDriver::start_adoption_queue(const DoutPrefixProvider* dpp,
     const int ret = adopt_one_bucket(&driver_prefix, null_yield, bucket,
 				     &one, &cb);
     if ((ret < 0) && (one["blocked"] == "true")) {
-      ldpp_dout(&driver_prefix, 1) << "nsfs: bucket " << bucket << " is "
-	"blocked by an identity that did not import" << dendl;
+      ldpp_dout_fmt(&driver_prefix, 1, "nsfs: bucket {} is blocked by an "
+				       "identity that did not import", bucket);
       return ret;
     }
     if (ret < 0) {
-      ldpp_dout(&driver_prefix, 0) << "ERROR: adoption: bucket " << bucket
-	<< ": " << (one.count("error") ? one["error"] : one["why"]) << dendl;
+      ldpp_dout_fmt(&driver_prefix, 0, "ERROR: adoption: bucket {}: {}", bucket,
+				       (one.count("error")
+					? one["error"]
+					: one["why"]));
       return ret;
     }
     if (one["adopted"] != "true") {
       return -EAGAIN;
     }
-    ldpp_dout(&driver_prefix, 1) << "nsfs: adopted bucket " << bucket << dendl;
+    ldpp_dout_fmt(&driver_prefix, 1, "nsfs: adopted bucket {}", bucket);
     return 0;
   };
   auto drained = [this, root] {
@@ -19783,8 +19795,8 @@ int NSFSDriver::start_adoption_queue(const DoutPrefixProvider* dpp,
   q->start();
   adoption_queue.store(q.get(), std::memory_order_release);
   adoption_queue_owner = std::move(q);
-  ldpp_dout(dpp, 1) << "nsfs: adopting " << root << " while serving:  "
-    << queued << " buckets queued" << dendl;
+  ldpp_dout_fmt(dpp, 1, "nsfs: adopting {} while serving:  {} buckets queued",
+			root, queued);
   return 0;
 }
 
@@ -19814,8 +19826,8 @@ bool NSFSDriver::awaits_adoption(const DoutPrefixProvider* dpp,
   nsfs::AbandonedRecord ab;
   const bool awaits = abandoned_bucket(dpp, b.get_name(), ab) < 0;
   if (awaits) {
-    ldpp_dout(dpp, 10) << "nsfs: bucket " << b.get_name()
-      << " is not adopted;  promoting it" << dendl;
+    ldpp_dout_fmt(dpp, 10, "nsfs: bucket {} is not adopted;  promoting it",
+			   b.get_name());
   }
   return awaits;
 }
@@ -19868,8 +19880,8 @@ int NSFSDriver::hint_unmarked_bucket(
     return ret;
   }
   if (!b.extended() || b.is_converting()) {
-    ldpp_dout(dpp, 1) << "nsfs: unmarked-bucket:  " << name
-      << " is not a marked bucket at rest" << dendl;
+    ldpp_dout_fmt(dpp, 1, "nsfs: unmarked-bucket:  {} is not a marked bucket "
+			  "at rest", name);
     return -ERR_INVALID_BUCKET_STATE;
   }
   if (adoption_configured()) {
@@ -19877,15 +19889,14 @@ int NSFSDriver::hint_unmarked_bucket(
       g_conf().get_val<std::string>("rgw_nsfs_noobaa_config_root") +
       "/buckets/" + name + ".json";
     if (::access(record.c_str(), F_OK) == 0) {
-      ldpp_dout(dpp, 1) << "nsfs: unmarked-bucket:  NooBaa holds a record "
-	"of " << name << dendl;
+      ldpp_dout_fmt(dpp, 1, "nsfs: unmarked-bucket:  NooBaa holds a record of "
+			    "{}", name);
       return -ERR_INVALID_BUCKET_STATE;
     }
   }
   ret = b.check_empty(dpp, null_yield);
   if (ret < 0) {
-    ldpp_dout(dpp, 1) << "nsfs: unmarked-bucket:  " << name
-      << " holds content" << dendl;
+    ldpp_dout_fmt(dpp, 1, "nsfs: unmarked-bucket:  {} holds content", name);
     return ret;
   }
 
@@ -19894,8 +19905,8 @@ int NSFSDriver::hint_unmarked_bucket(
     return ret;
   }
   hint_unmarked_buckets.fetch_add(1, std::memory_order_relaxed);
-  ldpp_dout(dpp, 1) << "nsfs: unmarked-bucket:  " << name
-    << " is now unmarked, for a test" << dendl;
+  ldpp_dout_fmt(dpp, 1, "nsfs: unmarked-bucket:  {} is now unmarked, for a "
+			"test", name);
   if (out) {
     (*out)["bucket"] = name;
     (*out)["profile"] = b.profile_name();
@@ -19934,8 +19945,8 @@ void NSFSDriver::hold_after_publish(const DoutPrefixProvider* dpp,
     inject_hold_after_publish_cond.wait_for(l, std::chrono::milliseconds(100));
   }
   if (inject_hold_after_publish_buckets.contains(bucket)) {
-    ldpp_dout(dpp, 0) << "inject-hold-after-publish: " << bucket
-      << " was not released within a minute;  the write goes on" << dendl;
+    ldpp_dout_fmt(dpp, 0, "inject-hold-after-publish: {} was not released "
+			  "within a minute;  the write goes on", bucket);
   }
   inject_hold_after_publish_waiting.erase(bucket);
 }
@@ -19945,7 +19956,7 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
 			    const std::map<std::string, std::string>& params,
 			    std::map<std::string, std::string>* out)
 {
-  ldpp_dout(dpp, 10) << "NSFSDriver::driver_hint: " << hint << dendl;
+  ldpp_dout_fmt(dpp, 10, "NSFSDriver::driver_hint: {}", hint);
 
   if (hint == "inject-fork-race") {
     /* stand in for another instance which forks a shadow first, so that
@@ -20908,8 +20919,8 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
       }
       const auto* had = get_access_strategy();
       access_strategy_live.store(want, std::memory_order_relaxed);
-      ldpp_dout(dpp, 1) << "nsfs: access model " << had->name() << " -> "
-	<< want->name() << " by driver hint" << dendl;
+      ldpp_dout_fmt(dpp, 1, "nsfs: access model {} -> {} by driver hint",
+			    had->name(), want->name());
       if (out) {
 	(*out)["had"] = had->name();
       }
@@ -21293,8 +21304,8 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
       } else {
 	return -EINVAL;
       }
-      ldpp_dout(dpp, 1) << "nsfs: dynamic supplementary groups "
-	<< it->second << " by driver hint" << dendl;
+      ldpp_dout_fmt(dpp, 1, "nsfs: dynamic supplementary groups {} by driver "
+			    "hint", it->second);
     }
     if (out) {
       (*out)["dynamic_groups"] =
@@ -21327,13 +21338,13 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
     }
     if (user) {
       userDB->force_user_identity_override(*user);
-      ldpp_dout(dpp, 1) << "nsfs: user identity override "
-	<< params.at("user") << " by driver hint" << dendl;
+      ldpp_dout_fmt(dpp, 1, "nsfs: user identity override {} by driver hint",
+			    params.at("user"));
     }
     if (role) {
       userDB->force_role_identity_override(*role);
-      ldpp_dout(dpp, 1) << "nsfs: role identity override "
-	<< params.at("role") << " by driver hint" << dendl;
+      ldpp_dout_fmt(dpp, 1, "nsfs: role identity override {} by driver hint",
+			    params.at("role"));
     }
     if (out) {
       (*out)["user_identity_override"] =
@@ -21411,7 +21422,7 @@ rgw::sal::Driver* newNSFSDriver(CephContext *cct,
    * virtual, so the base one would run and the identity table
    * would never be created */
   if ((ret = driver->get_identity_db()->Initialize("", -1)) < 0) {
-    ldout(cct, 0) << "DB initialization failed for tenant("<<tenant<<")" << dendl;
+    ldout_fmt(cct, 0, "DB initialization failed for tenant({})", tenant);
     delete driver;
     return nullptr;
   }

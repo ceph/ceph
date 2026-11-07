@@ -32,6 +32,7 @@
 #include "rgw_bucket_logging.h"
 #include "rgw_xml.h"
 #include "common/XMLFormatter.h"
+#include "common/dout_fmt.h"
 #include "common/errno.h"
 #include "include/scope_guard.h"
 
@@ -64,8 +65,8 @@ int RgwBucketStateStrategy::load(const DoutPrefixProvider* dpp, int dir_fd,
   } catch (buffer::error& err) {
     /* present and unreadable, which is not the same as absent:  the
      * bucket has stored state and we cannot see it */
-    ldpp_dout(dpp, 0) << "ERROR: bucket " << bucket_name << " has a "
-      << BUCKET_INFO_KEY << " attribute that does not decode" << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: bucket {} has a {} attribute that does not "
+			  "decode", bucket_name, BUCKET_INFO_KEY);
     return -EBADMSG;
   }
 
@@ -107,15 +108,14 @@ int decode_into(const DoutPrefixProvider* dpp, JSONFormatter& f, T& out)
 
   JSONParser p;
   if (!p.parse(bl.c_str(), bl.length())) {
-    ldpp_dout(dpp, 0) << "ERROR: could not re-parse a document we wrote"
-      << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: could not re-parse a document we wrote");
     return -EBADMSG;
   }
   try {
     out.decode_json(&p);
   } catch (const JSONDecoder::err& e) {
-    ldpp_dout(dpp, 0) << "ERROR: a document we wrote was rejected: "
-      << e.what() << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: a document we wrote was rejected: {}",
+			  e.what());
     return -EBADMSG;
   }
   return 0;
@@ -157,8 +157,8 @@ int from_noobaa_object_lock(const DoutPrefixProvider* dpp, JSONObj* cfg,
    * reach info.obj_lock and be reported as the retention mode of a
    * locked bucket. */
   if (has_rule && (mode != "GOVERNANCE") && (mode != "COMPLIANCE")) {
-    ldpp_dout(dpp, 0) << "ERROR: default_retention names mode \"" << mode
-      << "\", which is neither of NooBaa's" << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: default_retention names mode \"{}\", which "
+			  "is neither of NooBaa's", mode);
     return -EBADMSG;
   }
 
@@ -170,9 +170,10 @@ int from_noobaa_object_lock(const DoutPrefixProvider* dpp, JSONObj* cfg,
    * set yields mtime + years(0), a retention that expires the instant
    * the object is written. */
   if (has_rule && ((years > 0) == (days > 0))) {
-    ldpp_dout(dpp, 0) << "ERROR: default_retention names "
-      << (days > 0 ? "both days and years" : "neither days nor years")
-      << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: default_retention names {}",
+			  (days > 0
+			   ? "both days and years"
+			   : "neither days nor years"));
     return -EBADMSG;
   }
 
@@ -237,8 +238,7 @@ int from_noobaa_bucket_policy(const DoutPrefixProvider* dpp, JSONObj* pol,
     bl.append(p.text);
     attrs[RGW_ATTR_IAM_POLICY] = std::move(bl);
   } catch (const rgw::IAM::PolicyParseException& e) {
-    ldpp_dout(dpp, 0) << "ERROR: bucket policy does not parse: "
-      << e.what() << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: bucket policy does not parse: {}", e.what());
     return -EBADMSG;
   }
   return 0;
@@ -386,9 +386,9 @@ int from_noobaa_encryption(const DoutPrefixProvider* dpp, JSONObj* enc,
     /* warned on every load of this bucket, on purpose:  writes into it
      * will fail and the reason should be findable without reading the
      * record by hand */
-    ldpp_dout(dpp, 1) << "nsfs: bucket encryption names algorithm \""
-      << algorithm << "\", which is neither AES256 nor aws:kms;  writes into this "
-      << "bucket will fail" << dendl;
+    ldpp_dout_fmt(dpp, 1, "nsfs: bucket encryption names algorithm \"{}\", "
+			  "which is neither AES256 nor aws:kms;  writes into "
+			  "this bucket will fail", algorithm);
   }
 
   std::string key_id;
@@ -439,8 +439,8 @@ int from_noobaa_tags(const DoutPrefixProvider* dpp, JSONObj* tagging,
     if (key.empty()) {
       /* a tag with no key is not a tag;  RGW rejects it and there is
        * nothing to keep */
-      ldpp_dout(dpp, 0) << "ERROR: bucket " << bucket_name
-	<< " has a tag with no key" << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: bucket {} has a tag with no key",
+			    bucket_name);
       return -EBADMSG;
     }
     if ((key.size() > S3_MAX_TAG_KEY) || (val.size() > S3_MAX_TAG_VAL)) {
@@ -453,9 +453,9 @@ int from_noobaa_tags(const DoutPrefixProvider* dpp, JSONObj* tagging,
     return 0;
   }
   if ((tags.count() > S3_MAX_BUCKET_TAGS) || oversize) {
-    ldpp_dout(dpp, 1) << "nsfs: bucket " << bucket_name << " carries "
-      << tags.count() << " tags" << (oversize ? ", some over length" : "")
-      << ";  more than PutBucketTagging would accept" << dendl;
+    ldpp_dout_fmt(dpp, 1, "nsfs: bucket {} carries {} tags{};  more than "
+			  "PutBucketTagging would accept", bucket_name,
+			  tags.count(), (oversize ? ", some over length" : ""));
   }
 
   bufferlist bl;
@@ -654,8 +654,8 @@ int from_noobaa_lifecycle(const DoutPrefixProvider* dpp, CephContext* cct,
     return -EIO;
   }
   if (!parser.parse(xml.c_str(), xml.length(), 1)) {
-    ldpp_dout(dpp, 0) << "ERROR: bucket " << bucket_name << ": their "
-      << "lifecycle rules did not render as parsable XML" << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: bucket {}: their lifecycle rules did not "
+			  "render as parsable XML", bucket_name);
     return -EBADMSG;
   }
 
@@ -663,17 +663,17 @@ int from_noobaa_lifecycle(const DoutPrefixProvider* dpp, CephContext* cct,
   try {
     RGWXMLDecoder::decode_xml("LifecycleConfiguration", config, &parser);
   } catch (RGWXMLDecoder::err& e) {
-    ldpp_dout(dpp, 0) << "ERROR: bucket " << bucket_name << " has a "
-      << "lifecycle rule PutBucketLifecycle would reject: "
-      << e.what() << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: bucket {} has a lifecycle rule "
+			  "PutBucketLifecycle would reject: {}", bucket_name,
+			  e.what());
     return -EBADMSG;
   }
 
   RGWLifecycleConfiguration dest(cct);
   if (int r = config.rebuild(dest); r < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: bucket " << bucket_name << " has a "
-      << "lifecycle configuration RGW will not rebuild: "
-      << cpp_strerror(-r) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: bucket {} has a lifecycle configuration RGW "
+			  "will not rebuild: {}", bucket_name,
+			  cpp_strerror(-r));
     return -EBADMSG;
   }
 
@@ -746,8 +746,8 @@ int from_noobaa_cors(const DoutPrefixProvider* dpp, CephContext* cct,
     max_num = 100;
   }
   if (count > static_cast<size_t>(max_num)) {
-    ldpp_dout(dpp, 0) << "ERROR: bucket " << bucket_name << " has " << count
-      << " CORS rules, more than PutBucketCors accepts" << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: bucket {} has {} CORS rules, more than "
+			  "PutBucketCors accepts", bucket_name, count);
     return -EBADMSG;
   }
 
@@ -759,16 +759,16 @@ int from_noobaa_cors(const DoutPrefixProvider* dpp, CephContext* cct,
     return -EIO;
   }
   if (!parser.parse(xml.c_str(), xml.length(), 1)) {
-    ldpp_dout(dpp, 0) << "ERROR: bucket " << bucket_name << " has a CORS "
-      << "rule PutBucketCors would reject" << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: bucket {} has a CORS rule PutBucketCors "
+			  "would reject", bucket_name);
     return -EBADMSG;
   }
 
   auto* config = static_cast<RGWCORSConfiguration_S3*>(
     parser.find_first("CORSConfiguration"));
   if (!config) {
-    ldpp_dout(dpp, 0) << "ERROR: bucket " << bucket_name << ": their CORS "
-      << "rules did not render as a configuration" << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: bucket {}: their CORS rules did not render "
+			  "as a configuration", bucket_name);
     return -EBADMSG;
   }
 
@@ -802,8 +802,7 @@ int from_noobaa_logging(const DoutPrefixProvider* dpp, JSONObj* obj,
     JSONDecoder::decode_json("log_bucket", target, obj);
     JSONDecoder::decode_json("log_prefix", prefix, obj);
   } catch (const JSONDecoder::err& e) {
-    ldpp_dout(dpp, 0) << "ERROR: logging does not decode: " << e.what()
-      << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: logging does not decode: {}", e.what());
     return -EBADMSG;
   }
   if (target.empty()) {
@@ -844,8 +843,7 @@ int NooBaaBucketStateStrategy::list_records(const DoutPrefixProvider* dpp,
       return 0;
     }
     const int ret = -errno;
-    ldpp_dout(dpp, 0) << "ERROR: listing " << dir << ": "
-      << cpp_strerror(-ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: listing {}: {}", dir, cpp_strerror(-ret));
     return ret;
   }
   auto close_dir = make_scope_guard([d] { ::closedir(d); });
@@ -916,14 +914,14 @@ int NooBaaBucketStateStrategy::recorded_path(const DoutPrefixProvider* dpp,
   }
   JSONParser p;
   if (!p.parse(doc.data(), doc.size())) {
-    ldpp_dout(dpp, 0) << "ERROR: " << path << " is not JSON" << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: {} is not JSON", path);
     return -EBADMSG;
   }
   try {
     JSONDecoder::decode_json("path", out, &p);
   } catch (const JSONDecoder::err& e) {
-    ldpp_dout(dpp, 0) << "ERROR: " << path << " has a path this gateway "
-      << "cannot read: " << e.what() << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: {} has a path this gateway cannot read: {}",
+			  path, e.what());
     return -EBADMSG;
   }
   return 0;
@@ -948,14 +946,13 @@ int NooBaaBucketStateStrategy::load(const DoutPrefixProvider* dpp, int dir_fd,
     return -ENOENT;
   }
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: reading " << path << ": "
-      << cpp_strerror(-ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: reading {}: {}", path, cpp_strerror(-ret));
     return ret;
   }
 
   JSONParser p;
   if (!p.parse(doc.data(), doc.size())) {
-    ldpp_dout(dpp, 0) << "ERROR: " << path << " is not JSON" << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: {} is not JSON", path);
     return -EBADMSG;
   }
 
@@ -978,8 +975,8 @@ int NooBaaBucketStateStrategy::load(const DoutPrefixProvider* dpp, int dir_fd,
   } else if (versioning == "SUSPENDED") {
     info.flags |= BUCKET_VERSIONED | BUCKET_VERSIONS_SUSPENDED;
   } else if (!versioning.empty() && (versioning != "DISABLED")) {
-    ldpp_dout(dpp, 0) << "ERROR: " << path << " has versioning \""
-      << versioning << "\", which is none of NooBaa's" << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: {} has versioning \"{}\", which is none of "
+			  "NooBaa's", path, versioning);
     return -EBADMSG;
   }
 
@@ -993,8 +990,8 @@ int NooBaaBucketStateStrategy::load(const DoutPrefixProvider* dpp, int dir_fd,
       /* not fatal:  a creation date we cannot read costs a listing the
        * right timestamp, and nothing else.  Versioning is the reason
        * this reader exists. */
-      ldpp_dout(dpp, 4) << "nsfs: " << path << " has an unparsable "
-	<< "creation_date \"" << created << "\"" << dendl;
+      ldpp_dout_fmt(dpp, 4, "nsfs: {} has an unparsable creation_date \"{}\"",
+			    path, created);
     }
   }
 
@@ -1010,12 +1007,12 @@ int NooBaaBucketStateStrategy::load(const DoutPrefixProvider* dpp, int dir_fd,
     if (r == 0) {
       info.owner = parse_owner(owner_key);
     } else if (r == -ENOENT) {
-      ldpp_dout(dpp, 1) << "nsfs: bucket " << bucket_name << "'s owner_account "
-	<< owner_account << " is not imported;  the bucket has no owner" << dendl;
+      ldpp_dout_fmt(dpp, 1, "nsfs: bucket {}'s owner_account {} is not "
+			    "imported;  the bucket has no owner", bucket_name,
+			    owner_account);
     } else {
-      ldpp_dout(dpp, 0) << "ERROR: looking up bucket " << bucket_name
-	<< "'s owner_account " << owner_account << ": " << cpp_strerror(-r)
-	<< dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: looking up bucket {}'s owner_account {}: "
+			    "{}", bucket_name, owner_account, cpp_strerror(-r));
       return r;
     }
   }
@@ -1123,13 +1120,13 @@ int NooBaaBucketStateStrategy::load(const DoutPrefixProvider* dpp, int dir_fd,
     attrs[RGW_NSFS_ATTR_FORCE_MD5_ETAG] = std::move(fbl);
   }
 
-  ldpp_dout(dpp, 10) << "nsfs: bucket " << bucket_name
-    << " took versioning from " << path << ": "
-    << (versioning.empty() ? "unset" : versioning) << dendl;
+  ldpp_dout_fmt(dpp, 10, "nsfs: bucket {} took versioning from {}: {}",
+			 bucket_name, path,
+			 (versioning.empty() ? "unset" : versioning));
 
   } catch (const JSONDecoder::err& e) {
-    ldpp_dout(dpp, 0) << "ERROR: " << path << " has a field this gateway "
-      << "cannot decode: " << e.what() << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: {} has a field this gateway cannot decode: "
+			  "{}", path, e.what());
     return -EBADMSG;
   }
 

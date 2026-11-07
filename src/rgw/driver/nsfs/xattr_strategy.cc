@@ -18,6 +18,7 @@
 
 #include <sys/xattr.h>
 
+#include "common/dout_fmt.h"
 #include "common/errno.h"
 #include "rgw_object_lock.h"
 #include "rgw_tag.h"
@@ -318,8 +319,8 @@ void NooBaaXattrStrategy::parse_disk_attrs(
     if (len < 0) {
       /* raced with a delete, or longer than any tag may be -- NooBaa's
        * own limit is far below this.  One tag, not the set. */
-      ldpp_dout(dpp, 4) << "could not read " << disk << ": "
-			<< cpp_strerror(errno) << ";  skipping it" << dendl;
+      ldpp_dout_fmt(dpp, 4, "could not read {}: {};  skipping it",
+		    disk, cpp_strerror(errno));
       continue;
     }
     tags.add_tag(key, std::string(buf, len));
@@ -370,9 +371,9 @@ void NooBaaXattrStrategy::parse_disk_attrs(
       r.encode(bl);
       out.emplace(RGW_ATTR_OBJECT_RETENTION, std::move(bl));
     } else if (mode && date) {
-      ldpp_dout(dpp, 0) << "ERROR: object carries a retention date this "
-	<< "gateway cannot parse (\"" << *date << "\");  reporting no "
-	<< "retention rather than one that reads as expired" << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: object carries a retention date this "
+		    "gateway cannot parse (\"{}\");  reporting no "
+		    "retention rather than one that reads as expired", *date);
     }
   }
 }

@@ -24,6 +24,7 @@
 #include <string_view>
 
 #include "common/ceph_json.h"
+#include "common/dout_fmt.h"
 #include "common/errno.h"
 #include "include/scope_guard.h"
 
@@ -82,8 +83,7 @@ int read_record_file(const DoutPrefixProvider* dpp, const std::string& path,
       break;
     }
     if ((out.size() + n) > NB_RECORD_MAX) {
-      ldpp_dout(dpp, 0) << "ERROR: " << path << " exceeds "
-	<< NB_RECORD_MAX << " bytes" << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: {} exceeds {} bytes", path, NB_RECORD_MAX);
       return -EFBIG;
     }
     out.append(buf, n);
@@ -734,13 +734,14 @@ int NooBaaConfigStore::read(const DoutPrefixProvider* dpp,
     }
   }
 
-  ldpp_dout(dpp, 4) << "nsfs: read NooBaa store " << root << ": "
-    << out.accounts() << " accounts, " << out.iam_users() << " IAM users, "
-    << out.roles.size() << " roles, "
-    << out.buckets.size() << " buckets, "
-    << out.connections.size() << " connections, "
-    << (out.master_keys_present ? "master keys present" : "NO MASTER KEYS")
-    << ", " << out.unreadable.size() << " unreadable" << dendl;
+  ldpp_dout_fmt(dpp, 4, "nsfs: read NooBaa store {}: {} accounts, {} IAM "
+			"users, {} roles, {} buckets, {} connections, {}, {} "
+			"unreadable", root, out.accounts(), out.iam_users(),
+			out.roles.size(), out.buckets.size(),
+			out.connections.size(),
+			(out.master_keys_present
+			 ? "master keys present"
+			 : "NO MASTER KEYS"), out.unreadable.size());
 
   return 0;
 }

@@ -29,7 +29,7 @@
 
 #include <fmt/format.h>
 
-#include "common/dout.h"
+#include "common/dout_fmt.h"
 #include "common/errno.h"
 #include "include/scope_guard.h"
 
@@ -307,8 +307,8 @@ int PerPartMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
 
   int out_fd = create_output(dpp, id, dir_fd, output_name);
   if (out_fd < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: could not create assembly file "
-		      << output_name << ": " << cpp_strerror(-out_fd) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: could not create assembly file {}: {}",
+			  output_name, cpp_strerror(-out_fd));
     return out_fd;
   }
   auto close_out = make_scope_guard([out_fd] { ::close(out_fd); });
@@ -325,8 +325,8 @@ int PerPartMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
     const std::string pname = part_name(part.num);
     int part_fd = open_input(dpp, id, dir_fd, pname);
     if (part_fd < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: could not open part " << pname
-			<< ": " << cpp_strerror(-part_fd) << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: could not open part {}: {}", pname,
+			    cpp_strerror(-part_fd));
       return part_fd;
     }
     auto close_part = make_scope_guard([part_fd] { ::close(part_fd); });
@@ -341,8 +341,8 @@ int PerPartMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
     ret = fs->copy_range(dpp, part_fd, 0, out_fd, out_offset, stx.stx_size,
 			 hints);
     if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: could not copy part " << pname
-			<< ": " << cpp_strerror(-ret) << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: could not copy part {}: {}", pname,
+			    cpp_strerror(-ret));
       return ret;
     }
     out_offset += stx.stx_size;
@@ -467,31 +467,29 @@ int StridedMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
       if (linkat(dir_fd, sname.c_str(),
 		 dir_fd, output_name.c_str(), 0) < 0) {
 	int ret = errno;
-	ldpp_dout(dpp, 0) << "ERROR: could not link " << sname
-			  << " to " << output_name << ": " << cpp_strerror(ret)
-			  << dendl;
+	ldpp_dout_fmt(dpp, 0, "ERROR: could not link {} to {}: {}", sname,
+			      output_name, cpp_strerror(ret));
 	return -ret;
       }
 
       int out_fd = openat(dir_fd, output_name.c_str(), O_WRONLY | O_NOFOLLOW);
       if (out_fd < 0) {
 	int ret = errno;
-	ldpp_dout(dpp, 0) << "ERROR: could not open " << output_name
-			  << " to trim: " << cpp_strerror(ret) << dendl;
+	ldpp_dout_fmt(dpp, 0, "ERROR: could not open {} to trim: {}",
+			      output_name, cpp_strerror(ret));
 	return -ret;
       }
       auto close_out = make_scope_guard([out_fd] { ::close(out_fd); });
 
       if (ftruncate(out_fd, total) < 0) {
 	int ret = errno;
-	ldpp_dout(dpp, 0) << "ERROR: could not trim " << output_name << " to "
-			  << total << ": " << cpp_strerror(ret) << dendl;
+	ldpp_dout_fmt(dpp, 0, "ERROR: could not trim {} to {}: {}", output_name,
+			      total, cpp_strerror(ret));
 	return -ret;
       }
 
-      ldpp_dout(dpp, 15) << "StridedMPUStrategy::assemble: linked "
-			 << parts.size() << " parts, " << total
-			 << " bytes, no copy" << dendl;
+      ldpp_dout_fmt(dpp, 15, "StridedMPUStrategy::assemble: linked {} parts, "
+			     "{} bytes, no copy", parts.size(), total);
       return 0;
     }, y);
   }
@@ -502,8 +500,8 @@ int StridedMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
    * that file. */
   int out_fd = create_output(dpp, id, dir_fd, output_name);
   if (out_fd < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: could not create assembly file "
-		      << output_name << ": " << cpp_strerror(-out_fd) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: could not create assembly file {}: {}",
+			  output_name, cpp_strerror(-out_fd));
     return out_fd;
   }
   auto close_out = make_scope_guard([out_fd] { ::close(out_fd); });
@@ -533,8 +531,8 @@ int StridedMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
       if (shared_fd < 0) {
 	shared_fd = open_input(dpp, id, dir_fd, sname);
 	if (shared_fd < 0) {
-	  ldpp_dout(dpp, 0) << "ERROR: could not open " << sname
-			    << ": " << cpp_strerror(-shared_fd) << dendl;
+	  ldpp_dout_fmt(dpp, 0, "ERROR: could not open {}: {}", sname,
+				cpp_strerror(-shared_fd));
 	  return shared_fd;
 	}
       }
@@ -543,8 +541,8 @@ int StridedMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
       const std::string pname = part_name(part.num);
       own_fd = open_input(dpp, id, dir_fd, pname);
       if (own_fd < 0) {
-	ldpp_dout(dpp, 0) << "ERROR: could not open part " << pname << ": "
-			  << cpp_strerror(-own_fd) << dendl;
+	ldpp_dout_fmt(dpp, 0, "ERROR: could not open part {}: {}", pname,
+			      cpp_strerror(-own_fd));
 	return own_fd;
       }
       src_fd = own_fd;
@@ -553,16 +551,16 @@ int StridedMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
     int ret = fs->copy_range(dpp, src_fd, part.shared ? part.offset : 0,
 			     out_fd, out_offset, part.stored, hints);
     if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: could not copy part " << part.num << ": "
-			<< cpp_strerror(-ret) << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: could not copy part {}: {}", part.num,
+			    cpp_strerror(-ret));
       return ret;
     }
     out_offset += part.stored;
   }
 
-  ldpp_dout(dpp, 10) << "StridedMPUStrategy::assemble: copied "
-		     << parts.size() << " parts, " << out_offset
-		     << " bytes -- placement was not contiguous" << dendl;
+  ldpp_dout_fmt(dpp, 10, "StridedMPUStrategy::assemble: copied {} parts, {} "
+			 "bytes -- placement was not contiguous", parts.size(),
+			 out_offset);
   return 0;
 }
 
@@ -628,8 +626,8 @@ static bool nb_create_params(const DoutPrefixProvider* dpp, int root_fd,
   buf.resize(len);
 
   if (!parser.parse(buf.data(), buf.size())) {
-    ldpp_dout(dpp, 4) << "could not parse " << path << " as JSON;  not "
-		      << "treating it as an upload" << dendl;
+    ldpp_dout_fmt(dpp, 4, "could not parse {} as JSON;  not treating it as an "
+			  "upload", path);
     return false;
   }
   return true;
@@ -649,8 +647,7 @@ bool NooBaaMPUStrategy::staged_upload(const DoutPrefixProvider* dpp,
   }
   JSONObj* kobj = parser.find_obj("key");
   if (!kobj) {
-    ldpp_dout(dpp, 4) << dname << "/" << NB_CREATE_NAME
-		      << " carries no key" << dendl;
+    ldpp_dout_fmt(dpp, 4, "{}/{} carries no key", dname, NB_CREATE_NAME);
     return false;
   }
 
@@ -821,10 +818,9 @@ static std::optional<std::string> nb_scan_tmpdir(const DoutPrefixProvider* dpp,
        * Which one holds the uploads is not decidable from the tree, so
        * reject the write rather than pick -- and do not create a
        * third. */
-      ldpp_dout(dpp, 0) << "ERROR: bucket holds more than one NooBaa temp "
-			<< "directory (" << found << ", " << n << ");  "
-			<< "not guessing which holds multipart uploads"
-			<< dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: bucket holds more than one NooBaa temp "
+			    "directory ({}, {});  not guessing which holds "
+			    "multipart uploads", found, n);
       if (ambiguous) {
 	*ambiguous = true;
       }
@@ -1131,9 +1127,9 @@ bool NooBaaMPUStrategy::upload_info(const DoutPrefixProvider* dpp,
 	  out.obj_retention.set_mode(m->get_data());
 	  out.obj_retention.set_retain_until_date(until);
 	} else {
-	  ldpp_dout(dpp, 0) << "ERROR: upload " << dname << " carries a "
-	    << "retention date this gateway cannot parse (\"" << d->get_data()
-	    << "\");  not applying the retention" << dendl;
+	  ldpp_dout_fmt(dpp, 0, "ERROR: upload {} carries a retention date "
+				"this gateway cannot parse (\"{}\");  not "
+				"applying the retention", dname, d->get_data());
 	}
       }
     }
