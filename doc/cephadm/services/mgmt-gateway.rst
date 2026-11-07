@@ -41,7 +41,7 @@ Security enhancements
 
 Once the ``mgmt-gateway`` service is deployed, each application behind it
 still does its own authentication. Prometheus and Alertmanager ask for their
-user name and password (see :ref:`mgr-cephadm-monitoring`). Grafana allows
+user name and password (see :ref:`cephadm-monitoring-stack-security`). Grafana allows
 anonymous read-only access unless ``anonymous_access`` is ``false`` in the
 Grafana specification. To require a login with an identity provider for all of
 them, deploy the ``oauth2-proxy`` service. See
@@ -169,7 +169,7 @@ Fields specific to the ``spec`` section of the ``mgmt-gateway`` service are desc
 
 .. warning::
 
-   TLSv1.3 is considered safe at this moment and includes a set of secure ciphers by default.
+   TLSv1.3 includes a set of secure ciphers by default.
    When configuring SSL/TLS ciphers for older versions, especially TLSv1.2, it is crucial to
    use only a subset of secure ciphers. Using weak or outdated ciphers can significantly
    compromise the security of your system.
