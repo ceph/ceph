@@ -495,9 +495,12 @@ int POSIXDriver::load_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b,
 /* S3Vectors - load_vector_bucket */
 int POSIXDriver::load_vector_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b, std::unique_ptr<VectorBucket>* bucket, optional_yield y)
 {
-  // Use "s3vector" namespace to separate vector buckets from regular S3 buckets
-  // This ensures they can coexist with the same name
-  std::optional<std::string> vector_ns{"s3vector"};
+  // Use the bucket's tenant (which contains account ID for account-owned buckets)
+  // as the namespace to isolate vector buckets by account.
+  // When tenant is empty (no account), use "s3vector" as the default namespace.
+  std::optional<std::string> vector_ns = b.tenant.empty() ?
+    std::optional<std::string>{"s3vector"} :
+    std::optional<std::string>{b.tenant};
   *bucket = std::make_unique<POSIXVectorBucket>(this, root_dir.get(), b, vector_ns);
   return (*bucket)->load_bucket(dpp, y);
 }
@@ -774,23 +777,25 @@ int POSIXDriver::list_vector_buckets(const DoutPrefixProvider* dpp, const rgw_ow
       errno = 0;
       continue;
     }
-    // Vector buckets use .s3vector_ prefix, skip other dotfiles
-    const std::string_view s3vector_prefix = ".s3vector_";
+    // Vector buckets use namespace prefix (e.g., .s3vector_ or .RGW123_)
+    // Construct the expected prefix based on the tenant parameter
+    const std::string vector_prefix = tenant.empty() ?
+      ".s3vector_" : "." + tenant + "_";
     std::string_view dname(entry->d_name);
-    if (entry->d_name[0] == '.' && !dname.starts_with(s3vector_prefix)) {
-      /* Skip non-vector dotfiles */
+    if (entry->d_name[0] == '.' && !dname.starts_with(vector_prefix)) {
+      /* Skip dotfiles with different namespace prefixes */
       errno = 0;
       continue;
     }
-    // Skip regular buckets (those without the .s3vector_ prefix)
-    if (!dname.starts_with(s3vector_prefix)) {
+    // Skip regular buckets (those without the vector namespace prefix)
+    if (!dname.starts_with(vector_prefix)) {
       errno = 0;
       continue;
     }
-    // Extract the actual bucket name from .s3vector_<encoded_name>
-    std::string bucket_name = url_decode(entry->d_name + s3vector_prefix.length());
+    // Extract the actual bucket name from .<namespace>_<encoded_name>
+    std::string bucket_name = url_decode(entry->d_name + vector_prefix.length());
     std::unique_ptr<VectorBucket> bucket;
-    ret = load_vector_bucket(dpp, rgw_bucket("", bucket_name), &bucket, null_yield);
+    ret = load_vector_bucket(dpp, rgw_bucket(tenant, bucket_name), &bucket, null_yield);
     if (ret < 0) {
       if (ret == -ENOENT) {
         errno = 0;
@@ -873,6 +878,9 @@ int POSIXBucket::create(const DoutPrefixProvider* dpp,
 
   return 0;
 }
+
+/* S3Vectors - POSIXVectorBucket */
+POSIXVectorBucket::~POSIXVectorBucket() = default;
 
 /* S3Vectors - create */
 int POSIXVectorBucket::create(const DoutPrefixProvider* dpp,
@@ -1976,7 +1984,10 @@ int POSIXVectorBucket::remove(const DoutPrefixProvider* dpp,
   int ret = 0;
   if (delete_children) {
     // Delete all indexes stored in the backing bucket via LanceDB
-    ret = rgw::s3vector::remove_indexes(dpp, driver, &info.bucket.tenant, get_name(), true, y);
+    rgw::s3vector::bucket_namespace_t ns;
+    ns.tenant = info.bucket.tenant;
+    ns.account = ""; // POSIX driver embeds account info in tenant field, not stored separately
+    ret = rgw::s3vector::remove_indexes(dpp, driver, ns, get_name(), true, y);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: failed to remove indexes for vector bucket "
                         << get_name() << ": " << cpp_strerror(ret) << dendl;

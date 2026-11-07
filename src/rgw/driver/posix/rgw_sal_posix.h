@@ -596,7 +596,7 @@ public:
 };
 
 class POSIXBucket : public StoreBucket {
-private:
+protected:
   POSIXDriver* driver;
   RGWAccessControlPolicy acls;
   std::optional<std::string> ns{std::nullopt};
@@ -728,43 +728,10 @@ private:
 }; /* POSIXBucket */
 
 /* S3Vectors - class POSIXVectorBucket */
-class POSIXVectorBucket : public StoreVectorBucket {
-private:
-  POSIXDriver* driver;
-  std::optional<std::string> ns{std::nullopt};
-  std::unique_ptr<posix::Directory> dir;
-
+class POSIXVectorBucket : public POSIXBucket {
 public:
-  POSIXVectorBucket(POSIXDriver *_dr, posix::Directory* _p_dir, const rgw_bucket& _b, std::optional<std::string> _ns = std::nullopt)
-    : StoreVectorBucket(_b),
-    driver(_dr),
-    ns(_ns),
-    dir(std::make_unique<posix::Directory>(get_fname(), _p_dir, _dr->ctx()))
-    { }
-
-  POSIXVectorBucket(POSIXDriver *_dr, std::unique_ptr<posix::Directory> _this_dir, const rgw_bucket& _b, std::optional<std::string> _ns = std::nullopt)
-    : StoreVectorBucket(_b),
-    driver(_dr),
-    ns(_ns),
-    dir(std::move(_this_dir))
-    { }
-
-  POSIXVectorBucket(POSIXDriver *_dr, posix::Directory* _p_dir, const RGWBucketInfo& _i)
-    : StoreVectorBucket(_i),
-    driver(_dr),
-    ns(),
-    dir(std::make_unique<posix::Directory>(get_fname(), _p_dir, _dr->ctx()))
-    { }
-
-  POSIXVectorBucket(const POSIXVectorBucket& _b) :
-    StoreVectorBucket(_b),
-    driver(_b.driver),
-    ns(_b.ns)
-    {
-      dir = _b.dir->clone_dir();
-    }
-
-  virtual ~POSIXVectorBucket() { }
+  using POSIXBucket::POSIXBucket;
+  ~POSIXVectorBucket() override;
 
   virtual int remove(const DoutPrefixProvider* dpp, bool delete_children,
                      optional_yield y) override;
@@ -774,12 +741,13 @@ public:
   virtual int load_bucket(const DoutPrefixProvider* dpp, optional_yield y) override;
   virtual int put_info(const DoutPrefixProvider* dpp, bool exclusive,
                        ceph::real_time mtime, optional_yield y) override;
-  virtual int check_empty(const DoutPrefixProvider* dpp, optional_yield y) override;
   virtual int try_refresh_info(const DoutPrefixProvider* dpp, ceph::real_time* pmtime, optional_yield y) override;
-
-  virtual std::unique_ptr<VectorBucket> clone() override {
+  virtual int check_empty(const DoutPrefixProvider* dpp, optional_yield y) override;
+  virtual std::unique_ptr<Bucket> clone() override {
     return std::make_unique<POSIXVectorBucket>(*this);
   }
+  int chown(const DoutPrefixProvider* dpp, const rgw_owner& new_owner,
+              const std::string& new_owner_name, optional_yield y) override { return -ENOTSUP; }
 
   /* Internal APIs */
   int create(const DoutPrefixProvider *dpp, optional_yield y, bool* existed);

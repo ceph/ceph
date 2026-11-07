@@ -2459,6 +2459,7 @@ int RGWUser::execute_remove(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
       set_err_msg(err_msg, "unable to list user vector buckets");
       return ret;
     }
+  } while (!vector_listing.next_marker.empty());
 
   if (!vector_listing.buckets.empty() && !purge_data) {
     set_err_msg(err_msg, "must specify purge data to remove user with vector buckets");
