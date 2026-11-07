@@ -1,0 +1,7 @@
+storage-servers: count=9, CPU-Cores=1, MEM-GB=6
+Log-server: count=3, CPU-Cores=1, MEM-GB=4
+stateless-servers: count=3, CPU-Cores=1, MEM-GB=4
+throttle: disable
+storage_hard_limit_mb: 1500
+engine: ssd-redwood-1
+
