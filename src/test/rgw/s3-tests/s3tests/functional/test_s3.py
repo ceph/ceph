@@ -13155,6 +13155,76 @@ def test_post_object_tags_authenticated_request():
     body = _get_body(response)
     assert body == 'bar'
 
+_misspelled_tagging = ('<Taggin xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><TagSet>'
+                       '<Tag><Key>2</Key><Value>2</Value></Tag></TagSet></Taggin>')
+
+@pytest.mark.tagging
+@pytest.mark.fails_on_dbstore
+def test_put_obj_tagging_misspelled_root():
+    key = 'testputtags'
+    bucket_name = _create_key_with_random_content(key)
+    client = get_client()
+
+    input_tagset = _create_simple_tagset(2)
+    client.put_object_tagging(Bucket=bucket_name, Key=key, Tagging=input_tagset)
+
+    # boto3 always writes a Tagging root, so swap in the raw body
+    lf = (lambda **kwargs: kwargs['params'].update(body=_misspelled_tagging.encode()))
+    client.meta.events.register_first('before-call.s3.PutObjectTagging', lf)
+    e = assert_raises(ClientError, client.put_object_tagging, Bucket=bucket_name, Key=key,
+                      Tagging=input_tagset)
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 400
+    assert error_code == 'MalformedXML'
+
+    # the existing tags are kept
+    response = client.get_object_tagging(Bucket=bucket_name, Key=key)
+    assert response['TagSet'] == input_tagset['TagSet']
+
+@pytest.mark.tagging
+def test_put_bucket_tagging_misspelled_root():
+    bucket_name = get_new_bucket()
+    client = get_client()
+
+    input_tagset = _create_simple_tagset(2)
+    client.put_bucket_tagging(Bucket=bucket_name, Tagging=input_tagset)
+
+    lf = (lambda **kwargs: kwargs['params'].update(body=_misspelled_tagging.encode()))
+    client.meta.events.register_first('before-call.s3.PutBucketTagging', lf)
+    e = assert_raises(ClientError, client.put_bucket_tagging, Bucket=bucket_name,
+                      Tagging=input_tagset)
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 400
+    assert error_code == 'MalformedXML'
+
+    response = client.get_bucket_tagging(Bucket=bucket_name)
+    assert response['TagSet'] == input_tagset['TagSet']
+
+@pytest.mark.tagging
+@pytest.mark.fails_on_dbstore
+def test_post_object_tags_misspelled_root():
+    bucket_name = get_new_bucket_name()
+    client = get_client()
+    url = _get_post_url(bucket_name)
+    client.create_bucket(ACL='public-read-write', Bucket=bucket_name)
+
+    payload = OrderedDict([
+        ("key" , "foo.txt"),
+        ("acl" , "public-read"),
+        ("Content-Type" , "text/plain"),
+        ("tagging", _misspelled_tagging),
+        ('file', ('bar')),
+    ])
+
+    r = requests.post(url, files=payload, verify=get_config_ssl_verify())
+    assert r.status_code == 400
+
+    # no object was created
+    e = assert_raises(ClientError, client.get_object, Bucket=bucket_name, Key='foo.txt')
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 404
+    assert error_code == 'NoSuchKey'
+
 
 @pytest.mark.tagging
 @pytest.mark.fails_on_dbstore
