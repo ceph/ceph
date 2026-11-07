@@ -152,7 +152,6 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
   else()
     string(APPEND CMAKE_EXE_LINKER_FLAGS " -rdynamic")
   endif()
-  string(PREPEND CMAKE_CXX_FLAGS_DEBUG "-Og ")
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wstrict-null-sentinel>)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Woverloaded-virtual>)
   # cmake does not add '-pie' for executables even if
@@ -219,6 +218,18 @@ CHECK_C_COMPILER_FLAG("-D_GLIBCXX_ASSERTIONS" HAS_GLIBCXX_ASSERTIONS)
 if(HAS_GLIBCXX_ASSERTIONS AND CMAKE_BUILD_TYPE STREQUAL Debug)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-D_GLIBCXX_ASSERTIONS>)
 endif()
+
+foreach(lang C CXX)
+  # Before Clang 21, -Og was a bare alias for -O1:
+  # no debuggability gain to justify the build time.
+  if(CMAKE_${lang}_COMPILER_ID STREQUAL GNU OR
+     (CMAKE_${lang}_COMPILER_ID MATCHES "Clang" AND CMAKE_${lang}_COMPILER_VERSION VERSION_GREATER_EQUAL 21))
+    string(PREPEND CMAKE_${lang}_FLAGS_DEBUG "-Og ")
+  endif()
+endforeach()
+# GCC can't honor xxHash's always_inline hints at -Og (xxHash issue 943);
+# only xxhash.c needs this, rgw sets it for its C++ users.
+add_compile_definitions($<$<AND:$<CONFIG:Debug>,$<COMPILE_LANGUAGE:C>>:XXH_NO_INLINE_HINTS=1>)
 
 # add BLAKE3 before we clobber CMAKE_ASM_COMPILER
 add_subdirectory(BLAKE3/c EXCLUDE_FROM_ALL)
