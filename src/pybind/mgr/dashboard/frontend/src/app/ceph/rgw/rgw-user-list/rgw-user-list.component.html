@@ -89,5 +89,18 @@
         ></svg>
       </cds-tooltip>
     }
+    @if (row.system) {
+      <cds-tooltip
+        [description]="'System user'"
+        [align]="'top'"
+        i18n-description
+      >
+        <svg
+          [cdsIcon]="icons.userAdmin"
+          [size]="icons.size16"
+          class="system-user-icon"
+        ></svg>
+      </cds-tooltip>
+    }
   </div>
 </ng-template>
