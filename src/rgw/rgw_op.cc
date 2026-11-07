@@ -8065,6 +8065,15 @@ bool RGWCompleteMultipart::check_previously_completed(const RGWMultiCompleteUplo
     return false;
   }
   rgw::sal::Attrs sattrs = s->object->get_attrs();
+
+  auto iter = sattrs.find(RGW_ATTR_MULTIPART_UPLOAD_ID);
+  if (iter == sattrs.end()) {
+    return false; // not a multipart upload
+  }
+  if (!iter->second.contents_equal(upload_id.data(), upload_id.size())) {
+    return false; // from a different upload id
+  }
+
   string oetag = sattrs[RGW_ATTR_ETAG].to_str();
 
   MD5 hash;
@@ -8098,7 +8107,7 @@ bool RGWCompleteMultipart::check_previously_completed(const RGWMultiCompleteUplo
   etag = oetag;
 
   /* assign cksum and armored_cksum */
-  auto iter = sattrs.find(RGW_ATTR_CKSUM);
+  iter = sattrs.find(RGW_ATTR_CKSUM);
   if (iter != sattrs.end()) {
     auto bliter = iter->second.cbegin();
     try {
