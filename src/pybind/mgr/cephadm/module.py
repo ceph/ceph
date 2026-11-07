@@ -864,6 +864,21 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
         self.last_stray_daemon_check: Optional[datetime.datetime] = None
 
+        self.registry_credentials_present = False
+        self.registry_credential_urls = []
+        registry_credentials = self.get_store('registry_credentials')
+        if registry_credentials:
+            # on the off chance someone put something that isn't a json object
+            # here make sure the module doesn't crash while loading
+            try:
+                credentials_list = json.loads(registry_credentials).get('registry_credentials', [])
+            except json.decoder.JSONDecodeError:
+                logger.warning('Cephadm found registry credentials in mon db not in valid json object')
+                pass
+            else:
+                self.registry_credentials_present = True
+                self.registry_credential_urls = [cred.get('url', '') for cred in credentials_list]
+
     def shutdown(self) -> None:
         self.log.debug('shutdown')
         self._worker_pool.close()
@@ -1698,8 +1713,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         # if logins succeeded, store info
         self.log.debug("Host logins successful. Storing login info.")
         self.set_store('registry_credentials', json.dumps(registry_json))
+        self.registry_credentials_present = True
+        self.registry_credential_urls = [cred.get('url', '') for cred in registry_json.get('registry_credentials', [])]
         # distribute new login info to all hosts
         self.cache.distribute_new_registry_login_info()
+        self._kick_serve_loop()
         return 0, "registry login scheduled", ''
 
     @CephadmCLICommand.Read('cephadm check-host')
