@@ -130,6 +130,7 @@ using ceph::mono_time;
 using ceph::timespan_str;
 
 using namespace std::literals;
+using namespace bluestore;
 
 // kv store prefixes
 const std::string PREFIX_SUPER = "S";       // field -> value
@@ -160,35 +161,6 @@ const vector<uint64_t> bdev_label_positions = {
 #ifdef BLUESTORE_COMMON_CPUTRACE
 cpucounter_group BlueStore::cputrace_bluestore("bluestore");
 #endif
-
-/*
- * object name key structure
- *
- * encoded u8: shard + 2^7 (so that it sorts properly)
- * encoded u64: poolid + 2^63 (so that it sorts properly)
- * encoded u32: hash (bit reversed)
- *
- * escaped string: namespace
- *
- * escaped string: key or object name
- * 1 char: '<', '=', or '>'.  if =, then object key == object name, and
- *         we are done.  otherwise, we are followed by the object name.
- * escaped string: object name (unless '=' above)
- *
- * encoded u64: snap
- * encoded u64: generation
- * 'o'
- */
-#define ONODE_KEY_SUFFIX 'o'
-
-/*
- * extent shard key
- *
- * object prefix key
- * u32
- * 'x'
- */
-#define EXTENT_SHARD_KEY_SUFFIX 'x'
 
 /*
  * string encoding in the key
@@ -337,21 +309,6 @@ static void get_coll_range(const coll_t& cid, int bits,
   end->generation = 0;
   temp_start->generation = 0;
   temp_end->generation = 0;
-}
-
-void get_shared_blob_key(uint64_t sbid, string *key)
-{
-  key->clear();
-  _key_encode_u64(sbid, key);
-}
-
-int get_key_shared_blob(const string& key, uint64_t *sbid)
-{
-  const char *p = key.c_str();
-  if (key.length() < sizeof(uint64_t))
-    return -1;
-  _key_decode_u64(p, sbid);
-  return 0;
 }
 
 template<typename S>
@@ -537,22 +494,6 @@ void generate_extent_shard_key_and_apply(
     rewrite_extent_shard_key(offset, key);
   }
   apply(*key);
-}
-
-int get_key_extent_shard(const string& key, string *onode_key, uint32_t *offset)
-{
-  ceph_assert(key.size() > sizeof(uint32_t) + 1);
-  ceph_assert(*key.rbegin() == EXTENT_SHARD_KEY_SUFFIX);
-  int okey_len = key.size() - sizeof(uint32_t) - 1;
-  *onode_key = key.substr(0, okey_len);
-  const char *p = key.data() + okey_len;
-  _key_decode_u32(p, offset);
-  return 0;
-}
-
-bool is_extent_shard_key(const string& key)
-{
-  return *key.rbegin() == EXTENT_SHARD_KEY_SUFFIX;
 }
 
 static void get_deferred_key(uint64_t seq, string *out)

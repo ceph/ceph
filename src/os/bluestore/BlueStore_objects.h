@@ -31,6 +31,35 @@
 
 namespace bluestore {
 
+/*
+ * object name key structure
+ *
+ * encoded u8: shard + 2^7 (so that it sorts properly)
+ * encoded u64: poolid + 2^63 (so that it sorts properly)
+ * encoded u32: hash (bit reversed)
+ *
+ * escaped string: namespace
+ *
+ * escaped string: key or object name
+ * 1 char: '<', '=', or '>'.  if =, then object key == object name, and
+ *         we are done.  otherwise, we are followed by the object name.
+ * escaped string: object name (unless '=' above)
+ *
+ * encoded u64: snap
+ * encoded u64: generation
+ * 'o'
+ */
+  static constexpr char ONODE_KEY_SUFFIX = 'o';
+
+/*
+ * extent shard key
+ *
+ * object prefix key
+ * u32
+ * 'x'
+ */
+  static constexpr char EXTENT_SHARD_KEY_SUFFIX = 'x';
+
   struct printer {
     static constexpr uint16_t PTR = 1;   // pointer to Blob
     static constexpr uint16_t NICK = 2;  // a nickname of this Blob
@@ -1086,4 +1115,6 @@ void generate_extent_shard_key_and_apply(
   std::string *key,
   std::function<void(const std::string& final_key)> apply);
 
+template<typename S>
+  int get_key_object(const S& key, ghobject_t *oid);
 #endif

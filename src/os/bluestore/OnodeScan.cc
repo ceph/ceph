@@ -25,12 +25,6 @@ using namespace bluestore;
 #define dout_context cct
 #define dout_subsys ceph_subsys_bluestore
 
-int get_key_shared_blob(const string& key, uint64_t *sbid);
-bool is_extent_shard_key(const string& key);
-template<typename S>
-  int get_key_object(const S& key, ghobject_t *oid);
-int get_key_extent_shard(const string& key, string *onode_key, uint32_t *offset);
-
 struct bool_vector_t {
   static constexpr uint8_t null_gen = 0;
   std::vector<uint8_t> gen_markers;
