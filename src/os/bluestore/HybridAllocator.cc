@@ -33,6 +33,7 @@ int64_t HybridBtree2Allocator::allocate(
   uint64_t unit,
   uint64_t max_alloc_size,
   int64_t  hint, // unused and likely unneeded for btree2 allocator
+  alloc_tag_t tag,
   PExtentVector* extents)
 {
   ldout(get_context(), 10) << __func__ << std::hex
@@ -50,7 +51,7 @@ int64_t HybridBtree2Allocator::allocate(
     return want;
   }
   return HybridAllocatorBase<Btree2Allocator>::allocate(want,
-    unit, max_alloc_size, hint, extents);
+    unit, max_alloc_size, hint, tag, extents);
 }
 void HybridBtree2Allocator::release(const release_set_t& release_set)
 {

@@ -24,6 +24,7 @@ public:
     uint64_t unit,
     uint64_t max_alloc_size,
     int64_t  hint,
+    alloc_tag_t tag,
     PExtentVector *extents) override;
   using PrimaryAllocator::release;
   uint64_t get_free() override {
@@ -55,7 +56,8 @@ public:
       bmap_alloc->foreach(notify);
     }
   }
-  void init_rm_free(uint64_t offset, uint64_t length) override;
+  void init_rm_free(uint64_t offset, uint64_t length,
+                    alloc_tag_t tag = alloc_tag_t::unknown()) override;
 
   void expand(int64_t new_size) override {
     std::lock_guard l(PrimaryAllocator::get_lock());
@@ -166,6 +168,7 @@ public:
     uint64_t unit,
     uint64_t max_alloc_size,
     int64_t  hint,
+    alloc_tag_t tag,
     PExtentVector* extents) override;
   void release(const release_set_t& release_set) override;
 };

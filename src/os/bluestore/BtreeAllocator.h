@@ -78,6 +78,7 @@ public:
     uint64_t unit,
     uint64_t max_alloc_size,
     int64_t  hint,
+    alloc_tag_t tag,
     PExtentVector *extents) override;
   void release(const interval_set<uint64_t>& release_set) override;
   uint64_t get_free() override;
@@ -92,7 +93,8 @@ public:
     size_t max_count,
     free_extent_vector_t* out) override;
   void init_add_free(uint64_t offset, uint64_t length) override;
-  void init_rm_free(uint64_t offset, uint64_t length) override;
+  void init_rm_free(uint64_t offset, uint64_t length,
+                    alloc_tag_t tag = alloc_tag_t::unknown()) override;
   void shutdown() override;
 
 private:

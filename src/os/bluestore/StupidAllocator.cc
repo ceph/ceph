@@ -185,6 +185,7 @@ int64_t StupidAllocator::allocate(
   uint64_t alloc_unit,
   uint64_t max_alloc_size,
   int64_t hint,
+  alloc_tag_t tag,
   PExtentVector *extents)
 {
   uint64_t allocated_size = 0;
@@ -358,7 +359,7 @@ void StupidAllocator::init_add_free(uint64_t offset, uint64_t length)
   num_free += length;
 }
 
-void StupidAllocator::init_rm_free(uint64_t offset, uint64_t length)
+void StupidAllocator::init_rm_free(uint64_t offset, uint64_t length, alloc_tag_t tag)
 {
   if (!length)
     return;
