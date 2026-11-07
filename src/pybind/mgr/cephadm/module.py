@@ -4479,7 +4479,7 @@ Then run the following:
         service_name: Optional[str] = None,
         hostname: Optional[str] = None,
     ) -> str:
-        self.cert_mgr.save_key(key_name, key, service_name, hostname, True)
+        self.cert_mgr.save_key(key_name, key, service_name, hostname, user_made=True, editable=True)
         return f'Key for {key_name} set correctly'
 
     @handle_orch_error
@@ -4773,9 +4773,8 @@ Then run the following:
             else:
                 cert_warning += (
                     f"\n\n\nWarning: SSL is configured with '{CertificateSource.REFERENCE.value}', and this service uses per-host certificates.\n\n"
-                    f"To configure keys/certificates, run the following commands for each host daemons are deployed on:\n"
-                    f"  > ceph orch certmgr cert set --cert-name {svc.cert_name} --service-name {spec.service_name()} --hostname <host>  -i <cert-file>\n"
-                    f"  > ceph orch certmgr key set --key-name {svc.cert_name} --service-name {spec.service_name()} --hostname <host> -i <key-file>\n\n"
+                    f"To configure keys/certificates, run the following command for each host daemons are deployed on:\n"
+                    f"  > ceph orch certmgr cert-key set --consumer {spec.service_type} --service-name {spec.service_name()} --hostname <host> -i <cert-key-pem-file>\n\n"
                     f"Once all certificates are provisioned, run:\n"
                     f"  > ceph orch reconfig {spec.service_name()}\n"
                     f"to reconfigure the service with the certificates."

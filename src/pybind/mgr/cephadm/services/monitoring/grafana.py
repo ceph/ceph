@@ -5,7 +5,7 @@ from typing import List, Any, Tuple, Dict, Optional, cast
 from mgr_module import HandleCommandResult
 from ..service_registry import register_cephadm_service
 from cephadm.tlsobject_types import TLSCredentials
-from orchestrator import DaemonDescription
+from orchestrator import DaemonDescription, OrchestratorError
 from ceph.deployment.service_spec import GrafanaSpec, ServiceSpec, MgmtGatewaySpec
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, CephadmService, DaemonDeployContext
 from mgr_util import build_url
@@ -155,9 +155,16 @@ class GrafanaService(CephadmService):
         assert self.TYPE == daemon_spec.daemon_type
 
         tls_pair = self.get_grafana_certificates(daemon_spec)
-        if not tls_pair.cert or not tls_pair.key:
-            # this will lead to an error in the daemon as certificates are needed
-            logger.error(f'Cannot generate the needed certificates to deploy Grafana on {daemon_spec.host}')
+        svc_spec = self.mgr.spec_store[daemon_spec.service_name].spec
+        if svc_spec.ssl and (not tls_pair.cert or not tls_pair.key):
+            # Deploying without them would leave Grafana unable to start, so keep
+            # the current daemon configuration and report the error instead.
+            raise OrchestratorError(
+                f'Cannot get the TLS certificate/key needed to deploy Grafana on {daemon_spec.host} '
+                f'(certificate_source: {getattr(svc_spec, "certificate_source", None)}). '
+                f'Check the certificates with "ceph orch certmgr cert check".',
+                event_kind_subject=('daemon', daemon_spec.name()),
+            )
 
         security_enabled, mgmt_gw_enabled, oauth2_enabled = self.mgr._get_security_config()
         grafana_ini = self.generate_grafana_ini(daemon_spec, mgmt_gw_enabled, oauth2_enabled)
