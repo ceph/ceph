@@ -12,6 +12,10 @@ Ceph Storage Cluster APIs
 
 See :ref:`rados api`
 
+- :ref:`librados C API <rados api c>`.
+- :ref:`librados C++ API <rados api cpp>`.
+- :ref:`librados Python API <librados-python>`.
+- :ref:`libcephsqlite SQLite API <libcephsqlite>`.
 
 Ceph File System APIs
 =====================
