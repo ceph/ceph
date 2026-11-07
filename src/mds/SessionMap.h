@@ -414,6 +414,9 @@ public:
   // True if the session is opened by the client.
   // False if the session is forced to open, until it is opened again by the client.
   bool client_opened = false;
+  // True if the session is forced to open by imports and none of them has
+  // succeeded yet. The last reverted import closes the session.
+  bool forced_open_unused = false;
 
   xlist<Session*>::item item_session_list;
 
