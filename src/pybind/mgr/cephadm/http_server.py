@@ -59,6 +59,31 @@ class CephadmHttpServer(threading.Thread):
     def restart(self) -> None:
         self.cherrypy_restart_event.set()
 
+    def _sample_agent_pool(self) -> Optional[Tuple[int, int]]:
+        """Sample the shared /data + /node-proxy Cheroot worker pool."""
+        stats = getattr(self.mgr, 'agent_metadata_stats', None)
+        adapter = self.agent_adapter
+        if not stats or not adapter:
+            return None
+        try:
+            httpserver = getattr(adapter, 'httpserver', None)
+            requests = getattr(httpserver, 'requests', None)
+            if requests is None:
+                return None
+            idle = getattr(requests, 'idle', None)
+            queued = getattr(requests, 'qsize', None)
+            if callable(idle):
+                idle = idle()
+            if callable(queued):
+                queued = queued()
+            if isinstance(idle, int) and isinstance(queued, int):
+                stats.record_pool(idle, queued)
+                return idle, queued
+        except Exception as e:
+            # Diagnostics must never interfere with the HTTP server lifecycle.
+            self.mgr.log.debug(f'Unable to sample cephadm-agent HTTP worker pool: {e}')
+        return None
+
     def _stop_adapters(self) -> None:
         adapters_to_stop = {
             'service-discovery': getattr(self, 'sd_adapter', None),
@@ -145,7 +170,9 @@ class CephadmHttpServer(threading.Thread):
             return
 
         while not self.cherrypy_shutdown_event.is_set():
-            if self.cherrypy_restart_event.wait(timeout=0.5):
+            restart_requested = self.cherrypy_restart_event.wait(timeout=0.5)
+            self._sample_agent_pool()
+            if restart_requested:
                 self.cherrypy_restart_event.clear()
                 self.mgr.log.debug('Restarting cherrypy server...')
                 self._stop_adapters()
