@@ -8,6 +8,7 @@ import pytest
 
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
 from cephadm.serve import CephadmServe
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from cephadm.inventory import (
     HostCacheStatus,
     ClientKeyringSpec,
@@ -152,6 +153,26 @@ def with_osd_daemon(cephadm_module: CephadmOrchestrator, _run_cephadm, host: str
 
 
 class TestCephadm(object):
+
+    @pytest.mark.parametrize("uuid", ['osd-uuid', None])
+    def test_create_daemon_osd_uuid_from_osdmap(self, cephadm_module, uuid):
+        run = mock.AsyncMock(return_value=(['{}'], [], 0))
+        spec = CephadmDaemonDeploySpec(host='test', daemon_id='1', service_name='osd.foo',
+                                       daemon_type='osd')
+        with mock.patch('cephadm.serve.CephadmServe._run_cephadm', new=run), \
+                with_host(cephadm_module, 'test'), \
+                mock.patch.object(cephadm_module, 'get_osdmap') as get_osdmap, \
+                mock.patch.object(cephadm_module, 'get_osd_uuid_map') as uuid_map:
+            get_osdmap.return_value.get_osd_uuid.return_value = uuid
+            create = CephadmServe(cephadm_module)._create_daemon(spec)
+            if uuid:
+                cephadm_module.wait_async(create)
+                assert json.loads(run.call_args.kwargs['stdin'])['params']['osd_fsid'] == uuid
+            else:
+                with pytest.raises(OrchestratorError, match='osd.1 not in osdmap'):
+                    cephadm_module.wait_async(create)
+            get_osdmap.return_value.get_osd_uuid.assert_called_once_with(1)
+            uuid_map.assert_not_called()
 
     def test_get_osd_uuid_map_includes_down_osds_when_only_up_false(self, cephadm_module):
         cephadm_module.mock_store_set('_ceph_get', 'osd_map', {

@@ -378,7 +378,16 @@ class Module(MgrModule):
         osdmap = self.get_osdmap()
         osdmap.get_epoch()
         osdmap.get_crush_version()
-        osdmap.dump()
+        dump = osdmap.dump()
+
+        assert osdmap.get_require_osd_release() == dump['require_osd_release']
+        assert osdmap.get_pools() == {p['pool']: p for p in dump['pools']}
+        assert osdmap.get_pools_by_name() == {p['pool_name']: p for p in dump['pools']}
+        for osd in dump['osds']:
+            assert osdmap.exists(osd['osd'])
+            assert osdmap.get_osd_uuid(osd['osd']) == osd['uuid']
+        assert not osdmap.exists(dump['max_osd'])
+        assert osdmap.get_osd_uuid(dump['max_osd']) is None
 
         inc = osdmap.new_incremental()
         osdmap.apply_incremental(inc)

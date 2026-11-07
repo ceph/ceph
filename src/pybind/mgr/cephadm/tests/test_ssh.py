@@ -203,3 +203,40 @@ class TestAsyncSSHLogLevel:
 
         mock_set_log_level.assert_called_with('DEBUG')
         mock_set_debug_level.assert_called_with(debug_level)
+
+
+@pytest.mark.skipif(ConnectionLost is None, reason='no asyncssh')
+class TestSSHIdentity:
+
+    @mock.patch("asyncssh.connect")
+    def test_key_is_loaded_once(self, mock_connect, cephadm_module):
+        if not AsyncMock:
+            return
+        mock_connect.side_effect = async_side_effect(mock.MagicMock())
+        key = asyncssh.generate_private_key('ssh-ed25519')
+        cephadm_module.set_store('ssh_identity_key', key.export_private_key().decode())
+        cephadm_module.set_store('ssh_identity_pub', key.export_public_key().decode())
+        cephadm_module.ssh._reconfig_ssh()
+
+        keypairs = cephadm_module.ssh_keypairs
+        assert len(keypairs) == 1
+        assert keypairs[0].public_data == key.public_data
+
+        with mock.patch("asyncssh.load_keypairs") as load_keypairs, \
+                mock.patch("asyncssh.connection.load_default_keypairs") as load_default:
+            cephadm_module.wait_async(cephadm_module.ssh._remote_connection('test', '1::4'))
+            load_keypairs.assert_not_called()
+            load_default.assert_not_called()
+        assert mock_connect.call_args.kwargs['client_keys'] is keypairs
+
+    @mock.patch("asyncssh.connect")
+    def test_bad_key_falls_back_to_file(self, mock_connect, cephadm_module):
+        if not AsyncMock:
+            return
+        mock_connect.side_effect = async_side_effect(mock.MagicMock())
+        cephadm_module.set_store('ssh_identity_key', 'not a key')
+        cephadm_module.ssh._reconfig_ssh()
+
+        assert cephadm_module.ssh_keypairs == []
+        cephadm_module.wait_async(cephadm_module.ssh._remote_connection('test', '1::4'))
+        assert mock_connect.call_args.kwargs['client_keys'] == [cephadm_module.tkey.name]
