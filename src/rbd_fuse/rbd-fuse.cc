@@ -35,8 +35,8 @@
 #include "global/global_context.h"
 
 static int gotrados = 0;
-char *pool_name;
-char *nspace_name;
+const char *pool_name;
+const char *nspace_name;
 char *mount_image_name;
 rados_t cluster;
 rados_ioctx_t ioctx;
@@ -73,7 +73,8 @@ struct rbd_openimage {
 #define MAX_RBD_IMAGES		128
 struct rbd_openimage opentbl[MAX_RBD_IMAGES];
 
-struct rbd_options rbd_options = {(char*) "rbd", (char*) "", NULL};
+// libfuse3 frees the previous value when parsing a string option.
+struct rbd_options rbd_options = {NULL, NULL, NULL};
 
 #define rbdsize(fd)	opentbl[fd].rbd_stat.rbd_info.size
 #define rbdblksize(fd)	opentbl[fd].rbd_stat.rbd_info.obj_size
@@ -509,8 +510,8 @@ rbdfs_init(struct fuse_conn_info *conn
 	if (ret < 0)
 		exit(90);
 
-	pool_name = rbd_options.pool_name;
-	nspace_name = rbd_options.nspace_name;
+	pool_name = rbd_options.pool_name ? rbd_options.pool_name : "rbd";
+	nspace_name = rbd_options.nspace_name ? rbd_options.nspace_name : "";
 	mount_image_name = rbd_options.image_name;
 	ret = rados_ioctx_create(cluster, pool_name, &ioctx);
 	if (ret < 0)
