@@ -407,6 +407,12 @@ def conf_setup(ctx, config):
                     'mon', 'set', 'auth_allowed_ciphers', f'{client_key_type},aes256k']
             mon_remote.run(args=args)
 
+            # keys created later by tests (e.g. `fs authorize`) use the
+            # preferred cipher, which legacy clients may not understand
+            args = ['sudo', 'ceph', '--cluster', cluster_name,
+                    'mon', 'set', 'auth_preferred_cipher', client_key_type]
+            mon_remote.run(args=args)
+
             auth_warnings = [
                 'AUTH_INSECURE_CLIENT_KEY_TYPE',
                 'AUTH_INSECURE_KEYS_ALLOWED',
@@ -791,6 +797,20 @@ def cluster(ctx, config):
     if key_type is not None:
         auth_tool_extra_args.append(f'--key-type={key_type}')
 
+    # the admin keyring is copied to all nodes, including client nodes that
+    # may run legacy ceph versions, so create the admin key with the client
+    # key type. The initial monmap must allow that cipher for auth, otherwise
+    # client.admin cannot authenticate to the monitors.
+    client_key_type = config.get('client_key_type', None)
+    admin_key_type_args = []
+    if client_key_type is not None:
+        admin_key_type_args.append(f'--key-type={client_key_type}')
+        if not any(a.startswith('--auth-allowed-ciphers') for a in monmaptool_extra_args):
+            monmaptool_extra_args = [
+                *monmaptool_extra_args,
+                f'--auth-allowed-ciphers={client_key_type},aes256k',
+            ]
+
     testdir = teuthology.get_testdir(ctx)
     cluster_name = config['cluster']
     data_dir = '{tdir}/{cluster}.data'.format(tdir=testdir, cluster=cluster_name)
@@ -935,6 +955,7 @@ def cluster(ctx, config):
         args=[
             *authtool,
             '--gen-key',
+            *admin_key_type_args,
             '--name=client.admin',
             '--cap', 'mon', 'allow *',
             '--cap', 'osd', 'allow *',
@@ -2259,6 +2280,7 @@ def task(ctx, config):
             mon_bind_addrvec=config.get('mon_bind_addrvec', True),
             cephx=config.get('cephx', {}),
             monmaptool_extra_args=config.get('monmaptool_extra_args', {}),
+            client_key_type=config.get('client_key_type', None),
             crimson_compat=config.get('crimson_compat', False),
         )),
         lambda: run_daemon(ctx=ctx, config=config, type_='mon'),
