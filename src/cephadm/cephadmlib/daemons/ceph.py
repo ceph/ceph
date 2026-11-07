@@ -460,10 +460,16 @@ class OSD(Ceph):
         if osd_lv_data:
             for dev in osd_lv_data:
                 if dev.get('type') == 'block':
+                    dev_osd_fsid = dev.get('tags', {}).get('ceph.osd_fsid')
+                    if self._osd_fsid and dev_osd_fsid != self._osd_fsid:
+                        continue
                     lv_path = dev.get('lv_path', '')
                     encrypted = (
                         dev.get('tags', {}).get('ceph.encrypted', '0') == '1'
                     )
+                    if self._osd_fsid:
+                        break
+
         if not lv_path:
             raise Error(
                 f'Failed to find lv path for osd with id "{self.identity.daemon_id}". Key not rotated using ceph-bluestore-tool'
