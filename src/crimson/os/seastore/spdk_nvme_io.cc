@@ -41,6 +41,7 @@ void ensure_env()
 {
   std::call_once(env_once, [] {
     struct spdk_env_opts opts;
+    opts.opts_size = sizeof(opts);
     spdk_env_opts_init(&opts);
     opts.name = "crimson-seastore";
     // IOVA mode. Left empty by default so DPDK auto-detects: virtual-address
