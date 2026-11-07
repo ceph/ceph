@@ -228,6 +228,10 @@ public:
     return modules.at(name)->finisher;
   }
 
+  auto get_module_cmd_tracker(const std::string &name) {
+    return modules.at(name)->cmd_tracker;
+  }
+
   bool is_pending(std::string_view name) const {
     return pending_modules.count(name) > 0;
   }
