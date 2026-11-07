@@ -40,6 +40,43 @@ from ..net_utils import get_hostname, get_ip_addresses
 logger = logging.getLogger()
 
 
+def _auth_entity_from_keyring(keyring: Optional[str]) -> Optional[str]:
+    """Return the first [entity] section in a keyring, if one is present."""
+    if not isinstance(keyring, str):
+        return None
+    for line in keyring.splitlines():
+        line = line.strip()
+        if len(line) > 2 and line.startswith('[') and line.endswith(']'):
+            return line[1:-1].strip()
+    return None
+
+
+def _valid_crash_entity(entity: str) -> bool:
+    if not entity.startswith('client.crash.') or entity == 'client.crash.':
+        return False
+    if any(char in entity for char in '/\n\r\t '):
+        return False
+    if '..' in entity:
+        return False
+    return True
+
+
+def crash_client_name(ctx: CephadmContext, daemon_id: str) -> str:
+    """Return the cephx entity ceph-crash must authenticate as.
+
+    ``get_unique_name()`` strips a domain suffix from the daemon id, but the
+    mgr creates the key as ``client.crash.<inventory host>``. On a host
+    registered by FQDN those names differ, and passing the short daemon id to
+    ``ceph-crash -n`` makes every post fail. Prefer the entity stored in the
+    deployed keyring so ``-n`` and the keyring filename match the key.
+    """
+    configs = fetch_configs(ctx) or {}
+    entity = _auth_entity_from_keyring(configs.get('keyring'))
+    if entity and _valid_crash_entity(entity):
+        return entity
+    return 'client.crash.%s' % daemon_id
+
+
 @register_daemon_form
 class Ceph(ContainerDaemonForm):
     _daemons = (
@@ -185,12 +222,19 @@ class Ceph(ContainerDaemonForm):
             'crash',
             'ceph-exporter',
         ]:
-            # these do not search for their keyrings in a data directory
-            mounts[
-                data_dir + '/keyring'
-            ] = '/etc/ceph/ceph.client.%s.%s.keyring' % (
-                ident.daemon_type,
-                ident.daemon_id,
+            # these do not search for their keyrings in a data directory.
+            # Ceph opens /etc/ceph/$cluster.$name.keyring, where $name is the
+            # entity passed to -n. Crash keys use the inventory hostname,
+            # which is not always the daemon id.
+            if ident.daemon_type == 'crash':
+                client_name = crash_client_name(ctx, ident.daemon_id)
+            else:
+                client_name = 'client.%s.%s' % (
+                    ident.daemon_type,
+                    ident.daemon_id,
+                )
+            mounts[data_dir + '/keyring'] = (
+                '/etc/ceph/ceph.%s.keyring' % client_name
             )
         return mounts
 
@@ -291,7 +335,7 @@ class Ceph(ContainerDaemonForm):
         elif ident.daemon_type == 'cephfs-mirror':
             name = 'client.cephfs-mirror.%s' % ident.daemon_id
         elif ident.daemon_type == 'crash':
-            name = 'client.crash.%s' % ident.daemon_id
+            name = crash_client_name(ctx, ident.daemon_id)
         elif ident.daemon_type in ['mon', 'mgr', 'mds', 'osd']:
             name = ident.daemon_name
         else:
