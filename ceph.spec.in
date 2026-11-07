@@ -2238,6 +2238,7 @@ fi
 %files mgr
 %{_bindir}/ceph-mgr
 %dir %{_datadir}/ceph/mgr
+%{_datadir}/ceph/mgr/mgr_debug.*
 %{_datadir}/ceph/mgr/mgr_module.*
 %{_datadir}/ceph/mgr/mgr_util.*
 %{_datadir}/ceph/mgr/object_format.*
