@@ -49,7 +49,7 @@ Pull an explicit version tag or an image digest, for example:
 
 .. prompt:: bash #
 
-   podman pull quay.io/ceph/ceph:v20.2.4
+   podman pull quay.io/ceph/ceph:v21.2.0
 
 ``quay.io/ceph/ceph`` has no ``:latest`` tag, and tags such as ``v20`` and
 ``v20.2`` move when a new :term:`point release <Ceph Point Release>` ships.
