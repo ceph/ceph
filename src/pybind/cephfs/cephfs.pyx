@@ -642,8 +642,11 @@ cdef class LibCephFS(object):
     def get_addrs(self):
         """
         Get associated client addresses with this RADOS session.
+
+        Available once the client is initialized, so a caller can register
+        the address before it does any I/O.
         """
-        self.require_state("mounted")
+        self.require_state("initialized", "mounted")
 
         cdef:
             char* addrs = NULL
