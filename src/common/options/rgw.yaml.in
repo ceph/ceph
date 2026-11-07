@@ -1748,18 +1748,6 @@ options:
   see_also:
   - rgw_zonegroup_root_pool
   with_legacy: true
-- name: rgw_default_region_info_oid
-  type: str
-  level: advanced
-  desc: Default region info object id
-  long_desc: Obsolete config option. The rgw_default_zonegroup_info_oid should be
-    used instead.
-  default: default.region
-  services:
-  - rgw
-  see_also:
-  - rgw_default_zonegroup_info_oid
-  with_legacy: true
 - name: rgw_zonegroup
   type: str
   level: advanced

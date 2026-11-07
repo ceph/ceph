@@ -46,7 +46,6 @@ extern std::string region_info_oid_prefix;
 extern std::string realm_names_oid_prefix;
 extern std::string zone_group_info_oid_prefix;
 extern std::string realm_info_oid_prefix;
-extern std::string default_region_info_oid;
 extern std::string default_zone_group_info_oid;
 extern std::string region_map_oid;
 extern std::string default_realm_info_oid;
