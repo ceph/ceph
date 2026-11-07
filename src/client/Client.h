@@ -1304,6 +1304,7 @@ protected:
    * @param pool the pool ID affected, or -1 if all.
    */
   void _handle_full_flag(int64_t pool);
+  void _discard_dirty_data_after_blocklist();
 
   void _close_sessions();
 
