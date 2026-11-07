@@ -1,0 +1,17 @@
+tasks:
+- ceph:
+    wait-for-scrub: false
+    log-ignorelist:
+      - overall HEALTH_
+      - \(MGR_DOWN\)
+      - \(PG_
+      - \(POOL_APP_NOT_ENABLED\)
+# runs first: the mgr tests below disable non always-on modules (iostat)
+- workunit:
+    clients:
+      client.0:
+        - mgr/test_per_module_finisher.sh
+- cephfs_test_runner:
+    modules:
+      - tasks.mgr.test_module_selftest.TestModuleSelftest.test_selftest_run
+      - tasks.mgr.test_failover.TestFailover.test_explicit_fail
