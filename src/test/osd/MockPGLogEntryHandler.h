@@ -28,9 +28,9 @@
 // information when appending entries to the log
 class MockPGLogEntryHandler : public PGLog::LogEntryHandler {
  public:
-  MockPGBackend *backend;
+  PGBackend *backend;
   ObjectStore::Transaction *t;
-  MockPGLogEntryHandler(MockPGBackend *backend, ObjectStore::Transaction *t) : backend(backend), t(t) {}
+  MockPGLogEntryHandler(PGBackend *backend, ObjectStore::Transaction *t) : backend(backend), t(t) {}
 
   // LogEntryHandler
   void remove(const hobject_t &hoid) override {

@@ -676,7 +676,10 @@ public:
   hobject_t get_temp_recovery_object(
     const hobject_t& target,
     eversion_t version) override {
-    return hobject_t();
+    // As PrimaryLogPG: unique per PG shard, version and snap
+    std::ostringstream ss;
+    ss << "temp_recovering_" << pg_whoami << "_" << version << "_" << target.snap;
+    return target.make_temp_hobject(ss.str());
   }
 
   void send_message_osd_cluster(
