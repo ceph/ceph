@@ -2307,6 +2307,13 @@ void Server::early_reply(const MDRequestRef& mdr, CInode *tracei, CDentry *trace
     return;
   }
 
+  // request_kill() detaches a request that already has peers from its
+  // session and lets it run to completion; nobody is left to reply to.
+  if (!mdr->session) {
+    dout(10) << "early_reply - no session, not replying." << dendl;
+    return;
+  }
+
   if (mdr->has_more() && mdr->more()->has_journaled_peers) {
     dout(10) << "early_reply - there are journaled peers, not allowed." << dendl;
     return; 
