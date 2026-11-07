@@ -262,8 +262,14 @@ private:
   ceph_release_t last_require_osd_release{ceph_release_t::unknown};
 
   seastar::promise<> stop_acked;
+  bool stop_ack_received = false;
+  // Idempotent: both handle_mark_me_down and committed_osd_maps may
+  // fire in the PRESTOP window.
   void got_stop_ack() {
-    stop_acked.set_value();
+    if (!stop_ack_received) {
+      stop_ack_received = true;
+      stop_acked.set_value();
+    }
   }
   seastar::future<> prepare_to_stop();
   bool should_restart() const;
