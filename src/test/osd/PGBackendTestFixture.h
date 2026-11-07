@@ -723,6 +723,18 @@ public:
     bufferlist& out_data,
     uint64_t object_size);
 
+  /**
+   * Direct read of one extent from the shard of backend. As in
+   * PrimaryLogPG::do_op, a read that holds none of the shard's data is
+   * refused with -EINVAL.
+   */
+  int direct_read(
+    PGBackend* backend,
+    const hobject_t& hoid,
+    uint64_t offset,
+    uint64_t length,
+    bufferlist& out_data);
+
   int delete_object(const std::string& obj_name);
 
   /**
