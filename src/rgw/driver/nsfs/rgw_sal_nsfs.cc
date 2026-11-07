@@ -8785,8 +8785,8 @@ static int convert_attrs(const DoutPrefixProvider* dpp, optional_yield y,
    * account import has made that an RGW account.  Adoption is where the
    * tree becomes consistent with the imported accounts, so an object
    * that records no owner is given its bucket's here -- the owner an
-   * unconverted listing shows, and the one RGW stamps on a write into a
-   * BucketOwnerEnforced bucket.
+   * unconverted listing shows, and the one RGW records as the owner of
+   * a write into a BucketOwnerEnforced bucket.
    * Never the file's uid, which is the POSIX identity it was written
    * as, not an S3 owner.
    *
@@ -11495,8 +11495,9 @@ int NSFSBucket::create(const DoutPrefixProvider* dpp, optional_yield y, bool* ex
 
   const bool made = !existed || !*existed;
 
-  /* Stamp a bucket we made, so that everything this deployment creates
-   * is marked and only trees that came from somewhere else are not.
+  /* Mark a bucket we made with its extension set (mark_extensions()),
+   * so that everything this deployment creates is marked and only
+   * trees that came from somewhere else are not.
    * Only an internal bucket reaches here over a directory that already
    * exists -- a client's is rejected above -- and that directory keeps
    * the profile it already has:  marking is adoption's act, not a side
