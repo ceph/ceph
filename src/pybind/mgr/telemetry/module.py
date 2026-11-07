@@ -1944,37 +1944,20 @@ Please consider enabling the telemetry module with 'ceph telemetry on'.'''
         '''
         Preview a sample report of the most recent collections available (except for 'device')
         '''
-        report = {}
-
-        # We use a lock to prevent a scenario where the user wishes to preview
-        # the report, and at the same time the module hits the interval of
-        # sending a report with the opted-in collection, which has less data
-        # than in the preview report.
         col_delta = self.collection_delta()
-        with self.get_report_lock:
-            if col_delta is not None and len(col_delta) == 0:
-                # user is already opted-in to the most recent collection
-                msg = 'Telemetry is up to date, see report with `ceph telemetry show`.'
-                return 0, msg, ''
-            else:
-                # there are collections the user is not opted-in to
-                next_collection = []
+        if col_delta is not None and len(col_delta) == 0:
+            # user is already opted-in to the most recent collection
+            msg = 'Telemetry is up to date, see report with `ceph telemetry show`.'
+            return 0, msg, ''
 
-                for c in MODULE_COLLECTION:
-                    next_collection.append(c['name'].name)
-
-                opted_in_collection = self.db_collection
-                self.db_collection = next_collection
-                report = self.get_report(channels=channels)
-                self.db_collection = opted_in_collection
-
+        report = self.get_preview_report_locked(channels=channels)
         self.format_perf_histogram(report)
-        report = json.dumps(report, indent=4, sort_keys=True)
+        report_str = json.dumps(report, indent=4, sort_keys=True)
 
         if self.channel_device:
-            report += '''\nDevice report is generated separately. To see it run 'ceph telemetry preview-device'.'''
+            report_str += '''\nDevice report is generated separately. To see it run 'ceph telemetry preview-device'.'''
 
-        return 0, report, ''
+        return 0, report_str, ''
 
     @TelemetryCLICommand.Read('telemetry show-device')
     def show_device(self) -> Tuple[int, str, str]:
@@ -2000,30 +1983,15 @@ Please consider enabling the telemetry module with 'ceph telemetry on'.'''
         '''
         Preview a sample device report of the most recent device collection
         '''
-        report = {}
-
         device_col_delta = self.collection_delta(['device'])
-        with self.get_report_lock:
-            if device_col_delta is not None and len(device_col_delta) == 0 and self.channel_device:
-                # user is already opted-in to the most recent device collection,
-                # and device channel is on, thus `show-device` should be called
-                msg = 'device channel is on and up to date, see report with `ceph telemetry show-device`.'
-                return 0, msg, ''
+        if device_col_delta is not None and len(device_col_delta) == 0 and self.channel_device:
+            # user is already opted-in to the most recent device collection,
+            # and device channel is on, thus `show-device` should be called
+            msg = 'device channel is on and up to date, see report with `ceph telemetry show-device`.'
+            return 0, msg, ''
 
-            # either the user is not opted-in at all, or there are collections
-            # they are not opted-in to
-            next_collection = []
-
-            for c in MODULE_COLLECTION:
-                next_collection.append(c['name'].name)
-
-            opted_in_collection = self.db_collection
-            self.db_collection = next_collection
-            report = self.get_report('device')
-            self.db_collection = opted_in_collection
-
-        report = json.dumps(report, indent=4, sort_keys=True)
-        return 0, report, ''
+        report = self.get_preview_report_locked('device')
+        return 0, json.dumps(report, indent=4, sort_keys=True), ''
 
     @TelemetryCLICommand.Read('telemetry show-all')
     def show_all(self) -> Tuple[int, str, str]:
@@ -2051,39 +2019,39 @@ Please consider enabling the telemetry module with 'ceph telemetry on'.'''
         '''
         Preview a sample report of the most recent collections available of all channels (including 'device')
         '''
-        report = {}
-
         col_delta = self.collection_delta()
-        with self.get_report_lock:
-            if col_delta is not None and len(col_delta) == 0:
-                # user is already opted-in to the most recent collection
-                msg = 'Telemetry is up to date, see report with `ceph telemetry show`.'
-                return 0, msg, ''
+        if col_delta is not None and len(col_delta) == 0:
+            # user is already opted-in to the most recent collection
+            msg = 'Telemetry is up to date, see report with `ceph telemetry show`.'
+            return 0, msg, ''
 
-            # there are collections the user is not opted-in to
-            next_collection = []
-
-            for c in MODULE_COLLECTION:
-                next_collection.append(c['name'].name)
-
-            opted_in_collection = self.db_collection
-            self.db_collection = next_collection
-            report = self.get_report('all')
-            self.db_collection = opted_in_collection
-
+        report = self.get_preview_report_locked('all')
         self.format_perf_histogram(report)
-        report = json.dumps(report, indent=4, sort_keys=True)
-
-        return 0, report, ''
+        return 0, json.dumps(report, indent=4, sort_keys=True), ''
 
     def get_report_locked(self,
                           report_type: str = 'default',
                           channels: Optional[List[str]] = None) -> Dict[str, Any]:
         '''
-        A wrapper around get_report to allow for compiling a report of the most recent module collections
+        A wrapper around get_report to allow for compiling a report of the opted-in module collections
         '''
         with self.get_report_lock:
             return self.get_report(report_type, channels)
+
+    def get_preview_report_locked(self,
+                                  report_type: str = 'default',
+                                  channels: Optional[List[str]] = None) -> Dict[str, Any]:
+        '''
+        A wrapper around get_report to allow for compiling a report of the most recent module collections
+        '''
+        with self.get_report_lock:
+            next_collection = [c['name'].name for c in MODULE_COLLECTION]
+            opted_in_collection = self.db_collection
+            try:
+                self.db_collection = next_collection
+                return self.get_report(report_type, channels)
+            finally:
+                self.db_collection = opted_in_collection
 
     def get_report(self,
                    report_type: str = 'default',

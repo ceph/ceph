@@ -1,4 +1,4 @@
-from .helper import DashboardTestCase, JObj
+from .helper import DashboardTestCase, JList, JObj
 
 
 class TelemetryTest(DashboardTestCase):
@@ -78,6 +78,20 @@ class TelemetryTest(DashboardTestCase):
             'device_report': JObj({}, allow_unknown=True)
         })
         self.assertSchema(data, schema)
+
+    def test_get_report_when_disabled(self):
+        self._disable_module()
+        self._check_telemetry_enabled(False)
+        data = self._get('/api/telemetry/report')
+        self.assertStatus(200)
+        schema = JObj({
+            'report': JObj({
+                'collections_opted_in': JList(str),
+            }, allow_unknown=True),
+            'device_report': JObj({}, allow_unknown=True)
+        })
+        self.assertSchema(data, schema)
+        self.assertTrue(len(data['report']['collections_opted_in']) > 0)
 
     @classmethod
     def _enable_module(cls):
