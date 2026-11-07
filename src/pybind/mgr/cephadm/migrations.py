@@ -1,7 +1,7 @@
 import json
 import re
 import logging
-from typing import TYPE_CHECKING, Iterator, Optional, Dict, Any, List, cast
+from typing import TYPE_CHECKING, Iterator, Optional, Dict, Any, List, Set, cast
 
 from ceph.deployment.service_spec import PlacementSpec, ServiceSpec, HostPlacementSpec, RGWSpec, CertificateSource, NFSServiceSpec
 from cephadm.schedule import HostAssignment
@@ -17,7 +17,7 @@ from orchestrator import OrchestratorError, DaemonDescription
 if TYPE_CHECKING:
     from .module import CephadmOrchestrator
 
-LAST_MIGRATION = 11
+LAST_MIGRATION = 12
 
 logger = logging.getLogger(__name__)
 
@@ -138,6 +138,11 @@ class Migrations:
             logger.info('Running migration 10 -> 11')
             if self.migrate_10_11():
                 self.set(11)
+
+        if self.mgr.migration_current == 11:
+            logger.info('Running migration 11 -> 12')
+            if self.migrate_11_12():
+                self.set(12)
 
     def migrate_0_1(self) -> bool:
         """
@@ -661,6 +666,177 @@ class Migrations:
             self.mgr.set_store('nfs_services_with_old_userid', ','.join(nfs_services))
         self.mgr.remove_health_warning('CEPHADM_MIGRATION_FAILURE')
         return True
+
+    def migrate_11_12(self) -> bool:
+        """
+        Carry user-provided Grafana certificates over from the Tentacle certmgr
+        layout to the current one.
+
+        Tentacle stored per-host Grafana certificates under 'grafana_cert' and
+        'grafana_key'. They are now named 'grafana_ssl_cert' and 'grafana_ssl_key',
+        and which certificate a service uses is selected by the spec's
+        certificate_source. The old entries are no longer loaded by the
+        TLSObjectStore, so without this migration a user-provided certificate is
+        silently replaced by a cephadm-signed one after the upgrade.
+
+        For every host with a legacy entry holding a user-provided certificate,
+        the cert/key pair is copied to the new names as an editable, user-made
+        pair. Certificates are migrated as long as they are valid, even when
+        they are close to expiration: the user provided them, so they are kept
+        and the regular certificate health checks report the remaining validity.
+        Expired, unparsable or key-less certificates are not migrated. If every
+        host running Grafana ends up with a user-provided pair, the Grafana spec
+        is switched to certificate_source 'reference' so the daemons keep serving
+        the user's certificate; otherwise a health warning explains what is left
+        to do. Cephadm-generated certificates are left behind, as cephadm-signed
+        ones will be generated for them.
+
+        The legacy entries are removed from the mgr store once processed:
+        nothing reads them on this release and TLSObjectStore.load() would
+        otherwise discard them as unknown objects on every mgr start.
+        """
+        legacy_cert_name, legacy_key_name = 'grafana_cert', 'grafana_key'
+        cert_name, key_name = 'grafana_ssl_cert', 'grafana_ssl_key'
+        try:
+            def load_legacy_entries(kind: str, name: str) -> Dict[str, Dict[str, Any]]:
+                raw = self.mgr.get_store(f'cert_store.{kind}.{name}')
+                if not raw:
+                    return {}
+                try:
+                    entries = json.loads(raw)
+                except json.JSONDecodeError as e:
+                    logger.warning(f'Cannot parse legacy {kind} entry {name!r}: {e}')
+                    return {}
+                if not isinstance(entries, dict):
+                    logger.warning(f'Unexpected format for legacy {kind} entry {name!r}, skipping')
+                    return {}
+                return {h: v for h, v in entries.items() if isinstance(v, dict)}
+
+            def is_cephadm_generated(cert: str, user_made: bool) -> Optional[bool]:
+                if user_made:
+                    return False
+                try:
+                    org, cn = get_cert_issuer_info(cert)
+                except Exception as e:
+                    logger.warning(f'Cannot read the issuer of a legacy Grafana certificate: {e}')
+                    return None
+                # signed by the cephadm root CA (Tentacle and later)
+                if cn and (cn == 'cephadm-root' or cn.startswith('cephadm-root-')):
+                    return True
+                # legacy cephadm self-signed certificates (Squid and earlier):
+                # the monitoring stack used to issue them with
+                # create_self_signed_cert('Ceph', <host fqdn>), so their issuer
+                # is O=Ceph with the host FQDN as CN. Align with migrate_6_7,
+                # which treats org == 'Ceph' as cephadm-generated.
+                return org == 'Ceph'
+
+            def drop_legacy_entries(kind: str, name: str, hosts: Set[str]) -> None:
+                if not hosts:
+                    return
+                raw = self.mgr.get_store(f'cert_store.{kind}.{name}')
+                if not raw:
+                    return
+                try:
+                    entries = json.loads(raw)
+                except json.JSONDecodeError:
+                    return
+                if not isinstance(entries, dict):
+                    return
+                remaining = {h: v for h, v in entries.items() if h not in hosts}
+                if not remaining:
+                    self.mgr.set_store(f'cert_store.{kind}.{name}', None)
+                    logger.info(f'Removed legacy {kind} entry {name!r} from the mgr store')
+                elif len(remaining) < len(entries):
+                    self.mgr.set_store(f'cert_store.{kind}.{name}', json.dumps(remaining))
+                    logger.info(f'Removed {len(entries) - len(remaining)} processed host(s) from '
+                                f'legacy {kind} entry {name!r}')
+
+            legacy_certs = load_legacy_entries('cert', legacy_cert_name)
+            if not legacy_certs:
+                return True
+            legacy_keys = load_legacy_entries('key', legacy_key_name)
+
+            grafana_specs = self.mgr.spec_store.get_specs_by_type('grafana')
+            if not grafana_specs:
+                logger.info('No Grafana service found, skipping Grafana certificates migration')
+                return True
+
+            hosts_with_user_certs = set()
+            processed_hosts = set()
+            for host, cert_entry in legacy_certs.items():
+                cert = cert_entry.get('cert', '')
+                if not cert:
+                    logger.warning(f'Legacy Grafana certificate entry for host {host} is empty, not migrating it')
+                    continue
+
+                generated = is_cephadm_generated(cert, bool(cert_entry.get('user_made', False)))
+                if generated is None:
+                    # cannot classify it; leave the legacy entry in place
+                    continue
+                if generated:
+                    # cephadm-signed ones will be (re)generated, nothing to carry over
+                    processed_hosts.add(host)
+                    continue
+
+                key = legacy_keys.get(host, {}).get('key', '')
+                if not key:
+                    logger.warning(f'Legacy Grafana certificate for host {host} has no key, not migrating it')
+                    continue
+
+                if self.mgr.cert_mgr.cert_exists(cert_name, host=host):
+                    # already provisioned under the new name (e.g. by the user)
+                    logger.info(f'{cert_name} already present for host {host}, keeping it')
+                    hosts_with_user_certs.add(host)
+                    processed_hosts.add(host)
+                    continue
+
+                cert_info = self.mgr.cert_mgr.check_certificate_state(cert_name, host, cert, key)
+                if not cert_info.is_valid:
+                    logger.warning(f'Legacy Grafana certificate for host {host} is not valid, not migrating it: '
+                                   f'{cert_info.get_status_description()}')
+                    continue
+
+                logger.info(f'Migrating user-provided Grafana certificate for host {host} to {cert_name}/{key_name}')
+                self.mgr.cert_mgr.save_cert(cert_name, cert, host=host, user_made=True, editable=True)
+                self.mgr.cert_mgr.save_key(key_name, key, host=host, user_made=True, editable=True)
+                hosts_with_user_certs.add(host)
+                processed_hosts.add(host)
+
+            # Nothing on this release reads the legacy names anymore: drop the
+            # entries that were processed so TLSObjectStore.load() stops
+            # discarding them as unknown objects on every mgr start.
+            drop_legacy_entries('cert', legacy_cert_name, processed_hosts)
+            drop_legacy_entries('key', legacy_key_name, processed_hosts)
+
+            if not hosts_with_user_certs:
+                return True
+
+            for service_name, spec in grafana_specs.items():
+                if not spec.is_using_certificates_source(CertificateSource.CEPHADM_SIGNED):
+                    continue
+                grafana_hosts = {dd.hostname for dd in self.mgr.cache.get_daemons_by_service(service_name) if dd.hostname}
+                if not grafana_hosts or not grafana_hosts.issubset(hosts_with_user_certs):
+                    summary = (f'Not switching {service_name} to certificate_source '
+                               f'{CertificateSource.REFERENCE.value!r}: user-provided certificates were '
+                               f'found for {sorted(hosts_with_user_certs)} but {service_name} runs on '
+                               f'{sorted(grafana_hosts)}.')
+                    detail = [f'Provide a user-provided certificate for every Grafana host with '
+                              f"'ceph orch certmgr cert-key set grafana --hostname <host> -i <pem-file>' "
+                              f"and set certificate_source to '{CertificateSource.REFERENCE.value}' in the spec."]
+                    logger.warning(summary)
+                    self.mgr.set_health_warning('CEPHADM_MIGRATION_WARNING', summary, 1, detail)
+                    continue
+                logger.info(f'Setting certificate_source to {CertificateSource.REFERENCE.value!r} for {service_name}')
+                spec.certificate_source = CertificateSource.REFERENCE.value
+                self.mgr.spec_store.save(spec)
+
+            return True
+        except Exception as e:
+            logger.exception(f'Grafana certificates migration 11 -> 12 failed: {e}')
+            self.mgr.set_health_warning('CEPHADM_MIGRATION_FAILURE',
+                                        f'Cephadm migration failed: {e}',
+                                        1, [str(e)])
+            return False
 
 
 def queue_migrate_rgw_spec(mgr: "CephadmOrchestrator", spec_dict: Dict[Any, Any]) -> None:

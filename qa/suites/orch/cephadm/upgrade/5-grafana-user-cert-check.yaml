@@ -1,0 +1,30 @@
+# See 2-grafana-user-cert.yaml. This fragment shares the '5-' numeric prefix
+# with 5-upgrade-ls.yaml on purpose: this directory is a teuthology product
+# (it contains a '%' file), so every fragment is part of every job and the
+# number only fixes the ordering.
+tasks:
+- cephadm.shell:
+    mon.a:
+      - |
+        if ! fp=$(ceph config-key get qa/grafana_user_cert_fp); then
+            echo "no grafana user certificate set up before the upgrade"
+            exit 0
+        fi
+        host=$(ceph orch ps --daemon-type grafana --format json | jq -r '.[0].hostname')
+        if [ -z "$host" ] || [ "$host" = "null" ]; then
+            echo "no grafana daemon found"
+            exit 1
+        fi
+        addr=$(ceph orch host ls --format json | jq -r --arg h "$host" '.[] | select(.hostname == $h) | .addr')
+        ceph orch certmgr cert get grafana_ssl_cert --hostname "$host" > /tmp/grafana.crt
+        stored=$(python3 -c 'import hashlib, ssl, sys; print(hashlib.sha256(ssl.PEM_cert_to_DER_cert(open(sys.argv[1]).read())).hexdigest())' /tmp/grafana.crt)
+        [ "$stored" = "$fp" ]
+        ceph orch certmgr key get grafana_ssl_key --hostname "$host" > /dev/null
+        ceph orch ls grafana --export --format json | jq -e '.[0].spec.certificate_source == "reference"'
+        for i in $(seq 60); do
+            served=$(python3 -c 'import hashlib, ssl, sys; print(hashlib.sha256(ssl.PEM_cert_to_DER_cert(ssl.get_server_certificate((sys.argv[1], 3000)))).hexdigest())' "$addr" || true)
+            [ "$served" = "$fp" ] && break
+            sleep 10
+        done
+        [ "$served" = "$fp" ]
+        ceph config-key rm qa/grafana_user_cert_fp
