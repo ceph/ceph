@@ -1469,7 +1469,8 @@ private:
 
   ShardedThreadPool osd_op_tp;
 
-  void get_latest_osdmap();
+  /// @return the epoch of the newest osdmap, once the Objecter has it
+  epoch_t get_latest_osdmap();
 
   // -- sessions --
 private:

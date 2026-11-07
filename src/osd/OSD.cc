@@ -2994,7 +2994,9 @@ will start to track new ops received afterwards.";
     service.get_scrub_services().dump_scrub_reservations(f);
     f->close_section();
   } else if (prefix == "get_latest_osdmap") {
-    get_latest_osdmap();
+    const epoch_t epoch = get_latest_osdmap();
+    Formatter::ObjectSection os{*f, "osdmap"};
+    f->dump_unsigned("epoch", epoch);
   } else if (prefix == "set_heap_property") {
     string property;
     int64_t value = 0;
@@ -10616,14 +10618,17 @@ void OSD::check_config()
 
 // --------------------------------
 
-void OSD::get_latest_osdmap()
+epoch_t OSD::get_latest_osdmap()
 {
-  dout(10) << __func__ << " -- start" << dendl;
+  dout(10) << fmt::format("{} -- start", __func__) << dendl;
 
   boost::system::error_code ec;
   service.objecter->wait_for_latest_osdmap(ceph::async::use_blocked[ec]);
+  const epoch_t epoch =
+    service.objecter->with_osdmap(std::mem_fn(&OSDMap::get_epoch));
 
-  dout(10) << __func__ << " -- finish" << dendl;
+  dout(10) << fmt::format("{} -- finish (epoch {})", __func__, epoch) << dendl;
+  return epoch;
 }
 
 // --------------------------------
