@@ -33,16 +33,26 @@ public:
     return m_xlist_item.is_on_list();
   }
 
-  void start_op(ImageCtx &image_ctx);
+  // pass writes=false for an op that never changes the image, so that
+  // flush_writes() doesn't wait for it
+  void start_op(ImageCtx &image_ctx, bool writes = true);
   void finish_op();
 
+  // wait for all older operations to finish
   void flush(Context *on_finish);
+  // wait for all older operations that may write to finish
+  void flush_writes(Context *on_finish);
 
 private:
 
   ImageCtx *m_image_ctx;
+  bool m_writes = true;
   xlist<AsyncOperation *>::item m_xlist_item;
   std::list<Context *> m_flush_contexts;
+  std::list<Context *> m_flush_writes_contexts;
+
+  // the next older op, or nullptr. requires async_ops_lock
+  AsyncOperation* find_older_op(bool writes_only);
 
 };
 
