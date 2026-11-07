@@ -306,13 +306,14 @@ Only the pool changes: the inode number, the striping and the rest of the
 layout stay as they are.  Naming the pool the file is already in does nothing,
 and is not an error.
 
-This works on one regular file at a time.  It does not work on directories, and
-it does not walk a tree: to move many files, run it on each one.
+This works on one regular file.  To move every file below a directory, see
+:ref:`cephfs-moving-a-tree-to-another-pool`.
 
 .. note::
 
-   This feature is new.  It has been tested with one active MDS only, and
-   ``cephfs-data-scan`` has not been tested on pools that hold migrated files.
+   This feature is new.  It has been tested with up to three active MDS ranks,
+   but not at a large scale, and ``cephfs-data-scan`` has not been tested on
+   pools that hold migrated files.
 
 What happens to the file
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -323,8 +324,14 @@ been copied and the new layout is safe in the MDS journal.  During that time:
 * The MDS asks every client to flush any data it has buffered for the file, so
   nothing is lost and nothing arrives in the old pool afterwards.
 * Other clients' reads and writes of the file wait until the copy has finished.
-  A big file can therefore stall its readers and writers for as long as the
-  copy takes.  Clients that have the file open carry on afterwards.
+  Clients that have the file open carry on afterwards.
+* A file of at least ``mds_file_migrate_precopy_min`` (64 MiB by default) that
+  nobody has open for writing is copied first while clients keep using it.  The
+  MDS then takes the file's locks only to check that it did not change, so
+  readers wait for a moment rather than for the whole copy.  If the file did
+  change, or the copy failed, it is copied again with the locks held.  Smaller
+  files, and files open for writing, are always copied with the locks held, so
+  their readers and writers wait for as long as the copy takes.
 
 If the copy fails, ``setfattr`` returns the error and the file stays where it
 was.  If the MDS fails during the copy, the file also stays where it was, but
@@ -400,3 +407,71 @@ delete the pool, a client that still reads through a redirect, and a snapshot
 that stayed behind, read zeros in place of the file's data, with no error.
 Deleting a file removes what it left in the old pool, once its snapshots are
 gone too.
+
+.. _cephfs-moving-a-tree-to-another-pool:
+
+Moving a directory tree to another data pool
+--------------------------------------------
+
+To move every regular file below a directory, set ``ceph.dir.migrate.pool`` on
+the directory:
+
+.. code-block:: bash
+
+    $ setfattr -n ceph.dir.migrate.pool -v cephfs_data_ssd /mnt/cephfs/project
+
+The MDS then migrates the files in the background, each one exactly as
+``ceph.file.migrate.pool`` would, snapshots included.  ``setfattr`` returns once
+the job has been recorded, not when it is done.  At the same time the directory's
+own layout is set to the new pool, so files created in it from then on are
+written there directly.  The pool, client and permission rules are those of a
+single file.
+
+How the walk works:
+
+* The job is kept in the metadata pool, so it survives the failure of an MDS
+  and carries on when the rank is back.  At most the directories that were in
+  progress are walked again, which is safe: a file that is already in the
+  target pool is skipped.
+* With several active MDS ranks, each rank moves the files it is responsible
+  for.  The job belongs to the rank that holds the directory, and that rank
+  reports on all of it.  While a rank that holds part of the tree is down, that
+  part waits for it.
+* Hard links are followed, even out of the tree, and each file moves once.
+  Snapshot directories are not walked: moving a file moves its snapshots, or
+  says why it could not.
+* A file that is moved or created below a directory after the walk has passed
+  it is not found.  Setting ``ceph.dir.migrate.pool`` again once the job is done
+  picks it up; the files already moved are skipped.
+* Nothing new starts while the target pool is full, and little while the MDS
+  cache or journal is too big.
+
+Setting ``ceph.dir.migrate.pool`` again on the same directory with the same pool
+while the job runs is not an error.  It fails with ``EBUSY`` if a job is running
+on a directory above or below it, or on the same directory with another pool,
+since nested jobs could pull files back and forth.
+
+Watching and steering a job
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The rank that holds the directory shows the job and takes commands for it
+(rank 0 when there is one active MDS):
+
+.. code-block:: bash
+
+    $ ceph tell mds.<fs_name>:<rank> migrate status
+    $ ceph tell mds.<fs_name>:<rank> migrate pause [<id>]
+    $ ceph tell mds.<fs_name>:<rank> migrate resume [<id>]
+    $ ceph tell mds.<fs_name>:<rank> migrate abort [<id>]
+
+``migrate status`` lists each job with its state (``running``, ``paused``,
+``done`` or ``aborted``), its counters of directories and files, the errors it
+met, the part of each other rank, and what is holding it back, if anything.
+Without an ``<id>``, the other commands apply to every job of the rank.  Pause,
+resume and abort reach the other ranks at once, or when they are back if they
+are down.  Files in progress finish; after an abort, files already moved stay in
+the new pool.
+
+``mds_migrate_max_files`` (default 4) bounds the files that a rank's jobs move
+at a time, and each file uses up to 16 operations on the OSDs at a time.  Set it
+to 0 to stop the jobs from starting anything new without pausing them.
