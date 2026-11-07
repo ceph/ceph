@@ -1028,9 +1028,68 @@ bool SnapMapper::Scrubber::_parse_m(
   return true;
 }
 
+namespace {
+// one purged_snaps interval; sorted and merged by (pool, begin) in
+// Scrubber::run()
+struct purged_range_t {
+  int64_t pool;
+  snapid_t begin;
+  snapid_t end;
+  bool operator<(const purged_range_t& o) const {
+    return std::tie(pool, begin) < std::tie(o.pool, o.begin);
+  }
+};
+}
+
 void SnapMapper::Scrubber::run()
 {
   dout(10) << __func__ << dendl;
+
+  // Collect the purged_snaps rows up front, then walk the mapping keys
+  // once: O(M log P) instead of a fresh purged_snaps omap walk per
+  // mapping key, O(M*P). The on-disk key order is not numeric in the
+  // pool (decimal string), so sort numerically by (pool, begin); rows
+  // of one pool may overlap or touch on disk (record_purged_snaps()
+  // merges a new interval only with rows already on disk, so
+  // intervals carried in one call do not see each other), so merge
+  // same-pool rows into disjoint ranges: one binary search per
+  // mapping key, and the last row that starts at or before the snap
+  // is the only one that can cover it.
+  std::vector<purged_range_t> purged;
+  const auto result = store->omap_iterate(
+    ch, purged_snaps_hoid,
+    ObjectStore::omap_iter_seek_t{
+      .seek_position = PURGED_SNAP_PREFIX,
+      .seek_type = ObjectStore::omap_iter_seek_t::UPPER_BOUND
+    },
+    [this, &purged] (std::string_view key, std::string_view value) mutable {
+      if (!_parse_p(key, value)) {
+        return ObjectStore::omap_iter_ret_t::STOP;
+      }
+      purged.push_back({pool, begin, end});
+      return ObjectStore::omap_iter_ret_t::NEXT;
+    });
+  if (result < 0) {
+    derr << "omap_iterate() on purged_snaps_hoid returns " << result << dendl;
+    return;
+  }
+  if (purged.empty()) {
+    dout(10) << __func__ << " no purged_snaps, rest ok" << dendl;
+    return;
+  }
+  std::sort(purged.begin(), purged.end());
+  // merge overlapping and adjacent same-pool rows; the ranges stay
+  // sorted by (pool, begin) and become disjoint
+  size_t n = 0;
+  for (size_t i = 1; i < purged.size(); ++i) {
+    if (purged[i].pool == purged[n].pool &&
+        purged[i].begin <= purged[n].end) {
+      purged[n].end = std::max(purged[n].end, purged[i].end);
+    } else {
+      purged[++n] = purged[i];
+    }
+  }
+  purged.resize(n + 1);
 
   store->omap_iterate(
     ch, mapping_hoid,
@@ -1038,59 +1097,41 @@ void SnapMapper::Scrubber::run()
       .seek_position = MAPPING_PREFIX,
       .seek_type = ObjectStore::omap_iter_seek_t::UPPER_BOUND
     },
-    [this] (std::string_view key, std::string_view value) mutable {
+    [this, &purged] (std::string_view key, std::string_view value) mutable {
       if (!_parse_m(key, value)) {
         return ObjectStore::omap_iter_ret_t::STOP;
       }
-      // advance to next purged_snaps range?
-      const auto ret = store->omap_iterate(
-        ch, purged_snaps_hoid,
-        ObjectStore::omap_iter_seek_t{
-          .seek_position = PURGED_SNAP_PREFIX,
-          .seek_type = ObjectStore::omap_iter_seek_t::UPPER_BOUND
-        },
-        [this] (std::string_view key, std::string_view value) mutable {
-          _parse_p(key, value);
-          if (pool >= 0 &&
-                 (mapping.hoid.pool > pool ||
-                  (mapping.hoid.pool == pool && mapping.snap >= end))) {
-            return ObjectStore::omap_iter_ret_t::NEXT;
-	  } else {
-            return ObjectStore::omap_iter_ret_t::STOP;
-	  }
-        });
-      if (ret < 0) {
-	// beware _parse_p() also modifies pool
-	pool = -1;
-	derr << "omap_iterate() on purged_snaps_hoid returns " << ret << dendl;
-      } else if (const auto more = static_cast<bool>(ret); !more) {
-	pool = -1;
+      // O(log P): the merged rows are disjoint, so the last row that
+      // starts at or before this mapping's snap is the only one that
+      // can cover it
+      auto it = std::upper_bound(purged.begin(), purged.end(),
+                                 purged_range_t{mapping.hoid.pool,
+                                                mapping.snap, 0});
+      const purged_range_t *covering = nullptr;
+      if (it != purged.begin()) {
+        --it;
+        if (it->pool == mapping.hoid.pool && mapping.snap < it->end) {
+          covering = &*it;
+        }
       }
-      if (pool < 0) {
-        dout(10) << __func__ << " passed final purged_snaps interval, rest ok"
-                 << dendl;
-        return ObjectStore::omap_iter_ret_t::STOP;
-      }
-      if (mapping.hoid.pool < pool ||
-          mapping.snap < begin) {
+      if (!covering) {
         // ok
         dout(20) << fmt::format(
-                      "{} ok {} snap {} precedes pool {} purged_snaps [{}, {})",
-                      __func__, mapping.hoid, mapping.snap, pool, begin, end)
+                      "{} ok {} snap {} not in any purged_snaps interval",
+                      __func__, mapping.hoid, mapping.snap)
                  << dendl;
       } else {
-        ceph_assert(mapping.snap >= begin);
-        ceph_assert(mapping.snap < end);
-        ceph_assert(mapping.hoid.pool == pool);
         // invalid
         dout(10) << fmt::format(
-                      "{} stray {} snap {} in pool {} shard {} purged_snaps[{}, {})",
-                      __func__, mapping.hoid, mapping.snap, pool, shard, begin, end)
+                      "{} stray {} snap {} in pool {} shard {} purged_snaps "
+                      "[{}, {})",
+                      __func__, mapping.hoid, mapping.snap, mapping.hoid.pool,
+                      shard, covering->begin, covering->end)
                  << dendl;
         stray.emplace_back(std::tuple<int64_t,snapid_t,uint32_t,shard_id_t>(
-          		   pool, mapping.snap, mapping.hoid.get_hash(),
-          		   shard
-          		   ));
+                           mapping.hoid.pool, mapping.snap,
+                           mapping.hoid.get_hash(), shard
+                           ));
       }
       return ObjectStore::omap_iter_ret_t::NEXT;
     });
