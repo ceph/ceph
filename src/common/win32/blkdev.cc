@@ -15,6 +15,7 @@
 
 #include <errno.h>
 #include "common/blkdev.h"
+#include "include/ceph_assert.h"
 
 int get_device_by_path(const char *path, char* partition, char* device,
                size_t max)
@@ -37,7 +38,7 @@ int BlkDev::get_devid(dev_t *id) const
 }
 
 const char *BlkDev::sysfsdir() const {
-  assert(false);  // Should never be called on Windows
+  ceph_abort();  // Should never be called on Windows
   return "";
 }
 

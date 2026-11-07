@@ -71,7 +71,7 @@ image_sync::SyncPointHandler* StateBuilder<I>::create_sync_point_handler() {
   dout(10) << dendl;
 
   // TODO
-  ceph_assert(false);
+  ceph_abort();
   return nullptr;
 }
 

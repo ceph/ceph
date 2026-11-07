@@ -7211,7 +7211,7 @@ void Monitor::go_recovery_stretch_mode()
   dout(20) << "dead_mon_buckets.size(): " << dead_mon_buckets.size() << dendl;
   dout(20) << "dead_mon_buckets: " << dead_mon_buckets << dendl;
   if (dead_mon_buckets.size()) {
-    ceph_assert( 0 == "how did we try and do stretch recovery while we have dead monitor buckets?");
+    ceph_abort_msg("how did we try and do stretch recovery while we have dead monitor buckets?");
     // we can't recover if we are missing monitors in a zone!
     return;
   }

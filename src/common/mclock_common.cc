@@ -142,7 +142,7 @@ const dmc::ClientInfo *ClientRegistry::get_info(
   const scheduler_id_t &id) const {
   switch (id.class_id) {
   case SchedulerClass::immediate:
-    ceph_assert(0 == "Cannot schedule immediate");
+    ceph_abort_msg("Cannot schedule immediate");
     return (dmc::ClientInfo*)nullptr;
   case SchedulerClass::client:
     return get_external_client(id.client_profile_id);
@@ -250,7 +250,7 @@ void MclockConfig::set_from_config()
     dout(10) << "Setting custom profile " << current_profile << dendl;
   } else {
     derr << "Invalid mclock profile: " << mclock_profile << dendl;
-    ceph_assert("Invalid choice of mclock profile" == 0);
+    ceph_abort_msg("Invalid choice of mclock profile");
     return;
   }
   client_registry.update_from_profile(
