@@ -1,0 +1,10 @@
+# Of the kernel clients only the testing kernel has the lazyio mount
+# option: run the kclient jobs there, not on the distro kernel.
+teuthology:
+  postmerge:
+  - if not is_fuse() and not is_kupstream() then reject() end
+tasks:
+  - cephfs_test_runner:
+      fail_on_skip: false
+      modules:
+        - tasks.cephfs.test_lazyio
