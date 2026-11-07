@@ -612,6 +612,11 @@ void ECBackend::handle_sub_read(
       lgeneric_derr(cct) << __func__ << ": failed to decode OI for " << *i
               << ": " << e.what() << dendl;
       get_parent()->clog_warn() << "corrupt object info attribute for " << *i;
+      // as for every other error here, nothing of the object goes back
+      // with it: the primary asserts an errored object brought no data
+      reply->attrs_read.erase(*i);
+      reply->buffers_read.erase(*i);
+      reply->omaps_complete.erase(*i);
       reply->errors[*i] = -EIO;
       continue;
     }
@@ -760,6 +765,17 @@ void ECBackend::handle_sub_read_reply(
   if (iter == read_pipeline.tid_to_read_map.end()) {
     //canceled
     dout(20) << __func__ << ": dropped " << op << dendl;
+    // a fast read that completed without this shard, or a read that was
+    // cancelled: a media error that the shard reports still marks a
+    // damaged copy, which ec_repair_on_read() repairs when it is safe
+    for (auto &&[hoid, err] : op.errors) {
+      if (err == -EIO) {
+	dout(10) << __func__ << ": late reply from shard " << from
+		 << " failed to read " << hoid << " with a media error"
+		 << dendl;
+	read_pipeline.get_parent()->ec_repair_on_read(hoid, {from});
+      }
+    }
     return;
   }
   ReadOp &rop = iter->second;
@@ -971,19 +987,30 @@ void ECBackend::handle_sub_read_reply(
 
       if (!err) {
         ceph_assert(rop.complete.at(oid).r == 0);
-        if (!rop.complete.at(oid).errors.empty()) {
+        auto &res = rop.complete.at(oid);
+        if (!res.errors.empty()) {
           if (cct->_conf->osd_read_ec_check_for_errors) {
             rop.debug_log.emplace_back(ECUtil::COMPLETE_ERROR, op.from);
             dout(10) << __func__ << ": Not ignoring errors, use one shard" << dendl;
-            err = rop.complete.at(oid).errors.begin()->second;
-            rop.complete.at(oid).r = err;
+            err = res.errors.begin()->second;
+            res.r = err;
           } else {
-            get_parent()->clog_warn() << "Error(s) ignored for "
-              << iter->first << " enough copies available";
-            dout(10) << __func__ << " Error(s) ignored for " << iter->first
+            get_parent()->clog_warn() << "Error(s) ignored for " << oid
+              << " (shard errors " << res.errors << ")"
+              << " enough copies available";
+            dout(10) << __func__ << " Error(s) ignored for " << oid
+		     << " (shard errors " << res.errors << ")"
 		     << " enough copies available" << dendl;
             rop.debug_log.emplace_back(ECUtil::ERROR_CLEAR, op.from);
-            rop.complete.at(oid).errors.clear();
+            // a shard whose own store failed the read with -EIO holds a
+            // damaged copy: the decode does without it, and a client
+            // read then has the PG repair it (ClientReadCompleter)
+            for (auto &&[shard, shard_err] : res.errors) {
+              if (shard_err == -EIO) {
+                res.media_errors.insert(shard);
+              }
+            }
+            res.errors.clear();
           }
         }
         // avoid re-read for completed object as we may send remaining reads for

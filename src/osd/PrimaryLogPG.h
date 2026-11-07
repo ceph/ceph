@@ -340,6 +340,9 @@ public:
     const std::set<pg_shard_t> &from,
     const hobject_t &soid,
     const eversion_t &version) override;
+  void ec_repair_on_read(
+    const hobject_t &soid,
+    const std::set<pg_shard_t> &shards) override;
   void cancel_pull(const hobject_t &soid) override;
   void apply_stats(
     const hobject_t &soid,

@@ -140,6 +140,11 @@ public:
   void cancel_pull(const hobject_t &soid) override {
     // TODO
   }
+  void ec_repair_on_read(
+    const hobject_t &hoid,
+    const std::set<pg_shard_t> &shards) override {
+    // TODO: read repair; until then a deep scrub with repair fixes it
+  }
   const std::set<pg_shard_t> &get_acting_shards() const override {
     return get_actingset();
   }

@@ -45,6 +45,17 @@ struct ECListener {
   virtual bool pgb_is_primary() const = 0;
 
   /**
+   * Called when a client read of hoid decoded its data without shards
+   * whose own object store failed the read with a media error (-EIO).
+   * The read completes with the decoded data whatever this does; a
+   * clean PG may mark the object missing on those shards and recover it
+   * (osd_ec_repair_on_read). Called with the PG lock held.
+   */
+  virtual void ec_repair_on_read(
+    const hobject_t &hoid,
+    const std::set<pg_shard_t> &shards) = 0;
+
+  /**
    * Called when a read from a std::set of replicas/primary fails
    */
   virtual void on_failed_pull(
