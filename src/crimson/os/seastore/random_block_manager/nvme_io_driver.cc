@@ -380,7 +380,8 @@ public:
     uint64_t offset,
     bufferlist &&bl,
     size_t block_size,
-    uint16_t stream) final {
+    uint16_t stream,
+    dma_write_times_t *dma_times) final {
     LOG_PREFIX(KernelNVMeIODriver::writev);
     DEBUG("block: write offset {} len {}", offset, bl.length());
     uint16_t supported_stream = stream;
@@ -388,7 +389,13 @@ public:
       supported_stream = WRITE_LIFE_NOT_SET;
     }
     if (pi_enabled) {
+      if (dma_times) {
+        dma_times->start = std::chrono::steady_clock::now();
+      }
       co_await nvme_write(offset, bl.length(), bl.c_str());
+      if (dma_times) {
+        dma_times->end = std::chrono::steady_clock::now();
+      }
       co_return;
     }
     bl.rebuild_aligned(block_size);
@@ -396,11 +403,17 @@ public:
     auto has_error = seastar::make_lw_shared<bool>(false);
     co_await seastar::coroutine::parallel_for_each(
       iovs,
-      [this, supported_stream, offset, has_error, device_id, FNAME](auto &p)
+      [this, supported_stream, offset, has_error, device_id, dma_times,
+       FNAME](auto &p)
     {
       auto off = offset + p.offset;
       auto len = p.length;
       auto &iov = p.iov;
+      // the first dma_write issued sets start
+      if (dma_times &&
+          dma_times->start == std::chrono::steady_clock::time_point{}) {
+        dma_times->start = std::chrono::steady_clock::now();
+      }
       return io_device[supported_stream].dma_write(off, std::move(iov)
       ).handle_exception(
         [off, len, has_error, device_id, FNAME](auto e) -> seastar::future<size_t>
@@ -409,7 +422,12 @@ public:
           device_id_printer_t{device_id}, off, len, e);
         *has_error = true;
         return seastar::make_ready_future<size_t>(0);
-      }).then([off, len, has_error, device_id, FNAME](size_t written) {
+      }).then([off, len, has_error, device_id, dma_times,
+               FNAME](size_t written) {
+        // the last dma_write to finish sets end
+        if (dma_times) {
+          dma_times->end = std::chrono::steady_clock::now();
+        }
         if (written != len) {
           ERROR("{} poffset={}~{} dma_write len={} inconsistent",
             device_id_printer_t{device_id}, off, len, written);

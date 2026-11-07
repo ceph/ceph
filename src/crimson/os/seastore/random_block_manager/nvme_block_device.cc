@@ -171,13 +171,15 @@ read_ertr::future<> NVMeBlockDevice::_readv(
 write_ertr::future<> NVMeBlockDevice::writev(
   uint64_t offset,
   ceph::bufferlist bl,
-  uint16_t stream) {
+  uint16_t stream,
+  dma_write_times_t *dma_times) {
   LOG_PREFIX(NVMeBlockDevice::writev);
   DEBUG("block: write offset {} len {}", offset, bl.length());
   // bl is a by-value parameter: co_await keeps it (and the iovecs the driver
   // builds from it) alive for the duration of the driver call.
   co_await driver->writev(
-    get_device_id(), offset, std::move(bl), super.block_size, stream);
+    get_device_id(), offset, std::move(bl), super.block_size, stream,
+    dma_times);
 }
 
 Device::close_ertr::future<> NVMeBlockDevice::close() {

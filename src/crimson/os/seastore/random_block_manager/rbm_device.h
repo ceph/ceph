@@ -158,7 +158,8 @@ public:
   virtual write_ertr::future<> writev(
     uint64_t offset,
     ceph::bufferlist bl,
-    uint16_t stream = 0) = 0;
+    uint16_t stream = 0,
+    dma_write_times_t *dma_times = nullptr) = 0;
 
   bool is_end_to_end_data_protection() const final {
     return super.is_end_to_end_data_protection();
@@ -261,7 +262,8 @@ public:
   write_ertr::future<> writev(
     uint64_t offset,
     ceph::bufferlist bl,
-    uint16_t stream = 0) final;
+    uint16_t stream = 0,
+    dma_write_times_t *dma_times = nullptr) final;
 
   stat_device_ret stat_device() final {
     seastar::stat_data stat;

@@ -57,10 +57,20 @@ enum class txn_stage_t : uint8_t {
     // Sub-phases of submit_transaction:
     SUBMIT_RESERVE,        // enter(reserve_projected_usage) + epm reserve_projected_usage
     SUBMIT_OOL_WRITE,      // write_delayed + write_preallocated OOL extents (device I/O)
+    SUBMIT_OOL_THROTTLE,   // token_bucket wait inside OOL write (subset of SUBMIT_OOL_WRITE)
+    SUBMIT_OOL_PREPARE,    // RBM write-list build + merge copy inside OOL write (subset of SUBMIT_OOL_WRITE)
+    SUBMIT_OOL_DISK_WRITE, // RBM rbm->write submit until all complete inside OOL write (subset of SUBMIT_OOL_WRITE)
     SUBMIT_LBA_UPDATE,     // update_lba_mappings
     SUBMIT_PREPARE_ENTER,  // enter(prepare) pipeline stage (global OrderedExclusive wait)
     SUBMIT_PREPARE_RECORD, // prepare_record (record encoding)
     SUBMIT_JOURNAL,        // journal->submit_record -- POST-lock (not part of the hold)
+    SUBMIT_COMPLETE_COMMIT, // cache->complete_commit inside journal callback (subset of SUBMIT_JOURNAL)
+    SUBMIT_JOURNAL_BATCH_WAIT, // submit_record until its journal write starts (subset of SUBMIT_JOURNAL)
+    SUBMIT_JOURNAL_DISK_WRITE, // journal write start until complete (subset of SUBMIT_JOURNAL)
+    SUBMIT_JOURNAL_FINALIZE_WAIT, // wait to enter the journal finalize phase (subset of SUBMIT_JOURNAL)
+    SUBMIT_JOURNAL_PRE_DMA,  // journal write start until first dma_write issued (subset of SUBMIT_JOURNAL_DISK_WRITE, RBM only)
+    SUBMIT_JOURNAL_DMA,      // first dma_write issued until last completes (subset of SUBMIT_JOURNAL_DISK_WRITE, RBM only)
+    SUBMIT_JOURNAL_POST_DMA, // last dma_write completes until write seen complete (subset of SUBMIT_JOURNAL_DISK_WRITE, RBM only)
     MAX
 };
 
@@ -482,9 +492,11 @@ public:
 
     static constexpr auto STAGE_MAX = static_cast<std::size_t>(txn_stage_t::MAX);
     // Upper bounds (milliseconds) for the per-stage do_transaction latency
-    // histograms. Smallest bucket is 1ms; sub-ms is below lowres_clock
-    // resolution (~task_quota) and cannot be resolved.
-    static constexpr std::array<double, 12> STAGE_LAT_BUCKETS_MS = {
+    // histograms. The sub-ms buckets only mean something for stages timed
+    // with steady_clock (the SUBMIT_* sub-phases); stages timed with
+    // lowres_clock (~task_quota) cannot resolve below ~1ms.
+    static constexpr std::array<double, 19> STAGE_LAT_BUCKETS_MS = {
+      0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5,
       1, 1.5, 2, 3, 5, 7.5,
       10, 15, 20, 30, 50, 100
     };
