@@ -1,0 +1,72 @@
+@use '@carbon/layout';
+
+cd-rgw-account-role-policies-side-panel {
+  cds-panel .cds--header-panel {
+    background-color: var(--cds-background);
+  }
+
+  .panel-header {
+    margin-block-end: layout.$spacing-05;
+  }
+
+  .policies-panel-content {
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: layout.$spacing-05;
+    min-block-size: 0;
+    overflow: hidden;
+    padding-block: layout.$spacing-05;
+  }
+
+  .policies-panel-actions {
+    align-self: start;
+  }
+
+  .policies-panel-snippet {
+    background-color: var(--cds-layer-01);
+    flex: 1 1 auto;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 1rem;
+
+    cds-code-snippet,
+    .cds--snippet--multi {
+      width: 100%;
+    }
+
+    .cds--snippet-container {
+      min-block-size: 0;
+      padding-inline-end: layout.$spacing-09;
+    }
+  }
+
+  .policies-panel-form {
+    inline-size: 100%;
+
+    cds-text-label,
+    cds-textarea-label,
+    .cds--text-area__wrapper {
+      inline-size: 100%;
+      max-inline-size: none;
+    }
+
+    .cds--text-input,
+    .cds--text-area {
+      background-color: var(--cds-field-01);
+      inline-size: 100%;
+      max-inline-size: none;
+    }
+
+    textarea {
+      inline-size: 100%;
+      min-block-size: layout.rem(280px);
+    }
+  }
+
+  .panel-footer {
+    button {
+      flex: 1;
+    }
+  }
+}
