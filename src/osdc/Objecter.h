@@ -940,7 +940,7 @@ struct ObjectOperation {
     using ceph::encode;
     ceph::buffer::list bl;
     encode(attrs, bl);
-    add_xattr(CEPH_OSD_OP_RESETXATTRS, 0, bl.length());
+    add_xattr(CEPH_OSD_OP_RESETXATTRS, 0, bl);
   }
   void resetxattrs(const char *prefix, std::map<std::string, ceph::buffer::list>& attrs) {
     using ceph::encode;
