@@ -72,14 +72,31 @@ class ServiceDiscovery:
             d.connect(**route._asdict())
         return d
 
+    def _load_or_create_credentials(self) -> Tuple[str, str]:
+        username = self.mgr.get_store('service_discovery/root/username')
+        password = self.mgr.get_store('service_discovery/root/password')
+        if not password or not username:
+            username = 'admin'  # TODO(redo): what should be the default username
+            password = secrets.token_urlsafe(20)
+            self.mgr.set_store('service_discovery/root/password', password)
+            self.mgr.set_store('service_discovery/root/username', username)
+        return username, password
+
     def enable_auth(self) -> None:
-        self.username = self.mgr.get_store('service_discovery/root/username')
-        self.password = self.mgr.get_store('service_discovery/root/password')
-        if not self.password or not self.username:
-            self.username = 'admin'  # TODO(redo): what should be the default username
-            self.password = secrets.token_urlsafe(20)
-            self.mgr.set_store('service_discovery/root/password', self.password)
-            self.mgr.set_store('service_discovery/root/username', self.username)
+        self.username, self.password = self._load_or_create_credentials()
+
+    def get_credentials(self) -> Tuple[str, str]:
+        """Credentials clients (prometheus) must use once security is enabled.
+
+        The server only enables auth when it (re)starts, which happens
+        asynchronously after the security settings change. Clients configured
+        in between must not get unset credentials: load them from the store,
+        or create them there, so they are the ones enable_auth() will use.
+        """
+        if not self.username or not self.password:
+            self.enable_auth()
+        assert self.username and self.password
+        return self.username, self.password
 
     def configure_tls(self) -> Dict[str, str]:
         addr = self.mgr.get_mgr_ip()
