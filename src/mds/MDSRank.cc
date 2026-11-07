@@ -839,8 +839,13 @@ void MDSRankDispatcher::shutdown()
   purge_queue.shutdown();
 
   // shutdown metrics handler/updater -- this is ok even if it was not
-  // inited.
+  // inited.  The updater takes mds_lock to read subvolume rbytes, so it
+  // must be joined without holding it.  As with the finisher below,
+  // MDSRank::stopping is already set; the updater only reads cached
+  // rstat under mds_lock.
+  mds_lock.unlock();
   metrics_handler.shutdown();
+  mds_lock.lock();
 
   // shutdown metric aggergator
   if (metric_aggregator != nullptr) {
