@@ -24,6 +24,7 @@
 #include "include/ceph_assert.h" // Because intusive_ptr clobbers our assert...
 #include "include/buffer.h"
 #include "include/types.h"
+#include "include/feature_set.h"
 #include "common/item_history.h"
 #include "msg/MessageRef.h"
 
@@ -48,8 +49,22 @@ struct Connection : public RefCountedObjectSafe {
   bool anon = false;  ///< anonymous outgoing connection
 private:
   uint64_t features = 0;
+  ceph::feature_set_t features_ext;
 public:
   bool is_loopback = false;
+  /// [msgr2 only] what the peer's banner says it supports, when both
+  /// ends offered CEPH_MSGR2_FEATURE_EXTENDED_FEATURES.  Known before
+  /// authentication; the ident frames stay authoritative.
+  bool peer_banner_valid = false;
+  uint64_t peer_banner_features = 0;
+  ceph::feature_set_t peer_banner_ext;
+  /// server side: why we turn the peer away, for the reason trailer
+  std::string refusal_reason;
+  uint64_t refusal_missing = 0;
+  ceph::feature_set_t refusal_missing_ext;
+  /// client side: the reason the peer gave when it turned us away
+  int rejected_error = 0;
+  std::string rejected_reason;
   bool failed = false; // true if we are a lossy connection that has failed.
 
   int rx_buffers_version = 0;
@@ -209,6 +224,10 @@ public:
   }
   void set_features(uint64_t f) { features = f; }
   void set_feature(uint64_t f) { features |= f; }
+
+  /// extended features both ends support (ceph_features_ext.h)
+  const ceph::feature_set_t& get_features_ext() const { return features_ext; }
+  void set_features_ext(const ceph::feature_set_t& f) { features_ext = f; }
 
   virtual int get_con_mode() const {
     return CEPH_CON_MODE_CRC;

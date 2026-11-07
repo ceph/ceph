@@ -4068,7 +4068,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     rdata.append(ds);
     rs = "";
     r = 0;
-  } else if (prefix == "features") {
+  } else if (prefix == "features" || prefix == "features extended") {
     if (!is_leader() && !is_peon()) {
       dout(10) << " waiting for quorum" << dendl;
       waitfor_quorum.push_back(new C_RetryMessage(this, op));
@@ -4082,7 +4082,13 @@ void Monitor::handle_command(MonOpRequestRef op)
       f.reset(Formatter::create("json-pretty"));
     FeatureMap fm;
     get_combined_feature_map(&fm);
-    f->dump_object("features", fm);
+    if (prefix == "features") {
+      f->dump_object("features", fm);
+    } else {
+      f->open_object_section("extended_features");
+      fm.dump_ext(f.get());
+      f->close_section();
+    }
     f->flush(rdata);
     rs = "";
     r = 0;
@@ -6710,6 +6716,129 @@ bool Monitor::get_authorizer(int service_id, AuthAuthorizer **authorizer)
   return true;
 }
 
+// a client the session handshake refused reconnects within a second
+static constexpr auto second_strike_window = std::chrono::seconds(60);
+// remembered at most, so that a flood of refused clients cannot grow it
+static constexpr size_t max_second_strikes = 10000;
+static constexpr auto peer_reject_log_interval = std::chrono::seconds(60);
+
+// Turn away a client that lacks features we require of it, at
+// authentication: it fails at once there, where the session handshake
+// would leave older clients retrying until their mount timeout.
+bool Monitor::rejects_peer(Connection *con, std::string *reason)
+{
+  int type = con->get_peer_type();
+  if (type == CEPH_ENTITY_TYPE_MON) {
+    return false;
+  }
+  auto policy = messenger->get_policy(type);
+  if (!policy.features_checked_by_auth) {
+    return false;
+  }
+  uint64_t missing = 0;
+  ceph::feature_set_t missing_ext;
+  bool legacy = false;
+  if (con->is_msgr2() && con->peer_banner_valid) {
+    missing = policy.features_required & ~con->peer_banner_features;
+    missing_ext = policy.features_ext_required - con->peer_banner_ext;
+  } else if (!con->is_msgr2()) {
+    missing = policy.features_required & ~con->get_features();
+    missing_ext = policy.features_ext_required;
+    legacy = true;
+  } else {
+    // a msgr2 client from before vampire sends its features only after
+    // authentication: see handle_peer_missing_features()
+    missing_ext = policy.features_ext_required;
+    legacy = true;
+  }
+  auto now = ceph::mono_clock::now();
+  if (!missing && missing_ext.empty() && con->is_msgr2() && legacy) {
+    std::lock_guard l(peer_reject_lock);
+    auto p = second_strikes.find(con->peer_global_id);
+    if (con->peer_global_id && p != second_strikes.end() &&
+        now < p->second.until) {
+      // The global_id is not authenticated here, so keep the entry: a
+      // peer presenting someone's global_id only gets itself turned away.
+      missing = p->second.missing & policy.features_required;
+    }
+  }
+  if (!missing && missing_ext.empty()) {
+    return false;
+  }
+  *reason = "this cluster requires ";
+  if (missing) {
+    *reason += fmt::format("features {:#x}", missing);
+  }
+  if (!missing_ext.empty()) {
+    *reason += fmt::format("{}extended features {}", missing ? " and " : "",
+                           stringify(missing_ext));
+  }
+  *reason += " that this client lacks";
+  if (!missing_ext.empty()) {
+    if (!policy.features_required_reason.empty()) {
+      *reason += ": " + policy.features_required_reason;
+    }
+    if (legacy) {
+      *reason += "; use a vampire or later client with msgr2"
+        " (kernel: mount with ms_mode=prefer-crc)";
+    }
+  }
+  con->refusal_reason = *reason;
+  con->refusal_missing = missing;
+  con->refusal_missing_ext = missing_ext;
+  dout(1) << __func__ << " " << ceph_entity_type_name(type) << " at "
+          << con->get_peer_socket_addr() << ": " << *reason << dendl;
+  uint64_t count;
+  {
+    std::lock_guard l(peer_reject_lock);
+    ++peer_reject_count;
+    if (peer_reject_logged &&
+        now - *peer_reject_logged < peer_reject_log_interval) {
+      return true;
+    }
+    count = peer_reject_count;
+    peer_reject_logged = now;
+    peer_reject_count = 0;
+  }
+  clog->warn() << "turned away " << count << " "
+               << ceph_entity_type_name(type) << "(s) lacking required "
+               << "features (latest at " << con->get_peer_socket_addr()
+               << "): " << *reason;
+  return true;
+}
+
+void Monitor::handle_peer_missing_features(Connection *con, uint64_t missing)
+{
+  if (!missing || con->get_peer_type() != CEPH_ENTITY_TYPE_CLIENT ||
+      !con->peer_global_id ||
+      !messenger->get_policy(CEPH_ENTITY_TYPE_CLIENT).features_checked_by_auth) {
+    return;
+  }
+  // a client that reclaimed its global_id without proof could be anyone
+  auto priv = con->get_priv();
+  auto s = static_cast<MonSession*>(priv.get());
+  if (!s || !s->auth_handler ||
+      s->auth_handler->get_global_id_status() ==
+        global_id_status_t::RECLAIM_INSECURE) {
+    return;
+  }
+  auto now = ceph::mono_clock::now();
+  auto until = now + second_strike_window;
+  std::lock_guard l(peer_reject_lock);
+  while (!second_strikes_by_time.empty() &&
+         (second_strikes_by_time.front().first < now ||
+          second_strikes_by_time.size() >= max_second_strikes)) {
+    auto [t, gid] = second_strikes_by_time.front();
+    second_strikes_by_time.pop_front();
+    if (auto p = second_strikes.find(gid);
+        p != second_strikes.end() && p->second.until == t) {
+      second_strikes.erase(p);
+    }
+  }
+  second_strikes[con->peer_global_id] = {until, missing};
+  second_strikes_by_time.emplace_back(until, con->peer_global_id);
+}
+
 int Monitor::handle_auth_request(
   Connection *con,
   AuthConnectionMeta *auth_meta,
@@ -6829,6 +6958,11 @@ int Monitor::handle_auth_request(
             << " entity_name=" << entity_name
             << " con->peer_global_id=" << con->peer_global_id
             << dendl;
+
+    if (std::string reason; rejects_peer(con, &reason)) {
+      // not -EOPNOTSUPP: kernel clients warn about that one
+      return -EPROTONOSUPPORT;
+    }
 
     // supported method?
     if (entity_name.get_type() == CEPH_ENTITY_TYPE_MON ||

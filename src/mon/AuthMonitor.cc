@@ -891,6 +891,18 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
     else
       type = mon.auth_service_required.pick(supported);
 
+    std::string reason;
+    if (!s->con->is_msgr2() && mon.rejects_peer(s->con.get(), &reason)) {
+      // msgr1 clients get the reason in result_msg; never append bytes.
+      // Name the protocol: older kernels log nothing for protocol 0.
+      // Leave the connection open: closing it at once can lose the reply,
+      // and the client gives up on its own when it reads it.
+      reply = new MAuthReply(type, &response_bl, -EPROTONOSUPPORT,
+                             s->con->peer_global_id, reason.c_str());
+      mon.send_reply(op, reply);
+      return true;
+    }
+
     s->auth_handler = get_auth_service_handler(type, g_ceph_context, &mon);
     if (!s->auth_handler) {
       dout(1) << "client did not provide supported auth type" << dendl;

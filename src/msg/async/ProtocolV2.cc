@@ -10,6 +10,7 @@
 #include "common/ceph_crypto.h"
 #include "common/errno.h"
 #include "include/random.h"
+#include "include/ceph_features_ext.h"
 #include "auth/AuthClient.h"
 #include "auth/AuthServer.h"
 #include "auth/AuthSessionHandler.h" // for struct DecryptionError
@@ -797,6 +798,8 @@ void ProtocolV2::dump(Formatter *f) {
     f->dump_string("con_mode", ceph_con_mode_name(auth_meta->con_mode));
   }
   f->dump_bool("rev1", HAVE_MSGR2_FEATURE(peer_supported_features, REVISION_1));
+  f->dump_bool("ext_features", ext_features);
+  f->dump_stream("connection_features_ext") << connection_features_ext;
   f->dump_unsigned("connect_seq", connect_seq);
   f->dump_unsigned("peer_global_seq", peer_global_seq);
 
@@ -908,8 +911,13 @@ CtPtr ProtocolV2::_banner_exchange(CtRef callback) {
 
   ceph::bufferlist banner_payload;
   using ceph::encode;
-  encode((uint64_t)CEPH_MSGR2_SUPPORTED_FEATURES, banner_payload, 0);
+  supported_features = local_msgr2_features();
+  supported_ext_features = local_ext_features();
+  encode(supported_features, banner_payload, 0);
   encode((uint64_t)CEPH_MSGR2_REQUIRED_FEATURES, banner_payload, 0);
+  if (HAVE_MSGR2_FEATURE(supported_features, EXTENDED_FEATURES)) {
+    encode_banner_ext(banner_payload);
+  }
 
   ceph::bufferlist bl;
   bl.append(CEPH_BANNER_V2_PREFIX, strlen(CEPH_BANNER_V2_PREFIX));
@@ -996,7 +1004,6 @@ CtPtr ProtocolV2::_handle_peer_banner_payload(rx_buffer_t &&buffer, int r) {
 
   // Check feature bit compatibility
 
-  uint64_t supported_features = CEPH_MSGR2_SUPPORTED_FEATURES;
   uint64_t required_features = CEPH_MSGR2_REQUIRED_FEATURES;
 
   if ((required_features & peer_supported_features) != required_features) {
@@ -1018,6 +1025,26 @@ CtPtr ProtocolV2::_handle_peer_banner_payload(rx_buffer_t &&buffer, int r) {
   }
 
   this->peer_supported_features = peer_supported_features;
+  ext_features =
+    HAVE_MSGR2_FEATURE(peer_supported_features, EXTENDED_FEATURES) &&
+    HAVE_MSGR2_FEATURE(supported_features, EXTENDED_FEATURES);
+  connection->peer_banner_valid = false;
+  connection->peer_banner_features = 0;
+  connection->peer_banner_ext.clear();
+  if (ext_features) {
+    try {
+      decode(connection->peer_banner_features, ti);
+      decode(connection->peer_banner_ext, ti);
+    } catch (const ceph::buffer::error &e) {
+      lderr(cct) << __func__ << " bad extended features in the peer's banner"
+                 << dendl;
+      return _fault();
+    }
+    connection->peer_banner_valid = true;
+    ldout(cct, 5) << __func__ << " peer features=" << std::hex
+                  << connection->peer_banner_features << std::dec
+                  << " extended=" << connection->peer_banner_ext << dendl;
+  }
   if (peer_required_features == 0) {
     this->connection_features = msgr2_required;
   }
@@ -1830,6 +1857,15 @@ CtPtr ProtocolV2::handle_auth_bad_method(ceph::bufferlist &payload) {
   }
 
   auto bad_method = AuthBadMethodFrame::Decode(payload);
+  if (ext_features) {
+    try {
+      auto reason = AuthBadMethodReasonFrame::Decode(payload);
+      note_refusal(reason.result(), reason.reason(), reason.missing_features(),
+                   reason.missing_ext_features());
+    } catch (const ceph::buffer::error &e) {
+      // no trailer: the server gave no reason
+    }
+  }
   ldout(cct, 1) << __func__ << " method=" << bad_method.method()
 		<< " result " << cpp_strerror(bad_method.result())
                 << ", allowed methods=" << bad_method.allowed_methods()
@@ -2045,6 +2081,15 @@ CtPtr ProtocolV2::handle_ident_missing_features(ceph::bufferlist &payload)
   lderr(cct) << __func__
              << " client does not support all server features: " << std::hex
              << ident_missing.features() << std::dec << dendl;
+  if (ext_features) {
+    try {
+      auto reason = IdentMissingFeaturesReasonFrame::Decode(payload);
+      note_refusal(-EPROTONOSUPPORT, reason.reason(), reason.missing_features(),
+                   reason.missing_ext_features());
+    } catch (const ceph::buffer::error &e) {
+      // no trailer
+    }
+  }
 
   return _fault();
 }
@@ -2199,6 +2244,25 @@ CtPtr ProtocolV2::handle_server_ident(ceph::bufferlist &payload)
   peer_name = entity_name_t(connection->get_peer_type(), server_ident.gid());
   connection->set_features(server_ident.supported_features() &
                            connection->policy.features_supported);
+  if (ext_features &&
+      server_ident.supported_features() != connection->peer_banner_features) {
+    lderr(cct) << __func__ << " server features " << std::hex
+               << server_ident.supported_features() << " differ from its banner's "
+               << connection->peer_banner_features << std::dec << dendl;
+    return _fault();
+  }
+  ceph::feature_set_t peer_ext;
+  if (ext_features) {
+    peer_ext = connection->peer_banner_ext;
+  }
+  auto ext_missing = connection->policy.features_ext_required - peer_ext;
+  if (!ext_missing.empty()) {
+    lderr(cct) << __func__ << " server is missing required extended features "
+               << ext_missing << dendl;
+    return _fault();
+  }
+  connection_features_ext = peer_ext & supported_ext_features;
+  connection->set_features_ext(connection_features_ext);
   peer_global_seq = server_ident.global_seq();
 
   connection->policy.lossy = server_ident.flags() & CEPH_MSG_CONNECT_LOSSY;
@@ -2310,6 +2374,14 @@ CtPtr ProtocolV2::_auth_bad_method(int r)
 		<< ", allowed_methods " << allowed_methods
 		<< ", allowed_modes " << allowed_modes
 		<< dendl;
+  if (ext_features && r == -EPROTONOSUPPORT &&
+      !connection->refusal_reason.empty()) {
+    auto bad_method = AuthBadMethodReasonFrame::Encode(
+      auth_meta->auth_method, r, allowed_methods, allowed_modes,
+      connection->refusal_reason, connection->refusal_missing,
+      connection->refusal_missing_ext);
+    return WRITE(bad_method, "bad auth method", read_frame);
+  }
   auto bad_method = AuthBadMethodFrame::Encode(auth_meta->auth_method, r,
                                                allowed_methods, allowed_modes);
   return WRITE(bad_method, "bad auth method", read_frame);
@@ -2471,20 +2543,46 @@ CtPtr ProtocolV2::handle_client_ident(ceph::bufferlist &payload)
 
   client_cookie = client_ident.cookie();
 
+  if (ext_features &&
+      client_ident.supported_features() != connection->peer_banner_features) {
+    // the banner word is signed with cephx; the ident is not in crc mode
+    lderr(cct) << __func__ << " client features " << std::hex
+               << client_ident.supported_features() << " differ from its banner's "
+               << connection->peer_banner_features << std::dec << dendl;
+    return _fault();
+  }
+
   uint64_t feat_missing =
     (connection->policy.features_required | msgr2_required) &
     ~(uint64_t)client_ident.supported_features();
-  if (feat_missing) {
+  ceph::feature_set_t peer_ext;
+  if (ext_features) {
+    peer_ext = connection->peer_banner_ext;
+  }
+  auto ext_missing = connection->policy.features_ext_required - peer_ext;
+  if (feat_missing || !ext_missing.empty()) {
     ldout(cct, 1) << __func__ << " peer missing required features " << std::hex
-                  << feat_missing << std::dec << dendl;
-    auto ident_missing_features =
-        IdentMissingFeaturesFrame::Encode(feat_missing);
-
+                  << feat_missing << std::dec << " extended " << ext_missing
+                  << dendl;
+    if (messenger->auth_server) {
+      messenger->auth_server->handle_peer_missing_features(
+        connection, feat_missing & connection->policy.features_required);
+    }
+    if (ext_features) {
+      auto ident_missing_features = IdentMissingFeaturesReasonFrame::Encode(
+        feat_missing, connection->policy.features_required_reason,
+        feat_missing, ext_missing);
+      return WRITE(ident_missing_features, "ident missing features", read_frame);
+    }
+    // only extended features are missing: the peer predates them
+    auto ident_missing_features = IdentMissingFeaturesFrame::Encode(
+      feat_missing ? feat_missing : CEPH_FEATUREMASK_SERVER_VAMPIRE);
     return WRITE(ident_missing_features, "ident missing features", read_frame);
   }
 
   connection_features =
       client_ident.supported_features() & connection->policy.features_supported;
+  connection_features_ext = peer_ext & supported_ext_features;
 
   peer_global_seq = client_ident.global_seq();
 
@@ -2847,8 +2945,14 @@ CtPtr ProtocolV2::reuse_connection(const AsyncConnectionRef& existing,
     exproto->peer_name = peer_name;
     exproto->connection_features = connection_features;
     existing->set_features(connection_features);
+    exproto->connection_features_ext = connection_features_ext;
+    existing->set_features_ext(connection_features_ext);
     exproto->peer_supported_features = peer_supported_features;
+    existing->peer_banner_valid = connection->peer_banner_valid;
+    existing->peer_banner_features = connection->peer_banner_features;
+    existing->peer_banner_ext = connection->peer_banner_ext;
   }
+  exproto->ext_features = ext_features;
   exproto->peer_global_seq = peer_global_seq;
 
   ceph_assert(connection->center->in_thread());
@@ -3039,6 +3143,7 @@ CtPtr ProtocolV2::send_server_ident() {
   }
 
   connection->set_features(connection_features);
+  connection->set_features_ext(connection_features_ext);
 
   // notify
   connection->dispatch_queue->queue_accept(connection);
@@ -3145,4 +3250,54 @@ CtPtr ProtocolV2::finish_compression() {
 
   state = SESSION_ACCEPTING;
   return CONTINUE(read_frame);
+}
+
+static_assert(!(CEPH_MSGR2_REQUIRED_FEATURES &
+                CEPH_MSGR2_FEATURE_EXTENDED_FEATURES),
+              "requiring EXTENDED_FEATURES would lock out every older peer");
+
+uint64_t ProtocolV2::local_msgr2_features() const
+{
+  uint64_t f = CEPH_MSGR2_SUPPORTED_FEATURES;
+  if (cct->_conf.get_val<bool>("ms_v2_disable_ext_features")) {
+    f &= ~CEPH_MSGR2_FEATURE_EXTENDED_FEATURES;
+  }
+  return f;
+}
+
+ceph::feature_set_t ProtocolV2::local_ext_features() const
+{
+  return ceph_features_ext_supported() - ceph_parse_features_ext(
+    cct->_conf.get_val<std::string>("ms_v2_ext_features_hide"));
+}
+
+// The banner trailer of a peer that offers EXTENDED_FEATURES: our
+// connection feature word (the one CLIENT_IDENT/SERVER_IDENT will carry)
+// and our extended features.
+void ProtocolV2::encode_banner_ext(ceph::bufferlist &bl)
+{
+  using ceph::encode;
+  encode((uint64_t)connection->policy.features_supported, bl, 0);
+  auto ext = supported_ext_features;
+  if (cct->_conf.get_val<bool>("ms_v2_ext_features_grease")) {
+    // in a word we use or the next one, which an older peer does not know
+    ext.insert(ceph_feature_ext_grease_bit(
+      ceph::util::generate_random_number<unsigned>(0, ext.num_blocks())));
+  }
+  encode(ext, bl);
+}
+
+void ProtocolV2::note_refusal(int error, const std::string &reason,
+                              uint64_t missing,
+                              const ceph::feature_set_t &missing_ext)
+{
+  if (reason.empty()) {
+    return;
+  }
+  lderr(cct) << connection->get_peer_addrs() << " refused this "
+             << ceph_entity_type_name(messenger->get_mytype()) << ": " << reason
+             << " (missing features " << std::hex << missing << std::dec
+             << ", missing extended features " << missing_ext << ")" << dendl;
+  connection->rejected_error = error < 0 ? error : -EPROTONOSUPPORT;
+  connection->rejected_reason = reason;
 }

@@ -85,6 +85,7 @@
 
 #include "include/compat.h"
 #include "include/ceph_assert.h"
+#include "include/ceph_features_ext.h"
 #include "include/stringify.h"
 #include "include/util.h"
 #include "common/cmdparse.h"
@@ -504,7 +505,9 @@ std::vector<std::string> OSDMonitor::get_tracked_keys() const noexcept
   return {
     "mon_memory_target"s,
     "mon_memory_autotune"s,
-    "rocksdb_cache_size"s
+    "rocksdb_cache_size"s,
+    "mon_reject_clients_at_auth"s,
+    "mon_debug_require_client_ext_features"s
   };
 }
 
@@ -515,6 +518,13 @@ void OSDMonitor::handle_conf_change(const ConfigProxy& conf,
 
   if (changed.count("mon_memory_autotune")) {
     _set_cache_autotuning();
+  }
+  if (changed.count("mon_reject_clients_at_auth") ||
+      changed.count("mon_debug_require_client_ext_features")) {
+    mon.finisher.queue(new C_MonContext{&mon, [this](int) {
+      std::lock_guard l{mon.lock};
+      update_msgr_features();
+    }});
   }
   if (changed.count("mon_memory_target") ||
       changed.count("rocksdb_cache_size")) {
@@ -1119,6 +1129,35 @@ void OSDMonitor::update_msgr_features()
       dout(0) << "crush map has features " << features << ", adjusting msgr requires" << dendl;
       ceph::net::Policy p = mon.messenger->get_policy(type);
       p.features_required = (p.features_required & ~mask) | features;
+      mon.messenger->set_policy(type, p);
+    }
+
+    ceph::feature_set_t ext;
+    std::string reason;
+    if (type == entity_name_t::TYPE_CLIENT) {
+      std::string bad;
+      ext = ceph_parse_features_ext(g_conf().get_val<std::string>(
+        "mon_debug_require_client_ext_features"), &bad);
+      if (!bad.empty()) {
+        derr << "mon_debug_require_client_ext_features: ignoring " << bad
+             << dendl;
+      }
+      if (!ext.empty()) {
+        reason = fmt::format(
+          "the monitors require extended features {} of clients "
+          "(mon_debug_require_client_ext_features)", stringify(ext));
+      }
+    }
+    bool by_auth = type == entity_name_t::TYPE_CLIENT &&
+      g_conf().get_val<bool>("mon_reject_clients_at_auth");
+    if (mon.messenger->get_policy(type).features_ext_required != ext ||
+        mon.messenger->get_policy(type).features_checked_by_auth != by_auth) {
+      dout(0) << "adjusting msgr requires of " << ceph_entity_type_name(type)
+              << " to extended features " << ext << dendl;
+      ceph::net::Policy p = mon.messenger->get_policy(type);
+      p.features_ext_required = ext;
+      p.features_required_reason = reason;
+      p.features_checked_by_auth = by_auth;
       mon.messenger->set_policy(type, p);
     }
   }

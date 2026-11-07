@@ -28,6 +28,8 @@
 #include <cmath>
 #include <string>
 #include <array>
+#include <deque>
+#include <optional>
 
 #include "include/types.h"
 #include "include/health.h"
@@ -154,6 +156,23 @@ public:
   ThreadPool cpu_tp;  ///< threadpool for CPU intensive work
 
   ceph::mutex auth_lock = ceph::make_mutex("Monitor::auth_lock");
+
+  // peers turned away at authentication because they lack features
+  // required of them
+  ceph::mutex peer_reject_lock = ceph::make_mutex("Monitor::peer_reject_lock");
+  std::optional<ceph::mono_time> peer_reject_logged;
+  uint64_t peer_reject_count = 0;
+  /// clients the session handshake refused, by global_id, and the same
+  /// entries in the order they expire
+  struct second_strike_t {
+    ceph::mono_time until;
+    uint64_t missing;
+  };
+  std::map<uint64_t, second_strike_t> second_strikes;
+  std::deque<std::pair<ceph::mono_time, uint64_t>> second_strikes_by_time;
+  bool rejects_peer(Connection *con, std::string *reason);
+  void handle_peer_missing_features(Connection *con,
+                                    uint64_t missing) override;
 
   /// true if we have ever joined a quorum.  if false, we are either a
   /// new cluster, a newly joining monitor, or a just-upgraded

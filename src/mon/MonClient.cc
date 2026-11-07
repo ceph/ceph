@@ -647,10 +647,15 @@ int MonClient::authenticate(double timeout)
   until += ceph::make_timespan(timeout);
   if (timeout > 0.0)
     ldout(cct, 10) << "authenticate will time out at " << until << dendl;
-  while (!active_con && authenticate_err >= 0) {
+  // msgr2 authenticates before the session handshake, which can still
+  // refuse us: wait for _finish_auth() too, not just for active_con
+  auto in_progress = [this] {
+    return !active_con || authenticate_err == 1;
+  };
+  while (in_progress() && authenticate_err >= 0) {
     if (timeout > 0.0) {
       auto r = auth_cond.wait_until(lock, until);
-      if (r == std::cv_status::timeout && !active_con) {
+      if (r == std::cv_status::timeout && in_progress()) {
 	ldout(cct, 0) << "authenticate timed out after " << timeout << dendl;
 	authenticate_err = -ETIMEDOUT;
       }
@@ -659,11 +664,9 @@ int MonClient::authenticate(double timeout)
     }
   }
 
-  if (active_con) {
+  if (active_con && authenticate_err == 0) {
     ldout(cct, 5) << __func__ << " success, global_id "
 		  << active_con->get_global_id() << dendl;
-    // active_con should not have been set if there was an error
-    ceph_assert(authenticate_err >= 0);
     authenticated = true;
   }
 
@@ -734,6 +737,12 @@ void MonClient::handle_auth(MAuthReply *m)
     return;
   }
 
+  if (m->result < 0 && !m->result_msg.empty()) {
+    lderr(cct) << m->get_source_addrs() << " refused this "
+               << ceph_entity_type_name(cct->get_module_type()) << ": "
+               << m->result_msg << dendl;
+  }
+
   if (!_hunting()) {
     std::swap(active_con->get_auth(), auth);
     int ret = active_con->authenticate(m);
@@ -760,11 +769,12 @@ void MonClient::handle_auth(MAuthReply *m)
   }
   if (auth_err) {
     pending_cons.erase(found);
-    if (!pending_cons.empty()) {
+    if (!pending_cons.empty() && auth_err != -EPROTONOSUPPORT) {
       // keep trying with pending connections
       return;
     }
-    // the last try just failed, give up.
+    // the last try just failed, or we lack features: give up.
+    pending_cons.clear();
   } else {
     auto& mc = found->second;
     ceph_assert(mc.have_session());
@@ -1028,9 +1038,10 @@ void MonClient::_finish_hunting(int auth_err)
   }
 
   had_a_connection = true;
-  _un_backoff();
 
   if (!auth_err) {
+    // a refusal keeps the backoff, so retries slow down
+    _un_backoff();
     last_rotating_renew_sent = utime_t();
     while (!waiting_for_session.empty()) {
       _send_mon_message(std::move(waiting_for_session.front()));
@@ -1104,6 +1115,11 @@ void MonClient::tick()
       send_log();
       last_send_log = now;
     }
+  } else if (authenticated) {
+    // every mon refused us, e.g. because the cluster now requires
+    // features we lack: keep trying, backing off, in case that changes
+    ldout(cct, 1) << "no mon session; trying again" << dendl;
+    return _reopen_session();
   }
 }
 
@@ -1795,10 +1811,15 @@ int MonClient::handle_auth_bad_method(
 	  return r; // try another method on this con
 	}
 	pending_cons.erase(i.first);
-	if (!pending_cons.empty()) {
+        // a mon that turns us away for missing features speaks for them all
+        if (!pending_cons.empty() && result != -EPROTONOSUPPORT) {
 	  return r;  // fail this con, maybe another con will succeed
 	}
 	// fail hunt
+        pending_cons.clear();
+        if (result == -EPROTONOSUPPORT) {
+          r = result;  // the same error as over msgr1
+        }
 	_finish_hunting(r);
 	_finish_auth(r);
 	return r;
