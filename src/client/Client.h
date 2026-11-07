@@ -266,6 +266,18 @@ struct dir_result_t {
   struct dirent de;
 
   int fd;                // fd attached using fdopendir (-1 if none)
+
+  // A snapshot inode's request path goes through its dentries up to the
+  // snapdir, and they can be trimmed while the directory is open; without
+  // them the path is just #ino, i.e. the live directory. So the path of a
+  // snapshot directory is taken when it is opened.
+  filepath snap_path;
+  void make_request_path(filepath& p) const {
+    if (snap_path.get_ino())
+      p = snap_path;
+    else
+      inode->make_nosnap_relative_path(p);
+  }
 };
 
 /**
