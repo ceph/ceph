@@ -322,6 +322,13 @@ void PrimaryLogPG::OpContext::finish_read(PrimaryLogPG *pg)
     ceph_assert(pg->in_progress_async_reads.front().second == this);
     pg->in_progress_async_reads.pop_front();
 
+    if (this == pg->active_coro_ctx && pg->coro_awaits_reads &&
+	pg->coro_resumer) {
+      // the op's coroutine waits for these reads: it runs the op again,
+      // where the op's sync reads can yield
+      resume_coroutine(pg->coro_resumer);
+      return;
+    }
     // Restart the op context now that all reads have been
     // completed. Read failures will be handled by the op finisher
     pg->execute_ctx(this);
@@ -2631,14 +2638,31 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
           do_op_impl(op_ref);
         }
 
+        // Reads of the op that went async run it again when they
+        // complete. It must run again here, where a sync read (a CALL's
+        // cls_cxx_read) can yield; outside this coroutine one fails. An
+        // op before the CALL, such as a CHECKSUM, can start the async
+        // read before the CALL runs, so wait whether or not the op has
+        // made a sync read yet.
+        while (active_coro_ctx &&
+               !active_coro_ctx->async_reads_complete()) {
+          dout(20) << "do_op: coroutine op waits for its async reads"
+                   << dendl;
+          coro_awaits_reads = true;
+          yield();
+          coro_awaits_reads = false;
+          execute_ctx(active_coro_ctx);
+        }
+
         // Cleanup
         on_coroutine_complete();
       });
 
     coro_resumer = std::move(resumer);
 
-    // Startup the coroutine
-    (*coro_resumer)();
+    // Startup the coroutine. It may finish within this call; then the
+    // reference resume_coroutine() holds releases it from out here.
+    resume_coroutine(coro_resumer);
   } else {
     // Handle the message directly in the current thread
     do_op_impl(op);
@@ -2650,6 +2674,12 @@ void PrimaryLogPG::on_coroutine_complete()
   ceph_assert(coro_op_in_flight);
   coro_resumer = nullptr;
   coro_op_in_flight = false;
+  // the handles point into this coroutine's stack, which is freed once
+  // it returns; the op's OpContext that runs again outside it (after an
+  // async read) must not find them and yield
+  if (active_coro_op) {
+    active_coro_op->coro_handles.reset();
+  }
   active_coro_op = nullptr;
 
   if (active_coro_ctx) {
@@ -13265,6 +13295,12 @@ void PrimaryLogPG::on_shutdown()
 {
   dout(10) << __func__ << dendl;
 
+  // free a suspended coroutine while the PG is whole, before the backend
+  // cancels its reads; the ops it and its queue hold are dropped
+  stop_coroutine();
+  waiting_for_coro_op.clear();
+  active_coro_op = nullptr;
+
   if (recovery_queued) {
     recovery_queued = false;
     osd->clear_queued_recovery(this);
@@ -13369,30 +13405,44 @@ void PrimaryLogPG::on_activate_complete()
   agent_setup();
 }
 
+void PrimaryLogPG::stop_coroutine()
+{
+  if (coro_resumer == nullptr) {
+    return;
+  }
+  dout(20) << __func__ << ": Stopping active coroutine" << dendl;
+  // a suspended coroutine is unwound and its stack freed here, on our
+  // stack; its pending read completion finds the token gone and skips
+  // the resume. The op, which on_change() requeues, keeps no handles
+  // into that stack.
+  if (active_coro_op) {
+    active_coro_op->coro_handles.reset();
+  }
+  coro_awaits_reads = false;
+  coro_resumer = nullptr;
+  coro_op_in_flight = false;
+
+  if (active_coro_ctx) {
+    dout(20) << __func__ << ": Cleaning up orphaned OpContext from coroutine" << dendl;
+    // Remove from in_progress_async_reads if present
+    for (auto it = in_progress_async_reads.begin();
+        it != in_progress_async_reads.end(); ++it) {
+      if (it->second == active_coro_ctx) {
+        in_progress_async_reads.erase(it);
+        break;
+      }
+    }
+    // Close the context to release all resources
+    close_op_ctx(active_coro_ctx);
+    active_coro_ctx = nullptr;
+  }
+}
+
 void PrimaryLogPG::on_change(ObjectStore::Transaction &t)
 {
   dout(10) << __func__ << dendl;
 
-  if (coro_resumer != nullptr) {
-    dout(20) << __func__ << ": Stopping active coroutine" << dendl;
-    coro_resumer = nullptr;
-    coro_op_in_flight = false;
-
-    if (active_coro_ctx) {
-      dout(20) << __func__ << ": Cleaning up orphaned OpContext from coroutine" << dendl;
-      // Remove from in_progress_async_reads if present
-      for (auto it = in_progress_async_reads.begin();
-          it != in_progress_async_reads.end(); ++it) {
-        if (it->second == active_coro_ctx) {
-          in_progress_async_reads.erase(it);
-          break;
-        }
-      }
-      // Close the context to release all resources
-      close_op_ctx(active_coro_ctx);
-      active_coro_ctx = nullptr;
-    }
-  }
+  stop_coroutine();
 
   if (hit_set && hit_set->insert_count() == 0) {
     dout(20) << " discarding empty hit_set" << dendl;
