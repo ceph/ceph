@@ -170,6 +170,7 @@ Messaging and Networking
 
    messenger
    msgr2
+   msgr2-extended-features
    network-protocol
    rados-client-protocol
    dpdk
