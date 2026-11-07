@@ -3589,8 +3589,15 @@ def command_bootstrap(ctx):
         prepare_ssh(ctx, cli, wait_for_mgr_restart)
 
     if ctx.registry_url and ctx.registry_username and ctx.registry_password:
-        registry_credentials = {'url': ctx.registry_url, 'username': ctx.registry_username, 'password': ctx.registry_password}
-        cli(['config-key', 'set', 'mgr/cephadm/registry_credentials', json.dumps(registry_credentials)])
+        registry_credentials = {
+            'registry_credentials': [{
+                'url': ctx.registry_url,
+                'username': ctx.registry_username,
+                'password': ctx.registry_password,
+            }]
+        }
+        cli(['config-key', 'set', 'mgr/cephadm/registry_credentials',
+             json.dumps(registry_credentials)])
 
     cli(['config', 'set', 'mgr', 'mgr/cephadm/container_init', str(ctx.container_init), '--force'])
 
@@ -3691,14 +3698,14 @@ def command_registry_login(ctx: CephadmContext) -> int:
         example_multi_registry = {
             'registry_credentials': [
                 {
-                    'url': 'REGISTRY_URL1',
-                    'username': 'REGISTRY_USERNAME1',
-                    'password': 'REGISTRY_PASSWORD1'
+                    'url': '<REGISTRY_URL1>',
+                    'username': '<REGISTRY_USERNAME1>',
+                    'password': '<REGISTRY_PASSWORD1>'  # noqa: E501 (example placeholder)
                 },
                 {
-                    'url': 'REGISTRY_URL2',
-                    'username': 'REGISTRY_USERNAME2',
-                    'password': 'REGISTRY_PASSWORD2'
+                    'url': '<REGISTRY_URL2>',
+                    'username': '<REGISTRY_USERNAME2>',
+                    'password': '<REGISTRY_PASSWORD2>'  # noqa: E501 (example placeholder)
                 }
             ]
         }
