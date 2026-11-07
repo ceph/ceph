@@ -36,17 +36,31 @@ processed and pushed to an agent endpoint in the Ceph Manager.
 Limitations
 ===========
 
-For the time being, the ``node-proxy`` agent relies on the Redfish API.
-This implies that both ``node-proxy`` agent and the Ceph Manager need to be
-able to access the out-of-band network.
+For the time being, the ``node-proxy`` agent relies on the Redfish API. In
+Tentacle 20.2.3 and later releases, when ``mgr/cephadm/hw_monitoring_vendor``
+is ``atollon``, it also reads FCM statistics directly from the host's NVMe
+drives. The agent runs on each host whose host spec has ``oob`` details, and
+connects to that host's out-of-band management interface at the address and
+port given there (``oob.addr``; if it is not set, the value of
+``mgr/cephadm/oob_default_addr``, ``169.254.1.1`` by default; ``oob.port``,
+``443`` by default).
+
+The Ceph Manager does not connect to the out-of-band network. Each agent sends
+its data to the cephadm agent endpoint of the active Manager (TCP port 7150,
+or the next free port up to 7300). The Manager connects to each agent at the
+host's address on TCP port 9456 for the ``ceph orch hardware light``,
+``ceph orch hardware powercycle`` and ``ceph orch hardware shutdown``
+commands.
 
 
 Deploying the Agent
 ===================
 
-The first step is to provide the out-of-band management tool IP address and
-credentials. This can be done when adding the host with a :ref:`service
-spec <orchestrator-cli-service-spec>` file:
+The first step is to provide the out-of-band management credentials, and
+the out-of-band address if it is not the default. This can be done when
+adding the host with a host spec file (see "Creating many Hosts at Once" in
+:doc:`/cephadm/host-management`). In the ``oob`` section, ``username`` and
+``password`` are required; ``addr`` and ``port`` are optional.
 
 .. prompt:: bash # auto
 
@@ -77,7 +91,9 @@ Deploy the agent:
 CLI
 ===
 
-| **orch** **hardware** **status** [hostname] [--category CATEGORY] [--format plain | json]
+.. prompt:: bash #
+
+   ceph orch hardware status [<hostname>] [--category <category>] [--format <format>]
 
 Supported categories are:
 
@@ -89,8 +105,17 @@ Supported categories are:
 * power
 * fans
 * temperatures
-* firmware
+* firmware (requires a host name; ``firmwares`` is accepted as an alias)
 * criticals
+* fcm (statistics of FCM NVMe drives, read on the host; data only when
+  ``mgr/cephadm/hw_monitoring_vendor`` is ``atollon``)
+* fullreport (all data for one host; requires a host name and
+  ``--format json``)
+
+The ``temperatures`` and ``fcm`` categories, and the name ``firmware``, are in
+Tentacle 20.2.3 and later and in Umbrella 21. Squid 19.2 and Tentacle 20.2.0
+to 20.2.2 have no ``temperatures`` or ``fcm`` category and name the firmware
+category ``firmwares``.
 
 
 Examples
