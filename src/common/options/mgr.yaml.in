@@ -406,6 +406,21 @@ options:
   - runtime
   services:
   - mgr
+- name: mgr_init_delay
+  type: millisecs
+  level: dev
+  default: 0
+  desc: Number of milliseconds Mgr::init() sleeps before starting Python modules. Reproduces tracker_81666; for testing purposes only.
+  long_desc: Number of milliseconds Mgr::init() sleeps right before PyModuleRegistry::active_start(), while the Python
+    module registry is not yet active. This exists solely to reproduce the regression in
+    https://tracker.ceph.com/issues/81666 by letting mgr_module_load_expiration elapse before the modules are started.
+    It should never be set to a value greater than 0 outside of testing scenarios.
+  see_also:
+  - mgr_module_load_expiration
+  flags:
+  - runtime
+  services:
+  - mgr
 - name: cephadm_path
   type: str
   level: advanced
