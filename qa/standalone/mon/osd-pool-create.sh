@@ -183,6 +183,30 @@ function TEST_replicated_pool() {
         grep 'cannot change to type erasure' || return 1
 }
 
+function TEST_replica_read_pct_update_delay() {
+    local dir=$1
+    run_mon $dir a --rados-replica-read-policy=balance || return 1
+
+    ceph osd pool create balanced 12 || return 1
+    ceph osd pool get balanced pct_update_delay 2>&1 | \
+        grep 'pct_update_delay: 5' || return 1
+
+    # only ReplicatedBackend honours pct_update_delay
+    ceph osd pool create balanced-ec 12 12 erasure || return 1
+    ceph osd pool get balanced-ec pct_update_delay 2>&1 | \
+        grep "is not set on pool 'balanced-ec'" || return 1
+}
+
+function TEST_replica_read_pct_update_delay_default_policy() {
+    local dir=$1
+    run_mon $dir a --rados-replica-read-policy=default || return 1
+
+    # reads always go to the primary, so there is nothing to bound
+    ceph osd pool create unbalanced 12 || return 1
+    ceph osd pool get unbalanced pct_update_delay 2>&1 | \
+        grep "is not set on pool 'unbalanced'" || return 1
+}
+
 function TEST_no_pool_delete() {
     local dir=$1
     run_mon $dir a || return 1
