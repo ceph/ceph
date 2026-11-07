@@ -57,8 +57,10 @@ protected:
   std::string thread_name;
 
 public:
+  enum class ShutdownResult { OK, EXCEPTION, TIMEOUT };
+
   int serve();
-  void shutdown();
+  ShutdownResult shutdown();
   void log(const std::string &record);
 
   const char *get_thread_name() const
