@@ -14,6 +14,21 @@ from importlib import reload
 logger = logging.getLogger(__name__)
 
 
+def unload_mgr_modules(imported):
+    """
+    Unload the mgr modules imported since ``imported`` was taken.
+    mocked_modules() imports them with some of their dependencies replaced
+    by unittest.mock objects, and they keep those mocks. For example, a
+    method decorated with a mocked ``cherrypy.expose`` is a Mock object, so
+    autodoc would print Mock's docstring for it.
+    """
+    mgr_dir = os.path.dirname(os.path.dirname(sys.modules['tests'].__file__))
+    for name in set(sys.modules) - imported:
+        path = getattr(sys.modules[name], '__file__', None)
+        if path and path.startswith(mgr_dir + os.sep):
+            del sys.modules[name]
+
+
 class Flags:
     NOFORWARD = (1 << 0)
     OBSOLETE = (1 << 1)
@@ -294,6 +309,7 @@ class CephMgrCommands(Directive):
                          'cheroot.ssl',
                          'cheroot.ssl.builtin']
 
+        imported = set(sys.modules)
         for m in mock_imports:
             args = {}
             parts = m.split('=', 1)
@@ -308,6 +324,7 @@ class CephMgrCommands(Directive):
             for m in mock_imports:
                 mocked = m.split('=', 1)[0]
                 sys.modules.pop(mocked)
+            unload_mgr_modules(imported)
 
     def _collect_module_commands(self, name):
         with self.mocked_modules():
