@@ -321,6 +321,9 @@ class YumDnf(Packager):
         self.major = int(distro_version.split('.')[0])
         self.distro_normalized = self.DISTRO_NAMES[distro][0]
         self.distro_code = self.DISTRO_NAMES[distro][1] + str(self.major)
+        if self.distro_normalized == 'centos' and self.major >= 10:
+            # shaman publishes el10 dev builds only as rocky/10
+            self.distro_normalized = 'rocky'
         if (self.distro_code == 'fc' and self.major >= 30) or (
             self.distro_code == 'el' and self.major >= 8
         ):
