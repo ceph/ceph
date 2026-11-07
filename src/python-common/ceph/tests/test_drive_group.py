@@ -75,6 +75,18 @@ data_devices:
         ('/dev/sda', 'ssd'), ('/dev/sdb', None)]
 
 
+def test_DriveGroup_actuators_round_trip():
+    dg = DriveGroupSpec.from_json(yaml.safe_load("""service_type: osd
+service_id: testing_drivegroup
+placement:
+  host_pattern: hostname
+data_devices:
+  actuators: 2
+"""))
+    assert dg.to_json()['spec']['data_devices'] == {'actuators': 2}
+    loaded = DriveGroupSpec.from_json(dg.to_json())
+    assert loaded.data_devices.actuators == 2
+
 
 @pytest.mark.parametrize("match,test_input",
 [
