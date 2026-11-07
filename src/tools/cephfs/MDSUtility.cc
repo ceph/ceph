@@ -32,6 +32,8 @@ MDSUtility::MDSUtility() :
   messenger = Messenger::create_client_messenger(g_ceph_context, "mds");
   fsmap = new FSMap();
   objecter = new Objecter(g_ceph_context, messenger, monc, poolctx);
+  // Clients must direct ops to the source of a pool migration
+  objecter->set_honor_pool_migration();
 }
 
 
