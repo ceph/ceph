@@ -274,6 +274,33 @@ following form:
 
    ceph osd pool set <pool-name> crush_rule <rule-name>
 
+To make an existing rule place data only on one device class, run a command of
+the following form:
+
+.. prompt:: bash $
+
+   ceph osd crush rule set-device-class <rule-name> <class> [--yes-i-really-mean-it]
+
+The rule keeps its name and ID, so pools that use it need no change. The
+command refuses if no device of class ``<class>`` is under the rule's root.
+
+If every device under the rule's root is of class ``<class>``, no bucket under
+that root also sits in another bucket, and no rule yet names a class under that
+root, Ceph renumbers the CRUSH buckets so that no data moves. Ceph keeps the
+renumbering only after it confirms that no rule places data differently. That
+check fails when a weight set or a bucket's weight does not match the devices
+under it. When the renumbering is kept, every other rule under that root that
+does not name a class also starts using ``<class>``, the command's output lists
+those rules, and group flags set with ``ceph osd set-group`` stay with their
+buckets.
+
+Otherwise only this rule changes, and the data of pools that use it moves to
+devices of ``<class>``. When any pool uses the rule, the command then requires
+``--yes-i-really-mean-it``, and its output says why the buckets could not be
+renumbered. The command refuses while stretch mode is enabled,
+because pools on a rule that names a device class go inactive when a site is
+lost.
+
 Device classes are implemented by creating one or more "shadow" CRUSH
 hierarchies.  For each device class in use, there will be a shadow hierarchy
 that contains only devices of that class. CRUSH rules can then distribute data
