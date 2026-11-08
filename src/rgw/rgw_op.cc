@@ -9990,22 +9990,29 @@ void RGWPutObjRetention::execute(optional_yield y)
       op_ret = -EIO;
       return;
     }
-    if (ceph::real_clock::to_time_t(obj_retention.get_retain_until_date()) < ceph::real_clock::to_time_t(old_obj_retention.get_retain_until_date())) {
-      if (old_obj_retention.get_mode().compare("GOVERNANCE") != 0 || !bypass_perm || !bypass_governance_mode) {
-	  s->err.message = "proposed retain-until date shortens an existing retention period and governance bypass check failed";
-        op_ret = -EACCES;
-        return;
+    const auto old_until = ceph::real_clock::to_time_t(old_obj_retention.get_retain_until_date());
+    // an expired retention no longer restricts changes
+    if (old_until > ceph_clock_now()) {
+      const bool bypass = bypass_perm && bypass_governance_mode;
+      if (ceph::real_clock::to_time_t(obj_retention.get_retain_until_date()) < old_until) {
+        if (old_obj_retention.get_mode() != "GOVERNANCE" || !bypass) {
+          s->err.message = "proposed retain-until date shortens an existing retention period and governance bypass check failed";
+          op_ret = -EACCES;
+          return;
+        }
       }
-    } else if (old_obj_retention.get_mode() == obj_retention.get_mode()) {
-      // ok if retention mode doesn't change
-    } else if (obj_retention.get_mode() == "GOVERNANCE") {
-      s->err.message = "can't change retention mode from COMPLIANCE to GOVERNANCE";
-      op_ret = -EACCES;
-      return;
-    } else if (!bypass_perm || !bypass_governance_mode) {
-      s->err.message = "can't change retention mode from GOVERNANCE without governance bypass";
-      op_ret = -EACCES;
-      return;
+      if (old_obj_retention.get_mode() != obj_retention.get_mode()) {
+        if (obj_retention.get_mode() == "GOVERNANCE") {
+          s->err.message = "can't change retention mode from COMPLIANCE to GOVERNANCE";
+          op_ret = -EACCES;
+          return;
+        }
+        if (!bypass) {
+          s->err.message = "can't change retention mode from GOVERNANCE without governance bypass";
+          op_ret = -EACCES;
+          return;
+        }
+      }
     }
   }
 
