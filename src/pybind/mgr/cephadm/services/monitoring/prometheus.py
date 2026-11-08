@@ -161,11 +161,7 @@ class PrometheusService(CephadmService):
         # check if the prometheus.yml already exists in the config-key store,
         # if not we need to set the initial config-key with the default template content.
         # If it already exists, we need not override user config changes.
-        r, outs, err = self.mgr.mon_command({
-            'prefix': 'config-key get',
-            'key': 'mgr/cephadm/services/prometheus/prometheus.yml'
-        })
-        if r == -errno.ENOENT:
+        if self.mgr.get_store('services/prometheus/prometheus.yml') is None:
             loader = self.mgr.template.engine.env.loader
             assert loader is not None
 
@@ -173,11 +169,7 @@ class PrometheusService(CephadmService):
                 self.mgr.template.engine.env,
                 'services/prometheus/prometheus.yml.j2'
             )
-            self.mgr.check_mon_command({
-                'prefix': 'config-key set',
-                'key': 'mgr/cephadm/services/prometheus/prometheus.yml',
-                'val': raw_template
-            })
+            self.mgr.set_store('services/prometheus/prometheus.yml', raw_template)
 
         r: Dict[str, Any] = {
             'files': files,

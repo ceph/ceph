@@ -3,7 +3,6 @@ cephadm/serve.py remote-unexported dashboard.set_rgw_credentials
 cephadm/serve.py remote-unexported progress.complete
 cephadm/serve.py remote-unexported progress.fail
 cephadm/serve.py remote-unexported progress.update
-cephadm/services/monitoring/prometheus.py own-kv-via-mon mgr/cephadm/services/prometheus/prometheus.yml
 cephadm/services/monitoring/prometheus.py remote-unexported dashboard.get_cluster_credentials_files
 cephadm/services/nfs.py remote-unexported nfs.reconcile_client_pool
 cephadm/services/oauth2_proxy.py remote-unexported dashboard.disable_oauth2_sso
