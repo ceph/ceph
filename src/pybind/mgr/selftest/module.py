@@ -364,6 +364,22 @@ class Module(MgrModule):
         assert (set(self.get_store_prefix("test").keys())
                 == {"testkey"} | existing_keys)
 
+        # A module can always read its own keys.
+        assert self.get_store_ex("selftest", "testkey") == "testvalue"
+        # crash shares nothing with selftest.
+        try:
+            self.get_store_ex("crash", "testkey")
+        except PermissionError:
+            pass
+        else:
+            assert False, "get_store_ex should raise PermissionError"
+        try:
+            self.get_store_ex("__DNE__", "testkey")
+        except ImportError:
+            pass
+        else:
+            assert False, "get_store_ex should raise ImportError"
+
     def _self_test_perf_counters(self) -> None:
         self.get_unlabeled_perf_schema("osd", "0")
         self.get_unlabeled_counter("osd", "0", "osd.op")

@@ -597,8 +597,40 @@ should provide special commands to set the data via the module.
 Use the ``get_store_prefix`` function to enumerate keys within
 a particular prefix (i.e. all keys starting with a particular substring).
 
+Sharing KV data with other modules
+++++++++++++++++++++++++++++++++++
+
+A module can let specific other modules read part of its KV store.  Declare
+this with the ``SHARED_STORE`` class attribute, listing a key prefix (ending in
+``/``) and the names of the modules allowed to read it::
+
+    class Module(MgrModule):
+        SHARED_STORE = [
+            {'prefix': 'telemetry/', 'readers': ['telemetry']},
+        ]
+
+The reading module then uses ``get_store_ex``, which reads from the same local
+cache as ``get_store``::
+
+    metrics = self.get_store_ex('dashboard', 'telemetry/metrics')
+
+Only the owning module can write to its KV store.  Reads of keys that are not
+shared raise ``PermissionError``, and reads from a module that is missing or
+failed to load raise ``ImportError``.  Wildcard readers are not accepted.  An
+invalid ``SHARED_STORE`` declaration makes the owning module fail to load.
+
+.. warning:: Use this for data that changes rarely.  Every ``set_store`` is a
+   monitor write, and readers are not notified when a value changes.  To pass
+   data between modules on demand, or to compute it when asked, call a method
+   of the other module with ``remote()`` instead.
+
+.. note:: This is a contract between modules, not a security boundary.  All
+   modules run in the same process with the same capabilities, and can still
+   reach any key through ``mon_command``.
+
 
 .. automethod:: MgrModule.get_store
+.. automethod:: MgrModule.get_store_ex
 .. automethod:: MgrModule.set_store
 .. automethod:: MgrModule.get_localized_store
 .. automethod:: MgrModule.set_localized_store

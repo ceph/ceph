@@ -430,6 +430,12 @@ int PyModule::load(PyThreadState *pMainThreadState)
 
     load_notify_types();
 
+    r = load_shared_store();
+    if (r != 0) {
+      error_string = "Invalid SHARED_STORE attribute";
+      return r;
+    }
+
     // We've imported the module and found a MgrModule subclass, at this
     // point the module is considered loaded.  It might still not be
     // runnable though, can_run populated later...
@@ -579,6 +585,83 @@ int PyModule::load_notify_types()
   Py_DECREF(ls);
   dout(10) << "Module " << get_name() << " notify_types " << notify_types << dendl;
 
+  return 0;
+}
+
+int PyModule::load_shared_store()
+{
+  PyObject *ls = PyObject_GetAttrString(pClass, "SHARED_STORE");
+  if (ls == nullptr) {
+    // SHARED_STORE is optional - clear expected AttributeError
+    if (PyErr_ExceptionMatches(PyExc_AttributeError)) {
+      PyErr_Clear();
+      dout(10) << "Module " << get_name() << " has no SHARED_STORE member" << dendl;
+      return 0;
+    }
+    derr << "Error getting SHARED_STORE from " << get_name() << ": "
+         << handle_pyerror(true, module_name, "load_shared_store") << dendl;
+    return -EINVAL;
+  }
+
+  auto is_sequence = [](PyObject *o) {
+    return PyList_Check(o) || PyTuple_Check(o);
+  };
+  auto as_string = [](PyObject *o, std::string *out) {
+    if (!PyUnicode_Check(o)) {
+      return false;
+    }
+    const char *s = PyUnicode_AsUTF8(o);
+    if (s == nullptr) {
+      PyErr_Clear();
+      return false;
+    }
+    *out = s;
+    return true;
+  };
+
+  // Each entry is {'prefix': str, 'readers': [str, ...]}.  Any invalid entry
+  // fails the whole declaration, so the module fails to load.
+  std::string err;
+  if (!is_sequence(ls)) {
+    err = "SHARED_STORE is not a list";
+  }
+  for (Py_ssize_t i = 0; err.empty() && i < PySequence_Fast_GET_SIZE(ls); ++i) {
+    PyObject *item = PySequence_Fast_GET_ITEM(ls, i);
+    PyObject *py_prefix = PyDict_Check(item) ?
+      PyDict_GetItemString(item, "prefix") : nullptr;
+    PyObject *py_readers = PyDict_Check(item) ?
+      PyDict_GetItemString(item, "readers") : nullptr;
+    std::string prefix;
+    if (py_prefix == nullptr || !as_string(py_prefix, &prefix) ||
+        py_readers == nullptr || !is_sequence(py_readers)) {
+      err = "entry " + std::to_string(i) +
+        " is not {'prefix': str, 'readers': [str, ...]}";
+      break;
+    }
+    SharedStorePolicy::Readers readers;
+    for (Py_ssize_t j = 0; j < PySequence_Fast_GET_SIZE(py_readers); ++j) {
+      std::string reader;
+      if (!as_string(PySequence_Fast_GET_ITEM(py_readers, j), &reader)) {
+        err = "entry " + std::to_string(i) + ": readers must be strings";
+        break;
+      }
+      readers.insert(std::move(reader));
+    }
+    if (err.empty() &&
+        !shared_store.add(std::move(prefix), std::move(readers), &err)) {
+      err = "entry " + std::to_string(i) + ": " + err;
+    }
+  }
+  Py_DECREF(ls);
+
+  if (!err.empty()) {
+    derr << "Module " << get_name() << " has invalid SHARED_STORE: " << err
+         << dendl;
+    shared_store = {};
+    return -EINVAL;
+  }
+  dout(10) << "Module " << get_name() << " shares " << shared_store.size()
+           << " KV prefix(es)" << dendl;
   return 0;
 }
 

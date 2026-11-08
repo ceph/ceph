@@ -2310,6 +2310,31 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         else:
             return r
 
+    def get_store_ex(self, module: str, key: str, default: Optional[str] = None) -> Optional[str]:
+        """
+        Get a value from the persistent key value store of another module.
+
+        The other module (the owner) must have shared the key with this
+        module, by listing it in its ``SHARED_STORE`` class attribute::
+
+            SHARED_STORE = [{'prefix': 'telemetry/', 'readers': ['telemetry']}]
+
+        The key is relative to the owner's store, as for :func:`get_store`,
+        and the value comes from the same local cache. Only the owner can
+        write to its store.
+
+        :param module: name of the module that owns the data
+        :param key: the key, relative to the owner's store
+        :param default: returned if the key does not exist
+        :raises PermissionError: the owner does not share this key with this module
+        :raises ImportError: the owner is not found or failed to load
+        """
+        r = self._ceph_get_store_ex(module, key)
+        if r is None:
+            return default
+        else:
+            return r
+
     @API.expose
     def get_localized_store(self, key: str, default: Optional[str] = None) -> Optional[str]:
         r = self._ceph_get_store(_get_localized_key(self.get_mgr_id(), key))
