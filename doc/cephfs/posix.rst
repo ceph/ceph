@@ -102,3 +102,39 @@ See `PostgreSQL's summary of fsync() error reporting across operating systems
 <https://wiki.postgresql.org/wiki/Fsync_Errors>`_ and `Matthew Wilcox's
 presentation on Linux I/O error handling
 <https://www.youtube.com/watch?v=74c19hwY2oE>`_ for more information.
+
+
+Appending from more than one host
+---------------------------------
+
+POSIX requires that each write(2) to a file opened with ``O_APPEND`` go to
+the end of the file as it stands at the time of that write. When processes on
+different hosts append to the same file at the same time, a CephFS client can
+instead write at an end of file that is out of date, overwriting data that a
+client on another host has just appended. This affects kernel clients,
+ceph-fuse, and libcephfs. See `tracker issue 7333
+<https://tracker.ceph.com/issues/7333>`_.
+
+With kernel clients and libcephfs, when processes on more than one host append
+to the same file, each process must hold an exclusive lock on the file for
+each append, for example by calling ``flock(fd, LOCK_EX)`` before the write(2)
+and ``flock(fd, LOCK_UN)`` after it. A libcephfs application that opened the
+file with ``O_APPEND`` can call ``ceph_flock()`` and then ``ceph_write()`` with
+an offset of -1. This works only if every process that appends to the file
+takes the lock.
+
+ceph-fuse can write at an out-of-date end of file even while the process holds
+the lock. Do not append to the same file through ceph-fuse on more than one
+host; use the kernel client or libcephfs for those processes instead.
+
+
+File locks
+----------
+
+Kernel clients, ceph-fuse, and libcephfs support advisory locks taken with
+flock(2) and with fcntl(2) (POSIX record locks). The MDS tracks every lock, so
+a lock that a process holds on one host blocks a conflicting lock request from
+a process on any other host. As on local Linux file systems, flock(2) locks
+and fcntl(2) locks are independent of each other: a flock(2) lock does not
+conflict with an fcntl(2) lock on the same file. CephFS does not support
+mandatory locks.
