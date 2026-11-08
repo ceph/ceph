@@ -200,6 +200,10 @@ enum {
   l_osdc_core_con_open,
   l_osdc_core_con_reset,
   l_osdc_op_send_switch_pending,
+  l_osdc_core_switch_hold,
+  l_osdc_core_switch_hold_expired,
+  l_osdc_op_switch_held,
+  l_osdc_core_switch_hold_time,
 
   l_osdc_last,
 };
@@ -452,6 +456,18 @@ void Objecter::init()
     pcb.add_u64_counter(l_osdc_op_send_switch_pending, "op_send_switch_pending",
 			"Operations sent while their PG was due to switch to "
 			"another OSD connection, but had ops in flight");
+    pcb.add_u64_counter(l_osdc_core_switch_hold, "core_switch_hold",
+			"PGs holding their new ops, for their ops in flight "
+			"to drain before switching to another OSD connection");
+    pcb.add_u64_counter(l_osdc_core_switch_hold_expired,
+			"core_switch_hold_expired",
+			"PG holds that ended before their ops in flight "
+			"drained (objecter_osd_core_switch_max_hold)");
+    pcb.add_u64_counter(l_osdc_op_switch_held, "op_switch_held",
+			"Operations held for their PG to switch to another "
+			"OSD connection");
+    pcb.add_time_avg(l_osdc_core_switch_hold_time, "core_switch_hold_time",
+		     "Time PGs held their new ops");
 
     logger = pcb.create_perf_counters();
     cct->get_perfcounters_collection()->add(logger);
@@ -1572,6 +1588,16 @@ void Objecter::handle_osd_map(MOSDMap *m)
     }
   }
 
+  // the PGs whose ops drained, being resent elsewhere or canceled
+  if (use_osd_core_hints) {
+    for (auto& [osd, s] : osd_sessions) {
+      if (s->has_drained_holds) {
+	std::unique_lock sl(s->lock);
+	_release_drained_holds(s);
+      }
+    }
+  }
+
   _dump_active();
 
   // finish any Contexts that were waiting on a map update
@@ -2212,7 +2238,18 @@ void Objecter::_close_core_cons(OSDSession *s)
     route.hinted_core.reset();
     route.core.reset();
     route.switch_pending_since.reset();
+    if (route.holding) {
+      // the held ops are resent (or moved to the homeless session) by our
+      // caller, along with all of the session's ops
+      route.holding = false;
+      if (route.hold_event) {
+	timer.cancel_event(route.hold_event);
+	route.hold_event = 0;
+      }
+    }
   }
+  s->drained_holds.clear();
+  s->has_drained_holds = false;
   // the ops sent on these connections are no longer in flight
   for (auto& [tid, op] : s->ops) {
     if (op->routed_core) {
@@ -2244,12 +2281,22 @@ void Objecter::_reset_core_con(OSDSession *s,
   // the hints to that core, so that the next one reconnects.
   // TODO: back off reconnecting to a core that keeps failing
   std::set<spg_t> rerouted;
+  std::set<spg_t> released_holds;
   for (auto& [pgid, route] : s->pg_routes) {
     if (route.hinted_core != core && route.core != core) {
       continue;
     }
     // a new start for the route
     route.switch_pending_since.reset();
+    if (route.holding) {
+      // its held ops are sent below, along with the resent ones
+      route.holding = false;
+      if (route.hold_event) {
+	timer.cancel_event(route.hold_event);
+	route.hold_event = 0;
+      }
+      released_holds.insert(pgid);
+    }
     if (route.hinted_core == core) {
       route.hinted_core.reset();
     }
@@ -2266,6 +2313,14 @@ void Objecter::_reset_core_con(OSDSession *s,
   for (auto p = s->ops.begin(); p != s->ops.end();) {
     Op *op = p->second;
     ++p;
+    if (op->switch_held) {
+      // not sent yet, so even if !should_resend
+      if (released_holds.contains(op->target.actual_pgid) &&
+	  !op->target.paused) {
+	resend[op->tid] = op;
+      }
+      continue;
+    }
     if (op->routed_core != core) {
       continue;
     }
@@ -2368,11 +2423,13 @@ void Objecter::_op_unroute(Op *op)
   if (!op->routed_pgid) {
     return;
   }
-  auto& route = op->session->pg_routes.at(*op->routed_pgid);
+  const auto pgid = *op->routed_pgid;
+  auto& route = op->session->pg_routes.at(pgid);
   ceph_assert(route.in_flight > 0);
   --route.in_flight;
   op->routed_pgid.reset();
   op->routed_core.reset();
+  _route_maybe_drained(op->session, pgid, route);
 }
 
 void Objecter::_op_note_unanswered(Op *op)
@@ -2405,10 +2462,12 @@ void Objecter::_op_answered_late(OSDSession *s, ceph_tid_t tid)
   }
   ldout(cct, 10) << __func__ << " osd." << s->osd << " pg " << i->second.pgid
 		 << " tid " << tid << dendl;
-  auto& route = s->pg_routes.at(i->second.pgid);
+  const auto pgid = i->second.pgid;
+  auto& route = s->pg_routes.at(pgid);
   ceph_assert(route.unanswered > 0);
   --route.unanswered;
   s->unanswered.erase(i);
+  _route_maybe_drained(s, pgid, route);
 }
 
 void Objecter::_forget_unanswered(OSDSession *s,
@@ -2418,10 +2477,12 @@ void Objecter::_forget_unanswered(OSDSession *s,
   // s->lock is locked
   for (auto i = s->unanswered.begin(); i != s->unanswered.end();) {
     if (all || i->second.core == core) {
-      auto& route = s->pg_routes.at(i->second.pgid);
+      const auto pgid = i->second.pgid;
+      auto& route = s->pg_routes.at(pgid);
       ceph_assert(route.unanswered > 0);
       --route.unanswered;
       i = s->unanswered.erase(i);
+      _route_maybe_drained(s, pgid, route);
     } else {
       ++i;
     }
@@ -2431,21 +2492,210 @@ void Objecter::_forget_unanswered(OSDSession *s,
 void Objecter::_prune_unanswered(OSDSession *s)
 {
   // s->lock is locked
-  const auto cutoff = ceph::coarse_mono_clock::now() -
-    ceph::make_timespan(cct->_conf->objecter_timeout);
+  const auto cutoff = ceph::coarse_mono_clock::now() - _unanswered_max_age();
   for (auto i = s->unanswered.begin(); i != s->unanswered.end();) {
     if (i->second.since < cutoff) {
       ldout(cct, 5) << __func__ << " osd." << s->osd << " pg "
 		    << i->second.pgid << " tid " << i->first
 		    << ": no answer, giving up on it" << dendl;
-      auto& route = s->pg_routes.at(i->second.pgid);
+      const auto pgid = i->second.pgid;
+      auto& route = s->pg_routes.at(pgid);
       ceph_assert(route.unanswered > 0);
       --route.unanswered;
       i = s->unanswered.erase(i);
+      _route_maybe_drained(s, pgid, route);
     } else {
       ++i;
     }
   }
+}
+
+ceph::timespan Objecter::_unanswered_max_age() const
+{
+  // as long as a hold may wait for them
+  return ceph::make_timespan(
+    cct->_conf.get_val<double>("objecter_osd_core_switch_max_hold"));
+}
+
+bool Objecter::_op_hold_for_switch(Op *op)
+{
+  // op->session->lock is locked
+  auto s = op->session;
+  if (!use_osd_core_hints || s->osd < 0) {
+    return false;
+  }
+  const auto& pgid = op->target.actual_pgid;
+  auto& route = s->pg_routes[pgid];
+  if (route.holding) {
+    return true;
+  }
+  if (!route.switch_pending_since || !route.busy() ||
+      _route_desired(s, route) == route.core) {
+    // not due to switch, or _op_route() switches now
+    return false;
+  }
+  const double grace =
+    cct->_conf.get_val<double>("objecter_osd_core_switch_grace");
+  if (grace <= 0) {
+    return false;
+  }
+  const auto now = ceph::coarse_mono_clock::now();
+  if (now - *route.switch_pending_since < ceph::make_timespan(grace)) {
+    return false;
+  }
+  if (route.unanswered > 0) {
+    _prune_unanswered(s);
+    if (!route.busy()) {
+      return false;
+    }
+  }
+
+  // hold the PG's new ops until its ops drain, for max_hold at most
+  const double max_hold =
+    cct->_conf.get_val<double>("objecter_osd_core_switch_max_hold");
+  route.holding = true;
+  route.hold_since = now;
+  route.hold_seq = ++s->last_hold_seq;
+  route.hold_event = timer.add_event(
+    ceph::make_timespan(max_hold),
+    [this, osd = s->osd, pgid, seq = route.hold_seq] {
+      core_switch_hold_expired(osd, pgid, seq);
+    });
+  logger->inc(l_osdc_core_switch_hold);
+  ldout(cct, 5) << __func__ << " osd." << s->osd << " pg " << pgid
+		<< ": due to switch to core "
+		<< (route.hinted_core ? std::to_string(*route.hinted_core) : "none")
+		<< " for " << (now - *route.switch_pending_since)
+		<< ", holding its ops until " << route.in_flight
+		<< " ops in flight and " << route.unanswered
+		<< " canceled ones are answered (hold " << route.hold_seq << ")"
+		<< dendl;
+  return true;
+}
+
+void Objecter::_route_maybe_drained(OSDSession *s,
+				    const spg_t& pgid,
+				    const OSDSession::pg_route_t& route)
+{
+  // s->lock is locked
+  if (route.holding && !route.busy()) {
+    s->drained_holds.insert(pgid);
+    s->has_drained_holds = true;
+  }
+}
+
+void Objecter::_end_core_switch_hold(OSDSession *s,
+				     const spg_t& pgid,
+				     OSDSession::pg_route_t& route,
+				     bool drained)
+{
+  // s->lock is locked
+  ceph_assert(route.holding);
+  route.holding = false;
+  if (route.hold_event) {
+    timer.cancel_event(route.hold_event);
+    route.hold_event = 0;
+  }
+  const auto now = ceph::coarse_mono_clock::now();
+  logger->tinc(l_osdc_core_switch_hold_time, now - route.hold_since);
+  if (drained) {
+    ldout(cct, 10) << __func__ << " osd." << s->osd << " pg " << pgid
+		   << ": drained after " << (now - route.hold_since)
+		   << " (hold " << route.hold_seq << ")" << dendl;
+  } else {
+    // the held ops go on the current connection. Wait for the grace
+    // period again before holding again.
+    logger->inc(l_osdc_core_switch_hold_expired);
+    route.switch_pending_since = now;
+    ldout(cct, 1) << __func__ << " osd." << s->osd << " pg " << pgid
+		  << ": not drained after " << (now - route.hold_since)
+		  << ", " << route.in_flight << " ops in flight and "
+		  << route.unanswered << " canceled ones still unanswered;"
+		  << " not switching to core "
+		  << (route.hinted_core ? std::to_string(*route.hinted_core) : "none")
+		  << " (hold " << route.hold_seq << ")" << dendl;
+  }
+}
+
+void Objecter::_release_core_switch_hold(OSDSession *s,
+					 const spg_t& pgid,
+					 bool drained)
+{
+  // rwlock is locked
+  // s->lock is locked
+  _end_core_switch_hold(s, pgid, s->pg_routes.at(pgid), drained);
+
+  // in tid order. If drained, the first one switches the PG's route
+  std::vector<Op*> held;
+  for (auto& [tid, op] : s->ops) {
+    if (op->switch_held && op->target.actual_pgid == pgid &&
+	!op->target.paused) {
+      held.push_back(op);
+    }
+  }
+  ldout(cct, 10) << __func__ << " osd." << s->osd << " pg " << pgid
+		 << ": sending " << held.size() << " held ops" << dendl;
+  for (auto op : held) {
+    _send_op(op);
+  }
+}
+
+void Objecter::_release_drained_holds(OSDSession *s)
+{
+  // rwlock is locked
+  // s->lock is locked
+  if (!s->has_drained_holds) {
+    return;
+  }
+  auto drained = std::move(s->drained_holds);
+  s->drained_holds.clear();
+  s->has_drained_holds = false;
+  for (const auto& pgid : drained) {
+    auto i = s->pg_routes.find(pgid);
+    // (a hold may have ended since, or another one started)
+    if (i != s->pg_routes.end() && i->second.holding && !i->second.busy()) {
+      _release_core_switch_hold(s, pgid, true);
+    }
+  }
+}
+
+void Objecter::release_drained_holds(OSDSession *s)
+{
+  if (!s->has_drained_holds) {
+    return;
+  }
+  shared_lock rl(rwlock);
+  if (!initialized) {
+    return;
+  }
+  unique_lock sl(s->lock);
+  _release_drained_holds(s);
+}
+
+void Objecter::core_switch_hold_expired(int osd, spg_t pgid, uint64_t hold_seq)
+{
+  shared_lock rl(rwlock);
+  if (!initialized) {
+    return;
+  }
+  auto si = osd_sessions.find(osd);
+  if (si == osd_sessions.end()) {
+    return;
+  }
+  auto s = si->second;
+  unique_lock sl(s->lock);
+  auto i = s->pg_routes.find(pgid);
+  if (i == s->pg_routes.end() || !i->second.holding ||
+      i->second.hold_seq != hold_seq) {
+    // the hold has ended already
+    return;
+  }
+  auto& route = i->second;
+  route.hold_event = 0;  // firing
+  if (route.unanswered > 0) {
+    _prune_unanswered(s);
+  }
+  _release_core_switch_hold(s, pgid, !route.busy());
 }
 
 void Objecter::_session_apply_core_hint(OSDSession *s,
@@ -2694,6 +2944,8 @@ void Objecter::tick()
     if (!s->unanswered.empty()) {
       _prune_unanswered(s);
     }
+    // a fallback: holds drain mostly on replies (handle_osd_op_reply())
+    _release_drained_holds(s);
     bool found = false;
     for (auto p = s->ops.begin(); p != s->ops.end(); ++p) {
       auto op = p->second;
@@ -3239,6 +3491,8 @@ int Objecter::op_cancel(OSDSession *s, ceph_tid_t tid, int r,
   _op_cancel_map_check(op);
   _op_note_unanswered(op);
   _finish_op(op, r);
+  // (rwlock is locked by our callers)
+  _release_drained_holds(s);
   sl.unlock();
 
   return 0;
@@ -4254,8 +4508,9 @@ void Objecter::_send_op(Op *op)
   // rwlock is locked
   // op->session->lock is locked
 
-  // a previous send of op (if any) is void
+  // a previous send (or hold) of op (if any) is void
   _op_unroute(op);
+  op->switch_held = false;
 
   // backoff?
   auto p = op->session->backoffs.find(op->target.actual_pgid);
@@ -4279,6 +4534,16 @@ void Objecter::_send_op(Op *op)
 	return;
       }
     }
+  }
+
+  // to let its PG switch to another connection?
+  if (_op_hold_for_switch(op)) {
+    ldout(cct, 20) << __func__ << " holding tid " << op->tid << " of "
+		   << op->target.actual_pgid << " on osd." << op->session->osd
+		   << dendl;
+    op->switch_held = true;
+    logger->inc(l_osdc_op_switch_held);
+    return;
   }
 
   ceph_assert(op->tid > 0);
@@ -4451,6 +4716,22 @@ bs::error_code Objecter::process_op_reply_handlers(Op *op, const vector<OSDOp>& 
 
 
 void Objecter::handle_osd_op_reply(cref_t<MOSDOpReply> m)
+{
+  if (!use_osd_core_hints) {
+    _handle_osd_op_reply(std::move(m));
+    return;
+  }
+  // the reply may drain a PG's ops, ending its hold: the held ops are
+  // sent once the reply is handled, and the locks are released. (Also
+  // keeps the session alive meanwhile.)
+  auto priv = m->get_connection()->get_priv();
+  _handle_osd_op_reply(std::move(m));
+  if (auto s = static_cast<OSDSession*>(priv.get()); s) {
+    release_drained_holds(s);
+  }
+}
+
+void Objecter::_handle_osd_op_reply(cref_t<MOSDOpReply> m)
 {
   ldout(cct, 10) << "in handle_osd_op_reply" << dendl;
 
@@ -5920,6 +6201,9 @@ void Objecter::_dump_ops(const OSDSession *s, Formatter *fmt)
     fmt->dump_int("attempts", op->attempts);
     if (op->routed_core) {
       fmt->dump_unsigned("osd_core", *op->routed_core);
+    }
+    if (op->switch_held) {
+      fmt->dump_bool("held_for_core_switch", true);
     }
     fmt->dump_stream("snapid") << op->snapid;
     fmt->dump_stream("snap_context") << op->snapc;

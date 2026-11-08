@@ -2543,6 +2543,36 @@ options:
     Read when the client starts.
   see_also:
   - crimson_osd_core_listeners
+  - objecter_osd_core_switch_grace
+- name: objecter_osd_core_switch_grace
+  type: float
+  level: advanced
+  default: 1
+  desc: Seconds a PG may take to switch to the connection of its OSD core,
+    before its new ops are held for it to do so
+  long_desc: With objecter_use_osd_core_hints, a PG's ops move to the
+    connection of the OSD core hinted for it only while none of them is in
+    flight, so that they reach the OSD in order. A PG that is kept busy
+    would never switch. After this many seconds, the PG's new ops are held,
+    not sent, until its ops in flight are answered; the PG then switches,
+    and the held ops are sent. 0 - never hold.
+  see_also:
+  - objecter_use_osd_core_hints
+  - objecter_osd_core_switch_max_hold
+- name: objecter_osd_core_switch_max_hold
+  type: float
+  level: advanced
+  default: 2
+  desc: The longest time (in seconds) a PG's new ops are held for it to
+    switch to the connection of its OSD core
+  long_desc: If a PG's ops in flight are not all answered by then (see
+    objecter_osd_core_switch_grace), its held ops are sent on its current
+    connection, and the PG may be held again after another
+    objecter_osd_core_switch_grace. Also the longest time an op canceled
+    after being sent keeps its PG from switching, while its answer is due.
+  min: 0.01
+  see_also:
+  - objecter_osd_core_switch_grace
 # ignore the first reply for each write, and resend the osd op instead
 - name: objecter_retry_writes_after_first_reply
   type: bool
