@@ -24,17 +24,16 @@ also makes a client that the cluster turns away fail at once, with a reason.
   first check the connected clients, as ``set-require-min-compat-client`` does.
 - **Kernels stay simple.** Unmodified kernels need nothing and are refused
   cleanly. To take part, a kernel needs 12 lines of code.
-- **Umbrella keeps bit 54.** The server-side half of the clean rejection needs
-  no wire change, so it can be backported to Umbrella. With it, a client that
-  connects during a pool migration fails in about a second instead of after
+- **Backportable to Umbrella.** The server-side half of the clean rejection
+  needs no wire change. With it, an older client that connects to an Umbrella
+  cluster during a pool migration fails in about a second instead of after
   nearly an hour.
 
 The problem
 ===========
 
-Main has five unadvertised connection bits left: 17, 51, 54, 55 and 63. `PR
-#73238 <https://github.com/ceph/ceph/pull/73238>`__ takes 54 for Umbrella. At
-the rate since 2017, about two bits per release, that lasts two releases.
+Main has five unadvertised connection bits left. At the rate since 2017, about
+two bits per release, that lasts two releases.
 
 - **Every bit since 2018 has been a reused retired bit.** 11 of the last 21
   were ``SERVER_<release>`` markers, one per release.
@@ -42,10 +41,6 @@ the rate since 2017, about two bits per release, that lasts two releases.
   ``HAVE_FEATURE`` for some reused bits: Pacific OSDs look like Reef (the
   v18.2.8 known issue), and Nautilus clients pass the ``CRUSH_MSR``
   requirement.
-- **Umbrella still needs bit 54.** Umbrella has been released, so a backported
-  server can only tell an upstream Umbrella client apart by what that client
-  already sends: a connection bit. Pool migration and pools over zones share
-  that one bit.
 
 Requirements
 ============
@@ -185,9 +180,8 @@ either runs out, or cannot tell the servers what a client has.
      - Why
    * - Keep reusing retired connection bits
      - Rejected for anything clients see
-     - Four are left after PR #73238. Old releases already pass
-       ``HAVE_FEATURE`` for some reused bits, and client bits cannot be
-       retired.
+     - Five are left. Old releases already pass ``HAVE_FEATURE`` for some
+       reused bits, and client bits cannot be retired.
    * - An OSD session hello, like CephFS
      - Rejected
      - Every client would need a new handshake with every OSD, and every route
@@ -772,9 +766,9 @@ Problems found in current code along the way:
 - a ``test_msgr`` macro changes ``Policy``'s layout between the test and the
   library, so ``FeatureTest`` has been passing for the wrong reason;
 - Luminous to Nautilus clients falsely pass ``HAVE_FEATURE`` for ``CRUSH_MSR``,
-  ``SERVER_TENTACLE``, ``SERVER_UMBRELLA``, ``SERVER_VAMPIRE`` and bit 54,
-  because they still send old meanings of reused bits. Confirmed live: they
-  connect to a cluster with an MSR rule;
+  ``SERVER_TENTACLE``, ``SERVER_UMBRELLA`` and ``SERVER_VAMPIRE``, because they
+  still send old meanings of reused bits. Confirmed live: they connect to a
+  cluster with an MSR rule;
 - likely, but not tested: the mon's existing msgr1 authentication-failure path
   closes the connection straight after its reply, so a kernel can miss the
   error.
