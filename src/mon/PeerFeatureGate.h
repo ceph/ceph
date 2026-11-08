@@ -11,6 +11,7 @@
 
 #include "common/ceph_mutex.h"
 #include "common/ceph_time.h"
+#include "include/feature_set.h"
 
 /// Which clients the mons turn away at authentication for lacking
 /// required features (Monitor::rejects_peer()), with what the policy alone
@@ -27,20 +28,27 @@ public:
   /// what a client has told us when it asks to authenticate
   struct peer_t {
     enum class kind_t {
-      MSGR1,    ///< features from the connection
-      UNKNOWN,  ///< msgr2: features come only after authentication
+      BANNER,   ///< msgr2, with features and features_ext from its banner
+      MSGR1,    ///< features from the connection; no extended features
+      UNKNOWN,  ///< older msgr2: features come only after authentication
     } kind = kind_t::UNKNOWN;
     uint64_t features = 0;
+    ceph::feature_set_t features_ext;
     uint64_t global_id = 0;  ///< as claimed, not yet verified
   };
 
   struct refusal_t {
     uint64_t missing = 0;
+    ceph::feature_set_t missing_ext;
     std::string reason;
   };
 
-  /// whether @p peer lacks @p required
-  std::optional<refusal_t> check(uint64_t required, const peer_t& peer,
+  /// whether @p peer lacks @p required or @p required_ext; @p why tells
+  /// clients why the extended features are required
+  std::optional<refusal_t> check(uint64_t required,
+                                 const ceph::feature_set_t& required_ext,
+                                 const std::string& why,
+                                 const peer_t& peer,
                                  ceph::mono_time now);
 
   /// Identification refused client @p global_id, whose global_id we know

@@ -6736,13 +6736,22 @@ bool Monitor::rejects_peer(Connection *con, std::string *reason)
   if (!con->is_msgr2()) {
     peer.kind = kind_t::MSGR1;
     peer.features = con->get_features();
+  } else if (con->peer_banner_valid) {
+    peer.kind = kind_t::BANNER;
+    peer.features = con->peer_banner_features;
+    peer.features_ext = con->peer_banner_ext;
   }
   auto now = ceph::mono_clock::now();
-  auto refusal = peer_gate.check(policy.features_required, peer, now);
+  auto refusal = peer_gate.check(policy.features_required,
+                                 policy.features_ext_required,
+                                 policy.features_required_reason, peer, now);
   if (!refusal) {
     return false;
   }
   *reason = refusal->reason;
+  con->refusal_reason = refusal->reason;
+  con->refusal_missing = refusal->missing;
+  con->refusal_missing_ext = refusal->missing_ext;
   auto addr = stringify(con->get_peer_socket_addr());
   dout(10) << __func__ << " " << ceph_entity_type_name(type) << " at " << addr
            << ": " << *reason << dendl;

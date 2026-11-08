@@ -5,17 +5,27 @@
 
 #include <fmt/format.h>
 
+#include "include/ceph_features_ext.h"
+
 std::optional<PeerFeatureGate::refusal_t> PeerFeatureGate::check(
   uint64_t required,
+  const ceph::feature_set_t& required_ext,
+  const std::string& why,
   const peer_t& peer,
   ceph::mono_time now)
 {
   using kind_t = peer_t::kind_t;
   refusal_t r;
+  if (peer.kind == kind_t::BANNER) {
+    r.missing = required & ~peer.features;
+    r.missing_ext = required_ext - peer.features_ext;
+  } else {
+    r.missing_ext = required_ext;
+  }
   if (peer.kind == kind_t::MSGR1) {
     r.missing = required & ~peer.features;
   }
-  if (peer.kind == kind_t::UNKNOWN && peer.global_id) {
+  if (peer.kind == kind_t::UNKNOWN && r.missing_ext.empty() && peer.global_id) {
     std::lock_guard l(lock);
     // Kept until it expires: a peer presenting someone else's global_id
     // only gets itself turned away, and cannot clear the entry.
@@ -24,11 +34,21 @@ std::optional<PeerFeatureGate::refusal_t> PeerFeatureGate::check(
       r.missing = p->second.missing & required;
     }
   }
-  if (!r.missing) {
+  if (!r.missing && r.missing_ext.empty()) {
     return std::nullopt;
   }
-  r.reason = fmt::format(
-    "this cluster requires features {:#x} that this client lacks", r.missing);
+  r.reason = "this cluster requires " +
+    ceph_describe_missing_features(r.missing, r.missing_ext) +
+    " that this client lacks";
+  if (!r.missing_ext.empty()) {
+    if (!why.empty()) {
+      r.reason += ": " + why;
+    }
+    if (peer.kind != kind_t::BANNER) {
+      r.reason += "; use a vampire or later client with msgr2"
+        " (kernel: mount with ms_mode=prefer-crc)";
+    }
+  }
   return r;
 }
 

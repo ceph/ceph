@@ -2096,6 +2096,15 @@ options:
   - runtime
   services:
   - mon
+- name: mon_debug_require_client_ext_features
+  type: str
+  level: dev
+  desc: Extended feature bits the monitors require of clients, for tests
+  long_desc: Comma-separated numbers.
+  flags:
+  - runtime
+  services:
+  - mon
 - name: mon_debug_extra_checks
   type: bool
   level: dev
