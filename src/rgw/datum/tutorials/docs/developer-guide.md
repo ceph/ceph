@@ -117,14 +117,15 @@ This is a deliberate whole-page validation contract, not a model for every nativ
 Publication and storage effects stay outside preparation; `std::expected` itself supplies no
 rollback. Sharing one encoding across writes likewise does not make the writes atomic.
 
-**Available interfaces:** in this Datum checkout, `visit_range` and `scan_range` require an
-`acceptance` callback result; callback exceptions propagate without a partial result.
-`traversal::for_each_page` already accepts an expected-returning **reader**: read failure reports
-the error, the attempted page’s resume state, and the count of previously visited pages.
-Its visitor returns `void` or `page_action`; visitor exceptions propagate. Row consumption,
-page progress, safe retry, and transaction commit therefore remain separate contracts.
-Fallible visitation with error/progress results is a candidate in the object-class integration branch;
-the example here does not depend on it.
+**Available interfaces:** `visit_range` and `scan_range` accept callbacks returning either
+`acceptance` or `std::expected<acceptance, Error>`. A returned error retains the prior progress
+and counts the failing row as offered but unconsumed. A failed scan also retains its owned
+resume position. The [fallible scan example](examples/fallible_scan.cpp) shows that boundary.
+Callback exceptions propagate without a partial result; neither path rolls back callback effects.
+`traversal::for_each_page` accepts expected-returning readers and visitors. A returned error
+retains the attempted page’s input state and the count of previously completed pages; the
+failing page is not completed. Fallible readers and visitors must share their error type.
+Row consumption, page progress, safe retry, and transaction commit remain separate contracts.
 
 Build the example in the ordinary [tutorial build](build-and-run.md):
 

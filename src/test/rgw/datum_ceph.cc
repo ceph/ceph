@@ -9,6 +9,7 @@
 #include <string>
 #include <string_view>
 #include <iterator>
+#include <new>
 #include <utility>
 
 #include <algorithm>
@@ -19,6 +20,42 @@
 namespace datum = ::ceph::salad::datum;
 
 namespace {
+
+// An ADL decoder accepts this value without a default constructor, copy, or move.
+struct immobile_record final
+{
+    std::uint32_t first;
+    std::uint32_t second;
+
+public:
+    explicit immobile_record(std::uint32_t first, std::uint32_t second)
+        : first(first), second(second)
+    {}
+    immobile_record(const immobile_record&) = delete;
+    immobile_record(immobile_record&&) = delete;
+    immobile_record& operator=(const immobile_record&) = delete;
+    immobile_record& operator=(immobile_record&&) = delete;
+
+public:
+    friend void decode(immobile_record& value, ::ceph::buffer::list::const_iterator& input)
+    {
+        ::ceph::decode(value.first, input);
+        ::ceph::decode(value.second, input);
+    }
+};
+
+struct exceptional_record final
+{
+    bool allocation;
+
+    friend void decode(exceptional_record& value, ::ceph::buffer::list::const_iterator&)
+    {
+        if (value.allocation) {
+            throw std::bad_alloc {};
+        }
+        throw std::runtime_error {"decoder failure"};
+    }
+};
 
 template <typename OutputT>
 concept native_copy_output = requires(const ceph::buffer::list& source, OutputT&& output) {
@@ -43,6 +80,51 @@ auto fragmented_input()
 }
 
 } // anonymous namespace
+
+TEST_CASE("Ceph fallible decoding accepts native values and ADL without moving records")
+{
+    ::ceph::buffer::list bytes;
+    ::ceph::encode(std::uint32_t {19}, bytes);
+    ::ceph::encode(std::uint32_t {23}, bytes);
+    immobile_record record {1, 2};
+    CHECK(datum::try_decode(record, bytes));
+    CHECK(record.first == 19);
+    CHECK(record.second == 23);
+
+    auto input = bytes.cbegin();
+    std::uint32_t first = 0;
+    CHECK(datum::try_decode(first, input));
+    CHECK(first == 19);
+    CHECK(input.get_remaining() == sizeof(std::uint32_t));
+    CHECK(datum::try_decode(first, input));
+    CHECK(first == 23);
+    CHECK(input.end());
+}
+
+TEST_CASE("Ceph fallible decoding retains native partial mutation and cursor progress")
+{
+    ::ceph::buffer::list bytes;
+    ::ceph::encode(std::uint32_t {19}, bytes);
+    immobile_record record {1, 2};
+    auto input = bytes.cbegin();
+    CHECK_FALSE(datum::try_decode(record, input));
+    CHECK(record.first == 19);
+    CHECK(record.second == 2);
+    CHECK(input.end());
+    CHECK_FALSE(datum::try_decode(record, bytes));
+}
+
+TEST_CASE("Ceph fallible decoding propagates allocation and other decoder exceptions")
+{
+    const ::ceph::buffer::list bytes;
+    exceptional_record value {true};
+    CHECK_THROWS_AS(datum::try_decode(value, bytes), std::bad_alloc);
+    auto input = bytes.cbegin();
+    CHECK_THROWS_AS(datum::try_decode(value, input), std::bad_alloc);
+    value.allocation = false;
+    CHECK_THROWS_AS(datum::try_decode(value, bytes), std::runtime_error);
+    CHECK_THROWS_AS(datum::try_decode(value, input), std::runtime_error);
+}
 
 TEST_CASE("Ceph copy and slice distinguish payload ownership")
 {

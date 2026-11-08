@@ -15,6 +15,14 @@ struct scan_result final
     std::optional<StateT> resume;
 };
 
+template <owning_value StateT, typename ErrorT>
+struct scan_failure final
+{
+    visit_result progress;
+    StateT resume;
+    ErrorT error;
+};
+
 template <typename ProjectionT>
 struct ordered_positions final
 {
@@ -39,8 +47,8 @@ public:
 
 template <std::ranges::input_range RangeT, typename ConsumerT, typename PositionsT>
 requires std::invocable<ConsumerT&, std::ranges::range_reference_t<RangeT>> and
-         std::same_as<std::invoke_result_t<ConsumerT&, std::ranges::range_reference_t<RangeT>>,
-                      acceptance> and
+         detail::acceptance_result<
+             std::invoke_result_t<ConsumerT&, std::ranges::range_reference_t<RangeT>>> and
          requires (PositionsT& positions, const std::remove_reference_t<std::ranges::range_reference_t<RangeT>>& row) {
              positions.position(row);
              requires owning_value<decltype(positions.position(row))>;
@@ -53,21 +61,43 @@ requires std::invocable<ConsumerT&, std::ranges::range_reference_t<RangeT>> and
     using state_type = decltype(positions.position(
         std::declval<const std::remove_reference_t<std::ranges::range_reference_t<RangeT>>&>()));
 
-    scan_result<state_type> result;
-    result.progress = visit_range(std::forward<RangeT>(source), [&consumer, &positions, &result](auto&& row) {
+    using decision_type = std::invoke_result_t<ConsumerT&, std::ranges::range_reference_t<RangeT>>;
+    using traits = detail::result_traits<decision_type>;
+    using error_type = typename traits::error_type;
+    using result_type = std::conditional_t<std::is_void_v<error_type>, scan_result<state_type>,
+        std::expected<scan_result<state_type>, scan_failure<state_type, error_type>>>;
+
+    std::optional<state_type> resume;
+    auto progress = visit_range(std::forward<RangeT>(source), [&consumer, &positions, &resume](auto&& row) {
         // A profile may use a cheap index/token or materialize a native key.
         // Save an owned position before moving rows or producing effects.
         auto saved = positions.position(std::as_const(row));
-        const auto decision = std::invoke(consumer, std::forward<decltype(row)>(row));
+        auto response = std::invoke(consumer, std::forward<decltype(row)>(row));
+        if constexpr (!std::is_void_v<error_type>) {
+            if (!response) {
+                resume.emplace(positions.next(std::move(saved), false));
+
+                return response;
+            }
+        }
+        const auto decision = detail::result_value(response);
         if (acceptance::accept_and_stop == decision || acceptance::reject_and_stop == decision) {
-            result.resume.emplace(
+            resume.emplace(
                 positions.next(std::move(saved), acceptance::accept_and_stop == decision));
         }
 
-        return decision;
+        return response;
     });
 
-    return result;
+    if constexpr (!std::is_void_v<error_type>) {
+        if (!progress) {
+            return result_type {std::unexpected(scan_failure<state_type, error_type> {
+                progress.error().progress, std::move(*resume), std::move(progress.error().error)})};
+        }
+    }
+
+    return result_type {
+        scan_result<state_type> {detail::result_value(progress), std::move(resume)}};
 }
 
 } // ceph::salad::datum::traversal
