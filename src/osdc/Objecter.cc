@@ -4278,6 +4278,16 @@ uint32_t Objecter::list_nobjects_seek(NListContext *list_context,
 				pos, list_context->pool_id, string());
   ldout(cct, 10) << __func__ << " " << list_context
 		 << " pos " << pos << " -> " << list_context->pos << dendl;
+  if (!osdmap->have_pg_pool(list_context->pool_id)) {
+    // The pool was deleted out from under the listing. raw_pg_to_pg() would
+    // assert on the missing pool, so stop here and mark the listing done:
+    // a subsequent list_nobjects_next() then reports the gone pool as -ENOENT
+    // exactly as an unsought listing already does, instead of aborting.
+    ldout(cct, 10) << __func__ << " pool " << list_context->pool_id
+		   << " is gone" << dendl;
+    list_context->at_end_of_pool = true;
+    return pos;
+  }
   pg_t actual = osdmap->raw_pg_to_pg(pg_t(pos, list_context->pool_id));
   list_context->current_pg = actual.ps();
   list_context->at_end_of_pool = false;
@@ -4290,10 +4300,19 @@ uint32_t Objecter::list_nobjects_seek(NListContext *list_context,
   shared_lock rl(rwlock);
   ldout(cct, 10) << "list_nobjects_seek " << list_context << dendl;
   list_context->pos = cursor;
+  list_context->sort_bitwise = true;
+  if (!osdmap->have_pg_pool(list_context->pool_id)) {
+    // See the uint32_t overload above: don't map the position through an
+    // osdmap that no longer has the pool. End the listing so next() returns
+    // -ENOENT rather than letting raw_pg_to_pg() abort the client.
+    ldout(cct, 10) << "list_nobjects_seek pool " << list_context->pool_id
+		   << " is gone" << dendl;
+    list_context->at_end_of_pool = true;
+    return list_context->current_pg;
+  }
   list_context->at_end_of_pool = false;
   pg_t actual = osdmap->raw_pg_to_pg(pg_t(cursor.get_hash(), list_context->pool_id));
   list_context->current_pg = actual.ps();
-  list_context->sort_bitwise = true;
   return list_context->current_pg;
 }
 
@@ -4301,12 +4320,16 @@ void Objecter::list_nobjects_get_cursor(NListContext *list_context,
                                         hobject_t *cursor)
 {
   shared_lock rl(rwlock);
-  if (list_context->list.empty()) {
+  const pg_pool_t *pool = osdmap->get_pg_pool(list_context->pool_id);
+  if (list_context->list.empty() || !pool) {
+    // With no buffered entry there is nothing to hash; and once the pool is
+    // gone get_pg_pool() returns null, so hashing the front entry below would
+    // dereference it. Fall back to the last known position in both cases.
     *cursor = list_context->pos;
   } else {
     const librados::ListObjectImpl& entry = list_context->list.front();
     const string *key = (entry.locator.empty() ? &entry.oid : &entry.locator);
-    uint32_t h = osdmap->get_pg_pool(list_context->pool_id)->hash_key(*key, entry.nspace);
+    uint32_t h = pool->hash_key(*key, entry.nspace);
     *cursor = hobject_t(entry.oid, entry.locator, list_context->pool_snap_seq, h, list_context->pool_id, entry.nspace);
   }
 }
