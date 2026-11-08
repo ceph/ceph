@@ -770,11 +770,12 @@ void MonClient::handle_auth(MAuthReply *m)
   }
   if (auth_err) {
     pending_cons.erase(found);
-    if (!pending_cons.empty()) {
+    if (!pending_cons.empty() && auth_err != -EPROTONOSUPPORT) {
       // keep trying with pending connections
       return;
     }
-    // the last try just failed, give up.
+    // the last try just failed, or we lack features: give up.
+    pending_cons.clear();
   } else {
     auto& mc = found->second;
     ceph_assert(mc.have_session());
@@ -1805,10 +1806,15 @@ int MonClient::handle_auth_bad_method(
 	  return r; // try another method on this con
 	}
 	pending_cons.erase(i.first);
-	if (!pending_cons.empty()) {
+        // a mon that turns us away for missing features speaks for them all
+        if (!pending_cons.empty() && result != -EPROTONOSUPPORT) {
 	  return r;  // fail this con, maybe another con will succeed
 	}
 	// fail hunt
+        pending_cons.clear();
+        if (result == -EPROTONOSUPPORT) {
+          r = result;  // the same error as over msgr1
+        }
 	_finish_hunting(r);
 	_finish_auth(r);
 	return r;
