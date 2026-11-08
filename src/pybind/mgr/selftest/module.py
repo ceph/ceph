@@ -1,5 +1,5 @@
 
-from mgr_module import MgrModule, CommandResult, HandleCommandResult, Option
+from mgr_module import MgrModule, CommandResult, HandleCommandResult, Option, remote_export
 import enum
 import json
 import random
@@ -454,6 +454,14 @@ class Module(MgrModule):
         else:
             raise RuntimeError("KeyError not raised")
 
+    @remote_export
+    def remote_exported_ping(self) -> str:
+        return 'pong'
+
+    def remote_unexported_ping(self) -> str:
+        return 'pong'
+
+    @remote_export
     def remote_from_orchestrator_cli_self_test(self, what: str) -> Any:
         import orchestrator
         if what == 'OrchestratorError':
@@ -462,6 +470,7 @@ class Module(MgrModule):
             return orchestrator.OrchResult(result=None, exception=ZeroDivisionError('hello, world'))
         assert False, repr(what)
 
+    @remote_export
     def remote_raise_not_implemented_error(self) -> None:
         """
         Called via self.remote() to verify that dispatch_remote() does not
@@ -471,6 +480,7 @@ class Module(MgrModule):
         """
         raise NotImplementedError('selftest: intentional NotImplementedError')
 
+    @remote_export
     def remote_raise_runtime_error(self) -> None:
         """
         Called via self.remote() as a negative control for

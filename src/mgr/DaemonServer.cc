@@ -1722,6 +1722,33 @@ bool DaemonServer::_handle_command(
 
   op->mark_started();
 
+  if (prefix == "mgr api ls") {
+    std::string module_name;
+    cmd_getval(cmdctx->cmdmap, "module", module_name);
+    if (!module_name.empty() && !py_modules.get_module(module_name)) {
+      ss << "module '" << module_name << "' not found";
+      cmdctx->reply(-ENOENT, ss);
+      return true;
+    }
+    if (!f)
+      f.reset(Formatter::create("json-pretty"));
+    f->open_object_section("remote_exports");
+    for (const auto& module : py_modules.get_modules()) {
+      if (!module_name.empty() && module->get_name() != module_name) {
+        continue;
+      }
+      f->open_array_section(module->get_name());
+      for (const auto& method : module->get_remote_exports()) {
+        f->dump_string("method", method);
+      }
+      f->close_section();
+    }
+    f->close_section();
+    f->flush(cmdctx->odata);
+    cmdctx->reply(0, ss);
+    return true;
+  }
+
   // ----------------
   // service map commands
   if (prefix == "service dump") {

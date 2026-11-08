@@ -810,6 +810,23 @@ Modules can invoke member functions of other modules.
 Be sure to handle ``ImportError`` to deal with the case that the desired
 module is not enabled.
 
+A module marks the methods that other modules may call with the
+``remote_export`` decorator::
+
+    from mgr_module import MgrModule, remote_export
+
+    class Module(MgrModule):
+        @remote_export
+        def gather_telemetry(self) -> Dict[str, Any]:
+            ...
+
+Inherited methods count, so a decorated method in a base class (for
+example ``Orchestrator``) is exported by every subclass, even one that
+overrides it.  ``ceph mgr api ls [<module>]`` lists the exported
+methods.
+
+.. autofunction:: remote_export
+
 If the remote method raises a python exception, this will be converted
 to a RuntimeError on the calling side, where the message string describes
 the exception that was originally thrown.  If your logic intends

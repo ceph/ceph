@@ -110,6 +110,10 @@ private:
   int load_shared_store();
   SharedStorePolicy shared_store;
 
+  int load_remote_exports();
+  // Fixed once the module is loaded, so read without the lock.
+  std::set<std::string, std::less<>> remote_exports;
+
 public:
   std::unique_ptr<PerfCounters> perfcounter;
   static std::string mgr_store_prefix;
@@ -189,6 +193,10 @@ public:
 
   SharedStorePolicy::Readers get_shared_store_readers() const {
     return shared_store.all_readers();
+  }
+
+  const std::set<std::string, std::less<>> &get_remote_exports() const {
+    return remote_exports;
   }
 
   const std::string &get_name() const {

@@ -436,6 +436,12 @@ int PyModule::load(PyThreadState *pMainThreadState)
       return r;
     }
 
+    r = load_remote_exports();
+    if (r != 0) {
+      error_string = "Unable to read @remote_export methods";
+      return r;
+    }
+
     // We've imported the module and found a MgrModule subclass, at this
     // point the module is considered loaded.  It might still not be
     // runnable though, can_run populated later...
@@ -663,6 +669,38 @@ int PyModule::load_shared_store()
   dout(10) << "Module " << get_name() << " shares " << shared_store.size()
            << " KV prefix(es)" << dendl;
   return 0;
+}
+
+int PyModule::load_remote_exports()
+{
+  PyObject *ls = PyObject_CallMethod(pClass, "_remote_exports", nullptr);
+  if (ls == nullptr) {
+    derr << "Error getting remote exports from " << get_name() << ": "
+         << handle_pyerror(true, module_name, "load_remote_exports") << dendl;
+    return -EINVAL;
+  }
+  int r = 0;
+  if (!PyList_Check(ls)) {
+    derr << "Module " << get_name() << " _remote_exports() is not a list"
+         << dendl;
+    r = -EINVAL;
+  }
+  for (Py_ssize_t i = 0; r == 0 && i < PyList_Size(ls); ++i) {
+    PyObject *name = PyList_GetItem(ls, i);
+    const char *s = PyUnicode_Check(name) ? PyUnicode_AsUTF8(name) : nullptr;
+    if (s == nullptr) {
+      PyErr_Clear();
+      derr << "Module " << get_name() << " has a remote export that is not "
+           << "a string" << dendl;
+      r = -EINVAL;
+      break;
+    }
+    remote_exports.emplace(s);
+  }
+  Py_DECREF(ls);
+  dout(10) << "Module " << get_name() << " remote exports " << remote_exports
+           << dendl;
+  return r;
 }
 
 int PyModule::load_commands()
