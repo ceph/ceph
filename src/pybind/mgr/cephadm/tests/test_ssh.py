@@ -72,7 +72,7 @@ class TestWithSSH:
                 else:
                     return SSHCompletedProcess(returncode=self.returncode, stdout="", stderr="")
 
-            async def close(self):
+            def close(self):
                 pass
 
         def run_test(host, conn, expected_error):
@@ -95,8 +95,9 @@ class TestWithSSH:
                                                                    exit_signal="",
                                                                    stderr=stderr,
                                                                    stdout="")), f"cannot execute the command.+{stderr}")
-        # Test case 4: generic error
-        run_test('test4', FakeConn(exception=Exception), "Generic error Exception while executing command.+")
+        # Other SSH protocol errors are not retried.
+        run_test('test3', FakeConn(exception=asyncssh.Error(1, 'SSH protocol failure')),
+                 'SSH protocol failure')
 
 
 @pytest.mark.skipif(ConnectionLost is not None, reason='asyncssh')
@@ -264,7 +265,10 @@ def test_address_change_ignores_old_connection_result(cephadm_module, connect_fa
     mgr.wait_async(scenario())
 
 
-@pytest.mark.parametrize('error', [RuntimeError, OSError])
+@pytest.mark.parametrize('error', [
+    asyncssh.ChannelOpenError(1, 'old command failed'),
+    OSError('old command failed'),
+])
 def test_address_change_ignores_old_command_failure(cephadm_module, error):
     from cephadm.ssh import Executables, HostConnectionError, RemoteCommand
 
@@ -278,7 +282,7 @@ def test_address_change_ignores_old_command_failure(cephadm_module, error):
         async def fail_command(*args, **kwargs):
             started.set()
             await finish.wait()
-            raise error('old command failed')
+            raise error
 
         async def connect(addr, **kwargs):
             conn = AddressConnection(addr)
@@ -294,7 +298,7 @@ def test_address_change_ignores_old_command_failure(cephadm_module, error):
             await mgr.ssh._reset_con('test')
             current = await mgr.ssh._remote_connection('test')
             finish.set()
-            if error is OSError:
+            if isinstance(error, OSError):
                 assert (await pending)[0] == '192.0.2.2'
             else:
                 with pytest.raises(HostConnectionError, match='old command failed'):
@@ -322,3 +326,24 @@ def test_address_change_clears_offline_from_validation(resolve_ip, cephadm_modul
         wait(mgr, mgr.update_host_addr('test', '192.0.2.2'))
     host = wait(mgr, mgr.get_hosts())[0]
     assert (host.addr, host.status) == ('192.0.2.2', '')
+
+
+@pytest.mark.parametrize('phase', ['connect', 'command'])
+def test_ssh_programming_errors_leave_host_online(cephadm_module, phase):
+    from cephadm.ssh import Executables, RemoteCommand
+
+    mgr = cephadm_module
+    mgr.inventory.add_host(HostSpec('test', '192.0.2.1'))
+    conn = AddressConnection('192.0.2.1')
+
+    async def broken(*args, **kwargs):
+        raise TypeError('invalid SSH adapter argument')
+
+    if phase == 'command':
+        conn.run = broken
+    connect = broken if phase == 'connect' else async_side_effect(conn)
+    with mock.patch('asyncssh.connect', side_effect=connect):
+        with pytest.raises(TypeError, match='invalid SSH adapter argument'):
+            mgr.wait_async(mgr.ssh._execute_command('test', RemoteCommand(Executables.TRUE)))
+    assert not mgr.offline_hosts
+    assert not conn.closed
