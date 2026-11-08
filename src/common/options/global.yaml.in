@@ -1357,6 +1357,31 @@ options:
   level: dev
   default: 64_K
   with_legacy: true
+- name: ms_v2_disable_ext_features
+  type: bool
+  level: dev
+  desc: Do not offer extended features in msgr2, like releases before vampire
+  long_desc: For tests that need a peer that cannot exchange extended
+    features.
+  default: false
+  flags:
+  - runtime
+- name: ms_v2_ext_features_hide
+  type: str
+  level: dev
+  desc: Extended feature bits not to offer, as comma-separated numbers
+  long_desc: For tests that need a peer that lacks some extended features.
+  flags:
+  - runtime
+- name: ms_v2_ext_features_grease
+  type: bool
+  level: dev
+  desc: Offer a random unassigned extended feature bit on each connection
+  long_desc: Peers must ignore extended feature bits they do not know;
+    this catches those that do not.
+  default: false
+  flags:
+  - runtime
 - name: ms_inject_socket_failures
   type: uint
   level: dev

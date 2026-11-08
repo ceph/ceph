@@ -4,7 +4,9 @@
 #pragma once
 
 #include "include/ceph_features.h"
+#include "include/feature_set.h"
 #include <map>
+#include <string>
 
 namespace ceph::net {
 
@@ -42,6 +44,10 @@ struct Policy {
   ThrottleType* throttler_bytes;
   ThrottleType* throttler_messages;
 
+  /// Extended features any remotes must have (ceph_features_ext.h).
+  ceph::feature_set_t features_ext_required;
+  /// Why the features are required, for peers we turn away.
+  std::string features_required_reason;
   /// The authenticator turns away peers that lack required features
   /// (see Monitor::rejects_peer()), so msgr1 need not refuse them.
   bool features_checked_by_auth = false;
