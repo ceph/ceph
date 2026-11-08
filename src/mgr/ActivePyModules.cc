@@ -814,9 +814,13 @@ void ActivePyModules::set_store(const std::string &module_name,
                                    + module_name + "/" + key;
 
   Command set_cmd;
+  std::optional<std::string> prev;
   {
     std::lock_guard l(lock);
 
+    if (auto i = store_cache.find(global_key); i != store_cache.end()) {
+      prev = i->second;
+    }
     // NOTE: this isn't strictly necessary since we'll also get an MKVData
     // update from the mon due to our subscription *before* our command is acked.
     if (val) {
@@ -844,11 +848,26 @@ void ActivePyModules::set_store(const std::string &module_name,
 
   if (set_cmd.r != 0) {
     // config-key set will fail if mgr's auth key has insufficient
-    // permission to set config keys
+    // permission to set config keys, or if the value is too large
     // FIXME: should this somehow raise an exception back into Python land?
-    dout(0) << "`config-key set " << global_key << " " << val << "` failed: "
+    dout(0) << "`config-key " << (val ? "set " : "del ") << global_key
+      << "` (" << (val ? val->size() : 0) << " bytes) failed: "
       << cpp_strerror(set_cmd.r) << dendl;
     dout(0) << "mon returned " << set_cmd.r << ": " << set_cmd.outs << dendl;
+
+    // Undo our cache update so this mgr (and readers of shared keys) keeps
+    // what the mon has, unless another update replaced it meanwhile.
+    std::lock_guard l(lock);
+    auto i = store_cache.find(global_key);
+    const bool still_ours = val ? (i != store_cache.end() && i->second == *val)
+                                : i == store_cache.end();
+    if (still_ours) {
+      if (prev) {
+        store_cache[global_key] = std::move(*prev);
+      } else if (i != store_cache.end()) {
+        store_cache.erase(i);
+      }
+    }
   }
 }
 
