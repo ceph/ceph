@@ -83,7 +83,9 @@ which tells the client that it may retry later.
    control the retry frequency with ``retry_sleep_duration``.
 
 .. tip:: To minimize the latency added by asynchronous notification, we
-   recommend placing the "log" pool on fast media.
+   recommend placing the "log" pool on fast media. To move only the
+   notification queues to a pool on fast media, see
+   :ref:`radosgw-notif-pool-move`.
 
 Persistent bucket notifications are managed by the following central configuration options:
 
@@ -97,6 +99,121 @@ Persistent bucket notifications are managed by the following central configurati
 
 .. tip:: It is also recommended that you avoid modifying or deleting topics created during 
    upgrades, as this might result in orphan RADOS objects that will not be deleted when the topic is deleted.
+
+
+.. _radosgw-notif-pool-move:
+
+Moving the Persistent Notification Queues to Another Pool
+---------------------------------------------------------
+
+The queues of persistent topics are stored in the zone's ``notif_pool``. By
+default, this is the ``notif`` namespace of the zone's log pool, for example
+``default.rgw.log:notif``. To move the queues to another pool, for example a
+pool on faster media, copy the objects in this namespace to the new pool and
+then set ``notif_pool`` to the new pool.
+
+Every RGW in the zone must be stopped for the whole move, so the zone serves no
+S3 requests until the move is done:
+
+- An RGW opens ``notif_pool`` only when it starts. A realm reload or a period
+  commit does not make a running RGW use the new pool.
+- A running RGW changes the queue objects whenever an S3 request triggers a
+  notification. A change made while the objects are being copied is lost, and
+  so are the notifications in it.
+
+Notifications that are already in the queues when the RGWs stop are copied
+with the queues and are sent after the RGWs start.
+
+The new pool must be a replicated pool, because the list of queues is stored in
+omap, which erasure-coded pools do not support.
+
+The following example moves the queues of the zone ``default`` from
+``default.rgw.log:notif`` to the ``notif`` namespace of the pool ``mypool``:
+
+#. Create ``mypool`` as a replicated pool if it does not already exist, and
+   enable the ``rgw`` application on it:
+
+   .. prompt:: bash #
+
+      ceph osd pool create mypool
+      ceph osd pool application enable mypool rgw
+
+#. Stop every RGW in the zone. If cephadm manages the RGWs, stop each RGW
+   service of the zone:
+
+   .. prompt:: bash #
+
+      ceph orch stop rgw.<service-name>
+
+   Run ``ceph orch ps --daemon-type rgw`` and make sure that every RGW in the
+   zone is stopped.
+
+#. List the objects in the old namespace, and copy each of them to the new
+   pool:
+
+   .. code-block:: bash
+
+      rados -p default.rgw.log -N notif ls | sort > notif-objects.txt
+      while IFS= read -r obj; do
+          rados -p default.rgw.log -N notif cp "$obj" \
+              --target-pool mypool --target-nspace notif || echo "FAILED: $obj"
+      done < notif-objects.txt
+
+   ``rados cp`` copies each object's data, extended attributes, and omap. Do
+   not use ``rados export`` and ``rados import`` for this: ``rados export``
+   ignores ``-N`` and exports every namespace in the pool.
+
+#. Verify the copy. The ``diff`` command prints nothing if every object was
+   copied, and the two lists of queues must be the same:
+
+   .. prompt:: bash #
+
+      rados -p mypool -N notif ls | sort | diff notif-objects.txt -
+      rados -p default.rgw.log -N notif listomapkeys queues_list_object
+      rados -p mypool -N notif listomapkeys queues_list_object
+
+#. Set ``notif_pool`` to the new pool. ``radosgw-admin zone modify`` has no
+   option for it, so get the zone's configuration:
+
+   .. prompt:: bash #
+
+      radosgw-admin zone get --rgw-zone=default > zone.json
+
+   In ``zone.json``, change ``"notif_pool": "default.rgw.log:notif"`` to
+   ``"notif_pool": "mypool:notif"``, and then load the file:
+
+   .. prompt:: bash #
+
+      radosgw-admin zone set --rgw-zone=default --infile=zone.json
+
+   If the zone is part of a realm, also commit the change to the period:
+
+   .. prompt:: bash #
+
+      radosgw-admin period update --commit
+
+#. Start the RGWs. If cephadm manages them, start each RGW service of the
+   zone:
+
+   .. prompt:: bash #
+
+      ceph orch start rgw.<service-name>
+
+#. For each persistent topic (``radosgw-admin topic list`` lists the topics),
+   make sure that ``radosgw-admin topic stats`` reports its queue, and that new
+   notifications reach the topic's endpoint:
+
+   .. prompt:: bash #
+
+      radosgw-admin topic stats --topic={topic-name} [--tenant={tenant}]
+
+#. When the RGWs are using the new pool, remove the old copies:
+
+   .. code-block:: bash
+
+      while IFS= read -r obj; do
+          rados -p default.rgw.log -N notif rm "$obj"
+      done < notif-objects.txt
 
 
 Topic Management via CLI
