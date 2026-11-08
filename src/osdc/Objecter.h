@@ -2665,11 +2665,18 @@ public:
       /// whether, while due to switch, the PG was kept from switching
       /// only by canceled ops not answered yet (for the perf counters)
       bool delayed_by_unanswered = false;
+      /// since when the PG has been due to switch, and the holds started
+      /// since; unlike switch_pending_since, not restarted by an expired
+      /// hold (for the perf counters)
+      std::optional<ceph::coarse_mono_time> switch_due_since;
+      unsigned switch_holds = 0;
       /// the PG is no longer due to switch: it switched, the hint went
       /// away, or the route was reset
       void end_switch_wait() {
         switch_pending_since.reset();
         delayed_by_unanswered = false;
+        switch_due_since.reset();
+        switch_holds = 0;
       }
       /// After a switch has been pending for objecter_osd_core_switch_grace,
       /// the PG's new ops are held (Op::switch_held), so that its ops in
