@@ -4209,5 +4209,116 @@ TEST_F(OSDMapTest, CalcCrushRuleChangePins) {
         }
       }
     }
+
+    // The next sections force the pre-change acting set of one pg through
+    // pg_temp, so they do not depend on what CRUSH happens to compute.
+    auto rack_of = [&](int o) {
+      return esc.crush->get_parent_of_type(o, rack_type, rack_ec);
+    };
+    pg_t fpg(0, ec_pool_id);
+    vector<int> raw;
+    int raw_primary;
+    esc.pg_to_raw_osds(fpg, &raw, &raw_primary);
+    ASSERT_EQ(3u, raw.size());
+    // emap with `act` as fpg's acting set, and its copy with the rule change
+    auto with_acting = [&](const vector<int>& act, OSDMap *m, OSDMap *sc) {
+      m->deepish_copy_from(emap);
+      OSDMap::Incremental ti(m->get_epoch() + 1);
+      ti.fsid = m->get_fsid();
+      ti.new_pg_temp[fpg] =
+        mempool::osdmap::vector<int>(act.begin(), act.end());
+      m->apply_incremental(ti);
+      sc->deepish_copy_from(*m);
+      OSDMap::Incremental si(sc->get_epoch() + 1);
+      si.fsid = sc->get_fsid();
+      pg_pool_t tp = *m->get_pg_pool(ec_pool_id);
+      tp.crush_rule = rack_ec;
+      si.new_pools[ec_pool_id] = tp;
+      sc->apply_incremental(si);
+    };
+
+    // 9) two acting shards share a new failure-domain bucket, and the one
+    //    first in position order is CRUSH's pick for another slot (seen on
+    //    a live cluster: acting [8,12,2], raw [8,6,12], 12 and 2 in the
+    //    same rack).  Keeping the other one leaves the remaining slot free
+    //    to take its own CRUSH pick: one move (the floor) and one pair,
+    //    with either fill strategy.
+    int same_rack = -1;  // shares raw[2]'s rack but not its host
+    for (int o = 0; o < 12; ++o) {
+      if (rack_of(o) == rack_of(raw[2]) && o / 2 != raw[2] / 2) {
+        same_rack = o;
+        break;
+      }
+    }
+    ASSERT_GE(same_rack, 0);
+    for (bool load_aware : {true, false}) {
+      const vector<int> act = {raw[0], raw[2], same_rack};
+      OSDMap tm, tsc;
+      with_acting(act, &tm, &tsc);
+      vector<int> up, acting;
+      tm.pg_to_up_acting_osds(fpg, up, acting);
+      ASSERT_EQ(act, acting);
+      // stage the rule change and the pins in one incremental, as
+      // OSDMonitor::prepare_command_pool_set does: the pairs are relative
+      // to the new rule's raw placement
+      OSDMap::Incremental ti(tm.get_epoch() + 1);
+      ti.fsid = tm.get_fsid();
+      {
+        pg_pool_t tp = *tm.get_pg_pool(ec_pool_id);
+        tp.crush_rule = rack_ec;
+        ti.new_pools[ec_pool_id] = tp;
+      }
+      ASSERT_GT(tm.calc_crush_rule_change_pins(
+        g_ceph_context, tsc, ec_pool_id, &ti, load_aware), 0);
+      ASSERT_EQ(1u, ti.new_pg_upmap_items.count(fpg));
+      const auto& items = ti.new_pg_upmap_items[fpg];
+      ASSERT_EQ(1u, items.size());
+      ASSERT_EQ(raw[2], items[0].first);
+      ASSERT_EQ(same_rack, items[0].second);
+      OSDMap after;
+      after.deepish_copy_from(tm);
+      after.apply_incremental(ti);
+      after.pg_to_up_acting_osds(fpg, up, acting);
+      ASSERT_EQ(vector<int>({raw[0], raw[1], same_rack}), up);
+    }
+
+    // 10) the acting set is a rotation of the new raw set: pass 1 retains
+    //     every shard, but the pins form a cycle pg_upmap_items cannot
+    //     express.  Breaking it unavoidably costs one retained shard -- and
+    //     only one -- and the result must stay valid and stable.
+    for (bool load_aware : {true, false}) {
+      const vector<int> act = {raw[1], raw[2], raw[0]};
+      OSDMap tm, tsc;
+      with_acting(act, &tm, &tsc);
+      // stage the rule change and the pins in one incremental, as
+      // OSDMonitor::prepare_command_pool_set does: the pairs are relative
+      // to the new rule's raw placement
+      OSDMap::Incremental ti(tm.get_epoch() + 1);
+      ti.fsid = tm.get_fsid();
+      {
+        pg_pool_t tp = *tm.get_pg_pool(ec_pool_id);
+        tp.crush_rule = rack_ec;
+        ti.new_pools[ec_pool_id] = tp;
+      }
+      ASSERT_GT(tm.calc_crush_rule_change_pins(
+        g_ceph_context, tsc, ec_pool_id, &ti, load_aware), 0);
+      OSDMap after;
+      after.deepish_copy_from(tm);
+      after.apply_incremental(ti);
+      vector<int> up, acting;
+      after.pg_to_up_acting_osds(fpg, up, acting);
+      ASSERT_EQ(3u, up.size());
+      set<int> racks;
+      unsigned kept = 0;
+      for (unsigned i = 0; i < up.size(); ++i) {
+        racks.insert(rack_of(up[i]));
+        kept += up[i] == act[i];
+      }
+      ASSERT_EQ(3u, racks.size());
+      ASSERT_EQ(2u, kept);
+      OSDMap::Incremental ci(after.get_epoch() + 1);
+      ci.fsid = after.get_fsid();
+      ASSERT_FALSE(after.clean_pg_upmaps(g_ceph_context, &ci));
+    }
   }
 }
