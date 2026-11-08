@@ -211,6 +211,10 @@ enum {
   l_osdc_op_send_switch_unanswered,
   l_osdc_core_switch_delayed_unanswered,
   l_osdc_core_switch_hold_expired_unanswered,
+  l_osdc_core_switch_delay,
+  l_osdc_core_switch_delay_histogram,
+  l_osdc_core_pgs_switch_pending,
+  l_osdc_core_pgs_holding,
 
   l_osdc_last,
 };
@@ -474,7 +478,7 @@ void Objecter::init()
 			"Operations held for their PG to switch to another "
 			"OSD connection");
     pcb.add_time_avg(l_osdc_core_switch_hold_time, "core_switch_hold_time",
-		     "Time PGs held their new ops");
+		     "Time PGs held their new ops (max_inc: the longest)");
     // ops canceled after being sent, and not answered (yet): they keep
     // their PG from switching to another OSD connection
     pcb.add_u64_counter(l_osdc_op_unanswered, "op_unanswered",
@@ -503,6 +507,36 @@ void Objecter::init()
 			"core_switch_hold_expired_unanswered",
 			"PG holds that expired with no operation in flight, "
 			"but canceled ones not answered yet");
+    // how long PGs take to switch to another OSD connection, once due to
+    pcb.add_time_avg(l_osdc_core_switch_delay, "core_switch_delay",
+		     "Time PGs due to switch to another OSD connection took "
+		     "to do so, kept by their ops in flight (max_inc: the "
+		     "longest)");
+    PerfHistogramCommon::axis_config_d switch_delay_axis{
+      "Delay (usec)",
+      PerfHistogramCommon::SCALE_LOG2,
+      0,          ///< start at 0
+      1'000'000,  ///< 1ms quantization (values are in nanoseconds)
+      20,         ///< up to ~4 minutes
+    };
+    PerfHistogramCommon::axis_config_d switch_holds_axis{
+      "Holds",
+      PerfHistogramCommon::SCALE_LINEAR,
+      0,  ///< start at 0
+      1,  ///< 1 hold per bucket
+      6,  ///< 0..3, and 4 or more (bucket 0 is for values below 0)
+    };
+    pcb.add_u64_counter_histogram(
+      l_osdc_core_switch_delay_histogram, "core_switch_delay_histogram",
+      switch_delay_axis, switch_holds_axis,
+      "Histogram of the delays of PG switches to another OSD connection, "
+      "by the number of holds of their new ops it took");
+    pcb.add_u64(l_osdc_core_pgs_switch_pending, "core_pgs_switch_pending",
+		"PGs due to switch to another OSD connection, kept by their "
+		"ops in flight (updated on tick)");
+    pcb.add_u64(l_osdc_core_pgs_holding, "core_pgs_holding",
+		"PGs holding their new ops to switch to another OSD "
+		"connection (updated on tick)");
 
     logger = pcb.create_perf_counters();
     cct->get_perfcounters_collection()->add(logger);
@@ -2425,6 +2459,15 @@ ConnectionRef Objecter::_op_route(Op *op)
 		     << ": switching to core "
 		     << (desired ? std::to_string(*desired) : "none") << dendl;
       route.core = desired;
+      if (route.switch_due_since) {
+	// the switch was delayed
+	const auto delay =
+	  ceph::coarse_mono_clock::now() - *route.switch_due_since;
+	logger->tinc_with_max(l_osdc_core_switch_delay, delay);
+	logger->hinc(l_osdc_core_switch_delay_histogram,
+		     std::chrono::nanoseconds(delay).count(),
+		     route.switch_holds);
+      }
       route.end_switch_wait();
       logger->inc(l_osdc_core_route_switch);
     } else {
@@ -2437,6 +2480,9 @@ ConnectionRef Objecter::_op_route(Op *op)
 		       << route.unanswered << " canceled ones are answered"
 		       << dendl;
 	route.switch_pending_since = ceph::coarse_mono_clock::now();
+      }
+      if (!route.switch_due_since) {
+	route.switch_due_since = route.switch_pending_since;
       }
       logger->inc(l_osdc_op_send_switch_pending);
       if (route.in_flight == 0) {
@@ -2608,6 +2654,7 @@ bool Objecter::_op_hold_for_switch(Op *op)
     [this, osd = s->osd, pgid, seq = route.hold_seq] {
       core_switch_hold_expired(osd, pgid, seq);
     });
+  ++route.switch_holds;
   logger->inc(l_osdc_core_switch_hold);
   ldout(cct, 5) << __func__ << " osd." << s->osd << " pg " << pgid
 		<< ": due to switch to core "
@@ -2644,7 +2691,7 @@ void Objecter::_end_core_switch_hold(OSDSession *s,
     route.hold_event = 0;
   }
   const auto now = ceph::coarse_mono_clock::now();
-  logger->tinc(l_osdc_core_switch_hold_time, now - route.hold_since);
+  logger->tinc_with_max(l_osdc_core_switch_hold_time, now - route.hold_since);
   if (drained) {
     ldout(cct, 10) << __func__ << " osd." << s->osd << " pg " << pgid
 		   << ": drained after " << (now - route.hold_since)
@@ -2986,6 +3033,9 @@ void Objecter::tick()
   cutoff -= ceph::make_timespan(cct->_conf->objecter_timeout);  // timeout
 
   unsigned laggy_ops = 0;
+  // see objecter_use_osd_core_hints
+  uint64_t pgs_switch_pending = 0;
+  uint64_t pgs_holding = 0;
 
   for (auto siter = osd_sessions.begin();
        siter != osd_sessions.end(); ++siter) {
@@ -2996,6 +3046,15 @@ void Objecter::tick()
     }
     // a fallback: holds drain mostly on replies (handle_osd_op_reply())
     _release_drained_holds(s);
+    if (use_osd_core_hints) {
+      for (const auto& [pgid, route] : s->pg_routes) {
+	if (route.holding) {
+	  ++pgs_holding;
+	} else if (route.switch_due_since && route.busy()) {
+	  ++pgs_switch_pending;
+	}
+      }
+    }
     bool found = false;
     for (auto p = s->ops.begin(); p != s->ops.end(); ++p) {
       auto op = p->second;
@@ -3068,6 +3127,8 @@ void Objecter::tick()
   }
 
   logger->set(l_osdc_op_laggy, laggy_ops);
+  logger->set(l_osdc_core_pgs_switch_pending, pgs_switch_pending);
+  logger->set(l_osdc_core_pgs_holding, pgs_holding);
   logger->set(l_osdc_osd_laggy, toping.size());
 
   if (!toping.empty()) {
