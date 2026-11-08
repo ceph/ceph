@@ -1,0 +1,47 @@
+# Tracker #81323. workunits/ supplies the distro. Roles deploy prometheus,
+# alertmanager, grafana, and node-exporter. cluster-conf enables
+# secure_monitoring_stack before those daemons are applied (conf_setup runs
+# ahead of ceph_monitoring in qa/tasks/cephadm.py).
+roles:
+- - host.a
+  - mon.a
+  - mgr.a
+  - osd.0
+  - client.0
+  - alertmanager.a
+  - node-exporter.a
+- - host.b
+  - mon.b
+  - mgr.b
+  - osd.1
+  - prometheus.a
+  - grafana.a
+  - node-exporter.b
+- - host.c
+  - mon.c
+  - osd.2
+  - node-exporter.c
+overrides:
+  ceph:
+    log-only-match:
+      - CEPHADM_
+    # test_ceph_mon_down_alert stops a mon (MON_DOWN* and CEPHADM_STRAY /
+    # FAILED while it is down). Other failures still fail via orch ls /
+    # the Python asserts.
+    log-ignorelist:
+      - MON_DOWN
+      - mons down
+      - mon down
+      - out of quorum
+      - CEPHADM_STRAY_DAEMON
+      - CEPHADM_FAILED_DAEMON
+    cluster-conf:
+      mgr:
+        # Quoted so conf_setup passes lowercase "true" (not Python True).
+        mgr/cephadm/secure_monitoring_stack: "true"
+tasks:
+- install:
+- cephadm:
+- cephfs_test_runner:
+    modules:
+      - tasks.cephadm_cases.monitoring.test_monitoring_secure.TestMonitoringSecure
