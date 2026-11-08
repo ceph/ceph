@@ -1773,6 +1773,36 @@ def key_prune(ctx, config):
 
     yield
 
+def _rotate_key(manager, entity, key_type, rotate_cmd):
+    """
+    Rotate the key of entity and return a plaintext keyring holding the new
+    key, ready for ceph-authtool --import-keyring.
+    """
+    if rotate_cmd == 'rotate':
+        p = manager.ceph(f"auth rotate --key-type={key_type} {entity}")
+        return p.stdout.getvalue()
+
+    p = manager.ceph(f"auth rotate-pending --key-type={key_type} --format=json {entity}")
+    (rotated,) = json.loads(p.stdout.getvalue())
+    p = manager.ceph(f"auth get --format=json {entity}")
+    (current,) = json.loads(p.stdout.getvalue())
+    # a keyring file only uses "key", so put the pending key there
+    lines = [f"[{entity}]", f"\tkey = {rotated['pending_key']}"]
+    lines += [f'\tcaps {svc} = "{cap}"' for svc, cap in current['caps'].items()]
+    return '\n'.join(lines) + '\n'
+
+def _wait_for_pending_key_commit(manager, entity):
+    """
+    Wait until the pending key of entity has been committed.
+    """
+    with contextutil.safe_while(sleep=5, tries=24,
+                                action=f"{entity} pending key commit") as proceed:
+        while proceed():
+            p = manager.ceph(f"auth get --format=json {entity}")
+            (auth,) = json.loads(p.stdout.getvalue())
+            if 'pending_key' not in auth:
+                return
+
 @contextlib.contextmanager
 def key_rotate(ctx, config):
     """
@@ -1788,6 +1818,17 @@ def key_rotate(ctx, config):
           clients: [client.admin, ...]
           daemons: [mon.*, mds.*, osd.0]
           key_type: recommended
+          rotate_cmd: rotate
+
+    rotate_cmd is "rotate" (default) or "rotate-pending". With rotate-pending,
+    daemons commit the new key when they first authenticate with it, and
+    clients commit it with "auth commit-pending". The "mon." key is always
+    rotated with "auth rotate", since monitors do not use a pending key.
+    rotate_cmd can be set for all key_rotate tasks with::
+
+      overrides:
+        ceph.key_rotate:
+          rotate_cmd: rotate-pending
 
     :param ctx: Context
     :param config: Configuration
@@ -1797,10 +1838,17 @@ def key_rotate(ctx, config):
     elif isinstance(config, list):
         config = {'daemons': config}
 
+    overrides = ctx.config.get('overrides', {})
+    teuthology.deep_merge(config, overrides.get('ceph.key_rotate', {}))
+
     testdir = teuthology.get_testdir(ctx)
 
     key_type = config.setdefault('key_type', 'recommended')
     log.info("key_type is %s", key_type)
+    rotate_cmd = config.setdefault('rotate_cmd', 'rotate')
+    if rotate_cmd not in ('rotate', 'rotate-pending'):
+        raise ValueError(f"invalid rotate_cmd: {rotate_cmd}")
+    log.info("rotate_cmd is %s", rotate_cmd)
     coverage_dir = f'{testdir}/archive/coverage'
 
     cluster_name = config.setdefault('cluster', 'ceph')
@@ -1817,6 +1865,7 @@ def key_rotate(ctx, config):
     daemons = ctx.daemons.resolve_role_list(config.get('daemons', None), CEPH_ROLE_TYPES, True)
 
     new_mon_key = None
+    pending_entities = []
     for role in daemons:
         log.debug("daemon role is: %s", role)
         cluster, type_, id_ = teuthology.split_role(role)
@@ -1834,8 +1883,10 @@ def key_rotate(ctx, config):
             else:
                 new_key = new_mon_key
         else:
-            p = manager.ceph(f"auth rotate --key-type={key_type} {type_}.{id_}")
-            new_key = p.stdout.getvalue()
+            entity = f"{type_}.{id_}"
+            new_key = _rotate_key(manager, entity, key_type, rotate_cmd)
+            if rotate_cmd == 'rotate-pending':
+                pending_entities.append(entity)
 
         importme = '/tmp/importme'
         log.info("generated new daemon key %s", new_key)
@@ -1854,6 +1905,10 @@ def key_rotate(ctx, config):
         daemon.remote.run(args=['sudo', 'cat', os.path.join(daemon_dir, 'keyring')])
 
         daemon.restart()
+
+    # the restarted daemons authenticate with the pending key, which commits it
+    for entity in pending_entities:
+        _wait_for_pending_key_commit(manager, entity)
 
     clients = config.get('clients', [])
     keyring = ctx.ceph[cluster_name].keyring
@@ -1875,8 +1930,7 @@ def key_rotate(ctx, config):
 
             log.info("rotating %s on %s", role, remote)
 
-            p = manager.ceph(f"auth rotate --key-type={key_type} {role}")
-            new_key = p.stdout.getvalue()
+            new_key = _rotate_key(manager, role, key_type, rotate_cmd)
 
             importme = '/tmp/importme'
             log.info("generated new client key %s", new_key)
@@ -1900,6 +1954,10 @@ def key_rotate(ctx, config):
                 remote.run(args=args)
                 out = remote.read_file(keyring, sudo=True)
                 log.info("keyring after:\n%s", out)
+
+            if rotate_cmd == 'rotate-pending':
+                manager.ceph(f"auth commit-pending {role}")
+                _wait_for_pending_key_commit(manager, role)
 
     yield
 
