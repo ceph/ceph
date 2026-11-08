@@ -2650,9 +2650,28 @@ public:
       std::optional<uint32_t> core;
       /// the PG's ops in flight (sent, and still assigned to the session)
       unsigned in_flight = 0;
+      /// the PG's ops canceled after being sent, and not answered yet
+      /// (see OSDSession::unanswered)
+      unsigned unanswered = 0;
+      /// whether ops of the PG may still be on their way to (or queued at)
+      /// the OSD on the route's connection: the route may not change
+      bool busy() const { return in_flight + unanswered > 0; }
     };
     /// by PG; protected by this session's lock (OSDSession::lock)
     std::map<spg_t, pg_route_t> pg_routes;
+
+    /// An op canceled after it was sent (e.g. timed out): the OSD may still
+    /// execute it, on the connection it was sent on, and it still answers
+    /// it. Until the answer arrives (or the connection resets), a new op of
+    /// the PG on another connection could overtake it.
+    struct unanswered_op_t {
+      spg_t pgid;
+      /// the core connection it was sent on (nullopt: 'con')
+      std::optional<uint32_t> core;
+      ceph::coarse_mono_time since;
+    };
+    /// by tid; protected by this session's lock (OSDSession::lock)
+    std::map<ceph_tid_t, unanswered_op_t> unanswered;
 
     int num_locks;
     std::unique_ptr<std::mutex[]> completion_locks;
@@ -2850,6 +2869,23 @@ private:
   ConnectionRef _op_route(Op *op);
   /// stop accounting for op as in flight; op->session->lock is locked
   void _op_unroute(Op *op);
+  /// op is being canceled: if it was sent, keep its PG's route busy until
+  /// the OSD answers it (see OSDSession::unanswered). Call before
+  /// _finish_op(); op->session->lock is locked
+  void _op_note_unanswered(Op *op);
+  /// a reply for a tid no longer in s->ops arrived: if it answers an
+  /// unanswered op, forget that op. s->lock is locked
+  void _op_answered_late(OSDSession *s, ceph_tid_t tid);
+  /// forget the unanswered ops of s sent on the core connection 'core'
+  /// (nullopt: on the main connection), or all of them if 'all';
+  /// s->lock is locked
+  void _forget_unanswered(OSDSession *s,
+			  std::optional<uint32_t> core,
+			  bool all);
+  /// forget the unanswered ops older than the age limit: the OSD may
+  /// have dropped them (e.g. at an interval change), and their answer
+  /// would never arrive. s->lock is locked
+  void _prune_unanswered(OSDSession *s);
   /// note the core hinted for pgid in an op reply from s, and connect to
   /// that core if not yet connected. s->lock is locked
   void _session_apply_core_hint(OSDSession *s,

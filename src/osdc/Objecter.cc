@@ -702,6 +702,8 @@ void Objecter::_send_linger(LingerOp *info,
     if (info->session->ops.count(info->register_tid)) {
       auto o = info->session->ops[info->register_tid];
       _op_cancel_map_check(o);
+      // the new registration op must not overtake it
+      _op_note_unanswered(o);
       _cancel_linger_op(o);
     }
     sl.unlock();
@@ -2212,6 +2214,9 @@ void Objecter::_close_core_cons(OSDSession *s)
       _op_unroute(op);
     }
   }
+  // called when all of the session's connections are reset: the OSD
+  // drops what it still had of them
+  _forget_unanswered(s, std::nullopt, true);
 }
 
 void Objecter::_reset_core_con(OSDSession *s,
@@ -2266,6 +2271,9 @@ void Objecter::_reset_core_con(OSDSession *s,
       _cancel_linger_op(op);
     }
   }
+  // the canceled ops sent on that connection will not be answered
+  _forget_unanswered(s, core, false);
+
   logger->inc(l_osdc_op_resend, resend.size());
   for (auto& [tid, op] : resend) {
     _send_op(op);
@@ -2297,7 +2305,11 @@ ConnectionRef Objecter::_op_route(Op *op)
   if (route.hinted_core && s->core_cons.contains(*route.hinted_core)) {
     desired = route.hinted_core;
   }
-  if (desired != route.core && route.in_flight == 0) {
+  if (desired != route.core && route.unanswered > 0) {
+    // the answers of canceled ops might never arrive
+    _prune_unanswered(s);
+  }
+  if (desired != route.core && !route.busy()) {
     ldout(cct, 15) << __func__ << " osd." << s->osd << " pg " << pgid
 		   << ": switching to core "
 		   << (desired ? std::to_string(*desired) : "none") << dendl;
@@ -2326,6 +2338,79 @@ void Objecter::_op_unroute(Op *op)
   --route.in_flight;
   op->routed_pgid.reset();
   op->routed_core.reset();
+}
+
+void Objecter::_op_note_unanswered(Op *op)
+{
+  // op->session->lock is locked
+  if (!op->routed_pgid) {
+    // never sent, or the connection it was sent on is gone
+    return;
+  }
+  auto s = op->session;
+  ldout(cct, 10) << __func__ << " osd." << s->osd << " pg " << *op->routed_pgid
+		 << " tid " << op->tid << " on core "
+		 << (op->routed_core ? std::to_string(*op->routed_core) : "none")
+		 << dendl;
+  auto [i, added] = s->unanswered.emplace(
+    op->tid,
+    OSDSession::unanswered_op_t{*op->routed_pgid, op->routed_core,
+				ceph::coarse_mono_clock::now()});
+  if (added) {
+    ++s->pg_routes.at(*op->routed_pgid).unanswered;
+  }
+}
+
+void Objecter::_op_answered_late(OSDSession *s, ceph_tid_t tid)
+{
+  // s->lock is locked
+  auto i = s->unanswered.find(tid);
+  if (i == s->unanswered.end()) {
+    return;
+  }
+  ldout(cct, 10) << __func__ << " osd." << s->osd << " pg " << i->second.pgid
+		 << " tid " << tid << dendl;
+  auto& route = s->pg_routes.at(i->second.pgid);
+  ceph_assert(route.unanswered > 0);
+  --route.unanswered;
+  s->unanswered.erase(i);
+}
+
+void Objecter::_forget_unanswered(OSDSession *s,
+				  std::optional<uint32_t> core,
+				  bool all)
+{
+  // s->lock is locked
+  for (auto i = s->unanswered.begin(); i != s->unanswered.end();) {
+    if (all || i->second.core == core) {
+      auto& route = s->pg_routes.at(i->second.pgid);
+      ceph_assert(route.unanswered > 0);
+      --route.unanswered;
+      i = s->unanswered.erase(i);
+    } else {
+      ++i;
+    }
+  }
+}
+
+void Objecter::_prune_unanswered(OSDSession *s)
+{
+  // s->lock is locked
+  const auto cutoff = ceph::coarse_mono_clock::now() -
+    ceph::make_timespan(cct->_conf->objecter_timeout);
+  for (auto i = s->unanswered.begin(); i != s->unanswered.end();) {
+    if (i->second.since < cutoff) {
+      ldout(cct, 5) << __func__ << " osd." << s->osd << " pg "
+		    << i->second.pgid << " tid " << i->first
+		    << ": no answer, giving up on it" << dendl;
+      auto& route = s->pg_routes.at(i->second.pgid);
+      ceph_assert(route.unanswered > 0);
+      --route.unanswered;
+      i = s->unanswered.erase(i);
+    } else {
+      ++i;
+    }
+  }
 }
 
 void Objecter::_session_apply_core_hint(OSDSession *s,
@@ -2571,6 +2656,9 @@ void Objecter::tick()
        siter != osd_sessions.end(); ++siter) {
     auto s = siter->second;
     scoped_lock l(s->lock);
+    if (!s->unanswered.empty()) {
+      _prune_unanswered(s);
+    }
     bool found = false;
     for (auto p = s->ops.begin(); p != s->ops.end(); ++p) {
       auto op = p->second;
@@ -3114,6 +3202,7 @@ int Objecter::op_cancel(OSDSession *s, ceph_tid_t tid, int r,
     op->complete(ec, r, service.get_executor());
   }
   _op_cancel_map_check(op);
+  _op_note_unanswered(op);
   _finish_op(op, r);
   sl.unlock();
 
@@ -4366,6 +4455,8 @@ void Objecter::handle_osd_op_reply(cref_t<MOSDOpReply> m)
 		  << (m->is_ondisk() ? " ondisk" : (m->is_onnvram() ?
 						    " onnvram" : " ack"))
 		  << " ... stray" << dendl;
+    // the answer to a canceled op?
+    _op_answered_late(s, tid);
     sl.unlock();
     return;
   }
