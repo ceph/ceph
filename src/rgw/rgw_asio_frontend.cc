@@ -247,6 +247,21 @@ std::ostream& operator<<(std::ostream& out, const log_apache_time& a) {
 
 using SharedMutex = ceph::async::SharedMutex<boost::asio::any_io_executor>;
 
+// IMF-fixdate (RFC 9110 section 5.6.7) for the current time, or an empty
+// string if the time cannot be formatted
+static std::string http_date_now()
+{
+  const time_t now = time(nullptr);
+  struct tm result;
+  if (gmtime_r(&now, &result) == nullptr) {
+    return {};
+  }
+  char buf[64];
+  const size_t len = strftime(buf, sizeof(buf), "%a, %d %b %Y %H:%M:%S GMT",
+                              &result);
+  return std::string(buf, len);
+}
+
 template <typename Stream>
 void handle_connection(boost::asio::io_context& context,
                        RGWProcessEnv& env, Stream& stream,
@@ -286,9 +301,19 @@ void handle_connection(boost::asio::io_context& context,
     auto& message = parser.get();
     if (ec) {
       ldout(cct, 1) << "failed to read header: " << ec.message() << dendl;
+      // RFC 6585 section 5: tell the client that the header section is too
+      // large instead of a generic 400
+      const auto status = (ec == http::error::header_limit)
+          ? http::status::request_header_fields_too_large
+          : http::status::bad_request;
       http::response<http::empty_body> response;
-      response.result(http::status::bad_request);
+      response.result(status);
       response.version(message.version() == 10 ? 10 : 11);
+      // RFC 9110 section 6.6.1: an origin server with a clock MUST send Date
+      // on 4xx responses; this response is sent before the REST layer adds it
+      if (auto date = http_date_now(); !date.empty()) {
+        response.set(http::field::date, date);
+      }
       response.prepare_payload();
       timeout.start();
       http::async_write(stream, response, yield[ec]);
@@ -296,7 +321,8 @@ void handle_connection(boost::asio::io_context& context,
       if (ec) {
         ldout(cct, 5) << "failed to write response: " << ec.message() << dendl;
       }
-      ldout(cct, 1) << "====== req done http_status=400 ======" << dendl;
+      ldout(cct, 1) << "====== req done http_status=" << response.result_int()
+                    << " ======" << dendl;
       return;
     }
 
