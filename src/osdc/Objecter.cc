@@ -199,6 +199,7 @@ enum {
   l_osdc_core_cons,
   l_osdc_core_con_open,
   l_osdc_core_con_reset,
+  l_osdc_op_send_switch_pending,
 
   l_osdc_last,
 };
@@ -448,6 +449,9 @@ void Objecter::init()
 			"Connections to OSD cores opened");
     pcb.add_u64_counter(l_osdc_core_con_reset, "core_con_reset",
 			"Connections to OSD cores reset");
+    pcb.add_u64_counter(l_osdc_op_send_switch_pending, "op_send_switch_pending",
+			"Operations sent while their PG was due to switch to "
+			"another OSD connection, but had ops in flight");
 
     logger = pcb.create_perf_counters();
     cct->get_perfcounters_collection()->add(logger);
@@ -2207,6 +2211,7 @@ void Objecter::_close_core_cons(OSDSession *s)
   for (auto& [pgid, route] : s->pg_routes) {
     route.hinted_core.reset();
     route.core.reset();
+    route.switch_pending_since.reset();
   }
   // the ops sent on these connections are no longer in flight
   for (auto& [tid, op] : s->ops) {
@@ -2240,6 +2245,11 @@ void Objecter::_reset_core_con(OSDSession *s,
   // TODO: back off reconnecting to a core that keeps failing
   std::set<spg_t> rerouted;
   for (auto& [pgid, route] : s->pg_routes) {
+    if (route.hinted_core != core && route.core != core) {
+      continue;
+    }
+    // a new start for the route
+    route.switch_pending_since.reset();
     if (route.hinted_core == core) {
       route.hinted_core.reset();
     }
@@ -2289,6 +2299,18 @@ void Objecter::_reset_core_con(OSDSession *s,
   }
 }
 
+std::optional<uint32_t> Objecter::_route_desired(
+  const OSDSession *s,
+  const OSDSession::pg_route_t& route) const
+{
+  // s->lock is locked
+  // follow the hint only if connected to the hinted core
+  if (route.hinted_core && s->core_cons.contains(*route.hinted_core)) {
+    return route.hinted_core;
+  }
+  return std::nullopt;
+}
+
 ConnectionRef Objecter::_op_route(Op *op)
 {
   // op->session->lock is locked
@@ -2300,21 +2322,34 @@ ConnectionRef Objecter::_op_route(Op *op)
 
   const auto& pgid = op->target.actual_pgid;
   auto& route = s->pg_routes[pgid];
-  // follow the hint only if connected to the hinted core
-  std::optional<uint32_t> desired;
-  if (route.hinted_core && s->core_cons.contains(*route.hinted_core)) {
-    desired = route.hinted_core;
-  }
-  if (desired != route.core && route.unanswered > 0) {
-    // the answers of canceled ops might never arrive
-    _prune_unanswered(s);
-  }
-  if (desired != route.core && !route.busy()) {
-    ldout(cct, 15) << __func__ << " osd." << s->osd << " pg " << pgid
-		   << ": switching to core "
-		   << (desired ? std::to_string(*desired) : "none") << dendl;
-    route.core = desired;
-    logger->inc(l_osdc_core_route_switch);
+  const auto desired = _route_desired(s, route);
+  if (desired == route.core) {
+    route.switch_pending_since.reset();
+  } else {
+    if (route.unanswered > 0) {
+      // the answers of canceled ops might never arrive
+      _prune_unanswered(s);
+    }
+    if (!route.busy()) {
+      ldout(cct, 15) << __func__ << " osd." << s->osd << " pg " << pgid
+		     << ": switching to core "
+		     << (desired ? std::to_string(*desired) : "none") << dendl;
+      route.core = desired;
+      route.switch_pending_since.reset();
+      logger->inc(l_osdc_core_route_switch);
+    } else {
+      // to switch once the PG's ops drain
+      if (!route.switch_pending_since) {
+	ldout(cct, 15) << __func__ << " osd." << s->osd << " pg " << pgid
+		       << ": to switch to core "
+		       << (desired ? std::to_string(*desired) : "none")
+		       << " once " << route.in_flight << " ops in flight and "
+		       << route.unanswered << " canceled ones are answered"
+		       << dendl;
+	route.switch_pending_since = ceph::coarse_mono_clock::now();
+      }
+      logger->inc(l_osdc_op_send_switch_pending);
+    }
   }
 
   ++route.in_flight;
