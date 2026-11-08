@@ -17,6 +17,9 @@ protected:
   void SetUp() override {
     test_fscid = fs.get_fscid();
 
+    // Host anti-affinity is off by default; these scenarios test it enabled.
+    fs.get_mds_map().set_standby_enable_host_anti_affinity(true);
+
     // Define our target addresses to avoid (Active Rank Host)
     entity_addr_t active_addr;
     active_addr.parse("10.0.0.1:6800", nullptr); // Host A

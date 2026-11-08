@@ -120,7 +120,9 @@ evaluate available standby candidates by utilizing a multi-tiered scoring
 matrix. This scoring engine balances software assignment rules against
 physical infrastructure failure domains, strictly prioritizing hardware node
 anti-affinity over software choices to prevent a standby from being promoted
-onto a host sharing the same physical failure domain.
+onto a host sharing the same physical failure domain. Host anti-affinity is
+disabled by default in this release and is enabled per file system with the
+``standby_enable_host_anti_affinity`` flag, described below.
 
 
 Standby Selection Scoring Matrix
@@ -170,13 +172,15 @@ Anti-Affinity Behavioral Rules
 
        ceph fs set <fs name> refuse_standby_for_another_fs true
 
-* **Disabling Anti-Affinity:** Operators can bypass host anti-affinity on a
-  per-filesystem basis by setting the ``standby_enable_host_anti_affinity`` flag
-  to ``false``.
+* **Enabling Anti-Affinity:** Host anti-affinity is disabled by default in
+  this release, so the scoring engine ignores physical host placement and
+  scores all standbys in the ``Diff Host (Pref)`` tier, as in earlier
+  releases. Operators can enable it on a per-filesystem basis by setting the
+  ``standby_enable_host_anti_affinity`` flag to ``true``.
 
   ::
 
-       ceph fs set <fs name> standby_enable_host_anti_affinity false
+       ceph fs set <fs name> standby_enable_host_anti_affinity true
 
   When disabled, the scoring engine ignores physical host placement, scoring
   all standbys in the ``Diff Host (Pref)`` tier. This restores legacy behavior
