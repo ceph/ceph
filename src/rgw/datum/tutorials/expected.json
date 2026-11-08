@@ -37,5 +37,6 @@
   "17_bucket_listing": "object: photos/ant.jpg\nobject: photos/bee.jpg\nobject: photos/cat.jpg\npages: 2\ncomplete: true\n",
   "17_bucket_listing_variation": "object: photos/ant.jpg\nobject: photos/bee.jpg\npages: 1\ncomplete: false\nresume after: photos/bee.jpg\n",
   "18_ceph_bytes": "stored: 10 bytes in 2 buffers\ncopied: meow\nretained: meow\n",
-  "18_ceph_bytes_variation": "snapshot: meow\n"
+  "18_ceph_bytes_variation": "snapshot: meow\n",
+  "fallible_scan": "invalid row: true\noffered: 2, consumed: 1\nresume index: 1\n"
 }

@@ -6,6 +6,8 @@ if(NOT EXISTS "${CEPH_SOURCE_DIR}/src/include/buffer.h")
 endif()
 find_path(DATUM_TUTORIAL_CONFIG_INCLUDE_DIR acconfig.h
   HINTS "${CEPH_BUILD_DIR}/src/include" "${CEPH_BUILD_DIR}/include" NO_DEFAULT_PATH REQUIRED)
+find_path(DATUM_TUTORIAL_RELEASE_INCLUDE_DIR ceph_release.h
+  HINTS "${CEPH_BUILD_DIR}/src/include" "${CEPH_BUILD_DIR}/include" NO_DEFAULT_PATH REQUIRED)
 find_library(DATUM_TUTORIAL_CEPH_COMMON NAMES ceph-common libceph-common.so.2
   HINTS "${CEPH_BUILD_DIR}/lib" NO_DEFAULT_PATH REQUIRED)
 find_path(DATUM_TUTORIAL_FMT_INCLUDE_DIR fmt/format.h
@@ -17,4 +19,5 @@ target_include_directories(datum_tutorial_ceph INTERFACE "${DATUM_SOURCE_DIR}/ad
 target_include_directories(datum_tutorial_ceph SYSTEM INTERFACE
   "${CEPH_SOURCE_DIR}/src"
   "${DATUM_TUTORIAL_CONFIG_INCLUDE_DIR}"
+  "${DATUM_TUTORIAL_RELEASE_INCLUDE_DIR}"
   "${DATUM_TUTORIAL_FMT_INCLUDE_DIR}")
