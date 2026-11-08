@@ -2149,10 +2149,17 @@ void Server::journal_and_reply(const MDRequestRef& mdr, CInode *in, CDentry *dn,
 
     mdr->set_queued_next_replay_op();
     mds->queue_one_replay();
-  } else if (mdr->did_early_reply)
+  } else if (mdr->did_early_reply) {
     mds->locker->handle_locks_for_early_reply(mdr.get());
-  else
+    // The MDSs that auth pinned an object for us keep it pinned until we
+    // commit.  The requests and freezes that wait for those auth pins on
+    // other MDSs cannot nudge our log: flush it rather than leave them
+    // waiting for the next tick.
+    if (mdr->is_any_remote_auth_pin())
+      mdlog->flush();
+  } else {
     mdlog->flush();
+  }
 }
 
 void Server::submit_mdlog_entry(LogEvent *le, MDSLogContextBase *fin, const MDRequestRef& mdr,
