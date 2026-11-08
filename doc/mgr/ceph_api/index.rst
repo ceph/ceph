@@ -90,9 +90,9 @@ An example:
 Accessing the API Documentation
 ===============================
 
-Every running Ceph Dashboard serves documentation for the Ceph API that matches
-the version of Ceph that is running. This documentation is available in the
-following forms:
+The Dashboard provides documentation for the Ceph API that matches the
+running version of Ceph. This documentation is available in the following
+forms:
 
 * **Interactive documentation**: Click the help icon (**?**) in the top
   navigation bar of the Dashboard and select **API**. This opens an
