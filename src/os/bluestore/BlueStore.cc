@@ -3573,7 +3573,6 @@ int BlueStore::_open_fm(KeyValueDB::Transaction t,
   // When allocation-info is stored in a single file we set freelist_type to "null"
   if (can_have_null_fm) {
     freelist_type = "null";
-    need_to_destage_allocation_file = true;
   }
   fm = FreelistManager::create(cct, freelist_type, PREFIX_ALLOC);
   ceph_assert(fm);
@@ -3740,7 +3739,6 @@ int BlueStore::_init_alloc()
                  << std::dec << dendl;
         alloc->init_add_free(before_expansion_bdev_size,
                              delta);
-        need_to_destage_allocation_file = true;
       }
     } else {
       // This must mean that we had an unplanned shutdown and didn't manage to destage the allocator
@@ -4324,8 +4322,6 @@ int BlueStore::_open_db_and_around(
   if (!is_db_rotational() && !read_only && !to_repair && cct->_conf->bluestore_allocation_from_file) {
     dout(5) << __func__ << "::NCB::Commit to Null-Manager" << dendl;
     commit_to_null_manager();
-    need_to_destage_allocation_file = true;
-    dout(10) << __func__ << "::NCB::need_to_destage_allocation_file was set" << dendl;
   }
 
   return 0;
@@ -11398,6 +11394,9 @@ void BlueStore::_txc_finalize_kv(TransContext *txc, KeyValueDB::Transaction t)
 void BlueStore::_txc_apply_kv(TransContext *txc, bool sync_submit_transaction)
 {
   ceph_assert(txc->get_state() == TransContext::STATE_KV_QUEUED);
+  std::call_once(first_bluestore_transaction, [this]() {
+    _on_bluestore_first_transaction();
+  });
   {
 #if defined(WITH_LTTNG)
     auto start = mono_clock::now();
@@ -16621,6 +16620,14 @@ unsigned BlueStoreRepairer::apply(KeyValueDB* db)
   return repaired;
 }
 
+// Called when BlueStore does its first transaction.
+// It invalidates stored allocator state and in future other
+// volatile data whose state becomes invalid - like statfs from file.
+void BlueStore::_on_bluestore_first_transaction()
+{
+  invalidate_allocation_file_on_bluefs();
+}
+
 //================================================================================================================
 // BlueStore is committing all allocation information (alloc/release) into RocksDB before the client Write is performed.
 // This cause a delay in write path and add significant load to the CPU/Memory/Disk.
@@ -17047,6 +17054,9 @@ int BlueStore::store_allocator(Allocator* src_allocator)
 
   bluefs->close_writer(p_handle);
   need_to_destage_allocation_file = false;
+  // reset flag in case we reuse BlueStore instance for remount
+  first_bluestore_transaction.~once_flag();
+  new (&first_bluestore_transaction) std::once_flag();
   return 0;
 }
 
