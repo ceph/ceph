@@ -84,7 +84,6 @@ dashboard/services/rgw_client.py remote-unexported progress.fail
 diskprediction_local/module.py remote-unexported devicehealth.show_device_metrics
 insights/module.py remote-unexported crash.do_json_report
 mgr_util.py remote-unexported nvmeof.create_pool_if_not_exists
-orchestrator/_interface.py remote-unexported orchestrator._select_orchestrator
 pg_autoscaler/module.py remote-unexported progress.complete
 pg_autoscaler/module.py remote-unexported progress.update
 prometheus/module.py remote-unexported smb.db_ready

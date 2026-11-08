@@ -48,3 +48,26 @@ class Override(Child):
 def test_override_stays_exported():
     assert 'inherited' in Override._remote_exports()
 
+
+def test_orchestrator_backend_exports_interface():
+    from orchestrator import Orchestrator
+
+    class Backend(MgrModule, Orchestrator):
+        def get_hosts(self):  # type: ignore
+            return []
+
+    exports = Backend._remote_exports()
+    assert {'get_hosts', 'apply', 'is_orchestrator_module'} <= set(exports)
+    assert not any(e.startswith('_') for e in exports)
+
+
+def test_orchestrator_client_does_not_export_shims():
+    from orchestrator import OrchestratorClientMixin
+    from orchestrator.module import OrchestratorCli
+
+    class Client(OrchestratorClientMixin, MgrModule):
+        pass
+
+    assert 'get_hosts' not in Client._remote_exports()
+    assert 'get_hosts' not in OrchestratorCli._remote_exports()
+    assert 'select_orchestrator' in OrchestratorCli._remote_exports()
