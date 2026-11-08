@@ -1,5 +1,6 @@
 include(GetGitRevisionDescription)
 include(CheckCXXCompilerFlag)
+include(CheckLinkerFlag)
 
 # for erasure and compressor plugins
 set(CEPH_INSTALL_PKGLIBDIR ${CMAKE_INSTALL_LIBDIR}/${PROJECT_NAME})
@@ -195,6 +196,11 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     string(APPEND CMAKE_SHARED_LINKER_FLAGS " -undefined dynamic_lookup")
   endif()
 endif(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
+
+# --copy-dt-needed-entries is a GNU ld option; lld, Apple's ld64 and
+# lld in MinGW mode reject it. Test the linker instead of the OS or
+# the compiler, since clang on Linux uses GNU ld by default.
+check_linker_flag(CXX "-Wl,--copy-dt-needed-entries" HAVE_LINK_COPY_DT_NEEDED_ENTRIES)
 
 if(WITH_CEPH_DEBUG_MUTEX)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-DCEPH_DEBUG_MUTEX>)
