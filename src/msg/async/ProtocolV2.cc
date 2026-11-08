@@ -9,6 +9,7 @@
 #include "common/EventTrace.h"
 #include "common/ceph_crypto.h"
 #include "common/errno.h"
+#include "include/platform_errno.h"
 #include "include/random.h"
 #include "auth/AuthClient.h"
 #include "auth/AuthServer.h"
@@ -1830,8 +1831,10 @@ CtPtr ProtocolV2::handle_auth_bad_method(ceph::bufferlist &payload) {
   }
 
   auto bad_method = AuthBadMethodFrame::Decode(payload);
+  // the wire carries Linux errno values
+  int result = ceph_to_hostos_errno(bad_method.result());
   ldout(cct, 1) << __func__ << " method=" << bad_method.method()
-		<< " result " << cpp_strerror(bad_method.result())
+		<< " result " << cpp_strerror(result)
                 << ", allowed methods=" << bad_method.allowed_methods()
 		<< ", allowed modes=" << bad_method.allowed_modes()
                 << dendl;
@@ -1841,7 +1844,7 @@ CtPtr ProtocolV2::handle_auth_bad_method(ceph::bufferlist &payload) {
   int r = messenger->auth_client->handle_auth_bad_method(
     connection,
     am.get(),
-    bad_method.method(), bad_method.result(),
+    bad_method.method(), result,
     bad_method.allowed_methods(),
     bad_method.allowed_modes());
   connection->lock.lock();
@@ -2310,7 +2313,8 @@ CtPtr ProtocolV2::_auth_bad_method(int r)
 		<< ", allowed_methods " << allowed_methods
 		<< ", allowed_modes " << allowed_modes
 		<< dendl;
-  auto bad_method = AuthBadMethodFrame::Encode(auth_meta->auth_method, r,
+  auto bad_method = AuthBadMethodFrame::Encode(auth_meta->auth_method,
+                                               hostos_to_ceph_errno(r),
                                                allowed_methods, allowed_modes);
   return WRITE(bad_method, "bad auth method", read_frame);
 }
