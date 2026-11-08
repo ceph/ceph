@@ -1334,6 +1334,10 @@ TEST(EncodingCompatibility, FeatureEncodingPropagatesToLegacyContainerElements)
       nullptr,
       std::make_shared<encoding_compat_record>(bravo),
     }, 3);
+  expect_feature_encode_calls(
+    std::optional<encoding_compat_record> { alpha }, 1);
+  expect_feature_encode_calls(
+    boost::optional<encoding_compat_record> { bravo }, 1);
 }
 
 TEST(EncodingCompatibility, DecodeNoClearMapPreservesDuplicateKeys)

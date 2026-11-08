@@ -484,6 +484,9 @@ concept map_emplaces_key_value =
 template<typename OptionalT>
 void encode_optional(const OptionalT& p, bufferlist& bl);
 
+template<typename OptionalT>
+void encode_optional(const OptionalT& p, bufferlist& bl, uint64_t features);
+
 template<typename T>
 std::optional<T> decode_optional(bufferlist::const_iterator& p);
 
@@ -619,6 +622,13 @@ inline void encode(const boost::optional<T> &p, bufferlist &bl)
   encoding_detail::encode_optional(p, bl);
 }
 
+template<typename T>
+inline void encode(const boost::optional<T> &p, bufferlist &bl,
+                   uint64_t features)
+{
+  encoding_detail::encode_optional(p, bl, features);
+}
+
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpragmas"
 #pragma GCC diagnostic ignored "-Wuninitialized"
@@ -639,6 +649,13 @@ template<typename T>
 inline void encode(const std::optional<T> &p, bufferlist &bl)
 {
   encoding_detail::encode_optional(p, bl);
+}
+
+template<typename T>
+inline void encode(const std::optional<T> &p, bufferlist &bl,
+                   uint64_t features)
+{
+  encoding_detail::encode_optional(p, bl, features);
 }
 
 template<typename T>
@@ -1143,6 +1160,18 @@ void encode_optional(const OptionalT& p, bufferlist& bl)
   }
 
   encode(*p, bl);
+}
+
+template<typename OptionalT>
+void encode_optional(const OptionalT& p, bufferlist& bl, uint64_t features)
+{
+  __u8 present = static_cast<bool>(p);
+  encode(present, bl);
+  if (!p) {
+    return;
+  }
+
+  encode(*p, bl, features);
 }
 
 template<typename T>
