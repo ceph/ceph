@@ -14903,6 +14903,42 @@ def test_object_lock_changing_mode_from_compliance():
     assert status == 403
     assert error_code == 'AccessDenied'
 
+@pytest.mark.object_lock
+@pytest.mark.fails_on_dbstore
+def test_object_lock_changing_mode_from_compliance_after_expiry():
+    bucket_name = get_new_bucket_name()
+    key = 'file1'
+    client = get_client()
+    client.create_bucket(Bucket=bucket_name, ObjectLockEnabledForBucket=True)
+    # upload object with mode=COMPLIANCE and let the retention expire
+    retain_until = datetime.datetime.now(pytz.utc) + datetime.timedelta(seconds=3)
+    client.put_object(Bucket=bucket_name, Body='abc', Key=key, ObjectLockMode='COMPLIANCE',
+                      ObjectLockRetainUntilDate=retain_until)
+    time.sleep(5)
+    # change mode to GOVERNANCE
+    retain_until = datetime.datetime.now(pytz.utc) + datetime.timedelta(seconds=10)
+    retention = {'Mode':'GOVERNANCE', 'RetainUntilDate':retain_until}
+    response = client.put_object_retention(Bucket=bucket_name, Key=key, Retention=retention)
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+
+@pytest.mark.object_lock
+@pytest.mark.fails_on_dbstore
+def test_object_lock_changing_mode_from_governance_after_expiry():
+    bucket_name = get_new_bucket_name()
+    key = 'file1'
+    client = get_client()
+    client.create_bucket(Bucket=bucket_name, ObjectLockEnabledForBucket=True)
+    # upload object with mode=GOVERNANCE and let the retention expire
+    retain_until = datetime.datetime.now(pytz.utc) + datetime.timedelta(seconds=3)
+    client.put_object(Bucket=bucket_name, Body='abc', Key=key, ObjectLockMode='GOVERNANCE',
+                      ObjectLockRetainUntilDate=retain_until)
+    time.sleep(5)
+    # change mode to COMPLIANCE without bypass
+    retain_until = datetime.datetime.now(pytz.utc) + datetime.timedelta(seconds=10)
+    retention = {'Mode':'COMPLIANCE', 'RetainUntilDate':retain_until}
+    response = client.put_object_retention(Bucket=bucket_name, Key=key, Retention=retention)
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+
 @pytest.mark.fails_on_dbstore
 def test_copy_object_ifmatch_good():
     bucket_name = get_new_bucket()
