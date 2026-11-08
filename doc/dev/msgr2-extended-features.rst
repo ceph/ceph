@@ -15,8 +15,13 @@ also makes a client that the cluster turns away fail at once, with a reason.
   banner it already sends. Peers that don't set the bit see nothing new.
 - **A clean "no".** The banner arrives before authentication, so the mon knows
   what a client supports when it authenticates it. It turns away a client that
-  lacks a required feature there. Every client, old or new, kernel or
-  userspace, already treats a refusal at that point as final.
+  lacks a required feature there. Every connecting client, old or new, kernel
+  or userspace, already treats a refusal at that point as final.
+- **Requirements gate new connections only.** A client that is already
+  connected keeps working until it reconnects. A client from before Vampire
+  that is refused then never tries again, and its I/O hangs once its tickets
+  expire, even if the requirement is lifted. So turning a requirement on must
+  first check the connected clients, as ``set-require-min-compat-client`` does.
 - **Kernels stay simple.** Unmodified kernels need nothing and are refused
   cleanly. To take part, a kernel needs 12 lines of code.
 - **Umbrella keeps bit 54.** The server-side half of the clean rejection needs
@@ -264,11 +269,11 @@ keep their layout.
 
 **Why the banner.** The banner arrives before authentication, so the mon knows
 exactly what a client supports when it authenticates it. That gives one refusal
-point for every client, old or new, kernel or userspace, through a path they
-all already treat as final. It also keeps the kernel change to 12 lines of
-code, all in ``prepare_banner()``. With cephx, the authentication signature
-covers the banner in both crc and secure mode, so the extended part cannot be
-stripped unnoticed.
+point for every connecting client, old or new, kernel or userspace, through a
+path they all already treat as final. It also keeps the kernel change to 12
+lines of code, all in ``prepare_banner()``. With cephx, the authentication
+signature covers the banner in both crc and secure mode, so the extended part
+cannot be stripped unnoticed.
 
 **Rules.**
 
@@ -276,12 +281,16 @@ stripped unnoticed.
   upstream in order, and never reused or renumbered. A downstream backport
   reserves its number upstream first, which costs nothing now.
 - **Unknown bits.** Receivers ignore unknown bits and unknown trailing bytes.
-  The top bit of every 64-bit word is reserved: test builds set one at random
-  ("GREASE"), so a peer that mishandles unknown bits is caught early.
+  The top bit of every 64-bit word is reserved: with
+  ``ms_v2_ext_features_grease`` a peer sets one at random ("GREASE"), so a peer
+  that mishandles unknown bits is caught early. The msgr tests always turn it
+  on.
 - **Requirements.** They stay per peer type in the messenger ``Policy``
   (``features_ext_required`` plus a reason text), and are computed from cluster
   state as ``OSDMap::get_features`` does today. A requirement becomes active
-  only once every mon supports it.
+  only once every mon supports it. Only mons in the quorum refuse at
+  authentication: a mon outside it may hold an older policy, and clients stop
+  hunting at the first refusal.
 - **One feature word.** The word in the identification frame must equal the one
   in the banner. A peer that sees them differ drops the connection, which makes
   the word tamper-evident in crc mode.
@@ -304,10 +313,11 @@ Rejecting clients cleanly
 =========================
 
 The mon turns clients away during authentication, the one point where every
-client, old or new, kernel or userspace, already treats a refusal as final.
-Today a client that lacks a required feature is refused at identification
-instead. It retries until ``client_mount_timeout``, and over msgr2 it can retry
-for much longer because of the false success described below.
+connecting client, old or new, kernel or userspace, already treats a refusal as
+final. Today a client that lacks a required feature is refused at
+identification instead. It retries until ``client_mount_timeout``, and over
+msgr2 it can retry for much longer because of the false success described
+below.
 
 .. list-table::
    :header-rows: 1
@@ -325,9 +335,10 @@ for much longer because of the false success described below.
      - ``AUTH_BAD_METHOD(-EPROTONOSUPPORT)``
      - ``rbd map``: ``EACCES``; CephFS: ``EHOSTUNREACH``; dmesg shows -93
    * - Any client over msgr1 (kernels by default, Luminous, Mimic)
-     - ``MAuthReply(-EPROTONOSUPPORT)``, naming the auth protocol, with the
-       reason in ``result_msg``; the connection stays open so that the client
-       reads the reply
+     - ``MAuthReply(-EPROTONOSUPPORT)``, naming the auth protocol (but never
+       ``none``, whose clients take any reply as success), with the reason in
+       ``result_msg``; the connection stays open so that the client reads the
+       reply
      - errno 93; unpatched kernels log "mauth authentication failed: -93" (5.4:
        "auth method 'x' error -93"); a patched kernel prints the reason
    * - Older userspace over msgr2, missing an extended feature
@@ -337,10 +348,18 @@ for much longer because of the false success described below.
      - Two strikes: identification is refused once, then its next
        authentication
      - "Permission denied"
-   * - Clients already connected
-     - Not refused until they reconnect; then they retry every 3 to 30 s and
-       recover if the requirement is lifted
-     - n/a
+   * - Vampire or later clients already connected
+     - Not refused until they reconnect. Then they retry every 3 to 30 s
+     - They recover if the requirement is lifted within one to three times
+       ``auth_mon_ticket_ttl`` (12 hours by default). After that their old
+       ticket's secret is gone, the mons refuse them with ``EACCES``, and only
+       a restart helps
+   * - Older clients already connected
+     - Not refused until they reconnect. Then they never try again
+     - I/O goes on over their open OSD connections. A new one, after an OSD
+       restart for example, needs a fresh ticket; once theirs expires (one to
+       three times ``auth_service_ticket_ttl``, an hour by default), their I/O
+       hangs. Lifting the requirement does not help; only a restart does
 
 **Two strikes, for clients we cannot classify at authentication.** An older
 msgr2 client sends only the old 64-bit word, and only after authentication. So
@@ -351,11 +370,14 @@ cephx the ``global_id`` is not yet verified at that point, so a forged one only
 turns away the connection presenting it. The mon keeps each entry until it
 expires, so a forger cannot clear one either.
 
-**Requirements that apply to one pool,** such as an active pool migration,
-refuse operations on that pool only, with ``-EPROTONOSUPPORT``. Old clients
-keep working on every other pool. Never use ``-EOPNOTSUPP``: librbd and rgw
-take it as "fall back", and kernels print a warning with a stack trace when
-they see it at authentication.
+**A requirement at the mon applies to the whole cluster.** The mon knows
+nothing of the pools a client will use, so while it requires a feature, every
+new client without it is refused, whatever its pools: every new kernel mount,
+``rbd map``, ceph-csi pod and gateway restart. A need that concerns one pool,
+such as an active pool migration, is better enforced by the OSDs for operations
+on that pool, with ``-EPROTONOSUPPORT``; this design does not provide that.
+Never use ``-EOPNOTSUPP``: librbd and rgw take it as "fall back", and kernels
+print a warning with a stack trace when they see it at authentication.
 
 **MonClient changes.** The first two fix bugs that exist since Nautilus.
 
@@ -365,25 +387,59 @@ they see it at authentication.
   hours with the default 300 s) and then reports "Operation not permitted".
   ``authenticate()`` must never report success when the session was refused.
 - **Recovery.** A running client whose re-authentication fails gives up
-  silently and never tries again. It should keep retrying, backing off from 3
-  to 30 s, as the kernel does.
+  silently and never tries again. When the mons turn it away for missing
+  features, it should keep retrying, backing off from 3 to 30 s, as the kernel
+  does. After any other auth error, such as a deleted key, it stops as before,
+  saying so once: retrying those would only fill the mons' logs.
 - **Stop hunting at the first refusal.** A refused client keeps hunting while
   its connection to another mon is still pending, for example to a mon that is
   down, and fails only at ``client_mount_timeout``, with a timeout error. The
-  refusal reflects quorum state that every mon shares, so the client should
-  stop at the first one. Released clients keep the old behaviour, so while a
-  mon in their list is down they wait out ``client_mount_timeout``.
+  refusal reflects quorum state that every mon in the quorum shares, and mons
+  outside it do not refuse, so the client should stop at the first one.
+  Released clients keep the old behaviour, so while a mon in their list is down
+  they wait out ``client_mount_timeout``.
 
-**Operators see why.** The mon writes "turned away N client(s) lacking required
-features (latest at <addr>): <reason>" to the cluster log, at most once a
-minute. Today these clients are invisible at default debug levels. A health
-check should name them too.
+**Operators see why.** The mon writes "turned away N connection attempt(s) from
+clients lacking required features (latest at <addr>): <reason>" to the cluster
+log, at most once a minute. Each attempt is logged only at ``debug_mon`` 10:
+kernels retry forever, and at the default level each refusal would add a line
+of about 300 bytes to the mon log. Today these clients are invisible at default
+debug levels. A health check should name them too.
 
 **This part needs no new wire format, so it can be backported to Umbrella.** It
 covers refusing at authentication for 64-bit features, the two-strike rule, the
 msgr1 refusal and the MonClient changes. With it, old clients that connect
 while a pool migrates are turned away in about a second, and clients that
 support pool migration keep working throughout.
+
+Turning a requirement on
+========================
+
+Requirements gate new connections only, so turning one on is the moment that
+decides what happens to the clients already connected. In a test with short
+tickets, three clients from before the change (one patched, main's, and a
+released Reef) were refused when the mons restarted, kept writing for 7
+minutes, and then hung for good when an OSD restarted. Lifting the requirement
+brought none of them back.
+
+- **Check the connected clients first.** The command or state change that turns
+  on a client requirement should refuse while clients connected to the quorum
+  lack it, unless forced, as ``ceph osd set-require-min-compat-client`` does.
+  It must count the clients that cannot exchange extended features at all.
+- **When forced, make the failure visible.** Blocklisting the clients that lack
+  the feature makes them fail at once, with an error, instead of hanging hours
+  later.
+- **Every client counts.** That includes the ``ceph`` CLI from an older
+  package, the Rook operator, whose CLI comes from an older Ceph image, the
+  librados handles of an older mgr's modules, gateways, and OpenStack or
+  Proxmox hosts with a distribution's librbd. An older CLI sees only
+  "Permission denied" and cannot read the cluster log that explains why.
+- **Leave an escape.** Today the escape is ``ceph daemon mon.<id> config set
+  ...`` on every mon, or a CLI from the cluster's image. A requirement kept in
+  the OSDMap will need a mon admin socket command that suspends client
+  requirements.
+- **Never automatically.** Not from ``require_osd_release``, which Rook sets by
+  itself. Gate on the monmap's ``min_mon_release`` and on the mgr versions too.
 
 Compatibility and upgrades
 ==========================
@@ -471,16 +527,26 @@ No risk found blocks the design. Most are rules to write down and keep testing.
        on in tests.
    * - Crimson and third-party msgr2 code meet the longer banner. No
        third-party implementation is known.
-     - Run crimson against a cluster with extended features before merging.
+     - Done: a crimson OSD works in a cluster whose mons and clients send the
+       longer banner with GREASE (see the testing section). Run it again before
+       merging.
    * - Refusing after authentication succeeded makes clients reconnect without
        backoff.
      - Refuse before ``AUTH_DONE``, at the mon, as this design does. Refused
        running clients back off from 3 to 30 s.
    * - In a mixed-version quorum, an older mon admits what a newer one refuses.
      - A requirement becomes active only when every mon is Vampire or later.
-   * - Requirements apply only to new connections.
-     - Pool-scoped operation errors for pool features; blocklisting remains an
-       explicit operator action.
+   * - Requirements apply only to new connections, and clients connected when
+       one starts hang later.
+     - Check connected clients before turning a requirement on, and blocklist
+       those that lack it when forced (see above).
+   * - An operator's older CLI is locked out with "Permission denied".
+     - An escape through each mon's admin socket; document the symptom.
+   * - A mon outside the quorum, with an older policy, ends clients' hunt. In a
+       test, 30 of 30 clients failed.
+     - Only mons in the quorum refuse at authentication.
+   * - A flood of refused kernels fills the mon log.
+     - Each refusal at ``debug_mon`` 10; one cluster-log line a minute.
    * - Auth ``none`` gives no integrity, so a man in the middle can strip bit 2
        silently.
      - As today; document it. With cephx the strip is detected.
@@ -489,7 +555,7 @@ No risk found blocks the design. Most are rules to write down and keep testing.
      - Accepted; it reveals no secrets.
    * - Feature numbers cannot be reused, and a set holds at most 4,096 of them.
      - Allocate upstream in order; the type ignores numbers past the limit, and
-       options are parsed strictly.
+       options reject them, and GREASE bits, with a logged error.
 
 **Open questions.**
 
@@ -505,15 +571,15 @@ Implementation plan
 There are five steps, in order. The first two change no wire format and can be
 backported; only the fourth needs anyone outside Ceph's userspace.
 
-#. **MonClient fixes.** Make ``authenticate()`` never report success when the
-   session was refused, let a running client whose re-authentication failed
-   keep retrying with backoff, and stop hunting at the first refusal for
-   missing features. A small, separate pull request, backported to every
-   supported release.
+#. **MonClient fix.** Make ``authenticate()`` never report success when the
+   session was refused. A small, separate pull request, backported to every
+   supported release: `PR #73638 <https://github.com/ceph/ceph/pull/73638>`__
+   (`tracker #82890 <https://tracker.ceph.com/issues/82890>`__).
 #. **Refuse clients at authentication for missing 64-bit features.** This
    covers the two-strike rule for older msgr2 clients, the msgr1 refusal in
    ``MAuth`` with the reason in ``result_msg``, the cluster-log line and a
-   health check. No wire change.
+   health check. MonClient stops hunting at the first such refusal, and a
+   running client turned away keeps retrying with backoff. No wire change.
 #. **Extended features in the banner, for Vampire.** It contains:
 
    - the ``msgr2.rst`` spec;
@@ -540,10 +606,14 @@ Testing so far (temporary)
    tested with, for review. It will be removed before this document is
    merged.
 
-The prototype implements steps 1 to 3 in about 1,100 lines including tests; it
-is not published yet. Every experiment used real binaries: the prototype,
-upstream main, released clients from Luminous 12.2.13 to Umbrella 21.2.0, and
-kernels 5.4, 6.12 and 7.3 booted in VMs, with and without the kernel patch.
+The draft implementation, `PR #73605
+<https://github.com/ceph/ceph/pull/73605>`__, implements steps 1 to 3; its step
+1 is also `PR #73638 <https://github.com/ceph/ceph/pull/73638>`__. The rows
+from "Clients connected when a requirement starts" to "Mon log volume" ran on
+the draft itself; the others ran on the prototype it was cleaned up from. Every
+experiment used real binaries: the prototype or the draft, upstream main,
+released clients from Luminous 12.2.13 to Umbrella 21.2.0, and kernels 5.4,
+6.12 and 7.3 booted in VMs, with and without the kernel patch.
 
 - Every released client tested from Nautilus 14.2.22 to Umbrella 21.2.0, and
   every kernel tested, ignores the longer banner.
@@ -555,6 +625,8 @@ kernels 5.4, 6.12 and 7.3 booted in VMs, with and without the kernel patch.
   on every connection.
 - Sending the set in new frames after authentication caused a reconnect storm.
   That storm is why the set goes in the banner.
+- Clients connected before a requirement starts keep working, then hang once
+  they need a fresh ticket (see "Turning a requirement on").
 
 .. list-table::
    :header-rows: 1
@@ -601,6 +673,51 @@ kernels 5.4, 6.12 and 7.3 booted in VMs, with and without the kernel patch.
        refused in 0.7 s (110.5 s before), and Luminous to Nautilus get in
        through stale bits, as on main today. All are back in at once when the
        requirement goes.
+   * - Clients connected when a requirement starts
+     - 3 mons, service and mon tickets of 60 and 120 s; a patched client hiding
+       the feature, main's and a released Reef client writing; the requirement
+       set, every mon restarted, 7 minutes later an OSD restarted, then the
+       requirement lifted
+     - All three kept writing for 7 minutes, then hung for good at the OSD
+       restart (the OSD rejected their expired tickets); the control client
+       went on. None came back when the requirement was lifted: main's and Reef
+       never retry, and the patched client got ``EACCES`` for a ticket whose
+       secret had rotated away. Lifted 40 s after the refusal instead, the
+       patched client was back within 30 s; main's never was
+   * - Two strikes with several mons
+     - Released Reef and Quincy clients lacking ``CRUSH_MSR``, hunting 1, 3 or
+       5 mons
+     - Refused in 0.6, 1.0 and 1.0 to 1.4 s; strikes are per mon, so a client
+       is refused at identification at most once per mon
+   * - A stale mon outside the quorum
+     - 3 mons; the quorum lifts a requirement while the third, out of quorum,
+       keeps it
+     - Before mons outside the quorum stopped refusing: 30 of 30 prototype
+       clients failed; main's clients, which keep hunting, got in
+   * - ``auth none`` over msgr1
+     - A requirement the clients lack, cephx off, msgr1 only
+     - Before the fix, the refusal named protocol ``none``, whose clients take
+       any reply as success: 30 s and ``ETIMEDOUT`` instead of a refusal
+   * - An older CLI
+     - Main's and Reef's ``ceph`` with a requirement they lack
+     - Refused in 0.26 to 0.40 s with "Permission denied"; after ``config set``
+       through every mon's admin socket, main's CLI removed the requirement
+   * - Malformed banners
+     - 17 crafted banners sent to a live mon: truncated, odd and huge lengths,
+       65 and 8,000 words, GREASE only, unknown bits, trailing bytes
+     - No crash; every malformed one closes the connection at once; the
+       well-formed ones are accepted
+   * - Crimson
+     - A crimson OSD (cyanstore) with this design's mons, mgr and clients,
+       GREASE on: I/O, a 20 s bench, a client requirement, a crimson restart
+     - Works: about 220,000 writes, the restart rejoins, nothing about banners
+       or features in its log; ``ceph features extended`` shows it as unable to
+       exchange extended features. The mgr crashed in libcephsqlite on that OSD
+       whether extended features were on or off, so that is unrelated
+   * - Mon log volume
+     - 100 refused connections at the default debug levels
+     - 1.1 to 1.6 log lines (290 to 490 bytes) each before per-attempt logging
+       moved to level 10
    * - A mon down
      - 3 mons, one killed; clients that lack a required feature
      - Prototype client refused in 0.26 to 0.33 s (30 s without the hunting
@@ -648,8 +765,10 @@ kernels 5.4, 6.12 and 7.3 booted in VMs, with and without the kernel patch.
 
 Problems found in current code along the way:
 
-- the three MonClient bugs above: the false success, no recovery after a failed
-  re-authentication, and hunting on after a refusal;
+- three MonClient bugs: the false success (`tracker #82890
+  <https://tracker.ceph.com/issues/82890>`__), and, once the mon refuses at
+  authentication, no recovery after a failed re-authentication and hunting on
+  after a refusal;
 - a ``test_msgr`` macro changes ``Policy``'s layout between the test and the
   library, so ``FeatureTest`` has been passing for the wrong reason;
 - Luminous to Nautilus clients falsely pass ``HAVE_FEATURE`` for ``CRUSH_MSR``,
