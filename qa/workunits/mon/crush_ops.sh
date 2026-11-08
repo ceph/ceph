@@ -29,6 +29,26 @@ ceph osd crush rule ls-by-class ssd | expect_false grep 'foo-hdd'
 ceph osd crush rule ls-by-class hdd | grep 'foo-hdd'
 ceph osd crush rule ls-by-class hdd | expect_false grep 'foo-ssd'
 
+# set-device-class: the root holds more than one class, so only the named
+# rule changes
+ceph osd crush rule create-simple sdc-rule default host
+ceph osd crush rule set-device-class sdc-rule ssd
+ceph osd crush rule set-device-class sdc-rule ssd 2>&1 | grep 'already uses' # idempotent
+ceph osd crush rule ls-by-class ssd | grep 'sdc-rule'
+ceph osd crush rule dump sdc-rule | grep 'default~ssd'
+expect_false ceph osd crush rule set-device-class sdc-rule hdd
+expect_false ceph osd crush rule set-device-class sdc-rule nosuchclass
+expect_false ceph osd crush rule set-device-class nosuchrule ssd
+ceph osd crush rule rm sdc-rule
+# moving data that a pool uses takes --yes-i-really-mean-it
+ceph osd crush rule create-simple sdc-rule default host
+ceph osd pool create sdc_pool 1 1 replicated sdc-rule
+expect_false ceph osd crush rule set-device-class sdc-rule ssd
+ceph osd crush rule set-device-class sdc-rule ssd --yes-i-really-mean-it
+ceph osd crush rule ls-by-class ssd | grep 'sdc-rule'
+ceph osd pool rm sdc_pool sdc_pool --yes-i-really-really-mean-it
+ceph osd crush rule rm sdc-rule
+
 ceph osd erasure-code-profile set ec-foo-ssd crush-device-class=ssd m=2 k=2
 ceph osd pool create ec-foo 2 erasure ec-foo-ssd
 ceph osd pool rm ec-foo ec-foo --yes-i-really-really-mean-it
@@ -65,12 +85,43 @@ ceph osd crush add $o1 1 host=host1 root=foo
 ceph osd crush add $o1 1 host=host1 root=foo  # idemptoent
 ceph osd crush add $o2 1 host=host2 root=foo
 ceph osd crush add $o2 1 host=host2 root=foo  # idempotent
+
+# set-device-class on a root that holds only one class renumbers its buckets
+# so that no data moves, and group flags follow the renumbered buckets
+foo_id() {
+    ceph osd crush dump -f json | jq '.buckets[] | select(.name == "foo") | .id'
+}
+ceph osd crush set-device-class ssd osd.$o1 osd.$o2
+ceph osd crush rule create-simple foo-sdc foo host
+ceph osd set-group noout host1
+id_before=$(foo_id)
+ceph osd crush rule set-device-class foo-sdc ssd
+test "$id_before" != "$(foo_id)"
+ceph osd crush rule dump foo-sdc | grep 'foo~ssd'
+ceph osd dump -f json | jq -e '.crush_node_flags.host1 | contains(["noout"])'
+ceph osd unset-group noout host1
+ceph osd crush rule rm foo-sdc
+
 ceph osd crush add-bucket bar root
 ceph osd crush add-bucket bar root  # idempotent
 ceph osd crush link host1 root=bar
 ceph osd crush link host1 root=bar  # idempotent
 ceph osd crush link host2 root=bar
 ceph osd crush link host2 root=bar  # idempotent
+
+# host1 and host2 now also sit under root bar, so renumbering foo would change
+# what bar places: only the named rule changes, and with a pool on it that
+# takes --yes-i-really-mean-it
+ceph osd crush rule create-simple foo-sdc2 foo host
+ceph osd pool create foo_sdc_pool 1 1 replicated foo-sdc2
+expect_false ceph osd crush rule set-device-class foo-sdc2 ssd
+id_before=$(foo_id)
+ceph osd crush rule set-device-class foo-sdc2 ssd --yes-i-really-mean-it
+test "$id_before" = "$(foo_id)"
+ceph osd crush rule dump foo-sdc2 | grep 'foo~ssd'
+ceph osd pool rm foo_sdc_pool foo_sdc_pool --yes-i-really-really-mean-it
+ceph osd crush rule rm foo-sdc2
+ceph osd crush rm-device-class osd.$o1 osd.$o2
 
 ceph osd tree | grep -c osd.$o1 | grep -q 2
 ceph osd tree | grep -c host1 | grep -q 2
