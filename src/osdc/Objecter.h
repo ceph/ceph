@@ -2653,6 +2653,10 @@ public:
       /// the PG's ops canceled after being sent, and not answered yet
       /// (see OSDSession::unanswered)
       unsigned unanswered = 0;
+      /// since when the PG has been due to switch to another connection
+      /// (see _route_desired()), but could not, being busy(). Unset: not
+      /// due to switch
+      std::optional<ceph::coarse_mono_time> switch_pending_since;
       /// whether ops of the PG may still be on their way to (or queued at)
       /// the OSD on the route's connection: the route may not change
       bool busy() const { return in_flight + unanswered > 0; }
@@ -2864,6 +2868,11 @@ private:
   void _reset_core_con(OSDSession *s,
 		       uint32_t core,
 		       std::map<uint64_t, LingerOp *>& lresend);
+  /// the core connection a PG's ops should be sent on (nullopt: the main
+  /// connection): the hinted core's, once connected to it. s->lock is locked
+  std::optional<uint32_t> _route_desired(
+    const OSDSession *s,
+    const OSDSession::pg_route_t& route) const;
   /// choose the connection to send op on, and account for op as in flight
   /// on it; op->session->lock is locked
   ConnectionRef _op_route(Op *op);
