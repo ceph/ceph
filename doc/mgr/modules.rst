@@ -823,7 +823,8 @@ A module marks the methods that other modules may call with the
 Inherited methods count, so a decorated method in a base class (for
 example ``Orchestrator``) is exported by every subclass, even one that
 overrides it.  ``ceph mgr api ls [<module>]`` lists the exported
-methods.
+methods.  The ``check-remote-calls`` tox environment fails on a new
+``remote()`` call to a method that is not exported.
 
 .. autofunction:: remote_export
 
