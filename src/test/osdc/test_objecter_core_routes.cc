@@ -27,6 +27,7 @@
 
 #include <boost/asio/io_context.hpp>
 
+#include "common/perf_counters_collection.h"
 #include "global/global_context.h"
 #include "include/rados.h"
 #include "messages/MOSDOp.h"
@@ -235,6 +236,30 @@ protected:
     std::shared_lock l(session->lock);
     return session->pg_routes.at(spg_t(pgid)).holding;
   }
+
+  /// the Objecter's perf counter 'name' (each test has its own Objecter)
+  static const PerfCounters::perf_counter_data_any_d& perf(
+    const std::string& name)
+  {
+    const PerfCounters::perf_counter_data_any_d* data = nullptr;
+    g_ceph_context->get_perfcounters_collection()->with_counters(
+      [&](const PerfCountersCollectionImpl::CounterMap& counters) {
+        auto i = counters.find("objecter." + name);
+        ceph_assert(i != counters.end());
+        data = i->second.data;
+      });
+    return *data;
+  }
+  static uint64_t counter(const std::string& name)
+  {
+    return perf(name).u64;
+  }
+  /// a time avg counter's count, and its longest increment
+  static std::pair<uint64_t, double> time_avg(const std::string& name)
+  {
+    auto [sum, count, max] = perf(name).read_avg_ex();
+    return {count, max / 1e9};
+  }
 };
 
 // an idle PG switches with its first op after the hint
@@ -247,6 +272,10 @@ TEST_F(TestObjecterCoreRoutes, IdlePgSwitches)
   EXPECT_EQ((tids_t{a}), main_con->tids());
   EXPECT_EQ((tids_t{b}), core_con->tids());
   EXPECT_FALSE(route_holding());
+  EXPECT_EQ(1u, counter("core_route_switch"));
+  EXPECT_EQ(0u, counter("op_send_switch_pending"));
+  // not delayed
+  EXPECT_EQ(0u, time_avg("core_switch_delay").first);
 }
 
 // a busy PG keeps its connection during the grace period, and switches
@@ -263,6 +292,9 @@ TEST_F(TestObjecterCoreRoutes, BusyPgSwitchesWhenDrained)
   }
   auto e = submit();
   EXPECT_EQ((tids_t{e}), core_con->tids());
+  EXPECT_EQ(2u, counter("op_send_switch_pending"));  // c and d
+  EXPECT_EQ(0u, counter("core_switch_hold"));
+  EXPECT_EQ(1u, time_avg("core_switch_delay").first);
 }
 
 // after the grace period, the new ops are held until the ops in flight
@@ -287,6 +319,15 @@ TEST_F(TestObjecterCoreRoutes, HoldUntilDrained)
 
   auto f = submit();
   EXPECT_EQ((tids_t{d, e, f}), core_con->tids());
+
+  EXPECT_EQ(1u, counter("core_switch_hold"));
+  EXPECT_EQ(0u, counter("core_switch_hold_expired"));
+  EXPECT_EQ(2u, counter("op_switch_held"));
+  EXPECT_EQ(1u, time_avg("core_switch_hold_time").first);
+  // from c, the first op sent while the PG was due to switch
+  auto [delays, longest] = time_avg("core_switch_delay");
+  EXPECT_EQ(1u, delays);
+  EXPECT_GE(longest, grace);
 }
 
 // the safety hatch: if the ops in flight are not answered within
@@ -322,6 +363,17 @@ TEST_F(TestObjecterCoreRoutes, HoldExpires)
   }
   EXPECT_FALSE(route_holding());
   EXPECT_EQ((tids_t{g}), core_con->tids());
+
+  EXPECT_EQ(2u, counter("core_switch_hold"));
+  EXPECT_EQ(1u, counter("core_switch_hold_expired"));
+  EXPECT_EQ(0u, counter("core_switch_hold_expired_unanswered"));
+  auto [holds, longest_hold] = time_avg("core_switch_hold_time");
+  EXPECT_EQ(2u, holds);
+  EXPECT_GE(longest_hold, max_hold);
+  // a single switch, over both holds
+  auto [delays, longest] = time_avg("core_switch_delay");
+  EXPECT_EQ(1u, delays);
+  EXPECT_GE(longest, 2 * grace + max_hold);
 }
 
 // the reset of the core connection ends the hold: the held ops are sent
@@ -341,6 +393,9 @@ TEST_F(TestObjecterCoreRoutes, CoreConResetEndsHold)
   expected.insert(expected.end(), {d, e});
   EXPECT_EQ(expected, main_con->tids());
   EXPECT_TRUE(core_con->tids().empty());
+  EXPECT_EQ(1u, counter("core_switch_hold"));
+  EXPECT_EQ(0u, counter("core_switch_hold_expired"));
+  EXPECT_EQ(0u, time_avg("core_switch_delay").first);
 }
 
 // an op canceled after being sent keeps its PG from switching until it is
@@ -365,6 +420,13 @@ TEST_F(TestObjecterCoreRoutes, CanceledOpAnswered)
   reply(main_con, b);
   auto e = submit();
   EXPECT_EQ((tids_t{e}), core_con->tids());
+
+  EXPECT_EQ(1u, counter("op_unanswered"));
+  EXPECT_EQ(1u, counter("op_unanswered_answered"));
+  // c and d: nothing in flight, only b unanswered
+  EXPECT_EQ(2u, counter("op_send_switch_unanswered"));
+  EXPECT_EQ(1u, counter("core_switch_delayed_unanswered"));
+  EXPECT_EQ(1u, time_avg("core_switch_delay").first);
 }
 
 // ... or until it is old enough for its answer not to be expected anymore
@@ -382,6 +444,11 @@ TEST_F(TestObjecterCoreRoutes, CanceledOpForgotten)
   wait(max_hold * 1.5);
   auto d = submit();
   EXPECT_EQ((tids_t{d}), core_con->tids());
+
+  EXPECT_EQ(1u, counter("op_unanswered"));
+  EXPECT_EQ(1u, counter("op_unanswered_forgotten"));
+  EXPECT_EQ(0u, counter("op_unanswered_answered"));
+  EXPECT_EQ(1u, counter("core_switch_delayed_unanswered"));
 }
 
 // a canceled op is not waited for once its connection is reset
@@ -403,7 +470,11 @@ TEST_F(TestObjecterCoreRoutes, CanceledOpOnResetCon)
   }
   objecter->ms_handle_reset(core_con.get());
   poll();
-  std::shared_lock l(session->lock);
-  EXPECT_TRUE(session->unanswered.empty());
-  EXPECT_FALSE(session->pg_routes.at(spg_t(pgid)).busy());
+  {
+    std::shared_lock l(session->lock);
+    EXPECT_TRUE(session->unanswered.empty());
+    EXPECT_FALSE(session->pg_routes.at(spg_t(pgid)).busy());
+  }
+  EXPECT_EQ(1u, counter("op_unanswered"));
+  EXPECT_EQ(1u, counter("op_unanswered_reset"));
 }
