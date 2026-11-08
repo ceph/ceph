@@ -2662,6 +2662,15 @@ public:
       /// (see _route_desired()), but could not, being busy(). Unset: not
       /// due to switch
       std::optional<ceph::coarse_mono_time> switch_pending_since;
+      /// whether, while due to switch, the PG was kept from switching
+      /// only by canceled ops not answered yet (for the perf counters)
+      bool delayed_by_unanswered = false;
+      /// the PG is no longer due to switch: it switched, the hint went
+      /// away, or the route was reset
+      void end_switch_wait() {
+        switch_pending_since.reset();
+        delayed_by_unanswered = false;
+      }
       /// After a switch has been pending for objecter_osd_core_switch_grace,
       /// the PG's new ops are held (Op::switch_held), so that its ops in
       /// flight drain, and the PG switches. The hold ends once they drain,
