@@ -5230,8 +5230,12 @@ def update_service_for_daemon(ctx: CephadmContext,
         service_id = ctx.service_name
     for name in update_daemons:
         path = os.path.join(ctx.data_dir, ctx.fsid, name, 'unit.meta')
-        update_meta_file(path, data)
+        # set the label first, so that if it fails the OSD stays in its
+        # old service
         update_osd_bluestore_affinity(ctx, name, service_id)
+        # an adopted OSD has no service_name in unit.meta until cephadm
+        # redeploys it, so add the key rather than skip it
+        update_meta_file(path, data, add_missing=True)
         print(f'Successfully updated daemon {name} with service {ctx.service_name}')
 
 
