@@ -32,8 +32,6 @@
 #include "common/Formatter.h"
 #include <gtest/gtest.h>
 
-#define MSG_POLICY_UNIT_TESTING
-
 #include "common/ceph_argparse.h"
 #include "common/ceph_mutex.h"
 #include "global/global_init.h"
@@ -1189,25 +1187,15 @@ TEST_P(MessengerTest, FeatureTest) {
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
   bind_addr.parse("v2:127.0.0.1");
-  uint64_t all_feature_supported, feature_required, feature_supported = 0;
-  for (int i = 0; i < 10; i++)
-    feature_supported |= 1ULL << i;
-  feature_supported |= CEPH_FEATUREMASK_MSG_ADDR2;
-  feature_supported |= CEPH_FEATUREMASK_SERVER_NAUTILUS;
-  feature_required = feature_supported | 1ULL << 13;
-  all_feature_supported = feature_required | 1ULL << 14;
 
+  // 1. the server requires a feature no build supports
   Messenger::Policy p = server_msgr->get_policy(entity_name_t::TYPE_CLIENT);
-  p.features_required = feature_required;
+  p.features_required = CEPH_FEATUREMASK_MSG_ADDR2 | CEPH_FEATURE_RESERVED;
   server_msgr->set_policy(entity_name_t::TYPE_CLIENT, p);
   server_msgr->bind(bind_addr);
   server_msgr->add_dispatcher_head(&srv_dispatcher);
   server_msgr->start();
 
-  // 1. Suppose if only support less than required
-  p = client_msgr->get_policy(entity_name_t::TYPE_OSD);
-  p.features_supported = feature_supported;
-  client_msgr->set_policy(entity_name_t::TYPE_OSD, p);
   client_msgr->add_dispatcher_head(&cli_dispatcher);
   client_msgr->start();
 
@@ -1223,9 +1211,9 @@ TEST_P(MessengerTest, FeatureTest) {
   client_msgr->wait();
 
   // 2. supported met required
-  p = client_msgr->get_policy(entity_name_t::TYPE_OSD);
-  p.features_supported = all_feature_supported;
-  client_msgr->set_policy(entity_name_t::TYPE_OSD, p);
+  p.features_required = CEPH_FEATUREMASK_MSG_ADDR2 |
+    CEPH_FEATUREMASK_SERVER_NAUTILUS;
+  server_msgr->set_policy(entity_name_t::TYPE_CLIENT, p);
   client_msgr->start();
 
   conn = client_msgr->connect_to(server_msgr->get_mytype(),

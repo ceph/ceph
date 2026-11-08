@@ -43,11 +43,7 @@ struct Policy {
   ThrottleType* throttler_messages;
   
   /// Specify features supported locally by the endpoint.
-#ifdef MSG_POLICY_UNIT_TESTING
-  uint64_t features_supported{CEPH_FEATURES_SUPPORTED_DEFAULT};
-#else
   static constexpr uint64_t features_supported{CEPH_FEATURES_SUPPORTED_DEFAULT};
-#endif
 
   /// Specify features any remotes must have to talk to this endpoint.
   uint64_t features_required;
