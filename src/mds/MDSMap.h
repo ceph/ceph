@@ -627,7 +627,7 @@ protected:
   mds_rank_t max_mds = 1; /* The maximum number of active MDSes. Also, the maximum rank. */
   mds_rank_t old_max_mds = 0; /* Value to restore when MDS cluster is marked up */
   mds_rank_t standby_count_wanted = -1;
-  bool standby_enable_host_anti_affinity = true;
+  bool standby_enable_host_anti_affinity = false;
   std::string balancer;    /* The name/version of the mantle balancer (i.e. the rados obj name) */
 
   std::string bal_rank_mask = "-1";
