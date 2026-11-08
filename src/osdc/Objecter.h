@@ -16,10 +16,12 @@
 #ifndef CEPH_OBJECTER_H
 #define CEPH_OBJECTER_H
 
+#include <atomic>
 #include <deque>
 #include <list>
 #include <map>
 #include <mutex>
+#include <set>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -2136,6 +2138,9 @@ public:
     /// sent on (nullopt: the session's main connection)
     std::optional<spg_t> routed_pgid;
     std::optional<uint32_t> routed_core;
+    /// held, not sent, until its PG switches to another connection (see
+    /// OSDSession::pg_route_t::holding); still in its session's ops
+    bool switch_held = false;
 
     /// true if the throttle budget is get/put on a series of OPs,
     /// instead of per OP basis, when this flag is set, the budget is
@@ -2657,6 +2662,17 @@ public:
       /// (see _route_desired()), but could not, being busy(). Unset: not
       /// due to switch
       std::optional<ceph::coarse_mono_time> switch_pending_since;
+      /// After a switch has been pending for objecter_osd_core_switch_grace,
+      /// the PG's new ops are held (Op::switch_held), so that its ops in
+      /// flight drain, and the PG switches. The hold ends once they drain,
+      /// or after objecter_osd_core_switch_max_hold at most (the held ops
+      /// are then sent on the current connection, and the cycle restarts).
+      bool holding = false;
+      ceph::coarse_mono_time hold_since;
+      /// the timer event ending the hold (0: none); and the hold's id, to
+      /// tell a stale event
+      uint64_t hold_event = 0;
+      uint64_t hold_seq = 0;
       /// whether ops of the PG may still be on their way to (or queued at)
       /// the OSD on the route's connection: the route may not change
       bool busy() const { return in_flight + unanswered > 0; }
@@ -2676,6 +2692,17 @@ public:
     };
     /// by tid; protected by this session's lock (OSDSession::lock)
     std::map<ceph_tid_t, unanswered_op_t> unanswered;
+
+    /// the id of the last hold (see pg_route_t::holding); protected by
+    /// this session's lock (OSDSession::lock)
+    uint64_t last_hold_seq = 0;
+    /// the PGs whose hold may end, their ops having drained. Their held
+    /// ops are sent by _release_drained_holds(), not where the drain is
+    /// noticed (_op_unroute() and alike). Protected by this session's
+    /// lock (OSDSession::lock)
+    std::set<spg_t> drained_holds;
+    /// whether drained_holds is not empty: readable without the lock
+    std::atomic<bool> has_drained_holds = false;
 
     int num_locks;
     std::unique_ptr<std::mutex[]> completion_locks;
@@ -2895,6 +2922,36 @@ private:
   /// have dropped them (e.g. at an interval change), and their answer
   /// would never arrive. s->lock is locked
   void _prune_unanswered(OSDSession *s);
+  /// the age beyond which an unanswered op is forgotten
+  ceph::timespan _unanswered_max_age() const;
+
+  /// whether op is to be held (see OSDSession::pg_route_t::holding):
+  /// its PG is holding, or should start to. op->session->lock is locked
+  bool _op_hold_for_switch(Op *op);
+  /// note that the PG's hold may end, if the route is no longer busy.
+  /// s->lock is locked
+  void _route_maybe_drained(OSDSession *s,
+			    const spg_t& pgid,
+			    const OSDSession::pg_route_t& route);
+  /// end the PG's hold, without sending its held ops. drained: the route
+  /// is no longer busy (else: the hold expired). s->lock is locked
+  void _end_core_switch_hold(OSDSession *s,
+			     const spg_t& pgid,
+			     OSDSession::pg_route_t& route,
+			     bool drained);
+  /// end the PG's hold, and send its held ops in tid order. rwlock is
+  /// locked, s->lock is locked
+  void _release_core_switch_hold(OSDSession *s,
+				 const spg_t& pgid,
+				 bool drained);
+  /// end the holds of s->drained_holds that drained. rwlock is locked,
+  /// s->lock is locked
+  void _release_drained_holds(OSDSession *s);
+  /// as _release_drained_holds(), taking the locks only if needed; no
+  /// lock is held, and the caller holds a reference to s
+  void release_drained_holds(OSDSession *s);
+  /// the timer event ending a hold that did not drain in time
+  void core_switch_hold_expired(int osd, spg_t pgid, uint64_t hold_seq);
   /// note the core hinted for pgid in an op reply from s, and connect to
   /// that core if not yet connected. s->lock is locked
   void _session_apply_core_hint(OSDSession *s,
@@ -3026,6 +3083,7 @@ private:
   void ms_fast_dispatch2(const MessageRef& m) override;
 
   void handle_osd_op_reply(cref_t<MOSDOpReply> m);
+  void _handle_osd_op_reply(cref_t<MOSDOpReply> m);
   void handle_osd_backoff(cref_t<MOSDBackoff> m);
   void handle_watch_notify(cref_t<MWatchNotify> m);
   void handle_osd_map(class MOSDMap *m);
