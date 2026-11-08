@@ -1295,6 +1295,130 @@ TEST_F(CrushWrapperTest, device_class_clone) {
 				 &other_clone_id, &cmap_item_weight), -EBADF);
 }
 
+TEST_F(CrushWrapperTest, device_class_clone_weight_set_positions) {
+  // with a weight set of more than one position, a shadow bucket's entry
+  // for a child bucket is the child's total at every position, and a
+  // child with fewer positions counts with its last one
+  CrushWrapper c;
+  c.create();
+  c.set_type_name(0, "osd");
+  c.set_type_name(1, "host");
+  c.set_type_name(2, "root");
+  int root;
+  ASSERT_EQ(0, c.add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_DEFAULT, 2, 0,
+			    NULL, NULL, &root));
+  c.set_item_name(root, "default");
+  // a straw (v1) host has no weight set of its own
+  int straw_host;
+  ASSERT_EQ(0, c.add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_DEFAULT, 1, 0,
+			    NULL, NULL, &straw_host));
+  c.set_item_name(straw_host, "host3");
+  ASSERT_EQ(0, c.link_bucket(cct, straw_host, {{"root", "default"}}));
+  c.set_max_devices(8);
+  for (int i = 0; i < 8; ++i) {
+    map<string,string> loc = {{"host", "host" + stringify(i / 2)},
+			      {"root", "default"}};
+    ASSERT_EQ(0, c.insert_item(cct, i, 1, "osd." + stringify(i), loc));
+    ostringstream ss;
+    ASSERT_LE(0, c.update_device_class(i, "hdd", "osd." + stringify(i), &ss))
+      << ss.str();
+  }
+  ostringstream err;
+  int rule = c.add_simple_rule("hdd_by_host", "default", "host", "hdd",
+			       "firstn", pg_pool_t::TYPE_REPLICATED, &err);
+  ASSERT_LE(0, rule) << err.str();
+
+  // a positional weight set for a pool of size 3
+  const int positions = 3;
+  const int64_t pool = 1;
+  ASSERT_TRUE(c.create_choose_args(pool, positions));
+  ostringstream ss;
+  ASSERT_LE(0, c.choose_args_adjust_item_weightf(
+	      cct, c.choose_args_get(pool), 0, {0.5, 2.0, 1.0}, &ss)) << ss.str();
+  // host2 has a weight set of one position, as a compiled map can have
+  {
+    int host2 = c.get_item_id("host2");
+    crush_choose_arg& ha = c.choose_args_get(pool).args[-1 - host2];
+    ASSERT_EQ((unsigned)positions, ha.weight_set_positions);
+    for (int p = 1; p < positions; ++p) {
+      free(ha.weight_set[p].weights);
+      ha.weight_set[p].weights = nullptr;
+      ha.weight_set[p].size = 0;
+    }
+    ha.weight_set_positions = 1;
+    for (unsigned j = 0; j < ha.weight_set[0].size; ++j) {
+      ha.weight_set[0].weights[j] =
+	c.get_bucket_item(host2, j) == 4 ? 0x18000 : 0x10000;
+    }
+  }
+  // rebuilding the shadow trees recomputes their weight sets
+  ASSERT_EQ(0, c.rebuild_roots_with_classes(cct));
+  c.finalize();
+
+  // every input maps to three OSDs
+  vector<__u32> weight(c.get_max_devices(), 0x10000);
+  int short_mappings = 0;
+  vector<int> first_short;
+  for (int x = 0; x < 1024; ++x) {
+    vector<int> out;
+    c.do_rule(rule, x, out, 3, weight, pool);
+    if (out.size() != 3) {
+      if (!short_mappings++) {
+	first_short = out;
+      }
+    }
+  }
+  EXPECT_EQ(0, short_mappings) << "first short mapping " << first_short;
+
+  auto cmap = c.choose_args_get(pool);
+  int shadow_root = c.get_item_id("default~hdd");
+  ASSERT_TRUE(c.bucket_exists(shadow_root));
+  int shadow_straw_host = c.get_item_id("host3~hdd");
+  ASSERT_TRUE(c.bucket_exists(shadow_straw_host));
+  int size = c.get_bucket_size(shadow_root);
+  const crush_choose_arg& ra = cmap.args[-1 - shadow_root];
+  ASSERT_EQ((unsigned)positions, ra.weight_set_positions);
+  int checked = 0;
+  for (int p = 0; p < positions; ++p) {
+    for (int i = 0; i < size; ++i) {
+      int child = c.get_bucket_item(shadow_root, i);
+      if (child == shadow_straw_host) {
+	continue;
+      }
+      const crush_choose_arg& ca = cmap.args[-1 - child];
+      ASSERT_LT(0u, ca.weight_set_positions);
+      unsigned cp = std::min<unsigned>(p, ca.weight_set_positions - 1);
+      __u32 sum = 0;
+      for (unsigned j = 0; j < ca.weight_set[cp].size; ++j) {
+	sum += ca.weight_set[cp].weights[j];
+      }
+      ASSERT_EQ(sum, ra.weight_set[p].weights[i])
+	<< "position " << p << " item " << child;
+      ++checked;
+    }
+  }
+  ASSERT_EQ(3 * positions, checked);
+  int host0 = c.get_item_id("host0~hdd");
+  int host2 = c.get_item_id("host2~hdd");
+  ASSERT_EQ(1u, cmap.args[-1 - host2].weight_set_positions);
+  int found = 0;
+  for (int i = 0; i < size; ++i) {
+    int child = c.get_bucket_item(shadow_root, i);
+    if (child == host0) {
+      ASSERT_EQ(0x18000u, ra.weight_set[0].weights[i]);
+      ASSERT_EQ(0x30000u, ra.weight_set[1].weights[i]);
+      ASSERT_EQ(0x20000u, ra.weight_set[2].weights[i]);
+      ++found;
+    } else if (child == host2) {
+      for (int p = 0; p < positions; ++p) {
+	ASSERT_EQ(0x28000u, ra.weight_set[p].weights[i]) << "position " << p;
+      }
+      ++found;
+    }
+  }
+  ASSERT_EQ(2, found);
+}
+
 TEST_F(CrushWrapperTest, split_id_class) {
   CrushWrapper c;
   c.create();
