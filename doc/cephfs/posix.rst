@@ -102,3 +102,42 @@ See `PostgreSQL's summary of fsync() error reporting across operating systems
 <https://wiki.postgresql.org/wiki/Fsync_Errors>`_ and `Matthew Wilcox's
 presentation on Linux I/O error handling
 <https://www.youtube.com/watch?v=74c19hwY2oE>`_ for more information.
+
+
+Appending from more than one host
+---------------------------------
+
+POSIX requires that each write(2) to a file opened with ``O_APPEND`` go to
+the end of the file as it stands at the time of that write. When processes on
+different hosts append to the same file at the same time, a CephFS client can
+instead write at an end of file that is out of date, overwriting data that a
+client on another host has just appended. This happens when the client has to
+wait for another client to give up the capabilities to extend the file, and
+the other client appends while it waits. See `tracker issue 7333
+<https://tracker.ceph.com/issues/7333>`_.
+
+- Kernel clients in Linux 7.3 and later read the end of the file again once
+  they hold those capabilities, so their appends do not overwrite data that
+  other clients have appended.
+- ceph-fuse, libcephfs, and older kernel clients do not, so their appends can
+  overwrite data. A distribution kernel older than 7.3 has the fix if its
+  changelog lists "ceph: revalidate ki_pos for O_APPEND writes after cap
+  acquisition".
+
+With these clients, when processes on more than one host append to the same
+file, each process must hold an exclusive lock on the file for each append,
+for example by calling ``flock(fd, LOCK_EX)`` before the write(2) and
+``flock(fd, LOCK_UN)`` after it. This works only if every process that
+appends to the file takes the lock.
+
+
+File locks
+----------
+
+Kernel clients, ceph-fuse, and libcephfs support advisory locks taken with
+flock(2) and with fcntl(2) (POSIX record locks). The MDS tracks every lock, so
+a lock that a process holds on one host blocks a conflicting lock request from
+a process on any other host. As on local Linux file systems, flock(2) locks
+and fcntl(2) locks are independent of each other: a flock(2) lock does not
+conflict with an fcntl(2) lock on the same file. CephFS does not support
+mandatory locks.
