@@ -439,12 +439,18 @@ public:
 
     template <typename BytesT>
     requires std::same_as<BytesT, std::string> || std::same_as<BytesT, byte_buffer>
-    void payload(BytesT& value)
+    void payload(BytesT& value, const unsigned size)
     {
-        const auto size = scalar<std::uint32_t>();
         require(size);
         value.clear();
         input.copy(size, value);
+    }
+
+    template <typename BytesT>
+    requires std::same_as<BytesT, std::string> || std::same_as<BytesT, byte_buffer>
+    void payload(BytesT& value)
+    {
+        payload(value, scalar<std::uint32_t>());
     }
 
     // Validate the count before allocating unpublished sequence storage:

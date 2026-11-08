@@ -95,6 +95,7 @@ add_datum_example(09_selected_fields 09_selected_fields)
 add_datum_example(09_selected_fields_variation 09_selected_fields_variation)
 add_datum_example(10_scan_resume 10_scan_resume)
 add_datum_example(10_scan_resume_variation 10_scan_resume_variation)
+add_datum_example(fallible_scan fallible_scan)
 add_datum_example(11_discreet_log 11_discreet_log)
 add_datum_example(11_discreet_log_variation 11_discreet_log_variation)
 

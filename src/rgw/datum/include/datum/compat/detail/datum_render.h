@@ -78,7 +78,63 @@ struct datum_display_schema<interval::upper_endpoint<DomainT>>
         }>("value"), render::field<&record_type::inclusion>("inclusion")};
 };
 
-template <render_detail::page_traversal_display_value StateT>
+template <>
+struct datum_display_schema<visit_result>
+{
+    using record_type = visit_result;
+    static_assert(approved_display_members<record_type, 3>());
+
+    static constexpr std::string_view name = "visit_result";
+    static constexpr auto fields = std::tuple {
+        render::field<&record_type::offered>("offered"),
+        render::field<&record_type::accepted>("accepted"),
+        render::field<&record_type::stop>("stop")};
+};
+
+template <render_detail::traversal_display_value ErrorT>
+struct datum_display_schema<visit_failure<ErrorT>>
+{
+    using record_type = visit_failure<ErrorT>;
+    static_assert(approved_display_members<record_type, 2>());
+
+    static constexpr std::string_view name = "visit_failure";
+    static constexpr auto fields = std::tuple {
+        render::field<&record_type::progress>("progress"),
+        render::field<[](const record_type& value) -> decltype(auto) {
+            return (value.error);
+        }>("error")};
+};
+
+template <owning_value StateT>
+requires render_detail::traversal_display_value<StateT>
+struct datum_display_schema<traversal::scan_result<StateT>>
+{
+    using record_type = traversal::scan_result<StateT>;
+    static_assert(approved_display_members<record_type, 2>());
+
+    static constexpr std::string_view name = "scan_result";
+    static constexpr auto fields = std::tuple {
+        render::field<&record_type::progress>("progress"),
+        render::field<&record_type::resume>("resume")};
+};
+
+template <owning_value StateT, render_detail::traversal_display_value ErrorT>
+requires render_detail::traversal_display_value<StateT>
+struct datum_display_schema<traversal::scan_failure<StateT, ErrorT>>
+{
+    using record_type = traversal::scan_failure<StateT, ErrorT>;
+    static_assert(approved_display_members<record_type, 3>());
+
+    static constexpr std::string_view name = "scan_failure";
+    static constexpr auto fields = std::tuple {
+        render::field<&record_type::progress>("progress"),
+        render::field<&record_type::resume>("resume"),
+        render::field<[](const record_type& value) -> decltype(auto) {
+            return (value.error);
+        }>("error")};
+};
+
+template <render_detail::traversal_display_value StateT>
 struct datum_display_schema<traversal::page_traversal_result<StateT>>
 {
     using record_type = traversal::page_traversal_result<StateT>;
@@ -90,8 +146,8 @@ struct datum_display_schema<traversal::page_traversal_result<StateT>>
         render::field<&record_type::outcome>("outcome")};
 };
 
-template <render_detail::page_traversal_display_value StateT,
-          render_detail::page_traversal_display_value ErrorT>
+template <render_detail::traversal_display_value StateT,
+          render_detail::traversal_display_value ErrorT>
 struct datum_display_schema<traversal::page_traversal_failure<StateT, ErrorT>>
 {
     using record_type = traversal::page_traversal_failure<StateT, ErrorT>;
@@ -136,6 +192,25 @@ struct datum_enum_schema<interval::endpoint_inclusion>
     static constexpr std::array identifiers {
         entry_type {enum_type::excluded, "excluded"},
         entry_type {enum_type::included, "included"}};
+
+    static constexpr std::string_view name(const enum_type value)
+    {
+        return render_detail::enum_name(identifiers, value);
+    }
+
+};
+
+template <>
+struct datum_enum_schema<acceptance>
+{
+    using enum_type = acceptance;
+    using entry_type = std::pair<enum_type, std::string_view>;
+
+    static constexpr std::array identifiers {
+        entry_type {enum_type::accept, "accept"},
+        entry_type {enum_type::accept_and_stop, "accept_and_stop"},
+        entry_type {enum_type::reject_and_stop, "reject_and_stop"},
+        entry_type {enum_type::skip, "skip"}};
 
     static constexpr std::string_view name(const enum_type value)
     {
@@ -203,13 +278,39 @@ struct display_schema<interval::upper_endpoint<DomainT>> final
     : compat::detail::datum_display_schema<interval::upper_endpoint<DomainT>>
 {};
 
-template <render_detail::page_traversal_display_value StateT>
+template <>
+struct display_schema<visit_result> final
+    : compat::detail::datum_display_schema<visit_result>
+{};
+
+template <render_detail::traversal_display_value ErrorT>
+struct display_schema<visit_failure<ErrorT>> final
+    : compat::detail::datum_display_schema<visit_failure<ErrorT>>
+{};
+
+template <owning_value StateT>
+requires render_detail::traversal_display_value<StateT>
+struct display_schema<traversal::scan_result<StateT>> final
+    : compat::detail::datum_display_schema<traversal::scan_result<StateT>>
+{};
+
+template <owning_value StateT, render_detail::traversal_display_value ErrorT>
+requires render_detail::traversal_display_value<StateT>
+struct display_schema<traversal::scan_failure<StateT, ErrorT>> final
+    : compat::detail::datum_display_schema<traversal::scan_failure<StateT, ErrorT>>
+{};
+
+template <>
+struct enum_schema<acceptance> final : compat::detail::datum_enum_schema<acceptance>
+{};
+
+template <render_detail::traversal_display_value StateT>
 struct display_schema<traversal::page_traversal_result<StateT>> final
     : compat::detail::datum_display_schema<traversal::page_traversal_result<StateT>>
 {};
 
-template <render_detail::page_traversal_display_value StateT,
-          render_detail::page_traversal_display_value ErrorT>
+template <render_detail::traversal_display_value StateT,
+          render_detail::traversal_display_value ErrorT>
 struct display_schema<traversal::page_traversal_failure<StateT, ErrorT>> final
     : compat::detail::datum_display_schema<traversal::page_traversal_failure<StateT, ErrorT>>
 {};

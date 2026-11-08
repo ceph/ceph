@@ -1,10 +1,12 @@
-// Common Ceph byte vocabulary. Native storage and ownership stay at this boundary.
+// Common Ceph vocabulary. Native storage, codecs, and ownership stay at this boundary.
 #ifndef CEPH_RGW_DATUM_ADAPTERS_CEPH_DATUM_H
  #define CEPH_RGW_DATUM_ADAPTERS_CEPH_DATUM_H
 
 #include "datum/detail/byte.h"
 #include "datum/extent.h"
 #include "include/buffer.h"
+#include "include/ceph_assert.h"
+#include "include/encoding.h"
 #include "common/error_code.h"
 
 #include <cstddef>
@@ -18,6 +20,37 @@
 #include <ranges>
 
 namespace ceph::salad::datum {
+
+// Decode in place; malformed input may change both value and cursor. There is no rollback.
+// Allocation and other exceptions propagate. The caller chooses its error code and diagnostics.
+template <typename ValueT>
+[[nodiscard]] bool try_decode(ValueT& value, ::ceph::buffer::list::const_iterator& input)
+{
+    using ::ceph::decode;
+    try
+     {
+        decode(value, input);
+        return true;
+     }
+    catch (const ::ceph::buffer::error&)
+     {
+        return false;
+     }
+}
+
+// Match Ceph's whole-buffer decode contract, including its complete-consumption assertion.
+// Use a cursor when decoding a prefix or a sequence of records.
+template <typename ValueT>
+[[nodiscard]] bool try_decode(ValueT& value, const ::ceph::buffer::list& bytes)
+{
+    auto input = bytes.cbegin();
+    if (!try_decode(value, input)) {
+        return false;
+    }
+    ceph_assert(input.end());
+
+    return true;
+}
 
 // The returned standard view borrows the list and its payload. Keep both alive.
 // Iterators also depend on this transform descriptor; it is not a borrowed range.

@@ -1019,6 +1019,24 @@ and accepted entries; `consumed()` derives the consumed count. `stopped()` repor
 early stop, and the optional `stop` member preserves its acceptance decision. Here it
 contains `reject_and_stop`; a scan that reaches the end has no stopping decision.
 
+### A handled failure
+
+A callback can also return `std::expected<datum::acceptance, E>`. A successful
+expected carries the same acceptance decision. An error stops with the failing
+row unconsumed and returns its saved position, completed progress, and error.
+See the [complete fallible scan program](examples/fallible_scan.cpp) and
+[expected output](expected/fallible_scan.txt). Build it with the existing
+`fallible_scan` target. Its output is:
+
+```text
+invalid row: true
+offered: 2, consumed: 1
+resume index: 1
+```
+
+The error is explicit control flow. Effects already performed by the callback
+remain its responsibility; this position alone does not promise safe replay.
+
 ### A small variation
 
 Accept the ribbon entry before stopping, as in the
@@ -1433,6 +1451,12 @@ complete: false
 resume index: 1
 ```
 
+A page reader may return `std::expected<Page, E>`, and its visitor may return
+`std::expected<page_action, E>` or `std::expected<void, E>`. A handled error returns
+the failing page's input position and the number of previously completed pages.
+A successful `void` visitor continues. When both callbacks report handled errors,
+they use the same error type. Callback effects still need their own replay policy.
+
 ## 15 Write the order ticket
 
 *Store a byte selection and quota together, then explicitly take up to that many covered bytes.*
@@ -1652,7 +1676,11 @@ using bucket_marker = cls_rgw_obj_key;
 
 `bucket_marker` names the native RGW key type introduced in section 16. Start with
 an empty marker and pass `read_page`, the next-position callback, and the visitor
-to Datum. The page loop coordinates those callbacks; it does not issue CLS operations:
+to Datum. The page loop coordinates those callbacks; it does not issue CLS operations.
+
+This listing marker records a position, with no snapshot or object-generation guarantee.
+
+Run the listing traversal with the supplied callbacks:
 
 ```cpp
 const bucket_marker start {};
@@ -1912,6 +1940,32 @@ snapshot: meow
 Use Datum byte geometry to describe the selection and Ceph types to hold Ceph
 storage. `<ceph-datum.h>` connects them while keeping native storage outside the pure core.
 
+### Decode native values with an explicit failure path
+
+The same header supplies `try_decode` for Ceph's native codecs. The complete program
+also checks this round trip, without adding to its printed output:
+
+```cpp
+ceph::buffer::list frame;
+ceph::encode(std::uint32_t {10}, frame);
+std::uint32_t count = 0;
+if (!datum::try_decode(count, frame) || count != 10) {
+    return 1;
+}
+```
+
+`false` means the native decoder threw `ceph::buffer::error`. Allocation and other
+exceptions still propagate. Decoding happens in place: malformed input may partly
+change the value and advance a supplied cursor. This helper requires no value copy,
+move, or default constructor, and provides no rollback or publication guarantee.
+The caller chooses its error code, logging, and whether to publish a decoded candidate.
+Use native `decode` directly when handling needs the exception's diagnostic.
+
+The bufferlist overload retains native whole-buffer decoding's assertion that all
+bytes were consumed. For a prefix or sequence, pass a mutable cursor from
+`frame.cbegin()` instead. These are native codec contracts, so the helper belongs
+in the Ceph vocabulary outside Datum's pure core.
+
 ## Appendix A Building and running
 
 ### Requirements
@@ -1999,7 +2053,7 @@ cmake --build build --parallel 2 --target 18_ceph_bytes 18_ceph_bytes_variation
 ctest --test-dir build --output-on-failure -R '^18_ceph_bytes(_variation)?$'
 ```
 
-The build needs generated `acconfig.h`, initialized fmt headers, and
+The build needs generated `acconfig.h` and `ceph_release.h`, initialized fmt headers, and
 `libceph-common` from that compatible build. The Ceph and RGW options are
 independent; ordinary core examples do not link native libraries.
 

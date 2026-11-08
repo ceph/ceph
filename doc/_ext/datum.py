@@ -137,6 +137,10 @@ def source_read(app, docname, source):
                     '[Decode and prepare a reply](examples/developer_flow.cpp) with '
                     '[expected output](expected/developer_flow.txt). '
                     'The [developer’s guide](developer-guide.rst) explains its contracts.\n')
+        content += ('\n## Handled scan failures\n\n'
+                    'The [fallible scan program](examples/fallible_scan.cpp) retains progress and '
+                    'the failing row’s position. Its [expected output](expected/fallible_scan.txt) '
+                    'is checked by the `fallible_scan` target.\n')
     elif key == 'tutorial':
         content = text[:sections[0].start()].replace('# Datum tutorials', '# Tutorial', 1)
     else:
@@ -171,6 +175,11 @@ def doctree_read(app, tree):
     for reference in list(tree.findall(nodes.reference)):
         uri = reference.get('refuri', '')
         path, separator, anchor = uri.partition('#')
+        for prefix in ('tutorials/', '../'):
+            asset = path.removeprefix(prefix)
+            if asset.startswith(('examples/', 'expected/', 'figures/', 'cmake/')):
+                path = asset
+                break
         if path.startswith('figures/') and len(reference.children) == 1 and isinstance(
                 reference.children[0], nodes.image):
             # Sphinx supplies the full-size link for a scaled image.

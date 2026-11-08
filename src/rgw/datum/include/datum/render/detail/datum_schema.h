@@ -35,13 +35,39 @@ struct enum_schema<interval::endpoint_inclusion> final
     : reflected_enum_schema<interval::endpoint_inclusion>
 {};
 
-template <render_detail::page_traversal_display_value StateT>
+template <>
+struct enum_schema<acceptance> final : reflected_enum_schema<acceptance>
+{};
+
+template <>
+struct display_schema<visit_result> final
+    : reflected_display_schema<^^visit_result, 3>
+{};
+
+template <render_detail::traversal_display_value ErrorT>
+struct display_schema<visit_failure<ErrorT>> final
+    : reflected_display_schema<^^visit_failure<ErrorT>, 2>
+{};
+
+template <owning_value StateT>
+requires render_detail::traversal_display_value<StateT>
+struct display_schema<traversal::scan_result<StateT>> final
+    : reflected_display_schema<^^traversal::scan_result<StateT>, 2>
+{};
+
+template <owning_value StateT, render_detail::traversal_display_value ErrorT>
+requires render_detail::traversal_display_value<StateT>
+struct display_schema<traversal::scan_failure<StateT, ErrorT>> final
+    : reflected_display_schema<^^traversal::scan_failure<StateT, ErrorT>, 3>
+{};
+
+template <render_detail::traversal_display_value StateT>
 struct display_schema<traversal::page_traversal_result<StateT>> final
     : reflected_display_schema<^^traversal::page_traversal_result<StateT>, 3>
 {};
 
-template <render_detail::page_traversal_display_value StateT,
-          render_detail::page_traversal_display_value ErrorT>
+template <render_detail::traversal_display_value StateT,
+          render_detail::traversal_display_value ErrorT>
 struct display_schema<traversal::page_traversal_failure<StateT, ErrorT>> final
     : reflected_display_schema<^^traversal::page_traversal_failure<StateT, ErrorT>, 3>
 {};

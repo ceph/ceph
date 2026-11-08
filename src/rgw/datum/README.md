@@ -161,7 +161,7 @@ belong in the binding; retaining a borrowed span alone does not retain its bytes
 ## Native vocabulary and comparison composition
 
 Include `<ceph-datum.h>` and link `datum::ceph` for common Ceph buffers. The adapter
-is usable in C++20 declarations without importing a codec or the newer core dialect.
+includes Ceph's native encoding declarations; zpp and reflection remain optional.
 Given a native `const ceph::buffer::list& buffer`, these operations need only ordinary storage
 and Datum's supplied byte geometry:
 
@@ -192,6 +192,24 @@ but no longer depends on the view descriptor. Borrowing storage is distinct from
 range object is destroyed; this fragment view does not model that concept.
 `read_contiguous(cursor, scratch)` borrows a single
 native fragment when possible and gathers into scratch otherwise.
+
+`try_decode(value, input)` calls the native decoder, including argument-dependent lookup,
+and returns `false` only for `ceph::buffer::error`. It decodes in place, without requiring
+default construction, copying, or moving the value. Allocation and other exceptions propagate.
+Both the value and a supplied cursor may be partially changed on failure; there is no rollback.
+The bufferlist overload retains native whole-buffer decoding's complete-consumption assertion.
+Use a mutable native cursor for a prefix or sequence of records:
+
+```cpp
+auto input = buffer.cbegin();
+std::uint32_t count = 0;
+if (!datum::try_decode(count, input)) {
+    return -EINVAL; // This request's policy; stored metadata may need a different status.
+}
+```
+
+Keep errno selection, logging, compatibility fallback, and candidate publication at the caller.
+Use the native decoder directly when the diagnostic needs the caught exception.
 
 Ceph framing and RGW key wire profiles remain in optional `ceph/wire.h` and
 `rgw/key.h` adapters. Explicit field profiles work in C++23 with
@@ -622,6 +640,26 @@ ordered resumes are exclusive after consumption and inclusive on rejection.
 A returned token does not establish a snapshot, durable acknowledgement, or partial-page replay.
 Exceptions propagate without inventing a result for partial external effects.
 
+Callbacks can return `std::expected<acceptance, E>` for a handled failure. Then
+`visit_range` returns `std::expected<visit_result, visit_failure<E>>`; an error carries
+`progress` and the original error. The failing row is offered and rejected, so it is
+excluded from `consumed()` and `accepted`; no following row is fetched. `scan_range`
+returns `std::expected<scan_result<State>, scan_failure<State, E>>`, whose error adds
+an owned `resume` chosen with `next(position, false)`. A successful expected retains
+ordinary acceptance/stop semantics. Callbacks are borrowed, and errors can be move-only.
+The error describes traversal progress; a callback's external effects remain its responsibility.
+
+A decoder can run inside the visitor, with the resulting value passed directly to
+filtering and consumption. Alternatively, one `visit_range` over a standard decoding
+transform view dereferences each offered row once. A transform view does not cache
+its results across dereferences or traversals. Retain an eagerly decoded page when
+several passes need the values. Codec choice and native error translation stay in
+bindings; the core needs no codec or native record dependency.
+
+The [complete fallible scan example](tutorials/examples/fallible_scan.cpp) returns
+an error on the second row while retaining the first row's progress and a resume
+index for the failing row.
+
 ```cpp
 const auto scan = datum::traversal::scan_range(
     rows, consumer,
@@ -649,8 +687,21 @@ Scalar diagnostic redaction skips field access when no size is needed.
 cancellation, limits, throwing readers and `std::expected` failures. Readers and
 visitors own their effects; traversal does not establish a durable commit.
 Completion, stopping, cancellation, and page limits are ordinary result states.
-An expected reader failure carries its error, resume state, and prior page count;
-exceptions from a visitor still propagate without inventing a safe replay position.
+Readers may return `std::expected<Page, E>`. Visitors may return
+`std::expected<page_action, E>` or `std::expected<void, E>`; successful `void` means
+continue. If either callback is fallible, the traversal returns an expected whose
+failure carries the original error, current page's input resume state, and count
+of completed pages. A failed visitor does not increment that count. When both
+callbacks are fallible, they use the same error type. Exceptions still propagate;
+returning a position does not establish safe replay of a visitor's partial effects.
+The optional `datum/render/datum.h` profiles display row and scan progress and
+failures, including the stopping decision and resume state, just as they display
+page progress. They borrow the selected error and state; they do not decode rows,
+perform I/O, or enroll records for serialization. Opaque application errors need
+an explicit application display profile before these failure records can be displayed.
+The separate `datum/render/key.h` profile displays an `encoded_key` as a redacted
+byte count. It borrows `key_view(key)` and does not decode or print key segments.
+
 Use an optional for ordinary absence, a Boolean for admission, and an expected when
 the caller must distinguish a useful value from a handled failure. These mechanisms
 do not imply rollback, and allocation or consumer callbacks can still throw.

@@ -1,5 +1,6 @@
 // Built-in diagnostics and complete declaration enrollment share native/temporary semantics.
 #include <datum/render/datum.h>
+#include <datum/render/key.h>
 #include <datum/render/record.h>
 #include <datum/compat/detail/datum_render.h>
 
@@ -279,6 +280,33 @@ TEST_CASE("page diagnostics retain progress failure and cancellation semantics",
     CHECK(text(options) == "page_traversal_options{cancellation_requested=false, page_limit=2}");
     source.request_stop();
     CHECK(text(options) == "page_traversal_options{cancellation_requested=true, page_limit=2}");
+}
+
+TEST_CASE("row diagnostics retain acceptance progress and owned continuation", "[datum][render]")
+{
+    const datum::visit_result progress {3, 1, datum::acceptance::reject_and_stop};
+    const auto summary = "visit_result{offered=3, accepted=1, stop=reject_and_stop}";
+    CHECK(text(progress) == summary);
+    CHECK(text(datum::visit_failure<std::string_view> {progress, "invalid"}) ==
+          std::string {"visit_failure{progress="} + summary + ", error=\"invalid\"}");
+    CHECK(text(datum::traversal::scan_result<int> {progress, 8}) ==
+          std::string {"scan_result{progress="} + summary + ", resume=8}");
+    CHECK(text(datum::traversal::scan_failure<int, std::string_view> {progress, 8, "invalid"}) ==
+          std::string {"scan_failure{progress="} + summary + ", resume=8, error=\"invalid\"}");
+
+    const profile_test::immovable error {13};
+    const datum::visit_failure<const profile_test::immovable&> failure {progress, error};
+    CHECK(text(failure).ends_with("error=immovable{value=13}}"));
+    CHECK(text(static_cast<datum::acceptance>(9)) == "unknown(9)");
+    CHECK_FALSE(dr::displayable<datum::visit_failure<profile_test::opaque>>);
+}
+
+TEST_CASE("encoded key diagnostics report size without exposing segments", "[datum][render]")
+{
+    const auto key = datum::key::compose("private", "object");
+    CHECK(text(key) == "encoded_key{bytes=<redacted:15 bytes>}");
+    CHECK(text(key, {.bytes = 0}).empty());
+    CHECK(text(key, {.bytes = 12}) == "encoded_key{");
 }
 
 TEST_CASE("built-in enum tables retain names and unknown numeric values", "[datum][render]")

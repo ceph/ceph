@@ -66,42 +66,6 @@ struct page_traversal_failure final
 
 namespace page_traversal_detail {
 
-template <typename T>
-struct page_result_traits final
-{
-    using value_type = T;
-
-public:
-    static constexpr auto& get(auto& result) noexcept { return result; }
-
-    template <typename StateT>
-
-    using traversal_type = page_traversal_result<StateT>;
-
-};
-
-template <typename ValueT, typename ErrorT>
-struct page_result_traits<std::expected<ValueT, ErrorT>> final
-{
-    using value_type = ValueT;
-    using error_type = ErrorT;
-
-public:
-    static constexpr decltype(auto) get(auto& result) noexcept { return *result; }
-
-    template <typename StateT>
-
-    using traversal_type =
-        std::expected<page_traversal_result<StateT>, page_traversal_failure<StateT, ErrorT>>;
-
-};
-
-template <typename T>
-concept expected = requires {
-    typename page_result_traits<T>::value_type;
-    typename page_result_traits<T>::error_type;
-};
-
 template <typename ReaderT, typename StateT>
 using read_result = std::invoke_result_t<ReaderT&, const StateT&>;
 
@@ -109,10 +73,10 @@ template <typename ReaderT, typename StateT>
 concept page_reader =
     std::invocable<ReaderT&, const StateT&> and
     std::same_as<read_result<ReaderT, StateT>, std::remove_cvref_t<read_result<ReaderT, StateT>>> and
-    (!std::is_void_v<typename page_result_traits<read_result<ReaderT, StateT>>::value_type>);
+    (!std::is_void_v<typename detail::result_traits<read_result<ReaderT, StateT>>::value_type>);
 
 template <typename ReaderT, typename StateT>
-using page_type = typename page_result_traits<read_result<ReaderT, StateT>>::value_type;
+using page_type = typename detail::result_traits<read_result<ReaderT, StateT>>::value_type;
 
 template <typename NextT, typename StateT, typename PageT>
 concept next_page =
@@ -120,22 +84,44 @@ concept next_page =
     std::same_as<std::invoke_result_t<NextT&, const StateT&, PageT&>, std::optional<StateT>>;
 
 template <typename VisitorT, typename PageT>
+using visit_result = std::invoke_result_t<VisitorT&, PageT&&>;
+
+template <typename VisitorT, typename PageT>
 concept page_visitor = std::invocable<VisitorT&, PageT&&> and
-                       (std::same_as<std::invoke_result_t<VisitorT&, PageT&&>, void> ||
-                        std::same_as<std::invoke_result_t<VisitorT&, PageT&&>, page_action>);
+    std::same_as<visit_result<VisitorT, PageT>, std::remove_cvref_t<visit_result<VisitorT, PageT>>> and
+    (std::is_void_v<typename detail::result_traits<visit_result<VisitorT, PageT>>::value_type> ||
+     std::same_as<typename detail::result_traits<visit_result<VisitorT, PageT>>::value_type, page_action>);
 
 template <typename VisitorT, typename PageT>
 requires page_visitor<VisitorT, PageT>
-constexpr page_action visit(VisitorT& visitor, PageT&& page)
+constexpr auto visit(VisitorT& visitor, PageT&& page)
 {
-    if constexpr (std::same_as<std::invoke_result_t<VisitorT&, PageT&&>, void>) {
+    using response_type = visit_result<VisitorT, PageT>;
+    using traits = detail::result_traits<response_type>;
+    using error_type = typename traits::error_type;
+    using result_type = std::conditional_t<std::is_void_v<error_type>, page_action,
+                                           std::expected<page_action, error_type>>;
+
+    if constexpr (std::is_void_v<response_type>) {
         std::invoke(visitor, std::forward<PageT>(page));
 
         return page_action::next;
     }
 
-    if constexpr (std::same_as<std::invoke_result_t<VisitorT&, PageT&&>, page_action>) {
-        return std::invoke(visitor, std::forward<PageT>(page));
+    if constexpr (!std::is_void_v<response_type>) {
+        auto response = std::invoke(visitor, std::forward<PageT>(page));
+        if constexpr (!std::is_void_v<error_type>) {
+            if (!response) {
+                return result_type {std::unexpected(std::move(response.error()))};
+            }
+        }
+        if constexpr (std::is_void_v<typename traits::value_type>) {
+            return result_type {page_action::next};
+        }
+
+        if constexpr (!std::is_void_v<typename traits::value_type>) {
+            return result_type {detail::result_value(response)};
+        }
     }
 }
 
@@ -146,21 +132,33 @@ constexpr page_action visit(VisitorT& visitor, PageT&& page)
 // the visitor, so it may move continuation data from the page into the new
 // state. A stopped traversal returns the state; a read failure reports it with
 // prior progress. Readers that throw return the traversal result directly and
-// propagate exceptions; expected readers retain their error and resume state.
+// propagate exceptions. Expected reader/visitor errors retain the current page's
+// input state and completed page count; a failing visitor does not complete that
+// page. Callback effects are not rolled back. Fallible readers and visitors use
+// the same error type when both are present.
 template <typename StateT, typename ReaderT, typename NextT, typename VisitorT>
 requires std::move_constructible<StateT> and std::assignable_from<StateT&, StateT> and
          std::equality_comparable<StateT> and page_traversal_detail::page_reader<ReaderT, StateT> and
          page_traversal_detail::next_page<NextT, StateT,
                                           page_traversal_detail::page_type<ReaderT, StateT>> and
          page_traversal_detail::page_visitor<VisitorT,
-                                             page_traversal_detail::page_type<ReaderT, StateT>>
+                                             page_traversal_detail::page_type<ReaderT, StateT>> and
+         detail::compatible_result_errors<page_traversal_detail::read_result<ReaderT, StateT>,
+             page_traversal_detail::visit_result<
+                 VisitorT, page_traversal_detail::page_type<ReaderT, StateT>>>
 [[nodiscard]] auto for_each_page(StateT state, ReaderT&& fetch_page, NextT&& next,
                                  VisitorT&& visitor, const page_traversal_options options = {})
 {
     using read_type = page_traversal_detail::read_result<ReaderT, StateT>;
-    using traits = page_traversal_detail::page_result_traits<read_type>;
+    using traits = detail::result_traits<read_type>;
+    using visitor_type = page_traversal_detail::visit_result<
+        VisitorT, page_traversal_detail::page_type<ReaderT, StateT>>;
+    using visitor_traits = detail::result_traits<visitor_type>;
+    using error_type = std::conditional_t<std::is_void_v<typename traits::error_type>,
+                                         typename visitor_traits::error_type, typename traits::error_type>;
     using result_type = page_traversal_result<StateT>;
-    using traversal_result = traits::template traversal_type<StateT>;
+    using traversal_result = std::conditional_t<std::is_void_v<error_type>, result_type,
+        std::expected<result_type, page_traversal_failure<StateT, error_type>>>;
 
     auto pages = std::size_t {0};
 
@@ -181,7 +179,7 @@ requires std::move_constructible<StateT> and std::assignable_from<StateT&, State
 
         auto read = std::invoke(fetch_page, std::as_const(state));
 
-        if constexpr (page_traversal_detail::expected<read_type>) {
+        if constexpr (!std::is_void_v<typename traits::error_type>) {
             if (!read) {
                 return traversal_result {
                             std::unexpected(page_traversal_failure<StateT, typename traits::error_type> {
@@ -192,14 +190,21 @@ requires std::move_constructible<StateT> and std::assignable_from<StateT&, State
             }
         }
 
-        auto& page = traits::get(read);
+        auto& page = detail::result_value(read);
         auto following = std::invoke(next, std::as_const(state), page);
 
         if (following and state == *following) {
             throw std::logic_error {"Datum paged traversal did not advance its state"};
         }
 
-        const auto action = page_traversal_detail::visit(visitor, std::move(page));
+        auto response = page_traversal_detail::visit(visitor, std::move(page));
+        if constexpr (!std::is_void_v<typename visitor_traits::error_type>) {
+            if (!response) {
+                return traversal_result {std::unexpected(page_traversal_failure<StateT, error_type> {
+                    .resume = std::move(state), .error = std::move(response.error()), .pages = pages})};
+            }
+        }
+        const auto action = detail::result_value(response);
         ++pages;
 
         if (!following) {

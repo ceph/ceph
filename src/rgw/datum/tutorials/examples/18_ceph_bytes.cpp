@@ -1,6 +1,7 @@
 // Use Datum byte geometry to copy bytes from a Ceph bufferlist and retain a native slice.
 
 #include <array>
+#include <cstdint>
 #include <print>
 #include <utility>
 #include <string_view>
@@ -38,4 +39,12 @@ int main()
 
     std::println("copied: {}", std::string_view {output});
     std::println("retained: {}", retained.to_str());
+
+    // Native decoding can report malformed input without choosing an application error code.
+    ceph::buffer::list frame;
+    ceph::encode(std::uint32_t {10}, frame);
+    std::uint32_t count = 0;
+    if (!datum::try_decode(count, frame) || count != 10) {
+        return 1;
+    }
 }

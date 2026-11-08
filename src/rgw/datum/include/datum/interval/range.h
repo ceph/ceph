@@ -177,8 +177,9 @@ template <ordered_domain DomainT, interval_range_for<DomainT> RangeT, typename C
 requires detail::safe_interval_projection_for<std::identity,
                                               std::ranges::range_reference_t<RangeT>, DomainT> and
          std::invocable<ConsumerT&, const query<DomainT>&> and
-         std::same_as<std::invoke_result_t<ConsumerT&, const query<DomainT>&>, acceptance>
-[[nodiscard]] constexpr visit_result visit_intervals(RangeT&& source, ConsumerT&& consumer)
+         ::ceph::salad::datum::detail::acceptance_result<
+             std::invoke_result_t<ConsumerT&, const query<DomainT>&>>
+[[nodiscard]] constexpr auto visit_intervals(RangeT&& source, ConsumerT&& consumer)
 {
     using reference = std::ranges::range_reference_t<RangeT>;
 
@@ -202,7 +203,7 @@ requires requires(RangeT&& source, ConsumerT&& consumer) {
     interval::visit_intervals<expression_domain_t<std::ranges::range_reference_t<RangeT>>>(
         std::forward<RangeT>(source), std::forward<ConsumerT>(consumer));
 }
-[[nodiscard]] constexpr visit_result visit_intervals(RangeT&& source, ConsumerT&& consumer)
+[[nodiscard]] constexpr auto visit_intervals(RangeT&& source, ConsumerT&& consumer)
 {
     return interval::visit_intervals<expression_domain_t<std::ranges::range_reference_t<RangeT>>>(
         std::forward<RangeT>(source), std::forward<ConsumerT>(consumer));

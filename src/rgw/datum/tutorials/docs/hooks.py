@@ -185,6 +185,10 @@ def on_files(files, config):
         "[Decode and prepare a reply](examples/developer_flow.cpp) with "
         "[expected output](expected/developer_flow.txt). "
         "The [developer’s guide](developer-guide.md) explains its contracts.",
+        "", "## Handled scan failures", "",
+        "The [fallible scan program](examples/fallible_scan.cpp) retains progress and "
+        "the failing row's position. Its [expected output](expected/fallible_scan.txt) "
+        "is checked by the `fallible_scan` target.",
     ]) + "\n")
 
     archive = io.BytesIO()
@@ -211,6 +215,11 @@ def on_page_markdown(markdown, page, config, **kwargs):
     def rewrite_link(match):
         destination = match[1]
         path, separator, anchor = destination.partition("#")
+        for prefix in ("tutorials/", "../"):
+            asset = path.removeprefix(prefix)
+            if asset.startswith(("examples/", "expected/", "figures/", "cmake/")):
+                path = asset
+                break
         target = None
         if path in ["tutorial.md", "../tutorial.md", "tutorials/tutorial.md"] or (
             not path and anchor in config.extra["guide_links"]
@@ -223,7 +232,7 @@ def on_page_markdown(markdown, page, config, **kwargs):
         elif path in {"docs/developer-guide.md", "tutorials/docs/developer-guide.md"}:
             target = "developer-guide.md" + separator + anchor
         elif path == "expected.json" or path.startswith(("examples/", "expected/", "figures/")):
-            target = destination
+            target = path + separator + anchor
         else:
             design = config.extra["datum_source_url"] + "/src/rgw/datum/README.md#"
             if destination.startswith(design):

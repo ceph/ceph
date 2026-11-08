@@ -6,6 +6,7 @@
 #include "datum/plan/query.h"
 #include "datum/render/display.h"
 #include "datum/traversal.h"
+#include "datum/traversal/scan.h"
 
 #include <concepts>
 #include <cstddef>
@@ -60,7 +61,7 @@ struct query_expression_display final
 };
 
 template <typename T>
-concept page_traversal_display_value =
+concept traversal_display_value =
     std::integral<std::remove_cvref_t<T>> || text_value<T> || display_record<T> ||
     display_enum<T> || projected_display_value<T>;
 

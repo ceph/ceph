@@ -118,6 +118,8 @@ values; workspace results borrow them. Checked range admission follows standard
 **Ceph vocabulary; `ceph-datum.h`.** Shared operations for native `buffer::list`
 storage: copy into an ordinary destination, retain a slice, create an independent
 native copy, or expose fragments as standard spans.
+`try_decode` translates native malformed-buffer exceptions into `false`, decoding in place.
+It preserves native cursor progress and partial mutation; other exceptions propagate.
 [Lesson 18](../tutorial.md#18-bytes-with-a-ceph-accent).
 
 **`clip_view`; cuts.** Intersect each source record's extent with selected coverage
@@ -168,7 +170,8 @@ reset or evaluation. [Evaluation](design.md#canonical-operands-and-evaluation).
 for a reusable consumer to observe directly on an ordinary C++23 record. [Lesson 9](../tutorial.md#9-pick-the-basket-fields).
 
 **`for_each_page`.** Drive a page loop with a reader, next-position callback,
-and visitor. [Lesson 14](../tutorial.md#14-turn-the-page), applied to RGW in
+and visitor. Expected reader and visitor errors retain the current page position
+and completed page count; both use the same error type. [Lesson 14](../tutorial.md#14-turn-the-page), applied to RGW in
 [lesson 17](../tutorial.md#17-one-shard-two-pages).
 
 **`fragments`.** Adapt contiguous storage or a native Ceph list to a range of
@@ -265,7 +268,9 @@ from the destination after a move. [Lesson 7](../tutorial.md#7-move-it-and-keep-
 ### S–Z
 
 **`scan_range`.** Scan entries while recording progress and a resume position
-when the callback stops. [Lesson 10](../tutorial.md#10-keep-your-place).
+when the callback stops or returns a handled expected error. A failure retains
+progress, the rejected row's position, and its error.
+[Fallible example](../examples/fallible_scan.cpp). [Lesson 10](../tutorial.md#10-keep-your-place).
 
 **`set_union`; union.** Select points that belong to either operand.
 [Chapter 2½](../tutorial.md#2½-an-interval-interlude).
