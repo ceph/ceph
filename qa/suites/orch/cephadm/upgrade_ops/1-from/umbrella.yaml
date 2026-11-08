@@ -1,0 +1,4 @@
+tasks:
+- cephadm:
+    image: quay.ceph.io/ceph-ci/ceph:umbrella
+    compiled_cephadm_branch: umbrella
