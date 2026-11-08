@@ -2606,41 +2606,101 @@ int OSDMap::calc_crush_rule_change_pins(
       continue;
     }
 
-    // pass 1: keep acting OSDs the new failure domain allows (per position)
+    // pass 1: keep acting OSDs the new failure domain allows (per position).
+    // When several acting shards share a failure-domain bucket only one of
+    // them can stay.  The amount of data moved is the same whichever is
+    // kept, but the choice decides how cheaply the others can be expressed,
+    // so keep, in order of preference:
+    //  (a) a shard CRUSH itself already places there (raw_new[i] ==
+    //      acting[i]): its slot needs no pg_upmap_items pair at all;
+    //  (b) a shard whose OSD is not CRUSH's pick for another slot: keeping
+    //      such an OSD makes that slot's pair depend on this one, and when
+    //      the dependency chain closes over retained shards only it is a
+    //      cycle pg_upmap_items cannot express, costing an extra move;
+    //  (c) the shard whose contenders' own CRUSH picks (raw_new[j]) land in
+    //      a bucket holding no acting shard: pass 2 can then give them
+    //      those picks as-is, without any pair for their slots;
+    //  (d) the lowest position.
     std::set<int> used;
     std::vector<int> target(size, CRUSH_ITEM_NONE);
     std::vector<bool> pinned(size, false);
+    std::set<int> rawset(raw_new.begin(), raw_new.end());
+    std::map<int, std::vector<unsigned>> contenders;  // bucket -> positions
     for (unsigned i = 0; i < size && i < acting.size(); ++i) {
-      int a = acting[i];
-      auto it = fd_of.find(a);
-      if (a != CRUSH_ITEM_NONE && it != fd_of.end() &&
-          !used.count(it->second)) {
-        target[i] = a;
-        used.insert(it->second);
-        pinned[i] = true;
+      auto it = fd_of.find(acting[i]);
+      if (acting[i] != CRUSH_ITEM_NONE && it != fd_of.end())
+        contenders[it->second].push_back(i);
+    }
+    auto raw_lands_free = [&](unsigned j) {
+      auto it = fd_of.find(raw_new[j]);
+      return raw_new[j] != CRUSH_ITEM_NONE && it != fd_of.end() &&
+             !contenders.count(it->second);
+    };
+    for (auto& [b, pos] : contenders) {
+      unsigned keep = pos.front();
+      if (pos.size() > 1) {
+        // lexicographic (a, b, c); strict '>' keeps the lowest on ties (d)
+        std::tuple<bool, bool, unsigned> best;
+        for (unsigned i : pos) {
+          unsigned free_picks = 0;
+          for (unsigned j : pos) {
+            if (j != i && raw_lands_free(j))
+              ++free_picks;
+          }
+          std::tuple<bool, bool, unsigned> score(
+            raw_new[i] == acting[i],
+            raw_new[i] == acting[i] || !rawset.count(acting[i]),
+            free_picks);
+          if (i == pos.front() || score > best) {
+            best = score;
+            keep = i;
+          }
+        }
+      }
+      target[keep] = acting[keep];
+      used.insert(b);
+      pinned[keep] = true;
+    }
+    if (load_aware_fill) {
+      // a relocated shard whose own CRUSH pick lands in a free bucket takes
+      // it: that slot needs no pair, and CRUSH's pick is weight-balanced
+      // already.  Done for all slots before the load-aware fill below so a
+      // lower slot cannot take the bucket a higher slot's pick lives in.
+      for (unsigned i = 0; i < size; ++i) {
+        auto it = fd_of.find(raw_new[i]);
+        if (!pinned[i] && raw_new[i] != CRUSH_ITEM_NONE &&
+            it != fd_of.end() && !used.count(it->second)) {
+          target[i] = raw_new[i];
+          used.insert(it->second);
+        }
       }
     }
-    // pass 2: fill the violators; prefer CRUSH's own pick, else spread
-    // deterministically over the free buckets so forced moves stay balanced
+    // pass 2: fill the remaining violators; prefer CRUSH's own pick, else
+    // spread deterministically over the free buckets so forced moves stay
+    // balanced
     bool ok = true;
     for (unsigned i = 0; i < size; ++i) {
-      if (pinned[i])
+      if (target[i] != CRUSH_ITEM_NONE)
         continue;
       if (load_aware_fill) {
         // pick the least-loaded (crush-weight normalized) in-OSD across the
         // remaining free failure-domain buckets; deterministic tie-break so
-        // the result is reproducible for identical inputs.  This scan is
+        // the result is reproducible for identical inputs.  OSDs CRUSH
+        // picked for *other* slots come last: taking one displaces that
+        // slot's raw OSD, which can only lengthen the pair chain or close a
+        // cycle that pg_upmap_items cannot express.  This scan is
         // O(#osds in the rule subtree) per relocated shard; the total work
         // is bounded by mon_crush_rule_change_preserve_acting_max_pgs.
         int chosen = -1;
         int chosen_bkt = 0;
-        std::pair<double, uint32_t> best_key;
+        std::tuple<bool, double, uint32_t> best_key;
         for (auto& [b, osds] : fd_osds) {
           if (used.count(b))
             continue;
           for (int cand : osds) {
             auto pit = planned.find(cand);
-            std::pair<double, uint32_t> key(
+            std::tuple<bool, double, uint32_t> key(
+              rawset.count(cand) > 0,
               (pit == planned.end() ? 0 : pit->second) /
                 (double)weight_map.at(cand),
               (uint32_t)cand * 2654435761u + (uint32_t)ps * 40503u);
@@ -2708,7 +2768,9 @@ int OSDMap::calc_crush_rule_change_pins(
     // which pg_upmap_items cannot express (see the bidirectional-swap
     // note in _apply_upmap()).  Cycles are broken by re-targeting one
     // member to a fresh OSD outside raw_new (so no new edge can appear),
-    // which keeps the remaining members of the cycle in place.
+    // which keeps the remaining members of the cycle in place.  The member
+    // re-targeted is preferably one that moves anyway (not pinned in pass
+    // 1): only a cycle made of retained shards alone costs an extra move.
     std::map<unsigned, unsigned> succ, pred;
     std::set<unsigned> cyc;
     auto mismatched = [&](unsigned i) {
@@ -2753,9 +2815,14 @@ int OSDMap::calc_crush_rule_change_pins(
       }
     };
     rebuild_graph();
-    std::set<int> rawset(raw_new.begin(), raw_new.end());
     for (unsigned guard = 0; !cyc.empty() && guard < size; ++guard) {
       unsigned c = *cyc.begin();
+      for (auto m : cyc) {
+        if (!pinned[m]) {
+          c = m;
+          break;
+        }
+      }
       // free the bucket of the member we re-target, then pick a fresh
       // OSD; cycles are rare, so the load-aware pick is used for both
       // fill strategies for simplicity (still deterministic)
