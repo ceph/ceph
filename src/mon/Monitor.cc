@@ -6183,6 +6183,10 @@ void Monitor::tick()
   // ok go.
   dout(11) << "tick" << dendl;
   const utime_t now = ceph_clock_now();
+
+  if (auto line = peer_gate.take_log_line(ceph::mono_clock::now())) {
+    clog->warn() << *line;
+  }
   
   // Check if we need to emit any delayed health check updated messages
   if (is_leader()) {
@@ -6710,6 +6714,68 @@ bool Monitor::get_authorizer(int service_id, AuthAuthorizer **authorizer)
   return true;
 }
 
+// Turn away a client that lacks features we require of it, at
+// authentication: it fails at once there, where the session handshake
+// would leave older clients retrying until their mount timeout.
+bool Monitor::rejects_peer(Connection *con, std::string *reason)
+{
+  int type = con->get_peer_type();
+  if (type == CEPH_ENTITY_TYPE_MON) {
+    return false;
+  }
+  auto policy = messenger->get_policy(type);
+  // A msgr1 client may have connected while the policy left the check to
+  // us; one that passed it then passes again unless the requirement grew.
+  if (!policy.features_checked_by_auth &&
+      (con->is_msgr2() || type != CEPH_ENTITY_TYPE_CLIENT)) {
+    return false;
+  }
+  using kind_t = PeerFeatureGate::peer_t::kind_t;
+  PeerFeatureGate::peer_t peer;
+  peer.global_id = con->peer_global_id;
+  if (!con->is_msgr2()) {
+    peer.kind = kind_t::MSGR1;
+    peer.features = con->get_features();
+  }
+  auto now = ceph::mono_clock::now();
+  auto refusal = peer_gate.check(policy.features_required, peer, now);
+  if (!refusal) {
+    return false;
+  }
+  *reason = refusal->reason;
+  auto addr = stringify(con->get_peer_socket_addr());
+  dout(10) << __func__ << " " << ceph_entity_type_name(type) << " at " << addr
+           << ": " << *reason << dendl;
+  peer_gate.count_refusal(addr, *reason);
+  if (auto line = peer_gate.take_log_line(now)) {
+    clog->warn() << *line;
+  }
+  return true;
+}
+
+void Monitor::handle_peer_missing_features(Connection *con, uint64_t missing)
+{
+  if (!missing || con->get_peer_type() != CEPH_ENTITY_TYPE_CLIENT ||
+      !messenger->get_policy(CEPH_ENTITY_TYPE_CLIENT).features_checked_by_auth) {
+    return;
+  }
+  // only a global_id that the client proved is its own, or that we gave it
+  auto priv = con->get_priv();
+  auto s = static_cast<MonSession*>(priv.get());
+  if (!s || !s->auth_handler) {
+    return;
+  }
+  switch (s->auth_handler->get_global_id_status()) {
+  case global_id_status_t::NEW_OK:
+  case global_id_status_t::NEW_NOT_EXPOSED:
+  case global_id_status_t::RECLAIM_OK:
+    peer_gate.strike(con->peer_global_id, missing, ceph::mono_clock::now());
+    break;
+  default:
+    break;
+  }
+}
+
 int Monitor::handle_auth_request(
   Connection *con,
   AuthConnectionMeta *auth_meta,
@@ -6829,6 +6895,14 @@ int Monitor::handle_auth_request(
             << " entity_name=" << entity_name
             << " con->peer_global_id=" << con->peer_global_id
             << dendl;
+
+    // A mon outside the quorum may hold an older policy, and clients
+    // stop hunting at the first refusal.
+    if (std::string reason;
+        authmon()->_in_quorum() && rejects_peer(con, &reason)) {
+      // not -EOPNOTSUPP: kernel clients warn about that one
+      return -EPROTONOSUPPORT;
+    }
 
     // supported method?
     if (entity_name.get_type() == CEPH_ENTITY_TYPE_MON ||

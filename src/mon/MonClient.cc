@@ -47,6 +47,7 @@
 #include "messages/MMonSubscribe.h"
 #include "messages/MMonSubscribeAck.h"
 #include "common/errno.h"
+#include "common/strescape.h"
 #include "common/hostname.h"
 #include "common/LogClient.h"
 
@@ -735,6 +736,12 @@ void MonClient::handle_auth(MAuthReply *m)
     }
     m->put();
     return;
+  }
+
+  if (m->result < 0 && !m->result_msg.empty()) {
+    lderr(cct) << m->get_source_addrs() << " refused this "
+               << ceph_entity_type_name(cct->get_module_type()) << ": "
+               << printable_str(m->result_msg, 512) << dendl;
   }
 
   if (!_hunting()) {

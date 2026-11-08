@@ -504,7 +504,8 @@ std::vector<std::string> OSDMonitor::get_tracked_keys() const noexcept
   return {
     "mon_memory_target"s,
     "mon_memory_autotune"s,
-    "rocksdb_cache_size"s
+    "rocksdb_cache_size"s,
+    "mon_reject_clients_at_auth"s
   };
 }
 
@@ -515,6 +516,12 @@ void OSDMonitor::handle_conf_change(const ConfigProxy& conf,
 
   if (changed.count("mon_memory_autotune")) {
     _set_cache_autotuning();
+  }
+  if (changed.count("mon_reject_clients_at_auth")) {
+    mon.finisher.queue(new C_MonContext{&mon, [this](int) {
+      std::lock_guard l{mon.lock};
+      update_msgr_features();
+    }});
   }
   if (changed.count("mon_memory_target") ||
       changed.count("rocksdb_cache_size")) {
@@ -1119,6 +1126,16 @@ void OSDMonitor::update_msgr_features()
       dout(0) << "crush map has features " << features << ", adjusting msgr requires" << dendl;
       ceph::net::Policy p = mon.messenger->get_policy(type);
       p.features_required = (p.features_required & ~mask) | features;
+      mon.messenger->set_policy(type, p);
+    }
+
+    bool by_auth = type == entity_name_t::TYPE_CLIENT &&
+      g_conf().get_val<bool>("mon_reject_clients_at_auth");
+    if (mon.messenger->get_policy(type).features_checked_by_auth != by_auth) {
+      dout(0) << "adjusting msgr requires of " << ceph_entity_type_name(type)
+              << ": checked at authentication " << by_auth << dendl;
+      ceph::net::Policy p = mon.messenger->get_policy(type);
+      p.features_checked_by_auth = by_auth;
       mon.messenger->set_policy(type, p);
     }
   }
