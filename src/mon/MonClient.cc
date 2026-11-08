@@ -1039,9 +1039,18 @@ void MonClient::_finish_hunting(int auth_err)
   }
 
   had_a_connection = true;
-  _un_backoff();
+  last_hunt_err = auth_err;
+  if (auth_err && authenticated) {
+    lderr(cct) << "every mon refused this running "
+               << ceph_entity_type_name(cct->get_module_type()) << ": "
+               << cpp_strerror(auth_err)
+               << (auth_err == -EPROTONOSUPPORT ? "; will keep trying"
+                                                : "; not trying again") << dendl;
+  }
 
   if (!auth_err) {
+    // a refusal keeps the backoff, so retries slow down
+    _un_backoff();
     last_rotating_renew_sent = utime_t();
     while (!waiting_for_session.empty()) {
       _send_mon_message(std::move(waiting_for_session.front()));
@@ -1115,6 +1124,11 @@ void MonClient::tick()
       send_log();
       last_send_log = now;
     }
+  } else if (authenticated && last_hunt_err == -EPROTONOSUPPORT) {
+    // every mon refused us for features the cluster now requires: keep
+    // trying, backing off, in case that changes
+    ldout(cct, 1) << "no mon session; trying again" << dendl;
+    return _reopen_session();
   }
 }
 
