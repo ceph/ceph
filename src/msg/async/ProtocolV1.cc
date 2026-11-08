@@ -2055,8 +2055,13 @@ CtPtr ProtocolV1::handle_connect_message_2() {
     }
   }
 
-  uint64_t feat_missing =
+  uint64_t feat_missing = 0;
+  // a peer with an authorizer never sends the MAuth that checks them
+  if (!connection->policy.features_checked_by_auth ||
+      (uint32_t)connect_msg.authorizer_len != 0) {
+    feat_missing =
       connection->policy.features_required & ~(uint64_t)connect_msg.features;
+  }
   if (feat_missing) {
     ldout(cct, 1) << __func__ << " peer missing required features " << std::hex
                   << feat_missing << std::dec << dendl;

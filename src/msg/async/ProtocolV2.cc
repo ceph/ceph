@@ -2481,6 +2481,10 @@ CtPtr ProtocolV2::handle_client_ident(ceph::bufferlist &payload)
   if (feat_missing) {
     ldout(cct, 1) << __func__ << " peer missing required features " << std::hex
                   << feat_missing << std::dec << dendl;
+    if (messenger->auth_server) {
+      messenger->auth_server->handle_peer_missing_features(
+        connection, feat_missing & connection->policy.features_required);
+    }
     auto ident_missing_features =
         IdentMissingFeaturesFrame::Encode(feat_missing);
 

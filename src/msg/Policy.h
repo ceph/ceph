@@ -41,6 +41,10 @@ struct Policy {
    */
   ThrottleType* throttler_bytes;
   ThrottleType* throttler_messages;
+
+  /// The authenticator turns away peers that lack required features
+  /// (see Monitor::rejects_peer()), so msgr1 need not refuse them.
+  bool features_checked_by_auth = false;
   
   /// Specify features supported locally by the endpoint.
   static constexpr uint64_t features_supported{CEPH_FEATURES_SUPPORTED_DEFAULT};
