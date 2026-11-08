@@ -204,6 +204,13 @@ enum {
   l_osdc_core_switch_hold_expired,
   l_osdc_op_switch_held,
   l_osdc_core_switch_hold_time,
+  l_osdc_op_unanswered,
+  l_osdc_op_unanswered_answered,
+  l_osdc_op_unanswered_reset,
+  l_osdc_op_unanswered_forgotten,
+  l_osdc_op_send_switch_unanswered,
+  l_osdc_core_switch_delayed_unanswered,
+  l_osdc_core_switch_hold_expired_unanswered,
 
   l_osdc_last,
 };
@@ -468,6 +475,34 @@ void Objecter::init()
 			"OSD connection");
     pcb.add_time_avg(l_osdc_core_switch_hold_time, "core_switch_hold_time",
 		     "Time PGs held their new ops");
+    // ops canceled after being sent, and not answered (yet): they keep
+    // their PG from switching to another OSD connection
+    pcb.add_u64_counter(l_osdc_op_unanswered, "op_unanswered",
+			"Operations canceled after being sent, their answer "
+			"awaited before their PG switches OSD connections");
+    pcb.add_u64_counter(l_osdc_op_unanswered_answered,
+			"op_unanswered_answered",
+			"Canceled operations answered by the OSD");
+    pcb.add_u64_counter(l_osdc_op_unanswered_reset, "op_unanswered_reset",
+			"Canceled operations not answered, their connection "
+			"reset");
+    pcb.add_u64_counter(l_osdc_op_unanswered_forgotten,
+			"op_unanswered_forgotten",
+			"Canceled operations not answered within "
+			"objecter_osd_core_switch_max_hold, no longer awaited");
+    pcb.add_u64_counter(l_osdc_op_send_switch_unanswered,
+			"op_send_switch_unanswered",
+			"Operations sent while their PG was due to switch to "
+			"another OSD connection, kept from it only by canceled "
+			"operations not answered yet");
+    pcb.add_u64_counter(l_osdc_core_switch_delayed_unanswered,
+			"core_switch_delayed_unanswered",
+			"PG switches to another OSD connection that were "
+			"delayed only by canceled operations not answered yet");
+    pcb.add_u64_counter(l_osdc_core_switch_hold_expired_unanswered,
+			"core_switch_hold_expired_unanswered",
+			"PG holds that expired with no operation in flight, "
+			"but canceled ones not answered yet");
 
     logger = pcb.create_perf_counters();
     cct->get_perfcounters_collection()->add(logger);
@@ -2237,7 +2272,7 @@ void Objecter::_close_core_cons(OSDSession *s)
   for (auto& [pgid, route] : s->pg_routes) {
     route.hinted_core.reset();
     route.core.reset();
-    route.switch_pending_since.reset();
+    route.end_switch_wait();
     if (route.holding) {
       // the held ops are resent (or moved to the homeless session) by our
       // caller, along with all of the session's ops
@@ -2287,7 +2322,7 @@ void Objecter::_reset_core_con(OSDSession *s,
       continue;
     }
     // a new start for the route
-    route.switch_pending_since.reset();
+    route.end_switch_wait();
     if (route.holding) {
       // its held ops are sent below, along with the resent ones
       route.holding = false;
@@ -2379,7 +2414,7 @@ ConnectionRef Objecter::_op_route(Op *op)
   auto& route = s->pg_routes[pgid];
   const auto desired = _route_desired(s, route);
   if (desired == route.core) {
-    route.switch_pending_since.reset();
+    route.end_switch_wait();
   } else {
     if (route.unanswered > 0) {
       // the answers of canceled ops might never arrive
@@ -2390,7 +2425,7 @@ ConnectionRef Objecter::_op_route(Op *op)
 		     << ": switching to core "
 		     << (desired ? std::to_string(*desired) : "none") << dendl;
       route.core = desired;
-      route.switch_pending_since.reset();
+      route.end_switch_wait();
       logger->inc(l_osdc_core_route_switch);
     } else {
       // to switch once the PG's ops drain
@@ -2404,6 +2439,14 @@ ConnectionRef Objecter::_op_route(Op *op)
 	route.switch_pending_since = ceph::coarse_mono_clock::now();
       }
       logger->inc(l_osdc_op_send_switch_pending);
+      if (route.in_flight == 0) {
+	// but for canceled ops not answered yet, the PG would switch
+	logger->inc(l_osdc_op_send_switch_unanswered);
+	if (!route.delayed_by_unanswered) {
+	  route.delayed_by_unanswered = true;
+	  logger->inc(l_osdc_core_switch_delayed_unanswered);
+	}
+      }
     }
   }
 
@@ -2450,6 +2493,7 @@ void Objecter::_op_note_unanswered(Op *op)
 				ceph::coarse_mono_clock::now()});
   if (added) {
     ++s->pg_routes.at(*op->routed_pgid).unanswered;
+    logger->inc(l_osdc_op_unanswered);
   }
 }
 
@@ -2467,6 +2511,7 @@ void Objecter::_op_answered_late(OSDSession *s, ceph_tid_t tid)
   ceph_assert(route.unanswered > 0);
   --route.unanswered;
   s->unanswered.erase(i);
+  logger->inc(l_osdc_op_unanswered_answered);
   _route_maybe_drained(s, pgid, route);
 }
 
@@ -2482,6 +2527,7 @@ void Objecter::_forget_unanswered(OSDSession *s,
       ceph_assert(route.unanswered > 0);
       --route.unanswered;
       i = s->unanswered.erase(i);
+      logger->inc(l_osdc_op_unanswered_reset);
       _route_maybe_drained(s, pgid, route);
     } else {
       ++i;
@@ -2503,6 +2549,7 @@ void Objecter::_prune_unanswered(OSDSession *s)
       ceph_assert(route.unanswered > 0);
       --route.unanswered;
       i = s->unanswered.erase(i);
+      logger->inc(l_osdc_op_unanswered_forgotten);
       _route_maybe_drained(s, pgid, route);
     } else {
       ++i;
@@ -2606,6 +2653,9 @@ void Objecter::_end_core_switch_hold(OSDSession *s,
     // the held ops go on the current connection. Wait for the grace
     // period again before holding again.
     logger->inc(l_osdc_core_switch_hold_expired);
+    if (route.in_flight == 0) {
+      logger->inc(l_osdc_core_switch_hold_expired_unanswered);
+    }
     route.switch_pending_since = now;
     ldout(cct, 1) << __func__ << " osd." << s->osd << " pg " << pgid
 		  << ": not drained after " << (now - route.hold_since)
