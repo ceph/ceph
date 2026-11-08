@@ -29,6 +29,28 @@ also makes a client that the cluster turns away fail at once, with a reason.
   cluster during a pool migration fails in about a second instead of after
   nearly an hour.
 
+.. note::
+
+   **Why a clean rejection is needed.** Some features change where clients must
+   send their I/O. While a pool is being migrated, for example, a client that
+   cannot follow the migration would read and write the wrong pool and corrupt
+   data. So while such a feature is in use, clients that lack it must be kept
+   out, and Ceph already keeps them out: the OSDMap says which features the
+   cluster's current state requires (``OSDMap::get_features``), and the mons
+   refuse clients that lack them when they connect. What is wrong today is how
+   they are refused. The client cannot tell the refusal from a network fault:
+   it retries for minutes to hours, librados can even report success, and
+   operators see nothing at default debug levels. This design keeps the same
+   decision and makes the refusal immediate, final and explained.
+
+   **This design does not reject old clients in general.** A client is refused
+   only while the cluster is actively using a feature that the client lacks and
+   without which it would corrupt data. A cluster that uses no such feature
+   admits every client it admits today, and once the feature is no longer in
+   use, when the migration ends for example, new connections from old clients
+   succeed again. The design adds no requirement of its own: the only way to
+   set one directly is a debug option for testing.
+
 The problem
 ===========
 
