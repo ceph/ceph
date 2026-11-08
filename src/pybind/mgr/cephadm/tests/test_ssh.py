@@ -1,3 +1,5 @@
+import asyncio
+
 import asyncssh
 from asyncssh.process import SSHCompletedProcess
 from unittest import mock
@@ -203,3 +205,120 @@ class TestAsyncSSHLogLevel:
 
         mock_set_log_level.assert_called_with('DEBUG')
         mock_set_debug_level.assert_called_with(debug_level)
+
+
+class AddressConnection:
+    def __init__(self, addr):
+        self.addr = addr
+        self.closed = False
+
+    def is_closed(self):
+        return self.closed
+
+    def close(self):
+        self.closed = True
+
+    async def run(self, *args, **kwargs):
+        if self.closed:
+            raise asyncssh.ConnectionLost('connection closed')
+        return SSHCompletedProcess(stdout=self.addr, stderr='', returncode=0)
+
+
+@pytest.mark.parametrize('connect_fails', [True, False])
+def test_address_change_ignores_old_connection_result(cephadm_module, connect_fails):
+    from cephadm.ssh import Executables, HostConnectionError, RemoteCommand
+
+    mgr = cephadm_module
+    mgr.inventory.add_host(HostSpec('test', '192.0.2.1'))
+
+    async def scenario():
+        started = asyncio.Event()
+        finish = asyncio.Event()
+        old_conn = AddressConnection('192.0.2.1')
+
+        async def connect(addr, **kwargs):
+            if addr == '192.0.2.1':
+                started.set()
+                await finish.wait()
+                if connect_fails:
+                    raise OSError('old address unreachable')
+                return old_conn
+            assert addr == '192.0.2.2'
+            return AddressConnection(addr)
+
+        with mock.patch('asyncssh.connect', side_effect=connect):
+            pending = asyncio.create_task(mgr.ssh._remote_connection('test'))
+            await started.wait()
+            mgr.inventory.set_addr('test', '192.0.2.2')
+            await mgr.ssh._reset_con('test')
+            await mgr.ssh._remote_connection('test')
+            finish.set()
+            with pytest.raises(HostConnectionError):
+                await pending
+            assert not mgr.offline_hosts
+            out, _, _ = await mgr.ssh._execute_command('test', RemoteCommand(Executables.TRUE))
+            assert out == '192.0.2.2'
+            if not connect_fails:
+                assert old_conn.closed
+
+    mgr.wait_async(scenario())
+
+
+@pytest.mark.parametrize('error', [RuntimeError, OSError])
+def test_address_change_ignores_old_command_failure(cephadm_module, error):
+    from cephadm.ssh import Executables, HostConnectionError, RemoteCommand
+
+    mgr = cephadm_module
+    mgr.inventory.add_host(HostSpec('test', '192.0.2.1'))
+
+    async def scenario():
+        started = asyncio.Event()
+        finish = asyncio.Event()
+
+        async def fail_command(*args, **kwargs):
+            started.set()
+            await finish.wait()
+            raise error('old command failed')
+
+        async def connect(addr, **kwargs):
+            conn = AddressConnection(addr)
+            if addr == '192.0.2.1':
+                conn.run = fail_command
+            return conn
+
+        with mock.patch('asyncssh.connect', side_effect=connect):
+            pending = asyncio.create_task(
+                mgr.ssh._execute_command('test', RemoteCommand(Executables.TRUE)))
+            await started.wait()
+            mgr.inventory.set_addr('test', '192.0.2.2')
+            await mgr.ssh._reset_con('test')
+            current = await mgr.ssh._remote_connection('test')
+            finish.set()
+            if error is OSError:
+                assert (await pending)[0] == '192.0.2.2'
+            else:
+                with pytest.raises(HostConnectionError, match='old command failed'):
+                    await pending
+            assert not current.closed
+            assert not mgr.offline_hosts
+            out, _, _ = await mgr.ssh._execute_command('test', RemoteCommand(Executables.TRUE))
+            assert out == '192.0.2.2'
+
+    mgr.wait_async(scenario())
+
+
+@mock.patch('cephadm.utils.resolve_ip', return_value='192.0.2.2')
+def test_address_change_clears_offline_from_validation(resolve_ip, cephadm_module):
+    mgr = cephadm_module
+    mgr.inventory.add_host(HostSpec('test', '192.0.2.1'))
+
+    async def check_host(*args, **kwargs):
+        assert kwargs['addr'] == '192.0.2.2'
+        # An old SSH failure arrives just before validation finishes.
+        mgr.offline_hosts.add('test')
+        return [], [], 0
+
+    with mock.patch('cephadm.serve.CephadmServe._run_cephadm', side_effect=check_host):
+        wait(mgr, mgr.update_host_addr('test', '192.0.2.2'))
+    host = wait(mgr, mgr.get_hosts())[0]
+    assert (host.addr, host.status) == ('192.0.2.2', '')

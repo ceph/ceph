@@ -2606,6 +2606,8 @@ Then run the following:
         self._check_valid_addr(host, addr)
         self.inventory.set_addr(host, addr)
         self.ssh.reset_con(host)
+        # The new address passed validation; discard the old offline state.
+        self.offline_hosts_remove(host)
         self.event.set()  # refresh stray health check
         self.log.info('Set host %s addr to %s' % (host, addr))
         return "Updated host '{}' addr to '{}'".format(host, addr)
