@@ -1421,6 +1421,48 @@ public:
 
   int set_subtree_class(const std::string& name, const std::string& class_name);
 
+  /**
+   * Make every take step of a rule use one device class.
+   *
+   * When the rule's classless take steps all take one root bucket, every
+   * device under that root is of class_name, no bucket under it also sits
+   * in another bucket, and no rule takes that root or a bucket under it
+   * with a class, this tries renumbering the buckets the way reclassify()
+   * does.  The class's shadow tree inherits the original bucket IDs and
+   * weight sets, and every rule that takes that root or a bucket under it
+   * without a class now uses class_name.  The renumbering is kept only if
+   * same_placement() confirms that no rule maps differently; then
+   * *renumbered is set to true.
+   *
+   * Otherwise only this rule's classless take steps change, to the
+   * matching shadow buckets, and its mappings change.
+   *
+   * @param changed_rules receives every rule whose take steps now name
+   *        the class; empty when the rule already used only class_name
+   * @param renumbered_ids receives old -> new ID for each renumbered
+   *        bucket, so that state kept by bucket ID can follow it
+   * @param why_not if not null, receives the reason the buckets were not
+   *        renumbered when the rule changed alone
+   * @return 0 on success, or a negative errno with the reason in *ss
+   */
+  int rule_set_device_class(CephContext *cct, int ruleno,
+			    const std::string& class_name,
+			    bool *renumbered, std::set<int> *changed_rules,
+			    std::map<int,int> *renumbered_ids,
+			    std::ostream *ss,
+			    std::string *why_not = nullptr);
+
+  /// true if the rule has a take step and every take step names class_id
+  bool rule_takes_only_class(int ruleno, int class_id) const;
+
+  /**
+   * True if every rule maps the same in both maps: the same rules, and the
+   * same bucket contents and weight sets, by ID, for every bucket a rule
+   * can reach.  Otherwise false, with the first difference in why, which
+   * names buckets as other names them.
+   */
+  bool same_placement(const CrushWrapper& other, std::ostream& why) const;
+
   void start_choose_profile() {
     free(crush->choose_tries);
     /*

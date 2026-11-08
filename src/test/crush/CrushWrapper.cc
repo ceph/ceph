@@ -1557,6 +1557,512 @@ TEST_F(CrushWrapperTest, try_remap_rule) {
   }
 }
 
+// root "default", four hosts of three OSDs each; osd.i gets classes[i]
+static void build_classed_map(CephContext *cct, CrushWrapper& c,
+			      const vector<string>& classes)
+{
+  c.create();
+  c.set_type_name(0, "osd");
+  c.set_type_name(1, "host");
+  c.set_type_name(2, "root");
+  c.set_type_name(3, "rack");
+  int bno;
+  ASSERT_EQ(0, c.add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_DEFAULT, 2, 0,
+			    NULL, NULL, &bno));
+  c.set_item_name(bno, "default");
+  c.set_max_devices(classes.size());
+  for (unsigned i = 0; i < classes.size(); ++i) {
+    map<string,string> loc = {{"host", "host" + stringify(i / 3)},
+			      {"root", "default"}};
+    ASSERT_EQ(0, c.insert_item(cct, i, 1, "osd." + stringify(i), loc));
+  }
+  for (unsigned i = 0; i < classes.size(); ++i) {
+    ostringstream ss;
+    ASSERT_LE(0, c.update_device_class(i, classes[i], "osd." + stringify(i),
+				       &ss)) << ss.str();
+  }
+  c.finalize();
+}
+
+// root "archive" with host "host_a" holding osd.first .. osd.first+n-1,
+// all of class cls
+static void add_archive_root(CephContext *cct, CrushWrapper& c, int first,
+			     int n, const string& cls)
+{
+  int bno;
+  ASSERT_EQ(0, c.add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_DEFAULT, 2, 0,
+			    NULL, NULL, &bno));
+  c.set_item_name(bno, "archive");
+  c.set_max_devices(first + n);
+  for (int i = first; i < first + n; ++i) {
+    map<string,string> loc = {{"host", "host_a"}, {"root", "archive"}};
+    ASSERT_EQ(0, c.insert_item(cct, i, 1, "osd." + stringify(i), loc));
+    ostringstream ss;
+    ASSERT_LE(0, c.update_device_class(i, cls, "osd." + stringify(i), &ss))
+      << ss.str();
+  }
+  c.finalize();
+}
+
+static vector<vector<int>> rule_mappings(CrushWrapper& c, int rule,
+					 int numrep = 3)
+{
+  c.finalize();
+  vector<__u32> weight(c.get_max_devices(), 0x10000);
+  vector<vector<int>> m;
+  for (int x = 0; x < 1024; ++x) {
+    vector<int> out;
+    c.do_rule(rule, x, out, numrep, weight, 0);
+    m.push_back(out);
+  }
+  return m;
+}
+
+static bool any_double_shadow_name(CrushWrapper& c)
+{
+  for (int i = 0; i < c.get_max_buckets(); ++i) {
+    int id = -1 - i;
+    if (c.bucket_exists(id) &&
+	string(c.get_item_name(id)).find("~hdd~") != string::npos) {
+      return true;
+    }
+  }
+  return false;
+}
+
+TEST_F(CrushWrapperTest, rule_set_device_class_renumbers) {
+  CrushWrapper c;
+  build_classed_map(cct, c, vector<string>(12, "hdd"));
+  ostringstream err;
+  ASSERT_EQ(0, c.add_simple_rule("by_host", "default", "host", "", "firstn",
+				 pg_pool_t::TYPE_REPLICATED, &err));
+  ASSERT_EQ(1, c.add_simple_rule("by_osd", "default", "osd", "", "firstn",
+				 pg_pool_t::TYPE_REPLICATED, &err));
+  auto host_before = rule_mappings(c, 0);
+  auto osd_before = rule_mappings(c, 1);
+  int take = c.get_rule_arg1(0, 0);
+  int host1 = c.get_item_id("host1");
+
+  bool renumbered = false;
+  set<int> changed;
+  map<int,int> ids;
+  ostringstream ss;
+  string why = "stale";
+  ASSERT_EQ(0, c.rule_set_device_class(cct, 0, "hdd", &renumbered, &changed,
+				       &ids, &ss, &why)) << ss.str();
+  ASSERT_TRUE(renumbered);
+  ASSERT_TRUE(why.empty());
+  ASSERT_EQ(set<int>({0, 1}), changed);
+  // the take step keeps its ID, which now names the class's shadow root
+  ASSERT_EQ(take, c.get_rule_arg1(0, 0));
+  ASSERT_EQ(take, c.get_rule_arg1(1, 0));
+  ASSERT_EQ("default~hdd", string(c.get_item_name(take)));
+  ASSERT_EQ(host_before, rule_mappings(c, 0));
+  ASSERT_EQ(osd_before, rule_mappings(c, 1));
+  // the root and its four hosts moved to new IDs
+  ASSERT_EQ(5u, ids.size());
+  ASSERT_EQ(c.get_item_id("default"), ids[take]);
+  ASSERT_EQ(c.get_item_id("host1"), ids[host1]);
+  ASSERT_NE(host1, ids[host1]);
+  ASSERT_EQ("host1~hdd", string(c.get_item_name(host1)));
+
+  // again: nothing to do
+  ASSERT_EQ(0, c.rule_set_device_class(cct, 0, "hdd", &renumbered, &changed,
+				       &ids, &ss));
+  ASSERT_FALSE(renumbered);
+  ASSERT_TRUE(changed.empty());
+  ASSERT_TRUE(ids.empty());
+  ASSERT_TRUE(c.rule_takes_only_class(0, c.get_class_id("hdd")));
+}
+
+TEST_F(CrushWrapperTest, rule_set_device_class_renumbers_weight_set) {
+  CrushWrapper c;
+  build_classed_map(cct, c, vector<string>(12, "hdd"));
+  ostringstream err;
+  ASSERT_EQ(0, c.add_simple_rule("by_host", "default", "host", "", "firstn",
+				 pg_pool_t::TYPE_REPLICATED, &err));
+  // a compat weight set, as the crush-compat balancer makes, that differs
+  // from the CRUSH weights
+  ASSERT_TRUE(c.create_choose_args(CrushWrapper::DEFAULT_CHOOSE_ARGS, 1));
+  auto cmap = c.choose_args_get(CrushWrapper::DEFAULT_CHOOSE_ARGS);
+  ostringstream ss;
+  ASSERT_LE(0, c.choose_args_adjust_item_weightf(cct, cmap, 0, {0.25}, &ss));
+  ASSERT_LE(0, c.choose_args_adjust_item_weightf(cct, cmap, 4, {3.0}, &ss));
+  ASSERT_LE(0, c.choose_args_adjust_item_weightf(cct, cmap, 10, {0.5}, &ss));
+  auto before = rule_mappings(c, 0);
+
+  bool renumbered = false;
+  set<int> changed;
+  map<int,int> ids;
+  ASSERT_EQ(0, c.rule_set_device_class(cct, 0, "hdd", &renumbered, &changed,
+				       &ids, &ss)) << ss.str();
+  ASSERT_TRUE(renumbered);
+  ASSERT_EQ(before, rule_mappings(c, 0));
+}
+
+TEST_F(CrushWrapperTest, rule_set_device_class_renumbers_bucket_weight_set) {
+  // 'osd crush weight-set reweight-compat host1 2' sets the root's entry for
+  // host1 to 2 while host1's own entries still add up to 3.
+  // device_class_clone() would give the shadow root the 3.
+  CrushWrapper c;
+  build_classed_map(cct, c, vector<string>(12, "hdd"));
+  ostringstream err;
+  ASSERT_EQ(0, c.add_simple_rule("by_host", "default", "host", "", "firstn",
+				 pg_pool_t::TYPE_REPLICATED, &err));
+  ASSERT_TRUE(c.create_choose_args(CrushWrapper::DEFAULT_CHOOSE_ARGS, 1));
+  auto cmap = c.choose_args_get(CrushWrapper::DEFAULT_CHOOSE_ARGS);
+  ostringstream ss;
+  ASSERT_LE(0, c.choose_args_adjust_item_weightf(cct, cmap,
+						 c.get_item_id("host1"),
+						 {2.0}, &ss));
+  auto before = rule_mappings(c, 0);
+
+  bool renumbered = false;
+  set<int> changed;
+  map<int,int> ids;
+  ASSERT_EQ(0, c.rule_set_device_class(cct, 0, "hdd", &renumbered, &changed,
+				       &ids, &ss)) << ss.str();
+  ASSERT_TRUE(renumbered);
+  ASSERT_EQ(before, rule_mappings(c, 0));
+}
+
+TEST_F(CrushWrapperTest, rule_set_device_class_renumbers_straw_host) {
+  // a straw (v1) host under a straw2 root, as on older clusters, with a
+  // compat weight set
+  CrushWrapper c;
+  build_classed_map(cct, c, vector<string>(12, "hdd"));
+  int host4;
+  ASSERT_EQ(0, c.add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_DEFAULT, 1, 0,
+			    NULL, NULL, &host4));
+  c.set_item_name(host4, "host4");
+  ASSERT_EQ(0, c.link_bucket(cct, host4, {{"root", "default"}}));
+  c.set_max_devices(15);
+  for (int i = 12; i < 15; ++i) {
+    map<string,string> loc = {{"host", "host4"}, {"root", "default"}};
+    ASSERT_EQ(0, c.insert_item(cct, i, 1, "osd." + stringify(i), loc));
+    ostringstream ss;
+    ASSERT_LE(0, c.update_device_class(i, "hdd", "osd." + stringify(i), &ss))
+      << ss.str();
+  }
+  ostringstream err;
+  ASSERT_EQ(0, c.add_simple_rule("by_host", "default", "host", "", "firstn",
+				 pg_pool_t::TYPE_REPLICATED, &err));
+  ASSERT_TRUE(c.create_choose_args(CrushWrapper::DEFAULT_CHOOSE_ARGS, 1));
+  auto before = rule_mappings(c, 0);
+
+  bool renumbered = false;
+  set<int> changed;
+  map<int,int> ids;
+  ostringstream ss;
+  ASSERT_EQ(0, c.rule_set_device_class(cct, 0, "hdd", &renumbered, &changed,
+				       &ids, &ss)) << ss.str();
+  ASSERT_TRUE(renumbered);
+  ASSERT_EQ(before, rule_mappings(c, 0));
+}
+
+TEST_F(CrushWrapperTest, rule_set_device_class_verify_falls_back) {
+  // host0 weighs 5 in the root but its OSDs add up to 3.  The shadow root
+  // would weigh host0~hdd at 3, so renumbering would move data: change only
+  // the named rule instead.
+  CrushWrapper c;
+  build_classed_map(cct, c, vector<string>(12, "hdd"));
+  ostringstream err;
+  ASSERT_EQ(0, c.add_simple_rule("by_host", "default", "host", "", "firstn",
+				 pg_pool_t::TYPE_REPLICATED, &err));
+  ASSERT_EQ(1, c.add_simple_rule("by_osd", "default", "osd", "", "firstn",
+				 pg_pool_t::TYPE_REPLICATED, &err));
+  int root = c.get_item_id("default");
+  int host0 = c.get_item_id("host0");
+  ASSERT_LT(0, c.adjust_item_weightf(cct, host0, 5.0));
+  int take = c.get_rule_arg1(1, 0);
+  auto osd_before = rule_mappings(c, 1);
+
+  bool renumbered = true;
+  set<int> changed;
+  map<int,int> ids;
+  ostringstream ss;
+  string why;
+  ASSERT_EQ(0, c.rule_set_device_class(cct, 0, "hdd", &renumbered, &changed,
+				       &ids, &ss, &why)) << ss.str();
+  ASSERT_FALSE(renumbered);
+  ASSERT_EQ(0u, why.find("doing so would change placement (")) << why;
+  ASSERT_EQ(set<int>({0}), changed);
+  ASSERT_TRUE(ids.empty());
+  ASSERT_EQ(c.class_bucket[root][c.get_class_id("hdd")], c.get_rule_arg1(0, 0));
+  // the map is as it was apart from rule 0's take step
+  ASSERT_EQ(root, c.get_item_id("default"));
+  ASSERT_EQ(host0, c.get_item_id("host0"));
+  ASSERT_EQ(take, c.get_rule_arg1(1, 0));
+  ASSERT_EQ(osd_before, rule_mappings(c, 1));
+  ASSERT_FALSE(any_double_shadow_name(c));
+}
+
+TEST_F(CrushWrapperTest, rule_set_device_class_two_parents) {
+  // host0 sits directly under the root and also under rack1 there
+  CrushWrapper c;
+  build_classed_map(cct, c, vector<string>(12, "hdd"));
+  int rack1;
+  ASSERT_EQ(0, c.add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_DEFAULT, 3, 0,
+			    NULL, NULL, &rack1));
+  c.set_item_name(rack1, "rack1");
+  ASSERT_EQ(0, c.link_bucket(cct, rack1, {{"root", "default"}}));
+  int host0 = c.get_item_id("host0");
+  ASSERT_EQ(0, c.link_bucket(cct, host0, {{"rack", "rack1"}}));
+  ostringstream err;
+  ASSERT_EQ(0, c.add_simple_rule("by_host", "default", "host", "", "firstn",
+				 pg_pool_t::TYPE_REPLICATED, &err));
+  ASSERT_EQ(1, c.add_simple_rule("by_osd", "default", "osd", "", "firstn",
+				 pg_pool_t::TYPE_REPLICATED, &err));
+  int root = c.get_item_id("default");
+  int take = c.get_rule_arg1(1, 0);
+  auto osd_before = rule_mappings(c, 1);
+
+  bool renumbered = true;
+  set<int> changed;
+  map<int,int> ids;
+  ostringstream ss;
+  string why;
+  ASSERT_EQ(0, c.rule_set_device_class(cct, 0, "hdd", &renumbered, &changed,
+				       &ids, &ss, &why)) << ss.str();
+  ASSERT_FALSE(renumbered);
+  ASSERT_EQ("host0 also sits in rack1", why);
+  ASSERT_EQ(set<int>({0}), changed);
+  ASSERT_EQ(c.class_bucket[root][c.get_class_id("hdd")], c.get_rule_arg1(0, 0));
+  ASSERT_EQ(take, c.get_rule_arg1(1, 0));
+  ASSERT_EQ(osd_before, rule_mappings(c, 1));
+  ASSERT_EQ(host0, c.get_item_id("host0"));
+  ASSERT_FALSE(any_double_shadow_name(c));
+}
+
+TEST_F(CrushWrapperTest, rule_set_device_class_parent_in_other_root) {
+  // host0 sits under default and under archive; renumbering it would change
+  // what archive~hdd holds
+  CrushWrapper c;
+  build_classed_map(cct, c, vector<string>(12, "hdd"));
+  int archive;
+  ASSERT_EQ(0, c.add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_DEFAULT, 2, 0,
+			    NULL, NULL, &archive));
+  c.set_item_name(archive, "archive");
+  ASSERT_EQ(0, c.link_bucket(cct, c.get_item_id("host0"),
+			     {{"root", "archive"}}));
+  ostringstream err;
+  ASSERT_EQ(0, c.add_simple_rule("by_host", "default", "host", "", "firstn",
+				 pg_pool_t::TYPE_REPLICATED, &err));
+  ASSERT_EQ(1, c.add_simple_rule("archive_hdd", "archive", "osd", "hdd",
+				 "firstn", pg_pool_t::TYPE_REPLICATED, &err));
+  int archive_take = c.get_rule_arg1(1, 0);
+  auto archive_before = rule_mappings(c, 1);
+
+  bool renumbered = true;
+  set<int> changed;
+  map<int,int> ids;
+  ostringstream ss;
+  string why;
+  ASSERT_EQ(0, c.rule_set_device_class(cct, 0, "hdd", &renumbered, &changed,
+				       &ids, &ss, &why)) << ss.str();
+  ASSERT_FALSE(renumbered);
+  ASSERT_EQ("host0 also sits in archive", why);
+  ASSERT_EQ(set<int>({0}), changed);
+  ASSERT_EQ(archive_take, c.get_rule_arg1(1, 0));
+  ASSERT_EQ(archive_before, rule_mappings(c, 1));
+}
+
+TEST_F(CrushWrapperTest, rule_set_device_class_mixed_classes) {
+  CrushWrapper c;
+  vector<string> classes(12, "hdd");
+  classes[11] = "ssd";
+  build_classed_map(cct, c, classes);
+  ostringstream err;
+  ASSERT_EQ(0, c.add_simple_rule("by_host", "default", "host", "", "firstn",
+				 pg_pool_t::TYPE_REPLICATED, &err));
+  ASSERT_EQ(1, c.add_simple_rule("by_osd", "default", "osd", "", "firstn",
+				 pg_pool_t::TYPE_REPLICATED, &err));
+  int root = c.get_item_id("default");
+  int take = c.get_rule_arg1(0, 0);
+  auto osd_before = rule_mappings(c, 1);
+
+  bool renumbered = true;
+  set<int> changed;
+  map<int,int> ids;
+  ostringstream ss;
+  string why;
+  ASSERT_EQ(0, c.rule_set_device_class(cct, 0, "hdd", &renumbered, &changed,
+				       &ids, &ss, &why)) << ss.str();
+  ASSERT_FALSE(renumbered);
+  ASSERT_EQ("default holds osd.11, which is of class ssd", why);
+  ASSERT_EQ(set<int>({0}), changed);
+  ASSERT_EQ(c.class_bucket[root][c.get_class_id("hdd")], c.get_rule_arg1(0, 0));
+  ASSERT_EQ("default~hdd", string(c.get_item_name(c.get_rule_arg1(0, 0))));
+  // the other rule and the real root are untouched
+  ASSERT_EQ(take, c.get_rule_arg1(1, 0));
+  ASSERT_EQ(osd_before, rule_mappings(c, 1));
+  for (auto& out : rule_mappings(c, 0)) {
+    ASSERT_EQ(3u, out.size());
+    for (int osd : out) {
+      ASSERT_NE(11, osd);
+    }
+  }
+
+  // a take that already names another class, and an unknown class
+  ASSERT_EQ(-EINVAL, c.rule_set_device_class(cct, 0, "ssd", &renumbered,
+					     &changed, &ids, &ss));
+  ASSERT_EQ(-ENOENT, c.rule_set_device_class(cct, 1, "nvme", &renumbered,
+					     &changed, &ids, &ss));
+}
+
+TEST_F(CrushWrapperTest, rule_set_device_class_no_devices_under_take) {
+  // ssd exists under default but not under archive, though populate_classes()
+  // still made an (empty) archive~ssd
+  CrushWrapper c;
+  vector<string> classes(12, "hdd");
+  classes[11] = "ssd";
+  build_classed_map(cct, c, classes);
+  add_archive_root(cct, c, 12, 3, "hdd");
+  ostringstream err;
+  int ruleno = c.add_simple_rule("archive_rule", "archive", "host", "",
+				 "firstn", pg_pool_t::TYPE_REPLICATED, &err);
+  ASSERT_LE(0, ruleno);
+  int archive = c.get_item_id("archive");
+  ASSERT_TRUE(c.class_bucket[archive].count(c.get_class_id("ssd")));
+  int take = c.get_rule_arg1(ruleno, 0);
+
+  bool renumbered = true;
+  set<int> changed;
+  map<int,int> ids;
+  ostringstream ss;
+  ASSERT_EQ(-EINVAL, c.rule_set_device_class(cct, ruleno, "ssd", &renumbered,
+					     &changed, &ids, &ss));
+  ASSERT_NE(string::npos, ss.str().find("has no devices of class ssd"));
+  ASSERT_EQ(take, c.get_rule_arg1(ruleno, 0));
+}
+
+TEST_F(CrushWrapperTest, rule_set_device_class_no_take) {
+  CrushWrapper c;
+  build_classed_map(cct, c, vector<string>(12, "hdd"));
+  int ruleno = c.add_rule(-1, 1, pg_pool_t::TYPE_REPLICATED);
+  ASSERT_LE(0, ruleno);
+  ASSERT_EQ(0, c.set_rule_step_emit(ruleno, 0));
+  c.set_rule_name(ruleno, "no_take");
+
+  bool renumbered = true;
+  set<int> changed;
+  map<int,int> ids;
+  ostringstream ss;
+  ASSERT_EQ(-EINVAL, c.rule_set_device_class(cct, ruleno, "hdd", &renumbered,
+					     &changed, &ids, &ss));
+  ASSERT_NE(string::npos, ss.str().find("has no take step"));
+  ASSERT_FALSE(c.rule_takes_only_class(ruleno, c.get_class_id("hdd")));
+}
+
+TEST_F(CrushWrapperTest, rule_set_device_class_renumbers_sub_bucket_take) {
+  // a rule that takes a host under the root converts too, and its own
+  // mappings stay the same
+  CrushWrapper c;
+  build_classed_map(cct, c, vector<string>(12, "hdd"));
+  ostringstream err;
+  ASSERT_EQ(0, c.add_simple_rule("by_host", "default", "host", "", "firstn",
+				 pg_pool_t::TYPE_REPLICATED, &err));
+  ASSERT_EQ(1, c.add_simple_rule("on_host1", "host1", "osd", "", "firstn",
+				 pg_pool_t::TYPE_REPLICATED, &err));
+  int host1_take = c.get_rule_arg1(1, 0);
+  auto host1_before = rule_mappings(c, 1, 2);
+
+  bool renumbered = false;
+  set<int> changed;
+  map<int,int> ids;
+  ostringstream ss;
+  ASSERT_EQ(0, c.rule_set_device_class(cct, 0, "hdd", &renumbered, &changed,
+				       &ids, &ss)) << ss.str();
+  ASSERT_TRUE(renumbered);
+  ASSERT_EQ(set<int>({0, 1}), changed);
+  ASSERT_EQ(host1_take, c.get_rule_arg1(1, 0));
+  ASSERT_EQ("host1~hdd", string(c.get_item_name(host1_take)));
+  ASSERT_EQ(host1_before, rule_mappings(c, 1, 2));
+}
+
+TEST_F(CrushWrapperTest, rule_set_device_class_two_takes) {
+  // one rule takes two roots: no renumbering, both take steps change
+  CrushWrapper c;
+  build_classed_map(cct, c, vector<string>(12, "hdd"));
+  add_archive_root(cct, c, 12, 3, "hdd");
+  int root = c.get_item_id("default");
+  int archive = c.get_item_id("archive");
+  int ruleno = c.add_rule(-1, 6, pg_pool_t::TYPE_REPLICATED);
+  ASSERT_LE(0, ruleno);
+  ASSERT_EQ(0, c.set_rule_step_take(ruleno, 0, root));
+  ASSERT_EQ(0, c.set_rule_step_choose_leaf_firstn(ruleno, 1, 1, 1));
+  ASSERT_EQ(0, c.set_rule_step_emit(ruleno, 2));
+  ASSERT_EQ(0, c.set_rule_step_take(ruleno, 3, archive));
+  ASSERT_EQ(0, c.set_rule_step_choose_leaf_firstn(ruleno, 4, 1, 1));
+  ASSERT_EQ(0, c.set_rule_step_emit(ruleno, 5));
+  c.set_rule_name(ruleno, "split");
+
+  bool renumbered = true;
+  set<int> changed;
+  map<int,int> ids;
+  ostringstream ss;
+  string why;
+  ASSERT_EQ(0, c.rule_set_device_class(cct, ruleno, "hdd", &renumbered,
+				       &changed, &ids, &ss, &why)) << ss.str();
+  ASSERT_FALSE(renumbered);
+  ASSERT_EQ("rule split takes more than one bucket", why);
+  ASSERT_EQ(set<int>({ruleno}), changed);
+  int hdd = c.get_class_id("hdd");
+  ASSERT_EQ(c.class_bucket[root][hdd], c.get_rule_arg1(ruleno, 0));
+  ASSERT_EQ(c.class_bucket[archive][hdd], c.get_rule_arg1(ruleno, 3));
+  ASSERT_TRUE(c.rule_takes_only_class(ruleno, hdd));
+  for (auto& out : rule_mappings(c, ruleno, 2)) {
+    ASSERT_EQ(2u, out.size());
+  }
+}
+
+TEST_F(CrushWrapperTest, rule_set_device_class_renumbers_indep) {
+  CrushWrapper c;
+  build_classed_map(cct, c, vector<string>(12, "hdd"));
+  ostringstream err;
+  ASSERT_EQ(0, c.add_simple_rule("ec", "default", "host", "", "indep",
+				 pg_pool_t::TYPE_ERASURE, &err));
+  auto before = rule_mappings(c, 0, 4);
+
+  bool renumbered = false;
+  set<int> changed;
+  map<int,int> ids;
+  ostringstream ss;
+  ASSERT_EQ(0, c.rule_set_device_class(cct, 0, "hdd", &renumbered, &changed,
+				       &ids, &ss)) << ss.str();
+  ASSERT_TRUE(renumbered);
+  ASSERT_EQ(before, rule_mappings(c, 0, 4));
+}
+
+TEST_F(CrushWrapperTest, rule_set_device_class_beside_class_rule) {
+  CrushWrapper c;
+  build_classed_map(cct, c, vector<string>(12, "hdd"));
+  ostringstream err;
+  ASSERT_EQ(0, c.add_simple_rule("legacy", "default", "host", "", "firstn",
+				 pg_pool_t::TYPE_REPLICATED, &err));
+  ASSERT_EQ(1, c.add_simple_rule("hdd_only", "default", "host", "hdd",
+				 "firstn", pg_pool_t::TYPE_REPLICATED, &err));
+  int hdd_take = c.get_rule_arg1(1, 0);
+  auto hdd_before = rule_mappings(c, 1);
+
+  // renumbering would change the ID that hdd_only takes, so only legacy's
+  // take step changes
+  bool renumbered = true;
+  set<int> changed;
+  map<int,int> ids;
+  ostringstream ss;
+  string why;
+  ASSERT_EQ(0, c.rule_set_device_class(cct, 0, "hdd", &renumbered, &changed,
+				       &ids, &ss, &why)) << ss.str();
+  ASSERT_FALSE(renumbered);
+  ASSERT_EQ("rule hdd_only already takes default~hdd", why);
+  ASSERT_EQ(set<int>({0}), changed);
+  ASSERT_EQ(hdd_take, c.get_rule_arg1(0, 0));
+  ASSERT_EQ(hdd_take, c.get_rule_arg1(1, 0));
+  ASSERT_EQ(hdd_before, rule_mappings(c, 1));
+  ASSERT_EQ(hdd_before, rule_mappings(c, 0));
+}
+
 // Local Variables:
 // compile-command: "cd ../../../build ; make -j4 unittest_crush_wrapper && valgrind --tool=memcheck bin/unittest_crush_wrapper"
 // End:
