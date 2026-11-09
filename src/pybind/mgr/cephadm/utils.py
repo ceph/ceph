@@ -35,7 +35,8 @@ class CephadmNoImage(Enum):
 # ceph daemon types that use the ceph container image.
 # NOTE: order important here as these are used for upgrade order
 CEPH_TYPES = ['mgr', 'mon', 'crash', 'osd', 'mds', 'rgw',
-              'rbd-mirror', 'cephfs-mirror', 'ceph-exporter']
+              'rbd-mirror', 'cephfs-mirror', 'ceph-exporter',
+              'rgw-gap-list']
 GATEWAY_TYPES = ['iscsi', 'nfs', 'nvmeof', 'smb']
 # rgw is a gateway too, but it uses the ceph container image and is therefore
 # listed in CEPH_TYPES, which also places it in the upgrade order. Use this
@@ -177,7 +178,7 @@ def name_to_config_section(name: str) -> ConfEntity:
     Map from daemon names to ceph entity names (as seen in config)
     """
     daemon_type = name.split('.', 1)[0]
-    if daemon_type in ['rgw', 'rbd-mirror', 'nfs', 'crash', 'iscsi', 'ceph-exporter', 'nvmeof', 'smb']:
+    if daemon_type in ['rgw', 'rbd-mirror', 'nfs', 'crash', 'iscsi', 'ceph-exporter', 'nvmeof', 'smb', 'rgw-gap-list']:
         return ConfEntity('client.' + name)
     elif daemon_type in ['mon', 'osd', 'mds', 'mgr', 'client']:
         return ConfEntity(name)

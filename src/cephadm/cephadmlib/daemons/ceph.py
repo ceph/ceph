@@ -51,6 +51,7 @@ class Ceph(ContainerDaemonForm):
         'rbd-mirror',
         'crash',
         'cephfs-mirror',
+        'rgw-gap-list',
     )
 
     @classmethod
@@ -59,6 +60,7 @@ class Ceph(ContainerDaemonForm):
         return daemon_type in cls._daemons and daemon_type not in (
             'osd',
             'crash',
+            'rgw-gap-list',
         )
 
     def __init__(self, ctx: CephadmContext, ident: DaemonIdentity) -> None:
@@ -126,6 +128,8 @@ class Ceph(ContainerDaemonForm):
     def get_daemon_args(self) -> List[str]:
         if self.identity.daemon_type == 'crash':
             return []
+        if self.identity.daemon_type == 'rgw-gap-list':
+            return ['infinity']
         r = [
             '--setuser',
             'ceph',
@@ -284,6 +288,10 @@ class Ceph(ContainerDaemonForm):
         self, ctx: CephadmContext, args: List[str]
     ) -> None:
         ident = self.identity
+        if ident.daemon_type == 'rgw-gap-list':
+            # The container runs 'sleep infinity'; no ceph flags needed.
+            args.extend(self.get_daemon_args())
+            return
         if ident.daemon_type == 'rgw':
             name = 'client.rgw.%s' % ident.daemon_id
         elif ident.daemon_type == 'rbd-mirror':
@@ -311,6 +319,9 @@ class Ceph(ContainerDaemonForm):
             'rgw': '/usr/bin/radosgw',
             'rbd-mirror': '/usr/bin/rbd-mirror',
             'cephfs-mirror': '/usr/bin/cephfs-mirror',
+            # rgw-gap-list: the container idles; the systemd timer
+            # does 'podman exec' to run scans.
+            'rgw-gap-list': '/usr/bin/sleep',
         }
         daemon_type = self.identity.daemon_type
         return ep.get(daemon_type) or f'/usr/bin/ceph-{daemon_type}'
@@ -639,6 +650,28 @@ class Crash(Ceph):
             gid,
             DATA_DIR_MODE,
         )
+        return cls(ctx, ident)
+
+
+@register_daemon_form
+class RgwGapList(Ceph):
+    """Daemon form for rgw-gap-list.  The container stays running
+    via 'sleep infinity' and a systemd timer periodically execs
+    the scan script into it."""
+
+    @classmethod
+    def for_daemon_type(cls, daemon_type: str) -> bool:
+        return daemon_type == 'rgw-gap-list'
+
+    def __init__(
+        self,
+        ctx: CephadmContext,
+        ident: DaemonIdentity,
+    ) -> None:
+        super().__init__(ctx, ident)
+
+    @classmethod
+    def create(cls, ctx: CephadmContext, ident: DaemonIdentity) -> 'Ceph':
         return cls(ctx, ident)
 
 

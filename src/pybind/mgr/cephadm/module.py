@@ -4902,6 +4902,7 @@ Then run the following:
                 'crash': PlacementSpec(host_pattern='*'),
                 'container': PlacementSpec(count=1),
                 'pushgateway': PlacementSpec(count=1),
+                'rgw-gap-list': PlacementSpec(count=1),
                 'snmp-gateway': PlacementSpec(count=1),
                 'mgmt-gateway': PlacementSpec(count=1),
                 'oauth2-proxy': PlacementSpec(count=1),
@@ -5111,6 +5112,10 @@ Then run the following:
 
     @handle_orch_error
     def apply_ceph_exporter(self, spec: ServiceSpec) -> str:
+        return self._apply(spec)
+
+    @handle_orch_error
+    def apply_rgw_gap_list(self, spec: ServiceSpec) -> str:
         return self._apply(spec)
 
     @handle_orch_error

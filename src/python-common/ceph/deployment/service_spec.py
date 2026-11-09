@@ -2,6 +2,7 @@ import fnmatch
 import os
 import re
 import enum
+import shlex
 from enum import Enum
 from collections import OrderedDict
 from contextlib import contextmanager
@@ -882,6 +883,7 @@ class ServiceSpec(object):
         'alloy',
         'rbd-mirror',
         'rgw',
+        'rgw-gap-list',
         'smb',
         'snmp-gateway',
     ]
@@ -956,6 +958,7 @@ class ServiceSpec(object):
             'promtail': MonitoringSpec,
             'alloy': MonitoringSpec,
             'pushgateway': MonitoringSpec,
+            'rgw-gap-list': RGWGapListSpec,
             'snmp-gateway': SNMPGatewaySpec,
             'elasticsearch': TracingSpec,
             'jaeger-agent': TracingSpec,
@@ -2119,6 +2122,150 @@ class RGWSpec(ServiceSpec):
 
 
 yaml.add_representer(RGWSpec, ServiceSpec.yaml_representer)
+
+
+class RGWGapListSpec(ServiceSpec):
+    """
+    Settings for the rgw-gap-list bucket integrity scanner.
+
+    This service periodically runs rgw-gap-list.py to detect missing
+    RADOS objects referenced by RGW bucket indices.
+    """
+
+    # Canonical defaults - referenced by mgr and cephadm to avoid duplication.
+    DEFAULT_SCAN_INTERVAL = 1296000   # 15 days
+    DEFAULT_SCAN_TIMEOUT = 86400      # 24 hours
+    DEFAULT_MAX_AGE = 604800          # 7 days
+    DEFAULT_POOL = 'default.rgw.buckets.data default.rgw.buckets.non-ec'
+    DEFAULT_SYNC_POOL = 'default.rgw.buckets.index'
+    DEFAULT_NAMESPACE = 'rgw-gap-list'
+    DEFAULT_INFLIGHT = 15000
+
+    def __init__(self,
+                 service_type: str = 'rgw-gap-list',
+                 service_id: Optional[str] = None,
+                 placement: Optional[PlacementSpec] = None,
+                 unmanaged: bool = False,
+                 preview_only: bool = False,
+                 networks: Optional[List[str]] = None,
+                 extra_container_args: Optional[GeneralArgList] = None,
+                 extra_entrypoint_args: Optional[GeneralArgList] = None,
+                 custom_configs: Optional[List[CustomConfig]] = None,
+                 scan_interval: Optional[int] = None,
+                 scan_timeout: Optional[int] = None,
+                 max_age: Optional[int] = None,
+                 pool: Optional[str] = None,
+                 sync_pool: Optional[str] = None,
+                 namespace: Optional[str] = None,
+                 bucket_list: Optional[str] = None,
+                 exclude_list: Optional[str] = None,
+                 inflight: Optional[int] = None,
+                 extra_opts: Optional[str] = None,
+                 ):
+        super(RGWGapListSpec, self).__init__(
+            'rgw-gap-list',
+            service_id=service_id,
+            placement=placement,
+            unmanaged=unmanaged,
+            preview_only=preview_only,
+            networks=networks,
+            extra_container_args=extra_container_args,
+            extra_entrypoint_args=extra_entrypoint_args,
+            custom_configs=custom_configs,
+        )
+
+        # How often the scan runs (default: 15 days = 1296000s)
+        self.scan_interval = scan_interval
+        # Max time the scan can run before being killed (default: 24h)
+        self.scan_timeout = scan_timeout
+        # Seconds before a bucket is eligible for rescan (default: 7 days)
+        self.max_age = max_age
+        # Data pool(s) to scan
+        self.pool = pool
+        # Pool for sync/state coordination objects
+        self.sync_pool = sync_pool
+        # RADOS namespace for sync objects
+        self.namespace = namespace
+        # Specific bucket(s) to scan
+        self.bucket_list = bucket_list
+        # Bucket(s) to skip
+        self.exclude_list = exclude_list
+        # Max async RADOS stat operations in-flight
+        self.inflight = inflight
+        # Additional CLI flags passed through to rgw-gap-list.py
+        self.extra_opts = extra_opts
+
+    def validate(self) -> None:
+        super(RGWGapListSpec, self).validate()
+
+        verify_int(self.scan_interval, 'scan_interval')
+        verify_int(self.scan_timeout, 'scan_timeout')
+        verify_int(self.max_age, 'max_age')
+        verify_int(self.inflight, 'inflight')
+
+        # These have to be strings. A YAML list like pool: [pool1, pool2]
+        # would get stored and then fail later when we call .split().
+        for field_name in ('pool', 'sync_pool', 'namespace', 'bucket_list',
+                           'exclude_list', 'extra_opts'):
+            value = getattr(self, field_name)
+            if value is not None and not isinstance(value, str):
+                raise SpecValidationError(f'{field_name} must be a string')
+
+        if self.scan_interval is not None and self.scan_interval < 300:
+            raise SpecValidationError(
+                'scan_interval must be at least 300 seconds')
+        if self.scan_timeout is not None and self.scan_timeout < 60:
+            raise SpecValidationError(
+                'scan_timeout must be at least 60 seconds')
+        if self.max_age is not None and self.max_age < 0:
+            raise SpecValidationError(
+                'max_age must be non-negative')
+        if self.inflight is not None and self.inflight < 1:
+            raise SpecValidationError(
+                'inflight must be at least 1')
+
+        # Compare the *effective* values (fall back to the canonical
+        # defaults when a field is unset), otherwise a spec that sets only
+        # a small scan_interval would silently inherit the much larger
+        # default scan_timeout and violate this invariant unnoticed.
+        effective_interval = (
+            self.scan_interval if self.scan_interval is not None
+            else self.DEFAULT_SCAN_INTERVAL)
+        effective_timeout = (
+            self.scan_timeout if self.scan_timeout is not None
+            else self.DEFAULT_SCAN_TIMEOUT)
+        if effective_timeout >= effective_interval:
+            raise SpecValidationError(
+                'scan_timeout must be less than scan_interval '
+                f'(effective timeout={effective_timeout}, '
+                f'interval={effective_interval})')
+
+        if self.extra_opts is not None:
+            # Reject shell metacharacters to prevent injection.
+            # Only simple flags like '-vv' or '--debug' are allowed.
+            bad = set(self.extra_opts) & set(';|&$`\\(){}!<>\n\r')
+            if bad:
+                raise SpecValidationError(
+                    f'extra_opts contains disallowed characters: '
+                    f'{" ".join(sorted(bad))}')
+            # Catch bad quoting here. Deploy uses the same split, and a
+            # broken value would make the run script fail on every scan.
+            try:
+                shlex.split(self.extra_opts)
+            except ValueError as e:
+                raise SpecValidationError(
+                    f'extra_opts has invalid quoting: {e}')
+
+    def to_json(self):
+        # ServiceSpec.to_json() drops falsy values, which would discard
+        # max_age=0 (rescan every bucket) on save and reload.
+        ret = super(RGWGapListSpec, self).to_json()
+        if self.max_age == 0:
+            ret.setdefault('spec', {})['max_age'] = 0
+        return ret
+
+
+yaml.add_representer(RGWGapListSpec, ServiceSpec.yaml_representer)
 
 
 class NvmeofServiceSpec(ServiceSpec):

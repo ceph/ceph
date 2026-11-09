@@ -32,6 +32,7 @@ class Templates(str, enum.Enum):
     ceph_timer = 'ceph.timer.j2'
     ceph_oneshot = 'ceph.oneshot.j2'
     metrics_push_run = 'metrics-push.run.j2'
+    gap_list_run = 'gap-list.run.j2'
 
     def __str__(self) -> str:
         return self.value

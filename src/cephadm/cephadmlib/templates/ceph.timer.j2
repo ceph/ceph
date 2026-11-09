@@ -4,7 +4,7 @@ Description=Ceph {{ job_description }} timer for {{ fsid }}
 PartOf=ceph-{{ fsid }}.target
 
 [Timer]
-OnActiveSec={{ interval_sec }}s
+OnActiveSec={{ on_active_sec | default(interval_sec, true) }}s
 OnUnitInactiveSec={{ interval_sec }}s
 AccuracySec=1min
 {%- if randomized_delay_sec %}
