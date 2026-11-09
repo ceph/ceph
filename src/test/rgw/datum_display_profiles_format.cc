@@ -10,7 +10,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-namespace datum = ::ceph::salad::datum;
+namespace datum = ceph::salad::datum;
 namespace iv = datum::interval;
 
 TEST_CASE("formatting adapters preserve built-in Datum diagnostic policy", "[datum][render][profile]")

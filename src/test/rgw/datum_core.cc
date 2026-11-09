@@ -39,7 +39,7 @@
 
 #endif
 
-namespace datum = ::ceph::salad::datum;
+namespace datum = ceph::salad::datum;
 namespace iv = datum::interval;
 
 // Datum algebra tests: independent set-model, constexpr and cost checks.
@@ -648,7 +648,7 @@ TEST_CASE("prepared sweeps and consuming helpers copy only retained point values
                              const int upper = 4 * (int(item[1] % 7) - 3);
                              auto& values = index++ % 2 == 0 ? lhs : rhs;
                              auto& bits = index % 2 != 0 ? l : r;
-                             ::ceph::util::push_back(values, interval(lower, upper, item[2]));
+                             ceph::util::push_back(values, interval(lower, upper, item[2]));
                              bits |= model_mask(lower, upper, item[2]);
                          }
                          const auto left = iv::compile_intervals(lhs);
@@ -1036,7 +1036,7 @@ TEST_CASE("emptiness stops after the first certified streaming result", "[datum]
         const auto key = [](unsigned value) {
             return counted_point {std::to_string(1000 + value)};
         };
-        ::ceph::util::emplace_back(rows, CQ::closed_open(key(4 * index), key(4 * index + 2)));
+        ceph::util::emplace_back(rows, CQ::closed_open(key(4 * index), key(4 * index + 2)));
     }
     const iv::canonical_range source {rows};
     // Finite covering bounds make comparisons observe early termination.
@@ -1089,7 +1089,7 @@ TEST_CASE("admitted count retains size_t capacity for narrow iterator difference
     static_assert(std::forward_iterator<cursor>);
     std::vector<Q> rows;
     for (const auto index : std::views::iota(0, 256)) {
-        ::ceph::util::emplace_back(rows, Q::closed_open(2 * index, 2 * index + 1));
+        ceph::util::emplace_back(rows, Q::closed_open(2 * index, 2 * index + 1));
     }
     const iv::canonical_range source {std::ranges::subrange {
         cursor {std::data(rows)}, cursor {std::data(rows) + std::size(rows)}}};
@@ -1111,7 +1111,7 @@ TEST_CASE("admitted count retains size_t capacity for narrow iterator difference
                  const auto leaf = item[3] % 4;
                  const auto lower = 4 * (int(item[0] % 7) - 3);
                  const auto upper = 4 * (int(item[1] % 7) - 3);
-                 ::ceph::util::push_back(raw[leaf], interval(lower, upper, item[2]));
+                 ceph::util::push_back(raw[leaf], interval(lower, upper, item[2]));
                  bits[leaf] |= model_mask(lower, upper, item[2]);
              }
              const auto a = iv::compile_intervals(raw[0]);
@@ -1246,8 +1246,8 @@ TEST_CASE("canonical intersection bounds comparison work on disjoint inputs", "[
     };
     std::vector<CQ> left, right;
     for (unsigned index = 0; index != 64; ++index) {
-        ::ceph::util::push_back(left, CQ::closed_open(key(32 * index), key(32 * index + 8)));
-        ::ceph::util::push_back(right, CQ::closed_open(key(32 * index + 24), key(32 * index + 28)));
+        ceph::util::push_back(left, CQ::closed_open(key(32 * index), key(32 * index + 8)));
+        ceph::util::push_back(right, CQ::closed_open(key(32 * index + 24), key(32 * index + 28)));
     }
     const iv::canonical_range a {left}, b {right};
     const auto expression = iv::intersection(a, b);
@@ -1645,9 +1645,9 @@ TEST_CASE("copy-only retention copies each endpoint once before collection")
 
     CHECK(iv::contains(retained, copy_only_point {4}));
     std::vector<std::remove_cvref_t<decltype(retained)>> saved;
-    ::ceph::util::maybe_reserve(saved, 1);
+    ceph::util::maybe_reserve(saved, 1);
     copy_only_point::copies = 0;
-    ::ceph::util::emplace_back(saved, view);
+    ceph::util::emplace_back(saved, view);
     const std::array views {view};
     CHECK(copy_only_point::copies == 2);
 
@@ -1703,7 +1703,7 @@ TEST_CASE("materialization preserves the foreign accessor observation order")
         const auto retained = iv::materialize_boundary(view);
         CHECK(calls == (iv::is_below_all(value) ? "C" : iv::is_above_all(value) ? "CC" : "CCIK"));
         CHECK(retained.kind() == value.kind());
-        ::ceph::util::clear(calls);
+        ceph::util::clear(calls);
         const auto overridden = iv::materialize_boundary(view, false);
         CHECK(calls == (iv::is_below_all(value) ? "C" : iv::is_above_all(value) ? "CC" : "CCK"));
         CHECK_FALSE(overridden.inclusive());
@@ -1860,7 +1860,7 @@ TEST_CASE("Datum paged traversal visits a complete sequence")
                           .value = 10 + cursor};
     };
     const auto result = op::for_each_page(0, fetch_page, next_page, [&visited](test_page page) {
-        ::ceph::util::push_back(visited, page.value);
+        ceph::util::push_back(visited, page.value);
     });
 
     REQUIRE(result);
@@ -1881,7 +1881,7 @@ TEST_CASE("Datum paged traversal supports throwing readers directly")
             return test_page {.next = 1 == cursor ? std::nullopt : std::optional {1 + cursor},
                               .value = cursor};
         },
-        next_page, [&visited](test_page page) { ::ceph::util::push_back(visited, page.value); });
+        next_page, [&visited](test_page page) { ceph::util::push_back(visited, page.value); });
 
     static_assert(
         std::same_as<std::remove_cvref_t<decltype(result)>, op::page_traversal_result<int>>);
@@ -1924,7 +1924,7 @@ TEST_CASE("Datum throwing traversal unwinds pages and stops before another effec
     {
         CHECK_THROWS_AS(op::for_each_page(0, fetch, next,
                                           [&](owned_page page) {
-                                              ::ceph::util::push_back(visited, *page.value);
+                                              ceph::util::push_back(visited, *page.value);
                                           }),
                         std::system_error);
         CHECK(2 == reads);
@@ -1974,7 +1974,7 @@ TEST_CASE("Datum paged traversal preserves progress on read failure")
         return test_page {.next = 1 + cursor, .value = cursor};
     };
     const auto result = op::for_each_page(0, fetch_page, next_page, [&visited](test_page page) {
-        ::ceph::util::push_back(visited, page.value);
+        ceph::util::push_back(visited, page.value);
     });
 
     REQUIRE_FALSE(result);
@@ -2126,7 +2126,7 @@ TEST_CASE("Datum paged traversal transfers move-only page contents")
         [](const int& cursor, const move_only_page& page) {
             return page.complete ? std::nullopt : std::optional {1 + cursor};
         },
-        [&visited](move_only_page page) { ::ceph::util::push_back(visited, *page.value); });
+        [&visited](move_only_page page) { ceph::util::push_back(visited, *page.value); });
 
     static_assert(
         std::same_as<

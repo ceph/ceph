@@ -17,7 +17,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-namespace datum = ::ceph::salad::datum;
+namespace datum = ceph::salad::datum;
 
 namespace {
 
@@ -37,10 +37,10 @@ public:
     immobile_record& operator=(immobile_record&&) = delete;
 
 public:
-    friend void decode(immobile_record& value, ::ceph::buffer::list::const_iterator& input)
+    friend void decode(immobile_record& value, ceph::buffer::list::const_iterator& input)
     {
-        ::ceph::decode(value.first, input);
-        ::ceph::decode(value.second, input);
+        ceph::decode(value.first, input);
+        ceph::decode(value.second, input);
     }
 };
 
@@ -48,7 +48,7 @@ struct exceptional_record final
 {
     bool allocation;
 
-    friend void decode(exceptional_record& value, ::ceph::buffer::list::const_iterator&)
+    friend void decode(exceptional_record& value, ceph::buffer::list::const_iterator&)
     {
         if (value.allocation) {
             throw std::bad_alloc {};
@@ -72,9 +72,9 @@ static_assert(!native_copy_output<std::array<unsigned, 4>&>);
 
 auto fragmented_input()
 {
-    ::ceph::buffer::list result;
-    result.append(::ceph::buffer::copy("ab", 2));
-    result.append(::ceph::buffer::copy("cdef", 4));
+    ceph::buffer::list result;
+    result.append(ceph::buffer::copy("ab", 2));
+    result.append(ceph::buffer::copy("cdef", 4));
 
     return result;
 }
@@ -83,9 +83,9 @@ auto fragmented_input()
 
 TEST_CASE("Ceph fallible decoding accepts native values and ADL without moving records")
 {
-    ::ceph::buffer::list bytes;
-    ::ceph::encode(std::uint32_t {19}, bytes);
-    ::ceph::encode(std::uint32_t {23}, bytes);
+    ceph::buffer::list bytes;
+    ceph::encode(std::uint32_t {19}, bytes);
+    ceph::encode(std::uint32_t {23}, bytes);
     immobile_record record {1, 2};
     CHECK(datum::try_decode(record, bytes));
     CHECK(record.first == 19);
@@ -103,8 +103,8 @@ TEST_CASE("Ceph fallible decoding accepts native values and ADL without moving r
 
 TEST_CASE("Ceph fallible decoding retains native partial mutation and cursor progress")
 {
-    ::ceph::buffer::list bytes;
-    ::ceph::encode(std::uint32_t {19}, bytes);
+    ceph::buffer::list bytes;
+    ceph::encode(std::uint32_t {19}, bytes);
     immobile_record record {1, 2};
     auto input = bytes.cbegin();
     CHECK_FALSE(datum::try_decode(record, input));
@@ -116,7 +116,7 @@ TEST_CASE("Ceph fallible decoding retains native partial mutation and cursor pro
 
 TEST_CASE("Ceph fallible decoding propagates allocation and other decoder exceptions")
 {
-    const ::ceph::buffer::list bytes;
+    const ceph::buffer::list bytes;
     exceptional_record value {true};
     CHECK_THROWS_AS(datum::try_decode(value, bytes), std::bad_alloc);
     auto input = bytes.cbegin();
@@ -197,7 +197,7 @@ TEST_CASE("Ceph contiguous reads borrow one fragment and gather multiple fragmen
     CHECK(gathered.data() == scratch.data());
     CHECK(input.get_remaining() == 3);
     std::array<char, 4> too_large {};
-    CHECK_THROWS_AS(datum::read_contiguous(input, too_large), ::ceph::buffer::end_of_buffer);
+    CHECK_THROWS_AS(datum::read_contiguous(input, too_large), ceph::buffer::end_of_buffer);
     CHECK(input.get_remaining() == 3);
 }
 

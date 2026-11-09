@@ -40,7 +40,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-namespace datum = ::ceph::salad::datum;
+namespace datum = ceph::salad::datum;
 namespace iv = datum::interval;
 
 namespace {
@@ -636,8 +636,8 @@ void expect_throw(F&& f, const char *what)
 records make_records()
 {
     records out;
-    ::ceph::util::emplace_back(out, 10, 20, 1);
-    ::ceph::util::emplace_back(out, 30, 40, 2);
+    ceph::util::emplace_back(out, 10, 20, 1);
+    ceph::util::emplace_back(out, 30, 40, 2);
 
     return out;
 }

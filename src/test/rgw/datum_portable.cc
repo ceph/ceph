@@ -33,7 +33,7 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
-namespace datum = ::ceph::salad::datum;
+namespace datum = ceph::salad::datum;
 namespace iv = datum::interval;
 
 namespace tuple_access_test {
@@ -620,7 +620,7 @@ TEST_CASE("cuts and byte cursors compose across object and payload holes")
         datum::write_fragments(
             input.take(cut.bounds().upper().key() - lower),
             [&output](const auto block) { output.append(std::data(block), std::size(block)); });
-        ::ceph::util::push_back(sources, std::addressof(cut.source()) - std::data(rows));
+        ceph::util::push_back(sources, std::addressof(cut.source()) - std::data(rows));
     }
     CHECK(output == "bcghijklmns");
     CHECK(sources == std::vector<std::size_t> {0, 1, 2, 3});
@@ -1335,8 +1335,8 @@ static_assert([] {
 
 TEST_CASE("key and plan composition agrees at runtime", "[datum][key][plan]")
 {
-    CHECK(::datum_test::key_plan());
-    CHECK(::datum_test::key_query_ownership());
+    CHECK(datum_test::key_plan());
+    CHECK(datum_test::key_query_ownership());
 }
 
 TEST_CASE("Datum key layout and page traversal work without a native context", "[datum][data]")

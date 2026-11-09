@@ -8,7 +8,7 @@
 #include <stdexcept>
 #include <string_view>
 
-namespace datum = ::ceph::salad::datum;
+namespace datum = ceph::salad::datum;
 
 namespace ownership_test {
 

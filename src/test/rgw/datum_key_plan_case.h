@@ -15,7 +15,7 @@
 
 namespace datum_test {
 
-namespace datum = ::ceph::salad::datum;
+namespace datum = ceph::salad::datum;
 
 constexpr bool key_plan()
 {
