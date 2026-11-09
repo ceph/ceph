@@ -14094,6 +14094,85 @@ def test_bucket_policy_put_obj_request_obj_tag():
     #TODO: why is this a 400 and not passing
     alt_client.put_object(Bucket=bucket_name, Key=key1_str, Body=key1_str)
 
+def _put_request_obj_tag_policy(client, bucket_name):
+    """deny s3:PutObject unless the request carries the tag security=public"""
+    resource = _make_arn_resource("{}/{}".format(bucket_name, "*"))
+    missing = {"Null": {"s3:RequestObjectTag/security": "true"}}
+    mismatch = {"StringNotEquals": {"s3:RequestObjectTag/security": "public"}}
+
+    p = Policy()
+    p.add_statement(Statement("s3:PutObject", resource, effect="Deny", condition=missing))
+    p.add_statement(Statement("s3:PutObject", resource, effect="Deny", condition=mismatch))
+    client.put_bucket_policy(Bucket=bucket_name, Policy=p.to_json())
+
+@pytest.mark.tagging
+@pytest.mark.bucket_policy
+@pytest.mark.fails_on_dbstore
+def test_bucket_policy_multipart_request_obj_tag():
+    bucket_name = get_new_bucket()
+    client = get_client()
+    _put_request_obj_tag_policy(client, bucket_name)
+
+    key = 'testobj'
+    check_access_denied(client.create_multipart_upload, Bucket=bucket_name, Key=key)
+    check_access_denied(client.create_multipart_upload, Bucket=bucket_name, Key=key, Tagging='security=private')
+
+    response = client.create_multipart_upload(Bucket=bucket_name, Key=key, Tagging='security=public')
+    client.abort_multipart_upload(Bucket=bucket_name, Key=key, UploadId=response['UploadId'])
+
+@pytest.mark.tagging
+@pytest.mark.bucket_policy
+@pytest.mark.fails_on_dbstore
+def test_bucket_policy_post_obj_request_obj_tag():
+    bucket_name = get_new_bucket()
+    client = get_client()
+    _put_request_obj_tag_policy(client, bucket_name)
+
+    url = _get_post_url(bucket_name)
+    utc = pytz.utc
+    expires = datetime.datetime.now(utc) + datetime.timedelta(seconds=+6000)
+    aws_secret_access_key = get_main_aws_secret_key()
+    aws_access_key_id = get_main_aws_access_key()
+
+    def post(tagging):
+        conditions = [
+            {"bucket": bucket_name},
+            ["starts-with", "$key", "foo"],
+            {"acl": "private"},
+            ["content-length-range", 0, 1024],
+        ]
+        if tagging is not None:
+            conditions.append(["starts-with", "$tagging", ""])
+        policy_document = {"expiration": expires.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                           "conditions": conditions}
+        json_policy_document = json.JSONEncoder().encode(policy_document)
+        policy = base64.b64encode(bytes(json_policy_document, 'utf-8'))
+        signature = base64.b64encode(hmac.new(bytes(aws_secret_access_key, 'utf-8'), policy, hashlib.sha1).digest())
+
+        payload = OrderedDict([
+            ("key", "foo.txt"),
+            ("AWSAccessKeyId", aws_access_key_id),
+            ("acl", "private"),
+            ("signature", signature),
+            ("policy", policy)])
+        if tagging is not None:
+            payload["tagging"] = tagging
+        payload["file"] = ("bar")
+        return requests.post(url, files=payload, verify=get_config_ssl_verify())
+
+    def tagset(value):
+        return "<Tagging><TagSet><Tag><Key>security</Key><Value>{}</Value></Tag></TagSet></Tagging>".format(value)
+
+    r = post(None)
+    assert r.status_code == 403
+    r = post(tagset("private"))
+    assert r.status_code == 403
+    r = post(tagset("public"))
+    assert r.status_code == 204
+
+    response = client.get_object_tagging(Bucket=bucket_name, Key='foo.txt')
+    assert response['TagSet'] == [{'Key': 'security', 'Value': 'public'}]
+
 @pytest.mark.tagging
 @pytest.mark.bucket_policy
 @pytest.mark.fails_on_dbstore
