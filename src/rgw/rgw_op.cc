@@ -10085,7 +10085,7 @@ void RGWGetObjRetention::execute(optional_yield y)
   rgw::sal::Attrs attrs = s->object->get_attrs();
   auto aiter = attrs.find(RGW_ATTR_OBJECT_RETENTION);
   if (aiter == attrs.end()) {
-    op_ret = -ERR_NO_SUCH_OBJECT_LOCK_CONFIGURATION;
+    op_ret = -ERR_NO_SUCH_OBJECT_RETENTION_OR_HOLD;
     return;
   }
 
@@ -10211,7 +10211,7 @@ void RGWGetObjLegalHold::execute(optional_yield y)
   }
   auto aiter = s->object->get_attrs().find(RGW_ATTR_OBJECT_LEGAL_HOLD);
   if (aiter == s->object->get_attrs().end()) {
-    op_ret = -ERR_NO_SUCH_OBJECT_LOCK_CONFIGURATION;
+    op_ret = -ERR_NO_SUCH_OBJECT_RETENTION_OR_HOLD;
     return;
   }
 
