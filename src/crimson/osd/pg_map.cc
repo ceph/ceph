@@ -143,7 +143,7 @@ seastar::future<std::pair<core_id_t, store_index_t>> PGShardMapping::get_or_crea
           primary_mapping.primary_pgs.emplace(pgid, count_iter->first);
         }
 
-        if(crimson::common::get_conf<bool>("seastore_require_partition_count_match_reactor_count")) {
+        if (primary_mapping.require_partition_count_match) {
           shard_index_update = 0;
         } else {
           if (seastar::this_smp_shard_count() > store_shard_nums ) {

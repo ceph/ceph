@@ -61,9 +61,13 @@ public:
 
   seastar::future<> dump_store_shards(Formatter *f) const;
 
-  /// Map to cores in [min_core_mapping, core_mapping_limit)
-  PGShardMapping(core_id_t min_core_mapping, core_id_t core_mapping_limit, uint32_t store_shard_nums)
-    : store_shard_nums(store_shard_nums) {
+  /// Map to cores in [min_core_mapping, core_mapping_limit).
+  /// require_partition_count_match: the store's (cached)
+  /// seastore_require_partition_count_match_reactor_count
+  PGShardMapping(core_id_t min_core_mapping, core_id_t core_mapping_limit, uint32_t store_shard_nums,
+                 bool require_partition_count_match)
+    : store_shard_nums(store_shard_nums),
+      require_partition_count_match(require_partition_count_match) {
     ceph_assert_always(min_core_mapping < core_mapping_limit);
     auto max_core_mapping = std::min(min_core_mapping + store_shard_nums, core_mapping_limit);
     auto num_shard_services = (store_shard_nums + seastar::this_smp_shard_count() - 1 ) / seastar::this_smp_shard_count();
@@ -95,6 +99,7 @@ public:
 private:
 
   uint32_t store_shard_nums;
+  const bool require_partition_count_match;
   // only in shard 0
   //<core_id, num_pgs>
   std::map<core_id_t, unsigned> core_to_num_pgs;
