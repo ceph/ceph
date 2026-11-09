@@ -88,5 +88,37 @@ class Seq10 : public EcIoSequence {
   bool test_all_lengths;
   bool test_all_sizes;
 };
+
+// Seq19: for each WriteTruncate/WriteTruncate2 case, first injects a write
+// error and issues a FailedWriteTruncate/FailedWriteTruncate2, reading the
+// object to ensure it rolled back. Then clears the injection and issues the
+// same operation successfully, reading the object to ensure it was applied.
+class Seq19 : public EcIoSequence {
+ public:
+  Seq19(std::pair<int, int> obj_size_range, int seed,
+        std::optional<std::pair<int, int>> km,
+        std::optional<std::pair<std::string_view, std::string_view>>
+            mappinglayers,
+        bool check_consistency);
+
+  Sequence get_id() const override;
+  std::string get_name() const override;
+  std::unique_ptr<IoOp> _next() override;
+
+ private:
+  enum class Stage {
+    INJECT_ERROR,
+    FAILED_WRITE_TRUNCATE,
+    READ_AFTER_FAILURE,
+    CLEAR_INJECT,
+    WRITE_TRUNCATE,
+    READ_AFTER_SUCCESS,
+    RESET
+  };
+
+  std::vector<WriteTruncateCase> cases;
+  size_t case_idx;
+  Stage stage;
+};
 }  // namespace io_exerciser
 }  // namespace ceph
