@@ -423,6 +423,12 @@ BuildRequires:	python3-devel
 %if 0%{?openruyi}
 BuildRequires:	ninja
 %endif
+%if 0%{with crimson}
+BuildRequires:	meson
+BuildRequires:	python3dist(jinja2)
+BuildRequires:	python3dist(pyelftools)
+BuildRequires:	python3dist(tabulate)
+%endif
 # distro-conditional make check dependencies
 %if 0%{with make_check}
 BuildRequires:	golang
