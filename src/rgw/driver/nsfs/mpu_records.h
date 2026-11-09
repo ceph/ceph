@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <fmt/format.h>
 
 #include "include/buffer.h"
 #include "include/encoding.h"
@@ -100,7 +101,7 @@ struct NSFSMPObj {
     oid = _oid;
     upload_id = _upload_id;
     owner = _owner;
-    meta = oid + "." + upload_id;
+    meta = fmt::format("{}.{}", oid, upload_id);
   }
   void init_gen(NSFSDriver* driver, const std::string& _oid, ACLOwner& _owner);
   void clear() {

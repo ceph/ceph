@@ -17,6 +17,7 @@
 #include "bucket_profile.h"
 
 #include <sys/xattr.h>
+#include <fmt/format.h>
 
 #include "common/dout_fmt.h"
 #include "common/errno.h"
@@ -48,9 +49,10 @@ static const std::string RGW_ATTR_PFX = "user.rgw.";
 std::string PrefixedXattrStrategy::disk_name(const std::string& key) const
 {
   if (key.compare(0, RGW_ATTR_PFX.size(), RGW_ATTR_PFX) == 0) {
-    return NSFS_RGW_XATTR_PREFIX + key.substr(RGW_ATTR_PFX.size());
+    return fmt::format("{}{}", NSFS_RGW_XATTR_PREFIX,
+		       std::string_view(key).substr(RGW_ATTR_PFX.size()));
   }
-  return NSFS_XATTR_PREFIX + key;
+  return fmt::format("{}{}", NSFS_XATTR_PREFIX, key);
 }
 
 bool PrefixedXattrStrategy::parse_disk_name(const std::string& disk,
@@ -62,7 +64,8 @@ bool PrefixedXattrStrategy::parse_disk_name(const std::string& disk,
   }
   if (disk.compare(0, NSFS_RGW_XATTR_PREFIX.size(),
 		   NSFS_RGW_XATTR_PREFIX) == 0) {
-    key = RGW_ATTR_PFX + disk.substr(NSFS_RGW_XATTR_PREFIX.size());
+    key = fmt::format("{}{}", RGW_ATTR_PFX,
+		      std::string_view(disk).substr(NSFS_RGW_XATTR_PREFIX.size()));
     return true;
   }
   if (disk.compare(0, NSFS_XATTR_PREFIX.size(), NSFS_XATTR_PREFIX) == 0) {
@@ -177,7 +180,8 @@ std::string NooBaaXattrStrategy::disk_name(const std::string& key) const
    * "user." and nothing else */
   if (key.compare(0, std::strlen(RGW_ATTR_META_PREFIX),
 		  RGW_ATTR_META_PREFIX) == 0) {
-    return NB_USER_PREFIX + key.substr(std::strlen(RGW_ATTR_META_PREFIX));
+    return fmt::format("{}{}", NB_USER_PREFIX,
+		       std::string_view(key).substr(std::strlen(RGW_ATTR_META_PREFIX)));
   }
 
   /* nowhere:  NooBaa stores no ACL, and NooBaa's own gateway accepts the
@@ -187,7 +191,7 @@ std::string NooBaaXattrStrategy::disk_name(const std::string& key) const
   }
 
   /* nsfs's, and inert to NooBaa */
-  return NSFS_XATTR_PREFIX + key;
+  return fmt::format("{}{}", NSFS_XATTR_PREFIX, key);
 }
 
 bool NooBaaXattrStrategy::parse_disk_name(const std::string& disk,
@@ -222,8 +226,8 @@ bool NooBaaXattrStrategy::parse_disk_name(const std::string& disk,
   /* What is left under user. is user metadata, `user.nsfs.*` included:
    * a client's key that begins "nsfs." */
   if (disk.compare(0, NB_USER_PREFIX.size(), NB_USER_PREFIX) == 0) {
-    key = std::string(RGW_ATTR_META_PREFIX) +
-	  disk.substr(NB_USER_PREFIX.size());
+    key = fmt::format("{}{}", RGW_ATTR_META_PREFIX,
+		      std::string_view(disk).substr(NB_USER_PREFIX.size()));
     return true;
   }
 
@@ -293,7 +297,8 @@ static bool nb_tag_name(const std::string& disk, std::string& key)
   if (at == std::string::npos) {
     return false;
   }
-  key = disk.substr(0, at) + disk.substr(at + NB_TAG_PREFIX.size());
+  key = fmt::format("{}{}", std::string_view(disk).substr(0, at),
+		    std::string_view(disk).substr(at + NB_TAG_PREFIX.size()));
   return !key.empty();
 }
 

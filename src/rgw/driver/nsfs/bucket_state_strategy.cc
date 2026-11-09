@@ -17,6 +17,7 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <fmt/format.h>
 
 #include "common/ceph_json.h"
 #include "rgw_object_lock.h"
@@ -836,7 +837,7 @@ int NooBaaBucketStateStrategy::list_records(const DoutPrefixProvider* dpp,
   if (config_root.empty()) {
     return 0;
   }
-  const std::string dir = config_root + "/buckets";
+  const std::string dir = fmt::format("{}/buckets", config_root);
   DIR* d = ::opendir(dir.c_str());
   if (!d) {
     if (errno == ENOENT) {
@@ -878,7 +879,7 @@ int NooBaaBucketStateStrategy::recorded_id(const DoutPrefixProvider* dpp,
     return -ENOENT;
   }
   const std::string path =
-    config_root + "/buckets/" + bucket_name + ".json";
+    fmt::format("{}/buckets/{}.json", config_root, bucket_name);
   std::string doc;
   int ret = read_record_file(dpp, path, doc);
   if (ret < 0) {
@@ -905,7 +906,7 @@ int NooBaaBucketStateStrategy::recorded_path(const DoutPrefixProvider* dpp,
     return -ENOENT;
   }
   const std::string path =
-    config_root + "/buckets/" + bucket_name + ".json";
+    fmt::format("{}/buckets/{}.json", config_root, bucket_name);
 
   std::string doc;
   int ret = read_record_file(dpp, path, doc);
@@ -936,7 +937,7 @@ int NooBaaBucketStateStrategy::load(const DoutPrefixProvider* dpp, int dir_fd,
   }
 
   const std::string path =
-    config_root + "/buckets/" + bucket_name + ".json";
+    fmt::format("{}/buckets/{}.json", config_root, bucket_name);
 
   std::string doc;
   int ret = read_record_file(dpp, path, doc);

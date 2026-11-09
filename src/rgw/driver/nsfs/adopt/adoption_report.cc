@@ -17,6 +17,7 @@
 
 #include <algorithm>
 #include <ctime>
+#include <fmt/format.h>
 
 #include "common/dout_fmt.h"
 #include "common/errno.h"
@@ -240,8 +241,8 @@ int write_adoption_report(const DoutPrefixProvider* dpp,
   f.flush(bl);
 
   const std::string name =
-    "nsfs-adoption-" + r.gateway + "-" + file_stamp(r.ended) + ".json";
-  path = dir + "/" + name;
+    fmt::format("nsfs-adoption-{}-{}.json", r.gateway, file_stamp(r.ended));
+  path = fmt::format("{}/{}", dir, name);
   const int ret = safe_write_file(dir.c_str(), name.c_str(), bl.c_str(),
                                   bl.length(), 0640);
   if (ret < 0) {

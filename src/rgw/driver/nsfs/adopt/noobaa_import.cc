@@ -14,6 +14,7 @@
  */
 
 #include <algorithm>
+#include <fmt/format.h>
 #include <map>
 #include <tuple>
 
@@ -444,7 +445,7 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
       }
       Identity row;
       row.key = e.anonymous ? RGW_USER_ANON_ID
-	: e.iam_user ? "preview:" + e.noobaa_id : e.account_id;
+	: e.iam_user ? fmt::format("preview:{}", e.noobaa_id) : e.account_id;
       fill_posix(*src, row);
       check_name(row);
       check_uid(row);

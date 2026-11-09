@@ -46,6 +46,7 @@
 #include <charconv>
 #include <cstdint>
 #include <optional>
+#include <fmt/format.h>
 #include "rgw_mime.h"
 #include "rgw_multi.h"
 #include "include/scope_guard.h"
@@ -365,8 +366,8 @@ static uint64_t statx_mtime_ns(const struct statx& stx)
 
 static std::string nsfs_version_id_from_statx(const struct statx& stx)
 {
-  return "mtime-" + to_base36(statx_mtime_ns(stx))
-       + "-ino-" + to_base36(stx.stx_ino);
+  return fmt::format("mtime-{}-ino-{}", to_base36(statx_mtime_ns(stx)),
+		     to_base36(stx.stx_ino));
 }
 
 struct nsfs_version_info {
@@ -508,7 +509,7 @@ static void set_dir_entry_owner(rgw_bucket_dir_entry& bde, int ret,
 static inline std::string nsfs_ver_entry(const std::string& leaf,
                                          const std::string& vid)
 {
-  return leaf + "_" + vid;
+  return fmt::format("{}_{}", leaf, vid);
 }
 
 static std::string synthesize_etag(const struct statx& stx)
@@ -1632,7 +1633,7 @@ static int recover_rename_intent(const nsfs::XattrStrategy* xs,
       }
     }
     for (const auto& v : stranded) {
-      std::string sname = in.leaf + "_" + v.ver_id;
+      std::string sname = fmt::format("{}_{}", in.leaf, v.ver_id);
       ret = recovery_write(dpp, [&]() -> int {
 	return (::renameat(dst_vfd, v.entry.c_str(), src_vfd,
 			   sname.c_str()) < 0) ? -errno : 0;
@@ -1684,7 +1685,7 @@ static int recover_rename_intent(const nsfs::XattrStrategy* xs,
 	  continue;
 	}
       } else {
-	std::string dname = dst_leaf + "_" + v.ver_id;
+	std::string dname = fmt::format("{}_{}", dst_leaf, v.ver_id);
 	ret = recovery_write(dpp, [&]() -> int {
 	  return (::renameat(src_vfd, v.entry.c_str(), dst_vfd,
 			     dname.c_str()) < 0) ? -errno : 0;
@@ -4430,6 +4431,7 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
        * and only where a strategy marks directories -- a base bucket, or
        * one mid-conversion.  The nsfs strategy answers without a
        * syscall. */
+      const std::string sub_prefix = fmt::format("{}{}/", path_prefix, name);
       PathStrategy::DirectoryObject dobj{};
       if (subdir->directory_object(dpp, dobj)) {
 	NooBaaDirectoryObject dent(path_strategy->folder_object_name(),
@@ -4438,7 +4440,7 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
 	ret = dent.stat(dpp);
 	if (ret == 0) {
 	  ret = dent.make_dir_entry(
-	      dpp, y, path_strategy->key_from_name(path_prefix + name + "/"),
+	      dpp, y, path_strategy->key_from_name(sub_prefix),
 	      flags, bucket_owner, bde);
 	}
 	if (ret < 0) {
@@ -4456,7 +4458,7 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
       }
 
       return subdir->fill_cache(dpp, y, cb, flags, bucket_owner,
-                                path_prefix + name + "/");
+                                sub_prefix);
     }
 
     ret = ent->fill_cache(dpp, y, cb, flags, bucket_owner, path_prefix);
@@ -4628,8 +4630,8 @@ int MPDirectory::create(const DoutPrefixProvider* dpp, optional_yield y,
   std::string path;
 
   if(temp_file) {
-    tmpname = path = "._tmpname_" +
-           std::to_string(ceph::util::generate_random_number<uint64_t>());
+    tmpname = path = fmt::format(
+      "._tmpname_{}", ceph::util::generate_random_number<uint64_t>());
   } else {
     path = get_name();
   }
@@ -5171,7 +5173,7 @@ void NSFSDriver::init_multipart_cache(const DoutPrefixProvider* dpp,
 	  }
 	  std::string path = mpu->staging_dir_name(key.upload_meta);
 	  if (*root != ".") {
-	    path = *root + "/" + path;
+	    path = fmt::format("{}/{}", *root, path);
 	  }
 	  int dir_fd = ::openat(bfd, path.c_str(), O_RDONLY | O_NOFOLLOW | O_DIRECTORY);
 	  if (dir_fd < 0) {
@@ -5900,7 +5902,7 @@ int NSFSDriver::new_bucket_path(const DoutPrefixProvider* dpp,
   }
 
   const std::string dname =
-    b.tenant.empty() ? b.name : (b.tenant + "$" + b.name);
+    b.tenant.empty() ? b.name : fmt::format("{}${}", b.tenant, b.name);
   const std::string key = identity_key_for(owner);
 
   nsfs::Identity id;
@@ -5913,7 +5915,7 @@ int NSFSDriver::new_bucket_path(const DoutPrefixProvider* dpp,
     while ((at.size() > 1) && (at.back() == '/')) {
       at.pop_back();
     }
-    path = at + "/" + dname;
+    path = fmt::format("{}/{}", at, dname);
     if (owners_path) {
       *owners_path = true;
     }
@@ -5931,7 +5933,7 @@ int NSFSDriver::new_bucket_path(const DoutPrefixProvider* dpp,
 			  "buckets", key);
     return -EACCES;
   }
-  path = default_bucket_location() + "/" + dname;
+  path = fmt::format("{}/{}", default_bucket_location(), dname);
   return 0;
 }
 
@@ -6269,7 +6271,7 @@ int NSFSDriver::place_bucket(const DoutPrefixProvider* dpp, optional_yield y,
     char buf[17];
     gen_rand_alphanumeric(ctx(), buf, sizeof(buf) - 1);
     buf[16] = '\0';
-    info.bucket.marker = name + "." + buf;
+    info.bucket.marker = fmt::format("{}.{}", name, buf);
     info.bucket.bucket_id = info.bucket.marker;
     /* the site's, as CreateBucket records it:  a bucket in another
      * zonegroup is redirected */
@@ -6682,7 +6684,7 @@ int NSFSBucket::create(const DoutPrefixProvider* dpp,
     char buf[17];
     gen_rand_alphanumeric(driver->ctx(), buf, sizeof(buf) - 1);
     buf[16] = '\0';
-    info.bucket.marker = info.bucket.name + "." + buf;
+    info.bucket.marker = fmt::format("{}.{}", info.bucket.name, buf);
     info.bucket.bucket_id = info.bucket.marker;
   } else {
     info.bucket.marker = params.marker;
@@ -7431,7 +7433,7 @@ int NSFSDriver::meta_list_keys_next(const DoutPrefixProvider *dpp, void* handle,
     std::set<std::string> untenanted;
     for (const auto& r : rows) {
       all.insert(r.tenant.empty() ? r.bucket_name
-				  : (r.tenant + "/" + r.bucket_name));
+				  : fmt::format("{}/{}", r.tenant, r.bucket_name));
       if (r.tenant.empty()) {
 	untenanted.insert(r.bucket_name);
       }
@@ -9011,7 +9013,7 @@ static int convert_versions(const DoutPrefixProvider* dpp, optional_yield y,
        * reported under the entry name, which is all there is. */
       leaf = name;
     }
-    ev.key = prefix + leaf;
+    ev.key = fmt::format("{}{}", prefix, leaf);
     ev.index = progress.objects + progress.directory_objects
       + progress.versions;
 
@@ -9378,7 +9380,7 @@ static void count_link(const DoutPrefixProvider* dpp, int dir_fd,
 		       const std::string& prefix, const char* name,
 		       nsfs::ConvertProgress& progress)
 {
-  const std::string key = prefix + name;
+  const std::string key = fmt::format("{}{}", prefix, name);
   char target[PATH_MAX];
   const ssize_t tlen = ::readlinkat(dir_fd, name, target, sizeof(target) - 1);
   const std::string to = (tlen < 0) ? std::string("?")
@@ -9415,7 +9417,7 @@ static void count_link(const DoutPrefixProvider* dpp, int dir_fd,
     }
     const std::string real = fd_path(fd);
     const bool inside = !root.empty() &&
-      ((real == root) || real.starts_with(root + "/"));
+      ((real == root) || real.starts_with(fmt::format("{}/", root)));
     struct stat st{};
     if (!inside) {
       ++progress.links.outside;
@@ -9554,7 +9556,7 @@ static int convert_directory(const DoutPrefixProvider* dpp, optional_yield y,
 
     nsfs::ConvertEvent ev{};
     ev.kind = nsfs::ConvertEvent::Kind::object;
-    ev.key = prefix + name;
+    ev.key = fmt::format("{}{}", prefix, name);
     ev.index = progress.objects + progress.directory_objects;
 
     ret = convert_attrs(dpp, y, fd, ev.key, fs, xs, xattr_fallback,
@@ -9593,9 +9595,10 @@ static int convert_directory(const DoutPrefixProvider* dpp, optional_yield y,
       continue;
     }
 
+    const std::string sub_prefix = fmt::format("{}{}/", prefix, name);
     nsfs::PathStrategy::DirectoryObject dobj{};
     if (path_fallback->directory_object(dpp, sub.get_fd(), dobj)) {
-      ret = convert_directory_object(dpp, y, sub.get_fd(), prefix + name + "/",
+      ret = convert_directory_object(dpp, y, sub.get_fd(), sub_prefix,
 				     dobj, fs, xs, xattr_fallback, bucket_owner,
 				     path_fallback, cb, progress, no_chown);
       if (ret != 0) {
@@ -9603,14 +9606,13 @@ static int convert_directory(const DoutPrefixProvider* dpp, optional_yield y,
       }
     }
 
-    ret = convert_directory(dpp, y, &sub, cct, prefix + name + "/", fs,
+    ret = convert_directory(dpp, y, &sub, cct, sub_prefix, fs,
 			    xs, xattr_fallback, bucket_owner, path_fallback, rn,
 			    converted_to, cb, progress, no_chown);
     if (ret != 0) {
       return ret;
     }
-    mark_subtree_converted(dpp, sub.get_fd(), converted_to,
-			   prefix + name + "/");
+    mark_subtree_converted(dpp, sub.get_fd(), converted_to, sub_prefix);
   }
 
   return 0;
@@ -9634,7 +9636,7 @@ static int remove_noobaa_temp_dir(const DoutPrefixProvider* dpp,
   }
 
   uint64_t partial = 0;
-  const std::string uploads = *tmp + "/uploads";
+  const std::string uploads = fmt::format("{}/uploads", *tmp);
   const int ufd = ::openat(bucket_fd, uploads.c_str(),
 			   O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
   if (ufd >= 0) {
@@ -9756,7 +9758,7 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
 
     /* the nsfs one, beside it.  NooBaa's staging is two levels down
      * and nsfs's is the bucket directory, so this is not a rename. */
-    const std::string meta = su.key + "." + su.upload_id;
+    const std::string meta = fmt::format("{}.{}", su.key, su.upload_id);
     nsfs::Directory staging_dir(mpu->staging_dir_name(meta), dir.get(),
 			   driver->ctx());
     bool existed = false;
@@ -11880,7 +11882,7 @@ int NSFSObject::rename(const DoutPrefixProvider* dpp, optional_yield y,
 
   auto roll_back = [&]() {
     for (size_t k = 0; k < moved; ++k) {
-      std::string dname = dst_leaf + "_" + versions[k].ver_id;
+      std::string dname = fmt::format("{}_{}", dst_leaf, versions[k].ver_id);
       const int rret = renameat_as(dpp, id, model, dst_vfd, dname.c_str(),
 				   src_vfd, versions[k].entry.c_str());
       if (rret < 0) {
@@ -11908,7 +11910,7 @@ int NSFSObject::rename(const DoutPrefixProvider* dpp, optional_yield y,
     }
 
     for (; moved < versions.size(); ++moved) {
-      std::string dname = dst_leaf + "_" + versions[moved].ver_id;
+      std::string dname = fmt::format("{}_{}", dst_leaf, versions[moved].ver_id);
       const int fail_after = driver->rename_fail_after_injected();
       if (fail_after >= 0 && (int) moved >= fail_after) {
 	ret = -EIO;
@@ -12959,8 +12961,8 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
   if (src_exists && !(flags & FSIOObject::OPEN_FLAG_TRUNC)) {
     /* COW clone of the published object.  clone_file() works by name, so
      * this branch needs a named temp rather than O_TMPFILE. */
-    tmp_name = std::string(nsfs::TMP_LINK_PREFIX) + std::to_string(::getpid()) +
-      "_" + std::to_string(fsio_build_seq.fetch_add(1));
+    tmp_name = fmt::format("{}{}_{}", nsfs::TMP_LINK_PREFIX, ::getpid(),
+			   fsio_build_seq.fetch_add(1));
     int ret = driver->get_fs_strategy()->clone_file(
       dpp, parent_fd, leaf, sdir_fd, tmp_name, null_yield,
       driver->copy_hints_for(authenticated_user), true /* excl */,
@@ -12999,8 +13001,8 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
     if ((build_fd == -EOPNOTSUPP) || (build_fd == -EISDIR) ||
 	(build_fd == -EINVAL)) {
       /* filesystem without O_TMPFILE:  fall back to a named temp */
-      tmp_name = std::string(nsfs::TMP_LINK_PREFIX) + std::to_string(::getpid()) +
-	"_" + std::to_string(fsio_build_seq.fetch_add(1));
+      tmp_name = fmt::format("{}{}_{}", nsfs::TMP_LINK_PREFIX, ::getpid(),
+			     fsio_build_seq.fetch_add(1));
       build_fd = nsfs::open_as_or_raise(dpp, identity, model,
 					nsfs::AccessClass::data,
 					RAISED_CREATE_CAPS, sdir_fd,
@@ -15018,8 +15020,7 @@ std::string NSFSObject::gen_temp_fname()
   auto last_slash = key_path.rfind('/');
   std::string basename = (last_slash != std::string::npos)
     ? key_path.substr(last_slash + 1) : key_path;
-  temp_fname = "." + basename + ".";
-  temp_fname.append(buf);
+  temp_fname = fmt::format(".{}.{}", basename, buf);
 
   return temp_fname;
 }
@@ -16127,8 +16128,8 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
 
   /* create delete marker as zero-byte file in .versions/ */
   static std::atomic<uint64_t> dm_counter{0};
-  std::string dm_tmp = ".dm_tmp_" +
-    std::to_string(getpid()) + "_" + std::to_string(dm_counter.fetch_add(1));
+  std::string dm_tmp = fmt::format(".dm_tmp_{}_{}", getpid(),
+				   dm_counter.fetch_add(1));
 
   /* As the authenticated user, all of it.
    *
@@ -18797,7 +18798,8 @@ void NSFSDriver::write_adoption_report(
 {
   nsfs::AdoptionReport r;
   r.pass = pass;
-  r.gateway = ctx()->_conf->cluster + "-" + ctx()->_conf->name.to_str();
+  r.gateway = fmt::format("{}-{}", ctx()->_conf->cluster,
+			  ctx()->_conf->name.to_str());
   r.store = g_conf().get_val<std::string>("rgw_nsfs_noobaa_config_root");
   r.findings = adoption_findings.take(r.since);
   r.ended = ceph::real_clock::now();
@@ -19359,8 +19361,8 @@ int NSFSDriver::import_noobaa_bucket(const DoutPrefixProvider* dpp,
    * not imported, as adopt_identities() refuses the store for it.  So
    * must every connection, since its notifications may name any (I10). */
   {
-    const std::string path = root + "/buckets/" + bucket_name + ".json";
-    const std::string connections = root + "/connections/";
+    const std::string path = fmt::format("{}/buckets/{}.json", root, bucket_name);
+    const std::string connections = fmt::format("{}/connections/", root);
     for (const auto& u : contents.unreadable) {
       if ((u.path != path) && !u.path.starts_with(connections)) {
 	continue;
@@ -19885,9 +19887,9 @@ int NSFSDriver::hint_unmarked_bucket(
     return -ERR_INVALID_BUCKET_STATE;
   }
   if (adoption_configured()) {
-    const std::string record =
-      g_conf().get_val<std::string>("rgw_nsfs_noobaa_config_root") +
-      "/buckets/" + name + ".json";
+    const std::string record = fmt::format(
+      "{}/buckets/{}.json",
+      g_conf().get_val<std::string>("rgw_nsfs_noobaa_config_root"), name);
     if (::access(record.c_str(), F_OK) == 0) {
       ldpp_dout_fmt(dpp, 1, "nsfs: unmarked-bucket:  NooBaa holds a record of "
 			    "{}", name);
@@ -20501,7 +20503,7 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
     }
     const std::string& key = ky->second;
     if ((key.front() == '/') || (key.back() == '/') ||
-	(("/" + key + "/").find("/../") != std::string::npos)) {
+	(fmt::format("/{}/", key).find("/../") != std::string::npos)) {
       return -EINVAL;
     }
     std::optional<nsfs::Credentials> as;
@@ -20614,8 +20616,8 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
       }
       as = cred;
     }
-    const std::string parent = default_bucket_location() + "/" + name;
-    const std::string path = as ? (parent + "/d") : parent;
+    const std::string parent = fmt::format("{}/{}", default_bucket_location(), name);
+    const std::string path = as ? fmt::format("{}/d", parent) : parent;
     auto mode_of = [&params](mode_t& m) -> int {
       auto it = params.find("mode");
       if (it == params.end()) {
@@ -20691,7 +20693,7 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
 	  return 0;
 	}
 	const std::string content = (c == params.end()) ? "" : c->second;
-	const std::string fname = std::string(leaf) + "/" + f->second;
+	const std::string fname = fmt::format("{}/{}", leaf, f->second);
 	int fd = ::openat(pfd, fname.c_str(),
 			  O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0644);
 	if (fd < 0) {
@@ -21097,7 +21099,7 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
     if (out) {
       (*out)["count"] = std::to_string(seen.size());
       for (const auto& [site, uid] : seen) {
-	(*out)[std::string("ran_as_") + site] = std::to_string(uid);
+	(*out)[fmt::format("ran_as_{}", site)] = std::to_string(uid);
       }
     }
     return 0;

@@ -15,6 +15,7 @@
 
 #include <sys/wait.h>
 #include <unistd.h>
+#include <fmt/format.h>
 
 #include <openssl/evp.h>
 
@@ -66,9 +67,9 @@ int read_key_store(const DoutPrefixProvider* dpp,
      * config.json rather than anywhere configured. */
     std::string path = settings.master_keys_file_location;
     if (path.empty()) {
-      path = config_root + "/master_keys.json";
+      path = fmt::format("{}/master_keys.json", config_root);
     } else if (path.find('/') == std::string::npos) {
-      path = config_root + "/" + path;
+      path = fmt::format("{}/{}", config_root, path);
     }
     int ret = read_record_file(dpp, path, doc);
     if (ret < 0) {

@@ -22,6 +22,7 @@
 #include <algorithm>
 #include <climits>
 #include <string_view>
+#include <fmt/format.h>
 
 #include "common/ceph_json.h"
 #include "common/dout_fmt.h"
@@ -349,7 +350,7 @@ bool role_linked(const DoutPrefixProvider* dpp, const std::string& identities,
 		 const NooBaaRole& r)
 {
   const std::string link =
-    identities + "/" + r.owner + "/roles/" + r.name + ".symlink";
+    fmt::format("{}/{}/roles/{}.symlink", identities, r.owner, r.name);
   char buf[PATH_MAX];
   ssize_t n = -1;
   if (as_store_reader(dpp, [&]() -> int {
@@ -359,7 +360,7 @@ bool role_linked(const DoutPrefixProvider* dpp, const std::string& identities,
     return false;
   }
   return std::string_view{buf, static_cast<size_t>(n)}.ends_with(
-    "/" + r.id + "/identity.json");
+    fmt::format("/{}/identity.json", r.id));
 }
 
 } // namespace
@@ -401,7 +402,7 @@ int NooBaaConfigStore::read(const DoutPrefixProvider* dpp,
    * identity below it behaves and a reader of the report should see it
    * before the identities it qualifies. */
   {
-    const std::string path = root + "/config.json";
+    const std::string path = fmt::format("{}/config.json", root);
     std::string doc;
     int ret = read_record_file(dpp, path, doc);
     if (ret == 0) {
@@ -465,7 +466,7 @@ int NooBaaConfigStore::read(const DoutPrefixProvider* dpp,
    * imported.  Absent is not unreadable here:  version_skew() is what
    * acts on it. */
   {
-    const std::string path = root + "/system.json";
+    const std::string path = fmt::format("{}/system.json", root);
     std::string doc;
     int ret = read_record_file(dpp, path, doc);
     if (ret == 0) {
@@ -497,12 +498,13 @@ int NooBaaConfigStore::read(const DoutPrefixProvider* dpp,
     }
   }
 
-  out.master_keys_present = path_exists(dpp, root + "/master_keys.json");
+  out.master_keys_present =
+    path_exists(dpp, fmt::format("{}/master_keys.json", root));
 
   /* identities/<id>/identity.json.  A directory per identity, not a
    * file per identity:  verified against a store NooBaa's CLI wrote. */
   {
-    const std::string dir = root + "/identities";
+    const std::string dir = fmt::format("{}/identities", root);
     std::vector<std::string> entries;
     int ret = list_dir(dpp, dir, entries);
     if (ret == -ENOENT) {
@@ -514,7 +516,7 @@ int NooBaaConfigStore::read(const DoutPrefixProvider* dpp,
       unreadable(dir, cpp_strerror(-ret));
     } else {
       for (const auto& name : entries) {
-	const std::string path = dir + "/" + name + "/identity.json";
+	const std::string path = fmt::format("{}/{}/identity.json", dir, name);
 	std::string doc;
 	ret = read_record_file(dpp, path, doc);
 	if (ret < 0) {
@@ -592,7 +594,7 @@ int NooBaaConfigStore::read(const DoutPrefixProvider* dpp,
    * parses.  Carrying the fields across is I5, and the request path
    * already reads one of these per bucket in `serve` mode. */
   {
-    const std::string dir = root + "/buckets";
+    const std::string dir = fmt::format("{}/buckets", root);
     std::vector<std::string> entries;
     int ret = list_dir(dpp, dir, entries);
     if (ret == -ENOENT) {
@@ -609,7 +611,7 @@ int NooBaaConfigStore::read(const DoutPrefixProvider* dpp,
 	   * write path's and not a record. */
 	  continue;
 	}
-	const std::string path = dir + "/" + name;
+	const std::string path = fmt::format("{}/{}", dir, name);
 	std::string doc;
 	ret = read_record_file(dpp, path, doc);
 	if (ret < 0) {
@@ -664,7 +666,7 @@ int NooBaaConfigStore::read(const DoutPrefixProvider* dpp,
    * writes each through a temp entry in the same directory, which has no
    * `.json` suffix and is skipped with the lock files. */
   {
-    const std::string dir = root + "/connections";
+    const std::string dir = fmt::format("{}/connections", root);
     std::vector<std::string> entries;
     int ret = list_dir(dpp, dir, entries);
     if (ret == -ENOENT) {
@@ -679,7 +681,7 @@ int NooBaaConfigStore::read(const DoutPrefixProvider* dpp,
 			  suffix) != 0)) {
 	  continue;
 	}
-	const std::string path = dir + "/" + name;
+	const std::string path = fmt::format("{}/{}", dir, name);
 	std::string doc;
 	ret = read_record_file(dpp, path, doc);
 	if (ret < 0) {

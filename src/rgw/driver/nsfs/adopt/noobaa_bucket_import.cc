@@ -15,6 +15,7 @@
 
 #include <set>
 #include <string_view>
+#include <fmt/format.h>
 
 #include "rapidjson/document.h"
 #include "rapidjson/stringbuffer.h"
@@ -59,7 +60,7 @@ IdentityMapping::resolve(const std::string& principal) const
     }
     const std::string_view resource = rest.substr(colon + 1);
     if (resource == "root") {
-      return "arn:aws:iam::" + a->second + ":root";
+      return fmt::format("arn:aws:iam::{}:root", a->second);
     }
     if (resource.starts_with("user/")) {
       if (auto u = user_arn_by_account_and_path_name.find(
@@ -127,10 +128,11 @@ IdentityMapping mapping_from(const ImportPlan& plan)
       /* RGW matches a user principal on its path, then
        * `display_name`, which the import set to NooBaa's `iam_path`
        * and name. */
-      const std::string path_name =
-	(e.iam_path.empty() ? "/" : e.iam_path) + e.display_name;
+      const std::string path_name = fmt::format(
+	"{}{}", e.iam_path.empty() ? std::string_view("/") : std::string_view(e.iam_path),
+	e.display_name);
       const std::string arn =
-	"arn:aws:iam::" + e.account_id + ":user" + path_name;
+	fmt::format("arn:aws:iam::{}:user{}", e.account_id, path_name);
       m.user_arn_by_noobaa_id[e.noobaa_id] = arn;
       m.user_arn_by_account_and_path_name[{e.account_id, path_name}] = arn;
       if (!e.noobaa_name.empty()) {
@@ -373,7 +375,7 @@ int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
     JSONParser p;
     std::string doc;
     const std::string path =
-      config_root + "/buckets/" + rec.name + ".json";
+      fmt::format("{}/buckets/{}.json", config_root, rec.name);
     if ((read_record_file(dpp, path, doc) < 0) ||
 	!p.parse(doc.data(), doc.size())) {
       result.failures.push_back(rec.name + ": could not re-read " + path);

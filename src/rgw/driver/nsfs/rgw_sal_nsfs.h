@@ -73,7 +73,7 @@ struct IdentityMapping;
 inline std::string mp_cache_bucket(const std::string& tenant,
 				   const std::string& name)
 {
-  return tenant.empty() ? name : (tenant + "/" + name);
+  return tenant.empty() ? name : fmt::format("{}/{}", tenant, name);
 }
 
 /* {tenant, name} back from mp_cache_bucket(). */
@@ -1179,7 +1179,8 @@ public:
   {
     const static std::string tenant = "default_ns";
     const auto& db_path = g_conf().get_val<std::string>("rgw_nsfs_userdb_dir");
-    const auto& db_name = g_conf().get_val<std::string>("dbstore_db_name_prefix") + "-" + tenant;
+    const auto db_name = fmt::format(
+      "{}-{}", g_conf().get_val<std::string>("dbstore_db_name_prefix"), tenant);
     auto db_full_path = std::filesystem::path(db_path) / db_name;
 
     userDB = std::make_unique<nsfs::IdentityDB>(db_full_path.string(), cct);

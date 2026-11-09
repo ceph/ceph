@@ -119,7 +119,7 @@ bool PerPartMPUStrategy::staged_upload(const DoutPrefixProvider* dpp,
 
 std::string PerPartMPUStrategy::part_name(uint32_t part_num) const
 {
-  return RGW_MP_PART_PREFIX + fmt::format("{:0>5}", part_num);
+  return fmt::format("{}{:0>5}", RGW_MP_PART_PREFIX, part_num);
 }
 
 std::optional<uint32_t> PerPartMPUStrategy::part_number(std::string_view name) const
@@ -380,7 +380,7 @@ StridedMPUStrategy::part_target(uint32_t part_num,
    * boundary and diverts instead of discovering the damage later.  Writing LESS
    * is ordinary -- the final part is normally short, and it is the one
    * case that needs no handling at all. */
-  return PartTarget{RGW_MP_SHARED_PREFIX + std::to_string(*stride),
+  return PartTarget{fmt::format("{}{}", RGW_MP_SHARED_PREFIX, *stride),
 		    (static_cast<uint64_t>(part_num) - 1) * *stride,
 		    *stride,
 		    true};
@@ -403,7 +403,7 @@ const ReservedNames& StridedMPUStrategy::reserved_names() const
 std::optional<std::string>
 StridedMPUStrategy::shared_name(uint64_t stride) const
 {
-  return RGW_MP_SHARED_PREFIX + std::to_string(stride);
+  return fmt::format("{}{}", RGW_MP_SHARED_PREFIX, stride);
 }
 
 int StridedMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
@@ -607,7 +607,7 @@ static bool nb_create_params(const DoutPrefixProvider* dpp, int root_fd,
     return false;
   }
 
-  const std::string path = std::string(dname) + "/" + NB_CREATE_NAME;
+  const std::string path = fmt::format("{}/{}", dname, NB_CREATE_NAME);
   int fd = ::openat(root_fd, path.c_str(), O_RDONLY | O_NOFOLLOW);
   if (fd < 0) {
     return false;
@@ -693,7 +693,7 @@ NooBaaMPUStrategy::staging_root(const DoutPrefixProvider* dpp,
    * create_object_upload, so a bucket which has been written to and
    * never uploaded to has the one and not the other.  Returning a
    * path that does not exist would send an enumeration at it. */
-  const std::string root = *found + "/" + NB_MPU_ROOT;
+  const std::string root = fmt::format("{}/{}", *found, NB_MPU_ROOT);
   if (::faccessat(bucket_fd, root.c_str(), F_OK, AT_EACCESS) != 0) {
     return std::nullopt;
   }
@@ -795,7 +795,7 @@ static std::optional<std::string> nb_scan_tmpdir(const DoutPrefixProvider* dpp,
     }
 
     /* the one that holds uploads, whatever it is called */
-    const std::string probe = std::string(n) + "/" + NB_MPU_ROOT;
+    const std::string probe = fmt::format("{}/{}", n, NB_MPU_ROOT);
     const bool holds_uploads =
 	(::faccessat(bucket_fd, probe.c_str(), F_OK, AT_EACCESS) == 0);
 
@@ -851,7 +851,7 @@ static bool nb_tmpdir_ambiguous(const DoutPrefixProvider* dpp, int bucket_fd)
 std::string NooBaaMPUStrategy::part_name(uint32_t part_num) const
 {
   /* not zero padded:  NooBaa's is Number(name.slice('part-'.length)) */
-  return NB_PART_PREFIX + std::to_string(part_num);
+  return fmt::format("{}{}", NB_PART_PREFIX, part_num);
 }
 
 std::optional<uint32_t>
@@ -886,7 +886,7 @@ NooBaaMPUStrategy::part_target(uint32_t part_num,
 std::optional<std::string>
 NooBaaMPUStrategy::shared_name(uint64_t stride) const
 {
-  return RGW_MP_SHARED_PREFIX + std::to_string(stride);
+  return fmt::format("{}{}", RGW_MP_SHARED_PREFIX, stride);
 }
 
 std::string NooBaaMPUStrategy::meta_name() const
@@ -1025,7 +1025,7 @@ bool NooBaaMPUStrategy::part_record(const DoutPrefixProvider* dpp,
       const uint64_t ns =
 	  static_cast<uint64_t>(stx.stx_mtime.tv_sec) * 1000000000ull +
 	  stx.stx_mtime.tv_nsec;
-      out.etag = "mtime-" + base36(ns) + "-ino-" + base36(stx.stx_ino);
+      out.etag = fmt::format("mtime-{}-ino-{}", base36(ns), base36(stx.stx_ino));
     }
   }
 
@@ -1106,7 +1106,7 @@ bool NooBaaMPUStrategy::upload_info(const DoutPrefixProvider* dpp,
     }
     if (JSONObj* x = parser.find_obj("xattr")) {
       for (auto i = x->find_first(); !i.end(); ++i) {
-	put(std::string(RGW_ATTR_META_PREFIX) + (*i)->get_name(),
+	put(fmt::format("{}{}", RGW_ATTR_META_PREFIX, (*i)->get_name()),
 	    (*i)->get_data());
       }
     }

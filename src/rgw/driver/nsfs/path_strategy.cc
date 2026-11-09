@@ -19,6 +19,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/xattr.h>
+#include <fmt/format.h>
 
 #include "common/dout_fmt.h"
 #include "common/errno.h"
@@ -80,7 +81,7 @@ std::string SentinelPathStrategy::bucket_dir_name(
     const std::string& name, const std::optional<std::string>& ns) const
 {
   if (ns) {
-    return "." + *ns + "_" + name;
+    return fmt::format(".{}_{}", *ns, name);
   }
   return name;
 }

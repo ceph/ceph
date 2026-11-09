@@ -17,6 +17,7 @@
 
 #include <atomic>
 #include <filesystem>
+#include <fmt/format.h>
 
 #include <optional>
 #include <string>
@@ -262,16 +263,16 @@ public:
       /* the basename, which is how DB names every other table.
        * db_name is a full path here, and a table named after the
        * path is orphaned the moment the directory moves. */
-      identity_table(std::filesystem::path(db_name).filename().string()
-		     + "_nsfs_identity"),
-      noobaa_id_table(std::filesystem::path(db_name).filename().string()
-		      + "_nsfs_noobaa_id"),
-      placement_table(std::filesystem::path(db_name).filename().string()
-		      + "_nsfs_bucket_placement"),
-      completion_table(std::filesystem::path(db_name).filename().string()
-		       + "_nsfs_adoption_complete"),
-      abandoned_table(std::filesystem::path(db_name).filename().string()
-		      + "_nsfs_noobaa_abandoned"),
+      identity_table(fmt::format("{}_nsfs_identity",
+		     std::filesystem::path(db_name).filename().string())),
+      noobaa_id_table(fmt::format("{}_nsfs_noobaa_id",
+		      std::filesystem::path(db_name).filename().string())),
+      placement_table(fmt::format("{}_nsfs_bucket_placement",
+		      std::filesystem::path(db_name).filename().string())),
+      completion_table(fmt::format("{}_nsfs_adoption_complete",
+		       std::filesystem::path(db_name).filename().string())),
+      abandoned_table(fmt::format("{}_nsfs_noobaa_abandoned",
+		      std::filesystem::path(db_name).filename().string())),
       names(cct) {}
 
   int Initialize(std::string logfile, int loglevel);
@@ -463,7 +464,7 @@ struct Credentials {
 inline constexpr std::string_view ROLE_IDENTITY_PREFIX = "role:";
 inline std::string role_identity_key(std::string_view role_id)
 {
-  return std::string(ROLE_IDENTITY_PREFIX) + std::string(role_id);
+  return fmt::format("{}{}", ROLE_IDENTITY_PREFIX, role_id);
 }
 inline bool is_role_identity_key(std::string_view key)
 {

@@ -14,6 +14,8 @@
  */
 
 #include <boost/algorithm/string/predicate.hpp>
+#include <fmt/format.h>
+#include <iterator>
 
 #include "rapidjson/document.h"
 #include "rapidjson/stringbuffer.h"
@@ -93,7 +95,8 @@ void append_arg(std::string& args, const std::string& name,
   if (!args.empty()) {
     args.push_back('&');
   }
-  args += name + "=" + escape_endpoint_arg(value);
+  fmt::format_to(std::back_inserter(args), "{}={}", name,
+		 escape_endpoint_arg(value));
 }
 
 int translate_http(const NooBaaConnection& conn, bool https,
@@ -136,7 +139,7 @@ int translate_http(const NooBaaConnection& conn, bool https,
     host = *v;
   }
   if (host.find(':') != std::string::npos) {
-    host = "[" + host + "]";
+    host = fmt::format("[{}]", host);
   }
   std::string url = https ? "https://" : "http://";
   if (!conn.auth.empty()) {
@@ -145,8 +148,9 @@ int translate_http(const NooBaaConnection& conn, bool https,
       why = "request_options_object.auth names a user and no password";
       return -EINVAL;
     }
-    url += url_encode(conn.auth.substr(0, colon)) + ":" +
-           url_encode(conn.auth.substr(colon + 1)) + "@";
+    fmt::format_to(std::back_inserter(url), "{}:{}@",
+                   url_encode(conn.auth.substr(0, colon)),
+                   url_encode(conn.auth.substr(colon + 1)));
     out.dest.stored_secret = true;
     if (!https) {
       out.warnings.push_back(
@@ -155,10 +159,13 @@ int translate_http(const NooBaaConnection& conn, bool https,
   }
   url += host;
   if (auto v = either("port")) {
-    url += ":" + *v;
+    fmt::format_to(std::back_inserter(url), ":{}", *v);
   }
   if (auto v = member(request, "path")) {
-    url += (v->empty() || ((*v)[0] != '/')) ? "/" + *v : *v;
+    if (v->empty() || ((*v)[0] != '/')) {
+      url.push_back('/');
+    }
+    url += *v;
   }
   out.dest.push_endpoint = url;
 
@@ -257,7 +264,7 @@ int translate_kafka(CephContext* cct, const NooBaaConnection& conn,
     first = brokers.substr(0, comma);
     rest = brokers.substr(comma + 1);
   }
-  out.dest.push_endpoint = "kafka://" + first;
+  out.dest.push_endpoint = fmt::format("kafka://{}", first);
   std::string args;
   append_arg(args, "kafka-ack-level", "broker");
   if (!rest.empty()) {

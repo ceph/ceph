@@ -21,6 +21,7 @@
 #include <cerrno>
 #include <cstdio>
 #include <cstring>
+#include <fmt/format.h>
 #include <dlfcn.h>
 #include <fcntl.h>
 #include <linux/fs.h>
@@ -76,8 +77,8 @@ int POSIXStrategy::link_temp_file(int temp_fd, int dir_fd,
   /* link the O_TMPFILE into the directory under a temp name, then
    * rename to the final name — two-step because linkat(2) cannot
    * atomically replace an existing entry */
-  std::string tmp_name = std::string(TMP_LINK_PREFIX) +
-    std::to_string(getpid()) + "_" + std::to_string(temp_fd);
+  std::string tmp_name = fmt::format("{}{}_{}", TMP_LINK_PREFIX, getpid(),
+				     temp_fd);
 
   int ret = ::linkat(AT_FDCWD, temp_file_path,
                      dir_fd, tmp_name.c_str(), AT_SYMLINK_FOLLOW);
@@ -140,8 +141,8 @@ SafeResult POSIXStrategy::safe_unlink(const DoutPrefixProvider* dpp,
 {
   return nsfs::with_identity_r(dpp, id, [&]() -> SafeResult {
   static std::atomic<uint64_t> counter{0};
-  std::string tmp_name = std::string(UNLINK_TMP_PREFIX) +
-    std::to_string(getpid()) + "_" + std::to_string(counter.fetch_add(1));
+  std::string tmp_name = fmt::format("{}{}_{}", UNLINK_TMP_PREFIX, getpid(),
+				     counter.fetch_add(1));
 
   int ret = ::renameat(dir_fd, name.c_str(),
                        tmp_dir_fd, tmp_name.c_str());
@@ -190,8 +191,8 @@ bool probe_shares_extents(const DoutPrefixProvider* dpp,
    * copy_file_range share, it returns locally and deterministically,
    * and GPFS returns EOPNOTSUPP to it exactly as it does to
    * copy_file_range at every granularity. */
-  const std::string src = dir + "/.cfr-probe.src";
-  const std::string dst = dir + "/.cfr-probe.dst";
+  const std::string src = fmt::format("{}/.cfr-probe.src", dir);
+  const std::string dst = fmt::format("{}/.cfr-probe.dst", dir);
 
   int sfd = ::open(src.c_str(), O_RDWR | O_CREAT | O_TRUNC, 0600);
   if (sfd < 0) {
@@ -686,7 +687,7 @@ int FSStrategy::clone_fd_by_copy(const DoutPrefixProvider* dpp,
    * because the reopen is `id`'s and the fallback is not. */
   int own_fd = -1;
   if (id.active()) {
-    const std::string via = "/proc/self/fd/" + std::to_string(gw_src_fd);
+    const std::string via = fmt::format("/proc/self/fd/{}", gw_src_fd);
     int oret = nsfs::with_identity(dpp, id, [&]() -> int {
       own_fd = ::open(via.c_str(), O_RDONLY | O_CLOEXEC);
       return (own_fd < 0) ? -errno : 0;
@@ -1121,14 +1122,14 @@ static std::string fd_path(int dir_fd, const std::string& name)
     return {};
   }
   resolved[len] = '\0';
-  return std::string(resolved) + "/" + name;
+  return fmt::format("{}/{}", resolved, name);
 }
 
 /* hidden name for clone parent files — dot-prefix keeps them
  * out of bucket listings */
 static std::string clone_parent_name(const std::string& name)
 {
-  return std::string(CLONE_PARENT_PREFIX) + name;
+  return fmt::format("{}{}", CLONE_PARENT_PREFIX, name);
 }
 
 int GPFSStrategy::clone_file(const DoutPrefixProvider* dpp,

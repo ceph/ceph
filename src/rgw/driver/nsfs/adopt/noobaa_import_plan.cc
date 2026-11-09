@@ -14,6 +14,7 @@
  */
 
 #include <algorithm>
+#include <fmt/format.h>
 #include <map>
 #include <set>
 
@@ -342,7 +343,7 @@ int build_import_plan(const DoutPrefixProvider* dpp, CephContext* cct,
       if (e.iam_user) {
 	continue;
       }
-      const std::string key = e.tenant + "$" + e.name;
+      const std::string key = fmt::format("{}${}", e.tenant, e.name);
       auto [i, fresh] = seen.emplace(key, n);
       if (!fresh) {
 	fail_both(i->second, n,
