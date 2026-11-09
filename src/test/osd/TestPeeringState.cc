@@ -1371,6 +1371,59 @@ TEST_F(PeeringStateTest, TrimLog) {
   EXPECT_EQ(trim_to, eversion_t());
 }
 
+TEST_F(PeeringStateTest, TrimLogAggressive) {
+  dout(0) << "== TrimLogAggressive ==" << dendl;
+  // pg_trim_to keeps the newest target_pg_log_entries entries and only moves
+  // once at least osd_pg_log_trim_min entries can go
+  // (calc_trim_to_aggressive() is used once the cluster has pglog_hardlimit)
+  OSDMap::Incremental inc(osdmap->get_epoch() + 1);
+  inc.new_flags = osdmap->get_flags() | CEPH_OSDMAP_PGLOG_HARDLIMIT;
+  apply_incremental(inc);
+  test_create_peering_state();
+  test_init();
+  test_event_initialize();
+  test_event_advance_map();
+  test_event_activate_map();
+  dispatch_all();
+  new_epoch(); // for wait_upthru
+  test_event_advance_map();
+  test_event_activate_map();
+  dispatch_all();
+  verify_all_active_clean();
+
+  PeeringState *ps = get_ps(acting_primary);
+  ASSERT_TRUE(ps->get_osdmap()->test_flag(CEPH_OSDMAP_PGLOG_HARDLIMIT));
+  const unsigned target = get_listener(acting_primary)->target_pg_log_entries;
+  const unsigned trim_min = g_ceph_context->_conf->osd_pg_log_trim_min;
+
+  std::vector<eversion_t> versions;
+  // fewer than osd_pg_log_trim_min entries over the target: nothing to trim
+  for (unsigned i = 0; i < target + trim_min / 2; ++i) {
+    versions.push_back(test_append_log_entry());
+  }
+  // the primary only trims what is committed
+  ps->complete_write(versions.back(), versions.back());
+  ps->update_trim_to();
+  EXPECT_EQ(eversion_t(), ps->get_pg_trim_to());
+
+  // now target + trim_min + target / 2 entries: trim all but the newest target
+  for (unsigned i = 0; i < trim_min / 2 + target / 2; ++i) {
+    versions.push_back(test_append_log_entry());
+  }
+  ps->complete_write(versions.back(), versions.back());
+  ps->update_trim_to();
+  EXPECT_EQ(versions[versions.size() - target - 1], ps->get_pg_trim_to());
+
+  // osd_pg_log_trim_max = 0 leaves nothing to count from the tail: the trim
+  // point is the oldest entry
+  g_ceph_context->_conf.set_val("osd_pg_log_trim_max", "0");
+  g_ceph_context->_conf.apply_changes(nullptr);
+  ps->update_trim_to();
+  EXPECT_EQ(versions.front(), ps->get_pg_trim_to());
+  g_ceph_context->_conf.rm_val("osd_pg_log_trim_max");
+  g_ceph_context->_conf.apply_changes(nullptr);
+}
+
 // ============================================================================
 // Test Stubs - Missing Objects
 // ============================================================================
