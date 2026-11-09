@@ -59,6 +59,10 @@ void put_with_id(PrimaryLogPG *pg, uint64_t id);
 
 struct inconsistent_snapset_wrapper;
 
+namespace ceph::osd {
+class OmapGetValues;
+}
+
 class PrimaryLogPG : public PG,
 		     public PGBackend::Listener,
 		     public ECListener {
@@ -1592,6 +1596,7 @@ public:
   void kick_snap_trim() override;
   void snap_trimmer_scrub_complete() override;
   int do_osd_ops(OpContext *ctx, std::vector<OSDOp>& ops);
+  int do_osd_ops(OpContext *ctx, std::vector<OSDOp>& ops, ceph::osd::OmapGetValues *omap_read);
 
   int _get_tmap(OpContext *ctx, ceph::buffer::list *header, ceph::buffer::list *vals);
   int do_tmap2omap(OpContext *ctx, unsigned flags);

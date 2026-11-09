@@ -28,6 +28,10 @@ struct hobject_t;
 struct ECListener;
 class PGLog;
 
+namespace ceph::osd {
+class OmapGetValues;
+}
+
 namespace ceph::os {
   class Transaction;
 }
@@ -379,7 +383,8 @@ public:
   ll_read_ierrorator::future<> omap_get_vals(
     const ObjectState& os,
     OSDOp& osd_op,
-    object_stat_sum_t& delta_stats) const;
+    object_stat_sum_t& delta_stats,
+    ceph::osd::OmapGetValues *omap_read = nullptr) const;
   ll_read_ierrorator::future<> omap_get_vals_by_keys(
     const ObjectState& os,
     OSDOp& osd_op,
