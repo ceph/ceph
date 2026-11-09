@@ -432,7 +432,8 @@ SnapTrimObjSubEvent::start()
         std::max<int>(pg->get_average_object_size(), 1),
         static_cast<unsigned>(local_conf()->osd_snap_trim_priority),
         0,
-        SchedulerClass::background_best_effort}));
+        SchedulerClass::background_best_effort},
+      scheduler::throttle_level_t::foreground));
 
   co_await enter_stage<interruptor>(
     obc_orderer->obc_pp().process);

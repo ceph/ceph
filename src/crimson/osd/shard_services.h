@@ -839,8 +839,9 @@ public:
     snap_dump_reservations,
     snap_reserver.dump)
 
-  bool throttle_available() const {
-    return local_state.throttler.available();
+  bool throttle_available(
+    crimson::osd::scheduler::throttle_level_t level) const {
+    return local_state.throttler.available(level);
   }
 
   auto is_recovery_active() {

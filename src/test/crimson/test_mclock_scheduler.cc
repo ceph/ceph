@@ -22,8 +22,10 @@ TEST_F(MClockSchedulerTest, cleanup_continues_after_timeout)
     CephContext cct;
     mClockScheduler queue(&cct, 0, 1, 0, false, 20ms, 40ms, 10ms, false);
     queue.enqueue(item_t{
-      params_t{1, 0, 0, SchedulerClass::client}, seastar::promise<>()});
-    EXPECT_TRUE(std::holds_alternative<item_t>(queue.dequeue()));
+      params_t{1, 0, 0, SchedulerClass::client},
+      throttle_level_t::foreground, seastar::promise<>()});
+    EXPECT_TRUE(std::holds_alternative<item_t>(
+      queue.dequeue(throttle_level_t::foreground)));
 
     auto clients_cleaned = [&queue] {
       ceph::JSONFormatter formatter;

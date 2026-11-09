@@ -184,9 +184,8 @@ public:
   static constexpr OperationTypeCode type =
     OperationTypeCode::scrub_reserve_range;
 
-  template <typename... Args>
-  ScrubReserveRange(const hobject_t &begin, const hobject_t &end, Args&&... args)
-    : ScrubAsyncOpT(std::forward<Args>(args)...), begin(begin), end(end) {}
+  ScrubReserveRange(const hobject_t &begin, const hobject_t &end, Ref<PG> pg)
+    : ScrubAsyncOpT(pg, false), begin(begin), end(end) {}
 
   void print(std::ostream &out) const final {
     out << "(begin=" << begin << ", end=" << end << ")";
