@@ -37,3 +37,22 @@ The ``cls_sdk`` object class resides in ``src/cls/sdk/``. This gets built and
 loaded into Ceph, with the Ceph build process. You can run the 
 ``ceph_test_cls_sdk`` unittest, which resides in ``src/test/cls_sdk/``, 
 to test this class.
+
+OMAP reads
+----------
+
+``cls_cxx_map_get_vals`` returns an owning map. Its value buffers remain valid after
+the read completes and after subsequent object-class calls; callers do not receive
+borrowed storage-iterator views. The start key is exclusive, and the prefix filter
+is applied in the storage key order. Use the returned continuation flag and last
+key when requesting another page. Server limits can shorten a requested page.
+
+Classic and Crimson retain their respective quota and truncation policies. Their
+internal typed reads use the normal operation dispatcher, including access checks,
+suboperation counts, read statistics, and backend journal overlays. The exported
+interface and network encoding are unchanged. SeaStore retries discard a failed
+attempt's partial collection before replaying the read.
+
+Reads within one object-class invocation need not observe its earlier staged writes.
+Combine repeated-key updates before submitting a batch when the calculation requires
+their combined value; a later read is not a portable substitute for that aggregation.
