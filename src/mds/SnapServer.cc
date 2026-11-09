@@ -620,3 +620,18 @@ void SnapServer::handle_pool_changes()
   }
   tracked_data_pools = current;
 }
+
+bool SnapServer::is_snap_referenced(snapid_t sn) const
+{
+  if (snaps.count(sn))
+    return true;
+  for (const auto& [tid, info] : pending_update) {
+    if (info.snapid == sn)
+      return true;
+  }
+  for (const auto& [tid, destroy] : pending_destroy) {
+    if (destroy.first == sn)
+      return true;
+  }
+  return false;
+}

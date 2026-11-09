@@ -34,11 +34,18 @@ class TableTool : public MDSUtility
 
     std::unique_ptr<ProgressTracker> progress_tracker;
 
+    // set when the monitors reply to our MRemoveSnaps
+    bool remove_snaps_acked = false;
+    ceph::condition_variable remove_snaps_cond;
+
     int apply_role_fn(std::function<int(mds_role_t, Formatter *)> fptr, Formatter *f);
+    int purge_snaps(const std::string &pool_str, const std::string &snapids_str,
+                    bool really, Formatter *f);
 
   public:
     static void usage();
     int main(std::vector<const char*> &argv);
+    bool ms_dispatch(Message *m) override;
 
     TableTool()
     {

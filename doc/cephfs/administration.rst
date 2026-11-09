@@ -89,6 +89,12 @@ file system.  If any files have layouts for the removed data pool, the file
 data will become unavailable. The default data pool (when creating the file
 system) cannot be removed.
 
+If snapshots reference objects in the pool when it is removed, the clone
+objects of those snapshots are removed from the pool when the snapshots are
+deleted, as for the other data pools. This is done by the MDS and requires no
+action. Only pools removed before the MDS was upgraded to a release that does
+this need a manual step; see :ref:`cephfs-snapshots-removed-data-pool`.
+
 ::
 
     ceph fs rename <file system name> <new file system name> [--yes-i-really-mean-it]

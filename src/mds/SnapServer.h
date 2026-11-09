@@ -76,6 +76,10 @@ public:
 
   void handle_pool_changes();
 
+  snapid_t get_last_snap() const { return last_snap; }
+  // live, or with a pending create, update or destroy
+  bool is_snap_referenced(snapid_t sn) const;
+
 protected:
   void encode_server_state(bufferlist& bl) const override;
   void decode_server_state(bufferlist::const_iterator& bl) override;
