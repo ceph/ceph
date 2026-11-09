@@ -209,7 +209,7 @@ If successful, the response contains the requested information.
 Special Error Responses
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-TBD.
+None.
 
 Trim Usage
 ==========
@@ -268,7 +268,10 @@ Request Parameters
 Special Error Responses
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-TBD.
+``InvalidArgument``
+
+:Description: The request names no ``uid``, bucket, ``start`` or ``end``, and does not set ``remove-all``.
+:Code: 400 Bad Request
 
 Get User Info
 =============
