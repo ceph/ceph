@@ -571,7 +571,6 @@ Scan Range Option
 
     The scan range option to AWS-CLI enables the client to scan and process only a selected part of the object. 
     This option reduces input/output operations and bandwidth by skipping parts of the object that are not of interest.
-    TODO : different data-sources (CSV, JSON, Parquet)
 
 CSV Parsing Behavior
 --------------------
@@ -630,8 +629,6 @@ The statement "SELECT ... FROM s3object[*].aaa.bb.cc" instructs the reader to se
 A row begins when the reader encounters the path, and it ends when the reader exits the innermost part of the path, which in this case is the object "cc".
 
 NOTE : The semantics of querying JSON document may change and may not be the same as the current methodology described.
-
-TODO : relevant example for object and array values.
 
 A JSON Query Example
 --------------------

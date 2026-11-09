@@ -116,11 +116,6 @@ involved when dealing with signed URLs and public read ACLs.
   object via the public URL
   ``http://<host>:<port>/7188e165c0ae4424ac68ae2e89a05c50:foo/bar``.
 
-Swift with built-in authenticator
----------------------------------
-
-TBD -- not in test_multen.py yet
-
 Swift with Keystone
 -------------------
 
