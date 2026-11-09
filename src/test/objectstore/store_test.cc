@@ -8334,6 +8334,72 @@ void get_mempool_stats(uint64_t* total_bytes, uint64_t* total_items)
   *total_items = onode_items;
 }
 
+// https://tracker.ceph.com/issues/82940
+// With bluestore_cache_type = lru, trimming the buffer cache subtracted an
+// evicted buffer from its cache age bin twice, and the first unmount (which
+// trims every shard to zero) failed ceph_assert(*(b->cache_age_bin) >= b->length).
+TEST_P(StoreTestSpecificAUSize, LruBufferCacheTrimAndUnmount) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  SetVal(g_conf(), "bluestore_cache_type", "lru");
+  SetVal(g_conf(), "bluestore_default_buffered_read", "true");
+  SetVal(g_conf(), "bluestore_cache_size", "4194304");
+  g_conf().apply_changes(nullptr);
+  StartDeferred(4096);
+
+  int r;
+  coll_t cid;
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  // 8 MiB in 64 KiB objects, twice the cache: reading it back trims the cache
+  const unsigned num_objects = 128;
+  const unsigned object_size = 64 * 1024;
+  auto hoid = [](unsigned i) {
+    return ghobject_t(hobject_t(sobject_t("obj" + stringify(i), CEPH_NOSNAP)));
+  };
+  bufferlist data;
+  data.append(std::string(object_size, 'x'));
+  for (unsigned i = 0; i < num_objects; ++i) {
+    ObjectStore::Transaction t;
+    t.write(cid, hoid(i), 0, object_size, data);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  // two passes: the first fills and trims the cache, the second hits it
+  for (int pass = 0; pass < 2; ++pass) {
+    for (unsigned i = 0; i < num_objects; ++i) {
+      bufferlist bl;
+      r = store->read(ch, hoid(i), 0, object_size, bl);
+      ASSERT_EQ(r, (int)object_size);
+      ASSERT_TRUE(bl_eq(data, bl));
+    }
+  }
+  // unmount trims every shard to zero
+  ch.reset();
+  r = store->umount();
+  ASSERT_EQ(r, 0);
+  r = store->mount();
+  ASSERT_EQ(r, 0);
+
+  ch = store->open_collection(cid);
+  ASSERT_TRUE(ch);
+  {
+    ObjectStore::Transaction t;
+    for (unsigned i = 0; i < num_objects; ++i) {
+      t.remove(cid, hoid(i));
+    }
+    t.remove_collection(cid);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
 TEST_P(StoreTestSpecificAUSize, OnodeSizeTracking) {
 
   if (string(GetParam()) != "bluestore")
