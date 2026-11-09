@@ -182,7 +182,8 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
   // a slot.
   auto throttle = co_await interruptor::make_interruptible(
     shard_services->get_throttle(
-      scheduler::params_t{cost, prio, owner, SchedulerClass::client}));
+      scheduler::params_t{cost, prio, owner, SchedulerClass::client},
+      scheduler::throttle_level_t::foreground));
 
   DEBUGDPP("{}.{}: entering wait_pg_ready stage",
 	   *pgref, *this, this_instance_id);
