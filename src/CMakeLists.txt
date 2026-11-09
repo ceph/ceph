@@ -487,6 +487,11 @@ if(WITH_CRIMSON)
     set(Seastar_SANITIZE "OFF" CACHE STRING "" FORCE)
   endif()
   if(Seastar_DPDK)
+    if(WITH_CRIMSON_SPDK OR WITH_SPDK)
+      message(FATAL_ERROR "Seastar_DPDK cannot be enabled together with SPDK: "
+        "SPDK links its own bundled DPDK. "
+        "Set WITH_CRIMSON_SPDK=OFF and WITH_SPDK=OFF")
+    endif()
     find_package(DPDK REQUIRED)
   endif()
   set(old_BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS})

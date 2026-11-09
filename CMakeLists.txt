@@ -340,7 +340,8 @@ endif()
 
 CMAKE_DEPENDENT_OPTION(WITH_SPDK "Enable SPDK" OFF
   "CMAKE_SYSTEM_PROCESSOR MATCHES i386|i686|amd64|x86_64|AMD64|aarch64|riscv64" OFF)
-option(WITH_CRIMSON_SPDK "Enable SPDK for crimson SeaStore" OFF)
+CMAKE_DEPENDENT_OPTION(WITH_CRIMSON_SPDK "Enable SPDK for crimson SeaStore" ON
+  "WITH_CRIMSON;CMAKE_SYSTEM_PROCESSOR MATCHES amd64|x86_64|AMD64|aarch64" OFF)
 option(WITH_SYSTEM_SPDK "Require a system SPDK instead of building bundled src/spdk" OFF)
 if(WITH_SPDK AND NOT WITH_BLUESTORE)
   message(SEND_ERROR "Please enable WITH_BLUESTORE for using WITH_SPDK")
