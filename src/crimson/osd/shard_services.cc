@@ -124,6 +124,24 @@ void ShardServices::register_metrics()
   }
 }
 
+bool ShardServices::is_up_primary(spg_t pgid) const
+{
+  const auto &osdmap = local_state.get_osdmap();
+  if (!osdmap || !osdmap->have_pg_pool(pgid.pool())) {
+    return false;
+  }
+  std::vector<int> up;
+  int up_primary = -1;
+  osdmap->pg_to_up_acting_osds(pgid.pgid, &up, &up_primary, nullptr, nullptr);
+  if (up_primary != local_state.whoami) {
+    return false;
+  }
+  // an EC PG's shards are positional: this OSD may hold another shard
+  return pgid.shard == shard_id_t::NO_SHARD ||
+    (static_cast<size_t>(pgid.shard.id) < up.size() &&
+     up[pgid.shard.id] == local_state.whoami);
+}
+
 seastar::future<Ref<PG>> ShardServices::extract_pg(spg_t pgid) {
   auto pg = local_state.pg_map.get_pg(pgid);
   ceph_assert(pg);

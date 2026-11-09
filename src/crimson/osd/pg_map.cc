@@ -21,6 +21,10 @@ seastar::future<> PGShardMapping::dump_store_shards(Formatter *f) const {
     f->open_object_section("core_pgs");
     f->dump_int("core", i.first);
     f->dump_int("num_pgs", i.second);
+    if (auto p = core_to_num_primaries.find(i.first);
+        p != core_to_num_primaries.end()) {
+      f->dump_int("num_primaries", p->second);
+    }
     f->close_section();
   }
 
@@ -60,7 +64,8 @@ seastar::future<> PGShardMapping::dump_store_shards(Formatter *f) const {
 seastar::future<std::pair<core_id_t, store_index_t>> PGShardMapping::get_or_create_pg_mapping(
   spg_t pgid,
   core_id_t core_expected,
-  store_index_t store_index)
+  store_index_t store_index,
+  bool primary)
 {
   LOG_PREFIX(PGShardMapping::get_or_create_pg_mapping);
   auto find_iter = pg_to_core.find(pgid);
@@ -77,7 +82,7 @@ seastar::future<std::pair<core_id_t, store_index_t>> PGShardMapping::get_or_crea
     DEBUG("calling primary to add mapping for pg {} to the expected core {}",
           pgid, core_expected);
     return container().invoke_on(
-        0, [pgid, core_expected, store_index, FNAME, this](auto &primary_mapping) {
+        0, [pgid, core_expected, store_index, primary, FNAME, this](auto &primary_mapping) {
       auto core_to_update = core_expected;
       auto shard_index_update = store_index;
       auto find_iter = primary_mapping.pg_to_core.find(pgid);
@@ -113,11 +118,18 @@ seastar::future<std::pair<core_id_t, store_index_t>> PGShardMapping::get_or_crea
         std::map<unsigned, unsigned>::iterator shard_iter;
         if (core_expected == NULL_CORE) {
           assert(store_index == NULL_STORE_INDEX);
+          // the fewest PGs of this PG's role, then the fewest PGs
+          auto role_load = [&primary_mapping, primary](const auto &core_pgs) {
+            auto primaries = primary_mapping.core_to_num_primaries[core_pgs.first];
+            return std::make_pair(
+              primary ? primaries : core_pgs.second - primaries,
+              core_pgs.second);
+          };
           count_iter = std::min_element(
             primary_mapping.core_to_num_pgs.begin(),
             primary_mapping.core_to_num_pgs.end(),
-            [](const auto &left, const auto &right) {
-              return left.second < right.second;
+            [&role_load](const auto &left, const auto &right) {
+              return role_load(left) < role_load(right);
             }
           );
           core_to_update = count_iter->first;
@@ -126,6 +138,10 @@ seastar::future<std::pair<core_id_t, store_index_t>> PGShardMapping::get_or_crea
         }
         ceph_assert_always(primary_mapping.core_to_num_pgs.end() != count_iter);
         ++(count_iter->second);
+        if (primary) {
+          ++primary_mapping.core_to_num_primaries[count_iter->first];
+          primary_mapping.primary_pgs.emplace(pgid, count_iter->first);
+        }
 
         if(crimson::common::get_conf<bool>("seastore_require_partition_count_match_reactor_count")) {
           shard_index_update = 0;
@@ -236,6 +252,13 @@ seastar::future<> PGShardMapping::remove_pg_mapping(spg_t pgid) {
     assert(count_iter != primary_mapping.core_to_num_pgs.end());
     assert(count_iter->second > 0);
     --(count_iter->second);
+    if (auto p = primary_mapping.primary_pgs.find(pgid);
+        p != primary_mapping.primary_pgs.end()) {
+      auto &primaries = primary_mapping.core_to_num_primaries[p->second];
+      assert(primaries > 0);
+      --primaries;
+      primary_mapping.primary_pgs.erase(p);
+    }
 
     auto core_shard_iter = primary_mapping.core_shard_to_num_pgs.find(find_iter->second.first);
     auto shard_iter = core_shard_iter->second.find(find_iter->second.second);
