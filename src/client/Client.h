@@ -982,7 +982,7 @@ public:
    * @returns true if the data was already flushed, false otherwise.
    */
   bool _flush(Inode *in, Context *c);
-  void _flush_range(Inode *in, int64_t off, uint64_t size);
+  int _flush_range(Inode *in, int64_t off, uint64_t size);
   void _flushed(Inode *in);
   void flush_set_callback(ObjectCacher::ObjectSet *oset);
 
