@@ -748,3 +748,56 @@ wait
         log.info("Verifying that directory contents are readable...")
         dir_list = self.mount_a.run_shell(["ls", test_dir])
         self.assertIn("file_19", dir_list.stdout.getvalue().strip())
+
+    def test_subtree_map_mismatch_without_debug_subtrees(self):
+        """
+        That a replayed ESubtreeMap that does not match the subtrees in the
+        cache is only logged, and does not stop the replay, when
+        mds_debug_subtrees is off.
+        """
+
+        self.config_set('mds', 'mds_debug_subtrees', False)
+        # Start a major segment, with an ESubtreeMap, every few events, and
+        # keep every segment, so that the journal replays from before the
+        # export below up to a subtree map written after it.
+        self.config_set('mds', 'mds_log_events_per_segment', 1)
+        self.config_set('mds', 'mds_log_minor_segments_per_major_segment', 4)
+        self.config_set('mds', 'mds_log_max_segments', 100000)
+        self.config_set('mds', 'mds_log_trim_upkeep_interval', 86400000)
+
+        self.fs.set_max_mds(2)
+        status = self.fs.wait_for_daemons()
+
+        # Rank 0 exports the directory to rank 1 and journals an EExport.
+        # The subdirectory keeps the dirfrag of the pinned one in the cache,
+        # so that there is something to export.
+        self.mount_a.run_shell(["mkdir", "-p", "pinned/sub"])
+        self.mount_a.setfattr("pinned", "ceph.dir.pin", "1")
+        self._wait_subtrees([('/pinned', 1)], status=status, rank=1, timeout=60)
+
+        # More events on rank 0, so that its journal holds subtree maps
+        # that list the exported directory as a bound of the root.
+        for i in range(20):
+            self.mount_a.run_shell(["mkdir", f"dir{i}"])
+        self.mount_a.umount_wait()
+
+        self.fs.fail()
+
+        # Without the export, both ranks replay the directory into the root
+        # subtree of rank 0, while the subtree maps journaled after it list
+        # it as a subtree of rank 1.
+        self.fs.journal_tool(["event", "splice", "--type=EXPORT", "summary"], 0)
+        self.fs.journal_tool(["event", "splice", "--type=IMPORTSTART", "summary"], 1)
+        self.fs.journal_tool(["event", "splice", "--type=IMPORTFINISH", "summary"], 1)
+        # The import carried the sessions of the clients it brought along, so
+        # the session map of rank 1 no longer replays without them.
+        self.config_set('mds', 'mds_wipe_sessions', True)
+
+        self.fs.set_joinable()
+        status = self.fs.wait_for_daemons(timeout=120)
+        for rank in (0, 1):
+            self.assertEqual(self.fs.get_rank(rank=rank, status=status)['state'],
+                             'up:active')
+
+        self.mount_a.mount_wait()
+        self.mount_a.run_shell(["ls", "pinned/sub", "dir19"])
