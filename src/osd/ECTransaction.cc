@@ -390,6 +390,9 @@ void ECTransaction::Generate::delete_first() {
         coll_t(spg_t(pgid, shard)),
         ghobject_t(oid, entry->version.version, shard));
     }
+    if (osdmap->get_pg_pool(pgid.pool())->supports_omap()) {
+      ec_omap_journal.append_delete(plan.hoid, entry->version.version, false);
+    }
   } else {
     for (auto &&[shard, t]: transactions) {
       t.remove(
