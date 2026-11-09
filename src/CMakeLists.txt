@@ -617,7 +617,7 @@ set(ceph_common_objs
   $<TARGET_OBJECTS:json_spirit>
   $<TARGET_OBJECTS:erasure_code>)
 set(ceph_common_deps
-  common_utf8 extblkdev arch crc32
+  common_utf8 arch crc32
   ${LIB_RESOLV}
   Boost::thread
   Boost::context
