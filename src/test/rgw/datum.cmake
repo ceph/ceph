@@ -255,8 +255,11 @@ endif()
 foreach(target IN LISTS datum_tests)
   target_include_directories(${target} PRIVATE "${CMAKE_CURRENT_LIST_DIR}/../..")
   set_target_properties(${target} PROPERTIES CXX_SCAN_FOR_MODULES OFF)
-  target_compile_options(${target} PRIVATE
-    "$<$<CXX_COMPILER_ID:GNU>:-Wall;-Wextra;-Werror>")
+  # Native byte tests include Ceph headers and follow Ceph's warning policy.
+  if(NOT target MATCHES "^unittest_rgw_datum_ceph(_wire)?$")
+    target_compile_options(${target} PRIVATE
+      "$<$<CXX_COMPILER_ID:GNU>:-Wall;-Wextra;-Werror>")
+  endif()
 
   if(COMMAND add_ceph_test)
     target_sources(${target} PRIVATE "${CMAKE_CURRENT_LIST_DIR}/../catch2_compat_main.cc")

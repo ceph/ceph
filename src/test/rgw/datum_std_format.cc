@@ -9,7 +9,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-namespace datum = ::ceph::salad::datum;
+namespace datum = ceph::salad::datum;
 namespace dr = datum::render;
 
 namespace standard_adapter_test {

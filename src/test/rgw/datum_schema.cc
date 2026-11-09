@@ -7,7 +7,7 @@
 #include <type_traits>
 #include <vector>
 
-namespace datum = ::ceph::salad::datum;
+namespace datum = ceph::salad::datum;
 namespace schema_test {
 
 #define ROW_FIELDS(Field) Field(int, id) Field(std::string, label)

@@ -10,7 +10,7 @@
 #include <system_error>
 #include <vector>
 
-namespace datum = ::ceph::salad::datum;
+namespace datum = ceph::salad::datum;
 namespace codec_test {
 
 struct bad_field { int value; };

@@ -57,7 +57,7 @@
 
 #endif
 
-namespace datum = ::ceph::salad::datum;
+namespace datum = ceph::salad::datum;
 namespace iv = datum::interval;
 
 // Datum data mechanics: neutral fragmentation, retention and later data profiles.
@@ -622,7 +622,7 @@ TEST_CASE("minimal character sinks and total diagnostic budgets", "[datum][fmt][
     std::string text;
     datum::render::format_to(character_sink {&text}, value);
     CHECK(text == fmt::format("{}", value));
-    ::ceph::util::clear(text);
+    ceph::util::clear(text);
     const auto limited =
         datum::render::format_bounded(character_sink {&text}, value, {.bytes = 12});
     CHECK(limited.truncated);
@@ -631,7 +631,7 @@ TEST_CASE("minimal character sinks and total diagnostic budgets", "[datum][fmt][
     CHECK(text == fmt::format("{}", value).substr(0, 12));
     datum_fmt_test::cycle cycle {};
     cycle.next = &cycle;
-    ::ceph::util::clear(text);
+    ceph::util::clear(text);
     datum::render::format_to(character_sink {&text}, cycle, {.depth = 3});
     CHECK(std::empty(text));
     std::size_t observations = 0;
@@ -651,7 +651,7 @@ TEST_CASE("minimal character sinks and total diagnostic budgets", "[datum][fmt][
     datum::render_detail::append_binary(character_sink {&text}, binary);
     CHECK(observations == 32);
     observations = 0;
-    ::ceph::util::clear(text);
+    ceph::util::clear(text);
     const datum_fmt_test::counted_record counted {&observations};
     const auto stopped =
         datum::render::format_bounded(character_sink {&text}, counted, {.bytes = 14});
@@ -672,7 +672,7 @@ TEST_CASE("standard vocabulary preserves units and bounded nested observations",
         datum::render::format_bounded(std::back_inserter(bounded), value, {.bytes = 20});
     CHECK(result.truncated);
     CHECK(bounded == text.substr(0, 20));
-    ::ceph::util::clear(bounded);
+    ceph::util::clear(bounded);
     datum::render::format_to(std::back_inserter(bounded), value, {.depth = 1});
     CHECK(bounded == "vocabulary{values=, entries=}");
 }
@@ -697,7 +697,7 @@ TEST_CASE("time diagnostics preserve units without overflowing a nanosecond conv
     datum::render_detail::append_value(
         std::back_inserter(output), point {duration {std::numeric_limits<duration::rep>::max()}});
     CHECK(output == std::to_string(std::numeric_limits<duration::rep>::max()) + "h");
-    ::ceph::util::clear(output);
+    ceph::util::clear(output);
     datum::render_detail::append_value(std::back_inserter(output), datum_fmt_test::elapsed {3});
     CHECK(output == "3ms");
 }
@@ -846,7 +846,7 @@ public:
     void emit_interval(const LowerT& lower, const UpperT& upper)
     {
         ++boundary_emissions;
-        ::ceph::util::push_back(intervals, integer_query::between(lower, upper));
+        ceph::util::push_back(intervals, integer_query::between(lower, upper));
     }
 
 public:
@@ -855,7 +855,7 @@ public:
     void operator()(const IntervalT& interval)
     {
         ++interval_emissions;
-        ::ceph::util::push_back(intervals,
+        ceph::util::push_back(intervals,
                                 integer_query::between(interval.lower(), interval.upper()));
     }
 
@@ -1819,7 +1819,7 @@ TEST_CASE("Datum consumer schemas display and round-trip unrelated owning record
      const auto bytes = datum::to_bytes(value);
      CHECK(datum::from_bytes<datum_test::record>(bytes) == value);
      auto trailing = bytes;
-     ::ceph::util::push_back(trailing, 0);
+     ceph::util::push_back(trailing, 0);
      CHECK_THROWS_AS(datum::from_bytes<datum_test::record>(trailing), std::runtime_error);
      CHECK_THROWS_AS(
          datum::from_bytes<datum_test::record>(datum::binary_view {bytes}.first(1)),
@@ -1942,7 +1942,7 @@ TEST_CASE("generated views observe constructor-bearing public records", "[datum]
      CHECK_THROWS_AS((datum::decode_bounded<datum_test::record, 128>(expected, 16)), std::length_error);
      CHECK_THROWS_AS(datum::to_bytes(source, std::span {storage}.first(8)), std::runtime_error);
      auto trailing = expected;
-     ::ceph::util::push_back(trailing, 0);
+     ceph::util::push_back(trailing, 0);
      CHECK_THROWS_AS((datum::decode_bounded<datum_test::record, 128>(trailing, 512)), std::runtime_error);
      auto truncated = expected;
      truncated.pop_back();
@@ -1983,7 +1983,7 @@ TEST_CASE("generated views observe constructor-bearing public records", "[datum]
      CHECK(bytes == expected);
      CHECK(datum::from_bytes<wire>(bytes) == source);
 
-     ::ceph::util::clear(expected);
+     ceph::util::clear(expected);
      output.reset();
      output(source.value, source.version, source.key).or_throw();
      const auto custom = datum::to_bytes<reordered>(source);
@@ -1993,7 +1993,7 @@ TEST_CASE("generated views observe constructor-bearing public records", "[datum]
      using scalar_wire = datum::binary_schema_t<datum_test::scalar_record>;
 
      const datum_test::scalar_record scalar {3, 7};
-     ::ceph::util::clear(expected);
+     ceph::util::clear(expected);
      output.reset();
      output(scalar.first, scalar.second).or_throw();
      CHECK(datum::to_bytes<scalar_wire>(scalar) == expected);
@@ -2063,7 +2063,7 @@ TEST_CASE("generated views observe constructor-bearing public records", "[datum]
      CHECK_THROWS_AS((datum::decode_bounded<wire, 128>(expected, 1)), std::length_error);
      CHECK_THROWS_AS(datum::to_bytes<wire>(source, std::span {staging}.first(8)), std::runtime_error);
      auto damaged = expected;
-     ::ceph::util::push_back(damaged, 0);
+     ceph::util::push_back(damaged, 0);
      CHECK_THROWS_AS(datum::from_bytes<wire>(damaged), std::runtime_error);
      damaged = expected;
      damaged.pop_back();
@@ -2117,7 +2117,7 @@ TEST_CASE("generated views observe constructor-bearing public records", "[datum]
      zpp::bits::out output {observed};
      datum::serialize_schema(output, source, repeated {}).or_throw();
      auto expected = bytes;
-     ::ceph::util::append_range(expected, bytes);
+     ceph::util::append_range(expected, bytes);
      CHECK(observed == expected);
  }
 
