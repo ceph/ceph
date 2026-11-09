@@ -152,6 +152,24 @@ in the ``bar`` directory of file system ``cephfs_a``::
 
 .. _User Management - Add a User to a Keyring: ../../rados/operations/user-management/#add-a-user-to-a-keyring
 
+Encryption restriction (the 'e' flag)
+===========================================
+
+To create a new fscrypt encryption tree, for example using fscrypt cli, an fscrypt
+policy is required. Clients that wish to set a policy require the ``e`` flag in
+addition to ``rw``.
+
+For example, in the following snippet ``client.0`` can encrypt directory ``bar``
+via ``fscrypt encrypt bar/`` of file system ``cephfs_a``::
+
+    client.0
+        key: AQAz7EVWygILFRAAdIcuJ12opU/JKyfFmxhuaw==
+        caps: [mds] allow rw, allow rwe path=/bar
+        caps: [mon] allow r
+        caps: [osd] allow rw tag cephfs data=cephfs_a
+
+
+
 Network restriction
 ===================
 
