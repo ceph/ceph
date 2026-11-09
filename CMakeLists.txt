@@ -534,11 +534,7 @@ set(CRYPTO_LIBS OpenSSL::Crypto)
 
 option(WITH_DPDK "Enable DPDK messaging" OFF)
 if(WITH_DPDK)
-  find_package(DPDK)
-  if(NOT DPDK_FOUND)
-    include(BuildDPDK)
-    build_dpdk(${CMAKE_BINARY_DIR}/src/dpdk)
-  endif()
+  find_package(DPDK REQUIRED)
   set(HAVE_DPDK TRUE)
 endif()
 
