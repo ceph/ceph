@@ -26,6 +26,7 @@
 
 #include "dmclock/src/dmclock_server.h"
 #include "crimson/osd/scheduler/scheduler.h"
+#include "crimson/osd/scheduler/level_queue.h"
 #include "crimson/mon/MonClient.h"
 
 #include "common/config.h"
@@ -95,18 +96,33 @@ class mClockScheduler : public Scheduler, md_config_obs_t {
       control->cv.signal();
     }
   };
-  using mclock_queue_t = crimson::dmclock::PullPriorityQueue<
+  using mclock_queue_base_t = crimson::dmclock::PullPriorityQueue<
     scheduler_id_t,
-    item_t,
+    LevelQueue::Entry*,
     true,
     true,
     2,
     crimson_mclock_cleaning_job_t>;
+  // dmClock calculates a tag when a head is enqueued. Keep its predecessor
+  // so replacing an unserved head does not charge the class for that head.
+  // Only one candidate per class/profile is ever in this queue.
+  class mclock_queue_t : public mclock_queue_base_t {
+    std::map<scheduler_id_t, dmc::RequestTag> unserved;
+  public:
+    using mclock_queue_base_t::mclock_queue_base_t;
+
+    void set_candidate(const scheduler_id_t &id, LevelQueue::Entry *entry,
+                       uint32_t cost);
+    PullReq pull_candidate(double now);
+  };
   using priority_t = unsigned;
-  using SubQueue = std::map<priority_t,
-	std::list<item_t>,
-	std::greater<priority_t>>;
+  using SubQueue = std::map<priority_t, LevelQueue, std::greater<priority_t>>;
   mclock_queue_t scheduler;
+  struct PendingQueue {
+    LevelQueue items;
+    LevelQueue::Entry *candidate = nullptr;
+  };
+  std::map<scheduler_id_t, PendingQueue> waiting;
   /**
    * high_priority
    *
@@ -182,11 +198,16 @@ public:
   void enqueue_front(item_t &&item) final;
 
   // Return an op to be dispatch
-  WorkItem dequeue() final;
+  WorkItem dequeue(throttle_level_t max_level) final {
+    return dequeue(max_level, dmc::get_time());
+  }
+  WorkItem dequeue(throttle_level_t max_level, double now);
+
+  void abort(std::exception_ptr error) final;
 
   // Returns if the queue is empty
   bool empty() const final {
-    return scheduler.empty() && high_priority.empty();
+    return waiting.empty() && high_priority.empty();
   }
 
   // Formatted output of the queue
