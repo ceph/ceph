@@ -1,6 +1,5 @@
 include(GetGitRevisionDescription)
 include(CheckCXXCompilerFlag)
-include(CheckLinkerFlag)
 
 # for erasure and compressor plugins
 set(CEPH_INSTALL_PKGLIBDIR ${CMAKE_INSTALL_LIBDIR}/${PROJECT_NAME})
@@ -197,10 +196,12 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   endif()
 endif(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
 
-# --copy-dt-needed-entries is a GNU ld option; lld, Apple's ld64 and
-# lld in MinGW mode reject it. Test the linker instead of the OS or
-# the compiler, since clang on Linux uses GNU ld by default.
-check_linker_flag(CXX "-Wl,--copy-dt-needed-entries" HAVE_LINK_COPY_DT_NEEDED_ENTRIES)
+# ld.bfd only; lld and mold reject it. Checked after the FreeBSD -fuse-ld above,
+# with try_compile as it reruns on each configure, unlike check_linker_flag.
+try_compile(HAVE_LINK_COPY_DT_NEEDED_ENTRIES
+  ${CMAKE_CURRENT_BINARY_DIR}
+  SOURCES ${CMAKE_SOURCE_DIR}/cmake/modules/CephCheck_link.c
+  LINK_OPTIONS "LINKER:--copy-dt-needed-entries")
 
 if(WITH_CEPH_DEBUG_MUTEX)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-DCEPH_DEBUG_MUTEX>)
