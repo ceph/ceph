@@ -3,6 +3,7 @@
 
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <limits>
 #include <stack>
 #include <vector>
@@ -10,6 +11,9 @@
 #include <algorithm>
 #include <sys/time.h>
 #include <sys/file.h>
+#if defined(__linux__)
+#include <linux/fscrypt.h>
+#endif
 #include <boost/optional/optional_io.hpp>
 #include <boost/scope_exit.hpp>
 #include "include/scope_guard.h"
@@ -193,6 +197,278 @@ int fscrypt_open_flags_for_mode(mode_t mode) {
     return O_RDONLY | O_DIRECTORY | O_NOFOLLOW;
   }
   return O_RDONLY | O_NOFOLLOW;
+}
+
+#if defined(__linux__)
+// fscrypt CLI stores policy/protector metadata at the FS root. Ciphertext
+// sync alone is enough to decrypt once the key is loaded; these files are
+// needed for `fscrypt status` / `fscrypt unlock` on the peer.
+constexpr const char *FSCRYPT_CLI_BASE = "/.fscrypt";
+constexpr const char *FSCRYPT_CLI_POLICIES = "/.fscrypt/policies";
+constexpr const char *FSCRYPT_CLI_PROTECTORS = "/.fscrypt/protectors";
+
+std::string fscrypt_key_id_hex(const uint8_t *id, size_t len) {
+  static constexpr char HEX[] = "0123456789abcdef";
+  std::string out(len * 2, '\0');
+  for (size_t i = 0; i < len; ++i) {
+    out[i * 2] = HEX[id[i] >> 4];
+    out[i * 2 + 1] = HEX[id[i] & 0xf];
+  }
+  return out;
+}
+
+bool pb_read_varint(const uint8_t *&p, const uint8_t *end, uint64_t *v) {
+  *v = 0;
+  int shift = 0;
+  while (p < end && shift <= 63) {
+    uint8_t b = *p++;
+    *v |= uint64_t(b & 0x7f) << shift;
+    if ((b & 0x80) == 0) {
+      return true;
+    }
+    shift += 7;
+  }
+  return false;
+}
+
+bool pb_skip_field(const uint8_t *&p, const uint8_t *end, uint32_t wire) {
+  uint64_t len = 0;
+  switch (wire) {
+  case 0: // varint
+    return pb_read_varint(p, end, &len);
+  case 1: // 64-bit
+    if (end - p < 8) {
+      return false;
+    }
+    p += 8;
+    return true;
+  case 2: // length-delimited
+    if (!pb_read_varint(p, end, &len) || len > uint64_t(end - p)) {
+      return false;
+    }
+    p += len;
+    return true;
+  case 5: // 32-bit
+    if (end - p < 4) {
+      return false;
+    }
+    p += 4;
+    return true;
+  default:
+    return false;
+  }
+}
+
+// Pull protector_descriptor strings from fscrypt PolicyData protobuf
+// (field 3 = WrappedPolicyKey; inner field 1 = protector_descriptor).
+void fscrypt_policy_protector_ids(const uint8_t *data, size_t len,
+                                  std::vector<std::string> *out) {
+  const uint8_t *p = data;
+  const uint8_t *end = data + len;
+  while (p < end) {
+    uint64_t tag = 0;
+    if (!pb_read_varint(p, end, &tag)) {
+      return;
+    }
+    uint32_t field = tag >> 3;
+    uint32_t wire = tag & 7;
+    if (field == 3 && wire == 2) {
+      uint64_t mlen = 0;
+      if (!pb_read_varint(p, end, &mlen) || mlen > uint64_t(end - p)) {
+        return;
+      }
+      const uint8_t *mp = p;
+      const uint8_t *mend = p + mlen;
+      p += mlen;
+      while (mp < mend) {
+        uint64_t itag = 0;
+        if (!pb_read_varint(mp, mend, &itag)) {
+          break;
+        }
+        uint32_t ifield = itag >> 3;
+        uint32_t iwire = itag & 7;
+        if (ifield == 1 && iwire == 2) {
+          uint64_t slen = 0;
+          if (!pb_read_varint(mp, mend, &slen) || slen > uint64_t(mend - mp)) {
+            break;
+          }
+          out->emplace_back(reinterpret_cast<const char *>(mp), slen);
+          mp += slen;
+        } else if (!pb_skip_field(mp, mend, iwire)) {
+          break;
+        }
+      }
+    } else if (!pb_skip_field(p, end, wire)) {
+      return;
+    }
+  }
+}
+
+int read_fscrypt_cli_file(MountRef src, const std::string &path,
+                          std::vector<uint8_t> *out, mode_t *mode) {
+  int sfd = ceph_open(src, path.c_str(), O_RDONLY, 0);
+  if (sfd < 0) {
+    return sfd;
+  }
+
+  struct ceph_statx stx;
+  int r = ceph_fstatx(src, sfd, &stx, CEPH_STATX_MODE | CEPH_STATX_SIZE,
+                      AT_SYMLINK_NOFOLLOW);
+  if (r < 0) {
+    ceph_close(src, sfd);
+    return r;
+  }
+  if (mode) {
+    *mode = stx.stx_mode & 0777;
+  }
+
+  out->assign(stx.stx_size, 0);
+  if (stx.stx_size > 0) {
+    r = ceph_read(src, sfd, reinterpret_cast<char *>(out->data()), out->size(),
+                  0);
+    if (r < 0) {
+      ceph_close(src, sfd);
+      return r;
+    }
+    if (uint64_t(r) != stx.stx_size) {
+      ceph_close(src, sfd);
+      return -EIO;
+    }
+  }
+  ceph_close(src, sfd);
+  return 0;
+}
+
+int write_fscrypt_cli_file(MountRef dst, const std::string &path,
+                           const uint8_t *data, size_t len, mode_t mode) {
+  int dfd = ceph_open(dst, path.c_str(), O_CREAT | O_TRUNC | O_WRONLY, mode);
+  if (dfd < 0) {
+    return dfd;
+  }
+  int r = 0;
+  if (len > 0) {
+    r = ceph_write(dst, dfd, reinterpret_cast<const char *>(data), len, 0);
+    if (r >= 0 && uint64_t(r) != len) {
+      r = -EIO;
+    } else if (r > 0) {
+      r = 0;
+    }
+  }
+  ceph_close(dst, dfd);
+  return r;
+}
+
+int copy_fscrypt_cli_file(MountRef src, MountRef dst, const std::string &path) {
+  std::vector<uint8_t> buf;
+  mode_t mode = 0600;
+  int r = read_fscrypt_cli_file(src, path, &buf, &mode);
+  if (r < 0) {
+    return r;
+  }
+  return write_fscrypt_cli_file(dst, path, buf.data(), buf.size(), mode);
+}
+
+// Sync only the policy (and its protectors) for this encrypted directory.
+// Missing CLI metadata on the source is not an error.
+int sync_fscrypt_cli_metadata(MountRef src, MountRef dst, int src_dir_fd) {
+  struct fscrypt_policy_v2 policy;
+  memset(&policy, 0, sizeof(policy));
+  int r = ceph_get_fscrypt_policy_v2(src, src_dir_fd, &policy);
+  if (r == -ENODATA || r == -EOPNOTSUPP || r == -ENOENT || r == -ENOTSUP) {
+    return 0;
+  }
+  if (r < 0) {
+    return r;
+  }
+  if (policy.version != 2) {
+    return 0;
+  }
+
+  const std::string policy_id = fscrypt_key_id_hex(
+      policy.master_key_identifier, FSCRYPT_KEY_IDENTIFIER_SIZE);
+  const std::string policy_path =
+      std::string(FSCRYPT_CLI_POLICIES) + "/" + policy_id;
+
+  std::vector<uint8_t> policy_blob;
+  mode_t policy_mode = 0600;
+  r = read_fscrypt_cli_file(src, policy_path, &policy_blob, &policy_mode);
+  if (r == -ENOENT) {
+    generic_dout(10) << "cephfs::mirror: no fscrypt CLI policy at "
+                     << policy_path << "; skipping metadata sync" << dendl;
+    return 0;
+  }
+  if (r < 0) {
+    return r;
+  }
+
+  mode_t meta_mode = 0755;
+  struct ceph_statx bstx;
+  if (ceph_statx(src, FSCRYPT_CLI_BASE, &bstx, CEPH_STATX_MODE,
+                 AT_SYMLINK_NOFOLLOW) == 0) {
+    meta_mode = bstx.stx_mode & 07777;
+  }
+
+  r = ceph_mkdirs(dst, FSCRYPT_CLI_POLICIES, meta_mode);
+  if (r < 0 && r != -EEXIST) {
+    return r;
+  }
+  r = ceph_mkdirs(dst, FSCRYPT_CLI_PROTECTORS, meta_mode);
+  if (r < 0 && r != -EEXIST) {
+    return r;
+  }
+
+  r = write_fscrypt_cli_file(dst, policy_path, policy_blob.data(),
+                             policy_blob.size(), policy_mode);
+  if (r < 0) {
+    generic_derr << "cephfs::mirror: failed to sync fscrypt CLI policy "
+                 << policy_path << ": " << cpp_strerror(r) << dendl;
+    return r;
+  }
+  generic_dout(10) << "cephfs::mirror: synced fscrypt CLI policy "
+                   << policy_id << dendl;
+
+  std::vector<std::string> protector_ids;
+  fscrypt_policy_protector_ids(policy_blob.data(), policy_blob.size(),
+                               &protector_ids);
+  for (const auto &pid : protector_ids) {
+    if (pid.empty()) {
+      continue;
+    }
+    // Prefer the real protector; fall back to a cross-fs link file.
+    const std::string ppath =
+        std::string(FSCRYPT_CLI_PROTECTORS) + "/" + pid;
+    const std::string lpath = ppath + ".link";
+    r = copy_fscrypt_cli_file(src, dst, ppath);
+    if (r == -ENOENT) {
+      r = copy_fscrypt_cli_file(src, dst, lpath);
+    }
+    if (r == -ENOENT) {
+      generic_dout(5) << "cephfs::mirror: fscrypt protector " << pid
+                      << " not present on source; skipped" << dendl;
+      continue;
+    }
+    if (r < 0) {
+      generic_derr << "cephfs::mirror: failed to sync fscrypt CLI protector "
+                   << pid << ": " << cpp_strerror(r) << dendl;
+      return r;
+    }
+    generic_dout(10) << "cephfs::mirror: synced fscrypt CLI protector "
+                     << pid << dendl;
+  }
+  return 0;
+}
+#else
+int sync_fscrypt_cli_metadata(MountRef, MountRef, int) {
+  return 0;
+}
+#endif
+
+int sync_fscrypt_dir_root(MountRef src, int src_fd, MountRef dst, int dst_fd) {
+  int r = sync_fscrypt_xattrs(src, src_fd, dst, dst_fd);
+  if (r < 0) {
+    return r;
+  }
+  return sync_fscrypt_cli_metadata(src, dst, src_fd);
 }
 
 std::string entry_path(const std::string &dir, const std::string &name) {
@@ -2715,10 +2991,10 @@ int PeerReplayer::SnapDiffSync::init_sync() {
   root.is_fscrypt = fd_has_fscrypt_auth(m_local, m_fh->c_fd);
   if (root.is_fscrypt) {
     // Mirrored root itself may be the policy directory; stamp it once.
-    r = sync_fscrypt_xattrs(m_local, m_fh->c_fd, m_remote, m_fh->r_fd_dir_root);
+    r = sync_fscrypt_dir_root(m_local, m_fh->c_fd, m_remote, m_fh->r_fd_dir_root);
     if (r < 0) {
-      derr << ": failed to sync fscrypt xattrs for dir_root=" << m_dir_root << ": "
-           << cpp_strerror(r) << dendl;
+      derr << ": failed to sync fscrypt metadata for dir_root=" << m_dir_root
+           << ": " << cpp_strerror(r) << dendl;
       ceph_close_snapdiff(&info);
       return r;
     }
@@ -3145,10 +3421,10 @@ int PeerReplayer::RemoteSync::init_sync() {
   SyncEntry root(".", tdirp, tstx);
   root.is_fscrypt = fd_has_fscrypt_auth(m_local, m_fh->c_fd);
   if (root.is_fscrypt) {
-    r = sync_fscrypt_xattrs(m_local, m_fh->c_fd, m_remote, m_fh->r_fd_dir_root);
+    r = sync_fscrypt_dir_root(m_local, m_fh->c_fd, m_remote, m_fh->r_fd_dir_root);
     if (r < 0) {
-      derr << ": failed to sync fscrypt xattrs for dir_root=" << m_dir_root << ": "
-           << cpp_strerror(r) << dendl;
+      derr << ": failed to sync fscrypt metadata for dir_root=" << m_dir_root
+           << ": " << cpp_strerror(r) << dendl;
       ceph_closedir(m_local, tdirp);
       return r;
     }
