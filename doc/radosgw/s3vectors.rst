@@ -159,6 +159,32 @@ over its size or object quota; the request's own payload is not pre-counted, so
 the write that first takes a bucket over quota is allowed and subsequent writes
 are rejected.
 
+In addition to the storage quotas above, two service limits bound the number of
+vector-service entities. They are checked at the start of the relevant operation
+with the same *already-over* semantics (the request that first crosses the limit
+is allowed, later requests are rejected) and apply to every backend, since they
+count logical entities rather than stored bytes:
+
+* ``rgw_s3vector_max_indexes_per_bucket`` limits how many indexes a single vector
+  bucket may hold and is checked by ``CreateIndex``. The default is ``10000``,
+  matching the AWS S3 Vectors limit.
+* ``rgw_s3vector_max_vectors_per_index`` limits how many vectors a single index
+  may hold and is checked by ``PutVectors``. The default is ``2000000000``
+  (2 billion), matching the AWS S3 Vectors limit.
+
+Storage quotas and service limits are checked only for the S3 Vectors operations
+described above. Background tasks such as reindexing, compaction, and index
+maintenance do not perform these checks and are not stopped or aborted for
+exceeding a quota or limit. These tasks may increase or decrease storage usage,
+which affects quota checks on subsequent ``CreateIndex`` and ``PutVectors``
+requests.
+
+Set either option to ``0`` to disable that limit. Both are runtime-tunable, for
+example::
+
+   ceph config set client.rgw rgw_s3vector_max_indexes_per_bucket 100
+   ceph config set client.rgw rgw_s3vector_max_vectors_per_index 1000000
+
 Use ``--vector`` to select the vector namespace for bucket listing, statistics,
 quotas, ownership changes, and usage commands. For example::
 

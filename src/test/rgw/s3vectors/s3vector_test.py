@@ -2977,6 +2977,88 @@ def test_put_vectors_max_vectors():
     set_rgw_config_option('rgw_s3vector_max_put_vectors', 500)
 
 @pytest.mark.vector_test
+def test_create_index_max_indexes_per_bucket():
+    """
+    CreateIndex is rejected once a vector bucket is already over
+    "rgw_s3vector_max_indexes_per_bucket". The check uses the current index count
+    only (the new index is not pre-counted), so with a limit of 1 the first two
+    indexes succeed and the third -- when the bucket already holds more than the
+    limit -- is rejected. Setting the limit to 0 disables it.
+    """
+    set_rgw_config_option('rgw_s3vector_max_indexes_per_bucket', 1)
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dimension = 2
+    _ensure_s3_bucket_for_vector_bucket(bucket_name)
+    try:
+        result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+        def make_index(name):
+            return conn.create_index(vectorBucketName=bucket_name, indexName=name,
+                                     dataType='float32', dimension=dimension,
+                                     distanceMetric='euclidean')
+
+        # empty bucket -> allowed; count becomes 1 (== limit)
+        assert make_index('idx-0')['ResponseMetadata']['HTTPStatusCode'] == 200
+        # count 1 is not yet *over* the limit -> the crossing index is allowed
+        assert make_index('idx-1')['ResponseMetadata']['HTTPStatusCode'] == 200
+        # count 2 > 1 -> already over -> rejected
+        with pytest.raises(conn.exceptions.ClientError):
+            make_index('idx-2')
+
+        # disabling the limit lets creation through again
+        set_rgw_config_option('rgw_s3vector_max_indexes_per_bucket', 0)
+        assert make_index('idx-2')['ResponseMetadata']['HTTPStatusCode'] == 200
+    finally:
+        set_rgw_config_option('rgw_s3vector_max_indexes_per_bucket', 10000)
+        _ = _delete_vector_bucket(conn, bucket_name)
+        _delete_s3_bucket_for_vector_bucket(bucket_name)
+
+@pytest.mark.vector_test
+def test_put_vectors_max_vectors_per_index():
+    """
+    PutVectors is rejected once an index is already over
+    "rgw_s3vector_max_vectors_per_index". The check uses the current row count
+    only (this request's vectors are not pre-counted), so with a limit of 1 the
+    first request (which adds 2 vectors to an empty index) succeeds and the next
+    request -- when the index already holds more than the limit -- is rejected.
+    Setting the limit to 0 disables it.
+    """
+    set_rgw_config_option('rgw_s3vector_max_vectors_per_index', 1)
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    index_name = 'test-index'
+    dimension = 2
+    _ensure_s3_bucket_for_vector_bucket(bucket_name)
+    try:
+        result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                                   dataType='float32', dimension=dimension,
+                                   distanceMetric='euclidean')
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+        # empty index -> allowed even though it adds 2 vectors (payload not pre-counted)
+        result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                  vectors=generate_vectors(2, dimension))
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        # index now holds 2 > 1 -> already over -> rejected
+        with pytest.raises(conn.exceptions.ClientError):
+            conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                             vectors=generate_vectors(1, dimension))
+
+        # disabling the limit lets puts through again
+        set_rgw_config_option('rgw_s3vector_max_vectors_per_index', 0)
+        result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                  vectors=generate_vectors(1, dimension))
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    finally:
+        set_rgw_config_option('rgw_s3vector_max_vectors_per_index', 2000000000)
+        _ = _delete_vector_bucket(conn, bucket_name)
+        _delete_s3_bucket_for_vector_bucket(bucket_name)
+
+@pytest.mark.vector_test
 def test_vectors_large_fragment():
     """
     Vectors that were written by a single large request must all be returned.

@@ -958,6 +958,36 @@ namespace rgw::s3vector {
       return;
     }
 
+    // Reject when the bucket is already over its index-count limit. Only the
+    // current count is compared (the new index is not pre-counted), matching the
+    // storage-quota semantics. 0 disables the limit.
+    const auto max_indexes =
+        dpp->get_cct()->_conf.get_val<uint64_t>("rgw_s3vector_max_indexes_per_bucket");
+    if (max_indexes > 0) {
+      char** index_names = nullptr;
+      size_t index_count = 0;
+      char* count_error = nullptr;
+      if (lancedb_connection_table_names(conn, &index_names, &index_count,
+                                         &count_error) != LANCEDB_SUCCESS) {
+        ldpp_dout(dpp, 1) << "ERROR: s3vector failed to count indexes of bucket: "
+          << configuration.vector_bucket_name << ". error: "
+          << (count_error ? count_error : "unknown") << dendl;
+        lancedb_free_string(count_error);
+        lancedb_connection_free(conn);
+        ctx->result = -EIO;
+        return;
+      }
+      lancedb_free_table_names(index_names, index_count);
+      if (index_count > max_indexes) {
+        ldpp_dout(dpp, 10) << "s3vector: bucket '" << configuration.vector_bucket_name
+          << "' is already over its index limit (" << index_count << " > "
+          << max_indexes << ")" << dendl;
+        lancedb_connection_free(conn);
+        ctx->result = -ERR_QUOTA_EXCEEDED;
+        return;
+      }
+    }
+
     // validate the number of non/filterable metadata keys
     if (configuration.filterable_metadata_keys.size() > max_filterable_metadata_keys) {
       errors.push_back({"metadataConfiguration.filterableMetadataKeys",
@@ -1860,6 +1890,24 @@ namespace rgw::s3vector {
       lancedb_connection_free(conn);
       ctx->result = 0;
       return;
+    }
+
+    // Reject when the index is already over its vector-count limit. Only the
+    // current row count is compared (this request's vectors are not pre-counted),
+    // matching the storage-quota semantics. 0 disables the limit.
+    const auto max_vectors_per_index =
+        dpp->get_cct()->_conf.get_val<uint64_t>("rgw_s3vector_max_vectors_per_index");
+    if (max_vectors_per_index > 0) {
+      const auto row_count = lancedb_table_count_rows(table);
+      if (row_count > max_vectors_per_index) {
+        ldpp_dout(dpp, 10) << "s3vector: index '" << configuration.index_name
+          << "' is already over its vector limit (" << row_count << " > "
+          << max_vectors_per_index << ")" << dendl;
+        lancedb_table_free(table);
+        lancedb_connection_free(conn);
+        ctx->result = -ERR_QUOTA_EXCEEDED;
+        return;
+      }
     }
 
     // get the schema, dimension, and filterable keys from the table
