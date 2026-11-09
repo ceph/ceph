@@ -4492,7 +4492,18 @@ void RGWDeleteBucket::execute(optional_yield y)
 }
 
 int RGWPutObj::init_processing(optional_yield y) {
-  copy_source = url_decode(s->info.env->get("HTTP_X_AMZ_COPY_SOURCE", ""));
+  const std::string_view raw_copy_source =
+    s->info.env->get("HTTP_X_AMZ_COPY_SOURCE", "");
+  copy_source = url_decode(raw_copy_source);
+  /* url_decode() returns an empty string for a malformed percent
+   * sequence, which would read as no copy source and turn the request
+   * into an upload of its body */
+  if (!raw_copy_source.empty() && copy_source.empty()) {
+    s->err.message = "Invalid copy source encoding";
+    ldpp_dout(this, 5) << "x-amz-copy-source does not decode: "
+                       << raw_copy_source << dendl;
+    return -EINVAL;
+  }
   copy_source_range = s->info.env->get("HTTP_X_AMZ_COPY_SOURCE_RANGE");
   size_t pos;
   int ret;
