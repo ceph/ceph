@@ -136,7 +136,8 @@ class Reader : public DoutPrefixPipe {
 
   /// Classify the result of a completed shard read operation. Returning
   /// Retry will trigger another read() and its corresponding on_complete().
-  virtual Result on_complete(int shard, error_code ec) {
+  /// A reader may replace ec to report a failure from decoding a successful read.
+  virtual Result on_complete(int shard, error_code& ec) {
     return ec ? Result::Error : Result::Success;
   }
 
