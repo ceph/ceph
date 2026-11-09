@@ -51,10 +51,10 @@ void ZeroCopyClient::queue_user_cb(Client* clnt, IoCallback cb, int64_t result,
 }
 
 /**
- * Filer read completion. Objecter may invoke without client_lock; we take it,
- * finish short-read handling / optional FSCrypt decrypt, drop FILE_RD, unlock,
- * then run the user callback. Context::complete() deletes this after finish
- * returns (unless a short-read retry keeps the object alive).
+ * Filer read completion. Objecter may invoke without client_lock; we take it for
+ * size/cap/short-read bookkeeping, drop it for buffer assembly / decrypt and
+ * for Filer submit, then run the user callback. Context::complete() deletes
+ * this after finish returns (unless a short-read retry keeps the object alive).
  *
  * API payload is always plaintext: ciphertext from Filer is decrypted in place
  * via decrypt_bl before the user callback (copy into a new bufferlist).
@@ -83,6 +83,9 @@ public:
   uint64_t read_start = 0;
   uint64_t read_len = 0;
 #if defined(__linux__)
+  // Per-op validator: avoid racing shared_ptr assigns on in->fscrypt_key_validator
+  // from concurrent ZC reads (prepare stays under client_lock for inode fields).
+  FSCryptKeyValidatorRef key_validator;
   FSCryptFDataDencRef fscrypt_denc;
   bufferlist encbl; ///< accumulates ciphertext when fscrypt_denc is set
 #endif
@@ -108,11 +111,12 @@ public:
     clnt->_put_fh(fh);
   }
 
-  void start()
+  // Requires client_lock: reads inode size/ctx and sets up aligned range + denc.
+  // Does not submit to Filer — call submit() after unlocking.
+  void prepare()
   {
 #if defined(__linux__)
-    clnt->fscrypt->prepare_data_read(in->fscrypt_ctx,
-                                     &in->fscrypt_key_validator, off, len,
+    clnt->fscrypt->prepare_data_read(in->fscrypt_ctx, &key_validator, off, len,
                                      in->size, &read_start, &read_len,
                                      &fscrypt_denc);
     pos = read_start;
@@ -125,10 +129,11 @@ public:
     left = len;
     wanted = len;
 #endif
-    retry();
   }
 
-  void retry()
+  // Filer/Objecter submit — must not hold client_lock (avoids serializing
+  // concurrent ZC reads behind Objecter rwlock / message send under the mutex).
+  void submit()
   {
     filer->read_trunc(in->ino, &layout, snapid, pos, left, &tbl, 0,
                       truncate_size, truncate_seq, this);
@@ -217,8 +222,10 @@ public:
       wanted = left;
       truncate_size = in->truncate_size;
       truncate_seq = in->truncate_seq;
-      // Keep client_lock across submit; fini stays false until final completion.
-      retry();
+      // Submit under client_lock like C_Read_Sync_NonBlocking so an inline
+      // Objecter completion cannot re-enter finish() on this object. Initial
+      // submits from async_read() run unlocked after prepare().
+      submit();
       return;
     }
 
@@ -550,10 +557,10 @@ int ZeroCopyClient::async_read(Fh* fh, uint64_t off, uint64_t len, IoCallback cb
   client->logger->inc(l_c_aio_ops);
   client->inc_aio_in_flight();
 
-  // Hold client_lock across start(): prepare_data_read assigns
-  // in->fscrypt_key_validator (shared_ptr), same as C_Read_Sync_NonBlocking.
-  read_ctx->start();
+  // prepare_data_read needs client_lock for inode fields; Filer submit does not.
+  read_ctx->prepare();
   lock.unlock();
+  read_ctx->submit();
   return 0;
 }
 
