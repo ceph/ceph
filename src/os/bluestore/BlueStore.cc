@@ -3769,15 +3769,6 @@ int BlueStore::_init_alloc()
 
 void BlueStore::_post_init_alloc()
 {
-  int r = 0;
-  if (fm->is_null_manager()) {
-    // Now that we load the allocation map we need to invalidate the file as new allocation won't be reflected
-    // Changes to the allocation map (alloc/release) are not updated inline and will only be stored on umount()
-    // This means that we should not use the existing file on failure case (unplanned shutdown) and must resort
-    //  to recovery from RocksDB::ONodes
-    r = invalidate_allocation_file_on_bluefs();
-  }
-  ceph_assert(r >= 0);
 }
 
 void BlueStore::_close_alloc()
@@ -4302,20 +4293,6 @@ int BlueStore::_open_db_and_around(
       deferred_keys_remove_txn->rm_single_key(PREFIX_DEFERRED, s);
     }
     db->submit_transaction_sync(deferred_keys_remove_txn);
-  }
-
-  // when function is called in repair mode (to_repair=true) we skip db->open()/create()
-  // we can't change bluestore allocation so no need to invlidate allocation-file
-  if (fm->is_null_manager() && !read_only && !to_repair) {
-    // Now that we load the allocation map we need to invalidate the file as new allocation won't be reflected
-    // Changes to the allocation map (alloc/release) are not updated inline and will only be stored on umount()
-    // This means that we should not use the existing file on failure case (unplanned shutdown) and must resort
-    //  to recovery from RocksDB::ONodes
-    r = invalidate_allocation_file_on_bluefs();
-    if (r != 0) {
-      derr << __func__ << "::NCB::invalidate_allocation_file_on_bluefs() failed!" << dendl;
-      goto out_alloc;
-    }
   }
 
   // when function is called in repair mode (to_repair=true) we skip db->open()/create()
