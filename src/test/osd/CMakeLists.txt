@@ -61,6 +61,8 @@ add_executable(unittest_osd_types
 add_ceph_unittest(unittest_osd_types)
 target_link_libraries(unittest_osd_types global)
 
+add_catch2_test(omap_values)
+
 # unittest_ecbackend_l (legacy EC)
 add_executable(unittest_ecbackend_l
   TestECBackendL.cc
