@@ -17,7 +17,10 @@
 #include <thread>
 #include <vector>
 
+#include "common/ceph_argparse.h"
 #include "common/perf_counters.h"
+#include "global/global_context.h"
+#include "global/global_init.h"
 
 #include "mgr/mgr_perf_counters.h"
 #include "mgr/MgrMapCache.h"
@@ -218,4 +221,204 @@ TEST(LFUCache, ConcurrentReads) {
 
   ASSERT_EQ(success_count, 10000);
   ASSERT_EQ(c.get_hits(), 10000);
+}
+
+// MgrMapCache<PyObject*> refcount tests. Each test holds the GIL.
+struct PyCache : public ::testing::Test {
+  static void SetUpTestSuite() {
+    if (!Py_IsInitialized()) {
+      Py_Initialize();
+    }
+  }
+  void SetUp() override {
+    gstate = PyGILState_Ensure();
+  }
+  void TearDown() override {
+    PyGILState_Release(gstate);
+  }
+private:
+  PyGILState_STATE gstate{};
+};
+
+TEST_F(PyCache, InsertAndGet) {
+  PyObject* o = PyList_New(0);
+  {
+    MgrMapCache<PyObject*> c;
+    c.insert("pg_dump", o);
+    ASSERT_EQ(Py_REFCNT(o), 2);
+    PyObject* got = c.get("pg_dump");
+    ASSERT_EQ(got, o);
+    ASSERT_EQ(Py_REFCNT(o), 3);
+    Py_DECREF(got);
+  }
+  // destructor drops the cache's ref
+  ASSERT_EQ(Py_REFCNT(o), 1);
+  Py_DECREF(o);
+}
+
+TEST_F(PyCache, ReplaceDropsOld) {
+  PyObject* a = PyList_New(0);
+  PyObject* b = PyList_New(0);
+  MgrMapCache<PyObject*> c;
+  c.insert("pg_dump", a);
+  c.insert("pg_dump", b);
+  ASSERT_EQ(Py_REFCNT(a), 1);
+  ASSERT_EQ(Py_REFCNT(b), 2);
+  c.clear();
+  ASSERT_EQ(Py_REFCNT(b), 1);
+  Py_DECREF(a);
+  Py_DECREF(b);
+}
+
+TEST_F(PyCache, EvictDropsOld) {
+  PyObject* a = PyList_New(0);
+  PyObject* b = PyList_New(0);
+  MgrMapCache<PyObject*> c{1};
+  c.insert("pg_dump", a);
+  c.insert("osd_map", b);
+  ASSERT_EQ(c.size(), 1);
+  ASSERT_EQ(Py_REFCNT(a), 1);
+  ASSERT_EQ(Py_REFCNT(b), 2);
+  c.clear();
+  Py_DECREF(a);
+  Py_DECREF(b);
+}
+
+// erase() runs without the GIL in the mgr, so it only queues the object.
+// The next get() or insert() must drop the cache's ref.
+TEST_F(PyCache, EraseReleasedOnGet) {
+  PyObject* o = PyList_New(0);
+  MgrMapCache<PyObject*> c;
+  c.insert("pg_dump", o);
+  ASSERT_EQ(Py_REFCNT(o), 2);
+
+  PyThreadState* ts = PyEval_SaveThread();
+  c.erase("pg_dump");
+  PyEval_RestoreThread(ts);
+  ASSERT_EQ(c.size(), 0);
+  ASSERT_EQ(Py_REFCNT(o), 2);
+
+  ASSERT_EQ(c.get("pg_dump"), nullptr);
+  ASSERT_EQ(Py_REFCNT(o), 1);
+  Py_DECREF(o);
+}
+
+TEST_F(PyCache, EraseReleasedOnInsert) {
+  PyObject* a = PyList_New(0);
+  PyObject* b = PyList_New(0);
+  MgrMapCache<PyObject*> c;
+  c.insert("pg_dump", a);
+
+  PyThreadState* ts = PyEval_SaveThread();
+  c.erase("pg_dump");
+  PyEval_RestoreThread(ts);
+  ASSERT_EQ(Py_REFCNT(a), 2);
+
+  c.insert("osd_map", b);
+  ASSERT_EQ(Py_REFCNT(a), 1);
+  ASSERT_EQ(Py_REFCNT(b), 2);
+  c.clear();
+  Py_DECREF(a);
+  Py_DECREF(b);
+}
+
+TEST_F(PyCache, ClearDropsCachedAndQueued) {
+  PyObject* a = PyList_New(0);
+  PyObject* b = PyList_New(0);
+  MgrMapCache<PyObject*> c;
+  c.insert("pg_dump", a);
+  c.insert("osd_map", b);
+
+  PyThreadState* ts = PyEval_SaveThread();
+  c.erase("pg_dump");
+  PyEval_RestoreThread(ts);
+
+  c.clear();
+  ASSERT_EQ(Py_REFCNT(a), 1);
+  ASSERT_EQ(Py_REFCNT(b), 1);
+  // nothing left to release twice
+  c.clear();
+  ASSERT_EQ(c.get("pg_dump"), nullptr);
+  ASSERT_EQ(Py_REFCNT(a), 1);
+  Py_DECREF(a);
+  Py_DECREF(b);
+}
+
+// Reproducer for https://tracker.ceph.com/issues/81794: prometheus builds a
+// new pg_dump each scrape, and every new PG map invalidates it.
+TEST_F(PyCache, InsertGetEraseLoop) {
+  constexpr int n = 1000;
+  MgrMapCache<PyObject*> c;
+  std::vector<PyObject*> objs;
+  for (int i = 0; i < n; ++i) {
+    PyObject* o = PyList_New(0);
+    objs.push_back(o);
+    c.insert("pg_dump", o);
+    PyObject* got = c.get("pg_dump");
+    ASSERT_EQ(got, o);
+    Py_DECREF(got);
+
+    PyThreadState* ts = PyEval_SaveThread();
+    c.erase("pg_dump");
+    PyEval_RestoreThread(ts);
+  }
+  // drain the last erase
+  ASSERT_EQ(c.get("pg_dump"), nullptr);
+  for (auto* o : objs) {
+    ASSERT_EQ(Py_REFCNT(o), 1);
+    Py_DECREF(o);
+  }
+}
+
+// insert() and get() take the GIL, erase() runs without it, like the
+// notify paths. Every ref the cache took must be dropped exactly once.
+TEST_F(PyCache, Concurrent) {
+  constexpr int iters = 2000;
+  PyObject* a = PyList_New(0);
+  PyObject* b = PyList_New(0);
+  MgrMapCache<PyObject*> c;
+
+  PyThreadState* ts = PyEval_SaveThread();
+  std::vector<std::thread> threads;
+  for (int t = 0; t < 2; ++t) {
+    threads.emplace_back([&c, a, b, t] {
+      for (int i = 0; i < iters; ++i) {
+        PyGILState_STATE st = PyGILState_Ensure();
+        c.insert(i % 2 ? "pg_dump" : "osd_map", t ? a : b);
+        PyGILState_Release(st);
+      }
+    });
+    threads.emplace_back([&c] {
+      for (int i = 0; i < iters; ++i) {
+        PyGILState_STATE st = PyGILState_Ensure();
+        PyObject* o = c.get(i % 2 ? "pg_dump" : "osd_map");
+        Py_XDECREF(o);
+        PyGILState_Release(st);
+      }
+    });
+    threads.emplace_back([&c] {
+      for (int i = 0; i < iters; ++i) {
+        c.erase(i % 2 ? "osd_map" : "pg_dump");
+      }
+    });
+  }
+  for (auto& th : threads) th.join();
+  PyEval_RestoreThread(ts);
+
+  c.clear();
+  ASSERT_EQ(Py_REFCNT(a), 1);
+  ASSERT_EQ(Py_REFCNT(b), 1);
+  Py_DECREF(a);
+  Py_DECREF(b);
+}
+
+int main(int argc, char **argv)
+{
+  auto args = argv_to_vec(argc, argv);
+  auto cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_CLIENT,
+                         CODE_ENVIRONMENT_UTILITY,
+                         CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+  common_init_finish(g_ceph_context);
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
 }
