@@ -96,7 +96,7 @@ struct ClassRegistrar {
   template <typename Tag>
   void register_cxx_method(const ClsMethod<Tag, ClassDef>& method_def,
                     cls_method_cxx_call_t class_call,
-                    cls_method_handle_t* handle) {
+                    cls_method_handle_t *handle = nullptr) {
 
     int flags = FlagTraits<Tag>::value;
     detail::cls_register_cxx_method_impl(h_class, method_def.name, flags, class_call, handle);

@@ -48,7 +48,7 @@ constexpr std::uint32_t checked_count(const std::uint64_t size)
 }
 
 template <typename T>
-std::uint8_t checked_byte(const T value)
+constexpr std::uint8_t checked_byte(const T value)
 {
     if constexpr (std::is_enum_v<T>) {
         return checked_byte(std::to_underlying(value));
@@ -388,6 +388,11 @@ public:
         payload(value);
     }
 
+    void text(std::string& value, std::true_type)
+    {
+        payload(value, scalar<std::uint32_t>(), std::true_type {});
+    }
+
     void text(ceph::buffer::ptr& value)
     {
         const auto size = scalar<std::uint32_t>();
@@ -399,6 +404,8 @@ public:
         }
         input.copy_shallow(size, value);
     }
+
+    void text(ceph::buffer::ptr& value, std::true_type) { text(value); }
 
     std::string text()
     {
@@ -443,6 +450,35 @@ public:
     {
         require(size);
         value.clear();
+        input.copy(size, value);
+    }
+
+    // Opt in where owning text is decoded repeatedly; keep ordinary archive reads unchanged.
+    template <typename BytesT>
+    requires std::same_as<BytesT, std::string> || std::same_as<BytesT, byte_buffer>
+    void payload(BytesT& value, const unsigned size, std::true_type)
+    {
+        require(size);
+        if constexpr (std::same_as<BytesT, std::string> &&
+                      std::same_as<CursorT, byte_buffer::const_iterator>) {
+            // Avoid copying old contents when storage grows; fresh outputs are already empty.
+            if (!value.empty()) {
+                value.clear();
+            }
+            // The checked native cursor fills the storage without allocation or bounds failure.
+            value.resize_and_overwrite(size, [this](char *bytes, std::size_t count) noexcept {
+                input.copy(static_cast<unsigned>(count), bytes);
+
+                return count;
+            });
+
+            return;
+        }
+        value.clear();
+        if constexpr (std::same_as<BytesT, std::string>) {
+            // Other cursors may throw while copying; keep them outside a noexcept callback.
+            value.reserve(size);
+        }
         input.copy(size, value);
     }
 

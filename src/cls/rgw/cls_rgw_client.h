@@ -8,6 +8,9 @@
 #include "include/str_list.h"
 #include "include/rados/librados.hpp"
 #include "cls_rgw_ops.h"
+#include "rgw/datum/adapters/cls/bilog_types.h"
+#include "rgw/datum/adapters/cls/bucket_types.h"
+#include "rgw/datum/adapters/cls/olh_types.h"
 #include "cls_rgw_const.h"
 #include "common/RefCountedObj.h"
 #include "common/strtol.h"
@@ -140,13 +143,12 @@ void cls_rgw_bucket_update_stats(librados::ObjectWriteOperation& o,
 void cls_rgw_bucket_prepare_op(librados::ObjectWriteOperation& o, RGWModifyOp op, const std::string& tag,
                                const cls_rgw_obj_key& key, const std::string& locator);
 
-void cls_rgw_bucket_complete_op(librados::ObjectWriteOperation& o, RGWModifyOp op, const std::string& tag,
-                                const rgw_bucket_entry_ver& ver,
-                                const cls_rgw_obj_key& key,
-                                const rgw_bucket_dir_entry_meta& dir_meta,
-				const std::list<cls_rgw_obj_key> *remove_objs, bool log_op,
-                                uint16_t bilog_op, const rgw_zone_set *zones_trace,
-				const std::string& obj_locator = ""); // ignored if it's the empty string
+void cls_rgw_bucket_complete_op(
+    librados::ObjectWriteOperation& o, RGWModifyOp op, const std::string& tag,
+    const rgw_bucket_entry_ver& ver, const cls_rgw_obj_key& key,
+    const rgw_bucket_dir_entry_meta& dir_meta, const std::list<cls_rgw_obj_key> *remove_objs,
+    bool log_op, uint16_t bilog_flags, const rgw_zone_set *zones_trace,
+    const std::string& obj_locator = ""); // ignored if it's the empty string
 
 void cls_rgw_remove_obj(librados::ObjectWriteOperation& o, std::list<std::string>& keep_attr_prefixes);
 void cls_rgw_obj_store_pg_ver(librados::ObjectWriteOperation& o, const std::string& attr);
@@ -166,18 +168,25 @@ void cls_rgw_bi_put_entries(librados::ObjectWriteOperation& op,
                             bool check_existing);
 int cls_rgw_bi_list(librados::IoCtx& io_ctx, const std::string& oid,
                    const std::string& name, const std::string& marker, uint32_t max,
+                   std::vector<rgw_cls_bi_entry>& entries, bool& is_truncated, bool reshardlog = false);
+int cls_rgw_bi_list(librados::IoCtx& io_ctx, const std::string& oid,
+                   const std::string& name, const std::string& marker, uint32_t max,
                    std::list<rgw_cls_bi_entry> *entries, bool *is_truncated, bool reshardlog = false);
 
-void cls_rgw_bucket_link_olh(librados::ObjectWriteOperation& op,
-                            const cls_rgw_obj_key& key, const ceph::buffer::list& olh_tag,
-                            bool delete_marker, const std::string& op_tag, const rgw_bucket_dir_entry_meta *meta,
-                            uint64_t olh_epoch, ceph::real_time unmod_since, bool high_precision_time, bool log_op, const rgw_zone_set& zones_trace,
-                            ceph::buffer::list* epoch_out_bl = nullptr);
+void cls_rgw_bucket_link_olh(
+    librados::ObjectWriteOperation& op, const cls_rgw_obj_key& key,
+    const ceph::buffer::list& olh_tag, bool delete_marker,
+    const std::string& op_tag, const rgw_bucket_dir_entry_meta *meta,
+    uint64_t olh_epoch, ceph::real_time unmod_since, bool high_precision_time,
+    bool log_op, const rgw_zone_set& zones_trace, ceph::buffer::list *epoch_out_bl = nullptr);
 void cls_rgw_bucket_unlink_instance(librados::ObjectWriteOperation& op,
                                    const cls_rgw_obj_key& key, const std::string& op_tag,
                                    const std::string& olh_tag, uint64_t olh_epoch, bool log_op, uint16_t bilog_flags, const rgw_zone_set& zones_trace,
                                    ceph::buffer::list* epoch_out_bl = nullptr);
 void cls_rgw_get_olh_log(librados::ObjectReadOperation& op, const cls_rgw_obj_key& olh, uint64_t ver_marker, const std::string& olh_tag, rgw_cls_read_olh_log_ret& log_ret, int& op_ret);
+void cls_rgw_get_olh_log(librados::ObjectReadOperation& op, const cls_rgw_obj_key& olh,
+                        uint64_t ver_marker, const std::string& olh_tag,
+                        cls::rgw::olh::reply& log_ret, int& op_ret);
 void cls_rgw_trim_olh_log(librados::ObjectWriteOperation& op, const cls_rgw_obj_key& olh, uint64_t ver, const std::string& olh_tag);
 void cls_rgw_clear_olh(librados::ObjectWriteOperation& op, const cls_rgw_obj_key& olh, const std::string& olh_tag);
 void cls_rgw_bucket_refresh_instance(librados::ObjectWriteOperation& op, const cls_rgw_obj_key& key);
@@ -195,22 +204,38 @@ int cls_rgw_bucket_unlink_instance(librados::IoCtx& io_ctx, const std::string& o
                                    uint16_t bilog_flags, const rgw_zone_set& zones_trace);
 int cls_rgw_get_olh_log(librados::IoCtx& io_ctx, std::string& oid, const cls_rgw_obj_key& olh, uint64_t ver_marker,
                         const std::string& olh_tag, rgw_cls_read_olh_log_ret& log_ret);
+int cls_rgw_get_olh_log(librados::IoCtx& io_ctx, const std::string& oid,
+                       const cls_rgw_obj_key& olh, uint64_t ver_marker,
+                       const std::string& olh_tag, cls::rgw::olh::reply& log_ret);
 int cls_rgw_clear_olh(librados::IoCtx& io_ctx, std::string& oid, const cls_rgw_obj_key& olh, const std::string& olh_tag);
 int cls_rgw_usage_log_trim(librados::IoCtx& io_ctx, const std::string& oid, const std::string& user, const std::string& bucket,
                            uint64_t start_epoch, uint64_t end_epoch);
 #endif
 
+// After synchronous completion, combine the transport and reply statuses with this helper.
+constexpr int cls_rgw_bucket_list_result(int transport_status, int reply_status) noexcept
+{
+  if (transport_status >= 0 || transport_status == RGWBIAdvanceAndRetryError) {
+    return reply_status;
+  }
+
+  return transport_status;
+}
+
+// Both outputs must remain alive until completion. The callback owns the submitted marker.
+// Retry replies must be empty and truncated, with a nonempty changed marker; invalid replies
+// report -EIO through status and preserve result, as decoding failures do.
 void cls_rgw_bucket_list_op(librados::ObjectReadOperation& op,
                             const cls_rgw_obj_key& start_obj,
                             const std::string& filter_prefix,
 			    const std::string& delimiter,
                             uint32_t num_entries,
                             bool list_versions,
-                            rgw_cls_list_ret* result);
+                            cls::rgw::bucket_datum::reply& result, int& status);
 
 void cls_rgw_bilog_list(librados::ObjectReadOperation& op,
                         const std::string& marker, uint32_t max,
-                        cls_rgw_bi_log_list_ret *pdata, int *ret = nullptr);
+                        cls::rgw::bilog::reply<>& result, int& status);
 
 void cls_rgw_bilog_trim(librados::ObjectWriteOperation& op,
                         const std::string& start_marker,
@@ -223,6 +248,28 @@ void cls_rgw_bucket_check_index_decode(const bufferlist& out,
                                        rgw_cls_check_index_ret& result);
 
 void cls_rgw_bucket_rebuild_index(librados::ObjectWriteOperation& op);
+
+// Keep the opaque cursor and accumulated totals together for one shard generation.
+struct rgw_cls_index_check final
+{
+  rgw_cls_index_cursor cursor;
+  rgw_cls_check_index_ret result;
+
+public:
+  bool complete() const noexcept { return cursor.phase == rgw_cls_index_phase::complete; }
+  // Apply a validated page once. Errors leave both progress and totals unchanged.
+  // Allocation may throw; the same unchanged state can still be retried.
+  int consume(const bufferlist& page);
+};
+
+// These bounded operations must be the only operation in their RADOS request.
+// A server -ECANCELED requires a fresh check, rather than retrying the old cursor.
+void cls_rgw_bucket_check_index(librados::ObjectReadOperation& op,
+                                const rgw_cls_index_cursor& cursor, bufferlist& out,
+                                uint32_t max_rows = RGW_CLS_INDEX_PAGE_ROWS,
+                                uint64_t max_bytes = RGW_CLS_INDEX_PAGE_BYTES);
+void cls_rgw_bucket_rebuild_index(librados::ObjectWriteOperation& op,
+                                  const rgw_cls_index_check& check);
 
 void cls_rgw_bilog_start(librados::ObjectWriteOperation& op);
 void cls_rgw_bilog_stop(librados::ObjectWriteOperation& op);
