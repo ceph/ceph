@@ -7,6 +7,7 @@ log = logging.getLogger(__name__)
 
 # singleton design pattern taken from http://www.aleax.it/5ep.html
 
+
 class GlobalLock(object):
     """
     Global lock to serialize operations in mgr/volumes. This lock
@@ -23,8 +24,8 @@ class GlobalLock(object):
     See: https://people.eecs.berkeley.edu/~kubitron/courses/cs262a-F14/projects/reports/project6_report.pdf
     """
     _shared_state: Dict = {
-        'lock' : Lock(),
-        'init' : False
+        'lock': Lock(),
+        'init': False
     }
 
     def __init__(self):

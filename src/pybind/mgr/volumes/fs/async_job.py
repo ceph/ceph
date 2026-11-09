@@ -118,6 +118,7 @@ class JobThread(threading.Thread):
     def reset_cancel(self):
         self.cancel_event.clear()
 
+
 class AsyncJobs(threading.Thread):
     """
     Class providing asynchronous execution of jobs via worker threads.

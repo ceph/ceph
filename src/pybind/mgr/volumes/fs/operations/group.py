@@ -158,7 +158,7 @@ class Group(GroupTemplate):
                 'bytes_pcent': "undefined" if nsize == 0 else '{0:.2f}'.format((float(usedbytes) / nsize) * 100.0),
                 'normalization': normalization,
                 'casesensitive': casesensitive,
-        }
+                }
 
     def resize(self, newsize, noshrink):
         try:
@@ -193,6 +193,7 @@ class Group(GroupTemplate):
                 raise (VolumeException(-e.args[0],
                                        "Cannot set new size for the subvolume group. '{0}'".format(e.args[1])))
         return newsize, group_stat.st_size
+
 
 def set_group_attrs(fs, path, attrs):
     # set subvolume group attrs
@@ -267,6 +268,7 @@ def set_group_attrs(fs, path, attrs):
                         pool_namespace.encode('utf-8'), 0)
         except cephfs.Error as e:
             raise VolumeException(-e.args[0], e.args[1])
+
 
 def create_group(fs, vol_spec, groupname, size, pool, mode, uid, gid, normalization, casesensitive, namespace_isolated=False, pool_namespace=None):
     """

@@ -5,6 +5,7 @@ from .group import open_group
 from .template import SubvolumeOpType
 from .versions import loaded_subvolumes
 
+
 def create_subvol(mgr, fs, vol_spec, group, subvolname, size, isolate_nspace, pool, mode, uid, gid, earmark, normalization, casesensitive, enctag):
     """
     create a subvolume (create a subvolume with the max known version).
@@ -106,7 +107,7 @@ def open_clone_subvol_pair_in_vol(vc, vol_spec, vol_name, group_name,
 
     with open_subvol_in_vol(vc, vol_spec, vol_name, group_name, subvol_name,
                             SubvolumeOpType.CLONE_INTERNAL, lockless) \
-                            as (vol_handle, _, dst_subvol):
+            as (vol_handle, _, dst_subvol):
         src_volname, src_group_name, src_subvol_name, src_snap_name = \
             dst_subvol.get_clone_source()
 
@@ -122,7 +123,7 @@ def open_clone_subvol_pair_in_vol(vc, vol_spec, vol_name, group_name,
             with open_subvol_in_group(vc.mgr, vol_handle, vol_spec,
                                       src_group_name, src_subvol_name,
                                       op_type) \
-                                      as src_subvol:
+                    as src_subvol:
                 yield (dst_subvol, src_subvol, src_snap_name)
 
 
@@ -142,5 +143,5 @@ def open_clone_subvol_pair_in_group(mgr, vol_handle, vol_spec, volname,
             with open_subvol_in_group(mgr, vol_handle, vol_spec,
                                       src_group_name, src_subvol_name,
                                       SubvolumeOpType.CLONE_SOURCE) \
-                                      as src_subvol:
+                    as src_subvol:
                 yield (dst_subvol, src_subvol, src_snap_name)

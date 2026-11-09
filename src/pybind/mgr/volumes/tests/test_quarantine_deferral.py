@@ -60,8 +60,8 @@ def purge_env():
         yield trashcan
 
     with mock.patch.object(purge_queue, 'open_volume_lockless', open_volume_lockless), \
-         mock.patch.object(purge_queue, 'open_trashcan', open_trashcan), \
-         mock.patch.object(purge_queue, 'subvolume_purge') as subvolume_purge:
+            mock.patch.object(purge_queue, 'open_trashcan', open_trashcan), \
+            mock.patch.object(purge_queue, 'subvolume_purge') as subvolume_purge:
         yield trashcan, subvolume_purge
 
 
@@ -121,7 +121,7 @@ def test_clone_state_update_quarantined_is_deferred():
     handler = mock.Mock(return_value=(SubvolumeStates.STATE_COMPLETE, False))
     with mock.patch.object(async_cloner, 'get_clone_state',
                            return_value=SubvolumeStates.STATE_INPROGRESS), \
-         mock.patch.object(async_cloner, 'set_clone_state', side_effect=eacces()):
+            mock.patch.object(async_cloner, 'set_clone_state', side_effect=eacces()):
         with pytest.raises(JobDeferred):
             start_clone_sm({SubvolumeStates.STATE_INPROGRESS: handler})
 
