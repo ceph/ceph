@@ -454,7 +454,7 @@ public:
 namespace std::ranges {
 
 template <typename IteratorT>
-inline constexpr bool enable_borrowed_range<::ceph::salad::datum::byte_slice_view<IteratorT>> =
+inline constexpr bool enable_borrowed_range<ceph::salad::datum::byte_slice_view<IteratorT>> =
     true;
 } // std::ranges
 

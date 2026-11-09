@@ -16,14 +16,14 @@
 
 namespace fmt {
 
-template <::ceph::salad::datum::render::displayable ValueT>
-struct formatter<ValueT, char> : ::ceph::salad::datum::render_detail::formatter<ValueT, ::fmt::format_error>
+template <ceph::salad::datum::render::displayable ValueT>
+struct formatter<ValueT, char> : ceph::salad::datum::render_detail::formatter<ValueT, fmt::format_error>
 {};
 
-template <::ceph::salad::datum::render::displayable ValueT>
-struct formatter<::ceph::salad::datum::render::display_view<ValueT>, char>
-    : ::ceph::salad::datum::render_detail::formatter<
-          ::ceph::salad::datum::render::display_view<ValueT>, ::fmt::format_error>
+template <ceph::salad::datum::render::displayable ValueT>
+struct formatter<ceph::salad::datum::render::display_view<ValueT>, char>
+    : ceph::salad::datum::render_detail::formatter<
+          ceph::salad::datum::render::display_view<ValueT>, fmt::format_error>
 {};
 
 } // fmt

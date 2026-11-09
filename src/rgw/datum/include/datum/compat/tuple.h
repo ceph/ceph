@@ -32,7 +32,7 @@ constexpr decltype(auto) apply_const_tuple(const TupleT& source, AccessorT&& acc
         // Braces sequence access and retain converted temporaries through the consumer call.
         return std::apply(std::forward<ConsumerT>(consumer),
             std::tuple<segment_reference_t<Indexes, TupleT, AccessorT>...> {
-                ::ceph::salad::datum::compat::detail::bind_segment<
+                ceph::salad::datum::compat::detail::bind_segment<
                     segment_reference_t<Indexes, TupleT, AccessorT>>(
                     access.template operator()<Indexes>(source))...});
     }(std::make_index_sequence<std::tuple_size_v<std::remove_cvref_t<TupleT>>> {});

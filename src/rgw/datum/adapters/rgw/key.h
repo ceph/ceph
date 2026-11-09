@@ -12,11 +12,11 @@
 
 namespace rgw::datum_wire {
 
-namespace datum = ::ceph::salad::datum;
+namespace datum = ceph::salad::datum;
 
 // An object key frame contains name and instance strings, each with a length prefix.
 inline constexpr auto minimum_key_size =
-    ::ceph::encoding_detail::struct_header_len() + 2 * sizeof(std::uint32_t);
+    ceph::encoding_detail::struct_header_len() + 2 * sizeof(std::uint32_t);
 
 struct key_fields final
 {
@@ -24,7 +24,7 @@ struct key_fields final
     std::string_view instance;
 };
 
-inline void encode_key(::ceph::datum_wire::writer& archive,
+inline void encode_key(ceph::datum_wire::writer& archive,
                        const std::string_view name, const std::string_view instance)
 {
     archive.frame(1, [&] {
@@ -33,7 +33,7 @@ inline void encode_key(::ceph::datum_wire::writer& archive,
 }
 
 template <typename KeyT, auto Name, auto Instance>
-void decode_key(datum::binary_fields<Name, Instance>, ::ceph::datum_wire::reader& archive, KeyT& value)
+void decode_key(datum::binary_fields<Name, Instance>, ceph::datum_wire::reader& archive, KeyT& value)
 {
     archive.frame(1, [&](auto& fields, std::uint8_t) {
         fields.text(value.*Name);
@@ -41,7 +41,7 @@ void decode_key(datum::binary_fields<Name, Instance>, ::ceph::datum_wire::reader
     });
 }
 
-inline auto decode_key(::ceph::datum_wire::reader& archive)
+inline auto decode_key(ceph::datum_wire::reader& archive)
 {
     using key = std::pair<std::string, std::string>;
 

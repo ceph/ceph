@@ -1126,7 +1126,7 @@ constexpr void emit_difference(const LhsT& lhs, const RhsT& rhs, SinkT&& sink)
 
     if (empty_bounds(rhs_bounds) || definitely_before(rhs, lhs) ||
         definitely_after(rhs, lhs)) {
-        ::ceph::salad::datum::interval::for_each_interval(lhs, std::forward<SinkT>(sink));
+        ceph::salad::datum::interval::for_each_interval(lhs, std::forward<SinkT>(sink));
 
         return;
     }
@@ -1377,7 +1377,7 @@ constexpr void normalize_buffer(workspace<DomainT>& scratch, std::size_t slot)
         // Sort metadata rather than imposing assignment on the ordered point type.
         std::vector<borrowed_interval<DomainT>> ordered;
         ordered.reserve(std::size(values));
-        ::ceph::salad::datum::append_range(ordered, values | std::views::transform([](const auto& value) {
+        ceph::salad::datum::append_range(ordered, values | std::views::transform([](const auto& value) {
                 return borrowed_interval<DomainT> {
                     borrow_bound(value.lower()), borrow_bound(value.upper())};
             }));
@@ -1396,7 +1396,7 @@ constexpr void normalize_buffer(workspace<DomainT>& scratch, std::size_t slot)
         scratch.check_entries(count);
         std::vector<query<DomainT>> normalized;
         normalized.reserve(count);
-        ::ceph::salad::datum::append_range(normalized, ordered | std::views::take(count) |
+        ceph::salad::datum::append_range(normalized, ordered | std::views::take(count) |
             std::views::transform([](const auto& value) {
                 return query<DomainT>::between(value.first, value.last);
             }));
@@ -2273,7 +2273,7 @@ constexpr std::size_t interval_count(const ExprT& expression)
         }
     }
     detail::interval_counter sink;
-    ::ceph::salad::datum::interval::for_each_interval(expression, sink);
+    ceph::salad::datum::interval::for_each_interval(expression, sink);
 
     return sink.count;
 }

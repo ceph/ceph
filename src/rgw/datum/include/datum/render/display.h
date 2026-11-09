@@ -722,7 +722,7 @@ struct formatter
 
     constexpr auto format(const ValueT& value, auto& context) const
     {
-        return ::ceph::salad::datum::render_detail::format_value(context.out(), value);
+        return ceph::salad::datum::render_detail::format_value(context.out(), value);
     }
 
 };
@@ -769,7 +769,7 @@ void display(const ValueT&&, display_limits = {}) = delete;
 template <render_detail::character_output OutputT, displayable ValueT>
 constexpr display_result<OutputT> format_bounded(OutputT output, const ValueT& value, display_limits limits = {})
 {
-    return ::ceph::salad::datum::render_detail::format_bounded(output, value, limits);
+    return ceph::salad::datum::render_detail::format_bounded(output, value, limits);
 }
 
 template <render_detail::character_output OutputT, displayable ValueT>
@@ -781,14 +781,14 @@ constexpr OutputT format_to(OutputT output, const ValueT& value, display_limits 
 template <render_detail::character_output OutputT, displayable ValueT>
 constexpr auto format_bounded(OutputT output, const display_view<ValueT>& value)
 {
-    return ::ceph::salad::datum::render_detail::format_bounded(
+    return ceph::salad::datum::render_detail::format_bounded(
         output, value.value(), value.limits());
 }
 
 template <render_detail::character_output OutputT, displayable ValueT>
 constexpr OutputT format_to(OutputT output, const display_view<ValueT>& value)
 {
-    return ::ceph::salad::datum::render_detail::format_value(
+    return ceph::salad::datum::render_detail::format_value(
         std::move(output), value.value(), value.limits());
 }
 
@@ -801,7 +801,7 @@ struct formatter<render::display_view<ValueT>, ParseErrorT> : formatter<ValueT, 
 {
     constexpr auto format(const render::display_view<ValueT>& value, auto& context) const
     {
-        return ::ceph::salad::datum::render_detail::format_value(
+        return ceph::salad::datum::render_detail::format_value(
             context.out(), value.value(), value.limits());
     }
 
