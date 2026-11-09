@@ -143,6 +143,52 @@ storage.
    The LanceDB files of a vector bucket that is owned by an account are stored
    in the backing bucket under a prefix, which is the ID of the account.
 
+Quotas, Statistics, and Usage
+-----------------------------
+
+Native vector buckets support bucket quotas and contribute to their owner's
+user or account quota.
+
+Vector quotas are enforced once, at the start of each ``PutVectors`` and
+``CreateIndex`` operation, by comparing the current usage of the bucket that
+stores the data against the effective bucket and owner quotas.
+For native storage this is the vector bucket; when a vector
+bucket is backed by a separate S3 bucket, that backing bucket's usage and quota
+are used. A request is rejected only when the bucket (or its owner) is *already*
+over its size or object quota; the request's own payload is not pre-counted, so
+the write that first takes a bucket over quota is allowed and subsequent writes
+are rejected.
+
+Use ``--vector`` to select the vector namespace for bucket listing, statistics,
+quotas, ownership changes, and usage commands. For example::
+
+   radosgw-admin bucket stats --bucket=my-vectors --vector
+   radosgw-admin quota set --bucket=my-vectors --vector --max-size=1G
+   radosgw-admin quota enable --bucket=my-vectors --vector
+   radosgw-admin user stats --uid=owner --sync-stats
+
+``bucket list --account-id=ACCOUNT_ID --vector`` lists an account's vector
+buckets. User and account statistics include both S3 and native vector storage;
+``--sync-stats`` refreshes both.
+
+For a qualified bucket name, use ``--bucket=NAMESPACE/my-vectors``. If ``--tenant``
+is also supplied, it must match the prefix. For account-owned vector buckets,
+the namespace is the account ID; ordinary S3 buckets use the account's tenant.
+
+``bucket chown --bucket=my-vectors --uid=new-owner --vector`` changes ownership
+within the same tenant. Moving a vector bucket into another tenant or account
+namespace is not supported.
+
+Use ``usage show`` or ``usage trim`` with
+``--bucket=my-vectors --vector`` for user-owned vector buckets usage.
+
+Use ``bucket rm --bucket=my-vectors --vector`` to remove an empty vector bucket.
+Add ``--purge-objects`` to remove its indexes and data as well. For a named
+tenant or account, use ``--bucket=TENANT/my-vectors`` or
+``--bucket=ACCOUNT_ID/my-vectors``. Removal applies only to the local zone
+and does not delete a separate S3 backing bucket. Vector removal does not support
+``--bypass-gc`` or ``--inconsistent-index``.
+
 Multisite
 ---------
 

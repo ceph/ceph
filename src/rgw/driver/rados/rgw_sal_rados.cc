@@ -963,7 +963,8 @@ int RadosBucket::link(const DoutPrefixProvider* dpp, const rgw_owner& new_owner,
   rgw_ep_info ep_data{ep, ep_attrs};
 
   librados::Rados& rados = *store->getRados()->get_rados_handle();
-  int r = store->ctl()->bucket->link_bucket(rados, new_owner, info.bucket,
+  auto* ctl = info.is_vector() ? store->ctl()->vector_bucket : store->ctl()->bucket;
+  int r = ctl->link_bucket(rados, new_owner, info.bucket,
 					    get_creation_time(), y, dpp, update_entrypoint,
 					    &ep_data);
   if (r < 0)
@@ -978,7 +979,8 @@ int RadosBucket::link(const DoutPrefixProvider* dpp, const rgw_owner& new_owner,
 int RadosBucket::unlink(const DoutPrefixProvider* dpp, const rgw_owner& owner, optional_yield y, bool update_entrypoint)
 {
   librados::Rados& rados = *store->getRados()->get_rados_handle();
-  return store->ctl()->bucket->unlink_bucket(rados, owner, info.bucket,
+  auto* ctl = info.is_vector() ? store->ctl()->vector_bucket : store->ctl()->bucket;
+  return ctl->unlink_bucket(rados, owner, info.bucket,
                                              y, dpp, update_entrypoint);
 }
 
@@ -1007,6 +1009,17 @@ int RadosBucket::chown(const DoutPrefixProvider* dpp,
                        const rgw_owner& new_owner,
                        const std::string& new_owner_name,
                        optional_yield y) {
+  if (info.is_vector()) {
+    // A vector bucket's namespace is its owner's account ID or user tenant
+    // (see rgw::s3vector::bucket_namespace_t::name()). Changing that namespace
+    // requires migrating the bucket's identity, unlike an S3 ownership change
+    // between accounts in the same tenant. Reject it before unlinking the owner.
+    const auto* uid = std::get_if<rgw_user>(&new_owner);
+    const auto& ns = uid ? uid->tenant : std::get<rgw_account_id>(new_owner);
+    if (ns != info.bucket.tenant) {
+      return -ENOTSUP;
+    }
+  }
   // unlink from the owner, but don't update the entrypoint until link()
   int r = this->unlink(dpp, info.owner, y, false);
   if (r < 0) {
@@ -1100,7 +1113,8 @@ int RadosBucket::read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch,
   if (!user) {
     return -ENOTSUP; // not supported for account owners
   }
-  return store->getRados()->read_usage(dpp, *user, get_name(), start_epoch,
+  const auto name = info.is_vector() ? fmt::format("bucket/{}", get_name()) : get_name();
+  return store->getRados()->read_usage(dpp, *user, name, start_epoch,
 				       end_epoch, max_entries, is_truncated,
 				       usage_iter, usage);
 }
@@ -1111,7 +1125,8 @@ int RadosBucket::trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch,
   if (!user) {
     return -ENOTSUP; // not supported for account owners
   }
-  return store->getRados()->trim_usage(dpp, *user, get_name(), start_epoch, end_epoch, y);
+  const auto name = info.is_vector() ? fmt::format("bucket/{}", get_name()) : get_name();
+  return store->getRados()->trim_usage(dpp, *user, name, start_epoch, end_epoch, y);
 }
 
 int RadosBucket::remove_objs_from_index(const DoutPrefixProvider *dpp, std::list<rgw_obj_index_key>& objs_to_unlink)
@@ -2092,9 +2107,67 @@ int RadosStore::load_stats(const DoutPrefixProvider* dpp,
 {
   librados::Rados& rados = *getRados()->get_rados_handle();
   const rgw_raw_obj& obj = get_owner_buckets_obj(svc()->user, svc()->zone, owner);
-  return rgwrados::buckets::read_stats(dpp, y, rados, obj, stats,
-                                       &last_synced, &last_updated);
+  int r = rgwrados::buckets::read_stats(dpp, y, rados, obj, stats,
+                                        &last_synced, &last_updated);
+  if (r < 0) {
+    return r;
+  }
+
+  // Owner quotas cover both namespaces. Missing stats objects contribute zero.
+  const rgw_raw_obj& vobj = get_owner_vector_buckets_obj(svc()->user, svc()->zone, owner);
+  RGWStorageStats vstats;
+  ceph::real_time vsynced, vupdated;
+  r = rgwrados::buckets::read_stats(dpp, y, rados, vobj, vstats,
+                                    &vsynced, &vupdated);
+  if (r < 0) {
+    return r;
+  }
+  stats.size += vstats.size;
+  stats.size_rounded += vstats.size_rounded;
+  stats.num_objects += vstats.num_objects;
+  stats.size_utilized += vstats.size_utilized;
+  if (vsynced != ceph::real_time{} || vupdated != ceph::real_time{}) {
+    if (last_synced == ceph::real_time{} && last_updated == ceph::real_time{}) {
+      last_synced = vsynced;
+    } else {
+      last_synced = std::min(last_synced, vsynced);
+    }
+    last_updated = std::max(last_updated, vupdated);
+  }
+  return 0;
 }
+
+namespace {
+// Combines two async owner-stats reads (regular + vector buckets objects) into a
+// single response, summing the totals. If either read reports a
+// real (non-ENOENT) error, that error is propagated.
+class OwnerStatsSumCB : public rgw::sal::ReadStatsCB {
+  boost::intrusive_ptr<rgw::sal::ReadStatsCB> next;
+  std::mutex lock;
+  int pending;
+  int err = 0;               // first real (non-ENOENT) error seen
+  RGWStorageStats sum;
+public:
+  OwnerStatsSumCB(boost::intrusive_ptr<rgw::sal::ReadStatsCB> n, int count)
+    : next(std::move(n)), pending(count) {}
+
+  void handle_response(int r, const RGWStorageStats& stats) override {
+    std::unique_lock l{lock};
+    if (r == 0) {
+      sum.size += stats.size;
+      sum.size_rounded += stats.size_rounded;
+      sum.num_objects += stats.num_objects;
+      sum.size_utilized += stats.size_utilized;
+    } else if (r != -ENOENT && err == 0) {
+      err = r;
+    }
+    if (--pending == 0) {
+      l.unlock();
+      next->handle_response(err, sum);
+    }
+  }
+};
+} // anonymous namespace
 
 int RadosStore::load_stats_async(const DoutPrefixProvider* dpp,
                                  const rgw_owner& owner,
@@ -2102,7 +2175,23 @@ int RadosStore::load_stats_async(const DoutPrefixProvider* dpp,
 {
   librados::Rados& rados = *getRados()->get_rados_handle();
   const rgw_raw_obj& obj = get_owner_buckets_obj(svc()->user, svc()->zone, owner);
-  return rgwrados::buckets::read_stats_async(dpp, rados, obj, std::move(cb));
+  const rgw_raw_obj& vobj = get_owner_vector_buckets_obj(svc()->user, svc()->zone, owner);
+
+  // fan the response out across both owner-stats objects and sum them
+  boost::intrusive_ptr<ReadStatsCB> sum{new OwnerStatsSumCB(std::move(cb), 2)};
+
+  // read_stats_async invokes the cb asynchronously on success, but returns a
+  // synchronous error without ever invoking it; in that case decrement the
+  // combiner ourselves so it still fires exactly once.
+  int r1 = rgwrados::buckets::read_stats_async(dpp, rados, obj, sum);
+  if (r1 < 0) {
+    sum->handle_response(r1, RGWStorageStats{});
+  }
+  int r2 = rgwrados::buckets::read_stats_async(dpp, rados, vobj, sum);
+  if (r2 < 0) {
+    sum->handle_response(r2, RGWStorageStats{});
+  }
+  return 0;
 }
 
 int RadosStore::reset_stats(const DoutPrefixProvider *dpp,
@@ -2110,8 +2199,14 @@ int RadosStore::reset_stats(const DoutPrefixProvider *dpp,
                             const rgw_owner& owner)
 {
   librados::Rados& rados = *getRados()->get_rados_handle();
-  const rgw_raw_obj& obj = get_owner_buckets_obj(svc()->user, svc()->zone, owner);
-  return rgwrados::buckets::reset_stats(dpp, y, rados, obj);
+  for (const auto& obj : {get_owner_buckets_obj(svc()->user, svc()->zone, owner),
+                          get_owner_vector_buckets_obj(svc()->user, svc()->zone, owner)}) {
+    int r = rgwrados::buckets::reset_stats(dpp, y, rados, obj);
+    if (r < 0 && r != -ENOENT) {
+      return r;
+    }
+  }
+  return 0;
 }
 
 int RadosStore::complete_flush_stats(const DoutPrefixProvider* dpp,
@@ -2119,8 +2214,14 @@ int RadosStore::complete_flush_stats(const DoutPrefixProvider* dpp,
                                      const rgw_owner& owner)
 {
   librados::Rados& rados = *getRados()->get_rados_handle();
-  const rgw_raw_obj& obj = get_owner_buckets_obj(svc()->user, svc()->zone, owner);
-  return rgwrados::buckets::complete_flush_stats(dpp, y, rados, obj);
+  for (const auto& obj : {get_owner_buckets_obj(svc()->user, svc()->zone, owner),
+                          get_owner_vector_buckets_obj(svc()->user, svc()->zone, owner)}) {
+    int r = rgwrados::buckets::complete_flush_stats(dpp, y, rados, obj);
+    if (r < 0 && r != -ENOENT) {
+      return r;
+    }
+  }
+  return 0;
 }
 
 int RadosStore::load_owner_by_email(const DoutPrefixProvider* dpp,
@@ -3024,14 +3125,26 @@ int RadosStore::load_vector_bucket(const DoutPrefixProvider* dpp, const rgw_buck
 int RadosStore::list_vector_buckets(const DoutPrefixProvider* dpp,
 			     const rgw_owner& owner, const std::string& ns,
 			     const std::string& marker, const std::string& end_marker,
-			     uint64_t max, BucketList& listing,
+			     uint64_t max, bool need_stats, BucketList& listing,
 			     optional_yield y) {
   librados::Rados& rados = *getRados()->get_rados_handle();
   const rgw_raw_obj& obj = get_owner_vector_buckets_obj(svc()->user, svc()->zone, owner);
 
   // the namespace takes the place of the tenant in the keys of the vector buckets
-  return rgwrados::buckets::list(dpp, y, rados, obj, ns,
+  int ret = rgwrados::buckets::list(dpp, y, rados, obj, ns,
                                     marker, end_marker, max, listing);
+  if (ret < 0) {
+    return ret;
+  }
+
+  if (need_stats) {
+    ret = ctl()->vector_bucket->read_buckets_stats(listing.buckets, y, dpp);
+    if (ret < 0 && ret != -ENOENT) {
+      ldpp_dout(dpp, 0) << "ERROR: could not get stats for vector buckets" << dendl;
+      return ret;
+    }
+  }
+  return 0;
 }
 
 RadosObject::~RadosObject()

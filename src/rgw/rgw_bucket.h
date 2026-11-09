@@ -25,6 +25,10 @@ extern void init_bucket(rgw_bucket *b, const char *t, const char *n, const char 
 extern int rgw_bucket_parse_bucket_key(CephContext *cct, const std::string& key,
                                        rgw_bucket* bucket, int *shard_id);
 
+// Split an optional namespace prefix out of name. An unqualified name keeps
+// the supplied tenant; a qualified name overrides that fallback namespace.
+void rgw_bucket_parse_tenant(rgw_bucket& bucket);
+
 extern std::string rgw_make_bucket_entry_name(const std::string& tenant_name,
                                               const std::string& bucket_name);
 

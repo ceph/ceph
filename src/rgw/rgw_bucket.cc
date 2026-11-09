@@ -28,6 +28,14 @@ void init_bucket(rgw_bucket *b, const char *t, const char *n, const char *dp, co
   b->explicit_placement.index_pool = rgw_pool(ip);
 }
 
+void rgw_bucket_parse_tenant(rgw_bucket& bucket)
+{
+  if (auto pos = bucket.name.find('/'); pos != string::npos) {
+    bucket.tenant = bucket.name.substr(0, pos);
+    bucket.name.erase(0, pos + 1);
+  }
+}
+
 // parse key in format: [tenant/]name:instance[:shard_id]
 int rgw_bucket_parse_bucket_key(CephContext *cct, const string& key,
                                 rgw_bucket *bucket, int *shard_id)
@@ -142,6 +150,13 @@ int rgw_chown_bucket_and_objects(rgw::sal::Driver* driver, rgw::sal::Bucket* buc
   if (ret < 0) {
     set_err_msg(err_msg, "Failed to change bucket ownership: " + cpp_strerror(-ret));
     return ret;
+  }
+
+  // bucket->chown() has updated ownership and any bucket ACL above. Vector
+  // data objects do not expose S3 object ACLs, so there are no per-object ACLs
+  // to rewrite. Ordinary S3 buckets continue through the object ACL path below.
+  if (bucket->get_info().is_vector()) {
+    return 0;
   }
 
   // skip object acls when BucketOwnerEnforced

@@ -195,17 +195,17 @@ int RGWBucket::init(rgw::sal::Driver* _driver, RGWBucketAdminOpState& op_state,
     return -EINVAL;
 
   user = driver->get_user(op_state.get_user_id());
-  std::string tenant = user->get_tenant();
+  rgw_bucket key(user->get_tenant(), bucket_name, bucket_id);
+  rgw_bucket_parse_tenant(key);
 
-  // split possible tenant/name
-  auto pos = bucket_name.find('/');
-  if (pos != string::npos) {
-    tenant = bucket_name.substr(0, pos);
-    bucket_name = bucket_name.substr(pos + 1);
+  // a vector bucket lives in a separate metadata namespace, so it must be loaded
+  // through load_vector_bucket()
+  int r;
+  if (op_state.is_vector_bucket()) {
+    r = driver->load_vector_bucket(dpp, key, &bucket, y);
+  } else {
+    r = driver->load_bucket(dpp, key, &bucket, y);
   }
-
-  int r = driver->load_bucket(dpp, rgw_bucket(tenant, bucket_name, bucket_id),
-                              &bucket, y);
   if (r < 0) {
       set_err_msg(err_msg, "failed to fetch bucket info for bucket=" + bucket_name);
       return r;
@@ -1508,11 +1508,20 @@ int RGWBucketAdminOp::remove_bucket(rgw::sal::Driver* driver, const rgw::SiteCon
 {
   std::unique_ptr<rgw::sal::Bucket> bucket;
 
-  int ret = driver->load_bucket(dpp, rgw_bucket(op_state.get_tenant(),
-                                                op_state.get_bucket_name()),
-                                &bucket, y);
-  if (ret < 0)
+  const bool is_vector = op_state.is_vector_bucket();
+  if (is_vector && (bypass_gc || !keep_index_consistent)) {
+    ldpp_dout(dpp, 0) << "ERROR: vector bucket removal does not support "
+                        "--bypass-gc or --inconsistent-index" << dendl;
+    return -ENOTSUP;
+  }
+
+  rgw_bucket key(op_state.get_tenant(), op_state.get_bucket_name());
+  rgw_bucket_parse_tenant(key);
+  int ret = is_vector ? driver->load_vector_bucket(dpp, key, &bucket, y)
+                      : driver->load_bucket(dpp, key, &bucket, y);
+  if (ret < 0) {
     return ret;
+  }
 
   // check if the bucket is owned by my zonegroup, if not, refuse to remove it
   if (!forwarded_request && bucket->get_info().zonegroup != driver->get_zone()->get_zonegroup().get_id()) {
@@ -1520,6 +1529,12 @@ int RGWBucketAdminOp::remove_bucket(rgw::sal::Driver* driver, const rgw::SiteCon
                       << "Removal is not allowed. Please execute this operation "
                       << "on the bucket's zonegroup: " << bucket->get_info().zonegroup << dendl;
     return -ERR_PERMANENT_REDIRECT;
+  }
+
+  if (is_vector) {
+    // Vector buckets are local to this zone. Their remove() also handles
+    // vector indexes, cached sessions, and internal data objects.
+    return bucket->remove(dpp, op_state.will_delete_children(), y);
   }
 
   // forward to master first
@@ -1639,13 +1654,15 @@ static int bucket_restore_stats(rgw::sal::Driver* driver,
 
 static int bucket_stats(rgw::sal::Driver* driver, const rgw::SiteConfig& site,
                         const std::string& tenant_name, const std::string& bucket_name,
-                        bool dump_restore_stats, Formatter* formatter,
+                        bool dump_restore_stats, bool is_vector, Formatter* formatter,
                         const DoutPrefixProvider* dpp, optional_yield y) {
   std::unique_ptr<rgw::sal::Bucket> bucket;
   map<RGWObjCategory, RGWStorageStats> stats;
 
-  int ret = driver->load_bucket(dpp, rgw_bucket(tenant_name, bucket_name),
-                                &bucket, y);
+  rgw_bucket key(tenant_name, bucket_name);
+  rgw_bucket_parse_tenant(key);
+  int ret = is_vector ? driver->load_vector_bucket(dpp, key, &bucket, y)
+                      : driver->load_bucket(dpp, key, &bucket, y);
   if (ret < 0) {
     return ret;
   }
@@ -1865,7 +1882,7 @@ static int list_owner_bucket_info(const DoutPrefixProvider* dpp,
                                   const std::string& tenant,
                                   const std::string& marker,
 				  uint32_t max_entries,
-                                  bool show_stats,
+                                  bool show_stats, bool is_vector,
                                   RGWFormatterFlusher& flusher)
 {
   bool max_entries_specified = (max_entries > 0);
@@ -1894,16 +1911,20 @@ static int list_owner_bucket_info(const DoutPrefixProvider* dpp,
       max_items = (max_entries - count);
     }
 
-    int ret = driver->list_buckets(dpp, owner, tenant, listing.next_marker,
-                                   empty_end_marker, max_items, no_need_stats,
-                                   listing, y);
+    int ret = is_vector
+        ? driver->list_vector_buckets(dpp, owner, tenant, listing.next_marker,
+                                      empty_end_marker, max_items, no_need_stats,
+                                      listing, y)
+        : driver->list_buckets(dpp, owner, tenant, listing.next_marker,
+                               empty_end_marker, max_items, no_need_stats,
+                               listing, y);
     if (ret < 0) {
       return ret;
     }
 
     for (const auto& ent : listing.buckets) {
       if (show_stats) {
-        bucket_stats(driver, site, tenant, ent.bucket.name, false, formatter, dpp, y);
+        bucket_stats(driver, site, tenant, ent.bucket.name, false, is_vector, formatter, dpp, y);
       } else {
         formatter->dump_string("bucket", ent.bucket.name);
       }
@@ -1957,9 +1978,12 @@ int RGWBucketAdminOp::info(rgw::sal::Driver* driver,
   flusher.start(0);
 
   const bool show_stats = op_state.will_fetch_stats();
+  const bool is_vector = op_state.is_vector_bucket();
   const rgw_user& user_id = op_state.get_user_id();
   if (!bucket_name.empty()) {
-    ret = bucket_stats(driver, site, user_id.tenant, bucket_name, op_state.restore_stats, formatter, dpp, y);
+    ret = bucket_stats(driver, site, op_state.get_bucket()->get_tenant(),
+                       op_state.get_bucket()->get_name(), op_state.restore_stats,
+                       is_vector, formatter, dpp, y);
     if (ret < 0) {
       return ret;
     }
@@ -1974,11 +1998,16 @@ int RGWBucketAdminOp::info(rgw::sal::Driver* driver,
     if (!info.account_id.empty()) {
       ldpp_dout(dpp, 1) << "Listing buckets in user account "
           << info.account_id << dendl;
-      ret = list_owner_bucket_info(dpp, y, driver, site, info.account_id, uid.tenant,
-                                   op_state.marker, op_state.max_entries, show_stats, flusher);
+      // S3 bucket names are shared within a tenant. Vector bucket names are
+      // scoped to an account, so two accounts in the same tenant can have
+      // vector buckets with the same name. See
+      // rgw::s3vector::bucket_namespace_t::name() in rgw_s3vector.h.
+      ret = list_owner_bucket_info(dpp, y, driver, site, info.account_id,
+                                   is_vector ? info.account_id : uid.tenant,
+                                   op_state.marker, op_state.max_entries, show_stats, is_vector, flusher);
     } else {
       ret = list_owner_bucket_info(dpp, y, driver, site, uid, uid.tenant,
-                                   op_state.marker, op_state.max_entries, show_stats, flusher);
+                                   op_state.marker, op_state.max_entries, show_stats, is_vector, flusher);
     }
     if (ret < 0) {
       return ret;
@@ -1996,8 +2025,9 @@ int RGWBucketAdminOp::info(rgw::sal::Driver* driver,
       return ret;
     }
 
-    ret = list_owner_bucket_info(dpp, y, driver, site, account_id, info.tenant,
-                                 op_state.marker, op_state.max_entries, show_stats, flusher);
+    ret = list_owner_bucket_info(dpp, y, driver, site, account_id,
+                                 is_vector ? std::string(account_id) : info.tenant,
+                                 op_state.marker, op_state.max_entries, show_stats, is_vector, flusher);
     if (ret < 0) {
       return ret;
     }
@@ -2009,7 +2039,8 @@ int RGWBucketAdminOp::info(rgw::sal::Driver* driver,
     bool done = false;
 
     formatter->open_array_section("buckets");
-    ret = driver->meta_list_keys_init(dpp, "bucket", string(), &handle);
+    ret = driver->meta_list_keys_init(dpp, is_vector ? "vectorbucket" : "bucket",
+                                      string(), &handle);
 
     while (ret == 0 && !done && truncated) {
       std::list<std::string> buckets;
@@ -2023,7 +2054,7 @@ int RGWBucketAdminOp::info(rgw::sal::Driver* driver,
       for (const auto& bucket_name : buckets) {
         if (show_stats) {
           bucket_stats(driver, site, user_id.tenant, bucket_name,
-                       op_state.restore_stats, formatter, dpp, y);
+                       op_state.restore_stats, is_vector, formatter, dpp, y);
 	} else {
           formatter->dump_string("bucket", bucket_name);
 	}

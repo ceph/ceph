@@ -435,7 +435,7 @@ class RadosStore : public StoreDriver {
     int list_vector_buckets(const DoutPrefixProvider* dpp,
 			     const rgw_owner& owner, const std::string& ns,
 			     const std::string& marker, const std::string& end_marker,
-			     uint64_t max, BucketList& listing,
+			     uint64_t max, bool need_stats, BucketList& listing,
 			     optional_yield y) override;
 
     virtual void shutdown(void) override;
@@ -847,9 +847,6 @@ class RadosVectorBucket : public RadosBucket {
     }
     int put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time mtime, optional_yield y) override;
     int try_refresh_info(const DoutPrefixProvider* dpp, ceph::real_time* pmtime, optional_yield y) override;
-    // Ownership changes must also update the vector entrypoint and owner list.
-    int chown(const DoutPrefixProvider* dpp, const rgw_owner& new_owner,
-              const std::string& new_owner_name, optional_yield y) override { return -ENOTSUP; }
 
   private:
     int link(const DoutPrefixProvider* dpp, const rgw_owner& new_owner, optional_yield y, bool update_entrypoint = true, RGWObjVersionTracker* objv = nullptr);
