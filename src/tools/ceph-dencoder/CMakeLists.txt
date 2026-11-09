@@ -58,6 +58,7 @@ if(WITH_RADOSGW)
   target_link_libraries(denc-mod-rgw
     rgw_a
     cls_rgw_client
+    cls_user_client
     cls_journal_client)
   set_target_properties(denc-mod-rgw PROPERTIES
     JOB_POOL_LINK heavy_link_job_pool)

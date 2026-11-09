@@ -162,23 +162,6 @@ set(cls_timeindex_client_srcs
 add_library(cls_timeindex_client STATIC ${cls_timeindex_client_srcs})
 
 
-# cls_user
-set(cls_user_srcs user/cls_user.cc)
-add_library(cls_user SHARED ${cls_user_srcs})
-set_target_properties(cls_user PROPERTIES
-  VERSION "1.0.0"
-  SOVERSION "1"
-  INSTALL_RPATH ""
-  CXX_VISIBILITY_PRESET hidden)
-install(TARGETS cls_user DESTINATION ${cls_dir})
-
-set(cls_user_client_srcs
-  user/cls_user_client.cc
-  user/cls_user_types.cc
-  user/cls_user_ops.cc)
-add_library(cls_user_client STATIC ${cls_user_client_srcs})
-
-
 # cls_journal
 set(cls_journal_srcs
   journal/cls_journal.cc
@@ -197,15 +180,33 @@ set(cls_journal_client_srcs
 add_library(cls_journal_client STATIC ${cls_journal_client_srcs})
 
 
-# cls_rgw
+# RGW object classes
 if (WITH_RADOSGW)
+  # cls_user
+  set(cls_user_srcs user/cls_user.cc)
+  add_library(cls_user SHARED ${cls_user_srcs})
+  set_target_properties(cls_user PROPERTIES
+    VERSION "1.0.0"
+    SOVERSION "1"
+    INSTALL_RPATH ""
+    CXX_VISIBILITY_PRESET hidden)
+  install(TARGETS cls_user DESTINATION ${cls_dir})
+
+  set(cls_user_client_srcs
+    user/cls_user_client.cc
+    user/cls_user_types.cc
+    user/cls_user_ops.cc)
+  add_library(cls_user_client STATIC ${cls_user_client_srcs})
+
+  # cls_rgw
   set(cls_rgw_srcs
     rgw/cls_rgw.cc
+    rgw/cls_rgw_usage.cc
     rgw/cls_rgw_ops.cc
     rgw/cls_rgw_types.cc
     ${CMAKE_SOURCE_DIR}/src/common/ceph_json.cc)
   add_library(cls_rgw SHARED ${cls_rgw_srcs})
-  target_link_libraries(cls_rgw ${FMT_LIB})
+  target_link_libraries(cls_rgw PRIVATE ${FMT_LIB})
   target_include_directories(cls_rgw
 	  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/driver/rados"
 	  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw")
@@ -232,6 +233,20 @@ if (WITH_RADOSGW)
     target_compile_options(cls_rgw_client PUBLIC
       $<$<COMPILE_LANGUAGE:CXX>:-Werror=vla>)
   endif()
+
+  if(NOT TARGET datum::zpp)
+    message(FATAL_ERROR "RGW CLS requires Datum's zpp adapter (DATUM_ENABLE_ZPP=ON)")
+  endif()
+  add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../rgw/datum/adapters" datum-adapters)
+  foreach(target cls_user cls_user_client)
+    target_sources(${target} PRIVATE $<TARGET_OBJECTS:cls_user_datum>)
+  endforeach()
+  target_link_libraries(cls_user PRIVATE datum::core ${FMT_LIB})
+  target_link_libraries(cls_rgw PRIVATE datum::core)
+  foreach(target cls_rgw cls_rgw_client)
+    target_sources(${target} PRIVATE
+      $<TARGET_OBJECTS:cls_rgw_datum> $<TARGET_OBJECTS:cls_rgw_datum_gc>)
+  endforeach()
 
 endif (WITH_RADOSGW)
 
@@ -339,6 +354,10 @@ if (WITH_RADOSGW)
     rgw_gc/cls_rgw_gc_client.cc
     rgw/cls_rgw_types.cc)
   add_library(cls_rgw_gc_client STATIC ${cls_rgw_gc_client_srcs})
+  target_link_libraries(cls_rgw_gc PRIVATE datum::core ${FMT_LIB})
+  foreach(target cls_rgw_gc cls_rgw_gc_client)
+    target_sources(${target} PRIVATE $<TARGET_OBJECTS:cls_rgw_datum_gc>)
+  endforeach()
   target_include_directories(cls_rgw_gc_client
 	  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/driver/rados"
 	  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw")

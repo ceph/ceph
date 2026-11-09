@@ -41,6 +41,16 @@ void decode_key(datum::binary_fields<Name, Instance>, ceph::datum_wire::reader& 
     });
 }
 
+template <typename KeyT, auto Name, auto Instance>
+void decode_key(std::true_type, datum::binary_fields<Name, Instance>,
+                ceph::datum_wire::reader& archive, KeyT& value)
+{
+    archive.frame(1, [&](auto& fields, std::uint8_t) {
+        fields.text(value.*Name, std::true_type {});
+        fields.text(value.*Instance, std::true_type {});
+    });
+}
+
 inline auto decode_key(ceph::datum_wire::reader& archive)
 {
     using key = std::pair<std::string, std::string>;
