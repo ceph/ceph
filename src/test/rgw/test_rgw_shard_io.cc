@@ -1455,7 +1455,7 @@ struct MockReader : Reader {
     auto h = new MockHandler<detail::ReadHandler>(std::move(handler));
     reads.push_back(*h);
   }
-  Result on_complete(int, error_code ec) override {
+  Result on_complete(int, error_code& ec) override {
     if (ec == resource_unavailable_try_again) {
       return Result::Retry;
     } else if (ec) {
@@ -1795,6 +1795,43 @@ TEST(Reader, throttle_errors)
   ASSERT_TRUE(ec);
   EXPECT_EQ(no_such_file_or_directory, *ec);
   EXPECT_EQ(0, reader.reads.size());
+}
+
+TEST(Reader, completion_decode_error)
+{
+  struct DecodingReader : MockReader {
+    using MockReader::MockReader;
+
+    Result on_complete(int, error_code& ec) override {
+      if (!ec || ec == resource_unavailable_try_again) {
+        ec = make_error_code(io_error);
+      }
+
+      return Result::Error;
+    }
+  };
+
+  for (const auto transport : {error_code{}, make_error_code(resource_unavailable_try_again),
+                               make_error_code(no_such_file_or_directory)}) {
+    const auto dpp = NoDoutPrefix{dout_context, dout_subsys};
+    boost::asio::io_context service;
+    auto reader = DecodingReader{dpp, service.get_executor()};
+    const auto objects = std::map<int, std::string>{{0, "obj0"}, {1, "obj1"}};
+
+    std::optional<error_code> ec;
+    async_reads(reader, objects, infinite_aio, capture(ec));
+    service.poll();
+    ASSERT_EQ(2, reader.reads.size());
+
+    complete_at(reader.reads, 0, transport);
+    service.poll();
+    ASSERT_TRUE(service.stopped());
+    ASSERT_TRUE(ec);
+    const auto expected = transport == no_such_file_or_directory
+        ? transport : make_error_code(io_error);
+    EXPECT_EQ(expected, *ec);
+    EXPECT_EQ(0, reader.reads.size());
+  }
 }
 
 TEST(Reader, drain_errors)
