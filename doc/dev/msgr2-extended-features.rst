@@ -49,8 +49,9 @@ also makes a client that the cluster turns away fail at once, with a reason.
    set-require-min-compat-client`` does today. The cluster refuses to use such
    a feature, to start a pool migration for example, until the operator has
    required it. A cluster whose operator requires nothing admits every client
-   it admits today. The design adds no requirement of its own: the only way to
-   set one directly in the draft is a debug option for testing.
+   it admits today. The design adds no requirement of its own: in the draft,
+   ``ceph osd require-client-features`` is the only way to set one, besides a
+   debug option for tests.
 
 The problem
 ===========
@@ -462,18 +463,20 @@ brought none of them back.
   one cannot be used, and a pool migration cannot start, until an operator has
   required it. Once required, it stays required, so the moment that decides the
   fate of connected clients comes once, while the operator is watching, instead
-  of at every migration, unattended. The natural command is ``ceph osd
-  set-require-min-compat-client``, extended to accept feature names as well as
-  a release.
-- **Check the connected clients first.** The command should refuse while
-  clients connected to the quorum lack the feature, unless forced, as
-  ``set-require-min-compat-client`` does for a release. It must count the
-  clients that cannot exchange extended features at all. Note what that command
-  does today: it checks the clients connected when it runs, and afterwards
-  refuses map changes (tunables, upmap) that would need newer clients. It does
-  not by itself refuse later connections; those are refused only for features
-  the map's state implies, through ``OSDMap::get_features``. A requirement set
-  by the extended command must do both.
+  of at every migration, unattended. The draft adds ``ceph osd
+  require-client-features <feature>...`` and ``unrequire-client-features``;
+  ``ceph osd set-require-min-compat-client`` could accept feature names as well
+  as a release instead, once the release ladder and the feature set are
+  reconciled.
+- **Check the connected clients first.** The command refuses while clients
+  connected to the quorum lack the feature, unless forced, as
+  ``set-require-min-compat-client`` does for a release. It counts the clients
+  that cannot exchange extended features at all (done in the draft). Note what
+  that command does today: it checks the clients connected when it runs, and
+  afterwards refuses map changes (tunables, upmap) that would need newer
+  clients. It does not by itself refuse later connections; those are refused
+  only for features the map's state implies, through ``OSDMap::get_features``.
+  A requirement set by the extended command must do both.
 - **When forced, make the failure visible.** Blocklisting the clients that lack
   the feature makes them fail at once, with an error, instead of hanging hours
   later.
@@ -591,6 +594,54 @@ is bounded, and the bounds are no wider than main's today.
 
 Pre-authentication frame sizes on main (``HELLO``, ``AUTH_REQUEST``) are
 outside this design and are not changed by it.
+
+**An attacker on the path** can alter the banner or inject a refusal.
+
+- A banner *inflated* to claim a feature the client lacks is detected at
+  ``AUTH_DONE`` when cephx is in use, because the banner is signed, and the
+  connection is dropped: a lacking client is never silently admitted, which is
+  the outcome that could corrupt data. With auth ``none`` the inflation goes
+  unnoticed, as everything does under auth ``none``.
+- A banner *stripped* of a feature gets the client refused before
+  ``AUTH_DONE``, so the signature is never checked and the tampering is not
+  detected. The outcome is only a refusal.
+- A forged ``AUTH_BAD_METHOD(-EPROTONOSUPPORT)`` makes a client stop hunting at
+  once and a running client back off. The same attacker can forge ``-EACCES``,
+  which clients already treat as final, or reset the connection, so this is not
+  a new class of attack; it can never gain admission, which still needs the
+  key.
+- A forged or rogue mon can send any reason text. Userspace clients truncate it
+  to 512 printable characters before logging or storing it. The kernel patches
+  that print it to dmesg must cap its length and filter it to printable
+  characters in the same way.
+
+**What this design makes worse, and the mitigations.**
+
+- **A new parser runs before authentication.** ``feature_set_t::decode`` is
+  reachable by anyone who can connect. It is 15 lines, allocates a bounded
+  amount, and has a fuzz test; it must stay that small, and belong to any msgr2
+  fuzzing corpus.
+- **One refusal stops the hunt.** Today a client that one mon turns away keeps
+  trying the others; with the design it stops at the first
+  ``-EPROTONOSUPPORT``, so a single rogue or misconfigured mon address in a
+  client's list can stop a hunt that would have found a good mon. Only quorum
+  mons refuse, which handles the misconfigured case but not a rogue. Mitigation
+  to adopt: treat a refusal as final only once every mon tried in the current
+  round has refused or failed. When the quorum agrees this costs nothing;
+  against one rogue it costs at most a connection timeout (10 s), never
+  ``client_mount_timeout``.
+- **A refused msgr1 connection stays open.** The mon used to close the
+  connection straight after its reply; the design leaves it open so that the
+  client reads the reply, and today it is reaped only by
+  ``ms_connection_idle_timeout`` (15 minutes). An unauthenticated peer can
+  therefore hold a mon fd and session for that long per refused connection.
+  Mitigation to adopt: close the connection a few seconds after the reply, by
+  timer, as the draft already does nothing else with it.
+- **Refusals reach the cluster log and, later, a health check.**
+  Unauthenticated peers can cause both. The cluster-log line is rate-limited to
+  one a minute and carries only counts and an address; the health check must do
+  the same and never include a string a peer chose.
+
 
 Risks and open questions
 ========================
