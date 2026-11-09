@@ -24,15 +24,15 @@ namespace ceph::salad::datum {
 // Decode in place; malformed input may change both value and cursor. There is no rollback.
 // Allocation and other exceptions propagate. The caller chooses its error code and diagnostics.
 template <typename ValueT>
-[[nodiscard]] bool try_decode(ValueT& value, ::ceph::buffer::list::const_iterator& input)
+[[nodiscard]] bool try_decode(ValueT& value, ceph::buffer::list::const_iterator& input)
 {
-    using ::ceph::decode;
+    using ceph::decode;
     try
      {
         decode(value, input);
         return true;
      }
-    catch (const ::ceph::buffer::error&)
+    catch (const ceph::buffer::error&)
      {
         return false;
      }
@@ -41,7 +41,7 @@ template <typename ValueT>
 // Match Ceph's whole-buffer decode contract, including its complete-consumption assertion.
 // Use a cursor when decoding a prefix or a sequence of records.
 template <typename ValueT>
-[[nodiscard]] bool try_decode(ValueT& value, const ::ceph::buffer::list& bytes)
+[[nodiscard]] bool try_decode(ValueT& value, const ceph::buffer::list& bytes)
 {
     auto input = bytes.cbegin();
     if (!try_decode(value, input)) {
@@ -54,7 +54,7 @@ template <typename ValueT>
 
 // The returned standard view borrows the list and its payload. Keep both alive.
 // Iterators also depend on this transform descriptor; it is not a borrowed range.
-inline auto fragments(const ::ceph::buffer::list& source)
+inline auto fragments(const ceph::buffer::list& source)
 {
     return source.buffers() | std::views::transform([](const auto& block) {
                const auto size = block.length();
@@ -62,11 +62,11 @@ inline auto fragments(const ::ceph::buffer::list& source)
            });
 }
 
-void fragments(const ::ceph::buffer::list&&) = delete;
+void fragments(const ceph::buffer::list&&) = delete;
 
 namespace detail {
 
-inline void check_native_extent(const ::ceph::buffer::list& source, const byte_extent selected)
+inline void check_native_extent(const ceph::buffer::list& source, const byte_extent selected)
 {
     if (!extent_fits(selected.offset, selected.length, source.length())) {
         throw std::out_of_range {"byte extent exceeds its Ceph buffer"};
@@ -76,7 +76,7 @@ inline void check_native_extent(const ::ceph::buffer::list& source, const byte_e
 } // namespace detail
 
 template <writable_byte_output OutputT>
-auto copy(const ::ceph::buffer::list& source, const byte_extent selected, OutputT&& output)
+auto copy(const ceph::buffer::list& source, const byte_extent selected, OutputT&& output)
 {
     detail::check_native_extent(source, selected);
     if (selected.length > std::ranges::size(output)) {
@@ -104,26 +104,26 @@ auto copy(const ::ceph::buffer::list& source, const byte_extent selected, Output
 }
 
 template <writable_byte_output OutputT>
-auto copy(const ::ceph::buffer::list& source, const std::uint64_t offset, OutputT&& output)
+auto copy(const ceph::buffer::list& source, const std::uint64_t offset, OutputT&& output)
 {
     return ceph::salad::datum::copy(source, byte_extent {offset, std::ranges::size(output)},
                                    std::forward<OutputT>(output));
 }
 
 template <writable_byte_output OutputT>
-auto copy(const ::ceph::buffer::list& source, OutputT&& output)
+auto copy(const ceph::buffer::list& source, OutputT&& output)
 {
     return ceph::salad::datum::copy(source, byte_extent {0, source.length()}, std::forward<OutputT>(output));
 }
 
 // This result owns an independent payload. Native append/cursor copy-to-list can share storage.
-inline ::ceph::buffer::list copy(const ::ceph::buffer::list& source, const byte_extent selected)
+inline ceph::buffer::list copy(const ceph::buffer::list& source, const byte_extent selected)
 {
     detail::check_native_extent(source, selected);
-    ::ceph::buffer::list result;
+    ceph::buffer::list result;
     if (selected.length) {
-        ::ceph::buffer::ptr payload {
-            ::ceph::buffer::create(static_cast<unsigned>(selected.length))};
+        ceph::buffer::ptr payload {
+            ceph::buffer::create(static_cast<unsigned>(selected.length))};
         copy(source, selected, std::span<char> {payload.c_str(), payload.length()});
         result.append(std::move(payload));
     }
@@ -132,10 +132,10 @@ inline ::ceph::buffer::list copy(const ::ceph::buffer::list& source, const byte_
 }
 
 // A slice retains native references. Externally backed buffers retain their native obligations.
-inline ::ceph::buffer::list slice(const ::ceph::buffer::list& source, const byte_extent selected)
+inline ceph::buffer::list slice(const ceph::buffer::list& source, const byte_extent selected)
 {
     detail::check_native_extent(source, selected);
-    ::ceph::buffer::list result;
+    ceph::buffer::list result;
     if (selected.length) {
         result.substr_of(source, static_cast<unsigned>(selected.offset), static_cast<unsigned>(selected.length));
     }
@@ -151,7 +151,7 @@ template <typename CursorT>
 std::span<const char> read_contiguous(CursorT& input, const std::span<char> storage)
 {
     if (storage.size() > input.get_remaining()) {
-        throw ::ceph::buffer::end_of_buffer {};
+        throw ceph::buffer::end_of_buffer {};
     }
     if (storage.empty()) {
         return storage;

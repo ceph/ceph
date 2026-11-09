@@ -35,8 +35,8 @@
 
 namespace ceph::datum_wire {
 
-namespace datum = ::ceph::salad::datum;
-using byte_buffer = ::ceph::buffer::list;
+namespace datum = ceph::salad::datum;
+using byte_buffer = ceph::buffer::list;
 
 constexpr std::uint32_t checked_count(const std::uint64_t size)
 {
@@ -69,7 +69,7 @@ struct scalar_record final
     T value;
 };
 
-using frame_header = ::ceph::encoding_detail::struct_header;
+using frame_header = ceph::encoding_detail::struct_header;
 using header_fields =
     datum::binary_fields<&frame_header::v, &frame_header::compat, &frame_header::len>;
 
@@ -132,7 +132,7 @@ constexpr std::uint64_t encoded_size(datum::binary_fields<Member...> selected, c
 }
 
 static_assert(encoded_size(header_fields {}, frame_header {}) ==
-              ::ceph::encoding_detail::struct_header_len());
+              ceph::encoding_detail::struct_header_len());
 
 class writer final
 {
@@ -250,7 +250,7 @@ public:
     template <typename T>
     void native(const T& value)
     {
-        using ::ceph::encode;
+        using ceph::encode;
         encode(value, output);
     }
 
@@ -267,7 +267,7 @@ public:
     template <typename RecordT, auto ...Member>
     void frame(datum::binary_fields<Member...> selected, const std::uint8_t version, const RecordT& value)
     {
-        constexpr std::uint64_t header_size = ::ceph::encoding_detail::struct_header_len();
+        constexpr std::uint64_t header_size = ceph::encoding_detail::struct_header_len();
         const auto body_size = checked_count(encoded_size(selected, value));
         const auto size = header_size + body_size;
         ensure(size);
@@ -282,7 +282,7 @@ public:
     template <typename BodyT>
     void frame(const std::uint8_t version, const std::uint8_t compatible, BodyT&& body)
     {
-        constexpr auto header_size = ::ceph::encoding_detail::struct_header_len();
+        constexpr auto header_size = ceph::encoding_detail::struct_header_len();
         ensure(header_size);
         auto header = output.append_hole(header_size);
         const auto start = output.length();
@@ -342,7 +342,7 @@ public:
     void require(const std::size_t size) const
     {
         if (size > remaining()) {
-            throw ::ceph::buffer::malformed_input {"Ceph field exceeds its frame"};
+            throw ceph::buffer::malformed_input {"Ceph field exceeds its frame"};
         }
     }
 
@@ -356,7 +356,7 @@ public:
         const auto size = scalar<std::uint32_t>();
         require(tail);
         if (size > (remaining() - tail) / Minimum) {
-            throw ::ceph::buffer::malformed_input {"Ceph count exceeds frame capacity"};
+            throw ceph::buffer::malformed_input {"Ceph count exceeds frame capacity"};
         }
 
         return size;
@@ -388,12 +388,12 @@ public:
         payload(value);
     }
 
-    void text(::ceph::buffer::ptr& value)
+    void text(ceph::buffer::ptr& value)
     {
         const auto size = scalar<std::uint32_t>();
         require(size);
         if (0 == size) {
-            value = ::ceph::buffer::ptr {};
+            value = ceph::buffer::ptr {};
 
             return;
         }
@@ -455,12 +455,12 @@ public:
 
     // Validate the count before allocating unpublished sequence storage:
     template <unsigned Minimum, typename EntriesT, typename DecodeT>
-    requires ::ceph::concepts::has_emplace_back<EntriesT>
+    requires ceph::concepts::has_emplace_back<EntriesT>
     EntriesT sequence(DecodeT&& decode, const unsigned tail = 0)
     {
         const auto count = sequence_size<Minimum>(tail);
         EntriesT entries;
-        ::ceph::util::maybe_reserve(entries, count);
+        ceph::util::maybe_reserve(entries, count);
         for (std::uint32_t index = 0; index < count; ++index) {
             std::invoke(decode, *this, entries.emplace_back());
         }
@@ -473,7 +473,7 @@ public:
     template <typename T>
     void native(T& value)
     {
-        using ::ceph::decode;
+        using ceph::decode;
 
         auto cursor = input;
         decode(value, cursor);
@@ -482,7 +482,7 @@ public:
     }
 
     template <unsigned Minimum, typename EntriesT>
-    requires ::ceph::concepts::has_emplace_back<EntriesT>
+    requires ceph::concepts::has_emplace_back<EntriesT>
     EntriesT native(const unsigned tail = 0)
     {
         return sequence<Minimum, EntriesT>(
@@ -493,9 +493,9 @@ public:
     decltype(auto) frame(const std::uint8_t supported, BodyT&& body)
     {
         frame_header header DATUM_CEPH_INDETERMINATE;
-        fields<::ceph::encoding_detail::struct_header_len()>(header_fields {}, header);
+        fields<ceph::encoding_detail::struct_header_len()>(header_fields {}, header);
         if (header.compat > supported) {
-            throw ::ceph::buffer::malformed_input {"Ceph frame needs a newer decoder"};
+            throw ceph::buffer::malformed_input {"Ceph frame needs a newer decoder"};
         }
         require(header.len);
         const auto trailing = input.get_remaining() - header.len;
@@ -530,7 +530,7 @@ public:
         require(1);
         auto cursor = input;
         std::uint8_t version DATUM_CEPH_INDETERMINATE;
-        ::ceph::decode(version, cursor);
+        ceph::decode(version, cursor);
         if (version >= first_framed) {
             return frame(supported, std::forward<BodyT>(body));
         }
@@ -546,7 +546,7 @@ public:
     bool canonical_frame(const std::uint8_t version, BodyT&& body)
     {
         frame_header header DATUM_CEPH_INDETERMINATE;
-        fields<::ceph::encoding_detail::struct_header_len()>(header_fields {}, header);
+        fields<ceph::encoding_detail::struct_header_len()>(header_fields {}, header);
         require(header.len);
         if (version != header.v || 1 != header.compat) {
             return false;

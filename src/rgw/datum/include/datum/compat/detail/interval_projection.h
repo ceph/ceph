@@ -113,7 +113,7 @@ class const_projection_view final
 
         constexpr decltype(auto) operator*() const
         {
-            return std::invoke(::ceph::salad::datum::compat::detail::projector_value<ProjectionT>(
+            return std::invoke(ceph::salad::datum::compat::detail::projector_value<ProjectionT>(
                                    parent->projection), *current);
         }
 
@@ -172,7 +172,7 @@ class const_projection_view final
         constexpr decltype(auto) operator[](difference_type count) const
         requires std::ranges::random_access_range<base_range>
         {
-            return std::invoke(::ceph::salad::datum::compat::detail::projector_value<ProjectionT>(
+            return std::invoke(ceph::salad::datum::compat::detail::projector_value<ProjectionT>(
                                    parent->projection), current[count]);
         }
 
@@ -313,14 +313,14 @@ public:
 
     constexpr const_projection_view& operator=(const const_projection_view& other)
     noexcept(std::is_nothrow_copy_assignable_v<ViewT> and
-             noexcept(::ceph::salad::datum::compat::detail::assign_projector<ProjectionT>(
+             noexcept(ceph::salad::datum::compat::detail::assign_projector<ProjectionT>(
                  projection, other.projection)))
     requires (!trivial_copy_assignment) and std::is_copy_assignable_v<ViewT> and
              std::copy_constructible<ProjectionT>
     {
         if (this != std::addressof(other)) {
             source = other.source;
-            ::ceph::salad::datum::compat::detail::assign_projector<ProjectionT>(projection, other.projection);
+            ceph::salad::datum::compat::detail::assign_projector<ProjectionT>(projection, other.projection);
         }
 
         return *this;
@@ -328,13 +328,13 @@ public:
 
     constexpr const_projection_view& operator=(const_projection_view&& other)
     noexcept(std::is_nothrow_move_assignable_v<ViewT> and
-             noexcept(::ceph::salad::datum::compat::detail::assign_projector<ProjectionT>(
+             noexcept(ceph::salad::datum::compat::detail::assign_projector<ProjectionT>(
                  projection, std::move(other.projection))))
     requires (!trivial_move_assignment)
     {
         if (this != std::addressof(other)) {
             source = std::move(other.source);
-            ::ceph::salad::datum::compat::detail::assign_projector<ProjectionT>(
+            ceph::salad::datum::compat::detail::assign_projector<ProjectionT>(
                 projection, std::move(other.projection));
         }
 

@@ -71,7 +71,7 @@ public:
                 continue;
             }
 
-            auto out = ::ceph::salad::datum::compat::string_from_view(prefix.substr(0, i));
+            auto out = ceph::salad::datum::compat::string_from_view(prefix.substr(0, i));
             out.back() = static_cast<char>(1 + byte);
 
             return out;
@@ -588,7 +588,7 @@ constexpr byte_query prefix(const encoded_key& parent, const SegmentT& next_segm
 {
     const auto value = detail::segment_view(next_segment_prefix);
     detail::require_valid_segment(value);
-    auto out = ::ceph::salad::datum::compat::string_from_view(key_view(parent));
+    auto out = ceph::salad::datum::compat::string_from_view(key_view(parent));
     detail::append_segment_contents(out, value);
 
     return prefix<byte_string_domain>(std::move(out));

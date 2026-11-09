@@ -44,7 +44,7 @@ template <typename LensT, typename ArgT, typename DomainT = projection_domain_t<
 concept safe_interval_projection_for =
     interval_projection_for<LensT, ArgT, DomainT> and
     (std::is_lvalue_reference_v<ArgT> ||
-     ::ceph::salad::datum::owning_value<typename DomainT::value_type>);
+     ceph::salad::datum::owning_value<typename DomainT::value_type>);
 
 // transform_view invokes F&. Force the const lens overload that was checked,
 // and bind both const/nonconst iteration to the same domain.
@@ -164,11 +164,11 @@ intervals_view(RangeT&&, LensT&&) -> intervals_view<std::views::all_t<RangeT>, s
 // Own the points without introducing a second container or iterator protocol.
 // Capacity bounds entries, not allocations made by points or source storage.
 template <ordered_domain DomainT, std::size_t Capacity>
-requires ::ceph::salad::datum::owning_value<typename DomainT::value_type>
+requires ceph::salad::datum::owning_value<typename DomainT::value_type>
 using interval_batch = static_interval_set<DomainT, Capacity>;
 
-using ::ceph::salad::datum::acceptance;
-using ::ceph::salad::datum::visit_result;
+using ceph::salad::datum::acceptance;
+using ceph::salad::datum::visit_result;
 
 // Canonical values are scoped to each call; borrowed point domains remain
 // usable with lvalue elements. The standard views handle projection, while
@@ -184,7 +184,7 @@ requires detail::safe_interval_projection_for<std::identity,
     using reference = std::ranges::range_reference_t<RangeT>;
 
     if constexpr (canonical_interval<reference> and std::is_lvalue_reference_v<reference>) {
-        return ::ceph::salad::datum::visit_range(
+        return ceph::salad::datum::visit_range(
                   source, [&consumer](const query<DomainT>& value) { return std::invoke(consumer, value); });
     }
 
@@ -192,7 +192,7 @@ requires detail::safe_interval_projection_for<std::identity,
         auto values = std::ranges::transform_view {std::ranges::ref_view {source},
             [](const auto& value) { return copy_interval(value); }};
 
-        return ::ceph::salad::datum::visit_range(
+        return ceph::salad::datum::visit_range(
                   values, [&consumer](const query<DomainT>& value) { return std::invoke(consumer, value); });
     }
 }
