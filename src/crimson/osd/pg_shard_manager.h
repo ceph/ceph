@@ -412,7 +412,7 @@ public:
     }).then([this, &opref] {
       return get_pg_to_shard_mapping().get_or_create_pg_mapping(
         opref.get_pgid(), NULL_CORE, NULL_STORE_INDEX,
-        get_shard_services().is_up_primary(opref.get_pgid()));
+        get_shard_services().is_up_primary_if_unmapped(opref.get_pgid()));
     }).then_wrapped([this, &logger, op=std::move(op)](auto fut) mutable {
       if (unlikely(fut.failed())) {
         logger.error("{}: failed before with_pg", *op);
