@@ -13,6 +13,18 @@
 #define CEPH_COMPAT_H
 
 #include "acconfig.h"
+
+// Scratch storage whose value is assigned before it is observed. Keep the
+// attribute consistent across language modes when the compiler supports it.
+#if defined(__cplusplus) && defined(__has_cpp_attribute)
+# if __has_cpp_attribute(indeterminate)
+#  define CEPH_INDETERMINATE [[indeterminate]]
+# endif
+#endif
+#ifndef CEPH_INDETERMINATE
+# define CEPH_INDETERMINATE
+#endif
+
 #include <sys/types.h>
 #include <errno.h>
 #include <stdlib.h>
