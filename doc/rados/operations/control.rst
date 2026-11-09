@@ -493,8 +493,6 @@ standby if a standby is present), run the following command:
 
    ceph mds fail 0
 
-.. todo:: ``ceph mds`` subcommands missing docs: set, dump, getmap, stop, setmap
-
 
 Mon Subsystem
 =============
