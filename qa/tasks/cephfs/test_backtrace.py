@@ -101,6 +101,65 @@ class TestBacktrace(CephFSTestCase):
         old_pool_layout = self.fs.read_layout(file_ino, pool=old_data_pool_name)
         self.assertEqual(old_pool_layout['object_size'], 4194304)
 
+    def _list_inos(self, *dirs):
+        """
+        Map the path of every file under dirs to its inode number.
+        """
+        p = self.mount_a.run_shell(["find", *dirs, "-type", "f",
+                                    "-printf", "%i %p\\n"])
+        files = {}
+        for line in p.stdout.getvalue().splitlines():
+            ino, path = line.split(" ", 1)
+            files[path] = int(ino)
+        return files
+
+    def _check_backtraces(self, files):
+        for path, ino in files.items():
+            backtrace = self.fs.read_backtrace(ino)
+            self.assertEqual(list(reversed(path.split('/'))),
+                             [a['dname'] for a in backtrace['ancestors']],
+                             f"backtrace of {path} ({ino:#x})")
+
+    def test_backtrace_expire_max_inflight(self):
+        """
+        That the backtraces of the inodes created or moved in expiring
+        journal segments are all written when
+        mds_log_expire_backtrace_max_inflight limits how many of those
+        writes are in flight, also when many segments expire together and
+        when the limit is changed or removed at runtime.
+        """
+        nfiles = 50
+
+        # Small segments, so that a journal flush expires many at once.
+        self.config_set('mds', 'mds_log_events_per_segment', 10)
+        self.config_set('mds', 'mds_log_expire_backtrace_max_inflight', 1)
+
+        for d in ["bt_a", "bt_b", "bt_c/sub"]:
+            self.mount_a.create_n_files(f"{d}/file", nfiles)
+        # A moved inode gets its backtrace written again.
+        for i in range(0, nfiles, 5):
+            self.mount_a.run_shell(["mv", f"bt_a/file_{i}",
+                                    f"bt_c/sub/moved_{i}"])
+        self.fs.mds_asok(["flush", "journal"])
+        files = self._list_inos("bt_a", "bt_b", "bt_c")
+        self.assertEqual(len(files), 3 * nfiles)
+        self._check_backtraces(files)
+
+        # Raise the limit, then remove it, with segments to expire.
+        self.config_set('mds', 'mds_log_expire_backtrace_max_inflight', 4)
+        self.mount_a.create_n_files("bt_d/file", nfiles)
+        self.config_set('mds', 'mds_log_expire_backtrace_max_inflight', 0)
+        self.mount_a.create_n_files("bt_e/file", nfiles)
+        self.fs.mds_asok(["flush", "journal"])
+        files = self._list_inos("bt_d", "bt_e")
+        self.assertEqual(len(files), 2 * nfiles)
+        self._check_backtraces(files)
+
+        # The MDS still serves requests and trims its journal.
+        self.mount_a.run_shell(["touch", "bt_a/after"])
+        self.fs.mds_asok(["flush", "journal"])
+        self._check_backtraces(self._list_inos("bt_a"))
+
     def test_backtrace_flush_on_deleted_data_pool(self):
         """
         that the MDS does not go read-only when handling backtrace update errors
