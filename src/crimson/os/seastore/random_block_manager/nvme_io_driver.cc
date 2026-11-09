@@ -14,7 +14,7 @@
 #include "include/buffer.h"
 #include "nvme_io_driver.h"
 #include "crimson/os/seastore/logging.h"
-#ifdef HAVE_SPDK
+#ifdef HAVE_CRIMSON_SPDK
 #include "spdk_nvme_io_driver.h"
 #endif
 
@@ -429,14 +429,14 @@ NVMeIODriverRef make_nvme_io_driver(const std::string &path)
 {
   auto trid = crimson::common::local_conf().get_val<std::string>(
     "seastore_spdk_transport_id");
-#ifdef HAVE_SPDK
+#ifdef HAVE_CRIMSON_SPDK
   if (!trid.empty()) {
     return std::make_unique<SPDKNVMeIODriver>(trid);
   }
 #else
   if (!trid.empty()) {
     throw std::invalid_argument(
-      "seastore_spdk_transport_id is set but this build has WITH_SPDK=OFF");
+      "seastore_spdk_transport_id is set but this build has WITH_CRIMSON_SPDK=OFF");
   }
 #endif
   // RBM is never ZBD, so no zoned guard is needed here.
