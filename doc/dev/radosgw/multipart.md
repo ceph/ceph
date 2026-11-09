@@ -24,7 +24,7 @@ Complete can address this by guarding its head object write with an assertion th
 
 The assert_locked() method from cls_lock can't be used for this, because the lock is held on a different rados object. What we can do is pass the lock's current expiration timestamp with the request, and have the osd check that before applying the write.
 
-Rados doesn't provide an existing primitive for current time comparisons, so we'll need to introduce a new cls method for this. cls_rgw_obj_check_mtime() from cls_rgw is a good example to copy. Until osds upgrade to a release that supports this new method, calls will fail with EOPNOTSUPP errors. Radosgw should handle these errors by retrying the head object write without this guard.
+Rados doesn't provide an existing primitive for current time comparisons, so we'll need to extend the librados api for this. Until osds upgrade to a release that supports this new method, calls will fail with EOPNOTSUPP errors. Radosgw should handle these errors by retrying the head object write without this guard.
 
 By rejecting this head object write that commits the multipart upload, we can guarantee that other requests that successfully acquire the lock will be able to detect its completion. Abort should use the same guard for its write operations, at least on the first part objects consulted for completion.
 
