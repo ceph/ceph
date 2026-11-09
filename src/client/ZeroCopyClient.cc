@@ -156,6 +156,10 @@ public:
 #else
     bufferlist* pbl = bl;
 #endif
+    // Defer claim_append of this completion's tbl until we either retry
+    // (must accumulate under lock) or leave client_lock on the success path
+    // (large non-FSCrypt reads: avoid holding the mutex across MiB copies).
+    bool have_tbl = false;
 
     if (r == -ENOENT) {
       r = 0;
@@ -168,10 +172,16 @@ public:
       read_bytes += r;
       pos += r;
       left -= r;
-      pbl->claim_append(tbl);
+      have_tbl = true;
     }
 
     if (r >= 0 && static_cast<uint64_t>(r) < wanted) {
+      // Short OSD read: materialize this chunk before zero-fill / getattr /
+      // retry so accumulated ciphertext/plaintext stays in pbl across hops.
+      if (have_tbl) {
+        pbl->claim_append(tbl);
+        have_tbl = false;
+      }
       // Short OSD read: zero up to known EOF like C_Read_Sync_NonBlocking,
       // then re-check size. Retry the remainder only if the file grew / we
       // have not reached EOF yet.
@@ -214,6 +224,13 @@ public:
 
   success:
     if (r >= 0) {
+      // Buffer assembly (and FSCrypt decrypt) do not touch Client state —
+      // drop client_lock so concurrent ZC reads are not serialized on memcpy.
+      lock.unlock();
+      if (have_tbl) {
+        pbl->claim_append(tbl);
+        have_tbl = false;
+      }
 #if defined(__linux__)
       if (fscrypt_denc) {
         if (read_len > target_len) {
@@ -223,18 +240,23 @@ public:
         auto dec_start = mono_clock_now();
         r = fscrypt_denc->decrypt_bl(off, target_len, read_start, holes, pbl);
         clnt->logger->tinc(l_c_fscrypt_dec_lat, mono_clock_now() - dec_start);
-        if (r < 0) {
-          goto done;
+        if (r >= 0) {
+          bl->claim_append(*pbl);
+          clnt->logger->tinc(l_c_fscrypt_rd_lat, mono_clock_now() - start_time);
         }
-        bl->claim_append(*pbl);
-        clnt->logger->tinc(l_c_fscrypt_rd_lat, mono_clock_now() - start_time);
       }
 #endif
-      // Match C_Read_Sync_NonBlocking: full physical read → report logical len.
-      if (read_len == read_bytes) {
-        r = len;
-      } else {
-        r = read_bytes;
+      if (r >= 0) {
+        // Match C_Read_Sync_NonBlocking: full physical read → report logical len.
+        if (read_len == read_bytes) {
+          r = len;
+        } else {
+          r = read_bytes;
+        }
+      }
+      lock.lock();
+      if (r < 0) {
+        goto done;
       }
     }
 
