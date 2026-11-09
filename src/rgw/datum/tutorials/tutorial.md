@@ -1679,6 +1679,9 @@ an empty marker and pass `read_page`, the next-position callback, and the visito
 to Datum. The page loop coordinates those callbacks; it does not issue CLS operations.
 
 This listing marker records a position, with no snapshot or object-generation guarantee.
+Native RGW index maintenance uses a separate `rgw_cls_index_check` accumulator and an
+opaque identity/version cursor. Its page limits, restart policy, and guarded final
+publication are application policy; `for_each_page` does not add those guarantees.
 
 Run the listing traversal with the supplied callbacks:
 
