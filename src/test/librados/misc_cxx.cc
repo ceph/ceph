@@ -17,6 +17,7 @@
 #include "include/scope_guard.h"
 #include "include/stringify.h"
 #include "common/Checksummer.h"
+#include "common/Clock.h"
 #include "common/config_proxy.h" // for class ConfigProxy
 #include "mds/mdstypes.h"
 #include "global/global_context.h"
@@ -348,6 +349,51 @@ TEST_P(LibRadosMiscPP, AssertVersionPP) {
   op3.assert_version(v);
   op3.write(0, bl);
   ASSERT_EQ(0, ioctx.operate("asdfbar", &op3));
+}
+
+static timespec make_timespec(utime_t t)
+{
+  timespec ts;
+  t.to_timespec(&ts);
+  return ts;
+}
+
+TEST_P(LibRadosMiscPP, AssertTimeRange)
+{
+  // this test is subject to clock skew between the test client
+  // and osds. account for up to 300 seconds
+  const utime_t skew = utime_t{300, 0};
+  const std::string oid = "assert-time-range";
+
+  ASSERT_EQ(0, ioctx.create(oid, true));
+  {
+    ObjectReadOperation op;
+    const auto after = make_timespec(utime_t{});
+    const auto before = make_timespec(ceph_clock_now() + skew);
+    op.assert_time_range(after, before);
+    ASSERT_EQ(0, ioctx.operate(oid, &op, nullptr));
+  }
+  {
+    ObjectReadOperation op;
+    const auto after = make_timespec(utime_t{});
+    const auto before = make_timespec(ceph_clock_now() - skew);
+    op.assert_time_range(after, before);
+    ASSERT_EQ(-ETIME, ioctx.operate(oid, &op, nullptr));
+  }
+  {
+    ObjectReadOperation op;
+    const auto after = make_timespec(ceph_clock_now() + skew);
+    const auto before = make_timespec(utime_t::max());
+    op.assert_time_range(after, before);
+    ASSERT_EQ(-ETIME, ioctx.operate(oid, &op, nullptr));
+  }
+  {
+    ObjectReadOperation op;
+    const auto after = make_timespec(ceph_clock_now() - skew);
+    const auto before = make_timespec(utime_t::max());
+    op.assert_time_range(after, before);
+    ASSERT_EQ(0, ioctx.operate(oid, &op, nullptr));
+  }
 }
 
 TEST_P(LibRadosMiscPP, BigAttrPP) {
