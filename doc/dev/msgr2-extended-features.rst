@@ -7,27 +7,30 @@ Summary
 
 Ceph is running out of connection feature bits, and a client that lacks a
 required feature retries until it times out instead of failing. This design
-gives Vampire an unlimited set of feature numbers for clients and daemons. It
-also makes a client that the cluster turns away fail at once, with a reason.
+gives Ceph a set of feature numbers with no fixed limit, for clients and
+daemons. It also makes a client that the cluster turns away fail at once, with
+a reason. Both target the W release; Vampire gets a first step that needs no
+wire change (see "Phasing").
 
-- **Unlimited feature numbers.** One unused msgr2 banner bit lets a peer append
-  its 64-bit feature word and a variable-length set of extended features to the
-  banner it already sends. Peers that don't set the bit see nothing new.
+- **No fixed limit on feature numbers.** One unused msgr2 banner bit lets a
+  peer append its 64-bit feature word and a variable-length set of extended
+  features to the banner it already sends. Peers that don't set the bit see
+  nothing new, and a new client that connects to an older cluster is admitted
+  as today.
 - **A clean "no".** The banner arrives before authentication, so the mon knows
   what a client supports when it authenticates it. It turns away a client that
   lacks a required feature there. Every connecting client, old or new, kernel
   or userspace, already treats a refusal at that point as final.
 - **Requirements gate new connections only.** A client that is already
-  connected keeps working until it reconnects. A client from before Vampire
-  that is refused then never tries again, and its I/O hangs once its tickets
-  expire, even if the requirement is lifted. So turning a requirement on must
-  first check the connected clients, as ``set-require-min-compat-client`` does.
+  connected keeps working until it reconnects. A client from before W that is
+  refused then never tries again, and its I/O hangs once its tickets expire,
+  even if the requirement is lifted. So turning a requirement on must first
+  check the connected clients, as ``set-require-min-compat-client`` does.
 - **Kernels stay simple.** Unmodified kernels need nothing and are refused
   cleanly. To take part, a kernel needs 12 lines of code.
-- **Backportable to Umbrella.** The server-side half of the clean rejection
-  needs no wire change. With it, an older client that connects to an Umbrella
-  cluster during a pool migration fails in about a second instead of after
-  nearly an hour.
+- **Phased.** Vampire gets ``ceph osd set-require-min-compat-client`` accepting
+  feature names, and the MonClient fix; neither changes the wire. The extended
+  set and the clean rejection follow in W.
 
 .. note::
 
@@ -300,9 +303,21 @@ cannot be stripped unnoticed.
 
 **Rules.**
 
-- **Numbers.** Extended features are numbered from 0 with no limit, allocated
-  upstream in order, and never reused or renumbered. A downstream backport
-  reserves its number upstream first, which costs nothing now.
+- **Numbers.** Extended features are numbered from 0 with no fixed limit,
+  allocated upstream in order, and never reused or renumbered. The wire format
+  carries any number of 64-bit words. Each release keeps at most 64 of them
+  (4,096 numbers, ``feature_set_t::max_blocks``) and skips the rest, so that a
+  peer cannot make a daemon allocate whatever it claims before authentication.
+  A number past the receiver's cap counts as absent, which is the right answer
+  for a feature it does not know, and a later release raises the cap without a
+  wire change. A downstream backport reserves its number upstream first, which
+  costs nothing now.
+- **Room in the banner.** The payload length is 16 bits, so a banner is at most
+  64 KiB, shared by everything in it. The set is length-prefixed, and a sender
+  never emits more than 64 words, so the extension takes about 524 bytes at
+  most and a reader steps over it to whatever follows. Later additions go after
+  the set, switched on by one of the 61 unused banner bits or by an extended
+  feature number.
 - **Unknown bits.** Receivers ignore unknown bits and unknown trailing bytes.
   The top bit of every 64-bit word is reserved: with
   ``ms_v2_ext_features_grease`` a peer sets one at random ("GREASE"), so a peer
@@ -352,7 +367,7 @@ below.
    * - Client
      - How the mon refuses it
      - What the client shows
-   * - Vampire or later userspace
+   * - W or later userspace
      - ``AUTH_BAD_METHOD(-EPROTONOSUPPORT)`` plus the reason trailer
      - The error and the mon's reason
    * - Patched kernel, msgr2
@@ -375,7 +390,7 @@ below.
      - Two strikes: identification is refused once, then its next
        authentication
      - "Permission denied"
-   * - Vampire or later clients already connected
+   * - W or later clients already connected
      - Not refused until they reconnect. Then they retry every 3 to 30 s
      - They recover if the requirement is lifted within one to three times
        ``auth_mon_ticket_ttl`` (12 hours by default). After that their old
@@ -442,11 +457,12 @@ kernels retry forever, and at the default level each refusal would add a line
 of about 300 bytes to the mon log. Today these clients are invisible at default
 debug levels. A health check should name them too.
 
-**This part needs no new wire format, so it can be backported to Umbrella.** It
-covers refusing at authentication for 64-bit features, the two-strike rule, the
-msgr1 refusal and the MonClient changes. With it, old clients that connect
-while a pool migrates are turned away in about a second, and clients that
-support pool migration keep working throughout.
+**This part needs no new wire format.** It covers refusing at authentication
+for 64-bit features, the two-strike rule, the msgr1 refusal and the MonClient
+changes. With it, old clients that connect while a pool migrates are turned
+away in about a second, and clients that support pool migration keep working
+throughout. It is W work all the same, except the first MonClient fix, which
+Vampire gets (see "Phasing").
 
 Turning a requirement on
 ========================
@@ -464,10 +480,9 @@ brought none of them back.
   required it. Once required, it stays required, so the moment that decides the
   fate of connected clients comes once, while the operator is watching, instead
   of at every migration, unattended. The draft adds ``ceph osd
-  require-client-features <feature>...`` and ``unrequire-client-features``;
-  ``ceph osd set-require-min-compat-client`` could accept feature names as well
-  as a release instead, once the release ladder and the feature set are
-  reconciled.
+  require-client-features <feature>...`` and ``unrequire-client-features`` as a
+  stand-in. The command to keep is ``ceph osd set-require-min-compat-client``:
+  Vampire teaches it feature names, and W extended features (see "Phasing").
 - **Check the connected clients first.** The command refuses while clients
   connected to the quorum lack the feature, unless forced, as
   ``set-require-min-compat-client`` does for a release. It counts the clients
@@ -525,10 +540,17 @@ from that.
      - A longer banner, which they ignore
      - Nothing, unless something is required: then they are refused at
        authentication in under a second.
+   * - New clients and daemons against an older cluster
+     - Older mons and OSDs ignore bit 2 and the trailer, and set no bit 2
+       themselves
+     - Nothing. The client marks the peer as unable to exchange extended
+       features and the connection runs as today. Tested with released mons
+       from Nautilus to Umbrella and with main's mon and OSD, in both
+       directions.
    * - Older mons in a mixed quorum
      - Nothing new
-     - A requirement must wait until every mon is Vampire or later, or an older
-       mon would admit the clients that a newer one refuses.
+     - A requirement must wait until every mon is W or later, or an older mon
+       would admit the clients that a newer one refuses.
 
 **msgr2 is required only where an extended feature is.** msgr1 clients keep
 working while the cluster requires no extended feature of clients; requirements
@@ -536,9 +558,9 @@ on the 64-bit word still work over msgr1. Once a feature that uses an extended
 number is in use, every client must be new enough to have that feature, and
 must use msgr2.
 
-**msgr1 cannot be removed in Vampire, but deprecation can start.** Every kernel
-checked still defaults to msgr1, and no upstream decision exists. Steps that
-Vampire can take:
+**msgr1 cannot be removed in W, but deprecation can start.** Every kernel
+checked still defaults to msgr1, and no upstream decision exists. Steps that W
+can take:
 
 - make the mon honour ``ms_bind_msgr1`` (`tracker 70457
   <https://tracker.ceph.com/issues/70457>`__ is open);
@@ -668,7 +690,7 @@ No risk found blocks the design. Most are rules to write down and keep testing.
      - Refuse before ``AUTH_DONE``, at the mon, as this design does. Refused
        running clients back off from 3 to 30 s.
    * - In a mixed-version quorum, an older mon admits what a newer one refuses.
-     - A requirement becomes active only when every mon is Vampire or later.
+     - A requirement becomes active only when every mon is W or later.
    * - Requirements apply only to new connections, and clients connected when
        one starts hang later.
      - Check connected clients before turning a requirement on, and blocklist
@@ -686,8 +708,10 @@ No risk found blocks the design. Most are rules to write down and keep testing.
    * - The banner is readable before authentication, even in secure mode, so it
        reveals the feature set.
      - Accepted; it reveals no secrets.
-   * - Feature numbers cannot be reused, and a set holds at most 4,096 of them.
-     - Allocate upstream in order; the type ignores numbers past the limit, and
+   * - Feature numbers cannot be reused, and a release keeps at most 4,096 of
+       them.
+     - Allocate upstream in order, and raise the cap in a later release, which
+       changes no wire format; the type ignores numbers past the limit, and
        options reject them, and GREASE bits, with a logged error.
 
 **Open questions.**
@@ -695,14 +719,47 @@ No risk found blocks the design. Most are rules to write down and keep testing.
 - Should future releases put their ``SERVER_<release>`` markers in the extended
   set, or send a release number?
 - Should a downstream product get its own range of numbers, or always reserve
-  upstream first? Reserving upstream is cheap once numbers are unlimited.
+  upstream first? Reserving upstream is cheap once numbers have no fixed limit.
 - What should the health check that names refused clients say?
+
+Phasing
+=======
+
+The work is split by release. Vampire gets what pool migration needs without a
+wire change; the extended set and the clean rejection get the discussion they
+need in W.
+
+- **Vampire: require 64-bit features by name.** ``ceph osd
+  set-require-min-compat-client`` accepts feature names as well as a release.
+  The OSDMap carries the explicit requirement, and ``OSDMap::get_features``
+  folds it in, so the mon and OSD checks that enforce release-derived bits
+  today enforce it too. A name whose bit needs a marker is a set:
+  ``pool_migration`` means bit 54 with ``SERVER_OCTOPUS``. The command checks
+  connected clients first, as it does today. Without the clean rejection, a
+  refused client fails as it does today: kernels retry for about two minutes
+  and userspace clients for 3.7 minutes. The first MonClient fix (step 1 below)
+  goes to Vampire too, so that userspace clients end with an error rather than
+  a false success. Pool migration does not depend on this for safety, since it
+  refuses clients from the map while a migration runs; the command lets an
+  operator require the feature ahead of time.
+- **Kernel clients and bit 54.** The cluster takes a client as able to follow a
+  migration only if it sends bit 54 and ``SERVER_OCTOPUS``. The kernel sends
+  neither, so it is refused while a migration runs. To pass, it must follow
+  migrations: read the migration state from the pool, check each I/O against
+  the watermark and redirect it, and claim ``SERVER_OCTOPUS``, a release marker
+  whose every implication its maintainers will want audited. The feature bits
+  are one line; the behaviour is the work. The kernel needs no change to be
+  refused, cleanly once W's server side is in.
+- **W: the rest of this document.** The extended set, the clean rejection, the
+  two-strike rule, GREASE, and ``set-require-min-compat-client`` extended once
+  more, to extended features.
 
 Implementation plan
 ===================
 
-There are five steps, in order. The first two change no wire format and can be
-backported; only the fourth needs anyone outside Ceph's userspace.
+There are five steps, in order. Step 1 and the Vampire command (see "Phasing")
+change no wire format and go first; steps 2 to 5 are W work; only the fourth
+needs anyone outside Ceph's userspace.
 
 #. **MonClient fix.** Make ``authenticate()`` never report success when the
    session was refused. A small, separate pull request, backported to every
@@ -713,7 +770,7 @@ backported; only the fourth needs anyone outside Ceph's userspace.
    ``MAuth`` with the reason in ``result_msg``, the cluster-log line and a
    health check. MonClient stops hunting at the first such refusal, and a
    running client turned away keeps retrying with backoff. No wire change.
-#. **Extended features in the banner, for Vampire.** It contains:
+#. **Extended features in the banner, for W.** It contains:
 
    - the ``msgr2.rst`` spec;
    - the feature-set type and the list of feature numbers;
@@ -727,10 +784,10 @@ backported; only the fourth needs anyone outside Ceph's userspace.
    Crimson can follow later (about 60 to 90 lines).
 #. **Kernel series,** after step 3 merges. Three patches for the kernel client:
    12 lines of code to take part, plus two that only log the mon's reason.
-#. **Use it.** From Vampire on, new client-facing features and release markers
-   take extended numbers, not connection bits. Start deprecating msgr1: make
-   the mon honour ``ms_bind_msgr1``, warn about msgr1 sessions, create new
-   clusters without msgr1, and ask for the kernel default to change.
+#. **Use it.** From W on, new client-facing features and release markers take
+   extended numbers, not connection bits. Start deprecating msgr1: make the mon
+   honour ``ms_bind_msgr1``, warn about msgr1 sessions, create new clusters
+   without msgr1, and ask for the kernel default to change.
 
 Testing so far (temporary)
 ==========================
@@ -858,7 +915,7 @@ released clients from Luminous 12.2.13 to Umbrella 21.2.0, and kernels 5.4,
    * - Mixed-version mon quorum
      - Prototype mons with main's mons, as peons and as leader
      - The quorum forms and holds in every mix. Main's mons do not enforce
-       requirements, so a requirement must wait for an all-Vampire quorum.
+       requirements, so a requirement must wait for an all-W quorum.
    * - Rolling upgrade
      - Main to the prototype, mons, then OSDs, then the mgr, one at a time,
        under 10 minutes of writes
