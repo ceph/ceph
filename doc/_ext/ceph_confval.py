@@ -309,8 +309,7 @@ class CephOption(ObjectDescription):
                          'jsonpatch',
                          'rook.rook_client',
                          'rook.rook_client.ceph',
-                         'rook.rook_client._helper',
-                         'cherrypy=3.2.3']
+                         'rook.rook_client._helper']
         # make diskprediction_local happy
         mock_imports += ['numpy',
                          'scipy']
