@@ -55,7 +55,8 @@ macro(build_spdk)
     # unset $CFLAGS, otherwise it will interfere with how SPDK sets
     # its include directory.
     # unset $LDFLAGS, otherwise SPDK will fail to mock some functions.
-    BUILD_COMMAND env -i PATH=$ENV{PATH} CC=${CMAKE_C_COMPILER} ${make_cmd} EXTRA_CFLAGS=${spdk_CFLAGS}
+    # not make_cmd: LOG_BUILD runs this from a script, where $(MAKE) is unexpanded
+    BUILD_COMMAND env -i PATH=$ENV{PATH} CC=${CMAKE_C_COMPILER} ${MAKE_EXECUTABLE} EXTRA_CFLAGS=${spdk_CFLAGS}
     BUILD_IN_SOURCE 1
     BUILD_BYPRODUCTS ${spdk_libs}
     INSTALL_COMMAND ""
