@@ -129,6 +129,9 @@ rbd_with_crc32c = {{ spec.rbd_with_crc32c }}
 {% if spec.tgt_cmd_extra_args %}
 tgt_cmd_extra_args = {{ spec.tgt_cmd_extra_args }}
 {% endif %}
+{% if spec.librbd_core_mask %}
+librbd_core_mask = {{ spec.librbd_core_mask }}
+{% endif %}
 {% if iobuf_options %}
 iobuf_options = {{ iobuf_options }}
 {% endif %}

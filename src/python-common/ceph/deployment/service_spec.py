@@ -1889,6 +1889,7 @@ class NvmeofServiceSpec(ServiceSpec):
                  enable_dsa_acceleration: bool = False,
                  rbd_with_crc32c: bool = True,
                  tgt_cmd_extra_args: Optional[str] = None,
+                 librbd_core_mask: Optional[str] = None,
                  iobuf_options: Optional[Dict[str, int]] = None,
                  qos_timeslice_in_usecs: Optional[int] = 0,
                  notifications_interval: Optional[int] = 60,
@@ -2093,6 +2094,9 @@ class NvmeofServiceSpec(ServiceSpec):
         self.rbd_with_crc32c = rbd_with_crc32c
         #: ``tgt_cmd_extra_args`` extra arguments for the nvmf_tgt process
         self.tgt_cmd_extra_args = tgt_cmd_extra_args
+        #: ``librbd_core_mask`` SPDK cpuset for librados messenger threads.
+        #: Keeps those threads off the reactor cores. Examples: ``[4-7]``, ``0xF0``.
+        self.librbd_core_mask = librbd_core_mask
         #: List of extra arguments for SPDK iobuf in the form opt=value
         self.iobuf_options: Optional[Dict[str, int]] = iobuf_options
         #: ``qos_timeslice_in_usecs`` timeslice for QOS code, in micro seconds
@@ -2299,6 +2303,16 @@ class NvmeofServiceSpec(ServiceSpec):
         verify_boolean(self.enable_monitor_client, "Enable monitor client")
         verify_boolean(self.enable_dsa_acceleration, "Enable DSA acceleration")
         verify_boolean(self.rbd_with_crc32c, "Enable RBD CRC32C checksum reuse")
+        if self.librbd_core_mask and not re.fullmatch(
+            r'(?:0x[0-9a-fA-F]+|\['
+            r'\s*\d+(?:\s*-\s*\d+)?'
+            r'(?:\s*,\s*\d+(?:\s*-\s*\d+)?)*'
+            r'\s*\])',
+            self.librbd_core_mask,
+        ):
+            raise SpecValidationError(
+                'librbd_core_mask must be an SPDK cpuset, for example [4-7] or 0xF0'
+            )
         verify_positive_int(self.spdk_mem_size, "SPDK memory size")
         verify_positive_int(self.spdk_huge_pages, "SPDK huge pages count")
         if self.spdk_mem_size and self.spdk_huge_pages:

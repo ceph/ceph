@@ -5,6 +5,7 @@ from typing import Dict, List
 
 from cephadm.services.nvmeof import NvmeofService
 from cephadm.module import CephadmOrchestrator
+from ceph.deployment.hostspec import SpecValidationError
 from ceph.deployment.service_spec import NvmeofServiceSpec
 from cephadm.tests.fixtures import with_host, with_service, _run_cephadm, async_side_effect
 from orchestrator import OrchestratorError
@@ -233,6 +234,35 @@ timeout = 1.0\n"""
                     error_ok=True,
                     use_current_daemon_image=False,
                 )
+
+    @patch("cephadm.inventory.Inventory.get_addr", lambda _, __: '192.168.100.100')
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("cephadm.module.CephadmOrchestrator.get_unique_name")
+    def test_nvmeof_config_librbd_core_mask(self, _get_name, _run_cephadm,
+                                            cephadm_module: CephadmOrchestrator):
+        pool = 'testpool'
+        group = 'mygroup'
+        nvmeof_daemon_id = f'{pool}.{group}.test.qwert'
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+        _get_name.return_value = nvmeof_daemon_id
+
+        with with_host(cephadm_module, 'test'):
+            with with_service(cephadm_module, NvmeofServiceSpec(
+                    service_id=f'{pool}.{group}',
+                    group=group,
+                    pool=pool,
+                    librbd_core_mask='[4-7]')):
+                conf = json.loads(_run_cephadm.call_args.kwargs['stdin'])
+                gw_conf = conf['config_blobs']['files']['ceph-nvmeof.conf']
+                assert 'librbd_core_mask = [4-7]\n' in gw_conf
+
+    def test_librbd_core_mask_validation(self):
+        for mask in ('[4-7]', '0xF0', '[4,5,6,7]'):
+            NvmeofServiceSpec(service_id='p.g', group='g', pool='p',
+                              librbd_core_mask=mask).validate()
+        with pytest.raises(SpecValidationError, match='librbd_core_mask'):
+            NvmeofServiceSpec(service_id='p.g', group='g', pool='p',
+                              librbd_core_mask='cpus 4-7').validate()
 
     @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     def test_validate_no_group_duplicate_on_apply(self, cephadm_module: CephadmOrchestrator):
