@@ -167,10 +167,7 @@ int get_bucket_storage_mode(const DoutPrefixProvider* dpp,
 // bucket (VECTOR_BUCKET mode) or the backing S3 bucket (S3_BUCKET mode); for any
 // other backend the data is not stored in ceph, so it is a no-op (returns 0).
 //
-// CONVENTION: quota for native vector buckets is enforced HERE, at the op layer,
-// NOT in the SAL wrapper (rgw_sal_wrapper.cc), including background-thread operations
-// (compaction / index maintenance / any future writer) -- MUST call this at
-// the BEGINNING of the operation.
+// Checked at the start of CreateIndex and PutVectors, outside the SAL wrapper.
 int check_bucket_quota(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver,
     const bucket_namespace_t& ns, const std::string& vector_bucket_name,
     const BackendConfig& backend_config, optional_yield y);
