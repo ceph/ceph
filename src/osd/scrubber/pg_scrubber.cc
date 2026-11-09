@@ -1905,13 +1905,60 @@ void PgScrubber::clear_scrub_blocked()
 
 void PgScrubber::flag_reservations_failure()
 {
-  dout(10) << __func__ << dendl;
+  ceph_assert(m_active_target);
+  dout(10) << fmt::format(
+		  "{}: failed target: {}. up-to-date job: {}", __func__,
+		  *m_active_target, *m_scrub_job)
+	   << dendl;
+
+  // The session is terminated before any scrubbing took place.
+  // Note that start_scrub_session() had reset the scrub-job's target once
+  // the scrub was committed to: the target's urgency, 'scheduled-at' and
+  // 'not-before' only survive in m_active_target. They must be reinstated
+  // before the target is penalized and requeued. Otherwise, the delay would
+  // be added to a 'not-before' of utime_t::max(), i.e. the target would be
+  // rescheduled to 'never'.
+  const auto failed_target = *m_active_target;
+  m_active_target.reset();
+
+  if (!m_scrub_job->is_registered()) {
+    dout(10) << fmt::format(
+		    "{}: PG not registered for scrubbing on this OSD. Won't "
+		    "requeue!",
+		    __func__)
+	     << dendl;
+    return;
+  }
+
+  // merge the failed target into the job's (possibly updated in the
+  // meantime) target. Same as done for a scrub aborted mid-session (see
+  // on_mid_scrub_abort()).
+  auto& trgt = m_scrub_job->get_target(failed_target.level());
+  auto& curr_sched = trgt.sched_info.schedule;
+  const auto& failed_sched = failed_target.sched_info.schedule;
+  trgt.sched_info.urgency = std::max(trgt.urgency(), failed_target.urgency());
+  curr_sched.scheduled_at =
+      std::min(curr_sched.scheduled_at, failed_sched.scheduled_at);
+  curr_sched.not_before =
+      std::min(curr_sched.not_before, failed_sched.not_before);
+
   // delay the next invocation of the scrubber on this target. Note that
   // we use 'delay_both_targets_t::yes', as requeue_penalized() knows not to
   // penalize the sister target if its priority is higher.
   requeue_penalized(
-      m_active_target->level(), delay_both_targets_t::yes,
+      failed_target.level(), delay_both_targets_t::yes,
       delay_cause_t::replicas, ceph_clock_now());
+
+  // both targets were removed from the OSD's queue when the session was
+  // started. If the sister target was not penalized (and requeued) above,
+  // as it has the higher urgency - it must still be requeued.
+  auto& sister = m_scrub_job->get_target(
+      failed_target.level() == scrub_level_t::deep ? scrub_level_t::shallow
+						   : scrub_level_t::deep);
+  if (!sister.queued) {
+    m_osds->get_scrub_services().enqueue_target(sister);
+    sister.queued = true;
+  }
 }
 
 /*
