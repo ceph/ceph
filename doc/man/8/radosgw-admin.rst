@@ -446,18 +446,6 @@ as follows:
 :command:`datalog status`
   Read data log status.
 
-:command:`orphans find`
-  Init and run search for leaked RADOS objects.
-  DEPRECATED. See the "rgw-orphan-list" tool.
-
-:command:`orphans finish`
-  Clean up search for leaked RADOS objects.
-  DEPRECATED. See the "rgw-orphan-list" tool.
-
-:command:`orphans list-jobs`
-  List the current orphans search job IDs.
-  DEPRECATED. See the "rgw-orphan-list" tool.
-
 :command:`role create`
   Create a new role for use with STS (Security Token Service).
 
@@ -635,7 +623,6 @@ Options
 .. option:: --pool=<pool>
 
    Specify the pool name.
-   Also used with `orphans find` as data pool to scan for leaked RADOS objects.
 
 .. option:: --object=object
 
@@ -931,7 +918,7 @@ Options
 
    Maximum concurrent bucket operations. Affects operations that
    scan the bucket index, e.g., listing, deletion, and all scan/search
-   operations such as finding orphans or checking the bucket index.
+   operations such as listing RADOS objects or checking the bucket index.
    The default is 32.
 
 .. option:: --restore-status
@@ -956,31 +943,6 @@ Quota Options
 .. option:: --quota-scope
 
     The scope of quota (bucket, user).
-
-
-Orphans Search Options
-======================
-
-.. option:: --num-shards
-
-    Number of shards to use for temporary scan info
-
-.. option:: --orphan-stale-secs
-
-   Number of seconds to wait before declaring an object to be an orphan.
-   The default is 86400 (24 hours).
-
-.. option:: --job-id
-
-   Set the job id (for orphans find)
-
-
-Orphans list-jobs options
-=========================
-
-.. option:: --extra-info
-
-   Provide extra info in the job list.
 
 
 Role Options

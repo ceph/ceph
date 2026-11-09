@@ -59,6 +59,14 @@
 
 * RGW: ``radosgw-admin bilog trim`` no longer accepts ``--start-marker``, since
   FIFO-backed bilogs can only be trimmed from the front.
+
+* RGW: The ``radosgw-admin orphans find``, ``orphans finish``, and
+  ``orphans list-jobs`` subcommands, deprecated since Octopus, have been
+  removed. Use the ``rgw-orphan-list`` tool instead. Intermediate results
+  left by earlier runs of ``orphans find`` are stored in the zone's log pool
+  as ``orphan.index`` and ``orphan.scan.*`` objects; remove them with
+  ``rados rm`` if they are no longer needed.
+
 * RGW: S3 Select is deprecated. The default value of ``rgw_disable_s3select``
   changed from ``false`` to ``true``.
 

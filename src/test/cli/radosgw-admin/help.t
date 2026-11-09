@@ -175,10 +175,6 @@
     datalog type                     change datalog type to --log_type=fifo
     datalog semaphore list           List recovery semaphores
     datalog semaphore reset          Reset recovery semaphore (use marker)
-    orphans find                     deprecated -- init and run search for leaked rados objects (use job-id, pool)
-    orphans finish                   deprecated -- clean up search for leaked rados objects
-    orphans list-jobs                deprecated -- list the current job-ids for orphans search
-      * the three 'orphans' sub-commands are now deprecated; consider using the `rgw-orphan-list` tool
     role create                      create a AWS role for use with STS
     role delete                      remove a role
     role get                         get a role
@@ -393,15 +389,6 @@
      --max-delete-ops              specify max requests per accumulation interval for DELETE ops per RGW (DELETE request methods), 0 means unlimited
      --ratelimit-scope             scope of rate limiting: bucket, user, anonymous
                                    anonymous can be configured only with global rate limit
-  
-  Orphans search options:
-     --num-shards                  num of shards to use for keeping the temporary scan info
-     --orphan-stale-secs           num of seconds to wait before declaring an object to be an orphan (default: 86400)
-     --job-id                      set the job id (for orphans find)
-     --detail                      detailed mode, log and stat head objects as well
-  
-  Orphans list-jobs options:
-     --extra-info                  provide extra info in job list
   
   Role options:
      --role-name                   name of the role to create
