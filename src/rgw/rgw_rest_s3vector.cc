@@ -76,11 +76,17 @@ protected:
     // ListVectorBuckets has no individual target bucket.
     if constexpr (requires { rest_config.vector_bucket_name; }) {
       if (!rest_config.vector_bucket_name.empty()) {
+        // Use the ARN resource to distinguish usage from a same-name S3 bucket.
+        s->bucket_name = rgw::s3vector::vector_bucket_arn(
+            s->zonegroup_name, bucket_ns.name(),
+            rest_config.vector_bucket_name).resource;
         std::unique_ptr<rgw::sal::VectorBucket> bucket;
         int ret = driver->load_vector_bucket(this,
             rgw_bucket(bucket_ns.name(), rest_config.vector_bucket_name),
             &bucket, y);
-        if (ret < 0 && ret != -ENOENT) {
+        if (ret == 0) {
+          s->bucket_owner.id = bucket->get_info().owner;
+        } else if (ret != -ENOENT) {
           return ret;
         }
         rgw::s3vector::StorageMode mode;
@@ -204,7 +210,7 @@ protected:
       return ret;
     }
 
-    s->bucket_name = bucket_name;
+    // Keep the ARN resource set by do_init_processing() for usage accounting.
     s->bucket_attrs = vector_bucket->get_attrs();
     auto acl = s->bucket_attrs.find(RGW_ATTR_ACL);
     if (acl != s->bucket_attrs.end()) {
@@ -886,7 +892,7 @@ private:
     }
 
     op_ret = driver->list_vector_buckets(this, s->owner.id, bucket_ns.name(),
-        start_marker, end_marker, configuration.rest_config.max_results, listing, y);
+        start_marker, end_marker, configuration.rest_config.max_results, false, listing, y);
     if (op_ret < 0) {
       ldpp_dout(this, 20) << "ERROR: failed to execute ListVectorBuckets. error: " << op_ret << dendl;
       return;
@@ -1488,6 +1494,8 @@ int RGWHandler_REST_s3Vector::postauth_init(optional_yield y) {
     return ret;
   }
   s->bucket_tenant = tenant;
+  // Existing owners are resolved after parsing the request's bucket name/ARN.
+  s->bucket_owner = s->owner;
   return 0;
 }
 
