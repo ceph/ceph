@@ -7510,6 +7510,20 @@ int RGWRados::get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *oc
   }
 
   if (r == -ENOENT) {
+    /* check if this non-null versioned instance is a delete marker */
+    if ((!obj.key.instance.empty() || !obj.key.have_null_instance())
+         && bucket_info.versioned() ) {
+      rgw_bucket_dir_entry dirent;
+      int ret = bi_get_instance(dpp, bucket_info, obj, &dirent, y);
+      if (ret == 0 && dirent.is_delete_marker()) {
+        s->is_dm = true;
+        s->mtime = dirent.meta.mtime;
+        ldpp_dout(dpp, 20) << __func__ << "(): detected delete marker for obj=" << obj
+            << " mtime=" << s->mtime << dendl;
+        return 0;
+      }
+    }
+
     s->exists = false;
     s->has_attrs = true;
     tombstone_entry entry;
