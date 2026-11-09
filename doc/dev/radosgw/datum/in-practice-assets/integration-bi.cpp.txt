@@ -7,10 +7,10 @@
 
 struct entry final
 {
-    ::BIIndexType type = ::BIIndexType::Invalid;
+    BIIndexType type = BIIndexType::Invalid;
     std::string idx;
 
-    ::ceph::buffer::list data;
+    ceph::buffer::list data;
 };
 
 struct reply final
@@ -27,7 +27,7 @@ struct reply final
 
 namespace {
 
-using native_entry = ::rgw_cls_bi_entry;
+using native_entry = rgw_cls_bi_entry;
 
 constexpr auto native_entry_fields = datum::binary_fields<&native_entry::type, &native_entry::idx, &native_entry::data> {};
 constexpr auto module_entry_fields = datum::binary_fields<&entry::type, &entry::idx, &entry::data> {};
@@ -39,16 +39,16 @@ constexpr auto module_entry_fields = datum::binary_fields<&entry::type, &entry::
 // Revision: bf356195f0bd1983eeb0d6730f03e24d983bf189
 // Original lines: 122-155
 
-void encode(const reply& value, ::ceph::buffer::list& output)
+void encode(const reply& value, ceph::buffer::list& output)
 {
-    auto candidate = ::cls::rgw::bi_wire::encode_entries(module_entry_fields, value.entries, value.is_truncated);
+    auto candidate = cls::rgw::bi_wire::encode_entries(module_entry_fields, value.entries, value.is_truncated);
     output.claim_append(candidate);
 }
 
-void encode(const reply_format format, const reply& value, ::ceph::buffer::list& output)
+void encode(const reply_format format, const reply& value, ceph::buffer::list& output)
 {
     if (reply_format::compact == format) {
-        auto candidate = ::cls::rgw::bi_wire::encode_entries<2>(module_entry_fields, value.entries, value.is_truncated);
+        auto candidate = cls::rgw::bi_wire::encode_entries<2>(module_entry_fields, value.entries, value.is_truncated);
         output.claim_append(candidate);
 
         return;
@@ -57,19 +57,19 @@ void encode(const reply_format format, const reply& value, ::ceph::buffer::list&
 }
 
 template <typename EntriesT>
-requires ::ceph::concepts::same_as_any<EntriesT,
-                                    std::vector<::rgw_cls_bi_entry>, std::list<::rgw_cls_bi_entry>>
-std::pair<EntriesT, bool> decode_reply(const ::ceph::buffer::list& input)
+requires ceph::concepts::same_as_any<EntriesT,
+                                    std::vector<rgw_cls_bi_entry>, std::list<rgw_cls_bi_entry>>
+std::pair<EntriesT, bool> decode_reply(const ceph::buffer::list& input)
 {
     auto cursor = input.cbegin();
 
-    return ::cls::rgw::bi_wire::decode_entries<EntriesT, 2>(native_entry_fields, cursor);
+    return cls::rgw::bi_wire::decode_entries<EntriesT, 2>(native_entry_fields, cursor);
 }
 
-template std::pair<std::vector<::rgw_cls_bi_entry>, bool>
-decode_reply(const ::ceph::buffer::list& input);
-template std::pair<std::list<::rgw_cls_bi_entry>, bool>
-decode_reply(const ::ceph::buffer::list& input);
+template std::pair<std::vector<rgw_cls_bi_entry>, bool>
+decode_reply(const ceph::buffer::list& input);
+template std::pair<std::list<rgw_cls_bi_entry>, bool>
+decode_reply(const ceph::buffer::list& input);
 
 } // cls::rgw::bi_datum
 
@@ -98,14 +98,15 @@ decode_reply(const ::ceph::buffer::list& input);
 
 namespace cls::rgw::bi_wire {
 
-namespace datum = ::ceph::salad::datum;
-using byte_buffer = ::ceph::buffer::list;
+namespace datum = ceph::salad::datum;
+namespace key_wire = ::rgw::datum_wire;
+using byte_buffer = ceph::buffer::list;
 
 namespace detail {
 
-using ::ceph::datum_wire::checked_count;
-using ::ceph::datum_wire::reader;
-using ::ceph::datum_wire::writer;
+using ceph::datum_wire::checked_count;
+using ceph::datum_wire::reader;
+using ceph::datum_wire::writer;
 
 template <typename BytesT>
 std::size_t payload_size(const BytesT& value)
@@ -167,7 +168,7 @@ std::uint8_t decode_request(datum::binary_fields<Maximum, Filter, Marker, Reshar
                     byte_buffer::const_iterator& input, RequestT& value)
 {
     std::uint8_t decoded_version = 0;
-    ::ceph::datum_wire::decode_record<2>(value, input, [&decoded_version](auto& fields, auto& candidate, const std::uint8_t version) {
+    ceph::datum_wire::decode_record<2>(value, input, [&decoded_version](auto& fields, auto& candidate, const std::uint8_t version) {
         candidate.*Maximum = fields.template scalar<std::uint32_t>();
         fields.text(candidate.*Filter);
         fields.text(candidate.*Marker);
@@ -185,7 +186,7 @@ inline byte_buffer encode_get_request(const std::string_view name, const std::st
     byte_buffer output;
     detail::writer archive {output};
     archive.frame(1, [&] {
-        ::rgw::datum_wire::encode_key(archive, name, instance);
+        key_wire::encode_key(archive, name, instance);
         archive.scalar(kind);
     });
 
@@ -198,7 +199,7 @@ std::uint8_t decode_get_request(datum::binary_fields<Member...> selected, byte_b
     detail::reader archive {input};
 
     return archive.frame(1, [&](auto& fields, std::uint8_t) {
-        ::rgw::datum_wire::decode_key(selected, fields, key);
+        key_wire::decode_key(selected, fields, key);
 
         return fields.template scalar<std::uint8_t>();
     });
@@ -212,7 +213,7 @@ void encode_entry(datum::binary_fields<Kind, Key, Payload>, writer& archive, con
     const auto& data = datum::member_lens<Payload> {}(value);
     const std::string_view key = datum::member_lens<Key> {}(value);
     const auto length = checked_count(payload_size(data));
-    const auto kind = ::ceph::datum_wire::checked_byte(datum::member_lens<Kind> {}(value));
+    const auto kind = ceph::datum_wire::checked_byte(datum::member_lens<Kind> {}(value));
     using prefix = entry_prefix;
 
     if constexpr (1 == Version) {
@@ -223,7 +224,7 @@ void encode_entry(datum::binary_fields<Kind, Key, Payload>, writer& archive, con
     }
 
     if constexpr (2 == Version) {
-        archive.fields(::ceph::datum_wire::growing_metadata, entry_prefix_fields, prefix {kind, key, length});
+        archive.fields(ceph::datum_wire::growing_metadata, entry_prefix_fields, prefix {kind, key, length});
         archive.payload(data);
     }
 }
@@ -331,7 +332,7 @@ auto decode_entries(datum::binary_fields<Member...> selected, byte_buffer::const
         if constexpr (2 <= Supported) {
             if (2 <= compatible) {
                 if (version < 2) {
-                    throw ::ceph::buffer::malformed_input {"RGW CLS compact reply needs version two"};
+                    throw ceph::buffer::malformed_input {"RGW CLS compact reply needs version two"};
                 }
                 return body.template operator()<2>();
             }

@@ -226,6 +226,10 @@ if (WITH_RADOSGW)
     rgw/cls_rgw_types.cc
     rgw/cls_rgw_ops.cc)
   add_library(cls_rgw_client STATIC ${cls_rgw_client_srcs})
+  add_executable(ceph_cls_rgw_maintenance_example EXCLUDE_FROM_ALL
+    rgw/examples/index_maintenance.cc)
+  target_link_libraries(ceph_cls_rgw_maintenance_example PRIVATE cls_rgw_client librados global)
+  set_target_properties(ceph_cls_rgw_maintenance_example PROPERTIES CXX_STANDARD 20)
   target_include_directories(cls_rgw_client
 	  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/driver/rados"
 	  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw")

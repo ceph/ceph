@@ -48,6 +48,10 @@ without keeping it alive.
 * **Traversal and budgets:** :doc:`continue across pages <14-turn-page>` and
   :doc:`account for work <13-three-tickets>` while the application controls fetching and scheduling.
 
+For the native maintenance protocol and its complete client example, see
+:doc:`Bounded bucket-index maintenance <../cls-index-maintenance>`. Its object-generation
+cursor belongs to RGW; ordinary listing markers in lessons 16–17 do not provide that fence.
+
 .. rubric:: Domain Vocabulary: Ceph
 
 The shared ``ceph-datum.h`` header connects Datum's byte extents, mappings, and operations to
@@ -64,6 +68,7 @@ and native Ceph integration.
    Tutorial <tutorial>
    Datum in practice <in-practice>
    Developer’s guide <developer-guide>
+   Native index maintenance <../cls-index-maintenance>
    Design and reference <design>
    Build and run <build-and-run>
    Complete examples <examples>

@@ -33,6 +33,11 @@ gives the setup commands.
 | Copy or retain Ceph buffer bytes | [Bytes with a Ceph accent](../tutorial.md#18-bytes-with-a-ceph-accent) |
 | Read RGW bucket-index pages | [Read an RGW page](../tutorial.md#16-read-an-rgw-page), then [One shard, two pages](../tutorial.md#17-one-shard-two-pages); review [page traversal](../tutorial.md#14-turn-the-page) first |
 
+RGW's native `rgw_cls_index_check` maintenance accumulator additionally binds its cursor
+to one object's identity and version. The listing examples above teach position and
+traversal; generation checks, bounded maintenance calls, and final statistics publication
+belong to the separate native CLS protocol documented with `cls_rgw_client.h`.
+
 ## Topics and API names
 
 ### A–C
