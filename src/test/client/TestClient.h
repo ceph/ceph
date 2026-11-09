@@ -387,7 +387,7 @@ public:
 #if defined(__linux__)
       do {
 #endif
-        client = new ClientScaffold(messenger, mc, objecter, &fse);
+        client = create_client();
         client->init();
 #if defined(__linux__)
       } while (encrypt());
@@ -414,6 +414,10 @@ public:
     }
     // TODO expose altname versions
 protected:
+    virtual ClientScaffold* create_client() {
+      return new ClientScaffold(messenger, mc, objecter, &fse);
+    }
+
     static inline ceph::async::io_context_pool icp;
     static inline UserPerm myperm{0,0};
     static inline fscrypt_env fse;
