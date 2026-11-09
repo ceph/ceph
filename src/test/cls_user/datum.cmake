@@ -22,3 +22,23 @@ target_link_libraries(unittest_cls_user_wire PRIVATE
 set_target_properties(unittest_cls_user_wire PROPERTIES
   CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON)
 add_test(NAME cls_user_wire COMMAND unittest_cls_user_wire)
+
+add_executable(unittest_cls_user_reset
+  "${user_test_dir}/datum_reset.cc"
+  "${user_test_dir}/../../rgw/driver/rados/buckets.cc"
+  "${user_test_dir}/../cls_rgw/bi_wire_main.cc")
+target_link_libraries(unittest_cls_user_reset PRIVATE
+  cls_user_client librados global Catch2::Catch2 ceph-common ${FMT_LIB})
+target_include_directories(unittest_cls_user_reset PRIVATE
+  "${user_test_dir}/../../rgw"
+  "${user_test_dir}/../../rgw/services"
+  "${user_test_dir}/../../rgw/driver/rados")
+target_compile_definitions(unittest_cls_user_reset PRIVATE WITH_RADOSGW_RADOS)
+set_target_properties(unittest_cls_user_reset PROPERTIES
+  CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_VISIBILITY_PRESET hidden)
+# Keep the actual stats callers and discard unrelated functions from buckets.cc.
+target_compile_options(unittest_cls_user_reset PRIVATE -ffunction-sections -fdata-sections)
+target_link_options(unittest_cls_user_reset PRIVATE
+  "$<$<PLATFORM_ID:Darwin>:LINKER:-dead_strip>"
+  "$<$<NOT:$<PLATFORM_ID:Darwin>>:LINKER:--gc-sections>")
+add_test(NAME cls_user_reset COMMAND unittest_cls_user_reset)
