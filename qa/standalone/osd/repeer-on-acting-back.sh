@@ -212,6 +212,36 @@ function TEST_ceph_pg_repeer_on_simple_ec_and_rep_pools() {
 
 }
 
+function TEST_repeer_twice_on_ec_pool() {
+  local dir=$1
+
+  run_mon $dir a || return 1
+  run_mgr $dir x || return 1
+  for osd in 0 1 2 ; do
+    run_osd $dir $osd || return 1
+  done
+  ceph osd erasure-code-profile set twice plugin=isa k=2 m=1 \
+    crush-failure-domain=osd || return 1
+  ceph osd pool create twice 1 1 erasure twice || return 1
+  ceph osd pool set twice allow_ec_optimizations true || return 1
+  wait_for_clean || return 1
+  local pgid=$(ceph osd pool ls detail -f json |
+    jq -r '.[] | select(.pool_name == "twice") | .pool_id').0
+
+  # The primary asks for the first repeer's pg_temp to go at once. Keep that
+  # request pending (a mon tick proposes pending pg_temp changes), so that the
+  # second repeer lands in the same osdmap epoch
+  ceph tell mon.a config set mon_tick_interval 60 || return 1
+  sleep 6
+  ceph tell mon.a config set paxos_propose_interval 10 || return 1
+  (unset CEPH_CLI_TEST_DUP_COMMAND ; ceph pg repeer $pgid) || return 1
+  sleep 1
+  (unset CEPH_CLI_TEST_DUP_COMMAND ; ceph pg repeer $pgid) || return 1
+  ceph tell mon.a config set paxos_propose_interval 1 || return 1
+  ceph tell mon.a config set mon_tick_interval 5 || return 1
+  wait_for_clean || return 1
+}
+
 main repeer-on-acting-back "$@"
 
 # Local Variables:
