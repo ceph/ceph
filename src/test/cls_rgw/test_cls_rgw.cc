@@ -488,7 +488,7 @@ TEST_P(TestClsRgw, index_suggest)
 static void list_entries(librados::IoCtx& ioctx,
                          const std::string& oid,
                          uint32_t num_entries,
-                         rgw_cls_list_ret& result,
+                         cls::rgw::bucket_datum::reply& result,
                          const cls_rgw_obj_key& start_key = {},
                          const std::string& delimiter = "")
 {
@@ -496,9 +496,11 @@ static void list_entries(librados::IoCtx& ioctx,
   string empty_prefix;
   constexpr bool list_versions = true;
   librados::ObjectReadOperation op;
+  int status = 0;
   cls_rgw_bucket_list_op(op, start_key, empty_prefix, delimiter,
-                         num_entries, list_versions, &result);
+                         num_entries, list_versions, result, status);
   ASSERT_EQ(0, ioctx.operate(oid, &op, nullptr));
+  ASSERT_EQ(0, status);
 }
 
 TEST_P(TestClsRgw, index_suggest_complete)
@@ -520,7 +522,7 @@ TEST_P(TestClsRgw, index_suggest_complete)
   // list entry before completion
   rgw_bucket_dir_entry dirent;
   {
-    rgw_cls_list_ret listing;
+    cls::rgw::bucket_datum::reply listing;
     list_entries(ioctx, bucket_oid, 1, listing);
     const auto& entries = listing.dir.m;
     ASSERT_EQ(1, entries.size());
@@ -543,7 +545,7 @@ TEST_P(TestClsRgw, index_suggest_complete)
   }
   // list entry again, verify that suggested removal was not applied
   {
-    rgw_cls_list_ret listing;
+    cls::rgw::bucket_datum::reply listing;
     list_entries(ioctx, bucket_oid, 1, listing);
     const auto& entries = listing.dir.m;
     ASSERT_EQ(1, entries.size());
@@ -605,7 +607,7 @@ TEST_P(TestClsRgw, index_list)
   test_stats(ioctx, bucket_oid, RGWObjCategory::None,
 	     num_objs, obj_size * num_objs);
 
-  rgw_cls_list_ret listing;
+  cls::rgw::bucket_datum::reply listing;
   list_entries(ioctx, bucket_oid, 1000, listing);
   const auto& m = listing.dir.m;
 
@@ -671,7 +673,7 @@ TEST_P(TestClsRgw, index_list_delimited)
     }
   }
 
-  rgw_cls_list_ret listing;
+  cls::rgw::bucket_datum::reply listing;
   cls_rgw_obj_key start_key("", "");
   const string delimiter = "/";
   list_entries(ioctx, bucket_oid, 1000, listing, start_key, delimiter);
@@ -1343,11 +1345,11 @@ TEST_P(TestClsRgw, usage_clear)
 }
 
 static int bilog_list(librados::IoCtx& ioctx, const std::string& oid,
-                      cls_rgw_bi_log_list_ret *result)
+                      cls::rgw::bilog::reply<> *result)
 {
   int retcode = 0;
   librados::ObjectReadOperation op;
-  cls_rgw_bilog_list(op, "", 128, result, &retcode);
+  cls_rgw_bilog_list(op, "", 128, *result, retcode);
   int ret = ioctx.operate(oid, &op, nullptr);
   if (ret < 0) {
     return ret;
@@ -1396,7 +1398,7 @@ TEST_P(TestClsRgw, bi_log_trim)
   // bilog list
   vector<rgw_bi_log_entry> bilog1;
   {
-    cls_rgw_bi_log_list_ret bilog;
+    cls::rgw::bilog::reply<> bilog;
     ASSERT_EQ(0, bilog_list(ioctx, bucket_oid, &bilog));
     // complete/olh entry for each
     EXPECT_EQ(20u, bilog.entries.size());
@@ -1409,7 +1411,7 @@ TEST_P(TestClsRgw, bi_log_trim)
     const std::string from = "";
     const std::string to = bilog1[0].id;
     ASSERT_EQ(0, bilog_trim(ioctx, bucket_oid, from, to));
-    cls_rgw_bi_log_list_ret bilog;
+    cls::rgw::bilog::reply<> bilog;
     ASSERT_EQ(0, bilog_list(ioctx, bucket_oid, &bilog));
     EXPECT_EQ(19u, bilog.entries.size());
     EXPECT_EQ(bilog1[1].id, bilog.entries.begin()->id);
@@ -1420,7 +1422,7 @@ TEST_P(TestClsRgw, bi_log_trim)
     const std::string from = bilog1[18].id;
     const std::string to = "9";
     ASSERT_EQ(0, bilog_trim(ioctx, bucket_oid, from, to));
-    cls_rgw_bi_log_list_ret bilog;
+    cls::rgw::bilog::reply<> bilog;
     ASSERT_EQ(0, bilog_list(ioctx, bucket_oid, &bilog));
     EXPECT_EQ(18u, bilog.entries.size());
     EXPECT_EQ(bilog1[18].id, bilog.entries.rbegin()->id);
@@ -1431,7 +1433,7 @@ TEST_P(TestClsRgw, bi_log_trim)
     const std::string from = bilog1[13].id;
     const std::string to = bilog1[14].id;
     ASSERT_EQ(0, bilog_trim(ioctx, bucket_oid, from, to));
-    cls_rgw_bi_log_list_ret bilog;
+    cls::rgw::bilog::reply<> bilog;
     ASSERT_EQ(0, bilog_list(ioctx, bucket_oid, &bilog));
     EXPECT_EQ(17u, bilog.entries.size());
     ASSERT_EQ(-ENODATA, bilog_trim(ioctx, bucket_oid, from, to));
@@ -1441,7 +1443,7 @@ TEST_P(TestClsRgw, bi_log_trim)
     const std::string from = "";
     const std::string to = "9";
     ASSERT_EQ(0, bilog_trim(ioctx, bucket_oid, from, to));
-    cls_rgw_bi_log_list_ret bilog;
+    cls::rgw::bilog::reply<> bilog;
     ASSERT_EQ(0, bilog_list(ioctx, bucket_oid, &bilog));
     EXPECT_EQ(0u, bilog.entries.size());
     ASSERT_EQ(-ENODATA, bilog_trim(ioctx, bucket_oid, from, to));
@@ -1481,7 +1483,7 @@ TEST_P(TestClsRgw, index_racing_removes)
 
   // list to verify no pending ops
   {
-    rgw_cls_list_ret listing;
+    cls::rgw::bucket_datum::reply listing;
     list_entries(ioctx, bucket_oid, 1, listing);
     const auto& entries = listing.dir.m;
     ASSERT_EQ(1, entries.size());
@@ -1504,7 +1506,7 @@ TEST_P(TestClsRgw, index_racing_removes)
   // complete on tag2
   index_complete(ioctx, bucket_oid, CLS_RGW_OP_DEL, tag2, ++epoch, obj, meta);
   {
-    rgw_cls_list_ret listing;
+    cls::rgw::bucket_datum::reply listing;
     list_entries(ioctx, bucket_oid, 1, listing);
     const auto& entries = listing.dir.m;
     ASSERT_EQ(1, entries.size());
@@ -1517,7 +1519,7 @@ TEST_P(TestClsRgw, index_racing_removes)
   // cancel on tag1
   index_complete(ioctx, bucket_oid, CLS_RGW_OP_CANCEL, tag1, ++epoch, obj, meta);
   {
-    rgw_cls_list_ret listing;
+    cls::rgw::bucket_datum::reply listing;
     list_entries(ioctx, bucket_oid, 1, listing);
     const auto& entries = listing.dir.m;
     ASSERT_EQ(1, entries.size());
@@ -1532,7 +1534,7 @@ TEST_P(TestClsRgw, index_racing_removes)
 
   // verify that the key was removed
   {
-    rgw_cls_list_ret listing;
+    cls::rgw::bucket_datum::reply listing;
     list_entries(ioctx, bucket_oid, 1, listing);
     const auto& entries = listing.dir.m;
     ASSERT_EQ(0, entries.size());
