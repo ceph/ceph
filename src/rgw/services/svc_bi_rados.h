@@ -23,9 +23,9 @@
 
 #include "svc_bi.h"
 #include "svc_tier_rados.h"
+#include "rgw/datum/adapters/cls/bucket_types.h"
 
 struct rgw_bucket_dir_header;
-struct rgw_cls_list_ret;
 
 class RGWSI_BILog_RADOS;
 
@@ -159,7 +159,7 @@ public:
                    const std::string& prefix,
                    const std::string& delimiter,
                    uint32_t num_entries, bool list_versions,
-                   std::map<int, rgw_cls_list_ret>& results);
+                   std::map<int, cls::rgw::bucket_datum::reply>& results);
 
   int handle_overwrite(const DoutPrefixProvider *dpp, const RGWBucketInfo& info,
                        const RGWBucketInfo& orig_info,
