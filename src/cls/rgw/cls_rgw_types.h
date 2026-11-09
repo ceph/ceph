@@ -6,6 +6,7 @@
 #include <string>
 #include <list>
 #include <vector>
+#include <utility>
 #include <boost/container/flat_map.hpp>
 #include "common/ceph_time.h"
 #include "common/Formatter.h"
@@ -131,7 +132,7 @@ enum RGWCheckMTimeType {
 
 #define ROUND_BLOCK_SIZE 4096
 
-inline uint64_t cls_rgw_get_rounded_size(uint64_t size) {
+constexpr uint64_t cls_rgw_get_rounded_size(uint64_t size) {
   return (size + ROUND_BLOCK_SIZE - 1) & ~(ROUND_BLOCK_SIZE - 1);
 }
 
@@ -522,7 +523,13 @@ struct rgw_cls_bi_entry {
 };
 WRITE_CLASS_ENCODER(rgw_cls_bi_entry)
 
-enum OLHLogOp {
+// Interpret an opaque BI payload without requiring an owning BI record.
+bool cls_rgw_get_bi_entry_info(BIIndexType type, const ceph::buffer::list& data,
+                               cls_rgw_obj_key *key, RGWObjCategory *category,
+                               rgw_bucket_category_stats *accounted_stats);
+
+// Preserve the native 32-bit layout and admit every uint8 wire action.
+enum OLHLogOp : uint32_t {
   CLS_RGW_OLH_OP_UNKNOWN         = 0,
   // link OLH entry to a specific object version
   CLS_RGW_OLH_OP_LINK_OLH        = 1,
@@ -723,7 +730,33 @@ struct rgw_bucket_category_stats {
   uint64_t num_entries;
   uint64_t actual_size{0}; //< account for compression, encryption
 
-  rgw_bucket_category_stats() : total_size(0), total_size_rounded(0), num_entries(0) {}
+  constexpr rgw_bucket_category_stats() : total_size(0), total_size_rounded(0), num_entries(0) {}
+
+  constexpr explicit rgw_bucket_category_stats(const rgw_bucket_dir_entry_meta& meta)
+    : total_size(meta.accounted_size),
+      total_size_rounded(cls_rgw_get_rounded_size(meta.accounted_size)),
+      num_entries(1), actual_size(meta.size)
+  {}
+
+  constexpr rgw_bucket_category_stats& operator+=(const rgw_bucket_category_stats& other)
+  {
+    total_size += other.total_size;
+    total_size_rounded += other.total_size_rounded;
+    num_entries += other.num_entries;
+    actual_size += other.actual_size;
+
+    return *this;
+  }
+
+  constexpr rgw_bucket_category_stats& operator-=(const rgw_bucket_category_stats& other)
+  {
+    total_size -= other.total_size;
+    total_size_rounded -= other.total_size_rounded;
+    num_entries -= other.num_entries;
+    actual_size -= other.actual_size;
+
+    return *this;
+  }
 
   void encode(ceph::buffer::list &bl) const {
     ENCODE_START(3, 2, bl);
@@ -923,6 +956,35 @@ struct rgw_bucket_dir_header {
 };
 WRITE_CLASS_ENCODER(rgw_bucket_dir_header)
 
+enum struct rgw_cls_index_phase : uint8_t { plain_low, plain_high, instance, complete };
+
+struct rgw_cls_index_cursor final
+{
+  uint64_t version = 0;
+  // Encoded native object identity; independent of the physical scan marker.
+  std::string identity;
+  rgw_cls_index_phase phase = rgw_cls_index_phase::plain_low;
+  std::string marker;
+
+  bool operator==(const rgw_cls_index_cursor&) const = default;
+};
+
+constexpr uint32_t RGW_CLS_INDEX_PAGE_ROWS = 1000;
+constexpr uint64_t RGW_CLS_INDEX_PAGE_BYTES = 4 * 1024 * 1024;
+
+// Preserve the established rebuild policy, including resetting other header metadata.
+inline rgw_bucket_dir_header cls_rgw_index_stats_header(const rgw_bucket_dir_header& existing,
+                                                        rgw_bucket_dir_stats stats = {})
+{
+  rgw_bucket_dir_header result;
+  result.tag_timeout = existing.tag_timeout;
+  result.ver = existing.ver;
+  result.syncstopped = existing.syncstopped;
+  result.stats = std::move(stats);
+
+  return result;
+}
+
 struct rgw_bucket_dir {
   rgw_bucket_dir_header header;
   boost::container::flat_map<std::string, rgw_bucket_dir_entry> m;
@@ -1046,7 +1108,7 @@ struct rgw_usage_log_entry {
 
    void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(4, bl);
-    std::string s;
+    std::string s CEPH_INDETERMINATE;
     decode(s, bl);
     owner.from_str(s);
     decode(bucket, bl);
@@ -1061,7 +1123,7 @@ struct rgw_usage_log_entry {
       decode(usage_map, bl);
     }
     if (struct_v >= 3) {
-      std::string p;
+      std::string p CEPH_INDETERMINATE;
       decode(p, bl);
       payer.from_str(p);
     }
@@ -1381,9 +1443,13 @@ struct cls_rgw_lc_entry {
     : start_time(0), status(0) {}
 
   cls_rgw_lc_entry(const cls_rgw_lc_entry& rhs) = default;
+  cls_rgw_lc_entry(cls_rgw_lc_entry&&) = default;
 
   cls_rgw_lc_entry(const std::string& b, uint64_t t, uint32_t s)
     : bucket(b), start_time(t), status(s) {};
+
+  cls_rgw_lc_entry& operator=(const cls_rgw_lc_entry&) = default;
+  cls_rgw_lc_entry& operator=(cls_rgw_lc_entry&&) = default;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);

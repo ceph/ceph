@@ -382,6 +382,7 @@ endif()
 target_link_libraries(rgw_common
   PRIVATE
     ${rgw_common_libs}
+    datum::ceph
     legacy-option-headers
     global
     cls_rgw_client
@@ -495,6 +496,7 @@ if(WITH_RADOSGW_STANDALONE)
   target_link_libraries(rgw_common_standalone
     PRIVATE
     ${rgw_common_libs}
+    datum::ceph
     legacy-option-headers
     global
     cls_rgw_client
