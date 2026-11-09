@@ -893,6 +893,15 @@ COMMAND("osd set-require-min-compat-client "
         "name=yes_i_really_mean_it,type=CephBool,req=false",
 	"set the minimum client version we will maintain compatibility with",
 	"osd", "rw")
+COMMAND("osd require-client-features "
+	"name=features,type=CephString,n=N "
+	"name=yes_i_really_mean_it,type=CephBool,req=false",
+	"require extended features of clients; refused while a connected client lacks them",
+	"osd", "rw")
+COMMAND("osd unrequire-client-features "
+	"name=features,type=CephString,n=N",
+	"stop requiring extended features of clients",
+	"osd", "rw")
 COMMAND("osd pause", "pause osd", "osd", "rw")
 COMMAND("osd unpause", "unpause osd", "osd", "rw")
 COMMAND("osd erasure-code-profile set "

@@ -4086,6 +4086,12 @@ void Monitor::handle_command(MonOpRequestRef op)
       f->dump_object("features", fm);
     } else {
       f->open_object_section("extended_features");
+      f->open_array_section("required_of_clients");
+      osdmon()->get_required_client_ext_features().for_each([&](unsigned bit) {
+        auto name = ceph_feature_ext_name(bit);
+        f->dump_string("feature", name ? name : std::to_string(bit));
+      });
+      f->close_section();
       fm.dump_ext(f.get());
       f->close_section();
     }

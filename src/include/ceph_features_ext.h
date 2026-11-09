@@ -71,8 +71,17 @@ inline const char* ceph_feature_ext_name(unsigned bit) {
 
 #define HAVE_FEATURE_EXT(set, name) ((set).test(CEPH_FEATURE_EXT_##name))
 
-/// Parse comma-separated extended feature numbers (from options); invalid,
-/// out-of-range and GREASE entries are skipped and returned in @p bad.
+/// the number of a known extended feature, or -1
+inline int ceph_feature_ext_from_name(std::string_view name) {
+#define CEPH_FEATURE_EXT_FROM_NAME_(b, n, str) if (name == str) return b;
+  CEPH_FEATURES_EXT_LIST(CEPH_FEATURE_EXT_FROM_NAME_)
+#undef CEPH_FEATURE_EXT_FROM_NAME_
+  return -1;
+}
+
+/// Parse comma-separated extended feature numbers or names (from options
+/// and commands); unknown, out-of-range and GREASE entries are skipped and
+/// returned in @p bad.
 inline ceph::feature_set_t ceph_parse_features_ext(std::string_view s,
                                                    std::string *bad = nullptr)
 {
@@ -84,6 +93,10 @@ inline ceph::feature_set_t ceph_parse_features_ext(std::string_view s,
     while (!item.empty() && item.front() == ' ') item.remove_prefix(1);
     while (!item.empty() && item.back() == ' ') item.remove_suffix(1);
     if (item.empty()) {
+      continue;
+    }
+    if (int named = ceph_feature_ext_from_name(item); named >= 0) {
+      r.insert(named);
       continue;
     }
     unsigned bit = 0;

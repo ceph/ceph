@@ -139,5 +139,78 @@ function TEST_refused_at_identification() {
     grep -q "timed out" $dir/ident.err || return 1
 }
 
+# An operator requires a feature of clients; connected clients that lack
+# it block the command, the requirement outlives the mon, and only new
+# connections are affected until it is lifted.
+function TEST_operator_requires_feature() {
+    local dir=$1
+    local reason="refused this client: this cluster requires extended features {0} that this client lacks: an operator required extended features {0} of clients (ceph osd require-client-features)"
+
+    run_mon $dir a || return 1
+    ! ceph osd require-client-features no_such_feature 2> $dir/bad.err || return 1
+    grep -q "unknown extended feature(s) no_such_feature" $dir/bad.err || return 1
+
+    ceph --name client.hider --ms_v2_ext_features_hide 0 -w > $dir/hider.log 2>&1 &
+    local hider=$!
+    ceph --name client.oldie --ms_v2_disable_ext_features=true -w > $dir/oldie.log 2>&1 &
+    local oldie=$!
+    local i
+    for i in $(seq 30) ; do
+        has_session client.hider && has_session client.oldie && break
+        sleep 1
+    done
+    has_session client.hider || return 1
+    has_session client.oldie || return 1
+
+    ! ceph osd require-client-features dev_test_a 2> $dir/blocked.err || return 1
+    cat $dir/blocked.err
+    grep -q "1 connected client(s) lack them; 1 connected client(s) cannot exchange extended features" $dir/blocked.err || return 1
+    # nothing required: new clients of both kinds still get in
+    ceph --ms_v2_ext_features_hide 0 health || return 1
+    ceph features extended | grep -A1 required_of_clients | grep -q '\[\]' || return 1
+
+    kill $hider $oldie
+    wait $hider $oldie
+    for i in $(seq 30) ; do
+        has_session client.hider || has_session client.oldie || break
+        sleep 1
+    done
+    ceph osd require-client-features dev_test_a || return 1
+    ceph features extended | grep -A1 required_of_clients | grep -q dev_test_a || return 1
+    refused $dir/req.err ceph --ms_v2_ext_features_hide 0 || return 1
+    grep -q "$reason" $dir/req.err || return 1
+    refused $dir/req-old.err ceph --ms_v2_disable_ext_features=true || return 1
+    ceph health || return 1
+
+    # it is stored, not derived: the restarted mon still refuses
+    kill_daemons $dir TERM mon.a || return 1
+    activate_mon $dir a || return 1
+    wait_for_quorum 300 || return 1
+    refused $dir/req2.err ceph --ms_v2_ext_features_hide 0 || return 1
+    grep -q "$reason" $dir/req2.err || return 1
+
+    # adding a connected client that lacks a feature blocks requiring more
+    ceph --name client.hider --ms_v2_ext_features_hide 1 -w > $dir/hider2.log 2>&1 &
+    hider=$!
+    for i in $(seq 30) ; do
+        has_session client.hider && break
+        sleep 1
+    done
+    has_session client.hider || return 1
+    ! ceph osd require-client-features dev_test_b || return 1
+    ceph osd require-client-features dev_test_a dev_test_b --yes-i-really-mean-it || return 1
+    kill $hider
+    wait $hider
+
+    ceph osd unrequire-client-features dev_test_a dev_test_b || return 1
+    for i in $(seq 30) ; do
+        ceph --ms_v2_ext_features_hide 0 --client_mount_timeout 5 health \
+            2> /dev/null && break
+        sleep 1
+    done
+    ceph --ms_v2_ext_features_hide 0 health || return 1
+    ceph --ms_v2_disable_ext_features=true health || return 1
+}
+
 main mon-client-features "$@"
 

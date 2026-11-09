@@ -561,6 +561,11 @@ TEST(features_ext, parse)
             ceph_parse_features_ext("x,63,4096,-1,2,127,3a", &bad));
   EXPECT_EQ("x,63,4096,-1,127,3a", bad);
   EXPECT_TRUE(ceph_parse_features_ext("").empty());
+  bad.clear();
+  EXPECT_EQ(feature_set_t({0, 1, 3}),
+            ceph_parse_features_ext("dev_test_a, dev_test_b,3,dev_test_c", &bad));
+  EXPECT_EQ("dev_test_c", bad);
+  EXPECT_EQ(-1, ceph_feature_ext_from_name(""));
 }
 
 TEST(features_ext, describe_missing)
