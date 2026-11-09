@@ -2143,7 +2143,9 @@ public:
     std::optional<spg_t> routed_pgid;
     std::optional<uint32_t> routed_core;
     /// held, not sent, until its PG switches to another connection (see
-    /// OSDSession::pg_route_t::holding); still in its session's ops
+    /// OSDSession::pg_route_t::holding); still in its session's ops. Set
+    /// only while that hold lasts: when it ends, the op is sent, or, if
+    /// paused, waits to be resent when unpaused (as any paused op)
     bool switch_held = false;
 
     /// true if the throttle budget is get/put on a series of OPs,
