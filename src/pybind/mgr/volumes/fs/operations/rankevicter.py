@@ -9,6 +9,7 @@ from ..exception import ClusterTimeout, ClusterError
 
 log = logging.getLogger(__name__)
 
+
 class RankEvicter(threading.Thread):
     """
     Thread for evicting client(s) from a particular MDS daemon instance.
@@ -86,8 +87,8 @@ class RankEvicter(threading.Thread):
             ret, outb, outs = self._fs.mds_command(
                 "%s" % self.gid,
                 json.dumps({
-                                "prefix": "session evict",
-                                "filters": self._client_spec
+                    "prefix": "session evict",
+                    "filters": self._client_spec
                 }), "")
             log.debug("mds_command: complete {0} {1}".format(ret, outs))
 

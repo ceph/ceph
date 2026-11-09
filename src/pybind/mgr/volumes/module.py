@@ -53,8 +53,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'cmd': 'fs volume create '
                    f'name=name,type=CephString,goodchars={goodchars} '
                    'name=placement,type=CephString,req=false '
-                  f'name=meta_pool,type=CephString,goodchars={goodchars},req=false '
-                  f'name=data_pool,type=CephString,goodchars={goodchars},req=false ',
+                   f'name=meta_pool,type=CephString,goodchars={goodchars},req=false '
+                   f'name=data_pool,type=CephString,goodchars={goodchars},req=false ',
             'desc': "Create a CephFS volume",
             'perm': 'rw'
         },
@@ -750,7 +750,6 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                         else:
                             self.vc.cloner.resume()
 
-
     def handle_command(self, inbuf, cmd):
         handler_name = "_cmd_" + cmd['prefix'].replace(" ", "_")
         try:
@@ -935,31 +934,31 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_metadata_set(self, inbuf, cmd):
         return self.vc.set_user_metadata(vol_name=cmd['vol_name'],
-                                      sub_name=cmd['sub_name'],
-                                      key_name=cmd['key_name'],
-                                      value=cmd['value'],
-                                      group_name=cmd.get('group_name', None))
+                                         sub_name=cmd['sub_name'],
+                                         key_name=cmd['key_name'],
+                                         value=cmd['value'],
+                                         group_name=cmd.get('group_name', None))
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_metadata_get(self, inbuf, cmd):
         return self.vc.get_user_metadata(vol_name=cmd['vol_name'],
-                                      sub_name=cmd['sub_name'],
-                                      key_name=cmd['key_name'],
-                                      group_name=cmd.get('group_name', None))
+                                         sub_name=cmd['sub_name'],
+                                         key_name=cmd['key_name'],
+                                         group_name=cmd.get('group_name', None))
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_metadata_ls(self, inbuf, cmd):
         return self.vc.list_user_metadata(vol_name=cmd['vol_name'],
-                                      sub_name=cmd['sub_name'],
-                                      group_name=cmd.get('group_name', None))
+                                          sub_name=cmd['sub_name'],
+                                          group_name=cmd.get('group_name', None))
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_metadata_rm(self, inbuf, cmd):
         return self.vc.remove_user_metadata(vol_name=cmd['vol_name'],
-                                      sub_name=cmd['sub_name'],
-                                      key_name=cmd['key_name'],
-                                      group_name=cmd.get('group_name', None),
-                                      force=cmd.get('force', False))
+                                            sub_name=cmd['sub_name'],
+                                            key_name=cmd['key_name'],
+                                            group_name=cmd.get('group_name', None),
+                                            force=cmd.get('force', False))
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_earmark_get(self, inbuf, cmd):
@@ -970,34 +969,34 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_earmark_set(self, inbuf, cmd):
         return self.vc.set_earmark(vol_name=cmd['vol_name'],
-                                      sub_name=cmd['sub_name'],
-                                      group_name=cmd.get('group_name', None),
-                                      earmark=cmd['earmark'])
+                                   sub_name=cmd['sub_name'],
+                                   group_name=cmd.get('group_name', None),
+                                   earmark=cmd['earmark'])
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_earmark_rm(self, inbuf, cmd):
         return self.vc.clear_earmark(vol_name=cmd['vol_name'],
-                                      sub_name=cmd['sub_name'],
-                                      group_name=cmd.get('group_name', None))
+                                     sub_name=cmd['sub_name'],
+                                     group_name=cmd.get('group_name', None))
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_enctag_get(self, inbuf, cmd):
         return self.vc.get_enctag(vol_name=cmd['vol_name'],
-                                   sub_name=cmd['sub_name'],
-                                   group_name=cmd.get('group_name', None))
+                                  sub_name=cmd['sub_name'],
+                                  group_name=cmd.get('group_name', None))
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_enctag_set(self, inbuf, cmd):
         return self.vc.set_enctag(vol_name=cmd['vol_name'],
-                                      sub_name=cmd['sub_name'],
-                                      group_name=cmd.get('group_name', None),
-                                      enctag=cmd['enctag'])
+                                  sub_name=cmd['sub_name'],
+                                  group_name=cmd.get('group_name', None),
+                                  enctag=cmd['enctag'])
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_enctag_rm(self, inbuf, cmd):
         return self.vc.clear_enctag(vol_name=cmd['vol_name'],
-                                      sub_name=cmd['sub_name'],
-                                      group_name=cmd.get('group_name', None))
+                                    sub_name=cmd['sub_name'],
+                                    group_name=cmd.get('group_name', None))
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_quarantine_enable(self, inbuf, cmd):
@@ -1029,10 +1028,11 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                                    group_name=cmd['group_name'],
                                                    setting=cmd['setting'],
                                                    value=cmd['value'])
+
     @mgr_cmd_wrap
     def _cmd_fs_subvolumegroup_charmap_rm(self, inbuf, cmd):
         return self.vc.subvolume_group_charmap_rm(vol_name=cmd['vol_name'],
-                                                   group_name=cmd['group_name'])
+                                                  group_name=cmd['group_name'])
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolumegroup_charmap_get(self, inbuf, cmd):
@@ -1083,35 +1083,35 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_snapshot_metadata_set(self, inbuf, cmd):
         return self.vc.set_subvolume_snapshot_metadata(vol_name=cmd['vol_name'],
-                                               sub_name=cmd['sub_name'],
-                                               snap_name=cmd['snap_name'],
-                                               key_name=cmd['key_name'],
-                                               value=cmd['value'],
-                                               group_name=cmd.get('group_name', None))
+                                                       sub_name=cmd['sub_name'],
+                                                       snap_name=cmd['snap_name'],
+                                                       key_name=cmd['key_name'],
+                                                       value=cmd['value'],
+                                                       group_name=cmd.get('group_name', None))
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_snapshot_metadata_get(self, inbuf, cmd):
         return self.vc.get_subvolume_snapshot_metadata(vol_name=cmd['vol_name'],
-                                               sub_name=cmd['sub_name'],
-                                               snap_name=cmd['snap_name'],
-                                               key_name=cmd['key_name'],
-                                               group_name=cmd.get('group_name', None))
+                                                       sub_name=cmd['sub_name'],
+                                                       snap_name=cmd['snap_name'],
+                                                       key_name=cmd['key_name'],
+                                                       group_name=cmd.get('group_name', None))
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_snapshot_metadata_ls(self, inbuf, cmd):
         return self.vc.list_subvolume_snapshot_metadata(vol_name=cmd['vol_name'],
-                                               sub_name=cmd['sub_name'],
-                                               snap_name=cmd['snap_name'],
-                                               group_name=cmd.get('group_name', None))
+                                                        sub_name=cmd['sub_name'],
+                                                        snap_name=cmd['snap_name'],
+                                                        group_name=cmd.get('group_name', None))
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_snapshot_metadata_rm(self, inbuf, cmd):
         return self.vc.remove_subvolume_snapshot_metadata(vol_name=cmd['vol_name'],
-                                               sub_name=cmd['sub_name'],
-                                               snap_name=cmd['snap_name'],
-                                               key_name=cmd['key_name'],
-                                               group_name=cmd.get('group_name', None),
-                                               force=cmd.get('force', False))
+                                                          sub_name=cmd['sub_name'],
+                                                          snap_name=cmd['snap_name'],
+                                                          key_name=cmd['key_name'],
+                                                          group_name=cmd.get('group_name', None),
+                                                          force=cmd.get('force', False))
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_snapshot_ls(self, inbuf, cmd):
@@ -1150,8 +1150,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_charmap_rm(self, inbuf, cmd):
         return self.vc.subvolume_charmap_rm(vol_name=cmd['vol_name'],
-                                             sub_name=cmd['sub_name'],
-                                             group_name=cmd.get('group_name', None))
+                                            sub_name=cmd['sub_name'],
+                                            group_name=cmd.get('group_name', None))
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_charmap_get(self, inbuf, cmd):
@@ -1206,12 +1206,12 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_snapshot_visibility_set(self, inbuf, cmd):
         return self.vc.subvolume_snapshot_visibility_set(vol_name=cmd['vol_name'],
-                                                        sub_name=cmd['sub_name'],
-                                                        value=cmd['value'],
-                                                        group_name=cmd.get('group_name', None))
+                                                         sub_name=cmd['sub_name'],
+                                                         value=cmd['value'],
+                                                         group_name=cmd.get('group_name', None))
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_snapshot_visibility_get(self, inbuf, cmd):
         return self.vc.subvolume_snapshot_visibility_get(vol_name=cmd['vol_name'],
-                                                        sub_name=cmd['sub_name'],
-                                                        group_name=cmd.get('group_name', None))
+                                                         sub_name=cmd['sub_name'],
+                                                         group_name=cmd.get('group_name', None))

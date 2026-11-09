@@ -15,6 +15,7 @@ from ...exception import MetadataMgrException, OpSmException, VolumeException
 
 log = logging.getLogger(__name__)
 
+
 class SubvolumeLoader(object):
     INVALID_VERSION = -1
 
@@ -122,6 +123,7 @@ class SubvolumeLoader(object):
                 # log the actual error and generalize error string returned to user
                 log.error("error accessing subvolume metadata for '{0}' ({1})".format(subvolname, me))
                 raise VolumeException(-errno.EINVAL, "error accessing subvolume metadata")
+
 
 loaded_subvolumes = SubvolumeLoader()
 loaded_subvolumes._load_supported_versions()

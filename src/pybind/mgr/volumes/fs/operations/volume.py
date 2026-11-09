@@ -18,11 +18,13 @@ from .clone_index import open_clone_index
 
 log = logging.getLogger(__name__)
 
+
 def gen_pool_names(volname):
     """
     return metadata and data pool name (from a filesystem/volume name) as a tuple
     """
     return "cephfs.{}.meta".format(volname), "cephfs.{}.data".format(volname)
+
 
 def get_mds_map(mgr, volname):
     """
@@ -34,6 +36,7 @@ def get_mds_map(mgr, volname):
         if volname == f['mdsmap']['fs_name']:
             return f['mdsmap']
     return mds_map
+
 
 def get_pool_names(mgr, volname):
     """
@@ -56,6 +59,7 @@ def get_pool_names(mgr, volname):
     data_pools = [pools[id] for id in data_pool_ids]
     return metadata_pool, data_pools
 
+
 def get_pool_ids(mgr, volname):
     """
     return metadata and data pools (list) id of volume as a tuple
@@ -71,6 +75,7 @@ def get_pool_ids(mgr, volname):
     if metadata_pool_id is None:
         return None, None
     return metadata_pool_id, data_pool_ids
+
 
 def create_fs_pools(mgr, volname, data_pool, metadata_pool):
     '''
@@ -97,6 +102,7 @@ def create_fs_pools(mgr, volname, data_pool, metadata_pool):
         return [False, r, outb, outs]
 
     return [True, data_pool, metadata_pool]
+
 
 def create_volume(mgr, volname, placement, data_pool, metadata_pool):
     """
@@ -131,7 +137,7 @@ def create_volume(mgr, volname, placement, data_pool, metadata_pool):
     r, outb, outs = create_filesystem(mgr, volname, metadata_pool, data_pool)
     if r != 0:
         log.error("Filesystem creation error: {0} {1} {2}".format(r, outb, outs))
-        #cleanup
+        # cleanup
         if data_pool_was_created:
             remove_pool(mgr, data_pool)
         if metadata_pool_was_created:
@@ -180,6 +186,7 @@ def delete_volume(mgr, volname, metadata_pool, data_pools):
     result_str += "snap-schedule command-line due to the missing volume. "
     result_str += "However, these errors are transient and will get auto-resolved."
     return r, result_str, ""
+
 
 def rename_volume(mgr, volname: str, newvolname: str) -> Tuple[int, str, str]:
     """
@@ -237,7 +244,7 @@ def rename_volume(mgr, volname: str, newvolname: str) -> Tuple[int, str, str]:
 
     new_metadata_pool, new_data_pool = gen_pool_names(newvolname)
     if metadata_pool != new_metadata_pool:
-        r, outb, outs =  rename_pool(mgr, metadata_pool, new_metadata_pool)
+        r, outb, outs = rename_pool(mgr, metadata_pool, new_metadata_pool)
         if r != 0:
             errmsg = f"Failed to rename metadata pool '{metadata_pool}' to '{new_metadata_pool}'"
             log.error("Failed to rename metadata pool '%s' to '%s'", metadata_pool, new_metadata_pool)
@@ -278,6 +285,7 @@ def rename_volume(mgr, volname: str, newvolname: str) -> Tuple[int, str, str]:
 
     return r, outb, ""
 
+
 def list_volumes(mgr):
     """
     Get name of all volumes/file systems.
@@ -316,8 +324,8 @@ def get_all_pending_clones_count(self, mgr, vol_spec):
                 with open_clone_index(fs_handle, vol_spec) as index:
                     index_path = index.path.decode('utf-8')
                     pending_clones_cnt = pending_clones_cnt \
-                                            + len(listdir(fs_handle, index_path,
-                                                          filter_entries=None, filter_files=False))
+                        + len(listdir(fs_handle, index_path,
+                                      filter_entries=None, filter_files=False))
         except IndexException as e:
             if e.errno == -errno.ENOENT:
                 continue

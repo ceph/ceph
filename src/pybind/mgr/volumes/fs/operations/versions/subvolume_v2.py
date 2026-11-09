@@ -16,6 +16,7 @@ from ..template import SubvolumeOpType
 
 log = logging.getLogger(__name__)
 
+
 class SubvolumeV2(SubvolumeV1):
     """
     Version 2 subvolumes creates a subvolume with path as follows,
@@ -408,7 +409,6 @@ class SubvolumeV2(SubvolumeV1):
             except MetadataMgrException as e:
                 log.error(f"failed to write config: {e}")
                 raise VolumeException(e.args[0], e.args[1])
-
 
     def info(self):
         if self.state != SubvolumeStates.STATE_RETAINED:

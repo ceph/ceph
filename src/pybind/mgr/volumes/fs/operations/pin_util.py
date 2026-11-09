@@ -16,6 +16,7 @@ _pin_xattr = {
     "random": "ceph.dir.pin.random",
 }
 
+
 def pin(fs, path, pin_type, pin_setting):
     """
     Set a pin on a directory.
