@@ -1868,7 +1868,8 @@ seastar::future<> PG::stop()
   co_await merge_notify_gate.close();
   co_await osdmap_gate.stop();
   co_await wait_for_active_blocker.stop();
-  client_request_orderer.clear_and_cancel(*this);
+  client_request_orderer.clear_and_cancel(*this,
+    std::make_exception_ptr(crimson::common::system_shutdown_exception{}));
   scrubber.stop();
   co_await recovery_handler->stop();
   co_await recovery_backend->stop();
@@ -1888,7 +1889,8 @@ void PG::on_change(ceph::os::Transaction &t) {
     client_request_orderer.requeue(this);
   } else {
     logger().debug("{} {}: dropping requests", *this, __func__);
-    client_request_orderer.clear_and_cancel(*this);
+    client_request_orderer.clear_and_cancel(*this,
+      std::make_exception_ptr(crimson::common::actingset_changed(false)));
   }
   scrubber.on_interval_change();
   obc_registry.invalidate_on_interval_change();

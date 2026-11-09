@@ -4,6 +4,7 @@
 #pragma once
 
 #include <seastar/core/future.hh>
+#include <seastar/core/shared_future.hh>
 #include <seastar/core/sleep.hh>
 
 #include <boost/intrusive/list.hpp>
@@ -94,6 +95,14 @@ public:
     using ref_t = boost::intrusive_ptr<instance_handle_t>;
     std::optional<ObjectContextLoader::Orderer> obc_orderer;
     PipelineHandle handle;
+    seastar::abort_source admission_abort;
+    std::optional<RequestOrderer<hobject_t>::Turn> admission_turn;
+    seastar::shared_future<> admission_ready;
+
+    void cancel_admission(std::exception_ptr error) {
+      admission_abort.request_abort_ex(error);
+      admission_turn.reset();
+    }
 
     std::tuple<
       CommonPGPipeline::WaitPGReady::BlockingEvent,
@@ -205,7 +214,7 @@ public:
       intrusive_ptr_release(&request);
     }
     void requeue(Ref<PG> pg);
-    void clear_and_cancel(PG &pg);
+    void clear_and_cancel(PG &pg, std::exception_ptr error);
   };
   void complete_request(PG &pg);
 
@@ -231,8 +240,7 @@ public:
   PerShardPipeline &get_pershard_pipeline(ShardServices &);
 
   interruptible_future<> with_pg_process_interruptible(
-    Ref<PG> pgref, const unsigned instance_id, instance_handle_t &ihref,
-    seastar::future<RequestOrderer<hobject_t>::Turn> admission_turn);
+    Ref<PG> pgref, const unsigned instance_id, instance_handle_t &ihref);
 
   seastar::future<> with_pg_process(Ref<PG> pg);
 

@@ -34,18 +34,21 @@ void ClientRequest::Orderer::requeue(Ref<PG> pg)
   // dereference those dangling pointers.
   for (auto req: to_requeue) {
     DEBUGDPP("requeueing {}", *pg, *req);
+    req->get_instance_handle()->cancel_admission(
+      std::make_exception_ptr(crimson::common::actingset_changed(true)));
     req->reset_instance_handle();
     std::ignore = req->with_pg_process(pg);
   }
 }
 
-void ClientRequest::Orderer::clear_and_cancel(PG &pg)
+void ClientRequest::Orderer::clear_and_cancel(PG &pg, std::exception_ptr error)
 {
   LOG_PREFIX(ClientRequest::Orderer::clear_and_cancel);
   for (auto i = list.begin(); i != list.end(); ) {
     auto &req = *i;
     DEBUGDPP("{}", pg, req);
     ++i;
+    req.get_instance_handle()->cancel_admission(error);
     req.complete_request(pg);
   }
 }
@@ -132,8 +135,7 @@ ClientRequest::reply_op_error(const Ref<PG>& pg, int err)
 }
 
 ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptible(
-  Ref<PG> pgref, const unsigned this_instance_id, instance_handle_t &ihref,
-  seastar::future<RequestOrderer<hobject_t>::Turn> admission_turn)
+  Ref<PG> pgref, const unsigned this_instance_id, instance_handle_t &ihref)
 {
   LOG_PREFIX(ClientRequest::with_pg_process);
   DEBUGDPP(
@@ -173,23 +175,27 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
 
   // Same-object requests enter throttle admission in arrival order. A
   // successor must not take a slot and then wait for its predecessor.
-  auto turn = co_await interruptor::make_interruptible(std::move(admission_turn));
+  co_await interruptor::make_interruptible(ihref.admission_ready.get_future());
+  ihref.admission_abort.check();
 
   // admit in QoS order, then HOLD the slot for the op's lifetime
-  // (its destructor == mClock RequestCompletion).  Take it before entering
+  // (its destructor releases concurrency capacity). Take it before entering
   // wait_pg_ready: ops leave that phase in the order they entered it, so an
   // op admitted inside it could wait for an earlier op still waiting for
   // a slot.
   auto throttle = co_await interruptor::make_interruptible(
     shard_services->get_throttle(
-      scheduler::params_t{cost, prio, owner, SchedulerClass::client}));
+      scheduler::params_t{cost, prio, owner, SchedulerClass::client},
+      scheduler::throttle_level_t::foreground, &ihref.admission_abort));
+
+  ihref.admission_abort.check();
 
   DEBUGDPP("{}.{}: entering wait_pg_ready stage",
 	   *pgref, *this, this_instance_id);
   // The shard pipeline has been released, so there is no exit barrier
   // to drain and entering OrderedConcurrent wait_pg_ready cannot block.
   ihref.enter_stage_sync(client_pp(pg).wait_pg_ready, *this);
-  turn.reset();
+  ihref.admission_turn.reset();
 
   if (pg.can_discard_op(*m)) {
     co_await interruptor::make_interruptible(
@@ -289,13 +295,21 @@ seastar::future<> ClientRequest::with_pg_process(
   auto instance_handle = get_instance_handle();
   auto &ihref = *instance_handle;
   // Register before any map/activation wait, including when requeuing.
-  auto admission_turn = pgref->client_request_orderer.admission_orderer.get(
-    m->get_hobj().get_head());
+  // Keep the result shared until needed: an interruption in the map or
+  // activation wait may leave this result unobserved.
+  ihref.admission_ready = pgref->client_request_orderer.admission_orderer.get(
+    m->get_hobj().get_head(), &ihref.admission_abort).then(
+      [instance_handle](auto turn) {
+        // A granted turn may resume after its instance was cancelled.
+        // Never publish it into that instance again.
+        if (!instance_handle->admission_abort.abort_requested()) {
+          instance_handle->admission_turn.emplace(std::move(turn));
+        }
+      });
   return interruptor::with_interruption(
-    [FNAME, this, pgref, this_instance_id, &ihref,
-     admission_turn = std::move(admission_turn)]() mutable {
+    [FNAME, this, pgref, this_instance_id, &ihref]() {
       return with_pg_process_interruptible(
-	pgref, this_instance_id, ihref, std::move(admission_turn)
+	pgref, this_instance_id, ihref
       ).then_interruptible([FNAME, this, this_instance_id, pgref] {
 	DEBUGDPP("{}.{}: with_pg_process_interruptible complete,"
 		 " completing request",
@@ -309,8 +323,18 @@ seastar::future<> ClientRequest::with_pg_process(
       [this, FNAME, opref=std::move(opref), pgref,
        this_instance_id, instance_handle=std::move(instance_handle), &ihref]() mutable {
 	DEBUGDPP("{}.{}: exit", *pgref, *this, this_instance_id);
-	return ihref.handle.complete(
-	).finally([instance_handle=std::move(instance_handle)] {});
+	if (!ihref.admission_ready.available()) {
+	  ihref.admission_abort.request_abort();
+	}
+	ihref.admission_turn.reset();
+	// Cancellation wakes the semaphore waiter asynchronously. Drain its
+	// continuation before releasing the PG that owns the orderer.
+	return ihref.admission_ready.get_future().then_wrapped(
+	  [&ihref](auto ready) {
+	    ready.ignore_ready_future();
+	    return ihref.handle.complete();
+	  }).finally([instance_handle = std::move(instance_handle),
+	              pgref = std::move(pgref), opref = std::move(opref)] {});
     });
 }
 
