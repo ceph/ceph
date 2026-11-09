@@ -22,6 +22,7 @@
 #include <random>
 #include <string>
 #include <set>
+#include <thread>
 #include <vector>
 #include <gtest/gtest.h>
 
@@ -1032,6 +1033,38 @@ class StressFactory {
     delete accept_handler;
   }
 };
+
+TEST_P(NetworkWorkerTest, GetWorkerBalanceTest) {
+  // get_worker() hands out the least referenced worker, so when every
+  // worker starts out unreferenced and as many threads as there are workers
+  // each call it once at the same time, each worker must be picked exactly
+  // once. Repeat the race many times, as a single round rarely hits it.
+  const unsigned num_workers = stack->get_num_worker();
+  for (unsigned round = 0; round < 1000; ++round) {
+    std::atomic_bool go = false;
+    std::vector<std::thread> threads;
+    for (unsigned i = 0; i < num_workers; ++i) {
+      threads.emplace_back([this, &go] {
+        while (!go)
+          ;
+        stack->get_worker();
+      });
+    }
+    go = true;
+    for (auto &t : threads)
+      t.join();
+
+    std::vector<unsigned> refs;
+    for (unsigned i = 0; i < num_workers; ++i) {
+      Worker *w = get_worker(i);
+      refs.push_back(w->references);
+      while (w->references)
+        w->release_worker();
+    }
+    ASSERT_EQ(std::vector<unsigned>(num_workers, 1u), refs)
+      << "round " << round;
+  }
+}
 
 TEST_P(NetworkWorkerTest, StressTest) {
   StressFactory factory(stack, get_addr(), 16, 16, 10000, 1024);
