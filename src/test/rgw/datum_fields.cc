@@ -9,7 +9,7 @@
 #include <utility>
 #include <vector>
 
-namespace datum = ::ceph::salad::datum;
+namespace datum = ceph::salad::datum;
 
 namespace fields_test {
 
