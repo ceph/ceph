@@ -32,6 +32,8 @@
 #include "include/stringify.h"
 #include <gtest/gtest.h>
 #include <fmt/format.h>
+#include <filesystem>
+#include <fstream>
 
 using namespace std;
 
@@ -71,6 +73,70 @@ public:
   }
   void fini() {
     db.reset(NULL);
+  }
+
+  // the column family of every SST of the (closed) store
+  void sst_column_families(std::map<std::filesystem::path, std::string>* out) {
+    rocksdb::Options options;
+    std::vector<std::string> names;
+    ASSERT_TRUE(rocksdb::DB::ListColumnFamilies(options, "kv_test_temp_dir",
+                                                &names).ok());
+    std::vector<rocksdb::ColumnFamilyDescriptor> cfs;
+    for (auto& name : names) {
+      cfs.emplace_back(name, rocksdb::ColumnFamilyOptions());
+    }
+    std::vector<rocksdb::ColumnFamilyHandle*> handles;
+    rocksdb::DB* rdb = nullptr;
+    ASSERT_TRUE(rocksdb::DB::OpenForReadOnly(rocksdb::DBOptions(),
+                                             "kv_test_temp_dir", cfs,
+                                             &handles, &rdb).ok());
+    std::vector<rocksdb::LiveFileMetaData> files;
+    rdb->GetLiveFilesMetaData(&files);
+    out->clear();
+    for (auto& f : files) {
+      (*out)[std::filesystem::path("kv_test_temp_dir") / f.relative_filename] =
+        f.column_family_name;
+    }
+    for (auto h : handles) {
+      rdb->DestroyColumnFamilyHandle(h);
+    }
+    delete rdb;
+  }
+
+  void save_store() {
+    namespace fs = std::filesystem;
+    fs::remove_all("kv_test_temp_dir.orig");
+    fs::copy("kv_test_temp_dir", "kv_test_temp_dir.orig",
+             fs::copy_options::recursive);
+  }
+
+  void restore_store() {
+    namespace fs = std::filesystem;
+    fs::remove_all("kv_test_temp_dir");
+    fs::copy("kv_test_temp_dir.orig", "kv_test_temp_dir",
+             fs::copy_options::recursive);
+  }
+
+  void flip_bytes(const std::filesystem::path& sst, std::streamoff offset) {
+    cout << "corrupting " << sst << " at " << offset << std::endl;
+    std::fstream f(sst, std::ios::in | std::ios::out | std::ios::binary);
+    char buf[32];
+    ASSERT_TRUE(f.seekg(offset));
+    ASSERT_TRUE(f.read(buf, sizeof(buf)));
+    for (auto& c : buf) {
+      c = ~c;
+    }
+    ASSERT_TRUE(f.seekp(offset));
+    ASSERT_TRUE(f.write(buf, sizeof(buf)));
+  }
+
+  template <typename Iterator>
+  int count_keys(Iterator& it) {
+    int n = 0;
+    for (it->seek_to_first(); it->valid(); it->next()) {
+      n++;
+    }
+    return n;
   }
 
   void SetUp() override {
@@ -562,6 +628,82 @@ TEST_P(KVTest, RocksDBShardingIteratorTest) {
     ASSERT_EQ(it->valid(), false);
   }
   fini();
+}
+
+TEST_P(KVTest, RocksDBShardingIteratorReadError) {
+  if(string(GetParam()) != "rocksdb")
+    return;
+
+  namespace fs = std::filesystem;
+  const std::string cfs("B(3)");
+  const int nkeys = 300;
+  ASSERT_EQ(0, db->init(g_conf()->bluestore_rocksdb_options));
+  ASSERT_EQ(0, db->create_and_open(cout, cfs));
+  {
+    KeyValueDB::Transaction t = db->get_transaction();
+    for (int i = 0; i < nkeys; i++) {
+      std::string key = fmt::format("{:04}", i);
+      bufferlist val;
+      val.append(key + std::string(100, 'x'));
+      t->set("A", key, val);
+      t->set("B", key, val);
+    }
+    ASSERT_EQ(0, db->submit_transaction_sync(t));
+  }
+  db->compact();
+  fini();
+
+  // one SST for A in the default column family, one per shard of B
+  std::map<fs::path, std::string> ssts;
+  ASSERT_NO_FATAL_FAILURE(sst_column_families(&ssts));
+  ASSERT_EQ(4u, ssts.size());
+  fs::path a_sst;
+  std::vector<fs::path> b_ssts;
+  for (auto& [sst, cf] : ssts) {
+    if (cf == "default") {
+      a_sst = sst;
+    } else {
+      b_ssts.push_back(sst);
+    }
+  }
+  ASSERT_EQ(3u, b_ssts.size());
+  save_store();
+
+  // A unreadable: the whole-space listing skips A and must report it, B is complete
+  ASSERT_NO_FATAL_FAILURE(flip_bytes(a_sst, 0));
+  init();
+  ASSERT_EQ(0, db->open(cout, cfs));
+  {
+    KeyValueDB::WholeSpaceIterator it = db->get_wholespace_iterator();
+    EXPECT_EQ(nkeys, count_keys(it));
+    EXPECT_NE(0, it->status());
+  }
+  {
+    KeyValueDB::Iterator it = db->get_iterator("B");
+    EXPECT_EQ(nkeys, count_keys(it));
+    EXPECT_EQ(0, it->status());
+  }
+  fini();
+
+  // every shard of B unreadable: the listings stop before B and must report it
+  restore_store();
+  for (auto& sst : b_ssts) {
+    ASSERT_NO_FATAL_FAILURE(flip_bytes(sst, 0));
+  }
+  init();
+  ASSERT_EQ(0, db->open(cout, cfs));
+  {
+    KeyValueDB::WholeSpaceIterator it = db->get_wholespace_iterator();
+    EXPECT_EQ(nkeys, count_keys(it));
+    EXPECT_NE(0, it->status());
+  }
+  {
+    KeyValueDB::Iterator it = db->get_iterator("B");
+    EXPECT_EQ(0, count_keys(it));
+    EXPECT_NE(0, it->status());
+  }
+  fini();
+  fs::remove_all("kv_test_temp_dir.orig");
 }
 
 TEST_P(KVTest, RocksDBCFMerge) {
