@@ -74,13 +74,17 @@ class JWKSCache {
   explicit JWKSCache(size_t max_entries = 1024) : max_entries(max_entries) {}
 
   // Reuse only while the endpoint certificate and the token key's stored
-  // x5c thumbprints are still registered, and the entry is within TTL.
+  // x5c thumbprints are still registered, the entry is within TTL, and it
+  // was fetched under the provider's current jwks_generation (an operator
+  // bumps it to invalidate every cached copy; a fetch that started before
+  // the bump was stored with the old value and misses).
   std::optional<std::string> lookup(const Key& cache_key,
                                     const std::vector<std::string>& thumbprints,
                                     const std::optional<std::string>& token_kid,
                                     std::chrono::seconds ttl,
                                     time_point now,
-                                    bool verify_endpoint) const
+                                    bool verify_endpoint,
+                                    uint64_t generation = 0) const
   {
     std::lock_guard l{lock};
     auto it = entries.find(cache_key);
@@ -88,6 +92,9 @@ class JWKSCache {
       return std::nullopt;
     }
     const auto& entry = it->second;
+    if (entry.generation != generation) {
+      return std::nullopt;
+    }
     if (verify_endpoint &&
         (entry.cert_thumbprint.empty() ||
          !is_registered(entry.cert_thumbprint, thumbprints))) {
@@ -108,11 +115,14 @@ class JWKSCache {
 
   // cert_thumbprint: the endpoint certificate seen at fetch time, empty if
   // the endpoint was not verified. digest computes each x5c thumbprint.
+  // generation: the provider's jwks_generation as read before the fetch
+  // started, so an invalidation during the fetch is not missed.
   void store(const Key& cache_key,
              std::string cert_thumbprint,
              std::string jwks,
              time_point now,
-             const cert_digest_fn& digest = {})
+             const cert_digest_fn& digest = {},
+             uint64_t generation = 0)
   {
     if (max_entries == 0) {
       return;
@@ -138,7 +148,7 @@ class JWKSCache {
       entries.erase(oldest);
     }
     entries[cache_key] = Entry{std::move(jwks), std::move(keys),
-                         std::move(cert_thumbprint), now};
+                         std::move(cert_thumbprint), now, generation};
   }
 
   void clear()
@@ -181,6 +191,7 @@ class JWKSCache {
     jwks_keys_map keys;
     std::string cert_thumbprint;
     time_point stored_at;
+    uint64_t generation;
   };
 
   const size_t max_entries;

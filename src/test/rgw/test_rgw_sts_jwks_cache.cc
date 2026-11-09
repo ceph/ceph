@@ -316,3 +316,45 @@ TEST(STSJwksCache, SameIssuerSigningTrustIsAccountScoped)
   EXPECT_FALSE(cache.lookup(a, {"other"}, "a", ttl, t0(), false));
   EXPECT_EQ(jwks_x5c, cache.lookup(b, {"cb"}, "b", ttl, t0(), false));
 }
+
+// operator bumps the provider's jwks_generation: entries fetched under an
+// older generation are misses, other providers are unaffected
+TEST(STSJwksCache, OperatorInvalidationDropsEarlierFetches)
+{
+  JWKSCache cache;
+  const auto key = scoped("iss");
+  const auto other = scoped("iss2");
+  cache.store(key, "aa", jwks_ab, t0(), {}, 0);
+  cache.store(other, "aa", jwks_c, t0(), {}, 0);
+  // provider object never invalidated (generation 0, also for old objects)
+  EXPECT_EQ(jwks_ab, cache.lookup(key, registered, "a", ttl, t0() + 1s, true));
+  EXPECT_EQ(jwks_ab, cache.lookup(key, registered, "a", ttl, t0() + 1s, true, 0));
+  // operator invalidated after the fetch
+  EXPECT_FALSE(cache.lookup(key, registered, "a", ttl, t0() + 1s, true, 1));
+  EXPECT_FALSE(cache.lookup(key, registered, "b", ttl, t0() + 1s, true, 1));
+  EXPECT_EQ(jwks_c, cache.lookup(other, registered, "c", ttl, t0() + 1s, true, 0));
+  // refetched under the new generation
+  cache.store(key, "aa", jwks_ab, t0() + 2s, {}, 1);
+  EXPECT_EQ(jwks_ab, cache.lookup(key, registered, "a", ttl, t0() + 3s, true, 1));
+  EXPECT_FALSE(cache.lookup(key, registered, "a", ttl, t0() + 3s, true, 0));
+  // a later invalidation drops it again
+  EXPECT_FALSE(cache.lookup(key, registered, "a", ttl, t0() + 3s, true, 2));
+}
+
+// a fetch that started before the invalidation is stored with the generation
+// read at its start, so the entry is stale as soon as it lands
+TEST(STSJwksCache, InvalidationDuringInFlightFetchIsNotMissed)
+{
+  JWKSCache cache;
+  const auto key = scoped("iss");
+  // request R reads generation 0 and starts fetching; operator bumps to 1
+  // meanwhile; R's response lands and is stored under 0
+  cache.store(key, "aa", jwks_ab, t0() + 5s, {}, 0);
+  EXPECT_FALSE(cache.lookup(key, registered, "a", ttl, t0() + 6s, true, 1));
+  // the next request, under generation 1, fetches and replaces the entry
+  cache.store(key, "aa", jwks_ab, t0() + 7s, {}, 1);
+  EXPECT_EQ(jwks_ab, cache.lookup(key, registered, "a", ttl, t0() + 8s, true, 1));
+  // a late response from another pre-bump fetch must not revive the old state
+  cache.store(key, "aa", jwks_ab, t0() + 9s, {}, 0);
+  EXPECT_FALSE(cache.lookup(key, registered, "a", ttl, t0() + 10s, true, 1));
+}

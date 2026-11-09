@@ -60,6 +60,18 @@ single entry, include the existing values along with the new one.
    radosgw-admin oidc-provider modify --provider-url https://accounts.google.com \
      --client-ids newapp1,newapp2
 
+Invalidate Cached JWKS
+----------------------
+
+Invalidate the provider's cached keys without changing its thumbprints or
+client IDs (see `JWKS Caching`_). Use ``--account-id`` for an account-scoped
+provider; omit it for a global provider.
+
+.. prompt:: bash #
+
+   radosgw-admin oidc-provider invalidate-jwks-cache \
+     --provider-url https://accounts.google.com
+
 Delete a Global OIDC Provider
 -----------------------------
 
@@ -80,10 +92,11 @@ JWKS Caching
 
 For ``AssumeRoleWithWebIdentity``, RGW caches each provider's JSON Web Key Set
 (JWKS) for ``rgw_sts_jwks_cache_ttl`` seconds (default 300) instead of
-contacting the provider on every request. Cache entries are kept
-per account or tenant and provider registration. An entry fetched without
-endpoint verification is not reused by a request that requires it. A token is served from the cache
-only when its ``kid`` is present in the cached JWKS. Any other token (an
+contacting the provider on every request. Cache entries are kept per account
+or tenant and provider registration. An entry fetched without endpoint
+verification is not reused by a request that requires it. A token is served
+from the cache only when its ``kid`` is present in the cached JWKS. Any other
+token (an
 unknown ``kid``, or no ``kid`` at all) makes RGW fetch the key set from the
 provider as it did without the cache, so a newly rotated signing key is
 accepted without waiting for the cache to expire. A key that the provider
@@ -95,7 +108,12 @@ JWKS endpoint with ``rgw_enable_jwks_url_verification`` enabled. Removing a
 thumbprint from the RGW provider object
 (``UpdateOpenIDConnectProviderThumbprint``) therefore takes effect on the next
 request using the updated metadata. A key the provider removes from its JWKS
-without such a change stays accepted until the cached copy expires.
+without such a change stays accepted until the cached copy expires, unless an
+operator invalidates the cache: ``radosgw-admin oidc-provider
+invalidate-jwks-cache`` bumps a generation counter on the RGW provider
+object, and every radosgw stops reusing JWKS documents it fetched under the
+previous generation from its next request that reads the updated provider.
+This acts on one provider and leaves caching enabled.
 Setting ``rgw_sts_jwks_cache_ttl`` to ``0`` at runtime with ``ceph config set``
 makes each radosgw drop its cached copies and fetch on every request from the
 next request it serves after observing the new setting.

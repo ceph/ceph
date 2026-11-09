@@ -38,6 +38,7 @@ void RGWOIDCProviderInfo::dump(Formatter *f) const
   encode_json("tenant", tenant, f);
   encode_json("client_ids", client_ids, f);
   encode_json("thumbprints", thumbprints, f);
+  encode_json("jwks_generation", jwks_generation, f);
 }
 
 void RGWOIDCProviderInfo::decode_json(JSONObj *obj)
@@ -49,6 +50,7 @@ void RGWOIDCProviderInfo::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("tenant", tenant, obj);
   JSONDecoder::decode_json("client_ids", client_ids, obj);
   JSONDecoder::decode_json("thumbprints", thumbprints, obj);
+  JSONDecoder::decode_json("jwks_generation", jwks_generation, obj);
 }
 
 std::list<RGWOIDCProviderInfo> RGWOIDCProviderInfo::generate_test_instances()
@@ -61,6 +63,7 @@ std::list<RGWOIDCProviderInfo> RGWOIDCProviderInfo::generate_test_instances()
   p.creation_date = "someday";
   p.client_ids = {"a", "b"};
   p.thumbprints = {"c", "d"};
+  p.jwks_generation = 3;
   l.push_back(std::move(p));
   l.emplace_back();
   return l;
