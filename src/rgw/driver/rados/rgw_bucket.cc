@@ -855,15 +855,17 @@ static int is_versioned_instance_listable(const DoutPrefixProvider *dpp,
 {
   const std::string empty_delim;
   cls_rgw_obj_key marker;
-  rgw_cls_list_ret result;
+  cls::rgw::bucket_datum::reply result;
   listable = false;
 
   do {
     librados::ObjectReadOperation op;
+    int status = 0;
     cls_rgw_bucket_list_op(op, marker, key.name, empty_delim, 1000,
-                           true, &result);
+                           true, result, status);
     bufferlist ibl;
     int r = bs.bucket_obj.operate(dpp, std::move(op), &ibl, y);
+    r = cls_rgw_bucket_list_result(r, status);
     if (r < 0) {
       return r;
     }
