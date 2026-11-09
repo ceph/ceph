@@ -7545,8 +7545,12 @@ int NSFSBucket::list(const DoutPrefixProvider* dpp, ListParams& params,
 {
   /* multipart namespace: incomplete uploads live in staging directories
    * that aren't in the LMDB cache — delegate to list_multiparts() and
-   * format results using RADOS naming conventions so the LC processor
-   * can parse them via rgw_obj_key::parse_index_key().
+   * name each `_multipart_<key>.<upload id>`, which
+   * rgw_obj_key::parse_index_key() takes apart.  The LC processor passes
+   * the name to get_multipart_upload() without an id, as it does a
+   * RADOS meta, and the upload's first read splits it
+   * (NSFSMPObj::resolve_meta()).  Not RADOS's name, which ends in
+   * `.meta`;  the processor does not filter on it here.
    *
    * Skip this when we ARE a shadow (staging) bucket (ns == mp_ns) —
    * list_parts() uses shadow->list() to enumerate part files inside
@@ -16532,7 +16536,7 @@ int NSFSMultipartUpload::load(const DoutPrefixProvider *dpp, bool create)
       mpdir->set_access_model(driver->get_access_strategy());
     }
 
-    shadow = std::make_unique<NSFSBucket>(driver, std::move(mpdir), rgw_bucket(std::string(), mp_obj.upload_id), mp_ns);
+    shadow = std::make_unique<NSFSBucket>(driver, std::move(mpdir), rgw_bucket(std::string(), mpo().upload_id), mp_ns);
 
     ret = shadow->load_bucket(dpp, null_yield);
     if (ret == -ENOENT && create) {
@@ -16581,6 +16585,9 @@ int NSFSMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
 				ACLOwner& owner, rgw_placement_rule& dest_placement,
 				rgw::sal::Attrs& attrs)
 {
+  /* a new upload:  before anything below reads its name through mpo() */
+  mp_obj.resolve_new(driver);
+
   /* held off while this bucket's tree is being rewritten;  see
    * NSFSDriver::mutation_enter() */
   NSFSMutationGuard mg(dpp, driver, static_cast<NSFSBucket*>(bucket));
@@ -16713,7 +16720,7 @@ int NSFSMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext *
 
   file::listing::MultipartCacheKey cache_key{
     nsfs::mp_cache_bucket(bucket->get_tenant(), bucket->get_name()),
-    mp_obj.meta};
+    mpo().meta};
 
   auto result = mc->list_parts(
     cache_key, marker, num_parts,
@@ -16828,7 +16835,7 @@ int NSFSMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct, 
   }
   if (auto* mc = driver->get_multipart_cache()) {
     mc->remove({nsfs::mp_cache_bucket(bucket->get_tenant(),
-					bucket->get_name()), mp_obj.meta});
+					bucket->get_name()), mpo().meta});
   }
 
   return 0;
@@ -17294,7 +17301,7 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
   // remove multipart cache entry and staging directory
   if (auto* mc = driver->get_multipart_cache()) {
     mc->remove({nsfs::mp_cache_bucket(bucket->get_tenant(),
-					bucket->get_name()), mp_obj.meta});
+					bucket->get_name()), mpo().meta});
   }
   (void) remove_staging(dpp, y);
 
@@ -17361,7 +17368,7 @@ int NSFSMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield 
   }
 
   if (rule) {
-    if (mp_obj.upload_info.dest_placement.name.empty()) {
+    if (mpo().upload_info.dest_placement.name.empty()) {
       if (!meta_obj) {
 	meta_obj = get_meta_obj();
       }
@@ -17396,30 +17403,30 @@ int NSFSMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield 
        * owner, which is the owner of an upload nothing records one
        * for. */
       if (pb) {
-	mp_obj.owner = pb->default_object_owner(dpp, y);
+	mpo().owner = pb->default_object_owner(dpp, y);
       }
       if (!mpu_strategy()->upload_info(dpp, root->get_fd(), get_fname(),
 				       meta_obj->get_attrs(),
-				       mp_obj.upload_info, nullptr,
-				       &mp_obj.owner)) {
+				       mpo().upload_info, nullptr,
+				       &mpo().owner)) {
 	ldpp_dout_fmt(dpp, 0, " ERROR: mp upload {} carries no record this "
 			      "gateway can read, in {}", get_key(),
 			      mpu_strategy()->name());
 	return -EIO;
       }
     }
-    *rule = &mp_obj.upload_info.dest_placement;
+    *rule = &mpo().upload_info.dest_placement;
 
-    if (mp_obj.upload_info.obj_retention_exist) {
-      obj_retention = mp_obj.upload_info.obj_retention;
+    if (mpo().upload_info.obj_retention_exist) {
+      obj_retention = mpo().upload_info.obj_retention;
     }
-    if (mp_obj.upload_info.obj_legal_hold_exist) {
-      obj_legal_hold = mp_obj.upload_info.obj_legal_hold;
+    if (mpo().upload_info.obj_legal_hold_exist) {
+      obj_legal_hold = mpo().upload_info.obj_legal_hold;
     }
 
     /* no te olvides los cksum */
-    cksum_type = mp_obj.upload_info.cksum_type;
-    cksum_flags = mp_obj.upload_info.cksum_flags;
+    cksum_type = mpo().upload_info.cksum_type;
+    cksum_flags = mpo().upload_info.cksum_flags;
   }
 
   return 0;
@@ -17451,7 +17458,7 @@ nsfs::PathStrategy* NSFSMultipartUpload::path_strategy() const
 
 std::string NSFSMultipartUpload::get_fname()
 {
-  return mpu_strategy()->staging_dir_name(mp_obj.meta);
+  return mpu_strategy()->staging_dir_name(mpo().meta);
 }
 
 /* The stride this upload runs at, or nothing if it has none.
@@ -17490,7 +17497,7 @@ NSFSMultipartUpload::established_stride(const DoutPrefixProvider* dpp,
     file::listing::MultipartPartInfo pi;
     if (mc->peek_part({nsfs::mp_cache_bucket(bucket->get_tenant(),
 						 bucket->get_name()),
-			     mp_obj.meta}, 1, pi)) {
+			     mpo().meta}, 1, pi)) {
       stored = pi.stored;
     }
   }
@@ -17539,7 +17546,7 @@ std::unique_ptr<Writer> NSFSMultipartUpload::get_writer(
 
   file::listing::MultipartCacheKey cache_key{
     nsfs::mp_cache_bucket(bucket->get_tenant(), bucket->get_name()),
-    mp_obj.meta};
+    mpo().meta};
 
   /* Ask the layout where the bytes go.  The stride is the upload's
    * established uniform part size, which part 1 sets at its completion
@@ -17566,7 +17573,7 @@ std::unique_ptr<Writer> NSFSMultipartUpload::get_writer(
 						authenticated_user,
 						base_offset, shared_target,
 						shared_name,
-						mp_obj.upload_id, extent,
+						mpo().upload_id, extent,
 						static_cast<NSFSBucket*>(bucket));
 }
 

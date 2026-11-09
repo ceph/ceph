@@ -3065,7 +3065,8 @@ public:
 class NSFSMultipartUpload : public StoreMultipartUpload {
 protected:
   NSFSDriver* driver;
-  NSFSMPObj mp_obj;
+  /* read through mpo() everywhere but init();  see NSFSMPObj */
+  mutable NSFSMPObj mp_obj;
   ceph::real_time mtime;
   std::unique_ptr<rgw::sal::NSFSBucket> shadow;
   /* who the upload's operations are for, from get_multipart_upload() */
@@ -3083,6 +3084,15 @@ public:
     auth_user(_auth_user) {}
   virtual ~NSFSMultipartUpload() = default;
 
+protected:
+  /* An existing upload:  a name given without an id is its meta */
+  NSFSMPObj& mpo() const {
+    mp_obj.resolve_meta();
+    return mp_obj;
+  }
+
+public:
+
   virtual void set_on_behalf_of(const rgw_owner& owner) override {
     on_behalf_of = owner;
   }
@@ -3095,10 +3105,10 @@ public:
    * staging as the authenticated user (DECISIONS.md 2026-10-23);  ListParts
    * stays the gateway's (DECISIONS.md 2026-10-15). */
 
-  virtual const std::string& get_meta() const override { return mp_obj.meta; }
-  virtual const std::string& get_key() const override { return mp_obj.oid; }
-  virtual const std::string& get_upload_id() const override { return mp_obj.upload_id; }
-  virtual const ACLOwner& get_owner() const override { return mp_obj.owner; }
+  virtual const std::string& get_meta() const override { return mpo().meta; }
+  virtual const std::string& get_key() const override { return mpo().oid; }
+  virtual const std::string& get_upload_id() const override { return mpo().upload_id; }
+  virtual const ACLOwner& get_owner() const override { return mpo().owner; }
   virtual ceph::real_time& get_mtime() override { return mtime; }
   virtual std::unique_ptr<rgw::sal::Object> get_meta_obj() override;
 

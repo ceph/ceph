@@ -4496,6 +4496,43 @@ TEST_F(NSFSBucketTest, FlatAndHierarchicalCoexist)
   }
 }
 
+/* An upload asked for without an id is new when it is initialised, and
+ * the one its meta names otherwise -- as lifecycle's abort names it,
+ * from the multipart listing.  A new key ending `.jpg` is never split:
+ * two such uploads once shared the id `jpg`, and a staging directory. */
+TEST_F(NSFSBucketTest, MultipartUploadWithoutIdNewOrNamedByMeta)
+{
+  rgw_placement_rule placement;
+  Attrs attrs;
+  const std::string objname = testname + "-mp.jpg";
+  auto created = bucket->get_multipart_upload(
+    objname, rgw::sal::no_authenticated_user, std::nullopt);
+  ASSERT_EQ(created->init(env->dpp, null_yield, acl_owner, placement,
+			  attrs), 0);
+  const std::string id = created->get_upload_id();
+  EXPECT_FALSE(id.empty());
+  EXPECT_NE(id, "jpg");
+  EXPECT_EQ(created->get_key(), objname);
+
+  auto other = bucket->get_multipart_upload(
+    testname + "-other.jpg", rgw::sal::no_authenticated_user, std::nullopt);
+  ASSERT_EQ(other->init(env->dpp, null_yield, acl_owner, placement,
+			attrs), 0);
+  EXPECT_NE(other->get_upload_id(), id);
+
+  const std::string meta = created->get_meta();
+  sf::path staging{bp / "root" / testname / (".multipart_" + meta)};
+  ASSERT_TRUE(sf::exists(staging)) << "no staging at " << staging;
+
+  auto named = bucket->get_multipart_upload(
+    meta, rgw::sal::no_authenticated_user, std::nullopt);
+  EXPECT_EQ(named->get_key(), objname);
+  EXPECT_EQ(named->get_upload_id(), id);
+  EXPECT_EQ(named->abort(env->dpp, env->cct.get(), null_yield), 0);
+  EXPECT_FALSE(sf::exists(staging)) << "staging left at " << staging;
+  EXPECT_EQ(other->abort(env->dpp, env->cct.get(), null_yield), 0);
+}
+
 TEST_F(NSFSBucketTest, MultipartUploadComplete)
 {
   std::string objname = testname + "-mp";
