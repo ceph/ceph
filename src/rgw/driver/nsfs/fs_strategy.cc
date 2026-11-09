@@ -394,9 +394,9 @@ int POSIXStrategy::get_xattrs(const DoutPrefixProvider* dpp, int fd,
                               const nsfs::FSIdentity& id)
 {
   /* The whole read, not each call:  this is a listing plus one
-   * fetch per name, and flistxattr has no io_uring opcode -- see
-   * docs/IMPERSONATED_XATTR.md.  Each value needs read permission
-   * on the object, which the identity has and the gateway may not. */
+   * fetch per name, and flistxattr has no io_uring opcode.  Each
+   * value needs read permission on the object, which the identity
+   * has and the gateway may not. */
   return nsfs::with_identity(dpp, id, [&]() -> int {
   /* large enough for every attribute an object carries in practice;  the
    * biggest is the encoded ACL at a couple of hundred bytes */
@@ -1301,7 +1301,7 @@ int GPFSStrategy::get_xattrs(const DoutPrefixProvider* dpp, int fd,
    * GPFS files, which is IBM's to implement.  Until then every
    * attribute operation here costs a thread hop, which is why it
    * is taken once around the whole batch rather than per
-   * attribute.  docs/IMPERSONATED_XATTR.md section 6a. */
+   * attribute. */
   return nsfs::with_identity(dpp, id, [&]() -> int {
   if (!has_batch_xattrs()) {
     return POSIXStrategy().get_xattrs(dpp, fd, attrs, null_yield);

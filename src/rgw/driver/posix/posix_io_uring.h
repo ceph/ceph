@@ -112,8 +112,7 @@ int posix_uring_mkdirat(const DoutPrefixProvider* dpp, int dirfd,
  * `personality`.
  *
  * Their siblings listxattr and removexattr have no opcode, so those
- * go through nsfs::run_as() instead -- see
- * docs/IMPERSONATED_XATTR.md.
+ * go through nsfs::run_as() instead.
  */
 int posix_uring_fsetxattr(const DoutPrefixProvider* dpp, int fd,
                           const char* name, const void* value, size_t len,

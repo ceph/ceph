@@ -465,10 +465,9 @@ bool same_identity(const Credentials& a, const Credentials& b)
 
 /* The pool behind run_as().
  *
- * Deliberately plain:  it exists to be deleted once the kernel can
- * express listxattr and removexattr on a ring (see the header, and
- * docs/IMPERSONATED_XATTR.md), so it is not worth more machinery
- * than it takes to be correct.  One thread per concurrent call, up
+ * Deliberately plain:  it carries only the calls the ring cannot
+ * express (see the header), so it is not worth more machinery than
+ * it takes to be correct.  One thread per concurrent call, up
  * to a bound.  A caller with a coroutine suspends while its call
  * runs, so its frontend thread serves other requests;  one without
  * blocks.

@@ -144,7 +144,7 @@ int find_personality(const rgw_owner& key, PersonalityRef* out,
  * else.
  *
  * **For the operations io_uring cannot express.**  Three of them,
- * with three different owners -- see docs/IMPERSONATED_XATTR.md:
+ * with three different owners:
  *
  *   - listxattr and removexattr have no opcode.  Two opcodes in
  *     io_uring/xattr.c would close it;  that is for the nsfs work
