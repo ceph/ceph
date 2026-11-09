@@ -8,9 +8,8 @@ in the kernel driver.
 
 Inline data
 -----------
-Inline data was introduced by the Firefly release. This feature has been
-deprecated since the Octopus release: enabling it triggers a health warning,
-and it will be removed in a future release.
+Inline data is deprecated: enabling it triggers a health warning, and it will
+be removed in a future release.
 
 Linux kernel clients >= 3.19 can read inline data and convert existing
 inline data to RADOS objects when file data is modified. At present,
@@ -20,28 +19,24 @@ See `Experimental Features`_ for more information.
 
 Quotas
 ------
-Quota was first introduced by the Hammer release. Quota disk format got renewed
-by the Mimic release. Linux kernel clients >= 4.17 can support the new format
-quota. At present, no Linux kernel clients support the old format quota.
+Linux kernel clients >= 4.17 support quotas.
 
 See `Quotas`_ for more information.
 
 Multiple file systems within a Ceph cluster
 -------------------------------------------
-The feature was introduced by the Jewel release. Linux kernel clients >= 4.7
-can support it.
+Linux kernel clients >= 4.7 support multiple file systems.
 
 See `Experimental Features`_ for more information.
 
 Multiple active metadata servers
 --------------------------------
-The feature has been supported since the Luminous release. It is recommended to
-use Linux kernel clients >= 4.14 when there are multiple active MDS.
+It is recommended to use Linux kernel clients >= 4.14 when there are multiple
+active MDS.
 
 Snapshots
 ---------
-The feature has been supported since the Mimic release. It is recommended to
-use Linux kernel clients >= 4.17 if snapshot is used.
+It is recommended to use Linux kernel clients >= 4.17 if snapshot is used.
 
 .. _Experimental Features: ../experimental-features
 .. _Quotas: ../quota

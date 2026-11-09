@@ -5,9 +5,6 @@ CephFS Client Capabilities
 Ceph authentication capabilities are used to restrict CephFS clients to
 the lowest level of authority necessary.
 
-.. note:: Path restriction and layout-modification restriction were introduced
-   in the Jewel release of Ceph.
-
 .. note:: Using Erasure Coded (EC) pools with CephFS is supported only with
    :term:`BlueStore`. Erasure-coded pools cannot be used as metadata pools.
    Overwrites must be enabled on erasure-coded data pools.

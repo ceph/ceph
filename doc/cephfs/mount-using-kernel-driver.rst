@@ -50,9 +50,9 @@ Remember that the "latest" kernel in a stable Linux distribution is likely
 to be years behind the latest upstream Linux kernel where Ceph development
 takes place (including bug fixes).
 
-As a rough guide, as of Ceph 10.x (Jewel), you should be using at least a 4.x
-kernel. If you absolutely have to use an older kernel, you should use the
-FUSE client instead of the kernel client.
+As a rough guide, you should be using at least a 4.x kernel. If you absolutely
+have to use an older kernel, you should use the FUSE client instead of the
+kernel client.
 
 This advice does not apply if you are using a Linux distribution that includes
 CephFS support. In that case, the distributor is responsible for backporting
