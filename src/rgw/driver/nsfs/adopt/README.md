@@ -22,7 +22,9 @@ stay where they are even though they are format-specific.
 | `noobaa_schema` | the fields and object attributes the reviewed NooBaa releases write, and the checks that refuse anything else.  X4 |
 | `noobaa_import` | the store's identities into RGW:  accounts, IAM users, roles and the anonymous identity, with their rows.  I4, I7 to I9 |
 | `noobaa_bucket_import` | one bucket's record into RGW's bucket state and its placement row.  I5, P6 |
+| `noobaa_notification_import` | a bucket's notifications into RGW topics, owned by the bucket's account, and its notification attribute;  their connections become the topics' destinations.  I10 |
 | `adoption_queue` | `automatic`'s background adoption:  the intent queue, its workers, and promotion by a request.  C9 |
+| `adoption_report` | the report each `automatic` pass and a preview write:  the pass, its counts and findings, and each finding kind's effect and proposed action |
 
 The letters are the stages of `docs/NSFS_WORK_PLAN.md`.
 
