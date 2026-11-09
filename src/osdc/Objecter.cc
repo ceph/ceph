@@ -2648,7 +2648,7 @@ bool Objecter::_op_hold_for_switch(Op *op)
     cct->_conf.get_val<double>("objecter_osd_core_switch_max_hold");
   route.holding = true;
   route.hold_since = now;
-  route.hold_seq = ++s->last_hold_seq;
+  route.hold_seq = ++last_hold_seq;
   route.hold_event = timer.add_event(
     ceph::make_timespan(max_hold),
     [this, osd = s->osd, pgid, seq = route.hold_seq] {
