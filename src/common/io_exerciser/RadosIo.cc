@@ -247,6 +247,15 @@ void RadosIo::applyIoOp(IoOp& op) {
     case OpType::TruncateWrite3:
       applyTruncateWriteOp(op);
       break;
+    case OpType::WriteTruncate:
+      [[fallthrough]];
+    case OpType::WriteTruncate2:
+      [[fallthrough]];
+    case OpType::FailedWriteTruncate:
+      [[fallthrough]];
+    case OpType::FailedWriteTruncate2:
+      applyWriteTruncateOp(op);
+      break;
     case OpType::InjectReadError:
       [[fallthrough]];
     case OpType::InjectWriteError:
@@ -506,6 +515,71 @@ void RadosIo::applyTruncateWriteOp(IoOp& op) {
     default:
       ceph_abort_msg(
           fmt::format("Unsupported TruncateWrite operation ({})", op.getOpType()));
+      break;
+  }
+}
+
+void RadosIo::applyWriteTruncateOp(IoOp& op) {
+  auto applyWriteTruncateOp = [this]<OpType opType, int N>(
+                                  WriteTruncateOp<opType, N> writeTruncOp) {
+    auto op_info =
+        std::make_shared<AsyncOpInfo<1>>(std::array<uint64_t, 1>{writeTruncOp.offset},
+                                         std::array<uint64_t, 1>{writeTruncOp.length});
+    librados::ObjectWriteOperation wop;
+
+    // First, add the write operation
+    op_info->bufferlist[0] =
+        db->generate_data(writeTruncOp.offset, writeTruncOp.length);
+    wop.write(writeTruncOp.offset * block_size,
+              op_info->bufferlist[0]);
+
+    // Then, add the truncate operations
+    for (int i = 0; i < N; i++) {
+      wop.truncate(writeTruncOp.size[i] * block_size);
+    }
+
+    auto write_cb = [this](boost::system::error_code ec, version_t ver) {
+      if constexpr (opType == OpType::FailedWriteTruncate ||
+                    opType == OpType::FailedWriteTruncate2) {
+        ceph_assert(ec != boost::system::errc::success);
+      } else {
+        ceph_assert(ec == boost::system::errc::success);
+      }
+      finish_io();
+    };
+    librados::async_operate(asio.get_executor(), io, primary_oid,
+                            std::move(wop), 0, nullptr, write_cb);
+    num_io++;
+  };
+
+  switch (op.getOpType()) {
+    case OpType::WriteTruncate: {
+      start_io();
+      SingleWriteTruncateOp& writeTruncOp = static_cast<SingleWriteTruncateOp&>(op);
+      applyWriteTruncateOp(writeTruncOp);
+      break;
+    }
+    case OpType::WriteTruncate2: {
+      start_io();
+      DoubleWriteTruncateOp& writeTruncOp = static_cast<DoubleWriteTruncateOp&>(op);
+      applyWriteTruncateOp(writeTruncOp);
+      break;
+    }
+    case OpType::FailedWriteTruncate: {
+      start_io();
+      SingleFailedWriteTruncateOp& writeTruncOp = static_cast<SingleFailedWriteTruncateOp&>(op);
+      applyWriteTruncateOp(writeTruncOp);
+      break;
+    }
+    case OpType::FailedWriteTruncate2: {
+      start_io();
+      DoubleFailedWriteTruncateOp& writeTruncOp = static_cast<DoubleFailedWriteTruncateOp&>(op);
+      applyWriteTruncateOp(writeTruncOp);
+      break;
+    }
+    default:
+      ceph_abort_msg(
+          fmt::format("Unsupported WriteTruncate operation ({})", op.getOpType()));
       break;
   }
 }

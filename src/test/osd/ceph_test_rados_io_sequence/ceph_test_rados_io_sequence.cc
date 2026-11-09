@@ -58,6 +58,10 @@ using TripleTruncateWriteOp = ceph::io_exerciser::TripleTruncateWriteOp;
 using SingleFailedWriteOp = ceph::io_exerciser::SingleFailedWriteOp;
 using DoubleFailedWriteOp = ceph::io_exerciser::DoubleFailedWriteOp;
 using TripleFailedWriteOp = ceph::io_exerciser::TripleFailedWriteOp;
+using SingleWriteTruncateOp = ceph::io_exerciser::SingleWriteTruncateOp;
+using DoubleWriteTruncateOp = ceph::io_exerciser::DoubleWriteTruncateOp;
+using SingleFailedWriteTruncateOp = ceph::io_exerciser::SingleFailedWriteTruncateOp;
+using DoubleFailedWriteTruncateOp = ceph::io_exerciser::DoubleFailedWriteTruncateOp;
 
 using GenerationType = ceph::io_exerciser::data_generation::GenerationType;
 
@@ -179,6 +183,11 @@ constexpr std::string_view usage[] = {
     "\t\t write3|failedwrite3 <off> <len> <off> <len> <off> <len>",
     "\t\t append",
     "\t\t truncate",
+    "\t\t truncatewrite <size> <off> <len>",
+    "\t\t truncatewrite2 <size> <off> <len> <off> <len>",
+    "\t\t truncatewrite3 <size> <off> <len> <off> <len> <off> <len>",
+    "\t\t writetruncate|failedwritetruncate <off> <len> <size>",
+    "\t\t writetruncate2|failedwritetruncate2 <off> <len> <size1> <size2>",
     "\t\t injecterror <io_type> <shard> <type> <good_count> <fail_count>",
     "\t\t clearinject <io_type> <shard> <type>",
     "\t\t sleep",
@@ -1520,6 +1529,28 @@ bool ceph::io_sequence::tester::TestRunner::run_interactive_test() {
       uint64_t length3 = get_numeric_token();
       ioop = TripleFailedWriteOp::generate(offset1, length1, offset2, length2,
                                            offset3, length3);
+    } else if (op == "writetruncate") {
+      uint64_t offset = get_numeric_token();
+      uint64_t length = get_numeric_token();
+      uint64_t size = get_numeric_token();
+      ioop = SingleWriteTruncateOp::generate(offset, length, size);
+    } else if (op == "writetruncate2") {
+      uint64_t offset = get_numeric_token();
+      uint64_t length = get_numeric_token();
+      uint64_t size1 = get_numeric_token();
+      uint64_t size2 = get_numeric_token();
+      ioop = DoubleWriteTruncateOp::generate(offset, length, size1, size2);
+    } else if (op == "failedwritetruncate") {
+      uint64_t offset = get_numeric_token();
+      uint64_t length = get_numeric_token();
+      uint64_t size = get_numeric_token();
+      ioop = SingleFailedWriteTruncateOp::generate(offset, length, size);
+    } else if (op == "failedwritetruncate2") {
+      uint64_t offset = get_numeric_token();
+      uint64_t length = get_numeric_token();
+      uint64_t size1 = get_numeric_token();
+      uint64_t size2 = get_numeric_token();
+      ioop = DoubleFailedWriteTruncateOp::generate(offset, length, size1, size2);
     } else if (op == "injecterror") {
       std::string inject_type = get_token();
       int shard = get_numeric_token();
