@@ -124,6 +124,7 @@ Current Members
  * Guillaume Abrioux <gabrioux@redhat.com>
  * Igor Fedotov <igor.fedotov@croit.io>
  * Ilya Dryomov <idryomov@redhat.com>
+ * J. Eric Ivancich <ivancich@redhat.com>
  * Joseph Mundackal <jmundackal@bloomberg.net>
  * Josh Durgin <jdurgin@redhat.com>
  * João Eduardo Luis <joao@clyso.com>
