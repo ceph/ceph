@@ -1882,6 +1882,10 @@ private:
   mutable ceph::shared_mutex rwlock =
 	   ceph::make_shared_mutex("Objecter::rwlock");
   ceph::timer<ceph::coarse_mono_clock> timer;
+  /// the id of the last hold (see OSDSession::pg_route_t::holding). Not
+  /// per session: a stale timer event of a closed session must not match
+  /// a hold of the OSD's next session
+  std::atomic<uint64_t> last_hold_seq = 0;
 
   PerfCounters* logger = nullptr;
 
@@ -2709,9 +2713,6 @@ public:
     /// by tid; protected by this session's lock (OSDSession::lock)
     std::map<ceph_tid_t, unanswered_op_t> unanswered;
 
-    /// the id of the last hold (see pg_route_t::holding); protected by
-    /// this session's lock (OSDSession::lock)
-    uint64_t last_hold_seq = 0;
     /// the PGs whose hold may end, their ops having drained. Their held
     /// ops are sent by _release_drained_holds(), not where the drain is
     /// noticed (_op_unroute() and alike). Protected by this session's
