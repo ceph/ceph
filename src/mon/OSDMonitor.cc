@@ -13054,7 +13054,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       }
     }
     // Optimized EC does not cope with pg temp with a mismatched size.
-    pending_inc.new_pg_temp[pgid].resize(osdmap.get_pg_size(pgid), CRUSH_ITEM_NONE);
+    auto& temp = pending_inc.new_pg_temp[pgid];
+    temp.resize(osdmap.get_pg_size(pgid), CRUSH_ITEM_NONE);
+    // An erasure coded PG can still have this pg_temp from an earlier repeer,
+    // which its primary may have asked to remove: remove it, so that the
+    // acting set changes
+    if (std::equal(temp.begin(), temp.end(), acting.begin(), acting.end())) {
+      temp.clear();
+    }
     goto update;
   } else if (prefix == "osd pg-upmap" ||
              prefix == "osd rm-pg-upmap" ||
