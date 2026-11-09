@@ -107,6 +107,13 @@
   limits the number of concurrent background fetches.  This reduces latency in
   large directories while retaining cache warmth for hot directories.
 
+* CephFS: The MDS now limits the backtrace writes it issues to expire journal
+  segments to ``mds_log_expire_backtrace_max_inflight`` (default: ``256``) at a
+  time. Before, it issued the writes for a whole segment at once, thousands of
+  them after a burst of file creates, and its own journal writes stalled behind
+  them on the OSDs for seconds. Set the option to ``0`` to issue them all at
+  once as before.
+
 * BlueStore: The experimental PMEM device backend has been removed, together
   with the ``pmem`` value of the ``bdev_type`` option and the DML/DSA offload
   path. The hardware it targeted, Intel Optane DC persistent memory, was
