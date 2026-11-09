@@ -398,6 +398,33 @@ TEST_F(TestObjecterCoreRoutes, CoreConResetEndsHold)
   EXPECT_EQ(0u, time_avg("core_switch_delay").first);
 }
 
+// a held op paused meanwhile is not sent when the hold ends, and is no
+// longer held: it waits to be resent when unpaused, as any paused op
+TEST_F(TestObjecterCoreRoutes, PausedOpNotHeldAfterHold)
+{
+  auto sent = make_busy_pg();
+  wait(grace * 1.5);
+  auto d = submit();
+  auto e = submit();
+  EXPECT_TRUE(route_holding());
+  Objecter::Op* paused_op = nullptr;
+  {
+    std::unique_lock l(session->lock);
+    paused_op = session->ops.at(d);
+    EXPECT_TRUE(paused_op->switch_held);
+    paused_op->target.paused = true;
+  }
+
+  reply(main_con, sent[1]);
+  reply(main_con, sent[2]);
+  EXPECT_FALSE(route_holding());
+  EXPECT_EQ((tids_t{e}), core_con->tids());
+  EXPECT_EQ(sent, main_con->tids());
+  std::shared_lock l(session->lock);
+  EXPECT_FALSE(paused_op->switch_held);
+  EXPECT_FALSE(session->ops.at(e)->switch_held);
+}
+
 // an op canceled after being sent keeps its PG from switching until it is
 // answered
 TEST_F(TestObjecterCoreRoutes, CanceledOpAnswered)
