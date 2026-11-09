@@ -44,12 +44,13 @@ also makes a client that the cluster turns away fail at once, with a reason.
    decision and makes the refusal immediate, final and explained.
 
    **This design does not reject old clients in general.** A client is refused
-   only while the cluster is actively using a feature that the client lacks and
-   without which it would corrupt data. A cluster that uses no such feature
-   admits every client it admits today, and once the feature is no longer in
-   use, when the migration ends for example, new connections from old clients
-   succeed again. The design adds no requirement of its own: the only way to
-   set one directly is a debug option for testing.
+   only for a feature that an operator has explicitly required, with a command
+   that first checks the clients connected at the time, as ``ceph osd
+   set-require-min-compat-client`` does today. The cluster refuses to use such
+   a feature, to start a pool migration for example, until the operator has
+   required it. A cluster whose operator requires nothing admits every client
+   it admits today. The design adds no requirement of its own: the only way to
+   set one directly in the draft is a debug option for testing.
 
 The problem
 ===========
@@ -59,10 +60,15 @@ two bits per release, that lasts two releases.
 
 - **Every bit since 2018 has been a reused retired bit.** 11 of the last 21
   were ``SERVER_<release>`` markers, one per release.
-- **Reuse no longer works for client-facing bits.** Old releases already pass
-  ``HAVE_FEATURE`` for some reused bits: Pacific OSDs look like Reef (the
-  v18.2.8 known issue), and Nautilus clients pass the ``CRUSH_MSR``
-  requirement.
+- **Reuse is fragile for client-facing bits.** A reused bit is really a set:
+  the bit plus a marker bit that no release with the old meaning ever sent,
+  tested as ``(features & set) == set``. Choose the marker wrong and old
+  releases pass: Pacific OSDs look like Reef (the v18.2.8 known issue), and
+  Luminous to Nautilus clients, which send incarnation bit 57 together with old
+  meanings of bits 52 and 54, pass the ``CRUSH_MSR`` requirement (confirmed
+  live). Pairing with a later marker such as ``SERVER_OCTOPUS`` fixes each
+  case, but every new bit needs that care, and some messenger interfaces still
+  test ``(features & flag) != 0``.
 
 Requirements
 ============
@@ -314,7 +320,11 @@ cannot be stripped unnoticed.
   client's set, and whether it can exchange one at all.
 - **Release markers.** About half of all new connection bits since 2017 were
   ``SERVER_<release>`` markers. Future releases should put them in the extended
-  set.
+  set, or better, stop needing them: a release marker claims everything in that
+  release, which is why the kernel client still reports Luminous and why its
+  maintainers hesitate to move it (every behaviour the marker implies must be
+  checked first). An extended number claims one feature, so a kernel can add
+  exactly what it implements.
 
 **Costs, accepted.**
 
@@ -392,8 +402,17 @@ new client without it is refused, whatever its pools: every new kernel mount,
 ``rbd map``, ceph-csi pod and gateway restart. A need that concerns one pool,
 such as an active pool migration, is better enforced by the OSDs for operations
 on that pool, with ``-EPROTONOSUPPORT``; this design does not provide that.
-Never use ``-EOPNOTSUPP``: librbd and rgw take it as "fall back", and kernels
-print a warning with a stack trace when they see it at authentication.
+
+**Mon and OSDs both police it; the window is elsewhere.** The mon refuses every
+new client connection, and the OSDs refuse 64-bit mismatches at identification
+today through ``OSDMap::get_features``; they should check the banner's extended
+set the same way, which is cheap since every peer exchanges it. Neither closes
+the real window: clients that were connected before the requirement started,
+which keep their OSD connections and hang only later (see "Turning a
+requirement on"). That is why the requirement is turned on explicitly, with a
+check of connected clients, rather than by using the feature. Never use
+``-EOPNOTSUPP``: librbd and rgw take it as "fall back", and kernels print a
+warning with a stack trace when they see it at authentication.
 
 **MonClient changes.** The first two fix bugs that exist since Nautilus.
 
@@ -438,10 +457,23 @@ released Reef) were refused when the mons restarted, kept writing for 7
 minutes, and then hung for good when an OSD restarted. Lifting the requirement
 brought none of them back.
 
-- **Check the connected clients first.** The command or state change that turns
-  on a client requirement should refuse while clients connected to the quorum
-  lack it, unless forced, as ``ceph osd set-require-min-compat-client`` does.
-  It must count the clients that cannot exchange extended features at all.
+- **An operator turns a requirement on, explicitly and once.** A requirement is
+  never derived from what the cluster happens to be doing: a feature that needs
+  one cannot be used, and a pool migration cannot start, until an operator has
+  required it. Once required, it stays required, so the moment that decides the
+  fate of connected clients comes once, while the operator is watching, instead
+  of at every migration, unattended. The natural command is ``ceph osd
+  set-require-min-compat-client``, extended to accept feature names as well as
+  a release.
+- **Check the connected clients first.** The command should refuse while
+  clients connected to the quorum lack the feature, unless forced, as
+  ``set-require-min-compat-client`` does for a release. It must count the
+  clients that cannot exchange extended features at all. Note what that command
+  does today: it checks the clients connected when it runs, and afterwards
+  refuses map changes (tunables, upmap) that would need newer clients. It does
+  not by itself refuse later connections; those are refused only for features
+  the map's state implies, through ``OSDMap::get_features``. A requirement set
+  by the extended command must do both.
 - **When forced, make the failure visible.** Blocklisting the clients that lack
   the feature makes them fail at once, with an error, instead of hanging hours
   later.
@@ -525,6 +557,40 @@ Vampire can take:
 - **Not access control.** A client refused for a missing feature at
   identification has already completed cephx and holds tickets. Feature
   requirements are compatibility gates; cephx caps remain the access control.
+
+Security
+========
+
+The extended set is exchanged before authentication, so a peer that has not
+proved who it is can send one. Everything a peer can send before authentication
+is bounded, and the bounds are no wider than main's today.
+
+- **The banner is at most 64 KiB.** Its payload length is a 16-bit field that
+  already exists on main; every peer already reads a payload of that length
+  from any connection. This design only uses bytes within that bound.
+- **The extended set keeps at most 64 words (512 bytes).**
+  ``feature_set_t::decode`` allocates that much whatever length the peer
+  claims, and skips the rest. A length that is not a multiple of 8, or longer
+  than the data, is a decoding error and the connection faults. The unit tests
+  cover these cases, including a fuzz test.
+- **The reason text travels from server to client only.** A client truncates it
+  to 512 printable characters before logging or storing it. A client never
+  sends one.
+- **The two-strike table** on the mon holds one ``global_id`` per refused
+  attempt for 60 seconds, so it grows with the refusal rate and no further,
+  like the session table beside it.
+- **Work per refusal** is a comparison of at most 64 words and a cluster-log
+  line at most once a minute, the same order as today's refusal at
+  identification.
+- **The negotiation is authenticated** when cephx is in use: every byte sent
+  before ``AUTH_DONE``, the banner included, is signed, so a set that is
+  changed in flight is detected and the connection dropped. With auth ``none``
+  nothing on the wire is protected, as today. The set is readable before
+  authentication, even in secure mode; it reveals which features a client has
+  and nothing else.
+
+Pre-authentication frame sizes on main (``HELLO``, ``AUTH_REQUEST``) are
+outside this design and are not changed by it.
 
 Risks and open questions
 ========================
