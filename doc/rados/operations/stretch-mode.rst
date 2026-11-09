@@ -137,6 +137,7 @@ does not meet these requirements.
 
 
 .. _creating_stretch_pools:
+.. _entering_stretch_mode:
 
 Setting Up a Two-Zone Cluster
 =============================
@@ -212,6 +213,8 @@ a Monitor without a location, CRUSH weights more than 10% apart, or a pool
 default overridden in a Monitor's ``ceph.conf``.
 
 
+.. _stretch_mode1:
+
 Running a Stretch Cluster
 =========================
 
@@ -235,8 +238,9 @@ the cluster enters *degraded* mode and raises ``DEGRADED_STRETCH_MODE``.
 
 **The zone returns.** The cluster enters *recovery* mode and raises
 ``RECOVERING_STRETCH_MODE``. PGs peer with the zone that stayed up and recover
-the returning one. When every PG is clean, the cluster returns to normal mode
-automatically and requires both zones to peer again.
+the returning one. Once no PG is degraded, inactive or unknown, and at least
+``mon_stretch_recovery_min_wait`` seconds after recovery began, the cluster
+returns to normal mode automatically and requires both zones to peer again.
 
 Monitor the following health checks:
 
@@ -259,6 +263,9 @@ Monitor the following health checks:
    * - ``POOL_DEFAULT_CONFIG_OVERRIDE``
      - A Monitor-level setting overrides a pool creation default that stretch
        mode set (see :ref:`pool-default-config-override`)
+   * - ``STRETCH_MODE_POOL_NOT_CONVERTED``
+     - A pool of global stretch mode that the upgrade commit cannot give two
+       zones; see `Upgrading from Earlier Releases`_
 
 Operational notes:
 
@@ -269,7 +276,7 @@ Operational notes:
   ``ceph-mon`` instead of running ``ceph mon set_location``. The option takes
   a single ``bucket=loc`` pair, and its bucket type must be the zone type.
 * To replace a failed tiebreaker, deploy a new Monitor at the third site and
-  run ``ceph mon set_new_tiebreaker mon.{name}``; then remove the old one.
+  run ``ceph mon set_new_tiebreaker {name}``; then remove the old one.
   The command refuses a Monitor in the same location as the other Monitors.
 * If the cluster does not move to the next mode automatically, the
   transition can be forced; see `Forcing a Stretch Mode`_.
@@ -481,7 +488,7 @@ differences:
 
 An existing stretch cluster needs no action to upgrade. Until the upgrade is
 committed it behaves exactly as the earlier release did, including when a
-zone fails mid-upgrade; the new per-pool behaviour starts at the commit.
+zone fails mid-upgrade; the new per-pool behavior starts at the commit.
 
 The upgrade has three stages:
 
@@ -632,7 +639,8 @@ counted, not how the cluster handles failures.
      - Two zones of similar CRUSH weight; five Monitors, two in each zone and
        a tiebreaker at a third site; the ``connectivity`` election strategy
    * - Copies
-     - 2 copies of each object in each zone by default, 4 in all
+     - 2 copies of each object in each zone after ``enable_stretch_mode`` or the
+       upgrade commit, 4 in all
    * - When I/O stops
      - With the defaults, a PG serves I/O while each zone holds at least one
        copy. While a zone is down, one copy in the surviving zone is enough.
@@ -695,8 +703,9 @@ once. To unstretch one pool at a time, use the commands above.
 pool at once:
 
 * Replicated pools get 3 replicas.
-* Erasure-coded pools are taken offline during the transition. To keep them
-  available, migrate them first (see `For a Single Pool`_).
+* Erasure-coded pools' PGs re-peer, and some can be unavailable for the whole
+  transition, which can take days. To keep them available, migrate them first
+  (see `For a Single Pool`_).
 * The pool creation defaults are reset to 1 zone with 3 replicas.
 
 Afterwards, remove any OSDs that are no longer required.
@@ -902,7 +911,7 @@ When a PG serves I/O, for the default pools above:
      - 1 of the 2 copies in the surviving zone is enough; the PG stops if
        both are lost
    * - Recovery (the lost zone is back)
-     - The surviving zone only, until every PG is clean
+     - The surviving zone only, until recovery mode ends
      - As in degraded mode
      - As in degraded mode
    * - Netsplit
@@ -918,7 +927,7 @@ When a PG serves I/O, for the default pools above:
   ``num_zones``, reset it to the default.
 * ``ceph osd pool get {pool-name} min_size`` and ``ceph osd pool ls detail``
   print the count in each zone. ``ls detail`` shows the zones and the copies
-  in each zone before it, so a default replicated pool shows
+  in each zone before it, so a pool with ``replica`` 2 shows
   ``size 4 num_zones 2 replica 2 min_size 1``.
 * One-zone pools and individual stretch pools count ``min_size`` over all
   their copies.
@@ -1015,9 +1024,8 @@ To use a custom rule:
   ``ceph osd pool set {pool-name} crush_rule {rule}``.
 * ``ceph mon enable_stretch_mode --new_crush_rule {rule}`` gives every
   replicated pool the same rule, which must place 2 copies in each zone.
-* Prefer ``step take default`` then ``step choose firstn 0 type datacenter``.
-  A rule with one ``take`` step per zone makes ``MAX AVAIL`` report the space
-  of one zone only, not of both.
+* Prefer ``step take default`` then ``step choose firstn 0 type datacenter``,
+  which spreads the primaries over both zones (see below).
 * A rule can pick one device class, for example
   ``step take default class ssd``.
 
@@ -1048,8 +1056,7 @@ which zone holds the primaries:
 * A rule with one ``take`` step per zone puts every primary in the zone it
   takes first. Use it when the clients run in one zone, so that their writes
   reach a primary in their own zone. That zone's OSDs then do all the primary
-  work, ``MAX AVAIL`` reports one zone's space, and if that zone fails the
-  primaries move to the other zone. For example, to keep the primaries of a
+  work, and if that zone fails the primaries move to the other zone. For example, to keep the primaries of a
   replicated pool in ``dc1``::
 
      rule mypool_primary_dc1 {
@@ -1203,8 +1210,8 @@ the zone that keeps the pool with ``--root``:
 
    ceph osd pool set myecpool num_zones 1 --root dc1 --yes-i-really-mean-it
 
-The pool is taken offline during the transition, and
-``--yes-i-really-mean-it`` is required because PGs can become unavailable.
+PGs re-peer, and some can be unavailable for the whole transition, which can
+take days; ``--yes-i-really-mean-it`` is required for this reason.
 Each PG keeps only the shards of its first zone, shards ``0`` to ``k+m-1``,
 and its ``min_size`` becomes ``k + min(1, m - 1)``. CRUSH chooses the first
 zone for each PG, so each zone is the first zone of about half the PGs. The
