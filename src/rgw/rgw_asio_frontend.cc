@@ -64,9 +64,11 @@ using timeout_timer = rgw::basic_timeout_timer<ceph::coarse_mono_clock,
 static constexpr size_t parse_buffer_size = rgw::asio::parse_buffer_size;
 using parse_buffer = rgw::asio::parse_buffer;
 
-// use mmap/mprotect to allocate 512k coroutine stacks
+// use mmap/mprotect to allocate 1MB coroutine stacks
+// increased from 512k to support deep Rust/LanceDB call chains (s3vector)
+// NOTE: not increasing the stack-size may result with stack-overflow 
 auto make_stack_allocator() {
-  return boost::context::protected_fixedsize_stack{512*1024};
+  return boost::context::protected_fixedsize_stack{1024*1024};
 }
 
 static constexpr std::chrono::milliseconds BACKOFF_MAX_WAIT(5000);
