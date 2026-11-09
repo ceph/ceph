@@ -400,6 +400,10 @@ class StoreObject : public Object {
 			   optional_yield y) override {
       return -1;
     }
+    virtual std::optional<ceph::real_time> get_noncurrent_since(
+			   const DoutPrefixProvider* dpp, optional_yield y) override {
+      return std::nullopt;
+    }
     jspan_context& get_trace() override { return trace_ctx; }
     void set_trace (jspan_context&& _trace_ctx) override { trace_ctx = std::move(_trace_ctx); }
 

@@ -880,6 +880,8 @@ public:
 			   uint64_t& size,
 			   const DoutPrefixProvider* dpp,
 			   optional_yield y) override;
+  virtual std::optional<ceph::real_time> get_noncurrent_since(
+			   const DoutPrefixProvider* dpp, optional_yield y) override;
   virtual bool placement_rules_match(rgw_placement_rule& r1, rgw_placement_rule& r2) override;
   virtual int dump_obj_layout(const DoutPrefixProvider *dpp, optional_yield y,
 			      Formatter* f) override;

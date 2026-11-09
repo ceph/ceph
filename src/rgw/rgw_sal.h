@@ -1606,6 +1606,11 @@ public:
 			   uint64_t& size,
 			   const DoutPrefixProvider* dpp,
 			   optional_yield y) = 0;
+    /** When this version stopped being current, where the driver records
+     * it;  lifecycle ages a noncurrent version by it in place of the
+     * mtime of the version that replaced it */
+    virtual std::optional<ceph::real_time> get_noncurrent_since(
+			   const DoutPrefixProvider* dpp, optional_yield y) = 0;
     /** Check to see if two placement rules match */
     virtual bool placement_rules_match(rgw_placement_rule& r1, rgw_placement_rule& r2) = 0;
     /** Dump driver-specific object layout info in JSON */

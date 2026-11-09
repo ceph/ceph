@@ -1177,6 +1177,12 @@ int FilterObject::restore_obj_from_cloud(Bucket* bucket,
            cct, days, in_progress, size, dpp, y);
 }
 
+std::optional<ceph::real_time> FilterObject::get_noncurrent_since(
+			const DoutPrefixProvider* dpp, optional_yield y)
+{
+  return next->get_noncurrent_since(dpp, y);
+}
+
 bool FilterObject::placement_rules_match(rgw_placement_rule& r1, rgw_placement_rule& r2)
 {
   return next->placement_rules_match(r1, r2);
