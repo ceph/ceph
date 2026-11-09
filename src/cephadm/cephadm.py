@@ -675,16 +675,6 @@ def move_files(ctx, src, dst, uid=None, gid=None):
             os.chown(dst_file, uid, gid)
 
 
-def get_unit_name(
-    fsid: str, daemon_type: str, daemon_id: Union[str, int]
-) -> str:
-    """Return the name of the systemd unit given an fsid, a daemon_type,
-    and the daemon_id.
-    """
-    # TODO: fully replace get_unit_name with DaemonIdentity instances
-    return DaemonIdentity(fsid, daemon_type, daemon_id).unit_name
-
-
 def lookup_unit_name_by_daemon_name(ctx: CephadmContext, fsid: str, name: str) -> str:
     daemon = get_daemon_description(ctx, fsid, name)
     try:
@@ -1732,7 +1722,7 @@ def deploy_daemon_units(
     )
     call_throws(ctx, ['systemctl', 'daemon-reload'])
 
-    unit_name = get_unit_name(ident.fsid, ident.daemon_type, ident.daemon_id)
+    unit_name = ident.unit_name
     call(ctx, ['systemctl', 'stop', unit_name],
          verbosity=CallVerbosity.DEBUG)
     call(ctx, ['systemctl', 'reset-failed', unit_name],
@@ -2231,7 +2221,9 @@ class CephadmAgent(DaemonForm):
                 for j in os.listdir(os.path.join(data_dir, i)):
                     if '.' in j and os.path.isdir(os.path.join(data_dir, fsid, j)):
                         (daemon_type, daemon_id) = j.split('.', 1)
-                        unit_name = get_unit_name(fsid, daemon_type, daemon_id)
+                        unit_name = DaemonIdentity(
+                            fsid, daemon_type, daemon_id
+                        ).unit_name
                         (enabled, state, _) = check_unit(self.ctx, unit_name)
                         daemons[j] = {
                             'style': 'cephadm:v1',
@@ -3252,7 +3244,7 @@ def finish_bootstrap_config(
         call_throws(ctx, [
             'systemctl',
             'restart',
-            get_unit_name(fsid, 'mon', mon_id)
+            DaemonIdentity(fsid, 'mon', mon_id).unit_name
         ])
     elif 'image' in ctx and ctx.image:
         # we still want to assimilate the given container image if provided
