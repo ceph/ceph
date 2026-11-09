@@ -1095,6 +1095,15 @@ protected:
   std::atomic<uint64_t> attr_write_fails_injected{0};
   ceph::mutex inject_attr_write_fail_lock =
       ceph::make_mutex("NSFSDriver::inject_attr_write_fail_lock");
+  /* return no non-current time for these buckets' versions, so
+   * lifecycle ages them by their successor's mtime, as it did before
+   * get_noncurrent_since():  the test of the aging shows both results
+   * in one run.  Keyed by bucket, as the attribute failures are */
+  std::set<std::string> inject_noncurrent_since_none_buckets;
+  std::atomic<bool> inject_noncurrent_since_none_armed{false};
+  std::atomic<uint64_t> noncurrent_since_none_injected{0};
+  ceph::mutex inject_noncurrent_since_none_lock =
+      ceph::make_mutex("NSFSDriver::inject_noncurrent_since_none_lock");
   /* lift the gate on a bucket not taken over, for these buckets, so a
    * test can show a rejection is the gate's:  the same write succeeds
    * with it lifted.  Keyed by bucket, as the attribute-read injection
@@ -1942,6 +1951,14 @@ public:
     return inject_attr_write_fail_buckets.contains(bucket);
   }
   void record_attr_write_fail() { ++attr_write_fails_injected; }
+  bool noncurrent_since_none_injected_for(const std::string& bucket) {
+    if (!inject_noncurrent_since_none_armed.load(std::memory_order_relaxed)) {
+      return false;
+    }
+    std::lock_guard l{inject_noncurrent_since_none_lock};
+    return inject_noncurrent_since_none_buckets.contains(bucket);
+  }
+  void record_noncurrent_since_none() { ++noncurrent_since_none_injected; }
   bool adoption_gate_lifted(const std::string& bucket) {
     if (!inject_lift_adoption_gate_armed.load(std::memory_order_relaxed)) {
       return false;
@@ -2850,6 +2867,8 @@ public:
 			   uint64_t& size,
 			   const DoutPrefixProvider* dpp,
 			   optional_yield y) override;
+  virtual std::optional<ceph::real_time> get_noncurrent_since(
+			   const DoutPrefixProvider* dpp, optional_yield y) override;
   virtual bool placement_rules_match(rgw_placement_rule& r1, rgw_placement_rule& r2) override;
   virtual int dump_obj_layout(const DoutPrefixProvider *dpp, optional_yield y, Formatter* f) override;
   virtual int swift_versioning_restore(const ACLOwner& owner, const rgw_user& remote_user, bool& restored,

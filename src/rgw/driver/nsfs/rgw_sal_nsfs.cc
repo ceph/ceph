@@ -14070,6 +14070,52 @@ int NSFSObject::restore_obj_from_cloud(Bucket* bucket,
   return -ERR_NOT_IMPLEMENTED;
 }
 
+/* The time the demote wrote, in milliseconds since the epoch as NooBaa
+ * writes it, and where there is none or it does not parse, the version's
+ * own ctime -- NooBaa's `nc_noncurrent_time` (namespace_fs.js).  A
+ * successor's mtime is anyone's to set -- touch, cp -p, a restore from
+ * backup -- and one set into the past aged this version early;  a ctime
+ * cannot be set, and the demote's link set it.  None only where the
+ * version cannot be read:  lifecycle then falls back to the successor's
+ * mtime. */
+std::optional<ceph::real_time> NSFSObject::get_noncurrent_since(
+			const DoutPrefixProvider* dpp, optional_yield y)
+{
+  if (get_bucket() &&
+      driver->noncurrent_since_none_injected_for(get_bucket()->get_name())) {
+    driver->record_noncurrent_since_none();
+    return std::nullopt;
+  }
+  if (! state.has_attrs) {
+    const int ret = load_obj_state(dpp, y);
+    if (ret < 0) {
+      ldpp_dout_fmt(dpp, 10, "nsfs: {}: not read ({});  no non-current "
+			     "time", get_name(), cpp_strerror(-ret));
+      return std::nullopt;
+    }
+  }
+  bufferlist bl;
+  if (get_attr(RGW_NSFS_ATTR_NON_CURRENT_TS, bl)) {
+    const std::string s = bl.to_str();
+    int64_t ms = 0;
+    const auto [end, ec] = std::from_chars(s.data(), s.data() + s.size(), ms);
+    if ((ec == std::errc()) && (end == s.data() + s.size()) && (ms > 0)) {
+      return ceph::real_time(std::chrono::milliseconds(ms));
+    }
+    ldpp_dout_fmt(dpp, 1, "nsfs: {}: non-current timestamp {:?} does not "
+			  "parse;  aged by its ctime", get_name(), s);
+  }
+  if (! ent || ! (ent->get_stx().stx_mask & STATX_CTIME)) {
+    const int ret = stat(dpp);
+    if ((ret < 0) || ! ent || ! (ent->get_stx().stx_mask & STATX_CTIME)) {
+      ldpp_dout_fmt(dpp, 10, "nsfs: {}: no ctime;  no non-current time",
+			     get_name());
+      return std::nullopt;
+    }
+  }
+  return from_statx_timestamp(ent->get_stx().stx_ctime);
+}
+
 bool NSFSObject::placement_rules_match(rgw_placement_rule& r1, rgw_placement_rule& r2)
 {
   return (r1 == r2);
@@ -20327,6 +20373,35 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
     return 0;
   }
 
+  if (hint == "inject-noncurrent-since-none") {
+    /* no non-current time for one bucket's versions, so lifecycle ages
+     * them by their successor's mtime, as it did before
+     * get_noncurrent_since() */
+    auto it = params.find("enable");
+    auto b_it = params.find("bucket");
+    if ((it == params.end()) || (b_it == params.end()) ||
+	b_it->second.empty()) {
+      return -EINVAL;
+    }
+    const bool on = (it->second == "true");
+    {
+      std::lock_guard l{inject_noncurrent_since_none_lock};
+      if (on) {
+	inject_noncurrent_since_none_buckets.insert(b_it->second);
+      } else {
+	inject_noncurrent_since_none_buckets.erase(b_it->second);
+      }
+      inject_noncurrent_since_none_armed =
+	!inject_noncurrent_since_none_buckets.empty();
+    }
+    if (out) {
+      (*out)["enabled"] = on ? "true" : "false";
+      (*out)["bucket"] = b_it->second;
+      (*out)["fired"] = std::to_string(noncurrent_since_none_injected.load());
+    }
+    return 0;
+  }
+
   if (hint == "inject-attr-write-fail") {
     /* fail the attribute writes made after an object exists -- a
      * copy's version id, a delete marker's attributes, a multipart
@@ -20574,6 +20649,71 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
 	(*out)["uid"] = std::to_string(*uid);
       }
       (*out)["bucket_path"] = fd_path(bdir->get_fd());
+    }
+    return 0;
+  }
+
+  if (hint == "set-mtime") {
+    /* The current object's mtime, set `ago` seconds into the past, as
+     * touch -d, cp -p or a restore from backup sets it, for the suite's
+     * test that lifecycle does not age a noncurrent version by its
+     * successor's mtime.
+     *
+     *   bucket= key= ago=<seconds>   returns the mtime set, `mtime`, in
+     *                                seconds since the epoch
+     *
+     * As the gateway, and with CAP_FOWNER where that fails:  the file
+     * may be the authenticated user's. */
+    auto bk = params.find("bucket");
+    auto ky = params.find("key");
+    auto ag = params.find("ago");
+    if ((bk == params.end()) || (ky == params.end()) ||
+	(ag == params.end()) || bk->second.empty() || ky->second.empty()) {
+      return -EINVAL;
+    }
+    int64_t ago = 0;
+    const auto& as = ag->second;
+    const auto [end, ec] = std::from_chars(as.data(), as.data() + as.size(),
+					   ago);
+    if ((ec != std::errc()) || (end != as.data() + as.size()) || (ago < 0)) {
+      return -EINVAL;
+    }
+
+    std::unique_ptr<rgw::sal::Bucket> loaded;
+    int ret = load_bucket_internal(dpp, rgw_bucket{"", bk->second}, &loaded,
+				   null_yield);
+    if (ret < 0) {
+      return ret;
+    }
+    auto obj = loaded->get_object(rgw_obj_key(ky->second));
+    auto* nobj = static_cast<NSFSObject*>(obj.get());
+    std::vector<std::unique_ptr<nsfs::Directory>> chain;
+    nsfs::Directory* dir{nullptr};
+    std::string leaf;
+    ret = nobj->resolve_parent_dir(dpp, /*create_dirs=*/false, chain, dir,
+				   leaf);
+    if (ret < 0) {
+      return ret;
+    }
+    if ((dir->get_fd() < 0) && ((ret = dir->open(dpp)) < 0)) {
+      return ret;
+    }
+    const int dfd = dir->get_fd();
+    const time_t when = ::time(nullptr) - ago;
+    const struct timespec ts[2] = {{when, 0}, {when, 0}};
+    auto set = [&]() -> int {
+      return (::utimensat(dfd, leaf.c_str(), ts, AT_SYMLINK_NOFOLLOW) < 0)
+	? -errno : 0;
+    };
+    ret = set();
+    if (ret == -EPERM) {
+      ret = nsfs::with_capabilities(dpp, nsfs::cap_bit(CAP_FOWNER), set);
+    }
+    if (ret < 0) {
+      return ret;
+    }
+    if (out) {
+      (*out)["mtime"] = std::to_string(when);
     }
     return 0;
   }
