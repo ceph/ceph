@@ -28,6 +28,8 @@ macro(build_spdk)
   if(CMAKE_SYSTEM_PROCESSOR MATCHES "amd64|x86_64|AMD64")
     # a safer option than relying on the build host's arch
     set(target_arch core2)
+  elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64|arm64")
+    set(target_arch armv8-a)
   else()
     # default arch used by SPDK
     set(target_arch native)
