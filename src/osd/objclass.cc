@@ -10,6 +10,7 @@
 
 #include "objclass/objclass.h"
 #include "osd/PrimaryLogPG.h"
+#include "osd/OmapGetValues.h"
 
 #include "osd/ClassHandler.h"
 
@@ -406,25 +407,15 @@ int cls_cxx_map_get_vals(cls_method_context_t hctx, const string &start_obj,
   PrimaryLogPG::OpContext **pctx = (PrimaryLogPG::OpContext **)hctx;
   vector<OSDOp> ops(1);
   OSDOp& op = ops[0];
-  int ret;
-
-  encode(start_obj, op.indata);
-  encode(max_to_get, op.indata);
-  encode(filter_prefix, op.indata);
-
+  ceph::osd::OmapGetValues query(start_obj, filter_prefix, max_to_get);
   op.op.op = CEPH_OSD_OP_OMAPGETVALS;
-  
-  ret = (*pctx)->pg->do_osd_ops(*pctx, ops);
-  if (ret < 0)
-    return ret;
 
-  auto iter = op.outdata.cbegin();
-  try {
-    decode(*vals, iter);
-    decode(*more, iter);
-  } catch (ceph::buffer::error& err) {
-    return -EIO;
+  const int ret = (*pctx)->pg->do_osd_ops(*pctx, ops, &query);
+  if (ret < 0) {
+    return ret;
   }
+  vals->swap(query.values);
+  *more = query.more;
   return vals->size();
 }
 

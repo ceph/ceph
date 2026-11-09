@@ -600,7 +600,14 @@ OpsExecuter::list_snaps_iertr::future<> OpsExecuter::do_list_snaps(
 OpsExecuter::interruptible_errorated_future<OpsExecuter::osd_op_errorator>
 OpsExecuter::execute_op(OSDOp& osd_op)
 {
-  return do_execute_op(osd_op).handle_error_interruptible(
+  return execute_op(osd_op, nullptr);
+}
+
+OpsExecuter::interruptible_errorated_future<OpsExecuter::osd_op_errorator>
+OpsExecuter::execute_op(OSDOp& osd_op, ceph::osd::OmapGetValues *omap_read)
+{
+  ceph_assert(!omap_read || osd_op.op.op == CEPH_OSD_OP_OMAPGETVALS);
+  return do_execute_op(osd_op, omap_read).handle_error_interruptible(
     osd_op_errorator::all_same_way([&osd_op](auto e, auto&& e_raw)
       -> OpsExecuter::osd_op_errorator::future<> {
         // All ops except for CMPEXT should have rval set to -e.value(),
@@ -618,7 +625,8 @@ OpsExecuter::execute_op(OSDOp& osd_op)
 }
 
 OpsExecuter::interruptible_errorated_future<OpsExecuter::osd_op_errorator>
-OpsExecuter::do_execute_op_remote_full_checked(OSDOp& osd_op)
+OpsExecuter::do_execute_op_remote_full_checked(
+  OSDOp& osd_op, ceph::osd::OmapGetValues *omap_read)
 {
   // This reactor does not host the SeaStore shard. Asking it locally hits
   // an inactive shard and aborts in get_sharded_store(). Query the reactor
@@ -632,11 +640,11 @@ OpsExecuter::do_execute_op_remote_full_checked(OSDOp& osd_op)
       crimson::ct_error::eagain::make());
     co_return;
   }
-  co_await do_execute_op_body(osd_op);
+  co_await do_execute_op_body(osd_op, omap_read);
 }
 
 OpsExecuter::interruptible_errorated_future<OpsExecuter::osd_op_errorator>
-OpsExecuter::do_execute_op(OSDOp& osd_op)
+OpsExecuter::do_execute_op(OSDOp& osd_op, ceph::osd::OmapGetValues *omap_read)
 {
   // TODO: dispatch via call table?
   // TODO: we might want to find a way to unify both input and output
@@ -667,14 +675,14 @@ OpsExecuter::do_execute_op(OSDOp& osd_op)
         return crimson::ct_error::eagain::make();
       }
     } else {
-      return do_execute_op_remote_full_checked(osd_op);
+      return do_execute_op_remote_full_checked(osd_op, omap_read);
     }
   }
-  return do_execute_op_body(osd_op);
+  return do_execute_op_body(osd_op, omap_read);
 }
 
 OpsExecuter::interruptible_errorated_future<OpsExecuter::osd_op_errorator>
-OpsExecuter::do_execute_op_body(OSDOp& osd_op)
+OpsExecuter::do_execute_op_body(OSDOp& osd_op, ceph::osd::OmapGetValues *omap_read)
 {
   switch (const ceph_osd_op& op = osd_op.op; op.op) {
 
@@ -830,8 +838,8 @@ OpsExecuter::do_execute_op_body(OSDOp& osd_op)
       return backend.omap_get_keys(os, osd_op, delta_stats);
     });
   case CEPH_OSD_OP_OMAPGETVALS:
-    return do_read_op([this, &osd_op](auto& backend, const auto& os) {
-      return backend.omap_get_vals(os, osd_op, delta_stats);
+    return do_read_op([this, &osd_op, omap_read](auto& backend, const auto& os) {
+      return backend.omap_get_vals(os, osd_op, delta_stats, omap_read);
     });
   case CEPH_OSD_OP_OMAP_CMP:
     return  do_read_op([this, &osd_op](auto& backend, const auto& os) {
