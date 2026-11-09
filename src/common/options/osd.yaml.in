@@ -90,6 +90,14 @@ options:
     to a full OSD)
   fmt_desc: The number of seconds to wait before retrying pool migration requests.
   default: 30
+- name: osd_space_aware_backfill_priority
+  type: bool
+  level: advanced
+  desc: Add space-usage based priority boost to backfill priority. The more the reduction
+        of the OSD disk space usage caused by the PG's backfill, the higher the priority
+        boost is. The sum of the backfill priority and its boost should never be larger
+        than OSD_BACKFILL_DEGRADED_PRIORITY_BASE
+  default: true
 - name: osd_backfill_retry_interval
   type: float
   level: advanced
