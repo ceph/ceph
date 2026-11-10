@@ -1,68 +1,136 @@
 .. _pgcalc:
 
-  
 =======
 PG Calc
 =======
 
+The PG calculator suggests a ``pg_num`` value for each pool. It works from
+the share of the data that the pool is expected to hold, the pool's size or
+erasure-code profile, the number of OSDs that the pool uses, and a target
+number of PGs per OSD.
+
+The :ref:`PG autoscaler <pg-autoscaler>` is on by default for new pools and
+adjusts ``pg_num`` as pools fill. Many clusters running recent releases do
+fine with the PG autoscaler once :confval:`mon_target_pg_per_osd` is raised to
+at least 200, which is its default beginning with the Umbrella release. This
+calculator is still useful for internalizing how these values interact, and
+where the PG autoscaler is infeasible or undesirable. To give the autoscaler
+the calculator's information instead, set each pool's ``target_size_ratio`` to
+its %Data. Leave it unset for CephFS metadata and RGW index pools, which the
+autoscaler already weights more heavily.
+
+Using the calculator
+====================
+
+#. Choose a use case. Each one fills the table with typical pools.
+#. Choose the failure domain and CRUSH root for the CRUSH rules and
+   erasure-code profiles that the generated commands create.
+#. Adjust each pool: its application, whether it is replicated or erasure
+   coded, its size or *k* and *m*, and the remaining values. Click the Size,
+   OSD #, or Target PGs per OSD heading to set that value for every pool.
+#. Click **Add pool** to add a pool, and the × at the start of a row to remove
+   one.
+#. Click **Generate commands** for commands that create the pools.
 
 .. raw:: html
 
+   <div id="pgcalc-root"></div>
+   <script src="../../../_static/js/pgcalc.js"></script>
 
-   <link rel="stylesheet" id="wp-job-manager-job-listings-css" href="https://web.archive.org/web/20230614135557cs_/https://old.ceph.com/wp-content/plugins/wp-job-manager/assets/dist/css/job-listings.css" type="text/css" media="all"/>
-   <link rel="stylesheet" id="ceph/googlefont-css" href="https://web.archive.org/web/20230614135557cs_/https://fonts.googleapis.com/css?family=Raleway%3A300%2C400%2C700&amp;ver=5.7.2" type="text/css" media="all"/>
-   <link rel="stylesheet" id="Stylesheet-css" href="https://web.archive.org/web/20230614135557cs_/https://old.ceph.com/wp-content/themes/cephTheme/Resources/Styles/style.min.css" type="text/css" media="all"/>
-   <link rel="stylesheet" id="tablepress-default-css" href="https://web.archive.org/web/20230614135557cs_/https://old.ceph.com/wp-content/plugins/tablepress/css/default.min.css" type="text/css" media="all"/>
-   <link rel="stylesheet" id="jetpack_css-css" href="https://web.archive.org/web/20230614135557cs_/https://old.ceph.com/wp-content/plugins/jetpack/css/jetpack.css" type="text/css" media="all"/>
-   <script type="text/javascript" src="https://web.archive.org/web/20230614135557js_/https://old.ceph.com/wp-content/themes/cephTheme/foundation_framework/js/vendor/jquery.js" id="jquery-js"></script>
+Fields
+======
 
-   <link rel="stylesheet" href="https://web.archive.org/web/20230614135557cs_/https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.2/themes/smoothness/jquery-ui.css"/>
-   <link rel="stylesheet" href="https://web.archive.org/web/20230614135557cs_/https://old.ceph.com/pgcalc_assets/pgcalc.css"/>
-   <script src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.2/jquery-ui.min.js"></script>
+Failure domain and CRUSH root
+   The CRUSH bucket type that each PG spreads its shards across,
+   and the CRUSH root to choose them from. These go into the CRUSH rules and
+   erasure-code profiles in the generated commands.
 
-        <script src="../../../_static/js/pgcalc.js"></script>
-        	<div id="pgcalcdiv">
-                <div id="instructions">
-                <h2>Ceph PGs per Pool Calculator</h2><br/><fieldset><legend>Instructions</legend>
-                <ol>
-                        <li>Confirm your understanding of the fields by reading through the Key below.</li>
-                        <li>Select a <b>"Ceph Use Case"</b> from the drop down menu.</li>
-                        <li>Adjust the values in the <span class="inputColor addBorder" style="font-weight: bold;">"Green"</span> shaded fields below.<br/>
-                                <b>Tip:</b> Headers can be clicked to change the value throughout the table.</li>
-                        <li>You will see the Suggested PG Count update based on your inputs.</li>
-                        <li>Click the <b>"Add Pool"</b> button to create a new line for a new pool.</li>
-                        <li>Click the <span class="ui-icon ui-icon-trash" style="display:inline-block;"></span> icon to delete the specific Pool.</li>
-                        <li>For more details on the logic used and some important details, see the area below the table.</li>
-                        <li>Once all values have been adjusted, click the <b>"Generate Commands"</b> button to get the pool creation commands.</li>
-                </ol></fieldset>
-                </div>
-                <div id="beforeTable"></div>
-                <br/>
-                <p class="validateTips">&nbsp;</p>
-                <label for="presetType">Ceph Use Case Selector:</label><br/><select id="presetType"></select><button style="margin-left: 200px;" id="btnAddPool" type="button">Add Pool</button><button type="button" id="btnGenCommands" download="commands.txt">Generate Commands</button>
-                <div id="pgsPerPoolTable">
-                        <table id="pgsperpool">
-                        </table>
-                </div> <!-- id = pgsPerPoolTable -->
-                <br/>
-                <div id="afterTable"></div>
-                <div id="countLogic"><fieldset><legend>Logic behind Suggested PG Count</legend>
-                        <br/>
-                        <div class="upperFormula">( Target PGs per OSD ) x ( OSD # ) x ( %Data )</div>
-                        <div class="lowerFormula">( Size )</div>
-                        <ol id="countLogicList">
-                                <li>If the value of the above calculation is less than the value of <b>( OSD# ) / ( Size )</b>, then the value is updated to the value of <b>( OSD# ) / ( Size )</b>.  This is to ensure even load / data distribution by allocating at least one Primary or Secondary PG to every OSD for every Pool.</li>
-                                <li>The output value is then rounded to the <b>nearest power of 2</b>.<br/><b>Tip:</b> The nearest power of 2 provides a marginal improvement in efficiency of the <a href="https://web.archive.org/web/20230614135557/http://ceph.com/docs/master/rados/operations/crush-map/" title="CRUSH Map Details">CRUSH</a> algorithm.</li>
-                                <li>If the nearest power of 2 is more than <b>25%</b> below the original value, the next higher power of 2 is used.</li>
-                        </ol>
-                        <b>Objective</b>
-                        <ul><li>The objective of this calculation and the target ranges noted in the &quot;Key&quot; section above are to ensure that there are sufficient Placement Groups for even data distribution throughout the cluster, while not going high enough on the PG per OSD ratio to cause problems during Recovery and/or Backfill operations.</li></ul>
-                        <b>Effects of empty or non-active pools:</b>
-                        <ul>
-                                <li>Empty or otherwise non-active pools should not be considered helpful toward even data distribution throughout the cluster.</li>
-                                <li>However, the PGs associated with these empty / non-active pools still consume memory and CPU overhead.</li>
-                        </ul>
-                </fieldset>
-                </div>
-                <div id="commands" title="Pool Creation Commands"><code><pre id="commandCode"></pre></code></div>
-                </div>
+Pool name
+   The name of the pool. The use cases give the usual names.
+
+Application
+   The application that uses the pool: ``rbd``, ``rgw``, ``cephfs``, or a
+   name of your own for a pool that is accessed directly through librados.
+
+Type
+   Replicated or erasure coded. The calculator warns when an RGW index or
+   metadata pool, or a CephFS metadata pool, is erasure coded: a future release
+   may support this, but most deployments should stick with replication.
+
+Size or k + m
+   The number of replicas of a replicated pool, or the *k* data chunks and *m*
+   coding chunks of an erasure-coded pool, where *k* is at least 2 and *m* at
+   least 1. The calculation uses *k+m*. The
+   calculator marks a pool amber when it has fewer than three replicas, or
+   *m=1*: expect data unavailability during maintenance and data loss when
+   component failures overlap. See :ref:`ecpool` for more about *m=1*. It
+   also warns when *k* is above 8, which slows writes and rebuilds while each
+   step up in *k* saves less space than the last.
+
+OSD #
+   The number of OSDs that hold the pool's PGs. This is usually every OSD in
+   the cluster, but it is fewer when the pool's CRUSH rule selects a subset of
+   them, for example a device class. Each PG puts each of its shards on its
+   own OSD, in its own failure domain, so the calculator marks a pool red when
+   OSD # is less than its size or *k+m*, and leaves it out of the generated
+   commands.
+
+%Data
+   The share of the data on those OSDs that the pool is expected to hold. The
+   use cases give examples.
+
+Target PGs per OSD
+   200 suits most clusters. Beginning with the Umbrella release, it is the
+   default value of :confval:`mon_target_pg_per_osd`, the number of PG
+   replicas per OSD that the PG autoscaler aims for. Use 300 if the number of
+   OSDs is expected to grow, by up to double, in the foreseeable future. The
+   monitors refuse to create pools or to raise ``pg_num`` past
+   :confval:`mon_max_pg_per_osd` PG replicas per OSD, which is 500 by default
+   beginning with the Umbrella release, and 250 in earlier releases.
+
+How the suggested PG count is calculated
+========================================
+
+#. The calculator starts from this value, rounded down to a whole number:
+
+   .. code-block:: none
+
+      (Target PGs per OSD) x (OSD #) x (%Data / 100) / (Size, or k+m)
+
+#. It rounds that value to the nearest power of two. If the nearest power of
+   two is more than 25% below the value, it uses the next higher power of two.
+#. The result is never less than a minimum that is meant to give every OSD at
+   least one PG of every pool. The minimum is (OSD #) / (Size, or k+m), rounded
+   down, plus one. It is rounded to a power of two in the same way, and
+   doubled if it is still less than OSD #.
+
+The aim is enough PGs to spread data evenly across the OSDs, without so many
+PGs per OSD that recovery and backfill suffer. Empty or idle pools don't help
+spread data, but their PGs still use memory and CPU. To see how much of the
+raw capacity a pool can use across its failure domains, see :ref:`fdcalc`.
+
+For simplicity, the calculator assumes that all of a pool's OSDs are the same
+size. CRUSH places PGs in proportion to OSD weight, so when OSD sizes vary,
+the number of PG replicas on each OSD varies with them, and the largest OSDs
+hold the most. Set :confval:`mon_max_pg_per_osd` generously enough to allow
+for them: an OSD refuses to create PGs beyond
+:confval:`osd_max_pg_per_osd_hard_ratio` (3 by default) times that value.
+
+The generated commands
+======================
+
+The commands create, in order:
+
+- A replicated CRUSH rule, and an erasure-code profile and CRUSH rule for each
+  *k* and *m* in the table, all with the chosen failure domain and CRUSH root.
+- Each pool, with its suggested ``pg_num`` and its CRUSH rule. A replicated
+  pool also gets its size.
+- ``allow_ec_overwrites`` on erasure-coded RBD and CephFS pools, which need
+  it.
+- The pool's application: ``rbd pool init`` for a replicated RBD pool, and
+  ``ceph osd pool application enable`` for the others.
+
+Review the commands before you run them. The PG autoscaler may change these
+``pg_num`` values later unless you set each pool's ``pg_autoscale_mode`` to
+``off``. CephFS pools still need ``ceph fs new``, and an erasure-coded RBD pool
+holds image data only, with image metadata in a replicated pool.
