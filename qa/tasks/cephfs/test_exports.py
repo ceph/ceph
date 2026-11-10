@@ -613,12 +613,41 @@ done
         self.mount_a.setfattr("tree/a", "ceph.dir.pin", "1")
         self._wait_subtrees([("/tree/a", 1)], timeout=120, status=self.status, rank="all", path="/tree/a")
 
+    def test_ephemeral_pin_dist_tree_cache_drop(self):
+        """
+        That a rank keeps the dirfrags that the tree policy places on it when
+        trimming leaves them without entries in cache.  It used to hand them
+        back to the rank of the parent, which sent them straight back: under
+        cache pressure they went back and forth for as long as clients loaded
+        entries into them.
+        """
+
+        self._setup_big_dir(tree="tree")
+        self._wait_dist_stable("/tree/a/big", 3)
+
+        def placed():
+            return sorted((r, s['dir']['dirfrag'])
+                          for r in range(3)
+                          for s in self._get_subtrees(status=self.status, rank=r, path="/tree/a/big")
+                          if s['dir']['path'] == "/tree/a/big" and s['is_auth'] and
+                             s['distributed_ephemeral_pin'])
+        def exported():
+            return [self.perf_dump(rank=r, status=self.status)['mds']['exported'] for r in range(3)]
+
+        before = placed()
+        self.assertTrue(before)
+        self.mount_a.umount_wait() # release all caps
+        moves = exported()
+        self.fs.ranks_tell(["cache", "drop"], status=self.status)
+        # a few looks at the pins
+        time.sleep(30)
+        self.assertEqual(exported(), moves, "dirfrags moved after a cache drop")
+        self.assertEqual(placed(), before)
+
     def test_ephemeral_pin_dist_tree_failover(self):
         """
         That after an MDS failover the distributed dirfrags end up on the
-        same ranks as before.  (The restarted rank hands the imports it has
-        not loaded yet back to the inode's auth, like any empty import, and
-        the policy then moves them back.)
+        same ranks as before.
         """
 
         self._setup_big_dir(tree="tree")
