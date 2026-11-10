@@ -254,6 +254,9 @@ class Docs(BaseController):
                     'type': _type
                 },
             }
+            if isinstance(param.get('type'), list):  # e.g. [str]
+                res['schema'] = {'type': str(SchemaType.ARRAY),
+                                 'items': {'type': cls._type_to_str(param['type'][0])}}
             if param.get('description'):
                 res['description'] = param['description']
             if param['required']:

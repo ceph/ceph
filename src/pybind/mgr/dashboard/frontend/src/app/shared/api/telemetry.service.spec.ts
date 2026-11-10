@@ -26,9 +26,15 @@ describe('TelemetryService', () => {
     expect(service).toBeTruthy();
   });
 
-  it('should call getReport', () => {
-    service.getReport().subscribe();
-    const req = httpTesting.expectOne('api/telemetry/report');
+  it('should call getReport with the selected channels', () => {
+    service.getReport(['basic', 'crash']).subscribe();
+    const req = httpTesting.expectOne('api/telemetry/report?channels=basic&channels=crash');
+    expect(req.request.method).toBe('GET');
+  });
+
+  it('should call getReport with an empty value if no channel is selected', () => {
+    service.getReport([]).subscribe();
+    const req = httpTesting.expectOne('api/telemetry/report?channels=');
     expect(req.request.method).toBe('GET');
   });
 
