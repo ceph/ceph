@@ -829,6 +829,104 @@ ln dir_1/original dir_2/linkto
             timeout=60
         )
 
+    def test_reintegration_forwarded(self):
+        """
+        That when the rename that reintegrates a stray is forwarded, the mds
+        gets -EAGAIN back and lets go of the stray, so a later metadata
+        operation can reintegrate it.
+
+        Tracker: https://tracker.ceph.com/issues/83476
+        """
+
+        self.mount_a.run_shell_payload("""
+mkdir dir_1
+touch dir_1/file_a
+ln dir_1/file_a dir_1/file_b
+""")
+
+        # The mds sends the rename that reintegrates the stray to itself,
+        # since it is auth for the remaining link. It forwards it instead of
+        # doing it, as if dir_1 had been exported in between. A forward drops
+        # a request from an mds, so only the -EAGAIN reply lets go of it.
+        self.fs.mds_asok(['config', 'set', 'mds_inject_rename_forward', 'true'])
+
+        # mds reintegrates the stray when the unlink finishes
+        self.mount_a.run_shell(["rm", "-f", "dir_1/file_a"])
+        self.wait_until_true(
+            lambda: self.get_mdc_stat("strays_reintegrated") >= 1,
+            timeout=60)
+        time.sleep(5)
+        self.assertEqual(self.get_mdc_stat("num_strays"), 1)
+        self.fs.mds_asok(['config', 'set', 'mds_inject_rename_forward', 'false'])
+
+        # A metadata operation on the remaining link reintegrates the stray,
+        # unless the forwarded request still holds it
+        self.mount_a.run_shell(["mv", "dir_1/file_b", "dir_1/file_c"])
+        self.wait_until_equal(
+            lambda: self.get_mdc_stat("num_strays"),
+            expect_val=0,
+            timeout=60
+        )
+
+    def test_migration_on_shutdown_target_forwards(self):
+        """
+        That when mds.0 forwards a stray migration from a stopping rank, the
+        stopping rank migrates the stray again, and finishes stopping once
+        mds.0 takes the rename. mds.0 is always auth for the destination, its
+        own stray directory, so only the injection makes it forward; this
+        covers the stopping rank's retry on -EAGAIN.
+
+        Tracker: https://tracker.ceph.com/issues/83476
+        """
+
+        rank_0_id, rank_1_id = self._setup_two_ranks()
+
+        # Create a non-purgeable stray in a ~mds1 stray directory
+        # by doing a hard link and deleting the original file
+        self.mount_a.run_shell_payload("""
+mkdir dir_1 dir_2
+touch dir_1/original
+ln dir_1/original dir_2/linkto
+""")
+
+        self._force_migrate("dir_1")
+        self._force_migrate("dir_2", rank=0)
+
+        # empty mds cache. otherwise mds reintegrates stray when unlink finishes
+        self.mount_a.umount_wait()
+        self.fs.mds_asok(['flush', 'journal'], mds_id=rank_1_id)
+        self.fs.mds_asok(['cache', 'drop'], mds_id=rank_1_id)
+
+        self.mount_a.mount_wait()
+        self.mount_a.run_shell(["rm", "-f", "dir_1/original"])
+        self.mount_a.umount_wait()
+
+        self._wait_for_counter("mds_cache", "strays_created", 1,
+                               mds_id=rank_1_id)
+
+        # mds.0 forwards the rename that migrates the stray, so it replies
+        # -EAGAIN instead of doing it
+        self.fs.mds_asok(['config', 'set', 'mds_inject_rename_forward', 'true'],
+                         mds_id=rank_0_id)
+
+        # Shut down rank 1. Each -EAGAIN makes it migrate the stray again.
+        # The retries don't wait and each one logs on both ranks, so turn the
+        # injection off as soon as rank 1 has retried.
+        self.fs.set_max_mds(1)
+        self.wait_until_true(
+            lambda: self.get_mdc_stat("strays_migrated", rank_1_id) >= 2,
+            timeout=60, period=1)
+        strays_created = self.get_mdc_stat("strays_created", rank_0_id)
+        self.fs.mds_asok(['config', 'set', 'mds_inject_rename_forward', 'false'],
+                         mds_id=rank_0_id)
+        self.assertEqual(strays_created, 0)
+
+        # Rank 1 must migrate the stray once more, or it stays in up:stopping
+        self.fs.wait_for_daemons(timeout=120)
+
+        # See that the stray reached rank 0
+        self.assertEqual(self.get_mdc_stat("strays_created", rank_0_id), 1)
+
     def test_migrate_unlinked_dir(self):
         """
         Reproduce https://tracker.ceph.com/issues/53597
