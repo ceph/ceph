@@ -13,6 +13,11 @@
 # INSTRUCTIONS FOR RUNNING
 # 
 # This script contains many tests.  They can be all be run together (in sequence) or run individually.
+# By default, the script runs common tests once, followed by dynamic and
+# static mode tests.
+# Use -g 1 for static mode only or -g 2 for dynamic mode only.
+# Static mode changes membership with group mirroring disabled.
+# Dynamic mode changes membership while group mirroring stays enabled.
 # To run all tests the script can be run without any arguments
 #
 #    ../qa/workunits/rbd/rbd_mirror_group_simple.sh 
@@ -29,6 +34,9 @@
 #  -s <scenario_number> scenario_number sets the number of the scenario to use for the specified test.  Each test has one or more scenarios
 #                       declared before the test function.  The declaration defines the argments that the test function is called with.
 #                       (only valid if -t attribute is also specified)   
+# For the four tests with mode scenarios, -s 1 selects static and -s 2 dynamic.
+# Other tests keep their own scenario numbering.
+#  -g <group_mode> 1 runs static mode, 2 runs dynamic mode. Default: both.
 #  -f <feature_set> feature_set is a number that defines the features to use when creating any images during the tests.
 #                   Default value is 0
 #                     0 - "layering,exclusive-lock,object-map,fast-diff,deep-flatten"
@@ -42,6 +50,9 @@
 
 export RBD_MIRROR_NOCLEANUP=1
 export RBD_MIRROR_TEMDIR=/tmp/tmp.rbd_mirror
+
+# The command-line mode selects test coverage independently of the environment.
+RBD_MIRROR_SUPPORT_DYNAMIC_GROUPS=1
 
 dynamic_groups_enabled()
 {
@@ -70,14 +81,21 @@ image_prefix=test-image
 image_multiplier=1
 repeat_count=1
 feature=0
+group_mode=both
 
-while getopts "d:f:m:pr:s:t:" opt; do
+while getopts ":d:f:g:m:pr:s:t:" opt; do
   case $opt in
     d)
       RBD_MIRROR_SAVE_CLI_OUTPUT=$OPTARG
       ;;
     f)
       feature=$OPTARG
+      ;;
+    g)
+      case "$OPTARG" in
+        1|2) group_mode=$OPTARG ;;
+        *) echo "Invalid group mode: $OPTARG. Use -g 1 for static or -g 2 for dynamic." >&2; exit 1 ;;
+      esac
       ;;
     m)
       image_multiplier=$OPTARG
@@ -105,6 +123,10 @@ while getopts "d:f:m:pr:s:t:" opt; do
   esac
 done
 
+if [ "$group_mode" = 1 ]; then
+  RBD_MIRROR_SUPPORT_DYNAMIC_GROUPS=0
+fi
+
 features=(
   "layering,exclusive-lock,object-map,fast-diff,deep-flatten"
   "layering,exclusive-lock,object-map,fast-diff" 
@@ -126,10 +148,12 @@ if [ "${RBD_MIRROR_PRINT_TESTS}" != 'true' ]; then
   echo "Scenario number: $scenario_number"
   echo "Test name: $test_name"
   echo "Features: $RBD_IMAGE_FEATURES"
-  if dynamic_groups_enabled; then
-    echo "Dynamic mirror groups: enabled"
+  if [ "$group_mode" = both ]; then
+    echo "Test modes: static and dynamic"
+  elif dynamic_groups_enabled; then
+    echo "Test mode: dynamic"
   else
-    echo "Dynamic mirror groups: disabled"
+    echo "Test mode: static"
   fi
 fi
 
@@ -1117,8 +1141,12 @@ test_mirrored_group_remove_all_images()
 
 # create group then enable mirroring before adding images to the group.
 declare -a test_create_group_mirror_then_add_images_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${group0}" "${image_prefix}" 5)
+declare -a test_create_group_mirror_then_add_images_2=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${group0}" "${image_prefix}" 5)
 
-test_create_group_mirror_then_add_images_scenarios=1
+# Scenario 1: static mode. Scenario 2: dynamic mode.
+test_create_group_mirror_then_add_images_1_group_mode=1
+test_create_group_mirror_then_add_images_2_group_mode=2
+test_create_group_mirror_then_add_images_scenarios=2
 
 # Test sequence:
 # 1. Enable an empty mirror group and copy a standalone image to the peer.
@@ -1932,12 +1960,18 @@ test_image_snapshots_with_group()
 
 # add a large image to group and test replay
 declare -a test_create_group_with_large_image_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${group0}" "${image_prefix}")
+declare -a test_create_group_with_large_image_2=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${group0}" "${image_prefix}")
 
-test_create_group_with_large_image_scenarios=1
+# Scenario 1: static mode. Scenario 2: dynamic mode.
+test_create_group_with_large_image_1_group_mode=1
+test_create_group_with_large_image_2_group_mode=2
+test_create_group_with_large_image_scenarios=2
 
 # Test sequence:
 # 1. Mirror a group containing a small image.
-# 2. Attach a 4 GiB image, write across it, and sync a group snapshot.
+# 2. Add a 4 GiB image, write across it, and sync a group snapshot.
+#   Static mode disables and re-enables mirroring around membership changes.
+#   Dynamic mode adds and removes the image while mirroring stays enabled.
 # Expected: Both secondary images match the primary data.
 test_create_group_with_large_image()
 {
@@ -2097,14 +2131,20 @@ test_create_group_with_multiple_images_do_io()
 
 # multiple images in group with io
 declare -a test_stopped_daemon_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${group0}" "${image_prefix}" 3)
+declare -a test_stopped_daemon_2=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${group0}" "${image_prefix}" 3)
 
-test_stopped_daemon_scenarios=1
+# Scenario 1: static mode. Scenario 2: dynamic mode.
+test_stopped_daemon_1_group_mode=1
+test_stopped_daemon_2_group_mode=2
+test_stopped_daemon_scenarios=2
 
 # Test sequence:
 # 1. Fully sync a mirrored group, then stop the secondary daemon.
-# 2. Queue snapshots, detach and reattach to the same group while its mirror
-#   snapshots remain, then restart the daemon and wait for sync.
-# 3. Detach again and disable the group while the daemon is stopped. Restart
+# 2. In dynamic mode, queue snapshots, detach and reattach to the same group
+#   while its mirror snapshots remain. In static mode, disable mirroring, add
+#   an image, and re-enable mirroring. Restart the daemon and wait for sync.
+# 3. Remove an image, then disable the group while the daemon is stopped.
+#   Static mode disables and re-enables mirroring around removal. Restart
 #   after each change and check membership and group removal.
 # Expected: Replay processes the saved snapshots in order and reaches the final
 #   membership.
@@ -2572,13 +2612,18 @@ test_create_multiple_groups_do_io()
 
 # mirror a group then remove an image from that group and add to a different mirrored group.
 declare -a test_image_move_group_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${image_prefix}" 5)
+declare -a test_image_move_group_2=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${image_prefix}" 5)
 
-test_image_move_group_scenarios=1
+# Scenario 1: static mode. Scenario 2: dynamic mode.
+test_image_move_group_1_group_mode=1
+test_image_move_group_2_group_mode=2
+test_image_move_group_scenarios=2
 
 # Test sequence:
-# 1. Mirror source and destination groups.
+# 1. Mirror the source group. In dynamic mode, also mirror destination groups.
 # 2. Move images between groups, including while the secondary is stopped.
-#   Retry attach after the old mirror snapshots are removed.
+#   Static mode disables and re-enables group mirroring around the moves.
+#   Dynamic mode retries attach after the old mirror snapshots are removed.
 # Expected: Each image has one group owner and the secondary reaches the
 #   expected membership.
 test_image_move_group()
@@ -2787,13 +2832,9 @@ declare -a test_force_promote_5=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${image
 declare -a test_force_promote_6=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${image_prefix}" 'image_rename' 5)
 declare -a test_force_promote_7=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${image_prefix}" 'no_change_primary_up' 5)
 
-# The image rename scenario remains disabled for an unrelated failure. Image
-# add and remove need dynamic membership support.
-if dynamic_groups_enabled; then
-  test_force_promote_scenarios='1 2 3 4 5 7'
-else
-  test_force_promote_scenarios='3 4 5 7'
-fi
+# The image rename scenario remains disabled for an unrelated failure.
+# Focused static runs skip image_add and image_remove inside the test.
+test_force_promote_scenarios='1 2 3 4 5 7'
 
 # Test sequence:
 # 1. Sync a group and save a complete rollback point.
@@ -4605,6 +4646,8 @@ test_rollback_after_add_image_scenarios='1 2'
 #   standalone copy. Verify standalone snapshot replay and data in both cases.
 test_rollback_after_add_image()
 {
+  skip_without_dynamic_groups "${FUNCNAME[0]}" && return 0
+
   local primary_cluster=$1 ; shift
   local secondary_cluster=$1 ; shift
   local pool=$1 ; shift
@@ -4910,46 +4953,48 @@ run_test_all_scenarios()
     working_test_scenarios=$2
   fi
 
-  local loop
+  local loop scenario_mode_var scenario_mode
   for loop in $working_test_scenarios; do
-    run_test "$test_name" "$loop"
+    scenario_mode_var="${test_name}_${loop}_group_mode"
+    scenario_mode=${!scenario_mode_var:-}
+    if [ -n "$scenario_mode" ]; then
+      if [ "$group_mode" != both ] && [ "$group_mode" != "$scenario_mode" ]; then
+        if [ "${RBD_MIRROR_PRINT_TESTS}" != true ]; then
+          echo "SKIP:${test_name} scenario ${loop} does not match -g ${group_mode}"
+        fi
+        continue
+      fi
+      # Each explicit mode scenario sets its own workflow for this call only.
+      RBD_MIRROR_SUPPORT_DYNAMIC_GROUPS=$((scenario_mode - 1)) run_test "$test_name" "$loop"
+    else
+      run_test "$test_name" "$loop"
+    fi
   done
 }
 
-# exercise all scenarios for all tests
+# Run common tests once, followed by tests for the selected modes.
 run_all_tests()
 {
+  local RBD_MIRROR_SUPPORT_DYNAMIC_GROUPS=$RBD_MIRROR_SUPPORT_DYNAMIC_GROUPS
+
+  echo "Core group mirroring behavior"
+  run_test_all_scenarios test_create_group_with_images_then_mirror
+  run_test_all_scenarios test_create_group_with_multiple_images_do_io
+  run_test_all_scenarios test_create_group_with_images_then_mirror_with_regular_snapshots
+  run_test_all_scenarios test_create_group_with_regular_snapshots_then_mirror
+  run_test_all_scenarios test_enable_disable_repeat
+
+  echo "Common group mirroring tests"
   run_test_all_scenarios test_empty_group
   run_test_all_scenarios test_empty_groups
   run_test_all_scenarios test_remove_non_existing_group
-  if dynamic_groups_enabled; then
-    run_test_all_scenarios test_mirrored_group_remove_all_images
-    run_test_all_scenarios test_mirrored_group_add_and_remove_images
-  else
-    echo "SKIP:dynamic mirror group removal tests"
-  fi
-  run_test_all_scenarios test_create_group_mirror_then_add_images
-  run_test_all_scenarios test_rollback_after_add_image
-  run_test_all_scenarios test_resync_after_standalone_attach
-  run_test_all_scenarios test_detach_with_user_group_snapshot
-  run_test_all_scenarios test_resync_after_standalone_detach
-  run_test_all_scenarios test_resync_after_incremental_attach
-  run_test_all_scenarios test_create_group_with_images_then_mirror
   # TODO: add the capabilty to have image from different pool in the mirror group
   run_test_all_scenarios test_images_different_pools
-  run_test_all_scenarios test_create_group_with_images_then_mirror_with_regular_snapshots
-  run_test_all_scenarios test_create_group_with_large_image
-  run_test_all_scenarios test_create_group_with_multiple_images_do_io
   run_test_all_scenarios test_mirror_group_snapshot_unlink_peer
   run_test_all_scenarios test_group_and_standalone_images_do_io
-  run_test_all_scenarios test_stopped_daemon
-  run_test_all_scenarios test_create_group_with_regular_snapshots_then_mirror
-  run_test_all_scenarios test_image_move_group
-  run_test_all_scenarios test_force_promote
   run_test_all_scenarios test_resync
   run_test_all_scenarios test_multiple_mirror_group_snapshot_whilst_stopped
   run_test_all_scenarios test_create_group_with_image_remove_then_repeat
-  run_test_all_scenarios test_enable_disable_repeat
   run_test_all_scenarios test_empty_group_omap_keys
   # TODO: add the capabilty to have clone images support in the mirror group
   run_test_all_scenarios test_group_with_clone_image
@@ -4961,8 +5006,6 @@ run_all_tests()
   run_test_all_scenarios test_force_promote_delete_group
   run_test_all_scenarios test_create_group_stop_daemon_then_recreate
   run_test_all_scenarios test_enable_mirroring_when_duplicate_group_exists
-  # TODO this next test is disabled as it fails with incorrect state/description in mirror group status - issue 50
-  #run_test_all_scenarios test_enable_mirroring_when_duplicate_image_exists
   run_test_all_scenarios test_odf_failover_failback
   run_test_all_scenarios test_resync_marker
   run_test_all_scenarios test_force_promote_before_initial_sync
@@ -4970,10 +5013,39 @@ run_all_tests()
   run_test_all_scenarios test_group_rename
   run_test_all_scenarios test_demote_snap_sync
   run_test_all_scenarios test_demote_snap_sync_after_restart
-  # TODO this test is disabled - policing is missing for actions against groups on the secondary - not MVP
-  #run_test_all_scenarios test_invalid_actions
   run_test_all_scenarios test_remote_namespace
   run_test_all_scenarios test_create_multiple_groups_do_io
+  run_test_all_scenarios test_force_promote "3 4 5 7"
+
+  if [ "$group_mode" != 1 ]; then
+    echo "Dynamic mode tests"
+    run_test_all_scenarios test_create_group_mirror_then_add_images 2
+    run_test_all_scenarios test_create_group_with_large_image 2
+    run_test_all_scenarios test_stopped_daemon 2
+    run_test_all_scenarios test_image_move_group 2
+    run_test_all_scenarios test_mirrored_group_add_and_remove_images
+    run_test_all_scenarios test_mirrored_group_remove_all_images
+    run_test_all_scenarios test_rollback_after_add_image
+    run_test_all_scenarios test_resync_after_standalone_attach
+    run_test_all_scenarios test_detach_with_user_group_snapshot
+    run_test_all_scenarios test_resync_after_standalone_detach
+    run_test_all_scenarios test_resync_after_incremental_attach
+    run_test_all_scenarios test_force_promote "1 2"
+  fi
+
+  if [ "$group_mode" != 2 ]; then
+    echo "Static mode tests"
+    RBD_MIRROR_SUPPORT_DYNAMIC_GROUPS=0
+    run_test_all_scenarios test_create_group_mirror_then_add_images 1
+    run_test_all_scenarios test_create_group_with_large_image 1
+    run_test_all_scenarios test_stopped_daemon 1
+    run_test_all_scenarios test_image_move_group 1
+  fi
+
+  # TODO this next test is disabled as it fails with incorrect state/description in mirror group status - issue 50
+  #run_test_all_scenarios test_enable_mirroring_when_duplicate_image_exists
+  # TODO this test is disabled - policing is missing for actions against groups on the secondary - not MVP
+  #run_test_all_scenarios test_invalid_actions
 }
 
 if [ -n "${RBD_MIRROR_HIDE_BASH_DEBUGGING}" ]; then
@@ -4990,11 +5062,16 @@ for loop in $(seq 1 "${repeat_count}"); do
     echo "run number ${loop} of ${repeat_count}"
   fi
   if [ -n "${test_name}" ]; then
-    if [ -n "${scenario_number}" ]; then
-      run_test_all_scenarios "${test_name}" "${scenario_number}"
+    if declare -p "${test_name}_1_group_mode" &>/dev/null; then
+      run_test_all_scenarios "$test_name" ${scenario_number:+"$scenario_number"}
     else
-      run_test_all_scenarios "${test_name}"
-    fi  
+      if [ "$group_mode" != 1 ]; then
+        RBD_MIRROR_SUPPORT_DYNAMIC_GROUPS=1 run_test_all_scenarios "$test_name" ${scenario_number:+"$scenario_number"}
+      fi
+      if [ "$group_mode" != 2 ]; then
+        RBD_MIRROR_SUPPORT_DYNAMIC_GROUPS=0 run_test_all_scenarios "$test_name" ${scenario_number:+"$scenario_number"}
+      fi
+    fi
   else
     run_all_tests
   fi
