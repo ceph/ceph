@@ -163,7 +163,7 @@ ceph_send_command(BaseMgrModule *self, PyObject *args, PyObject *kwargs)
   MonCommandCompletion *command_c = new MonCommandCompletion(self->py_modules,
       completion, tag, self->this_module->get_name(), PyThreadState_Get());
 
-  PyThreadState *tstate = PyEval_SaveThread();
+  without_gil_t no_gil;
 
   if (std::string(type) == "mon") {
 
@@ -195,7 +195,7 @@ ceph_send_command(BaseMgrModule *self, PyObject *args, PyObject *kwargs)
       delete command_c;
       string msg("invalid osd_id: ");
       msg.append("\"").append(name).append("\"");
-      PyEval_RestoreThread(tstate);
+      no_gil.acquire_gil();
       PyErr_SetString(PyExc_ValueError, msg.c_str());
       return nullptr;
     }
@@ -215,7 +215,7 @@ ceph_send_command(BaseMgrModule *self, PyObject *args, PyObject *kwargs)
   } else if (std::string(type) == "mds") {
     string msg("cannot send command to mds via this interface: ");
     msg.append(cpp_strerror(-ENOSYS));
-    PyEval_RestoreThread(tstate);
+    no_gil.acquire_gil();
     PyErr_SetString(PyExc_RuntimeError, msg.c_str());
     return nullptr;
   } else if (std::string(type) == "pg") {
@@ -224,7 +224,7 @@ ceph_send_command(BaseMgrModule *self, PyObject *args, PyObject *kwargs)
       delete command_c;
       string msg("invalid pgid: ");
       msg.append("\"").append(name).append("\"");
-      PyEval_RestoreThread(tstate);
+      no_gil.acquire_gil();
       PyErr_SetString(PyExc_ValueError, msg.c_str());
       return nullptr;
     }
@@ -241,18 +241,18 @@ ceph_send_command(BaseMgrModule *self, PyObject *args, PyObject *kwargs)
 	  command_c->outbl = std::move(bl);
 	  f->queue(command_c);
 	});
-    PyEval_RestoreThread(tstate);
+    no_gil.acquire_gil();
     return nullptr;
   } else {
     delete command_c;
     string msg("unknown service type: ");
     msg.append(type);
-    PyEval_RestoreThread(tstate);
+    no_gil.acquire_gil();
     PyErr_SetString(PyExc_ValueError, msg.c_str());
     return nullptr;
   }
 
-  PyEval_RestoreThread(tstate);
+  no_gil.acquire_gil();
   Py_RETURN_NONE;
 }
 
@@ -899,10 +899,10 @@ ceph_dispatch_remote(BaseMgrModule *self, PyObject *args)
 
   // Drop GIL from calling python thread state, it will be taken
   // both for checking for method existence and for executing method.
-  PyThreadState *tstate = PyEval_SaveThread();
+  without_gil_t no_gil;
 
   if (!self->py_modules->method_exists(other_module, method)) {
-    PyEval_RestoreThread(tstate);
+    no_gil.acquire_gil();
     PyErr_SetString(PyExc_NameError, "Method not found");
 
     Py_DECREF(pickled_args);
@@ -921,7 +921,7 @@ ceph_dispatch_remote(BaseMgrModule *self, PyObject *args)
       &err,
       &crash_dump);
 
-  PyEval_RestoreThread(tstate);
+  no_gil.acquire_gil();
 
   // we retain these references across the dispatch_remote call so that
   // we can pass string_view and avoid the copy
