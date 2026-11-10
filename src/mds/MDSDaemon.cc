@@ -1219,7 +1219,11 @@ void MDSDaemon::ms_handle_remote_reset(Connection *con)
   auto priv = con->get_priv();
   if (auto session = static_cast<Session *>(priv.get()); session) {
     if (session->is_closed()) {
-      dout(3) << "ms_handle_remote_reset closing connection for session " << session->info.inst << dendl;
+      // Level 1: this can tear down a socket the client has only just
+      // opened (the messenger reuses this Connection for it), which the
+      // client sees as another reset.  Rare; keep it visible.
+      dout(1) << "ms_handle_remote_reset closing connection for session " << session->info.inst
+	      << " con " << con << dendl;
       con->mark_down();
       con->set_priv(nullptr);
     }
