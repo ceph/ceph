@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <functional>
 #include <map>
+#include <mutex>
 #include <optional>
 #include <set>
 #include <utility>
@@ -34,7 +35,15 @@
  * attaches to its op replies an osd_core_hint_t: the core owning the
  * op's PG, and the port of that core's listener. The session opens a
  * connection to that port, on the OSD's address its main connection uses,
- * and sends the PG's ops on it, saving the OSD a cross-core hop per op.
+ * and, once it is connected, sends the PG's ops on it, saving the OSD a
+ * cross-core hop per op.
+ *
+ * Reachability: a lossy client connection that cannot connect (e.g. a
+ * firewall letting only the OSD's main ports through) is not reset by
+ * the messenger: it keeps retrying, holding the messages queued on it.
+ * So a PG is routed to a core connection only once its handshake
+ * completed (SessionRoutes::note_connected()). One not connected in time
+ * is given up on, and its host is blocked for a while (HostBlocks).
  *
  * Ordering: the OSD orders a client's ops per connection. A PG's route
  * changes only while none of its ops may still be on the way to the OSD
@@ -136,6 +145,7 @@ struct hint_outcome_t {
   enum class what_t {
     unchanged,  ///< the PG was hinted to this core already
     invalid,    ///< ignored: no port, or no OSD address to use it on
+    blocked,    ///< ignored: connecting to the core is not allowed now
     changed,    ///< the PG is hinted to a new core
   };
   what_t what = what_t::unchanged;
@@ -217,6 +227,9 @@ public:
   /// connections to the per-core listeners of the OSD, by core; in
   /// addition to the session's main connection
   std::map<uint32_t, ConnectionRef> core_cons;
+  /// the core connections not connected yet, since when. Their cores are
+  /// not routed to (see note_connected())
+  std::map<uint32_t, time_point> connecting;
   /// by PG
   std::map<spg_t, pg_route_t> pg_routes;
   /// by tid
@@ -237,23 +250,41 @@ public:
   /// the core connection a PG's ops should be sent on (nullopt: the main
   /// connection): the hinted core's, once connected to it
   std::optional<uint32_t> desired_core(const pg_route_t& route) const {
-    if (route.hinted_core && core_cons.contains(*route.hinted_core)) {
+    if (route.hinted_core && core_cons.contains(*route.hinted_core) &&
+        !connecting.contains(*route.hinted_core)) {
       return route.hinted_core;
     }
     return std::nullopt;
   }
 
-  /// note the core hint for pgid in an op reply. main_con: the session's
-  /// main connection, whose address (and OSD instance) the core's listener
-  /// is reached at, on the hinted port
+  /// whether a new core connection may be opened now; called only when
+  /// one would be
+  using may_connect_fn_t = std::function<bool()>;
+
+  /// note the core hinted for pgid in an op reply. main_con: the
+  /// session's main connection, whose address (and OSD instance) the
+  /// core's listener is reached at, on the hinted port. A hint asking for
+  /// a new connection that may_connect() refuses is not recorded: a later
+  /// one will ask again
   hint_outcome_t apply_hint(const spg_t& pgid,
                             const osd_core_hint_t& hint,
-                            const ConnectionRef& main_con);
+                            const ConnectionRef& main_con,
+                            const may_connect_fn_t& may_connect);
 
-  /// a connection was opened to the core, as apply_hint() asked
-  void add_core_con(uint32_t core, ConnectionRef con) {
+  /// a connection to the core was opened at 'now', as apply_hint() asked.
+  /// It is not routed to until connected
+  void add_core_con(uint32_t core, ConnectionRef con, time_point now) {
     core_cons[core] = std::move(con);
+    connecting[core] = now;
   }
+
+  /// c completed its handshake: if it is a core connection not connected
+  /// yet, its core may now be routed to. Returns that core
+  std::optional<uint32_t> note_connected(const ConnectionRef& c);
+
+  /// the core connections still not connected, opened before 'cutoff'
+  std::vector<std::pair<uint32_t, ConnectionRef>>
+  overdue_connects(time_point cutoff) const;
 
   // -- routing
 
@@ -343,6 +374,45 @@ private:
   /// forget the canceled ops matching pred; returns them
   template <typename Pred>
   forgotten_t forget_unanswered_if(Pred&& pred);
+};
+
+/**
+ * The hosts whose per-core listeners could not be connected to (e.g. a
+ * firewall letting only the OSD's main ports through), shared by all the
+ * sessions of an Objecter: no core connection is opened to them for a
+ * while, starting at initial_backoff and doubling, up to max_backoff, as
+ * long as they keep failing. A connection that does connect lifts the
+ * block. Thread safe.
+ */
+class HostBlocks {
+public:
+  static constexpr ceph::timespan initial_backoff = std::chrono::minutes(1);
+  static constexpr ceph::timespan max_backoff = std::chrono::hours(1);
+
+  /// the host of addr (port and nonce cleared), as blocked
+  static entity_addr_t host_of(const entity_addr_t& addr);
+
+  /// whether opening core connections to host is blocked at 'now'
+  bool is_blocked(const entity_addr_t& host, time_point now) const;
+
+  /// a core connection to host did not connect: block it. Returns for
+  /// how long
+  ceph::timespan block(const entity_addr_t& host, time_point now);
+
+  /// a core connection to host connected: lift its block, and reset its
+  /// backoff. Returns whether there was any
+  bool unblock(const entity_addr_t& host);
+
+private:
+  struct block_t {
+    time_point until;
+    ceph::timespan backoff;
+  };
+  mutable std::mutex lock;
+  /// expired blocks are kept, for their backoff
+  std::map<entity_addr_t, block_t> blocks;
+  /// blocks is not empty: lets the common case skip the lock
+  std::atomic<bool> any = false;
 };
 
 } // namespace osdc::core_route

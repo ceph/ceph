@@ -25,6 +25,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <type_traits>
 #include <variant>
 
@@ -1887,6 +1888,9 @@ private:
   /// per session: a stale timer event of a closed session must not match
   /// a hold of the OSD's next session
   std::atomic<uint64_t> last_hold_seq = 0;
+  /// the hosts to which no core connection is opened for now, a previous
+  /// one having failed to connect (objecter_use_osd_core_hints)
+  osdc::core_route::HostBlocks core_host_blocks;
 
   PerfCounters* logger = nullptr;
 
@@ -2877,6 +2881,14 @@ private:
   void release_drained_holds(OSDSession *s);
   /// the timer event ending a hold that did not drain in time
   void core_switch_hold_expired(int osd, spg_t pgid, uint64_t hold_seq);
+  /// con (of an OSD) connected: if it is a core connection, its core may
+  /// now be routed to. No lock is held
+  void handle_core_con_connect(Connection *con);
+  /// give up on the core connections (osd, core, connection) that did not
+  /// connect in time, and block their hosts (see core_host_blocks)
+  void _give_up_core_cons(
+    const std::vector<std::tuple<int, uint32_t, ConnectionRef>>& overdue,
+    std::unique_lock<ceph::shared_mutex>& wl);
   /// note the core hinted for pgid in an op reply from s, and connect to
   /// that core if not yet connected. s->lock is locked
   void _session_apply_core_hint(OSDSession *s,

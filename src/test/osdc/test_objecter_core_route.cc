@@ -53,6 +53,14 @@ protected:
   ConnectionRef core_con = make_con("v2:127.0.0.1:6810/1234");
   ConnectionRef other_con = make_con("v2:127.0.0.1:6811/1234");
 
+  /// allows connecting if 'connect_allowed', and counts its calls
+  bool connect_allowed = true;
+  unsigned may_connect_calls = 0;
+  SessionRoutes::may_connect_fn_t may_connect = [this] {
+    ++may_connect_calls;
+    return connect_allowed;
+  };
+
   /// prunes nothing (no canceled op is older), and counts its calls
   unsigned cutoff_calls = 0;
   SessionRoutes::cutoff_fn_t no_cutoff = [this] {
@@ -76,10 +84,17 @@ protected:
   /// pgid is hinted to 'core', and connected to it
   void hinted_and_connected(const spg_t& pgid = spg_t(pg_t(0, 1)))
   {
-    auto out = routes.apply_hint(pgid, hint(core), main_con);
+    auto out = routes.apply_hint(pgid, hint(core), main_con, may_connect);
     if (out.connect) {
-      routes.add_core_con(core, core_con);
+      connected(core, core_con);
     }
+  }
+
+  /// a connection to core c was opened, and connected
+  void connected(uint32_t c, const ConnectionRef& con)
+  {
+    routes.add_core_con(c, con, at(90));
+    ASSERT_EQ(std::optional<uint32_t>(c), routes.note_connected(con));
   }
 
   route_outcome_t route(op_route_t& op, int now, const spg_t* pgid = nullptr)
@@ -109,7 +124,7 @@ protected:
 
 TEST_F(SessionRoutesTest, CoreOfFindsOnlyCoreConnections)
 {
-  routes.add_core_con(core, core_con);
+  routes.add_core_con(core, core_con, at(100));
   EXPECT_EQ(std::optional<uint32_t>(core), routes.core_of(core_con));
   EXPECT_FALSE(routes.core_of(main_con));
   EXPECT_FALSE(routes.core_of(other_con));
@@ -117,7 +132,7 @@ TEST_F(SessionRoutesTest, CoreOfFindsOnlyCoreConnections)
 
 TEST_F(SessionRoutesTest, FirstHintAsksToConnect)
 {
-  auto out = routes.apply_hint(pg, hint(core), main_con);
+  auto out = routes.apply_hint(pg, hint(core), main_con, may_connect);
   EXPECT_EQ(hint_outcome_t::what_t::changed, out.what);
   EXPECT_FALSE(out.prev_core);
   EXPECT_TRUE(out.connect);
@@ -129,7 +144,7 @@ TEST_F(SessionRoutesTest, FirstHintAsksToConnect)
 TEST_F(SessionRoutesTest, SameHintIsUnchanged)
 {
   hinted_and_connected();
-  auto out = routes.apply_hint(pg, hint(core), main_con);
+  auto out = routes.apply_hint(pg, hint(core), main_con, may_connect);
   EXPECT_EQ(hint_outcome_t::what_t::unchanged, out.what);
   EXPECT_FALSE(out.connect);
 }
@@ -138,7 +153,7 @@ TEST_F(SessionRoutesTest, HintToAConnectedCoreDoesNotConnect)
 {
   hinted_and_connected();
   // another PG of the same core
-  auto out = routes.apply_hint(pg2, hint(core), main_con);
+  auto out = routes.apply_hint(pg2, hint(core), main_con, may_connect);
   EXPECT_EQ(hint_outcome_t::what_t::changed, out.what);
   EXPECT_FALSE(out.connect);
 }
@@ -147,7 +162,7 @@ TEST_F(SessionRoutesTest, NewHintReportsThePreviousCore)
 {
   hinted_and_connected();
   auto out = routes.apply_hint(
-    pg, hint(other_core, 6811), main_con);
+    pg, hint(other_core, 6811), main_con, may_connect);
   EXPECT_EQ(hint_outcome_t::what_t::changed, out.what);
   EXPECT_EQ(std::optional<uint32_t>(core), out.prev_core);
   EXPECT_TRUE(out.connect);
@@ -157,21 +172,105 @@ TEST_F(SessionRoutesTest, UnusableHintIsIgnored)
 {
   const auto invalid = hint_outcome_t::what_t::invalid;
   // no port
-  EXPECT_EQ(invalid, routes.apply_hint(pg, hint(core, 0), main_con).what);
+  EXPECT_EQ(invalid, routes.apply_hint(
+    pg, hint(core, 0), main_con, may_connect).what);
   // no main connection, whose address to use
-  EXPECT_EQ(invalid, routes.apply_hint(pg, hint(core), nullptr).what);
+  EXPECT_EQ(invalid, routes.apply_hint(pg, hint(core), nullptr, may_connect).what);
   // a main connection without a msgr2 address
   EXPECT_EQ(invalid, routes.apply_hint(
-    pg, hint(core), make_con("v1:127.0.0.1:6789/1234")).what);
+    pg, hint(core), make_con("v1:127.0.0.1:6789/1234"), may_connect).what);
   EXPECT_FALSE(route_of(pg).hinted_core);
+  EXPECT_EQ(0u, may_connect_calls);
 }
 
 TEST_F(SessionRoutesTest, DesiredCoreOnlyOnceConnected)
 {
-  routes.apply_hint(pg, hint(core), main_con);
+  routes.apply_hint(pg, hint(core), main_con, may_connect);
   EXPECT_FALSE(routes.desired_core(route_of(pg)));
-  routes.add_core_con(core, core_con);
+  // opened, but not connected yet
+  routes.add_core_con(core, core_con, at(100));
+  EXPECT_FALSE(routes.desired_core(route_of(pg)));
+  EXPECT_EQ(std::optional<uint32_t>(core), routes.note_connected(core_con));
   EXPECT_EQ(std::optional<uint32_t>(core), routes.desired_core(route_of(pg)));
+}
+
+TEST_F(SessionRoutesTest, PgStaysOnMainUntilTheCoreConnects)
+{
+  routes.apply_hint(pg, hint(core), main_con, may_connect);
+  routes.add_core_con(core, core_con, at(100));
+  op_route_t a;
+  // not even due to switch: the core may never connect
+  EXPECT_EQ(route_outcome_t::what_t::stayed, route(a, 101).what);
+  EXPECT_FALSE(a.core);
+  EXPECT_FALSE(route_of(pg).switch_pending_since);
+  routes.unroute(a);
+
+  routes.note_connected(core_con);
+  op_route_t b;
+  EXPECT_EQ(route_outcome_t::what_t::switched, route(b, 102).what);
+  EXPECT_EQ(std::optional<uint32_t>(core), b.core);
+}
+
+TEST_F(SessionRoutesTest, NoteConnectedOnlyOfConnectingCoreCons)
+{
+  EXPECT_FALSE(routes.note_connected(main_con));
+  routes.add_core_con(core, core_con, at(100));
+  EXPECT_EQ(std::optional<uint32_t>(core), routes.note_connected(core_con));
+  // connected already
+  EXPECT_FALSE(routes.note_connected(core_con));
+}
+
+TEST_F(SessionRoutesTest, OverdueConnects)
+{
+  routes.add_core_con(core, core_con, at(100));
+  connected(other_core, other_con);
+  EXPECT_TRUE(routes.overdue_connects(at(100)).empty());
+  auto overdue = routes.overdue_connects(at(111));
+  ASSERT_EQ(1u, overdue.size());
+  EXPECT_EQ(core, overdue.front().first);
+  EXPECT_EQ(core_con, overdue.front().second);
+
+  routes.note_connected(core_con);
+  EXPECT_TRUE(routes.overdue_connects(at(111)).empty());
+}
+
+TEST_F(SessionRoutesTest, ResetsForgetConnectingCons)
+{
+  routes.add_core_con(core, core_con, at(100));
+  routes.reset_core(core);
+  EXPECT_TRUE(routes.connecting.empty());
+  routes.add_core_con(core, core_con, at(100));
+  routes.reset_all();
+  EXPECT_TRUE(routes.connecting.empty());
+}
+
+TEST_F(SessionRoutesTest, BlockedHintIsNotRecorded)
+{
+  connect_allowed = false;
+  auto out = routes.apply_hint(pg, hint(core), main_con, may_connect);
+  EXPECT_EQ(hint_outcome_t::what_t::blocked, out.what);
+  EXPECT_FALSE(out.connect);
+  EXPECT_FALSE(route_of(pg).hinted_core);
+  EXPECT_EQ(1u, may_connect_calls);
+
+  // asked again on the next hint
+  connect_allowed = true;
+  out = routes.apply_hint(pg, hint(core), main_con, may_connect);
+  EXPECT_EQ(hint_outcome_t::what_t::changed, out.what);
+  EXPECT_TRUE(out.connect);
+  EXPECT_EQ(2u, may_connect_calls);
+}
+
+TEST_F(SessionRoutesTest, MayConnectAskedOnlyForNewConnections)
+{
+  hinted_and_connected();
+  ASSERT_EQ(1u, may_connect_calls);
+  connect_allowed = false;
+  // the same hint, and another PG of a connected core
+  routes.apply_hint(pg, hint(core), main_con, may_connect);
+  EXPECT_EQ(hint_outcome_t::what_t::changed,
+            routes.apply_hint(pg2, hint(core), main_con, may_connect).what);
+  EXPECT_EQ(1u, may_connect_calls);
 }
 
 // -- routing
@@ -504,8 +603,9 @@ TEST_F(SessionRoutesTest, CoreResetFallsBackToMain)
 TEST_F(SessionRoutesTest, CoreResetLeavesOtherCoresAlone)
 {
   hinted_and_connected();
-  routes.apply_hint(pg2, hint(other_core, 6811), main_con);
-  routes.add_core_con(other_core, other_con);
+  routes.apply_hint(pg2, hint(other_core, 6811), main_con,
+                    may_connect);
+  connected(other_core, other_con);
   op_route_t op;
   route(op, 100, &pg2);
 
@@ -519,7 +619,7 @@ TEST_F(SessionRoutesTest, ResetAllForgetsEverything)
 {
   op_route_t a;
   make_pending(a);
-  routes.add_core_con(other_core, other_con);
+  connected(other_core, other_con);
   routes.start_hold(pg, at(120), 42).hold_event = 7;
   routes.unroute(a);  // drained
   ASSERT_TRUE(routes.has_drained_holds);
@@ -551,4 +651,59 @@ TEST_F(SessionRoutesTest, CountSwitching)
   routes.start_hold(pg, at(120), 42);
   EXPECT_EQ(std::make_pair(uint64_t(1), uint64_t(0)),
             routes.count_switching());
+}
+
+// -- HostBlocks
+
+namespace {
+const entity_addr_t host1 = HostBlocks::host_of(addr("v2:10.0.0.1:6810/1234"));
+const entity_addr_t host2 = HostBlocks::host_of(addr("v2:10.0.0.2:6810/1234"));
+} // namespace
+
+TEST(HostBlocks, HostOfIgnoresPortAndNonce)
+{
+  EXPECT_EQ(host1, HostBlocks::host_of(addr("v2:10.0.0.1:6820/99")));
+  EXPECT_NE(host1, host2);
+}
+
+TEST(HostBlocks, NothingBlockedAtFirst)
+{
+  HostBlocks blocks;
+  EXPECT_FALSE(blocks.is_blocked(host1, at(100)));
+  EXPECT_FALSE(blocks.unblock(host1));
+}
+
+TEST(HostBlocks, BlockLastsItsBackoff)
+{
+  HostBlocks blocks;
+  EXPECT_EQ(HostBlocks::initial_backoff, blocks.block(host1, at(100)));
+  EXPECT_TRUE(blocks.is_blocked(host1, at(159)));
+  EXPECT_FALSE(blocks.is_blocked(host1, at(160)));
+  EXPECT_FALSE(blocks.is_blocked(host2, at(100)));
+}
+
+TEST(HostBlocks, RepeatedBlocksBackOff)
+{
+  HostBlocks blocks;
+  auto expected = HostBlocks::initial_backoff;
+  int now = 0;
+  for (int i = 0; i < 10; ++i) {
+    // each time after the previous block expired
+    EXPECT_EQ(expected, blocks.block(host1, at(now)));
+    now += std::chrono::duration_cast<std::chrono::seconds>(expected).count();
+    expected = std::min(expected * 2, HostBlocks::max_backoff);
+  }
+  EXPECT_EQ(HostBlocks::max_backoff, blocks.block(host1, at(now)));
+}
+
+TEST(HostBlocks, UnblockResetsTheBackoff)
+{
+  HostBlocks blocks;
+  blocks.block(host1, at(100));
+  blocks.block(host1, at(200));
+  blocks.block(host2, at(100));
+  EXPECT_TRUE(blocks.unblock(host1));
+  EXPECT_FALSE(blocks.is_blocked(host1, at(201)));
+  EXPECT_TRUE(blocks.is_blocked(host2, at(101)));
+  EXPECT_EQ(HostBlocks::initial_backoff, blocks.block(host1, at(300)));
 }

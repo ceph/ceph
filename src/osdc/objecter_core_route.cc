@@ -30,9 +30,32 @@ std::optional<uint32_t> SessionRoutes::core_of(const ConnectionRef& c) const
   return std::nullopt;
 }
 
+std::optional<uint32_t> SessionRoutes::note_connected(const ConnectionRef& c)
+{
+  const auto core = core_of(c);
+  if (!core || !connecting.erase(*core)) {
+    // the main connection, or connected already
+    return std::nullopt;
+  }
+  return core;
+}
+
+std::vector<std::pair<uint32_t, ConnectionRef>>
+SessionRoutes::overdue_connects(time_point cutoff) const
+{
+  std::vector<std::pair<uint32_t, ConnectionRef>> overdue;
+  for (const auto& [core, since] : connecting) {
+    if (since < cutoff) {
+      overdue.emplace_back(core, core_cons.at(core));
+    }
+  }
+  return overdue;
+}
+
 hint_outcome_t SessionRoutes::apply_hint(const spg_t& pgid,
                                          const osd_core_hint_t& hint,
-                                         const ConnectionRef& main_con)
+                                         const ConnectionRef& main_con,
+                                         const may_connect_fn_t& may_connect)
 {
   hint_outcome_t out;
   auto& route = pg_routes[pgid];
@@ -54,10 +77,15 @@ hint_outcome_t SessionRoutes::apply_hint(const spg_t& pgid,
   }
   out.addr.set_port(hint.port);
 
+  out.connect = !core_cons.contains(hint.core);
+  if (out.connect && !may_connect()) {
+    out.what = hint_outcome_t::what_t::blocked;
+    out.connect = false;
+    return out;
+  }
   out.what = hint_outcome_t::what_t::changed;
   out.prev_core = route.hinted_core;
   route.hinted_core = hint.core;
-  out.connect = !core_cons.contains(hint.core);
   return out;
 }
 
@@ -302,6 +330,7 @@ core_reset_t SessionRoutes::reset_core(uint32_t core)
   core_reset_t reset;
   reset.con = std::move(i->second);
   core_cons.erase(i);
+  connecting.erase(core);
 
   for (auto& [pgid, route] : pg_routes) {
     if (route.hinted_core != core && route.core != core) {
@@ -332,6 +361,7 @@ all_reset_t SessionRoutes::reset_all()
 {
   all_reset_t reset;
   reset.cons.swap(core_cons);
+  connecting.clear();
   for (auto& [pgid, route] : pg_routes) {
     route.hinted_core.reset();
     route.core.reset();
@@ -363,6 +393,51 @@ std::pair<uint64_t, uint64_t> SessionRoutes::count_switching() const
     }
   }
   return {holding, pending};
+}
+
+// -- HostBlocks
+
+entity_addr_t HostBlocks::host_of(const entity_addr_t& addr)
+{
+  auto host = addr;
+  host.set_port(0);
+  host.set_nonce(0);
+  return host;
+}
+
+bool HostBlocks::is_blocked(const entity_addr_t& host, time_point now) const
+{
+  if (!any) {
+    // the common case
+    return false;
+  }
+  std::lock_guard l{lock};
+  auto i = blocks.find(host);
+  return i != blocks.end() && now < i->second.until;
+}
+
+ceph::timespan HostBlocks::block(const entity_addr_t& host, time_point now)
+{
+  std::lock_guard l{lock};
+  auto [i, added] = blocks.try_emplace(host, block_t{now, initial_backoff});
+  auto& b = i->second;
+  if (!added) {
+    b.backoff = std::min(b.backoff * 2, max_backoff);
+  }
+  b.until = std::max<time_point>(b.until, now + b.backoff);
+  any = true;
+  return b.backoff;
+}
+
+bool HostBlocks::unblock(const entity_addr_t& host)
+{
+  if (!any) {
+    return false;
+  }
+  std::lock_guard l{lock};
+  const bool erased = blocks.erase(host) > 0;
+  any = !blocks.empty();
+  return erased;
 }
 
 } // namespace osdc::core_route

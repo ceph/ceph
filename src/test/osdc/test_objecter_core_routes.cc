@@ -278,6 +278,28 @@ TEST_F(TestObjecterCoreRoutes, IdlePgSwitches)
   EXPECT_EQ(0u, time_avg("core_switch_delay").first);
 }
 
+// a core connection is not routed to until it connects (see
+// Objecter::ms_handle_connect())
+TEST_F(TestObjecterCoreRoutes, NotRoutedUntilConnected)
+{
+  no_holds();
+  {
+    std::unique_lock l(session->lock);
+    session->core_routes.connecting[pg_core] = ceph::coarse_mono_clock::now();
+  }
+  auto a = submit();
+  reply(main_con, a);
+  auto b = submit();
+  EXPECT_EQ((tids_t{a, b}), main_con->tids());
+  EXPECT_EQ(0u, counter("op_send_switch_pending"));
+
+  objecter->ms_handle_connect(core_con.get());
+  reply(main_con, b);
+  auto c = submit();
+  EXPECT_EQ((tids_t{c}), core_con->tids());
+  EXPECT_EQ(1u, counter("core_route_switch"));
+}
+
 // a busy PG keeps its connection during the grace period, and switches
 // once its ops drain on their own
 TEST_F(TestObjecterCoreRoutes, BusyPgSwitchesWhenDrained)
