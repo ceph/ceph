@@ -475,6 +475,16 @@ public:
                          optional_yield y,
                          std::string_view tenant,
                          std::vector<RGWOIDCProviderInfo>& providers) override;
+  int load_ext_authz_config(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            RGWExtAuthzConfig& config,
+                            RGWObjVersionTracker* objv_tracker) override;
+  int store_ext_authz_config(const DoutPrefixProvider* dpp,
+                             optional_yield y,
+                             const RGWExtAuthzConfig& config,
+                             RGWObjVersionTracker* objv_tracker) override;
+  int delete_ext_authz_config(const DoutPrefixProvider* dpp,
+                              optional_yield y) override;
   virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,

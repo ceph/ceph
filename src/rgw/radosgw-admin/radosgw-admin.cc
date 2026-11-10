@@ -92,6 +92,7 @@ extern "C" {
 #include "rgw_data_access.h"
 #include "rgw_account.h"
 #include "rgw_oidc_provider.h"
+#include "rgw_ext_authz.h"
 #include "rgw_bucket_logging.h"
 #include "rgw_dedup_cluster.h"
 #include "rgw_dedup_filter.h"
@@ -343,6 +344,9 @@ void usage()
   cout << "  oidc-provider get                get an OIDC provider\n";
   cout << "  oidc-provider delete             delete an OIDC provider\n";
   cout << "  oidc-provider list               list OIDC providers\n";
+  cout << "  ext-authz set                    set the STS external authorizer config (requires infile)\n";
+  cout << "  ext-authz get                    show the STS external authorizer config\n";
+  cout << "  ext-authz rm                     remove the STS external authorizer config\n";
   cout << "  reshard add                      schedule a resharding of a bucket\n";
   cout << "  reshard list                     list all bucket resharding or scheduled to be resharded\n";
   cout << "  reshard status                   read bucket resharding status\n";
@@ -851,6 +855,9 @@ static SimpleCmd::Commands all_cmds = {
   { "oidc-provider get", OPT::OIDC_PROVIDER_GET },
   { "oidc-provider delete", OPT::OIDC_PROVIDER_DELETE },
   { "oidc-provider list", OPT::OIDC_PROVIDER_LIST },
+  { "ext-authz set", OPT::EXT_AUTHZ_SET },
+  { "ext-authz get", OPT::EXT_AUTHZ_GET },
+  { "ext-authz rm", OPT::EXT_AUTHZ_RM },
 #ifdef WITH_RADOSGW_RADOS
   { "reshard bucket", OPT::BUCKET_RESHARD },
   { "reshard add", OPT::RESHARD_ADD },
@@ -4539,6 +4546,7 @@ int main(int argc, const char **argv)
 			 OPT::ROLE_LIST,
 			 OPT::OIDC_PROVIDER_GET,
 			 OPT::OIDC_PROVIDER_LIST,
+			 OPT::EXT_AUTHZ_GET,
 			 OPT::ROLE_POLICY_LIST,
 			 OPT::ROLE_POLICY_GET,
 			 OPT::ROLE_POLICY_LIST_ATTACHED,
@@ -4659,6 +4667,9 @@ int main(int argc, const char **argv)
                           && opt_cmd != OPT::OIDC_PROVIDER_GET
                           && opt_cmd != OPT::OIDC_PROVIDER_DELETE
                           && opt_cmd != OPT::OIDC_PROVIDER_LIST
+                          && opt_cmd != OPT::EXT_AUTHZ_SET
+                          && opt_cmd != OPT::EXT_AUTHZ_GET
+                          && opt_cmd != OPT::EXT_AUTHZ_RM
 #ifdef WITH_RADOSGW_RADOS
                           && opt_cmd != OPT::RESHARD_ADD
                           && opt_cmd != OPT::RESHARD_CANCEL
@@ -6736,6 +6747,7 @@ int main(int argc, const char **argv)
                                         OPT::ROLE_CREATE, OPT::ROLE_DELETE,
                                         OPT::OIDC_PROVIDER_CREATE, OPT::OIDC_PROVIDER_MODIFY,
                                         OPT::OIDC_PROVIDER_DELETE,
+                                        OPT::EXT_AUTHZ_SET, OPT::EXT_AUTHZ_RM,
                                         OPT::ROLE_POLICY_PUT, OPT::ROLE_POLICY_DELETE,
                                         OPT::ROLE_POLICY_ATTACH, OPT::ROLE_POLICY_DETACH,
                                         OPT::USER_POLICY_ATTACH, OPT::USER_POLICY_DETACH,
@@ -7407,6 +7419,55 @@ int main(int argc, const char **argv)
       }
       formatter->close_section();
       formatter->flush(cout);
+      return 0;
+    }
+  case OPT::EXT_AUTHZ_SET:
+    {
+      if (infile.empty()) {
+        cerr << "ERROR: --infile with the json config is required" << std::endl;
+        return EINVAL;
+      }
+      RGWExtAuthzConfig config;
+      ret = read_decode_json(infile, config);
+      if (ret < 0) {
+        return -ret;
+      }
+      ret = rgw::ext_authz::store_config(dpp(), null_yield, driver, config);
+      if (ret < 0) {
+        cerr << "ERROR: failed to set the external authorizer config: "
+             << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+      formatter->open_object_section("ext_authz");
+      config.dump(formatter.get(), true); // never print the credential
+      formatter->close_section();
+      formatter->flush(cout);
+      return 0;
+    }
+  case OPT::EXT_AUTHZ_GET:
+    {
+      RGWExtAuthzConfig config;
+      ret = driver->load_ext_authz_config(dpp(), null_yield, config, nullptr);
+      if (ret < 0) {
+        cerr << "ERROR: failed to get the external authorizer config: "
+             << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+      formatter->open_object_section("ext_authz");
+      config.dump(formatter.get(), true); // never print the credential
+      formatter->close_section();
+      formatter->flush(cout);
+      return 0;
+    }
+  case OPT::EXT_AUTHZ_RM:
+    {
+      ret = driver->delete_ext_authz_config(dpp(), null_yield);
+      if (ret < 0) {
+        cerr << "ERROR: failed to remove the external authorizer config: "
+             << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+      cout << "external authorizer config successfully removed" << std::endl;
       return 0;
     }
   case OPT::ROLE_POLICY_PUT:

@@ -69,6 +69,12 @@ void add_rgw_frontend_counters(PerfCountersBuilder *pcb) {
   pcb->add_u64_counter(l_rgw_kms_error_transient, "kms_error_transient", "Transient (e.g., timeout, overloaded) errors returned from KMS");
   pcb->add_u64_counter(l_rgw_kms_error_secret_store, "kms_error_secret_store", "Secret store errors (e.g., kernel keyring quota)");
 
+  pcb->add_u64_counter(l_rgw_ext_authz_req, "ext_authz_req", "External authorizer requests");
+  pcb->add_u64_counter(l_rgw_ext_authz_allow, "ext_authz_allow", "External authorizer explicit Allow decisions");
+  pcb->add_u64_counter(l_rgw_ext_authz_deny, "ext_authz_deny", "External authorizer explicit Deny decisions");
+  pcb->add_u64_counter(l_rgw_ext_authz_error, "ext_authz_error", "External authorizer failures (timeouts, connectivity, invalid response, misconfiguration), denied");
+  pcb->add_time_avg(l_rgw_ext_authz_lat, "ext_authz_lat", "External authorizer request latency");
+
   pcb->add_u64(l_rgw_bucket_reshard_active,
                "bucket_reshard_active",
                "Number of active bucket reshards");

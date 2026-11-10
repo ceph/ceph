@@ -58,6 +58,12 @@ enum {
   l_rgw_kms_error_permanent,
   l_rgw_kms_error_secret_store,
 
+  l_rgw_ext_authz_req,
+  l_rgw_ext_authz_allow,
+  l_rgw_ext_authz_deny,
+  l_rgw_ext_authz_error,
+  l_rgw_ext_authz_lat,
+
   l_rgw_bucket_reshard_active,
   l_rgw_bucket_reshard_active_shard_count,
   l_rgw_bucket_reshard_ok,

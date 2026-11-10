@@ -143,6 +143,15 @@
   and such an image simply runs without a cache. Note that ``ceph config set
   ... rwl`` now fails, which may break automation.
 
+* RGW: ``AssumeRoleWithWebIdentity`` can now require an explicit Allow from an
+  external authorizer after the web identity token and the role's trust policy
+  have been checked. The first provider is ``ibm-iam``. It is off unless
+  configured with ``radosgw-admin ext-authz set`` or the Admin Ops API
+  ``/admin/ext-authz`` (new ``ext-authz`` user capability). The configuration
+  is zone-wide metadata and replicates to all zones. When enabled, a Deny,
+  timeout, error or malformed response from the authorizer denies the request.
+  See :ref:`radosgw-ext-authz`.
+
 >=21.0.0
 * CephFS: The ``fs subvolumegroup create`` command now supports the
   ``--namespace-isolated`` option. When a subvolume group is created with this flag,

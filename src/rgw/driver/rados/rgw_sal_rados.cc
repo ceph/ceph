@@ -91,7 +91,9 @@
 #include "buckets.h"
 #include "group.h"
 #include "groups.h"
+#include "ext_authz.h"
 #include "oidc.h"
+#include "rgw_ext_authz.h"
 #include "rgw_pubsub.h"
 #include "role.h"
 #include "roles.h"
@@ -2956,6 +2958,35 @@ int RadosStore::get_oidc_providers(const DoutPrefixProvider* dpp,
   return rgwrados::oidc::list(dpp, y, *svc()->sysobj,
                               *getRados()->get_rados_handle(),
                               zone, tenant, providers);
+}
+
+int RadosStore::load_ext_authz_config(const DoutPrefixProvider* dpp,
+                                      optional_yield y,
+                                      RGWExtAuthzConfig& config,
+                                      RGWObjVersionTracker* objv_tracker)
+{
+  const RGWZoneParams& zone = svc()->zone->get_zone_params();
+  return rgwrados::ext_authz::read(dpp, y, *svc()->sysobj, zone, config,
+                                   nullptr, objv_tracker);
+}
+
+int RadosStore::store_ext_authz_config(const DoutPrefixProvider* dpp,
+                                       optional_yield y,
+                                       const RGWExtAuthzConfig& config,
+                                       RGWObjVersionTracker* objv_tracker)
+{
+  const RGWZoneParams& zone = svc()->zone->get_zone_params();
+  return rgwrados::ext_authz::write(dpp, y, *svc()->sysobj, svc()->mdlog,
+                                    zone, config, ceph::real_clock::now(),
+                                    objv_tracker);
+}
+
+int RadosStore::delete_ext_authz_config(const DoutPrefixProvider* dpp,
+                                        optional_yield y)
+{
+  const RGWZoneParams& zone = svc()->zone->get_zone_params();
+  return rgwrados::ext_authz::remove(dpp, y, *svc()->sysobj, svc()->mdlog,
+                                     zone);
 }
 
 std::unique_ptr<Writer> RadosStore::get_append_writer(const DoutPrefixProvider *dpp,

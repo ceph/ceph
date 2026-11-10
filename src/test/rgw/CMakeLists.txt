@@ -150,6 +150,11 @@ add_executable(unittest_rgw_zone test_rgw_zone.cc)
 add_ceph_unittest(unittest_rgw_zone)
 target_link_libraries(unittest_rgw_zone ${rgw_libs})
 
+# unittest_rgw_ext_authz
+add_executable(unittest_rgw_ext_authz test_rgw_ext_authz.cc)
+add_ceph_unittest(unittest_rgw_ext_authz)
+target_link_libraries(unittest_rgw_ext_authz ${rgw_libs})
+
 # unittest_rgw_compression
 add_executable(unittest_rgw_compression
   test_rgw_compression.cc

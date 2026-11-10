@@ -50,6 +50,7 @@ struct rgw_pubsub_bucket_topics;
 class RGWZonePlacementInfo;
 struct rgw_pubsub_topic;
 struct RGWOIDCProviderInfo;
+struct RGWExtAuthzConfig;
 struct RGWRoleInfo;
 class RGWGetObj_Filter;
 
@@ -707,6 +708,26 @@ class Driver {
                                    optional_yield y,
                                    std::string_view tenant,
                                    std::vector<RGWOIDCProviderInfo>& providers) = 0;
+    /** Read the external authorizer config, -ENOENT if none is set. Drivers
+     * that do not support it return -ENOTSUP. */
+    virtual int load_ext_authz_config(const DoutPrefixProvider* dpp,
+                                      optional_yield y,
+                                      RGWExtAuthzConfig& config,
+                                      RGWObjVersionTracker* objv_tracker) {
+      return -ENOTSUP;
+    }
+    /** Write the external authorizer config */
+    virtual int store_ext_authz_config(const DoutPrefixProvider* dpp,
+                                       optional_yield y,
+                                       const RGWExtAuthzConfig& config,
+                                       RGWObjVersionTracker* objv_tracker) {
+      return -ENOTSUP;
+    }
+    /** Remove the external authorizer config */
+    virtual int delete_ext_authz_config(const DoutPrefixProvider* dpp,
+                                        optional_yield y) {
+      return -ENOTSUP;
+    }
     /** Get a Writer that appends to an object */
     virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
