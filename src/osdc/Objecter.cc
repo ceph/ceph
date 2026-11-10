@@ -2360,6 +2360,9 @@ void Objecter::_reset_core_con(OSDSession *s,
   for (auto event : reset.timer_events) {
     timer.cancel_event(event);
   }
+  // the backoffs that came on that connection went away with it on the
+  // OSD: no unblock will come. The ops they held are sent below too
+  const auto unblocked = _forget_backoffs_of(s, reset.con);
 
   // as in _kick_requests(), for the ops sent on that connection. All of
   // a PG's ops in flight were sent on the same connection, so resending
@@ -2377,6 +2380,15 @@ void Objecter::_reset_core_con(OSDSession *s,
 	} else {
 	  resend[op->tid] = op;
 	}
+      }
+      continue;
+    }
+    if (!op->core_route.is_routed()) {
+      // not sent: held by a backoff (if not paused). If it was one of the
+      // forgotten ones, nothing would send it otherwise. (If another
+      // backoff holds it, sending it holds it again.)
+      if (unblocked.contains(op->target.actual_pgid) && !op->target.paused) {
+	resend[op->tid] = op;
       }
       continue;
     }
@@ -2412,6 +2424,30 @@ void Objecter::_reset_core_con(OSDSession *s,
       lresend[linger_id] = info;
     }
   }
+}
+
+std::set<spg_t> Objecter::_forget_backoffs_of(OSDSession *s,
+					      const ConnectionRef& con)
+{
+  // s->lock is locked
+  std::set<spg_t> pgs;
+  for (auto p = s->backoffs.begin(); p != s->backoffs.end();) {
+    auto& by_begin = p->second;
+    for (auto q = by_begin.begin(); q != by_begin.end();) {
+      if (q->second.con != con) {
+	++q;
+	continue;
+      }
+      ldout(cct, 10) << __func__ << " osd." << s->osd << " pg " << p->first
+		     << " id " << q->second.id << " [" << q->second.begin
+		     << "," << q->second.end << ")" << dendl;
+      pgs.insert(p->first);
+      s->backoffs_by_id.erase(q->second.id);
+      q = by_begin.erase(q);
+    }
+    p = by_begin.empty() ? s->backoffs.erase(p) : std::next(p);
+  }
+  return pgs;
 }
 
 ConnectionRef Objecter::_op_route(Op *op)
@@ -5125,6 +5161,7 @@ void Objecter::handle_osd_backoff(cref_t<MOSDBackoff> m)
       b.id = m->id;
       b.begin = m->begin;
       b.end = m->end;
+      b.con = con;
 
       // ack with original backoff's epoch so that the osd can discard this if
       // there was a pg split.

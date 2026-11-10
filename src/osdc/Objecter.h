@@ -2601,6 +2601,9 @@ public:
     spg_t pgid;
     uint64_t id;
     hobject_t begin, end;
+    /// the connection it came on: the OSD keeps it in that connection's
+    /// session, so it goes away with it (see _forget_backoffs_of())
+    ConnectionRef con;
   };
 
   struct OSDSession : public RefCountedObject {
@@ -2838,6 +2841,10 @@ private:
   void _reset_core_con(OSDSession *s,
 		       uint32_t core,
 		       std::map<uint64_t, LingerOp *>& lresend);
+  /// forget the backoffs of s that came on con (which reset: the OSD
+  /// forgot them, and will not unblock them). Returns their PGs.
+  /// s->lock is locked
+  std::set<spg_t> _forget_backoffs_of(OSDSession *s, const ConnectionRef& con);
   /// choose the connection to send op on, and account for op as in flight
   /// on it; op->session->lock is locked
   ConnectionRef _op_route(Op *op);

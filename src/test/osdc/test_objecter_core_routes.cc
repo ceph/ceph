@@ -32,6 +32,7 @@
 #include "global/global_context.h"
 #include "include/rados.h"
 #include "messages/MOSDOp.h"
+#include "messages/MOSDBackoff.h"
 #include "messages/MOSDOpReply.h"
 #include "mon/MonClient.h"
 #include "msg/Messenger.h"
@@ -195,6 +196,19 @@ protected:
     poll();
   }
 
+  /// the OSD backs off the (whole) PG, on con
+  void backoff(const ceph::ref_t<RecordingConnection>& con)
+  {
+    const epoch_t epoch =
+      objecter->with_osdmap([](const OSDMap& m) { return m.get_epoch(); });
+    auto m = ceph::make_message<MOSDBackoff>(
+      spg_t(pgid), epoch, CEPH_OSD_BACKOFF_OP_BLOCK, 1,
+      hobject_t(), hobject_t::get_max());
+    m->set_connection(con);
+    objecter->ms_dispatch2(m);
+    poll();
+  }
+
   /// the PG is due to switch to pg_core, with tids in flight on the main
   /// connection. Returns the tids sent
   tids_t make_busy_pg()
@@ -299,6 +313,30 @@ TEST_F(TestObjecterCoreRoutes, NotRoutedUntilConnected)
   auto c = submit();
   EXPECT_EQ((tids_t{c}), core_con->tids());
   EXPECT_EQ(1u, counter("core_route_switch"));
+}
+
+// a backoff that came on a core connection goes away with it (the OSD
+// keeps it in that connection's session): the ops it held are resent
+TEST_F(TestObjecterCoreRoutes, BackoffGoesAwayWithItsConnection)
+{
+  no_holds();
+  auto a = submit();
+  reply(main_con, a);
+  auto b = submit();
+  ASSERT_EQ((tids_t{b}), core_con->tids());
+  backoff(core_con);
+  // held by the backoff: not sent
+  auto c = submit();
+  EXPECT_EQ((tids_t{b}), core_con->tids());
+  EXPECT_EQ((tids_t{a}), main_con->tids());
+
+  objecter->ms_handle_reset(core_con.get());
+  poll();
+  // b (in flight on it) and c (held) are sent on the main connection, in
+  // order; and c is no longer held
+  EXPECT_EQ((tids_t{a, b, c}), main_con->tids());
+  std::shared_lock l(session->lock);
+  EXPECT_TRUE(session->backoffs.empty());
 }
 
 // a busy PG keeps its connection during the grace period, and switches
