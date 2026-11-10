@@ -95,6 +95,20 @@ daemon for each zone.
 
 .. confval:: rgw_enable_lc_threads
 
+Each Ceph Object Gateway that runs lifecycle threads starts a lifecycle run
+once a day, at the start of the window set by
+:confval:`rgw_lifecycle_work_time`, in the host's local time. A run that is
+still going at the end of that window continues until it has processed every
+bucket.
+
+.. confval:: rgw_lifecycle_work_time
+
+In multisite deployments, beginning with the Quincy 17.2.8 and Reef releases,
+every zone processes lifecycle for the buckets that it holds. A zone adds a
+bucket to its lifecycle list when the bucket's lifecycle configuration syncs to
+it, so a zone that is promoted to master keeps processing. To check, run
+``radosgw-admin lc list`` in each zone.
+
 Garbage Collection Settings
 ===========================
 
