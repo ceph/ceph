@@ -684,6 +684,7 @@ void Server::handle_client_session(const cref_t<MClientSession> &m)
       if (m->supported_features.test(CEPHFS_FEATURE_NOTIFY_SESSION_STATE)) {
 	if (session->is_open() && !mds->is_stopping()) {
           dout(10) << "currently already opened" << dendl;
+          session->deny_close_sent = false;
 
           auto reply = make_message<MClientSession>(CEPH_SESSION_OPEN,
                                                     session->get_push_seq());
@@ -830,6 +831,7 @@ void Server::handle_client_session(const cref_t<MClientSession> &m)
 
       pv = mds->sessionmap.mark_projected(session);
       sseq = mds->sessionmap.set_state(session, Session::STATE_OPENING);
+      session->deny_close_sent = false;
       mds->sessionmap.touch_session(session);
       auto fin = new LambdaContext([log_session_status = std::move(log_session_status)](int r){
         ceph_assert(r == 0);
@@ -1039,8 +1041,12 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
       }
 
       mds->mds_dmclock_scheduler->remove_session(session);
-      // reset session
-      mds->send_message_client(make_message<MClientSession>(CEPH_SESSION_CLOSE), session);
+      // reset session.  After a denied reconnect the client already has
+      // its CLOSE; a second one could hit a session it has since reopened
+      // on a new connection.
+      if (!session->deny_close_sent)
+	mds->send_message_client(make_message<MClientSession>(CEPH_SESSION_CLOSE), session);
+      session->deny_close_sent = false;
       mds->sessionmap.set_state(session, Session::STATE_CLOSED);
       session->clear();
       metrics_handler->remove_session(session);
@@ -1576,6 +1582,79 @@ void Server::journal_close_session(Session *session, int state, Context *on_safe
   finish_flush_session(session, session->get_push_seq());
 }
 
+/*
+ * The client has just been sent CEPH_SESSION_CLOSE in reply to a reconnect.
+ * Clients treat that as final: the kernel client marks the session closed
+ * and drops its caps (handle_session()), libcephfs closes it
+ * (Client::_closed_mds_session()).  Nobody renews the session after that.
+ * Outside the reconnect phase nothing else would close it either:
+ * client_reconnect_denied is only acted on by reconnect_tick().  So the
+ * session would be autoclosed after session_autoclose and, with
+ * mds_session_blocklist_on_timeout, the client blocklisted, which kills its
+ * mount on every rank.
+ *
+ * This happens when a session is opened outside the reconnect phase and the
+ * client's connection is reset before it sees the OPEN: the client's
+ * messenger reports the reset, the client sends a reconnect and we deny it,
+ * because we are no longer in up:reconnect.
+ *
+ * Close such a session now, as if the client had asked for it, when it holds
+ * nothing that needs fencing: no caps, leases, requests or delegated inode
+ * numbers.  Otherwise leave it to the session timeout, as before.
+ */
+void Server::close_session_denied_reconnect(Session *session)
+{
+  if (!mds->is_clientreplay() && !mds->is_active() && !mds->is_stopping()) {
+    // Before clientreplay (reconnect, rejoin), caps the client reconnected
+    // may still be in cap_imports rather than on the session, and rejoin
+    // keeps Session pointers.  Decide once rejoin is done.
+    dout(1) << __func__ << " " << session->info.inst << " deferred until "
+	    << "clientreplay/active (mds is " << ceph_mds_state_name(mds->get_state())
+	    << ")" << dendl;
+    deny_close_deferred.insert(session->get_client());
+    return;
+  }
+  if (session->is_importing()) {
+    session->deny_close_sent = false;
+    dout(1) << __func__ << " " << session->info.inst << " is being imported;"
+	    << " leaving it to the session timeout" << dendl;
+    return;
+  }
+  if (!session->caps.empty() || !session->leases.empty() ||
+      session->get_request_count() || !session->delegated_inos.empty()) {
+    session->deny_close_sent = false;
+    dout(1) << __func__ << " " << session->info.inst << " holds "
+	    << session->caps.size() << " caps, " << session->leases.size()
+	    << " leases, " << session->get_request_count() << " requests, "
+	    << session->delegated_inos.size() << " delegated inos;"
+	    << " leaving it to the session timeout" << dendl;
+    return;
+  }
+  dout(1) << __func__ << " " << session->info.inst << " state "
+	  << session->get_state_name() << ": holds no caps, closing it" << dendl;
+  mds->clog->info() << "closing session of " << session->info.inst
+		    << " after a denied reconnect (it holds no caps)";
+  journal_close_session(session, Session::STATE_CLOSING, NULL);
+}
+
+/*
+ * Called at clientreplay_start and active_start, before the waiters are
+ * kicked (a parked REQUEST_OPEN from the same client must find the session
+ * closing, not open).
+ */
+void Server::close_deferred_denied_sessions()
+{
+  auto clients = std::move(deny_close_deferred);
+  deny_close_deferred.clear();
+  for (auto c : clients) {
+    Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(c.v));
+    if (!session || !session->deny_close_sent ||
+	!(session->is_open() || session->is_stale() || session->is_opening()))
+      continue;
+    close_session_denied_reconnect(session);
+  }
+}
+
 void Server::reconnect_clients(MDSContext *reconnect_done_)
 {
   reconnect_done = reconnect_done_;
@@ -1633,7 +1712,18 @@ void Server::handle_client_reconnect(const cref_t<MClientReconnect> &m)
   if (!session->is_open()) {
     dout(0) << " ignoring msg from not-open session " << *m << dendl;
     auto reply = make_message<MClientSession>(CEPH_SESSION_CLOSE);
+    // The client drops the session on CLOSE and closes this connection.
+    // Do not keep it in standby: a later connection from the same client
+    // would reuse it as a "previous session" and get reset again.
+    m->get_connection()->mark_disposable();
     mds->send_message(reply, m->get_connection());
+    // An OPENING session is one whose open is still being journaled: once
+    // that completes it would be OPEN although the client has just been told
+    // it is closed.
+    if (session->is_opening() || session->is_stale()) {
+      session->deny_close_sent = true;
+      close_session_denied_reconnect(session);
+    }
     return;
   }
 
@@ -1695,9 +1785,18 @@ void Server::handle_client_reconnect(const cref_t<MClientReconnect> &m)
 
   if (deny) {
     auto r = make_message<MClientSession>(CEPH_SESSION_CLOSE);
+    if (session->get_connection())
+      session->get_connection()->mark_disposable();  // see above
     mds->send_message_client(r, session);
     if (session->is_open()) {
-      client_reconnect_denied.insert(session->get_client());
+      if (mds->is_reconnect() &&
+	  client_reconnect_gather.count(session->get_client())) {
+	// reconnect_tick() deals with it
+	client_reconnect_denied.insert(session->get_client());
+      } else {
+	session->deny_close_sent = true;
+	close_session_denied_reconnect(session);
+      }
     }
     return;
   }

@@ -2101,6 +2101,7 @@ void MDSRank::rejoin_done()
 void MDSRank::clientreplay_start()
 {
   dout(1) << "clientreplay_start" << dendl;
+  server->close_deferred_denied_sessions();
   finish_contexts(g_ceph_context, waiting_for_replay);  // kick waiters
   queue_one_replay();
 }
@@ -2172,6 +2173,7 @@ void MDSRank::active_start()
 
   mdcache->clean_open_file_lists();
   mdcache->export_remaining_imported_caps();
+  server->close_deferred_denied_sessions();
   finish_contexts(g_ceph_context, waiting_for_replay);  // kick waiters
 
   mdcache->reissue_all_caps();

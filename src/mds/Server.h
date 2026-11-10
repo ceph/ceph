@@ -183,6 +183,8 @@ public:
   void kill_session(Session *session, Context *on_safe);
   size_t apply_blocklist();
   void journal_close_session(Session *session, int state, Context *on_safe);
+  void close_deferred_denied_sessions();
+  void close_session_denied_reconnect(Session *session);
 
   size_t get_num_pending_reclaim() const { return client_reclaim_gather.size(); }
   Session *find_session_by_uuid(std::string_view uuid);
@@ -608,6 +610,7 @@ private:
   bool reconnect_evicting = false;  // true if I am waiting for evictions to complete
                             // before proceeding to reconnect_gather_finish
   time reconnect_start = clock::zero();
+  std::set<client_t> deny_close_deferred;  // close_session_denied_reconnect()
   time reconnect_last_seen = clock::zero();
   std::set<client_t> client_reconnect_gather;  // clients i need a reconnect msg from.
   std::set<client_t> client_reconnect_denied;  // clients whose reconnect msg have been denied .
