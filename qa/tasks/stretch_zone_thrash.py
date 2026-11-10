@@ -37,6 +37,9 @@ class ZoneThrasher(Thrasher):
       thrash_delay       Seconds to sleep between iterations (default: 30)
       pool_timeout       Seconds to wait for a stretch pool to exist before
                          starting thrashing (default: 300)
+      mark_out           Mark the zone's OSDs out once degraded stretch mode
+                         is engaged, and in again before the zone is revived
+                         (default: false)
 
     The zone topology is read from
     ``overrides.ceph.pool-config.crush_map_config``, which is injected by the
@@ -81,6 +84,7 @@ class ZoneThrasher(Thrasher):
         self.revive_timeout = float(self.config.get('revive_timeout', 600))
         self.thrash_delay = float(self.config.get('thrash_delay', 30))
         self.pool_timeout = float(self.config.get('pool_timeout', 300))
+        self.mark_out = bool(self.config.get('mark_out', False))
 
         # Parse zone topology from crush_map_config injected by 2.yaml
         pool_config = self.config.get('pool_config', {})
@@ -93,10 +97,11 @@ class ZoneThrasher(Thrasher):
 
         self.log('seed: {s}, hold_duration: {h}s, degrade_timeout: {d}s, '
                  'revive_timeout: {r}s, thrash_delay: {t}s, '
-                 'pool_timeout: {p}s'.format(
+                 'pool_timeout: {p}s, mark_out: {o}'.format(
                      s=self.random_seed, h=self.hold_duration,
                      d=self.degrade_timeout, r=self.revive_timeout,
-                     t=self.thrash_delay, p=self.pool_timeout))
+                     t=self.thrash_delay, p=self.pool_timeout,
+                     o=self.mark_out))
         self.log('zones: {z}'.format(z=[z['name'] for z in self.zones]))
         self.log('tiebreak monitor: {m}'.format(m=self.tiebreak_monitor))
 
@@ -150,6 +155,9 @@ class ZoneThrasher(Thrasher):
         zone_name = zone['name']
         self.log('reviving zone {z}: OSDs {o}, mons {m}'.format(
             z=zone_name, o=zone['osds'], m=zone['monitors']))
+        if self.mark_out:
+            self.manager.raw_cluster_cmd(
+                'osd', 'in', *[str(osd_id) for osd_id in zone['osds']])
 
         for mon_id in zone['monitors']:
             self.log('reviving mon.{i}'.format(i=mon_id))
@@ -295,6 +303,10 @@ class ZoneThrasher(Thrasher):
             if not degraded:
                 self._revive_zone(zone, total_mons=total_mons)
                 break
+            if self.mark_out:
+                self.log('marking zone {z} out'.format(z=zone['name']))
+                self.manager.raw_cluster_cmd(
+                    'osd', 'out', *[str(osd_id) for osd_id in zone['osds']])
 
             # Hold in degraded mode — this is the window where the IO workload
             # exercises the degraded stretch EC code path
