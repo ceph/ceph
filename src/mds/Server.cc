@@ -599,6 +599,22 @@ void Server::handle_client_reclaim(const cref_t<MClientReclaim> &m)
 void Server::handle_client_session(const cref_t<MClientSession> &m)
 {
   version_t pv;
+
+  if (m->get_op() == CEPH_SESSION_REQUEST_OPEN &&
+      m->get_connection()->is_closed()) {
+    // The connection has been closed since the request arrived, typically
+    // while it was parked until clientreplay and the client reset its
+    // connection meanwhile.  The OPEN reply could never be delivered:
+    // opening the session would leave one the client does not know about,
+    // which is autoclosed (and the client blocklisted) later.  The client
+    // learns about the reset when it reconnects and reopens if it needs to.
+    // (is_closed() is the Connection's state, not a Session's.)
+    dout(1) << "handle_client_session dropping " << *m << " from "
+            << m->get_source() << ": con " << m->get_connection().get()
+            << " is closed" << dendl;
+    return;
+  }
+
   Session *session = mds->get_session(m);
 
   dout(3) << "handle_client_session " << *m << " from " << m->get_source() << dendl;
