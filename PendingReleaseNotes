@@ -30,6 +30,10 @@
   ``lockers`` field rather than the truth value of the returned object
   to determine whether any clients hold the lock.
 
+* RGW: ``radosgw-admin bucket stats`` JSON output includes ``zonegroup_name``
+  (the zonegroup's display name) when the bucket's ``zonegroup`` id is known in
+  the local period. The existing ``zonegroup`` field remains the zonegroup id.
+
 * RGW: The "Bytes Sent" field is always set to "-" when bucket-logging is enabled
   in Standard mode.
 
