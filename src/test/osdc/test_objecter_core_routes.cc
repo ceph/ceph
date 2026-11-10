@@ -143,7 +143,7 @@ protected:
     core_con = ceph::make_ref<RecordingConnection>(osd);
     core_con->set_peer_addrs(core_addrs);
     core_con->set_priv(RefCountedPtr{session});
-    session->core_cons[pg_core] = core_con;
+    session->core_routes.core_cons[pg_core] = core_con;
     objecter->osd_sessions[osd] = session;
   }
 
@@ -234,7 +234,7 @@ protected:
   bool route_holding()
   {
     std::shared_lock l(session->lock);
-    return session->pg_routes.at(spg_t(pgid)).holding;
+    return session->core_routes.pg_routes.at(spg_t(pgid)).holding;
   }
 
   /// the Objecter's perf counter 'name' (each test has its own Objecter)
@@ -411,7 +411,7 @@ TEST_F(TestObjecterCoreRoutes, PausedOpNotHeldAfterHold)
   {
     std::unique_lock l(session->lock);
     paused_op = session->ops.at(d);
-    EXPECT_TRUE(paused_op->switch_held);
+    EXPECT_TRUE(paused_op->core_route.switch_held);
     paused_op->target.paused = true;
   }
 
@@ -421,8 +421,8 @@ TEST_F(TestObjecterCoreRoutes, PausedOpNotHeldAfterHold)
   EXPECT_EQ((tids_t{e}), core_con->tids());
   EXPECT_EQ(sent, main_con->tids());
   std::shared_lock l(session->lock);
-  EXPECT_FALSE(paused_op->switch_held);
-  EXPECT_FALSE(session->ops.at(e)->switch_held);
+  EXPECT_FALSE(paused_op->core_route.switch_held);
+  EXPECT_FALSE(session->ops.at(e)->core_route.switch_held);
 }
 
 // an op canceled after being sent keeps its PG from switching until it is
@@ -493,14 +493,14 @@ TEST_F(TestObjecterCoreRoutes, CanceledOpOnResetCon)
   poll();
   {
     std::shared_lock l(session->lock);
-    EXPECT_EQ(1u, session->unanswered.size());
+    EXPECT_EQ(1u, session->core_routes.unanswered.size());
   }
   objecter->ms_handle_reset(core_con.get());
   poll();
   {
     std::shared_lock l(session->lock);
-    EXPECT_TRUE(session->unanswered.empty());
-    EXPECT_FALSE(session->pg_routes.at(spg_t(pgid)).busy());
+    EXPECT_TRUE(session->core_routes.unanswered.empty());
+    EXPECT_FALSE(session->core_routes.pg_routes.at(spg_t(pgid)).busy());
   }
   EXPECT_EQ(1u, counter("op_unanswered"));
   EXPECT_EQ(1u, counter("op_unanswered_reset"));
