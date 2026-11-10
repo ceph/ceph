@@ -54,7 +54,7 @@ static void add_auth(KeyServerData::Incremental& auth_inc,
 
   const string prefix("auth");
   auto last_committed = ms.get(prefix, "last_committed") + 1;
-  auto t = make_shared<MonitorDBStore::Transaction>();
+  auto t = make_shared<MonitorDBStoreTransaction>();
   t->put(prefix, last_committed, bl);
   t->put(prefix, "last_committed", last_committed);
   auto first_committed = ms.get(prefix, "first_committed");
@@ -190,7 +190,7 @@ int update_monitor(const OSDSuperblock& sb, MonitorDBStore& ms)
   string uuid = stringify(sb.cluster_fsid) + "\n";
   bufferlist bl;
   bl.append(uuid);
-  auto t = make_shared<MonitorDBStore::Transaction>();
+  auto t = make_shared<MonitorDBStoreTransaction>();
   t->put("monitor", "cluster_uuid", bl);
   ms.apply_transaction(t);
   return 0;
@@ -209,7 +209,7 @@ int update_osdmap(ObjectStore& fs, OSDSuperblock& sb, MonitorDBStore& ms)
   const string last_committed_name("last_committed");
   epoch_t first_committed = ms.get(prefix, first_committed_name);
   epoch_t last_committed = ms.get(prefix, last_committed_name);
-  auto t = make_shared<MonitorDBStore::Transaction>();
+  auto t = make_shared<MonitorDBStoreTransaction>();
 
   // trim stale maps
   unsigned ntrimmed = 0;
@@ -233,7 +233,7 @@ int update_osdmap(ObjectStore& fs, OSDSuperblock& sb, MonitorDBStore& ms)
   if (first_committed) {
     t->put(prefix, first_committed_name, first_committed);
     ms.apply_transaction(t);
-    t = make_shared<MonitorDBStore::Transaction>();
+    t = make_shared<MonitorDBStoreTransaction>();
   }
 
   unsigned nadded = 0;
@@ -334,7 +334,7 @@ int update_osdmap(ObjectStore& fs, OSDSuperblock& sb, MonitorDBStore& ms)
     static constexpr unsigned TRANSACTION_SIZE = 30;
     if (t->size() >= TRANSACTION_SIZE) {
       ms.apply_transaction(t);
-      t = make_shared<MonitorDBStore::Transaction>();
+      t = make_shared<MonitorDBStoreTransaction>();
     }
   }
   if (!t->empty()) {

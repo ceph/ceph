@@ -6,6 +6,7 @@
 #include "test/librbd/mock/MockImageCtx.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "test/librados_test_stub/MockTestMemRadosClient.h"
+#include "include/encoding_set.h"
 #include "include/rados/librados.hpp"
 #include "common/bit_vector.hpp"
 #include "librbd/ImageState.h"

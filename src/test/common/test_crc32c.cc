@@ -4,6 +4,7 @@
 #include <iostream>
 #include <string.h>
 
+#include "include/encoding_string.h"
 #include "include/types.h"
 #include "include/crc32c.h"
 #include "include/utime.h"

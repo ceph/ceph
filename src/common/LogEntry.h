@@ -16,15 +16,8 @@
 #ifndef CEPH_LOGENTRY_H
 #define CEPH_LOGENTRY_H
 
-#include <fmt/format.h>
-#if FMT_VERSION >= 90000
-#include <fmt/ostream.h>
-#endif
-
 #include "include/types.h" // for version_t
 #include "include/utime.h"
-#include "include/utime_fmt.h"
-#include "msg/msg_fmt.h"
 #include "msg/msg_types.h"
 #include "common/entity_name.h"
 #include "ostream_temp.h"
@@ -218,20 +211,5 @@ inline std::ostream& operator<<(std::ostream& out, const clog_type t)
 }
 
 std::ostream& operator<<(std::ostream& out, const LogEntry& e);
-
-#if FMT_VERSION >= 90000
-template <> struct fmt::formatter<clog_type> : fmt::ostream_formatter {};
-#endif
-
-template <> struct fmt::formatter<EntityName> : fmt::formatter<std::string_view> {
-  template <typename FormatContext>
-  auto format(const EntityName& e, FormatContext& ctx) const {
-    return formatter<std::string_view>::format(e.to_str(), ctx);
-  }
-};
-
-template <> struct fmt::formatter<LogEntry> : fmt::formatter<std::string_view> {
-  auto format(const LogEntry& e, format_context& ctx) const -> format_context::iterator;
-};
 
 #endif

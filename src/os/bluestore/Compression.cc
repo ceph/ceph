@@ -19,24 +19,12 @@
 #include "common/debug.h" // for dout()
 #include "common/Formatter.h"
 #include <limits>
-
-template <typename Char>
-struct basic_ostream_formatter : fmt::formatter<std::basic_string_view<Char>, Char> {
-  template <typename T, typename OutputIt>
-  auto format(const T& value, fmt::basic_format_context<OutputIt, Char>& ctx) const
-      -> OutputIt {
-    std::basic_stringstream<Char> ss;
-    ss << value;
-    return fmt::formatter<std::basic_string_view<Char>, Char>::format(
-        ss.view(), ctx);
-  }
-};
-using ostream_formatter = basic_ostream_formatter<char>;
+#include <fmt/ostream.h>
 
 template <> struct fmt::formatter<BlueStore::Blob::printer>
-  : ostream_formatter {};
+  : fmt::ostream_formatter {};
 template <> struct fmt::formatter<BlueStore::Extent::printer>
-  : ostream_formatter {};
+  : fmt::ostream_formatter {};
 
 #define dout_context bluestore->cct
 #define dout_subsys ceph_subsys_bluestore_compression

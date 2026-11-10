@@ -20,6 +20,7 @@
 #include "profile.h"
 #endif
 
+#include <iomanip>  // for std::setw, std::setprecision
 
 namespace test = crimson::test_simple_scheduler;
 namespace ssched = crimson::simple_scheduler;

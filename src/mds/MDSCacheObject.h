@@ -8,7 +8,7 @@
 #include "common/config.h"
 
 #include "include/ceph_assert.h"
-#include "include/cephfs/types.h" // for mds_rank_t
+#include "include/cephfs/rank.h" // for mds_rank_t
 #include "include/mempool.h"
 #include "include/types.h"
 

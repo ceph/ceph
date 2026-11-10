@@ -19,6 +19,7 @@
 #include "messages/MMgrDigest.h"
 #include "messages/MMonCommand.h"
 
+#include "include/ceph_release_numbers.h"
 #include "include/stringify.h"
 #include "include/util.h" // for dump_services()
 #include "mgr/MgrContext.h"
@@ -38,6 +39,7 @@
 
 #define MGR_METADATA_PREFIX "mgr_metadata"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, map)
@@ -335,7 +337,7 @@ void MgrMonitor::post_paxos_update()
   }
 }
 
-void MgrMonitor::encode_pending(MonitorDBStore::TransactionRef t)
+void MgrMonitor::encode_pending(MonitorDBStoreTransactionRef t)
 {
   dout(10) << __func__ << " " << pending_map << dendl;
   bufferlist bl;
