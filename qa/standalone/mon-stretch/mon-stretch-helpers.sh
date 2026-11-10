@@ -243,6 +243,7 @@ function check_one_zone() {
     test "$(pool_field $pool peering_crush_bucket_barrier)" = 0 || return 1
     flush_pg_stats > /dev/null || return 1
     ceph pg ls-by-pool $pool -f json | jq -e --argjson f $first '
+        (.pg_stats | length) > 0 and
         [.pg_stats[].acting[] | select(. < $f or . >= $f + 4)] == []' > /dev/null || {
         ceph pg ls-by-pool $pool
         return 1
@@ -254,7 +255,7 @@ function check_ssd() {
     local pool=$1
     flush_pg_stats > /dev/null || return 1
     ceph pg ls-by-pool $pool -f json | jq -e --argjson ssd "$(ceph osd crush class ls-osd ssd -f json)" '
-        [.pg_stats[].acting[]] - $ssd == []' > /dev/null
+        (.pg_stats | length) > 0 and [.pg_stats[].acting[]] - $ssd == []' > /dev/null
 }
 
 function zone_mon() {
