@@ -49,6 +49,10 @@ class ClientScaffold : public Client {
   fscrypt_env *fse;
 public:
     using Client::walk_dentry_result;
+    // what _try_to_trim_inode() and trim_cache() do to a dentry
+    using Client::client_lock;
+    using Client::unlink;
+    using Client::trim_dentry;
 
     ClientScaffold(Messenger *m, MonClient *mc, Objecter *objecter_, fscrypt_env *fse) : Client(m, mc, objecter_), fse(fse) {}
     virtual ~ClientScaffold()

@@ -1573,9 +1573,10 @@ void Client::clear_dir_complete_and_ordered(Inode *diri, bool complete)
 	diri->flags &= ~I_DIR_ORDERED;
       }
     }
-    if (diri->dir)
-      diri->dir->readdir_cache.clear();
   }
+  // readdir_cache holds no references, also while it is being filled
+  if (diri->dir)
+    diri->dir->readdir_cache.clear();
 }
 
 /*
@@ -3855,6 +3856,21 @@ Dentry* Client::link(Dir *dir, const string& name, Inode *in, Dentry *dn)
   return dn;
 }
 
+struct dentry_off_lt {
+  bool operator()(const Dentry* dn, int64_t off) const {
+    return dir_result_t::fpos_cmp(dn->offset, off) < 0;
+  }
+};
+
+// readdir_cache is sorted by dentry offset
+static bool readdir_cache_holds(const Dir *dir, const Dentry *dn)
+{
+  const auto& cache = dir->readdir_cache;
+  auto it = std::lower_bound(cache.begin(), cache.end(), dn->offset,
+			     dentry_off_lt());
+  return it != cache.end() && *it == dn;
+}
+
 void Client::unlink(Dentry *dn, bool keepdir, bool keepdentry)
 {
   InodeRef in(dn->inode);
@@ -3892,6 +3908,10 @@ void Client::unlink(Dentry *dn, bool keepdir, bool keepdentry)
 
     // unlink from dir
     Dir *dir = dn->dir;
+    // readdir_cache holds no reference: drop it before dn can be freed,
+    // and with it the claim that no other names exist
+    if (readdir_cache_holds(dir, dn))
+      clear_dir_complete_and_ordered(dir->parent_inode, true);
     dn->detach();
     ceph_assert(dn->dir == nullptr);   // detach() must clear it
 
@@ -10020,12 +10040,6 @@ int Client::_readdir_get_frag(int op, dir_result_t* dirp,
 
   return res;
 }
-
-struct dentry_off_lt {
-  bool operator()(const Dentry* dn, int64_t off) const {
-    return dir_result_t::fpos_cmp(dn->offset, off) < 0;
-  }
-};
 
 int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
 			      int caps, bool getref)
