@@ -44,8 +44,13 @@ static int read_refcount(cls_method_context_t hctx, bool implicit_ref, obj_refco
   return 0;
 }
 
-static int set_refcount(cls_method_context_t hctx, const struct obj_refcount& objr)
+static int set_refcount(cls_method_context_t hctx, struct obj_refcount& objr)
 {
+  // retired tags only stop a replayed put from dropping a wildcard that has no owner
+  if (!objr.refs.count(wildcard_tag) || !objr.wildcard_owner.empty()) {
+    objr.retired_refs.clear();
+  }
+
   bufferlist bl;
 
   encode(objr, bl);
@@ -78,6 +83,12 @@ static int cls_rc_refcount_get(cls_method_context_t hctx, bufferlist *in, buffer
 
   objr.refs[op.tag] = true;
 
+  // a source with a ref of its own, live or retired, doesn't own the wildcard
+  if (objr.refs.count(wildcard_tag) && objr.wildcard_owner.empty() &&
+      !objr.refs.count(op.src_tag) && !objr.retired_refs.count(op.src_tag)) {
+    objr.wildcard_owner = op.src_tag;
+  }
+
   ret = set_refcount(hctx, objr);
   if (ret < 0)
     return ret;
@@ -109,19 +120,14 @@ static int cls_rc_refcount_put(cls_method_context_t hctx, bufferlist *in, buffer
 
   CLS_LOG(10, "cls_rc_refcount_put() tag=%s\n", op.tag.c_str());
 
-  bool found = false;
   auto iter = objr.refs.find(op.tag);
-  if (iter != objr.refs.end()) {
-    found = true;
-  } else if (op.implicit_ref) {
+  if (iter == objr.refs.end() && op.implicit_ref &&
+      (objr.wildcard_owner.empty() || objr.wildcard_owner == op.tag)) {
     iter = objr.refs.find(wildcard_tag);
-    if (iter != objr.refs.end()) {
-      found = true;
-    }
+    objr.wildcard_owner.clear();
   }
 
-  if (!found ||
-      objr.retired_refs.find(op.tag) != objr.retired_refs.end())
+  if (iter == objr.refs.end() || objr.retired_refs.count(op.tag))
     return 0;
 
   objr.retired_refs.insert(op.tag);
