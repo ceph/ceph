@@ -10,13 +10,9 @@ def mock_call(monkeypatch):
     Monkeypatches process.call, so that a caller can add behavior to the response
     """
     def apply(stdout=None, stderr=None, returncode=0):
-        stdout_stream = Factory(read=lambda: stdout)
-        stderr_stream = Factory(read=lambda: stderr)
         return_value = Factory(
-            stdout=stdout_stream,
-            stderr=stderr_stream,
-            wait=lambda: returncode,
-            communicate=lambda x: (stdout, stderr, returncode)
+            returncode=returncode,
+            communicate=lambda x: (stdout, stderr),
         )
 
         monkeypatch.setattr(
