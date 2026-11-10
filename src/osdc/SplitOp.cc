@@ -201,10 +201,10 @@ void ECSplitOp::init_read(OSDOp &op, bool sparse, int ops_index, bool single_op)
   uint64_t end_chunk = (offset + op.op.extent.length - 1) / chunk_size;
 
   uint64_t count = std::min<uint64_t>(data_chunk_count, end_chunk - start_chunk + 1);
-  // Primary is required if:
-  // 1. Reading from multiple chunks (count > 1)
-  // 2. Version information is needed (orig_op->objver)
-  // 3. There are non-read operations that need the primary
+  // The primary is required for non-read operations, and by the legacy
+  // version check (FromPrimaryShard) for a read of more than one chunk or of
+  // the object's version. Otherwise init_version_sub_read() chooses a shard
+  // that has the version.
   bool has_non_read_ops = false;
   for (const auto &op : orig_op->ops) {
     if (op.op.op != CEPH_OSD_OP_READ && op.op.op != CEPH_OSD_OP_SPARSE_READ) {
@@ -213,9 +213,9 @@ void ECSplitOp::init_read(OSDOp &op, bool sparse, int ops_index, bool single_op)
     }
   }
 
-  bool primary_required = orig_op->objver || has_non_read_ops ||
-                          (!single_op &&
-                           strategy == InternalVersionStrategy::FromPrimaryShard);
+  bool primary_required = has_non_read_ops ||
+                          (strategy == InternalVersionStrategy::FromPrimaryShard &&
+                           (orig_op->objver || !single_op));
 
   int first_shard = start_chunk % data_chunk_count;
   // Check all shards are online.
@@ -259,6 +259,50 @@ void ECSplitOp::init_read(OSDOp &op, bool sparse, int ops_index, bool single_op)
     sub_reads.emplace(reference_sub_read_key, orig_op->ops.size() + 1,
                       reference_sub_read.shard);
   }
+}
+
+/**
+ * @brief Choose the sub-read whose reply gives the object's version.
+ *
+ * A partial write can skip the data shards that cannot become primary, whose
+ * object info then holds an older version. So the version comes from the
+ * first of: a sub-read of the read to a shard that can become primary, a new
+ * sub-read to such a shard in the zone that the data is read from, and the
+ * primary.
+ */
+void ECSplitOp::init_version_sub_read() {
+  version_sub_read_key = reference_sub_read_key;
+  if (!orig_op->objver ||
+      strategy != InternalVersionStrategy::FromParticipatingShards ||
+      sub_reads.contains(reference_sub_read_key)) {
+    return;
+  }
+  auto &target = orig_op->target;
+  const pg_pool_t *pi = objecter.osdmap->get_pg_pool(target.base_oloc.pool);
+  ceph_assert(pi);
+
+  for (auto &&[index, sub_read] : sub_reads) {
+    if (!pi->is_nonprimary_shard(shard_id_t(index))) {
+      version_sub_read_key = index;
+      return;
+    }
+  }
+  std::optional<int> local_zone;
+  for (shard_id_t shard; shard < pi->get_zone_size(); ++shard) {
+    if (pi->is_nonprimary_shard(shard)) {
+      continue;
+    }
+    shard_id_t abs_shard = choose_read_shard(objecter, cct, target, localize,
+                                             shard, local_zone);
+    if (abs_shard != shard_id_t::NO_SHARD) {
+      version_sub_read_key = (int)abs_shard;
+      sub_reads.emplace(version_sub_read_key, orig_op->ops.size() + 1,
+                        abs_shard);
+      return;
+    }
+  }
+  sub_reads.emplace(reference_sub_read_key, orig_op->ops.size() + 1,
+                    reference_sub_read.shard);
 }
 
 int SplitOp::local_zone_for_acting_set(
@@ -1313,6 +1357,10 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
     }
   }
 
+  if (!split_read->abort) {
+    split_read->init_version_sub_read();
+  }
+
   // STAGE 5: Final abort check - discard split op if problems were detected
   if (split_read->abort) {
     ldout(cct, DBG_LVL) << __func__ <<" ABORTED 2" << dendl;
@@ -1346,7 +1394,7 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
     auto fin = new Finisher(split_read, sub_read); // Self-destructs when called.
 
     version_t *objver = nullptr;
-    if (index == split_read->reference_sub_read_key) {
+    if (index == split_read->version_sub_read_key) {
       objver = split_read->orig_op->objver;
     }
 
