@@ -1274,6 +1274,23 @@ void MDSDaemon::ms_handle_accept(Connection *con)
     return;
   }
 
+  // The accept may have been queued before we marked the connection down,
+  // e.g. when a client resets and the messenger reuses the existing
+  // Connection for its new socket: the remote reset is delivered first and
+  // ms_handle_remote_reset() marks the connection down, then the accept for
+  // it arrives.  Do not attach a Session to a dead connection: nothing can be
+  // sent on it, and a session request still parked from it (wait_for_replay)
+  // would otherwise find a fresh bootstrap Session when it is retried and
+  // open a session whose reply is never delivered.
+  // (con->is_closed() is the Connection's state, not a Session's.)  This is
+  // rare, so log it at level 1: it is the evidence that the ordering occurred.
+  if (con->is_closed()) {
+    dout(1) << "ms_handle_accept " << n << " " << con->get_peer_socket_addr()
+            << " con " << con << " is already closed, not attaching a session"
+            << dendl;
+    return;
+  }
+
   // We allow connections and assign Session instances to connections
   // even if we have not been assigned a rank, because clients with
   // "allow *" are allowed to connect and do 'tell' operations before
