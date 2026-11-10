@@ -8436,6 +8436,32 @@ int OSDMonitor::check_cluster_features(uint64_t features,
   return 0;
 }
 
+string OSDMonitor::clients_lacking_features(uint64_t features) const
+{
+  FeatureMap m;
+  mon.get_combined_feature_map(&m);
+  ostringstream ss;
+  bool first = true;
+  for (int type : {
+        CEPH_ENTITY_TYPE_CLIENT,
+        CEPH_ENTITY_TYPE_MDS,
+        CEPH_ENTITY_TYPE_MGR }) {
+    auto p = m.m.find(type);
+    if (p == m.m.end()) {
+      continue;
+    }
+    for (auto& [have, count] : p->second) {
+      if ((have & features) != features) {
+        ss << (first ? "" : ", ") << count << " connected "
+           << ceph_entity_type_name(type) << "(s) with features 0x"
+           << std::hex << have << std::dec;
+        first = false;
+      }
+    }
+  }
+  return ss.str();
+}
+
 bool OSDMonitor::validate_crush_against_features(const CrushWrapper *newcrush,
                                                  ostream &ss)
 {
@@ -16069,6 +16095,13 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         goto reply_no_propose;
       }
 
+      if (string lacking = clients_lacking_features(OSDMap::POOL_MIGRATION_FEATURES);
+          !lacking.empty()) {
+        ss << "pool migration is not supported by " << lacking
+           << "; 'ceph health detail' lists them";
+        err = -EPERM;
+        goto reply_no_propose;
+      }
       int ret = _prepare_rename_pool(pool_id, old_pool_name);
       if (ret < 0) {
         ss << "failed to rename pool '" << poolstr << "' to '" << old_pool_name << "': " << cpp_strerror(ret);

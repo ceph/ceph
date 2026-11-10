@@ -441,6 +441,11 @@ public:
    * @param ss Filled in with ane explanation of failure, if any
    */
   int check_cluster_features(uint64_t features, std::stringstream &ss);
+  /**
+   * The connected clients, MDSs and mgrs that lack any of the given
+   * features, counted by their features, or "" if none does
+   */
+  std::string clients_lacking_features(uint64_t features) const;
   // @param req an optional op request, if the osdmaps are replies to it. so
   //            @c Monitor::send_reply() can mark_event with it.
   void send_incremental(epoch_t first, MonSession *session, bool onetime,

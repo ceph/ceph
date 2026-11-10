@@ -2065,6 +2065,39 @@ Other thresholds that can raise the two health checks above are
 :confval:`mon_osd_nearfull_ratio` and :confval:`mon_osd_full_ratio`. For details and
 resolution, see :ref:`storage-capacity` and :ref:`no-free-drive-space`.
 
+POOL_MIGRATION_INCOMPATIBLE_CLIENTS
+___________________________________
+
+Pool migration is enabled, and one or more connected clients, MDSs or Managers
+can't follow a pool migration. These include Linux kernel clients and clients
+of earlier releases. ``ceph osd pool migrate`` is refused while any of them is
+connected.
+
+To list them, run the following command:
+
+.. prompt:: bash #
+
+   ceph health detail
+
+Upgrade or disconnect these clients before you migrate a pool.
+
+POOL_MIGRATING_WITH_INCOMPATIBLE_CLIENTS
+________________________________________
+
+A pool migration is in progress, and one or more connected clients, MDSs or
+Managers can't follow it. I/O from them to the pools in the migration fails or
+waits until the migration ends.
+
+This is not expected: ``ceph osd pool migrate`` is refused while such clients
+are connected, and clients and MDSs that can't follow a migration are refused
+while one is in progress. To list them, run the following command:
+
+.. prompt:: bash #
+
+   ceph health detail
+
+Stop these clients, or block them with ``ceph osd blocklist add``.
+
 OBJECT_MISPLACED
 ________________
 

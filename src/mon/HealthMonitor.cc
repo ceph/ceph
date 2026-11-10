@@ -782,6 +782,55 @@ bool HealthMonitor::check_member_health()
     }
   }
 
+  // POOL_MIGRATING_WITH_INCOMPATIBLE_CLIENTS, POOL_MIGRATION_INCOMPATIBLE_CLIENTS
+  {
+    bool migrating = false;
+    for (auto& [id, pool] : mon.osdmon()->osdmap.get_pools()) {
+      if (pool.is_migration_target()) {
+        migrating = true;
+        break;
+      }
+    }
+    std::ostringstream unused;
+    if (migrating ||
+        g_ceph_context->check_experimental_feature_enabled("poolmigration",
+                                                           &unused)) {
+      std::lock_guard l(mon.session_map_lock);
+      list<std::string> detail;
+      size_t count = 0;
+      for (auto s : mon.session_map.sessions) {
+        if ((s->con_type != CEPH_ENTITY_TYPE_CLIENT &&
+             s->con_type != CEPH_ENTITY_TYPE_MDS &&
+             s->con_type != CEPH_ENTITY_TYPE_MGR) ||
+            !s->con_features ||
+            (s->con_features & OSDMap::POOL_MIGRATION_FEATURES) ==
+              OSDMap::POOL_MIGRATION_FEATURES) {
+          continue;
+        }
+        if (++count <= max) {
+          ostringstream ds;
+          ds << s->entity_name << " at " << s->addrs
+             << " can't follow a pool migration (features 0x"
+             << std::hex << s->con_features << std::dec << ")";
+          detail.push_back(ds.str());
+        }
+      }
+      if (count > max) {
+        detail.push_back("...");
+      }
+      if (count) {
+        auto& d = migrating ?
+          next.add("POOL_MIGRATING_WITH_INCOMPATIBLE_CLIENTS", HEALTH_ERR,
+                   "clients that can't follow a pool migration are "
+                   "connected while a pool migrates", count) :
+          next.add("POOL_MIGRATION_INCOMPATIBLE_CLIENTS", HEALTH_WARN,
+                   "clients that can't follow a pool migration are connected",
+                   count);
+        d.detail.swap(detail);
+      }
+    }
+  }
+
   {
     auto& current_quorum_checks = quorum_checks.get_map();
     auto p = current_quorum_checks.find(mon.rank);
