@@ -726,6 +726,19 @@ void RGWSelectObj_ObjStore_S3::execute(optional_yield y)
   char parquet_magic[4];
   static constexpr uint8_t parquet_magic1[4] = {'P', 'A', 'R', '1'};
   static constexpr uint8_t parquet_magicE[4] = {'P', 'A', 'R', 'E'};
+  if (s->cct->_conf->rgw_disable_s3select == true) {
+    std::string error_msg =
+        "s3select : is disabled by rgw_disable_s3select configuration parameter";
+    ldpp_dout(this, 10) << error_msg << dendl;
+    if (!m_aws_response_handler.is_set()) {
+      m_aws_response_handler.set(s, this, fp_chunked_transfer_encoding);
+    }
+    m_aws_response_handler.send_error_response_rgw_formatter(error_msg.data());
+
+    op_ret = -ERR_INVALID_REQUEST;
+    return;
+  }
+
   get_params(y);
 #ifdef _ARROW_EXIST
   m_rgw_api.m_y = &y;
@@ -733,16 +746,6 @@ void RGWSelectObj_ObjStore_S3::execute(optional_yield y)
 
   if (!m_aws_response_handler.is_set()) {
     m_aws_response_handler.set(s, this, fp_chunked_transfer_encoding);
-  }
-
-  if (s->cct->_conf->rgw_disable_s3select == true)
-  {
-      std::string error_msg="s3select : is disabled by rgw_disable_s3select configuration parameter";
-      ldpp_dout(this, 10) << error_msg << dendl;
-      m_aws_response_handler.send_error_response_rgw_formatter(error_msg.data());
-      
-      op_ret = -ERR_INVALID_REQUEST;
-      return;
   }
 
   if (m_parquet_type) {
