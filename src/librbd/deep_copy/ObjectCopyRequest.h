@@ -13,6 +13,7 @@
 #include "librbd/io/Types.h"
 #include <list>
 #include <map>
+#include <set>
 #include <string>
 
 class Context;
@@ -81,6 +82,11 @@ private:
    *    v     v           |
    * WRITE_OBJECT --------/
    *    |
+   *    |     /-----------\
+   *    |     |           | (repeat for each snapshot)
+   *    v     v           |
+   * UPDATE_OBJECT_MAP ---/ (only for objects removed by
+   *    |                    an incremental copy)
    *    v
    * <finish>
    *
@@ -122,6 +128,7 @@ private:
   std::map<librados::snap_t, interval_set<uint64_t>> m_dst_data_interval;
   std::map<librados::snap_t, interval_set<uint64_t>> m_dst_zero_interval;
   std::map<librados::snap_t, uint8_t> m_dst_object_state;
+  std::set<librados::snap_t> m_dst_object_removed;
   std::map<librados::snap_t, bool> m_dst_object_may_exist;
 
   io::AsyncOperation* m_src_async_op = nullptr;
@@ -139,6 +146,9 @@ private:
   void send_write_object();
   void handle_write_object(int r);
 
+  void send_post_write_update_object_map();
+  void handle_post_write_update_object_map(int r);
+
   Context *start_lock_op(ceph::shared_mutex &owner_lock, int* r);
 
   void compute_read_ops();
@@ -146,6 +156,7 @@ private:
   void compute_zero_ops();
 
   void compute_dst_object_may_exist();
+  bool dst_object_overlaps_parent(librados::snap_t dst_snap_id);
 
   void finish(int r);
 };
