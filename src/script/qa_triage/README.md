@@ -7,7 +7,9 @@ with the evidence gathered and a draft tracker comment ready.
 It lives in a repository of its own,
 [aainscow/qa-triage](https://github.com/aainscow/qa-triage), with the library of
 what it has learned, which everyone who uses it adds to. That repository is
-private: its owner adds people as collaborators.
+private: its owner adds people as collaborators. A read-only snapshot of it, under the
+same license as Ceph's code, is public:
+[aainscow/qa-triage-public](https://github.com/aainscow/qa-triage-public).
 
 `qa_triage.sh` here clones it into `qa-triage/`, which git ignores, the first time,
 brings it up to date each time after, and runs it, with this ceph clone for the
