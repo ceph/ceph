@@ -417,15 +417,12 @@ TEST_F(TestSplitOpMapChange, ECBalancedShardWithOneZoneInActingSet)
   }
 }
 
-// A localized read of a replicated pool over two zones is split between the
-// replicas in the client's zone. A replicated acting set is not ordered by
-// zone, so the zone of each replica must come from CRUSH, not its position.
-class TestReplicaLocalizedSplitRead : public ::testing::Test {
+// An Objecter on a map with one OSD for each position of the PG's acting set,
+// osds_per_zone to each of the datacenters dc0, dc1, ... in order. The OSDs
+// have every feature, and their sessions record what they are sent.
+class TestZoneLocalizedSplitRead : public ::testing::Test {
 protected:
-  static constexpr int num_osds = 4;
   static constexpr int64_t pool_id = 1;
-  // primary osd.2 in dc1, then the zones interleaved
-  const std::vector<int> acting = {2, 0, 3, 1};
   boost::asio::io_context ioc;
   MonClient monc{g_ceph_context, ioc};
   std::unique_ptr<Messenger> msgr{
@@ -434,10 +431,10 @@ protected:
   std::map<int, ceph::ref_t<RecordingConnection>> cons;
   C_SaferCond done;
 
-  void SetUp() override
+  void start(int osds_per_zone, pg_pool_t pool, const std::vector<int> &acting,
+             const std::string &client_zone)
   {
-    g_ceph_context->_conf.set_val_or_die("osd_min_split_replica_read_size",
-                                         "4096");
+    const int num_osds = acting.size();
     objecter = std::make_unique<Objecter>(g_ceph_context, msgr.get(), &monc, ioc);
     objecter->init();
 
@@ -449,7 +446,6 @@ protected:
       map.set_state(i, CEPH_OSD_EXISTS | CEPH_OSD_UP);
     }
 
-    // datacenter dc0 holds osd.0 and osd.1, dc1 osd.2 and osd.3
     CrushWrapper crush;
     crush.create();
     OSDMap::_build_crush_types(crush);
@@ -461,34 +457,30 @@ protected:
     for (int osd = 0; osd < num_osds; osd++) {
       std::map<std::string, std::string> loc = {
         {"root", "default"},
-        {"datacenter", "dc" + std::to_string(osd / 2)},
+        {"datacenter", "dc" + std::to_string(osd / osds_per_zone)},
         {"host", "host" + std::to_string(osd)}};
       crush.insert_item(g_ceph_context, osd, 1.0, "osd." + std::to_string(osd),
                         loc);
     }
     crush.finalize();
-    OSDMap::Incremental crush_inc(map.get_epoch() + 1);
-    crush_inc.fsid = map.get_fsid();
-    crush.encode(crush_inc.crush, CEPH_FEATURES_SUPPORTED_DEFAULT);
-    map.apply_incremental(crush_inc);
+    OSDMap::Incremental inc(map.get_epoch() + 1);
+    inc.fsid = map.get_fsid();
+    crush.encode(inc.crush, CEPH_FEATURES_SUPPORTED_DEFAULT);
+    for (int osd = 0; osd < num_osds; osd++) {
+      inc.new_xinfo[osd] = map.get_xinfo(osd);
+      inc.new_xinfo[osd].features = CEPH_FEATURES_ALL;
+    }
+    map.apply_incremental(inc);
 
-    pg_pool_t rep;
-    rep.type = pg_pool_t::TYPE_REPLICATED;
-    rep.size = 4;
-    rep.min_size = 1;
-    rep.num_zones = 2;
-    rep.replica = 2;
-    rep.peering_crush_bucket_count = 2;
-    rep.peering_crush_bucket_target = 2;
-    rep.peering_crush_bucket_barrier = crush.get_type_id("datacenter");
-    rep.set_flag(pg_pool_t::FLAG_CLIENT_SPLIT_READS);
-    rep.set_pg_num(1);
-    rep.set_pgp_num(1);
-    OSDMapTestHelpers::add_pool(map, pool_id, rep);
+    pool.peering_crush_bucket_barrier = crush.get_type_id("datacenter");
+    pool.set_flag(pg_pool_t::FLAG_CLIENT_SPLIT_READS);
+    pool.set_pg_num(1);
+    pool.set_pgp_num(1);
+    OSDMapTestHelpers::add_pool(map, pool_id, pool);
     OSDMapTestHelpers::set_pg_acting(map, pg_t(0, pool_id), acting);
 
     objecter->start(&map);
-    objecter->crush_location = {{"datacenter", "dc0"}};
+    objecter->crush_location = {{"datacenter", client_zone}};
 
     for (int osd = 0; osd < num_osds; osd++) {
       auto s = new Objecter::OSDSession(g_ceph_context, osd, ioc.get_executor());
@@ -503,6 +495,34 @@ protected:
   {
     objecter->shutdown();
     objecter.reset();
+  }
+};
+
+// A localized read of a replicated pool over two zones is split between the
+// replicas in the client's zone. A replicated acting set is not ordered by
+// zone, so the zone of each replica must come from CRUSH, not its position.
+class TestReplicaLocalizedSplitRead : public TestZoneLocalizedSplitRead {
+protected:
+  void SetUp() override
+  {
+    g_ceph_context->_conf.set_val_or_die("osd_min_split_replica_read_size",
+                                         "4096");
+    pg_pool_t rep;
+    rep.type = pg_pool_t::TYPE_REPLICATED;
+    rep.size = 4;
+    rep.min_size = 1;
+    rep.num_zones = 2;
+    rep.replica = 2;
+    rep.peering_crush_bucket_count = 2;
+    rep.peering_crush_bucket_target = 2;
+    // dc0 holds osd.0 and osd.1, dc1 osd.2 and osd.3; the primary osd.2 is
+    // in dc1, then the zones interleave
+    start(2, rep, {2, 0, 3, 1}, "dc0");
+  }
+
+  void TearDown() override
+  {
+    TestZoneLocalizedSplitRead::TearDown();
     g_ceph_context->_conf.set_val_or_die("osd_min_split_replica_read_size",
                                          "0");
   }
@@ -528,4 +548,91 @@ TEST_F(TestReplicaLocalizedSplitRead, ReadsOnlyLocalZoneReplicas)
   EXPECT_FALSE(cons[1]->sent.empty());
   EXPECT_TRUE(cons[2]->sent.empty()) << "osd.2 is in dc1";
   EXPECT_TRUE(cons[3]->sent.empty()) << "osd.3 is in dc1";
+}
+
+// A localized read of a 2+1 EC pool over two zones that asks for the object's
+// version, from a client in the zone that does not hold the primary. The
+// version comes from a shard of the client's zone that every write updates.
+//
+//            dc0                         dc1 (the client's zone)
+//            osd.0    osd.1    osd.2     osd.3    osd.4    osd.5
+//   PG 1.0   shard 0  shard 1  shard 2   shard 3  shard 4  shard 5
+//            primary  data     parity    data 0   data 1   parity
+//
+// Shards 1 and 4 cannot become primary, so a partial write can skip them.
+class TestECLocalizedSplitRead : public TestZoneLocalizedSplitRead {
+protected:
+  static constexpr uint64_t chunk_size = 4096;
+  version_t objver = 0;
+
+  void SetUp() override
+  {
+    pg_pool_t ec;
+    ec.type = pg_pool_t::TYPE_ERASURE;
+    ec.size = 6;
+    ec.min_size = 4;
+    ec.num_zones = 2;
+    ec.peering_crush_bucket_count = 2;
+    ec.peering_crush_bucket_target = 2;
+    ec.ec_data_shard_count = 2;
+    ec.ec_coding_shard_count = 1;
+    ec.nonprimary_shards.insert(shard_id_t(1));
+    ec.nonprimary_shards.insert(shard_id_t(4));
+    ec.set_stripe_width(2 * chunk_size);
+    ec.set_flag(pg_pool_t::FLAG_EC_OVERWRITES);
+    ec.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
+    start(3, ec, {0, 1, 2, 3, 4, 5}, "dc1");
+  }
+
+  void localized_read(uint64_t off, uint64_t len)
+  {
+    osdc_opvec ops(1);
+    ops[0].op.op = CEPH_OSD_OP_READ;
+    ops[0].op.extent.offset = off;
+    ops[0].op.extent.length = len;
+    ceph_tid_t tid = 0;
+    objecter->op_submit(
+      new Objecter::Op(object_t("obj"), object_locator_t(pool_id),
+                       std::move(ops),
+                       CEPH_OSD_FLAG_READ | CEPH_OSD_FLAG_LOCALIZE_READS,
+                       &done, &objver),
+      &tid);
+    ioc.restart();
+    ioc.poll();
+  }
+
+  // The version the sub-read to an OSD returns into, if any
+  version_t *objver_of_op_to(int osd)
+  {
+    auto &ops = objecter->osd_sessions[osd]->ops;
+    ceph_assert(ops.size() == 1);
+    return ops.begin()->second->objver;
+  }
+};
+
+TEST_F(TestECLocalizedSplitRead, VersionFromReadShardThatCanBePrimary)
+{
+  localized_read(0, 2 * chunk_size);
+
+  for (int osd : {0, 1, 2, 5}) {
+    EXPECT_TRUE(cons[osd]->sent.empty()) << "osd." << osd;
+  }
+  ASSERT_EQ(1u, cons[3]->sent.size());
+  ASSERT_EQ(1u, cons[4]->sent.size());
+  EXPECT_EQ(&objver, objver_of_op_to(3));
+  EXPECT_EQ(nullptr, objver_of_op_to(4));
+}
+
+TEST_F(TestECLocalizedSplitRead, VersionFromLocalShardThatCanBePrimary)
+{
+  // Shard 4 alone holds the data, and a partial write may have skipped it
+  localized_read(chunk_size, chunk_size);
+
+  for (int osd : {0, 1, 2, 5}) {
+    EXPECT_TRUE(cons[osd]->sent.empty()) << "osd." << osd;
+  }
+  ASSERT_EQ(1u, cons[3]->sent.size());
+  ASSERT_EQ(1u, cons[4]->sent.size());
+  EXPECT_EQ(&objver, objver_of_op_to(3));
+  EXPECT_EQ(nullptr, objver_of_op_to(4));
 }
