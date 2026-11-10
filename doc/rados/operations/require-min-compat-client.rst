@@ -39,6 +39,43 @@ Pass ``--yes-i-really-mean-it`` to proceed anyway. Those clients will be
 disconnected once any feature the flag unlocks is actually enabled on the
 map.
 
+Requiring a feature
+===================
+
+Some features need more than a release: a feature that a distribution
+backports is in clients of an earlier release, and a release marker cannot
+say so. These are required by name instead of by release:
+
+.. prompt:: bash $
+
+   ceph osd set-require-min-compat-client pool_migration
+
+The Monitors inspect connected clients, MDSs and Managers as they do for a
+release, and refuse the command while any of them lacks the feature, unless
+``--yes-i-really-mean-it`` is given. The requirement is the
+``require_pool_migration`` flag of the OSDMap, shown by
+``ceph osd dump``. It gates ``ceph osd pool migrate``, which is refused until
+it is set (see :ref:`migratepool`). Clients that lack the feature are turned
+away only while a pool is being migrated. To stop requiring it:
+
+.. prompt:: bash $
+
+   ceph osd unset-require-min-compat-client pool_migration
+
+This is refused while a pool is being migrated.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 50 25
+
+   * - Feature
+     - Clients that have it
+     - Min kernel
+   * - ``pool_migration``
+     - Clients that can follow a pool migration; they can also use pools
+       over zones, which share the connection feature bit
+     - not yet implemented
+
 Checking the current value
 ==========================
 

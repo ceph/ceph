@@ -8462,6 +8462,43 @@ string OSDMonitor::clients_lacking_features(uint64_t features) const
   return ss.str();
 }
 
+int OSDMonitor::prepare_require_pool_migration(bool require, bool sure,
+                                               stringstream &ss)
+{
+  const bool set = osdmap.test_flag(CEPH_OSDMAP_REQUIRE_POOL_MIGRATION);
+  if (require == set) {
+    ss << "require_min_compat_client pool_migration is "
+       << (set ? "set" : "not set") << " already";
+    return 1;
+  }
+  if (require) {
+    if (string lacking = clients_lacking_features(OSDMap::POOL_MIGRATION_FEATURES);
+        !lacking.empty() && !sure) {
+      ss << "cannot set require_min_compat_client pool_migration: " << lacking
+         << "; add --yes-i-really-mean-it to do it anyway";
+      return -EPERM;
+    }
+  } else {
+    for (auto& [id, pool] : osdmap.get_pools()) {
+      if (pool.is_migration_target()) {
+        ss << "cannot unset require_min_compat_client pool_migration: pool '"
+           << osdmap.get_pool_name(id) << "' is being migrated";
+        return -EPERM;
+      }
+    }
+  }
+  if (pending_inc.new_flags < 0) {
+    pending_inc.new_flags = osdmap.get_flags();
+  }
+  if (require) {
+    pending_inc.new_flags |= CEPH_OSDMAP_REQUIRE_POOL_MIGRATION;
+  } else {
+    pending_inc.new_flags &= ~CEPH_OSDMAP_REQUIRE_POOL_MIGRATION;
+  }
+  ss << (require ? "set" : "unset") << " require_min_compat_client pool_migration";
+  return 0;
+}
+
 bool OSDMonitor::validate_crush_against_features(const CrushWrapper *newcrush,
                                                  ostream &ss)
 {
@@ -14205,9 +14242,26 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
 					      get_last_committed() + 1));
     return true;
-  } else if (prefix == "osd set-require-min-compat-client") {
+  } else if (prefix == "osd set-require-min-compat-client" ||
+             prefix == "osd unset-require-min-compat-client") {
     string v;
-    cmd_getval(cmdmap, "version", v);
+    bool sure = false;
+    cmd_getval(cmdmap, "yes_i_really_mean_it", sure);
+    if (prefix == "osd unset-require-min-compat-client") {
+      cmd_getval(cmdmap, "feature", v);
+    } else {
+      cmd_getval(cmdmap, "version", v);
+    }
+    if (v == "pool_migration") {
+      // a feature of clients rather than a release; it gates osd pool migrate
+      err = prepare_require_pool_migration(
+        prefix == "osd set-require-min-compat-client", sure, ss);
+      if (err) {
+        err = std::min(err, 0);
+        goto reply_no_propose;
+      }
+      goto update;
+    }
     ceph_release_t vno = ceph_release_from_name(v);
     if (!vno) {
       ss << "version " << v << " is not recognized";
@@ -14225,8 +14279,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -EPERM;
       goto reply_no_propose;
     }
-    bool sure = false;
-    cmd_getval(cmdmap, "yes_i_really_mean_it", sure);
     if (!sure) {
       FeatureMap m;
       mon.get_combined_feature_map(&m);
@@ -16030,12 +16082,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         goto reply_no_propose;
       }
 
-      if (osdmap.require_min_compat_client < ceph_release_t::vampire) {
-        ss << "require_min_compat_client "
-           << osdmap.require_min_compat_client
-           << " < vampire, which is required for pool migration. "
-           << "Try 'ceph osd set-require-min-compat-client vampire' "
-           << "before using the new feature";
+      if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_POOL_MIGRATION)) {
+        ss << "clients that can't follow a pool migration are still admitted. "
+           << "Run 'ceph osd set-require-min-compat-client pool_migration' "
+           << "before migrating a pool";
         err = -EPERM;
         goto reply_no_propose;
       }

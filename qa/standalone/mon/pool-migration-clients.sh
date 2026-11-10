@@ -47,6 +47,7 @@ function start_cluster() {
         rados -p test put obj$i /etc/hosts || return 1
     done
     ceph osd set-require-min-compat-client umbrella || return 1
+    ceph osd set-require-min-compat-client pool_migration || return 1
 }
 
 function enable_pool_migration() {
@@ -77,6 +78,45 @@ function stop_old_client() {
         OLD_CLIENT_PID=
         ceph tell mon.a config set mon_debug_hide_client_features 0
     fi
+}
+
+function TEST_require_pool_migration_clients() {
+    local dir=$1
+
+    start_cluster $dir || return 1
+    enable_pool_migration || return 1
+    ceph osd unset-require-min-compat-client pool_migration || return 1
+    ! ceph osd dump | grep -w require_pool_migration || return 1
+    ceph osd unset-require-min-compat-client pool_migration 2>&1 | \
+        grep "is not set already" || return 1
+
+    # a migration needs the requirement
+    ! ceph osd pool migrate test 16 2> $dir/migrate.out || return 1
+    grep "set-require-min-compat-client pool_migration" $dir/migrate.out || return 1
+
+    # which a connected client that lacks the feature blocks
+    start_old_client $dir $POOL_MIGRATION || return 1
+    ! ceph osd set-require-min-compat-client pool_migration 2> $dir/set.out || return 1
+    cat $dir/set.out
+    grep "cannot set require_min_compat_client pool_migration: [0-9]* connected client(s)" \
+        $dir/set.out || return 1
+    ceph osd set-require-min-compat-client pool_migration --yes-i-really-mean-it || return 1
+    ceph osd dump | grep -w flags | grep -w require_pool_migration || return 1
+    ceph osd unset-require-min-compat-client pool_migration || return 1
+    ! ceph osd dump | grep -w require_pool_migration || return 1
+    stop_old_client
+    wait_for_health_gone POOL_MIGRATION_INCOMPATIBLE_CLIENTS || return 1
+    ceph osd set-require-min-compat-client pool_migration || return 1
+    ceph osd set-require-min-compat-client pool_migration 2>&1 | \
+        grep "is set already" || return 1
+
+    # and which a migration keeps
+    ceph osd pause || return 1
+    ceph osd pool migrate test 16 || return 1
+    ! ceph osd unset-require-min-compat-client pool_migration 2> $dir/unset.out || return 1
+    grep "is being migrated" $dir/unset.out || return 1
+    ceph osd dump | grep -w flags | grep -w require_pool_migration || return 1
+    ceph osd unpause || return 1
 }
 
 function TEST_old_clients_block_migration() {

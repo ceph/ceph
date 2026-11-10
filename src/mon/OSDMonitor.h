@@ -446,6 +446,14 @@ public:
    * features, counted by their features, or "" if none does
    */
   std::string clients_lacking_features(uint64_t features) const;
+  /**
+   * Require, or stop requiring, that clients can follow a pool migration
+   * (CEPH_OSDMAP_REQUIRE_POOL_MIGRATION)
+   * @return 0 to propose, 1 if nothing changes, or -EPERM if refused
+   * @param sure require it although connected clients lack the feature
+   */
+  int prepare_require_pool_migration(bool require, bool sure,
+                                     std::stringstream &ss);
   // @param req an optional op request, if the osdmaps are replies to it. so
   //            @c Monitor::send_reply() can mark_event with it.
   void send_incremental(epoch_t first, MonSession *session, bool onetime,

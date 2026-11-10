@@ -890,7 +890,12 @@ COMMAND("osd get-require-min-compat-client",
 COMMAND("osd set-require-min-compat-client "
 	"name=version,type=CephString "
         "name=yes_i_really_mean_it,type=CephBool,req=false",
-	"set the minimum client version we will maintain compatibility with",
+	"set the minimum client version we will maintain compatibility with, "
+	"or require a feature of clients: pool_migration",
+	"osd", "rw")
+COMMAND("osd unset-require-min-compat-client "
+	"name=feature,type=CephChoices,strings=pool_migration",
+	"stop requiring a feature of clients",
 	"osd", "rw")
 COMMAND("osd pause", "pause osd", "osd", "rw")
 COMMAND("osd unpause", "unpause osd", "osd", "rw")

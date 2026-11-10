@@ -4804,6 +4804,8 @@ string OSDMap::get_flag_string(unsigned f)
     s += ",noautoscale";
   if (f & CEPH_OSDMAP_STRETCH_ZONES)
     s += ",stretch_zones";
+  if (f & CEPH_OSDMAP_REQUIRE_POOL_MIGRATION)
+    s += ",require_pool_migration";
   if (s.length())
     s.erase(0, 1);
   return s;

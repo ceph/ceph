@@ -453,11 +453,18 @@ for example to change the plugin or change the k and m values, which cannot othe
 be changed in place.
 
 Every client must be able to follow a pool migration. Linux kernel clients and
-clients of earlier releases can't. ``ceph osd pool migrate`` is refused while
-any client, MDS or Manager that can't is connected; the
-``POOL_MIGRATION_INCOMPATIBLE_CLIENTS`` health check lists them. While a
-migration is in progress, the Monitors and OSDs refuse clients and MDSs that
-can't follow it.
+clients of earlier releases can't. Before a pool can be migrated, an operator
+must require the feature of clients:
+
+.. prompt:: bash $
+
+   ceph osd set-require-min-compat-client pool_migration
+
+The command is refused while any client, MDS or Manager that can't follow a
+migration is connected (see :ref:`require_min_compat_client`), and so is
+``ceph osd pool migrate``; the ``POOL_MIGRATION_INCOMPATIBLE_CLIENTS`` health
+check lists them. While a migration is in progress, the Monitors and OSDs
+refuse clients and MDSs that can't follow it.
 
 
 .. _associate-pool-to-application:

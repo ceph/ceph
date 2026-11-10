@@ -1751,6 +1751,15 @@ Usage::
 
     ceph osd set-require-min-compat-client <version>
 
+Instead of a release, it takes the name of a feature that clients must have:
+``pool_migration``, which ``ceph osd pool migrate`` requires. Subcommand
+``unset-require-min-compat-client`` stops requiring the feature.
+
+Usage::
+
+    ceph osd set-require-min-compat-client pool_migration
+    ceph osd unset-require-min-compat-client pool_migration
+
 Subcommand ``stat`` prints summary of OSD map.
 
 Usage::
