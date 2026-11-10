@@ -331,6 +331,10 @@ function pool_autoscale_mode() {
     ceph osd pool get $1 pg_autoscale_mode -f json | jq -r .pg_autoscale_mode
 }
 
+function pool_rule() {
+    ceph osd pool get $1 crush_rule -f json | jq -r .crush_rule
+}
+
 # Test crush_rule and pg_autoscale_mode are also taken as rule and
 # autoscale_mode, their names in earlier releases, but not under both names
 function TEST_old_param_names() {
@@ -344,8 +348,12 @@ function TEST_old_param_names() {
         test "$(default_field crush_rule value)" = replicated_rule || return 1
         ceph osd pool default set --$name none || return 1
         test "$(default_field crush_rule value)" = none || return 1
-        ceph osd pool create pool_$name --$name replicated_rule || return 1
+        # replicated_rule is the default, so a second rule shows the name is used
+        ceph osd crush rule create-replicated second default osd || return 1
+        ceph osd pool create pool_$name --$name second || return 1
+        test "$(pool_rule pool_$name)" = second || return 1
         ceph osd pool set pool_$name $name replicated_rule || return 1
+        test "$(pool_rule pool_$name)" = replicated_rule || return 1
     done
     for name in pg_autoscale_mode autoscale_mode ; do
         # run_mon sets osd_pool_default_pg_autoscale_mode on the command line
