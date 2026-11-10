@@ -1923,7 +1923,7 @@ namespace {
 // positions that the zone holds.  Like calc_ec_acting, prefer up[i] and
 // acting[i] to strays.  Compared member by member, in order.  Not local to
 // calc_ec_acting_stretch(): GCC 13 cannot compare a local class with a
-// defaulted operator<=> inside std::pair.
+// defaulted operator<=> inside another class.
 struct zone_fit_t {
   unsigned up_or_acting = 0; // positions held by up[i] or acting[i]
   unsigned up = 0;           // positions held by up[i]
@@ -1937,6 +1937,16 @@ struct zone_fit_t {
             held_if_recoverable + o.held_if_recoverable, held + o.held,
             acting + o.acting};
   }
+};
+
+// How well a choice of CRUSH zones serves all the zone blocks.  Compared
+// member by member, in order.
+struct block_zones_score_t {
+  bool recoverable = false; // the served shards can recover the PG
+  bool writeable = false;   // the current served shards make acting writeable
+  zone_fit_t fit;           // summed over the blocks
+
+  auto operator<=>(const block_zones_score_t &) const = default;
 };
 } // anonymous namespace
 
@@ -2020,9 +2030,11 @@ void PeeringState::calc_ec_acting_stretch(
   };
   using block_holdings_t = map<int, map<int, zone_holding_t>>; // block -> zone
 
-  // Returns the CRUSH zone serving each block that is served.
+  // Returns the CRUSH zone serving each block that is served.  is_current
+  // tells which holders can count towards min_size.
   auto choose_block_zones = [&](const vector<vector<int>> &shard_holders,
-                                const vector<int> &cur_acting) {
+                                const vector<int> &cur_acting,
+                                auto is_current) {
     block_holdings_t holdings;
     for (unsigned i = 0; i < size; ++i) {
       auto &block = holdings[pool.info.get_shard_zone(shard_id_t(i))];
@@ -2059,9 +2071,9 @@ void PeeringState::calc_ec_acting_stretch(
     // its shards that no earlier block uses, and also leaving the block
     // unserved.  fit and served are the sums for the blocks before b.  Once
     // every block is decided, it keeps the first best choice: one whose
-    // shards can recover the PG, then the one with the highest fit.
-    using score_t = std::pair<bool, zone_fit_t>;
-    score_t best{};
+    // shards can recover the PG, then one whose current shards can make it
+    // writeable, then the one with the highest fit.
+    block_zones_score_t best;
     map<int, int> block_zone, trial;
     set<int> used_zones;
     std::function<void(block_holdings_t::const_iterator, const zone_fit_t &,
@@ -2069,7 +2081,15 @@ void PeeringState::calc_ec_acting_stretch(
       [&](block_holdings_t::const_iterator b, const zone_fit_t &fit,
           const set<pg_shard_t> &served) {
         if (b == holdings.cend()) {
-          const score_t score{is_recoverable(served), fit};
+          vector<int> current(size, CRUSH_ITEM_NONE);
+          for (const auto &s : served) {
+            if (is_current(s)) {
+              current[s.shard.id] = s.osd;
+            }
+          }
+          const block_zones_score_t score{
+            is_recoverable(served),
+            osdmap->acting_set_writeable(pool.info, current), fit};
           if (score > best) {
             best = score;
             block_zone = trial;
@@ -2093,7 +2113,11 @@ void PeeringState::calc_ec_acting_stretch(
   };
   map<int, int> block_zone;
   if (one_zone_per_block) {
-    block_zone = choose_block_zones(holders, acting);
+    block_zone = choose_block_zones(
+      holders, acting, [&](const pg_shard_t &shard) {
+        return all_info.at(shard).last_update >=
+               auth_log_shard->second.last_update;
+      });
     for (const auto &[block, zone] : block_zone) {
       ss << "zone block " << block << " served from zone " << zone
          << std::endl;
@@ -2142,7 +2166,8 @@ void PeeringState::calc_ec_acting_stretch(
       }
       add_holder(goal[i], i, want[i]);
     }
-    goal_zone = choose_block_zones(goal, want);
+    goal_zone = choose_block_zones(
+      goal, want, [](const pg_shard_t &) { return true; });
   }
   for (unsigned i = 0; i < size && i < up.size(); ++i) {
     if (up[i] == CRUSH_ITEM_NONE || want[i] == up[i]) {
