@@ -1,0 +1,5 @@
+# the pool on a hand-written rule that chooses the zones in a device class
+tasks:
+- stretch_rules:
+    rule: class
+    enable_stretch_mode: false
