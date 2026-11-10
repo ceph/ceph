@@ -215,6 +215,8 @@ enum {
   l_osdc_core_switch_delay_histogram,
   l_osdc_core_pgs_switch_pending,
   l_osdc_core_pgs_holding,
+  l_osdc_core_con_timeout,
+  l_osdc_core_hint_blocked,
 
   l_osdc_last,
 };
@@ -260,6 +262,7 @@ std::vector<std::string> Objecter::get_tracked_keys() const noexcept
     "rados_replica_read_policy"s,
     "objecter_osd_core_switch_grace"s,
     "objecter_osd_core_switch_max_hold"s,
+    "ms_connection_ready_timeout"s,
   };
 }
 
@@ -292,7 +295,8 @@ void Objecter::handle_conf_change(const ConfigProxy& conf,
     osd_timeout = conf.get_val<std::chrono::seconds>("rados_osd_op_timeout");
   }
   if (changed.count("objecter_osd_core_switch_grace") ||
-      changed.count("objecter_osd_core_switch_max_hold")) {
+      changed.count("objecter_osd_core_switch_max_hold") ||
+      changed.count("ms_connection_ready_timeout")) {
     // read by the routing events, with rwlock locked
     auto cfg = read_core_cfg(conf);
     // (objecter_use_osd_core_hints is read at startup only)
@@ -563,6 +567,13 @@ void Objecter::init()
     pcb.add_u64(l_osdc_core_pgs_holding, "core_pgs_holding",
 		"PGs holding their new ops to switch to another OSD "
 		"connection (updated on tick)");
+    pcb.add_u64_counter(l_osdc_core_con_timeout, "core_con_timeout",
+			"Connections to OSD cores given up on, not connected "
+			"in time (ms_connection_ready_timeout); their hosts "
+			"are then blocked for a while");
+    pcb.add_u64_counter(l_osdc_core_hint_blocked, "core_hint_blocked",
+			"Hints not followed, connecting to the OSD's cores "
+			"being blocked (after a connection to them timed out)");
 
     logger = pcb.create_perf_counters();
     cct->get_perfcounters_collection()->add(logger);
@@ -2342,19 +2353,40 @@ bool Objecter::_drop_core_con(OSDSession *s,
 {
   // rwlock is locked unique
   // s->lock is locked
+  using osdc::core_route::drop_why_t;
 
   // the PGs routed via that core fall back to the main connection. The
-  // hints to that core are forgotten, so that the next one reconnects.
-  // TODO: back off reconnecting to a core that keeps failing
+  // hints to that core are forgotten, so that the next one reconnects
+  // (unless the host is blocked: see connect_timeout).
+  // TODO: back off reconnecting to a core whose connection keeps resetting
+  // after having connected
   auto dropped = s->core_routes.drop_core_con(
     con, why, ceph::coarse_mono_clock::now(), core_host_blocks);
   if (!dropped) {
-    // reset, or replaced meanwhile
+    // reset, replaced or connected meanwhile
     return false;
   }
   const auto core = dropped->core;
-  ldout(cct, 1) << __func__ << " osd." << s->osd << " core " << core
-		<< " " << con << dendl;
+  switch (why) {
+  case drop_why_t::reset:
+  case drop_why_t::unresponsive:
+    ldout(cct, 1) << __func__ << " osd." << s->osd << " core " << core
+		  << " " << con << ": reset" << dendl;
+    break;
+  case drop_why_t::connect_timeout:
+    // no op was routed to it: there is nothing to resend
+    ldout(cct, 1) << __func__ << " osd." << s->osd << " core " << core
+		  << " " << con << ": not connected after "
+		  << cct->_conf->ms_connection_ready_timeout
+		  << "s; not connecting to the cores of " << con->get_peer_addrs()
+		  << " for " << dropped->blocked_for << dendl;
+    logger->inc(l_osdc_core_con_timeout);
+    break;
+  case drop_why_t::unused:
+    ldout(cct, 10) << __func__ << " osd." << s->osd << " core " << core
+		   << " " << con << ": unused" << dendl;
+    break;
+  }
   dropped->con->set_priv(NULL);
   dropped->con->mark_down();
   logger->dec(l_osdc_core_cons);
@@ -2662,15 +2694,18 @@ void Objecter::_session_apply_core_hint(OSDSession *s,
   case what_t::unchanged:
     // the common case
     return;
+  case what_t::blocked:
+    ldout(cct, 20) << __func__ << " osd." << s->osd << " pg " << pgid
+		   << ": not following hint " << fmt::format("{}", hint)
+		   << ": connecting to its host is blocked" << dendl;
+    logger->inc(l_osdc_core_hint_blocked);
+    return;
   case what_t::invalid:
     ldout(cct, 1) << __func__ << " osd." << s->osd << " pg " << pgid
 		  << ": ignoring hint " << fmt::format("{}", hint) << ": no port,"
 		  << " or no msgr2 address in "
 		  << (s->con ? s->con->get_peer_addrs() : entity_addrvec_t{})
 		  << dendl;
-    return;
-  case what_t::blocked:
-    // (no host is blocked)
     return;
   case what_t::connect_failed:
     ldout(cct, 1) << __func__ << " osd." << s->osd << " pg " << pgid
@@ -2687,11 +2722,10 @@ void Objecter::_session_apply_core_hint(OSDSession *s,
 		 << ")" << dendl;
   logger->inc(l_osdc_core_hint_change);
   if (out.opened) {
+    // not routed to until connected (see ms_handle_connect())
     ldout(cct, 10) << __func__ << " osd." << s->osd << " core " << hint.core
 		   << ": connecting to " << out.addr << " " << out.opened
 		   << dendl;
-    // routed to at once
-    s->core_routes.admit_core_con(out.opened, core_host_blocks);
     logger->inc(l_osdc_core_cons);
     logger->inc(l_osdc_core_con_open);
   }
@@ -2882,8 +2916,12 @@ void Objecter::tick()
   }
 
   set<OSDSession*> toping;
+  using osdc::core_route::drop_why_t;
   // core connections with laggy ops (see OSDSession::core_cons)
   std::vector<ConnectionRef> toping_core_cons;
+  // core connections to give up on, not connected in time:
+  // (osd, connection, why)
+  std::vector<std::tuple<int, ConnectionRef, drop_why_t>> giveup_core_cons;
   const auto now = ceph::coarse_mono_clock::now();
 
   // look for laggy requests
@@ -2923,6 +2961,10 @@ void Objecter::tick()
       _note_forgotten(s, checked.forgotten);
       pgs_holding += checked.pgs_holding;
       pgs_switch_pending += checked.pgs_switch_pending;
+      for (auto& [core, con] : checked.connect_timed_out) {
+	giveup_core_cons.emplace_back(s->osd, std::move(con),
+				      drop_why_t::connect_timeout);
+      }
     }
     // a fallback: holds drain mostly on replies (handle_osd_op_reply())
     _release_drained_holds(s);
@@ -2999,6 +3041,13 @@ void Objecter::tick()
     toping_core_cons.end());
   for (auto& con : toping_core_cons) {
     con->send_message(new MPing);
+  }
+
+  std::unique_lock<ceph::shared_mutex> wl;
+  if (!giveup_core_cons.empty()) {
+    rl.unlock();
+    wl = std::unique_lock{rwlock};
+    _give_up_core_cons(giveup_core_cons, wl);
   }
 
   // Make sure we don't reschedule if we wake up after shutdown
@@ -6025,6 +6074,58 @@ void Objecter::ms_handle_connect(Connection *con)
 
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON)
     resend_mon_ops();
+  else if (con->get_peer_type() == CEPH_ENTITY_TYPE_OSD && use_osd_core_hints)
+    handle_core_con_connect(con);
+}
+
+void Objecter::handle_core_con_connect(Connection *con)
+{
+  auto priv = con->get_priv();
+  auto s = static_cast<OSDSession*>(priv.get());
+  if (!s) {
+    return;
+  }
+  shared_lock rl(rwlock);
+  if (!initialized) {
+    return;
+  }
+  unique_lock sl(s->lock);
+  const auto admitted =
+    s->core_routes.admit_core_con(ConnectionRef(con), core_host_blocks);
+  if (!admitted) {
+    // the main connection, or not ours any more
+    return;
+  }
+  ldout(cct, 10) << __func__ << " osd." << s->osd << " core "
+		 << admitted->core << " " << con << ": connected" << dendl;
+  if (admitted->unblocked) {
+    ldout(cct, 5) << __func__ << " osd." << s->osd << " core "
+		  << admitted->core << ": connecting to the cores of "
+		  << con->get_peer_addrs() << " no longer blocked" << dendl;
+  }
+}
+
+void Objecter::_give_up_core_cons(
+  const std::vector<std::tuple<int, ConnectionRef,
+                               osdc::core_route::drop_why_t>>& cons,
+  std::unique_lock<ceph::shared_mutex>& wl)
+{
+  // rwlock is locked unique
+  if (!initialized || cons.empty()) {
+    return;
+  }
+  map<uint64_t, LingerOp *> lresend;
+  for (const auto& [osd, con, why] : cons) {
+    auto si = osd_sessions.find(osd);
+    if (si == osd_sessions.end()) {
+      continue;
+    }
+    auto s = si->second;
+    unique_lock sl(s->lock);
+    // (ignored if reset, replaced or connected meanwhile)
+    _drop_core_con(s, con, why, lresend);
+  }
+  _linger_ops_resend(lresend, wl);
 }
 
 bool Objecter::ms_handle_reset(Connection *con)
