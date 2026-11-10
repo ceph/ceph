@@ -5,6 +5,7 @@ import logging
 import os
 import re
 import shlex
+import time
 
 from tasks.util import get_remote_for_role
 from tasks.util.workunit import get_refspec_after_overrides
@@ -365,6 +366,28 @@ def _spawn_on_all_clients(ctx, refspec, tests, env, basedir, subdir, timeout=Non
             _delete_dir(ctx, role, created_mountpoint[role])
 
 
+def _clone(remote, role, refspec, git_url, clonedir, tries=3, sleep=10):
+    """
+    Clone git_url and check out refspec, retrying so a transient fetch error
+    (e.g. an HTTP 408 from GitHub) does not fail the clone outright or send
+    us to the fallback repository, which may not have this refspec at all.
+    """
+    for attempt in range(1, tries + 1):
+        try:
+            remote.run(logger=log.getChild(role),
+                       args=refspec.clone(git_url, clonedir))
+            return
+        except CommandFailedError:
+            if attempt == tries:
+                raise
+            log.warning(
+                "failed to check out '%s' from %s (attempt %d of %d); "
+                "retrying in %ds",
+                refspec, git_url, attempt, tries, sleep,
+            )
+            time.sleep(sleep)
+
+
 def _run_tests(ctx, refspec, role, tests, env, basedir,
                subdir=None, timeout=None, cleanup=True, watchdog=False,
                coverage_and_limits=True):
@@ -404,8 +427,7 @@ def _run_tests(ctx, refspec, role, tests, env, basedir,
     # if we are running an upgrade test, and ceph-ci does not have branches like
     # `jewel`, so should use ceph.git as an alternative.
     try:
-        remote.run(logger=log.getChild(role),
-                   args=refspec.clone(git_url, clonedir))
+        _clone(remote, role, refspec, git_url, clonedir)
     except CommandFailedError:
         if git_url.endswith('/ceph-ci.git'):
             alt_git_url = git_url.replace('/ceph-ci.git', '/ceph.git')
@@ -419,8 +441,7 @@ def _run_tests(ctx, refspec, role, tests, env, basedir,
             git_url,
             alt_git_url,
         )
-        remote.run(logger=log.getChild(role),
-                   args=refspec.clone(alt_git_url, clonedir))
+        _clone(remote, role, refspec, alt_git_url, clonedir)
     remote.run(
         logger=log.getChild(role),
         args=[
