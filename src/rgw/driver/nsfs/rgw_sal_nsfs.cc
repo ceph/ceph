@@ -556,6 +556,26 @@ static bool nsfs_non_md5_etag_into_attrs(const DoutPrefixProvider* dpp,
  *
  * A closed descriptor is -EBADF and not a skip:  every caller of this
  * is one whose attribute map will not be written again. */
+/* One attribute written to `fd` as `as`:  on the ring, or on the pool
+ * when the ring cannot take it;  as the gateway when `as` is inactive.
+ * 0 or -errno. */
+static int fsetxattr_as(const DoutPrefixProvider* dpp,
+			const nsfs::FSIdentity& as, int fd,
+			const std::string& name, const std::string& value,
+			optional_yield y)
+{
+  rgw::sal::UringOp op{rgw::sal::UringOp::Kind::fsetxattr};
+  op.fd = fd;
+  op.path = name.c_str();
+  op.buf = const_cast<char*>(value.data());
+  op.len = value.size();
+  const int r = nsfs::op_as(dpp, as, nsfs::HopKind::attr_write, op, [&]() -> int {
+    return (::fsetxattr(fd, name.c_str(), value.data(), value.size(), 0) < 0)
+      ? -errno : 0;
+  }, y);
+  return (r < 0) ? r : 0;
+}
+
 static int nsfs_record_non_md5_etag(const DoutPrefixProvider* dpp, int fd,
                                     const struct statx& stx,
                                     const nsfs::XattrStrategy* xs,
@@ -574,12 +594,7 @@ static int nsfs_record_non_md5_etag(const DoutPrefixProvider* dpp, int fd,
     ::fsetxattr(fd, xattr.c_str(), etag.c_str(), etag.size(), 0);
     return 0;
   }
-  return nsfs::with_identity(dpp, id, [&]() -> int {
-    if (::fsetxattr(fd, xattr.c_str(), etag.c_str(), etag.size(), 0) < 0) {
-      return -errno;
-    }
-    return 0;
-  }, y);
+  return fsetxattr_as(dpp, id, fd, xattr, etag, y);
 }
 
 /* The uid and gid of an open descriptor.
@@ -886,11 +901,15 @@ static int unlinkat_as(const DoutPrefixProvider* dpp,
 		       const nsfs::AccessStrategy* model,
 		       int dirfd, const char* name)
 {
-  return nsfs::with_identity_or_raise(dpp, id, model,
-				      nsfs::AccessClass::data,
-				      RAISED_KEYDIR_CAPS,
-				      [&]() -> int {
-    return (::unlinkat(dirfd, name, 0) < 0) ? -errno : 0;
+  return nsfs::as_identity_or_raise(dpp, id, model, nsfs::AccessClass::data,
+				    RAISED_KEYDIR_CAPS,
+				    [&](const nsfs::FSIdentity& as) -> int {
+    rgw::sal::UringOp op{rgw::sal::UringOp::Kind::unlinkat};
+    op.fd = dirfd;
+    op.path = name;
+    return nsfs::op_as(dpp, as, nsfs::HopKind::link, op, [&]() -> int {
+      return (::unlinkat(dirfd, name, 0) < 0) ? -errno : 0;
+    }, null_yield);
   }, null_yield);
 }
 
@@ -963,12 +982,18 @@ static int renameat_as(const DoutPrefixProvider* dpp,
 		       const nsfs::AccessStrategy* model, int olddirfd,
 		       const char* oldname, int newdirfd, const char* newname)
 {
-  return nsfs::with_identity_or_raise(dpp, id, model,
-				      nsfs::AccessClass::data,
-				      RAISED_KEYDIR_CAPS,
-				      [&]() -> int {
-    return (::renameat(olddirfd, oldname, newdirfd, newname) < 0)
+  return nsfs::as_identity_or_raise(dpp, id, model, nsfs::AccessClass::data,
+				    RAISED_KEYDIR_CAPS,
+				    [&](const nsfs::FSIdentity& as) -> int {
+    rgw::sal::UringOp op{rgw::sal::UringOp::Kind::renameat};
+    op.fd = olddirfd;
+    op.path = oldname;
+    op.fd2 = newdirfd;
+    op.path2 = newname;
+    return nsfs::op_as(dpp, as, nsfs::HopKind::link, op, [&]() -> int {
+      return (::renameat(olddirfd, oldname, newdirfd, newname) < 0)
 	? -errno : 0;
+    }, null_yield);
   }, null_yield);
 }
 
@@ -1265,6 +1290,21 @@ static int ensure_versions_dir(const DoutPrefixProvider* dpp, int parent_fd,
 			       const nsfs::AccessStrategy* model)
 {
   if (id.active()) {
+    /* Present already, as it is but for a key's first version:  asked on
+     * the ring, so only the make below, whose fchmodat(2) has no
+     * opcode, goes to the pool.  A denial or any doubt goes on to the
+     * make, which decides as before. */
+    struct statx vstx = {};
+    rgw::sal::UringOp probe{rgw::sal::UringOp::Kind::statx};
+    probe.fd = parent_fd;
+    probe.path = HIDDEN_VERSIONS_PATH.c_str();
+    probe.flags = AT_SYMLINK_NOFOLLOW;
+    probe.len = STATX_TYPE;
+    probe.buf = &vstx;
+    if ((nsfs::ring_as(dpp, id, &probe, 1, null_yield) == 0) &&
+	(probe.result == 0) && S_ISDIR(vstx.stx_mode)) {
+      return 0;
+    }
     const mode_t mode = nsfs::dir_create_mode();
     bool raised = false;
     bool made = false;
@@ -1968,18 +2008,16 @@ static int demote_current_version(const DoutPrefixProvider* dpp,
 
   std::string ver_name = nsfs_ver_entry(leaf, cur_ver_id);
 
-  /* the link inside the wrapper, so a denial can be the gateway's to
-   * perform:  as `id` on the helper, then raised */
+  /* as `id`, on the ring where it can be, so a denial can be the
+   * gateway's to perform:  then raised */
   SafeResult sr = SafeResult::ERROR;
-  (void) nsfs::with_identity_or_raise(dpp, id, model,
-				      nsfs::AccessClass::data,
-				      RAISED_KEYDIR_CAPS,
-				      [&]() -> int {
+  (void) nsfs::as_identity_or_raise(dpp, id, model, nsfs::AccessClass::data,
+				    RAISED_KEYDIR_CAPS,
+				    [&](const nsfs::FSIdentity& as) -> int {
     sr = fs_strategy->safe_link(
       dpp, parent_fd, leaf,
       vfd, ver_name,
-      statx_mtime_ns(cur_stx), cur_stx.stx_ino, null_yield,
-      nsfs::FSIdentity::none());
+      statx_mtime_ns(cur_stx), cur_stx.stx_ino, y, as);
     return (sr == SafeResult::DENIED) ? -EACCES : 0;
   }, y);
   ldpp_dout_fmt(dpp, 10, "nsfs: demote {} -> {} result={}", leaf, ver_name,
@@ -1995,12 +2033,11 @@ static int demote_current_version(const DoutPrefixProvider* dpp,
 	  std::chrono::system_clock::now().time_since_epoch()).count());
       const std::string ts_x =
 	xs->disk_name(RGW_NSFS_ATTR_NON_CURRENT_TS);
-      const int tret = nsfs::with_identity_or_raise(dpp, id, model,
-						    nsfs::AccessClass::data,
-						    RAISED_KEYDIR_CAPS,
-						    [&]() -> int {
-	return (::fsetxattr(demoted_fd, ts_x.c_str(), now_ms.c_str(),
-			    now_ms.size(), 0) < 0) ? -errno : 0;
+      const int tret = nsfs::as_identity_or_raise(dpp, id, model,
+						  nsfs::AccessClass::data,
+						  RAISED_KEYDIR_CAPS,
+						  [&](const nsfs::FSIdentity& as) -> int {
+	return fsetxattr_as(dpp, as, demoted_fd, ts_x, now_ms, y);
       }, y);
       if (tret < 0) {
 	ldpp_dout_fmt(dpp, 4, "nsfs: demote {}:  its non-current timestamp "
@@ -2346,6 +2383,116 @@ static inline int copy_dir_fd(int old_fd)
  * 2026-10-26).  Reported rather than refused here, because listing reads
  * through this too, and one object must not end a listing;  the callers
  * that hand out or convert an object refuse. */
+/* One value of get_x_attrs() into `attrs`. */
+static void put_x_attr(const DoutPrefixProvider* dpp, Attrs& attrs,
+		       std::string key, const nsfs::XattrStrategy* owner,
+		       const char* vp, ssize_t vallen,
+		       const std::string& display)
+{
+  bufferlist bl;
+  bl.append(vp, vallen);
+  /* `owner` and not `xs`:  whether a value is a counted string is the
+   * format's, and NooBaa's are not.  Asking the wrong one appends a
+   * NUL the NooBaa value never had. */
+  if (owner->counted_string_value(key)) {
+    /* Restore the terminator RGW writes and attr_on_disk() strips.
+     *
+     * If the value already ends in one, some write path skipped
+     * attr_on_disk() and we are about to double it.  That is a bug in
+     * this driver, not in the tree, so say so loudly rather than hand
+     * a NUL to a client. */
+    if (vallen > 0 && vp[vallen - 1] == '\0') {
+      ldpp_dout_fmt(dpp, 0, "ERROR: attribute {} on {} is already "
+			    "NUL-terminated on disk;  some write path "
+			    "skipped attr_on_disk().  Not restoring.", key,
+			    display);
+    } else {
+      bl.append('\0');
+    }
+  }
+  attrs.emplace(std::move(key), std::move(bl));
+}
+
+/* get_x_attrs() as an identity, on the ring (N-D3;  DECISIONS
+ * 2026-11-10):  the gateway lists the names, and the identity reads the
+ * values of those a format claims.  The pass over the names is the pool
+ * path's, below, done over what read_xattrs_as() returns.  -ENXIO when
+ * the ring cannot run it, with nothing changed. */
+static int get_x_attrs_ring(optional_yield y, const DoutPrefixProvider* dpp,
+			    int fd, Attrs& attrs, const std::string& display,
+			    const nsfs::XattrStrategy* xs,
+			    const nsfs::XattrStrategy* alt,
+			    const nsfs::FSIdentity& id, std::string_view skip,
+			    std::vector<std::string>* unknown,
+			    std::vector<std::string>* names)
+{
+  const auto claimed = [&](const std::string& n) -> bool {
+    std::string key;
+    if (!skip.empty() && n.starts_with(skip)) {
+      return false;
+    }
+    return xs->parse_disk_name(n, key) || (alt && alt->parse_disk_name(n, key));
+  };
+  std::vector<nsfs::XattrValue> vals;
+  const int r = nsfs::read_xattrs_as(dpp, fd, id, y, claimed, vals);
+  if (r == -ENXIO) {
+    return r;
+  }
+  if (r < 0) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: could not list attributes for {}: {}",
+			  display, cpp_strerror(-r));
+    return r;
+  }
+
+  std::vector<std::string> unclaimed;
+  for (auto& v : vals) {
+    if (names) {
+      names->push_back(v.name);
+    }
+    if (!skip.empty() && v.name.starts_with(skip)) {
+      continue;
+    }
+    std::string key;
+    const nsfs::XattrStrategy* owner = xs;
+    if (!xs->parse_disk_name(v.name, key)) {
+      if (!alt || !alt->parse_disk_name(v.name, key)) {
+	/* as below:  kept for parse_disk_attrs(), its value unread */
+	if (unknown && !nsfs::noobaa_schema::object_attribute_known(v.name)) {
+	  unknown->push_back(v.name);
+	}
+	unclaimed.emplace_back(std::move(v.name));
+	continue;
+      }
+      owner = alt;
+    }
+    if (v.err != 0) {
+      ldpp_dout_fmt(dpp, 0, "ERROR: could not get attribute {} for {}: {}",
+			    v.name, display, cpp_strerror(v.err));
+      return -v.err;
+    }
+    put_x_attr(dpp, attrs, std::move(key), owner, v.value.data(),
+	       v.value.size(), display);
+  }
+
+  /* What no name placed, read by the formats themselves, as the
+   * identity on the pool:  the formats read with fgetxattr(2) of their
+   * own.  Only when a format reads one of them -- NooBaa's per-tag
+   * attributes -- so `security.selinux`, on every file, costs no hop;  a
+   * NooBaa object with tags is the one that pays. */
+  if (std::ranges::any_of(unclaimed, [&](const std::string& n) {
+	return xs->parses_disk_attr(n) || (alt && alt->parses_disk_attr(n));
+      })) {
+    (void) nsfs::with_identity(dpp, id, nsfs::HopKind::attr_read, [&]() -> int {
+      xs->parse_disk_attrs(dpp, fd, unclaimed, attrs);
+      if (alt) {
+	alt->parse_disk_attrs(dpp, fd, unclaimed, attrs);
+      }
+      return 0;
+    }, y);
+  }
+  return 0;
+}
+
 static int get_x_attrs(optional_yield y, const DoutPrefixProvider* dpp, int fd,
 		       Attrs& attrs, const std::string& display,
 		       const nsfs::XattrStrategy* xs,
@@ -2355,10 +2502,18 @@ static int get_x_attrs(optional_yield y, const DoutPrefixProvider* dpp, int fd,
 		       std::vector<std::string>* unknown = nullptr,
 		       std::vector<std::string>* names = nullptr)
 {
+  if (id.active()) {
+    const int r = get_x_attrs_ring(y, dpp, fd, attrs, display, xs, alt, id,
+				   skip, unknown, names);
+    if (r != -ENXIO) {
+      return r;
+    }
+  }
+
   /* The whole read as the identity:  each value needs read
    * permission on the object.  Nested with_identity() calls below are harmless -- a thread
    * already running as the identity makes the call directly. */
-  return nsfs::with_identity(dpp, id, [&]() -> int {
+  return nsfs::with_identity(dpp, id, nsfs::HopKind::attr_read, [&]() -> int {
   /* large enough for every attribute an object carries in practice;  the
    * biggest is the encoded ACL at a couple of hundred bytes */
   enum { INLINE_VALUE_MAX = 1024 };
@@ -2439,28 +2594,7 @@ static int get_x_attrs(optional_yield y, const DoutPrefixProvider* dpp, int fd,
       return -ret;
     }
 
-    bufferlist bl;
-    bl.append(vp, vallen);
-    /* `owner` and not `xs`:  whether a value is a counted string is the
-     * format's, and NooBaa's are not.  Asking the wrong one appends a
-     * NUL the NooBaa value never had. */
-    if (owner->counted_string_value(key)) {
-      /* Restore the terminator RGW writes and attr_on_disk() strips.
-       *
-       * If the value already ends in one, some write path skipped
-       * attr_on_disk() and we are about to double it.  That is a bug in
-       * this driver, not in the tree, so say so loudly rather than hand
-       * a NUL to a client. */
-      if (vallen > 0 && vp[vallen - 1] == '\0') {
-	ldpp_dout_fmt(dpp, 0, "ERROR: attribute {} on {} is already "
-			      "NUL-terminated on disk;  some write path "
-			      "skipped attr_on_disk().  Not restoring.", key,
-			      display);
-      } else {
-	bl.append('\0');
-      }
-    }
-    attrs.emplace(std::move(key), std::move(bl)); /* key and bl are r-value refs */
+    put_x_attr(dpp, attrs, std::move(key), owner, vp, vallen, display);
 
     buflen -= keylen;
     keyptr += keylen;
@@ -14700,14 +14834,8 @@ int NSFSObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, 
        * null version (`6ac7174791c`), and the id the client holds
        * named nothing:  20 versioning tests, all of them a GET or a
        * HEAD by a version id that exists only in the response. */
-      const int vret = nsfs::with_identity(dpp, ent->get_identity(),
-					   [&]() -> int {
-	if (::fsetxattr(fd, xattr.c_str(), ver_id.c_str(),
-			ver_id.size(), 0) < 0) {
-	  return -errno;
-	}
-	return 0;
-      }, y);
+      const int vret = fsetxattr_as(dpp, ent->get_identity(), fd, xattr,
+				    ver_id, y);
       if (vret < 0) {
 	ldpp_dout_fmt(dpp, 0, "ERROR: could not record the version id on {}: "
 			      "{};  a later demote would file it as the null "
@@ -16096,14 +16224,14 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
        * gateway -- the same denial the writer's demote had before it
        * carried one. */
       SafeResult sr = SafeResult::ERROR;
-      (void) nsfs::with_identity_or_raise(dpp, identity, model,
-                                          nsfs::AccessClass::data,
-                                          RAISED_KEYDIR_CAPS, [&]() -> int {
+      (void) nsfs::as_identity_or_raise(dpp, identity, model,
+                                        nsfs::AccessClass::data,
+                                        RAISED_KEYDIR_CAPS,
+                                        [&](const nsfs::FSIdentity& as) -> int {
         sr = source->driver->get_fs_strategy()->safe_link(
                                 dpp, parent_fd, dm_leaf,
                                 vfd, ver_name,
-                                cur_mtime, cur_ino, null_yield,
-                                nsfs::FSIdentity::none());
+                                cur_mtime, cur_ino, y, as);
         return (sr == SafeResult::DENIED) ? -EACCES : 0;
       }, y);
       if (sr == SafeResult::OK) {
@@ -16116,16 +16244,23 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
             std::chrono::system_clock::now().time_since_epoch()).count());
         const std::string ts_x =
           source->xattr_strategy()->disk_name(RGW_NSFS_ATTR_NON_CURRENT_TS);
-        const int tret = nsfs::with_identity_or_raise(dpp, identity, model,
-                                                      nsfs::AccessClass::data,
-                                                      RAISED_KEYDIR_CAPS,
-                                                      [&]() -> int {
-          const int dfd = ::openat(vfd, ver_name.c_str(), O_RDONLY | O_NOFOLLOW);
-          if (dfd < 0) {
-            return -errno;
+        const int tret = nsfs::as_identity_or_raise(dpp, identity, model,
+                                                    nsfs::AccessClass::data,
+                                                    RAISED_KEYDIR_CAPS,
+                                                    [&](const nsfs::FSIdentity& as) -> int {
+          int dfd;
+          if (as.active()) {
+            dfd = nsfs::open_as(dpp, as, vfd, ver_name.c_str(), O_RDONLY, 0);
+          } else {
+            dfd = ::openat(vfd, ver_name.c_str(), O_RDONLY | O_NOFOLLOW);
+            if (dfd < 0) {
+              dfd = -errno;
+            }
           }
-          const int r = (::fsetxattr(dfd, ts_x.c_str(), now_ms.c_str(),
-                                     now_ms.size(), 0) < 0) ? -errno : 0;
+          if (dfd < 0) {
+            return dfd;
+          }
+          const int r = fsetxattr_as(dpp, as, dfd, ts_x, now_ms, y);
           ::close(dfd);
           return r;
         }, y);
@@ -16137,13 +16272,13 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
         /* CAS unlink: remove current only if it still matches.  The
          * authenticated user's too:  the entry it removes is in the bucket
          * directory, which phase D hands to the account. */
-        (void) nsfs::with_identity_or_raise(dpp, identity, model,
-                                            nsfs::AccessClass::data,
-                                            RAISED_KEYDIR_CAPS, [&]() -> int {
+        (void) nsfs::as_identity_or_raise(dpp, identity, model,
+                                          nsfs::AccessClass::data,
+                                          RAISED_KEYDIR_CAPS,
+                                          [&](const nsfs::FSIdentity& as) -> int {
           const SafeResult ur = source->driver->get_fs_strategy()->safe_unlink(
                       dpp, parent_fd, dm_leaf, vfd,
-                      cur_mtime, cur_ino, null_yield,
-                      nsfs::FSIdentity::none());
+                      cur_mtime, cur_ino, y, as);
           return (ur == SafeResult::DENIED) ? -EACCES : 0;
         }, y);
         demoted_ver_id = cur_ver_id;
@@ -16206,20 +16341,13 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
    * the version id is (`0dcf4a191f6`):  a `user.*` write is tested
    * against the calling thread, so the gateway writing to the
    * authenticated user's file would fail. */
-  int dm_fd = -1;
   bool dm_raised = false;
-  const int dmret = nsfs::with_identity_or_raise(dpp, identity, model,
-                                                 nsfs::AccessClass::data,
-                                                 RAISED_CREATE_CAPS,
-                                                 [&]() -> int {
-    dm_fd = ::openat(vfd, dm_tmp.c_str(),
-                     O_WRONLY | O_CREAT | O_EXCL,
-                     nsfs::file_create_mode());
-    if (dm_fd < 0) {
-      return -errno;
-    }
-    return 0;
-  }, y, &dm_raised);
+  int dm_fd = nsfs::open_as_or_raise(dpp, identity, model,
+                                     nsfs::AccessClass::data,
+                                     RAISED_CREATE_CAPS, vfd, dm_tmp.c_str(),
+                                     O_WRONLY | O_CREAT | O_EXCL,
+                                     nsfs::file_create_mode(), &dm_raised);
+  const int dmret = (dm_fd < 0) ? dm_fd : 0;
   if (dmret < 0) {
     ldpp_dout_fmt(dpp, 0, "ERROR: delete_obj: could not create the delete "
 			  "marker for {}: {}", dm_leaf, cpp_strerror(-dmret));
@@ -16239,20 +16367,14 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
      * user's file fails.  Each is checked:  a marker missing its flag
      * is an empty object, which a GET would return. */
     std::string dm_ver_id;
-    const int aret = nsfs::with_identity(dpp, identity, [&]() -> int {
+    const int aret = [&]() -> int {
       if (source->driver->attr_write_fail_injected(b->get_name())) {
 	source->driver->record_attr_write_fail();
 	return -EIO;
       }
-      /* set delete_marker xattr */
-      std::string dm_xattr = source->xattr_strategy()->disk_name(RGW_NSFS_ATTR_DELETE_MARKER);
-      std::string dm_val = "true";
-      if (::fsetxattr(dm_fd, dm_xattr.c_str(), dm_val.c_str(),
-		      dm_val.size(), 0) < 0) {
-	return -errno;
-      }
-
-      /* stat for version ID */
+      /* the version id from the descriptor, which needs no permission,
+       * so the gateway asks;  an attribute write does not move mtime, so
+       * it is the same id the writes below would have seen */
       struct statx dm_stx;
       if (nsfs::statx(dm_fd, "", AT_EMPTY_PATH, STATX_ALL, &dm_stx) == 0) {
         dm_ver_id = ver_enabled
@@ -16262,12 +16384,14 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
         dm_ver_id = NULL_VERSION_ID;
       }
 
-      /* set version_id xattr */
-      std::string vid_xattr = source->xattr_strategy()->disk_name(RGW_NSFS_ATTR_VERSION_ID);
-      if (::fsetxattr(dm_fd, vid_xattr.c_str(),
-		      dm_ver_id.c_str(), dm_ver_id.size(), 0) < 0) {
-	return -errno;
-      }
+      /* the flag and the version id, and below the ACL, as one batch on
+       * the ring:  every one is written that can be, and the first error
+       * is the marker's (DECISIONS 2026-11-10) */
+      nsfs::xattr_map_t dm_attrs;
+      dm_attrs[source->xattr_strategy()->disk_name(RGW_NSFS_ATTR_DELETE_MARKER)] =
+	"true";
+      dm_attrs[source->xattr_strategy()->disk_name(RGW_NSFS_ATTR_VERSION_ID)] =
+	dm_ver_id;
 
       /* copy ACL from the source object so the DM has owner info.
        *
@@ -16288,16 +16412,11 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
         policy.encode(acl_bl);
       }
       if (acl_bl.length() > 0) {
-        std::string acl_xattr = source->xattr_strategy()->disk_name(RGW_ATTR_ACL);
-        std::string acl_v = attr_on_disk(source->xattr_strategy(),
-                                         RGW_ATTR_ACL, acl_bl);
-        if (::fsetxattr(dm_fd, acl_xattr.c_str(),
-			acl_v.data(), acl_v.size(), 0) < 0) {
-	  return -errno;
-	}
+        dm_attrs[source->xattr_strategy()->disk_name(RGW_ATTR_ACL)] =
+	  attr_on_disk(source->xattr_strategy(), RGW_ATTR_ACL, acl_bl);
       }
-      return 0;
-    }, y);
+      return nsfs::set_xattrs_as(dpp, dm_fd, dm_attrs, y, identity);
+    }();
     ::close(dm_fd);
     /* unnamed yet, so taken back whole;  the demote above stands, as
      * it does when the marker cannot be created or named */
@@ -20325,6 +20444,49 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
        * was last called, so a test can prove which path ran rather
        * than assume it */
       (*out)["buffered_bytes"] = std::to_string(b->buffered_bytes.exchange(0));
+    }
+    return 0;
+  }
+
+  if (hint == "pool-hops") {
+    /* N-D3's route, for one user:  the hops to the helper pool that
+     * user's identity made since this hint was last called, by kind,
+     * reset.  `enable=true` (the default) counts from now on;
+     * `enable=false` stops.  Per user, so a test reads its own traffic
+     * whatever runs beside it. */
+    auto u = params.find("user");
+    if (u == params.end()) {
+      return -EINVAL;
+    }
+    const auto e = params.find("enable");
+    const bool on = (e == params.end()) || (e->second == "true");
+    const auto hops = nsfs::take_pool_hops(u->second, on);
+    if (out) {
+      (*out)["enabled"] = on ? "true" : "false";
+      (*out)["link"] = std::to_string(hops[size_t(nsfs::HopKind::link)]);
+      (*out)["attr_write"] =
+	std::to_string(hops[size_t(nsfs::HopKind::attr_write)]);
+      (*out)["attr_read"] =
+	std::to_string(hops[size_t(nsfs::HopKind::attr_read)]);
+      (*out)["other"] = std::to_string(hops[size_t(nsfs::HopKind::other)]);
+    }
+    return 0;
+  }
+
+  if (hint == "inject-no-ring") {
+    /* one user's links and attribute operations take the helper pool
+     * where the ring would serve them:  pool-hops' negative control.
+     * Where they run changes;  who runs them and what they return do
+     * not. */
+    auto u = params.find("user");
+    auto e = params.find("enable");
+    if ((u == params.end()) || (e == params.end())) {
+      return -EINVAL;
+    }
+    const bool on = (e->second == "true");
+    nsfs::set_no_ring(u->second, on);
+    if (out) {
+      (*out)["enabled"] = on ? "true" : "false";
     }
     return 0;
   }

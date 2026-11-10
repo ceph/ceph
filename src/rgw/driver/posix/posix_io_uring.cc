@@ -12,7 +12,9 @@
 #include "common/dout.h"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
+#include <chrono>
 #include <cstring>
 #include <deque>
 #include <mutex>
@@ -592,6 +594,11 @@ bool posix_uring_ensure_ring(const DoutPrefixProvider* dpp, bool nsfs)
     if (entries < POSIX_URING_MAX_IODEPTH) {
       entries = POSIX_URING_MAX_IODEPTH;
     }
+  } else if (nsfs) {
+    /* its links, renames and attribute operations as well as its opens
+     * (posix_uring_chain()):  sized by an option, for rings made after */
+    entries = cct->_conf.get_val<uint64_t>(
+	"rgw_nsfs_io_uring_control_entries");
   } else {
     entries = POSIX_URING_CONTROL_ENTRIES;
   }
@@ -727,6 +734,140 @@ int posix_uring_mkdirat(const DoutPrefixProvider* dpp, int dirfd,
   return wait_slot_blocking(slot);
 }
 
+
+bool posix_uring_sqpoll()
+{
+  return thread_uring_state.initialized &&
+    (thread_uring_state.ring.flags & IORING_SETUP_SQPOLL);
+}
+
+size_t posix_uring_chain_room(const DoutPrefixProvider* dpp)
+{
+  if (!posix_uring_ensure_ring(dpp, /*nsfs=*/true)) {
+    return URING_CHAIN_MAX;	/* the chain will say there is no ring */
+  }
+  return std::clamp<size_t>(thread_uring_state.ring.sq.ring_entries / 2, 1,
+                            URING_CHAIN_MAX);
+}
+
+static void prep_chain_op(io_uring_sqe* sqe, UringOp& op)
+{
+  switch (op.kind) {
+  case UringOp::Kind::linkat:
+    io_uring_prep_linkat(sqe, op.fd, op.path, op.fd2, op.path2, op.flags);
+    break;
+  case UringOp::Kind::renameat:
+    io_uring_prep_renameat(sqe, op.fd, op.path, op.fd2, op.path2, op.flags);
+    break;
+  case UringOp::Kind::unlinkat:
+    io_uring_prep_unlinkat(sqe, op.fd, op.path, op.flags);
+    break;
+  case UringOp::Kind::statx:
+    io_uring_prep_statx(sqe, op.fd, op.path, op.flags, op.len,
+                        static_cast<struct statx*>(op.buf));
+    break;
+  case UringOp::Kind::fsetxattr:
+    io_uring_prep_fsetxattr(sqe, op.fd, op.path,
+                            static_cast<const char*>(op.buf), op.flags,
+                            op.len);
+    break;
+  case UringOp::Kind::fgetxattr:
+    io_uring_prep_fgetxattr(sqe, op.fd, op.path, static_cast<char*>(op.buf),
+                            op.len);
+    break;
+  }
+}
+
+int posix_uring_chain(const DoutPrefixProvider* dpp, UringOp* ops, size_t n,
+                      uint16_t personality,
+                      const std::function<void()>& submitted,
+                      optional_yield y)
+{
+  if (n == 0) {
+    submitted();
+    return 0;
+  }
+  if (n > URING_CHAIN_MAX) {
+    return -EINVAL;
+  }
+  if (!posix_uring_ensure_ring(dpp, /*nsfs=*/true)) {
+    return -ENXIO;
+  }
+  io_uring* ring = &thread_uring_state.ring;
+
+  /* the whole chain in the queue at once:  get_sqe_retry() submits to
+   * make room, which would send the first ops without the rest */
+  if (io_uring_sq_space_left(ring) < n) {
+    submit_prepared(dpp);
+    if (io_uring_sq_space_left(ring) < n) {
+      ldpp_dout(dpp, 0) << "ERROR: URING: no room for a chain of " << n
+                        << dendl;
+      return -EAGAIN;
+    }
+  }
+
+  std::array<IoSlot, URING_CHAIN_MAX> slots;
+  for (size_t i = 0; i < n; ++i) {
+    io_uring_sqe* sqe = io_uring_get_sqe(ring);
+    prep_chain_op(sqe, ops[i]);
+    sqe->personality = personality;
+    if (i + 1 < n) {
+      sqe->flags |= IOSQE_IO_LINK;
+    }
+    slots[i].disp.fn = &IoSlot::handle_cqe;
+    slots[i].disp.arg = &slots[i];
+    io_uring_sqe_set_data(sqe, &slots[i].disp);
+  }
+
+  /* Until the kernel has taken every SQE.  It stops at an SQE it cannot
+   * set up, completing that one with the error and leaving the rest
+   * queued;  left there, another request's next submit on this thread
+   * would send them, pointing at slots in a frame that may be gone.
+   * Under SQPOLL the kernel thread takes them, and the wait below
+   * returns only once it has. */
+  if (posix_uring_sqpoll()) {
+    const int r = io_uring_submit(ring);
+    if (r < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: URING: io_uring_submit failed: "
+                        << cpp_strerror(-r) << dendl;
+    }
+  } else {
+    /* Until it does, however long:  a stalled request is safe, and
+     * neither alternative is -- returning leaves the SQEs to be sent
+     * into this frame once it is gone, and taking them back part way
+     * runs half a chain.  A stall says why, every ten seconds. */
+    auto backoff = std::chrono::milliseconds(1);
+    const auto began = std::chrono::steady_clock::now();
+    auto said = began;
+    while (io_uring_sq_ready(ring) > 0) {
+      const int r = io_uring_submit(ring);
+      if (r >= 0) {
+        continue;
+      }
+      const auto now = std::chrono::steady_clock::now();
+      if (now - said >= std::chrono::seconds(10)) {
+        said = now;
+        ldpp_dout(dpp, 0) << "ERROR: URING: a chain of " << n
+                          << " has not been submitted in "
+                          << std::chrono::duration_cast<std::chrono::seconds>(
+                               now - began).count()
+                          << "s: " << cpp_strerror(-r) << ";  retrying"
+                          << dendl;
+      }
+      std::this_thread::sleep_for(backoff);
+      backoff = std::min(backoff * 2, std::chrono::milliseconds(100));
+    }
+  }
+  submitted();
+
+  const bool suspend = y &&
+    !y.get_yield_context().get_cancellation_slot().is_connected();
+  for (size_t i = 0; i < n; ++i) {
+    ops[i].result = suspend ? wait_slot(slots[i], y)
+                            : wait_slot_blocking(slots[i]);
+  }
+  return 0;
+}
 
 struct UringReadWindow::Impl {
   const DoutPrefixProvider* dpp;
@@ -1116,6 +1257,27 @@ int posix_uring_fgetxattr(const DoutPrefixProvider* dpp, int fd,
   return -EOPNOTSUPP;
 }
 
+
+bool posix_uring_sqpoll()
+{
+  return false;
+}
+
+size_t posix_uring_chain_room(const DoutPrefixProvider* dpp)
+{
+  (void)dpp;
+  return URING_CHAIN_MAX;
+}
+
+int posix_uring_chain(const DoutPrefixProvider* dpp, UringOp* ops, size_t n,
+                      uint16_t personality,
+                      const std::function<void()>& submitted,
+                      optional_yield y)
+{
+  (void)dpp; (void)ops; (void)n; (void)personality; (void)submitted;
+  (void)y;
+  return -ENXIO;
+}
 
 void posix_uring_unregister_personality(const DoutPrefixProvider* dpp,
                                         uint16_t id)

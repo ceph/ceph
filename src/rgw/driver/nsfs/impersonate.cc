@@ -22,7 +22,9 @@
 #include <condition_variable>
 #include <deque>
 #include <functional>
+#include <map>
 #include <mutex>
+#include <set>
 #include <thread>
 #include <vector>
 
@@ -646,10 +648,114 @@ int run_as(const DoutPrefixProvider* dpp, const Credentials& cred,
 int with_identity(const DoutPrefixProvider* dpp, const FSIdentity& id,
 		  const ImpersonatedFn& fn, optional_yield y)
 {
+  return with_identity(dpp, id, HopKind::other, fn, y);
+}
+
+int with_identity(const DoutPrefixProvider* dpp, const FSIdentity& id,
+		  HopKind kind, const ImpersonatedFn& fn, optional_yield y)
+{
   if (! id.active()) {
     return fn();
   }
+  note_pool_hop(id, kind);
   return run_as(dpp, id.cred, fn, y);
+}
+
+/* --- pool-hops and inject-no-ring (N-D3) --------------------------------
+ *
+ * Both are per user, keyed by to_string() of the identity's owner, and
+ * both cost an atomic load when no user is armed. */
+
+namespace {
+
+struct HopCounts {
+  std::array<uint64_t, HOP_KINDS> n{};
+};
+
+std::mutex hop_lock;
+std::map<std::string, HopCounts> hop_counts;
+std::atomic<bool> any_hop_counting{false};
+
+std::mutex no_ring_lock;
+std::set<std::string> no_ring_users;
+std::atomic<bool> any_no_ring{false};
+
+bool no_ring_for(const rgw_owner& key)
+{
+  if (!any_no_ring.load(std::memory_order_relaxed)) {
+    return false;
+  }
+  const std::string user = to_string(key);
+  std::lock_guard lock(no_ring_lock);
+  return no_ring_users.contains(user);
+}
+
+} // anonymous namespace
+
+void note_pool_hop(const FSIdentity& id, HopKind kind)
+{
+  if (!any_hop_counting.load(std::memory_order_relaxed) || !id.active() ||
+      tl_impersonating) {
+    return;
+  }
+  const std::string user = to_string(id.key);
+  std::lock_guard lock(hop_lock);
+  if (auto it = hop_counts.find(user); it != hop_counts.end()) {
+    ++it->second.n[static_cast<size_t>(kind)];
+  }
+}
+
+std::array<uint64_t, HOP_KINDS> take_pool_hops(const std::string& user,
+					       bool enable)
+{
+  std::lock_guard lock(hop_lock);
+  std::array<uint64_t, HOP_KINDS> out{};
+  if (auto it = hop_counts.find(user); it != hop_counts.end()) {
+    out = it->second.n;
+    it->second.n = {};
+    if (!enable) {
+      hop_counts.erase(it);
+    }
+  } else if (enable) {
+    hop_counts.emplace(user, HopCounts{});
+  }
+  any_hop_counting.store(!hop_counts.empty(), std::memory_order_relaxed);
+  return out;
+}
+
+void set_no_ring(const std::string& user, bool on)
+{
+  std::lock_guard lock(no_ring_lock);
+  if (on) {
+    no_ring_users.insert(user);
+  } else {
+    no_ring_users.erase(user);
+  }
+  any_no_ring.store(!no_ring_users.empty(), std::memory_order_relaxed);
+}
+
+int ring_as(const DoutPrefixProvider* dpp, const FSIdentity& id,
+	    rgw::sal::UringOp* ops, size_t n, optional_yield y)
+{
+  if (!id.active() || no_ring_for(id.key)) {
+    return -ENXIO;
+  }
+  PersonalityRef ref;
+  const int ret = acquire_personality(dpp, id.key, id.cred, id.gen, &ref);
+  if (ret < 0) {
+    ldpp_dout_fmt(dpp, 10, "nsfs: no personality for uid {} on this ring "
+			   "({});  taking the pool", id.cred.uid,
+			   cpp_strerror(-ret));
+    return -ENXIO;
+  }
+  if (rgw::sal::posix_uring_sqpoll()) {
+    /* the kernel thread reads the SQEs after the submit returns:  the
+     * personality is held, on this thread, until the completions */
+    return rgw::sal::posix_uring_chain(dpp, ops, n, ref.id(), [] {},
+				       null_yield);
+  }
+  return rgw::sal::posix_uring_chain(dpp, ops, n, ref.id(),
+				     [&ref] { ref.reset(); }, y);
 }
 
 bool capability_is_effective(int cap)
@@ -891,6 +997,37 @@ int open_as_or_raise(const DoutPrefixProvider* dpp, const FSIdentity& id,
   return raise_for(dpp, id, model, caps, plain, raised);
 }
 
+int op_as(const DoutPrefixProvider* dpp, const FSIdentity& id,
+	  HopKind kind, rgw::sal::UringOp op, const ImpersonatedFn& plain,
+	  optional_yield y)
+{
+  if (!id.active()) {
+    return plain();
+  }
+  if (ring_as(dpp, id, &op, 1, y) < 0) {
+    return with_identity(dpp, id, kind, plain, y);
+  }
+  return op.result;
+}
+
+int as_identity_or_raise(const DoutPrefixProvider* dpp, const FSIdentity& id,
+			 const AccessStrategy* model, AccessClass what,
+			 uint64_t caps,
+			 const std::function<int(const FSIdentity&)>& fn,
+			 optional_yield y, bool* raised)
+{
+  if (raised) {
+    *raised = false;
+  }
+  const int ret = fn(id);
+  if (! raise_permitted(id, model, what, ret)) {
+    return ret;
+  }
+  return raise_for(dpp, id, model, caps, [&]() -> int {
+    return fn(FSIdentity::none());
+  }, raised);
+}
+
 int IdentityPersonality::acquire(const DoutPrefixProvider* dpp, uint16_t* out)
 {
   const int ret = acquire_personality(dpp, id.key, id.cred, id.gen, &ref);
@@ -905,6 +1042,7 @@ int IdentityPersonality::run_as(const DoutPrefixProvider* dpp,
 				fu2::unique_function<int() const> fn,
 				optional_yield y)
 {
+  note_pool_hop(id, HopKind::other);
   return nsfs::run_as(dpp, id.cred, fn, y);
 }
 

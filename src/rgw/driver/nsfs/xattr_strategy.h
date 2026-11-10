@@ -95,6 +95,13 @@ public:
 				const std::vector<std::string>& unclaimed,
 				Attrs& out) const {}
 
+  /* Whether parse_disk_attrs() reads `disk`.  A caller with no such name
+   * skips the call, and with it, as an identity, a hop to the pool
+   * (get_x_attrs()). */
+  virtual bool parses_disk_attr(const std::string& disk) const {
+    return false;
+  }
+
   virtual bool disk_attrs(const std::string& key, const bufferlist& val,
 			  const std::vector<std::string>& current,
 			  xattr_map_t& to_write,
@@ -234,6 +241,7 @@ public:
   void parse_disk_attrs(const DoutPrefixProvider* dpp, int fd,
 			const std::vector<std::string>& unclaimed,
 			Attrs& out) const override;
+  bool parses_disk_attr(const std::string& disk) const override;
   bool disk_attrs(const std::string& key, const bufferlist& val,
 		  const std::vector<std::string>& current,
 		  xattr_map_t& to_write,

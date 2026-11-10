@@ -20,6 +20,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <functional>
 #include <vector>
 
 #include <sys/types.h>
@@ -65,6 +66,43 @@ inline constexpr std::string_view DM_TMP_PREFIX = ".dm_tmp_";
  * keeps a version-entry parse, which looks for one of them after a '_',
  * from reading a temp name. */
 std::string temp_name(std::string_view prefix);
+
+/* One attribute of a read_xattrs_as():  its name;  whether its value was
+ * read;  and, if it was, the value or the errno its read failed with
+ * (ERANGE only after the sized retry). */
+struct XattrValue {
+  std::string name;
+  bool read = false;
+  int err = 0;
+  std::string value;
+};
+
+/* An identity's attribute read on the ring (N-D3;  DECISIONS
+ * 2026-11-10).  The gateway lists `fd`'s names, which needs no
+ * permission;  `want` picks the names whose values are read, and each is
+ * read under `id`'s personality, a ring's chain room to a submission
+ * (posix_uring_chain_room()).  Every
+ * listed name is in `out`, in the listing's order.
+ *
+ *   0       `out` filled
+ *   -ENXIO  nothing read and `out` untouched:  no identity, or the ring
+ *           cannot run it as `id`.  The caller reads on the pool.
+ *   -errno  the listing failed
+ */
+int read_xattrs_as(const DoutPrefixProvider* dpp, int fd,
+		   const FSIdentity& id, optional_yield y,
+		   const std::function<bool(const std::string&)>& want,
+		   std::vector<XattrValue>& out);
+
+/* `attrs` written to `fd` with fsetxattr(2):  as `id` on the ring, up to
+ * a ring's chain room to a submission, or on the pool when the ring cannot
+ * take them;  as the gateway when `id` is inactive.  Every entry is
+ * written that can be, and the first error is returned (DECISIONS
+ * 2026-11-10).  POSIXStrategy::set_xattrs(), and the raw attribute
+ * writes of the SAL. */
+int set_xattrs_as(const DoutPrefixProvider* dpp, int fd,
+		  const xattr_map_t& attrs, optional_yield y,
+		  const FSIdentity& id);
 
 /* Bounds on the I/O size FSStrategy::copy_range() uses when it has to fall
  * back to a buffered copy.  See preferred_io_size(). */

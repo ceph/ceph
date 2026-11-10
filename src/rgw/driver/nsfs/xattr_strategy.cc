@@ -302,6 +302,12 @@ static bool nb_tag_name(const std::string& disk, std::string& key)
   return !key.empty();
 }
 
+bool NooBaaXattrStrategy::parses_disk_attr(const std::string& disk) const
+{
+  std::string key;
+  return nb_tag_name(disk, key);
+}
+
 void NooBaaXattrStrategy::parse_disk_attrs(
     const DoutPrefixProvider* dpp, int fd,
     const std::vector<std::string>& unclaimed, Attrs& out) const

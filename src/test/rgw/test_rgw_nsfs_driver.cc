@@ -6122,6 +6122,29 @@ protected:
     return std::stoull(out["raised_operations"]);
   }
 
+  /* `who`'s hops to the helper pool since the last call, by kind */
+  std::map<std::string, uint64_t> pool_hops(const rgw_user& who,
+					    bool enable = true) {
+    std::map<std::string, std::string> out;
+    EXPECT_EQ(driver->driver_hint(env->dpp, "pool-hops",
+				  {{"user", to_string(rgw_owner{who})},
+				   {"enable", enable ? "true" : "false"}},
+				  &out), 0);
+    std::map<std::string, uint64_t> n;
+    for (const char* k : {"link", "attr_write", "attr_read", "other"}) {
+      n[k] = std::stoull(out[k]);
+    }
+    return n;
+  }
+
+  void inject_no_ring(const rgw_user& who, bool on) {
+    std::map<std::string, std::string> out;
+    EXPECT_EQ(driver->driver_hint(env->dpp, "inject-no-ring",
+				  {{"user", to_string(rgw_owner{who})},
+				   {"enable", on ? "true" : "false"}},
+				  &out), 0);
+  }
+
   /* on a thread of its own, as put_as() */
   int delete_as(const rgw_user& who, const std::string& key) {
     int ret = 0;
@@ -6542,6 +6565,46 @@ TEST_F(NSFSImpersonatedRenameTest, TheOwnersDemoteAndMarkerRunAsTheOwner)
   EXPECT_EQ(raised(), before)
       << "posix-strict raised, so the outcomes above do not name the "
 	 "credentials";
+}
+
+/* N-D3:  an identity's links and attribute operations run on the ring.
+ * A put, an overwrite (a demote) and a versioned delete (a demote, the
+ * CAS unlink, a delete marker) make no hop to the pool for either;  the
+ * hops left are the mode changes, which have no opcode.  With the ring
+ * withheld (`inject-no-ring`) the same sequence hops for each kind, so
+ * the counter sees them and the fallback runs, and the outcome is the
+ * same either way. */
+TEST_F(NSFSImpersonatedRenameTest, AnIdentitysLinksAndAttributesTakeNoHop)
+{
+  ASSERT_EQ(set_model("posix-strict"), 0);
+  for (const bool withheld : {false, true}) {
+    SCOPED_TRACE(withheld ? "ring withheld" : "on the ring");
+    inject_no_ring(alice, withheld);
+    (void) pool_hops(alice);
+    const std::string dir = withheld ? "pool" : "ring";
+    ASSERT_NO_FATAL_FAILURE(put_as(alice, dir + "/k", "first"));
+    ASSERT_NO_FATAL_FAILURE(put_as(alice, dir + "/k", "second"));
+    ASSERT_EQ(delete_as(alice, dir + "/k"), 0);
+    auto hops = pool_hops(alice);
+
+    const auto hist = versions_in(dir);
+    ASSERT_EQ(hist.size(), 3u) << "two demoted versions and the marker";
+    for (const auto& v : hist) {
+      EXPECT_EQ(owned(dir + "/.versions/" + v).uid, owner_uid)
+	  << v << " is not the owner's";
+    }
+    if (withheld) {
+      EXPECT_GT(hops["link"], 0u);
+      EXPECT_GT(hops["attr_write"], 0u);
+      EXPECT_GT(hops["attr_read"], 0u);
+    } else {
+      EXPECT_EQ(hops["link"], 0u);
+      EXPECT_EQ(hops["attr_write"], 0u);
+      EXPECT_EQ(hops["attr_read"], 0u);
+    }
+  }
+  inject_no_ring(alice, false);
+  (void) pool_hops(alice, false);
 }
 
 /* posix-strict:  another identity's rename out of the owner's key

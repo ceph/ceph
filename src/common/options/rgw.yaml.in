@@ -4975,6 +4975,20 @@ options:
   min: 1
   services:
   - rgw
+- name: rgw_nsfs_io_uring_control_entries
+  type: uint
+  level: advanced
+  desc: io_uring SQ entries per thread when the nsfs data engine is synchronous
+  long_desc: With rgw_nsfs_io_engine sync, a thread's ring carries only an
+    impersonated identity's operations -- its opens, and its links, renames
+    and attribute operations, in chains. A batch of attribute operations is
+    at most half the ring, and at most 8. Read when a thread creates its
+    ring, so a change applies to rings created after it, not to those that
+    exist. Rounded up to a power of two.
+  default: 32
+  min: 2
+  services:
+  - rgw
 - name: rgw_nsfs_io_uring_sqpoll
   type: bool
   level: advanced

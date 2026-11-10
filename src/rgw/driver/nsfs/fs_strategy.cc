@@ -17,6 +17,8 @@
 
 #include "fs_strategy.h"
 
+#include <algorithm>
+#include <array>
 #include <atomic>
 #include <cerrno>
 #include <cstdio>
@@ -125,6 +127,219 @@ std::string temp_name(std::string_view prefix)
 		     s.seq.fetch_add(1, std::memory_order_relaxed));
 }
 
+/* --- the ring, for an identity (N-D3) -----------------------------------
+ *
+ * An impersonated link, rename or attribute operation goes through the
+ * ring under the identity's personality rather than to a pool thread
+ * switched to it.  Who runs it and what it returns are unchanged;  the
+ * pool remains the path when the ring cannot run it (nsfs::ring_as()).
+ * A failed linkat, renameat or fsetxattr does not cancel the op chained
+ * after it (probes/linkchainprobe.c), so a chain is used only where the
+ * op after a failure is a harmless read, and a step that depends on a
+ * result is submitted after it. */
+
+namespace {
+
+UringOp ring_op(UringOp::Kind kind, int fd, const char* path,
+		int fd2 = AT_FDCWD, const char* path2 = nullptr, int flags = 0)
+{
+  UringOp op{kind};
+  op.fd = fd;
+  op.path = path;
+  op.fd2 = fd2;
+  op.path2 = path2;
+  op.flags = flags;
+  return op;
+}
+
+UringOp statx_op(int fd, const char* path, struct statx* stx)
+{
+  UringOp op = ring_op(UringOp::Kind::statx, fd, path);
+  op.len = STATX_INO | STATX_MTIME;
+  op.buf = stx;
+  return op;
+}
+
+bool statx_is(const struct statx& stx, uint64_t mtime_ns, uint64_t ino)
+{
+  return (statx_mtime_ns(stx) == mtime_ns) && (stx.stx_ino == ino);
+}
+
+} // anonymous namespace
+
+int read_xattrs_as(const DoutPrefixProvider* dpp, int fd,
+		   const FSIdentity& id, optional_yield y,
+		   const std::function<bool(const std::string&)>& want,
+		   std::vector<XattrValue>& out)
+{
+  /* every attribute an object carries in practice fits;  the largest is
+   * the encoded ACL, a couple of hundred bytes */
+  enum { INLINE_VALUE_MAX = 1024 };
+  if (!id.active()) {
+    return -ENXIO;
+  }
+  char namebuf[64 * 1024];
+  const ssize_t list_len = ::flistxattr(fd, namebuf, sizeof(namebuf));
+  if (list_len < 0) {
+    return -errno;
+  }
+  std::vector<XattrValue> vals;
+  std::vector<size_t> wanted;
+  for (const char* p = namebuf; p < namebuf + list_len; p += strlen(p) + 1) {
+    XattrValue v;
+    v.name = p;
+    v.read = want(v.name);
+    if (v.read) {
+      wanted.push_back(vals.size());
+    }
+    vals.push_back(std::move(v));
+  }
+
+  /* a value read on the pool, as `id`:  a batch the ring could not take,
+   * and the sized retry of one that did not fit */
+  const auto read_on_pool = [&](XattrValue& v, size_t len) -> int {
+    return with_identity(dpp, id, nsfs::HopKind::attr_read, [&]() -> int {
+      const ssize_t n = nsfs::fgetxattr(fd, v.name.c_str(),
+					len ? v.value.data() : nullptr, len);
+      return (n < 0) ? -errno : static_cast<int>(n);
+    }, y);
+  };
+
+  std::array<UringOp, URING_CHAIN_MAX> ops;
+  for (size_t at = 0, n = 0; at < wanted.size(); at += n) {
+    n = std::min(posix_uring_chain_room(dpp), wanted.size() - at);
+    for (size_t i = 0; i < n; ++i) {
+      XattrValue& v = vals[wanted[at + i]];
+      v.value.resize(INLINE_VALUE_MAX);
+      ops[i] = ring_op(UringOp::Kind::fgetxattr, fd, v.name.c_str());
+      ops[i].buf = v.value.data();
+      ops[i].len = v.value.size();
+    }
+    if (ring_as(dpp, id, ops.data(), n, y) < 0) {
+      if (at == 0) {
+	return -ENXIO;		/* nothing read:  the caller reads on the pool */
+      }
+      for (size_t i = 0; i < n; ++i) {
+	ops[i].result = read_on_pool(vals[wanted[at + i]], INLINE_VALUE_MAX);
+      }
+    }
+    for (size_t i = 0; i < n; ++i) {
+      XattrValue& v = vals[wanted[at + i]];
+      int r = ops[i].result;
+      if (r == -ERANGE) {
+	/* larger than the inline buffer:  sized, then read */
+	UringOp size = ring_op(UringOp::Kind::fgetxattr, fd, v.name.c_str());
+	r = op_as(dpp, id, nsfs::HopKind::attr_read, size, [&]() -> int {
+	  const ssize_t k = nsfs::fgetxattr(fd, v.name.c_str(), nullptr, 0);
+	  return (k < 0) ? -errno : static_cast<int>(k);
+	}, y);
+	if (r >= 0) {
+	  v.value.resize(r);
+	  UringOp read = ring_op(UringOp::Kind::fgetxattr, fd, v.name.c_str());
+	  read.buf = v.value.data();
+	  read.len = v.value.size();
+	  r = op_as(dpp, id, nsfs::HopKind::attr_read, read, [&]() -> int {
+	    return read_on_pool(v, v.value.size());
+	  }, y);
+	}
+      }
+      if (r < 0) {
+	v.err = -r;
+	v.value.clear();
+      } else {
+	v.value.resize(r);
+      }
+    }
+  }
+  out = std::move(vals);
+  return 0;
+}
+
+int set_xattrs_as(const DoutPrefixProvider* dpp, int fd,
+		  const xattr_map_t& attrs, optional_yield y,
+		  const FSIdentity& id)
+{
+  if (attrs.empty()) {
+    return 0;			/* and no hop to write nothing */
+  }
+  if (id.active()) {
+    /* Batched, a ring's chain room to a submission (posix_uring_chain_room()),
+     * so never more than URING_CHAIN_MAX.  A failed set does not
+     * cancel the rest, so every entry is written that can be, and the
+     * first error is returned (DECISIONS 2026-11-10). */
+    std::array<UringOp, URING_CHAIN_MAX> ops;
+    std::array<const std::string*, URING_CHAIN_MAX> names;
+    int first = 0;
+    bool ran = false;
+    auto it = attrs.begin();
+    while (it != attrs.end()) {
+      size_t n = 0;
+      const size_t room = posix_uring_chain_room(dpp);
+      for (; (n < room) && (it != attrs.end()); ++n, ++it) {
+	ops[n] = ring_op(UringOp::Kind::fsetxattr, fd, it->first.c_str());
+	ops[n].buf = const_cast<char*>(it->second.data());
+	ops[n].len = it->second.size();
+	names[n] = &it->first;
+      }
+      if (nsfs::ring_as(dpp, id, ops.data(), n, y) < 0) {
+	if (!ran) {
+	  break;		/* nothing written:  the pool, below, does it all */
+	}
+	/* the rest of this batch on the pool, as the identity */
+	for (size_t i = 0; i < n; ++i) {
+	  const std::string& nm = *names[i];
+	  const UringOp& op = ops[i];
+	  ops[i].result = nsfs::with_identity(dpp, id, nsfs::HopKind::attr_write, [&]() -> int {
+	    return (::fsetxattr(fd, nm.c_str(), op.buf, op.len, 0) < 0)
+	      ? -errno : 0;
+	  }, y);
+	}
+      }
+      ran = true;
+      for (size_t i = 0; i < n; ++i) {
+	const int r = ops[i].result;
+	if (r >= 0) {
+	  continue;
+	}
+	if ((r == -EACCES) || (r == -EPERM)) {
+	  ldpp_dout_fmt(dpp, 10, "fsetxattr {} denied: {}", *names[i],
+			cpp_strerror(-r));
+	} else {
+	  ldpp_dout_fmt(dpp, 0, "ERROR: fsetxattr {} failed: {}", *names[i],
+			cpp_strerror(-r));
+	}
+	if (first == 0) {
+	  first = r;
+	}
+      }
+    }
+    if (ran) {
+      return first;
+    }
+  }
+
+  return nsfs::with_identity(dpp, id, nsfs::HopKind::attr_write, [&]() -> int {
+  for (auto& [name, value] : attrs) {
+    int ret = ::fsetxattr(fd, name.c_str(), value.data(), value.size(), 0);
+    if (ret < 0) {
+      int err = errno;
+      /* a denial is the caller's to handle -- raise site 1 retries it
+       * raised, the access model performs it, or the caller fails and
+       * says so -- so it is not an error here */
+      if ((err == EACCES) || (err == EPERM)) {
+        ldpp_dout_fmt(dpp, 10, "fsetxattr {} denied: {}", name,
+                               cpp_strerror(err));
+      } else {
+        ldpp_dout_fmt(dpp, 0, "ERROR: fsetxattr {} failed: {}", name,
+                              cpp_strerror(err));
+      }
+      return -err;
+    }
+  }
+  return 0;
+  }, y);
+}
+
 /* --- POSIXStrategy ---------------------------------------------------- */
 
 int POSIXStrategy::link_temp_file(int temp_fd, int dir_fd,
@@ -133,7 +348,43 @@ int POSIXStrategy::link_temp_file(int temp_fd, int dir_fd,
                                   optional_yield y,
                                   const nsfs::FSIdentity& id)
 {
-  return nsfs::with_identity(dpp, id, [&]() -> int {
+  if (id.active()) {
+    /* On the ring, a step at a time:  chained, the rename would run
+     * after a failed link, and an entry already at the temp name would
+     * be renamed over the object. */
+    char proc[PATH_MAX];
+    snprintf(proc, PATH_MAX, "/proc/self/fd/%d", temp_fd);
+    const std::string tmp = temp_name(TMP_LINK_PREFIX);
+    UringOp link = ring_op(UringOp::Kind::linkat, AT_FDCWD, proc, dir_fd,
+			   tmp.c_str(), AT_SYMLINK_FOLLOW);
+    if (nsfs::ring_as(dpp, id, &link, 1, y) == 0) {
+      if (link.result < 0) {
+	ldpp_dout_fmt(dpp, 0, "ERROR: linkat for temp file: {}",
+		      cpp_strerror(-link.result));
+	return link.result;
+      }
+      const int r = op_as(dpp, id, nsfs::HopKind::link,
+	ring_op(UringOp::Kind::renameat, dir_fd, tmp.c_str(), dir_fd,
+		name.c_str()),
+	[&]() -> int {
+	  return (::renameat(dir_fd, tmp.c_str(), dir_fd, name.c_str()) < 0)
+	    ? -errno : 0;
+	}, y);
+      if (r < 0) {
+	(void) op_as(dpp, id, nsfs::HopKind::link,
+	  ring_op(UringOp::Kind::unlinkat, dir_fd, tmp.c_str()),
+	  [&]() -> int {
+	    return (::unlinkat(dir_fd, tmp.c_str(), 0) < 0) ? -errno : 0;
+	  }, y);
+	ldpp_dout_fmt(dpp, 0, "ERROR: renameat for temp file: {}",
+		      cpp_strerror(-r));
+	return r;
+      }
+      return 0;
+    }
+  }
+
+  return nsfs::with_identity(dpp, id, nsfs::HopKind::link, [&]() -> int {
   char temp_file_path[PATH_MAX];
   snprintf(temp_file_path, PATH_MAX, "/proc/self/fd/%d", temp_fd);
 
@@ -173,7 +424,40 @@ SafeResult POSIXStrategy::safe_link(const DoutPrefixProvider* dpp,
                                      optional_yield y,
                                      const nsfs::FSIdentity& id)
 {
-  return nsfs::with_identity_r(dpp, id, [&]() -> SafeResult {
+  if (id.active()) {
+    /* one chain:  the statx after a failed link reads, harmlessly, and
+     * its result is not used */
+    struct statx stx = {};
+    UringOp ops[2] = {
+      ring_op(UringOp::Kind::linkat, src_dir_fd, src_name.c_str(),
+	      dst_dir_fd, dst_name.c_str()),
+      statx_op(dst_dir_fd, dst_name.c_str(), &stx),
+    };
+    if (nsfs::ring_as(dpp, id, ops, 2, y) == 0) {
+      const int lr = ops[0].result;
+      if (lr == -EEXIST) {
+	return SafeResult::MISMATCH;
+      }
+      if ((lr == -EACCES) || (lr == -EPERM)) {
+	return SafeResult::DENIED;
+      }
+      if (lr < 0) {
+	return SafeResult::ERROR;
+      }
+      if ((ops[1].result >= 0) &&
+	  statx_is(stx, expected_mtime_ns, expected_ino)) {
+	return SafeResult::OK;
+      }
+      (void) op_as(dpp, id, nsfs::HopKind::link,
+	ring_op(UringOp::Kind::unlinkat, dst_dir_fd, dst_name.c_str()),
+	[&]() -> int {
+	  return (::unlinkat(dst_dir_fd, dst_name.c_str(), 0) < 0) ? -errno : 0;
+	}, y);
+      return SafeResult::MISMATCH;
+    }
+  }
+
+  return nsfs::with_identity_r(dpp, id, nsfs::HopKind::link, [&]() -> SafeResult {
   int ret = ::linkat(src_dir_fd, src_name.c_str(),
                      dst_dir_fd, dst_name.c_str(), 0);
   if (ret < 0) {
@@ -201,7 +485,48 @@ SafeResult POSIXStrategy::safe_unlink(const DoutPrefixProvider* dpp,
                                        optional_yield y,
                                        const nsfs::FSIdentity& id)
 {
-  return nsfs::with_identity_r(dpp, id, [&]() -> SafeResult {
+  if (id.active()) {
+    /* the rename and its check as one chain;  then the unlink, or the
+     * rename back, which depend on the check */
+    const std::string tmp = temp_name(UNLINK_TMP_PREFIX);
+    struct statx stx = {};
+    UringOp ops[2] = {
+      ring_op(UringOp::Kind::renameat, dir_fd, name.c_str(), tmp_dir_fd,
+	      tmp.c_str()),
+      statx_op(tmp_dir_fd, tmp.c_str(), &stx),
+    };
+    if (nsfs::ring_as(dpp, id, ops, 2, y) == 0) {
+      const int rr = ops[0].result;
+      if (rr == -ENOENT) {
+	return SafeResult::OK;
+      }
+      if ((rr == -EACCES) || (rr == -EPERM)) {
+	return SafeResult::DENIED;
+      }
+      if (rr < 0) {
+	return SafeResult::ERROR;
+      }
+      if ((ops[1].result >= 0) &&
+	  statx_is(stx, expected_mtime_ns, expected_ino)) {
+	(void) op_as(dpp, id, nsfs::HopKind::link,
+	  ring_op(UringOp::Kind::unlinkat, tmp_dir_fd, tmp.c_str()),
+	  [&]() -> int {
+	    return (::unlinkat(tmp_dir_fd, tmp.c_str(), 0) < 0) ? -errno : 0;
+	  }, y);
+	return SafeResult::OK;
+      }
+      (void) op_as(dpp, id, nsfs::HopKind::link,
+	ring_op(UringOp::Kind::renameat, tmp_dir_fd, tmp.c_str(), dir_fd,
+		name.c_str()),
+	[&]() -> int {
+	  return (::renameat(tmp_dir_fd, tmp.c_str(), dir_fd, name.c_str()) < 0)
+	    ? -errno : 0;
+	}, y);
+      return SafeResult::MISMATCH;
+    }
+  }
+
+  return nsfs::with_identity_r(dpp, id, nsfs::HopKind::link, [&]() -> SafeResult {
   std::string tmp_name = temp_name(UNLINK_TMP_PREFIX);
 
   int ret = ::renameat(dir_fd, name.c_str(),
@@ -302,7 +627,21 @@ int FSStrategy::link_temp_file_excl(int temp_fd, int dir_fd,
 				    optional_yield y,
 				    const nsfs::FSIdentity& id)
 {
-  return nsfs::with_identity(dpp, id, [&]() -> int {
+  if (id.active()) {
+    char proc[PATH_MAX];
+    snprintf(proc, PATH_MAX, "/proc/self/fd/%d", temp_fd);
+    UringOp link = ring_op(UringOp::Kind::linkat, AT_FDCWD, proc, dir_fd,
+			   name.c_str(), AT_SYMLINK_FOLLOW);
+    if (nsfs::ring_as(dpp, id, &link, 1, y) == 0) {
+      if ((link.result < 0) && (link.result != -EEXIST)) {
+	ldpp_dout_fmt(dpp, 0, "ERROR: exclusive linkat for temp file: {}",
+		      cpp_strerror(-link.result));
+      }
+      return (link.result < 0) ? link.result : 0;
+    }
+  }
+
+  return nsfs::with_identity(dpp, id, nsfs::HopKind::link, [&]() -> int {
   char temp_file_path[PATH_MAX];
   snprintf(temp_file_path, PATH_MAX, "/proc/self/fd/%d", temp_fd);
 
@@ -454,11 +793,41 @@ int POSIXStrategy::get_xattrs(const DoutPrefixProvider* dpp, int fd,
                               optional_yield y,
                               const nsfs::FSIdentity& id)
 {
+  if (id.active()) {
+    /* The gateway lists the names, which needs no permission (measured
+     * 2026-10-20), and the identity reads the values on the ring, each
+     * of which does (DECISIONS 2026-11-10). */
+    std::vector<XattrValue> vals;
+    const int r = read_xattrs_as(dpp, fd, id, y,
+				 [](const std::string&) { return true; }, vals);
+    if (r < 0 && r != -ENXIO) {
+      ldpp_dout_fmt(dpp, 0, "ERROR: flistxattr failed: {}", cpp_strerror(-r));
+      return r;
+    }
+    if (r == 0) {
+      for (auto& v : vals) {
+	if (v.err == 0) {
+	  attrs.emplace(std::move(v.name), std::move(v.value));
+	  continue;
+	}
+	/* gone, unreadable, or it grew again between the sizing and the
+	 * read, as below */
+	if ((v.err == ENODATA) || (v.err == EACCES) || (v.err == ERANGE)) {
+	  continue;
+	}
+	ldpp_dout_fmt(dpp, 0, "ERROR: fgetxattr {} failed: {}", v.name,
+		      cpp_strerror(v.err));
+	return -v.err;
+      }
+      return 0;
+    }
+  }
+
   /* The whole read, not each call:  this is a listing plus one
    * fetch per name, and flistxattr has no io_uring opcode.  Each
    * value needs read permission on the object, which the identity
    * has and the gateway may not. */
-  return nsfs::with_identity(dpp, id, [&]() -> int {
+  return nsfs::with_identity(dpp, id, nsfs::HopKind::attr_read, [&]() -> int {
   /* large enough for every attribute an object carries in practice;  the
    * biggest is the encoded ACL at a couple of hundred bytes */
   enum { INLINE_VALUE_MAX = 1024 };
@@ -524,26 +893,7 @@ int POSIXStrategy::set_xattrs(const DoutPrefixProvider* dpp, int fd,
                               optional_yield y,
                               const nsfs::FSIdentity& id)
 {
-  return nsfs::with_identity(dpp, id, [&]() -> int {
-  for (auto& [name, value] : attrs) {
-    int ret = ::fsetxattr(fd, name.c_str(), value.data(), value.size(), 0);
-    if (ret < 0) {
-      int err = errno;
-      /* a denial is the caller's to handle -- raise site 1 retries it
-       * raised, the access model performs it, or the caller fails and
-       * says so -- so it is not an error here */
-      if ((err == EACCES) || (err == EPERM)) {
-        ldpp_dout_fmt(dpp, 10, "fsetxattr {} denied: {}", name,
-                               cpp_strerror(err));
-      } else {
-        ldpp_dout_fmt(dpp, 0, "ERROR: fsetxattr {} failed: {}", name,
-                              cpp_strerror(err));
-      }
-      return -err;
-    }
-  }
-  return 0;
-  }, y);
+  return set_xattrs_as(dpp, fd, attrs, y, id);
 }
 
 int POSIXStrategy::remove_xattrs(const DoutPrefixProvider* dpp, int fd,
@@ -1062,7 +1412,44 @@ SafeResult GPFSStrategy::safe_link(const DoutPrefixProvider* dpp,
                                     optional_yield y,
                                     const nsfs::FSIdentity& id)
 {
-  return nsfs::with_identity_r(dpp, id, [&]() -> SafeResult {
+  if (id.active()) {
+    /* One chain, as POSIXStrategy::safe_link().  The source check below
+     * is not repeated:  the destination check reads the inode that was
+     * linked, which settles what the source check would.  A source
+     * gone is a mismatch, as the source check makes it. */
+    struct statx stx = {};
+    UringOp ops[2] = {
+      ring_op(UringOp::Kind::linkat, src_dir_fd, src_name.c_str(),
+	      dst_dir_fd, dst_name.c_str()),
+      statx_op(dst_dir_fd, dst_name.c_str(), &stx),
+    };
+    if (nsfs::ring_as(dpp, id, ops, 2, y) == 0) {
+      const int lr = ops[0].result;
+      if ((lr == -EEXIST) || (lr == -ENOENT)) {
+	ldpp_dout_fmt(dpp, 5, "gpfs safe_link: src={} dst={}: {}", src_name,
+		      dst_name, cpp_strerror(-lr));
+	return SafeResult::MISMATCH;
+      }
+      if (lr < 0) {
+	ldpp_dout_fmt(dpp, 0, "ERROR: linkat failed: {} src={} dst={}",
+		      cpp_strerror(-lr), src_name, dst_name);
+	return ((lr == -EACCES) || (lr == -EPERM)) ? SafeResult::DENIED
+						   : SafeResult::ERROR;
+      }
+      if ((ops[1].result >= 0) &&
+	  statx_is(stx, expected_mtime_ns, expected_ino)) {
+	return SafeResult::OK;
+      }
+      (void) op_as(dpp, id, nsfs::HopKind::link,
+	ring_op(UringOp::Kind::unlinkat, dst_dir_fd, dst_name.c_str()),
+	[&]() -> int {
+	  return (::unlinkat(dst_dir_fd, dst_name.c_str(), 0) < 0) ? -errno : 0;
+	}, y);
+      return SafeResult::MISMATCH;
+    }
+  }
+
+  return nsfs::with_identity_r(dpp, id, nsfs::HopKind::link, [&]() -> SafeResult {
   /* verify the source still matches expectations before linking;  a
    * stat the identity is refused is a denial, as linkat()'s is, so the
    * caller may perform it as the gateway */

@@ -4,7 +4,9 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <memory>
+#include <fcntl.h>
 #include <string>
 #include "include/buffer.h"
 #include "include/function2.hpp"
@@ -24,7 +26,8 @@ constexpr unsigned POSIX_URING_MAX_IODEPTH = 128;
  * charged against RLIMIT_MEMLOCK and multiplied by the frontend's
  * thread count, so the difference between this and a data-sized
  * ring decides whether a gateway with a few hundred threads can
- * create rings at all. */
+ * create rings at all.  nsfs's control ring also carries chains
+ * (posix_uring_chain()), and its size is rgw_nsfs_io_uring_control_entries. */
 constexpr unsigned POSIX_URING_CONTROL_ENTRIES = 8;
 
 inline int64_t posix_align_down(int64_t x, int64_t a = POSIX_DIRECT_ALIGN) {
@@ -120,6 +123,64 @@ int posix_uring_fsetxattr(const DoutPrefixProvider* dpp, int fd,
 int posix_uring_fgetxattr(const DoutPrefixProvider* dpp, int fd,
                           const char* name, void* value, size_t len,
                           uint16_t personality);
+
+/* One operation of a chain (posix_uring_chain()).  `fd` is the directory
+ * a path is taken relative to, or the file of an attribute operation;
+ * `fd2` and `path2` are a link's or rename's destination.  `result` is
+ * the operation's CQE:  >= 0 on success (a value's length, for
+ * fgetxattr), else -errno. */
+struct UringOp {
+  enum class Kind : uint8_t {
+    linkat, renameat, unlinkat, statx, fsetxattr, fgetxattr
+  };
+  Kind kind;
+  int fd = AT_FDCWD;
+  const char* path = nullptr;	/* or an attribute's name */
+  int fd2 = AT_FDCWD;
+  const char* path2 = nullptr;
+  int flags = 0;
+  void* buf = nullptr;		/* a statx, or an attribute's value */
+  size_t len = 0;
+  int result = 0;
+};
+
+inline constexpr size_t URING_CHAIN_MAX = 8;
+
+/* The longest batch to submit on this thread's ring:  URING_CHAIN_MAX,
+ * and at most half the ring, so a batch fits beside what else is queued
+ * on it.  A link chain is two ops, which every ring holds. */
+size_t posix_uring_chain_room(const DoutPrefixProvider* dpp);
+
+/* Whether this thread's ring polls its submission queue (SQPOLL).  Then
+ * io_uring_submit() returns before the kernel has read the SQEs. */
+bool posix_uring_sqpoll();
+
+/* `ops` through this thread's ring as one chain, every SQE under
+ * `personality` and linked to the next (IOSQE_IO_LINK).  A failed
+ * linkat, renameat or fsetxattr does not cancel the op after it
+ * (probes/linkchainprobe.c), so a chain is only for ops where the next
+ * is harmless after a failure;  a cancelled op's result is -ECANCELED.
+ *
+ * Returns once every op has completed, never before:  the completions
+ * land in slots on this frame.  `submitted` runs once the kernel has
+ * taken every SQE, before the wait, so a caller can release what it
+ * held only for the submission.  The wait suspends `y`'s coroutine when
+ * it has one that nothing can cancel, and blocks otherwise.
+ *
+ *   0       every op ran;  each `result` is its CQE
+ *   -ENXIO  this thread has no ring;  nothing was submitted
+ *   -EAGAIN the queue cannot hold the whole chain;  nothing was submitted
+ *   -EINVAL more than URING_CHAIN_MAX ops
+ *
+ * Once queued, a chain is submitted however long the kernel refuses it,
+ * logging every ten seconds while it waits:  its SQEs point at this
+ * frame, so returning would leave them for another submit on the thread
+ * to send into freed memory, and taking them back would run half the
+ * chain. */
+int posix_uring_chain(const DoutPrefixProvider* dpp, UringOp* ops, size_t n,
+                      uint16_t personality,
+                      const std::function<void()>& submitted,
+                      optional_yield y);
 
 /* Who a window's transfers run as.
  *

@@ -15,6 +15,7 @@
 
 #pragma once
 
+#include <array>
 #include <string>
 
 #include "include/function2.hpp"
@@ -270,6 +271,69 @@ public:
 int with_identity(const DoutPrefixProvider* dpp, const FSIdentity& id,
 		  const ImpersonatedFn& fn, optional_yield y);
 
+/* What a hop to the pool carries, for the `pool-hops` hint (N-D3).
+ * Named by the call that makes the hop -- with_identity() and op_as()
+ * take it -- and not by a scope:  a scope spans the ring's wait, which
+ * suspends the coroutine, and the kind would then label other requests'
+ * hops on the thread and be put back on another. */
+enum class HopKind : uint8_t { link, attr_write, attr_read, other };
+inline constexpr size_t HOP_KINDS = 4;
+
+/* Count one hop to the pool as `id`, of `kind`, if `id` is active, the
+ * calling thread is not a pool thread already, and `pool-hops` counts
+ * for its owner.  The with_identity() family calls it. */
+void note_pool_hop(const FSIdentity& id, HopKind kind);
+
+/* with_identity(), the hop counted as `kind` */
+int with_identity(const DoutPrefixProvider* dpp, const FSIdentity& id,
+		  HopKind kind, const ImpersonatedFn& fn, optional_yield y);
+
+/* The `pool-hops` hint:  the hops `user`'s identity made since the last
+ * call, by HopKind, reset;  counting for `user` from now when `enable`,
+ * stopped when not. */
+std::array<uint64_t, HOP_KINDS> take_pool_hops(const std::string& user,
+					       bool enable);
+
+/* The `inject-no-ring` hint:  `user`'s identity takes the pool where
+ * ring_as() would serve it.  Where an operation runs changes;  who runs
+ * it and what it returns do not. */
+void set_no_ring(const std::string& user, bool on);
+
+/* `ops` through the ring as `id`, as one chain (posix_uring_chain()).
+ *
+ * The personality is acquired on this thread and released once the
+ * kernel has taken the SQEs, which take their own reference to the
+ * credentials (probes/persprobe.c);  so the wait may suspend the
+ * coroutine, and it may resume on another thread (DECISIONS
+ * 2026-11-10).  Under SQPOLL the kernel takes the SQEs later, so the
+ * personality is held until the completions, and the wait blocks.
+ *
+ *   0       every op ran as `id`;  each op's `result` is its CQE
+ *   -ENXIO  not run, nothing submitted:  no identity, no ring, no
+ *           personality, or `inject-no-ring` for its owner.  The caller
+ *           takes the pool.
+ */
+int ring_as(const DoutPrefixProvider* dpp, const FSIdentity& id,
+	    rgw::sal::UringOp* ops, size_t n, optional_yield y);
+
+/* One operation as `id`:  `op` on the ring, or `plain` as `id` on the
+ * pool when the ring cannot run it;  `plain` as the gateway when `id` is
+ * inactive.  The operation's result:  >= 0, or -errno. */
+int op_as(const DoutPrefixProvider* dpp, const FSIdentity& id,
+	  HopKind kind, rgw::sal::UringOp op, const ImpersonatedFn& plain,
+	  optional_yield y);
+
+/* with_identity_or_raise()'s rule for a step that runs as the identity
+ * it is given, rather than as a whole on a pool thread:  `fn(id)`, which
+ * may put its operations on the ring (op_as(), a strategy given `id`);
+ * then, where the filesystem denied `id` and `model` permits `what`,
+ * `fn(FSIdentity::none())` raised with `caps`, as the gateway. */
+int as_identity_or_raise(const DoutPrefixProvider* dpp, const FSIdentity& id,
+			 const AccessStrategy* model, AccessClass what,
+			 uint64_t caps,
+			 const std::function<int(const FSIdentity&)>& fn,
+			 optional_yield y, bool* raised = nullptr);
+
 /* Put `CAP_DAC_READ_SEARCH` in this thread's effective set, once.
  *
  * **Nothing starts effective.**  The gateway's capabilities are
@@ -429,14 +493,22 @@ uint64_t raised_operations();
  * leaving the caller its default-constructed result. */
 template <typename F>
 auto with_identity_r(const DoutPrefixProvider* dpp, const FSIdentity& id,
-		     F&& fn, optional_yield y) -> decltype(fn())
+		     HopKind kind, F&& fn, optional_yield y) -> decltype(fn())
 {
   if (! id.active()) {
     return fn();
   }
   decltype(fn()) result{};
+  note_pool_hop(id, kind);
   run_as(dpp, id.cred, [&]() -> int { result = fn(); return 0; }, y);
   return result;
+}
+
+template <typename F>
+auto with_identity_r(const DoutPrefixProvider* dpp, const FSIdentity& id,
+		     F&& fn, optional_yield y) -> decltype(fn())
+{
+  return with_identity_r(dpp, id, HopKind::other, std::forward<F>(fn), y);
 }
 
 } } } // namespace rgw::sal::nsfs
