@@ -3593,7 +3593,7 @@ options:
     (recommended, provides authenticated encryption). Existing encrypted objects
     are always decrypted using the algorithm specified in their metadata,
     regardless of this setting.
-  default: aes-256-cbc
+  default: aes-256-gcm
   services:
   - rgw
   see_also:
