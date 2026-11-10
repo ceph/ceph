@@ -780,6 +780,81 @@ class TestCacheDrop(CephFSTestCase):
         # MDS to wait wait for cap revoke.
         self.mount_a.resume_netns()
 
+class TestDirPrefetchCacheFull(CephFSTestCase):
+    """
+    A lookup that misses a dentry loads the whole dirfrag with
+    mds_dir_prefetch, unless the MDS cache has no room for the dirfrag.
+
+    See: https://tracker.ceph.com/issues/82988
+    """
+    MDSS_REQUIRED = 1
+    CLIENTS_REQUIRED = 1
+    NFILES = 1000
+
+    def setUp(self):
+        super().setUp()
+        # some suites run with keyed fetches (qa/cephfs/overrides/dir_prefetch)
+        self.config_set('mds', 'mds_dir_prefetch', True)
+        self.mount_a.create_n_files("dir/file", self.NFILES, sync=True)
+
+    def _fetches(self):
+        p = self.fs.rank_tell(["perf", "dump"])['mds']
+        return p['dir_fetch_complete'], p['dir_fetch_keys']
+
+    def _drop_dirfrag(self):
+        # Without the client's caps, "cache drop" trims the dirfrag's
+        # entries, so that the next lookup in it misses.
+        self.mount_a.umount_wait()
+        self.fs.rank_tell(["flush", "journal"])
+        self.fs.rank_tell(["cache", "drop"])
+        self.mount_a.mount_wait()
+
+    def _stat(self, nfiles, path="dir"):
+        self.mount_a.run_shell_payload(
+            f"for i in $(seq 0 {nfiles - 1}); do stat {path}/file_$i > /dev/null; done")
+
+    def test_lookup_prefetches_dirfrag(self):
+        """
+        With room in the cache, a lookup that misses loads the whole dirfrag.
+        """
+        self._drop_dirfrag()
+        # the client's caps keep the root's entries, so only "dir" is fetched below
+        self.mount_a.run_shell(["stat", "dir"])
+        complete, keys = self._fetches()
+        self._stat(10)
+        complete2, keys2 = self._fetches()
+        log.info(f"complete fetches {complete} -> {complete2}, keyed {keys} -> {keys2}")
+        self.assertGreater(complete2, complete)
+        self.assertEqual(keys2, keys)
+
+    def test_lookup_fetches_key_when_cache_full(self):
+        """
+        With the cache at its trim target, a lookup that misses loads only
+        the wanted dentry: the rest of the dirfrag would be trimmed again
+        before it is used.
+        """
+        self.mount_a.create_n_files("fill/file", 5000)
+        self._drop_dirfrag()
+        # fill the cache up to its trim target with entries of another
+        # directory; "dir" alone would take about 3 MiB
+        self.config_set('mds', 'mds_cache_memory_limit', 8 << 20)
+        self._stat(5000, path="fill")
+        # the client's caps keep the root's entries, so only "dir" is fetched below
+        self.mount_a.run_shell(["stat", "dir"])
+        log.info(f"cache status: {self.fs.rank_tell(['cache', 'status'])}")
+        complete, keys = self._fetches()
+        self._stat(10)
+        complete2, keys2 = self._fetches()
+        log.info(f"complete fetches {complete} -> {complete2}, keyed {keys} -> {keys2}")
+        self.assertEqual(complete2, complete)
+        self.assertGreaterEqual(keys2 - keys, 10)
+
+        # readdir still loads the whole dirfrag
+        out = self.mount_a.run_shell_payload("ls dir | wc -l", stdout=StringIO())
+        self.assertEqual(int(out.stdout.getvalue().strip()), self.NFILES)
+        self._stat(self.NFILES)
+
+
 class TestSkipReplayInoTable(CephFSTestCase):
     MDSS_REQUIRED = 1
     CLIENTS_REQUIRED = 1
