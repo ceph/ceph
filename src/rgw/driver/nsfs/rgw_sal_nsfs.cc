@@ -2626,6 +2626,19 @@ static const char* removal_log_prefix(int err)
   return removal_log_level(err) ? "" : "ERROR: ";
 }
 
+/* ENOENT means the entry does not exist, which a new object or a
+ * missing key meets on every request;  the caller decides whether that
+ * is an error, so it is not one here. */
+static int absent_log_level(int err)
+{
+  return (err == ENOENT) ? 10 : 0;
+}
+
+static const char* absent_log_prefix(int err)
+{
+  return absent_log_level(err) ? "" : "ERROR: ";
+}
+
 static int delete_directory(int parent_fd, const char* dname, bool delete_children,
 		     const DoutPrefixProvider* dpp,
 		     const nsfs::ReservedNames& rn);
@@ -2789,8 +2802,8 @@ int FSEnt::stat(const DoutPrefixProvider* dpp, bool force)
 		  AT_SYMLINK_NOFOLLOW, STATX_ALL, &stx);
   if (ret < 0) {
     ret = errno;
-    ldpp_dout_fmt(dpp, 0, "ERROR: could not stat {}: {}", get_name(),
-			  cpp_strerror(ret));
+    ldpp_dout_fmt(dpp, absent_log_level(ret), "{}could not stat {}: {}",
+			  absent_log_prefix(ret), get_name(), cpp_strerror(ret));
     exist = false;
     return -ret;
   }
@@ -3280,8 +3293,9 @@ int File::open(const DoutPrefixProvider* dpp)
   }
   if (ret < 0) {
     ret = -ret;
-    ldpp_dout_fmt(dpp, 0, "ERROR: could not open object {} (flags 0x{:x}, "
-		  "as uid {}, read_only {:d}): {}", get_name(), flags,
+    ldpp_dout_fmt(dpp, absent_log_level(ret), "{}could not open object {} "
+		  "(flags 0x{:x}, as uid {}, read_only {:d}): {}",
+		  absent_log_prefix(ret), get_name(), flags,
 		  identity.cred.uid, read_only, cpp_strerror(ret));
     return -ret;
     }
@@ -3785,8 +3799,9 @@ int Directory::open(const DoutPrefixProvider* dpp)
     }
     if (!(access_model && access_model->permits(nsfs::AccessClass::path) &&
 	  ((r == -EACCES) || (r == -EPERM)))) {
-      ldpp_dout_fmt(dpp, 0, "ERROR: could not open dir {} as uid {}: {}",
-			    get_name(), identity.cred.uid, cpp_strerror(-r));
+      ldpp_dout_fmt(dpp, absent_log_level(-r), "{}could not open dir {} as "
+			    "uid {}: {}", absent_log_prefix(-r), get_name(),
+			    identity.cred.uid, cpp_strerror(-r));
       return r;
     }
     ldpp_dout_fmt(dpp, 10, "nsfs: walk denied at {} as uid {};  going on as "
@@ -3803,8 +3818,8 @@ int Directory::open(const DoutPrefixProvider* dpp)
   int ret = openat(pfd, fname.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
   if (ret < 0) {
     ret = errno;
-    ldpp_dout_fmt(dpp, 0, "ERROR: could not open dir {}: {}", get_name(),
-			  cpp_strerror(ret));
+    ldpp_dout_fmt(dpp, absent_log_level(ret), "{}could not open dir {}: {}",
+			  absent_log_prefix(ret), get_name(), cpp_strerror(ret));
     return -ret;
   }
 
