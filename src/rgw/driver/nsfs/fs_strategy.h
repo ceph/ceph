@@ -44,6 +44,27 @@ using xattr_map_t = boost::container::flat_map<std::string, std::string>;
 inline constexpr std::string_view TMP_LINK_PREFIX = ".tmp_link_";
 inline constexpr std::string_view UNLINK_TMP_PREFIX = ".unlink_tmp_";
 inline constexpr std::string_view CLONE_PARENT_PREFIX = ".clone_parent.";
+/* A delete marker before it is named, inside .versions/ only.  Not
+ * among the reserved names, so not refused as a key:  .versions/ is
+ * reserved, and split_version_entry() cannot read a temp_name() as a
+ * version entry, so no listing shows one. */
+inline constexpr std::string_view DM_TMP_PREFIX = ".dm_tmp_";
+
+/* A name for a temporary entry:  `<prefix><pid>@<host>_<nonce>_<seq>`.
+ * Unique across every gateway sharing the tree and across restarts,
+ * which a pid is not:  two nodes run the same pid at once, and a
+ * restart reuses one.  The nonce, 64 random bits drawn per process (and
+ * again in a forked child), is what makes it unique;  pid and host say
+ * which gateway left an entry behind;  seq separates names within the
+ * process.
+ *
+ * Every '_' after the prefix is this function's:  the host is joined to
+ * the pid by '@' and has any character outside [A-Za-z0-9.-] replaced,
+ * so no part after a '_' begins with the host.  Each such part begins
+ * with a hex digit, and neither "null" nor "mtime-" does, which is what
+ * keeps a version-entry parse, which looks for one of them after a '_',
+ * from reading a temp name. */
+std::string temp_name(std::string_view prefix);
 
 /* Bounds on the I/O size FSStrategy::copy_range() uses when it has to fall
  * back to a buffered copy.  See preferred_io_size(). */

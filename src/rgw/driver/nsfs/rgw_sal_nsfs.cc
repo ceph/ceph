@@ -12724,8 +12724,6 @@ out:
 }
 
 
-static std::atomic<uint64_t> fsio_build_seq{0};
-
 /* Apply what a create asked for to a shadow which has no name yet.
  *
  * Order matters.  Size first, because a truncate moves mtime;  then the
@@ -12980,8 +12978,7 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
   if (src_exists && !(flags & FSIOObject::OPEN_FLAG_TRUNC)) {
     /* COW clone of the published object.  clone_file() works by name, so
      * this branch needs a named temp rather than O_TMPFILE. */
-    tmp_name = fmt::format("{}{}_{}", nsfs::TMP_LINK_PREFIX, ::getpid(),
-			   fsio_build_seq.fetch_add(1));
+    tmp_name = nsfs::temp_name(nsfs::TMP_LINK_PREFIX);
     int ret = driver->get_fs_strategy()->clone_file(
       dpp, parent_fd, leaf, sdir_fd, tmp_name, null_yield,
       driver->copy_hints_for(authenticated_user), true /* excl */,
@@ -13020,8 +13017,7 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
     if ((build_fd == -EOPNOTSUPP) || (build_fd == -EISDIR) ||
 	(build_fd == -EINVAL)) {
       /* filesystem without O_TMPFILE:  fall back to a named temp */
-      tmp_name = fmt::format("{}{}_{}", nsfs::TMP_LINK_PREFIX, ::getpid(),
-			     fsio_build_seq.fetch_add(1));
+      tmp_name = nsfs::temp_name(nsfs::TMP_LINK_PREFIX);
       build_fd = nsfs::open_as_or_raise(dpp, identity, model,
 					nsfs::AccessClass::data,
 					RAISED_CREATE_CAPS, sdir_fd,
@@ -16192,9 +16188,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
   }
 
   /* create delete marker as zero-byte file in .versions/ */
-  static std::atomic<uint64_t> dm_counter{0};
-  std::string dm_tmp = fmt::format(".dm_tmp_{}_{}", getpid(),
-				   dm_counter.fetch_add(1));
+  std::string dm_tmp = nsfs::temp_name(nsfs::DM_TMP_PREFIX);
 
   /* As the authenticated user, all of it.
    *
