@@ -244,6 +244,8 @@ class NFSService(CephService):
         # NFS-Ganesha server file logging (opt-in via spec)
         if nfs_spec.log_to_file:
             deps.append('log_to_file: True')
+        if nfs_spec.max_ceph_clients is not None:
+            deps.append(f'max_ceph_clients: {nfs_spec.max_ceph_clients}')
 
         return sorted(deps)
 
@@ -478,7 +480,8 @@ class NFSService(CephService):
                 ),
                 "mem_stats_disable": nfs_spec.mem_stats_disable,
                 "clients_per_pool": nfs_spec.clients_per_pool,
-                "ceph_nodeid": daemon_id
+                "ceph_nodeid": daemon_id,
+                "max_ceph_clients": nfs_spec.max_ceph_clients,
             }
             if nfs_spec.enable_haproxy_protocol:
                 context["haproxy_hosts"] = self._haproxy_hosts()

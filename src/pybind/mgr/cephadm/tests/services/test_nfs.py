@@ -1480,6 +1480,128 @@ class TestNFS:
                 cephadm_module.remote.assert_any_call(
                     'nfs', 'reconcile_client_pool', 'qux', 3)
 
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("cephadm.services.nfs.NFSService.fence_old_ranks", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.purge", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.create_rados_config_obj", MagicMock())
+    def test_nfs_max_ceph_clients_in_ganesha_conf(
+            self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        """max_ceph_clients is rendered in the CEPH block, and only when set."""
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        def render(spec):
+            conf, _ = service_registry.get_service('nfs').generate_config(
+                DaemonDeployContext(CephadmDaemonDeploySpec(
+                    host='test', daemon_id='foo.test.0.0',
+                    service_name=spec.service_name(), rank=0)))
+            return conf['files']['ganesha.conf']
+
+        with with_host(cephadm_module, 'test'):
+            # Limit-only spec: the limit has to land in exactly one CEPH block.
+            limited = NFSServiceSpec(
+                service_id="foo",
+                placement=PlacementSpec(hosts=['test']),
+                max_ceph_clients=100,
+            )
+            with with_service(cephadm_module, limited):
+                ganesha_conf = render(limited)
+                assert ganesha_conf.count('CEPH {') == 1
+                assert 'max_ceph_clients = 100;' in ganesha_conf
+                assert 'clients_per_pool' not in ganesha_conf
+
+            # Together with clients_per_pool both land in the same block.
+            both = NFSServiceSpec(
+                service_id="foo",
+                placement=PlacementSpec(hosts=['test']),
+                clients_per_pool=3,
+                max_ceph_clients=100,
+            )
+            with with_service(cephadm_module, both):
+                ganesha_conf = render(both)
+                assert ganesha_conf.count('CEPH {') == 1
+                assert 'clients_per_pool = 3;' in ganesha_conf
+                assert 'max_ceph_clients = 100;' in ganesha_conf
+
+            # Unset: the CEPH block stays, the option is omitted.
+            unset = NFSServiceSpec(
+                service_id="foo",
+                placement=PlacementSpec(hosts=['test']),
+            )
+            with with_service(cephadm_module, unset):
+                ganesha_conf = render(unset)
+                assert ganesha_conf.count('CEPH {') == 1
+                assert 'max_ceph_clients' not in ganesha_conf
+
+            # Unset next to another CEPH option: the option is omitted only.
+            pooled = NFSServiceSpec(
+                service_id="foo",
+                placement=PlacementSpec(hosts=['test']),
+                clients_per_pool=3,
+            )
+            with with_service(cephadm_module, pooled):
+                ganesha_conf = render(pooled)
+                assert ganesha_conf.count('CEPH {') == 1
+                assert 'clients_per_pool = 3;' in ganesha_conf
+                assert 'max_ceph_clients' not in ganesha_conf
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("cephadm.services.nfs.NFSService.fence_old_ranks", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.purge", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.create_rados_config_obj", MagicMock())
+    def test_nfs_max_ceph_clients_dependency_changes(
+            self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        """Adding, changing or removing max_ceph_clients redeploys the daemons."""
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        with with_host(cephadm_module, 'test'):
+            nfs_spec = NFSServiceSpec(
+                service_id="lim",
+                placement=PlacementSpec(hosts=['test']),
+            )
+            with with_service(cephadm_module, nfs_spec):
+                svc = service_registry.get_service('nfs')
+
+                def spec_with(limit):
+                    return NFSServiceSpec(
+                        service_id="lim",
+                        placement=PlacementSpec(hosts=['test']),
+                        max_ceph_clients=limit,
+                    )
+
+                def next_action(curr_spec, curr_deps, last_deps):
+                    return svc.choose_next_action(
+                        utils.Action.NO_ACTION, 'nfs', curr_spec,
+                        curr_deps=curr_deps, last_deps=last_deps,
+                    ).action
+
+                unset = svc.get_dependencies(cephadm_module, nfs_spec)
+                assert not any(d.startswith('max_ceph_clients') for d in unset)
+
+                # Added.
+                added_spec = spec_with(100)
+                added = svc.get_dependencies(cephadm_module, added_spec)
+                assert 'max_ceph_clients: 100' in added
+                assert added != unset
+                assert next_action(added_spec, added, unset) == utils.Action.REDEPLOY
+
+                # Changed.
+                changed_spec = spec_with(200)
+                changed = svc.get_dependencies(cephadm_module, changed_spec)
+                assert 'max_ceph_clients: 200' in changed
+                assert 'max_ceph_clients: 100' not in changed
+                assert changed != added
+                assert next_action(changed_spec, changed, added) == utils.Action.REDEPLOY
+
+                # Removed.
+                removed = svc.get_dependencies(cephadm_module, nfs_spec)
+                assert removed == unset
+                assert next_action(nfs_spec, removed, changed) == utils.Action.REDEPLOY
+
+                # Unchanged leaves the daemons alone.
+                assert next_action(changed_spec, changed, changed) == utils.Action.NO_ACTION
+
 
 def test_nfs_enable_nfs_metrics_spec_roundtrip():
     """Verify enable_nfs_metrics survives JSON serialization round-trip."""
