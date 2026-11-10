@@ -14,17 +14,23 @@
 
 #pragma once
 
-#include "ceph_time.h"
+#include <time.h>
 
 #include <fmt/chrono.h>
+
+#include "ceph_time.h"
+
+
 
 // concept helpers for the formatters:
 
 template <typename TimeP>
-concept SteadyTimepoint = TimeP::clock::is_steady;
+concept UnsteadyTimepoint = !TimeP::clock::is_steady &&
+    !std::same_as<typename TimeP::clock, std::chrono::system_clock> &&
+    !std::same_as<typename TimeP::clock, std::chrono::utc_clock>;
 
 template <typename TimeP>
-concept UnsteadyTimepoint = ! TimeP::clock::is_steady;
+concept SteadyTimepoint = TimeP::clock::is_steady;
 
 namespace fmt {
 template <UnsteadyTimepoint T>
@@ -33,20 +39,14 @@ struct formatter<T> {
   template <typename FormatContext>
   auto format(const T& t, FormatContext& ctx) const
   {
-    struct tm bdt;
+    using namespace std::literals;
+    std::tm bdt;
     time_t tt = T::clock::to_time_t(t);
+    // C++26 supposedly has `std::localtime_r` in `<ctime>` but our
+    // libstdc++ doesn't.
     localtime_r(&tt, &bdt);
-    char tz[32] = {0};
-    strftime(tz, sizeof(tz), "%z", &bdt);
-
-    return fmt::format_to(
-	ctx.out(), "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}:{:06}{}",
-	(bdt.tm_year + 1900), (bdt.tm_mon + 1), bdt.tm_mday, bdt.tm_hour,
-	bdt.tm_min, bdt.tm_sec,
-	duration_cast<std::chrono::microseconds>(
-	    t.time_since_epoch() % std::chrono::seconds(1))
-	    .count(),
-	tz);
+    auto us = duration_cast<std::chrono::microseconds>(t.time_since_epoch() % 1s);
+    return fmt::format_to(ctx.out(), "{:%FT%T}.{:06}{:%z}", bdt, us.count(), bdt);
   }
 };
 
