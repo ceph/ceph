@@ -1,0 +1,5 @@
+# the pool on a hand-written rule that chooses the zones
+tasks:
+- stretch_rules:
+    rule: choose
+    enable_stretch_mode: false
