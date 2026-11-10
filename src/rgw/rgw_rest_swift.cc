@@ -292,7 +292,7 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets)
             s->user->get_info().quota.user_quota,
             s->user->get_max_buckets(),
             s->user_acl);
-    dump_errno(s);
+    dump_swift_status(s);
     dump_header(s, "Accept-Ranges", "bytes");
     end_header(s, this, NULL, NO_CONTENT_LENGTH, true);
   }
@@ -392,7 +392,7 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_end()
             s->user->get_info().quota.user_quota,
             s->user->get_max_buckets(),
             s->user_acl);
-    dump_errno(s);
+    dump_swift_status(s);
     end_header(s, this, nullptr, s->formatter->get_len(), true);
   }
 
@@ -548,7 +548,7 @@ next:
   }
 
   set_req_state_err(s, op_ret);
-  dump_errno(s);
+  dump_swift_status(s);
   end_header(s, this, NULL, content_len);
   if (op_ret < 0) {
     return;
@@ -671,7 +671,7 @@ void RGWStatAccount_ObjStore_SWIFT::send_response()
   }
 
   set_req_state_err(s, op_ret);
-  dump_errno(s);
+  dump_swift_status(s);
 
   end_header(s, NULL, NULL, 0,  true);
 
@@ -687,7 +687,7 @@ void RGWStatBucket_ObjStore_SWIFT::send_response()
   }
 
   set_req_state_err(s, op_ret);
-  dump_errno(s);
+  dump_swift_status(s);
 
   end_header(s, this, NULL, 0, true);
   dump_start(s);
@@ -865,7 +865,7 @@ void RGWCreateBucket_ObjStore_SWIFT::send_response()
     set_req_state_err(s, op_ret);
   }
 
-  dump_errno(s);
+  dump_swift_status(s);
   /* Propose ending HTTP header with 0 Content-Length header. */
   end_header(s, this, NULL, 0);
   rgw_flush_formatter_and_reset(s, s->formatter);
@@ -878,7 +878,7 @@ void RGWDeleteBucket_ObjStore_SWIFT::send_response()
     r = STATUS_NO_CONTENT;
 
   set_req_state_err(s, r);
-  dump_errno(s);
+  dump_swift_status(s);
   end_header(s, this, NULL, 0);
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
@@ -1150,7 +1150,7 @@ void RGWPutObj_ObjStore_SWIFT::send_response()
 
   dump_last_modified(s, mtime);
   set_req_state_err(s, op_ret);
-  dump_errno(s);
+  dump_swift_status(s);
   end_header(s, this);
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
@@ -1204,7 +1204,7 @@ void RGWPutMetadataAccount_ObjStore_SWIFT::send_response()
     set_req_state_err(s, op_ret);
   }
 
-  dump_errno(s);
+  dump_swift_status(s);
   end_header(s, this);
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
@@ -1240,7 +1240,7 @@ void RGWPutMetadataBucket_ObjStore_SWIFT::send_response()
     set_req_state_err(s, op_ret);
   }
 
-  dump_errno(s);
+  dump_swift_status(s);
   end_header(s, this);
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
@@ -1279,7 +1279,7 @@ void RGWPutMetadataObject_ObjStore_SWIFT::send_response()
     dump_content_length(s, 0);
   }
 
-  dump_errno(s);
+  dump_swift_status(s);
   end_header(s, this);
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
@@ -1372,7 +1372,7 @@ void RGWDeleteObj_ObjStore_SWIFT::send_response()
   }
 
   set_req_state_err(s, r);
-  dump_errno(s);
+  dump_swift_status(s);
 
   if (multipart_delete) {
     end_header(s, this /* RGWOp */, nullptr /* contype */,
@@ -1506,7 +1506,7 @@ void RGWCopyObj_ObjStore_SWIFT::send_partial_response(off_t ofs)
     if (! op_ret)
       op_ret = STATUS_CREATED;
     set_req_state_err(s, op_ret);
-    dump_errno(s);
+    dump_swift_status(s);
     end_header(s, this);
 
     /* Send progress information. Note that this diverge from the original swift
@@ -1543,7 +1543,7 @@ void RGWCopyObj_ObjStore_SWIFT::send_response()
     if (! op_ret)
       op_ret = STATUS_CREATED;
     set_req_state_err(s, op_ret);
-    dump_errno(s);
+    dump_swift_status(s);
     dump_etag(s, etag);
     dump_last_modified(s, mtime);
     dump_copy_info();
@@ -1605,11 +1605,11 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl,
 
   if (custom_http_ret) {
     set_req_state_err(s, 0);
-    dump_errno(s, custom_http_ret);
+    dump_swift_status(s, custom_http_ret);
   } else {
     set_req_state_err(s, (partial_content && !op_ret) ? STATUS_PARTIAL_CONTENT
 		    : op_ret);
-    dump_errno(s);
+    dump_swift_status(s);
 
     if (s->is_err()) {
       end_header(s, this);
@@ -1675,12 +1675,12 @@ void RGWOptionsCORS_ObjStore_SWIFT::send_response()
     op_ret = -EACCES;
   if (op_ret < 0) {
     set_req_state_err(s, op_ret);
-    dump_errno(s);
+    dump_swift_status(s);
     end_header(s, NULL);
     return;
   }
   get_response_params(hdrs, exp_hdrs, &max_age);
-  dump_errno(s);
+  dump_swift_status(s);
   dump_access_control(s, origin, req_meth, hdrs.c_str(), exp_hdrs.c_str(),
 		      max_age);
   end_header(s, NULL);
@@ -1737,7 +1737,7 @@ int RGWBulkDelete_ObjStore_SWIFT::get_data(
 void RGWBulkDelete_ObjStore_SWIFT::send_response()
 {
   set_req_state_err(s, op_ret);
-  dump_errno(s);
+  dump_swift_status(s);
   end_header(s, this /* RGWOp */, nullptr /* contype */,
              CHUNKED_TRANSFER_ENCODING);
 
@@ -1823,7 +1823,7 @@ RGWBulkUploadOp_ObjStore_SWIFT::create_stream()
 void RGWBulkUploadOp_ObjStore_SWIFT::send_response()
 {
   set_req_state_err(s, op_ret);
-  dump_errno(s);
+  dump_swift_status(s);
   end_header(s, this /* RGWOp */, nullptr /* contype */,
              CHUNKED_TRANSFER_ENCODING);
   rgw_flush_formatter_and_reset(s, s->formatter);
@@ -1884,7 +1884,7 @@ void RGWBulkUploadOp_ObjStore_SWIFT::send_response()
 void RGWGetCrossDomainPolicy_ObjStore_SWIFT::send_response()
 {
   set_req_state_err(s, op_ret);
-  dump_errno(s);
+  dump_swift_status(s);
   end_header(s, this, "application/xml");
 
   std::stringstream ss;
@@ -1902,7 +1902,7 @@ void RGWGetCrossDomainPolicy_ObjStore_SWIFT::send_response()
 void RGWGetHealthCheck_ObjStore_SWIFT::send_response()
 {
   set_req_state_err(s, op_ret);
-  dump_errno(s);
+  dump_swift_status(s);
   end_header(s, this, "application/xml");
 
   if (op_ret) {
@@ -1960,7 +1960,7 @@ void RGWInfo_ObjStore_SWIFT::send_response()
     op_ret = STATUS_NO_CONTENT;
   }
   set_req_state_err(s, op_ret);
-  dump_errno(s);
+  dump_swift_status(s);
   end_header(s, this);
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
@@ -2424,7 +2424,7 @@ void RGWFormPost::send_response()
 
   set_req_state_err(s, op_ret);
   s->err.err_code = err_msg;
-  dump_errno(s);
+  dump_swift_status(s);
   if (! redirect.empty()) {
     dump_redirect(s, redirect);
   }
@@ -2592,7 +2592,7 @@ RGWOp* RGWSwiftWebsiteHandler::get_ws_redirect_op()
 
     void send_response() override {
       set_req_state_err(s, op_ret);
-      dump_errno(s);
+      dump_swift_status(s);
       dump_content_length(s, 0);
       dump_redirect(s, location);
       end_header(s, this);
@@ -2638,7 +2638,7 @@ RGWOp* RGWSwiftWebsiteHandler::get_ws_listing_op()
     void send_response() override {
       /* Generate the header now. */
       set_req_state_err(s, op_ret);
-      dump_errno(s);
+      dump_swift_status(s);
       dump_container_metadata(s, stats, quota.bucket_quota,
                               s->bucket->get_info().website_conf);
       end_header(s, this, "text/html");
@@ -3132,6 +3132,8 @@ int RGWHandler_REST_SWIFT::init_from_header(rgw::sal::Driver* driver,
     string account_name;
     next_tok(req, account_name, '/');
 
+    s->init_state.swift_account_realm = account_name;
+
     /* Erase all pre-defined prefixes like "AUTH_" or "KEY_". */
     const vector<string> skipped_prefixes = { "AUTH_", "KEY_" };
 
@@ -3269,4 +3271,57 @@ int RGWHandler_REST_Obj_SWIFT::error_handler(int err_no,
 					     optional_yield y)
 {
   return website_handler->error_handler(err_no, error_content, y);
+}
+
+static std::string swift_www_authenticate_realm(const req_state *s)
+{
+  if (!s->init_state.swift_account_realm.empty()) {
+    return s->init_state.swift_account_realm;
+  }
+
+  if (!s->cct->_conf->rgw_swift_account_in_url) {
+    return "unknown";
+  }
+
+  const std::string_view uri = s->decoded_uri;
+  const std::string_view v1 = "/v1/";
+  const auto v1pos = uri.find(v1);
+  if (v1pos == std::string_view::npos) {
+    return "unknown";
+  }
+
+  const auto start = v1pos + v1.size();
+  const auto end = uri.find('/', start);
+  const std::string_view segment = (end == std::string_view::npos)
+      ? uri.substr(start)
+      : uri.substr(start, end - start);
+
+  if (segment.starts_with("AUTH_") || segment.starts_with("KEY_")) {
+    return std::string(segment);
+  }
+
+  return "unknown";
+}
+
+static void dump_swift_www_authenticate(req_state *s)
+{
+  const std::string realm = url_encode(swift_www_authenticate_realm(s));
+  const std::string swift_challenge = "Swift realm=\"" + realm + '"';
+  dump_header(s, "WWW-Authenticate", swift_challenge);
+}
+
+void dump_swift_status(req_state *s)
+{
+  dump_errno(s);
+  if (s->err.http_ret == 401) {
+    dump_swift_www_authenticate(s);
+  }
+}
+
+void dump_swift_status(req_state *s, int http_ret)
+{
+  dump_errno(s, http_ret);
+  if (http_ret == 401) {
+    dump_swift_www_authenticate(s);
+  }
 }

@@ -5,7 +5,19 @@ import sys
 
 import requests
 
-HOST = 'http://localhost:8000'
+def discover_swift_base():
+    """Match qa/workunits/rgw/common.py boto_connect() port order."""
+    for port, ssl in (('80', False), ('8000', False), ('443', True)):
+        proto = 'https' if ssl else 'http'
+        base = '%s://localhost:%s' % (proto, port)
+        try:
+            requests.get(base + '/swift/v1', timeout=5, verify=False)
+        except requests.exceptions.ConnectionError:
+            continue
+        print('connected to', base)
+        return base
+    print('FAILED: could not connect to rgw on localhost:80, :8000, or :443')
+    sys.exit(1)
 
 
 def assert_swift_challenge(resp, realm_substring=None):
@@ -25,15 +37,19 @@ def assert_swift_challenge(resp, realm_substring=None):
 
 
 def main():
+    host = discover_swift_base()
+
     r = requests.get(
-        HOST + '/swift/v1/AUTH_nobody',
+        host + '/swift/v1/AUTH_nobody',
         headers={'X-Auth-Token': 'bogus'},
+        verify=False,
     )
     assert_swift_challenge(r, 'AUTH_nobody')
 
     r = requests.get(
-        HOST + '/auth/1.0',
+        host + '/auth/1.0',
         headers={'X-Auth-User': 'test:tester', 'X-Auth-Key': 'wrong'},
+        verify=False,
     )
     assert_swift_challenge(r)
 
