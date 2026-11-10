@@ -5092,6 +5092,7 @@ void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp,
     fs_strategy = std::make_unique<nsfs::POSIXStrategy>();
   }
   ldpp_dout_fmt(dpp, 1, "nsfs: using {} fs strategy", fs_strategy->name());
+  nsfs::set_ring_metadata_changes(fs_strategy->ring_metadata_changes());
   /* Probed unless the caller says otherwise.  The strided layout, the
    * extent guard and the divert path are reached only where a copy is
    * real, which on a developer machine is nowhere -- so a caller which
@@ -18595,6 +18596,10 @@ void NSFSDriver::get_features(std::map<std::string, std::string>& features)
   features["key_paths_exclusive"] = "true";
   if (fs_strategy) {
     features["strategy"] = fs_strategy->name();
+    /* N-D3:  whether an identity's links, renames and attribute writes
+     * take the ring, or the helper pool (GPFS) */
+    features["ring_metadata_changes"] =
+      fs_strategy->ring_metadata_changes() ? "true" : "false";
     features["can_rename"] = fs_strategy->can_rename() ? "true" : "false";
     features["shares_extents"] =
       fs_strategy->shares_extents() ? "true" : "false";

@@ -6572,20 +6572,29 @@ TEST_F(NSFSImpersonatedRenameTest, TheOwnersDemoteAndMarkerRunAsTheOwner)
  * CAS unlink, a delete marker) make no hop to the pool for either;  the
  * hops left are the mode changes, which have no opcode.  With the ring
  * withheld (`inject-no-ring`) the same sequence hops for each kind, so
- * the counter sees them and the fallback runs, and the outcome is the
- * same either way. */
+ * the counter sees them and the fallback runs.  With metadata changes
+ * kept off the ring, as on GPFS, links and attribute writes hop and
+ * reads do not.  The outcome is the same every way. */
 TEST_F(NSFSImpersonatedRenameTest, AnIdentitysLinksAndAttributesTakeNoHop)
 {
   ASSERT_EQ(set_model("posix-strict"), 0);
-  for (const bool withheld : {false, true}) {
-    SCOPED_TRACE(withheld ? "ring withheld" : "on the ring");
-    inject_no_ring(alice, withheld);
+  enum class Route { ring, withheld, metadata_on_pool };
+  for (const Route route : {Route::ring, Route::withheld,
+			    Route::metadata_on_pool}) {
+    const char* what = (route == Route::ring) ? "on the ring"
+      : (route == Route::withheld) ? "ring withheld"
+      : "metadata changes on the pool (GPFS's route)";
+    SCOPED_TRACE(what);
+    inject_no_ring(alice, route == Route::withheld);
+    nsfs::set_ring_metadata_changes(route != Route::metadata_on_pool);
     (void) pool_hops(alice);
-    const std::string dir = withheld ? "pool" : "ring";
+    const std::string dir = (route == Route::ring) ? "ring"
+      : (route == Route::withheld) ? "pool" : "meta";
     ASSERT_NO_FATAL_FAILURE(put_as(alice, dir + "/k", "first"));
     ASSERT_NO_FATAL_FAILURE(put_as(alice, dir + "/k", "second"));
     ASSERT_EQ(delete_as(alice, dir + "/k"), 0);
     auto hops = pool_hops(alice);
+    nsfs::set_ring_metadata_changes(true);
 
     const auto hist = versions_in(dir);
     ASSERT_EQ(hist.size(), 3u) << "two demoted versions and the marker";
@@ -6593,14 +6602,23 @@ TEST_F(NSFSImpersonatedRenameTest, AnIdentitysLinksAndAttributesTakeNoHop)
       EXPECT_EQ(owned(dir + "/.versions/" + v).uid, owner_uid)
 	  << v << " is not the owner's";
     }
-    if (withheld) {
-      EXPECT_GT(hops["link"], 0u);
-      EXPECT_GT(hops["attr_write"], 0u);
-      EXPECT_GT(hops["attr_read"], 0u);
-    } else {
+    switch (route) {
+    case Route::ring:
       EXPECT_EQ(hops["link"], 0u);
       EXPECT_EQ(hops["attr_write"], 0u);
       EXPECT_EQ(hops["attr_read"], 0u);
+      break;
+    case Route::withheld:
+      EXPECT_GT(hops["link"], 0u);
+      EXPECT_GT(hops["attr_write"], 0u);
+      EXPECT_GT(hops["attr_read"], 0u);
+      break;
+    case Route::metadata_on_pool:
+      /* the changes go to the pool;  the reads stay on the ring */
+      EXPECT_GT(hops["link"], 0u);
+      EXPECT_GT(hops["attr_write"], 0u);
+      EXPECT_EQ(hops["attr_read"], 0u);
+      break;
     }
   }
   inject_no_ring(alice, false);

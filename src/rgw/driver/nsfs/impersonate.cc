@@ -997,6 +997,20 @@ int open_as_or_raise(const DoutPrefixProvider* dpp, const FSIdentity& id,
   return raise_for(dpp, id, model, caps, plain, raised);
 }
 
+namespace {
+std::atomic<bool> g_ring_metadata_changes{true};
+}
+
+void set_ring_metadata_changes(bool on)
+{
+  g_ring_metadata_changes.store(on, std::memory_order_relaxed);
+}
+
+bool ring_metadata_changes()
+{
+  return g_ring_metadata_changes.load(std::memory_order_relaxed);
+}
+
 int op_as(const DoutPrefixProvider* dpp, const FSIdentity& id,
 	  HopKind kind, rgw::sal::UringOp op, const ImpersonatedFn& plain,
 	  optional_yield y)
@@ -1004,7 +1018,9 @@ int op_as(const DoutPrefixProvider* dpp, const FSIdentity& id,
   if (!id.active()) {
     return plain();
   }
-  if (ring_as(dpp, id, &op, 1, y) < 0) {
+  const bool changes = (kind == HopKind::link) || (kind == HopKind::attr_write);
+  if ((changes && !ring_metadata_changes()) ||
+      (ring_as(dpp, id, &op, 1, y) < 0)) {
     return with_identity(dpp, id, kind, plain, y);
   }
   return op.result;

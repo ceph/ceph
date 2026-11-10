@@ -316,6 +316,14 @@ void set_no_ring(const std::string& user, bool on);
 int ring_as(const DoutPrefixProvider* dpp, const FSIdentity& id,
 	    rgw::sal::UringOp* ops, size_t n, optional_yield y);
 
+/* Whether an identity's metadata changes take the ring:  the driver sets
+ * it from its strategy (FSStrategy::ring_metadata_changes()), so off on
+ * GPFS.  op_as() consults it for HopKind::link and attr_write, and so
+ * does every direct ring path that changes metadata;  off, each takes
+ * its pool path. */
+void set_ring_metadata_changes(bool on);
+bool ring_metadata_changes();
+
 /* One operation as `id`:  `op` on the ring, or `plain` as `id` on the
  * pool when the ring cannot run it;  `plain` as the gateway when `id` is
  * inactive.  The operation's result:  >= 0, or -errno. */

@@ -408,6 +408,11 @@ public:
 
   virtual const char* name() const = 0;
 
+  /* Whether an identity's metadata changes -- links, renames, unlinks,
+   * attribute writes -- take the ring (N-D3), rather than the helper
+   * pool.  Reads take it regardless. */
+  virtual bool ring_metadata_changes() const { return true; }
+
   /* Can this strategy move a name cheaply, i.e. is renameat() the right
    * way to relocate an object?  Default no, so a strategy opts in rather
    * than inherits the behaviour.  GPFS deliberately does not:  rgw-nfs on
@@ -605,6 +610,12 @@ public:
                     const nsfs::FSIdentity& id = {}) override;
 
   const char* name() const override { return "gpfs"; }
+  /* No:  concurrent metadata changes on GPFS collapse past about eight
+   * -- a broadcast wake-up in its kernel around the recovery log -- and
+   * the pool's eight helpers keep them under it, where the ring, like a
+   * direct call, lets every request's change in at once.  Measured on
+   * rhel97-gpfs, 2026-11-10 (probes/xattrbench.c;  work plan, N-D3). */
+  bool ring_metadata_changes() const override { return false; }
 
   bool has_clone() const {
     return clone_enabled && fn_clone_snap && fn_clone_copy && fn_clone_unsnap;

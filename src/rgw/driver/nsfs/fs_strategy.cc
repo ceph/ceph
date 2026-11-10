@@ -262,7 +262,7 @@ int set_xattrs_as(const DoutPrefixProvider* dpp, int fd,
   if (attrs.empty()) {
     return 0;			/* and no hop to write nothing */
   }
-  if (id.active()) {
+  if (id.active() && nsfs::ring_metadata_changes()) {
     /* Batched, a ring's chain room to a submission (posix_uring_chain_room()),
      * so never more than URING_CHAIN_MAX.  A failed set does not
      * cancel the rest, so every entry is written that can be, and the
@@ -348,7 +348,7 @@ int POSIXStrategy::link_temp_file(int temp_fd, int dir_fd,
                                   optional_yield y,
                                   const nsfs::FSIdentity& id)
 {
-  if (id.active()) {
+  if (id.active() && nsfs::ring_metadata_changes()) {
     /* On the ring, a step at a time:  chained, the rename would run
      * after a failed link, and an entry already at the temp name would
      * be renamed over the object. */
@@ -424,7 +424,7 @@ SafeResult POSIXStrategy::safe_link(const DoutPrefixProvider* dpp,
                                      optional_yield y,
                                      const nsfs::FSIdentity& id)
 {
-  if (id.active()) {
+  if (id.active() && nsfs::ring_metadata_changes()) {
     /* one chain:  the statx after a failed link reads, harmlessly, and
      * its result is not used */
     struct statx stx = {};
@@ -485,7 +485,7 @@ SafeResult POSIXStrategy::safe_unlink(const DoutPrefixProvider* dpp,
                                        optional_yield y,
                                        const nsfs::FSIdentity& id)
 {
-  if (id.active()) {
+  if (id.active() && nsfs::ring_metadata_changes()) {
     /* the rename and its check as one chain;  then the unlink, or the
      * rename back, which depend on the check */
     const std::string tmp = temp_name(UNLINK_TMP_PREFIX);
@@ -627,7 +627,7 @@ int FSStrategy::link_temp_file_excl(int temp_fd, int dir_fd,
 				    optional_yield y,
 				    const nsfs::FSIdentity& id)
 {
-  if (id.active()) {
+  if (id.active() && nsfs::ring_metadata_changes()) {
     char proc[PATH_MAX];
     snprintf(proc, PATH_MAX, "/proc/self/fd/%d", temp_fd);
     UringOp link = ring_op(UringOp::Kind::linkat, AT_FDCWD, proc, dir_fd,
@@ -1412,7 +1412,7 @@ SafeResult GPFSStrategy::safe_link(const DoutPrefixProvider* dpp,
                                     optional_yield y,
                                     const nsfs::FSIdentity& id)
 {
-  if (id.active()) {
+  if (id.active() && nsfs::ring_metadata_changes()) {
     /* One chain, as POSIXStrategy::safe_link().  The source check below
      * is not repeated:  the destination check reads the inode that was
      * linked, which settles what the source check would.  A source
