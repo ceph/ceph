@@ -419,6 +419,10 @@ def configure(ctx, config):
         if lc_debug_interval:
             s3tests_conf['s3 main']['lc_debug_interval'] = lc_debug_interval
 
+        lc_list_cnt = properties.get('lc_list_cnt')
+        if lc_list_cnt:
+            s3tests_conf['s3 main']['lc_list_cnt'] = lc_list_cnt
+
         rgw_restore_debug_interval = properties.get('rgw_restore_debug_interval')
         if rgw_restore_debug_interval:
             s3tests_conf['s3 main']['rgw_restore_debug_interval'] = rgw_restore_debug_interval

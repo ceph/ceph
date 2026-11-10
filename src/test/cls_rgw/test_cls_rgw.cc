@@ -703,6 +703,131 @@ TEST_P(TestClsRgw, index_list_delimited)
   ASSERT_EQ("u-4", id_entry_map.crbegin()->first);
 }
 
+// link the null version of an object or delete marker
+static void link_null_version(librados::IoCtx& ioctx, const string& oid,
+                              const string& name, const string& olh_tag,
+                              bool delete_marker,
+                              const rgw_bucket_dir_entry_meta& meta)
+{
+  bufferlist olh_tag_bl;
+  olh_tag_bl.append(olh_tag);
+  rgw_zone_set zone_set;
+  ASSERT_EQ(0, cls_rgw_bucket_link_olh(ioctx, oid, cls_rgw_obj_key(name),
+                                       olh_tag_bl, delete_marker, olh_tag,
+                                       &meta, 0, ceph::real_time{}, true,
+                                       true, zone_set));
+}
+
+static void list_one(librados::IoCtx& ioctx, const string& oid,
+                     const cls_rgw_obj_key& start_key,
+                     rgw_bucket_dir_entry& entry)
+{
+  rgw_cls_list_ret listing;
+  list_entries(ioctx, oid, 1, listing, start_key);
+  ASSERT_EQ(1u, listing.dir.m.size());
+  entry = listing.dir.m.begin()->second;
+}
+
+// a listing resumes after a null version, object or delete marker, when
+// the start key names it "null", as s3 clients do with NextVersionIdMarker
+TEST_P(TestClsRgw, index_list_resume_after_null_version)
+{
+  string bucket_oid = str_int("bucket", 120);
+
+  ObjectWriteOperation op;
+  cls_rgw_bucket_init_index(op);
+  ASSERT_EQ(0, ioctx.operate(bucket_oid, &op));
+
+  string loc = str_int("loc", 0);
+  rgw_bucket_dir_entry_meta meta;
+  meta.category = RGWObjCategory::None;
+  meta.size = 1024;
+  meta.mtime = ceph::real_clock::now();
+
+  // objects "a" and "b"
+  //   - PUT after versioning was suspended
+  // so each is a lone "null" version
+  for (const string name : {"a", "b"}) {
+    string tag = "tag-" + name;
+    index_prepare(ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, name, loc);
+    index_complete(ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, 1, name, meta);
+    ASSERT_NO_FATAL_FAILURE(
+        link_null_version(ioctx, bucket_oid, name, tag, false, meta));
+  }
+
+  // for object "c"
+  //   - PUT when versioning enabled -> v1
+  //   - DELETE after suspend
+  // so "c" has a "null" DM on top of v1
+  {
+    cls_rgw_obj_key version("c", "v1");
+    index_prepare(ioctx, bucket_oid, CLS_RGW_OP_ADD, "tag-c", version, loc);
+    index_complete(ioctx, bucket_oid, CLS_RGW_OP_ADD, "tag-c", 1, version, meta);
+    ASSERT_NO_FATAL_FAILURE(
+        link_null_version(ioctx, bucket_oid, "c", "tag-c", true, {}));
+  }
+
+  // object "d"
+  //   - DELETE after suspend
+  // so "d" has a lone DM only
+  ASSERT_NO_FATAL_FAILURE(
+      link_null_version(ioctx, bucket_oid, "d", "tag-d", true, {}));
+
+  // objects "e" and "f" are plain entries
+  // PUT before versioning was enabled
+  for (const string name : {"e", "f"}) {
+    string tag = "tag-" + name;
+    index_prepare(ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, name, loc);
+    index_complete(ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, 1, name, meta);
+  }
+
+  // so at this point the index lists, in order (version markers are not
+  // listed, and the versions of a name sort newest first):
+  /*
+     key       version   entry                              flags
+     a                   version marker                       8
+     a         null      a, null version, current             3
+     b                   version marker                       8
+     b         null      b, null version, current             3
+     c                   version marker                       8
+     c         null      c, null delete marker, current       7
+     c         v1        c[v1], hidden behind the marker      1   * the victim
+     d                   version marker                       8
+     d         null      d, lone null delete marker           7
+     e                   plain entry                          0
+     f                   plain entry                          0
+  */
+  // to resume after a "null" version, the listing looks up its instance
+  // entry; a null delete marker keeps that entry under a different key
+  // than a null object does
+
+  rgw_bucket_dir_entry entry;
+
+  // assume each page has 1 entry
+  // start listing with no key -> from the first entry
+  ASSERT_NO_FATAL_FAILURE(list_one(ioctx, bucket_oid, {}, entry));
+  ASSERT_EQ(cls_rgw_obj_key("a"), entry.key);
+  ASSERT_TRUE(entry.flags & rgw_bucket_dir_entry::FLAG_VER);
+  ASSERT_TRUE(entry.is_current());
+
+  ASSERT_NO_FATAL_FAILURE(list_one(ioctx, bucket_oid, {"a", "null"}, entry));
+  EXPECT_EQ(cls_rgw_obj_key("b"), entry.key);
+
+  ASSERT_NO_FATAL_FAILURE(list_one(ioctx, bucket_oid, {"b", "null"}, entry));
+  ASSERT_EQ(cls_rgw_obj_key("c"), entry.key);
+  ASSERT_TRUE(entry.is_delete_marker());
+
+  // after the null delete marker comes the version it hides
+  ASSERT_NO_FATAL_FAILURE(list_one(ioctx, bucket_oid, {"c", "null"}, entry));
+  EXPECT_EQ(cls_rgw_obj_key("c", "v1"), entry.key);
+
+  ASSERT_NO_FATAL_FAILURE(list_one(ioctx, bucket_oid, {"d", "null"}, entry));
+  EXPECT_EQ(cls_rgw_obj_key("e"), entry.key);
+
+  // "null" past an unversioned entry moves on to the next name
+  ASSERT_NO_FATAL_FAILURE(list_one(ioctx, bucket_oid, {"e", "null"}, entry));
+  EXPECT_EQ(cls_rgw_obj_key("f"), entry.key);
+}
 
 TEST_P(TestClsRgw, bi_list)
 {
