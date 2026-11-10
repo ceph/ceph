@@ -74,6 +74,10 @@ mirror_group_snapshot_and_wait_for_sync_complete ${CLUSTER1} ${CLUSTER2} ${POOL}
 wait_for_group_status_in_pool_dir ${CLUSTER1} ${POOL}/${group} 'up+replaying' 1
 compare_images ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${image}
 
+# Test sequence:
+# 1. Remove an image from a mirrored group and wait for the detach to sync.
+# 2. Prune its old mirror snapshots, add it again, and check replayed data.
+# Expected: the same image can rejoin after its mirror snapshot dependencies end.
 testlog "TEST: test replay with remove image and later add the same"
 if [ -n "${RBD_MIRROR_SUPPORT_DYNAMIC_GROUPS}" ]; then
   group_image_remove ${CLUSTER2} ${POOL}/${group} ${POOL}/${image}
@@ -94,7 +98,9 @@ fi
 wait_for_group_replay_started ${CLUSTER1} ${POOL}/${group} 0
 
 if [ -n "${RBD_MIRROR_SUPPORT_DYNAMIC_GROUPS}" ]; then
-  group_image_add ${CLUSTER2} ${POOL}/${group} ${POOL}/${image}
+  wait_for_group_synced ${CLUSTER2} ${POOL}/${group} ${CLUSTER1} ${POOL}/${group}
+  mirror_group_snapshot ${CLUSTER2} ${POOL}/${group}
+  wait_for_group_image_add ${CLUSTER2} ${POOL}/${group} ${POOL}/${image}
   
   if [ -n "${RBD_MIRROR_NEW_IMPLICIT_BEHAVIOUR}" ]; then
     # check secondary cluster sees 0 images
@@ -475,7 +481,15 @@ wait_for_group_replay_started ${CLUSTER1} ${POOL}/${group} 1
 wait_for_group_status_in_pool_dir ${CLUSTER1} ${POOL}/${group} 'up+replaying' 1
 compare_images ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${image}
 
+# Test sequence:
+# 1. Wait for a complete group snapshot on the secondary.
+# 2. Stop the replayer, force-promote the secondary, and create split-brain.
+# 3. Resync the old primary and verify that the replayer recovers.
+# Expected result: promotion uses a recorded rollback point and resync restores
+# a healthy mirrored group.
 testlog "TEST: split-brain"
+get_newest_complete_mirror_group_snapshot_id ${CLUSTER2} ${POOL}/${group} group_snap_id
+wait_for_group_snap_sync_complete ${CLUSTER1} ${POOL}/${group} ${group_snap_id}
 stop_mirrors ${CLUSTER1}
 mirror_group_promote ${CLUSTER1} ${POOL}/${group} --force
 start_mirrors ${CLUSTER1}

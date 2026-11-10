@@ -21,6 +21,24 @@ std::ostream &operator<<(std::ostream &os,
   case StateTransition::STATE_ASSOCIATED:
     os << "ASSOCIATED";
     break;
+  case StateTransition::STATE_ASSOCIATING_STANDBY:
+    os << "ASSOCIATING_STANDBY";
+    break;
+  case StateTransition::STATE_STANDBY:
+    os << "STANDBY";
+    break;
+  case StateTransition::STATE_ACTIVATING:
+    os << "ACTIVATING";
+    break;
+  case StateTransition::STATE_DEACTIVATING:
+    os << "DEACTIVATING";
+    break;
+  case StateTransition::STATE_REMOVING_STANDBY:
+    os << "REMOVING_STANDBY";
+    break;
+  case StateTransition::STATE_UPDATING:
+    os << "UPDATING";
+    break;
   case StateTransition::STATE_SHUFFLING:
     os << "SHUFFLING";
     break;
@@ -63,6 +81,39 @@ const StateTransition::TransitionTable StateTransition::s_transition_table {
   {{STATE_ASSOCIATING,  ACTION_TYPE_MAP_UPDATE}, {ACTION_TYPE_ACQUIRE, {}, {},
                                                   {}}},
   {{STATE_ASSOCIATING,  ACTION_TYPE_ACQUIRE},    {ACTION_TYPE_NONE, {}, {},
+                                                  {STATE_ASSOCIATED}}},
+
+  {{STATE_ASSOCIATING_STANDBY, ACTION_TYPE_NONE},
+                                                 {ACTION_TYPE_MAP_UPDATE,
+                                                  {POLICY_ACTION_MAP}, {}, {}}},
+  {{STATE_ASSOCIATING_STANDBY, ACTION_TYPE_MAP_UPDATE},
+                                                 {ACTION_TYPE_NONE, {}, {},
+                                                  {STATE_STANDBY}}},
+
+  {{STATE_ACTIVATING,   ACTION_TYPE_NONE},       {ACTION_TYPE_MAP_UPDATE,
+                                                  {POLICY_ACTION_MAP}, {}, {}}},
+  {{STATE_ACTIVATING,   ACTION_TYPE_MAP_UPDATE}, {ACTION_TYPE_ACQUIRE, {}, {},
+                                                  {}}},
+  {{STATE_ACTIVATING,   ACTION_TYPE_ACQUIRE},    {ACTION_TYPE_NONE, {}, {},
+                                                  {STATE_ASSOCIATED}}},
+
+  {{STATE_DEACTIVATING, ACTION_TYPE_NONE},       {ACTION_TYPE_RELEASE, {}, {},
+                                                  {}}},
+  {{STATE_DEACTIVATING, ACTION_TYPE_RELEASE},    {ACTION_TYPE_MAP_UPDATE, {}, {},
+                                                  {}}},
+  {{STATE_DEACTIVATING, ACTION_TYPE_MAP_UPDATE}, {ACTION_TYPE_NONE, {}, {},
+                                                  {STATE_STANDBY}}},
+
+  {{STATE_REMOVING_STANDBY, ACTION_TYPE_NONE},   {ACTION_TYPE_MAP_REMOVE,
+                                                  {POLICY_ACTION_UNMAP}, {}, {}}},
+  {{STATE_REMOVING_STANDBY, ACTION_TYPE_MAP_REMOVE},
+                                                 {ACTION_TYPE_NONE, {},
+                                                  {POLICY_ACTION_REMOVE},
+                                                  {STATE_UNASSOCIATED}}},
+
+  {{STATE_UPDATING,     ACTION_TYPE_NONE},       {ACTION_TYPE_MAP_UPDATE, {}, {},
+                                                  {}}},
+  {{STATE_UPDATING,     ACTION_TYPE_MAP_UPDATE}, {ACTION_TYPE_NONE, {}, {},
                                                   {STATE_ASSOCIATED}}},
 
   {{STATE_DISSOCIATING, ACTION_TYPE_NONE},       {ACTION_TYPE_RELEASE, {},
