@@ -126,6 +126,7 @@ public:
   std::ostream& _conn_prefix(std::ostream *_dout);
 
   bool is_connected() override;
+  bool is_closed() override;
 
   // Only call when AsyncConnection first construct
   void connect(const entity_addrvec_t& addrs, int type, entity_addr_t& target);
