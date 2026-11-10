@@ -88,6 +88,7 @@ struct ECSubWrite {
     backfill_or_async_recovery = other.backfill_or_async_recovery;
   }
   void encode(ceph::buffer::list &bl) const;
+  void encode(ceph::buffer::list &bl, uint64_t features) const;
   void encode(ceph::buffer::list &p_bl,
 	      ceph::buffer::list &d_bll,
 	      uint64_t features=0) const;
@@ -102,7 +103,7 @@ private:
   const ECSubWrite& operator=(const ECSubWrite& other);
 };
 
-WRITE_CLASS_ENCODER(ECSubWrite)
+WRITE_CLASS_ENCODER_OPTIONAL_FEATURES(ECSubWrite)
 
 struct ECSubWriteReply {
   pg_shard_t from;

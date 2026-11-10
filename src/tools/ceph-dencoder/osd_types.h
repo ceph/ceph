@@ -77,7 +77,7 @@ TYPE(eversion_t)
 TYPE(ECLegacy::ECUtilL::HashInfo)
 
 #include "osd/ECMsgTypes.h"
-TYPE_NOCOPY(ECSubWrite)
+TYPE_FEATUREFUL_NOCOPY(ECSubWrite)
 TYPE(ECSubWriteReply)
 TYPE_FEATUREFUL(ECSubRead)
 TYPE(ECSubReadReply)

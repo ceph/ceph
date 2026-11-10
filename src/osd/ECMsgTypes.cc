@@ -33,6 +33,11 @@ void ECSubWrite::encode(bufferlist &bl) const
   encode(bl, bl);
 }
 
+void ECSubWrite::encode(bufferlist &bl, uint64_t features) const
+{
+  encode(bl, bl, features);
+}
+
 void ECSubWrite::encode(bufferlist &p_bl, bufferlist &d_bl, uint64_t features) const
 {
   uint8_t ver = HAVE_FEATURE(features, SERVER_VAMPIRE) ? 6 :
