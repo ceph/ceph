@@ -74,7 +74,7 @@ ceph_get_module_option(BaseMgrStandbyModule *self, PyObject *args)
     derr << "Invalid args!" << dendl;
     return nullptr;
   }
-  PyThreadState *tstate = PyEval_SaveThread();
+  without_gil_t no_gil;
   std::string final_key;
   std::string value;
   bool found = false;
@@ -86,7 +86,7 @@ ceph_get_module_option(BaseMgrStandbyModule *self, PyObject *args)
     final_key = what;
     found = self->this_module->get_config(final_key, &value);
   }
-  PyEval_RestoreThread(tstate);
+  no_gil.acquire_gil();
   if (found) {
     dout(10) << __func__ << " " << final_key << " found: " << value
 	     << dendl;
@@ -132,12 +132,12 @@ ceph_store_get(BaseMgrStandbyModule *self, PyObject *args)
   }
 
   // Drop GIL for blocking mon command execution
-  PyThreadState *tstate = PyEval_SaveThread();
+  without_gil_t no_gil;
 
   std::string value;
   bool found = self->this_module->get_store(what, &value);
 
-  PyEval_RestoreThread(tstate);
+  no_gil.acquire_gil();
 
   if (found) {
     dout(10) << "ceph_store_get " << what << " found: " << value.c_str() << dendl;
