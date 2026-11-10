@@ -75,13 +75,16 @@ public:
   /// bind one more listener per reactor core (see core_listeners), each
   /// on the first free port in ms_bind_port_min..ms_bind_port_max, on the
   /// IP of the main address. A connection accepted by core c's listener
-  /// is placed on core c. Must follow a successful bind(), and precede
-  /// start(); not available with dispatch_only_on_this_shard.
-  bind_ertr::future<> bind_core_listeners() override;
+  /// is placed on core c. Best effort: once a core gets no port, neither
+  /// it nor the cores after it get a listener. Must follow a successful
+  /// bind(); if called after start(), the listeners accept at once. Not
+  /// available with dispatch_only_on_this_shard.
+  seastar::future<> bind_core_listeners() override;
 
   /// the address of each core's listener, indexed by core: the current
   /// main address (thus reflecting a later-learned IP), with the core's
-  /// port. Empty unless bind_core_listeners() succeeded.
+  /// port; empty for a core without a listener. Empty unless
+  /// bind_core_listeners() was called.
   std::vector<entity_addrvec_t> get_core_addrs() const override;
 
   seastar::future<> start(const dispatchers_t& dispatchers) override;
@@ -221,8 +224,15 @@ private:
       entity_addr_t peer_addr,
       std::optional<seastar::shard_id> listener_core);
 
-  /// the address of core's per-core listener
+  /// the address of core's per-core listener (which it must have)
   entity_addrvec_t get_core_addr(seastar::shard_id core) const;
+
+  /// bind core's listener, unless an earlier core got no port
+  seastar::future<> bind_core_listener(seastar::shard_id core);
+  /// destroy the listeners of the cores that got no port
+  seastar::future<> drop_unbound_core_listeners();
+  /// accept connections on the bound core listeners
+  seastar::future<> accept_on_core_listeners();
 
   const seastar::shard_id sid;
   // Distinguish messengers with meaningful names for debugging
@@ -242,10 +252,14 @@ private:
 
   ShardedServerSocket *listener = nullptr;
   /// the per-core listeners (see bind_core_listeners()), indexed by core;
-  /// core_listeners[c] places all the sockets it accepts on core c
+  /// core_listeners[c] places all the sockets it accepts on core c. Null
+  /// for a core without a listener
   std::vector<ShardedServerSocket*> core_listeners;
-  /// the port each of core_listeners is bound to, indexed by core
+  /// the port each of core_listeners is bound to, indexed by core (0:
+  /// no listener)
   std::vector<uint32_t> core_ports;
+  /// a core listener got no port: the cores after it get none either
+  bool core_ports_exhausted = false;
   ChainedDispatchers dispatchers;
   /// registered connections, by peer address and accepting per-core
   /// listener (nullopt for the main listener, and for outgoing ones)

@@ -118,10 +118,11 @@ seastar::future<> PGShardManager::set_core_hints(
     seastar::smp_submit_to_options{},
     [core_addrs=std::move(core_addrs)](auto &local_service) {
       auto core = seastar::this_shard_id();
-      // the hint names the listener's port: the client reaches it on the
-      // IP it already uses for the OSD
+      // a core without a listener hints nothing: its clients keep using
+      // the main address. The hint names the listener's port: the client
+      // reaches it on the IP it already uses for the OSD
       local_service.local_state.set_core_hint(
-        core_addrs.empty()
+        core_addrs.empty() || core_addrs[core].empty()
           ? std::nullopt
           : std::make_optional<osd_core_hint_t>(
               core, core_addrs[core].front().get_port()));

@@ -541,7 +541,9 @@ seastar::future<> test_preemptive_shutdown() {
  * per-core connection must be served on its core, and all of them must
  * coexist with each other and with the main connection.
  */
-seastar::future<> test_core_listeners() {
+/// n_core_ports: if set, the core listeners get only that many ports
+/// (ms_bind_port_min..max): the cores beyond them get no listener
+seastar::future<> test_core_listeners(std::optional<unsigned> n_core_ports = {}) {
   struct test_state {
     class Server final
       : public crimson::net::Dispatcher {
@@ -567,15 +569,16 @@ seastar::future<> test_core_listeners() {
         msgr->set_default_policy(crimson::net::SocketPolicy::stateless_server(0));
         msgr->set_auth_client(&dummy_auth);
         msgr->set_auth_server(&dummy_auth);
+        // as the OSD does: the core listeners last, once started
         return msgr->bind(entity_addrvec_t{addr}).safe_then([this] {
-          return msgr->bind_core_listeners();
-        }).safe_then([this] {
           return msgr->start({this});
         }, crimson::net::Messenger::bind_ertr::assert_all_func(
             [addr] (const std::error_code& e) {
           logger().error("test_core_listeners(): bind failed at {}: {}",
                          addr, e.message());
-        }));
+        })).then([this] {
+          return msgr->bind_core_listeners();
+        });
       }
       entity_addr_t get_addr() const {
         return msgr->get_myaddr();
@@ -637,26 +640,45 @@ seastar::future<> test_core_listeners() {
     };
   };
 
-  logger().info("test_core_listeners():");
+  logger().info("test_core_listeners({}):",
+                n_core_ports ? std::to_string(*n_core_ports) : "all");
   auto server = seastar::make_shared<test_state::Server>();
   auto client = seastar::make_shared<test_state::Client>();
   auto addr = get_server_addr();
   addr.set_type(entity_addr_t::TYPE_MSGR2);
   addr.set_family(AF_INET);
-  return seastar::when_all_succeed(
-    server->init(entity_name_t::OSD(8), "server5", 9, addr),
-    client->init(entity_name_t::CLIENT(9), "client5", 10)
-  ).then_unpack([server, client] {
+  // the main address is bound to its own port, out of the range below
+  constexpr unsigned core_port_min = 9600;
+  auto set_range = n_core_ports ?
+    local_conf().set_val("ms_bind_port_min", std::to_string(core_port_min)
+    ).then([n_core_ports] {
+      return local_conf().set_val(
+        "ms_bind_port_max",
+        std::to_string(core_port_min + *n_core_ports - 1));
+    }) : seastar::now();
+  return set_range.then([server, client, addr] {
+    return seastar::when_all_succeed(
+      server->init(entity_name_t::OSD(8), "server5", 9, addr),
+      client->init(entity_name_t::CLIENT(9), "client5", 10));
+  }).then_unpack([server, client, n_core_ports] {
     const auto core_addrs = server->get_core_addrs();
     ceph_assert(core_addrs.size() == seastar::this_smp_shard_count());
-    // the main connection first, then one per core
-    std::vector<crimson::net::ConnectionRef> conns;
-    conns.push_back(client->connect(server->get_addr()));
-    for (const auto& core_addr : core_addrs) {
+    // the main connection first (expected core: -1, any), then one per
+    // core listener
+    std::vector<std::pair<crimson::net::ConnectionRef, int>> conns;
+    conns.emplace_back(client->connect(server->get_addr()), -1);
+    for (unsigned core = 0; core < core_addrs.size(); ++core) {
+      const auto& core_addr = core_addrs[core];
+      const bool expected = !n_core_ports || core < *n_core_ports;
+      ceph_assert(core_addr.empty() == !expected);
+      if (core_addr.empty()) {
+        logger().info("test_core_listeners(): core {}: no listener", core);
+        continue;
+      }
       logger().info("test_core_listeners(): core listener at {}", core_addr);
       ceph_assert(core_addr.front().get_port() != server->get_addr().get_port());
       ceph_assert(core_addr.front().get_nonce() == server->get_addr().get_nonce());
-      conns.push_back(client->connect(core_addr.front()));
+      conns.emplace_back(client->connect(core_addr.front()), core);
     }
     return seastar::do_with(std::move(conns), [client](auto& conns) {
       // two rounds: a connection replaced by another one of the same
@@ -667,13 +689,14 @@ seastar::future<> test_core_listeners() {
         auto idxs = boost::irange<size_t>(0, conns.size());
         return seastar::do_for_each(idxs.begin(), idxs.end(),
             [client, &conns, round](size_t i) {
-          return client->ask_core(conns[i]).then([&conns, round, i](int core) {
+          auto& [conn, expected_core] = conns[i];
+          return client->ask_core(conn).then(
+              [&conn, expected_core, round](int core) {
             logger().info("test_core_listeners(): round {}: connection {} "
-                          "served by core {}", round, *conns[i], core);
-            ceph_assert(conns[i]->is_connected());
-            if (i > 0) {
-              // conns[i] is connected to core (i - 1)'s listener
-              ceph_assert(core == static_cast<int>(i - 1));
+                          "served by core {}", round, *conn, core);
+            ceph_assert(conn->is_connected());
+            if (expected_core >= 0) {
+              ceph_assert(core == expected_core);
             }
           });
         });
@@ -685,6 +708,13 @@ seastar::future<> test_core_listeners() {
   }).then([server] {
     logger().info("server shutdown...");
     return server->shutdown();
+  }).then([n_core_ports] {
+    if (!n_core_ports) {
+      return seastar::now();
+    }
+    return local_conf().rm_val("ms_bind_port_min").then([] {
+      return local_conf().rm_val("ms_bind_port_max");
+    });
   }).then([] {
     logger().info("test_core_listeners() done!\n");
   }).handle_exception([server, client] (auto eptr) {
@@ -4095,6 +4125,9 @@ seastar::future<int> do_test(seastar::app_template& app)
       return test_preemptive_shutdown();
     }).then([] {
       return test_core_listeners();
+    }).then([] {
+      // fewer free ports than cores: the cores beyond them get no listener
+      return test_core_listeners(1);
     }).then([test_addr, cmd_peer_addr, test_peer_addr, testpeer_islocal, peer_wins] {
       return test_v2_protocol(
           test_addr,
