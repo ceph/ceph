@@ -8,6 +8,8 @@
 #include "common/ceph_mutex.h"
 #include "common/shunique_lock.h"
 #include "common/admin_socket.h"
+#include "include/buffer.h"
+#include "common/Formatter.h"
 
 #include <set>
 #include <ostream>
