@@ -1034,9 +1034,16 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
       // ms_handle_remote_reset() and realize they had in fact closed.
       // do this *before* sending the message to avoid a possible
       // race.
-      if (session->get_connection()) {
+      // only the close journaled for a denied reconnect, not a later one of
+      // a session that was reopened (e.g. force-opened) in between
+      const bool deny_close = session->deny_close_seq == state_seq;
+      if (session->get_connection() && !deny_close) {
         // Conditional because terminate_sessions will indiscrimately
         // put sessions in CLOSING whether they ever had a conn or not.
+        // After a denied reconnect the connection that carried the CLOSE is
+        // already disposable; the session may by now be attached to a new
+        // connection the client opened to reopen it, which must stay
+        // lossless.
         session->get_connection()->mark_disposable();
       }
 
@@ -1044,9 +1051,10 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
       // reset session.  After a denied reconnect the client already has
       // its CLOSE; a second one could hit a session it has since reopened
       // on a new connection.
-      if (!session->deny_close_sent)
+      if (!deny_close)
 	mds->send_message_client(make_message<MClientSession>(CEPH_SESSION_CLOSE), session);
       session->deny_close_sent = false;
+      session->deny_close_seq = 0;
       mds->sessionmap.set_state(session, Session::STATE_CLOSED);
       session->clear();
       metrics_handler->remove_session(session);
@@ -1110,6 +1118,7 @@ version_t Server::prepare_force_open_sessions(map<client_t,entity_inst_t>& cm,
 	session->is_closing() ||
 	session->is_killing()) {
       sseq = mds->sessionmap.set_state(session, Session::STATE_OPENING);
+      session->deny_close_sent = false;   // reopened: an earlier denial no longer applies
       auto q = cmm.find(p->first);
       if (q != cmm.end())
 	session->info.client_metadata.merge(q->second);
@@ -1593,10 +1602,14 @@ void Server::journal_close_session(Session *session, int state, Context *on_safe
  * mds_session_blocklist_on_timeout, the client blocklisted, which kills its
  * mount on every rank.
  *
- * This happens when a session is opened outside the reconnect phase and the
- * client's connection is reset before it sees the OPEN: the client's
- * messenger reports the reset, the client sends a reconnect and we deny it,
- * because we are no longer in up:reconnect.
+ * This happens when the client's connection is reset while its session with
+ * us is still OPENING on the client: the kernel client answers any peer reset
+ * with a reconnect, and we deny it outside up:reconnect.  The session we hold
+ * may be one the client asked for, or one we force-opened when importing its
+ * caps (subtree export to us, rename); the latter usually holds those caps
+ * and is left to the session timeout below.  The reset itself came from a
+ * connection left in standby by an earlier denial; marking denied
+ * connections disposable (handle_client_reconnect) removes that cause.
  *
  * Close such a session now, as if the client had asked for it, when it holds
  * nothing that needs fencing: no caps, leases, requests or delegated inode
@@ -1635,6 +1648,7 @@ void Server::close_session_denied_reconnect(Session *session)
   mds->clog->info() << "closing session of " << session->info.inst
 		    << " after a denied reconnect (it holds no caps)";
   journal_close_session(session, Session::STATE_CLOSING, NULL);
+  session->deny_close_seq = session->get_state_seq();
 }
 
 /*
@@ -1705,6 +1719,9 @@ void Server::handle_client_reconnect(const cref_t<MClientReconnect> &m)
     auto reply = make_message<MClientSession>(CEPH_SESSION_CLOSE);
     reply->metadata["error_string"] = "client cannot reconnect when file system flag" 
                                         " refuse_client_session is set";
+    // As below: the client drops the session and closes this connection; do
+    // not leave it in standby for a later connection to reuse and reset.
+    m->get_connection()->mark_disposable();
     mds->send_message(reply, m->get_connection());
     return;
   }
