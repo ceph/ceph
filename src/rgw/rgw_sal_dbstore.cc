@@ -2197,7 +2197,7 @@ namespace rgw::sal {
 
 extern "C" {
 
-  void *newDBStore(CephContext *cct)
+  rgw::sal::Driver* newDBStore(CephContext *cct)
   {
     rgw::sal::DBStore *driver = new rgw::sal::DBStore();
     DBStoreManager *dbsm = new DBStoreManager(cct);

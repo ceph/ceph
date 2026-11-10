@@ -6364,7 +6364,7 @@ make_neorados(CephContext* cct, boost::asio::io_context& io_context,
 
 extern "C" {
 
-void* newRadosStore(void* io_context_, CephContext* cct)
+rgw::sal::Driver* newRadosStore(void* io_context_, CephContext* cct)
 {
   auto& io_context = *static_cast<boost::asio::io_context*>(io_context_);
   ceph_assert(!io_context.stopped());

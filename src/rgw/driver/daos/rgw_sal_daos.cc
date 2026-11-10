@@ -2450,7 +2450,7 @@ std::string DaosStore::get_cluster_id(const DoutPrefixProvider* dpp,
 
 extern "C" {
 
-void* newDaosStore(CephContext* cct) {
+rgw::sal::Driver* newDaosStore(CephContext* cct) {
   return new rgw::sal::DaosStore(cct);
 }
 }
