@@ -36,6 +36,8 @@ function munge_ceph_spec_in {
     shift
     local for_make_check=$1
     shift
+    local with_fdb=$1
+    shift
     local OUTFILE=$1
     sed -e 's/@//g' < ceph.spec.in > $OUTFILE
     # http://rpm.org/user_doc/conditional_builds.html
@@ -44,6 +46,9 @@ function munge_ceph_spec_in {
     fi
     if $for_make_check; then
         sed -i -e 's/%bcond_with make_check/%bcond_without make_check/g' $OUTFILE
+    fi
+    if $with_fdb; then
+        sed -i -e 's/%bcond_with radosgw_fdb/%bcond_without radosgw_fdb/g' "$OUTFILE"
     fi
 }
 
@@ -58,6 +63,47 @@ function munge_debian_control {
             ;;
     esac
     echo $control
+}
+
+function install_foundationdb_clients {
+    local package_type=$1
+    local version=7.3.71
+    local package
+    case "$package_type:$ARCH" in
+        deb:x86_64) package="foundationdb-clients_${version}-1_amd64.deb" ;;
+        deb:aarch64) package="foundationdb-clients_${version}-1_aarch64.deb" ;;
+        rpm:x86_64) package="foundationdb-clients-${version}-1.el7.x86_64.rpm" ;;
+        rpm:aarch64) package="foundationdb-clients-${version}-1.el9.aarch64.rpm" ;;
+        *)
+            echo "No FoundationDB client package for $package_type on $ARCH" >&2
+            return 1
+            ;;
+    esac
+
+    local installed
+    if [ "$package_type" = deb ]; then
+        installed=$(dpkg-query -W -f='${db:Status-Status} ${Version}' foundationdb-clients 2>/dev/null) || true
+        if [[ "$installed" = installed\ * ]] && dpkg --compare-versions "${installed#* }" ge 7.3; then
+            return
+        fi
+        $SUDO apt-get install -y curl ca-certificates
+    else
+        installed=$(rpm -q --queryformat '%{VERSION}' foundationdb-clients 2>/dev/null) || true
+        if [ -n "$installed" ] && printf '%s\n' 7.3 "$installed" | sort --version-sort --check=quiet; then
+            return
+        fi
+        $SUDO dnf install -y /usr/bin/curl ca-certificates
+    fi
+
+    local url="https://github.com/apple/foundationdb/releases/download/$version/$package"
+    curl --fail --location --retry 3 "$url" --output "$DIR/$package"
+    curl --fail --location --retry 3 "$url.sha256" --output "$DIR/$package.sha256"
+    (cd "$DIR" && sha256sum --check "$package.sha256")
+    if [ "$package_type" = deb ]; then
+        $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y "$DIR/$package"
+    else
+        $SUDO dnf install -y "$DIR/$package"
+    fi
 }
 
 function ensure_decent_gcc_on_ubuntu {
@@ -443,6 +489,14 @@ if [ x$(uname)x = xFreeBSDx ]; then
     exit
 else
     [ $WITH_CRIMSON ] && with_crimson=true || with_crimson=false
+    case "${WITH_RADOSGW_FDB:-OFF}" in
+        1|ON|on|true|yes) with_fdb=true ;;
+        0|OFF|off|false|no) with_fdb=false ;;
+        *)
+            echo "error: unexpected WITH_RADOSGW_FDB value: $WITH_RADOSGW_FDB" >&2
+            exit 2
+            ;;
+    esac
     source /etc/os-release
     case "$ID" in
     debian|ubuntu|devuan|elementary|softiron)
@@ -470,6 +524,9 @@ else
         fi
         $SUDO apt-get install -y devscripts equivs
         $SUDO apt-get install -y dpkg-dev
+        if $with_fdb; then
+            install_foundationdb_clients deb
+        fi
         ensure_python3_sphinx_on_ubuntu
         case "$VERSION" in
             *Bionic*)
@@ -519,6 +576,9 @@ else
         if $with_crimson; then
             build_profiles+=",pkg.ceph.crimson"
         fi
+        if $with_fdb; then
+            build_profiles+=",pkg.ceph.fdb"
+        fi
 
         ci_debug "for_make_check=$for_make_check"
         ci_debug "with_crimson=$with_crimson"
@@ -563,9 +623,12 @@ else
         if [ "$INSTALL_EXTRA_PACKAGES" ]; then
             $SUDO dnf install -y $INSTALL_EXTRA_PACKAGES
         fi
-        munge_ceph_spec_in $with_crimson $for_make_check $DIR/ceph.spec
+        munge_ceph_spec_in "$with_crimson" "$for_make_check" "$with_fdb" "$DIR/ceph.spec"
         # for python3_pkgversion macro defined by python-srpm-macros, which is required by python3-devel
         $SUDO dnf install -y python3-devel
+        if $with_fdb; then
+            install_foundationdb_clients rpm
+        fi
         $SUDO $builddepcmd $DIR/ceph.spec 2>&1 | tee $DIR/yum-builddep.out
         [ ${PIPESTATUS[0]} -ne 0 ] && exit 1
         if [ -n "$dts_ver" ]; then
@@ -581,7 +644,7 @@ else
         if [ "$INSTALL_EXTRA_PACKAGES" ]; then
             $SUDO $zypp_install $INSTALL_EXTRA_PACKAGES
         fi
-        munge_ceph_spec_in $with_crimson $for_make_check $DIR/ceph.spec
+        munge_ceph_spec_in "$with_crimson" "$for_make_check" "$with_fdb" "$DIR/ceph.spec"
         $SUDO $zypp_install $(rpmspec -q --buildrequires $DIR/ceph.spec) || exit 1
         ;;
     *)
