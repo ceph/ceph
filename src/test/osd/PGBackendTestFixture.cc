@@ -868,9 +868,7 @@ void PGBackendTestFixture::do_truncate_and_write_impl(
       obc->attr_cache.clear();
     },
     [this, obj_name, truncate_size, writes, at_version](int) {
-      if (object_tracker) {
-        object_tracker->record_truncate_and_write(obj_name, truncate_size, writes, at_version);
-      }
+      record_truncate_and_write(obj_name, truncate_size, writes, at_version);
     });
 
   do_transaction(
