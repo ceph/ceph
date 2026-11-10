@@ -3071,8 +3071,8 @@ int DB::get_entry(const std::string& oid, const std::string& marker,
     goto out;
   }
 
-  if (params.op.lc_entry.entry.start_time != 0) { //ensure entry found
-    entry = std::move(params.op.lc_entry.entry);
+  if (!params.op.lc_entry.list_entries.empty()) { //ensure entry found
+    entry = std::move(params.op.lc_entry.list_entries.front());
   }
 
 out:
@@ -3099,8 +3099,8 @@ int DB::get_next_entry(const std::string& oid, const std::string& marker,
     goto out;
   }
 
-  if (params.op.lc_entry.entry.start_time != 0) { //ensure entry found
-    entry = std::move(params.op.lc_entry.entry);
+  if (!params.op.lc_entry.list_entries.empty()) { //ensure entry found
+    entry = std::move(params.op.lc_entry.list_entries.front());
   }
 
 out:

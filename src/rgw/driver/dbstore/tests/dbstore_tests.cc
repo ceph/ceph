@@ -1356,6 +1356,49 @@ TEST_F(DBStoreTest, LCEntry) {
   ASSERT_TRUE(entry.bucket.empty());
 }
 
+TEST_F(DBStoreTest, LCEntryNotStarted) {
+  int ret = -1;
+  uint64_t lc_time = ceph_clock_now();
+  std::string index = "lcindex3";
+  typedef enum {lc_uninitial = 1, lc_complete} status;
+  std::string ents[] = {"bucketa", "bucketb", "bucketc"};
+  rgw::sal::LCEntry entry;
+  rgw::sal::LCEntry entry1{ents[0], lc_time, lc_complete};
+  rgw::sal::LCEntry entry2{ents[1], 0, lc_uninitial};
+  rgw::sal::LCEntry entry3{ents[2], 0, lc_uninitial};
+
+  ret = db->set_entry(index, entry1);
+  ASSERT_EQ(ret, 0);
+  ret = db->set_entry(index, entry2);
+  ASSERT_EQ(ret, 0);
+  ret = db->set_entry(index, entry3);
+  ASSERT_EQ(ret, 0);
+
+  // an entry that has never run is found
+  ret = db->get_entry(index, ents[1], entry);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(entry.bucket, ents[1]);
+  ASSERT_EQ(entry.status, lc_uninitial);
+  ASSERT_EQ(entry.start_time, 0);
+
+  // the next entry is the first after the marker, not the last
+  entry = rgw::sal::LCEntry{};
+  ret = db->get_next_entry(index, ents[0], entry);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(entry.bucket, ents[1]);
+  ASSERT_EQ(entry.status, lc_uninitial);
+
+  entry = rgw::sal::LCEntry{};
+  ret = db->get_next_entry(index, ents[1], entry);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(entry.bucket, ents[2]);
+
+  entry = rgw::sal::LCEntry{};
+  ret = db->get_next_entry(index, ents[2], entry);
+  ASSERT_EQ(ret, 0);
+  ASSERT_TRUE(entry.bucket.empty());
+}
+
 TEST_F(DBStoreTest, RemoveBucket) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
