@@ -633,6 +633,8 @@ shards are of two types:
   acquiring a lock on a bucket. Errors of this kind typically resolve on their
   own.
 
+.. _rgw-multisite-check-the-logs:
+
 Check the logs
 --------------
 
