@@ -6,8 +6,11 @@
 #
 #   src/script/qa_triage/qa_triage.sh https://pulpito.ceph.com/<run>/
 #
-# QA_TRIAGE_REPO names another repository to clone, and QA_TRIAGE_CHECKOUT
-# another directory to keep it in. Its README.md says the rest.
+# It clones over ssh, with your GitHub key; where that fails, as on a host whose
+# key for GitHub is a deploy key for another repository, it clones over https with
+# gh's sign-in, if gh is signed in. QA_TRIAGE_REPO names another repository to
+# clone, and QA_TRIAGE_CHECKOUT another directory to keep it in. Its README.md says
+# the rest.
 
 set -euo pipefail
 
@@ -20,19 +23,41 @@ while [ -L "$source" ]; do
 done
 here=$(cd "$(dirname "$source")" && pwd)
 
+https=https://github.com/aainscow/qa-triage.git
 repo=${QA_TRIAGE_REPO:-git@github.com:aainscow/qa-triage.git}
 checkout=${QA_TRIAGE_CHECKOUT:-$here/qa-triage}
+
+# Git asks gh for GitHub's https credentials: for this script and what it runs,
+# qa_triage's own pulls and pushes of the library too, not for git elsewhere.
+use_gh() {
+    command -v gh > /dev/null 2>&1 && gh auth status > /dev/null 2>&1 || return 1
+    local n=${GIT_CONFIG_COUNT:-0}
+    export "GIT_CONFIG_KEY_$n=credential.https://github.com.helper"
+    export "GIT_CONFIG_VALUE_$n=!gh auth git-credential"
+    export GIT_CONFIG_COUNT=$((n + 1))
+}
 
 if [ ! -d "$checkout/.git" ]; then
     echo "qa_triage: cloning $repo into $checkout" >&2
     if ! git clone -q "$repo" "$checkout"; then
-        echo "qa_triage: could not clone $repo, which is private: its owner adds" \
-             "people as collaborators" >&2
-        exit 2
+        if [ -z "${QA_TRIAGE_REPO:-}" ] && use_gh && git clone -q "$https" "$checkout"; then
+            echo "qa_triage: cloned it over https, with gh's sign-in, as ssh could not" >&2
+        else
+            echo "qa_triage: could not clone $repo, which is private: its owner adds" \
+                 "people as collaborators. If you are one, and your ssh key for GitHub" \
+                 "is not your own (a deploy key, say), sign in with gh auth login, or" \
+                 "set QA_TRIAGE_REPO=$https" >&2
+            exit 2
+        fi
     fi
-elif ! out=$(git -C "$checkout" pull -q --ff-only 2>&1); then
-    echo "qa_triage: could not bring $checkout up to date, so it runs as it is:" \
-         "${out##*$'\n'}" >&2
+else
+    case $(git -C "$checkout" remote get-url origin 2> /dev/null) in
+        https://github.com/*) use_gh || true ;;
+    esac
+    if ! out=$(git -C "$checkout" pull -q --ff-only 2>&1); then
+        echo "qa_triage: could not bring $checkout up to date, so it runs as it is:" \
+             "${out##*$'\n'}" >&2
+    fi
 fi
 
 exec "$checkout/qa_triage.sh" "$@"

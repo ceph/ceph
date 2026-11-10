@@ -17,6 +17,8 @@ source checkouts and the fix check:
 $ src/script/qa_triage/qa_triage.sh https://pulpito.ceph.com/<run>/
 ```
 
-It clones over ssh, with your GitHub key; `QA_TRIAGE_REPO=https://github.com/aainscow/qa-triage.git`
-clones over https instead. Its README, `qa-triage/README.md` once it is cloned, says
-the rest.
+It clones over ssh, with your GitHub key. Where that fails, as on a host whose ssh
+key for GitHub is a deploy key, it clones over https with gh's sign-in, if gh is
+signed in (`gh auth login`), for its own git commands only;
+`QA_TRIAGE_REPO=https://github.com/aainscow/qa-triage.git` clones over https from the
+start. Its README, `qa-triage/README.md` once it is cloned, says the rest.
