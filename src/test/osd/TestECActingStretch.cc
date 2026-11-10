@@ -134,7 +134,7 @@ protected:
     pg_pool_t pool_info;
     pool_info.type     = pg_pool_t::TYPE_ERASURE;
     pool_info.size     = 6; // 2 zones * 3 shards
-    pool_info.min_size = 5;
+    pool_info.min_size = 3; // per zone
     pool_info.crush_rule = 0;
     pool_info.set_pg_num(8);
     pool_info.set_pgp_num(8);
@@ -1184,6 +1184,36 @@ TEST_F(TestECActingStretch, Rehash_AllThreePaths) {
 }
 
 /**
+ * Test: a block is not kept in a zone that leaves the PG below min_size
+ *
+ * up puts block 0 in dc0 with a hole at position 1, as when two dc0 OSDs
+ * are out.  dc1 holds all of block 0 and dc0 all of block 1, so swapping
+ * the zones fills every position, while following up leaves dc0 below
+ * min_size and the PG peered.
+ */
+TEST_F(TestECActingStretch, ZoneBelowMinSize_SwapsBlocks) {
+  const vector<int> up = {0, CRUSH_ITEM_NONE, 1, 3, 4, 5};
+  const vector<std::pair<int, int>> holders = {
+    {0, 0}, {1, 2}, {3, 3}, {4, 4}, {5, 5},  // up
+    {3, 0}, {4, 1}, {5, 2},                  // block 0 in dc1
+    {2, 3}, {6, 4}, {1, 5}};                 // block 1 in dc0
+  map<pg_shard_t, pg_info_t> all_info;
+  for (const auto &[osd, shard] : holders) {
+    add_info(all_info, osd, shard, eversion_t(1, 10), eversion_t(1, 5));
+  }
+
+  vector<int> want;
+  set<pg_shard_t> backfill, acting_backfill;
+  ostringstream ss;
+  calc(up, up, all_info, pg_shard_t(0, shard_id_t(0)), false, &want,
+       &backfill, &acting_backfill, ss);
+
+  EXPECT_EQ(want, (vector<int>{3, 4, 5, 2, 6, 1})) << ss.str();
+  EXPECT_TRUE(osdmap->acting_set_writeable(*osdmap->get_pg_pool(pool_id), want))
+    << ss.str();
+}
+
+/**
  * TestECActingStretch3Zone - Unit tests for stretch mode EC acting set selection
  *                            with 3 zones.
  *
@@ -1288,7 +1318,7 @@ protected:
     pg_pool_t pool_info;
     pool_info.type          = pg_pool_t::TYPE_ERASURE;
     pool_info.size          = 9;  // 3 zones * 3 shards
-    pool_info.min_size      = 7;  // tolerate 2 OSD failures
+    pool_info.min_size      = 3;  // per zone
     pool_info.crush_rule    = 0;
     pool_info.set_pg_num(8);
     pool_info.set_pgp_num(8);
