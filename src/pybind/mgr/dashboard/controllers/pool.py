@@ -255,7 +255,7 @@ class Pool(RESTController):
                       'pg_num_min', 'pg_num_max', 'target_size_bytes']
         bool_params = ['bulk', 'force_pg_limit', 'yes_i_really_mean_it',
                        'crimson', 'enable_ec_optimizations']
-        cmd_args = {}
+        cmd_args: Dict[str, Any] = {}
         for key, value in params.items():
             if value is None:
                 continue
