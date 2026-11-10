@@ -2,12 +2,11 @@
 Handling a full Ceph file system
 ================================
 
-When a RADOS cluster reaches its ``mon_osd_full_ratio`` (default
-95%) capacity, it is marked with the OSD full flag.  This flag causes
-most normal RADOS clients to pause all operations until it is resolved
-(for example by adding more capacity to the cluster).
+When a Ceph cluster reaches :confval:`mon_osd_full_ratio`, pools with PGs on
+full OSDs are marked with the ``full`` flag.  Most clients then pause writes
+to those pools until the flag clears.  Reads are not blocked by the full ratio.
 
-The file system has some special handling of the full flag, explained below.
+Kernel CephFS clients experience additional fullness behavior.
 
 A full file system leads to ENOSPC results from:
 
