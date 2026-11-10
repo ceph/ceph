@@ -555,3 +555,215 @@ TEST_F(LibRadosList, EnumerateObjectsSplit) {
   }
   ASSERT_EQ(n_objects, saw_obj.size());
 }
+
+void SetUpMigrationTest(rados_t *cluster,
+                        std::string &src_pool_name,
+                        std::string &tgt_pool_name,
+                        rados_ioctx_t *src_ioctx,
+                        rados_ioctx_t *tgt_ioctx,
+                        bool *skipped) {
+  *skipped = false;
+
+  // Create Source Pool
+  src_pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool(src_pool_name, cluster));
+
+  // Open Source IO Context
+  ASSERT_EQ(0, rados_ioctx_create(*cluster, src_pool_name.c_str(), src_ioctx));
+
+  // Set Min Compat Client
+  {
+    std::string c = "{\"prefix\": \"osd set-require-min-compat-client\", \"version\": \"vampire\"}";
+    const char *cmd[2] = { c.c_str(), 0 };
+    char *outbuf, *outs;
+    size_t outbuflen, outslen;
+    ASSERT_EQ(0, rados_mon_command(*cluster, cmd, 1, "", 0, &outbuf, &outbuflen, &outs, &outslen));
+    ASSERT_EQ(0, rados_wait_for_latest_osdmap(*cluster));
+  }
+
+  // Start Migration (no parameters = same-pool copy, requires --yes-i-really-mean-it).
+  // After migration the pool retains src_pool_name; tgt_pool_name is set to the
+  // same value so callers can open an ioctx on the new target pool by name.
+  tgt_pool_name = src_pool_name;
+  {
+    std::string c = "{\"prefix\": \"osd pool migrate\", \"pool\": \"" + src_pool_name +
+      "\", \"yes_i_really_mean_it\": true}";
+    const char *cmd[2] = { c.c_str(), 0 };
+    char *outbuf, *outs;
+    size_t outbuflen, outslen;
+    int r = rados_mon_command(*cluster, cmd, 1, "", 0, &outbuf, &outbuflen, &outs, &outslen);
+    if (r == -EPERM) {
+      // Migration is gated behind the 'poolmigration' experimental feature and a
+      // minimum require_osd_release / require_min_compat_client. All of those gates
+      // reply -EPERM with no state change, so treat it as "migration unavailable in
+      // this build/config" and let the caller skip -- rather than falling through
+      // and running the body against an uninitialized target ioctx.
+      *skipped = true;
+      return;
+    }
+    ASSERT_EQ(0, r);
+    ASSERT_EQ(0, rados_wait_for_latest_osdmap(*cluster));
+  }
+
+  // Open Target IO Context (same name, now points to the new target pool).
+  ASSERT_EQ(0, rados_ioctx_create(*cluster, tgt_pool_name.c_str(), tgt_ioctx));
+}
+
+//This is a test that will see if the objects in a pool migration are all outputted as if from one pool
+//currently it will add one object to the src pool and then start a migration to a new pool the tgt
+//Then it will read the objects from the src pool which should output the objects across both the pools
+TEST_F(LibRadosList, PoolMigrationRadosLSBasic) {
+  SKIP_IF_CRIMSON();
+
+  // --- VARIABLES ---
+  rados_t cluster;
+  std::string src_pool_name, tgt_pool_name;
+  rados_ioctx_t src_ioctx = nullptr, tgt_ioctx = nullptr;
+  bool skipped = false;
+
+  // --- SETUP ---
+  // Pass addresses (&) of handles so the function can fill them using pointers.
+  // ASSERT_NO_FATAL_FAILURE propagates a fatal ASSERT inside the void helper out
+  // to this test body (googletest otherwise only returns from the helper).
+  ASSERT_NO_FATAL_FAILURE(
+      SetUpMigrationTest(&cluster, src_pool_name, tgt_pool_name,
+                         &src_ioctx, &tgt_ioctx, &skipped));
+  if (skipped) {
+    if (src_ioctx) rados_ioctx_destroy(src_ioctx);
+    destroy_one_pool(src_pool_name, &cluster);
+    GTEST_SKIP() << "pool migration unavailable (experimental feature disabled "
+                    "or require_osd_release/min_compat_client too old)";
+  }
+
+  //Add object to the src pool
+  {
+    char buf[128];
+    memset(buf, 0xcc, sizeof(buf));
+    ASSERT_EQ(0, rados_write(src_ioctx, "foo", buf, sizeof(buf), 0));
+    ASSERT_EQ(0, rados_wait_for_latest_osdmap(cluster));
+  }
+  //Add object to the tgt pool
+  {
+    char buf2[128];
+    memset(buf2, 0xcc, sizeof(buf2));
+    ASSERT_EQ(0, rados_write(tgt_ioctx, "foo2", buf2, sizeof(buf2), 0));
+    ASSERT_EQ(0, rados_wait_for_latest_osdmap(cluster));
+  }
+
+  // --- VERIFICATION ---
+  std::cout << "Test Setup Complete. Listing objects in Source Pool..." << std::endl;
+
+  std::set<std::string> found_objects;
+
+  {
+    rados_list_ctx_t ctx;
+    // We are opening the list on the SOURCE pool.
+    // Due to the Triple-Read logic, we expect this to return objects from:
+    // 1. Source Pool ("foo")
+    // 2. Target Pool ("foo2")
+    ASSERT_EQ(0, rados_nobjects_list_open(src_ioctx, &ctx));
+
+    const char *entry;
+    while (rados_nobjects_list_next(ctx, &entry, NULL, NULL) != -ENOENT) {
+      found_objects.insert(std::string(entry));
+      std::cout << "DEBUG: List found object: " << entry << std::endl;
+    }
+    rados_nobjects_list_close(ctx);
+  }
+
+  // --- ASSERTIONS ---
+  // 1. Check for "foo" (Source Pool Object)
+  // If this fails here, but passed the Sanity Check in Setup,
+  // then your Triple-Read Stage 0 Logic is broken (it skipped the source pool).
+  EXPECT_TRUE(found_objects.count("foo"))
+      << "ERROR: Listing failed to return 'foo' (Source Pool object)";
+
+  // 2. Check for "foo2" (Target Pool Object)
+  EXPECT_TRUE(found_objects.count("foo2"))
+      << "ERROR: Listing failed to return 'foo2' (Target Pool object)";
+
+  // 3. Check Total Count
+  ASSERT_EQ(found_objects.size(), 2)
+      << "Expected exactly 2 objects, found " << found_objects.size();
+
+  // --- CLEANUP ---
+  rados_ioctx_destroy(src_ioctx);
+  rados_ioctx_destroy(tgt_ioctx);
+
+  // Deletes whole chain + shuts down the cluster connection
+  ASSERT_EQ(0, destroy_one_pool(src_pool_name, &cluster));
+}
+
+TEST_F(LibRadosList, PoolMigrationRadosLSMultiple) {
+  SKIP_IF_CRIMSON();
+  rados_t cluster;
+  std::string src_pool_name, tgt_pool_name;
+  rados_ioctx_t src_ioctx = nullptr, tgt_ioctx = nullptr;
+  bool skipped = false;
+
+  // --- SETUP ---
+  // Pass addresses (&) of handles so the function can fill them using pointers.
+  // ASSERT_NO_FATAL_FAILURE propagates a fatal ASSERT inside the void helper out
+  // to this test body (googletest otherwise only returns from the helper).
+  ASSERT_NO_FATAL_FAILURE(
+      SetUpMigrationTest(&cluster, src_pool_name, tgt_pool_name,
+                         &src_ioctx, &tgt_ioctx, &skipped));
+  if (skipped) {
+    if (src_ioctx) rados_ioctx_destroy(src_ioctx);
+    destroy_one_pool(src_pool_name, &cluster);
+    GTEST_SKIP() << "pool migration unavailable (experimental feature disabled "
+                    "or require_osd_release/min_compat_client too old)";
+  }
+
+  //Add objects to the src & tgt pools
+  for (int i=0; i < 6; i++) {
+    {
+      char buf[128];
+      memset(buf, 0xcc, sizeof(buf));
+      std::string obj_name = "src_obj_";
+      obj_name += std::to_string(i);
+      ASSERT_EQ(0, rados_write(src_ioctx, obj_name.c_str(), buf, sizeof(buf), 0));
+    }
+    {
+      char buf2[128];
+      memset(buf2, 0xcc, sizeof(buf2));
+      std::string obj_name = "tgt_obj_";
+      obj_name += std::to_string(i);
+      ASSERT_EQ(0, rados_write(tgt_ioctx, obj_name.c_str(), buf2, sizeof(buf2), 0));
+    }
+  }
+  ASSERT_EQ(0, rados_wait_for_latest_osdmap(cluster));
+
+  //read from the src pool get
+  std::set<std::string> found_objects;
+  {
+    rados_list_ctx_t ctx;
+    ASSERT_EQ(0, rados_nobjects_list_open(src_ioctx, &ctx));
+
+    const char *entry;
+    while (rados_nobjects_list_next(ctx, &entry, NULL, NULL) != -ENOENT) {
+      found_objects.insert(std::string(entry));
+      std::cout << "DEBUG: Found object: " << entry << std::endl;
+    }
+    rados_nobjects_list_close(ctx);
+  }
+
+  // Total Count Check: 6 from Source + 6 from Target = 12
+  ASSERT_EQ(found_objects.size(), 12)
+      << "Expected 12 total objects (6 src + 6 tgt), but found " << found_objects.size();
+
+  // Spot Check Source Objects
+  EXPECT_TRUE(found_objects.count("src_obj_0")) << "Missing src_obj_0";
+  EXPECT_TRUE(found_objects.count("src_obj_5")) << "Missing src_obj_5";
+
+  // Spot Check Target Objects
+  EXPECT_TRUE(found_objects.count("tgt_obj_0")) << "Missing tgt_obj_0";
+  EXPECT_TRUE(found_objects.count("tgt_obj_5")) << "Missing tgt_obj_5";
+
+  // --- 8. CLEANUP ---
+  rados_ioctx_destroy(src_ioctx);
+  rados_ioctx_destroy(tgt_ioctx);
+
+  // Deletes whole chain + shuts down the cluster connection
+  ASSERT_EQ(0, destroy_one_pool(src_pool_name, &cluster));
+}

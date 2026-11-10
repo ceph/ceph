@@ -1371,6 +1371,17 @@ autoscaler properties. ``--force-pg-limit`` creates the pool even if it exceeds
 a dot, and an erasure code profile whose ``stripe_unit`` is not a multiple of
 4096 bytes for a pool in one zone.
 
+Subcommand ``migrate`` migrates a pool's RADOS objects to a new pool. The new
+pool acquires the original pool's user-visible name. The original pool is
+renamed automatically and is by default not displayed to the user. The new
+pool takes the parameters of the original pool unless some are given; they
+are the parameters of ``create``, and ``--enable-ec-optimizations``.
+
+Usage::
+
+    ceph osd pool migrate <poolname> {<int[0-]>} {<int[0-]>} {replicated|erasure}
+    {<erasure_code_profile>} {<rule>} {<int[0-]>} {<options>...}
+
 Subcommand ``default get`` shows the defaults that ``osd pool create`` uses,
 and where each of them comes from.
 
@@ -1453,7 +1464,9 @@ Subcommand ``ls`` list pools
 
 Usage::
 
-    ceph osd pool ls {detail} {--show-rule-names}
+    ceph osd pool ls {detail} {--show-rule-names} {--show-all}
+
+Display a list of pools. Pass ``--show-all`` to show hidden pools.
 
 With ``detail``, ``--show-rule-names`` renders each pool's CRUSH rule by name
 instead of by numeric id in the text output. In the JSON output the numeric

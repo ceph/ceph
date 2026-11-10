@@ -40,6 +40,7 @@ struct ECSubWrite {
   std::set<hobject_t> temp_added;
   std::set<hobject_t> temp_removed;
   std::optional<pg_hit_set_history_t> updated_hit_set_history;
+  std::optional<hobject_t> migration_watermark;
   bool backfill_or_async_recovery = false;
   ECSubWrite() : tid(0) {}
   ECSubWrite(
@@ -56,6 +57,7 @@ struct ECSubWrite {
     std::optional<pg_hit_set_history_t> updated_hit_set_history,
     const std::set<hobject_t> &temp_added,
     const std::set<hobject_t> &temp_removed,
+    std::optional<hobject_t> migration_watermark,
     bool backfill_or_async_recovery)
     : from(from), tid(tid), reqid(reqid),
       soid(soid), stats(stats), t(t),
@@ -65,6 +67,7 @@ struct ECSubWrite {
       temp_added(temp_added),
       temp_removed(temp_removed),
       updated_hit_set_history(updated_hit_set_history),
+      migration_watermark(migration_watermark),
       backfill_or_async_recovery(backfill_or_async_recovery)
     {}
   void claim(ECSubWrite &other) {
@@ -81,9 +84,11 @@ struct ECSubWrite {
     temp_added.swap(other.temp_added);
     temp_removed.swap(other.temp_removed);
     updated_hit_set_history = other.updated_hit_set_history;
+    migration_watermark = other.migration_watermark;
     backfill_or_async_recovery = other.backfill_or_async_recovery;
   }
   void encode(ceph::buffer::list &bl) const;
+  void encode(ceph::buffer::list &bl, uint64_t features) const;
   void encode(ceph::buffer::list &p_bl,
 	      ceph::buffer::list &d_bll,
 	      uint64_t features=0) const;
@@ -98,7 +103,7 @@ private:
   const ECSubWrite& operator=(const ECSubWrite& other);
 };
 
-WRITE_CLASS_ENCODER(ECSubWrite)
+WRITE_CLASS_ENCODER_OPTIONAL_FEATURES(ECSubWrite)
 
 struct ECSubWriteReply {
   pg_shard_t from;

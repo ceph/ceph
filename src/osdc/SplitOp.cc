@@ -1061,12 +1061,12 @@ std::pair<bool, bool> validate(Objecter::Op *op, Objecter &objecter,
   bool single_direct_op = is_erasure;
 
   uint64_t replica_min_shard_read_size = objecter.get_min_split_replica_read_size();
-  
+
   if (!is_erasure && replica_min_shard_read_size == 0) {
     ldout(cct, DBG_LVL) << __func__ << " REJECT: splitting disabled (min_split_replica_read_size=0)" << dendl;
     return {false, false};
   }
-  
+
   uint64_t replica_min_read_size = replica_min_shard_read_size * kReplicaMinShardReads;
 
   // Validate operations and read sizes
@@ -1137,7 +1137,7 @@ void SplitOp::prepare_single_op(Objecter::Op *op, Objecter &objecter, CephContex
   const pg_pool_t *pi = objecter.osdmap->get_pg_pool(target.base_oloc.pool);
   ceph_assert(pi);
 
-  objecter._calc_target(&op->target, op);
+  objecter._calc_target(&op->target, op->snapid);
   uint64_t data_chunk_count = pi->get_ec_data_shard_count();
   uint32_t chunk_size = pi->get_stripe_width() / data_chunk_count;
 
@@ -1275,7 +1275,7 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
   // short-circuits once pgid is set.
   const auto saved_target = target;
   target.flags &= ~CEPH_OSD_FLAG_BALANCE_READS;
-  objecter._calc_target(&op->target, op);
+  objecter._calc_target(&op->target, op->snapid);
 
   // Initialize reference_sub_read now that acting set is populated
   split_read->init_reference_sub_read();

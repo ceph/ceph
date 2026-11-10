@@ -445,6 +445,10 @@ public:
   //            @c Monitor::send_reply() can mark_event with it.
   void send_incremental(epoch_t first, MonSession *session, bool onetime,
 			MonOpRequestRef req = MonOpRequestRef());
+  static bool target_pg_migrating(const std::set<pg_t> &migrating_pgs, const pg_t &source_pg,
+                                  int source_pgnum, int target_pgnum);
+  static uint64_t calculate_migrating_pg_count(int source_pgnum, int target_pgnum,
+                                               double migration_ratio);
 
 private:
   void print_utilization(std::ostream &out, ceph::Formatter *f, bool tree) const;
@@ -489,6 +493,9 @@ private:
   bool preprocess_pg_stop_merge(MonOpRequestRef op);
   bool prepare_pg_stop_merge(MonOpRequestRef op);
 
+  bool preprocess_pg_migrated_pool(MonOpRequestRef op);
+  bool prepare_pg_migrated_pool(MonOpRequestRef op);
+
   int _check_remove_pool(int64_t pool_id, const pg_pool_t &pool, std::ostream *ss);
   bool _check_become_tier(
       int64_t tier_pool_id, const pg_pool_t *tier_pool,
@@ -514,6 +521,8 @@ private:
   int check_no_legacy_individual_stretch_pools(int64_t skip_pool,
                                                std::ostream *ss) const;
   int _prepare_remove_pool(int64_t pool, std::ostream *ss, bool no_fake);
+  int _prepare_remove_pool_chain(int64_t target_pool, std::ostream *ss,
+				 bool no_fake);
   int _prepare_rename_pool(int64_t pool, std::string newname);
 
   bool enforce_pool_op_caps(MonOpRequestRef op);
@@ -628,6 +637,8 @@ private:
                        bool bulk,
                        bool crimson,
                        bool force_create,
+                       const std::optional<int64_t> source_pool_id,
+                       bool enable_ec_optimizations,
                        std::ostream *ss,
                        const std::string& rule_defaults = {});
   int prepare_new_pool(MonOpRequestRef op);
@@ -715,6 +726,7 @@ private:
     }
   };
 
+  void insert_new_removed_snap(int64_t pool, snapid_t s);
   bool preprocess_remove_snaps(MonOpRequestRef op);
   bool prepare_remove_snaps(MonOpRequestRef op);
 
@@ -937,6 +949,10 @@ public:
 			     bool force=false);
   void do_set_pool_opt(int64_t pool_id, pool_opts_t::key_t opt,
 		       pool_opts_t::value_t);
+
+  bool have_pg_pool(int64_t pool);
+  const pg_pool_t &get_pg_pool(int64_t pool) const;
+  pg_pool_t &get_pg_pool(int64_t pool);
 
   void add_flag(int flag) {
     if (!(osdmap.flags & flag)) {

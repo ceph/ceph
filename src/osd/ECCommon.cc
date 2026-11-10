@@ -1069,6 +1069,8 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
   std::vector<std::pair<int, Message*>> messages;
   messages.reserve(get_parent()->get_acting_recovery_backfill_shards().size());
   set<pg_shard_t> backfill_shards = get_parent()->get_backfill_shards();
+  std::optional<hobject_t> migration_watermark =
+    op.consider_updating_migration_watermark(get_parent());
 
   for (auto &&pg_shard: get_parent()->get_acting_recovery_backfill_shards()) {
     // Use shard % (k+m) to get the relative shard for zone duplication
@@ -1150,6 +1152,7 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
       op.updated_hit_set_history,
       op.temp_added,
       op.temp_cleared,
+      migration_watermark,
       !should_send);
     if (should_send && transaction_copy) {
       // Swap (not copy) the real content into sop.t now: transaction_copy
@@ -1244,6 +1247,10 @@ struct ECDummyOp final : ECCommon::RMWPipeline::Op {
       ceph::os::Transaction &transaction
     ) override {
     return !pending_roll_forward.erase(shard);
+  }
+
+  std::optional<hobject_t> consider_updating_migration_watermark(ECListener *parent) override {
+    return {};
   }
 };
 
@@ -1638,6 +1645,11 @@ struct RecoveryReadCompleter : ECCommon::ReadCompleter {
       const hobject_t &hoid,
       ECCommon::read_result_t &&res,
       ECCommon::read_request_t &req) override {
+    // The op may have been cancelled (e.g. by pool-migration cleanup) while its
+    // recovery read was in flight; both paths below assume the op still exists.
+    if (!backend.recovery_ops.contains(hoid)) {
+      return;
+    }
     if (!(res.r == 0 && res.errors.empty())) {
       backend._failed_push(hoid, res);
       return;
