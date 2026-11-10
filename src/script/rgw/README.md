@@ -86,7 +86,7 @@ Run from the **build directory**:
 | `--clone` | off | Enable GPFS clone_snap+clone_copy (implies `--gpfs`) |
 | `--lwe` | off | Enable GPFS LWE cluster-wide locking (implies `--gpfs`) |
 | `--gpfs-root DIR` | `/mnt/rgw/nsfs` | GPFS data directory |
-| `--perf` | off | NUMA pinning, tcmalloc thread cache, `tcp_nodelay`, no request timeout |
+| `--perf` | off | NUMA pinning, tcmalloc thread cache, no request timeout;  `tcp_nodelay` is on in every gateway the script starts |
 | `--profile` | off | No debug logging, for profiling |
 | `-o 'key=value'` | none | Pass a config option through to `vstart.sh` |
 | `--foreground` | off | Print the radosgw command instead of running it |
