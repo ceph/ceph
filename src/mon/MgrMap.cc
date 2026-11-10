@@ -518,7 +518,14 @@ void MgrMap::print_summary(ceph::Formatter *f, std::ostream *ss) const
   ceph_assert((ss != nullptr) != (f != nullptr));
   if (f) {
     f->dump_bool("available", available);
+    f->dump_string("active_name", get_active_name());
+    f->dump_stream("active_since") << active_change;
     f->dump_int("num_standbys", standbys.size());
+    f->open_array_section("standbys");
+    for (const auto &i : standbys) {
+     f->dump_string("name", i.second.name);
+    }
+    f->close_section();
     f->open_array_section("modules");
     for (auto& i : modules) {
 	f->dump_string("module", i);
