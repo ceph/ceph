@@ -89,18 +89,19 @@ void NVMeofGwMon::check_beacon_timeout(ceph::coarse_mono_clock::time_point now,
 {
   const auto nvmegw_beacon_grace =
 	  g_conf().get_val<std::chrono::seconds>("mon_nvmeofgw_beacon_grace");
-  for (auto &itr : last_beacon) {
-    auto& lb = itr.first;
-    auto last_beacon_time = itr.second;
+  for (auto it = last_beacon.begin(); it != last_beacon.end(); ) {
+    auto& lb = it->first;
+    auto last_beacon_time = it->second;
     if (last_beacon_time < (now - nvmegw_beacon_grace)) {
       auto diff = now - last_beacon_time;
       int seconds = std::chrono::duration_cast<std::chrono::seconds>(diff).count();
           dout(1) << "beacon timeout for GW " << lb.gw_id << " for "
                   << seconds <<" sec" << dendl;
       pending_map.process_gw_map_gw_down(lb.gw_id, lb.group_key, propose_pending);
-      last_beacon.erase(lb);
+      it = last_beacon.erase(it);
     } else {
       dout(20) << "beacon live for GW " << lb.group_key <<" "<< lb.gw_id << dendl;
+      ++it;
     }
   }
   last_beacon_check = now;
