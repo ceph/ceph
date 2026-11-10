@@ -286,6 +286,19 @@ public:
     auto new_path = make_file_path(newname);
     return ceph_link(cmount, existing_path.c_str(), new_path.c_str());
   }
+  int rename(const char* existing, const char* newname)
+  {
+    auto existing_path = make_file_path(existing);
+    auto new_path = make_file_path(newname);
+    return ceph_rename(cmount, existing_path.c_str(), new_path.c_str());
+  }
+  int create_file_with_layout(const char* relpath, uint64_t object_size)
+  {
+    auto path = make_file_path(relpath);
+    int fd = ceph_open_layout(cmount, path.c_str(), O_CREAT | O_EXCL | O_WRONLY,
+                              0666, object_size, 1, object_size, nullptr);
+    return fd < 0 ? fd : ceph_close(cmount, fd);
+  }
   int setxattr(const char* relpath, const char* name, const char* value)
   {
     auto path = make_file_path(relpath);
@@ -505,8 +518,14 @@ public:
   int for_each_file_blockdiff(const char* relpath,
 			      const char* snap1,
 			      const char* snap2,
-			      interval_set<uint64_t> *expected=nullptr)
+			      interval_set<uint64_t> *expected=nullptr,
+                              interval_set<uint64_t> *actual=nullptr)
   {
+    // Preserve expected-set subtraction for existing callers; exact-result
+    // tests can collect the returned extents separately.
+    if (actual) {
+      actual->clear();
+    }
     auto s1 = make_snap_name(snap1);
     auto s2 = make_snap_name(snap2);
     ceph_file_blockdiff_info info;
@@ -527,6 +546,9 @@ public:
       r = ceph_file_blockdiff(&info, &blocks);
       if (r < 0) {
 	std::cerr << " Failed to get next changed block, ret:" << r << std::endl;
+	int finish_r = ceph_file_blockdiff_finish(&info);
+	EXPECT_EQ(0, finish_r)
+	  << "failed to finish blockdiff stream after error " << r;
 	return r;
       }
 
@@ -536,6 +558,9 @@ public:
 	std::cout << " == [" << b->offset << "~" << b->len << "] == " << std::endl;
 	if (expected) {
 	  expected->erase(b->offset, b->len);
+	}
+	if (actual) {
+	  actual->union_insert(b->offset, b->len);
 	}
 	++b;
 	--nr_blocks;
@@ -2239,7 +2264,10 @@ TEST(LibCephFS, SnapDiffNoChangeWithUnchangedHead)
   TestMount test_mount;
 
   test_mount.prepareBlockDiffNoChangeWithUnchangedHead();
-  test_mount.for_each_file_blockdiff("fileA", "snap1", "snap2");
+  interval_set<uint64_t> actual;
+  ASSERT_EQ(0, test_mount.for_each_file_blockdiff(
+                 "fileA", "snap1", "snap2", nullptr, &actual));
+  ASSERT_TRUE(actual.empty()) << "unexpected extents: " << actual;
 
   std::cout << "------------- closing -------------" << std::endl;
   ASSERT_EQ(0, test_mount.purge_dir(""));
@@ -2252,10 +2280,181 @@ TEST(LibCephFS, SnapDiffNoChangeWithChangedHead)
   TestMount test_mount;
 
   test_mount.prepareBlockDiffNoChangeWithChangedHead();
-  test_mount.for_each_file_blockdiff("fileA", "snap1", "snap2");
+  interval_set<uint64_t> actual;
+  ASSERT_EQ(0, test_mount.for_each_file_blockdiff(
+                 "fileA", "snap1", "snap2", nullptr, &actual));
+  ASSERT_TRUE(actual.empty()) << "unexpected extents: " << actual;
 
   std::cout << "------------- closing -------------" << std::endl;
   ASSERT_EQ(0, test_mount.purge_dir(""));
+  ASSERT_EQ(0, test_mount.rmsnap("snap1"));
+  ASSERT_EQ(0, test_mount.rmsnap("snap2"));
+}
+
+struct BlockDiffSnapCleanup {
+  TestMount& test_mount;
+  ~BlockDiffSnapCleanup() {
+    test_mount.rmsnap("snap2");
+    test_mount.rmsnap("snap1");
+  }
+};
+
+TEST(LibCephFS, BlockDiffMultiversionHardlink)
+{
+  TestMount test_mount("BlockDiffMultiversionHardlink");
+
+  constexpr uint64_t block_size = 4 * 1024 * 1024;
+  constexpr uint64_t write_offset = 8 * 1024 * 1024;
+  constexpr uint64_t write_length = 1024 * 1024;
+
+  ASSERT_LE(0, test_mount.write_random("fileA", 4, block_size));
+  ASSERT_EQ(0, test_mount.link("fileA", "linkA"));
+  ASSERT_EQ(0, test_mount.sync());
+  ASSERT_EQ(0, test_mount.mksnap("snap1"));
+
+  ASSERT_LE(0, test_mount.write_random("fileA", 1, write_length,
+                                      write_offset, false));
+  ASSERT_EQ(0, test_mount.sync());
+  ASSERT_EQ(0, test_mount.mksnap("snap2"));
+
+  for (const char* path : {"fileA", "linkA"}) {
+    interval_set<uint64_t> expected;
+    interval_set<uint64_t> actual;
+    expected.union_insert(write_offset, write_length);
+    ASSERT_EQ(0, test_mount.for_each_file_blockdiff(
+                   path, "snap1", "snap2", nullptr, &actual));
+    ASSERT_EQ(expected, actual) << "unexpected changed extents for " << path;
+  }
+
+  ASSERT_EQ(0, test_mount.rmsnap("snap1"));
+  ASSERT_EQ(0, test_mount.rmsnap("snap2"));
+}
+
+TEST(LibCephFS, BlockDiffMultiversionHardlinkGrowth)
+{
+  TestMount test_mount("BlockDiffHardlinkGrowth");
+  BlockDiffSnapCleanup cleanup{test_mount};
+  constexpr uint64_t object_size = 4 * 1024 * 1024;
+  constexpr uint64_t growth = object_size + 1024 * 1024;
+
+  ASSERT_EQ(0, test_mount.create_file_with_layout("fileA", object_size));
+  ASSERT_EQ(object_size, test_mount.write_random("fileA", 1, object_size, 0));
+  ASSERT_EQ(0, test_mount.link("fileA", "linkA"));
+  ASSERT_EQ(0, test_mount.sync());
+  ASSERT_EQ(0, test_mount.mksnap("snap1"));
+
+  // Grow from one object to three. Using snap2's size for snap1 would scan
+  // the new objects instead of reporting the extent beyond snap1's EOF.
+  ASSERT_EQ(growth, test_mount.write_random("fileA", 1, growth, object_size));
+  ASSERT_EQ(0, test_mount.sync());
+  ASSERT_EQ(0, test_mount.mksnap("snap2"));
+
+  // The head size must not be used for either snapshot.
+  ASSERT_EQ(object_size, test_mount.write_random("linkA", 1, object_size,
+                                                 object_size + growth));
+  ASSERT_EQ(0, test_mount.sync());
+
+  for (const char* path : {"fileA", "linkA"}) {
+    interval_set<uint64_t> expected;
+    interval_set<uint64_t> actual;
+    expected.insert(object_size, growth);
+    ASSERT_EQ(0, test_mount.for_each_file_blockdiff(
+                   path, "snap1", "snap2", nullptr, &actual));
+    ASSERT_EQ(expected, actual) << "unexpected changed extents for " << path;
+  }
+}
+
+TEST(LibCephFS, BlockDiffDifferentAuthRanks)
+{
+  TestMount test_mount("BlockDiffDifferentAuthRanks");
+  if (test_mount.tell_rank("1", "status").is_null()) {
+    GTEST_SKIP() << "requires two active MDS ranks";
+  }
+  BlockDiffSnapCleanup cleanup{test_mount};
+  constexpr uint64_t object_size = 4 * 1024 * 1024;
+  constexpr uint64_t write_length = 1024 * 1024;
+
+  ASSERT_EQ(0, test_mount.mkdir("old"));
+  ASSERT_EQ(0, test_mount.mkdir("new"));
+  // Give the destination a dirfrag to export before moving the file.
+  ASSERT_EQ(0, test_mount.mkdir("new/empty"));
+  ASSERT_EQ(0, test_mount.setxattr("", "ceph.dir.pin", "0"));
+  ASSERT_EQ(0, test_mount.setxattr("old", "ceph.dir.pin", "0"));
+  ASSERT_EQ(0, test_mount.setxattr("new", "ceph.dir.pin", "1"));
+  ASSERT_TRUE(test_mount.wait_for_subtree_on_rank("new", "1"));
+
+  ASSERT_EQ(0, test_mount.create_file_with_layout("old/fileA", object_size));
+  ASSERT_EQ(2 * object_size,
+            test_mount.write_random("old/fileA", 2, object_size, 0));
+  ASSERT_EQ(0, test_mount.sync());
+  ASSERT_EQ(0, test_mount.mksnap("snap1"));
+
+  // COW while the inode still has a single link, leaving a separate snapped
+  // inode in the old parent on rank 0 before the head moves to rank 1.
+  ASSERT_EQ(write_length,
+            test_mount.write_random("old/fileA", 1, write_length, object_size));
+  ASSERT_EQ(0, test_mount.sync());
+
+  // Restore the old pathname with a hardlink so both snapshots contain it.
+  ASSERT_EQ(0, test_mount.rename("old/fileA", "new/fileA"));
+  ASSERT_EQ(0, test_mount.link("new/fileA", "old/fileA"));
+  ASSERT_EQ(0, test_mount.sync());
+  ASSERT_EQ(0, test_mount.mksnap("snap2"));
+
+  // Grow head after snap2 to distinguish snap2's size from head's size.
+  ASSERT_EQ(object_size,
+            test_mount.write_random("new/fileA", 1, object_size, 2 * object_size));
+  ASSERT_EQ(0, test_mount.sync());
+
+  interval_set<uint64_t> expected;
+  interval_set<uint64_t> actual;
+  expected.insert(0, 2 * object_size);
+  ASSERT_EQ(0, test_mount.for_each_file_blockdiff(
+                 "old/fileA", "snap1", "snap2", nullptr, &actual));
+  ASSERT_EQ(expected, actual);
+}
+
+TEST(LibCephFS, BlockDiffReversedSnapshots)
+{
+  TestMount test_mount("BlockDiffReversedSnapshots");
+
+  constexpr uint64_t block_size = 4 * 1024 * 1024;
+  constexpr uint64_t write_offset = 8 * 1024 * 1024;
+  constexpr uint64_t write_length = 1024 * 1024;
+
+  // fileA is COWed between the snapshots, fileB is not -- the latter makes
+  // both paths resolve to the same CInode.
+  ASSERT_LE(0, test_mount.write_random("fileA", 4, block_size));
+  ASSERT_LE(0, test_mount.write_random("fileB", 4, block_size));
+  ASSERT_EQ(0, test_mount.sync());
+  ASSERT_EQ(0, test_mount.mksnap("snap1"));
+
+  ASSERT_LE(0, test_mount.write_random("fileA", 1, write_length,
+                                      write_offset, false));
+  ASSERT_EQ(0, test_mount.sync());
+  ASSERT_EQ(0, test_mount.mksnap("snap2"));
+
+  // Snapshots must be supplied oldest first; the MDS must reject the
+  // request rather than assert.
+  for (const char* path : {"fileA", "fileB"}) {
+    ASSERT_EQ(-EINVAL, test_mount.for_each_file_blockdiff(
+                         path, "snap2", "snap1"))
+      << "expected EINVAL for reversed snapshots on " << path;
+  }
+
+  // ...and still works in the correct order.
+  interval_set<uint64_t> expected;
+  interval_set<uint64_t> actual;
+  expected.union_insert(write_offset, write_length);
+  ASSERT_EQ(0, test_mount.for_each_file_blockdiff(
+                 "fileA", "snap1", "snap2", nullptr, &actual));
+  ASSERT_EQ(expected, actual);
+
+  // Both snapshots select the same inode version for fileB.
+  ASSERT_EQ(0, test_mount.for_each_file_blockdiff(
+                 "fileB", "snap1", "snap2", nullptr, &actual));
+  ASSERT_TRUE(actual.empty()) << "unexpected extents for fileB: " << actual;
+
   ASSERT_EQ(0, test_mount.rmsnap("snap1"));
   ASSERT_EQ(0, test_mount.rmsnap("snap2"));
 }
