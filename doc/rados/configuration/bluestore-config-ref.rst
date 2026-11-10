@@ -215,6 +215,43 @@ the values specified in the ``bluestore_cache_meta_ratio`` and
 .. confval:: osd_memory_cache_min
 .. confval:: osd_memory_cache_resize_interval
 
+Cache Age Binning
+=================
+
+BlueStore tracks how recently each cache entry was used. Each cache groups its
+entries into *age bins*. Every ``bluestore_cache_age_bin_interval`` seconds,
+BlueStore creates a new bin, and an entry moves to the newest bin whenever it
+is read or updated. The ``bluestore_cache_age_bins_*`` options map ranges of
+bins to priority levels. The priority cache manager favors younger entries when
+balancing memory across caches.
+
+The number of bins is bounded. Each cache keeps as many bins as the largest
+value in its ``bluestore_cache_age_bins_*`` list (720 by default) and discards
+the oldest bin whenever it creates a new one. A bin is only a counter, so even
+a large bin count uses little memory.
+
+The values of these options can be changed at runtime. A change does not evict
+or move any cache entry. It changes only how entries are counted, and it takes
+effect gradually:
+
+* A new bin list is applied at the next bin rotation, which happens within one
+  ``bluestore_cache_age_bin_interval``.
+* If the new list covers fewer bins, the oldest bins are dropped. Their
+  entries stay in the cache but count toward the lowest priority until they
+  are used again.
+* If the new list covers more bins, the added bins start empty and fill as
+  bins rotate. Until that many intervals have passed, the oldest priority
+  levels receive less memory than they will in the steady state.
+* A new ``bluestore_cache_age_bin_interval`` takes effect after the current
+  rotation. Bins that already exist keep their original duration, so bins of
+  both durations coexist until the older ones rotate out.
+
+.. confval:: bluestore_cache_age_bin_interval
+.. confval:: bluestore_cache_age_bins_kv
+.. confval:: bluestore_cache_age_bins_kv_onode
+.. confval:: bluestore_cache_age_bins_meta
+.. confval:: bluestore_cache_age_bins_data
+
 
 Manual Cache Sizing
 ===================
