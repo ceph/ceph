@@ -670,6 +670,12 @@ public:
     bool force_all_shards,
     std::shared_ptr<int> result);
 
+  void do_write_omap_impl(
+    const std::string& obj_name,
+    const std::map<std::string, std::string>& to_set,
+    const std::set<std::string>& to_remove,
+    std::shared_ptr<int> result);
+
   virtual int create_and_write(
     const std::string& obj_name,
     const std::string& data);
@@ -872,6 +878,25 @@ public:
     const std::string& attr_name,
     const std::string& attr_value,
     bool force_all_shards);
+
+  /**
+   * Set and remove omap keys of an existing object in one op.
+   *
+   * @param run If true (default) call run_until_idle
+   */
+  int write_omap(
+    const std::string& obj_name,
+    const std::map<std::string, std::string>& to_set,
+    const std::set<std::string>& to_remove,
+    bool run = true);
+
+  /**
+   * The omap keys in one shard's ObjectStore (not including updates that
+   * are still only in the PG log).
+   */
+  std::set<std::string> get_shard_omap_keys(
+    const std::string& obj_name,
+    int shard);
 
   /**
    * List all attributes on an object.
