@@ -648,12 +648,7 @@ seastar::future<> OSD::start()
         ERROR("cluster messenger bind(): {}", e);
       })),
     public_msgr->bind(pick_addresses(CEPH_PICK_ADDRESS_PUBLIC))
-    .safe_then([this]() -> crimson::net::Messenger::bind_ertr::future<> {
-      if (local_conf().get_val<bool>("crimson_osd_core_listeners")) {
-        return public_msgr->bind_core_listeners();
-      }
-      return crimson::net::Messenger::bind_ertr::now();
-    }).safe_then([this, dispatchers]() mutable {
+    .safe_then([this, dispatchers]() mutable {
       return public_msgr->start(dispatchers);
     }, crimson::net::Messenger::bind_ertr::assert_all_func(
       [FNAME] (const std::error_code& e) {
@@ -689,6 +684,11 @@ seastar::future<> OSD::start()
   co_await start_cluster_lanes(osd_required);
   co_await heartbeat->start(pick_addresses(CEPH_PICK_ADDRESS_PUBLIC),
                             pick_addresses(CEPH_PICK_ADDRESS_CLUSTER));
+  if (local_conf().get_val<bool>("crimson_osd_core_listeners")) {
+    // optional, and best effort: bound only once all the messengers the
+    // OSD needs have their ports, so as not to take them
+    co_await public_msgr->bind_core_listeners();
+  }
   // create the admin-socket server, and the objects that register
   // to handle incoming commands
   co_await start_asok_admin();

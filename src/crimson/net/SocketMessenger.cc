@@ -230,7 +230,7 @@ SocketMessenger::bind(const entity_addrvec_t& addrs)
   });
 }
 
-SocketMessenger::bind_ertr::future<>
+seastar::future<>
 SocketMessenger::bind_core_listeners()
 {
   assert(seastar::this_shard_id() == sid);
@@ -238,27 +238,84 @@ SocketMessenger::bind_core_listeners()
   ceph_assert(listener);
   ceph_assert(!dispatch_only_on_sid);
   ceph_assert(core_listeners.empty());
-  auto cores = boost::irange<seastar::shard_id>(0, seastar::this_smp_shard_count());
+  const auto n_cores = seastar::this_smp_shard_count();
+  core_ports.assign(n_cores, 0);
+  core_ports_exhausted = false;
+  auto cores = boost::irange<seastar::shard_id>(0, n_cores);
   return seastar::do_for_each(cores.begin(), cores.end(),
       [this](seastar::shard_id core) {
     return ShardedServerSocket::create_fixed(core
     ).then([this](ShardedServerSocket* core_listener) {
       core_listeners.push_back(core_listener);
     });
-  }).then([this]() -> bind_ertr::future<> {
-    using crimson::common::local_conf;
-    return crimson::do_for_each(core_listeners,
-        [this](ShardedServerSocket* core_listener) {
-      return listen_on_first_free_port(get_myaddr(),
-          local_conf()->ms_bind_port_min,
-          local_conf()->ms_bind_port_max,
-          [core_listener](const entity_addr_t& to_bind) {
-        return core_listener->listen(to_bind);
-      }).safe_then([this](uint32_t port) {
-        logger().info("{} bind_core_listeners: core {} listens on port {}",
-                      *this, core_ports.size(), port);
-        core_ports.push_back(port);
-      });
+  }).then([this, cores] {
+    return seastar::do_for_each(cores.begin(), cores.end(),
+        [this](seastar::shard_id core) {
+      return bind_core_listener(core);
+    });
+  }).then([this] {
+    return drop_unbound_core_listeners();
+  }).then([this] {
+    // if not started yet, start() does it
+    return is_started() ? accept_on_core_listeners() : seastar::now();
+  });
+}
+
+seastar::future<> SocketMessenger::bind_core_listener(seastar::shard_id core)
+{
+  assert(seastar::this_shard_id() == sid);
+  if (core_ports_exhausted) {
+    return seastar::now();
+  }
+  using crimson::common::local_conf;
+  auto core_listener = core_listeners[core];
+  return listen_on_first_free_port(get_myaddr(),
+      local_conf()->ms_bind_port_min,
+      local_conf()->ms_bind_port_max,
+      [core_listener](const entity_addr_t& to_bind) {
+    return core_listener->listen(to_bind);
+  }).safe_then([this, core](uint32_t port) {
+    logger().info("{} bind_core_listeners: core {} listens on port {}",
+                  *this, core, port);
+    core_ports[core] = port;
+    return seastar::now();
+  }, listen_ertr::all_same_way([this, core](const std::error_code& e) {
+    // not fatal: the clients reach these cores via the main address, as
+    // without core listeners. The ports left are for others to bind
+    logger().warn("{} bind_core_listeners: no port for core {} in "
+                  "ms_bind_port_min..max ({}): cores {}..{} get no listener",
+                  *this, core, e, core, core_ports.size() - 1);
+    core_ports_exhausted = true;
+    return seastar::now();
+  }));
+}
+
+seastar::future<> SocketMessenger::drop_unbound_core_listeners()
+{
+  assert(seastar::this_shard_id() == sid);
+  std::vector<ShardedServerSocket*> unbound;
+  for (seastar::shard_id core = 0; core < core_listeners.size(); ++core) {
+    if (core_ports[core] == 0) {
+      unbound.push_back(std::exchange(core_listeners[core], nullptr));
+    }
+  }
+  return seastar::parallel_for_each(std::move(unbound),
+      [](ShardedServerSocket* core_listener) {
+    return core_listener->shutdown_destroy();
+  });
+}
+
+seastar::future<> SocketMessenger::accept_on_core_listeners()
+{
+  assert(seastar::this_shard_id() == sid);
+  auto cores = boost::irange<seastar::shard_id>(0, core_listeners.size());
+  return seastar::parallel_for_each(cores, [this](seastar::shard_id core) {
+    if (!core_listeners[core]) {
+      return seastar::now();
+    }
+    return core_listeners[core]->accept(
+        [this, core](SocketRef socket, entity_addr_t peer_addr) {
+      return accept_on_primary(std::move(socket), peer_addr, core);
     });
   });
 }
@@ -267,6 +324,7 @@ entity_addrvec_t SocketMessenger::get_core_addr(seastar::shard_id core) const
 {
   assert(seastar::this_shard_id() == sid);
   ceph_assert(core < core_ports.size());
+  ceph_assert(core_ports[core] != 0);
   // derived from the main address, which may be learned after binding
   auto addr = get_myaddr();
   addr.set_port(core_ports[core]);
@@ -279,7 +337,8 @@ std::vector<entity_addrvec_t> SocketMessenger::get_core_addrs() const
   std::vector<entity_addrvec_t> core_addrs;
   core_addrs.reserve(core_ports.size());
   for (seastar::shard_id core = 0; core < core_ports.size(); ++core) {
-    core_addrs.emplace_back(get_core_addr(core));
+    core_addrs.emplace_back(
+      core_ports[core] ? get_core_addr(core) : entity_addrvec_t{});
   }
   return core_addrs;
 }
@@ -332,13 +391,7 @@ seastar::future<> SocketMessenger::start(
     return listener->accept([this](SocketRef socket, entity_addr_t peer_addr) {
       return accept_on_primary(std::move(socket), peer_addr, std::nullopt);
     }).then([this] {
-      auto cores = boost::irange<seastar::shard_id>(0, core_listeners.size());
-      return seastar::parallel_for_each(cores, [this](seastar::shard_id core) {
-        return core_listeners[core]->accept(
-            [this, core](SocketRef socket, entity_addr_t peer_addr) {
-          return accept_on_primary(std::move(socket), peer_addr, core);
-        });
-      });
+      return accept_on_core_listeners();
     });
   }
   return seastar::now();
@@ -395,7 +448,8 @@ seastar::future<> SocketMessenger::shutdown()
     core_ports.clear();
     return seastar::parallel_for_each(std::move(d_core_listeners),
         [](ShardedServerSocket* core_listener) {
-      return core_listener->shutdown_destroy();
+      return core_listener ? core_listener->shutdown_destroy()
+                           : seastar::now();
     });
   }).then([this] {
     if (listener) {
