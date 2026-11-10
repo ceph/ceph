@@ -76,6 +76,14 @@
   erasure-coded pool that uses the ``default`` erasure code profile gets a
   profile of its own, such as ``mypool-k2-m2``, as does each new pool created
   without a named profile.
+* RGW: The default value of ``rgw_crypt_sse_algorithm`` changed from
+  ``aes-256-cbc`` to ``aes-256-gcm``, so newly written objects using
+  Server-Side Encryption are encrypted with AES-256-GCM. Existing objects are
+  unaffected and remain readable. Gateways older than Tentacle 20.2.5 cannot
+  decrypt AES-256-GCM objects. When upgrading from an older release, or when a
+  multisite configuration has zones running one, set
+  ``rgw_crypt_sse_algorithm`` to ``aes-256-cbc`` before the upgrade and remove
+  the setting once all gateways are upgraded.
 
 * RGW: The default value of ``rgw_rest_conn_connect_to_resolved_ips`` changed
   from ``false`` to ``true``.
