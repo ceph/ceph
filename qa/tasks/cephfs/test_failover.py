@@ -572,6 +572,54 @@ class TestFailover(CephFSTestCase):
         # rank 0 will get stuck in up:resolve, see https://tracker.ceph.com/issues/53194
         self.fs.wait_for_daemons()
 
+    def test_deferred_weak_rejoin(self):
+        """
+        A rejoining rank must not send OP_WEAK while a peer is still below rejoin.
+
+        Rank 0's rejoin send is held until rank 1 has failed and is replaying.
+        Releasing it then used to deliver OP_WEAK in resolve and trip
+        ceph_assert(mds->is_rejoin()) in handle_cache_rejoin_weak.
+        See https://tracker.ceph.com/issues/54840.
+        """
+        # One sleep at the start of replay. Stays under the 30s
+        # MDS_ESTIMATED_REPLAY_TIME warning and still covers the release below.
+        replay_hold_ms = 20000
+
+        self.fs.set_max_mds(2)
+        self.fs.wait_for_daemons()
+        self.mount_a.run_shell(["touch", "rejoin-file"])
+        self.mount_a.umount_wait()
+
+        self.config_set("mds", "mds_defer_rejoin_send_for_testing", "true")
+        self.addCleanup(self.config_rm, "mds", "mds_defer_rejoin_send_for_testing")
+
+        self.fs.rank_fail(rank=0)
+        self.fs.wait_for_state("up:rejoin", rank=0, timeout=120)
+        time.sleep(5)
+        state = self.fs.get_rank(rank=0)["state"]
+        self.assertEqual(
+            state, "up:rejoin",
+            f"rank 0 left rejoin ({state}) while rejoin send was deferred")
+
+        self.config_set("mds", "mds_delay_journal_replay_for_testing", str(replay_hold_ms))
+        self.addCleanup(self.config_rm, "mds", "mds_delay_journal_replay_for_testing")
+        self.fs.rank_fail(rank=1)
+        self.fs.wait_for_state("up:replay", rank=1, timeout=120)
+
+        # Peer is below rejoin. Clearing the hold retries rank 0's send.
+        self.config_set("mds", "mds_defer_rejoin_send_for_testing", "false")
+        time.sleep(5)
+        self.assertEqual(self.fs.get_rank(rank=0)["state"], "up:rejoin")
+        self.assertIn(
+            self.fs.get_rank(rank=1)["state"],
+            ("up:replay", "up:resolve", "up:reconnect"))
+
+        self.config_set("mds", "mds_delay_journal_replay_for_testing", "0")
+        self.fs.wait_for_daemons(timeout=180)
+        self.mount_a.mount()
+        self.mount_a.wait_until_mounted()
+        self.mount_a.run_shell(["stat", "rejoin-file"])
+
 
 class TestStandbyReplay(CephFSTestCase):
 

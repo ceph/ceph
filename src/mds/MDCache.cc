@@ -84,6 +84,7 @@
 
 #include "common/debug.h"
 #include "common/errno.h"
+#include "common/likely.h"
 #include "common/perf_counters.h"
 #include "common/safe_io.h"
 
@@ -284,6 +285,12 @@ void MDCache::handle_conf_change(const std::set<std::string>& changed, const MDS
   if (changed.count("mds_use_global_snaprealm_seq_for_subvol")) {
     use_global_snaprealm_seq = g_conf().get_val<bool>("mds_use_global_snaprealm_seq_for_subvol");
     dout(20) << __func__ << " mds_use_global_snaprealm_seq_for_subvol now " << use_global_snaprealm_seq << dendl;
+  }
+  if (changed.count("mds_defer_rejoin_send_for_testing") &&
+      !g_conf().get_val<bool>("mds_defer_rejoin_send_for_testing") &&
+      mds->is_rejoin()) {
+    dout(1) << "mds_defer_rejoin_send_for_testing cleared, retrying rejoins" << dendl;
+    maybe_send_pending_rejoins();
   }
 
   migrator->handle_conf_change(changed, mdsmap);
@@ -4104,12 +4111,23 @@ void MDCache::rejoin_start(MDSContext *rejoin_done_)
  *
  * we start out by sending rejoins to everyone in the recovery set.
  *
- * if we are rejoin, send for all regions in our cache.
+ * if we are rejoin, send OP_WEAK for all regions in our cache, but only
+ * to peers that have already reached rejoin (or later). peers still below
+ * rejoin (failed, replay, resolve, or reconnect) are skipped and retried
+ * from handle_mds_map once they catch up.
  * if we are active|stopping, send only to nodes that are rejoining.
  */
 void MDCache::rejoin_send_rejoins()
 {
   dout(10) << "rejoin_send_rejoins with recovery_set " << recovery_set << dendl;
+
+  // Hold every rejoin send, including a survivor's OP_STRONG, so a test can
+  // fail a peer and release the send while that peer is still below rejoin.
+  if (unlikely(g_conf().get_val<bool>("mds_defer_rejoin_send_for_testing"))) {
+    dout(1) << "rejoin_send_rejoins deferred by mds_defer_rejoin_send_for_testing" << dendl;
+    rejoins_pending = true;
+    return;
+  }
 
   if (rejoin_gather.count(mds->get_nodeid())) {
     dout(7) << "rejoin_send_rejoins still processing imported caps, delaying" << dendl;
@@ -4140,16 +4158,27 @@ void MDCache::rejoin_send_rejoins()
   }
 
   map<mds_rank_t, ref_t<MMDSCacheRejoin>> rejoins;
+  bool delayed = false;
 
-
-  // if i am rejoining, send a rejoin to everyone.
+  // if i am rejoining, send a rejoin to everyone already in rejoin or later.
   // otherwise, just send to others who are rejoining.
   for (const auto& rank : recovery_set) {
     if (rank == mds->get_nodeid())  continue;  // nothing to myself!
     if (rejoin_sent.count(rank)) continue;     // already sent a rejoin to this node!
-    if (mds->is_rejoin())
+    if (mds->is_rejoin()) {
+      auto st = mds->mdsmap->get_state(rank);
+      if (st < MDSMap::STATE_REJOIN) {
+	// Still owed an OP_WEAK: failed (STATE_NULL), replay, resolve,
+	// or reconnect. rejoins_pending retries this from handle_mds_map
+	// once the peer reaches rejoin.
+	dout(7) << "rejoin_send_rejoins peer mds." << rank
+		<< " not yet rejoin (state "
+		<< ceph_mds_state_name(st) << "), delaying OP_WEAK" << dendl;
+	delayed = true;
+	continue;
+      }
       rejoins[rank] = make_message<MMDSCacheRejoin>(MMDSCacheRejoin::OP_WEAK);
-    else if (mds->mdsmap->is_rejoin(rank))
+    } else if (mds->mdsmap->is_rejoin(rank))
       rejoins[rank] = make_message<MMDSCacheRejoin>(MMDSCacheRejoin::OP_STRONG);
   }
 
@@ -4203,7 +4232,15 @@ void MDCache::rejoin_send_rejoins()
     ceph_assert(dir->is_subtree_root());
     if (dir->is_ambiguous_dir_auth()) {
       // exporter is recovering, importer is survivor.
-      ceph_assert(rejoins.count(dir->authority().first));
+      if (!rejoins.count(dir->authority().first)) {
+	if (!rejoin_sent.count(dir->authority().first)) {
+	  dout(7) << "rejoin_send_rejoins delaying ambiguous subtree " << *dir
+		  << " until exporter mds." << dir->authority().first
+		  << " is sent a rejoin" << dendl;
+	  delayed = true;
+	}
+	continue;
+      }
       ceph_assert(!rejoins.count(dir->authority().second));
       continue;
     }
@@ -4339,7 +4376,7 @@ void MDCache::rejoin_send_rejoins()
     mds->send_message_mds(p.second, p.first);
   }
   rejoin_ack_gather.insert(mds->get_nodeid());   // we need to complete rejoin_gather_finish, too
-  rejoins_pending = false;
+  rejoins_pending = delayed;
 
   // nothing?
   if (mds->is_rejoin() && rejoin_gather.empty()) {
@@ -4584,9 +4621,15 @@ void MDCache::handle_cache_rejoin_weak(const cref_t<MMDSCacheRejoin> &weak)
     }
 
     encode(imported_caps, ack->imported_caps);
+  } else if (!mds->is_rejoin()) {
+    // A delayed OP_WEAK can arrive while we are still in resolve/reconnect.
+    // Defer until rejoin_start() rather than asserting.
+    dout(7) << "handle_cache_rejoin_weak from mds." << from
+	    << " while in " << ceph_mds_state_name(mds->get_state())
+	    << ", waiting for rejoin" << dendl;
+    mds->wait_for_rejoin(new C_MDS_RetryMessage(mds, weak));
+    return;
   } else {
-    ceph_assert(mds->is_rejoin());
-
     // we may have already received a strong rejoin from the sender.
     rejoin_scour_survivor_replicas(from, NULL, acked_inodes, gather_locks);
     ceph_assert(gather_locks.empty());
