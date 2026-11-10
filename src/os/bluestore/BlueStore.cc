@@ -1076,6 +1076,10 @@ public:
     default:
       ceph_abort_msg("bad cache_private");
     }
+    // cache_age_bin still points into src's ring; count the buffer in our
+    // newest bin instead, as _add() does, so that src's bins stay accurate
+    // and the counter is only updated under our lock from now on.
+    b->cache_age_bin = age_bins.front();
     if (!b->is_empty()) {
       buffer_bytes += b->length;
       list_bytes[b->cache_private] += b->length;
