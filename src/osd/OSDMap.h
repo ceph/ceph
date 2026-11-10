@@ -894,7 +894,8 @@ public:
                             std::ostream *out = nullptr) const;
 
   /// Whether up keeps each zone block of an erasure coded pool over zones in
-  /// one zone of its own, as peering needs.
+  /// one zone of its own, and puts no more than a zone's share of a
+  /// replicated pool's PG in one zone, as peering needs.
   bool keeps_zone_blocks(const pg_pool_t& pool, int crush_rule,
                          const std::vector<int>& up) const;
 
