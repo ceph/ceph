@@ -167,7 +167,6 @@ std::string create_ec_pool_pp(const std::string &pool_name, Rados &cluster, bool
     "{\"prefix\": \"osd erasure-code-profile set\", \"name\": \"testprofile-" + pool_name + "\", \"profile\": [ \"k=2\", \"m=1\", \"crush-failure-domain=osd\"]}",
     {}, NULL, NULL);
   if (ret) {
-    cluster.shutdown();
     oss << "mon_command erasure-code-profile set name:testprofile-" << pool_name << " failed with error " << ret;
     return oss.str();
   }
@@ -188,8 +187,8 @@ std::string create_ec_pool_pp(const std::string &pool_name, Rados &cluster, bool
       "\", \"var\": \"allow_ec_optimizations\", \"val\": \"true\"}",
       std::move(inbl), nullptr, nullptr);
     if (ret) {
-      destroy_one_ec_pool_pp(pool_name, cluster);
-      destroy_ec_profile_pp(cluster, pool_name, oss);
+      cluster.wait_for_latest_osdmap();
+      destroy_ec_pool_pp(pool_name, cluster);
       oss << "rados_mon_command osd pool set failed with error " << ret;
       return oss.str();
     }
