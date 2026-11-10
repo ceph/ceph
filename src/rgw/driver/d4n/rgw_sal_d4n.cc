@@ -1634,8 +1634,9 @@ int D4NFilterObject::write_if_space_available(const DoutPrefixProvider* dpp, con
 
   int ret = cacheDriver->check_and_reserve_space(dpp, size, y);
   if (ret == -ENOSPC) {
-    // Not enough space — reserve upfront unconditionally and evict to free space
-    cacheDriver->reserve_space(dpp, len, y);  
+    // Not enough space — reserve upfront unconditionally and evict to free space.
+    // Reserve size (len plus the xattr overhead): that is what put() and the rollback release.
+    cacheDriver->reserve_space(dpp, size, y);
     ret = driver->get_policy_driver()->get_cache_policy()->eviction(dpp, size, y);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << __func__ << "(): ERROR: Eviction call failed, ret=" << ret << dendl;
@@ -1941,41 +1942,83 @@ int D4NFilterObject::set_head_block_dir_entry(const DoutPrefixProvider* dpp, opt
         return ret;
       }
     }
+
+    /* A dirty version that is not the latest one (a newer version has a later mtime) still belongs
+       in the version list, at its own mtime; the latest version is added there above. Clean
+       versions are not kept in the version list. */
+    if (!is_latest_version && dirty) {
+      // The version list is keyed by the raw object name, like the latest version's entry above.
+      const std::string object_version = this->get_bucket()->versioning_enabled() ? this->get_object_version() : "null";
+      std::optional<rgw::d4n::CacheObjectVersion> ver_params;
+      if (driver->uses_fdb()) {
+        ver_params = rgw::d4n::CacheObjectVersion{
+          .objName = this->get_name(),
+          .bucketId = this->get_bucket()->get_bucket_id(),
+          .version = object_version,
+          .user_id = user_id,
+          .display_name = display_name,
+          .deleteMarker = this->delete_marker,
+          .etag = etag,
+          .size = this->get_accounted_size(),
+          .creationTime = std::to_string(std::chrono::duration_cast<std::chrono::nanoseconds>(this->get_mtime().time_since_epoch()).count())
+        };
+      }
+      auto mtime = this->get_mtime(); // add_version() takes a non-const reference
+      ret = this->driver->get_obj_dir()->add_version(dpp, y, this->get_bucket()->get_bucket_id(), this->get_name(), object_version,
+                                                     mtime, ver_params, std::ref(*txn));
+      if (ret < 0) {
+        ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): Failed to add non-latest version to ordered set with error: " << ret << dendl;
+        return ret;
+      }
+    }
   }//end-if get_bucket_versioned()
 
   return 0;
 }
 
 /*
- This method updates the hostslist, version and dirty flag for data block directory entries
+ This method updates the hostslist, version and dirty flag for data block directory entries.
+
+ All entries are written in one transaction, separate from the HEAD transaction. This is safe
+ because the entries are keyed by this PUT's version (no concurrent PUT writes them) and nothing
+ reads them before the HEAD that points to them is committed, which happens after this method
+ returns. The transaction is idempotent (dirty flag, version and a set union on hostsList), so an
+ uncertain commit is simply retried.
 */
 int D4NFilterObject::set_data_block_dir_entries(const DoutPrefixProvider* dpp, optional_yield y, std::string& version, bool dirty)
 {
+  constexpr int UNCERTAIN_RETRIES = 1;
   rgw::d4n::BlockDirectory* blockDir = driver->get_block_dir();
 
-  // Handle FoundationDB unknown_commit: reconcile the block update before further mutations:
-  return this->driver->execute_transaction(dpp, y,
-      [this, dpp, y, &version, dirty, blockDir](rgw::d4n::Transaction& txn) -> int {
-  	//update data block entries in directory
-        const off_t lst = is_remote_cache_request() ? this->get_remote_block_len() : this->get_size();
-        off_t fst = is_remote_cache_request() ? this->get_remote_block_offset() : 0;
-  	ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): Object/Block size =" << lst << dendl;
-  	ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): offset =" << fst << dendl;
+  /* lst is the end offset. A remote block put (len > 0, e.g. a relocated block) covers that block.
+     A local PUT and a remote head put (len == 0) cover the whole object: the head put follows all of
+     the blocks, so the remote RGW adds itself to every block's hostsList. */
+  const bool remote_block = is_remote_cache_request() && this->get_remote_block_len() > 0;
+  off_t fst = remote_block ? this->get_remote_block_offset() : 0;
+  const off_t lst = fst + (remote_block ? this->get_remote_block_len() : this->get_size());
+  ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): offset =" << fst << ", end offset =" << lst << dendl;
 
-        std::vector<rgw::d4n::CacheBlock> blocks;
+  std::vector<rgw::d4n::CacheBlock> all_blocks;
+  while (fst < lst) {
+    off_t cur_size = std::min<off_t>(fst + dpp->get_cct()->_conf->rgw_max_chunk_size, lst);
+    off_t cur_len = cur_size - fst;
+    rgw::d4n::CacheBlock block {};
+    block.cacheObj.bucketName = this->get_bucket()->get_bucket_id();
+    block.cacheObj.objName = this->get_name();
+    block.size = cur_len;
+    block.blockID = fst;
+    block.version = version;
+    fst += cur_len;
+    all_blocks.push_back(std::move(block));
+  }
 
-        while (fst < lst) {
-          off_t cur_size = std::min<off_t>(fst + dpp->get_cct()->_conf->rgw_max_chunk_size, lst);
-          off_t cur_len = cur_size - fst;
-          rgw::d4n::CacheBlock block {};
-          block.cacheObj.bucketName = this->get_bucket()->get_bucket_id();
-          block.cacheObj.objName = this->get_name();
-          block.size = cur_len;
-          block.blockID = fst;
-          block.version = version;
-          fst += cur_len;
-          blocks.push_back(std::move(block));
-        }
+  if (all_blocks.empty()) {
+    return 0;
+  }
+
+  auto set_blocks = [this, dpp, y, &version, dirty, blockDir, &all_blocks](rgw::d4n::Transaction& txn) -> int {
+        // get() fills the entries in, so every attempt starts from a fresh copy.
+        std::vector<rgw::d4n::CacheBlock> blocks = all_blocks;
 
         int ret = blockDir->get(dpp, y, blocks, txn);
 
@@ -2008,7 +2051,22 @@ int D4NFilterObject::set_data_block_dir_entries(const DoutPrefixProvider* dpp, o
         }
 
         return 0;
-      });
+      };
+
+  // Handle FoundationDB unknown_commit: the update is idempotent (same entries, hostsList is a set),
+  // so an uncertain commit is replayed once before it is reported.
+  for (int uncertain = 0; ; ++uncertain) {
+    auto result = this->driver->retry_transaction(dpp, y, set_blocks);
+
+    if (rgw::d4n::TransactionStatus::uncertain == rgw::d4n::describe(result).status &&
+        uncertain < UNCERTAIN_RETRIES) {
+      ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): uncertain commit for " << all_blocks.size()
+                         << " data block entries; the transaction is idempotent, retrying" << dendl;
+      continue;
+    }
+
+    return handle_transaction_result(dpp, result); // still uncertain after UNCERTAIN_RETRIES replays: -EIO
+  }
 }
 
 int D4NFilterObject::delete_cache_entry(const DoutPrefixProvider* dpp, const std::string key, optional_yield y) {
@@ -3708,6 +3766,17 @@ void D4NFilterObject::set_delete_marker_mtime(const DoutPrefixProvider* dpp, con
   delete_marker_mtime = ceph::real_time(std::chrono::nanoseconds(*parsed));
 }
 
+void D4NFilterObject::set_remote_mtime(const DoutPrefixProvider* dpp, const std::string& ns)
+{
+  auto parsed = ceph::parse<uint64_t>(ns);
+  if (!parsed) {
+    ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): ignoring invalid object mtime '" << ns << "'" << dendl;
+    remote_mtime.reset();
+    return;
+  }
+  remote_mtime = ceph::real_time(std::chrono::nanoseconds(*parsed));
+}
+
 D4NFilterObject::DeleteMarkerSpec
 D4NFilterObject::make_delete_marker_spec(const DoutPrefixProvider* dpp, optional_yield y,
                                          const std::string& forced_version,
@@ -4258,7 +4327,109 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
   return 0;
 }
 
-int D4NFilterWriter::prepare(optional_yield y) 
+namespace {
+
+// The current version of the object a conditional PUT is checked against.
+struct PutPreconditionState {
+  bool exists = false;
+  std::optional<std::string> etag;
+};
+
+// Same rules as RGWRados::Object::check_preconditions() for a PUT.
+int check_put_preconditions(const DoutPrefixProvider* dpp, const char* if_match, const char* if_nomatch,
+                            const PutPreconditionState& cur)
+{
+  if (if_match) {
+    if (std::string_view(if_match) == "*") {
+      if (!cur.exists) {
+        return -ENOENT;
+      }
+    } else if (cur.etag) {
+      const std::string if_match_str = rgw_string_unquote(if_match);
+      ldpp_dout(dpp, 10) << "D4NFilterWriter::" << __func__ << "(): if_match: " << if_match_str << ", etag: " << *cur.etag << dendl;
+      if (if_match_str.compare(0, cur.etag->length(), cur.etag->c_str(), cur.etag->length()) != 0) {
+        return -ERR_PRECONDITION_FAILED;
+      }
+    } else {
+      return cur.exists ? -ERR_PRECONDITION_FAILED : -ENOENT;
+    }
+  }
+
+  if (if_nomatch) {
+    if (std::string_view(if_nomatch) == "*") {
+      if (cur.exists) {
+        return -ERR_PRECONDITION_FAILED;
+      }
+    } else if (cur.etag) {
+      const std::string if_nomatch_str = rgw_string_unquote(if_nomatch);
+      ldpp_dout(dpp, 10) << "D4NFilterWriter::" << __func__ << "(): if_nomatch: " << if_nomatch_str << ", etag: " << *cur.etag << dendl;
+      if (if_nomatch_str.compare(0, cur.etag->length(), cur.etag->c_str(), cur.etag->length()) == 0) {
+        return -ERR_PRECONDITION_FAILED;
+      }
+    }
+  }
+
+  return 0;
+}
+
+/* Versioned buckets: whether a version with (our_mtime_ns, our_member) is newer than the version the
+   plain name HEAD `cur` points to. Versions are ordered by (mtime, version list member), as in the
+   version list; a null version is listed as "null". Only the newer one takes the plain name HEAD. */
+bool newer_than_head(const DoutPrefixProvider* dpp, const rgw::d4n::CacheBlock& cur,
+                     uint64_t our_mtime_ns, const std::string& our_member)
+{
+  auto cur_ns = ceph::parse<uint64_t>(cur.cacheObj.creationTime);
+  if (!cur_ns) {
+    ldpp_dout(dpp, 0) << __func__ << "(): invalid creationTime '" << cur.cacheObj.creationTime
+                      << "' on HEAD " << cur.cacheObj.objName << "; treating this version as the latest" << dendl;
+    return true;
+  }
+  std::string cur_member = cur.version;
+  if (auto it = cur.cacheObj.attrs.find(RGW_CACHE_ATTR_VERSION_ID);
+      it != cur.cacheObj.attrs.end() && it->second.to_str() == "null") {
+    cur_member = "null";
+  }
+  const bool newer = std::tie(our_mtime_ns, our_member) > std::tie(*cur_ns, cur_member);
+  if (!newer) {
+    ldpp_dout(dpp, 10) << __func__ << "(): " << our_member << " is older than the latest version "
+                       << cur.version << "; not updating the plain name HEAD" << dendl;
+  }
+  return newer;
+}
+
+std::optional<std::string> etag_from_attrs(const rgw::sal::Attrs& attrs)
+{
+  auto it = attrs.find(RGW_ATTR_ETAG);
+  if (it == attrs.end()) {
+    return std::nullopt;
+  }
+  return it->second.to_str(); // the whole bufferlist, as RADOS compares it
+}
+
+} // anonymous namespace
+
+/* Dirty blocks are never evicted, so the blocks of a PUT that does not commit its HEAD must be
+   removed by cleaning. This covers every way a PUT can end without committing: complete() failing
+   (an error, a failed precondition, an uncertain commit that did not land), process() failing
+   part way, and the request being abandoned before complete() (client disconnect, upload aborted).
+   The version is registered with the bytes actually written, so that do_delete() finds every
+   block it looks for; with no committed "_:<version>_<name>" HEAD, do_writeback() returns
+   -ECANCELED and do_delete() removes the blocks and their directory entries. Registering any
+   earlier is not safe: cleaning could run while the PUT is still in progress. */
+D4NFilterWriter::~D4NFilterWriter()
+{
+  if (head_committed || dirty_bytes_written == 0) {
+    return;
+  }
+  const std::string key = get_cache_block_prefix(obj, version);
+  ldpp_dout(dpp, 10) << "D4NFilterWriter::" << __func__ << "(): PUT not committed; registering " << key
+                     << " (" << dirty_bytes_written << " bytes) with cleaning to remove its data blocks" << dendl;
+  driver->get_policy_driver()->get_cache_policy()->update_dirty_object(dpp, key, version, false, dirty_bytes_written,
+      object->get_mtime(), std::get<rgw_user>(obj->get_bucket()->get_owner()), std::string{}, obj->get_bucket()->get_name(),
+      obj->get_bucket()->get_bucket_id(), obj->get_key(), rgw::d4n::RefCount::NOOP, y);
+}
+
+int D4NFilterWriter::prepare(optional_yield y)
 {
   d4n_writecache = g_conf()->d4n_writecache_enabled;
 
@@ -4268,50 +4439,10 @@ int D4NFilterWriter::prepare(optional_yield y)
     }
     ldpp_dout(dpp, 0) << "D4NFilterWriter::" << __func__ << "(): calling next->prepare" << dendl;
     return next->prepare(y);
-  } else {
-    //for non-versioned buckets or version suspended buckets, we need to delete the older dirty blocks of the object from the cache as dirty blocks do not get evicted
-    if (!object->get_bucket()->versioned() || (object->get_bucket()->versioned() && !object->get_bucket()->versioning_enabled())) {
-      // Skip check_head_exists_in_cache_get_oid for remote requests - they already provide old_version in the header
-      if (!object->is_remote_cache_request()) {
-        rgw::d4n::CacheBlock block;
-        std::string previous_oid;
-        std::string previous_version;
-
-        const int ret = this->driver->execute_transaction(this->dpp, y,
-            [this, y, &block, &previous_oid, &previous_version](rgw::d4n::Transaction& txn) -> int {
-              block = {};
-              previous_oid.clear();
-              previous_version.clear();
-
-              const int check_ret = object->check_head_exists_in_cache_get_oid(
-                  dpp, previous_oid, block, y, txn);
-
-              if (check_ret < 0) {
-                return check_ret;
-              }
-
-              if (check_ret > 0) {
-                rgw::d4n::detail::log_message<20>(dpp, std::source_location::current(),
-                  "found in cache, prev_oid_in_cache={}, old_version={}", previous_oid, block.version);
-                previous_version = std::move(block.version);
-              }
-
-              return 0;
-            });
-
-        // Handle FoundationDB unknown_commit: stop preparation unless completion is confirmed:
-        if (0 > ret) {
-          return ret;
-        }
-
-        // Publish the confirmed lookup's preparation state.
-        prev_oid_in_cache = std::move(previous_oid);
-        object->set_old_version(previous_version);
-      }
-
-      object->clear_instance();
-    }
   }
+  /* For non-versioned and version-suspended buckets the version this PUT replaces is found in
+     complete(), in the same transaction that writes the new HEAD, so that a concurrent PUT
+     committing in between cannot be missed. Remote requests get it from the header. */
 
   std::string version;
   bool remote_cache_request = object->is_remote_cache_request();
@@ -4403,10 +4534,17 @@ int D4NFilterWriter::process(bufferlist&& data, uint64_t offset)
   bl_val.append(object->get_key().ns);
   attrs[RGW_CACHE_ATTR_OBJECT_NS] = std::move(bl_val);
 
-  auto local_cache_ret = object->write_if_space_available(dpp, oid_in_cache, bl, bl_len, attrs, ofs, version, dirty, std::get<rgw_user>(object->get_bucket()->get_owner()), 
+  auto local_cache_ret = object->write_if_space_available(dpp, oid_in_cache, bl, bl_len, attrs, ofs, version, dirty, std::get<rgw_user>(object->get_bucket()->get_owner()),
 												   object->get_bucket()->get_name(), rgw::d4n::RefCount::NOOP, y, nullptr);
   if (local_cache_ret < 0) {
+    // The PUT fails; do not send the block to the remote RGW, where it would be orphaned.
     ldpp_dout(dpp, 0) << "D4NFilterWriter::" << __func__ << "(): adding block to local cache failed with ret= " << local_cache_ret << dendl;
+    return local_cache_ret;
+  }
+  /* Bytes of dirty data written so far (blocks arrive in order, from offset 0): if the PUT does
+     not commit, the destructor registers exactly these blocks with cleaning. */
+  if (dirty && !remote_cache_request) {
+    dirty_bytes_written = std::max<uint64_t>(dirty_bytes_written, static_cast<uint64_t>(ofs + bl_len));
   }
   //send it to remote only if it is not a remote request from another rgw
   if (!remote_cache_request && dpp->get_cct()->_conf->rgw_d4n_remote_put && !dpp->get_cct()->_conf->rgw_d4n_async_remote_put) {
@@ -4427,12 +4565,14 @@ int D4NFilterWriter::process(bufferlist&& data, uint64_t offset)
     op.old_version = object->get_old_version();
     std::unique_ptr<rgw::d4n::RemoteCachePutOp> remote_put = std::make_unique<rgw::d4n::RemoteCachePutOp>(driver, op);
     auto ret = remote_put->send_and_complete_request(dpp, y, &bl);
+    /* Fail the PUT: otherwise complete() sends the head put and the remote RGW registers a version
+       that is missing this block, and its write-back fails on it. Nothing is committed yet, so the
+       client can retry; the destructor registers the local blocks with cleaning. */
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "D4NFilterWriter::" << __func__ << "(): send_and_complete_request failed for remote cache: " << remote_addr << " ret= " << ret << dendl;
+      // ret is the remote RGW's status (e.g. -ENOENT for its 404); the client gets a 500.
+      return -EIO;
     }
-  }
-  if (local_cache_ret < 0) {
-    return local_cache_ret;
   }
   return 0;
 }
@@ -4452,13 +4592,13 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
   std::unordered_set<std::string> hostsList = {};
   std::string objEtag = etag;
   auto size = object->get_size();
-  std::string instance;
-  if (object->have_instance()) {
-    instance = object->get_instance();
-  }
   bool remote_cache_request = object->is_remote_cache_request();
   int ret;
-  
+
+  /* Every exit before the HEAD commit (errors, a failed precondition, an uncertain commit that did
+     not land, exceptions) leaves head_committed false; the destructor then registers the dirty
+     blocks written by process() with cleaning. */
+
   /* Return early if the put request was only for the data block. This occurs when a remote RGW evicts a block and
    * a different, qualifying RGW is available to keep the block instead. This logic is part of the LFUDA algorithm. */ 
   if (object->get_remote_block_only()) {
@@ -4477,57 +4617,14 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
      the head will not be marked dirty and the entire object will written to backend store also. In case write-back
      cache is enabled, the head will be cached as dirty. */
   if (d4n_writecache) {
-    if (remote_cache_request && object->get_remote_obj_size() == 0) {
+    /* A per-block put from process() carries the block (len > 0) but no object size; the head put
+       that follows carries the object size and no block (len == 0). A zero-byte object's head put
+       has both zero and must not be skipped. */
+    if (remote_cache_request && object->get_remote_block_len() > 0 && object->get_remote_obj_size() == 0) {
       return 0;
     }
-    auto ret = object->get_obj_attrs(y, dpp);
-    if (if_match) {
-      if (strcmp(if_match, "*") == 0) {
-        if (ret == -ENOENT) {
-          object->delete_data_block_cache_entries(dpp, y, this->version, true);
-          return -ERR_PRECONDITION_FAILED;
-        }
-      } else {
-        rgw::sal::Attrs attrs = object->get_attrs();
-        bufferlist bl;
-        auto iter = attrs.find(RGW_ATTR_ETAG);
-        if (iter == attrs.end()) {
-          object->delete_data_block_cache_entries(dpp, y, this->version, true);
-          return -ERR_PRECONDITION_FAILED;
-        } else {
-          bl = iter->second;
-        }
-        if (strncmp(if_match, bl.c_str(), bl.length()) != 0) {
-          object->delete_data_block_cache_entries(dpp, y, this->version, true);
-          return -ERR_PRECONDITION_FAILED;
-        }
-      }
-    }
-    if (if_nomatch) {
-      if (strcmp(if_nomatch, "*") == 0) {
-        if (ret != -ENOENT) {
-          object->delete_data_block_cache_entries(dpp, y, this->version, true);
-          return -ERR_PRECONDITION_FAILED;
-        }
-      } else {
-        rgw::sal::Attrs attrs = object->get_attrs();
-        bufferlist bl;
-        auto iter = attrs.find(RGW_ATTR_ETAG);
-        if (iter == attrs.end()) {
-          object->delete_data_block_cache_entries(dpp, y, this->version, true);
-          return -ERR_PRECONDITION_FAILED;
-        } else {
-          bl = iter->second;
-        }
-        if (strncmp(if_nomatch, bl.c_str(), bl.length()) == 0) {
-          object->delete_data_block_cache_entries(dpp, y, this->version, true);
-          return -ERR_PRECONDITION_FAILED;
-        }
-      }
-    }
-    //get_obj_attrs will override object version and size with older values, hence setting it here again
-    object->set_object_version(this->version);
-    object->set_instance(instance);
+    /* Conditional PUTs (if_match / if_nomatch) are checked in the HEAD transaction below, against
+       the current version read in that transaction. */
     dirty = true;
     if (remote_cache_request) {
       // For remote requests, use the dirty flag from HTTP header
@@ -4539,14 +4636,17 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
     }
     object->set_obj_size(size);
 
-    //update data block entries in directory
-    ret = object->set_data_block_dir_entries(dpp, y, this->version, true);
-    if (ret < 0) {
-      return ret;
-    }
-
+    // Set before the data block entries: if the PUT does not commit, the destructor registers the
+    // version with cleaning at this mtime.
     ceph::real_time m_time;
-    if (mtime) {
+    if (remote_cache_request && object->get_remote_mtime()) {
+      /* A remote RGW uses the mtime set by the local RGW, so that both register the version for
+         cleaning at the same creationTime and write versions back in the same order. */
+      m_time = *object->get_remote_mtime();
+      if (mtime) {
+        *mtime = m_time;
+      }
+    } else if (mtime) {
       if (real_clock::is_zero(*mtime)) {
         *mtime = real_clock::now();
       }
@@ -4556,6 +4656,14 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
     }
     object->set_mtime(m_time);
     object->set_accounted_size(accounted_size);
+
+    /* Data block entries first, in their own transaction; the HEAD transaction below is the commit
+       point. The order matters: a committed HEAD must never point to missing entries. */
+    ret = object->set_data_block_dir_entries(dpp, y, this->version, true);
+    if (ret < 0) {
+      return ret;
+    }
+
     ldpp_dout(dpp, 20) << "D4NFilterWriter::" << __func__ << " size is: " << object->get_size() << dendl;
     object->set_attr_crypt_parts(dpp, y, attrs);
     object->set_attrs(attrs);
@@ -4592,34 +4700,199 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
   object->set_object_version(version);
   //don't update directory head block entry for a remote request
   if (!remote_cache_request) {
-        const int ret = this->driver->execute_transaction(this->dpp, y,
-            [this, &attrs, dirty](rgw::d4n::Transaction& txn) -> int {
-              return object->set_head_block_dir_entry(
-                  dpp, y, attrs, true, dirty, txn);
-            });
+    /* The HEAD transaction is the commit point of the PUT. Everything that depends on the
+       current state of the object is read in it, so that a concurrent PUT committing first
+       makes this one conflict and run again with fresh reads:
+         - the version this PUT replaces ("_:null_<name>", non-versioned and null PUTs), whose
+           version-specific HEAD is tombstoned if dirty, so that cleaning on any RGW drops it;
+         - whether this version is the latest one (versioned buckets): versions are ordered by
+           (mtime, version), as in the version list, and only the latest one takes the plain name
+           HEAD and the bucket listing entry, whatever order the PUTs commit in;
+         - the precondition of a conditional PUT, checked against the plain name HEAD (the
+           current version). In versioned buckets a clean latest version has no plain name HEAD
+           (and a tombstoned one may hide an older current version); the attempt then stops
+           with STAGE_BACKEND_LOOKUP, the current version is read from the backend outside the
+           transaction, and the transaction runs once more.
+       None of this applies when the backend applied the PUT (write cache disabled). */
+    constexpr int STAGE_BACKEND_LOOKUP = -ERESTART;
+    const bool owns_put = d4n_writecache;
+    const bool versioned = object->get_bucket()->versioned();
+    const bool replaces_null = !versioned || object->get_instance() == "null";
+    const bool conditional = owns_put && (if_match || if_nomatch);
+    const std::string bucket_id = object->get_bucket()->get_bucket_id();
+    const std::string plain_name = get_latest_head_block_name(object->get_name());
+    // Version list member and score of this version (null PUTs are listed as "null").
+    const uint64_t our_mtime_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+        object->get_mtime().time_since_epoch()).count();
+    const std::string our_member = (versioned && !object->get_bucket()->versioning_enabled()) ? "null" : version;
 
-        // Handle FoundationDB unknown_commit: HEAD-update reconciliation remains a TODO:
-        if (0 > ret) {
-          return ret;
+    std::optional<PutPreconditionState> backend_state;
+    bool need_backend = false;
+    bool is_latest = true;
+    int precondition_ret = 0;
+    std::string old_version;
+    rgw::d4n::BlockDirectory* blockDir = driver->get_block_dir();
+
+    auto attempt = [&](rgw::d4n::Transaction& txn) -> int {
+      need_backend = false;
+      is_latest = true;
+      precondition_ret = 0;
+      old_version.clear();
+
+      if (owns_put) {
+        rgw::d4n::CacheBlock cur{
+          .cacheObj = { .objName = plain_name, .bucketName = bucket_id },
+          .blockID = 0,
+          .size = 0,
+        };
+        int r = blockDir->get(dpp, y, &cur, std::ref(txn));
+        if (r < 0 && r != -ENOENT) {
+          ldpp_dout(dpp, 0) << "D4NFilterWriter::complete(): failed to read HEAD " << plain_name << ", ret=" << r << dendl;
+          return r;
+        }
+        const bool cur_found = (r == 0);
+
+        if (conditional) {
+          /* A delete marker means the object does not exist. So does a tombstone in a
+             non-versioned bucket; in a versioned bucket a tombstone only means the latest
+             (dirty) version was deleted, and an older version may be the current one. */
+          PutPreconditionState st;
+          if (cur_found && (!versioned || !cur.invalid)) {
+            st.exists = !cur.invalid && !cur.deleteMarker;
+            if (st.exists) {
+              st.etag = etag_from_attrs(cur.cacheObj.attrs);
+            }
+          } else if (versioned) {
+            if (!backend_state) {
+              need_backend = true;
+              return STAGE_BACKEND_LOOKUP;
+            }
+            st = *backend_state;
+          } // non-versioned: every object has its HEAD in the directory, so it does not exist
+          if (int pr = check_put_preconditions(dpp, if_match, if_nomatch, st); pr < 0) {
+            precondition_ret = pr;
+            return pr;
+          }
         }
 
-        attrs.erase(RGW_CACHE_ATTR_MTIME);
-        attrs.erase(RGW_CACHE_ATTR_OBJECT_SIZE);
-        attrs.erase(RGW_CACHE_ATTR_ACCOUNTED_SIZE);
-        attrs.erase(RGW_CACHE_ATTR_EPOCH);
-        attrs.erase(RGW_CACHE_ATTR_MULTIPART);
-        attrs.erase(RGW_CACHE_ATTR_OBJECT_NS);
-        attrs.erase(RGW_CACHE_ATTR_BUCKET_NAME);
+        if (versioned && cur_found && !cur.invalid && cur.version != version) {
+          is_latest = newer_than_head(dpp, cur, our_mtime_ns, our_member);
+        }
+
+        if (replaces_null) {
+          rgw::d4n::CacheBlock null_head{
+            .cacheObj = { .objName = get_versioned_head_block_name("null", object->get_name()), .bucketName = bucket_id },
+            .blockID = 0,
+            .size = 0,
+          };
+          r = blockDir->get(dpp, y, &null_head, std::ref(txn));
+          if (r < 0 && r != -ENOENT) {
+            ldpp_dout(dpp, 0) << "D4NFilterWriter::complete(): failed to read null HEAD, ret=" << r << dendl;
+            return r;
+          }
+          if (r == 0 && !null_head.invalid && !null_head.deleteMarker && null_head.version != version) {
+            old_version = null_head.version;
+            if (null_head.cacheObj.dirty) {
+              rgw::d4n::CacheBlock old_head{
+                .cacheObj = { .objName = get_versioned_head_block_name(old_version, object->get_name()), .bucketName = bucket_id },
+                .blockID = 0,
+                .size = 0,
+              };
+              r = blockDir->get(dpp, y, &old_head, std::ref(txn));
+              if (r == 0 && !old_head.invalid) {
+                old_head.invalid = true;
+                if (r = blockDir->set(dpp, y, &old_head, std::ref(txn)); r < 0) {
+                  ldpp_dout(dpp, 0) << "D4NFilterWriter::complete(): failed to tombstone replaced version "
+                                    << old_version << ", ret=" << r << dendl;
+                  return r;
+                }
+              } else if (r < 0 && r != -ENOENT) {
+                ldpp_dout(dpp, 0) << "D4NFilterWriter::complete(): failed to read replaced version "
+                                  << old_version << ", ret=" << r << dendl;
+                return r;
+              }
+            }
+          }
+        }
+      }
+
+      return object->set_head_block_dir_entry(dpp, y, attrs, is_latest, dirty, std::ref(txn));
+    };
+
+    auto result = this->driver->retry_transaction(this->dpp, y, attempt);
+
+    if (need_backend && rgw::d4n::rejected_with(result, STAGE_BACKEND_LOOKUP)) {
+      // The current version of a versioned object, outside any transaction.
+      rgw_obj_key cur_key(object->get_name());
+      cur_key.ns = object->get_key().ns;
+      std::unique_ptr<rgw::sal::Object> cur_obj =
+          static_cast<FilterBucket*>(object->get_bucket())->get_next()->get_object(cur_key);
+      PutPreconditionState st;
+      int r = cur_obj->get_obj_attrs(y, dpp);
+      if (r == 0) {
+        st.exists = true;
+        st.etag = etag_from_attrs(cur_obj->get_attrs());
+      } else if (r != -ENOENT) {
+        ldpp_dout(dpp, 0) << "D4NFilterWriter::" << __func__ << "(): failed to read the current version from the backend, ret="
+                          << r << dendl;
+        return r;
+      }
+      backend_state = st;
+      result = this->driver->retry_transaction(this->dpp, y, attempt);
+    }
+
+    if (precondition_ret < 0 && rgw::d4n::rejected_with(result, precondition_ret)) {
+      ldpp_dout(dpp, 10) << "D4NFilterWriter::" << __func__ << "(): precondition failed, ret=" << precondition_ret << dendl;
+      return precondition_ret;
+    }
+
+    // Handle FoundationDB unknown_commit: reconcile through the version-specific HEAD, never replay.
+    int ret_txn = handle_transaction_result(dpp, result, [this, &version](const auto&) -> int {
+      /* The commit is not retried (replaying it is not safe after a commit that landed). Every
+         committed PUT writes "_:<version>_<name>" and the version is unique, so it tells whether
+         this one landed. If it did not, or this cannot be told, the destructor registers the
+         version with cleaning, which writes it back if it landed and removes it if not. */
+      int gone = object->delete_applied_in_directory(dpp, y, version); // 0: entry is live
+      if (gone == 0) {
+        ldpp_dout(dpp, 10) << "D4NFilterWriter::complete(): uncertain commit was applied, version=" << version << dendl;
+        return 0;
+      }
+      if (gone < 0) {
+        ldpp_dout(dpp, 0) << "D4NFilterWriter::complete(): could not verify uncertain commit, ret=" << gone << dendl;
+      }
+      return -EIO;
+    });
+
+    if (ret_txn < 0)
+      return ret_txn;
+
+    head_committed = true;
+    if (!old_version.empty()) {
+      object->set_old_version(old_version);
+      prev_oid_in_cache = get_cache_block_prefix(object, old_version);
+      ldpp_dout(dpp, 20) << "D4NFilterWriter::" << __func__ << "(): replaced version " << old_version
+                         << ", prev_oid_in_cache=" << prev_oid_in_cache << dendl;
+    }
+
+    attrs.erase(RGW_CACHE_ATTR_MTIME);
+    attrs.erase(RGW_CACHE_ATTR_OBJECT_SIZE);
+    attrs.erase(RGW_CACHE_ATTR_ACCOUNTED_SIZE);
+    attrs.erase(RGW_CACHE_ATTR_EPOCH);
+    attrs.erase(RGW_CACHE_ATTR_MULTIPART);
+    attrs.erase(RGW_CACHE_ATTR_OBJECT_NS);
+    attrs.erase(RGW_CACHE_ATTR_BUCKET_NAME);
   }
   if (dirty) {
     auto creationTime = object->get_mtime();
+    const std::string mtime_ns = std::to_string(std::chrono::duration_cast<std::chrono::nanoseconds>(
+        creationTime.time_since_epoch()).count());
     ldpp_dout(dpp, 20) << "D4NFilterWriter::" << __func__ << "(): key=" << key << dendl;
     ldpp_dout(dpp, 20) << "D4NFilterWriter::" << __func__ << "(): obj->get_key()=" << obj->get_key() << dendl;
-    if (accounted_size > 0) {
-      driver->get_policy_driver()->get_cache_policy()->update_dirty_object(dpp, key, version, false, accounted_size, creationTime, std::get<rgw_user>(obj->get_bucket()->get_owner()), objEtag, obj->get_bucket()->get_name(), obj->get_bucket()->get_bucket_id(), obj->get_key(), rgw::d4n::RefCount::NOOP, y);
-      if (!prev_oid_in_cache.empty()) {
-        driver->get_policy_driver()->get_cache_policy()->invalidate_dirty_object(dpp, prev_oid_in_cache);
-      }
+    /* Zero-byte objects are registered too: do_writeback() writes an empty object (its block loop
+       does not run) and do_delete() only removes the HEADs. */
+    driver->get_policy_driver()->get_cache_policy()->update_dirty_object(dpp, key, version, false, accounted_size, creationTime, std::get<rgw_user>(obj->get_bucket()->get_owner()), objEtag, obj->get_bucket()->get_name(), obj->get_bucket()->get_bucket_id(), obj->get_key(), rgw::d4n::RefCount::NOOP, y);
+    if (!prev_oid_in_cache.empty()) {
+      driver->get_policy_driver()->get_cache_policy()->invalidate_dirty_object(dpp, prev_oid_in_cache);
     }
     if (dpp->get_cct()->_conf->rgw_d4n_remote_put && !remote_cache_request) {
       auto& user = obj->get_bucket()->get_owner();
@@ -4635,14 +4908,21 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
       op.remote_addr = remote_addr;
       op.obj_size = accounted_size;
       op.old_version = object->get_old_version();
-      std::unique_ptr<rgw::d4n::RemoteCachePutOp> remote_put = std::make_unique<rgw::d4n::RemoteCachePutOp>(driver, op);
-      bufferlist bl;
-      auto ret = remote_put->send_and_complete_request(dpp, y, &bl);
-      if (ret < 0) {
-        ldpp_dout(dpp, 0) << "D4NFilterWriter::" << __func__ << "(): send_and_complete_request failed for remote cache: " << remote_addr << " ret= " << ret << dendl;
-        return ret;
-      }
-      if (dpp->get_cct()->_conf->rgw_d4n_async_remote_put) {
+      op.mtime = mtime_ns;
+      if (!dpp->get_cct()->_conf->rgw_d4n_async_remote_put) {
+        std::unique_ptr<rgw::d4n::RemoteCachePutOp> remote_put = std::make_unique<rgw::d4n::RemoteCachePutOp>(driver, op);
+        bufferlist bl;
+        auto ret = remote_put->send_and_complete_request(dpp, y, &bl);
+        /* The remote RGW did not register this version, so its copy is incomplete; fail the PUT, as
+           process() does for a failed block put. The PUT is already committed locally and is not
+           rolled back: the version stays and is written back by this RGW. */
+        if (ret < 0) {
+          ldpp_dout(dpp, 0) << "D4NFilterWriter::" << __func__ << "(): send_and_complete_request failed for remote cache: " << remote_addr << " ret= " << ret
+                            << "; the PUT is committed locally" << dendl;
+          // ret is the remote RGW's status (e.g. -ENOENT for its 404); the client gets a 500.
+          return -EIO;
+        }
+      } else {
         CephContext* cct = dpp->get_cct();
         auto pool = driver->get_pool();
         if (pool) {
@@ -4656,6 +4936,7 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
             oid = obj->get_name(),
             version,
             old_version = object->get_old_version(),
+            mtime_ns,
             dirty,
             driver = this->driver]
             (boost::asio::yield_context yield) {
@@ -4673,6 +4954,7 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
                   oid,
                   version,
                   old_version,
+                  mtime_ns,
                   dirty,
                   driver,
                   yield
@@ -4708,6 +4990,7 @@ int D4NFilterWriter::write_to_remote_cache(const DoutPrefixProvider* dpp_o,
                                            const std::string& obj_name,
                                            const std::string& version,
                                            const std::string& old_version,
+                                           const std::string& mtime,
                                            bool dirty,
                                            D4NFilterDriver* driver,
                                            optional_yield y)
@@ -4744,8 +5027,9 @@ int D4NFilterWriter::write_to_remote_cache(const DoutPrefixProvider* dpp_o,
       op.dirty = dirty;
       op.bucket_owner = user;
       op.remote_addr = remote_addr;
-      op.obj_size = size;
+      op.obj_size = 0;
       op.old_version = old_version;
+      op.mtime = mtime;
       std::unique_ptr<rgw::d4n::RemoteCachePutOp> remote_put = std::make_unique<rgw::d4n::RemoteCachePutOp>(driver, op);
       ret = remote_put->send_and_complete_request(dpp_o, y, &bl);
       if (ret < 0) {
@@ -4766,6 +5050,7 @@ int D4NFilterWriter::write_to_remote_cache(const DoutPrefixProvider* dpp_o,
   op.remote_addr = remote_addr;
   op.obj_size = size;
   op.old_version = old_version;
+  op.mtime = mtime;
   std::unique_ptr<rgw::d4n::RemoteCachePutOp> remote_put = std::make_unique<rgw::d4n::RemoteCachePutOp>(driver, op);
   bufferlist bl;
   auto ret = remote_put->send_and_complete_request(dpp_o, y, &bl);
@@ -4827,11 +5112,40 @@ int D4NFilterMultipartUpload::complete(const DoutPrefixProvider *dpp,
   }
 
 
-  // Handle FoundationDB unknown_commit: multipart HEAD reconciliation remains a TODO:
+  /* Versioned buckets: only the latest version, by (mtime, version), takes the plain name HEAD, as
+     in D4NFilterWriter::complete(). A newer dirty version may already be cached (a write-back PUT
+     with a later mtime); this clean HEAD must not replace (or, for a clean versioned object,
+     delete) its plain name HEAD. Reading the plain name HEAD in the transaction makes a concurrent
+     PUT that commits first conflict with this one. */
+  const bool versioned = d4n_target_obj->get_bucket()->versioned();
+  const std::string bucket_id = d4n_target_obj->get_bucket()->get_bucket_id();
+  const std::string plain_name = get_latest_head_block_name(d4n_target_obj->get_name());
+  const uint64_t our_mtime_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+      d4n_target_obj->get_mtime().time_since_epoch()).count();
+  const std::string our_member = (versioned && !d4n_target_obj->get_bucket()->versioning_enabled()) ? "null" : version;
+  rgw::d4n::BlockDirectory* blockDir = this->driver->get_block_dir();
+
+  // Handle FoundationDB unknown_commit: multipart HEAD reconciliation remains a TODO (-EIO):
   return this->driver->execute_transaction(dpp, y,
-      [d4n_target_obj, dpp, y, &attrs](rgw::d4n::Transaction& txn) -> int {
+      [&](rgw::d4n::Transaction& txn) -> int {
+        bool is_latest = true;
+        if (versioned) {
+          rgw::d4n::CacheBlock cur{
+            .cacheObj = { .objName = plain_name, .bucketName = bucket_id },
+            .blockID = 0,
+            .size = 0,
+          };
+          int r = blockDir->get(dpp, y, &cur, txn);
+          if (r < 0 && r != -ENOENT) {
+            ldpp_dout(dpp, 0) << "D4NFilterMultipartUpload::complete(): failed to read HEAD " << plain_name << ", ret=" << r << dendl;
+            return r;
+          }
+          if (r == 0 && !cur.invalid && cur.version != version) {
+            is_latest = newer_than_head(dpp, cur, our_mtime_ns, our_member);
+          }
+        }
         return d4n_target_obj->set_head_block_dir_entry(
-            dpp, y, attrs, true, false, txn);
+            dpp, y, attrs, is_latest, false, txn);
       });
 }
 

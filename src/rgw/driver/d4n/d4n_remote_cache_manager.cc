@@ -224,6 +224,9 @@ int RemoteCachePutOp::send_request(const DoutPrefixProvider* dpp, optional_yield
   if (!old_version.empty()) {
     extra_headers["x-rgw-cache-old-version"] = old_version;
   }
+  if (!mtime.empty()) {
+    extra_headers["x-rgw-cache-object-mtime"] = mtime;
+  }
   extra_headers["x-rgw-cache-blk-offset"] = std::to_string(op.offset);
   extra_headers["x-rgw-cache-blk-len"] = std::to_string(op.len);
   extra_headers["x-rgw-cache-obj-size"] = std::to_string(op.obj_size);

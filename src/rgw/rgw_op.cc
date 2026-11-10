@@ -5057,6 +5057,9 @@ void RGWPutObj::execute(optional_yield y)
       if (auto old_version = s->info.env->get_optional("HTTP_X_RGW_CACHE_OLD_VERSION"); old_version) {
         d4n_obj->set_old_version(old_version.get());
       }
+      if (auto object_mtime = s->info.env->get_optional("HTTP_X_RGW_CACHE_OBJECT_MTIME"); object_mtime) {
+        d4n_obj->set_remote_mtime(this, object_mtime.get());
+      }
       if (auto object_dirty = s->info.env->get_optional("HTTP_X_RGW_CACHE_OBJECT_DIRTY"); object_dirty) {
         d4n_obj->set_remote_dirty_flag(object_dirty.get() == "true" || object_dirty.get() == "1" );
       }

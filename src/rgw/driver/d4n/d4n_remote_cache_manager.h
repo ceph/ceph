@@ -111,14 +111,16 @@ class RemoteCachePutOp : public RemoteCacheOp {
   public:
     struct RemoteCachePutOpData : RemoteCacheOpData {
       std::string old_version; // Previous version to invalidate (for PUT overwrites in non-versioned buckets)
+      std::string mtime;       // object's mtime, nanoseconds since the epoch (empty: the remote uses its own clock)
     };
 
   private:
     std::string old_version;
+    std::string mtime;   // object's mtime, ns since the epoch (empty: the remote uses its own clock)
 
   public:
     RemoteCachePutOp(rgw::sal::Driver* driver, RemoteCachePutOpData& op, bool block_only = false)
-      : RemoteCacheOp(driver, op), block_only(block_only), old_version(op.old_version) {}
+      : RemoteCacheOp(driver, op), block_only(block_only), old_version(op.old_version), mtime(op.mtime) {}
     virtual ~RemoteCachePutOp() = default;
 
 	virtual int send_request(const DoutPrefixProvider* dpp, optional_yield& y, bufferlist* bl = nullptr) override;

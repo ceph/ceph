@@ -1557,28 +1557,31 @@ LFUDAPolicy::stage_writeback_directory(const DoutPrefixProvider *dpp, LFUDAObjEn
       return remove_version(true, block);
     }
 
+    /* Each HEAD entry is marked clean if it points to this version, independently of the others:
+       the plain name HEAD only while it is still this version (a newer one may have replaced it),
+       the null alias whenever it is this version (even after the plain name HEAD has moved on to a
+       newer version). Otherwise a null alias would keep a stale dirty flag, and a later PUT or
+       DELETE of the null version would treat a written-back version as dirty. */
     if (entry.version == block.version) {
-      CacheBlock null_block {
-        .cacheObj = {
-          .objName = rgw::sal::get_versioned_head_block_name("null", object.get_name()),
-          .bucketName = entry.bucket_id
-        },
-        .blockID = 0,
-        .size = 0
-      };
-      const int ret = blockDir.get(dpp, y, &null_block, txn);
-      if (0 > ret && -ENOENT != ret) {
-        return fail(ret, "get null-version block directory entry");
+      block.cacheObj.dirty = false;
+      if (const int ret = blockDir.set(dpp, y, &block, txn); 0 > ret) {
+        return fail(ret, "mark latest block clean");
       }
-      if (0 == ret && entry.version == null_block.version) {
-        block.cacheObj.dirty = false;
-        null_block.cacheObj.dirty = false;
-        if (const int ret = blockDir.set(dpp, y, &block, txn); 0 > ret) {
-          return fail(ret, "mark latest block clean");
-        }
-        if (const int ret = blockDir.set(dpp, y, &null_block, txn); 0 > ret) {
-          return fail(ret, "mark null-version block clean");
-        }
+    }
+    CacheBlock null_block {
+      .cacheObj = {
+        .objName = rgw::sal::get_versioned_head_block_name("null", object.get_name()),
+        .bucketName = entry.bucket_id
+      },
+      .blockID = 0,
+      .size = 0
+    };
+    if (const int ret = blockDir.get(dpp, y, &null_block, txn); 0 > ret && -ENOENT != ret) {
+      return fail(ret, "get null-version block directory entry");
+    } else if (0 == ret && entry.version == null_block.version) {
+      null_block.cacheObj.dirty = false;
+      if (const int ret = blockDir.set(dpp, y, &null_block, txn); 0 > ret) {
+        return fail(ret, "mark null-version block clean");
       }
     }
 
@@ -1915,10 +1918,13 @@ int LFUDAPolicy::do_writeback(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, o
 
       ceph::bufferlist data;
       rgw::sal::Attrs attrs;
+      /* A missing or short block must fail the write-back (the entry is retried): completing with
+         what was read would write a truncated object to the backend and mark the version clean. */
       op_ret = cacheDriver->get(dpp, oid_in_cache, 0, cur_len, data, attrs, y);
       if (op_ret < 0) {
-        ldpp_dout(dpp, 20) << __func__ << "cacheDriver->get returned ret=" << op_ret << dendl;
-        return op_ret;
+        ldpp_dout(dpp, 0) << __func__ << "(): cacheDriver->get failed for " << oid_in_cache << ", ret=" << op_ret << dendl;
+        // -ENOENT from do_writeback() makes cleaning() drop the entry; a missing block is retried.
+        return op_ret == -ENOENT ? -EIO : op_ret;
       }
       len = data.length();
       if (std::cmp_not_equal(cur_len, len)) {

@@ -554,10 +554,11 @@ class D4NFilterObject : public FilterObject {
     bool remote_cache_request{false}; //sent by another rgw
     std::string delete_marker_version; //version of a delete marker to replicate on the remote rgw
     std::optional<ceph::real_time> delete_marker_mtime; //mtime of that delete marker, as set by the local rgw
+    std::optional<ceph::real_time> remote_mtime; //mtime of the object in a remote PUT, as set by the local rgw
     std::optional<held_lease> read_lease; // Present after successful GET lease acquisition.
-    uint64_t blk_offset;
-    uint64_t blk_len;
-    uint64_t obj_size; //sent by remote rgw
+    uint64_t blk_offset = 0; //sent by remote rgw
+    uint64_t blk_len = 0;    //sent by remote rgw; 0 for a head put
+    uint64_t obj_size = 0; //sent by remote rgw
     bool block_only = false; // sent by remote rgw; used in PUT op for an evicted block
 
   private:
@@ -812,6 +813,10 @@ class D4NFilterObject : public FilterObject {
     // local RGW). An unparsable value is ignored, and the remote RGW falls back to its own clock.
     void set_delete_marker_mtime(const DoutPrefixProvider* dpp, const std::string& ns);
     std::optional<ceph::real_time> get_delete_marker_mtime() const { return delete_marker_mtime; }
+    // mtime of the object in a remote PUT, in nanoseconds since the epoch (as sent by the local
+    // RGW). An unparsable value is ignored, and the remote RGW falls back to its own clock.
+    void set_remote_mtime(const DoutPrefixProvider* dpp, const std::string& ns);
+    std::optional<ceph::real_time> get_remote_mtime() const { return remote_mtime; }
     bool get_remote_block_only() const { return block_only; }
     void set_remote_obj_size(uint64_t size) { obj_size = size; }
     void set_remote_block_only(bool flag) { block_only = flag; }
@@ -848,8 +853,12 @@ class D4NFilterWriter : public FilterWriter {
     std::string version;
     std::string prev_oid_in_cache;
     std::vector<std::unique_ptr<rgw::d4n::RemoteCachePutOp>> requests;
+    // Dirty data written to the local cache by process(), from offset 0 (local requests only).
+    uint64_t dirty_bytes_written = 0;
+    // Set once complete() has committed the HEAD; until then the PUT can still fail or be abandoned.
+    bool head_committed = false;
 
-    static int write_to_remote_cache(const DoutPrefixProvider* dpp_o, const std::string& prefix, uint64_t size, const rgw_user& user, const std::string& remote_addr, const std::string& bucket_name, const std::string& obj_name, const std::string& version, const std::string& old_version, bool dirty, D4NFilterDriver* driver, optional_yield y);
+    static int write_to_remote_cache(const DoutPrefixProvider* dpp_o, const std::string& prefix, uint64_t size, const rgw_user& user, const std::string& remote_addr, const std::string& bucket_name, const std::string& obj_name, const std::string& version, const std::string& old_version, const std::string& mtime, bool dirty, D4NFilterDriver* driver, optional_yield y);
 
   public:
     D4NFilterWriter(std::unique_ptr<Writer> _next, D4NFilterDriver* _driver, Object* _obj, 
@@ -860,7 +869,7 @@ class D4NFilterWriter : public FilterWriter {
 	const DoutPrefixProvider* _dpp, bool _atomic, optional_yield _y) : FilterWriter(std::move(_next), _obj),
 									   driver(_driver),
 									   dpp(_dpp), atomic(_atomic), y(_y) { object = static_cast<D4NFilterObject*>(obj); }
-    virtual ~D4NFilterWriter() = default;
+    virtual ~D4NFilterWriter() override;
 
     virtual int prepare(optional_yield y);
     virtual int process(bufferlist&& data, uint64_t offset) override;
