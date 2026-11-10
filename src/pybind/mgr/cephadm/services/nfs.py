@@ -236,6 +236,8 @@ class NFSService(CephService):
         # so a pool that is enabled or grown has to reconfigure the daemons.
         if nfs_spec.clients_per_pool is not None:
             deps.append(f'clients_per_pool: {nfs_spec.clients_per_pool}')
+        if nfs_spec.max_ceph_clients is not None:
+            deps.append(f'max_ceph_clients: {nfs_spec.max_ceph_clients}')
 
         return sorted(deps)
 
@@ -470,6 +472,7 @@ class NFSService(CephService):
                 ),
                 "mem_stats_disable": nfs_spec.mem_stats_disable,
                 "clients_per_pool": nfs_spec.clients_per_pool,
+                "max_ceph_clients": nfs_spec.max_ceph_clients,
             }
             if nfs_spec.enable_haproxy_protocol:
                 context["haproxy_hosts"] = self._haproxy_hosts()

@@ -67,13 +67,16 @@ RGW {
         name = "client.{{ rgw_user }}";
 }
 
-{% if use_old_nodeid or enable_client_object_cache or clients_per_pool %}
+{% if use_old_nodeid or enable_client_object_cache or clients_per_pool or max_ceph_clients %}
 CEPH {
 {% if use_old_nodeid %}
         Use_old_uuid = true;
 {% endif %}
 {% if clients_per_pool %}
         clients_per_pool = {{ clients_per_pool }};
+{% endif %}
+{% if max_ceph_clients %}
+        max_ceph_clients = {{ max_ceph_clients }};
 {% endif %}
 {% if enable_client_object_cache or client_object_cache_size is not none or client_object_cache_max_dirty is not none %}
         client_oc = {{ enable_client_object_cache | lower }};

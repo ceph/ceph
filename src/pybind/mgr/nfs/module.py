@@ -273,6 +273,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                 ingress_placement: Optional[str] = None,
                                 networks: Optional[List[str]] = None,
                                 clients_per_pool: Optional[int] = None,
+                                max_ceph_clients: Optional[int] = None,
                                 inbuf: Optional[str] = None,
                                 ) -> None:
         """Create an NFS Cluster"""
@@ -321,7 +322,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                            rdma_port=rdma_port,
                                            ingress_placement=ingress_placement,
                                            networks=networks,
-                                           clients_per_pool=clients_per_pool)
+                                           clients_per_pool=clients_per_pool,
+                                           max_ceph_clients=max_ceph_clients)
 
     @NFSCLICommand('nfs cluster rm', perm='rw')
     @object_format.EmptyResponder()
@@ -408,7 +410,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                        enable_nfsv3: bool = False,
                        ingress_placement: Optional[Union[str, Dict]] = None,
                        networks: Optional[Union[str, List[str]]] = None,
-                       clients_per_pool: Optional[int] = None) -> None:
+                       clients_per_pool: Optional[int] = None,
+                       max_ceph_clients: Optional[int] = None) -> None:
         """Python API for creating an NFS cluster (no CLI EmptyResponder wrapper).
 
         All placement/address/network parameters accept either their native JSON
@@ -432,6 +435,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             ingress_placement=_normalize_placement(ingress_placement),
             networks=_normalize_networks(networks),
             clients_per_pool=clients_per_pool,
+            max_ceph_clients=max_ceph_clients,
         )
 
     def cluster_rm(self, cluster_id: str) -> None:
