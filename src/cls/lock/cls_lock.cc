@@ -14,11 +14,10 @@
 
 #include "include/container_ios.h"
 #include "include/types.h"
-#include "include/utime.h"
 #include "objclass/objclass.h"
 
 #include "common/errno.h"
-#include "common/Clock.h"
+#include "common/ceph_time.h"
 
 #include "cls/lock/cls_lock_types.h"
 #include "cls/lock/cls_lock_ops.h"
@@ -78,13 +77,13 @@ static int read_lock(cls_method_context_t hctx,
 
   /* now trim expired locks */
 
-  utime_t now = ceph_clock_now();
+  const auto now = ceph::real_clock::now();
 
   auto iter = lock->lockers.begin();
 
   while (iter != lock->lockers.end()) {
     struct locker_info_t& info = iter->second;
-    if (!info.expiration.is_zero() && info.expiration < now) {
+    if (!ceph::real_clock::is_zero(info.expiration) && info.expiration < now) {
       CLS_LOG(20, "expiring locker");
       iter = lock->lockers.erase(iter);
     } else {
@@ -143,7 +142,7 @@ static int write_lock(cls_method_context_t hctx, const string& name, const lock_
 static int lock_obj(cls_method_context_t hctx,
                     const string& name,
                     ClsLockType lock_type,
-                    utime_t duration,
+                    ceph::timespan duration,
                     const string& description,
                     uint8_t flags,
                     const string& cookie,
@@ -228,11 +227,9 @@ static int lock_obj(cls_method_context_t hctx,
 
   linfo.lock_type = lock_type;
   linfo.tag = tag;
-  utime_t expiration;
-  if (!duration.is_zero()) {
-    expiration = ceph_clock_now();
-    expiration += duration;
-
+  ceph::real_time expiration;
+  if (duration != ceph::timespan::zero()) {
+    expiration = ceph::real_clock::now() + duration;
   }
   // make all addrs of type legacy, because v2 clients speak v2 or v1,
   // even depending on which OSD they are talking to, and the type

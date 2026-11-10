@@ -502,8 +502,7 @@ int RGWGC::process(int index, int max_secs, bool expired_only,
     return -EAGAIN;
 
   end += max_secs;
-  utime_t time(max_secs, 0);
-  l.set_duration(time);
+  l.set_duration(std::chrono::seconds(max_secs));
 
   int ret = l.lock_exclusive(&store->gc_pool_ctx, obj_names[index]);
   if (ret == -EBUSY) { /* already locked by another gc processor */

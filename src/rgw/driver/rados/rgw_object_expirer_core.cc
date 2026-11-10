@@ -303,8 +303,7 @@ bool RGWObjectExpirer::process_single_shard(const DoutPrefixProvider *dpp,
 
   rados::cls::lock::Lock l(objexp_lock_name);
 
-  utime_t time(max_secs, 0);
-  l.set_duration(time);
+  l.set_duration(std::chrono::seconds(max_secs));
 
   int ret = l.lock_exclusive(&static_cast<rgw::sal::RadosStore*>(driver)->getRados()->objexp_pool_ctx, shard);
   if (ret == -EBUSY) { /* already locked by another processor */

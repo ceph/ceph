@@ -150,7 +150,7 @@ class BucketLoggingManager : public DoutPrefixProvider {
   static constexpr auto m_log_commits_update_period = std::chrono::milliseconds(10000); // 10s
   static constexpr auto m_log_commits_update_retry = std::chrono::milliseconds(1000); // 1s
   static constexpr auto m_log_commits_idle_sleep = std::chrono::milliseconds(5000); // 5s
-  const utime_t m_failover_time = utime_t(m_log_commits_update_period*9); // 90s
+  const ceph::timespan m_failover_time = m_log_commits_update_period*9; // 90s
   CephContext* const m_cct;
   static constexpr auto COOKIE_LEN = 16;
   const std::string m_lock_cookie;
