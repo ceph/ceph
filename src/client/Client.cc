@@ -252,7 +252,7 @@ int Client::CommandHook::call(
       m_client->_kick_stale_sessions();
     else if (command == "status")
       m_client->dump_status(f);
-    else if (command == "dump_subvolume_metrics")
+    else if (command == "dump_subvolume_metrics_aggr")
       m_client->dump_subvolume_metrics(f);
     else
       ceph_abort_msg("bad command registered");
