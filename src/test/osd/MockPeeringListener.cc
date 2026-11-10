@@ -15,6 +15,22 @@
 #include "test/osd/MockPeeringListener.h"
 #include "test/osd/EventLoop.h"
 
+MockPeeringListener::~MockPeeringListener() {
+  // Zero ps/ctx before any scheduled lambdas can dereference them.
+  ps  = nullptr;
+  ctx = nullptr;
+  if (recoverystate_perf) {
+    g_ceph_context->get_perfcounters_collection()->remove(recoverystate_perf);
+    delete recoverystate_perf;
+    recoverystate_perf = nullptr;
+  }
+  if (logger_perf) {
+    g_ceph_context->get_perfcounters_collection()->remove(logger_perf);
+    delete logger_perf;
+    logger_perf = nullptr;
+  }
+}
+
 void MockPeeringListener::request_local_background_io_reservation(
   unsigned priority,
   PGPeeringEventURef on_grant,

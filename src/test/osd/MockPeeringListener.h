@@ -111,21 +111,7 @@ class MockPeeringListener : public PeeringState::PeeringListener {
   }
 
 
-  ~MockPeeringListener() {
-    // Zero ps/ctx before any scheduled lambdas can dereference them.
-    ps  = nullptr;
-    ctx = nullptr;
-    if (recoverystate_perf) {
-      g_ceph_context->get_perfcounters_collection()->remove(recoverystate_perf);
-      delete recoverystate_perf;
-      recoverystate_perf = nullptr;
-    }
-    if (logger_perf) {
-      g_ceph_context->get_perfcounters_collection()->remove(logger_perf);
-      delete logger_perf;
-      logger_perf = nullptr;
-    }
-  }
+  ~MockPeeringListener();
 
   epoch_t get_osdmap_epoch() const override {
     return current_epoch;
