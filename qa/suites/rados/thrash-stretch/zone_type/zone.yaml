@@ -1,0 +1,6 @@
+# zones of bucket type zone
+overrides:
+  ceph:
+    pool-config:
+      crush_map_config:
+        zone_type: zone
