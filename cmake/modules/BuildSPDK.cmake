@@ -7,6 +7,20 @@ macro(build_spdk)
   include(FindMake)
   find_make("MAKE_EXECUTABLE" "make_cmd")
 
+  # isa-l_crypto, which SPDK builds unconditionally since v26.05, cannot be
+  # compiled by clang on aarch64: its sources rely on gcc preprocessor and
+  # GNU as behaviour. Build SPDK with gcc there, as ceph-nvmeof does and as
+  # BuildISALCrypto.cmake effectively does by not passing a compiler at all.
+  set(spdk_cc "${CMAKE_C_COMPILER}")
+  set(spdk_cxx "${CMAKE_CXX_COMPILER}")
+  if(CMAKE_C_COMPILER_ID MATCHES "Clang" AND
+     CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64|arm64|ARM64")
+    find_program(SPDK_GCC NAMES gcc REQUIRED)
+    find_program(SPDK_GXX NAMES g++ REQUIRED)
+    set(spdk_cc "${SPDK_GCC}")
+    set(spdk_cxx "${SPDK_GXX}")
+  endif()
+
   set(spdk_CFLAGS "-fPIC")
   include(CheckCCompilerFlag)
   check_c_compiler_flag("-Wno-address-of-packed-member" HAVE_WARNING_ADDRESS_OF_PACKED_MEMBER)
@@ -50,7 +64,7 @@ macro(build_spdk)
 
   ExternalProject_Add(spdk-ext
     SOURCE_DIR ${source_dir}
-    CONFIGURE_COMMAND env CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER} ./configure
+    CONFIGURE_COMMAND env CC=${spdk_cc} CXX=${spdk_cxx} ./configure
       --disable-tests
       --disable-unit-tests
       --disable-examples
@@ -64,7 +78,7 @@ macro(build_spdk)
     # its include directory.
     # unset $LDFLAGS, otherwise SPDK will fail to mock some functions.
     # not make_cmd: LOG_BUILD runs this from a script, where $(MAKE) is unexpanded
-    BUILD_COMMAND env -i PATH=$ENV{PATH} CC=${CMAKE_C_COMPILER} ${MAKE_EXECUTABLE} EXTRA_CFLAGS=${spdk_CFLAGS}
+    BUILD_COMMAND env -i PATH=$ENV{PATH} CC=${spdk_cc} ${MAKE_EXECUTABLE} EXTRA_CFLAGS=${spdk_CFLAGS}
     BUILD_IN_SOURCE 1
     BUILD_BYPRODUCTS ${spdk_libs} ${isal_lib}
     INSTALL_COMMAND ""
