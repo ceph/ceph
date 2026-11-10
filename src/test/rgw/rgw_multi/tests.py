@@ -1226,8 +1226,14 @@ def test_suspended_delete_marker_incremental_sync():
     # create a versioned bucket
     bucket = zone.create_bucket(gen_bucket_name())
     log.debug('created bucket=%s', bucket.name)
-    bucket.configure_versioning(True)
-    bucket.configure_versioning(False)
+    zone.s3_client.put_bucket_versioning(
+        Bucket=bucket.name,
+        VersioningConfiguration={'Status': 'Enabled'}
+    )
+    zone.s3_client.put_bucket_versioning(
+        Bucket=bucket.name,
+        VersioningConfiguration={'Status': 'Suspended'}
+    )
 
     zonegroup_meta_checkpoint(zonegroup)
 
@@ -1235,12 +1241,11 @@ def test_suspended_delete_marker_incremental_sync():
 
     # upload a dummy object and wait for sync. this forces each zone to finish
     # a full sync and switch to incremental
-    new_key(zone, bucket, obj).set_contents_from_string('')
+    zone.s3_client.put_object(Bucket=bucket.name, Key=obj, Body='')
     zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
 
-    # create several a delete marker on source zone and let it sync
-    key = new_key(zone, bucket, obj)
-    key.delete()
+    # create a delete marker on source zone and let it sync
+    zone.s3_client.delete_object(Bucket=bucket.name, Key=obj)
 
     zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
 
