@@ -302,16 +302,25 @@ static bool nb_tag_name(const std::string& disk, std::string& key)
   return !key.empty();
 }
 
+/* Every name parse_disk_attrs() reads, and no other:  the two are one
+ * set.  get_x_attrs() calls parse_disk_attrs() only when this claims a
+ * name, so a family read there and not named here is never read on the
+ * ring path -- which the object-lock family once was (`e217ee1787b`):
+ * a NooBaa object served to an identity carried no retention and no
+ * legal hold. */
 bool NooBaaXattrStrategy::parses_disk_attr(const std::string& disk) const
 {
   std::string key;
-  return nb_tag_name(disk, key);
+  return nb_tag_name(disk, key) || (disk == NB_LEGAL_HOLD) ||
+    (disk == NB_RETENTION_MODE) || (disk == NB_RETENTION_DATE);
 }
 
 void NooBaaXattrStrategy::parse_disk_attrs(
     const DoutPrefixProvider* dpp, int fd,
     const std::vector<std::string>& unclaimed, Attrs& out) const
 {
+  /* parses_disk_attr() names every attribute read here:  a family
+   * added here is added there */
   if (out.contains(RGW_ATTR_TAGS)) {
     /* nsfs's is already there, from the per-name pass on a converting
      * object;  it is the later word */

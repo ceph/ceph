@@ -7124,6 +7124,48 @@ TEST_F(NSFSImpersonatedRenameTest, AnInterruptedMoveIsRecoveredInTheOwnersTree)
  * from noobaa-core 68ca22d33, the constant block at the head of
  * `namespace_fs.js` and `to_fs_xattr()`.
  */
+/* parses_disk_attr() names exactly what parse_disk_attrs() reads:  an
+ * identity's read on the ring calls parse_disk_attrs() only for a name
+ * this claims, so a family read there and missing here is never read --
+ * the object-lock family was, and a NooBaa object served to an identity
+ * carried no retention and no legal hold. */
+TEST(NooBaaXattr, ParsesDiskAttrNamesWhatParseDiskAttrsReads)
+{
+  nsfs::NooBaaXattrStrategy nb;
+  const sf::path p{base_path / get_test_name()};
+  {
+    std::ofstream f(p);
+    f << "bytes";
+  }
+  const std::map<std::string, std::string> on_disk = {
+    {"user.noobaa.tag.colour", "red"},
+    {"user.noobaa.legal_hold", "ON"},
+    {"user.noobaa.retention_mode", "GOVERNANCE"},
+    {"user.noobaa.retention_date", "2030-01-01T00:00:00.000Z"},
+    {"user.unrelated", "x"},
+  };
+  for (const auto& [n, v] : on_disk) {
+    ASSERT_EQ(::setxattr(p.c_str(), n.c_str(), v.data(), v.size(), 0), 0) << n;
+  }
+  std::vector<std::string> names;
+  for (const auto& [n, v] : on_disk) {
+    names.push_back(n);
+  }
+  const int fd = ::open(p.c_str(), O_RDONLY);
+  ASSERT_GE(fd, 0);
+  Attrs out;
+  nb.parse_disk_attrs(env->dpp, fd, names, out);
+  ::close(fd);
+  sf::remove(p);
+
+  EXPECT_TRUE(out.contains(RGW_ATTR_TAGS));
+  EXPECT_TRUE(out.contains(RGW_ATTR_OBJECT_LEGAL_HOLD));
+  EXPECT_TRUE(out.contains(RGW_ATTR_OBJECT_RETENTION));
+  for (const auto& [n, v] : on_disk) {
+    EXPECT_EQ(nb.parses_disk_attr(n), n != "user.unrelated") << n;
+  }
+}
+
 TEST(NooBaaXattr, NamesNooBaaAttributes)
 {
   nsfs::NooBaaXattrStrategy nb;
