@@ -249,6 +249,25 @@ class MDCache {
   bool cache_overfull(void) const {
     return cache_size() > cache_memory_limit*cache_health_threshold;
   }
+  /* Would nr_dentries more entries still fit below the size that trimming
+   * keeps the cache at?  An entry is assumed to take what an entry in
+   * cache takes now on average.  With fewer entries in cache than that,
+   * the average says little; the cache is then taken to have room as
+   * long as it is less than half full.  A cache that has lately trimmed
+   * as many entries as that has no room either: it makes room only by
+   * dropping entries again. */
+  bool cache_has_room_for(uint64_t nr_dentries) const {
+    double memory_reserve = cache_memory_limit*(1.0-cache_reservation);
+    uint64_t used = cache_size();
+    if (used > memory_reserve)
+      return false;
+    if (trim_counter.get() >= nr_dentries)
+      return false;
+    uint64_t nr_cached = lru.lru_get_size() + bottom_lru.lru_get_size();
+    if (nr_cached < nr_dentries)
+      return used <= memory_reserve / 2;
+    return used + nr_dentries * (used / nr_cached) <= memory_reserve;
+  }
 
   void advance_stray();
 

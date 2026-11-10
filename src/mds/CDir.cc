@@ -1600,8 +1600,24 @@ void CDir::fetch(std::string_view dname, snapid_t last,
   //       [(name, last), (name, CEPH_NOSNAP))
   if (!dname.empty() && last == CEPH_NOSNAP) {
     dentry_key_t key(last, dname, inode->hash_dentry_name(dname));
+    bool prefetch = g_conf().get_val<bool>("mds_dir_prefetch");
 
-    if (!g_conf().get_val<bool>("mds_dir_prefetch")) {
+    // A dirfrag that was closed after trimming comes back without its
+    // fnode; estimate its size from the directory's then.
+    int64_t nr_dentries = get_version() > 0 ? get_frag_size() :
+      inode->get_projected_inode()->dirstat.size() >> get_frag().bits();
+    if (prefetch &&
+        !mdcache->cache_has_room_for(std::max<int64_t>(nr_dentries, 0))) {
+      // With the cache full, trimming would drop the other entries of the
+      // dirfrag again before most of them are used, and each lookup that
+      // misses would load the whole dirfrag once more.
+      dout(10) << "fetch no room in cache for " << nr_dentries
+               << " entries, fetching the key only" << dendl;
+      fetch_keys({key}, c);
+      return;
+    }
+
+    if (!prefetch) {
       // prefetch disabled: only fetch the requested key
       fetch_keys({key}, c);
 
