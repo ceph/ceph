@@ -251,9 +251,10 @@ removing it.
 Each fragment placed on another rank than its parent directory is a subtree of
 its own, which the ranks track in memory and list, with the path leading to
 it, in their journal at the start of every major log segment. A fragment
-placed on the rank of its parent stays in the subtree of its parent. Ranks
-only keep the subtrees of fragments that have entries in cache: a rank hands
-an imported fragment without any back to the rank of its parent. When a tree
+placed on the rank of its parent stays in the subtree of its parent. A rank
+keeps the fragments that the policy places on it also when trimming leaves
+them without entries in cache, as the rank of the parent would only send them
+back. When a tree
 holds many directories just past the split size, each of them adds several
 subtrees for little gain; ``mds_export_ephemeral_distributed_tree_min_entries``
 then sets how many entries a fragmented directory needs before the policy
