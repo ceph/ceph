@@ -314,6 +314,10 @@ class SplitOp {
   virtual bool legacy_version_mismatch() const = 0;
   virtual bool version_mismatch_v2() const = 0;
   virtual void init_reference_sub_read() = 0;
+  /// Choose the sub-read that returns the object's version (orig_op->objver)
+  virtual void init_version_sub_read() {
+    version_sub_read_key = reference_sub_read_key;
+  }
   void init(OSDOp &op, int ops_index, bool single_op);
 
   Objecter::Op *orig_op;
@@ -352,6 +356,7 @@ class SplitOp {
   int flags = 0;
   pg_shard_t reference_sub_read;
   int reference_sub_read_key = -1; ///< acting index of the reference entry; sub_reads is keyed by acting index
+  int version_sub_read_key = -1; ///< acting index of the sub-read that returns the object's version
   std::map<int, std::vector<int>> op_offset_map;
 
 private:
@@ -512,6 +517,8 @@ class ECSplitOp : public SplitOp{
    * @param single_op True if the whole op will be sent as a single op
    */
   void init_read(OSDOp &op, bool sparse, int ops_index, bool single_op) override;
+
+  void init_version_sub_read() override;
 
   /**
    * @brief Choose the absolute shard to read data shard @p shard from.

@@ -428,3 +428,156 @@ TEST_F(TestReplicaLocalizedSplitRead, ReadsOnlyLocalZoneReplicas)
   EXPECT_TRUE(cons[2]->sent.empty()) << "osd.2 is in dc1";
   EXPECT_TRUE(cons[3]->sent.empty()) << "osd.3 is in dc1";
 }
+
+// A localized read of a 2+1 EC pool over two zones that asks for the object's
+// version, from a client in the zone that does not hold the primary. The
+// version comes from a shard of the client's zone that every write updates.
+//
+//            dc0                         dc1 (the client's zone)
+//            osd.0    osd.1    osd.2     osd.3    osd.4    osd.5
+//   PG 1.0   shard 0  shard 1  shard 2   shard 3  shard 4  shard 5
+//            primary  data     parity    data 0   data 1   parity
+//
+// Shards 1 and 4 cannot become primary, so a partial write can skip them.
+class TestECLocalizedSplitRead : public ::testing::Test {
+protected:
+  static constexpr int num_osds = 6;
+  static constexpr int64_t pool_id = 1;
+  static constexpr uint64_t chunk_size = 4096;
+  const std::vector<int> acting = {0, 1, 2, 3, 4, 5};
+  boost::asio::io_context ioc;
+  MonClient monc{g_ceph_context, ioc};
+  std::unique_ptr<Messenger> msgr{
+    Messenger::create_client_messenger(g_ceph_context, "client")};
+  std::unique_ptr<Objecter> objecter;
+  std::map<int, ceph::ref_t<RecordingConnection>> cons;
+  C_SaferCond done;
+  version_t objver = 0;
+
+  void SetUp() override
+  {
+    objecter = std::make_unique<Objecter>(g_ceph_context, msgr.get(), &monc, ioc);
+    objecter->init();
+
+    OSDMap map;
+    uuid_d fsid;
+    fsid.generate_random();
+    ceph_assert(map.build_simple(g_ceph_context, 1, fsid, num_osds) == 0);
+    for (int i = 0; i < num_osds; i++) {
+      map.set_state(i, CEPH_OSD_EXISTS | CEPH_OSD_UP);
+    }
+
+    CrushWrapper crush;
+    crush.create();
+    OSDMap::_build_crush_types(crush);
+    int rootid = 0;
+    ceph_assert(crush.add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_DEFAULT,
+                                 crush.get_type_id("root"), 0, nullptr,
+                                 nullptr, &rootid) == 0);
+    crush.set_item_name(rootid, "default");
+    for (int osd = 0; osd < num_osds; osd++) {
+      std::map<std::string, std::string> loc = {
+        {"root", "default"},
+        {"datacenter", "dc" + std::to_string(osd / 3)},
+        {"host", "host" + std::to_string(osd)}};
+      crush.insert_item(g_ceph_context, osd, 1.0, "osd." + std::to_string(osd),
+                        loc);
+    }
+    crush.finalize();
+    OSDMap::Incremental inc(map.get_epoch() + 1);
+    inc.fsid = map.get_fsid();
+    crush.encode(inc.crush, CEPH_FEATURES_SUPPORTED_DEFAULT);
+    inc.new_require_osd_release = ceph_release();
+    map.apply_incremental(inc);
+
+    pg_pool_t ec;
+    ec.type = pg_pool_t::TYPE_ERASURE;
+    ec.size = 6;
+    ec.min_size = 4;
+    ec.num_zones = 2;
+    ec.peering_crush_bucket_count = 2;
+    ec.peering_crush_bucket_target = 2;
+    ec.peering_crush_bucket_barrier = crush.get_type_id("datacenter");
+    ec.ec_data_shard_count = 2;
+    ec.ec_coding_shard_count = 1;
+    ec.nonprimary_shards.insert(shard_id_t(1));
+    ec.nonprimary_shards.insert(shard_id_t(4));
+    ec.set_stripe_width(2 * chunk_size);
+    ec.set_flag(pg_pool_t::FLAG_EC_OVERWRITES);
+    ec.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
+    ec.set_flag(pg_pool_t::FLAG_CLIENT_SPLIT_READS);
+    ec.set_pg_num(1);
+    ec.set_pgp_num(1);
+    OSDMapTestHelpers::add_pool(map, pool_id, ec);
+    OSDMapTestHelpers::set_pg_acting(map, pg_t(0, pool_id), acting);
+
+    objecter->start(&map);
+    objecter->crush_location = {{"datacenter", "dc1"}};
+
+    for (int osd = 0; osd < num_osds; osd++) {
+      auto s = new Objecter::OSDSession(g_ceph_context, osd, ioc.get_executor());
+      cons[osd] = ceph::make_ref<RecordingConnection>(osd);
+      s->con = cons[osd];
+      s->con->set_priv(RefCountedPtr{s});
+      objecter->osd_sessions[osd] = s;
+    }
+  }
+
+  void TearDown() override
+  {
+    objecter->shutdown();
+    objecter.reset();
+  }
+
+  void localized_read(uint64_t off, uint64_t len)
+  {
+    osdc_opvec ops(1);
+    ops[0].op.op = CEPH_OSD_OP_READ;
+    ops[0].op.extent.offset = off;
+    ops[0].op.extent.length = len;
+    ceph_tid_t tid = 0;
+    objecter->op_submit(
+      new Objecter::Op(object_t("obj"), object_locator_t(pool_id),
+                       std::move(ops),
+                       CEPH_OSD_FLAG_READ | CEPH_OSD_FLAG_LOCALIZE_READS,
+                       &done, &objver),
+      &tid);
+    ioc.restart();
+    ioc.poll();
+  }
+
+  // The version the sub-read to an OSD returns into, if any
+  version_t *objver_of_op_to(int osd)
+  {
+    auto &ops = objecter->osd_sessions[osd]->ops;
+    ceph_assert(ops.size() == 1);
+    return ops.begin()->second->objver;
+  }
+};
+
+TEST_F(TestECLocalizedSplitRead, VersionFromReadShardThatCanBePrimary)
+{
+  localized_read(0, 2 * chunk_size);
+
+  for (int osd : {0, 1, 2, 5}) {
+    EXPECT_TRUE(cons[osd]->sent.empty()) << "osd." << osd;
+  }
+  ASSERT_EQ(1u, cons[3]->sent.size());
+  ASSERT_EQ(1u, cons[4]->sent.size());
+  EXPECT_EQ(&objver, objver_of_op_to(3));
+  EXPECT_EQ(nullptr, objver_of_op_to(4));
+}
+
+TEST_F(TestECLocalizedSplitRead, VersionFromLocalShardThatCanBePrimary)
+{
+  // Shard 4 alone holds the data, and a partial write may have skipped it
+  localized_read(chunk_size, chunk_size);
+
+  for (int osd : {0, 1, 2, 5}) {
+    EXPECT_TRUE(cons[osd]->sent.empty()) << "osd." << osd;
+  }
+  ASSERT_EQ(1u, cons[3]->sent.size());
+  ASSERT_EQ(1u, cons[4]->sent.size());
+  EXPECT_EQ(&objver, objver_of_op_to(3));
+  EXPECT_EQ(nullptr, objver_of_op_to(4));
+}
