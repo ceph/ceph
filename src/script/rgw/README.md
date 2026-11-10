@@ -87,7 +87,7 @@ Run from the **build directory**:
 | `--lwe` | off | Enable GPFS LWE cluster-wide locking (implies `--gpfs`) |
 | `--gpfs-root DIR` | `/mnt/rgw/nsfs` | GPFS data directory |
 | `--perf` | off | NUMA pinning, tcmalloc thread cache, no request timeout;  `tcp_nodelay` is on in every gateway the script starts |
-| `--profile` | off | No debug logging, for profiling |
+| `--profile` | off | `debug_rgw`, `debug_rgw_access` and `debug_ms` at 0, for profiling and performance runs |
 | `-o 'key=value'` | none | Pass a config option through to `vstart.sh` |
 | `--foreground` | off | Print the radosgw command instead of running it |
 | `--restart` | off | Stop the running radosgw and start it again on the same `ceph.conf`, without `vstart.sh` and cleaning nothing;  takes only `--store`, `--adoption-mode`, `--debug-rgw`, `--port`, `--perf` and `--with-impersonation` |
