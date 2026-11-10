@@ -217,6 +217,7 @@ enum {
   l_osdc_core_pgs_holding,
   l_osdc_core_con_timeout,
   l_osdc_core_hint_blocked,
+  l_osdc_core_con_dead,
 
   l_osdc_last,
 };
@@ -546,6 +547,10 @@ void Objecter::init()
     pcb.add_u64_counter(l_osdc_core_hint_blocked, "core_hint_blocked",
 			"Hints not followed, connecting to the OSD's cores "
 			"being blocked (after a connection to them timed out)");
+    pcb.add_u64_counter(l_osdc_core_con_dead, "core_con_dead",
+			"Connections to OSD cores given up on: carrying laggy "
+			"ops, they did not answer a keepalive in time "
+			"(objecter_timeout)");
 
     logger = pcb.create_perf_counters();
     cct->get_perfcounters_collection()->add(logger);
@@ -2918,8 +2923,13 @@ void Objecter::tick()
   }
 
   set<OSDSession*> toping;
-  // core connections with laggy ops (see OSDSession::core_cons)
-  std::vector<ConnectionRef> toping_core_cons;
+  // core connections with laggy ops, to probe with a keepalive (see
+  // SessionRoutes::probe_core())
+  std::vector<ConnectionRef> toprobe_core_cons;
+  // core connections that did not answer a probe: (osd, core, connection)
+  std::vector<std::tuple<int, uint32_t, ConnectionRef>> dead_core_cons;
+  const auto probe_now = ceph_clock_now();
+  const auto probe_deadline = ceph::make_timespan(cct->_conf->objecter_timeout);
   // core connections not connected in time: (osd, core, connection)
   std::vector<std::tuple<int, uint32_t, ConnectionRef>> overdue_core_cons;
   const auto connect_cutoff = ceph::coarse_mono_clock::now() -
@@ -2954,6 +2964,8 @@ void Objecter::tick()
       }
     }
     bool found = false;
+    // the cores whose connections carry laggy ops
+    std::set<uint32_t> laggy_cores;
     for (auto p = s->ops.begin(); p != s->ops.end(); ++p) {
       auto op = p->second;
       ceph_assert(op->session);
@@ -2963,10 +2975,30 @@ void Objecter::tick()
 	found = true;
 	++laggy_ops;
 	if (op->core_route.core) {
-	  if (auto c = s->core_routes.core_cons.find(*op->core_route.core);
-	      c != s->core_routes.core_cons.end()) {
-	    toping_core_cons.push_back(c->second);
-	  }
+	  laggy_cores.insert(*op->core_route.core);
+	}
+      }
+    }
+    if (use_osd_core_hints) {
+      s->core_routes.end_probes_except(laggy_cores);
+      for (auto core : laggy_cores) {
+	auto c = s->core_routes.core_cons.find(core);
+	if (c == s->core_routes.core_cons.end()) {
+	  continue;
+	}
+	using osdc::core_route::probe_t;
+	switch (s->core_routes.probe_core(
+		  core, probe_now, c->second->get_last_keepalive_ack(),
+		  probe_deadline)) {
+	case probe_t::send:
+	  toprobe_core_cons.push_back(c->second);
+	  break;
+	case probe_t::dead:
+	  dead_core_cons.emplace_back(s->osd, core, c->second);
+	  break;
+	case probe_t::wait:
+	case probe_t::alive:
+	  break;
 	}
       }
     }
@@ -3036,20 +3068,18 @@ void Objecter::tick()
       (*i)->con->send_message(new MPing);
     }
   }
-  // dedup: a single ping per connection is enough
-  std::sort(toping_core_cons.begin(), toping_core_cons.end());
-  toping_core_cons.erase(
-    std::unique(toping_core_cons.begin(), toping_core_cons.end()),
-    toping_core_cons.end());
-  for (auto& con : toping_core_cons) {
-    con->send_message(new MPing);
+  // unlike an MPing, a keepalive is answered: its answer tells a core
+  // connection that silently stopped working from one with slow ops
+  for (auto& con : toprobe_core_cons) {
+    con->send_keepalive();
   }
 
   std::unique_lock<ceph::shared_mutex> wl;
-  if (!overdue_core_cons.empty()) {
+  if (!overdue_core_cons.empty() || !dead_core_cons.empty()) {
     rl.unlock();
     wl = std::unique_lock{rwlock};
     _give_up_core_cons(overdue_core_cons, wl);
+    _drop_dead_core_cons(dead_core_cons, wl);
   }
 
   // Make sure we don't reschedule if we wake up after shutdown
@@ -6113,6 +6143,38 @@ void Objecter::handle_core_con_connect(Connection *con)
 		  << ": connecting to the cores of " << con->get_peer_addrs()
 		  << " no longer blocked" << dendl;
   }
+}
+
+void Objecter::_drop_dead_core_cons(
+  const std::vector<std::tuple<int, uint32_t, ConnectionRef>>& dead,
+  std::unique_lock<ceph::shared_mutex>& wl)
+{
+  // rwlock is locked unique
+  if (!initialized || dead.empty()) {
+    return;
+  }
+  map<uint64_t, LingerOp *> lresend;
+  for (const auto& [osd, core, con] : dead) {
+    auto si = osd_sessions.find(osd);
+    if (si == osd_sessions.end()) {
+      continue;
+    }
+    auto s = si->second;
+    unique_lock sl(s->lock);
+    if (auto c = s->core_routes.core_cons.find(core);
+	c == s->core_routes.core_cons.end() || c->second != con) {
+      // reset or replaced meanwhile
+      continue;
+    }
+    ldout(cct, 1) << __func__ << " osd." << s->osd << " core " << core
+		  << " " << con << ": laggy ops, and no answer to a keepalive"
+		  << " within " << cct->_conf->objecter_timeout
+		  << "s: giving up on it" << dendl;
+    logger->inc(l_osdc_core_con_dead);
+    // its ops are resent on the main connection
+    _reset_core_con(s, core, lresend);
+  }
+  _linger_ops_resend(lresend, wl);
 }
 
 void Objecter::_give_up_core_cons(

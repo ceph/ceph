@@ -52,6 +52,36 @@ SessionRoutes::overdue_connects(time_point cutoff) const
   return overdue;
 }
 
+probe_t SessionRoutes::probe_core(uint32_t core,
+                                  utime_t now,
+                                  utime_t last_ack,
+                                  ceph::timespan deadline)
+{
+  auto [i, added] = probes.try_emplace(core, now);
+  if (added) {
+    return probe_t::send;
+  }
+  const auto sent = i->second;
+  if (last_ack >= sent) {
+    // (the answer echoes the time the keepalive was sent)
+    probes.erase(i);
+    return probe_t::alive;
+  }
+  if (static_cast<double>(now - sent) >=
+      std::chrono::duration<double>(deadline).count()) {
+    probes.erase(i);
+    return probe_t::dead;
+  }
+  return probe_t::wait;
+}
+
+void SessionRoutes::end_probes_except(const std::set<uint32_t>& laggy)
+{
+  std::erase_if(probes, [&laggy](const auto& probe) {
+    return !laggy.contains(probe.first);
+  });
+}
+
 hint_outcome_t SessionRoutes::apply_hint(const spg_t& pgid,
                                          const osd_core_hint_t& hint,
                                          const ConnectionRef& main_con,
@@ -331,6 +361,7 @@ core_reset_t SessionRoutes::reset_core(uint32_t core)
   reset.con = std::move(i->second);
   core_cons.erase(i);
   connecting.erase(core);
+  probes.erase(core);
 
   for (auto& [pgid, route] : pg_routes) {
     if (route.hinted_core != core && route.core != core) {
@@ -362,6 +393,7 @@ all_reset_t SessionRoutes::reset_all()
   all_reset_t reset;
   reset.cons.swap(core_cons);
   connecting.clear();
+  probes.clear();
   for (auto& [pgid, route] : pg_routes) {
     route.hinted_core.reset();
     route.core.reset();

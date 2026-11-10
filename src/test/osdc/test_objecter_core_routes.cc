@@ -17,6 +17,7 @@
  * objecter_osd_core_switch_max_hold).
  */
 
+#include <algorithm>
 #include <chrono>
 #include <mutex>
 #include <shared_mutex>
@@ -526,4 +527,76 @@ TEST_F(TestObjecterCoreRoutes, CanceledOpOnResetCon)
   }
   EXPECT_EQ(1u, counter("op_unanswered"));
   EXPECT_EQ(1u, counter("op_unanswered_reset"));
+}
+
+/// as TestObjecterCoreRoutes, with frequent ticks, and ops laggy soon
+class TestObjecterCoreRoutesTick : public TestObjecterCoreRoutes {
+protected:
+  void SetUp() override
+  {
+    auto& conf = g_ceph_context->_conf;
+    conf.set_val_or_die("objecter_tick_interval", "0.05");
+    conf.set_val_or_die("objecter_timeout", "0.2");
+    conf.apply_changes(nullptr);
+    TestObjecterCoreRoutes::SetUp();
+    // laggy ops make tick() ask for the next osdmap. There is no monitor:
+    // already wanting it, the MonClient is not asked to renew its subs
+    const epoch_t next = objecter->with_osdmap(
+      [](const OSDMap& m) { return m.get_epoch() + 1; });
+    monc.sub_want("osdmap", next, CEPH_SUBSCRIBE_ONETIME);
+  }
+
+  void TearDown() override
+  {
+    TestObjecterCoreRoutes::TearDown();
+    auto& conf = g_ceph_context->_conf;
+    conf.rm_val("objecter_tick_interval");
+    conf.rm_val("objecter_timeout");
+    conf.apply_changes(nullptr);
+  }
+
+  /// wait (up to 3s) for tid to be sent on the main connection
+  bool wait_resent_on_main(ceph_tid_t tid)
+  {
+    for (int i = 0; i < 300; ++i) {
+      const auto tids = main_con->tids();
+      if (std::find(tids.begin(), tids.end(), tid) != tids.end()) {
+        return true;
+      }
+      wait(0.01);
+    }
+    return false;
+  }
+};
+
+// a core connection carrying laggy ops, that does not answer a keepalive
+// (RecordingConnection never does), is given up on: its ops are resent on
+// the main connection
+TEST_F(TestObjecterCoreRoutesTick, DeadCoreConIsGivenUp)
+{
+  no_holds();
+  auto a = submit();
+  reply(main_con, a);
+  auto b = submit();
+  ASSERT_EQ((tids_t{b}), core_con->tids());
+  EXPECT_TRUE(wait_resent_on_main(b));
+  EXPECT_EQ(1u, counter("core_con_dead"));
+  EXPECT_EQ(1u, counter("core_con_reset"));
+  std::shared_lock l(session->lock);
+  EXPECT_TRUE(session->core_routes.core_cons.empty());
+}
+
+// one that answers is kept, however slow its ops
+TEST_F(TestObjecterCoreRoutesTick, AnsweringCoreConIsKept)
+{
+  no_holds();
+  // as if each keepalive were answered at once
+  core_con->set_last_keepalive_ack(ceph_clock_now() + utime_t(3600, 0));
+  auto a = submit();
+  reply(main_con, a);
+  auto b = submit();
+  ASSERT_EQ((tids_t{b}), core_con->tids());
+  EXPECT_FALSE(wait_resent_on_main(b));
+  EXPECT_EQ(0u, counter("core_con_dead"));
+  EXPECT_EQ(0u, counter("core_con_reset"));
 }

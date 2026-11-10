@@ -24,6 +24,7 @@
 
 #include "common/ceph_time.h"
 #include "include/types.h"
+#include "include/utime.h"
 #include "msg/Connection.h"
 #include "osd/osd_types.h"
 
@@ -44,6 +45,12 @@
  * So a PG is routed to a core connection only once its handshake
  * completed (SessionRoutes::note_connected()). One not connected in time
  * is given up on, and its host is blocked for a while (HostBlocks).
+ *
+ * Liveness: a connected core connection that silently stops working (e.g.
+ * a firewall dropping its flow, without a reset) would hold its ops until
+ * the messenger's idle timeout. Those carrying laggy ops are probed with
+ * a keepalive (SessionRoutes::probe_core()), and given up on if it is not
+ * answered.
  *
  * Ordering: the OSD orders a client's ops per connection. A PG's route
  * changes only while none of its ops may still be on the way to the OSD
@@ -201,6 +208,14 @@ struct hold_end_t {
   uint64_t timer_event = 0;
 };
 
+/// what probing a core connection found (SessionRoutes::probe_core())
+enum class probe_t {
+  send,   ///< a probe starts: send a keepalive
+  wait,   ///< not answered yet, and not overdue
+  alive,  ///< answered: the connection works (its ops are just slow)
+  dead,   ///< not answered in time: the connection likely stopped working
+};
+
 /// what resetting one core connection did (SessionRoutes::reset_core())
 struct core_reset_t {
   /// the connection, removed from core_cons: to be marked down
@@ -230,6 +245,9 @@ public:
   /// the core connections not connected yet, since when. Their cores are
   /// not routed to (see note_connected())
   std::map<uint32_t, time_point> connecting;
+  /// the keepalive probes of core connections (see probe_core()): when
+  /// each was sent, by core
+  std::map<uint32_t, utime_t> probes;
   /// by PG
   std::map<spg_t, pg_route_t> pg_routes;
   /// by tid
@@ -285,6 +303,17 @@ public:
   /// the core connections still not connected, opened before 'cutoff'
   std::vector<std::pair<uint32_t, ConnectionRef>>
   overdue_connects(time_point cutoff) const;
+
+  /// The core connection of 'core' carries laggy ops: probe it with a
+  /// keepalive, which the OSD's messenger answers however slow the ops
+  /// are. now: the current time; last_ack: the time of the last answered
+  /// keepalive of the connection (Connection::get_last_keepalive_ack());
+  /// deadline: how long to wait for the answer
+  probe_t probe_core(uint32_t core, utime_t now, utime_t last_ack,
+                     ceph::timespan deadline);
+
+  /// stop probing the cores not in 'laggy': their ops are no longer laggy
+  void end_probes_except(const std::set<uint32_t>& laggy);
 
   // -- routing
 

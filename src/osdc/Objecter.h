@@ -2884,6 +2884,12 @@ private:
   /// con (of an OSD) connected: if it is a core connection, its core may
   /// now be routed to. No lock is held
   void handle_core_con_connect(Connection *con);
+  /// give up on the core connections (osd, core, connection) that carry
+  /// laggy ops, but did not answer a keepalive in time (see
+  /// core_route::SessionRoutes::probe_core()); their ops are resent
+  void _drop_dead_core_cons(
+    const std::vector<std::tuple<int, uint32_t, ConnectionRef>>& dead,
+    std::unique_lock<ceph::shared_mutex>& wl);
   /// give up on the core connections (osd, core, connection) that did not
   /// connect in time, and block their hosts (see core_host_blocks)
   void _give_up_core_cons(

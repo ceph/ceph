@@ -653,6 +653,71 @@ TEST_F(SessionRoutesTest, CountSwitching)
             routes.count_switching());
 }
 
+// -- keepalive probes
+
+namespace {
+utime_t real_at(int seconds)
+{
+  return utime_t(seconds, 0);
+}
+} // namespace
+
+TEST_F(SessionRoutesTest, ProbeAnsweredMeansAlive)
+{
+  const auto deadline = ceph::timespan(10s);
+  // nothing answered yet
+  EXPECT_EQ(probe_t::send,
+            routes.probe_core(core, real_at(100), real_at(0), deadline));
+  EXPECT_EQ(probe_t::wait,
+            routes.probe_core(core, real_at(105), real_at(0), deadline));
+  // the answer echoes the time of the keepalive
+  EXPECT_EQ(probe_t::alive,
+            routes.probe_core(core, real_at(106), real_at(100), deadline));
+  EXPECT_TRUE(routes.probes.empty());
+  // still laggy: probed again
+  EXPECT_EQ(probe_t::send,
+            routes.probe_core(core, real_at(111), real_at(100), deadline));
+}
+
+TEST_F(SessionRoutesTest, ProbeNotAnsweredInTimeMeansDead)
+{
+  const auto deadline = ceph::timespan(10s);
+  routes.probe_core(core, real_at(100), real_at(50), deadline);
+  // an older answer does not count
+  EXPECT_EQ(probe_t::wait,
+            routes.probe_core(core, real_at(109), real_at(99), deadline));
+  EXPECT_EQ(probe_t::dead,
+            routes.probe_core(core, real_at(110), real_at(99), deadline));
+  EXPECT_TRUE(routes.probes.empty());
+}
+
+TEST_F(SessionRoutesTest, ProbesEndWhenNoLongerLaggy)
+{
+  const auto deadline = ceph::timespan(10s);
+  routes.probe_core(core, real_at(100), real_at(0), deadline);
+  routes.probe_core(other_core, real_at(100), real_at(0), deadline);
+  routes.end_probes_except({other_core});
+  EXPECT_EQ(0u, routes.probes.count(core));
+  EXPECT_EQ(1u, routes.probes.count(other_core));
+  // a new probe, not a late verdict on the old one
+  EXPECT_EQ(probe_t::send,
+            routes.probe_core(core, real_at(200), real_at(0), deadline));
+}
+
+TEST_F(SessionRoutesTest, ResetsEndProbes)
+{
+  const auto deadline = ceph::timespan(10s);
+  connected(core, core_con);
+  connected(other_core, other_con);
+  routes.probe_core(core, real_at(100), real_at(0), deadline);
+  routes.probe_core(other_core, real_at(100), real_at(0), deadline);
+  routes.reset_core(core);
+  EXPECT_EQ(0u, routes.probes.count(core));
+  EXPECT_EQ(1u, routes.probes.count(other_core));
+  routes.reset_all();
+  EXPECT_TRUE(routes.probes.empty());
+}
+
 // -- HostBlocks
 
 namespace {
