@@ -2237,6 +2237,20 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         return image
 
     def _check_valid_addr(self, host: str, addr: str) -> str:
+        ip_addr = self._resolve_host_addr(host, addr)
+        try:
+            with self.async_timeout_handler(host, f'cephadm check-host --expect-hostname {host}'):
+                failed = self.wait_async(self._check_host(host, addr))
+        except ssh.HostConnectionError as e:
+            raise OrchestratorError(str(e))
+        # outside async_timeout_handler(): check-host completed, so a timeout
+        # warning for the host is cleared even if a check failed
+        if failed:
+            raise failed
+        return ip_addr
+
+    def _resolve_host_addr(self, host: str, addr: str) -> str:
+        """Resolve the address of a host to add, without connecting to it."""
         # make sure hostname is resolvable before trying to make a connection
         try:
             ip_addr = utils.resolve_ip(addr)
@@ -2268,24 +2282,29 @@ Then run the following:
             self.log.debug(
                 f'Received loopback address resolving ip for {host}: {ip_addr}. Falling back to previous address.')
             ip_addr = self.inventory.get_addr(host)
-        try:
-            with self.async_timeout_handler(host, f'cephadm check-host --expect-hostname {host}'):
-                out, err, code = self.wait_async(CephadmServe(self)._run_cephadm(
-                    host, cephadmNoImage, 'check-host',
-                    ['--expect-hostname', host],
-                    addr=addr,
-                    error_ok=True, no_fsid=True))
-            if code:
-                msg = 'check-host failed:\n' + '\n'.join(err)
-                # err will contain stdout and stderr, so we filter on the message text to
-                # only show the errors
-                errors = [_i.replace("ERROR: ", "") for _i in err if _i.startswith('ERROR')]
-                if errors:
-                    msg = f'Host {host} ({addr}) failed check(s): {errors}'
-                raise OrchestratorError(msg)
-        except ssh.HostConnectionError as e:
-            raise OrchestratorError(str(e))
         return ip_addr
+
+    async def _check_host(self, host: str, addr: str) -> Optional[OrchestratorError]:
+        """Run 'cephadm check-host' on a host to add.
+
+        Returns the error to report when a check failed, None when all
+        passed. Raises only when check-host did not complete (connection
+        error, timeout).
+        """
+        out, err, code = await CephadmServe(self)._run_cephadm(
+            host, cephadmNoImage, 'check-host',
+            ['--expect-hostname', host],
+            addr=addr,
+            error_ok=True, no_fsid=True)
+        if code:
+            msg = 'check-host failed:\n' + '\n'.join(err)
+            # err will contain stdout and stderr, so we filter on the message text to
+            # only show the errors
+            errors = [_i.replace("ERROR: ", "") for _i in err if _i.startswith('ERROR')]
+            if errors:
+                msg = f'Host {host} ({addr}) failed check(s): {errors}'
+            return OrchestratorError(msg)
+        return None
 
     def _get_cephadm_version_for_host_prep(self) -> Optional[str]:
         """Extract cephadm version from cluster version string."""
