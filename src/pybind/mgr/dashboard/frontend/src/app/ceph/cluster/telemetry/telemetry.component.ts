@@ -181,26 +181,22 @@ export class TelemetryComponent extends CdForm implements OnInit {
   }
 
   private updateReportFromConfig(updatedConfig: Object = {}) {
-    // update channels
-    const availableChannels: string[] = this.report['report']['channels_available'];
-    const updatedChannels = [];
-    for (const channel of availableChannels) {
-      const key = `channel_${channel}`;
-      if (updatedConfig[key]) {
-        updatedChannels.push(channel);
+    // update contactInfo, which is only part of the report with the ident channel
+    if (this.report['report']['channels'].includes('ident')) {
+      for (const contactInfofield of this.contactInfofields) {
+        this.report['report'][contactInfofield] = updatedConfig[contactInfofield];
       }
-    }
-    this.report['report']['channels'] = updatedChannels;
-    // update contactInfo
-    for (const contactInfofield of this.contactInfofields) {
-      this.report['report'][contactInfofield] = updatedConfig[contactInfofield];
     }
   }
 
   private getReport() {
     this.loadingStart();
 
-    this.telemetryService.getReport().subscribe(
+    // Preview the channels selected in the form, which might not be saved yet.
+    const channels = Object.keys(this.newConfig)
+      .filter((key) => key.startsWith('channel_') && this.newConfig[key])
+      .map((key) => key.replace('channel_', ''));
+    this.telemetryService.getReport(channels).subscribe(
       (resp: object) => {
         this.report = resp;
         this.reportId = resp['report']['report_id'];

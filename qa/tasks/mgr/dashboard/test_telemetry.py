@@ -79,6 +79,24 @@ class TelemetryTest(DashboardTestCase):
         })
         self.assertSchema(data, schema)
 
+    def test_get_report_channels(self):
+        self._enable_module()
+        data = self._get('/api/telemetry/report?channels=basic&channels=crash')
+        self.assertStatus(200)
+        self.assertEqual(data['report']['channels'], ['basic', 'crash'])
+        self.assertIn('crashes', data['report'])
+        self.assertNotIn('perf_counters', data['report'])
+
+        data = self._get('/api/telemetry/report?channels=')
+        self.assertStatus(200)
+        self.assertEqual(data['report']['channels'], [])
+        self.assertNotIn('crashes', data['report'])
+
+    def test_get_report_invalid_channel(self):
+        self._get('/api/telemetry/report?channels=invalid')
+        self.assertStatus(400)
+        self.assertError(code='telemetry_invalid_channel')
+
     @classmethod
     def _enable_module(cls):
         cls._put('/api/telemetry', {
