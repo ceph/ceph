@@ -634,6 +634,10 @@ target_link_libraries(unittest_rgw_cuobj rgw_common ${rgw_libs} global)
 target_link_options(unittest_rgw_cuobj PRIVATE "LINKER:--wrap=dlopen")
 
 if(WITH_RADOSGW_RADOS)
+  add_ceph_test(run-rgw-swift-tests env MON=1 OSD=1 MGR=0 MDS=0 RGW=1
+    ${CMAKE_SOURCE_DIR}/src/test/vstart_wrapper.sh
+    ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/swift/test_swift.py)
+
   # S3 operations use link-time fake transports and in-memory storage writers.
   foreach(test_name IN ITEMS get put log)
     add_executable(unittest_rgw_cuobj_${test_name}
