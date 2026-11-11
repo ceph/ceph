@@ -24,6 +24,7 @@
 #include "common/Thread.h"
 #include "include/stringify.h"
 #include "osd/ReplicatedBackend.h"
+#include "messages/MOSDOpReply.h"
 
 #include <iostream> // for std::cout
 #include <sstream>
@@ -3088,6 +3089,79 @@ TEST(pg_history_t, merge_never_touched_peer_does_not_open_false_rebuild_span)
       << "merging a blank peer must not move last_rebuild_active_start past "
          "rebuild_span_reported and create a false open span";
   EXPECT_EQ(later_report, local.rebuild_span_reported);
+}
+
+static ceph::ref_t<MOSDOpReply> reply_roundtrip(
+  const ceph::ref_t<MOSDOpReply>& in,
+  uint64_t features)
+{
+  in->encode_payload(features);
+  auto out = ceph::make_message<MOSDOpReply>();
+  out->set_header(in->get_header());
+  ceph::buffer::list payload = in->get_payload();
+  out->set_payload(payload);
+  out->set_data(in->get_data());
+  out->decode_payload();
+  return out;
+}
+
+TEST(MOSDOpReply, core_hint_roundtrip)
+{
+  const osd_core_hint_t hint{3, 6810};
+
+  auto reply = ceph::make_message<MOSDOpReply>();
+  reply->set_core_hint(hint);
+  auto decoded = reply_roundtrip(reply, CEPH_FEATURES_ALL);
+  EXPECT_EQ(decoded->get_header().version, 9);
+  ASSERT_TRUE(decoded->get_core_hint().has_value());
+  EXPECT_EQ(*decoded->get_core_hint(), hint);
+  EXPECT_EQ(fmt::format("{}", *decoded->get_core_hint()), "core 3 port 6810");
+}
+
+// the hint is optional: a v9 reply may name none
+TEST(MOSDOpReply, no_core_hint)
+{
+  auto reply = ceph::make_message<MOSDOpReply>();
+  auto decoded = reply_roundtrip(reply, CEPH_FEATURES_ALL);
+  EXPECT_EQ(decoded->get_header().version, 9);
+  EXPECT_FALSE(decoded->get_core_hint().has_value());
+}
+
+// no feature gates it: any peer gets v9, and older ones ignore the hint
+TEST(MOSDOpReply, core_hint_regardless_of_features)
+{
+  auto reply = ceph::make_message<MOSDOpReply>();
+  reply->set_core_hint(osd_core_hint_t{3, 6810});
+  auto decoded = reply_roundtrip(
+    reply, CEPH_FEATURES_ALL & ~CEPH_FEATURE_SERVER_VAMPIRE);
+  EXPECT_EQ(decoded->get_header().version, 9);
+  ASSERT_TRUE(decoded->get_core_hint().has_value());
+  EXPECT_EQ(*decoded->get_core_hint(), (osd_core_hint_t{3, 6810}));
+}
+
+// a v8 decoder reads a v9 reply: all of it but the trailing hint
+TEST(MOSDOpReply, v9_read_as_v8)
+{
+  auto reply = ceph::make_message<MOSDOpReply>();
+  reply->set_tid(42);
+  reply->set_result(-2);
+  reply->set_reply_versions(eversion_t(5, 7), 7);
+  reply->set_core_hint(osd_core_hint_t{3, 6810});
+  reply->encode_payload(CEPH_FEATURES_ALL);
+  ASSERT_EQ(reply->get_header().version, 9);
+
+  auto out = ceph::make_message<MOSDOpReply>();
+  auto header = reply->get_header();
+  header.version = 8;  // as a decoder knowing up to v8 takes it
+  out->set_header(header);
+  ceph::buffer::list payload = reply->get_payload();
+  out->set_payload(payload);
+  out->decode_payload();
+  EXPECT_EQ(out->get_tid(), 42u);
+  EXPECT_EQ(out->get_result(), -2);
+  EXPECT_EQ(out->get_replay_version(), eversion_t(5, 7));
+  EXPECT_EQ(out->get_user_version(), 7u);
+  EXPECT_FALSE(out->get_core_hint().has_value());
 }
 
 /*

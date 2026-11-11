@@ -367,6 +367,44 @@ WRITE_CLASS_ENCODER(request_redirect_t)
 
 std::ostream& operator<<(std::ostream& out, const request_redirect_t& redir);
 
+/**
+ * osd_core_hint_t
+ *
+ * Sent by a Crimson OSD in MOSDOpReply (an optional field of v9, which
+ * older decoders ignore): the reactor core that owns the PG addressed by
+ * the op, and the port on which that core accepts client connections -
+ * on the IP of the OSD's address the client already uses. Advisory only:
+ * an op sent to any of the OSD's addresses is still served. Versioned, so
+ * that it may carry more (e.g. a per-core IP) later.
+ */
+struct osd_core_hint_t {
+  uint32_t core = 0;
+  uint16_t port = 0;
+
+  osd_core_hint_t() = default;
+  osd_core_hint_t(uint32_t core, uint16_t port)
+    : core(core), port(port) {}
+
+  bool operator==(const osd_core_hint_t&) const = default;
+
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator& bl);
+  void dump(ceph::Formatter *f) const;
+  static std::list<osd_core_hint_t> generate_test_instances();
+};
+WRITE_CLASS_ENCODER(osd_core_hint_t)
+
+namespace fmt {
+template <>
+struct formatter<osd_core_hint_t> {
+  constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
+  template <typename FormatContext>
+  auto format(const osd_core_hint_t& h, FormatContext& ctx) const {
+    return fmt::format_to(ctx.out(), "core {} port {}", h.core, h.port);
+  }
+};
+} // namespace fmt
+
 // Internal OSD op flags - set by the OSD based on the op types
 enum {
   CEPH_OSD_RMW_FLAG_READ        = (1 << 1),
