@@ -1,3 +1,8 @@
+"""
+Erasure coded pools over two datacenters losing one of them. The
+rados/singleton mon-stretch-ec-pool job runs these tests after
+mon-stretch-ec-pool.sh.
+"""
 import json
 import logging
 import random
@@ -11,7 +16,14 @@ log = logging.getLogger(__name__)
 
 class TestStretchCluster(MgrTestCase):
     """
-    Test the stretch cluster feature.
+    The cluster that mon-stretch-ec-pool.sh lays out: datacenters dc1 and
+    dc2, each of 3 hosts with one OSD, monitors a to c in dc1 and d to f in
+    dc2, and the tiebreaker g in dc3. Each test creates the erasure coded
+    pool ec_pool_stretch with osd pool create --num_zones 2, k=2 m=1 and
+    min_size 2, which puts 3 shards on 3 hosts in each datacenter and turns
+    on the cluster stretch flags. It then takes down the OSDs and monitors
+    of a datacenter, and checks which PGs stay active and what the pool can
+    still read and write.
     """
     # Define some constants
     POOL = 'pool_stretch'
@@ -29,8 +41,8 @@ class TestStretchCluster(MgrTestCase):
     PARALLEL_BENCH_DURATION = 30
     # Hard OS-level timeout applied to each bench process in the parallel
     # workload: the bench, plus RECOVERY_PERIOD for its I/O to wait out the
-    # site failure (the PGs re-peer on DC2 and the cluster enters degraded
-    # stretch mode, which can take more than a minute).
+    # site failure (the PGs re-peer on DC2 and degraded_stretch_mode is set,
+    # which can take more than a minute).
     # rados bench does not exit on its own when the cluster is unreachable --
     # it stalls in-flight ops until osd_op_timeout fires, causing an indefinite
     # remote.run(wait=True) hang.  The 'timeout' wrapper kills the process at
@@ -130,9 +142,9 @@ class TestStretchCluster(MgrTestCase):
 
     def _setup_stretch_ec_pool(self, pool_name, min_size=None):
         """
-        Create a k=K m=M pool over the two datacenters, with a rule named
-        after it. A profile is deleted with its last pool, so set it again
-        for each test.
+        Create a k=K m=M erasure coded pool over the two datacenters, with a
+        rule named after it. A profile is deleted with its last pool, so set
+        it again for each test.
         """
         self.mgr_cluster.mon_manager.raw_cluster_cmd(
             'osd', 'erasure-code-profile', 'set', self.STRETCH_EC_PROFILE,
@@ -489,7 +501,7 @@ class TestStretchCluster(MgrTestCase):
         )
 
     # ------------------------------------------------------------------ #
-    # Stretch mode state validators (OSDMap + MonMap)
+    # Checks of the cluster stretch flags (OSDMap + MonMap)
     # ------------------------------------------------------------------ #
 
     def _get_stretch_mode_osdmap(self):
@@ -499,9 +511,9 @@ class TestStretchCluster(MgrTestCase):
     
     def _assert_recovering_stretch_mode(self, expected=True):
         """
-        Assert that the OSDMap reflects (or does not reflect) recovering
-        stretch mode.  recovering_stretch_mode == 1 means the cluster is
-        healing after a site failure.
+        Assert that recovering_stretch_mode in the OSDMap is 1 if expected,
+        else 0. It is 1 while the PGs recover after a lost datacenter comes
+        back.
         """
         stretch = self._get_stretch_mode_osdmap()
         self.assertEqual(
@@ -515,8 +527,10 @@ class TestStretchCluster(MgrTestCase):
 
     def _stretch_mode_enabled_correctly(self):
         """
-        Evaluate whether the stretch EC pool stretch mode is enabled correctly
-        by checking the OSDMap and MonMap.
+        Check that every pool is over the two datacenters on the rule named
+        after it, with SIZE shards and min_size MIN_SIZE, and that the
+        cluster stretch flags are on in the OSDMap and the monmap, with
+        tiebreaker g and no zone down.
         """
         # Checking the OSDMap
         osdmap = self.mgr_cluster.mon_manager.get_osd_dump_json()
@@ -542,12 +556,12 @@ class TestStretchCluster(MgrTestCase):
                 True,
                 pool['is_stretch_pool']
             )
-            # expects peering_crush_bucket_count = 2 (always this value for stretch mode)
+            # expects peering_crush_bucket_count = 2 (the two zones)
             self.assertEqual(
                 self.PEERING_CRUSH_BUCKET_COUNT,
                 pool['peering_crush_bucket_count']
             )
-            # expects peering_crush_bucket_target = 2 (always this value for stretch mode)
+            # expects peering_crush_bucket_target = 2 (the two zones)
             self.assertEqual(
                 self.PEERING_CRUSH_BUCKET_TARGET,
                 pool['peering_crush_bucket_target']
@@ -602,7 +616,7 @@ class TestStretchCluster(MgrTestCase):
         log.debug("Stretch mode is enabled correctly.")
 
     def _wait_for_degraded_stretch_mode(self):
-        """Wait until the cluster enters degraded stretch mode."""
+        """Wait until degraded_stretch_mode is set in the OSDMap, and holds."""
         self.wait_until_true_and_hold(
             lambda: self.mgr_cluster.mon_manager.is_degraded_stretch_mode(),
             timeout=self.RECOVERY_PERIOD,
@@ -611,8 +625,9 @@ class TestStretchCluster(MgrTestCase):
 
     def _wait_for_recovering_stretch_mode(self):
         """
-        Wait until the cluster enters recovering stretch mode. It leaves it
-        as soon as its PGs are clean, so this does not wait for it to hold.
+        Wait until recovering_stretch_mode is set in the OSDMap. It is
+        cleared as soon as the PGs are clean, so this does not wait for it
+        to hold.
         """
         def _is_recovering():
             stretch = self._get_stretch_mode_osdmap()
@@ -624,7 +639,10 @@ class TestStretchCluster(MgrTestCase):
         )
 
     def _wait_for_normal_stretch_mode(self):
-        """Wait until the cluster leaves degraded/recovering stretch mode."""
+        """
+        Wait until degraded_stretch_mode and recovering_stretch_mode are both
+        0 in the OSDMap, and hold.
+        """
         def _is_normal():
             stretch = self._get_stretch_mode_osdmap()
             return (stretch.get('degraded_stretch_mode', 0) == 0 and
@@ -724,10 +742,12 @@ class TestStretchCluster(MgrTestCase):
 
     def test_stretch_ec_pool_no_active_pgs_2_sites(self):
         """
-        Test setting a pool to stretch cluster and checks whether
-        it prevents PGs from the going active when there is not
-        enough buckets available in the acting set of PGs to
-        go active.
+        With dc1's OSDs and monitors down, and then one OSD of dc2, the PGs
+        still have at least min_size shards, all in dc2, and all stay
+        active. With every OSD of dc2 down too, no PG is active, and none
+        becomes active when dc1 comes back: dc2 was active without dc1, so
+        the PGs wait for dc2. Once dc2's OSDs are back, all PGs are
+        active+clean.
         """
         self._setup_stretch_ec_pool(self.EC_POOL, min_size=self.K)
         self._write_some_data(self.WRITE_PERIOD, self.EC_POOL)
@@ -777,17 +797,18 @@ class TestStretchCluster(MgrTestCase):
 
     def test_stretch_ec_pool_io_when_down(self):
         """
-        Test setting a pool to stretch cluster and checks whether
-        it prevents PGs from the going active when:
-            1. write I/O occurs when a datacenter 1 is down
-            2. Datacenter 1 is brought up but OSDs in datacenter 2 are
-               brought down so there are less than min_size OSDs.
+        With dc1's OSDs and monitors down, the PGs stay active on dc2 and
+        the pool takes writes and reads, as it does with one OSD of dc2 down
+        too. With a second OSD of dc2 down, which leaves PGs below min_size,
+        not every PG is active, and when dc1 comes back no PG is: dc1's
+        shards missed the writes, and dc2 is still below min_size.
+        Bringing back the dc2 OSD that went down last, which was in the last
+        interval that could take writes, makes all PGs active, and the pool
+        takes reads and writes again. Once the rest of dc2 is back, all PGs
+        are active+clean.
         """
         self._setup_stretch_ec_pool(self.EC_POOL, min_size=self.K)
         self._write_some_data(self.WRITE_PERIOD, self.EC_POOL)
-        # 1. We test the case where we didn't make the pool stretch
-        #   and we expect the PGs to go active even when there is only
-        #   one bucket available in the acting set of PGs.
 
         # Wait for PGs to remap to the new stretch CRUSH rule
         self.wait_until_true_and_hold(
@@ -870,17 +891,14 @@ class TestStretchCluster(MgrTestCase):
 
     def test_stretch_ec_degraded_and_recovery_mode(self):
         """
-        Verify that the OSDMap and MonMap correctly reflect degraded stretch
-        mode when a datacenter fails, and then recovering stretch mode as the
-        cluster heals after the site is restored.
-
-        Steps:
-          1. Set up the EC pool in stretch mode.
-          2. Fail all OSDs + MONs in DC1 → cluster should enter degraded
-             stretch mode (degraded_stretch_mode == 1).
-          3. Bring DC1 back → cluster should transition through recovering
-             stretch mode (recovering_stretch_mode == 1) and then return to
-             normal (both flags == 0) once PGs are active+clean.
+        The cluster stretch flags follow the loss and return of a
+        datacenter. With both datacenters up and the PGs active+clean, the
+        pool and the flags are as _stretch_mode_enabled_correctly expects.
+        With dc1's OSDs and monitors down, the PGs stay active,
+        degraded_stretch_mode is set and recovering_stretch_mode is not, and
+        the pool takes writes and reads. When dc1 comes back,
+        recovering_stretch_mode is set; once the PGs are active+clean both
+        are 0, and the pool and the flags are as they were at the start.
         """
         self._setup_stretch_ec_pool(self.EC_POOL, min_size=self.K)
 
@@ -895,7 +913,7 @@ class TestStretchCluster(MgrTestCase):
 
         self._stretch_mode_enabled_correctly()
 
-        # --- Bring DC1 down → expect degraded stretch mode ---
+        # --- Bring DC1 down → expect degraded_stretch_mode ---
         log.debug("Failing over all OSDs and MONs in dc1")
         self._fail_over_all_osds_in_dc('dc1')
         self._fail_over_all_mons_in_dc('dc1')
@@ -907,8 +925,7 @@ class TestStretchCluster(MgrTestCase):
             success_hold_time=self.SUCCESS_HOLD_TIME,
         )
         
-        # OSDMap must reflect degraded (still-enabled) stretch mode, i.e.
-        # degraded_stretch_mode == 1 -- not stretch mode fully disabled.
+        # The cluster stretch flags stay on, with degraded_stretch_mode == 1.
         self._wait_for_degraded_stretch_mode()
         self._assert_recovering_stretch_mode(expected=False)
 
@@ -916,12 +933,12 @@ class TestStretchCluster(MgrTestCase):
         self._write_some_data(self.WRITE_PERIOD, self.EC_POOL)
         self._read_some_data(self.WRITE_PERIOD, self.EC_POOL)
 
-        # --- Restore DC1 → expect recovering then normal stretch mode ---
+        # --- Restore DC1 → expect recovering_stretch_mode, then neither ---
         log.debug("Restoring dc1 OSDs and MONs")
         self._bring_back_all_mons_in_dc('dc1')
         self._bring_back_all_osds_in_dc('dc1')
 
-        # The cluster should move through recovering stretch mode …
+        # recovering_stretch_mode is set while the PGs recover …
         self._wait_for_recovering_stretch_mode()
 
         # settle back to fully healthy
@@ -935,17 +952,12 @@ class TestStretchCluster(MgrTestCase):
 
     def test_stretch_ec_parallel_workloads_with_site_failure(self):
         """
-        Run parallel write and read workloads while inducing a site failure
-        and then recovering, verifying the cluster remains available on the
-        surviving site throughout.
-
-        Steps:
-          1. Set up the EC pool in stretch mode, seed initial data.
-          2. Start parallel read+write bench workloads.
-          3. Mid-flight: fail all OSDs in DC1 (network-partition simulation).
-          4. Wait for degraded stretch mode.
-          5. Join the workload threads (reads/writes on DC2 must succeed).
-          6. Restore DC1, verify full recovery.
+        rados bench writes and reads to the pool keep working while dc1
+        goes down. With both benches running, the test takes down dc1's OSDs
+        and monitors, and expects the PGs to stay active,
+        degraded_stretch_mode to be set and both benches to finish without
+        an error. Once dc1 is back, the PGs are active+clean, and
+        degraded_stretch_mode and recovering_stretch_mode are 0.
         """
         self._setup_stretch_ec_pool(self.EC_POOL, min_size=self.K)
 
@@ -1013,16 +1025,13 @@ class TestStretchCluster(MgrTestCase):
 
     def test_stretch_ec_data_integrity(self):
         """
-        Write a set of named objects before and during a site failure then
-        validate that every object can be read back with correct content
-        after full recovery.
-
-        Steps:
-          1. Set up the EC pool in stretch mode.
-          2. Write "pre-failure" objects and validate them immediately.
-          3. Fail DC1; write "during-failure" objects on DC2.
-          4. Restore DC1; wait for full recovery.
-          5. Validate ALL objects (pre-failure + during-failure) are intact.
+        Objects written to the pool read back intact while dc1 is down and
+        after it comes back. The test writes 10 objects, each holding its
+        own name, and reads them back. With dc1's OSDs and monitors down and
+        degraded_stretch_mode set, it reads them from dc2 alone, writes 10
+        more and reads all 20. Once dc1 is back, with the PGs active+clean
+        and degraded_stretch_mode and recovering_stretch_mode 0, it reads
+        all 20 again.
         """
         self._setup_stretch_ec_pool(self.EC_POOL, min_size=self.K)
 

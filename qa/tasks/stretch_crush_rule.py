@@ -1,3 +1,8 @@
+"""
+Recreates the hand-written replicated rule of a stretch test when the
+monitor has removed it, for tasks.stretch_cluster,
+tasks.stretch_mode_disable_enable and tasks.test_netsplit_3az_stretch_pool.
+"""
 import logging
 
 log = logging.getLogger(__name__)
@@ -5,13 +10,14 @@ log = logging.getLogger(__name__)
 
 def ensure_custom_crush_rule(mgr_cluster, rule_name, datacenters=3):
     """
-    Guarantee that the CRUSH rule rule_name exists.
+    Make sure that the CRUSH rule rule_name exists.
 
-    The monitor deletes any CRUSH rule as soon as no pool references it,
-    so the rule installed by the workunit (mon-stretch-pool.sh) may be
-    gone by the time setUp or a test tries to use it.  Recreate it if
-    needed, using the same rule text as the workunit: take default, choose
-    'datacenters' datacenters, then chooseleaf 2 hosts in each.
+    The monitor removes a rule when its last pool leaves it, so the rule
+    that the job's workunit wrote (mon-stretch-pool.sh or
+    mon-stretch-mode-5-mons-8-osds.sh) may be gone by the time setUp or a
+    test uses it. If it is gone, write it again as the workunit did: take
+    default, choose 'datacenters' datacenters, then chooseleaf 2 hosts in
+    each.
     """
     existing = mgr_cluster.mon_manager.raw_cluster_cmd(
         'osd', 'crush', 'rule', 'ls')

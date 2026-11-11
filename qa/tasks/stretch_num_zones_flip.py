@@ -1,6 +1,8 @@
 """
-Take the pools over zones down to one zone and back to two, again and again,
-while a workload runs on them.
+Thrasher that moves the pools over two zones into one zone and back with
+osd pool set <pool> num_zones, one pool at a time, while a workload runs on
+them. The thrash-stretch and thrash-erasure-code-stretch suites run it as
+their num-zones-flip thrasher.
 """
 import contextlib
 import json
@@ -20,9 +22,16 @@ log = logging.getLogger(__name__)
 
 class NumZonesFlipper(Thrasher):
     """
-    Each round picks a pool over two zones (not .mgr), sets it to one zone
-    (with --yes-i-really-mean-it for an erasure coded pool), waits for the
-    cluster to be clean, sets it to two zones again, and waits again.
+    Waits up to pool_timeout seconds for a pool over two zones other than
+    .mgr. Then, every delay seconds, it picks one such pool at random and
+    runs osd pool set <pool> num_zones 1 (with --yes-i-really-mean-it for
+    an erasure coded pool), then num_zones 2. After each change it waits up
+    to clean_timeout seconds for the PGs to be clean. That wait can return
+    on PG stats from before the change, so num_zones often goes back to 2 a
+    few seconds later, while the PGs are still peering at one zone. That is
+    on purpose: it tests peering that the next change interrupts. It skips
+    a pool that the workload deletes meanwhile. Any other command that
+    fails, or a wait that times out, stops the thrasher with an error.
 
     Options::
 
@@ -106,7 +115,9 @@ class NumZonesFlipper(Thrasher):
 @contextlib.contextmanager
 def task(ctx, config):
     """
-    Flip the num_zones of the pools over zones while the tasks after it run::
+    Run NumZonesFlipper while the tasks after it run, then wait for the PGs
+    to be clean. Takes the options of NumZonesFlipper, and cluster (default:
+    ceph)::
 
       tasks:
       - stretch_num_zones_flip:

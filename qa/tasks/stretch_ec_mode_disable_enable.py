@@ -1,3 +1,8 @@
+"""
+An erasure coded pool over two zones moved into one zone and back with
+osd pool set num_zones. The rados/singleton stretch-ec-mode-5-mons-8-osds
+job runs it after mon-stretch-ec-mode-5-mons-8-osds.sh.
+"""
 import logging
 from tasks.mgr.mgr_test_case import MgrTestCase
 
@@ -5,7 +10,11 @@ log = logging.getLogger(__name__)
 
 class TestStretchMode(MgrTestCase):
     """
-    Test the stretch mode feature of Ceph
+    The cluster that mon-stretch-ec-mode-5-mons-8-osds.sh lays out:
+    datacenters dc1 and dc2, each of 2 hosts with 2 OSDs, monitors a and b
+    in dc1, c and d in dc2, and the tiebreaker e in dc3. setUp removes every
+    pool, so the test's pool is the only one: the cluster stretch flags are
+    on while it is over the two datacenters, and off once it is in one.
     """
     POOL = 'stretch_ec_pool'
     CLUSTER = "ceph"
@@ -15,7 +24,7 @@ class TestStretchMode(MgrTestCase):
     # made by mon-stretch-ec-mode-5-mons-8-osds.sh
     STRETCH_EC_PROFILE = 'stretch_ec_profile'
     STRETCH_EC_CRUSH_RULE = 'stretch_ec_rule'
-    # the rules that ceph osd pool set num_zones generates for the pool
+    # the rules that osd pool set num_zones generates for the pool
     SINGLE_ZONE_CRUSH_RULE = POOL + '-single-zone'
     STRETCH_CRUSH_RULE = POOL + '-stretch'
     STRETCH_BUCKET_TYPE = 'datacenter'
@@ -289,8 +298,9 @@ class TestStretchMode(MgrTestCase):
 
     def _stretch_mode_enabled_correctly(self, crush_rule):
         """
-        Evaluate whether the stretch mode is enabled correctly.
-        by checking the OSDMap and MonMap.
+        Check that every pool is over the two datacenters on crush_rule, with
+        6 shards and min_size 2, and that the cluster stretch flags are on in
+        the OSDMap and the monmap, with tiebreaker e and no zone down.
         """
         crush_rule_id = self.mgr_cluster.mon_manager.get_crush_rule_id(
             crush_rule)
@@ -317,12 +327,12 @@ class TestStretchMode(MgrTestCase):
                 True,
                 pool['is_stretch_pool']
             )
-            # expects peering_crush_bucket_count = 2 (always this value for stretch mode)
+            # expects peering_crush_bucket_count = 2 (the two zones)
             self.assertEqual(
                 2,
                 pool['peering_crush_bucket_count']
             )
-            # expects peering_crush_bucket_target = 2 (always this value for stretch mode)
+            # expects peering_crush_bucket_target = 2 (the two zones)
             self.assertEqual(
                 2,
                 pool['peering_crush_bucket_target']
@@ -378,8 +388,9 @@ class TestStretchMode(MgrTestCase):
 
     def _stretch_mode_disabled_correctly(self, crush_rule):
         """
-        Evaluate whether the stretch mode is disabled correctly.
-        by checking the OSDMap and MonMap.
+        Check that every pool is in one zone on crush_rule, with 3 shards and
+        min_size 2, and that the cluster stretch flags are off in the OSDMap
+        and the monmap.
         """
         crush_rule_id = self.mgr_cluster.mon_manager.get_crush_rule_id(
             crush_rule)
@@ -468,9 +479,15 @@ class TestStretchMode(MgrTestCase):
 
     def test_disable_stretch_mode(self):
         """
-        Test stretch mode is disabled by setting num_zones to 1 with the following scenario:
-        1. Healthy Stretch Mode
-        2. Degraded Stretch Mode
+        osd pool set <pool> num_zones 1 moves an erasure coded pool over two
+        zones into one, onto a rule of its own, <pool>-single-zone, and is
+        refused without --yes-i-really-mean-it. This test does it twice for
+        the pool on stretch_ec_rule: first with both datacenters up, after
+        which num_zones 2 moves the pool back over both, onto
+        <pool>-stretch; then with dc1's OSDs and monitors down and
+        degraded_stretch_mode set. Each PG keeps the shards in its first
+        zone, so the PGs whose first zone is dc1 are unavailable until dc1
+        is back; then all PGs are active+clean.
         """
         # Create a pool
         self._setup_pool(self.POOL)
@@ -488,7 +505,7 @@ class TestStretchMode(MgrTestCase):
                 'num_zones',
                 '1'
             ))
-        # Disable stretch mode by setting num_zones to 1 (expect success 0)
+        # num_zones 1 with --yes-i-really-mean-it (expect success 0)
         self.assertEqual(
             0,
             self.mgr_cluster.mon_manager.raw_cluster_cmd_result(
@@ -500,7 +517,7 @@ class TestStretchMode(MgrTestCase):
                 '1',
                 '--yes-i-really-mean-it'
             ))
-        # Check if stretch mode is disabled correctly
+        # The pool is in one zone and the cluster stretch flags are off
         self._stretch_mode_disabled_correctly(self.SINGLE_ZONE_CRUSH_RULE)
         # all PGs are active + clean
         self.wait_until_true_and_hold(
@@ -510,7 +527,7 @@ class TestStretchMode(MgrTestCase):
         )
         # write some data to the pool
         self._write_some_data(self.WRITE_PERIOD)
-        # Enable stretch mode by setting num_zones to 2
+        # num_zones 2 moves the pool back over both zones
         self.assertEqual(
             0,
             self.mgr_cluster.mon_manager.raw_cluster_cmd_result(
@@ -533,13 +550,13 @@ class TestStretchMode(MgrTestCase):
         # Bring down dc1
         self._fail_over_all_osds_in_dc('dc1')
         self._fail_over_all_mons_in_dc('dc1')
-        # should be in degraded stretch mode
+        # degraded_stretch_mode is set
         self.wait_until_true_and_hold(
             lambda: self.mgr_cluster.mon_manager.is_degraded_stretch_mode(),
             timeout=self.RECOVERY_PERIOD,
             success_hold_time=self.SUCCESS_HOLD_TIME
         )
-        # Disable stretch mode by setting num_zones to 1 (expect success 0).
+        # num_zones 1 with dc1 down (expect success 0).
         # Each PG keeps the shards of its first zone, which is dc1 for about
         # half of them: those are unavailable until dc1 is back.
         self.assertEqual(
@@ -553,7 +570,7 @@ class TestStretchMode(MgrTestCase):
                 '1',
                 '--yes-i-really-mean-it'
             ))
-        # Check if stretch mode is disabled correctly
+        # The pool is in one zone and the cluster stretch flags are off
         self._stretch_mode_disabled_correctly(self.SINGLE_ZONE_CRUSH_RULE)
         # Those PGs recover once dc1 is back
         self._bring_back_dc('dc1')
