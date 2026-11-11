@@ -28,7 +28,7 @@ function inconsistent_shards() {
 # copies, shards 3-5, in the other. It writes an object, corrupts shard 4,
 # the copy of shard 1, and deep scrubs the PG: the shards reported with
 # errors must be those expected. After repair, a second deep scrub finds no
-# inconsistency, shard 4 holds its old bytes again, and the object reads
+# inconsistency, shards 1 and 4 hold their old bytes, and the object reads
 # back as written.
 # The tests run this with an isa and a jerasure profile, both k=2 m=1.
 function scrub_and_repair_zone_copy() {
@@ -44,7 +44,9 @@ function scrub_and_repair_zone_copy() {
     # shard 4 is the fifth in the acting set by shard, which pg query shows;
     # not named osd, which the helpers set
     local victim=$(ceph pg $pg query | jq '.acting[4]')
+    local twin=$(ceph pg $pg query | jq '.acting[1]')
 
+    objectstore_tool $dir $twin obj get-bytes $dir/TWIN || return 1
     objectstore_tool $dir $victim obj get-bytes $dir/SHARD || return 1
     dd if=/dev/urandom of=$dir/CORRUPT bs=$(stat -c %s $dir/SHARD) count=1 || return 1
     objectstore_tool $dir $victim obj set-bytes $dir/CORRUPT || return 1
@@ -58,6 +60,8 @@ function scrub_and_repair_zone_copy() {
     test "$(rados list-inconsistent-obj $pg | jq '.inconsistents|length')" = 0 || return 1
     objectstore_tool $dir $victim obj get-bytes $dir/REPAIRED || return 1
     cmp $dir/SHARD $dir/REPAIRED || return 1
+    objectstore_tool $dir $twin obj get-bytes $dir/TWIN_REPAIRED || return 1
+    cmp $dir/TWIN $dir/TWIN_REPAIRED || return 1
     rados -p ec get obj $dir/COPY || return 1
     cmp $dir/ORIGINAL $dir/COPY || return 1
 }
@@ -75,7 +79,7 @@ function TEST_scrub_repairs_corrupt_zone_copy() {
 
 # jerasure with technique reed_sol_van cannot turn CRCs that way, so
 # nothing says which of the two different copies is good: both, shards 1
-# and 4, are reported.
+# and 4, are reported, and repair rebuilds both.
 function TEST_scrub_repairs_both_copies_without_crc_decode() {
     local dir=$1
     two_zone_cluster $dir || return 1

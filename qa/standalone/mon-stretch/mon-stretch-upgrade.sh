@@ -317,7 +317,8 @@ function TEST_commit_copies_default_profile() {
 # default profile, osd require-osd-release vampire and the create of
 # erasure coded pool late. fresh, created before the commit, gets a copy,
 # fresh-k2-m2; gone, removed, gets none; and late, created after the
-# commit, gets late-k2-m2.
+# commit, gets late-k2-m2. late's create waits for the commit: late is not
+# in the first OSDMap of release vampire.
 function TEST_commit_copies_default_profile_in_its_update() {
     local dir=$1
     run_mons $dir || return 1
@@ -340,6 +341,12 @@ function TEST_commit_copies_default_profile_in_its_update() {
     test "$(pool_field fresh erasure_code_profile)" = '"fresh-k2-m2"' || return 1
     test "$(pool_field late erasure_code_profile)" = '"late-k2-m2"' || return 1
     ! ceph osd erasure-code-profile ls | grep -q '^gone-' || return 1
+
+    local epoch=$(ceph osd dump -f json | jq .epoch)
+    while [ "$(ceph osd dump $((epoch - 1)) -f json | jq -r .require_osd_release)" = vampire ]; do
+        epoch=$((epoch - 1))
+    done
+    ceph osd dump $epoch -f json | jq -e '[.pools[].pool_name] | index("late") == null' || return 1
 }
 
 # The upgrade commit turns a min_size of global stretch mode, which counts
