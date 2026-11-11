@@ -1200,7 +1200,9 @@ class VolumeClient(CephfsClient["Module"]):
         return src_path
 
     def _get_clone_progress_report(self, vol_handle, dst_group, dst_subvol):
-        dst_path = dst_subvol.base_path.decode('utf-8')
+        # Use the data directory (path), not base_path. base_path also includes
+        # .meta and other non-cloned entries, which inflates progress beyond 100%.
+        dst_path = dst_subvol.path.decode('utf-8')
         src_path = self._get_clone_src_path(vol_handle, dst_group, dst_subvol)
         if not src_path:
             return None
