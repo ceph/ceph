@@ -1874,6 +1874,22 @@ ECCommon::RecoveryBackend::recover_object(
   }
   map<hobject_t, interval_set<uint64_t>> clone_subsets;
 
+  auto clone_source_available = [&](const hobject_t &src) {
+    dout(10) << "checking the order of the objects: " << hoid << " is the current "
+             << src << " is the object we are trying to clone from" << dendl;
+    for (auto shard : op.missing_on) {
+      if (get_parent()->get_shard_missing(shard).is_missing(src)) {
+        return false;
+      }
+      if (src > hoid &&
+          get_parent()->get_backfill_shards().contains(shard) &&
+          src >= get_parent()->get_shard_info(shard).last_backfill) {
+        return false;
+      }
+    }
+    return true;
+  };
+
   if (cct->_conf->osd_recover_clone_overlap) {
     interval_set<uint64_t> prev = copy_subset;
     hobject_t c = hoid;
@@ -1886,16 +1902,8 @@ ECCommon::RecoveryBackend::recover_object(
       prev.intersection_of(op.recovery_info.ss.clone_overlap[c.snap]);
       if (prev.empty()) continue;
 
-      // NEW: Safety check! Ensure ALL target shards actually have this clone on their disk.
-      bool clone_missing = false;
-      for (auto shard : op.missing_on) {
-        if (get_parent()->get_shard_missing(shard).is_missing(c)) {
-          clone_missing = true;
-          break;
-        }
-      }
-      
-      if (clone_missing) {
+      // Ensure ALL target shards actually have this clone on their disk.
+      if (!clone_source_available(c)) {
         dout(10) << __func__ << " " << hoid << " replica is missing clone " << c 
                 << ", falling back to network push" << dendl;
         continue; // Skip this clone, try the next one or fall back to full push
@@ -1919,16 +1927,8 @@ ECCommon::RecoveryBackend::recover_object(
       head_overlap.intersection_of(op.recovery_info.ss.clone_overlap[hoid.snap]);
       
       if (!head_overlap.empty()) {
-        // NEW: Safety check for HEAD as well, just to be bulletproof.
-        bool head_missing = false;
-        for (auto shard : op.missing_on) {
-          if (get_parent()->get_shard_missing(shard).is_missing(head_obj)) {
-            head_missing = true;
-            break;
-          }
-        }
-
-        if (head_missing) {
+        // Safety check for HEAD as well.
+        if (!clone_source_available(head_obj)) {
           dout(10) << __func__ << " " << hoid << " replica is missing HEAD " << head_obj 
                   << ", falling back to network push" << dendl;
         } else {
