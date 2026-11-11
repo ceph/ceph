@@ -338,6 +338,27 @@ function stretch_mode_enabled() {
     ceph osd dump -f json | jq -e .stretch_mode.stretch_mode_enabled > /dev/null
 }
 
+function default_value() {
+    ceph osd pool default get -f json | jq -r ".$1.value"
+}
+
+# the cluster stretch flags are off, the pool defaults and the given pools
+# are back to one zone of 3, pool ec is on ec-single-zone, and the PGs are
+# clean
+function check_disabled() {
+    local pool
+    test "$(ceph mon dump -f json | jq .stretch_mode)" = false || return 1
+    ! stretch_mode_enabled || return 1
+    test "$(default_value num_zones)" = 1 || return 1
+    test "$(default_value replica)" = 3 || return 1
+    for pool in "$@"; do
+        test "$(pool_field $pool num_zones)" = 1 || return 1
+        test "$(pool_field $pool size)" = 3 || return 1
+    done
+    test "$(pool_rule ec)" = ec-single-zone || return 1
+    wait_for_clean || return 1
+}
+
 # hand-written rules over zones z1 and z2 of type ztype: take2 takes each zone,
 # choose2 chooses them, class2 chooses them in class ssd, ec_take and ec_choose
 # are erasure rules of each kind, and mixed2 has different steps after each

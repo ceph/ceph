@@ -35,10 +35,6 @@ function pool_num_zones() {
     ceph osd pool get $1 num_zones -f json | jq .num_zones
 }
 
-function default_value() {
-    ceph osd pool default get -f json | jq -r ".$1.value"
-}
-
 # zones iris (mon.a) and pze (mon.b) of two hosts each, tiebreaker mon.c,
 # and a replicated rule that takes 2 hosts in each zone
 function setup_zones() {

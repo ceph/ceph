@@ -60,7 +60,7 @@ function TEST_disable_to_user_rules() {
     done
     test "$(rule_takes ec-single-zone)" = default || return 1
     test "$(rule_leaf_type ec-single-zone)" = host || return 1
-    wait_for_clean || return 1
+    check_disabled .mgr rep rep2 || return 1
     check_pools $dir rep rep2 ec || return 1
     check_one_zone rep 1 || return 1
     check_one_zone rep2 1 || return 1
@@ -87,7 +87,7 @@ function TEST_disable_to_user_rules() {
     for pool in .mgr rep rep2; do
         test "$(pool_rule $pool)" = hosts_any || return 1
     done
-    wait_for_clean || return 1
+    check_disabled .mgr rep rep2 || return 1
     check_pools $dir rep rep2 ec || return 1
 
     # each replicated pool gets a rule of hosts_any's placement
@@ -107,7 +107,7 @@ function TEST_disable_to_user_rules() {
     for pool in .mgr rep rep2; do
         test "$(pool_rule $pool)" = ssd_hosts || return 1
     done
-    wait_for_clean || return 1
+    check_disabled .mgr rep rep2 || return 1
     check_ssd rep || return 1
     check_ssd rep2 || return 1
     check_pools $dir rep rep2 ec || return 1
