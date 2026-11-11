@@ -21,6 +21,9 @@ auth_names = ['client.crash.%s' % socket.gethostname(),
               'client.crash',
               'client.admin']
 
+# seconds to wait for a ceph cli invocation
+CEPH_TIMEOUT = 30
+
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -42,21 +45,26 @@ def parse_args():
     return parser.parse_args()
 
 
+def run_ceph(args, input=None):
+    try:
+        pr = subprocess.run(
+            args=['ceph'] + args,
+            input=input,
+            stderr=subprocess.PIPE,
+            timeout=CEPH_TIMEOUT,
+        )
+    except subprocess.TimeoutExpired:
+        return errno.ETIMEDOUT, 'timed out after %ds' % CEPH_TIMEOUT
+    return pr.returncode, pr.stderr.decode()
+
+
 def post_crash(path):
     rc = 0
     for n in auth_names:
-        pr = subprocess.Popen(
-            args=['timeout', '30', 'ceph',
-                  '-n', n,
-                  'crash', 'post', '-i', '-'],
-            stdin=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        f = open(os.path.join(path, 'meta'), 'rb')
-        (_, stderr) = pr.communicate(input=f.read())
-        stderr = stderr.decode()
-        rc = pr.wait()
-        f.close()
+        with open(os.path.join(path, 'meta'), 'rb') as f:
+            meta = f.read()
+        rc, stderr = run_ceph(['-n', n, 'crash', 'post', '-i', '-'],
+                              input=meta)
         if rc == 0 and stderr == "":
             break
         if rc == errno.EACCES:
@@ -68,6 +76,36 @@ def post_crash(path):
         log.warning('post %s failed: unable to authenticate as %s: %s'
                     % (path, ', '.join(auth_names), stderr))
     return rc
+
+
+def is_key_error(rc, stderr):
+    # the ceph cli returns EACCES for a rejected or missing key. Do not
+    # match ENOENT ("RADOS object not found"): that is also what a missing
+    # mon address gives, and that should not stop us.
+    if rc == errno.EACCES:
+        return True
+    for msg in ['unable to find a keyring',
+                'RADOS permission denied']:
+        if msg in stderr:
+            return True
+    return False
+
+
+def check_auth():
+    # exercise the same names, in the same order, as post_crash()
+    for n in auth_names:
+        rc, stderr = run_ceph(['-n', n, '-s'])
+        if rc == 0:
+            log.info('cluster ping as %s succeeded' % n)
+            return
+        if not is_key_error(rc, stderr):
+            # e.g. no quorum or mon unreachable: not a reason to stop
+            log.warning('cluster ping as %s failed: %s' % (n, stderr))
+            return
+        log.debug('cluster ping as %s failed: %s' % (n, stderr))
+    log.error('unable to authenticate as %s: %s'
+              % (', '.join(auth_names), stderr))
+    sys.exit(1)
 
 
 def scrape_path(path):
@@ -136,8 +174,7 @@ def main():
         time.sleep(30)
 
     log.info("pinging cluster to exercise our key")
-    pr = subprocess.Popen(args=['timeout', '30', 'ceph', '-s'])
-    pr.wait()
+    check_auth()
 
     log.info("monitoring path %s, delay %ds" % (args.path, args.delay * 60.0))
     while True:
