@@ -26,8 +26,14 @@ function run() {
     done
 }
 
-# Test osd pool create for stretch replica builds its rule from the root and
-# failure domains it is not given in the osd_pool_default_* options
+# osd pool create --num_zones 2 builds the pool's rule from --root,
+# --zone_failure_domain and --osd_failure_domain, and takes any it is not
+# given from osd_pool_default_root, osd_pool_default_zone_failure_domain and
+# osd_pool_default_osd_failure_domain. This test sets these options to
+# other (a second root, holding rooms room1 and room2), room and osd, and
+# creates replicated pool from_options with only --num_zones 2 and
+# --replica 2. Its rule, from_options, takes other and has steps of type
+# room and osd.
 function TEST_pool_create_stretch_replica_option_defaults() {
     local dir=$1
     run_mon $dir a --public-addr=$CEPH_MON_A || return 1
@@ -59,7 +65,15 @@ function TEST_pool_create_stretch_replica_option_defaults() {
     jq -e '.steps[] | select(.type == "osd")' $dir/rule.json || return 1
 }
 
-# Test create-erasure fails when insufficient number of zones, hosts, and osds
+# osd crush rule create-erasure <rule> <profile> --num_zones 2 makes an
+# erasure rule over two zones, of type datacenter by default, that places
+# k+m shards in each zone, each on a different host. It is refused until
+# each zone has k+m hosts with at least one OSD. This test uses profile
+# stretch_ec_profile (k=2 m=1) and datacenters dc1 and dc2, which start
+# empty. It adds three hosts to dc1, then an OSD to each of them, then does
+# the same for dc2, and runs the command after each step: it is refused,
+# naming the zone and what it lacks, until both zones have 3 hosts with an
+# OSD. The rule then chooses 2 datacenters, and 3 hosts in each.
 function TEST_stretch_ec() {
     local dir=$1
     run_mon $dir a --public-addr=$CEPH_MON_A || return 1
@@ -132,7 +146,17 @@ function TEST_stretch_ec() {
     ceph osd crush rule dump stretch_erasurecode_rule | jq '.steps[4].type' | grep "host" || return 1
 }
 
-# Test osd pool create for stretch EC fails when insufficient number of zones, hosts, and osds
+# osd pool create <pool> erasure --num_zones 2 makes an erasure coded pool
+# over two zones, of type datacenter by default, on a new rule named after
+# the pool. It is refused until each zone has k+m hosts with at least one
+# OSD. This test creates data0 with --k 2 --m 1 while it adds three hosts
+# to datacenter dc1, then an OSD to each, then does the same for dc2: each
+# attempt is refused, naming the zone and what it lacks. The OSDs join with
+# weight 0, so that the check of the zones' weights, which comes first,
+# passes, and get weight 1 once both zones have them. data0 is then
+# created, and its rule chooses 2 datacenters, and 3 hosts in each. Pool
+# data_osd_failure_domain, from a profile with crush-osd-failure-domain=osd,
+# gets a rule that chooses OSDs instead of hosts in each datacenter.
 function TEST_pool_create_stretch_ec() {
     local dir=$1
     run_mon $dir a --public-addr=$CEPH_MON_A || return 1
@@ -145,7 +169,7 @@ function TEST_pool_create_stretch_ec() {
     run_osd $dir 4 || return 1
     run_osd $dir 5 || return 1
 
-    # Set monitor locations for stretch mode validation
+    # Set monitor locations, which pools over zones need
     ceph mon set_location a datacenter=dc1 || return 1
     ceph mon set_location b datacenter=dc2 || return 1
     ceph mon set_location c datacenter=arbiter || return 1
@@ -222,7 +246,16 @@ function TEST_pool_create_stretch_ec() {
         jq -r '.steps[4].type' | grep '^osd$' || return 1
 }
 
-# Test osd pool create for stretch replica fails when insufficient number of zones, hosts, and osds
+# osd pool create <pool> --num_zones 2 --replica 2 makes a replicated pool
+# with 2 copies in each of two zones, of type datacenter by default, on a
+# new rule named after the pool. It is refused until each zone has 2 hosts
+# with at least one OSD. This test creates data0 while it adds two hosts to
+# datacenter dc1, then an OSD to each, then does the same for dc2: each
+# attempt is refused, naming the zone and what it lacks. The OSDs join with
+# weight 0, so that the check of the zones' weights, which comes first,
+# passes, and get weight 1 once both zones have them. data0 is then created
+# with size 4 and min_size 1, and its rule chooses 2 datacenters, and 2
+# hosts in each.
 function TEST_pool_create_stretch_replica() {
     local dir=$1
     run_mon $dir a --public-addr=$CEPH_MON_A || return 1
@@ -235,7 +268,7 @@ function TEST_pool_create_stretch_replica() {
     run_osd $dir 4 || return 1
     run_osd $dir 5 || return 1
 
-    # Set monitor locations for stretch mode validation
+    # Set monitor locations, which pools over zones need
     ceph mon set_location a datacenter=dc1 || return 1
     ceph mon set_location b datacenter=dc2 || return 1
     ceph mon set_location c datacenter=arbiter || return 1
@@ -294,8 +327,15 @@ function TEST_pool_create_stretch_replica() {
     ceph osd crush rule dump data0 | jq '.steps[2].type' | grep "host" || return 1
 }
 
-# Test osd pool create for stretch replica fails for device classes with
-# insufficient hosts
+# osd pool create --num_zones 2 --class <class> places a pool over two zones
+# on the OSDs of that device class only, so it needs enough hosts of the
+# class in each zone. In this test datacenters dc1 and dc2 each have 2 hosts
+# of ssd OSDs and 1 of hdd OSDs. Replicated pool stretch_ssd, with
+# --replica 2 --class ssd, is created. stretch_hdd, with --class hdd, is
+# refused, as dc1~hdd (the hdd OSDs of dc1) does not have 2 hosts with an
+# OSD; the message names the osd_pool_default_* options that gave the rest
+# of the placement. With a second host of hdd OSDs added to each
+# datacenter, stretch_hdd is created.
 function TEST_pool_create_stretch_replica_with_class() {
     local dir=$1
     run_mon $dir a --public-addr=$CEPH_MON_A || return 1
@@ -357,6 +397,14 @@ function TEST_pool_create_stretch_replica_with_class() {
     ceph osd pool create stretch_hdd --num_zones 2 --replica 2 --class hdd || return 1
 }
 
+# osd crush rule create-erasure <rule> <profile> --num_zones 2, with a
+# profile of a device class (crush-device-class), places the shards on OSDs
+# of that class only, so it needs k+m hosts of the class in each zone. In
+# this test datacenters dc1 and dc2 each have 3 hosts of ssd OSDs and 2 of
+# hdd OSDs, and profiles stretch_ec_ssd and stretch_ec_hdd are k=2 m=1 in
+# ssd and in hdd OSDs. Rule stretch_ssd is created. stretch_hdd is refused,
+# as dc1 has only 2 hosts with an hdd OSD. With a third host of hdd OSDs
+# added to each datacenter, stretch_hdd is created.
 function TEST_stretch_ec_with_class() {
     local dir=$1
     run_mon $dir a --public-addr=$CEPH_MON_A || return 1
@@ -441,7 +489,16 @@ function TEST_stretch_ec_with_class() {
     ceph osd crush rule create-erasure stretch_hdd stretch_ec_hdd --num_zones 2 || return 1
 }
 
-# Test adding a pool with different sites than other stretch mode pools
+# In global stretch mode a pool can go over zones only on a rule over the
+# two datacenters that global stretch mode uses. This test enables it with
+# mon enable_stretch_mode and rule stretch_ssd, which chooses datacenters
+# dc1 and dc2, and 2 hosts of ssd OSDs in each. It then adds a datacenter
+# bucket, dc3, outside the root, and bad_rule, which takes dc1 and dc3.
+# osd pool create data2 --rule bad_rule --num_zones 2 is refused because of
+# dc3, as global stretch mode needs exactly two datacenter buckets; this
+# check comes before that of the rule. osd pool set data3 num_zones 2
+# --crush_rule bad_rule is refused, as bad_rule uses datacenter buckets
+# other than those of global stretch mode, and data3 stays in one zone.
 function TEST_stretch_diff_sites() {
     local dir=$1
     run_mon $dir a --public-addr=$CEPH_MON_A || return 1
@@ -517,7 +574,7 @@ EOF
     crushtool -c $dir/crushmap.txt -o $dir/crushmap.new.bin || return 1
     ceph osd setcrushmap -i $dir/crushmap.new.bin || return 1
 
-    # pool create checks the cluster for stretch mode before the rule
+    # pool create checks the cluster's zones before the rule
     ceph osd pool create data2 --rule bad_rule --num_zones 2 2>&1 | grep "there are 3datacenter's in the cluster but stretch mode currently only works with 2" || return 1
 
     # the same check when a pool is set to two zones
@@ -526,6 +583,13 @@ EOF
     test "$(ceph osd pool get data3 num_zones -f json | jq .num_zones)" = 1 || return 1
 }
 
+# In global stretch mode, pools over zones can use rules of different device
+# classes over the same two datacenters. This test makes rules stretch_ssd
+# and stretch_hdd, which choose datacenters dc1 and dc2, and 2 hosts in
+# each, of ssd and of hdd OSDs. mon enable_stretch_mode with stretch_ssd
+# moves pool pool_ssd, created before, to stretch_ssd. Pools data0, on
+# stretch_ssd, and pool_hdd, on stretch_hdd, are then created with
+# --num_zones 2, and pool_hdd keeps stretch_hdd.
 function TEST_stretch_replica_device_class_pools() {
     local dir=$1
     run_mon $dir a --public-addr=$CEPH_MON_A || return 1
@@ -604,6 +668,15 @@ function TEST_stretch_replica_device_class_pools() {
     ceph osd pool ls | grep "pool_hdd" || return 1
 }
 
+# osd pool stretch set, which makes a replicated pool an individual stretch
+# pool, is refused for an erasure coded pool: osd pool set num_zones 2
+# places one over two zones instead. This test has 6 hosts in each of
+# datacenters dc1 and dc2, and erasure coded pools data0 and data1 from
+# profile stretch_ec_profile (k=4 m=2), with allow_ec_optimizations set.
+# osd pool stretch set data0, with stretch_ec, a rule over 2 zones made by
+# osd crush rule create-erasure, is refused. osd pool set num_zones 2 then
+# gives each pool size 12, 6 shards in each zone, and sets the cluster
+# stretch flags. The PGs then go clean.
 function TEST_stretch_ec_stretch_set() {
     local dir=$1
     run_mon $dir a --public-addr=$CEPH_MON_A || return 1
@@ -695,6 +768,13 @@ function TEST_stretch_ec_stretch_set() {
     wait_for_clean || return 1
 }
 
+# Global stretch mode needs exactly two buckets of the zone type of each
+# pool over zones. This test enables it with mon enable_stretch_mode, zones
+# z1 and z2 of bucket type zone, and rule stretch_zone (2 hosts of ssd OSDs
+# in each zone), and checks that the monmap shows it. Replicated pool
+# pool_dc, created with --num_zones 2 and --zone_failure_domain datacenter,
+# is then refused, as there are no datacenter buckets. The refusal comes
+# from the check of global stretch mode, before the pool's rule is built.
 function TEST_stretch_diff_bucket_barrier() {
     local dir=$1
     run_mon $dir a --public-addr=$CEPH_MON_A || return 1
@@ -758,7 +838,7 @@ function TEST_stretch_diff_bucket_barrier() {
 
     ceph mon enable_stretch_mode c stretch_zone zone || return 1
     
-    # Wait for stretch mode to be fully committed before testing validation
+    # Wait for global stretch mode to be committed before testing validation
     ceph mon dump | grep "stretch_mode_enabled 1" || return 1
 
     # the stretch checks come before the rule is built
@@ -766,8 +846,6 @@ function TEST_stretch_diff_bucket_barrier() {
 
 }
 
-# Test that unstretching the last pool cleanly disables stretch mode globally and clears leader memory
-# across all transition states: Healthy, Degraded, and Recovery.
 # Wait until the output of a command matches a pattern
 function wait_for_output() {
     local pattern=$1
@@ -779,7 +857,8 @@ function wait_for_output() {
     return 1
 }
 
-# Stretch mode is left in the OSDMap and the MonMap, whose change follows
+# The cluster stretch flags are cleared in the OSDMap, and in the monmap,
+# whose change follows
 function stretch_mode_left() {
     ceph osd dump | grep "^stretch_mode_enabled false" || return 1
     for ((i=0; i < 60; i++)); do
@@ -789,6 +868,16 @@ function stretch_mode_left() {
     return 1
 }
 
+# When the last pool over zones goes back to one zone, the cluster stretch
+# flags are cleared, in the OSDMap and then in the monmap, and the leader
+# drops any degraded or recovering state. This test, with datacenters dc1
+# and dc2, sets num_zones 1 on a new replicated pool, created with
+# --num_zones 2 --replica 2, three times: while the cluster is healthy;
+# while degraded_stretch_mode is set, with the monitor and OSDs of dc2
+# down; and while recovering_stretch_mode is set, after the monitor of dc2
+# is back and osd force_recovery_stretch_mode is run. Each time the flags
+# are cleared. After the last two, osd force_healthy_stretch_mode is
+# refused, as the cluster is not recovering.
 function TEST_stretch_unstretch_clean() {
     local dir=$1
     run_mon $dir a --public-addr=$CEPH_MON_A || return 1
@@ -829,7 +918,7 @@ function TEST_stretch_unstretch_clean() {
     # ==========================================
     ceph osd pool create data_healthy --num_zones 2 --replica 2 || return 1
 
-    # healthy stretch mode
+    # the cluster stretch flags set, not degraded or recovering
     ceph osd dump | grep "^stretch_mode_enabled true" || return 1
     ceph osd dump | grep "^degraded_stretch_mode 0" || return 1
 
@@ -850,7 +939,7 @@ function TEST_stretch_unstretch_clean() {
 
     wait_for_output "^degraded_stretch_mode 1" ceph osd dump || return 1
 
-    # Unstretch the pool while in degraded stretch mode
+    # Unstretch the pool while in degraded mode
     ceph osd pool set data_degraded num_zones 1 || return 1
     stretch_mode_left || return 1
     # the leader's degraded and recovering state went with it
@@ -872,7 +961,7 @@ function TEST_stretch_unstretch_clean() {
     # ==========================================
     ceph osd pool create data_recovery --num_zones 2 --replica 2 || return 1
 
-    # Recovery stretch mode is entered from degraded stretch mode, and only
+    # Recovery mode is entered from degraded mode, and only
     # with a monitor in quorum in every zone: lose dc2, then bring back
     # mon.b but not the OSDs
     kill_daemons $dir TERM mon.b
@@ -886,7 +975,7 @@ function TEST_stretch_unstretch_clean() {
     ceph osd force_recovery_stretch_mode --yes-i-really-mean-it || return 1
     wait_for_output "^recovering_stretch_mode 1" ceph osd dump || return 1
 
-    # Unstretch the pool while in recovery stretch mode
+    # Unstretch the pool while in recovery mode
     ceph osd pool set data_recovery num_zones 1 || return 1
     stretch_mode_left || return 1
     ceph osd force_healthy_stretch_mode --yes-i-really-mean-it 2>&1 | grep "the cluster is not in recovery stretch mode" || return 1

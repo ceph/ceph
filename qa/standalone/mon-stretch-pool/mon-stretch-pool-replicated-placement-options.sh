@@ -8,9 +8,17 @@ function run() {
     run_stretch_tests "$@"
 }
 
-# A single-zone pool builds a rule from the placement options when they differ
-# from the cluster default, so --root, --osd_failure_domain and --class are
-# honoured; only --zone_failure_domain, meaningless for one zone, is refused.
+# osd pool create, for a replicated pool in one zone, takes the placement
+# options --root, --osd_failure_domain and --class, and makes the pool a rule
+# of its own when replicated_rule (OSDs under the root default, here) does
+# not give that placement. --root altroot (a second root) and --class ssd
+# each get a rule <pool>-single-zone, and --osd_failure_domain host a rule
+# over hosts under default. --osd_failure_domain osd keeps replicated_rule,
+# and pool plain, given only --num_zones 1, gets no rule of its own.
+# --no-class drops the class set in the option osd_pool_default_class.
+# --zone_failure_domain, which means nothing in one zone, is refused and
+# leaves no pool. --class with --no-class, and a rule given with --root, are
+# refused too.
 function TEST_single_zone_replicated_placement_options() {
     local dir=$1
     run_mon $dir a || return 1
@@ -65,8 +73,12 @@ function TEST_single_zone_replicated_placement_options() {
         || return 1
 }
 
-# The placement options are honoured whatever the default rule places, and a
-# pool given none still gets the default rule
+# With a default rule set, osd pool create still honours the placement
+# options. The option osd_pool_default_crush_rule is set to alt, made by
+# create-replicated to place ssd OSDs under the root altroot. Pool plain,
+# given no options, gets alt. Pool data, given --root default
+# --osd_failure_domain host --no-class, gets a rule over hosts under
+# default.
 function TEST_single_zone_options_with_custom_default_rule() {
     local dir=$1
     run_mon $dir a || return 1
@@ -92,9 +104,11 @@ function TEST_single_zone_options_with_custom_default_rule() {
     rule_places $dir data default host || return 1
 }
 
-# A single-zone erasure coded pool takes --class, and a class that ceph osd
-# pool default set gives the default profile reaches an EC pool that names no
-# profile.
+# osd pool create, for an erasure coded pool in one zone, puts --class in
+# the pool's profile, and a pool that names no profile gets the class of the
+# default profile. Pool ec_cls, created with --class ssd, gets a profile with
+# crush-device-class=ssd. After osd pool default set --pool_type erasure
+# --class ssd, pool ec_def, given no type, class or profile, gets one too.
 function TEST_single_zone_erasure_placement_options() {
     local dir=$1
     run_mon $dir a || return 1
@@ -127,10 +141,16 @@ function rule_places() {
     jq -e ".steps[] | select(.type == \"$type\")" $dir/rule.json || return 1
 }
 
-# An erasure coded pool takes its placement from its profile: a pool that
-# names none from the default profile, which ceph osd pool default set
-# writes while the default type is erasure, and the options alone do not
-# change. Every such pool gets a rule of its own.
+# An erasure coded pool takes its placement from its profile; a pool that
+# names no profile takes it from the default profile. After osd pool default
+# set --pool_type erasure --root altroot --osd_failure_domain osd, pool
+# ec_def gets a rule over OSDs under altroot (a second, empty root). ec_named,
+# on profile named, which gives no placement, gets a rule over hosts under
+# default. Setting osd_pool_default_root and
+# osd_pool_default_osd_failure_domain with config set changes the options
+# but not the default profile, so ec_kept still gets altroot and OSDs. osd
+# pool default set --root default --osd_failure_domain host writes the
+# profile, and ec_back gets default and hosts. No erasure-code rule is made.
 function TEST_single_zone_erasure_placement_defaults() {
     local dir=$1
     run_mon $dir a || return 1

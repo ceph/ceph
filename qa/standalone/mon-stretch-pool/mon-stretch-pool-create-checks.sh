@@ -32,6 +32,16 @@ function expect_refused() {
     ! ceph osd pool ls | grep -qx p || return 1
 }
 
+# osd pool create checks its parameters before it makes the pool. This test
+# gives pool p parameters that do not go together (erasure with --k and no
+# --m, --erasure_code_profile with --k and --m, --k and --m for a replicated
+# pool, --size with --replica, and --zone_failure_domain for a replicated
+# pool in one zone), values out of range (--num_zones 3, --size 11, --replica
+# 11 and 0, --min_size 4 for k=2 m=1, and a --pgp_num above --pg_num), and a
+# profile and a rule that do not exist. Each is refused with its own message
+# and leaves no pool. p is then created and gets pool id 1, so the refused
+# commands used up no pool id, and creating it again reports that it already
+# exists. osd pool set p num_zones 1 --replica 0 is refused as out of range.
 function TEST_pool_create_checks() {
     local dir=$1
 
@@ -64,7 +74,7 @@ function TEST_pool_create_checks() {
     expect_refused $dir "specified rule none doesn't exist" \
         ceph osd pool create p --rule none || return 1
 
-    # the refused commands left no pool id or rule behind
+    # the refused commands left no pool id behind
     ceph osd pool create p 8 || return 1
     test "$(ceph osd pool ls detail -f json | jq '.[] | select(.pool_name == "p") | .pool_id')" = 1 || return 1
     ceph osd pool create p 8 2>&1 | grep "already exists" || return 1
@@ -73,6 +83,11 @@ function TEST_pool_create_checks() {
     grep -F "not in range" $dir/out || return 1
 }
 
+# osd pool create --min_size sets the min_size of the new pool. Replicated
+# pool r, created with --replica 3 --min_size 1, gets min_size 1, and erasure
+# coded pool e, with --k 2 --m 1 --min_size 3, gets min_size 3. --replica 2
+# --min_size 3 is refused, as min_size cannot be more than replica, and
+# leaves no pool.
 function TEST_pool_create_min_size() {
     local dir=$1
 

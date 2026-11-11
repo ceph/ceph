@@ -64,6 +64,22 @@ function assert_pool_rule() {
     }
 }
 
+# osd pool set <pool> num_zones and osd pool set <pool> replica change the
+# number of zones and of copies in each, on rules named after the pool. The
+# zones are zone-a and zone-b, of type zone, with 3 hosts each.
+# num_zones 2 refuses a --replica of 0, 128 or 256, and num_zones 3 is
+# refused. With --replica 2, replicated pool replica_name_test gets a rule
+# named after it with 2 copies in each zone, size 4 and min_size 1; min_size
+# counts the copies in each zone, so 3 is refused and 2 accepted. num_zones
+# 2 again changes nothing. replica 3 moves the pool to <pool>-replica-3, a
+# rule that already exists with 3 hosts in each zone, and replica 2 to a new
+# rule, <pool>-replica-2. The rule made for pool renamed goes when the pool,
+# renamed renamed2, is deleted. num_zones 1 refuses --replica 200, needs
+# --yes-i-really-mean-it for --replica 1 and is refused while nosizechange is
+# set; then the pool is on replicated_rule with size 3 and min_size 2, and no
+# peering zones. An erasure coded pool of k=2 m=1 is refused num_zones 2
+# until allow_ec_optimizations is set; then it gets <pool>-stretch, size 6,
+# and with num_zones 1 <pool>-single-zone, which has no step choosing zones.
 function TEST_pool_replica_crush_rule_name() {
     local dir=$1
     local poolname=replica_name_test
@@ -213,6 +229,11 @@ function TEST_pool_replica_crush_rule_name() {
         "$dir/ec-rule.json" || return 1
 }
 
+# osd pool set <pool> replica, for a pool in one zone, sets its size, with
+# the limits of osd pool set size: replica 11 is refused, and replica 1 needs
+# --yes-i-really-mean-it, though run_mon allows pools of one copy. With it,
+# size and min_size are 1. The reply to replica 2 has its two parts
+# separated ("size set to 2; set pool ...").
 function TEST_pool_replica_limits() {
     local dir=$1
 
@@ -235,8 +256,10 @@ function TEST_pool_replica_limits() {
     grep -F "size set to 2; set pool" "$dir/out.txt" || return 1
 }
 
-# Setting size, or replica, resets min_size to its default for the new size,
-# as setting size does on main
+# osd pool set <pool> replica resets min_size to its default for the new
+# size, as osd pool set <pool> size does. Pool single, with min_size set to
+# 1, gets min_size 2 from size 4, and, with min_size set to 1 again,
+# min_size 3 from replica 5.
 function TEST_pool_size_resets_min_size() {
     local dir=$1
 
@@ -252,8 +275,12 @@ function TEST_pool_size_resets_min_size() {
     test "$(ceph osd pool get single min_size | awk '{print $2}')" = 3 || return 1
 }
 
-# The options of num_zones are refused with other variables, which would
-# ignore them
+# --replica, --crush_rule, --zone_failure_domain, --osd_failure_domain,
+# --root, --class and --no-class are options of osd pool set <pool>
+# num_zones. Any other variable would ignore them, so they are refused with
+# it: osd pool set single size 2 is refused with each of them, and with
+# --min_size, which osd pool set does not take, and the size is unchanged.
+# osd pool set single num_zones 1 --replica 2 --root default is accepted.
 function TEST_pool_set_num_zones_options_only() {
     local dir=$1
 
@@ -274,9 +301,14 @@ function TEST_pool_set_num_zones_options_only() {
     ceph osd pool set single num_zones 1 --replica 2 --root default || return 1
 }
 
-# A pool over two zones on a rule that takes each zone in turn, as the rules
-# of global stretch mode do, can change its replicas too, unless the zones
-# are not chosen alike
+# osd pool set <pool> replica, for a pool over two zones, reads the
+# placement of the pool's rule to make a rule with the new number of copies
+# in each zone. It can read a rule that takes each zone in turn, as the
+# rules written for global stretch mode do: pool p, on two_take (2 hosts in
+# each of the zones zone-a and zone-b), moves with replica 1 to p-replica-1,
+# with 1 copy in each zone, size 2 and min_size 1. It cannot read
+# unlike_zones (2 hosts in zone-a, 2 OSDs in zone-b), so replica 1 is
+# refused for pool q, whose size stays 4.
 function TEST_pool_replica_two_take_rule() {
     local dir=$1
 

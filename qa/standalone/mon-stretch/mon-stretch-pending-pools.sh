@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# Stretch mode follows the pools over zones when several pool commands are
-# prepared for the same OSDMap epoch.
+# The cluster stretch flags follow the pools over zones when several pool
+# commands are prepared for the same OSDMap epoch.
 #
 
 source $CEPH_ROOT/qa/standalone/ceph-helpers.sh
@@ -43,8 +43,14 @@ function two_stretch_pools() {
     ceph tell mon.\* config set paxos_propose_interval 5 || return 1
 }
 
-# osd pool stretch set is refused in the epoch that enables stretch mode, as it
-# is once stretch mode is enabled
+# osd pool stretch set, the command of earlier releases for an individual
+# stretch pool, is refused once the cluster stretch flags are set, and must
+# be refused too in the OSDMap epoch that sets them. With proposals delayed,
+# replicated pool a is created over the datacenters dc1 and dc2, which sets
+# the flags, and a second later osd pool stretch set is run for pool ind,
+# an ordinary pool on two_dc (2 hosts in each datacenter). It is refused, a
+# is created, both flags, in the OSDMap and the monmap, are set, and ind is
+# not stretched.
 function TEST_stretch_set_while_stretch_mode_pending() {
     local dir=$1
 
@@ -65,7 +71,11 @@ function TEST_stretch_set_while_stretch_mode_pending() {
     test "$(pool_field ind peering_crush_bucket_count)" = 0 || return 1
 }
 
-# Deleting the last two pools over zones in one epoch disables stretch mode
+# Removing the last pool over two zones clears the cluster stretch flags.
+# Here the only two such pools, a and b, 2 copies in each of the
+# datacenters dc1 and dc2, are removed at once, with proposals delayed so
+# that both removals are in one OSDMap epoch. Both pools are gone, and both
+# flags, in the OSDMap and the monmap, are cleared.
 function TEST_delete_last_two_stretch_pools() {
     local dir=$1
     two_stretch_pools $dir || return 1
@@ -78,8 +88,13 @@ function TEST_delete_last_two_stretch_pools() {
     test "$(stretch_flags)" = "false false" || return 1
 }
 
-# Deleting the last pool over zones while another is created in the same
-# epoch keeps stretch mode enabled
+# Removing the last pool over two zones in the OSDMap epoch that creates
+# another must leave the cluster stretch flags set. Pools a and b start over
+# the datacenters dc1 and dc2, and a is removed. With proposals delayed,
+# pool c is created while b is removed, and then c is removed while pool d
+# is created, the first time with the create sent first and the second
+# time with the removal sent first. Each time the new pool is over two
+# zones, and both flags, in the OSDMap and the monmap, stay set.
 function TEST_delete_last_stretch_pool_while_creating_one() {
     local dir=$1
     two_stretch_pools $dir || return 1
@@ -107,8 +122,15 @@ function TEST_delete_last_stretch_pool_while_creating_one() {
     test "$(stretch_flags)" = "true true" || return 1
 }
 
-# Two pools over different zone types entering stretch mode in one OSDMap
-# update: the second is checked against the stretch mode the first enters
+# The first pool over two zones sets the cluster stretch flags with the
+# type of its zones, and a pool over zones of another type is refused. Here
+# the datacenters dc1 and dc2 are each in a region of its own, r1 and r2.
+# With proposals delayed, so that both creates are prepared for one OSDMap
+# epoch, pool a is created over zones of type datacenter and pool b over
+# zones of type region. The create checked second must be checked against
+# the zone type the first sets, and refused. One pool is created, the
+# OSDMap's stretch flag is set, and the pool's zones are of the zone type
+# the flags have.
 function TEST_pools_entering_stretch_mode_in_one_epoch() {
     local dir=$1
     two_zone_cluster $dir 2 || return 1
@@ -136,7 +158,8 @@ function TEST_pools_entering_stretch_mode_in_one_epoch() {
     test $created = 1 || return 1
     ceph osd pool ls | grep -qx -e a -e b || return 1
     test "$(ceph osd dump -f json | jq .stretch_mode.stretch_mode_enabled)" = true || return 1
-    # every stretched pool divides the cluster as stretch mode does
+    # every pool over zones divides the cluster at the zone type of the
+    # cluster stretch flags
     local bucket=$(ceph osd dump -f json | jq .stretch_mode.stretch_mode_bucket)
     local pool
     for pool in a b; do

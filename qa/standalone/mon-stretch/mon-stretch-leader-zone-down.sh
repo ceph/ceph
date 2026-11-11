@@ -11,17 +11,21 @@ function run() {
     run_stretch_tests "$@"
 }
 
-# The zone of the leader Monitor is lost after its OSDs are marked down: the
-# cluster must still enter degraded stretch mode. The new leader checks for it
-# when it wins the election, before it has a pending MonMap.
+# The cluster enters degraded mode when every OSD and monitor of one zone
+# is down. Here the leader's zone is lost in two steps. Erasure coded pool
+# data0 (k=2 m=1) over the datacenters dc1 and dc2 sets the cluster stretch
+# flags. The 3 OSDs of the leader's zone are killed and marked down, which
+# alone leaves the cluster in normal mode, and then the leader is killed.
+# The monitor that wins the next election must then find the whole zone
+# down and put the cluster in degraded mode.
 function TEST_lose_leader_zone_after_its_osds() {
     local dir=$1
 
     two_zone_cluster $dir || return 1
     ceph osd pool create data0 erasure --num_zones 2 --k 2 --m 1 || return 1
     wait_for_clean || return 1
-    # The pool enables stretch mode, whose connectivity elections can make
-    # either zone's monitor the leader.
+    # The pool sets the cluster stretch flags, whose connectivity elections
+    # can make either zone's monitor the leader.
     local leader=$(ceph quorum_status -f json | jq -r .quorum_leader_name)
     local osds
     case $leader in

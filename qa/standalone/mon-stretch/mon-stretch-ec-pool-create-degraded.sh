@@ -11,9 +11,18 @@ function run() {
     run_stretch_tests "$@"
 }
 
-# Creating a stretch EC pool in degraded stretch mode must not end degraded
-# mode: the healthy transition restores the other pools and lets the lost
-# zone's monitor lead again.
+# A pool created over two zones while the cluster is in degraded mode must
+# join degraded mode, not end it. The cluster has erasure coded pool data0
+# (k=2 m=1: 3 shards in each of the datacenters dc1 and dc2), and dc2's
+# monitor and OSDs are down. Erasure coded pool data1 is created over two
+# zones, and data2 is created in one zone and moved with osd pool set data2
+# num_zones 2. Both peer in dc1 alone, the cluster stays in degraded mode,
+# and no pool's size, min_size or target number of zones changes. An object
+# is written to data1.
+# When dc2 comes back the cluster returns to normal mode, and all three
+# pools peer over both zones again. Then dc1 goes down: dc2's monitor, which
+# could not lead while dc2 was down, must lead again, the cluster enters
+# degraded mode in dc2, and the object is read back from data1.
 function TEST_ec_pool_create_in_degraded_stretch_mode() {
     local dir=$1
 
@@ -21,7 +30,7 @@ function TEST_ec_pool_create_in_degraded_stretch_mode() {
 
     ceph osd pool create data1 erasure --num_zones 2 --k 2 --m 1 || return 1
     ceph osd pool ls detail
-    # data1 joins degraded stretch mode in the surviving datacenter
+    # data1 joins degraded mode in the surviving datacenter
     local dc1=$(ceph osd crush dump -f json | jq '.buckets[]|select(.name=="dc1")|.id')
     test "$(pool_field data1 peering_crush_bucket_count)" == 1 || return 1
     test "$(pool_field data1 peering_crush_bucket_mandatory_member)" == "$dc1" || return 1
