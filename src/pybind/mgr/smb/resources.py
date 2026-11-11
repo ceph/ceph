@@ -52,6 +52,9 @@ from .utils import checked
 
 ConversionOp = Tuple[PasswordFilter, PasswordFilter]
 
+# conversion that masks secrets, e.g. for logging resources
+HIDE_SECRETS: ConversionOp = (PasswordFilter.NONE, PasswordFilter.HIDDEN)
+
 _MASKED = '*' * 16
 
 

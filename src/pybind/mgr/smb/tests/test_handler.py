@@ -1,4 +1,5 @@
 import dataclasses
+import logging
 import time
 
 import pytest
@@ -2280,3 +2281,24 @@ def test_acl_support_no_modify_cluster(thandler):
     assert not rg.success, rg.to_simplified()
     rs = rg.to_simplified()
     assert 'acl_support value may not be changed' in rs['results'][0]['msg']
+
+
+def test_apply_does_not_log_secrets(thandler, caplog):
+    from smb.tests.test_resources import _SECRET, _secret_samples
+
+    r = smb.resources
+    secret_types = (
+        r.JoinAuth,
+        r.UsersAndGroups,
+        r.TLSCredential,
+        r.RGWCredential,
+        r.ExternalCephCluster,
+    )
+    samples = [v for k, v in _secret_samples().items() if k in secret_types]
+    with caplog.at_level(logging.DEBUG, logger='smb'):
+        rg = thandler.apply(samples)
+    assert rg.success, rg.to_simplified()
+
+    assert 'staging resource' in caplog.text
+    assert 'saved resource' in caplog.text
+    assert _SECRET not in caplog.text
