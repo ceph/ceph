@@ -514,8 +514,16 @@ struct BucketCache : public Notifiable
       for (int ix = 0; ix < lmdb_count; ++ix) {
 	sf::path env_path{safe_root_path / fmt::format("part_{}", ix)};
 	sf::create_directory(env_path);
+	/* No sync at commit:  the cache is purged and rebuilt at every
+	 * start (above), so a commit's durability is never used, and what a
+	 * crash loses or corrupts is discarded anyway.  A synced commit holds
+	 * the partition's one writer while it syncs, so every write to a
+	 * listed bucket queued behind every other's sync -- about 340 small
+	 * PUTs/s on a QLC disk whatever the concurrency, against 1,300-2,400
+	 * without (elbencho, 32 threads). */
 	parts[ix].env = LMDBSafe::getMDBEnv(
-	  env_path.string().c_str(), 0, 0600, max_dbs_per_partition);
+	  env_path.string().c_str(), MDB_NOSYNC | MDB_NOMETASYNC, 0600,
+	  max_dbs_per_partition);
 	/* The longest key this build of LMDB will accept.  It is a
 	 * compile-time constant of the library -- MDB_MAXKEYSIZE, 511 by
 	 * default -- and LMDB is a system package rather than vendored,
