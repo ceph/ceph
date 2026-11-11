@@ -61,12 +61,23 @@ public:
     return sent_tids;
   }
 
+  /// the watch sub-ops (CEPH_OSD_WATCH_OP_*) of the watch ops sent on it
+  std::vector<uint8_t> watch_ops() const
+  {
+    std::lock_guard l(lock);
+    return sent_watch_ops;
+  }
+
 protected:
   int send_msg(MessageRef&& m) override
   {
     if (m->get_type() == CEPH_MSG_OSD_OP) {
       std::lock_guard l(lock);
       sent_tids.push_back(m->get_tid());
+      const auto& ops = static_cast<const MOSDOp*>(m.get())->ops;
+      if (!ops.empty() && ops[0].op.op == CEPH_OSD_OP_WATCH) {
+        sent_watch_ops.push_back(ops[0].op.watch.op);
+      }
     }
     return 0;
   }
@@ -74,6 +85,7 @@ protected:
 private:
   mutable std::mutex lock;
   std::vector<ceph_tid_t> sent_tids;
+  std::vector<uint8_t> sent_watch_ops;
 };
 
 using tids_t = std::vector<ceph_tid_t>;
@@ -194,6 +206,22 @@ protected:
     r->set_connection(con);
     objecter->ms_fast_dispatch2(r);
     poll();
+  }
+
+  /// a watch on the object 'name' (of the single PG); its registration op
+  /// is sent, not answered yet
+  boost::intrusive_ptr<Objecter::LingerOp> watch(const std::string& name = "obj")
+  {
+    auto info = objecter->linger_register(
+      object_t(name), object_locator_t(pool_id), 0);
+    ObjectOperation op;
+    op.watch(info->get_cookie(), CEPH_OSD_WATCH_OP_WATCH);
+    ceph::buffer::list inbl;
+    objecter->linger_watch(info.get(), op, SnapContext(),
+                           ceph::real_clock::now(), inbl,
+                           new LambdaContext([](int) {}), nullptr);
+    poll();
+    return info;
   }
 
   /// the OSD backs off the (whole) PG, on con
@@ -337,6 +365,52 @@ TEST_F(TestObjecterCoreRoutes, BackoffGoesAwayWithItsConnection)
   EXPECT_EQ((tids_t{a, b, c}), main_con->tids());
   std::shared_lock l(session->lock);
   EXPECT_TRUE(session->backoffs.empty());
+}
+
+// The OSD ties a watch to the connection its registration came on. When a
+// core connection resets, the watches registered on it are registered
+// again, even if their PG's ops have moved to another connection since
+TEST_F(TestObjecterCoreRoutes, WatchReregisteredWhenItsConnectionResets)
+{
+  no_holds();
+  auto a = submit();
+  reply(main_con, a);
+  auto w = watch();
+  ASSERT_EQ((std::vector<uint8_t>{CEPH_OSD_WATCH_OP_WATCH}),
+            core_con->watch_ops());
+  reply(core_con, w->register_tid, false);
+
+  // the PG's ops move to the main connection (hints turned off)
+  auto& conf = g_ceph_context->_conf;
+  conf.set_val_or_die("objecter_use_osd_core_hints", "false");
+  conf.apply_changes(nullptr);
+  auto b = submit();
+  EXPECT_EQ((tids_t{a, b}), main_con->tids());
+
+  objecter->ms_handle_reset(core_con.get());
+  poll();
+  EXPECT_EQ((std::vector<uint8_t>{CEPH_OSD_WATCH_OP_RECONNECT}),
+            main_con->watch_ops());
+  EXPECT_EQ(1u, counter("core_linger_resend"));
+}
+
+// ... and only those: a watch registered on the main connection is not
+TEST_F(TestObjecterCoreRoutes, WatchOnMainNotReregistered)
+{
+  no_holds();
+  auto w = watch();
+  ASSERT_EQ((std::vector<uint8_t>{CEPH_OSD_WATCH_OP_WATCH}),
+            main_con->watch_ops());
+  // the reply hints the PG's core: its later ops go there
+  reply(main_con, w->register_tid);
+  auto b = submit();
+  ASSERT_EQ((tids_t{b}), core_con->tids());
+
+  objecter->ms_handle_reset(core_con.get());
+  poll();
+  EXPECT_EQ((std::vector<uint8_t>{CEPH_OSD_WATCH_OP_WATCH}),
+            main_con->watch_ops());
+  EXPECT_EQ(0u, counter("core_linger_resend"));
 }
 
 // a busy PG keeps its connection during the grace period, and switches
@@ -677,4 +751,46 @@ TEST_F(TestObjecterCoreRoutesTick, TurningHintsOff)
   EXPECT_EQ(1u, counter("core_con_close"));
   EXPECT_EQ(0u, counter("core_con_reset"));
   EXPECT_EQ(0u, counter("core_con_dead"));
+}
+
+// hints turned off: a watch registered on a core connection is registered
+// again (on the main connection) before that connection is closed, so the
+// OSD does not drop it
+TEST_F(TestObjecterCoreRoutesTick, WatchMovedBeforeItsConnectionCloses)
+{
+  no_holds();
+  auto& conf = g_ceph_context->_conf;
+  // the pings would keep the PG busy on the core connection
+  conf.set_val_or_die("objecter_inject_no_watch_ping", "true");
+  conf.apply_changes(nullptr);
+  core_con->set_last_keepalive_ack(ceph_clock_now() + utime_t(3600, 0));
+  auto a = submit();
+  reply(main_con, a);
+  auto w = watch();
+  ASSERT_EQ((std::vector<uint8_t>{CEPH_OSD_WATCH_OP_WATCH}),
+            core_con->watch_ops());
+  reply(core_con, w->register_tid, false);
+
+  conf.set_val_or_die("objecter_use_osd_core_hints", "false");
+  conf.apply_changes(nullptr);
+  auto b = submit();
+  EXPECT_EQ((tids_t{a, b}), main_con->tids());
+
+  bool closed = false;
+  for (int i = 0; i < 300 && !closed; ++i) {
+    {
+      std::shared_lock l(session->lock);
+      closed = session->core_routes.core_cons.empty();
+    }
+    if (!closed) {
+      wait(0.01);
+    }
+  }
+  EXPECT_TRUE(closed);
+  EXPECT_EQ((std::vector<uint8_t>{CEPH_OSD_WATCH_OP_RECONNECT}),
+            main_con->watch_ops());
+  EXPECT_EQ(1u, counter("core_linger_resend"));
+  EXPECT_EQ(1u, counter("core_con_close"));
+  conf.rm_val("objecter_inject_no_watch_ping");
+  conf.apply_changes(nullptr);
 }

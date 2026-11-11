@@ -219,6 +219,7 @@ enum {
   l_osdc_core_hint_blocked,
   l_osdc_core_con_dead,
   l_osdc_core_con_close,
+  l_osdc_core_linger_resend,
 
   l_osdc_last,
 };
@@ -559,6 +560,10 @@ void Objecter::init()
     pcb.add_u64_counter(l_osdc_core_hint_blocked, "core_hint_blocked",
 			"Hints not followed, connecting to the OSD's cores "
 			"being blocked (after a connection to them timed out)");
+    pcb.add_u64_counter(l_osdc_core_linger_resend, "core_linger_resend",
+                        "Watches and notifies registered again, as the OSD core "
+                        "connection they were registered on went away or was "
+                        "no longer used");
     pcb.add_u64_counter(l_osdc_core_con_close, "core_con_close",
 			"Connections to OSD cores closed, no longer used with "
 			"objecter_use_osd_core_hints turned off");
@@ -813,6 +818,8 @@ void Objecter::_send_linger(LingerOp *info,
   // do not resend this; we will send a new op to reregister
   o->should_resend = false;
   o->ctx_budgeted = true;
+  // the OSD ties the watch (notify) to the connection this goes on
+  o->registers_linger = info->linger_id;
 
   if (info->register_tid) {
     // repeat send.  cancel old registration op, if any.
@@ -2431,14 +2438,9 @@ void Objecter::_reset_core_con(OSDSession *s,
     _send_op(op);
   }
 
-  // the OSD drops the watches registered via that connection
-  for (auto& [linger_id, info] : s->linger_ops) {
-    if (reset.rerouted.contains(info->target.actual_pgid)) {
-      info->get();
-      ceph_assert(lresend.count(linger_id) == 0);
-      lresend[linger_id] = info;
-    }
-  }
+  // the OSD drops the watches (notifies) registered on that connection,
+  // wherever their PGs' ops go now
+  _lingers_registered_on(s, core, lresend);
 }
 
 std::set<spg_t> Objecter::_forget_backoffs_of(OSDSession *s,
@@ -2516,6 +2518,13 @@ ConnectionRef Objecter::_op_route(Op *op)
     break;
   }
 
+  if (op->registers_linger) {
+    // a watch (notify) registration: the OSD ties it to this connection
+    if (auto l = s->linger_ops.find(op->registers_linger);
+        l != s->linger_ops.end()) {
+      l->second->registered_core = op->core_route.core;
+    }
+  }
   if (op->core_route.core) {
     logger->inc(l_osdc_op_send_core);
     return s->core_routes.core_cons.at(*op->core_route.core);
@@ -2979,6 +2988,9 @@ void Objecter::tick()
   std::vector<ConnectionRef> toprobe_core_cons;
   // core connections that did not answer a probe: (osd, core, connection)
   std::vector<std::tuple<int, uint32_t, ConnectionRef>> dead_core_cons;
+  // unused core connections with watches still registered on them, with
+  // objecter_use_osd_core_hints off: (osd, core)
+  std::vector<std::pair<int, uint32_t>> rewatch_cores;
   const auto probe_now = ceph_clock_now();
   const auto probe_deadline = ceph::make_timespan(cct->_conf->objecter_timeout);
   // core connections not connected in time: (osd, core, connection)
@@ -3007,7 +3019,7 @@ void Objecter::tick()
     _release_drained_holds(s);
     if (core_hints_used) {
       if (!use_osd_core_hints) {
-        _close_idle_core_cons(s);
+        _close_idle_core_cons(s, rewatch_cores);
       }
       const auto [holding, pending] = s->core_routes.count_switching();
       pgs_holding += holding;
@@ -3129,11 +3141,13 @@ void Objecter::tick()
   }
 
   std::unique_lock<ceph::shared_mutex> wl;
-  if (!overdue_core_cons.empty() || !dead_core_cons.empty()) {
+  if (!overdue_core_cons.empty() || !dead_core_cons.empty() ||
+      !rewatch_cores.empty()) {
     rl.unlock();
     wl = std::unique_lock{rwlock};
     _give_up_core_cons(overdue_core_cons, wl);
     _drop_dead_core_cons(dead_core_cons, wl);
+    _reregister_off_cores(rewatch_cores, wl);
   }
 
   // Make sure we don't reschedule if we wake up after shutdown
@@ -4409,6 +4423,8 @@ void Objecter::_session_linger_op_remove(OSDSession *from, LingerOp *op)
   }
 
   from->linger_ops.erase(op->linger_id);
+  // (a core of that session's OSD)
+  op->registered_core.reset();
   put_session(from);
   op->session = NULL;
 
@@ -6200,10 +6216,60 @@ void Objecter::handle_core_con_connect(Connection *con)
   }
 }
 
-void Objecter::_close_idle_core_cons(OSDSession *s)
+void Objecter::_lingers_registered_on(OSDSession *s, uint32_t core,
+                                      map<uint64_t, LingerOp *>& lresend)
 {
   // s->lock is locked
+  for (auto& [linger_id, info] : s->linger_ops) {
+    if (info->registered_core == core && !lresend.contains(linger_id)) {
+      ldout(cct, 10) << __func__ << " osd." << s->osd << " core " << core
+                     << ": linger " << linger_id << dendl;
+      info->get();
+      lresend[linger_id] = info;
+      logger->inc(l_osdc_core_linger_resend);
+    }
+  }
+}
+
+void Objecter::_reregister_off_cores(
+  const std::vector<std::pair<int, uint32_t>>& rewatch,
+  std::unique_lock<ceph::shared_mutex>& wl)
+{
+  // rwlock is locked unique
+  if (!initialized || rewatch.empty()) {
+    return;
+  }
+  map<uint64_t, LingerOp *> lresend;
+  for (const auto& [osd, core] : rewatch) {
+    auto si = osd_sessions.find(osd);
+    if (si == osd_sessions.end()) {
+      continue;
+    }
+    unique_lock sl(si->second->lock);
+    _lingers_registered_on(si->second, core, lresend);
+  }
+  // on their PGs' current routes: the core connection is then unused
+  _linger_ops_resend(lresend, wl);
+}
+
+void Objecter::_close_idle_core_cons(
+  OSDSession *s,
+  std::vector<std::pair<int, uint32_t>>& rewatch)
+{
+  // s->lock is locked
+  std::set<uint32_t> registered_on;
+  for (const auto& [linger_id, info] : s->linger_ops) {
+    if (info->registered_core) {
+      registered_on.insert(*info->registered_core);
+    }
+  }
   for (auto core : s->core_routes.idle_cores()) {
+    if (registered_on.contains(core)) {
+      // closing it would drop its watches on the OSD: register them
+      // elsewhere first
+      rewatch.emplace_back(s->osd, core);
+      continue;
+    }
     auto reset = s->core_routes.reset_core(core);
     // idle: no op to resend, no hold to release
     ceph_assert(reset.rerouted.empty() && reset.released_holds.empty());
