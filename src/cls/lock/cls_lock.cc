@@ -49,7 +49,8 @@ static int clean_lock(cls_method_context_t hctx)
 
 static int read_lock(cls_method_context_t hctx,
 		     const string& name,
-		     lock_info_t *lock)
+		     lock_info_t *lock,
+		     bool may_write)
 {
   bufferlist bl;
   string key = LOCK_PREFIX;
@@ -92,9 +93,16 @@ static int read_lock(cls_method_context_t hctx,
   }
 
   if (lock->lockers.empty() && cls_lock_is_ephemeral(lock->lock_type)) {
-    r = clean_lock(hctx);
-    if (r < 0) {
-      CLS_ERR("error, on read, cleaning lock object %s", cpp_strerror(r).c_str());
+    /* The empty ephemeral lock object can only be removed by a method
+     * registered with CLS_METHOD_WR: the OSD fails a write issued from a
+     * read-only method with EIO. Read-only callers (get_info, assert_locked)
+     * therefore skip the removal and report the drained lock; the next
+     * write-capable call cleans the object up. */
+    if (may_write) {
+      r = clean_lock(hctx);
+      if (r < 0) {
+        CLS_ERR("error, on read, cleaning lock object %s", cpp_strerror(r).c_str());
+      }
     }
   }
 
@@ -164,7 +172,7 @@ static int lock_obj(cls_method_context_t hctx,
   }
 
   // see if there's already a locker
-  int r = read_lock(hctx, name, &linfo);
+  int r = read_lock(hctx, name, &linfo, true);
   if (r < 0 && r != -ENOENT) {
     CLS_ERR("Could not read lock info: %s", cpp_strerror(r).c_str());
     return r;
@@ -287,7 +295,7 @@ static int remove_lock(cls_method_context_t hctx,
 {
   // get current lockers
   lock_info_t linfo;
-  int r = read_lock(hctx, name, &linfo);
+  int r = read_lock(hctx, name, &linfo, true);
   if (r < 0) {
     CLS_ERR("Could not read list of current lockers off disk: %s", cpp_strerror(r).c_str());
     return r;
@@ -393,7 +401,7 @@ static int get_info(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   // get current lockers
   lock_info_t linfo;
-  int r = read_lock(hctx, op.name, &linfo);
+  int r = read_lock(hctx, op.name, &linfo, false);
   if (r < 0) {
     CLS_ERR("Could not read lock info: %s", cpp_strerror(r).c_str());
     return r;
@@ -482,7 +490,7 @@ int assert_locked(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   // see if there's already a locker
   lock_info_t linfo;
-  int r = read_lock(hctx, op.name, &linfo);
+  int r = read_lock(hctx, op.name, &linfo, false);
   if (r < 0) {
     CLS_ERR("Could not read lock info: %s", cpp_strerror(r).c_str());
     return r;
@@ -554,7 +562,7 @@ int set_cookie(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   // see if there's already a locker
   lock_info_t linfo;
-  int r = read_lock(hctx, op.name, &linfo);
+  int r = read_lock(hctx, op.name, &linfo, true);
   if (r < 0) {
     CLS_ERR("Could not read lock info: %s", cpp_strerror(r).c_str());
     return r;
