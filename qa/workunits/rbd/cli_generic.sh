@@ -1987,6 +1987,27 @@ test_mirror_pool_peer_bootstrap_create() {
     ceph osd pool rm rbd1 rbd1 --yes-i-really-really-mean-it
 }
 
+test_mirror_pool_peer_remove() {
+    echo "testing mirror pool peer remove..."
+    remove_images
+
+    ceph osd pool create rbd2 8
+    rbd pool init rbd2
+    rbd mirror pool enable rbd2 image
+
+    # removing a peer that does not exist must fail
+    PEER_UUID="$(rbd mirror pool peer add rbd2 cluster1)"
+    expect_fail rbd mirror pool peer remove rbd2 \
+        00000000-0000-0000-0000-000000000000
+    rbd mirror pool info rbd2 --format json | jq -e \
+        --arg uuid "$PEER_UUID" '.peers | map(.uuid) == [$uuid]'
+    rbd mirror pool peer remove rbd2 "$PEER_UUID"
+    rbd mirror pool info rbd2 --format json | jq -e '.peers == []'
+    expect_fail rbd mirror pool peer remove rbd2 "$PEER_UUID"
+
+    ceph osd pool rm rbd2 rbd2 --yes-i-really-really-mean-it
+}
+
 test_tasks_removed_pool() {
     echo "testing removing pool under running tasks..."
     remove_images
@@ -2102,6 +2123,7 @@ test_mirror_snapshot_schedule_staggering
 test_perf_image_iostat
 test_perf_image_iostat_recovery
 test_mirror_pool_peer_bootstrap_create
+test_mirror_pool_peer_remove
 test_tasks_removed_pool
 test_tasks_recovery
 
