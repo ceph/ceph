@@ -444,6 +444,65 @@ static bool pass_object_lock_check(rgw::sal::Driver* driver, rgw::sal::Object* o
   }
 }
 
+/**
+ * Determines whether to use unordered listing for lifecycle processing.
+ *
+ * For buckets with low shard counts, ordered listing is preferred due to better
+ * performance
+ *
+ * For buckets with high shard counts, unordered listing is preferred to avoid
+ * excess OSD requests
+ */
+static bool should_list_unordered(const rgw::bucket_index_layout_generation& current_index, uint64_t threshold) {
+  return current_index.layout.type == rgw::BucketIndexType::Normal
+    && rgw::num_shards(current_index.layout.normal) > threshold;
+}
+
+class BucketLister : public ILCBucketLister {
+
+  rgw::sal::Bucket *bucket;
+  CephContext *cct;
+  const DoutPrefixProvider* dpp;
+
+ public:
+
+  BucketLister(rgw::sal::Bucket *_bucket,
+               CephContext *_cct,
+               const DoutPrefixProvider *_dpp)
+      : bucket{_bucket},
+        cct{_cct},
+        dpp{_dpp}
+  {
+    ceph_assert(bucket);
+    ceph_assert(_cct);
+  }
+
+  rgw_bucket get_bucket_key() const noexcept override {
+    return bucket->get_key();
+  }
+
+  std::string_view get_bucket_name() const noexcept override {
+    return bucket->get_name();
+  }
+
+  bool bucket_versioned() const noexcept override {
+    return bucket->versioned();
+  }
+
+  bool allow_unordered() const noexcept override {
+    auto threshold = cct->_conf.get_val<uint64_t>("rgw_lc_ordered_list_threshold");
+    const auto& current_index = bucket->get_info().layout.current_index;
+    return should_list_unordered(current_index, threshold);
+  }
+
+  int list(rgw::sal::Bucket::ListParams& params,
+           int max_entries,
+           rgw::sal::Bucket::ListResults& results,
+           optional_yield y) override {
+    return bucket->list(dpp, params, max_entries, results, y);
+  }
+};
+
 struct op_env {
 
   using LCWorker = RGWLC::LCWorker;
@@ -716,20 +775,6 @@ static int remove_expired_obj(const DoutPrefixProvider* dpp,
   return ret;
 
 } /* remove_expired_obj */
-
-/**
- * Determines whether to use unordered listing for lifecycle processing.
- *
- * For buckets with low shard counts, ordered listing is preferred due to better
- * performance
- *
- * For buckets with high shard counts, unordered listing is preferred to avoid
- * excess OSD requests
- */
-bool should_list_unordered(const rgw::bucket_index_layout_generation& current_index, uint64_t threshold) {
-  return current_index.layout.type == rgw::BucketIndexType::Normal
-    && rgw::num_shards(current_index.layout.normal) > threshold;
-}
 
 class LCOpAction {
 public:
@@ -2147,7 +2192,7 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
     }
 
     CephContext* cct = driver->ctx();
-    rgw::sal::BucketLister bl(bucket.get(), cct, this);
+    BucketLister bl(bucket.get(), cct, this);
     LCObjsLister ol(&bl, cct, this);
     ol.set_prefix(prefix_iter->first);
 

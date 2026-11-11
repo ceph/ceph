@@ -42,9 +42,6 @@ typedef enum {
   lc_complete,
 } LC_BUCKET_STATUS;
 
-
-bool should_list_unordered(const rgw::bucket_index_layout_generation& current_index, uint64_t threshold);
-
 class LCExpiration
 {
 protected:
@@ -790,57 +787,7 @@ public:
 				  time_t stop_at, bool once);
 };
 
-namespace rgw {
-namespace  sal {
-
-  class BucketLister : public  ILCBucketLister {
-
-    rgw::sal::Bucket *bucket;
-    CephContext *cct;
-    const DoutPrefixProvider* dpp;
-
-   public:
-
-    BucketLister (rgw::sal::Bucket *_bucket,
-                  CephContext *_cct,
-                  const DoutPrefixProvider *_dpp)
-        : bucket{_bucket},
-          cct{_cct},
-          dpp{_dpp}
-    {
-      ceph_assert(bucket);
-      ceph_assert(_cct);
-    }
-
-    rgw_bucket get_bucket_key () const noexcept override {
-      return bucket->get_key();
-    }
-
-    std::string_view get_bucket_name() const noexcept override {
-      return bucket->get_name();
-    }
-
-    bool bucket_versioned() const noexcept override {
-      return bucket->versioned();
-    }
-
-    bool allow_unordered() const noexcept override {
-      auto threshold = cct->_conf.get_val<uint64_t>("rgw_lc_ordered_list_threshold");
-      const auto& current_index = bucket->get_info().layout.current_index;
-      return should_list_unordered(current_index, threshold);
-    }
-
-    int list(rgw::sal::Bucket::ListParams& params,
-             int max_entries,
-             rgw::sal::Bucket::ListResults& results,
-             optional_yield y) override {
-      return bucket->list(dpp, params, max_entries, results, y);
-    }
-  };
-
-}
-
-namespace lc {
+namespace rgw::lc {
 
 int fix_lc_shard_entry(const DoutPrefixProvider *dpp,
                        rgw::sal::Driver* driver,
@@ -868,4 +815,3 @@ bool s3_multipart_abort_header(
   std::string& rule_id);
 
 } // namespace rgw::lc
-}
