@@ -11617,11 +11617,23 @@ void Client::C_Read_Sync_NonBlocking::retry()
   // the one that has to read the reply. Nor on objecter_finisher, which
   // completes the writes whose cap references the MDS may be waiting for
   // before it answers.
+  //
+  // The Fr reference is put as soon as the OSD has replied, before the
+  // completion is queued: a completion waiting for the MDS on the finisher
+  // must not keep the reads queued behind it from giving back the
+  // references the MDS is waiting for (it may have to revoke Fr from this
+  // client before it can answer). Nothing in the dispatch blocks:
+  // client_lock is not held across a wait for the MDS.
   filer->read_trunc(in->ino, &in->layout, in->snapid, pos, left, &tbl, 0,
                     in->truncate_size, in->truncate_seq,
-                    new C_OnFinisher(
-                      new LambdaContext([this](int r) { complete(r); }),
-                      &clnt->nonblocking_read_finisher));
+                    new LambdaContext([this](int r) {
+                      if (have_caps) {
+                        std::scoped_lock l(clnt->client_lock);
+                        clnt->put_cap_ref(in, CEPH_CAP_FILE_RD);
+                      }
+                      clnt->nonblocking_read_finisher.queue(
+                        new LambdaContext([this](int r) { complete(r); }), r);
+                    }));
 }
 
 /**
@@ -11677,6 +11689,8 @@ void Client::C_Read_Sync_NonBlocking::finish(int r)
 
     // reverify size
     {
+      // As in the blocking path (_read), the Fr reference is not held
+      // while waiting for the MDS (retry() put it when the OSD replied).
       r = clnt->_getattr(in, CEPH_STAT_CAP_SIZE, f->actor_perms);
       if (r < 0)
         goto error;
@@ -11686,6 +11700,12 @@ void Client::C_Read_Sync_NonBlocking::finish(int r)
     if ((uint64_t)pos >= effective_size)
       goto success;
 
+    // Not reached today: pos has reached the size known before the
+    // getattr. Reading on needs the reference back for the next reply to
+    // put; with the caps possibly revoked meanwhile, that should be
+    // get_caps().
+    if (have_caps)
+      in->get_cap_ref(CEPH_CAP_FILE_RD);
     wanted = left;
     retry();
     clnt->client_lock.unlock();
@@ -11717,6 +11737,10 @@ success:
   }
 error:
 
+  // onfinish puts the Fr reference it was created with, before client_lock
+  // is released: give it one to put.
+  if (have_caps)
+    in->get_cap_ref(CEPH_CAP_FILE_RD);
   onfinish->complete(r);
   fini = true;
 
