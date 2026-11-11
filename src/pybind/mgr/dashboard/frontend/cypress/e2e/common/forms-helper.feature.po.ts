@@ -57,7 +57,14 @@ And('I click on submit button', () => {
  * by ticking the 'Are you sure?' box.
  */
 Then('I check the tick box in modal', () => {
-  cy.get('cd-modal input#confirmation').click();
+  cy.get('cd-modal').then(($modal) => {
+    if ($modal.find('#resource_name').length) {
+      const resourceName = $modal.find('.question strong').first().text().trim();
+      cy.get('cd-modal #resource_name').type(resourceName);
+    } else {
+      cy.get('cd-modal input#confirmation').click();
+    }
+  });
 });
 
 And('I confirm to {string}', (action: string) => {
