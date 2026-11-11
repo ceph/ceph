@@ -91,7 +91,7 @@ function TEST_stretch_ec() {
     ceph osd crush move dc1 root=default || return 1
     ceph osd crush move dc2 root=default || return 1
 
-    ceph osd erasure-code-profile set stretch_ec_profile plugin=jerasure k=2 m=1 crush-num-osd-failure-domains=2 || return 1
+    ceph osd erasure-code-profile set stretch_ec_profile plugin=jerasure k=2 m=1 || return 1
     ceph osd crush rule create-erasure stretch_erasurecode_rule stretch_ec_profile --num_zones 2 2>&1 | grep "Error EINVAL: zone dc1 has only 0 items of type host" || return 1
 
     ceph osd crush add-bucket host1 host || return 1
@@ -423,8 +423,8 @@ function TEST_stretch_ec_with_class() {
     run_osd $dir 10 || return 1
     run_osd $dir 11 || return 1
 
-    ceph osd erasure-code-profile set stretch_ec_ssd plugin=jerasure k=2 m=1 crush-num-osd-failure-domains=2 crush-device-class=ssd || return 1
-    ceph osd erasure-code-profile set stretch_ec_hdd plugin=jerasure k=2 m=1 crush-num-osd-failure-domains=2 crush-device-class=hdd || return 1
+    ceph osd erasure-code-profile set stretch_ec_ssd plugin=jerasure k=2 m=1 crush-device-class=ssd || return 1
+    ceph osd erasure-code-profile set stretch_ec_hdd plugin=jerasure k=2 m=1 crush-device-class=hdd || return 1
 
     ceph osd crush add-bucket dc1 datacenter || return 1
     ceph osd crush add-bucket dc2 datacenter || return 1
