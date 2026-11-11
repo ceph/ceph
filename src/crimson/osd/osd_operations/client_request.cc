@@ -603,11 +603,12 @@ ClientRequest::do_process(
 	  break;
 	}
       }
-    } else if (result > 0 && op_info.may_write() && !op_info.allows_returnvec()) {
-      result = 0;
     } else if (result < 0 &&
 	     (m->ops.empty() ?
 	      0 : m->ops.back().op.flags & CEPH_OSD_OP_FLAG_FAILOK)) {
+      result = 0;
+    }
+    if (result > 0 && op_info.may_write() && !op_info.allows_returnvec()) {
       result = 0;
     }
     auto reply = crimson::make_message<MOSDOpReply>(
