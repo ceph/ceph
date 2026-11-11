@@ -48,6 +48,10 @@ public:
   /// Remove pgid mapping
   seastar::future<> remove_pg_mapping(spg_t pgid);
 
+  /// Record pgid's current role, so later placements see up to date counts.
+  /// The pg itself stays on its core.
+  seastar::future<> set_pg_primary(spg_t pgid, bool is_primary);
+
   size_t get_num_pgs() const { return pg_to_core.size(); }
 
   seastar::future<> dump_store_shards(Formatter *f) const;
@@ -89,10 +93,16 @@ private:
   // only in shard 0
   //<core_id, num_pgs>
   std::map<core_id_t, unsigned> core_to_num_pgs;
+  // keyed like core_to_num_pgs, see primary_count_core()
   //<core_id, num_primary_pgs>
   std::map<core_id_t, unsigned> core_to_num_primaries;
   // pgs counted in core_to_num_primaries
   std::set<spg_t> primary_pgs;
+  /// The core a pg on core is counted under in core_to_num_primaries.
+  /// An alien core (store_shard_nums * j + i) is counted under core i.
+  core_id_t primary_count_core(core_id_t core) const {
+    return core % store_shard_nums;
+  }
   //<core_id, <shard_index, num_pgs>>  // when smp < store_shard_nums, each core more than one store shard
   std::map<core_id_t, std::map<unsigned, unsigned>> core_shard_to_num_pgs;
   //<core_id, <alien_core_id, num_pgs>> // when smp > store_shard_nums, more than one core share store shard

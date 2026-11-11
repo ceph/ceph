@@ -189,15 +189,14 @@ seastar::future<std::pair<core_id_t, store_index_t>> PGShardMapping::get_or_crea
             ++(shard_iter->second);
           }
         }
-        // count the core stored in pg_to_core, which the alien remap above
-        // may have changed, so remove_pg_mapping() decrements the same entry
         if (is_primary) {
-          auto prim_iter =
-            primary_mapping.core_to_num_primaries.find(core_to_update);
-          if (prim_iter != primary_mapping.core_to_num_primaries.end()) {
-            ++(prim_iter->second);
-            primary_mapping.primary_pgs.insert(pgid);
-          }
+          // core_to_update may have been remapped to an alien core above
+          auto prim_iter = primary_mapping.core_to_num_primaries.find(
+            primary_mapping.primary_count_core(core_to_update));
+          ceph_assert_always(
+            prim_iter != primary_mapping.core_to_num_primaries.end());
+          ++(prim_iter->second);
+          primary_mapping.primary_pgs.insert(pgid);
         }
         [[maybe_unused]] auto [insert_iter, inserted] =
           primary_mapping.pg_to_core.emplace(pgid, std::make_pair(core_to_update, shard_index_update));
@@ -251,6 +250,34 @@ seastar::future<std::pair<core_id_t, store_index_t>> PGShardMapping::get_or_crea
   }
 }
 
+seastar::future<> PGShardMapping::set_pg_primary(spg_t pgid, bool is_primary)
+{
+  LOG_PREFIX(PGShardMapping::set_pg_primary);
+  return container().invoke_on(
+      0, [pgid, is_primary, FNAME](auto &primary_mapping) {
+    auto find_iter = primary_mapping.pg_to_core.find(pgid);
+    if (find_iter == primary_mapping.pg_to_core.end()) {
+      DEBUG("pg {} has no mapping", pgid);
+      return;
+    }
+    auto prim_iter = primary_mapping.core_to_num_primaries.find(
+      primary_mapping.primary_count_core(find_iter->second.first));
+    ceph_assert_always(
+      prim_iter != primary_mapping.core_to_num_primaries.end());
+    auto &num_primaries = prim_iter->second;
+    if (is_primary) {
+      if (primary_mapping.primary_pgs.insert(pgid).second) {
+        ++num_primaries;
+      }
+    } else if (primary_mapping.primary_pgs.erase(pgid)) {
+      assert(num_primaries > 0);
+      --num_primaries;
+    }
+    DEBUG("pg {} on core {}: primary {}, core's primaries {}",
+          pgid, find_iter->second.first, is_primary, num_primaries);
+  });
+}
+
 seastar::future<> PGShardMapping::remove_pg_mapping(spg_t pgid) {
   LOG_PREFIX(PGShardMapping::remove_pg_mapping);
   auto find_iter = pg_to_core.find(pgid);
@@ -295,8 +322,8 @@ seastar::future<> PGShardMapping::remove_pg_mapping(spg_t pgid) {
     assert(count_iter->second > 0);
     --(count_iter->second);
     if (primary_mapping.primary_pgs.erase(pgid)) {
-      auto prim_iter =
-        primary_mapping.core_to_num_primaries.find(find_iter->second.first);
+      auto prim_iter = primary_mapping.core_to_num_primaries.find(
+        primary_mapping.primary_count_core(find_iter->second.first));
       ceph_assert_always(
         prim_iter != primary_mapping.core_to_num_primaries.end());
       assert(prim_iter->second > 0);
