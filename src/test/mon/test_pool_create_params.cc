@@ -367,6 +367,94 @@ TEST_F(PoolParamsTest, CopiesPerZone) {
   EXPECT_EQ(2, with({{"replica", int64_t(2)}}).copies_per_zone());
 }
 
+// A copy of a pool, as ceph osd pool migrate with no parameters makes it
+
+// Test a copy of a replicated pool of one zone has its size and PG settings,
+// the default min_size and no rule, for a copy of the rule of its own
+TEST_F(PoolParamsTest, CopyOfReplicatedPool) {
+  const int rule = crush.add_simple_rule("r", "default", "host", "", "firstn",
+                                         REPLICATED, &ss);
+  ASSERT_GE(rule, 0);
+  pg_pool_t pool;
+  pool.type = REPLICATED;
+  pool.size = 2;
+  pool.min_size = 2;
+  pool.crush_rule = rule;
+  pool.set_pg_num(16);
+  pool.set_pgp_num(8);
+  pool.pg_autoscale_mode = pg_pool_t::pg_autoscale_mode_t::WARN;
+  pool.set_flag(pg_pool_t::FLAG_BULK);
+
+  const PoolCreateParams p = pool_create_params_of(defaults(), pool, crush, {});
+  EXPECT_EQ(REPLICATED, p.pool_type);
+  EXPECT_EQ(1, p.num_zones);
+  EXPECT_TRUE(p.is_given("size"));
+  EXPECT_EQ(2, p.size);
+  EXPECT_FALSE(p.is_given("replica"));
+  EXPECT_FALSE(p.is_given("crush_rule"));
+  EXPECT_EQ(16, p.pg_num);
+  EXPECT_EQ(16, p.pgp_num);
+  EXPECT_EQ("warn", p.pg_autoscale_mode);
+  EXPECT_TRUE(p.bulk);
+  EXPECT_FALSE(p.is_given("min_size"));
+  EXPECT_EQ(0, p.min_size);
+  EXPECT_EQ(0, check_line(p, PoolCommand::CREATE)) << ss.str();
+  EXPECT_EQ(0, check(p)) << ss.str();
+}
+
+// Test a copy of a replicated pool over two zones has its replica and zone
+// failure domain
+TEST_F(PoolParamsTest, CopyOfTwoZoneReplicatedPool) {
+  const int rule = crush.add_simple_rule("r2", "default", "host", "", "firstn",
+                                         REPLICATED, &ss);
+  ASSERT_GE(rule, 0);
+  pg_pool_t pool;
+  pool.type = REPLICATED;
+  pool.num_zones = 2;
+  pool.replica = 2;
+  pool.size = 4;
+  pool.crush_rule = rule;
+  pool.set_pg_num(8);
+  pool.set_pgp_num(8);
+  pool.peering_crush_bucket_barrier = crush.get_type_id("zone");
+
+  const PoolCreateParams p = pool_create_params_of(defaults(), pool, crush, {});
+  EXPECT_EQ(2, p.num_zones);
+  EXPECT_TRUE(p.is_given("replica"));
+  EXPECT_EQ(2, p.replica);
+  EXPECT_FALSE(p.is_given("size"));
+  EXPECT_EQ("zone", p.zone_failure_domain);
+  EXPECT_FALSE(p.crush_params_given());
+  EXPECT_EQ("zone", effective_zone_failure_domain(p));
+  EXPECT_EQ(0, check_line(p, PoolCommand::CREATE)) << ss.str();
+  EXPECT_EQ(0, check(p)) << ss.str();
+}
+
+// Test a copy of an erasure coded pool has the contents of its profile, for
+// a profile of its own, and gives their k and m
+TEST_F(PoolParamsTest, CopyOfErasurePool) {
+  const int rule = crush.add_simple_rule("e", "default", "host", "", "indep",
+                                         ERASURE, &ss);
+  ASSERT_GE(rule, 0);
+  pg_pool_t pool;
+  pool.type = ERASURE;
+  pool.size = 6;
+  pool.crush_rule = rule;
+  pool.erasure_code_profile = "p42";
+
+  const PoolCreateParams p =
+    pool_create_params_of(defaults(), pool, crush, named_profile);
+  EXPECT_EQ(ERASURE, p.pool_type);
+  EXPECT_EQ("", p.erasure_code_profile);
+  EXPECT_FALSE(p.is_given("erasure_code_profile"));
+  EXPECT_EQ(named_profile, p.profile);
+  EXPECT_EQ(4, p.k());
+  EXPECT_EQ(2, p.m());
+  EXPECT_TRUE(p.ec_params_given());
+  EXPECT_FALSE(p.is_given("crush_rule"));
+  EXPECT_EQ(0, check_line(p, PoolCommand::CREATE)) << ss.str();
+}
+
 // Which parameters may be given together
 
 // Test a profile with k or m fails for both commands

@@ -17,6 +17,7 @@
 #define MON_OPREQUEST_H_
 
 #include <iosfwd>
+#include <map>
 #include <set>
 #include <string>
 
@@ -222,6 +223,9 @@ public:
   /// if it fails
   std::set<std::string> created_crush_rules;
   std::set<std::string> created_ec_profiles;
+  /// erasure code profiles that it gave a new name in such an update, new
+  /// name to old; it gives them back their old names if it fails
+  std::map<std::string, std::string> renamed_ec_profiles;
 };
 
 typedef MonOpRequest::Ref MonOpRequestRef;
