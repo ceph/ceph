@@ -23,6 +23,16 @@
 #
 #    cephfs-journal-tool --rank=<fs_name>:0 event recover_dentries summary
 #
+#    NOTE: Large journal sizes can cause the tool's Resident Set Size (RSS) to
+#          spike significantly. To prevent excessive memory consumption, use the
+#          `--max-rss <bytes>` flag to cap the RSS. 
+#
+#          Avoid setting this value too low, as it will severely degrade runtime
+#          performance and prolong recovery. It is best practice to maintain a memory
+#          buffer of at least 30% of the tool's total budget. For example, if 100 GiB
+#          is to be allotted to the tool, cap the RSS at 70 GiB
+#          (`--max-rss 75161927680`).
+#
 # 4b) If all good so far, reset the journal:
 #
 #    cephfs-journal-tool --rank=<fs_name>:0 journal reset --yes-i-really-really-mean-it
