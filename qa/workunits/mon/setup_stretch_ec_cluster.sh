@@ -72,7 +72,7 @@ ceph mon set_location d datacenter=dc2 host=node-7
 hostname=$(hostname -s)
 ceph osd crush remove $hostname ||  { echo 'command failed' ; exit 1; }
 
-ceph osd erasure-code-profile set stretch_ec_profile plugin=jerasure k=2 m=1 crush-num-osd-failure-domains=2
+ceph osd erasure-code-profile set stretch_ec_profile plugin=jerasure k=2 m=1
 
 # with 2 zones, create-erasure makes a rule that chooses both datacenters,
 # then 3 hosts in each
