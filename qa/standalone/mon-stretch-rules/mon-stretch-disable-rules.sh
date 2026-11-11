@@ -123,7 +123,7 @@ function TEST_disable_keeps_placement_of_hand_rules() {
     local dir=$1 pool
     local -x CEPH_ARGS="$CEPH_ARGS"
     zone_cluster $dir zone || return 1
-    ceph config set mon osd_pool_default_zone_failure_domain zone || return 1
+    ceph config set global osd_pool_default_zone_failure_domain zone || return 1
     add_hand_rules $dir zone || return 1
     ceph osd erasure-code-profile set p22 plugin=isa k=2 m=2 \
         crush-failure-domain=host || return 1

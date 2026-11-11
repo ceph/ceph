@@ -24,7 +24,7 @@ function run() {
 function pools_on_hand_rules() {
     local dir=$1 ztype=$2 deep=$3 pool
     zone_cluster $dir $ztype $deep || return 1
-    ceph config set mon osd_pool_default_zone_failure_domain $ztype || return 1
+    ceph config set global osd_pool_default_zone_failure_domain $ztype || return 1
     add_hand_rules $dir $ztype || return 1
     ceph osd erasure-code-profile set p22 plugin=isa k=2 m=2 \
         crush-failure-domain=host || return 1
