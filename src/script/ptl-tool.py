@@ -2075,8 +2075,13 @@ def verify_pr_readiness(G, session, R, pr, pr_commits, tip, base, args):
     
     checks: List[BaseAuditCheck] = [
         MergeConflictCheck(),
-        ApprovalCheck(),
     ]
+    if not args.audit:
+        # Per batrick's review feedback: gating --audit on approval status
+        # makes every freshly-created PR fail the audit immediately, since
+        # review typically lags behind. Only --final-merge should actually
+        # block on this.
+        checks.append(ApprovalCheck())
 
     if base != 'main':
         checks.append(CommitParityCheck())

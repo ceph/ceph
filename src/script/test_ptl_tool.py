@@ -722,7 +722,8 @@ def test_check_pr_approvals_normalizes_non_ascii_title_without_crashing(ptl_tool
 
 
 # ---------------------------------------------------------------------------
-# ApprovalCheck: gates --final-merge/--audit specifically (via
+# ApprovalCheck: gates --final-merge specifically (not --audit -- see
+# test_verify_pr_readiness_skips_approval_check_for_audit below; via
 # verify_pr_readiness()'s BaseAuditCheck framework), unlike check_pr_approvals()
 # above which used to run -- unconditionally, and only interactively -- on
 # every --pr-label/--integration/--qe-label batch merge. Per review feedback
@@ -829,8 +830,34 @@ def test_verify_pr_readiness_includes_approval_check_regardless_of_base(ptl_tool
     session.get.return_value = FakeJSONResponse(200, [], "")
     session.get.return_value.headers = {}
     G = mock.Mock()
-    args = mock.Mock(ci_mode=True, audit=True, dry_run=True)
+    args = mock.Mock(ci_mode=True, audit=False, final_merge=True, dry_run=True)
     with mock.patch.object(ptl_tool, "MergeConflictCheck") as FakeMergeCheck:
         FakeMergeCheck.return_value.run.return_value = None
         passed = ptl_tool.verify_pr_readiness(G, session, mock.Mock(), 100, [], mock.Mock(), "main", args)
     assert passed is False  # ApprovalCheck's ci-mode failure should have been picked up
+
+
+def test_verify_pr_readiness_skips_approval_check_for_audit(ptl_tool):
+    """Per batrick's review feedback on #70549: gating --audit on approval
+    status makes every freshly-created PR fail the audit immediately, since
+    review typically lags behind creation. ApprovalCheck must be skipped
+    entirely for --audit, even when the PR is genuinely unapproved -- only
+    --final-merge should block on this."""
+    session = mock.Mock()
+    # ci_mode's success path calls _hide_previous_bot_reviews() regardless of
+    # ApprovalCheck -- same fixture the sibling test above uses, unrelated to
+    # what this test actually verifies.
+    session.get.return_value = FakeJSONResponse(200, [], "")
+    session.get.return_value.headers = {}
+    # No GraphQL/approval call should happen at all; if ApprovalCheck ran,
+    # it would call session.post for the reviewDecision query and this
+    # unconfigured mock would return a Mock() the code can't parse, erroring
+    # instead of just passing -- so a clean pass here already proves it was
+    # skipped, but assert the call count too for an explicit signal.
+    G = mock.Mock()
+    args = mock.Mock(ci_mode=True, audit=True, final_merge=False, dry_run=True)
+    with mock.patch.object(ptl_tool, "MergeConflictCheck") as FakeMergeCheck:
+        FakeMergeCheck.return_value.run.return_value = None
+        passed = ptl_tool.verify_pr_readiness(G, session, mock.Mock(), 100, [], mock.Mock(), "main", args)
+    assert passed is True
+    session.post.assert_not_called()
