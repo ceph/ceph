@@ -644,7 +644,12 @@ public:
   /// on the correct reactor rather than dispatching cross-shard.
   seastar::future<std::pair<core_id_t, store_index_t>> get_pg_core_and_store(
     spg_t pgid) {
-    return pg_to_shard_mapping.get_or_create_pg_mapping(pgid);
+    return pg_to_shard_mapping.get_or_create_pg_mapping(
+      pgid, NULL_CORE, NULL_STORE_INDEX, false);
+  }
+
+  seastar::future<> set_pg_primary(spg_t pgid, bool is_primary) {
+    return pg_to_shard_mapping.set_pg_primary(pgid, is_primary);
   }
 
   auto remove_pg(spg_t pgid) {
