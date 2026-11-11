@@ -655,3 +655,82 @@ class TestDeviceSelectionLimit:
         assert dev_a in ds._data
         assert dev_b not in ds._data
         assert dev_c in ds._data
+
+
+class TestUnsatisfiedRoles:
+
+    @staticmethod
+    def _inventory():
+        # two HDDs and one SSD, all available
+        return _mk_inventory(_mk_device(rotational=True, model='ST16000') * 2
+                             + _mk_device(rotational=False, model='MZ7L3'))
+
+    @staticmethod
+    def _spec(**kwargs):
+        return DriveGroupSpec(service_id='hdd_ssd_db',
+                              placement=PlacementSpec(host_pattern='*'),
+                              data_devices=DeviceSelection(rotational=True),
+                              **kwargs)
+
+    def test_no_dedicated_roles(self):
+        ds = drive_selection.DriveSelection(self._spec(), self._inventory())
+        assert ds.unsatisfied_roles() == []
+
+    def test_db_devices_selected(self):
+        spec = self._spec(db_devices=DeviceSelection(model='MZ7L3'))
+        ds = drive_selection.DriveSelection(spec, self._inventory())
+        assert [d.path for d in ds.db_devices()] == ['/dev/sdc']
+        assert ds.unsatisfied_roles() == []
+
+    def test_db_devices_select_nothing(self):
+        spec = self._spec(db_devices=DeviceSelection(model='MZ7L4'))
+        ds = drive_selection.DriveSelection(spec, self._inventory())
+        assert [d.path for d in ds.data_devices()] == ['/dev/sda', '/dev/sdb']
+        assert ds.unsatisfied_roles() == ['db_devices']
+
+    def test_db_and_wal_devices_select_nothing(self):
+        spec = self._spec(db_devices=DeviceSelection(model='MZ7L4'),
+                          wal_devices=DeviceSelection(model='NVME'))
+        ds = drive_selection.DriveSelection(spec, self._inventory())
+        assert ds.unsatisfied_roles() == ['wal_devices', 'db_devices']
+
+    def test_fast_device_consumed_by_wal(self):
+        # wal_devices is assigned before db_devices: the SSD goes to wal
+        spec = self._spec(db_devices=DeviceSelection(rotational=False),
+                          wal_devices=DeviceSelection(rotational=False))
+        ds = drive_selection.DriveSelection(spec, self._inventory())
+        assert [d.path for d in ds.wal_devices()] == ['/dev/sdc']
+        assert ds.unsatisfied_roles() == ['db_devices']
+
+    def test_fast_device_unavailable(self):
+        inventory = self._inventory()
+        inventory[2].available = False
+        inventory[2].rejected_reasons = ['Has GPT headers']
+        spec = self._spec(db_devices=DeviceSelection(rotational=False))
+        ds = drive_selection.DriveSelection(spec, inventory)
+        assert ds.unsatisfied_roles() == ['db_devices']
+
+    def test_no_data_devices_selected(self):
+        spec = self._spec(db_devices=DeviceSelection(model='MZ7L4'))
+        spec.data_devices = DeviceSelection(model='NOPE')
+        ds = drive_selection.DriveSelection(spec, self._inventory())
+        assert ds.unsatisfied_roles() == []
+
+    def test_only_existing_osd_data_devices(self):
+        # data devices already backing OSDs of this spec don't lead to
+        # new OSDs, so there is nothing to protect
+        existing_lv = {'osd_id': '0', 'osdspec_affinity': 'hdd_ssd_db'}
+        inventory = self._inventory()
+        for dev in inventory[:2]:
+            dev.available = False
+            dev.ceph_device_lvm = True
+            dev.lvs = [existing_lv]
+        spec = self._spec(db_devices=DeviceSelection(model='MZ7L4'))
+        ds = drive_selection.DriveSelection(spec, inventory)
+        assert len(ds.data_devices()) == 2
+        assert ds.unsatisfied_roles() == []
+
+    def test_explicit_paths(self):
+        spec = self._spec(db_devices=DeviceSelection(paths=['/dev/sdc']))
+        ds = drive_selection.DriveSelection(spec, self._inventory())
+        assert ds.unsatisfied_roles() == []
