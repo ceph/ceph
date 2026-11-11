@@ -2,6 +2,9 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 #include "crimson/osd/pg_shard_manager.h"
+
+#include <functional>
+
 #include "crimson/osd/pg.h"
 
 namespace {
@@ -127,6 +130,15 @@ PGShardManager::calc_snap_trim_queue_total() const
     }
   });
   co_return total;
+}
+
+seastar::future<std::size_t> PGShardManager::scrub_purged_snaps(
+  const ceph::osd::purged_snaps::index_t& purged)
+{
+  return shard_services.map_reduce0(
+    [&purged](auto& local) { return local.scrub_purged_snaps(purged); },
+    std::size_t{0},
+    std::plus<>{});
 }
 
 }

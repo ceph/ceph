@@ -1,7 +1,12 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
+#include <algorithm>
+#include <iterator>
+#include <ranges>
+
 #include <boost/smart_ptr/make_local_shared.hpp>
+#include <fmt/ranges.h>
 
 #include "crimson/osd/shard_services.h"
 
@@ -877,12 +882,14 @@ seastar::future<std::unique_ptr<OSDMap>> OSDSingletonState::load_map(epoch_t e)
 
 seastar::future<> OSDSingletonState::store_maps(
   ceph::os::Transaction& t,
-  epoch_t start, Ref<MOSDMap> m)
+  epoch_t start,
+  Ref<MOSDMap> m,
+  ceph::osd::purged_snaps::by_epoch_t& new_purged)
 {
   LOG_PREFIX(OSDSingletonState::store_maps);
   return seastar::do_with(
     std::map<epoch_t, local_cached_map_t>(),
-    [&t, FNAME, m, start, this](auto &added_maps) {
+    [&t, FNAME, m, start, &new_purged, this](auto &added_maps) {
     return seastar::do_for_each(
       boost::make_counting_iterator(start),
       boost::make_counting_iterator(m->get_last() + 1),
@@ -916,7 +923,13 @@ seastar::future<> OSDSingletonState::store_maps(
 	ERROR("MOSDMap lied about what maps it had?");
 	return seastar::now();
       }
-    }).then([&t, FNAME, this, &added_maps] {
+    }).then([&t, FNAME, this, &added_maps, &new_purged] {
+      for (const auto& [e, map] : added_maps) {
+        if (const auto& purged = map->get_new_purged_snaps();
+            !purged.empty()) {
+          new_purged.emplace(e, purged);
+        }
+      }
       epoch_t last_map_epoch = superblock.get_newest_map();
       auto last_map_fut = last_map_epoch > 0
 	? get_local_map(last_map_epoch)
@@ -1353,6 +1366,38 @@ void OSDSingletonState::update_osd_stat(
   osd_stat.statfs = st;
   osd_stat.seq = (static_cast<uint64_t>(up_epoch) << 32
   ) | osd_stat_seq;
+}
+
+seastar::future<std::size_t> ShardServices::scrub_purged_snaps(
+  const ceph::osd::purged_snaps::index_t& purged)
+{
+  LOG_PREFIX(ShardServices::scrub_purged_snaps);
+  // 'purged' belongs to another core. Copy it (before the first
+  // suspension point).
+  const auto index = purged;
+  std::vector<Ref<PG>> pgs;
+  std::ranges::copy(
+    local_state.pg_map.get_pgs() | std::views::values,
+    std::back_inserter(pgs));
+  DEBUG("{} purged intervals, {} local pgs", index.size(), pgs.size());
+
+  std::size_t requeued = 0;
+  for (const auto& pg : pgs) {
+    if (is_stopping()) {
+      break;
+    }
+    if (!pg->is_primary() || !pg->is_active()) {
+      continue;
+    }
+    if (const auto strays = co_await pg->find_purged_strays(index);
+        !strays.empty()) {
+      INFO("pg {}: {} purged snaps with stray clones: {}",
+           pg->get_pgid(), strays.size(), strays);
+      pg->queue_snap_retrim(strays);
+      requeued += strays.size();
+    }
+  }
+  co_return requeued;
 }
 
 };
