@@ -69,8 +69,8 @@ PY36_REQUIREMENTS = [
     },
 ]
 PY_REQUIREMENTS = [
-    {'package_spec': 'MarkupSafe >= 2.1.3, <2.2', 'from_source': True},
-    {'package_spec': 'Jinja2 >= 3.1.2, <3.2', 'from_source': True},
+    {'package_spec': 'MarkupSafe >= 2.1.3', 'from_source': True},
+    {'package_spec': 'Jinja2 >= 3.1.2', 'from_source': True},
     # We can not install PyYAML using sources. Unlike MarkupSafe it requires
     # Cython to build and Cython must be compiled and there's not clear way past
     # the requirement in pyyaml's pyproject.toml. Instead, rely on fetching
