@@ -1495,6 +1495,124 @@ class TestCephadm(object):
                 image='', no_fsid=False, error_ok=False, log_output=True, use_current_daemon_image=False
             )
 
+    @staticmethod
+    def _hdd_ssd_inventory() -> Devices:
+        return Devices([
+            Device('/dev/sdb', available=True, sys_api={'rotational': '1', 'model': 'ST16000'}),
+            Device('/dev/sdc', available=True, sys_api={'rotational': '1', 'model': 'ST16000'}),
+            Device('/dev/sdd', available=True, sys_api={'rotational': '0', 'model': 'MZ7L3'}),
+        ])
+
+    @staticmethod
+    def _batch_calls(_run_cephadm) -> List[List[str]]:
+        return [c.args[3] for c in _run_cephadm.call_args_list
+                if len(c.args) > 3 and 'batch' in c.args[3]]
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_apply_osd_db_devices_select_nothing(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+        with with_host(cephadm_module, 'test'):
+            spec = DriveGroupSpec(
+                service_id='hdd_ssd_db',
+                placement=PlacementSpec(host_pattern='*'),
+                data_devices=DeviceSelection(rotational=True),
+                db_devices=DeviceSelection(model='MZ7L4'),  # matches nothing
+            )
+            c = cephadm_module.apply([spec])
+            assert wait(cephadm_module, c) == ['Scheduled osd.hdd_ssd_db update...']
+
+            cephadm_module.cache.update_host_devices('test', self._hdd_ssd_inventory().devices)
+            _run_cephadm.side_effect = async_side_effect((['{}'], '', 0))
+
+            assert CephadmServe(cephadm_module)._apply_all_services() is False
+
+            # no OSD is created without the requested dedicated DB
+            assert self._batch_calls(_run_cephadm) == []
+            errors = [e for e in cephadm_module.events.get_for_service('osd.hdd_ssd_db')
+                      if e.level == 'ERROR']
+            assert len(errors) == 1
+            assert 'not deploying OSDs on host test: db_devices defined but no device selected' \
+                in errors[0].message
+            # the spec is not re-evaluated until the inventory or the spec changes
+            assert not cephadm_module.cache.osdspec_needs_apply('test', spec)
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_apply_osd_db_devices_select_nothing_fallback(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+        with with_host(cephadm_module, 'test'):
+            spec = DriveGroupSpec(
+                service_id='hdd_ssd_db',
+                placement=PlacementSpec(host_pattern='*'),
+                data_devices=DeviceSelection(rotational=True),
+                db_devices=DeviceSelection(model='MZ7L4'),  # matches nothing
+                allow_collocated_fallback=True,
+            )
+            c = cephadm_module.apply([spec])
+            assert wait(cephadm_module, c) == ['Scheduled osd.hdd_ssd_db update...']
+
+            cephadm_module.cache.update_host_devices('test', self._hdd_ssd_inventory().devices)
+            _run_cephadm.side_effect = async_side_effect((['{}'], '', 0))
+
+            assert CephadmServe(cephadm_module)._apply_all_services() is False
+
+            # previous behaviour: OSDs deployed without dedicated DB
+            assert self._batch_calls(_run_cephadm) == [
+                ['--config-json', '-', '--', '--log-level', 'info', 'lvm', 'batch',
+                 '--no-auto', '/dev/sdb', '/dev/sdc', '--objectstore', 'bluestore',
+                 '--yes', '--no-systemd'],
+            ]
+            events = cephadm_module.events.get_for_service('osd.hdd_ssd_db')
+            assert any(e.level == 'INFO' and 'allow_collocated_fallback is set' in e.message
+                       for e in events)
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_apply_osd_db_devices_selected(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+        with with_host(cephadm_module, 'test'):
+            spec = DriveGroupSpec(
+                service_id='hdd_ssd_db',
+                placement=PlacementSpec(host_pattern='*'),
+                data_devices=DeviceSelection(rotational=True),
+                db_devices=DeviceSelection(rotational=False),
+            )
+            c = cephadm_module.apply([spec])
+            assert wait(cephadm_module, c) == ['Scheduled osd.hdd_ssd_db update...']
+
+            cephadm_module.cache.update_host_devices('test', self._hdd_ssd_inventory().devices)
+            _run_cephadm.side_effect = async_side_effect((['{}'], '', 0))
+
+            assert CephadmServe(cephadm_module)._apply_all_services() is False
+
+            assert self._batch_calls(_run_cephadm) == [
+                ['--config-json', '-', '--', '--log-level', 'info', 'lvm', 'batch',
+                 '--no-auto', '/dev/sdb', '/dev/sdc', '--db-devices', '/dev/sdd',
+                 '--objectstore', 'bluestore', '--yes', '--no-systemd'],
+            ]
+            assert not any('no device selected' in e.message
+                           for e in cephadm_module.events.get_for_service('osd.hdd_ssd_db'))
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    @mock.patch('cephadm.services.osd.OSDService._run_ceph_volume_command')
+    @mock.patch('cephadm.services.osd.OsdIdClaims.refresh', lambda _: None)
+    @mock.patch('cephadm.services.osd.OsdIdClaims.get', lambda _: {})
+    def test_preview_db_devices_select_nothing(self, _run_cv_cmd, cephadm_module):
+        with with_host(cephadm_module, 'test'):
+            cephadm_module.cache.update_host_devices('test', self._hdd_ssd_inventory().devices)
+            dg = DriveGroupSpec(service_id='hdd_ssd_db',
+                                placement=PlacementSpec(host_pattern='test'),
+                                data_devices=DeviceSelection(rotational=True),
+                                db_devices=DeviceSelection(model='MZ7L4'))
+            preview = cephadm_module.osd_service.generate_previews([dg], 'test')
+
+            _run_cv_cmd.assert_not_called()
+            assert len(preview) == 1
+            assert preview[0]['data'] == []
+            assert preview[0]['notes'] == [
+                'NOTE: osd.hdd_ssd_db: not deploying OSDs on host test: db_devices defined '
+                'but no device selected, OSDs would be created without dedicated DB/WAL. '
+                'Check the device filters and availability (ceph orch device ls), or set '
+                'allow_collocated_fallback: true in the spec to deploy them anyway']
+
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.module.SpecStore.save")
     def test_apply_osd_save_placement(self, _save_spec, cephadm_module):
