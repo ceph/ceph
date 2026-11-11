@@ -1,5 +1,14 @@
 #!/usr/bin/env bash
 
+# The second half of the upgrade test that pool-fields-upgrade-setup.sh
+# starts, run for the same POOL_FIELD_SCENARIO after the upgrade and
+# osd require-osd-release vampire, the upgrade commit. The commit must set
+# the OSDMap flag stretch_zones. Then each scenario checks what the commit
+# did to its pools and rules and, except in 3az, reads back the objects
+# that the setup wrote once the PGs are clean. In ec and rules, osd pool
+# set num_zones 2 then moves each pool over two zones, and the objects are
+# read back again.
+
 set -euo pipefail
 
 scenario=${POOL_FIELD_SCENARIO:?POOL_FIELD_SCENARIO must be set}
@@ -87,8 +96,11 @@ check_pool_fields() {
 
 case "$scenario" in
     2az)
+        # the commit makes the pool in global stretch mode a pool over two
+        # zones of 2 copies each: num_zones 2, replica 2, size 4, min_size 1
         check_pool_fields 2 2 4 1
-        # the pool keeps its rule, and its zones the bucket type it had
+        # the pool keeps its rule, and its zones the bucket type they had,
+        # which is also the value of osd_pool_default_zone_failure_domain
         test "$(rule_of "$pool")" = "$rule"
         type_id=$(ceph osd crush dump -f json |
             jq --arg t "$zone_type" '.types[] | select(.name == $t) | .type_id')
@@ -100,8 +112,9 @@ case "$scenario" in
         check_objects "$pool"
         ;;
     ec)
-        # the commit changes no erasure coded pool: each keeps its rule and
-        # placement, and the plain pools get copies of the default profile
+        # the commit moves no erasure coded pool to another rule; ec_fast
+        # keeps its profile, and ec_shared1, of the default profile, now has
+        # a profile of its own, named after it
         test "$(rule_of ec_fast)" = ec_fast
         test "$(rule_of ec_shared1)" = erasure-code
         test "$(rule_of ec_shared2)" = erasure-code
@@ -113,9 +126,12 @@ case "$scenario" in
             check_objects "$p"
         done
 
-        # then num_zones 2 refuses the legacy EC pool, and for ec_hand,
-        # whose rule's placement cannot be read in one zone, needs the
-        # placement given; each rule goes with its last pool
+        # then osd pool set num_zones 2 moves each pool over two zones, to a
+        # rule of its own, <pool>-stretch. It is refused for ec_legacy, a
+        # legacy erasure coded pool, and for ec_hand, whose rule's placement
+        # cannot be read, until --root, --osd_failure_domain and --no-class
+        # give the whole placement. A rule is removed when its last pool
+        # leaves it.
         expect_refusal "is a legacy EC pool" \
             ceph osd pool set ec_legacy num_zones 2
         ceph osd pool set ec_fast num_zones 2
@@ -139,12 +155,13 @@ case "$scenario" in
         done
         ;;
     3az)
-        # A stretch pool that was created before the upgrade decodes
-        # as num_zones=1 with replica=size by design. The pool keeps
-        # its stretch peering fields unchanged.
+        # A pool that osd pool stretch set made before the upgrade decodes
+        # as num_zones 1 with replica equal to size, by design: num_zones 1,
+        # replica 6, size 6, min_size 3.
         check_pool_fields 1 6 6 3
 
-        # Verify the pool stretch mode peering fields survived the upgrade.
+        # It keeps its rule and the peering_crush_bucket fields that osd
+        # pool stretch set gave it.
         crush_rule_id=$(ceph osd crush rule dump "$rule" --format=json 2>/dev/null \
             | python3 -c 'import sys,json; print(json.load(sys.stdin)["rule_id"])')
         if ! jq -e \
@@ -182,8 +199,15 @@ case "$scenario" in
             check_objects "$p"
         done
 
-        # then num_zones 2 keeps or replaces each rule, or is refused, as its
-        # placement allows, and each rule goes with its last pool
+        # then osd pool set num_zones 2, with --replica 2 for the replicated
+        # pools, moves each pool over two zones. The pools on class_hosts,
+        # erasure-code and osds need nothing more, but e2, a legacy erasure
+        # coded pool, is refused until allow_ec_optimizations is set. The
+        # placement of rook_stretch and per_zone_one cannot be read, so
+        # rrook1 and runread are refused until given a rule (rrook1:
+        # rook_stretch itself) or the whole placement (runread, and rrook2).
+        # A rule is removed when its last pool leaves it; rook_stretch, still
+        # used by rrook1, and spare, which no pool uses, stay.
         ceph osd pool set rcls1 num_zones 2 --replica 2
         has_rule class_hosts
         ceph osd pool set rcls2 num_zones 2 --replica 2
