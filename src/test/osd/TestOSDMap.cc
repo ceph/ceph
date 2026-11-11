@@ -510,6 +510,9 @@ TEST_F(OSDMapTest, PoolMigrationFeatures) {
     uint64_t mask;
     uint64_t features = osdmap.get_features(CEPH_ENTITY_TYPE_CLIENT, &mask);
     EXPECT_EQ(needed, mask & needed);
+    // a release marker would turn away a backport's clients
+    EXPECT_NE(CEPH_FEATUREMASK_SERVER_VAMPIRE,
+              features & CEPH_FEATUREMASK_SERVER_VAMPIRE);
     return (features & needed) == needed;
   };
   ASSERT_FALSE(client_requires_migration());

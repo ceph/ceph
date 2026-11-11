@@ -2043,15 +2043,12 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
       if (crush->is_v5_rule(ruleid))
 	features |= CEPH_FEATURE_CRUSH_TUNABLES5;
     }
-    if (pool.second.is_migrating()) {
-      features |= CEPH_FEATUREMASK_SERVER_VAMPIRE;
-    }
     if (pool.second.is_migration_target()) {
       features |= POOL_MIGRATION_FEATURES;
     }
   }
   mask |= CEPH_FEATURE_OSDHASHPSPOOL | CEPH_FEATURE_OSD_CACHEPOOL |
-          CEPH_FEATUREMASK_SERVER_VAMPIRE | POOL_MIGRATION_FEATURES;
+          POOL_MIGRATION_FEATURES;
 
   if (osd_primary_affinity) {
     for (int i = 0; i < max_osd; ++i) {
