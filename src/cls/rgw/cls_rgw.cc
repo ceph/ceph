@@ -1478,6 +1478,12 @@ public:
                              check_delete_marker && key.instance.empty()); /* this is potentially a delete marker, for null objects we
                                                                               keep separate instance entry for the delete markers */
 
+    if (ret == -ENOENT) {
+      // not necessarily an error: e.g. a delete marker is linked under a newly
+      // generated instance that has no entry yet, so leave it to the caller
+      CLS_LOG(20, "read_key_entry() idx=%s not found", escape_str(instance_idx).c_str());
+      return ret;
+    }
     if (ret < 0) {
       CLS_LOG(0, "ERROR: read_key_entry() idx=%s ret=%d", instance_idx.c_str(), ret);
       return ret;
@@ -1856,6 +1862,8 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     ret = 0;
   }
   if (ret < 0) {
+    CLS_LOG(0, "ERROR: %s: failed to read instance entry key=%s ret=%d",
+            __func__, op.key.to_string().c_str(), ret);
     return ret;
   }
 
@@ -1964,7 +1972,8 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
 
           ret = old_obj.demote_current(header);
           if (ret < 0) {
-            CLS_LOG(0, "ERROR: could not demote current on previous key ret=%d", ret);
+            CLS_LOG(0, "ERROR: could not demote current on previous key=%s ret=%d",
+                    olh_entry.key.to_string().c_str(), ret);
             return ret;
           }
         }
@@ -2218,7 +2227,8 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
         BIVerObjEntry next(hctx, next_key);
         ret = next.init();
         if (ret < 0) {
-          CLS_LOG(0, "ERROR: next.init() returned ret=%d", ret);
+          CLS_LOG(0, "ERROR: next.init() key=%s returned ret=%d",
+                  next_key.to_string().c_str(), ret);
           return ret;
         }
 
