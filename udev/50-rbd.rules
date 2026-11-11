@@ -1,5 +1,8 @@
 KERNEL=="rbd[0-9]*", ENV{DEVTYPE}=="disk", ACTION!="remove", PROGRAM="/usr/bin/ceph-rbdnamer %k", SYMLINK+="rbd/%c"
 KERNEL=="rbd[0-9]*", ENV{DEVTYPE}=="partition", ACTION!="remove", PROGRAM="/usr/bin/ceph-rbdnamer %k", SYMLINK+="rbd/%c-part%n"
 
+KERNEL=="rbd[0-9]*", ENV{DEVTYPE}=="partition", ACTION!="remove", IMPORT{builtin}="blkid --noraid"
+KERNEL=="rbd[0-9]*", ENV{DEVTYPE}=="partition", ACTION!="remove", ENV{ID_FS_USAGE}=="filesystem|other|crypto", ENV{ID_FS_UUID_ENC}=="?*", SYMLINK+="disk/by-uuid/$env{ID_FS_UUID_ENC}"
+
 # This is a placeholder, uncomment and edit as necessary
 #KERNEL=="rbd[0-9]*", ENV{DEVTYPE}=="disk", ACTION=="add|change", ATTR{bdi/read_ahead_kb}="128"
