@@ -210,6 +210,7 @@
 #define MSG_MDS_SCRUB_STATS        0x503  // for mds scrub stack
 #define MSG_MDS_QUIESCE_DB_LISTING 0x505  // quiesce db replication
 #define MSG_MDS_QUIESCE_DB_ACK     0x506  // quiesce agent ack back to the db
+#define MSG_MDS_MIGRATE            0x507  // directory migrations across ranks
 
 // *** generic ***
 #define MSG_TIMECHECK             0x600

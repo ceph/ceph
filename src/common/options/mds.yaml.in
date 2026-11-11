@@ -1210,6 +1210,49 @@ options:
   fmt_desc: Ceph will inject MDS failure in the rename code
     (for developers only).
   with_legacy: true
+- name: mds_file_migrate_precopy_min
+  type: size
+  level: advanced
+  desc: copy files of at least this size before locking them, when migrating
+  long_desc: A file with no writers is copied while clients can still use it, and
+    locked only to check that it did not change. If it did, it is copied again
+    with the lock held. Smaller files are always copied with the lock held.
+  default: 64_M
+- name: mds_migrate_max_files
+  type: uint
+  level: advanced
+  desc: maximum number of files a directory migration works on at a time
+  long_desc: Applies to all the ceph.dir.migrate.pool jobs of a rank together, and
+    also bounds the directories being scanned. Each file uses up to 16 OSD ops at a
+    time. 0 stops the jobs from starting anything new.
+  default: 4
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_migrate_inject_drop
+  type: float
+  level: dev
+  desc: test only, share of the messages between ranks about directory migrations
+    to ignore on receipt
+  default: 0
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_kill_file_migrate_at
+  type: int
+  level: dev
+  desc: test only, abort at a point of a file migration
+  long_desc: 1 while copying, 2 once the new layout is journaled, 3 while clearing
+    the old pool, 4 with the old pool cleared but that not yet journaled,
+    5 after a copy without the lock, 6 with a hand-over to another rank durable
+    but not sent, 7 with one received and durable but not acked.
+  default: 0
+  services:
+  - mds
+  flags:
+  - runtime
 - name: mds_kill_openc_at
   type: int
   level: dev
