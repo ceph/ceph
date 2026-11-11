@@ -613,7 +613,8 @@ class TestStretchCluster(MgrTestCase):
             self.TIEBREAKER_MON_NAME,
             monmap['tiebreaker_mon']
         )
-        log.debug("Stretch mode is enabled correctly.")
+        log.debug("The pools are over two zones and the cluster stretch "
+                  "flags are set.")
 
     def _wait_for_degraded_stretch_mode(self):
         """Wait until degraded_stretch_mode is set in the OSDMap, and holds."""

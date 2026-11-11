@@ -223,24 +223,24 @@ class ZoneThrasher(Thrasher):
         Returns False if the thrasher is stopped first.
         Raises RuntimeError on timeout.
         """
-        self.log('waiting for degraded stretch mode (timeout={t}s)'.format(
+        self.log('waiting for degraded mode (timeout={t}s)'.format(
             t=self.degrade_timeout))
         start = time.time()
         with safe_while(
                 sleep=5,
                 tries=math.ceil(self.degrade_timeout / 5),
-                action='wait for degraded stretch mode',
+                action='wait for degraded mode',
                 _raise=False) as proceed:
             while proceed():
                 if self.stopping.is_set():
                     return False
                 if self.manager.is_degraded_stretch_mode():
                     elapsed = time.time() - start
-                    self.log('cluster entered degraded stretch mode after '
+                    self.log('cluster entered degraded mode after '
                              '{e:.1f}s'.format(e=elapsed))
                     return True
         raise RuntimeError(
-            'Timed out waiting for cluster to enter degraded stretch mode '
+            'Timed out waiting for cluster to enter degraded mode '
             'after {t}s'.format(t=self.degrade_timeout))
 
     def _wait_for_healthy_stretch(self):
@@ -254,13 +254,13 @@ class ZoneThrasher(Thrasher):
         Returns early if the thrasher is stopped.
         Raises RuntimeError on timeout.
         """
-        self.log('waiting for healthy stretch mode (timeout={t}s)'.format(
+        self.log('waiting for normal mode (timeout={t}s)'.format(
             t=self.revive_timeout))
         start = time.time()
         with safe_while(
                 sleep=10,
                 tries=math.ceil(self.revive_timeout / 10),
-                action='wait for healthy stretch mode',
+                action='wait for normal mode',
                 _raise=False) as proceed:
             while proceed():
                 if self.stopping.is_set():
@@ -268,11 +268,11 @@ class ZoneThrasher(Thrasher):
                 if (not self.manager.is_degraded_stretch_mode() and
                         not self.manager.is_recovering_stretch_mode()):
                     elapsed = time.time() - start
-                    self.log('cluster returned to healthy stretch mode after '
+                    self.log('cluster returned to normal mode after '
                              '{e:.1f}s'.format(e=elapsed))
                     return
         raise RuntimeError(
-            'Timed out waiting for cluster to return to healthy stretch mode '
+            'Timed out waiting for cluster to return to normal mode '
             'after {t}s'.format(t=self.revive_timeout))
 
     def do_thrash(self):
