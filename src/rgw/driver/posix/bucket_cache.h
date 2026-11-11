@@ -236,9 +236,14 @@ public:
       }
     } /* mtx released */
 
+    /* whether the entry is in the tree, asked under the tree's lock:  a
+     * neighbour's insert or erase rebalances the tree and rewrites this
+     * node's hook, so an unlocked read races it */
+    bc->cache.lock_for(hk);
     if (name_hook.is_linked()) {
-      bc->cache.remove(hk, this, bucket_avl_cache::FLAG_LOCK);
+      bc->cache.remove(hk, this, bucket_avl_cache::FLAG_NONE);
     }
+    bc->cache.unlock_for(hk);
   }
 
   virtual ~BucketCacheEntry()
