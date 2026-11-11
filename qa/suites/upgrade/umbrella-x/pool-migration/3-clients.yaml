@@ -1,0 +1,63 @@
+meta:
+- desc: |
+   the clients keep their umbrella packages: while one is connected, the
+   pool_migration requirement cannot be set and no pool can be migrated;
+   with the requirement forced, a migration still cannot start; once the
+   client is gone, a migration runs, umbrella clients are refused while it
+   runs and admitted again after it
+tasks:
+- print: "**** an umbrella client stays connected"
+- exec:
+    client.1:
+      - nohup ceph -w > /tmp/old-watch.log 2>&1 & echo $! > /tmp/old-watch.pid
+      - sleep 15
+- cephadm.shell:
+    mon.a:
+      - ceph config set global enable_experimental_unrecoverable_data_corrupting_features poolmigration
+      - sleep 20
+      - ceph health detail
+      - ceph health detail | grep POOL_MIGRATION_INCOMPATIBLE_CLIENTS
+      - if ceph osd set-require-min-compat-client pool_migration ; then echo set-with-an-umbrella-client-connected ; exit 1 ; fi
+      - if ceph osd pool migrate data 64 ; then echo migrated-without-the-requirement ; exit 1 ; fi
+      - ceph osd set-require-min-compat-client pool_migration --yes-i-really-mean-it
+      - ceph osd dump | grep -w require_pool_migration
+      - if ceph osd pool migrate data 64 ; then echo migrated-with-an-umbrella-client-connected ; exit 1 ; fi
+      - ceph osd unset-require-min-compat-client pool_migration
+- print: "**** the umbrella client leaves: the requirement can be set, and nothing is refused yet"
+- exec:
+    client.1:
+      - kill $(cat /tmp/old-watch.pid)
+      - sleep 10
+      - rados -p data ls | wc -l
+- cephadm.shell:
+    mon.a:
+      - sleep 20
+      - ceph osd set-require-min-compat-client pool_migration
+      - ceph osd dump | grep -w require_pool_migration
+- exec:
+    client.1:
+      - rados -p data put obj-before-the-migration /etc/hosts
+- print: "**** the migration: umbrella clients are refused while it runs"
+- cephadm.shell:
+    mon.a:
+      - ceph osd pool migrate data 64
+      - ceph osd pool ls --show-all | grep migrate-1
+      - rados -p data ls | wc -l
+      - if ceph osd unset-require-min-compat-client pool_migration ; then echo unset-during-a-migration ; exit 1 ; fi
+- exec:
+    client.1:
+      - "! timeout 120 rados -p data ls"
+- cephadm.shell:
+    mon.a:
+      - while ceph osd pool ls detail -f json | jq -e 'map(select(.migration_src != null or .migration_target != null)) | length > 0' ; do sleep 15 ; done
+      - ceph osd pool ls detail
+      - rados -p data ls | wc -l
+      - rados -p data stat obj-before-the-migration
+      - ceph osd unset-require-min-compat-client pool_migration
+      - ceph osd set-require-min-compat-client pool_migration
+- print: "**** after the migration: umbrella clients are admitted again"
+- exec:
+    client.1:
+      - rados -p data ls | wc -l
+      - rados -p data stat obj-before-the-migration
+- ceph.healthy:
