@@ -453,6 +453,11 @@ different plugin). This makes it possible to change an erasure coded pool's prof
 for example to change the plugin or change the k and m values, which cannot otherwise
 be changed in place.
 
+``ceph osd pool migrate`` takes the options of ``ceph osd pool create``,
+including ``--num_zones`` and the other options of pools over several zones. A
+migration with no options gives the new pool the source pool's ``num_zones``
+and ``replica`` as well.
+
 .. _associate-pool-to-application:
 
 Associating a Pool with an Application
