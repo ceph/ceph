@@ -1,5 +1,23 @@
 #!/usr/bin/env bash
 
+# The first half of an upgrade test of the pools, their fields (num_zones,
+# replica, size, min_size) and their CRUSH rules. On the old release, this
+# lays out 8 OSDs, one to a host, 4 in each of the two zones dc1 and dc2,
+# and creates the pools and rules of scenario POOL_FIELD_SCENARIO:
+#   2az: pool_fields_upgrade, of 4 copies, in global stretch mode, which is
+#        enabled with its rule and the tiebreaker monitor c.
+#   ec: erasure coded pools of every kind, none of them over zones.
+#   rules: pools on rules of every kind, two pools on some, and weight-sets.
+#   3az: the OSDs go to datacenters dc1, dc2 and dc3 in turn, and a
+#        replicated pool on a rule over all three is made an individual
+#        stretch pool with osd pool stretch set.
+# Except in 3az, each pool gets 10 objects. The cluster is then upgraded and
+# osd require-osd-release vampire, the upgrade commit, is run, and
+# pool-fields-upgrade-verify.sh checks what the commit did to the pools and
+# reads the objects back. The tentacle-x/stretch and umbrella-x upgrade
+# suites run a job for each scenario, and their stretch-zone-loss jobs run
+# 2az with a zone lost during the upgrade.
+
 set -euo pipefail
 
 scenario=${POOL_FIELD_SCENARIO:?POOL_FIELD_SCENARIO must be set}
@@ -40,7 +58,9 @@ for osd in $(ceph osd ls); do
     fi
 done
 
-# stretch mode counts every zone bucket: the 2az tiebreaker has none
+# only 3az has a dc3 bucket: mon enable_stretch_mode and num_zones 2 need
+# exactly two buckets of the zone type, so the tiebreaker's dc3 is only a
+# monitor location
 zones="dc1 dc2"
 [[ "$scenario" == 3az ]] && zones="$zones dc3"
 for zone in $zones; do
@@ -186,10 +206,12 @@ elif [[ "$scenario" == 3az ]]; then
     ceph osd pool stretch set "$pool" 2 3 datacenter "$rule" 6 3
     ceph osd pool application enable "$pool" rados
 elif [[ "$scenario" == rules ]]; then
-    # pools on rules of every kind, some in pairs: a create-replicated rule
-    # of a class, the erasure-code rule of plain EC pools (one of them a
-    # legacy EC pool), a create-erasure rule, Rook's rule and per_zone_one;
-    # a compat weight-set and pool weight-sets
+    # pools on rules of every kind: class_hosts (made by create-replicated,
+    # in the class of the OSDs; rcls1 and rcls2), erasure-code (the rule that
+    # erasure coded pools of the default profile share; e1, and e2, a
+    # legacy erasure coded pool), osds (made by create-erasure; eosd),
+    # rook_stretch (rrook1 and rrook2) and per_zone_one (runread); a compat
+    # weight-set and the weight-sets of rcls1 and rrook1
     ceph osd crush rule create-replicated class_hosts default host "$class"
     ceph osd erasure-code-profile set fast22osd k=2 m=2 crush-failure-domain=osd
     ceph osd crush rule create-erasure osds fast22osd
@@ -216,9 +238,11 @@ elif [[ "$scenario" == rules ]]; then
         write_objects "$p"
     done
 else
-    # erasure coded pools before the commit: FastEC on a profile of its own,
-    # two plain pools that share the rule erasure-code, a legacy EC pool, and
-    # a FastEC pool on a hand-written rule over both zones
+    # erasure coded pools of every kind: ec_fast, with allow_ec_optimizations,
+    # on a profile of its own, ec_shared1 and ec_shared2, of the default
+    # profile, which share the rule erasure-code, ec_legacy, a legacy
+    # erasure coded pool, and ec_hand, with allow_ec_optimizations, on a
+    # hand-written rule over both zones
     ceph osd erasure-code-profile set fast22 k=2 m=2 crush-failure-domain=host
     ceph osd erasure-code-profile set legacy21 k=2 m=1 crush-failure-domain=host
     ceph osd pool create ec_fast 8 8 erasure fast22

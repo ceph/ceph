@@ -1,9 +1,13 @@
 """
-Put the pool of a zone thrash job on a hand-written CRUSH rule over the zones
-of crush_map_config, as an operator's existing rule would be, and check at the
-end that the pool kept its rule and that no rule went. With the num_zones
-flip thrasher, the pool may instead end on a rule generated with the same
-placement, and the rule written here may go.
+Puts the pool of a zone thrash job on a hand-written CRUSH rule over the two
+zones of crush_map_config, as an operator's existing rule would be, instead
+of a rule that the monitor generates. The rule takes each zone (take),
+chooses the zones (choose) or chooses them in the device class of osd.0
+(class). At the end it checks that the pool is still on that rule and that
+no rule was removed. With the num_zones flip thrasher, the pool may instead
+end on a rule generated with the same placement, and the hand-written rule
+may be gone. The rule/ fragments of the thrash-stretch and
+thrash-erasure-code-stretch suites run it, except generated.yaml.
 """
 import contextlib
 import json
@@ -19,6 +23,7 @@ POOL = 'rulepool'
 
 def _rule_text(name, kind, ec, zones, zone_type, osd_type, per_zone,
                device_class, rule_id):
+    """The text of the hand-written rule: per_zone copies or shards a zone."""
     mode = 'indep' if ec else 'firstn'
     # chooseleaf of type osd can return OSDs that are out
     leaf = 'choose' if osd_type == 'osd' else 'chooseleaf'
@@ -42,6 +47,10 @@ def _rule_text(name, kind, ec, zones, zone_type, osd_type, per_zone,
 
 
 def _check_placement(manager, rule, root, zones, zone_type, osd_type):
+    """
+    Assert that rule takes root, first chooses one bucket of zone_type for
+    each zone, and last chooses buckets of osd_type.
+    """
     dump = json.loads(manager.raw_cluster_cmd(
         'osd', 'crush', 'rule', 'dump', rule, '--format=json'))
     steps = dump['steps']
@@ -57,9 +66,10 @@ def _check_placement(manager, rule, root, zones, zone_type, osd_type):
 @contextlib.contextmanager
 def task(ctx, config):
     """
-    Create the pool rulepool over the zones of
-    overrides.ceph.pool-config.crush_map_config on a rule written here, and
-    give it to the rados task through overrides.rados.pools::
+    Create the pool rulepool over the two zones of
+    overrides.ceph.pool-config.crush_map_config on a rule written here,
+    <rule>_rule, and give it to the rados task through
+    overrides.rados.pools::
 
         tasks:
         - stretch_rules:
@@ -69,9 +79,12 @@ def task(ctx, config):
                                         # mode first, with the rule for a
                                         # replicated pool
 
-    The pool is erasure coded with pool-config's erasure_code_profile when
-    pool-config's ec_pool is true, and replicated otherwise, with the
-    replicas per zone of the pool creation defaults.
+    The pool is erasure coded with pool-config's erasure_code_profile, k+m
+    shards in each zone, when pool-config's ec_pool is true. Otherwise it is
+    replicated, with the replicas per zone of the pool creation defaults, or
+    2 in global stretch mode. pool-config's min_size is set if it has one.
+    mon enable_stretch_mode is given the rule for a replicated pool, and no
+    rule for an erasure coded one.
     """
     config = config or {}
     kind = config.get('rule', 'take')

@@ -1,5 +1,13 @@
 #!/usr/bin/env bash
 
+# Lays out the cluster for tasks.test_netsplit, which the netsplit
+# stretch-ec-2-dc-1-arbiter-stretch-cluster-netsplit job runs next:
+# datacenters dc1 and dc2, each of 4 hosts with one OSD, monitors a and b in
+# dc1, c and d in dc2, and the tiebreaker e, which may not lead, in arbiter,
+# which has no OSDs. It removes .mgr, then creates stretch_pool, an erasure
+# coded pool over the two datacenters (k=2 m=1, 3 shards in each), which
+# turns on the cluster stretch flags, and sets allow_ec_optimizations on it.
+
 set -ex
 
 NUM_OSDS_UP=$(ceph osd df | grep "up" | wc -l)
@@ -66,19 +74,10 @@ ceph osd crush remove $hostname ||  { echo 'command failed' ; exit 1; }
 
 ceph osd erasure-code-profile set stretch_ec_profile plugin=jerasure k=2 m=1 crush-num-osd-failure-domains=2
 
+# with 2 zones, create-erasure makes a rule that chooses both datacenters,
+# then 3 hosts in each
 ceph osd crush rule create-erasure stretch_rule stretch_ec_profile 2
 
-# rule stretch_rule {
-#         id 1
-#         type erasure
-#         step set_chooseleaf_tries 5
-#         step set_choose_tries 100
-#         step take default
-#         step choose firstn 0 type datacenter
-#         step chooseleaf indep 6 type host
-
-# }
-# end crush map
 ceph osd pool rm .mgr .mgr --yes-i-really-really-mean-it
 
 ceph mon set_location e datacenter=arbiter host=node-1 || { echo 'command failed' ; exit 1; }

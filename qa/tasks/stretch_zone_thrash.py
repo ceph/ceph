@@ -1,9 +1,10 @@
 """
-Stretch zone thrasher -- take down all daemons in a random zone to trigger
-degraded stretch mode, hold for a configurable duration, then revive and wait
-for the cluster to return to healthy stretch mode.
-
-Only meaningful when the cluster is configured with num_zones=2 (stretch EC).
+Zone thrasher for pools over two zones: takes down every OSD and monitor of
+one of the two zones, picked at random, waits for degraded_stretch_mode in
+the OSDMap, keeps the zone down for a while, then brings it back and waits
+for degraded_stretch_mode and recovering_stretch_mode to clear. The
+thrash-stretch and thrash-erasure-code-stretch suites run it as their
+zone-default, zone-out and zone-slow-recovery thrashers.
 """
 import contextlib
 import logging
@@ -22,35 +23,44 @@ log = logging.getLogger(__name__)
 
 class ZoneThrasher(Thrasher):
     """
-    Repeatedly takes down all OSDs and the zone monitor for a randomly chosen
-    zone, waits for degraded stretch mode, pauses for ``hold_duration`` seconds,
-    then revives all daemons and waits for healthy stretch mode to be restored.
+    Waits up to pool_timeout seconds for a pool with is_stretch_pool set,
+    as a pool over two zones has. Then, each round, it picks one of the two
+    zones at random and stops its OSDs and monitors, without marking the
+    OSDs out, and expects degraded_stretch_mode within degrade_timeout
+    seconds; with mark_out, it then marks the zone's OSDs out. After
+    hold_duration seconds it marks them in again if it marked them out,
+    restarts the zone's monitors, waits for every monitor to be in quorum
+    and restarts the OSDs. It expects degraded_stretch_mode and
+    recovering_stretch_mode to be 0 within revive_timeout seconds, then
+    waits thrash_delay seconds. If a wait times out, the thrasher stops
+    with an error.
 
     Options::
 
       seed               RNG seed for reproducibility (default: None, uses time)
       hold_duration      Seconds to keep the zone down (default: 60)
-      degrade_timeout    Seconds to wait for degraded stretch mode to engage
-                         after killing the zone (default: 300)
-      revive_timeout     Seconds to wait for healthy stretch mode after reviving
+      degrade_timeout    Seconds to wait for degraded_stretch_mode after
+                         killing the zone (default: 300)
+      revive_timeout     Seconds to wait for degraded_stretch_mode and
+                         recovering_stretch_mode to clear after reviving
                          the zone (default: 600)
       thrash_delay       Seconds to sleep between iterations (default: 30)
       pool_timeout       Seconds to wait for a stretch pool to exist before
                          starting thrashing (default: 300)
-      mark_out           Mark the zone's OSDs out once degraded stretch mode
-                         is engaged, and in again before the zone is revived
+      mark_out           Mark the zone's OSDs out once degraded_stretch_mode
+                         is set, and in again before the zone is revived
                          (default: false)
 
-    The zone topology is read from
-    ``overrides.ceph.pool-config.crush_map_config``, which is injected by the
-    ``num_zones/2/2.yaml`` matrix fragment.  Each zone entry must have:
+    The zones are read from
+    ``overrides.ceph.pool-config.crush_map_config``, which the suite's
+    ``num_zones/2/2.yaml`` fragment sets. Each zone entry must have:
 
       - ``name``:     zone name (informational)
       - ``osds``:     list of OSD IDs belonging to this zone
       - ``monitors``: list of monitor IDs belonging to this zone
 
-    The tiebreak monitor (``tiebreak_monitor`` key) is never touched so that
-    quorum is always maintained.
+    The tiebreaker monitor (``tiebreak_monitor`` key) is never touched, so
+    the monitors keep a quorum.
 
     Example task config::
 
@@ -122,8 +132,8 @@ class ZoneThrasher(Thrasher):
 
     def _kill_zone(self, zone):
         """
-        Stop all OSD daemons and the zone monitor.  Daemons are stopped but
-        not marked out so the cluster sees a sudden failure rather than a
+        Stop the zone's OSDs and monitors.  Daemons are stopped but not
+        marked out so the cluster sees a sudden failure rather than a
         planned removal.
         """
         zone_name = zone['name']
@@ -145,7 +155,7 @@ class ZoneThrasher(Thrasher):
 
         The quorum wait between mons and OSDs is critical: if OSDs boot while
         the zone monitor is still absent the mon leader's dead_mon_buckets map
-        still contains this datacenter.  The OSD-boot path in
+        still contains this zone.  The OSD-boot path in
         OSDMonitor::update_from_paxos skips go_recovery_stretch_mode() when
         dead_mon_buckets is non-empty, and once the mon eventually rejoins the
         OSD-up edge (prev_num_up_osd < num_up_osd) has already passed, leaving
@@ -209,7 +219,7 @@ class ZoneThrasher(Thrasher):
 
     def _wait_for_degraded_stretch(self):
         """
-        Poll until the cluster reports degraded stretch mode.
+        Poll until degraded_stretch_mode is set in the OSDMap.
         Returns False if the thrasher is stopped first.
         Raises RuntimeError on timeout.
         """
@@ -293,7 +303,7 @@ class ZoneThrasher(Thrasher):
             # Take down the zone
             self._kill_zone(zone)
 
-            # Confirm the cluster entered degraded stretch mode
+            # Confirm that degraded_stretch_mode is set
             try:
                 degraded = self._wait_for_degraded_stretch()
             except RuntimeError:
@@ -308,8 +318,8 @@ class ZoneThrasher(Thrasher):
                 self.manager.raw_cluster_cmd(
                     'osd', 'out', *[str(osd_id) for osd_id in zone['osds']])
 
-            # Hold in degraded mode — this is the window where the IO workload
-            # exercises the degraded stretch EC code path
+            # Hold the zone down — this is the window where the IO workload
+            # runs on the other zone alone
             self.log('holding zone {z} down for {d}s'.format(
                 z=zone['name'], d=self.hold_duration))
             time.sleep(self.hold_duration)
@@ -321,7 +331,8 @@ class ZoneThrasher(Thrasher):
             # Revive the zone — mon rejoins quorum before OSDs boot
             self._revive_zone(zone, total_mons=total_mons)
 
-            # Wait for the cluster to exit degraded stretch mode and recover
+            # Wait for degraded_stretch_mode and recovering_stretch_mode to
+            # clear
             self._wait_for_healthy_stretch()
 
             self.log('=== iteration complete: zone {z} recovered ==='.format(
@@ -338,12 +349,14 @@ class ZoneThrasher(Thrasher):
 @contextlib.contextmanager
 def task(ctx, config):
     """
-    Thrash stretch EC pools by repeatedly taking down an entire zone.
+    Run ZoneThrasher while the tasks after it run. Afterwards, wait for
+    every monitor to be in quorum and for recovery to finish within
+    revive_timeout seconds.
 
-    The zone topology is read from the ``crush_map_config`` defined by the
-    ``num_zones/2/2.yaml`` file (via ``overrides.ceph.pool-config``).
-    This task must therefore be combined with a ``num_zones: 2`` pool
-    configuration.
+    The zones are read from the ``crush_map_config`` that the suite's
+    ``num_zones/2/2.yaml`` fragment sets (in ``overrides.ceph.pool-config``),
+    so the job must have pools over two zones. Takes the options of
+    ZoneThrasher, and cluster (default: ceph).
 
     Example::
 
