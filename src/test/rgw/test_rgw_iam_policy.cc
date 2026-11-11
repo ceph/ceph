@@ -1623,6 +1623,36 @@ TEST_F(ConditionTest, DateNotEqualsLogic)
   }
 }
 
+TEST_F(ConditionTest, DateEpochOutOfRange)
+{
+  std::string key = "aws:CurrentTime";
+  const std::string now = "2024-01-01T00:00:00Z";
+
+  // Epoch values in range still convert and compare as dates
+  {
+    Condition dateLessThan{TokenID::DateLessThan, key.data(), key.size(), false};
+    dateLessThan.vals.push_back("4102444800"); // 2100-01-01T00:00:00Z
+    EXPECT_TRUE(dateLessThan.eval({{key, now}}, nullptr));
+  }
+  {
+    Condition dateLessThan{TokenID::DateLessThan, key.data(), key.size(), false};
+    dateLessThan.vals.push_back("1.5");
+    EXPECT_FALSE(dateLessThan.eval({{key, now}}, nullptr));
+  }
+
+  // Negative, non-finite and too-large epoch values must not wrap around
+  // into a date far in the future
+  for (const auto& val : {"-1", "-0.5", "nan", "inf", "-inf", "1e300"}) {
+    Condition dateLessThan{TokenID::DateLessThan, key.data(), key.size(), false};
+    dateLessThan.vals.push_back(val);
+    EXPECT_FALSE(dateLessThan.eval({{key, now}}, nullptr)) << val;
+
+    Condition dateGreaterThan{TokenID::DateGreaterThan, key.data(), key.size(), false};
+    dateGreaterThan.vals.push_back(val);
+    EXPECT_FALSE(dateGreaterThan.eval({{key, now}}, nullptr)) << val;
+  }
+}
+
 TEST_F(ConditionTest, NotIpAddressLogic)
 {
   std::string key = "aws:SourceIp";

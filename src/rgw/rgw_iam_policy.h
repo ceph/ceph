@@ -5,8 +5,10 @@
 
 #include <bitset>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <iostream>
+#include <limits>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -513,6 +515,15 @@ struct Condition {
     try {
       double d = std::stod(s, &p);
       if (p == s.length()) {
+	// ceph::real_time counts unsigned nanoseconds since the epoch, and
+	// casting a negative, NaN or out-of-range double to uint64_t is
+	// undefined (it typically yields a date far in the future). Treat
+	// such values as unconvertible, like any other malformed date.
+	static constexpr double max_seconds =
+	  std::numeric_limits<uint64_t>::max() / 1000000000ull;
+	if (!std::isfinite(d) || d < 0 || d >= max_seconds) {
+	  return std::nullopt;
+	}
 	return ceph::real_time(
 	  std::chrono::seconds(static_cast<uint64_t>(d)) +
 	  std::chrono::nanoseconds(
