@@ -204,7 +204,7 @@ namespace bluestore {
     std::set<SharedBlobRef> shared_blobs;  ///< these need to be updated/written
 
     KeyValueDB::Transaction t; ///< then we will commit this
-    std::list<Context*> oncommits;  ///< more commit completions
+    std::vector<Context *> oncommits;  ///< more commit completions
     std::list<CollectionRef> removed_collections; ///< colls we removed
 
     boost::intrusive::list_member_hook<> deferred_queue_item;
@@ -241,15 +241,15 @@ namespace bluestore {
 	: onode(_o), offset(off), length(len) {
       }
     };
-    using write_list_t = mempool::bluestore_writing::list<WriteObserverEntry>;
-    write_list_t writings;
+    using write_batch = mempool::bluestore_writing::vector<WriteObserverEntry>;
+    write_batch writings;
     bool were_writings = false;
 
     bool add_writing(Onode* o, uint32_t off, uint32_t len);
     void finish_writing();
 
     explicit TransContext(CephContext* cct, BlueStore::Collection* c, OpSequencer* o,
-      std::list<Context*>* on_commits)
+      std::vector<Context *> *on_commits)
       : ch(c),
       osr(o),
       ioc(cct, this),

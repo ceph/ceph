@@ -5,11 +5,11 @@
 #include "common/Formatter.h"
 
 using std::less;
-using std::list;
 using std::map;
 using std::ostream;
 using std::set;
 using std::string;
+using std::vector;
 
 using ceph::bufferlist;
 using ceph::decode;
@@ -542,9 +542,9 @@ void Transaction::dump(ceph::Formatter *f)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
-list<Transaction> Transaction::generate_test_instances()
+vector<Transaction> Transaction::generate_test_instances()
 {
-  list<Transaction> o;
+  vector<Transaction> o;
 
   o.emplace_back();
 

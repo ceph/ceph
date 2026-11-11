@@ -34,7 +34,6 @@
 #include "messages/MOSDPGRecoveryDeleteReply.h"
 
 using std::less;
-using std::list;
 using std::make_pair;
 using std::map;
 using std::ostream;

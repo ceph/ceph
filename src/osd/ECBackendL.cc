@@ -13,8 +13,10 @@
  *
  */
 
-#include <iostream>
+#include <deque>
 #include <sstream>
+#include <iostream>
+#include <iterator>
 
 #include "ECBackendL.h"
 #include "ECInject.h"
@@ -38,9 +40,9 @@
 #define dout_prefix _prefix(_dout, this)
 
 using std::dec;
+using std::deque;
 using std::hex;
 using std::less;
-using std::list;
 using std::make_pair;
 using std::map;
 using std::pair;
@@ -67,7 +69,7 @@ static ostream& _prefix(std::ostream *_dout, ECBackendL::RecoveryBackend *pgb) {
 }
 
 struct ECRecoveryHandle : public PGBackend::RecoveryHandle {
-  list<ECBackendL::RecoveryBackend::RecoveryOp> ops;
+  deque<ECBackendL::RecoveryBackend::RecoveryOp> ops;
 };
 
 static ostream &operator<<(ostream &lhs, const map<pg_shard_t, bufferlist> &rhs)
@@ -199,15 +201,14 @@ struct RecoveryMessages {
     const map<pg_shard_t, vector<pair<int, int>>> &need,
     bool attrs)
   {
-    list<ec_align_t> to_read;
-    to_read.emplace_back(ec_align_t{off, len, 0});
+    std::vector to_read {ec_align_t {off, len, 0}};
     ceph_assert(!recovery_reads.count(hoid));
     want_to_read.insert(make_pair(hoid, std::move(_want_to_read)));
     recovery_reads.insert(
       make_pair(
 	hoid,
 	ECCommonL::read_request_t(
-	  to_read,
+	  std::move(to_read),
 	  need,
 	  attrs)));
   }
@@ -469,7 +470,7 @@ struct RecoveryReadCompleter : ECCommonL::ReadCompleter {
   void finish_single_request(
     const hobject_t &hoid,
     ECCommonL::read_result_t &res,
-    list<ec_align_t>,
+    std::span<const ec_align_t>,
     set<int> wanted_to_read) override
   {
     if (!(res.r == 0 && res.errors.empty())) {
@@ -752,12 +753,11 @@ void ECBackendL::RecoveryBackend::run_recovery_op(
   int priority)
 {
   RecoveryMessages m;
-  for (list<RecoveryOp>::iterator i = h.ops.begin();
-       i != h.ops.end();
-       ++i) {
-    dout(10) << __func__ << ": starting " << *i << dendl;
-    ceph_assert(!recovery_ops.count(i->hoid));
-    RecoveryOp &op = recovery_ops.insert(make_pair(i->hoid, *i)).first->second;
+  for (const auto& pending : h.ops) {
+    dout(10) << __func__ << ": starting " << pending << dendl;
+    ceph_assert(!recovery_ops.count(pending.hoid));
+    RecoveryOp &op = recovery_ops.insert(
+      make_pair(pending.hoid, pending)).first->second;
     continue_recovery_op(op, &m);
   }
   dispatch_recovery_messages(m, priority);
@@ -781,39 +781,43 @@ int ECBackendL::RecoveryBackend::recover_object(
   PGBackend::RecoveryHandle *_h)
 {
   ECRecoveryHandle *h = static_cast<ECRecoveryHandle*>(_h);
-  h->ops.push_back(RecoveryOp());
-  h->ops.back().v = v;
-  h->ops.back().hoid = hoid;
-  h->ops.back().obc = obc;
-  h->ops.back().recovery_info.soid = hoid;
-  h->ops.back().recovery_info.version = v;
+  auto& op = h->ops.emplace_back();
+  op.v = v;
+  op.hoid = hoid;
+  op.obc = obc;
+  op.recovery_info.soid = hoid;
+  op.recovery_info.version = v;
+
   if (obc) {
-    h->ops.back().recovery_info.size = obc->obs.oi.size;
-    h->ops.back().recovery_info.oi = obc->obs.oi;
+    op.recovery_info.size = obc->obs.oi.size;
+    op.recovery_info.oi = obc->obs.oi;
   }
+
   if (hoid.is_snap()) {
     if (obc) {
       ceph_assert(obc->ssc);
-      h->ops.back().recovery_info.ss = obc->ssc->snapset;
+      op.recovery_info.ss = obc->ssc->snapset;
     } else if (head) {
       ceph_assert(head->ssc);
-      h->ops.back().recovery_info.ss = head->ssc->snapset;
+      op.recovery_info.ss = head->ssc->snapset;
     } else {
       ceph_abort_msg("neither obc nor head set for a snap object");
     }
   }
-  h->ops.back().recovery_progress.omap_complete = true;
+
+  op.recovery_progress.omap_complete = true;
   for (set<pg_shard_t>::const_iterator i =
 	 get_parent()->get_acting_recovery_backfill_shards().begin();
        i != get_parent()->get_acting_recovery_backfill_shards().end();
        ++i) {
     dout(10) << "checking " << *i << dendl;
     if (get_parent()->get_shard_missing(*i).is_missing(hoid)) {
-      h->ops.back().missing_on.insert(*i);
-      h->ops.back().missing_on_shards.insert(i->shard);
+      op.missing_on.insert(*i);
+      op.missing_on_shards.insert(i->shard);
     }
   }
-  dout(10) << __func__ << ": built op " << h->ops.back() << dendl;
+
+  dout(10) << __func__ << ": built op " << op << dendl;
   return 0;
 }
 
@@ -1260,22 +1264,20 @@ void ECBackendL::handle_sub_read_reply(
       dout(20) << __func__ << " to_read skipping" << dendl;
       continue;
     }
-    list<ec_align_t>::const_iterator req_iter =
-      rop.to_read.find(i->first)->second.to_read.begin();
-    list<
-      boost::tuple<
-	uint64_t, uint64_t, map<pg_shard_t, bufferlist> > >::iterator riter =
-      rop.complete[i->first].returned.begin();
-    for (list<pair<uint64_t, bufferlist> >::iterator j = i->second.begin();
-	 j != i->second.end();
-	 ++j, ++req_iter, ++riter) {
-      ceph_assert(req_iter != rop.to_read.find(i->first)->second.to_read.end());
-      ceph_assert(riter != rop.complete[i->first].returned.end());
+    const auto &requested = rop.to_read.find(i->first)->second.to_read;
+    auto req_iter = std::begin(requested);
+    auto &returned = rop.complete[i->first].returned;
+    auto riter = std::begin(returned);
+    for (auto& [offset, data] : i->second) {
+      ceph_assert(req_iter != std::end(requested));
+      ceph_assert(riter != std::end(returned));
       pair<uint64_t, uint64_t> aligned =
 	sinfo.chunk_aligned_offset_len_to_chunk(
 	  make_pair(req_iter->offset, req_iter->size));
-      ceph_assert(aligned.first == j->first);
-      riter->get<2>()[from] = std::move(j->second);
+      ceph_assert(aligned.first == offset);
+      riter->get<2>()[from] = std::move(data);
+      ++req_iter;
+      ++riter;
     }
   }
   for (auto i = op.attrs_read.begin();
@@ -1586,24 +1588,26 @@ int ECBackendL::objects_read_local(
 void ECBackendL::objects_read_async(
   const hobject_t &hoid,
   uint64_t object_size,
-  const list<pair<ec_align_t,
-                  pair<bufferlist*, Context*>>> &to_read,
+  std::vector<PGBackend::async_read_request> &&requests,
   Context *on_complete,
   bool fast_read)
 {
-  map<hobject_t,std::list<ec_align_t>> reads;
+  map<hobject_t, std::vector<ec_align_t>> reads;
 
   uint32_t flags = 0;
   extent_set es;
-  for (const auto& [read, ctx] : to_read) {
+  for (const auto& request : requests) {
+    const auto& extent = request.extent;
     pair<uint64_t, uint64_t> tmp;
     if (!cct->_conf->osd_ec_partial_reads || fast_read) {
-      tmp = sinfo.offset_len_to_stripe_bounds(make_pair(read.offset, read.size));
+      tmp = sinfo.offset_len_to_stripe_bounds(
+        make_pair(extent.offset, extent.size));
     } else {
-      tmp = sinfo.offset_len_to_chunk_bounds(make_pair(read.offset, read.size));
+      tmp = sinfo.offset_len_to_chunk_bounds(
+        make_pair(extent.offset, extent.size));
     }
     es.union_insert(tmp.first, tmp.second);
-    flags |= read.flags;
+    flags |= extent.flags;
   }
 
   if (!es.empty()) {
@@ -1618,21 +1622,19 @@ void ECBackendL::objects_read_async(
   struct cb {
     ECBackendL *ec;
     hobject_t hoid;
-    list<pair<ec_align_t,
-	      pair<bufferlist*, Context*> > > to_read;
+    std::vector<PGBackend::async_read_request> requests;
     unique_ptr<Context> on_complete;
     CephContext *cct;
     cb(const cb&) = delete;
     cb(cb &&) = default;
     cb(ECBackendL *ec,
        const hobject_t &hoid,
-       const list<pair<ec_align_t,
-                  pair<bufferlist*, Context*> > > &to_read,
+       std::vector<PGBackend::async_read_request> &&requests,
        Context *on_complete,
        CephContext *cct)
       : ec(ec),
 	hoid(hoid),
-	to_read(to_read),
+	requests(std::move(requests)),
 	on_complete(on_complete),
         cct(cct) {}
     void operator()(ECCommonL::ec_extents_t &&results) {
@@ -1645,18 +1647,20 @@ void ECBackendL::objects_read_async(
       auto &got = results[hoid];
 
       int r = 0;
-      for (auto &&read: to_read) {
+      for (auto& [extent, output, completion] : requests) {
 	if (got.err < 0) {
 	  // error handling
-	  if (read.second.second) {
-	    read.second.second->complete(got.err);
+	  if (completion) {
+	    auto *context = completion;
+	    completion = nullptr;
+	    context->complete(got.err);
 	  }
 	  if (r == 0)
 	    r = got.err;
 	} else {
-	  ceph_assert(read.second.first);
-	  uint64_t offset = read.first.offset;
-	  uint64_t length = read.first.size;
+	  ceph_assert(output);
+	  uint64_t offset = extent.offset;
+	  uint64_t length = extent.size;
 	  auto range = got.emap.get_containing_range(offset, length);
 	  uint64_t range_offset = range.first.get_off();
 	  uint64_t range_length = range.first.get_len();
@@ -1671,26 +1675,26 @@ void ECBackendL::objects_read_async(
               ECInject::test_parity_read(hoid)) {
             length = range_length;
           }
-	  read.second.first->substr_of(
+	  output->substr_of(
 	    range.first.get_val(),
 	    offset - range_offset,
 	    length);
-	  if (read.second.second) {
-	    read.second.second->complete(length);
-	    read.second.second = nullptr;
+	  if (completion) {
+	    auto *context = completion;
+	    completion = nullptr;
+	    context->complete(length);
 	  }
 	}
       }
-      to_read.clear();
+      requests.clear();
       if (on_complete) {
 	on_complete.release()->complete(r);
       }
     }
     ~cb() {
-      for (auto &&i: to_read) {
-	delete i.second.second;
+      for (const auto& request : requests) {
+	delete request.completion;
       }
-      to_read.clear();
     }
   };
   objects_read_and_reconstruct(
@@ -1700,15 +1704,13 @@ void ECBackendL::objects_read_async(
       ECCommonL::ec_extents_t &&, cb>(
 	cb(this,
 	   hoid,
-	   to_read,
+	   std::move(requests),
 	   on_complete,
            cct)));
 }
 
 void ECBackendL::objects_read_and_reconstruct(
-  const map<hobject_t,
-    std::list<ec_align_t>
-  > &reads,
+  const map<hobject_t, std::vector<ec_align_t>> &reads,
   bool fast_read,
   GenContextURef<ECCommonL::ec_extents_t &&> &&func)
 {

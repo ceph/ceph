@@ -143,17 +143,16 @@ public:
    * check_recovery_sources.
    */
   void objects_read_and_reconstruct(
-    const std::map<hobject_t, std::list<ec_align_t>> &reads,
+    const std::map<hobject_t, std::vector<ec_align_t>> &reads,
     bool fast_read,
     GenContextURef<ECCommonL::ec_extents_t &&> &&func) override;
 
-    void objects_read_async(
-      const hobject_t &hoid,
-      uint64_t object_size,
-      const std::list<std::pair<ec_align_t,
-                                std::pair<ceph::buffer::list*, Context*>>> &to_read,
-      Context *on_complete,
-      bool fast_read = false);
+  void objects_read_async(
+    const hobject_t &hoid,
+    uint64_t object_size,
+    std::vector<PGBackend::async_read_request> &&requests,
+    Context *on_complete,
+    bool fast_read = false);
 
 private:
   friend struct ECRecoveryHandle;

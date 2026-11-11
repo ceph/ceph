@@ -16,6 +16,8 @@
 #ifndef CEPH_MOSDPGBACKFILLREMOVE_H
 #define CEPH_MOSDPGBACKFILLREMOVE_H
 
+#include <vector>
+
 #include "MOSDFastDispatchOp.h"
 
 /*
@@ -29,7 +31,7 @@ public:
 
   spg_t pgid;            ///< target spg_t
   epoch_t map_epoch = 0;
-  std::list<std::pair<hobject_t,eversion_t>> ls;    ///< objects to remove
+  std::vector<std::pair<hobject_t, eversion_t>> ls;    ///< objects to remove
 
   epoch_t get_map_epoch() const override {
     return map_epoch;

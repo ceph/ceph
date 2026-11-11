@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <vector>
+
 #include "crimson/os/seastore/btree/btree_types.h"
 #include "crimson/os/seastore/backref/backref_tree_node.h"
 
@@ -60,6 +62,6 @@ public:
   }
 };
 
-using backref_mapping_list_t = std::list<BackrefMapping>;
+using backref_mappings_t = std::vector<BackrefMapping>;
 
 } // namespace crimson::os::seastore

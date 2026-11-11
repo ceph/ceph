@@ -4,6 +4,9 @@
 #ifndef CEPH_OSD_INTERNAL_TYPES_H
 #define CEPH_OSD_INTERNAL_TYPES_H
 
+#include <vector>
+#include <iterator>
+
 #include "osd_types.h"
 #include "OpRequest.h"
 #include "object_state.h"
@@ -53,7 +56,7 @@ public:
   std::map<std::string, ceph::buffer::list, std::less<>> attr_cache;
 
   RWState rwstate;
-  std::list<OpRequestRef> waiters;  ///< ops waiting on state change
+  std::vector<OpRequestRef> waiters;  ///< ops waiting on state change
   bool get_read(OpRequestRef& op) {
     if (rwstate.get_read_lock()) {
       return true;
@@ -83,21 +86,29 @@ public:
     }
     return false;
   }
-  void wake(std::list<OpRequestRef> *requeue) {
+  void wake(std::vector<OpRequestRef> *requeue) {
     rwstate.release_waiters();
-    requeue->splice(requeue->end(), waiters);
+    if (std::empty(*requeue)) {
+      requeue->swap(waiters);
+      return;
+    }
+
+    requeue->insert(std::end(*requeue),
+                    std::make_move_iterator(std::begin(waiters)),
+                    std::make_move_iterator(std::end(waiters)));
+    waiters.clear();
   }
-  void put_read(std::list<OpRequestRef> *requeue) {
+  void put_read(std::vector<OpRequestRef> *requeue) {
     if (rwstate.put_read()) {
       wake(requeue);
     }
   }
-  void put_write(std::list<OpRequestRef> *requeue) {
+  void put_write(std::vector<OpRequestRef> *requeue) {
     if (rwstate.put_write()) {
       wake(requeue);
     }
   }
-  void put_excl(std::list<OpRequestRef> *requeue) {
+  void put_excl(std::vector<OpRequestRef> *requeue) {
     if (rwstate.put_excl()) {
       wake(requeue);
     }
@@ -129,14 +140,14 @@ public:
   bool try_get_read_lock() {
     return rwstate.get_read_lock();
   }
-  void drop_recovery_read(std::list<OpRequestRef> *ls) {
+  void drop_recovery_read(std::vector<OpRequestRef> *ls) {
     ceph_assert(rwstate.recovery_read_marker);
     put_read(ls);
     rwstate.recovery_read_marker = false;
   }
   void put_lock_type(
     RWState::State type,
-    std::list<OpRequestRef> *to_wake,
+    std::vector<OpRequestRef> *to_wake,
     bool *requeue_recovery,
     bool *requeue_snaptrimmer) {
     switch (type) {
@@ -299,11 +310,11 @@ public:
   }
 
   void put_locks(
-    std::list<std::pair<ObjectContextRef, std::list<OpRequestRef> > > *to_requeue,
+    std::vector<std::pair<ObjectContextRef, std::vector<OpRequestRef>>> *to_requeue,
     bool *requeue_recovery,
     bool *requeue_snaptrimmer) {
     for (auto& p: locks) {
-      std::list<OpRequestRef> _to_requeue;
+      std::vector<OpRequestRef> _to_requeue;
       p.second.obc->put_lock_type(
 	p.second.type,
 	&_to_requeue,
