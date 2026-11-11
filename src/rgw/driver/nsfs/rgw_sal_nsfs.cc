@@ -54,6 +54,7 @@
 #include "common/async/spawn_throttle.h"
 #include "common/dout_fmt.h"
 #include "common/errno.h"
+#include "common/split.h"
 #include "rgw_lc.h"
 
 /* I6:  the import the adoption mode runs.  These are the only place
@@ -3213,7 +3214,7 @@ int FSEnt::read_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& at
 		    xattr_fallback, aid, {}, unknown);
 }
 
-int FSEnt::fill_cache(const DoutPrefixProvider *dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags, const ACLOwner& bucket_owner, const std::string& path_prefix)
+int FSEnt::fill_cache(const DoutPrefixProvider *dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags, const ACLOwner& bucket_owner, const std::string& path_prefix, file::listing::FillRecorder* rec)
 {
   rgw_bucket_dir_entry bde{};
 
@@ -3222,6 +3223,10 @@ int FSEnt::fill_cache(const DoutPrefixProvider *dpp, optional_yield y, fill_cach
   int ret = make_dir_entry(dpp, y, key, flags, bucket_owner, bde);
   if (ret < 0) {
     return ret;
+  }
+  if (rec) {
+    /* the stat make_dir_entry() described */
+    rec->entry(bde.key.name, file::listing::EntryStat::of(stx));
   }
   return cb(dpp, bde);
 }
@@ -4507,113 +4512,160 @@ int NooBaaDirectoryObject::link_temp_file(const DoutPrefixProvider* dpp,
   return reject_noobaa_directory_object_change(dpp, parent->get_name());
 }
 
+int Directory::fill_one(const DoutPrefixProvider *dpp, optional_yield y,
+		      const char* name, fill_cache_cb_t &cb, uint32_t flags,
+		      const ACLOwner& bucket_owner,
+		      const std::string& path_prefix,
+		      file::listing::FillRecorder* rec)
+{
+  const auto& rn = reserved_or_none(reserved_names);
+  std::unique_ptr<FSEnt> ent;
+
+  /* A directory-object sentinel is reserved but listed, as the
+   * directory's object -- except at the bucket root.  The root's is
+   * the root object, the key `/`, and NooBaa never lists it
+   * (DECISIONS.md 2026-10-13). */
+  if (is_reserved_name(name, rn) &&
+      (!path_strategy->names_directory_object(name) || path_prefix.empty())) {
+    return 0;
+  }
+
+  /* The sentinel of a directory NooBaa's format marks is that
+   * object's data and not the object:  the walk one level up emitted
+   * it, from the directory. */
+  if (path_strategy->names_directory_object(name)) {
+    PathStrategy::DirectoryObject dobj{};
+    if (directory_object(dpp, dobj)) {
+      return 0;
+    }
+  }
+
+  int ret = get_ent(dpp, y, name, std::string(), ent);
+  if ((ret == -ENOENT) || (ret == -EINVAL)) {
+    /* Not an object -- a link, or not a file or a directory -- or
+     * removed since readdir returned it.  Ending the walk here would
+     * end the listing here, since the cache keeps what it has. */
+    ldpp_dout_fmt(dpp, 10, "nsfs: listing skips {} in {}: {}", name,
+			   get_name(), cpp_strerror(-ret));
+    return 0;
+  }
+  if (ret < 0)
+    return ret;
+
+  ent->stat(dpp);
+
+  if (path_strategy->names_directory_object(name)) {
+    /* The directory's object, emitted with key = path_prefix, which is
+     * already "photos/" inside photos/.  Built by make_dir_entry(), as
+     * every other object's row is:  a row built here by hand left out
+     * the version identity, so in a versioned bucket a directory object
+     * listed as no version at all. */
+    rgw_bucket_dir_entry bde{};
+    ret = ent->make_dir_entry(dpp, y, path_strategy->key_from_name(path_prefix),
+			      flags, bucket_owner, bde);
+    if (ret < 0)
+      return ret;
+
+    return cb(dpp, bde);
+  }
+
+  if (ent->get_type() == ObjectType::DIRECTORY) {
+    Directory* subdir = static_cast<Directory*>(ent.get());
+    ret = subdir->open(dpp);
+    if (ret < 0)
+      return ret;
+
+    /* A directory object in NooBaa's format, empty or not:  the
+     * directory carries the marker and the object's attributes, so it
+     * is emitted here, from the directory, and its sentinel is skipped
+     * on the way in.
+     *
+     * One fgetxattr, on the descriptor just opened for the recursion,
+     * and only where a strategy marks directories -- a base bucket, or
+     * one mid-conversion.  The nsfs strategy answers without a
+     * syscall. */
+    const std::string sub_prefix = fmt::format("{}{}/", path_prefix, name);
+    PathStrategy::DirectoryObject dobj{};
+    if (subdir->directory_object(dpp, dobj)) {
+      NooBaaDirectoryObject dent(path_strategy->folder_object_name(),
+				 subdir, dobj, ctx);
+      rgw_bucket_dir_entry bde{};
+      ret = dent.stat(dpp);
+      if (ret == 0) {
+	ret = dent.make_dir_entry(
+	    dpp, y, path_strategy->key_from_name(sub_prefix),
+	    flags, bucket_owner, bde);
+      }
+      if (ret < 0) {
+	/* marked as holding content with no sentinel to hold it:
+	 * NooBaa cannot read it either */
+	ldpp_dout_fmt(dpp, 1, "nsfs: not listing the directory object "
+			      "{}{}/:  {}", path_prefix, name,
+			      cpp_strerror(-ret));
+      } else {
+	ret = cb(dpp, bde);
+	if (ret < 0) {
+	  return ret;
+	}
+      }
+    }
+
+    return subdir->fill_cache(dpp, y, cb, flags, bucket_owner,
+                              sub_prefix, rec);
+  }
+
+  ret = ent->fill_cache(dpp, y, cb, flags, bucket_owner, path_prefix, rec);
+  if (ret < 0)
+    return ret;
+  return 0;
+}
+
+/* What the listing cache's revalidation records of a directory:  its own
+ * inode and mtime, and its .versions/'s where the walk reads one. */
+static file::listing::DirStat directory_stat(const DoutPrefixProvider* dpp,
+					     int fd, bool versions)
+{
+  file::listing::DirStat st;
+  struct statx stx;
+  if (nsfs::statx(fd, "", AT_EMPTY_PATH, STATX_INO | STATX_MTIME, &stx) == 0) {
+    st.ino = stx.stx_ino;
+    st.mtime_ns = file::listing::statx_ns(stx.stx_mtime);
+  }
+  if (versions) {
+    if (nsfs::impersonation_enabled()) {
+      (void) nsfs::hold_thread_capabilities(dpp);
+    }
+    if (nsfs::statx(fd, HIDDEN_VERSIONS_PATH.c_str(), AT_SYMLINK_NOFOLLOW,
+		    STATX_INO | STATX_MTIME, &stx) == 0) {
+      st.vino = stx.stx_ino;
+      st.vmtime_ns = file::listing::statx_ns(stx.stx_mtime);
+    }
+  }
+  return st;
+}
+
+/* A file name's index key name, as the listing cache's keys hold it. */
+static std::string index_name(const std::string& fname)
+{
+  rgw_obj_key k(fname);
+  return k.get_index_key_name();
+}
+
 int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
                           fill_cache_cb_t &cb, uint32_t flags,
                           const ACLOwner& bucket_owner,
-                          const std::string& path_prefix)
+                          const std::string& path_prefix,
+                          file::listing::FillRecorder* rec)
 {
-  const auto& rn = reserved_or_none(reserved_names);
-  int ret = for_each(dpp, [this, &cb, &dpp, &y, &path_prefix, flags,
-			   &bucket_owner, &rn](const char *name) {
-    std::unique_ptr<FSEnt> ent;
-
-    /* A directory-object sentinel is reserved but listed, as the
-     * directory's object -- except at the bucket root.  The root's is
-     * the root object, the key `/`, and NooBaa never lists it
-     * (DECISIONS.md 2026-10-13). */
-    if (is_reserved_name(name, rn) &&
-	(!path_strategy->names_directory_object(name) || path_prefix.empty())) {
-      return 0;
-    }
-
-    /* The sentinel of a directory NooBaa's format marks is that
-     * object's data and not the object:  the walk one level up emitted
-     * it, from the directory. */
-    if (path_strategy->names_directory_object(name)) {
-      PathStrategy::DirectoryObject dobj{};
-      if (directory_object(dpp, dobj)) {
-	return 0;
-      }
-    }
-
-    int ret = get_ent(dpp, y, name, std::string(), ent);
-    if ((ret == -ENOENT) || (ret == -EINVAL)) {
-      /* Not an object -- a link, or not a file or a directory -- or
-       * removed since readdir returned it.  Ending the walk here would
-       * end the listing here, since the cache keeps what it has. */
-      ldpp_dout_fmt(dpp, 10, "nsfs: listing skips {} in {}: {}", name,
-			     get_name(), cpp_strerror(-ret));
-      return 0;
-    }
-    if (ret < 0)
-      return ret;
-
-    ent->stat(dpp);
-
-    if (path_strategy->names_directory_object(name)) {
-      /* The directory's object, emitted with key = path_prefix, which is
-       * already "photos/" inside photos/.  Built by make_dir_entry(), as
-       * every other object's row is:  a row built here by hand left out
-       * the version identity, so in a versioned bucket a directory object
-       * listed as no version at all. */
-      rgw_bucket_dir_entry bde{};
-      ret = ent->make_dir_entry(dpp, y, path_strategy->key_from_name(path_prefix),
-				flags, bucket_owner, bde);
-      if (ret < 0)
-        return ret;
-
-      return cb(dpp, bde);
-    }
-
-    if (ent->get_type() == ObjectType::DIRECTORY) {
-      Directory* subdir = static_cast<Directory*>(ent.get());
-      ret = subdir->open(dpp);
-      if (ret < 0)
-        return ret;
-
-      /* A directory object in NooBaa's format, empty or not:  the
-       * directory carries the marker and the object's attributes, so it
-       * is emitted here, from the directory, and its sentinel is skipped
-       * on the way in.
-       *
-       * One fgetxattr, on the descriptor just opened for the recursion,
-       * and only where a strategy marks directories -- a base bucket, or
-       * one mid-conversion.  The nsfs strategy answers without a
-       * syscall. */
-      const std::string sub_prefix = fmt::format("{}{}/", path_prefix, name);
-      PathStrategy::DirectoryObject dobj{};
-      if (subdir->directory_object(dpp, dobj)) {
-	NooBaaDirectoryObject dent(path_strategy->folder_object_name(),
-				   subdir, dobj, ctx);
-	rgw_bucket_dir_entry bde{};
-	ret = dent.stat(dpp);
-	if (ret == 0) {
-	  ret = dent.make_dir_entry(
-	      dpp, y, path_strategy->key_from_name(sub_prefix),
-	      flags, bucket_owner, bde);
-	}
-	if (ret < 0) {
-	  /* marked as holding content with no sentinel to hold it:
-	   * NooBaa cannot read it either */
-	  ldpp_dout_fmt(dpp, 1, "nsfs: not listing the directory object "
-				"{}{}/:  {}", path_prefix, name,
-				cpp_strerror(-ret));
-	} else {
-	  ret = cb(dpp, bde);
-	  if (ret < 0) {
-	    return ret;
-	  }
-	}
-      }
-
-      return subdir->fill_cache(dpp, y, cb, flags, bucket_owner,
-                                sub_prefix);
-    }
-
-    ret = ent->fill_cache(dpp, y, cb, flags, bucket_owner, path_prefix);
-    if (ret < 0)
-      return ret;
-    return 0;
+  if (rec) {
+    /* stat'd before it is read, so that a change during the read moves
+     * the mtime past the record */
+    rec->directory(index_name(path_prefix),
+		   directory_stat(dpp, get_fd(),
+				  flags & FSEnt::FLAG_LIST_VERSIONS));
+  }
+  int ret = for_each(dpp, [&](const char *name) {
+    return fill_one(dpp, y, name, cb, flags, bucket_owner, path_prefix, rec);
   });
 
   if (ret < 0) {
@@ -4957,7 +5009,8 @@ std::unique_ptr<File> MPDirectory::get_part_file(int partnum)
 int MPDirectory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
                             fill_cache_cb_t &cb, uint32_t flags,
                             const ACLOwner& bucket_owner,
-                            const std::string& path_prefix)
+                            const std::string& path_prefix,
+                            file::listing::FillRecorder*)
 {
   int ret = FSEnt::fill_cache(dpp, y, cb, FSEnt::FLAG_NONE, bucket_owner,
 			      path_prefix);
@@ -5528,6 +5581,7 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
       g_conf().get_val<int64_t>("rgw_nsfs_cache_partitions"),
       g_conf().get_val<int64_t>("rgw_nsfs_cache_lmdb_count"),
       g_conf().get_val<bool>("rgw_nsfs_inotify")));
+  bucket_cache->set_revalidation(get_listing_revalidation());
 
   /* multipart upload cache */
   {
@@ -7645,13 +7699,15 @@ MDB_cmp_func* NSFSBucket::lmdb_cmp()
 }
 
 int NSFSBucket::fill_cache(const DoutPrefixProvider* dpp, optional_yield y,
-                            fill_cache_cb_t& cb)
+                            fill_cache_cb_t& cb,
+                            file::listing::FillRecorder* rec)
 {
   uint32_t flags = nsfs::FSEnt::FLAG_NONE;
   if (get_info().versioned()) {
     flags |= nsfs::FSEnt::FLAG_LIST_VERSIONS;
   }
-  int ret = dir->fill_cache(dpp, y, cb, flags, default_object_owner(dpp, y));
+  int ret = dir->fill_cache(dpp, y, cb, flags, default_object_owner(dpp, y),
+			    "", rec);
   if (ret < 0) {
     return ret;
   }
@@ -7659,6 +7715,267 @@ int NSFSBucket::fill_cache(const DoutPrefixProvider* dpp, optional_yield y,
     ret |= file::listing::FILL_CACHE_FLAG_FIXUP_CURRENT;
   }
   return ret;
+}
+
+namespace {
+
+/* nsfs's half of the listing cache's revalidation:  the filesystem.  A key
+ * names its file verbatim (the path strategies' key_from_name()), so an
+ * index key's name decoded is the path under the bucket's directory. */
+class NSFSRevalidation final : public file::listing::Revalidation<NSFSBucket> {
+  NSFSDriver* driver;
+
+  /* an index key's name as a path under the bucket:  "." for the bucket's
+   * own directory, and no trailing '/' */
+  static std::string path_of(const std::string& name) {
+    std::string fname, ns;
+    rgw_obj_key::parse_index_key(name, &fname, &ns);
+    while (!fname.empty() && (fname.back() == '/')) {
+      fname.pop_back();
+    }
+    return fname.empty() ? std::string{"."} : fname;
+  }
+
+  /* the listing's reads are the gateway's, as the fill's are, in
+   * directories an identity may own */
+  static void hold(const DoutPrefixProvider* dpp) {
+    if (nsfs::impersonation_enabled()) {
+      (void) nsfs::hold_thread_capabilities(dpp);
+    }
+  }
+
+  static int bucket_fd(const DoutPrefixProvider* dpp, NSFSBucket* b) {
+    auto* dir = b->get_dir();
+    const int ret = dir->open(dpp);
+    return (ret < 0) ? ret : dir->get_fd();
+  }
+
+public:
+  explicit NSFSRevalidation(NSFSDriver* driver) : driver(driver) {}
+
+  bool applies(NSFSBucket* b) const override {
+    return driver->ctx()->_conf.get_val<bool>("rgw_nsfs_listing_revalidate") &&
+      !b->get_ns();
+  }
+
+  std::optional<ceph::timespan> entry_interval() const override {
+    const auto s = driver->listing_interval_override(true).value_or(
+      driver->ctx()->_conf.get_val<int64_t>("rgw_nsfs_listing_entry_interval"));
+    if (s < 0) {
+      return std::nullopt;
+    }
+    return std::chrono::seconds(s);
+  }
+
+  ceph::timespan provisional_interval() const override {
+    const auto s = driver->listing_interval_override(false).value_or(
+      driver->ctx()->_conf.get_val<int64_t>(
+	"rgw_nsfs_listing_provisional_interval"));
+    return std::chrono::seconds(std::max<int64_t>(s, 0));
+  }
+
+  int fill(const DoutPrefixProvider* dpp, optional_yield y, NSFSBucket* b,
+	   nsfs::fill_cache_cb_t& cb,
+	   file::listing::FillRecorder& rec) override {
+    return b->fill_cache(dpp, y, cb, &rec);
+  }
+
+  /* the directory at `path` under `fd` */
+  static int stat_dir_under(const DoutPrefixProvider* dpp, int fd,
+			    const std::string& path, bool versions,
+			    file::listing::DirStat& st) {
+    hold(dpp);
+    const int dfd = ::openat(fd, path.c_str(),
+			     O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+    if (dfd < 0) {
+      return ((errno == ENOENT) || (errno == ENOTDIR) || (errno == ELOOP))
+	? -ENOENT : -errno;
+    }
+    st = nsfs::directory_stat(dpp, dfd, versions);
+    ::close(dfd);
+    return (st.ino == 0) ? -EIO : 0;
+  }
+
+  void locate(NSFSBucket* b, std::string& root, bool& versions) override {
+    root = b->get_dir()->get_name();
+    versions = b->get_info().versioned();
+  }
+
+  int stat_dir_at(const DoutPrefixProvider* dpp, const std::string& root,
+		  bool versions, const std::string& prefix,
+		  file::listing::DirStat& st) override {
+    NoDoutPrefix ndp(driver->ctx(), dout_subsys);
+    const std::string path = fmt::format("{}/{}", root, path_of(prefix));
+    return stat_dir_under(dpp ? dpp : &ndp, AT_FDCWD, path, versions, st);
+  }
+
+  int stat_dir(const DoutPrefixProvider* dpp, optional_yield, NSFSBucket* b,
+	       const std::string& prefix,
+	       file::listing::DirStat& st) override {
+    const int fd = bucket_fd(dpp, b);
+    if (fd < 0) {
+      return fd;
+    }
+    return stat_dir_under(dpp, fd, path_of(prefix), b->get_info().versioned(),
+			  st);
+  }
+
+  int read_dir(const DoutPrefixProvider* dpp, optional_yield, NSFSBucket* b,
+	       const std::string& prefix,
+	       std::vector<std::string>& children) override {
+    const int fd = bucket_fd(dpp, b);
+    if (fd < 0) {
+      return fd;
+    }
+    hold(dpp);
+    const std::string path = path_of(prefix);
+    const int dfd = ::openat(fd, path.c_str(),
+			     O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+    if (dfd < 0) {
+      return ((errno == ENOENT) || (errno == ENOTDIR) || (errno == ELOOP))
+	? -ENOENT : -errno;
+    }
+    DIR* d = ::fdopendir(dfd);
+    if (!d) {
+      const int err = errno;
+      ::close(dfd);
+      return -err;
+    }
+    auto close_d = make_scope_guard([d] { ::closedir(d); });
+    const std::string fprefix = (path == ".") ? std::string{} : path + "/";
+    const auto& rn = driver->get_reserved_names();
+    errno = 0;
+    while (struct dirent* de = ::readdir(d)) {
+      const std::string_view name{de->d_name};
+      if ((name == ".") || (name == "..")) {
+	continue;
+      }
+      /* reserved names, the directory's object's sentinel among them:  a
+       * directory's object is not revalidated */
+      if (is_reserved_name(name, rn)) {
+	continue;
+      }
+      unsigned type = de->d_type;
+      if (type == DT_UNKNOWN) {
+	struct statx stx;
+	if (nsfs::statx(dfd, de->d_name, AT_SYMLINK_NOFOLLOW, STATX_TYPE,
+			&stx) < 0) {
+	  continue;
+	}
+	type = S_ISDIR(stx.stx_mode) ? DT_DIR
+	  : S_ISREG(stx.stx_mode) ? DT_REG : DT_UNKNOWN;
+      }
+      if (type == DT_DIR) {
+	children.push_back(nsfs::index_name(fmt::format("{}{}/", fprefix, name)));
+      } else if (type == DT_REG) {
+	children.push_back(nsfs::index_name(fmt::format("{}{}", fprefix, name)));
+      }
+    }
+    return 0;
+  }
+
+  int build(const DoutPrefixProvider* dpp, optional_yield y, NSFSBucket* b,
+	    const std::string& prefix,
+	    const std::vector<std::string>& children,
+	    nsfs::fill_cache_cb_t& cb,
+	    file::listing::FillRecorder& rec) override {
+    int ret = bucket_fd(dpp, b);
+    if (ret < 0) {
+      return ret;
+    }
+    hold(dpp);
+    /* the directory holding the children, reached as the fill reaches it */
+    nsfs::Directory* dir = b->get_dir();
+    std::vector<std::unique_ptr<nsfs::FSEnt>> chain;
+    const std::string path = path_of(prefix);
+    const std::string fprefix = (path == ".") ? std::string{} : path + "/";
+    if (path != ".") {
+      for (auto part : ceph::split(path, "/")) {
+	std::unique_ptr<nsfs::FSEnt> ent;
+	ret = dir->get_ent(dpp, y, std::string{part}, std::string(), ent);
+	if (ret < 0) {
+	  return ret;
+	}
+	if (ent->get_type() != nsfs::ObjectType::DIRECTORY) {
+	  return -ENOENT;
+	}
+	auto* next = static_cast<nsfs::Directory*>(ent.get());
+	ret = next->open(dpp);
+	if (ret < 0) {
+	  return ret;
+	}
+	chain.push_back(std::move(ent));
+	dir = next;
+      }
+    }
+
+    uint32_t flags = nsfs::FSEnt::FLAG_NONE;
+    if (b->get_info().versioned()) {
+      flags |= nsfs::FSEnt::FLAG_LIST_VERSIONS;
+    }
+    const ACLOwner& owner = b->default_object_owner(dpp, y);
+    int last = 0;
+    for (const auto& child : children) {
+      std::string fname, ns;
+      rgw_obj_key::parse_index_key(child, &fname, &ns);
+      std::string leaf = fname.substr(std::min(fprefix.size(), fname.size()));
+      while (!leaf.empty() && (leaf.back() == '/')) {
+	leaf.pop_back();
+      }
+      if (leaf.empty() || (leaf.find('/') != std::string::npos)) {
+	continue;
+      }
+      ret = dir->fill_one(dpp, y, leaf.c_str(), cb, flags, owner, fprefix,
+			  &rec);
+      if (ret < 0) {
+	ldpp_dout_fmt(dpp, 1, "nsfs: listing could not build {}: {}", child,
+		      cpp_strerror(-ret));
+	last = ret;
+      }
+    }
+    return last;
+  }
+
+  int stat_entry(const DoutPrefixProvider* dpp, optional_yield, NSFSBucket* b,
+		 const std::string& name,
+		 file::listing::EntryStat& st) override {
+    const int fd = bucket_fd(dpp, b);
+    if (fd < 0) {
+      return fd;
+    }
+    hold(dpp);
+    struct statx stx;
+    if (nsfs::statx(fd, path_of(name).c_str(), AT_SYMLINK_NOFOLLOW,
+		    STATX_TYPE | STATX_INO | STATX_SIZE | STATX_MTIME |
+		    STATX_CTIME, &stx) < 0) {
+      return ((errno == ENOENT) || (errno == ENOTDIR) || (errno == ELOOP))
+	? -ENOENT : -errno;
+    }
+    if (!S_ISREG(stx.stx_mode)) {
+      return -ENOENT;
+    }
+    st = file::listing::EntryStat::of(stx);
+    return 0;
+  }
+};
+
+} // anonymous namespace
+
+std::optional<int64_t> NSFSDriver::listing_interval_override(bool entry)
+{
+  std::lock_guard l{listing_intervals_lock};
+  if (ceph::coarse_mono_clock::now() >= listing_intervals.until) {
+    return std::nullopt;
+  }
+  return entry ? listing_intervals.entry : listing_intervals.provisional;
+}
+
+file::listing::Revalidation<NSFSBucket>* NSFSDriver::get_listing_revalidation()
+{
+  if (!listing_revalidation) {
+    listing_revalidation = std::make_unique<NSFSRevalidation>(this);
+  }
+  return listing_revalidation.get();
 }
 
 const ACLOwner& NSFSBucket::default_object_owner(const DoutPrefixProvider* dpp,
@@ -13501,7 +13818,8 @@ int NSFSObject::NSFSFSIOObject::publish(const DoutPrefixProvider* dpp, uint32_t 
 	  bde.meta.etag = synthesize_etag(pub_stx);
 	}
       }
-      bcache->add_entry(dpp, bucket->get_name(), bde);
+      const auto rst = file::listing::EntryStat::of(pub_stx);
+      bcache->add_entry(dpp, bucket->get_name(), bde, &rst);
 
       /* and flip the version this publish demoted from current to
        * non-current, as NSFSAtomicWriter::complete() does for an S3 PUT.
@@ -14928,7 +15246,8 @@ int NSFSObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, 
     if (ret < 0) {
       return ret;
     }
-    bcache->add_entry(dpp, b->get_name(), bde);
+    const auto rst = file::listing::EntryStat::of(ent->get_stx());
+    bcache->add_entry(dpp, b->get_name(), bde, &rst);
   }
   return 0;
 }
@@ -15621,7 +15940,8 @@ static void cache_promoted_current(NSFSDriver* driver,
   set_dir_entry_owner(bde, xs->object_owner(pattrs, acl_owner), acl_owner,
 		      bucket_owner);
 
-  driver->get_bucket_cache()->add_entry(dpp, bucket_name, bde);
+  const auto rst = file::listing::EntryStat::of(pstx);
+  driver->get_bucket_cache()->add_entry(dpp, bucket_name, bde, &rst);
 }
 
 int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
@@ -17423,7 +17743,8 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
                             xattr_strategy()->object_owner(osrc, acl_owner),
                             acl_owner, pb->default_object_owner(dpp, y));
       }
-      bcache->add_entry(dpp, pb->get_name(), bde);
+      const auto rst = file::listing::EntryStat::of(new_stx);
+      bcache->add_entry(dpp, pb->get_name(), bde, &rst);
     }
   }
 
@@ -18626,6 +18947,14 @@ void NSFSDriver::get_features(std::map<std::string, std::string>& features)
    * from the shape of an etag it has no second opinion about. */
   features["non_md5_etag"] =
     ctx()->_conf->rgw_non_md5_etag ? "true" : "false";
+  /* the listing cache's revalidation:  whether a listing checks the tree,
+   * and its two intervals in seconds (-1:  entries never compared) */
+  features["listing_revalidate"] =
+    ctx()->_conf.get_val<bool>("rgw_nsfs_listing_revalidate") ? "true" : "false";
+  features["listing_entry_interval"] = std::to_string(
+    ctx()->_conf.get_val<int64_t>("rgw_nsfs_listing_entry_interval"));
+  features["listing_provisional_interval"] = std::to_string(
+    ctx()->_conf.get_val<int64_t>("rgw_nsfs_listing_provisional_interval"));
   /* Whether lifecycle runs, and how long its day is:  with
    * rgw_lc_debug_interval positive, that many seconds stand for a day,
    * and otherwise a day is a day.  A test that waits for an expiry has
@@ -20733,6 +21062,67 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
     if (out) {
       (*out)["enabled"] = on ? "true" : "false";
       (*out)["bucket"] = b_it->second;
+    }
+    return 0;
+  }
+
+  if (hint == "listing-intervals") {
+    /* The listing cache's revalidation intervals, overridden for a while,
+     * for the suite's tests of what each bounds:  an object overwritten in
+     * place outside is listed as it is within the entry interval, a file
+     * created outside beside RGW's own write within the provisional one
+     * (DECISIONS.md 2026-11-11).  Daemon-wide:  while it lasts every
+     * listing checks at these intervals, so the tests that set it run
+     * alone, after baseline.
+     *
+     *   entry=<s> provisional=<s>   either or both, in seconds;  -1 for
+     *                               entry never compares
+     *   for=<s>                     how long the override lasts, 60 by
+     *                               default, so a test that stops part
+     *                               way leaves nothing behind
+     *   reset=true                  drop it now
+     *
+     * Returns the intervals in force, `entry` and `provisional`. */
+    auto num = [&](const char* k, std::optional<int64_t>& v) -> int {
+      auto it = params.find(k);
+      if (it == params.end()) {
+	return 0;
+      }
+      int64_t n = 0;
+      const auto& t = it->second;
+      const auto [end, ec] = std::from_chars(t.data(), t.data() + t.size(), n);
+      if ((ec != std::errc{}) || (end != t.data() + t.size())) {
+	return -EINVAL;
+      }
+      v = n;
+      return 0;
+    };
+    std::optional<int64_t> entry, provisional, lasts;
+    if ((num("entry", entry) < 0) || (num("provisional", provisional) < 0) ||
+	(num("for", lasts) < 0) || (lasts && (*lasts < 0))) {
+      return -EINVAL;
+    }
+    auto r = params.find("reset");
+    {
+      std::lock_guard l{listing_intervals_lock};
+      if ((r != params.end()) && (r->second == "true")) {
+	listing_intervals = ListingIntervals{};
+      } else {
+	listing_intervals.entry = entry;
+	listing_intervals.provisional = provisional;
+	listing_intervals.until = ceph::coarse_mono_clock::now() +
+	  std::chrono::seconds(lasts.value_or(60));
+      }
+    }
+    if (out) {
+      auto* rv = get_listing_revalidation();
+      const auto e = rv->entry_interval();
+      (*out)["entry"] = e
+	? std::to_string(std::chrono::duration_cast<std::chrono::seconds>(*e).count())
+	: std::string{"-1"};
+      (*out)["provisional"] = std::to_string(
+	std::chrono::duration_cast<std::chrono::seconds>(
+	  rv->provisional_interval()).count());
     }
     return 0;
   }

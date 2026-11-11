@@ -738,6 +738,8 @@ public:
     quota_handler = RGWQuotaHandler::generate_handler(env->dpp, this, false);
     bucket_cache.reset(new nsfs::BucketCache(
         this, fs_reference_path(), cache_base, 100, 3, 3, 3));
+    /* as initialize() does */
+    bucket_cache->set_revalidation(get_listing_revalidation());
 
     /* as initialize() does, from rgw_posix_sync_policy */
     init_sync_policy(dpp);
@@ -8279,6 +8281,217 @@ static void put_object(rgw::sal::Driver* driver, rgw::sal::Bucket* bucket,
   EXPECT_EQ(writer->complete(body.size(), etag, &mtime, real_time(), attrs,
 			     std::nullopt, real_time(), nullptr, nullptr,
 			     nullptr, nullptr, nullptr, rctx, 0), expect) << key;
+}
+
+/* The listing cache's revalidation (inflight/listing-revalidation.md):  a
+ * listing checks the tree as it walks, so a file a filesystem client
+ * changed after the bucket's first listing is listed as it is. */
+
+/* An option set for one test, and put back. */
+struct ConfSetting {
+  std::string name;
+  std::string was;
+  ConfSetting(const std::string& name, const std::string& value)
+    : name(name) {
+    g_conf().get_val(name, &was);
+    g_conf().set_val(name, value);
+  }
+  ~ConfSetting() { g_conf().set_val(name, was); }
+};
+
+/* `body` at `rel` under the bucket's directory, its directories made, as
+ * a filesystem client writes it:  an existing file is truncated in
+ * place. */
+static void sideload(const sf::path& bucket_dir, const std::string& rel,
+		     const std::string& body)
+{
+  const sf::path p = bucket_dir / rel;
+  sf::create_directories(p.parent_path());
+  const int fd = ::open(p.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+  ASSERT_GE(fd, 0) << p;
+  ASSERT_EQ(::write(fd, body.data(), body.size()), (ssize_t) body.size());
+  ::close(fd);
+}
+
+/* Every listed key and its size. */
+static std::map<std::string, uint64_t> listed(rgw::sal::Bucket* bucket,
+					      const DoutPrefixProvider* dpp)
+{
+  rgw::sal::Bucket::ListParams params;
+  rgw::sal::Bucket::ListResults results;
+  EXPECT_EQ(bucket->list(dpp, params, 1000, results, null_yield), 0);
+  std::map<std::string, uint64_t> out;
+  for (const auto& e : results.objs) {
+    out[e.key.name] = e.meta.size;
+  }
+  return out;
+}
+
+TEST_F(NSFSBucketTest, ASideloadedFileAfterAListingIsListed)
+{
+  put_object(driver.get(), bucket.get(), env->dpp, acl_owner, "seen", "seen",
+	     "text/plain");
+  ASSERT_TRUE(listed(bucket.get(), env->dpp).contains("seen"));
+
+  sideload(bucket_path(), "late.txt", "written outside");
+  const auto keys = listed(bucket.get(), env->dpp);
+  ASSERT_TRUE(keys.contains("late.txt"));
+  EXPECT_EQ(keys.at("late.txt"), 15u);
+  EXPECT_TRUE(keys.contains("seen"));
+}
+
+TEST_F(NSFSBucketTest, AFileRemovedOutsideAfterAListingIsNotListed)
+{
+  put_object(driver.get(), bucket.get(), env->dpp, acl_owner, "seen", "seen",
+	     "text/plain");
+  put_object(driver.get(), bucket.get(), env->dpp, acl_owner, "kept", "kept",
+	     "text/plain");
+  ASSERT_TRUE(listed(bucket.get(), env->dpp).contains("seen"));
+
+  ASSERT_TRUE(sf::remove(bucket_path() / "seen"));
+  const auto keys = listed(bucket.get(), env->dpp);
+  EXPECT_FALSE(keys.contains("seen"));
+  EXPECT_TRUE(keys.contains("kept"));
+}
+
+/* A file under directories made outside:  found by reading the bucket's
+ * own directory, which the walk enters first, and the new subtree built
+ * whole.  A delimited listing shows the new top directory. */
+TEST_F(NSFSBucketTest, ASideloadedFileUnderNewDirectoriesIsListed)
+{
+  put_object(driver.get(), bucket.get(), env->dpp, acl_owner, "seen", "seen",
+	     "text/plain");
+  ASSERT_TRUE(listed(bucket.get(), env->dpp).contains("seen"));
+
+  sideload(bucket_path(), "d1/d2/deep.txt", "deep");
+  const auto keys = listed(bucket.get(), env->dpp);
+  ASSERT_TRUE(keys.contains("d1/d2/deep.txt"));
+  EXPECT_EQ(keys.at("d1/d2/deep.txt"), 4u);
+
+  rgw::sal::Bucket::ListParams params;
+  params.delim = "/";
+  rgw::sal::Bucket::ListResults results;
+  ASSERT_EQ(bucket->list(env->dpp, params, 1000, results, null_yield), 0);
+  EXPECT_TRUE(results.common_prefixes.contains("d1/"));
+
+  /* and a file added outside to a directory the walk already knows */
+  sideload(bucket_path(), "d1/d2/second.txt", "second");
+  EXPECT_TRUE(listed(bucket.get(), env->dpp).contains("d1/d2/second.txt"));
+}
+
+/* An in-place overwrite moves no directory's mtime:  only the per-entry
+ * check finds it, here on every listing. */
+TEST_F(NSFSBucketTest, AFileOverwrittenInPlaceIsListedWithItsNewSize)
+{
+  ConfSetting every("rgw_nsfs_listing_entry_interval", "0");
+  put_object(driver.get(), bucket.get(), env->dpp, acl_owner, "seen", "seen",
+	     "text/plain");
+  ASSERT_EQ(listed(bucket.get(), env->dpp).at("seen"), 4u);
+
+  sideload(bucket_path(), "seen", "rewritten outside");
+  EXPECT_EQ(listed(bucket.get(), env->dpp).at("seen"), 17u);
+}
+
+/* RGW's own writes record what they changed:  the object's stat with its
+ * entry, its directory as provisional.  So a listing after them reads no
+ * directory and rebuilds no entry, even comparing every entry. */
+TEST_F(NSFSBucketTest, AnRGWWriteAfterAListingRebuildsNothing)
+{
+  ConfSetting every("rgw_nsfs_listing_entry_interval", "0");
+  put_object(driver.get(), bucket.get(), env->dpp, acl_owner, "first", "1",
+	     "text/plain");
+  ASSERT_TRUE(listed(bucket.get(), env->dpp).contains("first"));
+
+  auto* bc = driver->get_bucket_cache();
+  const uint64_t reconciles = bc->reconcile_count;
+  const uint64_t rebuilds = bc->rebuild_count;
+  const uint64_t compared = bc->entry_check_count;
+  put_object(driver.get(), bucket.get(), env->dpp, acl_owner, "second", "22",
+	     "text/plain");
+  put_object(driver.get(), bucket.get(), env->dpp, acl_owner, "sub/third",
+	     "333", "text/plain");
+  const auto keys = listed(bucket.get(), env->dpp);
+  EXPECT_TRUE(keys.contains("second"));
+  EXPECT_TRUE(keys.contains("sub/third"));
+  EXPECT_EQ(uint64_t(bc->reconcile_count), reconciles);
+  EXPECT_EQ(uint64_t(bc->rebuild_count), rebuilds);
+  EXPECT_GT(uint64_t(bc->entry_check_count), compared);
+}
+
+/* RGW records a directory's stat right after its own change, so an
+ * outside change that lands after it -- a removal, a create -- moves the
+ * mtime past the record and is found by the next listing, with no wait. */
+TEST_F(NSFSBucketTest, AnOutsideChangeAfterAnRGWWriteIsListedAtOnce)
+{
+  put_object(driver.get(), bucket.get(), env->dpp, acl_owner, "seen", "seen",
+	     "text/plain");
+  ASSERT_TRUE(listed(bucket.get(), env->dpp).contains("seen"));
+
+  put_object(driver.get(), bucket.get(), env->dpp, acl_owner, "kept", "kept",
+	     "text/plain");
+  ASSERT_TRUE(sf::remove(bucket_path() / "seen"));
+  sideload(bucket_path(), "after.txt", "after");
+  const auto keys = listed(bucket.get(), env->dpp);
+  EXPECT_FALSE(keys.contains("seen"));
+  EXPECT_TRUE(keys.contains("kept"));
+  EXPECT_TRUE(keys.contains("after.txt"));
+}
+
+/* A file created outside in a directory RGW then wrote to is absorbed
+ * into the directory's new record:  hidden until the provisional interval
+ * has passed, and listed by the first listing after it. */
+TEST_F(NSFSBucketTest, AnOutsideCreateBesideAnRGWWriteWaitsForTheProvisionalInterval)
+{
+  put_object(driver.get(), bucket.get(), env->dpp, acl_owner, "seen", "seen",
+	     "text/plain");
+  ASSERT_TRUE(listed(bucket.get(), env->dpp).contains("seen"));
+
+  sideload(bucket_path(), "beside.txt", "beside");
+  put_object(driver.get(), bucket.get(), env->dpp, acl_owner, "rgw", "rgw",
+	     "text/plain");
+  {
+    const auto keys = listed(bucket.get(), env->dpp);
+    EXPECT_TRUE(keys.contains("rgw"));
+    EXPECT_FALSE(keys.contains("beside.txt"))
+      << "within the provisional interval the directory is not read";
+  }
+  ConfSetting now("rgw_nsfs_listing_provisional_interval", "0");
+  EXPECT_TRUE(listed(bucket.get(), env->dpp).contains("beside.txt"));
+}
+
+/* Reading a directory accounts only for what its files back:  a name
+ * with no file there may still hold noncurrent versions and a delete
+ * marker, which .versions/ governs.  An outside change makes the listing
+ * read the directory;  the versions and the marker survive it. */
+TEST_F(NSFSBucketTest, ReadingADirectoryKeepsItsDeleteMarkersAndVersions)
+{
+  bucket->get_info().flags |= BUCKET_VERSIONED;
+  ASSERT_EQ(bucket->put_info(env->dpp, false, real_time(), null_yield), 0);
+  put_object(driver.get(), bucket.get(), env->dpp, acl_owner, "del", "one",
+	     "text/plain");
+  put_object(driver.get(), bucket.get(), env->dpp, acl_owner, "del", "two",
+	     "text/plain");
+  auto obj = bucket->get_object(rgw_obj_key("del"));
+  auto del = obj->get_delete_op(rgw::sal::no_authenticated_user);
+  ASSERT_EQ(del->delete_obj(env->dpp, null_yield, 0), 0);
+  ASSERT_EQ(listed_versions(bucket.get(), env->dpp, "del").size(), 3u)
+    << "two versions and the delete marker, before anything changed";
+
+  sideload(bucket_path(), "beside.txt", "beside");
+  const auto rows = listed_versions(bucket.get(), env->dpp, "del");
+  EXPECT_EQ(rows.size(), 3u) << "reading the directory dropped versions";
+  EXPECT_EQ(listed_versions(bucket.get(), env->dpp, "beside.txt").size(), 1u);
+}
+
+TEST_F(NSFSBucketTest, WithRevalidationOffAListingTrustsItsFill)
+{
+  ConfSetting off("rgw_nsfs_listing_revalidate", "false");
+  put_object(driver.get(), bucket.get(), env->dpp, acl_owner, "seen", "seen",
+	     "text/plain");
+  ASSERT_TRUE(listed(bucket.get(), env->dpp).contains("seen"));
+
+  sideload(bucket_path(), "late.txt", "written outside");
+  EXPECT_FALSE(listed(bucket.get(), env->dpp).contains("late.txt"));
 }
 
 /* Two writers of one object's attributes, each on its own handle loaded

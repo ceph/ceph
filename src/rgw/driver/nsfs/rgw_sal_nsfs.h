@@ -461,7 +461,9 @@ public:
 		     const rgw_obj_key& key, uint32_t flags,
 		     const ACLOwner& bucket_owner,
 		     rgw_bucket_dir_entry& bde);
-  virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags, const ACLOwner& bucket_owner, const std::string& path_prefix = "");
+  /* `rec`, where given, is told each directory read and each entry's
+   * recorded stat (the listing cache's revalidation) */
+  virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags, const ACLOwner& bucket_owner, const std::string& path_prefix = "", file::listing::FillRecorder* rec = nullptr);
   virtual std::string get_cur_version() { return ""; };
 };
 
@@ -539,7 +541,14 @@ public:
   virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y,
 			     std::string target_fname, bool excl = false,
 			     bool as_gateway = false) override;
-  virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags, const ACLOwner& bucket_owner, const std::string& path_prefix = "") override;
+  virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags, const ACLOwner& bucket_owner, const std::string& path_prefix = "", file::listing::FillRecorder* rec = nullptr) override;
+  /* the fill of one entry of this directory, `name`, as fill_cache() does
+   * each:  a file's entry, or a subdirectory whole.  0 where `name` is
+   * not listed, or -errno to end the fill. */
+  int fill_one(const DoutPrefixProvider* dpp, optional_yield y,
+	       const char* name, fill_cache_cb_t& cb, uint32_t flags,
+	       const ACLOwner& bucket_owner, const std::string& path_prefix,
+	       file::listing::FillRecorder* rec);
 
   int get_ent(const DoutPrefixProvider *dpp, optional_yield y, const std::string& name, const std::string& version, std::unique_ptr<FSEnt>& ent);
 
@@ -588,7 +597,7 @@ public:
   std::unique_ptr<MPDirectory> clone() {
     return std::make_unique<MPDirectory>(*this);
   }
-  virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags, const ACLOwner& bucket_owner, const std::string& path_prefix = "") override;
+  virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags, const ACLOwner& bucket_owner, const std::string& path_prefix = "", file::listing::FillRecorder* rec = nullptr) override;
 };
 
 /* A directory object in NooBaa's format.
@@ -858,6 +867,8 @@ protected:
   std::unique_ptr<nsfs::IdentityDB> userDB;
   NSFSZone zone;
   std::unique_ptr<nsfs::BucketCache> bucket_cache;
+  /* the listing cache's revalidation:  what touches the filesystem */
+  std::unique_ptr<file::listing::Revalidation<NSFSBucket>> listing_revalidation;
   std::unique_ptr<nsfs::MultipartCache> multipart_cache;
 
   /* Buckets whose mutations are held off, and how many are still
@@ -1142,6 +1153,17 @@ protected:
   std::atomic<bool> inject_version_id_after_publish_armed{false};
   ceph::mutex inject_version_id_after_publish_lock =
       ceph::make_mutex("NSFSDriver::inject_version_id_after_publish_lock");
+
+  /* The listing-intervals hint:  the listing cache's revalidation
+   * intervals, in seconds, overridden until `until`, for the suite's tests
+   * of what each interval bounds.  Daemon-wide. */
+  struct ListingIntervals {
+    std::optional<int64_t> entry;
+    std::optional<int64_t> provisional;
+    ceph::coarse_mono_time until;
+  } listing_intervals;
+  ceph::mutex listing_intervals_lock =
+      ceph::make_mutex("NSFSDriver::listing_intervals_lock");
 
   /* Which POSIX identity a converted consumer chose for one named
    * object, so a test can assert the uid and not the status --  (n)
@@ -2053,6 +2075,11 @@ public:
    * the others as buckets are opened. */
   const std::string& fs_reference_path() const { return base_path_; }
   nsfs::BucketCache* get_bucket_cache() { return bucket_cache.get(); }
+  /* nsfs's half of the listing cache's revalidation, for a cache this
+   * driver did not make (the unit tests') */
+  file::listing::Revalidation<NSFSBucket>* get_listing_revalidation();
+  /* the listing-intervals hint's override of one interval, while it lasts */
+  std::optional<int64_t> listing_interval_override(bool entry);
   nsfs::MultipartCache* get_multipart_cache() { return multipart_cache.get(); }
   UserCache& get_user_cache() { return user_cache; }
   nsfs::FSStrategy* get_fs_strategy() { return fs_strategy.get(); }
@@ -2609,8 +2636,10 @@ public:
   std::optional<std::string> get_ns() { return ns; }
   int rename(const DoutPrefixProvider* dpp, optional_yield y, Object* target_obj);
 
-  /* enumerate all entries by callback, in any order */
-  int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, nsfs::fill_cache_cb_t& cb);
+  /* enumerate all entries by callback, in any order;  `rec` as
+   * FSEnt::fill_cache() */
+  int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, nsfs::fill_cache_cb_t& cb,
+		 file::listing::FillRecorder* rec = nullptr);
 
   /* The owner of an object here that records none, with the display
    * name RGW gives it:  the bucket's owner.  NooBaa returns the
