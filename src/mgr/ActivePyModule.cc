@@ -124,12 +124,7 @@ void ActivePyModule::notify_clog(const LogEntry &log_entry)
       py_module->perfcounter->inc(py_module->l_pym_notify_avg_usec, usec);
     }
   } else {
-    derr << get_name() << ".notify_clog:" << dendl;
-    derr << handle_pyerror(true, get_name(), "ActivePyModule::notify_clog") << dendl;
-    // FIXME: callers can't be expected to handle a python module
-    // that has spontaneously broken, but Mgr() should provide
-    // a hook to unload misbehaving modules when they have an
-    // error somewhere like this
+    fail_on_pyerror("notify_clog");
   }
 }
 
