@@ -16,7 +16,7 @@ from itertools import zip_longest
 from io import StringIO
 
 import boto3
-from botocore.exceptions import ClientError
+from botocore.exceptions import BotoCoreError, ClientError
 
 from nose.tools import eq_ as eq
 from nose.tools import assert_not_equal, assert_equal, assert_true, assert_false
@@ -113,6 +113,12 @@ def datalog_status(zone):
 
 def datalog_autotrim(zone):
     zone.cluster.admin(['datalog', 'autotrim'])
+
+def bi_list(zone, bucket, args = None):
+    cmd = ['bi', 'list', '--bucket', bucket] + (args or [])
+    cmd += ['--tenant', config.tenant, '--uid', user.name] if config.tenant else []
+    bi, _ = zone.cluster.admin(cmd, read_only=True)
+    return json.loads(bi)
 
 def bilog_list(zone, bucket, args = None):
     cmd = ['bilog', 'list', '--bucket', bucket] + (args or [])
@@ -2077,6 +2083,132 @@ def test_bucket_index_log_trim():
     # verify cold bucket has empty bilog
     cold_bilog = bilog_list(zone.zone, cold_bucket.name)
     assert(len(cold_bilog) == 0)
+
+def bucket_log_shard_objects(zone, bucket_name):
+    """ one object name for each shard of the bucket's current bilog """
+    layout = bucket_layout(zone, bucket_name)['layout']
+    log = layout['logs'][-1]['layout']
+    if log['type'] == 'FIFO':
+        num_shards = log['fifo']['num_shards']
+    else:
+        num_shards = layout['current_index']['layout']['normal']['num_shards']
+    return get_bucket_shard_objects(zone, num_shards)
+
+def run_bucket_sync_after_dir_suggest_under_osd_delays(bilog_type=None):
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    primary = zonegroup_conns.rw_zones[0]
+    secondary = zonegroup_conns.rw_zones[1]
+    cluster = primary.zone.cluster
+    if secondary.zone.cluster == cluster:
+        raise SkipTest('primary and secondary zones share the same cluster, so the osd delays would hit both')
+
+    def num_bilog_entries(bucket_name):
+        return len(bilog_list(primary.zone, bucket_name, ['--max-entries', '100000']))
+
+    pending_expiration = 10
+    data_log_window = 30  # rgw_data_log_window default
+    # configs set up before rgw restart
+    restart_conf = [
+        ('osd', 'ms_inject_delay_type', 'client'),
+        ('osd', 'ms_inject_delay_max', 4),
+        ('global', 'rgw_pending_bucket_index_op_expiration', pending_expiration),
+    ]
+    if bilog_type:
+        restart_conf.append(('client', 'rgw_default_bucket_bilog_type', bilog_type))
+    # OSD delay configs set up after rgw restart
+    delay_conf = [
+        ('client', 'rados_osd_op_timeout', 2),
+        ('osd', 'ms_inject_delay_probability', 0.3),
+    ]
+
+    def set_conf(options):
+        for who, name, value in options:
+            cluster.ceph_admin(['config', 'set', who, name, str(value)])
+        time.sleep(config.config_propagation_wait)
+
+    def rm_conf(options):
+        for who, name, _ in options:
+            cluster.ceph_admin(['config', 'rm', who, name])
+        time.sleep(config.config_propagation_wait)
+
+    try:
+        try:
+            # the osds' delay queue is set up per connection, so restart the primary's gateways
+            set_conf(restart_conf)
+            primary.zone.stop()
+            primary.zone.start()
+            bucket = primary.create_bucket(gen_bucket_name())
+            if bilog_type:
+                log_layout = bucket_layout(primary.zone, bucket.name)['layout']['logs'][-1]
+                assert log_layout['layout']['type'].lower() == bilog_type, log_layout
+
+            # objects to delete later
+            for i in range(25):
+                primary.s3_client.put_object(Bucket=bucket.name, Key='del-%d' % i, Body='foo')
+            zonegroup_meta_checkpoint(zonegroup)
+            zone_bucket_checkpoint(secondary.zone, primary.zone, bucket.name)
+
+            # delay the osds so that some PUTs/DELETEs time out
+            set_conf(delay_conf)
+
+            for i in range(50):
+                try:
+                    primary.s3_client.put_object(Bucket=bucket.name, Key='obj-%d' % i, Body='foo')
+                except (BotoCoreError, ClientError) as e:
+                    log.info('put obj-%d failed: %s', i, e)
+
+            for i in range(25):
+                try:
+                    primary.s3_client.delete_object(Bucket=bucket.name, Key='del-%d' % i)
+                except (BotoCoreError, ClientError) as e:
+                    log.info('delete del-%d failed: %s', i, e)
+        finally:
+            rm_conf(delay_conf)
+
+        entries = bi_list(primary.zone, bucket.name, ['--max-entries', '100000'])
+        assert any(e['type'] == 'plain' and e['entry']['pending_map'] for e in entries), \
+            'no request timed out, so there is no stale pending op to complete'
+
+        # write to every shard once so the secondary catches up (a datalog write may have timed out too)
+        for name in bucket_log_shard_objects(primary.zone, bucket.name):
+            primary.s3_client.put_object(Bucket=bucket.name, Key=name, Body='foo')
+        zone_bucket_checkpoint(secondary.zone, primary.zone, bucket.name)
+        num_entries = num_bilog_entries(bucket.name)
+
+        # let the pending ops expire and the datalog window pass, so only the listing changes the bilog from here on
+        time.sleep(max(pending_expiration, data_log_window) + 10)
+        primary.s3_client.list_objects_v2(Bucket=bucket.name)
+        for _ in range(config.checkpoint_retries):
+            if num_bilog_entries(bucket.name) > num_entries:
+                break
+            time.sleep(config.checkpoint_delay)
+
+        # the listing repairs the stale pending ops on the primary with bilog entries but no datalog entries, so the
+        # secondary falls behind and autotrim can't trim those entries
+        assert num_bilog_entries(bucket.name) > num_entries, 'the listing wrote no repair entries'
+
+        # trim every bucket
+        trim_all = ['--rgw-sync-log-trim-max-buckets', '999', '--rgw-sync-log-trim-min-cold-buckets', '999']
+        bilog_autotrim(primary.zone, trim_all)
+
+        # Without the fix, the secondary stays behind: this checkpoint times out and the bucket differs between zones
+        # only check this direction: the primary's sync from the secondary also timed out and retries with backoff
+        zone_bucket_checkpoint(secondary.zone, primary.zone, bucket.name)
+        secondary.check_bucket_eq(primary, bucket.name)
+
+        bilog_autotrim(primary.zone, trim_all)
+        assert num_bilog_entries(bucket.name) == 0
+    finally:
+        rm_conf(restart_conf)
+        primary.zone.stop()
+        primary.zone.start()
+
+def test_bucket_sync_after_dir_suggest_under_osd_delays_inindex():
+    run_bucket_sync_after_dir_suggest_under_osd_delays('inindex')
+
+def test_bucket_sync_after_dir_suggest_under_osd_delays_fifo():
+    run_bucket_sync_after_dir_suggest_under_osd_delays('fifo')
 
 # TODO: disable failing tests temporarily
 # until they are fixed
