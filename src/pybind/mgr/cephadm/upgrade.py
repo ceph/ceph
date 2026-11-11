@@ -2755,13 +2755,18 @@ class CephadmUpgrade:
                     ceph_daemons = [d for d in self.mgr.cache.get_daemons() if d.daemon_type in CEPH_IMAGE_TYPES]
                     _, n1, n2, __ = self._detect_need_upgrade(ceph_daemons, target_digests, target_image)
                     if not n1 and not n2:
-                        # no ceph daemons need upgrade
-                        need_upgrade_names = [d[0].name() for d in need_upgrade] + \
-                            [d[0].name() for d in need_upgrade_deployer]
-                        dds = [d for d in self.mgr.cache.get_daemons_by_daemon_type(
-                            daemon_type) if d.name() not in need_upgrade_names]
-                        _, ___, n2, ____ = self._detect_need_upgrade(dds, target_digests, target_image)
-                        need_upgrade_deployer += n2
+                        # no ceph daemons need upgrade.
+                        # Types selectable via --daemon-types (nvmeof) are already in
+                        # daemons_of_type, which honours the upgrade filters, reading
+                        # the cache here would redeploy them cluster wide. The rest
+                        # can never be filtered, so they come from the cache.
+                        if daemon_type not in SUPPORTED_UPGRADE_DAEMON_TYPE_FILTER_TYPES:
+                            need_upgrade_names = [d[0].name() for d in need_upgrade] + \
+                                [d[0].name() for d in need_upgrade_deployer]
+                            dds = [d for d in self.mgr.cache.get_daemons_by_daemon_type(
+                                daemon_type) if d.name() not in need_upgrade_names]
+                            _, ___, n2, ____ = self._detect_need_upgrade(dds, target_digests, target_image)
+                            need_upgrade_deployer += n2
                     else:
                         # don't upgrade if ceph image daemons are not yet fully upgraded.
                         need_upgrade_deployer = []
