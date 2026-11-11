@@ -66,6 +66,7 @@ public:
 
   void on_change() override;
   void clear_recovery_state() override;
+  void cancel_recovery_op(const hobject_t &soid) override;
 
   class RPCRecPred : public IsPGRecoverablePredicate {
   public:
@@ -472,6 +473,7 @@ private:
     hobject_t discard_temp_oid,
     const ceph::buffer::list &log_entries,
     std::optional<pg_hit_set_history_t> &hset_history,
+    std::optional<hobject_t> &migration_watermark,
     ObjectStore::Transaction &op_t,
     pg_shard_t peer,
     const pg_info_t &pinfo);
@@ -486,6 +488,7 @@ private:
     hobject_t discard_temp_oid,
     const std::vector<pg_log_entry_t> &log_entries,
     std::optional<pg_hit_set_history_t> &hset_history,
+    std::optional<hobject_t> &migration_watermark,
     InProgressOp *op,
     ObjectStore::Transaction &op_t);
   void op_commit(const ceph::ref_t<InProgressOp>& op);

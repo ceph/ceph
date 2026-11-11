@@ -405,6 +405,9 @@ void ECBackend::handle_sub_write(
   if (!op.temp_added.empty()) {
     switcher->add_temp_objs(op.temp_added);
   }
+  if (op.migration_watermark) {
+    get_parent()->update_migration_watermark(*op.migration_watermark);
+  }
   if (op.backfill_or_async_recovery) {
     for (set<hobject_t>::iterator i = op.temp_removed.begin();
          i != op.temp_removed.end();
@@ -1059,6 +1062,10 @@ void ECBackend::clear_recovery_state() {
   recovery_backend.recovery_ops.clear();
 }
 
+void ECBackend::cancel_recovery_op(const hobject_t &soid) {
+  recovery_backend.recovery_ops.erase(soid);
+}
+
 void ECBackend::dump_recovery_info(Formatter *f) const {
   f->open_array_section("recovery_ops");
   for (map<hobject_t, RecoveryBackend::RecoveryOp>::const_iterator i =
@@ -1124,6 +1131,16 @@ struct ECClassicalOp : ECCommon::RMWPipeline::Op {
     }
     pending_roll_forward.insert(shard);
     return false;
+  }
+
+  std::optional<hobject_t> consider_updating_migration_watermark(ECListener *parent) final {
+    std::set<hobject_t> deleted;
+    for (auto &[hoid, op] : t.get()->op_map) {
+      if (op.is_delete()) {
+	deleted.insert(hoid);
+      }
+    }
+    return parent->consider_updating_migration_watermark(deleted);
   }
 };
 

@@ -148,6 +148,13 @@ public:
   void overall_recovery_rate_summary(ceph::Formatter *f, std::ostream *out) const;
   void pool_recovery_rate_summary(ceph::Formatter *f, std::ostream *out,
                                   uint64_t poolid) const;
+
+  void migration_rate_summary(ceph::Formatter *f, std::ostream *out,
+                              const pool_stat_t& delta_sum,
+                              utime_t delta_stamp) const;
+  void overall_migration_rate_summary(ceph::Formatter *f, std::ostream *out) const;
+  void pool_migration_rate_summary(ceph::Formatter *f, std::ostream *out,
+                                   uint64_t poolid) const;
   /**
    * Obtain a formatted/plain output for client I/O, source from stats for a
    * given @p delta_sum pool over a given @p delta_stamp period of time.

@@ -1592,3 +1592,14 @@ options:
   - mon
   flags:
   - runtime
+- name: mon_pool_migration_max_pg_ratio
+  type: float
+  level: advanced
+  desc: The maximum ratio of PGs that will be migrated in parallel during a pool migration.
+  long_desc: The ratio is applied to the PG count of whichever of the source and target
+    pools has fewer PGs, rounded up. At least one PG is always migrated at a time.
+  default: 0.05
+  services:
+  - mon
+  min: 0
+  max: 1
