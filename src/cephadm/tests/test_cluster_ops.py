@@ -3,7 +3,7 @@
 """Tests for cluster shutdown, start, and status operations."""
 
 import json
-import mock
+from unittest import mock
 import os
 
 from .fixtures import (
