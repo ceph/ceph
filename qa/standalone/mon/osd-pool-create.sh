@@ -34,6 +34,11 @@ function run() {
     done
 }
 
+# osd pool get <pool> <option> is refused for an option that was never set
+# on the pool, with a message saying so, and gives the value once it is
+# set. This test gets compression_mode from replicated pool p before and
+# after setting it to aggressive. It also expects num_zones 1 for p, which
+# was created without --num_zones.
 function TEST_pool_get_unset_option() {
     local dir=$1
     run_mon $dir a || return 1
@@ -45,6 +50,14 @@ function TEST_pool_get_unset_option() {
     ceph osd pool get p num_zones | grep 'num_zones: 1' || return 1
 }
 
+# A CRUSH rule is removed when its last pool leaves it, by being deleted or
+# by osd pool set crush_rule, whether the rule was made by hand or
+# generated for the pool. The default rule, replicated_rule, is kept. This
+# test puts replicated pools p and p2 on op_rule, made by
+# osd crush rule create-replicated: op_rule stays when p is deleted and
+# goes with p2. Pool r is moved from r-ssd, also made by hand, to
+# replicated_rule, and r-ssd goes. Deleting r leaves replicated_rule.
+# Deleting erasure coded pool e removes the rule generated for it.
 function TEST_pool_rule_removed_when_unused() {
     local dir=$1
     run_mon $dir a || return 1
@@ -82,8 +95,14 @@ function TEST_erasure_invalid_profile() {
     ! ceph osd erasure-code-profile ls | grep $notaprofile || return 1
 }
 
-# A pool create that fails removes the rule and the profile it generated; a
-# rule of that name made by hand stays
+# An osd pool create that fails removes the rule, and the erasure code
+# profile, that it generated for the pool, but not a rule of the same name
+# made by hand. This test creates badpool from lrcprofile (lrc plugin) with
+# --crimson, which is refused as a crimson pool needs EC optimizations and
+# lrc does not support them: no rule badpool is left. With rule badpool
+# made by osd crush rule create-erasure, the same refused create leaves it.
+# Erasure coded pool bigec, with no profile and 1024 PGs, is refused for
+# exceeding the PG limit, and leaves no rule bigec and no profile bigec-*.
 function TEST_failed_pool_create_removes_its_rule() {
     local dir=$1
     run_mon $dir a --enable_experimental_unrecoverable_data_corrupting_features=crimson || return 1
@@ -102,9 +121,13 @@ function TEST_failed_pool_create_removes_its_rule() {
     ! ceph osd erasure-code-profile ls | grep -q '^bigec-' || return 1
 }
 
-# A default profile with a stripe unit that is not a multiple of 4096, which
-# only --force accepts, does not serve the pools that name no profile, and the
-# refused create leaves nothing behind
+# osd pool create refuses an erasure coded pool whose stripe_unit is not a
+# multiple of 4096 unless given --yes-i-really-mean-it, also when the
+# stripe_unit comes from the default profile, and the refused create leaves
+# nothing behind. This test sets the default profile to isa k=2 m=1 with
+# stripe_unit=2048, which osd erasure-code-profile set accepts only with
+# --force, and creates erasure coded pool e with no profile. That is
+# refused, and leaves no pool e, profile e-k2-m1 or rule e.
 function TEST_default_profile_odd_stripe_unit() {
     local dir=$1
     run_mon $dir a || return 1
@@ -117,8 +140,13 @@ function TEST_default_profile_odd_stripe_unit() {
     ! ceph osd crush rule ls | grep -qx e || return 1
 }
 
-# --yes-i-really-mean-it creates a pool with such a stripe unit, from a named
-# profile or from the default one
+# With --yes-i-really-mean-it, osd pool create accepts an erasure coded pool
+# whose stripe_unit is not a multiple of 4096. This test makes profile odd,
+# isa k=2 m=1 with stripe_unit=2048 (set with --force), and creates pool
+# named on it: refused without the flag, created with it. It then gives the
+# default profile the same values and creates pool generated, with no
+# profile, with the flag. Both pools get a stripe width of 4096: 2 data
+# chunks of 2048.
 function TEST_odd_stripe_unit_yes_i_really_mean_it() {
     local dir=$1
     run_mon $dir a || return 1
@@ -227,6 +255,13 @@ function TEST_erasure_code_pool() {
         grep 'cannot change to type replicated' || return 1
 }
 
+# osd pool create --pool_type erasure without a profile gives the pool a
+# profile of its own, <pool>-k<k>-m<m>: the default profile with the --k,
+# --m and CRUSH options given. This test creates km_crush with --k 2 --m 1,
+# --zone_failure_domain rack and --osd_failure_domain osd, which differ
+# from the default profile's, and expects profile km_crush-k2-m1 to have
+# crush-zone-failure-domain=rack and crush-failure-domain=osd. The pool can
+# then be deleted and created again with the same options.
 function TEST_erasure_code_pool_km_crush_params() {
     local dir=$1
     run_mon $dir a || return 1
@@ -241,13 +276,18 @@ function TEST_erasure_code_pool_km_crush_params() {
     ceph osd erasure-code-profile get $profile | tee $dir/profile.txt
     grep '^crush-failure-domain=osd$' $dir/profile.txt || return 1
     grep '^crush-zone-failure-domain=rack$' $dir/profile.txt || return 1
-    # recreating the pool reuses the profile
+    # the profile goes with the pool, and is made again for the new one
     ceph osd pool delete $poolname $poolname --yes-i-really-really-mean-it || return 1
     ceph osd pool create $poolname --pool_type erasure --k 2 --m 1 \
         --pg_num 8 --pgp_num 8 \
         --zone_failure_domain rack --osd_failure_domain osd || return 1
 }
 
+# osd pool create --pool_type erasure with CRUSH options but no --k or --m
+# takes k and m from the default profile. This test creates crush_no_km
+# with only --osd_failure_domain osd, and expects a profile of its own,
+# crush_no_km-k2-m2, with crush-failure-domain=osd, and a rule of its own,
+# crush_no_km.
 function TEST_erasure_code_pool_crush_params_without_km() {
     local dir=$1
     run_mon $dir a || return 1
@@ -261,6 +301,12 @@ function TEST_erasure_code_pool_crush_params_without_km() {
         crush_no_km || return 1
 }
 
+# osd pool create for an erasure coded pool with no profile makes a profile
+# for it, <pool>-k<k>-m<m>. If a profile of that name exists with other
+# contents, the create is refused, and the message says to remove it or to
+# name it with --erasure_code_profile. This test makes taken-k2-m2 by hand
+# (isa k=2 m=2, failure domain osd) and creates pool taken: refused, and
+# then created when given --erasure_code_profile taken-k2-m2.
 function TEST_erasure_code_pool_profile_name_taken() {
     local dir=$1
     run_mon $dir a || return 1
@@ -538,8 +584,14 @@ function TEST_osd_pool_create_migrate_from() {
   teardown $dir || return 1
 }
 
-# A pool given a rule in the same update that removes the rule must not get
-# it: the pool would have a rule that is gone
+# osd pool set <pool> crush_rule <rule> must not give a pool a rule that a
+# pending update removes, as the rule's last pool has just left it: the
+# pool would be on a rule that is gone. This test moves pool a, the only
+# pool on race_rule, to replicated_rule, and one second later, while a
+# paxos_propose_interval of 5 seconds keeps that move pending, gives pool b
+# race_rule. b's rule exists afterwards: either b got race_rule and the
+# rule was kept, or the change was refused as race_rule does not exist and
+# b is still on replicated_rule.
 function TEST_pool_set_rule_racing_its_removal() {
     local dir=$1
 
@@ -565,8 +617,13 @@ function TEST_pool_set_rule_racing_its_removal() {
     fi
 }
 
-# A rule created by name while the deletion of its last pool is pending exists
-# afterwards
+# osd crush rule create-simple <rule> succeeds without a change when the
+# rule exists. While a pending update removes the rule with its last pool,
+# it must wait for that update and create the rule again. This test deletes
+# pool a, the only pool on race_rule, and one second later, while a
+# paxos_propose_interval of 5 seconds keeps the deletion pending, runs
+# osd crush rule create-simple race_rule again. race_rule exists
+# afterwards.
 function TEST_crush_rule_create_simple_racing_its_removal() {
     local dir=$1
 
@@ -585,8 +642,14 @@ function TEST_crush_rule_create_simple_racing_its_removal() {
     ceph osd crush rule ls | grep -qx race_rule || return 1
 }
 
-# A default rule named in the update that removes the rule must not be taken:
-# replicated pools would have no default rule left
+# osd pool default set --rule <rule> sets the rule that osd pool create
+# gives replicated pools by default. It must not take a rule that a pending
+# update removes with its last pool, or replicated pools would have no
+# default rule left. This test deletes pool a, the only pool on race_rule,
+# and one second later, while a paxos_propose_interval of 5 seconds keeps
+# the deletion pending, runs osd pool default set --rule race_rule. That is
+# refused as race_rule does not exist, race_rule is gone, and pool p can
+# then be created with the defaults.
 function TEST_pool_default_rule_racing_its_removal() {
     local dir=$1
 
@@ -606,7 +669,12 @@ function TEST_pool_default_rule_racing_its_removal() {
     timeout 60 ceph osd pool create p 8 || return 1
 }
 
-# osd pool set num_zones checks the rule and the replicas as pool create does
+# osd pool set <pool> num_zones checks the rule and the replicas it is
+# given as osd pool create does. This test gives replicated pool r
+# num_zones 2 with one_zone, a rule that does not place the pool in 2
+# buckets of type datacenter, and with --replica 11, above the limit of 10:
+# both are refused. Erasure coded pool e is given num_zones 2 with nosuch,
+# a rule that does not exist: refused, and no rule nosuch is made.
 function TEST_pool_set_num_zones_checks() {
     local dir=$1
 
@@ -625,7 +693,11 @@ function TEST_pool_set_num_zones_checks() {
     ! ceph osd crush rule ls | grep -qx nosuch || return 1
 }
 
-# The min_size of an LRC pool is checked against its chunks
+# osd pool create --min_size for an erasure coded pool of the lrc plugin
+# must be between k and the pool's size, which counts the local parity
+# chunks lrc adds. This test uses profile lrcp, k=4 m=2 l=3, 8 chunks in
+# all: --min_size 9 is refused, as not between 4 and 8, and --min_size 5
+# is accepted.
 function TEST_lrc_min_size() {
     local dir=$1
 
@@ -638,8 +710,11 @@ function TEST_lrc_min_size() {
     test "$(ceph osd pool get l min_size | awk '{print $2}')" = 5 || return 1
 }
 
-# A pool deleted in the update that gives it another rule takes that rule
-# with it
+# A pool deleted in the same update that moves it to another rule takes
+# both rules with it when it was their only pool: the one it left and the
+# one it was given. This test moves pool p from r1 to r2, and one second
+# later, while a paxos_propose_interval of 5 seconds keeps the move
+# pending, deletes p. Neither r1 nor r2 is left.
 function TEST_pool_delete_after_rule_change() {
     local dir=$1
 
