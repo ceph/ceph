@@ -65,14 +65,13 @@ void TestWatchNotify::flush(TestRadosClient *rados_client) {
 
 int TestWatchNotify::list_watchers(int64_t pool_id, const std::string& nspace,
                                    const std::string& o,
-                                   std::list<obj_watch_t> *out_watchers) {
+                                   std::vector<obj_watch_t> *out_watchers) {
   std::lock_guard lock{m_lock};
   SharedWatcher watcher = get_watcher(pool_id, nspace, o);
   if (!watcher) {
     return -ENOENT;
   }
 
-  out_watchers->clear();
   for (TestWatchNotify::WatchHandles::iterator it =
          watcher->watch_handles.begin();
        it != watcher->watch_handles.end(); ++it) {

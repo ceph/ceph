@@ -917,6 +917,8 @@ uint64_t Journal<I>::append_io_events(journal::EventType event_type,
   }
 
   Futures futures;
+  futures.reserve(std::size(bufferlists));
+
   for (auto &bl : bufferlists) {
     ceph_assert(bl.length() <= m_max_append_size);
     futures.push_back(m_journaler->append(m_tag_tid, bl));

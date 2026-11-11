@@ -3064,13 +3064,14 @@ void namespace_list_start(librados::ObjectReadOperation *op,
   op->exec(method::namespace_list, bl);
 }
 
-int namespace_list_finish(bufferlist::const_iterator *it,
-                          std::list<std::string> *entries)
-{
-  ceph_assert(entries);
+namespace {
 
+template <typename ENTRIES_T>
+int decode_namespace_list(bufferlist::const_iterator& cursor,
+                          ENTRIES_T& entries)
+{
   try {
-    decode(*entries, *it);
+    decode(entries, cursor);
   } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
@@ -3078,21 +3079,54 @@ int namespace_list_finish(bufferlist::const_iterator *it,
   return 0;
 }
 
-int namespace_list(librados::IoCtx *ioctx,
-                   const std::string &start, uint64_t max_return,
-                   std::list<std::string> *entries)
+template <typename ENTRIES_T>
+int namespace_list_impl(librados::IoCtx& ioctx,
+                        const std::string& start, uint64_t max_return,
+                        ENTRIES_T *entries)
 {
   librados::ObjectReadOperation op;
   namespace_list_start(&op, start, max_return);
 
   bufferlist out_bl;
-  int r = ioctx->operate(RBD_NAMESPACE, &op, &out_bl);
+  int r = ioctx.operate(RBD_NAMESPACE, &op, &out_bl);
   if (r < 0) {
     return r;
   }
 
-  auto iter = out_bl.cbegin();
-  return namespace_list_finish(&iter, entries);
+  ceph_assert(entries);
+
+  auto cursor = out_bl.cbegin();
+  return decode_namespace_list(cursor, *entries);
+}
+
+} // namespace
+
+int namespace_list_finish(bufferlist::const_iterator *it,
+                          std::list<std::string> *entries)
+{
+  ceph_assert(entries);
+
+  return decode_namespace_list(*it, *entries);
+}
+
+int namespace_list_finish(bufferlist::const_iterator& cursor,
+                          std::vector<std::string>& entries)
+{
+  return decode_namespace_list(cursor, entries);
+}
+
+int namespace_list(librados::IoCtx *ioctx,
+                   const std::string &start, uint64_t max_return,
+                   std::list<std::string> *entries)
+{
+  return namespace_list_impl(*ioctx, start, max_return, entries);
+}
+
+int namespace_list(librados::IoCtx& ioctx,
+                   const std::string& start, uint64_t max_return,
+                   std::vector<std::string>& entries)
+{
+  return namespace_list_impl(ioctx, start, max_return, &entries);
 }
 
 void sparsify(librados::ObjectWriteOperation *op, uint64_t sparse_size,

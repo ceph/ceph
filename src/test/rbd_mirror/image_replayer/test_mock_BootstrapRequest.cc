@@ -303,8 +303,6 @@ public:
   typedef PrepareLocalImageRequest<librbd::MockTestImageCtx> MockPrepareLocalImageRequest;
   typedef PrepareRemoteImageRequest<librbd::MockTestImageCtx> MockPrepareRemoteImageRequest;
   typedef StateBuilder<librbd::MockTestImageCtx> MockStateBuilder;
-  typedef std::list<cls::journal::Tag> Tags;
-
   void SetUp() override {
     TestMockFixture::SetUp();
 

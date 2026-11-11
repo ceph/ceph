@@ -100,7 +100,7 @@ public:
       auto session = _get_or_open_mds_session(0);
       auto m = make_message<MClientReclaim>(uuid, flag);
       ceph_assert(session->con->send_message2(std::move(m)) == 0);
-      wait_on_list(waiting_for_reclaim);
+      wait_on_conditions(waiting_for_reclaim);
       return session->reclaim_state == MetaSession::RECLAIM_FAIL ? true : false;
     }
 

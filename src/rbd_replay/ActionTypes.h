@@ -8,7 +8,6 @@
 #include "include/buffer_fwd.h"
 #include "include/encoding.h"
 #include <iosfwd>
-#include <list>
 #include <string>
 #include <vector>
 #include <variant>
@@ -54,7 +53,7 @@ struct Dependency {
   void decode(__u8 version, bufferlist::const_iterator &it);
   void dump(Formatter *f) const;
 
-  static std::list<Dependency> generate_test_instances();
+  static std::vector<Dependency> generate_test_instances();
 };
 
 WRITE_CLASS_ENCODER(Dependency);
@@ -322,7 +321,7 @@ public:
   void decode_unversioned(bufferlist::const_iterator &it);
   void dump(Formatter *f) const;
 
-  static std::list<ActionEntry> generate_test_instances();
+  static std::vector<ActionEntry> generate_test_instances();
 
 private:
   void decode_versioned(__u8 version, bufferlist::const_iterator &it);

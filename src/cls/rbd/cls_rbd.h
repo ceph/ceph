@@ -4,6 +4,7 @@
 #ifndef __CEPH_CLS_RBD_H
 #define __CEPH_CLS_RBD_H
 
+#include <vector>
 #include "include/types.h"
 #include "include/buffer_fwd.h"
 #include "include/rbd_types.h"
@@ -93,8 +94,8 @@ struct cls_rbd_parent {
     }
   }
 
-  static std::list<cls_rbd_parent> generate_test_instances() {
-    std::list<cls_rbd_parent> o;
+  static std::vector<cls_rbd_parent> generate_test_instances() {
+    std::vector<cls_rbd_parent> o;
     o.emplace_back();
     o.push_back(cls_rbd_parent{{1, "", "image id", 234}, {}});
     o.push_back(cls_rbd_parent{{1, "", "image id", 234}, {123}});
@@ -227,8 +228,8 @@ struct cls_rbd_snap {
     }
   }
 
-  static std::list<cls_rbd_snap> generate_test_instances() {
-    std::list<cls_rbd_snap> o;
+  static std::vector<cls_rbd_snap> generate_test_instances() {
+    std::vector<cls_rbd_snap> o;
     o.emplace_back();
     // the parent field is ignored in v8 and up, so let's avoid setting it.
     // otherwise check-generated.sh would fail due to the disprepancies between

@@ -29,9 +29,8 @@ public:
     }
   };
 
-  typedef std::list<Operation> Operations;
-
   typedef BlockGuard<Operation> OpBlockGuard;
+  typedef OpBlockGuard::BlockOperations Operations;
 
   void SetUp() override {
     TestFixture::SetUp();
@@ -95,4 +94,3 @@ TEST_F(TestIOBlockGuard, DetainedOps) {
 uint32_t TestIOBlockGuard::s_index = 0;
 
 } // namespace librbd
-

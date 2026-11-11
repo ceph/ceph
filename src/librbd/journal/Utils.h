@@ -8,7 +8,7 @@
 #include "include/int_types.h"
 #include "include/Context.h"
 #include "cls/journal/cls_journal_types.h"
-#include <list>
+#include <vector>
 
 
 namespace librbd {
@@ -47,7 +47,7 @@ struct C_DecodeTag : public Context {
 };
 
 struct C_DecodeTags : public Context {
-  typedef std::list<cls::journal::Tag> Tags;
+  using Tags = std::vector<cls::journal::Tag>;
 
   CephContext *cct;
   ceph::mutex *lock;

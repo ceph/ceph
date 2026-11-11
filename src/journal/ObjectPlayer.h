@@ -11,7 +11,7 @@
 #include "common/Timer.h"
 #include "common/RefCountedObj.h"
 #include "journal/Entry.h"
-#include <list>
+#include <deque>
 #include <string>
 #include <boost/noncopyable.hpp>
 #include <boost/unordered_map.hpp>
@@ -21,7 +21,7 @@ namespace journal {
 
 class ObjectPlayer : public RefCountedObject {
 public:
-  typedef std::list<Entry> Entries;
+  typedef std::deque<Entry> Entries;
   typedef interval_set<uint64_t> InvalidRanges;
 
   enum RefetchState {
@@ -80,7 +80,9 @@ private:
   ~ObjectPlayer() override;
 
   typedef std::pair<uint64_t, uint64_t> EntryKey;
-  typedef boost::unordered_map<EntryKey, Entries::iterator> EntryKeys;
+  // End insertion preserves deque element addresses; remove each index entry
+  // before popping its corresponding front element:
+  typedef boost::unordered_map<EntryKey, Entry *> EntryKeys;
 
   struct C_Fetch : public Context {
     ceph::ref_t<ObjectPlayer> object_player;

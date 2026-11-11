@@ -250,5 +250,32 @@ TEST_F(TestMockThrottler, Drain) {
   ASSERT_EQ(-ESTALE, on_start2.wait());
 }
 
+TEST_F(TestMockThrottler, Drain_Multiple_Namespaces) {
+  MockThrottler throttler(g_ceph_context, "rbd_mirror_concurrent_image_syncs");
+  throttler.set_max_concurrent_ops(1);
+
+  C_SaferCond on_start1;
+  throttler.start_op("ns1", "id1", &on_start1);
+  C_SaferCond on_start2;
+  throttler.start_op("ns2", "id2", &on_start2);
+  C_SaferCond on_start3;
+  throttler.start_op("ns1", "id3", &on_start3);
+  C_SaferCond on_start4;
+  throttler.start_op("ns2", "id4", &on_start4);
+  C_SaferCond on_start5;
+  throttler.start_op("ns1", "id5", &on_start5);
+
+  ASSERT_EQ(0, on_start1.wait());
+  throttler.drain("ns1", -ESTALE);
+  ASSERT_EQ(-ESTALE, on_start3.wait());
+  ASSERT_EQ(-ESTALE, on_start5.wait());
+
+  throttler.set_max_concurrent_ops(1);
+  ASSERT_EQ(0, on_start2.wait());
+  throttler.finish_op("ns2", "id2");
+  ASSERT_EQ(0, on_start4.wait());
+  throttler.finish_op("ns2", "id4");
+}
+
 } // namespace mirror
 } // namespace rbd

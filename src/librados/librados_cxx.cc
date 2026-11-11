@@ -15,6 +15,8 @@
 
 #include <limits.h>
 
+#include <iterator>
+
 #include "common/config.h"
 #include "common/errno.h"
 #include "common/ceph_argparse.h"
@@ -43,6 +45,7 @@
 #include <set>
 #include <vector>
 #include <list>
+#include <iterator>
 #include <stdexcept>
 #include <system_error>
 
@@ -344,6 +347,15 @@ void librados::ObjectOperation::omap_cmp(
 
 void librados::ObjectReadOperation::list_watchers(
   list<obj_watch_t> *out_watchers,
+  int *prval)
+{
+  ceph_assert(impl);
+  ::ObjectOperation *o = &impl->o;
+  o->list_watchers(out_watchers, prval);
+}
+
+void librados::ObjectReadOperation::list_watchers(
+  std::vector<obj_watch_t> *out_watchers,
   int *prval)
 {
   ceph_assert(impl);
@@ -1859,40 +1871,66 @@ int librados::IoCtx::break_lock(const std::string &oid, const std::string &name,
   return rados::cls::lock::break_lock(this, oid, name, cookie, locker);
 }
 
+int librados::IoCtx::list_lockers(const std::string& oid, const std::string& name,
+				  int& exclusive,
+				  std::string& tag,
+				  std::vector<librados::locker_t>& lockers)
+{
+  map<rados::cls::lock::locker_id_t, rados::cls::lock::locker_info_t> rados_lockers;
+  std::string tmp_tag;
+  ClsLockType tmp_type;
+  const int r = rados::cls::lock::get_lock_info(
+    this, oid, name, &rados_lockers, &tmp_type, &tmp_tag);
+  if (r < 0)
+	  return r;
+
+  std::vector<librados::locker_t> tmp_lockers;
+  tmp_lockers.reserve(std::size(rados_lockers));
+
+  for (const auto& [id, info] : rados_lockers) {
+    tmp_lockers.push_back({
+      .client = stringify(id.locker),
+      .cookie = id.cookie,
+      .address = stringify(info.addr)
+    });
+  }
+
+  lockers = std::move(tmp_lockers);
+  tag = std::move(tmp_tag);
+  exclusive = tmp_type == ClsLockType::EXCLUSIVE;
+
+  return static_cast<int>(std::size(lockers));
+}
+
 int librados::IoCtx::list_lockers(const std::string &oid, const std::string &name,
 				  int *exclusive,
 				  std::string *tag,
 				  std::list<librados::locker_t> *lockers)
 {
-  std::list<librados::locker_t> tmp_lockers;
-  map<rados::cls::lock::locker_id_t, rados::cls::lock::locker_info_t> rados_lockers;
+  int tmp_exclusive;
   std::string tmp_tag;
-  ClsLockType tmp_type;
-  int r = rados::cls::lock::get_lock_info(this, oid, name, &rados_lockers, &tmp_type, &tmp_tag);
+  std::vector<librados::locker_t> tmp_lockers;
+  const int r = list_lockers(oid, name, tmp_exclusive, tmp_tag, tmp_lockers);
   if (r < 0)
-	  return r;
+    return r;
 
-  map<rados::cls::lock::locker_id_t, rados::cls::lock::locker_info_t>::iterator map_it;
-  for (map_it = rados_lockers.begin(); map_it != rados_lockers.end(); ++map_it) {
-    librados::locker_t locker;
-    locker.client = stringify(map_it->first.locker);
-    locker.cookie = map_it->first.cookie;
-    locker.address = stringify(map_it->second.addr);
-    tmp_lockers.push_back(locker);
+  if (lockers) {
+    std::list<librados::locker_t> converted_lockers;
+
+    for (auto& locker : tmp_lockers) {
+      converted_lockers.push_back(std::move(locker));
+    }
+
+    *lockers = std::move(converted_lockers);
   }
 
-  if (lockers)
-    *lockers = tmp_lockers;
   if (tag)
-    *tag = tmp_tag;
-  if (exclusive) {
-    if (tmp_type == ClsLockType::EXCLUSIVE)
-      *exclusive = 1;
-    else
-      *exclusive = 0;
-  }
+    *tag = std::move(tmp_tag);
 
-  return tmp_lockers.size();
+  if (exclusive)
+    *exclusive = tmp_exclusive;
+
+  return r;
 }
 
 librados::NObjectIterator librados::IoCtx::nobjects_begin(
@@ -1939,10 +1977,18 @@ const librados::NObjectIterator& librados::IoCtx::nobjects_end() const
   return NObjectIterator::__EndObjectIterator;
 }
 
-int librados::IoCtx::hit_set_list(uint32_t hash, AioCompletion *c,
-				  std::list< std::pair<time_t, time_t> > *pls)
+int librados::IoCtx::hit_set_vector(
+  uint32_t hash, AioCompletion *c,
+  std::vector<std::pair<time_t, time_t>>& intervals)
 {
-  return io_ctx_impl->hit_set_list(hash, c->pc, pls);
+  return io_ctx_impl->hit_set_vector(hash, c->pc, intervals);
+}
+
+int librados::IoCtx::hit_set_list(
+  uint32_t hash, AioCompletion *c,
+  std::list<std::pair<time_t, time_t>> *intervals)
+{
+  return io_ctx_impl->hit_set_list(hash, c->pc, intervals);
 }
 
 int librados::IoCtx::hit_set_get(uint32_t hash,  AioCompletion *c, time_t stamp,
@@ -2233,6 +2279,20 @@ int librados::IoCtx::list_watchers(const std::string& oid,
   ObjectReadOperation op;
   int r;
   op.list_watchers(out_watchers, &r);
+  bufferlist bl;
+  int ret = operate(oid, &op, &bl);
+  if (ret < 0)
+    return ret;
+
+  return r;
+}
+
+int librados::IoCtx::list_watchers(const std::string& oid,
+                                   std::vector<obj_watch_t>& out_watchers)
+{
+  ObjectReadOperation op;
+  int r;
+  op.list_watchers(&out_watchers, &r);
   bufferlist bl;
   int ret = operate(oid, &op, &bl);
   if (ret < 0)
@@ -2611,25 +2671,60 @@ int librados::Rados::pool_delete_async(const char *name, PoolAsyncCompletion *c)
   return client->pool_delete_async(name, c->pc);
 }
 
-int librados::Rados::pool_list(std::list<std::string>& v)
+int librados::Rados::pool_list(std::vector<std::string>& names)
 {
-  std::list<std::pair<int64_t, std::string> > pools;
+  std::vector<std::pair<int64_t, std::string>> pools;
   int r = client->pool_list(pools);
   if (r < 0) {
     return r;
   }
 
-  v.clear();
-  for (std::list<std::pair<int64_t, std::string> >::iterator it = pools.begin();
-       it != pools.end(); ++it) {
-    v.push_back(it->second);
+  std::vector<std::string> result;
+  result.reserve(std::size(pools));
+
+  for (auto& pool : pools) {
+    result.push_back(std::move(pool.second));
   }
+
+  names = std::move(result);
+
   return 0;
 }
 
-int librados::Rados::pool_list2(std::list<std::pair<int64_t, std::string> >& v)
+int librados::Rados::pool_list(
+  std::vector<std::pair<int64_t, std::string>>& pools)
 {
-  return client->pool_list(v);
+  return client->pool_list(pools);
+}
+
+int librados::Rados::pool_list(std::list<std::string>& names)
+{
+  std::vector<std::string> contiguous_names;
+  int r = pool_list(contiguous_names);
+  if (r < 0) {
+    return r;
+  }
+
+  names.assign(std::make_move_iterator(std::begin(contiguous_names)),
+               std::make_move_iterator(std::end(contiguous_names)));
+
+  return 0;
+}
+
+int librados::Rados::pool_list2(
+  std::list<std::pair<int64_t, std::string>>& pools)
+{
+  std::vector<std::pair<int64_t, std::string>> contiguous_pools;
+  int r = pool_list(contiguous_pools);
+  if (r < 0) {
+    return r;
+  }
+
+  pools.insert(std::end(pools),
+               std::make_move_iterator(std::begin(contiguous_pools)),
+               std::make_move_iterator(std::end(contiguous_pools)));
+
+  return 0;
 }
 
 int64_t librados::Rados::pool_lookup(const char *name)
@@ -2702,12 +2797,12 @@ void librados::Rados::test_blocklist_self(bool set)
   client->blocklist_self(set);
 }
 
-int librados::Rados::get_pool_stats(std::list<string>& v,
+int librados::Rados::get_pool_stats(const std::vector<string>& pools,
 				    stats_map& result)
 {
   map<string,::pool_stat_t> rawresult;
   bool per_pool = false;
-  int r = client->get_pool_stats(v, &rawresult, &per_pool);
+  int r = client->get_pool_stats(pools, &rawresult, &per_pool);
   for (map<string,::pool_stat_t>::iterator p = rawresult.begin();
        p != rawresult.end();
        ++p) {
@@ -2741,6 +2836,14 @@ int librados::Rados::get_pool_stats(std::list<string>& v,
     pv.compressed_bytes_alloc = statfs.data_compressed_allocated;
   }
   return r;
+}
+
+int librados::Rados::get_pool_stats(std::list<string>& pools,
+				    stats_map& result)
+{
+  const std::vector<string> vector_pools(std::begin(pools), std::end(pools));
+
+  return get_pool_stats(vector_pools, result);
 }
 
 int librados::Rados::get_pool_stats(std::list<string>& v,
