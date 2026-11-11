@@ -31,6 +31,7 @@
 #include "rgw_zone.h"
 #include "rgw_sync.h"
 #include "rgw_bucket.h"
+#include "rgw_datalog.h"
 
 #include "services/svc_zone.h"
 #include "services/svc_bilog_rados.h"
@@ -509,6 +510,7 @@ class RGWFIFOBILogRemoveShardsCR : public RGWSimpleCoroutine {
 
 struct StatusShards {
   uint64_t generation = 0;
+  BucketSyncState state = BucketSyncState::Init; //< not reported by old peers
   std::vector<rgw_bucket_shard_sync_info> shards;
 };
 
@@ -687,6 +689,7 @@ class BucketTrimInstanceCR : public RGWCoroutine {
   int child_ret = 0;
   const DoutPrefixProvider *dpp;
   std::vector<StatusShards> peer_status; //< sync status for each peer
+  std::shared_ptr<RGWGenericAsyncCR::Action> heal; //< heals stuck bilog shards
 
   /// The log generation to trim
   rgw::bucket_log_layout_generation totrim;
@@ -847,6 +850,7 @@ inline int parse_decode_json<StatusShards>(
     bilog_status_v2 v;
     decode_json_obj(v, &p);
     s.generation = v.sync_status.incremental_gen;
+    s.state = v.sync_status.state;
     s.shards = std::move(v.inc_status);
   } catch (JSONDecoder::err& e) {
     try {
@@ -970,6 +974,99 @@ class TrimFIFOGenerationCR : public RGWCoroutine {
       return set_cr_done();
     }
     return 0;
+  }
+};
+
+/// per bilog shard, the oldest incremental marker of the peers in incremental sync
+using PeerMarkers = std::vector<std::optional<std::string>>;
+
+namespace {
+PeerMarkers take_min_inc_markers(uint64_t gen, const std::vector<StatusShards>& peer_status, size_t num_shards)
+{
+  PeerMarkers markers(num_shards);
+  for (const auto& peer : peer_status) {
+    if (peer.generation != gen || peer.state != BucketSyncState::Incremental || peer.shards.size() != num_shards) {
+      continue;
+    }
+    for (size_t i = 0; i < num_shards; ++i) {
+      // compare the shard's own marker, like bucket sync checkpoint
+      auto m = BucketIndexShardsManager::get_shard_marker(peer.shards[i].inc_marker.position);
+      if (!markers[i] || m < *markers[i]) {
+        markers[i] = std::move(m);
+      }
+    }
+  }
+  return markers;
+}
+}
+
+/// add a datalog entry for each bilog shard where a peer hasn't synced an entry older than
+/// rgw_sync_log_trim_heal_age, so that the peer syncs it (tracker #63235). an entry's timestamp is
+/// its object's mtime, so a recent delete of an old object may be healed sooner
+struct HealBILogShards : RGWGenericAsyncCR::Action {
+  const DoutPrefixProvider* const dpp;
+  rgw::sal::RadosStore* const store;
+  const RGWBucketInfo bucket_info;
+  const rgw::bucket_log_layout_generation log;
+  const std::chrono::seconds heal_age;
+  const PeerMarkers peer_markers;
+
+  HealBILogShards(const DoutPrefixProvider* dpp, rgw::sal::RadosStore* store, const RGWBucketInfo& bucket_info,
+                  const rgw::bucket_log_layout_generation& log, std::chrono::seconds heal_age,
+                  PeerMarkers peer_markers)
+    : dpp(dpp), store(store), bucket_info(bucket_info), log(log), heal_age(heal_age),
+      peer_markers(std::move(peer_markers))
+  {}
+
+  int operate() override {
+    std::map<int, std::string> markers; //< newest entry of each shard
+    int r = store->svc()->bilog_rados->get_log_status(dpp, bucket_info, log, -1, &markers, null_yield);
+    if (r < 0) {
+      return r;
+    }
+    // unsharded indexes log their datalog entries for shard -1
+    const bool unsharded = log.layout.type == rgw::BucketLogType::InIndex && log.layout.in_index.layout.num_shards == 0;
+    const auto stuck_before = ceph::real_clock::now() - heal_age;
+    int ret = 0;
+    int healed = 0;
+    for (const auto& [shard_id, marker] : markers) {
+      if (shard_id < 0 || std::cmp_greater_equal(shard_id, peer_markers.size())) {
+        continue;
+      }
+      const auto& peer_marker = peer_markers[shard_id];
+      if (!peer_marker || *peer_marker >= marker) {
+        continue;
+      }
+      // the oldest entry the peer hasn't synced
+      std::string after = *peer_marker;
+      std::list<rgw_bi_log_entry> entries;
+      r = store->svc()->bilog_rados->log_list(dpp, null_yield, bucket_info, log, shard_id, after, 1, entries, nullptr);
+      if (r < 0) {
+        ldpp_dout(dpp, 4) << "failed to list bilog of bucket=" << bucket_info.bucket << " shard=" << shard_id
+            << ": " << cpp_strerror(r) << dendl;
+        ret = r;
+        continue;
+      }
+      if (entries.empty() || entries.front().timestamp > stuck_before) {
+        continue;
+      }
+      ldpp_dout(dpp, 10) << "bucket=" << bucket_info.bucket << " shard=" << shard_id << ": a peer is stuck at marker="
+          << *peer_marker << " since " << entries.front().timestamp << ", newest=" << marker
+          << ", adding a datalog entry for the shard" << dendl;
+      r = store->svc()->datalog_rados->add_entry(dpp, bucket_info, log, unsharded ? -1 : shard_id, null_yield);
+      if (r < 0) {
+        ldpp_dout(dpp, 4) << "failed to add datalog entry for bucket=" << bucket_info.bucket << " shard=" << shard_id
+            << ": " << cpp_strerror(r) << dendl;
+        ret = r;
+        continue;
+      }
+      ++healed;
+    }
+    if (healed) {
+      ldpp_dout(dpp, 1) << "added datalog entries for " << healed << " bilog shards of bucket=" << bucket_info.bucket
+          << " with unsynced entries older than " << heal_age.count() << "s" << dendl;
+    }
+    return ret;
   }
 };
 
@@ -1205,6 +1302,24 @@ int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
       }
       if (retcode < 0) {
 	return set_cr_error(retcode);
+      }
+
+      // add datalog entries for shards that peers have been stuck on, unless disabled
+      if (auto heal_age = cct->_conf.get_val<std::chrono::seconds>("rgw_sync_log_trim_heal_age");
+          heal_age.count() > 0) {
+        if (auto markers = take_min_inc_markers(totrim.gen, peer_status, rgw::num_shards(totrim));
+            std::ranges::any_of(markers, [] (const auto& m) { return m.has_value(); })) {
+          heal = std::make_shared<HealBILogShards>(dpp, store, *pbucket_info, totrim, heal_age, std::move(markers));
+        }
+      }
+      if (heal) {
+        set_status("adding datalog entries for shards that peers are stuck on");
+        yield call(new RGWGenericAsyncCR(cct, store->svc()->async_processor, heal));
+        if (retcode < 0) {
+          // not fatal: retried on the next trim
+          ldpp_dout(dpp, 4) << "failed to heal bilog shards of bucket=" << bucket_instance << ": "
+              << cpp_strerror(retcode) << dendl;
+        }
       }
     }
 

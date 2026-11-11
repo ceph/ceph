@@ -2188,11 +2188,11 @@ def run_bucket_sync_after_dir_suggest_under_osd_delays(bilog_type=None):
         # secondary falls behind and autotrim can't trim those entries
         assert num_bilog_entries(bucket.name) > num_entries, 'the listing wrote no repair entries'
 
-        # trim every bucket
-        trim_all = ['--rgw-sync-log-trim-max-buckets', '999', '--rgw-sync-log-trim-min-cold-buckets', '999']
+        # trim every bucket, and heal stuck shards after a second
+        trim_all = ['--rgw-sync-log-trim-max-buckets', '999', '--rgw-sync-log-trim-min-cold-buckets', '999',
+                    '--rgw-sync-log-trim-heal-age', '1']
         bilog_autotrim(primary.zone, trim_all)
 
-        # Without the fix, the secondary stays behind: this checkpoint times out and the bucket differs between zones
         # only check this direction: the primary's sync from the secondary also timed out and retries with backoff
         zone_bucket_checkpoint(secondary.zone, primary.zone, bucket.name)
         secondary.check_bucket_eq(primary, bucket.name)

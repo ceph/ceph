@@ -2948,6 +2948,22 @@ options:
   - rgw_sync_log_trim_interval
   - rgw_sync_log_trim_max_buckets
   - rgw_sync_log_trim_min_cold_buckets
+- name: rgw_sync_log_trim_heal_age
+  type: secs
+  level: advanced
+  desc: Age of an unsynced bucket index log entry after which auto-trim heals its shard
+  long_desc: If a peer zone hasn't synced a bucket index log entry older than this value,
+    auto-trim adds a datalog entry for the shard so that the peer can sync it. An entry's
+    timestamp is its object's mtime, so a recent delete of an old object may be synced
+    sooner. 0 disables it.
+  default: 1_day
+  min: 0
+  services:
+  - rgw
+  flags:
+  - runtime
+  see_also:
+  - rgw_sync_log_trim_interval
 - name: rgw_sync_data_inject_err_probability
   type: float
   level: dev
