@@ -466,6 +466,18 @@ struct Revalidation {
    * where no file does */
   virtual int stat_entry(const DoutPrefixProvider* dpp, optional_yield y,
 			 B* b, const std::string& name, EntryStat& st) = 0;
+
+  /* For the watcher, which names paths under the bucket's directory.
+   * The name read_dir() gives the file, or the directory (`is_dir`), at
+   * `path`;  nullopt where the path is not listed. */
+  virtual std::optional<std::string> listed_name(const std::string& path,
+						 bool is_dir) const = 0;
+  /* the path under the bucket's directory of a directory's prefix:  "."
+   * for the bucket's own, and no trailing '/' */
+  virtual std::string dir_path(const std::string& prefix) const = 0;
+  /* the bucket named `bname`, for the hooks above */
+  virtual int load(const DoutPrefixProvider* dpp, const std::string& bname,
+		   std::unique_ptr<B>& b) = 0;
 };
 
 /* The directory holding `name`:  its prefix. */
@@ -840,8 +852,14 @@ public:
     std::string pending_name;
     EntryStat pending;
 
+    /* told of each directory before it is read */
+    std::function<void(const std::string&)> on_dir;
+
     explicit Recorder(BucketCacheEntry<D, B, YP>* b) : b(b) {}
     void directory(const std::string& prefix, const DirStat& st) override {
+      if (on_dir) {
+	on_dir(prefix);
+      }
       auto& r = b->dirs[prefix];
       r.set(st);
       r.baseline = true;
@@ -882,6 +900,12 @@ public:
       }
 
       Recorder rec{bucket};
+      /* with the driver's hooks the watcher follows the tree:  each
+       * directory is watched as the fill reaches it */
+      const bool tree = watching_tree();
+      if (tree) {
+	rec.on_dir = watch_dir(bucket);
+      }
       auto put =
 	[&](const DoutPrefixProvider* dpp, rgw_bucket_dir_entry& bde) -> int {
 	  std::string ser_data;
@@ -895,7 +919,7 @@ public:
 
       /* instruct the bucket provider to enumerate all entries,
        * in any order */
-      auto rc = revalidating(sal_bucket)
+      auto rc = (revalidating(sal_bucket) || tree)
 	? rv->fill(dpp, y, sal_bucket, fill_cache_cb_t{put}, rec)
 	: sal_bucket->fill_cache(dpp, y, put);
 
@@ -972,7 +996,9 @@ public:
 
       txn->commit();
       bucket->flags |= BucketCacheEntry<D, B, YP>::FLAG_FILLED;
-      un->add_watch(bucket->name, bucket);
+      if (!tree) {
+	un->add_watch(bucket->name, bucket);
+      }
       return rc;
     } catch (const std::exception& e) {
       ldpp_dout(dpp, 0) << "BucketCache: fill failed for "
@@ -1555,8 +1581,151 @@ public:
     }
   } /* walk_revalidating */
 
+  /* Whether the watcher follows the bucket's tree:  the driver supplies
+   * the hooks that say what a path in it is (Revalidation).  Without
+   * them, as for posix, it watches the bucket's directory for names. */
+  bool watching_tree() const {
+    return rv && un->watching();
+  }
+
+  /* A FillRecorder callback watching each directory, for names and
+   * writes, as it is reported:  before it is read, so nothing created in
+   * it in between is missed. */
+  std::function<void(const std::string&)> watch_dir(
+    BucketCacheEntry<D, B, YP>* b) {
+    return [this, b](const std::string& prefix) {
+      const std::string path = rv->dir_path(prefix);
+      un->add_watch(b->name, (path == ".") ? std::string{} : path + "/", b,
+		    true);
+    };
+  }
+
+  /* The entries for `children` of `prefix`, built as the fill builds
+   * them, each with its recorded stat, and their directories watched.
+   * LOCKED. */
+  template <typename TxnT>
+  void build_children(const DoutPrefixProvider* dpp, TxnT& txn,
+		      BucketCacheEntry<D, B, YP>* b, B* sal_bucket,
+		      const std::string& prefix,
+		      const std::vector<std::string>& children) {
+    Recorder rec{b};
+    rec.on_dir = watch_dir(b);
+    fill_cache_cb_t put =
+      [&](const DoutPrefixProvider* dpp, rgw_bucket_dir_entry& bde) -> int {
+	std::string ser_data;
+	if (ser_entry(bde, rec.take(bde.key.name), ser_data).code !=
+	    std::errc{0}) {
+	  return -EIO;
+	}
+	lsubdout(driver->ctx(), rgw, 10) << "BucketCache: notify lmdb put "
+	  << "bucket=" << b->name << " key=" << bde.key.name << dendl;
+	txn->put(b->dbi, concat_key(bde.key), ser_data);
+	return 0;
+      };
+    (void) rv->build(dpp, null_yield, sal_bucket, prefix, children, put, rec);
+  }
+
+  /* What the watcher saw change in a bucket's tree, applied to the cache
+   * through the driver's hooks.  A file added, moved in or written has its
+   * entry built again;  one removed or moved out loses the entries a file
+   * backed, not its versions or delete markers, which .versions/ holds;  a
+   * directory added is built whole, and watched;  one removed takes its
+   * subtree, and its watches.  A path the driver does not list, such as a
+   * reserved name, is passed over.  The gateway's own changes come here
+   * too -- inotify does not say whose a change is.  LOCKED. */
+  void notify_tree(const DoutPrefixProvider* dpp,
+		   BucketCacheEntry<D, B, YP>* b, B* sal_bucket,
+		   const Notifiable::Event& ev) {
+    using EventType = Notifiable::EventType;
+    const std::string path = fmt::format("{}{}", ev.dir, *ev.name);
+    const auto name = rv->listed_name(path, ev.is_dir);
+    if (!name) {
+      return;
+    }
+    lsubdout(driver->ctx(), rgw, 10) << "BucketCache: notify "
+      << ((ev.type == EventType::ADD) ? "add" : "remove") << " bucket="
+      << b->name << " name=" << *name << dendl;
+    auto txn = b->env->getRWTransaction();
+    if (ev.type == EventType::ADD) {
+      if (!ev.is_dir) {
+	(void) take_entries(dpp, txn, b->dbi, *name,
+			    [](const rgw_bucket_dir_entry& e) {
+			      return file_backed(e);
+			    }, 0, nullptr);
+      }
+      /* a directory's name ends in '/', and its parent precedes that */
+      const std::string_view n{*name};
+      build_children(dpp, txn, b, sal_bucket,
+		     parent_prefix(ev.is_dir ? n.substr(0, n.size() - 1) : n),
+		     {*name});
+    } else if (ev.is_dir) {
+      remove_subtree(txn, b, *name);
+      un->remove_watch(b->name, path + "/");
+    } else {
+      (void) take_entries(dpp, txn, b->dbi, *name,
+			  [](const rgw_bucket_dir_entry& e) {
+			    return file_backed(e);
+			  }, 0, nullptr);
+    }
+    txn->commit();
+  }
+
   int notify(const std::string& bname, void* opaque,
 	     const std::vector<Notifiable::Event>& evec) override {
+
+    using namespace LMDBSafe;
+
+    if (!rv) {
+      return notify_names(bname, opaque, evec);
+    }
+    GetBucketResult gbr = get_bucket(nullptr, bname, BucketCache<D, B, YP>::FLAG_LOCK);
+    auto [b /* BucketCacheEntry */, flags] = gbr;
+    if (b) {
+      auto unref_guard = make_scope_guard([this, b]{ lru.unref(b, cohort::lru::FLAG_NONE); });
+      unique_lock ulk{b->mtx, std::adopt_lock};
+      if ((b->name != bname) ||
+	  (opaque && (b != opaque)) ||
+	  (! (b->flags & BucketCacheEntry<D, B, YP>::FLAG_FILLED))) {
+	/* do nothing */
+	return 0;
+      }
+      NoDoutPrefix ndp(driver->ctx(), dout_subsys);
+      /* NB: b->mtx is held across the LMDB writes below so that fill()
+       * and notify() remain mutually exclusive on this bucket -- see
+       * b54e38b0d41 (fix notify() race with invalidation) */
+      try {
+	std::unique_ptr<B> sb;
+	for (const auto& ev : evec) {
+	  using EventType = Notifiable::EventType;
+	  if (ev.type == EventType::INVALIDATE) [[unlikely]] {
+	    lsubdout(driver->ctx(), rgw, 2) << "BucketCache: notify INVALIDATE "
+	      << "(inotify overflow) bucket=" << b->name << dendl;
+	    auto txn = b->env->getRWTransaction();
+	    mdb_drop(*txn, b->dbi, 0);
+	    txn->commit();
+	    b->flags &= ~BucketCacheEntry<D, B, YP>::FLAG_FILLED;
+	    b->dirs.clear();
+	    b->fs_root.clear();
+	    return 0; /* don't process any more events in this batch */
+	  }
+	  if (!ev.name) {
+	    continue;
+	  }
+	  if (!sb && (rv->load(&ndp, bname, sb) < 0)) {
+	    return 0;
+	  }
+	  notify_tree(&ndp, b, sb.get(), ev);
+	} /* all events */
+      } catch (const std::exception& e) {
+	lsubdout(driver->ctx(), rgw, 0) << "BucketCache: notify failed for "
+	  << b->name << ": " << e.what() << dendl;
+      }
+    } /* b */
+    return 0;
+  } /* notify */
+
+  int notify_names(const std::string& bname, void* opaque,
+		   const std::vector<Notifiable::Event>& evec) {
 
     using namespace LMDBSafe;
 
@@ -1644,7 +1813,7 @@ public:
       ulk.unlock();
     } /* b */
     return rc;
-  } /* notify */
+  } /* notify_names */
 
   /* RGW changed `name`'s directory:  record its stat again now, so that
    * only a change landing between RGW's and this stat is absorbed, and

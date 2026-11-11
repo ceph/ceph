@@ -8028,6 +8028,34 @@ public:
     st = file::listing::EntryStat::of(stx);
     return 0;
   }
+
+  std::optional<std::string> listed_name(const std::string& path,
+					 bool is_dir) const override {
+    /* as read_dir() skips them, and so passes over all beneath them */
+    const auto& rn = driver->get_reserved_names();
+    for (auto part : ceph::split(path, "/")) {
+      if (is_reserved_name(part, rn)) {
+	return std::nullopt;
+      }
+    }
+    return nsfs::index_name(is_dir ? path + "/" : path);
+  }
+
+  std::string dir_path(const std::string& prefix) const override {
+    return path_of(prefix);
+  }
+
+  int load(const DoutPrefixProvider* dpp, const std::string& bname,
+	   std::unique_ptr<NSFSBucket>& b) override {
+    std::unique_ptr<rgw::sal::Bucket> sb;
+    const int ret = driver->load_bucket(dpp, rgw_bucket(std::string(), bname),
+					&sb, null_yield);
+    if (ret < 0) {
+      return ret;
+    }
+    b.reset(static_cast<NSFSBucket*>(sb.release()));
+    return 0;
+  }
 };
 
 } // anonymous namespace

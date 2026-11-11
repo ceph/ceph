@@ -737,7 +737,8 @@ public:
 
     quota_handler = RGWQuotaHandler::generate_handler(env->dpp, this, false);
     bucket_cache.reset(new nsfs::BucketCache(
-        this, fs_reference_path(), cache_base, 100, 3, 3, 3));
+        this, fs_reference_path(), cache_base, 100, 3, 3, 3,
+        g_conf().get_val<bool>("rgw_nsfs_inotify")));
     /* as initialize() does */
     bucket_cache->set_revalidation(get_listing_revalidation());
 
@@ -8606,6 +8607,110 @@ TEST_F(NSFSBucketTest, ARacilyRecordedDirectoryIsReadAgain)
 
   EXPECT_FALSE(listed(bucket.get(), env->dpp).contains("seen"))
     << "a racily recorded directory was trusted";
+}
+
+/* The inotify watcher alone (rgw_nsfs_inotify, revalidation off):  what a
+ * filesystem client changes reaches the listing cache between listings.
+ * The watcher runs on its own thread, so a test waits for the listing. */
+class NSFSInotifyBucketTest : public NSFSBucketTest {
+public:
+  void SetUp() override {
+    g_conf().set_val("rgw_nsfs_inotify", "true");
+    g_conf().set_val("rgw_nsfs_listing_revalidate", "false");
+    NSFSBucketTest::SetUp();
+  }
+  void TearDown() override {
+    NSFSBucketTest::TearDown();
+    g_conf().set_val("rgw_nsfs_inotify", "false");
+    g_conf().set_val("rgw_nsfs_listing_revalidate", "true");
+  }
+
+  /* whether `pred` holds of the listing within five seconds */
+  bool eventually(const std::function<bool(const std::map<std::string, uint64_t>&)>& pred) {
+    for (int i = 0; i < 100; ++i) {
+      if (pred(listed(bucket.get(), env->dpp))) {
+	return true;
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+    return false;
+  }
+};
+
+TEST_F(NSFSInotifyBucketTest, AFileWrittenAfterAListingIsListed)
+{
+  put_object(driver.get(), bucket.get(), env->dpp, acl_owner, "seen", "seen",
+	     "text/plain");
+  ASSERT_TRUE(listed(bucket.get(), env->dpp).contains("seen"));
+
+  sideload(bucket_path(), "late.txt", "written outside");
+  EXPECT_TRUE(eventually([](const auto& k) {
+    return k.contains("late.txt") && (k.at("late.txt") == 15);
+  }));
+}
+
+/* A directory made outside is watched as it appears, and read whole. */
+TEST_F(NSFSInotifyBucketTest, AFileUnderNewDirectoriesIsListed)
+{
+  put_object(driver.get(), bucket.get(), env->dpp, acl_owner, "seen", "seen",
+	     "text/plain");
+  ASSERT_TRUE(listed(bucket.get(), env->dpp).contains("seen"));
+
+  sideload(bucket_path(), "d1/d2/deep.txt", "deep");
+  EXPECT_TRUE(eventually([](const auto& k) { return k.contains("d1/d2/deep.txt"); }));
+  /* and a file written later into a directory found that way */
+  sideload(bucket_path(), "d1/d2/later.txt", "later");
+  EXPECT_TRUE(eventually([](const auto& k) { return k.contains("d1/d2/later.txt"); }));
+}
+
+/* A removal deletes by the full key:  the event names the file in its
+ * directory, and the cache's key is the path under the bucket. */
+TEST_F(NSFSInotifyBucketTest, ANestedFileRemovedIsNotListed)
+{
+  put_object(driver.get(), bucket.get(), env->dpp, acl_owner, "sub/gone", "g",
+	     "text/plain");
+  put_object(driver.get(), bucket.get(), env->dpp, acl_owner, "sub/kept", "k",
+	     "text/plain");
+  ASSERT_TRUE(listed(bucket.get(), env->dpp).contains("sub/gone"));
+
+  ASSERT_TRUE(sf::remove(bucket_path() / "sub" / "gone"));
+  EXPECT_TRUE(eventually([](const auto& k) {
+    return !k.contains("sub/gone") && k.contains("sub/kept");
+  }));
+}
+
+/* An overwrite in place changes no name;  its write is the event. */
+TEST_F(NSFSInotifyBucketTest, AnOverwriteInPlaceIsListedWithItsNewSize)
+{
+  put_object(driver.get(), bucket.get(), env->dpp, acl_owner, "seen", "seen",
+	     "text/plain");
+  ASSERT_EQ(listed(bucket.get(), env->dpp).at("seen"), 4u);
+
+  sideload(bucket_path(), "seen", "rewritten outside");
+  EXPECT_TRUE(eventually([](const auto& k) {
+    return k.contains("seen") && (k.at("seen") == 17);
+  }));
+}
+
+/* The gateway's own temporary entries appear and vanish under the watch,
+ * and are never listed:  a reserved name is no object. */
+TEST_F(NSFSInotifyBucketTest, TheGatewaysTemporaryNamesAreNeverListed)
+{
+  put_object(driver.get(), bucket.get(), env->dpp, acl_owner, "k00", "x",
+	     "text/plain");
+  ASSERT_TRUE(listed(bucket.get(), env->dpp).contains("k00"));
+  for (int i = 1; i < 20; ++i) {
+    put_object(driver.get(), bucket.get(), env->dpp, acl_owner,
+	       fmt::format("k{:02d}", i), "x", "text/plain");
+  }
+  /* settled:  every PUT's events delivered */
+  ASSERT_TRUE(eventually([](const auto& k) { return k.contains("k19"); }));
+  std::this_thread::sleep_for(std::chrono::milliseconds(200));
+  const auto keys = listed(bucket.get(), env->dpp);
+  EXPECT_EQ(keys.size(), 20u);
+  for (const auto& [k, size] : keys) {
+    EXPECT_TRUE(k.starts_with("k")) << k << " is listed";
+  }
 }
 
 TEST_F(NSFSBucketTest, WithRevalidationOffAListingTrustsItsFill)

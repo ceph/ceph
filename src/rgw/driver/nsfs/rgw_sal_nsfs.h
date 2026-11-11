@@ -1241,6 +1241,9 @@ public:
    * latent crash;  that line is rgw-standalone's and is noted rather
    * than changed here. */
   virtual ~NSFSDriver() {
+    /* the cache's destructor joins the watcher thread, which calls back
+     * into the driver;  it must go before the members it uses */
+    bucket_cache.reset();
     multipart_cache.reset();
     if (base_fd >= 0) {
       ::close(base_fd);
