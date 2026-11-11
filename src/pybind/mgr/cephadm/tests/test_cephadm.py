@@ -2067,7 +2067,7 @@ class TestCephadm(object):
             unmanaged_spec = NFSServiceSpec(
                 service_id='name',
                 placement=ps,
-                enable_client_object_cache=True,
+                enable_nfsv3=True,
                 unmanaged=True,
             )
             with with_service(cephadm_module, unmanaged_spec):
@@ -2083,7 +2083,7 @@ class TestCephadm(object):
                     deploy_ctx = generate_config.call_args.args[0]
                     stored_spec = cephadm_module.spec_store['nfs.name'].spec
                     assert deploy_ctx.service_spec is stored_spec
-                    assert deploy_ctx.service_spec.enable_client_object_cache is True
+                    assert deploy_ctx.service_spec.enable_nfsv3 is True
 
                 assert_rm_daemon(cephadm_module, 'nfs.name.test', 'test')
 

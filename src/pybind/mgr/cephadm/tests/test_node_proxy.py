@@ -386,11 +386,9 @@ def test_node_proxy_get_dependencies():
     mgr.get_mgr_ip.return_value = '10.0.0.1'
     mgr.http_server.agent.server_port = 7150
     mgr.cert_mgr.get_root_ca.return_value = 'ROOT-CA'
-    mgr.hw_monitoring_vendor = 'generic'
 
     assert NodeProxy.get_dependencies(mgr) == sorted([
         '10.0.0.1',
         '7150',
         'ROOT-CA',
-        'generic',
     ])
