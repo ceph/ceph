@@ -1359,6 +1359,27 @@ class ExternalCephCluster(_RBase):
         if self.intent is Intent.PRESENT and not self.cluster:
             raise ValueError('cluster parameter must be specified')
 
+    def convert(self, operation: ConversionOp) -> Self:
+        """When hiding sensitive data hide the cephx keys too. However, the
+        BASE64 filter enum will act as a no-op. Cephx keys are already
+        base64 encoded.
+        """
+        if (
+            operation != (PasswordFilter.NONE, PasswordFilter.HIDDEN)
+            or not self.cluster
+        ):
+            return self
+
+        def _mask(user: Optional[CephUserKey]) -> Optional[CephUserKey]:
+            return replace(user, key=_MASKED) if user else None
+
+        cluster = replace(
+            self.cluster,
+            cephfs_user=_mask(self.cluster.cephfs_user),
+            rgw_user=_mask(self.cluster.rgw_user),
+        )
+        return replace(self, cluster=cluster)
+
 
 # SMBResource is a union of all valid top-level smb resource types.
 SMBResource = Union[

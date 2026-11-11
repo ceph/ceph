@@ -1551,6 +1551,37 @@ def test_rgw_credential_password_conversion():
     assert decoded.secret_access_key == 'secretkey123'
 
 
+def test_external_ceph_cluster_password_conversion():
+    """Test ExternalCephCluster cephx key conversion."""
+    extc = smb.resources.ExternalCephCluster(
+        external_ceph_cluster_id='exo1',
+        cluster=smb.resources.ExternalCephClusterValues(
+            fsid='cf05db31-3d4e-4ffd-85ad-753434d5add1',
+            mon_host='192.168.76.200',
+            cephfs_user=smb.resources.CephUserKey(
+                name='client.smb.fs', key='AQBFSKEY=='
+            ),
+            rgw_user=smb.resources.CephUserKey(
+                name='client.smb.rgw', key='AQBRGWKEY=='
+            ),
+        ),
+    )
+
+    # Test masking (NONE -> HIDDEN)
+    masked = extc.convert(
+        (smb.enums.PasswordFilter.NONE, smb.enums.PasswordFilter.HIDDEN)
+    )
+    assert masked.cluster.cephfs_user.key == '****************'
+    assert masked.cluster.rgw_user.key == '****************'
+
+    # Test base64 filters are a no-op
+    for op in [
+        (smb.enums.PasswordFilter.NONE, smb.enums.PasswordFilter.BASE64),
+        (smb.enums.PasswordFilter.BASE64, smb.enums.PasswordFilter.NONE),
+    ]:
+        assert extc.convert(op) == extc
+
+
 def test_rgw_credential_with_linked_cluster():
     """Test RGWCredential with linked_to_cluster."""
     import yaml
