@@ -71,7 +71,9 @@ function TEST_stretch_set_replicated_pool() {
 # than the zones of type <barrier> that the rule spans. This test gives
 # replicated pool rep, on replicated_rule, whose root holds zones iris and
 # pze, a count of 3 and then a target of 3: both are refused, with and
-# without --yes-i-really-mean-it, and rep does not become a stretch pool.
+# without --yes-i-really-mean-it, naming the field and the 2 zones, with no
+# mention of --yes-i-really-mean-it, which would not help, and rep does not
+# become a stretch pool.
 # A size of 5, which 2 zones do not divide, is then accepted, as an
 # individual stretch pool records no zones.
 function TEST_stretch_set_counts_above_zones() {
@@ -79,11 +81,14 @@ function TEST_stretch_set_counts_above_zones() {
     setup_zones $dir || return 1
 
     ceph osd pool create rep 8 8 replicated replicated_rule || return 1
-    for args in "3 2" "2 3"; do
+    local args field
+    for args in "3 2 count" "2 3 target"; do
+        field=peering_crush_bucket_${args##* }
         for sure in "" --yes-i-really-mean-it; do
-            expect_failure $dir "zones (2) spanned by crush rule replicated_rule" \
-                ceph osd pool stretch set rep $args zone replicated_rule 4 2 \
+            expect_failure $dir "$field (3) cannot exceed the number of zone zones (2) spanned by crush rule replicated_rule" \
+                ceph osd pool stretch set rep ${args% *} zone replicated_rule 4 2 \
                 $sure || return 1
+            ! grep -q yes-i-really-mean-it $dir/out || return 1
         done
     done
     test "$(pool_field rep peering_crush_bucket_count)" = 0 || return 1
