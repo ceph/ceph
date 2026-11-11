@@ -17,7 +17,7 @@
 #include <array>
 #include <cstdint>
 #include <cstring> // for memcmp(), memcpy()
-#include <list>
+#include <vector>
 #include <ostream>
 #include <string>
 
@@ -70,8 +70,8 @@ struct sha_digest_t {
   void dump(ceph::Formatter *f) const {
     f->dump_string("sha1", to_str());
   }
-  static std::list<sha_digest_t> generate_test_instances() {
-    std::list<sha_digest_t> ls;
+  static std::vector<sha_digest_t> generate_test_instances() {
+    std::vector<sha_digest_t> ls;
     ls.emplace_back();
     ls.emplace_back();
     ls.back().v[0] = 1;

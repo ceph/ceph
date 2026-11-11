@@ -18,6 +18,9 @@
 
 #include "OpQueue.h"
 
+#include <vector>
+#include <iterator>
+
 #include <boost/intrusive/list.hpp>
 #include <boost/intrusive/rbtree.hpp>
 #include <boost/intrusive/avl_set.hpp>
@@ -105,15 +108,11 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
       unsigned get_size() const {
 	return lp.size();
       }
-      void filter_class(std::list<T>* out) {
-        for (Lit i = --lp.end();; --i) {
-          if (out) {
-            out->push_front(std::move(i->item));
-          }
-          i = lp.erase_and_dispose(i, DelItem<ListPair>());
-          if (i == lp.begin()) {
-            break;
-          }
+      void extract_items(std::vector<T>& removed) {
+        while (!std::empty(lp)) {
+          auto i = lp.begin();
+          removed.emplace_back(std::move(i->item));
+          lp.erase_and_dispose(i, DelItem<ListPair>());
         }
       }
     };
@@ -170,14 +169,17 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
         check_end();
 	return ret;
       }
-      void filter_class(K& cl, std::list<T>* out) {
+      void remove_by_class(K& cl, std::vector<T>& removed) {
         Kit i = klasses.find(cl, MapKey<Klass, K>());
         if (i != klasses.end()) {
-          i->filter_class(out);
-	  Kit tmp = klasses.erase_and_dispose(i, DelItem<Klass>());
-	  if (next == i) {
-            next = tmp;
+          const bool remove_next = next == i;
+          i->extract_items(removed);
+          i = klasses.erase_and_dispose(i, DelItem<Klass>());
+
+	  if (remove_next) {
+            next = i;
           }
+
           check_end();
         }
       }
@@ -267,15 +269,18 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
 	  }
 	  return ret;
 	}
-	void filter_class(K& cl, std::list<T>* out) {
-	  for (Sit i = queues.begin(); i != queues.end();) {
-	    i->filter_class(cl, out);
-	    if (i->empty()) {
-	      total_prio -= i->key;
-	      i = queues.erase_and_dispose(i, DelItem<SubQueue>());
-	    } else {
+	void remove_by_class(K& cl, std::vector<T>& removed) {
+	  for (auto i = std::rbegin(queues); i != std::rend(queues);) {
+	    auto current = std::prev(i.base());
+	    current->remove_by_class(cl, removed);
+
+	    if (!std::empty(*current)) {
 	      ++i;
+	      continue;
 	    }
+
+	    total_prio -= current->key;
+	    i = decltype(i) {queues.erase_and_dispose(current, DelItem<SubQueue>())};
 	  }
 	}
 	// this is intended for unit tests and should be never used on hot paths
@@ -308,9 +313,11 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
       {
 	std::srand(time(0));
       }
-    void remove_by_class(K cl, std::list<T>* removed = 0) final {
-      strict.filter_class(cl, removed);
-      normal.filter_class(cl, removed);
+    std::vector<T> remove_by_class(K cl) final {
+      std::vector<T> removed;
+      normal.remove_by_class(cl, removed);
+      strict.remove_by_class(cl, removed);
+      return removed;
     }
     bool empty() const final {
       return strict.empty() && normal.empty();

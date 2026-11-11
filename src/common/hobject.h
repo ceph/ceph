@@ -16,6 +16,7 @@
 #ifndef __CEPH_OS_HOBJECT_H
 #define __CEPH_OS_HOBJECT_H
 
+#include <vector>
 #include <fmt/compile.h>
 #include <fmt/format.h>
 
@@ -350,7 +351,7 @@ public:
   void decode(ceph::bufferlist::const_iterator& bl);
   void decode(json_spirit::Value& v);
   void dump(ceph::Formatter *f) const;
-  static std::list<hobject_t> generate_test_instances();
+  static std::vector<hobject_t> generate_test_instances();
   friend int cmp(const hobject_t& l, const hobject_t& r);
   constexpr auto operator<=>(const hobject_t &rhs) const noexcept {
     auto cmp = max <=> rhs.max;
@@ -600,7 +601,7 @@ struct ghobject_t {
   void decode(json_spirit::Value& v);
   size_t encoded_size() const;
   void dump(ceph::Formatter *f) const;
-  static std::list<ghobject_t> generate_test_instances();
+  static std::vector<ghobject_t> generate_test_instances();
   friend int cmp(const ghobject_t& l, const ghobject_t& r);
   constexpr auto operator<=>(const ghobject_t&) const = default;
   bool operator==(const ghobject_t&) const = default;

@@ -56,9 +56,9 @@ void DecayCounter::dump(ceph::Formatter *f) const
   f->dump_float("halflife", rate.get_halflife());
 }
 
-std::list<DecayCounter> DecayCounter::generate_test_instances()
+std::vector<DecayCounter> DecayCounter::generate_test_instances()
 {
-  std::list<DecayCounter>ls;
+  std::vector<DecayCounter>ls;
 
   DecayCounter counter;
   counter.val = 3.0;

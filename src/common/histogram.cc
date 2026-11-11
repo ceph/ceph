@@ -40,9 +40,9 @@ void pow2_hist_t::decode(ceph::buffer::list::const_iterator& p)
   DECODE_FINISH(p);
 }
 
-std::list<pow2_hist_t> pow2_hist_t::generate_test_instances()
+std::vector<pow2_hist_t> pow2_hist_t::generate_test_instances()
 {
-  std::list<pow2_hist_t> ls;
+  std::vector<pow2_hist_t> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().h.push_back(1);

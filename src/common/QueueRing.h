@@ -6,7 +6,7 @@
 
 #include "common/ceph_mutex.h"
 
-#include <list>
+#include <deque>
 #include <atomic>
 #include <vector>
 
@@ -15,7 +15,7 @@ class QueueRing {
   struct QueueBucket {
     ceph::mutex lock = ceph::make_mutex("QueueRing::QueueBucket::lock");
     ceph::condition_variable cond;
-    typename std::list<T> entries;
+    std::deque<T> entries;
 
     QueueBucket() {}
     QueueBucket(const QueueBucket& rhs) {

@@ -1016,10 +1016,8 @@ struct error_code;
 #if 0
       // DEBUG: verify _len
       unsigned len = 0;
-      for (std::list<ptr>::const_iterator it = _buffers.begin();
-	   it != _buffers.end();
-	   it++) {
-	len += (*it).length();
+      for (const auto& buffer : _buffers) {
+	len += buffer.length();
       }
 #ifdef __CEPH__
       ceph_assert(len == _len);

@@ -21,8 +21,8 @@ void client_t::dump(ceph::Formatter *f) const {
   f->dump_int("id", v);
 }
 
-std::list<client_t> client_t::generate_test_instances() {
-  std::list<client_t> ls;
+std::vector<client_t> client_t::generate_test_instances() {
+  std::vector<client_t> ls;
   ls.emplace_back();
   ls.push_back(client_t(1));
   ls.push_back(client_t(123));
