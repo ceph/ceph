@@ -597,6 +597,10 @@ def task(ctx, config):
     assert ret == 404
     assert out['Code'] == 'NoSuchBucket'
 
+    # TESTCASE 'bucket-stats7', 'bucket', 'stats', 'non-existent user', 'fails, user not found error'
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['bucket', 'info'], {'uid' : 'doesnotexist'})
+    assert ret == 404
+
     # reclaim it
     connection.delete_object(Bucket=bucket_name, Key='one')
 
