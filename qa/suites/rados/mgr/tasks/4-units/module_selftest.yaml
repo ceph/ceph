@@ -8,6 +8,7 @@ overrides:
       - Synthetic exception in shutdown
       - Synthetic exception in handle_command
       - Synthetic exception in notify
+      - Synthetic exception in notify_clog
       - Synthetic exception in config_notify
       - shutdown\(\) timed out
       - _qa_broken_module
