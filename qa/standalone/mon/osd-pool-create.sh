@@ -260,8 +260,9 @@ function TEST_erasure_code_pool() {
 # --m and CRUSH options given. This test creates km_crush with --k 2 --m 1,
 # --zone_failure_domain rack and --osd_failure_domain osd, which differ
 # from the default profile's, and expects profile km_crush-k2-m1 to have
-# crush-zone-failure-domain=rack and crush-failure-domain=osd. The pool can
-# then be deleted and created again with the same options.
+# crush-zone-failure-domain=rack and crush-failure-domain=osd. Deleting the
+# pool removes the profile. A profile of that name with the same contents,
+# set by hand, is then used as it is when the pool is created again.
 function TEST_erasure_code_pool_km_crush_params() {
     local dir=$1
     run_mon $dir a || return 1
@@ -276,11 +277,14 @@ function TEST_erasure_code_pool_km_crush_params() {
     ceph osd erasure-code-profile get $profile | tee $dir/profile.txt
     grep '^crush-failure-domain=osd$' $dir/profile.txt || return 1
     grep '^crush-zone-failure-domain=rack$' $dir/profile.txt || return 1
-    # the profile goes with the pool, and is made again for the new one
     ceph osd pool delete $poolname $poolname --yes-i-really-really-mean-it || return 1
+    ! ceph osd erasure-code-profile ls | grep -qx $profile || return 1
+    ceph osd erasure-code-profile set $profile $(cat $dir/profile.txt) || return 1
     ceph osd pool create $poolname --pool_type erasure --k 2 --m 1 \
         --pg_num 8 --pgp_num 8 \
         --zone_failure_domain rack --osd_failure_domain osd || return 1
+    ceph osd pool get $poolname erasure_code_profile | grep -x "erasure_code_profile: $profile" || return 1
+    ceph osd erasure-code-profile get $profile | diff $dir/profile.txt - || return 1
 }
 
 # osd pool create --pool_type erasure with CRUSH options but no --k or --m
