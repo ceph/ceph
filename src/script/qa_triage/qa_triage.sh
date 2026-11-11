@@ -55,8 +55,19 @@ else
         https://github.com/*) use_gh || true ;;
     esac
     if ! out=$(git -C "$checkout" pull -q --ff-only 2>&1); then
-        echo "qa_triage: could not bring $checkout up to date, so it runs as it is:" \
-             "${out##*$'\n'}" >&2
+        # Changes made in it and never shared hold it back: set aside, where git keeps
+        # them, so that it runs as everyone's does.
+        if [ -n "$(git -C "$checkout" status --porcelain)" ] &&
+            git -C "$checkout" stash push -q --include-untracked \
+                -m "qa_triage: changes never shared, set aside on $(date '+%F %R')" &&
+            out=$(git -C "$checkout" pull -q --ff-only 2>&1); then
+            echo "qa_triage: $checkout had changes made in it and never shared: they are" \
+                 "set aside, so that it is up to date. git -C $checkout stash list lists" \
+                 "them, and stash pop brings them back." >&2
+        else
+            echo "qa_triage: could not bring $checkout up to date, so it runs as it is:" \
+                 "${out##*$'\n'}" >&2
+        fi
     fi
 fi
 
