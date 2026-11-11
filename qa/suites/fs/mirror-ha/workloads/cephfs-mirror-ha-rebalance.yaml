@@ -11,7 +11,7 @@ tasks:
   - ceph-fuse: [client.0, client.1]
   - cephfs_test_runner:
       modules:
-        # Method paths only — loading the class would also run ~80 inherited
+        # Method paths only - loading the class would also run ~80 inherited
         # TestMirroring tests that assume a single mirror daemon.
         - tasks.cephfs.test_mirroring_rebalance.TestMirroringRebalance.test_initial_distribution_balanced
         - tasks.cephfs.test_mirroring_rebalance.TestMirroringRebalance.test_failover_then_rejoin_rebalances
