@@ -219,6 +219,7 @@ enum {
   l_osdc_core_hint_blocked,
   l_osdc_core_con_dead,
   l_osdc_core_con_close,
+  l_osdc_core_linger_resend,
 
   l_osdc_last,
 };
@@ -583,6 +584,10 @@ void Objecter::init()
     pcb.add_u64_counter(l_osdc_core_hint_blocked, "core_hint_blocked",
 			"Hints not followed, connecting to the OSD's cores "
 			"being blocked (after a connection to them timed out)");
+    pcb.add_u64_counter(l_osdc_core_linger_resend, "core_linger_resend",
+                        "Watches and notifies registered again, as the OSD core "
+                        "connection they were registered on went away or was "
+                        "no longer used");
     pcb.add_u64_counter(l_osdc_core_con_close, "core_con_close",
 			"Connections to OSD cores closed, no longer used with "
 			"objecter_use_osd_core_hints turned off");
@@ -837,6 +842,8 @@ void Objecter::_send_linger(LingerOp *info,
   // do not resend this; we will send a new op to reregister
   o->should_resend = false;
   o->ctx_budgeted = true;
+  // the OSD ties the watch (notify) to the connection this goes on
+  o->registers_linger = info->linger_id;
 
   if (info->register_tid) {
     // repeat send.  cancel old registration op, if any.
@@ -2470,14 +2477,9 @@ bool Objecter::_drop_core_con(OSDSession *s,
     _send_op(op);
   }
 
-  // the OSD drops the watches registered via that connection
-  for (auto& [linger_id, info] : s->linger_ops) {
-    if (dropped->rerouted.contains(info->target.actual_pgid)) {
-      info->get();
-      ceph_assert(lresend.count(linger_id) == 0);
-      lresend[linger_id] = info;
-    }
-  }
+  // the OSD drops the watches (notifies) registered on that connection,
+  // wherever their PGs' ops go now
+  _lingers_registered_on(s, core, lresend);
   return true;
 }
 
@@ -2583,6 +2585,13 @@ ConnectionRef Objecter::_op_route_or_hold(Op *op)
     break;
   }
 
+  if (op->registers_linger) {
+    // a watch (notify) registration: the OSD ties it to this connection
+    if (auto l = s->linger_ops.find(op->registers_linger);
+        l != s->linger_ops.end()) {
+      l->second->registered_core = out.core;
+    }
+  }
   if (out.con) {
     logger->inc(l_osdc_op_send_core);
     return out.con;
@@ -2982,6 +2991,9 @@ void Objecter::tick()
   // core connections to give up on: not answering a probe, or not
   // connected in time: (osd, connection, why)
   std::vector<std::tuple<int, ConnectionRef, drop_why_t>> giveup_core_cons;
+  // unused core connections with watches still registered on them, with
+  // objecter_use_osd_core_hints off: (osd, core)
+  std::vector<std::pair<int, uint32_t>> rewatch_cores;
   const auto now = ceph::coarse_mono_clock::now();
   const auto probe_now = ceph_clock_now();
 
@@ -3033,7 +3045,7 @@ void Objecter::tick()
 				      drop_why_t::connect_timeout);
       }
       if (!checked.unused.empty()) {
-	_close_unused_core_cons(s, checked.unused);
+	_close_unused_core_cons(s, checked.unused, rewatch_cores);
       }
     }
     // a fallback: holds drain mostly on replies (handle_osd_op_reply())
@@ -3111,10 +3123,11 @@ void Objecter::tick()
   }
 
   std::unique_lock<ceph::shared_mutex> wl;
-  if (!giveup_core_cons.empty()) {
+  if (!giveup_core_cons.empty() || !rewatch_cores.empty()) {
     rl.unlock();
     wl = std::unique_lock{rwlock};
     _give_up_core_cons(giveup_core_cons, wl);
+    _reregister_off_cores(rewatch_cores, wl);
   }
 
   // Make sure we don't reschedule if we wake up after shutdown
@@ -4389,6 +4402,8 @@ void Objecter::_session_linger_op_remove(OSDSession *from, LingerOp *op)
   }
 
   from->linger_ops.erase(op->linger_id);
+  // (a core of that session's OSD)
+  op->registered_core.reset();
   put_session(from);
   op->session = NULL;
 
@@ -6173,13 +6188,62 @@ void Objecter::handle_core_con_connect(Connection *con)
   }
 }
 
+void Objecter::_lingers_registered_on(OSDSession *s, uint32_t core,
+                                      map<uint64_t, LingerOp *>& lresend)
+{
+  // s->lock is locked
+  for (auto& [linger_id, info] : s->linger_ops) {
+    if (info->registered_core == core && !lresend.contains(linger_id)) {
+      ldout(cct, 10) << __func__ << " osd." << s->osd << " core " << core
+                     << ": linger " << linger_id << dendl;
+      info->get();
+      lresend[linger_id] = info;
+      logger->inc(l_osdc_core_linger_resend);
+    }
+  }
+}
+
+void Objecter::_reregister_off_cores(
+  const std::vector<std::pair<int, uint32_t>>& rewatch,
+  std::unique_lock<ceph::shared_mutex>& wl)
+{
+  // rwlock is locked unique
+  if (!initialized || rewatch.empty()) {
+    return;
+  }
+  map<uint64_t, LingerOp *> lresend;
+  for (const auto& [osd, core] : rewatch) {
+    auto si = osd_sessions.find(osd);
+    if (si == osd_sessions.end()) {
+      continue;
+    }
+    unique_lock sl(si->second->lock);
+    _lingers_registered_on(si->second, core, lresend);
+  }
+  // on their PGs' current routes: the core connection is then unused
+  _linger_ops_resend(lresend, wl);
+}
+
 void Objecter::_close_unused_core_cons(
   OSDSession *s,
-  const std::vector<std::pair<osdc::core_route::core_id_t, ConnectionRef>>& unused)
+  const std::vector<std::pair<osdc::core_route::core_id_t, ConnectionRef>>& unused,
+  std::vector<std::pair<int, uint32_t>>& rewatch)
 {
   // rwlock is locked
   // s->lock is locked
+  std::set<uint32_t> registered_on;
+  for (const auto& [linger_id, info] : s->linger_ops) {
+    if (info->registered_core) {
+      registered_on.insert(*info->registered_core);
+    }
+  }
   for (const auto& [core, con] : unused) {
+    if (registered_on.contains(core)) {
+      // closing it would drop its watches on the OSD: register them
+      // elsewhere first
+      rewatch.emplace_back(s->osd, core);
+      continue;
+    }
     auto dropped = s->core_routes.drop_core_con(
       con, osdc::core_route::drop_why_t::unused,
       ceph::coarse_mono_clock::now(), core_host_blocks);
