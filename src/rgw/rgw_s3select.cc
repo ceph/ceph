@@ -626,8 +626,17 @@ int RGWSelectObj_ObjStore_S3::handle_aws_cli_parameters(std::string& sql_query)
   extract_by_tag(m_s3select_query, "Expression", sql_query);
   extract_by_tag(m_s3select_query, "Enabled", m_enable_progress);
   size_t _qi = m_s3select_query.find("<" + input_tag + ">", 0);
-  size_t _qe = m_s3select_query.find("</" + input_tag + ">", _qi);
-  m_s3select_input = m_s3select_query.substr(_qi + input_tag.size() + 2, _qe - (_qi + input_tag.size() + 2));
+  if (_qi == std::string::npos) {
+    ldpp_dout(this, 5) << "s3select: missing <" << input_tag << "> tag" << dendl;
+    return -EINVAL;
+  }
+  size_t input_begin = _qi + input_tag.size() + 2;
+  size_t _qe = m_s3select_query.find("</" + input_tag + ">", input_begin);
+  if (_qe == std::string::npos || _qe < input_begin) {
+    ldpp_dout(this, 5) << "s3select: invalid </" << input_tag << "> tag" << dendl;
+    return -EINVAL;
+  }
+  m_s3select_input = m_s3select_query.substr(input_begin, _qe - input_begin);
   extract_by_tag(m_s3select_input, "FieldDelimiter", m_column_delimiter);
   extract_by_tag(m_s3select_input, "QuoteCharacter", m_quot);
   extract_by_tag(m_s3select_input, "RecordDelimiter", m_row_delimiter);
@@ -642,8 +651,17 @@ int RGWSelectObj_ObjStore_S3::handle_aws_cli_parameters(std::string& sql_query)
   extract_by_tag(m_s3select_input, "QuoteEscapeCharacter", m_escape_char);
   extract_by_tag(m_s3select_input, "CompressionType", m_compression_type);
   size_t _qo = m_s3select_query.find("<" + output_tag + ">", 0);
-  size_t _qs = m_s3select_query.find("</" + output_tag + ">", _qi);
-  m_s3select_output = m_s3select_query.substr(_qo + output_tag.size() + 2, _qs - (_qo + output_tag.size() + 2));
+  if (_qo == std::string::npos) {
+    ldpp_dout(this, 5) << "s3select: missing <" << output_tag << "> tag" << dendl;
+    return -EINVAL;
+  }
+  size_t output_begin = _qo + output_tag.size() + 2;
+  size_t _qs = m_s3select_query.find("</" + output_tag + ">", output_begin);
+  if (_qs == std::string::npos || _qs < output_begin) {
+    ldpp_dout(this, 5) << "s3select: invalid </" << output_tag << "> tag" << dendl;
+    return -EINVAL;
+  }
+  m_s3select_output = m_s3select_query.substr(output_begin, _qs - output_begin);
   extract_by_tag(m_s3select_output, "FieldDelimiter", output_column_delimiter);
   extract_by_tag(m_s3select_output, "QuoteCharacter", output_quot);
   extract_by_tag(m_s3select_output, "QuoteEscapeCharacter", output_escape_char);
@@ -749,6 +767,10 @@ void RGWSelectObj_ObjStore_S3::execute(optional_yield y)
   static constexpr uint8_t parquet_magicE[4] = {'P', 'A', 'R', 'E'};
   status = get_params(y);
   if (status < 0) {
+    if (!m_aws_response_handler.is_set()) {
+      m_aws_response_handler.set(s, this, fp_chunked_transfer_encoding);
+    }
+    m_aws_response_handler.send_error_response_rgw_formatter("invalid s3select request");
     op_ret = status;
     return;
   }
