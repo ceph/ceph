@@ -65,8 +65,15 @@ function TEST_stretch_set_replicated_pool() {
     test "$(pool_field rep size)" = 2 || return 1
 }
 
-# The bucket counts cannot exceed the zones the rule spans, and the refusal
-# does not suggest an override that would not help
+# osd pool stretch set <pool> <count> <target> <barrier> <rule> <size>
+# <min_size> makes a replicated pool an individual stretch pool. Its
+# peering_crush_bucket_count and peering_crush_bucket_target cannot be more
+# than the zones of type <barrier> that the rule spans. This test gives
+# replicated pool rep, on replicated_rule, whose root holds zones iris and
+# pze, a count of 3 and then a target of 3: both are refused, with and
+# without --yes-i-really-mean-it, and rep does not become a stretch pool.
+# A size of 5, which 2 zones do not divide, is then accepted, as an
+# individual stretch pool records no zones.
 function TEST_stretch_set_counts_above_zones() {
     local dir=$1
     setup_zones $dir || return 1

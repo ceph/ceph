@@ -27,8 +27,9 @@ function run() {
 
 # Bring up the 5-mon connectivity cluster with $2 OSDs split evenly across two
 # data zones (iris, pze), locate the data mons, put mon e in the arbiter zone
-# and drop the default host bucket.  Shared by the replicated and EC
-# uneven-weight tests, which differ only in how the stretch pool is created.
+# and drop the default host bucket.  Shared by the replicated and erasure
+# coded uneven-weight tests, which differ only in how the pool that sets the
+# cluster stretch flags is created.
 _setup_stretch_uneven_cluster() {
     local dir=$1
     local num_osds=$2
@@ -99,8 +100,9 @@ _setup_stretch_uneven_cluster() {
     ceph osd crush remove $hostname || return 1
 }
 
-# Drive the stretch-mode health checks that are identical for both pools:
-# the "wrong number of buckets" warning and the weight-imbalance warning.
+# Drive the health checks of the cluster stretch flags that are the same for
+# both pools: the "wrong number of buckets" warning and the weight-imbalance
+# warning.
 _run_stretch_uneven_weight_checks() {
     local dir=$1
     local weight=0.09000
@@ -174,6 +176,13 @@ EOF
     _run_stretch_uneven_weight_checks $dir || return 1
 }
 
+# The health warnings of the cluster stretch flags when an erasure coded
+# pool over two zones, not mon enable_stretch_mode, set them. On 6 OSDs, 3
+# in each of the zones iris and pze, pool stretched_rbdpool is created with
+# --num_zones 2 --k 2 --m 1. A third zone bucket raises
+# INCORRECT_NUM_BUCKETS_STRETCH_MODE until it is removed. Zone weights that
+# differ a little raise nothing, and weights further apart raise
+# STRETCH_MODE_BUCKET_WEIGHT_IMBALANCE until they are evened out again.
 TEST_ec_stretch_cluster_uneven_crush_weights() {
     local dir=$1
     _setup_stretch_uneven_cluster $dir 6 || return 1

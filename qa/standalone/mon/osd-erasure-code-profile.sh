@@ -65,7 +65,13 @@ function TEST_set() {
     ceph osd erasure-code-profile rm $profile # cleanup
 }
 
-# Changing a profile that a pool uses needs --yes-i-really-mean-it
+# osd erasure-code-profile set changes an existing profile without flags
+# while no pool uses it, and needs --yes-i-really-mean-it once one does.
+# This test changes myprofile from k=2 to k=3, creates erasure coded pool
+# poolname on it and then sets k=4. That is refused, with a message naming
+# poolname and --yes-i-really-mean-it, and also with --force, and the
+# profile keeps k=3; with --yes-i-really-mean-it it gets k=4. The default
+# profile, which no pool uses, is changed without flags.
 function TEST_set_in_use() {
     local dir=$1
 
@@ -126,9 +132,15 @@ function TEST_rm() {
     ceph osd erasure-code-profile rm $profile # cleanup
 }
 
-# A pool created while the deletion of a profile's last pool is pending must
-# not get the profile, or the rule, that the deletion removes: the monitor
-# would crash computing the new pool's PGs with a rule that is gone
+# When a pool is deleted, its erasure code profile and its rule are removed
+# too if no other pool uses them. A pool created while that deletion is
+# pending must not take the profile or the rule, or the monitor would crash
+# computing the new pool's PGs with a rule that is gone. This test deletes
+# pool a, the only pool on profile p21 and rule r21, and one second later,
+# while a paxos_propose_interval of 5 seconds keeps the deletion pending,
+# creates pool b on p21 and r21. Either b is created and p21 is kept, or
+# the create is refused as p21 or r21 no longer exists; either way the
+# monitor still answers.
 function TEST_create_while_profile_removed() {
     local dir=$1
 
@@ -155,9 +167,13 @@ function TEST_create_while_profile_removed() {
     fi
 }
 
-# Deleting an erasure coded pool deletes its profile once no pool uses it,
-# never the default profile, and also when the profile's pools are deleted
-# in one epoch
+# Deleting an erasure coded pool removes its erasure code profile once no
+# other pool uses it, but never the default profile. This test deletes
+# pools a and b, both on profile p21: p21 stays after the first and goes
+# with the second. Deleting pool d, created with no profile, leaves the
+# default profile. Pools c1 and c2, on q21, are deleted at the same time,
+# with a paxos_propose_interval of 5 seconds to put both deletions in one
+# OSDMap update, and q21 goes too.
 function TEST_profile_removed_with_last_pool() {
     local dir=$1
 
@@ -312,9 +328,15 @@ function TEST_invalid_crush_failure_domain() {
     ! ceph osd erasure-code-profile set $profile k=4 m=2 crush-failure-domain=$crush_failure_domain 2>&1 || return 1
 }
 
-# A pool created while the deletion of the last pool of the rule it would
-# reuse by name is pending must not get that rule: the monitor would crash
-# computing the new pool's PGs with a rule that is gone
+# osd pool create gives an erasure coded pool the rule named after the pool
+# if there is one, and otherwise makes it from the pool's profile. A pool
+# created while a pending update removes that rule with its last pool must
+# not get it, or the monitor would crash computing the new pool's PGs with
+# a rule that is gone. This test creates pool a on profile prof, which
+# gives it rule a, and renames the pool z; pool keep, also on prof, keeps
+# the profile. It deletes z and one second later, while a
+# paxos_propose_interval of 5 seconds keeps the deletion pending, creates a
+# new pool a on prof. The create succeeds, and the new pool's rule exists.
 function TEST_create_while_rule_of_its_name_removed() {
     local dir=$1
 
@@ -337,8 +359,12 @@ function TEST_create_while_rule_of_its_name_removed() {
     ceph osd crush rule ls | grep -qx "$(awk '{print $2}' $dir/rule)" || return 1
 }
 
-# A profile set again while its removal with its last pool is pending exists
-# afterwards
+# osd erasure-code-profile set, run while a pending update removes the
+# profile with its last pool, waits for that update and then sets the
+# profile. This test deletes pool a, the only pool on profile prof, and one
+# second later, while a paxos_propose_interval of 5 seconds keeps the
+# deletion pending, sets prof again with the same values. prof exists
+# afterwards.
 function TEST_profile_set_while_removed() {
     local dir=$1
 

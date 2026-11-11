@@ -55,6 +55,10 @@ function TEST_crush_rule_create_simple() {
     ceph osd crush rule rm $rule || return 1
 }
 
+# osd crush rule create-replicated replies with the id of the rule it
+# creates. This test creates rep0 (root default, failure domain host) and
+# expects the reply "created rule rep0 at <id>", with the id that
+# osd crush rule dump rep0 shows.
 function TEST_crush_rule_create_replicated_reports_id() {
     local dir=$1
 
