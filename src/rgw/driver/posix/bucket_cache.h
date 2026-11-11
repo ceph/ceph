@@ -145,8 +145,27 @@ struct DirStat {
   bool operator==(const DirStat&) const = default;
 };
 
+/* How near the clock a directory's mtime may be when its stat is
+ * recorded, and the record still be trusted.  A filesystem stamping times
+ * from the coarse clock -- tmpfs, and xfs and ext4 before Linux 6.13's
+ * fine-grained timestamps -- gives every change within one tick (1 ms at
+ * HZ=1000) the same mtime, so a change landing in the tick the stat was
+ * recorded in moves nothing.  Generous, to cover coarser clocks. */
+inline constexpr int64_t RACY_RECORD_NS = 10'000'000;
+
+inline int64_t realtime_ns() {
+  return std::chrono::duration_cast<std::chrono::nanoseconds>(
+    ceph::real_clock::now().time_since_epoch()).count();
+}
+
 struct DirRecord {
   DirStat st;
+  /* recorded by a listing within RACY_RECORD_NS of its mtime (or its
+   * .versions/'s):  a change since may not have moved it, so the next check
+   * reads the directory, as git rereads a racily clean index entry.  A
+   * record of RGW's own change is never racy:  a change in its tick is one
+   * landing beside RGW's, which the provisional mark covers. */
+  bool racy{false};
   /* false after RGW's own change:  the next check takes the directory's
    * stat as its record without reading it */
   bool baseline{true};
@@ -154,6 +173,19 @@ struct DirRecord {
    * cleared by the read;  once older than the provisional interval, the
    * next check reads the directory, for what landed beside RGW's change */
   std::optional<int64_t> provisional_ns;
+
+  /* the record's stat, taken by a listing:  racy as of now, or not */
+  void set(const DirStat& s) {
+    st = s;
+    const int64_t now = realtime_ns();
+    racy = ((now - s.mtime_ns) < RACY_RECORD_NS) ||
+      (s.vmtime_ns && ((now - s.vmtime_ns) < RACY_RECORD_NS));
+  }
+  /* the record's stat, taken for RGW's own change */
+  void set_own(const DirStat& s) {
+    st = s;
+    racy = false;
+  }
 };
 
 template <typename D, typename B,
@@ -811,7 +843,7 @@ public:
     explicit Recorder(BucketCacheEntry<D, B, YP>* b) : b(b) {}
     void directory(const std::string& prefix, const DirStat& st) override {
       auto& r = b->dirs[prefix];
-      r.st = st;
+      r.set(st);
       r.baseline = true;
       r.provisional_ns.reset();
     }
@@ -1139,7 +1171,7 @@ public:
 	  << "trusted" << dendl;
 	continue;
       }
-      const bool moved = r.baseline && !(st == r.st);
+      const bool moved = r.baseline && (r.racy || !(st == r.st));
       const bool expired = r.provisional_ns &&
 	((now - *r.provisional_ns) >= prov_ns);
       if (moved || expired) {
@@ -1151,7 +1183,7 @@ public:
 	lock_guard lk{b->mtx};
 	if (auto it = b->dirs.find(prefix);
 	    (it != b->dirs.end()) && !it->second.baseline) {
-	  it->second.st = st;
+	  it->second.set_own(st);
 	  it->second.baseline = true;
 	}
       }
@@ -1310,7 +1342,7 @@ public:
       }
     }
     auto& r = b->dirs[prefix];
-    r.st = st;
+    r.set(st);
     r.baseline = true;
     r.provisional_ns.reset();
     txn->commit();
@@ -1633,7 +1665,7 @@ public:
       DirStat st;
       if (!b->fs_root.empty() &&
 	  (rv->stat_dir_at(nullptr, b->fs_root, b->fs_versions, prefix, st) == 0)) {
-	r.st = st;
+	r.set_own(st);
 	r.baseline = true;
       } else {
 	r.baseline = false;

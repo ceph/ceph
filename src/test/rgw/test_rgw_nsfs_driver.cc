@@ -8400,6 +8400,10 @@ TEST_F(NSFSBucketTest, AnRGWWriteAfterAListingRebuildsNothing)
   ConfSetting every("rgw_nsfs_listing_entry_interval", "0");
   put_object(driver.get(), bucket.get(), env->dpp, acl_owner, "first", "1",
 	     "text/plain");
+  /* past RACY_RECORD_NS, so the fill's record of the directory is not
+   * racy:  a racy one is read again at the next listing, which is not what
+   * this test is about */
+  std::this_thread::sleep_for(std::chrono::milliseconds(20));
   ASSERT_TRUE(listed(bucket.get(), env->dpp).contains("first"));
 
   auto* bc = driver->get_bucket_cache();
@@ -8579,6 +8583,29 @@ TEST_F(NSFSBucketTest, AStoredSyntheticETagFollowsAnOverwriteInPlace)
   EXPECT_TRUE(after.starts_with("mtime-")) << after;
   EXPECT_EQ(etag("syn-copy"), copied)
     << "an overwrite of the source changed its copy's ETag";
+}
+
+/* A filesystem stamping times from the coarse clock gives a change in the
+ * same tick as a recorded stat the same mtime, so the change moves nothing.
+ * Simulated on any filesystem by putting the directory's mtime back after
+ * the change:  a directory recorded racily -- within RACY_RECORD_NS of its
+ * mtime -- is read at the next listing whatever its stat says. */
+TEST_F(NSFSBucketTest, ARacilyRecordedDirectoryIsReadAgain)
+{
+  put_object(driver.get(), bucket.get(), env->dpp, acl_owner, "seen", "seen",
+	     "text/plain");
+  /* listed at once:  the fill records the directory within the margin */
+  ASSERT_TRUE(listed(bucket.get(), env->dpp).contains("seen"));
+
+  struct stat st{};
+  ASSERT_EQ(::stat(bucket_path().c_str(), &st), 0);
+  ASSERT_TRUE(sf::remove(bucket_path() / "seen"));
+  const struct timespec times[2] = {st.st_atim, st.st_mtim};
+  ASSERT_EQ(::utimensat(AT_FDCWD, bucket_path().c_str(), times, 0), 0)
+    << "putting the directory's mtime back, as a coarse clock would leave it";
+
+  EXPECT_FALSE(listed(bucket.get(), env->dpp).contains("seen"))
+    << "a racily recorded directory was trusted";
 }
 
 TEST_F(NSFSBucketTest, WithRevalidationOffAListingTrustsItsFill)
