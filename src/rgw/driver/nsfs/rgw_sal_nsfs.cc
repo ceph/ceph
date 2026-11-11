@@ -15246,7 +15246,8 @@ int NSFSObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, 
     if (nsfs_non_md5_etag_into_attrs(dpp, stx, get_attrs())) {
       const int eret = nsfs_record_non_md5_etag(
 	dpp, fd, stx, xattr_strategy(),
-	ent->get_identity(), driver->etag_as_gateway_injected(), y);
+	ent->get_identity(), driver->etag_as_gateway_injected(b->get_name()),
+	y);
       if (eret < 0) {
 	ldpp_dout_fmt(dpp, 0, "ERROR: could not record the etag on {}: {};  "
 			      "the object would carry a different etag than "
@@ -21844,14 +21845,27 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
      * discarded, so under impersonation it fails on a file the
      * gateway does not own and the object keeps the md5 etag
      * write_attrs() put there before the link.  The suite asserts both
-     * polarities against one build */
+     * polarities against one build.  In one bucket, since the suite runs
+     * in parallel */
     auto it = params.find("enable");
-    if (it == params.end()) {
+    auto b_it = params.find("bucket");
+    if ((it == params.end()) || (b_it == params.end()) ||
+	b_it->second.empty()) {
       return -EINVAL;
     }
-    inject_etag_as_gateway = (it->second == "true");
+    const bool on = (it->second == "true");
+    {
+      std::lock_guard l{inject_etag_as_gateway_lock};
+      if (on) {
+	inject_etag_as_gateway_buckets.insert(b_it->second);
+      } else {
+	inject_etag_as_gateway_buckets.erase(b_it->second);
+      }
+      inject_etag_as_gateway_armed = !inject_etag_as_gateway_buckets.empty();
+    }
     if (out) {
-      (*out)["enabled"] = inject_etag_as_gateway ? "true" : "false";
+      (*out)["enabled"] = on ? "true" : "false";
+      (*out)["bucket"] = b_it->second;
     }
     return 0;
   }

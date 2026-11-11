@@ -1044,8 +1044,12 @@ protected:
   /* write the non-md5 etag the way the defect did -- by the calling
    * thread, with the result discarded -- so a suite can watch the etag
    * the client is given diverge from the one recorded on disk, rather
-   * than deleting the fix and rebuilding to prove the test can fail */
-  bool inject_etag_as_gateway{false};
+   * than deleting the fix and rebuilding to prove the test can fail.
+   * By bucket, since the suite runs in parallel */
+  std::set<std::string> inject_etag_as_gateway_buckets;
+  std::atomic<bool> inject_etag_as_gateway_armed{false};
+  ceph::mutex inject_etag_as_gateway_lock =
+      ceph::make_mutex("NSFSDriver::inject_etag_as_gateway_lock");
   /* read a denial in a delete the way the defect did -- as an absent
    * object -- so a test can watch a denied delete answer success, or
    * -EINVAL, rather than deleting the fix to prove it can fail.
@@ -1939,7 +1943,13 @@ public:
     }
   }
   bool skip_reclone_injected() const { return inject_skip_reclone; }
-  bool etag_as_gateway_injected() const { return inject_etag_as_gateway; }
+  bool etag_as_gateway_injected(const std::string& bucket) {
+    if (!inject_etag_as_gateway_armed.load(std::memory_order_relaxed)) {
+      return false;
+    }
+    std::lock_guard l{inject_etag_as_gateway_lock};
+    return inject_etag_as_gateway_buckets.contains(bucket);
+  }
   bool denial_as_absence_injected() const { return inject_denial_as_absence; }
   bool unresolved_as_gateway_injected(const rgw_owner& who) {
     std::lock_guard l{unresolved_as_gateway_lock};
