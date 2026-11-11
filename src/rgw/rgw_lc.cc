@@ -1941,8 +1941,15 @@ LCObjsLister::obj_iter_type LCObjsLister::skip_to_the_next_key (obj_iter_type fr
 
     // we reached the end of the current list results batch;
     // need to fetch the next page and start over;
-    if (!list_results.is_truncated || fetch(y) < 0 ||
-        list_results.objs.empty()) {
+    if (!list_results.is_truncated) {
+      return list_results.objs.end();
+    }
+    int ret = fetch(y);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: list_op returned ret=" << ret << dendl;
+      return list_results.objs.end();
+    }
+    if (list_results.objs.empty()) {
       return list_results.objs.end();
     }
     i = obj_iter;
