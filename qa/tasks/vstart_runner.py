@@ -879,6 +879,7 @@ class LocalCephCluster(tasks.cephfs.filesystem.CephClusterBase):
         service_id = {
             'mon': 'a',
             'mds': 'a',
+            'mgr': 'x',
             'osd': '0'
         }[service_type]
 
