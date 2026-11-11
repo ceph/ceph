@@ -77,9 +77,11 @@ function assert_pool_rule() {
 # renamed renamed2, is deleted. num_zones 1 refuses --replica 200, needs
 # --yes-i-really-mean-it for --replica 1 and is refused while nosizechange is
 # set; then the pool is on replicated_rule with size 3 and min_size 2, and no
-# peering zones. An erasure coded pool of k=2 m=1 is refused num_zones 2
-# until allow_ec_optimizations is set; then it gets <pool>-stretch, size 6,
-# and with num_zones 1 <pool>-single-zone, which has no step choosing zones.
+# peering zones, and num_zones 1 again changes nothing; replicated_rule has
+# no step choosing zones. An erasure coded pool of k=2 m=1 is refused
+# num_zones 2 until allow_ec_optimizations is set; then it gets
+# <pool>-stretch, size 6, and with num_zones 1 <pool>-single-zone, which has
+# no step choosing zones either.
 function TEST_pool_replica_crush_rule_name() {
     local dir=$1
     local poolname=replica_name_test
@@ -197,8 +199,12 @@ function TEST_pool_replica_crush_rule_name() {
     jq -e --arg pool "$poolname" '.pools[] | select(.pool_name == $pool) |
         .peering_crush_bucket_count == 0 and .peering_crush_bucket_target == 0' \
         "$dir/osd.json" || return 1
+    # num_zones 1 again changes nothing, and replicated_rule chooses no zones
     ceph osd pool set "$poolname" num_zones 1 || return 1
+    ceph osd pool get "$poolname" all --format json > "$dir/pool-again.json" || return 1
+    cmp "$dir/pool.json" "$dir/pool-again.json" || return 1
     ceph osd crush rule dump replicated_rule --format json > "$dir/rule.json" || return 1
+    jq -e '[.steps[] | select(.type == "zone")] | length == 0' "$dir/rule.json" || return 1
 
     local ec_poolname=replica_ec_transition_test
     ceph config set global osd_pool_default_flag_ec_optimizations false || return 1
@@ -278,9 +284,10 @@ function TEST_pool_size_resets_min_size() {
 # --replica, --crush_rule, --zone_failure_domain, --osd_failure_domain,
 # --root, --class and --no-class are options of osd pool set <pool>
 # num_zones. Any other variable would ignore them, so they are refused with
-# it: osd pool set single size 2 is refused with each of them, and with
-# --min_size, which osd pool set does not take, and the size is unchanged.
-# osd pool set single num_zones 1 --replica 2 --root default is accepted.
+# it: osd pool set single size 2 is refused with each of them, naming the
+# option, and the size is unchanged. --yes-i-really-mean-it, which any
+# variable may take, is accepted with size 2. osd pool set single num_zones
+# 1 --replica 2 --root default is accepted.
 function TEST_pool_set_num_zones_options_only() {
     local dir=$1
 
@@ -296,8 +303,9 @@ function TEST_pool_set_num_zones_options_only() {
         ! ceph osd pool set single size 2 $opt > "$dir/error.txt" 2>&1 || return 1
         grep "only for 'ceph osd pool set <pool> num_zones'" "$dir/error.txt" || return 1
     done
-    ! ceph osd pool set single size 2 --min_size 1 > "$dir/error.txt" 2>&1 || return 1
     test "$(ceph osd pool get single size | awk '{print $2}')" = $size || return 1
+    ceph osd pool set single size 2 --yes-i-really-mean-it || return 1
+    test "$(ceph osd pool get single size | awk '{print $2}')" = 2 || return 1
     ceph osd pool set single num_zones 1 --replica 2 --root default || return 1
 }
 
