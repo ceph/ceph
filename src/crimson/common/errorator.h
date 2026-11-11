@@ -1286,6 +1286,7 @@ namespace ct_error {
   using einprogress = ct_error_code<static_cast<int>(std::errc::operation_in_progress)>;
   using enametoolong = ct_error_code<static_cast<int>(std::errc::filename_too_long)>;
   using eexist = ct_error_code<static_cast<int>(std::errc::file_exists)>;
+  using etime = ct_error_code<ETIME>;
   using edquot = ct_error_code<int(122)>;
   constexpr int cmp_fail_error_value = 4095;
   using cmp_fail = ct_error_code<int(cmp_fail_error_value)>;

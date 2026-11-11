@@ -59,7 +59,8 @@ class OpsExecuter {
     crimson::ct_error::operation_not_supported,
     crimson::ct_error::input_output_error,
     crimson::ct_error::value_too_large,
-    crimson::ct_error::file_too_large>;
+    crimson::ct_error::file_too_large,
+    crimson::ct_error::etime>;
   using read_errorator = PGBackend::read_errorator;
   using write_ertr = PGBackend::write_ertr;
   using get_attr_errorator = PGBackend::get_attr_errorator;
@@ -323,6 +324,7 @@ private:
   call_errorator::future<> do_assert_ver(
     OSDOp& osd_op,
     const ObjectState& os);
+  call_errorator::future<> do_assert_time_range(OSDOp& osd_op);
 
   using list_snaps_ertr = read_errorator::extend<
     crimson::ct_error::invarg>;
