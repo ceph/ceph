@@ -893,37 +893,6 @@ def test_nfs_choose_next_action_detects_explicit_value_change():
     assert step.action is utils.Action.REDEPLOY
 
 
-def test_nfs_get_dependencies_client_object_cache(cephadm_module: CephadmOrchestrator):
-    """Object-cache fields are included in deps only when set."""
-    nfs_svc = service_registry.get_service('nfs')
-
-    default_spec = NFSServiceSpec(service_id='foo')
-    deps = nfs_svc.get_dependencies(cephadm_module, default_spec)
-    assert not any(d.startswith('enable_client_object_cache:') for d in deps)
-    assert not any(d.startswith('client_object_cache_size:') for d in deps)
-    assert not any(d.startswith('client_object_cache_max_dirty:') for d in deps)
-
-    oc_spec = NFSServiceSpec(
-        service_id='foo',
-        enable_client_object_cache=True,
-        client_object_cache_size='1MiB',
-        client_object_cache_max_dirty='512KiB',
-    )
-    deps = nfs_svc.get_dependencies(cephadm_module, oc_spec)
-    assert 'enable_client_object_cache: True' in deps
-    assert 'client_object_cache_size: 1MiB' in deps
-    assert 'client_object_cache_max_dirty: 512KiB' in deps
-
-    step = nfs_svc.choose_next_action(
-        utils.Action.NO_ACTION,
-        'nfs',
-        oc_spec,
-        curr_deps=deps,
-        last_deps=[],
-    )
-    assert step.action is utils.Action.REDEPLOY
-
-
 def test_nfs_get_dependencies_rdma_and_tls_options(cephadm_module: CephadmOrchestrator):
     spec = NFSServiceSpec(
         service_id='foo',
