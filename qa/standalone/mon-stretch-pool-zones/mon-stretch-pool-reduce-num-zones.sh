@@ -358,8 +358,8 @@ function TEST_disable_stretch_mode_zone_lost() {
 # each PG's first zone, the zone of its first 3 shards, which may be the
 # zone lost next. data0, an erasure coded pool of k=2 m=1 with 3 shards in
 # each of dc1 and dc2, is moved to one zone, and then dc2's monitor and
-# OSDs are killed. Once dc2 is back the PGs go clean and the objects can
-# be read.
+# OSDs are killed. The PGs whose first zone is dc2 wait for it, inactive.
+# Once dc2 is back the PGs go clean and the objects can be read.
 function TEST_one_zone_then_lose_and_restore() {
     local dir=$1
     local -x CEPH_ARGS="$CEPH_ARGS"
@@ -367,7 +367,7 @@ function TEST_one_zone_then_lose_and_restore() {
     ceph osd pool set data0 num_zones 1 --yes-i-really-mean-it || return 1
     test "$(pool_field data0 num_zones)" = 1 || return 1
     kill_dc2 $dir || return 1
-    settled_inactive_pgs data0 || return 1
+    test "$(settled_inactive_pgs data0)" -gt 0 || return 1
     restore_dc2 $dir || return 1
     wait_for_clean || return 1
     check_objects $dir data0 old 20 || return 1
