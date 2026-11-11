@@ -46,6 +46,10 @@ public:
   /// Remove pgid mapping
   seastar::future<> remove_pg_mapping(spg_t pgid);
 
+  /// Record pgid's current role, so later placements see up to date counts.
+  /// The pg itself stays on its core.
+  seastar::future<> set_pg_primary(spg_t pgid, bool is_primary);
+
   size_t get_num_pgs() const { return pg_to_core.size(); }
 
   seastar::future<> dump_store_shards(Formatter *f) const;
