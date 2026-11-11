@@ -627,6 +627,7 @@ TEST_F(LCObjsListerTests, BaseCase_1Obj_3Vers) {
 
     ASSERT_FALSE(l.next(yield));
     ASSERT_FALSE(l.get_obj(&e));
+    EXPECT_FALSE(l.stopped_mid_object());
   }, rethrow);
   io.run();
 }
@@ -1116,6 +1117,7 @@ TEST_F(LCObjsListerTests, ListingErrorOnNextPage) {
 
     ASSERT_FALSE(l.next(yield));
     ASSERT_FALSE(l.get_obj(&e));
+    EXPECT_TRUE(l.stopped_mid_object());
   }, rethrow);
   io.run();
 }
@@ -1140,6 +1142,37 @@ TEST_F(LCObjsListerTests, ListingErrorWhileSkipping) {
     rgw_bucket_dir_entry e;
     ASSERT_FALSE(l.next(yield));
     ASSERT_FALSE(l.get_obj(&e));
+    EXPECT_FALSE(l.stopped_mid_object());
+  }, rethrow);
+  io.run();
+}
+
+TEST_F(LCObjsListerTests, ListingErrorWhileSkippingNextObject) {
+  boost::asio::io_context io;
+  boost::asio::spawn(io, [&](boost::asio::yield_context yield) {
+    FakeBucketLister fbl;
+    fbl.pages = {
+      {
+        .objs = {
+          make_entry("objA", "cur", curr_flags),
+          make_entry("objA", "v1", non_curr_flags),
+          make_entry("objB", "v0", non_curr_flags),
+        },
+        .truncated = true
+      },
+      { .ret = -ETIMEDOUT }
+    };
+    LCObjsLister l(&fbl, cct.get());
+    ASSERT_EQ(l.init(yield), 0);
+
+    rgw_bucket_dir_entry e;
+    ASSERT_TRUE(l.next(yield));
+    ASSERT_TRUE(l.get_obj(&e));
+    EXPECT_EQ(e.key.instance, "v1");
+
+    // objA was listed in full before the failure
+    ASSERT_FALSE(l.next(yield));
+    EXPECT_FALSE(l.stopped_mid_object());
   }, rethrow);
   io.run();
 }
@@ -1163,6 +1196,7 @@ TEST_F(LCObjsListerTests, EmptyPageAfterTruncatedPage) {
     rgw_bucket_dir_entry e;
     ASSERT_FALSE(l.next(yield));
     ASSERT_FALSE(l.get_obj(&e));
+    EXPECT_TRUE(l.stopped_mid_object());
   }, rethrow);
   io.run();
 }

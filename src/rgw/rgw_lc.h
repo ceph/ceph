@@ -622,6 +622,7 @@ class LCObjsLister {
   uint64_t num_noncurrent{0};
   int64_t delay_ms;
   int64_t page_index{-1};
+  bool stopped_mid_obj{false};
   std::string skipped_key_name;
 
   const uint64_t list_count;
@@ -656,6 +657,10 @@ class LCObjsLister {
   // the object whose remaining versions the last next() skipped; the
   // versions of it that were already returned must not be processed either
   const std::string& skipped_key() const noexcept { return skipped_key_name; }
+
+  // true if the listing stopped at a failed or empty page while the
+  // current object may have more versions on the next page
+  bool stopped_mid_object() const noexcept { return stopped_mid_obj; }
 
   uint64_t get_entry_pos() const noexcept {
     return (page_index * list_count) + (obj_iter - list_results.objs.begin());

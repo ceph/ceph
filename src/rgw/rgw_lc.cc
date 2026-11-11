@@ -1976,11 +1976,13 @@ bool LCObjsLister::next(boost::asio::yield_context y) {
       int ret = fetch(y);
       if (ret < 0) {
         ldpp_dout(dpp, 0) << "ERROR: list_op returned ret=" << ret << dendl;
+        stopped_mid_obj = true;
         return false;
       }
     }
     delay();
     if (obj_iter == list_results.objs.end()) {
+      stopped_mid_obj = true;
       return false;
     }
   }
@@ -2375,17 +2377,20 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
       key_group.clear();
     };
 
-    // drop the queued versions of an object the lister skipped; a group
-    // already flushed at the 1000-version cap can't be recalled
-    auto drop_skipped_key_group = [&] {
-      if (key_group.empty() ||
-          ol.skipped_key() != key_group.front().obj.key.name) {
-        return;
-      }
+    auto drop_key_group = [&] {
       for (size_t i = 0; i < key_group.size(); ++i) {
         batch_counters.decrement_pending();
       }
       key_group.clear();
+    };
+
+    // drop the queued versions of an object the lister skipped; a group
+    // already flushed at the 1000-version cap can't be recalled
+    auto drop_skipped_key_group = [&] {
+      if (!key_group.empty() &&
+          ol.skipped_key() == key_group.front().obj.key.name) {
+        drop_key_group();
+      }
     };
 
     rgw_bucket_dir_entry e;
@@ -2428,12 +2433,19 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
 	  ldpp_dout(this, 5) << __func__ << " interval budget EXPIRED worker="
 			     << worker->ix << " bucket=" << bucket_name
 			     << dendl;
+	  // the rest of this object is unchecked; the next run lists it again
+	  if (ol.next_key_name() == obj.key.name) {
+	    drop_key_group();
+	  }
 	  flush_key_group();
 	  return 0;
 	}
       }
     }
     drop_skipped_key_group();
+    if (ol.stopped_mid_object()) {
+      drop_key_group();
+    }
     flush_key_group();
   }
 
