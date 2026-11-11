@@ -3939,6 +3939,21 @@ Then run the following:
         # osdspec_needs_apply() only compares timestamps and would skip when inventory did not change.
         return self.osd_service.create_from_spec(drive_group, force_apply=True)
 
+    @handle_orch_error
+    def explain_osdspecs(self,
+                         service_name: Optional[str] = None,
+                         osdspecs: Optional[List[DriveGroupSpec]] = None,
+                         hosts: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+        if osdspecs is None:
+            osdspecs = [cast(DriveGroupSpec, spec)
+                        for name, spec in self.spec_store.active_specs.items()
+                        if spec.service_type == 'osd'
+                        and (service_name is None or name == service_name)]
+            if service_name and not osdspecs:
+                raise OrchestratorError(f'No OSD spec named {service_name} found')
+        return [self.osd_service.explain_osdspec(spec, hosts)
+                for spec in sorted(osdspecs, key=lambda s: s.service_name())]
+
     def _preview_osdspecs(self,
                           osdspecs: Optional[List[DriveGroupSpec]] = None
                           ) -> dict:

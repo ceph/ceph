@@ -7,6 +7,7 @@ from typing import List, Dict, Any, Set, Tuple, cast, Optional, TYPE_CHECKING
 from ceph.deployment import translate
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.drive_selection import DriveSelection
+from ceph.deployment.drive_selection.explain import explain_drive_selection
 from ceph.deployment.inventory import Device
 from ceph.utils import datetime_to_str, str_to_datetime
 
@@ -431,6 +432,79 @@ class OSDService(CephService):
                                         'host': host,
                                         'notes': notes})
         return ret_all
+
+    def explain_osdspec(self, spec: DriveGroupSpec,
+                        hosts: Optional[List[str]] = None) -> Dict[str, Any]:
+        """
+        Explain, for each host, whether the spec applies to it and which
+        devices it selects, with the reason why each other device is not
+        selected. Only uses the cached inventory: nothing is run on the hosts.
+        """
+        notes = []
+        if spec.unmanaged:
+            notes.append('the spec is unmanaged: cephadm does not deploy OSDs from it')
+        if spec.preview_only:
+            notes.append('the spec is preview only: cephadm does not deploy OSDs from it')
+
+        all_hosts = self.mgr.inventory.all_specs()
+        matching = set(spec.placement.filter_matching_hostspecs(all_hosts))
+        schedulable = set(spec.placement.filter_matching_hostspecs(
+            self.mgr.cache.get_schedulable_hosts()))
+        not_matching = [h.hostname for h in all_hosts if h.hostname not in matching]
+        if not matching:
+            notes.append('the placement of the spec matches no host')
+        elif not_matching and not hosts:
+            notes.append(f'{len(not_matching)} host(s) not matched by the placement: '
+                         f'{", ".join(sorted(not_matching))}')
+
+        ret_hosts = []
+        for host_spec in sorted(all_hosts, key=lambda h: h.hostname):
+            host = host_spec.hostname
+            if hosts:
+                if host not in hosts:
+                    continue
+            elif host not in matching:
+                continue
+
+            status, detail = 'eligible', None
+            if host not in matching:
+                status, detail = 'not_matched', 'the placement of the spec does not match this host'
+            elif host_spec.status.lower() in ('offline', 'maintenance'):
+                status = host_spec.status.lower()
+            elif SpecialHostLabels.DRAIN_DAEMONS in host_spec.labels:
+                status, detail = 'draining', f'host has the {SpecialHostLabels.DRAIN_DAEMONS} label'
+            elif host not in schedulable:
+                status, detail = 'not_refreshed', 'host daemons have not been refreshed yet'
+            elif host not in self.mgr.cache.devices:
+                status, detail = 'no_inventory', 'no device inventory yet for this host'
+
+            last_update = self.mgr.cache.last_device_update.get(host)
+            entry: Dict[str, Any] = {
+                'hostname': host,
+                'status': status,
+                'detail': detail,
+                'inventory_updated': datetime_to_str(last_update) if last_update else None,
+                'selection': None,
+            }
+            if status != 'not_matched' and host in self.mgr.cache.devices:
+                existing = [dd for dd in self.mgr.cache.get_daemons_by_service(spec.service_name())
+                            if dd.hostname == host]
+                entry['selection'] = explain_drive_selection(
+                    spec, self.mgr.cache.devices[host], existing_daemons=len(existing)).to_json()
+            ret_hosts.append(entry)
+
+        if hosts:
+            unknown = sorted(set(hosts) - {h.hostname for h in all_hosts})
+            for host in unknown:
+                ret_hosts.append({'hostname': host, 'status': 'unknown_host',
+                                  'detail': 'not a host of this cluster',
+                                  'inventory_updated': None, 'selection': None})
+
+        return {
+            'service_name': spec.service_name(),
+            'notes': notes,
+            'hosts': ret_hosts,
+        }
 
     def resolve_hosts_for_osdspecs(self,
                                    specs: Optional[List[DriveGroupSpec]] = None
