@@ -2153,10 +2153,10 @@ exit 0
 %{_datadir}/ceph/id_rsa_drop.ceph.com
 %{_datadir}/ceph/id_rsa_drop.ceph.com.pub
 %dir %{_sysconfdir}/ceph/
-%config %{_sysconfdir}/bash_completion.d/ceph
-%config %{_sysconfdir}/bash_completion.d/rados
-%config %{_sysconfdir}/bash_completion.d/rbd
-%config %{_sysconfdir}/bash_completion.d/radosgw-admin
+%{_datadir}/bash-completion/completions/ceph
+%{_datadir}/bash-completion/completions/rados
+%{_datadir}/bash-completion/completions/rbd
+%{_datadir}/bash-completion/completions/radosgw-admin
 %config(noreplace) %{_sysconfdir}/ceph/rbdmap
 %{_unitdir}/rbdmap.service
 %dir %{_udevrulesdir}

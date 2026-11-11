@@ -1,0 +1,4 @@
+rm_conffile /etc/bash_completion.d/ceph
+rm_conffile /etc/bash_completion.d/rados
+rm_conffile /etc/bash_completion.d/radosgw-admin
+rm_conffile /etc/bash_completion.d/rbd

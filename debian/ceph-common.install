@@ -1,9 +1,9 @@
 #! /usr/bin/dh-exec --with=install
 
-etc/bash_completion.d/ceph
-etc/bash_completion.d/rados
-etc/bash_completion.d/radosgw-admin
-etc/bash_completion.d/rbd
+usr/share/bash-completion/completions/ceph
+usr/share/bash-completion/completions/rados
+usr/share/bash-completion/completions/radosgw-admin
+usr/share/bash-completion/completions/rbd
 {usr/,}lib/systemd/system/ceph.target
 {usr/,}lib/systemd/system/rbdmap.service
 usr/bin/ceph
