@@ -653,6 +653,88 @@ TEST_F(SessionRoutesTest, CountSwitching)
             routes.count_switching());
 }
 
+// -- routing turned off (objecter_use_osd_core_hints)
+
+TEST_F(SessionRoutesTest, RoutingOffReturnsPgToMainOnceDrained)
+{
+  hinted_and_connected();
+  op_route_t a, b, c;
+  ASSERT_EQ(route_outcome_t::what_t::switched, route(a, 100).what);
+  EXPECT_FALSE(routes.desired_core(route_of(pg), false));
+
+  // turned off while a is in flight on the core connection: b follows a
+  auto out = routes.route_op(pg, b, at(101), no_cutoff, false);
+  EXPECT_EQ(route_outcome_t::what_t::pending, out.what);
+  EXPECT_FALSE(out.desired);
+  EXPECT_EQ(std::optional<uint32_t>(core), b.core);
+
+  routes.unroute(a);
+  routes.unroute(b);
+  out = routes.route_op(pg, c, at(102), no_cutoff, false);
+  EXPECT_EQ(route_outcome_t::what_t::switched, out.what);
+  EXPECT_FALSE(c.core);
+}
+
+TEST_F(SessionRoutesTest, RoutingOffKeepsIdlePgOnMain)
+{
+  hinted_and_connected();
+  op_route_t a;
+  auto out = routes.route_op(pg, a, at(100), no_cutoff, false);
+  EXPECT_EQ(route_outcome_t::what_t::stayed, out.what);
+  EXPECT_FALSE(a.core);
+  // still hinted: turned on again, the PG switches
+  routes.unroute(a);
+  EXPECT_EQ(route_outcome_t::what_t::switched, route(a, 101).what);
+}
+
+TEST_F(SessionRoutesTest, RoutingOffHoldsBusyPgAfterTheGrace)
+{
+  hinted_and_connected();
+  op_route_t a, b;
+  route(a, 100);
+  routes.route_op(pg, b, at(101), no_cutoff, false);
+  routes.unroute(b);
+  const SessionRoutes::grace_fn_t grace = [] { return ceph::timespan(10s); };
+  // a, on the core connection, must drain before the PG returns to main
+  EXPECT_EQ(hold_t::none, routes.hold_state(pg, at(105), grace, false));
+  EXPECT_EQ(hold_t::due, routes.hold_state(pg, at(111), grace, false));
+  // turned on again, the PG is where it should be
+  EXPECT_EQ(hold_t::none, routes.hold_state(pg, at(111), grace, true));
+}
+
+TEST_F(SessionRoutesTest, IdleCoresAreThoseNothingUses)
+{
+  connected(core, core_con);
+  connected(other_core, other_con);
+  EXPECT_EQ((std::vector<uint32_t>{core, other_core}), routes.idle_cores());
+
+  // a PG routed via core
+  routes.apply_hint(pg, hint(core), main_con, may_connect);
+  op_route_t a;
+  route(a, 100);
+  ASSERT_EQ(std::optional<uint32_t>(core), a.core);
+  EXPECT_EQ((std::vector<uint32_t>{other_core}), routes.idle_cores());
+
+  // ... still awaiting the answer to a canceled op sent there
+  routes.note_unanswered(1, a, at(101));
+  routes.unroute(a);
+  routes.route_op(pg, a, at(102), no_cutoff, false);  // back to main
+  routes.unroute(a);
+  EXPECT_EQ((std::vector<uint32_t>{other_core}), routes.idle_cores());
+  routes.answered_late(1);
+  // the PG's route still names core, until its next op switches it
+  EXPECT_EQ((std::vector<uint32_t>{other_core}), routes.idle_cores());
+  routes.route_op(pg, a, at(103), no_cutoff, false);
+  routes.unroute(a);
+  EXPECT_EQ((std::vector<uint32_t>{core, other_core}), routes.idle_cores());
+
+  // a PG holding its ops to switch to other_core
+  routes.apply_hint(pg2, hint(other_core, 6811), main_con,
+                    may_connect);
+  routes.pg_routes.at(pg2).holding = true;
+  EXPECT_EQ((std::vector<uint32_t>{core}), routes.idle_cores());
+}
+
 // -- keepalive probes
 
 namespace {

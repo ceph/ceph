@@ -638,3 +638,43 @@ TEST_F(TestObjecterCoreRoutesTick, AnsweringCoreConIsKept)
   EXPECT_EQ(0u, counter("core_con_dead"));
   EXPECT_EQ(0u, counter("core_con_reset"));
 }
+
+// objecter_use_osd_core_hints turned off at runtime: the PG's ops return to
+// the main connection once those in flight drain (never overtaking them),
+// and the then unused core connection is closed (on tick)
+TEST_F(TestObjecterCoreRoutesTick, TurningHintsOff)
+{
+  no_holds();
+  // as if each keepalive were answered at once: not given up on
+  core_con->set_last_keepalive_ack(ceph_clock_now() + utime_t(3600, 0));
+  auto a = submit();
+  reply(main_con, a);
+  auto b = submit();
+  ASSERT_EQ((tids_t{b}), core_con->tids());
+
+  auto& conf = g_ceph_context->_conf;
+  conf.set_val_or_die("objecter_use_osd_core_hints", "false");
+  conf.apply_changes(nullptr);
+  // b is in flight on the core connection: c follows it there
+  auto c = submit();
+  EXPECT_EQ((tids_t{b, c}), core_con->tids());
+  reply(core_con, b, false);
+  reply(core_con, c, false);
+  auto d = submit();
+  EXPECT_EQ((tids_t{a, d}), main_con->tids());
+
+  bool closed = false;
+  for (int i = 0; i < 300 && !closed; ++i) {
+    {
+      std::shared_lock l(session->lock);
+      closed = session->core_routes.core_cons.empty();
+    }
+    if (!closed) {
+      wait(0.01);
+    }
+  }
+  EXPECT_TRUE(closed);
+  EXPECT_EQ(1u, counter("core_con_close"));
+  EXPECT_EQ(0u, counter("core_con_reset"));
+  EXPECT_EQ(0u, counter("core_con_dead"));
+}

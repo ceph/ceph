@@ -46,6 +46,11 @@
  * completed (SessionRoutes::note_connected()). One not connected in time
  * is given up on, and its host is blocked for a while (HostBlocks).
  *
+ * Turning objecter_use_osd_core_hints off at runtime: every PG's target is
+ * then the main connection (the 'enabled' arguments below). A PG switches
+ * back as it would to a core, once it drains; the core connections no PG
+ * uses any more are then closed (idle_cores()).
+ *
  * Liveness: a connected core connection that silently stops working (e.g.
  * a firewall dropping its flow, without a reset) would hold its ops until
  * the messenger's idle timeout. Those carrying laggy ops are probed with
@@ -266,9 +271,12 @@ public:
   std::optional<uint32_t> core_of(const ConnectionRef& c) const;
 
   /// the core connection a PG's ops should be sent on (nullopt: the main
-  /// connection): the hinted core's, once connected to it
-  std::optional<uint32_t> desired_core(const pg_route_t& route) const {
-    if (route.hinted_core && core_cons.contains(*route.hinted_core) &&
+  /// connection): the hinted core's, once connected to it. enabled: the
+  /// routing is on (objecter_use_osd_core_hints); if not, the main one
+  std::optional<uint32_t> desired_core(const pg_route_t& route,
+                                       bool enabled = true) const {
+    if (enabled && route.hinted_core &&
+        core_cons.contains(*route.hinted_core) &&
         !connecting.contains(*route.hinted_core)) {
       return route.hinted_core;
     }
@@ -322,11 +330,12 @@ public:
   using cutoff_fn_t = std::function<time_point()>;
 
   /// choose the connection to send an op of pgid on, and account for the
-  /// op as in flight on it (in op)
+  /// op as in flight on it (in op). enabled: see desired_core()
   route_outcome_t route_op(const spg_t& pgid,
                            op_route_t& op,
                            time_point now,
-                           const cutoff_fn_t& unanswered_cutoff);
+                           const cutoff_fn_t& unanswered_cutoff,
+                           bool enabled = true);
 
   /// stop accounting for op as in flight (if it is)
   void unroute(op_route_t& op);
@@ -360,8 +369,10 @@ public:
   using grace_fn_t = std::function<ceph::timespan()>;
 
   /// whether pgid's new ops are to be held: the PG is holding, or has
-  /// been due to switch for the grace period, but is still busy
-  hold_t hold_state(const spg_t& pgid, time_point now, const grace_fn_t& grace);
+  /// been due to switch for the grace period, but is still busy.
+  /// enabled: see desired_core()
+  hold_t hold_state(const spg_t& pgid, time_point now, const grace_fn_t& grace,
+                    bool enabled = true);
 
   /// start holding pgid's new ops; seq: the hold's id. The caller sets
   /// the route's hold_event
@@ -390,6 +401,11 @@ public:
   /// and all hints, and end all holds. The caller then unroutes the ops
   /// sent on the core connections, and forgets the canceled ones
   all_reset_t reset_all();
+
+  /// the cores whose connections nothing uses: no PG is routed via them
+  /// or holds its ops to switch to them, and no canceled op sent on them
+  /// awaits its answer. With the routing off, they are closed
+  std::vector<uint32_t> idle_cores() const;
 
   // -- stats
 

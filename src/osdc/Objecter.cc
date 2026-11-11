@@ -218,6 +218,7 @@ enum {
   l_osdc_core_con_timeout,
   l_osdc_core_hint_blocked,
   l_osdc_core_con_dead,
+  l_osdc_core_con_close,
 
   l_osdc_last,
 };
@@ -261,6 +262,7 @@ std::vector<std::string> Objecter::get_tracked_keys() const noexcept
     "rados_osd_op_timeout"s,
     "osd_min_split_replica_read_size"s,
     "rados_replica_read_policy"s,
+    "objecter_use_osd_core_hints"s,
   };
 }
 
@@ -276,6 +278,16 @@ void Objecter::handle_conf_change(const ConfigProxy& conf,
   }
   if (changed.count("rados_osd_op_timeout")) {
     osd_timeout = conf.get_val<std::chrono::seconds>("rados_osd_op_timeout");
+  }
+  if (changed.count("objecter_use_osd_core_hints")) {
+    // off: each PG returns to its main connection once its ops drain, and
+    // tick() closes the core connections no longer used. Read per op from
+    // these flags, not from the configuration
+    const bool on = conf.get_val<bool>("objecter_use_osd_core_hints");
+    if (on) {
+      core_hints_used = true;
+    }
+    use_osd_core_hints = on;
   }
   if (changed.count("osd_min_split_replica_read_size")) {
     min_split_replica_read_size
@@ -547,6 +559,9 @@ void Objecter::init()
     pcb.add_u64_counter(l_osdc_core_hint_blocked, "core_hint_blocked",
 			"Hints not followed, connecting to the OSD's cores "
 			"being blocked (after a connection to them timed out)");
+    pcb.add_u64_counter(l_osdc_core_con_close, "core_con_close",
+			"Connections to OSD cores closed, no longer used with "
+			"objecter_use_osd_core_hints turned off");
     pcb.add_u64_counter(l_osdc_core_con_dead, "core_con_dead",
 			"Connections to OSD cores given up on: carrying laggy "
 			"ops, they did not answer a keepalive in time "
@@ -1672,7 +1687,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
   }
 
   // the PGs whose ops drained, being resent elsewhere or canceled
-  if (use_osd_core_hints) {
+  if (core_hints_used) {
     for (auto& [osd, s] : osd_sessions) {
       if (s->core_routes.has_drained_holds) {
 	std::unique_lock sl(s->lock);
@@ -2454,7 +2469,7 @@ ConnectionRef Objecter::_op_route(Op *op)
 {
   // op->session->lock is locked
   auto s = op->session;
-  if (!use_osd_core_hints || s->osd < 0) {
+  if (!core_hints_used || s->osd < 0) {
     return s->con;
   }
 
@@ -2462,7 +2477,7 @@ ConnectionRef Objecter::_op_route(Op *op)
   const auto& pgid = op->target.actual_pgid;
   const auto out = s->core_routes.route_op(
     pgid, op->core_route, ceph::coarse_mono_clock::now(),
-    [this] { return _unanswered_cutoff(); });
+    [this] { return _unanswered_cutoff(); }, use_osd_core_hints);
   _note_forgotten(s, out.forgotten);
   switch (out.what) {
   case what_t::stayed:
@@ -2571,7 +2586,7 @@ bool Objecter::_op_hold_for_switch(Op *op)
 {
   // op->session->lock is locked
   auto s = op->session;
-  if (!use_osd_core_hints || s->osd < 0) {
+  if (!core_hints_used || s->osd < 0) {
     return false;
   }
   using osdc::core_route::hold_t;
@@ -2581,7 +2596,7 @@ bool Objecter::_op_hold_for_switch(Op *op)
     return ceph::make_timespan(
       cct->_conf.get_val<double>("objecter_osd_core_switch_grace"));
   };
-  switch (s->core_routes.hold_state(pgid, now, grace)) {
+  switch (s->core_routes.hold_state(pgid, now, grace, use_osd_core_hints)) {
   case hold_t::none:
     return false;
   case hold_t::holding:
@@ -2990,7 +3005,10 @@ void Objecter::tick()
     }
     // a fallback: holds drain mostly on replies (handle_osd_op_reply())
     _release_drained_holds(s);
-    if (use_osd_core_hints) {
+    if (core_hints_used) {
+      if (!use_osd_core_hints) {
+        _close_idle_core_cons(s);
+      }
       const auto [holding, pending] = s->core_routes.count_switching();
       pgs_holding += holding;
       pgs_switch_pending += pending;
@@ -3015,7 +3033,7 @@ void Objecter::tick()
 	}
       }
     }
-    if (use_osd_core_hints) {
+    if (core_hints_used) {
       s->core_routes.end_probes_except(laggy_cores);
       for (auto core : laggy_cores) {
 	auto c = s->core_routes.core_cons.find(core);
@@ -4801,7 +4819,7 @@ bs::error_code Objecter::process_op_reply_handlers(Op *op, const vector<OSDOp>& 
 
 void Objecter::handle_osd_op_reply(cref_t<MOSDOpReply> m)
 {
-  if (!use_osd_core_hints) {
+  if (!core_hints_used) {
     _handle_osd_op_reply(std::move(m));
     return;
   }
@@ -6151,7 +6169,7 @@ void Objecter::ms_handle_connect(Connection *con)
 
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON)
     resend_mon_ops();
-  else if (con->get_peer_type() == CEPH_ENTITY_TYPE_OSD && use_osd_core_hints)
+  else if (con->get_peer_type() == CEPH_ENTITY_TYPE_OSD && core_hints_used)
     handle_core_con_connect(con);
 }
 
@@ -6179,6 +6197,25 @@ void Objecter::handle_core_con_connect(Connection *con)
     ldout(cct, 5) << __func__ << " osd." << s->osd << " core " << *core
 		  << ": connecting to the cores of " << con->get_peer_addrs()
 		  << " no longer blocked" << dendl;
+  }
+}
+
+void Objecter::_close_idle_core_cons(OSDSession *s)
+{
+  // s->lock is locked
+  for (auto core : s->core_routes.idle_cores()) {
+    auto reset = s->core_routes.reset_core(core);
+    // idle: no op to resend, no hold to release
+    ceph_assert(reset.rerouted.empty() && reset.released_holds.empty());
+    ldout(cct, 10) << __func__ << " osd." << s->osd << " core " << core
+		   << " " << reset.con << dendl;
+    reset.con->set_priv(NULL);
+    reset.con->mark_down();
+    for (auto event : reset.timer_events) {
+      timer.cancel_event(event);
+    }
+    logger->dec(l_osdc_core_cons);
+    logger->inc(l_osdc_core_con_close);
   }
 }
 

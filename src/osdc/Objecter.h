@@ -2891,6 +2891,10 @@ private:
   /// con (of an OSD) connected: if it is a core connection, its core may
   /// now be routed to. No lock is held
   void handle_core_con_connect(Connection *con);
+  /// objecter_use_osd_core_hints is off: close the core connections of s
+  /// that nothing uses any more (forgetting the hints to their cores).
+  /// s->lock is locked
+  void _close_idle_core_cons(OSDSession *s);
   /// give up on the core connections (osd, core, connection) that carry
   /// laggy ops, but did not answer a keepalive in time (see
   /// core_route::SessionRoutes::probe_core()); their ops are resent
@@ -4352,9 +4356,15 @@ private:
   epoch_t epoch_barrier = 0;
   bool retry_writes_after_first_reply =
     cct->_conf->objecter_retry_writes_after_first_reply;
-  /// see objecter_use_osd_core_hints
-  const bool use_osd_core_hints =
-    cct->_conf.get_val<bool>("objecter_use_osd_core_hints");
+  /// objecter_use_osd_core_hints, as last set (handle_conf_change()):
+  /// follow the OSDs' core hints, and route ops by them
+  std::atomic<bool> use_osd_core_hints{
+    cct->_conf.get_val<bool>("objecter_use_osd_core_hints")};
+  /// objecter_use_osd_core_hints was set at some point: the sessions may
+  /// have routing state (OSDSession::core_routes) even when it is off, as
+  /// their PGs drain back to their main connections. Never cleared; until
+  /// set, ops take the plain path
+  std::atomic<bool> core_hints_used{use_osd_core_hints.load()};
 
   bool dispatch_to_session_strand = false;
 

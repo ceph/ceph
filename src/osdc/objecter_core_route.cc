@@ -124,12 +124,13 @@ hint_outcome_t SessionRoutes::apply_hint(const spg_t& pgid,
 route_outcome_t SessionRoutes::route_op(const spg_t& pgid,
                                         op_route_t& op,
                                         time_point now,
-                                        const cutoff_fn_t& unanswered_cutoff)
+                                        const cutoff_fn_t& unanswered_cutoff,
+                                        bool enabled)
 {
   ceph_assert(!op.is_routed());
   route_outcome_t out;
   auto& route = pg_routes[pgid];
-  out.desired = desired_core(route);
+  out.desired = desired_core(route, enabled);
   if (out.desired == route.core) {
     route.end_switch_wait();
   } else {
@@ -265,14 +266,15 @@ forgotten_t SessionRoutes::prune_unanswered(time_point cutoff)
 
 hold_t SessionRoutes::hold_state(const spg_t& pgid,
                                  time_point now,
-                                 const grace_fn_t& grace_fn)
+                                 const grace_fn_t& grace_fn,
+                                 bool enabled)
 {
   auto& route = pg_routes[pgid];
   if (route.holding) {
     return hold_t::holding;
   }
   if (!route.switch_pending_since || !route.busy() ||
-      desired_core(route) == route.core) {
+      desired_core(route, enabled) == route.core) {
     // not due to switch, or route_op() switches now
     return hold_t::none;
   }
@@ -409,6 +411,31 @@ all_reset_t SessionRoutes::reset_all()
   drained_holds.clear();
   has_drained_holds = false;
   return reset;
+}
+
+std::vector<uint32_t> SessionRoutes::idle_cores() const
+{
+  std::set<uint32_t> used;
+  for (const auto& [pgid, route] : pg_routes) {
+    if (route.core) {
+      used.insert(*route.core);
+    }
+    if (route.holding && route.hinted_core) {
+      used.insert(*route.hinted_core);
+    }
+  }
+  for (const auto& [tid, u] : unanswered) {
+    if (u.core) {
+      used.insert(*u.core);
+    }
+  }
+  std::vector<uint32_t> idle;
+  for (const auto& [core, con] : core_cons) {
+    if (!used.contains(core)) {
+      idle.push_back(core);
+    }
+  }
+  return idle;
 }
 
 // -- stats
