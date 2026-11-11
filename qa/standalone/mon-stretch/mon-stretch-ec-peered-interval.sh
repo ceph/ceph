@@ -33,9 +33,18 @@ function osds_down() {
     done
 }
 
-# An interval in which the PG of a pool over zones could only be peered,
-# because its mandatory zone was below min_size, is not one that may have
-# taken writes: the PG must not wait for that interval's OSDs later.
+# In degraded or recovery mode, a PG of a pool over two zones goes active
+# only with min_size shards in the zone that stayed up. With fewer it is
+# only peered and takes no writes, so later peering must not wait for the
+# OSDs of such an interval.
+# The test writes obj to erasure coded pool p (one PG, k=2 m=2: 4 shards in
+# each of the datacenters dc1 and dc2, and min_size 3). With dc1 down the
+# cluster enters degraded mode in dc2, and obj is written again. Two of
+# dc2's OSDs go down and dc1 comes back: the cluster enters recovery mode,
+# still in dc2, and the PG is only peered. Then dc1's OSDs and one of the
+# two dc2 OSDs still up go down, and the two that went down come back. With
+# 3 shards in dc2 the PG must go active, although most OSDs of the peered
+# interval are down, and obj must read back as its second write.
 function TEST_peered_interval_not_waited_for() {
     local dir=$1
 
@@ -56,7 +65,7 @@ function TEST_peered_interval_not_waited_for() {
     echo v1 > $dir/v1
     rados -p p put obj $dir/v1 || return 1
 
-    # lose dc1: degraded stretch mode with dc2 as the mandatory member
+    # lose dc1: degraded mode with dc2 as the mandatory member
     osds_down $dir ${dc1[@]} || return 1
     kill_daemons $dir KILL mon.a || return 1
     wait_for_quorum 300 2 || return 1
@@ -65,7 +74,7 @@ function TEST_peered_interval_not_waited_for() {
     echo v2 > $dir/v2
     timeout 120 rados -p p put obj $dir/v2 || return 1
 
-    # dc2 down to two shards, then dc1 back: recovery stretch mode, still
+    # dc2 down to two shards, then dc1 back: recovery mode, still
     # with dc2 mandatory, so the PG can only be peered
     osds_down $dir ${dc2[2]} ${dc2[3]} || return 1
     activate_mon $dir a --public-addr $CEPH_MON_A || return 1
