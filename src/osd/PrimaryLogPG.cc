@@ -12604,8 +12604,8 @@ SnapSetContext *PrimaryLogPG::get_snapset_context(
 {
   std::lock_guard l(snapset_contexts_lock);
   SnapSetContext *ssc;
-  map<hobject_t, SnapSetContext*>::iterator p = snapset_contexts.find(
-    oid.get_snapdir());
+  hobject_t snapdir = oid.get_snapdir();
+  map<hobject_t, SnapSetContext*>::iterator p = snapset_contexts.find(snapdir);
   if (p != snapset_contexts.end()) {
     if (can_create || p->second->exists) {
       ssc = p->second;
@@ -12626,7 +12626,7 @@ SnapSetContext *PrimaryLogPG::get_snapset_context(
       ceph_assert(it_ss != attrs->end());
       bv = it_ss->second;
     }
-    ssc = new SnapSetContext(oid.get_snapdir());
+    ssc = new SnapSetContext(std::move(snapdir));
     _register_snapset_context(ssc);
     if (bv.length()) {
       bufferlist::const_iterator bvp = bv.begin();
