@@ -16,11 +16,27 @@ function run() {
     run_stretch_tests "$@"
 }
 
-# N2: pools go to two zones of type ztype on hand-written rules and back,
-# with their data, from rules shared by two pools, of which one changes at a
-# time, and from rules whose placement cannot be read, which need the new
-# rule or the whole placement. In a deep tree the zones are not under one
-# bucket, so a rule that takes each zone cannot be read either.
+# osd pool set <pool> num_zones 2 --crush_rule <rule> moves a pool over two
+# zones, of type ztype, on a hand-written rule, and num_zones 1 moves it
+# back. The pools start on hosts_any (rtake and rtake2: hosts of both zones,
+# ignoring zones), replicated_rule (rchoose and rclass), per_zone_one
+# (runread and runread2: its placement cannot be read), and rules of their
+# own (the erasure coded pools etake and echoose).
+# They are given take2 (takes each zone; rtake and rtake2 one at a time),
+# choose2 (chooses the zones), class2 (chooses them in ssd OSDs), mixed2
+# (different steps for each zone; runread2), ec_take and ec_choose. runread
+# is given no rule: it is refused until --root, --osd_failure_domain and
+# --no-class give the whole placement, and then gets a rule of its own.
+# With num_zones 1 the pools go to z1 or z2 (--root) or to hosts_z2
+# (--crush_rule), and rtake to replicated_rule, as take2's placement in one
+# zone is the stock one (root default, hosts, no class). A rule whose
+# placement cannot be read needs the whole placement again: mixed2, and
+# take2 in a deep tree, where the zones are not under one bucket.
+# A rule is removed when its last pool leaves it. The objects can be read
+# from each zone alone while the pools are over two zones, and after
+# num_zones 1 a pool in one zone can be read with the other zone down.
+# The tests run this with zones of type rack, room and region, and of type
+# datacenter in a deep tree.
 function pools_on_hand_rules() {
     local dir=$1 ztype=$2 deep=$3 pool
     zone_cluster $dir $ztype $deep || return 1
