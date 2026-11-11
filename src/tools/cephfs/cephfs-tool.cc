@@ -2095,6 +2095,8 @@ execute_perf_dump(struct ceph_mount_info* cmount, const string& output_path)
   }
 
   char* perf_dump = nullptr;
+  // ceph_get_perf_counters returns the byte length; the buffer is not
+  // NUL-terminated (see do_out_buffer), so write exactly that many bytes.
   int rc = ceph_get_perf_counters(cmount, &perf_dump);
   if (rc < 0) {
     cerr << "Error: Failed to get performance counters: " << strerror(-rc)
@@ -2110,7 +2112,7 @@ execute_perf_dump(struct ceph_mount_info* cmount, const string& output_path)
       free(perf_dump);
       return;
     }
-    ofs << perf_dump;
+    ofs.write(perf_dump, rc);
     free(perf_dump);
     cout << "Performance counters dumped to " << output_path << endl;
   }
