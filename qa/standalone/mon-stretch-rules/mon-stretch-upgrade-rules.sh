@@ -61,7 +61,7 @@ function TEST_commit_keeps_rules_of_every_kind() {
     local -x CEPH_ARGS="$CEPH_ARGS"
     zone_cluster $dir zone || return 1
     test "$(ceph osd dump -f json | jq -r .require_osd_release)" = umbrella || return 1
-    ceph config set mon osd_pool_default_zone_failure_domain zone || return 1
+    ceph config set global osd_pool_default_zone_failure_domain zone || return 1
     ! committed || return 1
     add_hand_rules $dir zone || return 1
     add_rook_rule $dir || return 1
