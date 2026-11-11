@@ -58,6 +58,7 @@
 #include <fmt/core.h>
 
 namespace rgw::d4n {
+  class CachePolicy;
   class PolicyDriver;
   class RemoteCacheOp;
   class RemoteCacheDeleteOp;
@@ -550,6 +551,7 @@ class D4NFilterObject : public FilterObject {
     bool exists_in_cache{false};
     bool load_from_store{false};
     bool attrs_read_from_cache{false};
+    bool head_dirty{false}; //the HEAD read from the directory is dirty: its version may not be in the backend yet
     bool cache_request{false};
     bool remote_cache_request{false}; //sent by another rgw
     std::string delete_marker_version; //version of a delete marker to replicate on the remote rgw
@@ -589,9 +591,27 @@ class D4NFilterObject : public FilterObject {
 	    bool write_to_cache{true};
             const DoutPrefixProvider* dpp{nullptr};
             optional_yield* y{nullptr};
-      std::vector<rgw::d4n::CacheBlock> blocks, dest_blocks;
+      std::vector<rgw::d4n::CacheBlock> blocks; // source blocks cached by this read, for the directory
 
-            void cache_chunk(const bufferlist& data);
+      /* What the cache writes need, the same for every chunk of a read: set up on the first chunk. */
+      struct CacheWriteState {
+        rgw::d4n::CachePolicy* policy{nullptr};
+        std::string version;            // source version (data block keys and directory entries)
+        std::string prefix;             // source cache block prefix
+        rgw_user owner;
+        std::string bucket_name;
+        rgw::d4n::CacheBlock block;     // template for the source data block entries
+        bool copy_dest{false};          // write-back copy: also write the destination blocks
+        std::string dest_version;
+        std::string dest_prefix;
+        rgw_user dest_owner;
+        std::string dest_bucket_name;
+        Attrs dest_attrs;
+      };
+      std::optional<CacheWriteState> cache_state;
+
+      void init_cache_write_state();
+      int cache_chunk(const bufferlist& data);
 
 	  public:
 	    D4NFilterGetCB(D4NFilterDriver* _filter, D4NFilterObject* _source) : filter(_filter),
@@ -740,6 +760,27 @@ class D4NFilterObject : public FilterObject {
     int calculate_version(const DoutPrefixProvider* dpp, optional_yield y, std::string& version, rgw::sal::Attrs& attrs);
     int set_head_block_dir_entry(const DoutPrefixProvider* dpp, optional_yield y, rgw::sal::Attrs& attrs, bool is_latest_version = true, bool dirty = false, std::optional<rgw::d4n::Transaction> txn = std::nullopt);
     int set_data_block_dir_entries(const DoutPrefixProvider* dpp, optional_yield y, std::string& version, bool dirty = false);
+    /* Adds the local RGW to the hostsList of the given data block entries and sets their version, in one
+       transaction (one replay on an uncertain commit). dirty == nullopt leaves the dirty flag of existing
+       entries as is; new entries are created clean. */
+    int update_data_block_dir_entries(const DoutPrefixProvider* dpp, optional_yield y,
+                                      const std::vector<rgw::d4n::CacheBlock>& blocks,
+                                      const std::string& version, std::optional<bool> dirty,
+                                      const char* component = "D4NFilterObject");
+    /* The commit point of a write of this object's version (PUT, copy): the HEAD transaction. With
+       read_current, the current state is read in the transaction (latest version rule of versioned
+       buckets, the precondition of a conditional PUT, and the "null" version this write replaces,
+       tombstoned if dirty). Returns 0 once committed, with old_version set to the replaced version
+       (empty if none); a precondition error; or another error (-EIO for an uncertain commit that
+       could not be confirmed). */
+    int commit_head_block_dir_entry(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs, bool dirty,
+                                    bool read_current, const char* if_match, const char* if_nomatch,
+                                    const char* component, std::string& old_version);
+    /* Replication of a write-back copy (called on the source, for its dest_object), in sync mode
+       (rgw_d4n_remote_put without rgw_d4n_async_remote_put), as D4NFilterWriter does for a PUT: each
+       destination block before the HEAD commit, the head put after it. No-ops otherwise. */
+    int replicate_copy_block(const DoutPrefixProvider* dpp, optional_yield y, const bufferlist& data, uint64_t ofs);
+    int replicate_copy_head(const DoutPrefixProvider* dpp, optional_yield y, uint64_t obj_size, const std::string& old_version);
     int delete_data_block_cache_entries(const DoutPrefixProvider* dpp, optional_yield y, std::string& version, bool dirty = false);
     // Positive: live head; zero: cache miss or delete marker (returned in blk); negative: error/local tombstone.
     int check_head_exists_in_cache_get_oid(const DoutPrefixProvider* dpp, std::string& head_oid_in_cache, rgw::d4n::CacheBlock& blk, optional_yield y, std::optional<rgw::d4n::Transaction> txn = std::nullopt);
@@ -786,9 +827,10 @@ class D4NFilterObject : public FilterObject {
     void track_delete_marker(const DoutPrefixProvider* dpp, optional_yield y, const DeleteMarkerSpec& spec);
     // Returns 1 if the delete marker's version-specific head is in the directory, 0 if not, < 0 on error.
     int delete_marker_in_directory(const DoutPrefixProvider* dpp, optional_yield y, const DeleteMarkerSpec& spec);
-    // Returns 1 if a delete of `version` is applied in the directory (its version-specific head is
-    // missing or tombstoned), 0 if the head is still live, < 0 on error.
-    int delete_applied_in_directory(const DoutPrefixProvider* dpp, optional_yield y, const std::string& version);
+    // Whether the version-specific head "_:<version>_<name>" is absent from the directory: returns 1
+    // if it is missing or tombstoned, 0 if it is live, < 0 on error. Used to resolve an uncertain
+    // commit: a delete was applied if it is absent, a PUT/copy HEAD commit if it is live.
+    int version_head_absent_in_directory(const DoutPrefixProvider* dpp, optional_yield y, const std::string& version);
     bool is_delete_marker() { return delete_marker; }
     bool exists(void) override { if (exists_in_cache) { return true;} return next->exists(); };
     bool load_obj_from_store() { return load_from_store; }
