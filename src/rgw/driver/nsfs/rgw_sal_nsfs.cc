@@ -112,6 +112,9 @@ const int64_t DIRECT_IO_ALIGN = 4096;
 #define RGW_NSFS_ATTR_MULTIPART_PART_SIZES "multipart_part_sizes"
 
 #define RGW_NSFS_ATTR_VERSION_ID "version_id"
+/* the file a stored checksum was computed over:  its mtime and inode, in a
+ * synthetic ETag's form (record_cksum_stat()) */
+#define RGW_NSFS_ATTR_CKSUM_STAT "cksum_stat"
 #define RGW_NSFS_ATTR_DELETE_MARKER "delete_marker"
 #define RGW_NSFS_ATTR_NON_CURRENT_TS "non_current_timestamp"
 
@@ -516,6 +519,73 @@ static inline std::string nsfs_ver_entry(const std::string& leaf,
 static std::string synthesize_etag(const struct statx& stx)
 {
   return nsfs_version_id_from_statx(stx);
+}
+
+/* A stored checksum describes the contents it was computed over.  Record
+ * which file that was -- its mtime and inode, in a synthetic ETag's form --
+ * so that a read after the file changed outside the gateway does not
+ * return it.  Only where an object's contents are written:  an attribute
+ * write after an outside overwrite would otherwise vouch for a checksum
+ * of contents no longer there.  `fd` is the new file. */
+static void record_cksum_stat(const DoutPrefixProvider* dpp, int fd,
+			      Attrs& attrs)
+{
+  attrs.erase(RGW_NSFS_ATTR_CKSUM_STAT);
+  if ((fd < 0) || (attrs.find(RGW_ATTR_CKSUM) == attrs.end())) {
+    return;
+  }
+  struct statx stx;
+  if (nsfs::statx(fd, "", AT_EMPTY_PATH, STATX_INO | STATX_MTIME, &stx) < 0) {
+    ldpp_dout_fmt(dpp, 1, "nsfs: could not stat a new object to record what "
+			  "its checksum describes: {};  it is returned unchecked",
+		  cpp_strerror(errno));
+    return;
+  }
+  bufferlist bl;
+  bl.append(nsfs_version_id_from_statx(stx));
+  attrs[RGW_NSFS_ATTR_CKSUM_STAT] = std::move(bl);
+}
+
+/* The inode part of a synthetic ETag, `mtime-<b36>-ino-<b36>`;  empty
+ * where `etag` is not one. */
+static std::string_view synthetic_etag_ino(std::string_view etag)
+{
+  if (!etag.starts_with("mtime-") ||
+      (etag.find_first_not_of("0123456789abcdefghijklmnopqrstuvwxyz-") !=
+       std::string_view::npos)) {
+    return {};
+  }
+  const auto i = etag.find("-ino-");
+  return (i == std::string_view::npos) ? std::string_view{}
+    : etag.substr(i + 5);
+}
+
+/* What a read returns of the values stored from an object's contents,
+ * given the file as it now is (`stx`):  NooBaa's result where the file was
+ * overwritten in place outside the gateway.  A stored synthetic ETag naming
+ * this file's inode with another mtime is synthesized afresh, as NooBaa
+ * synthesizes it on every read;  one naming another inode -- a copy carries
+ * its source's -- stays as stored.  A stored checksum whose recorded file
+ * no longer matches is not returned, as NooBaa stores none;  one with no
+ * record, written before records were kept, is returned as it is.
+ * Nothing on disk changes:  reads do not repair. */
+static void stored_values_in_force(const struct statx& stx, Attrs& attrs)
+{
+  const std::string now = nsfs_version_id_from_statx(stx);
+  if (auto e = attrs.find(RGW_ATTR_ETAG); e != attrs.end()) {
+    const std::string stored = e->second.to_str();
+    const auto ino = synthetic_etag_ino(stored);
+    if (!ino.empty() && (ino == synthetic_etag_ino(now)) && (stored != now)) {
+      bufferlist bl;
+      bl.append(now);
+      e->second = std::move(bl);
+    }
+  }
+  if (auto c = attrs.find(RGW_NSFS_ATTR_CKSUM_STAT); c != attrs.end()) {
+    if (c->second.to_str() != now) {
+      attrs.erase(RGW_ATTR_CKSUM);
+    }
+  }
 }
 
 /* rgw_non_md5_etag on NSFS: use the same mtime-ino string as version ids
@@ -3264,6 +3334,7 @@ int FSEnt::make_dir_entry(const DoutPrefixProvider *dpp, optional_yield y,
   ret = read_attrs(dpp, y, attrs);
   if (ret < 0)
     return ret;
+  stored_values_in_force(stx, attrs);
 
   ACLOwner acl_owner;
   ret = xattr_strategy->object_owner(attrs, acl_owner);
@@ -12842,6 +12913,22 @@ int NSFSObject::copy_object(const ACLOwner& owner,
     }
   }
 
+  /* A copy to another object records what its checksum describes:  the
+   * new file.  A copy onto itself rewrites no contents, and keeps the
+   * record it had -- recording now would vouch for a checksum an outside
+   * overwrite had already made stale. */
+  if ((dobj->get_bucket()->get_name() != get_bucket()->get_name()) ||
+      (dobj->get_key().name != get_key().name)) {
+    int dfd = -1;
+    if (auto* de = dobj->get_fsent()) {
+      if (de->get_fd() < 0) {
+	(void) de->open(dpp);
+      }
+      dfd = de->get_fd();
+    }
+    record_cksum_stat(dpp, dfd, attrs);
+  }
+
   ret = dobj->set_obj_attrs(dpp, &attrs,
 			    stale_meta.empty() ? nullptr : &stale_meta,
 			    y, rgw::sal::FLAG_LOG_OP, authenticated_user);
@@ -14266,6 +14353,10 @@ int NSFSObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp)
     return rret;
   });
   state.has_attrs = (ret == 0);
+
+  if (state.has_attrs) {
+    stored_values_in_force(ent->get_stx(), state.attrset);
+  }
 
   if (state.has_attrs && state.attrset.find(RGW_ATTR_ETAG) == state.attrset.end()) {
     bufferlist bl;
@@ -17502,6 +17593,7 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
 
     /* owner is already in attrs[RGW_ATTR_ACL] from the generic layer */
 
+    record_cksum_stat(dpp, afd, attrs);
     for (auto& [k, v] : attrs) {
       std::string xattr_name = xattr_strategy()->disk_name(k);
       std::string xattr_val = attr_on_disk(xattr_strategy(), k, v);
@@ -18698,6 +18790,8 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
 
   /* owner is already in attrs[RGW_ATTR_ACL] from the generic layer */
 
+  record_cksum_stat(rctx.dpp,
+		    obj->get_fsent() ? obj->get_fsent()->get_fd() : -1, attrs);
   obj->set_attrs(attrs);
   ret = obj->write_attrs(rctx.dpp, rctx.y);
   if (ret < 0) {
@@ -18948,13 +19042,20 @@ void NSFSDriver::get_features(std::map<std::string, std::string>& features)
   features["non_md5_etag"] =
     ctx()->_conf->rgw_non_md5_etag ? "true" : "false";
   /* the listing cache's revalidation:  whether a listing checks the tree,
-   * and its two intervals in seconds (-1:  entries never compared) */
+   * and its two intervals in seconds (-1:  entries never compared), as in
+   * force -- the listing-intervals hint can shorten them */
   features["listing_revalidate"] =
     ctx()->_conf.get_val<bool>("rgw_nsfs_listing_revalidate") ? "true" : "false";
-  features["listing_entry_interval"] = std::to_string(
-    ctx()->_conf.get_val<int64_t>("rgw_nsfs_listing_entry_interval"));
-  features["listing_provisional_interval"] = std::to_string(
-    ctx()->_conf.get_val<int64_t>("rgw_nsfs_listing_provisional_interval"));
+  {
+    auto* rv = get_listing_revalidation();
+    const auto e = rv->entry_interval();
+    features["listing_entry_interval"] = e
+      ? std::to_string(std::chrono::duration_cast<std::chrono::seconds>(*e).count())
+      : std::string{"-1"};
+    features["listing_provisional_interval"] = std::to_string(
+      std::chrono::duration_cast<std::chrono::seconds>(
+	rv->provisional_interval()).count());
+  }
   /* Whether lifecycle runs, and how long its day is:  with
    * rgw_lc_debug_interval positive, that many seconds stand for a day,
    * and otherwise a day is a day.  A test that waits for an expiry has

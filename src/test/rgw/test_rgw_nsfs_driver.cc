@@ -8483,6 +8483,104 @@ TEST_F(NSFSBucketTest, ReadingADirectoryKeepsItsDeleteMarkersAndVersions)
   EXPECT_EQ(listed_versions(bucket.get(), env->dpp, "beside.txt").size(), 1u);
 }
 
+/* A PUT carrying `extra` among its attributes, as RGWPutObj passes a
+ * client's checksum. */
+static void put_with_attrs(rgw::sal::Driver* driver, rgw::sal::Bucket* bucket,
+			   const DoutPrefixProvider* dpp, const ACLOwner& owner,
+			   const std::string& key, const std::string& body,
+			   rgw::sal::Attrs extra)
+{
+  auto obj = bucket->get_object(rgw_obj_key(key));
+  auto writer = driver->get_atomic_writer(dpp, null_yield, obj.get(), owner,
+					  nullptr, 0, "put",
+					  rgw::sal::no_authenticated_user);
+  ASSERT_EQ(writer->prepare(null_yield), 0) << key;
+  bufferlist bl;
+  bl.append(body);
+  ASSERT_EQ(writer->process(std::move(bl), 0), 0);
+  ASSERT_EQ(writer->process({}, body.size()), 0);
+  ceph::real_time mtime;
+  std::string etag;
+  req_context rctx{dpp, null_yield, nullptr};
+  ASSERT_EQ(writer->complete(body.size(), etag, &mtime, real_time(), extra,
+			     std::nullopt, real_time(), nullptr, nullptr,
+			     nullptr, nullptr, nullptr, rctx, 0), 0) << key;
+}
+
+/* The attributes GET and HEAD return for `key`. */
+static rgw::sal::Attrs read_attrs_of(rgw::sal::Bucket* bucket,
+				     const DoutPrefixProvider* dpp,
+				     const std::string& key)
+{
+  auto obj = bucket->get_object(rgw_obj_key(key));
+  EXPECT_EQ(obj->get_obj_attrs(null_yield, dpp), 0) << key;
+  return obj->get_attrs();
+}
+
+/* A stored checksum describes the contents it was computed over:  it is
+ * returned while the file is unchanged, and not once a filesystem client
+ * has overwritten the file in place -- NooBaa stores and returns none. */
+TEST_F(NSFSBucketTest, AStoredChecksumIsReturnedOnlyWhileItsFileIsUnchanged)
+{
+  bufferlist ck;
+  ck.append("a checksum");
+  put_with_attrs(driver.get(), bucket.get(), env->dpp, acl_owner, "ck", "one",
+		 {{RGW_ATTR_CKSUM, ck}});
+  EXPECT_TRUE(read_attrs_of(bucket.get(), env->dpp, "ck")
+	      .contains(RGW_ATTR_CKSUM)) << "an unchanged file lost its checksum";
+
+  sideload(bucket_path(), "ck", "rewritten outside");
+  EXPECT_FALSE(read_attrs_of(bucket.get(), env->dpp, "ck")
+	       .contains(RGW_ATTR_CKSUM))
+    << "a checksum of contents no longer there was returned";
+}
+
+/* Under rgw_non_md5_etag a PUT stores a synthetic ETag (GLOSSARY).  An
+ * overwrite in place keeps the inode and moves the mtime, and the ETag
+ * returned is synthesized afresh, as NooBaa synthesizes it.  A copy has its
+ * own file's, which an overwrite of its source does not touch. */
+TEST_F(NSFSBucketTest, AStoredSyntheticETagFollowsAnOverwriteInPlace)
+{
+  ConfSetting synthetic("rgw_non_md5_etag", "true");
+  put_object(driver.get(), bucket.get(), env->dpp, acl_owner, "syn", "one",
+	     "text/plain");
+  auto etag = [&](const std::string& key) {
+    auto a = read_attrs_of(bucket.get(), env->dpp, key);
+    auto it = a.find(RGW_ATTR_ETAG);
+    return (it == a.end()) ? std::string{} : it->second.to_str();
+  };
+  const std::string before = etag("syn");
+  ASSERT_TRUE(before.starts_with("mtime-")) << before;
+
+  auto src = bucket->get_object(rgw_obj_key("syn"));
+  auto dst = bucket->get_object(rgw_obj_key("syn-copy"));
+  Attrs cattrs;
+  add_attr(cattrs, RGW_ATTR_ACL, "");
+  std::string cetag, ctag;
+  ASSERT_EQ(src->copy_object(
+      acl_owner, rgw_user(), rgw::sal::no_authenticated_user,
+      nullptr, rgw_zone_id(),
+      dst.get(), bucket.get(), bucket.get(),
+      rgw_placement_rule(), nullptr, nullptr,
+      nullptr, nullptr, false,
+      nullptr, nullptr,
+      ATTRSMOD_NONE, false, cattrs,
+      RGWObjCategory::Main, 0,
+      boost::none, nullptr, &ctag, &cetag,
+      nullptr, nullptr, nullptr,
+      env->dpp, null_yield), 0);
+  const std::string copied = etag("syn-copy");
+  ASSERT_TRUE(copied.starts_with("mtime-")) << copied;
+
+  std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  sideload(bucket_path(), "syn", "rewritten outside");
+  const std::string after = etag("syn");
+  EXPECT_NE(after, before) << "the stored synthetic ETag outlived the overwrite";
+  EXPECT_TRUE(after.starts_with("mtime-")) << after;
+  EXPECT_EQ(etag("syn-copy"), copied)
+    << "an overwrite of the source changed its copy's ETag";
+}
+
 TEST_F(NSFSBucketTest, WithRevalidationOffAListingTrustsItsFill)
 {
   ConfSetting off("rgw_nsfs_listing_revalidate", "false");
