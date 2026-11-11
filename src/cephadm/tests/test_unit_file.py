@@ -5,6 +5,7 @@ from unittest import mock
 import functools
 import io
 import os
+import subprocess
 import sys
 
 import pytest
@@ -235,3 +236,53 @@ def test_monitoring_other_types_no_success_exit_status(
     daemon = Monitoring(ctx, ident)
     ctr = daemon.container(ctx)
     assert ctr.success_exit_status is None
+
+
+def test_docker_unit_run_waits_for_old_container_removal(tmp_path):
+    """The fake docker holds the old container's name for one more inspect,
+    as dockerd does while it removes a stopped --rm container.
+    """
+    from cephadmlib import runscripts
+    from cephadmlib.container_types import CephContainer
+
+    left = tmp_path / 'removal_inspects_left'
+    left.write_text('1\n')
+    started = tmp_path / 'started'
+    fake_docker = tmp_path / 'docker'
+    fake_docker.write_text(
+        f"""#!/bin/bash
+left=$(cat {left})
+case "$1" in
+rm) [ "$left" -eq 0 ] ;;
+inspect|container)
+    [ "$left" -gt 0 ] || exit 1
+    echo $((left - 1)) > {left} ;;
+run)
+    if [ "$left" -gt 0 ]; then
+        echo 'Conflict. The container name is already in use' >&2
+        exit 125
+    fi
+    touch {started} ;;
+esac
+"""
+    )
+    fake_docker.chmod(0o755)
+
+    ctx = context.CephadmContext()
+    ctx.container_engine = mock_docker()
+    ctx.container_engine.path = str(fake_docker)
+    ctx.data_dir = str(tmp_path)
+    ctx.image = 'quay.io/ceph/ceph:latest'
+    ctx.memory_request = None
+    ctx.memory_limit = None
+    ident = DaemonIdentity(_FSID, 'mon', 'a')
+    os.makedirs(ident.data_dir(ctx.data_dir))
+    ctr = CephContainer.for_daemon(
+        ctx, ident, '/usr/bin/ceph-mon', container_args=['-d']
+    )
+    runscripts.write_service_scripts(ctx, ident, container=ctr)
+
+    unit_run = os.path.join(ident.data_dir(ctx.data_dir), 'unit.run')
+    res = subprocess.run(['bash', unit_run], capture_output=True, text=True)
+    assert res.returncode == 0, res.stderr
+    assert started.exists()
