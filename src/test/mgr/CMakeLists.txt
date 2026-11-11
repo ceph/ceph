@@ -81,6 +81,17 @@ add_ceph_unittest(unittest_mgr_map_cache)
 target_link_libraries(unittest_mgr_map_cache ceph-common global
   Python3::Python ${CMAKE_DL_LIBS} ${GSSAPI_LIBRARIES})
 
+# unittest_mgr_mgrclient
+add_executable(unittest_mgr_mgrclient
+  test_mgrclient.cc
+  $<TARGET_OBJECTS:unit-main>
+)
+add_ceph_unittest(unittest_mgr_mgrclient)
+target_link_libraries(unittest_mgr_mgrclient
+  ceph-common
+  global
+)
+
 # unittest_mgr_mgroprequest
 add_executable(unittest_mgr_mgroprequest
   test_mgroprequest.cc
