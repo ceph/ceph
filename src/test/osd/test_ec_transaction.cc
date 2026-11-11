@@ -18,6 +18,9 @@
 #include "osd/ECTransaction.h"
 #include "common/debug.h"
 #include "osd/ECBackend.h"
+#include "osd/ECOmapJournal.h"
+#include "osd/OSDMap.h"
+#include "osd/PGLog.h"
 
 #include "test/unit.cc"
 
@@ -561,6 +564,70 @@ TEST(ectransaction, truncate_then_write_one_shard) {
   ECUtil::shard_extent_set_t ref_write(sinfo.get_k_plus_m());
   ref_write[shard_id_t(1)].insert(0, 8192);
   ref_write[shard_id_t(2)].insert(0, 8192);
-  
+
   ASSERT_EQ(ref_write, plan.will_write);
+}
+
+// While a PG is degraded or undersized the pipeline sets write_all_shards on
+// its plans (RMWPipeline::cache_ready). The log entry of a write then lists
+// every shard, where a partial write lists only the shards it writes. An
+// attribute update is the simplest partial write: it reaches the primary
+// capable shards only.
+TEST(ectransaction, write_all_shards_lists_every_shard) {
+  hobject_t h;
+  pg_pool_t pool;
+  pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
+  pool.nonprimary_shards.insert(shard_id_t(1));
+  ECUtil::stripe_info_t sinfo(2, 1, 2 * EC_ALIGN_SIZE, &pool, std::vector<shard_id_t>(0));
+  shard_id_set shards;
+  shards.insert_range(shard_id_t(0), 3);
+
+  OSDMapRef osdmap = std::make_shared<OSDMap>();
+  ErasureCodeInterfaceRef no_encoding;
+  ECOmapJournal ec_omap_journal(dpp);
+  PGLog pg_log(g_ceph_context);
+
+  for (bool write_all_shards : {false, true}) {
+    ObjectContextRef obc = std::make_shared<ObjectContext>();
+    obc->obs.exists = true;
+    obc->obs.oi.soid = h;
+    obc->obs.oi.size = 2 * EC_ALIGN_SIZE;
+
+    PGTransaction t;
+    t.obc_map[h] = obc;
+    bufferlist value;
+    value.append("value");
+    t.setattr(h, "_test", value);
+
+    ECTransaction::WritePlan plans;
+    plans.want_read = false;
+    plans.plans.emplace_back(
+      h, t.op_map.at(h), sinfo, shards, shards, false, obc->obs.oi.size,
+      obc->obs.oi, std::nullopt, 0);
+    plans.plans.back().write_all_shards = write_all_shards;
+
+    std::vector<pg_log_entry_t> entries;
+    entries.emplace_back(
+      pg_log_entry_t::MODIFY, h, eversion_t(1, 2), eversion_t(1, 1), 0,
+      osd_reqid_t(), utime_t(), 0);
+    shard_id_map<ObjectStore::Transaction> transactions(sinfo.get_k_plus_m());
+    for (auto shard : shards) {
+      transactions[shard];
+    }
+    std::map<hobject_t, ECUtil::shard_extent_map_t> written;
+    std::set<hobject_t> temp_added, temp_removed;
+    bool first_write_in_interval = false;
+
+    ECTransaction::generate_transactions(
+      &t, plans, no_encoding, pg_t(1, 0), sinfo, {}, entries, &written,
+      &transactions, &temp_added, &temp_removed, &dpp, osdmap,
+      first_write_in_interval, ec_omap_journal, pg_log);
+
+    const pg_log_entry_t &entry = entries.front();
+    ASSERT_TRUE(entry.is_written_shard(shard_id_t(0)));
+    ASSERT_TRUE(entry.is_written_shard(shard_id_t(2)));
+    // Shard 1 holds data only, and this write has none for it.
+    ASSERT_EQ(write_all_shards, entry.is_written_shard(shard_id_t(1)));
+    ASSERT_EQ(write_all_shards, !transactions.at(shard_id_t(1)).empty());
+  }
 }

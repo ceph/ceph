@@ -112,6 +112,7 @@ OSD
    peering
    placement-group
    erasure-coded-pool
+   ec-write-journal-poc
    pool-migration-design
    versions
    crimson/index

@@ -674,6 +674,28 @@ struct ECCommon {
     void cache_ready(Op &op);
     void try_finish_rmw();
     void finish_rmw(OpRef const &op);
+    // Send op's per-shard transactions now, with no log entry and no
+    // version, the way the rollforward kick is sent; op->on_all_commit runs
+    // once every shard committed. Only while the extent cache is idle, so
+    // nothing queued ahead of it is overtaken: returns false otherwise.
+    bool submit_unlogged(OpRef op);
+
+    // The roll-forward kick. When the pipeline goes idle after an op whose
+    // version is past can_rollback_to, a dummy transaction-empty op carries
+    // pg_committed_to to every shard that still holds rollback state, so
+    // that it can discard it (finish_rmw). Under load the pipeline is idle
+    // for a moment after about a third of the writes, and every kick costs
+    // those shards a transaction (a full PG info write: last_update does not
+    // move, so fast info cannot be used) and a message pair, and the next
+    // write's acknowledgement queues behind its commit. When set,
+    // defer_rollforward is asked first: true means the owner calls
+    // kick_rollforward() later (ECBackend: after osd_ec_rollforward_delay_ms)
+    // and nothing is sent now. A write that starts meanwhile carries
+    // pg_committed_to itself, so a deferred kick usually finds nothing to do.
+    std::function<bool()> defer_rollforward;
+    // Send the kick now if the pipeline is still idle and committed_to is
+    // past can_rollback_to; otherwise nothing.
+    void kick_rollforward();
 
     void on_change();
     void on_change2();
@@ -717,6 +739,11 @@ struct ECCommon {
     // Set of shards that will need a dummy transaction for the final
     // roll forward
     std::set<shard_id_t> pending_roll_forward;
+    // The op that last asked for a roll-forward kick: the dummy repeats its
+    // object, trim_to and reqid (kick_rollforward).
+    hobject_t rollforward_hoid;
+    eversion_t rollforward_trim_to;
+    osd_reqid_t rollforward_reqid;
 
     ceph::ErasureCodeInterfaceRef ec_impl;
     const ECUtil::stripe_info_t &sinfo;
