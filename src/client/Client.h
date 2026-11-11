@@ -2312,6 +2312,9 @@ private:
   Finisher remount_finisher;
   Finisher async_ino_releasor;
   Finisher objecter_finisher;
+  // Completes the OSD reads of non-blocking sync reads
+  // (C_Read_Sync_NonBlocking), which may wait for an MDS reply.
+  Finisher nonblocking_read_finisher;
 
   ceph::coarse_mono_time last_cap_renew;
 

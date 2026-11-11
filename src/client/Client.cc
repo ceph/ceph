@@ -406,6 +406,7 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
     remount_finisher(m->cct),
     async_ino_releasor(m->cct),
     objecter_finisher(m->cct),
+    nonblocking_read_finisher(m->cct, "Client::nonblocking_read", "fn_client_nbrd"),
     m_command_hook(this),
     fscid(0),
     subvolume_tracker{std::make_unique<SubvolumeMetricTracker>(cct, whoami)}
@@ -655,6 +656,7 @@ void Client::_pre_init()
   timer.init();
 
   objecter_finisher.start();
+  nonblocking_read_finisher.start();
   filer.reset(new Filer(objecter, &objecter_finisher));
 #if defined(__linux__)
   fscrypt.reset(new FSCrypt(cct));
@@ -823,6 +825,9 @@ void Client::shutdown()
 
   objecter_finisher.wait_for_empty();
   objecter_finisher.stop();
+
+  nonblocking_read_finisher.wait_for_empty();
+  nonblocking_read_finisher.stop();
 
   if (logger) {
     cct->get_perfcounters_collection()->remove(logger.get());
@@ -11606,8 +11611,17 @@ void Client::C_Read_Sync_NonBlocking::start()
 }
 void Client::C_Read_Sync_NonBlocking::retry()
 {
+  // finish() may have to ask the MDS for the file size (a short read
+  // without the Fs cap) and wait for the reply. It must not wait in the
+  // Objecter's dispatch, on a messenger worker thread: that thread may be
+  // the one that has to read the reply. Nor on objecter_finisher, which
+  // completes the writes whose cap references the MDS may be waiting for
+  // before it answers.
   filer->read_trunc(in->ino, &in->layout, in->snapid, pos, left, &tbl, 0,
-                    in->truncate_size, in->truncate_seq, this);
+                    in->truncate_size, in->truncate_seq,
+                    new C_OnFinisher(
+                      new LambdaContext([this](int r) { complete(r); }),
+                      &clnt->nonblocking_read_finisher));
 }
 
 /**
