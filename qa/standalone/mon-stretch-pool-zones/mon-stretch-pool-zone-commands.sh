@@ -20,7 +20,15 @@ function one_mon_args() {
     echo "${CEPH_ARGS/--mon-host=$CEPH_MON /--mon-host=$CEPH_MON_A }"
 }
 
-# size and replica of pools over zones, and min_size of an EC pool over zones
+# For a pool over two zones, osd pool set <pool> size is refused, and
+# replica, the number of copies in each zone, is set instead; min_size of
+# an erasure coded pool counts the shards in each zone. This test uses r, a
+# replicated pool with 2 copies in each of the zones dc1 and dc2, and e, an
+# erasure coded pool of k=2 m=1 in each zone. size 3 is refused for r, and
+# so is replica 3 while r has nosizechange set; with that unset, replica 3
+# gives r 6 copies. replica 2 is refused for e, which is not replicated.
+# min_size 4 is refused for e, as it must be between k=2 and k+m=3, and
+# min_size 3 is accepted.
 function TEST_pool_set_on_two_zones() {
     local dir=$1
     two_zone_cluster $dir || return 1
@@ -47,9 +55,13 @@ function TEST_pool_set_on_two_zones() {
     test "$(pool_field e min_size)" = 3 || return 1
 }
 
-# A PG has at most 128 OSDs: num_zones 2 is refused for a pool of more than 64
-# shards. A rule generated for so many shards is refused for the zones' size
-# first, so the pool is given a rule over two zones.
+# A PG can have at most 128 OSDs, so osd pool set <pool> num_zones 2 is
+# refused for an erasure coded pool of more than 64 shards. This test uses
+# wide, an erasure coded pool of k=60 m=5 (65 shards), and gives it
+# two_zones, a rule over two zones made by create-erasure, as a rule made
+# for so many shards would first be refused for the size of the zones. The
+# command is refused: wide keeps its 65 shards in one zone, two_zones is
+# not removed, and the cluster stretch flags stay unset.
 function TEST_num_zones_osd_limit() {
     local dir=$1
     two_zone_cluster $dir || return 1
@@ -69,9 +81,13 @@ function TEST_num_zones_osd_limit() {
     test "$(ceph osd dump -f json | jq .stretch_mode.stretch_mode_enabled)" = false || return 1
 }
 
-# A pool over zones is a FastEC pool, which a default profile with a stripe
-# unit that is not a multiple of 4096 cannot give, even with
-# --yes-i-really-mean-it; nothing is left behind
+# An erasure coded pool over zones must use the optimized erasure code
+# (allow_ec_optimizations), which needs a stripe unit that is a multiple of
+# 4096 bytes. This test sets the default erasure code profile to k=2 m=1
+# with stripe_unit=2048. osd pool create e erasure --num_zones 2 is
+# refused, and so it is with --yes-i-really-mean-it, which accepts such a
+# stripe unit only for a pool in one zone. No pool e, profile e-k2-m1 or
+# rule e is left behind, and the cluster stretch flags stay unset.
 function TEST_odd_stripe_unit_default_over_zones() {
     local dir=$1
     two_zone_cluster $dir || return 1
@@ -88,7 +104,12 @@ function TEST_odd_stripe_unit_default_over_zones() {
     test "$(ceph osd dump -f json | jq .stretch_mode.stretch_mode_enabled)" = false || return 1
 }
 
-# pool default set changes only the defaults: no pool, and not stretch mode
+# osd pool default set --num_zones 2 --replica 2 changes only the pool
+# creation defaults: pool old, created before it, stays in one zone, and
+# the cluster stretch flags stay unset in the OSDMap and the monmap. The
+# next pool, new, follows the defaults: it is created over the zones dc1
+# and dc2 with 2 copies in each, and as the first pool over two zones it
+# sets the cluster stretch flags in the OSDMap. old is still in one zone.
 function TEST_default_set_num_zones_changes_nothing() {
     local dir=$1
     two_zone_cluster $dir || return 1
@@ -106,9 +127,15 @@ function TEST_default_set_num_zones_changes_nothing() {
     test "$(pool_field old num_zones)" = 1 || return 1
 }
 
-# create-erasure takes the zone type of a rule over zones from the profile,
-# else from osd_pool_default_zone_failure_domain, as pool creation does: a
-# profile has crush-zone-failure-domain only if it is given
+# osd crush rule create-erasure <rule> <profile> 2 makes an erasure rule
+# over two zones. As pool creation does, it takes the zone type from the
+# profile's crush-zone-failure-domain or, when the profile has none, from
+# osd_pool_default_zone_failure_domain; a profile has
+# crush-zone-failure-domain only if it is given. Profile small has none.
+# With the option set to host, by_option is refused, as there are 6 hosts,
+# not 2; with it set to datacenter, by_option chooses datacenters, the
+# zones dc1 and dc2. Profile dcs has crush-zone-failure-domain datacenter,
+# and with the option back at host, by_profile chooses datacenters.
 function TEST_create_erasure_zone_type() {
     local dir=$1
     two_zone_cluster $dir || return 1
@@ -130,9 +157,13 @@ function TEST_create_erasure_zone_type() {
     test "$(rule_zone_type by_profile)" = datacenter || return 1
 }
 
-# num_zones takes the zone type of a pool in one zone from
-# --zone_failure_domain, else from osd_pool_default_zone_failure_domain, not
-# from an erasure coded pool's profile
+# osd pool set <pool> num_zones 2 takes the zone type from
+# --zone_failure_domain or, without it, from
+# osd_pool_default_zone_failure_domain, not from the erasure code profile
+# of the pool. This test creates e, an erasure coded pool in one zone, with
+# a profile whose crush-zone-failure-domain is host. num_zones 2, given no
+# --zone_failure_domain, puts e on e-stretch, which chooses zones of type
+# datacenter, the option's default, not host.
 function TEST_set_num_zones_erasure_zone_type() {
     local dir=$1
     two_zone_cluster $dir || return 1
@@ -145,8 +176,17 @@ function TEST_set_num_zones_erasure_zone_type() {
     test "$(rule_zone_type e-stretch)" = datacenter || return 1
 }
 
-# num_zones keeps the placement of the pool's rule, not that of the defaults
-# or of an erasure coded pool's profile; the command line changes it
+# osd pool set <pool> num_zones keeps the placement of the pool's rule
+# (root, device class and failure domain), not that of the pool creation
+# defaults or of an erasure coded pool's profile; options on the command
+# line change it. Every OSD here is ssd. Replicated pool r is created in
+# one zone with --class ssd --osd_failure_domain osd: num_zones 2 gives it
+# rule r, which chooses the zones and then ssd OSDs, and num_zones 1
+# --root dc1 gives it r-single-zone, of ssd OSDs in dc1. Erasure coded pool
+# e has profile plain (failure domain host) but is created on ssd_osds (ssd
+# OSDs, made by create-erasure): num_zones 2 gives it e-stretch, of ssd
+# OSDs, and num_zones 1 --no-class gives it e-single-zone, of OSDs of any
+# class.
 function TEST_num_zones_placement_from_rule() {
     local dir=$1
     two_zone_cluster $dir || return 1
@@ -176,9 +216,15 @@ function TEST_num_zones_placement_from_rule() {
     test "$(rule_leaf_type e-single-zone)" = osd || return 1
 }
 
-# A pool whose rule's placement cannot be read changes num_zones only with
-# --crush_rule, or with all of --root, --osd_failure_domain and --class or
-# --no-class
+# osd pool set <pool> num_zones 2 starts from the placement of the pool's
+# rule. When that cannot be read, it needs --crush_rule, or the whole
+# placement: --root, --osd_failure_domain and --class or --no-class. Pools
+# r and r2 are on two_per_host, which chooses hosts and then 2 OSDs in
+# each, so its placement cannot be read. For r, --root default
+# --osd_failure_domain host is refused without a class option, and r stays
+# in one zone; with --no-class added, r goes over two zones on rule r, of
+# hosts under the default root. r2 goes over two zones on r, given with
+# --crush_rule.
 function TEST_num_zones_rule_not_read() {
     local dir=$1
     two_zone_cluster $dir || return 1
@@ -211,8 +257,13 @@ EOF
     test "$(ceph osd pool get r2 crush_rule -f json | jq -r .crush_rule)" = r || return 1
 }
 
-# --root confines a pool to a subtree, and --class to a device class, also
-# when replica changes
+# --root on osd pool create confines a pool to a subtree of the CRUSH map,
+# and --class to a device class, which stays when replica changes. Every
+# OSD here is ssd. Erasure coded pool e, created in one zone with --root
+# dc1, gets a rule that takes dc1. Replicated pool r, created over two
+# zones with 2 copies in each and --class ssd, gets a rule that takes the
+# ssd OSDs of the default root, and so does r-replica-3, the rule that
+# osd pool set r replica 3 moves it to.
 function TEST_root_and_class_rules() {
     local dir=$1
     two_zone_cluster $dir || return 1
@@ -227,9 +278,19 @@ function TEST_root_and_class_rules() {
     test "$(rule_takes r-replica-3)" = default~ssd || return 1
 }
 
-# A pool reduced to one zone gets a rule of the placement that num_zones 1
-# is given (--root, --osd_failure_domain, --class), for replicated and
-# erasure coded pools; --no-class drops a default class
+# osd pool set <pool> num_zones 1 gives a pool over two zones a rule in one
+# zone with the placement it is given: --root, --osd_failure_domain or
+# --class. Every OSD here is ssd, and every pool starts over two zones.
+# Replicated pools r_root (--root dc1), r_host (--osd_failure_domain host)
+# and r_cls (--class ssd), and erasure coded pools e_root (--root dc2) and
+# e_cls (--class ssd), each get a rule of their own, <pool>-single-zone.
+# r_plain, given none, has the cluster's default placement and gets no
+# rule of its own.
+# With osd_pool_default_class set to ssd, --no-class drops the class:
+# replicated pool r_nc, and erasure coded pool e_nc, whose profile carries
+# the class, go to rules of any class. --class with --no-class is refused,
+# for r_both and e_both. A rule made by create-erasure from a profile of
+# class ssd still takes the ssd OSDs.
 function TEST_shrink_to_one_zone_placement() {
     local dir=$1
     two_zone_cluster $dir || return 1
@@ -285,8 +346,13 @@ function TEST_shrink_to_one_zone_placement() {
     ceph config rm global osd_pool_default_class || return 1
 }
 
-# A rule goes when the change of a pool's rule leaves it unused, and stays
-# while another pool uses it
+# A rule is removed when a change to a pool's rule leaves no pool on it,
+# and stays while another pool uses it. Erasure coded pools e1 and e2 share
+# rule e1. osd pool set e1 num_zones 2 gives e1 the rule e1-stretch and
+# leaves rule e1 to e2; once e2 is over two zones too, rule e1 is removed.
+# num_zones 1 then moves e1 to e1-single-zone and removes e1-stretch.
+# Replicated pool r, created over two zones on rule r, moves to
+# r-replica-3 with osd pool set r replica 3, and rule r is removed.
 function TEST_rule_lifetime_on_pool_changes() {
     local dir=$1
     two_zone_cluster $dir || return 1
@@ -315,9 +381,13 @@ function TEST_rule_lifetime_on_pool_changes() {
     ! rule_exists r || return 1
 }
 
-# The rule osd_pool_default_crush_rule names is kept, and replicated_rule
-# goes with its last pool; with no default replicated rule, single-zone
-# replicated pools cannot be created
+# The rule that osd_pool_default_crush_rule names is not removed when its
+# last pool leaves it, but replicated_rule is. With osd pool default set
+# --rule r, pool p is created on r, and pool q on replicated_rule. Moving q
+# to r removes replicated_rule; moving both pools to r2 leaves r, the
+# default. With osd_pool_default_crush_rule set to 99, a rule that does not
+# exist, there is no default replicated rule, so osd pool create s is
+# refused and no pool is created.
 function TEST_default_replicated_rule_lifetime() {
     local dir=$1
     local -x CEPH_ARGS="$(one_mon_args)"
@@ -341,8 +411,12 @@ function TEST_default_replicated_rule_lifetime() {
     ! ceph osd pool ls | grep -qx s || return 1
 }
 
-# With mon_fake_pool_delete a deleted pool is only renamed, and keeps its
-# profile and rule
+# With mon_fake_pool_delete set, osd pool rm only renames the pool, to
+# <pool>.<id>.DELETED, so the pool's erasure code profile and rule must
+# stay. This test removes e, an erasure coded pool made with --k 2 --m 1,
+# and finds e.<id>.DELETED with profile e-k2-m1, which still exists, and
+# rule e. It passes --yes-i-really-really-mean-it-not-faking, which, unlike
+# --yes-i-really-really-mean-it, leaves the choice to mon_fake_pool_delete.
 function TEST_fake_pool_delete_keeps_profile_and_rule() {
     local dir=$1
     local -x CEPH_ARGS="$(one_mon_args)"
@@ -358,8 +432,13 @@ function TEST_fake_pool_delete_keeps_profile_and_rule() {
     rule_exists e || return 1
 }
 
-# An error of building the rule of a pool over zones names the defaults that
-# gave its values
+# When the rule of a new pool over zones cannot be built, the error names
+# the pool creation defaults that gave the values it was built from. Each
+# of the zones dc1 and dc2 here has 2 hosts. osd pool create p --num_zones
+# 2 is refused as it needs at least 3 hosts, and the error names
+# osd_pool_default_size, osd_pool_default_zone_failure_domain,
+# osd_pool_default_osd_failure_domain and osd_pool_default_root. Given
+# --replica 3, the error names the last three only. No pool p is created.
 function TEST_rule_errors_name_defaults() {
     local dir=$1
     two_zone_cluster $dir 2 || return 1

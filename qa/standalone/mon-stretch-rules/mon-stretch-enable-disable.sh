@@ -111,7 +111,20 @@ function create_pools() {
     ceph osd pool set ec allow_ec_optimizations true || return 1
 }
 
-# Test enabling stretches every pool and sets the stretch defaults
+# mon enable_stretch_mode <tiebreaker> <rule> <zone type> turns on global
+# stretch mode: it moves every pool over two zones, as osd pool set
+# num_zones 2 does, and sets the pool creation defaults to 2 copies in each
+# of two zones of that type. This test gives it tiebreaker c (the monitor
+# in neither zone), stretch_rule (2 hosts in each of the zones iris and
+# pze) and type zone. The pools are rep (replicated) and ec (erasure coded,
+# k=2 m=1). rep goes to stretch_rule with 4 copies, and ec to a new rule,
+# ec-stretch, with 3 shards in each zone, of which shards 1 and 4 cannot
+# become primary. The monmap records global stretch mode with c as the
+# tiebreaker, and the cluster stretch flags are set. The command can be
+# run again.
+# A new pool, newrep, follows the new defaults with 4 copies on a rule made
+# for it; after osd pool default set --rule stretch_rule, newrep2 is put on
+# stretch_rule.
 function TEST_enable_stretches_every_pool() {
     local dir=$1
     setup_zones $dir || return 1
@@ -160,8 +173,17 @@ function pool_rule_name() {
     ceph osd pool get $1 crush_rule -f json | jq -r .crush_rule
 }
 
-# Test enabling without a CRUSH rule gives each pool a rule generated for it,
-# and that disabling removes those rules
+# mon enable_stretch_mode with no rule gives each pool a new rule over two
+# zones with the placement of the pool's own rule. This test runs it with
+# only --dividing_bucket zone on rep (replicated, in one zone), ec (erasure
+# coded, k=2 m=1) and two (replicated, already over two zones with 1 copy
+# in each). rep gets 4 copies on rule rep, which chooses the zones and then
+# OSDs, as replicated_rule chooses OSDs here; ec gets 6 shards on
+# ec-stretch; and two gets 2 copies in each zone on two-replica-2.
+# Pool later, replicated, is then created in one zone; mon
+# enable_stretch_mode run again with stretch_rule moves it to stretch_rule.
+# mon disable_stretch_mode then leaves none of the rules rep, ec-stretch
+# and two-replica-2.
 function TEST_enable_generates_rules() {
     local dir=$1
     setup_zones $dir || return 1
@@ -201,8 +223,17 @@ function TEST_enable_generates_rules() {
     wait_for_clean || return 1
 }
 
-# Test enabling with no pools enters stretch mode in the MonMap and sets the
-# defaults, and the first pool over two zones sets the cluster stretch flags
+# mon enable_stretch_mode with no pools turns on global stretch mode in the
+# monmap, with c as the tiebreaker, and sets the pool creation defaults to
+# two zones of type zone. The cluster stretch flags stay unset until a pool
+# is over two zones. Meanwhile osd pool stretch set, which stretches a
+# single pool, is refused, and mon disable_stretch_mode and then mon
+# enable_stretch_mode, run twice, work.
+# OSDs are then added, and the zones iris and pze put in two regions. A pool
+# over zones of type region is refused, as the monitors were divided by
+# zone, and the flags stay unset. The next pool, rep, is created over the
+# two zones by the defaults and sets the cluster stretch flags, with zone as
+# their bucket type, 2 zones and c as the tiebreaker.
 function TEST_enable_without_pools() {
     local dir=$1
     setup_zones $dir || return 1
@@ -232,8 +263,8 @@ function TEST_enable_without_pools() {
 
     # the first pool over two zones must divide them as the tiebreaker was
     # chosen for: two regions hold the zones, but no Monitor is in one, so
-    # stretch mode by region would crash the Monitors. No Manager yet, which
-    # would create .mgr over the zones first.
+    # cluster stretch flags by region would crash the Monitors. No Manager
+    # yet.
     setup_osds $dir nomgr || return 1
     local region
     for region in 1 2; do
@@ -259,8 +290,14 @@ function TEST_enable_without_pools() {
     wait_for_clean || return 1
 }
 
-# Test Rook's pool create in a stretch cluster: the stretch rule and --size 4,
-# before and after enable_stretch_mode, whatever osd_pool_default_size is
+# Rook creates each pool of a stretch cluster with osd pool create <pool>
+# <pg_num> replicated stretch_rule --size 4. Pool before is created that
+# way before mon enable_stretch_mode, which then moves it over two zones.
+# After it, pool rook is created over two zones on stretch_rule with 4
+# copies. rook2, created after osd_pool_default_size is set to 3, as Rook
+# re-applies a user's osd_pool_default_size, still gets 4 copies, 2 in each
+# zone. --size 5, not a multiple of the two zones, is refused, and so is
+# --size with --num_zones 2.
 function TEST_size_of_defaults_in_stretch_mode() {
     local dir=$1
     setup_zones $dir || return 1
@@ -287,8 +324,14 @@ function TEST_size_of_defaults_in_stretch_mode() {
     wait_for_clean || return 1
 }
 
-# Test a pool created through librados takes the pool creation defaults, as
-# ceph osd pool create <pool> does: in stretch mode it is stretched
+# A pool that a librados client such as RGW creates takes the pool creation
+# defaults, as one from osd pool create <pool> does. Before mon
+# enable_stretch_mode, pool before is in one zone with 3 copies. After it,
+# pool during is over two zones with 4 copies on a rule made for it, and,
+# after osd pool default set --rule stretch_rule, pool withrule is on
+# stretch_rule (2 hosts in each zone). A create that fails, with
+# mon_max_pg_per_osd set to 1, leaves no pool toomany and no rule of that
+# name.
 function TEST_librados_pool_takes_defaults() {
     local dir=$1
     setup_zones $dir || return 1
@@ -317,8 +360,13 @@ function TEST_librados_pool_takes_defaults() {
     wait_for_clean || return 1
 }
 
-# Test enabling checks that its rule places a pool already over two zones
-# with its new share in each zone
+# mon enable_stretch_mode gives every replicated pool 2 copies in each zone
+# on the rule it is given, so the rule must place a pool already over two
+# zones that way. This test creates rep3, a replicated pool over two zones
+# with 3 copies in each. The command is refused with three_per_zone, a rule
+# of 3 OSDs in each zone, and rep3 keeps its 6 copies and its rule. With
+# nosizechange set on rep3 it is refused with stretch_rule (2 hosts in each
+# zone) too. Once nosizechange is unset, it gives rep3 4 copies.
 function TEST_enable_checks_rule_of_pools_over_zones() {
     local dir=$1
     setup_zones $dir || return 1
@@ -354,8 +402,12 @@ function TEST_enable_checks_rule_of_pools_over_zones() {
     test "$(pool_field rep3 size)" = 4 || return 1
 }
 
-# Test enable_stretch_mode picks the monitor outside both zones as the
-# tiebreaker when none is given; the rule and bucket are then given by name
+# mon enable_stretch_mode with no tiebreaker picks the monitor in neither
+# zone, c. Its arguments are positional, so mon enable_stretch_mode
+# stretch_rule zone is refused, as dividing_bucket is missing. With
+# --new_crush_rule stretch_rule --dividing_bucket zone it turns on global
+# stretch mode with c as the tiebreaker, sets the cluster stretch flags and
+# moves pool rep over two zones.
 function TEST_enable_without_tiebreaker() {
     local dir=$1
     setup_zones $dir || return 1
@@ -372,7 +424,16 @@ function TEST_enable_without_tiebreaker() {
     test "$(pool_num_zones rep)" = 2 || return 1
 }
 
-# Test disabling unstretches every pool and sets the local defaults
+# mon disable_stretch_mode turns off global stretch mode: it moves every
+# pool over two zones back to one zone, as osd pool set num_zones 1 does,
+# and sets the pool creation defaults back to one zone of 3 copies. It
+# needs --yes-i-really-mean-it. This test runs mon enable_stretch_mode on
+# rep (replicated) and ec (erasure coded, k=2 m=1), and then creates local
+# in one zone, with 2 copies, the replica default of global stretch mode.
+# The disable moves rep back to 3 copies and ec to 3 shards, takes global
+# stretch mode out of the monmap and clears the cluster stretch flags;
+# local is left as it was. Run again, the command succeeds, as the
+# monitors' own retry needs.
 function TEST_disable_unstretches_every_pool() {
     local dir=$1
     setup_zones $dir || return 1
@@ -408,8 +469,11 @@ function TEST_disable_unstretches_every_pool() {
     grep -q "stretch mode is disabled" $dir/out || return 1
 }
 
-# Test disabling gives a replicated pool whose rule has a device class a rule
-# of its own in one zone, of that class
+# mon disable_stretch_mode moves a replicated pool whose rule has a device
+# class to a rule of its own in one zone, of the same class. Here every OSD
+# is ssd, and rep is created over two zones, 2 copies in each, with --class
+# ssd; global stretch mode is never enabled. The command moves rep to one
+# zone on rep-single-zone, which takes the ssd OSDs of the default root.
 function TEST_disable_keeps_placement_of_rule() {
     local dir=$1
     setup_zones $dir || return 1
@@ -425,7 +489,12 @@ function TEST_disable_keeps_placement_of_rule() {
     test "$(ceph osd crush rule dump rep-single-zone | jq -r '.steps[0].item_name')" = default~ssd || return 1
 }
 
-# Test disable resets the defaults after the last pool has left stretch mode
+# When osd pool set num_zones 1 has moved every pool to one zone, the
+# cluster stretch flags are cleared, but the pool creation defaults that mon
+# enable_stretch_mode set stay at two zones. This test does that to rep
+# (replicated) and ec (erasure coded, k=2 m=1) after the enable. mon
+# disable_stretch_mode then still sets the defaults back to one zone of 3
+# copies, and succeeds when run again.
 function TEST_disable_resets_defaults_without_stretch_mode() {
     local dir=$1
     setup_zones $dir || return 1
@@ -434,7 +503,8 @@ function TEST_disable_resets_defaults_without_stretch_mode() {
     ceph mon enable_stretch_mode c stretch_rule zone || return 1
     wait_for_clean || return 1
 
-    # unstretching every pool leaves stretch mode but not its defaults
+    # unstretching every pool clears the cluster stretch flags but not the
+    # defaults
     for pool in $(ceph osd pool ls); do
         ceph osd pool set $pool num_zones 1 --yes-i-really-mean-it || return 1
     done
@@ -453,7 +523,13 @@ function TEST_disable_resets_defaults_without_stretch_mode() {
     grep -q "stretch mode is disabled" $dir/out || return 1
 }
 
-# Test a legacy EC pool makes enabling fail without changing anything
+# An erasure coded pool without allow_ec_optimizations, a legacy erasure
+# coded pool, cannot be over two zones. With
+# oldec such a pool, mon enable_stretch_mode is refused and changes
+# nothing: rep, a replicated pool, stays in one zone, the pool creation
+# defaults stay at one zone and the monmap is not in global stretch mode.
+# osd pool set oldec num_zones 2 is refused too, asking for
+# allow_ec_optimizations.
 function TEST_enable_refuses_legacy_ec_pool() {
     local dir=$1
     setup_zones $dir || return 1
@@ -475,7 +551,14 @@ function TEST_enable_refuses_legacy_ec_pool() {
         ceph osd pool set oldec num_zones 2 --zone_failure_domain zone || return 1
 }
 
-# Test the checks that need no OSDs
+# mon enable_stretch_mode checks its arguments and the configuration before
+# it changes anything. With no OSDs, it is refused for nosuchrule and
+# nosuchtype, which do not exist, and for ecrule, an erasure rule. It is
+# refused while osd_pool_default_pg_num is 100000, as the next osd pool
+# create must work with the defaults it sets, and while
+# osd_pool_default_num_zones is set in the mon section of the configuration
+# database, where it would override them. Global stretch mode stays off and
+# the default num_zones stays 1.
 function TEST_enable_checks() {
     local dir=$1
     setup_zones $dir || return 1

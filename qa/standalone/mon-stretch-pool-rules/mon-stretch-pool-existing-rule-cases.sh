@@ -31,8 +31,15 @@ function pool_exists() {
     ceph osd pool ls | grep -qx "$1"
 }
 
-# S5: rules that take z2 before z1 place the first copies or shards in z2;
-# pools on them go to two zones, back to one, and into global stretch mode
+# Rules whose steps take z2 before z1 put the first copies or shards of
+# every PG in z2. This test creates replicated pool r on rev2 with
+# --num_zones 2 and moves erasure coded pool e to ec_rev with osd pool set
+# num_zones 2. The first 4 shards of every PG of e are in z2, and both pools
+# can be read with z1 down.
+# mon enable_stretch_mode with rev2 then moves .mgr to rev2 too, and mon
+# disable_stretch_mode with no rule moves e to e-single-zone, and r to
+# replicated_rule, as rev2's placement in one zone is the stock one (root
+# default, hosts, no class).
 function TEST_zones_in_opposite_order() {
     local dir=$1
     local -x CEPH_ARGS="$CEPH_ARGS"
@@ -90,8 +97,13 @@ EOF
     check_pools $dir r e || return 1
 }
 
-# S5: zones under a bucket that is not the root: a rule that chooses them
-# from it, and one that takes each zone, read that bucket as the root
+# The zones are under a bucket, site, that is not the root. A rule that
+# chooses the zones from site (site2), one that takes each zone (take2) and
+# one made with --root site are read as placing their pools under site.
+# osd pool set num_zones 1 moves the pools on site2 and take2 to rules of
+# their own that take site. site2, removed with its last pool, is added
+# again, and mon enable_stretch_mode with site2 moves the pools that are not
+# over zones to it.
 function TEST_zones_under_a_bucket() {
     local dir=$1
     zone_cluster $dir zone || return 1
@@ -154,10 +166,12 @@ EOF
     check_pools $dir rsite rtake rgen || return 1
 }
 
-# S5: z2 has 3 hosts and z1 4. With the zones' weights more than 10% apart
-# stretch mode refuses a pool over them; with the weights evened out a pool
-# over zones gets at most 3 copies or shards in each zone, and a larger one
-# is refused, with no pool, profile or rule left behind
+# z2 has 3 hosts and z1 4. With the zones' weights more than 10% apart, a
+# pool over them is refused. With the weights evened out, a replicated pool
+# of 3 copies in each zone and an erasure coded pool of k=2 m=1 are created,
+# and can be read with either zone down. 4 copies in each zone, and k=2 m=2,
+# need 4 hosts in each zone, so they are refused and leave no pool, profile
+# or rule behind.
 function TEST_uneven_hosts() {
     local dir=$1 osd
     local -x CEPH_ARGS="$CEPH_ARGS"
@@ -195,8 +209,11 @@ function TEST_uneven_hosts() {
     check_without_zone $dir 1 rep e21 || return 1
 }
 
-# S5: zones named like bucket types: --root names the bucket, and the bucket
-# type of that name, which has no buckets here, is refused as a zone type
+# The zones are buckets of type zone named rack and room, which are also
+# names of bucket types. Pools over zones of type zone can be created; a
+# pool over zones of type rack is refused, as there are no rack buckets.
+# --root rack and --root room in osd pool set num_zones 1 name the zones,
+# so each pool moves to one of them.
 function TEST_zone_names_like_types() {
     local dir=$1
     zone_cluster $dir zone || return 1
@@ -223,9 +240,12 @@ function TEST_zone_names_like_types() {
     check_pools $dir r e || return 1
 }
 
-# S5: MSR rules cannot be read, and the placement check does not count their
-# zones: a pool on one changes num_zones with the whole placement given, and
-# one over zones is refused as a rule over zones
+# The placement of an MSR rule (type msr_indep) cannot be read, and the
+# check of a rule over zones does not count its zones. So osd pool set
+# num_zones 2 is refused for erasure coded pool e on msr_one, with no rule
+# and with msr_two, which chooses 2 zones. With --root, --osd_failure_domain
+# and --no-class giving the whole placement, e gets a rule of its own,
+# e-stretch.
 function TEST_msr_rules() {
     local dir=$1
     zone_cluster $dir zone || return 1
@@ -269,10 +289,13 @@ EOF
     check_pools $dir e || return 1
 }
 
-# S6: ceph osd pool set crush_rule gives an erasure coded pool over zones an
-# erasure rule that places k+m shards in each zone, chosen or taken, and its
-# old rule goes; a replicated rule, a rule of another count and a rule in one
-# zone are refused. The same holds in global stretch mode.
+# osd pool set <pool> crush_rule <rule> for an erasure coded pool over zones
+# accepts an erasure rule that places k+m shards in each of the two zones,
+# whether it chooses the zones (ec_choose) or takes each one (ec_take). It
+# refuses a replicated rule (choose2), a rule of another number of shards in
+# each zone (ec_three) and a rule in one zone (one_zone). The pool's old rule
+# is removed when the pool leaves it. After mon enable_stretch_mode the pool
+# moves to ec_take the same way.
 function TEST_ec_pool_given_existing_rule() {
     local dir=$1
     zone_cluster $dir zone || return 1

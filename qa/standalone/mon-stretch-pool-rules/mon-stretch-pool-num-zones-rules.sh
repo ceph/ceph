@@ -16,9 +16,19 @@ function run() {
     run_stretch_tests "$@"
 }
 
-# N1: replicated pools on the rules they have in one zone go to two zones and
-# back with their data: replicated_rule, a create-replicated rule of a class,
-# and one of z1. A rule that no pool has used stays.
+# osd pool set <pool> num_zones 2 moves a replicated pool over two zones, on
+# a new rule with the placement of the pool's rule, and num_zones 1 moves it
+# back. This test does it for rdef on replicated_rule, rssd on ssd_hosts (ssd
+# OSDs, made by create-replicated) and rz1 on z1_hosts (hosts of z1).
+# num_zones 2 is refused for rz1, as z1 has no zones in it, until
+# --root default is given.
+# With num_zones 1, rdef goes back to replicated_rule, rssd to a rule of its
+# own in the ssd OSDs of z1 (--root z1) and rz1 to z2_hosts (--crush_rule).
+# The objects can be read from each zone alone while the pools are over two
+# zones, and after num_zones 1 a pool in one zone can be read with the other
+# zone down.
+# A rule is removed when its last pool leaves it; spare, which no pool uses,
+# stays.
 function TEST_replicated_one_two_one() {
     local dir=$1
     local -x CEPH_ARGS="$CEPH_ARGS"
@@ -90,10 +100,21 @@ function TEST_replicated_one_two_one() {
     rules_are replicated_rule spare rssd-single-zone z2_hosts || return 1
 }
 
-# N1: erasure coded pools on the rules they have in one zone go to two zones
-# and back with their data: the erasure-code rule that earlier releases
-# share, still used by another pool, and create-erasure rules of OSDs, of a
-# class and of z1. The last pool on erasure-code takes it with it.
+# osd pool set <pool> num_zones 2 moves an erasure coded pool over two zones,
+# on a new rule, <pool>-stretch, with the placement of the pool's rule, and
+# num_zones 1 moves it back. This test does it for eshared on erasure-code,
+# the rule that earlier releases share between erasure coded pools (eother
+# uses it too), eosd on osds (OSDs, not hosts), essd on ssds (ssd OSDs) and
+# ez1 on z1_hosts (hosts of z1). num_zones 2 is refused for ez1, as z1 has no
+# zones in it, until --root default is given.
+# With num_zones 1, eshared gets a rule over the default root, eosd one in z1
+# (--root z1), essd one in the ssd OSDs of z2 (--root z2), and ez1 goes to
+# z1_again (--crush_rule).
+# The objects can be read from each zone alone while the pools are over two
+# zones, and after num_zones 1 a pool in one zone can be read with the other
+# zone down.
+# A rule is removed when its last pool leaves it: erasure-code goes when
+# eother is removed.
 function TEST_ec_one_two_one() {
     local dir=$1
     local -x CEPH_ARGS="$CEPH_ARGS"
@@ -203,9 +224,14 @@ function wait_for_pg_num() {
     return 1
 }
 
-# N4: num_zones changes while pg_num rises, while PGs merge, and while a zone
-# is down, for pools on generated rules and on a rule that takes each zone;
-# the PGs end clean and the data is intact
+# osd pool set <pool> num_zones while the pool's PGs split, while they merge,
+# and while a zone is down. The pools are r (replicated, on replicated_rule),
+# rt (replicated, given take2, which takes each zone) and e (erasure coded).
+# Each goes over two zones while pg_num rises from 8 to 32, and back to
+# num_zones 1 (rt to z1) while pg_num falls back to 8. Then, with z2 down, r
+# and e go over two zones again: rt, in z1, stays readable, and the PGs of r
+# and e whose copies were all in z2 wait for it. Once z2 is back, r and e are
+# over both zones and all the objects can be read.
 function TEST_num_zones_while_pgs_change() {
     local dir=$1 pool
     local -x CEPH_ARGS="$CEPH_ARGS"

@@ -48,13 +48,21 @@ function check_enabled() {
     check_two_zones ec $ztype 4 || return 1
 }
 
-# S1 and S4: the replicated pools start on replicated_rule, a rule shared by
-# two pools, a create-replicated rule of a class and a rule whose placement
-# cannot be read, so enabling without a rule is refused and leaves nothing
-# behind. Then enable_stretch_mode with a rule that takes each zone, with one
-# that chooses them and with one of a class, each followed by
-# disable_stretch_mode, once to a rule that takes z1; every rule goes with
-# its last pool, and a pool keeps its class in one zone.
+# mon enable_stretch_mode and mon disable_stretch_mode, three times each,
+# with zones of type ztype. The replicated pools start on replicated_rule,
+# hosts_any (two pools), ssd_hosts (ssd OSDs, made by create-replicated) and
+# per_zone_one, whose placement cannot be read, so mon enable_stretch_mode
+# with no rule is refused and changes nothing.
+# The enables are then given take2 (takes each zone), choose2 (chooses the
+# zones) and class2 (chooses them in ssd OSDs) for the replicated pools. The
+# disables are given no rule, hosts_z1 (hosts of z1) and no rule: the pools
+# go to replicated_rule, as take2's placement in one zone is the stock one
+# (root default, hosts, no class), then to hosts_z1, then to rules of their
+# own in ssd OSDs, <pool>-single-zone. The erasure coded pool ec moves
+# between ec-stretch and ec-single-zone.
+# A rule is removed when its last pool leaves it. Each step writes objects
+# and reads back those of every step before it.
+# The tests run this with zones of type rack, room and region.
 function enable_disable_cycles() {
     local dir=$1 ztype=$2 pool
     local -x CEPH_ARGS="$CEPH_ARGS"
