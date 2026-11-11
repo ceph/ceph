@@ -7619,6 +7619,9 @@ void RGWInitMultipart::execute(optional_yield y)
   op_ret = upload->init(this, s->yield, s->owner, s->dest_placement, attrs);
   if (op_ret == 0) {
     upload_id = upload->get_upload_id();
+    // send_response() computes x-amz-abort-date from the initiation time,
+    // which init() records when it writes the upload's meta object
+    mtime = upload->get_mtime();
   }
   s->trace->SetAttribute(tracing::rgw::UPLOAD_ID, upload_id);
   multipart_trace->UpdateName(tracing::rgw::MULTIPART + upload_id);
