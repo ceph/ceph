@@ -1408,15 +1408,16 @@ Usage::
     {--pgp_num <int[0-]>} {--pg_autoscale_mode <on|off|warn>} {--bulk}
     {--crimson} {--yes-i-really-mean-it}
 
-Subcommand ``migrate`` migrates a pool's RADOS objects to a new pool. The new pool acquires
-the original pool's user-visible name. The original pool is renamed automatically and is by
-default not displayed to the user.
+Subcommand ``migrate`` migrates a pool's RADOS objects to a new pool. The new
+pool acquires the original pool's user-visible name. The original pool is
+renamed automatically and is by default not displayed to the user. It takes the
+parameters of ``create``. With none, the new pool takes the parameters of the
+original pool, its zones included.
 
 Usage::
 
-	ceph osd pool migrate <poolname> {<int[0-]>} {<int[0-]>} {replicated|erasure}
-	{<erasure_code_profile>} {<rule>} {<int>} {--autoscale-mode=<on,off,warn>}
-	{--enable-ec-optimizations}
+    ceph osd pool migrate <poolname> {<int[0-]>} {<int[0-]>} {replicated|erasure}
+    {<erasure_code_profile>} {<rule>} {<int[0-]>} {<options>...}
 
 Subcommand ``delete`` deletes pool. It also deletes the pool's CRUSH rule if no
 other pool uses it, unless it is the default replicated rule, and the erasure

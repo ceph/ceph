@@ -15981,43 +15981,137 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
                                get_last_committed() + 1));
     return true;
-  } else if (prefix == "osd pool create") {
-    int64_t pg_num_min = cmd_getval_or<int64_t>(cmdmap, "pg_num_min", 0);
-    int64_t pg_num_max = cmd_getval_or<int64_t>(cmdmap, "pg_num_max", 0);
-    string pool_type_str;
-    cmd_getval(cmdmap, "pool_type", pool_type_str);
-    if (pool_type_str.empty())
-      pool_type_str = g_conf().get_val<string>("osd_pool_default_type");
-
+  } else if (prefix == "osd pool create" || prefix == "osd pool migrate") {
+    bool is_migrate = (prefix == "osd pool migrate");
     string poolstr;
     cmd_getval(cmdmap, "pool", poolstr);
     bool confirm = false;
     //confirmation may be set to true only by internal operations.
     cmd_getval(cmdmap, "yes_i_really_mean_it", confirm);
+
+    int64_t pool_id = osdmap.lookup_pg_pool_name(poolstr);
+
+    string source_pool_name = "";
+
+    if (is_migrate) {
+      // Shared guards for both migration paths
+      bool experimental_enabled =
+        g_ceph_context->check_experimental_feature_enabled("poolmigration");
+      if (!experimental_enabled) {
+        ss << "Pool migration is an experimental feature that may cause "
+           << "unrecoverable data corruption. If you are sure, add "
+           << "'poolmigration' to the experimental features config "
+           << "(enable_experimental_unrecoverable_data_corrupting_features).";
+        err = -EPERM;
+        goto reply_no_propose;
+      }
+
+      if (osdmap.require_min_compat_client < ceph_release_t::vampire) {
+        ss << "require_min_compat_client "
+           << osdmap.require_min_compat_client
+           << " < vampire, which is required for pool migration. "
+           << "Try 'ceph osd set-require-min-compat-client vampire' "
+           << "before using the new feature";
+        err = -EPERM;
+        goto reply_no_propose;
+      }
+
+      if (osdmap.require_osd_release < ceph_release_t::vampire) {
+        ss << "All OSDs must be upgraded to vampire or "
+           << "later before using pool migration";
+        err = -EPERM;
+        goto reply_no_propose;
+      }
+
+      if (pool_id < 0) {
+        ss << "pool '" << poolstr << "' does not exist";
+        err = -ENOENT;
+        goto reply_no_propose;
+      }
+
+      if (pending_inc.old_pools.count(pool_id)) {
+        ss << "pool '" << poolstr << "' is pending removal";
+        err = -ENOENT;
+        goto reply_no_propose;
+      }
+
+      string old_pool_name;
+      int suffix_iter = 1;
+      while (true) {
+        old_pool_name = ".migrate-" + std::to_string(suffix_iter);
+        int64_t old_pool_id = osdmap.lookup_pg_pool_name(old_pool_name);
+        if (old_pool_id >= 0) {
+          suffix_iter++;
+          continue;
+        }
+        bool pending_exists = false;
+        for (auto& [id, name] : pending_inc.new_pool_names) {
+          if (name == old_pool_name) {
+            pending_exists = true;
+            break;
+          }
+        }
+        if (pending_exists) {
+          suffix_iter++;
+          continue;
+        }
+        break;
+      }
+
+      const pg_pool_t *src = osdmap.get_pg_pool(pool_id);
+      if (src->is_migrating()) {
+        ss << "Cannot migrate pool '" << poolstr << "': it is part of an ongoing migration.";
+        err = -EINVAL;
+        goto reply_no_propose;
+      }
+      if (!src->tiers.empty() || src->is_tier()) {
+        ss << "Cannot migrate pool '" << poolstr << "': it is part of a cache "
+           << "tier relationship.";
+        err = -EINVAL;
+        goto reply_no_propose;
+      }
+
+      int ret = _prepare_rename_pool(pool_id, old_pool_name);
+      if (ret < 0) {
+        ss << "failed to rename pool '" << poolstr << "' to '" << old_pool_name << "': " << cpp_strerror(ret);
+        err = ret;
+        goto reply_no_propose;
+      }
+
+      migrate_pool_id = pool_id;
+
+      // Resolve source_pool_name to the pending renamed pool name
+      for (auto& [id, name] : pending_inc.new_pool_names) {
+        if (id == migrate_pool_id) {
+          source_pool_name = name;
+          break;
+        }
+      }
+    }
+
     if (poolstr[0] == '.' && !confirm) {
       ss << "pool names beginning with . are not allowed";
       err = 0;
       goto reply_no_propose;
     }
-    int64_t pool_id = osdmap.lookup_pg_pool_name(poolstr);
+
+    string default_type_str, pool_type_str;
     if (pool_id >= 0 &&
         (!pending_inc.new_pool_names.count(pool_id) ||
          pending_inc.new_pool_names[pool_id] == poolstr)) {
-      const pg_pool_t *p = osdmap.get_pg_pool(pool_id);
-      if (pool_type_str != p->get_type_name()) {
-	ss << "pool '" << poolstr << "' cannot change to type " << pool_type_str;
- 	err = -EINVAL;
-      } else {
-	ss << "pool '" << poolstr << "' already exists";
-	err = 0;
+      if (source_pool_name.empty()) {
+        default_type_str = g_conf().get_val<string>("osd_pool_default_type");
+        pool_type_str = cmd_getval_or<string>(cmdmap, "pool_type", default_type_str);
+        const pg_pool_t *p = osdmap.get_pg_pool(pool_id);
+        if (pool_type_str != p->get_type_name()) {
+          ss << "pool '" << poolstr << "' cannot change to type " << pool_type_str;
+          err = -EINVAL;
+          goto reply_no_propose;
+        }
       }
+      ss << "pool '" << poolstr << "' already exists";
+      err = 0;
       goto reply_no_propose;
-    }
-    for (auto& [id, name] : pending_inc.new_pool_names) {
-      if (name == poolstr) {
-        // answered once the pending pool is committed
-        goto wait;
-      }
     }
 
     // the commit converts only the pools before it in its update
@@ -16025,6 +16119,89 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto wait;
     }
 
+    for(auto& [id, name] : pending_inc.new_pool_names) {
+      if (name == poolstr) {
+        // answered once the pending pool is committed
+        goto wait;
+      }
+    }
+
+    std::optional<int64_t> source_pool_id;
+    const pg_pool_t *source_pool = nullptr;
+    if (!source_pool_name.empty()) {
+      source_pool_id = osdmap.lookup_pg_pool_name(source_pool_name);
+      if (source_pool_id < 0) {
+        for (auto& [id, name] : pending_inc.new_pool_names) {
+          if (name == source_pool_name) {
+            source_pool_id = id;
+            break;
+          }
+        }
+      }
+      if (source_pool_id < 0) {
+        ss << "source pool '" << source_pool_name << "' does not exist";
+        err = -EINVAL;
+        goto reply_no_propose;
+      }
+      source_pool = &std::as_const(*this).get_pg_pool(source_pool_id.value());
+      if (source_pool->is_migrating()) {
+        ss << "Cannot migrate from a pool which is part of an ongoing migration";
+        err = -EINVAL;
+        goto reply_no_propose;
+      }
+    }
+
+    bool migrate_no_params = false;
+    if (is_migrate) {
+      migrate_no_params = !cmdmap.count("pg_num") &&
+                          !cmdmap.count("pgp_num") &&
+                          !cmdmap.count("pool_type") &&
+                          !cmdmap.count("erasure_code_profile") &&
+                          !cmdmap.count("rule") &&
+                          !cmdmap.count("expected_num_objects") &&
+                          !cmdmap.count("size") &&
+                          !cmdmap.count("pg_num_min") &&
+                          !cmdmap.count("pg_num_max") &&
+                          !cmdmap.count("autoscale_mode") &&
+                          !cmdmap.count("bulk") &&
+                          !cmdmap.count("target_size_bytes") &&
+                          !cmdmap.count("target_size_ratio") &&
+                          !cmdmap.count("crimson") &&
+                          !cmdmap.count("enable_ec_optimizations") &&
+                          !cmdmap.count("crush_rule") &&
+                          !cmdmap.count("pg_autoscale_mode") &&
+                          !cmdmap.count("k") &&
+                          !cmdmap.count("m") &&
+                          !cmdmap.count("num_zones") &&
+                          !cmdmap.count("root") &&
+                          !cmdmap.count("zone_failure_domain") &&
+                          !cmdmap.count("osd_failure_domain") &&
+                          !cmdmap.count("replica") &&
+                          !cmdmap.count("class") &&
+                          !cmdmap.count("no_class") &&
+                          !cmdmap.count("min_size");
+    }
+
+    auto pg_num = cmd_getval_or<int64_t>(cmdmap, "pg_num", 0);
+    auto pg_num_min = cmd_getval_or<int64_t>(cmdmap, "pg_num_min", 0);
+    auto pg_num_max = cmd_getval_or<int64_t>(cmdmap, "pg_num_max", 0);
+    auto pgp_num = cmd_getval_or<int64_t>(cmdmap, "pgp_num", pg_num);
+
+    bool pg_fields_set = (pg_num != 0) || (pg_num_min != 0) || (pg_num_max != 0) || (pgp_num != 0);
+    if (source_pool && !pg_fields_set && (migrate_no_params || !is_migrate)) {
+      pg_num = source_pool->get_pg_num();
+      pg_num_min = source_pool->get_pg_num_min();
+      pg_num_max = source_pool->get_pg_num_max();
+      pgp_num = pg_num;
+    }
+
+    bool inherit_type = source_pool && (migrate_no_params || !is_migrate);
+    default_type_str = inherit_type ? string(source_pool->get_type_name())
+                                    : g_conf().get_val<string>("osd_pool_default_type");
+    bool pool_type_explicit = cmd_getval(cmdmap, "pool_type", pool_type_str);
+    if (!pool_type_explicit) {
+      pool_type_str = default_type_str;
+    }
     int pool_type;
     if (pool_type_str == "replicated") {
       pool_type = pg_pool_t::TYPE_REPLICATED;
@@ -16036,11 +16213,46 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply_no_propose;
     }
 
+    bool enable_ec_optimizations = cmd_getval_or<bool>(cmdmap, "enable_ec_optimizations", false);
+    if (source_pool) {
+      bool source_not_legacy_ec = source_pool->get_type() == pg_pool_t::TYPE_REPLICATED ||
+        source_pool->allows_ecoptimizations();
+      bool target_is_legacy_ec = (pool_type_explicit &&
+                                  pool_type == pg_pool_t::TYPE_ERASURE &&
+                                  !enable_ec_optimizations);
+      if (source_not_legacy_ec && target_is_legacy_ec && !confirm) {
+        ss << "You are attempting to migrate to a pool type with less features " <<
+          "than the source pool which will result in functionality loss. Perhaps you want to enable " <<
+          "EC optimisations with the --enable_ec_optimizations option? Otherwise, please confirm with " <<
+          "the --yes-i-really-mean-it option.";
+        err = -EPERM;
+        goto reply_no_propose;
+      }
+    }
+
+    // Inherit type-specific parameters from the source when:
+    //   - osd pool create (with source) and types match, or
+    //   - osd pool migrate with no params given and types match.
+    bool types_match = source_pool && (migrate_no_params || !is_migrate) &&
+                       (static_cast<unsigned>(pool_type) == source_pool->get_type());
+
+    bool inherit_from_source = source_pool && (migrate_no_params || !is_migrate);
+    int64_t default_expected_num_objects = inherit_from_source ? source_pool->expected_num_objects : 0;
+    
+    // Only inherit erasure code profile if pool types match (and source is EC)
+    string default_profile = (types_match && pool_type == pg_pool_t::TYPE_ERASURE) ?
+                             source_pool->erasure_code_profile : "";
+    
+    // Only inherit CRUSH rule if pool types match, otherwise use system defaults
+    string default_rule_name = types_match ?
+                               osdmap.crush->get_rule_name(source_pool->get_crush_rule()) : "";
+
     // The legacy positional syntax of a replicated pool gives the rule in the
     // erasure_code_profile field and expected_num_objects in the rule field.
     cmdmap_t args = cmdmap;
     int64_t expected_num_objects =
-      cmd_getval_or<int64_t>(cmdmap, "expected_num_objects", 0);
+      cmd_getval_or<int64_t>(cmdmap, "expected_num_objects",
+                             default_expected_num_objects);
     if (string positional_rule;
         pool_type == pg_pool_t::TYPE_REPLICATED &&
         cmd_getval(cmdmap, "erasure_code_profile", positional_rule) &&
@@ -16064,6 +16276,34 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     err = rename_old_pool_params(args, &ss);
     if (err) {
       goto reply_no_propose;
+    }
+
+    // a migration with no parameters takes the source pool's layout
+    if (inherit_from_source) {
+      auto inherit = [&args](const char *param, auto value) {
+        if (!args.contains(param)) {
+          args[param] = value;
+        }
+      };
+      if (!pg_fields_set) {
+        inherit("pg_num", pg_num);
+        inherit("pgp_num", pgp_num);
+      }
+      if (types_match) {
+        if (pool_type == pg_pool_t::TYPE_ERASURE) {
+          inherit("erasure_code_profile", default_profile);
+        }
+        inherit("crush_rule", default_rule_name);
+      }
+      inherit("num_zones", int64_t(source_pool->num_zones));
+      if (pool_type == pg_pool_t::TYPE_REPLICATED) {
+        inherit("replica", int64_t(source_pool->replica));
+      }
+      inherit("pg_autoscale_mode",
+              string(source_pool->get_pg_autoscale_mode_name(
+                       source_pool->pg_autoscale_mode)));
+      inherit("bulk", source_pool->is_bulk());
+      inherit("crimson", source_pool->is_crimson());
     }
 
     // 1. the defaults, 2. the profile, 3. the command line, 4. the checks
@@ -16242,7 +16482,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply_no_propose;
     }
 
-    int64_t fast_read_param = cmd_getval_or<int64_t>(cmdmap, "fast_read", -1);
+    int64_t default_fast_read_param = inherit_from_source ? source_pool->fast_read : -1;
+    int64_t fast_read_param = cmd_getval_or<int64_t>(cmdmap, "fast_read", default_fast_read_param);
     FastReadType fast_read = FAST_READ_DEFAULT;
     if (fast_read_param == 0)
       fast_read = FAST_READ_OFF;
@@ -16251,8 +16492,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     const int64_t repl_size = params.is_given("size") ? params.size : 0;
     const int64_t min_size = params.is_given("min_size") ? params.min_size : 0;
-    int64_t target_size_bytes = 0;
-    double target_size_ratio = 0.0;
+    int64_t target_size_bytes =
+      inherit_from_source ? source_pool->get_target_size_bytes() : 0;
+    double target_size_ratio =
+      inherit_from_source ? source_pool->get_target_size_ratio() : 0.0;
     cmd_getval(cmdmap, "target_size_bytes", target_size_bytes);
     cmd_getval(cmdmap, "target_size_ratio", target_size_ratio);
     const string pg_autoscale_mode =
@@ -16260,8 +16503,17 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     const bool bulk = params.is_given("bulk") && params.bulk;
     bool force_create = false;
     cmd_getval(cmdmap, "force_pg_limit", force_create);
-    const bool enable_ec_optimizations =
-      cmd_getval_or<bool>(cmdmap, "enable_ec_optimizations", false);
+
+    // For osd pool migrate with no parameters: the new pool is a full copy of
+    // the source pool, so the migration would be pointless.  Warn the user and
+    // require --yes-i-really-mean-it to proceed.
+    if (migrate_no_params && !confirm) {
+      ss << "The target pool would be identical to the source pool '" << poolstr << "'. "
+         << "No migration is necessary. If you still want to perform this pointless migration, "
+         << "add the --yes-i-really-mean-it flag.";
+      err = -EPERM;
+      goto reply_no_propose;
+    }
 
     const string zone_failure_domain =
       num_zones > 1 || params.is_given("zone_failure_domain")
@@ -16307,7 +16559,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
                            bulk,
                            params.crimson,
                            force_create,
-                           std::nullopt, // no migration source
+                           source_pool_id,
                            enable_ec_optimizations,
                            &ss, rule_from_defaults(params));
     if (err < 0) {
@@ -16318,412 +16570,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         goto reply_no_propose;
       case -EAGAIN:
         goto wait;
-      default:
-	goto reply_no_propose;
-      }
-    } else {
-      ss << "pool '" << poolstr << "' created";
-    }
-    getline(ss, rs);
-    wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
-					      get_last_committed() + 1));
-    return true;
-
-  } else if (prefix == "osd pool migrate") {
-    bool is_migrate = (prefix == "osd pool migrate");
-    string poolstr;
-    cmd_getval(cmdmap, "pool", poolstr);
-    bool confirm = false;
-    //confirmation may be set to true only by internal operations.
-    cmd_getval(cmdmap, "yes_i_really_mean_it", confirm);
-
-    int64_t pool_id = osdmap.lookup_pg_pool_name(poolstr);
-
-    string source_pool_name = "";
-
-    if (is_migrate) {
-      // Shared guards for both migration paths
-      bool experimental_enabled =
-        g_ceph_context->check_experimental_feature_enabled("poolmigration");
-      if (!experimental_enabled) {
-        ss << "Pool migration is an experimental feature that may cause "
-           << "unrecoverable data corruption. If you are sure, add "
-           << "'poolmigration' to the experimental features config "
-           << "(enable_experimental_unrecoverable_data_corrupting_features).";
-        err = -EPERM;
-        goto reply_no_propose;
-      }
-
-      if (osdmap.require_min_compat_client < ceph_release_t::vampire) {
-        ss << "require_min_compat_client "
-           << osdmap.require_min_compat_client
-           << " < vampire, which is required for pool migration. "
-           << "Try 'ceph osd set-require-min-compat-client vampire' "
-           << "before using the new feature";
-        err = -EPERM;
-        goto reply_no_propose;
-      }
-
-      if (osdmap.require_osd_release < ceph_release_t::vampire) {
-        ss << "All OSDs must be upgraded to vampire or "
-           << "later before using pool migration";
-        err = -EPERM;
-        goto reply_no_propose;
-      }
-
-      if (pool_id < 0) {
-        ss << "pool '" << poolstr << "' does not exist";
-        err = -ENOENT;
-        goto reply_no_propose;
-      }
-
-      if (pending_inc.old_pools.count(pool_id)) {
-        ss << "pool '" << poolstr << "' is pending removal";
-        err = -ENOENT;
-        goto reply_no_propose;
-      }
-
-      string old_pool_name;
-      int suffix_iter = 1;
-      while (true) {
-        old_pool_name = ".migrate-" + std::to_string(suffix_iter);
-        int64_t old_pool_id = osdmap.lookup_pg_pool_name(old_pool_name);
-        if (old_pool_id >= 0) {
-          suffix_iter++;
-          continue;
-        }
-        bool pending_exists = false;
-        for (auto& [id, name] : pending_inc.new_pool_names) {
-          if (name == old_pool_name) {
-            pending_exists = true;
-            break;
-          }
-        }
-        if (pending_exists) {
-          suffix_iter++;
-          continue;
-        }
-        break;
-      }
-
-      const pg_pool_t *src = osdmap.get_pg_pool(pool_id);
-      if (src->is_migrating()) {
-        ss << "Cannot migrate pool '" << poolstr << "': it is part of an ongoing migration.";
-        err = -EINVAL;
-        goto reply_no_propose;
-      }
-      if (!src->tiers.empty() || src->is_tier()) {
-        ss << "Cannot migrate pool '" << poolstr << "': it is part of a cache "
-           << "tier relationship.";
-        err = -EINVAL;
-        goto reply_no_propose;
-      }
-
-      int ret = _prepare_rename_pool(pool_id, old_pool_name);
-      if (ret < 0) {
-        ss << "failed to rename pool '" << poolstr << "' to '" << old_pool_name << "': " << cpp_strerror(ret);
-        err = ret;
-        goto reply_no_propose;
-      }
-
-      migrate_pool_id = pool_id;
-
-      // Resolve source_pool_name to the pending renamed pool name
-      for (auto& [id, name] : pending_inc.new_pool_names) {
-        if (id == migrate_pool_id) {
-          source_pool_name = name;
-          break;
-        }
-      }
-    }
-
-    if (poolstr[0] == '.' && !confirm) {
-      ss << "pool names beginning with . are not allowed";
-      err = 0;
-      goto reply_no_propose;
-    }
-
-    string default_type_str, pool_type_str;
-    if (pool_id >= 0 &&
-        (!pending_inc.new_pool_names.count(pool_id) ||
-         pending_inc.new_pool_names[pool_id] == poolstr)) {
-      if (source_pool_name.empty()) {
-        default_type_str = g_conf().get_val<string>("osd_pool_default_type");
-        pool_type_str = cmd_getval_or<string>(cmdmap, "pool_type", default_type_str);
-        const pg_pool_t *p = osdmap.get_pg_pool(pool_id);
-        if (pool_type_str != p->get_type_name()) {
-          ss << "pool '" << poolstr << "' cannot change to type " << pool_type_str;
-          err = -EINVAL;
-          goto reply_no_propose;
-        }
-      }
-      ss << "pool '" << poolstr << "' already exists";
-      err = 0;
-      goto reply_no_propose;
-    }
-
-    for(auto& [id, name] : pending_inc.new_pool_names) {
-      if (name == poolstr) {
-        // answered once the pending pool is committed
-        goto wait;
-      }
-    }
-
-    std::optional<int64_t> source_pool_id;
-    const pg_pool_t *source_pool = nullptr;
-    if (!source_pool_name.empty()) {
-      source_pool_id = osdmap.lookup_pg_pool_name(source_pool_name);
-      if (source_pool_id < 0) {
-        for (auto& [id, name] : pending_inc.new_pool_names) {
-          if (name == source_pool_name) {
-            source_pool_id = id;
-            break;
-          }
-        }
-      }
-      if (source_pool_id < 0) {
-        ss << "source pool '" << source_pool_name << "' does not exist";
-        err = -EINVAL;
-        goto reply_no_propose;
-      }
-      source_pool = &std::as_const(*this).get_pg_pool(source_pool_id.value());
-      if (source_pool->is_migrating()) {
-        ss << "Cannot migrate from a pool which is part of an ongoing migration";
-        err = -EINVAL;
-        goto reply_no_propose;
-      }
-    }
-
-    bool migrate_no_params = false;
-    if (is_migrate) {
-      migrate_no_params = !cmdmap.count("pg_num") &&
-                          !cmdmap.count("pgp_num") &&
-                          !cmdmap.count("pool_type") &&
-                          !cmdmap.count("erasure_code_profile") &&
-                          !cmdmap.count("rule") &&
-                          !cmdmap.count("expected_num_objects") &&
-                          !cmdmap.count("size") &&
-                          !cmdmap.count("pg_num_min") &&
-                          !cmdmap.count("pg_num_max") &&
-                          !cmdmap.count("autoscale_mode") &&
-                          !cmdmap.count("bulk") &&
-                          !cmdmap.count("target_size_bytes") &&
-                          !cmdmap.count("target_size_ratio") &&
-                          !cmdmap.count("crimson") &&
-                          !cmdmap.count("enable_ec_optimizations");
-    }
-
-    auto pg_num = cmd_getval_or<int64_t>(cmdmap, "pg_num", 0);
-    auto pg_num_min = cmd_getval_or<int64_t>(cmdmap, "pg_num_min", 0);
-    auto pg_num_max = cmd_getval_or<int64_t>(cmdmap, "pg_num_max", 0);
-    auto pgp_num = cmd_getval_or<int64_t>(cmdmap, "pgp_num", pg_num);
-
-    bool pg_fields_set = (pg_num != 0) || (pg_num_min != 0) || (pg_num_max != 0) || (pgp_num != 0);
-    if (source_pool && !pg_fields_set && (migrate_no_params || !is_migrate)) {
-      pg_num = source_pool->get_pg_num();
-      pg_num_min = source_pool->get_pg_num_min();
-      pg_num_max = source_pool->get_pg_num_max();
-      pgp_num = pg_num;
-    }
-
-    bool inherit_type = source_pool && (migrate_no_params || !is_migrate);
-    default_type_str = inherit_type ? string(source_pool->get_type_name())
-                                    : g_conf().get_val<string>("osd_pool_default_type");
-    bool pool_type_explicit = cmd_getval(cmdmap, "pool_type", pool_type_str);
-    if (!pool_type_explicit) {
-      pool_type_str = default_type_str;
-    }
-    int pool_type;
-    if (pool_type_str == "replicated") {
-      pool_type = pg_pool_t::TYPE_REPLICATED;
-    } else if (pool_type_str == "erasure") {
-      pool_type = pg_pool_t::TYPE_ERASURE;
-    } else {
-      ss << "unknown pool type '" << pool_type_str << "'";
-      err = -EINVAL;
-      goto reply_no_propose;
-    }
-
-    bool enable_ec_optimizations = cmd_getval_or<bool>(cmdmap, "enable_ec_optimizations", false);
-    if (source_pool) {
-      bool source_not_legacy_ec = source_pool->get_type() == pg_pool_t::TYPE_REPLICATED ||
-        source_pool->allows_ecoptimizations();
-      bool target_is_legacy_ec = (pool_type_explicit &&
-                                  pool_type == pg_pool_t::TYPE_ERASURE &&
-                                  !enable_ec_optimizations);
-      if (source_not_legacy_ec && target_is_legacy_ec && !confirm) {
-        ss << "You are attempting to migrate to a pool type with less features " <<
-          "than the source pool which will result in functionality loss. Perhaps you want to enable " <<
-          "EC optimisations with the --enable_ec_optimizations option? Otherwise, please confirm with " <<
-          "the --yes-i-really-mean-it option.";
-        err = -EPERM;
-        goto reply_no_propose;
-      }
-    }
-
-    // Inherit type-specific parameters from the source when:
-    //   - osd pool create (with source) and types match, or
-    //   - osd pool migrate with no params given and types match.
-    bool types_match = source_pool && (migrate_no_params || !is_migrate) &&
-                       (static_cast<unsigned>(pool_type) == source_pool->get_type());
-
-    bool inherit_from_source = source_pool && (migrate_no_params || !is_migrate);
-    int64_t default_expected_num_objects = inherit_from_source ? source_pool->expected_num_objects : 0;
-    
-    // Only inherit erasure code profile if pool types match (and source is EC)
-    string default_profile = (types_match && pool_type == pg_pool_t::TYPE_ERASURE) ?
-                             source_pool->erasure_code_profile : "";
-    
-    // Only inherit CRUSH rule if pool types match, otherwise use system defaults
-    string default_rule_name = types_match ?
-                               osdmap.crush->get_rule_name(source_pool->get_crush_rule()) : "";
-
-    bool implicit_rule_creation = false;
-    int64_t expected_num_objects = default_expected_num_objects;
-    string erasure_code_profile = cmd_getval_or<string>(cmdmap, "erasure_code_profile", default_profile);
-    string rule_name = cmd_getval_or<string>(cmdmap, "rule", default_rule_name);
-
-    if (pool_type == pg_pool_t::TYPE_ERASURE) {
-      if (erasure_code_profile == "")
-	erasure_code_profile = "default";
-      //handle the erasure code profile
-      if (erasure_code_profile == "default") {
-	if (!osdmap.has_erasure_code_profile(erasure_code_profile)) {
-	  if (pending_inc.has_erasure_code_profile(erasure_code_profile)) {
-	    dout(20) << "erasure code profile " << erasure_code_profile << " already pending" << dendl;
-	    goto wait;
-	  }
-
-	  map<string,string> profile_map;
-	  err = osdmap.get_erasure_code_profile_default(cct,
-						      profile_map,
-						      &ss);
-	  if (err)
-	    goto reply_no_propose;
-	  dout(20) << "erasure code profile " << erasure_code_profile << " set" << dendl;
-	  pending_inc.set_erasure_code_profile(erasure_code_profile, profile_map);
-	  goto wait;
-	}
-      }
-      if (rule_name == "") {
-	implicit_rule_creation = true;
-	if (erasure_code_profile == "default") {
-	  rule_name = "erasure-code";
-	} else {
-	  dout(1) << "implicitly use rule named after the pool: "
-		<< poolstr << dendl;
-	  rule_name = poolstr;
-	}
-      }
-
-      expected_num_objects =
-	cmd_getval_or<int64_t>(cmdmap, "expected_num_objects", default_expected_num_objects);
-    } else {
-      //NOTE: for replicated pools, cmd_map will put rule_name to erasure_code_profile field
-      //      and put expected_num_objects to rule field.
-      // When migrating (source_pool is set), skip this CLI remapping to avoid
-      // conflicts with inherited parameters.
-      if (erasure_code_profile != "" && !source_pool) { // cmd is from CLI and NOT migrating
-        if (rule_name != "") {
-          string interr;
-          expected_num_objects = strict_strtoll(rule_name.c_str(), 10, &interr);
-          if (interr.length()) {
-            ss << "error parsing integer value '" << rule_name << "': " << interr;
-            err = -EINVAL;
-            goto reply_no_propose;
-          }
-        }
-        rule_name = erasure_code_profile;
-      } else { // cmd is well-formed or pool has a source (migration)
-        expected_num_objects =
-   cmd_getval_or<int64_t>(cmdmap, "expected_num_objects", default_expected_num_objects);
-      }
-    }
-
-    if (!implicit_rule_creation && rule_name != "") {
-      int rule;
-      err = get_crush_rule(rule_name, &rule, &ss);
-      if (err == -EAGAIN) {
-        goto wait;
-      }
-      if (err)
-	goto reply_no_propose;
-    }
-
-    if (expected_num_objects < 0) {
-      ss << "'expected_num_objects' must be non-negative";
-      err = -EINVAL;
-      goto reply_no_propose;
-    }
-
-    int64_t default_fast_read_param = inherit_from_source ? source_pool->fast_read : -1;
-    int64_t fast_read_param = cmd_getval_or<int64_t>(cmdmap, "fast_read", default_fast_read_param);
-    FastReadType fast_read = FAST_READ_DEFAULT;
-    if (fast_read_param == 0)
-      fast_read = FAST_READ_OFF;
-    else if (fast_read_param > 0)
-      fast_read = FAST_READ_ON;
-
-    int64_t default_repl_size = inherit_from_source ? source_pool->get_size() : 0;
-    int64_t default_target_size_bytes = inherit_from_source ? source_pool->get_target_size_bytes() : 0;
-    double default_target_size_ratio = inherit_from_source ? source_pool->get_target_size_ratio() : 0.0;
-    int64_t repl_size = cmd_getval_or<int64_t>(cmdmap, "size", default_repl_size);
-    int64_t target_size_bytes = cmd_getval_or<int64_t>(cmdmap, "target_size_bytes", default_target_size_bytes);
-    double target_size_ratio = cmd_getval_or<double>(cmdmap, "target_size_ratio", default_target_size_ratio);
-
-    string default_pg_autoscale_mode = inherit_from_source ?
-      source_pool->get_pg_autoscale_mode_name(source_pool->pg_autoscale_mode) : "";
-    string pg_autoscale_mode = cmd_getval_or<string>(cmdmap, "autoscale_mode", default_pg_autoscale_mode);
-
-    bool default_bulk = inherit_from_source ? source_pool->is_bulk() : false;
-    bool bulk = cmd_getval_or<bool>(cmdmap, "bulk", default_bulk);
-
-    bool default_crimson = inherit_from_source ? source_pool->is_crimson() : false;
-    bool crimson = cmd_getval_or<bool>(cmdmap, "crimson", default_crimson) ||
-      cct->_conf.get_val<bool>("osd_pool_default_crimson");
-    bool force_create = false;
-    cmd_getval(cmdmap, "force_pg_limit", force_create);
-
-    // For osd pool migrate with no parameters: the new pool is a full copy of
-    // the source pool, so the migration would be pointless.  Warn the user and
-    // require --yes-i-really-mean-it to proceed.
-    if (migrate_no_params && !confirm) {
-      ss << "The target pool would be identical to the source pool '" << poolstr << "'. "
-         << "No migration is necessary. If you still want to perform this pointless migration, "
-         << "add the --yes-i-really-mean-it flag.";
-      err = -EPERM;
-      goto reply_no_propose;
-    }
-
-    err = prepare_new_pool(poolstr,
-                           -1, // default crush rule
-                           rule_name,
-                           pg_num, pgp_num, pg_num_min, pg_num_max,
-                           repl_size, target_size_bytes, target_size_ratio,
-                           0, // min_size
-                           erasure_code_profile,
-                           "default", 1, 0, repl_size, "", "", "", // one zone
-                           false, // placement_given
-                           pool_type,
-                           (uint64_t)expected_num_objects,
-                           fast_read,
-			   pg_autoscale_mode,
-			   bulk,
-			   crimson,
-               force_create,
-			   source_pool_id,
-			   enable_ec_optimizations,
-			   &ss);
-    if (err < 0) {
-      switch(err) {
-      case -EEXIST:
-	ss << "pool '" << poolstr << "' already exists";
-        err = 0;
-        goto reply_no_propose;
-      case -EAGAIN:
-        goto wait;
-      case -ERANGE:
-        goto reply_no_propose;
       default:
 	goto reply_no_propose;
       }
