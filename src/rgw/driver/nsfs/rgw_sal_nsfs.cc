@@ -20836,6 +20836,170 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
     return 0;
   }
 
+  if (hint == "sideload") {
+    /* A file changed in a bucket by a filesystem client -- NFS, SMB, a
+     * local tool -- through neither the S3 path nor the listing cache, for
+     * the suite's side-loading tests (DECISIONS.md 2026-11-11).
+     *
+     *   op=write bucket= key= body=   makes the key's missing directories,
+     *                                 then creates the file, or truncates
+     *                                 it in place, and writes `body`:  an
+     *                                 existing name keeps its inode, as
+     *                                 `cp` onto it does
+     *   op=rename bucket= key= to=    renames the file to `to`, whose
+     *                                 directories must exist:  the write
+     *                                 to a temporary name, then rename,
+     *                                 that Samba and rsync do
+     *   op=unlink bucket= key=        removes the file
+     *
+     * as=<user>:  done as that user, as that identity's filesystem client
+     * would.  Returns the file's `ino` and `size` where it exists
+     * afterwards, at `to` for a rename. */
+    auto op = params.find("op");
+    auto bk = params.find("bucket");
+    auto ky = params.find("key");
+    if ((op == params.end()) || (bk == params.end()) ||
+	(ky == params.end()) || bk->second.empty()) {
+      return -EINVAL;
+    }
+    auto bad_key = [](const std::string& k) {
+      return k.empty() || (k.front() == '/') || (k.back() == '/') ||
+	(fmt::format("/{}/", k).find("/../") != std::string::npos) ||
+	(fmt::format("/{}/", k).find("/./") != std::string::npos);
+    };
+    const std::string& key = ky->second;
+    if (bad_key(key)) {
+      return -EINVAL;
+    }
+    std::string to;
+    if (op->second == "rename") {
+      auto t = params.find("to");
+      if ((t == params.end()) || bad_key(t->second)) {
+	return -EINVAL;
+      }
+      to = t->second;
+    } else if ((op->second != "write") && (op->second != "unlink")) {
+      return -EINVAL;
+    }
+    std::string body;
+    if (op->second == "write") {
+      auto b = params.find("body");
+      if (b == params.end()) {
+	return -EINVAL;
+      }
+      body = b->second;
+    }
+    std::optional<nsfs::Credentials> as;
+    if (auto a = params.find("as"); a != params.end()) {
+      nsfs::Credentials cred;
+      const int r = hint_credentials(dpp, this, a->second, cred);
+      if (r < 0) {
+	return r;
+      }
+      as = cred;
+    }
+
+    std::unique_ptr<rgw::sal::Bucket> loaded;
+    int ret = load_bucket_internal(dpp, rgw_bucket{"", bk->second}, &loaded,
+				   null_yield);
+    if (ret < 0) {
+      return ret;
+    }
+    auto* bdir = static_cast<NSFSBucket*>(loaded.get())->get_dir();
+    ret = bdir->open(dpp);
+    if (ret < 0) {
+      return ret;
+    }
+    const int bfd = bdir->get_fd();
+
+    /* the directory holding `k`, made where missing when `make`, and the
+     * leaf name;  a descriptor the caller closes, or -errno */
+    auto parent_of = [bfd](const std::string& k, bool make,
+			   std::string& leaf) -> int {
+      int dfd = ::openat(bfd, ".", O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+      if (dfd < 0) {
+	return -errno;
+      }
+      std::string_view rest{k};
+      for (auto slash = rest.find('/'); slash != std::string_view::npos;
+	   slash = rest.find('/')) {
+	const std::string dir{rest.substr(0, slash)};
+	rest.remove_prefix(slash + 1);
+	if (make && (::mkdirat(dfd, dir.c_str(), 0755) < 0) &&
+	    (errno != EEXIST)) {
+	  const int err = errno;
+	  ::close(dfd);
+	  return -err;
+	}
+	const int next = ::openat(dfd, dir.c_str(),
+				  O_RDONLY | O_DIRECTORY | O_NOFOLLOW |
+				  O_CLOEXEC);
+	const int err = errno;
+	::close(dfd);
+	if (next < 0) {
+	  return -err;
+	}
+	dfd = next;
+      }
+      leaf = std::string{rest};
+      return dfd;
+    };
+
+    std::string leaf;
+    auto change = [&]() -> int {
+      const int pfd = parent_of(key, op->second == "write", leaf);
+      if (pfd < 0) {
+	return pfd;
+      }
+      auto close_pfd = make_scope_guard([pfd] { ::close(pfd); });
+      if (op->second == "write") {
+	const int fd = ::openat(pfd, leaf.c_str(),
+				O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW |
+				O_CLOEXEC, 0644);
+	if (fd < 0) {
+	  return -errno;
+	}
+	auto close_fd = make_scope_guard([fd] { ::close(fd); });
+	size_t done = 0;
+	while (done < body.size()) {
+	  const ssize_t n = ::write(fd, body.data() + done, body.size() - done);
+	  if (n < 0) {
+	    if (errno == EINTR) {
+	      continue;
+	    }
+	    return -errno;
+	  }
+	  done += n;
+	}
+	return 0;
+      }
+      if (op->second == "unlink") {
+	return (::unlinkat(pfd, leaf.c_str(), 0) < 0) ? -errno : 0;
+      }
+      std::string to_leaf;
+      const int tfd = parent_of(to, false, to_leaf);
+      if (tfd < 0) {
+	return tfd;
+      }
+      auto close_tfd = make_scope_guard([tfd] { ::close(tfd); });
+      return (::renameat(pfd, leaf.c_str(), tfd, to_leaf.c_str()) < 0)
+	? -errno : 0;
+    };
+    ret = as ? nsfs::run_as(dpp, *as, change, null_yield) : change();
+    if (ret < 0) {
+      return ret;
+    }
+
+    struct statx stx;
+    const std::string& now = to.empty() ? key : to;
+    if (out && (nsfs::statx(bfd, now.c_str(), AT_SYMLINK_NOFOLLOW,
+			    STATX_INO | STATX_SIZE, &stx) == 0)) {
+      (*out)["ino"] = std::to_string(stx.stx_ino);
+      (*out)["size"] = std::to_string(stx.stx_size);
+    }
+    return 0;
+  }
+
   if (hint == "set-mtime") {
     /* The current object's mtime, set `ago` seconds into the past, as
      * touch -d, cp -p or a restore from backup sets it, for the suite's
