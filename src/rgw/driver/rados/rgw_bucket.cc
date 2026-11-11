@@ -3178,6 +3178,15 @@ int RGWBucketInstanceMetadataHandler::put_prepare(
       bci.info.layout.logs = old_bci->info.layout.logs;
     }
 
+    // keep the generation of the existing index and any reshard in progress.
+    // the json form of the bucket info carries the shard count, hash type and
+    // index type of the current index, but not its generation or the reshard
+    // target, so a metadata get/put round trip of a resharded bucket would
+    // otherwise point it back at the generation-0 index objects
+    bci.info.layout.current_index.gen = old_bci->info.layout.current_index.gen;
+    bci.info.layout.target_index = old_bci->info.layout.target_index;
+    bci.info.layout.resharding = old_bci->info.layout.resharding;
+
     // reject metadata with empty logs, since logs not being empty is
     // an invariant assumed broadly in codebase. indexless buckets are
     // created without logs (see init_default_bucket_layout()), so the
