@@ -11,7 +11,8 @@ function run() {
     run_stretch_tests "$@"
 }
 
-# the stretch EC pool data0 in recovery stretch mode, after dc2 came back
+# the erasure coded pool data0 over zones in recovery mode, after dc2 came
+# back
 function ec_stretch_cluster_recovering() {
     local dir=$1
 
@@ -25,8 +26,18 @@ function ec_stretch_cluster_recovering() {
     wait_for_stretch_state 1 1 || return 1
 }
 
-# Leaving stretch mode during recovery must end recovery stretch mode on the
-# leader too, so that force_healthy_stretch_mode fails afterwards.
+# When the last pool over two zones leaves them, the cluster stretch flags
+# are cleared, and the monitors, the leader too, must leave recovery mode.
+# Erasure coded pool data0 (k=2 m=1) over the datacenters dc1 and dc2 is the
+# only pool over zones. dc2's monitor and OSDs go down, and the cluster
+# enters degraded mode. When they come back, the cluster enters recovery
+# mode, and stays in it, as mon_stretch_recovery_min_wait is raised to an
+# hour. data0 then leaves the zones, and the OSDMap's stretch flag is
+# cleared. The monitor that led in recovery mode is made the leader again,
+# and osd force_healthy_stretch_mode, which only works in recovery mode,
+# must be refused.
+# The tests remove data0 (osd pool rm) or move it to one zone (osd pool set
+# data0 num_zones 1).
 function leave_stretch_mode_while_recovering() {
     local dir=$1
     shift
@@ -36,9 +47,9 @@ function leave_stretch_mode_while_recovering() {
     "$@" || return 1
     wait_for_quorum 300 3 || return 1
     test "$(ceph osd dump -f json | jq .stretch_mode.stretch_mode_enabled)" = false || return 1
-    # Leaving stretch mode allows every monitor to lead again, and another
-    # one can win the election that follows: only the monitor that led in
-    # recovery stretch mode may lead
+    # Clearing the cluster stretch flags allows every monitor to lead again,
+    # and another one can win the election that follows: only the monitor
+    # that led in recovery mode may lead
     local mon
     for mon in a b c; do
         if [ $mon != $leader ]; then

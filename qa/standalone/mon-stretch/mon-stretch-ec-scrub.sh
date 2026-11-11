@@ -21,8 +21,16 @@ function inconsistent_shards() {
         jq -c '[.inconsistents[].shards[]|select(.errors|length > 0)|.shard]|sort'
 }
 
-# Corrupt zone 2's copy of shard 1 of an object of a pool over two zones,
-# deep scrub, check the shards reported, repair, and check the object
+# Deep scrub of an erasure coded pool over two zones must find a shard
+# whose copy in one zone differs from that in the other, and repair must
+# fix it. The test creates pool ec, of one PG, over the datacenters dc1 and
+# dc2 with the given profile, so shards 0-2 are in one zone and their
+# copies, shards 3-5, in the other. It writes an object, corrupts shard 4,
+# the copy of shard 1, and deep scrubs the PG: the shards reported with
+# errors must be those expected. After repair, a second deep scrub finds no
+# inconsistency, shard 4 holds its old bytes again, and the object reads
+# back as written.
+# The tests run this with an isa and a jerasure profile, both k=2 m=1.
 function scrub_and_repair_zone_copy() {
     local dir=$1
     local profile=$2
@@ -54,8 +62,9 @@ function scrub_and_repair_zone_copy() {
     cmp $dir/ORIGINAL $dir/COPY || return 1
 }
 
-# A plugin that encodes and decodes CRCs finds the zone whose stripe is
-# consistent, so only the corrupt copy is reported
+# isa can turn the CRCs of the data shards into those of the parity shard
+# and back, so scrub can tell which zone's shards agree with each other:
+# only the corrupt copy, shard 4, is reported.
 function TEST_scrub_repairs_corrupt_zone_copy() {
     local dir=$1
     two_zone_cluster $dir || return 1
@@ -64,8 +73,9 @@ function TEST_scrub_repairs_corrupt_zone_copy() {
     scrub_and_repair_zone_copy $dir isa21 "[4]" || return 1
 }
 
-# Without CRC decoding nothing says which of two differing copies is good,
-# so both are reported, and repair rebuilds both
+# jerasure with technique reed_sol_van cannot turn CRCs that way, so
+# nothing says which of the two different copies is good: both, shards 1
+# and 4, are reported.
 function TEST_scrub_repairs_both_copies_without_crc_decode() {
     local dir=$1
     two_zone_cluster $dir || return 1

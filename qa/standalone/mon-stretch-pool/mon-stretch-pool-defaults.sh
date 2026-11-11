@@ -30,7 +30,13 @@ function pool_field() {
     ceph osd pool ls detail -f json | jq --arg p $1 ".[]|select(.pool_name==\$p)|.$2"
 }
 
-# Test get shows every default with its value, option and source
+# osd pool default get shows every default that osd pool create uses, with
+# its value and where the value comes from. This test checks that all of
+# them are listed, with k and m but no profile name, and the values on a new
+# cluster: pool_type replicated, num_zones 1 (the built-in default),
+# crush_rule none, zone_failure_domain datacenter, osd_failure_domain host
+# and root default. pg_autoscale_mode is off, from the command line, where
+# run_mon sets it.
 function TEST_get_shows_every_default() {
     local dir=$1
     run_mon $dir a || return 1
@@ -57,7 +63,12 @@ function TEST_get_shows_every_default() {
     test "$(default_field pg_autoscale_mode source)" = cmdline || return 1
 }
 
-# Test set writes the global section and get shows where values come from
+# osd pool default set writes the defaults to the global section of the
+# configuration database, and osd pool default get shows where each comes
+# from. --replica 2 --min_size 1 --pg_num 16 sets all three, and replica is
+# shown as the option osd_pool_default_size, from the global section. A
+# later --pg_num alone leaves replica as it was. --bulk turns the bulk
+# default on and --bulk=false turns it off.
 function TEST_set_writes_global_values() {
     local dir=$1
     run_mon $dir a || return 1
@@ -78,7 +89,8 @@ function TEST_set_writes_global_values() {
     test "$(default_field bulk value)" = false || return 1
 }
 
-# Test the defaults have no --size
+# osd pool default set has no --size: the default number of copies is set
+# with --replica. --size 4 is refused and replica stays 3.
 function TEST_set_refuses_size() {
     local dir=$1
     run_mon $dir a || return 1
@@ -87,7 +99,9 @@ function TEST_set_refuses_size() {
     test "$(default_field replica value)" = 3 || return 1
 }
 
-# Test replica shows a value set with ceph config set
+# The replica default is kept in the option osd_pool_default_size, so osd
+# pool default get shows a value set with config set global
+# osd_pool_default_size 2 as replica 2, from that option.
 function TEST_get_replica_from_size_option() {
     local dir=$1
     run_mon $dir a || return 1
@@ -97,7 +111,13 @@ function TEST_get_replica_from_size_option() {
     test "$(default_field replica option)" = osd_pool_default_size || return 1
 }
 
-# Test the checks that ceph osd pool create would make
+# osd pool default set makes the checks that osd pool create would make of
+# the same values. It refuses failure domains that are not CRUSH bucket
+# types; a root, class or rule that does not exist; a rule given with
+# --root; a --min_size above --replica; a --pgp_num above --pg_num; --crimson
+# before osd set-allow-crimson; and --replica 1 unless --yes-i-really-mean-it
+# is given. The refused commands leave zone_failure_domain and crush_rule at
+# their built-in values.
 function TEST_set_checks() {
     local dir=$1
     run_mon $dir a || return 1
@@ -128,7 +148,10 @@ function TEST_set_checks() {
     test "$(default_field crush_rule value)" = none || return 1
 }
 
-# Test num_zones 2 needs a cluster that can be stretched
+# osd pool default set --num_zones 2 makes new pools go over two zones, so
+# it checks the monitors as the first pool over two zones would. With the
+# one monitor of this cluster, --num_zones 2 --zone_failure_domain zone is
+# refused and num_zones stays 1.
 function TEST_set_num_zones_needs_stretchable_cluster() {
     local dir=$1
     run_mon $dir a || return 1
@@ -138,7 +161,10 @@ function TEST_set_num_zones_needs_stretchable_cluster() {
     test "$(default_field num_zones value)" = 1 || return 1
 }
 
-# Test the rule default is written as its id, and none returns to generated rules
+# osd pool default set --rule writes the rule's id to the option
+# osd_pool_default_crush_rule, and osd pool default get shows the rule by
+# name. --rule replicated_rule writes 0, and --rule none, for no default
+# rule, writes -1.
 function TEST_set_rule() {
     local dir=$1
     run_mon $dir a || return 1
@@ -154,7 +180,17 @@ function profile_of() {
     ceph osd pool get $1 erasure_code_profile -f json | jq -r .erasure_code_profile
 }
 
-# Test k and m are kept in the default profile, which new pools copy
+# osd pool default set --k and --m change the default erasure code profile,
+# default. A new erasure coded pool that names no profile, or names default,
+# copies it to a profile of its own, <pool>-k<k>-m<m>. --k and --m are
+# refused while the default pool type is replicated, and --replica while it
+# is erasure. A set is applied whole or not at all: with a bad --pgp_num,
+# the pool type and k stay as they were. Once set, k is shown as kept in the
+# OSDMap, and the option osd_pool_default_erasure_code_profile is left
+# alone. --k with an option kept in the configuration (--pg_num) sets both.
+# Pools before, named and named2, created first, keep their k=2 m=2
+# profiles, and pool after, created once k is 5 and m 3, gets after-k5-m3.
+# --erasure_code_profile is refused.
 function TEST_set_k_m_in_default_profile() {
     local dir=$1
     run_mon $dir a || return 1
@@ -204,9 +240,16 @@ function default_profile_field() {
     ceph osd erasure-code-profile get default -f json | jq -r ".\"$1\" // empty"
 }
 
-# Test the default profile always has the placement of erasure coded
-# pools: ceph osd pool default set writes the placement there, and not to the
-# options, while the default type is erasure, and to the options otherwise
+# The default erasure code profile always holds the placement of erasure
+# coded pools: on a new cluster it has crush-root default,
+# crush-zone-failure-domain datacenter, crush-failure-domain host and a
+# crush-device-class. osd erasure-code-profile set default, given no zone
+# failure domain, fills in datacenter. While the default pool type is
+# replicated, osd pool default set --root, --osd_failure_domain,
+# --zone_failure_domain and --no-class write the options and leave the
+# profile alone. With --pool_type erasure they write the profile instead,
+# even values that are the built-in ones (host), and leave the options;
+# --no-class empties the profile's device class and --class ssd sets it.
 function TEST_set_placement_in_default_profile() {
     local dir=$1
     run_mon $dir a || return 1
@@ -249,7 +292,11 @@ function TEST_set_placement_in_default_profile() {
     test "$(default_profile_field crush-device-class)" = ssd || return 1
 }
 
-# Test values that another source overrides are refused
+# osd pool default set writes the global section, so it refuses a value
+# that another source would override: --autoscale_mode, which run_mon sets
+# on mon.a's command line, and --replica while osd_pool_default_size is set
+# in the mon section of the configuration database. Once that is removed,
+# --replica 2 is accepted.
 function TEST_set_refuses_overridden_values() {
     local dir=$1
     run_mon $dir a || return 1
@@ -264,7 +311,10 @@ function TEST_set_refuses_overridden_values() {
     ceph osd pool default set --replica 2 || return 1
 }
 
-# Test a value masked to another host does not override this monitor's
+# The health warning POOL_DEFAULT_CONFIG_OVERRIDE says that a default set
+# by osd pool default set is overridden. A value masked to another host
+# (global/host:nosuchhost osd_pool_default_size 4) does not apply to this
+# monitor, so after --replica 2 it raises no warning.
 function TEST_health_ignores_mask_of_other_host() {
     local dir=$1
     run_mon $dir a || return 1
@@ -276,7 +326,10 @@ function TEST_health_ignores_mask_of_other_host() {
     return 0
 }
 
-# Test a later override raises POOL_DEFAULT_CONFIG_OVERRIDE
+# A value that overrides one written by osd pool default set raises the
+# health warning POOL_DEFAULT_CONFIG_OVERRIDE. After --replica 2 there is no
+# warning; config set mon osd_pool_default_size 3 raises it, naming the
+# option and the mon section, and removing that value clears it.
 function TEST_health_warns_of_override() {
     local dir=$1
     run_mon $dir a || return 1
@@ -298,7 +351,10 @@ function TEST_health_warns_of_override() {
     return 1
 }
 
-# Test pool create takes the defaults
+# osd pool create takes the values that osd pool default set gives. After
+# --replica 2 --pg_num 4, pool rep gets size 2, pg_num 4 and num_zones 1.
+# The legacy --size still sets the size of a pool in one zone: rep3, created
+# with --size 3, gets size 3.
 function TEST_pool_create_uses_defaults() {
     local dir=$1
     run_mon $dir a || return 1
@@ -315,8 +371,9 @@ function TEST_pool_create_uses_defaults() {
     test "$(pool_field rep3 size)" = 3 || return 1
 }
 
-# Test the default rule must be a replicated rule: replicated pools fall back
-# on it
+# The default rule must be a replicated rule, as replicated pools fall back
+# on it. osd pool default set --rule ecr, an erasure rule made by
+# create-erasure, is refused, and replicated pool r can still be created.
 function TEST_set_rule_must_be_replicated() {
     local dir=$1
     run_mon $dir a || return 1
@@ -335,8 +392,14 @@ function pool_rule() {
     ceph osd pool get $1 crush_rule -f json | jq -r .crush_rule
 }
 
-# Test crush_rule and pg_autoscale_mode are also taken as rule and
-# autoscale_mode, their names in earlier releases, but not under both names
+# osd pool default set, osd pool create and osd pool set also take
+# crush_rule and pg_autoscale_mode by their names in earlier releases, rule
+# and autoscale_mode. Under each name, this test sets the default rule to
+# replicated_rule and back to none, creates a pool on rule second (made by
+# create-replicated, so not the default) and moves it to replicated_rule.
+# Under each name it also creates a pool with autoscale mode warn and sets
+# it to on. The default autoscale mode is refused under both names, as
+# run_mon sets it on the command line. Giving both names at once is refused.
 function TEST_old_param_names() {
     local dir=$1
     run_mon $dir a || return 1

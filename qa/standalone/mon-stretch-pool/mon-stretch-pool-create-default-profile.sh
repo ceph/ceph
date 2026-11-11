@@ -19,8 +19,13 @@ function zone_steps() {
     ceph osd crush rule dump $1 | jq -c '[.steps[] | select(.type == "datacenter")]'
 }
 
-# Every EC pool created from the default profile gets a CRUSH rule of its
-# own, over zones or in one.
+# osd pool create <pool> erasure, with no profile, copies the default
+# profile (k=2 m=2) to a profile of the pool's own, <pool>-k2-m2, and makes a
+# rule of the pool's own, named <pool>, whether the pool is in one zone or
+# over two. The zones are the datacenters dc1 and dc2. This test creates p1
+# and p4 in one zone, and p2 and p3 with --num_zones 2. The rules of p1 and
+# p4 have no datacenter step, and those of p2 and p3 choose 2 datacenters.
+# No erasure-code rule is made, and p2's rule is removed with p2.
 function TEST_multi_zone_pool_default_profile() {
     local dir=$1
     two_zone_cluster $dir 4 || return 1

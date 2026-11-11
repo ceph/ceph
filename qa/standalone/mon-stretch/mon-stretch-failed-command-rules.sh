@@ -18,7 +18,14 @@ function run() {
     run_stretch_tests $dir "$@"
 }
 
-# The PG limit is checked with the rule generated for the new pool
+# osd pool create of a pool over two zones generates a rule for the pool,
+# and for an erasure coded pool an erasure code profile, and checks the PG
+# limit per OSD with that rule. With mon_max_pg_per_osd 25 on 6 OSDs, 3 in
+# each of the datacenters dc1 and dc2, pools of 64 PGs are refused:
+# replicated pool big, 2 copies in each zone, and erasure coded pool bigec,
+# k=2 m=1. Neither rule, big or bigec, nor the profile bigec-k2-m1 is left
+# behind. When a rule named big has been made by hand, the same refused
+# create of big leaves it in place.
 function TEST_failed_pool_create_removes_its_rule() {
     local dir=$1
 
@@ -44,6 +51,12 @@ function TEST_failed_pool_create_removes_its_rule() {
     rule_exists big || return 1
 }
 
+# osd pool set <pool> num_zones 2 generates a rule for the pool over two
+# zones and checks the PG limit per OSD with it. The pools, of 32 PGs each,
+# are created in one zone before mon_max_pg_per_osd is lowered to 25. Then
+# num_zones 2 is refused for erasure coded pool ec (k=2 m=1) and, with
+# --replica 3, for replicated pool rep. Their new rules, ec-stretch and rep,
+# are not left behind, and both pools stay in one zone.
 function TEST_failed_num_zones_removes_its_rule() {
     local dir=$1
 
@@ -65,6 +78,11 @@ function TEST_failed_num_zones_removes_its_rule() {
     test "$(pool_field rep num_zones)" = 1 || return 1
 }
 
+# osd pool set <pool> replica <n> for a pool over two zones generates a rule
+# with n copies in each zone and checks the PG limit per OSD with it.
+# Replicated pool p, of 32 PGs and 2 copies in each zone, is refused replica
+# 3 once mon_max_pg_per_osd is lowered to 25. Its new rule, p-replica-3, is
+# not left behind, and p keeps its size of 4.
 function TEST_failed_replica_removes_its_rule() {
     local dir=$1
 
@@ -79,8 +97,16 @@ function TEST_failed_replica_removes_its_rule() {
     test "$(pool_field p size)" = 4 || return 1
 }
 
-# enable_stretch_mode and disable_stretch_mode commit the rules of the EC
-# pools first; a pool that then refuses its change fails the command
+# mon enable_stretch_mode and mon disable_stretch_mode give each erasure
+# coded pool a new rule of its own. When another pool refuses its change,
+# the command is refused, and the new rules must not be left behind. Here
+# replicated pool rep has nosizechange set, so it refuses its new size.
+# mon enable_stretch_mode with stretch_rule (2 hosts in each of the
+# datacenters dc1 and dc2) is refused, leaves no rule ec-stretch, and
+# erasure coded pool ec stays in one zone. With nosizechange cleared it
+# works, and ec goes over two zones. With nosizechange set again, mon
+# disable_stretch_mode is refused, leaves no rule ec-single-zone, and ec
+# stays over two zones on ec-stretch.
 function TEST_failed_stretch_mode_removes_its_rules() {
     local dir=$1
 
