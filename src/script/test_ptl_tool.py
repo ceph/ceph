@@ -406,3 +406,60 @@ def test_logged_input_without_filehandler_preserves_behavior(ptl_tool, monkeypat
     """Without a FileHandler, logged_input() should behave like plain input()."""
     monkeypatch.setattr(builtins, "input", lambda prompt='': 'plain-answer')
     assert ptl_tool.logged_input("plain> ") == "plain-answer"
+
+
+# ---------------------------------------------------------------------------
+# subject_for_update(): on --update-qa the new branch anchors the subject and
+# earlier branches (read from the SHAMAN_BUILD journals) follow newest-first.
+# ---------------------------------------------------------------------------
+
+B1 = "wip-yuri-testing-20261002.125630-umbrella"
+B2 = "wip-yuri-testing-20261003.180813-umbrella"
+B3 = "wip-yuri-testing-20261005.175703-umbrella"
+B4 = "wip-yuri-testing-20261006.163134-umbrella"
+DEFAULT = "wip-yuri-testing-20261006.163134"  # default TEST_BRANCH, no suffix
+
+
+def _issue(*changes):
+    """Fake issue; each change is (old_value, new_value) of SHAMAN_BUILD."""
+    def journal(i, old, new):
+        d = {'property': 'cf', 'name': '26', 'old_value': old, 'new_value': new}
+        return mock.Mock(id=i, details=[{'property': 'cf', 'name': '27'}, d])
+    return mock.Mock(journals=[journal(i, o, n) for i, (o, n) in enumerate(changes, 1)])
+
+
+def test_subject_first_update(ptl_tool):
+    assert ptl_tool.subject_for_update(_issue((B1, B2)), B1, B2) == f"{B2} ({B1})"
+
+
+def test_subject_accumulates_newest_first(ptl_tool):
+    """Replays the real tracker 81324 sequence."""
+    issue = _issue((B1, B2), (B2, B3), (B3, B4))
+    assert ptl_tool.subject_for_update(issue, B3, B4) == f"{B4} ({B3}, {B2}, {B1})"
+
+
+def test_subject_ignores_hand_edited_subject_and_default_branch_names(ptl_tool):
+    issue = _issue((DEFAULT, B2))
+    assert ptl_tool.subject_for_update(issue, DEFAULT, B2) == f"{B2} ({DEFAULT})"
+
+
+def test_subject_no_journals_falls_back_to_old_branch(ptl_tool):
+    assert ptl_tool.subject_for_update(_issue(), B1, B2) == f"{B2} ({B1})"
+    assert ptl_tool.subject_for_update(_issue(), "unknown", B2) == B2
+
+
+def test_subject_same_branch_and_repeats_not_duplicated(ptl_tool):
+    issue = _issue((B1, B2), (B2, B1), (B1, B2))
+    assert ptl_tool.subject_for_update(issue, B1, B2) == f"{B2} ({B1})"
+
+
+def test_format_subject_length_cap_marks_truncation(ptl_tool):
+    prev = [B3, B2, B1]
+    cap = 2 * len(B4) + 10
+    s = ptl_tool.format_subject(B4, prev, max_len=cap)
+    assert len(s) <= cap
+    assert s == f"{B4} ({B3}, ...)"
+
+
+def test_format_subject_overlong_current_is_cut(ptl_tool):
+    assert ptl_tool.format_subject(B4, [B1], max_len=10) == B4[:10]
