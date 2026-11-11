@@ -37,13 +37,14 @@ void MockPeeringListener::request_local_background_io_reservation(
     stalled_events.push_back(std::move(on_preempt));
   }
   io_reservations_requested++;
+  io_reservation_priority = priority;
 }
 
 void MockPeeringListener::request_remote_recovery_reservation(
   unsigned priority,
   PGPeeringEventURef on_grant,
   PGPeeringEventURef on_preempt) {
-  if (inject_event_stall) {
+  if (inject_event_stall || inject_remote_reservation_stall) {
     stalled_events.push_back(std::move(on_grant));
   } else if (event_loop) {
     PGPeeringEventRef evt_ref = std::move(on_grant);
@@ -59,6 +60,7 @@ void MockPeeringListener::request_remote_recovery_reservation(
     stalled_events.push_back(std::move(on_preempt));
   }
   remote_recovery_reservations_requested++;
+  remote_recovery_reservation_priority = priority;
 }
 
 void MockPeeringListener::schedule_event_on_commit(
