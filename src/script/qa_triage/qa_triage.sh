@@ -54,32 +54,24 @@ else
     case $(git -C "$checkout" remote get-url origin 2> /dev/null) in
         https://github.com/*) use_gh || true ;;
     esac
-    # The commits of what was learned here and not pushed yet go on top of what
-    # others pushed since; a rebase that stops is undone, never left part way.
-    rebase() {
-        out=$(git -C "$checkout" pull -q --rebase 2>&1) && return 0
-        git -C "$checkout" rebase --abort > /dev/null 2>&1 || true
-        return 1
-    }
-    aside() {
-        echo "qa_triage: $checkout had $1 made in it and never shared: they are set" \
-             "aside, so that it is up to date. $2" >&2
-    }
     if ! out=$(git -C "$checkout" pull -q --ff-only 2>&1); then
         # Changes made in it and never shared hold it back: set aside, where git keeps
         # them, so that it runs as everyone's does.
         if [ -n "$(git -C "$checkout" status --porcelain)" ] &&
             git -C "$checkout" stash push -q --include-untracked \
                 -m "qa_triage: changes never shared, set aside on $(date '+%F %R')"; then
-            aside changes "git -C $checkout stash list lists them, and stash pop brings them back."
+            echo "qa_triage: $checkout had changes made in it and never shared: they are" \
+                 "set aside, so that it is up to date. git -C $checkout stash list lists" \
+                 "them, and stash pop brings them back." >&2
+            git -C "$checkout" pull -q --ff-only > /dev/null 2>&1 && out= || true
         fi
-        if ! rebase; then
-            # Commits that do not go onto what others pushed: on a branch of their own.
-            branch=qa-triage/set-aside-$(date '+%Y%m%d-%H%M%S')
-            if [ -n "$(git -C "$checkout" rev-list '@{u}..HEAD' 2> /dev/null)" ] &&
-                git -C "$checkout" branch "$branch" HEAD &&
-                git -C "$checkout" reset -q --keep '@{u}' && rebase; then
-                aside commits "git -C $checkout log @{u}..$branch lists them."
+        if [ -n "$out" ]; then
+            # Commits made in it and never pushed are left as they are: they are not
+            # for this script to move or delete.
+            if [ -n "$(git -C "$checkout" rev-list '@{u}..HEAD' 2> /dev/null)" ]; then
+                echo "qa_triage: $checkout has commits made in it and never pushed, so it" \
+                     "runs as it is, not up to date: git -C $checkout log @{u}..HEAD lists" \
+                     "them." >&2
             else
                 echo "qa_triage: could not bring $checkout up to date, so it runs as it is:" \
                      "${out##*$'\n'}" >&2
