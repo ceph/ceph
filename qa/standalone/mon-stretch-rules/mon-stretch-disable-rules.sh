@@ -17,10 +17,16 @@ function run() {
 
 HAND="take2 choose2 class2 ec_take ec_choose mixed2 hosts_any per_zone_one"
 
-# S2: disable_stretch_mode gives the replicated pools the rule it is given,
-# one that takes z1, a generic one and one of a class, and the erasure coded
-# pool a rule of its own in one zone; enable_stretch_mode then works again,
-# and each rule goes when no pool uses it
+# mon disable_stretch_mode <rule> moves every replicated pool to <rule>,
+# which must be a replicated rule. This test passes it three rules in turn:
+# z1_hosts (hosts of one zone), hosts_any (hosts of both zones, ignoring
+# zones) and ssd_hosts (ssd OSDs). Passing take2, the rule the pools use, is
+# refused.
+# The erasure coded pool ec ignores <rule>: it gets its own rule,
+# ec-single-zone, and goes back to ec-stretch on the next enable.
+# Between the disables, mon enable_stretch_mode is run again: with no rule it
+# is refused while the pools are on z1_hosts, as z1 has no zones in it.
+# A rule is removed when its last pool leaves it.
 function TEST_disable_to_user_rules() {
     local dir=$1 pool
     local -x CEPH_ARGS="$CEPH_ARGS"
@@ -113,12 +119,16 @@ function TEST_disable_to_user_rules() {
     check_pools $dir rep rep2 ec || return 1
 }
 
-# S2: disable_stretch_mode without a rule gives each pool over zones a rule in
-# one zone of the placement of its own rule: rules that take each zone (shared
-# by two pools), choose the zones, choose them in a class, erasure rules of
-# each kind, and a generated rule. A replicated pool whose placement is the
-# stock one (default, host, no class) or that of replicated_rule goes to
-# replicated_rule; a class keeps a rule of its own.
+# mon disable_stretch_mode with no rule moves each pool over zones to a rule
+# in one zone with the placement of the pool's own rule. The pools are on
+# take2 (rtake and rtake2: takes each zone), choose2 (chooses the zones),
+# class2 (chooses them in ssd OSDs), ec_take and ec_choose (erasure rules of
+# each kind) and a rule made by num_zones 2 (rdef).
+# The replicated pools whose placement in one zone is the stock one (root
+# default, hosts, no class) or replicated_rule's go to replicated_rule.
+# rclass, in ssd OSDs, and the two erasure coded pools each get a rule of
+# their own, <pool>-single-zone.
+# A rule is removed when its last pool leaves it.
 function TEST_disable_keeps_placement_of_hand_rules() {
     local dir=$1 pool
     local -x CEPH_ARGS="$CEPH_ARGS"

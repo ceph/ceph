@@ -48,14 +48,21 @@ function weight_sets() {
     ceph osd crush dump -f json | jq -c .choose_args
 }
 
-# U6: before the commit the pools are on replicated_rule (.mgr), a
-# create-replicated rule of a class (two pools), the erasure-code rule that
-# plain EC pools share (one of them a legacy EC pool), a create-erasure rule,
-# Rook's stretch rule (two pools), and a rule whose placement cannot be read;
-# hand-written rules that no pool uses, a compat weight-set and a pool's
-# weight-set are there too. The commit keeps all of them. Then num_zones 2
-# keeps or replaces each rule as its placement allows, and removes each rule
-# with its last pool.
+# osd require-osd-release vampire, the upgrade commit, sets the stretch_zones
+# flag. It must remove no rule, move no pool and keep the CRUSH weight-sets.
+# Before it, the pools are on replicated_rule (.mgr), ssd_hosts (ssd OSDs,
+# made by create-replicated; two pools), erasure-code (the rule earlier
+# releases share between erasure coded pools; two pools, one of them legacy),
+# osds (made by create-erasure), rook_stretch (the rule Rook writes; two
+# pools) and per_zone_one, whose placement cannot be read. Hand-written rules
+# that no pool uses, a compat weight-set and weight-sets of two pools are
+# there too.
+# After it, osd pool set num_zones 2 moves each pool over two zones. A pool
+# whose rule's placement can be read gets a new rule of that placement; the
+# others need a rule (rook_stretch itself, with 2 copies in each zone, or
+# choose2) or the whole placement. The legacy erasure coded pool is refused
+# until allow_ec_optimizations is set. A rule is removed when its last pool
+# leaves it, and the weight-sets stay.
 function TEST_commit_keeps_rules_of_every_kind() {
     local dir=$1 pool
     local -x CEPH_ARGS="$CEPH_ARGS"
@@ -162,11 +169,15 @@ function TEST_commit_keeps_rules_of_every_kind() {
     check_pools $dir $all || return 1
 }
 
-# U6: global stretch mode before the commit on Rook's stretch rule, one pool
-# moved to a rule whose placement cannot be read. The commit converts the
-# pools and keeps their rules. Then a replica change reads Rook's rule, and
-# disable_stretch_mode, refused for the pool whose rule cannot be read without
-# leaving rules behind, works with a rule given.
+# Global stretch mode is enabled before the upgrade commit, with
+# rook_stretch, the rule Rook writes, and pool rmixed is then moved to
+# mixed2, whose placement cannot be read. osd require-osd-release vampire
+# makes each pool a pool over two zones of 2 copies each, on the rule it
+# had. After it, osd pool set replica 3 gives rep1 a new rule read from
+# rook_stretch, and is refused for rmixed. mon disable_stretch_mode with no
+# rule is refused, as it cannot read mixed2, and changes nothing; given
+# hosts_any, it moves every replicated pool there. A rule is removed when its
+# last pool leaves it.
 function TEST_commit_global_stretch_mode_on_rook_rule() {
     local dir=$1 pool
     local -x CEPH_ARGS="$CEPH_ARGS"
