@@ -23,7 +23,7 @@ function TEST_replicated_one_two_one() {
     local dir=$1
     local -x CEPH_ARGS="$CEPH_ARGS"
     zone_cluster $dir zone || return 1
-    ceph config set mon osd_pool_default_zone_failure_domain zone || return 1
+    ceph config set global osd_pool_default_zone_failure_domain zone || return 1
     ceph osd crush rule create-replicated ssd_hosts default host ssd || return 1
     ceph osd crush rule create-replicated z1_hosts z1 host || return 1
     ceph osd crush rule create-replicated spare default osd || return 1
@@ -98,7 +98,7 @@ function TEST_ec_one_two_one() {
     local dir=$1
     local -x CEPH_ARGS="$CEPH_ARGS"
     zone_cluster $dir zone || return 1
-    ceph config set mon osd_pool_default_zone_failure_domain zone || return 1
+    ceph config set global osd_pool_default_zone_failure_domain zone || return 1
     ceph osd erasure-code-profile set p22 plugin=isa k=2 m=2 \
         crush-failure-domain=host || return 1
     ceph osd erasure-code-profile set p22osd plugin=isa k=2 m=2 \
@@ -210,7 +210,7 @@ function TEST_num_zones_while_pgs_change() {
     local dir=$1 pool
     local -x CEPH_ARGS="$CEPH_ARGS"
     zone_cluster $dir zone || return 1
-    ceph config set mon osd_pool_default_zone_failure_domain zone || return 1
+    ceph config set global osd_pool_default_zone_failure_domain zone || return 1
     add_hand_rules $dir zone || return 1
     ceph osd erasure-code-profile set p22 plugin=isa k=2 m=2 \
         crush-failure-domain=host || return 1
