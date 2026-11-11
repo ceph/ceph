@@ -1870,6 +1870,28 @@ LCObjsLister::LCObjsLister(ILCBucketLister *_backend,
   delay_ms = cct->_conf.get_val<int64_t>("rgw_lc_thread_delay");
 }
 
+LCObjsLister::~LCObjsLister() {
+  if (skipped_not_current || skipped_multiple_currents) {
+    ldpp_dout(dpp, 1) << "WARNING: lifecycle skipped "
+      << skipped_not_current + skipped_multiple_currents
+      << " objects with inconsistent index entries ("
+      << skipped_not_current << " newest version not current, "
+      << skipped_multiple_currents << " multiple currents) in bucket="
+      << backend->get_bucket_name() << " prefix=" << prefix << dendl;
+  }
+}
+
+// warn about the first few skipped objects, then log at a debug level
+void LCObjsLister::log_skipped(const rgw_obj_key& key, uint64_t& count,
+                               const char* reason) {
+  ++count;
+  const int level =
+    skipped_not_current + skipped_multiple_currents <= 10 ? 1 : 5;
+  ldpp_dout(dpp, level) << "WARNING: lifecycle skipping object " << key
+    << " (" << reason << ") in bucket=" << backend->get_bucket_name()
+    << dendl;
+}
+
 int LCObjsLister::init(boost::asio::yield_context y) {
   int res = fetch(y);
   if (res < 0)
@@ -1917,10 +1939,7 @@ LCObjsLister::obj_iter_type LCObjsLister::skip_to_key_with_first_current(obj_ite
       return from;
     }
 
-    ldpp_dout(dpp, 5) << "LCObjsLister::next(): skipping object "
-      << from->key << " (newer than the current)"
-      << " in bucket=" << backend->get_bucket_name()
-      <<  dendl;
+    log_skipped(from->key, skipped_not_current, "newest version is not current");
     from = skip_to_the_next_key(from, y);
   }
   while (from != list_results.objs.end());
@@ -1999,10 +2018,7 @@ bool LCObjsLister::next(boost::asio::yield_context y) {
     if (!obj_iter->is_current())
       ++num_noncurrent;
     else {
-      ldpp_dout(dpp, 5) << "LCObjsLister::next(): skipping object "
-        << obj_iter->key << " (multiple currents)"
-        << " in bucket=" << backend->get_bucket_name()
-        <<  dendl;
+      log_skipped(obj_iter->key, skipped_multiple_currents, "multiple currents");
       skipped_key_name = obj_iter->key.name;
       obj_iter = skip_to_the_next_key(obj_iter, y);
       obj_iter = skip_to_key_with_first_current(obj_iter, y);

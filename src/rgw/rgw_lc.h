@@ -624,6 +624,7 @@ class LCObjsLister {
   int64_t page_index{-1};
   bool stopped_mid_obj{false};
   std::string skipped_key_name;
+  uint64_t skipped_not_current{0}, skipped_multiple_currents{0};
 
   const uint64_t list_count;
 
@@ -632,6 +633,8 @@ class LCObjsLister {
   LCObjsLister(ILCBucketLister *backend,
                CephContext *cct,
                const DoutPrefixProvider *_dpp = nullptr);
+
+  ~LCObjsLister();
 
   void set_prefix(const std::string &p) {
     prefix = p;
@@ -675,6 +678,8 @@ private:
 
   // looks at the object key pointed to by the @from iterator and skips to the first instance of the next object
   obj_iter_type skip_to_the_next_key(obj_iter_type from, boost::asio::yield_context y);
+
+  void log_skipped(const rgw_obj_key& key, uint64_t& count, const char* reason);
 
 }; /* LCObjsLister */
 
