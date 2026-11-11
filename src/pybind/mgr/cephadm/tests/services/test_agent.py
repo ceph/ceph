@@ -57,3 +57,21 @@ class TestAgent:
                     error_ok=True,
                     use_current_daemon_image=False,
                 )
+
+
+def test_agent_get_dependencies():
+    from unittest.mock import MagicMock
+    from cephadm.services.cephadmservice import CephadmAgent
+
+    mgr = MagicMock()
+    mgr.http_server.agent.server_port = 7150
+    mgr.get_mgr_ip.return_value = '10.0.0.1'
+    mgr.cert_mgr.get_root_ca.return_value = 'ROOT-CA'
+    mgr.get_module_option.return_value = True
+
+    assert CephadmAgent.get_dependencies(mgr) == sorted([
+        '10.0.0.1',
+        '7150',
+        'ROOT-CA',
+        'True',
+    ])

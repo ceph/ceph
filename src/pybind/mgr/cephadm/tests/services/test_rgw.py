@@ -671,3 +671,19 @@ class TestRGWService:
             # Inline certs must still be present — the service is still running on host2
             assert cm.get_cert(rgw_svc.cert_name, service_name=svc_name) is not None
             assert cm.get_key(rgw_svc.key_name, service_name=svc_name) is not None
+
+
+def test_rgw_dependencies_include_legacy_frontend_certificate_hash():
+    from cephadm import utils
+    from cephadm.services.cephadmservice import RgwService
+
+    spec = RGWSpec(
+        service_id='foo',
+        rgw_frontend_ssl_certificate=['CERT', 'CHAIN'],
+    )
+
+    cert = "CERT\nCHAIN"
+
+    assert RgwService.get_dependencies(MagicMock(), spec, 'rgw') == [
+        f'ssl-cert:{utils.config_hash(cert)}'
+    ]
