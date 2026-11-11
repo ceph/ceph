@@ -456,10 +456,6 @@ namespace {
     std::vector<Call> calls;
     size_t idx{0};
 
-    rgw_bucket get_bucket_key () const noexcept override {
-      return rgw_bucket("test", "me");
-    }
-
     std::string_view get_bucket_name () const noexcept override {
       return "test";
     }
@@ -547,7 +543,6 @@ TEST_F(LCObjsListerTests, BaseCase_2Objs_5Vers) {
     EXPECT_EQ(e.key.instance, "cur");
     EXPECT_TRUE(e.is_current());
     EXPECT_EQ(l.get_num_noncurrent(), 0);
-    EXPECT_EQ(l.get_num_current(), 1);
 
     ASSERT_TRUE(l.next(yield));
     ASSERT_TRUE(l.get_obj(&e));
@@ -555,7 +550,6 @@ TEST_F(LCObjsListerTests, BaseCase_2Objs_5Vers) {
     EXPECT_EQ(e.key.instance, "v1");
     EXPECT_FALSE(e.is_current());
     EXPECT_EQ(l.get_num_noncurrent(), 1);
-    EXPECT_EQ(l.get_num_current(), 1);
 
     ASSERT_TRUE(l.next(yield));
     ASSERT_TRUE(l.get_obj(&e));
@@ -563,7 +557,6 @@ TEST_F(LCObjsListerTests, BaseCase_2Objs_5Vers) {
     EXPECT_EQ(e.key.instance, "v2");
     EXPECT_FALSE(e.is_current());
     EXPECT_EQ(l.get_num_noncurrent(), 2);
-    EXPECT_EQ(l.get_num_current(), 1);
 
     ASSERT_TRUE(l.next(yield));
     ASSERT_TRUE(l.get_obj(&e));
@@ -571,7 +564,6 @@ TEST_F(LCObjsListerTests, BaseCase_2Objs_5Vers) {
     EXPECT_EQ(e.key.instance, "cur");
     EXPECT_TRUE(e.is_current());
     EXPECT_EQ(l.get_num_noncurrent(), 0);
-    EXPECT_EQ(l.get_num_current(), 1);
 
     ASSERT_TRUE(l.next(yield));
     ASSERT_TRUE(l.get_obj(&e));
@@ -579,7 +571,6 @@ TEST_F(LCObjsListerTests, BaseCase_2Objs_5Vers) {
     EXPECT_EQ(e.key.instance, "v1");
     EXPECT_FALSE(e.is_current());
     EXPECT_EQ(l.get_num_noncurrent(), 1);
-    EXPECT_EQ(l.get_num_current(), 1);
 
     ASSERT_FALSE(l.next(yield));
     ASSERT_FALSE(l.get_obj(&e));
@@ -612,7 +603,6 @@ TEST_F(LCObjsListerTests, BaseCase_1Obj_3Vers) {
     EXPECT_EQ(e.key.instance, "cur");
     EXPECT_TRUE(e.is_current());
     EXPECT_EQ(l.get_num_noncurrent(), 0);
-    EXPECT_EQ(l.get_num_current(), 1);
 
     // doing multiple get_obj() should yield the same object and there should be no changes in the state of the lister;
     ASSERT_TRUE(l.get_obj(&e));
@@ -620,7 +610,6 @@ TEST_F(LCObjsListerTests, BaseCase_1Obj_3Vers) {
     EXPECT_EQ(e.key.instance, "cur");
     EXPECT_TRUE(e.is_current());
     EXPECT_EQ(l.get_num_noncurrent(), 0);
-    EXPECT_EQ(l.get_num_current(), 1);
 
     ASSERT_TRUE(l.next(yield));
     ASSERT_TRUE(l.get_obj(&e));
@@ -628,7 +617,6 @@ TEST_F(LCObjsListerTests, BaseCase_1Obj_3Vers) {
     EXPECT_EQ(e.key.instance, "v1");
     EXPECT_FALSE(e.is_current());
     EXPECT_EQ(l.get_num_noncurrent(), 1);
-    EXPECT_EQ(l.get_num_current(), 1);
 
     ASSERT_TRUE(l.next(yield));
     ASSERT_TRUE(l.get_obj(&e));
@@ -636,7 +624,6 @@ TEST_F(LCObjsListerTests, BaseCase_1Obj_3Vers) {
     EXPECT_EQ(e.key.instance, "v2");
     EXPECT_FALSE(e.is_current());
     EXPECT_EQ(l.get_num_noncurrent(), 2);
-    EXPECT_EQ(l.get_num_current(), 1);
 
     ASSERT_FALSE(l.next(yield));
     ASSERT_FALSE(l.get_obj(&e));
@@ -888,7 +875,6 @@ TEST_F(LCObjsListerTests, 2Curr_1NonCur_Page1_1Curr_1NonCurr_Page2) {
     ASSERT_EQ(e.key.instance, "cur0");
     ASSERT_TRUE(e.is_current());
     ASSERT_EQ(l.get_num_noncurrent(), 0);
-    ASSERT_EQ(l.get_num_current(), 1);
 
     ASSERT_FALSE(l.next(yield));
     ASSERT_FALSE(l.get_obj(&e));
@@ -927,7 +913,6 @@ TEST_F(LCObjsListerTests, AllCurr_Page1_1NonCurr_Page2) {
     ASSERT_EQ(e.key.instance, "cur0");
     ASSERT_TRUE(e.is_current());
     ASSERT_EQ(ol.get_num_noncurrent(), 0);
-    ASSERT_EQ(ol.get_num_current(), 1);
 
     ASSERT_FALSE(ol.next(yield));
     ASSERT_FALSE(ol.get_obj(&e));
@@ -968,7 +953,6 @@ TEST_F(LCObjsListerTests, AllCurr_ObjA_Page1_1NonCurr_1Curr_ObjB_Page2) {
     ASSERT_EQ(e.key.instance, "cur0");
     ASSERT_TRUE(e.is_current());
     ASSERT_EQ(ol.get_num_noncurrent(), 0);
-    ASSERT_EQ(ol.get_num_current(), 1);
 
     ASSERT_FALSE(ol.next(yield));
     ASSERT_FALSE(ol.get_obj(&e));
@@ -1007,7 +991,6 @@ TEST_F(LCObjsListerTests, AllNonCurr_ObjA_Page1_1CurrObjA_1Curr_ObjB_Page2) {
     ASSERT_EQ(e.key.instance, "cur");
     ASSERT_TRUE(e.is_current());
     ASSERT_EQ(ol.get_num_noncurrent(), 0);
-    ASSERT_EQ(ol.get_num_current(), 1);
 
     ASSERT_FALSE(ol.next(yield));
     ASSERT_FALSE(ol.get_obj(&e));

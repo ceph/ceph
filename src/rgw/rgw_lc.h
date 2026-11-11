@@ -582,8 +582,6 @@ namespace ceph::async { class spawn_throttle; }
 struct ILCBucketLister {
   virtual ~ILCBucketLister() = default;
 
-  virtual rgw_bucket get_bucket_key () const noexcept = 0;
-
   virtual std::string_view get_bucket_name () const noexcept = 0;
 
   virtual bool bucket_versioned() const noexcept = 0;
@@ -621,7 +619,7 @@ class LCObjsLister {
   std::string prefix;
   obj_iter_type obj_iter;
   rgw_bucket_dir_entry pre_obj;
-  uint64_t num_noncurrent{0}, num_current{0};
+  uint64_t num_noncurrent{0};
   int64_t delay_ms;
   int64_t page_index{-1};
 
@@ -653,8 +651,6 @@ class LCObjsLister {
   boost::optional<std::string> next_key_name() const;
 
   uint64_t get_num_noncurrent() const noexcept { return num_noncurrent; }
-
-  uint64_t get_num_current() const noexcept { return num_current; }
 
   uint64_t get_entry_pos() const noexcept {
     return (page_index * list_count) + (obj_iter - list_results.objs.begin());

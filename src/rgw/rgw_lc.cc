@@ -477,10 +477,6 @@ class BucketLister : public ILCBucketLister {
     ceph_assert(_cct);
   }
 
-  rgw_bucket get_bucket_key() const noexcept override {
-    return bucket->get_key();
-  }
-
   std::string_view get_bucket_name() const noexcept override {
     return bucket->get_name();
   }
@@ -1918,7 +1914,6 @@ LCObjsLister::obj_iter_type LCObjsLister::skip_to_key_with_first_current(obj_ite
     auto first = *from;
     if (first.is_current()) {
       num_noncurrent=0;
-      num_current = 1;
       return from;
     }
 
