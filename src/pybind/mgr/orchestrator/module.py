@@ -22,7 +22,7 @@ from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection, OSDMeth
 from ceph.deployment.service_spec import PlacementSpec, ServiceSpec, service_spec_allow_invalid_from_json, TracingSpec
 from ceph.deployment.hostspec import SpecValidationError
 from ceph.deployment.utils import unwrap_ipv6
-from ceph.utils import datetime_now
+from ceph.utils import datetime_now, str_to_datetime
 from ceph.cephadm.images import NonCephImageServiceTypes
 from mgr_util import (
     is_valid_container_image_ref,
@@ -310,6 +310,92 @@ OSDSPEC PREVIEWS
 {osd_table}
 """
         return tables
+
+
+def explain_osdspec_table(data: List[Dict[str, Any]], verbose: bool = False) -> str:
+    """ Plain text rendering of ``Orchestrator.explain_osdspecs()`` """
+    now = datetime_now()
+    out: List[str] = []
+    hints: List[str] = []
+
+    def hint_ref(hint: str) -> str:
+        if hint not in hints:
+            hints.append(hint)
+        return f' [{hints.index(hint) + 1}]'
+
+    def criterion_line(c: Dict[str, Any]) -> str:
+        actual = c['actual'] if c['actual'] is not None else '-'
+        line = f"{c['criterion']}: {actual}, expected {c['expected']}"
+        if verbose:
+            status = {'match': 'ok', 'mismatch': 'MISMATCH', 'error': 'ERROR'}[c['result']]
+            line = f'{status}: {line}'
+        if c['hint'] and c['result'] != 'match':
+            line += hint_ref(c['hint'])
+        return line
+
+    def reason_cell(role: Dict[str, Any]) -> str:
+        reason = role['reason']
+        if role['selected']:
+            lines = ['selected' + (f" ({role['detail']})" if role['detail'] else '')]
+        elif reason == 'filter_mismatch':
+            shown = role['criteria'] if verbose else [
+                c for c in role['criteria'] if c['result'] != 'match']
+            lines = [criterion_line(c) for c in shown] or ['filter mismatch']
+            if role['detail']:
+                lines.append(f"({role['detail']})")
+            return '\n'.join(lines)
+        else:
+            lines = [reason.replace('_', ' ') + (f": {role['detail']}" if role['detail'] else '')]
+        if verbose:
+            lines += [criterion_line(c) for c in role['criteria']]
+        return '\n'.join(lines)
+
+    for spec in data:
+        out.append(spec['service_name'])
+        out += [f'  NOTE: {n}' for n in spec['notes']]
+        for host in spec['hosts']:
+            line = f"  host {host['hostname']}: {host['status']}"
+            if host['detail']:
+                line += f" ({host['detail']})"
+            if host['inventory_updated']:
+                updated = str_to_datetime(host['inventory_updated'])
+                line += f", inventory updated {nice_delta(now, updated, ' ago')}"
+            out.append(line)
+            sel = host['selection']
+            if not sel:
+                continue
+            if sel['error']:
+                out.append(f"    ERROR: {sel['error']}")
+            for role in sel['roles']:
+                selected = role['selected']
+                out.append(f"    {role['role']}: {len(selected)} selected"
+                           + (f" ({', '.join(selected)})" if selected else ''))
+            out += [f'    NOTE: {n}' for n in sel['notes']]
+            if not sel['devices']:
+                out.append('    no device in the inventory of this host')
+                continue
+            table = PrettyTable(['PATH', 'TYPE', 'SIZE', 'MODEL', 'ROLE', 'SELECTED', 'REASON'],
+                                border=False)
+            table.align = 'l'
+            table.left_padding_width = 0
+            table.right_padding_width = 2
+            for dev in sel['devices']:
+                for i, role in enumerate(dev['roles']):
+                    first = i == 0
+                    table.add_row((
+                        dev['path'] if first else '',
+                        dev['type'] if first else '',
+                        (dev['size'] or '-') if first else '',
+                        (dev['model'] or '-') if first else '',
+                        role['role'],
+                        'yes' if role['selected'] else 'no',
+                        reason_cell(role),
+                    ))
+            out += ['    ' + line for line in table.get_string().splitlines()]
+    if hints:
+        out.append('')
+        out += [f'[{i + 1}] {h}' for i, h in enumerate(hints)]
+    return '\n'.join(out)
 
 
 def preview_table_osd(data: List) -> str:
@@ -982,6 +1068,48 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
                 out.append(f"{host_count} host(s), {', '.join(device_summary)}, {available_count} available")
 
             return HandleCommandResult(stdout='\n'.join(out))
+
+    @OrchestratorCLICommand.Read('orch osd spec explain')
+    def _explain_osd_spec(self,
+                          service_name: Optional[str] = None,
+                          host: Optional[List[str]] = None,
+                          verbose: bool = False,
+                          format: Format = Format.plain,
+                          inbuf: Optional[str] = None) -> HandleCommandResult:
+        """
+        Explain which devices OSD specs select on each host, and why the
+        other devices are not selected. Uses the cached device inventory.
+        Use -i <spec file> to explain a spec without applying it.
+        """
+        osdspecs: Optional[List[DriveGroupSpec]] = None
+        if inbuf:
+            if service_name:
+                return HandleCommandResult(
+                    -errno.EINVAL, stderr='service_name and -i are mutually exclusive')
+            try:
+                docs = [d for d in yaml.safe_load_all(inbuf) if d]
+            except yaml.YAMLError as e:
+                return HandleCommandResult(-errno.EINVAL, stderr=f'Invalid YAML received: {e}')
+            osdspecs = []
+            for doc in docs:
+                spec = ServiceSpec.from_json(doc)
+                if not isinstance(spec, DriveGroupSpec):
+                    return HandleCommandResult(
+                        -errno.EINVAL,
+                        stderr=f'{spec.service_name()} is not an OSD spec')
+                osdspecs.append(spec)
+        elif service_name and not service_name.startswith('osd.'):
+            service_name = f'osd.{service_name}'
+
+        completion = self.explain_osdspecs(service_name=service_name,
+                                           osdspecs=osdspecs,
+                                           hosts=host)
+        result = raise_if_exception(completion)
+        if format != Format.plain:
+            return HandleCommandResult(stdout=to_format(result, format, many=True, cls=None))
+        if not result:
+            return HandleCommandResult(stdout='No OSD spec found')
+        return HandleCommandResult(stdout=explain_osdspec_table(result, verbose))
 
     @OrchestratorCLICommand.Write('orch device zap')
     def _zap_device(self, hostname: str, path: str, force: bool = False) -> HandleCommandResult:
