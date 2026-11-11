@@ -207,3 +207,39 @@ class TestAgentEndpointAuto:
         # 1000 hosts: refresh rate 133 s, timeout capped
         mgr = FakeMgr(num_hosts=1000)
         assert AgentEndpoint(mgr).get_report_timeout() == AgentEndpoint.MAX_REPORT_TIMEOUT_SECONDS
+
+
+class TestServeSleepWithAgent:
+
+    def _sleep_interval(self, num_hosts, refresh_rate=-1, down_mult=3.0):
+        from unittest import mock
+        from cephadm.serve import CephadmServe
+
+        mgr = mock.MagicMock()
+        fake = FakeMgr(num_hosts=num_hosts)
+        fake.agent_refresh_rate = refresh_rate
+        mgr.http_server.agent = AgentEndpoint(fake)
+        mgr.use_agent = True
+        mgr.agent_refresh_rate = refresh_rate
+        mgr.agent_down_multiplier = down_mult
+        mgr.host_check_interval = 600
+        mgr.facts_cache_timeout = 600
+        mgr.daemon_cache_timeout = 600
+        mgr.device_cache_timeout = 1800
+        mgr.stray_daemon_check_interval = 1800
+        CephadmServe(mgr)._serve_sleep()
+        mgr.event.wait.assert_called_once()
+        return mgr.event.wait.call_args[0][0]
+
+    def test_auto_refresh_rate_is_not_the_floor(self):
+        # auto mode (-1) must use the computed refresh rate, not -1
+        assert self._sleep_interval(num_hosts=3) == 60       # 3 * 20 s
+        assert self._sleep_interval(num_hosts=305) == 228    # 3 * 76 s
+
+    def test_auto_refresh_rate_capped_by_other_intervals(self):
+        # 1000 hosts: 3 * 133 s = 399 s; 5000 hosts: capped at 600 s
+        assert self._sleep_interval(num_hosts=1000) == 399
+        assert self._sleep_interval(num_hosts=5000) == 600
+
+    def test_manual_refresh_rate(self):
+        assert self._sleep_interval(num_hosts=305, refresh_rate=40) == 120

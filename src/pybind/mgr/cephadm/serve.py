@@ -182,10 +182,13 @@ class CephadmServe:
         ]
         if self.mgr.use_agent:
             # _agent_down() only runs once per serve loop, so cap the sleep at
-            # the down-detection threshold. A future larger refactor is to run
+            # down_mult refresh periods. A future larger refactor is to run
             # agent-down detection on its own thread.
+            # Use the effective refresh period: agent_refresh_rate is -1 in
+            # auto mode, which would always give the 30 s floor.
             down_mult = max(self.mgr.agent_down_multiplier, 1.5)
-            candidates.append(int(down_mult * self.mgr.agent_refresh_rate))
+            refresh_rate = self.mgr.http_server.agent.compute_agents_refrsh_rate()
+            candidates.append(int(down_mult * refresh_rate))
         sleep_interval = max(30, min(candidates))
         self.log.debug('Sleeping for %d seconds', sleep_interval)
         self.mgr.event.wait(sleep_interval)
