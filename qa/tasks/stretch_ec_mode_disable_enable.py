@@ -384,7 +384,8 @@ class TestStretchMode(MgrTestCase):
             self.TIEBREAKER_MON_NAME,
             monmap['tiebreaker_mon']
         )
-        log.debug("Stretch mode is enabled correctly.")
+        log.debug("The pools are over two zones and the cluster stretch "
+                  "flags are set.")
 
     def _stretch_mode_disabled_correctly(self, crush_rule):
         """
@@ -475,7 +476,8 @@ class TestStretchMode(MgrTestCase):
             "",
             monmap['tiebreaker_mon']
         )
-        log.debug("Stretch mode is disabled correctly.")
+        log.debug("The pools are in one zone and the cluster stretch flags "
+                  "are cleared.")
 
     def test_disable_stretch_mode(self):
         """
@@ -546,7 +548,7 @@ class TestStretchMode(MgrTestCase):
             success_hold_time=self.SUCCESS_HOLD_TIME
         )
         # write some data to the pool
-        # self._write_some_data(self.WRITE_PERIOD)
+        self._write_some_data(self.WRITE_PERIOD)
         # Bring down dc1
         self._fail_over_all_osds_in_dc('dc1')
         self._fail_over_all_mons_in_dc('dc1')

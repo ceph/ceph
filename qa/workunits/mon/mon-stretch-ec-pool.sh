@@ -6,9 +6,12 @@
 # stretch_ec_pool (k=2 m=1), and expects osd pool stretch show to fail
 # before the pool exists and after, as it is not a stretch pool. osd pool
 # stretch set is refused for a pool that does not exist and, for
-# stretch_ec_pool, with an argument missing, with a barrier or a rule that
-# does not exist, and with valid arguments. osd pool stretch unset is
-# refused too.
+# stretch_ec_pool, with an argument missing. Given valid arguments,
+# stretch_ec_rule among them, a rule over the two datacenters, it is
+# refused as not supported for erasure coded pools, before any other check;
+# mon-stretch-pool.sh checks the barrier and the rule with a replicated
+# pool. osd pool stretch unset is refused, as stretch_ec_pool is not a
+# stretch pool.
 # It also lays out the cluster for tasks.stretch_ec_cluster, which the
 # rados/singleton mon-stretch-ec-pool job runs next: datacenters dc1 and
 # dc2, each of 3 hosts with one OSD, monitors a to c in dc1 and d to f in
@@ -101,16 +104,17 @@ expect_false ceph osd pool stretch show $TEST_POOL_STRETCH_EC
 expect_false ceph osd pool stretch set $TEST_POOL_STRETCH_EC 2 2 datacenter $TEST_STRETCH_EC_RULE
 # Non-existent pool must fail.
 expect_false ceph osd pool stretch set non_exist_pool 2 2 datacenter $TEST_STRETCH_EC_RULE 6 2
-# Non-existent barrier must fail.
-expect_false ceph osd pool stretch set $TEST_POOL_STRETCH_EC 2 2 non_exist_barrier $TEST_STRETCH_EC_RULE 6 2
-# Non-existent crush rule must fail.
-expect_false ceph osd pool stretch set $TEST_POOL_STRETCH_EC 2 2 datacenter non_exist_rule 6 2
 
 # An erasure coded pool goes over two zones with osd pool set <pool>
 # num_zones 2, not with osd pool stretch set or unset, which refuse it.
 expect_false ceph osd pool stretch set $TEST_POOL_STRETCH_EC 2 2 datacenter $TEST_STRETCH_EC_RULE 6 2
+ceph osd pool stretch set $TEST_POOL_STRETCH_EC 2 2 datacenter $TEST_STRETCH_EC_RULE 6 2 2>&1 |
+    grep "osd pool stretch set is not supported for EC pools"
 expect_false ceph osd pool stretch show $TEST_POOL_STRETCH_EC
 expect_false ceph osd pool stretch unset $TEST_POOL_STRETCH_EC $TEST_STRETCH_EC_RULE 3 2
+ceph osd pool stretch unset $TEST_POOL_STRETCH_EC $TEST_STRETCH_EC_RULE 3 2 2>&1 |
+    grep "pool $TEST_POOL_STRETCH_EC is not a stretch pool"
 
 # cleanup
 teardown
+ceph osd crush rule rm $TEST_STRETCH_EC_RULE

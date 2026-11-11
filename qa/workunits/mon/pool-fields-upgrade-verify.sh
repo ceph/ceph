@@ -173,7 +173,7 @@ case "$scenario" in
                 and .peering_crush_bucket_target == 3
                 and .crush_rule == $rule_id)' \
             <<< "$pool_map"; then
-            echo "3az: pool stretch mode peering fields did not survive upgrade"
+            echo "3az: the individual stretch pool's peering fields did not survive upgrade"
             jq --arg pool "$pool" '.[] | select(.pool_name == $pool) |
                 {pool_name, is_stretch_pool, peering_crush_bucket_count,
                  peering_crush_bucket_target, crush_rule}' <<< "$pool_map"
