@@ -1,0 +1,41 @@
+This suite checks how an MDS rank recovers when ganesha's libcephfs client
+misses the reconnect window after the rank fails over.
+
+Ganesha (FSAL_CEPH) sets a session timeout on its libcephfs client, which
+the MDS sees as client metadata "timeout". At reconnect timeout, the MDS
+evicts clients that did not reconnect, but keeps such a session ("reconnect
+keeps ..., need to be reclaimed") and holds the rank in up:clientreplay
+until the session is gone. That happens when a new ganesha instance
+reclaims it (by the same uuid, when it starts), when an admin evicts it,
+or when it is autoclosed after session_autoclose seconds without a cap
+renewal. All the other clients of the rank wait meanwhile.
+
+Each job runs one scenario, picked by scenario/. The ganesha-reclaim task
+freezes ganesha (SIGSTOP) and fails rank 0, checks that the new MDS holds
+the rank with ganesha's session kept, then:
+
+  restart   kills and restarts ganesha; the new instance has to reclaim
+            the session and the rank has to go active
+  evict     evicts the session; the rank has to go active
+  late      resumes ganesha, which missed the reconnect but is still
+            running, and writes a file over NFS; the rank has to go
+            active and the write has to complete
+
+The late job fails: the rank is held until ganesha's session is
+autoclosed. Ganesha's client does not reconnect to the new MDS. Stopped
+for longer than mon_client_ping_timeout, it reopens its mon session when
+it resumes, which drops the mdsmaps still queued on the old one, and the
+mon sends it only the current map. So it never sees the rank in
+up:reconnect and closes its side of the session ("we may miss the
+MDSMap::RECONNECT" in its client log). Nor does it open a new session
+while the rank is not active: its requests wait for an mdsmap with the
+rank active. Nothing renews the kept session, so it is
+autoclosed session_autoclose seconds after the reconnect started
+("evicting unresponsive client ..., after 300 seconds"). Only then does
+the rank go active, and as ganesha's client is blocklisted by the
+eviction, the NFS write fails (EREMOTEIO). The task reports how long the
+rank was held and whether ganesha's session was evicted.
+
+Without the timeout metadata (kernel client, ceph-fuse), a client that
+misses the reconnect is evicted at reconnect timeout and does not hold the
+rank.

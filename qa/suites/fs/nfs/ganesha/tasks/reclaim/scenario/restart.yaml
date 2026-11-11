@@ -1,0 +1,4 @@
+# a restarted ganesha reclaims its kept session
+overrides:
+  ganesha-reclaim:
+    scenario: restart
