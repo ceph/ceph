@@ -138,9 +138,9 @@ function TEST_rm() {
 # computing the new pool's PGs with a rule that is gone. This test deletes
 # pool a, the only pool on profile p21 and rule r21, and one second later,
 # while a paxos_propose_interval of 5 seconds keeps the deletion pending,
-# creates pool b on p21 and r21. Either b is created and p21 is kept, or
-# the create is refused as p21 or r21 no longer exists; either way the
-# monitor still answers.
+# creates pool b on p21 and r21. Either b is created on r21, and p21 and
+# r21 are kept, or the create is refused as p21 or r21 no longer exists;
+# either way the monitor still answers.
 function TEST_create_while_profile_removed() {
     local dir=$1
 
@@ -162,6 +162,8 @@ function TEST_create_while_profile_removed() {
     timeout 60 ceph osd pool ls > $dir/pools || return 1
     if grep -qx b $dir/pools; then
         ceph osd erasure-code-profile ls | grep -qx p21 || return 1
+        ceph osd crush rule ls | grep -qx r21 || return 1
+        test "$(ceph osd pool get b crush_rule | awk '{print $2}')" = r21 || return 1
     else
         grep "does not exist" $dir/out || return 1
     fi
