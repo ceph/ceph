@@ -311,6 +311,15 @@ class AgentEndpoint:
         else:
             return self.mgr.agent_jitter_seconds
 
+    def get_agent_down_threshold(self) -> float:
+        """
+        Seconds without a report after which an agent is considered down:
+        agent_down_multiplier (at least 1.5) times the longest interval an
+        agent can wait between reports (refresh period + jitter).
+        """
+        down_mult = max(self.mgr.agent_down_multiplier, 1.5)
+        return down_mult * float(self.compute_agents_refrsh_rate() + self.get_jitter())
+
     def get_report_timeout(self) -> int:
         """
         How long (in seconds) an agent waits for the reply to a metadata report.
@@ -1250,11 +1259,9 @@ class CephadmAgentHelpers:
             if host in self.mgr.offline_hosts:
                 return False
             self.mgr.agent_cache.agent_timestamp[host] = datetime_now()
-        # agent hasn't reported in:  down_multiplier * it's refresh rate + jitter. Something is likely wrong with it.
-        jitter: float = self.agent.get_jitter()
-        down_mult: float = max(self.mgr.agent_down_multiplier, 1.5)
+        # agent hasn't reported in: down_multiplier * (refresh rate + jitter). Something is likely wrong with it.
         time_diff = datetime_now() - self.mgr.agent_cache.agent_timestamp[host]
-        if time_diff.total_seconds() > down_mult * float(self.mgr.http_server.agent.compute_agents_refrsh_rate() + jitter):
+        if time_diff.total_seconds() > self.agent.get_agent_down_threshold():
             return True
         return False
 
@@ -1262,10 +1269,10 @@ class CephadmAgentHelpers:
         self.mgr.remove_health_warning('CEPHADM_AGENT_DOWN')
         if down_agent_hosts:
             detail: List[str] = []
-            down_mult: float = max(self.mgr.agent_down_multiplier, 1.5)
+            threshold = int(self.agent.get_agent_down_threshold())
             for agent in down_agent_hosts:
                 detail.append((f'Cephadm agent on host {agent} has not reported in '
-                              f'{down_mult * self.mgr.http_server.agent.compute_agents_refrsh_rate()} seconds. Agent is assumed '
+                              f'{threshold} seconds. Agent is assumed '
                                'down and host may be offline.'))
             for dd in [d for d in self.mgr.cache.get_daemons_by_type(CephadmAgent.TYPE) if d.hostname in down_agent_hosts]:
                 dd.status = DaemonDescriptionStatus.error

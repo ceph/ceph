@@ -15,6 +15,7 @@ class FakeMgr:
         self.agent_refresh_rate = -1
         self.agent_initial_startup_delay_max = -1
         self.agent_jitter_seconds = -1
+        self.agent_down_multiplier = 3.0
         self.cache = FakeCache(num_hosts)
 
     def get_mgr_ip(self):
@@ -207,6 +208,14 @@ class TestAgentEndpointAuto:
         # 1000 hosts: refresh rate 133 s, timeout capped
         mgr = FakeMgr(num_hosts=1000)
         assert AgentEndpoint(mgr).get_report_timeout() == AgentEndpoint.MAX_REPORT_TIMEOUT_SECONDS
+
+    def test_agent_down_threshold(self):
+        # 3 * (R + J): 3 * (20 + 10) at 3 hosts, 3 * (76 + 38) at 305 hosts
+        assert AgentEndpoint(FakeMgr(num_hosts=3)).get_agent_down_threshold() == 90
+        assert AgentEndpoint(FakeMgr(num_hosts=305)).get_agent_down_threshold() == 342
+        mgr = FakeMgr(num_hosts=305)
+        mgr.agent_down_multiplier = 1.0  # floored at 1.5
+        assert AgentEndpoint(mgr).get_agent_down_threshold() == 171
 
 
 class TestServeSleepWithAgent:
