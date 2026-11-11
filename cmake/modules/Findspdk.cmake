@@ -7,7 +7,11 @@
 
 find_package(PkgConfig REQUIRED QUIET)
 
-pkg_check_modules(SPDK IMPORTED_TARGET spdk_nvme spdk_env_dpdk)
+set(SPDK_MIN_VERSION 26.05)
+
+pkg_check_modules(SPDK IMPORTED_TARGET
+  "spdk_nvme>=${SPDK_MIN_VERSION}"
+  "spdk_env_dpdk>=${SPDK_MIN_VERSION}")
 
 # spdk's .so leave ISA-L symbols (crc32_iscsi, xor_gen, ...) undefined for the
 # final link and don't Require isa-l in their .pc; pull it in explicitly.
