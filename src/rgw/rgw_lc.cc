@@ -1949,6 +1949,7 @@ LCObjsLister::obj_iter_type LCObjsLister::skip_to_the_next_key (obj_iter_type fr
       ldpp_dout(dpp, 0) << "ERROR: list_op returned ret=" << ret << dendl;
       return list_results.objs.end();
     }
+    delay();
     if (list_results.objs.empty()) {
       return list_results.objs.end();
     }
