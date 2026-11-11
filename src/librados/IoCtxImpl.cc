@@ -1231,20 +1231,41 @@ int librados::IoCtxImpl::aio_cancel(AioCompletionImpl *c)
 }
 
 
-int librados::IoCtxImpl::hit_set_list(uint32_t hash, AioCompletionImpl *c,
-			      std::list< std::pair<time_t, time_t> > *pls)
+namespace {
+
+template <typename INTERVALS_T>
+int submit_hit_set_intervals(librados::IoCtxImpl& io, uint32_t hash,
+                             librados::AioCompletionImpl *c,
+                             INTERVALS_T *intervals)
 {
-  Context *oncomplete = new C_aio_Complete(c);
+  Context *oncomplete = new librados::IoCtxImpl::C_aio_Complete(c);
   c->is_read = true;
-  c->io = this;
+  c->io = &io;
 
   ::ObjectOperation rd;
-  rd.hit_set_ls(pls, NULL);
-  object_locator_t oloc(poolid);
-  Objecter::Op *o = objecter->prepare_pg_read_op(
-    hash, oloc, rd, NULL, extra_op_flags, oncomplete, NULL, NULL);
-  objecter->op_submit(o, &c->tid);
+  rd.hit_set_ls(intervals, nullptr);
+  object_locator_t oloc(io.poolid);
+  Objecter::Op *o = io.objecter->prepare_pg_read_op(
+    hash, oloc, rd, nullptr, io.extra_op_flags, oncomplete, nullptr, nullptr);
+  io.objecter->op_submit(o, &c->tid);
+
   return 0;
+}
+
+} // namespace
+
+int librados::IoCtxImpl::hit_set_vector(
+  uint32_t hash, AioCompletionImpl *c,
+  std::vector<std::pair<time_t, time_t>>& intervals)
+{
+  return submit_hit_set_intervals(*this, hash, c, &intervals);
+}
+
+int librados::IoCtxImpl::hit_set_list(
+  uint32_t hash, AioCompletionImpl *c,
+  std::list<std::pair<time_t, time_t>> *intervals)
+{
+  return submit_hit_set_intervals(*this, hash, c, intervals);
 }
 
 int librados::IoCtxImpl::hit_set_get(uint32_t hash, AioCompletionImpl *c,
@@ -2268,4 +2289,3 @@ int librados::IoCtxImpl::application_metadata_list(const std::string& app_name,
     });
   return r;
 }
-

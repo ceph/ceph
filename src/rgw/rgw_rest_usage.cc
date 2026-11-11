@@ -57,14 +57,9 @@ void RGWOp_Usage_Get::execute(optional_yield y) {
   string cat_str;
   RESTArgs::get_string(s, "categories", cat_str, &cat_str);
 
-  if (!cat_str.empty()) {
-    list<string> cat_list;
-    list<string>::iterator iter;
-    get_str_list(cat_str, cat_list);
-    for (iter = cat_list.begin(); iter != cat_list.end(); ++iter) {
-      categories[*iter] = true;
-    }
-  }
+  ceph::for_each_substr(cat_str, ";,= \t", [&categories](const auto category) {
+    categories.emplace(category, true);
+  });
 
   op_ret = RGWUsage::show(this, driver, user.get(), bucket.get(), start, end, show_entries, show_summary, &categories, flusher);
 }
@@ -129,5 +124,4 @@ RGWOp *RGWHandler_Usage::op_delete()
 {
   return new RGWOp_Usage_Delete;
 }
-
 

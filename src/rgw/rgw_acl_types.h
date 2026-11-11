@@ -21,7 +21,7 @@
 #pragma once
 
 #include <string>
-#include <list>
+#include <vector>
 #include <fmt/format.h>
 
 #include "include/types.h"
@@ -78,7 +78,7 @@ struct RGWAccessKey {
   void dump(Formatter *f) const;
   void dump_plain(Formatter *f) const;
   void dump(Formatter *f, const std::string& user, bool swift) const;
-  static std::list<RGWAccessKey> generate_test_instances();
+  static std::vector<RGWAccessKey> generate_test_instances();
 
   void decode_json(JSONObj *obj);
   void decode_json(JSONObj *obj, bool swift);
@@ -105,7 +105,7 @@ struct RGWSubUser {
   }
   void dump(Formatter *f) const;
   void dump(Formatter *f, const std::string& user) const;
-  static std::list<RGWSubUser> generate_test_instances();
+  static std::vector<RGWSubUser> generate_test_instances();
 
   void decode_json(JSONObj *obj);
 };
@@ -137,7 +137,7 @@ public:
   bool is_valid_cap_type(const std::string& tp);
   void dump(Formatter *f) const;
   void dump(Formatter *f, const char *name) const;
-  static std::list<RGWUserCaps> generate_test_instances();
+  static std::vector<RGWUserCaps> generate_test_instances();
   void decode_json(JSONObj *obj);
 };
 WRITE_CLASS_ENCODER(RGWUserCaps)
@@ -179,7 +179,7 @@ public:
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-  static std::list<ACLPermission> generate_test_instances();
+  static std::vector<ACLPermission> generate_test_instances();
 
   friend bool operator==(const ACLPermission& lhs, const ACLPermission& rhs);
   friend bool operator!=(const ACLPermission& lhs, const ACLPermission& rhs);
@@ -210,7 +210,7 @@ public:
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-  static std::list<ACLGranteeType> generate_test_instances();
+  static std::vector<ACLGranteeType> generate_test_instances();
 
   friend bool operator==(const ACLGranteeType& lhs, const ACLGranteeType& rhs);
   friend bool operator!=(const ACLGranteeType& lhs, const ACLGranteeType& rhs);

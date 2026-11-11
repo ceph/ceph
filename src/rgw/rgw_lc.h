@@ -72,7 +72,7 @@ public:
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-  //  static list<ACLOwner> generate_test_instances();
+  //  static vector<ACLOwner> generate_test_instances();
   void set_days(const std::string& _days) { days = _days; }
   std::string get_days_str() const {
     return days;
@@ -554,7 +554,7 @@ public:
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-  static std::list<RGWLifecycleConfiguration> generate_test_instances();
+  static std::vector<RGWLifecycleConfiguration> generate_test_instances();
 
   void add_rule(const LCRule& rule);
 

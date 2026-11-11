@@ -108,8 +108,6 @@ class RGWSyncTraceManager : public AdminSocketHook {
 
   std::atomic<uint64_t> count = { 0 };
 
-  std::list<std::array<std::string, 3> > admin_commands;
-
   uint64_t alloc_handle() {
     return ++count;
   }

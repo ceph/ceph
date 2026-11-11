@@ -271,9 +271,9 @@ int RGWObjManifest::generator::create_begin(CephContext *cct, RGWObjManifest *_m
   return 0;
 }
 
-std::list<RGWObjManifestPart> RGWObjManifestPart::generate_test_instances()
+std::vector<RGWObjManifestPart> RGWObjManifestPart::generate_test_instances()
 {
-  std::list<RGWObjManifestPart> o;
+  std::vector<RGWObjManifestPart> o;
 
   o.emplace_back();
 
@@ -289,9 +289,9 @@ std::list<RGWObjManifestPart> RGWObjManifestPart::generate_test_instances()
   return o;
 }
 
-std::list<RGWObjManifest> RGWObjManifest::generate_test_instances()
+std::vector<RGWObjManifest> RGWObjManifest::generate_test_instances()
 {
-  std::list<RGWObjManifest> o;
+  std::vector<RGWObjManifest> o;
 
   RGWObjManifest m;
   map<uint64_t, RGWObjManifestPart> objs;
@@ -374,9 +374,9 @@ void RGWObjManifestRule::dump(Formatter *f) const
   encode_json("override_prefix", override_prefix, f);
 }
 
-std::list<RGWObjManifestRule> RGWObjManifestRule::generate_test_instances()
+std::vector<RGWObjManifestRule> RGWObjManifestRule::generate_test_instances()
 {
-  std::list<RGWObjManifestRule> o;
+  std::vector<RGWObjManifestRule> o;
   RGWObjManifestRule r;
   r.start_part_num = 0;
   r.start_ofs = 0;
@@ -403,9 +403,9 @@ void RGWObjTier::dump(Formatter *f) const
   encode_json("is_multipart_upload", is_multipart_upload, f);
 }
 
-std::list<RGWObjTier> RGWObjTier::generate_test_instances()
+std::vector<RGWObjTier> RGWObjTier::generate_test_instances()
 {
-  std::list<RGWObjTier> o;
+  std::vector<RGWObjTier> o;
   RGWObjTier t;
   t.name = "name";
   for (auto& tier : RGWZoneGroupPlacementTier::generate_test_instances()) {

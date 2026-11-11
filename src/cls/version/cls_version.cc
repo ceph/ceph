@@ -9,8 +9,6 @@
 
 #include "include/compat.h"
 
-using std::list;
-
 using ceph::bufferlist;
 
 CLS_VER(1,0)
@@ -98,14 +96,13 @@ static int cls_version_set(cls_method_context_t hctx, bufferlist *in, bufferlist
   return 0;
 }
 
-static bool check_conds(list<obj_version_cond>& conds, obj_version& objv)
+static bool check_conds(std::vector<obj_version_cond>& conds, obj_version& objv)
 {
   if (conds.empty())
     return true;
 
-  for (list<obj_version_cond>::iterator iter = conds.begin(); iter != conds.end(); ++iter) {
-    obj_version_cond& cond = *iter;
-    obj_version& v = cond.ver;
+  for (auto& cond : conds) {
+    auto& v = cond.ver;
     CLS_LOG(20, "cls_version: check_version %s:%d (cond=%d)", v.tag.c_str(), (int)v.ver, (int)cond.cond);
 
     switch (cond.cond) {
@@ -237,4 +234,3 @@ CLS_INIT(version)
 
   return;
 }
-
