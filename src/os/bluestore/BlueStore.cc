@@ -5937,6 +5937,8 @@ int BlueStore::_mount()
     }
   });
 
+  _maybe_convert_allocation_store();
+
   r = _upgrade_super();
   if (r < 0) {
     return r;
@@ -18227,6 +18229,7 @@ int BlueStore::commit_to_null_manager()
   dout(5) << __func__ << " Set FreelistManager to NULL FM..." << dendl;
   fm->set_null_manager();
   freelist_type = "null";
+  need_to_destage_allocation_file = true;
 #if 1
   return commit_freelist_type();
 #else
@@ -18264,3 +18267,59 @@ int BlueStore::commit_to_real_manager()
 
 //================================================================================================================
 //================================================================================================================
+
+void BlueStore::_recreate_freelist_from_current_allocator(
+  const std::string& freelist_name)
+{
+  unique_ptr<Allocator> allocator(clone_allocator_without_bluefs(alloc));
+  ceph_assert(allocator);
+  // the allocator has extra bdev labels except the one at 0
+  _main_bdev_label_remove(allocator.get());
+  clear_allocation_objects_from_rocksdb();
+  if (fm) {
+    delete fm;
+  }
+  fm = FreelistManager::create(cct, freelist_name, PREFIX_ALLOC);
+  ceph_assert(fm);
+
+  KeyValueDB::Transaction t = db->get_transaction();
+  fm->create(bdev->get_size(), min_alloc_size, t);
+  db->submit_transaction_sync(t);
+
+  _write_out_fm_meta(0); // copy fm settings to label too
+  t = db->get_transaction();
+  // Note that we are not excluding 0 .. _get_ondisk_reserved().
+  // The allocator has it already.
+  fm->allocate(0, bdev->get_size(), t);
+  db->submit_transaction_sync(t);
+
+  copy_allocator_content_to_fm(allocator.get(), fm);
+}
+
+// Called at BlueStore::mount(). DB is already opened RW but BlueStore layer
+// is not yet initialized. It means that environment, if changed, must be
+// in a sane state.
+void BlueStore::_maybe_convert_allocation_store()
+{
+  if (!cct->_conf.get_val<bool>("bluestore_allocation_from_file_convert_on_mount")) {
+    return;
+  }
+  bool target_is_file = cct->_conf.get_val<bool>("bluestore_allocation_from_file");
+  dout(0) << "Considering converting allocator storage" << dendl;
+  // at this stage freelist_type must be already set
+  ceph_assert(freelist_type == "bitmap" || freelist_type == "null");
+  dout (0) << "freelist_type=" << freelist_type << " target_is_file=" << target_is_file << dendl;
+  if (freelist_type == "bitmap" && target_is_file) {
+    // convert to file stored allocator
+    clear_allocation_objects_from_rocksdb();
+    commit_to_null_manager();
+    dout(0) << "Allocator storage is now FILE" << dendl;
+  } else if (freelist_type == "null" && !target_is_file) {
+    // convert to db stored allocator
+    _recreate_freelist_from_current_allocator("bitmap");
+    commit_to_real_manager();
+    dout(0) << "Allocator storage is now DB" << dendl;
+  } else {
+    dout(0) << "No conversion needed" << dendl;
+  }
+}

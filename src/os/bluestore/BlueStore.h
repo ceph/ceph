@@ -2624,6 +2624,8 @@ private:
   Allocator* initialize_allocator_from_freelist(FreelistManager *real_fm);
   void copy_allocator_content_to_fm(Allocator *allocator, FreelistManager *real_fm);
 
+  void _recreate_freelist_from_current_allocator(const std::string& freelist_name);
+  void _maybe_convert_allocation_store();
 
   void _fsck_check_object_omap(FSCKDepth depth,
     OnodeRef& o,
