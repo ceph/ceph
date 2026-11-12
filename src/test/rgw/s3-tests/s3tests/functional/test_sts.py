@@ -1,5 +1,6 @@
 import boto3
 import botocore.session
+from botocore.client import Config
 from botocore.exceptions import ClientError
 from botocore.exceptions import ParamValidationError
 import pytest
@@ -33,6 +34,7 @@ from . import(
     setup_teardown,
     get_iam_client,
     get_sts_client,
+    get_sts_session_duration,
     get_client,
     get_alt_user_id,
     get_config_endpoint,
@@ -264,8 +266,11 @@ def test_assume_role_deny():
 @pytest.mark.test_of_sts
 @pytest.mark.fails_on_dbstore
 def test_assume_role_creds_expiry():
-    iam_client=get_iam_client()    
-    sts_client=get_sts_client()
+    iam_client=get_iam_client()
+    # botocore refuses a DurationSeconds below AWS's minimum of 900 before
+    # sending the request, but rgw_sts_min_session_duration can be lower
+    sts_client=get_sts_client(config=Config(signature_version='s3v4', parameter_validation=False))
+    duration=get_sts_session_duration()
     sts_user_id=get_alt_user_id()
     default_endpoint=get_config_endpoint()
     role_session_name=get_parameter_name()
@@ -283,11 +288,11 @@ def test_assume_role_creds_expiry():
         assert response['ResponseMetadata']['HTTPStatusCode'] == 200
     else:
         assert False, role_err
-    
-    resp=sts_client.assume_role(RoleArn=role_response['Role']['Arn'],RoleSessionName=role_session_name,DurationSeconds=900)
+
+    resp=sts_client.assume_role(RoleArn=role_response['Role']['Arn'],RoleSessionName=role_session_name,DurationSeconds=duration)
     assert resp['ResponseMetadata']['HTTPStatusCode'] == 200
-    time.sleep(900)
-    
+    time.sleep(duration)
+
     s3_client = boto3.client('s3',
 		aws_access_key_id = resp['Credentials']['AccessKeyId'],
 		aws_secret_access_key = resp['Credentials']['SecretAccessKey'],
