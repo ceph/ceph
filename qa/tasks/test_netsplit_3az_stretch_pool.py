@@ -1,4 +1,5 @@
 from tasks.ceph_test_case import CephTestCase
+from tasks.stretch_crush_rule import ensure_custom_crush_rule
 import logging
 import json
 from tasks.netsplit import disconnect, reconnect, get_ip_and_ports
@@ -33,6 +34,7 @@ class TestNetSplit(CephTestCase):
         Set up the cluster for the test.
         """
         super(TestNetSplit, self).setUp()
+        ensure_custom_crush_rule(self.mgr_cluster, self.CRUSH_RULE)
 
     def tearDown(self):
         """

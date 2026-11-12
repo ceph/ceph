@@ -37,8 +37,10 @@ than the current value; setting it to the current value is a no-op.
 Additionally, the Monitors verify that every Monitor in the quorum and
 every up OSD advertises the target release's feature bits. The Monitor
 feature check has no bypass; the OSD feature check can be overridden
-with ``--yes-i-really-mean-it``, but any OSD that lacks the feature
-will still be refused when it tries to boot (see `OSD boot window`_).
+with ``--yes-i-really-mean-it``, but any up OSD that lacks the feature
+is then marked down. Once the flag is raised, the Monitors refuse the
+boot of an OSD of an earlier release and do not send it OSD maps (see
+`OSD boot window`_).
 
 Checking the current value
 ==========================
@@ -77,7 +79,8 @@ are historical on modern clusters and are listed for completeness.
 OSD boot window
 ===============
 
-An OSD refuses to boot if it is running a release that is more than
+An OSD of a release earlier than ``require_osd_release`` cannot boot.
+An OSD also refuses to boot if it is running a release that is more than
 two ahead of ``require_osd_release``. For example, with
 ``require_osd_release`` set to ``reef``:
 

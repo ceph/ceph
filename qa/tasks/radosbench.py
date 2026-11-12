@@ -14,6 +14,12 @@ log = logging.getLogger(__name__)
 
 
 def _validate_pool_config(config):
+    num_zones = config.get('num_zones', 1)
+    if num_zones > 1:
+        log.info(
+            "num_zones=%d detected. Ensure osd_pool_default_flag_ec_optimizations "
+            "is set to true in ceph configuration.", num_zones
+        )
     
     if 'erasure_code_profile' in config and not config.get('ec_pool', False):
         raise ValueError(
@@ -66,6 +72,7 @@ def task(ctx, config):
         erasure_code_use_overwrites: test overwrites, default false
         fast_read: enable ec_pool's fast_read
         min_size: set the min_size of created pool
+        num_zones: number of zones for stretched pools
         cleanup: false (defaults to true)
         type: <write|seq|rand> (defaults to write)
         use-pool-config: if true, read pool configuration from overrides/ceph/pool-config
@@ -129,6 +136,7 @@ def task(ctx, config):
                 'erasure_code_crush',
                 'fast_read',
                 'min_size',
+                'num_zones',
             ]
             
             for setting in pool_settings:
@@ -137,6 +145,14 @@ def task(ctx, config):
                         config[setting] = pool_config[setting]
                         log.info("Set {setting} from pool-config: {value}".format(
                             setting=setting, value=pool_config[setting]))
+
+            crush_map_config = pool_config.get('crush_map_config', {})
+            if crush_map_config and 'osd_failure_domain' not in config:
+                failure_domain = crush_map_config.get('failure_domain')
+                if failure_domain is not None:
+                    config['osd_failure_domain'] = failure_domain
+                    log.info("Set osd_failure_domain from crush_map_config: %s",
+                             failure_domain)
         else:
             log.warning("use-pool-config is true but no pool-config found in overrides/ceph")
     
@@ -168,7 +184,10 @@ def task(ctx, config):
             crush_name = None
             if crush_prof:
                 crush_name = crush_prof.get('name', 'teuthologycrush')
-                manager.create_erasure_code_crush_rule(crush_name, crush_prof)
+                manager.create_erasure_code_crush_rule(
+                    crush_name, crush_prof,
+                    num_zones=config.get('num_zones', None),
+                    erasure_code_profile_name=profile_name)
         else:
             profile_name = None
             crush_name = None
@@ -189,12 +208,16 @@ def task(ctx, config):
                     erasure_code_profile_name=profile_name,
                     erasure_code_crush_rule_name=crush_name,
                     erasure_code_use_overwrites=config.get('erasure_code_use_overwrites', False),
+                    num_zones=config.get('num_zones', None),
+                    osd_failure_domain=config.get('osd_failure_domain', None),
                 )
             else:
                 pool = manager.create_pool_with_unique_name(
                     erasure_code_profile_name=profile_name,
                     erasure_code_crush_rule_name=crush_name,
                     erasure_code_use_overwrites=config.get('erasure_code_use_overwrites', False),
+                    num_zones=config.get('num_zones', None),
+                    osd_failure_domain=config.get('osd_failure_domain', None),
                 )
             
             if config.get('fast_read', False):

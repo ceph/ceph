@@ -34,6 +34,57 @@ function run() {
     done
 }
 
+# osd pool get <pool> <option> is refused for an option that was never set
+# on the pool, with a message saying so, and gives the value once it is
+# set. This test gets compression_mode from replicated pool p before and
+# after setting it to aggressive. It also expects num_zones 1 for p, which
+# was created without --num_zones.
+function TEST_pool_get_unset_option() {
+    local dir=$1
+    run_mon $dir a || return 1
+    ceph osd pool create p 8 || return 1
+    ! ceph osd pool get p compression_mode > $dir/out 2>&1 || return 1
+    grep "option 'compression_mode' is not set on pool 'p'" $dir/out || return 1
+    ceph osd pool set p compression_mode aggressive || return 1
+    ceph osd pool get p compression_mode | grep aggressive || return 1
+    ceph osd pool get p num_zones | grep 'num_zones: 1' || return 1
+}
+
+# A CRUSH rule is removed when its last pool leaves it, by being deleted or
+# by osd pool set crush_rule, whether the rule was made by hand or
+# generated for the pool. The default rule, replicated_rule, is kept. This
+# test puts replicated pools p and p2 on op_rule, made by
+# osd crush rule create-replicated: op_rule stays when p is deleted and
+# goes with p2. Pool r is moved from r-ssd, also made by hand, to
+# replicated_rule, and r-ssd goes. Deleting r leaves replicated_rule.
+# Deleting erasure coded pool e removes the rule generated for it.
+function TEST_pool_rule_removed_when_unused() {
+    local dir=$1
+    run_mon $dir a || return 1
+    ceph osd crush rule create-replicated op_rule default host || return 1
+    ceph osd pool create p 8 8 replicated op_rule || return 1
+    ceph osd pool create p2 8 8 replicated op_rule || return 1
+    # kept while another pool uses it
+    ceph osd pool delete p p --yes-i-really-really-mean-it || return 1
+    ceph osd crush rule ls | grep -qx op_rule || return 1
+    # removed with its last pool, whoever created it
+    ceph osd pool delete p2 p2 --yes-i-really-really-mean-it || return 1
+    ! ceph osd crush rule ls | grep -qx op_rule || return 1
+    # and when its last pool is given another rule
+    ceph osd crush rule create-replicated r-ssd default host || return 1
+    ceph osd pool create r 8 8 replicated r-ssd || return 1
+    ceph osd pool set r crush_rule replicated_rule || return 1
+    ! ceph osd crush rule ls | grep -qx r-ssd || return 1
+    # the default rule stays
+    ceph osd pool delete r r --yes-i-really-really-mean-it || return 1
+    ceph osd crush rule ls | grep -qx replicated_rule || return 1
+    # a rule generated for an erasure coded pool goes with the pool
+    ceph osd pool create e 8 8 erasure || return 1
+    local rule=$(ceph osd pool get e crush_rule | awk '{print $2}')
+    ceph osd pool delete e e --yes-i-really-really-mean-it || return 1
+    ! ceph osd crush rule ls | grep -qx "$rule" || return 1
+}
+
 # Before http://tracker.ceph.com/issues/8307 the invalid profile was created
 function TEST_erasure_invalid_profile() {
     local dir=$1
@@ -42,6 +93,75 @@ function TEST_erasure_invalid_profile() {
     local notaprofile=not-a-valid-erasure-code-profile
     ! ceph osd pool create $poolname 12 12 erasure $notaprofile || return 1
     ! ceph osd erasure-code-profile ls | grep $notaprofile || return 1
+}
+
+# An osd pool create that fails removes the rule, and the erasure code
+# profile, that it generated for the pool, but not a rule of the same name
+# made by hand. This test creates badpool from lrcprofile (lrc plugin) with
+# --crimson, which is refused as a crimson pool needs EC optimizations and
+# lrc does not support them: no rule badpool is left. With rule badpool
+# made by osd crush rule create-erasure, the same refused create leaves it.
+# Erasure coded pool bigec, with no profile and 1024 PGs, is refused for
+# exceeding the PG limit, and leaves no rule bigec and no profile bigec-*.
+function TEST_failed_pool_create_removes_its_rule() {
+    local dir=$1
+    run_mon $dir a --enable_experimental_unrecoverable_data_corrupting_features=crimson || return 1
+    ceph osd set-allow-crimson --yes-i-really-mean-it || return 1
+    # crimson needs EC optimizations, which lrc does not support
+    ceph osd erasure-code-profile set lrcprofile plugin=lrc k=2 m=1 l=3 || return 1
+    ! ceph osd pool create badpool 12 12 erasure lrcprofile --crimson || return 1
+    ! ceph osd crush rule ls | grep -qx badpool || return 1
+    ceph osd crush rule create-erasure badpool lrcprofile || return 1
+    ! ceph osd pool create badpool 12 12 erasure lrcprofile --crimson || return 1
+    ceph osd crush rule ls | grep -qx badpool || return 1
+    # the PG limit is checked with the rule
+    ! ceph osd pool create bigec 1024 1024 erasure > $dir/out 2>&1 || return 1
+    grep "exceeds the" $dir/out || return 1
+    ! ceph osd crush rule ls | grep -qx bigec || return 1
+    ! ceph osd erasure-code-profile ls | grep -q '^bigec-' || return 1
+}
+
+# osd pool create refuses an erasure coded pool whose stripe_unit is not a
+# multiple of 4096 unless given --yes-i-really-mean-it, also when the
+# stripe_unit comes from the default profile, and the refused create leaves
+# nothing behind. This test sets the default profile to isa k=2 m=1 with
+# stripe_unit=2048, which osd erasure-code-profile set accepts only with
+# --force, and creates erasure coded pool e with no profile. That is
+# refused, and leaves no pool e, profile e-k2-m1 or rule e.
+function TEST_default_profile_odd_stripe_unit() {
+    local dir=$1
+    run_mon $dir a || return 1
+    ceph osd erasure-code-profile set default plugin=isa k=2 m=1 \
+        stripe_unit=2048 --force --yes-i-really-mean-it || return 1
+    expect_failure $dir "stripe_unit should be a multiple of 4096 bytes" \
+        ceph osd pool create e 8 8 erasure || return 1
+    ! ceph osd pool ls | grep -qx e || return 1
+    ! ceph osd erasure-code-profile ls | grep -qx e-k2-m1 || return 1
+    ! ceph osd crush rule ls | grep -qx e || return 1
+}
+
+# With --yes-i-really-mean-it, osd pool create accepts an erasure coded pool
+# whose stripe_unit is not a multiple of 4096. This test makes profile odd,
+# isa k=2 m=1 with stripe_unit=2048 (set with --force), and creates pool
+# named on it: refused without the flag, created with it. It then gives the
+# default profile the same values and creates pool generated, with no
+# profile, with the flag. Both pools get a stripe width of 4096: 2 data
+# chunks of 2048.
+function TEST_odd_stripe_unit_yes_i_really_mean_it() {
+    local dir=$1
+    run_mon $dir a || return 1
+    ceph osd erasure-code-profile set odd plugin=isa k=2 m=1 \
+        stripe_unit=2048 --force || return 1
+    expect_failure $dir "only ceph osd pool create --yes-i-really-mean-it" \
+        ceph osd pool create named 8 8 erasure odd || return 1
+    ceph osd pool create named 8 8 erasure odd --yes-i-really-mean-it || return 1
+    ceph osd erasure-code-profile set default plugin=isa k=2 m=1 \
+        stripe_unit=2048 --force --yes-i-really-mean-it || return 1
+    ceph osd pool create generated 8 8 erasure --yes-i-really-mean-it || return 1
+    for pool in named generated; do
+        test "$(ceph osd dump -f json |
+            jq ".pools[] | select(.pool_name == \"$pool\") | .stripe_width")" = 4096 || return 1
+    done
 }
 
 function TEST_erasure_crush_rule() {
@@ -118,17 +238,90 @@ function TEST_erasure_crush_stripe_unit_padded() {
 function TEST_erasure_code_pool() {
     local dir=$1
     run_mon $dir a || return 1
-    ceph --format json osd dump > $dir/osd.json
-    local expected='"erasure_code_profile":"default"'
-    ! grep "$expected" $dir/osd.json || return 1
     ceph osd pool create erasurecodes 12 12 erasure
+    # a copy of the default profile of the pool's own
+    ceph osd pool get erasurecodes erasure_code_profile | \
+        grep 'erasure_code_profile: erasurecodes-k2-m2$' || return 1
+    test "$(ceph osd erasure-code-profile get erasurecodes-k2-m2 -f json | jq -r .plugin)" = \
+        "$(ceph osd erasure-code-profile get default -f json | jq -r .plugin)" || return 1
     ceph --format json osd dump | tee $dir/osd.json
-    grep "$expected" $dir/osd.json > /dev/null || return 1
+    ! grep '"erasure_code_profile":"default"' $dir/osd.json || return 1
+    test "$(ceph osd pool get erasurecodes crush_rule -f json | jq -r .crush_rule)" = \
+        erasurecodes || return 1
 
     ceph osd pool create erasurecodes 12 12 erasure 2>&1 | \
         grep 'already exists' || return 1
     ceph osd pool create erasurecodes 12 12 2>&1 | \
         grep 'cannot change to type replicated' || return 1
+}
+
+# osd pool create --pool_type erasure without a profile gives the pool a
+# profile of its own, <pool>-k<k>-m<m>: the default profile with the --k,
+# --m and CRUSH options given. This test creates km_crush with --k 2 --m 1,
+# --zone_failure_domain rack and --osd_failure_domain osd, which differ
+# from the default profile's, and expects profile km_crush-k2-m1 to have
+# crush-zone-failure-domain=rack and crush-failure-domain=osd. Deleting the
+# pool removes the profile. A profile of that name with the same contents,
+# set by hand, is then used as it is when the pool is created again.
+function TEST_erasure_code_pool_km_crush_params() {
+    local dir=$1
+    run_mon $dir a || return 1
+    # the default profile uses crush-failure-domain=host, so the crush
+    # parameters given here differ from it and must end up in the
+    # auto-created profile
+    local poolname=km_crush
+    local profile=$poolname-k2-m1
+    ceph osd pool create $poolname --pool_type erasure --k 2 --m 1 \
+        --pg_num 8 --pgp_num 8 \
+        --zone_failure_domain rack --osd_failure_domain osd || return 1
+    ceph osd erasure-code-profile get $profile | tee $dir/profile.txt
+    grep '^crush-failure-domain=osd$' $dir/profile.txt || return 1
+    grep '^crush-zone-failure-domain=rack$' $dir/profile.txt || return 1
+    ceph osd pool delete $poolname $poolname --yes-i-really-really-mean-it || return 1
+    ! ceph osd erasure-code-profile ls | grep -qx $profile || return 1
+    ceph osd erasure-code-profile set $profile $(cat $dir/profile.txt) || return 1
+    ceph osd pool create $poolname --pool_type erasure --k 2 --m 1 \
+        --pg_num 8 --pgp_num 8 \
+        --zone_failure_domain rack --osd_failure_domain osd || return 1
+    ceph osd pool get $poolname erasure_code_profile | grep -x "erasure_code_profile: $profile" || return 1
+    ceph osd erasure-code-profile get $profile | diff $dir/profile.txt - || return 1
+}
+
+# osd pool create --pool_type erasure with CRUSH options but no --k or --m
+# takes k and m from the default profile. This test creates crush_no_km
+# with only --osd_failure_domain osd, and expects a profile of its own,
+# crush_no_km-k2-m2, with crush-failure-domain=osd, and a rule of its own,
+# crush_no_km.
+function TEST_erasure_code_pool_crush_params_without_km() {
+    local dir=$1
+    run_mon $dir a || return 1
+    # k and m come from the default profile, and the pool's own profile and
+    # rule record the crush parameters
+    ceph osd pool create crush_no_km --pool_type erasure \
+        --pg_num 8 --pgp_num 8 --osd_failure_domain osd || return 1
+    ceph osd erasure-code-profile get crush_no_km-k2-m2 | tee $dir/profile.txt
+    grep '^crush-failure-domain=osd$' $dir/profile.txt || return 1
+    test "$(ceph osd pool get crush_no_km crush_rule -f json | jq -r .crush_rule)" = \
+        crush_no_km || return 1
+}
+
+# osd pool create for an erasure coded pool with no profile makes a profile
+# for it, <pool>-k<k>-m<m>. If a profile of that name exists with other
+# contents, the create is refused, and the message says to remove it or to
+# name it with --erasure_code_profile. This test makes taken-k2-m2 by hand
+# (isa k=2 m=2, failure domain osd) and creates pool taken: refused, and
+# then created when given --erasure_code_profile taken-k2-m2.
+function TEST_erasure_code_pool_profile_name_taken() {
+    local dir=$1
+    run_mon $dir a || return 1
+    ceph osd erasure-code-profile set taken-k2-m2 plugin=isa k=2 m=2 \
+        crush-failure-domain=osd || return 1
+    ! ceph osd pool create taken --pool_type erasure --pg_num 8 \
+        2> $dir/err.txt || return 1
+    grep "EC profile 'taken-k2-m2' already exists with different contents; remove it with ceph osd erasure-code-profile rm taken-k2-m2, or use it with --erasure_code_profile taken-k2-m2" \
+        $dir/err.txt || return 1
+    ceph osd pool create taken --pool_type erasure --pg_num 8 \
+        --erasure_code_profile taken-k2-m2 || return 1
 }
 
 function TEST_replicated_pool_with_rule() {
@@ -393,6 +586,416 @@ function TEST_osd_pool_create_migrate_from() {
   grep "Pool $TGT_POOL_ID has the flag NOPGCHANGE so will be skipped" $dir/mgr.x.log || return 1
 
   teardown $dir || return 1
+}
+
+# osd pool set <pool> crush_rule <rule> must not give a pool a rule that a
+# pending update removes, as the rule's last pool has just left it: the
+# pool would be on a rule that is gone. This test moves pool a, the only
+# pool on race_rule, to replicated_rule, and one second later, while a
+# paxos_propose_interval of 5 seconds keeps that move pending, gives pool b
+# race_rule. b's rule exists afterwards: either b got race_rule and the
+# rule was kept, or the change was refused as race_rule does not exist and
+# b is still on replicated_rule.
+function TEST_pool_set_rule_racing_its_removal() {
+    local dir=$1
+
+    run_mon $dir a || return 1
+    ceph osd crush rule create-replicated race_rule default host || return 1
+    ceph osd pool create a 8 8 replicated race_rule || return 1
+    ceph osd pool create b 8 8 replicated || return 1
+    ceph tell mon.\* config set paxos_propose_interval 5 || return 1
+    # an OSDMap change just committed delays the next proposal
+    ceph osd set noout || return 1
+
+    timeout 60 ceph osd pool set a crush_rule replicated_rule &
+    local pid=$!
+    sleep 1
+    timeout 60 ceph osd pool set b crush_rule race_rule > $dir/out 2>&1
+    wait $pid || return 1
+    cat $dir/out
+    timeout 60 ceph osd pool get b crush_rule > $dir/rule || return 1
+    local rule=$(awk '{print $2}' $dir/rule)
+    ceph osd crush rule ls | grep -qx "$rule" || return 1
+    if [ "$rule" = replicated_rule ]; then
+        grep "does not exist" $dir/out || return 1
+    fi
+}
+
+# osd crush rule create-simple <rule> succeeds without a change when the
+# rule exists. While a pending update removes the rule with its last pool,
+# it must wait for that update and create the rule again. This test deletes
+# pool a, the only pool on race_rule, and one second later, while a
+# paxos_propose_interval of 5 seconds keeps the deletion pending, runs
+# osd crush rule create-simple race_rule again. race_rule exists
+# afterwards.
+function TEST_crush_rule_create_simple_racing_its_removal() {
+    local dir=$1
+
+    run_mon $dir a || return 1
+    ceph osd crush rule create-simple race_rule default host || return 1
+    ceph osd pool create a 8 8 replicated race_rule || return 1
+    ceph tell mon.\* config set paxos_propose_interval 5 || return 1
+    # an OSDMap change just committed delays the next proposal
+    ceph osd set noout || return 1
+
+    timeout 60 ceph osd pool rm a a --yes-i-really-really-mean-it &
+    local pid=$!
+    sleep 1
+    timeout 60 ceph osd crush rule create-simple race_rule default host || return 1
+    wait $pid || return 1
+    ceph osd crush rule ls | grep -qx race_rule || return 1
+}
+
+# osd pool default set --rule <rule> sets the rule that osd pool create
+# gives replicated pools by default. It must not take a rule that a pending
+# update removes with its last pool, or replicated pools would have no
+# default rule left. This test deletes pool a, the only pool on race_rule,
+# and one second later, while a paxos_propose_interval of 5 seconds keeps
+# the deletion pending, runs osd pool default set --rule race_rule. That is
+# refused as race_rule does not exist, race_rule is gone, and pool p can
+# then be created with the defaults.
+function TEST_pool_default_rule_racing_its_removal() {
+    local dir=$1
+
+    run_mon $dir a || return 1
+    ceph osd crush rule create-replicated race_rule default host || return 1
+    ceph osd pool create a 8 8 replicated race_rule || return 1
+    ceph tell mon.\* config set paxos_propose_interval 5 || return 1
+    ceph osd set noout || return 1
+
+    timeout 60 ceph osd pool rm a a --yes-i-really-really-mean-it &
+    local pid=$!
+    sleep 1
+    ! timeout 60 ceph osd pool default set --rule race_rule > $dir/out 2>&1 || return 1
+    wait $pid || return 1
+    grep "does not exist" $dir/out || return 1
+    ! ceph osd crush rule ls | grep -qx race_rule || return 1
+    timeout 60 ceph osd pool create p 8 || return 1
+}
+
+# osd pool set <pool> num_zones checks the rule and the replicas it is
+# given as osd pool create does. This test gives replicated pool r
+# num_zones 2 with one_zone, a rule that does not place the pool in 2
+# buckets of type datacenter, and with --replica 11, above the limit of 10:
+# both are refused. Erasure coded pool e is given num_zones 2 with nosuch,
+# a rule that does not exist: refused, and no rule nosuch is made.
+function TEST_pool_set_num_zones_checks() {
+    local dir=$1
+
+    run_mon $dir a || return 1
+    ceph osd crush rule create-replicated one_zone default host || return 1
+    ceph osd pool create r 8 8 replicated || return 1
+    ! ceph osd pool set r num_zones 2 --crush_rule one_zone > $dir/out 2>&1 || return 1
+    grep "does not place the pool in 2 buckets of type datacenter" $dir/out || return 1
+    ! ceph osd pool set r num_zones 2 --replica 11 > $dir/out 2>&1 || return 1
+    grep "replica must be between 1 and 10" $dir/out || return 1
+
+    ceph osd pool create e 8 8 erasure --k 2 --m 1 || return 1
+    ceph osd pool set e allow_ec_optimizations true || return 1
+    ! ceph osd pool set e num_zones 2 --crush_rule nosuch > $dir/out 2>&1 || return 1
+    grep "specified rule nosuch doesn't exist" $dir/out || return 1
+    ! ceph osd crush rule ls | grep -qx nosuch || return 1
+}
+
+# osd pool create --min_size for an erasure coded pool of the lrc plugin
+# must be between k and the pool's size, which counts the local parity
+# chunks lrc adds. This test uses profile lrcp, k=4 m=2 l=3, 8 chunks in
+# all: --min_size 9 is refused, as not between 4 and 8, and --min_size 5
+# is accepted.
+function TEST_lrc_min_size() {
+    local dir=$1
+
+    run_mon $dir a || return 1
+    ceph osd erasure-code-profile set lrcp plugin=lrc k=4 m=2 l=3 \
+        crush-failure-domain=osd || return 1
+    ! ceph osd pool create l 8 8 erasure lrcp --min_size 9 > $dir/out 2>&1 || return 1
+    grep "pool min_size must be between 4 and 8" $dir/out || return 1
+    ceph osd pool create l 8 8 erasure lrcp --min_size 5 || return 1
+    test "$(ceph osd pool get l min_size | awk '{print $2}')" = 5 || return 1
+}
+
+# A pool deleted in the same update that moves it to another rule takes
+# both rules with it when it was their only pool: the one it left and the
+# one it was given. This test moves pool p from r1 to r2, and one second
+# later, while a paxos_propose_interval of 5 seconds keeps the move
+# pending, deletes p. Neither r1 nor r2 is left.
+function TEST_pool_delete_after_rule_change() {
+    local dir=$1
+
+    run_mon $dir a || return 1
+    ceph osd crush rule create-replicated r1 default host || return 1
+    ceph osd crush rule create-replicated r2 default host || return 1
+    ceph osd pool create p 8 8 replicated r1 || return 1
+    ceph tell mon.\* config set paxos_propose_interval 5 || return 1
+    ceph osd set noout || return 1
+
+    timeout 60 ceph osd pool set p crush_rule r2 &
+    local pid=$!
+    sleep 1
+    timeout 60 ceph osd pool rm p p --yes-i-really-really-mean-it || return 1
+    wait $pid || return 1
+    ! ceph osd crush rule ls | grep -qx r1 || return 1
+    ! ceph osd crush rule ls | grep -qx r2 || return 1
+}
+
+function pool_field() {
+  local pool=$1
+  local field=$2
+  ceph osd dump --format=json | jq -r ".pools[] | select(.pool_name == \"$pool\") | .$field"
+}
+
+function run_mon_for_pool_migration() {
+    local dir=$1
+    run_mon $dir a || return 1
+    ceph config set global enable_experimental_unrecoverable_data_corrupting_features poolmigration || return 1
+    ceph osd set-require-min-compat-client vampire || return 1
+}
+
+function rule_of() {
+    ceph osd pool get $1 crush_rule -f json | jq -r .crush_rule
+}
+
+function profile_of() {
+    ceph osd pool get $1 erasure_code_profile -f json | jq -r .erasure_code_profile
+}
+
+# the OSDs create the PGs of a pool only while it has the creating flag
+function creating() {
+    pool_field $1 flags_names | tr , '\n' | grep -qx creating
+}
+
+function TEST_pool_migrate_copies_pool() {
+    local dir=$1
+    run_mon_for_pool_migration $dir || return 1
+    ceph osd erasure-code-profile set mprofile k=2 m=1 crush-failure-domain=osd || return 1
+    ceph osd pool create mec 8 8 erasure mprofile || return 1
+    ceph osd pool create mrep 4 4 replicated || return 1
+    ceph osd pool set mrep size 2 || return 1
+
+    # a migration with no options copies the pool, and must be confirmed
+    expect_failure $dir "pointless migration" \
+        ceph osd pool migrate mec || return 1
+    ceph osd pool ls | grep -qx mec || return 1
+    ! ceph osd pool ls --show-all | grep -q 'migrate-' || return 1
+
+    ceph osd pool migrate mec --yes-i-really-mean-it || return 1
+    test "$(pool_field mec type)" = 3 || return 1
+    test "$(pool_field mec pg_num)" = 8 || return 1
+    test "$(pool_field mec size)" = 3 || return 1
+    test "$(pool_field mec num_zones)" = 1 || return 1
+    test "$(pool_field .migrate-1 migration_target)" = "$(pool_field mec pool)" || return 1
+
+    ceph osd pool migrate mrep --yes-i-really-mean-it || return 1
+    test "$(pool_field mrep type)" = 1 || return 1
+    test "$(pool_field mrep pg_num)" = 4 || return 1
+    test "$(pool_field mrep size)" = 2 || return 1
+}
+
+function TEST_pool_migrate_takes_create_arguments() {
+    local dir=$1
+    run_mon_for_pool_migration $dir || return 1
+    ceph osd pool create mec erasure --k 2 --m 1 --osd_failure_domain osd || return 1
+    ceph osd pool create mrep 4 4 replicated || return 1
+
+    ceph osd pool migrate mec --pool_type erasure --k 4 --m 2 --osd_failure_domain osd \
+        --enable_ec_optimizations || return 1
+    test "$(profile_of mec)" = mec-k4-m2 || return 1
+    test "$(pool_field mec size)" = 6 || return 1
+
+    # a migration that the checks of osd pool create refuse changes nothing
+    expect_failure $dir "num_zones must be from 1 to" \
+        ceph osd pool migrate mrep --num_zones 3 || return 1
+    ceph osd pool create later 4 4 replicated || return 1
+    ceph osd pool ls | grep -qx mrep || return 1
+    test "$(ceph osd pool ls --show-all | grep -c 'migrate-')" = 1 || return 1
+}
+
+function TEST_pool_migrate_gives_target_own_rule_and_profile() {
+    local dir=$1
+    run_mon_for_pool_migration $dir || return 1
+    ceph osd erasure-code-profile set pcopy k=2 m=1 crush-failure-domain=osd || return 1
+    ceph osd pool create mcopy 4 4 erasure pcopy || return 1
+    test "$(rule_of mcopy)" = mcopy || return 1
+    local rule=$(pool_field mcopy crush_rule)
+    local steps=$(ceph osd crush rule dump mcopy -f json | jq -c 'del(.rule_id, .rule_name)')
+
+    # the source keeps its rule and profile under new names, and the target
+    # has copies named after it
+    ceph osd pool migrate mcopy --yes-i-really-mean-it || return 1
+    creating mcopy || return 1
+    test "$(pool_field .migrate-1 crush_rule)" = $rule || return 1
+    test "$(rule_of .migrate-1)" = mcopy.migrate-1 || return 1
+    test "$(profile_of .migrate-1)" = pcopy.migrate-1 || return 1
+    test "$(pool_field mcopy crush_rule)" != $rule || return 1
+    test "$(rule_of mcopy)" = mcopy || return 1
+    test "$(profile_of mcopy)" = mcopy-k2-m1 || return 1
+    test "$(ceph osd crush rule dump mcopy -f json | jq -c 'del(.rule_id, .rule_name)')" = "$steps" || return 1
+    test "$(ceph osd erasure-code-profile get mcopy-k2-m1 -f json | jq -cS .)" = \
+        "$(ceph osd erasure-code-profile get pcopy.migrate-1 -f json | jq -cS .)" || return 1
+    ! ceph osd erasure-code-profile ls | grep -qx pcopy || return 1
+
+    # a new profile needs a new rule
+    ceph osd pool create mnew erasure --k 2 --m 1 --osd_failure_domain osd || return 1
+    rule=$(pool_field mnew crush_rule)
+    ceph osd pool migrate mnew --pool_type erasure --k 3 --m 1 --osd_failure_domain osd \
+        --enable_ec_optimizations || return 1
+    creating mnew || return 1
+    test "$(rule_of mnew)" = mnew || return 1
+    test "$(profile_of mnew)" = mnew-k3-m1 || return 1
+    test "$(pool_field mnew crush_rule)" != $rule || return 1
+    test "$(pool_field .migrate-2 crush_rule)" = $rule || return 1
+    test "$(rule_of .migrate-2)" = mnew.migrate-2 || return 1
+    test "$(profile_of .migrate-2)" = mnew-k2-m1.migrate-2 || return 1
+
+    ceph osd crush rule create-replicated myrule default osd || return 1
+    ceph osd pool create mrep 4 4 replicated myrule || return 1
+    rule=$(pool_field mrep crush_rule)
+    ceph osd pool migrate mrep --yes-i-really-mean-it || return 1
+    creating mrep || return 1
+    test "$(rule_of mrep)" = mrep || return 1
+    test "$(pool_field .migrate-3 crush_rule)" = $rule || return 1
+    test "$(rule_of .migrate-3)" = myrule.migrate-3 || return 1
+}
+
+function TEST_pool_migrate_keeps_shared_rule_and_profile() {
+    local dir=$1
+    run_mon_for_pool_migration $dir || return 1
+    ceph osd erasure-code-profile set pshared k=2 m=1 crush-failure-domain=osd || return 1
+    ceph osd crush rule create-erasure rshared pshared || return 1
+    ceph osd pool create mshared 4 4 erasure pshared rshared || return 1
+    ceph osd pool create other 4 4 erasure pshared rshared || return 1
+    ceph osd pool create mdefault 4 4 replicated || return 1
+    local default_rule=$(rule_of mdefault)
+    local steps=$(ceph osd crush rule dump $default_rule -f json | jq -c 'del(.rule_id, .rule_name)')
+
+    # the target has copies of the rules and profiles that keep their names
+    ceph osd pool migrate mshared --yes-i-really-mean-it || return 1
+    test "$(rule_of .migrate-1)" = rshared || return 1
+    test "$(profile_of .migrate-1)" = pshared || return 1
+    test "$(rule_of mshared)" = mshared || return 1
+    test "$(profile_of mshared)" = mshared-k2-m1 || return 1
+    ceph osd pool migrate mdefault --yes-i-really-mean-it || return 1
+    test "$(rule_of .migrate-2)" = $default_rule || return 1
+    test "$(rule_of mdefault)" = mdefault || return 1
+    test "$(ceph osd crush rule dump mdefault -f json | jq -c 'del(.rule_id, .rule_name)')" = "$steps" || return 1
+
+    # and of the defaults for a new pool type
+    ceph osd pool create mtoec 4 4 replicated || return 1
+    ceph osd pool migrate mtoec --pool_type erasure --enable_ec_optimizations || return 1
+    test "$(rule_of mtoec)" = mtoec || return 1
+    profile_of mtoec | grep -qx 'mtoec-k[0-9]*-m[0-9]*' || return 1
+    ceph osd pool create mtorep 4 4 erasure pshared rshared || return 1
+    ceph osd pool migrate mtorep --pool_type replicated || return 1
+    test "$(rule_of mtorep)" = mtorep || return 1
+
+    # a rule or profile that the command names is shared, and keeps its name
+    ceph osd erasure-code-profile set pown k=2 m=1 crush-failure-domain=osd || return 1
+    ceph osd pool create mown 4 4 erasure pown || return 1
+    ceph osd pool migrate mown --pool_type erasure --erasure_code_profile pown --rule mown \
+        --enable_ec_optimizations || return 1
+    for pool in mown .migrate-5 ; do
+        test "$(rule_of $pool)" = mown || return 1
+        test "$(profile_of $pool)" = pown || return 1
+    done
+    ! ceph osd crush rule ls | grep -q migrate || return 1
+    ! ceph osd erasure-code-profile ls | grep -q migrate || return 1
+}
+
+function TEST_pool_migrate_name_clash() {
+    local dir=$1
+    run_mon_for_pool_migration $dir || return 1
+    ceph osd erasure-code-profile set pclash k=2 m=1 crush-failure-domain=osd || return 1
+    ceph osd pool create mclash 4 4 erasure pclash || return 1
+
+    # the name for the source's rule is taken
+    ceph osd crush rule create-erasure mclash.migrate-1 pclash || return 1
+    expect_failure $dir "EEXIST.*rule 'mclash.migrate-1'" \
+        ceph osd pool migrate mclash --yes-i-really-mean-it || return 1
+    ceph osd crush rule rm mclash.migrate-1 || return 1
+    # the name for the source's profile is taken
+    ceph osd erasure-code-profile set pclash.migrate-1 k=2 m=1 crush-failure-domain=osd || return 1
+    expect_failure $dir "EEXIST.*profile 'pclash.migrate-1'" \
+        ceph osd pool migrate mclash --yes-i-really-mean-it || return 1
+    ceph osd erasure-code-profile rm pclash.migrate-1 || return 1
+    # the name for the target's profile is taken, with other contents
+    ceph osd erasure-code-profile set mclash-k2-m1 k=2 m=1 crush-failure-domain=host || return 1
+    expect_failure $dir "EEXIST.*'mclash-k2-m1'" \
+        ceph osd pool migrate mclash --yes-i-really-mean-it || return 1
+    ceph osd erasure-code-profile rm mclash-k2-m1 || return 1
+    # the name for the target's rule is another pool's rule
+    ceph osd pool create mrep 4 4 replicated || return 1
+    ceph osd crush rule create-erasure mrep pclash || return 1
+    ceph osd pool create other 4 4 erasure pclash mrep || return 1
+    expect_failure $dir "EEXIST.*rule 'mrep'" \
+        ceph osd pool migrate mrep --yes-i-really-mean-it || return 1
+
+    # the failures renamed nothing, and left nothing behind
+    ceph osd pool create later 4 4 replicated || return 1
+    ! ceph osd pool ls --show-all | grep -q migrate || return 1
+    test "$(rule_of mclash)" = mclash || return 1
+    test "$(profile_of mclash)" = pclash || return 1
+    test "$(rule_of mrep)" = "$(rule_of later)" || return 1
+    ! ceph osd erasure-code-profile ls | grep -q '^mclash-' || return 1
+}
+
+function TEST_pool_migrate_changes_profile_contents() {
+    local dir=$1
+    run_mon_for_pool_migration $dir || return 1
+    ceph osd pool create mec erasure --k 2 --m 1 --osd_failure_domain osd || return 1
+    local before=$(ceph osd erasure-code-profile get mec-k2-m1 -f json | jq -cS .)
+
+    # the target's profile has the name of the source's, with other contents
+    ceph osd pool migrate mec --pool_type erasure --k 2 --m 1 --osd_failure_domain host \
+        --enable_ec_optimizations || return 1
+    test "$(profile_of mec)" = mec-k2-m1 || return 1
+    ceph osd erasure-code-profile get mec-k2-m1 | grep -q 'failure-domain=host' || return 1
+    ceph osd crush rule dump mec -f json | jq -e '[.steps[] | select(.type == "host")] | length > 0' || return 1
+    test "$(profile_of .migrate-1)" = mec-k2-m1.migrate-1 || return 1
+    test "$(ceph osd erasure-code-profile get mec-k2-m1.migrate-1 -f json | jq -cS .)" = "$before" || return 1
+    test "$(rule_of .migrate-1)" = mec.migrate-1 || return 1
+
+    # a failure once the source's profile has its new name gives it back the old one
+    ceph osd pool create mundo erasure --k 2 --m 1 --osd_failure_domain osd || return 1
+    before=$(ceph osd erasure-code-profile get mundo-k2-m1 -f json | jq -cS .)
+    ceph osd crush rule create-replicated mundo.migrate-2 default osd || return 1
+    expect_failure $dir "EEXIST.*rule 'mundo.migrate-2'" \
+        ceph osd pool migrate mundo --pool_type erasure --k 2 --m 1 --osd_failure_domain host \
+        --enable_ec_optimizations || return 1
+    ceph osd pool ls | grep -qx mundo || return 1
+    test "$(profile_of mundo)" = mundo-k2-m1 || return 1
+    test "$(ceph osd erasure-code-profile get mundo-k2-m1 -f json | jq -cS .)" = "$before" || return 1
+    ! ceph osd erasure-code-profile ls | grep -q '^mundo-k2-m1.migrate' || return 1
+}
+
+# The monitors run a command again after an election: a migration of a pool
+# that is being migrated to the layout it asks for changes nothing, also when
+# its options give the target its own rule and erasure code profile
+function TEST_pool_migrate_again_to_layout() {
+    local dir=$1
+    run_mon_for_pool_migration $dir || return 1
+    ceph osd pool create mrep 4 4 replicated || return 1
+    ceph osd pool create mec 4 4 erasure --k 2 --m 1 --osd_failure_domain osd \
+        --enable_ec_optimizations || return 1
+
+    ceph osd pool migrate mrep --pool_type replicated --size 2 || return 1
+    local target=$(pool_field mrep pool)
+    ceph osd pool migrate mrep --pool_type replicated --size 2 || return 1
+    test "$(pool_field mrep pool)" = $target || return 1
+    expect_failure $dir "ongoing migration" \
+        ceph osd pool migrate mrep --pool_type replicated --size 3 || return 1
+    expect_failure $dir "ongoing migration" \
+        ceph osd pool migrate .migrate-1 --pool_type replicated --size 2 || return 1
+
+    ceph osd pool migrate mec --pool_type erasure --k 4 --m 2 --osd_failure_domain osd \
+        --enable_ec_optimizations || return 1
+    target=$(pool_field mec pool)
+    ceph osd pool migrate mec --pool_type erasure --k 4 --m 2 --osd_failure_domain osd \
+        --enable_ec_optimizations || return 1
+    test "$(pool_field mec pool)" = $target || return 1
+    expect_failure $dir "ongoing migration" \
+        ceph osd pool migrate mec --pool_type erasure --k 4 --m 2 --osd_failure_domain host \
+        --enable_ec_optimizations || return 1
+    test "$(ceph osd pool ls --show-all | grep -c 'migrate-')" = 2 || return 1
 }
 
 main osd-pool-create "$@"

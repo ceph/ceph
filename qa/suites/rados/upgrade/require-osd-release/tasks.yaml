@@ -1,0 +1,81 @@
+meta:
+- desc: |
+   Once require-osd-release is set, an OSD of an earlier release must not
+   boot. Stop osd.3, upgrade the rest of the cluster from umbrella and set
+   require-osd-release, then check that osd.3, still on umbrella, stays
+   down, and that it joins once its node is upgraded. Setting vampire
+   commits the upgrade to pools over zones, so the monitors refuse the
+   connection of osd.3, which lacks OSD_STRETCH_ZONES, before it can boot.
+overrides:
+  ceph:
+    log-ignorelist:
+      - \(OSD_
+      - \(PG_
+      - \(MGR_DOWN\)
+      - Monitor daemon marked osd
+      - wrongly marked me down
+tasks:
+- install:
+    branch: umbrella
+    exclude_packages:
+      - librados3
+      - ceph-mgr-dashboard
+      - ceph-mgr-diskprediction-local
+      - ceph-mgr-rook
+      - ceph-mgr-cephadm
+      - cephadm
+      - ceph-volume
+      - ceph-osd-classic
+      - ceph-osd-crimson
+    extra_packages: ['librados2']
+- ceph:
+    conf:
+      global:
+        mon warn on pool no app: false
+- exec:
+    mon.a:
+      - ceph osd dump | grep '^require_osd_release umbrella$'
+- ceph.stop: [osd.3]
+- exec:
+    mon.a:
+      - ceph osd down 3
+- sequential: [ignore-auth-warn-pkg]
+- install.upgrade:
+    mon.a:
+- ceph.restart:
+    daemons: [mon.*, mgr.*]
+    mon-health-to-clog: false
+    wait-for-healthy: false
+- ceph.restart:
+    daemons: [osd.0, osd.1, osd.2]
+    wait-for-healthy: false
+- exec:
+    mon.a:
+      - for i in $(seq 60) ; do [ $(ceph osd dump | grep -c -E '^osd\.[0-2] up ') -eq 3 ] && break ; sleep 5 ; done
+      - ceph versions
+      - ceph osd require-osd-release vampire
+      - for f in `ceph osd pool ls` ; do ceph osd pool set $f pg_autoscale_mode off ; done
+      - rados -p rbd bench 30 write --no-cleanup
+- ceph.restart:
+    daemons: [osd.3]
+    wait-for-healthy: false
+- exec:
+    osd.3:
+      - ceph-osd --version | grep umbrella
+      - "for i in $(seq 60) ; do grep -q 'handle_ident_missing_features client does not support all server features: 40000000000000$' /var/log/ceph/ceph-osd.3.log && break ; sleep 5 ; done"
+      - "grep -m1 'handle_ident_missing_features client does not support all server features: 40000000000000$' /var/log/ceph/ceph-osd.3.log"
+- exec:
+    mon.a:
+      - sleep 30
+      - ceph osd dump | grep '^osd\.3 down '
+- install.upgrade:
+    osd.3:
+- ceph.restart:
+    daemons: [osd.3]
+    wait-for-healthy: false
+    wait-for-osds-up: true
+- ceph.healthy:
+- exec:
+    mon.a:
+      - ceph versions
+      - ceph tell osd.3 version | grep -w vampire

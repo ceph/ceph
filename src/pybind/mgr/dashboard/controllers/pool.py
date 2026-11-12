@@ -7,6 +7,7 @@ from typing import Any, Dict, Iterable, List, Optional, Union, cast
 import cherrypy
 
 from .. import mgr
+from ..exceptions import DashboardException
 from ..security import Scope
 from ..services.ceph_service import CephService
 from ..services.exception import handle_send_command_error
@@ -303,7 +304,27 @@ class Pool(RESTController):
         quotas['max_objects'] = kwargs.pop('quota_max_objects', None)
         quotas['max_bytes'] = kwargs.pop('quota_max_bytes', None)
         self._set_quotas(pool, quotas)
+        self._size_as_replica(current_pool, kwargs)
         self._set_pool_keys(pool, kwargs)
+
+    @staticmethod
+    def _size_as_replica(current_pool, kwargs):
+        """
+        A pool over several zones refuses a size: its copies are set as
+        replica, the copies in each zone.
+        """
+        num_zones = current_pool.get('num_zones', 1)
+        if 'size' not in kwargs or num_zones <= 1:
+            return
+        size = int(kwargs.pop('size'))
+        if size == current_pool.get('size'):
+            return
+        if size % num_zones:
+            raise DashboardException(
+                msg=f'the size of a pool over {num_zones} zones must be a multiple '
+                    f'of {num_zones}, not {size}',
+                code='pool_size_not_multiple_of_zones', component='pool')
+        kwargs['replica'] = size // num_zones
 
     def _set_pool_keys(self, pool, pool_items):
         def set_key(key, value):

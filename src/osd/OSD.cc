@@ -1501,6 +1501,15 @@ void OSDService::send_incremental_map(epoch_t since, Connection *con,
                           con->get_peer_entity_name().to_str(),
                           con->get_peer_addr()) << dendl;
 
+  // an OSD of an earlier release would judge the intervals of these maps
+  // by its rules and keep them on disk
+  if (osdmap->stretch_zones() &&
+      con->get_peer_type() == CEPH_ENTITY_TYPE_OSD &&
+      !con->has_features(CEPH_FEATUREMASK_OSD_STRETCH_ZONES)) {
+    dout(10) << __func__ << " not sending to an OSD without OSD_STRETCH_ZONES"
+             << dendl;
+    return;
+  }
   OSDSuperblock sblock(get_superblock());
   if (to > since && (int64_t)(to - since) > cct->_conf->osd_map_share_max_epochs) {
     dout(10) << "  " << (to - since) << " > max "
@@ -7707,10 +7716,17 @@ void OSD::dispatch_session_waiting(const ceph::ref_t<Session>& session, OSDMapRe
     } else {
       pgid = m->get_spg();
       //Pre-tentacle clients encode the shard_id_t incorrectly for optimized EC
-      //pools with pg_temp set. Correct the mistake here.
-      if (!m->get_connection()->has_features(CEPH_FEATUREMASK_SERVER_TENTACLE)) {
-        auto pi = osdmap->get_pg_pool(pgid.pool());
-	pgid.reset_shard(osdmap->pgtemp_undo_primaryfirst(*pi, pgid.pgid, pgid.shard));
+      //pools with pg_temp set, and later ones without OSD_STRETCH_ZONES for
+      //such pools over zones. Correct the mistake here.
+      const auto& con = m->get_connection();
+      if (!con->has_features(CEPH_FEATUREMASK_SERVER_TENTACLE)
+          ? !osdmap->undo_pre_tentacle_primaryfirst(&pgid)
+          : (con->get_peer_type() == CEPH_ENTITY_TYPE_CLIENT &&
+             !con->has_features(CEPH_FEATUREMASK_OSD_STRETCH_ZONES) &&
+             !osdmap->undo_pre_stretch_zones_primaryfirst(&pgid))) {
+        dout(10) << __func__ << " dropping " << *m << ": shard " << pgid.shard
+                 << " is not in e" << osdmap->get_epoch() << dendl;
+        continue;
       }
     }
     enqueue_op(pgid, std::move(op), m->get_map_epoch());
@@ -7798,11 +7814,14 @@ void OSD::ms_fast_dispatch(Message *m)
 
   service.maybe_inject_dispatch_delay();
 
-  // Pre-tentacle clients sending requests to EC shards other than 0 may
-  // set the shard incorrectly because of how pg_temp encodes primary
-  // shards first. These requests need to be routed through
+  // Pre-tentacle clients, and later ones without OSD_STRETCH_ZONES for pools
+  // over zones, sending requests to EC shards other than 0 may set the
+  // shard incorrectly because of how pg_temp encodes primary shards first. These requests need to be routed through
   // dispatch_session_waiting which uses the OSDMap to correct the shard.
-  bool legacy = !m->get_connection()->has_features(CEPH_FEATUREMASK_SERVER_TENTACLE);
+  const auto& con = m->get_connection();
+  bool legacy = !con->has_features(CEPH_FEATUREMASK_SERVER_TENTACLE) ||
+    (con->get_peer_type() == CEPH_ENTITY_TYPE_CLIENT &&
+     !con->has_features(CEPH_FEATUREMASK_OSD_STRETCH_ZONES));
   spg_t spg = static_cast<MOSDFastDispatchOp*>(m)->get_spg();
   if (legacy) {
     // Optimization - replica pools and EC shard 0 are never remapped

@@ -26,10 +26,13 @@ overrides:
   ceph:
     conf:
       global:
-        osd pool default size: 3
         osd pool default min size: 2
       mon:
         debug mon: 30
+    # in the configuration database, where enable_stretch_mode can change it
+    cluster-conf:
+      global:
+        osd pool default size: 3
 tasks:
 - install:
 - ceph:

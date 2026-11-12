@@ -108,13 +108,13 @@ int destroy_ec_profile_and_rule_pp(Rados &cluster,
 }
 
 std::string create_one_ec_pool_pp(const std::string &pool_name,
-  Rados &cluster, bool fast_ec)
+  Rados &cluster, bool fast_ec, int k_per_zone, int m_per_zone)
 {
   std::string err = connect_cluster_pp(cluster);
   if (err.length())
     return err;
 
-  err = create_ec_pool_pp(pool_name, cluster, fast_ec);
+  err = create_ec_pool_pp(pool_name, cluster, fast_ec, /*enable_omap=*/true, k_per_zone, m_per_zone);
   if (err.length()) {
     cluster.shutdown();
     return err;
@@ -156,8 +156,25 @@ std::string create_pool_pp(const std::string &pool_name, Rados &cluster, int siz
   return "";
 }
 
-std::string create_ec_pool_pp(const std::string &pool_name, Rados &cluster, bool fast_ec) {
+std::string create_ec_pool_pp(const std::string &pool_name, Rados &cluster,
+                               bool fast_ec, bool enable_omap,
+                               int k_per_zone, int m_per_zone) {
   std::ostringstream oss;
+
+  if (k_per_zone > 0) {
+    int ret = cluster.mon_command(
+      fmt::format(R"({{"prefix":"osd pool create","pool":"{}","pool_type":"erasure","pg_num":8,"pgp_num":8,"k":{},"m":{},"num_zones":2,"osd_failure_domain":"osd"}})",
+                  pool_name, k_per_zone, m_per_zone),
+      {}, nullptr, nullptr);
+    if (ret) {
+      oss << "mon_command osd pool create pool:" << pool_name << " k:" << k_per_zone
+          << " m:" << m_per_zone << " num_zones:2 failed with error " << ret;
+      return oss.str();
+    }
+    cluster.wait_for_latest_osdmap();
+    return "";
+  }
+
   int ret = destroy_ec_profile_and_rule_pp(cluster, pool_name, oss);
   if (ret) {
     return oss.str();
@@ -165,16 +182,17 @@ std::string create_ec_pool_pp(const std::string &pool_name, Rados &cluster, bool
 
   ret = cluster.mon_command(
     "{\"prefix\": \"osd erasure-code-profile set\", \"name\": \"testprofile-" + pool_name + "\", \"profile\": [ \"k=2\", \"m=1\", \"crush-failure-domain=osd\"]}",
-    {}, NULL, NULL);
+    {}, nullptr, nullptr);
   if (ret) {
     cluster.shutdown();
     oss << "mon_command erasure-code-profile set name:testprofile-" << pool_name << " failed with error " << ret;
     return oss.str();
   }
-    
+
   ret = cluster.mon_command(
-    "{\"prefix\": \"osd pool create\", \"pool\": \"" + pool_name + "\", \"pool_type\":\"erasure\", \"pg_num\":8, \"pgp_num\":8, \"erasure_code_profile\":\"testprofile-" + pool_name + "\"}",
-    {}, NULL, NULL);
+    fmt::format(R"({{"prefix":"osd pool create","pool":"{}","pool_type":"erasure","pg_num":8,"pgp_num":8,"erasure_code_profile":"testprofile-{}"}})",
+                pool_name, pool_name),
+    {}, nullptr, nullptr);
   if (ret) {
     destroy_ec_profile_pp(cluster, pool_name, oss);
     oss << "mon_command osd pool create pool:" << pool_name << " pool_type:erasure failed with error " << ret;
@@ -184,13 +202,13 @@ std::string create_ec_pool_pp(const std::string &pool_name, Rados &cluster, bool
   if (fast_ec) {
     bufferlist inbl;
     ret = cluster.mon_command(
-      "{\"prefix\": \"osd pool set\", \"pool\": \"" + pool_name +
-      "\", \"var\": \"allow_ec_optimizations\", \"val\": \"true\"}",
+      fmt::format(R"({{"prefix":"osd pool set","pool":"{}","var":"allow_ec_optimizations","val":"true"}})",
+                  pool_name),
       std::move(inbl), nullptr, nullptr);
     if (ret) {
       destroy_one_ec_pool_pp(pool_name, cluster);
       destroy_ec_profile_pp(cluster, pool_name, oss);
-      oss << "rados_mon_command osd pool set failed with error " << ret;
+      oss << "rados_mon_command osd pool set allow_ec_optimizations failed with error " << ret;
       return oss.str();
     }
   }
@@ -198,6 +216,7 @@ std::string create_ec_pool_pp(const std::string &pool_name, Rados &cluster, bool
   cluster.wait_for_latest_osdmap();
   return "";
 }
+
 
 std::string set_pool_flags_pp(const std::string &pool_name, librados::Rados &cluster, int64_t flags, bool set_not_unset) {
   std::ostringstream oss;
