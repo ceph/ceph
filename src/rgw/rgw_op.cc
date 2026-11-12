@@ -6179,8 +6179,10 @@ void RGWDeleteObj::execute(optional_yield y)
       }
     }
 
-    // make reservation for notification if needed
-    const auto versioned_object = s->bucket->versioning_enabled();
+    // make reservation for notification if needed;  a delete naming no
+    // version makes a delete marker whether versioning is enabled or
+    // suspended
+    const auto versioned_object = s->bucket->versioned();
     const auto event_type = versioned_object &&
       s->object_key.instance.empty() ?
       rgw::notify::ObjectRemovedDeleteMarkerCreated :
@@ -8479,8 +8481,10 @@ void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object
     }
   }
 
-  // make reservation for notification if needed
-  const auto versioned_object = s->bucket->versioning_enabled();
+  // make reservation for notification if needed;  a delete naming no
+  // version makes a delete marker whether versioning is enabled or
+  // suspended
+  const auto versioned_object = s->bucket->versioned();
   const auto event_type = versioned_object && o.instance.empty() ?
                           rgw::notify::ObjectRemovedDeleteMarkerCreated :
                           rgw::notify::ObjectRemovedDelete;
