@@ -52,6 +52,8 @@ enum class FindingKind {
   notification_not_carried,
   notification_needs_operator,
   links_not_served,
+  setting_differs,
+  setting_not_carried,
   abandoned,
 };
 

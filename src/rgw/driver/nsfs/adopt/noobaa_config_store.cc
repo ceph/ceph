@@ -20,13 +20,17 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <cctype>
 #include <climits>
 #include <string_view>
 #include <fmt/format.h>
+#include <fmt/ranges.h>
 
 #include "common/ceph_json.h"
+#include "common/config_proxy.h"
 #include "common/dout_fmt.h"
 #include "common/errno.h"
+#include "common/split.h"
 #include "include/scope_guard.h"
 
 #include "noobaa_config_store.h"
@@ -104,6 +108,161 @@ size_t NooBaaStoreContents::iam_users() const
 		       [](const NooBaaIdentity& i) { return i.is_iam_user(); });
 }
 
+namespace {
+
+std::string lower(std::string s)
+{
+  std::transform(s.begin(), s.end(), s.begin(),
+		 [](unsigned char c) { return std::tolower(c); });
+  return s;
+}
+
+/* A umask, NooBaa's a JSON number and ours octal text, as four octal
+ * digits;  as it is when it is neither. */
+std::string umask_text(const std::string& v, int base)
+{
+  char* end = nullptr;
+  errno = 0;
+  const unsigned long u = ::strtoul(v.c_str(), &end, base);
+  if (errno || (end == v.c_str()) || (*end != '\0')) {
+    return v;
+  }
+  return fmt::format("{:04o}", u);
+}
+
+/* Host names, NooBaa's space-separated and ours comma-separated, sorted
+ * and joined by a space. */
+std::string host_list(const std::string& v)
+{
+  std::vector<std::string> hosts;
+  for (auto h : ceph::split(v, " ,")) {
+    hosts.emplace_back(h);
+  }
+  std::sort(hosts.begin(), hosts.end());
+  return fmt::format("{}", fmt::join(hosts, " "));
+}
+
+std::string option_text(const ConfigProxy& conf, const char* option)
+{
+  std::string v;
+  conf.get_val(option, &v);
+  return v;
+}
+
+/* A config.json setting whose behaviour RGW's can differ from
+ * (NOOBAA_ONDISK_FORMAT.md §7). */
+struct BehaviourKey {
+  const char* key;
+  /* NooBaa's default, as config.json would hold it;  "Infinity" for a
+   * limit config.json cannot state */
+  const char* noobaa_default;
+  /* the RGW option that controls it, or nullptr */
+  const char* option;
+  /* With an option:  NooBaa's value and the option's, each put in one
+   * form to compare them.  Without:  RGW's behaviour in NooBaa's form,
+   * and what that behaviour is. */
+  std::string (*noobaa_form)(const std::string&);
+  std::string (*rgw_form)(const ConfigProxy&);
+  const char* rgw_does;
+};
+
+std::string same(const std::string& v) { return v; }
+
+const BehaviourKey behaviour_table[] = {
+  {"NSFS_UMASK", "7", "rgw_nsfs_umask",
+   [](const std::string& v) { return umask_text(v, 10); },
+   [](const ConfigProxy& c) {
+     return umask_text(c.get_val<std::string>("rgw_nsfs_umask"), 8);
+   }, nullptr},
+  {"NSFS_CUSTOM_BUCKET_PATH_HTTP_HEADER", "x-noobaa-custom-bucket-path",
+   "rgw_nsfs_custom_bucket_path_header",
+   [](const std::string& v) { return lower(v); },
+   [](const ConfigProxy& c) {
+     return lower(c.get_val<std::string>(
+		    "rgw_nsfs_custom_bucket_path_header"));
+   }, nullptr},
+  {"NSFS_CUSTOM_BUCKET_PATH_ALLOWED_LIST", "",
+   "rgw_nsfs_custom_bucket_path_allowed_list", same,
+   [](const ConfigProxy& c) {
+     return c.get_val<std::string>("rgw_nsfs_custom_bucket_path_allowed_list");
+   }, nullptr},
+  {"NSFS_OPEN_READ_MODE", "r", "rgw_nsfs_direct_io", same,
+   [](const ConfigProxy& c) {
+     return std::string(c.get_val<bool>("rgw_nsfs_direct_io") ? "rd" : "r");
+   }, nullptr},
+  {"GPFS_DL_PATH", "/usr/lpp/mmfs/lib/libgpfs.so", "rgw_nsfs_gpfs_lib_path",
+   same,
+   [](const ConfigProxy& c) {
+     return c.get_val<std::string>("rgw_nsfs_gpfs_lib_path");
+   }, nullptr},
+  {"VIRTUAL_HOSTS", "", "rgw_dns_name", host_list,
+   [](const ConfigProxy& c) {
+     return host_list(c.get_val<std::string>("rgw_dns_name"));
+   }, nullptr},
+  {"NSFS_CALCULATE_MD5", "false", "rgw_non_md5_etag", same,
+   [](const ConfigProxy& c) {
+     return std::string(c.get_val<bool>("rgw_non_md5_etag") ? "false"
+							     : "true");
+   }, nullptr},
+
+  {"S3_CORS_DEFAULTS_ENABLED", "true", nullptr, same,
+   [](const ConfigProxy&) { return std::string("false"); },
+   "a bucket created through RGW has no CORS rule"},
+  {"S3_MAX_KEY_LENGTH", "Infinity", nullptr, same,
+   [](const ConfigProxy&) { return std::string("1024"); },
+   "RGW returns InvalidObjectName for a key over 1024 bytes, so a longer "
+   "key cannot be read or deleted"},
+  {"S3_MD_SIZE_LIMIT", "2048", nullptr, same,
+   [](const ConfigProxy&) { return std::string("Infinity"); },
+   "RGW does not limit the total size of an object's user metadata"},
+  {"WORM_ENABLED", "false", nullptr, same,
+   [](const ConfigProxy&) { return std::string("true"); },
+   "RGW grants object lock requested at CreateBucket"},
+  {"NSFS_VERSIONING_ENABLED", "true", nullptr, same,
+   [](const ConfigProxy&) { return std::string("true"); },
+   "RGW enables versioning when a bucket's owner asks"},
+  {"NSFS_CHECK_BUCKET_BOUNDARIES", "true", nullptr, same,
+   [](const ConfigProxy&) { return std::string("true"); },
+   "RGW never follows a symbolic link out of the bucket"},
+  {"NSFS_TRIGGER_FSYNC", "true", nullptr, same,
+   [](const ConfigProxy&) { return std::string("true"); },
+   "RGW syncs an object's data before it replies"},
+  {"NSFS_LOW_FREE_SPACE_CHECK_ENABLED", "false", nullptr, same,
+   [](const ConfigProxy&) { return std::string("false"); },
+   "RGW does not fail a write for low free space"},
+  {"DENY_UPLOAD_TO_STORAGE_CLASS_STANDARD", "false", nullptr, same,
+   [](const ConfigProxy&) { return std::string("false"); },
+   "RGW accepts an upload to STANDARD"},
+  {"NSFS_FOLDER_OBJECT_NAME", ".folder", nullptr, same,
+   [](const ConfigProxy&) { return std::string(".folder"); },
+   "RGW keeps a directory object's data in .folder"},
+  {"ANONYMOUS_ACCOUNT_NAME", "anonymous", nullptr, same,
+   [](const ConfigProxy&) { return std::string("anonymous"); },
+   "the import takes only the account named anonymous as the anonymous "
+   "account"},
+  {"ALLOW_HTTP", "false", nullptr, same,
+   [](const ConfigProxy&) { return std::string("false"); },
+   "whether RGW serves HTTP is rgw_frontends'"},
+  {"S3_SERVER_IP_WHITELIST", "[]", nullptr, same,
+   [](const ConfigProxy&) { return std::string("[]"); },
+   "RGW has no address allowlist;  a bucket policy's aws:SourceIp "
+   "condition is the nearest"},
+};
+
+const std::vector<const char*>& behaviour_keys()
+{
+  static const std::vector<const char*> keys = [] {
+    std::vector<const char*> k;
+    for (const auto& b : behaviour_table) {
+      k.push_back(b.key);
+    }
+    return k;
+  }();
+  return keys;
+}
+
+} // namespace
+
 std::vector<std::string> NooBaaStoreContents::md5_etag_divergence() const
 {
   /* What the accounts say.  A deployment is uniform when every
@@ -140,6 +299,39 @@ std::vector<std::string> NooBaaStoreContents::md5_etag_divergence() const
 		     ? std::string(", against the account's ") +
 		       (*account_says ? "true" : "false")
 		     : std::string(", which no account states")));
+  }
+  return out;
+}
+
+NooBaaSettingDifferences
+NooBaaStoreContents::setting_differences(const ConfigProxy& conf) const
+{
+  NooBaaSettingDifferences out;
+  for (const auto& b : behaviour_table) {
+    std::string value = b.noobaa_default;
+    std::string where = " (its default)";
+    if (auto i = settings.behaviour.find(b.key);
+	i != settings.behaviour.end()) {
+      value = i->second.value;
+      where = i->second.from_host
+	? fmt::format(" (host_customization[{}])", settings.host_section)
+	: std::string();
+    }
+    const std::string noobaa = b.noobaa_form(value);
+    const std::string rgw = b.rgw_form(conf);
+    if (noobaa == rgw) {
+      continue;
+    }
+    if (b.option) {
+      out.option_differs.push_back(
+	fmt::format("{} is \"{}\" in NooBaa{};  this gateway has {} \"{}\"",
+		    b.key, noobaa, where, b.option,
+		    option_text(conf, b.option)));
+    } else {
+      out.not_carried.push_back(
+	fmt::format("{} is \"{}\" in NooBaa{};  {}", b.key, noobaa, where,
+		    b.rgw_does));
+    }
   }
   return out;
 }
@@ -411,11 +603,41 @@ int NooBaaConfigStore::read(const DoutPrefixProvider* dpp,
       if (!p.parse(doc.data(), doc.size())) {
 	unreadable(path, "not JSON");
       } else {
-	if (p.find_obj("NSFS_ENABLE_DYNAMIC_SUPPLEMENTAL_GROUPS")) {
+	/* NooBaa merges host_customization[<its hostname>] over the rest,
+	 * so a key that section sets is read from it. */
+	std::string host = hostname;
+	if (host.empty()) {
+	  char buf[HOST_NAME_MAX + 1] = {};
+	  if (::gethostname(buf, sizeof(buf) - 1) == 0) {
+	    host = buf;
+	  }
+	}
+	JSONObj* host_obj = nullptr;
+	if (JSONObj* hc = p.find_obj("host_customization");
+	    hc && !host.empty()) {
+	  host_obj = hc->find_obj(host);
+	  if (host_obj && host_obj->is_object()) {
+	    out.settings.host_section = host;
+	  } else {
+	    host_obj = nullptr;
+	  }
+	}
+	auto from = [&](const char* key) -> JSONObj* {
+	  return (host_obj && host_obj->find_obj(key)) ? host_obj : &p;
+	};
+	for (const auto& key : behaviour_keys()) {
+	  JSONObj* src = from(key);
+	  if (JSONObj* o = src->find_obj(key)) {
+	    out.settings.behaviour[key] = {o->get_data(), src != &p};
+	  }
+	}
+
+	if (from("NSFS_ENABLE_DYNAMIC_SUPPLEMENTAL_GROUPS")->find_obj(
+	      "NSFS_ENABLE_DYNAMIC_SUPPLEMENTAL_GROUPS")) {
 	  try {
 	    JSONDecoder::decode_json("NSFS_ENABLE_DYNAMIC_SUPPLEMENTAL_GROUPS",
 				     out.settings.dynamic_supplemental_groups,
-				     &p);
+				     from("NSFS_ENABLE_DYNAMIC_SUPPLEMENTAL_GROUPS"));
 	    out.settings.have_dynamic_supplemental_groups = true;
 	  } catch (const JSONDecoder::err& e) {
 	    unreadable(path, std::string("NSFS_ENABLE_DYNAMIC_SUPPLEMENTAL_"
@@ -426,23 +648,28 @@ int NooBaaConfigStore::read(const DoutPrefixProvider* dpp,
 	 * `file`, and the file beside config.json. */
 	try {
 	  JSONDecoder::decode_json("NC_MASTER_KEYS_STORE_TYPE",
-				   out.settings.master_keys_store_type, &p);
+				   out.settings.master_keys_store_type,
+				   from("NC_MASTER_KEYS_STORE_TYPE"));
 	  JSONDecoder::decode_json("NC_MASTER_KEYS_FILE_LOCATION",
-				   out.settings.master_keys_file_location, &p);
+				   out.settings.master_keys_file_location,
+				   from("NC_MASTER_KEYS_FILE_LOCATION"));
 	  JSONDecoder::decode_json("NC_MASTER_KEYS_GET_EXECUTABLE",
-				   out.settings.master_keys_get_executable, &p);
+				   out.settings.master_keys_get_executable,
+				   from("NC_MASTER_KEYS_GET_EXECUTABLE"));
 	} catch (const JSONDecoder::err& e) {
 	  unreadable(path, std::string("NC_MASTER_KEYS_*: ") + e.what());
 	}
 	try {
 	  JSONDecoder::decode_json("NC_DISABLE_SCHEMA_CHECK",
-				   out.settings.schema_check_disabled, &p);
+				   out.settings.schema_check_disabled,
+				   from("NC_DISABLE_SCHEMA_CHECK"));
 	} catch (const JSONDecoder::err& e) {
 	  unreadable(path, std::string("NC_DISABLE_SCHEMA_CHECK: ") + e.what());
 	}
 	try {
 	  JSONDecoder::decode_json("LDAP_CONFIG_PATH",
-				   out.settings.ldap_config_path, &p);
+				   out.settings.ldap_config_path,
+				   from("LDAP_CONFIG_PATH"));
 	} catch (const JSONDecoder::err& e) {
 	  unreadable(path, std::string("LDAP_CONFIG_PATH: ") + e.what());
 	}

@@ -16068,6 +16068,95 @@ TEST_F(NooBaaStoreTest, ABucketStatingItAloneIsReported)
   EXPECT_NE(d[0].find("no account states"), std::string::npos) << d[0];
 }
 
+/* NooBaa merges host_customization[<its hostname>] over the rest of
+ * config.json (`config.js:1432`), so the import reads a key from the
+ * section for its host, and from the rest otherwise -- including the
+ * settings it acts on. */
+TEST_F(NooBaaStoreTest, HostCustomizationForThisHostIsMerged)
+{
+  write_file(store + "/config.json", R"({
+    "NSFS_UMASK": 7,
+    "NC_DISABLE_SCHEMA_CHECK": false,
+    "host_customization": {
+      "gw-a": {"NSFS_UMASK": 18, "NC_DISABLE_SCHEMA_CHECK": true},
+      "gw-b": {"WORM_ENABLED": true}
+    }
+  })");
+
+  nsfs::NooBaaStoreContents a;
+  ASSERT_EQ(nsfs::NooBaaConfigStore(store, "gw-a").read(env->dpp, a), 0);
+  EXPECT_EQ(a.settings.host_section, "gw-a");
+  EXPECT_TRUE(a.settings.schema_check_disabled)
+      << "a setting the import acts on was read from the shared section";
+  ASSERT_EQ(a.settings.behaviour.count("NSFS_UMASK"), 1u);
+  EXPECT_EQ(a.settings.behaviour["NSFS_UMASK"].value, "18");
+  EXPECT_TRUE(a.settings.behaviour["NSFS_UMASK"].from_host);
+  EXPECT_EQ(a.settings.behaviour.count("WORM_ENABLED"), 0u)
+      << "another host's section was merged";
+
+  nsfs::NooBaaStoreContents c;
+  ASSERT_EQ(nsfs::NooBaaConfigStore(store, "gw-c").read(env->dpp, c), 0);
+  EXPECT_TRUE(c.settings.host_section.empty());
+  EXPECT_FALSE(c.settings.schema_check_disabled);
+  EXPECT_EQ(c.settings.behaviour["NSFS_UMASK"].value, "7");
+  EXPECT_FALSE(c.settings.behaviour["NSFS_UMASK"].from_host);
+}
+
+/* Each setting is compared with what this gateway does:  a setting an
+ * RGW option controls, with the option;  one RGW has no counterpart
+ * for, with RGW's fixed behaviour.  NooBaa's default counts when
+ * config.json says nothing. */
+TEST_F(NooBaaStoreTest, SettingsThatDifferFromTheGatewayAreReported)
+{
+  auto has = [](const std::vector<std::string>& v, const std::string& key) {
+    return std::any_of(v.begin(), v.end(), [&](const std::string& s) {
+      return s.rfind(key + " ", 0) == 0;
+    });
+  };
+  auto& conf = g_conf();
+  const auto saved_umask = conf.get_val<std::string>("rgw_nsfs_umask");
+  const auto saved_md5 = conf.get_val<bool>("rgw_non_md5_etag");
+  conf.set_val_or_die("rgw_nsfs_umask", "0007");
+  conf.set_val_or_die("rgw_non_md5_etag", "false");
+
+  /* NooBaa's defaults */
+  auto d = read_store().setting_differences(conf);
+  EXPECT_TRUE(has(d.option_differs, "NSFS_CALCULATE_MD5"))
+      << "NooBaa's synthetic ETags against this gateway's MD5 ones";
+  EXPECT_FALSE(has(d.option_differs, "NSFS_UMASK"));
+  EXPECT_TRUE(has(d.not_carried, "S3_CORS_DEFAULTS_ENABLED"));
+  EXPECT_TRUE(has(d.not_carried, "S3_MAX_KEY_LENGTH"));
+  EXPECT_TRUE(has(d.not_carried, "WORM_ENABLED"));
+  EXPECT_FALSE(has(d.not_carried, "NSFS_TRIGGER_FSYNC"));
+
+  /* what config.json sets */
+  write_file(store + "/config.json", R"({
+    "NSFS_UMASK": 18,
+    "NSFS_CALCULATE_MD5": true,
+    "S3_CORS_DEFAULTS_ENABLED": false,
+    "NSFS_TRIGGER_FSYNC": false
+  })");
+  d = read_store().setting_differences(conf);
+  ASSERT_TRUE(has(d.option_differs, "NSFS_UMASK"));
+  for (const auto& s : d.option_differs) {
+    if (s.rfind("NSFS_UMASK ", 0) == 0) {
+      EXPECT_NE(s.find("\"0022\""), std::string::npos) << s;
+      EXPECT_NE(s.find("rgw_nsfs_umask \"0007\""), std::string::npos) << s;
+    }
+  }
+  EXPECT_FALSE(has(d.option_differs, "NSFS_CALCULATE_MD5"));
+  EXPECT_FALSE(has(d.not_carried, "S3_CORS_DEFAULTS_ENABLED"));
+  EXPECT_TRUE(has(d.not_carried, "NSFS_TRIGGER_FSYNC"));
+
+  /* the gateway set to match */
+  conf.set_val_or_die("rgw_nsfs_umask", "0022");
+  d = read_store().setting_differences(conf);
+  EXPECT_FALSE(has(d.option_differs, "NSFS_UMASK"));
+
+  conf.set_val_or_die("rgw_nsfs_umask", saved_umask);
+  conf.set_val_or_die("rgw_non_md5_etag", saved_md5 ? "true" : "false");
+}
+
 /* ------------------------------------------------------------------ *
  * P1 -- bucket placement:  the column and the accessor.
  *

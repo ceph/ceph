@@ -105,6 +105,13 @@ const FindingKindText kind_texts[] = {
    "the symbolic links NooBaa served are not served",
    "replace each link with the object it named, if it should still be "
    "served"},
+  {"setting_differs",
+   "this gateway behaves as its RGW option says, not as NooBaa was set",
+   "set the RGW option the finding names to match, if NooBaa's behaviour "
+   "should stand"},
+  {"setting_not_carried",
+   "RGW behaves as the finding says, whatever NooBaa was set to",
+   "none in RGW;  tell the clients that depend on NooBaa's behaviour"},
   {"abandoned",
    "the record is frozen and readable, and not converted",
    "take the abandonment back to convert it"},

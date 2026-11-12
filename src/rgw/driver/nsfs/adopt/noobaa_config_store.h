@@ -51,10 +51,12 @@
 
 #pragma once
 
+#include <map>
 #include <optional>
 #include <string>
 #include <vector>
 
+#include "common/config_fwd.h"
 #include "common/dout.h"
 
 namespace rgw { namespace sal { namespace nsfs {
@@ -189,6 +191,11 @@ struct NooBaaRole {
 struct NooBaaSettings {
   bool have_config_json{false};
 
+  /* The host whose `host_customization` section was merged over the
+   * rest, as NooBaa merges it for the host it runs on
+   * (`config.js:1432`);  empty when config.json has none for it. */
+  std::string host_section;
+
   /* `NSFS_ENABLE_DYNAMIC_SUPPLEMENTAL_GROUPS`, false by default in
    * NooBaa's `config.js` at the pin.  With it off, a directory-backed
    * identity carrying no explicit list gets *no* supplementary groups
@@ -220,6 +227,25 @@ struct NooBaaSettings {
    * serves only AssumeRoleWithWebIdentity */
   std::string ldap_config_path{"/etc/noobaa-server/ldap_config"};
   bool ldap_configured{false};
+
+  /* The settings config.json sets, of those whose behaviour RGW's can
+   * differ from (NOOBAA_ONDISK_FORMAT.md §7), by key. */
+  struct Value {
+    /* a string as it is, any other value as compact JSON */
+    std::string value;
+    /* set by the host_customization section */
+    bool from_host{false};
+  };
+  std::map<std::string, Value> behaviour;
+};
+
+/* Where NooBaa, as this store configured it, behaves differently from
+ * this gateway, one line per setting.  `option_differs` names a setting
+ * an RGW option controls;  `not_carried`, one RGW has no counterpart
+ * for. */
+struct NooBaaSettingDifferences {
+  std::vector<std::string> option_differs;
+  std::vector<std::string> not_carried;
 };
 
 /* What `system.json` says about the NooBaa versions that wrote the
@@ -334,6 +360,10 @@ struct NooBaaStoreContents {
    * which is the ordinary case. */
   std::vector<std::string> md5_etag_divergence() const;
 
+  /* Each setting, as config.json sets it or as NooBaa defaults it,
+   * compared with what this gateway does under `conf`. */
+  NooBaaSettingDifferences setting_differences(const ConfigProxy& conf) const;
+
   /* Why the NooBaa that wrote this store is not one adoption is
    * verified against, one line per reason;  empty when it is.
    *
@@ -352,9 +382,13 @@ struct NooBaaStoreContents {
  * one-time operation, not an address the request path keeps. */
 class NooBaaConfigStore {
   std::string root;
+  std::string hostname;
 
 public:
-  explicit NooBaaConfigStore(std::string dir) : root(std::move(dir)) {}
+  /* `host` is the host whose `host_customization` section applies;
+   * empty means this one. */
+  explicit NooBaaConfigStore(std::string dir, std::string host = {})
+    : root(std::move(dir)), hostname(std::move(host)) {}
 
   const std::string& directory() const { return root; }
 

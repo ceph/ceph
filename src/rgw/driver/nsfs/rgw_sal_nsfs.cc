@@ -19323,6 +19323,19 @@ int NSFSDriver::adopt_identities(const DoutPrefixProvider* dpp,
       contents.settings.ldap_config_path + " exists, so NooBaa served "
       "AssumeRoleWithWebIdentity against LDAP");
   }
+  {
+    const auto d = contents.setting_differences(g_conf());
+    adoption_findings.add(nsfs::FindingKind::setting_differs,
+			  d.option_differs);
+    adoption_findings.add(nsfs::FindingKind::setting_not_carried,
+			  d.not_carried);
+    for (const auto& why : contents.md5_etag_divergence()) {
+      adoption_findings.add(nsfs::FindingKind::setting_differs,
+	why + ";  this gateway has rgw_non_md5_etag \"" +
+	(g_conf().get_val<bool>("rgw_non_md5_etag") ? "true" : "false") +
+	"\" for every bucket");
+    }
+  }
   if (!contents.unreadable.empty()) {
     for (const auto& u : contents.unreadable) {
       ldpp_dout_fmt(dpp, 0, "ERROR: adoption: {}: {}", u.path, u.why);
