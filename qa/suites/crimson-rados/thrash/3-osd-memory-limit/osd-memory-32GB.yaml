@@ -1,3 +1,13 @@
+teuthology:
+  postmerge:
+    - |
+      -- smithi nodes have 32GB of RAM, of which seastar sees ~29GiB as
+      -- available: it refuses a 32G --memory and the OSD fails mkfs.
+      -- Use a smaller limit that fits there, leaving room for the
+      -- other daemons on the node.
+      if yaml.machine_type == "smithi" then
+        yaml.overrides.ceph.conf.osd["crimson memory"] = "24G"
+      end
 overrides:
   ceph:
     conf:
