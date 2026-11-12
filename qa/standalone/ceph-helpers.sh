@@ -1570,8 +1570,9 @@ function test_is_clean() {
 #
 function is_pg_clean() {
     local pgid=$1
+    local timeout=${2:-$WAIT_FOR_CLEAN_TIMEOUT}
     local pg_state
-    pg_state=$(ceph pg $pgid query 2>/dev/null | jq -r ".state ")
+    pg_state=$(timeout $timeout ceph pg $pgid query 2>/dev/null | jq -r ".state ")
     [[ "$pg_state" == "active+clean"* ]]
 }
 
@@ -1707,7 +1708,7 @@ function wait_for_pg_clean() {
 
     while true ; do
         echo "#---------- $pgid loop $loop"
-        is_pg_clean $pg_id && break
+        is_pg_clean $pg_id $WAIT_FOR_CLEAN_TIMEOUT && break
         if (( $loop >= ${#delays[*]} )) ; then
             ceph report
             echo "PG $pg_id is not clean after $loop iterations"
