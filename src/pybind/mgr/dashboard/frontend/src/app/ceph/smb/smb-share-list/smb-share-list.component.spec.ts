@@ -1,5 +1,5 @@
 import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { SmbShareListComponent } from './smb-share-list.component';
@@ -68,6 +68,7 @@ describe('SmbShareListComponent', () => {
 
   it('should only show CephFS shares on the CephFS route', fakeAsync(() => {
     jest.spyOn(smbService, 'listShares').mockReturnValue(of(MIXED_SHARES));
+    jest.spyOn(smbService, 'getCluster').mockReturnValue(of({} as any));
 
     let rows: any[];
     component.smbShares$.subscribe((value) => (rows = value));
@@ -79,6 +80,58 @@ describe('SmbShareListComponent', () => {
     expect(rows[0].cephfs).toBeDefined();
     expect(rows[0].rgw).toBeUndefined();
   }));
+
+  describe('persistent handles column', () => {
+    const cephfsShare = (id: string, availability?: { persistent_handles: boolean }) =>
+      ({
+        resource_type: 'ceph.smb.share',
+        cluster_id: 'c1',
+        share_id: id,
+        cephfs: { volume: 'vol1', path: '/' },
+        availability
+      }) as any;
+
+    const loadRows = (shares: any[], cluster: any): any[] => {
+      jest.spyOn(smbService, 'listShares').mockReturnValue(of(shares));
+      jest.spyOn(smbService, 'getCluster').mockReturnValue(cluster);
+      let rows: any[];
+      component.smbShares$.subscribe((value) => (rows = value));
+      component.loadSMBShares();
+      return rows;
+    };
+
+    it('should inherit the cluster default and honour explicit overrides', fakeAsync(() => {
+      const rows = loadRows(
+        [
+          cephfsShare('inherit'),
+          cephfsShare('opt-out', { persistent_handles: false }),
+          cephfsShare('opt-in', { persistent_handles: true })
+        ],
+        of({ share_defaults: { availability: { persistent_handles: true } } })
+      );
+      tick();
+      expect(rows.map((r) => r.hasPersistentHandles)).toEqual([true, false, true]);
+    }));
+
+    it('should treat shares as disabled when the cluster default is off', fakeAsync(() => {
+      const rows = loadRows(
+        [cephfsShare('inherit'), cephfsShare('opt-in', { persistent_handles: true })],
+        of({})
+      );
+      tick();
+      expect(rows.map((r) => r.hasPersistentHandles)).toEqual([false, true]);
+    }));
+
+    it('should still list shares when the cluster cannot be loaded', fakeAsync(() => {
+      const rows = loadRows(
+        [cephfsShare('inherit')],
+        throwError(() => new Error('failed'))
+      );
+      tick();
+      expect(rows.length).toBe(1);
+      expect(rows[0].hasPersistentHandles).toBe(false);
+    }));
+  });
 
   it('should link RGW bucket names to the bucket resource page', async () => {
     TestBed.resetTestingModule();

@@ -12,7 +12,18 @@ export interface SMBCluster {
   clustering?: Clustering;
   public_addrs?: PublicAddress[];
   client_compat?: ClientCompat;
+  persistent_handles_durability?: PersistentHandlesDurability;
+  share_defaults?: ShareDefaults;
   count?: number;
+}
+
+export interface ShareAvailability {
+  persistent_handles?: boolean;
+}
+
+export interface ShareDefaults {
+  availability?: ShareAvailability;
+  acl_support?: string;
 }
 
 export const CLIENT_COMPAT = {
@@ -24,6 +35,14 @@ export type ClientCompat = (typeof CLIENT_COMPAT)[keyof typeof CLIENT_COMPAT];
 
 export interface ClusterRequestModel {
   cluster_resource: SMBCluster;
+}
+
+export interface SMBApplyResponse {
+  success: boolean;
+  warnings_summary?: {
+    count: number;
+    recap: string[];
+  };
 }
 
 export interface ShareRequestModel {
@@ -86,6 +105,14 @@ export const AUTHMODE = {
   ActiveDirectory: 'active-directory'
 };
 
+export const PERSISTENT_HANDLES_DURABILITY = {
+  FullOutage: 'full_outage',
+  PartialOutage: 'partial_outage'
+} as const;
+
+export type PersistentHandlesDurability =
+  (typeof PERSISTENT_HANDLES_DURABILITY)[keyof typeof PERSISTENT_HANDLES_DURABILITY];
+
 export const PLACEMENT = {
   host: 'hosts',
   label: 'label'
@@ -112,6 +139,7 @@ export interface SMBShare {
   browseable?: boolean;
   restrict_access?: boolean;
   login_control?: SMBShareLoginControl;
+  availability?: ShareAvailability;
 }
 
 export interface SMBJoinAuth {

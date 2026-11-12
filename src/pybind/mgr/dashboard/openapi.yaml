@@ -27146,6 +27146,10 @@ paths:
                       description: Desired state of the resource, e.g., 'present'
                         or 'removed'
                       type: string
+                    persistent_handles_durability:
+                      description: 'Persistent handles durability policy: ''full_outage''
+                        or ''partial_outage'''
+                      type: string
                     placement:
                       description: Placement configuration for the resource
                       properties:
@@ -27175,6 +27179,22 @@ paths:
                     resource_type:
                       description: ceph.smb.cluster
                       type: string
+                    share_defaults:
+                      description: Default share configuration
+                      properties:
+                        availability:
+                          description: Availability defaults for CephFS shares
+                          properties:
+                            persistent_handles:
+                              description: Enable persistent handles by default for
+                                CephFS shares
+                              type: boolean
+                          required: &id182
+                          - persistent_handles
+                          type: object
+                      required: &id183
+                      - availability
+                      type: object
                     user_group_settings:
                       description: User group settings for user auth mode
                       items:
@@ -27185,13 +27205,13 @@ paths:
                           source_type:
                             description: resource
                             type: string
-                        required: &id182
+                        required: &id184
                         - source_type
                         - ref
                         type: object
                       type: array
                   type: object
-                required: &id183
+                required: &id185
                 - resource_type
                 - cluster_id
                 - auth_mode
@@ -27201,6 +27221,8 @@ paths:
                 - custom_dns
                 - public_addrs
                 - placement
+                - persistent_handles_durability
+                - share_defaults
                 type: array
             application/vnd.ceph.api.v1.0+json:
               schema:
@@ -27244,6 +27266,10 @@ paths:
                       description: Desired state of the resource, e.g., 'present'
                         or 'removed'
                       type: string
+                    persistent_handles_durability:
+                      description: 'Persistent handles durability policy: ''full_outage''
+                        or ''partial_outage'''
+                      type: string
                     placement:
                       description: Placement configuration for the resource
                       properties:
@@ -27270,6 +27296,20 @@ paths:
                     resource_type:
                       description: ceph.smb.cluster
                       type: string
+                    share_defaults:
+                      description: Default share configuration
+                      properties:
+                        availability:
+                          description: Availability defaults for CephFS shares
+                          properties:
+                            persistent_handles:
+                              description: Enable persistent handles by default for
+                                CephFS shares
+                              type: boolean
+                          required: *id182
+                          type: object
+                      required: *id183
+                      type: object
                     user_group_settings:
                       description: User group settings for user auth mode
                       items:
@@ -27280,11 +27320,11 @@ paths:
                           source_type:
                             description: resource
                             type: string
-                        required: *id182
+                        required: *id184
                         type: object
                       type: array
                   type: object
-                required: *id183
+                required: *id185
                 type: array
           description: OK
         '400':
@@ -27357,7 +27397,7 @@ paths:
                                       source_type:
                                         description: resource
                                         type: string
-                                    required: &id184
+                                    required: &id186
                                     - source_type
                                     - ref
                                     type: object
@@ -27365,7 +27405,7 @@ paths:
                                 realm:
                                   description: Domain realm, e.g., 'DOMAIN1.SINK.TEST'
                                   type: string
-                              required: &id185
+                              required: &id187
                               - realm
                               - join_sources
                               type: object
@@ -27373,13 +27413,17 @@ paths:
                               description: Desired state of the resource, e.g., 'present'
                                 or 'removed'
                               type: string
+                            persistent_handles_durability:
+                              description: 'Persistent handles durability policy:
+                                ''full_outage'' or ''partial_outage'''
+                              type: string
                             placement:
                               description: Placement configuration for the resource
                               properties:
                                 count:
                                   description: Number of instances to place
                                   type: integer
-                              required: &id186
+                              required: &id188
                               - count
                               type: object
                             public_addrs:
@@ -27394,7 +27438,7 @@ paths:
                                     description: Defines where the system will assign
                                       the managed IPs.
                                     type: string
-                                required: &id187
+                                required: &id189
                                 - address
                                 - destination
                                 type: object
@@ -27402,6 +27446,22 @@ paths:
                             resource_type:
                               description: ceph.smb.cluster
                               type: string
+                            share_defaults:
+                              description: Default share configuration
+                              properties:
+                                availability:
+                                  description: Availability defaults for CephFS shares
+                                  properties:
+                                    persistent_handles:
+                                      description: Enable persistent handles by default
+                                        for CephFS shares
+                                      type: boolean
+                                  required: &id190
+                                  - persistent_handles
+                                  type: object
+                              required: &id191
+                              - availability
+                              type: object
                             user_group_settings:
                               description: User group settings for user auth mode
                               items:
@@ -27413,12 +27473,12 @@ paths:
                                   source_type:
                                     description: resource
                                     type: string
-                                required: &id188
+                                required: &id192
                                 - source_type
                                 - ref
                                 type: object
                               type: array
-                          required: &id189
+                          required: &id193
                           - resource_type
                           - cluster_id
                           - auth_mode
@@ -27428,6 +27488,8 @@ paths:
                           - custom_dns
                           - public_addrs
                           - placement
+                          - persistent_handles_durability
+                          - share_defaults
                           type: object
                         state:
                           description: The current state of the resource,                        e.g.,
@@ -27436,7 +27498,7 @@ paths:
                         success:
                           description: Indicates if the operation was successful
                           type: boolean
-                      required: &id190
+                      required: &id194
                       - resource
                       - state
                       - success
@@ -27445,7 +27507,7 @@ paths:
                   success:
                     description: Indicates if the overall operation was successful
                     type: boolean
-                required: &id191
+                required: &id195
                 - results
                 - success
                 type: object
@@ -27486,17 +27548,21 @@ paths:
                                       source_type:
                                         description: resource
                                         type: string
-                                    required: *id184
+                                    required: *id186
                                     type: object
                                   type: array
                                 realm:
                                   description: Domain realm, e.g., 'DOMAIN1.SINK.TEST'
                                   type: string
-                              required: *id185
+                              required: *id187
                               type: object
                             intent:
                               description: Desired state of the resource, e.g., 'present'
                                 or 'removed'
+                              type: string
+                            persistent_handles_durability:
+                              description: 'Persistent handles durability policy:
+                                ''full_outage'' or ''partial_outage'''
                               type: string
                             placement:
                               description: Placement configuration for the resource
@@ -27504,7 +27570,7 @@ paths:
                                 count:
                                   description: Number of instances to place
                                   type: integer
-                              required: *id186
+                              required: *id188
                               type: object
                             public_addrs:
                               description: Public Address
@@ -27518,12 +27584,26 @@ paths:
                                     description: Defines where the system will assign
                                       the managed IPs.
                                     type: string
-                                required: *id187
+                                required: *id189
                                 type: object
                               type: array
                             resource_type:
                               description: ceph.smb.cluster
                               type: string
+                            share_defaults:
+                              description: Default share configuration
+                              properties:
+                                availability:
+                                  description: Availability defaults for CephFS shares
+                                  properties:
+                                    persistent_handles:
+                                      description: Enable persistent handles by default
+                                        for CephFS shares
+                                      type: boolean
+                                  required: *id190
+                                  type: object
+                              required: *id191
+                              type: object
                             user_group_settings:
                               description: User group settings for user auth mode
                               items:
@@ -27535,10 +27615,10 @@ paths:
                                   source_type:
                                     description: resource
                                     type: string
-                                required: *id188
+                                required: *id192
                                 type: object
                               type: array
-                          required: *id189
+                          required: *id193
                           type: object
                         state:
                           description: The current state of the resource,                        e.g.,
@@ -27547,13 +27627,13 @@ paths:
                         success:
                           description: Indicates if the operation was successful
                           type: boolean
-                      required: *id190
+                      required: *id194
                       type: object
                     type: array
                   success:
                     description: Indicates if the overall operation was successful
                     type: boolean
-                required: *id191
+                required: *id195
                 type: object
           description: Resource created.
         '202':
@@ -27666,7 +27746,7 @@ paths:
                             source_type:
                               description: resource
                               type: string
-                          required: &id192
+                          required: &id196
                           - source_type
                           - ref
                           type: object
@@ -27674,7 +27754,7 @@ paths:
                       realm:
                         description: Domain realm, e.g., 'DOMAIN1.SINK.TEST'
                         type: string
-                    required: &id193
+                    required: &id197
                     - realm
                     - join_sources
                     type: object
@@ -27682,13 +27762,17 @@ paths:
                     description: Desired state of the resource, e.g., 'present' or
                       'removed'
                     type: string
+                  persistent_handles_durability:
+                    description: 'Persistent handles durability policy: ''full_outage''
+                      or ''partial_outage'''
+                    type: string
                   placement:
                     description: Placement configuration for the resource
                     properties:
                       count:
                         description: Number of instances to place
                         type: integer
-                    required: &id194
+                    required: &id198
                     - count
                     type: object
                   public_addrs:
@@ -27703,7 +27787,7 @@ paths:
                           description: Defines where the system will assign the managed
                             IPs.
                           type: string
-                      required: &id195
+                      required: &id199
                       - address
                       - destination
                       type: object
@@ -27711,6 +27795,22 @@ paths:
                   resource_type:
                     description: ceph.smb.cluster
                     type: string
+                  share_defaults:
+                    description: Default share configuration
+                    properties:
+                      availability:
+                        description: Availability defaults for CephFS shares
+                        properties:
+                          persistent_handles:
+                            description: Enable persistent handles by default for
+                              CephFS shares
+                            type: boolean
+                        required: &id200
+                        - persistent_handles
+                        type: object
+                    required: &id201
+                    - availability
+                    type: object
                   user_group_settings:
                     description: User group settings for user auth mode
                     items:
@@ -27721,12 +27821,12 @@ paths:
                         source_type:
                           description: resource
                           type: string
-                      required: &id196
+                      required: &id202
                       - source_type
                       - ref
                       type: object
                     type: array
-                required: &id197
+                required: &id203
                 - resource_type
                 - cluster_id
                 - auth_mode
@@ -27736,6 +27836,8 @@ paths:
                 - custom_dns
                 - public_addrs
                 - placement
+                - persistent_handles_durability
+                - share_defaults
                 type: object
             application/vnd.ceph.api.v1.0+json:
               schema:
@@ -27766,17 +27868,21 @@ paths:
                             source_type:
                               description: resource
                               type: string
-                          required: *id192
+                          required: *id196
                           type: object
                         type: array
                       realm:
                         description: Domain realm, e.g., 'DOMAIN1.SINK.TEST'
                         type: string
-                    required: *id193
+                    required: *id197
                     type: object
                   intent:
                     description: Desired state of the resource, e.g., 'present' or
                       'removed'
+                    type: string
+                  persistent_handles_durability:
+                    description: 'Persistent handles durability policy: ''full_outage''
+                      or ''partial_outage'''
                     type: string
                   placement:
                     description: Placement configuration for the resource
@@ -27784,7 +27890,7 @@ paths:
                       count:
                         description: Number of instances to place
                         type: integer
-                    required: *id194
+                    required: *id198
                     type: object
                   public_addrs:
                     description: Public Address
@@ -27798,12 +27904,26 @@ paths:
                           description: Defines where the system will assign the managed
                             IPs.
                           type: string
-                      required: *id195
+                      required: *id199
                       type: object
                     type: array
                   resource_type:
                     description: ceph.smb.cluster
                     type: string
+                  share_defaults:
+                    description: Default share configuration
+                    properties:
+                      availability:
+                        description: Availability defaults for CephFS shares
+                        properties:
+                          persistent_handles:
+                            description: Enable persistent handles by default for
+                              CephFS shares
+                            type: boolean
+                        required: *id200
+                        type: object
+                    required: *id201
+                    type: object
                   user_group_settings:
                     description: User group settings for user auth mode
                     items:
@@ -27814,10 +27934,10 @@ paths:
                         source_type:
                           description: resource
                           type: string
-                      required: *id196
+                      required: *id202
                       type: object
                     type: array
-                required: *id197
+                required: *id203
                 type: object
           description: OK
         '400':
@@ -27855,7 +27975,7 @@ paths:
                         username:
                           description: Username for authentication
                           type: string
-                      required: &id198
+                      required: &id204
                       - username
                       - password
                       type: object
@@ -27875,7 +27995,7 @@ paths:
                       description: ceph.smb.join.auth
                       type: string
                   type: object
-                required: &id199
+                required: &id205
                 - resource_type
                 - auth_id
                 - intent
@@ -27895,7 +28015,7 @@ paths:
                         username:
                           description: Username for authentication
                           type: string
-                      required: *id198
+                      required: *id204
                       type: object
                     auth_id:
                       description: Unique identifier for the join auth resource
@@ -27913,7 +28033,7 @@ paths:
                       description: ceph.smb.join.auth
                       type: string
                   type: object
-                required: *id199
+                required: *id205
                 type: array
           description: OK
         '400':
@@ -27966,7 +28086,7 @@ paths:
                                 username:
                                   description: Username for authentication
                                   type: string
-                              required: &id200
+                              required: &id206
                               - username
                               - password
                               type: object
@@ -27985,7 +28105,7 @@ paths:
                             resource_type:
                               description: ceph.smb.join.auth
                               type: string
-                          required: &id201
+                          required: &id207
                           - resource_type
                           - auth_id
                           - intent
@@ -27999,7 +28119,7 @@ paths:
                         success:
                           description: Indicates if the operation was successful
                           type: boolean
-                      required: &id202
+                      required: &id208
                       - resource
                       - state
                       - success
@@ -28008,7 +28128,7 @@ paths:
                   success:
                     description: Indicates if the overall operation was successful
                     type: boolean
-                required: &id203
+                required: &id209
                 - results
                 - success
                 type: object
@@ -28031,7 +28151,7 @@ paths:
                                 username:
                                   description: Username for authentication
                                   type: string
-                              required: *id200
+                              required: *id206
                               type: object
                             auth_id:
                               description: Unique identifier for the join auth resource
@@ -28048,7 +28168,7 @@ paths:
                             resource_type:
                               description: ceph.smb.join.auth
                               type: string
-                          required: *id201
+                          required: *id207
                           type: object
                         state:
                           description: The current state of the resource,                        e.g.,
@@ -28057,13 +28177,13 @@ paths:
                         success:
                           description: Indicates if the operation was successful
                           type: boolean
-                      required: *id202
+                      required: *id208
                       type: object
                     type: array
                   success:
                     description: Indicates if the overall operation was successful
                     type: boolean
-                required: *id203
+                required: *id209
                 type: object
           description: Resource created.
         '202':
@@ -28159,7 +28279,7 @@ paths:
                       username:
                         description: Username for authentication
                         type: string
-                    required: &id204
+                    required: &id210
                     - username
                     - password
                     type: object
@@ -28178,7 +28298,7 @@ paths:
                   resource_type:
                     description: ceph.smb.join.auth
                     type: string
-                required: &id205
+                required: &id211
                 - resource_type
                 - auth_id
                 - intent
@@ -28197,7 +28317,7 @@ paths:
                       username:
                         description: Username for authentication
                         type: string
-                    required: *id204
+                    required: *id210
                     type: object
                   auth_id:
                     description: Unique identifier for the join auth resource
@@ -28214,7 +28334,7 @@ paths:
                   resource_type:
                     description: ceph.smb.join.auth
                     type: string
-                required: *id205
+                required: *id211
                 type: object
           description: OK
         '400':
@@ -28249,6 +28369,16 @@ paths:
             application/json:
               schema:
                 properties:
+                  availability:
+                    description: Availability configuration for the CephFS share
+                    properties:
+                      persistent_handles:
+                        description: Indicates if persistent handles are enabled for
+                          the share
+                        type: boolean
+                    required: &id212
+                    - persistent_handles
+                    type: object
                   browseable:
                     description: Indicates if the share is browseable
                     type: boolean
@@ -28270,7 +28400,7 @@ paths:
                       volume:
                         description: Name of the CephFS file system
                         type: string
-                    required: &id206
+                    required: &id213
                     - volume
                     - path
                     - provider
@@ -28314,7 +28444,7 @@ paths:
                   write_iops_limit:
                     description: 'QoS: max write IOPS (0=disabled)'
                     type: integer
-                required: &id207
+                required: &id214
                 - resource_type
                 - cluster_id
                 - share_id
@@ -28322,6 +28452,7 @@ paths:
                 - name
                 - readonly
                 - browseable
+                - availability
                 - cephfs
                 - read_iops_limit
                 - write_iops_limit
@@ -28333,6 +28464,15 @@ paths:
             application/vnd.ceph.api.v1.0+json:
               schema:
                 properties:
+                  availability:
+                    description: Availability configuration for the CephFS share
+                    properties:
+                      persistent_handles:
+                        description: Indicates if persistent handles are enabled for
+                          the share
+                        type: boolean
+                    required: *id212
+                    type: object
                   browseable:
                     description: Indicates if the share is browseable
                     type: boolean
@@ -28354,7 +28494,7 @@ paths:
                       volume:
                         description: Name of the CephFS file system
                         type: string
-                    required: *id206
+                    required: *id213
                     type: object
                   cluster_id:
                     description: Unique identifier for the cluster
@@ -28393,7 +28533,7 @@ paths:
                   write_iops_limit:
                     description: 'QoS: max write IOPS (0=disabled)'
                     type: integer
-                required: *id207
+                required: *id214
                 type: object
           description: OK
         '400':
@@ -28439,6 +28579,17 @@ paths:
                         resource:
                           description: Resource
                           properties:
+                            availability:
+                              description: Availability configuration for the CephFS
+                                share
+                              properties:
+                                persistent_handles:
+                                  description: Indicates if persistent handles are
+                                    enabled for the share
+                                  type: boolean
+                              required: &id215
+                              - persistent_handles
+                              type: object
                             browseable:
                               description: Indicates if the share is browseable
                               type: boolean
@@ -28461,7 +28612,7 @@ paths:
                                 volume:
                                   description: Name of the CephFS file system
                                   type: string
-                              required: &id208
+                              required: &id216
                               - volume
                               - path
                               - provider
@@ -28505,7 +28656,7 @@ paths:
                             write_iops_limit:
                               description: 'QoS: max write IOPS (0=disabled)'
                               type: integer
-                          required: &id209
+                          required: &id217
                           - resource_type
                           - cluster_id
                           - share_id
@@ -28513,6 +28664,7 @@ paths:
                           - name
                           - readonly
                           - browseable
+                          - availability
                           - cephfs
                           - read_iops_limit
                           - write_iops_limit
@@ -28528,7 +28680,7 @@ paths:
                         success:
                           description: Indicates if the operation was successful
                           type: boolean
-                      required: &id210
+                      required: &id218
                       - resource
                       - state
                       - success
@@ -28537,7 +28689,7 @@ paths:
                   success:
                     description: Indicates if the overall operation was successful
                     type: boolean
-                required: &id211
+                required: &id219
                 - results
                 - success
                 type: object
@@ -28551,6 +28703,16 @@ paths:
                         resource:
                           description: Resource
                           properties:
+                            availability:
+                              description: Availability configuration for the CephFS
+                                share
+                              properties:
+                                persistent_handles:
+                                  description: Indicates if persistent handles are
+                                    enabled for the share
+                                  type: boolean
+                              required: *id215
+                              type: object
                             browseable:
                               description: Indicates if the share is browseable
                               type: boolean
@@ -28573,7 +28735,7 @@ paths:
                                 volume:
                                   description: Name of the CephFS file system
                                   type: string
-                              required: *id208
+                              required: *id216
                               type: object
                             cluster_id:
                               description: Unique identifier for the cluster
@@ -28612,7 +28774,7 @@ paths:
                             write_iops_limit:
                               description: 'QoS: max write IOPS (0=disabled)'
                               type: integer
-                          required: *id209
+                          required: *id217
                           type: object
                         state:
                           description: The current state of the resource,                        e.g.,
@@ -28621,13 +28783,13 @@ paths:
                         success:
                           description: Indicates if the operation was successful
                           type: boolean
-                      required: *id210
+                      required: *id218
                       type: object
                     type: array
                   success:
                     description: Indicates if the overall operation was successful
                     type: boolean
-                required: *id211
+                required: *id219
                 type: object
           description: Resource created.
         '202':
@@ -28799,6 +28961,16 @@ paths:
             application/json:
               schema:
                 properties:
+                  availability:
+                    description: Availability configuration for the CephFS share
+                    properties:
+                      persistent_handles:
+                        description: Indicates if persistent handles are enabled for
+                          the share
+                        type: boolean
+                    required: &id220
+                    - persistent_handles
+                    type: object
                   browseable:
                     description: Indicates if the share is browseable
                     type: boolean
@@ -28820,7 +28992,7 @@ paths:
                       volume:
                         description: Name of the CephFS file system
                         type: string
-                    required: &id212
+                    required: &id221
                     - volume
                     - path
                     - provider
@@ -28864,7 +29036,7 @@ paths:
                   write_iops_limit:
                     description: 'QoS: max write IOPS (0=disabled)'
                     type: integer
-                required: &id213
+                required: &id222
                 - resource_type
                 - cluster_id
                 - share_id
@@ -28872,6 +29044,7 @@ paths:
                 - name
                 - readonly
                 - browseable
+                - availability
                 - cephfs
                 - read_iops_limit
                 - write_iops_limit
@@ -28883,6 +29056,15 @@ paths:
             application/vnd.ceph.api.v1.0+json:
               schema:
                 properties:
+                  availability:
+                    description: Availability configuration for the CephFS share
+                    properties:
+                      persistent_handles:
+                        description: Indicates if persistent handles are enabled for
+                          the share
+                        type: boolean
+                    required: *id220
+                    type: object
                   browseable:
                     description: Indicates if the share is browseable
                     type: boolean
@@ -28904,7 +29086,7 @@ paths:
                       volume:
                         description: Name of the CephFS file system
                         type: string
-                    required: *id212
+                    required: *id221
                     type: object
                   cluster_id:
                     description: Unique identifier for the cluster
@@ -28943,7 +29125,7 @@ paths:
                   write_iops_limit:
                     description: 'QoS: max write IOPS (0=disabled)'
                     type: integer
-                required: *id213
+                required: *id222
                 type: object
           description: OK
         '400':
@@ -28997,7 +29179,7 @@ paths:
                               name:
                                 description: The name of the group
                                 type: string
-                            required: &id214
+                            required: &id223
                             - name
                             type: object
                           type: array
@@ -29012,17 +29194,17 @@ paths:
                               password:
                                 description: The password for the user
                                 type: string
-                            required: &id215
+                            required: &id224
                             - name
                             - password
                             type: object
                           type: array
-                      required: &id216
+                      required: &id225
                       - users
                       - groups
                       type: object
                   type: object
-                required: &id217
+                required: &id226
                 - resource_type
                 - users_groups_id
                 - intent
@@ -29058,7 +29240,7 @@ paths:
                               name:
                                 description: The name of the group
                                 type: string
-                            required: *id214
+                            required: *id223
                             type: object
                           type: array
                         users:
@@ -29072,13 +29254,13 @@ paths:
                               password:
                                 description: The password for the user
                                 type: string
-                            required: *id215
+                            required: *id224
                             type: object
                           type: array
-                      required: *id216
+                      required: *id225
                       type: object
                   type: object
-                required: *id217
+                required: *id226
                 type: array
           description: OK
         '400':
@@ -29138,7 +29320,7 @@ paths:
                                           username:
                                             description: Username for authentication
                                             type: string
-                                        required: &id218
+                                        required: &id227
                                         - username
                                         - password
                                         type: object
@@ -29159,7 +29341,7 @@ paths:
                                       resource_type:
                                         description: ceph.smb.join.auth
                                         type: string
-                                    required: &id219
+                                    required: &id228
                                     - resource_type
                                     - auth_id
                                     - intent
@@ -29173,7 +29355,7 @@ paths:
                                   success:
                                     description: Indicates if the operation was successful
                                     type: boolean
-                                required: &id220
+                                required: &id229
                                 - resource
                                 - state
                                 - success
@@ -29183,7 +29365,7 @@ paths:
                               description: Indicates if the overall operation was
                                 successful
                               type: boolean
-                          required: &id221
+                          required: &id230
                           - results
                           - success
                           type: object
@@ -29194,7 +29376,7 @@ paths:
                         success:
                           description: Indicates if the operation was successful
                           type: boolean
-                      required: &id222
+                      required: &id231
                       - resource
                       - state
                       - success
@@ -29203,7 +29385,7 @@ paths:
                   success:
                     description: Indicates if the overall operation was successful
                     type: boolean
-                required: &id223
+                required: &id232
                 - results
                 - success
                 type: object
@@ -29233,7 +29415,7 @@ paths:
                                           username:
                                             description: Username for authentication
                                             type: string
-                                        required: *id218
+                                        required: *id227
                                         type: object
                                       auth_id:
                                         description: Unique identifier for the join
@@ -29252,7 +29434,7 @@ paths:
                                       resource_type:
                                         description: ceph.smb.join.auth
                                         type: string
-                                    required: *id219
+                                    required: *id228
                                     type: object
                                   state:
                                     description: The current state of the resource,                        e.g.,
@@ -29261,14 +29443,14 @@ paths:
                                   success:
                                     description: Indicates if the operation was successful
                                     type: boolean
-                                required: *id220
+                                required: *id229
                                 type: object
                               type: array
                             success:
                               description: Indicates if the overall operation was
                                 successful
                               type: boolean
-                          required: *id221
+                          required: *id230
                           type: object
                         state:
                           description: The current state of the resource,                        e.g.,
@@ -29277,13 +29459,13 @@ paths:
                         success:
                           description: Indicates if the operation was successful
                           type: boolean
-                      required: *id222
+                      required: *id231
                       type: object
                     type: array
                   success:
                     description: Indicates if the overall operation was successful
                     type: boolean
-                required: *id223
+                required: *id232
                 type: object
           description: Resource created.
         '202':
@@ -29395,7 +29577,7 @@ paths:
                             name:
                               description: The name of the group
                               type: string
-                          required: &id224
+                          required: &id233
                           - name
                           type: object
                         type: array
@@ -29410,16 +29592,16 @@ paths:
                             password:
                               description: The password for the user
                               type: string
-                          required: &id225
+                          required: &id234
                           - name
                           - password
                           type: object
                         type: array
-                    required: &id226
+                    required: &id235
                     - users
                     - groups
                     type: object
-                required: &id227
+                required: &id236
                 - resource_type
                 - users_groups_id
                 - intent
@@ -29454,7 +29636,7 @@ paths:
                             name:
                               description: The name of the group
                               type: string
-                          required: *id224
+                          required: *id233
                           type: object
                         type: array
                       users:
@@ -29468,12 +29650,12 @@ paths:
                             password:
                               description: The password for the user
                               type: string
-                          required: *id225
+                          required: *id234
                           type: object
                         type: array
-                    required: *id226
+                    required: *id235
                     type: object
-                required: *id227
+                required: *id236
                 type: object
           description: OK
         '400':
@@ -29526,7 +29708,7 @@ paths:
                             pool:
                               description: ''
                               type: integer
-                          required: &id228
+                          required: &id237
                           - pool
                           type: object
                         name:
@@ -29541,7 +29723,7 @@ paths:
                         success:
                           description: ''
                           type: boolean
-                      required: &id229
+                      required: &id238
                       - name
                       - metadata
                       - begin_time
@@ -29574,14 +29756,14 @@ paths:
                       warnings:
                         description: ''
                         type: integer
-                    required: &id230
+                    required: &id239
                     - warnings
                     - errors
                     type: object
                   version:
                     description: ''
                     type: string
-                required: &id231
+                required: &id240
                 - health_status
                 - mgr_id
                 - mgr_host
@@ -29621,7 +29803,7 @@ paths:
                             pool:
                               description: ''
                               type: integer
-                          required: *id228
+                          required: *id237
                           type: object
                         name:
                           description: ''
@@ -29635,7 +29817,7 @@ paths:
                         success:
                           description: ''
                           type: boolean
-                      required: *id229
+                      required: *id238
                       type: object
                     type: array
                   have_mon_connection:
@@ -29659,12 +29841,12 @@ paths:
                       warnings:
                         description: ''
                         type: integer
-                    required: *id230
+                    required: *id239
                     type: object
                   version:
                     description: ''
                     type: string
-                required: *id231
+                required: *id240
                 type: object
           description: OK
         '400':
@@ -29721,7 +29903,7 @@ paths:
                             pool:
                               description: ''
                               type: integer
-                          required: &id232
+                          required: &id241
                           - pool
                           type: object
                         name:
@@ -29736,7 +29918,7 @@ paths:
                         success:
                           description: ''
                           type: boolean
-                      required: &id233
+                      required: &id242
                       - name
                       - metadata
                       - begin_time
@@ -29748,7 +29930,7 @@ paths:
                       - exception
                       type: object
                     type: array
-                required: &id234
+                required: &id243
                 - executing_tasks
                 - finished_tasks
                 type: object
@@ -29780,7 +29962,7 @@ paths:
                             pool:
                               description: ''
                               type: integer
-                          required: *id232
+                          required: *id241
                           type: object
                         name:
                           description: finished tasks name
@@ -29794,10 +29976,10 @@ paths:
                         success:
                           description: ''
                           type: boolean
-                      required: *id233
+                      required: *id242
                       type: object
                     type: array
-                required: *id234
+                required: *id243
                 type: object
           description: OK
         '400':
@@ -29892,7 +30074,7 @@ paths:
                           mode:
                             description: ''
                             type: string
-                        required: &id235
+                        required: &id244
                         - active
                         - mode
                         type: object
@@ -29919,7 +30101,7 @@ paths:
                             items:
                               type: string
                             type: array
-                        required: &id236
+                        required: &id245
                         - cluster_changed
                         - active_changed
                         type: object
@@ -29940,7 +30122,7 @@ paths:
                               straw2:
                                 description: ''
                                 type: integer
-                            required: &id237
+                            required: &id246
                             - straw2
                             type: object
                           bucket_sizes:
@@ -29952,7 +30134,7 @@ paths:
                               '3':
                                 description: ''
                                 type: integer
-                            required: &id238
+                            required: &id247
                             - '1'
                             - '3'
                             type: object
@@ -29965,7 +30147,7 @@ paths:
                               '11':
                                 description: ''
                                 type: integer
-                            required: &id239
+                            required: &id248
                             - '1'
                             - '11'
                             type: object
@@ -30055,7 +30237,7 @@ paths:
                               straw_calc_version:
                                 description: ''
                                 type: integer
-                            required: &id240
+                            required: &id249
                             - choose_local_tries
                             - choose_local_fallback_tries
                             - choose_total_tries
@@ -30077,7 +30259,7 @@ paths:
                             - require_feature_tunables5
                             - has_v5_rules
                             type: object
-                        required: &id241
+                        required: &id250
                         - num_devices
                         - num_types
                         - num_buckets
@@ -30105,7 +30287,7 @@ paths:
                               ever_enabled_multiple:
                                 description: ''
                                 type: boolean
-                            required: &id242
+                            required: &id251
                             - enable_multiple
                             - ever_enabled_multiple
                             type: object
@@ -30120,7 +30302,7 @@ paths:
                           total_num_mds:
                             description: ''
                             type: integer
-                        required: &id243
+                        required: &id252
                         - count
                         - feature_flags
                         - num_standby_mds
@@ -30145,7 +30327,7 @@ paths:
                           num_with_osd:
                             description: ''
                             type: integer
-                        required: &id244
+                        required: &id253
                         - num
                         - num_with_mon
                         - num_with_mds
@@ -30162,91 +30344,6 @@ paths:
                         description: ''
                         properties:
                           mon:
-                            description: ''
-                            properties:
-                              arch:
-                                description: ''
-                                properties:
-                                  x86_64:
-                                    description: ''
-                                    type: integer
-                                required: &id245
-                                - x86_64
-                                type: object
-                              ceph_version:
-                                description: ''
-                                properties:
-                                  ceph version 16.0.0-3151-gf202994fcf:
-                                    description: ''
-                                    type: integer
-                                required: &id246
-                                - ceph version 16.0.0-3151-gf202994fcf
-                                type: object
-                              cpu:
-                                description: ''
-                                properties:
-                                  Intel(R) Core(TM) i7-8665U CPU @ 1.90GHz:
-                                    description: ''
-                                    type: integer
-                                required: &id247
-                                - Intel(R) Core(TM) i7-8665U CPU @ 1.90GHz
-                                type: object
-                              distro:
-                                description: ''
-                                properties:
-                                  centos:
-                                    description: ''
-                                    type: integer
-                                required: &id248
-                                - centos
-                                type: object
-                              distro_description:
-                                description: ''
-                                properties:
-                                  CentOS Linux 8 (Core):
-                                    description: ''
-                                    type: integer
-                                required: &id249
-                                - CentOS Linux 8 (Core)
-                                type: object
-                              kernel_description:
-                                description: ''
-                                properties:
-                                  '#1 SMP Wed Jul 1 19:53:01 UTC 2020':
-                                    description: ''
-                                    type: integer
-                                required: &id250
-                                - '#1 SMP Wed Jul 1 19:53:01 UTC 2020'
-                                type: object
-                              kernel_version:
-                                description: ''
-                                properties:
-                                  5.7.7-200.fc32.x86_64:
-                                    description: ''
-                                    type: integer
-                                required: &id251
-                                - 5.7.7-200.fc32.x86_64
-                                type: object
-                              os:
-                                description: ''
-                                properties:
-                                  Linux:
-                                    description: ''
-                                    type: integer
-                                required: &id252
-                                - Linux
-                                type: object
-                            required: &id253
-                            - arch
-                            - ceph_version
-                            - os
-                            - cpu
-                            - kernel_description
-                            - kernel_version
-                            - distro_description
-                            - distro
-                            type: object
-                          osd:
                             description: ''
                             properties:
                               arch:
@@ -30321,13 +30418,98 @@ paths:
                                 required: &id261
                                 - Linux
                                 type: object
+                            required: &id262
+                            - arch
+                            - ceph_version
+                            - os
+                            - cpu
+                            - kernel_description
+                            - kernel_version
+                            - distro_description
+                            - distro
+                            type: object
+                          osd:
+                            description: ''
+                            properties:
+                              arch:
+                                description: ''
+                                properties:
+                                  x86_64:
+                                    description: ''
+                                    type: integer
+                                required: &id263
+                                - x86_64
+                                type: object
+                              ceph_version:
+                                description: ''
+                                properties:
+                                  ceph version 16.0.0-3151-gf202994fcf:
+                                    description: ''
+                                    type: integer
+                                required: &id264
+                                - ceph version 16.0.0-3151-gf202994fcf
+                                type: object
+                              cpu:
+                                description: ''
+                                properties:
+                                  Intel(R) Core(TM) i7-8665U CPU @ 1.90GHz:
+                                    description: ''
+                                    type: integer
+                                required: &id265
+                                - Intel(R) Core(TM) i7-8665U CPU @ 1.90GHz
+                                type: object
+                              distro:
+                                description: ''
+                                properties:
+                                  centos:
+                                    description: ''
+                                    type: integer
+                                required: &id266
+                                - centos
+                                type: object
+                              distro_description:
+                                description: ''
+                                properties:
+                                  CentOS Linux 8 (Core):
+                                    description: ''
+                                    type: integer
+                                required: &id267
+                                - CentOS Linux 8 (Core)
+                                type: object
+                              kernel_description:
+                                description: ''
+                                properties:
+                                  '#1 SMP Wed Jul 1 19:53:01 UTC 2020':
+                                    description: ''
+                                    type: integer
+                                required: &id268
+                                - '#1 SMP Wed Jul 1 19:53:01 UTC 2020'
+                                type: object
+                              kernel_version:
+                                description: ''
+                                properties:
+                                  5.7.7-200.fc32.x86_64:
+                                    description: ''
+                                    type: integer
+                                required: &id269
+                                - 5.7.7-200.fc32.x86_64
+                                type: object
+                              os:
+                                description: ''
+                                properties:
+                                  Linux:
+                                    description: ''
+                                    type: integer
+                                required: &id270
+                                - Linux
+                                type: object
                               osd_objectstore:
                                 description: ''
                                 properties:
                                   bluestore:
                                     description: ''
                                     type: integer
-                                required: &id262
+                                required: &id271
                                 - bluestore
                                 type: object
                               rotational:
@@ -30336,10 +30518,10 @@ paths:
                                   '1':
                                     description: ''
                                     type: integer
-                                required: &id263
+                                required: &id272
                                 - '1'
                                 type: object
-                            required: &id264
+                            required: &id273
                             - osd_objectstore
                             - rotational
                             - arch
@@ -30351,7 +30533,7 @@ paths:
                             - distro_description
                             - distro
                             type: object
-                        required: &id265
+                        required: &id274
                         - osd
                         - mon
                         type: object
@@ -30374,7 +30556,7 @@ paths:
                                 items:
                                   type: string
                                 type: array
-                            required: &id266
+                            required: &id275
                             - persistent
                             - optional
                             type: object
@@ -30393,7 +30575,7 @@ paths:
                           v2_addr_mons:
                             description: ''
                             type: integer
-                        required: &id267
+                        required: &id276
                         - count
                         - features
                         - min_mon_release
@@ -30417,7 +30599,7 @@ paths:
                           require_osd_release:
                             description: ''
                             type: string
-                        required: &id268
+                        required: &id277
                         - count
                         - require_osd_release
                         - require_min_compat_client
@@ -30460,7 +30642,7 @@ paths:
                             type:
                               description: ''
                               type: string
-                          required: &id269
+                          required: &id278
                           - pool
                           - type
                           - pg_num
@@ -30490,7 +30672,7 @@ paths:
                           num_pools:
                             description: ''
                             type: integer
-                        required: &id270
+                        required: &id279
                         - num_pools
                         - num_images_by_pool
                         - mirroring_by_pool
@@ -30521,7 +30703,7 @@ paths:
                           zones:
                             description: ''
                             type: integer
-                        required: &id271
+                        required: &id280
                         - count
                         - zones
                         - zonegroups
@@ -30533,7 +30715,7 @@ paths:
                           rgw:
                             description: ''
                             type: integer
-                        required: &id272
+                        required: &id281
                         - rgw
                         type: object
                       usage:
@@ -30554,14 +30736,14 @@ paths:
                           total_used_bytes:
                             description: ''
                             type: integer
-                        required: &id273
+                        required: &id282
                         - pools
                         - pg_num
                         - total_used_bytes
                         - total_bytes
                         - total_avail_bytes
                         type: object
-                    required: &id274
+                    required: &id283
                     - leaderboard
                     - report_version
                     - report_timestamp
@@ -30585,7 +30767,7 @@ paths:
                     - balancer
                     - crashes
                     type: object
-                required: &id275
+                required: &id284
                 - report
                 - device_report
                 type: object
@@ -30607,7 +30789,7 @@ paths:
                           mode:
                             description: ''
                             type: string
-                        required: *id235
+                        required: *id244
                         type: object
                       channels:
                         description: ''
@@ -30632,7 +30814,7 @@ paths:
                             items:
                               type: string
                             type: array
-                        required: *id236
+                        required: *id245
                         type: object
                       crashes:
                         description: ''
@@ -30651,7 +30833,7 @@ paths:
                               straw2:
                                 description: ''
                                 type: integer
-                            required: *id237
+                            required: *id246
                             type: object
                           bucket_sizes:
                             description: ''
@@ -30662,7 +30844,7 @@ paths:
                               '3':
                                 description: ''
                                 type: integer
-                            required: *id238
+                            required: *id247
                             type: object
                           bucket_types:
                             description: ''
@@ -30673,7 +30855,7 @@ paths:
                               '11':
                                 description: ''
                                 type: integer
-                            required: *id239
+                            required: *id248
                             type: object
                           compat_weight_set:
                             description: ''
@@ -30761,9 +30943,9 @@ paths:
                               straw_calc_version:
                                 description: ''
                                 type: integer
-                            required: *id240
+                            required: *id249
                             type: object
-                        required: *id241
+                        required: *id250
                         type: object
                       fs:
                         description: ''
@@ -30780,7 +30962,7 @@ paths:
                               ever_enabled_multiple:
                                 description: ''
                                 type: boolean
-                            required: *id242
+                            required: *id251
                             type: object
                           filesystems:
                             description: ''
@@ -30793,7 +30975,7 @@ paths:
                           total_num_mds:
                             description: ''
                             type: integer
-                        required: *id243
+                        required: *id252
                         type: object
                       hosts:
                         description: ''
@@ -30813,7 +30995,7 @@ paths:
                           num_with_osd:
                             description: ''
                             type: integer
-                        required: *id244
+                        required: *id253
                         type: object
                       leaderboard:
                         description: ''
@@ -30825,75 +31007,6 @@ paths:
                         description: ''
                         properties:
                           mon:
-                            description: ''
-                            properties:
-                              arch:
-                                description: ''
-                                properties:
-                                  x86_64:
-                                    description: ''
-                                    type: integer
-                                required: *id245
-                                type: object
-                              ceph_version:
-                                description: ''
-                                properties:
-                                  ceph version 16.0.0-3151-gf202994fcf:
-                                    description: ''
-                                    type: integer
-                                required: *id246
-                                type: object
-                              cpu:
-                                description: ''
-                                properties:
-                                  Intel(R) Core(TM) i7-8665U CPU @ 1.90GHz:
-                                    description: ''
-                                    type: integer
-                                required: *id247
-                                type: object
-                              distro:
-                                description: ''
-                                properties:
-                                  centos:
-                                    description: ''
-                                    type: integer
-                                required: *id248
-                                type: object
-                              distro_description:
-                                description: ''
-                                properties:
-                                  CentOS Linux 8 (Core):
-                                    description: ''
-                                    type: integer
-                                required: *id249
-                                type: object
-                              kernel_description:
-                                description: ''
-                                properties:
-                                  '#1 SMP Wed Jul 1 19:53:01 UTC 2020':
-                                    description: ''
-                                    type: integer
-                                required: *id250
-                                type: object
-                              kernel_version:
-                                description: ''
-                                properties:
-                                  5.7.7-200.fc32.x86_64:
-                                    description: ''
-                                    type: integer
-                                required: *id251
-                                type: object
-                              os:
-                                description: ''
-                                properties:
-                                  Linux:
-                                    description: ''
-                                    type: integer
-                                required: *id252
-                                type: object
-                            required: *id253
-                            type: object
-                          osd:
                             description: ''
                             properties:
                               arch:
@@ -30960,13 +31073,82 @@ paths:
                                     type: integer
                                 required: *id261
                                 type: object
+                            required: *id262
+                            type: object
+                          osd:
+                            description: ''
+                            properties:
+                              arch:
+                                description: ''
+                                properties:
+                                  x86_64:
+                                    description: ''
+                                    type: integer
+                                required: *id263
+                                type: object
+                              ceph_version:
+                                description: ''
+                                properties:
+                                  ceph version 16.0.0-3151-gf202994fcf:
+                                    description: ''
+                                    type: integer
+                                required: *id264
+                                type: object
+                              cpu:
+                                description: ''
+                                properties:
+                                  Intel(R) Core(TM) i7-8665U CPU @ 1.90GHz:
+                                    description: ''
+                                    type: integer
+                                required: *id265
+                                type: object
+                              distro:
+                                description: ''
+                                properties:
+                                  centos:
+                                    description: ''
+                                    type: integer
+                                required: *id266
+                                type: object
+                              distro_description:
+                                description: ''
+                                properties:
+                                  CentOS Linux 8 (Core):
+                                    description: ''
+                                    type: integer
+                                required: *id267
+                                type: object
+                              kernel_description:
+                                description: ''
+                                properties:
+                                  '#1 SMP Wed Jul 1 19:53:01 UTC 2020':
+                                    description: ''
+                                    type: integer
+                                required: *id268
+                                type: object
+                              kernel_version:
+                                description: ''
+                                properties:
+                                  5.7.7-200.fc32.x86_64:
+                                    description: ''
+                                    type: integer
+                                required: *id269
+                                type: object
+                              os:
+                                description: ''
+                                properties:
+                                  Linux:
+                                    description: ''
+                                    type: integer
+                                required: *id270
+                                type: object
                               osd_objectstore:
                                 description: ''
                                 properties:
                                   bluestore:
                                     description: ''
                                     type: integer
-                                required: *id262
+                                required: *id271
                                 type: object
                               rotational:
                                 description: ''
@@ -30974,11 +31156,11 @@ paths:
                                   '1':
                                     description: ''
                                     type: integer
-                                required: *id263
+                                required: *id272
                                 type: object
-                            required: *id264
+                            required: *id273
                             type: object
-                        required: *id265
+                        required: *id274
                         type: object
                       mon:
                         description: ''
@@ -30999,7 +31181,7 @@ paths:
                                 items:
                                   type: string
                                 type: array
-                            required: *id266
+                            required: *id275
                             type: object
                           ipv4_addr_mons:
                             description: ''
@@ -31016,7 +31198,7 @@ paths:
                           v2_addr_mons:
                             description: ''
                             type: integer
-                        required: *id267
+                        required: *id276
                         type: object
                       osd:
                         description: ''
@@ -31033,7 +31215,7 @@ paths:
                           require_osd_release:
                             description: ''
                             type: string
-                        required: *id268
+                        required: *id277
                         type: object
                       pools:
                         description: ''
@@ -31072,7 +31254,7 @@ paths:
                             type:
                               description: ''
                               type: string
-                          required: *id269
+                          required: *id278
                           type: object
                         type: array
                       rbd:
@@ -31091,7 +31273,7 @@ paths:
                           num_pools:
                             description: ''
                             type: integer
-                        required: *id270
+                        required: *id279
                         type: object
                       report_id:
                         description: ''
@@ -31119,7 +31301,7 @@ paths:
                           zones:
                             description: ''
                             type: integer
-                        required: *id271
+                        required: *id280
                         type: object
                       services:
                         description: ''
@@ -31127,7 +31309,7 @@ paths:
                           rgw:
                             description: ''
                             type: integer
-                        required: *id272
+                        required: *id281
                         type: object
                       usage:
                         description: ''
@@ -31147,11 +31329,11 @@ paths:
                           total_used_bytes:
                             description: ''
                             type: integer
-                        required: *id273
+                        required: *id282
                         type: object
-                    required: *id274
+                    required: *id283
                     type: object
-                required: *id275
+                required: *id284
                 type: object
           description: OK
         '400':
@@ -31203,7 +31385,7 @@ paths:
                   username:
                     description: Username of the user
                     type: string
-                required: &id276
+                required: &id285
                 - username
                 - roles
                 - name
@@ -31242,7 +31424,7 @@ paths:
                   username:
                     description: Username of the user
                     type: string
-                required: *id276
+                required: *id285
                 type: object
           description: OK
         '400':
