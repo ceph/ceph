@@ -24,6 +24,7 @@
 #include "common/Thread.h"
 #include "include/stringify.h"
 #include "osd/ReplicatedBackend.h"
+#include "messages/MOSDPGPush.h"
 
 #include <iostream> // for std::cout
 #include <sstream>
@@ -3088,6 +3089,74 @@ TEST(pg_history_t, merge_never_touched_peer_does_not_open_false_rebuild_span)
       << "merging a blank peer must not move last_rebuild_active_start past "
          "rebuild_span_reported and create a false open span";
   EXPECT_EQ(later_report, local.rebuild_span_reported);
+}
+
+TEST(MOSDPGPush, data_segment)
+{
+  const std::vector<unsigned> lens = {5000, 100, 0, 128 * 1024};
+  std::vector<std::string> expected;
+  auto m = ceph::make_message<MOSDPGPush>();
+  for (unsigned len : lens) {
+    expected.emplace_back(len, (char)('a' + expected.size()));
+    PushOp p;
+    p.data.append(expected.back());
+    m->pushes.push_back(std::move(p));
+  }
+  // decode as a receiver does, with the data segment in page-aligned memory
+  auto decoded = [](const MOSDPGPush &m) {
+    auto r = ceph::make_message<MOSDPGPush>();
+    r->set_header(m.get_header());
+    ceph::buffer::list payload = m.get_payload();
+    r->set_payload(payload);
+    ceph::buffer::list data;
+    if (unsigned len = m.get_data().length()) {
+      ceph::buffer::ptr seg(ceph::buffer::create_page_aligned(len));
+      m.get_data().cbegin().copy(len, seg.c_str());
+      data.append(seg);
+    }
+    r->set_data(data);
+    r->decode_payload();
+    return r;
+  };
+  auto check = [&](const MOSDPGPush &r) {
+    ASSERT_EQ(lens.size(), r.pushes.size());
+    for (size_t i = 0; i < lens.size(); ++i) {
+      EXPECT_EQ(expected[i], r.pushes[i].data.to_str());
+    }
+  };
+
+  m->encode(CEPH_FEATURES_ALL, 0);
+  EXPECT_EQ(5, (int)m->get_header().version);
+  EXPECT_EQ(5, (int)m->get_header().compat_version);
+  // the small pushes are not padded, the 128 KiB one starts at 8 KiB
+  EXPECT_EQ(8192u + 128 * 1024, m->get_data().length());
+  auto r = decoded(*m);
+  check(*r);
+  EXPECT_TRUE(r->pushes[3].data.is_aligned(4096));
+
+  // the messenger encodes a message again after a reconnect
+  m->clear_payload();
+  m->encode(CEPH_FEATURES_ALL, 0);
+  EXPECT_EQ(8192u + 128 * 1024, m->get_data().length());
+  check(*decoded(*m));
+
+  // a data segment shorter than the pushes is refused
+  auto bad = ceph::make_message<MOSDPGPush>();
+  bad->set_header(m->get_header());
+  ceph::buffer::list payload = m->get_payload();
+  bad->set_payload(payload);
+  ceph::buffer::list shorter;
+  shorter.substr_of(m->get_data(), 0, m->get_data().length() - 1);
+  bad->set_data(shorter);
+  EXPECT_THROW(bad->decode_payload(), ceph::buffer::malformed_input);
+
+  // a peer without SERVER_VAMPIRE gets v4, with the data in the payload
+  m->clear_payload();
+  m->encode(CEPH_FEATURES_ALL & ~CEPH_FEATURE_SERVER_VAMPIRE, 0);
+  EXPECT_EQ(4, (int)m->get_header().version);
+  EXPECT_EQ(2, (int)m->get_header().compat_version);
+  EXPECT_EQ(0u, m->get_data().length());
+  check(*decoded(*m));
 }
 
 /*
