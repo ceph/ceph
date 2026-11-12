@@ -6,15 +6,28 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
-#include <expected>
 #include <chrono>
 #include <optional>
 #include <string_view>
 #include <utility>
+#include <version>
+
+// libc++ before 18 has a broken std::expected, see
+// https://github.com/llvm/llvm-project/issues/68552
+#if defined(_LIBCPP_VERSION) && _LIBCPP_VERSION < 180000
+#include "include/expected.hpp"
+using tl::expected;
+using tl::unexpected;
+#else // !(defined(_LIBCPP_VERSION) && _LIBCPP_VERSION < 180000)
+#include <expected>
+using std::expected;
+using std::unexpected;
+#endif // !(defined(_LIBCPP_VERSION) && _LIBCPP_VERSION < 180000)
 
 #include "common/ceph_time.h"
 
 #include "common/strtol.h"
+
 
 namespace ceph {
 namespace chrono = std::chrono;
@@ -69,7 +82,7 @@ auto consume_next_field(std::string_view& remaining, iso_8601_mode mode,
     // std::optional<std::optional<Field>>.
     //
     // This seemed marginally clearer.
-    -> std::expected<std::optional<Field>, fail>
+    -> expected<std::optional<Field>, fail>
 {
   if (remaining.empty()) {
     return std::nullopt;
@@ -77,14 +90,14 @@ auto consume_next_field(std::string_view& remaining, iso_8601_mode mode,
 
   if (mode == basic) {
     if (remaining.front() == separator) {
-      return std::unexpected(fail{});
+      return unexpected(fail{});
     }
 
     // So we don't try to process the timezone marker
     if (digits.contains(remaining.front())) {
       auto f = consume_bounded<Field>(remaining, 2, validate);
       if (!f) {
-        return std::unexpected(fail{});
+        return unexpected(fail{});
       } else {
         return f;
       }
@@ -98,7 +111,7 @@ auto consume_next_field(std::string_view& remaining, iso_8601_mode mode,
       remaining.remove_prefix(1);
       auto f = consume_bounded<Field>(remaining, 2, validate);
       if (!f) {
-        return std::unexpected(fail{});
+        return unexpected(fail{});
       } else {
         return f;
       }
