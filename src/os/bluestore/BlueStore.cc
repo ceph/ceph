@@ -3721,13 +3721,6 @@ int BlueStore::_init_alloc()
     dout(5) << __func__ << "::num_entries=" << num << " free_size=" << bytes << " alloc_size=" <<
       alloc->get_capacity() - bytes << " time=" << duration << " seconds" << dendl;
   } else {
-    // This is the new path reading the allocation map from a flat bluefs file and feeding them into the allocator
-
-    if (!cct->_conf->bluestore_allocation_from_file) {
-      derr << __func__ << "::NCB::cct->_conf->bluestore_allocation_from_file is set to FALSE with an active NULL-FM" << dendl;
-      derr << __func__ << "::NCB::Please change the value of bluestore_allocation_from_file to TRUE in your ceph.conf file" << dendl;
-      return -ENOTSUP; // Operation not supported
-    }
     if (restore_allocator(alloc, &num, &bytes) == 0) {
       dout(5) << __func__ << "::NCB::restore_allocator() completed successfully alloc=" << alloc << dendl;
 
@@ -18141,12 +18134,6 @@ int BlueStore::db_cleanup(int ret)
 // convert back the system from null-allocator to using rocksdb to store allocation
 int BlueStore::push_allocation_to_rocksdb()
 {
-  if (cct->_conf->bluestore_allocation_from_file) {
-    derr << "cct->_conf->bluestore_allocation_from_file must be cleared first" << dendl;
-    derr << "please change default to false in ceph.conf file>" << dendl;
-    return -1;
-  }
-
   dout(5) << "calling open_db_and_around() in read/write mode" << dendl;
   int ret = _open_db_and_around(false);
   if (ret < 0) {
@@ -18163,6 +18150,7 @@ int BlueStore::push_allocation_to_rocksdb()
   if (!allocator) {
     return db_cleanup(-1);
   }
+  _main_bdev_label_remove(allocator.get());
 
   // remove all objects of PREFIX_ALLOC_BITMAP from RocksDB to guarantee a clean start
   clear_allocation_objects_from_rocksdb();
