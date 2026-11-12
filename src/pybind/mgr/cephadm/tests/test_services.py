@@ -1719,7 +1719,7 @@ class TestMonitoring:
                  basicAuthUser: admin
                  jsonData:
                     graphiteVersion: "1.1"
-                    tlsAuth: false
+                    tlsAuth: true
                     tlsAuthWithCACert: true
                     tlsSkipVerify: false
                  secureJsonData:
@@ -1885,7 +1885,7 @@ class TestMonitoring:
                  basicAuthUser: admin
                  jsonData:
                     graphiteVersion: "1.1"
-                    tlsAuth: false
+                    tlsAuth: true
                     tlsAuthWithCACert: true
                     tlsSkipVerify: false
                  secureJsonData:
