@@ -3,7 +3,7 @@
 
 GATEWAYS=$1 # exmaple "nvmeof.a,nvmeof.b"
 DELAY="${SCALING_DELAYS:-50}"
-POOL="${RBD_POOL:-mypool}"
+POOL="${NVMEOF_POOL:-mypool}"
 GROUP="${NVMEOF_GROUP:-mygroup0}"
 source /etc/ceph/nvmeof.env
 

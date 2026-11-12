@@ -1,9 +1,9 @@
 tasks:
 - nvmeof:
     installer: host.a
-    gw_image: quay.io/ceph/nvmeof:devel # "default" is the image cephadm defaults to; change to test specific nvmeof images, example "latest"
+    gw_image: default # "default" is the image cephadm defaults to; change to test specific nvmeof images, example "latest"
     rbd:
-      # pool_name: .nvmeof
+      pool_name: mypool
       image_name_prefix: myimage
     gateway_config:
       subsystems_count: 3
@@ -21,8 +21,10 @@ tasks:
       client.0:
         - nvmeof/setup_subsystem.sh
     env:
-      RBD_POOL: .nvmeof
-      RBD_IMAGE_PREFIX: myimage
+      RBD_POOL: mypool
+      RBD_IMAGE_PREFIX: myimage 
+      NVMEOF_AUTO_LISTENER: 'true'
+      NVMEOF_NATIVE_CLI: 'true'
 
 - workunit:
     no_coverage_and_limits: true
@@ -35,6 +37,7 @@ tasks:
         - nvmeof/basic_tests.sh
         - nvmeof/fio_test.sh --start_ns 31 --end_ns 60
     env:
-      RBD_POOL: .nvmeof
+      RBD_POOL: mypool
+      NVMEOF_POOL: .nvmeof
       IOSTAT_INTERVAL: '10'
       RUNTIME: '600'
