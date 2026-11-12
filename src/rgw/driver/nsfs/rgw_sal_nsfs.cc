@@ -2333,18 +2333,15 @@ int resolve_path(const DoutPrefixProvider* dpp,
 
 static inline std::string gen_rand_instance_name()
 {
+#if 0
   enum { OBJ_INSTANCE_LEN = 32 };
   char buf[OBJ_INSTANCE_LEN + 1];
-
-#if 0
   gen_rand_alphanumeric_no_underscore(driver->ctx(), buf, OBJ_INSTANCE_LEN);
+  return buf;
 #else
   static uint64_t last_id = UINT64_MAX;
-  snprintf(buf, OBJ_INSTANCE_LEN, "%lx", last_id);
-  last_id--;
+  return fmt::format("{:x}", last_id--);
 #endif
-
-  return buf;
 }
 
 static inline bool get_attr(Attrs& attrs, const char* name, bufferlist& bl)
@@ -6694,14 +6691,9 @@ std::unique_ptr<Bucket> NSFSDriver::get_bucket(const RGWBucketInfo& i)
 
 std::string NSFSDriver::zone_unique_trans_id(const uint64_t unique_num)
 {
-  char buf[41]; /* 2 + 21 + 1 + 16 (timestamp can consume up to 16) + 1 */
-  time_t timestamp = time(NULL);
-
-  snprintf(buf, sizeof(buf), "tx%021llx-%010llx",
-           (unsigned long long)unique_num,
-           (unsigned long long)timestamp);
-
-  return std::string(buf);
+  const time_t timestamp = time(NULL);
+  return fmt::format("tx{:021x}-{:010x}", unique_num,
+		     static_cast<unsigned long long>(timestamp));
 }
 
 int NSFSDriver::get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* zg)
@@ -9938,10 +9930,9 @@ static int convert_directory_object(const DoutPrefixProvider* dpp,
 /* The path a descriptor is open on, or empty. */
 static std::string fd_path(int fd)
 {
-  char proc[64];
   char buf[PATH_MAX];
-  snprintf(proc, sizeof(proc), "/proc/self/fd/%d", fd);
-  const ssize_t n = ::readlink(proc, buf, sizeof(buf) - 1);
+  const std::string proc = fmt::format("/proc/self/fd/{}", fd);
+  const ssize_t n = ::readlink(proc.c_str(), buf, sizeof(buf) - 1);
   return (n < 0) ? std::string() : std::string(buf, n);
 }
 
@@ -13671,9 +13662,8 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
 					   nsfs::AccessClass::data,
 					   RAISED_KEYDIR_CAPS, [&]() -> int {
       if (tmp_name.empty()) {
-	char proc_path[PATH_MAX];
-	snprintf(proc_path, sizeof(proc_path), "/proc/self/fd/%d", build_fd);
-	return (::linkat(AT_FDCWD, proc_path, sdir_fd, leaf.c_str(),
+	const std::string proc_path = fmt::format("/proc/self/fd/{}", build_fd);
+	return (::linkat(AT_FDCWD, proc_path.c_str(), sdir_fd, leaf.c_str(),
 			 AT_SYMLINK_FOLLOW) < 0) ? -errno : 0;
       }
       return (::linkat(sdir_fd, tmp_name.c_str(), sdir_fd, leaf.c_str(),

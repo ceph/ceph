@@ -352,10 +352,9 @@ int POSIXStrategy::link_temp_file(int temp_fd, int dir_fd,
     /* On the ring, a step at a time:  chained, the rename would run
      * after a failed link, and an entry already at the temp name would
      * be renamed over the object. */
-    char proc[PATH_MAX];
-    snprintf(proc, PATH_MAX, "/proc/self/fd/%d", temp_fd);
+    const std::string proc = fmt::format("/proc/self/fd/{}", temp_fd);
     const std::string tmp = temp_name(TMP_LINK_PREFIX);
-    UringOp link = ring_op(UringOp::Kind::linkat, AT_FDCWD, proc, dir_fd,
+    UringOp link = ring_op(UringOp::Kind::linkat, AT_FDCWD, proc.c_str(), dir_fd,
 			   tmp.c_str(), AT_SYMLINK_FOLLOW);
     if (nsfs::ring_as(dpp, id, &link, 1, y) == 0) {
       if (link.result < 0) {
@@ -385,15 +384,14 @@ int POSIXStrategy::link_temp_file(int temp_fd, int dir_fd,
   }
 
   return nsfs::with_identity(dpp, id, nsfs::HopKind::link, [&]() -> int {
-  char temp_file_path[PATH_MAX];
-  snprintf(temp_file_path, PATH_MAX, "/proc/self/fd/%d", temp_fd);
+  const std::string temp_file_path = fmt::format("/proc/self/fd/{}", temp_fd);
 
   /* link the O_TMPFILE into the directory under a temp name, then
    * rename to the final name — two-step because linkat(2) cannot
    * atomically replace an existing entry */
   std::string tmp_name = temp_name(TMP_LINK_PREFIX);
 
-  int ret = ::linkat(AT_FDCWD, temp_file_path,
+  int ret = ::linkat(AT_FDCWD, temp_file_path.c_str(),
                      dir_fd, tmp_name.c_str(), AT_SYMLINK_FOLLOW);
   if (ret < 0) {
     ret = errno;
@@ -628,9 +626,8 @@ int FSStrategy::link_temp_file_excl(int temp_fd, int dir_fd,
 				    const nsfs::FSIdentity& id)
 {
   if (id.active() && nsfs::ring_metadata_changes()) {
-    char proc[PATH_MAX];
-    snprintf(proc, PATH_MAX, "/proc/self/fd/%d", temp_fd);
-    UringOp link = ring_op(UringOp::Kind::linkat, AT_FDCWD, proc, dir_fd,
+    const std::string proc = fmt::format("/proc/self/fd/{}", temp_fd);
+    UringOp link = ring_op(UringOp::Kind::linkat, AT_FDCWD, proc.c_str(), dir_fd,
 			   name.c_str(), AT_SYMLINK_FOLLOW);
     if (nsfs::ring_as(dpp, id, &link, 1, y) == 0) {
       if ((link.result < 0) && (link.result != -EEXIST)) {
@@ -642,10 +639,9 @@ int FSStrategy::link_temp_file_excl(int temp_fd, int dir_fd,
   }
 
   return nsfs::with_identity(dpp, id, nsfs::HopKind::link, [&]() -> int {
-  char temp_file_path[PATH_MAX];
-  snprintf(temp_file_path, PATH_MAX, "/proc/self/fd/%d", temp_fd);
+  const std::string temp_file_path = fmt::format("/proc/self/fd/{}", temp_fd);
 
-  int ret = ::linkat(AT_FDCWD, temp_file_path, dir_fd, name.c_str(),
+  int ret = ::linkat(AT_FDCWD, temp_file_path.c_str(), dir_fd, name.c_str(),
 		     AT_SYMLINK_FOLLOW);
   if (ret < 0) {
     ret = errno;
@@ -1561,10 +1557,9 @@ SafeResult GPFSStrategy::safe_unlink(const DoutPrefixProvider* dpp,
 
 static std::string fd_path(int dir_fd, const std::string& name)
 {
-  char proc[64];
   char resolved[PATH_MAX];
-  snprintf(proc, sizeof(proc), "/proc/self/fd/%d", dir_fd);
-  ssize_t len = ::readlink(proc, resolved, sizeof(resolved) - 1);
+  const std::string proc = fmt::format("/proc/self/fd/{}", dir_fd);
+  ssize_t len = ::readlink(proc.c_str(), resolved, sizeof(resolved) - 1);
   if (len < 0) {
     return {};
   }
