@@ -423,7 +423,12 @@ public:
     FileWriter(FileRef f, unsigned super_block_size)
       : file(std::move(f))
       , buffer_appender(buffer.get_page_aligned_appender(
-        std::max<uint64_t>(g_conf()->bluefs_alloc_size, 2 * super_block_size) / CEPH_PAGE_SIZE))
+        // round up: when CEPH_PAGE_SIZE exceeds the wanted capacity this
+        // must not truncate to 0 pages, or refill() allocates nothing and
+        // append_hole() falls back to an unaligned buffer
+        p2roundup<uint64_t>(
+          std::max<uint64_t>(g_conf()->bluefs_alloc_size, 2 * super_block_size),
+          CEPH_PAGE_SIZE) / CEPH_PAGE_SIZE))
       , envelope_head_filler() {
       ++file->num_writers;
       iocv.fill(nullptr);
