@@ -487,14 +487,14 @@ public:
 				const std::string& unique_tag) override;
 
   virtual const std::string& get_compression_type(const rgw_placement_rule& rule) override;
-  virtual bool valid_placement(const rgw_placement_rule& rule) override { return true; } 
-  int load_vector_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b,
-                            std::unique_ptr<VectorBucket>* bucket, optional_yield y) override { return -ENOTSUP; }
-  int list_vector_buckets(const DoutPrefixProvider* dpp,
-			     const rgw_owner& owner, const std::string& ns,
-			     const std::string& marker, const std::string& end_marker,
-			     uint64_t max, BucketList& buckets,
-			     optional_yield y) override { return -ENOTSUP; }
+  virtual bool valid_placement(const rgw_placement_rule& rule) override { return true; }
+  virtual int load_vector_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b,
+                          std::unique_ptr<VectorBucket>* bucket, optional_yield y) override;
+  virtual int list_vector_buckets(const DoutPrefixProvider* dpp,
+                           const rgw_owner& owner, const std::string& tenant,
+                           const std::string& marker, const std::string& end_marker,
+                           uint64_t max, BucketList& buckets,
+                           optional_yield y) override;
 
   virtual void finalize(void) override;
 
@@ -596,7 +596,7 @@ public:
 };
 
 class POSIXBucket : public StoreBucket {
-private:
+protected:
   POSIXDriver* driver;
   RGWAccessControlPolicy acls;
   std::optional<std::string> ns{std::nullopt};
@@ -727,6 +727,44 @@ private:
   int write_attrs(const DoutPrefixProvider *dpp, optional_yield y);
 }; /* POSIXBucket */
 
+/* S3Vectors - class POSIXVectorBucket */
+class POSIXVectorBucket : public POSIXBucket {
+public:
+  using POSIXBucket::POSIXBucket;
+  ~POSIXVectorBucket() override;
+
+  virtual int remove(const DoutPrefixProvider* dpp, bool delete_children,
+                     optional_yield y) override;
+  virtual int create(const DoutPrefixProvider* dpp,
+                     const CreateParams& params,
+                     optional_yield y) override;
+  virtual int load_bucket(const DoutPrefixProvider* dpp, optional_yield y) override;
+  virtual int put_info(const DoutPrefixProvider* dpp, bool exclusive,
+                       ceph::real_time mtime, optional_yield y) override;
+  virtual int try_refresh_info(const DoutPrefixProvider* dpp, ceph::real_time* pmtime, optional_yield y) override;
+  virtual int check_empty(const DoutPrefixProvider* dpp, optional_yield y) override;
+  virtual std::unique_ptr<Bucket> clone() override {
+    return std::make_unique<POSIXVectorBucket>(*this);
+  }
+  int chown(const DoutPrefixProvider* dpp, const rgw_owner& new_owner,
+              const std::string& new_owner_name, optional_yield y) override { return -ENOTSUP; }
+
+  /* Internal APIs */
+  int create(const DoutPrefixProvider *dpp, optional_yield y, bool* existed);
+  posix::Directory* get_dir() { return dir.get(); }
+  int get_dir_fd(const DoutPrefixProvider *dpp) { dir->open(dpp); return dir->get_fd(); }
+  /* TODO dang Escape the bucket name for file use */
+  std::string get_fname();
+  std::optional<std::string> get_ns() { return ns; }
+  int rename(const DoutPrefixProvider* dpp, optional_yield y, Object* target_obj);
+
+  /* enumerate all entries by callback, in any order */
+  int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb);
+
+private:
+  int write_attrs(const DoutPrefixProvider *dpp, optional_yield y);
+};
+/* S3Vectors - class POSIXVectorBucket */
 
 class POSIXObject : public StoreObject {
 public:
