@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
 
+from typing import Optional
+
 from .. import mgr
 from ..security import Scope
 from ..services.ceph_service import CephService
 from ..services.exception import handle_send_command_error
 from ..tools import find_object_in_list, str_to_bool
-from . import APIDoc, APIRouter, EndpointDoc, RESTController, allow_empty_body
+from . import APIDoc, APIRouter, EndpointDoc, Param, RESTController, allow_empty_body
 
 MGR_MODULE_SCHEMA = ([{
     "name": (str, "Module Name"),
@@ -94,15 +96,27 @@ class MgrModules(RESTController):
     @RESTController.Resource('POST')
     @handle_send_command_error('mgr_modules')
     @allow_empty_body
-    def enable(self, module_name):
+    @EndpointDoc("Enable Mgr module",
+                 parameters={
+                     'force': Param(
+                         bool,
+                         'Force enablement when not all mgr daemons support the module',
+                         True,
+                         False)
+                 })
+    def enable(self, module_name, force: Optional[bool] = False):
         """
         Enable the specified Ceph Mgr module.
         :param module_name: The name of the Ceph Mgr module.
         :type module_name: str
+        :param force: Force enablement when not all mgr daemons support the module.
+        :type force: bool
         """
         assert self._is_module_managed(module_name)
-        CephService.send_command(
-            'mon', 'mgr module enable', module=module_name)
+        cmd_kwargs = {'module': module_name}
+        if force:
+            cmd_kwargs['force'] = True
+        CephService.send_command('mon', 'mgr module enable', **cmd_kwargs)
 
     @RESTController.Resource('POST')
     @handle_send_command_error('mgr_modules')
