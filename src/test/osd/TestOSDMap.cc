@@ -1368,6 +1368,145 @@ TEST_F(OSDMapTest, CleanPGUpmaps) {
   }
 }
 
+TEST_F(OSDMapTest, ValidatePGUpmapItems) {
+  set_up_map();
+
+  // 3 hosts with 2 osds each, and a size 2 pool with a host failure domain
+  const int expected_host_num = 3;
+  int osd_per_host = get_num_osds() / expected_host_num;
+  ASSERT_EQ(2, osd_per_host);
+  for (int i = 0; i < (int)get_num_osds(); i++) {
+    vector<string> move_to;
+    move_to.push_back("root=default");
+    move_to.push_back("host=host-" + std::to_string(i / osd_per_host));
+    ASSERT_EQ(0, crush_move(osdmap, "osd." + std::to_string(i), move_to));
+  }
+  int rule_no = crush_rule_create_replicated("upmap", "default", "host");
+  ASSERT_LT(0, rule_no);
+
+  OSDMap::Incremental new_pool_inc(osdmap.get_epoch() + 1);
+  new_pool_inc.new_pool_max = osdmap.get_pool_max();
+  new_pool_inc.fsid = osdmap.get_fsid();
+  pg_pool_t empty;
+  uint64_t pool_id = ++new_pool_inc.new_pool_max;
+  pg_pool_t *p = new_pool_inc.get_new_pool(pool_id, &empty);
+  p->size = 2;
+  p->set_pg_num(64);
+  p->set_pgp_num(64);
+  p->type = pg_pool_t::TYPE_REPLICATED;
+  p->crush_rule = rule_no;
+  p->set_flag(pg_pool_t::FLAG_HASHPSPOOL);
+  new_pool_inc.new_pool_names[pool_id] = "upmap_pool";
+  osdmap.apply_incremental(new_pool_inc);
+
+  pg_t pgid = osdmap.raw_pg_to_pg(pg_t(0, pool_id));
+  vector<int> up;
+  int up_primary;
+  osdmap.pg_to_raw_up(pgid, &up, &up_primary);
+  ASSERT_EQ(2U, up.size());
+
+  // a and b hold the pg, a2 and b2 share their hosts, c and c2 are on
+  // the third host
+  auto host_of = [&](int osd) { return osd / osd_per_host; };
+  auto peer_of = [&](int osd) { return osd ^ 1; };
+  int a = up[0];
+  int b = up[1];
+  ASSERT_NE(host_of(a), host_of(b));
+  int a2 = peer_of(a);
+  int b2 = peer_of(b);
+  int c = -1;
+  for (int i = 0; i < (int)get_num_osds(); i++) {
+    if (host_of(i) != host_of(a) && host_of(i) != host_of(b)) {
+      c = i;
+      break;
+    }
+  }
+  ASSERT_LE(0, c);
+  int c2 = peer_of(c);
+
+  typedef vector<pair<int32_t,int32_t>> items_t;
+  auto validate = [&](const OSDMap& m, const items_t& items) {
+    stringstream ss;
+    int r = m.validate_pg_upmap_items(g_ceph_context, pgid, items, &ss);
+    if (r < 0) {
+      // every rejection has to say why
+      EXPECT_FALSE(ss.str().empty());
+    } else {
+      EXPECT_TRUE(ss.str().empty());
+    }
+    return r;
+  };
+  // what the mon would end up with after applying and cleaning the items
+  auto survives = [&](const items_t& items, const vector<int>& expected) {
+    OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+    pending_inc.new_pg_upmap_items[pgid] =
+      mempool::osdmap::vector<pair<int32_t,int32_t>>(
+        items.begin(), items.end());
+    OSDMap nextmap;
+    nextmap.deepish_copy_from(osdmap);
+    nextmap.apply_incremental(pending_inc);
+    OSDMap::Incremental clean_inc(nextmap.get_epoch() + 1);
+    clean_pg_upmaps(g_ceph_context, nextmap, clean_inc);
+    nextmap.apply_incremental(clean_inc);
+    vector<int> new_up;
+    int new_primary;
+    nextmap.pg_to_raw_up(pgid, &new_up, &new_primary);
+    return nextmap.have_pg_upmaps(pgid) && new_up == expected;
+  };
+
+  // valid: move to another host, or to the other osd on the same host
+  ASSERT_EQ(0, validate(osdmap, {{a, c}}));
+  ASSERT_TRUE(survives({{a, c}}, {c, b}));
+  ASSERT_EQ(0, validate(osdmap, {{a, a2}}));
+  ASSERT_TRUE(survives({{a, a2}}, {a2, b}));
+  ASSERT_EQ(0, validate(osdmap, {{a, a2}, {b, c}}));
+  ASSERT_TRUE(survives({{a, a2}, {b, c}}, {a2, c}));
+  // valid: a chain, where b is freed up before it is reused
+  ASSERT_EQ(0, validate(osdmap, {{b, c}, {a, b}}));
+  ASSERT_TRUE(survives({{b, c}, {a, b}}, {b, c}));
+
+  // source is not in the pg
+  ASSERT_EQ(-EINVAL, validate(osdmap, {{c, c2}}));
+  ASSERT_FALSE(survives({{c, c2}}, up));
+  // target is already in the pg
+  ASSERT_EQ(-EINVAL, validate(osdmap, {{a, b}}));
+  // swap and swap back, with one, both or neither osd in the pg
+  ASSERT_EQ(-EINVAL, validate(osdmap, {{a, c}, {c, a}}));
+  ASSERT_EQ(-EINVAL, validate(osdmap, {{a, b}, {b, a}}));
+  ASSERT_EQ(-EINVAL, validate(osdmap, {{c, c2}, {c2, c}}));
+  ASSERT_FALSE(survives({{c, c2}, {c2, c}}, up));
+  // the same source twice
+  ASSERT_EQ(-EINVAL, validate(osdmap, {{a, c}, {a, c2}}));
+  // the same target twice
+  ASSERT_EQ(-EINVAL, validate(osdmap, {{a, c}, {b, c}}));
+  // both replicas on the same host
+  ASSERT_EQ(-EINVAL, validate(osdmap, {{a, b2}}));
+  ASSERT_FALSE(survives({{a, b2}}, {b2, b}));
+  ASSERT_EQ(-EINVAL, validate(osdmap, {{a, c}, {b, c2}}));
+
+  {
+    // target is marked out
+    OSDMap::Incremental out_inc(osdmap.get_epoch() + 1);
+    out_inc.new_weight[c] = CEPH_OSD_OUT;
+    OSDMap outmap;
+    outmap.deepish_copy_from(osdmap);
+    outmap.apply_incremental(out_inc);
+    vector<int> out_up;
+    int out_primary;
+    outmap.pg_to_raw_up(pgid, &out_up, &out_primary);
+    ASSERT_EQ(up, out_up); // c was not part of the pg
+    ASSERT_EQ(-EINVAL, validate(outmap, {{a, c}}));
+    ASSERT_EQ(0, validate(outmap, {{a, c2}}));
+  }
+
+  // nonexistent pool
+  {
+    stringstream ss;
+    ASSERT_EQ(-EINVAL, osdmap.validate_pg_upmap_items(
+      g_ceph_context, pg_t(0, pool_id + 100), {{a, c}}, &ss));
+  }
+}
+
 TEST_F(OSDMapTest, CleanPGUpmapPrimaries) {
   // Set up a default osdmap
   set_up_map();

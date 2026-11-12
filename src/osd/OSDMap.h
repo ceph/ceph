@@ -1017,6 +1017,20 @@ public:
     const std::set<uint64_t>& affected_pools,
     const std::map<pg_t, mempool::osdmap::vector<std::pair<int,int>>>& to_remap) const;
   bool clean_pg_upmaps(CephContext *cct, Incremental *pending_inc) const;
+  /**
+   * check whether a proposed pg_upmap_items entry would take effect
+   *
+   * Rejects items that _apply_upmap() would ignore or that
+   * check_pg_upmaps() would cancel or trim.
+   *
+   * @return 0 if every item is effective, -EINVAL (with the reason
+   *         written to ss) otherwise
+   */
+  int validate_pg_upmap_items(
+    CephContext *cct,
+    pg_t pg,
+    const std::vector<std::pair<int32_t,int32_t>>& items,
+    std::ostream *ss) const;
 
   int apply_incremental(const Incremental &inc);
 

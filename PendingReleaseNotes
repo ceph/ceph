@@ -6,6 +6,14 @@
   ``next_scheduled_time``. Scripts or tools that parse this output
   must be updated accordingly.
 
+* RADOS: ``ceph osd pg-upmap-items`` now returns ``EINVAL``, with the reason,
+  for mappings that would have no effect. Examples are remapping an OSD to
+  itself, a source OSD that is not
+  in the PG, a target OSD that is already in the PG or is marked out, swapping
+  two OSDs and swapping them back, or a result that violates the CRUSH rule.
+  Previously such requests reported success and the mapping was then silently
+  discarded or left in place as a no-op.
+
 * libcephsqlite: concurrent readers is now supported. The VFS implements the
   full sqlite3 locking protocol.
 

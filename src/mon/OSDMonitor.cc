@@ -13710,8 +13710,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
           int from = *p++;
           int to = *p;
           if (from == to) {
-            ss << "from osd." << from << " == to osd." << to << ", ";
-            continue;
+            ss << "cannot remap osd." << from << " to itself";
+            err = -EINVAL;
+            goto reply_no_propose;
           }
           if (!osdmap.exists(from)) {
             ss << "osd." << from << " does not exist";
@@ -13740,6 +13741,12 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         if (new_pg_upmap_items.empty()) {
           ss << "no valid upmap items(pairs) is specified";
           err = -EINVAL;
+          goto reply_no_propose;
+        }
+
+        // refuse anything that would be ignored or cleaned up right away
+        err = osdmap.validate_pg_upmap_items(cct, pgid, new_pg_upmap_items, &ss);
+        if (err < 0) {
           goto reply_no_propose;
         }
 

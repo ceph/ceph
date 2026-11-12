@@ -2551,6 +2551,97 @@ bool OSDMap::clean_pg_upmaps(
   return any_change;
 }
 
+int OSDMap::validate_pg_upmap_items(
+  CephContext *cct,
+  pg_t pg,
+  const vector<pair<int32_t,int32_t>>& items,
+  ostream *ss) const
+{
+  const pg_pool_t *pi = get_pg_pool(pg.pool());
+  if (!pi) {
+    *ss << "pool of pg " << pg << " does not exist";
+    return -EINVAL;
+  }
+
+  // the pure CRUSH mapping; check_pg_upmaps() drops any item whose
+  // source is not part of it
+  vector<int> raw;
+  int primary;
+  pg_to_raw_osds(pg, &raw, &primary);
+
+  // the mapping the items get applied to, see _apply_upmap()
+  vector<int> working = raw;
+  auto p = pg_upmap.find(pg);
+  if (p != pg_upmap.end()) {
+    bool any_out = false;
+    for (auto osd : p->second) {
+      if (osd != CRUSH_ITEM_NONE && osd < max_osd && osd >= 0 &&
+          osd_weight[osd] == 0) {
+        any_out = true;
+        break;
+      }
+    }
+    if (!any_out) {
+      working = vector<int>(p->second.begin(), p->second.end());
+    }
+  }
+
+  auto crush_rule = get_pg_pool_crush_rule(pg);
+  map<int, float> weight_map;
+  bool have_weight_map =
+    crush->get_rule_weight_osd_map(crush_rule, &weight_map) >= 0;
+
+  for (auto& [osd_from, osd_to] : items) {
+    if (std::find(raw.begin(), raw.end(), osd_from) == raw.end()) {
+      *ss << "osd." << osd_from << " is not in the CRUSH mapping " << raw
+          << " of pg " << pg << ", so " << osd_from << "->" << osd_to
+          << " would have no effect";
+      return -EINVAL;
+    }
+    auto pos = std::find(working.begin(), working.end(), osd_from);
+    if (pos == working.end()) {
+      *ss << "osd." << osd_from << " is already remapped by an earlier pair"
+          << ", so " << osd_from << "->" << osd_to
+          << " would have no effect";
+      return -EINVAL;
+    }
+    if (osd_to != CRUSH_ITEM_NONE) {
+      if (std::find(working.begin(), working.end(), osd_to) != working.end()) {
+        *ss << "osd." << osd_to << " is already in the mapping " << working
+            << " of pg " << pg << ", so " << osd_from << "->" << osd_to
+            << " would have no effect";
+        return -EINVAL;
+      }
+      if (osd_to >= 0 && osd_to < max_osd && osd_weight[osd_to] == 0) {
+        *ss << "osd." << osd_to << " is marked out, so " << osd_from << "->"
+            << osd_to << " would have no effect";
+        return -EINVAL;
+      }
+      if (have_weight_map) {
+        auto it = weight_map.find(osd_to);
+        if (it == weight_map.end()) {
+          *ss << "osd." << osd_to << " is not in the CRUSH subtree used by"
+              << " the rule of pg " << pg;
+          return -EINVAL;
+        }
+        if (it->second == 0) {
+          *ss << "osd." << osd_to << " has a CRUSH weight of 0";
+          return -EINVAL;
+        }
+      }
+    }
+    *pos = osd_to;
+  }
+
+  int r = crush->verify_upmap(cct, crush_rule, get_pg_pool_size(pg), working);
+  if (r < 0) {
+    *ss << "resulting mapping " << working << " of pg " << pg
+        << " violates its CRUSH rule";
+    return -EINVAL;
+  }
+  return 0;
+}
+
 int OSDMap::apply_incremental(const Incremental &inc)
 {
   new_blocklist_entries = false;
