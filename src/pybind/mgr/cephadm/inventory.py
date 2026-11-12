@@ -1117,6 +1117,24 @@ class HostCache():
                     return iface
         return None
 
+    def get_network_for_ip(
+            self,
+            host: str,
+            ip: str
+    ) -> Optional[Tuple[str, Dict[str, List[str]]]]:
+        """
+        Return (subnet, {iface: [ips]}) for the first network on host whose
+        subnet contains ip, or None. The ip itself does not need to be
+        configured on the host (e.g. a VIP that is about to be added), and
+        subnets without any interface are skipped.
+        """
+        host = normalize_hostname(host)
+        addr = ipaddress.ip_address(ip)
+        for subnet, ifaces in self.networks.get(host, {}).items():
+            if ifaces and addr in ipaddress.ip_network(subnet):
+                return subnet, ifaces
+        return None
+
     def update_daemon_config_deps(self, host: str, name: str, deps: List[str], stamp: datetime.datetime) -> None:
         host = normalize_hostname(host)
         self.daemon_config_deps[host][name] = {

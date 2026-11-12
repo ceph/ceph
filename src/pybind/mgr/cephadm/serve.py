@@ -900,14 +900,14 @@ class CephadmServe:
             for vip in virtual_ips:
                 found = False
                 bare_ip = str(vip).split('/')[0]
-                for subnet, ifaces in self.mgr.cache.networks.get(host, {}).items():
-                    if ifaces and ipaddress.ip_address(bare_ip) in ipaddress.ip_network(subnet):
-                        # found matching interface for this IP, move on
-                        self.log.debug(
-                            f'{bare_ip} is in {subnet} on {host} interface {list(ifaces.keys())[0]}'
-                        )
-                        found = True
-                        break
+                network = self.mgr.cache.get_network_for_ip(host, bare_ip)
+                if network:
+                    # found matching interface for this IP, move on
+                    subnet, ifaces = network
+                    self.log.debug(
+                        f'{bare_ip} is in {subnet} on {host} interface {list(ifaces.keys())[0]}'
+                    )
+                    found = True
                 if not found and ingress_spec.virtual_interface_networks:
                     for subnet, ifaces in self.mgr.cache.networks.get(host, {}).items():
                         if subnet in ingress_spec.virtual_interface_networks:
