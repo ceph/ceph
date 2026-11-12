@@ -805,6 +805,16 @@ class FilesystemBase(MDSClusterBase):
             else:
                 raise
 
+        # Disable host anti-affinity for densely populated Teuthology environments by default.
+        try:
+            self.run_ceph_cmd('fs', 'set', self.name, 'standby_enable_host_anti_affinity', 'false')
+        except CommandFailedError as e:
+            if e.exitstatus == 22:
+                # Setting not available in older Ceph versions (upgrade tests)
+                pass
+            else:
+                raise
+
         if self.fs_config is not None:
             log.debug(f"fs_config: {self.fs_config}")
             max_mds = self.fs_config.get('max_mds', 1)
