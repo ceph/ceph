@@ -1723,6 +1723,131 @@ class TestCephadm(object):
             with pytest.raises(OrchestratorError, match='No OSD spec named osd.nope found'):
                 wait(cephadm_module, cephadm_module.explain_osdspecs(service_name='osd.nope'))
 
+    @staticmethod
+    def _apply_status_spec() -> DriveGroupSpec:
+        return DriveGroupSpec(service_id='hdd_ssd_db',
+                              placement=PlacementSpec(host_pattern='node*'),
+                              data_devices=DeviceSelection(rotational=True),
+                              db_devices=DeviceSelection(model='MZ7L3'))
+
+    @staticmethod
+    def _osd_events(cephadm_module, level=None) -> List[str]:
+        return [e.message for e in cephadm_module.events.get_for_service('osd.hdd_ssd_db')
+                if level is None or e.level == level]
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    @mock.patch('cephadm.services.osd.OSDService.create_single_host')
+    def test_osd_apply_status(self, _create_single_host, cephadm_module):
+        with with_host(cephadm_module, 'node1'), with_host(cephadm_module, 'node2'), \
+                with_host(cephadm_module, 'other'):
+            spec = self._apply_status_spec()
+            c = cephadm_module.apply([spec])
+            assert wait(cephadm_module, c) == ['Scheduled osd.hdd_ssd_db update...']
+            inventory = self._explain_inventory()
+            cephadm_module.cache.update_host_devices('node1', inventory)
+            # node2 only has an SSD: data_devices selects nothing
+            cephadm_module.cache.update_host_devices('node2', inventory[1:])
+
+            # first pass: node1 gets an OSD
+            _create_single_host.side_effect = async_side_effect(
+                "Created osd(s) 3 on host 'node1'")
+            cephadm_module.osd_service.create_from_spec(spec)
+
+            node1 = cephadm_module.cache.get_osdspec_apply_report('node1', 'osd.hdd_ssd_db')
+            assert node1['outcome'] == 'deployed'
+            assert node1['osds_created'] == [3]
+            assert node1['selected'] == {'data_devices': 1, 'db_devices': 1}
+            assert node1['new_data_devices'] == 1
+            assert node1['since'] == node1['last_attempt']
+            assert node1['inventory_refreshed'] is not None
+            node2 = cephadm_module.cache.get_osdspec_apply_report('node2', 'osd.hdd_ssd_db')
+            assert node2['outcome'] == 'nothing_selected'
+            assert node2['mismatched_criteria'] == {'data_devices': {'rotational': 1}}
+            assert self._osd_events(cephadm_module, 'INFO')[-1] == (
+                'node1: new -> deployed (created osd.3); node2: new -> nothing_selected')
+
+            status = cephadm_module.osd_service.apply_status(spec)
+            assert status['hosts_matched'] == 2
+            assert status['outcomes'] == {'nothing_selected': 1, 'deployed': 1}
+            assert 'stale' not in status['hosts']['node1']
+            # nothing_selected hosts are re-evaluated on every pass
+            assert status['hosts']['node2']['stale'] is True
+
+            # the new OSD shows up in the inventory: node1 is up to date
+            inventory = self._explain_inventory()
+            inventory[0].available = False
+            inventory[0].ceph_device_lvm = True
+            inventory[0].lvs = [{'osd_id': '3', 'osdspec_affinity': 'hdd_ssd_db'}]
+            cephadm_module.cache.update_host_devices('node1', inventory)
+            _create_single_host.side_effect = async_side_effect(
+                'Created no osd(s) on host node1; already created?')
+            cephadm_module.osd_service.create_from_spec(spec)
+            node1 = cephadm_module.cache.get_osdspec_apply_report('node1', 'osd.hdd_ssd_db')
+            assert node1['outcome'] == 'up_to_date'
+            assert node1['new_data_devices'] == 0
+            assert self._osd_events(cephadm_module, 'INFO')[-1] == \
+                'node1: deployed -> up_to_date'
+
+            # orch ls: counters for all hosts, up_to_date hosts not listed
+            svc = [s for s in wait(cephadm_module, cephadm_module.describe_service(
+                service_type='osd')) if s.spec.service_name() == 'osd.hdd_ssd_db'][0]
+            osd_apply = svc.to_json()['status']['osd_apply']
+            assert osd_apply['outcomes'] == {'nothing_selected': 1, 'up_to_date': 1}
+            assert list(osd_apply['hosts']) == ['node2']
+
+            # the reports are persisted with the host
+            stored = json.loads(cephadm_module.get_store('host.node1'))
+            assert stored['osdspec_apply_reports']['osd.hdd_ssd_db']['outcome'] == 'up_to_date'
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    @mock.patch('cephadm.services.osd.OSDService.create_single_host')
+    def test_osd_apply_status_failed(self, _create_single_host, cephadm_module):
+        with with_host(cephadm_module, 'node1'):
+            spec = self._apply_status_spec()
+            wait(cephadm_module, cephadm_module.apply([spec]))
+            cephadm_module.cache.update_host_devices('node1', self._explain_inventory())
+
+            _create_single_host.side_effect = RuntimeError('cephadm exited with an error code: 1')
+            cephadm_module.osd_service.create_from_spec(spec)
+            report = cephadm_module.cache.get_osdspec_apply_report('node1', 'osd.hdd_ssd_db')
+            assert report['outcome'] == 'failed'
+            assert report['error'] == 'cephadm exited with an error code: 1'
+            assert self._osd_events(cephadm_module, 'ERROR')[-1] == \
+                'node1: new -> failed (cephadm exited with an error code: 1)'
+
+            # ceph-volume returning without creating any OSD is a failure too
+            _create_single_host.side_effect = async_side_effect(
+                'Created no osd(s) on host node1; already created?')
+            cephadm_module.osd_service.create_from_spec(spec)
+            report = cephadm_module.cache.get_osdspec_apply_report('node1', 'osd.hdd_ssd_db')
+            assert report['outcome'] == 'failed'
+            assert report['error'].startswith(
+                'ceph-volume created no OSD although 1 new data device(s) were selected')
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_osd_apply_status_not_evaluated(self, cephadm_module):
+        with with_host(cephadm_module, 'node1'), with_host(cephadm_module, 'node2'):
+            spec = self._apply_status_spec()
+            wait(cephadm_module, cephadm_module.apply([spec]))
+            cephadm_module.inventory.add_label('node2', SpecialHostLabels.DRAIN_DAEMONS)
+
+            res = wait(cephadm_module, cephadm_module.osdspec_apply_status(
+                service_name='osd.hdd_ssd_db'))
+            assert len(res) == 1
+            assert res[0]['service_name'] == 'osd.hdd_ssd_db'
+            assert res[0]['outcomes'] == {'not_schedulable': 1, 'pending': 1}
+            assert res[0]['hosts']['node1'] == {'outcome': 'pending',
+                                                'reason': 'not evaluated yet'}
+            assert res[0]['hosts']['node2'] == {
+                'outcome': 'not_schedulable',
+                'reason': f'host has the {SpecialHostLabels.DRAIN_DAEMONS} label'}
+
+            res = wait(cephadm_module, cephadm_module.osdspec_apply_status(hosts=['node2']))
+            assert list(res[0]['hosts']) == ['node2']
+
+            with pytest.raises(OrchestratorError, match='No OSD spec named osd.nope found'):
+                wait(cephadm_module, cephadm_module.osdspec_apply_status(service_name='osd.nope'))
+
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     @mock.patch('cephadm.services.osd.OSDService._run_ceph_volume_command')
     @mock.patch('cephadm.services.osd.OSDService.driveselection_to_ceph_volume')

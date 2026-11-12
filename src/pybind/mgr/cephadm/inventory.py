@@ -889,6 +889,8 @@ class HostCache():
         self.last_autotune = {}        # type: Dict[str, datetime.datetime]
         self.osdspec_previews = {}     # type: Dict[str, List[Dict[str, Any]]]
         self.osdspec_last_applied = {}  # type: Dict[str, Dict[str, datetime.datetime]]
+        # host -> OSD service name -> outcome of the last apply (JSON-ready)
+        self.osdspec_apply_reports = {}  # type: Dict[str, Dict[str, Dict[str, Any]]]
         self.networks = {}             # type: Dict[str, Dict[str, Dict[str, List[str]]]]
         self.last_network_update = {}   # type: Dict[str, datetime.datetime]
         self.last_device_update = {}   # type: Dict[str, datetime.datetime]
@@ -974,6 +976,8 @@ class HostCache():
                 })
                 for name, ts in j.get('osdspec_last_applied', {}).items():
                     self.osdspec_last_applied[host][name] = str_to_datetime(ts)
+                self.osdspec_apply_reports.setdefault(host, {}).update(
+                    j.get('osdspec_apply_reports', {}))
 
                 for name, d in j.get('daemon_config_deps', {}).items():
                     # drop potential leftover daemon_config_deps entries
@@ -1134,6 +1138,15 @@ class HostCache():
         host = normalize_hostname(host)
         self.osdspec_last_applied[host][service_name] = ts
 
+    def update_osdspec_apply_report(self, host: str, service_name: str,
+                                    report: Dict[str, Any]) -> None:
+        host = normalize_hostname(host)
+        self.osdspec_apply_reports.setdefault(host, {})[service_name] = report
+
+    def get_osdspec_apply_report(self, host: str, service_name: str) -> Optional[Dict[str, Any]]:
+        host = normalize_hostname(host)
+        return self.osdspec_apply_reports.get(host, {}).get(service_name)
+
     def update_client_file(self,
                            host: str,
                            path: str,
@@ -1165,6 +1178,7 @@ class HostCache():
         self.networks[host] = {}
         self.osdspec_previews[host] = []
         self.osdspec_last_applied[host] = {}
+        self.osdspec_apply_reports[host] = {}
         self.daemon_config_deps[host] = {}
         self.daemon_refresh_queue.append(host)
         self.device_refresh_queue.append(host)
@@ -1246,6 +1260,12 @@ class HostCache():
         if host in self.osdspec_last_applied:
             for name, ts in list(self.osdspec_last_applied[host].items()):
                 j['osdspec_last_applied'][name] = datetime_to_str(ts)
+        if self.osdspec_apply_reports.get(host):
+            # drop the reports of removed specs
+            j['osdspec_apply_reports'] = {
+                name: report for name, report in self.osdspec_apply_reports[host].items()
+                if name in self.mgr.spec_store.all_specs
+            }
 
         if host in self.last_host_check:
             j['last_host_check'] = datetime_to_str(self.last_host_check[host])
@@ -1339,6 +1359,8 @@ class HostCache():
             del self.osdspec_previews[host]
         if host in self.osdspec_last_applied:
             del self.osdspec_last_applied[host]
+        if host in self.osdspec_apply_reports:
+            del self.osdspec_apply_reports[host]
         if host in self.loading_osdspec_preview:
             self.loading_osdspec_preview.remove(host)
         if host in self.networks:
