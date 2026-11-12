@@ -2624,6 +2624,8 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx,
   CLS_LOG_BITX(bitx_inst, 10, "INFO: %s: tag_timeout=%ld", __func__, tag_timeout.count());
 
   auto in_iter = in->cbegin();
+  // set when this call writes a bilog record for datalog notification.
+  bool logged = false;
 
   while (!in_iter.end()) {
     __u8 op;
@@ -2748,6 +2750,7 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx,
 			 __func__, ret);
             return ret;
           }
+          logged = true;
         }
         break;
       case CEPH_RGW_UPDATE:
@@ -2779,6 +2782,7 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx,
 	    CLS_LOG_BITX(bitx_inst, 0, "ERROR: %s: failed to log operation ret=%d", __func__, ret);
             return ret;
           }
+          logged = true;
         }
         break;
       } // switch(op)
@@ -2792,13 +2796,14 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx,
       CLS_LOG_BITX(bitx_inst, 0,
 		   "ERROR: %s: failed to write bucket header ret=%d",
 		   __func__, ret);
-    } else {
-      CLS_LOG_BITX(bitx_inst, 10, "EXITING %s, returning %d", __func__, ret);
+      return ret;
     }
-    return ret;
   }
 
-  CLS_LOG_BITX(bitx_inst, 10, "EXITING %s, returning 0", __func__);
+  if (out) {
+    encode(logged, *out);
+  }
+  CLS_LOG_BITX(bitx_inst, 10, "EXITING %s, returning 0 logged=%d", __func__, (int)logged);
   return 0;
 } // rgw_dir_suggest_changes
 
