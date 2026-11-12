@@ -11779,20 +11779,10 @@ int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
   } // while we haven't provided requested # of result entries
 
   // suggest updates if there are any
-  for (auto& miter : updates) {
-    if (miter.second.length()) {
-      ObjectWriteOperation o;
-      o.assert_exists();
-      cls_rgw_guard_bucket_resharding(o, -ERR_BUSY_RESHARDING);
-      cls_rgw_suggest_changes(o, miter.second);
-      // we don't care if we lose suggested updates, send them off blindly
-      AioCompletion *c =
-	librados::Rados::aio_create_completion(nullptr, nullptr);
-
-      ldout_bitx(bitx, dpp, 10) << "INFO: " << __func__ <<
-	": doing dir_suggest on " << miter.first << dendl_bitx;
-      ioctx.aio_operate(miter.first, c, &o);
-      c->release();
+  for (const auto& [shard, oid] : shard_oids) {
+    auto miter = updates.find(oid);
+    if (miter != updates.end() && miter->second.length()) {
+      suggest_index_changes(dpp, bucket_info, ioctx, oid, shard, miter->second);
     }
   } // updates loop
 
@@ -12051,20 +12041,10 @@ int RGWRados::cls_bucket_list_unordered(const DoutPrefixProvider *dpp,
 check_updates:
 
   // suggest updates if there is any
-  std::map<std::string, bufferlist>::iterator miter = updates.begin();
-  for (; miter != updates.end(); ++miter) {
-    if (miter->second.length()) {
-      ObjectWriteOperation o;
-      o.assert_exists();
-      cls_rgw_guard_bucket_resharding(o, -ERR_BUSY_RESHARDING);
-      cls_rgw_suggest_changes(o, miter->second);
-      // we don't care if we lose suggested updates, send them off blindly
-      AioCompletion *c = librados::Rados::aio_create_completion(nullptr, nullptr);
-
-      ldout_bitx(bitx, dpp, 10) << "INFO: " << __func__ <<
-	" doing dir_suggest on " << miter->first << dendl_bitx;
-      ioctx.aio_operate(miter->first, c, &o);
-      c->release();
+  for (const auto& [shard, oid] : oids) {
+    auto miter = updates.find(oid);
+    if (miter != updates.end() && miter->second.length()) {
+      suggest_index_changes(dpp, bucket_info, ioctx, oid, shard, miter->second);
     }
   }
 
@@ -12262,6 +12242,10 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
     bucket_info.layout.logs.empty() ||
     bucket_info.layout.logs.back().layout.type != rgw::BucketLogType::FIFO;
   uint8_t suggest_flag = (is_inindex && svc.zone->need_to_log_data() ? CEPH_RGW_DIR_SUGGEST_LOG_OP : 0);
+  // FIFO: the bilog entry is written below, so data sync also needs a
+  // datalog entry to know to read this shard. same conditions as with_bilog.
+  const bool fifo_datalog = !is_inindex && log_op &&
+    svc.zone->need_to_log_data() && bucket_info.datasync_flag_enabled();
 
   std::string loc;
 
@@ -12270,6 +12254,13 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
   string temp_key;
   if (MultipartMetaFilter(list_state.key.name, temp_key)) {
     obj.in_extra_data = true;
+  }
+
+  std::string datalog_hash_key = obj.key.name;
+  if (obj.key.ns == RGW_OBJ_NS_MULTIPART) {
+    RGWMPObj mp;
+    mp.from_meta(obj.key.name);
+    datalog_hash_key = mp.get_key();
   }
 
   string oid;
@@ -12311,6 +12302,9 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
                           << ": failed to flush DEL bilog entry for "
                           << list_state.key << ": " << cpp_strerror(r) << dendl;
         // continue: the index correction is more important than the bilog entry
+      } else if (fifo_datalog) {
+        std::ignore = add_datalog_entry(dpp, svc.datalog_rados, bucket_info,
+                                        datalog_hash_key, 0, y);
       }
     }, bucket_info, log_op);
     return -ENOENT;
@@ -12421,12 +12415,74 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
                         << ": failed to flush ADD bilog entry for "
                         << list_state.key << ": " << cpp_strerror(r) << dendl;
       // continue: the index correction is more important than the bilog entry
+    } else if (fifo_datalog) {
+      std::ignore = add_datalog_entry(dpp, svc.datalog_rados, bucket_info,
+                                      datalog_hash_key, 0, y);
     }
   }, bucket_info, log_op);
 
   ldout_bitx(bitx, dpp, 10) << "EXITING " << __func__ << dendl_bitx;
   return 0;
 } // RGWRados::check_disk_state
+
+void RGWRados::suggest_index_changes(const DoutPrefixProvider *dpp,
+                                     const RGWBucketInfo& bucket_info,
+                                     librados::IoCtx& ioctx,
+                                     const std::string& oid, int shard_id,
+                                     bufferlist& updates)
+{
+  const bool bitx = cct->_conf->rgw_bucket_index_transaction_instrumentation;
+
+  ldout_bitx(bitx, dpp, 10) << "INFO: " << __func__ <<
+    ": doing dir_suggest on " << oid << dendl_bitx;
+
+  const bool is_inindex =
+    bucket_info.layout.logs.empty() ||
+    bucket_info.layout.logs.back().layout.type != rgw::BucketLogType::FIFO;
+  if (!is_inindex || !svc.zone->need_to_log_data()) {
+    // we don't care if we lose suggested updates, send them off blindly
+    ObjectWriteOperation o;
+    o.assert_exists();
+    cls_rgw_guard_bucket_resharding(o, -ERR_BUSY_RESHARDING);
+    cls_rgw_suggest_changes(o, updates);
+    AioCompletion *c = librados::Rados::aio_create_completion(nullptr, nullptr);
+    ioctx.aio_operate(oid, c, &o);
+    c->release();
+    return;
+  }
+
+  bufferlist updates_copy = updates;
+  index_completion_manager->spawn(
+      [this, bucket_info, ioctx, oid, shard_id,
+       updates = std::move(updates_copy)](boost::asio::yield_context y) mutable {
+        DoutPrefix dpp(cct, dout_subsys, "rgw suggest_changes: ");
+        bufferlist reply;
+        ObjectWriteOperation op;
+        op.assert_exists();
+        cls_rgw_guard_bucket_resharding(op, -ERR_BUSY_RESHARDING);
+        cls_rgw_suggest_changes(op, updates, &reply);
+        int r = rgw_rados_operate(&dpp, ioctx, oid, std::move(op), y);
+        if (r < 0) {
+          ldpp_dout(&dpp, 5) << "dir_suggest on " << oid << " failed: "
+                             << cpp_strerror(r) << dendl;
+          return;
+        }
+        bool logged = true;
+        if (reply.length()) {
+          try {
+            auto p = reply.cbegin();
+            decode(logged, p);
+          } catch (const buffer::error&) {
+            logged = true;
+          }
+        }
+        if (!logged) {
+          return;
+        }
+        std::ignore = add_datalog_entry(&dpp, svc.datalog_rados, bucket_info,
+                                        oid, shard_id, y);
+      });
+}
 
 int RGWRados::cls_bucket_head_async(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info,
                                     const rgw::bucket_index_layout_generation& idx_layout, int shard_id,

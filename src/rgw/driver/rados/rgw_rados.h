@@ -1731,6 +1731,13 @@ public:
 				rgw_obj_index_key *last_entry,
                                 optional_yield y,
 				RGWBucketListNameFilter force_check_filter = {});
+  // send the suggestions collected by check_disk_state() to a bucket index
+  // shard. for InIndex buckets this also adds the datalog entry when the
+  // CLS wrote a bilog record while applying them.
+  void suggest_index_changes(const DoutPrefixProvider *dpp,
+                             const RGWBucketInfo& bucket_info,
+                             librados::IoCtx& ioctx, const std::string& oid,
+                             int shard_id, bufferlist& updates);
   int cls_bucket_head_async(const DoutPrefixProvider *dpp,
 			    const RGWBucketInfo& bucket_info,
 			    const rgw::bucket_index_layout_generation& idx_layout,
