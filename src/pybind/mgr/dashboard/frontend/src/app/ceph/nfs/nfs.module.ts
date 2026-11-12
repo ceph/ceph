@@ -30,6 +30,8 @@ import {
 import Close from '@carbon/icons/es/close/32';
 import { NfsClusterComponent } from './nfs-cluster/nfs-cluster.component';
 import { ClusterModule } from '../cluster/cluster.module';
+import { NfsClusterResourcePageComponent } from './nfs-cluster-resource-page/nfs-cluster-resource-page.component';
+import { NfsClusterResourceSidebarComponent } from './nfs-cluster-resource-sidebar/nfs-cluster-resource-sidebar.component';
 
 @NgModule({
   imports: [
@@ -54,14 +56,24 @@ import { ClusterModule } from '../cluster/cluster.module';
     TabsModule,
     ClusterModule
   ],
-  exports: [NfsListComponent, NfsFormComponent, NfsDetailsComponent, NfsClusterComponent],
+  exports: [
+    NfsListComponent,
+    NfsFormComponent,
+    NfsDetailsComponent,
+    NfsClusterComponent,
+    NfsClusterFormComponent,
+    NfsClusterResourcePageComponent,
+    NfsClusterResourceSidebarComponent
+  ],
   declarations: [
     NfsListComponent,
     NfsDetailsComponent,
     NfsFormComponent,
     NfsFormClientComponent,
     NfsClusterComponent,
-    NfsClusterFormComponent
+    NfsClusterFormComponent,
+    NfsClusterResourcePageComponent,
+    NfsClusterResourceSidebarComponent
   ]
 })
 export class NfsModule {

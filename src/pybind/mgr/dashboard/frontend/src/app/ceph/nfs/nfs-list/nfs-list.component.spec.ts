@@ -56,6 +56,26 @@ describe('NfsListComponent', () => {
     expect(component).toBeTruthy();
   });
 
+  describe('shares list', () => {
+    beforeEach(() => {
+      component.clusterId = 'demo-nfs-cluster';
+      spyOn(nfsService, 'list').and.returnValue(of([]));
+      component.ngOnInit();
+    });
+
+    it('should use Create share action, share columns, and cluster create link', () => {
+      expect(component.tableActions[0].name).toBe('Create share');
+      expect(component.columns.map((c) => c.prop)).toEqual([
+        'pseudo',
+        'path',
+        'protocols',
+        'clients'
+      ]);
+      const createLink = component.tableActions[0].routerLink as () => any;
+      expect(createLink()).toEqual(['/cephfs/nfs/create', { cluster_id: 'demo-nfs-cluster' }]);
+    });
+  });
+
   describe('edit action routerLink', () => {
     let editRouterLink: () => string | [string, { rgw_export_type: RgwExportType }];
 
@@ -206,39 +226,39 @@ describe('NfsListComponent', () => {
 
     expect(tableActions).toEqual({
       'create,update,delete': {
-        actions: ['Create', 'Edit', 'Delete'],
+        actions: ['Create share', 'Edit', 'Delete'],
         primary: {
-          multiple: 'Create',
-          executing: 'Create',
-          single: 'Create',
-          no: 'Create'
+          multiple: 'Create share',
+          executing: 'Create share',
+          single: 'Create share',
+          no: 'Create share'
         }
       },
       'create,update': {
-        actions: ['Create', 'Edit'],
+        actions: ['Create share', 'Edit'],
         primary: {
-          multiple: 'Create',
-          executing: 'Create',
-          single: 'Create',
-          no: 'Create'
+          multiple: 'Create share',
+          executing: 'Create share',
+          single: 'Create share',
+          no: 'Create share'
         }
       },
       'create,delete': {
-        actions: ['Create', 'Delete'],
+        actions: ['Create share', 'Delete'],
         primary: {
-          multiple: 'Create',
-          executing: 'Create',
-          single: 'Create',
-          no: 'Create'
+          multiple: 'Create share',
+          executing: 'Create share',
+          single: 'Create share',
+          no: 'Create share'
         }
       },
       create: {
-        actions: ['Create'],
+        actions: ['Create share'],
         primary: {
-          multiple: 'Create',
-          executing: 'Create',
-          single: 'Create',
-          no: 'Create'
+          multiple: 'Create share',
+          executing: 'Create share',
+          single: 'Create share',
+          no: 'Create share'
         }
       },
       'update,delete': {
