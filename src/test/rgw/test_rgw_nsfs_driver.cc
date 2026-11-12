@@ -697,7 +697,6 @@ TEST_F(NSFSDriverTest, Bucket)
 TEST_F(NSFSDriverTest, BucketCreate)
 {
   std::unique_ptr<rgw::sal::Bucket> bucket;
-  bool bucket_exists;
   rgw::sal::Bucket::CreateParams createparams;
 
   RGWBucketInfo info;
@@ -715,7 +714,6 @@ TEST_F(NSFSDriverTest, BucketCreate)
   EXPECT_EQ(bucket->get_key().name, testname);
   EXPECT_EQ(bucket->get_key().tenant, "");
   // bucket_id is set to a random value
-  EXPECT_FALSE(bucket_exists);
 
   sf::path tp{bp / "root" / testname};
   EXPECT_TRUE(sf::exists(tp));
