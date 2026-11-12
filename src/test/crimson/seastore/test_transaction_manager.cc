@@ -1321,7 +1321,7 @@ struct transaction_manager_test_t :
             });
           });
         }).handle_error_interruptible(
-	  crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+	  crimson::ct_error::enospc::assert_failure("unexpected enospc"),
 	  crimson::ct_error::pass_further_all{}
 	);
       });
@@ -1355,7 +1355,7 @@ struct transaction_manager_test_t :
           });
         });
       }).handle_error_interruptible(
-	crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+	crimson::ct_error::enospc::assert_failure("unexpected enospc"),
 	crimson::ct_error::pass_further_all{}
       );
     } else if (new_offset != 0 && o_len == new_offset + new_len) {
@@ -1387,7 +1387,7 @@ struct transaction_manager_test_t :
           });
         });
       }).handle_error_interruptible(
-	crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+	crimson::ct_error::enospc::assert_failure("unexpected enospc"),
 	crimson::ct_error::pass_further_all{}
       );
     } else {

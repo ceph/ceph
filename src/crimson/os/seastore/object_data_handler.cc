@@ -146,7 +146,7 @@ ObjectDataHandler::prepare_data_reservation(
 	pin.get_length());
       return std::make_optional<LBAMapping>(std::move(pin));
     }).handle_error_interruptible(
-      crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+      crimson::ct_error::enospc::assert_failure("unexpected enospc"),
       write_iertr::pass_further{}
     );
   }
@@ -287,7 +287,7 @@ ObjectDataHandler::write_ret do_zero(
       ctx.tm.get_block_size(),
       std::move(zero_pos)
     ).handle_error_interruptible(
-      crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+      crimson::ct_error::enospc::assert_failure("unexpected enospc"),
       TransactionManager::get_pin_iertr::pass_further{}
     ).handle_error_interruptible(
       ObjectDataHandler::write_iertr::pass_further{},
@@ -299,7 +299,7 @@ ObjectDataHandler::write_ret do_zero(
     iter.copy(extent->get_length(), extent->get_bptr().c_str());
     zero_pos = co_await ctx.tm.get_pin(ctx.t, *extent
     ).handle_error_interruptible(
-      crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+      crimson::ct_error::enospc::assert_failure("unexpected enospc"),
       TransactionManager::get_pin_iertr::pass_further{}
     ).handle_error_interruptible(
       ObjectDataHandler::write_iertr::pass_further{},
@@ -321,7 +321,7 @@ ObjectDataHandler::write_ret do_zero(
       ctx.t, std::move(zero_pos), laddr, len,
       extent_types_t::OBJECT_DATA_BLOCK
     ).handle_error_interruptible(
-      crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+      crimson::ct_error::enospc::assert_failure("unexpected enospc"),
       TransactionManager::get_pin_iertr::pass_further{}
     ).handle_error_interruptible(
       ObjectDataHandler::write_iertr::pass_further{},
@@ -339,7 +339,7 @@ ObjectDataHandler::write_ret do_zero(
 	ctx.tm.get_block_size(),
 	std::move(zero_pos)
     ).handle_error_interruptible(
-      crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+      crimson::ct_error::enospc::assert_failure("unexpected enospc"),
       TransactionManager::get_pin_iertr::pass_further{}
     ).handle_error_interruptible(
       ObjectDataHandler::write_iertr::pass_further{},
@@ -376,7 +376,7 @@ ObjectDataHandler::clone_ret do_clonerange(
       ctx.tm.get_block_size(),
       std::move(write_pos)
     ).handle_error_interruptible(
-      crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+      crimson::ct_error::enospc::assert_failure("unexpected enospc"),
       TransactionManager::get_pin_iertr::pass_further{}
     );
     assert(extents.size() == 1);
@@ -386,11 +386,11 @@ ObjectDataHandler::clone_ret do_clonerange(
     iter.copy(extent->get_length(), extent->get_bptr().c_str());
     auto mapping = co_await ctx.tm.get_pin(ctx.t, *extent
     ).handle_error_interruptible(
-      crimson::ct_error::enoent::assert_failure{"unexpected enospc"},
+      crimson::ct_error::enoent::assert_failure("unexpected enospc"),
       TransactionManager::get_pin_iertr::pass_further{}
     );
     write_pos = co_await mapping.next().handle_error_interruptible(
-      crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+      crimson::ct_error::enospc::assert_failure("unexpected enospc"),
       TransactionManager::get_pin_iertr::pass_further{}
     );
   }
@@ -431,7 +431,7 @@ ObjectDataHandler::clone_ret do_clonerange(
       ctx.tm.get_block_size(),
       std::move(write_pos)
     ).handle_error_interruptible(
-      crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+      crimson::ct_error::enospc::assert_failure("unexpected enospc"),
       TransactionManager::get_pin_iertr::pass_further{}
     );
     assert(extents.size() == 1);
@@ -486,7 +486,7 @@ ObjectDataHandler::write_ret do_write(
     }
     return ObjectDataHandler::write_iertr::now();
   }).handle_error_interruptible(
-    crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+    crimson::ct_error::enospc::assert_failure("unexpected enospc"),
     ObjectDataHandler::write_iertr::pass_further{}
   );
 }
