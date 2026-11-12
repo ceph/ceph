@@ -9,6 +9,8 @@
 #ifndef CEPH_COMMON_CRC32C_PPC_H
 #define CEPH_COMMON_CRC32C_PPC_H
 
+#include "arch/ppc.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
