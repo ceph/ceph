@@ -520,14 +520,13 @@ key/value store. If no certificate is specified, ``cephadm`` generates a
 self-signed certificate during the deployment of the Grafana service. Each
 certificate is specific for the host it was generated on.
 
-A custom certificate can be configured using the following commands:
+A custom certificate is stored in the Certificate Manager (certmgr) and is
+specific to each host. To set one for host ``<hostname>``:
 
 .. prompt:: bash #
 
-  ceph config-key set mgr/cephadm/{hostname}/grafana_key -i $PWD/key.pem
-  ceph config-key set mgr/cephadm/{hostname}/grafana_crt -i $PWD/certificate.pem
-
-Where `hostname` is the hostname for the host where grafana service is deployed.
+   ceph orch certmgr cert set --cert-name grafana_cert --hostname <hostname> -i $PWD/certificate.pem
+   ceph orch certmgr key set --key-name grafana_key --hostname <hostname> -i $PWD/key.pem
 
 If you have already deployed Grafana, run ``reconfig`` on the service to
 update its configuration:
