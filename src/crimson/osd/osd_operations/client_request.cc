@@ -132,7 +132,8 @@ ClientRequest::reply_op_error(const Ref<PG>& pg, int err)
 }
 
 ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptible(
-  Ref<PG> pgref, const unsigned this_instance_id, instance_handle_t &ihref)
+  Ref<PG> pgref, const unsigned this_instance_id, instance_handle_t &ihref,
+  seastar::future<RequestOrderer<hobject_t>::Turn> admission_turn)
 {
   LOG_PREFIX(ClientRequest::with_pg_process);
   DEBUGDPP(
@@ -142,13 +143,53 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
   DEBUGDPP("{} start", *pgref, *this);
   PG &pg = *pgref;
 
+  // The admission turn was registered before releasing the shard pipeline.
+  // Do not hold that pipeline while waiting for PG readiness or a slot.
+  co_await interruptor::make_interruptible(ihref.handle.complete());
+
+  // wait until the pg can serve the op before taking a slot, so ops on a pg
+  // that is still peering do not hold slots that other pgs need.  These
+  // waits are repeated in wait_pg_ready, in case the pg changes again
+  // before the op gets there.
+  co_await interruptor::make_interruptible(
+    ihref.enter_blocker(
+      *this, pg.osdmap_gate, &decltype(pg.osdmap_gate)::wait_for_map,
+      m->get_min_epoch(), nullptr));
+  if (pg.can_discard_op(*m)) {
+    co_await interruptor::make_interruptible(
+      shard_services->send_incremental_map(
+        std::ref(get_foreign_connection()), m->get_map_epoch()));
+    co_return;
+  }
+  co_await interruptor::make_interruptible(
+    ihref.enter_blocker(
+      *this,
+      pg.wait_for_active_blocker,
+      &decltype(pg.wait_for_active_blocker)::wait));
+
+  int cost  = std::max<int>(m->get_cost(), 1);
+  unsigned prio  = m->get_priority();
+  uint64_t owner = m->get_source().num();
+
+  // Same-object requests enter throttle admission in arrival order. A
+  // successor must not take a slot and then wait for its predecessor.
+  auto turn = co_await interruptor::make_interruptible(std::move(admission_turn));
+
+  // admit in QoS order, then HOLD the slot for the op's lifetime
+  // (its destructor == mClock RequestCompletion).  Take it before entering
+  // wait_pg_ready: ops leave that phase in the order they entered it, so an
+  // op admitted inside it could wait for an earlier op still waiting for
+  // a slot.
+  auto throttle = co_await interruptor::make_interruptible(
+    shard_services->get_throttle(
+      scheduler::params_t{cost, prio, owner, SchedulerClass::client}));
+
   DEBUGDPP("{}.{}: entering wait_pg_ready stage",
 	   *pgref, *this, this_instance_id);
-  // The prior stage is OrderedExclusive (PerShardPipeline::create_or_wait_pg)
-  // and wait_pg_ready is OrderedConcurrent.  This transition, therefore, cannot
-  // block and using enter_stage_sync is legal and more efficient than
-  // enter_stage.
+  // The shard pipeline has been released, so there is no exit barrier
+  // to drain and entering OrderedConcurrent wait_pg_ready cannot block.
   ihref.enter_stage_sync(client_pp(pg).wait_pg_ready, *this);
+  turn.reset();
 
   if (pg.can_discard_op(*m)) {
     co_await interruptor::make_interruptible(
@@ -171,16 +212,6 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
       *this,
       pg.wait_for_active_blocker,
       &decltype(pg.wait_for_active_blocker)::wait));
-
-  int cost  = std::max<int>(m->get_cost(), 1);
-  unsigned prio  = m->get_priority();
-  uint64_t owner = m->get_source().num();
-
-  // admit in QoS order, then HOLD the slot for the op's lifetime
-  // (its destructor == mClock RequestCompletion).
-  auto throttle = co_await interruptor::make_interruptible(
-    shard_services->get_throttle(
-      scheduler::params_t{cost, prio, owner, SchedulerClass::client}));
 
   DEBUGDPP("{}.{}: waited for active, entering get_obc stage ",
            pg, *this, this_instance_id);
@@ -257,10 +288,14 @@ seastar::future<> ClientRequest::with_pg_process(
   OperationRef opref{this};
   auto instance_handle = get_instance_handle();
   auto &ihref = *instance_handle;
+  // Register before any map/activation wait, including when requeuing.
+  auto admission_turn = pgref->client_request_orderer.admission_orderer.get(
+    m->get_hobj().get_head());
   return interruptor::with_interruption(
-    [FNAME, this, pgref, this_instance_id, &ihref]() mutable {
+    [FNAME, this, pgref, this_instance_id, &ihref,
+     admission_turn = std::move(admission_turn)]() mutable {
       return with_pg_process_interruptible(
-	pgref, this_instance_id, ihref
+	pgref, this_instance_id, ihref, std::move(admission_turn)
       ).then_interruptible([FNAME, this, this_instance_id, pgref] {
 	DEBUGDPP("{}.{}: with_pg_process_interruptible complete,"
 		 " completing request",
