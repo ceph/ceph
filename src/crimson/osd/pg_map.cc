@@ -16,6 +16,8 @@ seastar::future<> PGShardMapping::dump_store_shards(Formatter *f) const {
   f->dump_int("this shard id", seastar::this_shard_id());
   f->dump_int("osd shard nums", seastar::this_smp_shard_count());
   f->dump_int("store_shard_nums", store_shard_nums);
+  f->dump_int("num_mapped_pgs", pg_to_core.size());
+  f->dump_int("num_uncounted_pgs", uncounted_pgs.size());
 
   for (const auto &i : core_to_num_pgs) {
     f->open_object_section("core_pgs");
@@ -250,6 +252,97 @@ seastar::future<std::pair<core_id_t, store_index_t>> PGShardMapping::get_or_crea
   }
 }
 
+core_id_t PGShardMapping::to_store_core(core_id_t mapped_core) const
+{
+  // When smp > store_shard_nums, PGs are mapped to alien cores (e.g. core 3
+  // or 4 when store_shard_nums=3 and smp=5).  core_to_num_pgs only tracks
+  // the store-backend cores (0 .. store_shard_nums-1), so we must derive the
+  // store core from the alien core.
+  if (seastar::this_smp_shard_count() > store_shard_nums) {
+    return mapped_core % store_shard_nums;
+  }
+  return mapped_core;
+}
+
+void PGShardMapping::count_pg(const mapping_t &mapping)
+{
+  auto [mapped_core, store_index] = mapping;
+  auto store_core = to_store_core(mapped_core);
+  if (seastar::this_smp_shard_count() > store_shard_nums) {
+    auto alien_iter = core_alien_to_num_pgs.find(store_core);
+    ceph_assert_always(alien_iter != core_alien_to_num_pgs.end());
+    auto core_iter = alien_iter->second.find(mapped_core);
+    ceph_assert_always(core_iter != alien_iter->second.end());
+    ++(core_iter->second);
+  }
+
+  auto count_iter = core_to_num_pgs.find(store_core);
+  ceph_assert_always(count_iter != core_to_num_pgs.end());
+  ++(count_iter->second);
+
+  if (seastar::this_smp_shard_count() < store_shard_nums) {
+    auto core_shard_iter = core_shard_to_num_pgs.find(store_core);
+    ceph_assert_always(core_shard_iter != core_shard_to_num_pgs.end());
+    auto shard_iter = core_shard_iter->second.find(store_index);
+    ceph_assert_always(shard_iter != core_shard_iter->second.end());
+    ++(shard_iter->second);
+  }
+}
+
+void PGShardMapping::uncount_pg(const mapping_t &mapping)
+{
+  auto [mapped_core, store_index] = mapping;
+  auto store_core = to_store_core(mapped_core);
+  if (seastar::this_smp_shard_count() > store_shard_nums) {
+    // Also decrement the alien-core load counter that was incremented in
+    // get_or_create_pg_mapping.
+    auto alien_iter = core_alien_to_num_pgs.find(store_core);
+    if (alien_iter != core_alien_to_num_pgs.end()) {
+      auto core_iter = alien_iter->second.find(mapped_core);
+      if (core_iter != alien_iter->second.end() && core_iter->second > 0) {
+        --(core_iter->second);
+      }
+    }
+  }
+
+  auto count_iter = core_to_num_pgs.find(store_core);
+  assert(count_iter != core_to_num_pgs.end());
+  assert(count_iter->second > 0);
+  --(count_iter->second);
+
+  auto core_shard_iter = core_shard_to_num_pgs.find(store_core);
+  if (core_shard_iter != core_shard_to_num_pgs.end()) {
+    auto shard_iter = core_shard_iter->second.find(store_index);
+    if (shard_iter != core_shard_iter->second.end()) {
+      if (seastar::this_smp_shard_count() < store_shard_nums) {
+        assert(shard_iter->second > 0);
+        --(shard_iter->second);
+      }
+    }
+  }
+}
+
+unsigned PGShardMapping::count_primary(spg_t pgid, core_id_t mapped_core)
+{
+  auto prim_iter = core_to_num_primaries.find(primary_count_core(mapped_core));
+  ceph_assert_always(prim_iter != core_to_num_primaries.end());
+  if (primary_pgs.insert(pgid).second) {
+    ++(prim_iter->second);
+  }
+  return prim_iter->second;
+}
+
+unsigned PGShardMapping::uncount_primary(spg_t pgid, core_id_t mapped_core)
+{
+  auto prim_iter = core_to_num_primaries.find(primary_count_core(mapped_core));
+  ceph_assert_always(prim_iter != core_to_num_primaries.end());
+  if (primary_pgs.erase(pgid)) {
+    assert(prim_iter->second > 0);
+    --(prim_iter->second);
+  }
+  return prim_iter->second;
+}
+
 seastar::future<> PGShardMapping::set_pg_primary(spg_t pgid, bool is_primary)
 {
   LOG_PREFIX(PGShardMapping::set_pg_primary);
@@ -260,21 +353,100 @@ seastar::future<> PGShardMapping::set_pg_primary(spg_t pgid, bool is_primary)
       DEBUG("pg {} has no mapping", pgid);
       return;
     }
-    auto prim_iter = primary_mapping.core_to_num_primaries.find(
-      primary_mapping.primary_count_core(find_iter->second.first));
-    ceph_assert_always(
-      prim_iter != primary_mapping.core_to_num_primaries.end());
-    auto &num_primaries = prim_iter->second;
-    if (is_primary) {
-      if (primary_mapping.primary_pgs.insert(pgid).second) {
-        ++num_primaries;
-      }
-    } else if (primary_mapping.primary_pgs.erase(pgid)) {
-      assert(num_primaries > 0);
-      --num_primaries;
+    auto mapped_core = find_iter->second.first;
+    if (primary_mapping.uncounted_pgs.contains(pgid)) {
+      // not counted, claim_pg_count() counts the role the pg is created with
+      DEBUG("pg {} on core {}: primary {}, not counted",
+            pgid, mapped_core, is_primary);
+      return;
     }
+    auto num_primaries = is_primary ?
+      primary_mapping.count_primary(pgid, mapped_core) :
+      primary_mapping.uncount_primary(pgid, mapped_core);
     DEBUG("pg {} on core {}: primary {}, core's primaries {}",
-          pgid, find_iter->second.first, is_primary, num_primaries);
+          pgid, mapped_core, is_primary, num_primaries);
+  });
+}
+
+seastar::future<> PGShardMapping::release_pg_count(spg_t pgid)
+{
+  LOG_PREFIX(PGShardMapping::release_pg_count);
+  return container().invoke_on(
+      0, [pgid, FNAME](auto &primary_mapping) {
+    auto find_iter = primary_mapping.pg_to_core.find(pgid);
+    if (find_iter == primary_mapping.pg_to_core.end()) {
+      DEBUG("pg {} has no mapping", pgid);
+      return;
+    }
+    if (primary_mapping.uncounted_pgs.contains(pgid)) {
+      return;
+    }
+    auto mapped_core = find_iter->second.first;
+    primary_mapping.uncount_primary(pgid, mapped_core);
+    primary_mapping.uncount_pg(find_iter->second);
+    primary_mapping.uncounted_pgs.insert(pgid);
+    DEBUG("pg {} mapped to core {} does not exist, not counted",
+          pgid, mapped_core);
+  });
+}
+
+seastar::future<> PGShardMapping::claim_pg_count(spg_t pgid, bool is_primary)
+{
+  LOG_PREFIX(PGShardMapping::claim_pg_count);
+  return container().invoke_on(
+      0, [pgid, is_primary, FNAME](auto &primary_mapping) {
+    auto find_iter = primary_mapping.pg_to_core.find(pgid);
+    if (find_iter == primary_mapping.pg_to_core.end()) {
+      DEBUG("pg {} has no mapping", pgid);
+      return;
+    }
+    auto mapped_core = find_iter->second.first;
+    if (primary_mapping.uncounted_pgs.erase(pgid)) {
+      primary_mapping.count_pg(find_iter->second);
+      DEBUG("pg {} created on core {}, counted again", pgid, mapped_core);
+    }
+    // the role the mapping was counted with may be stale, and a pg created
+    // at the current epoch does not go through on_change()
+    auto num_primaries = is_primary ?
+      primary_mapping.count_primary(pgid, mapped_core) :
+      primary_mapping.uncount_primary(pgid, mapped_core);
+    DEBUG("pg {} created on core {}: primary {}, core's primaries {}",
+          pgid, mapped_core, is_primary, num_primaries);
+  });
+}
+
+seastar::future<std::vector<spg_t>> PGShardMapping::get_uncounted_pgs()
+{
+  return container().invoke_on(
+      0, [](const auto &primary_mapping) {
+    return std::vector<spg_t>(primary_mapping.uncounted_pgs.begin(),
+                              primary_mapping.uncounted_pgs.end());
+  });
+}
+
+seastar::future<> PGShardMapping::remove_uncounted_pg_mapping(spg_t pgid)
+{
+  LOG_PREFIX(PGShardMapping::remove_uncounted_pg_mapping);
+  return container().invoke_on(
+      0, [pgid, FNAME](auto &primary_mapping) {
+    if (primary_mapping.uncounted_pgs.erase(pgid) == 0) {
+      // counted again, or already removed
+      return seastar::now();
+    }
+    auto find_iter = primary_mapping.pg_to_core.find(pgid);
+    ceph_assert_always(find_iter != primary_mapping.pg_to_core.end());
+    primary_mapping.pg_to_core.erase(find_iter);
+    DEBUG("pg {} mapping erased (primary)", pgid);
+    return primary_mapping.container().invoke_on_others(
+      [pgid, FNAME](auto &other_mapping) {
+      auto find_iter = other_mapping.pg_to_core.find(pgid);
+      if (find_iter == other_mapping.pg_to_core.end()) {
+        ERROR("trying to remove non-exist mapping for pg {} (others)", pgid);
+        ceph_abort_msg("The pg mapping is inconsistent!");
+      }
+      other_mapping.pg_to_core.erase(find_iter);
+      DEBUG("pg {} mapping erased (others)", pgid);
+    });
   });
 }
 
@@ -294,51 +466,9 @@ seastar::future<> PGShardMapping::remove_pg_mapping(spg_t pgid) {
       ceph_abort_msg("The pg mapping is inconsistent!");
     }
     assert(find_iter->second.first != NULL_CORE);
-    auto mapped_core = find_iter->second.first;
-    auto store_index = find_iter->second.second;
-
-    // When smp > store_shard_nums, PGs are mapped to alien cores (e.g. core 3
-    // or 4 when store_shard_nums=3 and smp=5).  core_to_num_pgs only tracks
-    // the store-backend cores (0 .. store_shard_nums-1), so we must derive the
-    // store core from the alien core before decrementing it.
-    core_id_t store_core;
-    if (seastar::this_smp_shard_count() > primary_mapping.store_shard_nums) {
-      store_core = mapped_core % primary_mapping.store_shard_nums;
-      // Also decrement the alien-core load counter that was incremented in
-      // get_or_create_pg_mapping.
-      auto alien_iter = primary_mapping.core_alien_to_num_pgs.find(store_core);
-      if (alien_iter != primary_mapping.core_alien_to_num_pgs.end()) {
-        auto core_iter = alien_iter->second.find(mapped_core);
-        if (core_iter != alien_iter->second.end() && core_iter->second > 0) {
-          --(core_iter->second);
-        }
-      }
-    } else {
-      store_core = mapped_core;
-    }
-
-    auto count_iter = primary_mapping.core_to_num_pgs.find(store_core);
-    assert(count_iter != primary_mapping.core_to_num_pgs.end());
-    assert(count_iter->second > 0);
-    --(count_iter->second);
-    if (primary_mapping.primary_pgs.erase(pgid)) {
-      auto prim_iter = primary_mapping.core_to_num_primaries.find(
-        primary_mapping.primary_count_core(find_iter->second.first));
-      ceph_assert_always(
-        prim_iter != primary_mapping.core_to_num_primaries.end());
-      assert(prim_iter->second > 0);
-      --(prim_iter->second);
-    }
-
-    auto core_shard_iter = primary_mapping.core_shard_to_num_pgs.find(store_core);
-    if (core_shard_iter != primary_mapping.core_shard_to_num_pgs.end()) {
-      auto shard_iter = core_shard_iter->second.find(store_index);
-      if (shard_iter != core_shard_iter->second.end()) {
-        if (seastar::this_smp_shard_count() < primary_mapping.store_shard_nums) {
-          assert(shard_iter->second > 0);
-          --(shard_iter->second);
-        }
-      }
+    if (primary_mapping.uncounted_pgs.erase(pgid) == 0) {
+      primary_mapping.uncount_primary(pgid, find_iter->second.first);
+      primary_mapping.uncount_pg(find_iter->second);
     }
 
     primary_mapping.pg_to_core.erase(find_iter);

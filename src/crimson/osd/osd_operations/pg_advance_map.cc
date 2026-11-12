@@ -118,7 +118,7 @@ seastar::future<> PGAdvanceMap::start()
   pg->handle_activate_map(rctx);
   DEBUG("{}: map activated", *this);
   if (do_init) {
-    shard_services.pg_created(pg->get_pgid(), pg);
+    co_await shard_services.pg_created(pg->get_pgid(), pg);
     INFO("PGAdvanceMap::start new pg {}", *pg);
   }
   co_await pg->complete_rctx(std::move(rctx));
