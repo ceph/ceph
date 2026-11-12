@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include "rgw_kafka.h"
+#include "rgw_hint_registry.h"
 #include "rgw_url.h"
 #include <librdkafka/rdkafka.h>
 #include "include/ceph_assert.h"
@@ -957,10 +958,31 @@ bool init(CephContext* cct) {
   }
   // TODO: take conf from CephContext
   s_manager = new Manager(MAX_CONNECTIONS_DEFAULT, MAX_INFLIGHT_DEFAULT, MAX_QUEUE_DEFAULT, cct);
+  /* kafka-idle:  the gateway's open connections, and with `seconds=`
+   * rgw_kafka_connection_idle set at runtime, which the manager reads on
+   * each pass -- what a test of idle connections otherwise sets through
+   * the monitor and observes with ss */
+  rgw::hint_registry::add("kafka-idle",
+    [cct](const DoutPrefixProvider*, const std::map<std::string, std::string>& params,
+          std::map<std::string, std::string>* out) -> int {
+      if (auto it = params.find("seconds"); it != params.end()) {
+        if (cct->_conf.set_val("rgw_kafka_connection_idle", it->second) < 0) {
+          return -EINVAL;
+        }
+        cct->_conf.apply_changes(nullptr);
+      }
+      if (out) {
+        (*out)["connections"] = std::to_string(get_connection_count());
+        (*out)["seconds"] = std::to_string(
+          cct->_conf.get_val<uint64_t>("rgw_kafka_connection_idle"));
+      }
+      return 0;
+    });
   return true;
 }
 
 void shutdown() {
+  rgw::hint_registry::remove("kafka-idle");
   std::unique_lock lock(s_manager_mutex);
   delete s_manager;
   s_manager = nullptr;

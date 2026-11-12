@@ -6,6 +6,7 @@
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
 #include "common/config_proxy.h"
+#include "rgw_hint_registry.h"
 
 class RGWOp_Driver_Hint : public RGWRESTOp {
 public:
@@ -39,7 +40,13 @@ public:
     ldpp_dout(s, 10) << "driver_hint: hint=" << hint
       << " params=" << params.size() << dendl;
     std::map<std::string, std::string> out;
-    op_ret = driver->driver_hint(s, hint, params, &out);
+    /* a hint RGW serves itself (rgw_hint_registry.h) before the
+     * driver's */
+    if (auto r = rgw::hint_registry::run(s, hint, params, &out); r) {
+      op_ret = *r;
+    } else {
+      op_ret = driver->driver_hint(s, hint, params, &out);
+    }
     ldpp_dout(s, 10) << "driver_hint: hint=" << hint
       << " ret=" << op_ret << " results=" << out.size() << dendl;
     if (op_ret < 0) {
