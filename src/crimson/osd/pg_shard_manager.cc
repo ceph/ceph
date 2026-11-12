@@ -80,6 +80,34 @@ PGShardManager::get_pg_stats() const
     });
 }
 
+seastar::future<> PGShardManager::remove_uncounted_pgs_of_deleted_pools()
+{
+  ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
+  auto osdmap = get_shard_services().get_map();
+  auto pgids = co_await get_pg_to_shard_mapping().get_uncounted_pgs();
+  for (auto pgid : pgids) {
+    if (osdmap->have_pg_pool(pgid.pool())) {
+      continue;
+    }
+    auto core = get_pg_to_shard_mapping().get_pg_mapping(pgid);
+    if (core == NULL_CORE) {
+      continue;
+    }
+    // every shard has this osdmap, so the pg cannot be created after
+    // this check; one being created or waited for is left to a later map
+    bool in_use = co_await with_remote_shard_state(
+      core, [pgid](auto &local_state, auto &) {
+      return local_state.pg_map.has_pg_or_creating(pgid);
+    });
+    if (in_use) {
+      continue;
+    }
+    logger().debug("PGShardManager::{}: pool of pg {} is gone, "
+                   "removing its uncounted mapping", __func__, pgid);
+    co_await get_pg_to_shard_mapping().remove_uncounted_pg_mapping(pgid);
+  }
+}
+
 seastar::future<> PGShardManager::broadcast_map_to_pgs(epoch_t epoch)
 {
   ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);

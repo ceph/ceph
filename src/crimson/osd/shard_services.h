@@ -587,6 +587,18 @@ public:
       });
   }
 
+  /**
+   * An op mapped pgid to this core but found no pg here and dropped it.
+   * Stop counting the pg for placement unless it exists by now; if it is
+   * created later, pg_created() counts it again.
+   */
+  seastar::future<> release_pg_count_if_absent(spg_t pgid) {
+    if (local_state.pg_map.get_pg(pgid)) {
+      return seastar::now();
+    }
+    return pg_to_shard_mapping.release_pg_count(pgid);
+  }
+
   auto remove_pg(spg_t pgid) {
     local_state.pg_map.remove_pg(pgid);
     return pg_to_shard_mapping.remove_pg_mapping(pgid);
@@ -758,7 +770,12 @@ public:
   FORWARD_TO_LOCAL(update_shard_superblock)
   FORWARD_TO_LOCAL(get_osdmap_tlb)
 
-  FORWARD(pg_created, pg_created, local_state.pg_map)
+  // a template, so that PG needs not be complete here
+  template <typename PGRef>
+  seastar::future<> pg_created(spg_t pgid, PGRef &&pg) {
+    local_state.pg_map.pg_created(pgid, std::forward<PGRef>(pg));
+    return pg_to_shard_mapping.claim_pg_count(pgid);
+  }
 
   FORWARD_TO_OSD_SINGLETON_TARGET(
     snap_dump_reservations,

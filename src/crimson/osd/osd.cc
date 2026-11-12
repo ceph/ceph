@@ -1409,6 +1409,7 @@ seastar::future<> OSD::committed_osd_maps(
   // Drop merge-ready bookkeeping for PGs removed by the map we just
   // consumed, mirroring classic OSD::consume_map().
   co_await get_shard_services().prune_sent_ready_to_merge();
+  co_await pg_shard_manager.remove_uncounted_pgs_of_deleted_pools();
 
   if (osdmap->is_up(whoami)) {
     const auto up_from = osdmap->get_up_from(whoami);
