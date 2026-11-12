@@ -172,16 +172,28 @@ def assert_rm_service(cephadm: CephadmOrchestrator, srv_name):
         assert srv_name not in cephadm.spec_store, f'{cephadm.spec_store[srv_name]!r}'
 
 
+def _scheduled_update_msg(spec: ServiceSpec) -> str:
+    msg = f'Scheduled {spec.service_name()} update...'
+    if spec.unmanaged:
+        msg += (
+            f'\nNOTE: {spec.service_name()} is unmanaged. The spec has been'
+            f' saved but daemon changes will take effect only when the'
+            f' service becomes managed'
+            f' (e.g. `ceph orch set-managed {spec.service_name()}`).'
+        )
+    return msg
+
+
 @contextmanager
 def with_service(cephadm_module: CephadmOrchestrator, spec: ServiceSpec, meth=None, host: str = '', status_running=False) -> Iterator[List[str]]:
     if spec.placement.is_empty() and host:
         spec.placement = PlacementSpec(hosts=[host], count=1)
     if meth is not None:
         c = meth(cephadm_module, spec)
-        assert wait(cephadm_module, c) == f'Scheduled {spec.service_name()} update...'
+        assert wait(cephadm_module, c) == _scheduled_update_msg(spec)
     else:
         c = cephadm_module.apply([spec])
-        assert wait(cephadm_module, c) == [f'Scheduled {spec.service_name()} update...']
+        assert wait(cephadm_module, c) == [_scheduled_update_msg(spec)]
 
     specs = [d.spec for d in wait(cephadm_module, cephadm_module.describe_service())]
     assert spec in specs
