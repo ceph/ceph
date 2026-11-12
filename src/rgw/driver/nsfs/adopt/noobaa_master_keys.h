@@ -91,13 +91,16 @@ public:
   /* Load, honouring the store type.
    *
    *   file        `<location>`, else `<config_root>/master_keys.json`
-   *   executable  the program's standard output, which is the same
-   *               JSON.  No key file exists in this deployment
+   *   executable  `<program> master_keys`'s standard output:
+   *               `{"status":"OK","version":N,"data":<the file's
+   *               JSON>}`.  No key file exists in this deployment
    *
-   * Returns -ENOENT when the store is not there, -EBADMSG when it is
-   * there and will not parse, -ENOKEY when it parses and holds no
-   * usable key, and -EPROTONOSUPPORT when a key names a cipher this
-   * does not implement. */
+   * Returns -ENOENT when the store is not there, or the program
+   * returns NOT_FOUND;  -EIO when the program fails or returns another
+   * status;  -EBADMSG when the store is there and will not parse;
+   * -ENOKEY when it parses and holds no usable key;  and
+   * -EPROTONOSUPPORT when a key names a cipher this does not
+   * implement. */
   int load(const DoutPrefixProvider* dpp, const NooBaaSettings& settings,
 	   const std::string& config_root);
 

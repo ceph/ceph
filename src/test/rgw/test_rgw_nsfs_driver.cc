@@ -15719,12 +15719,24 @@ TEST_F(NooBaaKeysTest, AWrongKeyIsDetectedRatherThanReturned)
  * `NC_MASTER_KEYS_STORE_TYPE` may be `executable`, and then no key
  * file exists at all -- a reader that assumed `master_keys.json` would
  * report a broken deployment rather than a differently configured one.
- * The same key, delivered on standard output, opens the same secret. */
+ * NooBaa runs the program with the record's name, `master_keys`, and
+ * reads an envelope whose `data` is the file's JSON
+ * (`nc_master_key_manager.js:239`);  the script here answers as NooBaa's
+ * own test helper and IBM's `cess3_key_get` do, NOT_FOUND for any other
+ * name, exiting 0 either way.  The same key, delivered so, opens the
+ * same secret. */
 TEST_F(NooBaaKeysTest, TheKeysMayComeFromAProgram)
 {
   const std::string prog = (bp / "say-keys").string();
-  write_file(prog, std::string("#!/bin/sh\ncat <<'EOJ'\n") +
-		   NB_MASTER_KEYS + "\nEOJ\n");
+  write_file(prog, std::string(
+      "#!/bin/sh\n"
+      "if [ \"$#\" -ne 1 ] || [ \"$1\" != master_keys ]; then\n"
+      "  echo '{\"status\":\"NOT_FOUND\"}'\n"
+      "  exit 0\n"
+      "fi\n"
+      "cat <<'EOJ'\n"
+      "{\"status\":\"OK\",\"version\":1,\"data\":") + NB_MASTER_KEYS +
+      "}\nEOJ\n");
   ASSERT_EQ(::chmod(prog.c_str(), 0700), 0);
 
   nsfs::NooBaaSettings s;
@@ -15741,6 +15753,19 @@ TEST_F(NooBaaKeysTest, TheKeysMayComeFromAProgram)
 			 "Rm3nJgdKQ==", secret), 0);
   EXPECT_EQ(secret, NB_PLAIN_SECRET);
 
+  /* a program named without a directory is found on PATH */
+  {
+    const char* old = ::getenv("PATH");
+    const std::string saved = old ? old : "";
+    ::setenv("PATH", (bp.string() + ":" + saved).c_str(), 1);
+    nsfs::NooBaaSettings bare = s;
+    bare.master_keys_get_executable = "say-keys";
+    nsfs::NooBaaMasterKeys found;
+    EXPECT_EQ(found.load(env->dpp, bare, store), 0);
+    EXPECT_FALSE(found.empty());
+    ::setenv("PATH", saved.c_str(), 1);
+  }
+
   /* a program that fails is not an empty key store */
   nsfs::NooBaaSettings broken = s;
   broken.master_keys_get_executable = (bp / "no-such-program").string();
@@ -15751,6 +15776,33 @@ TEST_F(NooBaaKeysTest, TheKeysMayComeFromAProgram)
   nsfs::NooBaaSettings unset;
   unset.master_keys_store_type = "executable";
   EXPECT_EQ(none.load(env->dpp, unset, store), -ENOENT);
+
+  /* each other answer the envelope can carry */
+  auto answering = [&](const std::string& name, const std::string& body) {
+    const std::string path = (bp / name).string();
+    write_file(path, "#!/bin/sh\ncat <<'EOJ'\n" + body + "\nEOJ\n");
+    EXPECT_EQ(::chmod(path.c_str(), 0700), 0);
+    nsfs::NooBaaSettings t = s;
+    t.master_keys_get_executable = path;
+    nsfs::NooBaaMasterKeys k;
+    const int r = k.load(env->dpp, t, store);
+    EXPECT_TRUE(k.empty()) << name;
+    return r;
+  };
+  EXPECT_EQ(answering("not-found", R"({"status":"NOT_FOUND"})"), -ENOENT);
+  EXPECT_EQ(answering("internal", R"({"status":"INTERNAL"})"), -EIO);
+  EXPECT_EQ(answering("no-status", NB_MASTER_KEYS), -EBADMSG)
+      << "the file's shape, unwrapped, was taken as an envelope";
+  EXPECT_EQ(answering("no-data", R"({"status":"OK","version":1})"), -EBADMSG);
+  {
+    const std::string path = (bp / "exits-1").string();
+    write_file(path, "#!/bin/sh\nexit 1\n");
+    ASSERT_EQ(::chmod(path.c_str(), 0700), 0);
+    nsfs::NooBaaSettings t = s;
+    t.master_keys_get_executable = path;
+    nsfs::NooBaaMasterKeys k;
+    EXPECT_EQ(k.load(env->dpp, t, store), -EIO);
+  }
 }
 
 /* A store this cannot read says so, each in its own way.

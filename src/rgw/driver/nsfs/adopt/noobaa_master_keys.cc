@@ -52,9 +52,12 @@ namespace {
 
 /* NooBaa's store, whichever form it takes, as JSON text.
  *
- * The executable form is run without a shell:  the path comes out of
- * a configuration file and interpolating it into a command line would
- * be a quoting question nobody needs to have. */
+ * The executable form is run as NooBaa runs it, with the record's name,
+ * `master_keys`, as its one argument (`nc_master_key_manager.js:239`),
+ * and prints an envelope load() unwraps.  Run without a shell, which
+ * NooBaa uses:  the value is documented as a program's path, and
+ * interpreting it as a command line would be a quoting question nobody
+ * needs to have.  The path is searched for, as a shell would. */
 int read_key_store(const DoutPrefixProvider* dpp,
 		   const NooBaaSettings& settings,
 		   const std::string& config_root,
@@ -86,6 +89,8 @@ int read_key_store(const DoutPrefixProvider* dpp,
     return -ENOENT;
   }
 
+  char* const argv[] = {const_cast<char*>(prog.c_str()),
+			 const_cast<char*>("master_keys"), nullptr};
   int fds[2];
   if (::pipe(fds) != 0) {
     return -errno;
@@ -103,7 +108,7 @@ int read_key_store(const DoutPrefixProvider* dpp,
       ::_exit(127);
     }
     ::close(fds[1]);
-    ::execl(prog.c_str(), prog.c_str(), (char*)nullptr);
+    ::execvp(prog.c_str(), argv);
     ::_exit(127);
   }
   ::close(fds[1]);
@@ -189,10 +194,43 @@ int NooBaaMasterKeys::load(const DoutPrefixProvider* dpp,
     return -EBADMSG;
   }
 
-  try {
-    JSONDecoder::decode_json("active_master_key", active_id, &p);
+  /* The executable's envelope:  `{"status", "version", "data"}`, with
+   * the file's shape in `data` when the status is OK.  NOT_FOUND is a
+   * store with no master key, on which NooBaa would make one;  nothing
+   * NooBaa encrypted can be opened with a new key, so here it is the
+   * store not being there. */
+  JSONObj* store = &p;
+  if (settings.master_keys_store_type == "executable") {
+    JSONObj* status = p.find_obj("status");
+    if (!status) {
+      ldpp_dout_fmt(dpp, 0, "ERROR: {} printed no status",
+			    settings.master_keys_get_executable);
+      return -EBADMSG;
+    }
+    if (status->get_data() == "NOT_FOUND") {
+      ldpp_dout_fmt(dpp, 0, "ERROR: {} master_keys returned NOT_FOUND:  the "
+			    "store holds no master key",
+			    settings.master_keys_get_executable);
+      return -ENOENT;
+    }
+    if (status->get_data() != "OK") {
+      ldpp_dout_fmt(dpp, 0, "ERROR: {} master_keys returned status {}",
+			    settings.master_keys_get_executable,
+			    status->get_data());
+      return -EIO;
+    }
+    store = p.find_obj("data");
+    if (!store || !store->is_object()) {
+      ldpp_dout_fmt(dpp, 0, "ERROR: {} returned OK with no data object",
+			    settings.master_keys_get_executable);
+      return -EBADMSG;
+    }
+  }
 
-    JSONObj* all = p.find_obj("master_keys_by_id");
+  try {
+    JSONDecoder::decode_json("active_master_key", active_id, store);
+
+    JSONObj* all = store->find_obj("master_keys_by_id");
     if (!all) {
       ldpp_dout_fmt(dpp, 0, "ERROR: the master key store has no "
 			    "master_keys_by_id");
