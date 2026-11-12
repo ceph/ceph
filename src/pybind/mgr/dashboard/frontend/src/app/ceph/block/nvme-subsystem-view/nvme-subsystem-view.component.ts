@@ -31,11 +31,6 @@ export class NvmeSubsystemViewComponent implements OnInit {
     const extras = { queryParams: { group: this.groupName } };
     this.sidebarItems = [
       {
-        label: $localize`Overview`,
-        route: [this.basePath, this.subsystemNQN, 'overview'],
-        routeExtras: extras
-      },
-      {
         label: $localize`Initiators`,
         route: [this.basePath, this.subsystemNQN, 'hosts'],
         routeExtras: extras
@@ -48,11 +43,6 @@ export class NvmeSubsystemViewComponent implements OnInit {
       {
         label: $localize`Listeners`,
         route: [this.basePath, this.subsystemNQN, 'listeners'],
-        routeExtras: extras
-      },
-      {
-        label: $localize`Performance`,
-        route: [this.basePath, this.subsystemNQN, 'performance'],
         routeExtras: extras
       }
     ];

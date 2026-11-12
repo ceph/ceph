@@ -14,8 +14,9 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
+import { NvmeofStateService } from '../nvmeof-state.service';
 import { combineLatest, Subject } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
+import { catchError, takeUntil, tap } from 'rxjs/operators';
 
 @Component({
   selector: 'cd-nvmeof-subsystem-namespaces-list',
@@ -35,7 +36,6 @@ export class NvmeofSubsystemNamespacesListComponent implements OnInit, OnDestroy
   private destroy$ = new Subject<void>();
 
   constructor(
-    // ... constructor stays mostly same
     public actionLabels: ActionLabelsI18n,
     private router: Router,
     private modalService: ModalCdsService,
@@ -44,7 +44,8 @@ export class NvmeofSubsystemNamespacesListComponent implements OnInit, OnDestroy
     private nvmeofService: NvmeofService,
     private dimlessBinaryPipe: DimlessBinaryPipe,
     private iopsPipe: IopsPipe,
-    private route: ActivatedRoute
+    private route: ActivatedRoute,
+    private nvmeofStateService: NvmeofStateService
   ) {
     this.permission = this.authStorageService.getPermissions().nvmeof;
   }
@@ -155,7 +156,13 @@ export class NvmeofSubsystemNamespacesListComponent implements OnInit, OnDestroy
     if (this.group) {
       this.nvmeofService
         .listNamespaces(this.group, this.subsystemNQN)
-        .pipe(takeUntil(this.destroy$))
+        .pipe(
+          catchError(() => {
+            this.namespaces = [];
+            return [];
+          }),
+          takeUntil(this.destroy$)
+        )
         .subscribe((res: NvmeofSubsystemNamespace[]) => {
           this.namespaces = res || [];
         });
@@ -171,13 +178,15 @@ export class NvmeofSubsystemNamespacesListComponent implements OnInit, OnDestroy
       itemNames: [namespace.nsid],
       actionDescription: 'delete',
       submitActionObservable: () =>
-        this.taskWrapper.wrapTaskAroundCall({
-          task: new FinishedTask('nvmeof/namespace/delete', {
-            nqn: this.subsystemNQN,
-            nsid: namespace.nsid
-          }),
-          call: this.nvmeofService.deleteNamespace(this.subsystemNQN, namespace.nsid, this.group)
-        })
+        this.taskWrapper
+          .wrapTaskAroundCall({
+            task: new FinishedTask('nvmeof/namespace/delete', {
+              nqn: this.subsystemNQN,
+              nsid: namespace.nsid
+            }),
+            call: this.nvmeofService.deleteNamespace(this.subsystemNQN, namespace.nsid, this.group)
+          })
+          .pipe(tap({ complete: () => this.nvmeofStateService.requestRefresh() }))
     });
   }
 

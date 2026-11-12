@@ -9,6 +9,7 @@ import { mergeMap } from 'rxjs/operators';
 import { CrudTaskInfo, JsonFormUISchema } from './crud-form.model';
 import { Observable } from 'rxjs';
 import _ from 'lodash';
+import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { CdTableSelection } from '../../models/cd-table-selection';
 
 @Component({
@@ -24,7 +25,8 @@ export class CrudFormComponent implements OnInit {
   form = new UntypedFormGroup({});
   formUISchema$: Observable<JsonFormUISchema>;
   methodType: string;
-  urlFormName: string;
+  urlFormAction: string;
+  submitAction: string;
   key: string = '';
   selected: CdTableSelection;
 
@@ -33,11 +35,19 @@ export class CrudFormComponent implements OnInit {
     private activatedRoute: ActivatedRoute,
     private taskWrapper: TaskWrapperService,
     private location: Location,
-    private router: Router
+    private router: Router,
+    private actionLabels: ActionLabelsI18n
   ) {}
 
   ngOnInit(): void {
     this.activatedRoute.queryParamMap.subscribe((paramMap) => {
+      this.urlFormAction = this.router.url.split('/').pop();
+      // remove optional arguments
+      const paramIndex = this.urlFormAction.indexOf('?');
+      if (paramIndex > 0) {
+        this.urlFormAction = this.urlFormAction.substring(0, paramIndex);
+      }
+
       this.formUISchema$ = this.activatedRoute.data.pipe(
         mergeMap((data: any) => {
           this.resource = data.resource || this.resource;
@@ -49,13 +59,9 @@ export class CrudFormComponent implements OnInit {
       this.formUISchema$.subscribe((data: any) => {
         this.methodType = data.methodType;
         this.model = data.model;
+        this.submitAction =
+          this.urlFormAction === URLVerbs.EDIT ? this.actionLabels.SAVE_CHANGES : data.title;
       });
-      this.urlFormName = this.router.url.split('/').pop();
-      // remove optional arguments
-      const paramIndex = this.urlFormName.indexOf('?');
-      if (paramIndex > 0) {
-        this.urlFormName = this.urlFormName.substring(0, paramIndex);
-      }
     });
   }
 
@@ -92,7 +98,7 @@ export class CrudFormComponent implements OnInit {
       await this.preSubmit(data);
       this.taskWrapper
         .wrapTaskAroundCall({
-          task: new FinishedTask(`crud-component/${this.urlFormName}`, taskMetadata),
+          task: new FinishedTask(`crud-component/${this.urlFormAction}`, taskMetadata),
           call: this.dataGatewayService.submit(this.resource, data, this.methodType)
         })
         .subscribe({

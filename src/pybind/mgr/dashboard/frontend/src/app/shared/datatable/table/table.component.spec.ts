@@ -133,9 +133,9 @@ describe('TableComponent', () => {
     ) => {
       component.search = search;
       _.forEach(changes, (change) => {
-        component.onSelectFilter(change.filter.column.name);
-        component.onChangeFilter(change.value || undefined);
+        component.onChangeFilter(change.value || undefined, change.filter);
       });
+      component.onSubmitFilter();
       expect(component.rows).toEqual(results);
       component.onClearSearch();
       component.onClearFilters();

@@ -6,6 +6,7 @@ import { of } from 'rxjs';
 
 import { NvmeSubsystemViewComponent } from './nvme-subsystem-view.component';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
+
 describe('NvmeSubsystemViewComponent', () => {
   let component: NvmeSubsystemViewComponent;
   let fixture: ComponentFixture<NvmeSubsystemViewComponent>;
@@ -40,37 +41,28 @@ describe('NvmeSubsystemViewComponent', () => {
   });
 
   it('should build sidebar items correctly', () => {
-    expect(component.sidebarItems.length).toBe(5);
+    expect(component.sidebarItems.length).toBe(3);
 
+    // Verify first item (Initiators)
     expect(component.sidebarItems[0].route).toEqual([
-      '/block/nvmeof/subsystems',
-      'nqn.test',
-      'overview'
-    ]);
-    expect(component.sidebarItems[0].routeExtras).toEqual({ queryParams: { group: 'my-group' } });
-
-    expect(component.sidebarItems[1].route).toEqual([
       '/block/nvmeof/subsystems',
       'nqn.test',
       'hosts'
     ]);
+    expect(component.sidebarItems[0].routeExtras).toEqual({ queryParams: { group: 'my-group' } });
 
-    expect(component.sidebarItems[2].route).toEqual([
+    // Verify second item (Namespaces)
+    expect(component.sidebarItems[1].route).toEqual([
       '/block/nvmeof/subsystems',
       'nqn.test',
       'namespaces'
     ]);
 
-    expect(component.sidebarItems[3].route).toEqual([
+    // Verify third item (Listeners)
+    expect(component.sidebarItems[2].route).toEqual([
       '/block/nvmeof/subsystems',
       'nqn.test',
       'listeners'
-    ]);
-
-    expect(component.sidebarItems[4].route).toEqual([
-      '/block/nvmeof/subsystems',
-      'nqn.test',
-      'performance'
     ]);
   });
 });
