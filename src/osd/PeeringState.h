@@ -2422,17 +2422,20 @@ public:
   void close_rebuild_span();
 
   /**
-   * Set when either rebuild-stats counter -- pg_vulnerability_duration
-   * (prepare_stats_for_publish()) or pg_rebuild_duration
-   * (close_rebuild_span()) -- records a close; cleared by share_pg_info(),
-   * which sends info.history (and so both counters' "reported" markers)
-   * wholesale. Replicas only learn of a close through that share, and one
-   * left holding the pre-close history would, if promoted, treat the
-   * already-recorded episode as still open and record it again.
-   * Active::react(AdvMap) retries share_pg_info() while this is set, the
-   * same way it already does for dirty_big_info.
+   * Set whenever either rebuild-stats counter -- pg_vulnerability_duration
+   * (prepare_stats_for_publish()) or pg_rebuild_duration (arm_rebuild_span()/
+   * pause_rebuild_span()/close_rebuild_span()) -- latches an onset, pauses,
+   * or records a close; cleared by share_pg_info(), which sends info.history
+   * (and so both counters' onset/"reported" fields) wholesale. Replicas only
+   * learn of any of these transitions through that share. Left unshared
+   * across a primary handover, a peer can either treat an already-armed
+   * onset as unarmed and latch a fresh one of its own (losing the true
+   * onset), or treat an already-recorded episode as still open and record
+   * it again (double-counting). Active::react(AdvMap) retries
+   * share_pg_info() while this is set, the same way it already does for
+   * dirty_big_info.
    */
-  bool rebuild_stats_close_unshared = false;
+  bool rebuild_stats_unshared = false;
 
   bool is_complete() const { return info.last_complete == info.last_update; }
   bool should_send_notify() const { return send_notify; }
