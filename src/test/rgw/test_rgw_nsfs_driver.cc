@@ -16006,6 +16006,7 @@ TEST_F(NSFSIdentityDBTest, BucketPlacementRoundTrips)
   EXPECT_EQ(got.bucket_name, "elsewhere");
   EXPECT_EQ(got.tenant, "");
   EXPECT_EQ(got.path, "/ibm/gpfs/fs1/elsewhere");
+  EXPECT_FALSE(got.default_location);
 
   /* every row carries a path:  an empty one is rejected, and there is
    * no row meaning "the default" */
@@ -16016,11 +16017,14 @@ TEST_F(NSFSIdentityDBTest, BucketPlacementRoundTrips)
   EXPECT_EQ(db->get_bucket_placement(env->dpp, "ordinary", "", got),
 	    -ENOENT);
 
-  /* rewritten in place rather than duplicated */
+  /* rewritten in place rather than duplicated, whether it was made in
+   * the default location with it */
   bp.path = "/ibm/gpfs/fs2/elsewhere";
+  bp.default_location = true;
   ASSERT_EQ(db->put_bucket_placement(env->dpp, bp), 0);
   ASSERT_EQ(db->get_bucket_placement(env->dpp, "elsewhere", "", got), 0);
   EXPECT_EQ(got.path, "/ibm/gpfs/fs2/elsewhere");
+  EXPECT_TRUE(got.default_location);
 
   ASSERT_EQ(db->remove_bucket_placement(env->dpp, "elsewhere", ""), 0);
   EXPECT_EQ(db->get_bucket_placement(env->dpp, "elsewhere", "", got),
@@ -20577,6 +20581,9 @@ TEST_F(NSFSPlacedBucketTest, ACreatedBucketRecordsItsDirectory)
 		env->dpp, "made", "", row), 0)
       << "creation wrote no row";
   EXPECT_EQ(row.path, at.string());
+  EXPECT_TRUE(row.default_location)
+      << "a bucket made at the base path for an owner with no path is not "
+	 "recorded as made in the default location";
 }
 
 /* An owner with a new_buckets_path gets its buckets there.
@@ -20603,6 +20610,31 @@ TEST_F(NSFSPlacedBucketTest, AnOwnerWithAPathGetsItsBucketsThere)
   ASSERT_EQ(driver->get_identity_db()->get_bucket_placement(
 		env->dpp, "routed", "", row), 0);
   EXPECT_EQ(row.path, (acct / "routed").string());
+  EXPECT_FALSE(row.default_location);
+}
+
+/* An owner whose new_buckets_path is the base path itself makes its
+ * buckets there as the account, as NooBaa does:  the row records the
+ * owner's location, though the directory sits where a default-location
+ * bucket's would.  Whose a directory is follows how it was placed, not
+ * where it sits. */
+TEST_F(NSFSPlacedBucketTest, AnOwnersPathAtTheBasePathIsTheOwners)
+{
+  nsfs::Identity id;
+  id.key = to_string(owner);
+  id.new_buckets_path = (bp / "root").string();
+  ASSERT_EQ(driver->get_identity_db()->put_identity(env->dpp, id), 0);
+
+  auto bucket = make_bucket("owners");
+  EXPECT_TRUE(sf::is_directory(bp / "root" / "owners"));
+
+  nsfs::BucketPlacement row;
+  ASSERT_EQ(driver->get_identity_db()->get_bucket_placement(
+		env->dpp, "owners", "", row), 0);
+  EXPECT_EQ(row.path, (bp / "root" / "owners").string());
+  EXPECT_FALSE(row.default_location)
+      << "a bucket in its owner's path is recorded as the gateway's because "
+	 "the path is the base path";
 }
 
 /* I9:  under rgw_nsfs_user_identity_override a new bucket goes under

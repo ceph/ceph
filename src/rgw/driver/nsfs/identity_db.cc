@@ -311,9 +311,12 @@ int IdentityDB::Initialize(std::string logfile, int loglevel)
     "  Tenant TEXT NOT NULL DEFAULT '',"
     "  Path TEXT NOT NULL,"
     "  Owner TEXT NOT NULL,"
+    /* under X1's rule:  added 2026-11-12, and not migrated */
+    "  DefaultLocation INTEGER NOT NULL DEFAULT 0,"
     "  PRIMARY KEY (BucketName, Tenant),"
     "  UNIQUE (Path),"
     "  CHECK (Owner != ''),"
+    "  CHECK (DefaultLocation IN (0, 1)),"
     "  CHECK (Path GLOB '/*'"
     "         AND Path NOT GLOB '*/../*'"
     "         AND Path NOT GLOB '*/..'"
@@ -1179,7 +1182,7 @@ int resolve_credentials(const DoutPrefixProvider* dpp, const IdentityDB& db,
 namespace {
 
 constexpr const char* PLACEMENT_COLUMNS =
-  "BucketName, Tenant, Path, Owner";
+  "BucketName, Tenant, Path, Owner, DefaultLocation";
 
 BucketPlacement row_to_placement(sqlite3_stmt* st)
 {
@@ -1188,6 +1191,7 @@ BucketPlacement row_to_placement(sqlite3_stmt* st)
   bp.tenant = column_text(st, 1);
   bp.path = column_text(st, 2);
   bp.owner = column_text(st, 3);
+  bp.default_location = (sqlite3_column_int(st, 4) != 0);
   return bp;
 }
 
@@ -1221,14 +1225,14 @@ int IdentityDB::write_bucket_placement(const DoutPrefixProvider* dpp,
    * UNIQUE (Path)'s. */
   std::string sql =
     "INSERT INTO '" + placement_table + "' (" + PLACEMENT_COLUMNS + ") "
-    "SELECT ?1, ?2, ?3, ?4 WHERE NOT EXISTS ("
+    "SELECT ?1, ?2, ?3, ?4, ?5 WHERE NOT EXISTS ("
     "  SELECT 1 FROM '" + placement_table + "'"
     "  WHERE NOT (BucketName = ?1 AND Tenant = ?2)"
     "  AND (substr(?3, 1, length(Path) + 1) = Path || '/'"
     "       OR substr(Path, 1, length(?3) + 1) = ?3 || '/'))";
   if (repoint) {
     sql += " ON CONFLICT (BucketName, Tenant) DO UPDATE SET Path = excluded.Path,"
-	   " Owner = excluded.Owner";
+	   " Owner = excluded.Owner, DefaultLocation = excluded.DefaultLocation";
   }
   sql += ";";
 
@@ -1244,6 +1248,7 @@ int IdentityDB::write_bucket_placement(const DoutPrefixProvider* dpp,
   sqlite3_bind_text(st, 2, bp.tenant.c_str(), -1, SQLITE_TRANSIENT);
   sqlite3_bind_text(st, 3, bp.path.c_str(), -1, SQLITE_TRANSIENT);
   sqlite3_bind_text(st, 4, bp.owner.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_int(st, 5, bp.default_location ? 1 : 0);
 
   ConnectionMutex conn{sqlite3_db_mutex(handle())};
   std::lock_guard held{conn};

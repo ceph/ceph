@@ -2626,15 +2626,18 @@ public:
   int abort_multiparts_as(const DoutPrefixProvider* dpp, CephContext* cct,
 			  optional_yield y,
 			  const rgw_owner& authenticated_user);
+  /* Whether this bucket's directory was made in the default location,
+   * by the gateway, as its placement row records;  false with no row */
+  bool made_in_default_location(const DoutPrefixProvider* dpp) const;
   /* The bucket directory made by whoever had to be able to make it
-   * (DECISIONS.md 2026-10-24):  the gateway in the base path, `creator`
-   * under a location the account owns. */
+   * (DECISIONS.md 2026-10-24):  the gateway in the default location,
+   * `creator` under a location the account owns. */
   int make_dir(const DoutPrefixProvider* dpp, optional_yield y,
 	       bool* existed, const rgw_owner& creator);
   /* An owned bucket directory removed with `id` acting where the
    * authenticated user acts (remove()):  everything in it, and its entry in a
-   * location the account owns;  the gateway removes its entry from the
-   * base path. */
+   * location the account owns;  the gateway removes its entry where it
+   * made the directory, in the default location. */
   int remove_dir_as(const DoutPrefixProvider* dpp, optional_yield y,
 		    const nsfs::FSIdentity& id,
 		    const nsfs::AccessStrategy* model, bool delete_children);

@@ -129,6 +129,14 @@ struct BucketPlacement {
    * opens only the caller's buckets:  written where the owner is set
    * (creation, the import, chown, set_acl) and nowhere else. */
   std::string owner;
+
+  /* Whether the directory was made in the default location -- the base
+   * path, for an owner with no new_buckets_path -- and so by the
+   * gateway, which removes its entry too.  Written at creation;  false
+   * for a path the owner, the operator or NooBaa chose.  Where the
+   * directory sits relative to the base path says nothing, since the
+   * base path may have moved since. */
+  bool default_location{false};
 };
 
 /* Adoption's completion record:  NooBaa's store has been consumed and

@@ -7019,6 +7019,7 @@ int NSFSBucket::create(const DoutPrefixProvider* dpp,
     if (custom) {
       bp.path = *custom;
     }
+    bp.default_location = !owners_path && !custom;
     /* NooBaa's guard applies where NooBaa has it:  a path the account
      * chose.  The base path is the gateway's default, not the
      * account's. */
@@ -8333,31 +8334,30 @@ int NSFSBucket::merge_and_store_attrs(const DoutPrefixProvider* dpp,
  * removal is denied:  a gateway on its own directories never raises,
  * so one started without the capability still deletes its buckets.
  *
- * And `CAP_FOWNER` for the directory itself where its parent is sticky
- * -- a bucket placed under `/tmp` -- since the directory is its
- * creator's (raise site 4) and the sticky bit lets only the owner of
- * the entry or of the parent remove it;  DAC_OVERRIDE does not reach
- * that check.  NooBaa removes it as the account, its owner. */
+ * And `CAP_FOWNER` for the directory itself where the gateway made it in
+ * the default location and its parent is sticky and not the gateway's
+ * -- a base path at `/tmp` -- since the directory is its creator's
+ * (raise site 4) and the sticky bit lets only the owner of the entry
+ * or of the parent remove it;  DAC_OVERRIDE does not reach that check.
+ * NooBaa removes it as the account, its owner. */
 static constexpr uint64_t BUCKET_DELETE_CAPS =
   nsfs::cap_bit(CAP_DAC_OVERRIDE) | nsfs::cap_bit(CAP_FOWNER);
 
-/* Whether a bucket directory's parent is the base path, the gateway's
- * own directory.  Who acts on the bucket directory's entry follows who
- * had to be able to make it (DECISIONS.md 2026-10-24):  in the base
- * path the gateway, which makes the directory for its creator (raise
- * site 4);  under a location the account owns -- its
- * new_buckets_path, or a custom path -- the authenticated user, as
- * NooBaa makes and removes it as the account. */
-static bool parent_is_base_path(const std::string& base,
-				const std::string& dir_path)
+/* Who acts on the bucket directory's entry follows who had to be able
+ * to make it (DECISIONS.md 2026-10-24):  in the default location the
+ * gateway, which makes the directory for its creator (raise site 4);
+ * under a location the account owns -- its new_buckets_path, or a
+ * custom path -- the authenticated user, as NooBaa makes and removes it
+ * as the account.  Which it was is the placement row's record, written
+ * at creation, never where the directory sits relative to the base
+ * path now:  the base path is a default for new buckets, and may have
+ * moved since. */
+bool NSFSBucket::made_in_default_location(const DoutPrefixProvider* dpp) const
 {
-  auto trimmed = [](std::string p) {
-    while ((p.size() > 1) && (p.back() == '/')) {
-      p.pop_back();
-    }
-    return std::filesystem::path(p).lexically_normal();
-  };
-  return trimmed(dir_path).parent_path() == trimmed(base);
+  auto* db = driver->get_identity_db();
+  nsfs::BucketPlacement row;
+  return db && (db->get_bucket_placement(dpp, get_name(), get_tenant(), row) == 0) &&
+    row.default_location;
 }
 
 /* What a bucket-state write raises, and nothing else raises (raise
@@ -8403,8 +8403,7 @@ int NSFSBucket::remove_dir_as(const DoutPrefixProvider* dpp, optional_yield y,
   auto close_pfd = make_scope_guard([pfd] { ::close(pfd); });
 
   int ret;
-  if (parent_is_base_path(driver->default_bucket_location(),
-			  dir->get_name())) {
+  if (made_in_default_location(dpp)) {
     /* what is in it, as the authenticated user, on a descriptor of its
      * own:  a dup of the bucket's would share the offset check_empty()
      * has already read to the end */
@@ -8422,8 +8421,8 @@ int NSFSBucket::remove_dir_as(const DoutPrefixProvider* dpp, optional_yield y,
     if (ret < 0) {
       return ret;
     }
-    /* its entry, as the gateway, whose directory the base path is:
-     * raise site 3, CAP_FOWNER where the base path is sticky */
+    /* its entry, as the gateway, which made it:  raise site 3,
+     * CAP_FOWNER where its parent is sticky and not the gateway's */
     auto rm = [&]() -> int {
       return ((::unlinkat(pfd, leaf.c_str(), AT_REMOVEDIR) < 0) &&
 	      (errno != ENOENT)) ? -errno : 0;
@@ -8473,7 +8472,8 @@ int NSFSBucket::remove(const DoutPrefixProvider* dpp,
    * (DECISIONS.md 2026-10-24).  The authenticated user, where a request
    * names one under impersonation, is checked at the bucket directory,
    * removes what is below it, and removes its entry from a location the
-   * account owns;  the gateway removes its entry from the base path.
+   * account owns;  the gateway removes its entry where it made the
+   * directory, in the default location.
    * Each of that user's refusals stands under `posix-strict` and is
    * a model's raise under `s3-native`.  No authenticated user -- the
    * switch off, or a caller with no request -- is the gateway
@@ -12009,15 +12009,18 @@ int NSFSBucket::make_dir(const DoutPrefixProvider* dpp, optional_yield y,
 			 bool* existed, const rgw_owner& creator)
 {
   if (is_internal() || nsfs::owner_empty(creator) ||
-      parent_is_base_path(driver->default_bucket_location(),
-			  dir->get_name())) {
+      made_in_default_location(dpp)) {
     return dir->create(dpp, y, existed);
   }
   nsfs::FSIdentity id;
   const int pret = pin_personality_for(dpp, driver, creator, &id, y);
-  if ((pret < 0) && (pret != -ENODATA)) {
+  if ((pret < 0) && (pret != -ENODATA) &&
+      !((pret == -EACCES) && driver->unresolved_as_gateway_injected(creator))) {
     return pret;
   }
+  /* inactive where impersonation is off, or under
+   * inject-unresolved-as-gateway, which makes it as the gateway as the
+   * defect did */
   if (!id.active()) {
     return dir->create(dpp, y, existed);
   }
@@ -12138,9 +12141,7 @@ int NSFSBucket::create(const DoutPrefixProvider* dpp, optional_yield y, bool* ex
     /* by whoever made it:  under a location the account owns the
      * gateway cannot remove its entry (make_dir()) */
     nsfs::FSIdentity id;
-    if (!nsfs::owner_empty(creator) &&
-	!parent_is_base_path(driver->default_bucket_location(),
-			     dir->get_name())) {
+    if (!nsfs::owner_empty(creator) && !made_in_default_location(dpp)) {
       (void) pin_personality_for(dpp, driver, creator, &id, y);
     }
     const int r = id.active()
