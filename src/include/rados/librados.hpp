@@ -617,6 +617,20 @@ inline namespace v14_2_0 {
                      uint32_t truncate_seq = 0);
 
     /**
+     * Query the allocated extent map of the object without reading data.
+     * On EC pools with ec_optimizations enabled, returns only the extents
+     * that are allocated (non-sparse). On replicated pools this will
+     * return -EOPNOTSUPP.
+     *
+     * @param off    [in]  byte offset to start querying from
+     * @param len    [in]  byte length of the range to query
+     * @param m      [out] map of allocated extents: byte offset -> byte length
+     * @param prval  [out] return value of the sub-operation
+     */
+    void mapext(uint64_t off, uint64_t len,
+                std::map<uint64_t,uint64_t> *m, int *prval);
+
+    /**
      * omap_get_vals: keys and values from the object omap
      *
      * Get up to max_return keys and values beginning after start_after
