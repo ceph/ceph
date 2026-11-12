@@ -16,6 +16,7 @@
 #pragma once
 
 #include "rgw_sal.h"
+#include "include/random.h"
 
 /**
  * @brief State for a StoreObject
@@ -104,7 +105,7 @@ class StoreDriver : public Driver {
 
     int read_topics(const std::string& tenant, rgw_pubsub_topics& topics, RGWObjVersionTracker* objv_tracker,
         optional_yield y, const DoutPrefixProvider *dpp) override {return -EOPNOTSUPP;}
-    int stat_topics_v1(const std::string& tenant, optional_yield y, const DoutPrefixProvider *dpp) override {return -EOPNOTSUPP;}
+    int stat_topics_v1(const std::string& tenant, optional_yield y, const DoutPrefixProvider *dpp) override {return -ENOENT;}
     int write_topics(const std::string& tenant, const rgw_pubsub_topics& topics, RGWObjVersionTracker* objv_tracker,
 	optional_yield y, const DoutPrefixProvider *dpp) override {return -ENOENT;}
     int remove_topics(const std::string& tenant, RGWObjVersionTracker* objv_tracker,
@@ -148,6 +149,21 @@ class StoreDriver : public Driver {
                                  std::set<std::string>& bucket_keys,
                                  optional_yield y,
                                  const DoutPrefixProvider* dpp) override {
+      return -EOPNOTSUPP;
+    }
+
+    virtual int load_vector_bucket(const DoutPrefixProvider* dpp,
+                                   const rgw_bucket& b,
+                                   std::unique_ptr<VectorBucket>* bucket,
+                                   optional_yield y) override {
+      return -EOPNOTSUPP;
+    }
+
+    virtual int list_vector_buckets(const DoutPrefixProvider* dpp,
+                                    const rgw_owner& owner, const std::string& ns,
+                                    const std::string& marker,
+                                    const std::string& end_marker, uint64_t max,
+                                    BucketList& buckets, optional_yield y) override {
       return -EOPNOTSUPP;
     }
 };
@@ -275,7 +291,7 @@ class StoreBucket : public Bucket {
     }
     virtual void set_cache_request() override {};
 
-    friend class BucketList;
+    friend struct BucketList;
 };
 
 class StoreObject : public Object {

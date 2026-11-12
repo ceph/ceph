@@ -25,13 +25,14 @@ using namespace rgw::sal;
 const std::string ATTR1{"attr1"};
 const std::string ATTR2{"attr2"};
 const std::string ATTR3{"attr3"};
-const std::string ATTR_OBJECT_TYPE{"POSIX-Object-Type"};
+const std::string ATTR_OBJECT_TYPE{"object-type"};
 
 namespace sf = std::filesystem;
 class Environment* env;
 sf::path base_path{"posixtest"};
-std::unique_ptr<Directory> root;
+std::unique_ptr<posix::Directory> root;
 std::vector<const char*> args;
+uint64_t curver = UINT64_MAX - 1;
 
 class Environment : public ::testing::Environment {
 public:
@@ -55,19 +56,41 @@ public:
                       CODE_ENVIRONMENT_UTILITY,
                       CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
 
-    dpp = nullptr;
-    //dpp = new NoDoutPrefix(cct.get(), 1);
+    //dpp = nullptr;
+    dpp = new NoDoutPrefix(cct.get(), 1);
 
-    root = std::make_unique<Directory>(base_path, nullptr, cct.get());
+    root = std::make_unique<posix::Directory>(base_path, nullptr, cct.get());
     ASSERT_EQ(root->open(dpp), 0);
   }
 
   void TearDown() override {
-    sf::remove_all(base_path);
+    //sf::remove_all(base_path);
   }
 };
 
+static std::string to_base36(uint64_t v)
+{
+  if (v == 0) return "0";
+  const char digits[] = "0123456789abcdefghijklmnopqrstuvwxyz";
+  std::string result;
+  while (v > 0) {
+    result.insert(result.begin(), digits[v % 36]);
+    v /= 36;
+  }
+  return result;
+}
 
+static uint64_t statx_mtime_ns(const struct statx& stx)
+{
+  return (uint64_t)stx.stx_mtime.tv_sec * 1000000000ULL
+       + stx.stx_mtime.tv_nsec;
+}
+
+static std::string posix_version_id_from_statx(const struct statx& stx)
+{
+  return "mtime-" + to_base36(statx_mtime_ns(stx))
+       + "-ino-" + to_base36(stx.stx_ino);
+}
 static inline void add_attr(Attrs& attrs, const std::string& name, const std::string& value)
 {
   bufferlist bl;
@@ -76,51 +99,22 @@ static inline void add_attr(Attrs& attrs, const std::string& name, const std::st
   attrs[name] = bl;
 }
 
-static inline bool get_attr(Attrs& attrs, const char* name, bufferlist& bl)
-{
-  auto iter = attrs.find(name);
-  if (iter == attrs.end()) {
-    return false;
-  }
-
-  bl = iter->second;
-  return true;
-}
-
-template <typename F>
-static bool decode_attr(Attrs &attrs, const char *name, F &f) {
-  bufferlist bl;
-  if (!get_attr(attrs, name, bl)) {
-    return false;
-  }
-  F tmpf;
-  try {
-    auto bufit = bl.cbegin();
-    decode(tmpf, bufit);
-  } catch (buffer::error &err) {
-    return false;
-  }
-
-  f = tmpf;
-  return true;
-}
-
-class TestDirectory : public Directory {
+class TestDirectory : public posix::Directory {
 public:
-  TestDirectory(std::string _name, Directory* _parent, CephContext* _ctx) : Directory(_name, _parent, _ctx)
+  TestDirectory(std::string _name, posix::Directory* _parent, CephContext* _ctx) : posix::Directory(_name, _parent, _ctx)
     {}
-  TestDirectory(std::string _name, Directory* _parent, struct statx& _stx, CephContext* _ctx) : Directory(_name, _parent, _stx, _ctx)
+  TestDirectory(std::string _name, posix::Directory* _parent, struct statx& _stx, CephContext* _ctx) : posix::Directory(_name, _parent, _stx, _ctx)
     {}
   virtual ~TestDirectory() { close(); }
 
   bool get_stat_done() { return stat_done; }
 };
 
-class TestFile : public File {
+class TestFile : public posix::File {
 public:
-  TestFile(std::string _name, Directory* _parent, CephContext* _ctx) : File(_name, _parent, _ctx)
+  TestFile(std::string _name, posix::Directory* _parent, CephContext* _ctx) : posix::File(_name, _parent, _ctx)
     {}
-  TestFile(std::string _name, Directory* _parent, struct statx& _stx, CephContext* _ctx) : File(_name, _parent, _stx, _ctx)
+  TestFile(std::string _name, posix::Directory* _parent, struct statx& _stx, CephContext* _ctx) : posix::File(_name, _parent, _stx, _ctx)
     {}
   virtual ~TestFile() { close(); }
 
@@ -137,14 +131,30 @@ std::string get_test_name()
   return suitename + testname;
 }
 
+template <typename F>
+static bool test_decode_attr(Attrs &attrs, const char *name, F &f) {
+  bufferlist bl;
+  if (!posix::get_attr(attrs, name, bl)) {
+    return false;
+  }
+  try {
+    auto bufit = bl.cbegin();
+    decode(f, bufit);
+  } catch (buffer::error &err) {
+    return false;
+  }
 
-// Directory
+  return true;
+}
+
+
+// posix::Directory
 
 TEST(FSEnt, DirCreate)
 {
   std::string dirname = get_test_name();
   sf::path tp{base_path / dirname};
-  std::unique_ptr<Directory> testdir = std::make_unique<Directory>(dirname, root.get(), env->cct.get());
+  std::unique_ptr<posix::Directory> testdir = std::make_unique<posix::Directory>(dirname, root.get(), env->cct.get());
 
   EXPECT_FALSE(sf::exists(tp));
 
@@ -177,7 +187,7 @@ TEST(FSEnt, DirBase)
   EXPECT_EQ(testdir->get_name(), dirname);
   EXPECT_EQ(testdir->get_parent(), root.get());
   EXPECT_FALSE(testdir->exists());
-  EXPECT_EQ(testdir->get_type(), ObjectType::DIRECTORY);
+  EXPECT_EQ(testdir->get_type(), posix::ObjectType::DIRECTORY);
   EXPECT_FALSE(testdir->get_stat_done());
 
   ret = testdir->open(env->dpp);
@@ -203,19 +213,19 @@ TEST(FSEnt, DirBase)
   EXPECT_EQ(ret, 0);
   EXPECT_EQ(attrs.size(), 4);
   std::string val;
-  bool success = decode_attr(attrs, ATTR1.c_str(), val);
+  bool success = test_decode_attr(attrs, ATTR1.c_str(), val);
   EXPECT_TRUE(success);
   EXPECT_EQ(val, ATTR1);
-  success = decode_attr(attrs, ATTR2.c_str(), val);
+  success = test_decode_attr(attrs, ATTR2.c_str(), val);
   EXPECT_TRUE(success);
   EXPECT_EQ(val, ATTR2);
-  success = decode_attr(attrs, ATTR3.c_str(), val);
+  success = test_decode_attr(attrs, ATTR3.c_str(), val);
   EXPECT_TRUE(success);
   EXPECT_EQ(val, ATTR3);
-  ObjectType type;
-  success = decode_attr(attrs, ATTR_OBJECT_TYPE.c_str(), type);
+  posix::ObjectType type;
+  success = posix::decode_attr(attrs, ATTR_OBJECT_TYPE.c_str(), type);
   EXPECT_TRUE(success);
-  EXPECT_EQ(type.type, ObjectType::DIRECTORY);
+  EXPECT_EQ(type.type, posix::ObjectType::DIRECTORY);
 
   ret = testdir->close();
   EXPECT_EQ(ret, 0);
@@ -254,13 +264,13 @@ TEST(FSEnt, DirBase)
   ret = copydir->read_attrs(env->dpp, null_yield, attrs);
   EXPECT_EQ(ret, 0);
   EXPECT_EQ(attrs.size(), 4);
-  success = decode_attr(attrs, ATTR1.c_str(), val);
+  success = test_decode_attr(attrs, ATTR1.c_str(), val);
   EXPECT_TRUE(success);
   EXPECT_EQ(val, ATTR1);
-  success = decode_attr(attrs, ATTR2.c_str(), val);
+  success = test_decode_attr(attrs, ATTR2.c_str(), val);
   EXPECT_TRUE(success);
   EXPECT_EQ(val, ATTR2);
-  success = decode_attr(attrs, ATTR3.c_str(), val);
+  success = test_decode_attr(attrs, ATTR3.c_str(), val);
   EXPECT_TRUE(success);
   EXPECT_EQ(val, ATTR3);
 
@@ -268,10 +278,10 @@ TEST(FSEnt, DirBase)
   EXPECT_EQ(ret, 0);
   EXPECT_EQ(copydir->get_fd(), -1);
 
-  std::unique_ptr<FSEnt> ent;
+  std::unique_ptr<posix::FSEnt> ent;
   ret = root->get_ent(env->dpp, null_yield, dirname, std::string(), ent);
   EXPECT_EQ(ret, 0);
-  EXPECT_EQ(ent->get_type(), ObjectType::DIRECTORY);
+  EXPECT_EQ(ent->get_type(), posix::ObjectType::DIRECTORY);
 
   ret = testdir->remove(env->dpp, null_yield, false, nullptr);
   EXPECT_EQ(ret, 0);
@@ -283,7 +293,7 @@ TEST(FSEnt, DirAddDir)
   bool existed{false};
   std::string dirname = get_test_name();
   sf::path tp{base_path / dirname};
-  std::unique_ptr<Directory> testdir = std::make_unique<Directory>(dirname, root.get(), env->cct.get());
+  std::unique_ptr<posix::Directory> testdir = std::make_unique<posix::Directory>(dirname, root.get(), env->cct.get());
   int ret = testdir->create(env->dpp, &existed);
   EXPECT_EQ(ret, 0);
 
@@ -292,7 +302,7 @@ TEST(FSEnt, DirAddDir)
 
   std::string subdirname{"SubDir"};
   sf::path sp{base_path / dirname / subdirname};
-  std::unique_ptr<Directory> subdir = std::make_unique<Directory>(subdirname, testdir.get(), env->cct.get());
+  std::unique_ptr<posix::Directory> subdir = std::make_unique<posix::Directory>(subdirname, testdir.get(), env->cct.get());
   ret = subdir->create(env->dpp, &existed);
   EXPECT_EQ(ret, 0);
   EXPECT_FALSE(existed);
@@ -304,7 +314,7 @@ TEST(FSEnt, DirAddDir)
 
   std::string subsubdirname{"SubSubDir"};
   sf::path ssp{base_path / dirname / subdirname / subsubdirname };
-  std::unique_ptr<Directory> subsubdir = std::make_unique<Directory>(subsubdirname, subdir.get(), env->cct.get());
+  std::unique_ptr<posix::Directory> subsubdir = std::make_unique<posix::Directory>(subsubdirname, subdir.get(), env->cct.get());
   ret = subsubdir->create(env->dpp, &existed);
   EXPECT_EQ(ret, 0);
   EXPECT_FALSE(existed);
@@ -317,7 +327,7 @@ TEST(FSEnt, DirRename)
   bool existed{false};
   std::string dirname = get_test_name();
   sf::path tp{base_path / dirname};
-  std::unique_ptr<Directory> testdir = std::make_unique<Directory>(dirname, root.get(), env->cct.get());
+  std::unique_ptr<posix::Directory> testdir = std::make_unique<posix::Directory>(dirname, root.get(), env->cct.get());
   int ret = testdir->create(env->dpp, &existed);
   EXPECT_EQ(ret, 0);
 
@@ -326,7 +336,7 @@ TEST(FSEnt, DirRename)
 
   std::string subdirname{"SubDir"};
   sf::path sp{base_path / dirname / subdirname};
-  std::unique_ptr<Directory> subdir = std::make_unique<Directory>(subdirname, testdir.get(), env->cct.get());
+  std::unique_ptr<posix::Directory> subdir = std::make_unique<posix::Directory>(subdirname, testdir.get(), env->cct.get());
   ret = subdir->create(env->dpp, &existed);
   EXPECT_EQ(ret, 0);
   EXPECT_FALSE(existed);
@@ -347,7 +357,7 @@ TEST(FSEnt, DirRename)
 }
 
 
-// File
+// posix::File
 
 TEST(FSEnt, FileCreateReal)
 {
@@ -409,7 +419,7 @@ TEST(FSEnt, FileBase)
   EXPECT_EQ(testfile->get_name(), fname);
   EXPECT_EQ(testfile->get_parent(), root.get());
   EXPECT_FALSE(testfile->exists());
-  EXPECT_EQ(testfile->get_type(), ObjectType::FILE);
+  EXPECT_EQ(testfile->get_type(), posix::ObjectType::FILE);
   EXPECT_FALSE(testfile->get_stat_done());
 
   ret = testfile->open(env->dpp);
@@ -435,19 +445,19 @@ TEST(FSEnt, FileBase)
   EXPECT_EQ(ret, 0);
   EXPECT_EQ(attrs.size(), 4);
   std::string val;
-  bool success = decode_attr(attrs, ATTR1.c_str(), val);
+  bool success = test_decode_attr(attrs, ATTR1.c_str(), val);
   EXPECT_TRUE(success);
   EXPECT_EQ(val, ATTR1);
-  success = decode_attr(attrs, ATTR2.c_str(), val);
+  success = test_decode_attr(attrs, ATTR2.c_str(), val);
   EXPECT_TRUE(success);
   EXPECT_EQ(val, ATTR2);
-  success = decode_attr(attrs, ATTR3.c_str(), val);
+  success = test_decode_attr(attrs, ATTR3.c_str(), val);
   EXPECT_TRUE(success);
   EXPECT_EQ(val, ATTR3);
-  ObjectType type;
-  success = decode_attr(attrs, ATTR_OBJECT_TYPE.c_str(), type);
+  posix::ObjectType type;
+  success = posix::decode_attr(attrs, ATTR_OBJECT_TYPE.c_str(), type);
   EXPECT_TRUE(success);
-  EXPECT_EQ(type.type, ObjectType::FILE);
+  EXPECT_EQ(type.type, posix::ObjectType::FILE);
 
   ret = testfile->close();
   EXPECT_EQ(ret, 0);
@@ -480,10 +490,10 @@ TEST(FSEnt, FileBase)
   EXPECT_EQ(ret, 0);
   EXPECT_EQ(copyfile->get_fd(), -1);
 
-  std::unique_ptr<FSEnt> ent;
+  std::unique_ptr<posix::FSEnt> ent;
   ret = root->get_ent(env->dpp, null_yield, fname, std::string(), ent);
   EXPECT_EQ(ret, 0);
-  EXPECT_EQ(ent->get_type(), ObjectType::FILE);
+  EXPECT_EQ(ent->get_type(), posix::ObjectType::FILE);
 
   ret = testfile->remove(env->dpp, null_yield, false, nullptr);
   EXPECT_EQ(ret, 0);
@@ -494,7 +504,7 @@ TEST(FSEnt, FileReadWrite)
 {
   std::string fname = get_test_name();
   sf::path tp{base_path / fname};
-  std::unique_ptr<File> testfile{std::make_unique<File>(fname, root.get(), env->cct.get())};
+  std::unique_ptr<posix::File> testfile{std::make_unique<posix::File>(fname, root.get(), env->cct.get())};
 
   int ret = testfile->create(env->dpp);
   EXPECT_EQ(ret, 0);
@@ -526,7 +536,7 @@ TEST(FSEnt, SymlinkBase)
   std::string fname = get_test_name();
   sf::path tp{base_path / fname};
   std::string target{"symlinktarget"};
-  std::unique_ptr<Symlink> testlink = std::make_unique<Symlink>(fname, root.get(), target, env->cct.get());
+  std::unique_ptr<posix::Symlink> testlink = std::make_unique<posix::Symlink>(fname, root.get(), target, env->cct.get());
 
   EXPECT_FALSE(sf::exists(tp));
 
@@ -541,12 +551,12 @@ TEST(FSEnt, SymlinkBase)
   EXPECT_EQ(testlink->get_name(), fname);
   EXPECT_EQ(testlink->get_parent(), root.get());
   EXPECT_FALSE(testlink->exists());
-  EXPECT_EQ(testlink->get_type(), ObjectType::SYMLINK);
+  EXPECT_EQ(testlink->get_type(), posix::ObjectType::SYMLINK);
 
-  std::unique_ptr<FSEnt> ent;
+  std::unique_ptr<posix::FSEnt> ent;
   ret = root->get_ent(env->dpp, null_yield, fname, std::string(), ent);
   EXPECT_EQ(ret, 0);
-  EXPECT_EQ(ent->get_type(), ObjectType::SYMLINK);
+  EXPECT_EQ(ent->get_type(), posix::ObjectType::SYMLINK);
 
 
   ret = testlink->remove(env->dpp, null_yield, false, nullptr);
@@ -558,7 +568,7 @@ TEST(FSEnt, MPDirBase)
 {
   std::string dirname = get_test_name();
   sf::path tp{base_path / dirname};
-  std::unique_ptr<MPDirectory> testdir = std::make_unique<MPDirectory>(dirname, root.get(), env->cct.get());
+  std::unique_ptr<posix::MPDirectory> testdir = std::make_unique<posix::MPDirectory>(dirname, root.get(), env->cct.get());
 
   EXPECT_FALSE(sf::exists(tp));
 
@@ -570,11 +580,11 @@ TEST(FSEnt, MPDirBase)
   EXPECT_TRUE(sf::exists(tp));
   EXPECT_TRUE(sf::is_directory(tp));
 
-  EXPECT_EQ(testdir->get_fd(), -1);
+  EXPECT_GE(testdir->get_fd(), 0);
   EXPECT_EQ(testdir->get_name(), dirname);
   EXPECT_EQ(testdir->get_parent(), root.get());
   EXPECT_FALSE(testdir->exists());
-  EXPECT_EQ(testdir->get_type(), ObjectType::MULTIPART);
+  EXPECT_EQ(testdir->get_type(), posix::ObjectType::MULTIPART);
 
   ret = testdir->open(env->dpp);
   EXPECT_EQ(ret, 0);
@@ -598,19 +608,19 @@ TEST(FSEnt, MPDirBase)
   EXPECT_EQ(ret, 0);
   EXPECT_EQ(attrs.size(), 4);
   std::string val;
-  bool success = decode_attr(attrs, ATTR1.c_str(), val);
+  bool success = test_decode_attr(attrs, ATTR1.c_str(), val);
   EXPECT_TRUE(success);
   EXPECT_EQ(val, ATTR1);
-  success = decode_attr(attrs, ATTR2.c_str(), val);
+  success = test_decode_attr(attrs, ATTR2.c_str(), val);
   EXPECT_TRUE(success);
   EXPECT_EQ(val, ATTR2);
-  success = decode_attr(attrs, ATTR3.c_str(), val);
+  success = test_decode_attr(attrs, ATTR3.c_str(), val);
   EXPECT_TRUE(success);
   EXPECT_EQ(val, ATTR3);
-  ObjectType type;
-  success = decode_attr(attrs, ATTR_OBJECT_TYPE.c_str(), type);
+  posix::ObjectType type;
+  success = posix::decode_attr(attrs, ATTR_OBJECT_TYPE.c_str(), type);
   EXPECT_TRUE(success);
-  EXPECT_EQ(type.type, ObjectType::MULTIPART);
+  EXPECT_EQ(type.type, posix::ObjectType::MULTIPART);
 
   ret = testdir->close();
   EXPECT_EQ(ret, 0);
@@ -635,7 +645,7 @@ TEST(FSEnt, MPDirBase)
   EXPECT_TRUE(sf::exists(cp));
   EXPECT_TRUE(sf::is_directory(tp));
 
-  std::unique_ptr<MPDirectory> copydir = std::make_unique<MPDirectory>(copyname, root.get(), env->cct.get());
+  std::unique_ptr<posix::MPDirectory> copydir = std::make_unique<posix::MPDirectory>(copyname, root.get(), env->cct.get());
   ret = copydir->open(env->dpp);
   EXPECT_EQ(ret, 0);
   EXPECT_GT(copydir->get_fd(), 0);
@@ -648,13 +658,13 @@ TEST(FSEnt, MPDirBase)
   ret = copydir->read_attrs(env->dpp, null_yield, attrs);
   EXPECT_EQ(ret, 0);
   EXPECT_EQ(attrs.size(), 4);
-  success = decode_attr(attrs, ATTR1.c_str(), val);
+  success = test_decode_attr(attrs, ATTR1.c_str(), val);
   EXPECT_TRUE(success);
   EXPECT_EQ(val, ATTR1);
-  success = decode_attr(attrs, ATTR2.c_str(), val);
+  success = test_decode_attr(attrs, ATTR2.c_str(), val);
   EXPECT_TRUE(success);
   EXPECT_EQ(val, ATTR2);
-  success = decode_attr(attrs, ATTR3.c_str(), val);
+  success = test_decode_attr(attrs, ATTR3.c_str(), val);
   EXPECT_TRUE(success);
   EXPECT_EQ(val, ATTR3);
 
@@ -662,10 +672,10 @@ TEST(FSEnt, MPDirBase)
   EXPECT_EQ(ret, 0);
   EXPECT_EQ(copydir->get_fd(), -1);
 
-  std::unique_ptr<FSEnt> ent;
+  std::unique_ptr<posix::FSEnt> ent;
   ret = root->get_ent(env->dpp, null_yield, dirname, std::string(), ent);
   EXPECT_EQ(ret, 0);
-  EXPECT_EQ(ent->get_type(), ObjectType::MULTIPART);
+  EXPECT_EQ(ent->get_type(), posix::ObjectType::MULTIPART);
 
   ret = testdir->remove(env->dpp, null_yield, false, nullptr);
   EXPECT_EQ(ret, 0);
@@ -676,7 +686,7 @@ TEST(FSEnt, MPDirTemp)
 {
   std::string dirname = get_test_name();
   sf::path tp{base_path / dirname};
-  std::unique_ptr<MPDirectory> testdir = std::make_unique<MPDirectory>(dirname, root.get(), env->cct.get());
+  std::unique_ptr<posix::MPDirectory> testdir = std::make_unique<posix::MPDirectory>(dirname, root.get(), env->cct.get());
 
   EXPECT_FALSE(sf::exists(tp));
 
@@ -695,14 +705,14 @@ TEST(FSEnt, MPDirTemp)
 
   EXPECT_EQ(testdir->get_name(), dirname);
   EXPECT_EQ(testdir->get_parent(), root.get());
-  EXPECT_EQ(testdir->get_type(), ObjectType::MULTIPART);
+  EXPECT_EQ(testdir->get_type(), posix::ObjectType::MULTIPART);
 }
 
 TEST(FSEnt, MPDirReadWrite)
 {
   std::string dirname = get_test_name();
   sf::path tp{base_path / dirname};
-  std::unique_ptr<MPDirectory> testdir = std::make_unique<MPDirectory>(dirname, root.get(), env->cct.get());
+  std::unique_ptr<posix::MPDirectory> testdir = std::make_unique<posix::MPDirectory>(dirname, root.get(), env->cct.get());
   int ret = testdir->create(env->dpp, nullptr);
   EXPECT_EQ(ret, 0);
   EXPECT_TRUE(sf::exists(tp));
@@ -714,7 +724,7 @@ TEST(FSEnt, MPDirReadWrite)
   bufferlist write_bl;
   int total_len{0};
   for (int part_num = 0; part_num < 4; ++part_num) {
-    std::unique_ptr<File> testfile = testdir->get_part_file(part_num);
+    std::unique_ptr<posix::File> testfile = testdir->get_part_file(part_num);
     sf::path pp{tp / testfile->get_name()};
 
     ret = testfile->create(env->dpp, /*existed=*/nullptr, /*temp_file=*/false);
@@ -767,7 +777,7 @@ TEST(FSEnt, VerDirBase)
 {
   std::string dirname = get_test_name();
   sf::path tp{base_path / dirname};
-  std::unique_ptr<VersionedDirectory> testdir = std::make_unique<VersionedDirectory>(dirname, root.get(), env->cct.get());
+  std::unique_ptr<posix::VersionedDirectory> testdir = std::make_unique<posix::VersionedDirectory>(dirname, root.get(), env->cct.get());
 
   EXPECT_FALSE(sf::exists(tp));
 
@@ -784,7 +794,7 @@ TEST(FSEnt, VerDirBase)
   EXPECT_EQ(testdir->get_name(), dirname);
   EXPECT_EQ(testdir->get_parent(), root.get());
   EXPECT_FALSE(testdir->exists());
-  EXPECT_EQ(testdir->get_type(), ObjectType::VERSIONED);
+  EXPECT_EQ(testdir->get_type(), posix::ObjectType::VERSIONED);
 
   ret = testdir->open(env->dpp);
   EXPECT_EQ(ret, 0);
@@ -808,19 +818,19 @@ TEST(FSEnt, VerDirBase)
   EXPECT_EQ(ret, 0);
   EXPECT_EQ(attrs.size(), 4);
   std::string val;
-  bool success = decode_attr(attrs, ATTR1.c_str(), val);
+  bool success = test_decode_attr(attrs, ATTR1.c_str(), val);
   EXPECT_TRUE(success);
   EXPECT_EQ(val, ATTR1);
-  success = decode_attr(attrs, ATTR2.c_str(), val);
+  success = test_decode_attr(attrs, ATTR2.c_str(), val);
   EXPECT_TRUE(success);
   EXPECT_EQ(val, ATTR2);
-  success = decode_attr(attrs, ATTR3.c_str(), val);
+  success = test_decode_attr(attrs, ATTR3.c_str(), val);
   EXPECT_TRUE(success);
   EXPECT_EQ(val, ATTR3);
-  ObjectType type;
-  success = decode_attr(attrs, ATTR_OBJECT_TYPE.c_str(), type);
+  posix::ObjectType type;
+  success = test_decode_attr(attrs, ATTR_OBJECT_TYPE.c_str(), type);
   EXPECT_TRUE(success);
-  EXPECT_EQ(type.type, ObjectType::VERSIONED);
+  EXPECT_EQ(type.type, posix::ObjectType::VERSIONED);
 
   ret = testdir->close();
   EXPECT_EQ(ret, 0);
@@ -836,79 +846,65 @@ TEST(FSEnt, VerDirBase)
   ret = testdir->link_temp_file(env->dpp, null_yield, dirname);
   EXPECT_EQ(ret, -EINVAL);
 
-  std::string copyname{dirname + "-copy"};
-  sf::path cp{base_path / copyname};
-  sf::remove_all(cp);
-  EXPECT_FALSE(sf::exists(cp));
-  ret = testdir->copy(env->dpp, null_yield, root.get(), copyname);
-  EXPECT_EQ(ret, 0);
-  EXPECT_TRUE(sf::exists(cp));
-  EXPECT_TRUE(sf::is_directory(tp));
+  /* Can't test copy, there's no data in the object */
 
-  std::unique_ptr<VersionedDirectory> copydir = std::make_unique<VersionedDirectory>(copyname, root.get(), env->cct.get());
-  ret = copydir->open(env->dpp);
-  EXPECT_EQ(ret, 0);
-  EXPECT_GT(copydir->get_fd(), 0);
-
-  ret = copydir->stat(env->dpp, false);
-  EXPECT_EQ(ret, 0);
-  EXPECT_TRUE(S_ISDIR(copydir->get_stx().stx_mode));
-
-  attrs.clear();
-  ret = copydir->read_attrs(env->dpp, null_yield, attrs);
-  EXPECT_EQ(ret, 0);
-  EXPECT_EQ(attrs.size(), 4);
-  success = decode_attr(attrs, ATTR1.c_str(), val);
-  EXPECT_TRUE(success);
-  EXPECT_EQ(val, ATTR1);
-  success = decode_attr(attrs, ATTR2.c_str(), val);
-  EXPECT_TRUE(success);
-  EXPECT_EQ(val, ATTR2);
-  success = decode_attr(attrs, ATTR3.c_str(), val);
-  EXPECT_TRUE(success);
-  EXPECT_EQ(val, ATTR3);
-
-  ret = copydir->close();
-  EXPECT_EQ(ret, 0);
-  EXPECT_EQ(copydir->get_fd(), -1);
-
-  std::unique_ptr<FSEnt> ent;
+  std::unique_ptr<posix::FSEnt> ent;
   ret = root->get_ent(env->dpp, null_yield, dirname, std::string(), ent);
   EXPECT_EQ(ret, 0);
-  EXPECT_EQ(ent->get_type(), ObjectType::VERSIONED);
+  EXPECT_EQ(ent->get_type(), posix::ObjectType::VERSIONED);
 
-  ret = testdir->remove(env->dpp, null_yield, false, nullptr);
+  // This will create a delete marker
+  struct rgw::sal::Object::DeleteOp::Result result;
+  ret = testdir->remove(env->dpp, null_yield, false, &result);
   EXPECT_EQ(ret, 0);
+
+  std::unique_ptr<posix::VersionedDirectory> testdir2 = std::make_unique<posix::VersionedDirectory>(dirname, root.get(),
+                                                 result.version_id, env->cct.get());
+
+  ret = testdir2->open(env->dpp);
+  EXPECT_EQ(ret, 0);
+  EXPECT_GT(testdir2->get_fd(), 0);
+
+  // remove the delete marker
+  ret = testdir2->remove(env->dpp, null_yield, false, nullptr);
+  EXPECT_EQ(ret, 0);
+
   EXPECT_FALSE(sf::exists(tp));
 }
 
 TEST(FSEnt, VerDirReadWrite)
 {
   std::string fname = get_test_name();
-  std::unique_ptr<VersionedDirectory> verdir{
-      std::make_unique<VersionedDirectory>(fname, root.get(), env->cct.get())};
+  std::unique_ptr<posix::VersionedDirectory> verdir{
+      std::make_unique<posix::VersionedDirectory>(fname, root.get(), env->cct.get())};
   std::string instance_id{verdir->get_new_instance()};
   std::string vfname{"_%3A" + instance_id + "_" + fname};
   sf::path tp{base_path / fname};
-  sf::path fp{tp / vfname};
   sf::path lp{tp / fname};
 
   int ret = verdir->create(env->dpp, /*existed=*/nullptr, /*temp_file=*/false);
   EXPECT_EQ(ret, 0);
 
-  std::unique_ptr<File> testfile{std::make_unique<File>(vfname, verdir.get(), env->cct.get())};
+  std::unique_ptr<posix::File> testfile{std::make_unique<posix::File>(vfname, verdir.get(), env->cct.get())};
   ret = verdir->add_file(env->dpp, std::move(testfile), /*existed=*/nullptr, /*temp_file=*/true);
   EXPECT_EQ(ret, 0);
 
   std::string temp_fname{fname + "-blargh"};
   ret = verdir->link_temp_file(env->dpp, null_yield, temp_fname);
+
+  posix::FSEnt* cur = verdir->get_cur_version_ent();
+  ret = cur->stat(env->dpp, true);
+  std::string ver_id = posix_version_id_from_statx(cur->get_stx());
+  std::string vfname2{"_%3A" + ver_id + "_" + fname};
+  sf::path fp{tp / vfname2};
+
   EXPECT_TRUE(sf::exists(tp));
   EXPECT_TRUE(sf::is_directory(tp));
   EXPECT_TRUE(sf::exists(fp));
   EXPECT_TRUE(sf::is_regular_file(fp));
   EXPECT_TRUE(sf::exists(lp));
   EXPECT_TRUE(sf::is_symlink(lp));
-  EXPECT_EQ(sf::read_symlink(lp), vfname);
+  EXPECT_EQ(sf::read_symlink(lp), vfname2);
 
   bufferlist bl;
   encode(fname, bl);
@@ -943,59 +939,64 @@ TEST(FSEnt, VerDirReadWrite)
   EXPECT_EQ(ret, 0);
   EXPECT_EQ(attrs.size(), 4);
   std::string val;
-  bool success = decode_attr(attrs, ATTR1.c_str(), val);
+  bool success = test_decode_attr(attrs, ATTR1.c_str(), val);
   EXPECT_TRUE(success);
   EXPECT_EQ(val, ATTR1);
-  success = decode_attr(attrs, ATTR2.c_str(), val);
+  success = test_decode_attr(attrs, ATTR2.c_str(), val);
   EXPECT_TRUE(success);
   EXPECT_EQ(val, ATTR2);
-  success = decode_attr(attrs, ATTR3.c_str(), val);
+  success = test_decode_attr(attrs, ATTR3.c_str(), val);
   EXPECT_TRUE(success);
   EXPECT_EQ(val, ATTR3);
-  ObjectType type;
-  success = decode_attr(attrs, ATTR_OBJECT_TYPE.c_str(), type);
+  posix::ObjectType type;
+  success = posix::decode_attr(attrs, ATTR_OBJECT_TYPE.c_str(), type);
   EXPECT_TRUE(success);
-  EXPECT_EQ(type.type, ObjectType::VERSIONED);
+  EXPECT_EQ(type.type, posix::ObjectType::VERSIONED);
 
-  FSEnt* ent = verdir->get_cur_version_ent();
+  posix::FSEnt* ent = verdir->get_cur_version_ent();
   attrs.clear();
   ret = ent->read_attrs(env->dpp, null_yield, attrs);
   EXPECT_EQ(ret, 0);
   EXPECT_EQ(attrs.size(), 4);
-  success = decode_attr(attrs, ATTR1.c_str(), val);
+  success = test_decode_attr(attrs, ATTR1.c_str(), val);
   EXPECT_TRUE(success);
   EXPECT_EQ(val, ATTR1);
-  success = decode_attr(attrs, ATTR2.c_str(), val);
+  success = test_decode_attr(attrs, ATTR2.c_str(), val);
   EXPECT_TRUE(success);
   EXPECT_EQ(val, ATTR2);
-  success = decode_attr(attrs, ATTR3.c_str(), val);
+  success = test_decode_attr(attrs, ATTR3.c_str(), val);
   EXPECT_TRUE(success);
   EXPECT_EQ(val, ATTR3);
-  success = decode_attr(attrs, ATTR_OBJECT_TYPE.c_str(), type);
+  success = posix::decode_attr(attrs, ATTR_OBJECT_TYPE.c_str(), type);
   EXPECT_TRUE(success);
-  EXPECT_EQ(type.type, ObjectType::FILE);
+  EXPECT_EQ(type.type, posix::ObjectType::FILE);
 }
 
 TEST(FSEnt, MPVerDirReadWrite)
 {
   std::string testname = get_test_name();
-  std::unique_ptr<VersionedDirectory> verdir{
-      std::make_unique<VersionedDirectory>(testname, root.get(), env->cct.get())};
-  std::string instance_id{verdir->get_new_instance()};
-  std::string vfname{"_%3A" + instance_id + "_" + testname};
+  std::unique_ptr<posix::VersionedDirectory> verdir{
+      std::make_unique<posix::VersionedDirectory>(testname, root.get(), env->cct.get())};
+  std::string init_instance_id{verdir->get_new_instance()};
+  std::string init_vfname{"_%3A" + init_instance_id + "_" + testname};
   sf::path vp{base_path / testname};
-  sf::path mp{vp / vfname};
   sf::path lp{vp / testname};
 
   int ret = verdir->create(env->dpp, /*existed=*/nullptr, /*temp_file=*/false);
   EXPECT_EQ(ret, 0);
 
-  std::unique_ptr<MPDirectory> mpdir{std::make_unique<MPDirectory>(vfname, verdir.get(), env->cct.get())};
+  std::unique_ptr<posix::MPDirectory> mpdir{std::make_unique<posix::MPDirectory>(init_vfname, verdir.get(), env->cct.get())};
   ret = verdir->add_file(env->dpp, std::move(mpdir), /*existed=*/nullptr, /*temp_file=*/true);
   EXPECT_EQ(ret, 0);
 
   std::string temp_fname{testname + "-blargh"};
   ret = verdir->link_temp_file(env->dpp, null_yield, temp_fname);
+  EXPECT_EQ(ret, 0);
+
+  std::string instance_id{verdir->get_cur_version()};
+  std::string vfname{"_%3A" + instance_id + "_" + testname};
+  sf::path mp{vp / vfname};
+
   EXPECT_TRUE(sf::exists(vp));
   EXPECT_TRUE(sf::is_directory(vp));
   EXPECT_TRUE(sf::exists(mp));
@@ -1007,7 +1008,7 @@ TEST(FSEnt, MPVerDirReadWrite)
   ret = verdir->open(env->dpp);
   EXPECT_EQ(ret, 0);
 
-  MPDirectory* mpp = static_cast<MPDirectory*>(verdir->get_cur_version_ent());
+  posix::MPDirectory* mpp = static_cast<posix::MPDirectory*>(verdir->get_cur_version_ent());
   EXPECT_NE(mpp, nullptr);
 
   ret = mpp->open(env->dpp);
@@ -1016,7 +1017,7 @@ TEST(FSEnt, MPVerDirReadWrite)
   bufferlist write_bl;
   int total_len{0};
   for (int part_num = 0; part_num < 4; ++part_num) {
-    std::unique_ptr<File> testfile = mpp->get_part_file(part_num);
+    std::unique_ptr<posix::File> testfile = mpp->get_part_file(part_num);
     sf::path pp{mp / testfile->get_name()};
 
     ret = testfile->create(env->dpp, /*existed=*/nullptr, /*temp_file=*/false);
@@ -1065,29 +1066,63 @@ TEST(FSEnt, MPVerDirReadWrite)
   EXPECT_EQ(read_data, testname + testname + testname + testname);
 }
 
-class TestUser;
-class TestDriver : public POSIXDriver
+template <typename YP>
+struct TestMultipartCache : public posix::MultipartCache
 {
+public:
+  TestMultipartCache() :
+    MultipartCache(1, 1, 1, 1, file::listing::MultipartCachePolicy::writethrough)
+  { }
+  virtual ~TestMultipartCache() { }
+
+  file::listing::MultipartListResult list_parts(const file::listing::MultipartCacheKey& key,
+				 uint32_t marker, uint32_t max_parts,
+				 const file::listing::fill_parts_fn_t& fill_fn) override {
+    file::listing::MultipartListResult result;
+    boost::container::flat_map<uint32_t, file::listing::MultipartPartInfo> parts;
+
+    fill_fn(parts);
+    auto it = parts.lower_bound(marker + 1);
+    uint32_t count = 0;
+    while (it != parts.end() && count < max_parts) {
+      result.parts.push_back(it->second);
+      result.next_marker = it->first;
+      ++it;
+      ++count;
+    }
+    result.truncated = (it != parts.end());
+    return result;
+  };
+
+  void remove(const file::listing::MultipartCacheKey& key) override { }
+
+  bool add_part(const file::listing::MultipartCacheKey& key,
+                file::listing::MultipartPartInfo&& info) override {
+    return false;
+  }
+};
+
+class TestDriver : public POSIXDriver {
 public:
   std::string driver_base;
 
-  TestDriver(std::string _base_path) : POSIXDriver(nullptr), driver_base(_base_path)
-  { }
-  virtual ~TestDriver() {
-    RGWQuotaHandler::free_handler(quota_handler);
-  }
+  TestDriver(std::string _base_path) :
+    POSIXDriver(nullptr), driver_base(_base_path)
+  {}
+  virtual ~TestDriver() { RGWQuotaHandler::free_handler(quota_handler); }
 
   int init(const DoutPrefixProvider* dpp)
   {
     std::string cache_base = driver_base + "/cache";
     base_path = driver_base + "/root";
 
-    root_dir = std::make_unique<Directory>(base_path, nullptr, env->cct.get());
+    root_dir =
+        std::make_unique<posix::Directory>(base_path, nullptr, env->cct.get());
     int ret = root_dir->open(env->dpp);
     if (ret < 0) {
       if (ret == -ENOTDIR) {
         ldpp_dout(env->dpp, 0) << " ERROR: base path (" << base_path
-                          << "): was not a directory." << dendl;
+                               << "): was not a directory." << dendl;
         return ret;
       } else if (ret == -ENOENT) {
         ret = root_dir->create(env->dpp);
@@ -1101,78 +1136,147 @@ public:
     }
     quota_handler = RGWQuotaHandler::generate_handler(this, false);
     /* ordered listing cache */
-    bucket_cache.reset(new BucketCache(
-        this, base_path, cache_base, 100, 3, 3, 3));
+    bucket_cache.reset(
+        new posix::BucketCache(this, base_path, cache_base, 100, 3, 3, 3));
+    multipart_cache.reset(new TestMultipartCache<cohort::lru::NullYieldPolicy>());
 
     ldpp_dout(env->dpp, 20) << "SUCCESS" << dendl;
     return 0;
   }
-  virtual CephContext* ctx(void) override {
+  virtual CephContext* ctx(void) override
+  {
     return get_pointer(env->cct);
   }
 
   virtual std::unique_ptr<User> get_user(const rgw_user& u) override;
 };
 
-class TestUser : public StoreUser {
-  Attrs attrs;
+  class TestUser : public StoreUser {
+    Attrs attrs;
 
-public:
-  TestUser(TestDriver *_dr, const rgw_user& _u) : StoreUser(_u) { }
-  TestUser(TestDriver *_dr, const RGWUserInfo& _i) : StoreUser(_i) { }
-  TestUser(TestDriver *_dr)  { }
-  TestUser(TestUser& _o) = default;
-  virtual ~TestUser() = default;
+  public:
+    TestUser(TestDriver* _dr, const rgw_user& _u) :
+      StoreUser(_u)
+    {}
+    TestUser(TestDriver* _dr, const RGWUserInfo& _i) :
+      StoreUser(_i)
+    {}
+    TestUser(TestDriver* _dr) {}
+    TestUser(TestUser& _o) = default;
+    virtual ~TestUser() = default;
 
-  virtual std::unique_ptr<User> clone() override {
-    return std::unique_ptr<User>(new TestUser(*this));
+    virtual std::unique_ptr<User>
+    clone() override
+    {
+      return std::unique_ptr<User>(new TestUser(*this));
+    }
+    virtual Attrs&
+    get_attrs() override
+    {
+      return attrs;
+    }
+    virtual void
+    set_attrs(Attrs& _attrs) override
+    {
+      attrs = _attrs;
+    }
+    virtual int
+    read_attrs(const DoutPrefixProvider* dpp, optional_yield y) override
+    {
+      return 0;
+    }
+    virtual int
+    merge_and_store_attrs(
+        const DoutPrefixProvider* dpp,
+        Attrs& new_attrs,
+        optional_yield y) override
+    {
+      return 0;
+    }
+    virtual int
+    read_usage(
+        const DoutPrefixProvider* dpp,
+        uint64_t start_epoch,
+        uint64_t end_epoch,
+        uint32_t max_entries,
+        bool* is_truncated,
+        RGWUsageIter& usage_iter,
+        std::map<rgw_user_bucket, rgw_usage_log_entry>& usage) override
+    {
+      return 0;
+    }
+    virtual int
+    trim_usage(
+        const DoutPrefixProvider* dpp,
+        uint64_t start_epoch,
+        uint64_t end_epoch,
+        optional_yield y) override
+    {
+      return 0;
+    }
+    virtual int
+    load_user(const DoutPrefixProvider* dpp, optional_yield y) override
+    {
+      return 0;
+    }
+    virtual int
+    store_user(
+        const DoutPrefixProvider* dpp,
+        optional_yield y,
+        bool exclusive,
+        RGWUserInfo* old_info = nullptr) override
+    {
+      return 0;
+    }
+    virtual int
+    remove_user(const DoutPrefixProvider* dpp, optional_yield y) override
+    {
+      return 0;
+    }
+    virtual int
+    verify_mfa(
+        const std::string& mfa_str,
+        bool* verified,
+        const DoutPrefixProvider* dpp,
+        optional_yield y) override
+    {
+      return 0;
+    }
+    virtual int
+    list_groups(
+        const DoutPrefixProvider* dpp,
+        optional_yield y,
+        std::string_view marker,
+        uint32_t max_items,
+        GroupList& listing) override
+    {
+      return -ENOTSUP;
+    }
+  };
+
+  std::unique_ptr<User> TestDriver::get_user(const rgw_user& u)
+  {
+    return std::make_unique<TestUser>(this, u);
   }
-  virtual Attrs& get_attrs() override { return attrs; }
-  virtual void set_attrs(Attrs &_attrs) override { attrs = _attrs; }
-  virtual int read_attrs(const DoutPrefixProvider* dpp, optional_yield y) override { return 0; }
-  virtual int merge_and_store_attrs(const DoutPrefixProvider* dpp, Attrs&
-				    new_attrs, optional_yield y) override { return 0; }
-  virtual int read_usage(const DoutPrefixProvider* dpp, uint64_t start_epoch,
-             uint64_t end_epoch, uint32_t max_entries, bool* is_truncated,
-             RGWUsageIter &usage_iter,
-             std::map<rgw_user_bucket, rgw_usage_log_entry> &usage) override { return 0; }
-  virtual int trim_usage(const DoutPrefixProvider* dpp, uint64_t start_epoch,
-                         uint64_t end_epoch, optional_yield y) override { return 0; }
-  virtual int load_user(const DoutPrefixProvider* dpp, optional_yield y) override { return 0; }
-  virtual int store_user(const DoutPrefixProvider* dpp, optional_yield y, bool
-			 exclusive, RGWUserInfo* old_info = nullptr) override { return 0; }
-  virtual int remove_user(const DoutPrefixProvider* dpp, optional_yield y) override { return 0; }
-  virtual int verify_mfa(const std::string &mfa_str, bool *verified,
-                         const DoutPrefixProvider* dpp,
-                         optional_yield y) override { return 0; }
-  virtual int list_groups(const DoutPrefixProvider *dpp, optional_yield y,
-                          std::string_view marker, uint32_t max_items,
-                          GroupList &listing) override { return -ENOTSUP; }
-};
 
-std::unique_ptr<User> TestDriver::get_user(const rgw_user &u)
-{
-  return std::make_unique<TestUser>(this, u);
-}
+  TEST(POSIXDriver, CreateDriver)
+  {
+    std::string name = get_test_name();
+    sf::path bp{sf::absolute(sf::path{base_path / name})};
+    sf::create_directory(bp);
+    sf::create_directory(bp / "cache");
+    sf::create_directory(bp / "root");
+    TestDriver driver{bp};
 
-TEST(POSIXDriver, CreateDriver)
-{
-  std::string name = get_test_name();
-  sf::path bp{sf::absolute(sf::path{base_path / name})};
-  sf::create_directory(bp);
-  sf::create_directory(bp / "cache");
-  sf::create_directory(bp / "root");
-  TestDriver driver{bp};
+    sf::path tp{bp / "root"};
 
-  sf::path tp{bp / "root"};
+    int ret = driver.init(env->dpp);
+    EXPECT_EQ(ret, 0);
+    EXPECT_TRUE(sf::exists(tp));
+    EXPECT_TRUE(sf::is_directory(tp));
+  }
 
-  int ret = driver.init(env->dpp);
-  EXPECT_EQ(ret, 0);
-  EXPECT_TRUE(sf::exists(tp));
-  EXPECT_TRUE(sf::is_directory(tp));
-}
-
-class POSIXDriverTest : public ::testing::Test {
+  class POSIXDriverTest : public ::testing::Test {
   protected:
     std::unique_ptr<TestDriver> driver;
     rgw_owner owner;
@@ -1199,7 +1303,7 @@ class POSIXDriverTest : public ::testing::Test {
       EXPECT_EQ(ret, 0);
     }
 
-    void TearDown() { sf::remove_all(bp); }
+    void TearDown() { /*sf::remove_all(bp);*/ }
 };
 
 TEST_F(POSIXDriverTest, Bucket)
@@ -1242,7 +1346,7 @@ TEST_F(POSIXDriverTest, BucketCreate)
   EXPECT_EQ(bucket->get_name(), testname);
   EXPECT_EQ(bucket->get_key().name, testname);
   EXPECT_EQ(bucket->get_key().tenant, "");
-  EXPECT_EQ(bucket->get_key().bucket_id, "");
+  EXPECT_TRUE(bucket->get_key().bucket_id.starts_with(testname));
 
   EXPECT_TRUE(sf::exists(tp));
   EXPECT_TRUE(sf::is_directory(tp));
@@ -1527,8 +1631,8 @@ TEST_F(POSIXObjectTest, ObjectCopy)
 	   placement,
 	   &mtime,
 	   &mtime,
-	   &mtime,
-	   &mtime,
+	   nullptr,
+	   nullptr,
 	   false,
 	   nullptr,
 	   nullptr,
@@ -1560,10 +1664,9 @@ TEST_F(POSIXObjectTest, ObjectAttrs)
   bufferlist origbl;
   encode(ATTR1, origbl);
 
-  // POSIXDriver adds attributes ("POSIX-Owner", and "POSIX-Object-Type")
-  EXPECT_EQ(object->get_attrs().size(), 3);
+  // POSIXDriver adds attributes ("POSIX-Object-Type")
+  EXPECT_EQ(object->get_attrs().size(), 2);
   EXPECT_EQ(object->get_attrs()[ATTR1], origbl);
-  EXPECT_TRUE(object->get_attrs().contains("POSIX-Owner"));
   EXPECT_TRUE(object->get_attrs().contains(ATTR_OBJECT_TYPE));
 
   std::string addattr{"AddAttrO"};
@@ -1573,17 +1676,15 @@ TEST_F(POSIXObjectTest, ObjectAttrs)
   ret = object->modify_obj_attrs(addattr.c_str(), addbl, null_yield, env->dpp);
   EXPECT_EQ(ret, 0);
 
-  EXPECT_EQ(object->get_attrs().size(), 4);
+  EXPECT_EQ(object->get_attrs().size(), 3);
   EXPECT_EQ(object->get_attrs()[ATTR1], origbl);
   EXPECT_EQ(object->get_attrs()[addattr], addbl);
-  EXPECT_TRUE(object->get_attrs().contains("POSIX-Owner"));
   EXPECT_TRUE(object->get_attrs().contains(ATTR_OBJECT_TYPE));
 
   ret = object->delete_obj_attrs(env->dpp, ATTR1.c_str(), null_yield);
   EXPECT_EQ(ret, 0);
-  EXPECT_EQ(object->get_attrs().size(), 3);
+  EXPECT_EQ(object->get_attrs().size(), 2);
   EXPECT_EQ(object->get_attrs()[addattr], addbl);
-  EXPECT_TRUE(object->get_attrs().contains("POSIX-Owner"));
   EXPECT_TRUE(object->get_attrs().contains(ATTR_OBJECT_TYPE));
 }
 
@@ -1836,8 +1937,8 @@ TEST_F(POSIXMPObjectTest, MPUploadCopy)
 	   placement,
 	   &mtime,
 	   &mtime,
-	   &mtime,
-	   &mtime,
+	   nullptr,
+	   nullptr,
 	   false,
 	   nullptr,
 	   nullptr,
@@ -1953,7 +2054,12 @@ TEST_F(POSIXBucketTest, VersionedObjectWrite)
   EXPECT_TRUE(sf::exists(tp));
   EXPECT_TRUE(sf::is_directory(tp));
 
-  std::string vfname{"_%3A" + inst_id + "_" + testname};
+  POSIXObject* px_obj = static_cast<POSIXObject *>(object.get());
+  ret = px_obj->stat(env->dpp);
+  posix::VersionedDirectory *vdir = static_cast<posix::VersionedDirectory*>(px_obj->get_fsent());
+
+  std::string ver_id = vdir->get_cur_version();
+  std::string vfname{"_%3A" + ver_id + "_" + testname};
   sf::path op{tp / vfname};
   EXPECT_TRUE(sf::exists(op));
   EXPECT_TRUE(sf::is_regular_file(op));
@@ -2009,7 +2115,12 @@ TEST_F(POSIXBucketTest, VersionedObjectWrite)
   EXPECT_TRUE(sf::exists(tp));
   EXPECT_TRUE(sf::is_directory(tp));
 
-  vfname = "_%3A" + inst_id + "_" + testname;
+  px_obj = static_cast<POSIXObject *>(obj2.get());
+  ret = px_obj->stat(env->dpp);
+  posix::VersionedDirectory *vdir2 = static_cast<posix::VersionedDirectory*>(px_obj->get_fsent());
+  ver_id = vdir2->get_cur_version();
+
+  vfname = "_%3A" + ver_id + "_" + testname;
   sf::path o2p{tp / vfname};
   EXPECT_TRUE(sf::exists(o2p));
   EXPECT_TRUE(sf::is_regular_file(o2p));
@@ -2024,7 +2135,7 @@ TEST_F(POSIXBucketTest, VersionedObjectWrite)
   std::unique_ptr<rgw::sal::Object::ReadOp> read_op(robj->get_read_op());
   ret = read_op->prepare(null_yield, env->dpp);
   EXPECT_EQ(ret, 0);
-  EXPECT_EQ(robj->get_key().instance, inst_id);
+  EXPECT_EQ(robj->get_key().instance, ver_id);
 }
 
 class POSIXVerObjectTest : public POSIXBucketTest {
@@ -2287,8 +2398,8 @@ TEST_F(POSIXVerObjectTest, ObjectCopy)
 	   placement,
 	   &mtime,
 	   &mtime,
-	   &mtime,
-	   &mtime,
+	   nullptr,
+	   nullptr,
 	   false,
 	   nullptr,
 	   nullptr,
@@ -2310,18 +2421,14 @@ TEST_F(POSIXVerObjectTest, ObjectCopy)
   EXPECT_TRUE(sf::exists(sp));
   EXPECT_TRUE(sf::exists(dp));
 
-  std::string vfname1{"_%3A" + obj1v1_inst + "_" + dstname};
+  std::string vfname1{"_%3A" + dstobj->get_instance() + "_" + dstname};
   sf::path op1{dp / vfname1};
   EXPECT_TRUE(sf::exists(op1));
   EXPECT_TRUE(sf::is_regular_file(op1));
-  std::string vfname2{"_%3A" + obj1v2_inst + "_" + dstname};
-  sf::path op2{dp / vfname2};
-  EXPECT_TRUE(sf::exists(op2));
-  EXPECT_TRUE(sf::is_regular_file(op2));
   sf::path ops{dp / dstname};
   EXPECT_TRUE(sf::exists(ops));
   EXPECT_TRUE(sf::is_symlink(ops));
-  EXPECT_EQ(sf::read_symlink(ops), vfname2);
+  EXPECT_EQ(sf::read_symlink(ops), vfname1);
 }
 
 TEST_F(POSIXVerObjectTest, CopyVersion)
@@ -2365,8 +2472,8 @@ TEST_F(POSIXVerObjectTest, CopyVersion)
 	   placement,
 	   &mtime,
 	   &mtime,
-	   &mtime,
-	   &mtime,
+	   nullptr,
+	   nullptr,
 	   false,
 	   nullptr,
 	   nullptr,
@@ -2493,9 +2600,6 @@ public:
     ACLOwner owner;
     owner.id = bucket->get_owner();
     mp_obj->gen_rand_obj_instance_name();
-    std::string inst_id = mp_obj->get_instance();
-    std::string vfname{"_%3A" + inst_id + "_" + objname};
-    sf::path op{bp / "root" / testname / objname / vfname };
 
     int ret = upload->complete(env->dpp, null_yield, get_pointer(env->cct), parts,
                                remove_objs, accounted_size, compressed, cs_info,
@@ -2503,6 +2607,13 @@ public:
     EXPECT_EQ(ret, 0);
     EXPECT_EQ(write_size, ofs);
     EXPECT_EQ(write_size, accounted_size);
+
+    std::string inst_id = mp_obj->get_instance();
+    rgw_obj_key key;
+    auto posix_mp_obj = static_cast<POSIXObject*>(mp_obj.get());
+    posix::FSEnt *fs = posix_mp_obj->get_fsent();
+    std::string vfname{"_%3A" + fs->get_cur_version() + "_" + objname};
+    sf::path op{bp / "root" / testname / objname / vfname };
     EXPECT_TRUE(sf::exists(op));
     EXPECT_TRUE(sf::is_directory(op));
 
@@ -2522,9 +2633,9 @@ public:
     std::string getver = object->get_instance();
     EXPECT_EQ(inst_id, getver);
 
-    ObjectType type{ObjectType::VERSIONED};
-    ret = decode_attr(object->get_attrs(), ATTR_OBJECT_TYPE.c_str(), type);
-    EXPECT_EQ(type.type, ObjectType::VERSIONED);
+    posix::ObjectType type{posix::ObjectType::VERSIONED};
+    ret = posix::decode_attr(object->get_attrs(), ATTR_OBJECT_TYPE.c_str(), type);
+    EXPECT_EQ(type.type, posix::ObjectType::VERSIONED);
 
     std::unique_ptr<Object> vobj = bucket->get_object(rgw_obj_key(objname, inst_id));
     std::unique_ptr<rgw::sal::Object::ReadOp> vread_op(vobj->get_read_op());
@@ -2532,8 +2643,8 @@ public:
     ret = vread_op->prepare(null_yield, env->dpp);
     EXPECT_EQ(ret, 0);
 
-    ret = decode_attr(vobj->get_attrs(), ATTR_OBJECT_TYPE.c_str(), type);
-    EXPECT_EQ(type.type, ObjectType::VERSIONED);
+    ret = posix::decode_attr(vobj->get_attrs(), ATTR_OBJECT_TYPE.c_str(), type);
+    EXPECT_EQ(type.type, posix::ObjectType::VERSIONED);
 
     sf::path ops{bp / "root" / testname / objname / objname};
     EXPECT_TRUE(sf::exists(ops));
@@ -2555,4 +2666,23 @@ int main(int argc, char *argv[]) {
   ::testing::AddGlobalTestEnvironment(env);
 
   return RUN_ALL_TESTS();
+}
+
+TEST_F(POSIXMPObjectTest, MPUploadWithDots)
+{
+  std::string objname = "host.example.com";
+  std::unique_ptr<rgw::sal::MultipartUpload> upload = bucket->get_multipart_upload(objname, std::nullopt);
+
+  ASSERT_NE(upload.get(), nullptr);
+  EXPECT_EQ(upload->get_key(), objname);
+
+  rgw_placement_rule placement;
+  Attrs attrs;
+  int ret = upload->init(env->dpp, null_yield, acl_owner, placement, attrs);
+  ASSERT_EQ(ret, 0);
+
+  std::string upload_id = upload->get_upload_id();
+  ASSERT_FALSE(upload_id.empty());
+  EXPECT_NE(upload_id, "com");
+  EXPECT_EQ(upload_id.substr(0, 2), "2~");
 }

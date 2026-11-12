@@ -501,6 +501,28 @@ target_link_libraries(unittest_rgw_posix_driver
   ${LMDB_LIBRARIES})
 endif(WITH_RADOSGW_POSIX)
 
+if(WITH_RADOSGW_NSFS)
+# unittest_rgw_nsfs_driver
+add_executable(unittest_rgw_nsfs_driver
+	test_rgw_nsfs_driver.cc)
+add_ceph_unittest(unittest_rgw_nsfs_driver)
+target_compile_definitions(unittest_rgw_nsfs_driver PUBLIC LMDB_SAFE_NO_CPP_UTILITIES)
+target_include_directories(unittest_rgw_nsfs_driver
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw"
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/driver/nsfs"
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/driver/posix")
+target_link_libraries(unittest_rgw_nsfs_driver ${UNITTEST_LIBS}
+  ${rgw_libs} ${LMDB_LIBRARIES})
+
+# unittest_rgw_gpfs_xattr
+add_executable(unittest_rgw_gpfs_xattr
+	test_rgw_gpfs_xattr.cc)
+target_include_directories(unittest_rgw_gpfs_xattr
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
+target_link_libraries(unittest_rgw_gpfs_xattr
+  ${UNITTEST_LIBS} ${CMAKE_DL_LIBS})
+endif(WITH_RADOSGW_NSFS)
+
 if(WITH_RADOSGW_RADOS)
 # ceph_test_datalog
 add_executable(ceph_test_datalog test_datalog.cc)
@@ -552,7 +574,6 @@ add_ceph_unittest(unittest_rgw_http_client)
 target_link_libraries(unittest_rgw_http_client
   rgw_common ${rgw_libs} ${UNITTEST_LIBS})
 
-
 # unittest_rgw_rest_conn
 add_executable(unittest_rgw_rest_conn test_rgw_rest_conn.cc)
 add_ceph_unittest(unittest_rgw_rest_conn)
@@ -563,6 +584,13 @@ target_link_libraries(unittest_rgw_rest_conn
 add_executable(unittest_yield_completion test_yield_completion.cc)
 add_ceph_unittest(unittest_yield_completion)
 target_link_libraries(unittest_yield_completion
+  rgw_common ${rgw_libs} ${UNITTEST_LIBS})
+
+add_executable(unittest_rgw_opaque_etag test_rgw_opaque_etag.cc)
+add_ceph_unittest(unittest_rgw_opaque_etag)
+target_include_directories(unittest_rgw_opaque_etag
+  SYSTEM PRIVATE ${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/src/rgw)
+target_link_libraries(unittest_rgw_opaque_etag
   rgw_common ${rgw_libs} ${UNITTEST_LIBS})
 
 if(WITH_RADOSGW_FDB)

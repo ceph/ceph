@@ -46,6 +46,13 @@ class SQLiteDB : public DB, virtual public DBOp {
 
     int createTables(const DoutPrefixProvider *dpp) override;
     int createAccountTable(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int createRoleTable(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int createOIDCProviderTable(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int createGroupTable(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int createGroupUsersTable(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int createAccessKeysTable(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int createTopicTable(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int createBucketTopicMappingTable(const DoutPrefixProvider *dpp, DBOpParams *params);
     int createBucketTable(const DoutPrefixProvider *dpp, DBOpParams *params);
     int createUserTable(const DoutPrefixProvider *dpp, DBOpParams *params);
     int createObjectTable(const DoutPrefixProvider *dpp, DBOpParams *params);
@@ -134,6 +141,440 @@ class SQLGetAccount : public SQLiteDB, public GetAccountOp {
       if (email_stmt)
         sqlite3_finalize(email_stmt);
     }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLInsertRole : public SQLiteDB, public InsertRoleOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL;
+
+  public:
+    SQLInsertRole(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLInsertRole() {
+      if (stmt)
+        sqlite3_finalize(stmt);
+    }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLRemoveRole : public SQLiteDB, public RemoveRoleOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL;
+
+  public:
+    SQLRemoveRole(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLRemoveRole() {
+      if (stmt)
+        sqlite3_finalize(stmt);
+    }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLGetRole : public SQLiteDB, public GetRoleOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL;
+    sqlite3_stmt *name_stmt = NULL;
+    sqlite3_stmt *name_account_stmt = NULL;
+
+  public:
+    SQLGetRole(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLGetRole() {
+      if (stmt)
+        sqlite3_finalize(stmt);
+      if (name_stmt)
+        sqlite3_finalize(name_stmt);
+      if (name_account_stmt)
+        sqlite3_finalize(name_account_stmt);
+    }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLListRoles : public SQLiteDB, public ListRolesOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL;
+    sqlite3_stmt *account_stmt = NULL;
+    sqlite3_stmt *count_stmt = NULL;
+
+  public:
+    SQLListRoles(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLListRoles() {
+      if (stmt)
+        sqlite3_finalize(stmt);
+      if (account_stmt)
+        sqlite3_finalize(account_stmt);
+      if (count_stmt)
+        sqlite3_finalize(count_stmt);
+    }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLInsertOIDCProvider : public SQLiteDB, public InsertOIDCProviderOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL;
+
+  public:
+    SQLInsertOIDCProvider(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLInsertOIDCProvider() {
+      if (stmt)
+        sqlite3_finalize(stmt);
+    }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLRemoveOIDCProvider : public SQLiteDB, public RemoveOIDCProviderOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL;
+
+  public:
+    SQLRemoveOIDCProvider(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLRemoveOIDCProvider() {
+      if (stmt)
+        sqlite3_finalize(stmt);
+    }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLGetOIDCProvider : public SQLiteDB, public GetOIDCProviderOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL;
+
+  public:
+    SQLGetOIDCProvider(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLGetOIDCProvider() {
+      if (stmt)
+        sqlite3_finalize(stmt);
+    }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLListOIDCProviders : public SQLiteDB, public ListOIDCProvidersOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL;
+
+  public:
+    SQLListOIDCProviders(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLListOIDCProviders() {
+      if (stmt)
+        sqlite3_finalize(stmt);
+    }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLInsertTopic : public SQLiteDB, public InsertTopicOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL;
+  public:
+    SQLInsertTopic(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLInsertTopic() {
+      if (stmt)
+        sqlite3_finalize(stmt);
+    }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLRemoveTopic : public SQLiteDB, public RemoveTopicOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL;
+  public:
+    SQLRemoveTopic(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLRemoveTopic() {
+      if (stmt)
+        sqlite3_finalize(stmt);
+    }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLGetTopic : public SQLiteDB, public GetTopicOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL;
+  public:
+    SQLGetTopic(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLGetTopic() {
+      if (stmt)
+        sqlite3_finalize(stmt);
+    }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLListTopics : public SQLiteDB, public ListTopicsOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL;
+    sqlite3_stmt *owner_stmt = NULL;
+  public:
+    SQLListTopics(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLListTopics() {
+      if (stmt)
+        sqlite3_finalize(stmt);
+      if (owner_stmt)
+        sqlite3_finalize(owner_stmt);
+    }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLInsertBucketTopicMapping : public SQLiteDB, public InsertBucketTopicMappingOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL;
+  public:
+    SQLInsertBucketTopicMapping(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLInsertBucketTopicMapping() {
+      if (stmt)
+        sqlite3_finalize(stmt);
+    }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLRemoveBucketTopicMapping : public SQLiteDB, public RemoveBucketTopicMappingOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL;
+  public:
+    SQLRemoveBucketTopicMapping(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLRemoveBucketTopicMapping() {
+      if (stmt)
+        sqlite3_finalize(stmt);
+    }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLGetBucketTopicMapping : public SQLiteDB, public GetBucketTopicMappingOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL;
+  public:
+    SQLGetBucketTopicMapping(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLGetBucketTopicMapping() {
+      if (stmt)
+        sqlite3_finalize(stmt);
+    }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLRemoveBucketFromTopicMappings : public SQLiteDB, public RemoveBucketFromTopicMappingsOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL;
+  public:
+    SQLRemoveBucketFromTopicMappings(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLRemoveBucketFromTopicMappings() {
+      if (stmt)
+        sqlite3_finalize(stmt);
+    }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLInsertGroup : public SQLiteDB, public InsertGroupOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL;
+  public:
+    SQLInsertGroup(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLInsertGroup() { if (stmt) sqlite3_finalize(stmt); }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLRemoveGroup : public SQLiteDB, public RemoveGroupOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL;
+  public:
+    SQLRemoveGroup(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLRemoveGroup() { if (stmt) sqlite3_finalize(stmt); }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLGetGroup : public SQLiteDB, public GetGroupOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL;
+    sqlite3_stmt *name_stmt = NULL;
+  public:
+    SQLGetGroup(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLGetGroup() { if (stmt) sqlite3_finalize(stmt); if (name_stmt) sqlite3_finalize(name_stmt); }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLListGroups : public SQLiteDB, public ListGroupsOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL;
+    sqlite3_stmt *count_stmt = NULL;
+  public:
+    SQLListGroups(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLListGroups() { if (stmt) sqlite3_finalize(stmt); if (count_stmt) sqlite3_finalize(count_stmt); }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLInsertGroupUser : public SQLiteDB, public InsertGroupUserOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL;
+  public:
+    SQLInsertGroupUser(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLInsertGroupUser() { if (stmt) sqlite3_finalize(stmt); }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLRemoveGroupUser : public SQLiteDB, public RemoveGroupUserOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL;
+  public:
+    SQLRemoveGroupUser(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLRemoveGroupUser() { if (stmt) sqlite3_finalize(stmt); }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLRemoveUserGroups : public SQLiteDB, public RemoveUserGroupsOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL;
+  public:
+    SQLRemoveUserGroups(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLRemoveUserGroups() { if (stmt) sqlite3_finalize(stmt); }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLListUserGroups : public SQLiteDB, public ListUserGroupsOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL;
+  public:
+    SQLListUserGroups(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLListUserGroups() { if (stmt) sqlite3_finalize(stmt); }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLInsertAccessKey : public SQLiteDB, public InsertAccessKeyOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL;
+  public:
+    SQLInsertAccessKey(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLInsertAccessKey() { if (stmt) sqlite3_finalize(stmt); }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLRemoveAccessKey : public SQLiteDB, public RemoveAccessKeyOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL;
+  public:
+    SQLRemoveAccessKey(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLRemoveAccessKey() { if (stmt) sqlite3_finalize(stmt); }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLRemoveUserAccessKeys : public SQLiteDB, public RemoveUserAccessKeysOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL;
+  public:
+    SQLRemoveUserAccessKeys(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLRemoveUserAccessKeys() { if (stmt) sqlite3_finalize(stmt); }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLListGroupUsers : public SQLiteDB, public ListGroupUsersOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL;
+  public:
+    SQLListGroupUsers(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLListGroupUsers() { if (stmt) sqlite3_finalize(stmt); }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLGetAccountUser : public SQLiteDB, public GetAccountUserOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL;
+  public:
+    SQLGetAccountUser(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLGetAccountUser() { if (stmt) sqlite3_finalize(stmt); }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLListAccountUsers : public SQLiteDB, public ListAccountUsersOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL;
+    sqlite3_stmt *count_stmt = NULL;
+  public:
+    SQLListAccountUsers(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLListAccountUsers() { if (stmt) sqlite3_finalize(stmt); if (count_stmt) sqlite3_finalize(count_stmt); }
     int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
     int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
     int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);

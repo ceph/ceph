@@ -19,6 +19,7 @@
 #include "cls/user/cls_user_client.h"
 #include "rgw_common.h"
 #include "rgw_oidc_provider.h"
+#include "rgw_tools.h"
 #include "rgw_sal.h"
 
 namespace rgwrados::oidcs {

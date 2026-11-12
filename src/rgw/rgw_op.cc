@@ -42,7 +42,6 @@
 #include "rgw_acl.h"
 #include "rgw_acl_s3.h"
 #include "rgw_acl_swift.h"
-#include "driver/rados/rgw_user.h"
 #include "rgw_bucket.h"
 #include "rgw_log.h"
 #include "rgw_multi.h"
@@ -507,6 +506,7 @@ static int read_obj_policy(const DoutPrefixProvider *dpp,
   string upload_id;
   upload_id = s->info.args.get("uploadId");
   std::unique_ptr<rgw::sal::Object> mpobj;
+  std::unique_ptr<rgw::sal::MultipartUpload> upload;
   rgw_obj obj;
 
   if (!s->auth.identity->is_admin() && bucket_info.bucket_suspended()) {
@@ -519,7 +519,6 @@ static int read_obj_policy(const DoutPrefixProvider *dpp,
   // 'copy_src' is used to make this function backward compatible.
   if (!upload_id.empty() && !copy_src) {
     /* multipart upload */
-    std::unique_ptr<rgw::sal::MultipartUpload> upload;
     upload = bucket->get_multipart_upload(object->get_name(), upload_id);
     mpobj = upload->get_meta_obj();
     mpobj->set_in_extra_data(true);
@@ -4866,7 +4865,11 @@ void RGWPutObj::execute(optional_yield y)
 
   auto counters = rgw::op_counters::get(s);
 
-  bool need_calc_md5 = (dlo_manifest == NULL) && (slo_info == NULL);
+  // rgw_non_md5_etag: skip body MD5 on PUT/UploadPart; return a dashed
+  // non-MD5 ETag (mtime-<ns>-req-<id>; nsfs overwrites with mtime-ino
+  // from the object file's inode after publish).
+  const bool non_md5_etag = s->cct->_conf->rgw_non_md5_etag;
+  bool need_calc_md5 = (dlo_manifest == NULL) && (slo_info == NULL) && !non_md5_etag;
   rgw::op_counters::inc(counters, l_rgw_op_put_obj, 1);
 
   // report latency on return
@@ -4892,7 +4895,13 @@ void RGWPutObj::execute(optional_yield y)
   }
 
   if (supplied_md5_b64) {
-    need_calc_md5 = true;
+    if (non_md5_etag) {
+      ldpp_dout(this, 5) << "rgw_non_md5_etag is enabled; "
+          "ignoring client-supplied Content-MD5 and skipping verification"
+          << dendl;
+    } else {
+      need_calc_md5 = true;
+    }
 
     ldpp_dout(this, 15) << "supplied_md5_b64=" << supplied_md5_b64 << dendl;
     op_ret = ceph_unarmor(supplied_md5_bin, &supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1],
@@ -4991,9 +5000,6 @@ void RGWPutObj::execute(optional_yield y)
     if (s->bucket->versioning_enabled()) {
       if (!version_id.empty()) {
         s->object->set_instance(version_id);
-      } else {
-	s->object->gen_rand_obj_instance_name();
-        version_id = s->object->get_instance();
       }
     }
     processor = driver->get_atomic_writer(this, s->yield, s->object.get(),
@@ -5276,7 +5282,9 @@ void RGWPutObj::execute(optional_yield y)
     return;
   }
 
-  hash.Final(m);
+  if (!non_md5_etag) {
+    hash.Final(m);
+  }
 
   if (compressor && compressor->is_compressed()) {
     bufferlist tmp;
@@ -5305,11 +5313,26 @@ void RGWPutObj::execute(optional_yield y)
     }
   }
 
-  buf_to_hex(m, std::back_inserter(calc_md5));
+  if (non_md5_etag) {
+    // Non-MD5 ETag: "mtime-<ns>-req-<id>" on non-nsfs backends. The
+    // nsfs writer replaces this with mtime-ino from stat (same form as
+    // nsfs version ids). Dashes stop AWS SDKs from treating the value
+    // as content MD5. MPU complete folds these via
+    // rgw_part_etag_to_digest().
+    const auto ts = ceph::real_clock::to_timespec(ceph::real_clock::now());
+    const uint64_t mtime_ns =
+        static_cast<uint64_t>(ts.tv_sec) * 1000000000ull +
+        static_cast<uint64_t>(ts.tv_nsec);
+    const std::string_view opaque_id = !s->req_id.empty() ?
+        std::string_view(s->req_id) : std::string_view(s->trans_id);
+    calc_md5 = rgw_make_opaque_etag(opaque_id, mtime_ns);
+  } else {
+    buf_to_hex(m, std::back_inserter(calc_md5));
+  }
 
   etag = calc_md5;
 
-  if (supplied_md5_b64 && (calc_md5 != supplied_md5)) {
+  if (!non_md5_etag && supplied_md5_b64 && (calc_md5 != supplied_md5)) {
     op_ret = -ERR_BAD_DIGEST;
     return;
   }
@@ -5440,6 +5463,18 @@ void RGWPutObj::execute(optional_yield y)
   if (op_ret < 0) {
     return;
   }
+
+  if (non_md5_etag) {
+    auto eit = attrs.find(RGW_ATTR_ETAG);
+    if (eit != attrs.end() && eit->second.length()) {
+      etag.assign(eit->second.c_str(), eit->second.length());
+    }
+  }
+
+  if (s->bucket->versioning_enabled() && version_id.empty()) {
+    version_id = s->object->get_instance();
+  }
+
   // send request to notification manager
   auto ret = res->publish_commit(this, s->obj_size, mtime, etag, s->object->get_instance());
   if (ret < 0) {
@@ -5532,9 +5567,6 @@ void RGWPostObj::execute(optional_yield y)
 
     std::unique_ptr<rgw::sal::Object> obj =
 		     s->bucket->get_object(rgw_obj_key(get_current_filename()));
-    if (s->bucket->versioning_enabled()) {
-      obj->gen_rand_obj_instance_name();
-    }
 
     std::unique_ptr<rgw::sal::Writer> processor;
     // every file needs a tail tag of its own, not the req_id shared by the whole post
@@ -6210,6 +6242,7 @@ void RGWDeleteObj::execute(optional_yield y)
       del_op->params.versioning_status = s->bucket->get_info().versioning_status();
       del_op->params.unmod_since = unmod_since;
       del_op->params.last_mod_time_match = last_mod_time_match;
+      del_op->params.last_mod_time_match_precise = last_mod_time_match_precise;
       del_op->params.high_precision_time = s->system_request;
       del_op->params.olh_epoch = epoch;
       del_op->params.marker_version_id = version_id;
@@ -6706,8 +6739,6 @@ void RGWCopyObj::execute(optional_yield y)
 
   if ( ! version_id.empty()) {
     s->object->set_instance(version_id);
-  } else if (s->bucket->versioning_enabled()) {
-    s->object->gen_rand_obj_instance_name();
   }
 
   s->src_object->set_atomic(true);
@@ -6834,7 +6865,7 @@ void RGWCopyObj::execute(optional_yield y)
 	   RGWObjCategory::Main,
 	   olh_epoch,
 	   delete_at,
-	   (version_id.empty() ? NULL : &version_id),
+	   &version_id,
 	   &s->req_id, /* use req_id as tag */
 	   &etag,
 	   copy_obj_progress_cb, (void *)this,
@@ -7283,12 +7314,14 @@ void RGWPutLC::execute(optional_yield y)
     return;
   }
 
-  op_ret = driver->get_rgwlc()->set_bucket_config(this, y, s->bucket.get(),
-                                                  s->bucket_attrs, &new_config);
-  if (op_ret < 0) {
+  /* not all SAL drivers implement lifecycle */
+  auto* lc = driver->get_rgwlc();
+  if (!lc) {
+    op_ret = -ERR_NOT_IMPLEMENTED;
     return;
   }
-  return;
+  op_ret = lc->set_bucket_config(this, y, s->bucket.get(),
+                                 s->bucket_attrs, &new_config);
 }
 
 void RGWDeleteLC::execute(optional_yield y)
@@ -7300,14 +7333,15 @@ void RGWDeleteLC::execute(optional_yield y)
     return;
   }
 
-  // remove RGW_ATTR_LC and remove the bucket from the 'lc list'
-  constexpr bool update_attrs = true;
-  op_ret = driver->get_rgwlc()->remove_bucket_config(this, y, s->bucket.get(),
-                                                     update_attrs);
-  if (op_ret < 0) {
+  /* not all SAL drivers implement lifecycle */
+  auto* lc = driver->get_rgwlc();
+  if (!lc) {
+    op_ret = -ERR_NOT_IMPLEMENTED;
     return;
   }
-  return;
+  constexpr bool update_attrs = true;
+  op_ret = lc->remove_bucket_config(this, y, s->bucket.get(),
+                                    update_attrs);
 }
 
 int RGWGetCORS::verify_permission(optional_yield y)
@@ -7907,9 +7941,6 @@ void RGWCompleteMultipart::execute(optional_yield y)
   if (s->bucket->versioning_enabled()) {
     if (!version_id.empty()) {
       s->object->set_instance(version_id);
-    } else {
-      s->object->gen_rand_obj_instance_name();
-      version_id = s->object->get_instance();
     }
   }
 
@@ -8003,6 +8034,10 @@ void RGWCompleteMultipart::execute(optional_yield y)
     return;
   }
 
+  if (s->bucket->versioning_enabled() && version_id.empty()) {
+    version_id = s->object->get_instance();
+  }
+
   s->obj_size = ofs;
   remove_objs.clear();
 
@@ -8073,7 +8108,7 @@ bool RGWCompleteMultipart::check_previously_completed(const RGWMultiCompleteUplo
   for (const auto& [index, part] : parts->parts) {
     std::string partetag = rgw_string_unquote(part);
     char petag[CEPH_CRYPTO_MD5_DIGESTSIZE];
-    hex_to_buf(partetag.c_str(), petag, CEPH_CRYPTO_MD5_DIGESTSIZE);
+    rgw_part_etag_to_digest(partetag, petag);
     hash.Update((const unsigned char *)petag, sizeof(petag));
     ldpp_dout(this, 20)
       << __func__ << "() re-calculating multipart etag: part: "
@@ -8486,6 +8521,7 @@ void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object
   del_op->params.bucket_owner = s->bucket_owner.id;
   del_op->params.marker_version_id = version_id;
   del_op->params.last_mod_time_match = object.get_last_mod_time();
+  del_op->params.last_mod_time_match_precise = object.get_last_mod_time_precise();
   del_op->params.if_match = object.get_if_match();
   del_op->params.size_match = object.get_size_match();
 
@@ -9059,10 +9095,6 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
   op_ret = bucket->check_quota(this, quota, size, y);
   if (op_ret < 0) {
     return op_ret;
-  }
-
-  if (bucket->versioning_enabled()) {
-    obj->gen_rand_obj_instance_name();
   }
 
   rgw_placement_rule dest_placement = s->dest_placement;
