@@ -211,6 +211,7 @@ bool PG::try_flush_or_schedule_async() {
 
 void PG::publish_stats_to_osd()
 {
+  LOG_PREFIX(PG::publish_stats_to_osd);
   if (!is_primary())
     return;
 
@@ -220,11 +221,42 @@ void PG::publish_stats_to_osd()
       info.scrub_sched_status = scrubber.get_schedule();
     });
 
+  const bool was_dirty = peering_state.debug_has_dirty_state();
   if (auto new_pg_stats = peering_state.prepare_stats_for_publish(
         pg_stats,
         object_stat_collection_t());
       new_pg_stats.has_value()) {
     pg_stats = std::move(new_pg_stats);
+  }
+
+  if (was_dirty || !peering_state.debug_has_dirty_state()) {
+    return;
+  }
+
+  if (peering_state.is_dispatching_peering_event()) {
+    // The peering-event dispatch currently in progress
+    // (do_peering_event()/handle_advance_map()/handle_activate_map())
+    // flushes dirty state into its PeeringCtx transaction, which
+    // complete_rctx() submits.  A brand-new PG's collection-creation
+    // transaction may still be pending in that rctx, so a standalone
+    // transaction here could reach the store before it.
+    DEBUGDPP("deferring a new vulnerability/rebuild latch transition "
+             "to the current peering event dispatch's write_if_dirty()",
+             *this);
+    return;
+  }
+
+  // Not every caller has a transaction in flight to carry this write
+  // (e.g. an op completion callback), so write it now.
+  DEBUGDPP("forcing an immediate write for a new vulnerability/rebuild "
+           "latch transition", *this);
+  ceph::os::Transaction t;
+  peering_state.write_if_dirty(t);
+  if (!t.empty()) {
+    (void) crimson::os::with_store_do_transaction(
+      shard_services.get_store(store_index),
+      coll_ref,
+      std::move(t));
   }
 }
 
@@ -967,9 +999,12 @@ void PG::do_peering_event(
     logger().debug("{} ignoring {} -- pg has reset", __func__, evt.get_desc());
   } else {
     logger().debug("{} handling {} for pg: {}", __func__, evt.get_desc(), pgid);
+    bool saved_dispatching = peering_state.is_dispatching_peering_event();
+    peering_state.set_dispatching_peering_event(true);
     peering_state.handle_event(
       evt.get_event(),
       &rctx);
+    peering_state.set_dispatching_peering_event(saved_dispatching);
     peering_state.write_if_dirty(rctx.transaction);
   }
 }
@@ -1015,7 +1050,11 @@ void PG::handle_activate_map(PeeringCtx &rctx)
 
 void PG::handle_initialize(PeeringCtx &rctx)
 {
+  // handle_activate_map() follows in the same rctx and writes if dirty
+  bool saved_dispatching = peering_state.is_dispatching_peering_event();
+  peering_state.set_dispatching_peering_event(true);
   peering_state.handle_event(PeeringState::Initialize{}, &rctx);
+  peering_state.set_dispatching_peering_event(saved_dispatching);
 }
 
 void PG::init_collection_pool_opts()
