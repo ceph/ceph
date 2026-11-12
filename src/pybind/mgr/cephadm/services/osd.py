@@ -31,6 +31,12 @@ logger = logging.getLogger(__name__)
 class OSDService(CephService):
     TYPE = 'osd'
 
+    def validate_encryption(self, spec: DriveGroupSpec) -> None:
+        if spec.method == 'raw' and spec.encrypted and not spec.tpm2:
+            raise OrchestratorError(
+                'Raw encrypted OSD deployment through cephadm requires tpm2: true. '
+                'Use method: lvm for encryption without TPM2.')
+
     def create_from_spec(self, drive_group: DriveGroupSpec, force_apply: bool = False) -> str:
         """
         :param force_apply: If True, do not check osdspec_needs_apply(). Used by
@@ -38,6 +44,7 @@ class OSDService(CephService):
             in inventory timestamps (and the check only compares timestamps, not spec content).
         """
         logger.debug(f"Processing DriveGroup {drive_group}")
+        self.validate_encryption(drive_group)
         osd_id_claims = OsdIdClaims(self.mgr)
         if osd_id_claims.get():
             logger.info(
