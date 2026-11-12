@@ -52,6 +52,8 @@ public:
     }
   };
 
+  bool contains(const Key &key) const { return entries.contains(key); }
+
   seastar::future<Turn> get(const Key &key,
                            seastar::abort_source *abort = nullptr) {
     if (abort && abort->abort_requested()) {

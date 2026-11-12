@@ -932,11 +932,15 @@ TEST_F(RequestOrdererTest, handoff_preserves_order_before_waiter_resumes)
     EXPECT_FALSE(waiting.available());
     // Model publication: the old waiter becomes ready, but has not resumed.
     first.reset();
+    EXPECT_TRUE(orderer.contains(1));
+    EXPECT_FALSE(orderer.contains(3));
     auto lookup_after_publication = orderer.get(1);
     auto old_waiter = co_await std::move(waiting);
     EXPECT_FALSE(lookup_after_publication.available());
     old_waiter.reset();
     auto later = co_await std::move(lookup_after_publication);
+    later.reset();
+    EXPECT_FALSE(orderer.contains(1));
   });
 }
 

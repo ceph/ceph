@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <seastar/core/coroutine.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/shared_future.hh>
 #include <seastar/core/sharded.hh>
@@ -269,42 +270,59 @@ public:
     static_assert(!T::can_create());
     auto &logger = crimson::get_logger(ceph_subsys_osd);
     auto &opref = *op;
-    return opref.template with_blocking_event<
-      PGMap::PGCreationBlockingEvent
-    >([&target_shard_services, &opref, &logger](auto &&trigger) mutable {
-      auto pg = target_shard_services.get_pg(opref.get_pgid());
-      auto fut = ShardServices::wait_for_pg_ertr::make_ready_future<Ref<PG>>(pg);
-      if (!pg) {
-	if (opref.requires_pg()) {
-	  auto osdmap = target_shard_services.get_map();
-	  if (!osdmap->is_up_acting_osd_shard(
-		opref.get_pgid(), target_shard_services.local_state.whoami)) {
-	    logger.debug(
-	      "pg {} for {} is no longer here, discarding",
-	      opref.get_pgid(), opref);
-	    opref.get_handle().exit();
-	    auto _fut = seastar::now();
-	    if (osdmap->get_epoch() > opref.get_epoch_sent_at()) {
-	      _fut = target_shard_services.send_incremental_map(
-		std::ref(opref.get_foreign_connection()),
-		opref.get_epoch_sent_at() + 1);
-	    }
-	    return _fut;
-	  }
-	}
-	fut = target_shard_services.wait_for_pg(
-	  std::move(trigger), opref.get_pgid());
+    // get_pg_mapping is exclusive, so completing it cannot block. A remote
+    // op has already left it. Hand off to with_pg or queue for the PG before
+    // yielding, so another request cannot pass us at either handoff.
+    co_await seastar::coroutine::without_preemption_check(
+      opref.get_handle().complete());
+    const auto pgid = opref.get_pgid();
+    auto& orderer = target_shard_services.local_state.pg_map.request_orderer;
+    auto pgref = target_shard_services.get_pg(pgid);
+    if (pgref && !orderer.contains(pgid)) {
+      co_await opref.with_pg(target_shard_services, std::move(pgref));
+      co_return;
+    }
+
+    // Publication can race with a queued waiter's continuation. Join the
+    // queue until the last waiter has handed off, even if the PG exists.
+    pgref.reset();
+    auto turn = co_await orderer.get(pgid);
+    pgref = target_shard_services.get_pg(pgid);
+    if (!pgref && opref.requires_pg()) {
+      auto osdmap = target_shard_services.get_map();
+      if (!osdmap->is_up_acting_osd_shard(
+            opref.get_pgid(), target_shard_services.local_state.whoami)) {
+        logger.debug("pg {} for {} is no longer here, discarding",
+                     opref.get_pgid(), opref);
+        if (osdmap->get_epoch() > opref.get_epoch_sent_at()) {
+          co_await target_shard_services.send_incremental_map(
+            std::ref(opref.get_foreign_connection()),
+            opref.get_epoch_sent_at() + 1);
+        }
+        co_return;
       }
-      return fut.safe_then([&logger, &target_shard_services, &opref](Ref<PG> pgref) {
-	logger.debug("{}: have_pg", opref);
-	return opref.with_pg(target_shard_services, pgref);
+    }
+    if (!pgref) {
+      pgref = co_await opref.template with_blocking_event<
+        PGMap::PGCreationBlockingEvent
+      >([&target_shard_services, &opref](auto &&trigger) {
+        return target_shard_services.wait_for_pg(
+          std::move(trigger), opref.get_pgid());
       }).handle_error(
-	crimson::ct_error::ecanceled::handle([&logger, &opref](auto) {
-	  logger.debug("{}: pg creation canceled, dropping", opref);
-	  return seastar::now();
-	})
-      );
-    }).then([op=std::move(op)] {});
+        crimson::ct_error::ecanceled::handle([&logger, &opref](auto) {
+          logger.debug("{}: pg creation canceled, dropping", opref);
+          return seastar::make_ready_future<Ref<PG>>();
+        }));
+      if (!pgref) {
+        co_return;
+      }
+    }
+    logger.debug("{}: have_pg", opref);
+    // Register in the PG/object pipeline before letting the next request
+    // proceed. The per-PG turn must not be held while the operation runs.
+    auto result = opref.with_pg(target_shard_services, std::move(pgref));
+    turn.reset();
+    co_await std::move(result);
   }
 
   seastar::future<> load_pgs(crimson::os::FuturizedStore& store);
@@ -435,21 +453,21 @@ public:
         core_store.first, std::move(op),
         [this, core_store](ShardServices &target_shard_services,
                typename T::IRef op) {
-        auto &opref = *op;
-        auto &logger = crimson::get_logger(ceph_subsys_osd);
-        logger.debug("{}: entering create_or_wait_pg", opref);
-        return opref.template enter_stage<>(
-          opref.get_pershard_pipeline(target_shard_services).create_or_wait_pg
-        ).then([this, &target_shard_services, op=std::move(op), core_store]() mutable {
-          if constexpr (T::can_create()) {
+        if constexpr (T::can_create()) {
+          auto &opref = *op;
+          auto &logger = crimson::get_logger(ceph_subsys_osd);
+          logger.debug("{}: entering create_or_wait_pg", opref);
+          return opref.template enter_stage<>(
+            opref.get_pershard_pipeline(target_shard_services).create_or_wait_pg
+          ).then([this, &target_shard_services, op = std::move(op), core_store]() mutable {
             return this->template run_with_pg_maybe_create<T>(
                 std::move(op), target_shard_services, core_store.second);
-          } else {
-            (void)core_store; // silence unused capture warning
-            return this->template run_with_pg_maybe_wait<T>(
-                std::move(op), target_shard_services);
-          }
-        });
+          });
+        } else {
+          (void)core_store; // silence unused capture warning
+          return this->template run_with_pg_maybe_wait<T>(
+              std::move(op), target_shard_services);
+        }
       });
     });
     return std::make_pair(id, std::move(fut));
