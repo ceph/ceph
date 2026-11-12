@@ -810,9 +810,11 @@ static int nsfs_lmdb_cmp(const MDB_val *a, const MDB_val *b)
  * `CAP_DAC_OVERRIDE` for the bucket directory the link lands in and
  * for the promoted file's attribute;  `CAP_FOWNER` for
  * protected_hardlinks' check on the source inode
- * (`inode_owner_or_capable()` in `may_linkat()`) and for a sticky
- * `.versions` entry.  Both are in the gateway's permitted set
- * already, so this names a site and not a new capability. */
+ * (`inode_owner_or_capable()` in `may_linkat()`) and for an entry in
+ * a sticky directory the gateway does not own -- nsfs makes none, but
+ * a tree it is handed may have one (probes/stickyprobe.c).  Both are
+ * in the gateway's permitted set already, so this names a site and not
+ * a new capability. */
 static constexpr uint64_t PROMOTE_RESIDUE_CAPS =
   nsfs::cap_bit(CAP_DAC_OVERRIDE) | nsfs::cap_bit(CAP_FOWNER);
 
@@ -881,8 +883,9 @@ static bool credentials_from_recorded_owner(const DoutPrefixProvider* dpp,
 /* What the gateway raises to perform, in another identity's key
  * directory or `.versions`, what the authenticated user was denied
  * (with_identity_or_raise()):  DAC_OVERRIDE for the directory's mode,
- * FOWNER for a sticky `.versions` and for an attribute on another
- * identity's file. */
+ * FOWNER for an attribute on another identity's file and for an entry
+ * in a sticky directory the gateway does not own, which a tree nsfs is
+ * handed may have (probes/stickyprobe.c). */
 static constexpr uint64_t RAISED_KEYDIR_CAPS =
   nsfs::cap_bit(CAP_DAC_OVERRIDE) | nsfs::cap_bit(CAP_FOWNER);
 
@@ -1195,9 +1198,9 @@ static int promote_version(int parent_fd, const std::string& leaf,
      *
      * Each of the three steps below fails for the gateway against
      * a version an identity wrote:  fs.protected_hardlinks permits a
-     * link only to the target's owner, a sticky .versions/ entry is
-     * the file owner's to unlink, and the timestamp comes off the
-     * owner's file.  Nobody configures a promote, so neither the
+     * link only to the target's owner, the .versions/ entry is in the
+     * identity's directory, and the timestamp comes off the owner's
+     * file.  Nobody configures a promote, so neither the
      * authenticated user nor the bucket owner has a claim to perform it, and
      * either fails the same way unless it happens to be the
      * writer.  The file says who wrote it, and a hard link preserves
@@ -1295,7 +1298,8 @@ static int promote_version(int parent_fd, const std::string& leaf,
      * the gateway and not as anybody:  CAP_DAC_OVERRIDE for the
      * bucket directory and the promoted file's attribute,
      * CAP_FOWNER for protected_hardlinks' check on the source inode
-     * and for the sticky `.versions` entry.
+     * and for an entry in a sticky directory the gateway does not
+     * own.
      *
      * After the denial and never before it, so a tree whose bucket
      * directories need no group never pays for this.  `SafeResult`
@@ -9235,25 +9239,25 @@ const char* nsfs::to_string(nsfs::ConvertEvent::Phase p)
 
 /* What the conversion's attribute rewrite raises, and nothing else.
  *
- * `CAP_DAC_OVERRIDE` alone.  The walk runs as the gateway on an
+ * `CAP_DAC_OVERRIDE`.  The walk runs as the gateway on an
  * operator's instruction (see convert_attrs()), and an object written
  * under impersonation is its writer's at `0660`, so the gateway can
  * read it -- it holds `CAP_DAC_READ_SEARCH` for its whole life -- and
  * cannot write an attribute to it.  Without this the first object
  * stops the walk with EACCES and the converting marker stays.
  *
- * No `CAP_FOWNER`, which the two other raise sites pair with this one.
- * It answers only `xattr_permission()`'s sticky-directory gate, and
- * that gate needs a sticky directory the gateway does not own:  ours
- * are the gateway's (impersonation design §8a) and NooBaa's are `0777`
- * with no sticky bit (NOOBAA_WRITE_SURFACE.md).  Nothing produces the
- * intersection, so naming FOWNER here would raise a capability no call
- * under it can use.
+ * And `CAP_FOWNER`, for `xattr_permission()`'s sticky-directory gate:
+ * a `user.*` attribute on a sticky directory the caller does not own
+ * needs it, and DAC_OVERRIDE does not reach that check
+ * (probes/stickyprobe.c).  Neither nsfs nor NooBaa makes a sticky
+ * directory, but an adopted tree can hold one -- a bucket directory an
+ * operator made `1777`, or one a client made below it -- and without
+ * this its attributes stop the walk with EPERM.
  *
- * In the gateway's permitted set already, so this names a site and not
- * a new capability. */
+ * Both are in the gateway's permitted set already, so this names a site
+ * and not a new capability. */
 static constexpr uint64_t CONVERT_REWRITE_CAPS =
-  nsfs::cap_bit(CAP_DAC_OVERRIDE);
+  nsfs::cap_bit(CAP_DAC_OVERRIDE) | nsfs::cap_bit(CAP_FOWNER);
 
 /* What the three inherit_ids() calls raise, and nothing else.
  *

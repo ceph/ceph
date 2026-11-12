@@ -6759,6 +6759,78 @@ TEST_F(NSFSImpersonatedRenameTest, ABucketEmptiedByItsWriterIsDeleted)
   EXPECT_EQ(owned("").err, -ENOENT) << "the bucket directory stayed";
 }
 
+/* Raise site 3 where it is needed:  a bucket made in the default
+ * location under a base path that is sticky and not the gateway's --
+ * an operator's shared directory at 1777.  The gateway removes the
+ * directory's entry, which is its creator's, and the sticky rule lets
+ * only the entry's owner, the directory's owner or CAP_FOWNER do that;
+ * DAC_OVERRIDE does not reach it (probes/stickyprobe.c).  The premise:
+ * with DAC_OVERRIDE alone the gateway cannot.  GPFS admits only the
+ * owners whatever is raised, so there this delete fails:  a documented
+ * limitation (work plan, Future work 10). */
+TEST_F(NSFSImpersonatedRenameTest, ABucketUnderAStickyBasePathIsDeleted)
+{
+  constexpr uid_t operator_uid = 65534;
+  const sf::path base = bp / "root";
+  struct stat was{};
+  ASSERT_EQ(::stat(base.c_str(), &was), 0);
+  ASSERT_EQ(::chmod(base.c_str(), 01777), 0);
+  ASSERT_EQ(with_capabilities_elsewhere(nsfs::cap_bit(CAP_CHOWN), [&]() -> int {
+	return (::chown(base.c_str(), operator_uid, static_cast<gid_t>(-1)) < 0)
+	    ? -errno : 0;
+      }), 0);
+  auto restore = make_scope_guard([&] {
+    (void) with_capabilities_elsewhere(
+	nsfs::cap_bit(CAP_CHOWN) | nsfs::cap_bit(CAP_FOWNER), [&]() -> int {
+	  (void) ::chown(base.c_str(), was.st_uid, was.st_gid);
+	  (void) ::chmod(base.c_str(), was.st_mode & 07777);
+	  return 0;
+	});
+  });
+
+  const std::string name = "sticky-base";
+  RGWBucketInfo info;
+  info.bucket.name = name;
+  info.owner = alice;
+  info.creation_time = ceph::real_clock::now();
+  auto b = driver->get_bucket(info);
+  rgw::sal::Bucket::CreateParams cp;
+  cp.owner = alice;
+  int ret = -1;
+  std::thread([&] {
+    ret = b->create(env->dpp, cp, null_yield, alice);
+  }).join();
+  ASSERT_EQ(ret, 0) << cpp_strerror(-ret);
+
+  nsfs::BucketPlacement row;
+  ASSERT_EQ(driver->get_identity_db()->get_bucket_placement(
+		env->dpp, name, "", row), 0);
+  ASSERT_TRUE(row.default_location)
+      << "the premise:  the gateway made the directory, in the default "
+	 "location";
+  struct stat bst{};
+  ASSERT_EQ(::stat((base / name).c_str(), &bst), 0);
+  ASSERT_EQ(bst.st_uid, owner_uid)
+      << "the premise:  the directory is its creator's";
+
+  const int dac_only = with_capabilities_elsewhere(
+      nsfs::cap_bit(CAP_DAC_OVERRIDE), [&]() -> int {
+	return (::rmdir((base / name).c_str()) < 0) ? -errno : 0;
+      });
+  ASSERT_EQ(dac_only, -EPERM)
+      << "the premise:  DAC_OVERRIDE alone removed an entry from another "
+	 "uid's sticky directory, so this test could not fail";
+
+  bool still_raised = true;
+  std::thread([&] {
+    ret = b->remove(env->dpp, false, null_yield, alice);
+    still_raised = nsfs::capability_is_effective(CAP_FOWNER);
+  }).join();
+  ASSERT_EQ(ret, 0) << cpp_strerror(-ret);
+  EXPECT_FALSE(still_raised) << "the delete left CAP_FOWNER raised";
+  EXPECT_FALSE(sf::exists(base / name)) << "the bucket directory stayed";
+}
+
 /* s3-native:  another identity's rename out of the owner's key
  * directory is performed, and the leaf and its history move. */
 TEST_F(NSFSImpersonatedRenameTest, UnderS3NativeAnotherIdentitysRenameIsRaised)
@@ -10215,6 +10287,64 @@ TEST_F(NSFSNooBaaBucketTest, ADirectoryObjectAnotherUidOwnsConverts)
   }
   EXPECT_TRUE(sf::exists(e / ".folder")) << "the empty object got no sentinel";
   EXPECT_EQ(client_view(bucket.get(), env->dpp, "c/").body, "dir bytes");
+}
+
+/* A directory object whose directory is sticky and another uid's
+ * converts.  Neither nsfs nor NooBaa makes a sticky directory, but an
+ * adopted tree can hold one -- here world-writable, as an operator's
+ * shared directory is -- and a `user.*` attribute on a sticky directory
+ * the caller does not own needs CAP_FOWNER, which DAC_OVERRIDE does not
+ * stand in for (probes/stickyprobe.c).  The premise:  with DAC_OVERRIDE
+ * alone the gateway cannot remove one of NooBaa's attributes from it. */
+TEST_F(NSFSNooBaaBucketTest, AStickyDirectoryAnotherUidOwnsConverts)
+{
+  lay_noobaa_directory_object(bucket_path() / "s", "dir bytes", "text/x-s", "s");
+  const sf::path s = bucket_path() / "s";
+  constexpr uid_t other = 65534;
+  const gid_t mine = ::getgid();
+
+  auto give = [&](uid_t u) {
+    return with_capabilities_elsewhere(
+	nsfs::cap_bit(CAP_CHOWN) | nsfs::cap_bit(CAP_DAC_READ_SEARCH),
+	[&]() -> int {
+	  for (const auto& p : {s / ".folder", s}) {
+	    if ((::lchown(p.c_str(), u, mine) < 0) && (errno != ENOENT)) {
+	      return -errno;
+	    }
+	  }
+	  return 0;
+	});
+  };
+  ASSERT_EQ(::chmod(s.c_str(), 01777), 0);
+  ASSERT_EQ(::chmod((s / ".folder").c_str(), 0660), 0);
+  const int given = give(other);
+  if (given == -EPERM) {
+    GTEST_SKIP() << "CAP_CHOWN is not permitted, so the tree cannot be made "
+		    "another uid's;  setcap the unit binary";
+  }
+  ASSERT_EQ(given, 0);
+  auto restore = make_scope_guard([&] { (void) give(::getuid()); });
+
+  const int dac_only = with_capabilities_elsewhere(
+      nsfs::cap_bit(CAP_DAC_OVERRIDE), [&]() -> int {
+	return (::removexattr(s.c_str(), "user.noobaa.content_type") < 0)
+	    ? -errno : 0;
+      });
+  ASSERT_EQ(dac_only, -EPERM)
+      << "DAC_OVERRIDE alone removed an attribute from another uid's sticky "
+	 "directory, so this test could not fail";
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  int ret = -1;
+  std::thread([&] {
+    ret = b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_SHARED);
+  }).join();
+  ASSERT_EQ(ret, 0) << "conversion stopped at a sticky directory";
+
+  for (const char* n : {"user.noobaa.content_type", "user.noobaa.dir_content"}) {
+    EXPECT_LT(::getxattr(s.c_str(), n, nullptr, 0), 0)
+	<< s << " still carries " << n;
+  }
 }
 
 /* Without the capability, conversion fails and leaves nothing behind.
