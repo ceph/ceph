@@ -908,7 +908,8 @@ int acquire_personality(const DoutPrefixProvider* dpp, const rgw_owner& key,
 }
 
 int open_as(const DoutPrefixProvider* dpp, const FSIdentity& id,
-	    int dirfd, const char* path, uint64_t flags, uint64_t mode)
+	    int dirfd, const char* path, uint64_t flags, uint64_t mode,
+	    uint64_t resolve)
 {
   PersonalityRef ref;
   const int ret = acquire_personality(dpp, id.key, id.cred, id.gen, &ref);
@@ -918,7 +919,7 @@ int open_as(const DoutPrefixProvider* dpp, const FSIdentity& id,
   /* O_NOFOLLOW for every caller:  nothing nsfs opens by name is a link
    * (DECISIONS.md 2026-10-22) */
   return rgw::sal::posix_uring_openat2(dpp, dirfd, path, flags | O_NOFOLLOW,
-				       mode, ref.id());
+				       mode, ref.id(), resolve);
 }
 
 static std::atomic<uint64_t> raised_ops{0};

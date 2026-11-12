@@ -96,7 +96,7 @@ void posix_uring_unregister_personality(const DoutPrefixProvider* dpp,
  */
 int posix_uring_openat2(const DoutPrefixProvider* dpp, int dirfd,
                         const char* path, uint64_t flags, uint64_t mode,
-                        uint16_t personality);
+                        uint16_t personality, uint64_t resolve = 0);
 
 /* mkdirat(2) through the ring, under `personality`.
  *

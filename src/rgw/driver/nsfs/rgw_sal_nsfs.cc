@@ -14,6 +14,7 @@
  */
 
 #include <linux/capability.h>
+#include <linux/openat2.h>
 #include <sys/resource.h>
 #include <sys/sysmacros.h>
 
@@ -2247,7 +2248,8 @@ int resolve_key_path(const DoutPrefixProvider* dpp,
                      Directory*& leaf_dir,
                      std::string& leaf_name,
                      const FSIdentity& id,
-                     const AccessStrategy* model)
+                     const AccessStrategy* model,
+                     bool* one_open)
 {
   if (!internal_bucket && key.ns.empty() &&
       key_hits_reserved_name(key.name, rn)) {
@@ -2256,6 +2258,33 @@ int resolve_key_path(const DoutPrefixProvider* dpp,
 			    "driver scaffolding", key.name);
     }
     return create_dirs ? -ERR_INVALID_OBJECT_NAME : -ENOENT;
+  }
+  if (one_open) {
+    *one_open = false;
+  }
+  const auto slash = key_path.rfind('/');
+  if (one_open && !create_dirs && id.active() &&
+      (slash != std::string::npos) && (slash > 0) && (root->get_fd() >= 0)) {
+    const std::string dirs = key_path.substr(0, slash);
+    const int fd = nsfs::open_as(dpp, id, root->get_fd(), dirs.c_str(),
+				 O_RDONLY | O_DIRECTORY | O_CLOEXEC, 0,
+				 RESOLVE_BENEATH | RESOLVE_NO_SYMLINKS);
+    if (fd >= 0) {
+      auto dir = std::make_unique<Directory>(dirs, root, cct);
+      dir->set_identity(id);
+      dir->set_access_model(model);
+      dir->adopt_fd(fd);
+      leaf_dir = dir.get();
+      dir_chain.push_back(std::move(dir));
+      leaf_name = key_path.substr(slash + 1);
+      *one_open = true;
+      return 0;
+    }
+    if ((fd == -ENOENT) || (fd == -ENOTDIR)) {
+      return fd;
+    }
+    /* refused, a link on the way, or anything else:  the walk, whose
+     * every step the access model decides */
   }
   const int ret = resolve_path(dpp, root, key_path, create_dirs, cct,
 			       dir_chain, leaf_dir, leaf_name, id, model);
@@ -12213,6 +12242,28 @@ int NSFSObject::delete_object(const DoutPrefixProvider* dpp,
   if (ret < 0)
     return ret;
 
+  /* The prune removes the key's directories one at a time, so where
+   * stat() opened them as one, they are walked again;  what stat()
+   * added after them -- .versions -- stays, and so does the one
+   * directory, its parent, until the prune is done. */
+  std::unique_ptr<Directory> one_open_dir;
+  if (dir_chain_one_open && !dir_chain.empty()) {
+    std::vector<std::unique_ptr<Directory>> walked;
+    Directory* walked_leaf;
+    std::string walked_name;
+    if (nsfs::resolve_path(dpp, b->get_dir(), get_fname(/*use_version=*/false),
+			   /*create_dirs=*/false, driver->ctx(), walked,
+			   walked_leaf, walked_name, pending_identity,
+			   driver->get_access_strategy()) == 0) {
+      one_open_dir = std::move(dir_chain.front());
+      for (size_t i = 1; i < dir_chain.size(); ++i) {
+	walked.push_back(std::move(dir_chain[i]));
+      }
+      dir_chain = std::move(walked);
+    }
+    dir_chain_one_open = false;
+  }
+
   for (auto it = dir_chain.rbegin(); it != dir_chain.rend(); ++it) {
     int r = (*it)->remove(dpp, y, /*delete_children=*/false);
     if (r < 0)
@@ -14786,7 +14837,8 @@ int NSFSObject::stat(const DoutPrefixProvider* dpp)
         /*create_dirs=*/false,
         driver->ctx(),
         dir_chain, leaf_dir, leaf_name,
-        pending_identity, driver->get_access_strategy());
+        pending_identity, driver->get_access_strategy(),
+        &dir_chain_one_open);
     if (ret < 0) {
       state.exists = false;
       return ret;
