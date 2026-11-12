@@ -143,10 +143,6 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
   DEBUGDPP("{} start", *pgref, *this);
   PG &pg = *pgref;
 
-  // The admission turn was registered before releasing the shard pipeline.
-  // Do not hold that pipeline while waiting for PG readiness or a slot.
-  co_await interruptor::make_interruptible(ihref.handle.complete());
-
   // wait until the pg can serve the op before taking a slot, so ops on a pg
   // that is still peering do not hold slots that other pgs need.  These
   // waits are repeated in wait_pg_ready, in case the pg changes again
@@ -187,8 +183,11 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
 
   DEBUGDPP("{}.{}: entering wait_pg_ready stage",
 	   *pgref, *this, this_instance_id);
-  // The shard pipeline has been released, so there is no exit barrier
-  // to drain and entering OrderedConcurrent wait_pg_ready cannot block.
+  // enter_stage_sync is legal because this transition cannot block, and it
+  // is cheaper than enter_stage.  wait_pg_ready is OrderedConcurrent, whose
+  // enter() is synchronous, and the handle arrives holding no exit barrier
+  // to drain: run_with_pg_maybe_wait completed the connection handle,
+  // and a requeue uses a fresh handle from reset_instance_handle().
   ihref.enter_stage_sync(client_pp(pg).wait_pg_ready, *this);
   turn.reset();
 
