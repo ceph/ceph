@@ -9,6 +9,7 @@ tasks:
       client.0:
         - cls/test_cls_lock.sh
         - cls/test_cls_log.sh
+        - cls/test_cls_otp.sh
         - cls/test_cls_refcount.sh
         - cls/test_cls_rgw.sh
         - cls/test_cls_rgw_gc.sh
