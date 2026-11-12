@@ -961,6 +961,81 @@ Example output:
    are therefore not reported.
 
 
+.. _cephadm-osd-spec-status:
+
+Outcome of OSD Spec Applies
+---------------------------
+
+cephadm records, for each OSD spec and each host matched by its placement, the
+outcome of the last time it applied the spec on the host:
+
+.. list-table::
+   :header-rows: 1
+
+   * - Outcome
+     - Meaning
+   * - ``failed``
+     - ceph-volume (or the deployment) failed, or ceph-volume did not create
+       any OSD although new data devices were selected. See ``error``.
+   * - ``blocked``
+     - Reserved: the deployment was refused, e.g. because ``db_devices`` or
+       ``wal_devices`` selects no device.
+   * - ``nothing_selected``
+     - ``data_devices`` selects no device on the host.
+   * - ``not_schedulable``
+     - The host is offline, in maintenance, or has the ``_no_schedule``
+       label. See ``reason``.
+   * - ``pending``
+     - The host has not been evaluated yet. See ``reason``.
+   * - ``deployed``
+     - At least one OSD was created. See ``osds_created``.
+   * - ``up_to_date``
+     - All the selected data devices already back OSDs of the spec.
+
+To show it, run:
+
+.. prompt:: bash #
+
+   ceph orch osd spec status [<service_name>] [--host <hostname> ...] [--format json|yaml]
+
+Example output:
+
+.. code-block:: console
+
+   osd.hdd_ssd_db: 4 host(s) matched (1 failed, 1 nothing_selected, 1 deployed, 1 up_to_date)
+
+   HOST   OUTCOME           SINCE    LAST ATTEMPT  INVENTORY  DATA  DB  NEW  DETAIL
+   node6  failed            4h ago   4h ago        4h ago     3     1   3    ceph-volume lvm batch: 1 fast devices were passed, but none are available
+   node5  nothing_selected  34h ago  98m ago       103m ago   0     2   0    data_devices selects no device (size: 10 mismatches)
+   node4  deployed          6h ago   6h ago        6h ago     12    2   1    created osd.42
+   node1  up_to_date        5w ago   47h ago*      47h ago    12    2   0    -
+
+   Run 'ceph orch osd spec explain osd.hdd_ssd_db --host <host>' for the per-device details.
+
+   * the inventory or the spec changed since the last attempt, or the last attempt did not complete: the host is re-evaluated on the next pass
+
+``SINCE`` is when the host entered its current outcome, ``LAST ATTEMPT`` when
+cephadm last evaluated the spec on the host, and ``INVENTORY`` the age of the
+device inventory that evaluation was based on. A host is only re-evaluated when
+its device inventory or the spec changes, or when the last attempt did not
+complete. The ``DATA``, ``DB`` and ``WAL`` columns give the number of devices
+selected for each role, and ``NEW`` the number of selected data devices that
+don't back an OSD yet.
+
+The command only shows what cephadm did. To understand why devices are, or
+are not, selected, use :ref:`ceph orch osd spec explain
+<cephadm-osd-spec-explain>`.
+
+The same information is available to tools in the ``status.osd_apply`` block of
+``ceph orch ls osd --format yaml`` (or ``json``). To keep that output small,
+the block counts all the hosts but only lists the hosts that are not
+``up_to_date``. In addition to the outcome, it reports, per role, the number of
+excluded devices per reason and per failing filter criterion.
+
+When the outcome of a host changes, cephadm emits a service event, for example
+``node5: deployed -> nothing_selected``.
+
+
 Examples
 ========
 

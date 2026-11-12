@@ -32,6 +32,13 @@
   limit reached). It works on the stored OSD specs or, with ``-i``, on a spec
   file before it is applied.
 
+* Cephadm: cephadm now records, for each OSD spec and host, the outcome of the
+  last apply (``deployed``, ``up_to_date``, ``nothing_selected``, ``failed``,
+  ...), with the number of selected and excluded devices per role. The new
+  ``ceph orch osd spec status`` command shows it, and it is available to tools
+  in the new ``status.osd_apply`` block of ``ceph orch ls osd --format yaml``.
+  A service event is emitted when the outcome of a host changes.
+
 * RBD: The Python ``Image.list_lockers()`` method now returns a dictionary
   containing ``tag``, ``exclusive``, and ``lockers`` fields even when no clients
   hold the lock, instead of an empty list. Callers should check the
