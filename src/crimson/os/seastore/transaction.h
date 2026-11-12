@@ -3,9 +3,12 @@
 
 #pragma once
 
+#include <algorithm>
+#include <array>
 #include <chrono>
 #include <iostream>
 #include <memory_resource>
+#include <string_view>
 
 #include <boost/intrusive/list.hpp>
 
@@ -100,6 +103,138 @@ struct btree_cursor_stats_t {
   }
 };
 
+/**
+ * phase_latency_bucket_t
+ *
+ * Cross-cutting phases of a write transaction, timed wherever the work
+ * actually happens (Cache, LBAManager, the OOL writers) rather than at a
+ * single call site. Unlike txn_stage_t -- which splits do_transaction into
+ * consecutive, non-overlapping stages -- these buckets aggregate the time
+ * spent in one kind of work across the whole transaction, including the
+ * transaction-building phase that txn_stage_t only reports as a single BUILD
+ * sample.
+ *
+ * Deliberately *not* covered here, because an equivalent measurement already
+ * exists and is exported as seastore_do_transaction_stage_lat:
+ * - the whole submit_transaction  -> txn_stage_t::SUBMIT_TOTAL
+ * - journal->submit_record        -> txn_stage_t::SUBMIT_JOURNAL
+ *                                    (Transaction::phase_durations_t::journal)
+ * - update_lba_mappings           -> txn_stage_t::SUBMIT_LBA_UPDATE
+ *                                    (phase_durations_t::lba_update); only the
+ *                                    build-time mapping work is timed below.
+ *
+ * Buckets may nest (e.g. cache_mutation inside mapping_management), so the
+ * per-bucket totals are not expected to sum to the transaction latency.
+ */
+enum class phase_latency_bucket_t : uint8_t {
+  // onode-tree lookups driven by _do_transaction_step
+  metadata_lookup = 0,
+  // LBA mapping lookups/allocations/remaps/removals issued while building
+  // the transaction (the submit-time update_lba_mappings is excluded)
+  mapping_management,
+  // Cache extent allocation/retirement (no I/O, CPU only)
+  cache_mutation,
+  // CPU-side packing/merging of OOL extents before the device write is
+  // issued; a subset of phase_durations_t::ool_write, RBM writer only
+  write_packing,
+  MAX
+};
+
+static constexpr auto PHASE_LATENCY_BUCKET_MAX =
+  static_cast<std::size_t>(phase_latency_bucket_t::MAX);
+
+constexpr std::string_view phase_latency_bucket_name(
+  phase_latency_bucket_t bucket)
+{
+  switch (bucket) {
+  case phase_latency_bucket_t::metadata_lookup:
+    return "metadata_lookup";
+  case phase_latency_bucket_t::mapping_management:
+    return "mapping_management";
+  case phase_latency_bucket_t::cache_mutation:
+    return "cache_mutation";
+  case phase_latency_bucket_t::write_packing:
+    return "write_packing";
+  case phase_latency_bucket_t::MAX:
+    break;
+  }
+  return "unknown";
+}
+
+/**
+ * phase_latency_stats_t
+ *
+ * Per-transaction accumulator for phase_latency_bucket_t, fed by
+ * Transaction::phase_latency_timer_t and accumulated across replays, like
+ * phase_durations_t. A bucket is timed from the outermost enter() to the
+ * matching outermost exit(), so recursive and concurrent scopes of the same
+ * bucket are counted once.
+ */
+struct phase_latency_stats_t {
+  using clock = std::chrono::steady_clock;
+  using duration_t = clock::duration;
+
+  std::array<uint64_t, PHASE_LATENCY_BUCKET_MAX> total_ns = {};
+  // number of timed scopes, i.e. outermost enter()/exit() pairs
+  std::array<uint64_t, PHASE_LATENCY_BUCKET_MAX> sample_counts = {};
+  std::array<uint32_t, PHASE_LATENCY_BUCKET_MAX> active_depth = {};
+  std::array<clock::time_point, PHASE_LATENCY_BUCKET_MAX> active_start = {};
+
+  static uint64_t to_ns(duration_t dur) {
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(dur).count();
+  }
+
+  bool is_clear() const {
+    return std::all_of(
+      total_ns.begin(), total_ns.end(),
+      [](auto total) { return total == 0; });
+  }
+
+  void add(phase_latency_bucket_t bucket, duration_t dur) {
+    auto idx = static_cast<std::size_t>(bucket);
+    ceph_assert(idx < total_ns.size());
+    ++sample_counts[idx];
+    total_ns[idx] += to_ns(dur);
+  }
+
+  void enter(phase_latency_bucket_t bucket, clock::time_point now) {
+    auto idx = static_cast<std::size_t>(bucket);
+    ceph_assert(idx < active_depth.size());
+    if (active_depth[idx]++ == 0) {
+      active_start[idx] = now;
+    }
+  }
+
+  void exit(phase_latency_bucket_t bucket, clock::time_point now) {
+    auto idx = static_cast<std::size_t>(bucket);
+    ceph_assert(idx < active_depth.size());
+    if (active_depth[idx] == 0) {
+      // the stats were cleared while a timer was still alive, drop the sample
+      // rather than accounting a bogus interval
+      return;
+    }
+    if (--active_depth[idx] == 0) {
+      add(bucket, now - active_start[idx]);
+    }
+  }
+
+  uint64_t get_total_ns(phase_latency_bucket_t bucket) const {
+    auto idx = static_cast<std::size_t>(bucket);
+    ceph_assert(idx < total_ns.size());
+    return total_ns[idx];
+  }
+
+  uint64_t get_sample_count(phase_latency_bucket_t bucket) const {
+    auto idx = static_cast<std::size_t>(bucket);
+    ceph_assert(idx < sample_counts.size());
+    return sample_counts[idx];
+  }
+
+  duration_t get_total_duration(phase_latency_bucket_t bucket) const {
+    return std::chrono::nanoseconds(get_total_ns(bucket));
+  }
+};
+
 struct rbm_pending_ool_t {
   bool is_conflicted = false;
   // Extents of the in-flight write, all on the issuing writer's tier.
@@ -125,6 +260,40 @@ class Transaction : public boost::intrusive_ref_counter<
 public:
   using Ref = boost::intrusive_ptr<Transaction>;
   using on_destruct_func_t = std::function<void(Transaction&)>;
+
+  /**
+   * phase_latency_timer_t
+   *
+   * RAII scope timer feeding phase_latency_stats_t. Movable so that it can be
+   * captured by a continuation and kept alive until the future it times
+   * resolves -- a plain local would otherwise only time the synchronous part
+   * of a function that returns a future.
+   */
+  class phase_latency_timer_t {
+  public:
+    phase_latency_timer_t(Transaction &t, phase_latency_bucket_t bucket)
+      : stats(&t.phase_latency_stats),
+        bucket(bucket) {
+      stats->enter(bucket, phase_latency_stats_t::clock::now());
+    }
+    phase_latency_timer_t(const phase_latency_timer_t&) = delete;
+    phase_latency_timer_t& operator=(const phase_latency_timer_t&) = delete;
+    phase_latency_timer_t(phase_latency_timer_t&& other) noexcept
+      : stats(other.stats),
+        bucket(other.bucket) {
+      other.stats = nullptr;
+    }
+    phase_latency_timer_t& operator=(phase_latency_timer_t&&) = delete;
+    ~phase_latency_timer_t() {
+      if (stats != nullptr) {
+        stats->exit(bucket, phase_latency_stats_t::clock::now());
+      }
+    }
+  private:
+    phase_latency_stats_t *stats = nullptr;
+    phase_latency_bucket_t bucket;
+  };
+
   enum class get_extent_ret {
     PRESENT,
     ABSENT,
@@ -545,6 +714,19 @@ public:
   };
   phase_durations_t &get_phase_durations() {
     return phase_durations;
+  }
+
+  // Like phase_durations, phase_latency_stats is accumulated across retries
+  // and is therefore not cleared by reset_preserve_handle().
+  phase_latency_stats_t &get_phase_latency_stats() {
+    return phase_latency_stats;
+  }
+  const phase_latency_stats_t &get_phase_latency_stats() const {
+    return phase_latency_stats;
+  }
+  [[nodiscard]] phase_latency_timer_t record_phase_latency(
+    phase_latency_bucket_t bucket) {
+    return phase_latency_timer_t(*this, bucket);
   }
 
   auto &get_handle() {
@@ -1023,6 +1205,8 @@ private:
   std::size_t num_replays = 0;
 
   phase_durations_t phase_durations;
+
+  phase_latency_stats_t phase_latency_stats;
 
   bool has_reset = false;
 

@@ -2,6 +2,8 @@
 // vim: ts=8 sw=2 sts=2 expandtab expandtab
 
 #include <chrono>
+#include <optional>
+
 #include <seastar/core/sleep.hh>
 
 #include "crimson/os/seastore/extent_placement_manager.h"
@@ -1334,6 +1336,11 @@ RandomBlockOolWriter::do_write(
   DEBUGT("start with {} allocated extents",
          t, extents.size());
   std::vector<write_info_t> writes;
+  // times the CPU-side packing/merging below, not the device writes issued
+  // at the end of this function (those are covered by
+  // Transaction::phase_durations_t::ool_write)
+  std::optional<Transaction::phase_latency_timer_t> phase_lat(
+    std::in_place, t, phase_latency_bucket_t::write_packing);
   for (auto& ex : extents) {
     auto paddr = ex->get_paddr();
     assert(paddr.is_absolute());
@@ -1410,6 +1417,7 @@ RandomBlockOolWriter::do_write(
       w.mergeable_bps.clear();
     }
   }
+  phase_lat.reset();
 
   return trans_intr::make_interruptible(
     seastar::do_with(std::move(writes),
