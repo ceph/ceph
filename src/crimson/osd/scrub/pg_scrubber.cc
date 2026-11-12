@@ -2197,6 +2197,28 @@ void PGScrubber::emit_scrub_result(
         // compares in_stats against itself and correctly reports no mismatch.
       }
 
+      // Adopt the stats recomputed by scrub, but only the scrub-checked group
+      // (see foreach_scrub_checked_stat).  Assigning the whole
+      // pg_stats.stats.sum = in_stats would also clobber the scrub-maintained
+      // members that this scrub did not compute -- e.g. a shallow scrub
+      // reports num_deep_scrub_errors/num_omap_*/num_large_omap_objects as 0,
+      // erasing the values recorded by the last deep scrub -- and counters
+      // such as num_rd/num_wr that scrub does not track.  The maintained
+      // group is updated separately in step 2.
+      auto adopt_checked_stats = [&pg_stats, &in_stats]() {
+        foreach_scrub_checked_stat(
+          [&pg_stats, &in_stats](
+            const auto& /*name*/, auto statptr, const auto& /*invalid*/) {
+            pg_stats.stats.sum.*statptr = in_stats.*statptr;
+          });
+        pg_stats.dirty_stats_invalid = false;
+        pg_stats.omap_stats_invalid = false;
+        pg_stats.hitset_stats_invalid = false;
+        pg_stats.hitset_bytes_stats_invalid = false;
+        pg_stats.pin_stats_invalid = false;
+        pg_stats.manifest_stats_invalid = false;
+      };
+
       // Step 1: detect a stat mismatch against the *current* pg_stats before
       // any scrub-maintained fields are overwritten.  This mirrors classic OSD
       // PrimaryLogScrub::_scrub_finish(), which increments m_shallow_errors
@@ -2249,18 +2271,12 @@ void PGScrubber::emit_scrub_result(
             ++m_fixed_count;
             // Repair: write the corrected object/byte stats into pg_stats and
             // clear the *_invalid flags, matching classic OSD's _scrub_finish()
-            // which calls update_stats(stats.stats = m_scrub_cstat, clear flags)
-            // inside the same if (m_is_repair) block (PrimaryLogScrub.cc:221-231).
+            // which does so inside the same if (m_is_repair) block
+            // (PrimaryLogScrub.cc:221-231).
             // Without this, pg_stats retains the old (mismatched) num_objects,
             // num_bytes, etc. until the next scrub, and the *_invalid flags
             // remain set, suppressing stat-based PG state transitions.
-            pg_stats.stats.sum = in_stats;
-            pg_stats.dirty_stats_invalid = false;
-            pg_stats.omap_stats_invalid = false;
-            pg_stats.hitset_stats_invalid = false;
-            pg_stats.hitset_bytes_stats_invalid = false;
-            pg_stats.pin_stats_invalid = false;
-            pg_stats.manifest_stats_invalid = false;
+            adopt_checked_stats();
           }
         } else {
           // No object-level inconsistencies: this is just a bookkeeping
@@ -2268,13 +2284,7 @@ void PGScrubber::emit_scrub_result(
           // estimate).  Fix it silently, matching classic OSD.
           DEBUGDPP("fixing stat mismatch (no object errors): {}", pg,
                    mismatch_msg);
-          pg_stats.stats.sum = in_stats;
-          pg_stats.dirty_stats_invalid = false;
-          pg_stats.omap_stats_invalid = false;
-          pg_stats.hitset_stats_invalid = false;
-          pg_stats.hitset_bytes_stats_invalid = false;
-          pg_stats.pin_stats_invalid = false;
-          pg_stats.manifest_stats_invalid = false;
+          adopt_checked_stats();
         }
       }
 
