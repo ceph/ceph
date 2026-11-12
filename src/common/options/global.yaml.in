@@ -6249,6 +6249,8 @@ options:
   desc: The ratio at which BlueFS usage relative to the main device raises a
     health warning. Set to "1" to disable.
   default: 0.06
+  min: 0
+  max: 1
   with_legacy: false
   flags:
   - runtime
