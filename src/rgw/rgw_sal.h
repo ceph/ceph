@@ -289,6 +289,8 @@ class DataProcessorFactory {
                          optional_yield y) = 0;
   virtual RGWGetObj_Filter* get_filter() = 0;
   virtual bool need_copy_data() = 0;
+  // true when the data is decrypted or encrypted
+  virtual bool need_crypt() { return need_copy_data(); }
   virtual void finalize_attrs(Attrs& attrs) { /* default implementation does nothing */ }
 
   /*

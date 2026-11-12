@@ -6382,12 +6382,13 @@ public:
       crypt_http_responses(crypt_http_responses_)
   {}
 
-  bool need_copy_data() override {
-    // source is encrypted
-    if (src_attrs.count(RGW_ATTR_CRYPT_MODE)) return true;
+  bool need_crypt() override {
+    // source is encrypted, or the destination requests encryption
+    return src_attrs.count(RGW_ATTR_CRYPT_MODE) || dest_requests_encryption();
+  }
 
-    // destination encryption requires slow path
-    if (dest_requests_encryption()) return true;
+  bool need_copy_data() override {
+    if (need_crypt()) return true;
 
     // compression change: preserve fast path for same-codec copies
     bool src_compressed = false;
