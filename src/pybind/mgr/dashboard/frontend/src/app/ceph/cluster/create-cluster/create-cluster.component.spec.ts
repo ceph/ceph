@@ -1,7 +1,10 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
+import { ActivatedRoute } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
+
+import { BehaviorSubject } from 'rxjs';
 
 import { CephModule } from '~/app/ceph/ceph.module';
 import { CoreModule } from '~/app/core/core.module';
@@ -22,13 +25,23 @@ describe('CreateClusterComponent', () => {
   let hostService: HostService;
   let osdService: OsdService;
   let modalServiceShowSpy: jasmine.Spy;
+  const queryParams$ = new BehaviorSubject<Record<string, unknown>>({});
   const projectConstants: typeof AppConstants = AppConstants;
 
   configureTestBed({
-    imports: [HttpClientTestingModule, RouterTestingModule, SharedModule, CoreModule, CephModule]
+    imports: [HttpClientTestingModule, RouterTestingModule, SharedModule, CoreModule, CephModule],
+    providers: [
+      {
+        provide: ActivatedRoute,
+        useValue: {
+          queryParams: queryParams$.asObservable()
+        }
+      }
+    ]
   });
 
   beforeEach(() => {
+    queryParams$.next({});
     TestBed.overrideComponent(CreateClusterStep3Component, {
       set: { template: '<div class="create-cluster-step-3"></div>' }
     });
@@ -50,6 +63,32 @@ describe('CreateClusterComponent', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  it('should show welcome landing by default and when welcome=true', () => {
+    expect(component.startClusterCreation).toBe(true);
+    expect(fixture.debugElement.nativeElement.textContent).toContain(
+      `Welcome to ${projectConstants.projectName}`
+    );
+
+    queryParams$.next({ welcome: true });
+    fixture.detectChanges();
+    expect(component.startClusterCreation).toBeTruthy();
+    expect(fixture.debugElement.nativeElement.querySelector('cd-tearsheet')).toBe(null);
+  });
+
+  it('should open tearsheet when form=true and welcome is absent', () => {
+    queryParams$.next({ form: true });
+    fixture.detectChanges();
+    expect(component.startClusterCreation).toBe(false);
+    expect(fixture.debugElement.nativeElement.querySelector('cd-tearsheet')).not.toBe(null);
+  });
+
+  it('should keep welcome when both welcome and form are present', () => {
+    queryParams$.next({ welcome: true, form: true });
+    fixture.detectChanges();
+    expect(component.startClusterCreation).toBeTruthy();
+    expect(fixture.debugElement.nativeElement.querySelector('cd-tearsheet')).toBe(null);
   });
 
   it('should have project name in welcome screen', () => {

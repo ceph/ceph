@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Component, NgZone } from '@angular/core';
 import { fakeAsync, TestBed, tick } from '@angular/core/testing';
-import { ActivatedRouteSnapshot, Router, Routes } from '@angular/router';
+import { ActivatedRouteSnapshot, Router, RouterStateSnapshot, Routes } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { of as observableOf, throwError } from 'rxjs';
@@ -19,6 +19,7 @@ describe('ModuleStatusGuardService', () => {
   let httpClient: HttpClient;
   let router: Router;
   let route: ActivatedRouteSnapshot;
+  let state: RouterStateSnapshot;
   let ngZone: NgZone;
   let mgrModuleService: MgrModuleService;
   let authStorageService: AuthStorageService;
@@ -48,7 +49,7 @@ describe('ModuleStatusGuardService', () => {
     const getConfigSpy = spyOn(mgrModuleService, 'getConfig');
     getConfigSpy.and.returnValue(configOptPermission ? observableOf(orchBackend) : throwError({}));
     ngZone.run(() => {
-      service.canActivateChild(route).subscribe((resp) => {
+      service.canActivateChild(route, state).subscribe((resp) => {
         result = resp;
       });
     });
@@ -76,6 +77,7 @@ describe('ModuleStatusGuardService', () => {
     router = TestBed.inject(Router);
     route = new ActivatedRouteSnapshot();
     route.url = [];
+    route.queryParams = {};
     route.data = {
       moduleStatusGuardConfig: {
         uiApiPath: 'bar',
@@ -83,6 +85,7 @@ describe('ModuleStatusGuardService', () => {
         backend: 'rook'
       }
     };
+    state = { url: '/bar', root: route } as RouterStateSnapshot;
     ngZone = TestBed.inject(NgZone);
   });
 
@@ -109,5 +112,44 @@ describe('ModuleStatusGuardService', () => {
 
   it('should skip backend check for user without config-opt permission', fakeAsync(() => {
     testCanActivate({ available: true, message: 'foo' }, true, '/', 'rook', false);
+  }));
+
+  it('should allow add-storage?welcome=true even if orchestrator is unavailable', fakeAsync(() => {
+    Object.defineProperty(route, 'routeConfig', { value: { path: 'add-storage' } });
+    route.queryParams = { welcome: 'true' };
+    state = { url: '/add-storage?welcome=true', root: route } as RouterStateSnapshot;
+    let result: boolean;
+    spyOn(httpClient, 'get').and.returnValue(observableOf({ available: false }));
+    ngZone.run(() => {
+      service.canActivate(route, state).subscribe((resp) => {
+        result = resp;
+      });
+    });
+    tick();
+    expect(result).toBe(true);
+    expect(httpClient.get).not.toHaveBeenCalled();
+    expect(router.url).toBe('/');
+  }));
+
+  it('should allow add-storage welcome when only state.url has welcome=true', fakeAsync(() => {
+    route.queryParams = {};
+    state = { url: '/add-storage?welcome=true', root: route } as RouterStateSnapshot;
+    let result: boolean;
+    spyOn(httpClient, 'get').and.returnValue(observableOf({ available: false }));
+    ngZone.run(() => {
+      service.canActivate(route, state).subscribe((resp) => {
+        result = resp;
+      });
+    });
+    tick();
+    expect(result).toBe(true);
+    expect(httpClient.get).not.toHaveBeenCalled();
+  }));
+
+  it('should not bypass guard for other routes with welcome=true', fakeAsync(() => {
+    Object.defineProperty(route, 'routeConfig', { value: { path: 'upgrade' } });
+    route.queryParams = { welcome: 'true' };
+    state = { url: '/upgrade?welcome=true', root: route } as RouterStateSnapshot;
+    testCanActivate({ available: false, message: null }, false, '/foo');
   }));
 });
