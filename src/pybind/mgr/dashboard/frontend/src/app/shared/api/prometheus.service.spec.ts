@@ -1,11 +1,13 @@
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
-import { TestBed } from '@angular/core/testing';
+import { fakeAsync, tick, TestBed } from '@angular/core/testing';
 
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { AlertmanagerNotification } from '../models/prometheus-alerts';
 import { PrometheusService } from './prometheus.service';
 import { SettingsService } from './settings.service';
 import moment from 'moment';
+import { of } from 'rxjs';
+import { UtilizationCardQueries } from '../enum/dashboard-promqls.enum';
 
 describe('PrometheusService', () => {
   let service: PrometheusService;
@@ -262,6 +264,37 @@ describe('PrometheusService', () => {
       expect(result.start).toBeLessThanOrEqual(currentTime);
       expect(result.end).toBeGreaterThanOrEqual(currentTime);
       expect(result.end - result.start).toBe(3600);
+    });
+  });
+
+  describe('recovery throughput range query', () => {
+    [
+      { name: 'EC backfill', values: [[1, '154360592']] },
+      { name: 'replicated recovery', values: [[1, '1048576']] },
+      { name: 'idle recovery', values: [[1, '0']] },
+      { name: 'unavailable metrics', values: [] }
+    ].forEach(({ name, values }) => {
+      it(`should preserve ${name} without deriving a rate from the pool gauge`, fakeAsync(() => {
+        spyOn(service, 'isPrometheusUsable').and.returnValue(of(true));
+        let result: Record<string, [number, string][]>;
+        const subscription = service
+          .getRangeQueriesData(
+            service.lastHourDateObject,
+            { RECOVERYBYTES: UtilizationCardQueries.RECOVERYBYTES },
+            true
+          )
+          .subscribe((data) => (result = data));
+        tick(0);
+
+        const req = httpTesting.expectOne((request) => request.url === 'api/prometheus/data');
+        expect(decodeURIComponent(req.request.params.get('params'))).toBe(
+          'sum(ceph_pool_recovering_bytes_per_sec)'
+        );
+        req.flush({ result: values.length ? [{ values }] : [] });
+
+        expect(result.RECOVERYBYTES).toEqual(values);
+        subscription.unsubscribe();
+      }));
     });
   });
 
