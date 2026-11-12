@@ -2564,6 +2564,7 @@ public:
   int  push_allocation_to_rocksdb();
   int  read_allocation_from_drive_for_bluestore_tool();
 #endif
+  void clear_allocation_objects_from_rocksdb();
   int compare_allocation_recovery_for_bluestore_tool(std::ostream& out);
 
   void set_allocation_in_simple_bmap(SimpleBitmap* sbmap, uint64_t offset, uint64_t length);

@@ -18015,7 +18015,7 @@ Allocator* BlueStore::clone_allocator_without_bluefs(Allocator *src_allocator)
 }
 
 //---------------------------------------------------------
-static void clear_allocation_objects_from_rocksdb(KeyValueDB *db, CephContext *cct, const std::string &path)
+void BlueStore::clear_allocation_objects_from_rocksdb()
 {
   dout(5) << "t->rmkeys_by_prefix(PREFIX_ALLOC_BITMAP)" << dendl;
   KeyValueDB::Transaction t = db->get_transaction();
@@ -18163,7 +18163,7 @@ int BlueStore::push_allocation_to_rocksdb()
   }
 
   // remove all objects of PREFIX_ALLOC_BITMAP from RocksDB to guarantee a clean start
-  clear_allocation_objects_from_rocksdb(db, cct, path);
+  clear_allocation_objects_from_rocksdb();
 
   // then open fm in new mode with the full devie marked as alloctaed
   if (reset_fm_for_restore() != 0) {
