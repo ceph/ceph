@@ -465,6 +465,9 @@ void rgw_bucket_olh_entry::dump(Formatter *f) const
   encode_json("key", key, f);
   encode_json("delete_marker", delete_marker, f);
   encode_json("epoch", epoch, f);
+  ceph::real_time tp {std::chrono::nanoseconds (epoch)};
+  utime_t ut(tp);
+  encode_json("epoch_timestamp", ut, f);
   encode_json("pending_log", pending_log, f);
   encode_json("tag", tag, f);
   encode_json("exists", exists, f);
@@ -542,6 +545,9 @@ void rgw_bucket_olh_log_entry::dump(Formatter *f) const
     case CLS_RGW_OLH_OP_REMOVE_INSTANCE:
       op_str = "remove_instance";
       break;
+    case CLS_RGW_OLH_OP_STALE:
+      op_str = "stale_olh_op";
+      break;
     default:
       op_str = "unknown";
   }
@@ -562,6 +568,8 @@ void rgw_bucket_olh_log_entry::decode_json(JSONObj *obj)
     op = CLS_RGW_OLH_OP_UNLINK_OLH;
   } else if (op_str == "remove_instance") {
     op = CLS_RGW_OLH_OP_REMOVE_INSTANCE;
+  } else if (op_str == "stale_olh_op") {
+    op = CLS_RGW_OLH_OP_STALE;
   } else {
     op = CLS_RGW_OLH_OP_UNKNOWN;
   }

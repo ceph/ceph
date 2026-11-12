@@ -229,6 +229,7 @@ void rgw_cls_read_olh_log_op::generate_test_instances(list<rgw_cls_read_olh_log_
   op->olh.name = "name";
   op->ver_marker = 123;
   op->olh_tag = "olh_tag";
+  op->get_stales = true;
 
   o.push_back(op);
 
@@ -240,6 +241,7 @@ void rgw_cls_read_olh_log_op::dump(Formatter *f) const
   encode_json("olh", olh, f);
   encode_json("ver_marker", ver_marker, f);
   encode_json("olh_tag", olh_tag, f);
+  encode_json("get_stales", get_stales, f);
 }
 
 void rgw_cls_read_olh_log_ret::generate_test_instances(list<rgw_cls_read_olh_log_ret*>& o)

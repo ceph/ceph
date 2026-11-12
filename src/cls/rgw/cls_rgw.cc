@@ -321,19 +321,25 @@ static int get_obj_vals(cls_method_context_t hctx,
  */
 static void decreasing_str(uint64_t num, string *str)
 {
+  // This buffer must be big enough to hold the string representation of
+  // the largest unsigned 64-bit integer value (+ 1 more char).
   char buf[32];
   if (num < 0x10) { /* 16 */
-    snprintf(buf, sizeof(buf), "9%02lld", 15 - (long long)num);
+    snprintf(buf, sizeof(buf), "9%02" PRIu64, 0xF - num);
   } else if (num < 0x100) { /* 256 */
-    snprintf(buf, sizeof(buf), "8%03lld", 255 - (long long)num);
+    snprintf(buf, sizeof(buf), "8%03" PRIu64, 0xFF - num);
   } else if (num < 0x1000) /* 4096 */ {
-    snprintf(buf, sizeof(buf), "7%04lld", 4095 - (long long)num);
+    snprintf(buf, sizeof(buf), "7%04" PRIu64, 0xFFF - num);
   } else if (num < 0x10000) /* 65536 */ {
-    snprintf(buf, sizeof(buf), "6%05lld", 65535 - (long long)num);
+    snprintf(buf, sizeof(buf), "6%05" PRIu64, 0xFFFF - num);
   } else if (num < 0x100000000) /* 4G */ {
-    snprintf(buf, sizeof(buf), "5%010lld", 0xFFFFFFFF - (long long)num);
+    snprintf(buf, sizeof(buf), "5%010" PRIu64, 0xFFFFFFFF - num);
+  } else if (num < 0x10000000000) /* 1T */ {
+    snprintf(buf, sizeof(buf), "4%015" PRIu64, 0xFFFFFFFFFF - num);
+  } else if (num < 0x1000000000000) /* 281T */ {
+    snprintf(buf, sizeof(buf), "3%018" PRIu64, 0xFFFFFFFFFFFF - num);
   } else {
-    snprintf(buf, sizeof(buf), "4%020lld",  (long long)-num);
+    snprintf(buf, sizeof(buf), "2%020" PRIu64,  std::numeric_limits<uint64_t>::max() - num);
   }
 
   *str = buf;
@@ -498,11 +504,21 @@ static int decode_list_index_key(const string& index_key, cls_rgw_obj_key *key, 
     if (val[0] == 'i') {
       key->instance = val.substr(1);
     } else if (val[0] == 'v') {
+      // what we are dealing here with is the string representation of the versioned epoch (as converted to by
+      // decreasing_str() func); the first char is always 'v' to indicate that it is the versioned epoch; the
+      // second char is a digit in [9-2] range that is used to separate value ranges - in order to make
+      // string representation sort in the opposite direction and to decrease string length - to speed up
+      // the lexicographical comparison; hence +2 (1 for the value indicator and one for the range prefix);
       string err;
-      const char *s = val.c_str() + 1;
-      *ver = strict_strtoll(s, 10, &err);
-      if (!err.empty()) {
-        CLS_LOG(0, "ERROR: %s: bad index_key (%s): could not parse val (v=%s)", __func__, escape_str(index_key).c_str(), s);
+      if (val.size() > 2) {
+        const char *s = val.c_str() + 2;
+        *ver = strict_strtoull(s, 10, &err);
+        if (!err.empty()) {
+          CLS_LOG(0, "ERROR: %s: bad index_key (%s): could not parse val (v=%s)", __func__, escape_str(index_key).c_str(), s);
+          return -EIO;
+        }
+      } else {
+        CLS_LOG(0, "ERROR: %s: bad index_key (%s): empty val", __func__, escape_str(index_key).c_str());
         return -EIO;
       }
     }
@@ -1391,7 +1407,9 @@ static int read_olh(cls_method_context_t hctx,cls_rgw_obj_key& obj_key, rgw_buck
 static void update_olh_log(rgw_bucket_olh_entry& olh_data_entry, OLHLogOp op, const string& op_tag,
                            cls_rgw_obj_key& key, bool delete_marker, uint64_t epoch)
 {
-  vector<rgw_bucket_olh_log_entry>& log = olh_data_entry.pending_log[olh_data_entry.epoch];
+  CLS_LOG(20, "%s: op=%d op_tag=%s key=%s epoch=%lu", __func__,
+          op, op_tag.c_str(), key.to_string().c_str(), epoch);
+  vector<rgw_bucket_olh_log_entry>& log = olh_data_entry.pending_log[epoch];
   rgw_bucket_olh_log_entry log_entry;
   log_entry.epoch = epoch;
   log_entry.op = op;
@@ -1536,7 +1554,7 @@ public:
 
   int write(uint64_t epoch, bool current, rgw_bucket_dir_header& header) {
     if (instance_entry.versioned_epoch > 0) {
-      CLS_LOG(20, "%s: instance_entry.versioned_epoch=%d epoch=%d", __func__, (int)instance_entry.versioned_epoch, (int)epoch);
+      CLS_LOG(20, "%s: instance_entry.versioned_epoch=%lu epoch=%lu", __func__, instance_entry.versioned_epoch, epoch);
       /* this instance has a previous list entry, remove that entry */
       int ret = unlink_list_entry(header);
       if (ret < 0) {
@@ -1627,24 +1645,32 @@ public:
     return 0;
   }
 
-  bool start_modify(uint64_t candidate_epoch) {
-    if (candidate_epoch) {
-      if (candidate_epoch < olh_data_entry.epoch) {
-        return false; /* olh cannot be modified, old epoch */
-      }
+  /**
+   * This is called when a new instance of an object (in a versioned bucket) is added (via PUT) or an existing instance is removed.
+   * A part of that process is to update the OLH entry (in the bucket index) with the correct modification timestamp (epoch).
+   * This timestamp is then used later on to guard against OLH updates for add/remove instance ops that happened *before*
+   * the latest op that updated the OLH entry.
+   * @param candidate_epoch - this is provided (> 0) in the case when a remote epoch is coming in as the result of multisite sync;
+   * @param replace - true to replace the epoch if larger than the old one;
+   */
+  bool start_modify (uint64_t candidate_epoch, bool replace = true) {
+    // only update the olh.epoch if it is newer than the current one.
+    if (candidate_epoch < olh_data_entry.epoch) {
+      return false; /* olh cannot be modified, old epoch */
+    }
+
+    if (replace) {
       olh_data_entry.epoch = candidate_epoch;
-    } else {
-      if (olh_data_entry.epoch == 0) {
-        olh_data_entry.epoch = 2; /* versioned epoch should start with 2, 1 is reserved to converted plain entries */
-      } else {
-        olh_data_entry.epoch++;
-      }
     }
     return true;
   }
 
   uint64_t get_epoch() {
     return olh_data_entry.epoch;
+  }
+
+  void set_epoch(uint64_t epoch) {
+    olh_data_entry.epoch = epoch;
   }
 
   rgw_bucket_olh_entry& get_entry() {
@@ -1716,7 +1742,8 @@ static int convert_plain_entry_to_versioned(cls_method_context_t hctx,
                                             cls_rgw_obj_key& key,
                                             bool demote_current,
                                             bool instance_only,
-                                            rgw_bucket_dir_header& header)
+                                            rgw_bucket_dir_header& header,
+                                            uint64_t& versioned_epoch)
 {
   if (!key.instance.empty()) {
     return -EINVAL;
@@ -1732,7 +1759,8 @@ static int convert_plain_entry_to_versioned(cls_method_context_t hctx,
       return ret;
     }
 
-    entry.versioned_epoch = 1; /* converted entries are always 1 */
+    entry.versioned_epoch = versioned_epoch =
+          duration_cast<std::chrono::nanoseconds>(entry.meta.mtime.time_since_epoch()).count();
     entry.flags |= rgw_bucket_dir_entry::FLAG_VER;
 
     if (demote_current) {
@@ -1794,6 +1822,9 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     return -EINVAL;
   }
 
+  CLS_LOG(20, "%s: op_tag=%s key=%s olh_epoch=%lu", __func__,
+          op.op_tag.c_str(), op.key.to_string().c_str(), op.olh_epoch);
+
   struct rgw_bucket_dir_header header;
   int rc = read_bucket_header(hctx, &header);
   if (rc < 0) {
@@ -1828,6 +1859,16 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     return ret;
   }
 
+  /* read olh */
+  BIOLHEntry olh(hctx, op.key);
+  bool olh_found = false;
+  ret = olh.init(&olh_found);
+  if (ret < 0) {
+    return ret;
+  }
+
+  uint64_t now_epoch = duration_cast<std::chrono::nanoseconds>(real_clock::now().time_since_epoch()).count();
+
   if (existed && !real_clock::is_zero(op.unmod_since)) {
     timespec mtime = ceph::real_clock::to_timespec(obj.mtime());
     timespec unmod = ceph::real_clock::to_timespec(op.unmod_since);
@@ -1836,7 +1877,13 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
       unmod.tv_nsec = 0;
     }
     if (mtime >= unmod) {
-      return 0; /* no need tof set error, we just return 0 and avoid
+      olh.update_log(CLS_RGW_OLH_OP_STALE, op.op_tag, op.key, false, now_epoch);
+      ret = olh.write(header);
+      if (ret < 0) {
+        CLS_LOG(0, "ERROR: failed to update olh ret=%d", ret);
+        return ret;
+      }
+      return 0; /* no need to set error, we just return 0 and avoid
 		 * writing to the bi log */
     }
   }
@@ -1879,91 +1926,98 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     obj.init_as_delete_marker(op.meta);
   }
 
-  /* read olh */
-  BIOLHEntry olh(hctx, op.key);
-  bool olh_found = false;
-  ret = olh.init(&olh_found);
-  if (ret < 0) {
-    return ret;
-  }
-
   const uint64_t prev_epoch = olh.get_epoch();
 
-  if (!olh.start_modify(op.olh_epoch)) {
-    ret = obj.write(op.olh_epoch, false, header);
-    if (ret < 0) {
-      return ret;
-    }
-    if (removing) {
-      olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false, op.olh_epoch);
-    }
-    return write_header_while_logrecord(hctx, header);
-  }
+  // op.olh_epoch is provided (> 0) in the case when a remote epoch is coming in as the result of multisite sync;
+  uint64_t candidate_epoch = op.olh_epoch ? op.olh_epoch : now_epoch;
+  if (olh.start_modify(candidate_epoch)) {
+    // promote this version to current if it's a newer epoch, or if it matches the
+    // current epoch and sorts after the current instance
+    const bool promote = (olh.get_epoch() > prev_epoch) ||
+        (olh.get_epoch() == prev_epoch &&
+            olh.get_entry().key.instance >= op.key.instance);
+    const bool epoch_collision = olh.get_epoch() == prev_epoch;
 
-  // promote this version to current if it's a newer epoch, or if it matches the
-  // current epoch and sorts after the current instance
-  const bool promote = (olh.get_epoch() > prev_epoch) ||
-      (olh.get_epoch() == prev_epoch &&
-       olh.get_entry().key.instance >= op.key.instance);
-
-  if (olh_found) {
-    const string& olh_tag = olh.get_tag();
-    if (op.olh_tag != olh_tag) {
-      if (!olh.pending_removal()) {
-        CLS_LOG(5, "NOTICE: op.olh_tag (%s) != olh.tag (%s)", op.olh_tag.c_str(), olh_tag.c_str());
-        return -ECANCELED;
+    if (olh_found) {
+      const string &olh_tag = olh.get_tag();
+      if (op.olh_tag != olh_tag) {
+        if (!olh.pending_removal()) {
+          CLS_LOG(5, "NOTICE: op.olh_tag (%s) != olh.tag (%s)", op.olh_tag.c_str(), olh_tag.c_str());
+          return -ECANCELED;
+        }
+        /* if pending removal, this is a new olh instance */
+        olh.set_tag(op.olh_tag);
       }
-      /* if pending removal, this is a new olh instance */
-      olh.set_tag(op.olh_tag);
-    }
-    if (promote && olh.exists()) {
-      rgw_bucket_olh_entry& olh_entry = olh.get_entry();
-      /* found olh, previous instance is no longer the latest, need to update */
-      if (!(olh_entry.key == op.key)) {
-        BIVerObjEntry old_obj(hctx, olh_entry.key);
+      if (epoch_collision) {
+        auto const &s_key = op.key.to_string();
+        CLS_LOG(1, "NOTICE: versioned epoch collision (%lu) for object %s", prev_epoch, s_key.c_str());
+      }
+      if (promote && olh.exists()) {
+        rgw_bucket_olh_entry &olh_entry = olh.get_entry();
+        /* found olh, previous instance is no longer the latest, need to update */
+        if (!(olh_entry.key == op.key)) {
+          BIVerObjEntry old_obj(hctx, olh_entry.key);
 
-        ret = old_obj.demote_current(header);
-        if (ret < 0) {
-          CLS_LOG(0, "ERROR: could not demote current on previous key ret=%d", ret);
-          return ret;
+          ret = old_obj.demote_current(header);
+          if (ret < 0) {
+            CLS_LOG(0, "ERROR: could not demote current on previous key ret=%d", ret);
+            return ret;
+          }
         }
       }
+      olh.set_pending_removal(false);
+    } else {
+      bool instance_only = (op.key.instance.empty() && op.delete_marker);
+      cls_rgw_obj_key key(op.key.name);
+      uint64_t versioned_epoch = candidate_epoch;
+      ret = convert_plain_entry_to_versioned(hctx, key, promote, instance_only, header, versioned_epoch);
+      if (ret < 0) {
+        CLS_LOG(0, "ERROR: convert_plain_entry_to_versioned ret=%d", ret);
+        return ret;
+      }
+      olh.set_tag(op.olh_tag);
+      if (op.key.instance.empty()) {
+        obj.set_epoch(versioned_epoch);
+      }
     }
-    olh.set_pending_removal(false);
-  } else {
-    bool instance_only = (op.key.instance.empty() && op.delete_marker);
-    cls_rgw_obj_key key(op.key.name);
-    ret = convert_plain_entry_to_versioned(hctx, key, promote, instance_only, header);
+
+    /* update the olh log */
+    olh.update_log(CLS_RGW_OLH_OP_LINK_OLH, op.op_tag, op.key, op.delete_marker, now_epoch);
+    if (removing) {
+      olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false, now_epoch);
+    }
+
+    if (promote) {
+      olh.update(op.key, op.delete_marker);
+    }
+    olh.set_exists(true);
+
+    /* write the instance and list entries */
+    ret = obj.write(olh.get_epoch(), promote, header);
     if (ret < 0) {
-      CLS_LOG(0, "ERROR: convert_plain_entry_to_versioned ret=%d", ret);
       return ret;
     }
-    olh.set_tag(op.olh_tag);
-    if (op.key.instance.empty()){
-      obj.set_epoch(1);
+
+    ret = olh.write(header);
+  } else {
+    ret = obj.write(candidate_epoch, false, header);
+    if (ret < 0) {
+      return ret;
     }
+
+    // no point here in adding CLS_RGW_OLH_OP_LINK_OLH to the pending log as we know that
+    // the epoch is already stale compared to the current - so no point in applying it;
+
+    if (removing) {
+      olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false, now_epoch);
+    } else {
+      olh.update_log(CLS_RGW_OLH_OP_STALE, op.op_tag, op.key, false, now_epoch);
+    }
+    ret = olh.write(header);
   }
 
-  /* update the olh log */
-  olh.update_log(CLS_RGW_OLH_OP_LINK_OLH, op.op_tag, op.key, op.delete_marker);
-  if (removing) {
-    olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false);
-  }
-
-  if (promote) {
-    olh.update(op.key, op.delete_marker);
-  }
-  olh.set_exists(true);
-
-  ret = olh.write(header);
   if (ret < 0) {
     CLS_LOG(0, "ERROR: failed to update olh ret=%d", ret);
-    return ret;
-  }
-
-  /* write the instance and list entries */
-  ret = obj.write(olh.get_epoch(), promote, header);
-  if (ret < 0) {
     return ret;
   }
 
@@ -1978,7 +2032,7 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   rgw_bucket_dir_entry& entry = obj.get_dir_entry();
 
   rgw_bucket_entry_ver ver;
-  ver.epoch = (op.olh_epoch ? op.olh_epoch : olh.get_epoch());
+  ver.epoch = candidate_epoch;
 
   string *powner = NULL;
   string *powner_display_name = NULL;
@@ -2015,6 +2069,9 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
     return -EINVAL;
   }
 
+  CLS_LOG(20, "%s: op_tag=%s key=%s olh_epoch=%lu", __func__,
+          op.op_tag.c_str(), op.key.to_string().c_str(), op.olh_epoch);
+
   cls_rgw_obj_key dest_key = op.key;
 
   struct rgw_bucket_dir_header header;
@@ -2047,10 +2104,14 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
     return ret;
   }
 
+  uint64_t now_epoch = duration_cast<std::chrono::nanoseconds>(real_clock::now().time_since_epoch()).count();
+  uint64_t candidate_epoch = op.olh_epoch ? op.olh_epoch : now_epoch;
+
   if (!olh_found) {
     bool instance_only = false;
     cls_rgw_obj_key key(dest_key.name);
-    ret = convert_plain_entry_to_versioned(hctx, key, true, instance_only, header);
+    uint64_t versioned_epoch = candidate_epoch - 1;
+    ret = convert_plain_entry_to_versioned(hctx, key, true, instance_only, header, versioned_epoch);
     if (ret < 0) {
       CLS_LOG(0, "ERROR: convert_plain_entry_to_versioned ret=%d", ret);
       return ret;
@@ -2058,76 +2119,98 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
     olh.update(dest_key, false);
     olh.set_tag(op.olh_tag);
 
-    obj.set_epoch(1);
+    obj.set_epoch(versioned_epoch);
   }
 
-  if (!olh.start_modify(op.olh_epoch)) {
+  // op.olh_epoch is provided (> 0) in the case when a remote epoch is coming in as the result of multisite sync;
+  if (olh.start_modify(candidate_epoch, false)) {
+    rgw_bucket_olh_entry &olh_entry = olh.get_entry();
+    cls_rgw_obj_key &olh_key = olh_entry.key;
+    CLS_LOG(20, "%s: updating olh log: existing olh entry: %s[%s] (delete_marker=%d)", __func__,
+            olh_key.name.c_str(), olh_key.instance.c_str(), olh_entry.delete_marker);
+
+    if (olh_key == dest_key) {
+      /* this is the current head, need to update the OLH! */
+      cls_rgw_obj_key next_key;
+      bool found = false;
+      ret = obj.find_next_key(&next_key, &found);
+      if (ret < 0) {
+        CLS_LOG(0, "ERROR: obj.find_next_key() returned ret=%d", ret);
+        return ret;
+      }
+
+      if (found) {
+        BIVerObjEntry next(hctx, next_key);
+        ret = next.init();
+        if (ret < 0) {
+          CLS_LOG(0, "ERROR: next.init() returned ret=%d", ret);
+          return ret;
+        }
+
+        uint64_t next_epoch = next.get_dir_entry().versioned_epoch;
+        ret = next.write(next_epoch, true, header);
+        if (ret < 0) {
+          CLS_LOG(0, "ERROR: next.write() returned ret=%d", ret);
+          return ret;
+        }
+
+        CLS_LOG(20, "%s: updating olh log: link olh -> %s[%s] (is_delete=%d)", __func__,
+                next_key.name.c_str(), next_key.instance.c_str(), (int) next.is_delete_marker());
+
+        olh.update(next_key, next.is_delete_marker());
+        olh.update_log(CLS_RGW_OLH_OP_LINK_OLH, op.op_tag, next_key, next.is_delete_marker(), now_epoch);
+        // use the next entry's versioned_epoch in the olh entry since it's the new head now
+        olh.set_epoch(next_epoch);
+      } else {
+        // next_key is empty, but we need to preserve its name in case this entry
+        // gets resharded, because this key is used for hash placement
+        next_key.name = dest_key.name;
+        olh.update(next_key, false);
+        if (olh.get_epoch() == 0) {
+          olh.set_epoch(candidate_epoch);
+        }
+        olh.update_log(CLS_RGW_OLH_OP_UNLINK_OLH, op.op_tag, next_key, false, now_epoch);
+        olh.set_exists(false);
+        olh.set_pending_removal(true);
+      }
+    }
+
+    if (!obj.is_delete_marker()) {
+      olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false, now_epoch);
+    } else {
+      olh.update_log(CLS_RGW_OLH_OP_STALE, op.op_tag, op.key, true, now_epoch);
+
+      /* this is a delete marker, it's our responsibility to remove its
+       * instance entry */
+      ret = obj.unlink(header, op.key);
+      if (ret < 0) {
+        return ret;
+      }
+    }
+
+    ret = obj.unlink_list_entry(header);
+    if (ret < 0) {
+      return ret;
+    }
+  }
+  else {
     ret = obj.unlink_list_entry(header);
     if (ret < 0) {
       return ret;
     }
 
     if (obj.is_delete_marker()) {
-      return 0;
-    }
+      olh.update_log(CLS_RGW_OLH_OP_STALE, op.op_tag, op.key, true, now_epoch);
 
-    olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false, op.olh_epoch);
-    return olh.write(header);
-  }
-
-  rgw_bucket_olh_entry& olh_entry = olh.get_entry();
-  cls_rgw_obj_key& olh_key = olh_entry.key;
-  CLS_LOG(20, "%s: updating olh log: existing olh entry: %s[%s] (delete_marker=%d)", __func__,
-             olh_key.name.c_str(), olh_key.instance.c_str(), olh_entry.delete_marker);
-
-  if (olh_key == dest_key) {
-    /* this is the current head, need to update the OLH! */
-    cls_rgw_obj_key next_key;
-    bool found = false;
-    ret = obj.find_next_key(&next_key, &found);
-    if (ret < 0) {
-      CLS_LOG(0, "ERROR: obj.find_next_key() returned ret=%d", ret);
-      return ret;
-    }
-
-    if (found) {
-      BIVerObjEntry next(hctx, next_key);
-      ret = next.write(olh.get_epoch(), true, header);
+      ret = olh.write(header);
       if (ret < 0) {
-        CLS_LOG(0, "ERROR: next.write() returned ret=%d", ret);
-        return ret;
+        CLS_LOG(0, "ERROR: failed to update olh ret=%d", ret);
       }
 
-      CLS_LOG(20, "%s: updating olh log: link olh -> %s[%s] (is_delete=%d)", __func__,
-              next_key.name.c_str(), next_key.instance.c_str(), (int)next.is_delete_marker());
-
-      olh.update(next_key, next.is_delete_marker());
-      olh.update_log(CLS_RGW_OLH_OP_LINK_OLH, op.op_tag, next_key, next.is_delete_marker());
-    } else {
-      // next_key is empty, but we need to preserve its name in case this entry
-      // gets resharded, because this key is used for hash placement
-      next_key.name = dest_key.name;
-      olh.update(next_key, false);
-      olh.update_log(CLS_RGW_OLH_OP_UNLINK_OLH, op.op_tag, next_key, false);
-      olh.set_exists(false);
-      olh.set_pending_removal(true);
-    }
-  }
-
-  if (!obj.is_delete_marker()) {
-    olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false);
-  } else {
-    /* this is a delete marker, it's our responsibility to remove its
-     * instance entry */
-    ret = obj.unlink(header, op.key);
-    if (ret < 0) {
       return ret;
     }
-  }
 
-  ret = obj.unlink_list_entry(header);
-  if (ret < 0) {
-    return ret;
+    olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false, now_epoch);
   }
 
   ret = olh.write(header);
@@ -2144,7 +2227,7 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
   }
 
   rgw_bucket_entry_ver ver;
-  ver.epoch = (op.olh_epoch ? op.olh_epoch : olh.get_epoch());
+  ver.epoch = candidate_epoch;
 
   real_time mtime = obj.mtime(); /* mtime has no real meaning in
                                   * instance removal context */
@@ -2205,6 +2288,19 @@ static int rgw_bucket_read_olh_log(cls_method_context_t hctx, bufferlist *in, bu
       op_ret.log[iter->first] = iter->second;
     }
     op_ret.is_truncated = (iter != log.end());
+  }
+
+  // this is for backward compatibility
+  if (!op.get_stales) {
+    auto iter = op_ret.log.begin();
+    while (iter != op_ret.log.end()) {
+      std::erase_if(iter->second, [](const auto& e) { return e.op == CLS_RGW_OLH_OP_STALE; });
+      if (iter->second.empty()) {
+        iter = op_ret.log.erase(iter);
+      } else {
+        ++iter;
+      }
+    }
   }
 
   encode(op_ret, *out);

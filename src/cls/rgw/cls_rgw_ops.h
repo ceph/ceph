@@ -232,9 +232,16 @@ WRITE_CLASS_ENCODER(rgw_cls_link_olh_op)
 struct rgw_cls_unlink_instance_op {
   cls_rgw_obj_key key;
   std::string op_tag;
+  // this represents a remote epoch during multisite sync
   uint64_t olh_epoch;
   bool log_op;
   uint16_t bilog_flags;
+  // cls ops include olh_tag so the OLH class code can guard sensitive updates—only proceed if op.olh_tag equals
+  // the OLH’s stored tag. If it doesn’t, the op fails and the caller refreshes state/retries.
+  // for context: in real clusters, out‑of‑order replication or topology changes can recreate/move an OLH
+  // (eg, resharding or certain multisite flows). The tag changes with that new OLH “generation,” so stale
+  // writers carrying the old tag get refused instead of overwriting the new state. A concrete example of failures
+  // tied to OLH attributes shows how wrong attributes/tags cause bad GET behavior, which is why the guard exists.
   std::string olh_tag;
   rgw_zone_set zones_trace;
 
@@ -278,21 +285,26 @@ struct rgw_cls_read_olh_log_op
   cls_rgw_obj_key olh;
   uint64_t ver_marker;
   std::string olh_tag;
+  bool get_stales;
 
-  rgw_cls_read_olh_log_op() : ver_marker(0) {}
+  rgw_cls_read_olh_log_op() : ver_marker(0), get_stales(false) {}
 
   void encode(ceph::buffer::list &bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(olh, bl);
     encode(ver_marker, bl);
     encode(olh_tag, bl);
+    encode(get_stales, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator &bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(olh, bl);
     decode(ver_marker, bl);
     decode(olh_tag, bl);
+    if (struct_v >= 2) {
+      decode(get_stales, bl);
+    }
     DECODE_FINISH(bl);
   }
   static void generate_test_instances(std::list<rgw_cls_read_olh_log_op *>& o);
