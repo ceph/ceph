@@ -1744,6 +1744,230 @@
     },
     {
       "type": "timeseries",
+      "title": "Avg write phase latency by phase",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "sum/count of osd_seastore_phase_lat (milliseconds): average time one transaction spends in a phase, counting all of its replays. Phases may nest, so they do not add up to the transaction latency.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "min": 0,
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon, phase) (rate(osd_seastore_phase_lat_sum{ceph_daemon=~\"$osd\"}[$__rate_interval])) / sum by (ceph_daemon, phase) (rate(osd_seastore_phase_lat_count{ceph_daemon=~\"$osd\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}} {{phase}}",
+          "refId": "A"
+        }
+      ],
+      "id": 29,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 109
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "p99 write phase latency by phase",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "From the phase_lat histogram. Buckets: 1, 5, 10, 50, 100, 500 \u00b5s then 1, 2, 5, 10, 50, 100 ms. Samples above 100 ms fall in +Inf, where the quantile saturates.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "min": 0,
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "histogram_quantile(0.99, sum by (le, ceph_daemon, phase) (rate(osd_seastore_phase_lat_bucket{ceph_daemon=~\"$osd\"}[$__rate_interval])))",
+          "legendFormat": "{{ceph_daemon}} {{phase}}",
+          "refId": "A"
+        }
+      ],
+      "id": 30,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 109
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Mean cost of one phase operation",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "phase_lat_ns / phase_lat_scopes: mean cost of a single timed scope (one onode lookup, one mapping operation, ...), rather than the per-transaction total above. A scope is one outermost enter/exit pair, so nested scopes of the same phase count once.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ns",
+          "min": 0,
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon, phase) (rate(osd_seastore_phase_lat_ns{ceph_daemon=~\"$osd\"}[$__rate_interval])) / sum by (ceph_daemon, phase) (rate(osd_seastore_phase_lat_scopes{ceph_daemon=~\"$osd\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}} {{phase}}",
+          "refId": "A"
+        }
+      ],
+      "id": 31,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 117
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Time spent per second by phase",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "Nanoseconds of phase work per second of wall clock, summed over the shards of an OSD: where the write path spends its time. Not stacked, since nested phases overlap.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ns",
+          "min": 0,
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon, phase) (rate(osd_seastore_phase_lat_ns{ceph_daemon=~\"$osd\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}} {{phase}}",
+          "refId": "A"
+        }
+      ],
+      "id": 32,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 117
+      }
+    },
+    {
+      "type": "timeseries",
       "title": "Transactions in flight",
       "datasource": {
         "type": "prometheus",
@@ -1798,12 +2022,12 @@
           "refId": "B"
         }
       ],
-      "id": 29,
+      "id": 33,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 109
+        "y": 125
       }
     },
     {
@@ -1853,12 +2077,12 @@
           "refId": "A"
         }
       ],
-      "id": 30,
+      "id": 34,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 109
+        "y": 125
       }
     },
     {
@@ -1917,12 +2141,12 @@
           "refId": "B"
         }
       ],
-      "id": 31,
+      "id": 35,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 117
+        "y": 133
       }
     },
     {
@@ -1973,12 +2197,12 @@
           "refId": "A"
         }
       ],
-      "id": 32,
+      "id": 36,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 117
+        "y": 133
       }
     },
     {
@@ -2127,24 +2351,24 @@
           "values": false
         }
       },
-      "id": 33,
+      "id": 37,
       "gridPos": {
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 125
+        "y": 141
       }
     },
     {
       "type": "row",
       "title": "SeaStore cache",
-      "id": 34,
+      "id": 38,
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 133
+        "y": 149
       },
       "panels": []
     },
@@ -2236,12 +2460,12 @@
           }
         ]
       },
-      "id": 35,
+      "id": 39,
       "gridPos": {
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 134
+        "y": 150
       }
     },
     {
@@ -2291,12 +2515,12 @@
           "refId": "A"
         }
       ],
-      "id": 36,
+      "id": 40,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 142
+        "y": 158
       }
     },
     {
@@ -2355,12 +2579,12 @@
           "refId": "B"
         }
       ],
-      "id": 37,
+      "id": 41,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 142
+        "y": 158
       }
     },
     {
@@ -2410,12 +2634,12 @@
           "refId": "A"
         }
       ],
-      "id": 38,
+      "id": 42,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 150
+        "y": 166
       }
     },
     {
@@ -2474,12 +2698,12 @@
           "refId": "B"
         }
       ],
-      "id": 39,
+      "id": 43,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 150
+        "y": 166
       }
     },
     {
@@ -2547,12 +2771,12 @@
           "refId": "C"
         }
       ],
-      "id": 40,
+      "id": 44,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 158
+        "y": 174
       }
     },
     {
@@ -2620,12 +2844,12 @@
           "refId": "C"
         }
       ],
-      "id": 41,
+      "id": 45,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 158
+        "y": 174
       }
     },
     {
@@ -2675,12 +2899,12 @@
           "refId": "A"
         }
       ],
-      "id": 42,
+      "id": 46,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 166
+        "y": 182
       }
     },
     {
@@ -2730,12 +2954,12 @@
           "refId": "A"
         }
       ],
-      "id": 43,
+      "id": 47,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 166
+        "y": 182
       }
     },
     {
@@ -2785,12 +3009,12 @@
           "refId": "A"
         }
       ],
-      "id": 44,
+      "id": 48,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 174
+        "y": 190
       }
     },
     {
@@ -2867,24 +3091,24 @@
           "refId": "D"
         }
       ],
-      "id": 45,
+      "id": 49,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 174
+        "y": 190
       }
     },
     {
       "type": "row",
       "title": "Journal and background work (segmented and RBM)",
-      "id": 46,
+      "id": 50,
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 182
+        "y": 198
       },
       "panels": []
     },
@@ -2935,12 +3159,12 @@
           "refId": "A"
         }
       ],
-      "id": 47,
+      "id": 51,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 183
+        "y": 199
       }
     },
     {
@@ -3008,12 +3232,12 @@
           "refId": "C"
         }
       ],
-      "id": 48,
+      "id": 52,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 183
+        "y": 199
       }
     },
     {
@@ -3072,12 +3296,12 @@
           "refId": "B"
         }
       ],
-      "id": 49,
+      "id": 53,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 191
+        "y": 207
       }
     },
     {
@@ -3127,24 +3351,24 @@
           "refId": "A"
         }
       ],
-      "id": 50,
+      "id": 54,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 191
+        "y": 207
       }
     },
     {
       "type": "row",
       "title": "Segmented backend (segment cleaner and segment manager)",
-      "id": 51,
+      "id": 55,
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 199
+        "y": 215
       },
       "panels": []
     },
@@ -3195,12 +3419,12 @@
           "refId": "A"
         }
       ],
-      "id": 52,
+      "id": 56,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 200
+        "y": 216
       }
     },
     {
@@ -3250,12 +3474,12 @@
           "refId": "A"
         }
       ],
-      "id": 53,
+      "id": 57,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 200
+        "y": 216
       }
     },
     {
@@ -3314,12 +3538,12 @@
           "refId": "B"
         }
       ],
-      "id": 54,
+      "id": 58,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 208
+        "y": 224
       }
     },
     {
@@ -3369,24 +3593,24 @@
           "refId": "A"
         }
       ],
-      "id": 55,
+      "id": 59,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 208
+        "y": 224
       }
     },
     {
       "type": "row",
       "title": "RBM backend (RBM cleaner and circular bounded journal)",
-      "id": 56,
+      "id": 60,
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 216
+        "y": 232
       },
       "panels": []
     },
@@ -3455,12 +3679,12 @@
           "refId": "C"
         }
       ],
-      "id": 57,
+      "id": 61,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 217
+        "y": 233
       }
     },
     {
@@ -3510,12 +3734,12 @@
           "refId": "A"
         }
       ],
-      "id": 58,
+      "id": 62,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 217
+        "y": 233
       }
     },
     {
@@ -3583,12 +3807,12 @@
           "refId": "C"
         }
       ],
-      "id": 59,
+      "id": 63,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 225
+        "y": 241
       }
     },
     {
@@ -3656,12 +3880,12 @@
           "refId": "C"
         }
       ],
-      "id": 60,
+      "id": 64,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 225
+        "y": 241
       }
     },
     {
@@ -3711,12 +3935,12 @@
           "refId": "A"
         }
       ],
-      "id": 61,
+      "id": 65,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 233
+        "y": 249
       }
     },
     {
@@ -3775,24 +3999,24 @@
           "refId": "B"
         }
       ],
-      "id": 62,
+      "id": 66,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 233
+        "y": 249
       }
     },
     {
       "type": "row",
       "title": "Memory",
-      "id": 63,
+      "id": 67,
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 241
+        "y": 257
       },
       "panels": []
     },
@@ -3852,12 +4076,12 @@
           "refId": "B"
         }
       ],
-      "id": 64,
+      "id": 68,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 242
+        "y": 258
       }
     },
     {
@@ -3907,12 +4131,12 @@
           "refId": "A"
         }
       ],
-      "id": 65,
+      "id": 69,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 242
+        "y": 258
       }
     }
   ]

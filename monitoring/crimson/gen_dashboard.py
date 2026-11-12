@@ -252,6 +252,42 @@ ts("Avg do_transaction latency by stage",
      f"sum by (ceph_daemon, stage) (rate(osd_seastore_do_transaction_stage_lat_count{FT}[{R}]))",
      "{{ceph_daemon}} {{stage}}")],
    "ms", desc="tail=\"all\" samples only (milliseconds).")
+# Write phase latency: phase_latency_bucket_t (transaction.h), published per
+# transaction by SeaStore::Shard::publish_phase_latency_samples() (seastore.h).
+# Cross-cutting counterpart of the stage breakdown above, which reports
+# everything before submit_transaction as a single BUILD sample. Buckets may
+# nest (cache_mutation inside mapping_management), so the phases overlap: they
+# are deliberately not stacked and do not add up to the transaction latency.
+P = "osd_seastore_phase_lat"
+BYP = "sum by (ceph_daemon, phase)"
+ts("Avg write phase latency by phase",
+   [(f"{BYP} (rate({P}_sum{F}[{R}])) / {BYP} (rate({P}_count{F}[{R}]))",
+     "{{ceph_daemon}} {{phase}}")],
+   "ms", min=0,
+   desc="sum/count of osd_seastore_phase_lat (milliseconds): average time one "
+        "transaction spends in a phase, counting all of its replays. Phases "
+        "may nest, so they do not add up to the transaction latency.")
+ts("p99 write phase latency by phase",
+   [(f"histogram_quantile(0.99, sum by (le, ceph_daemon, phase) "
+     f"(rate({P}_bucket{F}[{R}])))", "{{ceph_daemon}} {{phase}}")],
+   "ms", min=0,
+   desc="From the phase_lat histogram. Buckets: 1, 5, 10, 50, 100, 500 µs then "
+        "1, 2, 5, 10, 50, 100 ms. Samples above 100 ms fall in +Inf, where the "
+        "quantile saturates.")
+ts("Mean cost of one phase operation",
+   [(f"{BYP} (rate({P}_ns{F}[{R}])) / {BYP} (rate({P}_scopes{F}[{R}]))",
+     "{{ceph_daemon}} {{phase}}")],
+   "ns", min=0,
+   desc="phase_lat_ns / phase_lat_scopes: mean cost of a single timed scope "
+        "(one onode lookup, one mapping operation, ...), rather than the "
+        "per-transaction total above. A scope is one outermost enter/exit "
+        "pair, so nested scopes of the same phase count once.")
+ts("Time spent per second by phase",
+   [(f"{BYP} (rate({P}_ns{F}[{R}]))", "{{ceph_daemon}} {{phase}}")],
+   "ns", min=0,
+   desc="Nanoseconds of phase work per second of wall clock, summed over the "
+        "shards of an OSD: where the write path spends its time. Not stacked, "
+        "since nested phases overlap.")
 ts("Transactions in flight",
    [(f"sum by (ceph_daemon) (osd_seastore_concurrent_transactions{F})", "{{ceph_daemon}} concurrent"),
     (f"sum by (ceph_daemon) (osd_seastore_pending_transactions{F})", "{{ceph_daemon}} pending")])
