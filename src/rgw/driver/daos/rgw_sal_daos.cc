@@ -1035,6 +1035,7 @@ int DaosObject::restore_obj_from_cloud(Bucket* bucket,
           uint64_t olh_epoch,
           std::optional<uint64_t> days,
 	  bool& in_progress,
+	  uint64_t& size,
           const DoutPrefixProvider* dpp, 
           optional_yield y)
 {
