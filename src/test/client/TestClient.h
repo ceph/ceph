@@ -49,6 +49,9 @@ class ClientScaffold : public Client {
   fscrypt_env *fse;
 public:
     using Client::walk_dentry_result;
+    using Client::client_lock;
+    // the requests a readdir sends
+    using Client::last_tid;
 
     ClientScaffold(Messenger *m, MonClient *mc, Objecter *objecter_, fscrypt_env *fse) : Client(m, mc, objecter_), fse(fse) {}
     virtual ~ClientScaffold()
