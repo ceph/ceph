@@ -395,6 +395,49 @@ class FSSnapshotMirror:
             log.error(f'failed to store peer {peer_uuid} in mirror object: {e}')
             raise Exception(-e.errno)
 
+    @staticmethod
+    def remove_omap_peer(ioctx, peer_uuid):
+        try:
+            with rados.WriteOpCtx() as write_op:
+                ioctx.remove_omap_keys(write_op, (f'{PEER_KEY_PREFIX}{peer_uuid}',))
+                ioctx.operate_write_op(write_op, MIRROR_OBJECT_NAME)
+        except rados.Error as e:
+            log.error(f'failed to remove peer {peer_uuid} from mirror object: {e}')
+            raise Exception(-e.errno)
+
+    @staticmethod
+    def notify_peers_changed(ioctx):
+        # a hint only: mirror daemons re-read the peers from the mirror object
+        def cbk(_, r, acks, timeouts):
+            log.debug(f'peers changed notify: r={r} acks={acks} timeouts={timeouts}')
+        try:
+            ioctx.aio_notify(MIRROR_OBJECT_NAME, cbk,
+                             msg=json.dumps({'type': 'peers_changed'}))
+        except rados.Error as e:
+            log.warning(f'failed to notify peer change: {e}')
+
+    @staticmethod
+    def omap_peer_entry(record):
+        """an omap peer record in the shape of an fs map peer entry"""
+        return {'remote': {'client_name': record['client_name'],
+                           'cluster_name': record['site_name'],
+                           'fs_name': record['remote_fs_name']},
+                'auth_mode': record['auth_mode']}
+
+    def get_all_peers(self, filesystem, ioctx):
+        """legacy peers from the fs map and per-share peers from the mirror object"""
+        peers = dict(self.get_filesystem_peers(filesystem))
+        for peer_uuid, record in FSSnapshotMirror.get_omap_peers(ioctx).items():
+            peers[peer_uuid] = FSSnapshotMirror.omap_peer_entry(record)
+        return peers
+
+    def remove_per_share_peer(self, filesystem, ioctx, peer_uuid):
+        # no ceph.mirror.info was set on the remote for a per-share peer;
+        # drop the record first, then the secret it points at
+        FSSnapshotMirror.remove_omap_peer(ioctx, peer_uuid)
+        self.config_set(FSSnapshotMirror.peer_config_key(filesystem, peer_uuid))
+        FSSnapshotMirror.notify_peers_changed(ioctx)
+
     def config_set(self, key, val=None):
         """set or remove a key from mon config store"""
         if val:
@@ -631,6 +674,12 @@ class FSSnapshotMirror:
         log.info(f'disabling mirror for filesystem {filesystem}')
         try:
             with self.lock:
+                # the fs map drops legacy peers on disable; drop per-share
+                # peers too so that they do not return on the next enable
+                fspolicy = self.pool_policy.get(filesystem, None)
+                if fspolicy:
+                    for peer_uuid in FSSnapshotMirror.get_omap_peers(fspolicy.ioctx):
+                        self.remove_per_share_peer(filesystem, fspolicy.ioctx, peer_uuid)
                 cmd = {'prefix': 'fs mirror disable', 'fs_name': filesystem}
                 r, outs, err = self.mgr.mon_command(cmd)
                 if r < 0:
@@ -648,13 +697,14 @@ class FSSnapshotMirror:
                 fspolicy = self.pool_policy.get(filesystem, None)
                 if not fspolicy:
                     raise MirrorException(-errno.EINVAL, f'filesystem {filesystem} is not mirrored')
-                peers = self.get_filesystem_peers(filesystem)
+                peers = self.get_all_peers(filesystem, fspolicy.ioctx)
                 peer_res = {}
                 for peer_uuid, rem in peers.items():
                     remote = rem['remote']
                     peer_res[peer_uuid] = {'client_name': remote['client_name'],
                                            'site_name': remote['cluster_name'],
-                                           'fs_name': remote['fs_name']
+                                           'fs_name': remote['fs_name'],
+                                           'auth_mode': rem.get('auth_mode', AuthMode.legacy.value)
                                            }
                 if format == 'json-pretty':
                     return 0, json.dumps(peer_res, indent=2), ''
@@ -750,6 +800,7 @@ class FSSnapshotMirror:
                     except:
                         pass
                     raise
+                FSSnapshotMirror.notify_peers_changed(fspolicy.ioctx)
                 return 0, json.dumps({}), ''
         except MirrorException as me:
             return me.args[0], '', me.args[1]
@@ -762,6 +813,9 @@ class FSSnapshotMirror:
                 fspolicy = self.pool_policy.get(filesystem, None)
                 if not fspolicy:
                     raise MirrorException(-errno.EINVAL, f'filesystem {filesystem} is not mirrored')
+                if peer_uuid in FSSnapshotMirror.get_omap_peers(fspolicy.ioctx):
+                    self.remove_per_share_peer(filesystem, fspolicy.ioctx, peer_uuid)
+                    return 0, json.dumps({}), ''
                 # ok, this is being a bit lazy. remove mirror info from peer followed
                 # by purging the peer from fsmap. if the mirror daemon fs map updates
                 # are laggy, they happily continue to synchronize. ideally, we should
@@ -951,7 +1005,7 @@ class FSSnapshotMirror:
         return metrics_load.load_sync_stat_metrics(
             ioctx, filesystem, None, fspolicy.policy,
             fspolicy.get_live_instance_ids(),
-            self.get_filesystem_peers(filesystem))
+            self.get_all_peers(filesystem, fspolicy.ioctx))
 
     @lru_cache_timeout(
         lambda self, *_args, **_kwargs: self.mgr.get_module_option(
@@ -1014,7 +1068,7 @@ class FSSnapshotMirror:
                     if not fspolicy.policy.lookup(dir_path):
                         raise MirrorException(-errno.ENOENT,
                                               f'directory {dir_path} is not mirrored')
-                all_peers = self.get_filesystem_peers(filesystem)
+                all_peers = self.get_all_peers(filesystem, fspolicy.ioctx)
                 if not all_peers:
                     return 0, json.dumps({'metrics': {}}, indent=4), ''
 
