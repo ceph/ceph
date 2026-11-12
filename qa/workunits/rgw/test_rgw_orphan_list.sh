@@ -241,6 +241,19 @@ for c in $(seq 1005) ;do
     mys3uploadkill $huge_obj $bkt incomplete-mp-obj-c-$c $fifo 3
 done
 
+# with a field separator radoslist lists the same rados objects,
+# including the tail objects of the parts of open uploads
+plain_out=$(radosgw-admin bucket radoslist --bucket=$bkt)
+fs_out=$(radosgw-admin bucket radoslist --bucket=$bkt --rgw-obj-fs=,)
+if ! diff <(sort -u <<<"$plain_out") <(cut -d, -f1 <<<"$fs_out" | sort -u) ;then
+    echo "ERROR: radoslist --rgw-obj-fs lists different rados objects"
+    exit 1
+fi
+if ! grep -q "__shadow_incomplete-mp-obj-c-1\..*,${bkt},incomplete-mp-obj-c-1\." <<<"$fs_out" ;then
+    echo "ERROR: radoslist --rgw-obj-fs left out the tail of an open upload"
+    exit 1
+fi
+
 ####################################
 # resharded bucket
 
