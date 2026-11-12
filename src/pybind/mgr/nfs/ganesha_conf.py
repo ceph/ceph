@@ -21,8 +21,9 @@ def _format_val(block_name: str, key: str, val: str) -> str:
         return ', '.join([_format_val(block_name, key, v) for v in val])
     if isinstance(val, bool):
         return str(val).lower()
-    if isinstance(val, int) or (block_name == 'CLIENT'
-                                and key == 'clients'):
+    if (isinstance(val, int)
+            or (block_name == 'CLIENT' and key == 'clients')
+            or (block_name == 'EXPORT' and key == 'server_addrs')):
         return '{}'.format(val)
     return '"{}"'.format(val)
 
