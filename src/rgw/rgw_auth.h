@@ -12,6 +12,7 @@
 
 #include <fmt/ostream.h>
 
+#include "common/error_code.h"
 #include "include/expected.hpp"
 #include "include/function2.hpp"
 
@@ -28,7 +29,14 @@ struct req_state;
 namespace rgw {
 namespace auth {
 
-using Exception = std::system_error;
+/* The auth engines, appliers and request abstractors report a (negative)
+ * errno or rgw_err code by throwing a system_error built with
+ * ceph::to_error_code(); callers recover it with ceph::from_error_code().
+ * Unlike a bare `throw -EACCES`, it is caught by catch(std::exception&), so
+ * generic code wrapping the auth paths (e.g. call_once()) cannot miss it.
+ * For negative codes the conversion round-trips exactly, which preserves the
+ * S3/Swift error codes, including the rgw-specific ERR_* values. */
+using Exception = boost::system::system_error;
 
 
 /* Load information about identity that will be used by RGWOp to authorize

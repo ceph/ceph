@@ -1089,7 +1089,7 @@ get_v2_signature(CephContext* const cct,
                  const AWSEngine::VersionAbstractor::string_to_sign_t& string_to_sign)
 {
   if (secret_key.empty()) {
-    throw -EINVAL;
+    throw boost::system::system_error(ceph::to_error_code(-EINVAL));
   }
 
   const auto digest = calc_hmac_sha1(secret_key, string_to_sign);
@@ -1103,7 +1103,7 @@ get_v2_signature(CephContext* const cct,
       reinterpret_cast<const char*>(digest.v + digest.SIZE));
   if (ret < 0) {
     ldout(cct, 10) << "ceph_armor failed" << dendl;
-    throw ret;
+    throw boost::system::system_error(ceph::to_error_code(ret));
   } else {
     buf[ret] = '\0';
     using srv_signature_t = AWSEngine::VersionAbstractor::server_signature_t;
@@ -1560,7 +1560,7 @@ void AWSv4ComplMulti::modify_request_state(const DoutPrefixProvider* dpp, req_st
 
     if (s_rw->content_length < 0) {
       ldpp_dout(dpp, 10) << "negative AWSv4's content length, aborting" << dendl;
-      throw -EINVAL;
+      throw boost::system::system_error(ceph::to_error_code(-EINVAL));
     }
   }
 
@@ -1722,7 +1722,7 @@ AWSv4ComplMulti::create(const req_state* const s,
     /* Some external authorizers (like Keystone) aren't fully compliant with
      * AWSv4. They do not provide the secret_key which is necessary to handle
      * the streamed upload. */
-    throw -ERR_NOT_IMPLEMENTED;
+    throw boost::system::system_error(ceph::to_error_code(-ERR_NOT_IMPLEMENTED));
   }
 
   const auto signing_key = \
@@ -1799,7 +1799,7 @@ std::string get_canonical_method(const DoutPrefixProvider *dpp, RGWOpType op_typ
       if (!cors_flags) {
           ldpp_dout(dpp, 1) << "invalid access-control-request-method header = "
                           << cors_method << dendl;
-          throw -EINVAL;
+          throw boost::system::system_error(ceph::to_error_code(-EINVAL));
       }
 
       ldpp_dout(dpp, 10) << "canonical req method = " << cors_method
@@ -1808,7 +1808,7 @@ std::string get_canonical_method(const DoutPrefixProvider *dpp, RGWOpType op_typ
     } else {
       ldpp_dout(dpp, 1) << "invalid http options req missing "
                       << "access-control-request-method header" << dendl;
-      throw -EINVAL;
+      throw boost::system::system_error(ceph::to_error_code(-EINVAL));
     }
   }
 

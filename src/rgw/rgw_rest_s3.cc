@@ -6658,7 +6658,7 @@ AWSGeneralAbstractor::get_auth_data(const req_state* const s) const
 
   if (s->cct->_conf->rgw_s3_auth_disable_signature_url) {
     ldpp_dout(s, 10) << "Presigned URLs are disabled by admin" << dendl;
-    throw -ERR_PRESIGNED_URL_DISABLED;
+    throw boost::system::system_error(ceph::to_error_code(-ERR_PRESIGNED_URL_DISABLED));
   }
   
   if (version == AwsVersion::V2) {
@@ -6667,7 +6667,7 @@ AWSGeneralAbstractor::get_auth_data(const req_state* const s) const
     return get_auth_data_v4(s, route == AwsRoute::QUERY_STRING);
   } else {
     /* FIXME(rzarzynski): handle anon user. */
-    throw -EINVAL;
+    throw boost::system::system_error(ceph::to_error_code(-EINVAL));
   }
 
 }
@@ -6853,7 +6853,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
 						using_qs,
                                                 s);
   if (ret < 0) {
-    throw ret;
+    throw boost::system::system_error(ceph::to_error_code(ret));
   }
 
   /* craft canonical headers */
@@ -6864,7 +6864,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
     ldpp_dout(s, 10) << "canonical headers format = "
                       << sanitize{*canonical_headers} << dendl;
   } else {
-    throw -EPERM;
+    throw boost::system::system_error(ceph::to_error_code(-EPERM));
   }
 
   bool is_non_s3_op = rgw::auth::s3::is_non_s3_op(s->op_type);
@@ -6925,7 +6925,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
       exp_payload_hash != empty_sha256sum) {
     ldpp_dout(s, 4) << "ERROR: empty payload checksum mismatch, expected "
         << empty_sha256sum << " got " << exp_payload_hash << dendl;
-    throw -ERR_AMZ_CONTENT_SHA256_MISMATCH;
+    throw boost::system::system_error(ceph::to_error_code(-ERR_AMZ_CONTENT_SHA256_MISMATCH));
   }
 
   /* Traditional UNSIGNED-PAYLOAD requests do not require a completer, but since
@@ -7027,7 +7027,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
           break;
         default:
           ldpp_dout(s, 10) << "ERROR: AWS4 completion for operation: " << s->op_type << ", NOT IMPLEMENTED" << dendl;
-          throw -ERR_NOT_IMPLEMENTED;
+          throw boost::system::system_error(ceph::to_error_code(-ERR_NOT_IMPLEMENTED));
       }
 
       const auto cmpl_factory = std::bind(AWSv4ComplSingle::create,
@@ -7052,7 +7052,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
           break;
         default:
           ldpp_dout(s, 10) << "ERROR: AWS4 completion for this operation NOT IMPLEMENTED (streaming mode)" << dendl;
-          throw -ERR_NOT_IMPLEMENTED;
+          throw boost::system::system_error(ceph::to_error_code(-ERR_NOT_IMPLEMENTED));
       }
 
       ldpp_dout(s, 10) << "aws4 seed signature ok... delaying v4 auth" << dendl;
@@ -7135,7 +7135,7 @@ AWSGeneralAbstractor::get_auth_data_v2(const req_state* const s) const
 
     std::string_view expires = s->info.args.get("Expires");
     if (expires.empty()) {
-      throw -EPERM;
+      throw boost::system::system_error(ceph::to_error_code(-EPERM));
     }
 
     /* It looks we have the guarantee that expires is a null-terminated,
@@ -7145,12 +7145,12 @@ AWSGeneralAbstractor::get_auth_data_v2(const req_state* const s) const
     time(&now);
 
     if (now >= exp) {
-      throw -EPERM;
+      throw boost::system::system_error(ceph::to_error_code(-EPERM));
     }
     if (s->info.args.exists("x-amz-security-token")) {
       session_token = s->info.args.get("x-amz-security-token");
       if (session_token.size() == 0) {
-        throw -EPERM;
+        throw boost::system::system_error(ceph::to_error_code(-EPERM));
       }
     }
 
@@ -7167,7 +7167,7 @@ AWSGeneralAbstractor::get_auth_data_v2(const req_state* const s) const
     if (token) {
       session_token = *token;
       if (session_token.size() == 0) {
-        throw -EPERM;
+        throw boost::system::system_error(ceph::to_error_code(-EPERM));
       }
     }
   }
@@ -7179,14 +7179,14 @@ AWSGeneralAbstractor::get_auth_data_v2(const req_state* const s) const
         qsr)) {
     ldpp_dout(s, 10) << "failed to create the canonized auth header\n"
                    << rgw::crypt_sanitize::auth{s,string_to_sign} << dendl;
-    throw -EPERM;
+    throw boost::system::system_error(ceph::to_error_code(-EPERM));
   }
 
   ldpp_dout(s, 10) << "string_to_sign:\n"
                  << rgw::crypt_sanitize::auth{s,string_to_sign} << dendl;
 
   if (!qsr && !is_time_skew_ok(header_time)) {
-    throw -ERR_REQUEST_TIME_SKEWED;
+    throw boost::system::system_error(ceph::to_error_code(-ERR_REQUEST_TIME_SKEWED));
   }
 
   return {
@@ -7420,7 +7420,7 @@ rgw::auth::s3::LocalEngine::authenticate(
     if (s->user->type != TYPE_RGW) {
       ldpp_dout(dpp, 10) << "ERROR: User id of type: " << s->user->type
                      << " is present" << dendl;
-      throw -EPERM;
+      throw boost::system::system_error(ceph::to_error_code(-EPERM));
     }
   }*/
 
