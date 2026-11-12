@@ -247,11 +247,19 @@ public:
       );
     }).safe_then([&logger, &target_shard_services, &opref](Ref<PG> pgref) {
       logger.debug("{}: have_pg", opref);
-      return opref.with_pg(target_shard_services, pgref);
+      const bool absent = !pgref;
+      return opref.with_pg(target_shard_services, pgref
+      ).then([absent, &target_shard_services, pgid=opref.get_pgid()] {
+        return absent ?
+          target_shard_services.release_pg_count_if_absent(pgid) :
+          seastar::now();
+      });
     }).handle_error(
-      crimson::ct_error::ecanceled::handle([&logger, &opref](auto) {
+      crimson::ct_error::ecanceled::handle(
+        [&logger, &target_shard_services, &opref](auto) {
         logger.debug("{}: pg creation canceled, dropping", opref);
-        return seastar::now();
+        return target_shard_services.release_pg_count_if_absent(
+          opref.get_pgid());
       })
     ).then([op=std::move(op)] {});
   }
@@ -279,11 +287,15 @@ public:
 	      "pg {} for {} is no longer here, discarding",
 	      opref.get_pgid(), opref);
 	    opref.get_handle().exit();
-	    auto _fut = seastar::now();
+	    auto _fut = target_shard_services.release_pg_count_if_absent(
+	      opref.get_pgid());
 	    if (osdmap->get_epoch() > opref.get_epoch_sent_at()) {
-	      _fut = target_shard_services.send_incremental_map(
-		std::ref(opref.get_foreign_connection()),
-		opref.get_epoch_sent_at() + 1);
+	      _fut = std::move(_fut).then(
+		[&target_shard_services, &opref, epoch=opref.get_epoch_sent_at()] {
+		return target_shard_services.send_incremental_map(
+		  std::ref(opref.get_foreign_connection()),
+		  epoch + 1);
+	      });
 	    }
 	    return _fut;
 	  }
@@ -295,9 +307,11 @@ public:
 	logger.debug("{}: have_pg", opref);
 	return opref.with_pg(target_shard_services, pgref);
       }).handle_error(
-	crimson::ct_error::ecanceled::handle([&logger, &opref](auto) {
+	crimson::ct_error::ecanceled::handle(
+	  [&logger, &target_shard_services, &opref](auto) {
 	  logger.debug("{}: pg creation canceled, dropping", opref);
-	  return seastar::now();
+	  return target_shard_services.release_pg_count_if_absent(
+	    opref.get_pgid());
 	})
       );
     }).then([op=std::move(op)] {});
@@ -359,6 +373,13 @@ public:
   }
 
   seastar::future<> broadcast_map_to_pgs(epoch_t epoch);
+
+  /**
+   * Remove the mappings of released pgs (see
+   * PGShardMapping::release_pg_count()) whose pool is gone from the current
+   * osdmap. Must be called after every shard has that osdmap.
+   */
+  seastar::future<> remove_uncounted_pgs_of_deleted_pools();
 
   template <typename F>
   auto with_pg(spg_t pgid, F &&f) {
