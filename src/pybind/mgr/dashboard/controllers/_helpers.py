@@ -3,6 +3,7 @@ import json
 import logging
 import re
 from functools import wraps
+from urllib.parse import unquote
 
 import cherrypy
 from ceph_argparse import ArgumentFormat  # pylint: disable=import-error
@@ -42,6 +43,38 @@ def _get_function_params(func):
     return func_params
 
 
+def _decode_path_params(url, proxy):
+    """Locate raw whole-segment parameters using Routes' parsed components."""
+    from routes.route import Route
+
+    positions = {}
+    separators = 0
+    for part in Route(None, url or '/').routelist:
+        if isinstance(part, dict):
+            positions[part['name']] = separators
+        else:
+            separators += part.count('/')
+
+    def decode(environ, result):
+        path = environ['REQUEST_URI'].partition('?')[0]
+        # CherryPy routes slash-only URLs to the root proxy endpoint.
+        if proxy and not path.strip('/'):
+            path = '/'
+        segments = path.split('/', separators)
+        # Reject separator changes outside a proxy's final wildcard.
+        if (len(segments) != separators + 1 or any(not part for part in segments[1:-1])
+                or (not proxy and '/' in segments[-1])):
+            return False
+        try:
+            values = [unquote(part, errors='strict') for part in segments]
+        except UnicodeDecodeError:
+            raise cherrypy.HTTPError(400, 'URL path must be UTF-8')
+        result.update((name, values[index]) for name, index in positions.items())
+        return True
+
+    return decode
+
+
 def generate_controller_routes(endpoint, mapper, base_url):
     inst = endpoint.inst
     ctrl_class = endpoint.ctrl
@@ -71,6 +104,7 @@ def generate_controller_routes(endpoint, mapper, base_url):
         parent_url = "/"
 
     url = "{}{}".format(base_url, endp_url)
+    conditions = dict(conditions or {}, function=_decode_path_params(url, endpoint.proxy))
 
     logger.debug("Mapped [%s] to %s:%s restricted to %s",
                  url, ctrl_class.__name__, endpoint.action,
@@ -82,11 +116,13 @@ def generate_controller_routes(endpoint, mapper, base_url):
     mapper.connect(name, url, controller=inst, action=endpoint.action,
                    conditions=conditions)
 
-    # adding route with trailing slash
-    name += "/"
-    url += "/"
-    mapper.connect(name, url, controller=inst, action=endpoint.action,
-                   conditions=conditions)
+    # A proxy's final wildcard already includes trailing slashes.
+    if not endpoint.proxy:
+        name += "/"
+        url += "/"
+        conditions = dict(conditions, function=_decode_path_params(url, endpoint.proxy))
+        mapper.connect(name, url, controller=inst, action=endpoint.action,
+                       conditions=conditions)
 
     return parent_url
 

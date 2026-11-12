@@ -4,7 +4,6 @@ import json
 import logging
 from functools import wraps
 from typing import ClassVar, List, Optional, Type
-from urllib.parse import unquote
 
 import cherrypy
 
@@ -249,10 +248,6 @@ class BaseController:
         @wraps(func)
         def inner(*args, **kwargs):
             client_version = None
-            for key, value in kwargs.items():
-                if isinstance(value, str):
-                    kwargs[key] = unquote(value)
-
             # Process method arguments.
             params = get_request_body_params(cherrypy.request)
             kwargs.update(params)
