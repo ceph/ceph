@@ -8,6 +8,7 @@
 #include "common/ceph_mutex.h"
 #include "include/Context.h"
 #include "include/err.h"
+#include "include/intarith.h"
 #include "include/neorados/RADOS.hpp"
 #include "osd/osd_types.h"
 #include "librados/snap_set_diff.h"
@@ -24,6 +25,8 @@
 
 #include <boost/optional.hpp>
 
+#include <algorithm>
+#include <map>
 #include <shared_mutex> // for std::shared_lock
 
 #define dout_subsys ceph_subsys_rbd
@@ -809,7 +812,8 @@ void ObjectListSnapsRequest<I>::handle_list_snaps(int r) {
   librados::snap_set_t snap_set;
   convert_snap_set(m_snap_set, &snap_set);
 
-  bool initial_extents_written = false;
+  m_map_extents_requests.clear();
+  m_initial_extents_written = false;
 
   interval_set<uint64_t> object_interval;
   for (auto& object_extent : m_object_extents) {
@@ -896,7 +900,7 @@ void ObjectListSnapsRequest<I>::handle_list_snaps(int r) {
     if (exists && start_snap_id == 0 &&
         (!diff_interval.empty() || !zero_interval.empty())) {
       ldout(cct, 20) << "object exists at snap id " << end_snap_id << dendl;
-      initial_extents_written = true;
+      m_initial_extents_written = true;
     }
 
     prev_end_size = end_size;
@@ -910,10 +914,15 @@ void ObjectListSnapsRequest<I>::handle_list_snaps(int r) {
     }
 
     if (exists) {
-      for (auto& interval : diff_interval) {
-        snapshot_delta[{end_snap_id, clone_end_snap_id}].insert(
-          interval.first, interval.second,
-          SparseExtent(SPARSE_EXTENT_STATE_DATA, interval.second));
+      auto snapshot_delta_key = std::make_pair(end_snap_id,
+                                               clone_end_snap_id);
+      if ((m_list_snaps_flags & LIST_SNAPS_FLAG_MAP_SPARSE_EXTENTS) != 0 &&
+          (m_list_snaps_flags & LIST_SNAPS_FLAG_WHOLE_OBJECT) == 0 &&
+          !diff_interval.empty()) {
+        m_map_extents_requests.push_back(
+          {clone_end_snap_id, snapshot_delta_key, std::move(diff_interval)});
+      } else {
+        append_diff_extents(snapshot_delta_key, diff_interval);
       }
     } else {
       zero_interval.union_of(diff_interval);
@@ -928,11 +937,103 @@ void ObjectListSnapsRequest<I>::handle_list_snaps(int r) {
     }
   }
 
-  bool snapshot_delta_empty = snapshot_delta.empty();
-  if (!initial_extents_written) {
+  map_extents();
+}
+
+template <typename I>
+void ObjectListSnapsRequest<I>::map_extents() {
+  I *image_ctx = this->m_ictx;
+
+  if (m_map_extents_requests.empty()) {
+    finish_list_snaps();
+    return;
+  }
+
+  auto& map_extents_request = m_map_extents_requests.front();
+  auto& diff_interval = map_extents_request.diff_interval;
+  uint64_t map_offset = diff_interval.begin().get_start();
+  uint64_t map_end = map_offset;
+  for (auto& interval : diff_interval) {
+    map_end = std::max(map_end, interval.first + interval.second);
+  }
+
+  auto io_context = *this->m_io_context;
+  io_context.set_read_snap(map_extents_request.snap_id);
+
+  m_mapped_extents.clear();
+  m_map_extents_ec.clear();
+  neorados::ReadOp read_op;
+  read_op.mapext(map_offset, map_end - map_offset, &m_mapped_extents,
+                 &m_map_extents_ec);
+
+  image_ctx->rados_api.execute(
+    {data_object_name(this->m_ictx, this->m_object_no)}, io_context,
+    std::move(read_op), nullptr,
+    librbd::asio::util::get_callback_adapter(
+      [this](int r) { handle_map_extents(r); }), nullptr,
+    (this->m_trace.valid() ? this->m_trace.get_info() : nullptr));
+}
+
+template <typename I>
+void ObjectListSnapsRequest<I>::handle_map_extents(int r) {
+  auto cct = this->m_ictx->cct;
+
+  if (r >= 0) {
+    r = -m_map_extents_ec.value();
+  }
+
+  auto map_extents_request = std::move(m_map_extents_requests.front());
+  m_map_extents_requests.pop_front();
+
+  if (r == -ENOENT) {
+    // The object has no mapped extents at this snapshot.
+  } else if (r == -EOPNOTSUPP) {
+    ldout(cct, 5) << "mapext unsupported; using unrefined diff interval"
+                  << dendl;
+    append_diff_extents(map_extents_request.snapshot_delta_key,
+                        map_extents_request.diff_interval);
+  } else if (r < 0) {
+    lderr(cct) << "failed to map object extents: " << cpp_strerror(r)
+               << dendl;
+    this->finish(r);
+    return;
+  } else {
+    interval_set<uint64_t> mapped_interval;
+    for (auto [offset, length] : m_mapped_extents) {
+      mapped_interval.union_insert(offset, length);
+    }
+
+    interval_set<uint64_t> diff_interval;
+    diff_interval.intersection_of(map_extents_request.diff_interval,
+                                  mapped_interval);
+    append_diff_extents(map_extents_request.snapshot_delta_key, diff_interval);
+  }
+
+  map_extents();
+}
+
+template <typename I>
+void ObjectListSnapsRequest<I>::append_diff_extents(
+    const std::pair<librados::snap_t, librados::snap_t>& snapshot_delta_key,
+    const interval_set<uint64_t>& diff_interval) {
+  for (auto& interval : diff_interval) {
+    (*m_snapshot_delta)[snapshot_delta_key].insert(
+      interval.first, interval.second,
+      SparseExtent(SPARSE_EXTENT_STATE_DATA, interval.second));
+  }
+}
+
+template <typename I>
+void ObjectListSnapsRequest<I>::finish_list_snaps() {
+  auto cct = this->m_ictx->cct;
+  auto snapshot_delta_empty = m_snapshot_delta->empty();
+
+  ceph_assert(!m_snap_ids.empty());
+  auto first_snap_id = *m_snap_ids.begin();
+  if (!m_initial_extents_written) {
     zero_extent(first_snap_id, first_snap_id > 0);
   }
-  ldout(cct, 20) << "snapshot_delta=" << snapshot_delta << dendl;
+  ldout(cct, 20) << "snapshot_delta=" << *m_snapshot_delta << dendl;
 
   if (snapshot_delta_empty) {
     list_from_parent();
