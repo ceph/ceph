@@ -225,9 +225,9 @@ void PG::clear_publish_stats()
   pg_stats.reset();
 }
 
-pg_stat_t PG::get_stats() const
+std::optional<pg_stat_t> PG::get_stats() const
 {
-  return pg_stats.value_or(pg_stat_t{});
+  return pg_stats;
 }
 
 void PG::apply_stats(
