@@ -189,7 +189,15 @@ def task(ctx, config):
     manager.raw_cluster_cmd('osd', 'set-nearfull-ratio',
                             '{:.3f}'.format(nearfull + 0.001))
 
+    # Resume recovery so the PG retries its backfill reservation with the
+    # updated ratios.
+    manager.raw_cluster_cmd('osd', 'unset', 'nobackfill')
+    manager.raw_cluster_cmd('osd', 'unset', 'norecover')
     wait_for_pg_state(manager, pgid, 'backfilling', target)
+
+    # Pause recovery again before interrupting the backfill.
+    manager.raw_cluster_cmd('osd', 'set', 'nobackfill')
+    manager.raw_cluster_cmd('osd', 'set', 'norecover')
 
     pgs = manager.get_pg_stats()
     pg = next((pg for pg in pgs if pg['pgid'] == pgid), None)
