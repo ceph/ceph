@@ -264,6 +264,11 @@ class IdentityDB : public rgw::store::POSIXUserDB {
 
   int write_bucket_placement(const DoutPrefixProvider* dpp,
 			     const BucketPlacement& bp, bool repoint);
+  /* complete when `pending_user_id` is null */
+  int insert_noobaa_id(const DoutPrefixProvider* dpp,
+		       const std::string& noobaa_id,
+		       const std::string& owner_key,
+		       const std::string* pending_user_id);
 
 public:
   IdentityDB(std::string db_name, CephContext* cct)
@@ -360,6 +365,25 @@ public:
   int put_noobaa_id(const DoutPrefixProvider* dpp,
 		    const std::string& noobaa_id,
 		    const std::string& owner_key);
+
+  /* An import in progress:  `noobaa_id` is being imported as
+   * `owner_key`, with `user_id` the RGW user it creates.  Written before
+   * anything else, so a run that stops part way is resumed with the
+   * same ids;  complete_noobaa_id() ends it.  Until then the id is not
+   * imported:  get_owner_by_noobaa_id() and owner_was_imported() do not
+   * see it.  -EEXIST as put_noobaa_id(). */
+  int put_pending_noobaa_id(const DoutPrefixProvider* dpp,
+			    const std::string& noobaa_id,
+			    const std::string& owner_key,
+			    const std::string& user_id);
+  /* -ENOENT when `noobaa_id` has no import in progress. */
+  int get_pending_noobaa_id(const DoutPrefixProvider* dpp,
+			    const std::string& noobaa_id,
+			    std::string& owner_key,
+			    std::string& user_id) const;
+  /* -ENOENT when `noobaa_id` has no import in progress. */
+  int complete_noobaa_id(const DoutPrefixProvider* dpp,
+			 const std::string& noobaa_id);
 
   /* The completion record.  `put` is a plain INSERT:  -EEXIST once it
    * is written, since completion happens once.  `get` is -ENOENT before

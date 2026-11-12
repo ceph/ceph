@@ -17462,6 +17462,129 @@ TEST_F(NooBaaImportTest, AnIdentityWithAnUndecryptedSecretIsRejected)
       << "a credential was written with no usable secret";
 }
 
+/* A run that fails after writing part of an identity is re-run once the
+ * cause is fixed, and the re-run completes it.
+ *
+ * The first run has no master key, so the account is written and its
+ * user is not;  the second has one. */
+TEST_F(NooBaaImportTest, APartialImportIsCompletedByARerun)
+{
+  /* as adopt_identities() runs it:  read, plan, check RGW's state, write */
+  auto adopt = [this] {
+    auto c = read_store();
+    nsfs::NooBaaMasterKeys keys;
+    nsfs::NooBaaSettings fs;
+    fs.master_keys_store_type = "file";
+    if (keys.load(env->dpp, fs, store) == 0) {
+      std::vector<std::string> failures;
+      nsfs::decrypt_store_secrets(env->dpp, keys, c, failures);
+    }
+    plan = nsfs::ImportPlan{};
+    result = nsfs::ImportResult{};
+    EXPECT_EQ(nsfs::build_import_plan(env->dpp, env->cct.get(), c, plan,
+				      driver->get_identity_db()), 0);
+    EXPECT_EQ(nsfs::check_rgw_state(env->dpp, null_yield, driver.get(), plan),
+	      0);
+    return nsfs::import_identities(env->dpp, null_yield, driver.get(), c,
+				   plan, result);
+  };
+
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  ASSERT_EQ(adopt(), -EIO);
+  {
+    RGWAccountInfo info;
+    rgw::sal::Attrs attrs;
+    RGWObjVersionTracker objv;
+    EXPECT_NE(driver->load_account_by_name(env->dpp, null_yield, "",
+					   "interchange", info, attrs, objv), 0)
+	<< "a run with no master key wrote the account";
+  }
+
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+  ASSERT_EQ(adopt(), 0) << why();
+  EXPECT_EQ(result.accounts_created, 1u);
+
+  std::string owner;
+  ASSERT_EQ(driver->get_identity_db()->get_owner_by_noobaa_id(
+		env->dpp, "6ac7cb27fd4af356919110a3", owner), 0);
+  std::unique_ptr<rgw::sal::User> user;
+  EXPECT_EQ(driver->get_user_by_access_key(env->dpp, "INTERCHANGEACCESSKEY",
+					   null_yield, &user), 0);
+}
+
+/* A run that stopped after writing an identity's account, user, keys
+ * and row, before recording it as imported, is resumed into what it
+ * wrote:  nothing is written twice and nothing is found to collide.
+ *
+ * The stop is made by setting the finished import's `_id` row back to
+ * in progress, which is the state a crash before the last step leaves. */
+TEST_F(NooBaaImportTest, AnImportStoppedBeforeItsLastStepIsResumed)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+
+  auto adopt = [this] {
+    auto c = read_store();
+    nsfs::NooBaaMasterKeys keys;
+    nsfs::NooBaaSettings fs;
+    fs.master_keys_store_type = "file";
+    EXPECT_EQ(keys.load(env->dpp, fs, store), 0);
+    std::vector<std::string> failures;
+    nsfs::decrypt_store_secrets(env->dpp, keys, c, failures);
+    plan = nsfs::ImportPlan{};
+    result = nsfs::ImportResult{};
+    EXPECT_EQ(nsfs::build_import_plan(env->dpp, env->cct.get(), c, plan,
+				      driver->get_identity_db()), 0);
+    EXPECT_EQ(nsfs::check_rgw_state(env->dpp, null_yield, driver.get(), plan),
+	      0);
+    return nsfs::import_identities(env->dpp, null_yield, driver.get(), c,
+				   plan, result);
+  };
+
+  ASSERT_EQ(adopt(), 0) << why();
+  auto* db = driver->get_identity_db();
+  std::string account;
+  ASSERT_EQ(db->get_owner_by_noobaa_id(env->dpp, "6ac7cb27fd4af356919110a3",
+				       account), 0);
+  std::unique_ptr<rgw::sal::User> user;
+  ASSERT_EQ(driver->get_user_by_access_key(env->dpp, "INTERCHANGEACCESSKEY",
+					   null_yield, &user), 0);
+  const rgw_user uid = user->get_id();
+
+  {
+    const std::string file = (bp / "userdb.db").string();
+    sqlite3* raw = nullptr;
+    ASSERT_EQ(sqlite3_open(file.c_str(), &raw), SQLITE_OK);
+    auto close_raw = make_scope_guard([raw] { sqlite3_close(raw); });
+    const std::string sql =
+      "UPDATE 'userdb_nsfs_noobaa_id' SET Complete = 0, UserId = '" +
+      uid.id + "' WHERE NoobaaId = '6ac7cb27fd4af356919110a3';";
+    ASSERT_EQ(sqlite3_exec(raw, sql.c_str(), nullptr, nullptr, nullptr),
+	      SQLITE_OK) << sqlite3_errmsg(raw);
+    ASSERT_EQ(sqlite3_changes(raw), 1);
+  }
+  std::string ignored;
+  ASSERT_EQ(db->get_owner_by_noobaa_id(env->dpp, "6ac7cb27fd4af356919110a3",
+				       ignored), -ENOENT)
+      << "an import in progress reads as imported";
+
+  ASSERT_EQ(adopt(), 0) << why();
+  EXPECT_EQ(entry("interchange")->account_id, account)
+      << "the plan minted a new account id for the import in progress";
+  EXPECT_EQ(result.accounts_created, 0u) << "the account was written twice";
+  EXPECT_EQ(result.users_created, 0u) << "the user was written twice";
+  EXPECT_EQ(result.accounts_skipped, 1u);
+  EXPECT_EQ(result.users_skipped, 1u);
+
+  std::string owner;
+  ASSERT_EQ(db->get_owner_by_noobaa_id(env->dpp, "6ac7cb27fd4af356919110a3",
+				       owner), 0);
+  EXPECT_EQ(owner, account);
+  ASSERT_EQ(driver->get_user_by_access_key(env->dpp, "INTERCHANGEACCESSKEY",
+					   null_yield, &user), 0);
+  EXPECT_EQ(user->get_id(), uid);
+}
+
 /* allow_bypass_governance becomes an IAM grant on an IAM user, and a
  * root needs none.
  *

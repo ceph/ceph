@@ -281,11 +281,16 @@ int IdentityDB::Initialize(std::string logfile, int loglevel)
     /* Provenance:  NooBaa's `_id` to the owner it was imported as.
      * The primary key is the whole uniqueness rule, and nothing writes
      * here with OR REPLACE, so a second import of one id is rejected
-     * rather than repointed. */
+     * rather than repointed.  An import in progress writes its row
+     * first, with Complete 0 and the RGW user it creates, so a run that
+     * stops part way is resumed with the same ids. */
     "CREATE TABLE IF NOT EXISTS '" + noobaa_id_table + "' ("
     "  NoobaaId TEXT NOT NULL PRIMARY KEY,"
     "  Owner TEXT NOT NULL,"
-    "  CHECK (NoobaaId != '' AND Owner != '')"
+    "  UserId TEXT,"
+    "  Complete INTEGER NOT NULL DEFAULT 1,"
+    "  CHECK (NoobaaId != '' AND Owner != ''),"
+    "  CHECK (Complete IN (0, 1))"
     ");"
 
     /* P1.  Bucket placement, in a table this backend owns.
@@ -489,12 +494,32 @@ int IdentityDB::put_noobaa_id(const DoutPrefixProvider* dpp,
 			       const std::string& noobaa_id,
 			       const std::string& owner_key)
 {
+  return insert_noobaa_id(dpp, noobaa_id, owner_key, nullptr);
+}
+
+int IdentityDB::put_pending_noobaa_id(const DoutPrefixProvider* dpp,
+				       const std::string& noobaa_id,
+				       const std::string& owner_key,
+				       const std::string& user_id)
+{
+  if (user_id.empty()) {
+    return -EINVAL;
+  }
+  return insert_noobaa_id(dpp, noobaa_id, owner_key, &user_id);
+}
+
+int IdentityDB::insert_noobaa_id(const DoutPrefixProvider* dpp,
+				  const std::string& noobaa_id,
+				  const std::string& owner_key,
+				  const std::string* pending_user_id)
+{
   if (noobaa_id.empty() || owner_key.empty()) {
     return -EINVAL;
   }
 
   const std::string sql =
-    "INSERT INTO '" + noobaa_id_table + "' (NoobaaId, Owner) VALUES (?,?);";
+    "INSERT INTO '" + noobaa_id_table + "' (NoobaaId, Owner, UserId, "
+    "Complete) VALUES (?,?,?,?);";
 
   sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
@@ -506,6 +531,12 @@ int IdentityDB::put_noobaa_id(const DoutPrefixProvider* dpp,
   auto done = make_scope_guard([st] { sqlite3_finalize(st); });
   sqlite3_bind_text(st, 1, noobaa_id.c_str(), -1, SQLITE_TRANSIENT);
   sqlite3_bind_text(st, 2, owner_key.c_str(), -1, SQLITE_TRANSIENT);
+  if (pending_user_id) {
+    sqlite3_bind_text(st, 3, pending_user_id->c_str(), -1, SQLITE_TRANSIENT);
+  } else {
+    sqlite3_bind_null(st, 3);
+  }
+  sqlite3_bind_int(st, 4, pending_user_id ? 0 : 1);
 
   ConnectionMutex conn{sqlite3_db_mutex(handle())};
   std::lock_guard held{conn};
@@ -530,7 +561,8 @@ int IdentityDB::get_owner_by_noobaa_id(const DoutPrefixProvider* dpp,
   }
 
   const std::string sql =
-    "SELECT Owner FROM '" + noobaa_id_table + "' WHERE NoobaaId = ?;";
+    "SELECT Owner FROM '" + noobaa_id_table + "' WHERE NoobaaId = ? "
+    "AND Complete = 1;";
 
   sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
@@ -549,6 +581,62 @@ int IdentityDB::get_owner_by_noobaa_id(const DoutPrefixProvider* dpp,
   }
   owner_key = column_text(st, 0);
   return 0;
+}
+
+int IdentityDB::get_pending_noobaa_id(const DoutPrefixProvider* dpp,
+				       const std::string& noobaa_id,
+				       std::string& owner_key,
+				       std::string& user_id) const
+{
+  if (noobaa_id.empty()) {
+    return -EINVAL;
+  }
+
+  const std::string sql =
+    "SELECT Owner, UserId FROM '" + noobaa_id_table + "' "
+    "WHERE NoobaaId = ? AND Complete = 0;";
+
+  sqlite3_stmt* st = nullptr;
+  if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
+      != SQLITE_OK) {
+    return -EIO;
+  }
+  auto done = make_scope_guard([st] { sqlite3_finalize(st); });
+  sqlite3_bind_text(st, 1, noobaa_id.c_str(), -1, SQLITE_TRANSIENT);
+
+  int rc = sqlite3_step(st);
+  if (rc == SQLITE_DONE) {
+    return -ENOENT;
+  }
+  if (rc != SQLITE_ROW) {
+    return -EIO;
+  }
+  owner_key = column_text(st, 0);
+  user_id = column_text(st, 1);
+  return 0;
+}
+
+int IdentityDB::complete_noobaa_id(const DoutPrefixProvider* dpp,
+				    const std::string& noobaa_id)
+{
+  const std::string sql =
+    "UPDATE '" + noobaa_id_table + "' SET Complete = 1 "
+    "WHERE NoobaaId = ? AND Complete = 0;";
+  sqlite3_stmt* st = nullptr;
+  if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
+      != SQLITE_OK) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: {}", sqlite3_errmsg(handle()));
+    return -EIO;
+  }
+  auto finalize = make_scope_guard([st] { sqlite3_finalize(st); });
+  sqlite3_bind_text(st, 1, noobaa_id.c_str(), -1, SQLITE_TRANSIENT);
+  ConnectionMutex conn{sqlite3_db_mutex(handle())};
+  std::lock_guard held{conn};
+  if (sqlite3_step(st) != SQLITE_DONE) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: {}", sqlite3_errmsg(handle()));
+    return -EIO;
+  }
+  return (sqlite3_changes(handle()) == 0) ? -ENOENT : 0;
 }
 
 int IdentityDB::put_adoption_completion(const DoutPrefixProvider* dpp,
@@ -753,7 +841,8 @@ int IdentityDB::owner_was_imported(const DoutPrefixProvider* dpp,
 				   bool& imported) const
 {
   const std::string sql =
-    "SELECT 1 FROM '" + noobaa_id_table + "' WHERE Owner = ? LIMIT 1;";
+    "SELECT 1 FROM '" + noobaa_id_table + "' WHERE Owner = ? "
+    "AND Complete = 1 LIMIT 1;";
 
   sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)

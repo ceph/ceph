@@ -165,10 +165,14 @@ int build_import_plan(const DoutPrefixProvider* dpp, CephContext* cct,
     e.account_id.clear();
     if (stored) {
       std::string owner;
-      if (stored->get_owner_by_noobaa_id(dpp, id.id, owner) == 0) {
+      std::string user;
+      if ((stored->get_owner_by_noobaa_id(dpp, id.id, owner) == 0) ||
+	  (stored->get_pending_noobaa_id(dpp, id.id, owner, user) == 0)) {
 	/* to_string(rgw_owner) -- for a root account, the account id,
 	 * which is the same thing a bucket's OwnerID holds, so reusing
-	 * it is what makes the two agree. */
+	 * it is what makes the two agree.  An import in progress keeps
+	 * its id too, so the run that resumes it writes into the account
+	 * it began. */
 	e.account_id = owner;
 	ldpp_dout_fmt(dpp, 10, "nsfs: import plan: {} keeps account {}",
 			       id.name, e.account_id);
@@ -428,13 +432,15 @@ int build_import_plan(const DoutPrefixProvider* dpp, CephContext* cct,
     }
   }
 
-  /* An identity already imported stays imported:  a collision with a
-   * record added since fails only the newcomer. */
+  /* An identity already imported, or being imported, stays so:  a
+   * collision with a record added since fails only the newcomer. */
   if (stored) {
     for (auto& e : plan.entries) {
-      std::string owner;
+      std::string owner, user;
       if (!e.failed.empty() &&
-	  (stored->get_owner_by_noobaa_id(dpp, e.noobaa_id, owner) == 0)) {
+	  ((stored->get_owner_by_noobaa_id(dpp, e.noobaa_id, owner) == 0) ||
+	   (stored->get_pending_noobaa_id(dpp, e.noobaa_id, owner, user)
+	    == 0))) {
 	e.failed.clear();
       }
     }
