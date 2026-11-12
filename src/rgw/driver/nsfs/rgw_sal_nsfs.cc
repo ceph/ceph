@@ -2331,19 +2331,6 @@ int resolve_path(const DoutPrefixProvider* dpp,
 
 } // namespace nsfs
 
-static inline std::string gen_rand_instance_name()
-{
-#if 0
-  enum { OBJ_INSTANCE_LEN = 32 };
-  char buf[OBJ_INSTANCE_LEN + 1];
-  gen_rand_alphanumeric_no_underscore(driver->ctx(), buf, OBJ_INSTANCE_LEN);
-  return buf;
-#else
-  static uint64_t last_id = UINT64_MAX;
-  return fmt::format("{:x}", last_id--);
-#endif
-}
-
 static inline bool get_attr(Attrs& attrs, const char* name, bufferlist& bl)
 {
   auto iter = attrs.find(name);
@@ -14586,9 +14573,9 @@ bool NSFSObject::is_expired()
   return false;
 }
 
+/* SAL's;  a version's id derives from its inode at publish (link_temp_file()) */
 void NSFSObject::gen_rand_obj_instance_name()
 {
-  state.obj.key.set_instance(gen_rand_instance_name());
 }
 
 std::unique_ptr<MPSerializer> NSFSObject::get_serializer(const DoutPrefixProvider *dpp, optional_yield y, const std::string& lock_name)
