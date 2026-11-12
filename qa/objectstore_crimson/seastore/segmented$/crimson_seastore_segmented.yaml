@@ -1,3 +1,13 @@
+teuthology:
+  postmerge:
+    - |
+      -- With an HDD data tier, mkfs creates both a cache and a data device
+      -- file, seastore_device_size (default 50G) each, in the OSD's data
+      -- directory. On smithi that is a ~89GiB filesystem: the two do not
+      -- fit, and mkfs fails with ENOSPC.
+      if yaml.machine_type == "smithi" then
+        yaml.overrides.ceph.conf.osd["seastore device size"] = "40G"
+      end
 overrides:
   ceph:
     conf:
