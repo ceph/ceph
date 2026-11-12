@@ -1,42 +1,34 @@
+# N-2 and N-1 run ceph-dencoder from release images, so they don't depend
+# on packages being built for the host distro. N uses the packages under test.
 tasks:
-- print: "**** installing N-2 version (Tentacle) ****"
 - install:
-    branch: tentacle
     exclude_packages:
       - ceph-volume
       - ceph-osd-classic
-- print: "**** done end installing task..."
-- print: "**** start dencoder tentacle... ****"
-- workunit:
-    clients:
-      client.0:
-        - dencoder/test-dencoder.sh
-- print: "**** done end dencoder tentacle... ****"
+    extra_system_packages:
+      - podman
 
-- print: "**** installing N-1 version (Umbrella) ****"
-- install:
-    branch: umbrella
-    exclude_packages:
-      - ceph-volume
-      - ceph-osd-classic
-- print: "**** done end installing task..."
-- print: "**** start dencoder umbrella... ****"
+- print: "**** start dencoder N-2 (Tentacle) ****"
 - workunit:
     clients:
       client.0:
         - dencoder/test-dencoder.sh
-- print: "**** done end dencoder umbrella... ****"
+    env:
+      DENCODER_IMAGE: quay.io/ceph/ceph:v20
+- print: "**** done dencoder N-2 (Tentacle) ****"
 
-- print: "**** installing N version (Vampire) ****"
-- install:
-    branch: vampire
-    exclude_packages:
-      - ceph-volume
-      - ceph-osd-classic
-- print: "**** done end installing task..."
-- print: "**** start dencoder vampire... ****"
+- print: "**** start dencoder N-1 (Umbrella) ****"
 - workunit:
     clients:
       client.0:
         - dencoder/test-dencoder.sh
-- print: "**** done end dencoder vampire... ****"
+    env:
+      DENCODER_IMAGE: quay.io/ceph/ceph:v21
+- print: "**** done dencoder N-1 (Umbrella) ****"
+
+- print: "**** start dencoder N (under test) ****"
+- workunit:
+    clients:
+      client.0:
+        - dencoder/test-dencoder.sh
+- print: "**** done dencoder N (under test) ****"
