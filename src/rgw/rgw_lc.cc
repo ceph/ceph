@@ -1336,6 +1336,7 @@ class LCOpAction_Transition : public LCOpAction {
 protected:
   virtual bool check_current_state(bool is_current) = 0;
   virtual ceph::real_time get_effective_mtime(lc_op_ctx& oc) = 0;
+  virtual int perf_counter() const = 0;
 public:
   LCOpAction_Transition(const transition_action& _transition)
     : transition(_transition) {}
@@ -1533,9 +1534,10 @@ public:
 
     if (!r && oc.tier->is_tier_type_s3()) {
       ldpp_dout(oc.dpp, 30) << "Found cloud s3 tier: " << target_placement.storage_class << dendl;
-      if (!oc.o.is_current() &&
-          !pass_object_lock_check(oc.driver, oc.obj.get(), oc.dpp)) {
-        /* Skip objects which has object lock enabled. */
+      /* Skip objects which have an active retention or legal hold, current
+       * versions included: a current version would be copied to the cloud
+       * endpoint and hidden behind a delete marker. */
+      if (!pass_object_lock_check(oc.driver, oc.obj.get(), oc.dpp)) {
         ldpp_dout(oc.dpp, 10) << "Object(key:" << oc.o.key << ") is locked. Skipping transition to cloud-s3 tier: " << target_placement.storage_class << dendl;
         return 0;
       }
@@ -1583,6 +1585,9 @@ public:
 			 << ":" << o.key << " -> "
 			 << transition.storage_class
 			 << " " << oc.wq->thr_name() << dendl;
+    if (perfcounter) {
+      perfcounter->inc(perf_counter(), 1);
+    }
     return 0;
   }
 };
@@ -1596,18 +1601,12 @@ protected:
   ceph::real_time get_effective_mtime(lc_op_ctx& oc) override {
     return oc.o.meta.mtime;
   }
+
+  int perf_counter() const override { return l_rgw_lc_transition_current; }
+
 public:
   LCOpAction_CurrentTransition(const transition_action& _transition)
     : LCOpAction_Transition(_transition) {}
-    int process(lc_op_ctx& oc) override {
-      int r = LCOpAction_Transition::process(oc);
-      if (r == 0) {
-        if (perfcounter) {
-          perfcounter->inc(l_rgw_lc_transition_current, 1);
-        }
-      }
-      return r;
-    }
 };
 
 class LCOpAction_NonCurrentTransition : public LCOpAction_Transition {
@@ -1619,20 +1618,14 @@ protected:
   ceph::real_time get_effective_mtime(lc_op_ctx& oc) override {
     return oc.effective_mtime;
   }
+
+  int perf_counter() const override { return l_rgw_lc_transition_noncurrent; }
+
 public:
   LCOpAction_NonCurrentTransition(op_env& env,
 				  const transition_action& _transition)
     : LCOpAction_Transition(_transition)
     {}
-    int process(lc_op_ctx& oc) override {
-      int r = LCOpAction_Transition::process(oc);
-      if (r == 0) {
-        if (perfcounter) {
-          perfcounter->inc(l_rgw_lc_transition_noncurrent, 1);
-        }
-      }
-      return r;
-    }
 };
 
 void LCOpRule::build()
