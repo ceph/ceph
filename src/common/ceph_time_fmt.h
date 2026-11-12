@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <type_traits>
 #include <time.h>
 
 #include <fmt/chrono.h>
@@ -25,9 +26,13 @@
 // concept helpers for the formatters:
 
 template <typename TimeP>
-concept UnsteadyTimepoint = !TimeP::clock::is_steady &&
-    !std::same_as<typename TimeP::clock, std::chrono::system_clock> &&
-    !std::same_as<typename TimeP::clock, std::chrono::utc_clock>;
+concept UnsteadyTimepoint =
+    !TimeP::clock::is_steady &&
+    !std::same_as<typename TimeP::clock, std::chrono::system_clock>
+#if FMT_USE_UTC_TIME
+    && !std::same_as<typename TimeP::clock, std::chrono::utc_clock>
+#endif // FMT_USE_UTC_TIME
+    ;
 
 template <typename TimeP>
 concept SteadyTimepoint = TimeP::clock::is_steady;
