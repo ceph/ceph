@@ -1,5 +1,14 @@
 >=22.0.0
 
+* RADOS: The new ``ceph osd crush rule set-device-class <rule> <class>``
+  command adjusts existing CRUSH rules to place data only on one device class,
+  without creating a new rule or moving pools to it. When every device under
+  the rule's root is of that class and no rule names a class there yet, it
+  renumbers the CRUSH buckets so that no data moves, and keeps the
+  renumbering only after confirming that no rule places data differently.
+  Otherwise, the data of pools that use the rule moves, and the command
+  requires ``--yes-i-really-mean-it``.
+
 * RBD: The ``schedule_time`` field in the output of
   ``rbd mirror snapshot schedule status`` and
   ``rbd trash purge schedule status`` has been renamed to

@@ -11,6 +11,7 @@
 #include "common/errno.h"
 #include "common/TextTable.h"
 #include "include/stringify.h"
+#include "include/ceph_features.h"
 
 #define dout_subsys ceph_subsys_crush
 
@@ -1908,6 +1909,474 @@ int CrushWrapper::set_subtree_class(
 	q.push_back(item);
       }
     }
+  }
+  return 0;
+}
+
+bool CrushWrapper::rule_takes_only_class(int ruleno, int class_id) const
+{
+  if (!rule_exists(ruleno)) {
+    return false;
+  }
+  const crush_rule *rule = crush->rules[ruleno];
+  bool any = false;
+  for (unsigned s = 0; s < rule->len; ++s) {
+    if (rule->steps[s].op != CRUSH_RULE_TAKE) {
+      continue;
+    }
+    int item, c;
+    if (split_id_class(rule->steps[s].arg1, &item, &c) < 0 || c != class_id) {
+      return false;
+    }
+    any = true;
+  }
+  return any;
+}
+
+static bool same_choose_arg(const crush_choose_arg_map& a,
+			    const crush_choose_arg_map& b, int id)
+{
+  const unsigned pos = -1 - id;
+  const crush_choose_arg none = {};
+  const crush_choose_arg& x = pos < a.size ? a.args[pos] : none;
+  const crush_choose_arg& y = pos < b.size ? b.args[pos] : none;
+  if (x.ids_size != y.ids_size ||
+      x.weight_set_positions != y.weight_set_positions) {
+    return false;
+  }
+  if (x.ids_size &&
+      memcmp(x.ids, y.ids, x.ids_size * sizeof(x.ids[0])) != 0) {
+    return false;
+  }
+  for (unsigned s = 0; s < x.weight_set_positions; ++s) {
+    const crush_weight_set& u = x.weight_set[s];
+    const crush_weight_set& v = y.weight_set[s];
+    if (u.size != v.size ||
+	(u.size &&
+	 memcmp(u.weights, v.weights, u.size * sizeof(u.weights[0])) != 0)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// true if the two buckets place data identically given the same items
+static bool same_bucket_data(const crush_bucket *a, const crush_bucket *b)
+{
+  if (a->alg != b->alg || a->hash != b->hash || a->type != b->type ||
+      a->size != b->size || a->weight != b->weight) {
+    return false;
+  }
+  for (unsigned i = 0; i < a->size; ++i) {
+    if (a->items[i] != b->items[i]) {
+      return false;
+    }
+  }
+  auto same = [](const __u32 *x, const __u32 *y, unsigned n) {
+    return n == 0 || memcmp(x, y, n * sizeof(*x)) == 0;
+  };
+  switch (a->alg) {
+  case CRUSH_BUCKET_UNIFORM:
+    return reinterpret_cast<const crush_bucket_uniform*>(a)->item_weight ==
+      reinterpret_cast<const crush_bucket_uniform*>(b)->item_weight;
+  case CRUSH_BUCKET_LIST: {
+    auto x = reinterpret_cast<const crush_bucket_list*>(a);
+    auto y = reinterpret_cast<const crush_bucket_list*>(b);
+    return same(x->item_weights, y->item_weights, a->size) &&
+      same(x->sum_weights, y->sum_weights, a->size);
+  }
+  case CRUSH_BUCKET_TREE: {
+    auto x = reinterpret_cast<const crush_bucket_tree*>(a);
+    auto y = reinterpret_cast<const crush_bucket_tree*>(b);
+    return x->num_nodes == y->num_nodes &&
+      same(x->node_weights, y->node_weights, x->num_nodes);
+  }
+  case CRUSH_BUCKET_STRAW: {
+    auto x = reinterpret_cast<const crush_bucket_straw*>(a);
+    auto y = reinterpret_cast<const crush_bucket_straw*>(b);
+    return same(x->item_weights, y->item_weights, a->size) &&
+      same(x->straws, y->straws, a->size);
+  }
+  case CRUSH_BUCKET_STRAW2:
+    return same(reinterpret_cast<const crush_bucket_straw2*>(a)->item_weights,
+		reinterpret_cast<const crush_bucket_straw2*>(b)->item_weights,
+		a->size);
+  default:
+    return false;
+  }
+}
+
+// a name for messages; a bucket or device may have none
+static string item_label(const CrushWrapper& c, int id)
+{
+  const char *name = c.get_item_name(id);
+  return name ? string(name) : stringify(id);
+}
+
+bool CrushWrapper::same_placement(const CrushWrapper& other,
+				  ostream& why) const
+{
+  if (crush->max_rules != other.crush->max_rules) {
+    why << "the number of rules differs";
+    return false;
+  }
+  if (choose_args.size() != other.choose_args.size()) {
+    why << "the number of weight sets differs";
+    return false;
+  }
+  for (auto& i : choose_args) {
+    if (!other.choose_args.count(i.first)) {
+      why << "weight set " << i.first << " is missing";
+      return false;
+    }
+  }
+  list<int> q;
+  set<int> seen;
+  for (unsigned r = 0; r < crush->max_rules; ++r) {
+    const crush_rule *a = crush->rules[r];
+    const crush_rule *b = other.crush->rules[r];
+    if (!a != !b) {
+      why << "rule " << r << " exists in only one map";
+      return false;
+    }
+    if (!a) {
+      continue;
+    }
+    if (a->len != b->len || a->type != b->type) {
+      why << "rule " << r << " differs";
+      return false;
+    }
+    for (unsigned s = 0; s < a->len; ++s) {
+      const crush_rule_step& x = a->steps[s];
+      const crush_rule_step& y = b->steps[s];
+      if (x.op != y.op || x.arg1 != y.arg1 || x.arg2 != y.arg2) {
+	why << "rule " << r << " step " << s << " differs";
+	return false;
+      }
+      if (x.op == CRUSH_RULE_TAKE && x.arg1 < 0 && seen.insert(x.arg1).second) {
+	q.push_back(x.arg1);
+      }
+    }
+  }
+  while (!q.empty()) {
+    int id = q.front();
+    q.pop_front();
+    const crush_bucket *a = get_bucket(id);
+    const crush_bucket *b = other.get_bucket(id);
+    if (IS_ERR(a) || IS_ERR(b)) {
+      why << "bucket " << item_label(IS_ERR(b) ? *this : other, id)
+	  << " is missing";
+      return false;
+    }
+    if (!same_bucket_data(a, b)) {
+      why << "bucket " << item_label(other, id) << " differs";
+      return false;
+    }
+    for (auto& i : choose_args) {
+      if (!same_choose_arg(i.second, other.choose_args.at(i.first), id)) {
+	why << "the weights of bucket " << item_label(other, id)
+	    << " in weight set " << i.first
+	    << " differ";
+	return false;
+      }
+    }
+    for (unsigned j = 0; j < a->size; ++j) {
+      if (a->items[j] < 0 && seen.insert(a->items[j]).second) {
+	q.push_back(a->items[j]);
+      }
+    }
+  }
+  return true;
+}
+
+static void copy_choose_arg(crush_choose_arg& dst, const crush_choose_arg& src)
+{
+  free(dst.ids);
+  for (unsigned s = 0; s < dst.weight_set_positions; ++s) {
+    free(dst.weight_set[s].weights);
+  }
+  free(dst.weight_set);
+  dst.ids = nullptr;
+  dst.ids_size = src.ids_size;
+  if (src.ids_size) {
+    dst.ids = static_cast<__s32*>(calloc(src.ids_size, sizeof(dst.ids[0])));
+    ceph_assert(dst.ids);
+    memcpy(dst.ids, src.ids, src.ids_size * sizeof(dst.ids[0]));
+  }
+  dst.weight_set = nullptr;
+  dst.weight_set_positions = src.weight_set_positions;
+  if (src.weight_set_positions) {
+    dst.weight_set = static_cast<crush_weight_set*>(
+      calloc(src.weight_set_positions, sizeof(crush_weight_set)));
+    ceph_assert(dst.weight_set);
+    for (unsigned s = 0; s < src.weight_set_positions; ++s) {
+      const unsigned n = src.weight_set[s].size;
+      dst.weight_set[s].size = n;
+      if (n) {
+	dst.weight_set[s].weights = static_cast<__u32*>(
+	  calloc(n, sizeof(__u32)));
+	ceph_assert(dst.weight_set[s].weights);
+	memcpy(dst.weight_set[s].weights, src.weight_set[s].weights,
+	       n * sizeof(__u32));
+      }
+    }
+  }
+}
+
+int CrushWrapper::rule_set_device_class(
+  CephContext *cct,
+  int ruleno,
+  const string& class_name,
+  bool *renumbered,
+  set<int> *changed_rules,
+  map<int,int> *renumbered_ids,
+  ostream *ss,
+  string *why_not)
+{
+  *renumbered = false;
+  changed_rules->clear();
+  renumbered_ids->clear();
+  if (why_not) {
+    why_not->clear();
+  }
+  if (!rule_exists(ruleno)) {
+    *ss << "rule " << ruleno << " does not exist";
+    return -ENOENT;
+  }
+  if (!class_exists(class_name)) {
+    *ss << "device class " << class_name << " does not exist";
+    return -ENOENT;
+  }
+  const int class_id = get_class_id(class_name);
+  auto rule_label = [this](int r) {
+    const char *name = get_rule_name(r);
+    return name ? string(name) : stringify(r);
+  };
+  const string rule_name = rule_label(ruleno);
+
+  // the buckets this rule takes without a class
+  set<int> classless;
+  bool any_take = false;
+  crush_rule *rule = get_rule(ruleno);
+  for (unsigned s = 0; s < rule->len; ++s) {
+    if (rule->steps[s].op != CRUSH_RULE_TAKE) {
+      continue;
+    }
+    any_take = true;
+    int take = rule->steps[s].arg1;
+    int item, c;
+    int r = split_id_class(take, &item, &c);
+    if (r < 0) {
+      *ss << "rule " << rule_name << " step " << s << " takes unknown item "
+	  << take;
+      return r;
+    }
+    if (item >= 0) {
+      *ss << "rule " << rule_name << " takes device "
+	  << item_label(*this, item)
+	  << " directly, which a device class can't constrain";
+      return -EINVAL;
+    }
+    if (c < 0) {
+      classless.insert(item);
+    } else if (c != class_id) {
+      *ss << "rule " << rule_name << " takes " << item_label(*this, take)
+	  << ", which already names device class " << get_class_name(c);
+      return -EINVAL;
+    }
+  }
+  if (!any_take) {
+    *ss << "rule " << rule_name << " has no take step";
+    return -EINVAL;
+  }
+  if (classless.empty()) {
+    return 0;
+  }
+  // populate_classes() makes a shadow tree for every class under every
+  // root, so the shadow existing doesn't mean it holds any devices
+  for (int item : classless) {
+    set<int> children;
+    get_all_children(item, &children);
+    bool found = false;
+    for (int child : children) {
+      if (child >= 0 && get_item_class_id(child) == class_id) {
+	found = true;
+	break;
+      }
+    }
+    if (!found || !class_bucket.count(item) ||
+	!class_bucket[item].count(class_id)) {
+      *ss << item_label(*this, item) << " has no devices of class "
+	  << class_name;
+      return -EINVAL;
+    }
+  }
+
+  // Can the shadow tree inherit the original bucket IDs?  Only for a root
+  // (renumbering a bucket that has a parent changes the parent's items and
+  // so the mappings of rules that take the parent), only when every device
+  // under it has this class (any other would drop out of the shadow tree),
+  // only when no bucket under it also sits in another bucket (reclassify()
+  // would renumber it once per parent), and only when no rule already takes
+  // a shadow bucket under it (whose ID would change).  Each bucket under it
+  // also needs a name, which is how the renumbered buckets are found again.
+  int root = *classless.begin();
+  bool can_renumber = true;
+  string reason;
+  auto cannot = [&](const string& r) {
+    can_renumber = false;
+    reason = r;
+  };
+  int parent;
+  if (classless.size() > 1) {
+    cannot("rule " + rule_name + " takes more than one bucket");
+  } else if (get_immediate_parent_id(root, &parent) != -ENOENT) {
+    cannot(item_label(*this, root) + " is not a root bucket");
+  }
+  set<int> subtree = { root };
+  if (can_renumber) {
+    get_all_children(root, &subtree);
+    for (int item : subtree) {
+      if (item < 0 && !get_item_name(item)) {
+	cannot("bucket " + stringify(item) + " has no name");
+	break;
+      }
+      if (item >= 0 && get_item_class_id(item) != class_id) {
+	const char *c = get_item_class(item);
+	cannot(item_label(*this, root) + " holds " + item_label(*this, item) +
+	       ", which " + (c ? string("is of class ") + c :
+			     string("has no device class")));
+	break;
+      }
+    }
+  }
+  map<int,int> parents;
+  for (int i = 0; can_renumber && i < crush->max_buckets; ++i) {
+    const crush_bucket *b = crush->buckets[i];
+    if (!b || is_shadow_item(b->id)) {
+      continue;
+    }
+    for (unsigned j = 0; j < b->size; ++j) {
+      int item = b->items[j];
+      if (item < 0 && subtree.count(item) &&
+	  (++parents[item] > 1 || !subtree.count(b->id))) {
+	cannot(item_label(*this, item) + " also sits in " +
+	       item_label(*this, b->id));
+	break;
+      }
+    }
+  }
+  set<int> to_change;
+  for (unsigned r = 0; can_renumber && r < crush->max_rules; ++r) {
+    crush_rule *rr = crush->rules[r];
+    if (!rr) {
+      continue;
+    }
+    for (unsigned s = 0; s < rr->len; ++s) {
+      if (rr->steps[s].op != CRUSH_RULE_TAKE) {
+	continue;
+      }
+      int take = rr->steps[s].arg1;
+      int item, c;
+      if (split_id_class(take, &item, &c) < 0) {
+	cannot("rule " + rule_label(r) + " takes an unknown item " +
+	       stringify(take));
+	break;
+      }
+      if (item >= 0 || !subtree.count(item)) {
+	continue;
+      }
+      if (c >= 0) {
+	cannot("rule " + rule_label(r) + " already takes " +
+	       item_label(*this, take));
+	break;
+      }
+      to_change.insert(r);
+    }
+  }
+
+  if (can_renumber) {
+    // Renumber, give each shadow bucket the weight sets its original had
+    // (device_class_clone() recomputes them, which isn't always the same),
+    // then check that every bucket any rule can reach is unchanged.  If
+    // not, put the map back and change only this rule.
+    bufferlist backup;
+    this->encode(backup, CEPH_FEATURES_SUPPORTED_DEFAULT);
+    CrushWrapper before;
+    {
+      auto p = backup.cbegin();
+      before.decode(p);
+    }
+    auto restore = [&]() {
+      auto p = backup.cbegin();
+      this->decode(p);
+    };
+    map<int,string> names;
+    for (int id : subtree) {
+      if (id < 0) {
+	names[id] = get_item_name(id);
+      }
+    }
+    ostringstream out;
+    int r = reclassify(cct, out, {{get_item_name(root), class_name}}, {});
+    if (r < 0) {
+      string line, last;
+      std::istringstream lines(out.str());
+      while (getline(lines, line)) {
+	if (!line.empty()) {
+	  last = line;
+	}
+      }
+      restore();
+      *ss << "renumbering " << names[root] << " failed: " << last;
+      return r;
+    }
+    for (auto& [id, name] : names) {
+      const crush_bucket *now = get_bucket(id);
+      const crush_bucket *was = before.get_bucket(id);
+      if (IS_ERR(now) || IS_ERR(was) || now->size != was->size ||
+	  (now->size &&
+	   memcmp(now->items, was->items, now->size * sizeof(now->items[0])))) {
+	continue;  // same_placement() will catch it
+      }
+      const unsigned pos = -1 - id;
+      for (auto& [key, cmap] : choose_args) {
+	const crush_choose_arg_map& old = before.choose_args.at(key);
+	if (pos < cmap.size && pos < old.size) {
+	  copy_choose_arg(cmap.args[pos], old.args[pos]);
+	}
+      }
+    }
+    ostringstream why;
+    if (same_placement(before, why)) {
+      *renumbered = true;
+      *changed_rules = to_change;
+      for (auto& [id, name] : names) {
+	(*renumbered_ids)[id] = get_item_id(name);
+      }
+      return 0;
+    }
+    ldout(cct, 1) << __func__ << " renumbering " << names[root]
+		  << " would change placement (" << why.str()
+		  << "); changing only rule " << rule_name << dendl;
+    reason = "doing so would change placement (" + why.str() + ")";
+    restore();
+    rule = get_rule(ruleno);
+  }
+
+  for (unsigned s = 0; s < rule->len; ++s) {
+    if (rule->steps[s].op != CRUSH_RULE_TAKE) {
+      continue;
+    }
+    int item, c;
+    split_id_class(rule->steps[s].arg1, &item, &c);
+    if (c < 0) {
+      rule->steps[s].arg1 = class_bucket[item][class_id];
+    }
+  }
+  changed_rules->insert(ruleno);
+  if (why_not) {
+    *why_not = reason;
   }
   return 0;
 }

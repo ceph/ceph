@@ -819,6 +819,13 @@ COMMAND("osd crush rule rename "
         "name=dstname,type=CephString,goodchars=[A-Za-z0-9-_.]",
         "rename crush rule <srcname> to <dstname>",
         "osd", "rw")
+COMMAND("osd crush rule set-device-class "
+        "name=name,type=CephString,goodchars=[A-Za-z0-9-_.] "
+        "name=class,type=CephString,goodchars=" CLASS_GOODCHARS " "
+        "name=yes_i_really_mean_it,type=CephBool,req=false",
+        "make every take step of crush rule <name> use devices of class "
+        "<class>; data moves unless the rule's root holds only that class",
+        "osd", "rw")
 COMMAND("osd crush tree "
         "name=show_shadow,type=CephBool,req=false",
 	"dump crush buckets and items in a tree view",

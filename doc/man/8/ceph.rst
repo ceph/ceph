@@ -967,6 +967,14 @@ Usage::
 
     ceph osd crush rule rm <name>
 
+Subcommand ``set-device-class`` makes every take step of CRUSH rule <name> use
+devices of class <class>. If pools use the rule and their data would move, it
+requires ``--yes-i-really-mean-it``.
+
+Usage::
+
+    ceph osd crush rule set-device-class <name> <class> {--yes-i-really-mean-it}
+
 Subcommand ``set`` used alone, sets CRUSH map from input file.
 
 Usage::

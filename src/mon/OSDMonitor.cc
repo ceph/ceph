@@ -12741,6 +12741,118 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
                                get_last_committed() + 1));
     return true;
 
+  } else if (prefix == "osd crush rule set-device-class") {
+    string rule_name;
+    string class_name;
+    bool sure = false;
+    cmd_getval(cmdmap, "name", rule_name);
+    cmd_getval(cmdmap, "class", class_name);
+    cmd_getval(cmdmap, "yes_i_really_mean_it", sure);
+
+    if (osdmap.crush->rule_exists(rule_name) &&
+	osdmap.crush->class_exists(class_name) &&
+	osdmap.crush->rule_takes_only_class(
+	  osdmap.crush->get_rule_id(rule_name),
+	  osdmap.crush->get_class_id(class_name))) {
+      ss << "rule " << rule_name << " already uses device class "
+	 << class_name;
+      err = 0;
+      goto reply_no_propose;
+    }
+
+    CrushWrapper newcrush = _get_pending_crush();
+    if (!newcrush.rule_exists(rule_name)) {
+      ss << "rule " << rule_name << " does not exist";
+      err = -ENOENT;
+      goto reply_no_propose;
+    }
+    if (osdmap.stretch_mode_enabled) {
+      // degraded stretch mode compares a PG's dividing bucket with the
+      // surviving site by name, and under a device class that bucket is a
+      // shadow ("site1~ssd") that never matches
+      ss << "stretch mode is enabled; pools on a rule that names a device "
+	 << "class go inactive when a site is lost";
+      err = -EINVAL;
+      goto reply_no_propose;
+    }
+    int ruleno = newcrush.get_rule_id(rule_name);
+    bool renumbered = false;
+    set<int> changed;
+    map<int,int> renumbered_ids;
+    string why_not;
+    err = newcrush.rule_set_device_class(cct, ruleno, class_name,
+					 &renumbered, &changed,
+					 &renumbered_ids, &ss, &why_not);
+    if (err < 0) {
+      goto reply_no_propose;
+    }
+    if (changed.empty()) {
+      // only the pending map has the change; reply once it commits
+      ss << "rule " << rule_name << " already uses device class "
+	 << class_name;
+      getline(ss, rs);
+      wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
+						get_last_committed() + 1));
+      return true;
+    }
+    unsigned pools = 0;
+    for (auto& [id, pool] : osdmap.get_pools()) {
+      if (pool.get_crush_rule() == ruleno) {
+	++pools;
+      }
+    }
+    if (!renumbered && pools > 0 && !sure) {
+      ss << "rule " << rule_name << " is used by " << pools
+	 << " pool(s), whose data will move to devices of class "
+	 << class_name;
+      if (!why_not.empty()) {
+	ss << "; the buckets can't be renumbered to avoid that because "
+	   << why_not;
+      }
+      ss << "; pass --yes-i-really-mean-it to proceed";
+      err = -EPERM;
+      goto reply_no_propose;
+    }
+    ss << "rule " << rule_name << " now uses device class " << class_name;
+    if (renumbered) {
+      ss << "; renumbered the buckets so that no data moves";
+      string others;
+      for (int r : changed) {
+	if (r != ruleno) {
+	  const char *name = newcrush.get_rule_name(r);
+	  others += " ";
+	  others += name ? string(name) : stringify(r);
+	}
+      }
+      if (!others.empty()) {
+	ss << ", which also converted rule(s)" << others;
+      }
+    } else if (pools > 0) {
+      ss << "; data in " << pools << " pool(s) will move";
+      if (!why_not.empty()) {
+	ss << "; the buckets couldn't be renumbered because " << why_not;
+      }
+    }
+    // group flags (osd set-group) are kept by bucket ID, so move them to
+    // the renumbered buckets
+    for (auto& [old_id, new_id] : renumbered_ids) {
+      unsigned flags = osdmap.get_crush_node_flags(old_id);
+      auto p = pending_inc.new_crush_node_flags.find(old_id);
+      if (p != pending_inc.new_crush_node_flags.end()) {
+	flags = p->second;
+      }
+      if (flags) {
+	pending_inc.new_crush_node_flags[new_id] = flags;
+	pending_inc.new_crush_node_flags[old_id] = 0;
+      }
+    }
+    pending_inc.crush.clear();
+    newcrush.encode(pending_inc.crush, mon.get_quorum_con_features());
+    getline(ss, rs);
+    wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
+                               get_last_committed() + 1));
+    return true;
+
   } else if (prefix == "osd setmaxosd") {
     int64_t newmax;
     if (!cmd_getval(cmdmap, "newmax", newmax)) {
