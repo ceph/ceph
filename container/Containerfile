@@ -82,6 +82,17 @@ RUN \
 # Pre-reqs
 RUN dnf install -y --setopt=install_weak_deps=False epel-release jq
 
+# EPEL 10 is branched per RHEL minor. Rocky's epel-release follows the "z"
+# alias (newest RHEL minor), which moves before Rocky has rebuilt, so select
+# the branch matching the base image's own minor instead.
+RUN set -euo pipefail; \
+    source /etc/ceph-distro.env; \
+    if [ "${ID}" != centos ] && [ "${MAJOR}" -ge 10 ]; then \
+        sed -i -E -e 's/\$\{releasever_minor:\+-z\}//' -e 's/\$\{stream:\+s\}//' \
+            -e 's/^(metalink=.*)\$releasever&/\1$releasever_major.$releasever_minor\&/' \
+            /etc/yum.repos.d/epel*.repo; \
+    fi
+
 # NFS-Ganesha repo
 RUN set -eux; \
     { \
