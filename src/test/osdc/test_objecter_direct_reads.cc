@@ -240,15 +240,60 @@ protected:
     return ops;
   }
 
-  void reply(int osd, const MessageRef& m)
+  // Delivers a reply to m, but leaves anything the Objecter posts to the
+  // io_context unrun.
+  void deliver_reply(int osd, const MessageRef& m,
+                     std::vector<pg_log_op_return_item_t> op_returns = {})
   {
     auto op = boost::static_pointer_cast<_mosdop::MOSDOp<osdc_opvec>>(m);
+    if (op_returns.empty()) {
+      op_returns.resize(op->ops.size());
+    }
     auto r = ceph::make_message<MOSDOpReply>();
     r->set_tid(op->get_tid());
-    r->set_op_returns(std::vector<pg_log_op_return_item_t>(op->ops.size()));
+    r->set_op_returns(op_returns);
     r->set_connection(cons[osd]);
     objecter->ms_fast_dispatch2(r);
+  }
+
+  void reply(int osd, const MessageRef& m)
+  {
+    deliver_reply(osd, m);
     poll();
+  }
+
+  // Delivers a successful reply to the sub-read of a split read in m: the
+  // data asked for, and the same version for every shard, so that the split
+  // read is not seen as torn.
+  void deliver_sub_read_reply(int osd, const MessageRef& m)
+  {
+    auto op = boost::static_pointer_cast<_mosdop::MOSDOp<osdc_opvec>>(m);
+    std::map<shard_id_t, eversion_t> versions;
+    for (unsigned i = 0; i < acting.size(); i++) {
+      versions[shard_id_t(i)] = eversion_t(1, 1);
+    }
+    std::vector<pg_log_op_return_item_t> op_returns(op->ops.size());
+    for (unsigned i = 0; i < op->ops.size(); i++) {
+      switch (op->ops[i].op.op) {
+      case CEPH_OSD_OP_READ:
+        op_returns[i].bl.append_zero(op->ops[i].op.extent.length);
+        break;
+      case CEPH_OSD_OP_GET_INTERNAL_VERSIONS:
+        ceph::encode(versions, op_returns[i].bl);
+        break;
+      case CEPH_OSD_OP_GET_INTERNAL_VERSIONS_V2:
+        encode(internal_versions_v2_response_t{versions}, op_returns[i].bl);
+        break;
+      }
+    }
+    deliver_reply(osd, m, std::move(op_returns));
+  }
+
+  using budget_t = std::pair<int64_t, int64_t>;
+
+  budget_t budget_in_use()
+  {
+    return objecter->get_op_budget_in_use();
   }
 
   // The sub-read of a split read to osd.1 is still outstanding when the PG
@@ -260,6 +305,8 @@ protected:
                                     CEPH_OSD_FLAG_BALANCE_READS);
     ASSERT_EQ(1u, sent_to(primary).size());
     ASSERT_EQ(1u, sent_to(shard1_osd).size());
+    // The budget is taken once, for the parent op.
+    EXPECT_EQ(budget_t(2 * chunk_size, 1), budget_in_use());
     reply(primary, cons[primary]->sent.back());
 
     // A map that leaves PG 1.0 alone leaves the sub-read alone.
@@ -271,8 +318,11 @@ protected:
     EXPECT_EQ(1u, sent_to(shard1_osd).size());
     ASSERT_EQ(2u, sent_to(primary).size());
     EXPECT_EQ(parent, sent_to(primary).back().first);
+    // The redriven op still holds the budget, and nothing more was taken.
+    EXPECT_EQ(budget_t(2 * chunk_size, 1), budget_in_use());
     reply(primary, cons[primary]->sent.back());
     EXPECT_EQ(0, done.wait_for(0));
+    EXPECT_EQ(budget_t(0, 0), budget_in_use());
   }
 
   // The single-chunk read 4K~4K goes directly to osd.1, which holds shard 1.
@@ -309,6 +359,32 @@ TEST_F(TestSplitOpMapChange, ECSplitReadRedrivesWhenOtherShardOsdDown)
 TEST_F(TestSplitOpMapChange, ECSplitReadRedrivesWhenShardOsdDown)
 {
   split_read_redriven_on_new_interval([this] { mark_down(shard1_osd); });
+}
+
+// A split read completes from a handler posted to the io_context, but must
+// return its budget before that: clients such as librbd submit from threads
+// of the same io_context, and with the throttle full they can all be blocked
+// waiting for budget, leaving none to run the handler.
+// https://tracker.ceph.com/issues/83105
+TEST_F(TestSplitOpMapChange, ECSplitReadReturnsBudgetBeforeCompletionRuns)
+{
+  submit_read(0, 2 * chunk_size, CEPH_OSD_FLAG_BALANCE_READS);
+  ASSERT_EQ(1u, sent_to(primary).size());
+  ASSERT_EQ(1u, sent_to(shard1_osd).size());
+  EXPECT_EQ(budget_t(2 * chunk_size, 1), budget_in_use());
+
+  deliver_sub_read_reply(primary, cons[primary]->sent.back());
+  EXPECT_EQ(budget_t(2 * chunk_size, 1), budget_in_use());
+
+  deliver_sub_read_reply(shard1_osd, cons[shard1_osd]->sent.back());
+  EXPECT_EQ(ETIMEDOUT, done.wait_for(0));
+  EXPECT_EQ(budget_t(0, 0), budget_in_use());
+
+  poll();
+  EXPECT_EQ(0, done.wait_for(0));
+  EXPECT_EQ(budget_t(0, 0), budget_in_use());
+  // Completed, not redriven.
+  EXPECT_EQ(1u, sent_to(primary).size());
 }
 
 TEST_F(TestSplitOpMapChange, ECDirectReadRedrivesWhenPrimaryMoves)

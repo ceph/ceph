@@ -2493,6 +2493,20 @@ void Objecter::resend_mon_ops()
 void Objecter::op_post_split_op_complete(Op* op, bs::error_code ec, int rc) {
   ceph_assert(op->session == splitop_session);
 
+  // Return the parent op's throttle budget now rather than from the posted
+  // handler.  The handler runs on 'service', which Objecter clients may share
+  // (librbd posts every IO to it, see neorados::RADOS::get_io_context()), and
+  // whose threads can all be blocked in _throttle_op() waiting for this very
+  // budget.  Nothing else touches op->budget while the sub-reads are in
+  // flight: op_cancel() only cancels the sub-reads, and the parent op reaches
+  // _finish_op() only from the handler posted below.  The -EAGAIN redrive
+  // resubmits through _op_submit(), which does not take budget, so the op
+  // keeps the budget it already holds.
+  if (rc != -EAGAIN && !op->ctx_budgeted && op->budget >= 0) {
+    put_op_budget_bytes(op->budget);
+    op->budget = -1;
+  }
+
   op->get();  // Keep alive during async operation
 
   boost::asio::post(service, [this, op, ec, rc]() {
