@@ -4954,7 +4954,7 @@ int RadosMultipartUpload::unlock(const DoutPrefixProvider *dpp, optional_yield y
 
 bool RadosMultipartUpload::is_locked()
 {
-  return serializer.is_locked();
+  return serializer.is_locked_until().has_value();
 }
 
 void RadosMultipartUpload::clear_locked()
@@ -4999,18 +4999,12 @@ MPRadosSerializer::~MPRadosSerializer()
   stop_renewal();
 }
 
-static void renewal(const DoutPrefixProvider* dpp,
-                    MPRadosSerializer& serializer,
-                    librados::IoCtx& ioctx,
-                    const std::string& oid,
-                    rados::cls::lock::Lock lock,
-                    auto& timer,
-                    ceph::timespan dur,
-                    boost::asio::yield_context yield)
+void MPRadosSerializer::renewal(ceph::timespan dur,
+                                boost::asio::yield_context yield)
 {
   const ceph::timespan renew_every = dur / 2;
-  lock.set_duration(dur);
-  lock.set_must_renew(true);
+  lock_state.set_duration(dur);
+  lock_state.set_must_renew(true);
 
   // run the renewal loop until canceled
   while (yield.get_cancellation_state().cancelled() == boost::asio::cancellation_type::none) {
@@ -5027,20 +5021,30 @@ static void renewal(const DoutPrefixProvider* dpp,
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "MPSerializer lock renewal on "
           << oid << " failed with injected error " << ret << dendl;
-      serializer.clear_locked();
+      clear_locked();
       return;
     }
 
+    constexpr int flags = librados::OPERATION_RETURNVEC;
+    bufferlist bl;
     librados::ObjectWriteOperation op;
     op.assert_exists();
-    lock.lock_exclusive(&op);
-    ret = rgw_rados_operate(dpp, ioctx, oid, std::move(op), yield);
+    lock_state.lock_exclusive(&op, &bl);
+    ret = rgw_rados_operate(dpp, ioctx, oid, std::move(op), yield, flags);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: MPSerializer lock renewal on "
           << oid << " failed with " << ret << ". If this upload completes, "
           "a racing request may overwrite and corrupt it." << dendl;
-      serializer.clear_locked();
+      clear_locked();
       return;
+    }
+
+    utime_t expires_at;
+    ret = ::rados::cls::lock::decode_lock_reply(bl, expires_at);
+    if (ret < 0) {
+      locked_until = ceph::real_clock::zero();
+    } else {
+      locked_until = expires_at.to_real_time();
     }
   }
   ldpp_dout(dpp, 20) << "MPSerializer lock renewal canceled" << dendl;
@@ -5069,7 +5073,7 @@ void MPRadosSerializer::start_renewal(ceph::timespan dur)
   using namespace boost::asio;
   spawn(ex,
       [this, dur] (yield_context yield) {
-        renewal(this->dpp, *this, ioctx, oid, lock_state, timer, dur, yield);
+        renewal(dur, yield);
       }, bind_cancellation_slot(signal.slot(),
                                 bind_executor(ex, std::move(completion))));
 }
@@ -5093,14 +5097,28 @@ void MPRadosSerializer::stop_renewal()
 
 int MPRadosSerializer::try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y)
 {
+  // use RETURNVEC to request that successful lock operations respond
+  // with the osd's lock expiration time
+  constexpr int flags = librados::OPERATION_RETURNVEC;
+  bufferlist bl;
+
   librados::ObjectWriteOperation op;
   op.assert_exists();
   lock_state.set_duration(dur);
   lock_state.set_may_renew(false);
-  lock_state.lock_exclusive(&op);
-  int ret = rgw_rados_operate(dpp, ioctx, oid, std::move(op), y);
+  lock_state.lock_exclusive(&op, &bl);
+  int ret = rgw_rados_operate(dpp, ioctx, oid, std::move(op), y, flags);
   if (! ret) {
-    locked = true;
+    utime_t expires_at;
+    ret = ::rados::cls::lock::decode_lock_reply(bl, expires_at);
+    if (ret < 0) {
+      // the osd doesn't support this use of RETURNVEC. initialize the
+      // optional<real_time> to zero, meaning that the lock is held but
+      // without a real expiration time
+      locked_until = ceph::real_clock::zero();
+    } else {
+      locked_until = expires_at.to_real_time();
+    }
 
     start_renewal(dur);
 

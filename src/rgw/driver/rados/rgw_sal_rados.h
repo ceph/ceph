@@ -893,7 +893,7 @@ class MPRadosSerializer {
   librados::IoCtx ioctx;
   ::rados::cls::lock::Lock lock_state;
   std::string oid;
-  std::atomic<bool> locked;
+  std::atomic<std::optional<ceph::real_time>> locked_until;
 
   // lock renewal state
   boost::asio::any_io_executor ex; // strand executor for renewal
@@ -906,6 +906,7 @@ class MPRadosSerializer {
   bool renew_canceled = false;
   void start_renewal(ceph::timespan dur);
   void stop_renewal();
+  void renewal(ceph::timespan dur, boost::asio::yield_context yield);
 
 public:
   MPRadosSerializer(const DoutPrefixProvider* dpp, optional_yield y,
@@ -915,8 +916,8 @@ public:
 
   int try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y);
   int unlock(const DoutPrefixProvider* dpp, optional_yield y);
-  bool is_locked() { return locked; }
-  void clear_locked() { locked = false; }
+  std::optional<ceph::real_time> is_locked_until() const { return locked_until; }
+  void clear_locked() { locked_until = std::nullopt; }
 };
 
 class RadosMultipartUpload : public StoreMultipartUpload {
