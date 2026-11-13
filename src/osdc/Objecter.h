@@ -2835,6 +2835,13 @@ private:
     return op_budget;
   }
   int take_linger_budget(LingerOp *info);
+  // Takes budget without waiting for it, so it may exceed the throttle
+  // limits.
+  void take_op_budget_bytes(int op_budget) {
+    ceph_assert(op_budget >= 0);
+    op_throttle_bytes.take(op_budget);
+    op_throttle_ops.take(1);
+  }
   void put_op_budget_bytes(int op_budget) {
     ceph_assert(op_budget >= 0);
     op_throttle_bytes.put(op_budget);
