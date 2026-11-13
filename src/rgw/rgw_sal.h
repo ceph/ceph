@@ -1070,6 +1070,13 @@ class Bucket {
     virtual bool versioned() = 0;
     /** Check if this bucket has versioning enabled */
     virtual bool versioning_enabled() = 0;
+    /** Check if this bucket supports POSIX-style positional i/o.  False
+     * unless the driver can serve it on this bucket;  librgw refuses an
+     * FSIO open on a bucket that does not.  Asked per bucket, not only
+     * per driver, because one mount sees many buckets, and a driver may
+     * serve the positional view on some and not others -- by layout,
+     * by placement, or by how far a bucket's own state has come. */
+    virtual bool have_fsio() const { return false; }
 
     /** Check if a Bucket pointer is empty */
     static bool empty(const Bucket* b) { return (!b || b->empty()); }

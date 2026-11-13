@@ -27,12 +27,31 @@ extern "C" {
 #endif
 
 #define LIBRGW_FILE_VER_MAJOR 1
-#define LIBRGW_FILE_VER_MINOR 2
-#define LIBRGW_FILE_VER_EXTRA 1 /* version number needs to advance to
-				 * match change in rgw_raddir2 signature */
+#define LIBRGW_FILE_VER_MINOR 4
+#define LIBRGW_FILE_VER_EXTRA 1
 
 #define LIBRGW_FILE_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
 #define LIBRGW_FILE_VERSION_CODE LIBRGW_FILE_VERSION(LIBRGW_FILE_VER_MAJOR, LIBRGW_FILE_VER_MINOR, LIBRGW_FILE_VER_EXTRA)
+
+/*
+ * Flags
+ *
+ * Every call takes a uint32_t flags as its last argument, and each call has
+ * its *own* namespace of flag values -- RGW_LOOKUP_FLAG_* for rgw_lookup(),
+ * RGW_OPEN_FLAG_* for the open calls, and so on.  The values are small and
+ * deliberately reused across namespaces, so a word from the wrong namespace
+ * is not detectable by value:  passing RGW_LOOKUP_FLAG_DIR to rgw_open()
+ * would read as RGW_OPEN_FLAG_V3.  Pass the namespace belonging to the call.
+ *
+ * Where a call defines only RGW_..._FLAG_NONE it takes no flags;  pass NONE.
+ * Where a call defines real values, a _FLAG_MASK is given beside them and the
+ * call rejects any bit outside it with -EINVAL, rather than letting an
+ * unexpected bit reach the shared internals and change behaviour there.
+ *
+ * Two calls share a namespace by intent, because they share an
+ * implementation:  rgw_open() and rgw_open2() both take RGW_OPEN_FLAG_*, and
+ * rgw_close() and rgw_close2() both take RGW_CLOSE_FLAG_*.
+ */
 
 /*
  * object types
@@ -98,6 +117,10 @@ void rgwfile_version(int *major, int *minor, int *extra);
 #define RGW_LOOKUP_FLAG_RCB     0x0002 /* readdir callback hint */
 #define RGW_LOOKUP_FLAG_DIR     0x0004
 #define RGW_LOOKUP_FLAG_FILE    0x0008
+
+#define RGW_LOOKUP_FLAG_MASK \
+  (RGW_LOOKUP_FLAG_CREATE|RGW_LOOKUP_FLAG_RCB|RGW_LOOKUP_FLAG_DIR| \
+   RGW_LOOKUP_FLAG_FILE)
 
 #define RGW_LOOKUP_TYPE_FLAGS \
   (RGW_LOOKUP_FLAG_DIR|RGW_LOOKUP_FLAG_FILE)
@@ -206,6 +229,8 @@ int rgw_mkdir(struct rgw_fs *rgw_fs,
 */
 #define RGW_RENAME_FLAG_NONE      0x0000
 
+#define RGW_RENAME_FLAG_MASK (RGW_RENAME_FLAG_NONE)
+
 int rgw_rename(struct rgw_fs *rgw_fs,
 	       struct rgw_file_handle *olddir, const char* old_name,
 	       struct rgw_file_handle *newdir, const char* new_name,
@@ -229,6 +254,8 @@ typedef int (*rgw_readdir_cb)(const char *name, void *arg, uint64_t offset,
 
 #define RGW_READDIR_FLAG_NONE      0x0000
 #define RGW_READDIR_FLAG_DOTDOT    0x0001 /* send dot names */
+
+#define RGW_READDIR_FLAG_MASK (RGW_READDIR_FLAG_DOTDOT)
 
 int rgw_readdir(struct rgw_fs *rgw_fs,
 		struct rgw_file_handle *parent_fh, uint64_t *offset,
@@ -284,8 +311,106 @@ int rgw_truncate(struct rgw_fs *rgw_fs,
 #define RGW_OPEN_FLAG_V3           0x0002 /* ops have v3 semantics */
 #define RGW_OPEN_FLAG_STATELESS    0x0002 /* alias it */
 
-int rgw_open(struct rgw_fs *rgw_fs, struct rgw_file_handle *parent_fh,
+#define RGW_OPEN_FLAG_MASK (RGW_OPEN_FLAG_CREATE|RGW_OPEN_FLAG_V3)
+
+int rgw_open(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
 	     uint32_t posix_flags, uint32_t flags);
+
+
+typedef void* rgw_open_fd;
+
+/*
+  create disposition for rgw_open2
+*/
+#define RGW_CREATEMODE_NONE        0 /* do not create */
+#define RGW_CREATEMODE_UNCHECKED   1 /* create, or open and apply attrs */
+#define RGW_CREATEMODE_GUARDED     2 /* create, fail if it exists */
+#define RGW_CREATEMODE_EXCLUSIVE   3 /* guarded, and attrs carry a verifier */
+#define RGW_CREATEMODE_EXCLUSIVE41 4 /* exclusive, verifier separate from attrs */
+
+/*
+  encodings an access-control list may arrive in.  reserved:  none is
+  accepted yet, and a non-empty acl is refused rather than ignored
+*/
+#define RGW_ACL_ENCODING_NONE      0
+#define RGW_ACL_ENCODING_NFS4      1 /* XDR nfsace4 */
+#define RGW_ACL_ENCODING_POSIX     2 /* POSIX.1e */
+#define RGW_ACL_ENCODING_RGW       3 /* RGWAccessControlPolicy */
+
+/*
+  Optional arguments to rgw_open2.
+
+  Carries no version of its own.  This interface is versioned as a whole --
+  LIBRGW_FILE_VER_MAJOR/MINOR/EXTRA at compile time, rgwfile_version() at
+  run time -- and a consumer is expected to build against the header
+  belonging to the library it links, as it already must for every other
+  structure here.  Adding a field to this one is an interface change like
+  any other, not something to be negotiated per call.
+
+  Zero the structure and set what you need.  Every member is independent:
+  none of them is selected by createmode, which is why this is a flat
+  structure rather than a tagged union.  When to set each:
+
+  createmode
+      The create disposition.  Leave it zero (RGW_CREATEMODE_NONE) to open
+      without creating, in which case RGW_OPEN_FLAG_CREATE and O_EXCL decide
+      as they always did.  Set it to make the disposition explicit, and it
+      governs instead.  Note UNCHECKED does not truncate:  ask for that with
+      RGW_SETATTR_SIZE below, or with O_TRUNC in posix_flags.
+
+  attr_mask, attrs
+      Set together or not at all -- a mask with no attrs is -EINVAL.  These
+      are the attributes the object should have, applied while a created
+      object is still invisible under its name, so a second caller never
+      observes it without them.  Meaningful for *any* createmode, not only a
+      creating one:  UNCHECKED applies them to an object that already
+      existed.
+
+      RGW_SETATTR_SIZE here is a data operation, applied after any O_TRUNC,
+      so an explicit size wins over the flag.
+
+      For an exclusive create this is also how the verifier arrives:  the
+      caller folds it into atime and mtime (as ganesha's
+      set_common_verifier() does) and sets RGW_SETATTR_ATIME|RGW_SETATTR_MTIME.
+      Those two are stored and returned byte-exact, so do not expect server
+      time to be substituted for them.  They survive until the first write,
+      which moves mtime as it would on any filesystem -- long enough for a
+      retransmitted create, which arrives before the client's writes.
+
+  attrs_out
+      Set it to receive the resulting attributes, NULL if you do not want
+      them.  Independent of everything above:  useful on a plain open as well
+      as a create, and it saves a following rgw_getattr() since these were
+      just written.
+
+  acl, acl_len, acl_encoding
+      Reserved.  A non-empty ACL is refused with -ENOTSUP rather than
+      ignored, because a caller which believes it set one must not be told
+      the open succeeded.  Leave all three zero.  The encoding enum records
+      the intended alternatives (NFSv4 XDR, POSIX.1e, RGW's own policy);
+      which are accepted, and what RGW stores natively, is unsettled.
+*/
+struct rgw_open_args
+{
+  uint32_t createmode;   /* RGW_CREATEMODE_*;  zero means "do not create" */
+  uint32_t attr_mask;    /* RGW_SETATTR_* describing which of *attrs to use */
+  struct stat* attrs;    /* IN:  attributes to apply;  NULL if attr_mask==0 */
+  struct stat* attrs_out; /* OUT: resulting attributes;  NULL if not wanted */
+  void* acl;             /* reserved -- must be NULL */
+  uint32_t acl_len;      /* reserved -- must be 0 */
+  uint32_t acl_encoding; /* reserved -- must be RGW_ACL_ENCODING_NONE */
+};
+
+/*
+  args may be NULL, in which case the create disposition is taken from
+  RGW_OPEN_FLAG_CREATE and O_EXCL as it always was.  When
+  args->createmode is not RGW_CREATEMODE_NONE it governs instead.
+*/
+int rgw_open2(struct rgw_fs* rgw_fs, struct rgw_file_handle* fh,
+              rgw_open_fd* open_fd /* OUT */,
+              struct rgw_open_args* args,
+              uint32_t posix_flags,
+              uint32_t flags);
 
 /*
    close file
@@ -293,9 +418,57 @@ int rgw_open(struct rgw_fs *rgw_fs, struct rgw_file_handle *parent_fh,
 
 #define RGW_CLOSE_FLAG_NONE        0x0000
 #define RGW_CLOSE_FLAG_RELE        0x0001
+#define RGW_CLOSE_FLAG_DETACH      0x0002
+
+#define RGW_CLOSE_FLAG_MASK (RGW_CLOSE_FLAG_RELE|RGW_CLOSE_FLAG_DETACH)
+
+/*
+  RGW_CLOSE_FLAG_DETACH declines to finalize on this close's account:
+  the close does not publish, even when it returns the last write open.
+
+  It is not an abort.  There is one mutable view of an object, shared by
+  every open on it, so one writer's bytes are indistinguishable from
+  another's and cannot be withdrawn.  What follows from that:
+
+    - another writer is still open:  they publish the shared view when
+      they close, including everything this caller wrote.  DETACH
+      suppressed the trigger, nothing more.
+    - this is the last open on the object:  no one else has a claim, so
+      the view is discarded rather than published.  This is the only
+      case in which DETACH abandons anything.
+    - only readers remain:  nothing is published and nothing is
+      discarded -- readers are reading that view, and taking it from
+      them would be worse than leaving it.  It persists, unpublished,
+      until a later writer finishes it or it is unlinked.
+
+  The sense is pthread_detach()'s:  it changes who is responsible for
+  finalizing, not whether the work happened.  A caller wanting
+  transactional abort does not have it here;  only an intersecting
+  unlink discards work another open is still holding.
+
+  NOT YET IMPLEMENTED.  The flag is accepted and currently has no
+  effect -- librgw finalizes by the ordinary rules.  Semantics were
+  settled 2026-09-08 so that the meaning is fixed before a caller
+  depends on it.
+*/
   
 int rgw_close(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
 	      uint32_t flags);
+
+int rgw_close2(rgw_open_fd open_fd, uint32_t flags);
+
+/*
+  change the access mode of an open, without returning it
+
+  An upgrade to write establishes the object's mutable view, since a
+  reader may be bound to the published object.  A downgrade which
+  returns the last write open publishes, exactly as closing it would:
+  giving up write intent and closing both return it.
+*/
+/* flags is reserved and must be RGW_OPEN_FLAG_NONE:  the access mode comes
+   entirely from posix_flags, and nothing in the open namespace applies to a
+   mode change */
+int rgw_reopen2(rgw_open_fd open_fd, uint32_t posix_flags, uint32_t flags);
 
 /*
    read data from file
@@ -306,6 +479,11 @@ int rgw_read(struct rgw_fs *rgw_fs,
 	     struct rgw_file_handle *fh, uint64_t offset,
 	     size_t length, size_t *bytes_read, void *buffer,
 	     uint32_t flags);
+
+int rgw_readv(rgw_open_fd open_fd,
+              const struct iovec* iov, int iov_cnt,
+              uint64_t offset, uint64_t* bytes_read,
+              uint32_t flags);
 
 /*
    read symbolic link
@@ -327,41 +505,10 @@ int rgw_write(struct rgw_fs *rgw_fs,
 	      size_t length, size_t *bytes_written, void *buffer,
 	      uint32_t flags);
 
-#define RGW_UIO_NONE    0x0000
-#define RGW_UIO_GIFT    0x0001
-#define RGW_UIO_FREE    0x0002
-#define RGW_UIO_BUFQ    0x0004
-
-struct rgw_uio;
-typedef void (*rgw_uio_release)(struct rgw_uio *, uint32_t);
-
-/* buffer vector descriptors */
-struct rgw_vio {
-  void *vio_p1;
-  void *vio_u1;
-  void *vio_base;
-  int32_t vio_len;
-};
-  
-struct rgw_uio {
-  rgw_uio_release uio_rele;
-  void *uio_p1;
-  void *uio_u1;
-  uint64_t uio_offset;
-  uint64_t uio_resid;
-  uint32_t uio_cnt;
-  uint32_t uio_flags;
-  struct rgw_vio *uio_vio; /* appended vectors */
-};
-
-typedef struct rgw_uio rgw_uio;
-
-int rgw_readv(struct rgw_fs *rgw_fs,
-	      struct rgw_file_handle *fh, rgw_uio *uio, uint32_t flags);
-
-int rgw_writev(struct rgw_fs *rgw_fs,
-	       struct rgw_file_handle *fh, rgw_uio *uio, uint32_t flags);
-
+int rgw_writev(rgw_open_fd open_fd,
+               const struct iovec* iov, int iov_cnt,
+               uint64_t offset, uint64_t* bytes_written,
+               uint32_t flags);
 /*
    sync written data
 */
@@ -410,6 +557,8 @@ int rgw_getxattrs(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
 		  uint32_t flags);
 
 #define RGW_LSXATTR_FLAG_NONE       0x0000
+/* returned by the caller's rgw_xattrlist_cb to stop enumeration;  it is not
+ * an input to rgw_lsxattrs(), which takes no flags */
 #define RGW_LSXATTR_FLAG_STOP       0x0001
 
 int rgw_lsxattrs(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,

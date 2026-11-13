@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <boost/container/flat_map.hpp>
@@ -29,6 +30,15 @@ class DoutPrefixProvider;
 namespace rgw { namespace sal { namespace nsfs {
 
 using xattr_map_t = boost::container::flat_map<std::string, std::string>;
+
+/* Names the strategy layer creates on disk which are not objects.  They
+ * are declared here rather than inline at their use sites so that the
+ * listing paths can suppress them without duplicating the knowledge --
+ * a name added here and nowhere else would otherwise start appearing in
+ * NFS readdir and S3 LIST. */
+inline constexpr std::string_view TMP_LINK_PREFIX = ".tmp_link_";
+inline constexpr std::string_view UNLINK_TMP_PREFIX = ".unlink_tmp_";
+inline constexpr std::string_view CLONE_PARENT_PREFIX = ".clone_parent.";
 
 enum class SafeResult {
   OK = 0,
@@ -82,9 +92,14 @@ public:
    * overwritten.  A GPFS extension for automatic clone-parent
    * garbage collection would eliminate this lifecycle burden; until
    * then, the clone path is experimental. */
+  /* excl: fail with -EEXIST rather than overwrite an existing
+   * destination.  shadow forks pass it so that two instances racing to
+   * fork the same object cannot clobber each other;  the loser joins
+   * the winner's shadow instead. */
   virtual int clone_file(const DoutPrefixProvider* dpp,
                          int src_dir_fd, const std::string& src_name,
-                         int dst_dir_fd, const std::string& dst_name) = 0;
+                         int dst_dir_fd, const std::string& dst_name,
+                         bool excl = false) = 0;
 
   /* clone from an open source fd — used when the source pathname is
    * no longer valid (e.g. versioned self-copy after demote). */
@@ -151,7 +166,8 @@ public:
 
   int clone_file(const DoutPrefixProvider* dpp,
                  int src_dir_fd, const std::string& src_name,
-                 int dst_dir_fd, const std::string& dst_name) override;
+                 int dst_dir_fd, const std::string& dst_name,
+                 bool excl = false) override;
 
   int clone_fd(const DoutPrefixProvider* dpp,
                int src_fd,
@@ -260,7 +276,8 @@ public:
 
   int clone_file(const DoutPrefixProvider* dpp,
                  int src_dir_fd, const std::string& src_name,
-                 int dst_dir_fd, const std::string& dst_name) override;
+                 int dst_dir_fd, const std::string& dst_name,
+                 bool excl = false) override;
 
   int clone_fd(const DoutPrefixProvider* dpp,
                int src_fd,

@@ -15,6 +15,8 @@
 
 #include <stdint.h>
 #include <tuple>
+#include <thread>
+#include <chrono>
 #include <iostream>
 #include <fstream>
 #include <stack>
@@ -61,6 +63,10 @@ namespace {
   string readf_name("toyland");
   string readf_out_name("rgwlib_readf.out");
   std::string writef_name{"bigbird"};
+
+  /* From the driver's fs-features:  a key and its directory form
+   * cannot both exist, so the second PUT of such a pair conflicts. */
+  bool key_paths_exclusive = false;
 
   int n_dirs1_dirs = 3;
   int n_dirs1_objs = 2;
@@ -180,6 +186,18 @@ namespace {
 
   dirs1_vec renames_vec;
 
+  /* Poll for an expected refcount, bounded.  Settles immediately when
+   * the reference has already come back. */
+  void wait_refcnt(RGWFileHandle* rgw_fh, uint32_t expected,
+		   int max_ms = 15000) {
+    for (int waited = 0; waited < max_ms; waited += 250) {
+      if (rgw_fh->get_refcnt() == expected) {
+	return;
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(250));
+    }
+  }
+
   struct {
     int argc;
     char **argv;
@@ -214,6 +232,20 @@ TEST(LibRGW, MOUNT) {
   ASSERT_NE(fs, nullptr);
 
   cct = static_cast<RGWLibFS*>(fs->fs_private)->get_context();
+
+  /* A stateless open, such as the one rgw_read() takes on demand, is
+   * returned by the idle reclaimer rather than by the caller--v3 has no
+   * close to give us.  Shorten the interval so tests which check that
+   * references come back do not wait minutes for it. */
+  g_conf().set_val("rgw_nfs_stateless_finalize_secs", "1");
+  g_conf().apply_changes(nullptr);
+
+  const DoutPrefix dp(g_ceph_context, dout_subsys, "nfsns test: ");
+  std::map<std::string, std::string> features;
+  if (g_rgwlib->get_driver()->driver_hint(&dp, "fs-features", {},
+                                          &features) == 0) {
+    key_paths_exclusive = (features["key_paths_exclusive"] == "true");
+  }
 }
 
 TEST(LibRGW, SETUP_HIER1)
@@ -239,24 +271,26 @@ TEST(LibRGW, SETUP_HIER1)
 
     if (do_create) {
       /* create objects directly */
-      std::vector<std::string> obj_names =
-	{"foo/bar/baz/quux",
-	 "foo/f1",
-	 "foo/f2",
-	 "foo/bar/f1",
-	 "foo/bar/d1/",
-	 "foo/bar/baz/hungry",
-	 "foo/bar/baz/hungry/",
-	 "foo/bar/baz/momma",
-	 "foo/bar/baz/bear/",
-	 "foo/bar/baz/sasquatch",
-	 "foo/bar/baz/sasquatch/",
-	 "foo/bar/baz/frobozz"};
+      /* The bool is true for the directory form of a key created
+       * earlier in the list. */
+      std::vector<std::pair<std::string, bool>> obj_names =
+	{{"foo/bar/baz/quux", false},
+	 {"foo/f1", false},
+	 {"foo/f2", false},
+	 {"foo/bar/f1", false},
+	 {"foo/bar/d1/", false},
+	 {"foo/bar/baz/hungry", false},
+	 {"foo/bar/baz/hungry/", true},
+	 {"foo/bar/baz/momma", false},
+	 {"foo/bar/baz/bear/", false},
+	 {"foo/bar/baz/sasquatch", false},
+	 {"foo/bar/baz/sasquatch/", true},
+	 {"foo/bar/baz/frobozz", false}};
 
       buffer::list bl; // empty object
       RGWLibFS *fs_private = static_cast<RGWLibFS*>(fs->fs_private);
 
-      for (const auto& obj_name : obj_names) {
+      for (const auto& [obj_name, second_form] : obj_names) {
 	if (verbose) {
 	  std::cout << "creating: " << bucket_name << ":" << obj_name
 		    << std::endl;
@@ -267,7 +301,11 @@ TEST(LibRGW, SETUP_HIER1)
 	int rc = g_rgwlib->get_fe()->execute_req(&req);
 	int rc2 = req.get_ret();
 	ASSERT_EQ(rc, 0);
-	ASSERT_EQ(rc2, 0);
+	if (key_paths_exclusive && second_form) {
+	  ASSERT_EQ(rc2, -ERR_KEY_PATH_CONFLICT);
+	} else {
+	  ASSERT_EQ(rc2, 0);
+	}
       }
     }
   }
@@ -372,8 +410,11 @@ TEST(LibRGW, SETUP_DIRS1) {
 	    st.st_mode = 644;
 	    sf.rgw_fh->create_stat(&st, create_mask);
 
-	    /* open handle */
-	    rc = rgw_open(fs, sf.fh, 0 /* posix flags */, 0 /* flags */);
+	    /* open handle;  a write open of a not-yet-existing object
+	     * needs a mode and CREATE--rgw_open() no longer just sets a
+	     * flag, it resolves and binds the positional view */
+	    rc = rgw_open(fs, sf.fh, O_RDWR,
+			  RGW_OPEN_FLAG_V3|RGW_OPEN_FLAG_CREATE);
 	    ASSERT_EQ(rc, 0);
 	    ASSERT_TRUE(sf.rgw_fh->is_open());
 	    /* stage seq write */
@@ -444,8 +485,9 @@ TEST(LibRGW, SETATTR) {
 	st.st_mode = 644;
 	sf.rgw_fh->create_stat(&st, create_mask);
 
-	/* open handle */
-	rc = rgw_open(fs, sf.fh, 0 /* posix flags */, 0 /* flags */);
+	/* open handle (see SETUP_DIRS1 for why the mode and CREATE) */
+	rc = rgw_open(fs, sf.fh, O_RDWR,
+		      RGW_OPEN_FLAG_V3|RGW_OPEN_FLAG_CREATE);
 	ASSERT_EQ(rc, 0);
 	ASSERT_TRUE(sf.rgw_fh->is_open());
 	/* stage seq write */
@@ -806,7 +848,8 @@ TEST(LibRGW, WRITEF_DIRS1) {
       fobj.sync();
 
       /* begin write transaction */
-      rc = rgw_open(fs, fobj.fh, 0 /* posix flags */, 0 /* flags */);
+      rc = rgw_open(fs, fobj.fh, O_RDWR,
+		    RGW_OPEN_FLAG_V3|RGW_OPEN_FLAG_CREATE);
       ASSERT_EQ(rc, 0);
       ASSERT_TRUE(fobj.rgw_fh->is_open());
 
@@ -865,6 +908,11 @@ TEST(LibRGW, RELEASE_DIRS1) {
 		    << " refs: " << obj.rgw_fh->get_refcnt()
 		    << std::endl;
 	}
+	/* Reclamation of a stateless open is asynchronous, so wait for it
+	 * rather than sampling and assuming it has happened.  This asserts
+	 * more than the bare check did:  not merely that nothing was taken,
+	 * but that what was taken came back. */
+	wait_refcnt(obj.rgw_fh, 2UL);
 	ASSERT_EQ(obj.rgw_fh->get_refcnt(), 2UL);
 	rc = rgw_fh_rele(fs, obj.fh, 0 /* flags */);
 	ASSERT_EQ(rc, 0);
@@ -1014,7 +1062,8 @@ TEST(LibRGW, MARKER1_SETUP_OBJECTS)
       ASSERT_EQ(ret, 0);
       obj.rgw_fh = get_rgwfh(obj.fh);
       // open object--open transaction
-      ret = rgw_open(fs, obj.fh, 0 /* posix flags */, RGW_OPEN_FLAG_NONE);
+      ret = rgw_open(fs, obj.fh, O_RDWR,
+		     RGW_OPEN_FLAG_V3|RGW_OPEN_FLAG_CREATE);
       ASSERT_EQ(ret, 0);
       ASSERT_TRUE(obj.rgw_fh->is_open());
       // unstable write data

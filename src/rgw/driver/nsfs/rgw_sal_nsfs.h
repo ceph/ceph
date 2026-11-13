@@ -104,6 +104,23 @@ WRITE_CLASS_ENCODER(ObjectType);
 
 class Directory;
 
+/* Attribute write contract.
+ *
+ * REPLACE_ALL is the bucket contract:  bucket attrs are one map (a
+ * single blob on rados), so the incoming set is the complete set and
+ * anything absent from it is removed.  The bucket delete ops in
+ * rgw_op.cc depend on this -- they erase from the map and call
+ * put_info().
+ *
+ * MERGE is the object contract, matching RGWRados::set_attrs():  the
+ * incoming set is added or overwritten, nothing else is touched, and
+ * removals are named explicitly in rmattrs.
+ */
+enum class AttrWriteMode {
+  REPLACE_ALL,
+  MERGE,
+};
+
 class FSEnt {
 protected:
   std::string fname;
@@ -150,7 +167,9 @@ public:
   virtual int remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children) = 0;
   virtual int write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) = 0;
   virtual int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) = 0;
-  virtual int write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs, Attrs* extra_attrs);
+  virtual int write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs, Attrs* extra_attrs,
+			  AttrWriteMode mode = AttrWriteMode::REPLACE_ALL,
+			  const std::vector<std::string>* rmattrs = nullptr);
   virtual int read_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs);
   virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name) = 0;
   virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname) = 0;
@@ -421,6 +440,19 @@ protected:
   RGWQuotaHandler* quota_handler{nullptr};
   RGWLC* lc{nullptr};
   bool use_lc_thread{false};
+  /* driver hint state (test only)--see driver_hint() */
+  bool inject_fork_race{false};
+  bool inject_skip_reclone{false};
+  /* fail a shadow build, so the cleanup paths run rather than being
+   * reasoned about:  "attrs" fails applying the create spec, "link" fails
+   * the linkat which makes the shadow visible */
+  bool inject_fsio_attrs_fail{false};
+  bool inject_fsio_link_fail{false};
+  /* skip the temp cleanup, so a test can assert that its detector sees a
+   * leak as well as that the code does not produce one.  Same idea as
+   * inject_skip_reclone:  the negative case belongs in the test rather than
+   * in a hand-edited build */
+  bool inject_fsio_skip_cleanup{false};
 
 public:
   NSFSDriver(CephContext *_cct) : StoreDriver(), cct(_cct), zone(this)
@@ -442,6 +474,8 @@ public:
     use_lc_thread = _use_lc_thread;
     return *this;
   }
+
+  bool have_fsio() const override { return true; }
 
   virtual int initialize(CephContext *cct, const DoutPrefixProvider *dpp);
   virtual const std::string get_name() const override { return "nsfs"; }
@@ -756,6 +790,18 @@ public:
   virtual CephContext* ctx(void) override { return userDB->ctx(); }
 
   virtual void register_admin_apis(RGWRESTMgr* mgr) override;
+  void get_features(std::map<std::string, std::string>& features);
+
+  int driver_hint(const DoutPrefixProvider* dpp,
+		  const std::string& hint,
+		  const std::map<std::string, std::string>& params,
+		  std::map<std::string, std::string>* out = nullptr) override;
+
+  bool fork_race_injected() const { return inject_fork_race; }
+  bool skip_reclone_injected() const { return inject_skip_reclone; }
+  bool fsio_attrs_fail_injected() const { return inject_fsio_attrs_fail; }
+  bool fsio_link_fail_injected() const { return inject_fsio_link_fail; }
+  bool fsio_skip_cleanup_injected() const { return inject_fsio_skip_cleanup; }
 
   /* Internal APIs */
   int get_root_fd() { return root_dir->get_fd(); }
@@ -837,7 +883,10 @@ public:
   virtual int read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch,
                          uint64_t end_epoch, uint32_t max_entries,
                          bool* is_truncated, RGWUsageIter& usage_iter,
-                         std::map<rgw_user_bucket, rgw_usage_log_entry>& usage) override { return 0; }
+                         std::map<rgw_user_bucket, rgw_usage_log_entry>& usage) override {
+    *is_truncated = false;
+    return 0;
+  }
   virtual int trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch,
                          uint64_t end_epoch, optional_yield y) override { return 0; }
   virtual int load_user(const DoutPrefixProvider* dpp, optional_yield y) override;
@@ -859,6 +908,9 @@ private:
   std::unique_ptr<nsfs::Directory> dir;
 
 public:
+  /* every nsfs bucket serves the positional view */
+  bool have_fsio() const override { return true; }
+
   NSFSBucket(NSFSDriver *_dr, nsfs::Directory* _p_dir, const rgw_bucket& _b, std::optional<std::string> _ns = std::nullopt)
     : StoreBucket(_b),
     driver(_dr),
@@ -1078,8 +1130,23 @@ public:
 			 bool* truncated, list_parts_each_t&& each_func,
 			 optional_yield y) override;
 
+  FSIOResult get_fsio_handle(const DoutPrefixProvider* dpp,
+			     uint32_t flags = FSIOObject::OPEN_FLAG_NONE,
+			     const FSIOCreateSpec* spec = nullptr) override;
+
+  int stat_fsio_view(const DoutPrefixProvider* dpp, struct stat* st,
+		     Attrs* attrs, uint32_t flags) override;
+
+  /* resolve this object's parent directory, opening the chain from the
+   * bucket root;  see the definition for why ent->get_parent() will not
+   * do for a nested key */
+  int resolve_parent_dir(const DoutPrefixProvider* dpp, bool create_dirs,
+			 std::vector<std::unique_ptr<nsfs::Directory>>& chain,
+			 nsfs::Directory*& dir, std::string& leaf);
+
   bool is_sync_completed(const DoutPrefixProvider* dpp, optional_yield y,
                          const ceph::real_time& obj_mtime) override;
+
   virtual int load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh = true) override;
   virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
 			    Attrs* delattrs, optional_yield y, uint32_t flags) override;
@@ -1141,7 +1208,8 @@ public:
   int open(const DoutPrefixProvider *dpp, bool create = false, bool temp_file = false);
   int close();
   int write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y);
-  int write_attrs(const DoutPrefixProvider* dpp, optional_yield y);
+  int write_attrs(const DoutPrefixProvider* dpp, optional_yield y,
+		  const std::vector<std::string>* rmattrs = nullptr);
   int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y);
   std::string gen_temp_fname();
   const std::string get_fname(bool use_version);
@@ -1152,6 +1220,56 @@ public:
   int fill_cache(const DoutPrefixProvider *dpp, optional_yield y, nsfs::fill_cache_cb_t& cb);
   int stat(const DoutPrefixProvider *dpp);
   int make_ent(nsfs::ObjectType type);
+
+ class NSFSFSIOObject : public FSIOObject {
+  private:
+   NSFSObject* src_obj;
+   NSFSDriver* driver;
+   int shadow_fd{-1};
+   int shadow_dir_fd{-1};
+   int parent_fd{-1};
+   std::string shadow_name;
+   std::string leaf_name;
+   bool ephemeral{false};
+   std::vector<std::unique_ptr<nsfs::Directory>> dir_chain;
+
+   friend class NSFSObject;
+
+  protected:
+   NSFSFSIOObject(NSFSObject* _obj, NSFSDriver* _drv, bool _ephemeral)
+     : src_obj(_obj), driver(_drv), ephemeral(_ephemeral) {}
+
+  public:
+    virtual int preadv(const struct iovec* iov, int iovcnt,
+		       uint64_t ofs, uint64_t* bytes_read,
+		       uint32_t flags) override;
+    virtual int pwritev(const struct iovec* iov, int iovcnt,
+			uint64_t ofs, uint64_t* bytes_written,
+			uint32_t flags) override;
+    virtual int commit(const DoutPrefixProvider* dpp, uint32_t flags) override;
+    virtual int publish(const DoutPrefixProvider* dpp, uint32_t flags) override;
+    virtual int reclone(const DoutPrefixProvider* dpp, uint32_t flags) override;
+    virtual int close(const DoutPrefixProvider* dpp, uint32_t flags) override;
+    virtual int discard(const DoutPrefixProvider* dpp, uint32_t flags) override;
+    virtual int ftruncate(const DoutPrefixProvider* dpp, uint64_t size,
+			  uint32_t flags) override;
+
+    virtual int fstat(struct stat* st, uint32_t flags) override;
+    virtual int fgetattr(const DoutPrefixProvider* dpp,
+			  const std::string& name, bufferlist& dest,
+			  uint32_t flags) override;
+    virtual int fsetattr(const DoutPrefixProvider* dpp,
+			  const std::string& name, const bufferlist& val,
+			  uint32_t flags) override;
+    virtual int fgetattrs(const DoutPrefixProvider* dpp,
+			   Attrs& attrs, uint32_t flags) override;
+    virtual int fsetattrs(const DoutPrefixProvider* dpp,
+			   Attrs& attrs, uint32_t flags) override;
+    virtual int fremovexattr(const DoutPrefixProvider* dpp,
+			      const std::string& name, uint32_t flags) override;
+
+    virtual ~NSFSFSIOObject() override;
+  }; /* NSFSFSIOObject */
 
 protected:
   int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y);

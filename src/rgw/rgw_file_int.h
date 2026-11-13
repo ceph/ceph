@@ -3,19 +3,26 @@
 
 #pragma once
 
+#include "rgw_sal.h"
 #include "include/rados/rgw_file.h"
 
 /* internal header */
 #include <cstdint>
+#include <memory>
+#include <fcntl.h>
 #include <string.h>
 #include <string_view>
 #include <sys/stat.h>
 #include <stdint.h>
+#include <sys/types.h>
 
 #include <atomic>
 #include <chrono>
 #include <thread>
 #include <mutex>
+#include <condition_variable>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include <deque>
 #include <algorithm>
@@ -59,6 +66,7 @@ namespace rgw {
 
 
   namespace bi = boost::intrusive;
+  typedef bi::link_mode<bi::safe_link> link_mode;  
 
   class RGWLibFS;
   class RGWFileHandle;
@@ -80,16 +88,7 @@ namespace rgw {
 
   /*
    * XXX
-   * The current 64-bit, non-cryptographic hash used here is intended
-   * for prototyping only.
-   *
-   * However, the invariant being prototyped is that objects be
-   * identifiable by their hash components alone.  We believe this can
-   * be legitimately implemented using 128-hash values for bucket and
-   * object components, together with a cluster-resident cryptographic
-   * key.  Since an MD5 or SHA-1 key is 128 bits and the (fast),
-   * non-cryptographic CityHash128 hash algorithm takes a 128-bit seed,
-   * speculatively we could use that for the final hash computations.
+   * 64-bit, non-cryptographic (but extremely sensitive) hash.
    */
   struct fh_key
   {
@@ -220,15 +219,76 @@ namespace rgw {
 		ctime{0,0}, mtime{0,0}, atime{0,0}, version(0) {}
     } state;
 
+  public:
     struct file {
+
+      std::atomic<int32_t> fd_next{2};
+
+      typedef bi::list_member_hook<link_mode> list_hook;
+
+      class Open {
+      public:
+        RGWFileHandle& fh;
+        list_hook file_open_hook;
+        uint32_t posix_flags;
+
+        Open(RGWFileHandle& _fh, uint32_t _posix_flags);
+        ~Open();
+
+        inline bool is_read_open()
+        {
+          return !(posix_flags & (O_WRONLY | O_RDWR));
+        }
+
+        inline bool is_write_open()
+        {
+          return ((posix_flags & O_WRONLY) || (posix_flags & O_RDWR));
+        }
+      }; /* Open */
+
+      using open_list =
+          bi::list<Open, bi::member_hook<Open, bi::list_member_hook<link_mode>,
+                                         &Open::file_open_hook>>;
+      open_list opens;
+
+      /* the stateless (NFSv3) open, if one is active;  librgw owns
+       * its lifetime and never exposes it as an rgw_open_fd */
+      Open* global_open{nullptr};
+      uint64_t stateless_timer_id{0};
+
+      /* read_opens counts read-only opens;  an O_RDWR open is
+       * counted in write_opens only (cf. Open::is_read_open) */
+      uint32_t read_opens{0};
+      uint32_t write_opens{0};
+
+      inline open_list::size_type open_count() { return opens.size(); }
+
+      std::unique_ptr<rgw::sal::Bucket> sal_bucket;
+      std::unique_ptr<rgw::sal::Object> sal_object;
+      /* shared so that in-flight i/o survives a concurrent close */
+      std::shared_ptr<sal::Object::FSIOObject> fsio_hdl;
       RGWWriteRequest* write_req;
+
       file() : write_req(nullptr) {}
       ~file();
-    };
+
+      /* XXX compiler required these to put a unique_ptr in one arm of std::variant */
+      file &operator=(const file &) {
+	ceph_assert(true); // not reached
+        return *this;
+      }
+
+      file(const file& rhs) {
+	ceph_assert(true); // not reached
+      }
+
+      file(file &&rhs) {
+	ceph_assert(true); // not reached
+      }
+    }; /* file */
 
     // coverity[missing_lock:SUPPRESS]
     struct directory {
-
       static constexpr uint32_t FLAG_NONE =     0x0000;
 
       uint32_t flags;
@@ -259,7 +319,15 @@ namespace rgw {
     static constexpr uint32_t FLAG_ROOT =    0x0002;
     static constexpr uint32_t FLAG_CREATE =  0x0004;
     static constexpr uint32_t FLAG_CREATING =  0x0008;
-    static constexpr uint32_t FLAG_SYMBOLIC_LINK = 0x0009; // XXXX bug?
+    /* 0x4000, not 0x0009.  It was 0x0009, which is FLAG_OPEN|FLAG_CREATING
+     * rather than a bit of its own -- so every symlink handle was born
+     * reporting is_open() and creating() true, and the type test below is a
+     * mask test which fires on either constituent bit.  Nothing misfired only
+     * because no caller passes those two into lookup_fh();  FLAG_CREATING
+     * becoming live made that a matter of luck rather than design.  The flags
+     * word is in-memory only -- encode_attrs() does not serialise it -- so
+     * moving the bit costs nothing on disk. */
+    static constexpr uint32_t FLAG_SYMBOLIC_LINK = 0x4000;
     static constexpr uint32_t FLAG_DIRECTORY = 0x0010;
     static constexpr uint32_t FLAG_BUCKET = 0x0020;
     static constexpr uint32_t FLAG_LOCK =   0x0040;
@@ -386,7 +454,7 @@ namespace rgw {
 	if (flags & FLAG_DIRECTORY) {
 	  fh.fh_type = RGW_FS_TYPE_DIRECTORY;
 	  variant_type = directory();
-        } else if(flags & FLAG_SYMBOLIC_LINK) {
+        } else if (flags & FLAG_SYMBOLIC_LINK) {
 	  fh.fh_type = RGW_FS_TYPE_SYMBOLIC_LINK;
           variant_type = file();
         } else {
@@ -505,6 +573,20 @@ namespace rgw {
       st->st_gid = state.owner_gid;
 
       st->st_mode = state.unix_mode;
+
+      /* if an FSIO handle is active, get live size/mtime from shadow */
+      auto* f = get_if<file>(&variant_type);
+      if (f && f->fsio_hdl) {
+	struct stat shadow_st;
+	if (f->fsio_hdl->fstat(&shadow_st, 0) == 0) {
+	  state.size = shadow_st.st_size;
+#ifdef HAVE_STAT_ST_MTIMESPEC_TV_NSEC
+	  state.mtime = shadow_st.st_mtimespec;
+#else
+	  state.mtime = shadow_st.st_mtim;
+#endif
+	}
+      }
 
       switch (fh.fh_type) {
       case RGW_FS_TYPE_DIRECTORY:
@@ -652,17 +734,7 @@ namespace rgw {
     bool stateless_open() const { return flags & FLAG_STATELESS_OPEN; }
     bool has_children() const;
 
-    int open(uint32_t gsh_flags) {
-      lock_guard guard(mtx);
-      if (! is_open()) {
-	if (gsh_flags & RGW_OPEN_FLAG_V3) {
-	  flags |= FLAG_STATELESS_OPEN;
-	}
-	flags |= FLAG_OPEN;
-	return 0;
-      }
-      return -EPERM;
-    }
+    int open(uint32_t rgw_openflags);
 
     typedef std::variant<uint64_t*, const char*> readdir_offset;
 
@@ -671,26 +743,68 @@ namespace rgw {
 
     int write(uint64_t off, size_t len, size_t *nbytes, void *buffer);
 
-    int commit(uint64_t offset, uint64_t length, uint32_t flags) {
-      /* NFS3 and NFSv4 COMMIT implementation
-       * the current atomic update strategy doesn't actually permit
-       * clients to read-stable until either CLOSE (NFSv4+) or the
-       * expiration of the active write timer (NFS3).  In the
-       * interim, the client may send an arbitrary number of COMMIT
-       * operations which must return a success result */
-      return 0;
-    }
+    /* NFS COMMIT:  make previously written data durable.  this is
+     * fsync, not publish--the shadow is durable and visible to NFS
+     * either way, and finalizing it into the S3 namespace is the
+     * business of close (or the idle finalizer).  a client may send
+     * an arbitrary number of COMMITs, which must all succeed */
+    int commit(uint64_t offset, uint64_t length, uint32_t flags);
 
     int write_finish(uint32_t flags = FLAG_NONE);
+
+    int open2(file::Open** /* out */, uint32_t posix_flags,
+              uint32_t rgw_openflags,
+              const struct rgw_open_args* args = nullptr);
+
+    /* stateless (NFSv3) open tracking:  at most one Open per file
+     * handle, created on demand and reclaimed by close or by the
+     * idle reaper */
+    int open_global(uint32_t posix_flags, uint32_t rgw_openflags);
+    int close_global(uint32_t flags);
+
+    /* change the access mode of an existing open (NFSv4 reopen) */
+    int reopen2(file::Open* open_hdl, uint32_t posix_flags);
+    /* mtx must be held */
+    int change_open_mode(file::Open* open_hdl, uint32_t posix_flags);
+
+    file::Open* get_global_open() {
+      lock_guard guard(mtx);
+      auto f = std::get_if<file>(&variant_type);
+      return f ? f->global_open : nullptr;
+    }
+
+    /* mtx must be held */
+    int do_open(file::Open** /* out */, uint32_t posix_flags,
+                uint32_t rgw_openflags,
+                const struct rgw_open_args* args = nullptr);
+    void arm_stateless_timer();
+    /* mtx must be held */
+    void discard_shadow();
+    /* mtx must be held */
+    void stamp_unix_attrs();
+    int readv(file::Open* open_hdl, const struct iovec* iov, int iov_cnt,
+              uint64_t offset, uint64_t* bytes_read, uint32_t flags);
+
+    int writev(file::Open* open_hdl, const struct iovec* iov, int iov_cnt,
+               uint64_t offset, uint64_t* bytes_written, uint32_t flags);
+
     int close();
+    int close2(file::Open* open_hdl, uint32_t flags);
+
+    /* NFS SETATTR with a size:  a complete write operation, not a
+     * cached attribute */
+    int truncate(uint64_t size);
 
     void open_for_create() {
       lock_guard guard(mtx);
       flags |= FLAG_CREATING;
     }
 
-    void clear_creating() {
-      lock_guard guard(mtx);
+    void clear_creating(uint32_t cflags = FLAG_NONE) {
+      unique_lock guard{mtx, std::defer_lock};
+      if (! (cflags & FLAG_LOCKED)) {
+	guard.lock();
+      }
       flags &= ~FLAG_CREATING;
     }
 
@@ -775,7 +889,6 @@ namespace rgw {
 	{ return fh.get_key() == k; }
     };
 
-    typedef bi::link_mode<bi::safe_link> link_mode; /* XXX normal */
 #if defined(FHCACHE_AVL)
     typedef bi::avl_set_member_hook<link_mode> tree_hook_type;
 #else
@@ -834,6 +947,14 @@ namespace rgw {
 
   inline RGWFileHandle* get_rgwfh(struct rgw_file_handle* fh) {
     return static_cast<RGWFileHandle*>(fh->fh_private);
+  }
+
+  inline RGWFileHandle::file::Open* fd_to_open(rgw_open_fd fd) {
+    return static_cast<RGWFileHandle::file::Open*>(fd);
+  }
+
+  inline rgw_open_fd open_to_fd(RGWFileHandle::file::Open* open) {
+    return static_cast<rgw_open_fd>(open);
   }
 
   inline enum rgw_fh_type fh_type_of(uint32_t flags) {
@@ -908,6 +1029,33 @@ namespace rgw {
       void operator()() {
 	rgw_fh.close(); /* will finish in-progress write */
 	rgw_fh.get_fs()->unref(&rgw_fh);
+      }
+    };
+
+    /* backstop for a stateless (NFSv3) writer which never closes:
+     * publish the shadow so the object reaches S3.  the shadow's fds
+     * are left open--releasing them is the ULP's business, and a
+     * writer which resumes simply reclones */
+    struct StatelessFinalize
+    {
+      RGWFileHandle& rgw_fh;
+
+      explicit StatelessFinalize(RGWFileHandle& _fh) : rgw_fh(_fh) {
+	/* the ledger entry and the reference are taken together, so an
+	 * observer holding stateless_pin_mtx never sees one without the
+	 * other.  only this constructor takes a reference--a copy of the
+	 * event into the timer's storage does not--so the ledger counts
+	 * arm events, which is what balances operator() */
+	pin_stateless(&rgw_fh);
+      }
+
+      void operator()() {
+	/* close, not merely publish:  a stateless open has no token held
+	 * anywhere outside librgw, so nothing is invalidated by releasing
+	 * it, and a later read or write simply reopens.  publishing is
+	 * part of the close when a writer is the last one out */
+	rgw_fh.close_global(RGWFileHandle::FLAG_NONE);
+	unpin_stateless(&rgw_fh);
       }
     };
 
@@ -998,6 +1146,67 @@ namespace rgw {
       /* release call-path ref */
       (void) fh_lru.unref(fh, cohort::lru::FLAG_NONE);
     }
+
+    /* Deterministic control of the stateless-finalize timer, for tests
+     * which assert on handle reference counts.
+     *
+     * The timer's reference cannot be inferred from the handle.
+     * close_global() clears file::stateless_timer_id while the pending
+     * event still holds the reference its constructor took, and only the
+     * event body returns it--so after an explicit close the pin is live
+     * with nothing to read it from.  A test which needs an exact expected
+     * refcount therefore has to be told, which is what the ledger below
+     * is for:  it is maintained at the two points that take and return
+     * the reference, so it is exact in every mode. */
+    enum class StatelessTimerMode : uint8_t {
+      NORMAL,   /* arm as configured */
+      DISARMED, /* arm_stateless_timer() is a no-op;  no event, no ref */
+      HELD,     /* armed at an interval which will not elapse in a test */
+    };
+
+    static std::atomic<StatelessTimerMode> stateless_timer_mode;
+
+    /* interval used in HELD mode:  long enough that no test outlives it */
+    static constexpr std::chrono::seconds stateless_held_interval{86400};
+
+    /* Whether to maintain the ledger below.  Off by default:  a live
+     * gateway has no use for it and should not pay a global mutex on
+     * every stateless open.  Only a test which needs the finalize term
+     * of an expected refcount turns it on, and must do so before the
+     * first open--toggling it with references outstanding would leave
+     * the count unbalanced.  A test running DISARMED needs none of this;
+     * with no timer there is no finalize reference to account for. */
+    static std::atomic<bool> stateless_ledger;
+
+    /* outstanding StatelessFinalize references, by handle */
+    static std::mutex stateless_pin_mtx;
+    static std::condition_variable stateless_pin_cv;
+    static std::unordered_map<const RGWFileHandle*, uint32_t> stateless_pins;
+    static std::unordered_set<uint64_t> stateless_armed_ids;
+
+    static void pin_stateless(RGWFileHandle* fh);
+    static void unpin_stateless(RGWFileHandle* fh);
+
+    /* how many finalize references this handle currently holds.  callers
+     * which also read get_refcnt() should hold stateless_pin_mtx across
+     * both, so the pair is consistent against a firing timer. */
+    static uint32_t stateless_pins_for(const RGWFileHandle* fh);
+
+    /* Fire every armed StatelessFinalize now and wait for the last one to
+     * return its reference;  suppress re-arming first, so the count can
+     * only fall.  Cancelling is not an alternative:  the constructor takes
+     * the reference and only operator() gives it back, so a cancelled
+     * event leaks it--which is why close_global() leaves it to fire. */
+    /* Returns the number of events it advanced.  A caller which asserts
+     * on the barrier wants to know it had something to do:  a quiesce
+     * which advanced nothing proves nothing about the barrier. */
+    static uint64_t quiesce_stateless_timers();
+
+    /* Whole-cache leak sweep at drain;  see ObjUnref in RGWLibFS::close().
+     * Off by default--a live gateway has no use for it, and the count is
+     * only meaningful once the caller has released what it holds. */
+    static bool sweep_on_drain;
+    static std::atomic<uint64_t> sweep_leaks;
 
     int authorize(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver) {
       int ret = driver->get_user_by_access_key(dpp, key.id, null_yield, &user);
@@ -2162,6 +2371,80 @@ public:
   void send_response() override {}
 
 }; /* RGWDeleteObjRequest */
+
+class RGWOpenRequest : public RGWLibRequest,
+		       public RGWOpen /* RGWOp */
+{
+public:
+  const std::string& bucket_name;
+  const std::string& obj_name;
+  std::unique_ptr<rgw::sal::Bucket> sal_bucket;
+  std::unique_ptr<rgw::sal::Object> sal_object;
+  uint64_t _size;
+  uint32_t flags;
+
+  static constexpr uint32_t FLAG_NONE =   0x000;
+  static constexpr uint32_t FLAG_WRITE =  0x001;
+  static constexpr uint32_t FLAG_CREATE = 0x002;
+
+  /* TODO: check args */
+  RGWOpenRequest(CephContext* _cct, std::unique_ptr<rgw::sal::User> _user,
+		 const std::string& _bname, const std::string& _oname,
+		 uint32_t _flags)
+    : RGWLibRequest(_cct, std::move(_user)), bucket_name(_bname),
+      obj_name(_oname), _size(0), flags(_flags) {
+    if (flags & (FLAG_WRITE | FLAG_CREATE)) {
+      write_open = true;
+    }
+    op = this;
+  }
+
+  const char* name() const override { return "stat_obj"; }
+  RGWOpType get_type() override { return RGW_OP_STAT_OBJ; }
+
+  /* getters */
+
+  bool only_bucket() override { return (flags & (FLAG_WRITE | FLAG_CREATE)); }
+
+  int op_init() override {
+    // assign driver, s, and dialect_handler
+    // framework promises to call op_init after parent init
+    RGWOp::init(RGWHandler::driver, get_state(), this);
+    op = this; // assign self as op: REQUIRED
+    return 0;
+  }
+
+  int header_init() override {
+
+    req_state* state = get_state();
+    state->info.method = "NFS"; /* XXX is this ok? */
+    state->op = OP_UNKNOWN; /* XXX is this ok?  OPEN not a http_op */
+
+    /* XXX derp derp derp */
+    state->relative_uri = make_uri(bucket_name, obj_name);
+    state->info.request_uri = state->relative_uri; // XXX
+    state->info.effective_uri = state->relative_uri;
+    state->info.request_params = "";
+    state->info.domain = ""; /* XXX ? */
+
+    return 0;
+  }
+
+  void send_response_data(ceph::buffer::list& _bl) override {
+    /* NOP */
+  }
+
+  void execute(optional_yield y) override {
+    RGWOpen::execute(y);
+    /* save Bucket and Object handles, and link them */
+    auto state = get_state();
+    sal_bucket = state->bucket->clone();
+    sal_object = state->object->clone();
+    sal_object->set_bucket(sal_bucket.get());
+    _size = state->obj_size;
+  }
+
+}; /* RGWOpenRequest */
 
 class RGWStatObjRequest : public RGWLibRequest,
 			  public RGWGetObj /* RGWOp */

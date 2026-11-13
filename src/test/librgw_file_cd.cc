@@ -44,7 +44,11 @@ namespace {
   bool do_multi = false;
   int multi_cnt = 10;
 
-  string bucket_name = "sorrydave";
+  /* private to this suite.  It used to be "sorrydave", which
+   * librgw_file_aw.cc and librgw_file_write2.cc also use -- so whichever ran
+   * first left the bucket behind and CREATE_BUCKET below could only return
+   * -EEXIST. */
+  string bucket_name = "cdtest";
 
   struct {
     int argc;
@@ -65,6 +69,20 @@ TEST(LibRGW, MOUNT) {
   ASSERT_NE(fs, nullptr);
 }
 
+/* Remove a bucket left by an earlier run, so the create below is actually
+ * exercised rather than returning -EEXIST.  DELETE_BUCKET only runs under
+ * --delete, so an ordinary --create run leaves its bucket behind and the
+ * next one starts dirty. */
+static void drop_leftover(const string& bn)
+{
+  struct rgw_file_handle* fh{nullptr};
+  if (rgw_lookup(fs, fs->root_fh, bn.c_str(), &fh, nullptr, 0,
+		 RGW_LOOKUP_FLAG_NONE) == 0) {
+    (void) rgw_unlink(fs, fs->root_fh, bn.c_str(), RGW_UNLINK_FLAG_NONE);
+    rgw_fh_rele(fs, fh, 0);
+  }
+}
+
 TEST(LibRGW, CREATE_BUCKET) {
   if (do_create) {
     struct stat st;
@@ -74,6 +92,7 @@ TEST(LibRGW, CREATE_BUCKET) {
     st.st_gid = owner_gid;
     st.st_mode = 755;
 
+    drop_leftover(bucket_name);
     int ret = rgw_mkdir(fs, fs->root_fh, bucket_name.c_str(), &st, create_mask,
 			&fh, RGW_MKDIR_FLAG_NONE);
     ASSERT_EQ(ret, 0);
@@ -101,6 +120,7 @@ TEST(LibRGW, CREATE_BUCKET_MULTI) {
     for (int ix = 0; ix < multi_cnt; ++ix) {
       string bn = bucket_name;
       bn += to_string(ix);
+      drop_leftover(bn);
       ret = rgw_mkdir(fs, fs->root_fh, bn.c_str(), &st, create_mask, &fh,
 		      RGW_MKDIR_FLAG_NONE);
       ASSERT_EQ(ret, 0);

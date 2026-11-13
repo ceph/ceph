@@ -4,6 +4,7 @@
 #include "include/compat.h"
 #include "include/rados/rgw_file.h"
 
+#include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 
@@ -30,6 +31,7 @@
 #include "services/svc_zone.h"
 
 #include <atomic>
+#include <cstdint>
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -46,6 +48,85 @@ namespace rgw {
 
   ceph::timer<ceph::mono_clock> RGWLibFS::write_timer{
     ceph::construct_suspended};
+
+  std::atomic<RGWLibFS::StatelessTimerMode> RGWLibFS::stateless_timer_mode{
+    RGWLibFS::StatelessTimerMode::NORMAL};
+
+  std::atomic<bool> RGWLibFS::stateless_ledger{false};
+  std::mutex RGWLibFS::stateless_pin_mtx;
+  std::condition_variable RGWLibFS::stateless_pin_cv;
+  std::unordered_map<const RGWFileHandle*, uint32_t> RGWLibFS::stateless_pins;
+  std::unordered_set<uint64_t> RGWLibFS::stateless_armed_ids;
+
+  bool RGWLibFS::sweep_on_drain = false;
+  std::atomic<uint64_t> RGWLibFS::sweep_leaks{0};
+
+  void RGWLibFS::pin_stateless(RGWFileHandle* fh)
+  {
+    if (likely(! stateless_ledger.load(std::memory_order_relaxed))) {
+      fh->get_fs()->ref(fh);
+      return;
+    }
+    lock_guard guard(stateless_pin_mtx);
+    ++stateless_pins[fh];
+    fh->get_fs()->ref(fh);
+  } /* RGWLibFS::pin_stateless */
+
+  void RGWLibFS::unpin_stateless(RGWFileHandle* fh)
+  {
+    if (likely(! stateless_ledger.load(std::memory_order_relaxed))) {
+      fh->get_fs()->unref(fh);
+      return;
+    }
+    {
+      lock_guard guard(stateless_pin_mtx);
+      auto it = stateless_pins.find(fh);
+      if (it != stateless_pins.end()) {
+	if (--(it->second) == 0) {
+	  stateless_pins.erase(it);
+	}
+      }
+      /* the unref is inside the lock so that an observer never sees the
+       * ledger fall before the reference does;  it may free the handle,
+       * which is why the ledger entry goes first and the pointer is only
+       * ever used as a key */
+      fh->get_fs()->unref(fh);
+    }
+    stateless_pin_cv.notify_all();
+  } /* RGWLibFS::unpin_stateless */
+
+  uint32_t RGWLibFS::stateless_pins_for(const RGWFileHandle* fh)
+  {
+    auto it = stateless_pins.find(fh);
+    return (it == stateless_pins.end()) ? 0 : it->second;
+  } /* RGWLibFS::stateless_pins_for */
+
+  uint64_t RGWLibFS::quiesce_stateless_timers()
+  {
+    /* suppress re-arming before draining, so the count can only fall */
+    stateless_timer_mode = StatelessTimerMode::DISARMED;
+
+    std::unordered_set<uint64_t> ids;
+    {
+      lock_guard guard(stateless_pin_mtx);
+      ids = stateless_armed_ids;
+    }
+    /* pull each armed event forward to now;  adjust_event() returns false
+     * for one which has already fired or is running, which is harmless--
+     * the wait below is on the ledger, not on this set */
+    uint64_t advanced{0};
+    for (const auto id : ids) {
+      if (write_timer.adjust_event(id, std::chrono::seconds(0))) {
+	++advanced;
+      }
+    }
+
+    unique_lock guard(stateless_pin_mtx);
+    stateless_pin_cv.wait(guard, []() { return stateless_pins.empty(); });
+    /* every recorded id has now fired */
+    stateless_armed_ids.clear();
+    return advanced;
+  } /* RGWLibFS::quiesce_stateless_timers */
 
   inline int valid_fs_bucket_name(const string& name) {
     int rc = valid_s3_bucket_name(name, false /* relaxed */);
@@ -177,12 +258,76 @@ namespace rgw {
 
     LookupFHResult fhr{nullptr, 0};
 
+    std::string obj_path = parent->format_child_name(path, false);
+
+    /* Resolve the NFS view directly, when the driver has one.  The
+     * fallback below synthesizes an S3 GET, which cannot see a shadow
+     * and brings a lookup-time s3:GetObject check that is the wrong
+     * permission for a lookup;  it is kept only for drivers with no
+     * positional view, and should not be extended. */
+    {
+      const DoutPrefix dp(cct, dout_subsys, "rgw stat_leaf: ");
+      std::unique_ptr<rgw::sal::Bucket> sal_bucket;
+      int rc = g_rgwlib->get_driver()->load_bucket(
+	&dp, rgw_bucket(user->get_tenant(), parent->bucket_name()),
+	&sal_bucket, null_yield);
+      if (rc == 0) {
+	auto sal_object = sal_bucket->get_object(rgw_obj_key(obj_path));
+	struct stat st;
+	rgw::sal::Attrs attrs;
+	memset(&st, 0, sizeof(st));
+
+	rc = sal_object->stat_fsio_view(&dp, &st, &attrs, 0);
+	if (rc == 0) {
+	  /* st_mode carries the type, so one call disambiguates what
+	   * the fallback needs two round trips for */
+	  bool is_dir = S_ISDIR(st.st_mode);
+	  if (((type == RGW_FS_TYPE_DIRECTORY) && !is_dir) ||
+	      ((type == RGW_FS_TYPE_FILE) && is_dir)) {
+	    return fhr; /* wrong type for the hint given */
+	  }
+
+	  fhr = lookup_fh(parent, path,
+			  is_dir ? RGWFileHandle::FLAG_DIRECTORY
+				 : RGWFileHandle::FLAG_CREATE);
+	  if (get<0>(fhr)) {
+	    RGWFileHandle* rgw_fh = get<0>(fhr);
+	    lock_guard guard(rgw_fh->mtx);
+	    rgw_fh->set_size(st.st_size);
+	    rgw_fh->set_times(st.st_mtim);
+
+	    auto find_attr = [&attrs](const char* k) -> buffer::list* {
+	      auto it = attrs.find(k);
+	      return (it != attrs.end()) ? &(it->second) : nullptr;
+	    };
+	    auto ux_key = find_attr(RGW_ATTR_UNIX_KEY1);
+	    auto ux_attrs = find_attr(RGW_ATTR_UNIX1);
+	    auto p_etag = find_attr(RGW_ATTR_ETAG);
+	    auto p_acl = find_attr(RGW_ATTR_ACL);
+	    if (p_etag) {
+	      rgw_fh->set_etag(*p_etag);
+	    }
+	    if (p_acl) {
+	      rgw_fh->set_acls(*p_acl);
+	    }
+	    if (ux_key && ux_attrs) {
+	      [[maybe_unused]] DecodeAttrsResult dar =
+		rgw_fh->decode_attrs(ux_key, ux_attrs);
+	    }
+	  }
+	  return fhr;
+	}
+	if (rc != -ENOTSUP) {
+	  /* the name does not exist in the NFS view */
+	  return fhr;
+	}
+      }
+    }
+
     /* XXX the need for two round-trip operations to identify file or
      * directory leaf objects is unnecessary--the current proposed
      * mechanism to avoid this is to store leaf object names with an
      * object locator w/o trailing slash */
-
-    std::string obj_path = parent->format_child_name(path, false);
 
     for (auto ix : { 0, 1, 2 }) {
       switch (ix) {
@@ -207,8 +352,14 @@ namespace rgw {
 	    /* restore attributes */
 	    auto ux_key = req.get_attr(RGW_ATTR_UNIX_KEY1);
 	    auto ux_attrs = req.get_attr(RGW_ATTR_UNIX1);
-            rgw_fh->set_etag(*(req.get_attr(RGW_ATTR_ETAG)));
-            rgw_fh->set_acls(*(req.get_attr(RGW_ATTR_ACL)));
+	    auto p_etag = req.get_attr(RGW_ATTR_ETAG);
+	    auto p_acl = req.get_attr(RGW_ATTR_ACL);
+	    if (p_etag) {
+	      rgw_fh->set_etag(*p_etag);
+	    }
+	    if (p_acl) {
+	      rgw_fh->set_acls(*p_acl);
+	    }
             if (ux_key && ux_attrs) {
               /* restores unix attrs */
               [[maybe_unused]] DecodeAttrsResult dar = rgw_fh->decode_attrs(ux_key, ux_attrs);
@@ -241,8 +392,14 @@ namespace rgw {
 	    /* restore attributes */
 	    auto ux_key = req.get_attr(RGW_ATTR_UNIX_KEY1);
 	    auto ux_attrs = req.get_attr(RGW_ATTR_UNIX1);
-            rgw_fh->set_etag(*(req.get_attr(RGW_ATTR_ETAG)));
-            rgw_fh->set_acls(*(req.get_attr(RGW_ATTR_ACL)));
+	    auto p_etag = req.get_attr(RGW_ATTR_ETAG);
+	    auto p_acl = req.get_attr(RGW_ATTR_ACL);
+	    if (p_etag) {
+	      rgw_fh->set_etag(*p_etag);
+	    }
+	    if (p_acl) {
+	      rgw_fh->set_acls(*p_acl);
+	    }
             if (ux_key && ux_attrs) {
               /* restores unix attrs */
               [[maybe_unused]] DecodeAttrsResult dar =
@@ -443,6 +600,9 @@ namespace rgw {
     if (! rc || rc == -ENOENT) {
       // coverity[var_deref_op:SUPPRESS]
       rgw_fh->flags |= RGWFileHandle::FLAG_DELETED;
+      /* drop the shadow's name;  open descriptors keep working until
+       * the last is returned, and the view is never published */
+      rgw_fh->discard_shadow();
       fh_cache.remove(rgw_fh->fh.fh_hk.object, rgw_fh,
 		      RGWFileHandle::FHCache::FLAG_LOCK);
     }
@@ -741,8 +901,16 @@ namespace rgw {
         if (st)
 	  (void) rgw_fh->stat(st, RGWFileHandle::FLAG_LOCKED);
 
-        rgw_fh->set_etag(*(req.get_attr(RGW_ATTR_ETAG)));
-        rgw_fh->set_acls(*(req.get_attr(RGW_ATTR_ACL))); 
+	{
+	  auto p_etag = req.get_attr(RGW_ATTR_ETAG);
+	  auto p_acl = req.get_attr(RGW_ATTR_ACL);
+	  if (p_etag) {
+	    rgw_fh->set_etag(*p_etag);
+	  }
+	  if (p_acl) {
+	    rgw_fh->set_acls(*p_acl);
+	  }
+	}
 
 	get<0>(mkr) = rgw_fh;
 	rgw_fh->file_ondisk_version = 0; // inital version
@@ -882,6 +1050,18 @@ namespace rgw {
     buffer::list etag = rgw_fh->get_etag();
     buffer::list acls = rgw_fh->get_acls();
 
+    bool truncated{false};
+
+    if ((mask & RGW_SETATTR_SIZE) && st && rgw_fh->is_file()) {
+      /* a size change is a data operation--apply it to the shadow
+       * before the attribute pass (which takes rgw_fh->mtx) */
+      rc = rgw_fh->truncate(st->st_size);
+      if (!! rc) {
+        return rc;
+      }
+      truncated = true;
+    }
+
     lock_guard guard(rgw_fh->mtx);
 
     switch(rgw_fh->fh.fh_type) {
@@ -899,6 +1079,29 @@ namespace rgw {
       break;
     };
 
+    rgw_fh->create_stat(st, mask);
+
+    /* if FSIO handle is active, write attrs to the shadow */
+    auto* f = std::get_if<RGWFileHandle::file>(&rgw_fh->variant_type);
+    if (f && f->fsio_hdl) {
+      rgw_fh->encode_attrs(ux_key, ux_attrs);
+      rgw::sal::Attrs attrs;
+      attrs[RGW_ATTR_UNIX_KEY1] = std::move(ux_key);
+      attrs[RGW_ATTR_UNIX1] = std::move(ux_attrs);
+      if (etag.length()) {
+	attrs[RGW_ATTR_ETAG] = std::move(etag);
+      }
+      if (acls.length()) {
+	attrs[RGW_ATTR_ACL] = std::move(acls);
+      }
+      const DoutPrefix adp(cct, dout_subsys, "rgw setattr: ");
+      rc = f->fsio_hdl->fsetattrs(&adp, attrs, 0);
+      if (rc == 0) {
+	rgw_fh->set_ctime(real_clock::to_timespec(real_clock::now()));
+      }
+      return rc;
+    }
+
     string obj_name{rgw_fh->relative_object_name()};
 
     if (rgw_fh->is_dir() &&
@@ -908,14 +1111,21 @@ namespace rgw {
 
     RGWSetAttrsRequest req(cct, user->clone(), rgw_fh->bucket_name(), obj_name);
 
-    rgw_fh->create_stat(st, mask);
     rgw_fh->encode_attrs(ux_key, ux_attrs);
 
     /* save attrs */
     req.emplace_attr(RGW_ATTR_UNIX_KEY1, std::move(ux_key));
     req.emplace_attr(RGW_ATTR_UNIX1, std::move(ux_attrs));
-    req.emplace_attr(RGW_ATTR_ETAG, std::move(etag));
-    req.emplace_attr(RGW_ATTR_ACL, std::move(acls));
+    /* only stamp etag and acl when we have them--writing an empty
+     * bufferlist over a good policy leaves it undecodable.  after a
+     * truncate, publish() has already stamped an etag for the new
+     * content, so the handle's cached one is stale as well */
+    if ((! truncated) && etag.length()) {
+      req.emplace_attr(RGW_ATTR_ETAG, std::move(etag));
+    }
+    if (acls.length()) {
+      req.emplace_attr(RGW_ATTR_ACL, std::move(acls));
+    }
 
     rc = g_rgwlib->get_fe()->execute_req(&req);
     rc2 = req.get_ret();
@@ -972,6 +1182,52 @@ namespace rgw {
     if ((rgw_fh->is_bucket()) ||
 	(rgw_fh->is_root()))  {
       return -EINVAL;
+    }
+
+    /* if FSIO handle is active, read xattrs from shadow */
+    auto* f = std::get_if<RGWFileHandle::file>(&rgw_fh->variant_type);
+    if (f && f->fsio_hdl) {
+      const DoutPrefix xdp(cct, dout_subsys, "rgw getxattrs: ");
+      for (uint32_t ix = 0; ix < attrs->xattr_cnt; ++ix) {
+	auto& xattr = attrs->xattrs[ix];
+	std::string k = is_exposed_attr(xattr.key)
+	  ? std::string{xattr.key.val, xattr.key.len}
+	  : prefix_xattr_keystr(xattr.key);
+
+	bufferlist bl;
+	int rc = f->fsio_hdl->fgetattr(&xdp, k, bl, 0);
+	if (rc < 0) {
+	  continue;
+	}
+
+	std::string_view svk =
+	  is_exposed_attr(xattr.key)
+	  ? std::string_view{xattr.key.val, xattr.key.len}
+	  : unprefix_xattr_keystr(k);
+
+	if (svk.empty()) {
+	  continue;
+	}
+
+	/* The terminator is representation, not value.  An S3 client never
+	 * sees it, because the HTTP layer reads the attribute with
+	 * c_str();  an NFS client should not see it either.  Values
+	 * written before this was stored consistently simply do not have
+	 * one, and are unaffected. */
+	std::string val = bl.to_str();
+	if (!val.empty() && (val.back() == '\0')) {
+	  val.pop_back();
+	}
+	rgw_xattrstr xattr_k = { const_cast<char*>(svk.data()),
+				  uint32_t(svk.length()) };
+	rgw_xattrstr xattr_v = { const_cast<char*>(val.c_str()),
+				  uint32_t(val.length()) };
+	rgw_xattr xa = { xattr_k, xattr_v };
+	rgw_xattrlist xattrlist = { &xa, 1 };
+
+	cb(&xattrlist, cb_arg, RGW_GETXATTR_FLAG_NONE);
+      }
+      return 0;
     }
 
     int rc, rc2, rc3;
@@ -1034,9 +1290,14 @@ namespace rgw {
 
 	rgw_xattrstr xattr_k = { const_cast<char*>(svk.data()),
 				 uint32_t(svk.length())};
-	rgw_xattrstr xattr_v =
-	  {const_cast<char*>(const_cast<buffer::list&>(v).c_str()),
-	   uint32_t(v.length())};
+	/* the terminator is representation, not value -- see the FSIO
+	 * branch above */
+	std::string val = const_cast<buffer::list&>(v).to_str();
+	if (!val.empty() && (val.back() == '\0')) {
+	  val.pop_back();
+	}
+	rgw_xattrstr xattr_v = { const_cast<char*>(val.c_str()),
+				 uint32_t(val.length()) };
 	rgw_xattr xattr = { xattr_k, xattr_v };
 	rgw_xattrlist xattrlist = { &xattr, 1 };
 
@@ -1055,6 +1316,40 @@ namespace rgw {
     if ((rgw_fh->is_bucket()) ||
 	(rgw_fh->is_root()))  {
       return -EINVAL;
+    }
+
+    /* if FSIO handle is active, list xattrs from shadow */
+    auto* f = std::get_if<RGWFileHandle::file>(&rgw_fh->variant_type);
+    if (f && f->fsio_hdl) {
+      const DoutPrefix xdp(cct, dout_subsys, "rgw lsxattrs: ");
+      rgw::sal::Attrs shadow_attrs;
+      int rc = f->fsio_hdl->fgetattrs(&xdp, shadow_attrs, 0);
+      if (rc < 0) {
+	return rc;
+      }
+      for (const auto& [k, v] : shadow_attrs) {
+	std::string_view svk =
+	  is_exposed_attr(rgw_xattrstr{const_cast<char*>(k.c_str()),
+				       uint32_t(k.length())})
+	  ? k
+	  : unprefix_xattr_keystr(k);
+
+	if (svk.empty()) {
+	  continue;
+	}
+
+	rgw_xattrstr xattr_k = { const_cast<char*>(svk.data()),
+				  uint32_t(svk.length()) };
+	rgw_xattrstr xattr_v = { nullptr, 0 };
+	rgw_xattr xattr = { xattr_k, xattr_v };
+	rgw_xattrlist xattrlist = { &xattr, 1 };
+
+	auto cbr = cb(&xattrlist, cb_arg, RGW_LSXATTR_FLAG_NONE);
+	if (cbr & RGW_LSXATTR_FLAG_STOP) {
+	  break;
+	}
+      }
+      return 0;
     }
 
     int rc, rc2, rc3;
@@ -1106,6 +1401,37 @@ namespace rgw {
       return -EINVAL;
     }
 
+    /* if FSIO handle is active, write xattrs to shadow */
+    auto* f = std::get_if<RGWFileHandle::file>(&rgw_fh->variant_type);
+    if (f && f->fsio_hdl) {
+      const DoutPrefix xdp(cct, dout_subsys, "rgw setxattrs: ");
+      for (uint32_t ix = 0; ix < attrs->xattr_cnt; ++ix) {
+	auto& xattr = attrs->xattrs[ix];
+	if (!(xattr.key.len > 0)) {
+	  continue;
+	}
+	if (is_exposed_attr(xattr.key)) {
+	  continue;
+	}
+	string k = prefix_xattr_keystr(xattr.key);
+	bufferlist bl;
+	/* Store it as S3 would.  rgw_get_request_metadata() appends the
+	 * terminator and counts it, so that a reader can treat the value
+	 * as a C string;  on a filesystem backend the bufferlist's bytes
+	 * are the file's xattr, so the same metadata set over NFS has to
+	 * land in the same bytes as it would over S3, or the two protocols
+	 * disagree about an object they both see.  getxattrs() takes the
+	 * terminator back off. */
+	bl.append(xattr.val.val, xattr.val.len);
+	bl.append('\0');
+	int rc = f->fsio_hdl->fsetattr(&xdp, k, bl, 0);
+	if (rc < 0) {
+	  return rc;
+	}
+      }
+      return 0;
+    }
+
     int rc, rc2;
     string obj_name{rgw_fh->relative_object_name2()};
 
@@ -1123,7 +1449,9 @@ namespace rgw {
 	continue;
 
       string k = prefix_xattr_keystr(xattr.key);
+      /* terminated and counted, as above */
       attr_bl.append(xattr.val.val, xattr.val.len);
+      attr_bl.append('\0');
       req.emplace_attr(k.c_str(), std::move(attr_bl));
     }
 
@@ -1145,6 +1473,24 @@ namespace rgw {
     if ((rgw_fh->is_bucket()) ||
 	(rgw_fh->is_root()))  {
       return -EINVAL;
+    }
+
+    /* if FSIO handle is active, remove xattrs from shadow */
+    auto* f = std::get_if<RGWFileHandle::file>(&rgw_fh->variant_type);
+    if (f && f->fsio_hdl) {
+      const DoutPrefix xdp(cct, dout_subsys, "rgw rmxattrs: ");
+      for (uint32_t ix = 0; ix < attrs->xattr_cnt; ++ix) {
+	auto& xattr = attrs->xattrs[ix];
+	if (!(xattr.key.len > 0)) {
+	  continue;
+	}
+	string k = prefix_xattr_keystr(xattr.key);
+	int rc = f->fsio_hdl->fremovexattr(&xdp, k, 0);
+	if (rc < 0 && rc != -ENODATA) {
+	  return rc;
+	}
+      }
+      return 0;
     }
 
     int rc, rc2;
@@ -1224,6 +1570,30 @@ namespace rgw {
 	  << fh->name
 	  << " before ObjUnref refs=" << fh->get_refcnt()
 	  << dendl;
+	/* Whole-cache leak sweep.  The per-entry checks a test makes only
+	 * cover handles it enumerated;  this sees every handle the cache
+	 * still holds.  At drain the only references left should be the
+	 * sentinel and any finalize event still pending, so anything above
+	 * that was leaked by a path which never gave its reference back.
+	 * Reported, not asserted:  close() runs on the umount path, where
+	 * aborting would lose the rest of the teardown. */
+	/* Files only.  A directory carries one reference per live child
+	 * (lookup_fh() refs the parent), and drain pops the queue in no
+	 * particular order, so a directory's expected count changes as its
+	 * children go and is not knowable here.  A leaked handle is a file
+	 * handle in every case this screens for. */
+	if (sweep_on_drain && (! fh->is_dir())) {
+	  lock_guard guard(stateless_pin_mtx);
+	  const auto refcnt = fh->get_refcnt();
+	  const auto expected = 1 /* sentinel */ + stateless_pins_for(fh);
+	  if (refcnt != expected) {
+	    lsubdout(fs->get_context(), rgw, 0)
+	      << "LEAK " << fh->name
+	      << " refs=" << refcnt << " expected=" << expected
+	      << dendl;
+	    ++sweep_leaks;
+	  }
+	}
 	fs->unref(fh);
       }
     };
@@ -1763,6 +2133,716 @@ namespace rgw {
     return rc;
   } /* RGWFileHandle::write_finish */
 
+  /* backward-compatible open, no open tracking */
+  int
+  RGWFileHandle::open(uint32_t rgw_openflags)
+  {
+    lock_guard guard(mtx);
+    if (! is_open()) {
+      if (rgw_openflags & RGW_OPEN_FLAG_V3) {
+        flags |= FLAG_STATELESS_OPEN;
+      }
+      flags |= FLAG_OPEN;
+	return 0;
+      }
+    return -EPERM;
+  } /*  RGWFileHandle::open */
+
+  int RGWFileHandle::open2(file::Open** out, uint32_t posix_flags,
+                           uint32_t rgw_openflags,
+                           const struct rgw_open_args* args)
+  {
+    if (!is_file()) {
+      return -EINVAL;
+    }
+
+    lock_guard guard(mtx);
+    return do_open(out, posix_flags, rgw_openflags, args);
+  } /* RGWFileHandle::open2(...) */
+
+  /* mtx must be held */
+  int RGWFileHandle::do_open(file::Open** out, uint32_t posix_flags,
+                             uint32_t rgw_openflags,
+                             const struct rgw_open_args* args)
+  {
+
+    /*
+     * posixflags
+     *
+     * O_RDWR
+     * O_RDONLY
+     * O_WRONLY
+     * O_TRUNC
+     * O_EXCL
+     *
+     */
+
+    auto* fs = get_fs();
+    CephContext* cct = static_cast<CephContext*>(fs->get_fs()->rgw);
+    const DoutPrefix dp(cct, dout_subsys, "rgw open: ");
+
+    file* f = get_if<file>(&variant_type);
+    if (!f) {
+      return -EISDIR;
+    }
+
+    bool write_open = ((posix_flags & O_WRONLY) || (posix_flags & O_RDWR));
+
+    if (write_open) {
+      /* content may change from here, so the etag cached at lookup can
+       * no longer be stamped onto the object--publish() computes the
+       * authoritative one, and stat_leaf repopulates this at the next
+       * lookup.  ganesha issues a truncate and a setattr as two calls,
+       * so without this the second would put the pre-truncate etag back
+       * over the one the first just published */
+      etag.clear();
+    }
+
+    /* Optional arguments.  Absent, the create disposition is what it has
+     * always been:  RGW_OPEN_FLAG_CREATE plus O_EXCL. */
+    uint32_t createmode = RGW_CREATEMODE_NONE;
+    if (args) {
+      if (args->acl || args->acl_len ||
+	  (args->acl_encoding != RGW_ACL_ENCODING_NONE)) {
+	/* reserved.  refused rather than dropped:  a caller which believes
+	 * it set an ACL at create must not be told it succeeded */
+	return -ENOTSUP;
+      }
+      if (args->attr_mask && ! args->attrs) {
+	return -EINVAL;
+      }
+      createmode = args->createmode;
+
+      /* Initial attributes go onto the handle *before* the create, because
+       * encode_attrs() serialises handle state and the stamp below is what
+       * makes them durable.  This is also how an exclusive-create verifier
+       * arrives:  ganesha's set_common_verifier() puts it in atime/mtime, so
+       * it needs no special handling here -- but it does mean those two must
+       * survive byte-exact, since check_verifier compares tv_sec. */
+      if (args->attr_mask) {
+	create_stat(args->attrs, args->attr_mask);
+      }
+    }
+
+    auto* driver = g_rgwlib->get_driver(); /* XXXX need to link driver to fs */
+    if (driver->have_fsio()) {
+      /* the permission check needs this object's bucket and its full
+       * key, not the immediate parent's name and the leaf--those agree
+       * only for an object at the root of a bucket, which is why this
+       * went unnoticed:  a nested object looked its bucket up by the
+       * name of its containing directory and got NoSuchBucket */
+      const std::string& bkt_name = bucket_name();
+      std::string obj_name = relative_object_name();
+
+      if (! f->fsio_hdl) {
+        uint32_t op_flags = RGWOpenRequest::FLAG_NONE;
+        if (write_open) {
+          op_flags |= RGWOpenRequest::FLAG_WRITE;
+        }
+        if (rgw_openflags & RGW_OPEN_FLAG_CREATE) {
+          op_flags |= RGWOpenRequest::FLAG_CREATE;
+        }
+
+        RGWOpenRequest req(
+                           cct, g_rgwlib->get_driver()->get_user(fs->get_user()->user_id),
+                           bkt_name, obj_name, op_flags);
+
+        int rc = g_rgwlib->get_fe()->execute_req(&req);
+        if (rc < 0) {
+          return rc;
+        }
+
+        /* the driver has FSIO, but a bucket may not serve it */
+        if (! req.sal_bucket->have_fsio()) {
+          lsubdout(fs->get_context(), rgw, 4)
+            << __func__ << " " << obj_name
+            << ": bucket " << bkt_name << " does not serve FSIO" << dendl;
+          return -ENOTSUP;
+        }
+
+        uint32_t hopen_flags = sal::Object::FSIOObject::OPEN_FLAG_NONE;
+        if ((rgw_openflags & RGW_OPEN_FLAG_CREATE) ||
+	    (createmode >= RGW_CREATEMODE_UNCHECKED)) {
+          hopen_flags |= sal::Object::FSIOObject::OPEN_FLAG_CREATE;
+        }
+        if (posix_flags & O_TRUNC) {
+	  /* deliberately not implied by UNCHECKED:  that mode means "create
+	   * if absent, do not fail if present", and a client asking to
+	   * truncate says so with a size in the attributes.  Truncating here
+	   * would silently destroy an existing object on an ordinary
+	   * create-open */
+          hopen_flags |= sal::Object::FSIOObject::OPEN_FLAG_TRUNC;
+        }
+        if ((posix_flags & O_EXCL) ||
+	    (createmode >= RGW_CREATEMODE_GUARDED)) {
+	  /* GUARDED and both EXCLUSIVE modes all fail on an existing object.
+	   * Distinguishing a replay from a genuine conflict is the caller's
+	   * job:  ganesha compares the verifier it stored in atime/mtime
+	   * against what getattr returns, so all this layer owes it is
+	   * -EEXIST and attributes that come back unchanged */
+          hopen_flags |= sal::Object::FSIOObject::OPEN_FLAG_EXCL;
+        }
+        if (write_open) {
+          hopen_flags |= sal::Object::FSIOObject::OPEN_FLAG_WRITE;
+        }
+        /* What a create should apply, handed to the driver rather than
+	 * stamped by us afterwards.  The driver builds the shadow away from
+	 * its name and links it into place only once complete, so there is no
+	 * window in which another opener adopts a half-built view and no
+	 * half-built shadow left behind if it fails.  encode_attrs() reads
+	 * handle state, which create_stat() populated above. */
+        ceph::buffer::list ux_key, ux_attrs;
+        rgw::sal::Attrs iattrs;
+        struct timespec cts[2];
+        sal::Object::FSIOCreateSpec spec;
+        sal::Object::FSIOCreateSpec* specp = nullptr;
+        if (args && args->attr_mask) {
+          encode_attrs(ux_key, ux_attrs);
+          iattrs[RGW_ATTR_UNIX_KEY1] = std::move(ux_key);
+          iattrs[RGW_ATTR_UNIX1] = std::move(ux_attrs);
+          spec.attrs = &iattrs;
+          if (args->attr_mask & RGW_SETATTR_SIZE) {
+            spec.size = args->attrs->st_size;
+          }
+          if (args->attr_mask & (RGW_SETATTR_ATIME|RGW_SETATTR_MTIME)) {
+            cts[0] = (args->attr_mask & RGW_SETATTR_ATIME)
+              ? args->attrs->st_atim : timespec{0, UTIME_OMIT};
+            cts[1] = (args->attr_mask & RGW_SETATTR_MTIME)
+              ? args->attrs->st_mtim : timespec{0, UTIME_OMIT};
+            spec.times = cts;
+          }
+          specp = &spec;
+        }
+        auto f_result = req.sal_object->get_fsio_handle(&dp, hopen_flags,
+							specp);
+        if (!get<0>(f_result)) {
+          f->sal_bucket = std::move(req.sal_bucket);
+          f->sal_object = std::move(req.sal_object);
+          f->fsio_hdl = std::move(get<1>(f_result));
+        } else {
+          lsubdout(fs->get_context(), rgw, 0)
+            << __func__ << " " << obj_name
+            << ": attempt to open FSIO handle failed rc=="
+            << std::get<0>(f_result)
+            << dendl;
+          return std::get<0>(f_result);
+        }
+      }
+
+      /* a writer arriving on a handle bound to the published object,
+       * or on a shadow which has since been published, forks a new
+       * shadow and dup2()s it onto the shared fd--readers on this
+       * handle follow it without reopening */
+      if (write_open && f->fsio_hdl && f->fsio_hdl->needs_shadow()) {
+        int rc = f->fsio_hdl->reclone(&dp, rgw::sal::Object::FSIOObject::OPEN_FLAG_NONE);
+        if (!!rc) {
+          lsubdout(fs->get_context(), rgw, 0)
+            << __func__ << " " << obj_name
+            << " failed to establish shadow for write open" << dendl;
+          return rc;
+        }
+      }
+
+      /* O_TRUNC is consumed by get_fsio_handle only when the shadow is
+       * acquired here;  on a handle which already existed it has to be
+       * applied in place, so that clients rendezvoused on the shadow
+       * follow the truncation */
+      if (write_open && (posix_flags & O_TRUNC) && f->fsio_hdl) {
+        int rc = f->fsio_hdl->ftruncate(&dp, 0, 0);
+        if (!!rc) {
+          lsubdout(fs->get_context(), rgw, 0)
+            << __func__ << " " << obj_name
+            << " failed to truncate shadow" << dendl;
+          return rc;
+        }
+      }
+
+    } /* have fsio */
+
+    /* save on open list */
+    auto open = new file::Open(*this, posix_flags);
+    f->opens.push_back(*open);
+    *out = open;
+
+    if (rgw_openflags & RGW_OPEN_FLAG_V3) {
+      flags |= FLAG_STATELESS_OPEN;
+    }
+
+    if (open->is_read_open()) {
+      (f->read_opens)++;
+    }
+    if (open->is_write_open()) {
+      (f->write_opens)++;
+    }
+
+    /* The create intent recorded by rgw_lookup(RGW_LOOKUP_FLAG_CREATE) has
+     * now been acted on, whichever API got here.  Cleared in do_open()
+     * rather than at an entry point because rgw_open() and rgw_open2() both
+     * funnel through here, and only the former used to clear it -- so an
+     * open2 consumer left the flag set on the handle for good, and a later
+     * rgw_open() on that handle would infer a create it was not asked for. */
+    clear_creating(FLAG_LOCKED);
+
+    flags |= FLAG_OPEN;
+
+    /* ganesha's open2 fills attrs_out;  everything it wants was just
+     * stamped, so returning it here saves the caller a getattr */
+    if (args && args->attrs_out) {
+      (void) stat(args->attrs_out, FLAG_LOCKED);
+    }
+
+    return 0;
+  } /* RGWFileHandle::do_open(...) */
+
+  /* mtx must be held */
+  void RGWFileHandle::arm_stateless_timer()
+  {
+    using StatelessFinalize = RGWLibFS::StatelessFinalize;
+
+    file* f = get_if<file>(&variant_type);
+    if (! f) {
+      return;
+    }
+
+    /* an idle timer, not a deadline:  i/o on the stateless open
+     * defers it, so a slow but active writer never trips it */
+    auto interval = std::chrono::seconds(
+      fs->get_context()->_conf->rgw_nfs_stateless_finalize_secs);
+
+    /* tests which assert on reference counts pin the timer's contribution
+     * to a known constant;  see RGWLibFS::StatelessTimerMode */
+    const auto mode = RGWLibFS::stateless_timer_mode.load();
+    if (mode == RGWLibFS::StatelessTimerMode::DISARMED) {
+      return;
+    }
+    if (mode == RGWLibFS::StatelessTimerMode::HELD) {
+      interval = RGWLibFS::stateless_held_interval;
+    }
+
+    if (f->stateless_timer_id) {
+      RGWLibFS::write_timer.adjust_event(f->stateless_timer_id, interval);
+      return;
+    }
+
+    f->stateless_timer_id =
+      RGWLibFS::write_timer.add_event(interval, StatelessFinalize(*this));
+    if (RGWLibFS::stateless_ledger.load(std::memory_order_relaxed)) {
+      /* Gated on the ledger, not on the mode:  the barrier's own mode
+       * runs as NORMAL until it fires, so gating on the mode recorded
+       * nothing and left quiesce_stateless_timers() waiting out the real
+       * interval instead of pulling the events forward.  The ledger flag
+       * is the "a test is accounting for these" signal, which is exactly
+       * when the set is wanted--nothing erases an id when its event
+       * fires, so recording them in a live gateway would grow without
+       * bound. */
+      RGWLibFS::lock_guard guard(RGWLibFS::stateless_pin_mtx);
+      RGWLibFS::stateless_armed_ids.insert(f->stateless_timer_id);
+    }
+  } /* RGWFileHandle::arm_stateless_timer */
+
+  /* Write this handle's unix attrs onto the shadow, immediately before
+   * it is published.  mtx must be held.
+   *
+   * The legacy write path did this in RGWWriteRequest::exec_finish():
+   * it set size and mtime from what it had written, encoded, and
+   * emplaced UNIX_KEY1/UNIX1 as part of finishing the write.  The FSIO
+   * path had no equivalent, so a file created through open2/write/close
+   * carried no owner, group or mode at all.
+   *
+   * Doing it at publish rather than at create also captures a setattr
+   * issued while the open was held.  Size and mtime are refreshed from
+   * the shadow first:  encode_attrs() serializes the whole state, so
+   * stamping the handle's cached values would persist a size which
+   * disagrees with the data, and decode_attrs() would hand that back at
+   * the next lookup. */
+  void RGWFileHandle::stamp_unix_attrs()
+  {
+    file* f = get_if<file>(&variant_type);
+    if (! f || ! f->fsio_hdl) {
+      return;
+    }
+
+    CephContext* cct = static_cast<CephContext*>(fs->get_fs()->rgw);
+    const DoutPrefix dp(cct, dout_subsys, "rgw stamp_unix_attrs: ");
+
+    struct stat shadow_st;
+    if (f->fsio_hdl->fstat(&shadow_st, 0) == 0) {
+      state.size = shadow_st.st_size;
+#ifdef HAVE_STAT_ST_MTIMESPEC_TV_NSEC
+      state.mtime = shadow_st.st_mtimespec;
+#else
+      state.mtime = shadow_st.st_mtim;
+#endif
+    }
+
+    ceph::buffer::list ux_key, ux_attrs;
+    encode_attrs(ux_key, ux_attrs);
+
+    rgw::sal::Attrs attrs;
+    attrs[RGW_ATTR_UNIX_KEY1] = std::move(ux_key);
+    attrs[RGW_ATTR_UNIX1] = std::move(ux_attrs);
+
+    int rc = f->fsio_hdl->fsetattrs(&dp, attrs, 0);
+    if (!! rc) {
+      lsubdout(fs->get_context(), rgw, 0)
+        << __func__ << " " << object_name()
+        << " failed to stamp unix attrs rc=" << rc << dendl;
+    }
+  } /* RGWFileHandle::stamp_unix_attrs */
+
+  /* mtx must be held */
+  void RGWFileHandle::discard_shadow()
+  {
+    file* f = get_if<file>(&variant_type);
+    if (! f || ! f->fsio_hdl) {
+      return;
+    }
+
+    CephContext* cct = static_cast<CephContext*>(fs->get_fs()->rgw);
+    const DoutPrefix dp(cct, dout_subsys, "rgw discard_shadow: ");
+
+    int rc = f->fsio_hdl->discard(&dp, 0);
+    if ((!! rc) && (rc != -ENOTSUP)) {
+      lsubdout(fs->get_context(), rgw, 0)
+        << __func__ << " " << object_name()
+        << " failed to discard shadow rc=" << rc << dendl;
+    }
+  } /* RGWFileHandle::discard_shadow */
+
+  /* Move an existing open between read-only and write access.
+   * mtx must be held.
+   *
+   * An upgrade establishes the shadow, since a reader may be bound to
+   * the published object.  A downgrade publishes if it returns the last
+   * write open:  returning the last write open is what publishes,
+   * whether it is returned by closing or by giving up write intent.
+   * Keeping those two as one rule matters--close2() keys its publish
+   * off the closing open's mode, so a downgraded last writer would
+   * otherwise close through the read arm and leave the write
+   * unpublished with nothing left to publish it.  The cost when a
+   * client upgrades again is one COW fork.
+   *
+   * read_opens counts read-*only* opens;  an O_RDWR open is counted in
+   * write_opens only (cf. Open::is_read_open), so a change of access
+   * moves the open between the two counts rather than adjusting one. */
+  int RGWFileHandle::change_open_mode(file::Open* open, uint32_t posix_flags)
+  {
+    auto* fs = get_fs();
+    CephContext* cct = static_cast<CephContext*>(fs->get_fs()->rgw);
+    const DoutPrefix dp(cct, dout_subsys, "rgw change_open_mode: ");
+
+    file* f = get_if<file>(&variant_type);
+    if (! f) {
+      return -EISDIR;
+    }
+
+    bool want_write = ((posix_flags & O_WRONLY) || (posix_flags & O_RDWR));
+
+    if (want_write == open->is_write_open()) {
+      /* same access class;  O_TRUNC is still honoured for a writer */
+      if (want_write && (posix_flags & O_TRUNC) && f->fsio_hdl) {
+        return f->fsio_hdl->ftruncate(&dp, 0, 0);
+      }
+      return 0;
+    }
+
+    if (want_write) {
+      if (f->fsio_hdl && f->fsio_hdl->needs_shadow()) {
+        int rc = f->fsio_hdl->reclone(
+          &dp, rgw::sal::Object::FSIOObject::OPEN_FLAG_NONE);
+        if (!! rc) {
+          lsubdout(fs->get_context(), rgw, 0)
+            << __func__ << " " << object_name()
+            << " failed to establish shadow for write upgrade" << dendl;
+          return rc;
+        }
+      }
+      if ((posix_flags & O_TRUNC) && f->fsio_hdl) {
+        int rc = f->fsio_hdl->ftruncate(&dp, 0, 0);
+        if (!! rc) {
+          lsubdout(fs->get_context(), rgw, 0)
+            << __func__ << " " << object_name()
+            << " failed to truncate shadow on write upgrade" << dendl;
+          return rc;
+        }
+      }
+      (f->read_opens)--;
+      open->posix_flags = (open->posix_flags & ~O_ACCMODE) | O_RDWR;
+      (f->write_opens)++;
+      return 0;
+    }
+
+    /* downgrade */
+    (f->write_opens)--;
+    open->posix_flags = (open->posix_flags & ~O_ACCMODE) | O_RDONLY;
+    (f->read_opens)++;
+
+    if ((f->write_opens == 0) && f->fsio_hdl && ! deleted()) {
+      stamp_unix_attrs();
+      int rc = f->fsio_hdl->publish(
+        &dp, rgw::sal::Object::FSIOObject::PUBLISH_FLAG_NONE);
+      if (!! rc) {
+        lsubdout(fs->get_context(), rgw, 0)
+          << __func__ << " " << object_name()
+          << " failed to publish on last writer downgrade" << dendl;
+        return rc;
+      }
+    }
+    return 0;
+  } /* RGWFileHandle::change_open_mode */
+
+  int RGWFileHandle::reopen2(file::Open* open, uint32_t posix_flags)
+  {
+    if (! open) {
+      return -EBADF;
+    }
+
+    lock_guard guard(mtx);
+
+    int rc = change_open_mode(open, posix_flags);
+    if (! rc) {
+      auto f = get_if<file>(&variant_type);
+      if (f && (f->global_open == open)) {
+        arm_stateless_timer();
+      }
+    }
+    return rc;
+  } /* RGWFileHandle::reopen2 */
+
+  int RGWFileHandle::open_global(uint32_t posix_flags,
+                                 uint32_t rgw_openflags)
+  {
+    if (!is_file()) {
+      return -EINVAL;
+    }
+
+    auto* fs = get_fs();
+    CephContext* cct = static_cast<CephContext*>(fs->get_fs()->rgw);
+    const DoutPrefix dp(cct, dout_subsys, "rgw open_global: ");
+
+    lock_guard guard(mtx);
+
+    file* f = get_if<file>(&variant_type);
+    if (! f) {
+      return -EISDIR;
+    }
+
+    if (f->global_open) {
+      int rc = change_open_mode(f->global_open, posix_flags);
+      if (! rc) {
+        arm_stateless_timer();
+      }
+      return rc;
+    }
+
+    file::Open* open{nullptr};
+    int rc = do_open(&open, posix_flags, rgw_openflags);
+    if (! rc) {
+      f->global_open = open;
+      flags |= FLAG_STATELESS_OPEN;
+      /* every stateless open is armed, not just a writer's:  nothing
+       * else reclaims one.  v4 tells us when it is done;  v3 does not,
+       * so we infer the close, and the cost of inferring it is a held
+       * descriptor and a pinned handle until the idle interval */
+      arm_stateless_timer();
+    }
+    return rc;
+  } /* RGWFileHandle::open_global */
+
+  int RGWFileHandle::close_global(uint32_t flags)
+  {
+    file::Open* open{nullptr};
+    {
+      lock_guard guard(mtx);
+      file* f = get_if<file>(&variant_type);
+      if (! f || ! f->global_open) {
+        return 0;
+      }
+      open = f->global_open;
+      f->global_open = nullptr;
+      /* the idle event holds a reference on this handle and releases
+       * it when it runs, so it is left to fire rather than cancelled;
+       * a spurious firing is a no-op */
+      f->stateless_timer_id = 0;
+    }
+    /* close2 takes mtx, and publishes if this was the last writer */
+    return close2(open, flags);
+  } /* RGWFileHandle::close_global */
+
+  int RGWFileHandle::readv(file::Open* open,
+                           const struct iovec* iov, int iov_cnt,
+                           uint64_t offset,
+                           uint64_t* bytes_read,
+                           uint32_t flags)
+  {
+    if (open->posix_flags & O_WRONLY) {
+      return -EBADF;
+    }
+
+    /* snapshot the handle:  a concurrent close (the idle reaper, or
+     * the ULP) may drop the file's reference while i/o is in flight */
+    std::shared_ptr<sal::Object::FSIOObject> hdl;
+    {
+      lock_guard guard(mtx);
+      auto f = get_if<file>(&variant_type);
+      if (unlikely(! f)) {
+        return -EINVAL; // or EISDIR
+      }
+      hdl = f->fsio_hdl;
+      if (f->global_open == open) {
+        /* activity on the stateless open defers reclamation.  the guard
+         * matters:  a stateful open is never the global one, so this
+         * keeps timer events to handles under v3 access rather than
+         * arming one for every read */
+        arm_stateless_timer();
+      }
+    }
+
+    if (! hdl) {
+      return -EBADF;
+    }
+
+    return hdl->preadv(iov, iov_cnt, offset, bytes_read, flags);
+  } /* readv */
+
+  int RGWFileHandle::writev(file::Open* open,
+                            const struct iovec* iov, int iov_cnt,
+                            uint64_t offset,
+                            uint64_t* bytes_written,
+                            uint32_t flags)
+  {
+    if (! open->is_write_open()) {
+      return -EBADF;
+    }
+
+    std::shared_ptr<sal::Object::FSIOObject> hdl;
+    {
+      lock_guard guard(mtx);
+      auto f = get_if<file>(&variant_type);
+      if (unlikely(! f)) {
+        return -EINVAL; // or EISDIR
+      }
+      hdl = f->fsio_hdl;
+      if (hdl && hdl->needs_shadow()) {
+        /* the shadow was published--by the idle finalizer, or by an
+         * earlier last-writer close--so fork a new one rather than
+         * mutating the live object */
+        CephContext* cct = static_cast<CephContext*>(fs->get_fs()->rgw);
+        const DoutPrefix dp(cct, dout_subsys, "rgw writev: ");
+        int rc = hdl->reclone(
+          &dp, rgw::sal::Object::FSIOObject::OPEN_FLAG_NONE);
+        if (!! rc) {
+          return rc;
+        }
+      }
+      if (f->global_open == open) {
+        /* activity on the stateless open defers the idle finalizer */
+        arm_stateless_timer();
+      }
+    }
+
+    if (! hdl) {
+      return -EBADF;
+    }
+
+    return hdl->pwritev(iov, iov_cnt, offset, bytes_written, flags);
+  } /* writev */
+
+  int RGWFileHandle::commit(uint64_t offset, uint64_t length, uint32_t flags)
+  {
+    std::shared_ptr<sal::Object::FSIOObject> hdl;
+    {
+      unique_lock guard{mtx, std::defer_lock};
+      if (likely(! (flags & FLAG_LOCKED))) {
+        guard.lock();
+      }
+      auto f = get_if<file>(&variant_type);
+      if (! f) {
+        return 0; /* not a file--nothing to make durable */
+      }
+      hdl = f->fsio_hdl;
+    }
+
+    if (! hdl) {
+      /* no shadow is attached:  a legacy write cycle, or nothing has
+       * been written through this handle.  COMMIT still succeeds */
+      return 0;
+    }
+
+    CephContext* cct = static_cast<CephContext*>(fs->get_fs()->rgw);
+    const DoutPrefix dp(cct, dout_subsys, "rgw commit: ");
+
+    return hdl->commit(&dp,
+		       rgw::sal::Object::FSIOObject::COMMIT_FLAG_NONE);
+  } /* RGWFileHandle::commit */
+
+  int RGWFileHandle::truncate(uint64_t size)
+  {
+    auto* driver = g_rgwlib->get_driver();
+    if (! driver->have_fsio()) {
+      /* legacy path:  size is advisory until the write cycle ends */
+      return 0;
+    }
+
+    CephContext* cct = static_cast<CephContext*>(fs->get_fs()->rgw);
+    const DoutPrefix dp(cct, dout_subsys, "rgw truncate: ");
+
+    file::Open* open{nullptr};
+    int rc{0};
+
+    {
+      lock_guard guard(mtx);
+
+      file* f = get_if<file>(&variant_type);
+      if (! f) {
+        return -EISDIR;
+      }
+      if (deleted()) {
+        return -ESTALE;
+      }
+
+      if (! f->fsio_hdl) {
+        /* no open is held:  the truncate is the whole operation, so
+         * take a write open and publish it below */
+        rc = do_open(&open, O_RDWR, RGW_OPEN_FLAG_NONE);
+        if (!! rc) {
+          return rc;
+        }
+      } else if (f->fsio_hdl->needs_shadow()) {
+        rc = f->fsio_hdl->reclone(
+          &dp, rgw::sal::Object::FSIOObject::OPEN_FLAG_NONE);
+        if (!! rc) {
+          return rc;
+        }
+      }
+
+      rc = f->fsio_hdl->ftruncate(&dp, size, 0);
+      if (!! rc) {
+        lsubdout(fs->get_context(), rgw, 0)
+          << __func__ << " " << object_name()
+          << " failed to truncate shadow to " << size
+          << " rc=" << rc << dendl;
+      } else {
+        set_size(size);
+        if (! open && (f->write_opens == 0)) {
+          /* readers may be attached, but no writer will publish this */
+          rc = f->fsio_hdl->publish(
+            &dp, rgw::sal::Object::FSIOObject::PUBLISH_FLAG_NONE);
+        }
+      }
+    } /* !LOCKED */
+
+    if (open) {
+      /* last (only) writer:  publishes */
+      int rc2 = close2(open, RGW_CLOSE_FLAG_NONE);
+      if (! rc) {
+        rc = rc2;
+      }
+    }
+
+    return rc;
+  } /* RGWFileHandle::truncate */
+
   int RGWFileHandle::close()
   {
     lock_guard guard(mtx);
@@ -1774,6 +2854,108 @@ namespace rgw {
 
     return rc;
   } /* RGWFileHandle::close */
+
+  int RGWFileHandle::close2(file::Open* open, uint32_t flags)
+  {
+    int rc{0};
+    CephContext* cct = static_cast<CephContext*>(fs->get_fs()->rgw);
+    const DoutPrefix dp(cct, dout_subsys, "rgw close2: ");
+
+    bool read_open = open->is_read_open();
+    bool write_open = open->is_write_open();
+
+    uint32_t close_flags{rgw::sal::Object::FSIOObject::CLOSE_FLAG_NONE};
+
+    if (unlikely(flags & RGW_CLOSE_FLAG_DETACH)) {
+      close_flags |= rgw::sal::Object::FSIOObject::CLOSE_FLAG_DETACH;
+    }
+
+    lock_guard guard(mtx); // XXX needed? probably
+
+    auto f = std::get_if<file>(&variant_type);
+    if (f) {
+      /* publish when the last write open is
+       * returned, close when all opens returned */
+      bool should_close{false};
+
+      if (read_open) {
+        (f->read_opens)--;
+      }
+      if (write_open) {
+        (f->write_opens)--;
+      }
+
+      int publish_rc{0};
+
+      if (write_open) {
+        if (f->write_opens == 0) {
+          if (f->fsio_hdl && ! deleted()) {
+            stamp_unix_attrs();
+            publish_rc = f->fsio_hdl->publish(&dp,
+                      rgw::sal::Object::FSIOObject::PUBLISH_FLAG_NONE);
+            if (!!publish_rc) {
+              lsubdout(fs->get_context(), rgw, 0)
+                << __func__ << " " << object_name()
+                << " failed to publish fsio handle " << dendl;
+            }
+          }
+          if (f->read_opens == 0) {
+            /* last open is returned */
+            should_close = true;
+          }
+        } /* write_opens == 0 */
+      } else {
+        /* read_open */
+        if (f->read_opens == 0) {
+          /* there is no general action to take here? */
+          if (f->write_opens == 0) {
+            should_close = true;
+          }
+        }
+      }
+
+      if (should_close) {
+        if (f->fsio_hdl) {
+          rc = f->fsio_hdl->close(&dp, close_flags);
+          if (!! rc) {
+            lsubdout(fs->get_context(), rgw, 0)
+              << __func__ << " " << object_name()
+              << " failed to close via fsio handle " << dendl;
+          }
+          /* reset fsio handles so re-opens see correct state */
+          f->fsio_hdl.reset();
+          f->sal_object.reset();
+        }
+
+        this->flags &= ~FLAG_OPEN;
+        this->flags &= ~FLAG_STATELESS_OPEN;
+      }
+
+      if (!! publish_rc) {
+        /* the caller's data did not reach the namespace;  that matters
+         * more than how the release itself went */
+        rc = publish_rc;
+      }
+
+      /* remove from opens list */
+      auto it = file::open_list::s_iterator_to(*open);
+      f->opens.erase(it);
+      delete(open);
+    }
+
+    return rc;
+  } /* RGWFileHandle::close2 */
+
+  RGWFileHandle::file::Open::Open(RGWFileHandle& _fh, uint32_t _posix_flags)
+    : fh(_fh), posix_flags(_posix_flags)
+  {
+    fh.get_fs()->ref(&fh);
+  }
+
+  RGWFileHandle::file::Open::~Open()
+  {
+    fh.get_fs()->unref(&fh);
+  }
 
   RGWFileHandle::file::~file()
   {
@@ -2000,7 +3182,10 @@ namespace rgw {
     etag.reserve(CEPH_CRYPTO_MD5_DIGESTSIZE * 2);
     buf_to_hex(m, std::back_inserter(etag));
 
-    bl.append(etag.c_str(), etag.size() + 1);
+    /* bare hex, no trailing NUL:  dump_etag() emits the attribute
+     * verbatim, and a stored NUL makes If-Match compare unequal --
+     * rgw_string_unquote() yields 32 bytes against a 33-byte value */
+    bl.append(etag.c_str(), etag.size());
     emplace_attr(RGW_ATTR_ETAG, std::move(bl));
 
     policy.encode(aclbl);
@@ -2109,6 +3294,15 @@ int rgw_mount2(librgw_t rgw, const char *uid, const char *acc_key,
                uint32_t flags)
 {
   int rc = 0;
+
+  /* An init that failed leaves no driver, and every path below needs
+   * one.  Returning the error is what the caller can act on;  the
+   * alternative was a null dereference in the DoutPrefix below, which
+   * crashed the whole embedding process -- ganesha, in the case that
+   * matters -- instead of reporting a configuration fault. */
+  if (! g_rgwlib || ! g_rgwlib->get_driver()) {
+    return -EIO;
+  }
 
   /* if the config has no value for path/root, choose "/" */
   RGWLibFS* new_fs{nullptr};
@@ -2297,6 +3491,9 @@ int rgw_rename(struct rgw_fs *rgw_fs,
 	       struct rgw_file_handle *dst, const char* dst_name,
 	       uint32_t flags)
 {
+  if (flags & ~RGW_RENAME_FLAG_MASK) {
+    return -EINVAL;
+  }
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
 
   RGWFileHandle* src_fh = get_rgwfh(src);
@@ -2325,6 +3522,9 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
 	      struct rgw_file_handle **fh,
 	      struct stat *st, uint32_t mask, uint32_t flags)
 {
+  if (flags & ~RGW_LOOKUP_FLAG_MASK) {
+    return -EINVAL;
+  }
   //CephContext* cct = static_cast<CephContext*>(rgw_fs->rgw);
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
 
@@ -2385,8 +3585,18 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
       if (! get<0>(fhr)) {
 	if (! (flags & RGW_LOOKUP_FLAG_CREATE))
 	  return -ENOENT;
-	else
+	else {
 	  fhr = fs->lookup_fh(parent, path, RGWFileHandle::FLAG_CREATE);
+	  /* The object does not exist and the caller asked for it to be
+	   * created:  both halves of the intent are known here and nowhere
+	   * else, so record it on the handle.  rgw_open() needs it -- see
+	   * the note there.  (RGWFileHandle::FLAG_CREATE in fhr's flags word
+	   * is not this:  that is a transient "just minted" bit returned to
+	   * the caller, not durable state.) */
+	  if (get<0>(fhr)) {
+	    get<0>(fhr)->open_for_create();
+	  }
+	}
       }
       rgw_fh = get<0>(fhr);
     }
@@ -2476,20 +3686,70 @@ int rgw_truncate(struct rgw_fs *rgw_fs,
 int rgw_open(struct rgw_fs *rgw_fs,
 	     struct rgw_file_handle *fh, uint32_t posix_flags, uint32_t flags)
 {
+  if (flags & ~RGW_OPEN_FLAG_MASK) {
+    return -EINVAL;
+  }
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
 
-  /* XXX
-   * need to track specific opens--at least read opens and
-   * a write open;  we need to know when a write open is returned,
-   * that closes a write transaction
+  /* the stateless (NFSv3) open:  no open token is returned to the
+   * ULP, so librgw keeps the Open on the file handle and reclaims it
+   * from rgw_close(), or from the idle reaper if no close arrives */
+  if (! rgw_fh->is_file()) {
+    return -EISDIR;
+  }
+
+  /* No positional view:  the open is bookkeeping, as it was before the
+   * FSIO path existed, and rgw_close() completes the write transaction
+   * through close(). */
+  if (! g_rgwlib->get_driver()->have_fsio()) {
+    return rgw_fh->open(flags);
+  }
+
+  /* v1 compatibility.  rgw_lookup(RGW_LOOKUP_FLAG_CREATE) on an object
+   * which did not exist recorded the caller's intent to create it, so
+   * supply what that implies rather than requiring the caller to say it
+   * twice.
    *
-   * for now, we will support single-open only, it's preferable to
-   * anything we can otherwise do without access to the NFS state
-   */
-  if (! rgw_fh->is_file())
+   * This keeps one v1 contract across drivers.  Where there is no FSIO
+   * view the open is bookkeeping and nothing had to be said:  the write
+   * transaction created the object at rgw_close(), so
+   * lookup(CREATE)/open/write/close worked with posix_flags 0.  Where the
+   * open is a real openat(), the same sequence is an O_RDONLY open of an
+   * object that does not exist -- -ENOENT, after which the write has no
+   * open to use and returns -EPERM, one call downstream of the cause.
+   * Inferring here means a v1 consumer moving from rados to a
+   * filesystem-backed driver does not have to change. */
+  if (rgw_fh->creating()) {
+    if (! (posix_flags & (O_WRONLY|O_RDWR))) {
+      posix_flags |= O_RDWR;
+    }
+    flags |= RGW_OPEN_FLAG_CREATE;
+  }
+
+  /* do_open() clears FLAG_CREATING on success, for open2 as well as this
+   * path -- see the note there */
+  return rgw_fh->open_global(posix_flags, flags);
+}
+
+/*
+   open file, tracking open file handles
+*/
+int rgw_open2(struct rgw_fs* rgw_fs, struct rgw_file_handle* fh,
+              rgw_open_fd* open_fd /* OUT */, struct rgw_open_args* args,
+              uint32_t posix_flags, uint32_t flags)
+{
+  if (flags & ~RGW_OPEN_FLAG_MASK) {
+    return -EINVAL;
+  }
+  RGWFileHandle* rgw_fh = get_rgwfh(fh);
+
+  if (!rgw_fh->is_file())
     return -EISDIR;
 
-  return rgw_fh->open(flags);
+  RGWFileHandle::file::Open* open{nullptr};
+  auto rc = rgw_fh->open2(&open, posix_flags, flags, args);
+  *open_fd = open_to_fd(open);
+  return rc;
 }
 
 /*
@@ -2498,13 +3758,61 @@ int rgw_open(struct rgw_fs *rgw_fs,
 int rgw_close(struct rgw_fs *rgw_fs,
 	      struct rgw_file_handle *fh, uint32_t flags)
 {
-  RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
+  if (flags & ~RGW_CLOSE_FLAG_MASK) {
+    return -EINVAL;
+  }
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
-  int rc = rgw_fh->close(/* XXX */);
+  int rc;
 
-  if (flags & RGW_CLOSE_FLAG_RELE)
+  if (rgw_fh->get_global_open()) {
+    rc = rgw_fh->close_global(flags);
+  } else {
+    /* legacy (non-FSIO) write transaction, if any */
+    rc = rgw_fh->close();
+  }
+
+  if (flags & RGW_CLOSE_FLAG_RELE) {
+    auto fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
     fs->unref(rgw_fh);
+  }
 
+  return rc;
+}
+
+/*
+   change the access mode of an open, without returning it
+*/
+int rgw_reopen2(rgw_open_fd open_fd, uint32_t posix_flags, uint32_t flags)
+{
+  /* reserved:  the access mode comes from posix_flags alone.  Refused
+   * rather than ignored, so a caller which believed a flag meant
+   * something is told otherwise */
+  if (flags != RGW_OPEN_FLAG_NONE) {
+    return -EINVAL;
+  }
+  auto open = fd_to_open(open_fd);
+  if (! open) {
+    return -EBADF;
+  }
+
+  return open->fh.reopen2(open, posix_flags);
+}
+
+int rgw_close2(rgw_open_fd open_fd, uint32_t flags)
+{
+  if (flags & ~RGW_CLOSE_FLAG_MASK) {
+    return -EINVAL;
+  }
+  auto open = fd_to_open(open_fd);
+
+  auto& rgw_fh = open->fh;
+  auto fs = rgw_fh.get_fs();
+
+  int rc = rgw_fh.close2(open, flags);
+
+  if (flags & RGW_CLOSE_FLAG_RELE) {
+    fs->unref(&rgw_fh);
+  }
   return rc;
 }
 
@@ -2513,6 +3821,9 @@ int rgw_readdir(struct rgw_fs *rgw_fs,
 		rgw_readdir_cb rcb, void *cb_arg, bool *eof,
 		uint32_t flags)
 {
+  if (flags & ~RGW_READDIR_FLAG_MASK) {
+    return -EINVAL;
+  }
   RGWFileHandle* parent = get_rgwfh(parent_fh);
   if (! parent) {
     /* bad parent */
@@ -2541,6 +3852,9 @@ int rgw_readdir2(struct rgw_fs *rgw_fs,
 		 rgw_readdir_cb rcb, void *cb_arg, bool *eof,
 		 uint32_t flags)
 {
+  if (flags & ~RGW_READDIR_FLAG_MASK) {
+    return -EINVAL;
+  }
   RGWFileHandle* parent = get_rgwfh(parent_fh);
   if (! parent) {
     /* bad parent */
@@ -2590,7 +3904,34 @@ int rgw_read(struct rgw_fs *rgw_fs,
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
 
+  if (g_rgwlib->get_driver()->have_fsio() && rgw_fh->is_file()) {
+    /* stateless read:  attach to the shadow if one exists, else to
+     * the published object;  a reader never creates a shadow */
+    auto* open = rgw_fh->get_global_open();
+    if (! open) {
+      int rc = rgw_fh->open_global(O_RDONLY, RGW_OPEN_FLAG_V3);
+      if (!! rc) {
+	return rc;
+      }
+      open = rgw_fh->get_global_open();
+    }
+    struct iovec iov{buffer, length};
+    uint64_t nread{0};
+    int rc = rgw_fh->readv(open, &iov, 1, offset, &nread, flags);
+    *bytes_read = nread;
+    return rc;
+  }
+
   return fs->read(rgw_fh, offset, length, bytes_read, buffer, flags);
+}
+
+int rgw_readv(rgw_open_fd open_fd,
+              const struct iovec* iov, int iov_cnt,
+              uint64_t offset, uint64_t* bytes_read,    
+              uint32_t flags)
+{
+  auto open = rgw::fd_to_open(open_fd);
+  return open->fh.readv(open, iov, iov_cnt, offset, bytes_read, flags);
 }
 
 /*
@@ -2623,6 +3964,25 @@ int rgw_write(struct rgw_fs *rgw_fs,
   if (! rgw_fh->is_file())
     return -EISDIR;
 
+  if (g_rgwlib->get_driver()->have_fsio()) {
+    auto* open = rgw_fh->get_global_open();
+    if (! open || ! open->is_write_open()) {
+      if (! (flags & RGW_OPEN_FLAG_V3) && ! open) {
+	return -EPERM;
+      }
+      rc = rgw_fh->open_global(O_RDWR, flags);
+      if (!! rc) {
+	return rc;
+      }
+      open = rgw_fh->get_global_open();
+    }
+    struct iovec iov{buffer, length};
+    uint64_t nwritten{0};
+    rc = rgw_fh->writev(open, &iov, 1, offset, &nwritten, flags);
+    *bytes_written = nwritten;
+    return rc;
+  }
+
   if (! rgw_fh->is_open()) {
     if (flags & RGW_OPEN_FLAG_V3) {
       rc = rgw_fh->open(flags);
@@ -2635,124 +3995,26 @@ int rgw_write(struct rgw_fs *rgw_fs,
   rc = rgw_fh->write(offset, length, bytes_written, buffer);
 
   return rc;
-}
+} /* rgw_write */
 
-/*
-   read data from file (vector)
-*/
-class RGWReadV
+int rgw_writev(rgw_open_fd open_fd,
+               const struct iovec* iov, int iov_cnt,
+               uint64_t offset, uint64_t* bytes_written,
+               uint32_t flags)
 {
-  buffer::list bl;
-  struct rgw_vio* vio;
+  auto open = fd_to_open(open_fd);
+  auto rgw_fh = &(open->fh);
 
-public:
-  RGWReadV(buffer::list& _bl, rgw_vio* _vio) : vio(_vio) {
-    bl = std::move(_bl);
-  }
-
-  struct rgw_vio* get_vio() { return vio; }
-
-  const auto& buffers() { return bl.buffers(); }
-
-  unsigned /* XXX */ length() { return bl.length(); }
-
-};
-
-void rgw_readv_rele(struct rgw_uio *uio, uint32_t flags)
-{
-  RGWReadV* rdv = static_cast<RGWReadV*>(uio->uio_p1);
-  rdv->~RGWReadV();
-  ::operator delete(rdv);
-}
-
-int rgw_readv(struct rgw_fs *rgw_fs,
-	      struct rgw_file_handle *fh, rgw_uio *uio, uint32_t flags)
-{
-#if 0 /* XXX */
-  CephContext* cct = static_cast<CephContext*>(rgw_fs->rgw);
-  RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
-  RGWFileHandle* rgw_fh = get_rgwfh(fh);
+  *bytes_written = 0;
 
   if (! rgw_fh->is_file())
-    return -EINVAL;
+    return -EISDIR;
 
-  int rc = 0;
-
-  buffer::list bl;
-  RGWGetObjRequest req(cct, fs->get_user(), rgw_fh->bucket_name(),
-		      rgw_fh->object_name(), uio->uio_offset, uio->uio_resid,
-		      bl);
-  req.do_hexdump = false;
-
-  rc = g_rgwlib->get_fe()->execute_req(&req);
-
-  if (! rc) {
-    RGWReadV* rdv = static_cast<RGWReadV*>(
-      ::operator new(sizeof(RGWReadV) +
-		    (bl.buffers().size() * sizeof(struct rgw_vio))));
-
-    (void) new (rdv)
-      RGWReadV(bl, reinterpret_cast<rgw_vio*>(rdv+sizeof(RGWReadV)));
-
-    uio->uio_p1 = rdv;
-    uio->uio_cnt = rdv->buffers().size();
-    uio->uio_resid = rdv->length();
-    uio->uio_vio = rdv->get_vio();
-    uio->uio_rele = rgw_readv_rele;
-
-    int ix = 0;
-    auto& buffers = rdv->buffers();
-    for (auto& bp : buffers) {
-      rgw_vio *vio = &(uio->uio_vio[ix]);
-      vio->vio_base = const_cast<char*>(bp.c_str());
-      vio->vio_len = bp.length();
-      vio->vio_u1 = nullptr;
-      vio->vio_p1 = nullptr;
-      ++ix;
-    }
-  }
-
-  return rc;
-#else
-  return 0;
-#endif
+  /* open_fd is a live open token, so no implicit open is required */
+  return rgw_fh->writev(open, iov, iov_cnt, offset, bytes_written, flags);
 }
 
-/*
-   write data to file (vector)
-*/
-int rgw_writev(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
-	      rgw_uio *uio, uint32_t flags)
-{
 
-  // not supported - rest of function is ignored
-  return -ENOTSUP;
-
-  CephContext* cct = static_cast<CephContext*>(rgw_fs->rgw);
-  RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
-  RGWFileHandle* rgw_fh = get_rgwfh(fh);
-
-  if (! rgw_fh->is_file())
-    return -EINVAL;
-
-  buffer::list bl;
-  for (unsigned int ix = 0; ix < uio->uio_cnt; ++ix) {
-    rgw_vio *vio = &(uio->uio_vio[ix]);
-    bl.push_back(
-      buffer::create_static(vio->vio_len,
-			    static_cast<char*>(vio->vio_base)));
-  }
-
-  std::string oname = rgw_fh->relative_object_name();
-  RGWPutObjRequest req(cct, g_rgwlib->get_driver()->get_user(fs->get_user()->user_id),
-		       rgw_fh->bucket_name(), oname, bl);
-
-  int rc = g_rgwlib->get_fe()->execute_req(&req);
-
-  /* XXX update size (in request) */
-
-  return rc;
-}
 
 /*
    sync written data
@@ -2760,7 +4022,11 @@ int rgw_writev(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
 int rgw_fsync(struct rgw_fs *rgw_fs, struct rgw_file_handle *handle,
 	      uint32_t flags)
 {
-  return 0;
+  RGWFileHandle* rgw_fh = get_rgwfh(handle);
+
+  /* FSAL_RGW calls this for a stable (FILE_SYNC) write, so it has to
+   * be a real fsync of the shadow, not a no-op */
+  return rgw_fh->commit(0, 0, RGWFileHandle::FLAG_NONE);
 }
 
 int rgw_commit(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,

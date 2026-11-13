@@ -1985,6 +1985,7 @@ int POSIXBucket::read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch,
 			    bool* is_truncated, RGWUsageIter& usage_iter,
 			    std::map<rgw_user_bucket, rgw_usage_log_entry>& usage)
 {
+  *is_truncated = false;
   return 0;
 }
 

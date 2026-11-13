@@ -44,8 +44,21 @@ structural, not a missing object.  Noobaa's `.folder` sentinel
 mechanism is unrelated: it handles directory objects (keys ending
 in `/`), not file-as-prefix conflicts.
 
+**What we return, and why it differs from theirs.**  `ENOTDIR` from
+`make_ent()` is mapped to `ERR_KEY_PATH_CONFLICT`, **409
+KeyPathConflict** (2026-10-07).  Previously it reached the client as a
+500, which invites a retry that can never succeed while the occupying
+object exists.  Their 404 is no better in a different way:  it says the
+object is absent when the truth is that a conflicting one is present,
+so a client's natural response -- write it -- also cannot work.  The
+client's only recourse is to delete the occupying object, and 409 with
+a code of its own is what says so.  A non-standard code is precedented
+in the error table (`TooManyBuckets`, `KeyExists`,
+`PositionNotEqualToLength`).
+
 S3 tests that exercise overlapping key prefixes are tagged
-`fails_on_nsfs` and skipped via `--features fails_on_nsfs`.
+`fails_on_nsfs` and skipped via `--features fails_on_nsfs`.  The gate
+stays:  the status code is a separate question from the limitation.
 
 ## xattr Scheme
 
