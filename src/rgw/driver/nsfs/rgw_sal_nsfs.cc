@@ -3393,6 +3393,12 @@ int NSFSDriver::list_account_topics(const DoutPrefixProvider* dpp,
   return 0;
 }
 
+/* In an anonymous namespace because the posix driver, which nsfs was
+ * forked from, defines an rgw::sal::meta_list_handle of its own with
+ * more members.  Two definitions of one name are one type to the
+ * linker, which keeps one inline constructor for both:  posix's then
+ * wrote its extra members past the end of this smaller handle. */
+namespace {
 struct meta_list_handle {
   std::string marker;
   std::string section;
@@ -3405,6 +3411,7 @@ struct meta_list_handle {
     section = _section;
   }
 };
+} // namespace
 
 int NSFSDriver::meta_list_keys_init(const DoutPrefixProvider *dpp,
                                      const std::string& section,
