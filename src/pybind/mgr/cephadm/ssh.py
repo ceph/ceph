@@ -156,6 +156,10 @@ class SSHManager:
         self._con_addrs: Dict[str, str] = {}
         # serializes opening a connection to a host, see _remote_connection()
         self._con_locks: Dict[str, asyncio.Lock] = {}
+        # bumped by the resets of all connections and of each host's: a
+        # connection opened across a reset is not kept, see _remote_connection()
+        self._cons_generation = 0
+        self._con_generations: Dict[str, int] = {}
 
     def _is_conn_valid(self, conn: "SSHClientConnection") -> bool:
         """Safely check if an AsyncSSH connection is still valid and usable."""
@@ -186,31 +190,48 @@ class SSHManager:
         A connection to another address (a host re-added or checked with a
         new address) is closed and replaced.
         """
-        if not addr and host in self.mgr.inventory:
-            addr = self.mgr.inventory.get_addr(host)
-        if not addr:
-            raise OrchestratorError("host address is empty")
-
         # Without the lock, concurrent commands for a host that find no
         # usable connection would each open one, and all but the last
         # cached one would be left open.
         lock = self._con_locks.setdefault(host, asyncio.Lock())
         async with lock:
-            existing_conn = self.cons.get(host)
-            if existing_conn:
-                if not self._is_conn_valid(existing_conn):
-                    logger.debug(f'Existing connection to {host} is invalid, creating new connection')
-                    await self._reset_con(host, existing_conn)
-                elif self._con_addrs.get(host) != addr:
-                    logger.debug(f'Existing connection to {host} is to '
-                                 f'{self._con_addrs.get(host)}, not {addr}: replacing it')
-                    await self._reset_con(host, existing_conn)
-                else:
-                    self.mgr.offline_hosts_remove(host)
-                    return existing_conn
-            conn = await self._connect(host, addr)
-            self.cons[host] = conn
-            self._con_addrs[host] = addr
+            while True:
+                conn_addr = addr
+                if not conn_addr and host in self.mgr.inventory:
+                    conn_addr = self.mgr.inventory.get_addr(host)
+                if not conn_addr:
+                    raise OrchestratorError("host address is empty")
+
+                existing_conn = self.cons.get(host)
+                if existing_conn:
+                    if not self._is_conn_valid(existing_conn):
+                        logger.debug(f'Existing connection to {host} is invalid, creating new connection')
+                        await self._reset_con(host, existing_conn)
+                    elif self._con_addrs.get(host) != conn_addr:
+                        logger.debug(f'Existing connection to {host} is to '
+                                     f'{self._con_addrs.get(host)}, not {conn_addr}: replacing it')
+                        await self._reset_con(host, existing_conn)
+                    else:
+                        self.mgr.offline_hosts_remove(host)
+                        return existing_conn
+
+                generation = self._con_generation(host)
+                conn = await self._connect(host, conn_addr)
+                self.cons[host] = conn
+                self._con_addrs[host] = conn_addr
+                if generation == self._con_generation(host):
+                    break
+                # The connections to the host were reset while this one was
+                # being opened (host removed or its address changed, SSH
+                # key, user or config changed): it may use the old settings.
+                # Close it and start over, as if this call came after the
+                # reset: the address is looked up again, so a removed host
+                # fails and a new address is used. The generation is checked
+                # after the connection is cached: _reset_cons() runs in
+                # another thread, and closes whatever it finds cached once
+                # it has bumped the generation.
+                logger.debug(f'Connections to {host} were reset while connecting: starting over')
+                await self._reset_con(host, conn)
 
         self.mgr.offline_hosts_remove(host)
 
@@ -589,6 +610,9 @@ class SSHManager:
             except OSError:
                 pass
 
+    def _con_generation(self, host: str) -> Tuple[int, int]:
+        return self._cons_generation, self._con_generations.get(host, 0)
+
     async def _reset_con(self, host: str,
                          conn: Optional["SSHClientConnection"] = None) -> None:
         """Close the cached connection to a host.
@@ -597,9 +621,13 @@ class SSHManager:
         is dropped from the cache only if it is still the cached one, so a
         connection opened since then, maybe in use by other commands, is
         left alone.
+
+        Without conn (host removed, address changed), a connection being
+        opened to the host is not kept either: see _remote_connection().
         """
         cached = self.cons.get(host)
         if conn is None:
+            self._con_generations[host] = self._con_generations.get(host, 0) + 1
             conn = cached
         if conn is None:
             return
@@ -614,11 +642,20 @@ class SSHManager:
             self.mgr.wait_async(self._reset_con(host))
 
     def _reset_cons(self) -> None:
-        for host, conn in self.cons.items():
-            logger.debug(f'_reset_cons close {host}')
-            conn.close()
+        """Close all connections (SSH key, user or config changed).
+
+        Called from the mgr threads, not from the SSH event loop, which may
+        be opening or caching connections meanwhile: bump the generation
+        first, so that connections being opened are not kept (see
+        _remote_connection()), then close a snapshot of the cache.
+        """
+        self._cons_generation += 1
+        cons = self.cons
         self.cons = {}
         self._con_addrs = {}
+        for host, conn in list(cons.items()):
+            logger.debug(f'_reset_cons close {host}')
+            conn.close()
 
     def _load_client_keys(self) -> Optional[Sequence["SSHKeyPair"]]:
         """Load the cephadm SSH identity (key, certificate) once.
