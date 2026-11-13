@@ -1706,11 +1706,14 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
     def check_host(self, host: str, addr: Optional[str] = None) -> Tuple[int, str, str]:
         """Check whether we can access and manage a remote host"""
         try:
-            with self.async_timeout_handler(host, f'cephadm check-host --expect-hostname {host}'):
-                out, err, code = self.wait_async(
-                    CephadmServe(self)._run_cephadm(
-                        host, cephadmNoImage, 'check-host', ['--expect-hostname', host],
-                        addr=addr, error_ok=True, no_fsid=True))
+            try:
+                with self.async_timeout_handler(host, f'cephadm check-host --expect-hostname {host}'):
+                    out, err, code = self.wait_async(
+                        CephadmServe(self)._run_cephadm(
+                            host, cephadmNoImage, 'check-host', ['--expect-hostname', host],
+                            addr=addr, error_ok=True, no_fsid=True))
+            finally:
+                self._close_unmanaged_host_con(host)
             if code:
                 return 1, '', ('check-host failed:\n' + '\n'.join(err))
         except ssh.HostConnectionError as e:
@@ -1734,11 +1737,14 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         'cephadm prepare-host')
     def _prepare_host(self, host: str, addr: Optional[str] = None) -> Tuple[int, str, str]:
         """Prepare a remote host for use with cephadm"""
-        with self.async_timeout_handler(host, 'cephadm prepare-host'):
-            out, err, code = self.wait_async(
-                CephadmServe(self)._run_cephadm(
-                    host, cephadmNoImage, 'prepare-host', ['--expect-hostname', host],
-                    addr=addr, error_ok=True, no_fsid=True))
+        try:
+            with self.async_timeout_handler(host, 'cephadm prepare-host'):
+                out, err, code = self.wait_async(
+                    CephadmServe(self)._run_cephadm(
+                        host, cephadmNoImage, 'prepare-host', ['--expect-hostname', host],
+                        addr=addr, error_ok=True, no_fsid=True))
+        finally:
+            self._close_unmanaged_host_con(host)
         if code:
             return 1, '', ('prepare-host failed:\n' + '\n'.join(err))
         # if we have an outstanding health alert for this host, give the
@@ -2338,6 +2344,13 @@ Then run the following:
             )
         self.log.info('Successfully prepared host %s for sudo hardening', hostname)
 
+    def _close_unmanaged_host_con(self, host: str) -> None:
+        """Close the SSH connection to a host that is not in the inventory
+        (a host that failed to be added, or a host only checked or prepared),
+        instead of keeping it open until the mgr restarts."""
+        if host not in self.inventory:
+            self.ssh.reset_con(host)
+
     def _add_host(self, spec):
         # type: (HostSpec) -> str
         """
@@ -2345,6 +2358,16 @@ Then run the following:
 
         :param host: host name
         """
+        try:
+            return self._do_add_host(spec)
+        except Exception:
+            # Whatever failed, if the host was not added, close the SSH
+            # connection opened to check it: nothing else will use it.
+            self._close_unmanaged_host_con(spec.hostname)
+            raise
+
+    def _do_add_host(self, spec):
+        # type: (HostSpec) -> str
         HostSpec.validate(spec)
         # Drop the cached SSH connection when re-adding a host with a new
         # address. Otherwise check-host may reuse the old connection and
