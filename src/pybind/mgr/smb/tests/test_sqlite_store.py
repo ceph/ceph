@@ -134,6 +134,31 @@ def test_rgw_credential_mirror_write_get_remove():
     assert key not in list(mirror_target)
 
 
+def test_ext_ceph_cluster_mirror_write_and_get():
+    store, mirror_target = _mirroring_store()
+    key = ('ext_ceph_clusters', 'exo1')
+    store.set_object(
+        key,
+        {
+            'cluster': {
+                'cephfs_user': {'name': 'client.fs', 'key': 'fskey'},
+                'rgw_user': {'name': 'client.rgw', 'key': 'rgwkey'},
+            }
+        },
+    )
+
+    assert (
+        mirror_target[key].get()['cluster']['cephfs_user']['key'] == 'fskey'
+    )
+    assert mirror_target[key].get()['cluster']['rgw_user']['key'] == 'rgwkey'
+    raw = smb.sqlite_store.SqliteStore.get_object(store, key)
+    assert 'key' not in raw['cluster']['cephfs_user']
+    assert 'key' not in raw['cluster']['rgw_user']
+    cluster = store.get_object(key)['cluster']
+    assert cluster['cephfs_user']['key'] == 'fskey'
+    assert cluster['rgw_user']['key'] == 'rgwkey'
+
+
 def test_mirror_opt_out():
     store, mirror_target = _mirroring_store(opts={'mirror_join_auths': 'no'})
     key = ('join_auths', 'auth1')
