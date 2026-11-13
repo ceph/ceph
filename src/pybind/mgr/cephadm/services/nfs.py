@@ -299,13 +299,26 @@ class NFSService(CephService):
         grpc_source = spec.grpc_certificate_source
         svc_name = spec.service_name()
         host = daemon_spec.host
-        # Remove inline-saved gRPC certs when no longer using inline.
-        if grpc_source in (CertificateSource.REFERENCE.value, CertificateSource.CEPHADM_SIGNED.value):
+        # Remove inline-saved gRPC certs when switching to reference.
+        if grpc_source == CertificateSource.REFERENCE.value:
             self.mgr.cert_mgr.rm_inline_saved_cert_key_pair(
                 NFS_GRPC_SERVER_CERT, NFS_GRPC_SERVER_KEY,
                 service_name=svc_name, host=host, ca_cert_name=NFS_GRPC_CA_CERT)
             self.mgr.cert_mgr.rm_inline_saved_cert_key_pair(
                 NFS_GRPC_CLIENT_CERT, NFS_GRPC_CLIENT_KEY, service_name=svc_name)
+        # Remove user-uploaded gRPC certs (user_made=True) when switching to cephadm-signed,
+        # so stale external-CA certs aren't reused. Auto-generated ones are left intact.
+        if grpc_source == CertificateSource.CEPHADM_SIGNED.value:
+            for name in [NFS_GRPC_SERVER_CERT, NFS_GRPC_CLIENT_CERT, NFS_GRPC_CA_CERT]:
+                obj = self.mgr.cert_mgr.cert_store.get_tlsobject_if_exists(
+                    name, svc_name, None)
+                if obj and getattr(obj, 'user_made', False):
+                    self.mgr.cert_mgr.rm_cert_if_present(name, service_name=svc_name)
+            for name in [NFS_GRPC_SERVER_KEY, NFS_GRPC_CLIENT_KEY]:
+                obj = self.mgr.cert_mgr.key_store.get_tlsobject_if_exists(
+                    name, svc_name, None)
+                if obj and getattr(obj, 'user_made', False):
+                    self.mgr.cert_mgr.rm_key_if_present(name, service_name=svc_name)
         # Remove cephadm-signed gRPC server cert when no longer using cephadm-signed.
         if grpc_source != CertificateSource.CEPHADM_SIGNED.value:
             self.mgr.cert_mgr.try_rm_self_signed_cert_key_pair(svc_name, host, label='grpc')
