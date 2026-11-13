@@ -1153,12 +1153,14 @@ void Replayer<I>::copy_image() {
   m_deep_copy_handler = new DeepCopyHandler(this);
   auto ctx = create_context_callback<
     Replayer<I>, &Replayer<I>::handle_copy_image>(this);
+  // Saved progress is a completed-object count. Deep copy expects the last
+  // completed object's zero-based index and resumes at the next object.
   auto req = librbd::deep_copy::ImageCopyRequest<I>::create(
     m_state_builder->remote_image_ctx,  m_state_builder->local_image_ctx,
     m_remote_snap_id_start, m_remote_snap_id_end, m_local_snap_id_start, false,
     (m_local_mirror_snap_ns.last_copied_object_number > 0 ?
       librbd::deep_copy::ObjectNumber{
-        m_local_mirror_snap_ns.last_copied_object_number} :
+        m_local_mirror_snap_ns.last_copied_object_number - 1} :
       librbd::deep_copy::ObjectNumber{}),
     m_local_mirror_snap_ns.snap_seqs, m_deep_copy_handler, ctx);
   req->send();

@@ -5405,7 +5405,7 @@ written." % (self.name, ret, length))
 
             * ``primary_snap_id`` (int) - primary snapshot Id
 
-            *  ``last_copied_object_number`` (int) - last copied object number
+            *  ``last_copied_object_number`` (int) - how many objects have been copied so far
         """
         cdef:
             rbd_snap_mirror_namespace_t sn

@@ -1004,7 +1004,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, InterruptedSyncInitial) {
   expect_notify_sync_request(mock_instance_watcher, mock_local_image_ctx.id, 0);
   MockImageCopyRequest mock_image_copy_request;
   expect_image_copy(mock_image_copy_request, 0, 1, 0,
-                    librbd::deep_copy::ObjectNumber{123U},
+                    librbd::deep_copy::ObjectNumber{122U},
                     {{1, CEPH_NOSNAP}}, 0);
   MockApplyImageStateRequest mock_apply_state_request;
   expect_apply_image_state(mock_apply_state_request, 0);
@@ -1087,7 +1087,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, InterruptedSyncDelta) {
      0, {}, 0, 0, {}}},
     {12U, librbd::SnapInfo{"snap2", cls::rbd::MirrorSnapshotNamespace{
        cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY, {}, "remote mirror uuid",
-       2, false, 123, {{2, CEPH_NOSNAP}}},
+       2, false, 1, {{2, CEPH_NOSNAP}}},
      0, {}, 0, 0, {}}}};
 
   // re-sync snap2
@@ -1099,12 +1099,12 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, InterruptedSyncDelta) {
   expect_notify_sync_request(mock_instance_watcher, mock_local_image_ctx.id, 0);
   MockImageCopyRequest mock_image_copy_request;
   expect_image_copy(mock_image_copy_request, 1, 2, 11,
-                    librbd::deep_copy::ObjectNumber{123U},
+                    librbd::deep_copy::ObjectNumber{0U},
                     {{2, CEPH_NOSNAP}}, 0);
   MockApplyImageStateRequest mock_apply_state_request;
   expect_apply_image_state(mock_apply_state_request, 0);
   expect_mirror_image_snapshot_set_copy_progress(
-    mock_local_image_ctx, 12, true, 123, 0);
+    mock_local_image_ctx, 12, true, 1, 0);
   expect_notify_update(mock_local_image_ctx);
   MockUnlinkPeerRequest mock_unlink_peer_request;
   expect_unlink_peer(mock_unlink_peer_request, 1, "remote mirror peer uuid",
@@ -1222,7 +1222,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, InterruptedSyncDeltaDemote) {
   expect_notify_sync_request(mock_instance_watcher, mock_local_image_ctx.id, 0);
   MockImageCopyRequest mock_image_copy_request;
   expect_image_copy(mock_image_copy_request, 1, 2, 11,
-                    librbd::deep_copy::ObjectNumber{123U},
+                    librbd::deep_copy::ObjectNumber{122U},
                     {{2, CEPH_NOSNAP}}, 0);
   MockApplyImageStateRequest mock_apply_state_request;
   expect_apply_image_state(mock_apply_state_request, 0);

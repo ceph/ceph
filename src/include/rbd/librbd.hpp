@@ -87,7 +87,7 @@ namespace librbd {
     bool complete;
     std::string primary_mirror_uuid;
     uint64_t primary_snap_id;
-    uint64_t last_copied_object_number;
+    uint64_t last_copied_object_number; // how many objects have been copied so far
   } snap_mirror_namespace_t;
 
   typedef struct {
