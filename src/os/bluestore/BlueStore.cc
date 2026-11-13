@@ -3550,74 +3550,56 @@ void BlueStore::_close_bdev()
   bdev = NULL;
 }
 
-int BlueStore::_open_fm(KeyValueDB::Transaction t,
-                        bool read_only,
-                        bool db_avail,
-                        bool fm_restore)
+// Calculate how the to store allocator state.
+// The value returned is in logic of freelist_type.
+std::string BlueStore::_calc_desired_freelist_type()
+{
+  bool from_file = is_db_rotational() ?
+    cct->_conf->bluestore_allocation_from_file_rotational :
+    cct->_conf->bluestore_allocation_from_file;
+  std::string f = from_file ? "null" : "bitmap";
+  dout(5) << __func__ << "=" << f << dendl;
+  return f;
+}
+
+int BlueStore::_create_fm(
+  KeyValueDB::Transaction t,
+  const std::string& type)
+{
+  dout(5) << __func__ << " freelist_type=" << freelist_type << dendl;
+  fm = FreelistManager::create(cct, type, PREFIX_ALLOC);
+  ceph_assert(fm);
+  {
+    bufferlist bl;
+    bl.append(type);
+    t->set(PREFIX_SUPER, "freelist_type", bl);
+  }
+  // being able to allocate in units less than bdev block size
+  // seems to be a bad idea.
+  ceph_assert(cct->_conf->bdev_block_size <= min_alloc_size);
+  fm->create(bdev->get_size(), min_alloc_size, t);
+
+  int r = _write_out_fm_meta(0);
+  ceph_assert(r == 0);
+  return 0;
+}
+
+int BlueStore::_open_fm(bool read_only)
 {
   int r;
-
-  dout(5) << __func__ << "::NCB::freelist_type=" << freelist_type << dendl;
+  dout(5) << __func__ << " freelist_type=" << freelist_type << dendl;
   ceph_assert(fm == NULL);
-  // fm_restore means we are transitioning from null-fm to bitmap-fm
-  ceph_assert(!fm_restore || (freelist_type != "null"));
-  // fm restore must pass in a valid transaction
-  ceph_assert(!fm_restore || (t != nullptr));
-
-  // when function is called in repair mode (to_repair=true) we skip db->open()/create()
-  bool can_have_null_fm = !is_db_rotational() &&
-                          !read_only &&
-                          db_avail &&
-                          cct->_conf->bluestore_allocation_from_file;
-
-  // When allocation-info is stored in a single file we set freelist_type to "null"
-  if (can_have_null_fm) {
-    freelist_type = "null";
-    need_to_destage_allocation_file = true;
-  }
   fm = FreelistManager::create(cct, freelist_type, PREFIX_ALLOC);
   ceph_assert(fm);
-  if (t) {
-    // create mode. initialize freespace
-    dout(20) << __func__ << " initializing freespace" << dendl;
-    {
-      bufferlist bl;
-      bl.append(freelist_type);
-      t->set(PREFIX_SUPER, "freelist_type", bl);
-    }
-    // being able to allocate in units less than bdev block size 
-    // seems to be a bad idea.
-    ceph_assert(cct->_conf->bdev_block_size <= min_alloc_size);
-
-    uint64_t alloc_size = min_alloc_size;
-    fm->create(bdev->get_size(), alloc_size, t);
-
-    auto reserved = _get_ondisk_reserved();
-    if (fm_restore) {
-      // we need to allocate the full space in restore case
-      // as later we will add free-space marked in the allocator file
-      fm->allocate(0, bdev->get_size(), t);
-    } else {
-      // allocate bdev label + bluefs superblock reserved space.
-      fm->allocate(BDEV_FIRST_LABEL_POSITION, reserved, t);
-      // we do not mark other label positions
-    }
-    r = _write_out_fm_meta(0);
-    ceph_assert(r == 0);
-  } else {
-    if (can_have_null_fm) {
-      commit_to_null_manager();
-    }
-    r = fm->init(db, read_only,
-      [&](const std::string& key, std::string* result) {
-        return read_meta(key, result);
-    });
-    if (r < 0) {
-      derr << __func__ << " failed: " << cpp_strerror(r) << dendl;
-      delete fm;
-      fm = NULL;
-      return r;
-    }
+  r = fm->init(db, read_only,
+    [&](const std::string& key, std::string* result) {
+      return read_meta(key, result);
+  });
+  if (r < 0) {
+    derr << __func__ << " failed: " << cpp_strerror(r) << dendl;
+    delete fm;
+    fm = nullptr;
+    return r;
   }
   dout(1) << __func__ << " effective freelist_type = " << freelist_type << std::hex
           << ", freelist_alloc_size = 0x" << fm->get_alloc_size()
@@ -4257,8 +4239,11 @@ int BlueStore::_open_db_and_around(
   if (r < 0) {
     goto out_db;
   }
-
-  r = _open_fm(nullptr, true, false);
+  ceph_assert(freelist_type == "null" || freelist_type == "bitmap");
+  if (freelist_type == "null") {
+    need_to_destage_allocation_file = true;
+  }
+  r = _open_fm(true);
   if (r < 0)
     goto out_db;
 
@@ -5036,7 +5021,7 @@ int BlueStore::mkfs()
     }
   }
 
-  freelist_type = "bitmap";
+  freelist_type = _calc_desired_freelist_type();
   dout(10) << " freelist_type " << freelist_type << dendl;
 
   // choose min_alloc_size
@@ -5095,9 +5080,13 @@ int BlueStore::mkfs()
 
   {
     KeyValueDB::Transaction t = db->get_transaction();
-    r = _open_fm(t, false, true);
+    r = _create_fm(t, freelist_type);
     if (r < 0)
       goto out_close_db;
+    // allocate bdev label + bluefs superblock reserved space.
+    uint64_t reserved = _get_ondisk_reserved();
+    fm->allocate(BDEV_FIRST_LABEL_POSITION, reserved, t);
+    // we do not mark other label positions
     {
       bufferlist bl;
       encode((uint64_t)0, bl);
@@ -18079,12 +18068,15 @@ int BlueStore::reset_fm_for_restore()
   KeyValueDB::Transaction t = db->get_transaction();
   // call _open_fm() with fm_restore set to TRUE
   // this will mark the full device space as allocated (and not just the reserved space)
-  _open_fm(t, true, true, true);
-  if (fm == nullptr) {
-    derr << "Failed _open_fm()" << dendl;
-    return -1;
-  }
+  _create_fm(t, freelist_type);
+  ceph_assert(fm != nullptr);
+  // we need to allocate the full space in restore case
+  // as later we will add free-space marked in the allocator file
+  // (this is actually very stupid, instead of allocate + remove free,
+  // we should ask fm to provide inverted of free)
+  fm->allocate(0, bdev->get_size(), t);
   db->submit_transaction_sync(t);
+
   ceph_assert(!fm->is_null_manager());
   dout(5) << "fm was reactivated in full mode" << dendl;
   return 0;
@@ -18278,6 +18270,8 @@ void BlueStore::_recreate_freelist_from_current_allocator(
   t = db->get_transaction();
   // Note that we are not excluding 0 .. _get_ondisk_reserved().
   // The allocator has it already.
+  // (this is actually very stupid, instead of allocate + remove free,
+  // we should ask fm to provide inverted of free)
   fm->allocate(0, bdev->get_size(), t);
   db->submit_transaction_sync(t);
 
@@ -18292,17 +18286,17 @@ void BlueStore::_maybe_convert_allocation_store()
   if (!cct->_conf.get_val<bool>("bluestore_allocation_from_file_convert_on_mount")) {
     return;
   }
-  bool target_is_file = cct->_conf.get_val<bool>("bluestore_allocation_from_file");
   dout(0) << "Considering converting allocator storage" << dendl;
   // at this stage freelist_type must be already set
   ceph_assert(freelist_type == "bitmap" || freelist_type == "null");
-  dout (0) << "freelist_type=" << freelist_type << " target_is_file=" << target_is_file << dendl;
-  if (freelist_type == "bitmap" && target_is_file) {
+  std::string desired = _calc_desired_freelist_type();
+  dout(0) << "freelist_type=" << freelist_type << " desired=" << desired << dendl;
+  if (desired == "null" && freelist_type != "null") {
     // convert to file stored allocator
     clear_allocation_objects_from_rocksdb();
     commit_to_null_manager();
     dout(0) << "Allocator storage is now FILE" << dendl;
-  } else if (freelist_type == "null" && !target_is_file) {
+  } else if (desired == "bitmap" && freelist_type != "bitmap") {
     // convert to db stored allocator
     _recreate_freelist_from_current_allocator("bitmap");
     commit_to_real_manager();

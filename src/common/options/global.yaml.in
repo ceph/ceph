@@ -5616,6 +5616,19 @@ options:
   flags:
     - startup
   see_also:
+    - bluestore_allocation_from_file_rotational
+- name: bluestore_allocation_from_file_rotational
+  type: bool
+  level: dev
+  desc: Selects allocator storage
+  long_desc: Selects location to store BlueStore allocator.
+    True = BlueFS file, false = RocksDB column "b".
+    This variant applies when main RocksDB volume is on spinner.
+  default: true
+  with_legacy: true
+  flags:
+    - startup
+  see_also:
     - bluestore_allocation_from_file
 - name: bluestore_allocation_from_file_convert_on_mount
   type: bool
