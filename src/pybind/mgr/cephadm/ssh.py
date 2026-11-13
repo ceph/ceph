@@ -152,6 +152,10 @@ class SSHManager:
         self.cons: Dict[str, "SSHClientConnection"] = {}
         # cephadm SSH identity, loaded by _reconfig_ssh()
         self._client_keys: Optional[Sequence["SSHKeyPair"]] = None
+        # address each cached connection was opened to
+        self._con_addrs: Dict[str, str] = {}
+        # serializes opening a connection to a host, see _remote_connection()
+        self._con_locks: Dict[str, asyncio.Lock] = {}
 
     def _is_conn_valid(self, conn: "SSHClientConnection") -> bool:
         """Safely check if an AsyncSSH connection is still valid and usable."""
@@ -172,21 +176,47 @@ class SSHManager:
                                  host: str,
                                  addr: Optional[str] = None,
                                  ) -> "SSHClientConnection":
-        existing_conn = self.cons.get(host)
-        # Check if we have a valid existing connection
-        if existing_conn and host in self.mgr.inventory and self._is_conn_valid(existing_conn):
-            self.mgr.offline_hosts_remove(host)
-            return existing_conn
+        """Return the connection to a host, opening it if needed.
 
-        if existing_conn and not self._is_conn_valid(existing_conn):
-            logger.debug(f'Existing connection to {host} is invalid, creating new connection')
-            await self._reset_con(host)
-
+        One connection per host, shared by all the commands for the host
+        (each command or SFTP session is a channel of the connection). It
+        is reused as long as it is open and was opened to the same address,
+        including for a host not in the inventory yet: checking a new host
+        and copying the cephadm binary to it runs about a dozen commands.
+        A connection to another address (a host re-added or checked with a
+        new address) is closed and replaced.
+        """
         if not addr and host in self.mgr.inventory:
             addr = self.mgr.inventory.get_addr(host)
         if not addr:
             raise OrchestratorError("host address is empty")
 
+        # Without the lock, concurrent commands for a host that find no
+        # usable connection would each open one, and all but the last
+        # cached one would be left open.
+        lock = self._con_locks.setdefault(host, asyncio.Lock())
+        async with lock:
+            existing_conn = self.cons.get(host)
+            if existing_conn:
+                if not self._is_conn_valid(existing_conn):
+                    logger.debug(f'Existing connection to {host} is invalid, creating new connection')
+                    await self._reset_con(host, existing_conn)
+                elif self._con_addrs.get(host) != addr:
+                    logger.debug(f'Existing connection to {host} is to '
+                                 f'{self._con_addrs.get(host)}, not {addr}: replacing it')
+                    await self._reset_con(host, existing_conn)
+                else:
+                    self.mgr.offline_hosts_remove(host)
+                    return existing_conn
+            conn = await self._connect(host, addr)
+            self.cons[host] = conn
+            self._con_addrs[host] = addr
+
+        self.mgr.offline_hosts_remove(host)
+
+        return conn
+
+    async def _connect(self, host: str, addr: str) -> "SSHClientConnection":
         local_fips = is_fips_enabled()
         target_fips = self.mgr.cache.get_host_fips_enabled(host)
         logger.debug(
@@ -243,11 +273,7 @@ class SSHManager:
                 raise
             except Exception:
                 raise
-        self.cons[host] = conn
-
-        self.mgr.offline_hosts_remove(host)
-
-        return self.cons[host]
+        return conn
 
     @contextmanager
     def redirect_log(self, host: str, addr: str) -> Iterator[None]:
@@ -581,6 +607,7 @@ class SSHManager:
         conn.close()
         if cached is conn:
             del self.cons[host]
+            self._con_addrs.pop(host, None)
 
     def reset_con(self, host: str) -> None:
         with self.mgr.async_timeout_handler(cmd=f'resetting ssh connection to {host}'):
@@ -591,6 +618,7 @@ class SSHManager:
             logger.debug(f'_reset_cons close {host}')
             conn.close()
         self.cons = {}
+        self._con_addrs = {}
 
     def _load_client_keys(self) -> Optional[Sequence["SSHKeyPair"]]:
         """Load the cephadm SSH identity (key, certificate) once.
