@@ -340,6 +340,46 @@ TEST_F(TestMockDeepCopySnapshotCopyRequest, SnapCreate) {
   validate_snap_seqs({{src_snap_id1, 12}, {src_snap_id2, 14}});
 }
 
+// Test sequence: Create a group image snapshot and recover its local snap-id
+// using the group namespace even if a user snapshot has the same name.
+TEST_F(TestMockDeepCopySnapshotCopyRequest, GroupSnapshotNamespaceMapping) {
+  librbd::MockTestImageCtx mock_src_image_ctx(*m_src_image_ctx);
+  librbd::MockTestImageCtx mock_dst_image_ctx(*m_dst_image_ctx);
+  MockSnapshotCreateRequest mock_snapshot_create_request;
+  MockSetHeadRequest mock_set_head_request;
+  librbd::MockExclusiveLock mock_exclusive_lock;
+  prepare_exclusive_lock(mock_dst_image_ctx, mock_exclusive_lock);
+  expect_test_features(mock_dst_image_ctx);
+
+  const cls::rbd::ImageSnapshotNamespaceGroup snap_ns{3, "group", "snap"};
+  const std::string snap_name = ".group.3_group_snap";
+  mock_dst_image_ctx.group_spec = {"group", 3};
+  mock_dst_image_ctx.snap_ids[{cls::rbd::UserSnapshotNamespace{}, snap_name}] = 99;
+  mock_src_image_ctx.snaps = {1};
+  mock_src_image_ctx.snap_ids[{snap_ns, snap_name}] = 1;
+  mock_src_image_ctx.snap_info.emplace(1, SnapInfo{
+    snap_name, snap_ns, m_image_size, {}, 0, 0, {}});
+
+  InSequence seq;
+  expect_get_snap_namespace(mock_src_image_ctx, 1);
+  expect_start_op(mock_exclusive_lock);
+  EXPECT_CALL(mock_snapshot_create_request, send())
+    .WillOnce(Invoke([this, &mock_dst_image_ctx,
+                      &mock_snapshot_create_request, snap_ns, snap_name]() {
+      mock_dst_image_ctx.snap_ids[{snap_ns, snap_name}] = 10;
+      m_work_queue->queue(mock_snapshot_create_request.on_finish, 0);
+    }));
+  expect_snap_is_protected(mock_src_image_ctx, 1, false, 0);
+  expect_set_head(mock_set_head_request, 0);
+
+  C_SaferCond ctx;
+  auto request = create_request(mock_src_image_ctx, mock_dst_image_ctx,
+                                0, CEPH_NOSNAP, 0, &ctx);
+  request->send();
+  ASSERT_EQ(0, ctx.wait());
+  validate_snap_seqs({{1, 10}});
+}
+
 TEST_F(TestMockDeepCopySnapshotCopyRequest, SnapCreateError) {
   ASSERT_EQ(0, create_snap(m_src_image_ctx, "snap1"));
 
