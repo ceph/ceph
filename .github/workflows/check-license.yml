@@ -18,7 +18,62 @@ jobs:
     name: "Check for Incompatible Licenses"
     runs-on: ubuntu-latest
     steps:
+    - name: Check PR Changes for License
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        REPO: ${{ github.repository }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      run: |
+        # Written in two parts so that this file does not contain the text it
+        # looks for, and a change to it does not fail the check.
+        license="GNU General Public"" License"
+
+        found() {
+          echo "Error: Incompatible license '$license' found in $1."
+          exit 1
+        }
+
+        # Read the changes file by file: GitHub refuses "gh pr diff" for a
+        # diff over 20000 lines. If the API call fails, fail the check
+        # rather than pass it without having read anything.
+        files=$(gh api "repos/$REPO/pulls/$PR_NUMBER/files?per_page=100" \
+                  --paginate --jq '.[] | @json') || {
+          echo "Error: could not list the files changed by PR #$PR_NUMBER."
+          exit 1
+        }
+
+        # Search the added and unchanged lines. Removing text that names the
+        # license is not a problem.
+        patches=$(jq -r '.patch // empty | split("\n")[] | select(startswith("-") | not)' \
+                    <<<"$files")
+        if grep -qi "$license" <<<"$patches"; then
+          found "PR changes"
+        fi
+
+        # The API leaves out the patch of a file whose diff is too large, so
+        # search all of such a file at the PR head. Skip files the PR deletes,
+        # which add no text, and files with no changed lines (pure renames,
+        # binary files), for which "gh pr diff" showed no text either.
+        large=$(jq -r 'select(.patch == null and .status != "removed" and .changes > 0)
+                       | .filename' <<<"$files")
+        content=$(mktemp)
+        while IFS= read -r file; do
+          [ -n "$file" ] || continue
+          path=$(jq -rn --arg f "$file" '$f | split("/") | map(@uri) | join("/")')
+          gh api -H "Accept: application/vnd.github.raw" \
+            "repos/$REPO/contents/$path?ref=$HEAD_SHA" > "$content" || {
+            echo "Error: could not read $file at $HEAD_SHA."
+            exit 1
+          }
+          if grep -qi "$license" "$content"; then
+            found "$file"
+          fi
+        done <<<"$large"
+
+    # Replaced by the step above, and to be removed.
     - name: Check PR Diff for License
+      if: false
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
