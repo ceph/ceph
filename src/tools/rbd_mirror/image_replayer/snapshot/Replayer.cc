@@ -540,6 +540,10 @@ void Replayer<I>::scan_local_mirror_snapshots(
           m_prune_snap_ids.insert(local_snap_id);
           break;
         }
+        // Keep the group-linked snapshot so the group can prune it or
+        // authorize resuming it with the same snap-id.
+        m_local_snap_id_end = local_snap_id;
+        break;
       } else {
         // start snap will be last complete mirror snapshot or initial
         // image revision
@@ -637,7 +641,7 @@ void Replayer<I>::scan_local_mirror_snapshots(
 
 template <typename I>
 bool Replayer<I>::is_group_image_replayer() const {
-  std::lock_guard locker{m_lock};
+  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
   if (m_local_group_spec.is_valid()) {
     return true;
   }
@@ -783,41 +787,38 @@ void Replayer<I>::scan_remote_mirror_snapshots(
                << "remote_snap_id_end=" << m_remote_snap_id_end << ", "
                << "remote_snap_ns=" << m_remote_mirror_snap_ns << dendl;
       if (m_remote_mirror_snap_ns.complete) {
-        locker->unlock();
-
-        if (m_local_snap_id_end != CEPH_NOSNAP &&
-            !m_local_mirror_snap_ns.complete) {
-          // attempt to resume image-sync
-          dout(10) << "local image contains in-progress mirror snapshot"
-                   << dendl;
-          get_local_image_state();
-        } else {
-          // A group-owned replayer must not pass its limit even for a
-          // standalone snapshot created between detach and reattach. The
-          // group may still need to retry the preceding image snapshot.
-          // Independent standalone image replayers do not need a group limit.
-          if (!m_remote_mirror_snap_ns.group_spec.is_valid() &&
-              !is_group_image_replayer()) {
-            copy_snapshots();
-            return;
-          }
-          // Image is part of group enabled for mirroring
-          auto limit = get_remote_snap_id_end_limit();
-          if (limit != CEPH_NOSNAP && limit >= m_remote_snap_id_end) {
-            copy_snapshots();
-            return;
-          }
-          dout(10) << "idling waiting for change in snapshot limits" << dendl;
-          {
-            std::unique_lock locker{m_lock};
-            // Shutdown can run while the scan is unlocked.
-            if (is_replay_interrupted(&locker)) {
-              return;
-            }
+        const bool resuming = m_local_snap_id_end != CEPH_NOSNAP &&
+                              !m_local_mirror_snap_ns.complete;
+        // Group snapshots need a limit before starting or resuming a copy.
+        // A group-owned replayer also needs a limit before starting a new
+        // standalone snapshot copy between detach and reattach.
+        const bool needs_group_limit =
+          m_remote_mirror_snap_ns.group_spec.is_valid() ||
+          (!resuming && is_group_image_replayer());
+        if (needs_group_limit &&
+            (m_remote_group_image_snap_id == CEPH_NOSNAP ||
+             m_remote_group_image_snap_id < m_remote_snap_id_end)) {
+          // After restart, an incomplete snapshot may still lack its saved
+          // image state. Wait for the group to prune it or restore its limit.
+          dout(10) << "waiting for group snapshot limit" << dendl;
+          if (m_image_updated || !m_prune_snap_ids_by_gr.empty()) {
+            locker->unlock();
+            load_local_image_meta();
+          } else {
             ceph_assert(m_state == STATE_REPLAYING);
             m_state = STATE_IDLE;
             notify_status_updated();
           }
+          return;
+        }
+
+        locker->unlock();
+        if (resuming) {
+          dout(10) << "local image contains in-progress mirror snapshot"
+                   << dendl;
+          get_local_image_state();
+        } else {
+          copy_snapshots();
         }
         return;
       } else {

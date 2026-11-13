@@ -1162,6 +1162,112 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, InterruptedSyncDelta) {
                                         mock_remote_image_ctx));
 }
 
+// Test sequence:
+// 1. Keep a completed snapshot and an unfinished group snapshot with no copied
+//   objects, as after the image replayer stops during group snapshot sync.
+// 2. Restart without a group limit, then allow only the earlier snapshot.
+// 3. Allow the unfinished snapshot and finish copying it.
+// Expected: Wait for group permission before reading image state or resuming.
+//   Complete the same snapshot without deleting or recreating it.
+TEST_F(TestMockImageReplayerSnapshotReplayer, InterruptedPendingGroupSyncDelta) {
+  librbd::MockTestImageCtx mock_local_image_ctx{*m_local_image_ctx};
+  librbd::MockTestImageCtx mock_remote_image_ctx{*m_remote_image_ctx};
+  MockThreads mock_threads(m_threads);
+  expect_work_queue_repeatedly(mock_threads);
+  MockReplayerListener mock_replayer_listener;
+  expect_notification(mock_threads, mock_replayer_listener);
+
+  InSequence seq;
+  MockInstanceWatcher mock_instance_watcher;
+  MockImageMeta mock_image_meta;
+  MockStateBuilder mock_state_builder(mock_local_image_ctx,
+                                      mock_remote_image_ctx, mock_image_meta);
+  MockReplayer mock_replayer{&mock_threads, &mock_instance_watcher,
+                             "local mirror uuid", "local mirror peer uuid",
+                             &m_pool_meta_cache, &mock_state_builder,
+                             &mock_replayer_listener};
+  m_pool_meta_cache.set_remote_pool_meta(
+    m_remote_fsid, m_remote_io_ctx.get_id(),
+    {"remote mirror uuid", "remote mirror peer uuid"});
+  const cls::rbd::GroupSpec local_group("local group", m_local_io_ctx.get_id());
+
+  librbd::UpdateWatchCtx* update_watch_ctx = nullptr;
+  ASSERT_EQ(0, init_entry_replayer(mock_replayer, mock_threads,
+                                   mock_local_image_ctx, mock_remote_image_ctx,
+                                   mock_replayer_listener, mock_image_meta,
+                                   &update_watch_ctx));
+
+  cls::rbd::MirrorSnapshotNamespace remote_snap{
+    cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {"remote mirror peer uuid"},
+    "", CEPH_NOSNAP, true, 0, {}};
+  remote_snap.group_spec = {"remote group", m_remote_io_ctx.get_id()};
+  remote_snap.group_snap_id = "group snap1";
+  mock_remote_image_ctx.snap_info = {
+    {1U, librbd::SnapInfo{"snap1", remote_snap, 0, {}, 0, 0, {}}}};
+  remote_snap.group_snap_id = "group snap2";
+  mock_remote_image_ctx.snap_info.emplace(
+    2U, librbd::SnapInfo{"snap2", remote_snap, 0, {}, 0, 0, {}});
+
+  cls::rbd::MirrorSnapshotNamespace local_snap{
+    cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY, {}, "remote mirror uuid",
+    1, true, 0, {{1, CEPH_NOSNAP}}};
+  local_snap.group_spec = local_group;
+  local_snap.group_snap_id = "group snap1";
+  mock_local_image_ctx.snap_info = {
+    {11U, librbd::SnapInfo{"snap1", local_snap, 0, {}, 0, 0, {}}}};
+  local_snap.primary_snap_id = 2;
+  local_snap.complete = false;
+  local_snap.snap_seqs = {{2, CEPH_NOSNAP}};
+  local_snap.group_snap_id = "group snap2";
+  mock_local_image_ctx.snap_info.emplace(
+    12U, librbd::SnapInfo{"snap2", local_snap, 0, {}, 0, 0, {}});
+
+  expect_load_image_meta(mock_image_meta, false, 0);
+  expect_is_refresh_required(mock_remote_image_ctx, false);
+  expect_is_refresh_required(mock_local_image_ctx, false);
+  update_watch_ctx->handle_notify();
+  ASSERT_EQ(0, wait_for_notification(1));
+  ASSERT_TRUE(mock_replayer.is_replaying());
+  ASSERT_EQ(0, mock_replayer.get_error_code());
+
+  expect_load_image_meta(mock_image_meta, false, 0);
+  expect_is_refresh_required(mock_remote_image_ctx, false);
+  expect_is_refresh_required(mock_local_image_ctx, false);
+  mock_replayer.set_remote_snap_id_end_limit(1);
+  ASSERT_EQ(0, wait_for_notification(1));
+
+  expect_load_image_meta(mock_image_meta, false, 0);
+  expect_is_refresh_required(mock_remote_image_ctx, false);
+  expect_is_refresh_required(mock_local_image_ctx, false);
+  MockGetImageStateRequest mock_get_image_state_request;
+  expect_get_image_state(mock_get_image_state_request, 12, 0);
+  expect_notify_sync_request(mock_instance_watcher, mock_local_image_ctx.id, 0);
+  MockImageCopyRequest mock_image_copy_request;
+  expect_image_copy(mock_image_copy_request, 1, 2, 11, {},
+                    {{2, CEPH_NOSNAP}}, 0);
+  MockApplyImageStateRequest mock_apply_state_request;
+  expect_apply_image_state(mock_apply_state_request, 0);
+  expect_mirror_image_snapshot_set_copy_progress(
+    mock_local_image_ctx, 12, true, 0, 0);
+  expect_notify_update(mock_local_image_ctx);
+  expect_notify_sync_complete(mock_instance_watcher, mock_local_image_ctx.id);
+
+  // Refresh the completed snapshot while retaining both group references.
+  auto completed_snap_info = mock_local_image_ctx.snap_info;
+  std::get<cls::rbd::MirrorSnapshotNamespace>(
+    completed_snap_info.at(12).snap_namespace).complete = true;
+  expect_load_image_meta(mock_image_meta, false, 0);
+  expect_is_refresh_required(mock_remote_image_ctx, false);
+  expect_is_refresh_required(mock_local_image_ctx, true);
+  expect_refresh(mock_local_image_ctx, completed_snap_info, 0);
+
+  mock_replayer.set_remote_snap_id_end_limit(2);
+  ASSERT_EQ(0, wait_for_notification(2));
+  ASSERT_EQ(0, shut_down_entry_replayer(mock_replayer, mock_threads,
+                                        mock_local_image_ctx,
+                                        mock_remote_image_ctx));
+}
+
 TEST_F(TestMockImageReplayerSnapshotReplayer, InterruptedSyncDeltaDemote) {
   librbd::MockTestImageCtx mock_local_image_ctx{*m_local_image_ctx};
   librbd::MockTestImageCtx mock_remote_image_ctx{*m_remote_image_ctx};
