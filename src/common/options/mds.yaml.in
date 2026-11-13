@@ -1162,6 +1162,18 @@ options:
   services:
   - mds
   fmt_desc: probabilistically inject corrupt CDentry::first at journal load
+- name: mds_inject_dir_fetch_delay
+  type: millisecs
+  level: dev
+  default: 0
+  services:
+  - mds
+  fmt_desc: >
+    inject a delay (ms) before each dirfrag fetch reply acquires mds_lock,
+    including continuation batches, so tests can inspect partial fetches
+    and exercise concurrent cache trimming and commits.
+  flags:
+  - runtime
 - name: mds_kill_shutdown_at
   type: uint
   level: dev

@@ -15,6 +15,7 @@
 
 #include <string_view>
 #include <algorithm>
+#include <thread>
 
 #include "include/types.h"
 
@@ -1715,13 +1716,44 @@ void CDir::fetch_keys(const std::vector<dentry_key_t>& keys, MDSContext *c)
   mdcache->mds->balancer->hit_dir(this, META_POP_FETCH);
 }
 
-class C_IO_Dir_OMAP_FetchedMore : public CDirIOContext {
+class CDirFetchIOContext : public CDirIOContext {
+  // Capture the delay at submission; complete() runs without mds_lock.
+  const std::chrono::milliseconds inject_delay;
+
+public:
+  explicit CDirFetchIOContext(CDir *d) :
+    CDirIOContext(d),
+    inject_delay(d->mdcache->mds->get_inject_dir_fetch_delay()) { }
+
+  void complete(int r) override {
+    // Delay outside mds_lock to allow concurrent trims and commits.
+    // Sleep in slices so shutdown need not wait out the delay on the
+    // shared finisher.
+    if (inject_delay > std::chrono::milliseconds::zero()) {
+      const MDSRank *rank = dir->mdcache->mds;
+      lgeneric_subdout(g_ceph_context, mds, 1)
+        << "CDirFetchIOContext injecting delay " << inject_delay.count()
+        << "ms" << dendl;
+      constexpr std::chrono::milliseconds slice{100};
+      auto left = inject_delay;
+      while (left > std::chrono::milliseconds::zero() &&
+             !rank->is_daemon_stopping()) {
+        const auto step = std::min(left, slice);
+        std::this_thread::sleep_for(step);
+        left -= step;
+      }
+    }
+    CDirIOContext::complete(r);
+  }
+};
+
+class C_IO_Dir_OMAP_FetchedMore : public CDirFetchIOContext {
 public:
   bool more = false;
   map<string, bufferlist> omap;      ///< this batch only
   int ret;
   explicit C_IO_Dir_OMAP_FetchedMore(CDir *d) :
-    CDirIOContext(d), ret(0) { }
+    CDirFetchIOContext(d), ret(0) { }
   void finish(int r) override {
     dir->_omap_fetch_batch(omap, more, r);
   }
@@ -1730,7 +1762,7 @@ public:
   }
 };
 
-class C_IO_Dir_OMAP_Fetched : public CDirIOContext {
+class C_IO_Dir_OMAP_Fetched : public CDirFetchIOContext {
   MDSContext *fin;
 public:
   const version_t omap_version;
@@ -1745,7 +1777,7 @@ public:
   int ret1, ret2, ret3;
 
   C_IO_Dir_OMAP_Fetched(CDir *d, MDSContext *f, bool full, bool pipeline) :
-    CDirIOContext(d), fin(f),
+    CDirFetchIOContext(d), fin(f),
     omap_version(d->get_committing_version()),
     full_fetch(full), pipelined(pipeline),
     ret1(0), ret2(0), ret3(0) {
@@ -1853,6 +1885,7 @@ void CDir::_omap_fetch_batch(map<string, bufferlist>& batch,
 
   ceph_assert(fetch_state);
   fetch_state_t& st = *fetch_state;
+  ++st.replies;
 
   if (r < 0)
     more = false;		// let the finish path report it
@@ -1865,6 +1898,8 @@ void CDir::_omap_fetch_batch(map<string, bufferlist>& batch,
     if (check_version && st.omap_version < get_committed_version()) {
       dout(10) << __func__ << " dir was committed to v" << get_committed_version()
 	       << " while fetching at v" << st.omap_version << ", restarting" << dendl;
+      if (mdcache->mds->logger)
+        mdcache->mds->logger->inc(l_mds_dir_fetch_restart);
       fetch_state.reset();
       _omap_fetch(nullptr, nullptr, false);
       return;
@@ -1894,6 +1929,8 @@ void CDir::_omap_fetch_batch(map<string, bufferlist>& batch,
     st.version_changed = true;
     dout(10) << __func__ << " dir was committed to v" << get_committed_version()
 	     << " while fetching at v" << st.omap_version << ", continuing" << dendl;
+    if (mdcache->mds->logger)
+      mdcache->mds->logger->inc(l_mds_dir_fetch_continue);
   }
 
   // The raw cursor lets the next read overlap decoding this batch.
@@ -2217,6 +2254,7 @@ void CDir::_omap_decode_batch(fetch_state_t& st, map<string, bufferlist>& batch,
 			      std::vector<string_snap_t>& null_keys)
 {
   dout(10) << "_fetched " << batch.size() << " keys for " << *this << dendl;
+  st.decoded_keys += batch.size();
 
   if (st.snap_purge_target)
     st.snaps = inode->find_snaprealm()->get_snaps();
@@ -3856,6 +3894,17 @@ void CDir::dump(Formatter *f, int flags) const
     if (state_test(CDir::STATE_IMPORTBOUND)) f->dump_string("state", "importbound");
     if (state_test(CDir::STATE_BADFRAG)) f->dump_string("state", "badfrag");
     f->close_section();
+    if (fetch_state) {
+      // Progress of the full fetch; absent until its first reply arrives.
+      f->open_object_section("fetch");
+      f->dump_bool("pipelined", fetch_state->pipelined);
+      f->dump_unsigned("omap_version", fetch_state->omap_version);
+      f->dump_bool("version_changed", fetch_state->version_changed);
+      f->dump_unsigned("replies", fetch_state->replies);
+      f->dump_unsigned("decoded_keys", fetch_state->decoded_keys);
+      f->dump_unsigned("buffered_keys", fetch_state->pending.size());
+      f->close_section();
+    }
   }
   if (flags & DUMP_MDS_CACHE_OBJECT) {
     MDSCacheObject::dump(f);
