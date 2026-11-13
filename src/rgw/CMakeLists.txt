@@ -368,6 +368,7 @@ endif()
 target_link_libraries(rgw_common
   PRIVATE
     ${rgw_common_libs}
+    datum::ceph
     legacy-option-headers
     global
     cls_rgw_client
@@ -481,6 +482,7 @@ if(WITH_RADOSGW_STANDALONE)
   target_link_libraries(rgw_common_standalone
     PRIVATE
     ${rgw_common_libs}
+    datum::ceph
     legacy-option-headers
     global
     cls_rgw_client
@@ -871,10 +873,12 @@ if(WITH_RADOSGW_FDB)
   rgw_fdb)
 
  # Use the zpp_bits back-end for serialization:
- add_library(zpp_bits INTERFACE)
+ if(NOT TARGET zpp_bits)
+  add_library(zpp_bits INTERFACE)
 
- # JFW: there must be a nicer way to refer to this path (or ask it to be installed somewhere?):
- target_include_directories(zpp_bits INTERFACE "${CMAKE_BINARY_DIR}/_deps/zpp_bits-src/")
+  # JFW: there must be a nicer way to refer to this path (or ask it to be installed somewhere?):
+  target_include_directories(zpp_bits INTERFACE "${CMAKE_BINARY_DIR}/_deps/zpp_bits-src/")
+ endif()
 
  target_link_libraries(rgw_fdb INTERFACE zpp_bits)
 

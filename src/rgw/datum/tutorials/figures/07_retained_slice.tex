@@ -1,0 +1,38 @@
+\documentclass[10pt]{article}
+\usepackage[paperwidth=12cm,paperheight=6.8cm,margin=3mm]{geometry}
+\usepackage{tikz}
+\pagestyle{empty}
+\pagecolor{white}
+
+\begin{document}
+\centering
+\begin{tikzpicture}[x=1cm,y=1cm,font=\sffamily\large]
+  \definecolor{inputcolor}{RGB}{38,89,137}
+  \definecolor{resultcolor}{RGB}{0,111,106}
+
+  \filldraw[fill=inputcolor!5,draw=inputcolor,rounded corners=3pt]
+    (0,3.7) rectangle (6.2,6.0);
+  \node[anchor=west,font=\ttfamily\large] at (0.3,5.6) {message};
+  \node[anchor=west] at (0.3,4.9) {owner: \texttt{Miso: meow}};
+  \node[anchor=west] at (0.3,4.2) {lens: offset 6, length 4};
+  \draw[->,line width=1pt] (6.2,4.85) -- (8.0,4.85)
+    node[midway,above,font=\ttfamily\large] {get()};
+  \draw[gray,rounded corners=2pt] (8.1,4.5) rectangle (9.7,5.2);
+  \node[font=\ttfamily\large] at (8.9,4.85) {meow};
+  \node at (8.9,4.0) {borrow};
+
+  \draw[->,line width=1pt] (3.1,3.7) -- (3.1,2.6);
+  \node[anchor=west] at (3.35,3.15) {move owner and lens};
+
+  \filldraw[fill=resultcolor!5,draw=resultcolor,rounded corners=3pt]
+    (0,0.3) rectangle (6.2,2.6);
+  \node[anchor=west,font=\ttfamily\large] at (0.3,2.2) {moved};
+  \node[anchor=west] at (0.3,1.5) {owner: \texttt{Miso: meow}};
+  \node[anchor=west] at (0.3,0.8) {lens: offset 6, length 4};
+  \draw[->,line width=1pt] (6.2,1.45) -- (8.0,1.45)
+    node[midway,above,font=\ttfamily\large] {get()};
+  \draw[gray,rounded corners=2pt] (8.1,1.1) rectangle (9.7,1.8);
+  \node[font=\ttfamily\large] at (8.9,1.45) {meow};
+  \node at (8.9,0.6) {fresh borrow};
+\end{tikzpicture}
+\end{document}

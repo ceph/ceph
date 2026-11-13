@@ -371,7 +371,7 @@ private:
   }
 
   interruptible_errorated_future<osd_op_errorator>
-  do_execute_op(OSDOp& osd_op);
+  do_execute_op(OSDOp& osd_op, ceph::osd::OmapGetValues *omap_read);
 
   OpsExecuter(Ref<PG> pg,
               ObjectContextRef obc,
@@ -410,6 +410,8 @@ public:
 
   interruptible_errorated_future<osd_op_errorator>
   execute_op(OSDOp& osd_op);
+  interruptible_errorated_future<osd_op_errorator>
+  execute_op(OSDOp& osd_op, ceph::osd::OmapGetValues *omap_read);
 
   using rep_op_fut_tuple =
     std::tuple<interruptible_future<>, interruptible_future<>>;

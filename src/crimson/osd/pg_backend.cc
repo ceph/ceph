@@ -35,6 +35,7 @@
 #include "ec_backend.h"
 #include "exceptions.h"
 #include "osd/object_state_fmt.h"
+#include "osd/OmapGetValues.h"
 
 namespace {
   seastar::logger& logger() {
@@ -1434,6 +1435,7 @@ using get_omap_iterate_ertr =
   crimson::os::FuturizedStore::Shard::read_errorator::extend<
     crimson::ct_error::enodata>;
 using omap_iterate_cb_t = crimson::os::FuturizedStore::Shard::omap_iterate_cb_t;
+using omap_iterate_conf_t = crimson::os::FuturizedStore::Shard::omap_iterate_conf_t;
 static
 get_omap_iterate_ertr::future<ObjectStore::omap_iter_ret_t>
 maybe_do_omap_iterate(
@@ -1441,11 +1443,12 @@ maybe_do_omap_iterate(
   const crimson::os::CollectionRef& coll,
   const object_info_t& oi,
   ObjectStore::omap_iter_seek_t start_from,
-  omap_iterate_cb_t callback)
+  omap_iterate_cb_t callback,
+  omap_iterate_conf_t on_conflict = nullptr)
 {
   if (oi.is_omap()) {
     return crimson::os::with_store<&crimson::os::FuturizedStore::Shard::omap_iterate>(
-      store, coll, ghobject_t{oi.soid}, start_from, callback, 0, nullptr);
+      store, coll, ghobject_t{oi.soid}, start_from, callback, 0, on_conflict);
   } else {
     logger().error("{} on {}: backend has no OMAP support",__func__, oi.soid);
     return crimson::ct_error::enodata::make();
@@ -1627,23 +1630,30 @@ PGBackend::ll_read_ierrorator::future<>
 PGBackend::omap_get_vals(
   const ObjectState& os,
   OSDOp& osd_op,
-  object_stat_sum_t& delta_stats) const
+  object_stat_sum_t& delta_stats,
+  ceph::osd::OmapGetValues *omap_read) const
 {
   if (!os.exists || os.oi.is_whiteout()) {
     logger().debug("object does not exist: {}", os.oi.soid);
     co_await ll_read_ierrorator::future<>(crimson::ct_error::enoent::make());
   }
-  std::string start_after;
-  uint64_t max_return;
-  std::string filter_prefix;
-  try {
-    auto p = osd_op.indata.cbegin();
-    decode(start_after, p);
-    decode(max_return, p);
-    decode(filter_prefix, p);
-  } catch (buffer::error&) {
-    throw crimson::osd::invalid_argument{};
+  std::string wire_start, wire_prefix;
+  uint64_t max_return = omap_read ? omap_read->max_return : 0;
+  if (!omap_read) {
+    try
+     {
+      auto p = osd_op.indata.cbegin();
+      decode(wire_start, p);
+      decode(max_return, p);
+      decode(wire_prefix, p);
+     }
+    catch (buffer::error&)
+     {
+      throw crimson::osd::invalid_argument{};
+     }
   }
+  const auto& start_after = omap_read ? omap_read->start_after : wire_start;
+  const auto& filter_prefix = omap_read ? omap_read->filter_prefix : wire_prefix;
 
   uint64_t max_omap_entries = local_conf()->osd_max_omap_entries_per_request;
   max_return = \
@@ -1651,13 +1661,15 @@ PGBackend::omap_get_vals(
 
   ceph::bufferlist result;
   uint32_t num = 0;
+  uint64_t payload_bytes = 0;
   bool truncated = false;
   ObjectStore::omap_iter_seek_t start_from = ObjectStore::omap_iter_seek_t::min_lower_bound();
   start_from.seek_position = filter_prefix > start_after ? filter_prefix : start_after;
   start_from.seek_type = filter_prefix > start_after ?
                          ObjectStore::omap_iter_seek_t::LOWER_BOUND :
                          ObjectStore::omap_iter_seek_t::UPPER_BOUND;
-  omap_iterate_cb_t callback = [filter_prefix, max_return, &result, &num, &truncated]
+  omap_iterate_cb_t callback = [&filter_prefix, max_return, &result, &num, &truncated,
+                               &payload_bytes, omap_read]
     (std::string_view key, std::string_view value)
   {
     if (num >= max_return) {
@@ -1667,26 +1679,52 @@ PGBackend::omap_get_vals(
       return ObjectStore::omap_iter_ret_t::STOP;
     }
 
-    encode(key, result);
-    encode(value, result);
+    if (omap_read) {
+      omap_read->append(key, value);
+    }
+    if (!omap_read) {
+      encode(key, result);
+      encode(value, result);
+    }
+    payload_bytes += 2 * sizeof(uint32_t) + key.size() + value.size();
     ++num;
     return ObjectStore::omap_iter_ret_t::NEXT;
   };
 
-  co_await maybe_do_omap_iterate(store, coll, os.oi, start_from, callback
-  ).safe_then([&osd_op, &delta_stats, &result, &num, &truncated](auto ret) {
+  co_await maybe_do_omap_iterate(store, coll, os.oi, start_from, callback,
+    [&result, &num, &truncated, &payload_bytes, omap_read] {
+      result.clear();
+      num = 0;
+      truncated = false;
+      payload_bytes = 0;
+      if (omap_read) {
+        omap_read->reset();
+      }
+      return ObjectStore::omap_iter_ret_t::NEXT;
+    }
+  ).safe_then([&osd_op, &delta_stats, &result, &num, &truncated, &payload_bytes, omap_read](auto ret) {
     if (ret != ObjectStore::omap_iter_ret_t::STOP) {
       logger().warn("omap_iterate not meet a stop condition");
     }
-    encode(num, osd_op.outdata);
-    osd_op.outdata.claim_append(result);
-    encode(truncated, osd_op.outdata);
-    delta_stats.num_rd_kb += shift_round_up(osd_op.outdata.length(), 10);
+    if (omap_read) {
+      omap_read->more = truncated;
+    }
+    if (!omap_read) {
+      encode(num, osd_op.outdata);
+      osd_op.outdata.claim_append(result);
+      encode(truncated, osd_op.outdata);
+    }
+    delta_stats.num_rd_kb += shift_round_up(sizeof(uint32_t) + payload_bytes + sizeof(bool), 10);
     delta_stats.num_rd++;
   }).handle_error(
-    crimson::ct_error::enodata::handle([&osd_op] {
-      encode(uint32_t{0} /* num */, osd_op.outdata);
-      encode(bool{false} /* truncated */, osd_op.outdata);
+    crimson::ct_error::enodata::handle([&osd_op, omap_read] {
+      if (omap_read) {
+        omap_read->reset();
+      }
+      if (!omap_read) {
+        encode(uint32_t{0} /* num */, osd_op.outdata);
+        encode(bool{false} /* truncated */, osd_op.outdata);
+      }
       osd_op.rval = 0;
       return ll_read_errorator::now();
     }),

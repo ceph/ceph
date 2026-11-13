@@ -6,16 +6,18 @@
 #include <cctype>
 
 #include "include/utime.h"
+#include "rgw/datum/adapters/ceph-datum.h"
 #include "objclass/objclass.h"
 
 #include "cls_user_ops.h"
+#include "rgw/datum/adapters/cls/user.h"
 #include "rgw/rgw_string.h"
 
 using std::map;
 using std::string;
 
 using ceph::bufferlist;
-using ceph::decode;
+using ceph::salad::datum::try_decode;
 using ceph::encode;
 
 CLS_VER(1,0)
@@ -33,20 +35,6 @@ static int write_entry(cls_method_context_t hctx, const string& key, const cls_u
   return 0;
 }
 
-static int remove_entry(cls_method_context_t hctx, const string& key)
-{
-  int ret = cls_cxx_map_remove_key(hctx, key);
-  if (ret < 0)
-    return ret;
-
-  return 0;
-}
-
-static void get_key_by_bucket_name(const string& bucket_name, string *key)
-{
-  *key = bucket_name;
-}
-
 static int get_existing_bucket_entry(cls_method_context_t hctx, const string& bucket_name,
                                      cls_user_bucket_entry& entry)
 {
@@ -54,20 +42,15 @@ static int get_existing_bucket_entry(cls_method_context_t hctx, const string& bu
     return -EINVAL;
   }
 
-  string key;
-  get_key_by_bucket_name(bucket_name, &key);
-
   bufferlist bl;
-  int rc = cls_cxx_map_get_val(hctx, key, &bl);
+  int rc = cls_cxx_map_get_val(hctx, bucket_name, &bl);
   if (rc < 0) {
-    CLS_LOG(10, "could not read entry %s", key.c_str());
+    CLS_LOG(10, "could not read entry %s", bucket_name.c_str());
     return rc;
   }
-  try {
-    auto iter = bl.cbegin();
-    decode(entry, iter);
-  } catch (ceph::buffer::error& err) {
-    CLS_LOG(0, "ERROR: failed to decode entry %s", key.c_str());
+  auto iter = bl.cbegin();
+  if (!try_decode(entry, iter)) {
+    CLS_LOG(0, "ERROR: failed to decode entry %s", bucket_name.c_str());
     return -EIO;
   }
 
@@ -75,7 +58,7 @@ static int get_existing_bucket_entry(cls_method_context_t hctx, const string& bu
 }
 
 template <typename T>
-static int read_header(cls_method_context_t hctx, T *header)
+static int read_header(cls_method_context_t hctx, T& header)
 {
   bufferlist bl;
 
@@ -84,13 +67,11 @@ static int read_header(cls_method_context_t hctx, T *header)
     return ret;
 
   if (bl.length() == 0) {
-    *header = T();
+    header = T();
     return 0;
   }
 
-  try {
-    decode(*header, bl);
-  } catch (ceph::buffer::error& err) {
+  if (!try_decode(header, bl)) {
     CLS_LOG(0, "ERROR: failed to decode user header");
     return -EIO;
   }
@@ -98,52 +79,47 @@ static int read_header(cls_method_context_t hctx, T *header)
   return 0;
 }
 
-static void add_header_stats(cls_user_stats *stats, cls_user_bucket_entry& entry)
+static void add_header_stats(cls_user_stats& stats, const cls_user_bucket_entry& entry)
 {
-  stats->total_entries += entry.count;
-  stats->total_bytes += entry.size;
-  stats->total_bytes_rounded += entry.size_rounded;
+  stats.total_entries += entry.count;
+  stats.total_bytes += entry.size;
+  stats.total_bytes_rounded += entry.size_rounded;
 }
 
-static void dec_header_stats(cls_user_stats *stats, cls_user_bucket_entry& entry)
+static void dec_header_stats(cls_user_stats& stats, const cls_user_bucket_entry& entry)
 {
-  stats->total_bytes -= entry.size;
-  stats->total_bytes_rounded -= entry.size_rounded;
-  stats->total_entries -= entry.count;
+  stats.total_bytes -= entry.size;
+  stats.total_bytes_rounded -= entry.size_rounded;
+  stats.total_entries -= entry.count;
 }
 
-static void apply_entry_stats(const cls_user_bucket_entry& src_entry, cls_user_bucket_entry *target_entry)
+static void apply_entry_stats(const cls_user_bucket_entry& src_entry,
+                               cls_user_bucket_entry& target_entry)
 {
-  target_entry->size = src_entry.size;
-  target_entry->size_rounded = src_entry.size_rounded;
-  target_entry->count = src_entry.count;
+  target_entry.size = src_entry.size;
+  target_entry.size_rounded = src_entry.size_rounded;
+  target_entry.count = src_entry.count;
 }
 
 static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   auto in_iter = in->cbegin();
 
-  cls_user_set_buckets_op op;
-  try {
-    decode(op, in_iter);
-  } catch (ceph::buffer::error& err) {
+  cls::rgw::user_datum::bulk_request op;
+  if (!try_decode(op, in_iter)) {
     CLS_LOG(1, "ERROR: cls_user_add_op(): failed to decode op");
     return -EINVAL;
   }
 
   cls_user_header header;
-  int ret = read_header(hctx, &header);
+  int ret = read_header(hctx, header);
   if (ret < 0) {
     CLS_LOG(0, "ERROR: failed to read user info header ret=%d", ret);
     return ret;
   }
 
-  for (auto iter = op.entries.begin(); iter != op.entries.end(); ++iter) {
-    cls_user_bucket_entry& update_entry = *iter;
-
-    string key;
-
-    get_key_by_bucket_name(update_entry.bucket.name, &key);
+  for (const auto& update_entry : op.entries) {
+    const auto& key = update_entry.bucket.name;
 
     cls_user_bucket_entry entry;
     ret = get_existing_bucket_entry(hctx, key, entry);
@@ -165,8 +141,10 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
     if (ret < 0) {
       CLS_LOG(0, "ERROR: get_existing_bucket_entry() key=%s returned %d", key.c_str(), ret);
       return ret;
-    } else if (ret >= 0 && entry.user_stats_sync) {
-      dec_header_stats(&header.stats, entry);
+    }
+
+    if (entry.user_stats_sync) {
+      dec_header_stats(header.stats, entry);
     }
 
     CLS_LOG(20, "storing entry for key=%s size=%lld count=%lld",
@@ -176,7 +154,7 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
     // new entry we already have copied update_entry earlier, OTOH, for an existing entry
     // we end up clobbering the existing stats for the bucket
     if (!op.add){
-      apply_entry_stats(update_entry, &entry);
+      apply_entry_stats(update_entry, entry);
     }
     entry.user_stats_sync = true;
 
@@ -184,7 +162,7 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
     if (ret < 0)
       return ret;
 
-    add_header_stats(&header.stats, entry);
+    add_header_stats(header.stats, entry);
   }
 
   bufferlist bl;
@@ -207,16 +185,14 @@ static int cls_user_complete_stats_sync(cls_method_context_t hctx, bufferlist *i
 {
   auto in_iter = in->cbegin();
 
-  cls_user_complete_stats_sync_op op;
-  try {
-    decode(op, in_iter);
-  } catch (ceph::buffer::error& err) {
+  cls::rgw::user_datum::time_request op;
+  if (!try_decode(op, in_iter)) {
     CLS_LOG(1, "ERROR: cls_user_add_op(): failed to decode op");
     return -EINVAL;
   }
 
   cls_user_header header;
-  int ret = read_header(hctx, &header);
+  int ret = read_header(hctx, header);
   if (ret < 0) {
     CLS_LOG(0, "ERROR: failed to read user info header ret=%d", ret);
     return ret;
@@ -240,24 +216,20 @@ static int cls_user_remove_bucket(cls_method_context_t hctx, bufferlist *in, buf
 {
   auto in_iter = in->cbegin();
 
-  cls_user_remove_bucket_op op;
-  try {
-    decode(op, in_iter);
-  } catch (ceph::buffer::error& err) {
+  cls::rgw::user_datum::bucket_request op;
+  if (!try_decode(op, in_iter)) {
     CLS_LOG(1, "ERROR: cls_user_add_op(): failed to decode op");
     return -EINVAL;
   }
 
   cls_user_header header;
-  int ret = read_header(hctx, &header);
+  int ret = read_header(hctx, header);
   if (ret < 0) {
     CLS_LOG(0, "ERROR: failed to read user info header ret=%d", ret);
     return ret;
   }
 
-  string key;
-
-  get_key_by_bucket_name(op.bucket.name, &key);
+  const auto& key = op.bucket.name;
 
   cls_user_bucket_entry entry;
   ret = get_existing_bucket_entry(hctx, key, entry);
@@ -271,7 +243,7 @@ static int cls_user_remove_bucket(cls_method_context_t hctx, bufferlist *in, buf
 
   CLS_LOG(20, "removing entry at %s", key.c_str());
 
-  ret = remove_entry(hctx, key);
+  ret = cls_cxx_map_remove_key(hctx, key);
   if (ret < 0)
     return ret;
 
@@ -279,7 +251,7 @@ static int cls_user_remove_bucket(cls_method_context_t hctx, bufferlist *in, buf
     return 0;
   }
 
-  dec_header_stats(&header.stats, entry);
+  dec_header_stats(header.stats, entry);
 
   CLS_LOG(20, "header: total bytes=%lld entries=%lld", (long long)header.stats.total_bytes, (long long)header.stats.total_entries);
 
@@ -292,10 +264,8 @@ static int cls_user_list_buckets(cls_method_context_t hctx, bufferlist *in, buff
 {
   auto in_iter = in->cbegin();
 
-  cls_user_list_buckets_op op;
-  try {
-    decode(op, in_iter);
-  } catch (ceph::buffer::error& err) {
+  cls::rgw::user_datum::bucket_list_request op;
+  if (!try_decode(op, in_iter)) {
     CLS_LOG(1, "ERROR: cls_user_list_op(): failed to decode op");
     return -EINVAL;
   }
@@ -312,7 +282,7 @@ static int cls_user_list_buckets(cls_method_context_t hctx, bufferlist *in, buff
     max_entries = MAX_ENTRIES;
 
   string match_prefix;
-  cls_user_list_buckets_ret ret;
+  cls::rgw::user_datum::bucket_list_reply<> ret;
 
   int rc = cls_cxx_map_get_vals(hctx, from_index, match_prefix, max_entries, &keys, &ret.truncated);
   if (rc < 0)
@@ -339,13 +309,12 @@ static int cls_user_list_buckets(cls_method_context_t hctx, bufferlist *in, buff
 
     bufferlist& bl = iter->second;
     auto biter = bl.cbegin();
-    try {
-      cls_user_bucket_entry e;
-      decode(e, biter);
-      entries.push_back(e);
-    } catch (ceph::buffer::error& err) {
+    cls_user_bucket_entry e;
+    if (!try_decode(e, biter)) {
       CLS_LOG(0, "ERROR: cls_user_list: could not decode entry, index=%s", index.c_str());
+      continue;
     }
+    entries.push_back(std::move(e));
   }
 
   if (ret.truncated) {
@@ -361,17 +330,15 @@ static int cls_user_get_header(cls_method_context_t hctx, bufferlist *in, buffer
 {
   auto in_iter = in->cbegin();
 
-  cls_user_get_header_op op;
-  try {
-    decode(op, in_iter);
-  } catch (ceph::buffer::error& err) {
+  cls::rgw::user_datum::empty_request op;
+  if (!try_decode(op, in_iter)) {
     CLS_LOG(1, "ERROR: cls_user_get_header_op(): failed to decode op");
     return -EINVAL;
   }
 
-  cls_user_get_header_ret op_ret;
+  cls::rgw::user_datum::header_reply op_ret;
 
-  int ret = read_header(hctx, &op_ret.header);
+  int ret = read_header(hctx, op_ret.header);
   if (ret < 0)
     return ret;
 
@@ -387,12 +354,10 @@ static int cls_user_get_header(cls_method_context_t hctx, bufferlist *in, buffer
 static int cls_user_reset_stats(cls_method_context_t hctx,
 				bufferlist *in, bufferlist *out /*ignore*/)
 {
-  cls_user_reset_stats_op op;
+  cls::rgw::user_datum::time_request op;
 
-  try {
-    auto bliter = in->cbegin();
-    decode(op, bliter);
-  } catch (ceph::buffer::error& err) {
+  auto bliter = in->cbegin();
+  if (!try_decode(op, bliter)) {
     CLS_LOG(0, "ERROR: %s failed to decode op", __func__);
     return -EINVAL;
   }
@@ -413,16 +378,14 @@ static int cls_user_reset_stats(cls_method_context_t hctx,
 
     for (const auto& kv : keys) {
       cls_user_bucket_entry e;
-      try {
-	auto bl = kv.second;
-	auto bliter = bl.cbegin();
-	decode(e, bliter);
-      } catch (ceph::buffer::error& err) {
+      const auto& bl = kv.second;
+      auto bliter = bl.cbegin();
+      if (!try_decode(e, bliter)) {
 	CLS_LOG(0, "ERROR: %s failed to decode bucket entry for %s",
 		__func__, kv.first.c_str());
 	return -EIO;
       }
-      add_header_stats(&header.stats, e);
+      add_header_stats(header.stats, e);
     }
     if (!keys.empty()) {
       from_index = keys.rbegin()->first;
@@ -444,19 +407,18 @@ static int cls_user_reset_stats(cls_method_context_t hctx,
 static int cls_user_reset_stats2(cls_method_context_t hctx,
 				 buffer::list *in, buffer::list *out)
 {
-  cls_user_reset_stats2_op op;
+  cls::rgw::user_datum::reset_request op;
 
-  try {
-    auto bliter = in->cbegin();
-    decode(op, bliter);
-  } catch (ceph::buffer::error& err) {
+  auto bliter = in->cbegin();
+  if (!try_decode(op, bliter)) {
     CLS_LOG(0, "ERROR: %s failed to decode op", __func__);
     return -EINVAL;
   }
 
   cls_user_header header;
   string from_index{op.marker}, prefix;
-  cls_user_reset_stats2_ret ret;
+  cls::rgw::user_datum::reset_reply ret;
+  ret.acc_stats = op.acc_stats;
 
   map<string, buffer::list> keys;
   int rc = cls_cxx_map_get_vals(hctx, from_index, prefix, MAX_ENTRIES,
@@ -470,16 +432,14 @@ static int cls_user_reset_stats2(cls_method_context_t hctx,
 
   for (const auto& kv : keys) {
     cls_user_bucket_entry e;
-    try {
-      auto& bl = kv.second;
-      auto bliter = bl.cbegin();
-      decode(e, bliter);
-    } catch (ceph::buffer::error& err) {
+    auto& bl = kv.second;
+    auto bliter = bl.cbegin();
+    if (!try_decode(e, bliter)) {
       CLS_LOG(0, "ERROR: %s failed to decode bucket entry for %s",
 	      __func__, kv.first.c_str());
       return -EIO;
     }
-    add_header_stats(&ret.acc_stats, e);
+    add_header_stats(ret.acc_stats, e);
   }
 
   if (! ret.truncated) {
@@ -510,8 +470,7 @@ static int cls_user_reset_stats2(cls_method_context_t hctx,
 // convert all keys to lowercase
 static std::string resource_key(std::string_view name)
 {
-  std::string key;
-  key.resize(name.size());
+  std::string key(name.size(), '\0');
   std::transform(name.begin(), name.end(), key.begin(),
                  [](unsigned char c) { return std::tolower(c); });
   return key;
@@ -520,11 +479,9 @@ static std::string resource_key(std::string_view name)
 static int cls_account_resource_add(cls_method_context_t hctx,
                                     buffer::list *in, buffer::list *out)
 {
-  cls_user_account_resource_add_op op;
-  try {
-    auto bliter = in->cbegin();
-    decode(op, bliter);
-  } catch (const ceph::buffer::error& err) {
+  cls::rgw::user_datum::resource_add_request op;
+  auto bliter = in->cbegin();
+  if (!try_decode(op, bliter)) {
     CLS_LOG(0, "ERROR: %s failed to decode op", __func__);
     return -EINVAL;
   }
@@ -545,7 +502,7 @@ static int cls_account_resource_add(cls_method_context_t hctx,
   std::optional<cls_user_account_header> header;
   if (!exists) {
     // if this is a new entry, update the resource count in the account header
-    ret = read_header(hctx, &header.emplace());
+    ret = read_header(hctx, header.emplace());
     if (ret < 0) {
       CLS_LOG(0, "ERROR: failed to read account header ret=%d", ret);
       return ret;
@@ -581,11 +538,9 @@ static int cls_account_resource_add(cls_method_context_t hctx,
 static int cls_account_resource_get(cls_method_context_t hctx,
                                     bufferlist *in, bufferlist *out)
 {
-  cls_user_account_resource_get_op op;
-  try {
-    auto p = in->cbegin();
-    decode(op, p);
-  } catch (const ceph::buffer::error& err) {
+  cls::rgw::user_datum::name_request op;
+  auto p = in->cbegin();
+  if (!try_decode(op, p)) {
     CLS_LOG(0, "ERROR: %s failed to decode op", __func__);
     return -EINVAL;
   }
@@ -600,11 +555,9 @@ static int cls_account_resource_get(cls_method_context_t hctx,
     return r;
   }
 
-  cls_user_account_resource_get_ret ret;
-  try {
-    auto iter = bl.cbegin();
-    decode(ret.entry, iter);
-  } catch (ceph::buffer::error& err) {
+  cls::rgw::user_datum::resource_reply ret;
+  auto iter = bl.cbegin();
+  if (!try_decode(ret.entry, iter)) {
     CLS_LOG(0, "ERROR: failed to decode entry %s", key.c_str());
     return -EIO;
   }
@@ -616,11 +569,9 @@ static int cls_account_resource_get(cls_method_context_t hctx,
 static int cls_account_resource_rm(cls_method_context_t hctx,
                                    buffer::list *in, buffer::list *out)
 {
-  cls_user_account_resource_rm_op op;
-  try {
-    auto bliter = in->cbegin();
-    decode(op, bliter);
-  } catch (const ceph::buffer::error& err) {
+  cls::rgw::user_datum::name_request op;
+  auto bliter = in->cbegin();
+  if (!try_decode(op, bliter)) {
     CLS_LOG(0, "ERROR: %s failed to decode op", __func__);
     return -EINVAL;
   }
@@ -646,7 +597,7 @@ static int cls_account_resource_rm(cls_method_context_t hctx,
 
   // update resource count in the account header
   cls_user_account_header header;
-  ret = read_header(hctx, &header);
+  ret = read_header(hctx, header);
   if (ret < 0) {
     CLS_LOG(0, "ERROR: failed to read account header ret=%d", ret);
     return ret;
@@ -663,11 +614,9 @@ static int cls_account_resource_rm(cls_method_context_t hctx,
 static int cls_account_resource_list(cls_method_context_t hctx,
                                      bufferlist *in, bufferlist *out)
 {
-  cls_user_account_resource_list_op op;
-  try {
-    auto p = in->cbegin();
-    decode(op, p);
-  } catch (const ceph::buffer::error& err) {
+  cls::rgw::user_datum::resource_list_request op;
+  auto p = in->cbegin();
+  if (!try_decode(op, p)) {
     CLS_LOG(0, "ERROR: %s failed to decode op", __func__);
     return -EINVAL;
   }
@@ -685,16 +634,14 @@ static int cls_account_resource_list(cls_method_context_t hctx,
     return rc;
   }
 
-  cls_user_account_resource_list_ret ret;
+  cls::rgw::user_datum::resource_list_reply ret;
 
   // copy matching decoded omap values into a vector
   for (auto& [key, bl] : entries) {
     // decode as cls_user_account_resource
     cls_user_account_resource entry;
-    try {
-      auto p = bl.cbegin();
-      decode(entry, p);
-    } catch (const ceph::buffer::error& e) {
+    auto p = bl.cbegin();
+    if (!try_decode(entry, p)) {
       CLS_LOG(1, "ERROR: %s failed to decode resource entry at key=%s",
               __func__, key.c_str());
       return -EIO;
@@ -725,34 +672,22 @@ CLS_INIT(user)
   CLS_LOG(1, "Loaded user class!");
 
   cls_handle_t h_class;
-  cls_method_handle_t h_user_set_buckets_info;
-  cls_method_handle_t h_user_complete_stats_sync;
-  cls_method_handle_t h_user_remove_bucket;
-  cls_method_handle_t h_user_list_buckets;
-  cls_method_handle_t h_user_get_header;
-  cls_method_handle_t h_user_reset_stats;
-  cls_method_handle_t h_user_reset_stats2;
 
   using namespace cls::user;
   cls_register(ClassId::name, &h_class);
   ClassRegistrar<ClassId> cls(h_class);
 
-  cls.register_cxx_method(method::set_buckets_info,      cls_user_set_buckets_info,    &h_user_set_buckets_info);
-  cls.register_cxx_method(method::complete_stats_sync,   cls_user_complete_stats_sync, &h_user_complete_stats_sync);
-  cls.register_cxx_method(method::remove_bucket,         cls_user_remove_bucket,       &h_user_remove_bucket);
-  cls.register_cxx_method(method::list_buckets,          cls_user_list_buckets,        &h_user_list_buckets);
-  cls.register_cxx_method(method::get_header,            cls_user_get_header,          &h_user_get_header);
-  cls.register_cxx_method(method::reset_user_stats,      cls_user_reset_stats,         &h_user_reset_stats);
-  cls.register_cxx_method(method::reset_user_stats2,     cls_user_reset_stats2,        &h_user_reset_stats2);
+  cls.register_cxx_method(method::set_buckets_info,      cls_user_set_buckets_info);
+  cls.register_cxx_method(method::complete_stats_sync,   cls_user_complete_stats_sync);
+  cls.register_cxx_method(method::remove_bucket,         cls_user_remove_bucket);
+  cls.register_cxx_method(method::list_buckets,          cls_user_list_buckets);
+  cls.register_cxx_method(method::get_header,            cls_user_get_header);
+  cls.register_cxx_method(method::reset_user_stats,      cls_user_reset_stats);
+  cls.register_cxx_method(method::reset_user_stats2,     cls_user_reset_stats2);
 
   // account
-  cls_method_handle_t h_account_resource_add;
-  cls_method_handle_t h_account_resource_get;
-  cls_method_handle_t h_account_resource_rm;
-  cls_method_handle_t h_account_resource_list;
-
-  cls.register_cxx_method(method::account_resource_add,  cls_account_resource_add,     &h_account_resource_add);
-  cls.register_cxx_method(method::account_resource_get,  cls_account_resource_get,     &h_account_resource_get);
-  cls.register_cxx_method(method::account_resource_rm,   cls_account_resource_rm,      &h_account_resource_rm);
-  cls.register_cxx_method(method::account_resource_list, cls_account_resource_list,    &h_account_resource_list);
+  cls.register_cxx_method(method::account_resource_add,  cls_account_resource_add);
+  cls.register_cxx_method(method::account_resource_get,  cls_account_resource_get);
+  cls.register_cxx_method(method::account_resource_rm,   cls_account_resource_rm);
+  cls.register_cxx_method(method::account_resource_list, cls_account_resource_list);
 }

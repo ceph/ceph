@@ -22,7 +22,9 @@ jobs:
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        DIFF=$(gh pr diff ${{ github.event.pull_request.number }} -R ${{ github.repository }})
+        DIFF=$(gh api "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/pull/${{ github.event.pull_request.number }}.diff")
+        # Inspect additions so unchanged context and removed notices do not trigger the check.
+        DIFF=$(printf '%s\n' "$DIFF" | sed -n '/^+/p')
         if echo "$DIFF" | grep -qi "GNU General Public License"; then
           echo "Error: Incompatible license 'GNU General Public License' found in PR diff."
           exit 1

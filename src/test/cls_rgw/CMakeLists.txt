@@ -19,3 +19,8 @@ add_executable(ceph_test_cls_rgw_stats test_cls_rgw_stats.cc
 target_link_libraries(ceph_test_cls_rgw_stats cls_rgw_client global
   librados ${UNITTEST_LIBS} radostest-cxx)
 install(TARGETS ceph_test_cls_rgw_stats DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+if(TARGET Catch2::Catch2)
+  include("${CMAKE_CURRENT_SOURCE_DIR}/bi_wire.cmake")
+  include("${CMAKE_CURRENT_SOURCE_DIR}/olh.cmake")
+endif()

@@ -1073,3 +1073,105 @@ INSTANTIATE_TEST_SUITE_P(
     return info.param.label;
   }
 );
+
+class TestECOmapSeek : public PGBackendTestFixture
+{
+public:
+  TestECOmapSeek()
+  {
+    ec_plugin = "mock";
+    pool_flags |= pg_pool_t::FLAG_OMAP;
+  }
+};
+
+// Exercise the real journal/store merge without making persistent test objects.
+class OmapSeekStore final : public MemStore
+{
+public:
+  std::map<std::string, std::string> rows;
+  int result = 0;
+
+public:
+  OmapSeekStore() : MemStore(g_ceph_context, "") {}
+
+public:
+  int omap_iterate(CollectionHandle& collection, const ghobject_t& oid,
+                   omap_iter_seek_t seek,
+                   std::function<omap_iter_ret_t(std::string_view, std::string_view)> visit) override
+  {
+    if (result < 0) {
+      return result;
+    }
+    auto row = seek.seek_type == omap_iter_seek_t::LOWER_BOUND
+        ? rows.lower_bound(seek.seek_position) : rows.upper_bound(seek.seek_position);
+    for (; row != rows.end(); ++row) {
+      if (omap_iter_ret_t::STOP == visit(row->first, row->second)) {
+        return 1;
+      }
+    }
+    return 0;
+  }
+};
+
+TEST_F(TestECOmapSeek, JournalAndStoreHonorTheSameSeek)
+{
+  auto *pg = get_primary_test_pg();
+  auto *switcher = static_cast<ECSwitch *>(pg->get_backend());
+  auto *osd_fixture = get_osd_fixture(pg->pg_whoami.osd);
+  ECBackend backend(pg->get_backend_listener(), g_ceph_context, ec_impl,
+                    stripe_unit * k, switcher, *osd_fixture->lru);
+  OmapSeekStore store;
+  const ghobject_t oid(hobject_t("omap-seek", CEPH_NOSNAP, 0, pool_id, ""));
+  const std::map<std::string, std::string> journal_rows {
+    {"", "empty"}, {std::string("\0", 1), "nul"}, {"b", "journal-b"},
+    {"d", "journal-d"}, {std::string("\xFF", 1), "high"}
+  };
+  store.rows = {{"b", "store-b"}, {"c", "store-c"}, {"e", "store-e"}};
+  std::map<std::string, bufferlist> values;
+  for (const auto& [key, value] : journal_rows) {
+    values[key].append(value);
+  }
+  bufferlist encoded_values;
+  encode(values, encoded_values);
+  backend.ec_omap_journal.add_entry(oid.hobj, ECOmapJournalEntry(
+      eversion_t(1, 1), false, std::nullopt, {{OmapUpdateType::Insert, encoded_values}}));
+
+  auto merged = store.rows;
+  for (const auto& [key, value] : journal_rows) {
+    merged.insert_or_assign(key, value);
+  }
+  using seek_t = ObjectStore::omap_iter_seek_t;
+  for (const auto& start : {std::string{}, std::string("\0", 1), std::string("b"),
+                            std::string("c"), std::string("d"), std::string("\xFF", 1)}) {
+    for (const auto mode : {seek_t::LOWER_BOUND, seek_t::UPPER_BOUND}) {
+      SCOPED_TRACE(testing::Message() << "start=" << start << " mode=" << mode);
+      std::map<std::string, std::string> actual;
+      ASSERT_EQ(0, backend.omap_iterate(pg->ch, oid, seek_t {start, mode},
+          [&actual](std::string_view key, std::string_view value) {
+            EXPECT_TRUE(actual.emplace(key, value).second);
+            return ObjectStore::omap_iter_ret_t::NEXT;
+          }, &store));
+      auto first = mode == seek_t::LOWER_BOUND
+          ? merged.lower_bound(start) : merged.upper_bound(start);
+      EXPECT_EQ((std::map<std::string, std::string>(first, merged.end())), actual);
+    }
+  }
+
+  unsigned visited = 0;
+  EXPECT_EQ(1, backend.omap_iterate(pg->ch, oid, seek_t {"b", seek_t::UPPER_BOUND},
+      [&visited](std::string_view key, std::string_view value) {
+        ++visited;
+        EXPECT_EQ("c", key);
+        return ObjectStore::omap_iter_ret_t::STOP;
+      }, &store));
+  EXPECT_EQ(1u, visited);
+
+  store.result = -EIO;
+  visited = 0;
+  EXPECT_EQ(-EIO, backend.omap_iterate(pg->ch, oid, seek_t {"b", seek_t::UPPER_BOUND},
+      [&visited](std::string_view key, std::string_view value) {
+        ++visited;
+        return ObjectStore::omap_iter_ret_t::NEXT;
+      }, &store));
+  EXPECT_EQ(0u, visited);
+}

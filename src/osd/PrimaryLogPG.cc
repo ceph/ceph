@@ -25,6 +25,7 @@
 #include <boost/tuple/tuple.hpp>
 
 #include "PrimaryLogPG.h"
+#include "OmapGetValues.h"
 
 #include "cls/cas/cls_cas_ops.h"
 #include "common/CDC.h"
@@ -6478,6 +6479,13 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
 
 int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 {
+  return do_osd_ops(ctx, ops, nullptr);
+}
+
+int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
+                            ceph::osd::OmapGetValues *omap_read)
+{
+  ceph_assert(!omap_read || (ops.size() == 1 && ops.front().op.op == CEPH_OSD_OP_OMAPGETVALS));
   int result = 0;
   SnapSetContext *ssc = ctx->obc->ssc;
   ObjectState& obs = ctx->new_obs;
@@ -8254,30 +8262,36 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_OMAPGETVALS:
       ++ctx->num_read;
       {
-	string start_after;
-	uint64_t max_return;
-	string filter_prefix;
-	try {
-	  decode(start_after, bp);
-	  decode(max_return, bp);
-	  decode(filter_prefix, bp);
+	string wire_start, wire_prefix;
+	uint64_t max_return = omap_read ? omap_read->max_return : 0;
+	if (!omap_read) {
+	  try
+	   {
+	    decode(wire_start, bp);
+	    decode(max_return, bp);
+	    decode(wire_prefix, bp);
+	   }
+	  catch (ceph::buffer::error& e)
+	   {
+	    result = -EINVAL;
+	    tracepoint(osd, do_osd_op_pre_omapgetvals, soid.oid.name.c_str(), soid.snap.val, "???", 0, "???");
+	    goto fail;
+	   }
 	}
-	catch (ceph::buffer::error& e) {
-	  result = -EINVAL;
-	  tracepoint(osd, do_osd_op_pre_omapgetvals, soid.oid.name.c_str(), soid.snap.val, "???", 0, "???");
-	  goto fail;
-	}
+	const auto& start_after = omap_read ? omap_read->start_after : wire_start;
+	const auto& filter_prefix = omap_read ? omap_read->filter_prefix : wire_prefix;
 	if (max_return > cct->_conf->osd_max_omap_entries_per_request) {
 	  max_return = cct->_conf->osd_max_omap_entries_per_request;
 	}
 	tracepoint(osd, do_osd_op_pre_omapgetvals, soid.oid.name.c_str(), soid.snap.val, start_after.c_str(), max_return, filter_prefix.c_str());
 
 	uint32_t num = 0;
+	uint64_t payload_bytes = 0;
 	bool truncated = false;
 	bufferlist bl;
 	if (oi.is_omap()) {
 	  using omap_iter_seek_t = ObjectStore::omap_iter_seek_t;
-	  const auto result = get_pgbackend()->omap_iterate(
+	  const auto read_result = get_pgbackend()->omap_iterate(
 	    ch, ghobject_t(soid, ghobject_t::NO_GEN, whoami_shard().shard),
 	    // try to seek as many keys-at-once as possible for the sake of performance.
 	    // note complexity should be logarithmic, so seek(n/2) + seek(n/2) is worse
@@ -8287,29 +8301,41 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	      .seek_type = filter_prefix > start_after ? omap_iter_seek_t::LOWER_BOUND
 						       : omap_iter_seek_t::UPPER_BOUND
 	    },
-	    [&bl, &truncated, &filter_prefix, &num, max_return,
+	    [&bl, &truncated, &filter_prefix, &num, &payload_bytes, max_return, omap_read,
 	     max_bytes=cct->_conf->osd_max_omap_bytes_per_request]
 	    (std::string_view key, std::string_view value) mutable {
 	      if (key.substr(0, filter_prefix.size()) != filter_prefix) {
 	        return ObjectStore::omap_iter_ret_t::STOP;
 	      }
-	      if (num >= max_return || bl.length() >= max_bytes) {
+	      if (num >= max_return || payload_bytes >= max_bytes) {
 	        truncated = true;
 	        return ObjectStore::omap_iter_ret_t::STOP;
 	      }
-	      encode(key, bl);
-	      encode(value, bl);
+	      if (omap_read) {
+	        omap_read->append(key, value);
+	      }
+	      if (!omap_read) {
+	        encode(key, bl);
+	        encode(value, bl);
+	      }
+	      payload_bytes += 2 * sizeof(uint32_t) + key.size() + value.size();
 	      ++num;
 	      return ObjectStore::omap_iter_ret_t::NEXT;
 	    });
-	  if (result < 0) {
+	  if (read_result < 0) {
+	    result = read_result;
 	    goto fail;
 	  }
 	} // else return empty out_set
-	encode(num, osd_op.outdata);
-	osd_op.outdata.claim_append(bl);
-	encode(truncated, osd_op.outdata);
-	ctx->delta_stats.num_rd_kb += shift_round_up(osd_op.outdata.length(), 10);
+	if (omap_read) {
+	  omap_read->more = truncated;
+	}
+	if (!omap_read) {
+	  encode(num, osd_op.outdata);
+	  osd_op.outdata.claim_append(bl);
+	  encode(truncated, osd_op.outdata);
+	}
+	ctx->delta_stats.num_rd_kb += shift_round_up(sizeof(uint32_t) + payload_bytes + sizeof(bool), 10);
 	ctx->delta_stats.num_rd++;
       }
       break;

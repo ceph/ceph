@@ -12,6 +12,7 @@
 #include "cls/rgw/cls_rgw_client.h"
 #include "common/async/blocked_completion.h"
 #include "common/async/librados_completion.h"
+#include "common/error_code.h"
 
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/co_spawn.hpp>
@@ -21,6 +22,7 @@
 using namespace std;
 using rgwrados::shard_io::Result;
 namespace asio = boost::asio;
+namespace bilog = cls::rgw::bilog;
 namespace fifo = neorados::cls::fifo;
 
 struct TrimWriter : rgwrados::shard_io::RadosWriter {
@@ -224,17 +226,27 @@ static void build_bucket_index_marker(const string& shard_id_str,
 struct LogReader : rgwrados::shard_io::RadosReader {
   const BucketIndexShardsManager& start;
   uint32_t max;
-  std::map<int, cls_rgw_bi_log_list_ret>& logs;
+  std::map<int, bilog::reply<>>& logs;
+  std::map<int, int> statuses;
 
   LogReader(const DoutPrefixProvider& dpp, boost::asio::any_io_executor ex,
             librados::IoCtx& ioctx, const BucketIndexShardsManager& start,
-            uint32_t max, std::map<int, cls_rgw_bi_log_list_ret>& logs)
+            uint32_t max, std::map<int, bilog::reply<>>& logs)
     : RadosReader(dpp, std::move(ex), ioctx),
       start(start), max(max), logs(logs)
   {}
   void prepare_read(int shard, librados::ObjectReadOperation& op) override {
     auto& result = logs[shard];
-    cls_rgw_bilog_list(op, start.get(shard, ""), max, &result, nullptr);
+    auto& status = statuses[shard];
+    status = 0;
+    cls_rgw_bilog_list(op, start.get(shard, ""), max, result, status);
+  }
+  Result on_complete(int shard, boost::system::error_code& ec) override {
+    if (!ec && statuses.at(shard) < 0) {
+      ec = ceph::to_error_code(statuses.at(shard));
+    }
+
+    return ec ? Result::Error : Result::Success;
   }
   void add_prefix(std::ostream& out) const override {
     out << "list bilog shards: ";
@@ -247,7 +259,7 @@ static int bilog_list(const DoutPrefixProvider* dpp, optional_yield y,
                       const rgw::bucket_log_layout_generation& log_layout,
                       const BucketIndexShardsManager& start,
                       int shard_id, uint32_t max,
-                      std::map<int, cls_rgw_bi_log_list_ret>& logs)
+                      std::map<int, bilog::reply<>>& logs)
 {
   librados::IoCtx index_pool;
   map<int, string> oids;
@@ -301,7 +313,7 @@ int RGWSI_BILog_RADOS_InIndex::log_list(
     return r;
   }
 
-  std::map<int, cls_rgw_bi_log_list_ret> bi_log_lists;
+  std::map<int, bilog::reply<>> bi_log_lists;
   r = bilog_list(dpp, y, svc.bi, bucket_info, log_layout, marker_mgr,
                  shard_id, max, bi_log_lists);
   if (r < 0) {

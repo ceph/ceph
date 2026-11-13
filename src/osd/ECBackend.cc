@@ -1646,10 +1646,9 @@ int ECBackend::omap_iterate (
   // Updates in update_map take priority over removed_ranges
   auto [update_map, removed_ranges] = ec_omap_journal.get_value_updates(oid.hobj);
 
-  auto journal_it = update_map.begin();
-  if (!start_from.seek_position.empty()) {
-    journal_it = update_map.lower_bound(start_from.seek_position);
-  }
+  auto journal_it = start_from.seek_type == ObjectStore::omap_iter_seek_t::LOWER_BOUND
+      ? update_map.lower_bound(start_from.seek_position)
+      : update_map.upper_bound(start_from.seek_position);
 
   auto wrapper = [&](const std::string_view store_key, const std::string_view store_value) {
     bool found_store_key_in_journal = false;

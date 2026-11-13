@@ -18,6 +18,8 @@ constexpr int RGWBIAdvanceAndRetryError = -EFBIG;
 #define RGW_BUCKET_LIST "bucket_list"
 #define RGW_BUCKET_CHECK_INDEX "bucket_check_index"
 #define RGW_BUCKET_REBUILD_INDEX "bucket_rebuild_index"
+#define RGW_BUCKET_CHECK_INDEX_PAGE "bucket_check_index_page"
+#define RGW_BUCKET_REBUILD_INDEX_COMMIT "bucket_rebuild_index_commit"
 #define RGW_BUCKET_UPDATE_STATS "bucket_update_stats"
 #define RGW_BUCKET_PREPARE_OP "bucket_prepare_op"
 #define RGW_BUCKET_COMPLETE_OP "bucket_complete_op"
