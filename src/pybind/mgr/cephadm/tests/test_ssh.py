@@ -647,3 +647,84 @@ class TestSSHResetWhileConnecting:
         conns[0].close.assert_called_once_with()
         assert conn is conns[1]
         assert ssh.cons['host1'] is conn and ssh._con_addrs['host1'] == '10.0.0.2'
+
+
+@pytest.mark.skipif(ConnectionLost is None, reason='no asyncssh')
+class TestSSHConnectionUnmanagedHost:
+    """The connection to a host that does not end up in the inventory is
+    closed; the connection to an added host is kept for what follows."""
+
+    @pytest.fixture
+    def connect(self):
+        conns = []
+        returncode = [0]
+
+        async def run(cmd, **kwargs):
+            return SSHCompletedProcess(returncode=returncode[0], stdout='', stderr='')
+
+        async def _connect(*args, **kwargs):
+            conn = TestSSHConnectionReuse._new_conn()
+            conn.run.side_effect = run
+            conns.append(conn)
+            return conn
+
+        with mock.patch("asyncssh.connect", side_effect=_connect) as m:
+            m.conns = conns
+            m.returncode = returncode
+            yield m
+
+    @mock.patch("cephadm.utils.resolve_ip", lambda _: '10.0.0.1')
+    def test_failed_add_closes_connection(self, cephadm_module, connect):
+        connect.returncode[0] = 1  # check-host fails
+        with pytest.raises(OrchestratorError):
+            cephadm_module._add_host(HostSpec('new1', '10.0.0.1'))
+        assert 'new1' not in cephadm_module.inventory
+        assert 'new1' not in cephadm_module.ssh.cons
+        assert connect.call_count == 1
+        connect.conns[0].close.assert_called_once_with()
+
+    @mock.patch("cephadm.utils.resolve_ip", lambda _: '10.0.0.1')
+    def test_add_failing_after_check_closes_connection(self, cephadm_module, connect):
+        # check-host passed, but adding the host failed before registering it
+        with mock.patch.object(cephadm_module, 'check_mon_command',
+                               side_effect=OrchestratorError('osd crush add-bucket failed')):
+            with pytest.raises(OrchestratorError):
+                cephadm_module._add_host(HostSpec('new1', '10.0.0.1', location={'rack': 'r1'}))
+        assert 'new1' not in cephadm_module.inventory
+        assert 'new1' not in cephadm_module.ssh.cons
+        connect.conns[0].close.assert_called_once_with()
+
+    @mock.patch("cephadm.utils.resolve_ip", lambda _: '10.0.0.1')
+    def test_failure_after_registration_keeps_connection(self, cephadm_module, connect):
+        # once in the inventory, the host is managed: keep its connection
+        cephadm_module.sudo_hardening = True
+        cephadm_module.ssh_user = 'cephadm'
+        with mock.patch.object(cephadm_module, '_prepare_new_host_for_sudo_hardening',
+                               side_effect=OrchestratorError('failed')):
+            with pytest.raises(OrchestratorError):
+                cephadm_module._add_host(HostSpec('new1', '10.0.0.1'))
+        assert 'new1' in cephadm_module.inventory
+        assert cephadm_module.ssh.cons['new1'] is connect.conns[0]
+        connect.conns[0].close.assert_not_called()
+
+    @mock.patch("cephadm.utils.resolve_ip", lambda _: '10.0.0.1')
+    def test_added_host_keeps_connection(self, cephadm_module, connect):
+        cephadm_module._add_host(HostSpec('new1', '10.0.0.1'))
+        assert 'new1' in cephadm_module.inventory
+        assert cephadm_module.ssh.cons['new1'] is connect.conns[0]
+        connect.conns[0].close.assert_not_called()
+        # and the next command for the host reuses it
+        cephadm_module.wait_async(cephadm_module.ssh._remote_connection('new1'))
+        assert connect.call_count == 1
+
+    def test_check_host_closes_unmanaged_connection(self, cephadm_module, connect):
+        code, out, err = cephadm_module.check_host('new1', '10.0.0.1')
+        assert code == 0
+        assert 'new1' not in cephadm_module.ssh.cons
+        connect.conns[0].close.assert_called_once_with()
+
+        cephadm_module.inventory.add_host(HostSpec('test', '1::4'))
+        code, out, err = cephadm_module.check_host('test')
+        assert code == 0
+        assert cephadm_module.ssh.cons['test'] is connect.conns[1]
+        connect.conns[1].close.assert_not_called()
