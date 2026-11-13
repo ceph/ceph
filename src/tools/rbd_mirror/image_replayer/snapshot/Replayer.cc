@@ -540,6 +540,10 @@ void Replayer<I>::scan_local_mirror_snapshots(
           m_prune_snap_ids.insert(local_snap_id);
           break;
         }
+        // Keep the group-linked snapshot so the group can prune it or
+        // authorize resuming it with the same snap-id.
+        m_local_snap_id_end = local_snap_id;
+        break;
       } else {
         // start snap will be last complete mirror snapshot or initial
         // image revision
@@ -771,6 +775,28 @@ void Replayer<I>::scan_remote_mirror_snapshots(
                << "remote_snap_id_end=" << m_remote_snap_id_end << ", "
                << "remote_snap_ns=" << m_remote_mirror_snap_ns << dendl;
       if (m_remote_mirror_snap_ns.complete) {
+        if (m_local_snap_id_end != CEPH_NOSNAP &&
+            !m_local_mirror_snap_ns.complete &&
+            m_remote_mirror_snap_ns.group_spec.is_valid() &&
+            (m_remote_group_image_snap_id == CEPH_NOSNAP ||
+             m_remote_group_image_snap_id < m_remote_snap_id_end)) {
+          // Snapshot creation and saving its image-state object are separate
+          // steps. A restart between them leaves a snapshot whose state read
+          // returns -ENOENT. Wait for the group to prune it or set its limit
+          // before resuming. Snapshot cleanup stays under group control.
+          dout(10) << "waiting for group snapshot limit before resuming"
+                   << dendl;
+          if (m_image_updated || !m_prune_snap_ids_by_gr.empty()) {
+            locker->unlock();
+            load_local_image_meta();
+          } else {
+            ceph_assert(m_state == STATE_REPLAYING);
+            m_state = STATE_IDLE;
+            notify_status_updated();
+          }
+          return;
+        }
+
         locker->unlock();
 
         if (m_local_snap_id_end != CEPH_NOSNAP &&

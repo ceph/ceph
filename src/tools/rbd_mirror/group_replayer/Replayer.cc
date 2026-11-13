@@ -591,7 +591,7 @@ void Replayer<I>::handle_load_local_group_snapshots(int r) {
   auto prune_creating_group_snaps =
     std::make_shared<std::vector<cls::rbd::GroupSnapshot>>();
   m_last_local_snap = nullptr;
-  const cls::rbd::GroupSnapshot* last_complete_local_snap = nullptr;
+  m_last_complete_local_snap = nullptr;
   for (const auto& local_snap : m_local_group_snaps) {
     auto mirror_ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
       &local_snap.snapshot_namespace);
@@ -612,7 +612,7 @@ void Replayer<I>::handle_load_local_group_snapshots(int r) {
       if (is_mirror_group_snapshot_complete(local_snap.state,
                                             mirror_ns->complete)) {
         // complete non-primary snapshot
-        last_complete_local_snap = &local_snap;
+        m_last_complete_local_snap = &local_snap;
 
         // oldest complete non-primary snapshot
         if (!m_prune_group_snap) {
@@ -626,7 +626,7 @@ void Replayer<I>::handle_load_local_group_snapshots(int r) {
   }
 
   // retain newest complete non-primary snapshot
-  if (m_prune_group_snap == last_complete_local_snap) {
+  if (m_prune_group_snap == m_last_complete_local_snap) {
     m_prune_group_snap = nullptr;
   }
 
@@ -717,6 +717,23 @@ void Replayer<I>::check_local_group_snapshots(
   }
 
   if (m_retry_validate_snap) {
+    if (m_update_group_state) {
+      // Restore limits once after restart. Normal copy validation can poll
+      // repeatedly while the member image snapshots are still incomplete.
+      auto snap = std::find_if(m_remote_group_snaps.begin(),
+        m_remote_group_snaps.end(), [this](const auto& snap) {
+          return snap.id == m_last_local_snap->id;
+        });
+      if (snap != m_remote_group_snaps.end()) {
+        if (m_last_complete_local_snap != nullptr) {
+          // An earlier complete snapshot means the group is already enabled.
+          // Restore image limits without repeating the group-state request.
+          m_update_group_state = false;
+        }
+        update_local_group_state(locker, *snap);
+        return;
+      }
+    }
     locker->unlock();
     schedule_load_group_snapshots();
     return;

@@ -18,6 +18,7 @@ target_link_libraries(rbd_mirror_test
 add_executable(unittest_rbd_mirror
   test_main.cc
   test_mock_fixture.cc
+  group_replayer/test_Restart.cc
   test_mock_ImageMap.cc
   test_mock_ImageReplayer.cc
   test_mock_ImageSync.cc
