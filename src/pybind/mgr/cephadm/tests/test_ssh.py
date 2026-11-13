@@ -516,3 +516,134 @@ class TestSSHConnectionReuse:
         assert code == 0
         assert len(commands) > 5
         assert connect.call_count == 1
+
+
+@pytest.mark.skipif(ConnectionLost is None, reason='no asyncssh')
+class TestSSHResetWhileConnecting:
+    """A connection being opened when the connections to the host are reset
+    is not kept: the call that opened it gets a new connection, as if it
+    came after the reset."""
+
+    @staticmethod
+    def _run_reset_during_connect(cephadm_module, reset):
+        ssh = cephadm_module.ssh
+        conns = []
+
+        async def scenario():
+            started, release = asyncio.Event(), asyncio.Event()
+
+            async def connect(*args, **kwargs):
+                started.set()
+                await release.wait()
+                conn = TestSSHConnectionReuse._new_conn()
+                conns.append(conn)
+                return conn
+
+            with mock.patch("asyncssh.connect", side_effect=connect):
+                task = asyncio.ensure_future(ssh._remote_connection('host1', '10.0.0.1'))
+                await started.wait()
+                await reset()
+                release.set()
+                return await task
+
+        conn = cephadm_module.wait_async(scenario())
+        return conn, conns
+
+    def test_host_reset_while_connecting(self, cephadm_module):
+        ssh = cephadm_module.ssh
+        conn, conns = self._run_reset_during_connect(
+            cephadm_module, lambda: ssh._reset_con('host1'))
+        assert len(conns) == 2
+        conns[0].close.assert_called_once_with()
+        assert conn is conns[1]
+        assert ssh.cons['host1'] is conns[1]
+        conns[1].close.assert_not_called()
+
+    def test_all_reset_while_connecting(self, cephadm_module):
+        ssh = cephadm_module.ssh
+
+        async def reset_all():
+            ssh._reset_cons()
+
+        conn, conns = self._run_reset_during_connect(cephadm_module, reset_all)
+        assert len(conns) == 2
+        conns[0].close.assert_called_once_with()
+        assert conn is conns[1]
+        assert ssh.cons['host1'] is conns[1]
+
+    def test_reset_of_other_host_while_connecting(self, cephadm_module):
+        ssh = cephadm_module.ssh
+        conn, conns = self._run_reset_during_connect(
+            cephadm_module, lambda: ssh._reset_con('host2'))
+        assert len(conns) == 1
+        assert ssh.cons['host1'] is conn
+        conn.close.assert_not_called()
+
+    def test_failed_connection_reset_while_connecting(self, cephadm_module):
+        # closing one failed connection is not a reset of the host
+        ssh = cephadm_module.ssh
+        failed = TestSSHConnectionReuse._new_conn()
+        conn, conns = self._run_reset_during_connect(
+            cephadm_module, lambda: ssh._reset_con('host1', failed))
+        assert len(conns) == 1
+        assert ssh.cons['host1'] is conn
+
+    def test_reset_cons_closes_snapshot(self, cephadm_module):
+        ssh = cephadm_module.ssh
+        c1, c2 = TestSSHConnectionReuse._new_conn(), TestSSHConnectionReuse._new_conn()
+        ssh.cons.update({'host1': c1, 'host2': c2})
+        ssh._con_addrs.update({'host1': '10.0.0.1', 'host2': '10.0.0.2'})
+        generation = ssh._cons_generation
+        ssh._reset_cons()
+        c1.close.assert_called_once_with()
+        c2.close.assert_called_once_with()
+        assert ssh.cons == {} and ssh._con_addrs == {}
+        assert ssh._cons_generation == generation + 1
+
+    def _reset_inventory_host_during_connect(self, cephadm_module, change):
+        # connect to an inventory host without giving its address, while
+        # the host is changed in the inventory and its connections reset
+        ssh = cephadm_module.ssh
+        cephadm_module.inventory.add_host(HostSpec('host1', '10.0.0.1'))
+        conns = []
+
+        async def scenario():
+            started, release = asyncio.Event(), asyncio.Event()
+
+            async def connect(*args, **kwargs):
+                started.set()
+                await release.wait()
+                conn = TestSSHConnectionReuse._new_conn()
+                conn.addr = args[0]
+                conns.append(conn)
+                return conn
+
+            with mock.patch("asyncssh.connect", side_effect=connect):
+                task = asyncio.ensure_future(ssh._remote_connection('host1'))
+                await started.wait()
+                change()
+                await ssh._reset_con('host1')
+                release.set()
+                return await task
+
+        return scenario, conns
+
+    def test_host_removed_while_connecting(self, cephadm_module):
+        ssh = cephadm_module.ssh
+        scenario, conns = self._reset_inventory_host_during_connect(
+            cephadm_module, lambda: cephadm_module.inventory.rm_host('host1'))
+        with pytest.raises(OrchestratorError, match='host address is empty'):
+            cephadm_module.wait_async(scenario())
+        assert len(conns) == 1
+        conns[0].close.assert_called_once_with()
+        assert 'host1' not in ssh.cons
+
+    def test_host_addr_changed_while_connecting(self, cephadm_module):
+        ssh = cephadm_module.ssh
+        scenario, conns = self._reset_inventory_host_during_connect(
+            cephadm_module, lambda: cephadm_module.inventory.set_addr('host1', '10.0.0.2'))
+        conn = cephadm_module.wait_async(scenario())
+        assert [c.addr for c in conns] == ['10.0.0.1', '10.0.0.2']
+        conns[0].close.assert_called_once_with()
+        assert conn is conns[1]
+        assert ssh.cons['host1'] is conn and ssh._con_addrs['host1'] == '10.0.0.2'
