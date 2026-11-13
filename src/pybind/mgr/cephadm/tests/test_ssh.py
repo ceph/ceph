@@ -1,3 +1,4 @@
+import logging
 import asyncio
 import asyncssh
 from asyncssh.process import SSHCompletedProcess
@@ -10,6 +11,7 @@ except ImportError:
 except ImportError:
     AsyncMock = None
 import pytest
+from typing import List
 
 
 try:
@@ -728,3 +730,130 @@ class TestSSHConnectionUnmanagedHost:
         assert code == 0
         assert cephadm_module.ssh.cons['test'] is connect.conns[1]
         connect.conns[1].close.assert_not_called()
+
+
+@pytest.mark.skipif(ConnectionLost is None, reason='no asyncssh')
+class TestRunCephadmTiming:
+    """'check-host', and any call that had to copy the cephadm binary, log
+    how long each step took."""
+
+    @pytest.fixture
+    def connect(self):
+        returncodes: List[int] = []
+
+        async def run(cmd, **kwargs):
+            code = returncodes.pop(0) if returncodes else 0
+            return SSHCompletedProcess(returncode=code, stdout='', stderr='')
+
+        async def _connect(*args, **kwargs):
+            conn = TestSSHConnectionReuse._new_conn()
+            conn.run.side_effect = run
+            sftp = conn.start_sftp_client.return_value.__aenter__.return_value
+            sftp.put = AsyncMock()
+            return conn
+
+        with mock.patch("asyncssh.connect", side_effect=_connect) as m:
+            m.returncodes = returncodes
+            yield m
+
+    @staticmethod
+    def _timing_lines(caplog):
+        return [r.getMessage() for r in caplog.records
+                if r.name == 'cephadm.serve' and ' took ' in r.getMessage()]
+
+    def _run(self, cephadm_module, command, addr='10.0.0.1'):
+        return cephadm_module.wait_async(CephadmServe(cephadm_module)._run_cephadm(
+            'new1', cephadmNoImage, command, [], addr=addr, error_ok=True, no_fsid=True))
+
+    def test_new_host_check(self, cephadm_module, connect, caplog):
+        caplog.set_level(logging.INFO, logger='cephadm.serve')
+        connect.returncodes.extend([127, 2])  # no cephadm binary yet
+        out, err, code = self._run(cephadm_module, 'check-host')
+        assert code == 0
+        [line] = self._timing_lines(caplog)
+        assert line.startswith('check-host on new1 (10.0.0.1) took ')
+        steps = [step.rsplit(' ', 1)[0] for step in line.split('(', 2)[2].rstrip(')').split(', ')]
+        assert steps == ['connect', 'check-host', 'binary check', 'binary copy', 'check-host']
+
+    def test_check_host_with_binary(self, cephadm_module, connect, caplog):
+        caplog.set_level(logging.INFO, logger='cephadm.serve')
+        self._run(cephadm_module, 'check-host')
+        [line] = self._timing_lines(caplog)
+        assert 'connect' in line and 'binary' not in line
+
+    def test_other_command_not_logged(self, cephadm_module, connect, caplog):
+        caplog.set_level(logging.INFO, logger='cephadm.serve')
+        self._run(cephadm_module, 'gather-facts')
+        assert self._timing_lines(caplog) == []
+
+    def test_other_command_copying_binary_logged(self, cephadm_module, connect, caplog):
+        caplog.set_level(logging.INFO, logger='cephadm.serve')
+        connect.returncodes.extend([127, 2])
+        self._run(cephadm_module, 'gather-facts')
+        [line] = self._timing_lines(caplog)
+        assert line.startswith('gather-facts on new1 (10.0.0.1) took ')
+        assert 'binary copy' in line
+
+    def test_failed_check_logged(self, cephadm_module, connect, caplog):
+        caplog.set_level(logging.INFO, logger='cephadm.serve')
+        with mock.patch.object(cephadm_module.ssh, '_execute_command',
+                               side_effect=OrchestratorError('boom')):
+            out, err, code = self._run(cephadm_module, 'check-host')
+        assert code == 1
+        [line] = self._timing_lines(caplog)
+        assert line.startswith('check-host on new1 (10.0.0.1) (failed) took ')
+
+    def test_connect_failure_logged(self, cephadm_module, connect, caplog):
+        caplog.set_level(logging.INFO, logger='cephadm.serve')
+        connect.side_effect = OSError('unreachable')
+        with pytest.raises(Exception):
+            self._run(cephadm_module, 'check-host')
+        [line] = self._timing_lines(caplog)
+        assert line.startswith('check-host on new1 (10.0.0.1) (failed) took ')
+
+    def test_check_host_exit_code_logged(self, cephadm_module, connect, caplog):
+        # check-host ran but failed: not logged as a success
+        caplog.set_level(logging.INFO, logger='cephadm.serve')
+        connect.returncodes.append(1)
+        out, err, code = self._run(cephadm_module, 'check-host')
+        assert code == 1
+        [line] = self._timing_lines(caplog)
+        assert line.startswith('check-host on new1 (10.0.0.1) (exit code 1) took ')
+
+    def test_failed_binary_copy_logged(self, cephadm_module, connect, caplog):
+        # not check-host: logged because the binary had to be copied, also
+        # when the copy fails
+        caplog.set_level(logging.INFO, logger='cephadm.serve')
+        connect.returncodes.extend([127, 2])
+        with mock.patch.object(CephadmServe, '_deploy_cephadm_binary',
+                               side_effect=OrchestratorError('copy failed')):
+            out, err, code = self._run(cephadm_module, 'gather-facts')
+        assert code == 1
+        [line] = self._timing_lines(caplog)
+        assert line.startswith('gather-facts on new1 (10.0.0.1) (failed) took ')
+        assert 'binary check' in line and 'binary copy' not in line
+
+    def test_cancelled_check_logged(self, cephadm_module, connect, caplog):
+        # e.g. the per-check timeout of the parallel host checks
+        caplog.set_level(logging.INFO, logger='cephadm.serve')
+
+        async def scenario():
+            started = asyncio.Event()
+
+            async def hang(*args, **kwargs):
+                started.set()
+                await asyncio.Event().wait()
+
+            with mock.patch.object(cephadm_module.ssh, '_execute_command', side_effect=hang):
+                task = asyncio.ensure_future(CephadmServe(cephadm_module)._run_cephadm(
+                    'new1', cephadmNoImage, 'check-host', [], addr='10.0.0.1',
+                    error_ok=True, no_fsid=True))
+                await started.wait()
+                task.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await task
+
+        cephadm_module.wait_async(scenario())
+        [line] = self._timing_lines(caplog)
+        assert line.startswith('check-host on new1 (10.0.0.1) (cancelled) took ')
+        assert '(connect ' in line
