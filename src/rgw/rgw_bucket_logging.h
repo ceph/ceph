@@ -174,7 +174,8 @@ int log_record(rgw::sal::Driver* driver,
     const DoutPrefixProvider *dpp,
     optional_yield y,
     bool async_completion,
-    bool log_source_bucket);
+    bool log_source_bucket,
+    bool bucket_deleted);
 
 // no-req_state variant of the log_record(req_state*, ..., configuration&) overload above
 int log_record(rgw::sal::Driver* driver,
@@ -187,7 +188,8 @@ int log_record(rgw::sal::Driver* driver,
     const DoutPrefixProvider *dpp,
     optional_yield y,
     bool async_completion,
-    bool log_source_bucket);
+    bool log_source_bucket,
+    bool bucket_deleted);
 
 // commit the pending log objec to the log bucket
 // and create a new pending log object
@@ -225,7 +227,8 @@ int log_record(rgw::sal::Driver* driver,
     const DoutPrefixProvider *dpp,
     optional_yield y,
     bool async_completion,
-    bool log_source_bucket);
+    bool log_source_bucket,
+    bool bucket_deleted);
 
 // no-req_state variant of the log_record(LoggingType, ..., req_state*) overload above
 int log_record(rgw::sal::Driver* driver,
@@ -238,7 +241,8 @@ int log_record(rgw::sal::Driver* driver,
     const DoutPrefixProvider *dpp,
     optional_yield y,
     bool async_completion,
-    bool log_source_bucket);
+    bool log_source_bucket,
+    bool bucket_deleted);
 
 // return (by ref) an rgw_bucket object with the bucket name and tenant name
 // fails if the bucket name is not in the format: [tenant name:]<bucket name>
