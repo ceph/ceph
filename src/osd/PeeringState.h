@@ -578,6 +578,7 @@ public:
   TrivialEvent(Initialize)
   TrivialEvent(GotInfo)
   TrivialEvent(NeedUpThru)
+  TrivialEvent(RechooseActing)
   TrivialEvent(Backfilled)
   TrivialEvent(LocalBackfillReserved)
   TrivialEvent(RejectTooFullRemoteReservation)
@@ -894,6 +895,11 @@ public:
   struct Peering : boost::statechart::state< Peering, Primary, GetInfo >, NamedState {
     PastIntervals::PriorSet prior_set;
     bool history_les_bound;  //< need osd_find_best_info_ignore_history_les
+    /// optimized EC: shards for which GetMissing sent this interval back to
+    /// GetLog because they were behind the log tail without being backfill
+    /// targets. A second time for the same shard means choose_acting() did
+    /// not act on it, and the PG must not activate.
+    std::set<pg_shard_t> rechosen_behind_log_tail;
 
     explicit Peering(my_context ctx);
     void exit();
@@ -1609,6 +1615,10 @@ public:
 
   struct GetMissing : boost::statechart::state< GetMissing, Peering >, NamedState {
     std::set<pg_shard_t> peer_missing_requested;
+    /// optimized EC: acting or async recovery shards, not backfill targets,
+    /// found behind the log tail. The acting set is chosen again for them
+    /// once every requested log has arrived.
+    std::set<pg_shard_t> behind_log_tail;
 
     explicit GetMissing(my_context ctx);
     void exit();
@@ -1617,11 +1627,16 @@ public:
       boost::statechart::custom_reaction< QueryState >,
       boost::statechart::custom_reaction< QueryUnfound >,
       boost::statechart::custom_reaction< MLogRec >,
-      boost::statechart::transition< NeedUpThru, WaitUpThru >
+      boost::statechart::custom_reaction< RechooseActing >,
+      boost::statechart::transition< NeedUpThru, WaitUpThru >,
+      boost::statechart::transition< IsIncomplete, Incomplete >
       > reactions;
     boost::statechart::result react(const QueryState& q);
     boost::statechart::result react(const QueryUnfound& q);
     boost::statechart::result react(const MLogRec& logevt);
+    boost::statechart::result react(const RechooseActing&);
+    bool note_behind_log_tail(const pg_shard_t &shard, const char *why);
+    void rechoose_acting();
   };
 
   struct WaitUpThru : boost::statechart::state< WaitUpThru, Peering >, NamedState {
@@ -1975,8 +1990,12 @@ private:
     bool exclude_nonprimary_shards,
     bool *history_les_bound = nullptr) const;
 
+  /// the tail the primary's log will have once GetLog has merged the log
+  /// of the shard with info get_log_info
+  eversion_t log_tail_after_getlog(const pg_info_t &get_log_info) const;
+
   static void calc_ec_acting(
-    std::map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard,
+    const eversion_t &log_tail,
     unsigned size,
     const std::vector<int> &acting,
     const std::vector<int> &up,
