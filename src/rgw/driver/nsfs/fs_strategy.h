@@ -144,6 +144,14 @@ public:
                             const std::vector<std::string>& names) = 0;
 
   virtual const char* name() const = 0;
+
+  /* Can this strategy move a name cheaply, i.e. is renameat() the right
+   * way to relocate an object?  Default no, so a strategy opts in rather
+   * than inherits the behaviour.  GPFS deliberately does not:  rgw-nfs on
+   * Spectrum Scale is not a productization target and this is provisional
+   * code, so it should not reach those deployments.  See
+   * RENAME_DESIGN.md. */
+  virtual bool can_rename() const { return false; }
 };
 
 class POSIXStrategy : public FSStrategy {
@@ -187,6 +195,7 @@ public:
                     const std::vector<std::string>& names) override;
 
   const char* name() const override { return "posix"; }
+  bool can_rename() const override { return true; }
 };
 
 class GPFSStrategy : public FSStrategy {

@@ -19,6 +19,7 @@
 #include "rgw_pubsub_push.h"
 #include "rgw_pubsub.h"
 #include "rgw_s3_filter.h"
+#include <sys/statvfs.h>
 #include <cstdint>
 #include "rgw_multi.h"
 #include "include/scope_guard.h"
@@ -533,6 +534,25 @@ int POSIXDriver::list_all_zones(const DoutPrefixProvider* dpp,
 
 int POSIXDriver::cluster_stat(RGWClusterStat& stats)
 {
+  /* the "cluster" is the filesystem the namespace lives on.  ganesha
+   * asks for this on every statfs, and a client uses it to decide
+   * whether a write can fit, so leaving it unfilled is not harmless */
+  struct statvfs vfs;
+  if (::statvfs(base_path.c_str(), &vfs) < 0) {
+    return -errno;
+  }
+
+  /* frsize is the fragment size blocks are counted in;  f_bsize is a
+   * hint for i/o size and is not what f_blocks counts */
+  uint64_t frsize = vfs.f_frsize ? vfs.f_frsize : vfs.f_bsize;
+
+  stats.kb = (vfs.f_blocks * frsize) >> 10;
+  stats.kb_avail = (vfs.f_bavail * frsize) >> 10;
+  stats.kb_used = ((vfs.f_blocks - vfs.f_bfree) * frsize) >> 10;
+  /* inodes in use is the closest thing to an object count here */
+  stats.num_objects = (vfs.f_files >= vfs.f_ffree)
+    ? (vfs.f_files - vfs.f_ffree) : 0;
+
   return 0;
 }
 
