@@ -8,7 +8,7 @@ from threading import Thread
 from contextlib import contextmanager
 from io import StringIO
 from shlex import quote
-from typing import TYPE_CHECKING, Optional, List, Tuple, Dict, Iterator, TypeVar, Awaitable, Union, Any
+from typing import TYPE_CHECKING, Optional, List, Tuple, Dict, Iterator, TypeVar, Awaitable, Union, Any, Sequence
 from ceph.deployment.hostspec import normalize_hostname
 from orchestrator import OrchestratorError
 from .utils import is_fips_enabled, get_default_ssh_config
@@ -21,6 +21,7 @@ except ImportError:
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
     from asyncssh.connection import SSHClientConnection
+    from asyncssh.public_key import SSHKeyPair
 
 T = TypeVar('T')
 
@@ -149,6 +150,8 @@ class SSHManager:
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr: "CephadmOrchestrator" = mgr
         self.cons: Dict[str, "SSHClientConnection"] = {}
+        # cephadm SSH identity, loaded by _reconfig_ssh()
+        self._client_keys: Optional[Sequence["SSHKeyPair"]] = None
 
     def _is_conn_valid(self, conn: "SSHClientConnection") -> bool:
         """Safely check if an AsyncSSH connection is still valid and usable."""
@@ -224,7 +227,14 @@ class SSHManager:
                     keepalive_interval=self.mgr.ssh_keepalive_interval,
                     keepalive_count_max=self.mgr.ssh_keepalive_count_max
                 )
-                conn = await asyncssh.connect(addr, username=self.mgr.ssh_user, client_keys=[self.mgr.tkey.name],
+                # the identity loaded by _reconfig_ssh(); the key file if
+                # it could not be loaded (the error is then reported here)
+                client_keys: Sequence[Union[str, "SSHKeyPair"]]
+                if self._client_keys:
+                    client_keys = self._client_keys
+                else:
+                    client_keys = [self.mgr.tkey.name]
+                conn = await asyncssh.connect(addr, username=self.mgr.ssh_user, client_keys=client_keys,
                                               known_hosts=None, config=[self.mgr.ssh_config_fname],
                                               preferred_auth=['publickey'], options=ssh_options)
             except OSError:
@@ -570,6 +580,31 @@ class SSHManager:
             conn.close()
         self.cons = {}
 
+    def _load_client_keys(self) -> Optional[Sequence["SSHKeyPair"]]:
+        """Load the cephadm SSH identity (key, certificate) once.
+
+        Given the key file name, asyncssh.connect() reads and parses the key
+        again for every new connection. For an RSA key this includes the
+        key validation, which costs 0.05-0.3 s of CPU and holds the GIL the
+        whole time. Adding hundreds of hosts at once, or reconnecting to
+        every host after a mgr failover, stalls the mgr for that long per
+        host. Load the key here, once per identity change, and pass the
+        loaded key pairs to every connection.
+
+        Returns None if the key can't be loaded: connections then use the
+        key file as before, and report the error for each host.
+        """
+        if asyncssh is None:
+            return None
+        try:
+            # Same as client_keys=[key file] in asyncssh.connect(): the key,
+            # and the certificate from '<key file>-cert.pub' if present.
+            return asyncssh.load_keypairs([self.mgr.tkey.name])
+        except Exception as e:
+            logger.warning('Unable to load the cephadm SSH identity, '
+                           'connections will read the key file: %s', e)
+            return None
+
     def _reconfig_ssh(self) -> None:
         temp_files = []  # type: list
         ssh_options = []  # type: List[str]
@@ -617,6 +652,7 @@ class SSHManager:
                 tcert.flush()  # make visible to other processes
                 temp_files += [tcert]
             ssh_options += ['-i', self.mgr.tkey.name]
+        self._client_keys = self._load_client_keys() if ssh_key else None
 
         self.mgr._temp_files = temp_files
         if ssh_options:
