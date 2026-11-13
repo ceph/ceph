@@ -3160,17 +3160,21 @@ Then run the following:
             self._invalidate_daemons_and_kick_serve(host)
             self.log.debug('Kicked serve() loop to refresh all daemons')
 
+        def wanted(dd: orchestrator.DaemonDescription) -> bool:
+            if daemon_type is not None and daemon_type != dd.daemon_type:
+                return False
+            if daemon_id is not None and daemon_id != dd.daemon_id:
+                return False
+            if service_name is not None and service_name != dd.service_name():
+                return False
+            return True
+
         result = []
-        for h, dm in self.cache.get_daemons_with_volatile_status():
-            if host and h != host:
-                continue
+        # filter before the cache copies each daemon, so listing one host or
+        # service does not cost as much as listing the whole cluster
+        for h, dm in self.cache.get_daemons_with_volatile_status(host=host or None,
+                                                                 daemon_filter=wanted):
             for name, dd in dm.items():
-                if daemon_type is not None and daemon_type != dd.daemon_type:
-                    continue
-                if daemon_id is not None and daemon_id != dd.daemon_id:
-                    continue
-                if service_name is not None and service_name != dd.service_name():
-                    continue
                 if not dd.memory_request and dd.daemon_type in ['osd', 'mon']:
                     dd.memory_request = cast(Optional[int], self.get_foreign_ceph_option(
                         dd.name(),

@@ -1,4 +1,5 @@
 import asyncio
+from copy import copy
 import json
 import logging
 
@@ -455,6 +456,41 @@ class TestCephadm(object):
             CephadmServe(cephadm_module)._refresh_host_daemons('myhost')
             dds = wait(cephadm_module, cephadm_module.list_daemons())
             assert {d.name() for d in dds} == {'rgw.myrgw.foobar', 'haproxy.test.bar'}
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm(
+        json.dumps([
+            dict(
+                name='rgw.myrgw.foobar',
+                style='cephadm',
+                fsid='fsid',
+            ),
+            dict(
+                name='haproxy.test.bar',
+                style='cephadm',
+                fsid='fsid',
+            ),
+        ])
+    ))
+    def test_list_daemons_filters_before_copy(self, cephadm_module: CephadmOrchestrator):
+        # https://tracker.ceph.com/issues/82583: only the daemons that match
+        # the filters may be copied out of the cache
+        cephadm_module.service_cache_timeout = 10
+        with with_host(cephadm_module, 'host1'):
+            with with_host(cephadm_module, 'host2'):
+                CephadmServe(cephadm_module)._refresh_host_daemons('host1')
+                CephadmServe(cephadm_module)._refresh_host_daemons('host2')
+                with mock.patch('cephadm.inventory.copy', side_effect=copy) as copy_mock:
+                    dds = wait(cephadm_module, cephadm_module.list_daemons(
+                        host='host2', daemon_type='rgw'))
+                assert [(d.hostname, d.name()) for d in dds] == [('host2', 'rgw.myrgw.foobar')]
+                assert copy_mock.call_count == 1
+
+                with mock.patch('cephadm.inventory.copy', side_effect=copy) as copy_mock:
+                    dds = wait(cephadm_module, cephadm_module.list_daemons(
+                        daemon_id='myrgw.foobar'))
+                assert sorted((d.hostname, d.name()) for d in dds) == [
+                    ('host1', 'rgw.myrgw.foobar'), ('host2', 'rgw.myrgw.foobar')]
+                assert copy_mock.call_count == 2
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm(
         json.dumps([

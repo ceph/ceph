@@ -7,8 +7,8 @@ import json
 import logging
 import math
 import socket
-from typing import TYPE_CHECKING, Dict, List, Iterator, Optional, Any, Tuple, Set, Mapping, cast, \
-    NamedTuple, Type, ValuesView, Union
+from typing import TYPE_CHECKING, Callable, Dict, List, Iterator, Optional, Any, Tuple, Set, \
+    Mapping, cast, NamedTuple, Type, ValuesView, Union
 
 import orchestrator
 from ceph.deployment import inventory
@@ -1508,7 +1508,16 @@ class HostCache():
             return False
         return True
 
-    def get_daemons_with_volatile_status(self) -> Iterator[Tuple[str, Dict[str, orchestrator.DaemonDescription]]]:
+    def get_daemons_with_volatile_status(
+        self,
+        host: Optional[str] = None,
+        daemon_filter: Optional[Callable[[orchestrator.DaemonDescription], bool]] = None,
+    ) -> Iterator[Tuple[str, Dict[str, orchestrator.DaemonDescription]]]:
+        # Copying a DaemonDescription is not cheap, so callers that only want
+        # some daemons pass `host` and/or `daemon_filter` to skip the others
+        # before they are copied. The filter sees the cached daemon, so it must
+        # not modify it and must not depend on the volatile fields (status,
+        # status_desc, events) set below.
         def alter(host: str, dd_orig: orchestrator.DaemonDescription) -> orchestrator.DaemonDescription:
             dd = copy(dd_orig)
             if host in self.mgr.offline_hosts:
@@ -1521,9 +1530,11 @@ class HostCache():
             dd.events = self.mgr.events.get_for_daemon(dd.name())
             return dd
 
-        snapshot = {host: dict(dm) for host, dm in list(self.daemons.items())}
-        for host, dm in snapshot.items():
-            yield host, {name: alter(host, d) for name, d in dm.items()}
+        snapshot = {h: dict(dm) for h, dm in list(self.daemons.items())
+                    if host is None or h == host}
+        for h, dm in snapshot.items():
+            yield h, {name: alter(h, d) for name, d in dm.items()
+                      if daemon_filter is None or daemon_filter(d)}
 
     def get_daemons_by_service(self, service_name):
         # type: (str) -> List[orchestrator.DaemonDescription]
