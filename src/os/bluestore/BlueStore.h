@@ -1416,10 +1416,11 @@ private:
 	       bool to_repair_db=false,
 	       bool read_only = false);
   void _close_db();
-  int _open_fm(KeyValueDB::Transaction t,
-               bool read_only,
-               bool db_avail,
-               bool fm_restore = false);
+  std::string _calc_desired_freelist_type();
+  int _create_fm(
+    KeyValueDB::Transaction t,
+    const std::string& type);
+  int _open_fm(bool read_only);
   void _close_fm();
   int _write_out_fm_meta(uint64_t target_size);
   int _create_alloc();
