@@ -23,6 +23,7 @@
 #include "include/str_list.h"
 #include "global/signal_handler.h"
 #include "common/Timer.h"
+#include "include/scope_guard.h"
 #include "common/WorkQueue.h"
 #include "common/ceph_argparse.h"
 #include "common/ceph_context.h"
@@ -500,6 +501,21 @@ namespace rgw {
     ceph::mutex mutex = ceph::make_mutex("main");
     SafeTimer init_timer(g_ceph_context, mutex);
     init_timer.init();
+    /* the timer thread must be stopped before ~SafeTimer runs, on every
+     * path.  Without this an exception thrown below unwinds into the
+     * destructor with the thread still live, which asserts and aborts --
+     * destroying the exception, so the failure that actually occurred is
+     * never reported.  Multiple instances over one shared filesystem hit
+     * this init path concurrently, so it is not hypothetical. */
+    bool timer_stopped = false;
+    auto stop_timer = make_scope_guard([&] {
+      if (! timer_stopped) {
+	std::lock_guard l{mutex};
+	init_timer.cancel_all_events();
+	init_timer.shutdown();
+	timer_stopped = true;
+      }
+    });
     mutex.lock();
     init_timer.add_event_after(g_conf()->rgw_init_timeout, new C_InitTimeout);
     mutex.unlock();
@@ -514,11 +530,6 @@ namespace rgw {
 
     main.init_storage();
     if (! main.get_driver()) {
-      mutex.lock();
-      init_timer.cancel_all_events();
-      init_timer.shutdown();
-      mutex.unlock();
-
       derr << "Couldn't init storage provider (RADOS)" << dendl;
       return -EIO;
     }
@@ -528,6 +539,7 @@ namespace rgw {
     mutex.lock();
     init_timer.cancel_all_events();
     init_timer.shutdown();
+    timer_stopped = true;
     mutex.unlock();
 
     main.init_ldap();
