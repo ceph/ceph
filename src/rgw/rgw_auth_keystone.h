@@ -151,6 +151,9 @@ class EC2Engine : public rgw::auth::s3::AWSEngine {
                     const std::string& string_to_sign,
                     const std::string_view& signature,
                     optional_yield y) const;
+  bool is_admin_token_rejected(const DoutPrefixProvider* dpp,
+                               const std::string& admin_token,
+                               optional_yield y) const;
 
   struct access_token_result {
     boost::optional<token_envelope_t> token;

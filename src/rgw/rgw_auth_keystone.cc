@@ -438,6 +438,10 @@ EC2Engine::get_from_keystone(const DoutPrefixProvider* dpp, const std::string_vi
 
   keystone_url.append("v3/s3tokens");
 
+  bool admin_token_retried = false;
+
+admin_token_retry:
+
   /* get authentication token for Keystone. */
   std::string admin_token;
   bool admin_token_cached = false;
@@ -482,6 +486,23 @@ EC2Engine::get_from_keystone(const DoutPrefixProvider* dpp, const std::string_vi
   /* send request */
   ret = validate.process(dpp, y);
 
+  /* Keystone answers 401 both when the supplied signature is wrong and when
+   * our admin token is invalid, e.g. revoked because the password of the
+   * admin user was set. A cached admin token stays in the cache until it
+   * expires, so every S3 request would fail with SignatureDoesNotMatch.
+   * Only drop the cached token when Keystone rejects it, so that requests
+   * with a wrong signature do not make us issue a new admin token. */
+  if (validate.get_http_status() ==
+          decltype(validate)::HTTP_STATUS_UNAUTHORIZED &&
+      admin_token_cached && !admin_token_retried &&
+      is_admin_token_rejected(dpp, admin_token, y)) {
+    ldpp_dout(dpp, 20) << "s3 keystone: invalidating admin_token cache due to 401"
+                       << dendl;
+    token_cache.invalidate_admin(dpp);
+    admin_token_retried = true;
+    goto admin_token_retry;
+  }
+
   /* if the supplied signature is wrong, we will get 401 from Keystone */
   if (validate.get_http_status() ==
           decltype(validate)::HTTP_STATUS_UNAUTHORIZED) {
@@ -507,6 +528,39 @@ EC2Engine::get_from_keystone(const DoutPrefixProvider* dpp, const std::string_vi
   }
 
   return std::make_pair(std::move(token_envelope), 0);
+}
+
+/*
+ * Ask Keystone whether it rejects our admin token: the token validates
+ * itself. Connection errors and other statuses do not count as a rejection.
+ */
+bool EC2Engine::is_admin_token_rejected(const DoutPrefixProvider* dpp,
+                                        const std::string& admin_token,
+                                        optional_yield y) const
+{
+  std::string keystone_url = config.get_endpoint_url();
+  if (keystone_url.empty()) {
+    return false;
+  }
+  keystone_url.append("v3/auth/tokens");
+
+  using RGWValidateKeystoneToken
+    = rgw::keystone::Service::RGWValidateKeystoneToken;
+
+  ceph::bufferlist token_body_bl;
+  RGWValidateKeystoneToken validate(cct, "GET", keystone_url, &token_body_bl);
+  validate.append_header("X-Auth-Token", admin_token);
+  validate.append_header("X-Subject-Token", admin_token);
+  validate.set_verify_ssl(cct->_conf->rgw_keystone_verify_ssl);
+  validate.set_send_length(0);
+
+  validate.process(dpp, y);
+
+  const auto status = validate.get_http_status();
+  ldpp_dout(dpp, 20) << "s3 keystone: admin token validation returned "
+                     << status << dendl;
+  return status == RGWValidateKeystoneToken::HTTP_STATUS_UNAUTHORIZED ||
+         status == RGWValidateKeystoneToken::HTTP_STATUS_NOTFOUND;
 }
 
 auto EC2Engine::get_secret_from_keystone(const DoutPrefixProvider* dpp,
