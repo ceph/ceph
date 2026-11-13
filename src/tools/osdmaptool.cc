@@ -326,6 +326,10 @@ int main(int argc, const char **argv)
     cerr << me << ": osd-size-aware is only applicable to read mode" << std::endl;
     usage();
   }
+  if (test_random && test_map_pgs_dump_all) {
+    cerr << me << ": --test-random cannot be combined with --test-map-pgs-dump-all" << std::endl;
+    usage();
+  }
   fn = args[0];
 
   if (range_first >= 0 && range_last >= 0) {
@@ -791,7 +795,9 @@ skip_upmap:
 	pg_t pgid = pg_t(i, p->first);
 
 	vector<int> osds, raw, up, acting;
-	int primary, calced_primary, up_primary, acting_primary;
+	int primary;
+	// set only for --test-map-pgs-dump-all, which excludes --test-random
+	int calced_primary = -1, up_primary = -1, acting_primary = -1;
 	if (test_random) {
 	  osds.resize(p->second.size);
 	  for (unsigned i=0; i<osds.size(); ++i) {

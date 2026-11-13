@@ -147,10 +147,9 @@ namespace rgw::putobj {
    * PutObject, it won't have a checksum algorithm header, so we
    * need to search for one */
   static inline GetHeaderCksumResult find_hdr_cksum(const RGWEnv& env) {
-    cksum::Type cksum_type;
     for (int16_t ix = int16_t(cksum::Type::none) + 1;
 	 ix < uint16_t(cksum::Type::COUNT); ++ix) {
-      cksum_type = cksum::Type(ix);
+      const auto cksum_type = cksum::Type(ix);
       auto hk = fmt::format("HTTP_X_AMZ_CHECKSUM_{}", to_uc_string(cksum_type));
       auto hv = env.get(hk.c_str());
       if (hv) {
@@ -160,7 +159,7 @@ namespace rgw::putobj {
 			       std::string_view(hv, std::strlen(hv)));
       }
     }
-    return GetHeaderCksumResult(cksum::Cksum(cksum_type), "");
+    return GetHeaderCksumResult(cksum::Cksum(cksum::Type::none), "");
   } /* find_hdr_cksum */
 
   static inline uint16_t

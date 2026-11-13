@@ -175,14 +175,14 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-unused-private-field>)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-address-of-packed-member>)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-unknown-warning-option>)
+  # might reach a GCC C compiler, which ignores unknown -Wno- but not -W options
   add_compile_options(
     -Wno-unused-function
     -Wno-unused-local-typedef
     -Wno-varargs
     -Wno-gnu-designator
     -Wno-missing-braces
-    -Wno-parentheses
-    -Wno-deprecated-register)
+    -Wno-parentheses)
   if(CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 18)
     add_compile_options(
     -Wno-vla-cxx-extension)
@@ -196,6 +196,10 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     string(APPEND CMAKE_SHARED_LINKER_FLAGS " -undefined dynamic_lookup")
   endif()
 endif(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
+
+# checked per language, since the C and C++ compilers may differ
+add_compile_options($<$<COMPILE_LANG_AND_ID:C,AppleClang,Clang>:-Wconditional-uninitialized>)
+add_compile_options($<$<COMPILE_LANG_AND_ID:CXX,AppleClang,Clang>:-Wconditional-uninitialized>)
 
 # --copy-dt-needed-entries is a GNU ld option; lld, Apple's ld64 and
 # lld in MinGW mode reject it. Test the linker instead of the OS or
@@ -525,6 +529,7 @@ if(WITH_CRIMSON)
     "-Wno-sign-compare"
     "-Wno-attributes"
     "-Wno-pessimizing-move"
+    "$<$<CXX_COMPILER_ID:Clang>:-Wno-conditional-uninitialized>"
     "-Wno-address-of-packed-member")
   if(WITH_ASAN)
     # As built here (RelWithDebInfo) seastar keeps its own allocator, which
