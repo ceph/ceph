@@ -1,0 +1,7 @@
+tasks:
+- workunit:
+    clients:
+      all:
+        - rbd/krbd_verify_reads.sh
+    env:
+      DURATION: "1200"

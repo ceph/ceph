@@ -1,0 +1,14 @@
+# image data in an EC 2+1 pool with EC optimizations (EC direct and split reads)
+tasks:
+- exec:
+    client.0:
+      - sudo ceph osd erasure-code-profile set krbd-ec k=2 m=1 crush-failure-domain=osd
+      - sudo ceph osd pool create ecdata 16 16 erasure krbd-ec
+      - sudo ceph osd pool set ecdata allow_ec_overwrites true
+      - sudo ceph osd pool set ecdata allow_ec_optimizations true
+      - sudo ceph osd pool application enable ecdata rbd
+overrides:
+  ceph:
+    conf:
+      client:
+        rbd default data pool: ecdata
