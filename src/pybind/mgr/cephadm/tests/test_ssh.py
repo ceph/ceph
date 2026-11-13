@@ -1,3 +1,4 @@
+import asyncio
 import asyncssh
 from asyncssh.process import SSHCompletedProcess
 from unittest import mock
@@ -395,3 +396,123 @@ class TestSSHConnectionReset:
         assert code == 1
         cached.close.assert_not_called()
         assert ssh.cons['host1'] is cached
+
+
+@pytest.mark.skipif(ConnectionLost is None, reason='no asyncssh')
+class TestSSHConnectionReuse:
+    """One connection per host and address, also for hosts not in the
+    inventory yet."""
+
+    @staticmethod
+    def _new_conn(*args, **kwargs):
+        conn = mock.MagicMock()
+        conn.is_connected.return_value = True
+        conn.is_closing.return_value = False
+        conn.is_closed.return_value = False
+        return conn
+
+    @pytest.fixture
+    def connect(self):
+        conns = []
+
+        async def _connect(*args, **kwargs):
+            await asyncio.sleep(0)  # let concurrent callers interleave
+            conn = self._new_conn()
+            conn.addr = args[0]
+            conns.append(conn)
+            return conn
+
+        with mock.patch("asyncssh.connect", side_effect=_connect) as m:
+            m.conns = conns
+            yield m
+
+    def test_new_host_connection_reused(self, cephadm_module, connect):
+        ssh = cephadm_module.ssh
+        assert 'new1' not in cephadm_module.inventory
+        c1 = cephadm_module.wait_async(ssh._remote_connection('new1', '10.0.0.1'))
+        c2 = cephadm_module.wait_async(ssh._remote_connection('new1', '10.0.0.1'))
+        assert c1 is c2
+        assert connect.call_count == 1
+        assert ssh.cons['new1'] is c1
+
+    def test_inventory_host_connection_reused(self, cephadm_module, connect):
+        ssh = cephadm_module.ssh
+        cephadm_module.inventory.add_host(HostSpec('test', '1::4'))
+        # no address given: the inventory one
+        c1 = cephadm_module.wait_async(ssh._remote_connection('test'))
+        c2 = cephadm_module.wait_async(ssh._remote_connection('test'))
+        c3 = cephadm_module.wait_async(ssh._remote_connection('test', '1::4'))
+        assert c1 is c2 is c3
+        assert c1.addr == '1::4'
+        assert connect.call_count == 1
+
+    def test_other_address_replaces_connection(self, cephadm_module, connect):
+        ssh = cephadm_module.ssh
+        c1 = cephadm_module.wait_async(ssh._remote_connection('new1', '10.0.0.1'))
+        c2 = cephadm_module.wait_async(ssh._remote_connection('new1', '10.0.0.2'))
+        assert c1 is not c2
+        assert c2.addr == '10.0.0.2'
+        c1.close.assert_called_once_with()
+        c2.close.assert_not_called()
+        assert ssh.cons['new1'] is c2
+
+    def test_closed_connection_replaced(self, cephadm_module, connect):
+        ssh = cephadm_module.ssh
+        c1 = cephadm_module.wait_async(ssh._remote_connection('new1', '10.0.0.1'))
+        c1.is_closing.return_value = True
+        c2 = cephadm_module.wait_async(ssh._remote_connection('new1', '10.0.0.1'))
+        assert c1 is not c2
+        c1.close.assert_called_once_with()
+        assert ssh.cons['new1'] is c2
+
+    def test_concurrent_callers_share_one_connection(self, cephadm_module, connect):
+        ssh = cephadm_module.ssh
+
+        async def many():
+            return await asyncio.gather(*(ssh._remote_connection('new1', '10.0.0.1')
+                                          for _ in range(5)))
+
+        conns = cephadm_module.wait_async(many())
+        assert connect.call_count == 1
+        assert all(c is conns[0] for c in conns)
+
+    def test_reset_forgets_address(self, cephadm_module, connect):
+        ssh = cephadm_module.ssh
+        c1 = cephadm_module.wait_async(ssh._remote_connection('new1', '10.0.0.1'))
+        ssh.reset_con('new1')
+        c1.close.assert_called_once_with()
+        assert 'new1' not in ssh.cons
+        assert 'new1' not in ssh._con_addrs
+        c2 = cephadm_module.wait_async(ssh._remote_connection('new1', '10.0.0.1'))
+        assert c2 is not c1
+
+    def test_new_host_check_uses_one_connection(self, cephadm_module, connect):
+        # check-host on a new host without the cephadm binary: check-host
+        # (127), ls (2), copy of the binary (several commands and SFTP),
+        # check-host again. All on one connection.
+        results = iter([127, 2])
+        commands = []
+
+        async def run(cmd, **kwargs):
+            commands.append(cmd)
+            return SSHCompletedProcess(returncode=next(results, 0), stdout='', stderr='')
+
+        def new_conn(*args, **kwargs):
+            conn = TestSSHConnectionReuse._new_conn()
+            conn.run.side_effect = run
+            sftp = conn.start_sftp_client.return_value.__aenter__.return_value
+            sftp.put = AsyncMock()
+            return conn
+
+        async def _connect(*args, **kwargs):
+            conn = new_conn()
+            connect.conns.append(conn)
+            return conn
+
+        connect.side_effect = _connect
+        out, err, code = cephadm_module.wait_async(CephadmServe(cephadm_module)._run_cephadm(
+            'new1', cephadmNoImage, 'check-host', ['--expect-hostname', 'new1'],
+            addr='10.0.0.1', error_ok=True, no_fsid=True))
+        assert code == 0
+        assert len(commands) > 5
+        assert connect.call_count == 1
