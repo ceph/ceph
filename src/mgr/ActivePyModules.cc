@@ -17,6 +17,7 @@
 
 #include "ActivePyModules.h"
 
+#include <memory>
 #include <rocksdb/version.h>
 
 #include "common/debug.h"
@@ -1191,16 +1192,22 @@ PyObject* ActivePyModules::get_perf_schema_python(
   auto dump_counter_with_labels = [&dump_sub_counter_information](
   		      PyFormatter *f, auto key_labels,
   		      auto type,
-  		      std::optional<Formatter::ObjectSection>& counter_object_section,
-  		      std::optional<Formatter::ObjectSection>& counters_section) {
-    counter_object_section.emplace(*f, "");  // counter should be enclosed by array
+  		      std::unique_ptr<Formatter::ObjectSection>& counter_object_section,
+  		      std::unique_ptr<Formatter::ObjectSection>& counters_section) {
+    // Use unique_ptr rather than optional: ObjectSection holds a reference,
+    // and GCC's -Wmaybe-uninitialized false-positives on empty optional dtors.
+    // Reset before make_unique so the old section closes before the new opens.
+    counter_object_section.reset();
+    counter_object_section =
+	std::make_unique<Formatter::ObjectSection>(*f, "");
 
     for (Formatter::ObjectSection labels_section{*f, "labels"};
       const auto &label : key_labels) {
       f->dump_string(label.first, label.second);
     }
 
-    counters_section.emplace(*f, "counters");
+    counters_section.reset();
+    counters_section = std::make_unique<Formatter::ObjectSection>(*f, "counters");
     dump_sub_counter_information(f, type);
   };
 
@@ -1212,9 +1219,9 @@ PyObject* ActivePyModules::get_perf_schema_python(
 	perf_counter_label_pairs prev_key_labels;
 	Formatter::ObjectSection counter_section{
 	    f, key.c_str()};  // Main Object Section
-	std::optional<Formatter::ArraySection> array_section;
-	std::optional<Formatter::ObjectSection> counter_object_section;
-	std::optional<Formatter::ObjectSection> counters_section;
+	std::unique_ptr<Formatter::ArraySection> array_section;
+	std::unique_ptr<Formatter::ObjectSection> counter_object_section;
+	std::unique_ptr<Formatter::ObjectSection> counters_section;
 
 	for (const auto &[counter_name_with_labels, _] :
 	     state->perf_counters.instances) {
@@ -1284,9 +1291,10 @@ PyObject* ActivePyModules::get_perf_schema_python(
 	  if (prev_key_name != key_name) {
 	    counters_section.reset();
 	    counter_object_section.reset();
+	    array_section.reset();  // close previous array before opening next
 	    prev_key_name = key_name;
 	    prev_key_labels = key_labels;
-	    array_section.emplace(f, key_name);
+	    array_section = std::make_unique<Formatter::ArraySection>(f, key_name);
 	    dump_counter_with_labels(&f, key_labels, type, counter_object_section, counters_section);
 	  } else if (
 	      prev_key_name == key_name && prev_key_labels == key_labels) {
