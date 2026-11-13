@@ -411,17 +411,11 @@ void ECTransactionL::generate_transactions(
 	ldpp_dout(dpp, 20) << "generate_transactions: new_size truncate down "
 			   << new_size << dendl;
 	if (new_size != op.truncate->first) { // 0 the unaligned part
-	  bufferlist bl;
-	  bl.append_zero(new_size - op.truncate->first);
-	  to_write.insert(
-	    op.truncate->first,
-	    bl.length(),
-	    bl);
-	  append_after = sinfo.logical_to_prev_stripe_offset(
-	    op.truncate->first);
-	} else {
-	  append_after = new_size;
-	}
+          bufferlist bl;
+          bl.append_zero(new_size - op.truncate->first);
+          to_write.insert(op.truncate->first, bl.length(), bl);
+        }
+        append_after = new_size;
 	to_write.erase(
 	  new_size,
 	  std::numeric_limits<uint64_t>::max() - new_size);

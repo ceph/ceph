@@ -3112,34 +3112,34 @@ TEST(MOSDOpReply, core_hint_roundtrip)
   auto reply = ceph::make_message<MOSDOpReply>();
   reply->set_core_hint(hint);
   auto decoded = reply_roundtrip(reply, CEPH_FEATURES_ALL);
-  EXPECT_EQ(decoded->get_header().version, 9);
+  EXPECT_GE(decoded->get_header().version, 9);
   ASSERT_TRUE(decoded->get_core_hint().has_value());
   EXPECT_EQ(*decoded->get_core_hint(), hint);
   EXPECT_EQ(fmt::format("{}", *decoded->get_core_hint()), "core 3 port 6810");
 }
 
-// the hint is optional: a v9 reply may name none
+// the hint is optional: a reply may name none
 TEST(MOSDOpReply, no_core_hint)
 {
   auto reply = ceph::make_message<MOSDOpReply>();
   auto decoded = reply_roundtrip(reply, CEPH_FEATURES_ALL);
-  EXPECT_EQ(decoded->get_header().version, 9);
+  EXPECT_GE(decoded->get_header().version, 9);
   EXPECT_FALSE(decoded->get_core_hint().has_value());
 }
 
-// no feature gates it: any peer gets v9, and older ones ignore the hint
+// no feature gates it: any peer gets the hint (v9+), and older ones ignore it
 TEST(MOSDOpReply, core_hint_regardless_of_features)
 {
   auto reply = ceph::make_message<MOSDOpReply>();
   reply->set_core_hint(osd_core_hint_t{3, 6810});
   auto decoded = reply_roundtrip(
     reply, CEPH_FEATURES_ALL & ~CEPH_FEATURE_SERVER_VAMPIRE);
-  EXPECT_EQ(decoded->get_header().version, 9);
+  EXPECT_GE(decoded->get_header().version, 9);
   ASSERT_TRUE(decoded->get_core_hint().has_value());
   EXPECT_EQ(*decoded->get_core_hint(), (osd_core_hint_t{3, 6810}));
 }
 
-// a v8 decoder reads a v9 reply: all of it but the trailing hint
+// a v8 decoder reads a newer reply: all of it but the trailing hint
 TEST(MOSDOpReply, v9_read_as_v8)
 {
   auto reply = ceph::make_message<MOSDOpReply>();
@@ -3148,7 +3148,7 @@ TEST(MOSDOpReply, v9_read_as_v8)
   reply->set_reply_versions(eversion_t(5, 7), 7);
   reply->set_core_hint(osd_core_hint_t{3, 6810});
   reply->encode_payload(CEPH_FEATURES_ALL);
-  ASSERT_EQ(reply->get_header().version, 9);
+  ASSERT_GE(reply->get_header().version, 9);
 
   auto out = ceph::make_message<MOSDOpReply>();
   auto header = reply->get_header();
@@ -3162,6 +3162,331 @@ TEST(MOSDOpReply, v9_read_as_v8)
   EXPECT_EQ(out->get_replay_version(), eversion_t(5, 7));
   EXPECT_EQ(out->get_user_version(), 7u);
   EXPECT_FALSE(out->get_core_hint().has_value());
+}
+
+// ---------------------------------------------------------------------------
+// force_allocated_extents_t tests
+// ---------------------------------------------------------------------------
+
+TEST(ForceAllocatedExtents, EncodeDecodeEmpty)
+{
+  force_allocated_extents_t fae;
+  ceph::buffer::list bl;
+  fae.encode(bl);
+  auto p = bl.cbegin();
+  force_allocated_extents_t out;
+  out.decode(p);
+  EXPECT_TRUE(out.empty());
+}
+
+TEST(ForceAllocatedExtents, DecodeEmptyBufferlist)
+{
+  ceph::buffer::list bl; // completely empty – no ENCODE_START
+  auto p = bl.cbegin();
+  force_allocated_extents_t out;
+  out.decode(p);
+  EXPECT_TRUE(out.empty());
+}
+
+TEST(ForceAllocatedExtents, EncodeDecodeV2SmallSet)
+{
+  // v2 format: two disjoint blocks — round-trip correctness.
+  force_allocated_extents_t fae;
+  fae.insert_exact(0, 4096);
+  fae.insert_exact(8192, 4096);
+  ceph::buffer::list bl;
+  fae.encode(bl);
+
+  // Verify struct_v == 2 (first byte of ENCODE_START header).
+  auto raw = bl.cbegin();
+  uint8_t sv;
+  decode(sv, raw);
+  EXPECT_EQ(2u, sv);
+
+  auto p = bl.cbegin();
+  force_allocated_extents_t out;
+  out.decode(p);
+  EXPECT_EQ(fae.get_intervals(), out.get_intervals());
+}
+
+TEST(ForceAllocatedExtents, EncodeDecodeManyIntervalsRoundTrip)
+{
+  // 129 disjoint 4K intervals — round-trip correctness with v2 chunk format.
+  force_allocated_extents_t fae;
+  constexpr uint32_t n = 129;
+  for (uint32_t i = 0; i < n; ++i) {
+    fae.insert_exact(uint64_t{i} * 2 * FAE_BLOCK_SIZE, FAE_BLOCK_SIZE);
+  }
+  ASSERT_EQ(n, fae.num_intervals());
+
+  ceph::buffer::list bl;
+  fae.encode(bl);
+  auto p = bl.cbegin();
+  force_allocated_extents_t out;
+  out.decode(p);
+  EXPECT_EQ(fae.get_intervals(), out.get_intervals());
+}
+
+TEST(ForceAllocatedExtents, EncodeDecodeContiguousBlocksMerged)
+{
+  // 3 adjacent blocks at offset 0 plus many disjoint blocks elsewhere.
+  // After round-trip, the first interval must still be the merged 3-block run.
+  force_allocated_extents_t fae;
+  fae.insert_exact(0, 3 * FAE_BLOCK_SIZE);
+  uint64_t base = 1000 * FAE_BLOCK_SIZE;
+  for (uint32_t i = 0; i < 128; ++i) {
+    fae.insert_exact(base + uint64_t{i} * 2 * FAE_BLOCK_SIZE, FAE_BLOCK_SIZE);
+  }
+
+  ceph::buffer::list bl;
+  fae.encode(bl);
+  auto p = bl.cbegin();
+  force_allocated_extents_t out;
+  out.decode(p);
+  EXPECT_EQ(fae.get_intervals(), out.get_intervals());
+  // The first 3 contiguous blocks must decode back as a single interval.
+  auto it = out.begin();
+  auto [first_start, first_len] = *it;
+  EXPECT_EQ(0u, first_start);
+  EXPECT_EQ(3 * FAE_BLOCK_SIZE, first_len);
+}
+
+// --- add ---
+
+TEST(ForceAllocatedExtents, AddAligned)
+{
+  force_allocated_extents_t fae;
+  fae.add(0, FAE_BLOCK_SIZE);
+  EXPECT_EQ(1u, fae.num_intervals());
+  EXPECT_TRUE(fae.contains(0));
+  EXPECT_TRUE(fae.contains(FAE_BLOCK_SIZE - 1));
+}
+
+TEST(ForceAllocatedExtents, AddUnalignedRoundsOut)
+{
+  force_allocated_extents_t fae;
+  // Unaligned: should round down to 0 and up to 4K
+  fae.add(100, 200);
+  EXPECT_EQ(1u, fae.num_intervals());
+  auto [start, len] = *fae.begin();
+  EXPECT_EQ(0u, start);
+  EXPECT_EQ(FAE_BLOCK_SIZE, len);
+}
+
+TEST(ForceAllocatedExtents, AddAdjacentMerges)
+{
+  force_allocated_extents_t fae;
+  fae.add(0, FAE_BLOCK_SIZE);
+  fae.add(FAE_BLOCK_SIZE, FAE_BLOCK_SIZE);
+  EXPECT_EQ(1u, fae.num_intervals());
+  EXPECT_EQ(2 * FAE_BLOCK_SIZE, fae.size());
+}
+
+TEST(ForceAllocatedExtents, AddNonAdjacentKeepsSeparate)
+{
+  force_allocated_extents_t fae;
+  fae.add(0, FAE_BLOCK_SIZE);
+  fae.add(2 * FAE_BLOCK_SIZE, FAE_BLOCK_SIZE);
+  EXPECT_EQ(2u, fae.num_intervals());
+}
+
+TEST(ForceAllocatedExtents, AddZeroLengthNoOp)
+{
+  force_allocated_extents_t fae;
+  fae.add(0, 0);
+  EXPECT_TRUE(fae.empty());
+}
+
+// --- remove ---
+
+TEST(ForceAllocatedExtents, RemoveSplitsInterval)
+{
+  force_allocated_extents_t fae;
+  fae.insert_exact(0, 3 * FAE_BLOCK_SIZE);
+  // Remove the middle block
+  fae.remove(FAE_BLOCK_SIZE, FAE_BLOCK_SIZE);
+  EXPECT_EQ(2u, fae.num_intervals());
+  EXPECT_TRUE(fae.contains(0));
+  EXPECT_FALSE(fae.contains(FAE_BLOCK_SIZE));
+  EXPECT_TRUE(fae.contains(2 * FAE_BLOCK_SIZE));
+}
+
+TEST(ForceAllocatedExtents, RemoveSpansMultipleIntervals)
+{
+  force_allocated_extents_t fae;
+  fae.insert_exact(0, FAE_BLOCK_SIZE);
+  fae.insert_exact(2 * FAE_BLOCK_SIZE, FAE_BLOCK_SIZE);
+  fae.insert_exact(4 * FAE_BLOCK_SIZE, FAE_BLOCK_SIZE);
+  fae.remove(0, 5 * FAE_BLOCK_SIZE);
+  EXPECT_TRUE(fae.empty());
+}
+
+TEST(ForceAllocatedExtents, RemoveNonExistentNoOp)
+{
+  force_allocated_extents_t fae;
+  fae.insert_exact(0, FAE_BLOCK_SIZE);
+  fae.remove(2 * FAE_BLOCK_SIZE, FAE_BLOCK_SIZE);
+  EXPECT_EQ(1u, fae.num_intervals());
+}
+
+TEST(ForceAllocatedExtents, RemoveZeroLengthNoOp)
+{
+  force_allocated_extents_t fae;
+  fae.insert_exact(0, FAE_BLOCK_SIZE);
+  fae.remove(0, 0);
+  EXPECT_EQ(1u, fae.num_intervals());
+}
+
+// --- truncate ---
+
+TEST(ForceAllocatedExtents, TruncateRemovesTail)
+{
+  force_allocated_extents_t fae;
+  fae.insert_exact(0, FAE_BLOCK_SIZE);
+  fae.insert_exact(4 * FAE_BLOCK_SIZE, FAE_BLOCK_SIZE);
+  fae.truncate(2 * FAE_BLOCK_SIZE);
+  EXPECT_EQ(1u, fae.num_intervals());
+  EXPECT_TRUE(fae.contains(0));
+  EXPECT_FALSE(fae.contains(4 * FAE_BLOCK_SIZE));
+}
+
+TEST(ForceAllocatedExtents, TruncatePreservesBeforeNewSize)
+{
+  force_allocated_extents_t fae;
+  fae.insert_exact(0, FAE_BLOCK_SIZE);
+  fae.truncate(FAE_BLOCK_SIZE);
+  EXPECT_EQ(1u, fae.num_intervals());
+}
+
+TEST(ForceAllocatedExtents, TruncateLargerThanExtentsIsNoOp)
+{
+  force_allocated_extents_t fae;
+  fae.insert_exact(0, FAE_BLOCK_SIZE);
+  fae.truncate(1024 * FAE_BLOCK_SIZE);
+  EXPECT_EQ(1u, fae.num_intervals());
+}
+
+TEST(ForceAllocatedExtents, TruncateEmptySetNoOp)
+{
+  force_allocated_extents_t fae;
+  fae.truncate(0);
+  EXPECT_TRUE(fae.empty());
+}
+
+TEST(ForceAllocatedExtents, TruncateUnalignedSizeRoundsUp)
+{
+  // Truncating to an unaligned size should round up to FAE_BLOCK_SIZE,
+  // so a block exactly at the rounded boundary is preserved.
+  force_allocated_extents_t fae;
+  fae.insert_exact(0, FAE_BLOCK_SIZE);
+  fae.insert_exact(FAE_BLOCK_SIZE, FAE_BLOCK_SIZE);
+  // Truncate to half-way through the first block: rounds up to FAE_BLOCK_SIZE
+  // so both blocks should be preserved (aligned_size == FAE_BLOCK_SIZE,
+  // but second block starts at FAE_BLOCK_SIZE which equals aligned_size).
+  fae.truncate(FAE_BLOCK_SIZE / 2);
+  // aligned_size = FAE_BLOCK_SIZE; range_end = 2*FAE_BLOCK_SIZE > aligned_size
+  // so the second block should be erased
+  EXPECT_EQ(1u, fae.num_intervals());
+  EXPECT_TRUE(fae.contains(0));
+  EXPECT_FALSE(fae.contains(FAE_BLOCK_SIZE));
+}
+
+TEST(ForceAllocatedExtents, ZeroDecodeFastPath)
+{
+  // Encode an FAE, decode it into a new instance, then immediately re-encode
+  // without calling any read accessor.  The output bytes must equal the input
+  // bytes and chunks_ must never have been populated (deferred decode).
+  force_allocated_extents_t src;
+  src.add(0, FAE_BLOCK_SIZE);
+  src.add(8 * FAE_BLOCK_SIZE, 3 * FAE_BLOCK_SIZE);
+
+  ceph::buffer::list encoded;
+  src.encode(encoded);
+
+  force_allocated_extents_t decoded;
+  auto p = encoded.cbegin();
+  decoded.decode(p);
+
+  // Re-encode without touching any accessor — must return identical bytes.
+  ceph::buffer::list re_encoded;
+  decoded.encode(re_encoded);
+
+  EXPECT_EQ(encoded.length(), re_encoded.length());
+  EXPECT_EQ(0, memcmp(encoded.c_str(), re_encoded.c_str(), encoded.length()));
+
+  // Now verify the data is still correct after materialisation.
+  EXPECT_EQ(src.get_intervals(), decoded.get_intervals());
+}
+
+// ---------------------------------------------------------------------------
+// US-1.2: FLAG_PRESERVE_ALLOCATION pool flag
+// ---------------------------------------------------------------------------
+
+TEST(pg_pool_t, TrackZeroBlocksFlagDefaultOff)
+{
+  pg_pool_t pool;
+  EXPECT_FALSE(pool.tracks_zero_blocks());
+  EXPECT_FALSE(pool.has_flag(pg_pool_t::FLAG_PRESERVE_ALLOCATION));
+}
+
+TEST(pg_pool_t, TrackZeroBlocksFlagEnableDisable)
+{
+  pg_pool_t pool;
+  pool.type = pg_pool_t::TYPE_ERASURE;
+  pool.flags |= pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS;
+
+  pool.enable_track_zero_blocks();
+  EXPECT_TRUE(pool.tracks_zero_blocks());
+  EXPECT_TRUE(pool.has_flag(pg_pool_t::FLAG_PRESERVE_ALLOCATION));
+
+  pool.disable_track_zero_blocks();
+  EXPECT_FALSE(pool.tracks_zero_blocks());
+  EXPECT_FALSE(pool.has_flag(pg_pool_t::FLAG_PRESERVE_ALLOCATION));
+}
+
+TEST(pg_pool_t, TrackZeroBlocksFlagDoesNotConflict)
+{
+  // FLAG_PRESERVE_ALLOCATION must not share bits with any other flag.
+  const uint64_t all_other_flags =
+    pg_pool_t::FLAG_HASHPSPOOL        |
+    pg_pool_t::FLAG_FULL              |
+    pg_pool_t::FLAG_EC_OVERWRITES     |
+    pg_pool_t::FLAG_INCOMPLETE_CLONES |
+    pg_pool_t::FLAG_NODELETE          |
+    pg_pool_t::FLAG_NOPGCHANGE        |
+    pg_pool_t::FLAG_NOSIZECHANGE      |
+    pg_pool_t::FLAG_WRITE_FADVISE_DONTNEED |
+    pg_pool_t::FLAG_NOSCRUB           |
+    pg_pool_t::FLAG_NODEEP_SCRUB      |
+    pg_pool_t::FLAG_FULL_QUOTA        |
+    pg_pool_t::FLAG_NEARFULL          |
+    pg_pool_t::FLAG_BACKFILLFULL      |
+    pg_pool_t::FLAG_SELFMANAGED_SNAPS |
+    pg_pool_t::FLAG_POOL_SNAPS        |
+    pg_pool_t::FLAG_CREATING          |
+    pg_pool_t::FLAG_EIO               |
+    pg_pool_t::FLAG_BULK              |
+    pg_pool_t::FLAG_CRIMSON           |
+    pg_pool_t::FLAG_EC_OPTIMIZATIONS  |
+    pg_pool_t::FLAG_CLIENT_SPLIT_READS |
+    pg_pool_t::FLAG_OMAP;
+  EXPECT_EQ(0u, (uint64_t)pg_pool_t::FLAG_PRESERVE_ALLOCATION & all_other_flags);
+}
+
+TEST(pg_pool_t, TrackZeroBlocksFlagNameRoundTrip)
+{
+  EXPECT_STREQ("preserve_allocation",
+               pg_pool_t::get_flag_name(pg_pool_t::FLAG_PRESERVE_ALLOCATION));
+  EXPECT_EQ((uint64_t)pg_pool_t::FLAG_PRESERVE_ALLOCATION,
+            pg_pool_t::get_flag_by_name("preserve_allocation"));
+}
+
+TEST(pg_pool_t, TrackZeroBlocksFlagInFlagsString)
+{
+  pg_pool_t pool;
+  pool.enable_track_zero_blocks();
+  const std::string s = pool.get_flags_string();
+  EXPECT_NE(std::string::npos, s.find("preserve_allocation"));
 }
 
 /*

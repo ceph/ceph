@@ -655,6 +655,10 @@ void RADOS::wait_for_latest_osd_map_(Op::Completion c) {
 			       bs::error_code())));
 }
 
+bool RADOS::pool_has_flag(std::int64_t pool_id, uint64_t flag) const {
+  return false;
+}
+
 } // namespace neorados
 
 namespace librados {

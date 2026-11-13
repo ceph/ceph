@@ -4,5 +4,6 @@ overrides:
     conf:
       global:
         osd_pool_default_flag_ec_optimizations: true
+        osd_pool_default_flags: 8388608  # FLAG_PRESERVE_ALLOCATION (1<<23)
     pool-config:
       ec_pool: true
