@@ -1197,6 +1197,111 @@ TEST(OPEN2, SHADOW_COW_FAILURE_LEAVES_NO_TEMP)
   ASSERT_EQ(rgw_fh_rele(fs, rfh, 0), 0);
 }
 
+/* FSStrategy::copy_range() prefers copy_file_range(2), which shares extents
+ * on XFS and returns EOPNOTSUPP on GPFS at every granularity
+ * (probes/results-cowprobe-2026-09-22.txt).  So on a development filesystem
+ * the buffered fallback -- the only path GPFS ever takes -- never executes,
+ * and no amount of passing tests here says anything about it.
+ * inject-buffered-copy forces it, and the hint reports the bytes the
+ * fallback moved, so each polarity can be shown to have taken the path it
+ * claims rather than merely to have produced the right bytes.
+ *
+ * The two arms run an identical sequence, which is what lets the second
+ * one mean something:  the first proves that sequence does clone, so a
+ * zero count in the second is copy_file_range having done it, not the
+ * clone having been skipped.  On a filesystem which cannot share extents
+ * the second arm has no separate path to take, and the test says so
+ * rather than asserting a zero it would never see. */
+TEST(OPEN2, BUFFERED_COPY_MATCHES_COPY_FILE_RANGE)
+{
+  if (! fs_profile.known) {
+    GTEST_SKIP() << "no fs profile;  cannot say which path a copy should "
+		    "take";
+  }
+  const DoutPrefix dp(g_ceph_context, dout_subsys, "write2 test: ");
+  const std::string name{"sb-bufcopy"};
+  (void) rgw_unlink(fs, bucket_fh, name.c_str(), RGW_UNLINK_FLAG_NONE);
+
+  /* over preferred_io_size()'s 1 MiB floor and not a multiple of it, so the
+   * fallback has to iterate, advance both offsets, and end on a short read */
+  const size_t body_len = (3 * 1024 * 1024) + 4097;
+  std::string body(body_len, '\0');
+  for (size_t i = 0; i < body_len; ++i) {
+    body[i] = (char) ((i * 31) + (i >> 13));
+  }
+
+  {
+    Open2Helper o2h(fs, bucket_fh);
+    ASSERT_EQ(get<0>(o2h.lookup(name)), 0);
+    auto ofw = o2h.open(O_RDWR, RGW_OPEN_FLAG_CREATE);
+    ASSERT_EQ(get<0>(ofw), 0);
+    ASSERT_EQ(get<0>(o2h.write(get<1>(ofw), body, 0, body.length())), 0);
+    ASSERT_EQ(o2h.close(get<1>(ofw)), 0);
+  }
+
+  const off_t poke = (2 * 1024 * 1024) + 11;
+
+  /* Where copy_file_range works, the two arms take different paths and the
+   * counter separates them.  Where it does not -- GPFS -- there is only one
+   * path, the hint changes nothing, and both arms must account for every
+   * byte.  Asserting zero there would fail for the right reason and read
+   * like a regression. */
+  const bool shares = fs_profile.shares_extents;
+
+  for (bool buffered : {true, false}) {
+    std::map<std::string, std::string> out;
+    int ret = fsio_inject_out(&dp, "inject-buffered-copy", buffered, &out);
+    if (ret == -ENOTSUP || ret == -EINVAL) {
+      GTEST_SKIP() << "driver does not implement inject-buffered-copy";
+    }
+    ASSERT_EQ(ret, 0);
+
+    const std::string mark = buffered ? "B" : "R";
+    {
+      /* O_RDWR with no O_TRUNC on an existing object:  the COW clone arm */
+      Open2Helper o2h(fs, bucket_fh);
+      ASSERT_EQ(get<0>(o2h.lookup(name)), 0);
+      auto ofw = o2h.open(O_RDWR, RGW_OPEN_FLAG_NONE);
+      ASSERT_EQ(get<0>(ofw), 0);
+      ASSERT_EQ(get<0>(o2h.write(get<1>(ofw), mark, poke, mark.length())), 0);
+      ASSERT_EQ(o2h.close(get<1>(ofw)), 0);
+    }
+    body[poke] = mark[0];
+
+    out.clear();
+    ASSERT_EQ(fsio_inject_out(&dp, "inject-buffered-copy", false, &out), 0);
+    ASSERT_NE(out.find("buffered_bytes"), out.end());
+    const uint64_t counted = std::stoull(out["buffered_bytes"]);
+
+    if (buffered || ! shares) {
+      EXPECT_EQ(counted, body_len)
+	  << "the fallback moved " << counted << " of " << body_len
+	  << " bytes;  the content check below is not testing it";
+    } else {
+      EXPECT_EQ(counted, 0u)
+	  << "the fallback ran " << counted << " bytes where "
+	     "copy_file_range should have;  the positive case above is not "
+	     "distinguishing the two paths";
+    }
+
+    Open2Helper o2h(fs, bucket_fh);
+    ASSERT_EQ(get<0>(o2h.lookup(name)), 0);
+    auto ofr = o2h.open(O_RDONLY, RGW_OPEN_FLAG_NONE);
+    ASSERT_EQ(get<0>(ofr), 0);
+    auto rr = o2h.read(get<1>(ofr), 0, body_len);
+    ASSERT_EQ(get<0>(rr), 0);
+    EXPECT_EQ(get<1>(rr).length(), body_len)
+	<< (buffered ? "buffered" : "copy_file_range") << " clone is short";
+    EXPECT_EQ(first_difference(get<1>(rr), body), std::string::npos)
+	<< (buffered ? "buffered" : "copy_file_range")
+	<< " clone differs from the original at offset "
+	<< first_difference(get<1>(rr), body);
+    ASSERT_EQ(o2h.close(get<1>(ofr)), 0);
+  }
+
+  (void) rgw_unlink(fs, bucket_fh, name.c_str(), RGW_UNLINK_FLAG_NONE);
+}
+
 /* md5 of a buffer, hex, as an S3 part etag */
 static std::string md5_hex(const std::string& data)
 {
@@ -1221,6 +1326,141 @@ static std::string blob(size_t len, unsigned seed)
     s[i] = (char) ((i * 7) + seed);
   }
   return s;
+}
+
+/* Multipart assembly is the other caller of FSStrategy::copy_range, and it
+ * is the one the file API cannot reach:  there is no multipart in NFS.  So
+ * drive it through the SAL, which costs no new harness -- this suite
+ * already holds the driver, and calls driver_hint on it.
+ *
+ * Forced through the buffered path, because where copy_file_range works
+ * assembly never takes it, and where it does not (GPFS) this is the only
+ * path there is.  Either way the assembled object must be the parts, in
+ * order, byte for byte. */
+TEST(OPEN2, MULTIPART_ASSEMBLY_BUFFERED)
+{
+  if (! fs_profile.known) {
+    GTEST_SKIP() << "no fs profile;  cannot force or account the fallback";
+  }
+  const DoutPrefix dp(g_ceph_context, dout_subsys, "write2 test: ");
+  auto* driver = rgw::g_rgwlib->get_driver();
+  const bool shares = fs_profile.shares_extents;
+
+ for (bool buffered : {true, false}) {
+
+  std::unique_ptr<rgw::sal::Bucket> bucket;
+  ASSERT_EQ(driver->load_bucket(&dp, rgw_bucket(std::string(), bucket_name),
+			        &bucket, null_yield), 0);
+
+  /* parts deliberately not multiples of the 1 MiB copy buffer, so the
+   * fallback ends each one on a short read and has to carry the output
+   * offset across parts -- which the loop this replaced got right only by
+   * accident */
+  const std::vector<std::string> parts = {
+    blob((5 << 20) + 3, 11),
+    blob((5 << 20) + 7, 29),
+    blob(4096 + 5, 47),
+  };
+  std::string whole;
+  for (const auto& p : parts) {
+    whole += p;
+  }
+
+  const std::string key = buffered ? "mpu-buffered" : "mpu-cfr";
+  (void) rgw_unlink(fs, bucket_fh, key.c_str(), RGW_UNLINK_FLAG_NONE);
+
+  ACLOwner owner;
+  owner.id = bucket->get_info().owner;
+  rgw_placement_rule placement = bucket->get_info().placement_rule;
+
+  auto obj = bucket->get_object(rgw_obj_key(key));
+  auto upload = bucket->get_multipart_upload(key, std::nullopt, owner);
+  ASSERT_NE(upload, nullptr);
+
+  rgw::sal::Attrs init_attrs;
+  ASSERT_EQ(upload->init(&dp, null_yield, owner, placement, init_attrs), 0);
+
+  std::map<std::string, std::string> hint_out;
+  int ret = fsio_inject_out(&dp, "inject-buffered-copy", buffered,
+			    &hint_out);
+  if (ret == -ENOTSUP || ret == -EINVAL) {
+    (void) upload->abort(&dp, g_ceph_context, null_yield);
+    GTEST_SKIP() << "driver does not implement inject-buffered-copy";
+  }
+  ASSERT_EQ(ret, 0);
+
+  std::map<int, std::string> part_etags;
+  for (size_t i = 0; i < parts.size(); ++i) {
+    const int pnum = (int) i + 1;
+    const std::string pstr = std::to_string(pnum);
+    const std::string etag = md5_hex(parts[i]);
+
+    auto writer = upload->get_writer(&dp, null_yield, obj.get(), owner,
+				     &placement, pnum, pstr);
+    ASSERT_NE(writer, nullptr) << "no writer for part " << pnum;
+    ASSERT_EQ(writer->prepare(null_yield), 0);
+
+    bufferlist bl;
+    bl.append(parts[i].c_str(), parts[i].length());
+    ASSERT_EQ(writer->process(std::move(bl), 0), 0);
+
+    rgw::sal::Attrs pattrs;
+    const req_context rctx{&dp, null_yield, nullptr};
+    ASSERT_EQ(writer->complete(parts[i].length(), etag, nullptr, real_time(),
+			       pattrs, std::nullopt, real_time(),
+			       nullptr, nullptr, nullptr, nullptr, nullptr,
+			       rctx, rgw::sal::FLAG_LOG_OP), 0)
+	<< "part " << pnum << " did not land";
+    part_etags[pnum] = etag;
+  }
+
+  std::list<rgw_obj_index_key> remove_objs;
+  uint64_t accounted_size = 0;
+  bool compressed = false;
+  RGWCompressionInfo cs_info;
+  off_t ofs = 0;
+  std::string tag{"write2-mpu"};
+  rgw::sal::MultipartUpload::prefix_map_t processed_prefixes;
+
+  ASSERT_EQ(upload->complete(&dp, null_yield, g_ceph_context, part_etags,
+			     remove_objs, accounted_size, compressed, cs_info,
+			     ofs, tag, owner, 0, obj.get(),
+			     processed_prefixes), 0)
+      << "CompleteMultipartUpload failed";
+
+  hint_out.clear();
+  ASSERT_EQ(fsio_inject_out(&dp, "inject-buffered-copy", false, &hint_out), 0);
+  ASSERT_NE(hint_out.find("buffered_bytes"), hint_out.end());
+  const uint64_t counted = std::stoull(hint_out["buffered_bytes"]);
+  if (buffered || ! shares) {
+    EXPECT_GE(counted, whole.length())
+	<< "assembly moved " << counted << " bytes through the buffer for an "
+	<< whole.length() << " byte object;  the content check below is not "
+	   "testing the fallback";
+  } else {
+    EXPECT_EQ(counted, 0u)
+	<< "assembly buffered " << counted << " bytes where copy_file_range "
+	   "should have shared them;  then the forced arm above proves "
+	   "nothing about the hint";
+  }
+
+  EXPECT_EQ(accounted_size, whole.length());
+
+  /* and the bytes are the parts, in order */
+  Open2Helper o2h(fs, bucket_fh);
+  ASSERT_EQ(get<0>(o2h.lookup(key)), 0);
+  auto ofr = o2h.open(O_RDONLY, RGW_OPEN_FLAG_NONE);
+  ASSERT_EQ(get<0>(ofr), 0);
+  auto rr = o2h.read(get<1>(ofr), 0, whole.length());
+  ASSERT_EQ(get<0>(rr), 0);
+  EXPECT_EQ(get<1>(rr).length(), whole.length()) << "assembled object short";
+  EXPECT_EQ(first_difference(get<1>(rr), whole), std::string::npos)
+      << "assembled object differs from the parts at offset "
+      << first_difference(get<1>(rr), whole);
+  ASSERT_EQ(o2h.close(get<1>(ofr)), 0);
+
+  (void) rgw_unlink(fs, bucket_fh, key.c_str(), RGW_UNLINK_FLAG_NONE);
+ }
 }
 
 TEST(OPEN2, SHADOW_BUILD_FAILURE_LEAKS_NO_DESCRIPTORS)
