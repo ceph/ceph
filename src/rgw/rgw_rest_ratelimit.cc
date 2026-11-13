@@ -105,13 +105,17 @@ void RGWOp_Ratelimit_Info::execute(optional_yield y)
     encode_json("user_ratelimit", ratelimit_info, s->formatter);
     s->formatter->close_section();
     flusher.flush();
+    return;
   }
   if (global) {
     std::string realm_id = driver->get_zone()->get_realm_id();
     RGWPeriodConfig period_config;
     auto cfgstore = s->penv.cfgstore;
     op_ret = cfgstore->read_period_config(this, y, realm_id, period_config);
-    if (op_ret && op_ret != -ENOENT) {
+    if (op_ret == -ENOENT) {
+      // no global limits stored yet, so report the defaults
+      op_ret = 0;
+    } else if (op_ret) {
       ldpp_dout(this, 0) << "Error on period config read" << dendl;
       return;
     }
