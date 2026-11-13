@@ -666,7 +666,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         )
         if acl_support is not None:
             share.acl_support = acl_support
-        return self._apply_res([share], create_only=True).one()
+        return self._apply_res([share], create_only=True).squash(share)
 
     @SMBCLICommand('share rm', perm='rw')
     def share_rm(
@@ -679,7 +679,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         share = resources.RemovedShare(
             cluster_id=cluster_id, share_id=share_id
         )
-        return self._apply_res([share]).one()
+        return self._apply_res([share]).squash(share)
 
     def _share_wildcard_rm(
         self, cluster_id: str, share_id: str
@@ -737,7 +737,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             )
 
             updated_share = replace(share, cephfs=updated_cephfs)
-            return self._apply_res([updated_share]).one()
+            return self._apply_res([updated_share]).squash(updated_share)
 
         except resources.InvalidResourceError as err:
             return results.InvalidResourceResult(err.resource_data, str(err))
