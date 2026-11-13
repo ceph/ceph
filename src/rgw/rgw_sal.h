@@ -15,6 +15,8 @@
 
 #pragma once
 
+#include <sys/stat.h>
+#include <sys/uio.h>
 #include <cstdint>
 #include <optional>
 #include <boost/intrusive_ptr.hpp>
@@ -321,6 +323,8 @@ class Driver {
   public:
     Driver() {}
     virtual ~Driver() = default;
+
+    virtual bool have_fsio() const { return false; } /* Supports POSIX-style positional i/o */
 
     /** Post-creation initialization of driver */
     virtual int initialize(CephContext *cct, const DoutPrefixProvider *dpp) = 0;
@@ -754,6 +758,23 @@ class Driver {
 
     /** Register admin APIs unique to this driver */
     virtual void register_admin_apis(RGWRESTMgr* mgr) = 0;
+
+    /** Send a driver-level hint with optional parameters.
+     *  Hints are string-keyed, extensible commands for debug, testing,
+     *  and administrative operations that don't warrant dedicated SAL
+     *  methods.  Returns 0 on success, -ENOTSUP if unrecognized.
+     *
+     *  If out is non-null the hint may fill it with results, which is
+     *  what lets a hint assert on driver state rather than only act on
+     *  it.  Keeping it symmetric with params (string to string both
+     *  ways) means a caller can serialize the result without any type
+     *  machinery;  a hint needing structure can put JSON in a value. */
+    virtual int driver_hint(const DoutPrefixProvider* dpp,
+                            const std::string& hint,
+                            const std::map<std::string, std::string>& params,
+                            std::map<std::string, std::string>* out = nullptr) {
+      return -ENOTSUP;
+    }
 }; // class Driver
 
 
@@ -1159,6 +1180,91 @@ class Bucket {
 class Object {
   public:
 
+  /**
+   * A handle exposing a posix-like, mutable i/o view on an Object
+   */
+    class FSIOObject {
+    public:
+      /* get_fsio_handle flags */
+      static constexpr uint32_t OPEN_FLAG_NONE =      0x0000;
+      static constexpr uint32_t OPEN_FLAG_CREATE =    0x0001;
+      static constexpr uint32_t OPEN_FLAG_EXCL =      0x0002;
+      static constexpr uint32_t OPEN_FLAG_TRUNC =     0x0004;
+      static constexpr uint32_t OPEN_FLAG_EPHEMERAL = 0x0008;
+      /* the caller intends to write:  a shadow is created if none
+       * exists.  absent it no shadow is ever constructed--a reader
+       * binds to the published object, and follows the shadow if a
+       * writer later creates one */
+      static constexpr uint32_t OPEN_FLAG_WRITE =     0x0010;
+
+      /* commit flags */
+      static constexpr uint32_t COMMIT_FLAG_NONE =    0x0000;
+
+      /* publish flags */
+      static constexpr uint32_t PUBLISH_FLAG_NONE =   0x0000;
+
+      /* close flags */
+      static constexpr uint32_t CLOSE_FLAG_NONE =     0x0000;
+      static constexpr uint32_t CLOSE_FLAG_DETACH =   0x0001;
+
+      virtual int preadv(const struct iovec* iov, int iovcnt,
+			  uint64_t ofs, uint64_t* bytes_read,
+			  uint32_t flags) = 0;
+      virtual int pwritev(const struct iovec* iov, int iovcnt,
+			   uint64_t ofs, uint64_t* bytes_written,
+			   uint32_t flags) = 0;
+      virtual int commit(const DoutPrefixProvider* dpp, uint32_t flags) = 0;
+      virtual int publish(const DoutPrefixProvider* dpp, uint32_t flags) = 0;
+      virtual int reclone(const DoutPrefixProvider* dpp, uint32_t flags) = 0;
+      virtual int close(const DoutPrefixProvider* dpp, uint32_t flags) = 0;
+      /* the object has been unlinked:  drop the shadow's name now,
+       * refuse to publish it, and let the storage be reclaimed when
+       * the last open descriptor is returned (posix unlink) */
+      virtual int discard(const DoutPrefixProvider* dpp, uint32_t flags) {
+	return -ENOTSUP;
+      }
+      /* truncate the shadow in place;  clients rendezvoused on it
+       * follow, which unlinking and recreating it would defeat */
+      virtual int ftruncate(const DoutPrefixProvider* dpp, uint64_t size,
+			     uint32_t flags) {
+	return -ENOTSUP;
+      }
+
+      virtual int fstat(struct stat* st, uint32_t flags) = 0;
+      virtual int fgetattr(const DoutPrefixProvider* dpp,
+			    const std::string& name, bufferlist& dest,
+			    uint32_t flags) = 0;
+      virtual int fsetattr(const DoutPrefixProvider* dpp,
+			    const std::string& name, const bufferlist& val,
+			    uint32_t flags) = 0;
+      virtual int fgetattrs(const DoutPrefixProvider* dpp,
+			     Attrs& attrs, uint32_t flags) = 0;
+      virtual int fsetattrs(const DoutPrefixProvider* dpp,
+			     Attrs& attrs, uint32_t flags) = 0;
+      virtual int fremovexattr(const DoutPrefixProvider* dpp,
+				const std::string& name, uint32_t flags) = 0;
+
+      /* what this handle's i/o fd is currently bound to */
+      enum class Binding : uint8_t {
+        PUBLISHED,        /* no shadow exists;  bound to published object */
+        SHADOW,           /* bound to the active, unpublished shadow */
+        SHADOW_PUBLISHED, /* shadow was published;  a write must re-fork */
+      };
+
+      bool resumed() const { return resumed_existing; }
+      /* true when a write requires (re-)establishing a shadow */
+      bool needs_shadow() const { return binding != Binding::SHADOW; }
+      bool is_doomed() const { return doomed; }
+
+      FSIOObject() {}
+      virtual ~FSIOObject() {}
+
+    protected:
+      bool resumed_existing{false};
+      bool doomed{false};
+      Binding binding{Binding::SHADOW};
+    }; /* FSIOObject */
+
     /**
      * @brief Read operation on an Object
      *
@@ -1271,6 +1377,33 @@ class Object {
                DataProcessorFactory* dp_factory,
                const DoutPrefixProvider* dpp, optional_yield y) = 0;
 
+    /** Move this object to another name, and optionally another bucket,
+     * without copying its data.
+     *
+     * PROVISIONAL.  This is the single-object case, which is the degenerate
+     * form of what the general operation is expected to be:  a
+     * prefix-capable rebinding of names onto objects.  Do not build on this
+     * signature.
+     *
+     * The contract is atomic from the caller's view;  a driver which cannot
+     * achieve that natively is responsible for making it so, not for
+     * advertising that it cannot.  Backends with no cheap way to move a name
+     * return -ENOTSUP and the caller falls back to copy-and-delete.
+     *
+     * History moves with the object.  A destination bucket which cannot hold
+     * the source's history -- unversioned, when the source has non-current
+     * versions -- is refused unless FLAG_SLICE_VERSIONS is given, in which
+     * case the current version moves and the history is dropped.
+     */
+    static constexpr uint32_t FLAG_RENAME_NONE = 0x0000;
+    static constexpr uint32_t FLAG_SLICE_VERSIONS = 0x0001;
+
+    virtual int rename(const DoutPrefixProvider* dpp, optional_yield y,
+		       Bucket* dest_bucket, const rgw_obj_key& dest_key,
+		       uint32_t flags) {
+      return -ENOTSUP;
+    }
+
     /** return logging subsystem */
     virtual unsigned get_subsys() { return ceph_subsys_rgw; };
     /** Get the ACL for this object */
@@ -1303,6 +1436,50 @@ class Object {
     virtual bool empty() const = 0;
     /** Get the name of this object */
     virtual const std::string &get_name() const = 0;
+
+    /** What a create should apply to a new shadow before it becomes
+     *  visible under its name.
+     *
+     *  Passed in rather than applied by the caller afterwards, so the
+     *  shadow is linked into place only once it is complete.  Nothing can
+     *  then rendezvous onto a half-built view, and a failure leaves
+     *  nothing behind -- which matters because a leftover attribute-less
+     *  shadow would reject every later exclusive create on that name,
+     *  with no mechanism to reap it. */
+    struct FSIOCreateSpec {
+      Attrs* attrs{nullptr};                 /* xattrs to set */
+      const struct timespec* times{nullptr}; /* [2]: atime, mtime */
+      int64_t size{-1};                      /* >= 0 to set */
+    };
+
+    /** Get a fsio view on an object or object prototype.  -ENOTSUP from a
+     *  driver with no positional view. */
+    using FSIOResult = std::tuple<int, std::unique_ptr<FSIOObject>>;
+    virtual FSIOResult get_fsio_handle(const DoutPrefixProvider* dpp,
+				       uint32_t flags = FSIOObject::OPEN_FLAG_NONE,
+				       const FSIOCreateSpec* spec = nullptr) {
+      return FSIOResult{-ENOTSUP, nullptr};
+    }
+
+    /** Resolve the positional (NFS) view of this name: the active
+     *  shadow if one exists, else the published object.  A probe, not
+     *  an open--it constructs no FSIOObject, retains no descriptor, and
+     *  never creates a shadow, so it is cheap enough for a lookup which
+     *  runs per dirent.  st->st_mode carries the type, so one call
+     *  disambiguates a file from a directory.
+     *
+     *  Returns -ENOENT when neither view exists, and -ENOTSUP from a
+     *  driver with no positional view;  a caller which gets -ENOTSUP
+     *  falls back to resolving through the S3 op path, which is frozen
+     *  legacy and should not be extended.  A driver which later gains a
+     *  positional view (RADOS is expected to) implements this and its
+     *  callers stop taking the fallback, with no change at the caller.
+     */
+    virtual int stat_fsio_view(const DoutPrefixProvider* dpp,
+			       struct stat* st, Attrs* attrs,
+			       uint32_t flags) {
+      return -ENOTSUP;
+    }
 
     /** Load the object state for this object. */
     virtual int load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh = true) = 0;

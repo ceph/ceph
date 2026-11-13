@@ -142,6 +142,8 @@ public:
   FilterDriver(Driver* _next) : next(_next) {}
   virtual ~FilterDriver() = default;
 
+  bool have_fsio() const override { return next->have_fsio(); }
+
   virtual int initialize(CephContext *cct, const DoutPrefixProvider *dpp) override;
   virtual const std::string get_name() const override;
   virtual std::string get_cluster_id(const DoutPrefixProvider* dpp,
@@ -516,6 +518,13 @@ public:
   virtual void register_admin_apis(RGWRESTMgr* mgr) override {
       return next->register_admin_apis(mgr);
   }
+
+  int driver_hint(const DoutPrefixProvider* dpp,
+                  const std::string& hint,
+                  const std::map<std::string, std::string>& params,
+                  std::map<std::string, std::string>* out = nullptr) override {
+    return next->driver_hint(dpp, hint, params, out);
+  }
 };
 
 class FilterUser : public User {
@@ -826,6 +835,17 @@ public:
 			 int max_parts, int marker, int* next_marker,
 			 bool* truncated, list_parts_each_t&& each_func,
 			 optional_yield y) override;
+
+  FSIOResult get_fsio_handle(const DoutPrefixProvider* dpp,
+			     uint32_t flags = FSIOObject::OPEN_FLAG_NONE,
+			     const FSIOCreateSpec* spec = nullptr) override {
+    return next->get_fsio_handle(dpp, flags, spec);
+  }
+
+  int stat_fsio_view(const DoutPrefixProvider* dpp, struct stat* st,
+		     Attrs* attrs, uint32_t flags) override {
+    return next->stat_fsio_view(dpp, st, attrs, flags);
+  }
 
   virtual int load_obj_state(const DoutPrefixProvider *dpp, optional_yield y,
                              bool follow_olh = true) override;
