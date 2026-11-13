@@ -1326,8 +1326,20 @@ int FSEnt::fill_cache(const DoutPrefixProvider *dpp, optional_yield y, fill_cach
 {
   rgw_bucket_dir_entry bde{};
 
-  std::string full_key = path_prefix + get_name();
-  rgw_obj_key key = decode_obj_key(full_key);
+  rgw_obj_key key = decode_obj_key(path_prefix + get_name());
+
+  int ret = make_dir_entry(dpp, y, key, flags, bde);
+  if (ret < 0) {
+    return ret;
+  }
+  return cb(dpp, bde);
+}
+
+int FSEnt::make_dir_entry(const DoutPrefixProvider *dpp, optional_yield y,
+			  const rgw_obj_key& in_key, uint32_t flags,
+			  rgw_bucket_dir_entry& bde)
+{
+  rgw_obj_key key = in_key;
   if (parent->get_type() == ObjectType::MULTIPART) {
     key.ns = mp_ns;
   }
@@ -1395,7 +1407,7 @@ int FSEnt::fill_cache(const DoutPrefixProvider *dpp, optional_yield y, fill_cach
     }
   }
 
-  return cb(dpp, bde);
+  return 0;
 }
 
 int File::create(const DoutPrefixProvider *dpp, bool* existed, bool temp_file)
@@ -5351,11 +5363,15 @@ int NSFSObject::NSFSFSIOObject::publish(const DoutPrefixProvider* dpp, uint32_t 
   auto* bucket = static_cast<NSFSBucket*>(src_obj->get_bucket());
   const auto& binfo = bucket->get_info();
 
+  /* scoped at function level:  the result has to outlive the lock, because
+   * the listing cache below must flip the demoted entry from current to
+   * non-current.  Declared inside the block it was discarded, so nothing
+   * could -- and two NFS writes left two entries flagged current. */
+  DemoteResult demote;
   if (binfo.versioned() && parent_fd >= 0) {
     auto vlock = driver->get_fs_strategy()->version_lock(
       dpp, open_versions_lockfile(parent_fd));
 
-    DemoteResult demote;
     demote_current_version(dpp, driver->get_fs_strategy(),
 			   parent_fd, leaf_name,
 			   binfo.versioning_enabled(), demote);
@@ -5365,6 +5381,30 @@ int NSFSObject::NSFSFSIOObject::publish(const DoutPrefixProvider* dpp, uint32_t 
 		       parent_fd, leaf_name.c_str());
   if (ret < 0) {
     return -errno;
+  }
+
+  /* Stamp the version id, as the S3 write path does in link_temp_file().
+   *
+   * demote_current_version() decides what a later write is demoting by
+   * reading this xattr, and is_null_version_fd() treats its absence as
+   * the null version.  Without it every object written over NFS was the
+   * null version:  a second write demoted the first to <leaf>_null, a
+   * third collided on that same slot, and the versions collapsed onto
+   * one entry instead of accumulating.
+   *
+   * shadow_fd still refers to this inode -- the rename moved the name,
+   * not the file -- so it stamps the published object. */
+  std::string ver_id;
+  if (binfo.versioned()) {
+    ver_id = NULL_VERSION_ID;
+    struct statx vstx;
+    if (binfo.versioning_enabled() &&
+	statx(shadow_fd, "", AT_EMPTY_PATH, STATX_ALL, &vstx) == 0) {
+      ver_id = nsfs_version_id_from_statx(vstx);
+    }
+    std::string vid_x = NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_VERSION_ID;
+    ::fsetxattr(shadow_fd, vid_x.c_str(), ver_id.c_str(), ver_id.size(), 0);
+    src_obj->set_instance(ver_id);
   }
 
   /* update bucket listing cache */
@@ -5380,12 +5420,19 @@ int NSFSObject::NSFSFSIOObject::publish(const DoutPrefixProvider* dpp, uint32_t 
       bde.ver.pool = 1;
       bde.ver.epoch = 1;
       bde.exists = true;
+      if (binfo.versioned()) {
+	/* the id stamped above:  without it every publish writes the
+	 * same cache key and a new version replaces its predecessor's
+	 * row rather than taking a place beside it */
+	bde.key.instance = ver_id;
+	bde.flags = rgw_bucket_dir_entry::FLAG_VER |
+		    rgw_bucket_dir_entry::FLAG_CURRENT;
+      }
       bde.meta.category = RGWObjCategory::Main;
       bde.meta.size = pub_stx.stx_size;
       bde.meta.accounted_size = pub_stx.stx_size;
       bde.meta.mtime = from_statx_timestamp(pub_stx.stx_mtime);
       bde.meta.storage_class = RGW_STORAGE_CLASS_STANDARD;
-      bde.meta.etag = synthesize_etag(pub_stx);
       {
 	Attrs shadow_attrs;
 	if (fgetattrs(dpp, shadow_attrs, 0) == 0) {
@@ -5394,9 +5441,43 @@ int NSFSObject::NSFSFSIOObject::publish(const DoutPrefixProvider* dpp, uint32_t 
 	    bde.meta.owner = to_string(acl_owner.id);
 	    bde.meta.owner_display_name = acl_owner.display_name;
 	  }
+	  /* the digest stamped above, which is what HEAD returns;  the
+	   * synthesized change token is for objects that carry no etag,
+	   * i.e. sideloaded files, and reporting it here disagreed with
+	   * HEAD for every object published from NFS */
+	  bufferlist etag_bl;
+	  if (rgw::sal::get_attr(shadow_attrs, RGW_ATTR_ETAG, etag_bl)) {
+	    bde.meta.etag = etag_bl.to_str();
+	  }
+	}
+	if (bde.meta.etag.empty()) {
+	  bde.meta.etag = synthesize_etag(pub_stx);
 	}
       }
       bcache->add_entry(dpp, bucket->get_name(), bde);
+
+      /* and flip the version this publish demoted from current to
+       * non-current, as NSFSAtomicWriter::complete() does for an S3 PUT.
+       * Without it the previous current entry stays in the cache still
+       * flagged current, so the object lists with two. */
+      if (demote.did_demote) {
+	std::string obj_name = src_obj->get_key().get_index_key_name();
+
+	cls_rgw_obj_key old_key;
+	old_key.name = obj_name;
+	old_key.instance = demote.demoted_ver_id;
+	bcache->remove_entry(dpp, bucket->get_name(), old_key);
+
+	rgw_bucket_dir_entry dem_bde{};
+	dem_bde.key.name = obj_name;
+	dem_bde.key.instance = demote.demoted_ver_id;
+	dem_bde.ver.pool = 1;
+	dem_bde.ver.epoch = 1;
+	dem_bde.exists = true;
+	dem_bde.meta.category = RGWObjCategory::Main;
+	dem_bde.flags = rgw_bucket_dir_entry::FLAG_VER;
+	bcache->add_entry(dpp, bucket->get_name(), dem_bde);
+      }
     }
   }
 
@@ -6257,11 +6338,20 @@ int NSFSObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y)
     flags = FSEnt::FLAG_LIST_VERSIONS;
   }
 
-  ent->fill_cache(nullptr, null_yield,
-      [&](const DoutPrefixProvider *dpp, rgw_bucket_dir_entry &bde) -> int {
-	driver->get_bucket_cache()->add_entry(dpp, b->get_name(), bde);
-	return 0;
-      }, flags);
+  /* Add this object's listing entry from the key we already have.  Going
+   * through fill_cache() here composed the key from an empty path prefix,
+   * so a nested object was cached under its bare leaf name -- absent
+   * under its real key, and colliding with any same-named leaf in another
+   * directory. */
+  auto* bcache = driver->get_bucket_cache();
+  if (bcache) {
+    rgw_bucket_dir_entry bde{};
+    ret = ent->make_dir_entry(dpp, y, get_key(), flags, bde);
+    if (ret < 0) {
+      return ret;
+    }
+    bcache->add_entry(dpp, b->get_name(), bde);
+  }
   return 0;
 }
 
@@ -7327,7 +7417,16 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
     dem_bde.meta.accounted_size = ent->get_stx().stx_size;
     dem_bde.meta.mtime = from_statx_timestamp(ent->get_stx().stx_mtime);
     dem_bde.meta.storage_class = RGW_STORAGE_CLASS_STANDARD;
-    dem_bde.meta.etag = synthesize_etag(ent->get_stx());
+    {
+      /* its own digest, as HEAD reports it;  the synthesized change
+       * token is for objects that carry no etag */
+      bufferlist etag_bl;
+      if (rgw::sal::get_attr(source->get_attrs(), RGW_ATTR_ETAG, etag_bl)) {
+	dem_bde.meta.etag = etag_bl.to_str();
+      } else {
+	dem_bde.meta.etag = synthesize_etag(ent->get_stx());
+      }
+    }
     dem_bde.flags = rgw_bucket_dir_entry::FLAG_VER;
     {
       ACLOwner acl_owner;
@@ -8613,6 +8712,30 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
       (*out)["enabled"] = inject_skip_reclone ? "true" : "false";
     }
     return 0;
+  }
+
+  if (hint == "invalidate-cache") {
+    /* drop a bucket's listing cache, so the next listing rebuilds it by
+     * enumerating the store.  The incremental and rebuild paths compose
+     * keys differently and only the rebuild walks .versions/, so a test
+     * that means to exercise the rebuild has no other way to reach it
+     * from inside one process.
+     *
+     * The side branch carries this verb too, along with
+     * invalidate-quota-cache;  they want merging. */
+    auto it = params.find("bucket");
+    if (it == params.end()) {
+      return -EINVAL;
+    }
+    auto* bcache = get_bucket_cache();
+    if (!bcache) {
+      return -ENOTSUP;
+    }
+    int ret = bcache->invalidate_bucket(dpp, it->second);
+    if (out) {
+      (*out)["invalidated"] = (ret == 0) ? "true" : "false";
+    }
+    return ret;
   }
 
   return -ENOTSUP;
