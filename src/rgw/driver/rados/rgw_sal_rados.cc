@@ -4828,10 +4828,29 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
   obj_op.meta.if_match = if_match;
   obj_op.meta.if_nomatch = if_nomatch;
 
+  const std::optional expires_at = serializer.is_locked_until();
+  if (!expires_at) { // lock renewal failed
+    return -ETIME;
+  }
+  if (*expires_at != ceph::real_clock::zero()) {
+    // prevent the write if it gets delayed past our lock expiration.
+    // this comparison is subject to clock skew between the osds, so
+    // add a small fudge factor
+    constexpr auto skew = std::chrono::seconds(5); // TODO: config option
+    const auto end = *expires_at - skew;
+    const auto dur = serializer.get_duration();
+    obj_op.meta.time_range.emplace(end - dur, end);
+  }
+
   const req_context rctx{dpp, y, nullptr};
   ret = obj_op.write_meta(ofs, accounted_size, attrs, rctx, get_trace());
-  if (ret < 0)
-    return ret;
+
+  if (ret == -EOPNOTSUPP) {
+    // the osd hasn't upgraded yet, retry without assert_time_range(). this
+    // fallback was added for the V release, so can be removed for X
+    obj_op.meta.time_range = std::nullopt;
+    ret = obj_op.write_meta(ofs, accounted_size, attrs, rctx, get_trace());
+  }
 
   return ret;
 }
@@ -5097,6 +5116,8 @@ void MPRadosSerializer::stop_renewal()
 
 int MPRadosSerializer::try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y)
 {
+  duration = dur;
+
   // use RETURNVEC to request that successful lock operations respond
   // with the osd's lock expiration time
   constexpr int flags = librados::OPERATION_RETURNVEC;

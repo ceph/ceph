@@ -885,6 +885,8 @@ public:
         bool keep_tail;
         bool completeMultipart;
         bool appendable;
+        using time_pair = std::pair<ceph::real_time, ceph::real_time>;
+        std::optional<time_pair> time_range;
 
         MetaParams() : mtime(NULL), rmattrs(NULL), data(NULL), manifest(NULL), ptag(NULL),
                  remove_objs(NULL), category(RGWObjCategory::Main), flags(0),

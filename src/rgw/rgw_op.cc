@@ -7981,17 +7981,17 @@ void RGWCompleteMultipart::execute(optional_yield y)
     return;
   }
 
-  if (!upload->is_locked()) {
-    // lock renewal failed, it's not safe to commit the head object
-    op_ret = -ERR_INTERNAL_ERROR;
-    s->err.message = "This multipart completion is already in progress";
-    return;
-  }
-
   op_ret =
     upload->complete(this, y, s->cct, parts->parts, remove_objs, accounted_size,
                      compressed, cs_info, ofs, s->req_id, s->owner, olh_epoch,
                      s->object.get(), processed_prefixes, if_match, if_nomatch);
+
+  if (op_ret == -ETIME) {
+    // lock renewal failed, it wasn't safe to commit the head object
+    op_ret = -ERR_INTERNAL_ERROR;
+    s->err.message = "This multipart completion is already in progress";
+    return;
+  }
 
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: upload complete failed ret=" << op_ret << dendl;

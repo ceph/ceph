@@ -1418,18 +1418,16 @@ int rgw_multipart_complete( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_pt
     target_obj->set_attrs(meta_obj->get_attrs());
   }
 
-  if (!upload->is_locked()) {
-    // lock renewal failed, it's not safe to commit the head object
-    ret = -ERR_INTERNAL_ERROR;
-    ldpp_dout(dpp, 0) << "This multipart completion is already in progress" << ret << dendl;
-    return ret;
-  }
-
   ret = upload->complete(
     dpp, y, g_ceph_context, part_etags, remove_objs,
     accounted_size, compressed, cs_info, ofs, tag, owner,
     0, target_obj.get(), processed_prefixes, nullptr, nullptr);
 
+  if (ret == -ETIME) {
+    // lock renewal failed, it wasn't safe to commit the head object
+    ldpp_dout(dpp, 0) << "This multipart completion is already in progress" << ret << dendl;
+    return -ERR_INTERNAL_ERROR;
+  }
   if (ret < 0) {
     return ret;
   }
