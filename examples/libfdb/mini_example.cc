@@ -20,7 +20,9 @@
 
 #include "rgw/fdb/interface.h"
 
+#include <algorithm>
 #include <cstdio>
+#include <expected>
 #include <print>
 #include <stdexcept>
 #include <string>
@@ -54,12 +56,71 @@ static const vector<person> nifty_people {
   }
 };
 
+enum struct write_error { empty_name };
+
+static auto store_people(lfdb::transaction_handle& txn, const vector<person>& people)
+ -> expected<size_t, write_error>
+{
+ if (ranges::any_of(people, [](const auto& name) { return name.empty(); }, &person::name)) {
+  return unexpected(write_error::empty_name);
+ }
+
+ lfdb::set(txn, "example/people", people);
+
+ return people.size();
+}
+
+template <typename ErrorT>
+static void report_failure(const lfdb::transaction_failure<ErrorT>& failure)
+{
+ println(stderr, "Transaction failed; uncertain: {}, may finish later: {}",
+         failure.status.has_unknown_commit(), failure.status.may_commit_later());
+ if (const auto *native = get_if<lfdb::fdb_error>(&failure.cause)) {
+  println(stderr, "{} {}: {}", native->code.category().name(), native->code.value(), native->code.message());
+ }
+ if (const auto *exception = get_if<exception_ptr>(&failure.cause)) {
+  try
+   {
+    rethrow_exception(*exception);
+   }
+  catch (const std::exception& error)
+   {
+    println(stderr, "{}", error.what());
+   }
+  catch (...)
+   {
+    println(stderr, "Nonstandard C++ exception");
+   }
+ }
+}
+
 static int run_example()
 try
 {
  auto dbh = lfdb::create_database();
 
- lfdb::set(dbh, "example/people", nifty_people);
+ auto txn = lfdb::make_transaction(dbh);
+ lfdb::set(txn, "example/people", nifty_people);
+ if (const auto committed = lfdb::commit(txn); not committed) {
+  report_failure(committed.error());
+  return 1;
+ }
+ println("manual commit: confirmed");
+
+ const auto txr = lfdb::make_transactor(dbh);
+ const auto stored = txr(store_people, nifty_people);
+ if (not stored) {
+  report_failure(stored.error());
+  return 1;
+ }
+ println("managed transaction: stored {} people", stored->value);
+
+ if (const auto rejected = txr(store_people, vector<person> {person {}});
+     rejected or not holds_alternative<lfdb::application_error<write_error>>(rejected.error().cause) or
+     rejected.error().status.commit != lfdb::commit_status::not_submitted) {
+  throw runtime_error("empty name did not reject the attempt before commit");
+ }
+ println("application rejection: empty name, no commit submitted");
 
  vector<person> people;
  if (not lfdb::get(dbh, "example/people", people) or people != nifty_people) {
