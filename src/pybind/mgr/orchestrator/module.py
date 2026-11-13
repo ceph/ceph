@@ -2844,16 +2844,21 @@ Usage:
     def _upgrade_ls(self,
                     image: Optional[str] = None,
                     tags: bool = False,
-                    show_all_versions: Optional[bool] = False
+                    show_all_versions: Optional[bool] = False,
+                    format: Optional[Format] = None
                     ) -> HandleCommandResult:
         """Check for available versions (or tags) we can upgrade to"""
         completion = self.upgrade_ls(image, tags, show_all_versions)
         r = raise_if_exception(completion)
-        out = json.dumps(r, indent=4)
+        if format:
+            out = to_format(r, format, many=False, cls=None)
+        else:
+            # without --format, keep the indented JSON that existing callers parse
+            out = json.dumps(r, indent=4)
         return HandleCommandResult(stdout=out)
 
     @OrchestratorCLICommand.Write('orch upgrade status')
-    def _upgrade_status(self, format: Optional[str] = None) -> HandleCommandResult:
+    def _upgrade_status(self, format: Optional[Format] = None) -> HandleCommandResult:
         """Check the status of any potential ongoing upgrade operation"""
         completion = self.upgrade_status()
         status = raise_if_exception(completion)
@@ -2866,7 +2871,6 @@ Usage:
         upgrade_status.message = status.message
         upgrade_status.is_paused = status.is_paused
         if format is not None:
-            format = Format(format)
             out = to_format(upgrade_status, format, many=False, cls=UpgradeStatusSpec)
         else:
             out = json.dumps(upgrade_status.to_dict(), indent=4)
