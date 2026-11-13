@@ -2938,6 +2938,20 @@ int RGWHandler_REST_SWIFT::authorize(const DoutPrefixProvider *dpp, optional_yie
   return rgw::auth::Strategy::apply(dpp, auth_strategy, s, y);
 }
 
+int RGWHandler_REST_SWIFT::error_handler(int err_no, std::string *error_content,
+                                         optional_yield y)
+{
+  if (!s->err.http_ret || s->err.http_ret == 200) {
+    set_req_state_err(s, err_no);
+  }
+  if (s->err.http_ret == 401) {
+    dump_swift_status(s);
+    end_header(s, nullptr);
+    return 0;
+  }
+  return err_no;
+}
+
 int RGWHandler_REST_SWIFT::postauth_init(optional_yield y)
 {
   struct req_init_state* t = &s->init_state;
@@ -3263,14 +3277,22 @@ int RGWHandler_REST_Bucket_SWIFT::error_handler(int err_no,
 						std::string *error_content,
 						optional_yield y)
 {
-  return website_handler->error_handler(err_no, error_content, y);
+  int ret = RGWHandler_REST_SWIFT::error_handler(err_no, error_content, y);
+  if (ret == 0) {
+    return 0;
+  }
+  return website_handler->error_handler(ret, error_content, y);
 }
 
 int RGWHandler_REST_Obj_SWIFT::error_handler(int err_no,
 					     std::string *error_content,
 					     optional_yield y)
 {
-  return website_handler->error_handler(err_no, error_content, y);
+  int ret = RGWHandler_REST_SWIFT::error_handler(err_no, error_content, y);
+  if (ret == 0) {
+    return 0;
+  }
+  return website_handler->error_handler(ret, error_content, y);
 }
 
 static std::string swift_www_authenticate_realm(const req_state *s)

@@ -2,8 +2,14 @@
 """Check Swift 401 responses include WWW-Authenticate (RFC 9110)."""
 
 import sys
+import time
 
 import requests
+
+from common import exec_cmd
+
+CEPH_CFG_PROPAGATION_WAIT = 5
+
 
 def discover_swift_base():
     """Match qa/workunits/rgw/common.py boto_connect() port order."""
@@ -36,15 +42,51 @@ def assert_swift_challenge(resp, realm_substring=None):
         sys.exit(1)
 
 
+def assert_no_crlf_injected_header(resp):
+    if 'X-Injected' in resp.headers:
+        print('FAILED: CRLF realm must not inject response headers: %r' % dict(resp.headers))
+        sys.exit(1)
+
+
 def main():
     host = discover_swift_base()
 
+    # Default cluster config: realm is unknown when account is not in the URL.
     r = requests.get(
-        host + '/swift/v1/AUTH_nobody',
+        host + '/swift/v1',
         headers={'X-Auth-Token': 'bogus'},
         verify=False,
     )
-    assert_swift_challenge(r, 'AUTH_nobody')
+    assert_swift_challenge(r, 'unknown')
+
+    exec_cmd('ceph config set client rgw_swift_account_in_url true')
+    time.sleep(CEPH_CFG_PROPAGATION_WAIT)
+    try:
+        # Early auth failure (abort_early), not op send_response().
+        r = requests.get(
+            host + '/swift/v1/AUTH_nobody',
+            headers={'X-Auth-Token': 'bogus'},
+            verify=False,
+        )
+        assert_swift_challenge(r, 'AUTH_nobody')
+
+        r = requests.get(
+            host + '/swift/v1/AUTH_a%0d%0aX-Injected:%20y',
+            headers={'X-Auth-Token': 'bogus'},
+            verify=False,
+        )
+        assert_swift_challenge(r)
+        assert_no_crlf_injected_header(r)
+
+        r = requests.get(
+            host + '/swift/v1/KEY_tester',
+            headers={'X-Auth-Token': 'bogus'},
+            verify=False,
+        )
+        assert_swift_challenge(r, 'KEY_tester')
+    finally:
+        exec_cmd('ceph config rm client rgw_swift_account_in_url')
+        time.sleep(CEPH_CFG_PROPAGATION_WAIT)
 
     r = requests.get(
         host + '/auth/1.0',
