@@ -666,9 +666,31 @@ protected:
   friend class C_IO_Dir_Committed;
   friend class C_IO_Dir_Commit_Ops;
 
+  // State shared by the steps that handle a dirfrag fetch reply.
+  struct fetch_state_t {
+    explicit fetch_state_t(bool full_fetch) : full_fetch(full_fetch) {}
+
+    // A keyed fetch can request an empty set, so mode is independent of keys.size().
+    const bool full_fetch;
+    bool force_dirty = false;
+    const std::set<snapid_t> *snaps = nullptr; ///< set when purging stale snaps
+    double rand_threshold = 0;
+    std::list<CInode*> undef_inodes;
+    std::vector<MDSContext*> finished;
+    int count = 0;                     ///< heartbeat_reset() throttle
+  };
+
   void _omap_fetch(std::set<std::string> *keys, MDSContext *fin=nullptr);
   void _omap_fetch_more(version_t omap_version, bufferlist& hdrbl,
 			std::map<std::string, bufferlist>& omap, MDSContext *fin);
+  // Return false for a bad header.
+  bool _omap_fetch_init(fetch_state_t& st, ceph::buffer::list& hdrbl);
+  void _omap_decode_batch(fetch_state_t& st,
+			  std::map<std::string, ceph::buffer::list>& batch,
+			  const std::set<std::string>& keys,
+			  std::vector<string_snap_t>& null_keys);
+  void _omap_fetch_finish(fetch_state_t& st,
+			  std::vector<string_snap_t>& null_keys);
   CDentry *_load_dentry(
       std::string_view key,
       std::string_view dname,
