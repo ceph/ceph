@@ -36,14 +36,6 @@
 
 namespace ceph::libfdb {
 
-enum struct transaction_phase { body, commit };
-
-struct transaction_failure final
-{
- std::error_code code;
- transaction_phase phase;
-};
-
 // Own one decision callable per logical invocation. Class template argument
 // deduction keeps retry_if(callable) typed, including mutable/move-only state.
 template <typename FnT = void>
@@ -53,14 +45,14 @@ class retry_if final
 
  public:
  explicit retry_if(FnT fn)
- requires std::invocable<FnT&, const transaction_failure&> and
-          std::same_as<bool, std::invoke_result_t<FnT&, const transaction_failure&>>
+ requires std::invocable<FnT&, const transaction_failure<>&> and
+          std::same_as<bool, std::invoke_result_t<FnT&, const transaction_failure<>&>>
   : fn(std::move(fn))
  {}
 
  public:
- bool operator()(const transaction_failure& failure)
- noexcept(std::is_nothrow_invocable_v<FnT&, const transaction_failure&>)
+ bool operator()(const transaction_failure<>& failure)
+ noexcept(std::is_nothrow_invocable_v<FnT&, const transaction_failure<>&>)
  {
   return std::invoke(fn, failure);
  }
@@ -71,7 +63,7 @@ class retry_if final
 template <>
 struct retry_if<void> final
 {
- bool operator()(const transaction_failure&) const noexcept
+ bool operator()(const transaction_failure<>&) const noexcept
  {
   return true;
  }
@@ -79,6 +71,32 @@ struct retry_if<void> final
 };
 
 namespace detail {
+
+template <typename FnT, typename ...ArgTs>
+requires std::invocable<FnT&, ArgTs...>
+decltype(auto) invoke_user_callback(FnT& fn, ArgTs&& ...arguments)
+try
+ {
+  return std::invoke(fn, std::forward<ArgTs>(arguments)...);
+ }
+catch (const libfdb_exception& error)
+ {
+  if (error.code().category() != libfdb::fdb_error_category()) {
+   throw;
+  }
+
+  throw user_callback_failure {std::current_exception()};
+ }
+
+template <typename FnT>
+auto invoke_user_callback(std::in_place_t, FnT fn)
+{
+ return [fn = std::move(fn)](auto&& ...arguments) mutable -> decltype(auto)
+ requires std::invocable<FnT&, decltype(arguments)...>
+ {
+  return invoke_user_callback(fn, std::forward<decltype(arguments)>(arguments)...);
+ };
+}
 
 template <typename T>
 inline constexpr bool is_staged_proxy = false;
@@ -125,7 +143,7 @@ template <concepts::stageable T>
 [[nodiscard]] staged_proxy<T> staged(T& target);
 
 template <concepts::in_place_stageable T>
-[[nodiscard]] auto staged(T& target, std::in_place_t)
+[[nodiscard]] auto staged(std::in_place_t, T& target)
  -> staged_proxy<T, detail::staged_initialization::in_place>;
 
 // A transaction-attempt-local view of a value supplied through staged(). It is
@@ -138,15 +156,22 @@ class staged_proxy final
  std::optional<T> attempt_value;
 
  private:
+ template <typename ...ArgTs>
+ void reconstruct(ArgTs&& ...args)
+ {
+  auto construct = [&] { attempt_value.emplace(std::forward<ArgTs>(args)...); };
+  detail::invoke_user_callback(construct);
+ }
+
  T& materialize()
  {
   if (not attempt_value) {
    if constexpr (detail::staged_initialization::copy_target == Initialization) {
-    attempt_value.emplace(target.get());
+    reconstruct(target.get());
    }
 
    if constexpr (detail::staged_initialization::in_place == Initialization) {
-    attempt_value.emplace();
+    reconstruct();
    }
   }
 
@@ -162,7 +187,7 @@ class staged_proxy final
   }
 
   if constexpr (detail::staged_initialization::in_place == Initialization) {
-   attempt_value.emplace();
+   reconstruct();
   }
  }
 
@@ -181,7 +206,7 @@ class staged_proxy final
  public:
  staged_proxy& operator=(T replacement)
  {
-  attempt_value.emplace(std::move(replacement));
+  reconstruct(std::move(replacement));
 
   return *this;
  }
@@ -248,7 +273,7 @@ class staged_proxy final
  friend staged_proxy<U> staged(U& target);
 
  template <concepts::in_place_stageable U>
- friend auto staged(U& target, std::in_place_t)
+ friend auto staged(std::in_place_t, U& target)
   -> staged_proxy<U, detail::staged_initialization::in_place>;
 };
 
@@ -292,15 +317,46 @@ struct staged_access final
 
 } // namespace detail
 
+namespace detail {
+
+template <typename ResultT>
+struct invocation_result_traits final
+{
+ using value_type = ResultT;
+ using error_type = void;
+ using stored_t = std::expected<ResultT, std::monostate>;
+ static constexpr bool controlled = false;
+};
+
+template <typename ValueT, typename ErrorT>
+struct invocation_result_traits<std::expected<ValueT, ErrorT>> final
+{
+ using value_type = ValueT;
+ using error_type = ErrorT;
+ using stored_t = std::expected<ValueT, ErrorT>;
+ static constexpr bool controlled = true;
+};
+
+// A bare error tag needs an explicit expected<T, E> body contract.
+template <typename ErrorT>
+struct invocation_result_traits<std::unexpected<ErrorT>> final {};
+
+template <typename T>
+concept safely_deliverable = std::is_void_v<T> or
+ (std::is_object_v<T> and not is_staged_proxy<std::remove_cvref_t<T>> and
+  std::is_nothrow_move_constructible_v<T> and std::destructible<T>);
+
+} // namespace detail
+
 namespace concepts {
 
 template <typename T>
 concept supported_invocation_result =
- std::is_void_v<T> or
- (not detail::is_staged_proxy<std::remove_cvref_t<T>> and
-  not std::is_reference_v<T> and
-  std::constructible_from<std::remove_cvref_t<T>, T> and
-  std::move_constructible<std::remove_cvref_t<T>>);
+ not std::is_reference_v<T> and
+ detail::safely_deliverable<typename detail::invocation_result_traits<std::remove_cv_t<T>>::value_type> and
+ detail::safely_deliverable<typename detail::invocation_result_traits<std::remove_cv_t<T>>::error_type> and
+ (std::is_void_v<T> or
+  std::constructible_from<typename detail::invocation_result_traits<std::remove_cv_t<T>>::stored_t, T>);
 
 template <typename T>
 concept storable_invocation_result =
@@ -429,7 +485,7 @@ template <concepts::stageable T>
 
 // Construct fresh attempt-local state instead of copying the target:
 template <concepts::in_place_stageable T>
-[[nodiscard]] auto staged(T& target, std::in_place_t)
+[[nodiscard]] auto staged(std::in_place_t, T& target)
  -> staged_proxy<T, detail::staged_initialization::in_place>
 {
  return staged_proxy<T, detail::staged_initialization::in_place> {target};
@@ -473,42 +529,33 @@ class transaction_source final
 
 } // namespace detail
 
-// Submit once, without retry preparation. Commit-future errors are returned as values;
-// waiting, precondition, and local failures may throw. Use reset_for_replay before replay.
-[[nodiscard]] inline auto commit(with_result_t, const transaction_handle& txn)
- -> std::expected<void, std::error_code>
+// Submit once. Recovery and whole-body replay remain with the transaction owner.
+[[nodiscard]] inline transaction_result<void> commit(const transaction_handle& txn) noexcept
 {
  if (not txn or not *txn) {
-  throw libfdb_exception(std::errc::invalid_argument, "commit() requires a transaction");
+  return detail::fail_transaction(fdb_error {std::make_error_code(std::errc::invalid_argument), {}},
+                                  transaction_phase::setup, {});
  }
-
- return txn->commit(with_result);
+ return txn->commit();
 }
 
-inline void commit(const transaction_handle& txn)
-{
- if (const auto result = commit(with_result, txn); not result) {
-  throw libfdb_exception(result.error());
- }
-}
-
-[[nodiscard]] inline auto commit(with_result_t, const transaction_handle& txn, const versionstamp& stamp)
- -> std::expected<void, std::error_code>
+[[nodiscard]] inline transaction_result<void> commit(const transaction_handle& txn,
+                                                     const versionstamp& stamp) noexcept
 {
  if (not txn or not *txn) {
-  throw libfdb_exception(std::errc::invalid_argument, "commit() requires a transaction");
+  return detail::fail_transaction(fdb_error {std::make_error_code(std::errc::invalid_argument), {}},
+                                  transaction_phase::setup, {});
  }
-
- txn->mark_version(stamp);
-
- return commit(with_result, txn);
-}
-
-inline void commit(const transaction_handle& txn, const versionstamp& stamp)
-{
- if (const auto result = commit(with_result, txn, stamp); not result) {
-  throw libfdb_exception(result.error());
- }
+ try
+  {
+   txn->mark_version(stamp);
+   return txn->commit();
+  }
+ catch (...)
+  {
+   return detail::fail_transaction(
+    detail::exception_failure(std::current_exception(), transaction_phase::setup, {}));
+  }
 }
 
 [[nodiscard]] inline std::string get_key(transaction_handle txn, const key_selector& selector,
@@ -550,34 +597,6 @@ inline void reset_for_replay(const transaction_handle& txn, std::error_code erro
 namespace detail {
 
 // Native on_error remains authoritative once the policy requests preparation.
-template <typename PolicyT>
-std::optional<fdb_error_t> retryable_error(const transaction_failure failure,
-                                         const transaction_handle& txn,
-                                         retry_if<PolicyT>& policy)
-noexcept(std::is_nothrow_invocable_v<retry_if<PolicyT>&, const transaction_failure&>)
-{
- if (transaction_phase::body == failure.phase) {
-  finish_version_stamps(*txn, failure.code);
- }
-
- if (failure.code.category() != ::ceph::libfdb::fdb_error_category() or
-     not policy(failure)) {
-  return std::nullopt;
- }
-
- return failure.code.value();
-}
-
-template <typename PolicyT>
-std::optional<fdb_error_t> retryable_error(const libfdb_exception& error,
-                                         const transaction_handle& txn,
-                                         retry_if<PolicyT>& policy)
-noexcept(std::is_nothrow_invocable_v<retry_if<PolicyT>&, const transaction_failure&>)
-{
- return retryable_error(transaction_failure {error.code(), transaction_phase::body},
-                       txn, policy);
-}
-
 template <typename FnT, typename ...ArgTs>
 using transaction_invocation_result_t =
  std::invoke_result_t<FnT&, transaction_handle&, ArgTs&...>;
@@ -617,39 +636,6 @@ using operation_result_t =
                     void,
                     std::remove_cvref_t<transaction_invocation_result_t<FnT>>>;
 
-// Only native libfdb_exception needs an origin marker to bypass recovery.
-// Other thrown types propagate without allocating an extra exception object:
-struct user_callback_failure final
-{
- std::exception_ptr cause;
-};
-
-template <typename FnT, typename ...ArgTs>
-requires std::invocable<FnT&, ArgTs...>
-decltype(auto) invoke_user_callback(FnT& fn, ArgTs&& ...arguments)
-try
-{
- return std::invoke(fn, std::forward<ArgTs>(arguments)...);
-}
-catch (const libfdb_exception& error)
-{
- if (error.code().category() != ::ceph::libfdb::fdb_error_category()) {
-  throw;
- }
-
- throw user_callback_failure {std::current_exception()};
-}
-
-template <typename FnT>
-auto invoke_user_callback(std::in_place_t, FnT fn)
-{
- return [fn = std::move(fn)](auto&& ...arguments) mutable -> decltype(auto)
- requires std::invocable<FnT&, decltype(arguments)...>
- {
-  return invoke_user_callback(fn, std::forward<decltype(arguments)>(arguments)...);
- };
-}
-
 template <transaction_op FnT, typename PolicyT = void>
 auto maybe_retry(transaction_handle txn, FnT&& fn, retry_if<PolicyT> policy = {})
  -> operation_result_t<FnT>;
@@ -671,76 +657,55 @@ auto in_read_transaction(const transaction_source& source, FnT&& fn) -> operatio
 
 } // namespace detail
 
-/* A "transactor" is a function-like wrapper for running replayable transactions.
- * It defers transaction creation until called, commits after the user function
- * returns, and replays when FoundationDB requests replay. Calls throw when
- * recovery fails or retries are exhausted. Arguments wrapped with staged()
- * publish only after a confirmed commit. Plus, the name is pretty cool. */
+namespace detail {
+
+template <typename FnT>
+using managed_result_t = transaction_result<
+ typename invocation_result_traits<std::remove_cv_t<transaction_invocation_result_t<FnT>>>::value_type,
+ typename invocation_result_traits<std::remove_cv_t<transaction_invocation_result_t<FnT>>>::error_type>;
+
+template <typename PolicyT, typename FnT, typename ...ArgTs>
+auto transact(const transaction_source&, retry_policy, retry_if<PolicyT>&, FnT&&, ArgTs&&...) noexcept;
+
+} // namespace detail
+
+// A reusable configuration. Every invocation owns its transaction and native replay.
+// Results retain commit knowledge, including earlier uncertain attempts.
 class transactor final
 {
  detail::transaction_source source;
+ retry_policy retry;
 
  private:
- explicit transactor(database_handle database)
-  : source(std::move(database))
- {}
-
- transactor(database_handle database, const transaction_options& options)
-  : source(std::move(database), options)
+ transactor(database_handle database, const transaction_options& options, const retry_policy policy)
+  : source(std::move(database), options), retry(policy)
  {}
 
  public:
- template <typename FnT>
- requires detail::transaction_op<FnT>
- decltype(auto) operator()(FnT&& fn) const
- {
-  return detail::maybe_retry(source.make(), std::forward<FnT>(fn));
- }
-
  template <typename FnT, typename ...ArgTs>
- requires (0 < sizeof...(ArgTs) &&
-           detail::bound_transaction_op<std::reference_wrapper<std::remove_reference_t<FnT>>,
-                                        ArgTs...>)
- decltype(auto) operator()(FnT&& fn, ArgTs&& ...args) const
+ requires detail::bound_transaction_op<std::reference_wrapper<std::remove_reference_t<FnT>>, ArgTs...>
+ [[nodiscard]] auto operator()(FnT&& fn, ArgTs&& ...args) const noexcept
  {
-  auto bound = detail::bind_transaction_invocation(
-    std::ref(fn), std::forward<ArgTs>(args)...);
-
-  return (*this)(bound);
- }
-
- template <typename PolicyT, typename FnT>
- requires detail::transaction_op<FnT>
- decltype(auto) operator()(retry_if<PolicyT> policy, FnT&& fn) const
- {
-  return detail::maybe_retry(source.make(), std::forward<FnT>(fn), std::move(policy));
+  retry_if<> policy;
+  return detail::transact(source, retry, policy, std::forward<FnT>(fn), std::forward<ArgTs>(args)...);
  }
 
  template <typename PolicyT, typename FnT, typename ...ArgTs>
- requires (0 < sizeof...(ArgTs) &&
-           detail::bound_transaction_op<std::reference_wrapper<std::remove_reference_t<FnT>>,
-                                        ArgTs...>)
- decltype(auto) operator()(retry_if<PolicyT> policy, FnT&& fn, ArgTs&& ...args) const
+ requires detail::bound_transaction_op<std::reference_wrapper<std::remove_reference_t<FnT>>, ArgTs...>
+ [[nodiscard]] auto operator()(retry_if<PolicyT> policy, FnT&& fn, ArgTs&& ...args) const noexcept
  {
-  auto bound = detail::bind_transaction_invocation(
-   std::ref(fn), std::forward<ArgTs>(args)...);
-
-  return (*this)(std::move(policy), bound);
+  return detail::transact(source, retry, policy, std::forward<FnT>(fn), std::forward<ArgTs>(args)...);
  }
 
  private:
- friend inline transactor make_transactor(database_handle dbh);
- friend inline transactor make_transactor(database_handle dbh, const transaction_options& opts);
+ friend transactor make_transactor(database_handle, const transaction_options&, retry_policy);
 };
 
-inline transactor make_transactor(database_handle dbh)
+[[nodiscard]] inline transactor make_transactor(database_handle dbh,
+                                                const transaction_options& options = {},
+                                                const retry_policy policy = retry_policy::retryable)
 {
- return transactor(std::move(dbh));
-}
-
-inline transactor make_transactor(database_handle dbh, const transaction_options& opts)
-{
- return transactor(std::move(dbh), opts);
+ return transactor(std::move(dbh), options, policy);
 }
 
 inline void reset_for_replay(const transaction_handle& txn, const std::error_code error)
@@ -751,109 +716,233 @@ inline void reset_for_replay(const transaction_handle& txn, const std::error_cod
 
 namespace detail {
 
-template <typename ResultT>
-struct invocation_result_traits final
+// Exception-based leaf/adapter boundaries share the same failure extraction.
+[[noreturn]] inline void rethrow_failure(const transaction_failure<>& failure)
 {
- using stored_t = std::remove_cvref_t<ResultT>;
-
- template <typename FnT>
- static stored_t store(transaction_handle& txn, FnT&& fn)
- {
-  return std::invoke(std::forward<FnT>(fn), txn);
+ if (const auto *native = std::get_if<fdb_error>(&failure.cause)) {
+  if (const auto *recovery = std::get_if<std::error_code>(&native->retry_error)) {
+   throw libfdb_exception(*recovery);
+  }
+  if (const auto *recovery = std::get_if<std::exception_ptr>(&native->retry_error)) {
+   std::rethrow_exception(*recovery);
+  }
+  if (native->exception) {
+   std::rethrow_exception(native->exception);
+  }
+  throw libfdb_exception(native->code);
  }
 
- static stored_t take(stored_t&& result)
- {
-  return std::move(result);
- }
+ std::rethrow_exception(std::get<std::exception_ptr>(failure.cause));
+}
 
-};
-
-template <>
-struct invocation_result_traits<void> final
-{
- using stored_t = std::tuple<>;
-
- template <typename FnT>
- static stored_t store(transaction_handle& txn, FnT&& fn)
- {
-  std::invoke(std::forward<FnT>(fn), txn);
-
-  return {};
- }
-
- static void take(stored_t&&)
- {}
-
-};
-
-template <typename FnT, typename CommitFnT, typename PolicyT = void,
-          typename ResultT = std::invoke_result_t<FnT&, transaction_handle&>>
-auto invoke_with_retry(transaction_handle& txn, FnT&& fn, CommitFnT&& commit_fn,
-                       retry_if<PolicyT> policy = {})
- -> operation_result_t<FnT>
+inline std::exception_ptr failure_exception(const transaction_failure<>& failure) noexcept
 try
+ {
+  rethrow_failure(failure);
+ }
+catch (...)
+ {
+  return std::current_exception();
+ }
+
+// This boundary serves existing leaf helpers whose public contract is a value or
+// exception. Transaction owners use the structured result directly.
+template <typename ValueT>
+ValueT take_operation_result(transaction_result<ValueT> result)
 {
- using stored_result_t = typename invocation_result_traits<ResultT>::stored_t;
-
- // Native on_error() honors FDB_TR_OPTION_RETRY_LIMIT and FDB_TR_OPTION_TIMEOUT.
- // A retry_if predicate can stop replay earlier:
- for (;;) {
-  std::optional<stored_result_t> result;
-
-  try {
-   prepare_invocation(fn);
-   result.emplace(invocation_result_traits<ResultT>::store(txn, fn));
-  } catch (const libfdb_exception& e) {
-   if (const auto replay_error = retryable_error(e, txn, policy)) {
-    reset_for_replay(txn, std::error_code(*replay_error, ::ceph::libfdb::fdb_error_category()));
-    continue;
-   }
-
-   throw;
-  } catch (...) {
-   finish_version_stamps(*txn, std::make_error_code(std::errc::operation_canceled));
-
-   throw;
-  }
-
-  const auto commit_state = std::invoke(commit_fn, txn);
-
-  if (not commit_state) {
-   if (const auto replay_error = retryable_error(
-         transaction_failure {commit_state.error(), transaction_phase::commit}, txn, policy)) {
-    reset_for_replay(txn, std::error_code(*replay_error, ::ceph::libfdb::fdb_error_category()));
-    continue;
-   }
-
-   throw libfdb_exception(commit_state.error());
-  }
-
-  publish_invocation(fn);
-
-  return invocation_result_traits<ResultT>::take(std::move(*result));
+ if (not result) {
+  rethrow_failure(result.error());
+ }
+ if constexpr (not std::is_void_v<ValueT>) {
+  return std::move(result->value);
  }
 }
-catch (const user_callback_failure& failure)
+
+// Decide without blocking; optional execution backends prepare replay themselves.
+template <typename PolicyT>
+std::optional<fdb_error_t> retryable_error(const transaction_failure<>& failure,
+                                          retry_if<PolicyT>& policy,
+                                          const retry_policy retry = retry_policy::retryable)
+noexcept(std::is_nothrow_invocable_v<retry_if<PolicyT>&, const transaction_failure<>&>)
 {
- std::rethrow_exception(failure.cause);
+ if (transaction_phase::setup == failure.phase or
+     transaction_phase::commit_observation == failure.phase) {
+  return std::nullopt;
+ }
+ if (retry_policy::retryable_not_committed == retry and failure.status.has_unknown_commit()) {
+  return std::nullopt;
+ }
+
+ const auto *native = std::get_if<fdb_error>(&failure.cause);
+ if (not native or libfdb::fdb_error_category() != native->code.category() or not policy(failure)) {
+  return std::nullopt;
+ }
+
+ return native->code.value();
+}
+
+// Resolve pending stamps on a failed attempt without asserting database rollback.
+inline void finish_failed_attempt(const transaction_handle& txn, const transaction_failure<>& failure) noexcept
+{
+ if (txn) {
+  const auto *native = std::get_if<fdb_error>(&failure.cause);
+  finish_version_stamps(*txn, native ? native->code : std::make_error_code(std::errc::operation_canceled));
+ }
+}
+
+template <typename PolicyT>
+auto prepare_replay(const transaction_handle& txn, transaction_failure<> failure,
+                    retry_if<PolicyT>& policy, const retry_policy retry) noexcept
+ -> std::optional<transaction_failure<>>
+{
+ try
+  {
+   if (not retryable_error(failure, policy, retry)) {
+    return failure;
+   }
+  }
+ catch (...)
+  {
+   std::get<fdb_error>(failure.cause).retry_error = std::current_exception();
+   return failure;
+  }
+
+ auto& native = std::get<fdb_error>(failure.cause);
+ try
+  {
+   reset_for_replay(txn, native.code);
+   return std::nullopt;
+  }
+ catch (const libfdb_exception& error)
+  {
+   native.retry_error = error.code();
+  }
+ catch (...)
+  {
+   native.retry_error = std::current_exception();
+  }
+
+ return failure;
+}
+
+template <typename FnT, typename CommitFnT, typename PolicyT = void>
+auto invoke_with_retry(transaction_handle& txn, FnT&& fn, CommitFnT&& commit_fn,
+                       retry_if<PolicyT>& policy,
+                       const retry_policy retry = retry_policy::retryable) noexcept
+ -> managed_result_t<FnT>
+{
+ using raw_result = transaction_invocation_result_t<FnT>;
+ using traits = invocation_result_traits<std::remove_cv_t<raw_result>>;
+ using value_type = typename traits::value_type;
+ using error_type = typename traits::error_type;
+ using result_type = managed_result_t<FnT>;
+ static_assert(std::is_nothrow_move_constructible_v<result_type>);
+
+ transaction_status status;
+ auto phase = transaction_phase::body;
+ try
+  {
+   for (;;) {
+    next_attempt(status);
+    phase = transaction_phase::body;
+    std::optional<typename traits::stored_t> attempt;
+    try
+     {
+      prepare_invocation(fn);
+      if constexpr (std::is_void_v<raw_result>) {
+       std::invoke(fn, txn);
+       attempt.emplace();
+      }
+      if constexpr (not std::is_void_v<raw_result>) {
+       attempt.emplace(std::invoke(fn, txn));
+      }
+     }
+    catch (...)
+     {
+      auto failure = exception_failure(std::current_exception(), phase, status);
+      finish_failed_attempt(txn, failure);
+      if (auto stopped = prepare_replay(txn, std::move(failure), policy, retry)) {
+       return fail_transaction<error_type>(std::move(*stopped));
+      }
+      continue;
+     }
+
+    if constexpr (traits::controlled) {
+     if (not *attempt) {
+      finish_version_stamps(*txn, std::make_error_code(std::errc::operation_canceled));
+      return fail_transaction<error_type>(application_error<error_type> {std::move(attempt->error())},
+                                          phase, status);
+     }
+    }
+
+    if constexpr (not std::same_as<std::remove_cvref_t<CommitFnT>, std::nullopt_t>) {
+     phase = transaction_phase::commit;
+     auto completion = std::invoke(commit_fn, txn);
+     observe_commit(status, completion ? completion->status : completion.error().status);
+     if (not completion) {
+      auto failure = std::move(completion.error());
+      phase = failure.phase;
+      failure.status = status;
+      if (auto stopped = prepare_replay(txn, std::move(failure), policy, retry)) {
+       return fail_transaction<error_type>(std::move(*stopped));
+      }
+      continue;
+     }
+    }
+
+    publish_invocation(fn);
+    if constexpr (std::is_void_v<value_type>) {
+     return result_type {std::in_place, status};
+    }
+    if constexpr (not std::is_void_v<value_type>) {
+     return result_type {std::in_place, std::move(**attempt), status};
+    }
+   }
+  }
+ catch (...)
+  {
+   auto failure = exception_failure(std::current_exception(), phase, status);
+   finish_failed_attempt(txn, failure);
+   return fail_transaction<error_type>(std::move(failure));
+  }
+}
+
+template <typename PolicyT, typename FnT, typename ...ArgTs>
+auto transact(const transaction_source& source, const retry_policy retry, retry_if<PolicyT>& policy,
+               FnT&& fn, ArgTs&& ...args) noexcept
+{
+ using invocation_t = decltype(bind_transaction_invocation(std::ref(fn), std::forward<ArgTs>(args)...));
+ using traits = invocation_result_traits<std::remove_cv_t<transaction_invocation_result_t<invocation_t>>>;
+ using error_type = typename traits::error_type;
+ using result_type = managed_result_t<invocation_t>;
+ try
+  {
+   auto invocation = bind_transaction_invocation(std::ref(fn), std::forward<ArgTs>(args)...);
+   auto txn = source.make();
+   return invoke_with_retry(txn, invocation,
+    [](const transaction_handle& current) { return ceph::libfdb::commit(current); }, policy, retry);
+  }
+ catch (...)
+  {
+   return result_type {fail_transaction<error_type>(
+    exception_failure(std::current_exception(), transaction_phase::setup, {}))};
+  }
 }
 
 template <transaction_op FnT, typename PolicyT>
 auto maybe_retry(transaction_handle txn, FnT&& fn, retry_if<PolicyT> policy)
  -> operation_result_t<FnT>
 {
- return invoke_with_retry(txn, std::forward<FnT>(fn),
-          [](transaction_handle& active_txn) {
-           return ::ceph::libfdb::commit(with_result, active_txn);
-          }, std::move(policy));
+ return take_operation_result(invoke_with_retry(txn, std::forward<FnT>(fn),
+  [](const transaction_handle& current) { return ceph::libfdb::commit(current); }, policy));
 }
 
 template <transaction_op FnT>
 auto retry_without_commit(transaction_handle txn, FnT&& fn) -> operation_result_t<FnT>
 {
- return invoke_with_retry(txn, std::forward<FnT>(fn),
-          [](transaction_handle&) { return std::expected<void, std::error_code> {}; });
+ retry_if<> policy;
+ return take_operation_result(invoke_with_retry(txn, std::forward<FnT>(fn),
+  std::nullopt, policy));
 }
 
 template <transaction_op FnT>
@@ -872,11 +961,10 @@ auto in_read_transaction(database_handle dbh, FnT&& fn)
 template <transaction_op FnT>
 auto in_read_transaction(const transaction_source& source, FnT&& fn) -> operation_result_t<FnT>
 {
- // Successful read-only transactions can simply be destroyed without commit:
  return retry_without_commit(source.make(), std::forward<FnT>(fn));
 }
 
-// Commit only once; the caller is responsible for transaction replay:
+// Leaf helpers do not own whole-body replay when supplied a transaction.
 template <transaction_op FnT>
 auto commit_noreplay(transaction_handle txn,
                      const commit_after_op commit_after,
@@ -886,12 +974,20 @@ auto commit_noreplay(transaction_handle txn,
   return std::invoke(fn, txn);
  }
 
+ // A body failure leaves this caller-owned transaction usable. A replay owner's
+ // attempt cleanup would prematurely finalize its pending versionstamps.
  prepare_invocation(fn);
- auto result = invocation_result_traits<operation_result_t<FnT>>::store(txn, fn);
- ::ceph::libfdb::commit(txn);
- publish_invocation(fn);
-
- return invocation_result_traits<operation_result_t<FnT>>::take(std::move(result));
+ if constexpr (std::is_void_v<operation_result_t<FnT>>) {
+  std::invoke(fn, txn);
+  take_operation_result(ceph::libfdb::commit(txn));
+  publish_invocation(fn);
+ }
+ if constexpr (not std::is_void_v<operation_result_t<FnT>>) {
+  auto value = std::invoke(fn, txn);
+  take_operation_result(ceph::libfdb::commit(txn));
+  publish_invocation(fn);
+  return value;
+ }
 }
 
 } // namespace detail

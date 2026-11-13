@@ -1,11 +1,48 @@
+Ceph - scalable distributed file system
+
+Copyright (C) 2026 International Business Machines Corp. (IBM)
+
+This is free software; you can redistribute it and/or
+modify it under the terms of the GNU Lesser General Public
+License version 2.1, as published by the Free Software
+Foundation. See file COPYING.
+
+* Paged collection reserves from source cardinality rather than the requested
+  maximum. Exact sizes use standard range sizing; bounded approximate sources use
+  the C++26 reserve_hint CPO only when its library feature macro is available.
+  Unlimited unsized streams grow from actual rows, and empty generic pages reserve
+  no vector storage. Native single-window pages reserve from returned row counts.
+  Suitable generic collections and page-result accessors support constant evaluation.
 
 * Include fdb.h for the complete public interface. Lower-level ownership lives
   in base.h; transactions, transactors, and staged output live in transaction.h;
   direct key operations live in interface.h; and range traversal lives in
   scan.h.
 
+* Use staged(output) to lazily copy the target for each transaction attempt, or
+  staged(std::in_place, output) to start with a fresh value. Both publish only
+  after a confirmed commit. See EXAMPLES.md for the Staged Proxies contract.
+
+* transaction_result.h defines the shared completion/error vocabulary. Ordinary
+  commit(txn), commit(txn, stamp), and libfdb Transactor invocations return this
+  result family, preserving phase and commit history. Manual commit submits once;
+  only the Transactor owns body replay. Completion has no with_result selector.
+  An unexpected expected-body result rejects an attempt; other ordinary values
+  authorize commit. See EXAMPLES.md for result handling and uncertainty.
+
+* Native commit attempts produce that same completion result internally.
+  Synchronous and asynchronous owners share failure classification, exception
+  origin, stamp cleanup and replay decisions. Read helpers omit completion.
+  Single-shot leaf writes share native completion but preserve their caller's
+  transaction when the leaf body fails before commit.
+
 ----
 Network and Database Options:
+
+Pass a network_options object to create_database(netopts) to configure only the
+client network. This keeps default source resolution and empty database options;
+create_database(dbopts, netopts) configures both. Network options take effect only
+on the first client-network initialization.
 
 There are various database at network settings that can be adjusted; see the "options" test for some examples of using
 the network_options and database_options structures. But what may be tweaked, you ask? Excellent question-- and when
