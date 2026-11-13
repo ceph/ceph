@@ -8608,67 +8608,19 @@ int RGWRados::Object::Read::range_to_ofs(uint64_t obj_size, int64_t &ofs, int64_
 
 int RGWRados::Bucket::UpdateIndex::guard_reshard(const DoutPrefixProvider *dpp, const rgw_obj& obj_instance, BucketShard **pbs, std::function<int(BucketShard *)> call, optional_yield y)
 {
-  RGWRados *store = target->get_store();
-  BucketShard *bs = nullptr;
-  int r;
-
-#define NUM_RESHARD_RETRIES 10
-  for (int i = 0; i < NUM_RESHARD_RETRIES; ++i) {
-    int ret = get_bucket_shard(&bs, dpp, y);
+  // reuse the cached bucket shard until a retry invalidates it
+  auto get_bs = [&] (BucketShard **out) {
+    int ret = get_bucket_shard(out, dpp, y);
     if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: failed to get BucketShard object. obj=" << 
+      ldpp_dout(dpp, 0) << "ERROR: failed to get BucketShard object. obj=" <<
         obj_instance.key << ". ret=" << ret << dendl;
-      return ret;
     }
-
-    r = call(bs);
-    if (r == -ENOENT) {
-      ldpp_dout(dpp, 10) << "ENOENT in guard_reshard(), likely bucket resharding, retrying" << dendl;
-      invalidate_bs();
-      continue;
-    }
-
-    if (r != -ERR_BUSY_RESHARDING) {
-      break;
-    }
-
-    ldpp_dout(dpp, 10) <<
-      "NOTICE: resharding operation on bucket index detected, blocking. obj=" << 
-      obj_instance.key << dendl;
-
-    r = store->block_while_resharding(bs, obj_instance, target->bucket_info, y, dpp);
-    if (r == -ERR_BUSY_RESHARDING) {
-      ldpp_dout(dpp, 10) << __func__ <<
-	" NOTICE: block_while_resharding() still busy. obj=" <<
-        obj_instance.key << dendl;
-      continue;
-    } else if (r < 0) {
-      ldpp_dout(dpp, 0) << __func__ <<
-	" ERROR: block_while_resharding() failed. obj=" <<
-        obj_instance.key << ". ret=" << cpp_strerror(-r) << dendl;
-      return r;
-    }
-
-    ldpp_dout(dpp, 20) << "reshard completion identified. obj=" << obj_instance.key << dendl;
-    i = 0; /* resharding is finished, make sure we can retry */
-    invalidate_bs();
-  } // for loop
-
-  if (r < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: bucket shard callback failed. obj=" << 
-      obj_instance.key << ". ret=" << cpp_strerror(-r) << dendl;
-    return r;
-  }
-
-  if (pbs) {
-    *pbs = bs;
-  }
-
-  if (target->bucket_info.layout.resharding == rgw::BucketReshardState::InLogrecord) {
-    store->check_reshard_logrecord_status(target->bucket_info, y, dpp);
-  }
-
-  return 0;
+    return ret;
+  };
+  return target->get_store()->guard_reshard(dpp, obj_instance,
+                                            target->bucket_info, get_bs,
+                                            [this] { invalidate_bs(); },
+                                            std::move(call), pbs, y);
 }
 
 int RGWRados::Bucket::UpdateIndex::prepare(const DoutPrefixProvider *dpp, RGWModifyOp op, const string *write_tag,
@@ -9380,20 +9332,42 @@ int RGWRados::guard_reshard(const DoutPrefixProvider *dpp,
 			    RGWBucketInfo& bucket_info,
 			    std::function<int(BucketShard *)> call, optional_yield y)
 {
-  rgw_obj obj;
-  const rgw_obj *pobj = &obj_instance;
-  int r;
-
-  for (int i = 0; i < NUM_RESHARD_RETRIES; ++i) {
-    r = bs->init(pobj->bucket, *pobj, nullptr /* no RGWBucketInfo */, dpp, y);
+  // bs is reinitialized before every attempt, so there's nothing to invalidate
+  auto get_bs = [&] (BucketShard **out) {
+    int r = bs->init(obj_instance.bucket, obj_instance, nullptr /* no RGWBucketInfo */, dpp, y);
     if (r < 0) {
       ldpp_dout(dpp, 5) << "bs.init() returned ret=" << r << dendl;
+      return r;
+    }
+    *out = bs;
+    return 0;
+  };
+  return guard_reshard(dpp, obj_instance, bucket_info, get_bs, [] {},
+                       std::move(call), nullptr, y);
+}
+
+int RGWRados::guard_reshard(const DoutPrefixProvider *dpp,
+                            const rgw_obj& obj_instance,
+                            RGWBucketInfo& bucket_info,
+                            std::function<int(BucketShard **)> get_bs,
+                            std::function<void()> invalidate_bs,
+                            std::function<int(BucketShard *)> call,
+                            BucketShard **pbs, optional_yield y)
+{
+  constexpr int num_reshard_retries = 10;
+  BucketShard *bs = nullptr;
+  int r;
+
+  for (int i = 0; i < num_reshard_retries; ++i) {
+    r = get_bs(&bs);
+    if (r < 0) {
       return r;
     }
 
     r = call(bs);
     if (r == -ENOENT) {
       ldpp_dout(dpp, 10) << "ENOENT in guard_reshard(), likely bucket resharding, retrying" << dendl;
+      invalidate_bs();
       continue;
     }
     if (r != -ERR_BUSY_RESHARDING) {
@@ -9417,14 +9391,19 @@ int RGWRados::guard_reshard(const DoutPrefixProvider *dpp,
       return r;
     }
 
-    ldpp_dout(dpp, 20) << "reshard completion identified" << dendl;
+    ldpp_dout(dpp, 20) << "reshard completion identified. obj=" << obj_instance.key << dendl;
     i = 0; /* resharding is finished, make sure we can retry */
+    invalidate_bs();
   } // for loop
 
   if (r < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: bucket shard callback failed. obj=" << 
+    ldpp_dout(dpp, 0) << "ERROR: bucket shard callback failed. obj=" <<
       obj_instance.key << ". ret=" << cpp_strerror(-r) << dendl;
     return r;
+  }
+
+  if (pbs) {
+    *pbs = bs;
   }
 
   if (bucket_info.layout.resharding == rgw::BucketReshardState::InLogrecord) {
