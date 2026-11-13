@@ -6,6 +6,7 @@
 #include <boost/intrusive/set.hpp>
 
 #include "include/utime.h"
+#include "include/ceph_assert.h"
 
 #include <numeric> // for std::accumulate()
 #include <optional>
@@ -69,7 +70,7 @@ class not_before_queue_t {
     template <typename... Args>
     container_t(Args&&... args) : v(std::forward<Args>(args)...) {}
     ~container_t() {
-      assert(status == status_t::INVALID);
+      ceph_assert(status == status_t::INVALID);
     }
   };
 
@@ -180,7 +181,7 @@ public:
     }
 
     auto iter = eligible_queue.begin();
-    assert(iter->status == status_t::ELIGIBLE);
+    ceph_assert(iter->status == status_t::ELIGIBLE);
 
     eligible_queue.erase(
       typename eligible_queue_t::const_iterator(iter));
@@ -204,7 +205,7 @@ public:
       return std::nullopt;
     }
 
-    assert(iter->status == status_t::ELIGIBLE);
+    ceph_assert(iter->status == status_t::ELIGIBLE);
     eligible_queue.erase(typename eligible_queue_t::const_iterator(iter));
     iter->status = status_t::INVALID;
 
@@ -241,7 +242,7 @@ public:
 
       auto iter = ineligible_queue.begin();
       auto &item = *iter;
-      assert(item.status == status_t::INELIGIBLE);
+      ceph_assert(item.status == status_t::INELIGIBLE);
 
       if (project_not_before(item.v) > current_time) {
 	break;
@@ -272,7 +273,7 @@ public:
 	eligible_queue.erase(
 	  eligible_queue_t::s_iterator_to(std::as_const(*iter)));
       } else {
-	assert(0 == "impossible status");
+	ceph_abort_msg("impossible status");
       }
       iter->status = status_t::INVALID;
       removal_registry.erase_and_dispose(
@@ -312,7 +313,7 @@ public:
 	eligible_queue.erase(
 	    eligible_queue_t::s_iterator_to(std::as_const(*iter)));
       } else {
-	assert(0 == "impossible status");
+	ceph_abort_msg("impossible status");
       }
       iter->status = not_before_queue_t::status_t::INVALID;
       removal_registry.erase_and_dispose(

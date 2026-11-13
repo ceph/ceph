@@ -296,7 +296,7 @@ static seastar::future<> test_echo(unsigned rounds,
       PingSessionRef find_session(crimson::net::Connection *c) {
         auto found = sessions.find(c);
         if (found == sessions.end()) {
-          ceph_assert(false);
+          ceph_abort();
         }
         return found->second;
       }

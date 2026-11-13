@@ -556,7 +556,7 @@ private:
     lderr(cct) << "unexpected state transition: "
                << "current_state=" << current_state << ", "
                << "next_state=" << next_state << dendl;
-    ceph_assert(false);
+    ceph_abort();
   }
 
   void complete_work(std::shared_ptr<Work> work, int r, Response&& response) {
@@ -945,7 +945,7 @@ void HttpClient<I>::create_http_session(Context* on_finish) {
     m_http_session = std::make_unique<SslHttpSession>(this);
     break;
   default:
-    ceph_assert(false);
+    ceph_abort();
     break;
   }
 

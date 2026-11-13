@@ -1508,7 +1508,7 @@ CtPtr ProtocolV2::handle_message() {
                   << ", discarding" << dendl;
     if (connection->has_feature(CEPH_FEATURE_RECONNECT_SEQ) &&
         cct->_conf->ms_die_on_old_message) {
-      ceph_assert(0 == "old msgs despite reconnect_seq feature");
+      ceph_abort_msg("old msgs despite reconnect_seq feature");
     }
     return nullptr;
   }
@@ -1516,7 +1516,7 @@ CtPtr ProtocolV2::handle_message() {
     ldout(cct, 0) << __func__ << " missed message?  skipped from seq "
                   << cur_seq << " to " << message->get_seq() << dendl;
     if (cct->_conf->ms_die_on_skipped_message) {
-      ceph_assert(0 == "skipped incoming seq");
+      ceph_abort_msg("skipped incoming seq");
     }
   }
 
@@ -2593,7 +2593,7 @@ CtPtr ProtocolV2::handle_reconnect(ceph::bufferlist &payload)
   ProtocolV2 *exproto = dynamic_cast<ProtocolV2 *>(existing->protocol.get());
   if (!exproto) {
     ldout(cct, 1) << __func__ << " existing=" << existing << dendl;
-    ceph_assert(false);
+    ceph_abort();
   }
 
   if (exproto->state == CLOSED) {
@@ -2697,7 +2697,7 @@ CtPtr ProtocolV2::handle_existing_connection(const AsyncConnectionRef& existing)
   ProtocolV2 *exproto = dynamic_cast<ProtocolV2 *>(existing->protocol.get());
   if (!exproto) {
     ldout(cct, 1) << __func__ << " existing=" << existing << dendl;
-    ceph_assert(false);
+    ceph_abort();
   }
 
   if (exproto->state == CLOSED) {
