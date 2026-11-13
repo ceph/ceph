@@ -32,7 +32,7 @@ export class UpgradeProgressComponent implements OnInit, OnDestroy {
   executingTask: ExecutingTask;
 
   upgradeStatus$: Observable<UpgradeStatusInterface>;
-  subject = new ReplaySubject<UpgradeStatusInterface>();
+  subject = new ReplaySubject<void>();
 
   constructor(
     private authStorageService: AuthStorageService,

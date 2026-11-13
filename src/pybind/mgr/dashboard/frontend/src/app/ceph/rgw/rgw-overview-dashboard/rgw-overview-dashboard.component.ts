@@ -76,7 +76,7 @@ export class RgwOverviewDashboardComponent implements OnInit, OnDestroy {
   showMultisiteCard = true;
   loading = false;
   multisiteSyncStatus$: Observable<any>;
-  subject = new ReplaySubject<any>();
+  subject = new ReplaySubject<void>();
   fetchDataSub: Subscription;
   private destroy$ = new Subject<void>();
 

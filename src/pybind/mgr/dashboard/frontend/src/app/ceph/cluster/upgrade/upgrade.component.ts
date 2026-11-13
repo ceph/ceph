@@ -38,7 +38,7 @@ export class UpgradeComponent implements OnInit, OnDestroy {
   columns: CdTableColumn[] = [];
 
   upgradeStatus$: Observable<any>;
-  subject = new ReplaySubject<any>();
+  subject = new ReplaySubject<void>();
   private subs = new Subscription();
 
   constructor(

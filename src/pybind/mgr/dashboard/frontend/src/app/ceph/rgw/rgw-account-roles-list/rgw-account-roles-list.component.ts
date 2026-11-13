@@ -264,7 +264,7 @@ export class RgwAccountRolesListComponent implements OnInit, OnChanges {
       itemDescription: $localize`Role`,
       itemNames: [roleName],
       submitActionObservable: () => {
-        return new Observable((observer: Subscriber<unknown>) => {
+        return new Observable((observer: Subscriber<void>) => {
           this.rgwRoleService.delete(roleName, this.accountId).subscribe({
             next: () => {
               this.notificationService.show(

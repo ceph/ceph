@@ -16,7 +16,7 @@ export class DirectoryStoreService {
 
   readonly directoryStore$: Observable<DirectoryStore> = this._directoryStoreSubject.asObservable();
 
-  stopDirectoryPolling = new Subject();
+  stopDirectoryPolling = new Subject<void>();
 
   isLoading = true;
 

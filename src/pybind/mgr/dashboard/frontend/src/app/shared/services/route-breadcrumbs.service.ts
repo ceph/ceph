@@ -59,7 +59,7 @@ export class RouteBreadcrumbsService {
     }
 
     if (route.firstChild) {
-      crumbs$ = concat<IBreadcrumb[]>(crumbs$, this.resolveRoute(route.firstChild));
+      crumbs$ = concat(crumbs$, this.resolveRoute(route.firstChild));
     }
 
     return crumbs$;
