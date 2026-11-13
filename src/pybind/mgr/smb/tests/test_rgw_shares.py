@@ -843,6 +843,10 @@ def test_external_cluster_mixed_users(thandler):
     )
     assert rg.success, rg.to_simplified()
 
+    # spec backup in the public store must not contain the keys
+    backup = json.dumps(thandler.public_store['exo-mixed', 'spec.smb'].get())
+    assert 'AQExternal' not in backup
+
     # Verify external cluster has both users
     ext_data = thandler.internal_store.data[
         ('ext_ceph_clusters', 'exo-mixed')

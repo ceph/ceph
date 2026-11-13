@@ -1733,8 +1733,13 @@ def _save_pending_rgw_config(
 def _save_pending_spec_backup(
     store: ConfigStore, change_group: ClusterChangeGroup, smb_spec: SMBSpec
 ) -> None:
+    data = smb_spec.to_json()
+    # the public store must not hold secrets; drop ext cluster keys
+    for ccc in data.get('spec', {}).get('ceph_cluster_configs') or []:
+        ccc.pop('key', None)
+        ccc.pop('rgw_key', None)
     ssentry = store[external.spec_backup_key(change_group.cluster.cluster_id)]
-    ssentry.set(smb_spec.to_json())
+    ssentry.set(data)
     change_group.cache_updated_entry(ssentry)
 
 
