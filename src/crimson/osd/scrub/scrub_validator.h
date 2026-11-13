@@ -5,6 +5,7 @@
 
 #include <string>
 #include <map>
+#include <vector>
 
 #include "common/config_proxy.h"
 #include "common/scrub_types.h"
@@ -153,6 +154,36 @@ void foreach_scrub_maintained_stat(Func &&op) {
      &object_stat_sum_t::num_large_omap_objects,
      true);
 }
+
+struct scrub_stats_update_t {
+  /// pg_stats were flagged invalid (e.g. after split/merge) and have been
+  /// replaced by the scrubbed values
+  bool repaired_invalid_stats = false;
+
+  /// one entry per scrub_checked_stat not matching the stored pg value
+  std::vector<std::string> stat_mismatches;
+};
+
+/**
+ * update_stats_from_scrub
+ *
+ * Applies the stats accumulated by a completed scrub to the pg's history
+ * and stats (see PgScrubber::scrub_finish() in classic):
+ * - scrub_maintained_stats are replaced by the scrubbed values, except for
+ *   those only measured by a deep scrub, which a shallow scrub leaves as-is
+ * - each mismatching scrub_checked_stat counts as a shallow scrub error
+ * - num_scrub_errors is recomputed as the sum of the shallow and deep
+ *   errors, so that a shallow scrub retains previously found deep errors
+ * - the last_scrub, last_deep_scrub & last_clean_scrub history entries
+ *   are updated
+ */
+scrub_stats_update_t update_stats_from_scrub(
+  bool deep,
+  const object_stat_sum_t &scrubbed,
+  eversion_t last_update,
+  utime_t now,
+  pg_history_t &history,
+  pg_stat_t &pg_stats);
 
 }
 
