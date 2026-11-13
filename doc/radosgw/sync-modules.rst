@@ -15,10 +15,9 @@ tape drives, indexing metadata in Elasticsearch etc.
 
 A sync module configuration is local to a zone. The sync module determines
 whether the zone exports data or can only consume data that was modified in
-another zone. As of Luminous the supported sync plugins are :ref:`elasticsearch <radosgw-elastic-sync-module>`,
-``rgw``, which is the default sync plugin that synchronizes data between the
-zones and ``log`` which is a trivial sync plugin that logs the metadata
-operation that happens in the remote zones. The following docs are written with
+another zone. As of Luminous the supported sync plugins are :ref:`elasticsearch <radosgw-elastic-sync-module>`
+and ``rgw``, which is the default sync plugin that synchronizes data between the
+zones. The following docs are written with
 the example of a zone using :ref:`radosgw-elastic-sync-module`, the process would be similar
 for configuring any sync plugin.
 

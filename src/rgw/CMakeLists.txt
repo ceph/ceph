@@ -251,7 +251,6 @@ list(APPEND librgw_rados_srcs
   driver/rados/rgw_sync_module_aws.cc
   driver/rados/rgw_sync_module_es.cc
   driver/rados/rgw_sync_module_es_rest.cc
-  driver/rados/rgw_sync_module_log.cc
   driver/rados/rgw_sync_trace.cc
   driver/rados/rgw_tools.cc
   driver/rados/rgw_trim_bilog.cc

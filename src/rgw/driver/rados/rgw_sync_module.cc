@@ -8,7 +8,6 @@
 #include "rgw_data_sync.h"
 #include "rgw_bucket.h"
 
-#include "rgw_sync_module_log.h"
 #include "rgw_sync_module_es.h"
 #include "rgw_sync_module_aws.h"
 
@@ -92,9 +91,6 @@ void rgw_register_sync_modules(RGWSyncModulesManager *modules_manager)
 
   RGWSyncModuleRef archive_module(std::make_shared<RGWArchiveSyncModule>());
   modules_manager->register_module("archive", archive_module);
-
-  RGWSyncModuleRef log_module(std::make_shared<RGWLogSyncModule>());
-  modules_manager->register_module("log", log_module);
 
   RGWSyncModuleRef es_module(std::make_shared<RGWElasticSyncModule>());
   modules_manager->register_module("elasticsearch", es_module);
