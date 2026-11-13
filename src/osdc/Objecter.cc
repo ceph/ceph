@@ -2499,17 +2499,18 @@ void Objecter::op_post_split_op_complete(Op* op, bs::error_code ec, int rc) {
   // whose threads can all be blocked in _throttle_op() waiting for this very
   // budget.  Nothing else touches op->budget while the sub-reads are in
   // flight: op_cancel() only cancels the sub-reads, and the parent op reaches
-  // _finish_op() only from the handler posted below.  The -EAGAIN redrive
-  // resubmits through _op_submit(), which does not take budget, so the op
-  // keeps the budget it already holds.
-  if (rc != -EAGAIN && !op->ctx_budgeted && op->budget >= 0) {
-    put_op_budget_bytes(op->budget);
+  // _finish_op() only from the handler posted below.  This goes for the
+  // -EAGAIN redrive too, which takes the budget back in the handler.
+  int budget = -1;
+  if (!op->ctx_budgeted && op->budget >= 0) {
+    budget = op->budget;
+    put_op_budget_bytes(budget);
     op->budget = -1;
   }
 
   op->get();  // Keep alive during async operation
 
-  boost::asio::post(service, [this, op, ec, rc]() {
+  boost::asio::post(service, [this, op, ec, rc, budget]() {
     shunique_lock sul(rwlock, ceph::acquire_shared);
 
     bool freed = op->get_nref() == 1;
@@ -2531,6 +2532,15 @@ void Objecter::op_post_split_op_complete(Op* op, bs::error_code ec, int rc) {
       _session_op_remove(op->session, op);
       sl.unlock();
       op->split_op_tids.reset();
+      // Take back the budget returned above without waiting for it, as
+      // waiting here could block the very threads that return budget.  This
+      // may take the throttle past its limit, by at most the budget of the
+      // split reads being redriven.
+      if (budget >= 0) {
+        op_throttle_bytes.take(budget);
+        op_throttle_ops.take(1);
+        op->budget = budget;
+      }
       ceph_tid_t tid = 0;
       _op_submit(op, sul, &tid);
     }

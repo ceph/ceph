@@ -136,6 +136,14 @@ protected:
 
   void advance_map(const std::function<void(OSDMap::Incremental&)>& change)
   {
+    deliver_map(change);
+    poll();
+  }
+
+  // Delivers the next map, but leaves anything the Objecter posts to the
+  // io_context unrun.
+  void deliver_map(const std::function<void(OSDMap::Incremental&)>& change)
+  {
     auto [epoch, fsid] = objecter->with_osdmap([](const OSDMap& o) {
       return std::make_pair(o.get_epoch(), o.get_fsid());
     });
@@ -151,7 +159,6 @@ protected:
     // the unconnected MonClient opening a session.
     monc.sub_want("osdmap", inc.epoch + 1, CEPH_SUBSCRIBE_ONETIME);
     objecter->handle_osd_map(m.get());
-    poll();
   }
 
   void mark_down(int osd)
@@ -385,6 +392,34 @@ TEST_F(TestSplitOpMapChange, ECSplitReadReturnsBudgetBeforeCompletionRuns)
   EXPECT_EQ(budget_t(0, 0), budget_in_use());
   // Completed, not redriven.
   EXPECT_EQ(1u, sent_to(primary).size());
+}
+
+// The same goes for a split read that is redriven to the primary: its budget
+// is returned before the redrive is posted, and taken back by the redrive.
+TEST_F(TestSplitOpMapChange, ECSplitReadReturnsBudgetBeforeRedriveRuns)
+{
+  ceph_tid_t parent = submit_read(0, 2 * chunk_size,
+                                  CEPH_OSD_FLAG_BALANCE_READS);
+  ASSERT_EQ(1u, sent_to(primary).size());
+  ASSERT_EQ(1u, sent_to(shard1_osd).size());
+  deliver_reply(primary, cons[primary]->sent.back());
+  EXPECT_EQ(budget_t(2 * chunk_size, 1), budget_in_use());
+
+  // The new interval fails the sub-read to osd.1 with -EAGAIN.
+  deliver_map([](OSDMap::Incremental& inc) {
+    inc.new_state[parity_osd] = CEPH_OSD_UP;
+  });
+  EXPECT_EQ(1u, sent_to(primary).size());
+  EXPECT_EQ(budget_t(0, 0), budget_in_use());
+
+  poll();
+  ASSERT_EQ(2u, sent_to(primary).size());
+  EXPECT_EQ(parent, sent_to(primary).back().first);
+  EXPECT_EQ(budget_t(2 * chunk_size, 1), budget_in_use());
+
+  reply(primary, cons[primary]->sent.back());
+  EXPECT_EQ(0, done.wait_for(0));
+  EXPECT_EQ(budget_t(0, 0), budget_in_use());
 }
 
 TEST_F(TestSplitOpMapChange, ECDirectReadRedrivesWhenPrimaryMoves)
