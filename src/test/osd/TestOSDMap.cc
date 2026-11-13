@@ -4322,3 +4322,182 @@ TEST_F(OSDMapTest, CalcCrushRuleChangePins) {
     }
   }
 }
+
+TEST_F(OSDMapTest, CalcCrushRuleChangePinsDropsPgUpmap) {
+  // Same topology as CalcCrushRuleChangePins: 12 osds -> 6 hosts
+  // (2 osds each) -> 3 racks (2 hosts each).
+  set_up_map(12, true);
+  {
+    CrushWrapper newcrush;
+    get_crush(osdmap, newcrush);
+    for (int i = 0; i < 12; i++) {
+      map<string,string> loc = {
+        {"root", "default"},
+        {"rack", "rack" + std::to_string(i / 4)},
+        {"host", "host" + std::to_string(i / 2)},
+      };
+      int r = newcrush.create_or_move_item(
+        g_ceph_context, i, 1.0, "osd." + std::to_string(i), loc);
+      ASSERT_GE(r, 0);
+    }
+    OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+    pending_inc.fsid = osdmap.get_fsid();
+    pending_inc.crush.clear();
+    newcrush.encode(pending_inc.crush, CEPH_FEATURES_SUPPORTED_DEFAULT);
+    osdmap.apply_incremental(pending_inc);
+  }
+  int host_rule = crush_rule_create_replicated("pu_host", "default", "host");
+  ASSERT_GE(host_rule, 0);
+  int rack_rule = crush_rule_create_replicated("pu_rack", "default", "rack");
+  ASSERT_GE(rack_rule, 0);
+  const int rack_type = osdmap.crush->get_type_id("rack");
+  ASSERT_GT(rack_type, 0);
+
+  uint64_t pool_id;
+  {
+    OSDMap::Incremental new_pool_inc(osdmap.get_epoch() + 1);
+    new_pool_inc.fsid = osdmap.get_fsid();
+    new_pool_inc.new_pool_max = osdmap.get_pool_max();
+    pg_pool_t empty;
+    pool_id = ++new_pool_inc.new_pool_max;
+    pg_pool_t *p = new_pool_inc.get_new_pool(pool_id, &empty);
+    p->size = 3;
+    p->set_pg_num(16);
+    p->set_pgp_num(16);
+    p->type = pg_pool_t::TYPE_REPLICATED;
+    p->crush_rule = host_rule;
+    p->set_flag(pg_pool_t::FLAG_HASHPSPOOL);
+    new_pool_inc.new_pool_names[pool_id] = "pupool";
+    osdmap.apply_incremental(new_pool_inc);
+  }
+
+  // Explicit pg_upmap entries, valid under the host rule:
+  //  - pg_bad:  osd.0, osd.2 (rack0) and osd.4 (rack1) -> violates the rack
+  //             rule, only two of the three shards can stay;
+  //  - pg_good: osd.0 (rack0), osd.4 (rack1), osd.8 (rack2) -> already
+  //             satisfies the rack rule, all three shards can stay.
+  // _apply_upmap() applies pg_upmap before pg_upmap_items, so pins computed
+  // against the raw CRUSH mapping would be ignored if pg_upmap were kept.
+  const pg_t pg_bad(0, pool_id), pg_good(1, pool_id), pg_staged(2, pool_id);
+  const vector<int> bad_upmap = {0, 2, 4};
+  const vector<int> good_upmap = {0, 4, 8};
+  {
+    OSDMap::Incremental inc(osdmap.get_epoch() + 1);
+    inc.fsid = osdmap.get_fsid();
+    inc.new_pg_upmap[pg_bad] = mempool::osdmap::vector<int32_t>(
+      bad_upmap.begin(), bad_upmap.end());
+    inc.new_pg_upmap[pg_good] = mempool::osdmap::vector<int32_t>(
+      good_upmap.begin(), good_upmap.end());
+    osdmap.apply_incremental(inc);
+  }
+  for (auto& [pg, expect] : {std::make_pair(pg_bad, bad_upmap),
+                             std::make_pair(pg_good, good_upmap)}) {
+    vector<int> up, acting;
+    osdmap.pg_to_up_acting_osds(pg, up, acting);
+    ASSERT_EQ(expect, acting);
+  }
+
+  // record pre-change acting sets
+  map<pg_t, set<int>> old_acting;
+  for (unsigned ps = 0; ps < 16; ++ps) {
+    pg_t pg(ps, pool_id);
+    vector<int> up, acting;
+    osdmap.pg_to_up_acting_osds(pg, up, acting);
+    old_acting[pg] = set<int>(acting.begin(), acting.end());
+  }
+
+  // Stage the rule change as the monitor would.  pg_staged additionally
+  // gets a pg_upmap staged earlier in the same proposal: it must not
+  // survive either, or it would override the pins.
+  OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+  pending_inc.fsid = osdmap.get_fsid();
+  pending_inc.new_pg_upmap[pg_staged] =
+    mempool::osdmap::vector<int32_t>({0, 2, 4});
+  OSDMap scratch;
+  scratch.deepish_copy_from(osdmap);
+  {
+    OSDMap::Incremental s_inc = pending_inc;
+    pg_pool_t tp = *osdmap.get_pg_pool(pool_id);
+    tp.crush_rule = rack_rule;
+    s_inc.new_pools[pool_id] = tp;
+    scratch.apply_incremental(s_inc);
+  }
+  int pins = osdmap.calc_crush_rule_change_pins(
+    g_ceph_context, scratch, pool_id, &pending_inc);
+  ASSERT_GT(pins, 0);
+  {
+    pg_pool_t tp = *osdmap.get_pg_pool(pool_id);
+    tp.crush_rule = rack_rule;
+    pending_inc.new_pools[pool_id] = tp;
+  }
+
+  // the stale explicit mappings are dropped in the same incremental
+  ASSERT_TRUE(pending_inc.old_pg_upmap.count(pg_bad));
+  ASSERT_TRUE(pending_inc.old_pg_upmap.count(pg_good));
+  ASSERT_TRUE(pending_inc.old_pg_upmap.count(pg_staged));
+  ASSERT_FALSE(pending_inc.new_pg_upmap.count(pg_staged));
+
+  OSDMap newmap;
+  newmap.deepish_copy_from(osdmap);
+  newmap.apply_incremental(pending_inc);
+  // pg_upmap is private: probe for a surviving explicit mapping by dropping
+  // the pg_upmap_items and checking that the result is the raw CRUSH set
+  {
+    OSDMap probe;
+    probe.deepish_copy_from(newmap);
+    OSDMap::Incremental pi(probe.get_epoch() + 1);
+    pi.fsid = probe.get_fsid();
+    for (auto pg : {pg_bad, pg_good, pg_staged})
+      pi.old_pg_upmap_items.insert(pg);
+    probe.apply_incremental(pi);
+    for (auto pg : {pg_bad, pg_good, pg_staged}) {
+      ASSERT_FALSE(probe.have_pg_upmaps(pg)) << "pg " << pg;
+      vector<int> raw, up;
+      probe.pg_to_raw_upmap(pg, &raw, &up);
+      ASSERT_EQ(raw, up) << "pg " << pg;
+    }
+  }
+
+  for (unsigned ps = 0; ps < 16; ++ps) {
+    pg_t pg(ps, pool_id);
+    vector<int> up, acting;
+    newmap.pg_to_up_acting_osds(pg, up, acting);
+    ASSERT_EQ(3u, up.size());
+    set<int> racks;
+    for (auto o : up) {
+      int r = newmap.crush->get_parent_of_type(o, rack_type, rack_rule);
+      ASSERT_LT(r, 0);
+      racks.insert(r);
+    }
+    ASSERT_EQ(3u, racks.size()) << "pg " << pg << " up " << up;
+    // retention is maximal: one old shard kept per distinct old rack
+    set<int> old_racks;
+    for (auto o : old_acting[pg]) {
+      old_racks.insert(
+        osdmap.crush->get_parent_of_type(o, rack_type, rack_rule));
+    }
+    unsigned kept = 0;
+    for (auto o : up) {
+      if (old_acting[pg].count(o))
+        kept++;
+    }
+    ASSERT_EQ(old_racks.size(), kept) << "pg " << pg << " up " << up;
+  }
+  // in particular, the pg_upmap'd PGs keep what their explicit mapping held
+  {
+    vector<int> up, acting;
+    newmap.pg_to_up_acting_osds(pg_good, up, acting);
+    ASSERT_EQ(set<int>(good_upmap.begin(), good_upmap.end()),
+              set<int>(up.begin(), up.end()));
+  }
+
+  // the mon must find nothing to cancel or simplify: pins take effect
+  {
+    OSDMap::Incremental clean_inc(newmap.get_epoch() + 1);
+    clean_inc.fsid = newmap.get_fsid();
+    ASSERT_FALSE(newmap.clean_pg_upmaps(g_ceph_context, &clean_inc));
+    ASSERT_TRUE(clean_inc.old_pg_upmap.empty());
+    ASSERT_TRUE(clean_inc.old_pg_upmap_items.empty());
+    ASSERT_TRUE(clean_inc.new_pg_upmap_items.empty());
+  }
+}

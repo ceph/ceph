@@ -2888,10 +2888,27 @@ int OSDMap::calc_crush_rule_change_pins(
       }
     }
 
+    // The pairs above are expressed against raw_new, but _apply_upmap()
+    // applies an explicit pg_upmap first and the items on top of it: with
+    // a pre-existing pg_upmap the sources would not be found and the pins
+    // silently ignored (and clean_pg_upmaps() would then usually cancel
+    // the whole PG against the new rule).  `acting` already reflects that
+    // pg_upmap, so dropping it loses nothing the pins do not keep.
+    // old_pg_upmap is applied after new_pg_upmap by apply_incremental(),
+    // so this also overrides a pg_upmap staged earlier in this proposal.
+    auto drop_pg_upmap = [&]() {
+      if (pg_upmap.count(pg) || newmap.pg_upmap.count(pg) ||
+          pending_inc->new_pg_upmap.count(pg)) {
+        pending_inc->new_pg_upmap.erase(pg);
+        pending_inc->old_pg_upmap.insert(pg);
+      }
+    };
+
     if (pairs.empty()) {
       // raw placement already optimal; drop a stale pre-change entry if any
       if (pg_upmap_items.count(pg))
         pending_inc->old_pg_upmap_items.insert(pg);
+      drop_pg_upmap();
       continue;
     }
     // final safety: the intended up must satisfy the new rule
@@ -2915,6 +2932,7 @@ int OSDMap::calc_crush_rule_change_pins(
                      << " computed pin failed verify_upmap, skipping" << dendl;
       continue;
     }
+    drop_pg_upmap();
     pending_inc->new_pg_upmap_items[pg] = pairs;
     ++npins;
   }

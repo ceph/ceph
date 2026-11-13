@@ -803,7 +803,10 @@ new failure domain allows it. Only the shards that violate the new failure
 domain are relocated, so data movement is reduced to the minimum the new rule
 requires. Because the rule change and the entries are applied atomically, it
 is not necessary to set ``norebalance`` beforehand. For erasure-coded pools,
-retained shards are kept at their position in the acting set. The option
+retained shards are kept at their position in the acting set. A PG that
+has an explicit ``pg-upmap`` entry (see ``ceph osd pg-upmap``) has that entry
+removed in the same epoch: the staged ``pg-upmap-items`` entries already keep
+the acting set it produced, and they would not take effect on top of it. The option
 also applies to replicated pools, where it is harmless but, for the reasons
 above, usually brings little or no additional reduction in data movement.
 
