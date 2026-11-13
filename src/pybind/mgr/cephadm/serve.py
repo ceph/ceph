@@ -2015,7 +2015,10 @@ class CephadmServe:
                                 self.mgr._schedule_daemon_action(agent.name(), 'redeploy')
 
             except Exception as e:
-                await self.mgr.ssh._reset_con(host)
+                # No reset of the host's connection here: _execute_command()
+                # closes the connection a command failed on, and
+                # _remote_connection() replaces a closed one. The cached
+                # connection may be in use by other commands for the host.
                 if error_ok:
                     return [], [str(e)], 1
                 raise
@@ -2033,7 +2036,7 @@ class CephadmServe:
                 out, err, code = await self.mgr.ssh._execute_command(
                     host, cmd, stdin=stdin, addr=addr)
             except Exception as e:
-                await self.mgr.ssh._reset_con(host)
+                # see the 'root' mode case above
                 if error_ok:
                     return [], [str(e)], 1
                 raise

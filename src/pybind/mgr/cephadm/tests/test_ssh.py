@@ -285,3 +285,113 @@ class TestSSHIdentity:
         # the connection reads the key file and reports the error, as before
         cephadm_module.wait_async(cephadm_module.ssh._remote_connection('host1', '1::4'))
         assert mock_connect.call_args.kwargs['client_keys'] == [cephadm_module.tkey.name]
+
+
+@pytest.mark.skipif(ConnectionLost is None, reason='no asyncssh')
+class TestSSHConnectionReset:
+    """A failure closes the connection it happened on, not a connection
+    opened since then and maybe used by other commands for the host."""
+
+    @staticmethod
+    def _conn(run=None):
+        conn = mock.MagicMock()
+        if run is not None:
+            conn.run.side_effect = run
+        return conn
+
+    def test_reset_con_given_connection(self, cephadm_module):
+        ssh = cephadm_module.ssh
+        failed, cached = self._conn(), self._conn()
+        ssh.cons['host1'] = cached
+
+        cephadm_module.wait_async(ssh._reset_con('host1', failed))
+        failed.close.assert_called_once_with()
+        cached.close.assert_not_called()
+        assert ssh.cons['host1'] is cached
+
+        cephadm_module.wait_async(ssh._reset_con('host1', cached))
+        cached.close.assert_called_once_with()
+        assert 'host1' not in ssh.cons
+
+    def test_reset_con_cached_connection(self, cephadm_module):
+        ssh = cephadm_module.ssh
+        cached = self._conn()
+        ssh.cons['host1'] = cached
+        cephadm_module.wait_async(ssh._reset_con('host1'))
+        cached.close.assert_called_once_with()
+        assert 'host1' not in ssh.cons
+        # nothing cached: nothing to do
+        cephadm_module.wait_async(ssh._reset_con('host1'))
+
+    def test_retry_closes_only_failed_connection(self, cephadm_module):
+        from cephadm.ssh import RemoteCommand, Executables
+        ssh = cephadm_module.ssh
+        other = self._conn()
+
+        async def fail(*args, **kwargs):
+            # meanwhile, another command opened a new connection to the host
+            ssh.cons['host1'] = other
+            raise ConnectionLost('reason')
+
+        failed = self._conn(run=fail)
+        retry = self._conn(run=async_side_effect(
+            SSHCompletedProcess(returncode=0, stdout='ok', stderr='')))
+        conns = iter([failed, retry])
+
+        async def remote_connection(host, addr=None):
+            return next(conns)
+
+        with mock.patch.object(ssh, '_remote_connection', side_effect=remote_connection):
+            out, err, code = cephadm_module.wait_async(
+                ssh._execute_command('host1', RemoteCommand(Executables.TRUE), addr='1::4'))
+        assert (out, code) == ('ok', 0)
+        failed.close.assert_called_once_with()
+        other.close.assert_not_called()
+        assert ssh.cons['host1'] is other
+
+    @pytest.mark.parametrize('exc', [
+        asyncssh.ChannelOpenError(1, '', ''),  # not recoverable
+        asyncssh.ProcessError(env='', command='', subsystem='', exit_status=1,
+                              exit_signal='', returncode=1, stdout='', stderr=''),
+        Exception('boom'),
+    ])
+    def test_failure_closes_only_failed_connection(self, cephadm_module, exc):
+        from cephadm.ssh import RemoteCommand, Executables, HostConnectionError
+        ssh = cephadm_module.ssh
+        other = self._conn()
+
+        async def fail(*args, **kwargs):
+            ssh.cons['host1'] = other
+            raise exc
+
+        failed = self._conn(run=fail)
+
+        async def remote_connection(host, addr=None):
+            return failed
+
+        with mock.patch.object(ssh, '_remote_connection', side_effect=remote_connection):
+            with pytest.raises(HostConnectionError):
+                cephadm_module.wait_async(
+                    ssh._execute_command('host1', RemoteCommand(Executables.TRUE), addr='1::4'))
+        failed.close.assert_called_once_with()
+        other.close.assert_not_called()
+        assert ssh.cons['host1'] is other
+
+    @mock.patch("cephadm.ssh.SSHManager._execute_command")
+    def test_run_cephadm_error_keeps_connection(self, execute_command, cephadm_module):
+        ssh = cephadm_module.ssh
+        cached = self._conn()
+        ssh.cons['host1'] = cached
+
+        async def remote_connection(host, addr=None):
+            return cached
+
+        # an error that is not about the connection (the connection
+        # errors are handled by _execute_command())
+        execute_command.side_effect = OrchestratorError('not wrapped with invoker')
+        with mock.patch.object(ssh, '_remote_connection', side_effect=remote_connection):
+            out, err, code = cephadm_module.wait_async(CephadmServe(cephadm_module)._run_cephadm(
+                'host1', cephadmNoImage, 'check-host', [], error_ok=True, no_fsid=True))
+        assert code == 1
+        cached.close.assert_not_called()
+        assert ssh.cons['host1'] is cached

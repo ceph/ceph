@@ -378,7 +378,7 @@ class SSHManager:
                         logger.debug(
                             f'ChannelOpenError code {error_code} is not recoverable, '
                             f'not retrying for host {host}')
-                        await self._reset_con(host)
+                        await self._reset_con(host, conn)
                         self.mgr.offline_hosts.add(normalize_hostname(host))
                         raise HostConnectionError(
                             f'Unable to reach remote host {host}. {str(e)}',
@@ -389,7 +389,7 @@ class SSHManager:
                         f'for host {host}: {str(e)}')
 
                 # Reset connection and get a new one for retry
-                await self._reset_con(host)
+                await self._reset_con(host, conn)
                 if attempt < self.SSH_RETRY_COUNT - 1:
                     # Not the last attempt, try to get a new connection
                     try:
@@ -410,7 +410,7 @@ class SSHManager:
             except asyncssh.ProcessError as e:
                 msg = f"ProcessError cannot execute the command '{rcmd}' on the {host}. {str(e.stderr)}."
                 logger.exception(msg)
-                await self._reset_con(host)
+                await self._reset_con(host, conn)
                 self.mgr.offline_hosts.add(normalize_hostname(host))
                 raise HostConnectionError(msg, host, address)
             except Exception as e:
@@ -418,7 +418,7 @@ class SSHManager:
                 msg = (f"Generic error {error_type} while executing command '{rcmd}' "
                        f"on the host {host}. {str(e)}.")
                 logger.exception(msg)
-                await self._reset_con(host)
+                await self._reset_con(host, conn)
                 self.mgr.offline_hosts.add(normalize_hostname(host))
                 raise HostConnectionError(msg, host, address)
 
@@ -563,11 +563,23 @@ class SSHManager:
             except OSError:
                 pass
 
-    async def _reset_con(self, host: str) -> None:
-        conn = self.cons.get(host)
-        if conn:
-            logger.debug(f'_reset_con close {host}')
-            conn.close()
+    async def _reset_con(self, host: str,
+                         conn: Optional["SSHClientConnection"] = None) -> None:
+        """Close the cached connection to a host.
+
+        With conn, close that connection: the one a command failed on. It
+        is dropped from the cache only if it is still the cached one, so a
+        connection opened since then, maybe in use by other commands, is
+        left alone.
+        """
+        cached = self.cons.get(host)
+        if conn is None:
+            conn = cached
+        if conn is None:
+            return
+        logger.debug(f'_reset_con close {host}')
+        conn.close()
+        if cached is conn:
             del self.cons[host]
 
     def reset_con(self, host: str) -> None:
