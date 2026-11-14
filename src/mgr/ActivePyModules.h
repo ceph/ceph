@@ -68,7 +68,10 @@ class ActivePyModules
   Objecter &objecter;
   Finisher &finisher;
   ThreadMonitor* m_thread_monitor = nullptr;
-  MgrMapCache<PyObject*> api_cache;
+  MgrMapCache api_cache;
+  // Internal C API producer; its new reference is immediately adopted by the
+  // owning cacheable_get_python() interface.
+  PyObject* get_python(std::string_view what, bool use_cache);
 public:
   Finisher cmd_finisher;
 private:
@@ -93,10 +96,8 @@ public:
   // FIXME: wrap for send_command?
   MonClient &get_monc() {return monc;}
   Objecter  &get_objecter() {return objecter;}
-  PyObject *cacheable_get_python(std::string_view what,
-    const bool get_mutable = false);
-  PyObject *get_python(std::string_view what,
-    const bool get_mutable = false);
+  [[nodiscard]] PyObjectRef cacheable_get_python(std::string_view what,
+    bool get_mutable = false);
   int ceph_cache_map_erase(std::string_view what);
   PyObject *get_server_python(const std::string &hostname);
   PyObject *list_servers_python();

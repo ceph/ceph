@@ -29,6 +29,7 @@ if(WITH_MGR)
     PerfCounterInstance.cc
     PyFormatter.cc
     PyUtil.cc
+    PyObjectRef.cc
     PyModule.cc
     PyModuleRegistry.cc
     PyModuleRunner.cc
