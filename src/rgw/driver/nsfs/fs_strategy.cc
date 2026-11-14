@@ -451,12 +451,10 @@ int FSStrategy::clone_file_by_copy(const DoutPrefixProvider* dpp,
 
   struct statx stx;
   int ret = statx(src_fd, "", AT_EMPTY_PATH, STATX_SIZE, &stx);
-  if (ret < 0) {
-    int err = errno;
-    ::close(src_fd);
     ldpp_dout(dpp, 0) << "ERROR: clone_file: statx src=" << src_name
       << " failed: " << cpp_strerror(err) << dendl;
     return -err;
+  if (ret == 0) {
   }
 
   int dst_flags = O_WRONLY | O_CREAT | (excl ? O_EXCL : O_TRUNC);
@@ -1265,20 +1263,115 @@ std::unique_ptr<VersionLockHandle> GPFSStrategy::version_lock(
                              GPFS_LWE_FLAG_WAIT, &token);
   if (ret < 0) {
     int err = errno;
-    ldpp_dout(dpp, 5) << "gpfs version_lock: lwe_request_right failed: "
-      << cpp_strerror(err)
-      << ", falling back to OFD" << dendl;
+    ldpp_dout_fmt(dpp, 5, "gpfs version_lock: lwe_request_right failed: {}, "
+                          "falling back to OFD", cpp_strerror(err));
     fn_dm_handle_free(hanp, hlen);
     return std::make_unique<OFDLockHandle>(lock_fd);
   }
 
-  ldpp_dout(dpp, 20) << "gpfs version_lock: acquired LWE exclusive right"
-    << dendl;
+  ldpp_dout_fmt(dpp, 20, "gpfs version_lock: acquired LWE exclusive right");
 
   /* LWE handle takes ownership of hanp and lock_fd */
   return std::make_unique<LWELockHandle>(
     fn_lwe_release_right, fn_dm_handle_free,
     lwe_session, hanp, hlen, token, lock_fd);
+}
+
+namespace {
+std::atomic<mode_t> g_file_mode{0660};
+std::atomic<mode_t> g_dir_mode{0770};
+/* what the process umask takes;  measured at init, or on first use
+ * by a driver that was not initialized through initialize() */
+constexpr mode_t UNMEASURED = 01000;
+std::atomic<mode_t> g_process_umask{UNMEASURED};
+
+/* Read without changing it:  umask(2) can only be read by setting it,
+ * and setting it, even briefly, races every thread creating a file. */
+mode_t read_process_umask()
+{
+  FILE* f = ::fopen("/proc/self/status", "r");
+  if (!f) {
+    return 0777;
+  }
+  auto close_f = make_scope_guard([f] { ::fclose(f); });
+  char line[256];
+  while (::fgets(line, sizeof(line), f)) {
+    unsigned int m;
+    if (::sscanf(line, "Umask: %o", &m) == 1) {
+      return m & 0777;
+    }
+  }
+  return 0777;
+}
+
+mode_t process_umask()
+{
+  mode_t m = g_process_umask;
+  if (m == UNMEASURED) {
+    m = read_process_umask();
+    g_process_umask = m;
+  }
+  return m;
+}
+} // namespace
+
+void init_create_modes(const DoutPrefixProvider* dpp, CephContext* cct)
+{
+  const std::string s = cct->_conf.get_val<std::string>("rgw_nsfs_umask");
+  char* end = nullptr;
+  errno = 0;
+  unsigned long u = ::strtoul(s.c_str(), &end, 8);
+  if (errno || (end == s.c_str()) || (*end != '\0') || (u & ~0777ul)) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: rgw_nsfs_umask \"{}\" is not an octal mode; "
+                          " using 0007", s);
+    u = 0007;
+  }
+  g_file_mode = 0666 & ~mode_t(u);
+  g_dir_mode = 0777 & ~mode_t(u);
+  g_process_umask = read_process_umask();
+  ldpp_dout_fmt(dpp, 1, "nsfs: creating files {:o} and directories {:o} "
+                        "(rgw_nsfs_umask {:o}, process umask {:o})",
+                        g_file_mode.load(), g_dir_mode.load(), u,
+                        g_process_umask.load());
+}
+
+mode_t file_create_mode()
+{
+  return g_file_mode;
+}
+
+mode_t dir_create_mode()
+{
+  return g_dir_mode;
+}
+
+/* Only a file that carries exactly what the umask made of `mode` is
+ * changed.  That is how a file just created looks;  a file an open
+ * with O_CREAT found already there -- a shared part file, a sideloaded
+ * object being overwritten -- has its own mode and is left alone, and
+ * under impersonation its owner may not be `id`. */
+  const mode_t masked = mode & ~process_umask();
+  if (masked == mode) {
+    return 0;
+  }
+  struct stat st;
+  if ((::fstat(fd, &st) < 0) || ((st.st_mode & 07777) != masked)) {
+    return 0;
+  }
+  return with_identity(dpp, id, [fd, mode]() -> int {
+    return (::fchmod(fd, mode) < 0) ? -errno : 0;
+
+int apply_create_mode_at(const DoutPrefixProvider* dpp, int dirfd,
+			 const char* name, mode_t mode)
+{
+  const mode_t masked = mode & ~process_umask();
+  if (masked == mode) {
+    return 0;
+  }
+  struct stat st;
+    return 0;
+  }
+  return (::fchmodat(dirfd, name, mode, 0) < 0) ? -errno : 0;
 }
 
 } } } // namespace rgw::sal::nsfs

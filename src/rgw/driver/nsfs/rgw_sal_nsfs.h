@@ -25,6 +25,7 @@
 #include <atomic>
 #include <thread>
 #include "common/dout.h"
+#include "common/fmt_common.h"
 #include "../posix/bucket_cache.h"
 #include "../posix/multipart_cache.h"
 #include "../posix/posixDB.h"
@@ -34,9 +35,11 @@
 #include "../posix/qd2_pending.h"
 #include "../posix/posix_io_uring.h"
 #include "fs_strategy.h"
+#include "mpu_records.h"
 #include "mpu_strategy.h"
 #include "xattr_strategy.h"
 #include "path_strategy.h"
+#include "bucket_state_strategy.h"
 #include "bucket_profile.h"
 
 class RGWLC;
@@ -146,6 +149,12 @@ protected:
    * built from its parent */
   XattrStrategy* xattr_strategy{nullptr};
   PathStrategy* path_strategy{nullptr};
+  /* The names for this entry's own attributes, when they are not the
+   * format's:  a bucket's directory carries the bucket's state, which is
+   * RGW's in every format (DECISIONS.md 2026-10-13).  Not inherited --
+   * the entries beneath are in the bucket's format -- and with no
+   * fallback, since nothing else writes bucket state there. */
+  XattrStrategy* own_xattr_strategy{nullptr};
   /* the union of what every strategy calls its own scaffolding, assembled
    * once by the driver.  Carried rather than asked for, because the
    * listing paths test it per directory entry. */
@@ -179,6 +188,7 @@ public:
   XattrStrategy* get_xattr_strategy() const { return xattr_strategy; }
   void set_path_strategy(PathStrategy* s) { path_strategy = s; }
   PathStrategy* get_path_strategy() const { return path_strategy; }
+  void set_own_xattr_strategy(XattrStrategy* s) { own_xattr_strategy = s; }
   void set_reserved_names(const ReservedNames* r) { reserved_names = r; }
   const ReservedNames* get_reserved_names() const { return reserved_names; }
   void set_sync_on_close(bool sync) { need_fsync = sync; }
@@ -201,6 +211,9 @@ public:
   virtual int read_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs);
   virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name) = 0;
   virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname) = 0;
+  /* `unknown`, if given, receives every `user.noobaa.*` name the
+   * reviewed releases do not write (X4's third layer);  a caller that
+   * hands out the object refuses on one, and listing passes none */
   virtual std::unique_ptr<FSEnt> clone_base() = 0;
   /* Build this entry's listing row.  Only Directory::fill_cache()
    * composes keys from a path prefix as it descends;  every other caller
@@ -474,8 +487,23 @@ protected:
   std::unique_ptr<nsfs::MPUStrategy> mpu_strategy;
   std::unique_ptr<nsfs::XattrStrategy> xattr_strategy;
   std::unique_ptr<nsfs::PathStrategy> path_strategy;
+  /* NooBaa's three.  Held whether or not a bucket is in NooBaa's format,
+   * because which format a bucket is in is not known until it is
+   * loaded, and constructing a strategy costs nothing. */
+  std::unique_ptr<nsfs::BucketStateStrategy> bucket_state_strategy;
+
+  /* null unless rgw_nsfs_noobaa_config_root names a store */
+  std::unique_ptr<nsfs::BucketStateStrategy> nb_bucket_state_strategy;
+  std::unique_ptr<nsfs::XattrStrategy> nb_xattr_strategy;
+  std::unique_ptr<nsfs::PathStrategy> nb_path_strategy;
+  std::unique_ptr<nsfs::MPUStrategy> nb_mpu_strategy;
   /* what a bucket's extensions marker resolves to;  both resolve to the
    * same strategy instances until S5 supplies the noobaa ones */
+  /* The format shared and strong both use:  NooBaa's layout with the nsfs
+   * metadata representation, which is what EXT_RGW_META declares. */
+  nsfs::Format rgw_meta_format;
+  /* What base is:  NooBaa's, entire. */
+  nsfs::Format noobaa_format;
   nsfs::BucketProfile base_profile;
   nsfs::BucketProfile shared_profile;
   nsfs::BucketProfile extended_profile;
@@ -944,6 +972,12 @@ public:
   nsfs::MPUStrategy* get_mpu_strategy() { return mpu_strategy.get(); }
   nsfs::XattrStrategy* get_xattr_strategy() { return xattr_strategy.get(); }
   nsfs::PathStrategy* get_path_strategy() { return path_strategy.get(); }
+  nsfs::BucketStateStrategy* get_bucket_state_strategy() {
+    return bucket_state_strategy.get();
+  }
+  nsfs::BucketStateStrategy* get_noobaa_bucket_state_strategy() {
+    return nb_bucket_state_strategy.get();
+  }
   }
   const nsfs::ReservedNames& get_reserved_names() const { return reserved_names; }
 
@@ -1170,6 +1204,56 @@ public:
     return profile ? profile->name() : "unresolved";
   }
 
+  const nsfs::Format* get_format() const {
+    return profile ? profile->format : nullptr;
+  }
+
+  /* Test support:  point a bucket at a profile the driver does not
+   * hold, so the selection can be shown choosing between two formats
+   * while only one real one exists.  The caller owns the profile. */
+  void set_profile_for_test(const nsfs::BucketProfile* p) {
+    profile = p;
+    apply_format();
+  }
+
+  /* Point the bucket's directory at the format's strategies.
+   *
+   * An FSEnt carries its own and every child inherits its parent's, so
+   * seeding the bucket's directory is what puts a whole subtree in the
+   * bucket's format.  Called wherever `profile` changes.  Without it
+   * the subtree keeps the driver's, which are seeded on the root at
+   * initialize() and are nsfs's -- the wrong format for every object
+   * read and written through an FSEnt in a base bucket. */
+  void apply_format();
+
+  /* The strategies this bucket's format selects.
+   *
+   * They fall back to the driver's, for two reasons:  a bucket whose
+   * profile has not been resolved yet has no format, and only one
+   * format exists, so the results coincide.  Call sites move onto
+   * these as each NooBaa strategy arrives and gives the selection
+   * something to be wrong about;  migrating them while every path
+   * resolves to the same objects would be a large diff nothing can
+   * check.
+   *
+   * The MPU one differs:  a format which does not name a staging
+   * layout takes the driver's, because per-part against strided is
+   * chosen from what the filesystem can do. */
+  nsfs::XattrStrategy* xattr_strategy() const;
+  nsfs::PathStrategy* path_strategy() const;
+  nsfs::MPUStrategy* mpu_strategy() const;
+  nsfs::BucketStateStrategy* bucket_state_strategy() const;
+  /* The fallback bucket-state strategy, or null.
+   *
+   * Runs the opposite way round to the object strategies, and
+   * deliberately.  A
+   * base bucket's *objects* are in NooBaa's format, so NooBaa's is the
+   * primary there.  A base bucket's *state* is nsfs's where it exists,
+   * because bucket configuration is the one thing written in the nsfs
+   * form while a bucket is still base -- so the nsfs strategy is the
+   * primary here and NooBaa's store is read only for a bucket that has
+   * none. */
+  nsfs::BucketStateStrategy* bucket_state_fallback() const;
 
 
 
@@ -1265,6 +1349,16 @@ private:
   std::string dm_version_id;
 
 public:
+
+  /* The strategies this object's bucket is in.
+   *
+   * Through the bucket, not the driver:  the driver's are nsfs's, and a
+   * base bucket's objects are in NooBaa's format.  They fall back to
+   * the driver's for an object with no bucket, which is what a few
+   * internal paths construct. */
+  nsfs::XattrStrategy* xattr_strategy() const;
+  nsfs::PathStrategy* path_strategy() const;
+
   struct NSFSReadOp : ReadOp {
     NSFSObject* source;
     int64_t part_ofs{0};
@@ -1505,98 +1599,12 @@ private:
   int get_cur_version(const DoutPrefixProvider *dpp, rgw_obj_key &key);
 };
 
-struct NSFSMPObj {
-  std::string oid;
-  std::string upload_id;
-  ACLOwner owner;
-  multipart_upload_info upload_info;
-  std::string meta;
+/* NSFSMPObj moved to mpu_records.h, beside NSFSUploadPartInfo and for
+ * the same reason:  an upload's record is the staging layout's, and a
+ * strategy has to be able to read what its own layout wrote. */
 
-  NSFSMPObj(NSFSDriver* driver, const std::string& _oid,
-	     std::optional<std::string> _upload_id, ACLOwner& _owner) {
-    if (_upload_id && !_upload_id->empty()) {
-      init(_oid, *_upload_id, _owner);
-    } else if (!_oid.empty()) {
-      if (!from_meta(_oid, _owner)) {
-	init_gen(driver, _oid, _owner);
-      }
-    }
-  }
-  /* parse <objname>.<uploadid> — the format produced by get_meta() */
-  bool from_meta(const std::string& meta_name, ACLOwner& _owner) {
-    auto pos = meta_name.rfind('.');
-    if (pos == std::string::npos || pos == 0) return false;
-    std::string _oid = meta_name.substr(0, pos);
-    std::string _upload_id = meta_name.substr(pos + 1);
-    if (_upload_id.empty()) return false;
-    init(_oid, _upload_id, _owner);
-    return true;
-  }
-  void init(const std::string& _oid, const std::string& _upload_id, ACLOwner& _owner) {
-    oid = _oid;
-    upload_id = _upload_id;
-    owner = _owner;
-    meta = oid + "." + upload_id;
-  }
-  void init_gen(NSFSDriver* driver, const std::string& _oid, ACLOwner& _owner);
-  void clear() {
-    oid = "";
-    meta = "";
-    upload_id = "";
-  }
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    encode(oid, bl);
-    encode(upload_id, bl);
-    encode(owner, bl);
-    encode(upload_info, bl);
-    encode(meta, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
-    decode(oid, bl);
-    decode(upload_id, bl);
-    decode(owner, bl);
-    decode(upload_info, bl);
-    decode(meta, bl);
-    DECODE_FINISH(bl);
-  }
-};
-WRITE_CLASS_ENCODER(NSFSMPObj)
-
-struct NSFSUploadPartInfo {
-  uint32_t num{0};
-  uint64_t size{0};
-  std::string etag;
-  ceph::real_time mtime;
-  std::optional<rgw::cksum::Cksum> cksum;
-
-  void encode(bufferlist& bl) const {
-    ENCODE_START(3, 1, bl);
-    encode(num, bl);
-    encode(etag, bl);
-    encode(mtime, bl);
-    encode(cksum, bl);
-    encode(size, bl);
-    ENCODE_FINISH(bl);
-  }
-  void decode(bufferlist::const_iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(3, 1, 1, bl);
-    decode(num, bl);
-    decode(etag, bl);
-    decode(mtime, bl);
-    if (struct_v > 1) {
-      decode(cksum, bl);
-    }
-    if (struct_v > 2) {
-      decode(size, bl);
-    }
-    DECODE_FINISH(bl);
-  }
-};
-WRITE_CLASS_ENCODER(NSFSUploadPartInfo)
+/* NSFSUploadPartInfo moved to part_info.h:  a part's record is the
+ * staging layout's, so MPUStrategy has to be able to read it. */
 
 class NSFSMultipartUpload;
 
@@ -1699,6 +1707,21 @@ public:
 
 private:
   std::string get_fname();
+
+  /* The staging layout this upload's bucket is in.  Resolved through
+   * the bucket rather than the driver, because which layout a tree
+   * stages in is a property of its format. */
+  nsfs::MPUStrategy* mpu_strategy() const;
+  /* and the other two, for the same reason:  the object this upload
+   * completes into is written in the bucket's format, not the
+   * driver's */
+  nsfs::XattrStrategy* xattr_strategy() const;
+  nsfs::PathStrategy* path_strategy() const;
+
+  /* The directory holding staging directories, where the format keeps
+   * them somewhere other than the bucket.  Held because the staging
+   * directory keeps a raw parent pointer into it. */
+  std::unique_ptr<nsfs::Directory> staging_root_dir;
   int load(const DoutPrefixProvider *dpp, bool create=false);
 };
 
@@ -1751,6 +1774,9 @@ public:
 class NSFSMultipartWriter : public StoreWriter {
 private:
   NSFSDriver* driver;
+  /* the upload's staging layout, resolved once by get_writer();  this
+   * writer has no bucket of its own to ask */
+  nsfs::MPUStrategy* mpu_strat;
   const ACLOwner& owner;
   const rgw_placement_rule *ptail_placement_rule;
   uint64_t part_num;
@@ -1787,6 +1813,11 @@ private:
    * damage is invisible afterwards:  each record still describes where
    * its part was meant to go. */
   int divert(uint64_t written);
+  /* Move this part into the file its own length belongs in.
+   *
+   * Asked of the layout, which is the only thing that knows whether a
+   * file's identity depends on the size it holds;  see
+   * MPUStrategy::relocation_target().  A no-op for the nsfs layout. */
   /* the upload this part belongs to, as the client knows it.  The
    * injection map is keyed by this rather than by the internal meta,
    * so a test can arm exactly the upload it created. */
@@ -1823,6 +1854,7 @@ public:
 		    file::listing::MultipartCacheKey&& _mp_cache_key) :
     StoreWriter(dpp, y),
     driver(_driver),
+    mpu_strat(_mpu_strat),
     owner(_owner),
     ptail_placement_rule(_ptail_placement_rule),
     part_num(_part_num),

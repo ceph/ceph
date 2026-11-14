@@ -22,6 +22,9 @@
 #include "rgw_acl.h"
 #include "rgw_sal.h"
 
+/* for xattr_map_t:  the on-disk view, full names to raw values, which
+ * the widened pair below deals in */
+#include "fs_strategy.h"
 
 namespace rgw { namespace sal { namespace nsfs {
 
@@ -38,6 +41,11 @@ class XattrStrategy {
 public:
   virtual ~XattrStrategy() = default;
 
+  /* Whether the driver writes attributes in this format.  NooBaa's is
+   * read and never written (DECISIONS.md 2026-10-21):
+   * FSEnt::write_attrs() rejects a write in a format that does not
+   * write, and lets its removals through. */
+  virtual bool writes() const { return true; }
 
   /* the on-disk xattr name for a logical attribute key, and the inverse.
    * parse_disk_name() returns false for a name this format does not own,
@@ -47,6 +55,75 @@ public:
   virtual bool parse_disk_name(const std::string& disk,
 			       std::string& key) const = 0;
 
+  /* The same pair, widened from one name to a set of whole attributes.
+   *
+   * disk_name()/parse_disk_name() rename a key and let the bytes
+   * through, which is all a format needs when one logical attribute is
+   * one attribute on disk.  Where it is not, they can say nothing:
+   * object tags are one ceph-encoded RGWObjTags for us and one
+   * attribute per tag for NooBaa, so the mapping is one-to-many in
+   * both directions and the value has to be built rather than copied.
+   *
+   * These have to be the mechanism rather than a question like
+   * object_owner(), because the consumer is not nsfs.  rgw_op.cc reads
+   * and writes tags through the attribute map -- `attrs.find(
+   * RGW_ATTR_TAGS)` in six places, modify_obj_attrs() for
+   * PutObjectTagging, delete_obj_attrs() for the delete -- and that is
+   * generic code shared with every driver.  A method on this interface
+   * would never be called.  So RGW_ATTR_TAGS must appear in the map,
+   * assembled from what is on disk, and fan back out when written.
+   *
+   * Both take the on-disk NAMES and an fd, not a map of values.  The
+   * caller has the names already -- one flistxattr it was doing
+   * anyway -- and reading every value to hand over would buy an
+   * fgetxattr per object for attributes no format wants;  on trees
+   * nsfs wrote the unclaimed set is `security.selinux` and nothing else.
+   * So each format reads what it claims and nothing else, and a
+   * format that claims nothing issues no syscall at all.
+   *
+   * parse_disk_attrs() runs after the per-name pass and is given the
+   * names that pass could not place.  It adds the logical attributes
+   * they encode.
+   *
+   * disk_attrs() translates one logical attribute the other way.  It
+   * is given the names currently on the file because a one-to-many
+   * write has to remove what it supersedes, and which names those are
+   * is only knowable from the disk -- the tag keys are IN the names.
+   * Returns false for a key it does not handle, which is the signal to
+   * fall back to disk_name(). */
+  virtual void parse_disk_attrs(const DoutPrefixProvider* dpp, int fd,
+				const std::vector<std::string>& unclaimed,
+				Attrs& out) const {}
+
+
+  virtual bool disk_attrs(const std::string& key, const bufferlist& val,
+			  const std::vector<std::string>& current,
+			  xattr_map_t& to_write,
+			  std::vector<std::string>& to_remove) const {
+    return false;
+  }
+
+
+  /* Does RGW store this attribute's value as a counted string, with its
+   * NUL terminator included?
+   *
+   * `rgw_get_request_metadata` (`rgw_op.h:2479`) and four other writers
+   * append `size() + 1`.  On rados the byte is private.  On a filesystem
+   * it is on-disk format, and it makes nsfs's metadata differ from NooBaa's
+   * for the same object by a byte nobody meant to write.
+   *
+   * The driver strips it on the way to disk and restores it on the way
+   * back, so the tree is clean and every RGW consumer sees what it sees
+   * on rados.  A compensation, not a fix -- see
+   * docs/RGW_COUNTED_STRING_ATTRS.md.  If upstream drops the terminator,
+   * this predicate and `attr_on_disk()` go with it.
+   *
+   * It asks about the KEY because the value cannot say:  a ceph-encoded
+   * blob may legitimately end in a zero byte, so "strip whatever ends in
+   * NUL" would corrupt an ACL or a bucket_info.  And only attributes
+   * that are counted on *every* path that writes them may be listed --
+   * etag is not, which is why it is absent. */
+  virtual bool counted_string_value(const std::string& key) const = 0;
 
   virtual const char* name() const = 0;
 };
@@ -88,8 +165,32 @@ public:
 		       std::string& key) const override;
 
 
+  bool counted_string_value(const std::string& key) const override;
+
   const char* name() const override { return "rgw"; }
 };
 
+class NooBaaXattrStrategy : public XattrStrategy {
+public:
+  std::string disk_name(const std::string& key) const override;
+  bool parse_disk_name(const std::string& disk,
+		       std::string& key) const override;
+
+  /* object tags, which are one attribute per tag in NooBaa's format and
+   * one encoded RGWObjTags in the nsfs format */
+  void parse_disk_attrs(const DoutPrefixProvider* dpp, int fd,
+			const std::vector<std::string>& unclaimed,
+			Attrs& out) const override;
+  bool disk_attrs(const std::string& key, const bufferlist& val,
+		  const std::vector<std::string>& current,
+		  xattr_map_t& to_write,
+		  std::vector<std::string>& to_remove) const override;
+
+
+  bool counted_string_value(const std::string& key) const override;
+
+  const char* name() const override { return "noobaa"; }
+  bool writes() const override { return false; }
+};
 
 }}} // namespace rgw::sal::nsfs

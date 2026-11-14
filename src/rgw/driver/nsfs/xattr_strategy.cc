@@ -16,6 +16,13 @@
 #include "xattr_strategy.h"
 #include "bucket_profile.h"
 
+#include <sys/xattr.h>
+#include <fmt/format.h>
+
+#include "common/dout_fmt.h"
+#include "common/errno.h"
+#include "rgw_object_lock.h"
+#include "rgw_tag.h"
 
 #include <cerrno>
 
@@ -85,16 +92,327 @@ int PrefixedXattrStrategy::object_owner(const Attrs& attrs,
   return 0;
 }
 
+/* The attributes RGW writes as counted strings, from the five writers
+ * catalogued in docs/RGW_COUNTED_STRING_ATTRS.md.  Everything else --
+ * the encoded ACL, object_type, bucket_info, the multipart blobs -- is
+ * ceph-encoded and must not be touched. */
 bool PrefixedXattrStrategy::counted_string_value(const std::string& key) const
 {
+  /* x-amz-meta-*, from rgw_get_request_metadata() and the librgw
+   * setxattr path */
+  if (key.compare(0, sizeof(RGW_ATTR_META_PREFIX) - 1,
+		  RGW_ATTR_META_PREFIX) == 0) {
+    return true;
+  }
+
+  /* s->generic_attrs, written by rgw_op.cc:3861;  the table is
+   * generic_attrs[] at rgw_rest.cc:122 */
+  return key == RGW_ATTR_CONTENT_TYPE ||
+         key == RGW_ATTR_CONTENT_LANG ||
+         key == RGW_ATTR_EXPIRES ||
+         key == RGW_ATTR_CACHE_CONTROL ||
+         key == RGW_ATTR_CONTENT_DISP ||
+         key == RGW_ATTR_CONTENT_ENC ||
+         key == RGW_ATTR_X_ROBOTS_TAG;
+
+  /* NOT RGW_ATTR_ETAG.  Only the opaque-etag path (rgw_op.cc:9000)
+   * writes it counted;  the ordinary MD5 path does not, and nsfs stores
+   * it bare since 15386ec4a26.  Listing it made the strip a no-op and
+   * the restore a corruption -- HEAD returned an etag with a NUL inside
+   * the quotes. */
+}
+
+/* --- NooBaaXattrStrategy ---------------------------------------------- */
+
+static const std::string NB_USER_PREFIX = "user.";
+static const std::string NB_INTERNAL_PREFIX = "user.noobaa.";
+static const std::string NB_CONTENT_MD5 = "user.content_md5";
+
+/* RGW's logical key on the left, NooBaa's on the right.  One to one;  the
+ * rows which are not are named in the header and deferred. */
+struct NBKeyMap {
+  const char* logical;
+  const char* disk;
+};
+
+static const NBKeyMap NB_KEYS[] = {
+  { RGW_ATTR_ETAG,            "user.content_md5" },
+  { RGW_ATTR_CONTENT_TYPE,    "user.noobaa.content_type" },
+  { RGW_ATTR_CONTENT_ENC,     "user.noobaa.content_encoding" },
+  { "version_id",             "user.noobaa.version_id" },
+  { "delete_marker",          "user.noobaa.delete_marker" },
+  { "non_current_timestamp",  "user.noobaa.non_current_timestamp" },
+  /* Not under user.noobaa., and the only name NooBaa's own reader
+   * excludes from user metadata -- XATTR_METADATA_IGNORE_LIST holds
+   * this and nothing else (`namespace_fs.js:111`, `:281`).  Without
+   * the mapping it fell through to the metadata rule below and came
+   * back as `x-amz-meta-storage_class`, which is a key no client set
+   * and NooBaa's gateway does not report. */
+  { RGW_ATTR_STORAGE_CLASS,   "user.storage_class" },
+};
+
+/* Three results, not two.
+ *
+ * A key NooBaa keeps goes to NooBaa's name.  An nsfs key with no
+ * counterpart -- bucket_info, rename intent -- goes under user.nsfs:,
+ * where it is inert to them;  the convergence report already records
+ * that we write bucket_info on a base bucket for exactly that reason.
+ * Only an S3 attribute they deliberately do not keep is dropped, and
+ * that is the ACL:  the empty name says "nowhere", and a write path
+ * which sees one skips the attribute rather than inventing a place for
+ * it.
+ *
+ * Returning the key unchanged would be the wrong third result -- it
+ * would write under a name neither format owns, which is how two
+ * gateways come to disagree about what an object carries. */
+std::string NooBaaXattrStrategy::disk_name(const std::string& key) const
+{
+  for (const auto& m : NB_KEYS) {
+    if (key == m.logical) {
+      return m.disk;
+    }
+  }
+
+  /* user metadata is NooBaa's key for key:  to_fs_xattr() prefixes with
+   * "user." and nothing else */
+  if (key.compare(0, std::strlen(RGW_ATTR_META_PREFIX),
+		  RGW_ATTR_META_PREFIX) == 0) {
+    return fmt::format("{}{}", NB_USER_PREFIX,
+		       std::string_view(key).substr(std::strlen(RGW_ATTR_META_PREFIX)));
+  }
+
+  /* nowhere:  NooBaa stores no ACL, and NooBaa's own gateway accepts the
+   * request and keeps nothing (`s3_put_object_acl.js`) */
+  if (key == RGW_ATTR_ACL) {
+    return std::string();
+  }
+
+  /* nsfs's, and inert to NooBaa */
+  return fmt::format("{}{}", NSFS_XATTR_PREFIX, key);
+}
+
+bool NooBaaXattrStrategy::parse_disk_name(const std::string& disk,
+					  std::string& key) const
+{
+  for (const auto& m : NB_KEYS) {
+    if (disk == m.disk) {
+      key = m.logical;
+      return true;
+    }
+  }
 
   /* nsfs's, written on NooBaa's tree because it has nowhere else to go;
    * a marker is no attribute's */
   if (disk.starts_with(MARKER_XATTR_PREFIX)) {
     return false;
   }
+  if (disk.compare(0, NSFS_XATTR_PREFIX.size(), NSFS_XATTR_PREFIX) == 0) {
+    key = disk.substr(NSFS_XATTR_PREFIX.size());
+    return true;
+  }
+
+  /* Everything else under user.noobaa. is NooBaa's and structured --
+   * tags, the object-lock family, the part record -- and this format
+   * does not yet map any of it.  Claimed as unmapped rather than
+   * surfaced:  handing a caller one of NooBaa's plain strings under an RGW
+   * key would feed a NooBaa value to a ceph decoder. */
+  if (disk.compare(0, NB_INTERNAL_PREFIX.size(), NB_INTERNAL_PREFIX) == 0) {
+    return false;
+  }
 
   /* What is left under user. is user metadata, `user.nsfs.*` included:
    * a client's key that begins "nsfs." */
+  if (disk.compare(0, NB_USER_PREFIX.size(), NB_USER_PREFIX) == 0) {
+    key = fmt::format("{}{}", RGW_ATTR_META_PREFIX,
+		      std::string_view(disk).substr(NB_USER_PREFIX.size()));
+    return true;
+  }
+
+  return false;
+}
+
+int NooBaaXattrStrategy::object_owner(const Attrs& attrs,
+				      ACLOwner& owner) const
+{
+
+/* Never.  The terminator is an RGW-side accident that RGW's own writers
+ * append;  nothing in NooBaa's tree carries one, and restoring a byte
+ * NooBaa never wrote would corrupt the value.  See
+ * docs/RGW_COUNTED_STRING_ATTRS.md. */
+/* NooBaa's tag attribute prefix.  One attribute per tag, the key after
+ * the prefix, the value raw (`namespace_fs.js:85`, `:1443`, `:2251`).
+ * Hardcoded a second time in NooBaa's GPFS ILM policy generator
+ * (`nc_lifecycle.js:1359`), which is a second writer on the same
+ * platform. */
+static const std::string NB_TAG_PREFIX = "user.noobaa.tag.";
+
+/* The object-lock family:  three plain attributes of NooBaa's against
+ * two ceph-encoded ones of nsfs's (`namespace_fs.js:86-88`).  Legal
+ * hold is one-to-one and still needs the widened pair, because the
+ * shapes differ -- NooBaa's is the literal `ON` or `OFF` and nsfs's is an
+ * encoded RGWObjectLegalHold.  Retention is two-to-one. */
+static const std::string NB_LEGAL_HOLD = "user.noobaa.legal_hold";
+static const std::string NB_RETENTION_MODE = "user.noobaa.retention_mode";
+static const std::string NB_RETENTION_DATE = "user.noobaa.retention_date";
+
+/* one of NooBaa's plain attributes, or nothing */
+static std::optional<std::string> nb_read(const DoutPrefixProvider* dpp,
+					  int fd, const std::string& name)
+{
+  char buf[512];
+  if (len < 0) {
+    return std::nullopt;
+  }
+  return std::string(buf, len);
+}
+
+/* Is this on-disk name one of NooBaa's tags?
+ *
+ * NooBaa's reader tests with String.includes() -- a SUBSTRING match, not
+ * a prefix one (`namespace_fs.js:316`) -- and strips with
+ * .replace(prefix,''), which removes only the first occurrence.  NooBaa's
+ * own clear path uses startsWith instead (`fs_napi.cpp:551`), so the
+ * two disagree;  a name that merely contains the prefix is reported as
+ * a tag and not removed by DeleteObjectTagging.
+ *
+ * nsfs follows NooBaa's reader, because it is what decides what a
+ * client sees.  The consequence is NooBaa's and is reproduced
+ * deliberately:  a
+ * PUT header `x-amz-meta-noobaa.tag.colour` becomes the on-disk name
+ * `user.noobaa.tag.colour` (NooBaa's user metadata is `user.` + the key
+ * with `x-amz-meta-` stripped) and comes back as a tag rather than as
+ * metadata. */
+static bool nb_tag_name(const std::string& disk, std::string& key)
+{
+  const auto at = disk.find(NB_TAG_PREFIX);
+  if (at == std::string::npos) {
+    return false;
+  }
+  key = fmt::format("{}{}", std::string_view(disk).substr(0, at),
+		    std::string_view(disk).substr(at + NB_TAG_PREFIX.size()));
+  return !key.empty();
+}
+
+
+void NooBaaXattrStrategy::parse_disk_attrs(
+    const DoutPrefixProvider* dpp, int fd,
+    const std::vector<std::string>& unclaimed, Attrs& out) const
+{
+  if (out.contains(RGW_ATTR_TAGS)) {
+    /* nsfs's is already there, from the per-name pass on a converting
+     * object;  it is the later word */
+    return;
+  }
+
+  RGWObjTags tags;
+  bool any = false;
+  for (const auto& disk : unclaimed) {
+    std::string key;
+    if (!nb_tag_name(disk, key)) {
+      continue;
+    }
+    char buf[1024];
+    if (len < 0) {
+      /* raced with a delete, or longer than any tag may be -- NooBaa's
+       * own limit is far below this.  One tag, not the set. */
+      ldpp_dout_fmt(dpp, 4, "could not read {}: {};  skipping it",
+		    disk, cpp_strerror(errno));
+      continue;
+    }
+    tags.add_tag(key, std::string(buf, len));
+    any = true;
+  }
+
+  if (any) {
+    bufferlist bl;
+    tags.encode(bl);
+    out.emplace(RGW_ATTR_TAGS, std::move(bl));
+  }
+
+  /* The object-lock family.
+   *
+   * Retention is both attributes or neither, which is NooBaa's rule too:
+   * NooBaa's reader returns undefined unless mode AND date are present
+   * (`namespace_fs.js:2890`).  A half-written pair is not a retention
+   * with a missing field, it is no retention -- and a retention
+   * carrying the epoch because a date would not parse reads as
+   * expired, which is the one wrong result object lock must never
+   * return. */
+  bool has_hold = false, has_mode = false, has_date = false;
+  for (const auto& disk : unclaimed) {
+    has_hold |= (disk == NB_LEGAL_HOLD);
+    has_mode |= (disk == NB_RETENTION_MODE);
+    has_date |= (disk == NB_RETENTION_DATE);
+  }
+
+  if (has_hold && !out.contains(RGW_ATTR_OBJECT_LEGAL_HOLD)) {
+    if (auto v = nb_read(dpp, fd, NB_LEGAL_HOLD)) {
+      RGWObjectLegalHold lh;
+      lh.set_status(*v);
+      bufferlist bl;
+      lh.encode(bl);
+      out.emplace(RGW_ATTR_OBJECT_LEGAL_HOLD, std::move(bl));
+    }
+  }
+
+  if (has_mode && has_date && !out.contains(RGW_ATTR_OBJECT_RETENTION)) {
+    auto mode = nb_read(dpp, fd, NB_RETENTION_MODE);
+    auto date = nb_read(dpp, fd, NB_RETENTION_DATE);
+    ceph::real_time until;
+    if (mode && date && (parse_time(date->c_str(), &until) == 0)) {
+      RGWObjectRetention r;
+      r.set_mode(*mode);
+      r.set_retain_until_date(until);
+      bufferlist bl;
+      r.encode(bl);
+      out.emplace(RGW_ATTR_OBJECT_RETENTION, std::move(bl));
+    } else if (mode && date) {
+      ldpp_dout_fmt(dpp, 0, "ERROR: object carries a retention date this "
+		    "gateway cannot parse (\"{}\");  reporting no "
+		    "retention rather than one that reads as expired", *date);
+    }
+  }
+}
+
+bool NooBaaXattrStrategy::disk_attrs(const std::string& key,
+				     const bufferlist& val,
+				     const std::vector<std::string>& current,
+				     xattr_map_t& to_write,
+				     std::vector<std::string>& to_remove) const
+{
+  /* Only ever a removal.  A NooBaa attribute is read and never written
+   * (DECISIONS.md 2026-10-21);  what reaches here empty is a conversion,
+   * or a removal on a bucket being converted, taking a key one format
+   * spreads over several names off the object.  A value to write is not
+   * claimed:  the placement falls to disk_name(), and
+   * FSEnt::write_attrs() rejects it, since this format does not write. */
+  if (val.length() != 0) {
+    return false;
+  }
+  if (key == RGW_ATTR_OBJECT_LEGAL_HOLD) {
+    to_remove.push_back(NB_LEGAL_HOLD);
+    return true;
+  }
+  if (key == RGW_ATTR_OBJECT_RETENTION) {
+    to_remove.push_back(NB_RETENTION_MODE);
+    to_remove.push_back(NB_RETENTION_DATE);
+    return true;
+  }
+  if (key != RGW_ATTR_TAGS) {
+    return false;
+  }
+  for (const auto& disk : current) {
+    std::string tk;
+    if (nb_tag_name(disk, tk)) {
+      to_remove.push_back(disk);
+    }
+  }
+  return true;
+}
+
+bool NooBaaXattrStrategy::counted_string_value(const std::string& key) const
+{
+  return false;
+}
 
 }}} // namespace rgw::sal::nsfs

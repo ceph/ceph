@@ -16,11 +16,16 @@
 #include "mpu_strategy.h"
 
 #include <cerrno>
+#include <dirent.h>
 #include <fcntl.h>
 #include <linux/stat.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <cctype>
+#include <charconv>
+#include <algorithm>
+#include <sys/xattr.h>
 
 #include <fmt/format.h>
 
@@ -29,6 +34,9 @@
 #include "include/scope_guard.h"
 
 #include "fs_strategy.h"
+#include "rgw_common.h"
+#include "include/uuid.h"
+#include "common/ceph_json.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -64,6 +72,50 @@ static const std::string RGW_MP_ASSEMBLED_NAME = ".assembled";
  * open a second size file. */
 static const std::string RGW_MP_SHARED_PREFIX = "parts-size-";
 
+/* NooBaa's names, from noobaa-core 68ca22d33.  The temp directory is
+ * config.NSFS_TEMP_DIR_NAME + '_' + bucket_id, and the bucket id comes
+ * from NooBaa's config store, so only the prefix is knowable here. */
+static const std::string NB_TMPDIR_PREFIX = ".noobaa-nsfs_";
+static const std::string NB_MPU_ROOT = "multipart-uploads";
+static const std::string NB_PART_PREFIX = "part-";
+static const std::string NB_CREATE_NAME = "create_object_upload";
+static const std::string NB_FINAL_NAME = "final";
+static const char* NB_XATTR_PART_SIZE = "user.noobaa.part_size";
+static const char* NB_XATTR_PART_OFFSET = "user.noobaa.part_offset";
+static const char* NB_XATTR_CONTENT_MD5 = "user.content_md5";
+
+
+std::string PerPartMPUStrategy::staging_dir_name(const std::string& meta) const
+{
+  return RGW_MP_STAGING_PREFIX + url_encode(meta, true);
+}
+
+bool PerPartMPUStrategy::is_staging_dir(std::string_view name) const
+{
+  return name.starts_with(RGW_MP_STAGING_PREFIX);
+}
+
+/* The name carries the meta, so this costs a decode and a split and
+ * opens nothing. */
+bool PerPartMPUStrategy::staged_upload(const DoutPrefixProvider* dpp,
+				       int root_fd, std::string_view dname,
+				       StagedUpload& out) const
+{
+  if (!is_staging_dir(dname)) {
+    return false;
+  }
+  std::string_view rest = dname;
+  rest.remove_prefix(RGW_MP_STAGING_PREFIX.size());
+
+  const std::string meta = url_decode(std::string(rest));
+  const auto dot = meta.rfind('.');
+  if (dot == std::string::npos || dot == 0 || dot + 1 == meta.size()) {
+    return false;
+  }
+  out.key = meta.substr(0, dot);
+  out.upload_id = meta.substr(dot + 1);
+  return true;
+}
 
 std::string PerPartMPUStrategy::part_name(uint32_t part_num) const
 {
@@ -72,14 +124,27 @@ std::string PerPartMPUStrategy::part_name(uint32_t part_num) const
 
 std::optional<uint32_t> PerPartMPUStrategy::part_number(std::string_view name) const
 {
+  if (! name.starts_with(RGW_MP_PART_PREFIX)) {
     return std::nullopt;
   }
+  const std::string_view digits{name.substr(RGW_MP_PART_PREFIX.length())};
   if (digits.empty()) {
     return std::nullopt;
   }
 
+  /* from_chars rather than stoul:  it parses into the target type, so a
+   * value above 2^32-1 is reported as out of range instead of being
+   * truncated by a narrowing cast;  it needs no try/catch;  and
+   * requiring ptr == end rejects "00001x", which stoul would accept.
+   * This reads a name found on disk, so anything may be there. */
+  uint32_t part_num = 0;
+  const char* const end = digits.data() + digits.size();
+  const auto [ptr, ec] = std::from_chars(digits.data(), end, part_num);
+  if (ec != std::errc{} || ptr != end) {
     return std::nullopt;
   }
+  return part_num;
+}
 
 std::optional<MPUStrategy::PartTarget>
 PerPartMPUStrategy::part_target(uint32_t part_num,
@@ -92,6 +157,95 @@ PerPartMPUStrategy::part_target(uint32_t part_num,
   return PartTarget{part_name(part_num), 0, std::nullopt, false};
 }
 
+/* Never.  A part lives where its record says, in the file the upload's
+ * stride names, and a part shorter than the stride leaves the rest of
+ * its slot unread.  This layout gives every part its own file in any
+ * case. */
+std::optional<MPUStrategy::PartTarget>
+PerPartMPUStrategy::relocation_target(uint32_t part_num, uint64_t stored,
+				      std::optional<uint64_t> stride) const
+{
+  return std::nullopt;
+}
+
+/* The nsfs record is one ceph-encoded blob, written and read through the
+ * bucket's XattrStrategy, so it arrives already decoded in `attrs` and
+ * the fd is not needed. */
+bool PerPartMPUStrategy::part_record(const DoutPrefixProvider* dpp,
+				     int dir_fd, std::string_view pname,
+				     const Attrs& attrs,
+				     PartRecord& out) const
+{
+  auto i = attrs.find(RGW_NSFS_ATTR_MPUPLOAD);
+  if (i == attrs.end()) {
+    return false;
+  }
+  NSFSUploadPartInfo upi;
+  try {
+    auto bufit = i->second.cbegin();
+    decode(upi, bufit);
+  } catch (buffer::error&) {
+    return false;
+  }
+
+  out.size = upi.size;
+  out.stored = upi.stored;
+  out.offset = upi.offset;
+  out.shared = upi.shared;
+  out.etag = std::move(upi.etag);
+  out.mtime = upi.mtime;
+  out.cksum = std::move(upi.cksum);
+  return true;
+}
+
+/* Nothing.  The record is the ceph-encoded attribute the caller writes
+ * through the bucket's XattrStrategy, and the meta file's content is
+ * unused -- part_record() and staged_upload() read that attribute and
+ * the staging directory's name, neither of which is written here. */
+int PerPartMPUStrategy::write_staged_upload(const DoutPrefixProvider* dpp,
+					    int dir_fd,
+					    const StagedUpload& su) const
+{
+  return 0;
+}
+
+int PerPartMPUStrategy::write_part_record(const DoutPrefixProvider* dpp,
+					  int dir_fd, std::string_view pname,
+					  const PartRecord& rec) const
+{
+  return 0;
+}
+
+/* The nsfs record is one ceph-encoded blob on the meta file, read through the
+ * bucket's XattrStrategy, so it arrives already decoded in `attrs`
+ * and the fd is not needed -- the same arrangement as part_record(). */
+bool PerPartMPUStrategy::upload_info(const DoutPrefixProvider* dpp,
+				     int root_fd, std::string_view dname,
+				     const Attrs& attrs,
+				     multipart_upload_info& out,
+				     Attrs* extra, ACLOwner* owner) const
+{
+  auto i = attrs.find(RGW_NSFS_ATTR_MPUPLOAD);
+  if (i == attrs.end()) {
+    return false;
+  }
+  /* the record is the whole NSFSMPObj;  only its upload_info is
+   * returned here -- the identity beside it is staged_upload()'s and
+   * the owner is upload_owner()'s */
+  ACLOwner none;
+  rgw::sal::NSFSMPObj mp(nullptr, std::string(), std::nullopt, none);
+  try {
+    auto bufit = i->second.cbegin();
+    decode(mp, bufit);
+  } catch (buffer::error&) {
+    return false;
+  }
+  out = mp.upload_info;
+  if (owner) {
+    *owner = mp.owner;
+  }
+  return true;
+}
 
 std::string PerPartMPUStrategy::meta_name() const
 {
@@ -121,6 +275,9 @@ const ReservedNames& PerPartMPUStrategy::reserved_names() const
   if (out_fd < 0) {
   }
   auto close_out = make_scope_guard([out_fd] { ::close(out_fd); });
+      mret < 0) {
+    return mret;
+  }
 
   /* Each part is its own whole file, so the recorded placement says
    * nothing this layout needs:  only the part numbers are taken from
@@ -149,6 +306,16 @@ const ReservedNames& PerPartMPUStrategy::reserved_names() const
   return 0;
 }
 
+/* Never, for the same reason as the per-part layout:  assembly reads
+ * every shared part out of the one file the stride names, at the
+ * offset in its record.  A part which is not the stride is either
+ * shorter than its slot or was diverted while it was being written. */
+std::optional<MPUStrategy::PartTarget>
+StridedMPUStrategy::relocation_target(uint32_t part_num, uint64_t stored,
+				      std::optional<uint64_t> stride) const
+{
+  return std::nullopt;
+}
 
 std::optional<MPUStrategy::PartTarget>
 StridedMPUStrategy::part_target(uint32_t part_num,
@@ -240,6 +407,9 @@ StridedMPUStrategy::shared_name(uint64_t stride) const
   if (out_fd < 0) {
   }
   auto close_out = make_scope_guard([out_fd] { ::close(out_fd); });
+      mret < 0) {
+    return mret;
+  }
 
   int shared_fd = -1;
   auto close_shared = make_scope_guard([&shared_fd] {
@@ -284,6 +454,579 @@ StridedMPUStrategy::shared_name(uint64_t stride) const
   return 0;
 }
 
+
+std::string NooBaaMPUStrategy::staging_dir_name(const std::string& meta) const
+{
+  /* NooBaa's directory is the upload id alone -- a randomUUID -- so the
+   * key half of the meta is dropped.  The key is inside, in
+   * create_object_upload, which is what costs them an open per upload
+   * when they enumerate. */
+  const auto dot = meta.rfind('.');
+  if (dot == std::string::npos) {
+    return meta;
+  }
+  return meta.substr(dot + 1);
+}
+
+bool NooBaaMPUStrategy::is_staging_dir(std::string_view name) const
+{
+  /* NooBaa's staging never sits among objects -- it is under the bucket's
+   * temp directory, which is reserved whole -- so an entry of the
+   * bucket directory is never one of NooBaa's.  This is the question
+   * asked while enumerating objects, and for this format it always
+   * returns no;  recognising an upload is staged_upload()'s job, and it
+   * reads the directory rather than guessing from a uuid. */
+  return false;
+}
+
+/* NooBaa's directory is named for the upload id and the key is inside, in
+ * create_object_upload (`namespace_fs.js` create_object_upload, and
+ * NooBaa's own list_uploads reads it back the same way).  So this opens
+ * and parses one file per upload, which is what NooBaa's layout costs. */
+/* NooBaa's create_object_upload, parsed.
+ *
+ * Two questions read it -- what upload is here, and what the create
+ * request settled -- so the read is in one place.  False means this
+ * is not an upload NooBaa started:  no document, an empty one, or one that
+ * is not JSON.  Skipped rather than failed, because a listing walks
+ * entries that may be anything. */
+static bool nb_create_params(const DoutPrefixProvider* dpp, int root_fd,
+			     std::string_view dname, JSONParser& parser)
+{
+  if (dname.empty() || (dname == ".") || (dname == "..")) {
+    return false;
+  }
+
+  const std::string path = fmt::format("{}/{}", dname, NB_CREATE_NAME);
+  if (fd < 0) {
+    return false;
+  }
+  auto close_fd = make_scope_guard([fd] { ::close(fd); });
+
+  /* NooBaa's create params are a JSON dump of the request, so bounded by
+   * what a CreateMultipartUpload carries;  a file larger than this is
+   * not one of NooBaa's */
+  static constexpr size_t MAX_CREATE_PARAMS = 64 * 1024;
+  std::string buf(MAX_CREATE_PARAMS, '\0');
+  ssize_t len = ::pread(fd, buf.data(), buf.size(), 0);
+  if (len <= 0) {
+    return false;
+  }
+  buf.resize(len);
+
+  if (!parser.parse(buf.data(), buf.size())) {
+    ldpp_dout_fmt(dpp, 4, "could not parse {} as JSON;  not treating it as an "
+			  "upload", path);
+    return false;
+  }
+  return true;
+}
+
+bool NooBaaMPUStrategy::staged_upload(const DoutPrefixProvider* dpp,
+				      int root_fd, std::string_view dname,
+				      StagedUpload& out) const
+{
+  if (dname.empty() || (dname == ".") || (dname == "..")) {
+    return false;
+  }
+
+  JSONParser parser;
+  if (!nb_create_params(dpp, root_fd, dname, parser)) {
+    return false;
+  }
+  JSONObj* kobj = parser.find_obj("key");
+  if (!kobj) {
+    ldpp_dout_fmt(dpp, 4, "{}/{} carries no key", dname, NB_CREATE_NAME);
+    return false;
+  }
+
+  out.key = kobj->get_data();
+  out.upload_id = std::string(dname);
+  return !out.key.empty();
+}
+
+/* The bucket's NooBaa temp directory, or nothing when there is none or
+ * more than one.  `ambiguous` distinguishes those two, which matters
+ * only to the write side:  a tree with none may be created into, a
+ * tree with several may not. */
+static std::optional<std::string> nb_scan_tmpdir(const DoutPrefixProvider* dpp,
+						 int bucket_fd,
+						 bool* ambiguous);
+static std::optional<std::string> nb_tmpdir(const DoutPrefixProvider* dpp,
+					    int bucket_fd);
+static bool nb_tmpdir_ambiguous(const DoutPrefixProvider* dpp, int bucket_fd);
+
+/* A bucket id minted here, when the tree has none.  NooBaa uses
+ * crypto.randomUUID(), so this is one too -- the shape is what a
+ * NooBaa gateway would expect to find, even though this particular id
+ * is not in NooBaa's config store. */
+static std::string gen_uuid()
+{
+  uuid_d u;
+  u.generate_random();
+  return u.to_string();
+}
+
+std::optional<std::string>
+NooBaaMPUStrategy::staging_root(const DoutPrefixProvider* dpp,
+				int bucket_fd) const
+{
+  auto found = nb_tmpdir(dpp, bucket_fd);
+  if (!found) {
+    return std::nullopt;
+  }
+
+  /* The temp directory is not enough.  NooBaa creates it for ordinary
+   * object writes too (`namespace_fs.js:1303`, `:1569`) and only
+   * creates multipart-uploads/ beneath it at the first
+   * create_object_upload, so a bucket which has been written to and
+   * never uploaded to has the one and not the other.  Returning a
+   * path that does not exist would send an enumeration at it. */
+  const std::string root = fmt::format("{}/{}", *found, NB_MPU_ROOT);
+    return std::nullopt;
+  }
+  return root;
+}
+
+std::optional<std::string>
+NooBaaMPUStrategy::staging_root_for_write(const DoutPrefixProvider* dpp,
+					  int bucket_fd) const
+{
+  return std::nullopt;
+}
+
+
+/* Does this name end in `_` followed by something UUID-shaped?
+ *
+ * NooBaa's temp directory is `config.NSFS_TEMP_DIR_NAME + '_' + bucket_id`
+ * (`native_fs_utils.js:797`).  Only the first part is configurable;  the
+ * separator and the id are structural, and the id is NooBaa's bucket
+ * record's `_id`, a crypto.randomUUID().  So this recognises the part
+ * of the name they cannot change. */
+static bool nb_uuid_suffixed(std::string_view n)
+{
+  static constexpr size_t UUID_LEN = 36;   /* 8-4-4-4-12 */
+  if (n.size() < UUID_LEN + 2) {           /* at least `x_` before it */
+    return false;
+  }
+  const std::string_view tail = n.substr(n.size() - UUID_LEN);
+  if (n[n.size() - UUID_LEN - 1] != '_') {
+    return false;
+  }
+  for (size_t i = 0; i < UUID_LEN; ++i) {
+    const char c = tail[i];
+    if ((i == 8) || (i == 13) || (i == 18) || (i == 23)) {
+      if (c != '-') {
+	return false;
+      }
+    } else if (!std::isxdigit(static_cast<unsigned char>(c))) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/* NooBaa's per-bucket temp directory, found by what it is rather than by
+ * what it is called.
+ *
+ * `config.NSFS_TEMP_DIR_NAME` is a default in NooBaa's config.js, not a
+ * constant, so a deployment can change `.noobaa-nsfs` and matching the
+ * prefix would then find nothing:  every upload in flight invisible,
+ * and a second temp directory created beside NooBaa's.
+ *
+ * Two tests, in this order.  A directory holding `multipart-uploads/`
+ * IS the temp directory whatever it is called, and that settles every
+ * tree which has ever taken an upload -- which is every tree the read
+ * path cares about.  Otherwise the name, but only its structural part:
+ * see nb_uuid_suffixed().  The prefix is not consulted at all.
+ *
+ * `ambiguous` distinguishes "none" from "more than one", which matters
+ * only to the write side:  a tree with none may be created into, a tree
+ * with several may not. */
+static std::optional<std::string> nb_scan_tmpdir(const DoutPrefixProvider* dpp,
+						 int bucket_fd, bool* ambiguous)
+{
+  if (ambiguous) {
+    *ambiguous = false;
+  }
+  int fd = ::openat(bucket_fd, ".", O_RDONLY | O_DIRECTORY);
+  if (fd < 0) {
+    return std::nullopt;
+  }
+  DIR* d = ::fdopendir(fd);
+  if (!d) {
+    ::close(fd);
+    return std::nullopt;
+  }
+  auto close_d = make_scope_guard([d] { ::closedir(d); });
+
+  std::string found;
+  bool found_by_content = false;
+  struct dirent* de;
+  while ((de = ::readdir(d)) != nullptr) {
+    std::string_view n = de->d_name;
+    if ((n == ".") || (n == "..")) {
+      continue;
+    }
+
+    /* the one that holds uploads, whatever it is called */
+    const std::string probe = fmt::format("{}/{}", n, NB_MPU_ROOT);
+
+    if (!holds_uploads && !nb_uuid_suffixed(n)) {
+      continue;
+    }
+    if (holds_uploads && !found_by_content) {
+      /* content beats shape:  a directory that holds uploads is the
+       * one returned even if something else in the bucket is named like
+       * a temp directory */
+      found = n;
+      found_by_content = true;
+      continue;
+    }
+    if (found_by_content && !holds_uploads) {
+      continue;
+    }
+    if (!found.empty()) {
+      /* Two temp directories means two bucket ids have written here.
+       * Which one holds the uploads is not decidable from the tree, so
+       * reject the write rather than pick -- and do not create a
+       * third. */
+      ldpp_dout_fmt(dpp, 0, "ERROR: bucket holds more than one NooBaa temp "
+			    "directory ({}, {});  not guessing which holds "
+			    "multipart uploads", found, n);
+      if (ambiguous) {
+	*ambiguous = true;
+      }
+      return std::nullopt;
+    }
+    found = n;
+  }
+
+  if (found.empty()) {
+    return std::nullopt;
+  }
+  return found;
+}
+
+static std::optional<std::string> nb_tmpdir(const DoutPrefixProvider* dpp,
+					    int bucket_fd)
+{
+  return nb_scan_tmpdir(dpp, bucket_fd, nullptr);
+}
+
+static bool nb_tmpdir_ambiguous(const DoutPrefixProvider* dpp, int bucket_fd)
+{
+  bool ambiguous = false;
+  (void) nb_scan_tmpdir(dpp, bucket_fd, &ambiguous);
+  return ambiguous;
+}
+
+std::string NooBaaMPUStrategy::part_name(uint32_t part_num) const
+{
+  /* not zero padded:  NooBaa's is Number(name.slice('part-'.length)) */
+  return fmt::format("{}{}", NB_PART_PREFIX, part_num);
+}
+
+std::optional<uint32_t>
+NooBaaMPUStrategy::part_number(std::string_view name) const
+{
+  if (!name.starts_with(NB_PART_PREFIX)) {
+    return std::nullopt;
+  }
+  const std::string_view digits{name.substr(NB_PART_PREFIX.length())};
+  if (digits.empty()) {
+    return std::nullopt;
+  }
+  uint32_t num{0};
+  auto [p, ec] = std::from_chars(digits.data(), digits.data() + digits.size(),
+				 num);
+  if ((ec != std::errc{}) || (p != digits.data() + digits.size())) {
+    return std::nullopt;
+  }
+  return num;
+}
+
+/* NooBaa's staging is read and never written (DECISIONS.md 2026-10-21):
+ * adoption carries an upload NooBaa started into RGW's layout, and a
+ * write to one it has not reached waits for it. */
+std::optional<MPUStrategy::PartTarget>
+NooBaaMPUStrategy::part_target(uint32_t part_num,
+			       std::optional<uint64_t> stride) const
+{
+  return std::nullopt;
+}
+
+std::optional<std::string>
+NooBaaMPUStrategy::shared_name(uint64_t stride) const
+{
+  return fmt::format("{}{}", RGW_MP_SHARED_PREFIX, stride);
+}
+
+std::string NooBaaMPUStrategy::meta_name() const
+{
+  return NB_CREATE_NAME;
+}
+
+std::string NooBaaMPUStrategy::assembled_name() const
+{
+  return NB_FINAL_NAME;
+}
+
+namespace {
+
+/* one unsigned decimal xattr, or nothing */
+std::optional<uint64_t> u64_xattr(int fd, const char* name)
+{
+  char buf[32];
+  if (len <= 0) {
+    return std::nullopt;
+  }
+  buf[len] = '\0';
+  char* end = nullptr;
+  errno = 0;
+  unsigned long long v = ::strtoull(buf, &end, 10);
+  if (errno || (end == buf) || (*end != '\0')) {
+    return std::nullopt;
+  }
+  return static_cast<uint64_t>(v);
+}
+
+std::string base36(uint64_t v)
+{
+  static const char digits[] = "0123456789abcdefghijklmnopqrstuvwxyz";
+  if (v == 0) {
+    return "0";
+  }
+  std::string out;
+  while (v) {
+    out.push_back(digits[v % 36]);
+    v /= 36;
+  }
+  std::reverse(out.begin(), out.end());
+  return out;
+}
+
+} /* anonymous namespace */
+
+/* NooBaa's staging is read and never written (DECISIONS.md 2026-10-21):
+ * adoption carries an upload NooBaa started into RGW's layout, and a
+ * write to one it has not reached waits for it. */
+std::optional<MPUStrategy::PartTarget>
+NooBaaMPUStrategy::relocation_target(uint32_t part_num, uint64_t stored,
+				     std::optional<uint64_t> stride) const
+{
+  return std::nullopt;
+}
+
+/* NooBaa's record is three plain attributes of its own, which the nsfs
+ * XattrStrategy drops as foreign, so this reads them off the file.
+ *
+ * The etag is the one place NooBaa's writer and reader disagree.
+ * _finish_upload() writes both user.content_md5 and
+ * user.noobaa.part_etag (`namespace_fs.js:1421`, `:1424`), and
+ * _get_etag() -- which NooBaa's list_multiparts and completion
+ * check both use -- reads content_md5 and falls back to a string
+ * derived from the stat.  So content_md5 is the result, part_etag is
+ * a cross-check, and the derived form is what a part carries when no
+ * digest was computed.  It is not an MD5 and a strict client will say
+ * so;  that is NooBaa's behaviour, and base is NooBaa's format.
+ *
+ * `stored` has no counterpart:  nothing sits between NooBaa's op layer
+ * and writer to change a byte count, so the accounted size is
+ * the stored size. */
+bool NooBaaMPUStrategy::part_record(const DoutPrefixProvider* dpp,
+				    int dir_fd, std::string_view pname,
+				    const Attrs& attrs,
+				    PartRecord& out) const
+{
+  /* The nsfs record first, where there is one.  A part nsfs wrote
+   * carries both:  NooBaa's, which NooBaa's gateway reads, and the nsfs
+   * one, which is the only one of the two with a checksum in it.
+   * NooBaa's alone is what a part NooBaa wrote has. */
+  auto i = attrs.find(RGW_NSFS_ATTR_MPUPLOAD);
+  if (i != attrs.end()) {
+    NSFSUploadPartInfo upi;
+    try {
+      auto bufit = i->second.cbegin();
+      decode(upi, bufit);
+      out.size = upi.size;
+      out.stored = upi.stored;
+      out.offset = upi.offset;
+      out.shared = upi.shared;
+      out.etag = std::move(upi.etag);
+      out.mtime = upi.mtime;
+      out.cksum = std::move(upi.cksum);
+      return true;
+    } catch (buffer::error&) {
+      /* fall through to NooBaa's */
+    }
+  }
+
+  if (part_fd < 0) {
+    return false;
+  }
+  auto close_part = make_scope_guard([part_fd] { ::close(part_fd); });
+
+  auto size = u64_xattr(part_fd, NB_XATTR_PART_SIZE);
+  if (!size) {
+    return false;
+  }
+  out.size = *size;
+  out.stored = *size;
+  out.offset = u64_xattr(part_fd, NB_XATTR_PART_OFFSET).value_or(0);
+  /* every part of a size shares that size's file */
+  out.shared = true;
+
+  char ebuf[256];
+  if (elen > 0) {
+    out.etag.assign(ebuf, elen);
+  }
+
+  struct statx stx;
+    out.mtime = ceph::real_clock::from_time_t(stx.stx_mtime.tv_sec) +
+		std::chrono::nanoseconds(stx.stx_mtime.tv_nsec);
+    if (out.etag.empty()) {
+      /* _get_version_id_by_stat:  mtime in nanoseconds and the inode,
+       * both base 36 */
+      const uint64_t ns =
+	  static_cast<uint64_t>(stx.stx_mtime.tv_sec) * 1000000000ull +
+	  stx.stx_mtime.tv_nsec;
+      out.etag = fmt::format("mtime-{}-ino-{}", base36(ns), base36(stx.stx_ino));
+    }
+  }
+
+  return true;
+}
+
+/* NooBaa's staging is read and never written (DECISIONS.md 2026-10-21):
+ * adoption carries an upload NooBaa started into RGW's layout, and a
+ * write to one it has not reached waits for it. */
+int NooBaaMPUStrategy::write_staged_upload(const DoutPrefixProvider* dpp,
+					   int dir_fd,
+					   const StagedUpload& su) const
+{
+  return -ERR_INVALID_BUCKET_STATE;
+}
+
+/* NooBaa's staging is read and never written (DECISIONS.md 2026-10-21):
+ * adoption carries an upload NooBaa started into RGW's layout, and a
+ * write to one it has not reached waits for it. */
+int NooBaaMPUStrategy::write_part_record(const DoutPrefixProvider* dpp,
+					 int dir_fd, std::string_view pname,
+					 const PartRecord& rec) const
+{
+  return -ERR_INVALID_BUCKET_STATE;
+}
+
+/* None recorded.  create_object_upload is a dump of the request
+ * parameters and names no initiator, and complete and abort check
+ * none, so an upload has no owner apart from its bucket's -- which is
+ * what NooBaa's ListMultipartUploads would show if it showed one;  it
+ * returns the placeholder `DEFAULT_S3_USER`.  Not the staging
+ * directory's uid, which is a POSIX identity and not an S3 owner. */
+int NooBaaMPUStrategy::upload_owner(const DoutPrefixProvider* dpp,
+				    int root_fd, std::string_view dname,
+				    ACLOwner& out) const
+{
+  return -ENODATA;
+}
+
+/* NooBaa's is the content of create_object_upload, and nothing of it is
+ * an attribute, so this reads the document rather than `attrs`.
+ *
+ * What comes across is what NooBaa holds:  the storage class, and the
+ * object-lock family, which NooBaa's own completion reads off the same
+ * document and puts on the finished object.  Placement stays at its
+ * default because a placement rule is an RGW concept;  the checksum
+ * family stays at its default because NooBaa's CreateMultipartUpload
+ * never persisted one.
+ */
+bool NooBaaMPUStrategy::upload_info(const DoutPrefixProvider* dpp,
+				    int root_fd, std::string_view dname,
+				    const Attrs& attrs,
+				    multipart_upload_info& out,
+				    Attrs* extra, ACLOwner* owner) const
+{
+  JSONParser parser;
+  if (!nb_create_params(dpp, root_fd, dname, parser)) {
+    return false;
+  }
+
+  if (JSONObj* sc = parser.find_obj("storage_class")) {
+    out.dest_placement.storage_class = sc->get_data();
+  }
+
+  if (extra) {
+    auto put = [extra](const std::string& key, const std::string& v) {
+      if (!v.empty()) {
+	bufferlist bl;
+	bl.append(v);
+	extra->emplace(key, std::move(bl));
+      }
+    };
+    if (JSONObj* ct = parser.find_obj("content_type")) {
+      put(RGW_ATTR_CONTENT_TYPE, ct->get_data());
+    }
+    if (JSONObj* ce = parser.find_obj("content_encoding")) {
+      put(RGW_ATTR_CONTENT_ENC, ce->get_data());
+    }
+    if (JSONObj* x = parser.find_obj("xattr")) {
+      for (auto i = x->find_first(); !i.end(); ++i) {
+	put(fmt::format("{}{}", RGW_ATTR_META_PREFIX, (*i)->get_name()),
+	    (*i)->get_data());
+      }
+    }
+  }
+
+  if (JSONObj* lock = parser.find_obj("lock_settings")) {
+    if (JSONObj* r = lock->find_obj("retention")) {
+      JSONObj* m = r->find_obj("mode");
+      JSONObj* d = r->find_obj("retain_until_date");
+      if (m && d) {
+	ceph::real_time until;
+	/* NooBaa's date is whatever new Date() produced, which is ISO
+	 * 8601.  A retention we cannot date is not applied:  a
+	 * retention with the epoch in it would read as expired, which
+	 * is the one wrong result object lock must never return. */
+	if (parse_time(d->get_data().c_str(), &until) == 0) {
+	  out.obj_retention_exist = true;
+	  out.obj_retention.set_mode(m->get_data());
+	  out.obj_retention.set_retain_until_date(until);
+	} else {
+	  ldpp_dout_fmt(dpp, 0, "ERROR: upload {} carries a retention date "
+				"this gateway cannot parse (\"{}\");  not "
+				"applying the retention", dname, d->get_data());
+	}
+      }
+    }
+    if (JSONObj* h = lock->find_obj("legal_hold")) {
+      if (JSONObj* st = h->find_obj("status")) {
+	out.obj_legal_hold_exist = true;
+	out.obj_legal_hold.set_status(st->get_data());
+      }
+    }
+  }
+
+  return true;
+}
+
+const ReservedNames& NooBaaMPUStrategy::reserved_names() const
+{
+  static const ReservedNames names{
+    .exact = { NB_CREATE_NAME, NB_FINAL_NAME },
+    .prefixes = { RGW_MP_SHARED_PREFIX, NB_PART_PREFIX },
+    /* the temp directory holds uploads in flight, which S3 reports and
+     * which therefore make a bucket non-empty */
+    .staging_prefixes = { NB_TMPDIR_PREFIX },
+  };
+  return names;
+}
+
+/* NooBaa's staging is read and never written (DECISIONS.md 2026-10-21):
+ * adoption carries an upload NooBaa started into RGW's layout, and a
+ * write to one it has not reached waits for it. */
+  return -ERR_INVALID_BUCKET_STATE;
+}
 
 
 }}} // namespace rgw::sal::nsfs

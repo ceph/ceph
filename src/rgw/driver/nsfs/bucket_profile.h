@@ -24,6 +24,33 @@ namespace rgw { namespace sal { namespace nsfs {
 
 class XattrStrategy;
 class PathStrategy;
+class MPUStrategy;
+class BucketStateStrategy;
+
+/* The on-disk format of a tree:  one member per format-dependent
+ * concern, so the formats sit beside each other with the same shape.
+ *
+ * The MPU member is nullable, and null means the driver's own choice
+ * between per-part and strided, which turns on whether the filesystem
+ * shares extents.  That is a property of the mount and not of the
+ * tree, so `rgw_meta_format` leaves it unset.  A format whose staging
+ * layout is its own -- NooBaa's size-keyed one -- names it here.
+ *
+ * A Format is complete or it does not exist.  A driver must not hold
+ * one carrying another format's staging layout with the nsfs attribute
+ * names:  that is a combination no profile represents and no tree is
+ * ever in.  A test may compose one, which is how the selection is
+ * given something to be wrong about while only one real format
+ * exists. */
+struct Format {
+  XattrStrategy* xattr_strategy{nullptr};
+  PathStrategy* path_strategy{nullptr};
+  MPUStrategy* mpu_strategy{nullptr};
+  BucketStateStrategy* bucket_state_strategy{nullptr};
+  const char* fname{"unset"};
+
+  const char* name() const { return fname; }
+};
 
 /* Whether a bucket carries the nsfs extensions, and what that resolves to.
  *
@@ -121,6 +148,21 @@ inline constexpr uint32_t EXT_ACLS        = 0x2;  /* S3 access control lists */
  * be a value somebody can read back. */
 inline constexpr uint32_t EXT_RGW_META    = 0x8;
 
+/* WHAT EARNS A BIT.
+ *
+ * Not "a feature we implemented".  The two bits above it are the
+ * pattern:  EXT_SHADOW marks a STRUCTURE, a subtree that is in the
+ * tree or is not, and EXT_ACLS marks a fact NooBaa has no concept of
+ * -- NooBaa stores no ACL, so the nsfs one is not NooBaa's thing under
+ * another name, it is something extra.
+ *
+ * An attribute both formats keep, differing only in name or packing,
+ * needs no bit:  EXT_RGW_META already says whether this tree holds
+ * RGW attributes or NooBaa's.  Object tags were mapped without one and object
+ * lock will be.  An earlier comment here expected them to "move into
+ * shared" by defining bits;  that was written when neither had any
+ * representation in this driver, and mapping them put them in shared
+ * on their own. */
 
 /* The bits this build can serve.  The rejection test, and the reason a
  * declared-but-unbuilt extension must stay out of it:  accepting a bit
@@ -129,6 +171,23 @@ inline constexpr uint32_t EXT_RGW_META    = 0x8;
 inline constexpr uint32_t EXTENSIONS_KNOWN =
     EXT_SHADOW | EXT_ACLS | EXT_RGW_META;
 
+/* The named profiles.
+ *
+ * base    -- no attribute at all.  Read and written as NooBaa does, and
+ *            nothing of nsfs's is added.  It is an absence and not a
+ *            value, so it is the one profile with no mask.
+ * shared  -- RGW's metadata representation on NooBaa's layout.  One
+ *            bit, and that is the whole of it:  an attribute whose
+ *            name differs is covered by EXT_RGW_META, so a feature
+ *            both formats have needs nothing added when it is mapped.
+ *            Object tags landed that way and so will object lock.
+ * strong  -- everything this build can serve, which is everything
+ *            named.  Should a bit ever be declared ahead of its
+ *            implementation it stays out of here, because a bucket
+ *            must never be marked with an extension the writer cannot
+ *            produce.
+ *
+ * A tree is handable back to NooBaa only at `base`. */
 inline constexpr uint32_t EXTENSIONS_BASE   = EXTENSIONS_NONE;
 inline constexpr uint32_t EXTENSIONS_SHARED = EXT_RGW_META;
 inline constexpr uint32_t EXTENSIONS_STRONG = EXTENSIONS_KNOWN;
@@ -165,6 +224,7 @@ inline bool is_named_profile(uint32_t ext)
  * strategy at a time without touching the call sites again. */
 struct BucketProfile {
   uint32_t extensions{EXTENSIONS_NONE};
+  const Format* format{nullptr};
 
   bool has(uint32_t ext) const { return (extensions & ext) != 0; }
 
