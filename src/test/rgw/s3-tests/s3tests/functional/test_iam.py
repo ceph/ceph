@@ -6,7 +6,7 @@ from botocore.exceptions import ClientError
 import pytest
 
 from .utils import assert_raises
-from .test_s3 import _multipart_upload
+from .test_s3 import _multipart_upload, _exercise_bucket_policy_principal_type
 from . import (
     configfile,
     setup_teardown,
@@ -29,6 +29,26 @@ from . import (
 )
 from .utils import _get_status, _get_status_and_error_code
 from .iam import iam_root, iam_alt_root
+
+
+@pytest.mark.bucket_policy
+@pytest.mark.iam_account
+@pytest.mark.parametrize('principal_type', ['User', 'Account'])
+def test_account_principal_type(iam_root, principal_type):
+    if principal_type == 'Account':
+        client = get_iam_root_client(service_name='s3')
+    else:
+        user_name = make_iam_name('PrincipalTypeUser')
+        iam_root.create_user(UserName=user_name, Path=get_iam_path_prefix())
+        iam_root.put_user_policy(
+            UserName=user_name, PolicyName='AllowS3', PolicyDocument=json.dumps({
+                'Version': '2012-10-17',
+                'Statement': [{'Effect': 'Allow', 'Action': 's3:*', 'Resource': '*'}],
+            }))
+        key = iam_root.create_access_key(UserName=user_name)['AccessKey']
+        client = get_iam_s3client(
+            aws_access_key_id=key['AccessKeyId'], aws_secret_access_key=key['SecretAccessKey'])
+    _exercise_bucket_policy_principal_type(client, principal_type)
 
 
 @pytest.mark.user_policy
