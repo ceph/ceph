@@ -42,9 +42,9 @@ describe('when cluster creation is completed', () => {
 
     it('should check if monitoring stacks are running on the root host', { retries: 2 }, () => {
       const monitoringStack = ['alertmanager', 'grafana', 'node-exporter', 'prometheus'];
-      hosts.clickTab('cd-host-details', 'ceph-node-00', 'Daemons');
+      hosts.clickHostTab('ceph-node-00', 'Service instances');
       for (const daemon of monitoringStack) {
-        cy.get('cd-host-details').within(() => {
+        cy.get('cd-host-resource-page').within(() => {
           services.checkServiceStatus(daemon);
         });
       }
@@ -57,23 +57,23 @@ describe('when cluster creation is completed', () => {
     });
 
     it('should display inventory', () => {
-      hosts.clickTab('cd-host-details', hostnames[1], 'Physical Disks');
-      cy.get('cd-host-details').within(() => {
+      hosts.clickHostTab(hostnames[1], 'Storage Devices');
+      cy.get('cd-host-resource-page cd-inventory').within(() => {
         hosts.getTableCount('total').should('be.gte', 0);
       });
     });
 
     it('should display daemons', () => {
-      hosts.clickTab('cd-host-details', hostnames[1], 'Daemons');
-      cy.get('cd-host-details').within(() => {
+      hosts.clickHostTab(hostnames[1], 'Service instances');
+      cy.get('cd-host-resource-page cd-service-daemon-list').within(() => {
         hosts.getTableCount('total').should('be.gte', 0);
       });
     });
 
     it('should check if mon daemon is running on all hosts', () => {
       for (const hostname of hostnames) {
-        hosts.clickTab('cd-host-details', hostname, 'Daemons');
-        cy.get('cd-host-details').within(() => {
+        hosts.clickHostTab(hostname, 'Service instances');
+        cy.get('cd-host-resource-page').within(() => {
           services.checkServiceStatus('mon');
         });
       }

@@ -20,6 +20,7 @@ add_executable(ceph_test_neocls_log
   )
 target_link_libraries(ceph_test_neocls_log
   libneorados
+  ceph-json-headers
   ${BLKID_LIBRARIES}
   ${CMAKE_DL_LIBS}
   ${CRYPTO_LIBS}
