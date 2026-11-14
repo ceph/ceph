@@ -40,12 +40,12 @@ data pool(s).
    ceph auth get-or-create client.mirror mon 'profile cephfs-mirror' mds 'allow r' osd 'allow rw tag cephfs metadata=*, allow r tag cephfs data=*' mgr 'allow r'
 
 Create a user for each file system peer (on the secondary/remote cluster).
-This user needs to have full capabilities on the MDS (to take snapshots) and
-the OSDs:
+This user needs to have full capabilities on the MDS (``allow *``, required to
+take snapshots and to set fscrypt metadata) and the OSDs:
 
 .. prompt:: bash $
 
-   ceph fs authorize <fs_name> client.mirror_remote / rwps
+   ceph fs authorize <fs_name> client.mirror_remote / *
 
 This user should be used (as part of peer specification) when adding a peer.
 

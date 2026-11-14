@@ -179,6 +179,9 @@ private:
     bool purged_or_itype_changed = false;
     bool is_snapdiff = false;
     bool sync_check = true;
+    // Directory: this inode has (or inherits) an fscrypt policy.
+    // File/symlink on dataq: parent directory was fscrypt (copied by crawler).
+    bool is_fscrypt = false;
 
     SyncEntry() {
     }
@@ -327,7 +330,8 @@ private:
     }
     bool wait_for_sync();
 
-    int remote_mkdir(const std::string &epath, const struct ceph_statx &stx);
+    int remote_mkdir(const std::string &epath, const struct ceph_statx &stx,
+                     bool is_fscrypt);
   protected:
     PeerReplayer& m_peer_replayer;
     // It's not used in RemoteSync but required to be accessed in datasync threads
@@ -835,9 +839,10 @@ private:
 
   int remote_file_op(std::shared_ptr<SyncMechanism>& syncm, const std::string &dir_root,
                      const std::string &epath, const struct ceph_statx &stx,
-                     bool sync_check, const FHandles &fh, bool need_data_sync, bool need_attr_sync);
+                     bool sync_check, const FHandles &fh, bool need_data_sync, bool need_attr_sync,
+                     bool is_fscrypt);
   int copy_to_remote(const std::string &dir_root, const std::string &epath, const struct ceph_statx &stx,
-                     const FHandles &fh, uint64_t num_blocks, struct cblock *b);
+                     const FHandles &fh, uint64_t num_blocks, struct cblock *b, bool is_fscrypt);
   int sync_perms(const std::string& path);
 
   // add syncm to syncm_q

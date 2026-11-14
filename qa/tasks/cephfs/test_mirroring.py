@@ -1106,7 +1106,7 @@ class TestMirroring(CephFSTestCase):
         """Restore mirror remote client caps used by the mirror test suite."""
         self.get_ceph_cmd_result(
             'auth', 'caps', 'client.mirror_remote',
-            'mds', 'allow rwps',
+            'mds', 'allow *',
             'mon', 'allow r',
             'osd', "allow rw tag cephfs *=*",
             'mgr', 'allow r')
@@ -2107,6 +2107,94 @@ class TestMirroring(CephFSTestCase):
 
         self.remove_directory(self.primary_fs_name, self.primary_fs_id, '/d0')
         self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+
+    def test_cephfs_mirror_fscrypt_sync(self):
+        """Mirror an fscrypt directory (short + long names) and verify remote unlock."""
+        try:
+            self.mount_a.run_shell_payload("sudo fscrypt --help")
+        except CommandFailedError:
+            self.skipTest("fscrypt CLI is not installed")
+
+        self.setup_mount_b(mds_perm='rw')
+
+        protector = 'mirrortest'
+        key_file = '/tmp/mirror_fscrypt.key'
+        dir_name = 'd0_fscrypt'
+        peer_spec = "client.mirror_remote@ceph"
+        long_name = 'a' * 255
+
+        self.mount_a.run_shell_payload("sudo fscrypt setup --force --verbose")
+        self.mount_a.run_shell_payload(
+            f"sudo fscrypt setup {self.mount_a.hostfs_mntpt} --verbose")
+        self.mount_a.run_shell_payload(
+            f"sudo dd if=/dev/urandom of={key_file} bs=32 count=1")
+
+        self.mount_a.run_shell(["mkdir", "-p", dir_name])
+        self.mount_a.run_shell_payload(
+            f"sudo fscrypt encrypt --verbose --source=raw_key --name={protector} "
+            f"--no-recovery --key={key_file} {dir_name}")
+        self.mount_a.run_shell_payload(f"sudo chmod 777 {dir_name}")
+
+        self.mount_a.write_file(f'{dir_name}/short.txt', 'hello-fscrypt-mirror')
+        self.mount_a.run_shell(["mkdir", f"{dir_name}/subdir"])
+        self.mount_a.write_file(f'{dir_name}/subdir/nested.txt', 'nested-data')
+        self.mount_a.symlink(f'{dir_name}/short.txt', f'{dir_name}/sym_short')
+        self.mount_a.write_file(f'{dir_name}/{long_name}', 'long-name-contents')
+
+        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        self.add_directory(self.primary_fs_name, self.primary_fs_id, f'/{dir_name}')
+        self.peer_add(self.primary_fs_name, self.primary_fs_id, peer_spec,
+                      self.secondary_fs_name)
+
+        self.mount_a.run_shell(["mkdir", f"{dir_name}/.snap/snap0"])
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               peer_spec, f'/{dir_name}', 'snap0', 1)
+
+        key_b64 = self.mount_a.run_shell(
+            ["base64", "-w0", key_file]).stdout.getvalue().strip()
+        self.mount_b.run_shell_payload(
+            f"echo '{key_b64}' | base64 -d | sudo tee {key_file} >/dev/null")
+        self.mount_b.run_shell_payload("sudo fscrypt setup --force --verbose")
+        self.mount_b.run_shell_payload(
+            f"sudo fscrypt setup {self.mount_b.hostfs_mntpt} --verbose")
+        self.mount_b.run_shell_payload(
+            f"sudo fscrypt unlock --verbose --key={key_file} {dir_name}")
+
+        self.assertIn(long_name, self.mount_b.ls(path=dir_name))
+        self.assertEqual(self.mount_b.read_file(f'{dir_name}/short.txt'),
+                         'hello-fscrypt-mirror')
+        self.assertEqual(self.mount_b.read_file(f'{dir_name}/{long_name}'),
+                         'long-name-contents')
+        self.assertEqual(self.mount_b.read_file(f'{dir_name}/subdir/nested.txt'),
+                         'nested-data')
+
+        same_host = (self.mount_a.client_remote.hostname ==
+                     self.mount_b.client_remote.hostname)
+        src = os.path.join(self.mount_a.hostfs_mntpt, dir_name)
+        dst = os.path.join(self.mount_b.hostfs_mntpt, dir_name)
+        if same_host:
+            self.mount_a.compare_trees(os.path.join(src, 'subdir'),
+                                       os.path.join(dst, 'subdir'))
+        else:
+            self.assertEqual(
+                self.mount_a.dir_checksum(path=f'{dir_name}/subdir',
+                                          follow_symlinks=True),
+                self.mount_b.dir_checksum(path=f'{dir_name}/subdir',
+                                          follow_symlinks=True))
+
+        self.mount_a.run_shell_payload(f"sudo fscrypt lock --verbose {dir_name}")
+        self.mount_b.run_shell_payload(f"sudo fscrypt lock --verbose {dir_name}")
+        if same_host:
+            self.mount_a.compare_trees(src, dst, compare_data=False)
+
+        self.mount_a.run_shell_payload(
+            f"sudo fscrypt unlock --verbose --key={key_file} {dir_name}")
+        self.remove_directory(self.primary_fs_name, self.primary_fs_id, f'/{dir_name}')
+        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        self.mount_a.run_shell_payload(
+            f"sudo fscrypt purge --force --verbose {self.mount_a.hostfs_mntpt}")
+        self.mount_b.run_shell_payload(
+            f"sudo fscrypt purge --force --verbose {self.mount_b.hostfs_mntpt}")
 
     def test_cephfs_mirror_cancel_sync(self):
         self.setup_mount_b(mds_perm='rw')
