@@ -8185,11 +8185,12 @@ int RGWRados::set_attrs(const DoutPrefixProvider *dpp, RGWObjectCtx* octx, RGWBu
       int64_t poolid = ioctx.get_id();
 
       /*
-       * Retain Object category as CloudTiered while restore is in
-       * progress or failed or if its temporarily restored copy.
+       * Retain Object category as CloudTiered for a cloud-tiered stub, while
+       * restore is in progress or failed or if its temporarily restored copy.
        * Check new attrs first, fall back to existing attrs for partial updates.
        */
-      RGWObjCategory category = RGWObjCategory::Main;
+      RGWObjCategory category = (manifest && manifest->is_tier_type_s3()) ?
+                                RGWObjCategory::CloudTiered : RGWObjCategory::Main;
       bufferlist rs_bl, rt_bl;
       if (auto it = attrs.find(RGW_ATTR_RESTORE_STATUS); it != attrs.end()) {
         rs_bl = it->second;
