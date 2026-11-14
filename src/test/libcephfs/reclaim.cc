@@ -34,6 +34,8 @@
 #include <vector>
 #include <thread>
 #include <atomic>
+#include <chrono>
+#include <future>
 
 #define	CEPHFS_RECLAIM_TIMEOUT		60
 
@@ -250,6 +252,73 @@ TEST(LibCephFS, ReclaimResetAfterMDSFailover) {
   struct ceph_statx stx;
   ASSERT_EQ(ceph_statx(cmount, "/reclaim_failover_test/testfile", &stx, 0, 0), 0);
 
+  ceph_unmount(cmount);
+  ceph_release(cmount);
+}
+
+static int evict_client(struct ceph_mount_info *admin, uint64_t id)
+{
+  std::string cmd = "{\"prefix\": \"client evict\", \"filters\": [\"id=" +
+                    std::to_string(id) + "\"]}";
+  const char *cmdv[1] = {cmd.c_str()};
+  char *outbuf = nullptr, *outs = nullptr;
+  size_t outbuf_len = 0, outs_len = 0;
+  int ret = ceph_mds_command(admin, "0", cmdv, 1, nullptr, 0,
+                             &outbuf, &outbuf_len, &outs, &outs_len);
+  if (outbuf) ceph_buffer_free(outbuf);
+  if (outs) ceph_buffer_free(outs);
+  return ret;
+}
+
+/* Create a new file, retrying until the client has reconnected or the
+   timeout runs out. */
+static bool create_eventually(struct ceph_mount_info *cmount,
+                              const std::string& path, int timeout)
+{
+  for (int i = 0; i < timeout; ++i) {
+    auto f = std::async(std::launch::async, [&] {
+      return ceph_open(cmount, path.c_str(), O_CREAT|O_EXCL|O_WRONLY, 0644);
+    });
+    if (f.wait_for(std::chrono::seconds(timeout - i)) != std::future_status::ready)
+      return false;
+    int fd = f.get();
+    if (fd >= 0) {
+      ceph_close(cmount, fd);
+      return true;
+    }
+    sleep(1);
+  }
+  return false;
+}
+
+TEST(LibCephFS, ReconnectStaleInterval) {
+  struct ceph_mount_info *cmount, *admin;
+
+  ASSERT_EQ(ceph_create(&cmount, nullptr), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, nullptr), 0);
+  ASSERT_EQ(ceph_conf_parse_env(cmount, nullptr), 0);
+  ASSERT_EQ(ceph_conf_set(cmount, "client_reconnect_stale", "true"), 0);
+  ASSERT_EQ(ceph_conf_set(cmount, "client_reconnect_stale_interval", "0"), 0);
+  ASSERT_EQ(ceph_mount(cmount, "/"), 0);
+
+  ASSERT_EQ(ceph_create(&admin, nullptr), 0);
+  ASSERT_EQ(ceph_conf_read_file(admin, nullptr), 0);
+  ASSERT_EQ(ceph_conf_parse_env(admin, nullptr), 0);
+  ASSERT_EQ(ceph_mount(admin, "/"), 0);
+
+  std::string dir = "reconnect_stale_interval." + std::to_string(getpid());
+  ASSERT_EQ(ceph_mkdir(cmount, dir.c_str(), 0755), 0);
+
+  /* With no interval, the client reconnects after every eviction, not
+     just after the first one. */
+  for (int round = 0; round < 2; ++round) {
+    ASSERT_EQ(evict_client(admin, ceph_get_instance_id(cmount)), 0);
+    std::string path = dir + "/f" + std::to_string(round);
+    ASSERT_TRUE(create_eventually(cmount, path, 60)) << "round " << round;
+  }
+
+  ceph_unmount(admin);
+  ceph_release(admin);
   ceph_unmount(cmount);
   ceph_release(cmount);
 }
