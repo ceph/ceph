@@ -13619,6 +13619,47 @@ def test_bucket_policy_get_obj_existing_tag():
 
 @pytest.mark.tagging
 @pytest.mark.bucket_policy
+@pytest.mark.versioning
+@pytest.mark.fails_on_dbstore
+# aws doesn't support s3:ExistingObjectTag for DeleteObject
+@pytest.mark.fails_on_aws
+def test_bucket_policy_delete_obj_existing_tag_versioned():
+    bucket_name = get_new_bucket()
+    client = get_client()
+    check_configure_versioning_retry(bucket_name, "Enabled", "Enabled")
+
+    key = 'foo'
+    v1 = client.put_object(Bucket=bucket_name, Key=key, Body='one', Tagging='security=public')['VersionId']
+    v2 = client.put_object(Bucket=bucket_name, Key=key, Body='two', Tagging='security=public')['VersionId']
+
+    tag_conditional = {"StringEquals": {
+        "s3:ExistingObjectTag/security" : "public"
+    }}
+
+    resource = _make_arn_resource("{}/{}".format(bucket_name, "*"))
+    policy_document = make_json_policy("s3:DeleteObject",
+                                       resource,
+                                       conditions=tag_conditional)
+    client.put_bucket_policy(Bucket=bucket_name, Policy=policy_document)
+
+    alt_client = get_alt_client()
+
+    # a delete without VersionId adds a delete marker and keeps both versions
+    response = alt_client.delete_object(Bucket=bucket_name, Key=key)
+    assert response.get('DeleteMarker') == True
+    assert response['VersionId'] not in (v1, v2)
+
+    response = client.list_object_versions(Bucket=bucket_name)
+    assert sorted(v['VersionId'] for v in response['Versions']) == sorted([v1, v2])
+    assert len(response['DeleteMarkers']) == 1
+
+    # s3:DeleteObject doesn't allow deleting a specific version
+    e = assert_raises(ClientError, alt_client.delete_object, Bucket=bucket_name, Key=key, VersionId=v2)
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 403
+
+@pytest.mark.tagging
+@pytest.mark.bucket_policy
 @pytest.mark.fails_on_dbstore
 def test_bucket_policy_get_obj_tagging_existing_tag():
     bucket_name = _create_objects(keys=['publictag', 'privatetag', 'invalidtag'])
