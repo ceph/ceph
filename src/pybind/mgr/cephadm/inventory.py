@@ -1,5 +1,6 @@
 import datetime
 import enum
+import hashlib
 from copy import copy
 import ipaddress
 import itertools
@@ -7,6 +8,7 @@ import json
 import logging
 import math
 import socket
+import time
 from typing import TYPE_CHECKING, Dict, List, Iterator, Optional, Any, Tuple, Set, Mapping, cast, \
     NamedTuple, Type, ValuesView, Union
 
@@ -41,6 +43,35 @@ HOST_CACHE_PREFIX = "host."
 SPEC_STORE_PREFIX = "spec."
 AGENT_CACHE_PREFIX = 'agent.'
 NODE_PROXY_CACHE_PREFIX = 'node_proxy'
+
+
+def _timed_set_store(mgr: 'CephadmOrchestrator', key: str, value: Optional[str], category: str) -> None:
+    """Persist a cache entry and attribute its latency to Phase-0 agent stats.
+
+    Only the host/device/agent cache persistence call sites use this helper. This
+    intentionally avoids wrapping mgr.set_store() globally, so unrelated cephadm
+    store traffic cannot skew the agent metadata measurements.
+    """
+    stats = getattr(mgr, 'agent_metadata_stats', None)
+    if not stats:
+        mgr.set_store(key, value)
+        return
+
+    start = time.monotonic()
+    error = False
+    try:
+        mgr.set_store(key, value)
+    except Exception:
+        error = True
+        raise
+    finally:
+        stats.record_store(category, time.monotonic() - start, error=error)
+
+
+def _record_store_skipped(mgr: 'CephadmOrchestrator', category: str) -> None:
+    stats = getattr(mgr, 'agent_metadata_stats', None)
+    if stats:
+        stats.record_store_skipped(category)
 
 
 class HostCacheStatus(enum.Enum):
@@ -893,6 +924,8 @@ class HostCache():
         self.last_network_update = {}   # type: Dict[str, datetime.datetime]
         self.last_device_update = {}   # type: Dict[str, datetime.datetime]
         self.last_device_change = {}   # type: Dict[str, datetime.datetime]
+        # host -> digest of the device list last written to the store
+        self._persisted_devices_digest = {}  # type: Dict[str, str]
         self.last_tuned_profile_update = {}  # type: Dict[str, datetime.datetime]
         self.daemon_refresh_queue = []  # type: List[str]
         self.device_refresh_queue = []  # type: List[str]
@@ -1259,7 +1292,17 @@ class HostCache():
         if host in self.devices:
             self.save_host_devices(host)
 
-        self.mgr.set_store(HOST_CACHE_PREFIX + host, json.dumps(j))
+        _timed_set_store(self.mgr, HOST_CACHE_PREFIX + host, json.dumps(j), 'host')
+
+    @staticmethod
+    def _devices_digest(devs: List[Dict[str, Any]], cache_size: Optional[int]) -> str:
+        # 'created' is set to the time a report was parsed, so it changes on
+        # every refresh even when the devices don't. Device.__eq__ ignores it
+        # for the same reason. The entry size limit decides the sharding, so
+        # it is part of the digest too.
+        stable = [{k: v for k, v in d.items() if k != 'created'} for d in devs]
+        payload = json.dumps([cache_size, stable], sort_keys=True, default=str)
+        return hashlib.sha256(payload.encode('utf-8')).hexdigest()
 
     def save_host_devices(self, host: str) -> None:
         host = normalize_hostname(host)
@@ -1276,6 +1319,15 @@ class HostCache():
 
         dev_cache_counter: int = 0
         cache_size: int = self.mgr.get_foreign_ceph_option('mon', 'mon_config_key_max_entry_size')
+
+        # save_host() runs on every agent report and refresh, while the
+        # device list rarely changes. Skip the write when the store already
+        # holds the same devices.
+        digest = self._devices_digest(devs, cache_size)
+        if self._persisted_devices_digest.get(host) == digest:
+            _record_store_skipped(self.mgr, 'devices')
+            return
+
         if cache_size is not None and cache_size != 0 and byte_len(json.dumps(devs)) > cache_size - 1024:
             # no guarantee all device entries take up the same amount of space
             # splitting it up so there's one more entry than we need should be fairly
@@ -1288,12 +1340,22 @@ class HostCache():
                 dev_dict: Dict[str, Any] = {'devices': dev_list}
                 if dev_cache_counter == 0:
                     dev_dict.update({'entries': len(dev_lists)})
-                self.mgr.set_store(HOST_CACHE_PREFIX + host + '.devices.'
-                                   + str(dev_cache_counter), json.dumps(dev_dict))
+                _timed_set_store(
+                    self.mgr,
+                    HOST_CACHE_PREFIX + host + '.devices.' + str(dev_cache_counter),
+                    json.dumps(dev_dict),
+                    'devices',
+                )
                 dev_cache_counter += 1
         else:
-            self.mgr.set_store(HOST_CACHE_PREFIX + host + '.devices.'
-                               + str(dev_cache_counter), json.dumps({'devices': devs, 'entries': 1}))
+            _timed_set_store(
+                self.mgr,
+                HOST_CACHE_PREFIX + host + '.devices.' + str(dev_cache_counter),
+                json.dumps({'devices': devs, 'entries': 1}),
+                'devices',
+            )
+        # only after every entry was written: a failed write retries next time
+        self._persisted_devices_digest[host] = digest
 
     def load_host_devices(self, host: str) -> List[inventory.Device]:
         dev_cache_counter: int = 0
@@ -1351,6 +1413,7 @@ class HostCache():
             del self.last_network_update[host]
         if host in self.last_device_change:
             del self.last_device_change[host]
+        self._persisted_devices_digest.pop(host, None)
         if host in self.last_tuned_profile_update:
             del self.last_tuned_profile_update[host]
         if host in self.daemon_config_deps:
@@ -2083,6 +2146,8 @@ class AgentCache():
         self.agent_keys = {}  # type: Dict[str, str]
         self.agent_ports = {}  # type: Dict[str, int]
         self.sending_agent_message = {}  # type: Dict[str, bool]
+        # host -> value last written to the store for that agent
+        self._persisted_agent = {}  # type: Dict[str, str]
 
     def load(self):
         # type: () -> None
@@ -2102,8 +2167,10 @@ class AgentCache():
                     conf_deps['last_config'] = str_to_datetime(conf_deps['last_config'])
                 self.agent_config_deps[host] = conf_deps
                 self.agent_counter[host] = int(j.get('agent_counter', 1))
-                self.agent_timestamp[host] = str_to_datetime(
-                    j.get('agent_timestamp', datetime_to_str(datetime_now())))
+                # Older releases persisted 'agent_timestamp' on every report.
+                # It is no longer written, so a stored value can be arbitrarily
+                # old: ignore it. _agent_down() starts the clock for a host
+                # with no timestamp, as it did after a failover before.
                 self.agent_keys[host] = str(j.get('agent_keys', ''))
                 agent_port = int(j.get('agent_ports', 0))
                 if agent_port:
@@ -2135,10 +2202,16 @@ class AgentCache():
             j['agent_keys'] = self.agent_keys[host]
         if host in self.agent_ports:
             j['agent_ports'] = self.agent_ports[host]
-        if host in self.agent_timestamp:
-            j['agent_timestamp'] = datetime_to_str(self.agent_timestamp[host])
 
-        self.mgr.set_store(AGENT_CACHE_PREFIX + host, json.dumps(j))
+        # save_agent() runs on every agent report. The last-report time is not
+        # persisted (it would make every report a mon write), so in steady
+        # state nothing here changes and the write is skipped.
+        value = json.dumps(j)
+        if self._persisted_agent.get(host) == value:
+            _record_store_skipped(self.mgr, 'agent')
+            return
+        _timed_set_store(self.mgr, AGENT_CACHE_PREFIX + host, value, 'agent')
+        self._persisted_agent[host] = value
 
     def update_agent_config_deps(self, host: str, deps: List[str], stamp: datetime.datetime) -> None:
         self.agent_config_deps[host] = {
