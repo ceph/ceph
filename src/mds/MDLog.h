@@ -115,7 +115,7 @@ public:
   uint64_t get_num_segments() const { return segments.size(); }
 
   auto get_debug_subtrees() const {
-    return events_per_segment;
+    return debug_subtrees;
   }
   auto get_max_segments() const {
     return max_segments;
