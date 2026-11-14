@@ -1342,7 +1342,9 @@ private:
 				      std::set<SimpleLock *>& gather_locks);
   void handle_cache_rejoin_ack(const cref_t<MMDSCacheRejoin> &m);
   void rejoin_send_acks();
-  void rejoin_trim_undef_inodes();
+  bool rejoin_trim_undef_inodes();
+  void rejoin_trim_undef_inode(CInode *in);
+  void rejoin_drop_unacked_dentry(CDentry *dn);
   void maybe_send_pending_rejoins() {
     rejoin_send_rejoins_if_pending();
   }

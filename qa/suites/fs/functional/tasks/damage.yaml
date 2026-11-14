@@ -20,6 +20,7 @@ overrides:
       - force file system read-only
       - with standby daemon mds
       - MDS abort because newly corrupt dentry
+      - in damaged dirfrags and cannot be opened
 tasks:
   - cephfs_test_runner:
       modules:
