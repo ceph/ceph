@@ -25,7 +25,7 @@ BitmapAllocator::BitmapAllocator(CephContext* _cct,
 
 int64_t BitmapAllocator::allocate(
   uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,
-  int64_t hint, PExtentVector *extents)
+  int64_t hint, alloc_tag_t tag, PExtentVector *extents)
 {
   uint64_t allocated = 0;
   size_t old_size = extents->size();

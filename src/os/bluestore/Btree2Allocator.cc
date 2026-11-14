@@ -67,6 +67,7 @@ int64_t Btree2Allocator::allocate(
   uint64_t unit,
   uint64_t max_alloc_size,
   int64_t  hint, // unused and likely unneeded
+  alloc_tag_t tag,
   PExtentVector* extents)
 {
   ldout(cct, 10) << __func__ << std::hex
@@ -101,7 +102,7 @@ int64_t Btree2Allocator::allocate(
 
   auto lock_acquired = mono_clock::now();
 
-  auto ret = _allocate(want, unit, max_alloc_size, hint, extents);
+  auto ret = _allocate(want, unit, max_alloc_size, hint, tag, extents);
 
   logger->tinc_with_max(
       l_bluestore_allocator_alloc_process_lat,
@@ -276,6 +277,7 @@ int64_t Btree2Allocator::_allocate(
   uint64_t unit,
   uint64_t max_alloc_size,
   int64_t  hint, // unused and likely unneeded
+  alloc_tag_t tag,
   PExtentVector* extents)
 {
   uint64_t allocated = 0;
@@ -292,7 +294,7 @@ int64_t Btree2Allocator::_allocate(
     }
     size_t bucket0 = myTraits._get_bucket(want_now);
     int64_t r = __allocate(bucket0, want_now,
-      unit, extents);
+      unit, tag, extents);
     if (r < 0) {
       // Allocation failed.
       break;
@@ -419,6 +421,7 @@ int64_t Btree2Allocator::__allocate(
   size_t bucket0,
   uint64_t size,
   uint64_t unit,
+  alloc_tag_t tag,
   PExtentVector* extents)
 {
   int64_t allocated = 0;
@@ -462,6 +465,7 @@ int64_t Btree2Allocator::__allocate(
             unit,
             size,
             0,
+            tag,
             extents); // 0 is returned if error were detected.
           allocated += r;
           ceph_assert(size >= (uint64_t)r);

@@ -81,6 +81,7 @@ public:
     uint64_t unit,
     uint64_t max_alloc_size,
     int64_t  hint,
+    alloc_tag_t tag,
     PExtentVector *extents) override;
   void release(const release_set_t& release_set) override;
   uint64_t get_free() override;
@@ -244,6 +245,7 @@ private:
                                       uint64_t unit,
                                       uint64_t max_alloc_size,
                                       int64_t  hint,
+                                      alloc_tag_t tag,
                                       PExtentVector* extents) {
     // this should be overriden when range count cap is present,
     // i.e. (range_count_cap > 0)
@@ -283,6 +285,7 @@ protected:
     uint64_t unit,
     uint64_t max_alloc_size,
     int64_t  hint,
+    alloc_tag_t tag,
     PExtentVector *extents);
 
   void _release(const release_set_t& release_set);
