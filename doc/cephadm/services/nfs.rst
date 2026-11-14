@@ -402,6 +402,164 @@ The specification can then be applied by running the following command:
 
    ceph orch apply -i nfs.yaml
 
+gRPC/mTLS Example
+-----------------
+
+Cephadm generates and manages gRPC certificates automatically by default
+(``cephadm-signed``). Administrators can also provide their own certificates
+using ``inline`` or ``reference`` certificate sources.
+
+.. note::
+   gRPC and TLS (NFS data plane) are separate security domains and always use
+   separate certificates, even when both are enabled. The gRPC server certificate
+   authenticates the management endpoint; the TLS certificate (``ssl``) authenticates
+   NFS file share access.
+
+Here's an example NFS service specification with inline gRPC/mTLS certificates:
+
+.. code-block:: yaml
+
+    service_type: nfs
+    service_id: mynfs
+    placement:
+      hosts:
+      - ceph-node-0
+    spec:
+      port: 2049
+      grpc_certificate_source: inline
+      grpc_server_cert: |
+        -----BEGIN CERTIFICATE-----
+        (PEM cert contents here)
+        -----END CERTIFICATE-----
+      grpc_server_key: |
+        -----BEGIN PRIVATE KEY-----
+        (PEM key contents here)
+        -----END PRIVATE KEY-----
+      grpc_client_cert: |
+        -----BEGIN CERTIFICATE-----
+        (PEM cert contents here)
+        -----END CERTIFICATE-----
+      grpc_client_key: |
+        -----BEGIN PRIVATE KEY-----
+        (PEM key contents here)
+        -----END PRIVATE KEY-----
+      grpc_ca_cert: |
+        -----BEGIN CERTIFICATE-----
+        (PEM CA cert contents here)
+        -----END CERTIFICATE-----
+
+This example configures an NFS service with gRPC using inline certificates.
+
+gRPC Parameters
+~~~~~~~~~~~~~~~
+
+* ``grpc_certificate_source`` (string): Specifies the source of the gRPC
+  certificates. Options include:
+
+  - ``cephadm-signed`` (default): Cephadm automatically generates and signs a
+    per-host gRPC server certificate (with the host IP in the SAN field) and a
+    per-service client certificate, all using its internal cluster CA.
+  - ``inline``: Provide all five certificates and keys directly in the
+    specification.
+  - ``reference``: Certificates are pre-loaded into certmgr store and referenced
+    by name. Only ``grpc_certificate_source: reference`` is needed in the spec.
+    Pre-load all five objects before applying the spec using the exact registered
+    names and the correct scope flags:
+
+    .. prompt:: bash #
+
+       # Server cert + key — SERVICE scope (--service-name only, no --hostname)
+       # The server cert must include the IP addresses of ALL NFS hosts in
+       # its SAN field so that gRPC clients can verify every daemon.
+       ceph orch certmgr cert set nfs_grpc_server_cert \
+           --service-name nfs.<svc_id> -i server.crt
+       ceph orch certmgr key set nfs_grpc_server_key \
+           --service-name nfs.<svc_id> -i server.key
+
+       # Client cert + key — SERVICE scope (--service-name only, no --hostname)
+       ceph orch certmgr cert set nfs_grpc_client_cert \
+           --service-name nfs.<svc_id> -i client.crt
+       ceph orch certmgr key set nfs_grpc_client_key \
+           --service-name nfs.<svc_id> -i client.key
+
+       # CA cert — SERVICE scope (--service-name only, no --hostname)
+       ceph orch certmgr cert set nfs_grpc_ca_cert \
+           --service-name nfs.<svc_id> -i ca.crt
+
+    If a previous deployment auto-generated any of these objects, add ``--force``
+    to override them.
+
+* ``grpc_server_cert`` (string): The gRPC server certificate in PEM format.
+  Required when using ``inline`` certificate source. Must include the NFS host
+  IP in the Subject Alternative Name (SAN) field.
+
+* ``grpc_server_key`` (string): The gRPC server private key in PEM format.
+  Required when using ``inline`` certificate source.
+
+* ``grpc_client_cert`` (string): The gRPC client certificate in PEM format.
+  Required when using ``inline`` certificate source. Must be signed by the same
+  CA as the server certificate (``grpc_ca_cert``). No SAN or IP required in the
+  certificate itself.
+
+* ``grpc_client_key`` (string): The gRPC client private key in PEM format.
+  Required when using ``inline`` certificate source.
+
+* ``grpc_ca_cert`` (string): The CA certificate in PEM format used by the gRPC
+  server to verify client certificates. Required when using ``inline``
+  certificate source.
+
+.. note::
+   When ``grpc_certificate_source`` is set to ``inline``, all five fields
+   (``grpc_server_cert``, ``grpc_server_key``, ``grpc_client_cert``,
+   ``grpc_client_key``, ``grpc_ca_cert``) must be provided.
+
+Accessing gRPC Client Certificates
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Cephadm automatically deploys a client certificate bundle for every NFS service
+to all admin nodes (hosts with the ``_admin`` label). Each service gets its own
+sub-directory under the following path on the admin node:
+
+.. code-block:: text
+
+   /var/lib/ceph/<fsid>/nfs_grpc-client-certs/nfs.<svc_id>/
+
+The directory contains the following files:
+
+.. code-block:: text
+
+   ca.crt      # CA certificate (cluster root CA)
+   client.crt  # Client certificate
+   client.key  # Client private key
+
+Inside a ``cephadm shell`` the path is accessible under ``/srv/ceph/``:
+
+.. prompt:: bash #
+
+   cephadm shell
+   ls /srv/ceph/<fsid>/nfs_grpc-client-certs/nfs.<svc_id>/
+   # ca.crt  client.crt  client.key
+
+Use the certificates with ``grpcurl`` to connect to the NFS gRPC server:
+
+.. prompt:: bash #
+
+   cd /srv/ceph/<fsid>/nfs_grpc-client-certs/nfs.<svc_id>/
+   grpcurl -cacert ca.crt -cert client.crt -key client.key <NFS-Node-IP>:50051 list
+
+.. note::
+   Certificates are deployed to all admin nodes automatically. No manual
+   certificate setup is needed when using the default ``cephadm-signed`` mode.
+   For ``reference`` mode the bundle is only deployed when the client cert and CA
+   have been pre-loaded into certmgr. If they are absent the folder is not created
+   and the admin should use their own cert files directly.
+
+The specification can then be applied by running the following command:
+
+.. prompt:: bash #
+
+   ceph orch apply -i nfs.yaml
+
 .. _cephadm-ha-nfs:
 
 High-availability NFS

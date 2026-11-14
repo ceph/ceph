@@ -247,8 +247,10 @@ set -e
         makedirs(kmip_dir, uid, gid, 0o755)
 
         tls_dir = os.path.join(data_dir, 'etc/ganesha/tls')
+        certs_dir = os.path.join(data_dir, 'etc', 'ganesha', 'certs')
         makedirs(config_dir, uid, gid, 0o755)
         makedirs(tls_dir, uid, gid, 0o755)
+        makedirs(certs_dir, uid, gid, 0o755)
 
         config_files = {
             fname: content
@@ -265,11 +267,16 @@ set -e
             for fname, content in self.files.items()
             if fname.startswith('tls')
         }
-
+        grpc_files = {
+            fname[len('grpc_') :]: content
+            for fname, content in self.files.items()
+            if fname.startswith('grpc_')
+        }
         # populate files from the config-json
         populate_files(config_dir, config_files, uid, gid)
         populate_files(kmip_dir, kmip_files, uid, gid)
         populate_files(tls_dir, tls_files, uid, gid)
+        populate_files(certs_dir, grpc_files, uid, gid)
 
         ganesha_conf = self.files.get('ganesha.conf', '')
         nfsv3 = self.nfsv3_enabled_in_ganesha_conf(ganesha_conf)

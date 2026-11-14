@@ -1128,7 +1128,7 @@ class TestIngressService:
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
 
         def fake_resolve_ip(hostname: str) -> str:
-            if hostname in ('host1', '192.168.122.111'):
+            if hostname in ('host1', '192.168.122.111', 'test'):
                 return '192.168.122.111'
             elif hostname in ('host2', '192.168.122.222'):
                 return '192.168.122.222'
@@ -1272,6 +1272,11 @@ class TestIngressService:
             '        name = "client.nfs.foo.test.0.0-rgw";\n'
             '}\n'
             '\n'
+            'GRPC {\n'
+            '        GRPC_Server_Cert = "/etc/ganesha/certs/server.crt";\n'
+            '        GRPC_Server_Key  = "/etc/ganesha/certs/server.key";\n'
+            '        GRPC_CA_Cert     = "/etc/ganesha/certs/ca.crt";\n'
+            '}\n'
             '\n'
             "%url    rados://.nfs/foo/conf-nfs.foo"
         )
@@ -1388,6 +1393,15 @@ class TestIngressService:
             nfs_ganesha_txt
         )
         nfs_expected_conf['config'] = '[client]\n\tobjecter_dispatch_to_session_strand = true\n'
+
+        # gRPC server cert files are always auto-generated; verify they exist
+        # and remove them before comparing the rest of the config.
+        # Client cert is NOT deployed to the daemon (goes to mgr host instead).
+        for fname in ['grpc_server.crt', 'grpc_server.key', 'grpc_ca.crt']:
+            assert fname in nfs_generated_conf['files'], f'Missing gRPC file: {fname}'
+            nfs_generated_conf['files'].pop(fname)
+        assert 'grpc_client.crt' not in nfs_generated_conf['files']
+        assert 'grpc_client.key' not in nfs_generated_conf['files']
         assert nfs_generated_conf == nfs_expected_conf
 
     @patch("cephadm.services.nfs.NFSService.fence_old_ranks", MagicMock())
@@ -1467,6 +1481,7 @@ class TestIngressService:
             ),
         ]
         _get_daemons_by_service.return_value = nfs_daemons
+        _get_addr.side_effect = lambda h: {'host1': '10.10.2.20', 'host2': '10.10.2.21'}.get(h, '10.10.2.20')
 
         ingress_svc = service_registry.get_service('ingress')
         nfs_svc = service_registry.get_service('nfs')
