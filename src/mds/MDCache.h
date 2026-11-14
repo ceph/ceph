@@ -1342,6 +1342,7 @@ private:
 				      std::set<SimpleLock *>& gather_locks);
   void handle_cache_rejoin_ack(const cref_t<MMDSCacheRejoin> &m);
   void rejoin_send_acks();
+  void rejoin_send_acks_and_finish();
   void rejoin_trim_undef_inodes();
   void maybe_send_pending_rejoins() {
     rejoin_send_rejoins_if_pending();
@@ -1451,6 +1452,7 @@ private:
   std::set<mds_rank_t> rejoin_sent;        // nodes i sent a rejoin to
   std::set<mds_rank_t> rejoin_ack_sent;    // nodes i sent a rejoin to
   std::set<mds_rank_t> rejoin_ack_gather;  // nodes from whom i need a rejoin ack
+  Context *rejoin_ack_delay_event = nullptr;  // pending mds_debug_rejoin_ack_delay timer
   std::map<mds_rank_t,std::map<inodeno_t,std::map<client_t,Capability::Import> > > rejoin_imported_caps;
   std::map<inodeno_t,std::pair<mds_rank_t,std::map<client_t,Capability::Export> > > rejoin_peer_exports;
 
