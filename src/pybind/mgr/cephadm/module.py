@@ -4896,6 +4896,7 @@ Then run the following:
                 'prometheus': PlacementSpec(count=1),
                 'node-exporter': PlacementSpec(host_pattern='*'),
                 'ceph-exporter': PlacementSpec(host_pattern='*'),
+                'fcm-dedup': PlacementSpec(host_pattern='*'),
                 'loki': PlacementSpec(count=1),
                 'promtail': PlacementSpec(host_pattern='*'),
                 'alloy': PlacementSpec(host_pattern='*'),
@@ -5111,6 +5112,10 @@ Then run the following:
 
     @handle_orch_error
     def apply_ceph_exporter(self, spec: ServiceSpec) -> str:
+        return self._apply(spec)
+
+    @handle_orch_error
+    def apply_fcm_dedup(self, spec: ServiceSpec) -> str:
         return self._apply(spec)
 
     @handle_orch_error
