@@ -4716,6 +4716,68 @@ TEST(bluestore_blob_use_tracker_t, mempool_stats_test) {
   }
 }
 
+// maybe_unpin() may be entered through the shard an onode was in before a
+// PG split moved it; the shard that holds it now must do the work, or the
+// caller links the onode into the wrong shard's lists under the wrong lock.
+TEST(OnodeCache, maybe_unpin_works_on_the_shard_that_holds_the_onode) {
+  BlueStore store(g_ceph_context, "", 4096);
+  std::unique_ptr<BlueStore::OnodeCacheShard> old_shard{
+      BlueStore::OnodeCacheShard::create(g_ceph_context, "lru", NULL)};
+  std::unique_ptr<BlueStore::OnodeCacheShard> new_shard{
+      BlueStore::OnodeCacheShard::create(g_ceph_context, "lru", NULL)};
+  std::unique_ptr<BlueStore::BufferCacheShard> bc{
+      BlueStore::BufferCacheShard::create(&store, "lru", NULL)};
+  for (auto* sh : {old_shard.get(), new_shard.get()}) {
+    sh->set_bin_count(64);
+    sh->set_max(1ull << 40);
+  }
+  auto coll = ceph::make_ref<BlueStore::Collection>(&store, new_shard.get(),
+                                                    bc.get(), coll_t());
+  ghobject_t oid(hobject_t(object_t("o1"), "", CEPH_NOSNAP, 1, 0, ""));
+  BlueStore::Onode* raw;
+  {
+    BlueStore::OnodeRef o = new BlueStore::Onode(coll.get(), oid, "");
+    o->exists = true;
+    coll->onode_space.add_onode(oid, o);
+    raw = o.get();
+  }
+  // promote it: the move-within-LRU path is the one that touches the lists
+  for (int b = 0; b < 2; b++) {
+    new_shard->shift_bins();
+    BlueStore::OnodeRef o = coll->onode_space.lookup(oid);
+    ASSERT_TRUE(o);
+  }
+  uint64_t onodes = 0, pinned = 0;
+  new_shard->add_stats(&onodes, &pinned);
+  ASSERT_EQ(1u, onodes);
+
+  // as if the caller had read the collection's shard before the split
+  old_shard->maybe_unpin(raw);
+
+  onodes = pinned = 0;
+  old_shard->add_stats(&onodes, &pinned);
+  EXPECT_EQ(0u, onodes);
+  EXPECT_EQ(0u, pinned);
+  onodes = pinned = 0;
+  new_shard->add_stats(&onodes, &pinned);
+  EXPECT_EQ(1u, onodes);
+  EXPECT_EQ(0u, pinned);
+  // the touch stamps the onode into the age bin of the shard whose lists
+  // it is in: the list sizes alone cannot tell a wrongly linked onode apart
+  EXPECT_EQ(0u, old_shard->sum_bins(0, 64)) << "stamped into the wrong shard";
+  EXPECT_EQ(1u, new_shard->sum_bins(0, 64)) << "lost from its shard's bins";
+
+  // the shard that holds the onode must still be able to evict it; an onode
+  // linked into old_shard's list leaves new_shard's list inconsistent here
+  old_shard->flush();
+  EXPECT_TRUE(coll->onode_space.lookup(oid));
+  new_shard->flush();
+  EXPECT_FALSE(coll->onode_space.lookup(oid));
+  onodes = pinned = 0;
+  new_shard->add_stats(&onodes, &pinned);
+  EXPECT_EQ(0u, onodes);
+}
+
 int main(int argc, char **argv) {
   auto args = argv_to_vec(argc, argv);
   auto cct =
