@@ -839,6 +839,240 @@ int RGWBucket::check_index_olh(rgw::sal::RadosStore* const rados_store,
 }
 
 /**
+ * Loops over all olh entries in a bucket shard and checks the versioned list
+ * entries of each object against its instance entries and olh (see
+ * check_olh_list() in cls_rgw): list entries with no matching instance entry,
+ * CURRENT flags that disagree with the olh, and a missing or overwritten
+ * version marker. These were known to be left behind by racing PUT/DELETE
+ * requests on null versions. If op_state.fix_index is true, the object's
+ * entries are repaired by cls_rgw in a single operation, which skips objects
+ * with operations in progress (counted in busy_out).
+ */
+static int check_index_olh_list(rgw::sal::RadosStore* const rados_store,
+                                rgw::sal::Bucket* const bucket,
+                                const DoutPrefixProvider *dpp,
+                                RGWBucketAdminOpState& op_state,
+                                RGWFormatterFlusher& flusher,
+                                const int shard,
+                                uint64_t* const count_out,
+                                uint64_t* const busy_out,
+                                uint64_t* const unresolved_out,
+                                optional_yield y)
+{
+  string marker = BI_OLH_ENTRY_NS_START;
+  bool is_truncated = true;
+  list<rgw_cls_bi_entry> entries;
+
+  RGWRados* store = rados_store->getRados();
+  RGWRados::BucketShard bs(store);
+
+  int ret = bs.init(dpp, bucket->get_info(), bucket->get_info().layout.current_index, shard, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, -1) << "ERROR bs.init(bucket=" << bucket << "): " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
+  *count_out = 0;
+  *busy_out = 0;
+  *unresolved_out = 0;
+  do {
+    entries.clear();
+    ret = store->bi_list(bs, "", marker, -1, &entries, &is_truncated, false, y);
+    if (ret < 0) {
+      ldpp_dout(dpp, -1) << "ERROR bi_list(): " << cpp_strerror(-ret) << dendl;
+      break;
+    }
+    for (rgw_cls_bi_entry& entry : entries) {
+      marker = entry.idx;
+      if (entry.type != BIIndexType::OLH) {
+        is_truncated = false;
+        break;
+      }
+      rgw_bucket_olh_entry olh_entry;
+      auto iiter = entry.data.cbegin();
+      try {
+        decode(olh_entry, iiter);
+      } catch (buffer::error& err) {
+        ldpp_dout(dpp, -1) << "ERROR failed to decode olh entry for key: " << entry.idx << dendl;
+        continue;
+      }
+      const cls_rgw_obj_key key(olh_entry.key.name);
+
+      bufferlist out;
+      librados::ObjectReadOperation rop;
+      cls_rgw_bucket_check_olh_list(rop, key, out);
+      ret = bs.bucket_obj.operate(dpp, std::move(rop), nullptr, y);
+      if (ret == -EOPNOTSUPP) {
+        ldpp_dout(dpp, -1) << "ERROR: the OSDs do not support checking olh list "
+          "entries; upgrade them to use this command" << dendl;
+        return ret;
+      } else if (ret < 0) {
+        ldpp_dout(dpp, -1) << "ERROR failed to check olh list entries for: " <<
+          key.name << ": " << cpp_strerror(-ret) << dendl;
+        continue;
+      }
+      rgw_cls_check_olh_list_ret result;
+      try {
+        cls_rgw_bucket_check_olh_list_decode(out, result);
+      } catch (buffer::error& err) {
+        ldpp_dout(dpp, -1) << "ERROR failed to decode olh list check for: " << key.name << dendl;
+        continue;
+      }
+      if (result.busy) {
+        ldpp_dout(dpp, 10) << "NOTICE: " << key.name << " has operations in progress, skipping" << dendl;
+        *busy_out += 1;
+        continue;
+      }
+      if (result.unresolved) {
+        ldpp_dout(dpp, 0) << "WARNING: cannot identify the current version of " <<
+          key.name << ", leaving its list entries alone" << dendl;
+        *unresolved_out += 1;
+      }
+      if (!result.needs_fix() && !result.unresolved) {
+        continue;
+      }
+      if (op_state.will_fix_index() && result.needs_fix()) {
+        librados::ObjectWriteOperation wop;
+        cls_rgw_guard_bucket_resharding(wop, -ERR_BUSY_RESHARDING);
+        cls_rgw_bucket_fix_olh_list(wop, key);
+        ret = bs.bucket_obj.operate(dpp, std::move(wop), y);
+        if (ret == -EBUSY) {
+          ldpp_dout(dpp, 10) << "NOTICE: " << key.name << " has operations in progress, skipping" << dendl;
+          *busy_out += 1;
+          continue;
+        } else if (ret < 0) {
+          ldpp_dout(dpp, -1) << "ERROR failed to fix olh list entries for: " <<
+            key.name << ": " << cpp_strerror(-ret) << dendl;
+          continue;
+        }
+      }
+      if (op_state.dump_keys) {
+        Formatter* const formatter = flusher.get_formatter();
+        formatter->open_object_section("object");
+        formatter->dump_string("name", key.name);
+        formatter->dump_unsigned("orphaned_list_entries", result.orphaned.size());
+        formatter->dump_unsigned("wrong_current_flags", result.wrong_current.size());
+        formatter->dump_bool("bad_version_marker", result.bad_version_marker);
+        formatter->dump_bool("restored_instance", result.restored_instance);
+        formatter->dump_bool("unresolved", result.unresolved);
+        formatter->close_section();
+        if (formatter->get_len() > FORMATTER_LEN_FLUSH_THRESHOLD) {
+          flusher.flush();
+        }
+      }
+      if (result.needs_fix()) {
+        *count_out += 1;
+      }
+    }
+  } while (is_truncated);
+  flusher.flush();
+  return 0;
+}
+
+/**
+ * Spawns separate coroutines to check the versioned list entries of the
+ * objects in each bucket shard (and repair them if op_state.fix_index is
+ * true).
+ */
+int RGWBucket::check_index_olh_list(rgw::sal::RadosStore* const rados_store,
+                                    const DoutPrefixProvider *dpp,
+                                    RGWBucketAdminOpState& op_state,
+                                    RGWFormatterFlusher& flusher)
+{
+  const RGWBucketInfo& bucket_info = get_bucket_info();
+  if ((bucket_info.versioning_status() & BUCKET_VERSIONED) == 0) {
+    ldpp_dout(dpp, 0) << "WARNING: this command is only applicable to versioned buckets" << dendl;
+    return 0;
+  }
+
+  const auto& index_layout = bucket_info.layout.current_index.layout;
+  if (index_layout.type != rgw::BucketIndexType::Normal) {
+    ldpp_dout(dpp, 0) << "ERROR: cannot check bucket indices with layouts of type " <<
+      current_layout_desc(bucket_info.layout) <<
+      " for bad olh list entries" << dendl;
+    return -EINVAL;
+  }
+
+  Formatter* formatter = flusher.get_formatter();
+  if (op_state.dump_keys) {
+    formatter->open_array_section("");
+  }
+
+  const int max_shards = rgw::num_shards(index_layout.normal);
+  std::string verb = op_state.will_fix_index() ? "fixed" : "found";
+  uint64_t count_out = 0;
+  uint64_t busy_out = 0;
+  uint64_t unresolved_out = 0;
+  int error = 0;
+
+  boost::asio::io_context context;
+  int next_shard = 0;
+
+  const int max_aio = std::max(1, op_state.get_max_aio());
+
+  for (int i=0; i<max_aio; i++) {
+    boost::asio::spawn(context, [&](boost::asio::yield_context yield) {
+      while (true) {
+        int shard = next_shard;
+        next_shard += 1;
+        if (shard >= max_shards) {
+          return;
+        }
+        optional_yield y(yield);
+        uint64_t shard_count = 0;
+        uint64_t shard_busy = 0;
+        uint64_t shard_unresolved = 0;
+        int r = ::check_index_olh_list(rados_store, &*bucket, dpp, op_state, flusher,
+                                       shard, &shard_count, &shard_busy,
+                                       &shard_unresolved, y);
+        if (r < 0) {
+          ldpp_dout(dpp, -1) << "NOTICE: error processing shard " << shard <<
+            " check_index_olh_list(): " << r << dendl;
+          if (r == -EOPNOTSUPP) {
+            error = r;
+          }
+        }
+        count_out += shard_count;
+        busy_out += shard_busy;
+        unresolved_out += shard_unresolved;
+        if (!op_state.hide_progress) {
+          ldpp_dout(dpp, 1) << "NOTICE: finished shard " << shard << " (" << shard_count <<
+            " objects " << verb << ", " << shard_busy << " busy)" << dendl;
+        }
+      }
+    }, [] (std::exception_ptr eptr) {
+      if (eptr) std::rethrow_exception(eptr);
+    });
+  }
+  try {
+    context.run();
+  } catch (const std::system_error& e) {
+    return -e.code().value();
+  }
+  if (!op_state.hide_progress) {
+    ldpp_dout(dpp, 1) << "NOTICE: finished all shards (" << count_out <<
+      " objects " << verb << ", " << busy_out << " busy)" << dendl;
+  }
+  if (busy_out > 0) {
+    ldpp_dout(dpp, 0) << "NOTICE: " << busy_out << " objects had operations "
+      "in progress and were skipped; rerun the command to check them" << dendl;
+  }
+  if (unresolved_out > 0) {
+    ldpp_dout(dpp, 0) << "WARNING: the current version of " << unresolved_out <<
+      " objects could not be identified; their list entries were left alone" << dendl;
+  }
+  if (op_state.will_fix_index() && count_out > 0) {
+    ldpp_dout(dpp, 0) << "NOTICE: run 'radosgw-admin bucket check --fix' to "
+      "recalculate the bucket stats" << dendl;
+  }
+  if (op_state.dump_keys) {
+    formatter->close_section();
+    flusher.flush();
+  }
+  return error;
+}
+
+/**
  * Indicates whether a versioned bucket instance entry is listable in the
  * index. It does this by looping over all plain entries with prefix equal to
  * the key name, and checking whether any have an instance ID matching the one
@@ -1442,6 +1676,27 @@ int RGWBucketAdminOp::check_index_unlinked(rgw::sal::RadosStore* store,
   ret = bucket.check_index_unlinked(store, dpp, op_state, flusher);
   if (ret < 0) {
     ldpp_dout(dpp, -1) << "check_index_unlinked(): " << ret << dendl;
+    return ret;
+  }
+  flusher.flush();
+  return 0;
+}
+
+int RGWBucketAdminOp::check_index_olh_list(rgw::sal::RadosStore* store,
+                                           RGWBucketAdminOpState& op_state,
+                                           RGWFormatterFlusher& flusher,
+                                           const DoutPrefixProvider *dpp)
+{
+  flusher.start(0);
+  RGWBucket bucket;
+  int ret = bucket.init(store, op_state, null_yield, dpp);
+  if (ret < 0) {
+    ldpp_dout(dpp, -1) << "bucket.init(): " << ret << dendl;
+    return ret;
+  }
+  ret = bucket.check_index_olh_list(store, dpp, op_state, flusher);
+  if (ret < 0) {
+    ldpp_dout(dpp, -1) << "check_index_olh_list(): " << ret << dendl;
     return ret;
   }
   flusher.flush();

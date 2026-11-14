@@ -2,6 +2,7 @@
 
 import logging as log
 import json
+import tempfile
 import botocore
 from common import exec_cmd, create_user, boto_connect, put_objects, create_unlinked_objects
 from botocore.config import Config
@@ -185,6 +186,67 @@ def main():
     assert json_out['usage']['rgw.main']['size_kb'] == 0
     assert json_out['usage']['rgw.main']['size_kb_actual'] == 0
     assert json_out['usage']['rgw.main']['size_kb_utilized'] == 0
+
+    # objects with a versioned instance and a null version on top, as written
+    # while versioning is suspended
+    olh_list_keys = ['olh-list-a', 'olh-list-b']
+    put_objects(bucket, olh_list_keys)
+    connection.BucketVersioning(BUCKET_NAME).suspend()
+    put_objects(bucket, olh_list_keys)
+    connection.BucketVersioning(BUCKET_NAME).enable()
+
+    def olh_list_problems():
+        out = exec_cmd(f'radosgw-admin bucket check olh-list --bucket {BUCKET_NAME} --dump-keys')
+        return {o['name']: o for o in json.loads(out) if o['name'] in olh_list_keys}
+
+    # TESTCASE 'bucket check olh-list does not report normal entries'
+    log.debug('TEST: bucket check olh-list does not report normal entries\n')
+    assert olh_list_problems() == {}
+
+    # inject what racing PUT and DELETE requests on null versions leave behind:
+    # an orphaned null list entry flagged CURRENT, and the version marker
+    # overwritten by a suggested update
+    for key in olh_list_keys:
+        out = exec_cmd(f'radosgw-admin bi list --bucket {BUCKET_NAME} --object {key}')
+        idx_entries = json.loads(out.replace(b'\x80', b'0x80'))
+        current = [e for e in idx_entries if e['type'] == 'plain' and '\x00v' in e['idx']
+                   and e['entry']['flags'] & 0x2]
+        assert len(current) == 1, f'expected one current list entry for key={key}'
+        for idx in [f'{key}\x00v999\x00i', key]:
+            entry = dict(current[0], idx=idx)
+            with tempfile.NamedTemporaryFile('w', suffix='.json') as f:
+                json.dump(entry, f)
+                f.flush()
+                exec_cmd(f'radosgw-admin bi put --bucket {BUCKET_NAME} --infile {f.name}')
+
+    # TESTCASE 'bucket check olh-list finds bad list entries'
+    log.debug('TEST: bucket check olh-list finds bad list entries\n')
+    problems = olh_list_problems()
+    assert set(problems) == set(olh_list_keys)
+    for o in problems.values():
+        assert o['orphaned_list_entries'] == 1
+        assert o['bad_version_marker']
+
+    # TESTCASE 'bad list entries are listed as extra latest versions'
+    log.debug('TEST: bad list entries are listed as extra latest versions\n')
+    for key in olh_list_keys:
+        latest = [v for v in bucket.object_versions.filter(Prefix=key) if v.is_latest]
+        assert len(latest) > 1, f'expected several latest versions for key={key}'
+
+    # TESTCASE 'bucket check olh-list fixes bad list entries'
+    log.debug('TEST: bucket check olh-list fixes bad list entries\n')
+    out = exec_cmd(f'radosgw-admin bucket check olh-list --bucket {BUCKET_NAME} --fix --dump-keys')
+    fixed = {o['name'] for o in json.loads(out)}
+    assert set(olh_list_keys) <= fixed
+    for key in olh_list_keys:
+        versions = list(bucket.object_versions.filter(Prefix=key))
+        assert len(versions) == 2, f'expected two versions for key={key}'
+        latest = [v for v in versions if v.is_latest]
+        assert len(latest) == 1 and latest[0].version_id == 'null'
+
+    # TESTCASE 'bucket check olh-list does not find bad list entries after fix'
+    log.debug('TEST: bucket check olh-list does not find bad list entries after fix\n')
+    assert olh_list_problems() == {}
 
     # Clean up
     log.debug("Deleting bucket {}".format(BUCKET_NAME))
