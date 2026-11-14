@@ -103,6 +103,11 @@ void Client::ms_handle_connect(
 {
   LOG_PREFIX(Client::ms_handle_connect);
   DEBUGDPP("prev_shard: {}", *this, prv_shard);
+  // ignore foreign connections from chained dispatchers
+  if (c->get_peer_type() != CEPH_ENTITY_TYPE_MGR) {
+    return;
+  }
+  // mgr connections never migrate shards
   ceph_assert_always(prv_shard == seastar::this_shard_id());
   gates.dispatch_in_background(__func__, *this,
   [this, c, FNAME] {
@@ -125,6 +130,10 @@ void Client::ms_handle_reset(crimson::net::ConnectionRef c, bool /* is_replace *
 {
   LOG_PREFIX(Client::ms_handle_reset);
   DEBUGDPP("", *this);
+  // ignore foreign connections from chained dispatchers
+  if (c->get_peer_type() != CEPH_ENTITY_TYPE_MGR) {
+    return;
+  }
   gates.dispatch_in_background(__func__, *this,
   [this, c, FNAME] {
     DEBUGDPP("dispatching in background", *this);
