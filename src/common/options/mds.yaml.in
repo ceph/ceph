@@ -455,6 +455,9 @@ options:
   type: bool
   level: advanced
   desc: flag to prefetch entire dir
+  long_desc: When a lookup misses a dentry, load the whole dirfrag instead
+    of only that dentry. When the MDS cache has no room for the whole
+    dirfrag, only the dentry is loaded.
   default: true
   services:
   - mds
