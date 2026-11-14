@@ -1214,12 +1214,14 @@ int RadosBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int max
   return ret;
 }
 
-std::unique_ptr<MultipartUpload> RadosBucket::get_multipart_upload(
-				  const std::string& oid,
-				  std::optional<std::string> upload_id,
-				  ACLOwner owner, ceph::real_time mtime)
+auto RadosBucket::get_multipart_upload(const DoutPrefixProvider* dpp,
+                                       optional_yield y,
+                                       const std::string& oid,
+                                       std::optional<std::string> upload_id,
+                                       ACLOwner owner, ceph::real_time mtime)
+  -> std::unique_ptr<MultipartUpload>
 {
-  return std::make_unique<RadosMultipartUpload>(this->store, this, oid, upload_id,
+  return std::make_unique<RadosMultipartUpload>(dpp, y, this->store, this, oid, upload_id,
 						std::move(owner), mtime);
 }
 
@@ -1253,7 +1255,7 @@ int RadosBucket::list_multiparts(const DoutPrefixProvider *dpp,
         .id = rgw_user(dentry.meta.owner),
         .display_name = dentry.meta.owner_display_name
       };
-      uploads.push_back(this->get_multipart_upload(key.name,
+      uploads.push_back(this->get_multipart_upload(dpp, y, key.name,
 			std::nullopt, std::move(owner), dentry.meta.mtime));
     }
   }
@@ -3451,11 +3453,6 @@ int RadosObject::chown(const DoutPrefixProvider* dpp,
   return 0;
 }
 
-std::unique_ptr<MPSerializer> RadosObject::get_serializer(const DoutPrefixProvider *dpp, optional_yield y, const std::string& lock_name)
-{
-  return std::make_unique<MPRadosSerializer>(dpp, y, store, this, lock_name);
-}
-
 int RadosObject::transition(Bucket* bucket,
 			    const rgw_placement_rule& placement_rule,
 			    const real_time& mtime,
@@ -4188,6 +4185,17 @@ int RadosObject::swift_versioning_copy(const ACLOwner& owner, const rgw_user& re
                                         y);
 }
 
+RadosMultipartUpload::RadosMultipartUpload(
+    const DoutPrefixProvider* dpp, optional_yield y,
+    RadosStore* _store, Bucket* _bucket, const std::string& oid,
+    std::optional<std::string> upload_id, ACLOwner owner,
+    ceph::real_time _mtime)
+  : StoreMultipartUpload(_bucket), store(_store), mp_obj(oid, upload_id),
+    owner(owner), mtime(_mtime),
+    serializer(dpp, y, store, bucket, mp_obj, "RGWCompleteMultipart")
+{
+}
+
 int RadosMultipartUpload::cleanup_orphaned_parts(const DoutPrefixProvider *dpp,
                                                  CephContext *cct, optional_yield y,
                                                  const rgw_obj& obj,
@@ -4304,8 +4312,6 @@ int RadosMultipartUpload::cleanup_part_history(const DoutPrefixProvider* dpp,
 int RadosMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct, optional_yield y)
 {
   std::unique_ptr<rgw::sal::Object> meta_obj = get_meta_obj();
-  meta_obj->set_in_extra_data(true);
-  meta_obj->set_hash_source(mp_obj.get_key());
   cls_rgw_obj_chain chain;
   list<rgw_obj_index_key> remove_objs;
   bool truncated;
@@ -4337,10 +4343,9 @@ int RadosMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct,
         RadosMultipartPart* obj_part = dynamic_cast<RadosMultipartPart*>(part_it->second.get());
 
         if (obj_part->info.manifest.empty()) {
-          std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(
-            rgw_obj_key(obj_part->oid, std::string(), RGW_OBJ_NS_MULTIPART));
-          obj->set_hash_source(mp_obj.get_key());
-          ret = obj->delete_object(dpp, y, 0, nullptr, nullptr);
+          auto obj = RadosObject{store, rgw_obj_key(obj_part->oid, std::string(), RGW_OBJ_NS_MULTIPART), bucket};
+          obj.set_hash_source(mp_obj.get_key());
+          ret = obj.delete_object(dpp, y, 0, nullptr, nullptr);
           if (ret < 0 && ret != -ENOENT)
             return ret;
         } else {
@@ -4417,7 +4422,11 @@ int RadosMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct,
 
 std::unique_ptr<rgw::sal::Object> RadosMultipartUpload::get_meta_obj()
 {
-  return bucket->get_object(rgw_obj_key(get_meta(), string(), mp_ns));
+  auto obj = std::make_unique<RadosObject>(
+      store, rgw_obj_key(get_meta(), string(), mp_ns), bucket);
+  obj->set_in_extra_data(true);
+  obj->set_hash_source(get_key());
+  return obj;
 }
 
 int RadosMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y, ACLOwner& owner, rgw_placement_rule& dest_placement, rgw::sal::Attrs& attrs)
@@ -4430,7 +4439,6 @@ int RadosMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y, 
   do {
     char buf[33];
     string tmp_obj_name;
-    std::unique_ptr<rgw::sal::Object> obj;
     gen_rand_alphanumeric(store->ctx(), buf, sizeof(buf) - 1);
     std::string upload_id = MULTIPART_UPLOAD_ID_PREFIX; /* v2 upload id */
     upload_id.append(buf);
@@ -4438,16 +4446,15 @@ int RadosMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y, 
     mp_obj.init(oid, upload_id);
     tmp_obj_name = mp_obj.get_meta();
 
-    obj = bucket->get_object(rgw_obj_key(tmp_obj_name, string(), mp_ns));
+    auto obj = rgw_obj{bucket->get_key(), rgw_obj_key(tmp_obj_name, string(), mp_ns)};
     // the meta object will be indexed with 0 size, we c
-    obj->set_in_extra_data(true);
-    obj->set_hash_source(oid);
+    obj.set_in_extra_data(true);
+    obj.index_hash_source = oid;
 
 
-    const RGWBucketInfo& bucket_info = obj->get_bucket()->get_info();
+    const RGWBucketInfo& bucket_info = bucket->get_info();
 
-    RGWRados::Object op_target(store->getRados(), bucket_info,
-			       obj_ctx, obj->get_obj());
+    RGWRados::Object op_target(store->getRados(), bucket_info, obj_ctx, obj);
     RGWRados::Object::Write obj_op(&op_target);
 
     op_target.set_versioning_disabled(true); /* no versioning for multipart meta */
@@ -4825,10 +4832,29 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
   obj_op.meta.if_match = if_match;
   obj_op.meta.if_nomatch = if_nomatch;
 
+  const std::optional expires_at = serializer.is_locked_until();
+  if (!expires_at) { // lock renewal failed
+    return -ETIME;
+  }
+  if (*expires_at != ceph::real_clock::zero()) {
+    // prevent the write if it gets delayed past our lock expiration.
+    // this comparison is subject to clock skew between the osds, so
+    // add a small fudge factor
+    constexpr auto skew = std::chrono::seconds(5); // TODO: config option
+    const auto end = *expires_at - skew;
+    const auto dur = serializer.get_duration();
+    obj_op.meta.time_range.emplace(end - dur, end);
+  }
+
   const req_context rctx{dpp, y, nullptr};
   ret = obj_op.write_meta(ofs, accounted_size, attrs, rctx, get_trace());
-  if (ret < 0)
-    return ret;
+
+  if (ret == -EOPNOTSUPP) {
+    // the osd hasn't upgraded yet, retry without assert_time_range(). this
+    // fallback was added for the V release, so can be removed for X
+    obj_op.meta.time_range = std::nullopt;
+    ret = obj_op.write_meta(ofs, accounted_size, attrs, rctx, get_trace());
+  }
 
   return ret;
 }
@@ -4861,9 +4887,7 @@ int RadosMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield
   }
 
   /* We need either attributes or placement, so we need a read */
-  std::unique_ptr<rgw::sal::Object> meta_obj;
-  meta_obj = get_meta_obj();
-  meta_obj->set_in_extra_data(true);
+  std::unique_ptr<rgw::sal::Object> meta_obj = get_meta_obj();
 
   multipart_upload_info upload_info;
   bufferlist headbl;
@@ -4941,8 +4965,31 @@ std::unique_ptr<Writer> RadosMultipartUpload::get_writer(
 				 ptail_placement_rule, part_num, part_num_str, obj->get_trace());
 }
 
-MPRadosSerializer::MPRadosSerializer(const DoutPrefixProvider *dpp, optional_yield y,
-                                     RadosStore* store, RadosObject* obj,
+int RadosMultipartUpload::try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y)
+{
+  return serializer.try_lock(dpp, dur, y);
+}
+
+int RadosMultipartUpload::unlock(const DoutPrefixProvider *dpp, optional_yield y)
+{
+  return serializer.unlock(dpp, y);
+}
+
+bool RadosMultipartUpload::is_locked()
+{
+  return serializer.is_locked_until().has_value();
+}
+
+void RadosMultipartUpload::clear_locked()
+{
+  serializer.clear_locked();
+}
+
+MPRadosSerializer::MPRadosSerializer(const DoutPrefixProvider* dpp,
+                                     optional_yield y,
+                                     RadosStore* store,
+                                     Bucket* bucket,
+                                     const RGWMPObj& mp_obj,
                                      const std::string& lock_name)
   : dpp(dpp),
     y(y),
@@ -4951,14 +4998,22 @@ MPRadosSerializer::MPRadosSerializer(const DoutPrefixProvider *dpp, optional_yie
     timer(ex),
     cond(ex)
 {
-  rgw_pool meta_pool;
-  rgw_raw_obj raw_obj;
+  auto rados = store->getRados();
+  const auto& placement = bucket->get_placement_rule();
 
-  obj->get_raw_obj(&raw_obj);
+  rgw_obj obj{bucket->get_key(), rgw_obj_key{mp_obj.get_meta(), "", mp_ns}};
+  obj.set_in_extra_data(true);
+  obj.index_hash_source = mp_obj.get_key();
+
+  // get raw object name
+  rgw_raw_obj raw_obj;
+  rados->obj_to_raw(placement, obj, &raw_obj);
   oid = raw_obj.oid;
-  store->getRados()->get_obj_data_pool(obj->get_bucket()->get_placement_rule(),
-				       obj->get_obj(), &meta_pool);
-  store->getRados()->open_pool_ctx(dpp, meta_pool, ioctx, true, true);
+
+  // open an IoCtx for its pool
+  rgw_pool meta_pool;
+  rados->get_obj_data_pool(placement, obj, &meta_pool);
+  rados->open_pool_ctx(dpp, meta_pool, ioctx, true, true);
 }
 
 MPRadosSerializer::~MPRadosSerializer()
@@ -4967,18 +5022,12 @@ MPRadosSerializer::~MPRadosSerializer()
   stop_renewal();
 }
 
-static void renewal(const DoutPrefixProvider* dpp,
-                    rgw::sal::MPSerializer& serializer,
-                    librados::IoCtx& ioctx,
-                    const std::string& oid,
-                    rados::cls::lock::Lock lock,
-                    auto& timer,
-                    ceph::timespan dur,
-                    boost::asio::yield_context yield)
+void MPRadosSerializer::renewal(ceph::timespan dur,
+                                boost::asio::yield_context yield)
 {
   const ceph::timespan renew_every = dur / 2;
-  lock.set_duration(dur);
-  lock.set_must_renew(true);
+  lock_state.set_duration(dur);
+  lock_state.set_must_renew(true);
 
   // run the renewal loop until canceled
   while (yield.get_cancellation_state().cancelled() == boost::asio::cancellation_type::none) {
@@ -4995,20 +5044,30 @@ static void renewal(const DoutPrefixProvider* dpp,
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "MPSerializer lock renewal on "
           << oid << " failed with injected error " << ret << dendl;
-      serializer.clear_locked();
+      clear_locked();
       return;
     }
 
+    constexpr int flags = librados::OPERATION_RETURNVEC;
+    bufferlist bl;
     librados::ObjectWriteOperation op;
     op.assert_exists();
-    lock.lock_exclusive(&op);
-    ret = rgw_rados_operate(dpp, ioctx, oid, std::move(op), yield);
+    lock_state.lock_exclusive(&op, &bl);
+    ret = rgw_rados_operate(dpp, ioctx, oid, std::move(op), yield, flags);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: MPSerializer lock renewal on "
           << oid << " failed with " << ret << ". If this upload completes, "
           "a racing request may overwrite and corrupt it." << dendl;
-      serializer.clear_locked();
+      clear_locked();
       return;
+    }
+
+    utime_t expires_at;
+    ret = ::rados::cls::lock::decode_lock_reply(bl, expires_at);
+    if (ret < 0) {
+      locked_until = ceph::real_clock::zero();
+    } else {
+      locked_until = expires_at.to_real_time();
     }
   }
   ldpp_dout(dpp, 20) << "MPSerializer lock renewal canceled" << dendl;
@@ -5037,7 +5096,7 @@ void MPRadosSerializer::start_renewal(ceph::timespan dur)
   using namespace boost::asio;
   spawn(ex,
       [this, dur] (yield_context yield) {
-        renewal(this->dpp, *this, ioctx, oid, lock_state, timer, dur, yield);
+        renewal(dur, yield);
       }, bind_cancellation_slot(signal.slot(),
                                 bind_executor(ex, std::move(completion))));
 }
@@ -5061,14 +5120,30 @@ void MPRadosSerializer::stop_renewal()
 
 int MPRadosSerializer::try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y)
 {
+  duration = dur;
+
+  // use RETURNVEC to request that successful lock operations respond
+  // with the osd's lock expiration time
+  constexpr int flags = librados::OPERATION_RETURNVEC;
+  bufferlist bl;
+
   librados::ObjectWriteOperation op;
   op.assert_exists();
   lock_state.set_duration(dur);
   lock_state.set_may_renew(false);
-  lock_state.lock_exclusive(&op);
-  int ret = rgw_rados_operate(dpp, ioctx, oid, std::move(op), y);
+  lock_state.lock_exclusive(&op, &bl);
+  int ret = rgw_rados_operate(dpp, ioctx, oid, std::move(op), y, flags);
   if (! ret) {
-    locked = true;
+    utime_t expires_at;
+    ret = ::rados::cls::lock::decode_lock_reply(bl, expires_at);
+    if (ret < 0) {
+      // the osd doesn't support this use of RETURNVEC. initialize the
+      // optional<real_time> to zero, meaning that the lock is held but
+      // without a real expiration time
+      locked_until = ceph::real_clock::zero();
+    } else {
+      locked_until = expires_at.to_real_time();
+    }
 
     start_renewal(dur);
 

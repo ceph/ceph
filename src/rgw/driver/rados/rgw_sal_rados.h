@@ -635,8 +635,6 @@ class RadosObject : public StoreObject {
     virtual std::unique_ptr<Object> clone() override {
       return std::unique_ptr<Object>(new RadosObject(*this));
     }
-    virtual std::unique_ptr<MPSerializer> get_serializer(const DoutPrefixProvider *dpp, optional_yield y,
-							 const std::string& lock_name) override;
     virtual int transition(Bucket* bucket,
 			   const rgw_placement_rule& placement_rule,
 			   const real_time& mtime,
@@ -707,6 +705,14 @@ class RadosObject : public StoreObject {
 		                 RGWRestoreStatus restore_status);
     RGWObjManifest* get_manifest() { return manifest; }
     RGWObjectCtx& get_ctx() { return *rados_ctx; }
+
+    // for multipart meta object
+    void set_in_extra_data(bool i) {
+      state.obj.set_in_extra_data(i);
+    }
+    void set_hash_source(std::string s) {
+      state.obj.index_hash_source = std::move(s);
+    }
 
   private:
     int read_attrs(const DoutPrefixProvider* dpp, RGWRados::Object::Read &read_op, optional_yield y, rgw_obj* target_obj = nullptr);
@@ -787,6 +793,8 @@ class RadosBucket : public StoreBucket {
       return std::make_unique<RadosBucket>(*this);
     }
     virtual std::unique_ptr<MultipartUpload> get_multipart_upload(
+				const DoutPrefixProvider* dpp,
+				optional_yield y,
 				const std::string& oid,
 				std::optional<std::string> upload_id=std::nullopt,
 				ACLOwner owner={}, ceph::real_time mtime=real_clock::now()) override;
@@ -880,6 +888,41 @@ public:
   friend class RadosMultipartUpload;
 };
 
+class MPRadosSerializer {
+  const DoutPrefixProvider* dpp;
+  optional_yield y;
+  librados::IoCtx ioctx;
+  ::rados::cls::lock::Lock lock_state;
+  std::string oid;
+  ceph::timespan duration;
+  std::atomic<std::optional<ceph::real_time>> locked_until;
+
+  // lock renewal state
+  boost::asio::any_io_executor ex; // strand executor for renewal
+  using Timer = boost::asio::basic_waitable_timer<ceph::coarse_mono_clock>;
+  Timer timer;
+  boost::asio::cancellation_signal signal;
+  std::mutex mutex;
+  ceph::async::async_cond<> cond;
+  bool renew_started = false;
+  bool renew_canceled = false;
+  void start_renewal(ceph::timespan dur);
+  void stop_renewal();
+  void renewal(ceph::timespan dur, boost::asio::yield_context yield);
+
+public:
+  MPRadosSerializer(const DoutPrefixProvider* dpp, optional_yield y,
+                    RadosStore* store, Bucket* bucket,
+                    const RGWMPObj& mp_obj, const std::string& lock_name);
+  ~MPRadosSerializer();
+
+  int try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y);
+  int unlock(const DoutPrefixProvider* dpp, optional_yield y);
+  std::optional<ceph::real_time> is_locked_until() const { return locked_until; }
+  void clear_locked() { locked_until = std::nullopt; }
+  ceph::timespan get_duration() const { return duration; }
+};
+
 class RadosMultipartUpload : public StoreMultipartUpload {
   RadosStore* store;
   RGWMPObj mp_obj;
@@ -890,12 +933,13 @@ class RadosMultipartUpload : public StoreMultipartUpload {
   multipart_upload_info upload_information;
   rgw::sal::Attrs cached_attrs;
 
+  MPRadosSerializer serializer;
+
 public:
-  RadosMultipartUpload(RadosStore* _store, Bucket* _bucket, const std::string& oid,
+  RadosMultipartUpload(const DoutPrefixProvider* dpp, optional_yield y,
+                       RadosStore* _store, Bucket* _bucket, const std::string& oid,
                        std::optional<std::string> upload_id, ACLOwner owner,
-                       ceph::real_time _mtime)
-      : StoreMultipartUpload(_bucket), store(_store), mp_obj(oid, upload_id),
-        owner(owner), mtime(_mtime) {}
+                       ceph::real_time _mtime);
   virtual ~RadosMultipartUpload() = default;
 
   virtual const std::string& get_meta() const override { return mp_obj.get_meta(); }
@@ -936,39 +980,18 @@ public:
 			  const rgw_placement_rule *ptail_placement_rule,
 			  uint64_t part_num,
 			  const std::string& part_num_str) override;
+
+  int try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y) override;
+  int unlock(const DoutPrefixProvider *dpp, optional_yield y) override;
+  bool is_locked() override;
+  void clear_locked() override;
+
 protected:
   int cleanup_part_history(const DoutPrefixProvider* dpp,
                            optional_yield y,
                            RadosMultipartPart* part,
                            std::list<rgw_obj_index_key>& remove_objs,
                            boost::container::flat_set<std::string>& processed_prefixes);
-};
-
-class MPRadosSerializer : public StoreMPSerializer {
-  const DoutPrefixProvider* dpp;
-  optional_yield y; // context of request coroutine/thread
-  librados::IoCtx ioctx;
-  ::rados::cls::lock::Lock lock_state;
-
-  // lock renewal state
-  boost::asio::any_io_executor ex; // strand executor for renewal
-  using Timer = boost::asio::basic_waitable_timer<ceph::coarse_mono_clock>;
-  Timer timer;
-  boost::asio::cancellation_signal signal;
-  std::mutex mutex;
-  ceph::async::async_cond<> cond;
-  bool renew_started = false;
-  bool renew_canceled = false;
-  void start_renewal(ceph::timespan dur);
-  void stop_renewal();
-
-public:
-  MPRadosSerializer(const DoutPrefixProvider *dpp, optional_yield y,
-                    RadosStore* store, RadosObject* obj, const std::string& lock_name);
-  ~MPRadosSerializer() override;
-
-  virtual int try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y) override;
-  virtual int unlock(const DoutPrefixProvider* dpp, optional_yield y) override;
 };
 
 class LCRadosSerializer : public StoreLCSerializer {

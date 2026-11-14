@@ -520,9 +520,8 @@ static int read_obj_policy(const DoutPrefixProvider *dpp,
   if (!upload_id.empty() && !copy_src) {
     /* multipart upload */
     std::unique_ptr<rgw::sal::MultipartUpload> upload;
-    upload = bucket->get_multipart_upload(object->get_name(), upload_id);
+    upload = bucket->get_multipart_upload(dpp, y, object->get_name(), upload_id);
     mpobj = upload->get_meta_obj();
-    mpobj->set_in_extra_data(true);
     object = mpobj.get();
   }
   policy = get_iam_policy_from_attr(s->cct, bucket_attrs, s->bucket_tenant);
@@ -4970,7 +4969,7 @@ void RGWPutObj::execute(optional_yield y)
 
   if (multipart) {
     std::unique_ptr<rgw::sal::MultipartUpload> upload;
-    upload = s->bucket->get_multipart_upload(s->object->get_name(),
+    upload = s->bucket->get_multipart_upload(this, y, s->object->get_name(),
 					 multipart_upload_id);
     op_ret = upload->get_info(this, s->yield, &pdest_placement);
 
@@ -7623,7 +7622,7 @@ void RGWInitMultipart::execute(optional_yield y)
   rgw_cond_decode_objtags(s, attrs);
 
   std::unique_ptr<rgw::sal::MultipartUpload> upload;
-  upload = s->bucket->get_multipart_upload(s->object->get_name(),
+  upload = s->bucket->get_multipart_upload(this, y, s->object->get_name(),
 				       upload_id);
 
   /* apparently, we are assured of upload */
@@ -7790,7 +7789,6 @@ void RGWCompleteMultipart::execute(optional_yield y)
 {
   RGWMultiCompleteUpload* parts;
   RGWMultiXMLParser parser;
-  std::unique_ptr<rgw::sal::MultipartUpload> upload;
   off_t ofs = 0;
   uint64_t olh_epoch = 0;
 
@@ -7834,7 +7832,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
     return;
   }
 
-  upload = s->bucket->get_multipart_upload(s->object->get_name(), upload_id);
+  upload = s->bucket->get_multipart_upload(this, y, s->object->get_name(), upload_id);
 
   rgw_placement_rule* dest_placement;
   op_ret = upload->get_info(this, s->yield, &dest_placement);
@@ -7864,8 +7862,6 @@ void RGWCompleteMultipart::execute(optional_yield y)
   list<rgw_obj_index_key> remove_objs; /* objects to be removed from index listing */
 
   std::unique_ptr<rgw::sal::Object> meta_obj = upload->get_meta_obj();
-  meta_obj->set_in_extra_data(true);
-  meta_obj->set_hash_source(s->object->get_name());
 
   /* take a cls lock on meta_obj to prevent racing completions (or retries)
      from deleting the parts*/
@@ -7873,8 +7869,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
     s->cct->_conf.get_val<int64_t>("rgw_mp_lock_max_time");
   const ceph::timespan dur = std::chrono::seconds(max_lock_secs_mp);
 
-  serializer = meta_obj->get_serializer(this, y, "RGWCompleteMultipart");
-  op_ret = serializer->try_lock(this, dur, y);
+  op_ret = upload->try_lock(this, dur, y);
   if (op_ret == -ENOENT) {
     // CompleteMultipartUpload should be idempotent - return success if the
     // upload already completed. but note that this check isn't reliable in
@@ -8005,17 +8000,17 @@ void RGWCompleteMultipart::execute(optional_yield y)
     return;
   }
 
-  if (!serializer->is_locked()) {
-    // lock renewal failed, it's not safe to commit the head object
-    op_ret = -ERR_INTERNAL_ERROR;
-    s->err.message = "This multipart completion is already in progress";
-    return;
-  }
-
   op_ret =
     upload->complete(this, y, s->cct, parts->parts, remove_objs, accounted_size,
                      compressed, cs_info, ofs, s->req_id, s->owner, olh_epoch,
                      s->object.get(), processed_prefixes, if_match, if_nomatch);
+
+  if (op_ret == -ETIME) {
+    // lock renewal failed, it wasn't safe to commit the head object
+    op_ret = -ERR_INTERNAL_ERROR;
+    s->err.message = "This multipart completion is already in progress";
+    return;
+  }
 
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: upload complete failed ret=" << op_ret << dendl;
@@ -8038,7 +8033,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
     if (ret != -ECANCELED || i == MAX_DELETE_RETRIES - 1) {
       if (ret >= 0) {
         /* serializer's exclusive lock is released */
-        serializer->clear_locked();
+        upload->clear_locked();
       } else {
         ldpp_dout(this, 1) << "ERROR: failed to remove object " << meta_obj << ", ret: " << ret << dendl;
       }
@@ -8152,10 +8147,10 @@ bool RGWCompleteMultipart::check_previously_completed(const RGWMultiCompleteUplo
 void RGWCompleteMultipart::complete()
 {
   /* release exclusive lock iff not already */
-  if (unlikely(serializer.get() && serializer->is_locked())) {
-    int r = serializer->unlock(this, s->yield);
+  if (unlikely(upload.get() && upload->is_locked())) {
+    int r = upload->unlock(this, s->yield);
     if (r < 0) {
-      ldpp_dout(this, 0) << "WARNING: failed to unlock " << *serializer.get() << dendl;
+      ldpp_dout(this, 0) << "WARNING: failed to unlock " << *upload << dendl;
     }
   }
 
@@ -8192,9 +8187,8 @@ void RGWAbortMultipart::execute(optional_yield y)
   if (upload_id.empty() || rgw::sal::Object::empty(s->object.get()))
     return;
 
-  upload = s->bucket->get_multipart_upload(s->object->get_name(), upload_id);
+  upload = s->bucket->get_multipart_upload(this, y, s->object->get_name(), upload_id);
   meta_obj = upload->get_meta_obj();
-  meta_obj->set_in_extra_data(true);
   meta_obj->get_obj_attrs(s->yield, this);
 
   jspan_context trace_ctx(false, false);
@@ -8207,8 +8201,7 @@ void RGWAbortMultipart::execute(optional_yield y)
   int max_lock_secs_mp =
     s->cct->_conf.get_val<int64_t>("rgw_mp_lock_max_time");
   const ceph::timespan dur = std::chrono::seconds(max_lock_secs_mp);
-  auto serializer = meta_obj->get_serializer(this, y, "RGWCompleteMultipart");
-  op_ret = serializer->try_lock(this, dur, y);
+  op_ret = upload->try_lock(this, dur, y);
   if (op_ret < 0) {
     if (op_ret == -ENOENT) {
       op_ret = -ERR_NO_SUCH_UPLOAD;
@@ -8216,7 +8209,7 @@ void RGWAbortMultipart::execute(optional_yield y)
     return;
   }
   op_ret = upload->abort(this, s->cct, y);
-  serializer->unlock(this, y);
+  upload->unlock(this, y);
 }
 
 int RGWListMultipart::verify_permission(optional_yield y)
@@ -8242,7 +8235,7 @@ void RGWListMultipart::execute(optional_yield y)
   if (op_ret < 0)
     return;
 
-  upload = s->bucket->get_multipart_upload(s->object->get_name(), upload_id);
+  upload = s->bucket->get_multipart_upload(this, y, s->object->get_name(), upload_id);
 
   rgw::sal::Attrs attrs;
   op_ret = upload->get_info(this, s->yield, &placement, &attrs);

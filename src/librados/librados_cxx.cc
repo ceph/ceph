@@ -144,6 +144,14 @@ void librados::ObjectOperation::assert_version(uint64_t ver)
   o->assert_version(ver);
 }
 
+void librados::ObjectOperation::assert_time_range(timespec after,
+                                                  timespec before)
+{
+  ceph_assert(impl);
+  ::ObjectOperation *o = &impl->o;
+  o->assert_time_range(after, before);
+}
+
 void librados::ObjectOperation::assert_exists()
 {
   ceph_assert(impl);

@@ -228,6 +228,105 @@ TEST_P(LibRadosMisc, CmpExt) {
 	    rados_cmpext(ioctx, "cmpextpp", mismatch_str, sizeof(mismatch_str), 0));
 }
 
+static timespec make_timespec(utime_t t)
+{
+  timespec ts;
+  t.to_timespec(&ts);
+  return ts;
+}
+
+TEST_P(LibRadosMisc, ReadAssertTimeRange)
+{
+  // this test is subject to clock skew between the test client
+  // and osds. account for up to 300 seconds
+  const utime_t skew = utime_t{300, 0};
+  const char* oid = "read-assert-time-range";
+  {
+    auto op = rados_create_write_op();
+    rados_write_op_create(op, LIBRADOS_CREATE_IDEMPOTENT, nullptr);
+    ASSERT_EQ(0, rados_write_op_operate(op, ioctx, oid, nullptr, 0));
+    rados_release_write_op(op);
+  }
+  {
+    auto op = rados_create_read_op();
+    const auto after = make_timespec(utime_t{});
+    const auto before = make_timespec(ceph_clock_now() + skew);
+    rados_read_op_assert_time_range(op, after, before);
+    ASSERT_EQ(0, rados_read_op_operate(op, ioctx, oid, 0));
+    rados_release_read_op(op);
+  }
+  {
+    auto op = rados_create_read_op();
+    const auto after = make_timespec(utime_t{});
+    const auto before = make_timespec(ceph_clock_now() - skew);
+    rados_read_op_assert_time_range(op, after, before);
+    ASSERT_EQ(-ETIME, rados_read_op_operate(op, ioctx, oid, 0));
+    rados_release_read_op(op);
+  }
+  {
+    auto op = rados_create_read_op();
+    const auto after = make_timespec(ceph_clock_now() + skew);
+    const auto before = make_timespec(utime_t::max());
+    rados_read_op_assert_time_range(op, after, before);
+    ASSERT_EQ(-ETIME, rados_read_op_operate(op, ioctx, oid, 0));
+    rados_release_read_op(op);
+  }
+  {
+    auto op = rados_create_read_op();
+    const auto after = make_timespec(ceph_clock_now() - skew);
+    const auto before = make_timespec(utime_t::max());
+    rados_read_op_assert_time_range(op, after, before);
+    ASSERT_EQ(0, rados_read_op_operate(op, ioctx, oid, 0));
+    rados_release_read_op(op);
+  }
+}
+
+TEST_P(LibRadosMisc, WriteAssertTimeRange)
+{
+  // this test is subject to clock skew between the test client
+  // and osds. account for up to 300 seconds
+  const utime_t skew = utime_t{300, 0};
+  const char* oid = "write-assert-time-range";
+  {
+    auto op = rados_create_write_op();
+    rados_write_op_create(op, LIBRADOS_CREATE_IDEMPOTENT, nullptr);
+    ASSERT_EQ(0, rados_write_op_operate(op, ioctx, oid, nullptr, 0));
+    rados_release_write_op(op);
+  }
+  {
+    auto op = rados_create_write_op();
+    const auto after = make_timespec(utime_t{});
+    const auto before = make_timespec(ceph_clock_now() + skew);
+    rados_write_op_assert_time_range(op, after, before);
+    ASSERT_EQ(0, rados_write_op_operate(op, ioctx, oid, nullptr, 0));
+    rados_release_write_op(op);
+  }
+  {
+    auto op = rados_create_write_op();
+    const auto after = make_timespec(utime_t{});
+    const auto before = make_timespec(ceph_clock_now() - skew);
+    rados_write_op_assert_time_range(op, after, before);
+    ASSERT_EQ(-ETIME, rados_write_op_operate(op, ioctx, oid, nullptr, 0));
+    rados_release_write_op(op);
+  }
+  {
+    auto op = rados_create_write_op();
+    const auto after = make_timespec(ceph_clock_now() + skew);
+    const auto before = make_timespec(utime_t::max());
+    rados_write_op_assert_time_range(op, after, before);
+    ASSERT_EQ(-ETIME, rados_write_op_operate(op, ioctx, oid, nullptr, 0));
+    rados_release_write_op(op);
+  }
+  {
+    auto op = rados_create_write_op();
+    const auto after = make_timespec(ceph_clock_now() - skew);
+    const auto before = make_timespec(utime_t::max());
+    rados_write_op_assert_time_range(op, after, before);
+    ASSERT_EQ(0, rados_write_op_operate(op, ioctx, oid, nullptr, 0));
+    rados_release_write_op(op);
+  }
+}
+
 TEST_P(LibRadosMisc, Applications) {
   const char *cmd[] = {"{\"prefix\":\"osd dump\"}", nullptr};
   char *buf, *st;

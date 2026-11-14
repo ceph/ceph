@@ -12,11 +12,23 @@
 namespace rados {
   namespace cls {
     namespace lock {
+      /// Add a lock request to the given write operation.
+      ///
+      /// @param obl If the operation is submitted with the
+      ///            OPERATION_RETURNVEC flag, the osd may reply with a
+      ///            buffer that encodes the osd's expiration timestamp.
+      ///            This may still come back empty if the osd isn't
+      ///            running an upgraded cls_lock.
       extern void lock(librados::ObjectWriteOperation *rados_op,
 		       const std::string& name, ClsLockType type,
 		       const std::string& cookie, const std::string& tag,
 		       const std::string& description, const utime_t& duration,
-		       uint8_t flags);
+		       uint8_t flags, ceph::bufferlist* obl = nullptr);
+
+      /// Decode the expiration timestamp from lock()'s optional reply
+      /// buffer or return -EIO on failure.
+      int decode_lock_reply(const bufferlist& obl,
+                            utime_t& expires_at);
 
       extern void unlock(librados::ObjectWriteOperation *rados_op,
 			 const std::string& name, const std::string& cookie);
@@ -113,15 +125,18 @@ namespace rados {
         void assert_locked_exclusive_ephemeral(librados::ObjectOperation *rados_op);
 
 	/* ObjectWriteOperation */
-	void lock_shared(librados::ObjectWriteOperation *ioctx);
-	void lock_exclusive(librados::ObjectWriteOperation *ioctx);
+	void lock_shared(librados::ObjectWriteOperation *op,
+                         ceph::bufferlist* obl = nullptr);
+	void lock_exclusive(librados::ObjectWriteOperation *op,
+                            ceph::bufferlist* obl = nullptr);
 
 	// Be careful when using an exclusive ephemeral lock; it is
 	// intended strictly for cases when a lock object exists
 	// solely for a lock in a given process and the object is no
 	// longer needed when the lock is unlocked or expired, as the
 	// cls back-end will make an effort to delete it.
-	void lock_exclusive_ephemeral(librados::ObjectWriteOperation *ioctx);
+	void lock_exclusive_ephemeral(librados::ObjectWriteOperation *ioctx,
+                                      ceph::bufferlist* obl = nullptr);
 	void unlock(librados::ObjectWriteOperation *ioctx);
 	void break_lock(librados::ObjectWriteOperation *ioctx,
 			const entity_name_t& locker);
