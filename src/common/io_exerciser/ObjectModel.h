@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 #include <random>
+#include <unordered_map>
 
 /* Overview
  *
@@ -31,6 +32,7 @@ class ObjectModel : public Model {
   std::vector<int> primary_contents;
   std::vector<int> secondary_contents;
   std::mt19937_64 rng;
+  std::unordered_map<uint64_t, int> write_seeds;
 
   // Track read and write I/Os that can be submitted in
   // parallel to detect violations:

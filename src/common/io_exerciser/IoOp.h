@@ -257,6 +257,51 @@ class TripleFailedWriteOp : public ReadWriteOp<OpType::FailedWrite3, 3> {
       uint64_t offset3, uint64_t length3);
 };
 
+template <OpType opType, int numTruncates>
+class WriteTruncateOp : public TestOp<opType> {
+ public:
+  uint64_t offset;
+  uint64_t length;
+  std::array<uint64_t, numTruncates> size;
+
+ protected:
+  WriteTruncateOp(uint64_t offset, uint64_t length,
+                  std::array<uint64_t, numTruncates>&& size);
+  std::string to_string(uint64_t block_size) const override;
+};
+
+class SingleWriteTruncateOp : public WriteTruncateOp<OpType::WriteTruncate, 1> {
+ public:
+  SingleWriteTruncateOp(uint64_t offset, uint64_t length, uint64_t size);
+  static std::unique_ptr<SingleWriteTruncateOp> generate(
+      uint64_t offset, uint64_t length, uint64_t size);
+};
+
+class DoubleWriteTruncateOp : public WriteTruncateOp<OpType::WriteTruncate2, 2> {
+ public:
+  DoubleWriteTruncateOp(uint64_t offset, uint64_t length, uint64_t size1,
+                        uint64_t size2);
+  static std::unique_ptr<DoubleWriteTruncateOp> generate(
+      uint64_t offset, uint64_t length, uint64_t size1, uint64_t size2);
+};
+
+class SingleFailedWriteTruncateOp
+    : public WriteTruncateOp<OpType::FailedWriteTruncate, 1> {
+ public:
+  SingleFailedWriteTruncateOp(uint64_t offset, uint64_t length, uint64_t size);
+  static std::unique_ptr<SingleFailedWriteTruncateOp> generate(
+      uint64_t offset, uint64_t length, uint64_t size);
+};
+
+class DoubleFailedWriteTruncateOp
+    : public WriteTruncateOp<OpType::FailedWriteTruncate2, 2> {
+ public:
+  DoubleFailedWriteTruncateOp(uint64_t offset, uint64_t length, uint64_t size1,
+                              uint64_t size2);
+  static std::unique_ptr<DoubleFailedWriteTruncateOp> generate(
+      uint64_t offset, uint64_t length, uint64_t size1, uint64_t size2);
+};
+
 template <ceph::io_exerciser::OpType opType>
 class InjectErrorOp : public TestOp<opType> {
  public:
