@@ -1,0 +1,11 @@
+# thrash ganesha and the MDSs together: ganesha's libcephfs session has to
+# reconnect to restarted MDS ranks and be reclaimed by restarted ganesha
+# instances, sometimes both at once
+overrides:
+  ceph:
+    log-ignorelist:
+      - Replacing daemon mds
+tasks:
+- mds_thrash:
+- ganesha_thrash:
+    cluster_id: nfs-ganesha-test
