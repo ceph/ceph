@@ -1822,12 +1822,11 @@ void OSDMap::get_out_of_subnet_osd_counts(CephContext *cct,
   unreachable->clear();
   for (int i = 0; i < max_osd; i++) {
     if (exists(i) && is_up(i)) {
-      if (const auto& addrs = get_addrs(i).v; addrs.size() >= 2) {
-        if (!is_addr_in_subnet(cct, public_network, addrs[0])) {
-          unreachable->emplace(i);
-        }
-        if (!is_addr_in_subnet(cct, public_network, addrs[1])) {
-          unreachable->emplace(i);
+      if (const auto& addrs = get_addrs(i).v; !addrs.empty()) {
+        for (const auto& addr : addrs) {
+          if (!is_addr_in_subnet(cct, public_network, addr)) {
+            unreachable->emplace(i);
+          }
         }
       }
     }
