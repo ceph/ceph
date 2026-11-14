@@ -146,6 +146,11 @@
   and such an image simply runs without a cache. Note that ``ceph config set
   ... rwl`` now fails, which may break automation.
 
+* OSD: ``bluestore_bluefs_warn_ratio`` is now validated to the range
+  ``[0, 1]``. Negative or out-of-range values are rejected with ``EINVAL``
+  instead of producing misleading ``BLUESTORE_BLUEFS_OVERSIZED`` health
+  messages such as ``-100%``.
+
 >=21.0.0
 * CephFS: The ``fs subvolumegroup create`` command now supports the
   ``--namespace-isolated`` option. When a subvolume group is created with this flag,
