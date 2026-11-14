@@ -291,6 +291,37 @@ Flags
 
    option only affects daemon creation
 
+Validation
+----------
+
+Use ``min``, ``max`` and ``enum_values`` for constraints that the option
+system can check directly. For additional rules, ``validator`` accepts
+a C++ callback that receives the parsed ``Option::value_t&`` and an
+error string pointer. Return zero to accept the value, or a negative error
+code and a message to reject it. For example, an unsigned integer option
+that requires an even value can use:
+
+.. code-block:: yaml
+
+   validator: |
+     [](const Option::value_t &value, std::string *error_message) {
+       if (std::get<uint64_t>(value) % 2 != 0) {
+         *error_message = "value must be even";
+         return -EINVAL;
+       }
+       return 0;
+     }
+
+The option system parses the input once before calling ``validator``. The
+callback can inspect any option type through ``Option::value_t`` without
+repeating that parsing. Use a const reference when only inspecting the value.
+
+A validator may also normalize the parsed value without changing its type.
+For example, a string option can convert named features into a string
+containing their bitmask. The standard min, max and enum checks run after
+the callback, so they apply to the normalized value. ``Option::validate()``
+performs the same checks for callers that already have a typed value.
+
 Documentation of Configuration Values
 =====================================
 

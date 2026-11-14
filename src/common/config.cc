@@ -160,9 +160,10 @@ md_config_t::md_config_t(ConfigValues& values,
     opt.set_flag(Option::FLAG_RUNTIME);
     opt.set_long_description("The value takes the form 'N' or 'N/M' where N and M are values between 0 and 99.  N is the debug level to log (all values below this are included), and M is the level to gather and buffer in memory.  In the event of a crash, the most recent items <= M are dumped to the log file.");
     opt.set_subsys(i);
-    opt.set_validator([](std::string *value, std::string *error_message) {
+    opt.set_validator([](Option::value_t &new_value, std::string *error_message) {
+	auto &value = std::get<std::string>(new_value);
 	int m, n;
-	int r = sscanf(value->c_str(), "%d/%d", &m, &n);
+	int r = sscanf(value.c_str(), "%d/%d", &m, &n);
 	if (r >= 1) {
 	  if (m < 0 || m > 99) {
 	    *error_message = "value must be in range [0, 99]";
@@ -176,7 +177,7 @@ md_config_t::md_config_t(ConfigValues& values,
 	  } else {
 	    // normalize to M/N
 	    n = m;
-	    *value = fmt::format("{}/{}", m, n);
+	    value = fmt::format("{}/{}", m, n);
 	  }
 	} else {
 	  *error_message = "value must take the form N or N/M, where N and M are integers";
@@ -191,10 +192,10 @@ md_config_t::md_config_t(ConfigValues& values,
 
   validate_schema();
 
-  // Validate default values from the schema
+  // Validate and normalize string defaults with custom validators.
   for (const auto &i : schema) {
     const Option &opt = i.second;
-    if (opt.type == Option::TYPE_STR) {
+    if (opt.type == Option::TYPE_STR && opt.validator) {
       bool has_daemon_default = (opt.daemon_value != Option::value_t{});
       Option::value_t default_val;
       if (is_daemon && has_daemon_default) {
@@ -202,24 +203,23 @@ md_config_t::md_config_t(ConfigValues& values,
       } else {
 	default_val = opt.value;
       }
-      // We call pre_validate as a sanity check, but also to get any
-      // side effect (value modification) from the validator.
-      auto* def_str = std::get_if<std::string>(&default_val);
-      std::string val = *def_str;
+      auto normalized = default_val;
       std::string err;
-      if (opt.pre_validate(&val, &err) != 0) {
-        std::cerr << "Default value " << opt.name << "=" << *def_str << " is "
-                     "invalid: " << err << std::endl;
+      if (opt.validate(normalized, &err) != 0) {
+        std::cerr << "Default value " << opt.name << "="
+                  << std::get<std::string>(default_val)
+                  << " is invalid: " << err << std::endl;
 
         // This is the compiled-in default that is failing its own option's
         // validation, so this is super-invalid and should never make it
         // past a pull request: crash out.
         ceph_abort();
       }
-      if (val != *def_str) {
+      if (normalized != default_val) {
 	// if the validator normalizes the string into a different form than
 	// what was compiled in, use that.
-	set_val_default(values, tracker, opt.name, val);
+	set_val_default(values, tracker, opt.name,
+			std::get<std::string>(normalized));
       }
     }
   }
