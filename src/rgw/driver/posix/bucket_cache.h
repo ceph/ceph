@@ -5,11 +5,15 @@
 
 #include <iostream>
 #include <lmdb.h>
+#include <map>
 #include <memory>
+#include <optional>
+#include <set>
 #include <tuple>
 #include <vector>
 #include <string>
 #include <string_view>
+#include <sys/stat.h>
 #include <mutex>
 #include <shared_mutex>
 #include <condition_variable>
@@ -17,6 +21,8 @@
 #include <boost/container/flat_map.hpp>
 #include <boost/intrusive/avl_set.hpp>
 #include "include/function2.hpp"
+#include "common/ceph_time.h"
+#include "common/errno.h"
 #include "common/cohort_lru.h"
 #include "include/scope_guard.h"
 #include "lmdb-safe.hh"
@@ -83,6 +89,106 @@ namespace sf = std::filesystem;
 typedef bi::link_mode<bi::safe_link> link_mode; /* XXX normal */
 typedef bi::avl_set_member_hook<link_mode> member_hook_t;
 
+/* Revalidation:  a listing checks the tree as it walks, so that what a
+ * filesystem client changed after the fill is listed (nsfs's
+ * rgw_nsfs_listing_revalidate).  The cache does the walk and keeps the
+ * records;  the driver supplies what touches the filesystem
+ * (Revalidation, below).  A cache given none trusts its fill, as posix's
+ * does.
+ *
+ * Every name here is an index key's name -- what the cache's keys hold
+ * before the '\0' -- and a directory is named by its prefix, "" for the
+ * bucket's own and otherwise ending in '/'. */
+
+inline int64_t statx_ns(const struct statx_timestamp& t) {
+  return int64_t(t.tv_sec) * 1000000000 + t.tv_nsec;
+}
+
+inline int64_t revalidation_now_ns() {
+  return std::chrono::duration_cast<std::chrono::nanoseconds>(
+    ceph::coarse_mono_clock::now().time_since_epoch()).count();
+}
+
+/* An entry's recorded stat:  the file holding a current object, as it
+ * was when the entry was built, and when a listing last compared it.  A
+ * value carries one whether or not anything reads it;  an unknown one
+ * (ino 0) never matches, so its entry is rebuilt at its first check. */
+struct EntryStat {
+  uint64_t ino{0};
+  uint64_t size{0};
+  int64_t mtime_ns{0};
+  int64_t ctime_ns{0};
+  int64_t checked_ns{0};	/* revalidation_now_ns() */
+
+  bool known() const { return ino != 0; }
+  bool same_file(const EntryStat& o) const {
+    return known() && (ino == o.ino) && (size == o.size) &&
+      (mtime_ns == o.mtime_ns) && (ctime_ns == o.ctime_ns);
+  }
+  static EntryStat of(const struct statx& stx) {
+    EntryStat s;
+    s.ino = stx.stx_ino;
+    s.size = stx.stx_size;
+    s.mtime_ns = statx_ns(stx.stx_mtime);
+    s.ctime_ns = statx_ns(stx.stx_ctime);
+    s.checked_ns = revalidation_now_ns();
+    return s;
+  }
+};
+
+/* A directory's recorded inode and mtime, and its .versions/'s where it
+ * has one (0 where not). */
+struct DirStat {
+  uint64_t ino{0};
+  int64_t mtime_ns{0};
+  uint64_t vino{0};
+  int64_t vmtime_ns{0};
+  bool operator==(const DirStat&) const = default;
+};
+
+/* How near the clock a directory's mtime may be when its stat is
+ * recorded, and the record still be trusted.  A filesystem stamping times
+ * from the coarse clock -- tmpfs, and xfs and ext4 before Linux 6.13's
+ * fine-grained timestamps -- gives every change within one tick (1 ms at
+ * HZ=1000) the same mtime, so a change landing in the tick the stat was
+ * recorded in moves nothing.  Generous, to cover coarser clocks. */
+inline constexpr int64_t RACY_RECORD_NS = 10'000'000;
+
+inline int64_t realtime_ns() {
+  return std::chrono::duration_cast<std::chrono::nanoseconds>(
+    ceph::real_clock::now().time_since_epoch()).count();
+}
+
+struct DirRecord {
+  DirStat st;
+  /* recorded by a listing within RACY_RECORD_NS of its mtime (or its
+   * .versions/'s):  a change since may not have moved it, so the next check
+   * reads the directory, as git rereads a racily clean index entry.  A
+   * record of RGW's own change is never racy:  a change in its tick is one
+   * landing beside RGW's, which the provisional mark covers. */
+  bool racy{false};
+  /* false after RGW's own change:  the next check takes the directory's
+   * stat as its record without reading it */
+  bool baseline{true};
+  /* set by RGW's first change since the directory was last read, and
+   * cleared by the read;  once older than the provisional interval, the
+   * next check reads the directory, for what landed beside RGW's change */
+  std::optional<int64_t> provisional_ns;
+
+  /* the record's stat, taken by a listing:  racy as of now, or not */
+  void set(const DirStat& s) {
+    st = s;
+    const int64_t now = realtime_ns();
+    racy = ((now - s.mtime_ns) < RACY_RECORD_NS) ||
+      (s.vmtime_ns && ((now - s.vmtime_ns) < RACY_RECORD_NS));
+  }
+  /* the record's stat, taken for RGW's own change */
+  void set_own(const DirStat& s) {
+    st = s;
+    racy = false;
+  }
+};
+
 template <typename D, typename B,
 	  typename YP = cohort::lru::NullYieldPolicy>
 struct BucketCache;
@@ -112,6 +218,18 @@ struct BucketCacheEntry : public cohort::lru::Object
   std::condition_variable cv;
   uint32_t flags;
 
+  /* Revalidation's record of each directory the fill walked, by prefix.
+   * A map, not one value, because the cache flattens the tree into one
+   * keyspace and a directory's mtime moves only with its own children.
+   * Meaningful only while FLAG_FILLED is set:  cleared wherever that is,
+   * and rebuilt by the fill that sets it.  Under mtx. */
+  std::map<std::string, DirRecord> dirs;
+  /* where the fill found the bucket's tree, and whether it read
+   * .versions/, so that RGW's own change can stat a directory with no
+   * bucket in hand.  With dirs. */
+  std::string fs_root;
+  bool fs_versions{false};
+
 public:
   BucketCacheEntry(BucketCache<D, B, YP>* bc, const std::string& name, uint64_t hk)
     : bc(bc), name(name), env{nullptr}, hk(hk), flags(FLAG_NONE) {}
@@ -132,6 +250,7 @@ public:
 	return;
       }
       flags |= FLAG_DELETED;
+      dirs.clear();
       if (bc->un) {
 	bc->un->remove_watch(name);
       }
@@ -150,9 +269,14 @@ public:
       }
     } /* mtx released */
 
+    /* whether the entry is in the tree, asked under the tree's lock:  a
+     * neighbour's insert or erase rebalances the tree and rewrites this
+     * node's hook, so an unlocked read races it */
+    bc->cache.lock_for(hk);
     if (name_hook.is_linked()) {
-      bc->cache.remove(hk, this, bucket_avl_cache::FLAG_LOCK);
+      bc->cache.remove(hk, this, bucket_avl_cache::FLAG_NONE);
     }
+    bc->cache.unlock_for(hk);
   }
 
   virtual ~BucketCacheEntry()
@@ -245,6 +369,7 @@ public:
 	}
 
 	flags |= FLAG_DELETED;
+	dirs.clear();
 	bc->recycle_count++;
 	lsubdout(bc->driver->ctx(), rgw, 2) << "BucketCache: reclaim evicting bucket=" << name << dendl;
 	bc->un->remove_watch(name);
@@ -290,6 +415,78 @@ using fill_cache_cb_t =
 
 /* fill_cache return flags (non-negative rc) */
 static constexpr int FILL_CACHE_FLAG_FIXUP_CURRENT = 0x0001;
+
+/* What a fill reports beside its entries, for revalidation. */
+struct FillRecorder {
+  virtual ~FillRecorder() = default;
+  /* a directory the fill reads, stat'd before it is read */
+  virtual void directory(const std::string& prefix, const DirStat& st) = 0;
+  /* the recorded stat of the entry the next callback carries */
+  virtual void entry(const std::string& name, const EntryStat& st) = 0;
+};
+
+/* What revalidation needs of a driver:  the filesystem half.  Names in
+ * and out are index keys' names (above);  the driver maps them to
+ * paths. */
+template <typename B>
+struct Revalidation {
+  virtual ~Revalidation() = default;
+
+  /* whether this bucket's listings check its tree */
+  virtual bool applies(B* b) const = 0;
+  /* how often a listed entry is compared with its file;  nullopt never */
+  virtual std::optional<ceph::timespan> entry_interval() const = 0;
+  virtual ceph::timespan provisional_interval() const = 0;
+
+  /* where a bucket's tree is, and whether its directories' .versions/
+   * are recorded, for stat_dir_at() */
+  virtual void locate(B* b, std::string& root, bool& versions) = 0;
+  /* stat_dir(), given what locate() returned */
+  virtual int stat_dir_at(const DoutPrefixProvider* dpp,
+			  const std::string& root, bool versions,
+			  const std::string& prefix, DirStat& st) = 0;
+
+  /* the fill, reporting through `rec` */
+  virtual int fill(const DoutPrefixProvider* dpp, optional_yield y, B* b,
+		   fill_cache_cb_t& cb, FillRecorder& rec) = 0;
+  /* 0, -ENOENT where the directory is gone, or -errno */
+  virtual int stat_dir(const DoutPrefixProvider* dpp, optional_yield y,
+		       B* b, const std::string& prefix, DirStat& st) = 0;
+  /* the listable children of a directory:  a file's name, a
+   * subdirectory's prefix */
+  virtual int read_dir(const DoutPrefixProvider* dpp, optional_yield y,
+		       B* b, const std::string& prefix,
+		       std::vector<std::string>& children) = 0;
+  /* entries for these children of `prefix`, a subdirectory whole, as the
+   * fill builds them;  a child gone since is skipped */
+  virtual int build(const DoutPrefixProvider* dpp, optional_yield y, B* b,
+		    const std::string& prefix,
+		    const std::vector<std::string>& children,
+		    fill_cache_cb_t& cb, FillRecorder& rec) = 0;
+  /* the stat of the file holding `name`'s current object:  0, or -ENOENT
+   * where no file does */
+  virtual int stat_entry(const DoutPrefixProvider* dpp, optional_yield y,
+			 B* b, const std::string& name, EntryStat& st) = 0;
+
+  /* For the watcher, which names paths under the bucket's directory.
+   * The name read_dir() gives the file, or the directory (`is_dir`), at
+   * `path`;  nullopt where the path is not listed. */
+  virtual std::optional<std::string> listed_name(const std::string& path,
+						 bool is_dir) const = 0;
+  /* the path under the bucket's directory of a directory's prefix:  "."
+   * for the bucket's own, and no trailing '/' */
+  virtual std::string dir_path(const std::string& prefix) const = 0;
+  /* the bucket named `bname`, for the hooks above */
+  virtual int load(const DoutPrefixProvider* dpp, const std::string& bname,
+		   std::unique_ptr<B>& b) = 0;
+};
+
+/* The directory holding `name`:  its prefix. */
+inline std::string parent_prefix(std::string_view name) {
+  const auto slash = name.rfind('/');
+  return (slash == std::string_view::npos)
+    ? std::string{} : std::string{name.substr(0, slash + 1)};
+}
 
 using list_bucket_each_t =
   const fu2::unique_function<bool(const rgw_bucket_dir_entry&) const>;
@@ -367,8 +564,16 @@ struct BucketCache : public Notifiable
       for (int ix = 0; ix < lmdb_count; ++ix) {
 	sf::path env_path{safe_root_path / fmt::format("part_{}", ix)};
 	sf::create_directory(env_path);
+	/* No sync at commit:  the cache is purged and rebuilt at every
+	 * start (above), so a commit's durability is never used, and what a
+	 * crash loses or corrupts is discarded anyway.  A synced commit holds
+	 * the partition's one writer while it syncs, so every write to a
+	 * listed bucket queued behind every other's sync -- about 340 small
+	 * PUTs/s on a QLC disk whatever the concurrency, against 1,300-2,400
+	 * without (elbencho, 32 threads). */
 	parts[ix].env = LMDBSafe::getMDBEnv(
-	  env_path.string().c_str(), 0, 0600, max_dbs_per_partition);
+	  env_path.string().c_str(), MDB_NOSYNC | MDB_NOMETASYNC, 0600,
+	  max_dbs_per_partition);
 	/* The longest key this build of LMDB will accept.  It is a
 	 * compile-time constant of the library -- MDB_MAXKEYSIZE, 511 by
 	 * default -- and LMDB is a system package rather than vendored,
@@ -473,6 +678,19 @@ struct BucketCache : public Notifiable
 
   std::unique_ptr<Notify> un;
 
+  /* the driver's half of revalidation;  none, the fill is trusted */
+  Revalidation<B>* rv{nullptr};
+
+public:
+  /* what revalidation did, for tests and the curious */
+  std::atomic<uint64_t> dir_check_count{0};
+  std::atomic<uint64_t> reconcile_count{0};
+  std::atomic<uint64_t> entry_check_count{0};
+  std::atomic<uint64_t> rebuild_count{0};
+
+  /* `r` outlives the cache;  set once, before the first listing */
+  void set_revalidation(Revalidation<B>* r) { rv = r; }
+
 public:
   BucketCache(D* driver, std::string bucket_root, std::string database_root,
 	      uint32_t max_buckets=100, uint8_t max_lanes=3,
@@ -546,9 +764,14 @@ public:
 	b->mtx.lock();
 	if (b->deleted() ||
 	    ! lru.ref(b, cohort::lru::FLAG_INITIAL)) {
-	  // lru ref failed
-	  lat.lock->unlock();
+	  /* lru ref failed:  b is being evicted.  Its mutex is released
+	   * before the latch, because the latch is what keeps the eviction
+	   * from completing -- it removes b from this partition, under this
+	   * lock, before recycling it, and a recycle constructs a new mutex
+	   * in place.  Released after the latch, the unlock could land on
+	   * that new mutex, which nobody holds, and leave it unusable. */
 	  b->mtx.unlock();
+	  lat.lock->unlock();
 	  goto retry;
 	}
 	lat.lock->unlock();
@@ -623,6 +846,46 @@ public:
     return k_str;
   }
 
+  /* The fill's recorder:  directories into the entry's records, and the
+   * stat of the entry the next callback carries. */
+  struct Recorder final : FillRecorder {
+    BucketCacheEntry<D, B, YP>* b;
+    std::string pending_name;
+    EntryStat pending;
+
+    /* told of each directory before it is read */
+    std::function<void(const std::string&)> on_dir;
+
+    explicit Recorder(BucketCacheEntry<D, B, YP>* b) : b(b) {}
+    void directory(const std::string& prefix, const DirStat& st) override {
+      if (on_dir) {
+	on_dir(prefix);
+      }
+      auto& r = b->dirs[prefix];
+      r.set(st);
+      r.baseline = true;
+      r.provisional_ns.reset();
+    }
+    void entry(const std::string& name, const EntryStat& st) override {
+      pending_name = name;
+      pending = st;
+    }
+    /* the recorded stat for the entry `name`, unknown if none was
+     * reported for it */
+    EntryStat take(const std::string& name) {
+      EntryStat st;
+      if (name == pending_name) {
+	st = pending;
+	pending_name.clear();
+      }
+      return st;
+    }
+  };
+
+  bool revalidating(B* sal_bucket) const {
+    return rv && rv->applies(sal_bucket);
+  }
+
   int fill(const DoutPrefixProvider* dpp, BucketCacheEntry<D, B, YP>* bucket,
 	    B* sal_bucket, uint32_t flags, optional_yield y) /* assert: LOCKED */
   {
@@ -631,35 +894,35 @@ public:
 
       /* clear stale data from a prior hiwat eviction before repopulating */
       mdb_drop(*txn, bucket->dbi, 0);
+      bucket->dirs.clear();
+      bucket->fs_root.clear();
+      if (revalidating(sal_bucket)) {
+	rv->locate(sal_bucket, bucket->fs_root, bucket->fs_versions);
+      }
+
+      Recorder rec{bucket};
+      /* with the driver's hooks the watcher follows the tree:  each
+       * directory is watched as the fill reaches it */
+      const bool tree = watching_tree();
+      if (tree) {
+	rec.on_dir = watch_dir(bucket);
+      }
+      auto put =
+	[&](const DoutPrefixProvider* dpp, rgw_bucket_dir_entry& bde) -> int {
+	  std::string ser_data;
+	  if (ser_entry(bde, rec.take(bde.key.name), ser_data).code !=
+	      std::errc{0}) {
+	    return -EIO;
+	  }
+	  txn->put(bucket->dbi, concat_key(bde.key), ser_data);
+	  return 0;
+	};
 
       /* instruct the bucket provider to enumerate all entries,
        * in any order */
-      auto rc = sal_bucket->fill_cache(dpp, y,
-	[&](const DoutPrefixProvider* dpp, rgw_bucket_dir_entry& bde) -> int {
-	  auto concat_k = concat_key(bde.key);
-	  std::string ser_data;
-	  zpp::bits::out out(ser_data);
-	  struct timespec ts{ceph::real_clock::to_timespec(bde.meta.mtime)};
-          auto errc =
-              out(bde.key.name, bde.key.instance, /* XXX bde.key.ns, */
-                  bde.ver.pool, bde.ver.epoch, bde.exists, bde.meta.category,
-                  bde.meta.size, ts.tv_sec, ts.tv_nsec, bde.meta.owner,
-                  bde.meta.owner_display_name, bde.meta.accounted_size,
-                  bde.meta.storage_class, bde.meta.appendable, bde.meta.etag,
-                  bde.flags);
-#ifndef NDEBUG
-          std::cout << fmt::format("fill: bde.key.name: {}", bde.key.name)
-          << std::endl;
-#endif
-	  if (errc.code != std::errc{0}) {
-	    return -EIO;
-	  }
-	  txn->put(bucket->dbi, concat_k, ser_data);
-#ifndef NDEBUG
-	  std::cout << fmt::format("{} {}", __func__, bde.key.name) << '\n';
-#endif
-	  return 0;
-	});
+      auto rc = (revalidating(sal_bucket) || tree)
+	? rv->fill(dpp, y, sal_bucket, fill_cache_cb_t{put}, rec)
+	: sal_bucket->fill_cache(dpp, y, put);
 
       /* fixup FLAG_CURRENT for orphaned delete markers: iterate LMDB
        * entries in key order (contiguous by object name).  For each
@@ -682,26 +945,11 @@ public:
             if (!group_has_current && !best_dm_concat_k.empty()) {
               /* rewrite the newest DM entry with FLAG_CURRENT added */
               rgw_bucket_dir_entry bde{};
-              std::string ser_v{best_dm_data};
-              zpp::bits::in in_v(ser_v);
-              struct timespec ts;
-              auto errc = in_v(
-                bde.key.name, bde.key.instance,
-                bde.ver.pool, bde.ver.epoch, bde.exists, bde.meta.category,
-                bde.meta.size, ts.tv_sec, ts.tv_nsec, bde.meta.owner,
-                bde.meta.owner_display_name, bde.meta.accounted_size,
-                bde.meta.storage_class, bde.meta.appendable, bde.meta.etag,
-                bde.flags);
-              if (errc.code == std::errc{0}) {
+	      EntryStat st;
+              if (deser_entry(best_dm_data, bde, &st).code == std::errc{0}) {
                 bde.flags |= rgw_bucket_dir_entry::FLAG_CURRENT;
                 std::string new_data;
-                zpp::bits::out out(new_data);
-                (void)out(bde.key.name, bde.key.instance,
-                    bde.ver.pool, bde.ver.epoch, bde.exists, bde.meta.category,
-                    bde.meta.size, ts.tv_sec, ts.tv_nsec, bde.meta.owner,
-                    bde.meta.owner_display_name, bde.meta.accounted_size,
-                    bde.meta.storage_class, bde.meta.appendable, bde.meta.etag,
-                    bde.flags);
+                (void) ser_entry(bde, st, new_data);
                 txn->put(bucket->dbi, best_dm_concat_k, new_data);
               }
             }
@@ -727,17 +975,7 @@ public:
 
             /* deserialize just the flags (last field) — quick check */
             rgw_bucket_dir_entry bde{};
-            std::string ser_v{svv};
-            zpp::bits::in in_v(ser_v);
-            struct timespec ts;
-            auto errc = in_v(
-              bde.key.name, bde.key.instance,
-              bde.ver.pool, bde.ver.epoch, bde.exists, bde.meta.category,
-              bde.meta.size, ts.tv_sec, ts.tv_nsec, bde.meta.owner,
-              bde.meta.owner_display_name, bde.meta.accounted_size,
-              bde.meta.storage_class, bde.meta.appendable, bde.meta.etag,
-              bde.flags);
-            if (errc.code != std::errc{0}) {
+            if (deser_entry(svv, bde).code != std::errc{0}) {
               continue;
             }
 
@@ -759,11 +997,14 @@ public:
 
       txn->commit();
       bucket->flags |= BucketCacheEntry<D, B, YP>::FLAG_FILLED;
-      un->add_watch(bucket->name, bucket);
+      if (!tree) {
+	un->add_watch(bucket->name, bucket);
+      }
       return rc;
     } catch (const std::exception& e) {
       ldpp_dout(dpp, 0) << "BucketCache: fill failed for "
 	<< bucket->name << ": " << e.what() << dendl;
+      bucket->dirs.clear();
       return -EIO;
     }
     } /* fill */
@@ -801,6 +1042,10 @@ public:
     ulk.unlock();
     /*! LOCKED */
 
+    if (revalidating(sal_bucket)) {
+      return walk_revalidating(dpp, y, b, sal_bucket, marker, each_func);
+    }
+
     try {
       auto txn = b->env->getROTransaction();
       auto cursor=txn->getCursor(b->dbi);
@@ -814,23 +1059,13 @@ public:
         std::string_view svk __attribute__((unused)) =
           key.get<string_view>(); // {name, instance, [ns]}
         std::string_view svv = data.get<string_view>();
-        std::string ser_v{svv};
-        zpp::bits::in in_v(ser_v);
-        struct timespec ts;
-        errc = in_v(
-            bde.key.name, bde.key.instance, /* bde.key.ns, */
-            bde.ver.pool, bde.ver.epoch, bde.exists, bde.meta.category,
-            bde.meta.size, ts.tv_sec, ts.tv_nsec, bde.meta.owner,
-            bde.meta.owner_display_name, bde.meta.accounted_size,
-            bde.meta.storage_class, bde.meta.appendable, bde.meta.etag,
-            bde.flags);
+        errc = deser_entry(svv, bde);
         if (errc.code != std::errc{0}) {
 	  ldpp_dout(dpp, 0) << "BucketCache: deserialization error listing "
 	    << sal_bucket->get_name()
 	    << " errc=" << static_cast<int>(errc.code) << dendl;
           return;
         }
-        bde.meta.mtime = ceph::real_clock::from_timespec(ts);
         again = each_func(bde);
       };
 
@@ -868,8 +1103,630 @@ public:
     return 0;
   } /* list_bucket */
 
+  /* ---- revalidation:  the walk ---- */
+
+  static bool namespaced(std::string_view name) {
+    if (name.empty() || name.front() != '_') {
+      return false;
+    }
+    std::string n, ns;
+    rgw_obj_key::parse_index_key(std::string{name}, &n, &ns);
+    return !ns.empty();
+  }
+
+  /* Whether an entry is backed by a file in its directory:  an
+   * unversioned entry, or a current one that is not a delete marker.  A
+   * noncurrent version and a delete marker live in .versions/, so reading
+   * the directory says nothing about them. */
+  static bool file_backed(const rgw_bucket_dir_entry& e) {
+    if (!(e.flags & rgw_bucket_dir_entry::FLAG_VER)) {
+      return true;
+    }
+    return (e.flags & rgw_bucket_dir_entry::FLAG_CURRENT) &&
+      !(e.flags & rgw_bucket_dir_entry::FLAG_DELETE_MARKER);
+  }
+
+  /* Whether a listing compares this entry with its file:  a current
+   * object held by a file of its own.  Not a directory's object, whose
+   * data is its sentinel's;  not a delete marker or a noncurrent version,
+   * which no filesystem client writes;  not a namespaced entry. */
+  static bool compares(const rgw_bucket_dir_entry& bde, std::string_view name) {
+    if (name.empty() || (name.back() == '/') || namespaced(name)) {
+      return false;
+    }
+    if (bde.flags & rgw_bucket_dir_entry::FLAG_DELETE_MARKER) {
+      return false;
+    }
+    if ((bde.flags & rgw_bucket_dir_entry::FLAG_VER) &&
+	!(bde.flags & rgw_bucket_dir_entry::FLAG_CURRENT)) {
+      return false;
+    }
+    return true;
+  }
+
+  /* The recorded directories the walk enters after the name `after` and
+   * through `upto` -- every one after `after` where `upto` is none -- and
+   * those on the path to `upto` (to `after`, where none).  Each is checked
+   * once a page (`checked`):  one stat, compared with its record.  Those
+   * changed, gone, or provisional for longer than `prov_ns` are added to
+   * `changed`, to be read. */
+  void check_dirs(const DoutPrefixProvider* dpp, optional_yield y,
+		  BucketCacheEntry<D, B, YP>* b, B* sal_bucket,
+		  std::string_view after, std::optional<std::string_view> upto,
+		  std::set<std::string>& checked, int64_t prov_ns,
+		  std::vector<std::string>& changed) {
+    std::vector<std::pair<std::string, DirRecord>> due;
+    {
+      lock_guard lk{b->mtx};
+      auto consider = [&](const std::string& prefix, const DirRecord& r) {
+	if (checked.insert(prefix).second) {
+	  due.emplace_back(prefix, r);
+	}
+      };
+      const std::string_view path = upto ? *upto : after;
+      for (size_t pos = 0;;) {
+	std::string prefix{path.substr(0, pos)};
+	if (auto it = b->dirs.find(prefix); it != b->dirs.end()) {
+	  consider(it->first, it->second);
+	}
+	const auto slash = path.find('/', pos);
+	if (slash == std::string_view::npos) {
+	  break;
+	}
+	pos = slash + 1;
+      }
+      for (auto it = b->dirs.upper_bound(std::string{after});
+	   (it != b->dirs.end()) &&
+	     (!upto || (std::string_view{it->first} <= *upto));
+	   ++it) {
+	consider(it->first, it->second);
+      }
+    }
+
+    const int64_t now = revalidation_now_ns();
+    for (auto& [prefix, r] : due) {
+      ++dir_check_count;
+      DirStat st;
+      const int ret = rv->stat_dir(dpp, y, sal_bucket, prefix, st);
+      if (ret == -ENOENT) {
+	changed.push_back(prefix);
+	continue;
+      }
+      if (ret < 0) {
+	ldpp_dout(dpp, 1) << "BucketCache: cannot check " << b->name << "/"
+	  << prefix << ": " << cpp_strerror(-ret) << ";  its listing is "
+	  << "trusted" << dendl;
+	continue;
+      }
+      const bool moved = r.baseline && (r.racy || !(st == r.st));
+      const bool expired = r.provisional_ns &&
+	((now - *r.provisional_ns) >= prov_ns);
+      if (moved || expired) {
+	changed.push_back(prefix);
+	continue;
+      }
+      if (!r.baseline) {
+	/* RGW's own change:  this stat is the record */
+	lock_guard lk{b->mtx};
+	if (auto it = b->dirs.find(prefix);
+	    (it != b->dirs.end()) && !it->second.baseline) {
+	  it->second.set_own(st);
+	  it->second.baseline = true;
+	}
+      }
+    }
+  }
+
+  /* Remove every entry under `prefix`, and the records of the
+   * directories there. */
+  template <typename TxnT>
+  void remove_subtree(TxnT& txn, BucketCacheEntry<D, B, YP>* b,
+		      const std::string& prefix) {
+    using namespace LMDBSafe;
+    auto cursor = txn->getCursor(b->dbi);
+    MDBOutVal key, data;
+    MDBInVal k(prefix);
+    int rc = cursor.lower_bound(k, key, data);
+    while (rc == 0) {
+      if (!key.get<std::string_view>().starts_with(prefix)) {
+	break;
+      }
+      cursor.del();
+      rc = cursor.get(key, data, MDB_NEXT);
+    }
+    for (auto it = b->dirs.lower_bound(prefix);
+	 (it != b->dirs.end()) && it->first.starts_with(prefix);) {
+      it = b->dirs.erase(it);
+    }
+  }
+
+  static constexpr int RECONCILE_REFILL = 1;
+
+  /* Bring one directory's entries up to date with the directory:  read
+   * it, build entries for the children the cache lacks, remove those of
+   * children gone, and record its stat.  Its subdirectories' contents are
+   * theirs to check, except that a new one is built whole.  Returns 0,
+   * RECONCILE_REFILL where only a refill can bring it up to date, or
+   * -errno.  LOCKED. */
+  int reconcile_dir(const DoutPrefixProvider* dpp, optional_yield y,
+		    BucketCacheEntry<D, B, YP>* b, B* sal_bucket,
+		    const std::string& prefix) {
+    using namespace LMDBSafe;
+    ++reconcile_count;
+
+    DirStat st;
+    int ret = rv->stat_dir(dpp, y, sal_bucket, prefix, st);
+    std::vector<std::string> disk;
+    if (ret == 0) {
+      /* A .versions/ changed by someone else:  its entries are versions of
+       * several names, which only the fill's walk assembles. */
+      auto rit = b->dirs.find(prefix);
+      if ((rit != b->dirs.end()) && rit->second.baseline &&
+	  ((st.vino != rit->second.st.vino) ||
+	   (st.vmtime_ns != rit->second.st.vmtime_ns))) {
+	return RECONCILE_REFILL;
+      }
+      ret = rv->read_dir(dpp, y, sal_bucket, prefix, disk);
+    }
+    if ((ret == -ENOENT) && prefix.empty()) {
+      return RECONCILE_REFILL;
+    }
+
+    auto txn = b->env->getRWTransaction();
+    if (ret == -ENOENT) {
+      remove_subtree(txn, b, prefix);
+      txn->commit();
+      return 0;
+    }
+    if (ret < 0) {
+      return ret;
+    }
+    const std::set<std::string> on_disk(disk.begin(), disk.end());
+
+    /* what the cache holds directly under `prefix`:  names with an entry
+     * a file backs, and the prefixes of subdirectories, each
+     * subdirectory's range skipped with one seek */
+    std::set<std::string> cached;
+    {
+      auto cursor = txn->getCursor(b->dbi);
+      MDBOutVal key, data;
+      std::string seek{prefix};
+      int rc = seek.empty() ? cursor.get(key, data, MDB_FIRST)
+	: cursor.lower_bound(MDBInVal(seek), key, data);
+      while (rc == 0) {
+	const std::string_view kv = key.get<std::string_view>();
+	const std::string_view name = kv.substr(0, kv.find('\0'));
+	if (!name.starts_with(prefix)) {
+	  break;
+	}
+	const std::string_view rest = name.substr(prefix.size());
+	const auto slash = rest.find('/');
+	if (rest.empty() || ((slash == std::string_view::npos) &&
+			     namespaced(name))) {
+	  /* the directory's own object;  a namespaced entry */
+	  rc = cursor.get(key, data, MDB_NEXT);
+	} else if (slash == std::string_view::npos) {
+	  rgw_bucket_dir_entry e{};
+	  if ((deser_entry(data.get<std::string_view>(), e).code ==
+	       std::errc{0}) && file_backed(e)) {
+	    cached.emplace(name);
+	  }
+	  rc = cursor.get(key, data, MDB_NEXT);
+	} else {
+	  cached.emplace(name.substr(0, prefix.size() + slash + 1));
+	  seek.assign(name.substr(0, prefix.size() + slash));
+	  seek += char('/' + 1);
+	  rc = cursor.lower_bound(MDBInVal(seek), key, data);
+	}
+      }
+    }
+    /* a subdirectory with a record and no entries is known, not new */
+    for (auto it = b->dirs.upper_bound(prefix);
+	 (it != b->dirs.end()) && it->first.starts_with(prefix); ++it) {
+      const std::string_view rest =
+	std::string_view{it->first}.substr(prefix.size());
+      if (rest.find('/') == rest.size() - 1) {
+	cached.insert(it->first);
+      }
+    }
+
+    std::vector<std::string> added;
+    for (const auto& c : on_disk) {
+      if (!cached.contains(c)) {
+	added.push_back(c);
+      }
+    }
+    for (const auto& c : cached) {
+      if (on_disk.contains(c)) {
+	continue;
+      }
+      if (c.back() == '/') {
+	remove_subtree(txn, b, c);
+      } else {
+	/* the file's entries, not its versions or delete markers */
+	(void) take_entries(dpp, txn, b->dbi, c,
+			    [](const rgw_bucket_dir_entry& e) {
+			      return file_backed(e);
+			    }, 0, nullptr);
+      }
+    }
+    if (!added.empty()) {
+      Recorder rec{b};
+      fill_cache_cb_t put =
+	[&](const DoutPrefixProvider* dpp, rgw_bucket_dir_entry& bde) -> int {
+	  std::string ser_data;
+	  if (ser_entry(bde, rec.take(bde.key.name), ser_data).code !=
+	      std::errc{0}) {
+	    return -EIO;
+	  }
+	  txn->put(b->dbi, concat_key(bde.key), ser_data);
+	  return 0;
+	};
+      ret = rv->build(dpp, y, sal_bucket, prefix, added, put, rec);
+      if (ret < 0) {
+	ldpp_dout(dpp, 1) << "BucketCache: building entries in " << b->name
+	  << "/" << prefix << ": " << cpp_strerror(-ret) << dendl;
+      }
+    }
+    auto& r = b->dirs[prefix];
+    r.set(st);
+    r.baseline = true;
+    r.provisional_ns.reset();
+    txn->commit();
+    ldpp_dout(dpp, 10) << "BucketCache: read " << b->name << "/" << prefix
+      << ":  " << added.size() << " added, "
+      << (cached.size() - (on_disk.size() - added.size())) << " gone" << dendl;
+    return 0;
+  }
+
+  /* Rebuild the current entry of `name` from its file, which changed or
+   * is gone.  LOCKED. */
+  int rebuild_entry(const DoutPrefixProvider* dpp, optional_yield y,
+		    BucketCacheEntry<D, B, YP>* b, B* sal_bucket,
+		    const std::string& name) {
+    using namespace LMDBSafe;
+    ++rebuild_count;
+    auto txn = b->env->getRWTransaction();
+    (void) take_entries(dpp, txn, b->dbi, name,
+			[](const rgw_bucket_dir_entry& e) {
+			  return !(e.flags & rgw_bucket_dir_entry::FLAG_VER) ||
+			    (e.flags & rgw_bucket_dir_entry::FLAG_CURRENT);
+			}, 0, nullptr);
+    Recorder rec{b};
+    fill_cache_cb_t put =
+      [&](const DoutPrefixProvider* dpp, rgw_bucket_dir_entry& bde) -> int {
+	std::string ser_data;
+	if (ser_entry(bde, rec.take(bde.key.name), ser_data).code !=
+	    std::errc{0}) {
+	  return -EIO;
+	}
+	txn->put(b->dbi, concat_key(bde.key), ser_data);
+	return 0;
+      };
+    const int ret = rv->build(dpp, y, sal_bucket, parent_prefix(name),
+			      {name}, put, rec);
+    txn->commit();
+    ldpp_dout(dpp, 10) << "BucketCache: rebuilt " << b->name << "/" << name
+      << (ret < 0 ? ":  gone" : "") << dendl;
+    return 0;
+  }
+
+  struct Touched {
+    std::string key;
+    std::string before;
+    std::string after;
+  };
+
+  /* The checked times a page recorded, each written only where the value
+   * is still the one the walk read:  an RGW write since wins. */
+  void write_touched(const DoutPrefixProvider* dpp,
+		     BucketCacheEntry<D, B, YP>* b,
+		     std::vector<Touched>& touched) {
+    using namespace LMDBSafe;
+    if (touched.empty()) {
+      return;
+    }
+    try {
+      auto txn = b->env->getRWTransaction();
+      for (const auto& t : touched) {
+	MDBOutVal cur;
+	if ((txn->get(b->dbi, MDBInVal(t.key), cur) == 0) &&
+	    (cur.get<std::string_view>() == t.before)) {
+	  txn->put(b->dbi, t.key, t.after);
+	}
+      }
+      txn->commit();
+    } catch (const std::exception& e) {
+      ldpp_dout(dpp, 1) << "BucketCache: recording checks in " << b->name
+	<< ": " << e.what() << dendl;
+    }
+    touched.clear();
+  }
+
+  /* The listing walk, checking the tree as it goes:  a directory as the
+   * walk enters it, a current entry at most once per entry interval.  A
+   * change is applied between read transactions:  the walk stops before
+   * the key that found it, brings the cache up to date, and resumes after
+   * the last key it returned.  Each directory and entry is checked once a
+   * page, so a page ends however busy the tree. */
+  int walk_revalidating(const DoutPrefixProvider* dpp, optional_yield y,
+			BucketCacheEntry<D, B, YP>* b, B* sal_bucket,
+			const std::string& marker,
+			list_bucket_each_t& each_func) {
+    using namespace LMDBSafe;
+    const auto ival = rv->entry_interval();
+    const int64_t ival_ns = ival
+      ? std::chrono::duration_cast<std::chrono::nanoseconds>(*ival).count()
+      : 0;
+    const int64_t prov_ns =
+      std::chrono::duration_cast<std::chrono::nanoseconds>(
+	rv->provisional_interval()).count();
+
+    std::set<std::string> checked;		/* directories, this page */
+    std::set<std::string> entries_checked;	/* names, this page */
+    std::vector<Touched> touched;
+    std::string pos{marker};	/* resume here:  inclusive until a key is returned */
+    bool inclusive = true;
+    std::string after{marker.substr(0, marker.find('\0'))};
+
+    for (;;) {
+      std::vector<std::string> changed;
+      std::optional<std::string> rebuild;
+      bool done = false;
+      const int64_t now = revalidation_now_ns();
+      try {
+	auto txn = b->env->getROTransaction();
+	auto cursor = txn->getCursor(b->dbi);
+	MDBOutVal key, data;
+	int rc;
+	if (pos.empty()) {
+	  rc = cursor.get(key, data, MDB_FIRST);
+	} else {
+	  rc = cursor.lower_bound(MDBInVal(pos), key, data);
+	  if (!inclusive && (rc == 0) &&
+	      (key.get<std::string_view>() == pos)) {
+	    rc = cursor.get(key, data, MDB_NEXT);
+	  }
+	}
+	for (;;) {
+	  if (rc != MDB_SUCCESS) {
+	    check_dirs(dpp, y, b, sal_bucket, after, std::nullopt, checked,
+		       prov_ns, changed);
+	    done = changed.empty();
+	    break;
+	  }
+	  const std::string_view kv = key.get<std::string_view>();
+	  const std::string_view name = kv.substr(0, kv.find('\0'));
+	  check_dirs(dpp, y, b, sal_bucket, after, name, checked, prov_ns,
+		     changed);
+	  if (!changed.empty()) {
+	    break;
+	  }
+	  const std::string_view sv = data.get<std::string_view>();
+	  rgw_bucket_dir_entry bde{};
+	  EntryStat st;
+	  if (deser_entry(sv, bde, &st).code != std::errc{0}) {
+	    ldpp_dout(dpp, 0) << "BucketCache: deserialization error listing "
+	      << sal_bucket->get_name() << dendl;
+	    rc = cursor.get(key, data, MDB_NEXT);
+	    continue;
+	  }
+	  if (ival && compares(bde, name) &&
+	      ((now - st.checked_ns) >= ival_ns) &&
+	      entries_checked.emplace(name).second) {
+	    ++entry_check_count;
+	    EntryStat cur;
+	    const int r = rv->stat_entry(dpp, y, sal_bucket, std::string{name},
+					 cur);
+	    if ((r == -ENOENT) || ((r == 0) && !st.same_file(cur))) {
+	      rebuild.emplace(name);
+	      break;
+	    }
+	    if (r == 0) {
+	      EntryStat nst = st;
+	      nst.checked_ns = now;
+	      std::string v;
+	      if (ser_entry(bde, nst, v).code == std::errc{0}) {
+		touched.push_back({std::string{kv}, std::string{sv},
+				   std::move(v)});
+	      }
+	    }
+	  }
+	  pos.assign(kv);
+	  inclusive = false;
+	  after.assign(name);
+	  if (!each_func(bde)) {
+	    done = true;
+	    break;
+	  }
+	  rc = cursor.get(key, data, MDB_NEXT);
+	}
+      } catch (const std::exception& e) {
+	ldpp_dout(dpp, 0) << "BucketCache: LMDB error listing "
+	  << sal_bucket->get_name() << ": " << e.what() << dendl;
+	return -EIO;
+      }
+      write_touched(dpp, b, touched);
+      if (done) {
+	return 0;
+      }
+
+      unique_lock ulk{b->mtx};
+      try {
+	bool refill = !(b->flags & BucketCacheEntry<D, B, YP>::FLAG_FILLED);
+	for (const auto& prefix : changed) {
+	  if (refill) {
+	    break;
+	  }
+	  const int r = reconcile_dir(dpp, y, b, sal_bucket, prefix);
+	  if (r == RECONCILE_REFILL) {
+	    refill = true;
+	  } else if (r < 0) {
+	    ldpp_dout(dpp, 1) << "BucketCache: reading " << b->name << "/"
+	      << prefix << ": " << cpp_strerror(-r) << dendl;
+	  }
+	}
+	if (rebuild && !refill) {
+	  (void) rebuild_entry(dpp, y, b, sal_bucket, *rebuild);
+	}
+	if (refill) {
+	  ldpp_dout(dpp, 2) << "BucketCache: refilling bucket=" << b->name
+	    << " to bring it up to date" << dendl;
+	  (void) fill(dpp, b, sal_bucket, FLAG_NONE, y);
+	}
+      } catch (const std::exception& e) {
+	ldpp_dout(dpp, 0) << "BucketCache: bringing " << b->name
+	  << " up to date: " << e.what() << dendl;
+	return -EIO;
+      }
+    }
+  } /* walk_revalidating */
+
+  /* Whether the watcher follows the bucket's tree:  the driver supplies
+   * the hooks that say what a path in it is (Revalidation).  Without
+   * them, as for posix, it watches the bucket's directory for names. */
+  bool watching_tree() const {
+    return rv && un->watching();
+  }
+
+  /* A FillRecorder callback watching each directory, for names and
+   * writes, as it is reported:  before it is read, so nothing created in
+   * it in between is missed. */
+  std::function<void(const std::string&)> watch_dir(
+    BucketCacheEntry<D, B, YP>* b) {
+    return [this, b](const std::string& prefix) {
+      const std::string path = rv->dir_path(prefix);
+      un->add_watch(b->name, (path == ".") ? std::string{} : path + "/", b,
+		    true);
+    };
+  }
+
+  /* The entries for `children` of `prefix`, built as the fill builds
+   * them, each with its recorded stat, and their directories watched.
+   * LOCKED. */
+  template <typename TxnT>
+  void build_children(const DoutPrefixProvider* dpp, TxnT& txn,
+		      BucketCacheEntry<D, B, YP>* b, B* sal_bucket,
+		      const std::string& prefix,
+		      const std::vector<std::string>& children) {
+    Recorder rec{b};
+    rec.on_dir = watch_dir(b);
+    fill_cache_cb_t put =
+      [&](const DoutPrefixProvider* dpp, rgw_bucket_dir_entry& bde) -> int {
+	std::string ser_data;
+	if (ser_entry(bde, rec.take(bde.key.name), ser_data).code !=
+	    std::errc{0}) {
+	  return -EIO;
+	}
+	lsubdout(driver->ctx(), rgw, 10) << "BucketCache: notify lmdb put "
+	  << "bucket=" << b->name << " key=" << bde.key.name << dendl;
+	txn->put(b->dbi, concat_key(bde.key), ser_data);
+	return 0;
+      };
+    (void) rv->build(dpp, null_yield, sal_bucket, prefix, children, put, rec);
+  }
+
+  /* What the watcher saw change in a bucket's tree, applied to the cache
+   * through the driver's hooks.  A file added, moved in or written has its
+   * entry built again;  one removed or moved out loses the entries a file
+   * backed, not its versions or delete markers, which .versions/ holds;  a
+   * directory added is built whole, and watched;  one removed takes its
+   * subtree, and its watches.  A path the driver does not list, such as a
+   * reserved name, is passed over.  The gateway's own changes come here
+   * too -- inotify does not say whose a change is.  LOCKED. */
+  void notify_tree(const DoutPrefixProvider* dpp,
+		   BucketCacheEntry<D, B, YP>* b, B* sal_bucket,
+		   const Notifiable::Event& ev) {
+    using EventType = Notifiable::EventType;
+    const std::string path = fmt::format("{}{}", ev.dir, *ev.name);
+    const auto name = rv->listed_name(path, ev.is_dir);
+    if (!name) {
+      return;
+    }
+    lsubdout(driver->ctx(), rgw, 10) << "BucketCache: notify "
+      << ((ev.type == EventType::ADD) ? "add" : "remove") << " bucket="
+      << b->name << " name=" << *name << dendl;
+    auto txn = b->env->getRWTransaction();
+    if (ev.type == EventType::ADD) {
+      if (!ev.is_dir) {
+	(void) take_entries(dpp, txn, b->dbi, *name,
+			    [](const rgw_bucket_dir_entry& e) {
+			      return file_backed(e);
+			    }, 0, nullptr);
+      }
+      /* a directory's name ends in '/', and its parent precedes that */
+      const std::string_view n{*name};
+      build_children(dpp, txn, b, sal_bucket,
+		     parent_prefix(ev.is_dir ? n.substr(0, n.size() - 1) : n),
+		     {*name});
+    } else if (ev.is_dir) {
+      remove_subtree(txn, b, *name);
+      un->remove_watch(b->name, path + "/");
+    } else {
+      (void) take_entries(dpp, txn, b->dbi, *name,
+			  [](const rgw_bucket_dir_entry& e) {
+			    return file_backed(e);
+			  }, 0, nullptr);
+    }
+    txn->commit();
+  }
+
   int notify(const std::string& bname, void* opaque,
 	     const std::vector<Notifiable::Event>& evec) override {
+
+    using namespace LMDBSafe;
+
+    if (!rv) {
+      return notify_names(bname, opaque, evec);
+    }
+    GetBucketResult gbr = get_bucket(nullptr, bname, BucketCache<D, B, YP>::FLAG_LOCK);
+    auto [b /* BucketCacheEntry */, flags] = gbr;
+    if (b) {
+      auto unref_guard = make_scope_guard([this, b]{ lru.unref(b, cohort::lru::FLAG_NONE); });
+      unique_lock ulk{b->mtx, std::adopt_lock};
+      if ((b->name != bname) ||
+	  (opaque && (b != opaque)) ||
+	  (! (b->flags & BucketCacheEntry<D, B, YP>::FLAG_FILLED))) {
+	/* do nothing */
+	return 0;
+      }
+      NoDoutPrefix ndp(driver->ctx(), dout_subsys);
+      /* NB: b->mtx is held across the LMDB writes below so that fill()
+       * and notify() remain mutually exclusive on this bucket -- see
+       * b54e38b0d41 (fix notify() race with invalidation) */
+      try {
+	std::unique_ptr<B> sb;
+	for (const auto& ev : evec) {
+	  using EventType = Notifiable::EventType;
+	  if (ev.type == EventType::INVALIDATE) [[unlikely]] {
+	    lsubdout(driver->ctx(), rgw, 2) << "BucketCache: notify INVALIDATE "
+	      << "(inotify overflow) bucket=" << b->name << dendl;
+	    auto txn = b->env->getRWTransaction();
+	    mdb_drop(*txn, b->dbi, 0);
+	    txn->commit();
+	    b->flags &= ~BucketCacheEntry<D, B, YP>::FLAG_FILLED;
+	    b->dirs.clear();
+	    b->fs_root.clear();
+	    return 0; /* don't process any more events in this batch */
+	  }
+	  if (!ev.name) {
+	    continue;
+	  }
+	  if (!sb && (rv->load(&ndp, bname, sb) < 0)) {
+	    return 0;
+	  }
+	  notify_tree(&ndp, b, sb.get(), ev);
+	} /* all events */
+      } catch (const std::exception& e) {
+	lsubdout(driver->ctx(), rgw, 0) << "BucketCache: notify failed for "
+	  << b->name << ": " << e.what() << dendl;
+      }
+    } /* b */
+    return 0;
+  } /* notify */
+
+  int notify_names(const std::string& bname, void* opaque,
+		   const std::vector<Notifiable::Event>& evec) {
 
     using namespace LMDBSafe;
 
@@ -909,17 +1766,10 @@ public:
               * side loading support instance and ns */
               auto concat_k = concat_key(bde.key);
               rc = driver->mint_listing_entry(b->name, bde);
+              /* no recorded stat:  under revalidation the entry is
+               * rebuilt once, at its first check */
               std::string ser_data;
-              zpp::bits::out out(ser_data);
-              struct timespec ts{ceph::real_clock::to_timespec(bde.meta.mtime)};
-              auto errc =
-                  out(bde.key.name, bde.key.instance, /* XXX bde.key.ns, */
-                      bde.ver.pool, bde.ver.epoch, bde.exists, bde.meta.category,
-                      bde.meta.size, ts.tv_sec, ts.tv_nsec, bde.meta.owner,
-                      bde.meta.owner_display_name, bde.meta.accounted_size,
-                      bde.meta.storage_class, bde.meta.appendable, bde.meta.etag,
-                      bde.flags);
-              if (errc.code != std::errc{0}) {
+              if (ser_entry(bde, ser_data).code != std::errc{0}) {
                 break;
               }
 	      lsubdout(driver->ctx(), rgw, 10)
@@ -945,6 +1795,8 @@ public:
               mdb_drop(*txn, b->dbi, 0);
               txn->commit();
               b->flags &= ~BucketCacheEntry<D, B, YP>::FLAG_FILLED;
+              b->dirs.clear();
+              b->fs_root.clear();
               ulk.unlock();
               return 0; /* don't process any more events in this batch */
             }
@@ -962,9 +1814,46 @@ public:
       ulk.unlock();
     } /* b */
     return rc;
-  } /* notify */
+  } /* notify_names */
 
-  int add_entry(const DoutPrefixProvider* dpp, std::string bname, rgw_bucket_dir_entry bde) {
+  /* RGW changed `name`'s directory:  record its stat again now, so that
+   * only a change landing between RGW's and this stat is absorbed, and
+   * mark it provisional from now if it is not already, so that it is read
+   * within the provisional interval for such a change.  A directory with
+   * no record is new -- RGW made it -- so its parent changed too.  Where
+   * the stat fails, the next check takes its stat as the record.  Nothing
+   * to do for a bucket not filled with records.  LOCKED. */
+  void note_own_change(BucketCacheEntry<D, B, YP>* b, std::string_view name) {
+    if (b->dirs.empty() || !rv) {
+      return;
+    }
+    const int64_t now = revalidation_now_ns();
+    std::string prefix = parent_prefix(name);
+    for (;;) {
+      auto [it, inserted] = b->dirs.try_emplace(prefix);
+      auto& r = it->second;
+      DirStat st;
+      if (!b->fs_root.empty() &&
+	  (rv->stat_dir_at(nullptr, b->fs_root, b->fs_versions, prefix, st) == 0)) {
+	r.set_own(st);
+	r.baseline = true;
+      } else {
+	r.baseline = false;
+      }
+      if (!r.provisional_ns) {
+	r.provisional_ns = now;
+      }
+      if (!inserted || prefix.empty()) {
+	break;
+      }
+      prefix = parent_prefix(std::string_view{prefix}.substr(0, prefix.size() - 1));
+    }
+  }
+
+  /* `st`, where the caller has it, is the object's recorded stat:  the
+   * file as RGW left it, so that a listing's check finds it unchanged. */
+  int add_entry(const DoutPrefixProvider* dpp, std::string bname,
+		rgw_bucket_dir_entry bde, const EntryStat* st = nullptr) {
     using namespace LMDBSafe;
 
     ldpp_dout(dpp, 10) << "BucketCache: add_entry bucket=" << bname
@@ -975,24 +1864,19 @@ public:
     if (b) {
       auto unref_guard = make_scope_guard([this, b]{ lru.unref(b, cohort::lru::FLAG_NONE); });
       unique_lock ulk{b->mtx, std::adopt_lock};
+      note_own_change(b, bde.key.name);
       ulk.unlock();
 
       try {
         auto txn = b->env->getRWTransaction();
         auto concat_k = concat_key(bde.key);
         std::string ser_data;
-        zpp::bits::out out(ser_data);
-        struct timespec ts {
-          ceph::real_clock::to_timespec(bde.meta.mtime)
-        };
-        auto errc =
-            out(bde.key.name, bde.key.instance, /* XXX bde.key.ns, */
-                bde.ver.pool, bde.ver.epoch, bde.exists, bde.meta.category,
-                bde.meta.size, ts.tv_sec, ts.tv_nsec, bde.meta.owner,
-                bde.meta.owner_display_name, bde.meta.accounted_size,
-                bde.meta.storage_class, bde.meta.appendable, bde.meta.etag,
-                bde.flags);
-        if (errc.code != std::errc{0}) {
+	EntryStat rst;
+	if (st) {
+	  rst = *st;
+	  rst.checked_ns = revalidation_now_ns();
+	}
+        if (ser_entry(bde, rst, ser_data).code != std::errc{0}) {
           return -EIO;
         }
 	ldpp_dout(dpp, 10) << "BucketCache: lmdb put bucket=" << bname
@@ -1015,13 +1899,15 @@ public:
     return 0;
   } /* add_entry */
 
-  /* (de)serialisation of a cache entry, in one place.
-   * they predate these helpers and are left alone rather than churned.  New
   /* The longest key LMDB will accept, hence the longest object name
    * this cache can hold.  Zero until the first partition env exists. */
   int max_key_size() const { return lmdbs.max_key_size(); }
 
+  /* (de)serialisation of a cache entry, in one place:  the entry, then
+   * its recorded stat.  Every writer goes through ser_entry(), so every
+   * value carries a recorded stat, unknown where the writer had none. */
   static zpp::bits::errc ser_entry(const rgw_bucket_dir_entry& bde,
+				   const EntryStat& st,
 				   std::string& out_data) {
     zpp::bits::out out(out_data);
     struct timespec ts{ceph::real_clock::to_timespec(bde.meta.mtime)};
@@ -1030,11 +1916,18 @@ public:
 	       bde.meta.size, ts.tv_sec, ts.tv_nsec, bde.meta.owner,
 	       bde.meta.owner_display_name, bde.meta.accounted_size,
 	       bde.meta.storage_class, bde.meta.appendable, bde.meta.etag,
-	       bde.flags);
+	       bde.flags,
+	       st.ino, st.size, st.mtime_ns, st.ctime_ns, st.checked_ns);
+  }
+
+  static zpp::bits::errc ser_entry(const rgw_bucket_dir_entry& bde,
+				   std::string& out_data) {
+    return ser_entry(bde, EntryStat{}, out_data);
   }
 
   static zpp::bits::errc deser_entry(std::string_view sv,
-				     rgw_bucket_dir_entry& bde) {
+				     rgw_bucket_dir_entry& bde,
+				     EntryStat* st = nullptr) {
     std::string ser_v{sv};
     zpp::bits::in in_v(ser_v);
     struct timespec ts{};
@@ -1046,6 +1939,10 @@ public:
 		     bde.flags);
     if (errc.code == std::errc{0}) {
       bde.meta.mtime = ceph::real_clock::from_timespec(ts);
+      if (st) {
+	errc = in_v(st->ino, st->size, st->mtime_ns, st->ctime_ns,
+		    st->checked_ns);
+      }
     }
     return errc;
   }
@@ -1134,6 +2031,7 @@ public:
     }
     auto unref_guard = make_scope_guard([this, b]{ lru.unref(b, cohort::lru::FLAG_NONE); });
     unique_lock ulk{b->mtx, std::adopt_lock};
+    note_own_change(b, name);
     ulk.unlock();
 
     int removed = 0;
@@ -1197,6 +2095,10 @@ public:
     auto sunref = make_scope_guard([this, sb]{ lru.unref(sb, cohort::lru::FLAG_NONE); });
     {
       unique_lock ulk{sb->mtx, std::adopt_lock};
+      note_own_change(sb, src_name);
+      if (same_bucket) {
+	note_own_change(sb, dst_name);
+      }
       ulk.unlock();
     }
 
@@ -1239,6 +2141,7 @@ public:
 	  auto dunref = make_scope_guard([this, db]{ lru.unref(db, cohort::lru::FLAG_NONE); });
 	  {
 	    unique_lock ulk{db->mtx, std::adopt_lock};
+	    note_own_change(db, dst_name);
 	    ulk.unlock();
 	  }
 	  try {
@@ -1287,6 +2190,7 @@ public:
     if (b) {
       auto unref_guard = make_scope_guard([this, b]{ lru.unref(b, cohort::lru::FLAG_NONE); });
       unique_lock ulk{b->mtx, std::adopt_lock};
+      note_own_change(b, key.name);
       ulk.unlock();
 
       try {
@@ -1349,6 +2253,8 @@ public:
 	lmdbs.recycle_dbi(b);
       }
       b->flags &= ~BucketCacheEntry<D, B, YP>::FLAG_FILLED;
+      b->dirs.clear();
+      b->fs_root.clear();
 
       ulk.unlock();
     } /* b */

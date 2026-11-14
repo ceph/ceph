@@ -5160,6 +5160,55 @@ options:
   default: false
   services:
   - rgw
+- name: rgw_nsfs_listing_revalidate
+  type: bool
+  level: advanced
+  desc: Check a bucket's tree at listing time, so that files changed outside
+    the gateway are listed
+  long_desc: The listing cache is filled from a walk of a bucket's tree.  When
+    enabled, a listing compares each directory it reaches with the inode and
+    mtime recorded for it, and reads a directory that changed, building
+    entries only for the names it lacks and removing those gone;  and it
+    compares a listed object with its file at most once per
+    rgw_nsfs_listing_entry_interval.  Files written, removed, renamed or
+    overwritten by an NFS or SMB client, or any other process, are then
+    listed as NooBaa lists them.  When disabled, the cache is trusted until
+    the bucket is evicted or the gateway restarts.
+  default: true
+  services:
+  - rgw
+  see_also:
+  - rgw_nsfs_listing_entry_interval
+  - rgw_nsfs_listing_provisional_interval
+- name: rgw_nsfs_listing_entry_interval
+  type: int
+  level: advanced
+  desc: Seconds between comparisons of a listed object with its file
+  long_desc: Under rgw_nsfs_listing_revalidate, a listed object is compared
+    with its file (inode, size, mtime, ctime) at most once in this many
+    seconds, and its listing entry rebuilt only where the file changed.  An
+    object overwritten in place outside the gateway is listed as it now is
+    within this interval.  0 compares on every listing, as NooBaa does;  -1
+    never compares.
+  default: 30
+  services:
+  - rgw
+  see_also:
+  - rgw_nsfs_listing_revalidate
+- name: rgw_nsfs_listing_provisional_interval
+  type: int
+  level: advanced
+  desc: Seconds a directory the gateway changed is trusted without being read
+  long_desc: Under rgw_nsfs_listing_revalidate, the gateway's own change to a
+    directory moves its mtime, and is not a reason to read it.  The directory
+    is trusted for at most this many seconds after the first such change, and
+    the first listing after that reads it, so that a file another process
+    created beside the gateway's change is listed within this interval.
+  default: 300
+  services:
+  - rgw
+  see_also:
+  - rgw_nsfs_listing_revalidate
 - name: rgw_nsfs_read_fadvise
   type: int
   level: advanced
