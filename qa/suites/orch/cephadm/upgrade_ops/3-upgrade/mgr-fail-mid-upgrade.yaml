@@ -1,0 +1,4 @@
+tasks:
+- cephfs_test_runner:
+    modules:
+      - tasks.cephadm_cases.upgrade_ops.test_mgr_fail_mid_upgrade.TestMgrFailMidUpgrade
