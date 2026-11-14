@@ -16,6 +16,7 @@
 #include "common/async/blocked_completion.h"
 
 #include <exception>
+#include <thread>
 
 #include <boost/asio/append.hpp>
 #include <boost/asio/awaitable.hpp>

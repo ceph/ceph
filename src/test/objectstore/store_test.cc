@@ -20,6 +20,7 @@
 #include <string.h>
 #include <iostream>
 #include <memory>
+#include <semaphore>
 #include <time.h>
 #include <sys/mount.h>
 #include <boost/random/mersenne_twister.hpp>
