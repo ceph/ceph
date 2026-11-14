@@ -20,6 +20,7 @@
 
 #include "rgw/fdb/interface.h"
 
+#include <cstdint>
 #include <cstdio>
 #include <print>
 #include <stdexcept>
@@ -58,11 +59,18 @@ static int run_example()
 try
 {
  auto dbh = lfdb::create_database();
+ // Option lists preserve both tag applications in written order.
+ const lfdb::transaction_options options {
+  {FDB_TR_OPTION_RETRY_LIMIT, std::int64_t {3}},
+  {FDB_TR_OPTION_TIMEOUT, std::int64_t {5000}},
+  {FDB_TR_OPTION_TAG, "example"},
+  {FDB_TR_OPTION_TAG, "people"}
+ };
 
- lfdb::set(dbh, "example/people", nifty_people);
+ lfdb::set(dbh, options, "example/people", nifty_people);
 
  vector<person> people;
- if (not lfdb::get(dbh, "example/people", people) or people != nifty_people) {
+ if (not lfdb::get(dbh, options, "example/people", people) or people != nifty_people) {
   throw std::runtime_error("people did not round-trip through FoundationDB");
  }
 
