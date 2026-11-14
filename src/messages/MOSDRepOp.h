@@ -18,6 +18,7 @@
 #define CEPH_MOSDREPOP_H
 
 #include "MOSDFastDispatchOp.h"
+#include "include/encoding_optional.h"
 
 /*
  * OSD sub op - for internal ops on pobjects between primary and replicas(/stripes/whatever)
