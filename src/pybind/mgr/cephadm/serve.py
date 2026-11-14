@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 import ipaddress
 import hashlib
@@ -5,6 +6,7 @@ import json
 import logging
 import uuid
 import os
+import time
 from collections import defaultdict
 from typing import TYPE_CHECKING, Optional, List, cast, Dict, Any, Union, Tuple, Set, \
     DefaultDict, Callable
@@ -51,6 +53,25 @@ REQUIRES_POST_ACTIONS = ['grafana', 'iscsi', 'prometheus', 'alertmanager', 'rgw'
 DISABLED_SERVICES = ['nfs', 'keepalived']
 
 CEPHADM_EXE = ssh.RemoteExecutable('/usr/bin/cephadm')
+
+
+class _PhaseTimer:
+    """Wall-clock time of the steps of a remote cephadm call (SSH
+    connection, command, cephadm binary check and copy), for the log."""
+
+    def __init__(self) -> None:
+        self._start = self._last = time.monotonic()
+        self.phases: List[Tuple[str, float]] = []
+
+    def mark(self, phase: str) -> None:
+        now = time.monotonic()
+        self.phases.append((phase, now - self._last))
+        self._last = now
+
+    def summary(self) -> str:
+        total = time.monotonic() - self._start
+        steps = ', '.join(f'{phase} {secs:.2f}s' for phase, secs in self.phases)
+        return f'{total:.2f}s ({steps})'
 
 
 class CephadmServe:
@@ -1893,7 +1914,30 @@ class CephadmServe:
         :env_vars: in format -> [KEY=VALUE, ..]
         """
 
-        await self.mgr.ssh._remote_connection(host, addr)
+        # 'check-host' is logged with how long each step took, as is any
+        # call that had to copy the cephadm binary: adding a host does both,
+        # and adding many hosts at once is slow.
+        command_name = command if isinstance(command, str) else ' '.join(command)
+        log_timing = command_name == 'check-host'
+        timer = _PhaseTimer()
+
+        def _log_timing(failure: str = '') -> None:
+            if log_timing:
+                self.log.info(
+                    f'{command_name} on {host}'
+                    + (f' ({addr})' if addr else '')
+                    + (f' ({failure})' if failure else '')
+                    + f' took {timer.summary()}')
+
+        try:
+            await self.mgr.ssh._remote_connection(host, addr)
+        except asyncio.CancelledError:
+            _log_timing('cancelled')
+            raise
+        except Exception:
+            _log_timing('failed')
+            raise
+        timer.mark('connect')
 
         self.log.debug(f"_run_cephadm : command = {command}")
         self.log.debug(f"_run_cephadm : args = {args}")
@@ -1990,6 +2034,7 @@ class CephadmServe:
             try:
                 out, err, code = await self.mgr.ssh._execute_command(
                     host, cmd, stdin=stdin, addr=addr)
+                timer.mark(command_name)
                 if code == 2 or code == 127 or 'command not found' in err:
                     # Use invoker to check file existence when SSH hardening is enabled
                     if self.mgr.sudo_hardening and self.mgr.invoker_path:
@@ -2004,18 +2049,29 @@ class CephadmServe:
                         )
                     out_ls, err_ls, code_ls = await self.mgr.ssh._execute_command(host, check_cmd, addr=addr,
                                                                                   log_command=log_output)
+                    timer.mark('binary check')
                     if code_ls == 2:
+                        log_timing = True
                         await self._deploy_cephadm_binary(host, addr)
+                        timer.mark('binary copy')
                         out, err, code = await self.mgr.ssh._execute_command(
                             host, cmd, stdin=stdin, addr=addr)
+                        timer.mark(command_name)
                         # if there is an agent on this host, make sure it is using the most recent
                         # version of cephadm binary
                         if host in self.mgr.inventory:
                             for agent in self.mgr.cache.get_daemons_by_type('agent', host):
                                 self.mgr._schedule_daemon_action(agent.name(), 'redeploy')
 
+            except asyncio.CancelledError:
+                _log_timing('cancelled')
+                raise
             except Exception as e:
-                await self.mgr.ssh._reset_con(host)
+                # No reset of the host's connection here: _execute_command()
+                # closes the connection a command failed on, and
+                # _remote_connection() replaces a closed one. The cached
+                # connection may be in use by other commands for the host.
+                _log_timing('failed')
                 if error_ok:
                     return [], [str(e)], 1
                 raise
@@ -2032,13 +2088,19 @@ class CephadmServe:
                     cmd = ssh.RemoteCommand(CEPHADM_EXE, final_args)
                 out, err, code = await self.mgr.ssh._execute_command(
                     host, cmd, stdin=stdin, addr=addr)
+                timer.mark(command_name)
+            except asyncio.CancelledError:
+                _log_timing('cancelled')
+                raise
             except Exception as e:
-                await self.mgr.ssh._reset_con(host)
+                # see the 'root' mode case above
+                _log_timing('failed')
                 if error_ok:
                     return [], [str(e)], 1
                 raise
         else:
             assert False, 'unsupported mode'
+        _log_timing(f'exit code {code}' if code else '')
 
         if log_output:
             self.log.debug(f'code: {code}')
