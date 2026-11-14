@@ -6,7 +6,7 @@ options:
   type: str
   level: advanced
   desc: Filesystem path to the Manager's data directory, which contains
-    keyrings and other data 
+    keyrings and other data
   fmt_desc: Path to load daemon data (such as keyring)
   default: /var/lib/ceph/mgr/$cluster-$id
   services:
@@ -25,10 +25,10 @@ options:
 - name: mgr_stats_period
   type: int
   level: basic
-  desc: Period in seconds of OSD/MDS stats reports to manager
+  desc: Period in seconds of OSD/MDS stats reports to the Manager
   long_desc: Use this setting to control the granularity of time series data collection
-    from daemons.  Adjust upwards if the manager CPU load is too high, or if you simply
-    do not require the most up to date performance counter data.
+    from daemons.  Adjust upwards if the Manager CPU load is too high, or if you simply
+    do not require the most up-to-date performance counter data.
   default: 5
   services:
   - mgr
@@ -130,7 +130,7 @@ options:
   type: float
   level: advanced
   desc: Period in seconds from last beacon to manager dropping state about a monitored
-    service (RGW, rbd-mirror etc)
+    service (RGW, rbd-mirror etc.)
   default: 1_min
   services:
   - mgr
@@ -152,7 +152,7 @@ options:
 - name: mgr_max_pg_creating
   type: uint
   level: advanced
-  desc: bound on max creating pgs when acting to create more pgs
+  desc: bound on max creating PGs when acting to create more PGs
   default: 1024
   services:
   - mgr
@@ -178,7 +178,7 @@ options:
 - name: mgr_disabled_modules
   type: str
   level: advanced
-  desc: List of manager modules never get loaded
+  desc: List of Manager modules that never get loaded
   long_desc: A comma delimited list of module names. This list is read by manager
     when it starts. By default, manager loads all modules found in specified 'mgr_module_path',
     and it starts the enabled ones as instructed. The modules in this list will not
@@ -315,7 +315,7 @@ options:
 - name: mon_pg_check_down_all_threshold
   type: float
   level: advanced
-  desc: threshold of down osds after which we check all pgs
+  desc: threshold of down OSDs after which we check all PGs
   fmt_desc: Percentage threshold of ``down`` OSDs above which we check all PGs
     for stale ones.
   default: 0.5
@@ -325,8 +325,8 @@ options:
 - name: mon_pg_stuck_threshold
   type: int
   level: advanced
-  desc: number of seconds after which pgs can be considered stuck inactive, unclean,
-    etc
+  desc: number of seconds after which PGs can be considered stuck inactive, unclean,
+    etc.
   long_desc: see doc/control.rst under dump_stuck for more info
   fmt_desc: Number of seconds after which PGs can be considered as
     being stuck.
@@ -336,7 +336,7 @@ options:
 - name: mon_pg_warn_min_per_osd
   type: uint
   level: advanced
-  desc: minimal number PGs per (in) osd before we warn the admin
+  desc: minimal number of PGs per (in) OSD before we warn the admin
   fmt_desc: Raise ``HEALTH_WARN`` if the average number
     of PGs per ``in`` OSD is under this number. A non-positive number
     disables this.
@@ -346,7 +346,7 @@ options:
 - name: mon_pg_warn_max_object_skew
   type: float
   level: advanced
-  desc: max skew few average in objects per pg
+  desc: max skew from average object count per PG
   fmt_desc: Raise ``HEALTH_WARN`` if the average RADOS object count per PG
     of any pool is greater than ``mon_pg_warn_max_object_skew`` times
     the average RADOS object count per PG of all pools. Zero or a non-positive
@@ -357,7 +357,7 @@ options:
 - name: mon_pg_warn_min_objects
   type: int
   level: advanced
-  desc: 'do not warn below this object #'
+  desc: do not warn below this object count
   fmt_desc: Do not warn if the total number of RADOS objects in cluster is below
     this number
   default: 10000
@@ -366,7 +366,7 @@ options:
 - name: mon_pg_warn_min_pool_objects
   type: int
   level: advanced
-  desc: 'do not warn on pools below this object #'
+  desc: do not warn on pools below this object count
   fmt_desc: Do not warn on pools whose RADOS object count is below this number
   default: 1000
   services:
@@ -475,7 +475,7 @@ options:
 - name: mon_osd_err_op_age_ratio
   type: float
   level: advanced
-  desc: issue REQUEST_STUCK health error if OSD ops are slower than is age (seconds)
+  desc: issue REQUEST_STUCK health error if OSD ops are slower than this age (seconds)
   default: 128
   services:
   - mgr
