@@ -173,10 +173,42 @@ static constexpr uint32_t FLAG_PREVENT_VERSIONING = 0x0002;
 static constexpr uint32_t FLAG_FORCE_OP = 0x0004;
 static constexpr uint32_t FLAG_SKIP_UPDATE_OLH = 0x0008;
 
+/* No authenticated identity, for the operations that take one.
+ *
+ * An `authenticated_user` parameter names who an operation is for:
+ * the identity the request authenticated as, which for a member of an
+ * account is the member and not the account that owns what it
+ * touches, and for a session of a role in an account is the role --
+ * `rgw_user{tenant, <role id>, role_session_ns}`, since a role has no
+ * user of its own and rgw_owner names users and accounts.  A driver
+ * that maps an identity to filesystem credentials needs the member, or
+ * every member of an account is served as one, and the role, or every
+ * role of an account is;  a driver with no such mapping ignores it.
+ *
+ * The parameter is not defaulted, deliberately:  such a driver runs an
+ * unnamed operation as the daemon, which reaches more of the
+ * filesystem than any user it would be acting for, so every caller is
+ * made to say which it is.  This names the cases that genuinely have
+ * nobody -- lifecycle, restore, sync, a cache's own writeback -- and
+ * makes them greppable as a set. */
 inline const rgw_owner no_authenticated_user{};
 
+/* The namespace of a role session's `authenticated_user`, as "oidc" is
+ * a federated user's (rgw_auth.cc) */
 inline constexpr std::string_view role_session_ns = "role";
 
+/* Whose work an operation with no authenticated user is, where it is
+ * someone's:  lifecycle acts for the bucket's owner.  Carried as
+ * `on_behalf_of` in ReadOp and DeleteOp params, and by
+ * MultipartUpload::set_on_behalf_of().
+ *
+ * Not an authentication.  The operation's `authenticated_user` stays
+ * no_authenticated_user, since nobody authenticated;  this says only
+ * on whose behalf the gateway does work that no request asked for.  A
+ * driver that maps an identity to filesystem credentials decides what
+ * acting for it permits;  a driver with no such mapping ignores it, as
+ * it ignores `authenticated_user`.  Empty is nobody, which is what an
+ * operation that does not set it carries. */
 
 enum class RGWRestoreStatus : uint8_t {
   None  = 0,
@@ -1452,13 +1484,17 @@ class Object {
      * the source's history -- unversioned, when the source has non-current
      * versions -- is refused unless FLAG_SLICE_VERSIONS is given, in which
      * case the current version moves and the history is dropped.
+     *
+     * `authenticated_user` names who the rename is for, as for
+     * set_obj_attrs():  undefaulted, so a caller with nobody says so with
+     * `rgw::sal::no_authenticated_user`.
      */
     static constexpr uint32_t FLAG_RENAME_NONE = 0x0000;
     static constexpr uint32_t FLAG_SLICE_VERSIONS = 0x0001;
 
     virtual int rename(const DoutPrefixProvider* dpp, optional_yield y,
 		       Bucket* dest_bucket, const rgw_obj_key& dest_key,
-		       uint32_t flags) {
+		       uint32_t flags, const rgw_owner& authenticated_user) {
       return -ENOTSUP;
     }
 
@@ -1513,6 +1549,8 @@ class Object {
     /** Get a fsio view on an object or object prototype.  -ENOTSUP from a
      *  driver with no positional view.
      *
+     *  `authenticated_user` names who the handle is for, held for the
+     *  handle's life, as for rename():  undefaulted, so a caller with
      *  nobody says so with `rgw::sal::no_authenticated_user`. */
     using FSIOResult = std::tuple<int, std::unique_ptr<FSIOObject>>;
     virtual FSIOResult get_fsio_handle(const DoutPrefixProvider* dpp,

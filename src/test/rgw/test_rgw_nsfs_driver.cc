@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <array>
 #include <set>
+#include <thread>
 #include <iostream>
 #include <fstream>
 #include <filesystem>
@@ -34,6 +35,17 @@
 #include "rgw_public_access.h"
 #include "rgw_website.h"
 #include "rgw_bucket_encryption.h"
+#include "driver/nsfs/identity_db.h"
+#include "driver/nsfs/impersonate.h"
+#include "driver/nsfs/name_resolve.h"
+#include <condition_variable>
+#include <boost/asio/detached.hpp>
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/spawn.hpp>
+#include <linux/capability.h>
+#include <sys/syscall.h>
+#include "driver/nsfs/personality.h"
+#include "rgw_auth.h"
 #include "common/ceph_json.h"
 
 using namespace rgw::sal;
@@ -248,7 +260,7 @@ TEST(FSEnt, DirCreate)
   EXPECT_FALSE(sf::exists(tp));
 
   bool existed{false};
-  int ret = testdir->create(env->dpp, &existed);
+  int ret = testdir->create(env->dpp, null_yield, &existed);
 
   EXPECT_EQ(ret, 0);
   EXPECT_FALSE(existed);
@@ -266,7 +278,7 @@ TEST(FSEnt, DirBase)
   EXPECT_FALSE(sf::exists(tp));
 
   bool existed{false};
-  int ret = testdir->create(env->dpp, &existed);
+  int ret = testdir->create(env->dpp, null_yield, &existed);
 
   EXPECT_EQ(ret, 0);
   EXPECT_FALSE(existed);
@@ -335,7 +347,8 @@ TEST(FSEnt, DirBase)
   sf::path cp{base_path / copyname};
   sf::remove_all(cp);
   EXPECT_FALSE(sf::exists(cp));
-  ret = testdir->copy(env->dpp, null_yield, root.get(), copyname);
+  ret = testdir->copy(env->dpp, null_yield, root.get(), copyname,
+		      nsfs::CopyHints{});
   EXPECT_EQ(ret, 0);
   EXPECT_TRUE(sf::exists(cp));
   EXPECT_TRUE(sf::is_directory(tp));
@@ -386,7 +399,7 @@ TEST(FSEnt, DirAddDir)
   sf::path tp{base_path / dirname};
   std::unique_ptr<nsfs::Directory> testdir =
     std::make_unique<nsfs::Directory>(dirname, root.get(), env->cct.get());
-  int ret = testdir->create(env->dpp, &existed);
+  int ret = testdir->create(env->dpp, null_yield, &existed);
   EXPECT_EQ(ret, 0);
 
   ret = testdir->open(env->dpp);
@@ -396,7 +409,7 @@ TEST(FSEnt, DirAddDir)
   sf::path sp{base_path / dirname / subdirname};
   std::unique_ptr<nsfs::Directory> subdir =
     std::make_unique<nsfs::Directory>(subdirname, testdir.get(), env->cct.get());
-  ret = subdir->create(env->dpp, &existed);
+  ret = subdir->create(env->dpp, null_yield, &existed);
   EXPECT_EQ(ret, 0);
   EXPECT_FALSE(existed);
   EXPECT_TRUE(sf::exists(sp));
@@ -409,7 +422,7 @@ TEST(FSEnt, DirAddDir)
   sf::path ssp{base_path / dirname / subdirname / subsubdirname};
   std::unique_ptr<nsfs::Directory> subsubdir =
     std::make_unique<nsfs::Directory>(subsubdirname, subdir.get(), env->cct.get());
-  ret = subsubdir->create(env->dpp, &existed);
+  ret = subsubdir->create(env->dpp, null_yield, &existed);
   EXPECT_EQ(ret, 0);
   EXPECT_FALSE(existed);
   EXPECT_TRUE(sf::exists(ssp));
@@ -428,7 +441,7 @@ TEST(FSEnt, FileCreateReal)
   EXPECT_FALSE(sf::exists(tp));
 
   bool existed{false};
-  int ret = testfile.create(env->dpp, &existed);
+  int ret = testfile.create(env->dpp, null_yield, &existed);
 
   EXPECT_EQ(ret, 0);
   EXPECT_FALSE(existed);
@@ -445,7 +458,7 @@ TEST(FSEnt, FileCreateTemp)
   EXPECT_FALSE(sf::exists(tp));
 
   bool existed{false};
-  int ret = testfile.create(env->dpp, &existed, true);
+  int ret = testfile.create(env->dpp, null_yield, &existed, true);
   EXPECT_EQ(ret, 0);
   EXPECT_FALSE(existed);
   EXPECT_FALSE(sf::exists(tp));
@@ -468,7 +481,7 @@ TEST(FSEnt, FileBase)
   EXPECT_EQ(testfile->get_fd(), -1);
 
   bool existed{false};
-  int ret = testfile->create(env->dpp, &existed);
+  int ret = testfile->create(env->dpp, null_yield, &existed);
 
   EXPECT_EQ(ret, 0);
   EXPECT_FALSE(existed);
@@ -541,7 +554,7 @@ TEST(FSEnt, FileReadWrite)
   std::unique_ptr<nsfs::File> testfile{
     std::make_unique<nsfs::File>(fname, root.get(), env->cct.get())};
 
-  int ret = testfile->create(env->dpp);
+  int ret = testfile->create(env->dpp, null_yield);
   EXPECT_EQ(ret, 0);
   EXPECT_TRUE(sf::exists(tp));
   EXPECT_TRUE(sf::is_regular_file(tp));
@@ -867,6 +880,244 @@ public:
 };
 
 
+/* A file that arrives in a marked bucket without going through RGW is
+ * its bucket owner's.
+ *
+ * An NFS or POSIX client writes no ACL, and no conversion walk will
+ * visit the file afterwards.  NooBaa returns the bucket's owner for
+ * such a file, and so does RGW core on the request path when an object
+ * has no ACL (DECISIONS.md 2026-10-11) -- so the listing entry and
+ * get_owner() return the same owner, rather than `unknown`.
+ *
+ * The control is a second sideloaded file carrying a recorded ACL for
+ * somebody else:  a recorded owner is the object's, so the two must
+ * differ, and the first assertion cannot pass by reporting the bucket
+ * owner for everything. */
+TEST_F(NSFSBucketTest, ASideloadedFileIsItsBucketOwners)
+{
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_STRNE(b->profile_name(), "base") << "the fixture is not marked";
+
+  auto sideload = [&](const char* name) {
+    const sf::path f{bucket_path() / name};
+    int fd = ::open(f.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    EXPECT_GE(fd, 0) << cpp_strerror(errno);
+    EXPECT_EQ(::write(fd, "x", 1), 1);
+    ::close(fd);
+    return f;
+  };
+  sideload("nobodys.txt");
+  const sf::path other = sideload("somebodys.txt");
+
+  const rgw_user someone{"", "somebody-else"};
+  RGWAccessControlPolicy policy;
+  policy.create_default(someone, "Somebody Else");
+  bufferlist aclbl;
+  policy.encode(aclbl);
+  const std::string disk = b->xattr_strategy()->disk_name(RGW_ATTR_ACL);
+  ASSERT_FALSE(disk.empty());
+  ASSERT_EQ(::setxattr(other.c_str(), disk.c_str(), aclbl.c_str(),
+		       aclbl.length(), 0), 0) << cpp_strerror(errno);
+
+  rgw::sal::Bucket::ListParams params;
+  rgw::sal::Bucket::ListResults results;
+  ASSERT_EQ(bucket->list(env->dpp, params, 128, results, null_yield), 0);
+  std::map<std::string, std::string> owners;
+  for (const auto& e : results.objs) {
+    owners[e.key.name] = e.meta.owner;
+  }
+  EXPECT_EQ(owners["nobodys.txt"], to_string(bucket->get_info().owner))
+      << "a file recording no owner did not list as its bucket's";
+  EXPECT_EQ(owners["somebodys.txt"], to_string(rgw_owner{someone}))
+      << "a recorded owner was replaced by the bucket's";
+
+  /* and get_owner(), which HEAD uses, agrees with the listing */
+  auto obj = bucket->get_object(rgw_obj_key("nobodys.txt"));
+  ASSERT_EQ(obj->get_obj_attrs(null_yield, env->dpp), 0);
+  std::unique_ptr<rgw::sal::User> u;
+  ASSERT_EQ(static_cast<rgw::sal::NSFSObject*>(obj.get())->get_owner(
+		env->dpp, null_yield, &u), 0);
+  EXPECT_EQ(rgw_owner{u->get_id()}, bucket->get_info().owner);
+}
+
+
+/* I9:  a user stored for the first time in an account gets a copy of
+ * its account's identity row, as NooBaa's CreateUser copies the
+ * account's nsfs_account_config, and the copy is never updated.  The
+ * override decides only whether it is consulted.  An account with no
+ * row gives none, and a later store does not make one. */
+TEST_F(NSFSBucketTest, ANewAccountUserCopiesItsAccountsRow)
+{
+  auto* db = driver->get_identity_db();
+  const rgw_account_id acct{"RGW66666666666666666"};
+  nsfs::Identity arow;
+  arow.key = acct;
+  arow.uid = 4242; arow.gid = 4242;
+  arow.groups = std::vector<uint32_t>{77};
+  arow.new_buckets_path = "/elsewhere/acct";
+  ASSERT_EQ(db->put_identity(env->dpp, arow), 0);
+
+  /* an NSFSUser, not the fixture's TestUser, which stores through the
+   * user table alone and would leave this test vacuous */
+  auto store = [&] (const rgw_user& id, const rgw_account_id& in) {
+    auto u = std::make_unique<rgw::sal::NSFSUser>(driver.get(), id);
+    u->get_info().user_id = id;
+    /* an existing user is updated as RGW's paths update one:  loaded
+     * first, so the store carries its version */
+    (void) u->load_user(env->dpp, null_yield);
+    u->get_info().account_id = in;
+    u->get_info().display_name = id.id;
+    return u->store_user(env->dpp, null_yield, false, nullptr);
+  };
+  const rgw_user fred{"", "copy-fred"};
+  ASSERT_EQ(store(fred, acct), 0);
+
+  nsfs::Identity copy;
+  ASSERT_EQ(db->get_identity(env->dpp, fred.to_str(), copy), 0)
+      << "a new account user got no copy";
+  EXPECT_EQ(copy.uid, arow.uid);
+  EXPECT_EQ(copy.gid, arow.gid);
+  EXPECT_EQ(copy.groups, arow.groups);
+  EXPECT_EQ(copy.new_buckets_path, arow.new_buckets_path);
+
+  /* the account changes;  the copy does not, and a second store of the
+   * same user does not refresh it */
+  arow.uid = 4343; arow.gid = 4343;
+  ASSERT_EQ(db->put_identity(env->dpp, arow), 0);
+  ASSERT_EQ(store(fred, acct), 0);
+  ASSERT_EQ(db->get_identity(env->dpp, fred.to_str(), copy), 0);
+  EXPECT_EQ(copy.uid, 4242u) << "the copy followed its account";
+
+  /* which row fred runs as is the override's */
+  nsfs::Credentials cred;
+  db->force_user_identity_override(false);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, fred, acct, cred,
+				      null_yield), 0);
+  EXPECT_EQ(cred.uid, 4343u) << "without the override fred is the account";
+  db->force_user_identity_override(true);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, fred, acct, cred,
+				      null_yield), 0);
+  EXPECT_EQ(cred.uid, 4242u) << "under the override fred is his copy";
+  db->force_user_identity_override(std::nullopt);
+
+  /* a user outside any account gets no row */
+  const rgw_user plain{"", "copy-plain"};
+  ASSERT_EQ(store(plain, rgw_account_id{}), 0);
+  EXPECT_EQ(db->get_identity(env->dpp, plain.to_str(), copy), -ENOENT);
+
+  /* an account with no row gives none, now or on a later store */
+  const rgw_account_id bare{"RGW77777777777777777"};
+  const rgw_user gail{"", "copy-gail"};
+  ASSERT_EQ(store(gail, bare), 0);
+  EXPECT_EQ(db->get_identity(env->dpp, gail.to_str(), copy), -ENOENT);
+  nsfs::Identity brow;
+  brow.key = bare;
+  brow.uid = 5151; brow.gid = 5151;
+  ASSERT_EQ(db->put_identity(env->dpp, brow), 0);
+  ASSERT_EQ(store(gail, bare), 0);
+  EXPECT_EQ(db->get_identity(env->dpp, gail.to_str(), copy), -ENOENT)
+      << "a later store copied a row the account gained after the user";
+}
+
+/* A user's stored record is compare-and-swap on its version:  writers that
+ * read it concurrently each either apply or get -ECANCELED and retry, as
+ * RGW's callers do, and no write is lost.  dbstore checked the version and
+ * then wrote with INSERT OR REPLACE, two steps nothing held together, so
+ * two writers that read the same version both succeeded and the later one
+ * wrote over the earlier -- a concurrent caps grant on one Admin Ops user
+ * lost a cap that way (run 20261027-135946).  Each thread here adds its
+ * own placement tags, a list nothing validates, so every one must be
+ * there at the end. */
+TEST_F(NSFSBucketTest, ConcurrentUserWritesLoseNothing)
+{
+  auto* udb = driver->get_user_db();
+  RGWUserInfo info;
+  info.user_id = rgw_user{"", "cas-user"};
+  info.display_name = "cas";
+  rgw::sal::Attrs attrs;
+  RGWObjVersionTracker objv;
+  ASSERT_EQ(udb->store_user(env->dpp, info, true, &attrs, &objv, nullptr), 0);
+
+  constexpr int threads = 16;
+  constexpr int each = 8;
+  std::atomic<int> cancelled{0};
+  std::atomic<int> failed{0};
+  std::vector<std::thread> ts;
+  for (int t = 0; t < threads; ++t) {
+    ts.emplace_back([&, t] {
+      for (int i = 0; i < each; ++i) {
+	const std::string tag = "t" + std::to_string(t) + "-" + std::to_string(i);
+	for (;;) {
+	  RGWUserInfo u;
+	  u.user_id = rgw_user{"", "cas-user"};
+	  rgw::sal::Attrs a;
+	  RGWObjVersionTracker v;
+	  if (udb->get_user(env->dpp, "user_id", "cas-user", u, &a, &v) < 0) {
+	    ++failed;
+	    return;
+	  }
+	  u.placement_tags.push_back(tag);
+	  const int r = udb->store_user(env->dpp, u, false, &a, &v, nullptr);
+	  if (r == -ECANCELED) {
+	    ++cancelled;
+	    continue;
+	  }
+	  if (r < 0) {
+	    ++failed;
+	  }
+	  break;
+	}
+      }
+    });
+  }
+  for (auto& t : ts) {
+    t.join();
+  }
+  ASSERT_EQ(failed.load(), 0);
+
+  RGWUserInfo end;
+  end.user_id = rgw_user{"", "cas-user"};
+  ASSERT_EQ(udb->get_user(env->dpp, "user_id", "cas-user", end, nullptr,
+			  nullptr), 0);
+  std::set<std::string> have(end.placement_tags.begin(),
+			     end.placement_tags.end());
+  EXPECT_EQ(have.size(), static_cast<size_t>(threads * each))
+      << "writes were lost:  " << have.size() << " of " << threads * each
+      << " tags stored, after " << cancelled.load() << " retries";
+}
+
+/* And the plain case:  a write carrying a version the row no longer has
+ * is refused, and the row is left as the newer write made it. */
+TEST_F(NSFSBucketTest, AStaleUserWriteIsRefused)
+{
+  auto* udb = driver->get_user_db();
+  RGWUserInfo info;
+  info.user_id = rgw_user{"", "stale-user"};
+  info.display_name = "stale";
+  rgw::sal::Attrs attrs;
+  RGWObjVersionTracker objv;
+  ASSERT_EQ(udb->store_user(env->dpp, info, true, &attrs, &objv, nullptr), 0);
+
+  auto load = [&] (RGWUserInfo& u, RGWObjVersionTracker& v) {
+    u.user_id = rgw_user{"", "stale-user"};
+    rgw::sal::Attrs a;
+    return udb->get_user(env->dpp, "user_id", "stale-user", u, &a, &v);
+  };
+  RGWUserInfo first, second;
+  RGWObjVersionTracker v1, v2;
+  ASSERT_EQ(load(first, v1), 0);
+  ASSERT_EQ(load(second, v2), 0);
+  first.max_buckets = 11;
+  ASSERT_EQ(udb->store_user(env->dpp, first, false, &attrs, &v1, nullptr), 0);
+  second.max_buckets = 22;
+  EXPECT_EQ(udb->store_user(env->dpp, second, false, &attrs, &v2, nullptr),
+	    -ECANCELED);
+  RGWUserInfo now;
+  RGWObjVersionTracker vn;
+  ASSERT_EQ(load(now, vn), 0);
+  EXPECT_EQ(now.max_buckets, 11) << "the stale write replaced the newer one";
+}
+
 /* Stored state that will not decode fails the bucket closed.
  *
  * Absent and unreadable are different.  A bucket with no stored state
@@ -921,6 +1172,2262 @@ TEST_F(NSFSBucketTest, UnreadableStateDoesNotDenyTheListingOrTheProfile)
       << "the profile endpoint went blind on the bucket that needs it";
 }
 
+/* The identity table.
+ *
+ * A fixture of its own, and not one deriving from NSFSDriverTest,
+ * because the suite's TestDriver is constructed with a null
+ * CephContext -- so the driver's own IdentityDB can never open.  The
+ * database is a standalone object, which is what stage A is about,
+ * so the fixture builds one directly against the test's own
+ * directory. */
+class NSFSIdentityDBTest : public NSFSDriverTest {
+protected:
+  std::unique_ptr<nsfs::IdentityDB> db;
+
+public:
+  /* The driver comes from the base fixture, for the tests that need
+   * a sal::User to build an applier around.  The database does not:
+   * the suite's TestDriver is constructed with a null CephContext,
+   * so the driver's own IdentityDB can never open.  This one is
+   * built directly against the test's directory. */
+  void SetUp() {
+    NSFSDriverTest::SetUp();
+    db = std::make_unique<nsfs::IdentityDB>((bp / "identity").string(),
+					    env->cct.get());
+    ASSERT_EQ(db->Initialize("", -1), 0);
+  }
+
+  void TearDown() {
+    db.reset();
+    NSFSDriverTest::TearDown();
+  }
+
+  /* A real LocalApplier, which is what makes the account/user
+   * distinction below a statement about RGW rather than about a
+   * stub written to agree with me. */
+  std::unique_ptr<rgw::auth::LocalApplier>
+  local_applier(const rgw_user& uid, const char* account_id) {
+    auto user = driver->get_user(uid);
+    user->get_info().user_id = uid;
+    std::optional<RGWAccountInfo> account;
+    if (account_id) {
+      RGWAccountInfo ai;
+      ai.id = account_id;
+      ai.name = "an-account";
+      user->get_info().account_id = account_id;
+      account = ai;
+    }
+    return std::make_unique<rgw::auth::LocalApplier>(
+	env->cct.get(), std::move(user), std::move(account),
+	std::vector<rgw::IAM::Policy>{},
+	rgw::auth::LocalApplier::NO_SUBUSER, std::nullopt,
+	rgw::auth::LocalApplier::NO_ACCESS_KEY);
+  }
+
+  /* every column populated, so a round trip proves the whole record
+   * and not the subset impersonation reads */
+  static nsfs::Identity local_identity(const std::string& key) {
+    nsfs::Identity id;
+    id.key = key;
+    id.uid = 1001;
+    id.gid = 2002;
+    id.groups = std::vector<uint32_t>{10, 20, 30};
+    id.new_buckets_path = "/gpfs/rgw1/nsfs/newbuckets";
+    id.custom_bucket_path_allowed_list = "/gpfs/rgw1/nsfs/allowed";
+    id.fs_backend = "GPFS";
+    return id;
+  }
+};
+
+/* Every column round-trips, including the ones no request path
+ * reads.  A column no test writes and reads is a column whose first
+ * real use finds its bugs. */
+TEST_F(NSFSIdentityDBTest, EveryColumnRoundTrips)
+{
+  /* the control:  nothing is there before it is put */
+  nsfs::Identity got;
+  ASSERT_EQ(db->get_identity(env->dpp, "user$alice", got), -ENOENT);
+
+  const auto put = local_identity("user$alice");
+  ASSERT_EQ(db->put_identity(env->dpp, put), 0);
+  ASSERT_EQ(db->get_identity(env->dpp, "user$alice", got), 0);
+
+  EXPECT_EQ(got.key, put.key);
+  ASSERT_TRUE(got.uid.has_value());
+  EXPECT_EQ(*got.uid, 1001u);
+  ASSERT_TRUE(got.gid.has_value());
+  EXPECT_EQ(*got.gid, 2002u);
+  ASSERT_TRUE(got.groups.has_value());
+  EXPECT_EQ(*got.groups, (std::vector<uint32_t>{10, 20, 30}));
+  EXPECT_EQ(got.new_buckets_path, put.new_buckets_path);
+  EXPECT_EQ(got.custom_bucket_path_allowed_list,
+	    put.custom_bucket_path_allowed_list);
+  EXPECT_EQ(got.fs_backend, "GPFS");
+  EXPECT_TRUE(got.distinguished_name.empty());
+}
+
+/* A directory-backed identity is the other form:  a name and no ids. */
+TEST_F(NSFSIdentityDBTest, DirectoryBackedIdentityRoundTrips)
+{
+  nsfs::Identity id;
+  id.key = "user$bob";
+  id.distinguished_name = "bob";
+  id.new_buckets_path = "/gpfs/rgw1/nsfs/bob";
+  ASSERT_EQ(db->put_identity(env->dpp, id), 0);
+
+  nsfs::Identity got;
+  ASSERT_EQ(db->get_identity(env->dpp, "user$bob", got), 0);
+  EXPECT_EQ(got.distinguished_name, "bob");
+  EXPECT_FALSE(got.uid.has_value());
+  EXPECT_FALSE(got.gid.has_value());
+  EXPECT_TRUE(got.directory_backed());
+  EXPECT_FALSE(got.local());
+}
+
+/* Unset, explicitly empty, and populated are three distinct states.
+ *
+ * Collapsing the first two would make "this identity has no
+ * supplementary groups" indistinguishable from "nobody has said",
+ * which is the difference the directory-backed form will turn on. */
+TEST_F(NSFSIdentityDBTest, GroupsDistinguishUnsetFromEmpty)
+{
+  nsfs::Identity id;
+  id.key = "user$carol";
+  id.uid = 1; id.gid = 1;
+
+  id.groups = std::nullopt;
+  ASSERT_EQ(db->put_identity(env->dpp, id), 0);
+  nsfs::Identity got;
+  ASSERT_EQ(db->get_identity(env->dpp, "user$carol", got), 0);
+  EXPECT_FALSE(got.groups.has_value()) << "unset became something";
+
+  id.groups = std::vector<uint32_t>{};
+  ASSERT_EQ(db->put_identity(env->dpp, id), 0);
+  ASSERT_EQ(db->get_identity(env->dpp, "user$carol", got), 0);
+  ASSERT_TRUE(got.groups.has_value()) << "an explicit empty list became unset";
+  EXPECT_TRUE(got.groups->empty());
+
+  id.groups = std::vector<uint32_t>{7};
+  ASSERT_EQ(db->put_identity(env->dpp, id), 0);
+  ASSERT_EQ(db->get_identity(env->dpp, "user$carol", got), 0);
+  ASSERT_TRUE(got.groups.has_value());
+  EXPECT_EQ(*got.groups, (std::vector<uint32_t>{7}));
+}
+
+/* Each field updates independently:  a put that changes one leaves
+ * the others as they were. */
+TEST_F(NSFSIdentityDBTest, FieldsUpdateIndependently)
+{
+  auto id = local_identity("user$dave");
+  ASSERT_EQ(db->put_identity(env->dpp, id), 0);
+
+  id.fs_backend = "CEPH_FS";
+  ASSERT_EQ(db->put_identity(env->dpp, id), 0);
+
+  nsfs::Identity got;
+  ASSERT_EQ(db->get_identity(env->dpp, "user$dave", got), 0);
+  EXPECT_EQ(got.fs_backend, "CEPH_FS");
+  EXPECT_EQ(*got.uid, 1001u) << "an unrelated field moved";
+  EXPECT_EQ(got.new_buckets_path, "/gpfs/rgw1/nsfs/newbuckets");
+}
+
+/* The exclusivity rule is enforced by the schema, not by a caller.
+ *
+ * NooBaa's own schema will not validate a record holding both forms,
+ * so neither may this one -- otherwise an importer could produce a
+ * record NooBaa's tooling would reject. */
+TEST_F(NSFSIdentityDBTest, BothIdentityArmsAreRejected)
+{
+  /* the control:  each form alone is accepted */
+  nsfs::Identity local;
+  local.key = "user$ok-local";
+  local.uid = 5; local.gid = 5;
+  ASSERT_EQ(db->put_identity(env->dpp, local), 0);
+
+  nsfs::Identity dir;
+  dir.key = "user$ok-dir";
+  dir.distinguished_name = "someone";
+  ASSERT_EQ(db->put_identity(env->dpp, dir), 0);
+
+  nsfs::Identity both;
+  both.key = "user$both";
+  both.uid = 5; both.gid = 5;
+  both.distinguished_name = "someone";
+  EXPECT_EQ(db->put_identity(env->dpp, both), -EINVAL);
+
+  nsfs::Identity got;
+  EXPECT_EQ(db->get_identity(env->dpp, "user$both", got), -ENOENT)
+      << "a rejected record was stored anyway";
+}
+
+/* A uid without a gid is half an identity and is rejected. */
+TEST_F(NSFSIdentityDBTest, AUidWithoutAGidIsRejected)
+{
+  nsfs::Identity id;
+  id.key = "user$halfway";
+  id.uid = 9;
+  EXPECT_EQ(db->put_identity(env->dpp, id), -EINVAL);
+}
+
+/* The re-import lookup:  NooBaa's id to the owner it became. */
+TEST_F(NSFSIdentityDBTest, LookupByNoobaaId)
+{
+  std::string owner;
+  /* the control:  nothing is recorded before it is put */
+  ASSERT_EQ(db->get_owner_by_noobaa_id(
+	      env->dpp, "6a2bdeabf5c8e167f92cb079", owner), -ENOENT);
+
+  ASSERT_EQ(db->put_noobaa_id(env->dpp, "6a2bdeabf5c8e167f92cb079",
+			      "RGW12345678901234567"), 0);
+  ASSERT_EQ(db->get_owner_by_noobaa_id(
+	      env->dpp, "6a2bdeabf5c8e167f92cb079", owner), 0);
+  EXPECT_EQ(owner, "RGW12345678901234567");
+
+  EXPECT_EQ(db->get_owner_by_noobaa_id(env->dpp, "nosuchid", owner), -ENOENT);
+}
+
+/* Recording an id twice is rejected, and the first record survives.
+ *
+ * The table is written with a plain INSERT for exactly this:  under
+ * OR REPLACE a second import of one id would silently repoint it,
+ * which is the importer failing to recognise its own output. */
+TEST_F(NSFSIdentityDBTest, ANoobaaIdIsRecordedOnce)
+{
+  ASSERT_EQ(db->put_noobaa_id(env->dpp, "6a2bdeabf5c8e167f92cb079",
+			      "RGW12345678901234567"), 0);
+  EXPECT_EQ(db->put_noobaa_id(env->dpp, "6a2bdeabf5c8e167f92cb079",
+			      "RGW76543210987654321"), -EEXIST);
+
+  std::string owner;
+  ASSERT_EQ(db->get_owner_by_noobaa_id(
+	      env->dpp, "6a2bdeabf5c8e167f92cb079", owner), 0);
+  EXPECT_EQ(owner, "RGW12345678901234567") << "the second put repointed it";
+
+  /* the control:  a different id is accepted, so the rejection above is
+   * about the id and not about the table */
+  EXPECT_EQ(db->put_noobaa_id(env->dpp, "6a2bdeabf5c8e167f92cb07a",
+			      "RGW76543210987654321"), 0);
+}
+
+/* Delete removes it;  deleting what is absent is not an error,
+ * because the caller asked for it to be gone and it is. */
+TEST_F(NSFSIdentityDBTest, RemoveAndList)
+{
+  ASSERT_EQ(db->put_identity(env->dpp, local_identity("user$a")), 0);
+  ASSERT_EQ(db->put_identity(env->dpp, local_identity("user$b")), 0);
+
+  std::vector<nsfs::Identity> all;
+  ASSERT_EQ(db->list_identities(env->dpp, all), 0);
+  ASSERT_EQ(all.size(), 2u);
+
+  ASSERT_EQ(db->remove_identity(env->dpp, "user$a"), 0);
+  nsfs::Identity got;
+  EXPECT_EQ(db->get_identity(env->dpp, "user$a", got), -ENOENT);
+  EXPECT_EQ(db->remove_identity(env->dpp, "user$a"), 0)
+      << "removing an absent identity should not be an error";
+
+  all.clear();
+  ASSERT_EQ(db->list_identities(env->dpp, all), 0);
+  EXPECT_EQ(all.size(), 1u);
+}
+
+/* Resolution:  the stored row becomes the credentials a request is
+ * served under. */
+
+/* The process's own supplementary groups, which the resolved vector
+ * must never be.  If this is empty the clear cases below cannot fail
+ * for the reason they are testing, so they say so. */
+static std::vector<gid_t> process_groups()
+{
+  int n = getgroups(0, nullptr);
+  if (n <= 0) {
+    return {};
+  }
+  std::vector<gid_t> g(n);
+  n = getgroups(n, g.data());
+  if (n < 0) {
+    return {};
+  }
+  g.resize(n);
+  return g;
+}
+
+TEST_F(NSFSIdentityDBTest, ResolveLocalIdentity)
+{
+  const rgw_owner owner = parse_owner("user$resolve");
+  ASSERT_EQ(db->put_identity(env->dpp,
+			     local_identity(to_string(owner))), 0);
+
+  nsfs::Credentials cred;
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, owner, cred, null_yield), 0);
+  EXPECT_EQ(cred.uid, 1001u);
+  EXPECT_EQ(cred.gid, 2002u);
+  EXPECT_EQ(cred.groups, (std::vector<gid_t>{10, 20, 30}));
+}
+
+/* An account id is an owner too, and the key resolution looks under
+ * has to be the one the endpoint wrote. */
+TEST_F(NSFSIdentityDBTest, ResolveAccountIdOwner)
+{
+  const rgw_owner owner = parse_owner("RGW12345678901234567");
+  ASSERT_TRUE(std::holds_alternative<rgw_account_id>(owner))
+      << "the fixture's id is not being read as an account id";
+  ASSERT_EQ(db->put_identity(env->dpp,
+			     local_identity(to_string(owner))), 0);
+
+  nsfs::Credentials cred;
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, owner, cred, null_yield), 0);
+  EXPECT_EQ(cred.uid, 1001u);
+}
+
+/* The sharpest case.  An absent group list means no supplementary
+ * groups, installed, not "leave whatever the process holds" -- the
+ * reading that grants access rather than denying it.
+ *
+ * The control is the process's own group set:  unless it is
+ * non-empty, an empty result here is indistinguishable from having
+ * inherited it, and the test proves nothing. */
+TEST_F(NSFSIdentityDBTest, ResolveAbsentGroupListClears)
+{
+  const auto mine = process_groups();
+  ASSERT_FALSE(mine.empty())
+      << "this process holds no supplementary groups, so an empty "
+	 "resolved vector cannot be distinguished from an inherited one";
+
+  nsfs::Identity id;
+  id.key = "user$nogroups";
+  id.uid = 1; id.gid = 1;
+  id.groups = std::nullopt;
+  ASSERT_EQ(db->put_identity(env->dpp, id), 0);
+
+  nsfs::Credentials cred;
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db,
+				      parse_owner(id.key), cred, null_yield), 0);
+  EXPECT_TRUE(cred.groups.empty())
+      << "an absent list resolved to " << cred.groups.size() << " groups";
+  for (auto g : mine) {
+    EXPECT_EQ(std::find(cred.groups.begin(), cred.groups.end(), g),
+	      cred.groups.end())
+	<< "the process's own group " << g << " reached the credentials";
+  }
+}
+
+/* An explicitly empty list resolves the same way.  The two stay
+ * distinct in the record for the directory-backed form;  they are not
+ * distinct here. */
+TEST_F(NSFSIdentityDBTest, ResolveEmptyGroupListClears)
+{
+  nsfs::Identity id;
+  id.key = "user$emptygroups";
+  id.uid = 1; id.gid = 1;
+  id.groups = std::vector<uint32_t>{};
+  ASSERT_EQ(db->put_identity(env->dpp, id), 0);
+
+  nsfs::Credentials cred;
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db,
+				      parse_owner(id.key), cred, null_yield), 0);
+  EXPECT_TRUE(cred.groups.empty());
+}
+
+/* No row is not an error:  it means nothing asked for impersonation,
+ * and the caller does what it did before this existed. */
+TEST_F(NSFSIdentityDBTest, ResolveNoRowIsNotAnError)
+{
+  nsfs::Credentials cred;
+  cred.uid = 4242;			/* must not be written to */
+  EXPECT_EQ(nsfs::resolve_credentials(env->dpp, *db,
+				      parse_owner("user$absent"), cred, null_yield),
+	    -ENOENT);
+  EXPECT_EQ(cred.uid, 4242u) << "a failed resolve wrote to its output";
+}
+
+/* A row carrying only placement data asks for no impersonation.
+ * That is the no-row case, not the cannot-supply one. */
+TEST_F(NSFSIdentityDBTest, ResolvePlacementOnlyRowAsksForNothing)
+{
+  nsfs::Identity id;
+  id.key = "user$placementonly";
+  id.new_buckets_path = "/gpfs/rgw1/nsfs/somewhere";
+  ASSERT_EQ(db->put_identity(env->dpp, id), 0);
+
+  nsfs::Credentials cred;
+  EXPECT_EQ(nsfs::resolve_credentials(env->dpp, *db,
+				      parse_owner(id.key), cred, null_yield), -ENOENT);
+}
+
+/* I7.  An nsswitch-resolved row -- `distinguished_name`, the field NooBaa
+ * passes to getpwnam -- is resolved through nsswitch.  The lookup is
+ * replaced here, so each outcome nsswitch can return is exercised;
+ * NsswitchRealLookup below calls the real one. */
+namespace {
+
+struct FakeDirectory {
+  std::mutex m;
+  std::map<std::string, int> fail;	/* name -> -errno */
+  std::map<std::string, nsfs::ResolvedName> names;
+  int calls{0};
+  /* I8:  users by uid, and each name's group list */
+  std::map<uint32_t, std::pair<std::string, uint32_t>> users;
+  std::map<std::string, std::vector<uint32_t>> groups;
+  std::map<std::string, int> group_fail;	/* name -> -errno */
+  int group_calls{0};
+
+  nsfs::NameLookupFn fn() {
+    return [this] (const std::string& name, nsfs::ResolvedName& out) {
+      std::lock_guard l(m);
+      ++calls;
+      if (auto f = fail.find(name); f != fail.end()) {
+	return f->second;
+      }
+      auto i = names.find(name);
+      if (i == names.end()) {
+	return -ENOENT;
+      }
+      out = i->second;
+      return 0;
+    };
+  }
+
+  nsfs::GroupLookupFn groups_fn() {
+    return [this] (const std::string& name, uint32_t,
+		   std::vector<uint32_t>& out) {
+      std::lock_guard l(m);
+      ++group_calls;
+      if (auto f = group_fail.find(name); f != group_fail.end()) {
+	return f->second;
+      }
+      auto i = groups.find(name);
+      out = (i == groups.end()) ? std::vector<uint32_t>{} : i->second;
+      return 0;
+    };
+  }
+
+  nsfs::UserLookupFn user_fn() {
+    return [this] (uint32_t uid, std::string& name, uint32_t& gid) {
+      std::lock_guard l(m);
+      auto i = users.find(uid);
+      if (i == users.end()) {
+	return -ENOENT;
+      }
+      name = i->second.first;
+      gid = i->second.second;
+      return 0;
+    };
+  }
+
+  void install(nsfs::NsswitchCache& c) {
+    c.set_lookup_for_test(fn());
+    c.set_group_lookups_for_test(groups_fn(), user_fn());
+  }
+};
+
+/* A local row with no list:  NooBaa's dynamic groups apply to it too,
+ * by uid. */
+nsfs::Identity listless_identity(const std::string& key, uint32_t uid,
+				 uint32_t gid)
+{
+  nsfs::Identity id;
+  id.key = key;
+  id.uid = uid;
+  id.gid = gid;
+  return id;
+}
+
+nsfs::Identity name_identity(const std::string& key, const std::string& name)
+{
+  nsfs::Identity id;
+  id.key = key;
+  id.distinguished_name = name;
+  return id;
+}
+
+} // namespace
+
+/* Resolved and served:  the uid and gid are nsswitch's.  The control is
+ * the same row before the directory knows the name, which must be
+ * refused -- without it a resolver that returned a fixed answer would
+ * pass. */
+TEST_F(NSFSIdentityDBTest, NsswitchResolvesThroughNsswitch)
+{
+  FakeDirectory dir;
+  db->nsswitch_cache().set_lookup_for_test(dir.fn());
+  const rgw_owner owner = parse_owner("user$byname");
+  ASSERT_EQ(db->put_identity(env->dpp, name_identity(to_string(owner),
+						     "nsfsname")), 0);
+
+  nsfs::Credentials cred;
+  EXPECT_EQ(nsfs::resolve_credentials(env->dpp, *db, owner, cred,
+				      null_yield), -EPERM)
+      << "control:  a name nsswitch does not know resolved";
+
+  dir.names["nsfsname"] = {70101, 100};
+  db->nsswitch_cache().refresh(env->dpp, "nsfsname");
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, owner, cred,
+				      null_yield), 0);
+  EXPECT_EQ(cred.uid, 70101u);
+  EXPECT_EQ(cred.gid, 100u);
+  EXPECT_TRUE(cred.groups.empty())
+      << "no list on the row means none until I8";
+}
+
+/* The row's explicit list wins:  nsswitch supplies only the uid and the
+ * primary gid. */
+TEST_F(NSFSIdentityDBTest, NsswitchTakesTheRowsGroupList)
+{
+  FakeDirectory dir;
+  dir.names["nsfsname"] = {70101, 100};
+  db->nsswitch_cache().set_lookup_for_test(dir.fn());
+
+  auto id = name_identity("user$byname", "nsfsname");
+  id.groups = std::vector<uint32_t>{5, 6};
+  ASSERT_EQ(db->put_identity(env->dpp, id), 0);
+
+  nsfs::Credentials cred;
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, parse_owner(id.key),
+				      cred, null_yield), 0);
+  EXPECT_EQ(cred.groups, (std::vector<gid_t>{5, 6}));
+
+  id.groups = std::vector<uint32_t>{};
+  ASSERT_EQ(db->put_identity(env->dpp, id), 0);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, parse_owner(id.key),
+				      cred, null_yield), 0);
+  EXPECT_TRUE(cred.groups.empty())
+      << "control:  the list read back was not the row's";
+}
+
+/* A lookup that fails is refused, as NooBaa's request is, and is not
+ * cached:  the control is the next call after the directory recovers,
+ * which must resolve. */
+TEST_F(NSFSIdentityDBTest, NsswitchLookupFailureIsRefusedAndNotCached)
+{
+  FakeDirectory dir;
+  dir.names["nsfsname"] = {70101, 100};
+  dir.fail["nsfsname"] = -EAGAIN;
+  db->nsswitch_cache().set_lookup_for_test(dir.fn());
+  const rgw_owner owner = parse_owner("user$byname");
+  ASSERT_EQ(db->put_identity(env->dpp, name_identity(to_string(owner),
+						     "nsfsname")), 0);
+
+  nsfs::Credentials cred;
+  EXPECT_EQ(nsfs::resolve_credentials(env->dpp, *db, owner, cred,
+				      null_yield), -EPERM);
+
+  dir.fail.clear();
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, owner, cred,
+				      null_yield), 0)
+      << "a failed lookup was cached";
+  EXPECT_EQ(cred.uid, 70101u);
+}
+
+/* A hit costs no lookup;  the control is a refresh, after which the
+ * next lookup is the directory's. */
+TEST_F(NSFSIdentityDBTest, NsswitchHitsDoNotLookUp)
+{
+  FakeDirectory dir;
+  dir.names["nsfsname"] = {70101, 100};
+  db->nsswitch_cache().set_lookup_for_test(dir.fn());
+  const rgw_owner owner = parse_owner("user$byname");
+  ASSERT_EQ(db->put_identity(env->dpp, name_identity(to_string(owner),
+						     "nsfsname")), 0);
+
+  nsfs::Credentials cred;
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, owner, cred,
+				      null_yield), 0);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, owner, cred,
+				      null_yield), 0);
+  EXPECT_EQ(dir.calls, 1);
+
+  dir.names["nsfsname"] = {70102, 100};
+  EXPECT_EQ(cred.uid, 70101u) << "the cache was bypassed";
+  EXPECT_EQ(db->nsswitch_cache().refresh(env->dpp, "nsfsname"), 1);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, owner, cred,
+				      null_yield), 0);
+  EXPECT_EQ(cred.uid, 70102u);
+}
+
+/* The identity an unauthenticated request is served as may take the name
+ * form too -- NooBaa's anonymous account can carry a distinguished name
+ * (`ACCOUNT_IMPORT.md` §6.8) -- and it resolves under RGW's anonymous
+ * user like any other key.  The control is the same row before the
+ * directory knows the name, which must be refused. */
+TEST_F(NSFSIdentityDBTest, NsswitchResolvesTheAnonymousIdentity)
+{
+  FakeDirectory dir;
+  db->nsswitch_cache().set_lookup_for_test(dir.fn());
+  const rgw_owner anon = rgw_user(RGW_USER_ANON_ID);
+  ASSERT_EQ(db->put_identity(env->dpp, name_identity(to_string(anon),
+						     "nsfsanon")), 0);
+
+  nsfs::Credentials cred;
+  EXPECT_EQ(nsfs::resolve_credentials(env->dpp, *db, anon, cred,
+				      null_yield), -EPERM)
+      << "control:  a name nsswitch does not know resolved";
+
+  dir.names["nsfsanon"] = {70105, 100};
+  db->nsswitch_cache().refresh(env->dpp, "nsfsanon");
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, anon, cred,
+				      null_yield), 0);
+  EXPECT_EQ(cred.uid, 70105u);
+}
+
+/* The bound.  A personality hit resolves nothing, so the sweep is what
+ * notices a change, and it does so by moving the identity generation.
+ * Every outcome counts:  a new uid, a name that went, one that
+ * appeared, a lookup that failed.  The control is a sweep over an
+ * unchanged directory, which must move nothing. */
+TEST_F(NSFSIdentityDBTest, NsswitchSweepInvalidatesOnChange)
+{
+  FakeDirectory dir;
+  dir.names["nsfsname"] = {70101, 100};
+  db->nsswitch_cache().set_lookup_for_test(dir.fn());
+  const rgw_owner owner = parse_owner("user$byname");
+  ASSERT_EQ(db->put_identity(env->dpp, name_identity(to_string(owner),
+						     "nsfsname")), 0);
+  nsfs::Credentials cred;
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, owner, cred,
+				      null_yield), 0);
+
+  uint64_t gen = nsfs::identity_generation(owner);
+  EXPECT_EQ(db->nsswitch_cache().sweep(env->dpp), 0);
+  EXPECT_EQ(nsfs::identity_generation(owner), gen)
+      << "control:  an unchanged directory invalidated";
+
+  dir.names["nsfsname"] = {70102, 100};		/* a new uid */
+  EXPECT_EQ(db->nsswitch_cache().sweep(env->dpp), 1);
+  EXPECT_NE(nsfs::identity_generation(owner), gen);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, owner, cred,
+				      null_yield), 0);
+  EXPECT_EQ(cred.uid, 70102u);
+
+  gen = nsfs::identity_generation(owner);
+  dir.names.erase("nsfsname");			/* the name went */
+  EXPECT_EQ(db->nsswitch_cache().sweep(env->dpp), 1);
+  EXPECT_NE(nsfs::identity_generation(owner), gen);
+  EXPECT_EQ(nsfs::resolve_credentials(env->dpp, *db, owner, cred,
+				      null_yield), -EPERM);
+
+  gen = nsfs::identity_generation(owner);
+  dir.names["nsfsname"] = {70101, 100};		/* and came back */
+  EXPECT_EQ(db->nsswitch_cache().sweep(env->dpp), 1);
+  EXPECT_NE(nsfs::identity_generation(owner), gen);
+
+  gen = nsfs::identity_generation(owner);
+  dir.fail["nsfsname"] = -EIO;			/* the lookup failed */
+  EXPECT_EQ(db->nsswitch_cache().sweep(env->dpp), 1);
+  EXPECT_NE(nsfs::identity_generation(owner), gen);
+  EXPECT_EQ(nsfs::resolve_credentials(env->dpp, *db, owner, cred,
+				      null_yield), -EPERM)
+      << "a warm answer outlived a failing directory";
+}
+
+/* Clearing an entry makes the next resolution a lookup and invalidates
+ * identities, so a warm personality resolves again too.  The control is
+ * clearing a name the cache does not hold, which must move nothing. */
+TEST_F(NSFSIdentityDBTest, NsswitchForgetClearsAndInvalidates)
+{
+  FakeDirectory dir;
+  dir.names["nsfsname"] = {70101, 100};
+  db->nsswitch_cache().set_lookup_for_test(dir.fn());
+  const rgw_owner owner = parse_owner("user$byname");
+  ASSERT_EQ(db->put_identity(env->dpp, name_identity(to_string(owner),
+						     "nsfsname")), 0);
+  nsfs::Credentials cred;
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, owner, cred,
+				      null_yield), 0);
+
+  uint64_t gen = nsfs::identity_generation(owner);
+  EXPECT_FALSE(db->nsswitch_cache().forget("othername"));
+  EXPECT_EQ(nsfs::identity_generation(owner), gen)
+      << "control:  clearing an absent entry invalidated";
+
+  dir.names["nsfsname"] = {70102, 100};
+  EXPECT_TRUE(db->nsswitch_cache().forget("nsfsname"));
+  EXPECT_NE(nsfs::identity_generation(owner), gen);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, owner, cred,
+				      null_yield), 0);
+  EXPECT_EQ(cred.uid, 70102u);
+  EXPECT_EQ(dir.calls, 2);
+}
+
+/* A row written or removed is the gateway's own evidence that a name may
+ * have changed, so the names it touches are cleared:  the same name
+ * rewritten is looked up again, a name the row no longer carries is
+ * dropped, and so is a removed row's.  The control is a write to an
+ * unrelated row, which must leave the cached answer alone. */
+TEST_F(NSFSIdentityDBTest, NsswitchRowWritesClearTheirNames)
+{
+  FakeDirectory dir;
+  dir.names["nsfsname"] = {70101, 100};
+  dir.names["othername"] = {70103, 100};
+  db->nsswitch_cache().set_lookup_for_test(dir.fn());
+  const rgw_owner owner = parse_owner("user$byname");
+  ASSERT_EQ(db->put_identity(env->dpp, name_identity(to_string(owner),
+						     "nsfsname")), 0);
+  nsfs::Credentials cred;
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, owner, cred,
+				      null_yield), 0);
+
+  dir.names["nsfsname"] = {70102, 100};
+  ASSERT_EQ(db->put_identity(env->dpp, local_identity("user$unrelated")), 0);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, owner, cred,
+				      null_yield), 0);
+  EXPECT_EQ(cred.uid, 70101u) << "control:  an unrelated write cleared it";
+
+  uint64_t gen = nsfs::identity_generation(owner);
+  ASSERT_EQ(db->put_identity(env->dpp, name_identity(to_string(owner),
+						     "nsfsname")), 0);
+  EXPECT_NE(nsfs::identity_generation(owner), gen);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, owner, cred,
+				      null_yield), 0);
+  EXPECT_EQ(cred.uid, 70102u) << "the same name rewritten was not looked up";
+
+  ASSERT_EQ(db->put_identity(env->dpp, name_identity(to_string(owner),
+						     "othername")), 0);
+  EXPECT_TRUE(db->nsswitch_cache().names_for_uid(70102).empty())
+      << "the name the row left behind was kept";
+
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, owner, cred,
+				      null_yield), 0);
+  ASSERT_EQ(db->nsswitch_cache().names_for_uid(70103).size(), 1u);
+  ASSERT_EQ(db->remove_identity(env->dpp, to_string(owner)), 0);
+  EXPECT_TRUE(db->nsswitch_cache().names_for_uid(70103).empty())
+      << "a removed row's name was kept";
+}
+
+/* The sweep's first pass resolves every name the table carries, so one
+ * nsswitch does not know is logged at startup.  The control is the
+ * cache before the sweep starts, which holds nothing. */
+TEST_F(NSFSIdentityDBTest, NsswitchSweepStartsByResolvingTheTable)
+{
+  FakeDirectory dir;
+  dir.names["nsfsname"] = {70101, 100};
+  db->nsswitch_cache().set_lookup_for_test(dir.fn());
+  ASSERT_EQ(db->put_identity(env->dpp, name_identity("user$a", "nsfsname")),
+	    0);
+  ASSERT_EQ(db->put_identity(env->dpp, name_identity("user$b", "nobody")),
+	    0);
+  ASSERT_EQ(db->put_identity(env->dpp, local_identity("user$c")), 0);
+  EXPECT_TRUE(db->nsswitch_cache().names_for_uid(70101).empty())
+      << "control:  the cache held a name before the sweep";
+
+  db->start_name_sweep();
+  for (int i = 0; i < 500; ++i) {
+    {
+      std::lock_guard l(dir.m);
+      if (dir.calls >= 2) {
+	break;
+      }
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  db->nsswitch_cache().stop();
+  EXPECT_EQ(dir.calls, 2) << "the pass looked up other than the two names";
+  EXPECT_EQ(db->nsswitch_cache().names_for_uid(70101),
+	    (std::vector<std::string>{"nsfsname"}));
+
+  /* both are held now:  neither is looked up again */
+  nsfs::ResolvedName rn;
+  EXPECT_EQ(db->nsswitch_cache().resolve(env->dpp, "nobody", rn, null_yield),
+	    -ENOENT);
+  EXPECT_EQ(dir.calls, 2);
+}
+
+/* With a coroutine the lookup runs on the pool and the coroutine
+ * suspends, so a frontend thread serves other requests meanwhile.  The
+ * lookup waits for a second coroutine on the same single-threaded
+ * io_context;  it can run only if the first suspended.  The control is
+ * `null_yield`, which runs the lookup on the calling thread and so
+ * cannot see the second coroutine -- the lookup times out. */
+TEST_F(NSFSIdentityDBTest, NsswitchLookupSuspendsTheCoroutine)
+{
+  const rgw_owner owner = parse_owner("user$byname");
+  ASSERT_EQ(db->put_identity(env->dpp, name_identity(to_string(owner),
+						     "nsfsname")), 0);
+
+  for (const bool suspend : {true, false}) {
+    std::mutex m;
+    std::condition_variable cv;
+    bool released = false;
+    std::thread::id looked_up_on;
+    db->nsswitch_cache().set_lookup_for_test(
+      [&] (const std::string&, nsfs::ResolvedName& out) {
+	std::unique_lock l(m);
+	looked_up_on = std::this_thread::get_id();
+	if (! cv.wait_for(l, std::chrono::seconds(1),
+			  [&] { return released; })) {
+	  return -ETIMEDOUT;
+	}
+	out = {70101, 100};
+	return 0;
+      });
+
+    boost::asio::io_context io;
+    int ret = 1;
+    std::thread::id caller;
+    boost::asio::spawn(io, [&] (boost::asio::yield_context yield) {
+	caller = std::this_thread::get_id();
+	nsfs::Credentials cred;
+	ret = nsfs::resolve_credentials(
+	  env->dpp, *db, owner, cred,
+	  suspend ? optional_yield{yield} : null_yield);
+      }, boost::asio::detached);
+    boost::asio::spawn(io, [&] (boost::asio::yield_context) {
+	std::lock_guard l(m);
+	released = true;
+	cv.notify_all();
+      }, boost::asio::detached);
+    io.run();
+
+    if (suspend) {
+      EXPECT_EQ(ret, 0) << "the coroutine held its thread";
+      EXPECT_NE(looked_up_on, caller);
+    } else {
+      EXPECT_EQ(ret, -EPERM) << "control:  null_yield suspended";
+      EXPECT_EQ(looked_up_on, caller);
+    }
+  }
+}
+
+/* The real nsswitch, on whatever source this host has.  root is in every
+ * `files` source;  the control is a name no source has. */
+TEST_F(NSFSIdentityDBTest, NsswitchRealLookup)
+{
+  nsfs::ResolvedName rn;
+  ASSERT_EQ(nsfs::nsswitch_lookup("root", rn), 0);
+  EXPECT_EQ(rn.uid, 0u);
+  EXPECT_EQ(rn.gid, 0u);
+  EXPECT_EQ(nsfs::nsswitch_lookup("uid=someone,ou=people,dc=example,dc=com",
+				  rn), -ENOENT);
+}
+
+/* A credential built from a file carries a uid and no name, and a
+ * nsswitch-resolved row stores no uid, so the row is found through the cache:
+ * the names recently resolved to that uid.  The control is the same
+ * completion before the name was resolved, which finds no row. */
+TEST_F(NSFSIdentityDBTest, NsswitchCompletesFileCredentials)
+{
+  FakeDirectory dir;
+  dir.names["nsfsname"] = {70101, 100};
+  db->nsswitch_cache().set_lookup_for_test(dir.fn());
+  auto id = name_identity("user$byname", "nsfsname");
+  id.groups = std::vector<uint32_t>{7};
+  ASSERT_EQ(db->put_identity(env->dpp, id), 0);
+
+  nsfs::Credentials file;
+  file.uid = 70101;
+  file.gid = 100;
+  std::string key;
+  EXPECT_EQ(nsfs::complete_file_credentials(env->dpp, *db, file, &key),
+	    -ENOENT) << "control:  an unresolved name completed";
+
+  nsfs::Credentials cred;
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, parse_owner(id.key),
+				      cred, null_yield), 0);
+  ASSERT_EQ(nsfs::complete_file_credentials(env->dpp, *db, file, &key), 0);
+  EXPECT_EQ(file.groups, (std::vector<gid_t>{7}));
+  EXPECT_EQ(key, "user$byname");
+}
+
+/* I8.  Supplementary groups through nsswitch, under
+ * rgw_nsfs_dynamic_supplemental_groups (`inflight/i8-plan.md`).  NooBaa's
+ * rule, at the pin:  an explicit list wins, empty included;  otherwise,
+ * switch on, the user's groups from getgrouplist (`object_sdk.js:313`).
+ * The lookups are injected;  NsswitchRealGroups calls the real ones. */
+
+/* Switch on, an explicit list wins over nsswitch.  The control is the
+ * same row with no list, which takes nsswitch's. */
+TEST_F(NSFSIdentityDBTest, NsswitchGroupsTheExplicitListWins)
+{
+  FakeDirectory dir;
+  dir.users[70101] = {"nsfsuser", 70101};
+  dir.groups["nsfsuser"] = {70101, 70010};
+  dir.install(db->nsswitch_cache());
+  db->nsswitch_cache().override_dynamic_groups(true);
+
+  auto id = listless_identity("user$grouped", 70101, 70101);
+  id.groups = std::vector<uint32_t>{5};
+  ASSERT_EQ(db->put_identity(env->dpp, id), 0);
+  nsfs::Credentials cred;
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, parse_owner(id.key),
+				      cred, null_yield), 0);
+  EXPECT_EQ(cred.groups, (std::vector<gid_t>{5}));
+
+  id.groups.reset();
+  ASSERT_EQ(db->put_identity(env->dpp, id), 0);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, parse_owner(id.key),
+				      cred, null_yield), 0);
+  EXPECT_EQ(cred.groups, (std::vector<gid_t>{70101, 70010}))
+      << "control:  a list-less row did not take nsswitch's groups";
+}
+
+/* The sharp edge:  an explicit *empty* list is no groups, not "ask
+ * nsswitch" -- NooBaa tests the list's presence, and `[]` is present.
+ * Getting it wrong grants access.  The control is the list-less row. */
+TEST_F(NSFSIdentityDBTest, NsswitchGroupsTheExplicitEmptyListWins)
+{
+  FakeDirectory dir;
+  dir.users[70101] = {"nsfsuser", 70101};
+  dir.groups["nsfsuser"] = {70101, 70010};
+  dir.install(db->nsswitch_cache());
+  db->nsswitch_cache().override_dynamic_groups(true);
+
+  auto id = listless_identity("user$grouped", 70101, 70101);
+  id.groups = std::vector<uint32_t>{};
+  ASSERT_EQ(db->put_identity(env->dpp, id), 0);
+  nsfs::Credentials cred;
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, parse_owner(id.key),
+				      cred, null_yield), 0);
+  EXPECT_TRUE(cred.groups.empty()) << "an empty list asked nsswitch";
+  EXPECT_EQ(dir.group_calls, 0);
+
+  id.groups.reset();
+  ASSERT_EQ(db->put_identity(env->dpp, id), 0);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, parse_owner(id.key),
+				      cred, null_yield), 0);
+  EXPECT_FALSE(cred.groups.empty()) << "control:  no list, no groups";
+}
+
+/* Switch off, a list-less row has no groups and nsswitch is not asked --
+ * today's behaviour, pinned.  The control is the switch on. */
+TEST_F(NSFSIdentityDBTest, NsswitchGroupsOffGivesNone)
+{
+  FakeDirectory dir;
+  dir.users[70101] = {"nsfsuser", 70101};
+  dir.groups["nsfsuser"] = {70101, 70010};
+  dir.install(db->nsswitch_cache());
+  db->nsswitch_cache().override_dynamic_groups(false);
+
+  const auto id = listless_identity("user$grouped", 70101, 70101);
+  ASSERT_EQ(db->put_identity(env->dpp, id), 0);
+  nsfs::Credentials cred;
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, parse_owner(id.key),
+				      cred, null_yield), 0);
+  EXPECT_TRUE(cred.groups.empty());
+  EXPECT_EQ(dir.group_calls, 0) << "the switch off asked nsswitch";
+
+  db->nsswitch_cache().override_dynamic_groups(true);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, parse_owner(id.key),
+				      cred, null_yield), 0);
+  EXPECT_EQ(cred.groups, (std::vector<gid_t>{70101, 70010}))
+      << "control:  the switch on gave no groups";
+}
+
+/* Both forms:  an nsswitch-resolved row's groups come by its name and
+ * resolved gid, a local row's by its uid.  Each is its own user's. */
+TEST_F(NSFSIdentityDBTest, NsswitchGroupsForBothForms)
+{
+  FakeDirectory dir;
+  dir.names["byname"] = {70102, 100};
+  dir.users[70101] = {"bylocal", 70101};
+  dir.groups["byname"] = {100, 70020};
+  dir.groups["bylocal"] = {70101, 70010};
+  dir.install(db->nsswitch_cache());
+  db->nsswitch_cache().override_dynamic_groups(true);
+
+  ASSERT_EQ(db->put_identity(env->dpp, name_identity("user$n", "byname")), 0);
+  ASSERT_EQ(db->put_identity(env->dpp,
+			     listless_identity("user$l", 70101, 70101)), 0);
+  nsfs::Credentials n, l;
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, parse_owner("user$n"),
+				      n, null_yield), 0);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, parse_owner("user$l"),
+				      l, null_yield), 0);
+  EXPECT_EQ(n.groups, (std::vector<gid_t>{100, 70020}));
+  EXPECT_EQ(l.groups, (std::vector<gid_t>{70101, 70010}));
+}
+
+/* Under the switch a list-less local identity whose uid nsswitch does
+ * not know is refused, as NooBaa's request is (`fs_napi.cpp:1508-1515`).
+ * The control is the switch off, which serves it with no groups. */
+TEST_F(NSFSIdentityDBTest, NsswitchGroupsUnknownUidIsRefused)
+{
+  FakeDirectory dir;
+  dir.install(db->nsswitch_cache());
+  const auto id = listless_identity("user$nouser", 70199, 70199);
+  ASSERT_EQ(db->put_identity(env->dpp, id), 0);
+  nsfs::Credentials cred;
+
+  db->nsswitch_cache().override_dynamic_groups(false);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, parse_owner(id.key),
+				      cred, null_yield), 0)
+      << "control:  the switch off refused";
+
+  db->nsswitch_cache().override_dynamic_groups(true);
+  EXPECT_EQ(nsfs::resolve_credentials(env->dpp, *db, parse_owner(id.key),
+				      cred, null_yield), -EPERM);
+}
+
+/* A group lookup that fails is refused and not cached:  the control is
+ * the next call after it recovers, which resolves. */
+TEST_F(NSFSIdentityDBTest, NsswitchGroupsLookupFailureIsRefusedAndNotCached)
+{
+  FakeDirectory dir;
+  dir.users[70101] = {"nsfsuser", 70101};
+  dir.groups["nsfsuser"] = {70101, 70010};
+  dir.group_fail["nsfsuser"] = -EIO;
+  dir.install(db->nsswitch_cache());
+  db->nsswitch_cache().override_dynamic_groups(true);
+  const auto id = listless_identity("user$grouped", 70101, 70101);
+  ASSERT_EQ(db->put_identity(env->dpp, id), 0);
+
+  nsfs::Credentials cred;
+  EXPECT_EQ(nsfs::resolve_credentials(env->dpp, *db, parse_owner(id.key),
+				      cred, null_yield), -EPERM);
+  dir.group_fail.clear();
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, parse_owner(id.key),
+				      cred, null_yield), 0)
+      << "a failed group lookup was cached";
+  EXPECT_EQ(cred.groups, (std::vector<gid_t>{70101, 70010}));
+}
+
+/* A membership change reaches requests through the sweep:  a changed
+ * list moves the identity generation, for a local identity and an
+ * nsswitch-resolved one alike.  The control is a sweep over unchanged
+ * groups, which moves nothing. */
+TEST_F(NSFSIdentityDBTest, NsswitchGroupsSweepInvalidatesOnChange)
+{
+  FakeDirectory dir;
+  dir.names["byname"] = {70102, 100};
+  dir.users[70101] = {"bylocal", 70101};
+  dir.groups["byname"] = {100, 70010};
+  dir.groups["bylocal"] = {70101, 70010};
+  dir.install(db->nsswitch_cache());
+  db->nsswitch_cache().override_dynamic_groups(true);
+  ASSERT_EQ(db->put_identity(env->dpp, name_identity("user$n", "byname")), 0);
+  ASSERT_EQ(db->put_identity(env->dpp,
+			     listless_identity("user$l", 70101, 70101)), 0);
+  nsfs::Credentials cred;
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, parse_owner("user$n"),
+				      cred, null_yield), 0);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, parse_owner("user$l"),
+				      cred, null_yield), 0);
+
+  const rgw_owner owner = parse_owner("user$l");
+  uint64_t gen = nsfs::identity_generation(owner);
+  EXPECT_EQ(db->nsswitch_cache().sweep(env->dpp), 0);
+  EXPECT_EQ(nsfs::identity_generation(owner), gen)
+      << "control:  unchanged groups invalidated";
+
+  dir.groups["bylocal"] = {70101};		/* gpasswd -d */
+  EXPECT_EQ(db->nsswitch_cache().sweep(env->dpp), 1);
+  EXPECT_NE(nsfs::identity_generation(owner), gen);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, owner, cred,
+				      null_yield), 0);
+  EXPECT_EQ(cred.groups, (std::vector<gid_t>{70101}));
+
+  gen = nsfs::identity_generation(owner);
+  dir.groups["byname"] = {100};
+  EXPECT_EQ(db->nsswitch_cache().sweep(env->dpp), 1);
+  EXPECT_NE(nsfs::identity_generation(owner), gen);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, parse_owner("user$n"),
+				      cred, null_yield), 0);
+  EXPECT_EQ(cred.groups, (std::vector<gid_t>{100}));
+}
+
+/* A local row written clears its uid's entry, so a rewrite looks the
+ * groups up again.  The control is a write to an unrelated row. */
+TEST_F(NSFSIdentityDBTest, NsswitchGroupsRowWritesClearTheirUid)
+{
+  FakeDirectory dir;
+  dir.users[70101] = {"bylocal", 70101};
+  dir.groups["bylocal"] = {70101, 70010};
+  dir.install(db->nsswitch_cache());
+  db->nsswitch_cache().override_dynamic_groups(true);
+  const auto id = listless_identity("user$l", 70101, 70101);
+  ASSERT_EQ(db->put_identity(env->dpp, id), 0);
+  nsfs::Credentials cred;
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, parse_owner(id.key),
+				      cred, null_yield), 0);
+
+  dir.groups["bylocal"] = {70101};
+  ASSERT_EQ(db->put_identity(env->dpp, local_identity("user$unrelated")), 0);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, parse_owner(id.key),
+				      cred, null_yield), 0);
+  EXPECT_EQ(cred.groups, (std::vector<gid_t>{70101, 70010}))
+      << "control:  an unrelated write cleared it";
+
+  ASSERT_EQ(db->put_identity(env->dpp, id), 0);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, parse_owner(id.key),
+				      cred, null_yield), 0);
+  EXPECT_EQ(cred.groups, (std::vector<gid_t>{70101}))
+      << "the row rewritten was not looked up again";
+}
+
+/* The driver hint flips the switch for the suite's dynamic-groups
+ * profile, and invalidates every identity, since what a list-less row
+ * means changes.  The control is `default`, which returns to the
+ * option's value, off here. */
+TEST_F(NSFSIdentityDBTest, NsswitchGroupsOverrideInvalidates)
+{
+  const rgw_owner owner = parse_owner("user$any");
+  db->nsswitch_cache().override_dynamic_groups(std::nullopt);
+  EXPECT_FALSE(db->nsswitch_cache().dynamic_groups());
+  const uint64_t gen = nsfs::identity_generation(owner);
+  db->nsswitch_cache().override_dynamic_groups(true);
+  EXPECT_TRUE(db->nsswitch_cache().dynamic_groups());
+  EXPECT_NE(nsfs::identity_generation(owner), gen);
+  db->nsswitch_cache().override_dynamic_groups(std::nullopt);
+  EXPECT_FALSE(db->nsswitch_cache().dynamic_groups())
+      << "control:  default did not return to the option";
+}
+
+/* The sweep's first pass under the switch resolves every list-less
+ * local row's uid as well as every name, so a uid nsswitch does not know
+ * is logged at startup.  The control:  with the switch off, no uid is
+ * looked up. */
+TEST_F(NSFSIdentityDBTest, NsswitchGroupsSweepStartsWithTheTablesUids)
+{
+  FakeDirectory dir;
+  dir.users[70101] = {"bylocal", 70101};
+  dir.install(db->nsswitch_cache());
+  ASSERT_EQ(db->put_identity(env->dpp,
+			     listless_identity("user$l", 70101, 70101)), 0);
+  ASSERT_EQ(db->put_identity(env->dpp,
+			     listless_identity("user$x", 70199, 70199)), 0);
+  ASSERT_EQ(db->put_identity(env->dpp, local_identity("user$listed")), 0);
+
+  db->nsswitch_cache().override_dynamic_groups(false);
+  EXPECT_TRUE(db->sweep_table(env->dpp).uids.empty())
+      << "control:  the switch off listed uids";
+
+  db->nsswitch_cache().override_dynamic_groups(true);
+  auto uids = db->sweep_table(env->dpp).uids;
+  std::sort(uids.begin(), uids.end());
+  EXPECT_EQ(uids, (std::vector<uint32_t>{70101, 70199}))
+      << "a row with its own list, or none, was listed";
+}
+
+/* The real lookups, on whatever source this host has.  root is in every
+ * `files` source, in its own group;  the control is a uid no source has. */
+TEST_F(NSFSIdentityDBTest, NsswitchRealGroups)
+{
+  std::string name;
+  uint32_t gid = 1;
+  ASSERT_EQ(nsfs::nsswitch_user(0, name, gid), 0);
+  EXPECT_EQ(name, "root");
+  EXPECT_EQ(gid, 0u);
+  std::vector<uint32_t> groups;
+  ASSERT_EQ(nsfs::nsswitch_groups(name, gid, groups), 0);
+  EXPECT_NE(std::find(groups.begin(), groups.end(), 0u), groups.end())
+      << "getgrouplist left out the primary gid";
+  EXPECT_EQ(nsfs::nsswitch_user(3999999999u, name, gid), -ENOENT);
+}
+
+/* Credentials built from a file, under the switch (decision 4):  (1) a
+ * list-less row completes with its nsswitch groups;  (2) rows disagree
+ * when what each would install differs;  (3) a failed lookup is
+ * -ENODATA;  and a uid no row carries completes with its Unix groups,
+ * -ENOENT when nsswitch does not know it either.  Each with its control:
+ * the switch off. */
+TEST_F(NSFSIdentityDBTest, NsswitchGroupsCompleteFileCredentials)
+{
+  FakeDirectory dir;
+  dir.users[70101] = {"bylocal", 70101};
+  dir.users[70103] = {"norow", 70103};
+  dir.groups["bylocal"] = {70101, 70010};
+  dir.groups["norow"] = {70103, 70030};
+  dir.install(db->nsswitch_cache());
+  ASSERT_EQ(db->put_identity(env->dpp,
+			     listless_identity("user$l", 70101, 70101)), 0);
+  auto file = [] (uint32_t uid) {
+    nsfs::Credentials c;
+    c.uid = uid;
+    c.gid = uid;
+    return c;
+  };
+
+  /* (1), and its control */
+  db->nsswitch_cache().override_dynamic_groups(false);
+  auto c = file(70101);
+  ASSERT_EQ(nsfs::complete_file_credentials(env->dpp, *db, c), 0);
+  EXPECT_TRUE(c.groups.empty()) << "control:  the switch off gave groups";
+  db->nsswitch_cache().override_dynamic_groups(true);
+  c = file(70101);
+  std::string key;
+  ASSERT_EQ(nsfs::complete_file_credentials(env->dpp, *db, c, &key), 0);
+  EXPECT_EQ(c.groups, (std::vector<gid_t>{70101, 70010}));
+  EXPECT_EQ(key, "user$l");
+
+  /* a uid no row carries:  its Unix groups, and no key;  control off */
+  c = file(70103);
+  key = "untouched";
+  ASSERT_EQ(nsfs::complete_file_credentials(env->dpp, *db, c, &key), 0);
+  EXPECT_EQ(c.groups, (std::vector<gid_t>{70103, 70030}));
+  EXPECT_EQ(key, "untouched");
+  db->nsswitch_cache().override_dynamic_groups(false);
+  c = file(70103);
+  EXPECT_EQ(nsfs::complete_file_credentials(env->dpp, *db, c), -ENOENT)
+      << "control:  the switch off completed a uid no row carries";
+  db->nsswitch_cache().override_dynamic_groups(true);
+  c = file(70199);
+  EXPECT_EQ(nsfs::complete_file_credentials(env->dpp, *db, c), -ENOENT)
+      << "a uid neither a row nor nsswitch knows completed";
+
+  /* (3) */
+  dir.group_fail["bylocal"] = -EIO;
+  db->nsswitch_cache().forget_uid(70101);
+  c = file(70101);
+  EXPECT_EQ(nsfs::complete_file_credentials(env->dpp, *db, c), -ENODATA);
+  dir.group_fail.clear();
+
+  /* (2):  a second row on the uid with its own list, which differs */
+  auto listed = listless_identity("user$l2", 70101, 70101);
+  listed.groups = std::vector<uint32_t>{7};
+  ASSERT_EQ(db->put_identity(env->dpp, listed), 0);
+  c = file(70101);
+  EXPECT_EQ(nsfs::complete_file_credentials(env->dpp, *db, c), -ENODATA)
+      << "an explicit list and nsswitch's were taken to agree";
+  listed.groups = std::vector<uint32_t>{70101, 70010};
+  ASSERT_EQ(db->put_identity(env->dpp, listed), 0);
+  c = file(70101);
+  ASSERT_EQ(nsfs::complete_file_credentials(env->dpp, *db, c), 0)
+      << "control:  rows that install the same groups disagreed";
+  EXPECT_EQ(c.groups, (std::vector<gid_t>{70101, 70010}));
+}
+
+/* Completing a credential built from a file:  the groups come from
+ * the row carrying the uid, and the uid and gid do not.  The file's
+ * are authoritative for the file -- a member writing in a directory
+ * that is not SGID creates files with its own primary gid, which the
+ * account's row does not know. */
+TEST_F(NSFSIdentityDBTest, CompleteFileCredentialsTakesTheRowsGroups)
+{
+  ASSERT_EQ(db->put_identity(env->dpp, local_identity("user$fileowner")), 0);
+
+  nsfs::Credentials cred;
+  cred.uid = 1001;			/* as a stat of the file yields */
+  cred.gid = 4242;			/* not the row's 2002 */
+  std::string key;
+  ASSERT_EQ(nsfs::complete_file_credentials(env->dpp, *db, cred, &key), 0);
+  EXPECT_EQ(cred.groups, (std::vector<gid_t>{10, 20, 30}));
+  EXPECT_EQ(cred.uid, 1001u);
+  EXPECT_EQ(cred.gid, 4242u) << "the row's gid displaced the file's";
+  EXPECT_EQ(key, "user$fileowner")
+      << "one row names an identity, which is what makes an FSIdentity "
+	 "active";
+}
+
+/* Several rows carrying one uid is the normal case, not an error:
+ * every member of an account runs as the account.  Where they agree
+ * there is no ambiguity in fact. */
+TEST_F(NSFSIdentityDBTest, CompleteFileCredentialsAgreeingRowsAreNotAmbiguous)
+{
+  auto a = local_identity("user$member1");
+  auto b = local_identity("user$member2");
+  ASSERT_EQ(a.uid, b.uid);
+  ASSERT_EQ(db->put_identity(env->dpp, a), 0);
+  ASSERT_EQ(db->put_identity(env->dpp, b), 0);
+
+  nsfs::Credentials cred;
+  cred.uid = *a.uid;
+  std::string key = "untouched";
+  ASSERT_EQ(nsfs::complete_file_credentials(env->dpp, *db, cred, &key), 0);
+  EXPECT_EQ(cred.groups, (std::vector<gid_t>{10, 20, 30}));
+  EXPECT_EQ(key, "untouched")
+      << "two identities whose credentials coincide have no one key";
+}
+
+/* The polarity that matters.  Rows that disagree cannot be chosen
+ * between -- a file names its owner by uid alone -- and guessing
+ * would lend one identity's reach to another identity's file.  The
+ * caller is left with the file owner's own rights. */
+TEST_F(NSFSIdentityDBTest, CompleteFileCredentialsFailsOnDisagreeingRows)
+{
+  auto a = local_identity("user$member1");
+  auto b = local_identity("user$member2");
+  b.groups = std::vector<uint32_t>{10, 20, 30, 40};
+  ASSERT_EQ(db->put_identity(env->dpp, a), 0);
+  ASSERT_EQ(db->put_identity(env->dpp, b), 0);
+
+  nsfs::Credentials cred;
+  cred.uid = *a.uid;
+  cred.groups = std::vector<gid_t>{7};	/* must not be written to */
+  EXPECT_EQ(nsfs::complete_file_credentials(env->dpp, *db, cred),
+	    -ENODATA);
+  EXPECT_EQ(cred.groups, (std::vector<gid_t>{7}))
+      << "a failed completion wrote to its output";
+}
+
+/* No row carrying the uid is not an error:  a uid no account maps to
+ * is ordinary in a sideloaded tree. */
+TEST_F(NSFSIdentityDBTest, CompleteFileCredentialsNoRowIsNotAnError)
+{
+  ASSERT_EQ(db->put_identity(env->dpp, local_identity("user$someone")), 0);
+
+  nsfs::Credentials cred;
+  cred.uid = 65534;			/* no row carries it */
+  cred.groups = std::vector<gid_t>{7};
+  EXPECT_EQ(nsfs::complete_file_credentials(env->dpp, *db, cred), -ENOENT);
+  EXPECT_EQ(cred.groups, (std::vector<gid_t>{7}));
+}
+
+/* A row carrying only placement data asks for no impersonation, and
+ * has no uid to be found by. */
+TEST_F(NSFSIdentityDBTest, CompleteFileCredentialsIgnoresRowsWithoutIds)
+{
+  nsfs::Identity placement;
+  placement.key = "user$placementonly";
+  placement.new_buckets_path = "/gpfs/rgw1/nsfs/newbuckets";
+  ASSERT_EQ(db->put_identity(env->dpp, placement), 0);
+
+  std::vector<nsfs::Identity> rows;
+  ASSERT_EQ(db->get_identities_by_uid(env->dpp, 0, rows), 0);
+  EXPECT_TRUE(rows.empty()) << "a NULL Uid was matched by a uid lookup";
+
+  nsfs::Credentials cred;
+  cred.uid = 0;
+  EXPECT_EQ(nsfs::complete_file_credentials(env->dpp, *db, cred), -ENOENT);
+}
+
+/* A test's own raise, on a thread of its own.  Under impersonation a
+ * raise leaves its thread holding CAP_DAC_READ_SEARCH, and every
+ * thread started from it afterwards inherits that, which spoils the
+ * fresh-thread controls of every case after it. */
+static int with_capabilities_elsewhere(uint64_t caps,
+				       const nsfs::ImpersonatedFn& fn)
+{
+  int r = 0;
+  std::thread t([&] { r = nsfs::with_capabilities(env->dpp, caps, fn); });
+  t.join();
+  return r;
+}
+
+/* The raise primitive.  The rejections need a process not permitted
+ * the capability, which the unit test is unless it was given the
+ * gateway's file capabilities.  The other polarity, a raise that works and is
+ * dropped again, needs the file capabilities and is the `raise`
+ * driver hint's job on a real gateway.
+ *
+ * The effective set is read around every case:  a primitive that
+ * leaves a capability behind is the failure that matters, and it
+ * would not show up in a return value. */
+class NSFSRaiseTest : public ::testing::Test {
+protected:
+  static uint64_t effective_set() {
+    struct __user_cap_header_struct hdr = {};
+    struct __user_cap_data_struct data[2] = {};
+    hdr.version = _LINUX_CAPABILITY_VERSION_3;
+    hdr.pid = 0;
+    if (::syscall(SYS_capget, &hdr, data) < 0) {
+      return ~0ull;			/* unreadable, not empty */
+    }
+    return (static_cast<uint64_t>(data[1].effective) << 32) |
+	   data[0].effective;
+  }
+
+  /* The rejections need the capability absent from the permitted set,
+   * not merely from the effective one:  nothing starts effective, so
+   * a binary given the gateway's file capabilities raises it and the
+   * rejection cannot happen.  Such a binary skips them. */
+  static bool permitted(int cap) {
+    struct __user_cap_header_struct hdr = {};
+    struct __user_cap_data_struct data[2] = {};
+    hdr.version = _LINUX_CAPABILITY_VERSION_3;
+    hdr.pid = 0;
+    if (::syscall(SYS_capget, &hdr, data) < 0) {
+      return true;			/* unreadable:  assume the worst */
+    }
+    return data[cap / 32].permitted & (1u << (cap % 32));
+  }
+};
+
+/* An empty mask is not a raise:  it runs the call and touches
+ * nothing. */
+TEST_F(NSFSRaiseTest, AnEmptyMaskRunsTheCall)
+{
+  const uint64_t before = effective_set();
+  bool ran = false;
+  EXPECT_EQ(nsfs::with_capabilities(env->dpp, 0,
+				    [&ran]() -> int { ran = true; return 7; }),
+	    7);
+  EXPECT_TRUE(ran);
+  EXPECT_EQ(effective_set(), before);
+}
+
+/* A capability that is not permitted cannot be raised, and the call
+ * does not run.  Fails closed:  running it unprivileged would report
+ * whatever the kernel said about an ordinary call, which reads as a
+ * permission bug rather than as a gateway started without its
+ * capabilities. */
+TEST_F(NSFSRaiseTest, AnUnpermittedCapabilityIsRejectedAndTheCallDoesNotRun)
+{
+  if (permitted(CAP_DAC_OVERRIDE)) {
+    GTEST_SKIP() << "CAP_DAC_OVERRIDE is permitted, so the rejection "
+		    "cannot happen";
+  }
+  const uint64_t before = effective_set();
+  ASSERT_NE(before, ~0ull) << "the effective set could not be read";
+
+  bool ran = false;
+  EXPECT_EQ(nsfs::with_capabilities(env->dpp,
+				    nsfs::cap_bit(CAP_DAC_OVERRIDE),
+				    [&ran]() -> int { ran = true; return 0; }),
+	    -EPERM);
+  EXPECT_FALSE(ran) << "the call ran without the capability it asked for";
+  EXPECT_EQ(effective_set(), before) << "a rejected raise changed the set";
+}
+
+/* Several at once are rejected on the first that is absent, and the
+ * mask the operator is shown names what was missing rather than what
+ * was asked for. */
+TEST_F(NSFSRaiseTest, SeveralUnpermittedCapabilitiesAreRejectedTogether)
+{
+  if (permitted(CAP_DAC_OVERRIDE) && permitted(CAP_FOWNER)) {
+    GTEST_SKIP() << "CAP_DAC_OVERRIDE and CAP_FOWNER are permitted, so "
+		    "the rejection cannot happen";
+  }
+  const uint64_t before = effective_set();
+  bool ran = false;
+  EXPECT_EQ(nsfs::with_capabilities(
+	      env->dpp,
+	      nsfs::cap_bit(CAP_DAC_OVERRIDE) | nsfs::cap_bit(CAP_FOWNER),
+	      [&ran]() -> int { ran = true; return 0; }),
+	    -EPERM);
+  EXPECT_FALSE(ran);
+  EXPECT_EQ(effective_set(), before);
+}
+
+/* The upstream behaviour this design keys on, pinned.
+ *
+ * Two different owners come out of one applier.  `get_aclowner()`
+ * says who a created object belongs to, and for a member of an
+ * account that is the *account*;  `load_acct_info()` -- what becomes
+ * `s->user` -- says who authenticated, and that is the *member*.
+ * authenticated_user(), and so get_credentials_for(), uses the second.
+ *
+ * This is not nsfs code, so it is exactly the kind of thing that can
+ * change under us.  If `load_acct_info()` ever starts returning the
+ * account, every member of an account is silently served as one uid
+ * and gid, and nothing else in the suite would notice. */
+TEST_F(NSFSIdentityDBTest, AclOwnerIsTheAccountButAuthenticatedUserIsNot)
+{
+  const rgw_user uid{"", "alice"};
+  const char* acct = "RGW12345678901234567";
+
+  /* the control:  with no account the two agree, so the second half
+   * below cannot pass merely because they always differ */
+  auto plain = local_applier(uid, nullptr);
+  EXPECT_EQ(plain->get_aclowner().id, rgw_owner{uid});
+  EXPECT_EQ(plain->load_acct_info(env->dpp)->get_id(), uid);
+
+  auto member = local_applier(uid, acct);
+  EXPECT_EQ(member->get_aclowner().id, rgw_owner{rgw_account_id{acct}})
+      << "the ACL owner should be the account";
+  EXPECT_EQ(member->load_acct_info(env->dpp)->get_id(), uid)
+      << "s->user collapsed onto the account;  per-member POSIX "
+	 "identity is no longer expressible";
+}
+
+/* A row keyed on a member takes precedence over its account's.
+ *
+ * On Scale a member ordinarily has no row and runs as its account
+ * (ACCOUNT_IMPORT.md §2.8);  a per-user row is what keeps a distinct
+ * identity expressible.  It cannot be expressed through
+ * get_aclowner() at all:  both members share an ACL owner, so keyed
+ * on it they would be indistinguishable. */
+TEST_F(NSFSIdentityDBTest, AccountMembersResolveIndependently)
+{
+  /* I9:  a member's own row is consulted only under the override */
+  db->force_user_identity_override(true);
+  const char* acct = "RGW12345678901234567";
+  const rgw_user alice{"", "alice"};
+  const rgw_user bob{"", "bob"};
+
+  nsfs::Identity a;
+  a.key = alice.to_str();
+  a.uid = 1001; a.gid = 1001;
+  a.groups = std::vector<uint32_t>{50};
+  ASSERT_EQ(db->put_identity(env->dpp, a), 0);
+
+  nsfs::Identity b;
+  b.key = bob.to_str();
+  b.uid = 1002; b.gid = 1002;
+  ASSERT_EQ(db->put_identity(env->dpp, b), 0);
+
+  /* and a row under the account itself, which must not be what
+   * either member gets -- without it, "they differ" could be
+   * satisfied by one of them simply failing */
+  nsfs::Identity acct_row;
+  acct_row.key = acct;
+  acct_row.uid = 9999; acct_row.gid = 9999;
+  ASSERT_EQ(db->put_identity(env->dpp, acct_row), 0);
+
+  auto ia = local_applier(alice, acct);
+  auto ib = local_applier(bob, acct);
+  ASSERT_EQ(ia->get_aclowner().id, ib->get_aclowner().id)
+      << "the fixture is wrong:  these should share an ACL owner";
+
+  /* the key the driver uses:  s->user, which is what
+   * load_acct_info() returns.  Called once per applier -- for
+   * LocalApplier it releases the held user. */
+  nsfs::Credentials ca, cb;
+  std::string ra, rb;
+  auto ua = ia->load_acct_info(env->dpp);
+  auto ub = ib->load_acct_info(env->dpp);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, ua->get_id(),
+				      ua->get_info().account_id, ca, null_yield, &ra), 0);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, ub->get_id(),
+				      ub->get_info().account_id, cb, null_yield, &rb), 0);
+  EXPECT_EQ(ra, alice.to_str());
+  EXPECT_EQ(rb, bob.to_str());
+
+  EXPECT_EQ(ca.uid, 1001u);
+  EXPECT_EQ(cb.uid, 1002u);
+  EXPECT_NE(ca.uid, 9999u) << "a member was served as its account";
+  EXPECT_NE(cb.uid, 9999u) << "a member was served as its account";
+  EXPECT_EQ(ca.groups, (std::vector<gid_t>{50}));
+  EXPECT_TRUE(cb.groups.empty());
+
+  /* the control:  without the override both run as the account, their
+   * rows kept but not consulted */
+  db->force_user_identity_override(false);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, ua->get_id(),
+				      ua->get_info().account_id, ca, null_yield, &ra), 0);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, ub->get_id(),
+				      ub->get_info().account_id, cb, null_yield, &rb), 0);
+  EXPECT_EQ(ra, acct);
+  EXPECT_EQ(rb, acct);
+  EXPECT_EQ(ca.uid, 9999u);
+  EXPECT_EQ(cb.uid, 9999u);
+}
+
+/* A member with no row of its own runs as its account.
+ *
+ * The Scale model (ACCOUNT_IMPORT.md §2.8):  an account has one POSIX
+ * identity, and the import writes a row for the account and none for
+ * its members. */
+TEST_F(NSFSIdentityDBTest, AMemberWithNoRowRunsAsItsAccount)
+{
+  const char* acct = "RGW12345678901234567";
+  auto member = local_applier(rgw_user{"", "carol"}, acct);
+  auto u = member->load_acct_info(env->dpp);
+  ASSERT_EQ(u->get_info().account_id, acct)
+      << "the fixture is wrong:  carol should be a member";
+
+  /* the control:  with no account row there is nothing to fall back
+   * to, so the success below is the fallback and not something else */
+  nsfs::Credentials cred;
+  std::string row = "untouched";
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, u->get_id(),
+				      u->get_info().account_id, cred, null_yield, &row),
+	    -ENOENT);
+  EXPECT_EQ(row, "untouched") << "-ENOENT named a row";
+
+  nsfs::Identity acct_row;
+  acct_row.key = acct;
+  acct_row.uid = 9999; acct_row.gid = 9999;
+  acct_row.groups = std::vector<uint32_t>{70};
+  ASSERT_EQ(db->put_identity(env->dpp, acct_row), 0);
+
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, u->get_id(),
+				      u->get_info().account_id, cred, null_yield, &row), 0)
+      << "a member with no row was not served as its account";
+  EXPECT_EQ(row, acct) << "the fallback did not name the account's row";
+  EXPECT_EQ(cred.uid, 9999u);
+  EXPECT_EQ(cred.gid, 9999u);
+  EXPECT_EQ(cred.groups, (std::vector<gid_t>{70}));
+
+  /* and the owner form does not fall back:  it reads one row, which
+   * is what the credentials diagnostic's `identity=` reports */
+  EXPECT_EQ(nsfs::resolve_credentials(env->dpp, *db, rgw_owner{u->get_id()},
+				      cred, null_yield), -ENOENT);
+}
+
+/* A user outside any account has nothing to fall back to. */
+TEST_F(NSFSIdentityDBTest, AUserOutsideAnAccountResolvesUnderItsOwnKey)
+{
+  const rgw_user dan{"", "dan"};
+  nsfs::Credentials cred;
+  EXPECT_EQ(nsfs::resolve_credentials(env->dpp, *db, dan, rgw_account_id{},
+				      cred, null_yield), -ENOENT);
+
+  nsfs::Identity row;
+  row.key = dan.to_str();
+  row.uid = 1234; row.gid = 1234;
+  ASSERT_EQ(db->put_identity(env->dpp, row), 0);
+  /* the I9 override governs account users only */
+  for (bool on : {false, true}) {
+    db->force_user_identity_override(on);
+    ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, dan, rgw_account_id{},
+					cred, null_yield), 0) << on;
+    EXPECT_EQ(cred.uid, 1234u) << on;
+  }
+}
+
+/* A member row that asks for an identity it cannot be given is
+ * denied, not replaced by its account's.
+ *
+ * -EPERM is a directory-backed row whose directory is not consulted;
+ * serving the account instead would run the request as someone the
+ * row did not name. */
+TEST_F(NSFSIdentityDBTest, ADeniedMemberRowDoesNotFallBack)
+{
+  db->force_user_identity_override(true);
+  const char* acct = "RGW12345678901234567";
+  const rgw_user erin{"", "erin"};
+
+  nsfs::Identity acct_row;
+  acct_row.key = acct;
+  acct_row.uid = 9999; acct_row.gid = 9999;
+  ASSERT_EQ(db->put_identity(env->dpp, acct_row), 0);
+
+  /* the control:  with no row of her own, erin runs as the account */
+  nsfs::Credentials cred;
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, erin,
+				      rgw_account_id{acct}, cred, null_yield), 0);
+  ASSERT_EQ(cred.uid, 9999u);
+
+  nsfs::Identity dir;
+  dir.key = erin.to_str();
+  dir.distinguished_name = "erin";
+  ASSERT_EQ(db->put_identity(env->dpp, dir), 0);
+  std::string row;
+  EXPECT_EQ(nsfs::resolve_credentials(env->dpp, *db, erin,
+				      rgw_account_id{acct}, cred, null_yield, &row), -EPERM)
+      << "a denied row fell through to the account";
+  EXPECT_EQ(row, erin.to_str()) << "the denial named another row";
+
+  /* without the override erin's row is not consulted at all, so it
+   * cannot deny her:  she runs as the account */
+  db->force_user_identity_override(false);
+  EXPECT_EQ(nsfs::resolve_credentials(env->dpp, *db, erin,
+				      rgw_account_id{acct}, cred, null_yield, &row), 0);
+  EXPECT_EQ(row, acct);
+  EXPECT_EQ(cred.uid, 9999u);
+}
+
+/* A role's identity row (I9) is keyed apart from every owner's, and is
+ * stored and read like any other row.  No owner's key begins `role:`,
+ * since to_string(rgw_owner) is an account id or a user id. */
+TEST_F(NSFSIdentityDBTest, ARoleRowIsKeyedApartFromOwners)
+{
+  const std::string key = nsfs::role_identity_key("4c7e5a1d-role-id");
+  EXPECT_EQ(key, "role:4c7e5a1d-role-id");
+  EXPECT_TRUE(nsfs::is_role_identity_key(key));
+  EXPECT_FALSE(nsfs::is_role_identity_key(
+		 to_string(rgw_owner{rgw_account_id{"RGW12345678901234567"}})));
+  EXPECT_FALSE(nsfs::is_role_identity_key(
+		 to_string(rgw_owner{rgw_user{"", "alice"}})));
+
+  nsfs::Identity row;
+  row.key = key;
+  row.uid = 70109; row.gid = 70109;
+  ASSERT_EQ(db->put_identity(env->dpp, row), 0);
+  nsfs::Identity got;
+  ASSERT_EQ(db->get_identity(env->dpp, key, got), 0);
+  EXPECT_EQ(got.uid, 70109u);
+  /* and resolving an owner never reaches it */
+  nsfs::Credentials cred;
+  EXPECT_EQ(nsfs::resolve_credentials(env->dpp, *db, rgw_user{"", "4c7e5a1d-role-id"},
+				      rgw_account_id{}, cred, null_yield), -ENOENT);
+}
+
+/* A role session's credentials (I9):  the role's own row under the role
+ * override, when it was given one, else its account's -- and its
+ * account's always without the override.  Each case is the others'
+ * control. */
+TEST_F(NSFSIdentityDBTest, ARoleSessionRunsAsItsRowOnlyUnderTheOverride)
+{
+  const rgw_account_id acct{"RGW13131313131313131"};
+  const std::string role_id = "1f2e3d4c-role";
+  nsfs::Identity arow;
+  arow.key = acct;
+  arow.uid = 70109; arow.gid = 70109;
+  ASSERT_EQ(db->put_identity(env->dpp, arow), 0);
+  nsfs::Identity rrow;
+  rrow.key = nsfs::role_identity_key(role_id);
+  rrow.uid = 70110; rrow.gid = 70110;
+  ASSERT_EQ(db->put_identity(env->dpp, rrow), 0);
+
+  nsfs::Credentials cred;
+  std::string row;
+  db->force_role_identity_override(false);
+  ASSERT_EQ(nsfs::resolve_role_credentials(env->dpp, *db, role_id, acct, cred,
+					   null_yield, &row), 0);
+  EXPECT_EQ(cred.uid, 70109u) << "without the override the role was not its account";
+  EXPECT_EQ(row, std::string(acct));
+
+  db->force_role_identity_override(true);
+  ASSERT_EQ(nsfs::resolve_role_credentials(env->dpp, *db, role_id, acct, cred,
+					   null_yield, &row), 0);
+  EXPECT_EQ(cred.uid, 70110u) << "under the override the role's row was not used";
+  EXPECT_EQ(row, rrow.key);
+
+  ASSERT_EQ(db->remove_identity(env->dpp, rrow.key), 0);
+  ASSERT_EQ(nsfs::resolve_role_credentials(env->dpp, *db, role_id, acct, cred,
+					   null_yield, &row), 0);
+  EXPECT_EQ(cred.uid, 70109u)
+      << "a role given no identity did not follow its account";
+
+  /* and a role of no account, given no identity, has nothing */
+  EXPECT_EQ(nsfs::resolve_role_credentials(env->dpp, *db, role_id,
+					   rgw_account_id{}, cred, null_yield),
+	    -ENOENT);
+}
+
+/* Changing an account's row reaches every member's cached
+ * personality.
+ *
+ * Personalities are cached under the user a request authenticated
+ * as, so a member that resolved through its account's row is cached
+ * under the member's key.  Bumping the account key's own shard does
+ * not reach it -- the first half shows that, and is why the second
+ * mechanism exists. */
+TEST_F(NSFSIdentityDBTest, AnAccountRowChangeReachesItsMembers)
+{
+  const rgw_user acct_key{"RGW12345678901234567"};
+  const rgw_user alice{"", "alice"};
+  const rgw_user bob{"", "bob"};
+
+  const uint64_t a0 = nsfs::identity_generation(alice);
+  const uint64_t b0 = nsfs::identity_generation(bob);
+  nsfs::note_identity_changed(acct_key);
+  ASSERT_EQ(nsfs::identity_generation(alice), a0)
+      << "these keys share a shard;  pick names that do not";
+  ASSERT_EQ(nsfs::identity_generation(bob), b0)
+      << "these keys share a shard;  pick names that do not";
+
+  nsfs::note_all_identities_changed();
+  EXPECT_NE(nsfs::identity_generation(alice), a0)
+      << "a member cached through its account keeps the old identity";
+  EXPECT_NE(nsfs::identity_generation(bob), b0);
+}
+
+/* The personality table.
+ *
+ * Tested against a counting registrar rather than io_uring:  the
+ * parts worth testing here are eviction order, pinning and the
+ * all-pinned case, none of which involve a ring, and all of which
+ * would otherwise need root to reach. */
+class CountingRegistrar : public nsfs::PersonalityTable::Registrar {
+public:
+  int next_id{1};
+  int fail_with{0};			/* non-zero: fail with this */
+  std::vector<int> registered;		/* ids handed out, in order */
+  std::vector<int> released;		/* ids taken back, in order */
+  std::vector<nsfs::Credentials> creds;	/* what each registration saw */
+
+  int register_personality(const DoutPrefixProvider*,
+			   const nsfs::Credentials& cred) override {
+    if (fail_with) {
+      return fail_with;
+    }
+    creds.push_back(cred);
+    registered.push_back(next_id);
+    return next_id++;
+  }
+  void unregister_personality(const DoutPrefixProvider*,
+			      uint16_t id) override {
+    released.push_back(id);
+  }
+  bool live(int id) const {
+    return std::count(registered.begin(), registered.end(), id) >
+	   std::count(released.begin(), released.end(), id);
+  }
+};
+
+static nsfs::Credentials creds_for(uid_t uid)
+{
+  nsfs::Credentials c;
+  c.uid = uid;
+  c.gid = uid;
+  c.groups = {uid + 1000};
+  return c;
+}
+
+/* A generation source a test drives by hand.
+ *
+ * The production one is a sharded atomic array bumped by the Admin
+ * Ops identity writes;  what the table needs from it is only that a
+ * changed identity returns something new. */
+class ManualGenerations : public nsfs::GenerationSource {
+public:
+  std::map<std::string, uint64_t> gens;
+  uint64_t generation(const rgw_owner& key) const override {
+    auto it = gens.find(to_string(key));
+    return it == gens.end() ? 0 : it->second;
+  }
+  void bump(const rgw_owner& key) { ++gens[to_string(key)]; }
+};
+
+class NSFSPersonalityTest : public ::testing::Test {
+protected:
+  CountingRegistrar reg;
+};
+
+/* A miss, then a hit, and the registrar is consulted exactly once. */
+TEST_F(NSFSPersonalityTest, MissRegistersAndHitDoesNot)
+{
+  nsfs::PersonalityTable t{4, &reg};
+  const rgw_user alice{"", "alice"};
+
+  nsfs::PersonalityRef ref;
+  ASSERT_EQ(t.find(alice, &ref), -ENOENT) << "empty table reported a hit";
+  ASSERT_FALSE(ref.valid());
+
+  ASSERT_EQ(t.insert(env->dpp, alice, creds_for(1001), &ref), 0);
+  ASSERT_TRUE(ref.valid());
+  const uint16_t id = ref.id();
+  EXPECT_EQ(reg.registered.size(), 1u);
+  ASSERT_EQ(reg.creds.size(), 1u);
+  EXPECT_EQ(reg.creds[0].uid, 1001u) << "the registrar saw other credentials";
+
+  nsfs::PersonalityRef second;
+  ASSERT_EQ(t.find(alice, &second), 0) << "a registered identity missed";
+  EXPECT_EQ(second.id(), id);
+  EXPECT_EQ(reg.registered.size(), 1u)
+      << "a hit registered a second personality";
+
+  EXPECT_EQ(t.get_stats().hits, 1u);
+  EXPECT_EQ(t.get_stats().misses, 1u);
+  EXPECT_EQ(t.get_stats().registrations, 1u);
+}
+
+/* A hit carries the credentials, so the caller need not resolve them.
+ *
+ * The whole point of splitting find() from insert():  resolving an
+ * identity is a database read on the S3 path, and a personality
+ * already registered on this ring has had that read done once
+ * already.  The thread-pool fallback assumes the identity itself, so
+ * the id alone would not be enough -- a caller skipping resolution
+ * would hand it a default-constructed Credentials and it would try
+ * to become uid 0.
+ *
+ * The negative case is reachable:  before the slot kept them,
+ * credentials() had nothing to return and this test could not have
+ * been written. */
+TEST_F(NSFSPersonalityTest, AHitCarriesTheCredentials)
+{
+  nsfs::PersonalityTable t{4, &reg};
+  const rgw_user alice{"", "alice"};
+
+  nsfs::PersonalityRef ref;
+  ASSERT_EQ(t.insert(env->dpp, alice, creds_for(1001), &ref), 0);
+  EXPECT_EQ(ref.credentials().uid, 1001u);
+  EXPECT_EQ(ref.credentials().gid, 1001u);
+  ASSERT_EQ(ref.credentials().groups.size(), 1u);
+  EXPECT_EQ(ref.credentials().groups[0], 2001u);
+  ref.reset();
+
+  /* the hit, which is the case that matters:  no registrar call, and
+   * the credentials still available */
+  nsfs::PersonalityRef hit;
+  ASSERT_EQ(t.find(alice, &hit), 0) << "a registered identity missed";
+  EXPECT_EQ(reg.registered.size(), 1u) << "a hit registered again";
+  EXPECT_EQ(hit.credentials().uid, 1001u)
+      << "a hit did not carry the credentials it was registered with";
+  EXPECT_EQ(hit.credentials().gid, 1001u);
+  ASSERT_EQ(hit.credentials().groups.size(), 1u)
+      << "the supplementary group vector was not kept";
+  EXPECT_EQ(hit.credentials().groups[0], 2001u);
+}
+
+/* A reused slot carries the new identity's credentials, not the old.
+ *
+ * The failure this guards is silent and serious:  a slot recycled by
+ * the FIFO cursor that kept its previous credentials would serve one
+ * identity's requests as another. */
+TEST_F(NSFSPersonalityTest, AReusedSlotDoesNotKeepStaleCredentials)
+{
+  nsfs::PersonalityTable t{1, &reg};
+  const rgw_user alice{"", "alice"};
+  const rgw_user bob{"", "bob"};
+
+  {
+    nsfs::PersonalityRef r;
+    ASSERT_EQ(t.insert(env->dpp, alice, creds_for(1001), &r), 0);
+    ASSERT_EQ(r.credentials().uid, 1001u);
+  }
+
+  /* one slot, so bob evicts alice and takes it */
+  nsfs::PersonalityRef r;
+  ASSERT_EQ(t.insert(env->dpp, bob, creds_for(2002), &r), 0);
+  EXPECT_EQ(t.get_stats().evictions, 1u) << "alice was not evicted";
+  EXPECT_EQ(r.credentials().uid, 2002u)
+      << "the reused slot served bob with alice's credentials";
+  ASSERT_EQ(r.credentials().groups.size(), 1u);
+  EXPECT_EQ(r.credentials().groups[0], 3002u);
+
+  EXPECT_EQ(t.find(alice, &r), -ENOENT) << "alice survived her eviction";
+}
+
+/* A changed identity record stops the old personality being served.
+ *
+ * The bug this closes:  nothing about a registered slot notices that
+ * the row it was minted from has been rewritten, so an Admin Ops
+ * change to a uid, gid or group vector was ignored until the FIFO
+ * cursor happened to evict the slot -- never, on a table larger than
+ * the working set.  Measured in the live suite as a group revocation
+ * that did not take effect.
+ *
+ * Both polarities, and in this order:  the hit must happen without a
+ * bump, so that its absence after one is attributable to the bump. */
+TEST_F(NSFSPersonalityTest, AChangedIdentityInvalidatesItsPersonality)
+{
+  ManualGenerations gens;
+  nsfs::PersonalityTable t{4, &reg, &gens};
+  const rgw_user alice{"", "alice"};
+
+  {
+    nsfs::PersonalityRef r;
+    ASSERT_EQ(t.insert(env->dpp, alice, creds_for(1001), &r), 0);
+  }
+
+  /* the control:  unchanged, so a hit */
+  {
+    nsfs::PersonalityRef r;
+    ASSERT_EQ(t.find(alice, &r), 0) << "an unchanged identity missed";
+    EXPECT_EQ(r.credentials().uid, 1001u);
+  }
+  ASSERT_EQ(t.get_stats().stale, 0u);
+
+  gens.bump(alice);
+
+  nsfs::PersonalityRef r;
+  EXPECT_EQ(t.find(alice, &r), -ENOENT)
+      << "a rewritten identity was still served from its old slot";
+  EXPECT_EQ(t.get_stats().stale, 1u);
+  EXPECT_EQ(reg.released.size(), 1u)
+      << "the stale personality was not given back to the ring";
+
+  /* and the next insert registers the new credentials */
+  ASSERT_EQ(t.insert(env->dpp, alice, creds_for(2002), &r), 0);
+  EXPECT_EQ(r.credentials().uid, 2002u);
+  EXPECT_EQ(reg.registered.size(), 2u);
+}
+
+/* A stale slot a live operation still holds is not pulled out from
+ * under it, and is not given to anyone else.
+ *
+ * Unregistering a pinned slot would pull a personality an in-flight
+ * submission still names.  Serving it to a new lookup would hand a new
+ * operation credentials its identity no longer has -- and that
+ * operation keeps what it resolved for its whole life.  So the slot
+ * leaves the index at once and is unregistered at its last unpin. */
+TEST_F(NSFSPersonalityTest, AStaleSlotInUseIsNotPulled)
+{
+  ManualGenerations gens;
+  nsfs::PersonalityTable t{4, &reg, &gens};
+  const rgw_user alice{"", "alice"};
+
+  nsfs::PersonalityRef held;
+  ASSERT_EQ(t.insert(env->dpp, alice, creds_for(1001), &held), 0);
+  gens.bump(alice);
+
+  nsfs::PersonalityRef r;
+  EXPECT_EQ(t.find(alice, &r), -ENOENT)
+      << "a stale slot was served to a new lookup because it was pinned";
+  EXPECT_TRUE(reg.released.empty())
+      << "a personality still in use was unregistered";
+  EXPECT_EQ(held.credentials().uid, 1001u)
+      << "the live operation lost the credentials it was submitting under";
+  held.reset();
+  EXPECT_EQ(reg.released.size(), 1u)
+      << "the stale personality was not given back at its last unpin";
+}
+
+/* Credentials resolved before an identity changed are never indexed
+ * as current.
+ *
+ * The defect:  an operation resolves an identity once, and each
+ * submission registers from those credentials if its slot is gone.
+ * After an identity write, the operation's next submission found the
+ * slot stale, dropped it and registered the old credentials -- stamped
+ * with the current generation, so every later request was served the
+ * old credentials as fresh, until the identity changed again.  A
+ * revoked group stayed granted.
+ *
+ * The operation itself keeps what it resolved;  a new lookup must not
+ * see it.  The control is a registration at the current generation,
+ * which is indexed and found. */
+TEST_F(NSFSPersonalityTest, OldCredentialsAreNotIndexedAsCurrent)
+{
+  ManualGenerations gens;
+  nsfs::PersonalityTable t{4, &reg, &gens};
+  const rgw_user alice{"", "alice"};
+  const uint64_t g0 = gens.generation(alice);
+
+  /* an operation's first submission */
+  {
+    nsfs::PersonalityRef r;
+    ASSERT_EQ(t.acquire(env->dpp, alice, creds_for(1001), g0, &r), 0);
+  }
+  gens.bump(alice);
+
+  /* its next submission, after the change, under what it resolved */
+  {
+    nsfs::PersonalityRef r;
+    ASSERT_EQ(t.acquire(env->dpp, alice, creds_for(1001), g0, &r), 0);
+    EXPECT_EQ(r.credentials().uid, 1001u)
+        << "the operation's submission ran under other credentials";
+  }
+
+  /* a new operation */
+  nsfs::PersonalityRef n;
+  EXPECT_EQ(t.find(alice, &n), -ENOENT)
+      << "credentials resolved before the change were indexed as current";
+  n.reset();
+
+  /* the control:  a registration at the current generation is indexed */
+  const uint64_t g1 = gens.generation(alice);
+  ASSERT_NE(g1, g0);
+  {
+    nsfs::PersonalityRef r;
+    ASSERT_EQ(t.acquire(env->dpp, alice, creds_for(2002), g1, &r), 0);
+    EXPECT_EQ(r.credentials().uid, 2002u);
+  }
+  ASSERT_EQ(t.find(alice, &n), 0) << "a current registration was not indexed";
+  EXPECT_EQ(n.credentials().uid, 2002u);
+  n.reset();
+  EXPECT_EQ(reg.registered.size() - reg.released.size(), 1u)
+      << "registrations from the old credentials were not given back";
+}
+
+/* A new operation gets the current credentials while an older one is
+ * still submitting under the stale slot. */
+TEST_F(NSFSPersonalityTest, ANewOperationIsNotGivenAPinnedStaleSlot)
+{
+  ManualGenerations gens;
+  nsfs::PersonalityTable t{4, &reg, &gens};
+  const rgw_user alice{"", "alice"};
+  const uint64_t g0 = gens.generation(alice);
+
+  nsfs::PersonalityRef older;
+  ASSERT_EQ(t.acquire(env->dpp, alice, creds_for(1001), g0, &older), 0);
+  gens.bump(alice);
+
+  nsfs::PersonalityRef newer;
+  ASSERT_EQ(t.acquire(env->dpp, alice, creds_for(2002),
+		      gens.generation(alice), &newer), 0);
+  EXPECT_EQ(newer.credentials().uid, 2002u)
+      << "a new operation was submitted under the old credentials";
+  EXPECT_NE(newer.id(), older.id());
+  EXPECT_EQ(older.credentials().uid, 1001u);
+  EXPECT_TRUE(reg.released.empty())
+      << "the older operation's personality was pulled while in flight";
+  older.reset();
+  EXPECT_EQ(reg.released.size(), 1u)
+      << "the stale personality was not given back at its last unpin";
+}
+
+/* An operation older than the index keeps its own credentials.
+ *
+ * Once a newer operation has registered the identity's current
+ * credentials, an operation that resolved before the change still
+ * submits under what it resolved, through a registration of its own
+ * that is never indexed and is given back when the submission ends. */
+TEST_F(NSFSPersonalityTest, AnOperationOlderThanTheIndexKeepsItsCredentials)
+{
+  ManualGenerations gens;
+  nsfs::PersonalityTable t{4, &reg, &gens};
+  const rgw_user alice{"", "alice"};
+  const uint64_t g0 = gens.generation(alice);
+  gens.bump(alice);
+  const uint64_t g1 = gens.generation(alice);
+
+  {
+    nsfs::PersonalityRef r;
+    ASSERT_EQ(t.acquire(env->dpp, alice, creds_for(2002), g1, &r), 0);
+  }
+  {
+    nsfs::PersonalityRef r;
+    ASSERT_EQ(t.acquire(env->dpp, alice, creds_for(1001), g0, &r), 0);
+    EXPECT_EQ(r.credentials().uid, 1001u)
+        << "an operation was switched to credentials it did not resolve";
+  }
+  nsfs::PersonalityRef n;
+  ASSERT_EQ(t.find(alice, &n), 0);
+  EXPECT_EQ(n.credentials().uid, 2002u)
+      << "the older operation displaced the current registration";
+  n.reset();
+  EXPECT_EQ(reg.registered.size() - reg.released.size(), 1u)
+      << "the older operation's registration was not given back";
+}
+
+/* Eviction is by age, and the evicted personality is given back. */
+TEST_F(NSFSPersonalityTest, EvictionIsFifoAndUnregisters)
+{
+  nsfs::PersonalityTable t{3, &reg};
+
+  /* fill it, holding nothing -- refs are released at each iteration */
+  std::vector<rgw_user> users;
+  for (int i = 0; i < 3; ++i) {
+    users.emplace_back("", std::string("u") + std::to_string(i));
+    nsfs::PersonalityRef r;
+    ASSERT_EQ(t.insert(env->dpp, users[i], creds_for(100 + i), &r), 0);
+  }
+  ASSERT_EQ(t.size(), 3u);
+  const int oldest = reg.registered.front();
+
+  /* the control:  all three are still findable before the overflow */
+  for (const auto& u : users) {
+    nsfs::PersonalityRef r;
+    EXPECT_EQ(t.find(u, &r), 0) << u << " was lost before any eviction";
+  }
+
+  const rgw_user newcomer{"", "newcomer"};
+  nsfs::PersonalityRef r;
+  ASSERT_EQ(t.insert(env->dpp, newcomer, creds_for(999), &r), 0);
+
+  EXPECT_EQ(t.size(), 3u) << "the table grew past its capacity";
+  EXPECT_EQ(t.get_stats().evictions, 1u);
+  EXPECT_FALSE(reg.live(oldest)) << "the evicted personality was not released";
+
+  nsfs::PersonalityRef gone;
+  EXPECT_EQ(t.find(users[0], &gone), -ENOENT)
+      << "the oldest entry survived;  eviction is not FIFO";
+  nsfs::PersonalityRef kept;
+  EXPECT_EQ(t.find(users[1], &kept), 0) << "a younger entry was evicted";
+}
+
+/* A pinned slot is skipped, so a live operation keeps its
+ * credentials even as the cursor comes round. */
+TEST_F(NSFSPersonalityTest, PinnedSlotsAreNotReused)
+{
+  nsfs::PersonalityTable t{2, &reg};
+  const rgw_user held{"", "held"};
+
+  nsfs::PersonalityRef pin;
+  ASSERT_EQ(t.insert(env->dpp, held, creds_for(1), &pin), 0);
+  const uint16_t held_id = pin.id();
+
+  /* the control:  with the pin released, this same sequence evicts
+   * it -- so "survived" below is the pin's doing and not an
+   * accident of the table being big enough */
+  {
+    nsfs::PersonalityTable t2{2, &reg};
+    nsfs::PersonalityRef tmp;
+    ASSERT_EQ(t2.insert(env->dpp, held, creds_for(1), &tmp), 0);
+    tmp.reset();
+    for (int i = 0; i < 2; ++i) {
+      nsfs::PersonalityRef r;
+      ASSERT_EQ(t2.insert(env->dpp, rgw_user{"", "p" + std::to_string(i)},
+			  creds_for(50 + i), &r), 0);
+      r.reset();
+    }
+    nsfs::PersonalityRef gone;
+    ASSERT_EQ(t2.find(held, &gone), -ENOENT)
+	<< "the control did not evict;  the real case proves nothing";
+  }
+
+  /* now with the pin held */
+  for (int i = 0; i < 2; ++i) {
+    nsfs::PersonalityRef r;
+    ASSERT_EQ(t.insert(env->dpp, rgw_user{"", "x" + std::to_string(i)},
+		       creds_for(60 + i), &r), 0);
+    r.reset();
+  }
+
+  nsfs::PersonalityRef still;
+  EXPECT_EQ(t.find(held, &still), 0) << "a pinned slot was reused";
+  EXPECT_EQ(still.id(), held_id);
+  EXPECT_TRUE(reg.live(held_id)) << "a pinned personality was unregistered";
+}
+
+/* Every slot pinned is a failure, not an improvisation.
+ *
+ * Serving the request unimpersonated would give it the gateway's
+ * reach;  evicting a pinned slot would pull credentials out from
+ * under a live operation.  Neither is acceptable, so it fails. */
+TEST_F(NSFSPersonalityTest, AllSlotsPinnedFails)
+{
+  nsfs::PersonalityTable t{2, &reg};
+
+  std::vector<nsfs::PersonalityRef> pins(2);
+  for (int i = 0; i < 2; ++i) {
+    ASSERT_EQ(t.insert(env->dpp, rgw_user{"", "h" + std::to_string(i)},
+		       creds_for(70 + i), &pins[i]), 0);
+  }
+
+  nsfs::PersonalityRef denied;
+  EXPECT_EQ(t.insert(env->dpp, rgw_user{"", "late"}, creds_for(80),
+		     &denied), -EBUSY);
+  EXPECT_FALSE(denied.valid());
+  EXPECT_EQ(t.get_stats().exhausted, 1u);
+  EXPECT_EQ(reg.registered.size(), 2u)
+      << "a failed insert registered a personality anyway";
+
+  /* and it recovers:  release one and the next insert succeeds */
+  pins[0].reset();
+  nsfs::PersonalityRef ok;
+  EXPECT_EQ(t.insert(env->dpp, rgw_user{"", "late"}, creds_for(80), &ok), 0);
+}
+
+/* Two operations on one identity pin it twice;  it stays until both
+ * are gone. */
+TEST_F(NSFSPersonalityTest, PinsNest)
+{
+  nsfs::PersonalityTable t{1, &reg};
+  const rgw_user u{"", "shared"};
+
+  nsfs::PersonalityRef a, b;
+  ASSERT_EQ(t.insert(env->dpp, u, creds_for(5), &a), 0);
+  ASSERT_EQ(t.find(u, &b), 0);
+
+  a.reset();
+  nsfs::PersonalityRef blocked;
+  EXPECT_EQ(t.insert(env->dpp, rgw_user{"", "other"}, creds_for(6),
+		     &blocked), -EBUSY)
+      << "one release freed a slot two operations were holding";
+
+  b.reset();
+  nsfs::PersonalityRef now;
+  EXPECT_EQ(t.insert(env->dpp, rgw_user{"", "other"}, creds_for(6),
+		     &now), 0);
+}
+
+/* A registrar that fails leaves nothing behind. */
+TEST_F(NSFSPersonalityTest, AFailedRegistrationStoresNothing)
+{
+  nsfs::PersonalityTable t{4, &reg};
+  const rgw_user u{"", "nope"};
+
+  /* the control:  it works before the registrar starts failing */
+  nsfs::PersonalityRef ok;
+  ASSERT_EQ(t.insert(env->dpp, rgw_user{"", "fine"}, creds_for(1), &ok), 0);
+  ok.reset();
+
+  reg.fail_with = -EPERM;
+  nsfs::PersonalityRef ref;
+  EXPECT_EQ(t.insert(env->dpp, u, creds_for(2), &ref), -EPERM);
+  EXPECT_FALSE(ref.valid());
+
+  nsfs::PersonalityRef after;
+  EXPECT_EQ(t.find(u, &after), -ENOENT)
+      << "a failed registration left an entry";
+  EXPECT_EQ(t.get_stats().failed, 1u);
+}
+
+/* The capacity is clamped to what an SQE can name. */
+TEST_F(NSFSPersonalityTest, CapacityIsClampedToTheIdSpace)
+{
+  nsfs::PersonalityTable t{1000000, &reg};
+  EXPECT_EQ(t.capacity(), 65535u);
+}
+
+/* The group text parser, which is the cost of storing the vector in
+ * one column.  An empty list parses to an empty vector;  malformed
+ * input is reported rather than silently yielding one, because an
+ * empty vector is a meaningful value. */
+TEST(NSFSIdentityGroups, TextRoundTripAndRejection)
+{
+  std::vector<uint32_t> out;
+
+  EXPECT_EQ(nsfs::groups_to_text({}), "");
+  EXPECT_EQ(nsfs::groups_to_text({1}), "1");
+  EXPECT_EQ(nsfs::groups_to_text({1, 22, 333}), "1,22,333");
+
+  ASSERT_TRUE(nsfs::groups_from_text("", out));
+  EXPECT_TRUE(out.empty());
+  ASSERT_TRUE(nsfs::groups_from_text("1,22,333", out));
+  EXPECT_EQ(out, (std::vector<uint32_t>{1, 22, 333}));
+
+  EXPECT_FALSE(nsfs::groups_from_text("1,,2", out));
+  EXPECT_FALSE(nsfs::groups_from_text(",1", out));
+  EXPECT_FALSE(nsfs::groups_from_text("1,", out));
+  EXPECT_FALSE(nsfs::groups_from_text("1,x", out));
+  EXPECT_FALSE(nsfs::groups_from_text("-1", out));
+}
 
 TEST_F(NSFSBucketTest, Object)
 {
@@ -2251,7 +4758,6 @@ TEST_F(NSFSBucketTest, HierarchicalChown)
   auto obj = bucket->get_object(rgw_obj_key("dir1/file.txt"));
   TestUser user(driver.get());
   int ret = obj->chown(env->dpp, user.get_id(), user.get_display_name(), null_yield);
-  // chown to uid/gid 0 requires root; EPERM is expected for non-root
   EXPECT_TRUE(ret == 0 || ret == -EPERM);
 
 /* nsfs creates objects and their directories in NooBaa's modes, under
@@ -2542,7 +5048,1050 @@ TEST(NooBaaMPU, StagingRootAbsentIsNotAnError)
   ::close(bfd);
 }
 
+/* Completion reads the parts as their uploader.
+ *
+ * The parts are the uploader's files, and the gateway can read them
+ * only with CAP_DAC_READ_SEARCH, which a thread takes the first time
+ * it opens something with no identity and not before.  A completion
+ * coroutine that resumed on a thread which had not yet done that read
+ * its parts as the gateway without the capability, and failed with
+ * EACCES (measured in the baseline, 2026-10-20).  So each test
+ * assembles on a fresh thread.
+ *
+ * The control is on that thread too:  the gateway's own open of an
+ * input must fail, or the assembly's success says nothing about whose
+ * credentials read it. */
+class NSFSImpersonatedAssembleTest : public NSFSRaiseTest {
+protected:
+  static constexpr uid_t uploader = 70150;
+  static constexpr uint64_t size = 16;
+  const nsfs::FSIdentity id{rgw_user{"", "uploader"}, creds_for(uploader)};
+  sf::path dir;
+  int dfd{-1};
+
+  void SetUp() override {
+    if (::geteuid() == 0) {
+      GTEST_SKIP() << "root reads every part whatever the owner";
+    }
+    if (!permitted(CAP_SETUID) || !permitted(CAP_SETGID) ||
+	!permitted(CAP_CHOWN)) {
+      GTEST_SKIP() << "the binary cannot assume an identity or give it a "
+		      "file;  run the setcap step";
+    }
+    dir = base_path / get_test_name();
+    sf::create_directories(dir);
+    ASSERT_EQ(::chmod(dir.c_str(), 01777), 0);
+    dfd = ::open(dir.c_str(), O_RDONLY | O_DIRECTORY);
+    ASSERT_GE(dfd, 0);
+  }
+
+  void TearDown() override {
+    if (dfd >= 0) {
+      ::close(dfd);
+    }
+  }
+
+  /* An input as completion finds it:  the uploader's, and 0660. */
+  void give(const std::string& name, const std::string& body) {
+    int fd = ::openat(dfd, name.c_str(), O_WRONLY | O_CREAT | O_EXCL, 0660);
+    ASSERT_GE(fd, 0) << name;
+    auto close_fd = make_scope_guard([fd] { ::close(fd); });
+    ASSERT_EQ(::write(fd, body.data(), body.size()), (ssize_t)body.size());
+    ASSERT_EQ(::fchmod(fd, 0660), 0);
+    ASSERT_EQ(with_capabilities_elsewhere(nsfs::cap_bit(CAP_CHOWN),
+	[fd]() -> int {
+	  return ::fchown(fd, uploader, uploader) < 0 ? -errno : 0;
+	}), 0) << "could not give " << name << " to the uploader";
+  }
+
+  struct Fresh {
+    bool had_read_search{true};
+    std::vector<int> controls;
+    int assembled{0};
+  };
+
+  /* `assemble` on a thread that has never raised read-search, after
+   * the gateway's own open of each of `inputs` there. */
+  Fresh on_a_fresh_thread(const std::vector<std::string>& inputs,
+			  const std::function<int()>& assemble) {
+    Fresh r;
+    std::thread fresh([&] {
+      r.had_read_search =
+	  nsfs::capability_is_effective(CAP_DAC_READ_SEARCH);
+      for (const auto& name : inputs) {
+	const int fd = ::openat(dfd, name.c_str(), O_RDONLY);
+	r.controls.push_back((fd < 0) ? -errno : 0);
+	if (fd >= 0) {
+	  ::close(fd);
+	}
+      }
+      r.assembled = assemble();
+    });
+    fresh.join();
+    return r;
+  }
+
+  /* the output is the uploader's, so it is read back with the
+   * capability */
+  std::string read_back(const std::string& name) {
+    std::string out;
+    EXPECT_EQ(nsfs::with_capabilities(env->dpp,
+				      nsfs::cap_bit(CAP_DAC_READ_SEARCH),
+	[&]() -> int {
+	  out = read_all(dir / name);
+	  return 0;
+	}), 0);
+    return out;
+  }
+
+  static void expect_gateway_denied(const Fresh& r) {
+    ASSERT_FALSE(r.had_read_search)
+	<< "a new thread started with CAP_DAC_READ_SEARCH effective";
+    for (const int c : r.controls) {
+      ASSERT_EQ(c, -EACCES)
+	  << "the gateway could open an input itself, so the assembly "
+	     "does not show whose credentials read it";
+    }
+  }
+};
+
+/* One file per part. */
+TEST_F(NSFSImpersonatedAssembleTest, PartsAreReadAsTheUploader)
+{
+  nsfs::PerPartMPUStrategy mpu;
+  nsfs::POSIXStrategy fs;
+
+  std::vector<nsfs::MPUStrategy::PartPlacement> parts;
+  for (uint32_t n = 1; n <= 2; ++n) {
+    ASSERT_NO_FATAL_FAILURE(give(mpu.part_name(n),
+				 std::string(size, static_cast<char>('a' + n))));
+    parts.push_back({n, false, 0, size});
+  }
+
+  const Fresh r = on_a_fresh_thread({mpu.part_name(1)}, [&] {
+    return mpu.assemble(env->dpp, &fs, dfd, parts, "final", size,
+			null_yield, nsfs::CopyHints{}, id);
+  });
+  ASSERT_NO_FATAL_FAILURE(expect_gateway_denied(r));
+  ASSERT_EQ(r.assembled, 0)
+      << "the parts were not read as their uploader: "
+      << cpp_strerror(-r.assembled);
+  EXPECT_EQ(read_back("final"),
+	    std::string(size, 'b') + std::string(size, 'c'));
+}
+
+/* The strided layout, where it copies:  part 1 in the shared file and
+ * part 2 in its own, which is not contiguous and so opens both. */
+TEST_F(NSFSImpersonatedAssembleTest, StridedInputsAreReadAsTheUploader)
+{
+  nsfs::StridedMPUStrategy mpu;
+  nsfs::POSIXStrategy fs;
+
+  const std::string shared = *mpu.shared_name(size);
+  ASSERT_NO_FATAL_FAILURE(give(shared, std::string(size, 'b')));
+  ASSERT_NO_FATAL_FAILURE(give(mpu.part_name(2), std::string(size, 'c')));
+  const std::vector<nsfs::MPUStrategy::PartPlacement> parts{
+    {1, true, 0, size}, {2, false, 0, size}};
+
+  const Fresh r = on_a_fresh_thread({shared, mpu.part_name(2)}, [&] {
+    return mpu.assemble(env->dpp, &fs, dfd, parts, "final", size,
+			null_yield, nsfs::CopyHints{}, id);
+  });
+  ASSERT_NO_FATAL_FAILURE(expect_gateway_denied(r));
+  ASSERT_EQ(r.assembled, 0)
+      << "the shared file or a part was not read as its uploader: "
+      << cpp_strerror(-r.assembled);
+  EXPECT_EQ(read_back("final"),
+	    std::string(size, 'b') + std::string(size, 'c'));
+}
+
+/* The gateway's attribute reads take the capability themselves.
+ *
+ * Read permission on a user.* attribute is checked at each
+ * fgetxattr(2), against the calling thread, not at open.  So a
+ * descriptor opened on a thread that held CAP_DAC_READ_SEARCH does not
+ * carry it to the thread a coroutine resumes on.  The case opens the
+ * uploader's object on one thread and reads it on another, after a
+ * raw read there as the control:  it must fail, or the wrapper's
+ * success says nothing.
+ *
+ * Impersonation is on for the length of the case, which is what the
+ * wrapper asks before it takes the capability. */
+class NSFSGatewayAttrReadTest : public NSFSImpersonatedAssembleTest {
+protected:
   static constexpr const char* attr = "user.nsfs:test";
+  int ofd{-1};
+
+  void SetUp() override {
+    NSFSImpersonatedAssembleTest::SetUp();
+    if (IsSkipped() || HasFatalFailure()) {
+      return;
+    }
+    set_impersonate("true");
+
+    ASSERT_NO_FATAL_FAILURE(give("obj", "body"));
+    const std::string path = (dir / "obj").string();
+    ASSERT_EQ(with_capabilities_elsewhere(
+				      nsfs::cap_bit(CAP_DAC_OVERRIDE),
+	[&path]() -> int {
+	  return ::setxattr(path.c_str(), attr, "v", 1, 0) < 0 ? -errno : 0;
+	}), 0) << "could not give the object an attribute";
+
+    /* opened on a thread that holds the capability, as the gateway
+     * opens an object it reads with no identity */
+    std::thread opener([this] {
+      (void) nsfs::hold_thread_capabilities(env->dpp);
+      ofd = ::openat(dfd, "obj", O_RDONLY);
+    });
+    opener.join();
+    ASSERT_GE(ofd, 0) << "the gateway could not open the object";
+  }
+
+  void TearDown() override {
+    if (ofd >= 0) {
+      ::close(ofd);
+    }
+    set_impersonate("false");
+    NSFSImpersonatedAssembleTest::TearDown();
+  }
+
+  static void set_impersonate(const char* v) {
+    g_conf().set_val_or_die("rgw_nsfs_impersonate", v);
+    g_conf().apply_changes(nullptr);
+  }
+};
+
+TEST_F(NSFSGatewayAttrReadTest, AnAttributeIsReadOnAnotherThread)
+{
+  bool had_read_search = true;
+  int control = 0;
+  ssize_t len = -1;
+  int err = 0;
+  char buf[16] = {};
+  std::thread reader([&] {
+    had_read_search = nsfs::capability_is_effective(CAP_DAC_READ_SEARCH);
+    control = (::fgetxattr(ofd, attr, buf, sizeof(buf)) < 0) ? -errno : 0;
+    len = nsfs::fgetxattr(ofd, attr, buf, sizeof(buf));
+    err = errno;
+  });
+  reader.join();
+
+  ASSERT_FALSE(had_read_search)
+      << "a new thread started with CAP_DAC_READ_SEARCH effective";
+  ASSERT_EQ(control, -EACCES)
+      << "the thread could read the attribute without the capability, so "
+	 "the read below does not show the wrapper taking it";
+  ASSERT_EQ(len, 1) << "the attribute was not read: " << cpp_strerror(err);
+  EXPECT_EQ(std::string(buf, len), "v");
+}
+
+TEST_F(NSFSGatewayAttrReadTest, ARaiseKeepsReadSearch)
+{
+  if (!permitted(CAP_FOWNER) || !permitted(CAP_DAC_OVERRIDE)) {
+    GTEST_SKIP() << "the binary cannot raise CAP_FOWNER;  run the setcap "
+		    "step";
+  }
+  ASSERT_EQ(::mkdirat(dfd, "sub", 0700), 0);
+  auto remove_sub = make_scope_guard([this] {
+    (void) with_capabilities_elsewhere(
+				   nsfs::cap_bit(CAP_DAC_OVERRIDE),
+      [this]() -> int {
+	std::error_code ec;
+	sf::remove_all(dir / "sub", ec);
+	return ec ? -ec.value() : 0;
+      });
+  });
+  const int xfd = ::openat(dfd, "sub/x", O_WRONLY | O_CREAT | O_EXCL, 0600);
+  ASSERT_GE(xfd, 0);
+  ::close(xfd);
+  ASSERT_EQ(with_capabilities_elsewhere(nsfs::cap_bit(CAP_CHOWN),
+	[this]() -> int {
+	  return ::fchownat(dfd, "sub", uploader, uploader, 0) < 0 ? -errno : 0;
+	}), 0) << "could not give the directory to the uploader";
+
+  bool had_read_search = true;
+  int control = 0;
+  int inside = -1;
+  int after = -1;
+  bool still_held = false;
+  std::thread fresh([&] {
+    struct ::statx stx;
+    had_read_search = nsfs::capability_is_effective(CAP_DAC_READ_SEARCH);
+    control = (::statx(dfd, "sub/x", AT_SYMLINK_NOFOLLOW, STATX_BASIC_STATS,
+		       &stx) < 0) ? -errno : 0;
+    inside = nsfs::with_capabilities(env->dpp, nsfs::cap_bit(CAP_FOWNER),
+      [&]() -> int {
+	return (nsfs::statx(dfd, "obj", AT_SYMLINK_NOFOLLOW,
+			    STATX_BASIC_STATS, &stx) < 0) ? -errno : 0;
+      });
+    after = (nsfs::statx(dfd, "sub/x", AT_SYMLINK_NOFOLLOW,
+			 STATX_BASIC_STATS, &stx) < 0) ? -errno : 0;
+    still_held = nsfs::capability_is_effective(CAP_DAC_READ_SEARCH);
+  });
+  fresh.join();
+
+  ASSERT_FALSE(had_read_search)
+      << "a new thread started with CAP_DAC_READ_SEARCH effective";
+  ASSERT_EQ(control, -EACCES)
+      << "the thread could search the uploader's directory without the "
+	 "capability, so the read below does not show it kept";
+  ASSERT_EQ(inside, 0) << cpp_strerror(-inside);
+  EXPECT_EQ(after, 0)
+      << "the gateway's read after the raise was denied: "
+      << cpp_strerror(-after);
+  EXPECT_TRUE(still_held)
+      << "the raise's restore dropped CAP_DAC_READ_SEARCH";
+}
+
+/* An object rename runs as the authenticated user.
+ *
+ * Under impersonation a key's directory and its `.versions` are made
+ * by the authenticated user at `0770`, so the gateway can neither walk them
+ * nor move a name out of them.  The rename has to run as that
+ * user:  the walks on both sides, the version lock, the intent
+ * record on `.versions`, each version's move and the leaf's.  The
+ * control is the gateway's own open of the source key directory, on
+ * a thread that has never taken read-search:  it must fail, or the
+ * rename's success says nothing about whose credentials did it. */
+class NSFSImpersonatedRenameTest : public NSFSBucketTest {
+protected:
+  static constexpr uid_t owner_uid = 70160;
+  static constexpr uid_t other_uid = 70161;
+  const rgw_user alice{"", "rename-alice"};
+  const rgw_user bob{"", "rename-bob"};
+
+  void SetUp() override {
+    if (::geteuid() == 0) {
+      GTEST_SKIP() << "root walks every directory whatever the owner";
+    }
+    std::string missing;
+    if (! nsfs::have_credential_capabilities(&missing)) {
+      GTEST_SKIP() << "the binary cannot assume an identity (" << missing
+		   << ");  run the setcap step";
+    }
+    NSFSBucketTest::SetUp();
+    if (HasFailure()) {
+      return;
+    }
+    /* NooBaa's modes:  key directories 0770, objects 0660 */
+    g_conf().set_val("rgw_nsfs_umask", "0007");
+    nsfs::init_create_modes(env->dpp, env->cct.get());
+    /* the bucket directory stays the gateway's, writable by every
+     * identity, so each can make its own key directories in it */
+    ASSERT_EQ(::chmod(bucket_path().c_str(), 01777), 0);
+
+    bucket->get_info().flags |= BUCKET_VERSIONED;
+    ASSERT_EQ(bucket->put_info(env->dpp, false, real_time(), null_yield), 0);
+
+    for (const auto& [who, uid] : {std::pair{alice, owner_uid},
+				   std::pair{bob, other_uid}}) {
+      nsfs::Identity row;
+      row.key = to_string(rgw_owner{who});
+      row.uid = uid;
+      row.gid = uid;
+      ASSERT_EQ(driver->get_identity_db()->put_identity(env->dpp, row), 0);
+    }
+    set_impersonate("true");
+  }
+
+  void TearDown() override {
+    }
+    set_impersonate("false");
+    /* Always, unlike the suite's other trees:  the key directories are
+     * the identities' 0770, which the next run's clean_first cannot
+     * empty without the capability. */
+    {
+      (void) nsfs::with_capabilities(env->dpp,
+				     nsfs::cap_bit(CAP_DAC_OVERRIDE),
+	[this]() -> int {
+	  std::error_code ec;
+	  sf::remove_all(bp, ec);
+	  return ec ? -ec.value() : 0;
+	});
+    }
+    NSFSBucketTest::TearDown();
+  }
+
+  static void set_impersonate(const char* v) {
+    g_conf().set_val_or_die("rgw_nsfs_impersonate", v);
+    g_conf().apply_changes(nullptr);
+  }
+
+
+  /* `who`'s hops to the helper pool since the last call, by kind */
+  std::map<std::string, uint64_t> pool_hops(const rgw_user& who,
+					    bool enable = true) {
+    std::map<std::string, std::string> out;
+    EXPECT_EQ(driver->driver_hint(env->dpp, "pool-hops",
+				  {{"user", to_string(rgw_owner{who})},
+				   {"enable", enable ? "true" : "false"}},
+				  &out), 0);
+    std::map<std::string, uint64_t> n;
+    for (const char* k : {"link", "attr_write", "attr_read", "other"}) {
+      n[k] = std::stoull(out[k]);
+    }
+    return n;
+  }
+
+  void inject_no_ring(const rgw_user& who, bool on) {
+    std::map<std::string, std::string> out;
+    EXPECT_EQ(driver->driver_hint(env->dpp, "inject-no-ring",
+				  {{"user", to_string(rgw_owner{who})},
+				   {"enable", on ? "true" : "false"}},
+				  &out), 0);
+  }
+
+
+  int delete_version_as(const rgw_user& who, const std::string& key,
+			const std::string& vid) {
+    int ret = 0;
+    std::thread deleter([&] {
+      auto obj = bucket->get_object(rgw_obj_key(key, vid));
+      auto del = obj->get_delete_op(who);
+      ret = del->delete_obj(env->dpp, null_yield, 0);
+    });
+    deleter.join();
+    return ret;
+  }
+
+  /* On a thread of its own:  the write holds read-search for the life
+   * of the thread it runs on, and a thread created after that inherits
+   * it, which would spoil the control below and other tests' controls
+   * on this binary's main thread. */
+  void put_as(const rgw_user& who, const std::string& key,
+	      const std::string& body) {
+    std::thread writer([&] { put_on_this_thread(who, key, body); });
+    writer.join();
+    /* the writer's failures are the test's, but only this thread's
+     * stop it */
+    ASSERT_FALSE(HasFatalFailure()) << "could not write " << key;
+  }
+
+  void put_on_this_thread(const rgw_user& who, const std::string& key,
+			  const std::string& body) {
+    auto obj = bucket->get_object(rgw_obj_key(key));
+    auto writer = driver->get_atomic_writer(env->dpp, null_yield, obj.get(),
+					    acl_owner, nullptr, 0, "put", who);
+    ASSERT_EQ(writer->prepare(null_yield), 0) << key;
+    bufferlist bl;
+    bl.append(body);
+    ASSERT_EQ(writer->process(std::move(bl), 0), 0);
+    ASSERT_EQ(writer->process({}, body.size()), 0);
+    Attrs attrs;
+    ceph::real_time mtime;
+    std::string etag;
+    req_context rctx{env->dpp, null_yield, nullptr};
+    ASSERT_EQ(writer->complete(body.size(), etag, &mtime, real_time(), attrs,
+			       std::nullopt, real_time(), nullptr, nullptr,
+			       nullptr, nullptr, nullptr, rctx, 0), 0) << key;
+  }
+
+  /* On a thread of its own too:  the rename's gateway listings hold
+   * read-search for the life of the thread they run on, and this
+   * binary's main thread runs the other tests' controls. */
+  int rename_as(const rgw_user& who, const std::string& from,
+		const std::string& to) {
+    int ret = 0;
+    std::thread renamer([&] {
+      auto obj = bucket->get_object(rgw_obj_key(from));
+      ret = obj->rename(env->dpp, null_yield, bucket.get(), rgw_obj_key(to),
+			rgw::sal::Object::FLAG_RENAME_NONE, who);
+    });
+    renamer.join();
+    return ret;
+  }
+
+  /* the gateway's open of `rel`, on a thread that has never taken
+   * read-search */
+  int gateway_open_on_a_fresh_thread(const std::string& rel) {
+    int r = 0;
+    bool had_read_search = true;
+    const sf::path p = bucket_path() / rel;
+    std::thread fresh([&] {
+      had_read_search = nsfs::capability_is_effective(CAP_DAC_READ_SEARCH);
+      const int fd = ::open(p.c_str(), O_RDONLY | O_DIRECTORY);
+      r = (fd < 0) ? -errno : 0;
+      if (fd >= 0) {
+	::close(fd);
+      }
+    });
+    fresh.join();
+    EXPECT_FALSE(had_read_search)
+	<< "a new thread started with CAP_DAC_READ_SEARCH effective";
+    return r;
+  }
+
+  /* the gateway's unlink of `rel`, on a thread that has never taken
+   * read-search */
+  int gateway_unlink_on_a_fresh_thread(const std::string& rel) {
+    int r = 0;
+    const sf::path p = bucket_path() / rel;
+    std::thread fresh([&] {
+      r = (::unlink(p.c_str()) < 0) ? -errno : 0;
+    });
+    fresh.join();
+    return r;
+  }
+
+  /* the tree is the identities', so it is read with the capability */
+  struct Owned {
+    int err{0};
+    uid_t uid{0};
+    mode_t mode{0};
+  };
+  Owned owned(const std::string& rel) {
+    Owned o;
+    const sf::path p = bucket_path() / rel;
+    EXPECT_EQ(with_capabilities_elsewhere(
+				      nsfs::cap_bit(CAP_DAC_READ_SEARCH),
+	[&]() -> int {
+	  struct stat st{};
+	  o.err = (::lstat(p.c_str(), &st) < 0) ? -errno : 0;
+	  o.uid = st.st_uid;
+	  o.mode = st.st_mode & 07777;
+	  return 0;
+	}), 0);
+    return o;
+  }
+
+  std::vector<std::string> versions_in(const std::string& keydir) {
+    std::vector<std::string> out;
+    const sf::path p = bucket_path() / keydir / ".versions";
+    EXPECT_EQ(with_capabilities_elsewhere(
+				      nsfs::cap_bit(CAP_DAC_READ_SEARCH),
+	[&]() -> int {
+	  std::error_code ec;
+	  for (const auto& e : sf::directory_iterator(p, ec)) {
+	    const std::string n = e.path().filename().string();
+	    if (n.rfind(".", 0) != 0) {
+	      out.push_back(n);
+	    }
+	  }
+	  return 0;
+	}), 0);
+    return out;
+  }
+};
+
+/* The owner's rename moves the leaf and its history, and everything it
+ * makes on the destination side is the owner's. */
+TEST_F(NSFSImpersonatedRenameTest, TheOwnersRenameRunsAsTheOwner)
+{
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "src/k", "first"));
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "src/k", "second"));
+  ASSERT_EQ(versions_in("src").size(), 1u) << "no history to move";
+
+  ASSERT_EQ(owned("src").uid, owner_uid);
+  ASSERT_EQ(gateway_open_on_a_fresh_thread("src"), -EACCES)
+      << "the gateway could walk the owner's key directory itself, so the "
+	 "rename does not show whose credentials ran it";
+
+  const int ret = rename_as(alice, "src/k", "dst/k");
+  ASSERT_EQ(ret, 0) << "the owner's rename failed: " << cpp_strerror(-ret);
+
+  EXPECT_EQ(owned("src/k").err, -ENOENT) << "the leaf was not moved";
+  const Owned leaf = owned("dst/k");
+  ASSERT_EQ(leaf.err, 0) << "the leaf did not arrive";
+  EXPECT_EQ(leaf.uid, owner_uid);
+
+  const Owned ddir = owned("dst");
+  EXPECT_EQ(ddir.uid, owner_uid) << "the destination key directory";
+  EXPECT_EQ(ddir.mode, 0770u) << "the destination key directory";
+  const Owned dvers = owned("dst/.versions");
+  ASSERT_EQ(dvers.err, 0) << "the destination has no .versions";
+  EXPECT_EQ(dvers.uid, owner_uid) << "the destination .versions";
+
+  EXPECT_TRUE(versions_in("src").empty()) << "the history stayed behind";
+  const auto moved = versions_in("dst");
+  ASSERT_EQ(moved.size(), 1u) << "the history did not follow the leaf";
+  EXPECT_EQ(owned("dst/.versions/" + moved[0]).uid, owner_uid);
+}
+
+
+/* A tag removal runs as the authenticated user (phase C's validation clause,
+ * the call-site table's remove_x_attr row), under each access model.
+ *
+ * fremovexattr(2) of a `user.*` name is checked against the calling
+ * thread, so on alice's 0660 object it succeeds only with credentials
+ * that may write it.  Under posix-strict no raise is possible, so a
+ * removal that succeeds there can only have run with that user's
+ * credentials -- which is what remove_x_attr()'s old single-name branch,
+ * acting as the gateway, failed (16c5f31a2e1).  The premise is that the
+ * gateway, unraised, cannot;  bob, whom posix-strict denies, cannot
+ * either, so the identity follows the authenticated user.  Under
+ * s3-native the same denial is performed by the gateway under a raise,
+ * which the access model's counter shows -- the case in which the file outcome
+ * alone would not say whose credentials ran.  The model is set here,
+ * not inherited;  TearDown() restores the configured one. */
+TEST_F(NSFSImpersonatedRenameTest, ATagRemovalRunsAsTheAuthenticatedUserUnderEachModel)
+{
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "k", "alice's"));
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  const std::string tag_x = b->xattr_strategy()->disk_name(RGW_ATTR_TAGS);
+  ASSERT_FALSE(tag_x.empty());
+
+  /* on a thread of its own, as put_as() */
+  auto on_thread = [](const std::function<int()>& fn) {
+    int r = 0;
+    std::thread t([&] { r = fn(); });
+    t.join();
+    return r;
+  };
+  auto tag_as = [&](const rgw_user& who) {
+    RGWObjTags tags;
+    tags.add_tag("phase", "d");
+    bufferlist bl;
+    tags.encode(bl);
+    return on_thread([&] {
+      auto obj = bucket->get_object(rgw_obj_key("k"));
+      /* as the core does before an attribute operation */
+      if (const int lr = obj->load_obj_state(env->dpp, null_yield); lr < 0) {
+	return lr;
+      }
+      return obj->modify_obj_attrs(RGW_ATTR_TAGS, bl, null_yield, env->dpp,
+				   who);
+    });
+  };
+  auto untag_as = [&](const rgw_user& who) {
+    return on_thread([&] {
+      auto obj = bucket->get_object(rgw_obj_key("k"));
+      /* as the core does before an attribute operation */
+      if (const int lr = obj->load_obj_state(env->dpp, null_yield); lr < 0) {
+	return lr;
+      }
+      return obj->delete_obj_attrs(env->dpp, RGW_ATTR_TAGS, null_yield,
+				   who);
+    });
+  };
+  /* the attribute's presence, read with the capability */
+  auto tagged = [&]() {
+    ssize_t len = -1;
+    EXPECT_EQ(with_capabilities_elsewhere(nsfs::cap_bit(CAP_DAC_READ_SEARCH),
+	[&]() -> int {
+	  len = ::getxattr((bucket_path() / "k").c_str(), tag_x.c_str(),
+			   nullptr, 0);
+	  return 0;
+	}), 0);
+    return len >= 0;
+  };
+  /* the gateway performing an attribute operation the filesystem denied
+   * the authenticated user:  with_cross_account_retry()'s counter,
+   * reported by the access-model hint as `attrs_served` -- not raised(), which
+   * counts with_identity_or_raise()'s directory operations */
+  auto attrs_served = [this]() {
+    std::map<std::string, std::string> out;
+    EXPECT_EQ(driver->driver_hint(env->dpp, "access-model", {}, &out), 0);
+    return std::stoull(out["attrs_served"]);
+  };
+
+  /* posix-strict:  no raise, so the file's outcome names the credentials */
+  ASSERT_EQ(set_model("posix-strict"), 0);
+  ASSERT_EQ(tag_as(alice), 0);
+  ASSERT_TRUE(tagged());
+  EXPECT_EQ(on_thread([&] {
+	      return (::removexattr((bucket_path() / "k").c_str(),
+				    tag_x.c_str()) < 0) ? -errno : 0;
+	    }), -EACCES)
+      << "the premise:  the gateway, unraised, cannot remove it";
+  ASSERT_TRUE(tagged());
+  const uint64_t served_strict = attrs_served();
+  const uint64_t raised_strict = raised();
+  EXPECT_LT(untag_as(bob), 0) << "posix-strict let another identity remove it";
+  EXPECT_TRUE(tagged()) << "bob's denied removal removed the tags";
+  EXPECT_EQ(untag_as(alice), 0);
+  EXPECT_FALSE(tagged()) << "alice's removal left the tags";
+  EXPECT_EQ(attrs_served(), served_strict)
+      << "posix-strict performed an attribute operation as the gateway, so "
+	 "the outcomes above do not name the credentials";
+  EXPECT_EQ(raised(), raised_strict)
+      << "posix-strict raised a directory operation";
+
+  /* s3-native:  bob's removal is performed, by the gateway under a raise */
+  ASSERT_EQ(set_model("s3-native"), 0);
+  ASSERT_EQ(tag_as(alice), 0);
+  ASSERT_TRUE(tagged());
+  const uint64_t served_native = attrs_served();
+  EXPECT_EQ(untag_as(bob), 0) << "s3-native did not perform bob's removal";
+  EXPECT_FALSE(tagged()) << "s3-native's removal left the tags";
+  EXPECT_GT(attrs_served(), served_native)
+      << "bob's removal succeeded without a raise, so it ran as something "
+	 "other than the gateway";
+}
+
+/* The owner's demote and delete marker run as the owner (phase C's
+ * validation clause, the safe_link pair:  the writer's demote,
+ * `demote_current_version()`, and the delete marker's link and CAS
+ * unlink in `delete_obj()`).  Under posix-strict nothing raises, so
+ * each succeeds only with credentials that may write the owner's 0770
+ * `.versions` and link the owner's file -- which the gateway, unraised,
+ * cannot (the premise) -- and `raised()` not moving shows no raise did
+ * it.  The marker is a file the delete creates, so its uid is the
+ * identity observed directly.  The s3-native cases are
+ * UnderS3NativeAnotherIdentitysPutIsRaised and ...DeleteIsRaised. */
+TEST_F(NSFSImpersonatedRenameTest, TheOwnersDemoteAndMarkerRunAsTheOwner)
+{
+  ASSERT_EQ(set_model("posix-strict"), 0);
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "src/k", "first"));
+  const uint64_t before = raised();
+
+  /* the writer's demote */
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "src/k", "second"));
+  ASSERT_EQ(versions_in("src").size(), 1u) << "the overwrite demoted nothing";
+
+  /* the premise:  the gateway, unraised, cannot link into `.versions` */
+  int premise = 0;
+  std::thread fresh([&] {
+    const int src = ::open((bucket_path() / "src").c_str(),
+			   O_RDONLY | O_DIRECTORY);
+    const int vfd = ::open((bucket_path() / "src" / ".versions").c_str(),
+			   O_RDONLY | O_DIRECTORY);
+    premise = ((src < 0) || (vfd < 0)) ? -errno
+	: ((::linkat(src, "k", vfd, "probe", 0) < 0) ? -errno : 0);
+    if (src >= 0) {
+      ::close(src);
+    }
+    if (vfd >= 0) {
+      ::close(vfd);
+    }
+  });
+  fresh.join();
+  EXPECT_TRUE((premise == -EACCES) || (premise == -EPERM))
+      << "the gateway could link into the owner's .versions: "
+      << cpp_strerror(-premise);
+
+  /* the delete marker's demote, its CAS unlink, and the marker */
+  const int ret = delete_as(alice, "src/k");
+  ASSERT_EQ(ret, 0) << "the delete failed: " << cpp_strerror(-ret);
+  EXPECT_EQ(owned("src/k").err, -ENOENT) << "the current version stayed";
+  const auto hist = versions_in("src");
+  ASSERT_EQ(hist.size(), 3u) << "two demoted versions and the marker";
+  for (const auto& v : hist) {
+    EXPECT_EQ(owned("src/.versions/" + v).uid, owner_uid)
+	<< v << " is not the owner's";
+  }
+
+  EXPECT_EQ(raised(), before)
+      << "posix-strict raised, so the outcomes above do not name the "
+	 "credentials";
+}
+
+/* N-D3:  an identity's links and attribute operations run on the ring.
+ * A put, an overwrite (a demote) and a versioned delete (a demote, the
+ * CAS unlink, a delete marker) make no hop to the pool for either;  the
+ * hops left are the mode changes, which have no opcode.  With the ring
+ * withheld (`inject-no-ring`) the same sequence hops for each kind, so
+ * the counter sees them and the fallback runs.  With metadata changes
+ * kept off the ring, as on GPFS, links and attribute writes hop and
+ * reads do not.  The outcome is the same every way. */
+TEST_F(NSFSImpersonatedRenameTest, AnIdentitysLinksAndAttributesTakeNoHop)
+{
+  ASSERT_EQ(set_model("posix-strict"), 0);
+  enum class Route { ring, withheld, metadata_on_pool };
+  for (const Route route : {Route::ring, Route::withheld,
+			    Route::metadata_on_pool}) {
+    const char* what = (route == Route::ring) ? "on the ring"
+      : (route == Route::withheld) ? "ring withheld"
+      : "metadata changes on the pool (GPFS's route)";
+    SCOPED_TRACE(what);
+    inject_no_ring(alice, route == Route::withheld);
+    nsfs::set_ring_metadata_changes(route != Route::metadata_on_pool);
+    (void) pool_hops(alice);
+    const std::string dir = (route == Route::ring) ? "ring"
+      : (route == Route::withheld) ? "pool" : "meta";
+    ASSERT_NO_FATAL_FAILURE(put_as(alice, dir + "/k", "first"));
+    ASSERT_NO_FATAL_FAILURE(put_as(alice, dir + "/k", "second"));
+    ASSERT_EQ(delete_as(alice, dir + "/k"), 0);
+    auto hops = pool_hops(alice);
+    nsfs::set_ring_metadata_changes(true);
+
+    const auto hist = versions_in(dir);
+    ASSERT_EQ(hist.size(), 3u) << "two demoted versions and the marker";
+    for (const auto& v : hist) {
+      EXPECT_EQ(owned(dir + "/.versions/" + v).uid, owner_uid)
+	  << v << " is not the owner's";
+    }
+    switch (route) {
+    case Route::ring:
+      EXPECT_EQ(hops["link"], 0u);
+      EXPECT_EQ(hops["attr_write"], 0u);
+      EXPECT_EQ(hops["attr_read"], 0u);
+      break;
+    case Route::withheld:
+      EXPECT_GT(hops["link"], 0u);
+      EXPECT_GT(hops["attr_write"], 0u);
+      EXPECT_GT(hops["attr_read"], 0u);
+      break;
+    case Route::metadata_on_pool:
+      /* the changes go to the pool;  the reads stay on the ring */
+      EXPECT_GT(hops["link"], 0u);
+      EXPECT_GT(hops["attr_write"], 0u);
+      EXPECT_EQ(hops["attr_read"], 0u);
+      break;
+    }
+  }
+  inject_no_ring(alice, false);
+  (void) pool_hops(alice, false);
+}
+
+/* posix-strict:  another identity's rename out of the owner's key
+ * directory is denied, and nothing moves. */
+TEST_F(NSFSImpersonatedRenameTest, AnotherIdentitysRenameIsDenied)
+{
+  ASSERT_STREQ(driver->get_access_strategy()->name(), "posix-strict");
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "src/k", "body"));
+
+  const int ret = rename_as(bob, "src/k", "dst/k");
+  EXPECT_TRUE(ret == -EACCES || ret == -EPERM)
+      << "another identity's rename was not denied: " << cpp_strerror(-ret);
+  EXPECT_EQ(owned("src/k").err, 0) << "the leaf moved";
+  EXPECT_EQ(owned("dst/k").err, -ENOENT) << "the leaf arrived";
+}
+
+
+static std::map<std::string, bool> listed_versions(rgw::sal::Bucket* bucket,
+						   const DoutPrefixProvider* dpp,
+						   const std::string& key);
+
+/* A bucket whose versions were all deleted by their writer keeps
+ * only scaffolding -- that writer's `.versions` at 0770 -- and the
+ * gateway's bucket delete removes it (raise site 3).  The premise is
+ * that the gateway, unraised, cannot.  Two versions, so one has been
+ * demoted into `.versions` before both are deleted. */
+TEST_F(NSFSImpersonatedRenameTest, ABucketEmptiedByItsWriterIsDeleted)
+{
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "k", "first"));
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "k", "second"));
+  /* the listings and the delete on threads of their own:  a gateway
+   * listing holds read-search for the life of its thread, and this
+   * binary's main thread runs the other tests' controls */
+  auto listed_elsewhere = [this]() {
+    std::map<std::string, bool> out;
+    std::thread lister([&] {
+      out = listed_versions(bucket.get(), env->dpp, "k");
+    });
+    lister.join();
+    return out;
+  };
+  const auto listed = listed_elsewhere();
+  ASSERT_EQ(listed.size(), 2u);
+  for (const auto& [vid, _] : listed) {
+    ASSERT_EQ(delete_version_as(alice, "k", vid), 0) << vid;
+  }
+  ASSERT_TRUE(listed_elsewhere().empty());
+
+  const Owned v = owned(".versions");
+  ASSERT_EQ(v.uid, owner_uid)
+      << "the premise:  the scaffolding is the writer's";
+  ASSERT_EQ(v.mode, 0770u);
+  ASSERT_EQ(gateway_unlink_on_a_fresh_thread(".versions/.lock"), -EACCES)
+      << "the premise:  the gateway, unraised, cannot remove it";
+
+  int ret = 0;
+  bool still_raised = true;
+  std::thread remover([&] {
+    ret = bucket->remove(env->dpp, false, null_yield, rgw::sal::no_authenticated_user);
+    still_raised = nsfs::capability_is_effective(CAP_DAC_OVERRIDE);
+  });
+  remover.join();
+  ASSERT_EQ(ret, 0) << cpp_strerror(-ret);
+  EXPECT_FALSE(still_raised) << "the delete left DAC_OVERRIDE raised";
+  EXPECT_EQ(owned("").err, -ENOENT) << "the bucket directory stayed";
+}
+
+
+/* FSIO in a key directory an identity made (n plan D4a).  Under
+ * impersonation the directory is its owner's at 0770, so a handle
+ * opened as the gateway cannot make `.shadow` in it, and FSIO fails on
+ * every key directory an identity made.  D4a carries librgw's mount
+ * user -- here the owner -- through the handle, and `.shadow` is made
+ * as `.versions` is:  the owner's at 0770. */
+TEST_F(NSFSImpersonatedRenameTest, FSIOWritesInTheOwnersKeyDirectory)
+{
+  /* on a thread of its own, as put_as():  the profile change takes
+   * read-search for the thread it runs on, which would spoil the
+   * control below */
+  int hret = 0, lret = 0;
+  std::thread raiser([&] {
+    std::map<std::string, std::string> out;
+    hret = driver->driver_hint(env->dpp, "bucket-profile",
+			       {{"bucket", testname}, {"profile", "strong"}},
+			       &out);
+    lret = driver->load_bucket(env->dpp, rgw_bucket{"", testname}, &bucket,
+			       null_yield);
+  });
+  raiser.join();
+  ASSERT_EQ(hret, 0);
+  ASSERT_EQ(lret, 0);
+  ASSERT_TRUE(static_cast<rgw::sal::NSFSBucket*>(bucket.get())
+		  ->has_extension(nsfs::EXT_SHADOW));
+
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "src/k", "first"));
+  ASSERT_EQ(owned("src").uid, owner_uid);
+  ASSERT_EQ(gateway_open_on_a_fresh_thread("src"), -EACCES)
+      << "the gateway could walk the owner's key directory itself, so "
+	 "this does not show whose credentials FSIO ran with";
+
+  int rc = 0, crc = 0, prc = 0;
+  std::thread fsio([&] {
+    auto obj = bucket->get_object(rgw_obj_key("src/k"));
+    auto [r, hdl] = obj->get_fsio_handle(
+	env->dpp, alice, rgw::sal::Object::FSIOObject::OPEN_FLAG_WRITE);
+    rc = r;
+    if (r == 0) {
+      crc = hdl->commit(env->dpp,
+			rgw::sal::Object::FSIOObject::COMMIT_FLAG_NONE);
+      prc = hdl->publish(env->dpp,
+			 rgw::sal::Object::FSIOObject::PUBLISH_FLAG_NONE);
+      hdl->close(env->dpp, rgw::sal::Object::FSIOObject::CLOSE_FLAG_NONE);
+    }
+  });
+  fsio.join();
+
+  ASSERT_EQ(rc, 0) << "FSIO could not open the owner's object to write: "
+		   << cpp_strerror(-rc);
+  EXPECT_EQ(crc, 0) << "commit";
+  EXPECT_EQ(prc, 0) << "publish";
+  const Owned shadow = owned("src/.shadow");
+  ASSERT_EQ(shadow.err, 0) << "no .shadow in the owner's key directory";
+  EXPECT_EQ(shadow.uid, owner_uid) << ".shadow is not the owner's";
+  EXPECT_EQ(shadow.mode, 0770u) << ".shadow is not made as .versions is";
+}
+
+/* Lifecycle (n plan Phase F):  work no request asked for carries no
+ * authenticated user, and names whom it is done for -- the bucket's
+ * owner -- in `on_behalf_of`.  These build the operations as
+ * rgw_lc.cc does, with the identity under test named directly. */
+static const rgw_user lifecycle_nobody{"", "lc-nobody-has-a-row"};
+
+/* A lifecycle delete runs as whom it is for, and refuses one with no
+ * row rather than running as the gateway. */
+TEST_F(NSFSImpersonatedRenameTest, ALifecycleDeleteRunsAsWhomItIsFor)
+{
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "src/k", "alice's"));
+  auto lc_delete = [this](const rgw_user& for_whom) {
+    int ret = 0;
+    std::thread t([&] {
+      auto obj = bucket->get_object(rgw_obj_key("src/k"));
+      auto del = obj->get_delete_op(rgw::sal::no_authenticated_user);
+      del->params.versioning_status = bucket->get_info().versioning_status();
+      del->params.bucket_owner = rgw_owner{for_whom};
+      del->params.on_behalf_of = rgw_owner{for_whom};
+      ret = del->delete_obj(env->dpp, null_yield, 0);
+    });
+    t.join();
+    return ret;
+  };
+
+  const int nret = lc_delete(lifecycle_nobody);
+  EXPECT_EQ(nret, -EACCES) << "work for an owner with no row was not "
+      "refused: " << cpp_strerror(-nret);
+  EXPECT_EQ(owned("src/k").err, 0) << "the refused delete removed the object";
+
+  std::map<std::string, std::string> out;
+  ASSERT_EQ(driver->driver_hint(env->dpp, "ran-as",
+				{{"select", alice.to_str()}}, &out), 0);
+  const int ret = lc_delete(alice);
+  ASSERT_EQ(ret, 0) << "the delete failed: " << cpp_strerror(-ret);
+  out.clear();
+  EXPECT_EQ(driver->driver_hint(env->dpp, "ran-as", {}, &out), 0);
+  EXPECT_EQ(out["ran_as_delete"], std::to_string(owner_uid))
+      << "the delete did not run as whom it was for";
+  EXPECT_EQ(owned("src/k").err, -ENOENT) << "the current version stayed";
+}
+
+
+/* A lifecycle abort runs as whom it is for:  one with no row is
+ * refused and the upload stays, where an abort for nobody would run
+ * as the gateway (the bucket-delete path's). */
+TEST_F(NSFSImpersonatedRenameTest, ALifecycleAbortRunsAsWhomItIsFor)
+{
+  const std::string objname = "mpk";
+  rgw_placement_rule placement;
+  {
+    auto upload = bucket->get_multipart_upload(objname, alice, "abcdef");
+    std::thread t([&] {
+      Attrs attrs;
+      ASSERT_EQ(upload->init(env->dpp, null_yield, acl_owner, placement,
+			     attrs), 0);
+      auto w = upload->get_writer(env->dpp, null_yield, nullptr, acl_owner,
+				  &placement, 1, "1", alice);
+      ASSERT_EQ(w->prepare(null_yield), 0);
+      bufferlist bl;
+      bl.append("part one");
+      const size_t len = bl.length();
+      ASSERT_EQ(w->process(std::move(bl), 0), 0);
+      ASSERT_EQ(w->process({}, len), 0);
+      ceph::real_time mtime;
+      Attrs pa;
+      req_context rctx{env->dpp, null_yield, nullptr};
+      std::string etag = "1";
+      ASSERT_EQ(w->complete(len, etag, &mtime, real_time(), pa, std::nullopt,
+			    real_time(), nullptr, nullptr, nullptr, nullptr,
+			    nullptr, rctx, 0), 0);
+    });
+    t.join();
+    ASSERT_FALSE(HasFatalFailure());
+  }
+  const std::string staging = ".multipart_" + objname + ".abcdef";
+  ASSERT_EQ(owned(staging).err, 0) << "the upload was not staged";
+
+  auto lc_abort = [&](const rgw_user& for_whom) {
+    int ret = 0;
+    std::thread t([&] {
+      auto u = bucket->get_multipart_upload(objname,
+					    rgw::sal::no_authenticated_user,
+					    "abcdef");
+      u->set_on_behalf_of(rgw_owner{for_whom});
+      ret = u->abort(env->dpp, env->cct.get(), null_yield);
+    });
+    t.join();
+    return ret;
+  };
+
+  const int nret = lc_abort(lifecycle_nobody);
+  EXPECT_EQ(nret, -EACCES) << "work for an owner with no row was not "
+      "refused: " << cpp_strerror(-nret);
+  EXPECT_EQ(owned(staging).err, 0) << "the refused abort removed the upload";
+
+  const int ret = lc_abort(alice);
+  ASSERT_EQ(ret, 0) << "the abort failed: " << cpp_strerror(-ret);
+  EXPECT_EQ(owned(staging).err, -ENOENT) << "the upload stayed";
+}
+
+/* Lifecycle's tag read calls get_attr() with no prepare():  it reads as
+ * whom it is for, so posix-strict denies it an object the filesystem
+ * denies that identity, and one with no row is refused -- where the
+ * read used to run as the gateway, which reads everything. */
+TEST_F(NSFSImpersonatedRenameTest, ALifecycleTagReadRunsAsWhomItIsFor)
+{
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "src/k", "alice's"));
+  ASSERT_EQ(set_model("posix-strict"), 0);
+  auto lc_read = [this](const rgw_user& for_whom) {
+    int ret = 0;
+    std::thread t([&] {
+      auto obj = bucket->get_object(rgw_obj_key("src/k"));
+      auto rop = obj->get_read_op(rgw::sal::no_authenticated_user);
+      rop->params.on_behalf_of = rgw_owner{for_whom};
+      bufferlist bl;
+      ret = rop->get_attr(env->dpp, RGW_ATTR_ETAG, bl, null_yield);
+    });
+    t.join();
+    return ret;
+  };
+
+  const int aret = lc_read(alice);
+  EXPECT_EQ(aret, 0) << "the owner could not read its own object's "
+      "attributes: " << cpp_strerror(-aret);
+
+  const int nret = lc_read(lifecycle_nobody);
+  EXPECT_EQ(nret, -EACCES) << "work for an owner with no row was not "
+      "refused: " << cpp_strerror(-nret);
+
+  const int bret = lc_read(bob);
+  EXPECT_NE(bret, 0) << "posix-strict read another identity's object's "
+      "attributes, as the gateway would";
+}
+
 
 /* NooBaa's attribute names.
  *
@@ -2594,8 +6143,34 @@ TEST(NooBaaXattr, NamesRoundTrip)
   }
 }
 
+/* PrefixedXattrStrategy -- what shared and strong both resolve to --
+ * returns the owner the recorded ACL holds.  A file written by cp or
+ * over NFS has none, for which it returns -ENODATA and the caller gives
+ * it the bucket's owner;  an ACL that will not decode returns -EIO
+ * (DECISIONS.md 2026-10-11). */
+TEST(PrefixedXattr, OwnerIsRecordedOrNone)
+{
   nsfs::PrefixedXattrStrategy prefixed;
+  const rgw::sal::Attrs none;
+
+  ACLOwner owner;
+  EXPECT_EQ(prefixed.object_owner(none, owner), -ENODATA)
+      << "a file with no ACL did not read as recording no owner";
+
+  rgw::sal::Attrs with;
+  RGWAccessControlPolicy policy;
+  policy.create_default(rgw_user("someone"), "Someone");
+  bufferlist bl;
+  policy.encode(bl);
+  with[RGW_ATTR_ACL] = bl;
   ASSERT_EQ(prefixed.object_owner(with, owner), 0);
+  EXPECT_EQ(owner.id, rgw_owner(rgw_user("someone")));
+
+  rgw::sal::Attrs broken;
+  broken[RGW_ATTR_ACL].append("not an acl");
+  EXPECT_EQ(prefixed.object_owner(broken, owner), -EIO)
+      << "an unreadable ACL read as no owner recorded";
+}
 
 /* Three results, and the third is the one worth pinning.  An ACL has
  * nowhere to go, so the name is empty and the write path skips it --
@@ -2655,9 +6230,17 @@ TEST(NooBaaXattr, LeavesNooBaaStructuredAttributesAlone)
   EXPECT_FALSE(nb.parse_disk_name("trusted.something", key));
 }
 
+/* NooBaa's format records no owner.  NooBaa returns the bucket's
+ * `owner_account` for every object, so this returns -ENODATA and the
+ * caller supplies the bucket's owner -- never the file's uid
+ * (DECISIONS.md 2026-10-11). */
+TEST(NooBaaXattr, RecordsNoOwner)
+{
   nsfs::NooBaaXattrStrategy nb;
   Attrs none;
   ACLOwner owner;
+  EXPECT_EQ(nb.object_owner(none, owner), -ENODATA);
+}
 
 /* Never counted.  The trailing NUL is an RGW-side accident the nsfs
  * writers append;  nothing in NooBaa's tree carries one. */
@@ -3237,6 +6820,103 @@ TEST_F(NSFSStridedBucketTest, StridedOversizedPartDiverts)
       << "part 2's overrun reached part 3's region";
 }
 
+/* The impersonated fixture with the strided staging layout forced, as
+ * NSFSStridedBucketTest forces it, so an oversized part diverts. */
+class NSFSImpersonatedStridedTest : public NSFSImpersonatedRenameTest {
+public:
+  std::optional<bool> shares_extents() const override { return false; }
+};
+
+/* copy_range() moves bytes between descriptors already opened, so a copy runs
+ * as whoever opened them:  the identity reaches the copies only through
+ * set_identity() calls in NSFSMultipartWriter, far from them (call-site table
+ * §9.2, row 1).  So every file a strided upload makes -- the shared file, part
+ * 2's own file after its divert, and the object assembly produces -- is the
+ * uploader's;  and the same upload by another identity makes them that
+ * identity's, so the first case discriminates.  Not the gateway as the other
+ * case:  under impersonation a part with no authenticated user is denied
+ * (`RGW_NSFS_VADE_MECUM.md` §12, "No authenticated user means refuse").  The
+ * upload's `.meta` is the gateway's by design -- staging stays its -- so the
+ * data files are named rather than listed. */
+TEST_F(NSFSImpersonatedStridedTest, EveryFileAStridedUploadMakesIsTheUploaders)
+{
+  ASSERT_STREQ(driver->get_mpu_strategy()->name(), "rgw-strided");
+  const size_t stride = 64;
+  const uint64_t diverts = driver->mpu_diverts_seen();
+
+  /* unversioned:  the fixture versions its bucket, and then the second
+   * uploader's completion needs the bucket root's .versions, which the
+   * first made its own at 0770 -- the cross-identity case, not the
+   * copy this asserts */
+  std::thread unversion([&] {
+    bucket->get_info().flags &= ~BUCKET_VERSIONED;
+    ASSERT_EQ(bucket->put_info(env->dpp, false, real_time(), null_yield), 0);
+  });
+  unversion.join();
+  ASSERT_FALSE(HasFatalFailure());
+
+  /* one upload of three parts, the second oversized, as `who`, each
+   * step on a thread of its own, as put_as() */
+  auto upload_as = [&](const rgw_user& who, uid_t uid,
+		       const std::string& objname) {
+    auto upload = bucket->get_multipart_upload(objname, who, "c0ffee");
+    rgw_placement_rule placement;
+    std::map<int, std::string> etags;
+    std::thread t([&] {
+      Attrs attrs;
+      ASSERT_EQ(upload->init(env->dpp, null_yield, acl_owner, placement,
+			     attrs), 0);
+      const std::string bodies[] = {std::string(stride, 'a'),
+				    std::string(stride + 17, 'b'),
+				    std::string(stride, 'c')};
+      for (int n = 1; n <= 3; ++n) {
+	auto w = upload->get_writer(env->dpp, null_yield, nullptr, acl_owner,
+				    &placement, n, std::to_string(n), who);
+	ASSERT_EQ(w->prepare(null_yield), 0) << "part " << n;
+	bufferlist bl;
+	bl.append(bodies[n - 1]);
+	const size_t len = bl.length();
+	ASSERT_EQ(w->process(std::move(bl), 0), 0);
+	ASSERT_EQ(w->process({}, len), 0);
+	ceph::real_time mtime;
+	Attrs pa;
+	req_context rctx{env->dpp, null_yield, nullptr};
+	std::string etag = std::to_string(n);
+	ASSERT_EQ(w->complete(len, etag, &mtime, real_time(), pa, std::nullopt,
+			      real_time(), nullptr, nullptr, nullptr, nullptr,
+			      nullptr, rctx, 0), 0) << "part " << n;
+	etags[n] = etag;
+      }
+    });
+    t.join();
+    ASSERT_FALSE(HasFatalFailure());
+
+    /* the shared file and part 2's own file, which divert() copied
+     * into, are the uploader's, before completion */
+    const std::string staging = ".multipart_" + objname + ".c0ffee/";
+    const auto* mpu = driver->get_mpu_strategy();
+    for (const std::string& name : {*mpu->shared_name(stride),
+				    mpu->part_name(2)}) {
+      const Owned o = owned(staging + name);
+      ASSERT_EQ(o.err, 0) << name << " is missing";
+      EXPECT_EQ(o.uid, uid) << name << " is not its uploader's";
+    }
+
+    /* and the object assembly makes from them */
+    std::thread c([&] {
+      EXPECT_EQ(complete_mp(bucket.get(), upload.get(), owner, objname,
+			    etags), 0);
+    });
+    c.join();
+    EXPECT_EQ(owned(objname).uid, uid)
+	<< "the assembled object is not its uploader's";
+  };
+
+  ASSERT_NO_FATAL_FAILURE(upload_as(alice, owner_uid, "mp"));
+  EXPECT_GT(driver->mpu_diverts_seen(), diverts)
+      << "part 2 did not divert, so divert()'s copy was not exercised";
+  ASSERT_NO_FATAL_FAILURE(upload_as(bob, other_uid, "mp-bob"));
+}
 
 /* The strided layout under the writeback cache policy.
  *
@@ -3539,6 +7219,13 @@ TEST_F(NSFSNooBaaBucketTest, AStrayAttributeOnTheBucketDirectoryIsNotBucketState
 }
 
 
+/* NooBaa's temp directory is content only while it holds something.
+ *
+ * `.noobaa-nsfs_<bucket id>` outlives every upload:  NooBaa makes it,
+ * and `multipart-uploads/` inside it, and leaves both behind when the
+ * last upload completes.  Matched by name alone it counted as an upload
+ * in flight forever, and a bucket that listed empty answered
+ * BucketNotEmpty. */
 TEST_F(NSFSNooBaaBucketTest, AnEmptyTempDirectoryDoesNotKeepABucket)
 {
   sf::create_directories(bucket_path() / ".noobaa-nsfs_6ace0000aaaabbbbccccdddd"
@@ -3550,10 +7237,32 @@ TEST_F(NSFSNooBaaBucketTest, AnEmptyTempDirectoryDoesNotKeepABucket)
   EXPECT_FALSE(sf::exists(bucket_path()));
 }
 
+/* An upload in progress does not keep its bucket, and deleting the
+ * bucket aborts it, as RADOS does:  check_bucket_empty() counts only
+ * the objects' namespace and RadosBucket::remove() aborts the uploads.
+ * One NooBaa started, carried through adoption. */
+TEST_F(NSFSNooBaaBucketTest, DeletingABucketAbortsTheUploadTheyStarted)
+{
   TestTree tree;
   make_noobaa_tree(bucket_path(), TreeShape::with_upload, tree);
   ASSERT_TRUE(sf::is_directory(tree.staging));
+  /* adopted first:  a bucket not taken over takes no DeleteBucket */
   auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_SHARED), 0);
+
+  std::vector<std::unique_ptr<rgw::sal::MultipartUpload>> uploads;
+  std::string marker;
+  bool truncated = false;
+  ASSERT_EQ(bucket->list_multiparts(env->dpp, "", marker, "", 10, uploads,
+				    nullptr, &truncated, null_yield,
+				    rgw::sal::no_authenticated_user), 0);
+  ASSERT_EQ(uploads.size(), 1u) << "nothing to abort:  no upload listed";
+
+  EXPECT_EQ(b->check_empty(env->dpp, null_yield), 0)
+      << "an upload in progress kept its bucket";
+  EXPECT_EQ(bucket->remove(env->dpp, false, null_yield, rgw::sal::no_authenticated_user), 0);
+  EXPECT_FALSE(sf::exists(bucket_path()));
+}
 
 /* A base bucket whose state is where NooBaa keeps it.
  *
@@ -3686,6 +7395,10 @@ TEST_F(NSFSNooBaaStateTest, NsfsStateWinsOverNooBaas)
 
   nsfs::PrefixedXattrStrategy prefixed;
   const std::string disk = prefixed.disk_name(RGW_ATTR_ACL);
+  EXPECT_EQ(policy.get_owner().id, bucket->get_info().owner)
+      << "the recorded owner is not the bucket's";
+  EXPECT_NE(to_string(policy.get_owner().id), std::to_string(st.st_uid))
+      << "the file's uid was recorded as its S3 owner";
 
 /* A base bucket loaded the way a request loads it lists in NooBaa's format.
  *
@@ -3740,6 +7453,8 @@ TEST_F(NSFSNooBaaBucketTest, ALoadedBaseBucketListsInNooBaaFormat)
     found = true;
     EXPECT_NE(e.meta.owner, "unknown")
 	<< "the listing read their object with our strategy";
+    EXPECT_EQ(e.meta.owner, to_string(fresh->get_info().owner))
+	<< "an object recording no owner did not list as its bucket's";
   }
   EXPECT_TRUE(found) << "the sideloaded object was not listed";
 
@@ -4522,8 +8237,89 @@ TEST_F(NSFSNooBaaStateTest, AnUnreadableRecordFailsClosed)
       << "a versioning value that is none of theirs was accepted";
 }
 
+/* Every listing row reports the same owner for an object nothing wrote
+ * through RGW.
+ *
+ * Such an object records no owner and is its bucket's owner's
+ * (DECISIONS.md 2026-10-11).  The version entry once listed a
+ * different owner from the object's own -- `unknown` beside an owner --
+ * so both are asserted, and asserted equal.
+ *
+ * Two controls, because without them the comparison could not fail.
+ * The first asserts the files carry no extended attribute at all, so
+ * no recorded ACL can be supplying the owner.  The second asserts the
+ * owner is the bucket's and not the file's uid, which is what this
+ * listed before. */
+TEST_F(NSFSNooBaaStateTest, EveryListingRowAgreesOnASideloadedOwner)
+{
   remove_rgw_bucket_info();
   write_nb_record("ENABLED");
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
+  ASSERT_TRUE(bucket->get_info().versioned())
+      << "the version rows are only walked on a versioned bucket";
+
+  const sf::path leaf = bucket_path() / "external.txt";
+  const sf::path vdir = bucket_path() / ".versions";
+  sf::create_directories(vdir);
+  write_file(leaf, "sideloaded content");
+  /* a real version-id suffix, not _null:  the current object with no
+   * version-id attribute already reads as the null version, so a
+   * .versions/ entry named _null would collide with it on the cache
+   * key (name '\0' instance) and one row would replace the other. */
+  const std::string vent = "external.txt_mtime-zzzz-ino-zzzz";
+  write_file(vdir / vent, "an older sideloaded body");
+
+  /* control one:  neither file carries a user.* attribute, so no
+   * recorded ACL can be supplying the owner.  Only user.* is tested
+   * because the kernel supplies security.selinux on every file here,
+   * and that is not a name any strategy reads. */
+  auto no_user_xattrs = [](const sf::path& f) {
+    char names[4096];
+    ssize_t len = ::listxattr(f.c_str(), names, sizeof(names));
+    if (len < 0) {
+      return std::string{"listxattr failed on "} + f.string();
+    }
+    for (ssize_t i = 0; i < len; i += (ssize_t)strlen(names + i) + 1) {
+      if (std::string_view(names + i).starts_with("user.")) {
+        return std::string{names + i} + " on " + f.string();
+      }
+    }
+    return std::string{};
+  };
+  ASSERT_EQ(no_user_xattrs(leaf), "");
+  ASSERT_EQ(no_user_xattrs(vdir / vent), "");
+
+  /* control two:  the owner is the bucket's, not the uid */
+  const std::string expect = to_string(bucket->get_info().owner);
+  ASSERT_NE(expect, std::to_string(::getuid()));
+
+  rgw::sal::Bucket::ListParams params;
+  params.list_versions = true;
+  rgw::sal::Bucket::ListResults results;
+  ASSERT_EQ(bucket->list(env->dpp, params, 1000, results, null_yield), 0);
+
+  std::string current_owner, version_owner;
+  for (const auto& e : results.objs) {
+    if (e.key.name != "external.txt") {
+      continue;
+    }
+    const bool is_noncurrent =
+        (e.flags & rgw_bucket_dir_entry::FLAG_VER) &&
+        !(e.flags & rgw_bucket_dir_entry::FLAG_CURRENT);
+    if (is_noncurrent) {
+      version_owner = e.meta.owner;
+    } else {
+      current_owner = e.meta.owner;
+    }
+  }
+  ASSERT_FALSE(current_owner.empty()) << "no row for the object itself";
+  ASSERT_FALSE(version_owner.empty()) << "no row for its version";
+
+  EXPECT_EQ(current_owner, expect) << "the object's own row";
+  EXPECT_EQ(version_owner, expect) << "the version row under .versions/";
+  EXPECT_EQ(current_owner, version_owner)
+      << "two rows for one object disagree about who owns it";
+}
 
 /* An upload NooBaa started, enumerated by us.
  *
@@ -5119,10 +8915,24 @@ TEST_F(NSFSUpgradeTest, ABaseBucketWritesItsStateAsRGWAttributes)
   nb_object("photo.jpg", "image/jpeg");
   nb_delete_marker("gone.bin", vid);
 
+/* Conversion records the bucket's owner on a version, as on any object
+ * that records none (DECISIONS.md 2026-10-11).  A delete marker needs
+ * this too -- RGW emits an <Owner> for one. */
   nb_version("doc.txt", vid, "text/plain");
   nb_delete_marker("doc.txt", dmid);
 
+    char buf[4096];
     ssize_t len = ::getxattr(p.c_str(), "user.nsfs:rgw.acl", buf, sizeof(buf));
+    ASSERT_GT(len, 0);
+    bufferlist bl;
+    bl.append(buf, len);
+    RGWAccessControlPolicy policy;
+    auto it = bl.cbegin();
+    ASSERT_NO_THROW(policy.decode(it));
+    EXPECT_EQ(policy.get_owner().id, bucket->get_info().owner)
+	<< p << " records an owner that is not the bucket's";
+  }
+}
   nb_version("only.bin", vid, "text/plain");
 
 /* No marker is bucket metadata, so none reaches the S3 attribute set
@@ -5346,6 +9156,44 @@ static std::vector<std::string> listing_rows(rgw::sal::Bucket* bucket,
 	e.meta.storage_class, e.flags, e.exists));
   }
   return rows;
+}
+
+
+/* An upload in progress does not keep its bucket, and deleting the
+ * bucket aborts it, as RADOS does (check_bucket_empty(),
+ * RadosBucket::remove()).  The control is the same bucket with an
+ * object:  refused, and the refusal leaves the upload in place. */
+TEST_F(NSFSBucketTest, DeletingABucketAbortsItsUploads)
+{
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  std::unique_ptr<rgw::sal::MultipartUpload> upload =
+    bucket->get_multipart_upload(testname + "-mp", rgw::sal::no_authenticated_user, "c0ffee");
+  rgw_placement_rule placement;
+  Attrs attrs;
+  ASSERT_EQ(upload->init(env->dpp, null_yield, acl_owner, placement, attrs),
+	    0);
+  auto count_uploads = [&]() -> size_t {
+    std::vector<std::unique_ptr<rgw::sal::MultipartUpload>> uploads;
+    std::string marker;
+    bool truncated = false;
+    EXPECT_EQ(bucket->list_multiparts(env->dpp, "", marker, "", 10, uploads,
+				      nullptr, &truncated, null_yield,
+				      rgw::sal::no_authenticated_user), 0);
+    return uploads.size();
+  };
+  ASSERT_EQ(count_uploads(), 1u);
+
+  write_file(bucket_path() / "o00", "o00");
+  EXPECT_EQ(b->check_empty(env->dpp, null_yield), -ENOTEMPTY)
+      << "the control:  an object did not count as content";
+  EXPECT_EQ(bucket->remove(env->dpp, false, null_yield, rgw::sal::no_authenticated_user), -ENOTEMPTY);
+  EXPECT_EQ(count_uploads(), 1u) << "a refused delete aborted the upload";
+  sf::remove(bucket_path() / "o00");
+
+  EXPECT_EQ(b->check_empty(env->dpp, null_yield), 0)
+      << "an upload in progress kept its bucket";
+  EXPECT_EQ(bucket->remove(env->dpp, false, null_yield, rgw::sal::no_authenticated_user), 0);
+  EXPECT_FALSE(sf::exists(bucket_path()));
 }
 
 
@@ -5777,10 +9625,358 @@ TEST(NooBaaSchema, ObjectAttributesAgreeWithWhatNooBaaWrote)
 
 TEST_F(NooBaaKeysTest, NooBaaKeyOpensNooBaaSecret)
 {
+  EXPECT_EQ(got.fs_backend, "GPFS");
+}
+/* A write's result is its own, whatever other threads do on the
+ * connection meanwhile.
+ *
+ * The connection is dbstore's, shared by every thread, and a write's
+ * result is read after its step:  sqlite3_changes() for a placement
+ * insert and an abandoned-row removal, sqlite3_extended_errcode() for a
+ * duplicate.  Read as a separate call, either can return another
+ * thread's statement's instead.  On rhel97-gpfs a bucket create was
+ * answered 409 this way while its row went in, and the row stayed with
+ * no directory.  Three kinds of thread run together:  inserts, each
+ * then repeated as a duplicate;  removals of a row that is not there,
+ * which change nothing;  and abandoned rows written and removed, which
+ * change one.  Every result must be the one its own statement earned. */
+TEST_F(NSFSIdentityDBTest, AWritesResultIsItsOwnUnderConcurrency)
+{
+  /* On tmpfs, where one exists:  on a disk each write waits for its
+   * commit to sync, few statements land between a step and its read,
+   * and the race goes unseen. */
+  const sf::path dir = sf::is_directory("/dev/shm")
+    ? sf::path{"/dev/shm"} / ("nsfs-identity-" + std::to_string(::getpid()))
+    : bp / "identity-concurrency";
+  sf::create_directories(dir);
+  auto remove_dir = make_scope_guard([&dir] { sf::remove_all(dir); });
+  auto sdb = std::make_unique<nsfs::IdentityDB>((dir / "identity").string(),
+						 env->cct.get());
+  ASSERT_EQ(sdb->Initialize("", -1), 0);
+
+  constexpr int inserters = 8;
+  constexpr int removers = 8;
+  constexpr int abandoners = 4;
+  constexpr int each = 200;
+  std::atomic<bool> stop{false};
+  std::atomic<int> wrong_insert{0};
+  std::atomic<int> wrong_duplicate{0};
+  std::atomic<int> wrong_removal{0};
+  std::atomic<int> wrong_absent_removal{0};
+  std::atomic<int> failed{0};
+
+  std::vector<std::thread> ts;
+  for (int t = 0; t < inserters; ++t) {
+    ts.emplace_back([&, t] {
+      for (int i = 0; i < each; ++i) {
+	nsfs::BucketPlacement bp;
+	bp.owner = "RGW00000000000000001";
+	bp.bucket_name = "p" + std::to_string(t) + "-" + std::to_string(i);
+	bp.path = "/ibm/gpfs/fs1/" + bp.bucket_name;
+	if (sdb->insert_bucket_placement(env->dpp, bp) != 0) {
+	  ++wrong_insert;
+	}
+	if (sdb->insert_bucket_placement(env->dpp, bp) != -EEXIST) {
+	  ++wrong_duplicate;
+	}
+      }
+    });
+  }
+  std::vector<std::thread> rivals;
+  for (int t = 0; t < removers; ++t) {
+    rivals.emplace_back([&, t] {
+      const std::string absent = "absent-" + std::to_string(t);
+      while (!stop.load()) {
+	if (sdb->remove_bucket_placement(env->dpp, absent, "") != 0) {
+	  ++failed;
+	}
+      }
+    });
+  }
+  for (int t = 0; t < abandoners; ++t) {
+    rivals.emplace_back([&, t] {
+      nsfs::AbandonedRecord r;
+      r.noobaa_id = "nb-" + std::to_string(t);
+      r.kind = "bucket";
+      r.name = "abandoned-" + std::to_string(t);
+      r.stage = "not imported";
+      r.reason = "concurrency";
+      r.at = "2026-11-06T00:00:00Z";
+      while (!stop.load()) {
+	if (sdb->put_abandoned(env->dpp, r) != 0) {
+	  ++failed;
+	  return;
+	}
+	if (sdb->remove_abandoned(env->dpp, r.noobaa_id) != 0) {
+	  ++wrong_removal;
+	}
+	if (sdb->remove_abandoned(env->dpp, r.noobaa_id) != -ENOENT) {
+	  ++wrong_absent_removal;
+	}
+      }
+    });
+  }
+  for (auto& t : ts) {
+    t.join();
+  }
+  stop = true;
+  for (auto& t : rivals) {
+    t.join();
+  }
+
+  EXPECT_EQ(failed.load(), 0);
+  EXPECT_EQ(wrong_insert.load(), 0)
+      << "inserts that went in returned another statement's result";
+  EXPECT_EQ(wrong_duplicate.load(), 0)
+      << "duplicates returned another statement's error code";
+  EXPECT_EQ(wrong_removal.load(), 0)
+      << "removals of a row returned another statement's count";
+  EXPECT_EQ(wrong_absent_removal.load(), 0)
+      << "removals of no row returned another statement's count";
+
+  for (int t = 0; t < inserters; ++t) {
+    for (int i = 0; i < each; ++i) {
+      const std::string name = "p" + std::to_string(t) + "-"
+	+ std::to_string(i);
+      nsfs::BucketPlacement got;
+      ASSERT_EQ(sdb->get_bucket_placement(env->dpp, name, "", got), 0)
+	  << name << " has no row";
+    }
+  }
+}
 TEST_F(NooBaaPlanTest, AStoreNooBaaToolsWroteMapsCleanly)
 {
+/* An nsswitch-resolved account whose name nsswitch does not know is imported as
+ * NooBaa's record stood, and named in the result, so the operator
+ * learns of it at the import rather than from a refused request.  The
+ * control is the account whose name resolves, which must not be named. */
+TEST_F(NooBaaImportTest, AnUnresolvedNameIsReported)
+{
+  FakeDirectory dir;
+  dir.names["knownname"] = {70101, 100};
+  driver->get_identity_db()->nsswitch_cache().set_lookup_for_test(dir.fn());
+
+  auto dn_account = [] (const char* id, const char* name, const char* key,
+		     const char* dn) {
+    std::string j = NB_ACCOUNT_PLAIN;
+    auto sub = [&j] (const std::string& from, const std::string& to) {
+      const auto at = j.find(from);
+      ASSERT_NE(at, std::string::npos) << from;
+      j.replace(at, from.size(), to);
+    };
+    sub("6ac7cb27fd4af356919110a3", id);
+    sub("\"name\": \"interchange\"", std::string("\"name\": \"") + name
+	+ "\"");
+    sub("\"email\": \"interchange\"", std::string("\"email\": \"") + name
+	+ "\"");
+    sub("INTERCHANGEACCESSKEY", key);
+    sub("\"uid\": 1000,\n    \"gid\": 1000,",
+	std::string("\"distinguished_name\": \"") + dn + "\",");
+    return j;
+  };
+  const std::string known = dn_account("6ac7cb27fd4af356919110b1",
+					"ix-known", "INTERCHANGEKNOWNKEY1",
+					"knownname");
+  const std::string unknown = dn_account("6ac7cb27fd4af356919110b2",
+					  "ix-unknown", "INTERCHANGEUNKNOWNK1",
+					  "unknownname");
+  add_identity("6ac7cb27fd4af356919110b1", known.c_str());
+  add_identity("6ac7cb27fd4af356919110b2", unknown.c_str());
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.identity_rows, 2u) << "an unresolved name was not written";
+  ASSERT_EQ(result.unresolved_names.size(), 1u);
+  EXPECT_NE(result.unresolved_names[0].find("unknownname"),
+	    std::string::npos) << result.unresolved_names[0];
+}
+
+/* I8.  A store whose config.json has NooBaa's dynamic groups on is
+ * refused by a gateway with rgw_nsfs_dynamic_supplemental_groups off:
+ * its list-less accounts would lose the groups the site gives them.
+ * Nothing is written.  The control is the gateway with the switch on,
+ * which imports it, and reports a list-less account whose uid nsswitch
+ * does not know. */
+TEST_F(NooBaaImportTest, DynamicGroupsMustMatchTheStore)
+{
+  FakeDirectory dir;
+  dir.users[1000] = {"known", 1000};
+  dir.install(driver->get_identity_db()->nsswitch_cache());
+
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  std::string other = NB_ACCOUNT_PLAIN;
+  auto sub = [&other] (const std::string& from, const std::string& to) {
+    const auto at = other.find(from);
+    ASSERT_NE(at, std::string::npos) << from;
+    other.replace(at, from.size(), to);
+  };
+  sub("6ac7cb27fd4af356919110a3", "6ac7cb27fd4af356919110c1");
+  sub("\"name\": \"interchange\"", "\"name\": \"ix-nouser\"");
+  sub("\"email\": \"interchange\"", "\"email\": \"ix-nouser\"");
+  sub("INTERCHANGEACCESSKEY", "INTERCHANGENOUSERK01");
+  sub("\"uid\": 1000,\n    \"gid\": 1000,", "\"uid\": 70199,\n    \"gid\": 70199,");
+  add_identity("6ac7cb27fd4af356919110c1", other.c_str());
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+  write_file(store + "/config.json",
+	     R"({"NSFS_ENABLE_DYNAMIC_SUPPLEMENTAL_GROUPS": true})");
+
+  driver->get_identity_db()->nsswitch_cache().override_dynamic_groups(false);
+  EXPECT_LT(run(), 0) << "a store with dynamic groups on was imported "
+			 "by a gateway with them off";
+  EXPECT_EQ(result.identity_rows, 0u) << "the refusal wrote rows";
+  ASSERT_FALSE(result.failures.empty());
+
+  driver->get_identity_db()->nsswitch_cache().override_dynamic_groups(true);
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.identity_rows, 2u);
+  ASSERT_EQ(result.unresolved_uids.size(), 1u);
+  EXPECT_NE(result.unresolved_uids[0].find("70199"), std::string::npos)
+      << result.unresolved_uids[0];
+}
+  /* NooBaa's id, recorded against the account it became */
+  std::string owner;
+  EXPECT_EQ(owner, e->account_id);
+
+  /* the identity row, keyed on the account */
+  nsfs::Identity row;
+  ASSERT_EQ(driver->get_identity_db()->get_identity(
+		env->dpp, e->account_id, row), 0);
+  std::string owner;
+  ASSERT_EQ(driver->get_identity_db()->get_owner_by_noobaa_id(
+		env->dpp, "6ac7cb27fd4af356919110a3", owner), 0);
 TEST_F(NooBaaImportTest, ARenameInNooBaaIsStillTheSameIdentity)
 {
+  std::string owner;
+  ASSERT_EQ(driver->get_identity_db()->get_owner_by_noobaa_id(
+		env->dpp, "6ac7cb27fd4af356919110a3", owner), 0);
+  EXPECT_EQ(owner, id);
+}
+  std::string owner;
+  ASSERT_EQ(driver->get_identity_db()->get_owner_by_noobaa_id(
+		env->dpp, "6ac7d213cac521f05aac9fb4", owner), 0);
+  EXPECT_EQ(owner, RGW_USER_ANON_ID);
+  EXPECT_EQ(result.identity_rows, 1u) << "an account row too many or few";
+  EXPECT_EQ(result.user_rows, 1u) << "the IAM user's own row was not written";
+
+  const std::string account = entry("interchange")->account_id;
+  /* the account's row is the account's, not overwritten by the
+   * member -- which is what keying every identity on the account did */
+  ASSERT_EQ(driver->get_identity_db()->get_identity(
+		env->dpp, account, row), 0);
+  EXPECT_EQ(row.uid, 1000u) << "the member's copy replaced the account's";
+  /* and the member's is its own NooBaa tuple, not a copy of the
+   * account's */
+  ASSERT_EQ(driver->get_identity_db()->get_identity(
+		env->dpp, user->get_id().to_str(), row), 0)
+      << "the member's own row was not written";
+  EXPECT_EQ(row.uid, 1500u) << "the member's row is not its NooBaa tuple";
+
+  /* which it runs as is the override's */
+  auto* db = driver->get_identity_db();
+  nsfs::Credentials cred;
+  db->force_user_identity_override(false);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, user->get_id(),
+				      user->get_info().account_id, cred, null_yield), 0);
+  EXPECT_EQ(cred.uid, 1000u) << "without the override it is not the account";
+  db->force_user_identity_override(true);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, user->get_id(),
+				      user->get_info().account_id, cred, null_yield), 0);
+  EXPECT_EQ(cred.uid, 1500u) << "under the override it is not its own row";
+  db->force_user_identity_override(std::nullopt);
+
+  /* both ids recorded, each against what it became */
+  std::string owner;
+  ASSERT_EQ(driver->get_identity_db()->get_owner_by_noobaa_id(
+		env->dpp, "6ac7cb27fd4af356919110a3", owner), 0);
+  EXPECT_EQ(owner, account);
+  ASSERT_EQ(driver->get_identity_db()->get_owner_by_noobaa_id(
+		env->dpp, "u1", owner), 0);
+  EXPECT_EQ(owner, to_string(rgw_owner{user->get_id()}));
+
+  /* the drift, named */
+  ASSERT_EQ(plan.drift.size(), 1u);
+  EXPECT_NE(plan.drift[0].find("a-user"), std::string::npos) << plan.drift[0];
+  EXPECT_NE(plan.drift[0].find("uid/gid"), std::string::npos) << plan.drift[0];
+  EXPECT_EQ(plan.drift[0].find("new_buckets_path"), std::string::npos)
+      << "a field that matches was reported:  " << plan.drift[0];
+  EXPECT_NE(plan.drift[0].find("rgw_nsfs_user_identity_override"),
+	    std::string::npos)
+      << "the report does not name the override:  " << plan.drift[0];
+}
+
+/* A member whose copy matches its account is not drift.
+ *
+ * The control for the report above:  NooBaa copies every field at
+ * creation, so a user nobody changed the account under is the
+ * ordinary case and must say nothing. */
+TEST_F(NooBaaImportTest, AFaithfulCopyIsNotDrift)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  add_identity("u1", R"({"_id":"u1","name":"a-user","email":"u@x",
+    "owner":"6ac7cb27fd4af356919110a3",
+    "nsfs_account_config":{"uid":1000,"gid":1000,
+      "new_buckets_path":"/lv2tb/nsfs-interchange/data/root"},
+    "access_keys":[{"access_key":"USERAAAAAAAAAAAAAAAA",
+      "encrypted_secret_key":"AlSvZsxnqaN+QX3A/wUwFB0kJwM01TDOXKmNFnV51FijvRm3nJgdKQ=="}],
+    "master_key_id":"6ac7cb2751b72219a4bae375"})");
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_TRUE(plan.drift.empty()) << plan.drift[0];
+}
+
+/* Re-planning a store with an IAM user keeps the account's id.
+ *
+ * The regression `36cc060acb7` fixed, in the shape that brought it
+ * back:  while every identity's row was keyed on the account, the IAM
+ * user's write replaced the root's NooBaa id, the root was no longer
+ * found, and a second plan -- the one `adopt_one_bucket()` builds --
+ * minted a new account id.  Every adopted bucket was then owned by an
+ * account no imported user was in. */
+TEST_F(NooBaaImportTest, ReplanningWithAnIamUserKeepsTheAccountId)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  add_identity("u1", R"({"_id":"u1","name":"a-user","email":"u@x",
+    "owner":"6ac7cb27fd4af356919110a3",
+    "nsfs_account_config":{"uid":1000,"gid":1000},
+    "access_keys":[{"access_key":"USERAAAAAAAAAAAAAAAA",
+      "encrypted_secret_key":"AlSvZsxnqaN+QX3A/wUwFB0kJwM01TDOXKmNFnV51FijvRm3nJgdKQ=="}],
+    "master_key_id":"6ac7cb2751b72219a4bae375"})");
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+
+  ASSERT_EQ(run(), 0) << why();
+  const std::string first = entry("interchange")->account_id;
+
+  /* the control:  with nothing to consult, a plan mints afresh, so the
+   * equality below is the lookup and not a coincidence */
+  auto c = read_store();
+  nsfs::ImportPlan fresh;
+  ASSERT_EQ(nsfs::build_import_plan(env->dpp, env->cct.get(), c, fresh), 0);
+  const nsfs::ImportEntry* f = nullptr;
+  for (const auto& e : fresh.entries) {
+    if (e.noobaa_name == "interchange") {
+      f = &e;
+    }
+  }
+  ASSERT_NE(f, nullptr);
+  ASSERT_NE(f->account_id, first);
+
+  nsfs::ImportPlan again;
+  ASSERT_EQ(nsfs::build_import_plan(env->dpp, env->cct.get(), c, again,
+				    driver->get_identity_db()), 0);
+  for (const auto& e : again.entries) {
+    EXPECT_EQ(e.account_id, first)
+	<< e.noobaa_name << " was planned into a different account";
+  }
+}
+  /* The gateway set as a deployment adopting this store sets it:  the
+   * import refuses a store with NooBaa's dynamic groups on when
+   * rgw_nsfs_dynamic_supplemental_groups is off (I8), and the stand-up
+   * writes one under impersonation. */
+  driver->get_identity_db()->nsswitch_cache().override_dynamic_groups(
+    c.settings.dynamic_supplemental_groups);
+  EXPECT_TRUE(r.unresolved_names.empty()) << r.unresolved_names.front();
+  EXPECT_TRUE(r.unresolved_uids.empty()) << r.unresolved_uids.front();
   write_nb_record("DISABLED");
 
   write_nb_record("DISABLED");
@@ -5849,11 +10045,276 @@ TEST_F(NooBaaModeTest, ConversionKeepsTheVersioningNooBaaRecordSupplied)
   remove_rgw_bucket_info();
   write_nb_record("ENABLED");
 
+/* I9:  under rgw_nsfs_user_identity_override a new bucket goes under
+ * its creating user's own new_buckets_path, as NooBaa's CreateBucket
+ * reads the requesting record's;  the bucket is still the account's.
+ * Without the override it goes under the account's, whatever the
+ * user's row says. */
+TEST_F(NSFSPlacedBucketTest, AUsersOwnNewBucketsPathIsUsedUnderTheOverride)
+{
+  auto* db = driver->get_identity_db();
+  const rgw_account_id acct{"RGW88888888888888888"};
+  const sf::path apath = elsewhere() / "acct-path";
+  const sf::path upath = elsewhere() / "user-path";
+  sf::create_directories(apath);
+  sf::create_directories(upath);
+  nsfs::Identity arow;
+  arow.key = acct;
+  arow.new_buckets_path = apath.string();
+  ASSERT_EQ(db->put_identity(env->dpp, arow), 0);
+
+  const rgw_user hal{"", "path-hal"};
+  auto u = std::make_unique<rgw::sal::NSFSUser>(driver.get(), hal);
+  u->get_info().user_id = hal;
+  u->get_info().account_id = acct;
+  u->get_info().display_name = "hal";
+  ASSERT_EQ(u->store_user(env->dpp, null_yield, true, nullptr), 0);
+  nsfs::Identity urow;
+  ASSERT_EQ(db->get_identity(env->dpp, hal.to_str(), urow), 0)
+      << "the user got no copy to move";
+  urow.new_buckets_path = upath.string();
+  ASSERT_EQ(db->put_identity(env->dpp, urow), 0);
+
+  auto create = [&] (const std::string& name) {
+    RGWBucketInfo info;
+    info.bucket.name = name;
+    info.owner = rgw_owner{acct};
+    auto b = driver->get_bucket(info);
+    rgw::sal::Bucket::CreateParams cp;
+    cp.owner = rgw_owner{acct};
+    return b->create(env->dpp, cp, null_yield, rgw_owner{hal});
+  };
+
+  db->force_user_identity_override(false);
+  ASSERT_EQ(create("by-account-row"), 0);
+  EXPECT_TRUE(sf::is_directory(apath / "by-account-row"))
+      << "without the override the account's path did not place it";
+  EXPECT_FALSE(sf::exists(upath / "by-account-row"));
+
+  db->force_user_identity_override(true);
+  ASSERT_EQ(create("by-user-row"), 0);
+  EXPECT_TRUE(sf::is_directory(upath / "by-user-row"))
+      << "under the override the user's own path did not place it";
+  EXPECT_FALSE(sf::exists(apath / "by-user-row"));
+  nsfs::BucketPlacement row;
+  ASSERT_EQ(db->get_bucket_placement(env->dpp, "by-user-row", "", row), 0);
+  EXPECT_EQ(row.owner, to_string(rgw_owner{acct}))
+      << "the user's path was used, but the bucket is the account's";
+
+  /* a request with no authenticated user uses the owner's path */
+  RGWBucketInfo info;
+  info.bucket.name = "by-nobody";
+  info.owner = rgw_owner{acct};
+  auto b = driver->get_bucket(info);
+  rgw::sal::Bucket::CreateParams cp;
+  cp.owner = rgw_owner{acct};
+  ASSERT_EQ(b->create(env->dpp, cp, null_yield,
+		      rgw::sal::no_authenticated_user), 0);
+  EXPECT_TRUE(sf::is_directory(apath / "by-nobody"));
+  db->force_user_identity_override(std::nullopt);
+}
+
+/* A role in an account, for the tests of a role session's new buckets:
+ * created as IAM CreateRole creates one, which gives it its id. */
+static std::string make_account_role(const DoutPrefixProvider* dpp,
+				     rgw::sal::Driver* driver,
+				     const std::string& name,
+				     const rgw_account_id& acct)
+{
+  RGWRoleInfo ri;
+  ri.name = name;
+  ri.path = "/";
+  ri.account_id = acct;
+  ri.trust_policy = R"({"Version":"2012-10-17","Statement":[{"Effect":"Allow",)"
+    R"("Principal":{"AWS":["arn:aws:iam::)" + std::string(acct) +
+    R"(:root"]},"Action":["sts:AssumeRole"]}]})";
+  ri.max_session_duration = RGWRole::SESSION_DURATION_MIN;
+  std::unique_ptr<RGWRole> role = driver->get_role(ri);
+  if (role->create(dpp, "", null_yield) < 0) {
+    return {};
+  }
+  return role->get_info().id;
+}
+
+/* I9:  under rgw_nsfs_role_identity_override a role session's new
+ * bucket goes under the role's own new_buckets_path, as a user's goes
+ * under its own under the user override;  the bucket is still the
+ * account's.  Without the override, and for a role of another account,
+ * it goes under the account's. */
+TEST_F(NSFSPlacedBucketTest, ARolesOwnNewBucketsPathIsUsedUnderTheOverride)
+{
+  auto* db = driver->get_identity_db();
+  const rgw_account_id acct{"RGW77777777777777777"};
+  const rgw_account_id other{"RGW77777777777777778"};
+  const sf::path apath = elsewhere() / "acct-path";
+  const sf::path rpath = elsewhere() / "role-path";
+  sf::create_directories(apath);
+  sf::create_directories(rpath);
+  nsfs::Identity arow;
+  arow.key = acct;
+  arow.new_buckets_path = apath.string();
+  ASSERT_EQ(db->put_identity(env->dpp, arow), 0);
+
+  const std::string mine = make_account_role(env->dpp, driver.get(),
+					     "path-role", acct);
+  const std::string theirs = make_account_role(env->dpp, driver.get(),
+					       "path-role", other);
+  ASSERT_FALSE(mine.empty()) << "the role was not created";
+  ASSERT_FALSE(theirs.empty()) << "the other account's role was not created";
+  for (const auto& id : {mine, theirs}) {
+    nsfs::Identity rrow;
+    rrow.key = nsfs::role_identity_key(id);
+    rrow.new_buckets_path = rpath.string();
+    ASSERT_EQ(db->put_identity(env->dpp, rrow), 0);
+  }
+
+  auto create = [&] (const std::string& name, const std::string& role_id) {
+    RGWBucketInfo info;
+    info.bucket.name = name;
+    info.owner = rgw_owner{acct};
+    auto b = driver->get_bucket(info);
+    rgw::sal::Bucket::CreateParams cp;
+    cp.owner = rgw_owner{acct};
+    const rgw_owner session{rgw_user{"", role_id,
+				     std::string(rgw::sal::role_session_ns)}};
+    return b->create(env->dpp, cp, null_yield, session);
+  };
+
+  db->force_role_identity_override(false);
+  ASSERT_EQ(create("role-off", mine), 0);
+  EXPECT_TRUE(sf::is_directory(apath / "role-off"))
+      << "without the override the account's path did not place it";
+  EXPECT_FALSE(sf::exists(rpath / "role-off"));
+
+  db->force_role_identity_override(true);
+  ASSERT_EQ(create("role-on", mine), 0);
+  EXPECT_TRUE(sf::is_directory(rpath / "role-on"))
+      << "under the override the role's own path did not place it";
+  EXPECT_FALSE(sf::exists(apath / "role-on"));
+  nsfs::BucketPlacement row;
+  ASSERT_EQ(db->get_bucket_placement(env->dpp, "role-on", "", row), 0);
+  EXPECT_EQ(row.owner, to_string(rgw_owner{acct}))
+      << "the role's path was used, but the bucket is the account's";
+
+  ASSERT_EQ(create("role-elsewhere", theirs), 0);
+  EXPECT_TRUE(sf::is_directory(apath / "role-elsewhere"))
+      << "a role of another account placed the account's bucket";
+  EXPECT_FALSE(sf::exists(rpath / "role-elsewhere"));
+
+  /* a role given no identity follows its account */
+  ASSERT_EQ(db->remove_identity(env->dpp, nsfs::role_identity_key(mine)), 0);
+  ASSERT_EQ(create("role-no-row", mine), 0);
+  EXPECT_TRUE(sf::is_directory(apath / "role-no-row"));
+  db->force_role_identity_override(std::nullopt);
+}
 
   auto own = make_bucket("mine");
 
   auto others = driver->get_bucket(info);
   ASSERT_EQ(others->create(env->dpp, cp, null_yield, rgw::sal::no_authenticated_user), 0);
+/* I9:  under rgw_nsfs_user_identity_override the creating user's own
+ * allowlist admits a custom path, as NooBaa checks the requesting
+ * record's;  without it the account's does.  The account allows one
+ * directory and the user another, so each setting admits exactly one. */
+TEST_F(NSFSCustomPathTest, TheUsersOwnAllowlistAdmitsUnderTheOverride)
+{
+  auto* db = driver->get_identity_db();
+  const rgw_account_id acct{"RGW99999999999999999"};
+  const sf::path aroot = elsewhere() / "acct-allowed";
+  const sf::path uroot = elsewhere() / "user-allowed";
+  sf::create_directories(aroot);
+  sf::create_directories(uroot);
+  nsfs::Identity arow;
+  arow.key = acct;
+  arow.custom_bucket_path_allowed_list = aroot.string();
+  ASSERT_EQ(db->put_identity(env->dpp, arow), 0);
+
+  const rgw_user ida{"", "allow-ida"};
+  auto u = std::make_unique<rgw::sal::NSFSUser>(driver.get(), ida);
+  u->get_info().user_id = ida;
+  u->get_info().account_id = acct;
+  u->get_info().display_name = "ida";
+  ASSERT_EQ(u->store_user(env->dpp, null_yield, true, nullptr), 0);
+  nsfs::Identity urow;
+  ASSERT_EQ(db->get_identity(env->dpp, ida.to_str(), urow), 0);
+  urow.custom_bucket_path_allowed_list = uroot.string();
+  ASSERT_EQ(db->put_identity(env->dpp, urow), 0);
+
+  auto create_at = [&] (const std::string& name, const sf::path& at) {
+    env_.set("HTTP_X_NOOBAA_CUSTOM_BUCKET_PATH", at.string());
+    RGWBucketInfo info;
+    info.bucket.name = name;
+    info.owner = rgw_owner{acct};
+    auto b = driver->get_bucket(info);
+    rgw::sal::Bucket::CreateParams cp;
+    cp.owner = rgw_owner{acct};
+    cp.env = &env_;
+    return b->create(env->dpp, cp, null_yield, rgw_owner{ida});
+  };
+
+  db->force_user_identity_override(false);
+  EXPECT_EQ(create_at("off-user", uroot / "off-user"), -EACCES)
+      << "without the override the user's allowlist admitted a path";
+  EXPECT_EQ(create_at("off-acct", aroot / "off-acct"), 0);
+
+  db->force_user_identity_override(true);
+  EXPECT_EQ(create_at("on-acct", aroot / "on-acct"), -EACCES)
+      << "under the override the account's allowlist still admitted";
+  EXPECT_EQ(create_at("on-user", uroot / "on-user"), 0);
+  EXPECT_EQ(row_path("on-user"), (uroot / "on-user").string());
+  db->force_user_identity_override(std::nullopt);
+}
+
+/* I9:  under rgw_nsfs_role_identity_override a role session's own
+ * allowlist admits a custom path, as a user's does under the user
+ * override;  without it the account's does. */
+TEST_F(NSFSCustomPathTest, TheRolesOwnAllowlistAdmitsUnderTheOverride)
+{
+  auto* db = driver->get_identity_db();
+  const rgw_account_id acct{"RGW66666666666666666"};
+  const sf::path aroot = elsewhere() / "acct-allowed";
+  const sf::path rroot = elsewhere() / "role-allowed";
+  sf::create_directories(aroot);
+  sf::create_directories(rroot);
+  nsfs::Identity arow;
+  arow.key = acct;
+  arow.custom_bucket_path_allowed_list = aroot.string();
+  ASSERT_EQ(db->put_identity(env->dpp, arow), 0);
+
+  const std::string role_id = make_account_role(env->dpp, driver.get(),
+						"allow-role", acct);
+  ASSERT_FALSE(role_id.empty()) << "the role was not created";
+  nsfs::Identity rrow;
+  rrow.key = nsfs::role_identity_key(role_id);
+  rrow.custom_bucket_path_allowed_list = rroot.string();
+  ASSERT_EQ(db->put_identity(env->dpp, rrow), 0);
+
+  auto create_at = [&] (const std::string& name, const sf::path& at) {
+    env_.set("HTTP_X_NOOBAA_CUSTOM_BUCKET_PATH", at.string());
+    RGWBucketInfo info;
+    info.bucket.name = name;
+    info.owner = rgw_owner{acct};
+    auto b = driver->get_bucket(info);
+    rgw::sal::Bucket::CreateParams cp;
+    cp.owner = rgw_owner{acct};
+    cp.env = &env_;
+    const rgw_owner session{rgw_user{"", role_id,
+				     std::string(rgw::sal::role_session_ns)}};
+    return b->create(env->dpp, cp, null_yield, session);
+  };
+
+  db->force_role_identity_override(false);
+  EXPECT_EQ(create_at("off-role", rroot / "off-role"), -EACCES)
+      << "without the override the role's allowlist admitted a path";
+  EXPECT_EQ(create_at("off-acct", aroot / "off-acct"), 0);
+
+  db->force_role_identity_override(true);
+  EXPECT_EQ(create_at("on-acct", aroot / "on-acct"), -EACCES)
+      << "under the override the account's allowlist still admitted";
+  EXPECT_EQ(create_at("on-role", rroot / "on-role"), 0);
+  EXPECT_EQ(row_path("on-role"), (rroot / "on-role").string());
+  db->force_role_identity_override(std::nullopt);
+}
       if (std::string_view(q).starts_with("user.nsfs:")) {
   static constexpr uid_t other_uid = 70170;
   row.uid = other_uid;

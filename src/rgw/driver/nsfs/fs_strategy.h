@@ -20,6 +20,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <functional>
 #include <vector>
 
 #include <sys/types.h>
@@ -27,6 +28,8 @@
 #include <boost/container/flat_map.hpp>
 
 #include "gpfs/gpfs.h"
+
+#include "impersonate.h"
 
 class DoutPrefixProvider;
 
@@ -42,6 +45,43 @@ using xattr_map_t = boost::container::flat_map<std::string, std::string>;
 inline constexpr std::string_view TMP_LINK_PREFIX = ".tmp_link_";
 inline constexpr std::string_view UNLINK_TMP_PREFIX = ".unlink_tmp_";
 inline constexpr std::string_view CLONE_PARENT_PREFIX = ".clone_parent.";
+
+/* One attribute of a read_xattrs_as():  its name;  whether its value was
+ * read;  and, if it was, the value or the errno its read failed with
+ * (ERANGE only after the sized retry). */
+struct XattrValue {
+  std::string name;
+  bool read = false;
+  int err = 0;
+  std::string value;
+};
+
+/* An identity's attribute read on the ring (N-D3;  DECISIONS
+ * 2026-11-10).  The gateway lists `fd`'s names, which needs no
+ * permission;  `want` picks the names whose values are read, and each is
+ * read under `id`'s personality, a ring's chain room to a submission
+ * (posix_uring_chain_room()).  Every
+ * listed name is in `out`, in the listing's order.
+ *
+ *   0       `out` filled
+ *   -ENXIO  nothing read and `out` untouched:  no identity, or the ring
+ *           cannot run it as `id`.  The caller reads on the pool.
+ *   -errno  the listing failed
+ */
+int read_xattrs_as(const DoutPrefixProvider* dpp, int fd,
+		   const FSIdentity& id, optional_yield y,
+		   const std::function<bool(const std::string&)>& want,
+		   std::vector<XattrValue>& out);
+
+/* `attrs` written to `fd` with fsetxattr(2):  as `id` on the ring, up to
+ * a ring's chain room to a submission, or on the pool when the ring cannot
+ * take them;  as the gateway when `id` is inactive.  Every entry is
+ * written that can be, and the first error is returned (DECISIONS
+ * 2026-11-10).  POSIXStrategy::set_xattrs(), and the raw attribute
+ * writes of the SAL. */
+int set_xattrs_as(const DoutPrefixProvider* dpp, int fd,
+		  const xattr_map_t& attrs, optional_yield y,
+		  const FSIdentity& id);
 
 /* Bounds on the I/O size FSStrategy::copy_range() uses when it has to fall
  * back to a buffered copy.  See preferred_io_size(). */
@@ -104,15 +144,33 @@ protected:
   VersionLockHandle() = default;
 };
 
+/* What one copy is asked to do by the hints set for the user it runs
+ * for:  the `inject-buffered-copy` driver hint, which the driver keeps
+ * by user and resolves into this, so the strategy never sees who the
+ * user is.  `buffered_bytes` is where the buffered fallback counts
+ * what it moves, and null counts nowhere. */
+struct CopyHints {
+  bool force_buffered = false;
+  std::atomic<uint64_t>* buffered_bytes = nullptr;
+};
+
 class FSStrategy {
 public:
   virtual ~FSStrategy() = default;
 
   /* atomically publish a temp file (O_TMPFILE fd) to a directory entry,
    * replacing any existing entry with that name */
+  /* `id` is the identity the operation runs as.  Publishing a
+   * temp file hardlinks it, and with fs.protected_hardlinks set a
+   * caller may only link a file it owns or can read and write --
+   * so a file created under an identity must be published under
+   * the same one, whatever the directory permits. */
   virtual int link_temp_file(int temp_fd, int dir_fd,
                              const std::string& name,
-                             const DoutPrefixProvider* dpp) = 0;
+                             const DoutPrefixProvider* dpp,
+                             optional_yield y,
+                             const nsfs::FSIdentity& id = {}) = 0;
+
 
   /* CAS link: link src to dst, verify inode+mtime match expected;
    * undo on mismatch */
@@ -120,19 +178,23 @@ public:
                                int src_dir_fd, const std::string& src_name,
                                int dst_dir_fd, const std::string& dst_name,
                                uint64_t expected_mtime_ns,
-                               uint64_t expected_ino) = 0;
+                               uint64_t expected_ino,
+                               optional_yield y,
+                               const nsfs::FSIdentity& id = {}) = 0;
 
   /* CAS unlink: remove entry only if it matches expected inode+mtime */
   virtual SafeResult safe_unlink(const DoutPrefixProvider* dpp,
                                  int dir_fd, const std::string& name,
                                  int tmp_dir_fd,
                                  uint64_t expected_mtime_ns,
-                                 uint64_t expected_ino) = 0;
+                                 uint64_t expected_ino,
+                                 optional_yield y,
+                                 const nsfs::FSIdentity& id = {}) = 0;
 
   /* copy a byte range between two files, by the cheapest means the
    * filesystem offers:  copy_file_range(2), which shares extents where
    * that is supported (XFS with reflink), and a buffered loop where it is
-   * not.  GPFS answers EOPNOTSUPP for copy_file_range at every
+   * not.  GPFS returns EOPNOTSUPP for copy_file_range at every
    * granularity, so there the fallback is the only path -- see
    * probes/results-cowprobe-2026-09-22.txt.
    *
@@ -142,13 +204,13 @@ public:
   virtual int copy_range(const DoutPrefixProvider* dpp,
                          int src_fd, off_t src_off,
                          int dst_fd, off_t dst_off,
-                         off_t len);
+                         off_t len, const CopyHints& hints);
 
   /* I/O size for copy_range()'s buffered fallback:  the file's
    * st_blksize, clamped to [MIN_COPY_IO_SIZE, MAX_COPY_IO_SIZE].
    *
    * The clamp is the measurement, not caution.  GPFS reports st_blksize
-   * 4 MiB, its block size and the right answer;  XFS and tmpfs report
+   * 4 MiB, its block size and the right value;  XFS and tmpfs report
    * 4096, and honouring that would be sixteen times worse than the 64 KiB
    * this replaced.  Above 4 MiB the cost rises again everywhere.  See
    * probes/results-copyprobe-2026-09-23.txt. */
@@ -171,7 +233,7 @@ public:
    * copy_file_range(2) actually clone rather than copy?  Established once
    * at driver startup by probe_shares_extents() and recorded here, because
    * it is not a property of the strategy:  POSIXStrategy serves XFS with
-   * reflink (yes) alongside ext4 and tmpfs (no), and GPFS answers no today
+   * reflink (yes) alongside ext4 and tmpfs (no), and GPFS returns no today
    * (probes/results-cowprobe-2026-09-22.txt) but is not promised to forever.
    * Measuring costs one small file at mount and needs no strategy to make a
    * claim it cannot check.
@@ -201,7 +263,8 @@ protected:
 
   int copy_buffered(const DoutPrefixProvider* dpp, size_t bufsz,
                     int src_fd, off_t src_off,
-                    int dst_fd, off_t dst_off, off_t len);
+                    int dst_fd, off_t dst_off, off_t len,
+                    const CopyHints& hints);
 
   bool fs_shares_extents{false};
   std::atomic<uint64_t> buffered_copy_bytes{0};
@@ -221,14 +284,21 @@ public:
   /* excl: fail with -EEXIST rather than overwrite an existing
    * destination.  shadow forks pass it so that two instances racing to
    * fork the same object cannot clobber each other;  the loser joins
-   * the winner's shadow instead. */
+   * the winner's shadow instead.
+   *
+   * id:  who reads the source and owns the clone.  A copy is a read of
+   * the source and a write of the destination, so both are
+   * `id`'s:  the source's permissions are checked against it,
+   * and the destination is created as it. */
   virtual int clone_file(const DoutPrefixProvider* dpp,
                          int src_dir_fd, const std::string& src_name,
                          int dst_dir_fd, const std::string& dst_name,
                          bool excl = false) = 0;
 
   /* clone from an open source fd — used when the source pathname is
-   * no longer valid (e.g. versioned self-copy after demote). */
+   * no longer valid (e.g. versioned self-copy after demote).  `id` as
+   * for clone_file();  the source is reopened as it, through the
+   * descriptor, so its permissions are checked. */
   virtual int clone_fd(const DoutPrefixProvider* dpp,
                        int src_fd,
                        int dst_dir_fd, const std::string& dst_name) = 0;
@@ -260,16 +330,32 @@ public:
    *
    * names in xattr_map_t are the full on-disk names (e.g.
    * "user.rgw.etag"); the caller handles any prefix mapping. */
+  /* `id` is the identity the operation is performed as.  A
+   * strategy does not decide how that is arranged -- it wraps its
+   * body in nsfs::with_identity() and says what it wants done.
+   * Default-constructed means the gateway's own credentials, which
+   * is every caller that has not been told otherwise. */
   virtual int get_xattrs(const DoutPrefixProvider* dpp, int fd,
-                         xattr_map_t& attrs) = 0;
+                         xattr_map_t& attrs,
+                         optional_yield y,
+                         const nsfs::FSIdentity& id = {}) = 0;
 
   virtual int set_xattrs(const DoutPrefixProvider* dpp, int fd,
-                         const xattr_map_t& attrs) = 0;
+                         const xattr_map_t& attrs,
+                         optional_yield y,
+                         const nsfs::FSIdentity& id = {}) = 0;
 
   virtual int remove_xattrs(const DoutPrefixProvider* dpp, int fd,
-                            const std::vector<std::string>& names) = 0;
+                            const std::vector<std::string>& names,
+                            optional_yield y,
+                            const nsfs::FSIdentity& id = {}) = 0;
 
   virtual const char* name() const = 0;
+
+  /* Whether an identity's metadata changes -- links, renames, unlinks,
+   * attribute writes -- take the ring (N-D3), rather than the helper
+   * pool.  Reads take it regardless. */
+  virtual bool ring_metadata_changes() const { return true; }
 
   /* Can this strategy move a name cheaply, i.e. is renameat() the right
    * way to relocate an object?  Default no, so a strategy opts in rather
@@ -284,19 +370,25 @@ class POSIXStrategy : public FSStrategy {
 public:
   int link_temp_file(int temp_fd, int dir_fd,
                      const std::string& name,
-                     const DoutPrefixProvider* dpp) override;
+                     const DoutPrefixProvider* dpp,
+                     optional_yield y,
+                     const nsfs::FSIdentity& id = {}) override;
 
   SafeResult safe_link(const DoutPrefixProvider* dpp,
                        int src_dir_fd, const std::string& src_name,
                        int dst_dir_fd, const std::string& dst_name,
                        uint64_t expected_mtime_ns,
-                       uint64_t expected_ino) override;
+                       uint64_t expected_ino,
+                       optional_yield y,
+                       const nsfs::FSIdentity& id = {}) override;
 
   SafeResult safe_unlink(const DoutPrefixProvider* dpp,
                          int dir_fd, const std::string& name,
                          int tmp_dir_fd,
                          uint64_t expected_mtime_ns,
-                         uint64_t expected_ino) override;
+                         uint64_t expected_ino,
+                         optional_yield y,
+                         const nsfs::FSIdentity& id = {}) override;
 
   int clone_file(const DoutPrefixProvider* dpp,
                  int src_dir_fd, const std::string& src_name,
@@ -314,11 +406,17 @@ public:
     const DoutPrefixProvider* dpp, int lock_fd) override;
 
   int get_xattrs(const DoutPrefixProvider* dpp, int fd,
-                 xattr_map_t& attrs) override;
+                 xattr_map_t& attrs,
+                 optional_yield y,
+                 const nsfs::FSIdentity& id = {}) override;
   int set_xattrs(const DoutPrefixProvider* dpp, int fd,
-                 const xattr_map_t& attrs) override;
+                 const xattr_map_t& attrs,
+                 optional_yield y,
+                 const nsfs::FSIdentity& id = {}) override;
   int remove_xattrs(const DoutPrefixProvider* dpp, int fd,
-                    const std::vector<std::string>& names) override;
+                    const std::vector<std::string>& names,
+                    optional_yield y,
+                    const nsfs::FSIdentity& id = {}) override;
 
   const char* name() const override { return "posix"; }
   bool can_rename() const override { return true; }
@@ -395,19 +493,25 @@ public:
 
   int link_temp_file(int temp_fd, int dir_fd,
                      const std::string& name,
-                     const DoutPrefixProvider* dpp) override;
+                     const DoutPrefixProvider* dpp,
+                     optional_yield y,
+                     const nsfs::FSIdentity& id = {}) override;
 
   SafeResult safe_link(const DoutPrefixProvider* dpp,
                        int src_dir_fd, const std::string& src_name,
                        int dst_dir_fd, const std::string& dst_name,
                        uint64_t expected_mtime_ns,
-                       uint64_t expected_ino) override;
+                       uint64_t expected_ino,
+                       optional_yield y,
+                       const nsfs::FSIdentity& id = {}) override;
 
   SafeResult safe_unlink(const DoutPrefixProvider* dpp,
                          int dir_fd, const std::string& name,
                          int tmp_dir_fd,
                          uint64_t expected_mtime_ns,
-                         uint64_t expected_ino) override;
+                         uint64_t expected_ino,
+                         optional_yield y,
+                         const nsfs::FSIdentity& id = {}) override;
 
   int clone_file(const DoutPrefixProvider* dpp,
                  int src_dir_fd, const std::string& src_name,
@@ -425,13 +529,25 @@ public:
     const DoutPrefixProvider* dpp, int lock_fd) override;
 
   int get_xattrs(const DoutPrefixProvider* dpp, int fd,
-                 xattr_map_t& attrs) override;
+                 xattr_map_t& attrs,
+                 optional_yield y,
+                 const nsfs::FSIdentity& id = {}) override;
   int set_xattrs(const DoutPrefixProvider* dpp, int fd,
-                 const xattr_map_t& attrs) override;
+                 const xattr_map_t& attrs,
+                 optional_yield y,
+                 const nsfs::FSIdentity& id = {}) override;
   int remove_xattrs(const DoutPrefixProvider* dpp, int fd,
-                    const std::vector<std::string>& names) override;
+                    const std::vector<std::string>& names,
+                    optional_yield y,
+                    const nsfs::FSIdentity& id = {}) override;
 
   const char* name() const override { return "gpfs"; }
+  /* No:  concurrent metadata changes on GPFS collapse past about eight
+   * -- a broadcast wake-up in its kernel around the recovery log -- and
+   * the pool's eight helpers keep them under it, where the ring, like a
+   * direct call, lets every request's change in at once.  Measured on
+   * rhel97-gpfs, 2026-11-10 (probes/xattrbench.c;  work plan, N-D3). */
+  bool ring_metadata_changes() const override { return false; }
 
   bool has_clone() const {
     return clone_enabled && fn_clone_snap && fn_clone_copy && fn_clone_unsnap;
@@ -465,6 +581,9 @@ mode_t dir_create_mode();
 /* Give a file just created the mode it asked for, where the process
  * umask took some of it.  As `id`, because a file created under a
  * personality is that identity's and only its owner may chmod it. */
+int apply_create_mode(const DoutPrefixProvider* dpp, int fd, mode_t mode,
+		      optional_yield y,
+		      const FSIdentity& id = {});
 /* The same, for a directory created by name. */
 int apply_create_mode_at(const DoutPrefixProvider* dpp, int dirfd,
 			 const char* name, mode_t mode);

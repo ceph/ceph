@@ -95,6 +95,12 @@ public:
 				const std::vector<std::string>& unclaimed,
 				Attrs& out) const {}
 
+  /* Whether parse_disk_attrs() reads `disk`.  A caller with no such name
+   * skips the call, and with it, as an identity, a hop to the pool
+   * (get_x_attrs()). */
+  virtual bool parses_disk_attr(const std::string& disk) const {
+    return false;
+  }
 
   virtual bool disk_attrs(const std::string& key, const bufferlist& val,
 			  const std::vector<std::string>& current,
@@ -103,6 +109,21 @@ public:
     return false;
   }
 
+  /* The owner recorded on this object, if any.
+   *
+   *   0         recorded;  `owner` is it
+   *   -ENODATA  none recorded.  The object is its bucket's owner's:
+   *             NooBaa records no per-object owner and returns the
+   *             bucket's `owner_account` for every object, and an
+   *             adopted bucket is BucketOwnerEnforced (DECISIONS.md
+   *             2026-10-11).
+   *             The caller has the bucket;  this does not.
+   *   -EIO      recorded and unreadable
+   *
+   * Never the file's uid.  The uid is the POSIX identity the file was
+   * written as, which is not an S3 owner and can be shared by several
+   * accounts. */
+  virtual int object_owner(const Attrs& attrs, ACLOwner& owner) const = 0;
 
   /* Does RGW store this attribute's value as a counted string, with its
    * NUL terminator included?
@@ -164,12 +185,51 @@ public:
   bool parse_disk_name(const std::string& disk,
 		       std::string& key) const override;
 
+  int object_owner(const Attrs& attrs, ACLOwner& owner) const override;
 
   bool counted_string_value(const std::string& key) const override;
 
   const char* name() const override { return "rgw"; }
 };
 
+/* NooBaa's layout, which is what the base profile is.
+ *
+ *   user.<k>                          user metadata, key for key
+ *   user.content_md5                  the etag
+ *   user.noobaa.content_type          content type
+ *   user.noobaa.content_encoding      content encoding
+ *   user.noobaa.version_id            version id
+ *   user.noobaa.delete_marker         delete marker
+ *   user.noobaa.non_current_timestamp when it stopped being current
+ *
+ * Read from noobaa-core at 68ca22d33, `namespace_fs.js`:  the constant
+ * block at the head of the file, and `to_fs_xattr()` for the user
+ * metadata mapping.
+ *
+ * Ownership is the bucket's.  They record no owner anywhere and return
+ * the bucket's `owner_account` for every object, so object_owner()
+ * returns -ENODATA and the caller supplies the bucket's owner
+ * (DECISIONS.md 2026-10-11).
+ *
+ * NOT MAPPED, DELIBERATELY:
+ *
+ * S3 ACLs.  NooBaa stores none, so there is nowhere for RGW_ATTR_ACL to
+ * go.  The write is accepted and not stored, which is what NooBaa's own
+ * gateway does -- `s3_put_object_acl.js` says so:  "we only handle
+ * canned acl, the rest is deprecated in favor of bucket policy.
+ * however we do not fail the request because there are still clients
+ * that call it."  Rejecting the write would make base stricter than
+ * the format it emulates and break the clients that comment protects.
+ * Losing an ACL in *translation* is a different matter and is the
+ * export manifest's job;  a base bucket never held one.
+ *
+ * Object tags and the object-lock family.  Not renames:  the nsfs format
+ * is one encoded blob for every tag and two encoded attributes for the
+ * lock, NooBaa's is user.noobaa.tag.<k> per tag and three plain
+ * attributes.
+ * Changing the shape of a value is what disk_name() and
+ * parse_disk_name() cannot express, and it is the value-format work S5
+ * names separately.  Deferred, not overlooked. */
 class NooBaaXattrStrategy : public XattrStrategy {
 public:
   std::string disk_name(const std::string& key) const override;
@@ -181,11 +241,13 @@ public:
   void parse_disk_attrs(const DoutPrefixProvider* dpp, int fd,
 			const std::vector<std::string>& unclaimed,
 			Attrs& out) const override;
+  bool parses_disk_attr(const std::string& disk) const override;
   bool disk_attrs(const std::string& key, const bufferlist& val,
 		  const std::vector<std::string>& current,
 		  xattr_map_t& to_write,
 		  std::vector<std::string>& to_remove) const override;
 
+  int object_owner(const Attrs& attrs, ACLOwner& owner) const override;
 
   bool counted_string_value(const std::string& key) const override;
 

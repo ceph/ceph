@@ -5130,6 +5130,20 @@ options:
   min: 1
   services:
   - rgw
+- name: rgw_nsfs_io_uring_control_entries
+  type: uint
+  level: advanced
+  desc: io_uring SQ entries per thread when the nsfs data engine is synchronous
+  long_desc: With rgw_nsfs_io_engine sync, a thread's ring carries only an
+    impersonated identity's operations -- its opens, and its links, renames
+    and attribute operations, in chains. A batch of attribute operations is
+    at most half the ring, and at most 8. Read when a thread creates its
+    ring, so a change applies to rings created after it, not to those that
+    exist. Rounded up to a power of two.
+  default: 32
+  min: 2
+  services:
+  - rgw
 - name: rgw_nsfs_io_uring_sqpoll
   type: bool
   level: advanced
@@ -5155,6 +5169,98 @@ options:
   default: '0007'
   services:
   - rgw
+- name: rgw_nsfs_impersonate
+  type: bool
+  level: advanced
+  desc: Serve each nsfs request as the POSIX identity that made it
+  long_desc: When set, filesystem operations are performed with the uid,
+    gid and supplementary groups recorded for the authenticated identity
+    rather than with the gateway's own credentials. Requires CAP_SETUID
+    and CAP_SETGID; the gateway does not start without them. Every
+    identity that can authenticate must have a record, and a request
+    whose identity has none is failed rather than served unimpersonated.
+    Every process that loads the nsfs driver reads it, radosgw-admin
+    included, so set it for the gateway only.
+  default: false
+  services:
+  - rgw
+- name: rgw_nsfs_dynamic_supplemental_groups
+  type: bool
+  level: advanced
+  desc: Give nsfs identities with no group list their groups from nsswitch
+  long_desc: NooBaa's NSFS_ENABLE_DYNAMIC_SUPPLEMENTAL_GROUPS. An identity
+    row with no supplemental group list of its own then runs with the
+    user's groups as nsswitch returns them (getgrouplist), by name for an
+    nsswitch-resolved row and by uid for a local one; an explicit list,
+    an empty one included, still wins. A uid nsswitch does not know, or a
+    lookup that fails, is refused. Adoption refuses a NooBaa store that
+    has the setting on while this is off.
+  default: false
+  services:
+  - rgw
+- name: rgw_nsfs_user_identity_override
+  type: bool
+  level: advanced
+  desc: Let an nsfs account user's own identity row override its account's
+  long_desc: NooBaa serves an IAM user from its own record. With this on,
+    an account user's identity row -- uid and gid or a distinguished
+    name, supplementary groups, new_buckets_path and the custom bucket
+    path allowlist -- is consulted before its account's. Rows are written
+    whatever this is set to; adoption imports each NooBaa user's, and a
+    new account user gets a copy of its account's. Off, every account
+    user runs as its account.
+  default: false
+  services:
+  - rgw
+- name: rgw_nsfs_role_identity_override
+  type: bool
+  level: advanced
+  desc: Let a role given an nsfs identity of its own run as it
+  long_desc: A role session runs as its account's identity. With this on,
+    a role that has been given an identity row runs as that row, and a
+    role without one still runs as its account. NooBaa documents this
+    for roles and does not implement it.
+  default: false
+  services:
+  - rgw
+- name: rgw_nsfs_identity_resolve_ttl
+  type: uint
+  level: advanced
+  desc: Seconds between re-resolutions of nsswitch-resolved nsfs identities
+  long_desc: An nsswitch-resolved identity row, one carrying
+    distinguished_name, takes its uid and gid from nsswitch. The answers
+    are cached, and every this many seconds each cached name is looked up
+    again; where an answer changed, the identities served from the old
+    one are re-resolved on their next use. This bounds how long a change
+    in the directory takes to reach requests. NooBaa's group cache is one
+    minute.
+  default: 60
+  min: 1
+  services:
+  - rgw
+- name: rgw_nsfs_impersonate_helper_threads
+  type: uint
+  level: advanced
+  desc: Threads for impersonated calls io_uring cannot express
+  long_desc: listxattr and removexattr have no io_uring opcode, so they
+    cannot name a personality on a submission entry and are run instead
+    on a small pool of threads that assume the identity for the duration
+    of one call. Request-serving threads never change identity. This
+    pool is expected to disappear once those opcodes exist.
+  default: 8
+  services:
+  - rgw
+- name: rgw_nsfs_personality_table_size
+  type: uint
+  level: advanced
+  desc: Registered POSIX credentials cached per io_uring ring
+  long_desc: Each ring keeps its own table, so this is multiplied by the
+    number of rings, and every ring's working set converges on the whole
+    set of concurrently active identities. Sized comfortably above that
+    count; eviction is by age, so a table below the working set shows up
+    as repeated re-registration of the same identity. Clamped to 65535,
+    the range of sqe->personality.
+  default: 1024
   services:
   - rgw
 - name: rgw_nsfs_io_uring_sq_thread_idle_ms

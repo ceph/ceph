@@ -78,8 +78,11 @@ bool PrefixedXattrStrategy::parse_disk_name(const std::string& disk,
 int PrefixedXattrStrategy::object_owner(const Attrs& attrs,
 				   ACLOwner& owner) const
 {
+  /* recorded, and separate from the file's uid.  A file created outside
+   * this gateway has none. */
   auto i = attrs.find(RGW_ATTR_ACL);
   if (i == attrs.end()) {
+    return -ENODATA;
   }
   RGWAccessControlPolicy policy;
   try {
@@ -231,9 +234,14 @@ bool NooBaaXattrStrategy::parse_disk_name(const std::string& disk,
   return false;
 }
 
+/* Never recorded.  NooBaa's format has nowhere to put an owner, and
+ * `get_default_object_owner()` (`s3_utils.js`) returns the bucket's
+ * `owner_account` for every object. */
 int NooBaaXattrStrategy::object_owner(const Attrs& attrs,
 				      ACLOwner& owner) const
 {
+  return -ENODATA;
+}
 
 /* Never.  The terminator is an RGW-side accident that RGW's own writers
  * append;  nothing in NooBaa's tree carries one, and restoring a byte
@@ -260,6 +268,7 @@ static std::optional<std::string> nb_read(const DoutPrefixProvider* dpp,
 					  int fd, const std::string& name)
 {
   char buf[512];
+  const ssize_t len = nsfs::fgetxattr(fd, name.c_str(), buf, sizeof(buf));
   if (len < 0) {
     return std::nullopt;
   }
@@ -293,6 +302,9 @@ static bool nb_tag_name(const std::string& disk, std::string& key)
   return !key.empty();
 }
 
+bool NooBaaXattrStrategy::parses_disk_attr(const std::string& disk) const
+{
+  std::string key;
 
 void NooBaaXattrStrategy::parse_disk_attrs(
     const DoutPrefixProvider* dpp, int fd,
@@ -312,6 +324,7 @@ void NooBaaXattrStrategy::parse_disk_attrs(
       continue;
     }
     char buf[1024];
+    const ssize_t len = nsfs::fgetxattr(fd, disk.c_str(), buf, sizeof(buf));
     if (len < 0) {
       /* raced with a delete, or longer than any tag may be -- NooBaa's
        * own limit is far below this.  One tag, not the set. */

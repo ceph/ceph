@@ -15,6 +15,8 @@
 
 #include "fs_strategy.h"
 
+#include <algorithm>
+#include <array>
 #include <atomic>
 #include <cerrno>
 #include <cstdio>
@@ -52,7 +54,7 @@ static bool stat_matches(int fd, const std::string& name,
                          uint64_t expected_mtime_ns, uint64_t expected_ino)
 {
   struct statx stx;
-  int ret = statx(fd, name.c_str(), 0, STATX_INO | STATX_MTIME, &stx);
+  int ret = nsfs::statx(fd, name.c_str(), 0, STATX_INO | STATX_MTIME, &stx);
   if (ret < 0) {
     return false;
   }
@@ -60,14 +62,265 @@ static bool stat_matches(int fd, const std::string& name,
          stx.stx_ino == expected_ino;
 }
 
+
+/* --- the ring, for an identity (N-D3) -----------------------------------
+ *
+ * An impersonated link, rename or attribute operation goes through the
+ * ring under the identity's personality rather than to a pool thread
+ * switched to it.  Who runs it and what it returns are unchanged;  the
+ * pool remains the path when the ring cannot run it (nsfs::ring_as()).
+ * A failed linkat, renameat or fsetxattr does not cancel the op chained
+ * after it (probes/linkchainprobe.c), so a chain is used only where the
+ * op after a failure is a harmless read, and a step that depends on a
+ * result is submitted after it. */
+
+namespace {
+
+UringOp ring_op(UringOp::Kind kind, int fd, const char* path,
+		int fd2 = AT_FDCWD, const char* path2 = nullptr, int flags = 0)
+{
+  UringOp op{kind};
+  op.fd = fd;
+  op.path = path;
+  op.fd2 = fd2;
+  op.path2 = path2;
+  op.flags = flags;
+  return op;
+}
+
+UringOp statx_op(int fd, const char* path, struct statx* stx)
+{
+  UringOp op = ring_op(UringOp::Kind::statx, fd, path);
+  op.len = STATX_INO | STATX_MTIME;
+  op.buf = stx;
+  return op;
+}
+
+bool statx_is(const struct statx& stx, uint64_t mtime_ns, uint64_t ino)
+{
+  return (statx_mtime_ns(stx) == mtime_ns) && (stx.stx_ino == ino);
+}
+
+} // anonymous namespace
+
+int read_xattrs_as(const DoutPrefixProvider* dpp, int fd,
+		   const FSIdentity& id, optional_yield y,
+		   const std::function<bool(const std::string&)>& want,
+		   std::vector<XattrValue>& out)
+{
+  /* every attribute an object carries in practice fits;  the largest is
+   * the encoded ACL, a couple of hundred bytes */
+  enum { INLINE_VALUE_MAX = 1024 };
+  if (!id.active()) {
+    return -ENXIO;
+  }
+  char namebuf[64 * 1024];
+  const ssize_t list_len = ::flistxattr(fd, namebuf, sizeof(namebuf));
+  if (list_len < 0) {
+    return -errno;
+  }
+  std::vector<XattrValue> vals;
+  std::vector<size_t> wanted;
+  for (const char* p = namebuf; p < namebuf + list_len; p += strlen(p) + 1) {
+    XattrValue v;
+    v.name = p;
+    v.read = want(v.name);
+    if (v.read) {
+      wanted.push_back(vals.size());
+    }
+    vals.push_back(std::move(v));
+  }
+
+  /* a value read on the pool, as `id`:  a batch the ring could not take,
+   * and the sized retry of one that did not fit */
+  const auto read_on_pool = [&](XattrValue& v, size_t len) -> int {
+    return with_identity(dpp, id, nsfs::HopKind::attr_read, [&]() -> int {
+      const ssize_t n = nsfs::fgetxattr(fd, v.name.c_str(),
+					len ? v.value.data() : nullptr, len);
+      return (n < 0) ? -errno : static_cast<int>(n);
+    }, y);
+  };
+
+  std::array<UringOp, URING_CHAIN_MAX> ops;
+  for (size_t at = 0, n = 0; at < wanted.size(); at += n) {
+    n = std::min(posix_uring_chain_room(dpp), wanted.size() - at);
+    for (size_t i = 0; i < n; ++i) {
+      XattrValue& v = vals[wanted[at + i]];
+      v.value.resize(INLINE_VALUE_MAX);
+      ops[i] = ring_op(UringOp::Kind::fgetxattr, fd, v.name.c_str());
+      ops[i].buf = v.value.data();
+      ops[i].len = v.value.size();
+    }
+    if (ring_as(dpp, id, ops.data(), n, y) < 0) {
+      if (at == 0) {
+	return -ENXIO;		/* nothing read:  the caller reads on the pool */
+      }
+      for (size_t i = 0; i < n; ++i) {
+	ops[i].result = read_on_pool(vals[wanted[at + i]], INLINE_VALUE_MAX);
+      }
+    }
+    for (size_t i = 0; i < n; ++i) {
+      XattrValue& v = vals[wanted[at + i]];
+      int r = ops[i].result;
+      if (r == -ERANGE) {
+	/* larger than the inline buffer:  sized, then read */
+	UringOp size = ring_op(UringOp::Kind::fgetxattr, fd, v.name.c_str());
+	r = op_as(dpp, id, nsfs::HopKind::attr_read, size, [&]() -> int {
+	  const ssize_t k = nsfs::fgetxattr(fd, v.name.c_str(), nullptr, 0);
+	  return (k < 0) ? -errno : static_cast<int>(k);
+	}, y);
+	if (r >= 0) {
+	  v.value.resize(r);
+	  UringOp read = ring_op(UringOp::Kind::fgetxattr, fd, v.name.c_str());
+	  read.buf = v.value.data();
+	  read.len = v.value.size();
+	  r = op_as(dpp, id, nsfs::HopKind::attr_read, read, [&]() -> int {
+	    return read_on_pool(v, v.value.size());
+	  }, y);
+	}
+      }
+      if (r < 0) {
+	v.err = -r;
+	v.value.clear();
+      } else {
+	v.value.resize(r);
+      }
+    }
+  }
+  out = std::move(vals);
+  return 0;
+}
+
+int set_xattrs_as(const DoutPrefixProvider* dpp, int fd,
+		  const xattr_map_t& attrs, optional_yield y,
+		  const FSIdentity& id)
+{
+  if (attrs.empty()) {
+    return 0;			/* and no hop to write nothing */
+  }
+  if (id.active() && nsfs::ring_metadata_changes()) {
+    /* Batched, a ring's chain room to a submission (posix_uring_chain_room()),
+     * so never more than URING_CHAIN_MAX.  A failed set does not
+     * cancel the rest, so every entry is written that can be, and the
+     * first error is returned (DECISIONS 2026-11-10). */
+    std::array<UringOp, URING_CHAIN_MAX> ops;
+    std::array<const std::string*, URING_CHAIN_MAX> names;
+    int first = 0;
+    bool ran = false;
+    auto it = attrs.begin();
+    while (it != attrs.end()) {
+      size_t n = 0;
+      const size_t room = posix_uring_chain_room(dpp);
+      for (; (n < room) && (it != attrs.end()); ++n, ++it) {
+	ops[n] = ring_op(UringOp::Kind::fsetxattr, fd, it->first.c_str());
+	ops[n].buf = const_cast<char*>(it->second.data());
+	ops[n].len = it->second.size();
+	names[n] = &it->first;
+      }
+      if (nsfs::ring_as(dpp, id, ops.data(), n, y) < 0) {
+	if (!ran) {
+	  break;		/* nothing written:  the pool, below, does it all */
+	}
+	/* the rest of this batch on the pool, as the identity */
+	for (size_t i = 0; i < n; ++i) {
+	  const std::string& nm = *names[i];
+	  const UringOp& op = ops[i];
+	  ops[i].result = nsfs::with_identity(dpp, id, nsfs::HopKind::attr_write, [&]() -> int {
+	    return (::fsetxattr(fd, nm.c_str(), op.buf, op.len, 0) < 0)
+	      ? -errno : 0;
+	  }, y);
+	}
+      }
+      ran = true;
+      for (size_t i = 0; i < n; ++i) {
+	const int r = ops[i].result;
+	if (r >= 0) {
+	  continue;
+	}
+	if ((r == -EACCES) || (r == -EPERM)) {
+	  ldpp_dout_fmt(dpp, 10, "fsetxattr {} denied: {}", *names[i],
+			cpp_strerror(-r));
+	} else {
+	  ldpp_dout_fmt(dpp, 0, "ERROR: fsetxattr {} failed: {}", *names[i],
+			cpp_strerror(-r));
+	}
+	if (first == 0) {
+	  first = r;
+	}
+      }
+    }
+    if (ran) {
+      return first;
+    }
+  }
+
+  return nsfs::with_identity(dpp, id, nsfs::HopKind::attr_write, [&]() -> int {
+  for (auto& [name, value] : attrs) {
+    int ret = ::fsetxattr(fd, name.c_str(), value.data(), value.size(), 0);
+    if (ret < 0) {
+      int err = errno;
+      /* a denial is the caller's to handle -- raise site 1 retries it
+       * raised, the access model performs it, or the caller fails and
+       * says so -- so it is not an error here */
+      if ((err == EACCES) || (err == EPERM)) {
+        ldpp_dout_fmt(dpp, 10, "fsetxattr {} denied: {}", name,
+                               cpp_strerror(err));
+      } else {
+        ldpp_dout_fmt(dpp, 0, "ERROR: fsetxattr {} failed: {}", name,
+                              cpp_strerror(err));
+      }
+      return -err;
+    }
+  }
+  return 0;
+  }, y);
+}
+
 /* --- POSIXStrategy ---------------------------------------------------- */
 
 int POSIXStrategy::link_temp_file(int temp_fd, int dir_fd,
                                   const std::string& name,
-                                  const DoutPrefixProvider* dpp)
+                                  const DoutPrefixProvider* dpp,
+                                  optional_yield y,
+                                  const nsfs::FSIdentity& id)
 {
-  char temp_file_path[PATH_MAX];
-  snprintf(temp_file_path, PATH_MAX, "/proc/self/fd/%d", temp_fd);
+  if (id.active() && nsfs::ring_metadata_changes()) {
+    /* On the ring, a step at a time:  chained, the rename would run
+     * after a failed link, and an entry already at the temp name would
+     * be renamed over the object. */
+    const std::string proc = fmt::format("/proc/self/fd/{}", temp_fd);
+    const std::string tmp = temp_name(TMP_LINK_PREFIX);
+    UringOp link = ring_op(UringOp::Kind::linkat, AT_FDCWD, proc.c_str(), dir_fd,
+			   tmp.c_str(), AT_SYMLINK_FOLLOW);
+    if (nsfs::ring_as(dpp, id, &link, 1, y) == 0) {
+      if (link.result < 0) {
+	ldpp_dout_fmt(dpp, 0, "ERROR: linkat for temp file: {}",
+		      cpp_strerror(-link.result));
+	return link.result;
+      }
+      const int r = op_as(dpp, id, nsfs::HopKind::link,
+	ring_op(UringOp::Kind::renameat, dir_fd, tmp.c_str(), dir_fd,
+		name.c_str()),
+	[&]() -> int {
+	  return (::renameat(dir_fd, tmp.c_str(), dir_fd, name.c_str()) < 0)
+	    ? -errno : 0;
+	}, y);
+      if (r < 0) {
+	(void) op_as(dpp, id, nsfs::HopKind::link,
+	  ring_op(UringOp::Kind::unlinkat, dir_fd, tmp.c_str()),
+	  [&]() -> int {
+	    return (::unlinkat(dir_fd, tmp.c_str(), 0) < 0) ? -errno : 0;
+	  }, y);
+	ldpp_dout_fmt(dpp, 0, "ERROR: renameat for temp file: {}",
+		      cpp_strerror(-r));
+	return r;
+      }
+      return 0;
+    }
+  }
+
+  return nsfs::with_identity(dpp, id, nsfs::HopKind::link, [&]() -> int {
+  const std::string temp_file_path = fmt::format("/proc/self/fd/{}", temp_fd);
 
   /* link the O_TMPFILE into the directory under a temp name, then
    * rename to the final name — two-step because linkat(2) cannot
@@ -79,8 +332,7 @@ int POSIXStrategy::link_temp_file(int temp_fd, int dir_fd,
                      dir_fd, tmp_name.c_str(), AT_SYMLINK_FOLLOW);
   if (ret < 0) {
     ret = errno;
-    ldpp_dout(dpp, 0) << "ERROR: linkat for temp file: "
-      << cpp_strerror(ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: linkat for temp file: {}", cpp_strerror(ret));
     return -ret;
   }
 
@@ -88,12 +340,13 @@ int POSIXStrategy::link_temp_file(int temp_fd, int dir_fd,
   if (ret < 0) {
     ret = errno;
     ::unlinkat(dir_fd, tmp_name.c_str(), 0);
-    ldpp_dout(dpp, 0) << "ERROR: renameat for temp file: "
-      << cpp_strerror(ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: renameat for temp file: {}",
+                          cpp_strerror(ret));
     return -ret;
   }
 
   return 0;
+  }, y);
 }
 
 SafeResult POSIXStrategy::safe_link(const DoutPrefixProvider* dpp,
@@ -102,8 +355,44 @@ SafeResult POSIXStrategy::safe_link(const DoutPrefixProvider* dpp,
                                     int dst_dir_fd,
                                     const std::string& dst_name,
                                     uint64_t expected_mtime_ns,
-                                    uint64_t expected_ino)
+                                    uint64_t expected_ino,
+                                     optional_yield y,
+                                     const nsfs::FSIdentity& id)
 {
+  if (id.active() && nsfs::ring_metadata_changes()) {
+    /* one chain:  the statx after a failed link reads, harmlessly, and
+     * its result is not used */
+    struct statx stx = {};
+    UringOp ops[2] = {
+      ring_op(UringOp::Kind::linkat, src_dir_fd, src_name.c_str(),
+	      dst_dir_fd, dst_name.c_str()),
+      statx_op(dst_dir_fd, dst_name.c_str(), &stx),
+    };
+    if (nsfs::ring_as(dpp, id, ops, 2, y) == 0) {
+      const int lr = ops[0].result;
+      if (lr == -EEXIST) {
+	return SafeResult::MISMATCH;
+      }
+      if ((lr == -EACCES) || (lr == -EPERM)) {
+	return SafeResult::DENIED;
+      }
+      if (lr < 0) {
+	return SafeResult::ERROR;
+      }
+      if ((ops[1].result >= 0) &&
+	  statx_is(stx, expected_mtime_ns, expected_ino)) {
+	return SafeResult::OK;
+      }
+      (void) op_as(dpp, id, nsfs::HopKind::link,
+	ring_op(UringOp::Kind::unlinkat, dst_dir_fd, dst_name.c_str()),
+	[&]() -> int {
+	  return (::unlinkat(dst_dir_fd, dst_name.c_str(), 0) < 0) ? -errno : 0;
+	}, y);
+      return SafeResult::MISMATCH;
+    }
+  }
+
+  return nsfs::with_identity_r(dpp, id, nsfs::HopKind::link, [&]() -> SafeResult {
   int ret = ::linkat(src_dir_fd, src_name.c_str(),
                      dst_dir_fd, dst_name.c_str(), 0);
   if (ret < 0) {
@@ -117,17 +406,59 @@ SafeResult POSIXStrategy::safe_link(const DoutPrefixProvider* dpp,
   }
   ::unlinkat(dst_dir_fd, dst_name.c_str(), 0);
   return SafeResult::MISMATCH;
+  }, y);
 }
 
 SafeResult POSIXStrategy::safe_unlink(const DoutPrefixProvider* dpp,
                                       int dir_fd, const std::string& name,
                                       int tmp_dir_fd,
                                       uint64_t expected_mtime_ns,
-                                      uint64_t expected_ino)
+                                      uint64_t expected_ino,
+                                       optional_yield y,
+                                       const nsfs::FSIdentity& id)
 {
-  static std::atomic<uint64_t> counter{0};
-  std::string tmp_name = std::string(UNLINK_TMP_PREFIX) +
-    std::to_string(getpid()) + "_" + std::to_string(counter.fetch_add(1));
+  if (id.active() && nsfs::ring_metadata_changes()) {
+    /* the rename and its check as one chain;  then the unlink, or the
+     * rename back, which depend on the check */
+    const std::string tmp = temp_name(UNLINK_TMP_PREFIX);
+    struct statx stx = {};
+    UringOp ops[2] = {
+      ring_op(UringOp::Kind::renameat, dir_fd, name.c_str(), tmp_dir_fd,
+	      tmp.c_str()),
+      statx_op(tmp_dir_fd, tmp.c_str(), &stx),
+    };
+    if (nsfs::ring_as(dpp, id, ops, 2, y) == 0) {
+      const int rr = ops[0].result;
+      if (rr == -ENOENT) {
+	return SafeResult::OK;
+      }
+      if ((rr == -EACCES) || (rr == -EPERM)) {
+	return SafeResult::DENIED;
+      }
+      if (rr < 0) {
+	return SafeResult::ERROR;
+      }
+      if ((ops[1].result >= 0) &&
+	  statx_is(stx, expected_mtime_ns, expected_ino)) {
+	(void) op_as(dpp, id, nsfs::HopKind::link,
+	  ring_op(UringOp::Kind::unlinkat, tmp_dir_fd, tmp.c_str()),
+	  [&]() -> int {
+	    return (::unlinkat(tmp_dir_fd, tmp.c_str(), 0) < 0) ? -errno : 0;
+	  }, y);
+	return SafeResult::OK;
+      }
+      (void) op_as(dpp, id, nsfs::HopKind::link,
+	ring_op(UringOp::Kind::renameat, tmp_dir_fd, tmp.c_str(), dir_fd,
+		name.c_str()),
+	[&]() -> int {
+	  return (::renameat(tmp_dir_fd, tmp.c_str(), dir_fd, name.c_str()) < 0)
+	    ? -errno : 0;
+	}, y);
+      return SafeResult::MISMATCH;
+    }
+  }
+
+  return nsfs::with_identity_r(dpp, id, nsfs::HopKind::link, [&]() -> SafeResult {
 
   int ret = ::renameat(dir_fd, name.c_str(),
                        tmp_dir_fd, tmp_name.c_str());
@@ -143,6 +474,7 @@ SafeResult POSIXStrategy::safe_unlink(const DoutPrefixProvider* dpp,
   }
   ::renameat(tmp_dir_fd, tmp_name.c_str(), dir_fd, name.c_str());
   return SafeResult::MISMATCH;
+  }, y);
 }
 
 /* --- FSStrategy ------------------------------------------------------- */
@@ -215,6 +547,22 @@ bool probe_shares_extents(const DoutPrefixProvider* dpp,
   return shares;
 }
 
+  if (id.active() && nsfs::ring_metadata_changes()) {
+    const std::string proc = fmt::format("/proc/self/fd/{}", temp_fd);
+    UringOp link = ring_op(UringOp::Kind::linkat, AT_FDCWD, proc.c_str(), dir_fd,
+			   name.c_str(), AT_SYMLINK_FOLLOW);
+    if (nsfs::ring_as(dpp, id, &link, 1, y) == 0) {
+      if ((link.result < 0) && (link.result != -EEXIST)) {
+	ldpp_dout_fmt(dpp, 0, "ERROR: exclusive linkat for temp file: {}",
+		      cpp_strerror(-link.result));
+      }
+      return (link.result < 0) ? link.result : 0;
+    }
+  }
+
+  return nsfs::with_identity(dpp, id, nsfs::HopKind::link, [&]() -> int {
+  }, y);
+}
 
 size_t FSStrategy::preferred_io_size(int fd) const
 {
@@ -235,7 +583,8 @@ size_t FSStrategy::preferred_io_size(int fd) const
 
 int FSStrategy::copy_buffered(const DoutPrefixProvider* dpp, size_t bufsz,
                               int src_fd, off_t src_off,
-                              int dst_fd, off_t dst_off, off_t len)
+                              int dst_fd, off_t dst_off, off_t len,
+                              const CopyHints& hints)
 {
   auto buf = std::make_unique<char[]>(bufsz);
 
@@ -244,15 +593,15 @@ int FSStrategy::copy_buffered(const DoutPrefixProvider* dpp, size_t bufsz,
     ssize_t nr = ::pread(src_fd, buf.get(), want, src_off);
     if (nr < 0) {
       int err = errno;
-      ldpp_dout(dpp, 0) << "ERROR: copy_range: pread at " << src_off
-        << " failed: " << cpp_strerror(err) << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: copy_range: pread at {} failed: {}",
+                            src_off, cpp_strerror(err));
       return -err;
     }
     if (nr == 0) {
       /* source is shorter than the caller believed;  the caller sized the
        * copy from its own statx, so this is a truncation under us */
-      ldpp_dout(dpp, 5) << "copy_range: short source at " << src_off
-        << ", " << len << " bytes unread" << dendl;
+      ldpp_dout_fmt(dpp, 5, "copy_range: short source at {}, {} bytes unread",
+                            src_off, len);
       break;
     }
 
@@ -262,8 +611,8 @@ int FSStrategy::copy_buffered(const DoutPrefixProvider* dpp, size_t bufsz,
                             dst_off + done);
       if (nw <= 0) {
         int err = (nw < 0) ? errno : EIO;
-        ldpp_dout(dpp, 0) << "ERROR: copy_range: pwrite at "
-          << (dst_off + done) << " failed: " << cpp_strerror(err) << dendl;
+        ldpp_dout_fmt(dpp, 0, "ERROR: copy_range: pwrite at {} failed: {}",
+                              (dst_off + done), cpp_strerror(err));
         return -err;
       }
       done += nw;
@@ -272,38 +621,41 @@ int FSStrategy::copy_buffered(const DoutPrefixProvider* dpp, size_t bufsz,
     src_off += nr;
     dst_off += nr;
     len -= nr;
-    buffered_copy_bytes += nr;
+    if (hints.buffered_bytes) {
+      *hints.buffered_bytes += nr;
+    }
   }
   return 0;
 }
 
 int FSStrategy::copy_range(const DoutPrefixProvider* dpp,
                            int src_fd, off_t src_off,
-                           int dst_fd, off_t dst_off, off_t len)
+                           int dst_fd, off_t dst_off, off_t len,
+                           const CopyHints& hints)
 {
   off_t soff = src_off, doff = dst_off;
 
-  if (force_buffered_copy) {
+  if (hints.force_buffered) {
     return copy_buffered(dpp, preferred_io_size(src_fd),
-                         src_fd, soff, dst_fd, doff, len);
+                         src_fd, soff, dst_fd, doff, len, hints);
   }
 
   while (len > 0) {
     ssize_t copied = ::copy_file_range(src_fd, &soff, dst_fd, &doff,
                                        len, 0);
     if (copied == 0) {
-      ldpp_dout(dpp, 5) << "copy_range: short source at " << soff
-        << ", " << len << " bytes unread" << dendl;
+      ldpp_dout_fmt(dpp, 5, "copy_range: short source at {}, {} bytes unread",
+                            soff, len);
       break;
     }
     if (copied < 0) {
       if (errno == EXDEV || errno == ENOSYS || errno == EOPNOTSUPP) {
         return copy_buffered(dpp, preferred_io_size(src_fd),
-                             src_fd, soff, dst_fd, doff, len);
+                             src_fd, soff, dst_fd, doff, len, hints);
       }
       int err = errno;
-      ldpp_dout(dpp, 0) << "ERROR: copy_range: copy_file_range failed: "
-        << cpp_strerror(err) << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: copy_range: copy_file_range failed: {}",
+                            cpp_strerror(err));
       return -err;
     }
     len -= copied;
@@ -342,8 +694,45 @@ std::unique_ptr<VersionLockHandle> POSIXStrategy::version_lock(
 }
 
 int POSIXStrategy::get_xattrs(const DoutPrefixProvider* dpp, int fd,
-                              xattr_map_t& attrs)
+                              xattr_map_t& attrs,
+                              optional_yield y,
+                              const nsfs::FSIdentity& id)
 {
+  if (id.active()) {
+    /* The gateway lists the names, which needs no permission (measured
+     * 2026-10-20), and the identity reads the values on the ring, each
+     * of which does (DECISIONS 2026-11-10). */
+    std::vector<XattrValue> vals;
+    const int r = read_xattrs_as(dpp, fd, id, y,
+				 [](const std::string&) { return true; }, vals);
+    if (r < 0 && r != -ENXIO) {
+      ldpp_dout_fmt(dpp, 0, "ERROR: flistxattr failed: {}", cpp_strerror(-r));
+      return r;
+    }
+    if (r == 0) {
+      for (auto& v : vals) {
+	if (v.err == 0) {
+	  attrs.emplace(std::move(v.name), std::move(v.value));
+	  continue;
+	}
+	/* gone, unreadable, or it grew again between the sizing and the
+	 * read, as below */
+	if ((v.err == ENODATA) || (v.err == EACCES) || (v.err == ERANGE)) {
+	  continue;
+	}
+	ldpp_dout_fmt(dpp, 0, "ERROR: fgetxattr {} failed: {}", v.name,
+		      cpp_strerror(v.err));
+	return -v.err;
+      }
+      return 0;
+    }
+  }
+
+  /* The whole read, not each call:  this is a listing plus one
+   * fetch per name, and flistxattr has no io_uring opcode.  Each
+   * value needs read permission on the object, which the identity
+   * has and the gateway may not. */
+  return nsfs::with_identity(dpp, id, nsfs::HopKind::attr_read, [&]() -> int {
   /* large enough for every attribute an object carries in practice;  the
    * biggest is the encoded ACL at a couple of hundred bytes */
   enum { INLINE_VALUE_MAX = 1024 };
@@ -351,8 +740,7 @@ int POSIXStrategy::get_xattrs(const DoutPrefixProvider* dpp, int fd,
   ssize_t list_len = ::flistxattr(fd, namebuf, sizeof(namebuf));
   if (list_len < 0) {
     int err = errno;
-    ldpp_dout(dpp, 0) << "ERROR: flistxattr failed: "
-      << cpp_strerror(err) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: flistxattr failed: {}", cpp_strerror(err));
     return -err;
   }
   if (list_len == 0) {
@@ -373,14 +761,14 @@ int POSIXStrategy::get_xattrs(const DoutPrefixProvider* dpp, int fd,
     char valbuf[INLINE_VALUE_MAX];
     std::string spill;
     const char* vp = valbuf;
-    ssize_t vallen = ::fgetxattr(fd, p, valbuf, sizeof(valbuf));
+    ssize_t vallen = nsfs::fgetxattr(fd, p, valbuf, sizeof(valbuf));
 
     if (vallen < 0 && errno == ERANGE) {
-      vallen = ::fgetxattr(fd, p, nullptr, 0);
+      vallen = nsfs::fgetxattr(fd, p, nullptr, 0);
       if (vallen >= 0) {
         spill.resize(vallen);
         vp = spill.data();
-        vallen = ::fgetxattr(fd, p, spill.data(), vallen);
+        vallen = nsfs::fgetxattr(fd, p, spill.data(), vallen);
       }
     }
 
@@ -392,8 +780,8 @@ int POSIXStrategy::get_xattrs(const DoutPrefixProvider* dpp, int fd,
         continue;
       }
       int err = errno;
-      ldpp_dout(dpp, 0) << "ERROR: fgetxattr " << p
-        << " failed: " << cpp_strerror(err) << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: fgetxattr {} failed: {}", p,
+                            cpp_strerror(err));
       return -err;
     }
 
@@ -402,14 +790,26 @@ int POSIXStrategy::get_xattrs(const DoutPrefixProvider* dpp, int fd,
     p += keylen;
   }
   return 0;
+  }, y);
 }
 
 int POSIXStrategy::set_xattrs(const DoutPrefixProvider* dpp, int fd,
-                              const xattr_map_t& attrs)
+                              const xattr_map_t& attrs,
+                              optional_yield y,
+                              const nsfs::FSIdentity& id)
 {
-  for (auto& [name, value] : attrs) {
-    int ret = ::fsetxattr(fd, name.c_str(), value.data(), value.size(), 0);
-    if (ret < 0) {
+  return set_xattrs_as(dpp, fd, attrs, y, id);
+}
+
+int POSIXStrategy::remove_xattrs(const DoutPrefixProvider* dpp, int fd,
+                                 const std::vector<std::string>& names,
+                                 optional_yield y,
+                                 const nsfs::FSIdentity& id)
+{
+  return nsfs::with_identity(dpp, id, [&]() -> int {
+  for (auto& name : names) {
+    int ret = ::fremovexattr(fd, name.c_str());
+    if (ret < 0 && errno != ENODATA) {
       int err = errno;
       ldpp_dout(dpp, 0) << "ERROR: fsetxattr " << name
         << " failed: " << cpp_strerror(err) << dendl;
@@ -417,21 +817,7 @@ int POSIXStrategy::set_xattrs(const DoutPrefixProvider* dpp, int fd,
     }
   }
   return 0;
-}
-
-int POSIXStrategy::remove_xattrs(const DoutPrefixProvider* dpp, int fd,
-                                 const std::vector<std::string>& names)
-{
-  for (auto& name : names) {
-    int ret = ::fremovexattr(fd, name.c_str());
-    if (ret < 0 && errno != ENODATA) {
-      int err = errno;
-      ldpp_dout(dpp, 0) << "ERROR: fremovexattr " << name
-        << " failed: " << cpp_strerror(err) << dendl;
-      return -err;
-    }
-  }
-  return 0;
+  }, y);
 }
 
 int FSStrategy::clone_file_by_copy(const DoutPrefixProvider* dpp,
@@ -443,18 +829,79 @@ int FSStrategy::clone_file_by_copy(const DoutPrefixProvider* dpp,
 {
   int src_fd = ::openat(src_dir_fd, src_name.c_str(), O_RDONLY);
   if (src_fd < 0) {
+  /* the destination's create, and then what gives it its owner */
+  static constexpr uint64_t COPY_DEST_CAPS =
+    nsfs::cap_bit(CAP_DAC_OVERRIDE);
+  static constexpr uint64_t COPY_CHOWN_CAPS = nsfs::cap_bit(CAP_CHOWN);
+
+  };
+  int oret = nsfs::with_identity(dpp, id, open_src, y);
+
+  /* The destination as `id`, and raised where the filesystem denies it
+   * and the model permits;  hoisted out of the identity block below
+   * for the same reason as the source.  A raised create is the
+   * gateway's until the chown, so its mode is set first, while the
+   * gateway may still set it. */
+  const int dst_flags =
+    O_WRONLY | O_NOFOLLOW | O_CREAT | (excl ? O_EXCL : O_TRUNC);
+  int dst_fd = -1;
+  auto open_dst = [&]() -> int {
+    dst_fd = ::openat(dst_dir_fd, dst_name.c_str(), dst_flags,
+		      file_create_mode());
+    return (dst_fd < 0) ? -errno : 0;
+  };
+  bool dst_raised = false;
+  int dret = nsfs::with_identity(dpp, id, open_dst, y);
+  if (((dret == -EACCES) || (dret == -EPERM)) && src_as_gateway &&
+      id.active()) {
+    dret = nsfs::with_capabilities(dpp, COPY_DEST_CAPS, open_dst);
+    if (dret == 0) {
+      dst_raised = true;
+      dret = apply_create_mode(dpp, dst_fd, file_create_mode(), null_yield);
+    }
+    if (dret == 0) {
+      dret = nsfs::with_capabilities(dpp, COPY_CHOWN_CAPS, [&]() -> int {
+	return (::fchown(dst_fd, id.cred.uid, id.cred.gid) < 0) ? -errno : 0;
+      });
+    }
+    if (dret == 0) {
+      ldpp_dout_fmt(dpp, 10, "nsfs: clone_file: the filesystem denied the "
+                             "identity the destination {} and the gateway "
+                             "made it as theirs, which the access model "
+                             "permits", dst_name);
+    } else if (dst_fd >= 0) {
+      ::close(dst_fd);
+      dst_fd = -1;
+      (void) nsfs::with_capabilities(dpp, COPY_DEST_CAPS, [&]() -> int {
+	return ::unlinkat(dst_dir_fd, dst_name.c_str(), 0);
+      });
+    }
+  }
+  if (dret < 0) {
+    if (excl && (dret == -EEXIST)) {
+      /* lost the race;  the caller joins the winner's file */
+      return -EEXIST;
+    }
+    ldpp_dout_fmt(dpp, 0, "ERROR: clone_file: openat dst={} failed: {}",
+                          dst_name, cpp_strerror(-dret));
+    return dret;
+  }
+
+  /* the rest as `id`, who now owns the destination either way */
+  int ret = nsfs::with_identity(dpp, id, [&]() -> int {
+  struct statx stx;
+  int ret = nsfs::statx(src_fd, "", AT_EMPTY_PATH, STATX_SIZE, &stx);
+  if (ret < 0) {
     int err = errno;
-    ldpp_dout(dpp, 0) << "ERROR: clone_file: openat src=" << src_name
-      << " failed: " << cpp_strerror(err) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: clone_file: statx src={} failed: {}",
+                          src_name, cpp_strerror(err));
+    ::close(dst_fd);
     return -err;
   }
 
-  struct statx stx;
-  int ret = statx(src_fd, "", AT_EMPTY_PATH, STATX_SIZE, &stx);
-    ldpp_dout(dpp, 0) << "ERROR: clone_file: statx src=" << src_name
-      << " failed: " << cpp_strerror(err) << dendl;
-    return -err;
+  ret = apply_create_mode(dpp, dst_fd, file_create_mode(), null_yield);
   if (ret == 0) {
+    ret = copy_range(dpp, src_fd, 0, dst_fd, 0, stx.stx_size, hints);
   }
 
   int dst_flags = O_WRONLY | O_CREAT | (excl ? O_EXCL : O_TRUNC);
@@ -476,9 +923,20 @@ int FSStrategy::clone_file_by_copy(const DoutPrefixProvider* dpp,
   ::close(dst_fd);
 
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: clone_file: copy " << src_name
-      << " → " << dst_name << " failed: " << cpp_strerror(-ret) << dendl;
-    ::unlinkat(dst_dir_fd, dst_name.c_str(), 0);
+    ldpp_dout_fmt(dpp, 0, "ERROR: clone_file: copy {} → {} failed: {}",
+                          src_name, dst_name, cpp_strerror(-ret));
+    if (!dst_raised) {
+      ::unlinkat(dst_dir_fd, dst_name.c_str(), 0);
+    }
+  }
+  return ret;
+  }, y);
+  /* a raised destination is in a directory `id` cannot write,
+   * so its removal is the gateway's too */
+  if ((ret < 0) && dst_raised) {
+    (void) nsfs::with_capabilities(dpp, COPY_DEST_CAPS, [&]() -> int {
+      return ::unlinkat(dst_dir_fd, dst_name.c_str(), 0);
+    });
   }
   return ret;
 }
@@ -487,11 +945,23 @@ int FSStrategy::clone_fd_by_copy(const DoutPrefixProvider* dpp,
                                  int src_fd,
                                  int dst_dir_fd, const std::string& dst_name)
 {
+  int own_fd = -1;
+  if (id.active()) {
+    const std::string via = fmt::format("/proc/self/fd/{}", gw_src_fd);
+    }, y);
+  }
+  auto close_own = make_scope_guard([own_fd] {
+    if (own_fd >= 0) {
+      ::close(own_fd);
+    }
+  });
+  const int src_fd = (own_fd >= 0) ? own_fd : gw_src_fd;
+
   struct statx stx;
-  if (statx(src_fd, "", AT_EMPTY_PATH, STATX_SIZE, &stx) < 0) {
+  if (nsfs::statx(src_fd, "", AT_EMPTY_PATH, STATX_SIZE, &stx) < 0) {
     int err = errno;
-    ldpp_dout(dpp, 0) << "ERROR: clone_fd: statx src failed: "
-      << cpp_strerror(err) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: clone_fd: statx src failed: {}",
+                          cpp_strerror(err));
     return -err;
   }
 
@@ -503,7 +973,8 @@ int FSStrategy::clone_fd_by_copy(const DoutPrefixProvider* dpp,
     return -err;
   }
 
-  int ret = copy_range(dpp, src_fd, 0, tmp_fd, 0, stx.stx_size);
+      r = copy_range(dpp, src_fd, 0, tmp_fd, 0, stx.stx_size, hints);
+    }
   if (ret < 0) {
     ::close(tmp_fd);
     ldpp_dout(dpp, 0) << "ERROR: clone_fd: copy -> " << dst_name
@@ -522,7 +993,8 @@ int POSIXStrategy::clone_file(const DoutPrefixProvider* dpp,
                               bool excl)
 {
   return clone_file_by_copy(dpp, src_dir_fd, src_name,
-                            dst_dir_fd, dst_name, excl);
+                            dst_dir_fd, dst_name, y, hints, excl, id,
+                            src_as_gateway);
 }
 
 int POSIXStrategy::clone_fd(const DoutPrefixProvider* dpp,
@@ -564,22 +1036,20 @@ std::unique_ptr<GPFSStrategy> GPFSStrategy::try_create(
   struct statfs sfs;
   if (::statfs(base_path.c_str(), &sfs) == 0) {
     if (sfs.f_type != GPFS_SUPER_MAGIC) {
-      ldpp_dout(dpp, 1) << "gpfs: base_path " << base_path
-        << " is not a GPFS filesystem (f_type=0x"
-        << std::hex << sfs.f_type << std::dec
-        << "), falling back to POSIX strategy" << dendl;
+      ldpp_dout_fmt(dpp, 1, "gpfs: base_path {} is not a GPFS filesystem "
+                            "(f_type=0x{:x}), falling back to POSIX strategy",
+                            base_path, sfs.f_type);
       return nullptr;
     }
   } else {
-    ldpp_dout(dpp, 0) << "gpfs: statfs(" << base_path
-      << ") failed: " << cpp_strerror(errno) << dendl;
+    ldpp_dout_fmt(dpp, 0, "gpfs: statfs({}) failed: {}", base_path,
+                          cpp_strerror(errno));
     return nullptr;
   }
 
   void* dl = dlopen(dl_path.c_str(), RTLD_NOW | RTLD_LOCAL);
   if (!dl) {
-    ldpp_dout(dpp, 5) << "gpfs: dlopen " << dl_path
-      << " failed: " << dlerror() << dendl;
+    ldpp_dout_fmt(dpp, 5, "gpfs: dlopen {} failed: {}", dl_path, dlerror());
     return nullptr;
   }
 
@@ -600,15 +1070,15 @@ std::unique_ptr<GPFSStrategy> GPFSStrategy::try_create(
     dlsym(dl, "gpfs_fcntl"));
 
   if (!la || !lai || !ua) {
-    ldpp_dout(dpp, 0) << "gpfs: dlsym failed — missing symbols in "
-      << dl_path << dendl;
+    ldpp_dout_fmt(dpp, 0, "gpfs: dlsym failed — missing symbols in {}",
+                          dl_path);
     dlclose(dl);
     return nullptr;
   }
 
   if (!cs || !cc || !cu) {
-    ldpp_dout(dpp, 5) << "gpfs: clone symbols not available, "
-      << "clone_file will fall back to copy" << dendl;
+    ldpp_dout_fmt(dpp, 5, "gpfs: clone symbols not available, clone_file will "
+                          "fall back to copy");
   }
 
   /* LWE cluster-wide locking.
@@ -636,8 +1106,8 @@ std::unique_ptr<GPFSStrategy> GPFSStrategy::try_create(
   if (lwe_enabled) {
     dmapi_dl = dlopen("libdmapi.so", RTLD_NOW | RTLD_LOCAL);
     if (!dmapi_dl) {
-      ldpp_dout(dpp, 5) << "gpfs: dlopen libdmapi.so failed: "
-        << dlerror() << ", LWE locking will fall back to OFD" << dendl;
+      ldpp_dout_fmt(dpp, 5, "gpfs: dlopen libdmapi.so failed: {}, LWE locking "
+                            "will fall back to OFD", dlerror());
     } else {
       dm_fd = reinterpret_cast<dm_fd_to_handle_t>(
         dlsym(dmapi_dl, "dm_fd_to_handle"));
@@ -658,31 +1128,33 @@ std::unique_ptr<GPFSStrategy> GPFSStrategy::try_create(
       char sess_info[] = "ceph-rgw-nsfs";
       int ret = lcs(GPFS_LWE_NO_SESSION, sess_info, &session);
       if (ret < 0) {
-        ldpp_dout(dpp, 0) << "gpfs: lwe_create_session failed: "
-          << cpp_strerror(errno)
-          << ", LWE locking will fall back to OFD" << dendl;
+        ldpp_dout_fmt(dpp, 0, "gpfs: lwe_create_session failed: {}, LWE "
+                              "locking will fall back to OFD",
+                              cpp_strerror(errno));
         session = GPFS_LWE_NO_SESSION;
       } else {
         lwe_ok = true;
       }
     } else {
-      ldpp_dout(dpp, 5) << "gpfs: LWE/DMAPI symbols not available, "
-        << "version locking will fall back to OFD" << dendl;
+      ldpp_dout_fmt(dpp, 5, "gpfs: LWE/DMAPI symbols not available, version "
+                            "locking will fall back to OFD");
     }
   }
 
   bool batch_ok = batch_xattrs && fc;
   if (batch_xattrs && !fc) {
-    ldpp_dout(dpp, 5) << "gpfs: gpfs_fcntl symbol not available, "
-      << "batch xattr ops will fall back to POSIX" << dendl;
+    ldpp_dout_fmt(dpp, 5, "gpfs: gpfs_fcntl symbol not available, batch xattr "
+                          "ops will fall back to POSIX");
   }
 
   std::string features;
   if (clone_enabled) features += " clone";
   if (lwe_ok) features += " lwe";
   if (batch_ok) features += " batch-xattrs";
-  ldpp_dout(dpp, 1) << "gpfs: loaded " << dl_path
-    << (features.empty() ? "" : " (" + features.substr(1) + ")") << dendl;
+  ldpp_dout_fmt(dpp, 1, "gpfs: loaded {}{}", dl_path,
+                        (features.empty()
+                         ? ""
+                         : " (" + features.substr(1) + ")"));
 
   return std::unique_ptr<GPFSStrategy>(
     new GPFSStrategy(dl, dmapi_dl, la, lai, ua, cs, cc, cu, fc,
@@ -692,18 +1164,22 @@ std::unique_ptr<GPFSStrategy> GPFSStrategy::try_create(
 
 int GPFSStrategy::link_temp_file(int temp_fd, int dir_fd,
                                  const std::string& name,
-                                 const DoutPrefixProvider* dpp)
+                                 const DoutPrefixProvider* dpp,
+                                 optional_yield y,
+                                 const nsfs::FSIdentity& id)
 {
+  return nsfs::with_identity(dpp, id, [&]() -> int {
   /* gpfs_linkat with AT_EMPTY_PATH links an open fd directly into
    * the namespace, atomically replacing any existing entry */
   int ret = fn_linkat(temp_fd, "", dir_fd, name.c_str(), AT_EMPTY_PATH);
   if (ret < 0) {
     ret = errno;
-    ldpp_dout(dpp, 0) << "ERROR: gpfs_linkat for temp file: "
-      << cpp_strerror(ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: gpfs_linkat for temp file: {}",
+                          cpp_strerror(ret));
     return -ret;
   }
   return 0;
+  }, y);
 }
 
 SafeResult GPFSStrategy::safe_link(const DoutPrefixProvider* dpp,
@@ -712,40 +1188,109 @@ SafeResult GPFSStrategy::safe_link(const DoutPrefixProvider* dpp,
                                    int dst_dir_fd,
                                    const std::string& dst_name,
                                    uint64_t expected_mtime_ns,
-                                   uint64_t expected_ino)
+                                   uint64_t expected_ino,
+                                    optional_yield y,
+                                    const nsfs::FSIdentity& id)
 {
-  /* verify the source still matches expectations before linking */
-  if (!stat_matches(src_dir_fd, src_name, expected_mtime_ns, expected_ino)) {
-    ldpp_dout(dpp, 5) << "gpfs safe_link: source mismatch or gone"
-      << " src=" << src_name << dendl;
+  if (id.active() && nsfs::ring_metadata_changes()) {
+    /* One chain, as POSIXStrategy::safe_link().  The source check below
+     * is not repeated:  the destination check reads the inode that was
+     * linked, which settles what the source check would.  A source
+     * gone is a mismatch, as the source check makes it. */
+    struct statx stx = {};
+    UringOp ops[2] = {
+      ring_op(UringOp::Kind::linkat, src_dir_fd, src_name.c_str(),
+	      dst_dir_fd, dst_name.c_str()),
+      statx_op(dst_dir_fd, dst_name.c_str(), &stx),
+    };
+    if (nsfs::ring_as(dpp, id, ops, 2, y) == 0) {
+      const int lr = ops[0].result;
+      if ((lr == -EEXIST) || (lr == -ENOENT)) {
+	ldpp_dout_fmt(dpp, 5, "gpfs safe_link: src={} dst={}: {}", src_name,
+		      dst_name, cpp_strerror(-lr));
+	return SafeResult::MISMATCH;
+      }
+      if (lr < 0) {
+	ldpp_dout_fmt(dpp, 0, "ERROR: linkat failed: {} src={} dst={}",
+		      cpp_strerror(-lr), src_name, dst_name);
+	return ((lr == -EACCES) || (lr == -EPERM)) ? SafeResult::DENIED
+						   : SafeResult::ERROR;
+      }
+      if ((ops[1].result >= 0) &&
+	  statx_is(stx, expected_mtime_ns, expected_ino)) {
+	return SafeResult::OK;
+      }
+      (void) op_as(dpp, id, nsfs::HopKind::link,
+	ring_op(UringOp::Kind::unlinkat, dst_dir_fd, dst_name.c_str()),
+	[&]() -> int {
+	  return (::unlinkat(dst_dir_fd, dst_name.c_str(), 0) < 0) ? -errno : 0;
+	}, y);
+      return SafeResult::MISMATCH;
+    }
+  }
+
+  return nsfs::with_identity_r(dpp, id, nsfs::HopKind::link, [&]() -> SafeResult {
+  /* verify the source still matches expectations before linking;  a
+   * stat the identity is refused is a denial, as linkat()'s is, so the
+   * caller may perform it as the gateway */
+  struct statx stx;
+  if (nsfs::statx(src_dir_fd, src_name.c_str(), 0, STATX_INO | STATX_MTIME,
+                  &stx) < 0) {
+    const int err = errno;
+    if ((err == EACCES) || (err == EPERM)) {
+      return SafeResult::DENIED;
+    }
+    ldpp_dout_fmt(dpp, 5, "gpfs safe_link: source gone src={}: {}", src_name,
+                          cpp_strerror(err));
+    return SafeResult::MISMATCH;
+  }
+  if ((statx_mtime_ns(stx) != expected_mtime_ns) ||
+      (stx.stx_ino != expected_ino)) {
+    ldpp_dout_fmt(dpp, 5, "gpfs safe_link: source mismatch src={}", src_name);
     return SafeResult::MISMATCH;
   }
 
-  /* gpfs_linkatif with replacefd=0 skips the destination inode check,
-   * creating a new link or unconditionally replacing an existing one */
-  int ret = fn_linkatif(src_dir_fd, src_name.c_str(),
-                        dst_dir_fd, dst_name.c_str(),
-                        0, 0);
-  int err = errno;
-
+  /* linkat(2), not gpfs_linkatif():  every caller needs the link to
+   * fail when the destination exists, and gpfs_linkatif() replaces it
+   * instead.  Its replacement is conditional on the destination's
+   * inode matching replacefd, and "if the inode passed in is zero skip
+   * the check" (gpfs.h) -- zero is what this passed, so the
+   * destination was replaced unconditionally, discarding a version
+   * entry or a current version another writer had just put there.
+   * linkat() is "fail if the destination exists" by definition, and a
+   * GPFS file is an ordinary file to it. */
+  int ret = ::linkat(src_dir_fd, src_name.c_str(),
+                     dst_dir_fd, dst_name.c_str(), 0);
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: gpfs_linkatif failed: "
-      << cpp_strerror(err)
-      << " src=" << src_name << " dst=" << dst_name << dendl;
+    int err = errno;
     if (err == EEXIST) {
       return SafeResult::MISMATCH;
     }
+    ldpp_dout_fmt(dpp, 0, "ERROR: linkat failed: {} src={} dst={}",
+                          cpp_strerror(err), src_name, dst_name);
     return SafeResult::ERROR;
   }
-  return SafeResult::OK;
+
+  /* the source was checked above, but between that check and the link
+   * it could have been replaced;  a hard link shares the inode, so
+   * checking the destination checks what was actually linked */
+  if (stat_matches(dst_dir_fd, dst_name, expected_mtime_ns, expected_ino)) {
+    return SafeResult::OK;
+  }
+  ::unlinkat(dst_dir_fd, dst_name.c_str(), 0);
+  return SafeResult::MISMATCH;
+  }, y);
 }
 
 SafeResult GPFSStrategy::safe_unlink(const DoutPrefixProvider* dpp,
                                      int dir_fd, const std::string& name,
                                      int tmp_dir_fd,
                                      uint64_t expected_mtime_ns,
-                                     uint64_t expected_ino)
+                                     uint64_t expected_ino,
+                                      optional_yield y,
+                                      const nsfs::FSIdentity& id)
 {
+  return nsfs::with_identity_r(dpp, id, [&]() -> SafeResult {
   /* open the target to get an fd; gpfs_unlinkat removes the entry
    * only if its inode matches this fd */
   int fd = ::openat(dir_fd, name.c_str(), O_RDONLY);
@@ -761,7 +1306,7 @@ SafeResult GPFSStrategy::safe_unlink(const DoutPrefixProvider* dpp,
 
   /* verify inode+mtime before attempting the unlink */
   struct statx stx;
-  int ret = statx(fd, "", AT_EMPTY_PATH, STATX_INO | STATX_MTIME, &stx);
+  int ret = nsfs::statx(fd, "", AT_EMPTY_PATH, STATX_INO | STATX_MTIME, &stx);
   if (ret < 0 ||
       statx_mtime_ns(stx) != expected_mtime_ns ||
       stx.stx_ino != expected_ino) {
@@ -774,34 +1319,34 @@ SafeResult GPFSStrategy::safe_unlink(const DoutPrefixProvider* dpp,
   ::close(fd);
 
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: gpfs_unlinkat failed: "
-      << cpp_strerror(err) << " name=" << name << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: gpfs_unlinkat failed: {} name={}",
+                          cpp_strerror(err), name);
     if (err == EEXIST) {
       return SafeResult::MISMATCH;
     }
     return SafeResult::ERROR;
   }
   return SafeResult::OK;
+  }, y);
 }
 
 static std::string fd_path(int dir_fd, const std::string& name)
 {
-  char proc[64];
   char resolved[PATH_MAX];
-  snprintf(proc, sizeof(proc), "/proc/self/fd/%d", dir_fd);
-  ssize_t len = ::readlink(proc, resolved, sizeof(resolved) - 1);
+  const std::string proc = fmt::format("/proc/self/fd/{}", dir_fd);
+  ssize_t len = ::readlink(proc.c_str(), resolved, sizeof(resolved) - 1);
   if (len < 0) {
     return {};
   }
   resolved[len] = '\0';
-  return std::string(resolved) + "/" + name;
+  return fmt::format("{}/{}", resolved, name);
 }
 
 /* hidden name for clone parent files — dot-prefix keeps them
  * out of bucket listings */
 static std::string clone_parent_name(const std::string& name)
 {
-  return std::string(CLONE_PARENT_PREFIX) + name;
+  return fmt::format("{}{}", CLONE_PARENT_PREFIX, name);
 }
 
 int GPFSStrategy::clone_file(const DoutPrefixProvider* dpp,
@@ -810,10 +1355,15 @@ int GPFSStrategy::clone_file(const DoutPrefixProvider* dpp,
                              bool excl)
 {
   if (!has_clone()) {
-    ldpp_dout(dpp, 10) << "gpfs clone_file: clone symbols not available, "
-      << "falling back to copy" << dendl;
+    ldpp_dout_fmt(dpp, 10, "gpfs clone_file: clone symbols not available, "
+                           "falling back to copy");
     return clone_file_by_copy(dpp, src_dir_fd, src_name,
                               dst_dir_fd, dst_name, excl);
+  }
+  /* The clone path makes its parent and child as the gateway.  As an
+   * identity, copy instead, so the clone is its own and the read of
+   * the source is checked against it. */
+  if (id.active()) {
   }
 
   /* gpfs_clone_copy() has no exclusive-create mode, so the best we
@@ -828,15 +1378,14 @@ int GPFSStrategy::clone_file(const DoutPrefixProvider* dpp,
    * has_clone(), and an active identity falls back to the copy
    * above. */
   if (excl &&
-      (::faccessat(dst_dir_fd, dst_name.c_str(), F_OK, 0) == 0)) {
+      (::faccessat(dst_dir_fd, dst_name.c_str(), F_OK, AT_EACCESS) == 0)) {
     return -EEXIST;
   }
 
   std::string src_path = fd_path(src_dir_fd, src_name);
   std::string dst_path = fd_path(dst_dir_fd, dst_name);
   if (src_path.empty() || dst_path.empty()) {
-    ldpp_dout(dpp, 0) << "ERROR: gpfs clone_file: could not resolve paths"
-      << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: gpfs clone_file: could not resolve paths");
     return -EINVAL;
   }
 
@@ -855,8 +1404,8 @@ int GPFSStrategy::clone_file(const DoutPrefixProvider* dpp,
   std::string snap_name = clone_parent_name(dst_name);
   std::string snap_path = fd_path(dst_dir_fd, snap_name);
   if (snap_path.empty()) {
-    ldpp_dout(dpp, 0) << "ERROR: gpfs clone_file: could not resolve snap path"
-      << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: gpfs clone_file: could not resolve snap "
+                          "path");
     return -EINVAL;
   }
 
@@ -866,26 +1415,24 @@ int GPFSStrategy::clone_file(const DoutPrefixProvider* dpp,
   int ret = fn_clone_snap(src_path.c_str(), snap_path.c_str());
   if (ret < 0) {
     int err = errno;
-    ldpp_dout(dpp, 5) << "gpfs clone_file: clone_snap " << src_name
-      << " failed: " << cpp_strerror(err)
-      << ", falling back to copy" << dendl;
+    ldpp_dout_fmt(dpp, 5, "gpfs clone_file: clone_snap {} failed: {}, falling "
+                          "back to copy", src_name, cpp_strerror(err));
     return clone_file_by_copy(dpp, src_dir_fd, src_name,
-                              dst_dir_fd, dst_name, excl);
+                              dst_dir_fd, dst_name, y, hints, excl);
   }
 
   ret = fn_clone_copy(snap_path.c_str(), dst_path.c_str());
   if (ret < 0) {
     int err = errno;
-    ldpp_dout(dpp, 5) << "gpfs clone_file: clone_copy " << src_name
-      << " → " << dst_name << " failed: " << cpp_strerror(err)
-      << ", falling back to copy" << dendl;
+    ldpp_dout_fmt(dpp, 5, "gpfs clone_file: clone_copy {} → {} failed: {}, "
+                          "falling back to copy", src_name, dst_name,
+                          cpp_strerror(err));
     cleanup_clone(dpp, dst_dir_fd, dst_name);
     return clone_file_by_copy(dpp, src_dir_fd, src_name,
-                              dst_dir_fd, dst_name, excl);
+                              dst_dir_fd, dst_name, y, hints, excl);
   }
 
-  ldpp_dout(dpp, 10) << "gpfs clone_file: cloned " << src_name
-    << " → " << dst_name << dendl;
+  ldpp_dout_fmt(dpp, 10, "gpfs clone_file: cloned {} → {}", src_name, dst_name);
   return 0;
 }
 
@@ -926,11 +1473,10 @@ void GPFSStrategy::cleanup_clone(const DoutPrefixProvider* dpp,
 
   ret = ::unlinkat(dir_fd, snap_name.c_str(), 0);
   if (ret < 0) {
-    ldpp_dout(dpp, 5) << "gpfs cleanup_clone: unlink "
-      << snap_name << " failed: " << cpp_strerror(errno) << dendl;
+    ldpp_dout_fmt(dpp, 5, "gpfs cleanup_clone: unlink {} failed: {}", snap_name,
+                          cpp_strerror(errno));
   } else {
-    ldpp_dout(dpp, 10) << "gpfs cleanup_clone: removed "
-      << snap_name << dendl;
+    ldpp_dout_fmt(dpp, 10, "gpfs cleanup_clone: removed {}", snap_name);
   }
 }
 
@@ -952,10 +1498,21 @@ void GPFSStrategy::cleanup_clone(const DoutPrefixProvider* dpp,
 static size_t align8(size_t n) { return (n + 7) & ~7; }
 
 int GPFSStrategy::get_xattrs(const DoutPrefixProvider* dpp, int fd,
-                             xattr_map_t& attrs)
+                             xattr_map_t& attrs,
+                             optional_yield y,
+                             const nsfs::FSIdentity& id)
 {
+  /* The whole batch under one identity.
+   *
+   * gpfs_fcntl is a vendor ioctl, so no io_uring opcode will ever
+   * carry it -- the mechanism that would is f_op->uring_cmd on
+   * GPFS files, which is IBM's to implement.  Until then every
+   * attribute operation here costs a thread hop, which is why it
+   * is taken once around the whole batch rather than per
+   * attribute. */
+  return nsfs::with_identity(dpp, id, [&]() -> int {
   if (!has_batch_xattrs()) {
-    return POSIXStrategy().get_xattrs(dpp, fd, attrs);
+    return POSIXStrategy().get_xattrs(dpp, fd, attrs, null_yield);
   }
 
   /* first, list xattr names via gpfs_fcntl LIST_XATTR */
@@ -975,9 +1532,9 @@ int GPFSStrategy::get_xattrs(const DoutPrefixProvider* dpp, int fd,
   int ret = fn_fcntl(fd, &list_arg);
   if (ret < 0) {
     int err = errno;
-    ldpp_dout(dpp, 5) << "gpfs get_xattrs: LIST_XATTR failed: "
-      << cpp_strerror(err) << ", falling back to POSIX" << dendl;
-    return POSIXStrategy().get_xattrs(dpp, fd, attrs);
+    ldpp_dout_fmt(dpp, 5, "gpfs get_xattrs: LIST_XATTR failed: {}, falling "
+                          "back to POSIX", cpp_strerror(err));
+    return POSIXStrategy().get_xattrs(dpp, fd, attrs, null_yield);
   }
 
   /* parse the length-prefixed name list */
@@ -1054,9 +1611,9 @@ int GPFSStrategy::get_xattrs(const DoutPrefixProvider* dpp, int fd,
     ret = fn_fcntl(fd, get_buf);
     if (ret < 0) {
       int err = errno;
-      ldpp_dout(dpp, 5) << "gpfs get_xattrs: batch GET_XATTR failed: "
-        << cpp_strerror(err) << ", falling back to POSIX" << dendl;
-      return POSIXStrategy().get_xattrs(dpp, fd, attrs);
+      ldpp_dout_fmt(dpp, 5, "gpfs get_xattrs: batch GET_XATTR failed: {}, "
+                            "falling back to POSIX", cpp_strerror(err));
+      return POSIXStrategy().get_xattrs(dpp, fd, attrs, null_yield);
     }
 
     for (auto& slot : slots) {
@@ -1098,16 +1655,20 @@ int GPFSStrategy::get_xattrs(const DoutPrefixProvider* dpp, int fd,
     }
   }
 
-  ldpp_dout(dpp, 20) << "gpfs get_xattrs: batch read "
-    << attrs.size() << " xattrs" << dendl;
+  ldpp_dout_fmt(dpp, 20, "gpfs get_xattrs: batch read {} xattrs", attrs.size());
   return 0;
+  }, y);
 }
 
 int GPFSStrategy::set_xattrs(const DoutPrefixProvider* dpp, int fd,
-                             const xattr_map_t& attrs)
+                             const xattr_map_t& attrs,
+                             optional_yield y,
+                             const nsfs::FSIdentity& id)
 {
+  /* see get_xattrs on why the whole batch */
+  return nsfs::with_identity(dpp, id, [&]() -> int {
   if (!has_batch_xattrs() || attrs.empty()) {
-    return POSIXStrategy().set_xattrs(dpp, fd, attrs);
+    return POSIXStrategy().set_xattrs(dpp, fd, attrs, null_yield);
   }
 
   char buf[GPFS_MAX_FCNTL_LENGTH];
@@ -1129,9 +1690,9 @@ int GPFSStrategy::set_xattrs(const DoutPrefixProvider* dpp, int fd,
       int ret = fn_fcntl(fd, buf);
       if (ret < 0) {
         int err = errno;
-        ldpp_dout(dpp, 5) << "gpfs set_xattrs: batch SET_XATTR failed: "
-          << cpp_strerror(err) << ", falling back to POSIX" << dendl;
-        return POSIXStrategy().set_xattrs(dpp, fd, attrs);
+        ldpp_dout_fmt(dpp, 5, "gpfs set_xattrs: batch SET_XATTR failed: {}, "
+                              "falling back to POSIX", cpp_strerror(err));
+        return POSIXStrategy().set_xattrs(dpp, fd, attrs, null_yield);
       }
       off = sizeof(gpfsFcntlHeader_t);
       memset(hdr, 0, sizeof(*hdr));
@@ -1155,21 +1716,26 @@ int GPFSStrategy::set_xattrs(const DoutPrefixProvider* dpp, int fd,
   int ret = fn_fcntl(fd, buf);
   if (ret < 0) {
     int err = errno;
-    ldpp_dout(dpp, 5) << "gpfs set_xattrs: batch SET_XATTR failed: "
-      << cpp_strerror(err) << ", falling back to POSIX" << dendl;
-    return POSIXStrategy().set_xattrs(dpp, fd, attrs);
+    ldpp_dout_fmt(dpp, 5, "gpfs set_xattrs: batch SET_XATTR failed: {}, "
+                          "falling back to POSIX", cpp_strerror(err));
+    return POSIXStrategy().set_xattrs(dpp, fd, attrs, null_yield);
   }
 
-  ldpp_dout(dpp, 20) << "gpfs set_xattrs: batch wrote "
-    << attrs.size() << " xattrs" << dendl;
+  ldpp_dout_fmt(dpp, 20, "gpfs set_xattrs: batch wrote {} xattrs",
+                         attrs.size());
   return 0;
+  }, y);
 }
 
 int GPFSStrategy::remove_xattrs(const DoutPrefixProvider* dpp, int fd,
-                                const std::vector<std::string>& names)
+                                const std::vector<std::string>& names,
+                                optional_yield y,
+                                const nsfs::FSIdentity& id)
 {
+  /* see get_xattrs on why the whole batch */
+  return nsfs::with_identity(dpp, id, [&]() -> int {
   if (!has_batch_xattrs() || names.empty()) {
-    return POSIXStrategy().remove_xattrs(dpp, fd, names);
+    return POSIXStrategy().remove_xattrs(dpp, fd, names, null_yield);
   }
 
   char buf[GPFS_MAX_FCNTL_LENGTH];
@@ -1202,14 +1768,15 @@ int GPFSStrategy::remove_xattrs(const DoutPrefixProvider* dpp, int fd,
   int ret = fn_fcntl(fd, buf);
   if (ret < 0) {
     int err = errno;
-    ldpp_dout(dpp, 5) << "gpfs remove_xattrs: batch delete failed: "
-      << cpp_strerror(err) << ", falling back to POSIX" << dendl;
-    return POSIXStrategy().remove_xattrs(dpp, fd, names);
+    ldpp_dout_fmt(dpp, 5, "gpfs remove_xattrs: batch delete failed: {}, "
+                          "falling back to POSIX", cpp_strerror(err));
+    return POSIXStrategy().remove_xattrs(dpp, fd, names, null_yield);
   }
 
-  ldpp_dout(dpp, 20) << "gpfs remove_xattrs: batch deleted "
-    << names.size() << " xattrs" << dendl;
+  ldpp_dout_fmt(dpp, 20, "gpfs remove_xattrs: batch deleted {} xattrs",
+                         names.size());
   return 0;
+  }, y);
 }
 
 /* LWE lock handle — holds a cluster-wide exclusive right via the
@@ -1242,8 +1809,8 @@ std::unique_ptr<VersionLockHandle> GPFSStrategy::version_lock(
   const DoutPrefixProvider* dpp, int lock_fd)
 {
   if (!has_lwe()) {
-    ldpp_dout(dpp, 10) << "gpfs version_lock: LWE not available, "
-      << "falling back to OFD" << dendl;
+    ldpp_dout_fmt(dpp, 10, "gpfs version_lock: LWE not available, falling "
+                           "back to OFD");
     return std::make_unique<OFDLockHandle>(lock_fd);
   }
 
@@ -1251,9 +1818,8 @@ std::unique_ptr<VersionLockHandle> GPFSStrategy::version_lock(
   size_t hlen = 0;
   int ret = fn_dm_fd_to_handle(lock_fd, &hanp, &hlen);
   if (ret < 0) {
-    ldpp_dout(dpp, 5) << "gpfs version_lock: dm_fd_to_handle failed: "
-      << cpp_strerror(errno)
-      << ", falling back to OFD" << dendl;
+    ldpp_dout_fmt(dpp, 5, "gpfs version_lock: dm_fd_to_handle failed: {}, "
+                          "falling back to OFD", cpp_strerror(errno));
     return std::make_unique<OFDLockHandle>(lock_fd);
   }
 
@@ -1350,6 +1916,10 @@ mode_t dir_create_mode()
  * with O_CREAT found already there -- a shared part file, a sideloaded
  * object being overwritten -- has its own mode and is left alone, and
  * under impersonation its owner may not be `id`. */
+int apply_create_mode(const DoutPrefixProvider* dpp, int fd, mode_t mode,
+		      optional_yield y,
+		      const FSIdentity& id)
+{
   const mode_t masked = mode & ~process_umask();
   if (masked == mode) {
     return 0;
@@ -1360,6 +1930,8 @@ mode_t dir_create_mode()
   }
   return with_identity(dpp, id, [fd, mode]() -> int {
     return (::fchmod(fd, mode) < 0) ? -errno : 0;
+  }, y);
+}
 
 int apply_create_mode_at(const DoutPrefixProvider* dpp, int dirfd,
 			 const char* name, mode_t mode)
@@ -1369,6 +1941,8 @@ int apply_create_mode_at(const DoutPrefixProvider* dpp, int dirfd,
     return 0;
   }
   struct stat st;
+  if ((nsfs::fstatat(dirfd, name, &st, AT_SYMLINK_NOFOLLOW) < 0) ||
+      ((st.st_mode & 07777) != masked)) {
     return 0;
   }
   return (::fchmodat(dirfd, name, mode, 0) < 0) ? -errno : 0;

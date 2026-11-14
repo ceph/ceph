@@ -267,14 +267,50 @@ const ReservedNames& PerPartMPUStrategy::reserved_names() const
   return names;
 }
 
+/* An assembly's output, created as `id`:  it becomes the object, so its
+ * owner is the object's.  A descriptor, or -errno. */
+static int create_output(const DoutPrefixProvider* dpp, const FSIdentity& id,
+			 int dir_fd, const std::string& name)
+{
+  if (id.active()) {
+    return open_as(dpp, id, dir_fd, name.c_str(), flags, file_create_mode());
+  }
+  const int fd = ::openat(dir_fd, name.c_str(), flags, file_create_mode());
+  return (fd < 0) ? -errno : fd;
+}
 
+/* A part, or the shared file, opened to be read into an assembly, as
+ * `id`:  they are the uploader's data, and the gateway's read-search
+ * capability is not for data.  A descriptor, or -errno. */
+static int open_input(const DoutPrefixProvider* dpp, const FSIdentity& id,
+		      int dir_fd, const std::string& name)
+{
+  if (id.active()) {
+    return open_as(dpp, id, dir_fd, name.c_str(), O_RDONLY, 0);
+  }
+  return (fd < 0) ? -errno : fd;
+}
+
+int PerPartMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
+			     int dir_fd,
+			     const std::vector<PartPlacement>& parts,
+			     const std::string& output_name,
+			     std::optional<uint64_t> stride,
+			     optional_yield y, const CopyHints& hints,
+			     const FSIdentity& id) const
+{
   if (! fs) {
     return -EINVAL;
   }
 
+  int out_fd = create_output(dpp, id, dir_fd, output_name);
   if (out_fd < 0) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: could not create assembly file {}: {}",
+			  output_name, cpp_strerror(-out_fd));
+    return out_fd;
   }
   auto close_out = make_scope_guard([out_fd] { ::close(out_fd); });
+  if (int mret = apply_create_mode(dpp, out_fd, file_create_mode(), y, id);
       mret < 0) {
     return mret;
   }
@@ -285,16 +321,23 @@ const ReservedNames& PerPartMPUStrategy::reserved_names() const
   off_t out_offset = 0;
   for (const auto& part : parts) {
     const std::string pname = part_name(part.num);
+    int part_fd = open_input(dpp, id, dir_fd, pname);
     if (part_fd < 0) {
+      ldpp_dout_fmt(dpp, 0, "ERROR: could not open part {}: {}", pname,
+			    cpp_strerror(-part_fd));
+      return part_fd;
     }
     auto close_part = make_scope_guard([part_fd] { ::close(part_fd); });
 
     struct statx stx;
+    int ret = nsfs::statx(part_fd, "", AT_EMPTY_PATH, STATX_SIZE, &stx);
     if (ret < 0) {
       ret = errno;
       return -ret;
     }
 
+    ret = fs->copy_range(dpp, part_fd, 0, out_fd, out_offset, stx.stx_size,
+			 hints);
     if (ret < 0) {
       ldpp_dout_fmt(dpp, 0, "ERROR: could not copy part {}: {}", pname,
 			    cpp_strerror(-ret));
@@ -361,6 +404,14 @@ StridedMPUStrategy::shared_name(uint64_t stride) const
   return fmt::format("{}{}", RGW_MP_SHARED_PREFIX, stride);
 }
 
+int StridedMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
+				 int dir_fd,
+				 const std::vector<PartPlacement>& parts,
+				 const std::string& output_name,
+				 std::optional<uint64_t> stride,
+				 optional_yield y, const CopyHints& hints,
+				 const FSIdentity& id) const
+{
   if (!fs) {
     return -EINVAL;
   }
@@ -372,6 +423,9 @@ StridedMPUStrategy::shared_name(uint64_t stride) const
    * shared file and nothing here could have been placed in it */
   const std::string sname = stride ? *shared_name(*stride) : std::string();
   if (sname.empty()) {
+    return PerPartMPUStrategy::assemble(dpp, fs, dir_fd, parts, output_name,
+					stride, y, hints, id);
+  }
 
   /* Can the shared file be the object as it stands?
    *
@@ -399,14 +453,56 @@ StridedMPUStrategy::shared_name(uint64_t stride) const
   }
 
   if (contiguous) {
+    /* The shared file already holds the object, in order, from zero.
+     * Link it under the output name -- no copy at any size -- and trim,
+     * because it may be longer than the object:  a short final part may
+     * have been padded to a block, and a diverted part may have left a
+     * tail behind.
+     *
+     * As `id`, who wrote the shared file and so owns it:  linking a file
+     * one does not own, and opening it to trim, are its owner's. */
+    return with_identity(dpp, id, [&]() -> int {
+      if (linkat(dir_fd, sname.c_str(),
+		 dir_fd, output_name.c_str(), 0) < 0) {
+	int ret = errno;
+	ldpp_dout_fmt(dpp, 0, "ERROR: could not link {} to {}: {}", sname,
+			      output_name, cpp_strerror(ret));
+	return -ret;
+      }
+
+      if (out_fd < 0) {
+	int ret = errno;
+	ldpp_dout_fmt(dpp, 0, "ERROR: could not open {} to trim: {}",
+			      output_name, cpp_strerror(ret));
+	return -ret;
+      }
+      auto close_out = make_scope_guard([out_fd] { ::close(out_fd); });
+
+      if (ftruncate(out_fd, total) < 0) {
+	int ret = errno;
+	ldpp_dout_fmt(dpp, 0, "ERROR: could not trim {} to {}: {}", output_name,
+			      total, cpp_strerror(ret));
+	return -ret;
+      }
+
+      ldpp_dout_fmt(dpp, 15, "StridedMPUStrategy::assemble: linked {} parts, "
+			     "{} bytes, no copy", parts.size(), total);
+      return 0;
+    }, y);
+  }
 
   /* Some part is not where the object wants it.  Copy each one from
    * wherever its record says it is;  a part in the shared file is read
    * from its offset there, a part in its own file from the start of
    * that file. */
+  int out_fd = create_output(dpp, id, dir_fd, output_name);
   if (out_fd < 0) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: could not create assembly file {}: {}",
+			  output_name, cpp_strerror(-out_fd));
+    return out_fd;
   }
   auto close_out = make_scope_guard([out_fd] { ::close(out_fd); });
+  if (int mret = apply_create_mode(dpp, out_fd, file_create_mode(), y, id);
       mret < 0) {
     return mret;
   }
@@ -430,16 +526,27 @@ StridedMPUStrategy::shared_name(uint64_t stride) const
 
     if (part.shared) {
       if (shared_fd < 0) {
+	shared_fd = open_input(dpp, id, dir_fd, sname);
 	if (shared_fd < 0) {
+	  ldpp_dout_fmt(dpp, 0, "ERROR: could not open {}: {}", sname,
+				cpp_strerror(-shared_fd));
+	  return shared_fd;
+	}
       }
       src_fd = shared_fd;
     } else {
       const std::string pname = part_name(part.num);
+      own_fd = open_input(dpp, id, dir_fd, pname);
       if (own_fd < 0) {
+	ldpp_dout_fmt(dpp, 0, "ERROR: could not open part {}: {}", pname,
+			      cpp_strerror(-own_fd));
+	return own_fd;
       }
       src_fd = own_fd;
     }
 
+    int ret = fs->copy_range(dpp, src_fd, part.shared ? part.offset : 0,
+			     out_fd, out_offset, part.stored, hints);
     if (ret < 0) {
       ldpp_dout_fmt(dpp, 0, "ERROR: could not copy part {}: {}", part.num,
 			    cpp_strerror(-ret));
@@ -583,6 +690,7 @@ NooBaaMPUStrategy::staging_root(const DoutPrefixProvider* dpp,
    * never uploaded to has the one and not the other.  Returning a
    * path that does not exist would send an enumeration at it. */
   const std::string root = fmt::format("{}/{}", *found, NB_MPU_ROOT);
+  if (::faccessat(bucket_fd, root.c_str(), F_OK, AT_EACCESS) != 0) {
     return std::nullopt;
   }
   return root;
@@ -671,6 +779,8 @@ static std::optional<std::string> nb_scan_tmpdir(const DoutPrefixProvider* dpp,
 
     /* the one that holds uploads, whatever it is called */
     const std::string probe = fmt::format("{}/{}", n, NB_MPU_ROOT);
+    const bool holds_uploads =
+	(::faccessat(bucket_fd, probe.c_str(), F_OK, AT_EACCESS) == 0);
 
     if (!holds_uploads && !nb_uuid_suffixed(n)) {
       continue;
@@ -778,6 +888,7 @@ namespace {
 std::optional<uint64_t> u64_xattr(int fd, const char* name)
 {
   char buf[32];
+  ssize_t len = nsfs::fgetxattr(fd, name, buf, sizeof(buf) - 1);
   if (len <= 0) {
     return std::nullopt;
   }
@@ -878,11 +989,15 @@ bool NooBaaMPUStrategy::part_record(const DoutPrefixProvider* dpp,
   out.shared = true;
 
   char ebuf[256];
+  ssize_t elen = nsfs::fgetxattr(part_fd, NB_XATTR_CONTENT_MD5, ebuf,
+			     sizeof(ebuf));
   if (elen > 0) {
     out.etag.assign(ebuf, elen);
   }
 
   struct statx stx;
+  if (nsfs::statx(part_fd, "", AT_EMPTY_PATH, STATX_MTIME | STATX_INO,
+		  &stx) == 0) {
     out.mtime = ceph::real_clock::from_time_t(stx.stx_mtime.tv_sec) +
 		std::chrono::nanoseconds(stx.stx_mtime.tv_nsec);
     if (out.etag.empty()) {
@@ -1025,6 +1140,14 @@ const ReservedNames& NooBaaMPUStrategy::reserved_names() const
 /* NooBaa's staging is read and never written (DECISIONS.md 2026-10-21):
  * adoption carries an upload NooBaa started into RGW's layout, and a
  * write to one it has not reached waits for it. */
+int NooBaaMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
+				int dir_fd,
+				const std::vector<PartPlacement>& parts,
+				const std::string& output_name,
+				std::optional<uint64_t> stride,
+				optional_yield y, const CopyHints& hints,
+				const FSIdentity& id) const
+{
   return -ERR_INVALID_BUCKET_STATE;
 }
 

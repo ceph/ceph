@@ -16,6 +16,8 @@
 #   --gpfs-root DIR     GPFS data directory (default: /mnt/rgw/nsfs)
 #   --clean             Wipe config DB and all data before starting
 #   --debug-rgw N       Debug level (default: 20)
+#   --port N            The port radosgw serves on (default: 8000);  the
+#                       one s3tests.conf names
 #   --with-keycloak     Start a local Keycloak container for WebIdentity
 #                       testing (requires podman, jq, openssl, curl)
 #   --with-kafka        Start a local Kafka broker for notification testing
@@ -25,6 +27,21 @@
 #   --with-lifecycle     Set rgw_lc_debug_interval=10 so lifecycle
 #                       expiration tests complete in seconds, and
 #                       uncomment lc_debug_interval in s3tests.conf
+#   --with-impersonation
+#                       Serve each request as its own POSIX identity.
+#                       Creates the fixture users and groups, seeds a
+#                       bucket whose objects are gated on group
+#                       membership, and applies the six capabilities
+#                       (n) needs to the built radosgw -- three held,
+#                       three raised around named sites.  Needs sudo;  each step
+#                       is skipped if already done.  Also makes two
+#                       unplaced, account-owned directories for
+#                       placement tests, afresh on every start.
+#                       Exits with an error if run as root.
+#   --no-fixture        With --with-impersonation:  the users, groups and
+#                       capabilities only -- no seeded bucket, no
+#                       unplaced directories.  For a --data-root another
+#                       gateway wrote, which the fixture would write into.
 #   --with-inotify      Enable inotify watcher on bucket directories
 #                       (for sideloaded file detection; off by default)
 #   --ramdisk           Mount tmpfs on data root and LMDB cache dirs
@@ -32,6 +49,18 @@
 #   --bucket-profile P  shared | strong:  the profile new nsfs buckets are
 #                       marked with.  The driver defaults to shared;  FSIO
 #                       (librgw, the librgw_file tests) needs strong.
+#                       does when S3 authorises an operation the filesystem
+#                       denies the requester (rgw_nsfs_access_model).  The
+#                       driver defaults to posix-strict.
+#   --user-identity-override
+#                       An account user's own identity row overrides its
+#                       account's (rgw_nsfs_user_identity_override), as
+#                       NooBaa serves an IAM user from its own record.
+#                       The driver defaults to off.
+#   --role-identity-override
+#                       A role given an identity row runs as it, not as its
+#                       account (rgw_nsfs_role_identity_override).  The
+#                       driver defaults to off.
 #   --data-root DIR     Serve objects from DIR/root instead of the build
 #                       directory (e.g. --data-root /mnt/nvme for fast
 #                       storage, or a tree another gateway wrote).
@@ -67,14 +96,21 @@ KEYCLOAK=false
 KAFKA=false
 VAULT=false
 LIFECYCLE=false
+IMPERSONATE=false
+IMPERSONATE_CLEAN=false
+NO_FIXTURE=false
 INOTIFY=false
 RAMDISK=false
 DATA_ROOT=""
 BUCKET_PROFILE=""
+ACCESS_MODEL=""
+USER_IDENTITY_OVERRIDE=false
+ROLE_IDENTITY_OVERRIDE=false
 PERF=false
 PROFILE=false
 GPFS_ROOT=/mnt/rgw/nsfs
 DEBUG_RGW=20
+RGW_PORT=8000
 FOREGROUND=false
 RESTART=false
 EXTRA_OPTS=()
@@ -85,25 +121,36 @@ while [[ $# -gt 0 ]]; do
 		--gpfs)       GPFS=true; shift ;;
 		--clone)      CLONE=true; GPFS=true; shift ;;
 		--lwe)        LWE=true; GPFS=true; shift ;;
-		--clean)      CLEAN=true; shift ;;
+		--clean)      CLEAN=true; IMPERSONATE_CLEAN=true; shift ;;
 		--with-keycloak) KEYCLOAK=true; shift ;;
 		--with-kafka) KAFKA=true; shift ;;
 		--with-vault) VAULT=true; shift ;;
 		--with-lifecycle) LIFECYCLE=true; shift ;;
+		--with-impersonation) IMPERSONATE=true; shift ;;
+		--no-fixture) NO_FIXTURE=true; shift ;;
 		--with-inotify) INOTIFY=true; shift ;;
 		--ramdisk) RAMDISK=true; shift ;;
 		--data-root) DATA_ROOT="$2"; shift 2 ;;
 		--bucket-profile) BUCKET_PROFILE="$2"; shift 2 ;;
+		--access-model) ACCESS_MODEL="$2"; shift 2 ;;
+		--user-identity-override) USER_IDENTITY_OVERRIDE=true; shift ;;
+		--role-identity-override) ROLE_IDENTITY_OVERRIDE=true; shift ;;
 		--perf) PERF=true; shift ;;
 		--profile) PROFILE=true; shift ;;
 		--gpfs-root)  GPFS_ROOT="$2"; shift 2 ;;
 		--debug-rgw)  DEBUG_RGW="$2"; shift 2 ;;
+		--port)       RGW_PORT="$2"; shift 2 ;;
 		--foreground) FOREGROUND=true; shift ;;
 		--restart) RESTART=true; shift ;;
 		-o) EXTRA_OPTS+=(-o "$2"); shift 2 ;;
 		*) echo "unknown option: $1" >&2; exit 1 ;;
 	esac
 done
+
+if ! [[ "$RGW_PORT" =~ ^[0-9]+$ ]]; then
+	echo "error: --port takes a port number" >&2
+	exit 1
+fi
 
 if [[ "$STORE" != "nsfs" && "$STORE" != "posix" ]]; then
 	echo "error: --store must be nsfs or posix" >&2
@@ -115,6 +162,18 @@ if $GPFS && [[ "$STORE" != "nsfs" ]]; then
 	exit 1
 fi
 
+# Root holds every capability, and they override the file modes that
+# impersonation exists to enforce:  every result in this area comes
+# out the same whoever the request runs as.  The gateway must run as
+# an ordinary user holding only its file capabilities.  The script
+# raises sudo itself for the steps that need it.
+if $IMPERSONATE && [[ $EUID -eq 0 ]]; then
+	echo "error: --with-impersonation must not run as root:  root's" \
+		"capabilities override the permissions it enforces.  Run" \
+		"as yourself;  the script uses sudo where it must." >&2
+	exit 1
+fi
+
 BUILD_DIR="$(pwd)"
 if [[ ! -f "$BUILD_DIR/CMakeCache.txt" ]]; then
 	echo "error: run this from the build directory" >&2
@@ -123,7 +182,7 @@ fi
 
 SRC_DIR="$(grep -m1 'CMAKE_HOME_DIRECTORY' CMakeCache.txt | cut -d= -f2)"
 CONF="$BUILD_DIR/ceph.conf"
-PID="$BUILD_DIR/out/radosgw.8000.pid"
+PID="$BUILD_DIR/out/radosgw.$RGW_PORT.pid"
 
 # ceph.conf is regenerated by vstart.sh, so it is patched after it ran.
 patch_conf_bool() {
@@ -142,6 +201,7 @@ start_radosgw() {
 	RGW_PREFIX=()
 
 	if $PERF; then
+		BEAST_OPTS="beast port=$RGW_PORT request_timeout_ms=0 tcp_nodelay=1"
 		RGW_PREFIX=(
 			numactl -N 0 -m 0 --
 			env TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES=134217728
@@ -153,9 +213,13 @@ start_radosgw() {
 		${RGW_PREFIX[@]+"${RGW_PREFIX[@]}"}
 		"$BUILD_DIR/bin/radosgw"
 		-c "$CONF"
+		--log-file="$BUILD_DIR/out/radosgw.$RGW_PORT.log"
+		--admin-socket="$BUILD_DIR/out/radosgw.$RGW_PORT.asok"
 		--pid-file="$PID"
+		--rgw_luarocks_location="$BUILD_DIR/out/radosgw.$RGW_PORT.luarocks"
 		--debug-rgw="$DEBUG_RGW"
 		--debug-ms=0
+		-n "client.rgw.$RGW_PORT"
 		--rgw_frontends="$BEAST_OPTS"
 	)
 
@@ -192,22 +256,86 @@ start_radosgw() {
 	echo "==> starting radosgw"
 	"${RGW_CMD[@]}"
 
+	radosgw_serves
+}
+
+# The radosgw started here is the one serving:  its pid file names a
+# live process, and the port is listened on.  A listener alone is not
+# enough -- a gateway from an earlier run, root's say, answers for one
+# that failed to bind and exited.
+radosgw_serves() {
 	sleep 2
+	local pid
+	pid="$(cat "$PID" 2>/dev/null || true)"
+	if [[ -z "$pid" || ! -d "/proc/$pid" ]]; then
+		echo "error: radosgw did not start" >&2
+		tail -20 "$BUILD_DIR/out/radosgw.$RGW_PORT.log"
+		if ss -ltnH "sport = :$RGW_PORT" | grep -q .; then
+			echo "error: something else holds port $RGW_PORT;  stop it, then run again" >&2
+		fi
+		exit 1
+	fi
 	# ss, not fuser:  a radosgw given file capabilities is not dumpable, so
 	# its /proc/<pid>/fd is root's and fuser cannot see the socket.
+	if ! ss -ltnH "sport = :$RGW_PORT" | grep -q .; then
+		echo "error: radosgw (pid $pid) is not listening on port $RGW_PORT" >&2
+		tail -20 "$BUILD_DIR/out/radosgw.$RGW_PORT.log"
 		exit 1
 	fi
 }
 
+# What --with-impersonation needs of the machine, checked before the
+# running gateway is stopped, so a refusal leaves it as it was.
+if $IMPERSONATE; then
+	# setcap on a nosuid mount succeeds and the kernel then ignores
+	# the capabilities, so every impersonated request would fail as a
+	# denial.  Refused here, before anything is started.
+	if findmnt -no OPTIONS -T "$BUILD_DIR/bin" | tr , '\n' | grep -qx nosuid; then
+		echo "error: $BUILD_DIR/bin is on a nosuid mount, where file" \
+			"capabilities are ignored;  --with-impersonation needs a" \
+			"build on a mount without nosuid" >&2
+		exit 1
+	fi
+
+	# The fixture uids own none of the directories above the data
+	# root and are in none of their groups, so each needs the
+	# other-execute bit to reach a bucket;  a 0700 home directory is
+	# the usual one that lacks it.  The first existing ancestor of the
+	# data root without it is named, rather than surfacing later as
+	# denials.  Not the data root itself:  in an adopted tree it is
+	# NooBaa's, an account's at 0770, and what is below it is the
+	# access model's.
+	if $GPFS; then
+		_root="$GPFS_ROOT/root"
+	elif [[ -n "$DATA_ROOT" ]]; then
+		_root="$DATA_ROOT/root"
+	else
+		_root="$BUILD_DIR/dev/rgw/$STORE/root"
+	fi
+	_d="$(dirname "$_root")"
+	while [[ "$_d" != "/" ]]; do
+		if [[ -d "$_d" ]] && (( ( 8#$(stat -c '%a' "$_d") & 1 ) == 0 )); then
+			echo "error: the fixture uids cannot search $_d, so they cannot" \
+				"reach the data root $_root.  Give it o+x, or use a" \
+				"build or --data-root under a directory every user can" \
+				"search." >&2
+			exit 1
+		fi
+		_d="$(dirname "$_d")"
+	done
+fi
 
 # --- --restart:  the running gateway again, on the same state ---
 
 if $RESTART; then
 	if $GPFS || $CLEAN || $KEYCLOAK || $KAFKA || $VAULT || $LIFECYCLE || \
 		$NON_MD5_ETAG || $NO_FIXTURE || $INOTIFY || $RAMDISK || $PROFILE || \
+		$FOREGROUND || $USER_IDENTITY_OVERRIDE || $ROLE_IDENTITY_OVERRIDE || \
+		[[ -n "$DATA_ROOT" ]] || \
 		[[ -n "$NOOBAA_CONFIG_ROOT" ]] || [[ -n "$BUCKET_PROFILE" ]] || \
 		[[ -n "$ACCESS_MODEL" ]] || (( ${#EXTRA_OPTS[@]} )); then
 		echo "error: --restart takes only --store, --adoption-mode," \
+			"--debug-rgw, --port, --perf and --with-impersonation;  the rest is" \
 			"in ceph.conf from the start it restarts" >&2
 		exit 1
 	fi
@@ -237,17 +365,21 @@ if $RESTART; then
 		patch_conf_bool "rgw nsfs adoption mode" "$ADOPTION_MODE"
 	fi
 	start_radosgw
+	echo "==> radosgw restarted on port $RGW_PORT;  nothing cleaned"
 	exit 0
 fi
 
 # --- kill any existing radosgw ---
 
-echo "==> killing any existing radosgw on port 8000"
-if [[ -f "$PID" ]]; then
-	kill "$(cat "$PID" 2>/dev/null)" 2>/dev/null || true
+# Every gateway this build directory runs, on whatever port:  they share
+# its state, which --clean wipes.
+echo "==> killing any existing radosgw of this build, and any on port $RGW_PORT"
+for pidfile in "$BUILD_DIR"/out/radosgw.*.pid; do
+	[[ -f "$pidfile" ]] || continue
+	kill "$(cat "$pidfile" 2>/dev/null)" 2>/dev/null || true
 	sleep 1
-fi
-fuser -k 8000/tcp 2>/dev/null || true
+done
+fuser -k "$RGW_PORT/tcp" 2>/dev/null || true
 
 # stop any existing sidecar containers from a prior run
 if command -v podman &>/dev/null; then
@@ -298,6 +430,22 @@ for sub in lmdb root userdb; do
 		rm -f "$d" 2>/dev/null || true
 	else
 		rm -rf "$d"/* 2>/dev/null || true
+		# An impersonated run leaves entries other uids own -- every
+		# bucket directory is its creator's -- which the developer
+		# cannot remove;  vstart.sh's own clean then fails.  Removed
+		# with sudo, which prompts where it must, as the fixture's
+		# chmod does;  refused only where nothing can answer a prompt.
+		if compgen -G "$d/*" >/dev/null; then
+			if sudo -n true 2>/dev/null || [[ -t 0 ]]; then
+				echo "==> removing entries other uids own in $d (sudo)"
+				sudo rm -rf "${d:?}"/*
+			else
+				echo "error: $d holds entries other uids own, left by a" >&2
+				echo "       --with-impersonation run.  Remove them, then run again:" >&2
+				echo "         sudo rm -rf $d" >&2
+				exit 1
+			fi
+		fi
 	fi
 done
 
@@ -387,6 +535,19 @@ if [[ -n "$BUCKET_PROFILE" ]]; then
 	VSTART_OPTS+=(-o "rgw_nsfs_bucket_profile=$BUCKET_PROFILE")
 fi
 
+if [[ -n "$ACCESS_MODEL" ]]; then
+	case "$ACCESS_MODEL" in
+		   exit 1 ;;
+	esac
+	VSTART_OPTS+=(-o "rgw_nsfs_access_model=$ACCESS_MODEL")
+fi
+
+if $USER_IDENTITY_OVERRIDE; then
+	VSTART_OPTS+=(-o "rgw_nsfs_user_identity_override=true")
+fi
+
+if $ROLE_IDENTITY_OVERRIDE; then
+	VSTART_OPTS+=(-o "rgw_nsfs_role_identity_override=true")
 fi
 
 if $INOTIFY; then
@@ -414,11 +575,189 @@ VSTART_FLAGS=(-n -d)
 if $PROFILE; then
 	VSTART_FLAGS=(-n)
 	DEBUG_RGW=0
+
+# --- impersonation:  users, groups and the capability ------------
+#
+# Before vstart, because the capability has to be on the binary
+# before the daemon execs it.  The fixture tree cannot go here --
+# vstart removes $nsfs_dir/root (vstart.sh:1010) -- so it is seeded
+# further down, once the root exists again.
+
+IMP_GRP_NAME=rgwfix
+IMP_GRP_GID=70010
+IMP_USER_A=rgwalice
+IMP_UID_A=70101
+IMP_USER_B=rgwbob
+IMP_UID_B=70102
+# the POSIX identity an unauthenticated request runs as.  A deployment
+# that serves public buckets has an anonymous account
+# (ACCOUNT_IMPORT.md 6.8;  NooBaa provisions one with
+# `account add --anonymous`), and with impersonation on a request whose
+# identity has no record is denied rather than served as the gateway.
+# Its own uid, not the gateway's:  anonymous is then a distinct
+# principal on the filesystem, which is what lets a test assert it
+# cannot reach what alice can.
+IMP_USER_N=rgwanon
+IMP_UID_N=70103
+# the suite's *tenanted* user is a principal like any other, and under
+# impersonation a principal with no identity row cannot be served -- so
+# the cors `_tenant` tests failed with "no POSIX identity recorded for
+# testx$..." and were measuring that rather than CORS (2026-10-16).
+IMP_USER_T=rgwtenant
+IMP_UID_T=70104
+# The rest of the suite's principals.  Every identity that can
+# authenticate needs a record, and this list has fallen behind that
+# three times -- the tenanted user above (2026-10-16), anonymous, and
+# then these four (2026-10-19), each found by an unrelated test failing
+# with "no POSIX identity recorded for ..." and measuring that instead
+# of what it was written for.  `identity::test_every_principal_is_
+# provisioned` now fails by name when it happens again.
+#
+# The two IAM root accounts are here because an account authenticates
+# like any other principal, and a user created inside an account needs
+# no row of its own:  resolve_credentials() tries the user's row and
+# falls back to its account's when that is absent
+# (identity_db.cc:893), which is what makes these two rows cover every
+# user of either account.
+IMP_USER_I=rgwiam
+IMP_UID_I=70105
+IMP_USER_P=rgwpolicy
+IMP_UID_P=70106
+IMP_USER_R1=rgwacct1
+IMP_UID_R1=70107
+IMP_USER_R2=rgwacct2
+IMP_UID_R2=70108
+# I9's users:  the stand-up's `copy` step moves an account from the first
+# to the second after making a user in it, and the suite's override tests
+# bind them.  Their own, so no other test's rows carry their uids --
+# rows sharing a uid that disagree on groups make a file's credential
+# unresolvable (complete_file_credentials()) -- and in no gating group,
+# so nothing about them depends on rgwfix.
+IMP_USER_CA=rgwcopya
+IMP_UID_CA=70109
+IMP_USER_CB=rgwcopyb
+IMP_UID_CB=70110
+IMP_BUCKET=impersonate-fixture
+IMP_OWNED=impersonate-owned
+IMP_MULTI=impersonate-multiproto
+IMP_UID_NFS=70103
+
+if $IMPERSONATE; then
+	if [[ "$STORE" != "nsfs" ]]; then
+		echo "error: --with-impersonation only applies to --store nsfs" >&2
+		exit 1
+	fi
+
+	echo "==> --with-impersonation: users, groups and capability (needs sudo)"
+
+	# Objects written under impersonation belong to the identity
+	# that wrote them, so the developer cannot chmod them and
+	# vstart's own clean cannot replace them.  Remove the data
+	# root here, while sudo is already in hand, rather than
+	# leaving vstart to trip over it.  (The unlink itself would
+	# succeed -- bucket directories are gateway-owned, and a
+	# directory's owner may unlink anything inside it -- but the
+	# fixture's chmod and chown still need root.)
+	if $IMPERSONATE_CLEAN; then
+		if $GPFS; then
+			sudo rm -rf "$GPFS_ROOT/root"
+			mkdir -p "$GPFS_ROOT/root"
+		else
+			sudo rm -rf "$BUILD_DIR/dev/rgw/$STORE/root"
+		fi
+	fi
+
+	getent group "$IMP_GRP_NAME" >/dev/null 2>&1 || \
+		sudo groupadd -g "$IMP_GRP_GID" "$IMP_GRP_NAME"
+	# alice holds the gating group, bob deliberately does not
+	getent passwd "$IMP_USER_A" >/dev/null 2>&1 || \
+		sudo useradd -u "$IMP_UID_A" -M -N -s /sbin/nologin \
+			-G "$IMP_GRP_NAME" "$IMP_USER_A"
+	getent passwd "$IMP_USER_B" >/dev/null 2>&1 || \
+		sudo useradd -u "$IMP_UID_B" -M -N -s /sbin/nologin \
+			"$IMP_USER_B"
+	# and their memberships, which the dynamic-groups tests and the
+	# stand-up's groups step change and put back:  a run interrupted
+	# between the two would otherwise leave them changed for every
+	# run after
+	id -nG "$IMP_USER_A" | grep -qw "$IMP_GRP_NAME" || \
+		sudo gpasswd -a "$IMP_USER_A" "$IMP_GRP_NAME" >/dev/null
+	! id -nG "$IMP_USER_B" | grep -qw "$IMP_GRP_NAME" || \
+		sudo gpasswd -d "$IMP_USER_B" "$IMP_GRP_NAME" >/dev/null
+	# in no gating group:  anonymous reaches only what is open to all
+	getent passwd "$IMP_USER_N" >/dev/null 2>&1 || \
+		sudo useradd -u "$IMP_UID_N" -M -N -s /sbin/nologin \
+			"$IMP_USER_N"
+	# the remaining principals, each in no gating group
+	for _u in "$IMP_USER_I:$IMP_UID_I" "$IMP_USER_P:$IMP_UID_P" \
+		  "$IMP_USER_R1:$IMP_UID_R1" "$IMP_USER_R2:$IMP_UID_R2" \
+		  "$IMP_USER_CA:$IMP_UID_CA" "$IMP_USER_CB:$IMP_UID_CB"; do
+		_n=${_u%%:*}
+		_i=${_u##*:}
+		getent passwd "$_n" >/dev/null 2>&1 || \
+			sudo useradd -u "$_i" -M -N -s /sbin/nologin "$_n"
+	done
+	# the tenanted user, in no gating group:  what it tests is CORS
+	# and presigning, not group reach
+	getent passwd "$IMP_USER_T" >/dev/null 2>&1 || \
+		sudo useradd -u "$IMP_UID_T" -M -N -s /sbin/nologin \
+			"$IMP_USER_T"
+
+	# ninja clears file capabilities on every relink, so this is
+	# reapplied on each start rather than being one-time setup.
+	#
+	# CAP_DAC_READ_SEARCH alongside the two identity capabilities:
+	# objects written under impersonation belong to the identity
+	# that wrote them, and the gateway still has to read their
+	# attributes to build listing rows.  Listings are complete and
+	# unfiltered by design -- an object's contents are protected by
+	# filesystem permissions, its name is not.
+	#
+	# It is safe only because the registration bracket clears the
+	# effective capability set:  a personality copies the
+	# registering task's credentials whole, so without that clear
+	# every impersonated read would inherit this and silently
+	# bypass DAC.  Measured in probes/results-capprobe-2026-10-01.txt.
+	#
+	# Six, and permitted-only:  +p, not +ep.
+	#
+	# A file capability set carries one effective flag for all of it,
+	# so +ep would make every one of the six effective on every
+	# thread -- including CAP_DAC_OVERRIDE on the 31 io_context_pool
+	# threads, which are created before the driver initialises, so a
+	# lowering at startup cannot reach them (measured 2026-10-16:
+	# main 0xc4, every pool thread 0xcf).  With +p nothing starts
+	# effective and each capability is put in the effective set at
+	# its own site:  CAP_DAC_READ_SEARCH by the thread that reads
+	# with no identity, and CAP_DAC_OVERRIDE, CAP_CHOWN, CAP_FOWNER
+	# by with_capabilities() around a named call.
+	sudo setcap cap_dac_read_search,cap_setuid,cap_setgid,cap_dac_override,cap_chown,cap_fowner+p \
+		"$BUILD_DIR/bin/radosgw"
+
+	# Every thread that serves an impersonated request creates an
+	# io_uring ring, because the open carries the personality on a
+	# submission entry, and ring memory is charged against
+	# RLIMIT_MEMLOCK.  One limit against the whole frontend thread
+	# count:  a thread that cannot create a ring cannot register a
+	# personality, and its requests fail with a 500 rather than being
+	# served as the gateway.
+	#
+	# Control rings are 8 entries, so the default 8 MiB is ample.  The
+	# check is here because a deployment that turns the io_uring data
+	# engine on makes them 1024, and then a few hundred threads will
+	# not fit.
+	MEMLOCK_KB=$(ulimit -l)
+	if [ "$MEMLOCK_KB" != "unlimited" ] && [ "$MEMLOCK_KB" -lt 65536 ]; then
+		echo "==> note: RLIMIT_MEMLOCK is ${MEMLOCK_KB}K." \
+			"Ample for control rings;  raise it before enabling" \
+			"the io_uring data engine on a large frontend" >&2
+	fi
 fi
 
 MON=0 OSD=0 MDS=0 MGR=0 RGW=1 \
 	"$SRC_DIR/src/vstart.sh" "${VSTART_FLAGS[@]}" \
 	--rgw_store "$STORE" \
+	--rgw_port "$RGW_PORT" \
 	"${VSTART_OPTS[@]}" \
 	${EXTRA_OPTS[@]+"${EXTRA_OPTS[@]}"}
 
@@ -432,9 +771,10 @@ elif [[ -n "$DATA_ROOT" ]]; then
 	DATA_DIR="$DATA_ROOT/root"
 fi
 
-if ! $GPFS && ! $PERF; then
-	# plain non-GPFS: vstart already started the daemon with defaults
-	true
+if ! $GPFS && ! $PERF && ! $IMPERSONATE && [[ -z "$DATA_ROOT" ]]; then
+	# plain non-GPFS: vstart already started the daemon with defaults.
+	# Not with impersonation, whose option goes on the command line below.
+	radosgw_serves
 else
 
 # --- kill vstart daemon, patch ceph.conf if needed, restart ---
@@ -495,20 +835,140 @@ start_radosgw
 
 fi  # end GPFS block
 
-# --- generate s3tests.conf from SAMPLE ---
+# s3tests.conf is not generated here:  the suite is its own repository,
+# and its s3tests.conf.SAMPLE already carries every user vstart.sh
+# creates.  Copy that once and point S3TEST_CONF at the copy.  The
+# sidecars, --with-lifecycle and --with-vault below record what they set
+# up in that file, when S3TEST_CONF names one.
+S3CONF="${S3TEST_CONF:-}"
 
-SAMPLE="$SRC_DIR/qa/workunits/rgw/s3tests-rs/s3tests.conf.SAMPLE"
-S3CONF="$BUILD_DIR/s3tests.conf"
+# --- impersonation:  the fixture ---------------------------------
+#
+# The bucket is created over S3 rather than placed in the data root.
+# An unmarked directory has no owner RGW can resolve -- a base
+# bucket's owner waits on the account import -- so a sideloaded one
+# is denied (AccessDenied) before any permission question is
+# reached.  Creating it through the gateway gives it an owner;  only
+# the ownership and mode of the gated object need root.
+#
+# That object ends up mode 0040 owned root:$IMP_GRP_NAME.  No owner
+# bits and no other bits, so holding the group is the only thing
+# that can grant a read -- credprobe's shape, and what makes a
+# denial a control rather than an absence.
 
-if [[ -f "$SAMPLE" ]]; then
-	echo "==> generating $S3CONF"
-	cp "$SAMPLE" "$S3CONF"
-	sed -i "s/bucket prefix = yournamehere-/bucket prefix = $(whoami)-/" "$S3CONF"
-else
-	echo "warning: $SAMPLE not found, skipping s3tests.conf generation" >&2
+if $IMPERSONATE && ! $NO_FIXTURE; then
+	# vstart's own user.  Taken from the pair radosgw creates at
+	# first start (driver/posix/posixDB.cc) rather than from
+	# s3tests.conf, which is not generated in every tree.
+	IMP_AK=0555b35654ad1656d804
+	IMP_SK='h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q=='
+
+	# The data root stays as the gateway made it.  A bucket
+	# directory belongs to the identity that created the bucket, at
+	# 0770 with no sticky bit, as NooBaa makes it (DECISIONS
+	# 2026-10-23), so the developer cannot see inside one:  sudo for
+	# every look.
+
+	# testid is bound to the fixture uid so the seeded objects are
+	# owned by a real identity rather than by the gateway -- and so
+	# that the writes are not denied, since with impersonation on
+	# an identity with no record cannot be served.
+	# The suite's alt user is bound to the other fixture uid for the
+	# whole run, so a test that reads testid's object as the alt user
+	# meets a different identity rather than none.  Its id is the one
+	# vstart.sh gives it.
+	IMP_ALT_USER=56789abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234
+	# single-quoted:  the id begins with a digit after the tenant's
+	# `$`, which double quotes would read as a positional parameter
+	IMP_TENANT_USER='testx$9876543210abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
+	# vstart's own ids, as s3tests.conf records them
+	IMP_IAM_USER=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+	IMP_POLICY_USER=s3policyonly
+	IMP_ACCT1=RGW11111111111111111
+	IMP_ACCT2=RGW22222222222222222
+	if ! python3 "$SRC_DIR/src/script/rgw/nsfs-impersonate-fixture.py" \
+			localhost "$RGW_PORT" "$IMP_AK" "$IMP_SK" "$IMP_BUCKET" \
+			testid "$IMP_UID_A" "$IMP_ALT_USER" "$IMP_UID_B" \
+			"$IMP_TENANT_USER" "$IMP_UID_T" \
+			anonymous "$IMP_UID_N" \
+			"$IMP_IAM_USER" "$IMP_UID_I" \
+			"$IMP_POLICY_USER" "$IMP_UID_P" \
+			"$IMP_ACCT1" "$IMP_UID_R1" \
+			"$IMP_ACCT2" "$IMP_UID_R2"; then
+		echo "error: could not create the impersonation fixture" >&2
+		exit 1
+	fi
+
+	IMP_DIR="$DATA_DIR/$IMP_BUCKET"
+	if ! sudo test -f "$IMP_DIR/grouped.txt"; then
+		echo "error: $IMP_DIR/grouped.txt absent after creation;" \
+			"is $DATA_DIR the data root?" >&2
+		exit 1
+	fi
+
+	# Everything here now belongs to the identity that wrote it,
+	# so the developer cannot chmod any of it -- sudo throughout.
+	#
+	# The bucket directory is its creator's -- testid, so
+	# $IMP_UID_A -- at 0770 (raise site 4).  Asserted rather than
+	# set, so a change to that decision shows up here rather than
+	# silently.
+	case "$(sudo stat -c '%a %u' "$IMP_DIR")" in
+		"770 $IMP_UID_A") ;;
+		*) echo "warning: $IMP_BUCKET is" \
+			"$(sudo stat -c '%a %u' "$IMP_DIR")," \
+			"expected 770 $IMP_UID_A" >&2 ;;
+	esac
+
+	# the control:  readable by anyone, so a test that cannot read
+	# this has a broken gateway rather than a working denial
+	sudo chmod 0644 "$IMP_DIR/open.txt"
+
+	sudo chown "root:$IMP_GRP_NAME" "$IMP_DIR/grouped.txt"
+	sudo chmod 0040 "$IMP_DIR/grouped.txt"
+
+	echo "==> --with-impersonation: $IMP_BUCKET seeded;" \
+		"grouped.txt is 0040 root:$IMP_GRP_NAME"
+
+	# Two unplaced directories under the base path, for tests that
+	# place them as buckets through /admin/nsfs/bucket.  Neither is a
+	# bucket until placed, and a placed one carries nsfs state, which
+	# placement then rejects, so both are made afresh on every start.
+	#
+	# $IMP_OWNED is what an account's bucket looks like after NooBaa
+	# made it, or after adoption:  the account's uid throughout, and
+	# NooBaa's modes, 0777 and 0666 masked by NSFS_UMASK 007
+	# (bucketspace_fs.js create_bucket;  config.js).
+	#
+	# $IMP_MULTI is the same, shared with NFS through the group
+	# $IMP_GRP_NAME, which the account's uid is in:  the directories
+	# are setgid, so what anyone writes there takes the group.  An NFS
+	# client writes as its own uid ($IMP_UID_NFS, with $IMP_GRP_NAME
+	# in the group list it sends) under umask 022.  The uid has no
+	# passwd entry here, as NFS client uids often have none:  the
+	# server sees only the ids on the files.
+	mk_tree() {	# <dir> <group> <dir mode>
+		sudo rm -rf "${DATA_DIR:?}/$1"
+		sudo install -d -o "$IMP_UID_A" -g "$2" -m "$3" "$DATA_DIR/$1"
+		sudo install -o "$IMP_UID_A" -g "$2" -m 0660 /dev/null \
+			"$DATA_DIR/$1/obj"
+		sudo install -d -o "$IMP_UID_A" -g "$2" -m "$3" \
+			"$DATA_DIR/$1/sub"
+		sudo install -o "$IMP_UID_A" -g "$2" -m 0660 /dev/null \
+			"$DATA_DIR/$1/sub/nested"
+	}
+	mk_tree "$IMP_OWNED" "$IMP_UID_A" 0770
+	mk_tree "$IMP_MULTI" "$IMP_GRP_GID" 2770
+	sudo install -o "$IMP_UID_NFS" -g "$IMP_GRP_GID" -m 0644 /dev/null \
+		"$DATA_DIR/$IMP_MULTI/nfs-written"
+	sudo install -d -o "$IMP_UID_NFS" -g "$IMP_GRP_GID" -m 2755 \
+		"$DATA_DIR/$IMP_MULTI/nfs-dir"
+	sudo install -o "$IMP_UID_NFS" -g "$IMP_GRP_GID" -m 0644 /dev/null \
+		"$DATA_DIR/$IMP_MULTI/nfs-dir/inner"
+
+	echo "==> --with-impersonation: $IMP_OWNED and $IMP_MULTI made," \
+		"unplaced;  $IMP_MULTI shared through $IMP_GRP_NAME"
 fi
-
-export S3TEST_CONF="$S3CONF"
 
 # --- optional sidecars ---
 
@@ -525,6 +985,9 @@ fi
 if $LIFECYCLE; then
 	if [[ -f "$S3CONF" ]]; then
 		sed -i 's/^#lc_debug_interval = .*/lc_debug_interval = 10/' "$S3CONF"
+	else
+		echo "note: S3TEST_CONF is not set;  set lc_debug_interval = 10" \
+			"in your s3tests.conf" >&2
 	fi
 fi
 
@@ -538,13 +1001,15 @@ if $VAULT; then
 		if ! grep -q '^kms_keyid2' "$S3CONF"; then
 			sed -i '/^kms_keyid = /a kms_keyid2 = testkey-2' "$S3CONF"
 		fi
+	else
+		echo "note: S3TEST_CONF is not set;  set kms_keyid = testkey-1" \
+			"and kms_keyid2 = testkey-2 in your s3tests.conf" >&2
 	fi
 fi
 
 # --- status + what-next output ---
 
-S3TESTS_DIR="$SRC_DIR/qa/workunits/rgw/s3tests-rs"
-FEATURE_FLAG="fails_on_nsfs"
+FEATURE_FLAG="fails_on_nsfs,rgw_admin"
 if [[ "$STORE" == "posix" ]]; then
 	FEATURE_FLAG="fails_on_posix"
 fi
@@ -553,10 +1018,23 @@ if $VAULT; then
 fi
 
 echo ""
-echo "==> radosgw up on port 8000 ($STORE, data on $DATA_DIR)"
-echo "    s3tests.conf: $S3CONF"
+echo "==> radosgw up on port $RGW_PORT ($STORE, data on $DATA_DIR)"
+if [[ -n "$S3CONF" ]]; then
+	echo "    s3tests.conf: $S3CONF"
+else
+	echo "    s3tests.conf: S3TEST_CONF is not set;  it names your copy of the suite's s3tests.conf.SAMPLE"
+fi
 if $LIFECYCLE; then
 	echo "    Lifecycle: rgw_lc_debug_interval=10"
+if $IMPERSONATE; then
+	echo "    Impersonation: on;  bucket $IMP_BUCKET has open.txt (0644)" \
+		"and grouped.txt (0040 root:$IMP_GRP_NAME, gid $IMP_GRP_GID)"
+	echo "    Fixture ids: $IMP_USER_A=$IMP_UID_A in $IMP_GRP_NAME," \
+		"$IMP_USER_B=$IMP_UID_B not"
+	echo "    Unplaced: $DATA_DIR/$IMP_OWNED ($IMP_UID_A:$IMP_UID_A," \
+		"0770/0660);  $DATA_DIR/$IMP_MULTI ($IMP_UID_A:$IMP_GRP_NAME," \
+		"2770/0660, plus nfs-written and nfs-dir/ owned by" \
+		"$IMP_UID_NFS:$IMP_GRP_NAME, 0644/2755)"
 fi
 if $KEYCLOAK; then
 	echo "    Keycloak: http://localhost:8080/realms/demorealm (user: testuser / testuser)"
@@ -568,10 +1046,9 @@ if $VAULT; then
 	echo "    Vault: http://localhost:8200 (transit keys: testkey-1, testkey-2)"
 fi
 echo ""
-echo "To run tests:"
-echo "  cd $S3TESTS_DIR"
-echo "  S3TEST_CONF=$S3CONF \\"
-echo "    cargo nextest run -P all --test-threads=1 --features $FEATURE_FLAG"
+echo "To run tests, from your s3-tests-rs checkout's src/test/rgw/s3-tests-rs:"
+echo "  S3TEST_CONF=${S3CONF:-/path/to/s3tests.conf} \\"
+echo "    cargo nextest run -P baseline --features $FEATURE_FLAG"
 echo ""
 echo "To stop:"
 echo "  kill \$(cat $PID)"

@@ -40,6 +40,8 @@
 #include "xattr_strategy.h"
 #include "path_strategy.h"
 #include "bucket_state_strategy.h"
+#include "identity_db.h"
+#include "impersonate.h"
 #include "bucket_profile.h"
 
 class RGWLC;
@@ -134,9 +136,15 @@ protected:
   std::string fname;
   Directory* parent;
   int fd{-1};
+  nsfs::FSIdentity identity;
+  bool read_only{false};
   bool need_fsync{false};
   bool exist{false};
-  struct statx stx;
+  /* Zero-initialized so that get_stx() on an entry which has not been
+   * stat()ed reads as "no information":  statx sets in stx_mask what
+   * it filled in, and a zero mask is what a reader tests before
+   * touching a field. */
+  struct statx stx{};
   bool stat_done{false};
   CephContext* ctx;
   FSStrategy* fs_strategy;
@@ -198,7 +206,44 @@ public:
   struct statx& get_stx() { return stx; }
   virtual ObjectType get_type() { return ObjectType::UNKNOWN; };
 
-  virtual int create(const DoutPrefixProvider *dpp, bool* existed = nullptr, bool temp_file = false) = 0;
+  /* The identity this entry's descriptors are obtained under.
+   *
+   * Set rather than passed, so open() and create() keep their
+   * signatures and their call sites.  An inactive identity means the
+   * gateway's own credentials, which is every caller that has not
+   * been told otherwise.  Who, not a personality id:  open() and
+   * create() look the id up on the thread they run on.
+   *
+   * It applies to the *final component* only.  `resolve_path()`
+   * opens each ancestor with `Directory::open()`, which takes no
+   * identity, so a key directory's own permissions are never checked
+   * against the identity.  NooBaa checks every component, because
+   * it opens an object by its path under the account's
+   * credentials;  closing that gap means passing this down the walk.
+   *
+   * There is no descriptor cache in the way:  `dir_chain` is built
+   * per request and `Directory::open()` memoises `fd` on the entry,
+   * which lasts one request. */
+  void set_identity(const nsfs::FSIdentity& id) { identity = id; }
+  const nsfs::FSIdentity& get_identity() const { return identity; }
+
+
+  /* Ask for no more access than the caller needs.
+   *
+   * Descriptors are opened O_RDWR by default, which cost nothing
+   * while the gateway owned every file and could write all of
+   * them.  Under impersonation a read is often the whole of what
+   * the authenticated user is entitled to -- an object reachable through a
+   * supplementary group and not writable at all -- and the
+   * authorisation pass reads attributes with no identity at all,
+   * holding only CAP_DAC_READ_SEARCH.  Both need the open to ask
+   * for a read and stop there.
+   *
+   * Set rather than passed, like the identity above, so open()
+   * keeps its signature and its call sites. */
+  void set_read_only(bool ro) { read_only = ro; }
+
+  virtual int create(const DoutPrefixProvider *dpp, optional_yield y, bool* existed = nullptr, bool temp_file = false) = 0;
   virtual int open(const DoutPrefixProvider *dpp) = 0;
   virtual int close() = 0;
   virtual int stat(const DoutPrefixProvider *dpp, bool force = false);
@@ -209,18 +254,22 @@ public:
 			  AttrWriteMode mode = AttrWriteMode::REPLACE_ALL,
 			  const std::vector<std::string>* rmattrs = nullptr);
   virtual int read_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs);
-  virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name) = 0;
   virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname) = 0;
   /* `unknown`, if given, receives every `user.noobaa.*` name the
    * reviewed releases do not write (X4's third layer);  a caller that
    * hands out the object refuses on one, and listing passes none */
+  virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name, const CopyHints& hints, bool src_as_gateway = false) = 0;
   virtual std::unique_ptr<FSEnt> clone_base() = 0;
   /* Build this entry's listing row.  Only Directory::fill_cache()
    * composes keys from a path prefix as it descends;  every other caller
    * already knows the object's key and should pass it, rather than
-   * borrowing a prefix-relative walk to produce one row. */
+   * borrowing a prefix-relative walk to produce one row.
+   *
+   * `bucket_owner` is the owner of an object that records none --
+   * NSFSBucket::default_object_owner(). */
   int make_dir_entry(const DoutPrefixProvider* dpp, optional_yield y,
 		     const rgw_obj_key& key, uint32_t flags,
+		     const ACLOwner& bucket_owner,
 		     rgw_bucket_dir_entry& bde);
   virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags, const std::string& path_prefix = "");
   virtual std::string get_cur_version() { return ""; };
@@ -242,14 +291,14 @@ public:
   virtual ObjectType get_type() override { return ObjectType::FILE; };
 
 
-  virtual int create(const DoutPrefixProvider *dpp, bool* existed = nullptr, bool temp_file = false) override;
+  virtual int create(const DoutPrefixProvider *dpp, optional_yield y, bool* existed = nullptr, bool temp_file = false) override;
   virtual int open(const DoutPrefixProvider *dpp) override;
   virtual int close() override;
   virtual int stat(const DoutPrefixProvider *dpp, bool force = false) override;
   virtual int remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children) override;
   virtual int write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) override;
   virtual int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) override;
-  virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name) override;
+  virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name, const CopyHints& hints, bool src_as_gateway = false) override;
   virtual int rename(const DoutPrefixProvider* dpp, optional_yield y, Directory* dst_dir, const std::string& dst_name);
   virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname) override;
   virtual std::unique_ptr<FSEnt> clone_base() override {
@@ -275,7 +324,7 @@ public:
 
   virtual bool file_exists(std::string& name);
 
-  virtual int create(const DoutPrefixProvider *dpp, bool* existed = nullptr, bool temp_file = false) override;
+  virtual int create(const DoutPrefixProvider *dpp, optional_yield y, bool* existed = nullptr, bool temp_file = false) override;
   virtual int open(const DoutPrefixProvider *dpp) override;
   virtual int close() override;
   virtual int stat(const DoutPrefixProvider *dpp, bool force = false) override;
@@ -294,9 +343,8 @@ public:
   std::unique_ptr<Directory> clone() {
     return std::make_unique<Directory>(*this);
   }
-  virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name) override;
   virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname) override;
-  virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags, const std::string& path_prefix = "") override;
+  virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name, const CopyHints& hints, bool src_as_gateway = false) override;
 
   int get_ent(const DoutPrefixProvider *dpp, optional_yield y, const std::string& name, const std::string& version, std::unique_ptr<FSEnt>& ent);
 };
@@ -319,9 +367,9 @@ public:
   virtual ~MPDirectory() { close(); }
 
   virtual ObjectType get_type() override { return ObjectType::MULTIPART; };
-  virtual int create(const DoutPrefixProvider *dpp, bool* existed = nullptr, bool temp_file = false) override;
   virtual int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) override;
   virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname) override;
+  virtual int create(const DoutPrefixProvider *dpp, optional_yield y, bool* existed = nullptr, bool temp_file = false) override;
   virtual int remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children) override;
   virtual int stat(const DoutPrefixProvider *dpp, bool force = false) override;
   std::unique_ptr<File> get_part_file(int partnum);
@@ -339,6 +387,17 @@ public:
 
 std::string get_key_fname(rgw_obj_key& key, bool use_version);
 
+  virtual int create(const DoutPrefixProvider *dpp, optional_yield y, bool* existed = nullptr, bool temp_file = false) override;
+  virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name, const CopyHints& hints, bool src_as_gateway = false) override;
+/* Walk `key_path` from `root`, making missing directories when
+ * `create_dirs`.
+ *
+ * As `id`:  each directory is opened as it, and one the walk makes is
+ * its, at dir_create_mode().  An inactive `id` is the gateway.  When
+ * `id` is denied on the way, `model` decides
+ * (`permits(AccessClass::path)`):  the denial stands, or the walk goes
+ * on as the gateway.  A null `model` lets no denial through, which is
+ * what a gateway walk needs, having none. */
 int resolve_path(const DoutPrefixProvider* dpp,
                  Directory* root,
                  const std::string& key_path,
@@ -346,7 +405,10 @@ int resolve_path(const DoutPrefixProvider* dpp,
                  CephContext* cct,
                  std::vector<std::unique_ptr<Directory>>& dir_chain,
                  Directory*& leaf_dir,
-                 std::string& leaf_name);
+                 std::string& leaf_name,
+                 const FSIdentity& id,
+                 const AccessStrategy* model);
+
 
 } // namespace nsfs
 
@@ -472,7 +534,24 @@ public:
 class NSFSDriver : public StoreDriver {
 protected:
   CephContext *cct;
-  std::unique_ptr<rgw::store::POSIXUserDB> userDB;
+  /* The prefix for work that belongs to no request:  an FSIO handle is
+   * shared, and its destructor runs wherever the last reference drops,
+   * as late as an RGWFileHandle's reclaim.  It reads `cct` at each
+   * call, so it follows set_context(). */
+  class DriverPrefix : public DoutPrefixProvider {
+    const NSFSDriver& driver;
+  public:
+    explicit DriverPrefix(const NSFSDriver& driver) : driver(driver) {}
+    CephContext* get_cct() const override { return driver.cct; }
+    unsigned get_subsys() const override { return ceph_subsys_rgw; }
+    std::ostream& gen_prefix(std::ostream& out) const override {
+      return out << "nsfs driver: ";
+    }
+  } driver_prefix{*this};
+  /* the driver's database.  An IdentityDB rather than a plain
+   * POSIXUserDB:  same file, same connection, one extra table for the
+   * Scale data an identity carries. */
+  std::unique_ptr<nsfs::IdentityDB> userDB;
   NSFSZone zone;
   std::unique_ptr<nsfs::BucketCache> bucket_cache;
   std::unique_ptr<nsfs::MultipartCache> multipart_cache;
@@ -512,6 +591,7 @@ protected:
   RGWQuotaHandler* quota_handler{nullptr};
   RGWLC* lc{nullptr};
   bool use_lc_thread{false};
+  bool background_tasks{false};
   /* driver hint state (test only)--see driver_hint() */
   bool inject_fork_race{false};
 
@@ -541,6 +621,14 @@ protected:
   ceph::mutex inject_delta_lock =
       ceph::make_mutex("NSFSDriver::inject_delta_lock");
   bool inject_skip_reclone{false};
+  /* the user whose credentials not resolving NSFSReadOp::prepare(),
+   * get_attr(), check_owner_access() and create() pass over, as they did
+   * before work-plan stage N-F2, so a test can watch a metadata read served,
+   * or a bucket placed or created, rather than deleting the fix.  By user,
+   * since the suite runs in parallel;  empty is off */
+  ceph::mutex unresolved_as_gateway_lock =
+    ceph::make_mutex("NSFSDriver::unresolved_as_gateway_lock");
+  std::string unresolved_as_gateway_user;
   /* -1 disables;  otherwise fail a rename after this many version entries
    * have moved, so the rollback path is exercised rather than assumed */
   int inject_rename_fail_after{-1};
@@ -560,6 +648,22 @@ protected:
    * in a hand-edited build */
   bool inject_fsio_skip_cleanup{false};
 
+  /* The `inject-buffered-copy` hint, by user.  Armed with `user=`,
+   * a bundle applies to that user's copies only;  armed without,
+   * the daemon's applies to every user with no bundle of its own,
+   * and to the copies with no authenticated user at all.  A bundle is
+   * kept for the driver's life once made, one per user a test has
+   * armed, so the counter a CopyHints points at never dangles. */
+  struct CopyBundle {
+    std::atomic<bool> force_buffered{false};
+    std::atomic<uint64_t> buffered_bytes{0};
+  };
+  CopyBundle daemon_copy_bundle;
+  ceph::mutex copy_bundles_lock =
+    ceph::make_mutex("NSFSDriver::copy_bundles_lock");
+  std::map<std::string, CopyBundle> copy_bundles;
+  std::atomic<bool> any_copy_bundle{false};
+
 public:
   NSFSDriver(CephContext *_cct) : StoreDriver(), cct(_cct), zone(this)
   {
@@ -568,7 +672,7 @@ public:
     const auto& db_name = g_conf().get_val<std::string>("dbstore_db_name_prefix") + "-" + tenant;
     auto db_full_path = std::filesystem::path(db_path) / db_name;
 
-    userDB = std::make_unique<rgw::store::POSIXUserDB>(db_full_path.string(), cct);
+    userDB = std::make_unique<nsfs::IdentityDB>(db_full_path.string(), cct);
   }
   /* The multipart cache goes before anything it calls back into.
    *
@@ -596,6 +700,11 @@ public:
    * than changed here. */
   virtual ~NSFSDriver() {
     multipart_cache.reset();
+  const DoutPrefixProvider* get_dpp() const { return &driver_prefix; }
+
+  /* What `who`'s copies are asked to do:  its bundle where it has
+   * one, else the daemon's. */
+  nsfs::CopyHints copy_hints_for(const rgw_owner& who);
 
   void set_context(CephContext *_cct) {
     cct = _cct;
@@ -603,6 +712,13 @@ public:
 
   NSFSDriver& set_run_lc_thread(bool _use_lc_thread) {
     use_lc_thread = _use_lc_thread;
+    return *this;
+  }
+
+  /* RGW's `background_tasks`:  true in a process that serves requests,
+   * radosgw and librgw;  false in radosgw-admin */
+  NSFSDriver& set_background_tasks(bool _background_tasks) {
+    background_tasks = _background_tasks;
     return *this;
   }
 
@@ -749,6 +865,18 @@ public:
 				  GroupList& listing) override;
 
   virtual std::unique_ptr<Object> get_object(const rgw_obj_key& k) override;
+  /* Whose identity row supplies a new bucket's directory --
+   * `new_buckets_path` and the custom bucket path allowlist -- for
+   * new_bucket_path(), custom_bucket_path() and
+   * check_owner_can_create_at():  the creating user's, as NooBaa's
+   * CreateBucket reads the requesting record's, when
+   * rgw_nsfs_user_identity_override is on and that user is in the
+   * owning account and has a row (I9);  otherwise `owner`.  The bucket
+   * is `owner`'s either way. */
+  rgw_owner new_bucket_path_source(const DoutPrefixProvider* dpp,
+				   const rgw_owner& owner,
+				   const rgw_owner& authenticated_user,
+				   optional_yield y);
   virtual std::unique_ptr<Bucket> get_bucket(const RGWBucketInfo& i)  override;
   virtual int load_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b,
                           std::unique_ptr<Bucket>* bucket, optional_yield y) override;
@@ -954,6 +1082,10 @@ public:
     }
   }
   bool skip_reclone_injected() const { return inject_skip_reclone; }
+  bool unresolved_as_gateway_injected(const rgw_owner& who) {
+    std::lock_guard l{unresolved_as_gateway_lock};
+    return !unresolved_as_gateway_user.empty() &&
+	   (unresolved_as_gateway_user == to_string(who));
   int rename_fail_after_injected() const { return inject_rename_fail_after; }
   int rename_abandon_injected() const { return inject_rename_abandon; }
   bool fsio_attrs_fail_injected() const { return inject_fsio_attrs_fail; }
@@ -963,8 +1095,21 @@ public:
   /* Internal APIs */
   int get_root_fd() { return root_dir->get_fd(); }
   rgw::store::POSIXUserDB* get_user_db() { return userDB.get(); }
-  nsfs::Directory* get_root_dir() { return root_dir.get(); }
   const std::string& get_base_path() const { return base_path; }
+  nsfs::IdentityDB* get_identity_db() { return userDB.get(); }
+
+  /* The POSIX credentials `who` is served as, by the same resolution
+   * every operation for it uses:  a user's own row under the user
+   * identity override, else its account's;  a role session's
+   * (rgw::sal::role_session_ns) own row under the role identity
+   * override, else its account's;  an account's row.  For a request,
+   * `who` is authenticated_user(s).  Returns what
+   * nsfs::resolve_credentials() returns:  0 resolved, -ENOENT no
+   * impersonation asked for, -EPERM asked for and unavailable.  `row`
+   * receives the key of the row that resolved. */
+  int get_credentials_for(const DoutPrefixProvider* dpp, const rgw_owner& who,
+			  optional_yield y, nsfs::Credentials& out,
+			  std::string* row = nullptr);
   nsfs::BucketCache* get_bucket_cache() { return bucket_cache.get(); }
   nsfs::MultipartCache* get_multipart_cache() { return multipart_cache.get(); }
   UserCache& get_user_cache() { return user_cache; }
@@ -1076,6 +1221,8 @@ class NSFSUser : public StoreUser {
 private:
   NSFSDriver* driver;
   int load_user_from_cache_or_db(const DoutPrefixProvider* dpp, bool& cache_hit);
+  /* I9:  a new account user's copy of its account's identity row */
+  int copy_account_identity(const DoutPrefixProvider* dpp);
 
 public:
   NSFSUser(NSFSDriver* _driver) :
@@ -1120,6 +1267,8 @@ private:
   std::unique_ptr<nsfs::Directory> dir;
   /* resolved from the extensions marker;  null until it has been read */
   const nsfs::BucketProfile* profile{nullptr};
+  /* default_object_owner(), once looked up */
+  std::optional<ACLOwner> default_owner;
 
 public:
   /* every nsfs bucket serves the positional view */
@@ -1304,6 +1453,7 @@ public:
 
   virtual std::unique_ptr<MultipartUpload> get_multipart_upload(
 				const std::string& oid,
+				const rgw_owner& authenticated_user,
 				std::optional<std::string> upload_id=std::nullopt,
 				ACLOwner owner={}, ceph::real_time mtime=real_clock::now()) override;
   virtual int list_multiparts(const DoutPrefixProvider *dpp,
@@ -1319,7 +1469,21 @@ public:
 			       CephContext* cct, optional_yield y) override;
 
   /* Internal APIs */
-  int create(const DoutPrefixProvider *dpp, optional_yield y, bool* existed);
+  /* abort_multiparts() as `authenticated_user`, each abort through the access
+   * model;  no_authenticated_user is the gateway, raised after a
+   * denial, as abort_multiparts() is */
+  int abort_multiparts_as(const DoutPrefixProvider* dpp, CephContext* cct,
+			  optional_yield y,
+			  const rgw_owner& authenticated_user);
+  int make_dir(const DoutPrefixProvider* dpp, optional_yield y,
+	       bool* existed, const rgw_owner& creator);
+  int remove_dir_as(const DoutPrefixProvider* dpp, optional_yield y,
+		    const nsfs::FSIdentity& id,
+		    const nsfs::AccessStrategy* model, bool delete_children);
+  /* `creator` is who the directory is given to (raise site 4), or
+   * no_authenticated_user where no request made it */
+  int create(const DoutPrefixProvider *dpp, optional_yield y, bool* existed,
+	     const rgw_owner& creator);
   nsfs::Directory* get_dir() { return dir.get(); }
   int get_dir_fd(const DoutPrefixProvider *dpp) { dir->open(dpp); return dir->get_fd(); }
   /* TODO dang Escape the bucket name for file use */
@@ -1329,6 +1493,14 @@ public:
 
   /* enumerate all entries by callback, in any order */
   int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, nsfs::fill_cache_cb_t& cb);
+
+  /* The owner of an object here that records none, with the display
+   * name RGW gives it:  the bucket's owner.  NooBaa returns the
+   * bucket's owner for every object, and an adopted bucket is
+   * BucketOwnerEnforced (DECISIONS.md 2026-10-11).  Looked up once per
+   * handle;  a display name that cannot be looked up is left empty. */
+  const ACLOwner& default_object_owner(const DoutPrefixProvider* dpp,
+				       optional_yield y);
 
   static MDB_cmp_func* lmdb_cmp();
 
@@ -1348,7 +1520,42 @@ private:
   std::unique_ptr<rgw::sal::Bucket> pinned_bucket;
   std::string dm_version_id;
 
+  /* How this object's entry is to be reached, held until an entry
+   * exists to apply it to.
+   *
+   * stat() both creates the entry and opens it, so a caller cannot
+   * set this on the entry afterwards -- by then the descriptor
+   * exists and its access mode is fixed.  The write path sidesteps
+   * the problem by calling make_ent() itself and setting it in
+   * between, which a read cannot do:  make_ent() resolves with
+   * create_dirs. */
+  nsfs::FSIdentity pending_identity;
+  bool pending_read_only{false};
+
+  void apply_pending_access() {
+    if (! ent) {
+      return;
+    }
+    ent->set_read_only(pending_read_only);
+    if (pending_identity.active()) {
+      ent->set_identity(pending_identity);
+      /* and the key's directories, which a delete prunes */
+      for (auto& d : dir_chain) {
+	d->set_identity(pending_identity);
+
 public:
+  /* Say how the entry is to be opened before anything opens it.
+   *
+   * An inactive identity means the gateway's own credentials.
+   * read_only is what a read op always wants:  asking for write
+   * access it does not need is the difference between serving an
+   * object readable through a supplementary group and the open failing
+   * with EACCES. */
+  void set_access(const nsfs::FSIdentity& id, bool ro) {
+    pending_identity = id;
+    pending_read_only = ro;
+    apply_pending_access();
+  }
 
   /* The strategies this object's bucket is in.
    *
@@ -1374,15 +1581,41 @@ public:
 			RGWGetDataCB* cb, optional_yield y) override;
     virtual int get_attr(const DoutPrefixProvider* dpp, const char* name,
 			 bufferlist& dest, optional_yield y) override;
+
+    /* Who this op is for, from get_read_op().  The identity is resolved
+     * at first I/O rather than here, so an operation that never reads a
+     * byte costs no registration.  No personality is held across the
+     * operation:  each submission looks one up on the thread it runs
+     * on. */
+    rgw_owner auth_user;
+    nsfs::FSIdentity identity;
+    /* resolve who this op runs as, into `identity`.  0 or -errno;
+     * -ENODATA means impersonation is off and the caller proceeds as
+     * before. */
+    int pin_personality(const DoutPrefixProvider* dpp, optional_yield y);
   };
 
   struct NSFSDeleteOp : DeleteOp {
     NSFSObject* source;
+    /* who asked, from get_delete_op(), for the writes a delete makes
+     * inside `.versions` */
+    rgw_owner auth_user;
 
     NSFSDeleteOp(NSFSObject* _source, const rgw_owner& _auth_user) :
       source(_source), auth_user(_auth_user) {}
     virtual ~NSFSDeleteOp() = default;
 
+    /* A delete of a current version in a versioned bucket *writes*:
+     * it links the current name into `.versions` and unlinks it from
+     * the bucket directory, against an object an identity wrote.  As
+     * the gateway that link fails with EPERM under
+     * fs.protected_hardlinks, so the authenticated user is what those
+     * two calls need (work-plan stage N-D).
+     *
+     * Not the promote that may follow them.  That publishes as the
+     * version file's own owner (§5) and must stay outside any
+     * `with_identity` here:  `run_as` rejects a call as one identity
+     * on a thread already acting as another. */
     virtual int delete_obj(const DoutPrefixProvider* dpp, optional_yield y, uint32_t flags) override;
   };
 
@@ -1417,10 +1650,12 @@ public:
 			    RGWObjVersionTracker* objv) override;
   virtual int rename(const DoutPrefixProvider* dpp, optional_yield y,
   		     rgw::sal::Bucket* dest_bucket,
-  		     const rgw_obj_key& dest_key, uint32_t flags) override;
+  		     const rgw_obj_key& dest_key, uint32_t flags,
+		     const rgw_owner& authenticated_user) override;
 
   virtual int copy_object(const ACLOwner& owner,
                const rgw_user& remote_user,
+               const rgw_owner& authenticated_user,
                req_info* info, const rgw_zone_id& source_zone,
                rgw::sal::Object* dest_object, rgw::sal::Bucket* dest_bucket,
                rgw::sal::Bucket* src_bucket,
@@ -1446,6 +1681,7 @@ public:
 			 optional_yield y) override;
 
   FSIOResult get_fsio_handle(const DoutPrefixProvider* dpp,
+			     const rgw_owner& authenticated_user,
 			     uint32_t flags = FSIOObject::OPEN_FLAG_NONE,
 			     const FSIOCreateSpec* spec = nullptr) override;
 
@@ -1472,6 +1708,7 @@ public:
   virtual int get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp) override;
   virtual int modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
 			       optional_yield y, const DoutPrefixProvider* dpp,
+			       const rgw_owner& authenticated_user,
 			       uint32_t flags = rgw::sal::FLAG_LOG_OP) override;
   virtual int delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name,
 			       optional_yield y, const rgw_owner& authenticated_user) override;
@@ -1524,7 +1761,8 @@ public:
   }
 
   nsfs::FSEnt* get_fsent() { return ent.get(); }
-  int open(const DoutPrefixProvider *dpp, bool create = false, bool temp_file = false);
+  int open(const DoutPrefixProvider *dpp, optional_yield y, bool create = false,
+	   bool temp_file = false);
   int close();
   int write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y);
   int write_attrs(const DoutPrefixProvider* dpp, optional_yield y,
@@ -1535,10 +1773,27 @@ public:
   bool check_exists(const DoutPrefixProvider* dpp) { stat(dpp); return state.exists; }
   int get_owner(const DoutPrefixProvider *dpp, optional_yield y, std::unique_ptr<User> *owner);
   int copy(const DoutPrefixProvider *dpp, optional_yield y, NSFSBucket *sb,
-           NSFSBucket *db, NSFSObject *dobj);
+           NSFSBucket *db, NSFSObject *dobj, const nsfs::CopyHints& hints);
   int fill_cache(const DoutPrefixProvider *dpp, optional_yield y, nsfs::fill_cache_cb_t& cb);
   int stat(const DoutPrefixProvider *dpp);
   int make_ent(nsfs::ObjectType type);
+
+  /* Put the authenticated user on the entry, so the open and the
+   * attribute write that follow are that user's rather than the
+   * gateway's.
+   *
+   * An attribute write opens the object O_RDWR and sets a `user.*`
+   * name on it, and both are tested against the calling thread:  as
+   * the gateway, on an identity's 0660 object, both fail.
+   * That used to pass silently and now returns (`09bf3d2b9ea`), so
+   * PutObjectTagging and friends answered 403.
+   *
+   * An empty `who` is not a failure.  It is what
+   * `rgw::sal::no_authenticated_user` means -- lifecycle, restore, a
+   * chown -- and those run as the gateway by design. */
+  int pin_identity_for_attrs(const DoutPrefixProvider* dpp,
+			     const rgw_owner& who, optional_yield y);
+
 
  class NSFSFSIOObject : public FSIOObject {
   private:
@@ -1551,6 +1806,13 @@ public:
    std::string leaf_name;
    bool ephemeral{false};
    std::vector<std::unique_ptr<nsfs::Directory>> dir_chain;
+   /* who the handle is for (n plan D4a):  librgw's mount user, pinned
+    * at get_fsio_handle() and held for the handle's life;  every call
+    * on the tree runs as it, and as the gateway where it is inactive */
+   nsfs::FSIdentity identity;
+   /* the same user, for the hints its copies carry:  set whether or
+    * not impersonation is, where `identity` is not */
+   rgw_owner authenticated_user;
 
    friend class NSFSObject;
 
@@ -1642,6 +1904,11 @@ protected:
   NSFSMPObj mp_obj;
   ceph::real_time mtime;
   std::unique_ptr<rgw::sal::NSFSBucket> shadow;
+  /* who the upload's operations are for, from get_multipart_upload() */
+  rgw_owner auth_user;
+  /* whom work no request asked for is done for:  lifecycle's abort */
+  rgw_owner on_behalf_of;
+  nsfs::FSIdentity identity;
 
 public:
   NSFSMultipartUpload(NSFSDriver* _driver, Bucket* _bucket, const std::string& _oid,
@@ -1656,6 +1923,19 @@ public:
   virtual const std::string& get_key() const override { return mp_obj.oid; }
   virtual const std::string& get_upload_id() const override { return mp_obj.upload_id; }
   virtual const ACLOwner& get_owner() const override { return mp_obj.owner; }
+
+  virtual void set_on_behalf_of(const rgw_owner& owner) override {
+    on_behalf_of = owner;
+  }
+
+  /* complete() resolves the authenticated user and makes the object
+   * as it:  the assembled file is created, or a data file linked in,
+   * and its attributes written, as the identity.  Parts are written as their
+   * uploader by the part writer, as NooBaa writes them.  init() makes
+   * staging and the meta object as the uploader, and abort() removes
+   * staging as the authenticated user (DECISIONS.md 2026-10-23);  ListParts
+   * stays the gateway's (DECISIONS.md 2026-10-15). */
+
   virtual ceph::real_time& get_mtime() override { return mtime; }
   virtual std::unique_ptr<rgw::sal::Object> get_meta_obj() override;
 
@@ -1723,6 +2003,8 @@ private:
    * directory keeps a raw parent pointer into it. */
   std::unique_ptr<nsfs::Directory> staging_root_dir;
   int load(const DoutPrefixProvider *dpp, bool create=false);
+  /* this upload's staging directory, as `identity`;  0 or -errno */
+  int remove_staging(const DoutPrefixProvider* dpp, optional_yield y);
 };
 
 class NSFSAtomicWriter : public StoreWriter {
@@ -1735,9 +2017,14 @@ private:
   NSFSObject* obj;
   QD2PendingWrite pending_write;
   optional_yield yield;
+  rgw_owner auth_user;
+  nsfs::FSIdentity identity;
+  nsfs::IdentityPersonality uring_identity{identity};
   std::unique_ptr<UringWriteWindow> uring_write;
 
 public:
+  int pin_personality(const DoutPrefixProvider* dpp, optional_yield y);
+
   NSFSAtomicWriter(const DoutPrefixProvider *dpp,
                     optional_yield y,
 		    rgw::sal::Object* _head_obj,
@@ -1753,8 +2040,9 @@ public:
     ptail_placement_rule(_ptail_placement_rule),
     olh_epoch(_olh_epoch),
     unique_tag(_unique_tag),
-    obj(static_cast<NSFSObject*>(_head_obj)), yield(y) {}
-
+    obj(static_cast<NSFSObject*>(_head_obj)),
+    yield(y),
+    auth_user(_auth_user) {}
   virtual ~NSFSAtomicWriter() = default;
 
   virtual int prepare(optional_yield y) override;
@@ -1773,6 +2061,9 @@ public:
 
 class NSFSMultipartWriter : public StoreWriter {
 private:
+  rgw_owner auth_user;
+  nsfs::FSIdentity identity;
+  nsfs::IdentityPersonality uring_identity{identity};
   NSFSDriver* driver;
   /* the upload's staging layout, resolved once by get_writer();  this
    * writer has no bucket of its own to ask */
@@ -1818,6 +2109,7 @@ private:
    * Asked of the layout, which is the only thing that knows whether a
    * file's identity depends on the size it holds;  see
    * MPUStrategy::relocation_target().  A no-op for the nsfs layout. */
+  int relocate(optional_yield y);
   /* the upload this part belongs to, as the client knows it.  The
    * injection map is keyed by this rather than by the internal meta,
    * so a test can arm exactly the upload it created. */
@@ -1843,6 +2135,8 @@ private:
   std::unique_ptr<UringWriteWindow> uring_write;
 
 public:
+  int pin_personality(const DoutPrefixProvider* dpp, optional_yield y);
+
   NSFSMultipartWriter(const DoutPrefixProvider *dpp,
                     optional_yield y,
 		    NSFSBucket* _shadow_bucket,
@@ -1853,6 +2147,7 @@ public:
                     uint64_t _part_num,
 		    file::listing::MultipartCacheKey&& _mp_cache_key) :
     StoreWriter(dpp, y),
+    auth_user(_auth_user),
     driver(_driver),
     mpu_strat(_mpu_strat),
     owner(_owner),

@@ -400,6 +400,25 @@ public:
    * listing paths about its own names.  The reference outlives the call. */
   virtual const ReservedNames& reserved_names() const = 0;
 
+  /* make the completed object from its parts.  dir_fd is the staging
+   * directory;  output_name is created within it.  fs supplies the copy,
+   * which is the whole reason the result depends on the filesystem.
+   *
+   * parts must be in ascending part order:  the output is their
+   * concatenation in that order, and a layout which places parts by
+   * offset can only check its placement against a sorted run.
+   *
+   * `id` is who the output belongs to, since it becomes the object:  it
+   * is created as `id`, and a data file linked in as the output was
+   * written as `id` and is linked and trimmed as it.  Parts are read as
+   * `id` too:  they are the uploader's data. */
+  virtual int assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
+                       int dir_fd,
+                       const std::vector<PartPlacement>& parts,
+                       const std::string& output_name,
+                       std::optional<uint64_t> stride,
+                       optional_yield y, const CopyHints& hints,
+                       const FSIdentity& id = {}) const = 0;
 
   /* The shared data file for an upload running at this stride, if the
    * layout has one.  THE NAME CARRIES THE VALUE, which is what makes
@@ -465,6 +484,12 @@ public:
 
   const ReservedNames& reserved_names() const override;
 
+  int assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
+               int dir_fd, const std::vector<PartPlacement>& parts,
+               const std::string& output_name,
+               std::optional<uint64_t> stride,
+               optional_yield y, const CopyHints& hints,
+               const FSIdentity& id = {}) const override;
 
   const char* name() const override { return "rgw"; }
 };
@@ -502,6 +527,12 @@ public:
 
   const ReservedNames& reserved_names() const override;
 
+  int assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
+	       int dir_fd, const std::vector<PartPlacement>& parts,
+	       const std::string& output_name,
+	       std::optional<uint64_t> stride,
+	       optional_yield y, const CopyHints& hints,
+	       const FSIdentity& id = {}) const override;
 
   std::optional<std::string> shared_name(uint64_t stride) const override;
 
@@ -571,6 +602,12 @@ public:
   std::string assembled_name() const override;
   const ReservedNames& reserved_names() const override;
 
+  int assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
+	       int dir_fd, const std::vector<PartPlacement>& parts,
+	       const std::string& output_name,
+	       std::optional<uint64_t> stride,
+	       optional_yield y, const CopyHints& hints,
+	       const FSIdentity& id = {}) const override;
 
   std::optional<std::string> shared_name(uint64_t stride) const override;
 

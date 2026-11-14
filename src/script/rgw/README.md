@@ -14,21 +14,22 @@ ninja -j$(nproc) radosgw radosgw-admin ceph-conf
 # 2. Start cluster (nsfs, clean state, with sidecars)
 ../src/script/rgw/rgw-vstart.sh --store nsfs --clean --with-keycloak --with-kafka
 
-# 3. Run tests (the script prints this command with correct paths)
-cd ../qa/workunits/rgw/s3tests-rs
-S3TEST_CONF=$BUILD/s3tests.conf \
-  cargo nextest run -P all --test-threads=1 --features fails_on_nsfs
+# 3. Run tests, from your s3-tests-rs checkout
+cd /path/to/s3-tests-rs/src/test/rgw/s3-tests-rs
+S3TEST_CONF=/path/to/s3tests.conf \
+  cargo nextest run -P baseline --features fails_on_nsfs,rgw_admin
 ```
 
-The script prints the exact test command with absolute paths when it
-finishes — copy-paste from there.
+The test suite, s3-tests-rs, is its own repository.  `S3TEST_CONF` names
+your copy of its `s3tests.conf.SAMPLE`.  The script prints the test
+command when it finishes.
 
 ## rgw-vstart.sh
 
 Single entry point for the entire dev test environment.  Wraps
-`vstart.sh` to handle cleanup, user/account bootstrap, test config
-generation, optional GPFS integration, and optional sidecar services
-(Keycloak, and in the future Vault and Kafka).
+`vstart.sh` to handle cleanup, user/account bootstrap, optional GPFS
+integration, impersonation and its fixture, and optional sidecar
+services (Keycloak, Kafka, Vault).  The header comment of
 `rgw-vstart.sh` is the authoritative list of options, with the detail;
 the table below lists every one.
 
@@ -87,6 +88,7 @@ Run from the **build directory**:
 | `--debug-rgw N` | `20` | RGW debug log level |
 | `-o 'key=value'` | none | Pass a config option through to `vstart.sh` |
 | `--foreground` | off | Print the radosgw command instead of running it |
+| `--restart` | off | Stop the running radosgw and start it again on the same `ceph.conf`, without `vstart.sh` and cleaning nothing;  takes only `--store`, `--adoption-mode`, `--debug-rgw`, `--port`, `--perf` and `--with-impersonation` |
 
 ### What it does
 
@@ -111,17 +113,42 @@ again, so the userdb, the LMDB cache and the tree are as they were.
 
 ### s3tests.conf
 
-The script generates `build/s3tests.conf` automatically from
-`qa/workunits/rgw/s3tests-rs/s3tests.conf.SAMPLE`.  All credentials
-match the users that `vstart.sh` creates — no manual editing needed.
+The script does not write one.  Copy s3-tests-rs's
+`s3tests.conf.SAMPLE` once, and set `S3TEST_CONF` to the copy:  its
+credentials already match the users `vstart.sh` creates.  When
+`S3TEST_CONF` is set as the script runs, the sidecars,
+`--with-lifecycle` and `--with-vault` record what they set up in that
+file;  when it is not, the script says what to add.
 
-Set `S3TEST_CONF` when running tests:
+### Impersonation (--with-impersonation):  what it needs of the machine
 
-```bash
-S3TEST_CONF=/path/to/build/s3tests.conf cargo nextest run -P all ...
-```
+The gateway serves each request as a system user, so the script
+changes the machine, and needs the machine to allow it:
 
-The script prints the exact command at the end.
+- **`sudo`, from your own account and not as root.**  It creates the
+  fixture's users (`rgwalice`, `rgwbob`, `rgwanon`, `rgwtenant`,
+  `rgwiam`, `rgwpolicy`, `rgwacct1`, `rgwacct2`, `rgwcopya`,
+  `rgwcopyb`, at uids 70101-70110) and group (`rgwfix`, gid 70010),
+  reusing any that exist by name;  applies `setcap` to `bin/radosgw`;
+  and owns fixture files as those users.  Those ids must be free, or
+  already the fixture's.
+- **A build on a mount without `nosuid`.**  There `setcap` succeeds and
+  the kernel ignores the capabilities.  Checked:  the script refuses.
+- **Every directory above the data root searchable by every user**
+  (`o+x`).  The fixture's users own none of them;  a `0700` home
+  directory is the usual one that blocks them.  Checked:  the script
+  names the first directory that blocks them.
+- **`python3`**, for `nsfs-impersonate-fixture.py`.
+
+Both checks run before the running gateway is stopped.
+
+In every mode the gateway listens on `--port`, 8000 by default.  The
+script stops every radosgw this build directory runs, on any port,
+since they share its state, and whatever else of yours holds the port
+(`fuser -k`).  It then refuses the start unless the radosgw it started
+is alive and the port is listened on:  something it could not stop --
+a gateway of root's, say -- would otherwise answer for one that failed
+to bind.
 
 ### Accounts and IAM
 
@@ -141,8 +168,8 @@ since stale rows from interrupted runs can cause false test failures.
 
 Starts a local Keycloak container via podman for WebIdentity testing.
 Provisions a realm, client, and test user, extracts tokens and
-thumbprint, and writes the `[webidentity]` section to the generated
-`build/s3tests.conf`.
+thumbprint, and writes the `[webidentity]` section to the file
+`S3TEST_CONF` names, or prints it to add by hand when none is named.
 
 **Prerequisites:** podman, jq, openssl, curl
 
@@ -159,7 +186,9 @@ To stop Keycloak manually:
 
 Starts a single-node Kafka broker via podman (KRaft mode, no
 ZooKeeper) for S3 bucket notification testing.  Writes the `[kafka]`
+section, with the broker endpoint, to the file `S3TEST_CONF` names;
 without one, the suite's notification tests find the broker at
+`127.0.0.1:9092` anyway.
 
 **Prerequisites:** podman
 
@@ -204,15 +233,17 @@ kill $(cat out/radosgw.<port>.pid)     # out/radosgw.8000.pid by default
 
 ## Running tests
 
-After starting a cluster, run the s3tests-rs suite from the source
-tree:
+After starting a cluster, run the s3-tests-rs suite from your
+checkout of it:
 
 ```bash
-cd qa/workunits/rgw/s3tests-rs
-S3TEST_CONF=/path/to/build/s3tests.conf \
-  cargo nextest run -P all --test-threads=1 --no-fail-fast \
-  --features fails_on_nsfs
+cd /path/to/s3-tests-rs/src/test/rgw/s3-tests-rs
+S3TEST_CONF=/path/to/s3tests.conf \
+  cargo nextest run -P baseline --no-fail-fast \
+  --features fails_on_nsfs,rgw_admin
 ```
+
+To run the suite across every nsfs configuration, use its
 `scripts/validate.rs`, which starts each gateway through this script
 on the port your s3tests.conf names:  `--preset full` for every
 configuration, `--preset quick` or `--preset cover` for a compact
@@ -250,6 +281,7 @@ same gateway, since it switches a setting by driver hint:
 |---------|----------|
 | `fails_on_nsfs` | Testing nsfs backend |
 | `fails_on_posix` | Testing posix backend |
+| `rgw_admin` | Enables the tests that use Admin Ops and driver hints;  the gateway runs with `rgw_driver_debug_apis`, which this script sets |
 
 These gate tests that hit known filesystem-backend limitations (e.g.
 file-as-prefix on nsfs).  Always pass the appropriate feature flag.
@@ -257,7 +289,7 @@ file-as-prefix on nsfs).  Always pass the appropriate feature flag.
 ### Single test
 
 ```bash
-S3TEST_CONF=/path/to/build/s3tests.conf \
+S3TEST_CONF=/path/to/s3tests.conf \
   cargo nextest run --features fails_on_nsfs,rgw_admin \
   -E 'test(conditional::test_put_object_if_match)' --test-threads=1
 ```
