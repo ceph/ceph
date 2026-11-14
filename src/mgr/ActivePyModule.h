@@ -31,6 +31,8 @@
 
 #include <fmt/core.h>
 
+#include <atomic>
+#include <memory>
 #include <vector>
 #include <string>
 
@@ -39,6 +41,40 @@ class ActivePyModule;
 class ActivePyModules;
 class MgrSession;
 class ModuleCommand;
+
+// Counts commands queued on or running in a module's finisher, so that
+// DaemonServer can reject new ones with EAGAIN once the module's
+// max_command_queue_length is reached.
+class ModuleCommandTracker
+  : public std::enable_shared_from_this<ModuleCommandTracker>
+{
+public:
+  // Held by a queued command; releases its slot when destroyed.
+  class InFlight {
+  public:
+    explicit InFlight(std::shared_ptr<ModuleCommandTracker> t)
+      : tracker(std::move(t)) {}
+    InFlight(const InFlight&) = delete;
+    InFlight& operator=(const InFlight&) = delete;
+    ~InFlight() { tracker->put(); }
+  private:
+    std::shared_ptr<ModuleCommandTracker> tracker;
+  };
+
+  explicit ModuleCommandTracker(PyModuleRef py_module)
+    : py_module(std::move(py_module)) {}
+
+  // Returns nullptr if limit is non-zero and already reached. The check
+  // and increment are not atomic together; callers serialize admission
+  // (DaemonServer::lock).
+  std::unique_ptr<InFlight> try_get(uint64_t limit);
+
+private:
+  void put();
+
+  std::atomic<uint64_t> in_flight{0};
+  PyModuleRef py_module;
+};
 
 class ActivePyModule : public PyModuleRunner
 {
@@ -52,13 +88,15 @@ private:
   const MgrSession* m_session = nullptr;
 public:
   Finisher finisher; // per active module finisher to execute commands
+  std::shared_ptr<ModuleCommandTracker> cmd_tracker;
 
 public:
   ActivePyModule(const PyModuleRef &py_module_,
       LogChannelRef clog_,
       ThreadMonitor* monitor_ = nullptr)
     : PyModuleRunner(py_module_, clog_, monitor_),
-      finisher(g_ceph_context, thread_name, fmt::format("m-fin-{}", py_module->get_name()).substr(0,15))
+      finisher(g_ceph_context, thread_name, fmt::format("m-fin-{}", py_module->get_name()).substr(0,15)),
+      cmd_tracker(std::make_shared<ModuleCommandTracker>(py_module))
 
   {
   }

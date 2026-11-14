@@ -267,6 +267,14 @@ public:
     return active_modules->get_module_finisher(name);
   }
 
+  auto get_active_module_cmd_tracker(const std::string &name) {
+    ceph_assert(active_modules);
+    return active_modules->get_module_cmd_tracker(name);
+  }
+
+  // 0 means unlimited
+  uint64_t get_max_command_queue_length(const PyModuleRef &module) const;
+
   // Sends the "active" beacon right away if all mgr modules
   // have finished startup. If some modules are still pending
   // startup, the "active" beacon is scheduled to send later
