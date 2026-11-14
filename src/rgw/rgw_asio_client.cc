@@ -88,6 +88,9 @@ int ClientIO::init_env(CephContext *cct)
 
 size_t ClientIO::complete_request()
 {
+  if (header_pending) {
+    flush();  // headers of a response without a body
+  }
   perfcounter->inc(l_rgw_qlen, -1);
   perfcounter->inc(l_rgw_qactive, -1);
   return 0;
@@ -95,7 +98,24 @@ size_t ClientIO::complete_request()
 
 void ClientIO::flush()
 {
+  header_pending = false;
   txbuf.pubsync();
+}
+
+size_t ClientIO::send_body(const char* buf, size_t len)
+{
+  if (!header_pending) {
+    return write_data(buf, len);
+  }
+  // Write the headers together with the first part of the body. Written
+  // separately, a small body would be a second small segment, which
+  // Nagle's algorithm (tcp_nodelay=0) holds until the client acknowledges
+  // the first, and it costs a second send either way.
+  header_pending = false;
+  const auto headers = txbuf.pending();
+  txbuf.discard();
+  write_data_gather(headers.data(), headers.size(), buf, len);
+  return len;
 }
 
 size_t ClientIO::send_status(int status, const char* status_name)
@@ -163,7 +183,7 @@ size_t ClientIO::complete_header()
   constexpr char HEADER_END[] = "\r\n";
   sent += txbuf.sputn(HEADER_END, sizeof(HEADER_END) - 1);
 
-  flush();
+  header_pending = true;
   return sent;
 }
 

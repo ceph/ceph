@@ -1,5 +1,12 @@
 >=22.0.0
 
+* RGW: The beast frontend's ``tcp_nodelay`` option now defaults to ``1``,
+  disabling Nagle's algorithm. With it enabled, a small response (e.g. a GET
+  of a 4 KiB object) waited for the client's delayed acknowledgement of its
+  headers, about 40 ms on Linux, which limited small-object GETs to ~25 per
+  second per connection. Set ``tcp_nodelay=0`` in ``rgw_frontends`` for the
+  old behaviour.
+
 * RBD: The ``schedule_time`` field in the output of
   ``rbd mirror snapshot schedule status`` and
   ``rbd trash purge schedule status`` has been renamed to
