@@ -30039,7 +30039,16 @@ paths:
     get:
       description: "\n        Get Ceph and device report data\n        :return: Ceph\
         \ and device report data\n        :rtype: dict\n        "
-      parameters: []
+      parameters:
+      - allowEmptyValue: true
+        description: Channels to report, an empty value selects none. Defaults to
+          the enabled ones.
+        in: query
+        name: channels
+        schema:
+          items:
+            type: string
+          type: array
       responses:
         '200':
           content:

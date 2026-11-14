@@ -326,6 +326,40 @@ describe('TelemetryComponent', () => {
       });
     });
 
+    it('should request the report of the channels selected in the form', () => {
+      component.newConfig = { channel_basic: true, channel_crash: false, channel_perf: true };
+      component['getReport']();
+      httpTesting.expectOne('api/telemetry/report?channels=basic&channels=perf');
+    });
+
+    it('should request the report without channels if none is selected', () => {
+      component.newConfig = { channel_basic: false, channel_perf: false };
+      component['getReport']();
+      httpTesting.expectOne('api/telemetry/report?channels=');
+    });
+
+    it('should only add the contact info to the report if the ident channel is selected', () => {
+      const flush = (newConfig: object) => {
+        component.newConfig = {
+          contact: 'a@b.c',
+          description: 'd',
+          organization: 'o',
+          ...newConfig
+        };
+        component['getReport']();
+        httpTesting
+          .expectOne((req) => req.url === 'api/telemetry/report')
+          .flush({ report: { report_id: 'id', channels_available: ['basic', 'ident'] } });
+        return component.report['report'];
+      };
+      expect(flush({ channel_basic: true })).not.toHaveProperty('contact');
+      expect(flush({ channel_basic: true, channel_ident: true })).toMatchObject({
+        contact: 'a@b.c',
+        description: 'd',
+        organization: 'o'
+      });
+    });
+
     it('should submit when telemetry is not yet enabled', () => {
       component.moduleEnabled = false;
       component.onSubmit();
