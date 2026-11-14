@@ -66,8 +66,8 @@ struct cls_2pc_urgent_data
 {
   uint64_t reserved_size{0};
   // pending reservations size in bytes
-  // For version >= 3: this counter is accurate and can be used directly
-  // For version < 3: ignore this value and compute from reservations (fixes
+  // For version >= 4: this counter is accurate and can be used directly
+  // For version < 4: ignore this value and compute from reservations (fixes
   // historical drift)
   cls_2pc_reservation::id_t last_id{cls_2pc_reservation::NO_ID};
   // last allocated id
@@ -76,10 +76,11 @@ struct cls_2pc_urgent_data
   uint32_t committed_entries{0}; // how many entries have been committed so far
   // Transient field (not persisted) - stores the version from which this was
   // decoded
-  uint8_t decoded_struct_v{3};
+  uint8_t decoded_struct_v{4};
 
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(3, 1, bl);
+    // v3/v4 add no fields; v4 forces reserved_size recalculation on v3 queues
+    ENCODE_START(4, 1, bl);
     encode(reserved_size, bl);
     encode(last_id, bl);
     encode(reservations, bl);
@@ -89,7 +90,7 @@ struct cls_2pc_urgent_data
   }
 
   void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(3, bl);
+    DECODE_START(4, bl);
     decode(reserved_size, bl);
     decode(last_id, bl);
     decode(reservations, bl);

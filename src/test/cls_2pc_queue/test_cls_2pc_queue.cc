@@ -1122,6 +1122,213 @@ TEST_P(TestCls2PCQueue, AbortSpillover)
   ASSERT_EQ(reservations.size(), 0);
 }
 
+namespace {
+// read/write the queue head the same way queue_read_head()/queue_write_head() do
+void read_queue_head(librados::IoCtx& ioctx, const std::string& queue_name, cls_queue_head& head)
+{
+  constexpr auto prefix_len = sizeof(uint16_t) + sizeof(uint64_t);
+  bufferlist bl;
+  ASSERT_EQ(ioctx.read(queue_name, bl, prefix_len, 0), static_cast<int>(prefix_len));
+  auto it = bl.cbegin();
+  uint16_t queue_head_start;
+  decode(queue_head_start, it);
+  ASSERT_EQ(queue_head_start, QUEUE_HEAD_START);
+  uint64_t encoded_len;
+  decode(encoded_len, it);
+  bl.clear();
+  ASSERT_EQ(ioctx.read(queue_name, bl, encoded_len, prefix_len), static_cast<int>(encoded_len));
+  it = bl.cbegin();
+  decode(head, it);
+}
+
+void write_queue_head(librados::IoCtx& ioctx, const std::string& queue_name, const cls_queue_head& head)
+{
+  bufferlist bl;
+  encode(static_cast<uint16_t>(QUEUE_HEAD_START), bl);
+  bufferlist bl_head;
+  encode(head, bl_head);
+  encode(static_cast<uint64_t>(bl_head.length()), bl);
+  bl.claim_append(bl_head);
+  ASSERT_LE(bl.length(), head.max_head_size);
+  ASSERT_EQ(0, ioctx.write(queue_name, bl, bl.length(), 0));
+}
+
+void read_urgent_data(librados::IoCtx& ioctx, const std::string& queue_name,
+                      cls_queue_head& head, cls_2pc_urgent_data& urgent_data)
+{
+  ASSERT_NO_FATAL_FAILURE(read_queue_head(ioctx, queue_name, head));
+  auto it = head.bl_urgent_data.cbegin();
+  decode(urgent_data, it);
+}
+
+// encode the urgent data as a pre-v4 cls would
+bufferlist encode_old_urgent_data(const cls_2pc_urgent_data& urgent_data, uint8_t version)
+{
+  bufferlist bl;
+  ENCODE_START(version, 1, bl);
+  encode(urgent_data.reserved_size, bl);
+  encode(urgent_data.last_id, bl);
+  encode(urgent_data.reservations, bl);
+  encode(urgent_data.has_xattrs, bl);
+  if (version >= 2) {
+    encode(urgent_data.committed_entries, bl);
+  }
+  ENCODE_FINISH(bl);
+  return bl;
+}
+
+void drift_reserved_size(librados::IoCtx& ioctx, const std::string& queue_name,
+                         uint64_t drifted_reserved_size, uint8_t version)
+{
+  cls_queue_head head;
+  cls_2pc_urgent_data urgent_data;
+  ASSERT_NO_FATAL_FAILURE(read_urgent_data(ioctx, queue_name, head, urgent_data));
+  urgent_data.reserved_size = drifted_reserved_size;
+  head.bl_urgent_data = encode_old_urgent_data(urgent_data, version);
+  ASSERT_NO_FATAL_FAILURE(write_queue_head(ioctx, queue_name, head));
+}
+
+uint64_t pending_reservations_size(librados::IoCtx& ioctx, const std::string& queue_name)
+{
+  cls_2pc_reservations reservations;
+  EXPECT_EQ(0, cls_2pc_queue_list_reservations(ioctx, queue_name, reservations));
+  uint64_t total = 0;
+  for (const auto& [id, res] : reservations) {
+    total += res.size + res.entries*QUEUE_ENTRY_OVERHEAD;
+  }
+  return total;
+}
+}
+
+// the first write of any kind must fix a drifted reserved_size of a pre-v4 queue
+TEST_P(TestCls2PCQueue, RecalcDriftedReservedSize)
+{
+  const auto max_size = 64U*1024U;
+  const auto size_to_reserve = 1000U;
+  const uint64_t reservation_size = size_to_reserve + QUEUE_ENTRY_OVERHEAD;
+  const std::vector<std::string> first_writes = {"reserve", "commit", "abort", "expire", "remove_entries"};
+
+  for (const uint8_t version : {1, 2, 3}) {
+    for (const auto& first_write : first_writes) {
+      const std::string queue_name = std::string(__PRETTY_FUNCTION__) + "-v" + to_string(version) +
+        "-" + first_write;
+      SCOPED_TRACE(queue_name);
+      librados::ObjectWriteOperation op;
+      op.create(true);
+      cls_2pc_queue_init(op, queue_name, max_size);
+      ASSERT_EQ(0, ioctx.operate(queue_name, &op));
+
+      // one committed entry and one pending reservation
+      bufferlist bl_data;
+      bl_data.append(std::string(size_to_reserve, 'a'));
+      cls_2pc_reservation::id_t res_id;
+      ASSERT_EQ(0, cls_2pc_queue_reserve(ioctx, queue_name, size_to_reserve, 1, res_id));
+      cls_2pc_queue_commit(op, {bl_data}, res_id);
+      ASSERT_EQ(0, ioctx.operate(queue_name, &op));
+      cls_2pc_reservation::id_t pending_id;
+      ASSERT_EQ(0, cls_2pc_queue_reserve(ioctx, queue_name, size_to_reserve, 1, pending_id));
+
+      // drift reserved_size so that no new reservation fits
+      ASSERT_NO_FATAL_FAILURE(drift_reserved_size(ioctx, queue_name, max_size, version));
+
+      uint64_t expected_reserved_size = 0;
+      if (first_write == "reserve") {
+        ASSERT_EQ(0, cls_2pc_queue_reserve(ioctx, queue_name, size_to_reserve, 1, res_id));
+        expected_reserved_size = 2*reservation_size;
+      } else {
+        if (first_write == "commit") {
+          cls_2pc_queue_commit(op, {bl_data}, pending_id);
+        } else if (first_write == "abort") {
+          cls_2pc_queue_abort(op, pending_id);
+        } else if (first_write == "expire") {
+          cls_2pc_queue_expire_reservations(op, ceph::coarse_real_clock::now() + std::chrono::seconds(60));
+        } else {
+          std::vector<cls_queue_entry> entries;
+          bool truncated;
+          std::string end_marker;
+          ASSERT_EQ(0, cls_2pc_queue_list_entries(ioctx, queue_name, "", 1, entries, &truncated, end_marker));
+          ASSERT_EQ(entries.size(), 1);
+          cls_2pc_queue_remove_entries(op, end_marker, 1);
+          // the pending reservation is untouched
+          expected_reserved_size = reservation_size;
+        }
+        ASSERT_EQ(0, ioctx.operate(queue_name, &op));
+      }
+
+      cls_queue_head head;
+      cls_2pc_urgent_data urgent_data;
+      ASSERT_NO_FATAL_FAILURE(read_urgent_data(ioctx, queue_name, head, urgent_data));
+      ASSERT_EQ(urgent_data.decoded_struct_v, 4);
+      ASSERT_EQ(urgent_data.reserved_size, expected_reserved_size);
+
+      ASSERT_EQ(0, cls_2pc_queue_reserve(ioctx, queue_name, size_to_reserve, 1, res_id));
+    }
+  }
+}
+
+// same, with reservations spilled over to xattrs
+TEST_P(TestCls2PCQueue, RecalcDriftedReservedSizeSpillover)
+{
+  const auto max_size = 1024U*1024U;
+  const auto number_of_ops = 1024U;
+  const auto size_to_reserve = 64U;
+  const std::vector<std::string> first_writes = {"reserve", "commit", "abort", "expire"};
+
+  for (const uint8_t version : {2, 3}) {
+    for (const auto& first_write : first_writes) {
+      const std::string queue_name = std::string(__PRETTY_FUNCTION__) + "-v" + to_string(version) +
+        "-" + first_write;
+      SCOPED_TRACE(queue_name);
+      librados::ObjectWriteOperation op;
+      op.create(true);
+      cls_2pc_queue_init(op, queue_name, max_size);
+      ASSERT_EQ(0, ioctx.operate(queue_name, &op));
+
+      cls_2pc_reservation::id_t res_id;
+      for (auto i = 0U; i < number_of_ops; ++i) {
+        ASSERT_EQ(0, cls_2pc_queue_reserve(ioctx, queue_name, size_to_reserve, 1, res_id));
+      }
+      // pick a reservation that was spilled over to xattrs
+      cls_queue_head head;
+      cls_2pc_urgent_data urgent_data;
+      ASSERT_NO_FATAL_FAILURE(read_urgent_data(ioctx, queue_name, head, urgent_data));
+      ASSERT_TRUE(urgent_data.has_xattrs);
+      cls_2pc_reservations reservations;
+      ASSERT_EQ(0, cls_2pc_queue_list_reservations(ioctx, queue_name, reservations));
+      ASSERT_EQ(reservations.size(), number_of_ops);
+      auto spilled = std::find_if(reservations.begin(), reservations.end(), [&urgent_data](const auto& r) {
+          return urgent_data.reservations.count(r.first) == 0;
+        });
+      ASSERT_NE(spilled, reservations.end());
+      const auto spilled_id = spilled->first;
+
+      ASSERT_NO_FATAL_FAILURE(drift_reserved_size(ioctx, queue_name, max_size, version));
+
+      if (first_write == "reserve") {
+        ASSERT_EQ(0, cls_2pc_queue_reserve(ioctx, queue_name, size_to_reserve, 1, res_id));
+      } else {
+        if (first_write == "commit") {
+          bufferlist bl_data;
+          bl_data.append(std::string(size_to_reserve, 'a'));
+          cls_2pc_queue_commit(op, {bl_data}, spilled_id);
+        } else if (first_write == "abort") {
+          cls_2pc_queue_abort(op, spilled_id);
+        } else {
+          cls_2pc_queue_expire_reservations(op, ceph::coarse_real_clock::now() + std::chrono::seconds(60));
+        }
+        ASSERT_EQ(0, ioctx.operate(queue_name, &op));
+      }
+
+      ASSERT_NO_FATAL_FAILURE(read_urgent_data(ioctx, queue_name, head, urgent_data));
+      ASSERT_EQ(urgent_data.decoded_struct_v, 4);
+      ASSERT_EQ(urgent_data.reserved_size, pending_reservations_size(ioctx, queue_name));
+      if (first_write == "expire") {
+        ASSERT_EQ(urgent_data.reserved_size, 0);
+      }
+    }
+  }
+}
+
 INSTANTIATE_TEST_SUITE_P(, TestCls2PCQueue,
   ::testing::Values(PoolType::REPLICATED, PoolType::FAST_EC),
   [](const ::testing::TestParamInfo<PoolType>& info) {
