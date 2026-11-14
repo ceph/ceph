@@ -137,6 +137,7 @@ extensions = [
     'sphinx_substitution_extensions',
     'substitution_prompt',
     'breathe',
+    'ceph_doc_mocks',
     'ceph_commands',
     'ceph_releases',
     'ceph_confval',
