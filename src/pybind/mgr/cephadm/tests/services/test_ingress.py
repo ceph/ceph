@@ -1059,6 +1059,8 @@ class TestIngressService:
                         service_name=s.service_name())))
                 ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
                 assert "Bind_addr = 1.2.3.0/24" in ganesha_conf
+                assert 'register_service = true' in ganesha_conf
+                assert 'nodeid = "foo.test.0.0"' in ganesha_conf
 
                 keepalived_generated_conf = service_registry.get_service('ingress').keepalived_generate_config(
                     CephadmDaemonDeploySpec(host='test', daemon_id='ingress', service_name=ispec.service_name()))
@@ -1270,6 +1272,11 @@ class TestIngressService:
             'RGW {\n'
             '        cluster = "ceph";\n'
             '        name = "client.nfs.foo.test.0.0-rgw";\n'
+            '}\n'
+            '\n'
+            'CEPH {\n'
+            '        register_service = true;\n'
+            '        nodeid = "foo.test.0.0";\n'
             '}\n'
             '\n'
             '\n'
@@ -1513,6 +1520,8 @@ class TestIngressService:
         )
         ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
         assert "Bind_addr = 10.10.2.20" in ganesha_conf
+        assert 'register_service = true' in ganesha_conf
+        assert 'nodeid = "foo.test.0.0"' in ganesha_conf
 
 
 def test_keepalived_choose_next_action_redeploy_on_deps_change_when_stopped():
