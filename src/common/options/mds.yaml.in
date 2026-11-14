@@ -624,6 +624,24 @@ options:
   min: 1
   services:
   - mds
+- name: mds_log_expire_backtrace_max_inflight
+  type: uint
+  level: advanced
+  desc: maximum number of backtrace writes that expiring journal segments
+    have in flight
+  long_desc: To expire a journal segment, the MDS writes the backtrace of
+    every inode created or moved in it, one write per inode to the data
+    pool.  A segment full of new files issues thousands of them at once,
+    and the journal writes of the MDS then wait behind them on the OSDs.
+    This caps the backtrace writes in flight across all expiring segments;
+    0 means no limit.
+  default: 256
+  services:
+  - mds
+  see_also:
+  - mds_log_events_per_segment
+  flags:
+  - runtime
 # segment size for mds log, default to default file_layout_t
 - name: mds_log_segment_size
   type: size

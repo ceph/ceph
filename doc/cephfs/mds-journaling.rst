@@ -154,3 +154,11 @@ The target maximum number of segments is controlled by:
 
 The MDS will often sit a little above this number due to non-major segments
 awaiting trimming up to the next major segment.
+
+To expire a segment, the MDS writes the backtrace of every inode created or
+moved in it to the data pool, one write per inode. A segment full of new files
+can need thousands of them, and the journal writes of the MDS wait behind them
+on the OSDs. The number of these writes in flight, across all the segments
+being expired, is limited by:
+
+.. confval:: mds_log_expire_backtrace_max_inflight

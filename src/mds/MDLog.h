@@ -71,6 +71,8 @@ class MDSRank;
 class LogSegment;
 class ESubtreeMap;
 
+struct BacktraceBatch;
+
 class MDLog {
 public:
 
@@ -187,6 +189,10 @@ public:
   // beacon needs me too
   bool is_trim_slow() const;
 
+  // Called from the finisher thread.
+  void queue_backtrace_batch(std::shared_ptr<BacktraceBatch> batch);
+  void backtrace_op_done(std::shared_ptr<BacktraceBatch> batch, int r);
+
 protected:
   struct PendingEvent {
     PendingEvent(LogEvent *e, Context* c, bool f=false) : le(e), fin(c), flush(f) {}
@@ -293,12 +299,20 @@ protected:
   ceph::fair_mutex submit_mutex{"MDLog::submit_mutex"};
   std::condition_variable_any submit_cond;
 
+  // Backtrace writes of expiring segments, issued at most
+  // mds_log_expire_backtrace_max_inflight at a time, so that a segment
+  // full of new files does not flood the OSDs and hold up the journal.
+  // Finisher thread only.
+  std::deque<std::shared_ptr<BacktraceBatch>> backtrace_batches;
+  uint64_t backtrace_inflight = 0;
+
 private:
   friend class C_MaybeExpiredSegment;
   friend class C_MDL_Flushed;
   friend class C_OFT_Committed;
 
   void try_to_commit_open_file_table(uint64_t last_seq);
+  void issue_backtraces();
   LogSegmentRef const& _start_new_segment(SegmentBoundary* sb);
   void _segment_upkeep();
   LogSegment::seq_t _submit_entry(LogEvent* e, MDSLogContextBase* c);
