@@ -324,6 +324,33 @@ def main():
         exec_cmd(f'rados -p {DATA_POOL} setxattr {olh_oid} user.rgw.olh.ver {olh_ver}')
     assert bucket.Object(key).delete().get('DeleteMarker'), 'expected a delete marker'
 
+    # TESTCASE 'verify an UNORDERED listing resumes correctly after a null version'
+    log.debug('TEST: unordered listing resumes correctly after a null version\n')
+    null_bucket_name = BUCKET_NAME + '-null-resume'
+    null_bucket = connection.create_bucket(Bucket=null_bucket_name)
+    keys = [f'k{i:02d}' for i in range(6)]
+    try:
+        connection.BucketVersioning(null_bucket_name).enable()
+        for k in keys:
+            null_bucket.Object(k).put(Body=b'v1')      # a noncurrent version
+        connection.BucketVersioning(null_bucket_name).suspend()
+        for k in keys:
+            null_bucket.Object(k).put(Body=b'null')    # a current null version
+        exec_cmd(f'radosgw-admin bucket reshard --bucket {null_bucket_name} --num-shards 1 --yes-i-really-mean-it')
+        # 'tell' applies the limit on every OSD before returning, so the
+        # listing below always pages within the index shard
+        exec_cmd('ceph tell osd.* config set osd_max_omap_entries_per_request 1')
+        try:
+            listing = json.loads(exec_cmd(f'radosgw-admin bucket list --bucket {null_bucket_name} --allow-unordered'))
+        finally:
+            exec_cmd('ceph tell osd.* config unset osd_max_omap_entries_per_request')
+        entries = [(e['name'], e.get('instance', '')) for e in listing]
+        dups = sorted(e for e in set(entries) if entries.count(e) > 1)
+        assert not dups, f'entries listed more than once: {dups}'
+    finally:
+        null_bucket.object_versions.all().delete()
+        null_bucket.delete()
+
     # Clean up
     log.debug("Deleting bucket {}".format(BUCKET_NAME))
     bucket.object_versions.all().delete()
