@@ -23,8 +23,8 @@ struct SnapSetContext {
   bool registered : 1;
   bool exists : 1;
 
-  explicit SnapSetContext(const hobject_t& o) :
-    oid(o), ref(0), registered(false), exists(true) { }
+  explicit SnapSetContext(hobject_t o) :
+    oid(std::move(o)), ref(0), registered(false), exists(true) { }
 };
 
 inline std::ostream& operator<<(std::ostream& out, const SnapSetContext& ssc)
