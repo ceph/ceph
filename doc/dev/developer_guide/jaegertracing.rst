@@ -22,11 +22,11 @@ refer to the `Ceph Tracing documentation <../../../jaegertracing/#basic-architec
 HOW TO GET STARTED USING TRACING?
 ---------------------------------
 
-Enabling jaegertracing with Ceph needs deployment Jaeger daemons + compiling
+Enabling jaegertracing with Ceph needs deploying the Jaeger daemon + compiling
 Ceph with Jaeger, orchestrated to be used in vstart cluster for developers, this
 uses a jaeger `all-in-one docker
-<https://www.jaegertracing.io/docs/1.22/getting-started/#all-in-one>`_ which
-isn't recommended for production, but for testing purposes. Let's look at all the
+<https://www.jaegertracing.io/docs/2.17/getting-started/#all-in-one>`_ while this
+isn't recommended for production, it is useful for testing purposes. Let's look at all the
 steps needed:
 
   1. Update system with Jaeger dependencies, using install-deps::
@@ -45,13 +45,13 @@ steps needed:
       $ ./do_cmake.sh -DWITH_JAEGER=ON && ninja vstart
 
   3. After successful compiling, start a vstart cluster with `--jaeger` which
-  will deploy `jaeger all-in-one <https://www.jaegertracing.io/docs/1.20/getting-started/#all-in-one>`_
+  will deploy `jaeger all-in-one <https://www.jaegertracing.io/docs/2.17/getting-started/#all-in-one>`_
   using container deployment services(docker/podman)::
 
    $ MON=1 MGR=0 OSD=1 ../src/vstart.sh --with-jaeger
 
   if the deployment is unsuccessful, you can deploy `all-in-one
-  <https://www.jaegertracing.io/docs/1.20/getting- started/#all-in-one>`_
+  <https://www.jaegertracing.io/docs/2.17/getting-started/#all-in-one>`_
   service manually and start vstart cluster without jaeger as well.
 
 
