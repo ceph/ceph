@@ -1,6 +1,7 @@
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { RouterTestingModule } from '@angular/router/testing';
+import { NO_ERRORS_SCHEMA } from '@angular/core';
 
 import { BehaviorSubject, of } from 'rxjs';
 
@@ -13,6 +14,7 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { RgwDaemon } from '../models/rgw-daemon';
+import { RgwRole } from '../models/rgw-role';
 
 describe('RgwAccountRolesListComponent', () => {
   let component: RgwAccountRolesListComponent;
@@ -71,7 +73,8 @@ describe('RgwAccountRolesListComponent', () => {
           provide: ModalCdsService,
           useValue: { show: modalShow }
         }
-      ]
+      ],
+      schemas: [NO_ERRORS_SCHEMA]
     }).compileComponents();
 
     fixture = TestBed.createComponent(RgwAccountRolesListComponent);
@@ -88,12 +91,12 @@ describe('RgwAccountRolesListComponent', () => {
   });
 
   it('should load roles on init', () => {
-    const roles = [{ RoleName: 'test-role' }];
-    jest.spyOn(rgwRoleService, 'list').mockReturnValue(of(roles as any));
+    const roles = [{ RoleName: 'test-role' }] as RgwRole[];
+    jest.spyOn(rgwRoleService, 'list').mockReturnValue(of(roles));
     component.loadRoles();
     expect(rgwRoleService.list).toHaveBeenCalledWith('test-account');
     component.data$.subscribe((res) => {
-      expect(res).toEqual(roles);
+      expect(res).toEqual([{ RoleName: 'test-role', policies_count: 0 }]);
     });
   });
 
@@ -136,4 +139,11 @@ describe('RgwAccountRolesListComponent', () => {
     component.openRoleForm(false);
     expect(modalShow).not.toHaveBeenCalled();
   });
+
+  it('should open policy side panel for a specific policy', fakeAsync(() => {
+    component.openPolicyPanel('test-role', 'policy-2');
+    tick();
+    expect(component.policyPanelOpen).toBe(true);
+    expect(component.selectedPolicyName).toBe('policy-2');
+  }));
 });
