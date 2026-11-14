@@ -29,6 +29,7 @@
 
 #include "common/ceph_time.h"
 #include "common/Clock.h"
+#include "common/dout_fmt.h"
 #include "common/errno.h"
 #include "common/async/blocked_completion.h"
 

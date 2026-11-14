@@ -58,6 +58,7 @@ using RGWBucketListNameFilter = std::function<bool (const std::string&)>;
 
 namespace rgw {
   class Aio;
+  class SiteConfig;
   namespace IAM { struct Policy; }
 }
 
