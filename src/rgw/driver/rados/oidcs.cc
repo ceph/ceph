@@ -14,6 +14,7 @@
  */
 
 #include "oidcs.h"
+#include "rgw_tools.h"
 
 #include "include/rados/librados.hpp"
 #include "cls/user/cls_user_client.h"

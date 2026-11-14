@@ -45,6 +45,7 @@
 #include "rgw_crypt.h"
 #include "rgw_bl_rados.h"
 #include "rgw_lc.h"
+#include "rgw_lua.h"
 #include "rgw_lc_tier.h"
 #include "rgw_lc_tier.h"
 #include "rgw_mdlog.h"

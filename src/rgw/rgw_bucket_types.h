@@ -30,6 +30,8 @@
 
 struct cls_user_bucket;
 
+#define RGW_NO_SHARD -1
+
 struct rgw_bucket_key {
   std::string tenant;
   std::string name;

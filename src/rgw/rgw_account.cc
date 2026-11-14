@@ -23,10 +23,12 @@
 #include "common/utf8.h"
 
 #include "rgw_arn.h"
+#include "rgw_formats.h"
 #include "rgw_oidc_provider.h"
 #include "rgw_quota.h"
 #include "rgw_role.h"
 #include "rgw_sal.h"
+#include "driver/rados/rgw_user.h"
 
 #define dout_subsys ceph_subsys_rgw
 
