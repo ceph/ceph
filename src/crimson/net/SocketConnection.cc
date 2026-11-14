@@ -122,9 +122,11 @@ SocketConnection::start_connect(const entity_addr_t& _peer_addr,
 
 void
 SocketConnection::start_accept(SocketFRef&& sock,
-                               const entity_addr_t& _peer_addr)
+                               const entity_addr_t& _peer_addr,
+                               std::optional<seastar::shard_id> _listener_core)
 {
   assert(seastar::this_shard_id() == msgr_sid);
+  listener_core = _listener_core;
   protocol->start_accept(std::move(sock), _peer_addr);
 }
 

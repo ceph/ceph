@@ -585,6 +585,7 @@ set(libcommon_files
   osd/osd_types.cc
   osdc/Striper.cc
   osdc/Objecter.cc
+  osdc/objecter_core_route.cc
   osdc/error_code.cc
   osdc/SplitOp.cc
   librbd/Features.cc

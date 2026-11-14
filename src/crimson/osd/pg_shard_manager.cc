@@ -108,6 +108,28 @@ seastar::future<> PGShardManager::set_up_epoch(epoch_t e) {
     });
 }
 
+seastar::future<> PGShardManager::set_core_hints(
+  std::vector<entity_addrvec_t> core_addrs)
+{
+  ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
+  ceph_assert(core_addrs.empty() ||
+              core_addrs.size() == seastar::this_smp_shard_count());
+  return shard_services.invoke_on_all(
+    seastar::smp_submit_to_options{},
+    [core_addrs=std::move(core_addrs)](auto &local_service) {
+      auto core = seastar::this_shard_id();
+      // a core without a listener hints nothing: its clients keep using
+      // the main address. The hint names the listener's port: the client
+      // reaches it on the IP it already uses for the OSD
+      local_service.local_state.set_core_hint(
+        core_addrs.empty() || core_addrs[core].empty()
+          ? std::nullopt
+          : std::make_optional<osd_core_hint_t>(
+              core, core_addrs[core].front().get_port()));
+      return seastar::now();
+    });
+}
+
 seastar::future<> PGShardManager::set_superblock(OSDSuperblock superblock) {
   ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
   get_osd_singleton_state().set_singleton_superblock(superblock);

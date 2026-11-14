@@ -10,6 +10,7 @@
 #include <fmt/format.h>
 #include <fmt/os.h>
 #include <fmt/ostream.h>
+#include <fmt/ranges.h>
 #include <seastar/core/timer.hh>
 #include <seastar/coroutine/parallel_for_each.hh>
 
@@ -683,6 +684,11 @@ seastar::future<> OSD::start()
   co_await start_cluster_lanes(osd_required);
   co_await heartbeat->start(pick_addresses(CEPH_PICK_ADDRESS_PUBLIC),
                             pick_addresses(CEPH_PICK_ADDRESS_CLUSTER));
+  if (local_conf().get_val<bool>("crimson_osd_core_listeners")) {
+    // optional, and best effort: bound only once all the messengers the
+    // OSD needs have their ports, so as not to take them
+    co_await public_msgr->bind_core_listeners();
+  }
   // create the admin-socket server, and the objects that register
   // to handle incoming commands
   co_await start_asok_admin();
@@ -767,6 +773,12 @@ seastar::future<> OSD::_send_boot()
   INFO("hb_back_msgr: {}", hb_back_addrs);
   INFO("hb_front_msgr: {}", hb_front_addrs);
   INFO("cluster_msgr: {}", cluster_addrs);
+
+  // the public address is final by now, and so are the per-core
+  // addresses derived from it
+  auto core_addrs = public_msgr->get_core_addrs();
+  INFO("public_msgr core listeners: {}", core_addrs);
+  co_await pg_shard_manager.set_core_hints(std::move(core_addrs));
 
   auto m = crimson::make_message<MOSDBoot>(superblock,
                                   osdmap->get_epoch(),
