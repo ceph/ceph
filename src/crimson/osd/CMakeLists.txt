@@ -73,7 +73,6 @@ if(HAS_VTA)
     PROPERTIES COMPILE_FLAGS -fno-var-tracking-assignments)
 endif()
 target_link_libraries(crimson-osd
-  legacy-option-headers
   crimson-admin
   crimson-common
   crimson-os

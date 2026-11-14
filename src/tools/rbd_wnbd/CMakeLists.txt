@@ -9,7 +9,6 @@ set_target_properties(
     "-fpermissive -I${WNBD_INCLUDE_DIRS}")
 target_link_libraries(
     rbd-wnbd
-    legacy-option-headers
     setupapi rpcrt4
     wbemuuid oleaut32
     ${WNBD_LIBRARIES}
