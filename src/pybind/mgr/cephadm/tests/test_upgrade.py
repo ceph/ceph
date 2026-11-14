@@ -1641,6 +1641,101 @@ def test_do_upgrade_gateway_batch_with_upgrade_filters(
     assert [d[0].name() for d in batches[0]] == expected
 
 
+@pytest.mark.parametrize(
+    "daemon_types,services,hosts,expected",
+    [
+        # --daemon-types without nvmeof: the nvmeof gateways belong to a later
+        # staggered pass and must be left alone
+        (['ceph-exporter'], None, None, []),
+        # --services on the exporter service only: same thing
+        (None, ['ceph-exporter.svc1'], None, []),
+        # --daemon-types nvmeof: this is the pass that owns them
+        (['nvmeof'], None, None,
+         ['nvmeof.svc1.host1.abcdef', 'nvmeof.svc1.host2.abcdef']),
+        # --daemon-types nvmeof --hosts host1: only the gateway on host1
+        (['nvmeof'], None, ['host1'], ['nvmeof.svc1.host1.abcdef']),
+    ]
+)
+@mock.patch.object(CephadmUpgrade, '_upgrade_daemons')
+@mock.patch.object(CephadmUpgrade, '_handle_need_upgrade_self')
+@mock.patch.object(CephadmUpgrade, '_set_container_images')
+@mock.patch.object(CephadmUpgrade, '_complete_osd_upgrade')
+@mock.patch.object(CephadmUpgrade, '_complete_mds_upgrade')
+@mock.patch.object(CephadmUpgrade, '_update_upgrade_progress')
+@mock.patch.object(CephadmUpgrade, 'get_distinct_container_image_settings', return_value={})
+@mock.patch("cephadm.module.CephadmOrchestrator.lookup_release_name", return_value='tentacle')
+@mock.patch("cephadm.module.CephadmOrchestrator.check_mon_command", return_value=(0, '{}', ''))
+@mock.patch("cephadm.module.CephadmOrchestrator.set_container_image")
+@mock.patch("cephadm.module.CephadmOrchestrator.get_active_mgr_digests")
+@mock.patch("cephadm.module.CephadmOrchestrator.get", return_value={
+    'min_mon_release': 19,
+    'require_osd_release': 'tentacle',
+    'have_local_config_map': True,
+})
+@mock.patch(
+    "cephadm.module.CephadmOrchestrator.version",
+    new_callable=mock.PropertyMock,
+    return_value='ceph version 19.3.0-0 (hash)',
+)
+@mock.patch("cephadm.module.HostCache.get_daemons_by_service")
+@mock.patch("cephadm.module.HostCache._get_daemons")
+@mock.patch("cephadm.module.HostCache.get_daemons")
+def test_do_upgrade_nvmeof_respects_upgrade_filters(
+    get_daemons: mock.MagicMock,
+    _get_daemons: mock.MagicMock,
+    get_daemons_by_service: mock.MagicMock,
+    _version: mock.MagicMock,
+    _get: mock.MagicMock,
+    get_active_mgr_digests: mock.MagicMock,
+    _set_container_image: mock.MagicMock,
+    _check_mon_command: mock.MagicMock,
+    _lookup_release_name: mock.MagicMock,
+    _get_distinct_container_image_settings: mock.MagicMock,
+    _update_upgrade_progress: mock.MagicMock,
+    _complete_mds_upgrade: mock.MagicMock,
+    _complete_osd_upgrade: mock.MagicMock,
+    _set_container_images: mock.MagicMock,
+    _handle_need_upgrade_self: mock.MagicMock,
+    _upgrade_daemons: mock.MagicMock,
+    daemon_types: Optional[List[str]],
+    services: Optional[List[str]],
+    hosts: Optional[List[str]],
+    expected: List[str],
+    cephadm_module: CephadmOrchestrator,
+) -> None:
+    # nvmeof is redeployed once every ceph image daemon is upgraded, but that
+    # must still happen inside the --daemon-types/--services/--hosts filters of
+    # the running staggered pass, not on every nvmeof daemon in the cluster
+    target_digest = 'new_image@repo_digest'
+    get_active_mgr_digests.return_value = [target_digest]
+    # ceph-exporter is the last ceph image type of the upgrade order and is
+    # already fully upgraded, so the nvmeof redeploy gate is open
+    daemons = _gateway_daemons('ceph-exporter', 1, 2, digest=target_digest)
+    # nvmeof runs its own image, so it only ever needs a redeploy: it is on the
+    # "correct" image but was deployed by the pre-upgrade mgr
+    daemons += _gateway_daemons('nvmeof', 1, 2)
+    get_daemons.return_value = daemons
+    _get_daemons.return_value = daemons
+    get_daemons_by_service.side_effect = \
+        lambda service: [d for d in daemons if d.service_name() == service]
+
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target_image',
+        '0',
+        target_id='image_id',
+        target_digests=[target_digest],
+        target_version='19.3.0-0',
+        daemon_types=daemon_types,
+        services=services,
+        hosts=hosts,
+    )
+
+    cephadm_module.upgrade._do_upgrade()
+
+    upgraded = [d[0].name() for c in _upgrade_daemons.call_args_list for d in c.args[0]]
+    assert upgraded == expected
+
+
 @pytest.mark.parametrize("current_version, use_tags, show_all_versions, tags, result",
                          [
                              # several candidate versions (from different major versions)
