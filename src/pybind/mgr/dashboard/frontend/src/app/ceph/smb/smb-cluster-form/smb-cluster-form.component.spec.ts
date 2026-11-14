@@ -12,7 +12,11 @@ import { FOO_USERSGROUPS } from '../smb-usersgroups-form/smb-usersgroups-form.co
 import { of } from 'rxjs';
 import { By } from '@angular/platform-browser';
 import { USER } from '~/app/shared/constants/app.constants';
-import { SMB_CEPHFS_CONTEXT, SMB_CONTEXT } from '~/app/shared/constants/smb.constant';
+import {
+  SMB_CEPHFS_CONTEXT,
+  SMB_CONTEXT,
+  SMB_RGW_CONTEXT
+} from '~/app/shared/constants/smb.constant';
 
 describe('SmbClusterFormComponent', () => {
   let component: SmbClusterFormComponent;
@@ -111,6 +115,46 @@ describe('SmbClusterFormComponent', () => {
     component.smbForm.get('client_compat').setValue(false);
     const request = (component as any).buildRequest();
     expect(request.cluster_resource.client_compat).toBe(CLIENT_COMPAT.Default);
+  });
+
+  it('should enable macOS compatibility for cephfs smb', () => {
+    expect(component.showMacOsCompat).toBe(true);
+  });
+
+  describe('rgw smb', () => {
+    beforeEach(() => {
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({
+        imports: [
+          BrowserAnimationsModule,
+          SharedModule,
+          HttpClientTestingModule,
+          RouterTestingModule,
+          ReactiveFormsModule,
+          GridModule,
+          InputModule,
+          SelectModule,
+          ComboBoxModule
+        ],
+        declarations: [SmbClusterFormComponent],
+        providers: [{ provide: SMB_CONTEXT, useValue: SMB_RGW_CONTEXT }]
+      });
+      fixture = TestBed.createComponent(SmbClusterFormComponent);
+      component = fixture.componentInstance;
+      fixture.detectChanges();
+    });
+
+    it('should disable macOS compatibility for rgw smb', () => {
+      expect(component.showMacOsCompat).toBe(false);
+    });
+
+    it('should not include client_compat in the request', () => {
+      component.smbForm.get('auth_mode').setValue(AUTHMODE.ActiveDirectory);
+      component.smbForm.get('domain_settings').setValue('test-realm');
+      component.smbForm.get('cluster_id').setValue('cluster-id');
+      const request = (component as any).buildRequest();
+      expect(request.cluster_resource.client_compat).toBeUndefined();
+    });
   });
 
   it('should delete domain', () => {
