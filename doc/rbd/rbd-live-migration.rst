@@ -197,6 +197,34 @@ it utilizes native Ceph operations. For example, to import from the image
   ``ceph config-key set rbd/native/my_key AQAz7EVWygILFRAAdIcuJ12opU/JKyfFmxhuaw==``
   and ``"key": "config://rbd/native/my_key"`` in ``source-spec``).
 
+.. note::
+  The ``snap_name`` parameter must refer to a snapshot in the user snapshot
+  namespace: a snapshot created with ``rbd snap create``. Snapshots in
+  other namespaces (for example, snapshots created with ``rbd group snap
+  create``) cannot be used as a live-migration source.
+
+Live-migration of a group as a whole is not currently supported. To copy the
+consistent point in time captured by a group snapshot to another cluster,
+clone each member image's snapshot under the group snapshot first: there is
+no ``rbd group clone`` command, and ``rbd export`` cannot read a snapshot in
+the group snapshot namespace. Obtain the id of each member's snapshot with
+``rbd group snap info`` and clone it (this requires clone format 2)::
+
+        $ rbd group snap info mypool/mygroup@mygroupsnap
+        $ rbd clone --snap-id <member-snap-id> mypool/image1 mypool/image1-copy
+
+Since nothing writes to the clones, their contents remain identical to the
+group snapshot regardless of any activity on the original member images.
+Copy each clone to the destination cluster with ``rbd export`` and
+``rbd import``, which need no snapshot of the clone::
+
+        $ rbd export mypool/image1-copy - | rbd --cluster dest import - mypool/image1
+
+After all member images have been imported, and before any of them receives
+writes, re-create the group and take a new group snapshot on the destination
+cluster (``rbd group create``, ``rbd group image add``, ``rbd group snap
+create``). The clones on the source cluster can then be removed.
+
 The ``qcow`` format can be used to describe a QCOW (QEMU copy-on-write) block
 device. Both the QCOW (v1) and QCOW2 formats are currently supported with the
 exception of advanced features such as compression, encryption, backing
