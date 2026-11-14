@@ -239,15 +239,15 @@ def is_repo_digest(image_name: str) -> bool:
     return '@' in image_name
 
 
-def resolve_ip(hostname: str) -> str:
+def resolve_ip(hostname: str, prefer_ipv6: bool = False) -> str:
     try:
         r = socket.getaddrinfo(hostname, None, flags=socket.AI_CANONNAME,
                                type=socket.SOCK_STREAM)
-        # pick first v4 IP, if present
+        family = socket.AF_INET6 if prefer_ipv6 else socket.AF_INET
         for a in r:
-            if a[0] == socket.AF_INET:
-                return a[4][0]
-        return r[0][4][0]
+            if a[0] == family:
+                return str(a[4][0])
+        return str(r[0][4][0])
     except socket.gaierror as e:
         raise OrchestratorError(f"Cannot resolve ip for host {hostname}: {e}")
 

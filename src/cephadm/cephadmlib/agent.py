@@ -4,6 +4,8 @@ from typing import Optional, Any, Tuple
 import importlib
 import logging
 
+from .net_utils import wrap_ipv6
+
 logger = logging.getLogger()
 
 
@@ -15,7 +17,7 @@ def http_query(
     ssl_ctx: Optional[Any] = None,
     timeout: Optional[int] = 10,
 ) -> Tuple[int, str]:
-    url = f'https://{addr}:{port}{endpoint}'
+    url = f'https://{wrap_ipv6(addr)}:{port}{endpoint}'
     logger.debug(f'sending query to {url}')
     try:
         req = Request(url, data, {'Content-Type': 'application/json'})
