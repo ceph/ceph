@@ -24,5 +24,6 @@ tasks:
     clients:
       client.0:
         - rgw/test_account_migration.sh
+        - rgw/test_account_root_suspend.sh
 - radosgw-admin:
 - radosgw-admin-rest:

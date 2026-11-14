@@ -57,6 +57,30 @@ as follows:
 :command:`user list`
   List all users.
 
+:command:`account create`
+  Create a new account.
+
+:command:`account modify`
+  Modify an existing account.
+
+:command:`account get`
+  Get account info.
+
+:command:`account stats`
+  Dump account storage stats.
+
+:command:`account rm`
+  Remove an account.
+
+:command:`account list`
+  List all account ids.
+
+:command:`account suspend`
+  Suspend an account and its owned buckets.
+
+:command:`account enable`
+  Re-enable an account after suspension.
+
 :command:`caps add`
   Add user capabilities.
 
