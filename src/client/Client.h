@@ -327,6 +327,8 @@ struct dir_result_t {
   uint64_t ordered_count;
   unsigned cache_index;
   int start_shared_gen;  // dir shared_gen at start of readdir
+  // An authoritative rstat from a request sent since this sequence is fresh.
+  uint64_t listing_seq = 0;
   UserPerm perms;
 
   frag_t buffer_frag;
@@ -382,6 +384,7 @@ public:
   friend class C_Deleg_Timeout; // Asserts on client_lock, called when a delegation is unreturned
   friend class C_Client_CacheRelease; // Asserts on client_lock
   friend class SyntheticClient;
+  friend class ClientScaffold; // src/test/client/TestClient.h
   friend void intrusive_ptr_release(Inode *in);
   template <typename T> friend struct RWRefState;
   template <typename T> friend class RWRef;
@@ -1005,7 +1008,7 @@ public:
 			      utime_t ctime, utime_t mtime, utime_t atime);
 
   Inode *add_update_inode(InodeStat *st, utime_t ttl, MetaSession *session,
-			  const UserPerm& request_perms);
+			  const UserPerm& request_perms, uint64_t listing_seq);
   Dentry *insert_dentry_inode(Dir *dir, const std::string& dname, LeaseStat *dlease,
 			      Inode *in, utime_t from, MetaSession *session,
 			      Dentry *old_dentry = NULL);
@@ -2472,6 +2475,8 @@ private:
   std::unordered_map<int, Fh*> fd_map;
   set<Fh*> ll_unclosed_fh_set;
   std::unordered_set<dir_result_t*> opened_dirs;
+  // Protected by client_lock; zero never denotes a started listing.
+  uint64_t readdir_listing_seq = 0;
   uint64_t fd_gen = 1;
 
   bool   mount_aborted = false;
