@@ -1397,6 +1397,7 @@ class Module(MgrModule):
     def get_rook_data(self, report: Dict[str, object]) -> None:
         r, outb, outs = self.mon_command({
             'prefix': 'config-key dump',
+            'key': 'rook/',
             'format': 'json'
         })
         if r != 0:
