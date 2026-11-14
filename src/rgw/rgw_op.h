@@ -1437,6 +1437,7 @@ protected:
   const char *supplied_etag;
   std::string etag;
   RGWAccessControlPolicy policy;
+  RGWObjTags obj_tags;
   std::map<std::string, bufferlist> attrs;
   boost::optional<ceph::real_time> delete_at;
   std::optional<rgw::cksum::Cksum> cksum;
@@ -2103,6 +2104,7 @@ protected:
 public:
   RGWInitMultipart() {}
 
+  int init_processing(optional_yield y) override;
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
   void execute(optional_yield y) override;

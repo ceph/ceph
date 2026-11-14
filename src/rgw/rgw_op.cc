@@ -5483,6 +5483,10 @@ int RGWPostObj::init_processing(optional_yield y)
 
 int RGWPostObj::verify_permission(optional_yield y)
 {
+  for (const auto& kv: obj_tags.get_tags()) {
+    rgw_add_to_iam_environment(s->env, "s3:RequestObjectTag/"+kv.first, kv.second);
+  }
+
   // add server-side encryption headers
   rgw_iam_add_crypt_attrs(s->env, s->info.crypt_attribute_map);
 
@@ -7564,11 +7568,25 @@ void RGWSetRequestPayment::execute(optional_yield y)
   s->bucket_attrs = s->bucket->get_attrs();
 }
 
+int RGWInitMultipart::init_processing(optional_yield y)
+{
+  int ret = get_params(y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  return RGWOp::init_processing(y);
+}
+
 int RGWInitMultipart::verify_permission(optional_yield y)
 {
   auto [has_s3_existing_tag, has_s3_resource_tag] = rgw_check_policy_condition(this, s);
   if (has_s3_existing_tag || has_s3_resource_tag)
     rgw_iam_add_objtags(this, s, has_s3_existing_tag, has_s3_resource_tag);
+
+  for (const auto& kv: obj_tags.get_tags()) {
+    rgw_add_to_iam_environment(s->env, "s3:RequestObjectTag/"+kv.first, kv.second);
+  }
 
   // add server-side encryption headers
   rgw_iam_add_crypt_attrs(s->env, s->info.crypt_attribute_map);
@@ -7590,11 +7608,6 @@ void RGWInitMultipart::execute(optional_yield y)
 {
   multipart_trace = tracing::rgw::tracer.start_trace(tracing::rgw::MULTIPART, s->trace_enabled);
   bufferlist aclbl, tracebl;
-
-  op_ret = get_params(y);
-  if (op_ret < 0) {
-    return;
-  }
 
   if (rgw::sal::Object::empty(s->object.get()))
     return;
