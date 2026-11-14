@@ -204,15 +204,28 @@ bool ThreadMonitor::read_thread_stat(pid_t tid, long long& utime, long long& sti
   std::string stat_path = "/proc/self/task/" + std::to_string(tid) + "/stat";
   std::ifstream stat_file(stat_path);
   if (!stat_file.is_open()) {
-    dout(20) << __func__ << "Could not open " << stat_path << dendl;
+    dout(20) << "Could not open " << stat_path << dendl;
     return false;
   }
   std::string line;
   std::getline(stat_file, line);
+  if (!parse_thread_stat(line, utime, stime)) {
+    dout(20) << "Malformed stat file for TID " << tid << dendl;
+    return false;
+  }
+  return true;
+}
+
+bool ThreadMonitor::parse_thread_stat(const std::string& line, long long& utime,
+                                      long long& stime) {
   size_t start = line.find('(');
   size_t end = line.rfind(')');
   if (start == std::string::npos || end == std::string::npos) {
-    dout(20) << __func__ << "Malformed stat file for TID " << tid << dendl;
+    return false;
+  }
+
+  // substr(end + 2) would throw if the line is cut off at ')'
+  if (end + 2 >= line.size()) {
     return false;
   }
 
@@ -220,12 +233,18 @@ bool ThreadMonitor::read_thread_stat(pid_t tid, long long& utime, long long& sti
   std::stringstream ss(remainder);
   std::string val;
 
-  // skip 11 fields before utime/stime: 
+  // skip 11 fields before utime/stime:
   // state ppid pgrp session tty_nr tpgid flags minflt cminflt majflt cmajflt
   for (int i = 0; i < 11; ++i) {
     ss >> val;
   }
-  ss >> utime >> stime;
+
+  long long tmp_utime = 0, tmp_stime = 0;
+  if (!(ss >> tmp_utime >> tmp_stime)) {
+    return false;
+  }
+  utime = tmp_utime;
+  stime = tmp_stime;
   return true;
 }
 
@@ -234,12 +253,28 @@ bool ThreadMonitor::read_process_statm(long long& rss_pages) {
   std::ifstream statm_file(statm_path);
 
   if (!statm_file.is_open()) {
-    dout(20) << __func__ << "Could not open " << statm_path << dendl;
+    dout(20) << "Could not open " << statm_path << dendl;
     return false;
   }
 
-  long long vsize_pages;
-  statm_file >> vsize_pages >> rss_pages;
+  std::string line;
+  std::getline(statm_file, line);
+  if (!parse_process_statm(line, rss_pages)) {
+    dout(20) << "Malformed statm file" << dendl;
+    return false;
+  }
+  return true;
+}
+
+bool ThreadMonitor::parse_process_statm(const std::string& line, long long& rss_pages) {
+  // statm fields: size resident shared text lib data dt
+  // rss is the 2nd field (resident set size, in pages).
+  std::stringstream ss(line);
+  long long vsize_pages = 0, tmp_rss = 0;
+  if (!(ss >> vsize_pages >> tmp_rss)) {
+    return false;
+  }
+  rss_pages = tmp_rss;
   return true;
 }
 
