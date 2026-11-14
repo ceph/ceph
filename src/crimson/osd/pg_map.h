@@ -34,11 +34,25 @@ public:
     return iter == pg_to_core.end() ? NULL_CORE : iter->second.first;
   }
 
-  /// Returns mapping for pgid, creates new one if it doesn't already exist
+  /**
+   * Returns mapping for pgid, creates new one if it doesn't already exist
+   *
+   * core_expected, store_index: where the PG's data already is (e.g. a
+   * PG loaded at startup, or a split child), or NULL_CORE and
+   * NULL_STORE_INDEX for a new PG.
+   *
+   * A new PG without an expected core goes to the core with the fewest
+   * PGs of its role: client ops are served by the primaries only, so
+   * the primaries are spread over the cores evenly, and so are the
+   * other PGs. 'primary': whether this OSD is the PG's (up) primary.
+   * It is also counted for a PG with an expected core (e.g. loaded at
+   * startup), so that the PGs created later balance against it.
+   */
   seastar::future<std::pair<core_id_t, store_index_t>> get_or_create_pg_mapping(
     spg_t pgid,
-    core_id_t core_expected = NULL_CORE,
-    store_index_t store_index = NULL_STORE_INDEX);
+    core_id_t core_expected,
+    store_index_t store_index,
+    bool primary);
 
   /// Remove pgid mapping
   seastar::future<> remove_pg_mapping(spg_t pgid);
@@ -47,9 +61,13 @@ public:
 
   seastar::future<> dump_store_shards(Formatter *f) const;
 
-  /// Map to cores in [min_core_mapping, core_mapping_limit)
-  PGShardMapping(core_id_t min_core_mapping, core_id_t core_mapping_limit, uint32_t store_shard_nums)
-    : store_shard_nums(store_shard_nums) {
+  /// Map to cores in [min_core_mapping, core_mapping_limit).
+  /// require_partition_count_match: the store's (cached)
+  /// seastore_require_partition_count_match_reactor_count
+  PGShardMapping(core_id_t min_core_mapping, core_id_t core_mapping_limit, uint32_t store_shard_nums,
+                 bool require_partition_count_match)
+    : store_shard_nums(store_shard_nums),
+      require_partition_count_match(require_partition_count_match) {
     ceph_assert_always(min_core_mapping < core_mapping_limit);
     auto max_core_mapping = std::min(min_core_mapping + store_shard_nums, core_mapping_limit);
     auto num_shard_services = (store_shard_nums + seastar::this_smp_shard_count() - 1 ) / seastar::this_smp_shard_count();
@@ -62,6 +80,7 @@ public:
         }
       }
       core_to_num_pgs.emplace(i, 0);
+      core_to_num_primaries.emplace(i, 0);
       for (unsigned int j = 0; j < num_alien_cores; ++j) {
         if (store_shard_nums * j + i < core_mapping_limit) {
           core_alien_to_num_pgs[i].emplace(store_shard_nums * j + i, 0);
@@ -80,9 +99,14 @@ public:
 private:
 
   uint32_t store_shard_nums;
+  const bool require_partition_count_match;
   // only in shard 0
   //<core_id, num_pgs>
   std::map<core_id_t, unsigned> core_to_num_pgs;
+  //<core_id, num_pgs this OSD was the primary of when mapped>
+  std::map<core_id_t, unsigned> core_to_num_primaries;
+  //<pg, the core_to_num_primaries entry it was counted in>
+  std::map<spg_t, core_id_t> primary_pgs;
   //<core_id, <shard_index, num_pgs>>  // when smp < store_shard_nums, each core more than one store shard
   std::map<core_id_t, std::map<unsigned, unsigned>> core_shard_to_num_pgs;
   //<core_id, <alien_core_id, num_pgs>> // when smp > store_shard_nums, more than one core share store shard

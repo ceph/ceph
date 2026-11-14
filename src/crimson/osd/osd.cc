@@ -339,6 +339,7 @@ seastar::future<> OSD::mkfs(
   LOG_PREFIX(OSD::mkfs);
   DEBUG("starting store mkfs");
   co_await store.start();
+  store.cache_require_partition_count_match();
 
   // Every exit past start() must go through stop(): destroying a started
   // seastar::sharded<> asserts, which would turn the error exit back into
@@ -555,7 +556,10 @@ seastar::future<> OSD::start()
   ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
   DEBUG("starting store");
   uint32_t store_shards_num = co_await store.start();
-  co_await pg_to_shard_mappings.start(0, seastar::this_smp_shard_count(), store_shards_num);
+  store.cache_require_partition_count_match();
+  co_await pg_to_shard_mappings.start(
+    0, seastar::this_smp_shard_count(), store_shards_num,
+    store.get_require_partition_count_match());
   co_await osd_singleton_state.start_single(
         whoami, std::ref(*cluster_msgr), std::ref(*public_msgr),
         std::ref(*monc), std::ref(*mgrc));

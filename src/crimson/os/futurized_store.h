@@ -280,8 +280,28 @@ public:
   /// Run garbage collection on all shards until space ratios are acceptable.
   /// Default implementation is a no-op (for stores that don't need GC).
   virtual seastar::future<> do_gc() { return seastar::now(); }
+
+  /**
+   * seastore_require_partition_count_match_reactor_count: whether each
+   * store shard must be served by its own reactor. It is a startup option,
+   * so it can't change while the OSD runs: the OSD caches it once the store
+   * has started (and the number of store shards is known), rather than
+   * with_store() looking it up by name on every store call.
+   */
+  void cache_require_partition_count_match() {
+    require_partition_count_match = crimson::common::get_conf<bool>(
+      "seastore_require_partition_count_match_reactor_count");
+  }
+  bool get_require_partition_count_match() const {
+    return require_partition_count_match;
+  }
+
 protected:
   const core_id_t primary_core;
+
+private:
+  /// the option's default, until cache_require_partition_count_match()
+  bool require_partition_count_match = true;
 };
 
 template<auto MemberFunc, typename... Args>
@@ -293,7 +313,7 @@ auto with_store(BackendStore store, Args&&... args)
   constexpr bool is_seastar_future = seastar::is_future<raw_return_type>::value && !is_errorator;
   constexpr bool is_plain = !is_errorator && !is_seastar_future;
   const auto original_core = seastar::this_shard_id();
-  if(crimson::common::get_conf<bool>("seastore_require_partition_count_match_reactor_count")) {
+  if (store.f_store.get_require_partition_count_match()) {
     if (store.shard_id != GLOBAL_STORE) {
       ceph_assert(store.shard_id == seastar::this_shard_id());
     }

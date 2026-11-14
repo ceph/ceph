@@ -576,12 +576,26 @@ public:
     return pg_to_shard_mapping.dump_store_shards(f);
   }
 
+  /// whether this OSD is pgid's up primary in this core's map. Used to
+  /// spread the primaries over the cores (see PGShardMapping)
+  bool is_up_primary(spg_t pgid) const;
+
+  /// is_up_primary(), for a PG that has no core yet. The role matters only
+  /// when the PG is placed, so a mapped PG (the common case: every op looks
+  /// its PG's core up) is not run through CRUSH
+  bool is_up_primary_if_unmapped(spg_t pgid) {
+    return pg_to_shard_mapping.get_pg_mapping(pgid) == NULL_CORE &&
+      is_up_primary(pgid);
+  }
+
   auto create_split_pg_mapping(spg_t pgid, core_id_t core, store_index_t store_index) {
-    return pg_to_shard_mapping.get_or_create_pg_mapping(pgid, core, store_index);
+    return pg_to_shard_mapping.get_or_create_pg_mapping(
+      pgid, core, store_index, is_up_primary(pgid));
   }
 
   seastar::future<core_id_t> get_pg_mapping(spg_t pgid) {
-    return pg_to_shard_mapping.get_or_create_pg_mapping(pgid).then(
+    return pg_to_shard_mapping.get_or_create_pg_mapping(
+      pgid, NULL_CORE, NULL_STORE_INDEX, is_up_primary_if_unmapped(pgid)).then(
       [](std::pair<core_id_t, store_index_t> mapping) {
         return mapping.first;
       });
