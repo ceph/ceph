@@ -4716,6 +4716,293 @@ TEST(bluestore_blob_use_tracker_t, mempool_stats_test) {
   }
 }
 
+// The data cache budget split among the buffer cache shards, and what the
+// data cache asks the autotuner for (BlueStore_cache_shards.h).
+namespace {
+constexpr uint64_t MiB = 1ull << 20;
+constexpr size_t SHARDS = 32;
+constexpr uint64_t TUNED = 2048 * MiB;
+
+uint64_t sum(const std::vector<uint64_t>& v) {
+  uint64_t t = 0;
+  for (auto x : v) t += x;
+  return t;
+}
+
+// The loop the autotuner closes around the data cache: the committed size
+// becomes the shard limits, the shards with data fill them, the cache asks
+// for `scale` of what it holds, and the next commit is that plus a chunk of
+// headroom (PriorityCache::get_chunk). `with_data` shards have more data
+// than any limit; the others have none.
+uint64_t next_commit(uint64_t committed, size_t with_data, bool scaled) {
+  std::vector<uint64_t> held(SHARDS, 0);
+  // the shards were split by the current commit and have filled their limits
+  auto limits = bluestore_cache_shards::weighted_limits(committed, held);
+  for (size_t s = 0; s < with_data; ++s) held[s] = limits[s];
+  // ... and are split again by the bytes they hold, and fill again
+  limits = bluestore_cache_shards::weighted_limits(committed, held);
+  for (size_t s = 0; s < with_data; ++s) held[s] = limits[s];
+  double scale = scaled ?
+    bluestore_cache_shards::even_split_fraction(committed, held) : 1.0;
+  uint64_t request = static_cast<uint64_t>(sum(held) * scale);
+  return PriorityCache::get_chunk(request, TUNED);
+}
+}
+
+TEST(bluestore_cache_shards, weighted_limits_even_when_nothing_held) {
+  std::vector<uint64_t> held(SHARDS, 0);
+  auto limits = bluestore_cache_shards::weighted_limits(128 * MiB, held);
+  ASSERT_EQ(SHARDS, limits.size());
+  for (auto l : limits) EXPECT_EQ(4 * MiB, l);
+  EXPECT_TRUE(bluestore_cache_shards::weighted_limits(128 * MiB, {}).empty());
+}
+
+TEST(bluestore_cache_shards, weighted_limits_floor_and_sum) {
+  // 15 of 32 shards hold data, unevenly; 17 hold nothing
+  uint64_t alloc = 480 * MiB;
+  std::vector<uint64_t> held(SHARDS, 0);
+  for (size_t s = 0; s < 15; ++s) held[s] = (s + 1) * MiB;
+  auto limits = bluestore_cache_shards::weighted_limits(alloc, held);
+  uint64_t floor = alloc / SHARDS / bluestore_cache_shards::FLOOR_DIV;
+  EXPECT_LE(sum(limits), alloc);
+  EXPECT_GE(sum(limits), alloc - SHARDS);   // only the integer rounding is lost
+  for (size_t s = 0; s < SHARDS; ++s) {
+    EXPECT_GE(limits[s], floor) << s;
+    if (held[s] == 0) EXPECT_EQ(floor, limits[s]) << s;
+  }
+  // more held, bigger limit
+  for (size_t s = 1; s < 15; ++s) EXPECT_GT(limits[s], limits[s - 1]) << s;
+}
+
+TEST(bluestore_cache_shards, weighted_limits_full_even_split_is_fixed_point) {
+  uint64_t alloc = 1024 * MiB;
+  std::vector<uint64_t> held(SHARDS, alloc / SHARDS);
+  auto limits = bluestore_cache_shards::weighted_limits(alloc, held);
+  for (auto l : limits) EXPECT_EQ(alloc / SHARDS, l);
+}
+
+TEST(bluestore_cache_shards, weighted_limits_full_shards_converge_to_even) {
+  // four full shards at 40/20/20/20 % of the budget: each resize moves the
+  // limits 1/8 of the way to the even split, so there is no uneven state
+  // they can freeze in
+  uint64_t alloc = 100 * MiB;
+  std::vector<uint64_t> held = {40 * MiB, 20 * MiB, 20 * MiB, 20 * MiB};
+  uint64_t even = alloc / held.size();
+  uint64_t prev_gap = held[0] - even;
+  for (int round = 0; round < 40; ++round) {
+    auto limits = bluestore_cache_shards::weighted_limits(alloc, held);
+    EXPECT_LE(sum(limits), alloc);
+    held = limits;                        // every shard fills its limit
+    uint64_t gap = held[0] - even;
+    EXPECT_LT(gap, prev_gap) << round;
+    prev_gap = gap;
+  }
+  for (auto h : held) EXPECT_NEAR(even, h, MiB / 4);
+}
+
+TEST(bluestore_cache_shards, even_split_fraction_is_one_when_nothing_is_over) {
+  std::vector<uint64_t> held(SHARDS, 3 * MiB);
+  EXPECT_DOUBLE_EQ(1.0, bluestore_cache_shards::even_split_fraction(128 * MiB, held));
+  EXPECT_DOUBLE_EQ(1.0, bluestore_cache_shards::even_split_fraction(0, held));
+  EXPECT_DOUBLE_EQ(1.0, bluestore_cache_shards::even_split_fraction(128 * MiB, {}));
+  std::vector<uint64_t> empty(SHARDS, 0);
+  EXPECT_DOUBLE_EQ(1.0, bluestore_cache_shards::even_split_fraction(128 * MiB, empty));
+}
+
+TEST(bluestore_cache_shards, even_split_fraction_caps_shards_over_their_share) {
+  // 15 shards hold 8 MiB each under a 128 MiB commit whose even share is
+  // 4 MiB: an even split would have held 60 of the 120 MiB
+  std::vector<uint64_t> held(SHARDS, 0);
+  for (size_t s = 0; s < 15; ++s) held[s] = 8 * MiB;
+  EXPECT_DOUBLE_EQ(0.5, bluestore_cache_shards::even_split_fraction(128 * MiB, held));
+  // a shard under its share counts as is
+  held.assign(SHARDS, 0);
+  held[0] = 3 * MiB;
+  held[1] = MiB / 2;
+  EXPECT_DOUBLE_EQ(1.5 / 3.5, bluestore_cache_shards::even_split_fraction(32 * MiB, held));
+}
+
+TEST(bluestore_cache_shards, scaled_request_keeps_the_commit_where_the_even_split_had_it) {
+  // 15 of 32 shards have data. Under the even split the cache holds 60 of a
+  // 128 MiB commit and 60 MiB + 64 MiB headroom rounds back to 128: the
+  // commit is a fixed point. With weighted limits the shards hold nearly
+  // the whole 128 MiB; asking for all of it by age is committed 184, then
+  // more, every round. Asking by age for the even-split fraction only stays
+  // at 128 when nothing is left for the LAST request (the saturated pool;
+  // the unsaturated one is the tuner test below).
+  uint64_t committed = 128 * MiB;
+  EXPECT_EQ(committed, next_commit(committed, 15, true));
+  EXPECT_EQ(184 * MiB, next_commit(committed, 15, false));
+  uint64_t d = committed;
+  for (int round = 0; round < 10; ++round) {
+    d = next_commit(d, 15, false);
+  }
+  EXPECT_GE(d, 4 * committed);   // the unscaled loop keeps growing: 576 MiB
+  d = committed;
+  for (int round = 0; round < 10; ++round) {
+    d = next_commit(d, 15, true);
+  }
+  EXPECT_EQ(committed, d);   // the scaled one does not move
+}
+
+TEST(bluestore_cache_shards, scaled_request_is_the_full_request_when_shards_are_dense) {
+  // every shard has data: the weighted split is the even split, nothing is
+  // over its share, and the request is what is held. The commit then grows
+  // by the headroom, scaled or not, as it does for any cache whose working
+  // set is larger than its budget.
+  std::vector<uint64_t> held(SHARDS, 0);
+  uint64_t committed = 512 * MiB;
+  auto limits = bluestore_cache_shards::weighted_limits(committed, held);
+  held = limits;
+  EXPECT_DOUBLE_EQ(1.0, bluestore_cache_shards::even_split_fraction(committed, held));
+  EXPECT_EQ(next_commit(committed, SHARDS, false), next_commit(committed, SHARDS, true));
+  EXPECT_EQ(576 * MiB, next_commit(committed, SHARDS, true));
+}
+
+// The data cache's request through the real tuner. A fake cache asks for a
+// fixed number of bytes per priority; the data cache asks for its even-split
+// fraction by age and for the rest at LAST, as MempoolCache does with
+// _request_scale().
+namespace {
+struct FakeCache : public PriorityCache::PriCache {
+  std::string name;
+  double ratio;
+  int64_t want[PriorityCache::Priority::LAST + 1] = {0};
+  int64_t bytes[PriorityCache::Priority::LAST + 1] = {0};
+  int64_t committed = 0;
+  FakeCache(std::string n, double r) : name(n), ratio(r) {}
+  int64_t request_cache_bytes(PriorityCache::Priority pri, uint64_t) const override {
+    return want[pri] > bytes[pri] ? want[pri] - bytes[pri] : 0;
+  }
+  int64_t get_cache_bytes(PriorityCache::Priority pri) const override { return bytes[pri]; }
+  int64_t get_cache_bytes() const override {
+    int64_t t = 0;
+    for (auto b : bytes) t += b;
+    return t;
+  }
+  void set_cache_bytes(PriorityCache::Priority pri, int64_t b) override { bytes[pri] = b; }
+  void add_cache_bytes(PriorityCache::Priority pri, int64_t b) override { bytes[pri] += b; }
+  int64_t commit_cache_size(uint64_t total) override {
+    return committed = PriorityCache::get_chunk(get_cache_bytes(), total);
+  }
+  int64_t get_committed_size() const override { return committed; }
+  double get_cache_ratio() const override { return ratio; }
+  void set_cache_ratio(double r) override { ratio = r; }
+  std::string get_cache_name() const override { return name; }
+  void shift_bins() override {}
+  void import_bins(const std::vector<uint64_t>&) override {}
+  void set_bins(PriorityCache::Priority, uint64_t) override {}
+  uint64_t get_bins(PriorityCache::Priority) const override { return 0; }
+};
+
+struct Tuner {
+  // the c28 test OSD: 2 GiB target, 256 MiB base, 15 % fragmentation, so a
+  // 1484.8 MiB pool; meta and kv ratios 0.30, kv_onode 0.04, data the rest
+  static constexpr uint64_t POOL = 1484 * MiB + 819 * 1024;
+  static int instances;
+  // reserve_extra true, as BlueStore constructs it; a distinct perf counter
+  // name per instance, since two tuners live in one test
+  PriorityCache::Manager pcm{g_ceph_context, POOL, POOL, 64 * TUNED, true,
+                             "test-pricache-" + std::to_string(instances++)};
+  std::shared_ptr<FakeCache> data{new FakeCache("data", 0.36)};
+  std::shared_ptr<FakeCache> meta{new FakeCache("meta", 0.30)};
+  std::shared_ptr<FakeCache> kv{new FakeCache("kv", 0.30)};
+  std::shared_ptr<FakeCache> kv_onode{new FakeCache("kv_onode", 0.04)};
+  Tuner() {
+    // with perf counters: balance() commits only the caches that have them
+    pcm.insert("data", data, true);
+    pcm.insert("meta", meta, true);
+    pcm.insert("kv", kv, true);
+    pcm.insert("kv_onode", kv_onode, true);
+    pcm.tune_memory();   // min == max: the pool, whatever this process maps
+    kv->want[PriorityCache::Priority::PRI0] = 64 * MiB;        // RocksDB always
+    kv_onode->want[PriorityCache::Priority::PRI0] = 64 * MiB;  // asks a chunk at PRI0
+  }
+  // the data cache holds `held`, of which an even split would have held
+  // `even_part`: that part by age (all in PRI2 here), the rest at LAST
+  void data_holds(int64_t held, int64_t even_part) {
+    data->want[PriorityCache::Priority::PRI2] = even_part;
+    data->want[PriorityCache::Priority::LAST] = held - even_part;
+  }
+};
+int Tuner::instances = 0;
+}
+
+TEST(PriorityCache, request_at_last_is_credited) {
+  // a cache with content older than its last age bin asks for it at LAST;
+  // the ratio split of the remainder must come on top of that grant, and
+  // the pool must be handed out in full
+  Tuner t;
+  t.meta->want[PriorityCache::Priority::PRI2] = 50 * MiB;
+  t.meta->want[PriorityCache::Priority::LAST] = 300 * MiB;
+  t.data_holds(100 * MiB, 100 * MiB);
+  t.pcm.balance();
+  int64_t avail = Tuner::POOL - 4 * PriorityCache::get_chunk(1, Tuner::POOL);
+  EXPECT_GE(t.meta->bytes[PriorityCache::Priority::LAST], 300 * MiB);
+  int64_t granted = t.data->get_cache_bytes() + t.meta->get_cache_bytes() +
+                    t.kv->get_cache_bytes() + t.kv_onode->get_cache_bytes();
+  EXPECT_NEAR(avail, granted, 4096);
+}
+
+TEST(bluestore_cache_shards, request_at_last_grows_into_unclaimed_memory) {
+  // the hot-set test: 648 MiB hot on 32 shards of which 18 have data; an
+  // even split of the 688 MiB commit holds 387 MiB, the weighted one 648;
+  // meta holds 6 MiB, RocksDB next to nothing. Most of the pool is unclaimed.
+  Tuner t;
+  t.meta->want[PriorityCache::Priority::PRI2] = 6 * MiB;
+  t.data_holds(648 * MiB, 387 * MiB);
+  t.pcm.balance();
+  EXPECT_EQ(1484 * MiB + 819 * 1024, t.pcm.get_tuned_mem());
+  // every byte asked for by age was granted, the others' included
+  EXPECT_EQ(387 * MiB, t.data->bytes[PriorityCache::Priority::PRI2]);
+  EXPECT_EQ(6 * MiB, t.meta->bytes[PriorityCache::Priority::PRI2]);
+  EXPECT_EQ(64 * MiB, t.kv->bytes[PriorityCache::Priority::PRI0]);
+  EXPECT_EQ(64 * MiB, t.kv_onode->bytes[PriorityCache::Priority::PRI0]);
+  // the LAST request was served in full from the unclaimed memory, and the
+  // data cache still got its ratio share of what was left after that
+  EXPECT_GE(t.data->bytes[PriorityCache::Priority::LAST], (648 - 387) * MiB);
+  EXPECT_GE(t.data->committed, 648 * MiB + 64 * MiB);   // the hot set fits
+  // asking by age for the even-split part only (v4) commits what stock did
+  Tuner s;
+  s.meta->want[PriorityCache::Priority::PRI2] = 6 * MiB;
+  s.data_holds(387 * MiB, 387 * MiB);
+  s.pcm.balance();
+  EXPECT_LT(s.data->committed, t.data->committed);
+  EXPECT_NEAR(688 * MiB, s.data->committed, 16 * MiB);  // the stock commit measured on c28
+}
+
+TEST(bluestore_cache_shards, request_at_last_takes_nothing_from_age_bins) {
+  // the drain test: meta and the RocksDB onode cache hold more than the pool
+  // can fund; the even split of a 128 MiB commit held 60 MiB, the weighted
+  // one 119. Asking the extra 59 by age (the PR as first pushed) took them
+  // from kv_onode; asking at LAST gets nothing and takes nothing.
+  Tuner t;
+  t.meta->want[PriorityCache::Priority::PRI5] = 700 * MiB;
+  t.kv_onode->want[PriorityCache::Priority::PRI10] = 400 * MiB;
+  t.data_holds(119 * MiB, 60 * MiB);
+  t.pcm.balance();
+  int64_t avail = Tuner::POOL - 4 * PriorityCache::get_chunk(1, Tuner::POOL);
+  EXPECT_EQ(60 * MiB, t.data->bytes[PriorityCache::Priority::PRI2]);
+  EXPECT_EQ(700 * MiB, t.meta->bytes[PriorityCache::Priority::PRI5]);
+  // kv_onode, last in age order, gets all that is left; the data cache's
+  // LAST request gets nothing
+  // (within the tuner's integer truncation of fair shares)
+  EXPECT_NEAR(avail - (60 + 700 + 64 + 64) * MiB, t.kv_onode->bytes[PriorityCache::Priority::PRI10], 4096);
+  EXPECT_EQ(0, t.data->bytes[PriorityCache::Priority::LAST]);
+  EXPECT_EQ(PriorityCache::get_chunk(60 * MiB, Tuner::POOL), t.data->committed);
+  EXPECT_EQ(128 * MiB, t.data->committed);
+  // the same 119 MiB asked by age, as the PR first did: committed 184, the
+  // 59 MiB come out of kv_onode
+  Tuner v3;
+  v3.meta->want[PriorityCache::Priority::PRI5] = 700 * MiB;
+  v3.kv_onode->want[PriorityCache::Priority::PRI10] = 400 * MiB;
+  v3.data_holds(119 * MiB, 119 * MiB);
+  v3.pcm.balance();
+  EXPECT_EQ(184 * MiB, v3.data->committed);
+  EXPECT_NEAR(t.kv_onode->bytes[PriorityCache::Priority::PRI10] - 59 * MiB,
+              v3.kv_onode->bytes[PriorityCache::Priority::PRI10], 4096);
+}
+
 int main(int argc, char **argv) {
   auto args = argv_to_vec(argc, argv);
   auto cct =

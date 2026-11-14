@@ -1869,16 +1869,33 @@ void BlueStore::MempoolThread::_resize_shards(bool interval_stats)
 
   uint64_t max_shard_onodes = static_cast<uint64_t>(
       (meta_alloc / (double) onode_shards) / meta_cache->get_bytes_per_onode());
-  uint64_t max_shard_buffer = static_cast<uint64_t>(data_alloc / buffer_shards);
+
+  // A collection maps to buffer shard pg seed % shards, so the shards fill
+  // unevenly.  If weighted, each shard keeps 1/8 of the even split and the
+  // rest goes by the bytes each shard holds; the limits still sum to at most
+  // data_alloc, and an evenly loaded OSD keeps the even split.
+  uint64_t buffer_alloc = std::max<int64_t>(data_alloc, 0);
+  std::vector<uint64_t> held(buffer_shards, 0);
+  uint64_t total_held = 0;
+  if (store->cache_data_shard_weighted) {
+    for (size_t s = 0; s < buffer_shards; ++s) {
+      // lockless, like DataCache::_get_used_bytes()
+      held[s] = store->buffer_cache_shards[s]->_get_bytes();
+      total_held += held[s];
+    }
+  }
+  std::vector<uint64_t> limits =
+    bluestore_cache_shards::weighted_limits(buffer_alloc, held);
 
   dout(30) << __func__ << " max_shard_onodes: " << max_shard_onodes
-                 << " max_shard_buffer: " << max_shard_buffer << dendl;
+           << " buffer_alloc: " << buffer_alloc
+           << " total_held: " << total_held << dendl;
 
   for (auto i : store->onode_cache_shards) {
     i->set_max(max_shard_onodes);
   }
-  for (auto i : store->buffer_cache_shards) {
-    i->set_max(max_shard_buffer);
+  for (size_t s = 0; s < buffer_shards; ++s) {
+    store->buffer_cache_shards[s]->set_max(limits[s]);
   }
 }
 
@@ -2023,6 +2040,7 @@ std::vector<std::string> BlueStore::get_tracked_keys() const noexcept
     "bluestore_cache_kv_onode_age_bins"s,
     "bluestore_cache_meta_age_bins"s,
     "bluestore_cache_data_age_bins"s,
+    "bluestore_cache_data_shard_weighted"s,
     "bluestore_warn_on_legacy_statfs"s,
     "bluestore_warn_on_no_per_pool_omap"s,
     "bluestore_warn_on_no_per_pg_omap"s,
@@ -2111,6 +2129,10 @@ void BlueStore::handle_conf_change(const ConfigProxy& conf,
       changed.count("bluestore_throttle_deferred_bytes") ||
       changed.count("bluestore_throttle_trace_rate")) {
     throttle.reset_throttle(conf);
+  }
+  if (changed.count("bluestore_cache_data_shard_weighted")) {
+    cache_data_shard_weighted =
+      conf.get_val<bool>("bluestore_cache_data_shard_weighted");
   }
   if (changed.count("bluestore_max_defer_interval")) {
     if (bdev) {
@@ -2296,6 +2318,8 @@ int BlueStore::_set_cache_sizes()
       cct->_conf.get_val<double>("bluestore_cache_autotune_interval");
   cache_age_bin_interval =
       cct->_conf.get_val<double>("bluestore_cache_age_bin_interval");
+  cache_data_shard_weighted =
+      cct->_conf.get_val<bool>("bluestore_cache_data_shard_weighted");
   auto _set_bin = [&](std::string conf_name, std::vector<uint64_t>* intervals)
   {
     std::string intervals_str = cct->_conf.get_val<std::string>(conf_name);
