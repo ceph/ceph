@@ -8,7 +8,7 @@ There are several Ceph daemons in a storage cluster:
 
 * **Ceph OSDs** (Object Storage Daemons) store most of the data
   in Ceph. Usually each OSD is backed by a single storage device.
-  This can be a traditional hard disk (HDD) or a solid state disk
+  This can be a hard disk drive (HDD) or a solid-state drive
   (SSD). OSDs can also be backed by a combination of devices: for
   example, a HDD for most data and an SSD (or partition of an
   SSD) for some metadata. The number of OSDs in a cluster is
@@ -57,11 +57,11 @@ Key BlueStore features include:
   to the user without being verified.
 * Inline compression.  Data can be optionally compressed before being written
   to disk.
-* Multi-device metadata tiering. BlueStore allows its internal
-  journal (write-ahead log) to be written to a separate, high-speed
-  device (like an SSD, NVMe, or NVDIMM) for increased performance.  If
-  a significant amount of faster storage is available, internal
-  metadata can be stored on the faster device.
+* Multi-device metadata tiering. BlueStore can keep its write-ahead log and
+  RocksDB metadata (WAL+DB) on a faster device than the bulk data. HDD OSDs,
+  other than the deepest archives, benefit from moving WAL+DB to a shared SSD;
+  SSD OSDs keep WAL+DB on the same device. See :ref:`Storage Devices
+  <hardware-storage-devices>` in :ref:`hardware-recommendations`.
 * Efficient copy-on-write. RBD and CephFS snapshots rely on a
   copy-on-write *clone* mechanism that is implemented efficiently in
   BlueStore. This results in efficient I/O both for regular snapshots
