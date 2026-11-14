@@ -177,6 +177,8 @@ int MgrStandby::asok_command(std::string_view cmd, const cmdmap_t& cmdmap,
     ceph_heap_profiler_handle_command(cmd_vec, outss);
     outbl.append(outss.str());
     return 0;
+  } else if (cmd == "py stacks" || cmd == "py mem") {
+    return py_module_registry.handle_py_debug(cmdmap, errss, outbl);
   } else {
     return -ENOSYS;
   }
@@ -218,6 +220,21 @@ int MgrStandby::init()
       "name=value,type=CephString,req=false",
       asok_hook.get(),
       "show heap usage info (available only if compiled with tcmalloc)");
+    ceph_assert(r == 0);
+    r = admin_socket->register_command(
+      "py stacks " \
+      "name=duration,type=CephFloat,req=false " \
+      "name=rate,type=CephInt,req=false",
+      asok_hook.get(),
+      "dump python thread stacks, or sample them for <duration> seconds");
+    ceph_assert(r == 0);
+    r = admin_socket->register_command(
+      "py mem " \
+      "name=action,type=CephChoices,strings=start|stop|status|snapshot|diff|top " \
+      "name=limit,type=CephInt,req=false " \
+      "name=nframes,type=CephInt,req=false",
+      asok_hook.get(),
+      "trace python allocations (tracemalloc) and diff against a baseline");
     ceph_assert(r == 0);
   }
 

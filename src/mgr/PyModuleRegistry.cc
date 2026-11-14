@@ -26,6 +26,7 @@
 #include "PyOSDMap.h"
 #include "BaseMgrStandbyModule.h"
 #include "Gil.h"
+#include "PyFormatter.h"
 #include "MgrContext.h"
 #include "mgr/mgr_commands.h"
 
@@ -98,6 +99,7 @@ void PyModuleRegistry::init()
   // thread state becomes NULL)
   pMainThreadState = PyEval_SaveThread();
   ceph_assert(pMainThreadState != nullptr);
+  python_ready.store(true, std::memory_order_release);
 
   std::list<std::string> failed_modules;
   thread_monitor->start_monitoring();
@@ -325,6 +327,45 @@ std::string PyModuleRegistry::get_site_packages()
   Py_DECREF(site_module);
 
   return site_packages.str();
+}
+
+int PyModuleRegistry::handle_py_debug(const cmdmap_t& cmdmap,
+                                      std::ostream& errss,
+                                      ceph::buffer::list& outbl)
+{
+  // Not taking `lock`: grabbing the GIL while holding it could deadlock
+  // against a module thread that holds the GIL.
+  if (!python_ready.load(std::memory_order_acquire)) {
+    errss << "python not initialized yet";
+    return -EAGAIN;
+  }
+  SafeThreadState sts(pMainThreadState);
+  Gil gil(sts, true);
+
+  PyObject *mod = PyImport_ImportModule("mgr_debug");
+  if (mod == nullptr) {
+    errss << handle_pyerror();
+    return -EIO;
+  }
+  PyFormatter f;
+  TOPNSPC::common::cmdmap_dump(cmdmap, &f);
+  PyObject *py_cmd = f.get();
+  PyObject *r = PyObject_CallMethod(mod, "handle", "O", py_cmd);
+  Py_DECREF(py_cmd);
+  Py_DECREF(mod);
+  if (r == nullptr) {
+    errss << handle_pyerror();
+    return -EINVAL;
+  }
+  int ret = 0;
+  if (const char *s = PyUnicode_AsUTF8(r); s != nullptr) {
+    outbl.append(s);
+  } else {
+    errss << handle_pyerror();
+    ret = -EINVAL;
+  }
+  Py_DECREF(r);
+  return ret;
 }
 
 std::vector<std::string> PyModuleRegistry::probe_modules(const std::string &path) const
