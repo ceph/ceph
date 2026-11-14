@@ -492,6 +492,16 @@ public:
     static constexpr double TAIL_SLOW_MS = 5;        // 5 ms
     static constexpr double TAIL_VERY_SLOW_MS = 10;  // 10 ms
 
+    static constexpr auto PHASE_LAT_MAX = PHASE_LATENCY_BUCKET_MAX;
+    // Upper bounds (milliseconds) for the per-phase latency histograms.
+    // Unlike the txn_stage_t histograms these are fed from steady_clock, so
+    // sub-millisecond buckets are meaningful: most phases (cache mutation,
+    // mapping lookups that hit the cache) complete in microseconds.
+    static constexpr std::array<double, 12> PHASE_LAT_BUCKETS_MS = {
+      0.001, 0.005, 0.01, 0.05, 0.1, 0.5,
+      1, 2, 5, 10, 50, 100
+    };
+
     struct {
       std::array<seastar::metrics::histogram, LAT_MAX> op_lat;
       seastar::metrics::histogram conflict_replays;
@@ -509,6 +519,14 @@ public:
       // same metrics collected two more times for high tail txns.
       std::array<seastar::metrics::histogram, STAGE_MAX> stage_lat_slow;
       std::array<seastar::metrics::histogram, STAGE_MAX> stage_lat_very_slow;
+
+      // Per-phase latency: one histogram sample per transaction holding the
+      // time that transaction spent in the phase, plus the raw nanosecond
+      // total and the number of timed scopes, which together give the mean
+      // cost of a single operation of that phase.
+      std::array<seastar::metrics::histogram, PHASE_LAT_MAX> phase_lat;
+      std::array<uint64_t, PHASE_LAT_MAX> phase_lat_ns = {};
+      std::array<uint64_t, PHASE_LAT_MAX> phase_lat_scopes = {};
     } stats;
 
     void add_onode_tree_sample(const Transaction::tree_stats_t& ts) {
@@ -584,6 +602,54 @@ public:
       }
       ++hist.sample_count;
       hist.sample_sum += ms;
+    }
+
+    seastar::metrics::histogram& get_phase_latency(
+      phase_latency_bucket_t bucket) {
+      auto idx = static_cast<std::size_t>(bucket);
+      assert(idx < stats.phase_lat.size());
+      return stats.phase_lat[idx];
+    }
+
+    // Record the time one transaction spent in a single phase. Buckets are
+    // non-cumulative (bucket = first upper_bound >= value); values above the
+    // top bound aren't bucketed but still land in sample_count/sample_sum.
+    void add_phase_latency_sample(
+        phase_latency_bucket_t bucket,
+        std::chrono::steady_clock::duration dur) {
+      auto& hist = get_phase_latency(bucket);
+      if (hist.buckets.empty()) {
+        // register_metrics() did not run (store inactive); nothing to record.
+        return;
+      }
+      auto ms = std::chrono::duration_cast<
+        std::chrono::duration<double, std::milli>>(dur).count();
+      for (auto& b : hist.buckets) {
+        if (ms <= b.upper_bound) {
+          ++b.count;
+          break;
+        }
+      }
+      ++hist.sample_count;
+      hist.sample_sum += ms;
+    }
+
+    // Fold a completed transaction's per-phase accumulators into the shard
+    // metrics. Phases the transaction never entered are skipped so that the
+    // histogram counts transactions that actually did that kind of work.
+    void publish_phase_latency_samples(
+        const phase_latency_stats_t& phase_stats) {
+      for (std::size_t idx = 0; idx < PHASE_LAT_MAX; ++idx) {
+        const auto bucket = static_cast<phase_latency_bucket_t>(idx);
+        auto scopes = phase_stats.get_sample_count(bucket);
+        if (scopes == 0) {
+          continue;
+        }
+        stats.phase_lat_ns[idx] += phase_stats.get_total_ns(bucket);
+        stats.phase_lat_scopes[idx] += scopes;
+        add_phase_latency_sample(
+          bucket, phase_stats.get_total_duration(bucket));
+      }
     }
 
     /*

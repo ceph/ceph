@@ -133,6 +133,8 @@ public:
     laddr_t offset) {
     LOG_PREFIX(TransactionManager::get_pin);
     SUBDEBUGT(seastore_tm, "{} ...", t, offset);
+    auto phase_lat = t.record_phase_latency(
+      phase_latency_bucket_t::mapping_management);
     auto cursor = co_await lba_manager->get_cursor(t, offset, false);
     auto pin = co_await resolve_cursor_to_mapping(t, std::move(cursor));
     SUBDEBUGT(seastore_tm, "got {}", t, pin);
@@ -149,6 +151,8 @@ public:
     laddr_t laddr) {
     LOG_PREFIX(TransactionManager::get_containing_pin);
     SUBDEBUGT(seastore_tm, "{} ...", t, laddr);
+    auto phase_lat = t.record_phase_latency(
+      phase_latency_bucket_t::mapping_management);
     auto cursor = co_await lba_manager->get_cursor(t, laddr, true);
     auto pin = co_await resolve_cursor_to_mapping(t, std::move(cursor));
     SUBDEBUGT(seastore_tm, "got {}", t, pin);
@@ -158,6 +162,8 @@ public:
   get_pin_ret get_pin(Transaction &t, LogicalChildNode &extent) {
     LOG_PREFIX(TransactionManager::get_pin);
     SUBDEBUGT(seastore_tm, "{} ...", t, extent);
+    auto phase_lat = t.record_phase_latency(
+      phase_latency_bucket_t::mapping_management);
     auto cursor = co_await lba_manager->get_cursor(t, extent);
     ceph_assert(cursor->is_direct());
     auto ret = LBAMapping::create_direct(std::move(cursor));
@@ -178,6 +184,8 @@ public:
     extent_len_t length) {
     LOG_PREFIX(TransactionManager::get_pins);
     SUBDEBUGT(seastore_tm, "{}~0x{:x} ...", t, offset, length);
+    auto phase_lat = t.record_phase_latency(
+      phase_latency_bucket_t::mapping_management);
     auto cursors = co_await lba_manager->get_cursors(t, offset, length);
     std::list<LBAMapping> ret;
     for (auto &cursor: cursors) {
@@ -636,6 +644,9 @@ public:
     TCachedExtentRef<T> ext;
     while (!ext) {
       try {
+        // the background wait below is deliberately left out of the phase
+        auto phase_lat = t.record_phase_latency(
+          phase_latency_bucket_t::cache_mutation);
         ext = cache->alloc_new_non_data_extent<T>(
           t, len, {placement_hint, INIT_GENERATION});
       } catch(crimson::ct_error::eagain&) {}
@@ -647,11 +658,15 @@ public:
     // user must initialize the logical extent themselves.
     assert(is_user_transaction(t.get_src()));
     ext->set_seen_by_users();
-    co_await lba_manager->alloc_extent(
-      t,
-      laddr_hint,
-      *ext,
-      EXTENT_DEFAULT_REF_COUNT);
+    {
+      auto phase_lat = t.record_phase_latency(
+        phase_latency_bucket_t::mapping_management);
+      co_await lba_manager->alloc_extent(
+        t,
+        laddr_hint,
+        *ext,
+        EXTENT_DEFAULT_REF_COUNT);
+    }
     SUBDEBUGT(seastore_tm, "allocated {}", t, *ext);
     co_return ext;
   }
@@ -680,6 +695,9 @@ public:
     std::vector<TCachedExtentRef<T>> exts;
     while (exts.empty()) {
       try {
+        // the background wait below is deliberately left out of the phase
+        auto phase_lat = t.record_phase_latency(
+          phase_latency_bucket_t::cache_mutation);
         exts = cache->alloc_new_data_extents<T>(
           t, len,
           {
@@ -706,20 +724,24 @@ public:
 	off = (off + extent->get_length()).checked_to_laddr();
       }
     }
-    if (pos) {
-      auto npos = co_await pos->refresh();
-      co_await lba_manager->alloc_extents(
-	t,
-	npos.get_effective_cursor_ref(),
-	std::vector<LogicalChildNodeRef>(
-	  exts.begin(), exts.end()));
-    } else {
-      co_await lba_manager->alloc_extents(
-	t,
-	laddr_hint,
-	std::vector<LogicalChildNodeRef>(
-	  exts.begin(), exts.end()),
-	EXTENT_DEFAULT_REF_COUNT);
+    {
+      auto phase_lat = t.record_phase_latency(
+        phase_latency_bucket_t::mapping_management);
+      if (pos) {
+        auto npos = co_await pos->refresh();
+        co_await lba_manager->alloc_extents(
+	  t,
+	  npos.get_effective_cursor_ref(),
+	  std::vector<LogicalChildNodeRef>(
+	    exts.begin(), exts.end()));
+      } else {
+        co_await lba_manager->alloc_extents(
+	  t,
+	  laddr_hint,
+	  std::vector<LogicalChildNodeRef>(
+	    exts.begin(), exts.end()),
+	  EXTENT_DEFAULT_REF_COUNT);
+      }
     }
     auto &front = exts.front();
     if (front->get_write_policy() != write_policy_t::WRITE_THROUGH &&
@@ -772,6 +794,8 @@ public:
     extent_types_t type) {
     LOG_PREFIX(TransactionManager::reserve_region);
     SUBDEBUGT(seastore_tm, "hint {}~0x{:x} {} ...", t, hint, len, type);
+    auto phase_lat = t.record_phase_latency(
+      phase_latency_bucket_t::mapping_management);
     auto pin = co_await lba_manager->reserve_region(
       t,
       hint,
@@ -790,6 +814,8 @@ public:
     extent_types_t type) {
     LOG_PREFIX(TransactionManager::reserve_region);
     SUBDEBUGT(seastore_tm, "hint {}~0x{:x} {} ...", t, hint, len, type);
+    auto phase_lat = t.record_phase_latency(
+      phase_latency_bucket_t::mapping_management);
     pos = co_await pos.refresh();
     auto pin = co_await lba_manager->reserve_region(
       t,
@@ -826,6 +852,8 @@ public:
     LOG_PREFIX(TransactionManager::clone_pin);
     SUBDEBUGT(seastore_tm, "{} clone to hint {} ... pos={}, updateref={}",
       t, mapping, hint, pos, updateref);
+    auto phase_lat = t.record_phase_latency(
+      phase_latency_bucket_t::mapping_management);
     pos = co_await pos.refresh();
     mapping = co_await complete_mapping(t, mapping);
     laddr_t inter_key = mapping.is_indirect() ?
@@ -870,6 +898,8 @@ public:
     bool updateref)
   {
     LOG_PREFIX(TransactionManager::clone_range);
+    auto phase_lat = t.record_phase_latency(
+      phase_latency_bucket_t::mapping_management);
     co_await pos.co_refresh();
     mapping = co_await mapping.refresh();
     SUBDEBUGT(seastore_tm,
@@ -1315,6 +1345,9 @@ public:
     std::array<TransactionManager::remap_entry_t, N> remaps)
   {
     LOG_PREFIX(TransactionManager::remap_mappings);
+    // covers cut_mapping()/punch_hole_in_mapping(), which both delegate here
+    auto phase_lat = t.record_phase_latency(
+      phase_latency_bucket_t::mapping_management);
     if (!mapping.is_indirect() && mapping.is_zero_reserved()) {
       SUBDEBUGT(seastore_tm, "zero reserved, mapping {}, {} remaps",
 		t, mapping, remaps);
@@ -1476,6 +1509,8 @@ public:
     remove_mappings_param_t params)
   {
     LOG_PREFIX(TransactionManager::remove_mappings_in_range);
+    auto phase_lat = t.record_phase_latency(
+      phase_latency_bucket_t::mapping_management);
     auto mapping = co_await first_mapping.refresh();
     SUBDEBUGT(seastore_tm, "{}~{}, first_mapping: {}",
       t, start, unaligned_len, mapping);
@@ -1787,6 +1822,8 @@ private:
       if (extent) {
         SUBTRACET(seastore_tm, "retire extent...", t);
         assert(extent->is_seen_by_users());
+        auto phase_lat = t.record_phase_latency(
+          phase_latency_bucket_t::cache_mutation);
         cache->retire_extent(t, extent);
         if (pin.has_shadow_val()) {
           if (auto shadow = extent->get_shadow()) {
@@ -1826,6 +1863,8 @@ private:
         ceph_assert(remap_len != 0);
         ceph_assert(remap_offset % cache->get_block_size() == 0);
         ceph_assert(remap_len % cache->get_block_size() == 0);
+        auto phase_lat = t.record_phase_latency(
+          phase_latency_bucket_t::cache_mutation);
         auto remapped_extent = cache->alloc_remapped_extent<T>(
           t,
           remap_laddr,
