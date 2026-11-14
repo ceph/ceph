@@ -4248,6 +4248,7 @@ int POSIXMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
 
   mp_obj.upload_info.cksum_type = cksum_type;
   mp_obj.upload_info.cksum_flags = cksum_flags;
+  mp_obj.upload_info.compression_type = compression_type;
 
   if (obj_retention) {
     mp_obj.upload_info.obj_retention_exist = true;
@@ -4560,6 +4561,7 @@ int POSIXMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield
     /* no te olvides los cksum */
     cksum_type = mp_obj.upload_info.cksum_type;
     cksum_flags = mp_obj.upload_info.cksum_flags;
+    compression_type = mp_obj.upload_info.compression_type;
   }
 
   return 0;
