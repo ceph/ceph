@@ -253,6 +253,18 @@ void Migrator::export_empty_import(CDir *dir)
     dout(7) << " root" << dendl;
     return;
   }
+  /*
+   * The rank of the parent would only send a fragment that a
+   * ceph.dir.pin.distributed.tree policy places here straight back, at its
+   * next look at the pins, and both moves freeze the fragment.  With the
+   * fragment emptied by trimming, under cache pressure, that goes on for as
+   * long as the clients keep loading entries into it.
+   */
+  if (dir->inode->is_ephemeral_dist_tree() &&
+      dir->get_export_pin() == mds->get_nodeid()) {
+    dout(7) << " placed here by its tree policy" << dendl;
+    return;
+  }
   
   mds_rank_t dest = dir->inode->authority().first;
   //if (mds->is_shutting_down()) dest = 0;  // this is more efficient.
@@ -1873,6 +1885,8 @@ void Migrator::finish_export_inode(CInode *in, mds_rank_t peer,
   
   // mark auth
   ceph_assert(in->is_auth());
+  // as a replica, keep to the decision on the size made here
+  in->set_dist_tree_large(in->is_dist_tree_fragmented());
   in->state_clear(CInode::STATE_AUTH);
   in->replica_nonce = CInode::EXPORT_NONCE;
   
