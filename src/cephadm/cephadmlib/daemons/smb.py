@@ -824,7 +824,7 @@ class SMB(ContainerDaemonForm):
             ctdb_log_level=tunables.get('log_level.ctdb', ''),
         )
         logger.debug('SMB Instance Config: %s', self._instance_cfg)
-        logger.debug('Configured files: %s', self._files)
+        logger.debug('Configured files: %s', list(self._files.keys()))
         logger.debug(
             'Configured TLS/SSL files: %s', list(self._tls_files.keys())
         )

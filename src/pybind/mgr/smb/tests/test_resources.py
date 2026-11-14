@@ -1,3 +1,5 @@
+import typing
+
 import dataclasses
 
 import pytest
@@ -1551,6 +1553,37 @@ def test_rgw_credential_password_conversion():
     assert decoded.secret_access_key == 'secretkey123'
 
 
+def test_external_ceph_cluster_password_conversion():
+    """Test ExternalCephCluster cephx key conversion."""
+    extc = smb.resources.ExternalCephCluster(
+        external_ceph_cluster_id='exo1',
+        cluster=smb.resources.ExternalCephClusterValues(
+            fsid='cf05db31-3d4e-4ffd-85ad-753434d5add1',
+            mon_host='192.168.76.200',
+            cephfs_user=smb.resources.CephUserKey(
+                name='client.smb.fs', key='AQBFSKEY=='
+            ),
+            rgw_user=smb.resources.CephUserKey(
+                name='client.smb.rgw', key='AQBRGWKEY=='
+            ),
+        ),
+    )
+
+    # Test masking (NONE -> HIDDEN)
+    masked = extc.convert(
+        (smb.enums.PasswordFilter.NONE, smb.enums.PasswordFilter.HIDDEN)
+    )
+    assert masked.cluster.cephfs_user.key == '****************'
+    assert masked.cluster.rgw_user.key == '****************'
+
+    # Test base64 filters are a no-op
+    for op in [
+        (smb.enums.PasswordFilter.NONE, smb.enums.PasswordFilter.BASE64),
+        (smb.enums.PasswordFilter.BASE64, smb.enums.PasswordFilter.NONE),
+    ]:
+        assert extc.convert(op) == extc
+
+
 def test_rgw_credential_with_linked_cluster():
     """Test RGWCredential with linked_to_cluster."""
     import yaml
@@ -1613,3 +1646,69 @@ def test_share_defaults_share_sync():
             or f2.default != field.default
         ):
             raise ValueError(fname)
+
+
+_SECRET = 'hunter2'
+
+
+def _secret_samples():
+    r = smb.resources
+    return {
+        r.Cluster: r.Cluster(
+            cluster_id='c1',
+            auth_mode=enums.AuthMode.USER,
+            user_group_settings=[
+                r.UserGroupSource(
+                    source_type=enums.UserGroupSourceType.RESOURCE,
+                    ref='ug1',
+                )
+            ],
+        ),
+        r.RemovedCluster: r.RemovedCluster(cluster_id='c1'),
+        r.Share: r.Share(
+            cluster_id='c1',
+            share_id='s1',
+            cephfs=r.CephFSStorage(volume='cephfs', path='/'),
+        ),
+        r.RemovedShare: r.RemovedShare(cluster_id='c1', share_id='s1'),
+        r.JoinAuth: r.JoinAuth(
+            auth_id='ja1',
+            auth=r.JoinAuthValues(username='admin', password=_SECRET),
+        ),
+        r.UsersAndGroups: r.UsersAndGroups(
+            users_groups_id='ug1',
+            values=r.UserGroupSettings(
+                users=[{'name': 'bob', 'password': _SECRET}],
+                groups=[],
+            ),
+        ),
+        r.TLSCredential: r.TLSCredential(
+            tls_credential_id='tls1',
+            credential_type=enums.TLSCredentialType.KEY,
+            value=_SECRET,
+        ),
+        r.RGWCredential: r.RGWCredential(
+            rgw_credential_id='rgw1',
+            user_id='rgwuser',
+            access_key_id=_SECRET,
+            secret_access_key=_SECRET,
+        ),
+        r.ExternalCephCluster: r.ExternalCephCluster(
+            external_ceph_cluster_id='exo1',
+            cluster=r.ExternalCephClusterValues(
+                fsid='cf05db31-3d4e-4ffd-85ad-753434d5add1',
+                mon_host='192.168.76.200',
+                cephfs_user=r.CephUserKey(name='client.fs', key=_SECRET),
+                rgw_user=r.CephUserKey(name='client.rgw', key=_SECRET),
+            ),
+        ),
+    }
+
+
+def test_hide_secrets_covers_all_resource_types():
+    samples = _secret_samples()
+    rtypes = set(typing.get_args(smb.resources.SMBResource))
+    assert rtypes == set(samples), 'missing sample for a resource type'
+    for rtype, resource in samples.items():
+        hidden = resource.convert(smb.resources.HIDE_SECRETS)
+        assert _SECRET not in repr(hidden), rtype.__name__

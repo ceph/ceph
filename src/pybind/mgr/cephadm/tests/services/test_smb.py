@@ -1,4 +1,5 @@
 import json
+import logging
 from unittest.mock import patch
 
 from ceph.smb.constants import REMOTE_CONTROL
@@ -204,6 +205,72 @@ class TestSMB:
                 assert files.get('remote_control.ssl.crt') == ceph_generated_cert
                 assert files.get('remote_control.ssl.key') == ceph_generated_key
                 assert files.get('remote_control.ca.crt') == cephadm_root_ca
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_smb_generate_config_log_redacts_secrets(
+        self, _run_cephadm, cephadm_module: CephadmOrchestrator, caplog
+    ):
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+        ext_key = 'AQBAAK9ptYayIRAAQ1Bcpti9yMvX2Gl0KMmc4Q=='
+
+        with with_host(cephadm_module, 'test', addr='1.2.3.7'):
+            cephadm_module.cache.update_host_networks(
+                'test',
+                {'1.2.3.0/24': {'if0': ['1.2.3.7']}}
+            )
+
+            smb_spec = SMBSpec(
+                cluster_id='foxtrot',
+                service_id='foo',
+                config_uri='rados://.smb/foxtrot/config2.json',
+                placement=PlacementSpec(hosts=['test']),
+                features=[REMOTE_CONTROL],
+                ssl_certificates={
+                    'remote_control': {
+                        'enabled': True,
+                        'ssl_cert': ceph_generated_cert,
+                        'ssl_key': ceph_generated_key,
+                        'ssl_ca_cert': cephadm_root_ca,
+                        'certificate_source': 'inline',
+                    },
+                },
+                ceph_cluster_configs=[
+                    SMBExternalCephCluster(
+                        alias='exo',
+                        fsid='cf05db31-3d4e-4ffd-85ad-753434d5add1',
+                        mon_host='[v2:192.168.76.200:3300/0]',
+                        user='client.smb.remote1',
+                        key=ext_key,
+                    )
+                ],
+            )
+            service_name = smb_spec.service_name()
+
+            with with_service(cephadm_module, smb_spec):
+                caplog.clear()
+                with caplog.at_level(logging.DEBUG, logger='cephadm.services.smb'):
+                    smb_conf, _ = service_registry.get_service('smb').generate_config(
+                        DaemonDeployContext(CephadmDaemonDeploySpec(
+                            host='test',
+                            daemon_id='foo.test.0',
+                            service_name=service_name,
+                        ))
+                    )
+
+        files = smb_conf['files']
+        assert files['remote_control.ssl.key'] == ceph_generated_key
+        assert ext_key in files['exo.ceph.keyring']
+        assert smb_conf['keyring']
+
+        # but the debug log shoudn't have secrets
+        logged = caplog.text
+        assert 'smb generate_config' in logged
+        assert 'rados://.smb/foxtrot/config2.json' in logged
+        assert 'remote_control.ssl.key' in logged
+        assert 'exo.ceph.keyring' in logged
+        assert 'PRIVATE KEY' not in logged
+        assert ext_key not in logged
+        assert smb_conf['keyring'] not in logged
 
 
 def test_smb_get_dependencies(cephadm_module):

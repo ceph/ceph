@@ -312,7 +312,11 @@ class Staging:
             state = State.REMOVED if removed else State.NOT_PRESENT
         else:
             state = entry.create_or_update(resource)
-        log.debug('saved resource: %r; state: %s', resource, state)
+        log.debug(
+            'saved resource: %r; state: %s',
+            resource.convert(resources.HIDE_SECRETS),
+            state,
+        )
         result = ResourceResult.processed(resource, state)
         return result
 
