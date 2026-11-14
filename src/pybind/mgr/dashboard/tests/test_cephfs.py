@@ -12,7 +12,8 @@ except ImportError:
 
 from .. import mgr
 from ..controllers.cephfs import CephFS, CephFSMirror, CephFSMirrorStatus, \
-    CephFSSubvolume, CephFSSubvolumeGroups, CephFSSubvolumeSnapshots
+    CephFSSnapshotSchedule, CephFSSubvolume, CephFSSubvolumeGroups, \
+    CephFSSubvolumeSnapshots
 from ..exceptions import DashboardException
 from ..services.ceph_service import SendCommandError
 from ..services.cephfs import ensure_mirroring_client_caps, \
@@ -818,3 +819,57 @@ class CephFSMirrorStatusTest(ControllerTestCase):
             response = self.json_body()
             self.assertFalse(response.get('available'))
             self.assertIn('Cephfs mirror module is not enabled', response.get('message', ''))
+
+
+class CephFSSnapshotScheduleTest(ControllerTestCase):
+
+    @classmethod
+    def setup_server(cls):
+        cls.setup_controllers([CephFSSnapshotSchedule])
+
+    def _delete_snapshot_url(self, fs='test_fs', path='/e2e_data', schedule='1d',
+                             start='2024-01-01T00:00:00', retention_policy=None):
+        encoded_path = urllib.parse.quote(path, safe='')
+        url = (f'/api/cephfs/snapshot/schedule/{fs}/{encoded_path}/delete_snapshot'
+               f'?schedule={schedule}&start={urllib.parse.quote(start)}')
+        if retention_policy is not None:
+            url += f'&retention_policy={urllib.parse.quote(retention_policy)}'
+        return url
+
+    def test_delete_snapshot_skips_invalid_retention_spec(self):
+        def remote_side_effect(_module, cmd, *args):
+            if cmd == 'snap_schedule_list':
+                return 0, '/e2e_data 1d', ''
+            if cmd == 'snap_schedule_rm':
+                return 0, 'Schedule removed for path /e2e_data', ''
+            if cmd == 'snap_schedule_retention_rm':
+                self.fail('invalid retention spec should not be sent to snap_schedule')
+            return 0, '', ''
+
+        mgr.remote = Mock(side_effect=remote_side_effect)
+
+        self._delete(self._delete_snapshot_url(retention_policy='--'))
+        self.assertStatus(200)
+        self.assertIn('deleted successfully', self.json_body())
+        self.assertTrue(
+            any(call.args[1] == 'snap_schedule_rm' for call in mgr.remote.call_args_list)
+        )
+
+    def test_delete_snapshot_continues_when_retention_remove_fails(self):
+        def remote_side_effect(_module, cmd, *args):
+            if cmd == 'snap_schedule_list':
+                return 0, '/e2e_data 1d', ''
+            if cmd == 'snap_schedule_retention_rm':
+                return 22, '', 'Retention spec is invalid'
+            if cmd == 'snap_schedule_rm':
+                return 0, 'Schedule removed for path /e2e_data', ''
+            return 0, '', ''
+
+        mgr.remote = Mock(side_effect=remote_side_effect)
+
+        self._delete(self._delete_snapshot_url(retention_policy='7-d'))
+        self.assertStatus(200)
+        self.assertIn('deleted successfully', self.json_body())
+        self.assertTrue(
+            any(call.args[1] == 'snap_schedule_rm' for call in mgr.remote.call_args_list)
+        )
