@@ -318,6 +318,11 @@ class MDCache {
     stray_manager.eval_remote(dn);
   }
 
+  void drop_stray_requests_to(mds_rank_t who)
+  {
+    stray_manager.drop_requests_to(who);
+  }
+
   void _send_discover(discover_info_t& dis);
   discover_info_t& _create_discover(mds_rank_t mds) {
     ceph_tid_t t = ++discover_last_tid;
