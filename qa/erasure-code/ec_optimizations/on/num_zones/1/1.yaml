@@ -1,0 +1,5 @@
+# Single zone configuration (default)
+overrides:
+  ceph:
+    pool-config:
+      num_zones: 1

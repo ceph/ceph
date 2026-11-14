@@ -10,6 +10,7 @@ except ImportError:
 from .. import mgr
 from ..controllers.pool import Pool
 from ..controllers.task import Task
+from ..exceptions import DashboardException
 from ..tests import ControllerTestCase
 from ..tools import NotificationQueue, TaskManager
 
@@ -227,3 +228,24 @@ class PoolControllerTest(ControllerTestCase):
         NotificationQueue.stop()
         self.assertEqual(_get.call_count, 1)
         self.assertEqual(send_command.call_count, 10)
+
+    def test_size_of_pool_over_zones_is_replica(self):
+        kwargs = {'size': 6, 'pg_num': 32}
+        Pool._size_as_replica({'num_zones': 2, 'size': 4}, kwargs)
+        self.assertEqual(kwargs, {'replica': 3, 'pg_num': 32})
+
+    def test_unchanged_size_of_pool_over_zones_is_not_set(self):
+        kwargs = {'size': 4}
+        Pool._size_as_replica({'num_zones': 2, 'size': 4}, kwargs)
+        self.assertEqual(kwargs, {})
+
+    def test_size_of_pool_over_zones_must_divide(self):
+        with self.assertRaises(DashboardException):
+            Pool._size_as_replica({'num_zones': 2, 'size': 4}, {'size': 5})
+
+    def test_size_of_single_zone_pool_is_size(self):
+        kwargs = {'size': 2}
+        Pool._size_as_replica({'num_zones': 1, 'size': 3}, kwargs)
+        self.assertEqual(kwargs, {'size': 2})
+        Pool._size_as_replica({'size': 3}, kwargs)
+        self.assertEqual(kwargs, {'size': 2})

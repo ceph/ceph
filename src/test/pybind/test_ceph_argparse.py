@@ -1081,6 +1081,13 @@ class TestOSD(TestArgparse):
                                     'poolname', '128', '128',
                                     'erasure', 'A-Za-z0-9-_.', 'rule^^'])
         self._assert_valid_command(['osd', 'pool', 'create', 'poolname'])
+        # every argument from before the ones taken by name only, the last
+        # two flags included, is still positional
+        self._assert_valid_command(['osd', 'pool', 'create',
+                                    'poolname', '128', '128',
+                                    'replicated', 'profile', 'rule',
+                                    '0', '3', '1', '512', 'on', 'false',
+                                    '0', '0.0', 'false', 'true', 'false'])
         self.assertEqual({}, validate_command(sigdict, ['osd', 'pool', 'create']))
         # invalid pg_num and pgp_num, like "-1", could spill over to
         # erasure_code_profile and rule as they are valid profile and rule
@@ -1107,6 +1114,25 @@ class TestOSD(TestArgparse):
                                                         '128', '128',
                                                         'INVALID', 'profile',
                                                         'rule']))
+        # crush_rule and pg_autoscale_mode, and their old names
+        for rule, mode in (('crush_rule', 'pg_autoscale_mode'),
+                           ('rule', 'autoscale_mode')):
+            args = validate_command(sigdict, ['osd', 'pool', 'create',
+                                              'poolname',
+                                              '--' + rule, 'r',
+                                              '--' + mode, 'warn'])
+            self.assertEqual('r', args[rule])
+            self.assertEqual('warn', args[mode])
+
+    def test_pool_default_set(self):
+        # crush_rule and pg_autoscale_mode, and their old names
+        for rule, mode in (('crush_rule', 'pg_autoscale_mode'),
+                           ('rule', 'autoscale_mode')):
+            args = validate_command(sigdict, ['osd', 'pool', 'default', 'set',
+                                              '--' + rule, 'r',
+                                              '--' + mode, 'warn'])
+            self.assertEqual('r', args[rule])
+            self.assertEqual('warn', args[mode])
 
     def test_pool_delete(self):
         self._assert_valid_command(['osd', 'pool', 'delete',
@@ -1154,13 +1180,17 @@ class TestOSD(TestArgparse):
 
     def test_pool_set(self):
         for var in ('size', 'min_size',
-                    'pg_num', 'pgp_num', 'crush_rule',
+                    'pg_num', 'pgp_num', 'crush_rule', 'rule',
+                    'pg_autoscale_mode', 'autoscale_mode',
                     'hashpspool', 'fast_read',
                     'scrub_min_interval', 'scrub_max_interval',
                     'deep_scrub_interval', 'recovery_priority',
                     'recovery_op_priority'):
             self._assert_valid_command(['osd', 'pool',
                                        'set', 'poolname', var, 'value'])
+        # yes_i_really_mean_it is still positional
+        self._assert_valid_command(['osd', 'pool',
+                                    'set', 'poolname', 'size', '1', 'true'])
         self.assertEqual({}, validate_command(sigdict, ['osd', 'pool',
                                                         'set']))
         self.assertEqual({}, validate_command(sigdict, ['osd', 'pool',

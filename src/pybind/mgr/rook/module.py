@@ -568,8 +568,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         return result
 
     def _get_pool_params(self) -> Tuple[int, str]:
-        num_replicas = self.get_ceph_option('osd_pool_default_size')
-        assert type(num_replicas) is int
+        num_replicas = self.default_pool_size()
 
         leaf_type_id = self.get_ceph_option('osd_crush_chooseleaf_type')
         assert type(leaf_type_id) is int

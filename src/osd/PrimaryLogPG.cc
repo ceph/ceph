@@ -14144,7 +14144,8 @@ void PrimaryLogPG::on_activate_complete(HBHandle *handle)
 
   publish_stats_to_osd();
 
-  if (get_backfill_targets().size()) {
+  // Complete backfill targets need no backfill
+  if (recovery_state.needs_backfill()) {
     last_backfill_started = recovery_state.earliest_backfill();
     new_backfill = true;
     ceph_assert(!last_backfill_started.is_max());
@@ -15572,10 +15573,12 @@ void PrimaryLogPG::update_range(
 	      const auto & [shard, version] = entry.second;
 	      versions[shard] = version;
 	    }
-	    // Update entries in map that are modified by log entry
+            // Update entries in map that are modified by log entry.
+            // backfill_targets and versions are keyed by absolute shard id,
+            // but written_shards holds relative ids.
 	    bool uses_default = false;
 	    for (const auto & shard : backfill_targets) {
-	      if (e.is_written_shard(shard.shard)) {
+              if (e.is_written_shard(pool.info.get_relative_shard(shard.shard))) {
 		versions.erase(shard.shard);
 		uses_default = true;
 	      } else {
@@ -15753,8 +15756,9 @@ void PrimaryLogPG::scan_range_primary(
     } else {
       bool added_default = false;
       for (auto & shard: backfill_targets) {
-	if (shard_versions.contains(shard.shard)) {
-	  auto shard_version = shard_versions.at(shard.shard);
+        const shard_id_t rel_shard = pool.info.get_relative_shard(shard.shard);
+        if (shard_versions.contains(rel_shard)) {
+          auto shard_version = shard_versions.at(rel_shard);
 	  bi->objects.insert(make_pair(*p, std::make_pair(shard.shard,
 							  shard_version)));
 	} else if (!added_default) {
@@ -18530,12 +18534,7 @@ int PrimaryLogPG::get_internal_versions(const hobject_t& soid,
   }
 
   if (is_primary() && pool.info.is_erasure()) {
-    for (unsigned int i = 0; i < pool.info.get_size(); ++i) {
-      (*out)[shard_id_t(i)] = obc->obs.oi.version;
-    }
-    for (const auto& [shard, version] : obc->obs.oi.shard_versions) {
-      out->at(shard) = version;
-    }
+    *out = get_shard_versions(obc->obs.oi, pool.info);
   } else {
     (*out)[pg_whoami.shard] = obc->obs.oi.version;
   }
@@ -18551,12 +18550,7 @@ int PrimaryLogPG::get_internal_versions_v2(const hobject_t& soid,
   }
 
   if (pool.info.is_erasure()) {
-    for (unsigned int i = 0; i < pool.info.get_size(); ++i) {
-      (*out)[shard_id_t(i)] = obc->obs.oi.version;
-    }
-    for (const auto& [shard, version] : obc->obs.oi.shard_versions) {
-      out->at(shard) = version;
-    }
+    *out = get_shard_versions(obc->obs.oi, pool.info);
   } else {
     (*out)[shard_id_t::NO_SHARD] = obc->obs.oi.version;
   }
