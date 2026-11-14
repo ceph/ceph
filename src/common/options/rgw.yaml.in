@@ -2455,11 +2455,27 @@ options:
   long_desc: If true, this option computes the MD5 checksum of the data which is written
     at the destination and checks if it is identical to the ETAG stored in the source.
     It ensures integrity of the objects fetched from a remote server over HTTP including
-    multisite sync.
+    multisite sync. Objects that are transferred encrypted or compressed are not verified.
   default: false
   services:
   - rgw
+  see_also:
+  - rgw_sync_obj_skip_decompress
   with_legacy: true
+- name: rgw_sync_obj_skip_decompress
+  type: bool
+  level: advanced
+  desc: Fetch objects from the remote zone as stored if they already use the local
+    compression type
+  long_desc: If true, multisite sync fetches an object that is already compressed with
+    the type that this zone uses for its storage class as stored, so the source zone
+    doesn't decompress it and this zone doesn't recompress it. rgw_sync_obj_etag_verify
+    does not verify objects that are transferred compressed.
+  default: true
+  services:
+  - rgw
+  see_also:
+  - rgw_sync_obj_etag_verify
 - name: rgw_obj_tombstone_cache_size
   type: int
   level: advanced
