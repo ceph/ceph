@@ -6,15 +6,13 @@ Orchestrator CLI
 ================
 
 This module provides a command line interface (CLI) for orchestrator modules.
-The commands are carried out by an orchestrator backend, a ``ceph-mgr`` module
-such as cephadm, which manages hosts directly over SSH, or Rook, which works
-through Kubernetes.
+The commands are carried out by an orchestrator backend: the cephadm
+``ceph-mgr`` module, which manages hosts directly over SSH.
 
 Definition of Terms
 ===================
 
-The orchestrator CLI works with more than one backend, so it uses a common set
-of terms:
+The orchestrator CLI uses these terms:
 
 +--------------------------------------+---------------------------------------+
 | *host*                               | The name of the host as the           |
@@ -22,10 +20,9 @@ of terms:
 |                                      | this is the output of ``hostname`` on |
 |                                      | that host, which can be a bare host   |
 |                                      | name or a fully qualified domain name |
-|                                      | (see :ref:`cephadm-fqdn`). With Rook, |
-|                                      | it is the Kubernetes node name. Not   |
-|                                      | the pod name, container name, or host |
-|                                      | name inside a container.              |
+|                                      | (see :ref:`cephadm-fqdn`). Not the    |
+|                                      | container name or the host name       |
+|                                      | inside a container.                   |
 +--------------------------------------+---------------------------------------+
 | *service type*                       | The type of the service. e.g., nfs,   |
 |                                      | mds, osd, mon, rgw, mgr, iscsi        |
@@ -55,11 +52,6 @@ Here is how the names relate:
 
 * A *service* has a specific *service type*.
 * A *daemon* is a physical instance of a *service type*.
-
-.. note::
-
-    Orchestrator modules might implement only a subset of the commands listed
-    below. The implementation of the commands may differ between modules.
 
 Status
 ======
@@ -201,12 +193,12 @@ Enable the orchestrator by using the ``set backend`` command to select the orche
 Example - Configuring the Orchestrator CLI
 ------------------------------------------
 
-For example, to enable the Rook orchestrator module and use it with the CLI:
+For example, to enable the cephadm orchestrator module and use it with the CLI:
 
 .. prompt:: bash #
 
-   ceph mgr module enable rook
-   ceph orch set backend rook
+   ceph mgr module enable cephadm
+   ceph orch set backend cephadm
 
 Confirm that the backend is properly configured:
 
@@ -222,55 +214,4 @@ To disable the orchestrator, use the empty string ``""``:
 .. prompt:: bash #
 
    ceph orch set backend ""
-   ceph mgr module disable rook
-
-Current Implementation Status
-=============================
-
-This is an overview of the current implementation status of the orchestrators.
-
-=================================== ====== =========
- Command                             Rook   Cephadm
-=================================== ====== =========
- apply iscsi                         ⚪     ✔
- apply mds                           ✔      ✔
- apply mgr                           ⚪      ✔
- apply mon                           ✔      ✔
- apply nfs                           ✔      ✔
- apply osd                           ✔      ✔
- apply rbd-mirror                    ✔      ✔
- apply cephfs-mirror                 ⚪      ✔
- apply grafana                       ⚪      ✔
- apply prometheus                    ❌      ✔
- apply alertmanager                  ❌      ✔
- apply node-exporter                 ❌      ✔
- apply rgw                           ✔       ✔
- apply -i <container spec>           ⚪      ✔
- apply snmp-gateway                  ❌      ✔
- host add                            ⚪      ✔
- host ls                             ✔      ✔
- host rm                             ⚪      ✔
- host maintenance enter              ❌      ✔
- host maintenance exit               ❌      ✔
- daemon {stop,start,...}             ⚪      ✔
- device light                        ⚪      ✔
- device ls                           ✔      ✔
- daemon add iscsi                    ⚪      ✔
- daemon add mds                      ⚪      ✔
- daemon add nfs                      ⚪      ✔
- daemon add rbd-mirror               ⚪      ✔
- daemon add rgw                      ⚪      ✔
- ls                                  ✔      ✔
- ps                                  ✔      ✔
- status                              ✔      ✔
- upgrade                             ❌      ✔
-=================================== ====== =========
-
-where
-
-* ⚪ = not yet implemented
-* ❌ = not applicable
-* ✔ = implemented
-
-The ``device light`` row is the ``ceph device light`` command, which has no
-``orch`` prefix.
+   ceph mgr module disable cephadm

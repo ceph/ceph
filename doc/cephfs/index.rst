@@ -44,10 +44,9 @@ For most deployments of Ceph, setting up your first CephFS file system is as sim
     # Create a CephFS volume named (for example) "cephfs":
     ceph fs volume create cephfs
 
-The Ceph `Orchestrator`_  will automatically create and configure MDS for
-your file system if the back-end deployment technology supports it (see
-`Orchestrator deployment table`_). Otherwise, please `deploy MDS manually
-as needed`_. You can also `create other CephFS volumes`_.
+The Ceph `Orchestrator`_ will automatically create and configure MDS for
+your file system. Without an orchestrator, please `deploy MDS manually as
+needed`_. You can also `create other CephFS volumes`_.
 
 Finally, to mount CephFS on your client nodes, see `Mount CephFS:
 Prerequisites`_ page. Additionally, a command-line shell utility is available
@@ -58,7 +57,6 @@ see :ref:`csi-cephfs`.
 .. _Orchestrator: ../mgr/orchestrator
 .. _deploy MDS manually as needed: add-remove-mds
 .. _create other CephFS volumes: fs-volumes
-.. _Orchestrator deployment table: ../mgr/orchestrator/#current-implementation-status
 .. _Mount CephFS\: Prerequisites: mount-prerequisites
 
 
