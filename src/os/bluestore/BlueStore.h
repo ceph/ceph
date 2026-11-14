@@ -924,7 +924,7 @@ private:
   // store open_db options:
   bool db_was_opened_read_only = true;
   bool need_to_destage_allocation_file = false;
-
+  std::once_flag first_bluestore_transaction;
   alloc_recovery_policy_t alloc_recovery_policy = alloc_recovery_policy_t::strict;
   std::atomic<uint64_t> alloc_recovery_skipped_onodes = {0};
   bool _alloc_recovery_tolerates_corruption() const;
@@ -2560,6 +2560,8 @@ public:
     mempool::bluestore_fsck::list<std::string>* expecting_shards,
     std::map<BlobRef, bluestore_blob_t::unused_t>* referenced,
     BlueStore::FSCK_ObjectCtx& ctx);
+
+  void _on_bluestore_first_transaction();
 #ifdef CEPH_BLUESTORE_TOOL_RESTORE_ALLOCATION
   int  push_allocation_to_rocksdb();
   int  read_allocation_from_drive_for_bluestore_tool();
