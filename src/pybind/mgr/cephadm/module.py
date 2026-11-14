@@ -2395,6 +2395,7 @@ Then run the following:
         if spec.hostname not in self.inventory:
             self.cache.prime_empty_host(spec.hostname)
         self.inventory.add_host(spec)
+        self.cache.registry_login_queue.add(spec.hostname)
         self.offline_hosts_remove(spec.hostname)
         if spec.status == 'maintenance':
             self.update_maintenance_healthcheck()
