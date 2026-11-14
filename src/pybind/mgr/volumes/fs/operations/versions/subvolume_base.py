@@ -371,7 +371,37 @@ class SubvolumeBase(object):
                 raise VolumeException(-errno.EINVAL,
                                       "invalid fscrypt_file specified: '{0}'".format(fscrypt_file))
 
+    def convert_to_bytes(self, subvol_size):
+        import re
+        unit_map = {"B": 1,
+                    "K": pow(1024, 1),
+                    "M": pow(1024, 2),
+                    "G": pow(1024, 3),
+                    "T": pow(1024, 4),
+                    "P": pow(1024, 5),
+                    "E": pow(1024, 6)}
+        pattern = r'^(\d+\.\d+|\d+)([KMGTPE]i?B?|B)$'
+        match = re.match(pattern, subvol_size)
+        if match:
+            value = match.group(1)
+            unit = match.group(2)
+            if unit[0] == "B" and "." in value:
+                raise VolumeException(-errno.EINVAL,
+                                      f"Invalid byte value: {value}")
+            multiplier = unit_map.get(unit[0])
+            if multiplier is None:
+                raise VolumeException(-errno.EINVAL,
+                                      f"Invalid subvolume unit: {unit}")
+            else:
+                return float(value) * multiplier
+        else:
+            return None
+
     def _resize(self, path, newsize, noshrink):
+        num = self.convert_to_bytes(newsize)
+        if num is not None:
+            newsize = num
+
         try:
             newsize = int(newsize)
             if newsize <= 0:
@@ -396,7 +426,7 @@ class SubvolumeBase(object):
             raise VolumeException(-e.args[0], e.args[1])
 
         subvolstat = self.fs.stat(path)
-        if newsize > 0 and newsize < subvolstat.st_size:
+        if 0 < newsize < subvolstat.st_size:
             if noshrink:
                 raise VolumeException(-errno.EINVAL,
                                       "Can't resize the subvolume. "
