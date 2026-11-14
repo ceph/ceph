@@ -371,10 +371,12 @@ class PerfHandler:
 
             if pool_key == GLOBAL_POOL_KEY:
                 # refresh the global pool id -> name map upon each
-                # processing period
+                # processing period; I/O is matched against the data pool,
+                # so keep the pools that only hold image data (e.g. EC)
                 user_query[QUERY_POOL_ID_MAP] = {
                     pool_id: pool_name for pool_id, pool_name
-                    in get_rbd_pools(self.module).items()}
+                    in get_rbd_pools(self.module,
+                                     include_data_pools=True).items()}
 
         self.log.debug("register_query: pool_key={}, query_ids={}".format(
             pool_key, user_query[QUERY_IDS]))
