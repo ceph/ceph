@@ -143,6 +143,78 @@ storage.
    The LanceDB files of a vector bucket that is owned by an account are stored
    in the backing bucket under a prefix, which is the ID of the account.
 
+Quotas, Statistics, and Usage
+-----------------------------
+
+Native vector buckets support bucket quotas and contribute to their owner's
+user or account quota.
+
+Vector quotas are enforced once, at the start of each ``PutVectors`` and
+``CreateIndex`` operation, by comparing the current usage of the bucket that
+stores the data against the effective bucket and owner quotas.
+For native storage this is the vector bucket; when a vector
+bucket is backed by a separate S3 bucket, that backing bucket's usage and quota
+are used. A request is rejected only when the bucket (or its owner) is *already*
+over its size or object quota; the request's own payload is not pre-counted, so
+the write that first takes a bucket over quota is allowed and subsequent writes
+are rejected.
+
+In addition to the storage quotas above, two service limits bound the number of
+vector-service entities. They are checked at the start of the relevant operation
+with the same *already-over* semantics (the request that first crosses the limit
+is allowed, later requests are rejected) and apply to every backend, since they
+count logical entities rather than stored bytes:
+
+* ``rgw_s3vector_max_indexes_per_bucket`` limits how many indexes a single vector
+  bucket may hold and is checked by ``CreateIndex``. The default is ``10000``,
+  matching the AWS S3 Vectors limit.
+* ``rgw_s3vector_max_vectors_per_index`` limits how many vectors a single index
+  may hold and is checked by ``PutVectors``. The default is ``2000000000``
+  (2 billion), matching the AWS S3 Vectors limit.
+
+Storage quotas and service limits are checked only for the S3 Vectors operations
+described above. Background tasks such as reindexing, compaction, and index
+maintenance do not perform these checks and are not stopped or aborted for
+exceeding a quota or limit. These tasks may increase or decrease storage usage,
+which affects quota checks on subsequent ``CreateIndex`` and ``PutVectors``
+requests.
+
+Set either option to ``0`` to disable that limit. Both are runtime-tunable, for
+example::
+
+   ceph config set client.rgw rgw_s3vector_max_indexes_per_bucket 100
+   ceph config set client.rgw rgw_s3vector_max_vectors_per_index 1000000
+
+Use ``--vector`` to select the vector namespace for bucket listing, statistics,
+quotas, ownership changes, and usage commands. For example::
+
+   radosgw-admin bucket stats --bucket=my-vectors --vector
+   radosgw-admin quota set --bucket=my-vectors --vector --max-size=1G
+   radosgw-admin quota enable --bucket=my-vectors --vector
+   radosgw-admin user stats --uid=owner --sync-stats
+
+``bucket list --account-id=ACCOUNT_ID --vector`` lists an account's vector
+buckets. User and account statistics include both S3 and native vector storage;
+``--sync-stats`` refreshes both.
+
+For a qualified bucket name, use ``--bucket=NAMESPACE/my-vectors``. If ``--tenant``
+is also supplied, it must match the prefix. For account-owned vector buckets,
+the namespace is the account ID; ordinary S3 buckets use the account's tenant.
+
+``bucket chown --bucket=my-vectors --uid=new-owner --vector`` changes ownership
+within the same tenant. Moving a vector bucket into another tenant or account
+namespace is not supported.
+
+Use ``usage show`` or ``usage trim`` with
+``--bucket=my-vectors --vector`` for user-owned vector buckets usage.
+
+Use ``bucket rm --bucket=my-vectors --vector`` to remove an empty vector bucket.
+Add ``--purge-objects`` to remove its indexes and data as well. For a named
+tenant or account, use ``--bucket=TENANT/my-vectors`` or
+``--bucket=ACCOUNT_ID/my-vectors``. Removal applies only to the local zone
+and does not delete a separate S3 backing bucket. Vector removal does not support
+``--bypass-gc`` or ``--inconsistent-index``.
+
 Multisite
 ---------
 

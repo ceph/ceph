@@ -119,6 +119,11 @@ static int load_bucket( rgw::sal::Driver* driver, const DoutPrefixProvider* dpp,
   return 0;
 }
 
+// NOTE: quota is intentionally NOT enforced in this SAL wrapper. These functions
+// are invoked once per file by the LanceDB store, so a per-call check would run
+// N times per request. Quota is enforced once, at the start of CreateIndex and
+// PutVectors, by rgw::s3vector::check_bucket_quota() (see rgw_s3vector.{h,cc}).
+
 // Convert CRgwObject to rgw_obj_key, using version_id as instance if provided
 static inline rgw_obj_key make_obj_key(const CRgwObject* obj) {
   std::string name(obj->key);

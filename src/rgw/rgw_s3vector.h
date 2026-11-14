@@ -159,6 +159,19 @@ int get_bucket_storage_mode(const DoutPrefixProvider* dpp,
     rgw::sal::Driver* driver, const bucket_namespace_t& ns,
     const std::string& vector_bucket_name, StorageMode& mode, optional_yield y);
 
+// Reject a write-type vector operation when the bucket that will receive the
+// data (or its owner) is ALREADY over quota. Only the bucket's current usage is
+// compared against the effective bucket/owner quota -- the request's own payload
+// is NOT pre-counted, so the write that first crosses the limit is allowed and
+// subsequent writes are rejected. For the rgw backend it loads the native vector
+// bucket (VECTOR_BUCKET mode) or the backing S3 bucket (S3_BUCKET mode); for any
+// other backend the data is not stored in ceph, so it is a no-op (returns 0).
+//
+// Checked at the start of CreateIndex and PutVectors, outside the SAL wrapper.
+int check_bucket_quota(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver,
+    const bucket_namespace_t& ns, const std::string& vector_bucket_name,
+    const BackendConfig& backend_config, optional_yield y);
+
 // Create a LanceDB session with RGW provider. The namespace is the owner
 // account/tenant for native vector storage, or the tenant for S3 backing storage.
 // use_vector_bucket selects the entrypoint namespace of the object operations.
