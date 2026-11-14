@@ -1953,8 +1953,10 @@ int RGWBucketAdminOp::info(rgw::sal::Driver* driver,
 
   const bool max_entries_specified = (op_state.max_entries > 0);
 
+  // don't start the flusher until the lookups below have succeeded. once
+  // started, the response status has already been sent and any error we
+  // return can no longer reach the client
   Formatter *formatter = flusher.get_formatter();
-  flusher.start(0);
 
   const bool show_stats = op_state.will_fetch_stats();
   const rgw_user& user_id = op_state.get_user_id();
@@ -1963,6 +1965,7 @@ int RGWBucketAdminOp::info(rgw::sal::Driver* driver,
     if (ret < 0) {
       return ret;
     }
+    flusher.start(0);
   } else if (op_state.is_user_op()) {
     const rgw_user& uid = op_state.get_user_id();
     auto user = driver->get_user(uid);
@@ -1971,6 +1974,7 @@ int RGWBucketAdminOp::info(rgw::sal::Driver* driver,
       return ret;
     }
     const RGWUserInfo& info = user->get_info();
+    flusher.start(0);
     if (!info.account_id.empty()) {
       ldpp_dout(dpp, 1) << "Listing buckets in user account "
           << info.account_id << dendl;
@@ -1996,12 +2000,14 @@ int RGWBucketAdminOp::info(rgw::sal::Driver* driver,
       return ret;
     }
 
+    flusher.start(0);
     ret = list_owner_bucket_info(dpp, y, driver, site, account_id, info.tenant,
                                  op_state.marker, op_state.max_entries, show_stats, flusher);
     if (ret < 0) {
       return ret;
     }
   } else {
+    flusher.start(0);
     constexpr uint64_t max_keys = 1000;
     void *handle = nullptr;
     bool truncated = true;
