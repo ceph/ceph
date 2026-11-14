@@ -162,8 +162,12 @@ def unlink_file(
             raise
 
 
-def update_meta_file(file_path: str, update_key_val: dict) -> None:
-    """Update key in the file with provided value"""
+def update_meta_file(
+    file_path: str, update_key_val: dict, add_missing: bool = False
+) -> None:
+    """Update keys in the file with the provided values. Keys that the file
+    does not have are skipped unless add_missing is set.
+    """
     try:
         with open(file_path, 'r') as fh:
             data = json.load(fh)
@@ -174,7 +178,11 @@ def update_meta_file(file_path: str, update_key_val: dict) -> None:
         logger.exception(f'Failed to update {file_path}')
         raise
     data.update(
-        {key: value for key, value in update_key_val.items() if key in data}
+        {
+            key: value
+            for key, value in update_key_val.items()
+            if add_missing or key in data
+        }
     )
 
     with write_new(
