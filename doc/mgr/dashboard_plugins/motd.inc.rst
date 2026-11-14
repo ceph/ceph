@@ -14,6 +14,9 @@ integer followed by seconds, minutes, hours, days and weeks. If the MOTD
 should expire after 2 hours, use ``2h`` or ``5w`` for 5 weeks. Use ``0`` to
 configure a MOTD that does not expire.
 
+Specify exactly one integer and unit; combined durations such as ``1d2h``
+and spelled-out units such as ``2days`` are not accepted.
+
 To configure a MOTD, run the following command:
 
 .. prompt:: bash #
