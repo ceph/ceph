@@ -56,19 +56,18 @@ void close_delete_bluestore(ObjectStore* store)
 {
   auto bluestore = dynamic_cast<BlueStore*>(store);
   ceph_assert(bluestore);
-  bluestore->close_db_environment();
+  bluestore->close_db();
   delete bluestore;
 }
 
 int StoreTool::load_bluestore(const string& path, bool read_only, bool to_repair)
 {
   auto bluestore = new BlueStore(g_ceph_context, path);
-  KeyValueDB *db_ptr;
-  int r = bluestore->open_db_environment(&db_ptr, read_only, to_repair);
+  int r = bluestore->open_db(read_only, to_repair);
   if (r < 0) {
      return -EINVAL;
   }
-  db = decltype(db){db_ptr, Deleter(bluestore, close_delete_bluestore)};
+  db = decltype(db){bluestore->get_db(), Deleter(bluestore, close_delete_bluestore)};
   return 0;
 }
 #else
