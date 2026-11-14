@@ -695,6 +695,17 @@ TEST(ECExtentCache, test_invalidate_lru)
   }
 }
 
+// Mirrors ceph_assert(reads_sent) in ECCommon::ReadPipeline::do_read_op.
+void assert_request_readable(const stripe_info_t &sinfo,
+                             const shard_extent_set_t &request,
+                             uint64_t object_size)
+{
+  shard_extent_set_t readable(sinfo.get_k_plus_m());
+  sinfo.ro_size_to_read_mask(object_size, readable);
+  readable.intersection_of(request);
+  ceph_assert(!readable.empty());
+}
+
 struct MultiClient : public ECExtentCache::BackendReadListener
 {
   hobject_t oid_x = hobject_t().make_temp_hobject("Object X");
@@ -713,6 +724,7 @@ struct MultiClient : public ECExtentCache::BackendReadListener
 
   void backend_read(hobject_t _oid, const shard_extent_set_t& request,
     uint64_t object_size) override  {
+    assert_request_readable(sinfo, request, object_size);
     active_reads[_oid].emplace(request);
     last_read_object_size[_oid] = object_size;
   }
@@ -761,18 +773,16 @@ struct MultiClient : public ECExtentCache::BackendReadListener
 //      so write_done never fires for the clone target.
 //
 // cache_maybe_ready pops the clone target (read_done=true, invalidation
-// fires).  invalidate() clears do_not_read and pre-sets projected_size =
-// op->projected_size BEFORE replaying — so the growth hole from 0 →
-// projected_size is never re-added.  The clone target Object now has
-// current_size=0 and empty do_not_read.
+// fires).  invalidate() clears do_not_read and replays from projected_size =
+// op->projected_size: the clone's data is not a hole.  The clone target
+// Object has current_size=0 until the clone's write is issued.
 //
 // A new op on the clone oid (via submit_transaction → execute) computes
-// reads with orig_size = projected_size (large), which survive the empty
-// do_not_read.  send_reads fires with current_size=0.  In production,
+// reads with orig_size = projected_size (large).  If send_reads fired before
+// the clone's write, it would use current_size=0.  In production,
 // get_min_avail_to_read_shards returns 0 without populating shard_reads,
 // and do_read_op hits ceph_assert(reads_sent).
-// Disabled until https://tracker.ceph.com/issues/78465 has a new fix.
-TEST(ECExtentCache, DISABLED_CloneInvalidateStaleSize)
+TEST(ECExtentCache, CloneInvalidateStaleSize)
 {
   MultiClient cl(4096, 2, 1, 1024*1024);
   const auto *si = cl.get_stripe_info();
@@ -835,15 +845,14 @@ TEST(ECExtentCache, DISABLED_CloneInvalidateStaleSize)
   //  - X completes → write_done, popped
   //  - Clone target: invalidates_cache=true, reading=false → invalidate()!
   //    invalidate clears do_not_read, sets projected_size=head_size,
-  //    replays clone target (no reads/writes, growth hole NOT re-added
-  //    because projected_size already == op->projected_size)
+  //    replays clone target (no reads/writes, no growth)
   //  - Clone target: complete_if_reads_cached → callback fires
   //  - X2: reads outstanding (from execute) → cache_maybe_ready stops
   //
   // Clone target Object now has:
   //   current_size = 0  (write_done never called — pending_cache_ops > 0)
   //   projected_size = head_size
-  //   do_not_read = EMPTY (invalidation cleared it, growth hole not re-added)
+  //   do_not_read = EMPTY (invalidation cleared it)
 
   // Step 3: A new op on the clone oid arrives (e.g. snap trim or CLS op).
   // submit_transaction → execute → request → send_reads.
@@ -857,23 +866,113 @@ TEST(ECExtentCache, DISABLED_CloneInvalidateStaleSize)
     });
   cl.cache_execute(*op_y);
 
-  // With the fix, invalidate() sets projected_size = current_size (0
-  // for a clone target).  During replay, the growth hole from 0 ->
-  // projected_size is re-added to do_not_read, so the reads are subtracted
-  // and no backend_read is issued.
-  //
-  // Without the fix, the growth hole is NOT re-added, reads survive
-  // do_not_read, and send_reads fires with current_size=0 — which in
-  // production causes ceph_assert(reads_sent).
+  // The clone has not been written, so the shards do not hold Y yet and
+  // the read must wait for the clone's write.  Sent now, it went out with
+  // current_size=0, which in production causes ceph_assert(reads_sent).
   ASSERT_FALSE(cl.active_reads[cl.oid_y].has_value());
 
-  // Clean up: op_x2's reads may have been covered by op_x's do_not_read,
-  // so only complete the read if it was actually issued.
+  // op_x2's reads may have been covered by op_x's do_not_read, so only
+  // complete the read if it was actually issued.
   if (cl.active_reads[cl.oid_x].has_value()) {
     cl.complete_read(cl.oid_x);
   }
   cl.complete_write(*op_x);
   cl.complete_write(*op_clone);
+
+  // Once the clone is written, Y's data is read, for the clone's size.
+  ASSERT_TRUE(cl.active_reads[cl.oid_y].has_value());
+  ASSERT_EQ(head_size, cl.last_read_object_size[cl.oid_y]);
+  cl.complete_read(cl.oid_y);
   cl.complete_write(*op_x2);
   cl.complete_write(*op_y);
+}
+// G grows X far past its end, but pins only the line it writes. H, an older
+// op pinning line 0, dies while G is stuck behind Y, so erase_line() drops
+// G's growth hole from line 0. V then reads from the hole with
+// current_size still 4096.
+TEST(ECExtentCache, HoleErasedByOlderOpLineDeath)
+{
+  MultiClient cl(4096, 2, 1, 1024*1024);
+  const auto *si = cl.get_stripe_info();
+  auto cb = [&cl] {
+    return [&cl](ECExtentCache::OpRef &op) {
+      cl.cache_ready(op->get_hoid(), op->get_result());
+    };
+  };
+
+  optional op_h = cl.cache.prepare(cl.oid_x, nullopt,
+    iset_from_vector({{{0, 4096}}, {}}, si), 0, 4096, false, cb());
+  cl.cache_execute(*op_h);
+  ASSERT_FALSE(cl.active_reads[cl.oid_x].has_value());
+  cl.complete_write(*op_h);
+
+  optional op_y = cl.cache.prepare(cl.oid_y,
+    iset_from_vector({{{0, 4096}}, {}}, si),
+    iset_from_vector({{{0, 4096}}, {}}, si), 4096, 4096, false, cb());
+  cl.cache_execute(*op_y);
+  ASSERT_TRUE(cl.active_reads[cl.oid_y].has_value());
+
+  optional op_g = cl.cache.prepare(cl.oid_x, nullopt,
+    iset_from_vector({{{131072, 4096}}, {}}, si), 4096, 266240, false, cb());
+  cl.cache_execute(*op_g);
+  ASSERT_FALSE(cl.active_reads[cl.oid_x].has_value());
+
+  op_h.reset();
+
+  optional op_v = cl.cache.prepare(cl.oid_x,
+    iset_from_vector({{}, {{4096, 4096}}}, si),
+    iset_from_vector({{{4096, 4096}}, {}}, si), 266240, 266240, false, cb());
+  cl.cache_execute(*op_v);
+  ASSERT_FALSE(cl.active_reads[cl.oid_x].has_value());
+
+  cl.complete_read(cl.oid_y);
+  cl.complete_write(*op_y);
+  cl.complete_write(*op_g);
+  cl.complete_write(*op_v);
+}
+
+// As above, but V's read is queued behind G's in-flight read, so it is sent
+// from read_done() rather than from request().
+TEST(ECExtentCache, HoleErasedBeforeReadDoneSendReads)
+{
+  MultiClient cl(4096, 2, 1, 1024*1024);
+  const auto *si = cl.get_stripe_info();
+  auto cb = [&cl] {
+    return [&cl](ECExtentCache::OpRef &op) {
+      cl.cache_ready(op->get_hoid(), op->get_result());
+    };
+  };
+
+  optional op_h = cl.cache.prepare(cl.oid_x, nullopt,
+    iset_from_vector({{{32768, 4096}}, {}}, si), 69632, 69632, false, cb());
+  cl.cache_execute(*op_h);
+  ASSERT_FALSE(cl.active_reads[cl.oid_x].has_value());
+  cl.complete_write(*op_h);
+
+  optional op_y = cl.cache.prepare(cl.oid_y,
+    iset_from_vector({{{0, 4096}}, {}}, si),
+    iset_from_vector({{{0, 4096}}, {}}, si), 4096, 4096, false, cb());
+  cl.cache_execute(*op_y);
+  ASSERT_TRUE(cl.active_reads[cl.oid_y].has_value());
+
+  optional op_g = cl.cache.prepare(cl.oid_x,
+    iset_from_vector({{}, {{0, 4096}}}, si),
+    iset_from_vector({{{131072, 4096}}, {}}, si), 69632, 266240, false, cb());
+  cl.cache_execute(*op_g);
+  ASSERT_TRUE(cl.active_reads[cl.oid_x].has_value());
+
+  op_h.reset();
+
+  optional op_v = cl.cache.prepare(cl.oid_x,
+    iset_from_vector({{}, {{36864, 4096}}}, si),
+    iset_from_vector({{{36864, 4096}}, {}}, si), 266240, 266240, false, cb());
+  cl.cache_execute(*op_v);
+
+  cl.complete_read(cl.oid_x);
+  ASSERT_FALSE(cl.active_reads[cl.oid_x].has_value());
+
+  cl.complete_read(cl.oid_y);
+  cl.complete_write(*op_y);
+  cl.complete_write(*op_g);
+  cl.complete_write(*op_v);
 }
