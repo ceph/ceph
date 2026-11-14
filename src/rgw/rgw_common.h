@@ -1278,6 +1278,7 @@ namespace rgw {
       class STSEngine;
     }
     class Completer;
+    class Identity;
   }
   namespace io {
     class BasicClient;
@@ -1312,8 +1313,6 @@ struct req_init_state {
   std::string url_bucket;
   std::string src_bucket;
 };
-
-#include "rgw_auth.h"
 
 class RGWObjectCtx;
 

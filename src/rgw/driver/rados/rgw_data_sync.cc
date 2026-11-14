@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include "rgw_data_sync.h"
+#include "rgw_auth.h"
 
 #include <fmt/format.h>
 #if FMT_VERSION >= 90000

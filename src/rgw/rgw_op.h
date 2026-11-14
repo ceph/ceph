@@ -69,7 +69,7 @@ class RGWMultiCompleteUpload;
 class RGWPutObj_Torrent;
 class RGWMultiDelObject;
 
-namespace rgw::auth::registry { class StrategyRegistry; }
+namespace rgw::auth { class StrategyRegistry; }
 
 int rgw_forward_request_to_master(const DoutPrefixProvider* dpp,
                                   const rgw::SiteConfig& site,
