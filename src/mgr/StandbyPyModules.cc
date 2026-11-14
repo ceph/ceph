@@ -43,33 +43,32 @@ StandbyPyModules::StandbyPyModules(
   state.set_mgr_map(mgr_map_);
 }
 
-// FIXME: completely identical to ActivePyModules
-void StandbyPyModules::shutdown()
+bool StandbyPyModules::shutdown()
 {
   std::lock_guard locker(lock);
+  bool clean = true;
 
-  // Signal modules to drop out of serve() and/or tear down resources
-  for (auto &i : modules) {
-    auto module = i.second.get();
-    const auto& name = i.first;
+  // Signal modules to drop out of serve() and/or tear down resources.
+  // shutdown() bounds its own call+join (see PyModuleRunner::shutdown),
+  // so there is no separate thread-join pass here.
+  for (auto it = modules.begin(); it != modules.end(); ) {
+    const auto& name = it->first;
     dout(10) << "waiting for module " << name << " to shutdown" << dendl;
     lock.unlock();
-    module->shutdown();
+    const bool finished = it->second->shutdown();
     lock.lock();
-    dout(10) << "module " << name << " shutdown" << dendl;
+    if (!finished) {
+      derr << "module " << name << " shutdown() timed out; abandoning it"
+           << dendl;
+      // keep it in modules: its code may still be running
+      clean = false;
+      ++it;
+    } else {
+      dout(10) << "module " << name << " shutdown" << dendl;
+      it = modules.erase(it);
+    }
   }
-
-  // For modules implementing serve(), finish the threads where we
-  // were running that.
-  for (auto &i : modules) {
-    lock.unlock();
-    dout(10) << "joining thread for module " << i.first << dendl;
-    i.second->thread.join();
-    dout(10) << "joined thread for module " << i.first << dendl;
-    lock.lock();
-  }
-
-  modules.clear();
+  return clean;
 }
 
 void StandbyPyModules::start_one(PyModuleRef py_module)

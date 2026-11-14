@@ -216,6 +216,20 @@ void PyModuleRegistry::active_start(
             Objecter &objecter_, Finisher &f,
             DaemonServer &server)
 {
+  // Shut standby modules down without holding our lock: send_beacon()
+  // takes it via get_modules(), and a slow module shutdown() must not
+  // stall beacons past mon_mgr_beacon_grace.
+  std::unique_ptr<StandbyPyModules> standby;
+  {
+    std::lock_guard l(lock);
+    standby = std::move(standby_modules);
+  }
+  if (standby && !standby->shutdown()) {
+    std::lock_guard l(lock);
+    leaked_standby_modules = std::move(standby);
+  }
+  standby.reset();
+
   std::lock_guard locker(lock);
 
   dout(4) << "Starting modules in active mode" << dendl;
@@ -225,11 +239,6 @@ void PyModuleRegistry::active_start(
   // Must have seen a MgrMap by this point, in order to know
   // which modules should be enabled
   ceph_assert(mgr_map.epoch > 0);
-
-  if (standby_modules != nullptr) {
-    standby_modules->shutdown();
-    standby_modules.reset();
-  }
 
   active_modules.reset(
     new ActivePyModules(
