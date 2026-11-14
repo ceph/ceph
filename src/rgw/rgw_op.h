@@ -38,6 +38,7 @@
 #include "rgw_cksum.h"
 #include "rgw_common.h"
 #include "rgw_dmclock.h"
+#include "rgw_lua_types.h"
 
 struct rgw_crypt_src_identity;
 #include "rgw_sal.h"

@@ -29,8 +29,6 @@ struct rgw_cls_list_ret;
 
 class RGWSI_BILog_RADOS;
 
-#define RGW_NO_SHARD -1
-
 #define RGW_SHARDS_PRIME_0 7877
 #define RGW_SHARDS_PRIME_1 65521
 
