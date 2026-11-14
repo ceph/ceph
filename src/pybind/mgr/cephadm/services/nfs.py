@@ -148,6 +148,9 @@ class NFSService(CephService):
             deps.append(f'tls_min_version: {nfs_spec.tls_min_version}')
         if nfs_spec.tls_ciphers is not None:
             deps.append(f'tls_ciphers: {nfs_spec.tls_ciphers}')
+        # NFS-Ganesha server file logging (opt-in via spec)
+        if nfs_spec.log_to_file:
+            deps.append('log_to_file: True')
         parent_deps = super().get_dependencies(mgr, spec, daemon_type)
         return sorted(deps + parent_deps)
 
@@ -336,6 +339,7 @@ class NFSService(CephService):
                 'keyring': rgw_keyring,
             }
             config['enable_rdma'] = spec.enable_rdma
+            config['log_to_file'] = spec.log_to_file
             logger.debug('Generated cephadm config-json: %s' % config)
             return config
 
