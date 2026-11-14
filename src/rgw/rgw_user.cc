@@ -2471,7 +2471,7 @@ int RGWUser::execute_remove(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
         return ret;
       }
 
-      ret = vector_bucket->remove(dpp, true, y);
+      ret = vector_bucket->remove(dpp, true, y, rgw::sal::no_authenticated_user);
       if (ret < 0) {
         set_err_msg(err_msg, "unable to delete user vector bucket data");
         return ret;
@@ -2502,7 +2502,7 @@ int RGWUser::execute_remove(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
         return ret;
       }
 
-      ret = bucket->remove(dpp, true, y);
+      ret = bucket->remove(dpp, true, y, rgw::sal::no_authenticated_user);
       if (ret < 0) {
         set_err_msg(err_msg, "unable to delete user data");
         return ret;

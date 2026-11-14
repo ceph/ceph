@@ -241,7 +241,8 @@ int rgw_put_object( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
   std::string unique_tag = driver->zone_unique_id(driver->get_new_req_id());
 
   std::unique_ptr<rgw::sal::Writer> writer = driver->get_atomic_writer(
-    dpp, y, obj.get(), owner, &placement_rule, 0, unique_tag);
+    dpp, y, obj.get(), owner, &placement_rule, 0, unique_tag,
+    rgw::sal::no_authenticated_user);
 
   if (!writer) {
     ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_put_object: failed to create writer" << dendl;
@@ -350,7 +351,8 @@ int rgw_put_object_conditional( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dp
   std::string unique_tag = driver->zone_unique_id(driver->get_new_req_id());
 
   std::unique_ptr<rgw::sal::Writer> writer = driver->get_atomic_writer(
-    dpp, y, obj.get(), owner, &placement_rule, 0, unique_tag);
+    dpp, y, obj.get(), owner, &placement_rule, 0, unique_tag,
+    rgw::sal::no_authenticated_user);
 
   if (!writer) {
     ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_put_object_conditional: allocation failed" << dendl;
@@ -495,7 +497,7 @@ int rgw_get_object( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
     return -ENOMEM;
   }
 
-  std::unique_ptr<rgw::sal::Object::ReadOp> read_op = obj->get_read_op();
+  std::unique_ptr<rgw::sal::Object::ReadOp> read_op = obj->get_read_op(rgw::sal::no_authenticated_user);
 
   ret = read_op->prepare(y, dpp);
   if (ret < 0) {
@@ -585,7 +587,7 @@ int rgw_get_object_conditional( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dp
     return -ENOMEM;
   }
 
-  std::unique_ptr<rgw::sal::Object::ReadOp> read_op = obj->get_read_op();
+  std::unique_ptr<rgw::sal::Object::ReadOp> read_op = obj->get_read_op(rgw::sal::no_authenticated_user);
 
   // Set conditional parameters
   ceph::real_time mod_time, unmod_time;
@@ -658,7 +660,7 @@ int rgw_delete_object( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
     return -ENOMEM;
   }
 
-  std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = obj->get_delete_op();
+  std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = obj->get_delete_op(rgw::sal::no_authenticated_user);
   ret = del_op->delete_obj(dpp, y, 0);
 
   if (ret == -ENOENT) {
@@ -950,6 +952,7 @@ int rgw_copy_object( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
   ret = src_obj->copy_object(
                             owner,
                             remote_user,      /* empty = local copy, not cross-cluster */
+                            rgw::sal::no_authenticated_user,
                             nullptr,          /* info */
                             source_zone,      /* empty = local zone */
                             dst_obj.get(),
@@ -1061,6 +1064,7 @@ int rgw_copy_object_conditional( CRgwDriver* driver_ptr, const CRgwDoutPrefix* d
   ret = src_obj->copy_object(
                             owner,
                             remote_user,      /* empty = local copy */
+                            rgw::sal::no_authenticated_user,
                             nullptr,          /* info */
                             source_zone,      /* empty = local zone */
                             dst_obj.get(),
@@ -1133,7 +1137,7 @@ int rgw_delete_objects( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
       continue;
     }
 
-    std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = obj->get_delete_op();
+    std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = obj->get_delete_op(rgw::sal::no_authenticated_user);
     int del_ret = del_op->delete_obj(dpp, y, 0);
     if (del_ret < 0 && del_ret != -ENOENT) {
       ldpp_dout(dpp, 1) << "rgw_delete_objects: failed to delete '"
@@ -1179,7 +1183,7 @@ int rgw_multipart_init( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
 
   std::string initial_upload_id;
   std::unique_ptr<rgw::sal::MultipartUpload> upload =
-    bucket->get_multipart_upload(obj_id->key, initial_upload_id);
+    bucket->get_multipart_upload(obj_id->key, rgw::sal::no_authenticated_user, initial_upload_id);
   if (!upload) {
     ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_multipart_init: allocation failed" << dendl;
     return -ENOMEM;
@@ -1244,7 +1248,7 @@ int rgw_multipart_put_part( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_pt
   const rgw_placement_rule& placement_rule = bucket->get_placement_rule();
   std::unique_ptr<rgw::sal::Writer> writer = upload->get_writer(
     dpp, y, obj.get(), owner, &placement_rule, part_num,
-    std::to_string(part_num));
+    std::to_string(part_num), rgw::sal::no_authenticated_user);
 
   if (!writer) {
     ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_multipart_put_part: allocation failed" << dendl;

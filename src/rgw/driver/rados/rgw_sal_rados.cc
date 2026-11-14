@@ -196,7 +196,8 @@ int RadosStore::list_buckets(const DoutPrefixProvider* dpp,
 
 int RadosBucket::create(const DoutPrefixProvider* dpp,
                         const CreateParams& params,
-                        optional_yield y)
+                        optional_yield y,
+                        const rgw_owner& authenticated_user)
 {
   rgw_bucket key = get_key();
   key.marker = params.marker;
@@ -395,7 +396,8 @@ RadosBucket::~RadosBucket() {}
 
 int RadosBucket::remove(const DoutPrefixProvider* dpp,
 			bool delete_children,
-			optional_yield y)
+			optional_yield y,
+			const rgw_owner& authenticated_user)
 {
   int ret;
 
@@ -648,7 +650,7 @@ int RadosBucket::remove_bypass_gc(int concurrent_max, bool
   // this function can only be run if caller wanted children to be
   // deleted, so we can ignore the check for children as any that
   // remain are detritus from a prior bug
-  ret = remove(dpp, true, y);
+  ret = remove(dpp, true, y, rgw::sal::no_authenticated_user);
   if (ret < 0) {
     ldpp_dout(dpp, -1) << "ERROR: could not remove bucket " << this << dendl;
     return ret;
@@ -669,7 +671,8 @@ int RadosVectorBucket::unlink(const DoutPrefixProvider* dpp, const rgw_owner& ow
 
 int RadosVectorBucket::remove(const DoutPrefixProvider* dpp,
 			bool delete_children,
-			optional_yield y)
+			optional_yield y,
+			const rgw_owner& authenticated_user)
 {
   ldpp_dout(dpp, 20) << "s3vector --- RadosVectorBucket::remove called" << dendl;
 
@@ -814,7 +817,8 @@ int RadosVectorBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield
 
 int RadosVectorBucket::create(const DoutPrefixProvider* dpp,
                         const CreateParams& params,
-                        optional_yield y)
+                        optional_yield y,
+                        const rgw_owner& authenticated_user)
 {
   ldpp_dout(dpp, 20) << "s3vector --- RadosVectorBucket::create called" << dendl;
   rgw_bucket key = get_key();
@@ -1216,6 +1220,7 @@ int RadosBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int max
 
 std::unique_ptr<MultipartUpload> RadosBucket::get_multipart_upload(
 				  const std::string& oid,
+				  const rgw_owner& authenticated_user,
 				  std::optional<std::string> upload_id,
 				  ACLOwner owner, ceph::real_time mtime)
 {
@@ -1230,7 +1235,8 @@ int RadosBucket::list_multiparts(const DoutPrefixProvider *dpp,
 				 const int& max_uploads,
 				 vector<std::unique_ptr<MultipartUpload>>& uploads,
 				 map<string, bool> *common_prefixes,
-				 bool *is_truncated, optional_yield y)
+				 bool *is_truncated, optional_yield y,
+				 const rgw_owner& authenticated_user)
 {
   rgw::sal::Bucket::ListParams params;
   rgw::sal::Bucket::ListResults results;
@@ -1254,7 +1260,8 @@ int RadosBucket::list_multiparts(const DoutPrefixProvider *dpp,
         .display_name = dentry.meta.owner_display_name
       };
       uploads.push_back(this->get_multipart_upload(key.name,
-			std::nullopt, std::move(owner), dentry.meta.mtime));
+			authenticated_user, std::nullopt, std::move(owner),
+			dentry.meta.mtime));
     }
   }
   if (common_prefixes) {
@@ -1280,7 +1287,8 @@ int RadosBucket::abort_multiparts(const DoutPrefixProvider* dpp,
 
   do {
     ret = list_multiparts(dpp, empty_prefix, marker, empty_delim,
-			  max, uploads, nullptr, &is_truncated, y);
+			  max, uploads, nullptr, &is_truncated, y,
+			  rgw::sal::no_authenticated_user);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << __func__ <<
 	" ERROR : calling list_bucket_multiparts; ret=" << ret <<
@@ -2966,7 +2974,8 @@ std::unique_ptr<Writer> RadosStore::get_append_writer(const DoutPrefixProvider *
 				  const rgw_placement_rule *ptail_placement_rule,
 				  const std::string& unique_tag,
 				  uint64_t position,
-				  uint64_t *cur_accounted_size)
+				  uint64_t *cur_accounted_size,
+				  const rgw_owner& authenticated_user)
 {
   RGWBucketInfo& bucket_info = obj->get_bucket()->get_info();
   RGWObjectCtx& obj_ctx = static_cast<RadosObject*>(obj)->get_ctx();
@@ -2985,7 +2994,8 @@ std::unique_ptr<Writer> RadosStore::get_atomic_writer(const DoutPrefixProvider *
 				  const ACLOwner& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,
-				  const std::string& unique_tag)
+				  const std::string& unique_tag,
+				  const rgw_owner& authenticated_user)
 {
   RGWBucketInfo& bucket_info = obj->get_bucket()->get_info();
   if (bucket_info.versioning_enabled() && !obj->have_instance()) {
@@ -3240,7 +3250,9 @@ int RadosObject::read_attrs(const DoutPrefixProvider* dpp, RGWRados::Object::Rea
   return read_op.prepare(y, dpp);
 }
 
-int RadosObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y, uint32_t flags)
+int RadosObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
+			       Attrs* delattrs, optional_yield y, uint32_t flags,
+			       const rgw_owner& authenticated_user)
 {
   Attrs empty;
   const bool log_op = flags & rgw::sal::FLAG_LOG_OP;
@@ -3268,7 +3280,9 @@ int RadosObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp)
   return 0;
 }
 
-int RadosObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp, uint32_t flags)
+int RadosObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
+				  optional_yield y, const DoutPrefixProvider* dpp,
+				  const rgw_owner& authenticated_user, uint32_t flags)
 {
   rgw_obj target = get_obj();
   rgw_obj save = get_obj();
@@ -3286,21 +3300,24 @@ int RadosObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val, o
 
   Attrs mattr;
   mattr[attr_name] = attr_val;
-  r = set_obj_attrs(dpp, &mattr, nullptr, y, flags);
+  r = set_obj_attrs(dpp, &mattr, nullptr, y, flags, authenticated_user);
   /* Restore target */
   state.obj = save;
 
   return r;
 }
 
-int RadosObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name, optional_yield y)
+int RadosObject::delete_obj_attrs(const DoutPrefixProvider* dpp,
+				  const char* attr_name, optional_yield y,
+				  const rgw_owner& authenticated_user)
 {
   Attrs rmattr;
   bufferlist bl;
 
   set_atomic(true);
   rmattr[attr_name] = bl;
-  return set_obj_attrs(dpp, nullptr, &rmattr, y, rgw::sal::FLAG_LOG_OP);
+  return set_obj_attrs(dpp, nullptr, &rmattr, y, rgw::sal::FLAG_LOG_OP,
+		       authenticated_user);
 }
 
 bool RadosObject::is_expired() {
@@ -3442,7 +3459,10 @@ int RadosObject::chown(const DoutPrefixProvider* dpp,
   set_atomic(true);
   map<string, bufferlist> attrs;
   attrs[RGW_ATTR_ACL] = bl;
-  r = set_obj_attrs(dpp, &attrs, nullptr, y, rgw::sal::FLAG_LOG_OP);
+  /* the chown is the operator's, not new_user's, and no request
+   * authenticated it */
+  r = set_obj_attrs(dpp, &attrs, nullptr, y, rgw::sal::FLAG_LOG_OP,
+		    rgw::sal::no_authenticated_user);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: modify attr failed " << cpp_strerror(-r) << dendl;
     return r;
@@ -3637,7 +3657,8 @@ int RadosObject::transition_to_cloud(Bucket* bucket,
   if (update_object) {
     real_time read_mtime;
 
-    std::unique_ptr<rgw::sal::Object::ReadOp> read_op(get_read_op());
+    std::unique_ptr<rgw::sal::Object::ReadOp> read_op(
+      get_read_op(rgw::sal::no_authenticated_user));
     read_op->params.lastmod = &read_mtime;
 
     ret = read_op->prepare(y, dpp);
@@ -3959,7 +3980,7 @@ int RadosObject::dump_obj_layout(const DoutPrefixProvider *dpp, optional_yield y
   return 0;
 }
 
-std::unique_ptr<Object::ReadOp> RadosObject::get_read_op()
+std::unique_ptr<Object::ReadOp> RadosObject::get_read_op(const rgw_owner& authenticated_user)
 {
   return std::make_unique<RadosObject::RadosReadOp>(this, rados_ctx);
 }
@@ -4018,7 +4039,7 @@ int RadosObject::RadosReadOp::get_attr(const DoutPrefixProvider* dpp, const char
   return parent_op.get_attr(dpp, name, dest, y);
 }
 
-std::unique_ptr<Object::DeleteOp> RadosObject::get_delete_op()
+std::unique_ptr<Object::DeleteOp> RadosObject::get_delete_op(const rgw_owner& authenticated_user)
 {
   return std::make_unique<RadosObject::RadosDeleteOp>(this);
 }
@@ -4093,6 +4114,7 @@ int RadosObject::delete_object(const DoutPrefixProvider* dpp,
 
 int RadosObject::copy_object(const ACLOwner& owner,
 				const rgw_user& remote_user,
+				const rgw_owner& authenticated_user,
 				req_info* info,
 				const rgw_zone_id& source_zone,
 				rgw::sal::Object* dest_object,
@@ -4384,7 +4406,8 @@ int RadosMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct,
       }
     }
 
-    std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = meta_obj->get_delete_op();
+    std::unique_ptr<rgw::sal::Object::DeleteOp> del_op =
+      meta_obj->get_delete_op(rgw::sal::no_authenticated_user);
     del_op->params.bucket_owner = bucket->get_info().owner;
     del_op->params.versioning_status = 0;
     if (!remove_objs.empty()) {
@@ -4868,7 +4891,8 @@ int RadosMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield
   bufferlist headbl;
 
   /* Read the obj head which contains the multipart_upload_info */
-  std::unique_ptr<rgw::sal::Object::ReadOp> read_op = meta_obj->get_read_op();
+  std::unique_ptr<rgw::sal::Object::ReadOp> read_op =
+    meta_obj->get_read_op(rgw::sal::no_authenticated_user);
   meta_obj->set_prefetch_data();
 
   int ret = read_op->prepare(y, dpp);
@@ -4929,7 +4953,8 @@ std::unique_ptr<Writer> RadosMultipartUpload::get_writer(
 				  const ACLOwner& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t part_num,
-				  const std::string& part_num_str)
+				  const std::string& part_num_str,
+				  const rgw_owner& authenticated_user)
 {
   RGWBucketInfo& bucket_info = obj->get_bucket()->get_info();
   RGWObjectCtx& obj_ctx = static_cast<RadosObject*>(obj)->get_ctx();

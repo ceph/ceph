@@ -15,6 +15,8 @@
 
 #pragma once
 
+#include <mutex>
+
 #include "rgw_sal.h"
 #include "include/random.h"
 
@@ -103,6 +105,21 @@ class StoreDriver : public Driver {
       return ceph::util::generate_random_number<uint64_t>();
     }
 
+    /* The gateway's host id, for x-amz-id-2 and HostId:  an id unique to
+     * the process, then the zone and the zonegroup, the shape the rados
+     * driver gives its own.  Made once, on the first request, when the
+     * zone is known. */
+    virtual std::string get_host_id() override {
+      std::call_once(host_id_once, [this] {
+        auto* zone = get_zone();
+        host_id = fmt::format("{}-{}-{}",
+                              ceph::util::generate_random_number<uint64_t>(),
+                              zone ? zone->get_name() : "",
+                              zone ? zone->get_zonegroup().get_name() : "");
+      });
+      return host_id;
+    }
+
     int read_topics(const std::string& tenant, rgw_pubsub_topics& topics, RGWObjVersionTracker* objv_tracker,
         optional_yield y, const DoutPrefixProvider *dpp) override {return -EOPNOTSUPP;}
     int stat_topics_v1(const std::string& tenant, optional_yield y, const DoutPrefixProvider *dpp) override {return -ENOENT;}
@@ -166,6 +183,10 @@ class StoreDriver : public Driver {
                                     BucketList& buckets, optional_yield y) override {
       return -EOPNOTSUPP;
     }
+
+  private:
+    std::once_flag host_id_once;
+    std::string host_id;
 };
 
 class StoreUser : public User {
@@ -399,6 +420,11 @@ class StoreObject : public Object {
     virtual int update_olh(const DoutPrefixProvider* dpp, optional_yield y,
                            uint32_t flags) override {
       return 0;
+    }
+
+    virtual std::optional<ceph::real_time> get_noncurrent_since(
+			   const DoutPrefixProvider* dpp, optional_yield y) override {
+      return std::nullopt;
     }
     jspan_context& get_trace() override { return trace_ctx; }
     void set_trace (jspan_context&& _trace_ctx) override { trace_ctx = std::move(_trace_ctx); }

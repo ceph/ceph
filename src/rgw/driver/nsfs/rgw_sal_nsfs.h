@@ -736,7 +736,6 @@ public:
   virtual std::string meta_get_marker(void* handle) override { return ""; }
   virtual int meta_remove(const DoutPrefixProvider* dpp, std::string& metadata_key, optional_yield y) override { return 0; }
   virtual const RGWSyncModuleInstanceRef& get_sync_module() override { return sync_module; }
-  virtual std::string get_host_id() override { return ""; }
   virtual std::unique_ptr<LuaManager> get_lua_manager(const std::string& luarocks_path) override;
   virtual std::unique_ptr<RGWRole> get_role(std::string name,
 					    std::string tenant,
@@ -781,14 +780,16 @@ public:
 				const rgw_placement_rule *ptail_placement_rule,
 				const std::string& unique_tag,
 				uint64_t position,
-				uint64_t *cur_accounted_size) override;
+				uint64_t *cur_accounted_size,
+				const rgw_owner& authenticated_user) override;
   virtual std::unique_ptr<Writer> get_atomic_writer(const DoutPrefixProvider *dpp,
 				optional_yield y,
 				rgw::sal::Object* obj,
 				const ACLOwner& owner,
 				const rgw_placement_rule *ptail_placement_rule,
 				uint64_t olh_epoch,
-				const std::string& unique_tag) override;
+				const std::string& unique_tag,
+				const rgw_owner& authenticated_user) override;
 
   virtual const std::string& get_compression_type(const rgw_placement_rule& rule) override;
   virtual bool valid_placement(const rgw_placement_rule& rule) override { return true; }
@@ -970,14 +971,16 @@ public:
   virtual int merge_and_store_attrs(const DoutPrefixProvider* dpp,
 				    Attrs& new_attrs, optional_yield y) override;
   virtual int remove(const DoutPrefixProvider* dpp, bool delete_children,
-		     optional_yield y) override;
+		     optional_yield y,
+		     const rgw_owner& authenticated_user) override;
   virtual int remove_bypass_gc(int concurrent_max,
 			       bool keep_index_consistent,
 			       optional_yield y,
 			       const DoutPrefixProvider *dpp) override;
   virtual int create(const DoutPrefixProvider* dpp,
 		     const CreateParams& params,
-		     optional_yield y) override;
+		     optional_yield y,
+		     const rgw_owner& authenticated_user) override;
   virtual int load_bucket(const DoutPrefixProvider* dpp, optional_yield y) override;
   virtual RGWAccessControlPolicy& get_acl(void) override { return acls; }
   virtual int set_acl(const DoutPrefixProvider* dpp, RGWAccessControlPolicy& acl,
@@ -1031,7 +1034,8 @@ public:
 			      const int& max_uploads,
 			      std::vector<std::unique_ptr<MultipartUpload>>& uploads,
 			      std::map<std::string, bool> *common_prefixes,
-			      bool *is_truncated, optional_yield y) override;
+			      bool *is_truncated, optional_yield y,
+			      const rgw_owner& authenticated_user) override;
   virtual int abort_multiparts(const DoutPrefixProvider* dpp,
 			       CephContext* cct, optional_yield y) override;
 
@@ -1070,8 +1074,8 @@ public:
     NSFSObject* source;
     int64_t part_ofs{0};
 
-    NSFSReadOp(NSFSObject* _source) :
-      source(_source) {}
+    NSFSReadOp(NSFSObject* _source, const rgw_owner& _auth_user) :
+      source(_source), auth_user(_auth_user) {}
     virtual ~NSFSReadOp() = default;
 
     virtual int prepare(optional_yield y, const DoutPrefixProvider* dpp) override;
@@ -1086,8 +1090,8 @@ public:
   struct NSFSDeleteOp : DeleteOp {
     NSFSObject* source;
 
-    NSFSDeleteOp(NSFSObject* _source) :
-      source(_source) {}
+    NSFSDeleteOp(NSFSObject* _source, const rgw_owner& _auth_user) :
+      source(_source), auth_user(_auth_user) {}
     virtual ~NSFSDeleteOp() = default;
 
     virtual int delete_obj(const DoutPrefixProvider* dpp, optional_yield y, uint32_t flags) override;
@@ -1171,13 +1175,14 @@ public:
 
   virtual int load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh = true) override;
   virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
-			    Attrs* delattrs, optional_yield y, uint32_t flags) override;
+			    Attrs* delattrs, optional_yield y, uint32_t flags,
+			    const rgw_owner& authenticated_user) override;
   virtual int get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp) override;
   virtual int modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
 			       optional_yield y, const DoutPrefixProvider* dpp,
 			       uint32_t flags = rgw::sal::FLAG_LOG_OP) override;
   virtual int delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name,
-			       optional_yield y) override;
+			       optional_yield y, const rgw_owner& authenticated_user) override;
   virtual bool is_expired() override;
   virtual void gen_rand_obj_instance_name() override;
   virtual std::unique_ptr<MPSerializer> get_serializer(const DoutPrefixProvider *dpp, optional_yield y,
@@ -1211,8 +1216,8 @@ public:
 				       const DoutPrefixProvider* dpp, optional_yield y) override;
   virtual int swift_versioning_copy(const ACLOwner& owner, const rgw_user& remote_user,
 				    const DoutPrefixProvider* dpp, optional_yield y) override;
-  virtual std::unique_ptr<ReadOp> get_read_op() override;
-  virtual std::unique_ptr<DeleteOp> get_delete_op() override;
+  virtual std::unique_ptr<ReadOp> get_read_op(const rgw_owner& authenticated_user) override;
+  virtual std::unique_ptr<DeleteOp> get_delete_op(const rgw_owner& authenticated_user) override;
   virtual int omap_get_vals_by_keys(const DoutPrefixProvider *dpp, const std::string& oid,
 				    const std::set<std::string>& keys,
 				    Attrs* vals) override;
@@ -1435,9 +1440,10 @@ protected:
 public:
   NSFSMultipartUpload(NSFSDriver* _driver, Bucket* _bucket, const std::string& _oid,
 		       std::optional<std::string> _upload_id, ACLOwner _owner,
-		       ceph::real_time _mtime) :
+		       ceph::real_time _mtime, const rgw_owner& _auth_user) :
     StoreMultipartUpload(_bucket), driver(_driver),
-    mp_obj(driver, _oid, _upload_id, _owner), mtime(_mtime) {}
+    mp_obj(driver, _oid, _upload_id, _owner), mtime(_mtime),
+    auth_user(_auth_user) {}
   virtual ~NSFSMultipartUpload() = default;
 
   virtual const std::string& get_meta() const override { return mp_obj.meta; }
@@ -1479,7 +1485,8 @@ public:
 			  const ACLOwner& owner,
 			  const rgw_placement_rule *ptail_placement_rule,
 			  uint64_t part_num,
-			  const std::string& part_num_str) override;
+			  const std::string& part_num_str,
+			  const rgw_owner& authenticated_user) override;
 
   NSFSBucket* get_shadow() { return shadow.get(); }
 private:
@@ -1507,7 +1514,8 @@ public:
                     const ACLOwner& _owner,
                     const rgw_placement_rule *_ptail_placement_rule,
                     uint64_t _olh_epoch,
-                    const std::string& _unique_tag) :
+                    const std::string& _unique_tag,
+                    const rgw_owner& _auth_user) :
     StoreWriter(dpp, y),
     driver(_driver),
     owner(_owner),

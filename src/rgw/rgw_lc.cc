@@ -403,7 +403,9 @@ static bool pass_object_lock_check(rgw::sal::Driver* driver, rgw::sal::Object* o
   if (!obj->get_bucket()->get_info().obj_lock_enabled()) {
     return true;
   }
-  std::unique_ptr<rgw::sal::Object::ReadOp> read_op = obj->get_read_op();
+  std::unique_ptr<rgw::sal::Object::ReadOp> read_op =
+    obj->get_read_op(rgw::sal::no_authenticated_user);
+  read_op->params.on_behalf_of = obj->get_bucket()->get_owner();
   int ret = read_op->prepare(y, dpp);
   if (ret < 0) {
     if (ret == -ENOENT) {
@@ -818,12 +820,13 @@ static int remove_expired_obj(const DoutPrefixProvider* dpp,
   auto size = obj->get_size();
 
   std::unique_ptr<rgw::sal::Object::DeleteOp> del_op
-    = obj->get_delete_op();
+    = obj->get_delete_op(rgw::sal::no_authenticated_user);
   del_op->params.versioning_status
     = obj->get_bucket()->get_info().versioning_status();
   del_op->params.obj_owner.id = rgw_user{meta.owner};
   del_op->params.obj_owner.display_name = meta.owner_display_name;
   del_op->params.bucket_owner = bucket_info.owner;
+  del_op->params.on_behalf_of = bucket_info.owner;
   del_op->params.unmod_since = meta.mtime;
 
   uint32_t flags = (!remove_indeed || !zonegroup_lc_check(dpp, oc.driver->get_zone()))
@@ -918,6 +921,10 @@ public:
     return env.op.obj_tags != boost::none;
   }
 
+  bool needs_noncurrent_since() const {
+    return env.op.noncur_expiration > 0 || !env.op.noncur_transitions.empty();
+  }
+
   const lc_op& get_op() const {
     return env.op;
   }
@@ -936,6 +943,7 @@ public:
   LCOpAction* evaluate(rgw_bucket_dir_entry& o,
 		       const DoutPrefixProvider *dpp,
 		       const RGWObjTags* cached_tags,
+		       const std::optional<ceph::real_time>& noncurrent_since,
 		       optional_yield y);
   int execute(LCOpAction& action,
 	      rgw_bucket_dir_entry& o,
@@ -946,7 +954,8 @@ public:
 	      optional_yield y);
   int process(rgw_bucket_dir_entry& o, const DoutPrefixProvider *dpp,
               LCBatchCounters* batch_counters, optional_yield y,
-              const RGWObjTags* cached_tags = nullptr);
+              const RGWObjTags* cached_tags = nullptr,
+              const std::optional<ceph::real_time>& noncurrent_since = std::nullopt);
 }; /* LCOpRule */
 
 RGWLC::LCWorker::LCWorker(const DoutPrefixProvider* dpp, CephContext *cct,
@@ -989,7 +998,9 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
 
     if (obj_has_expired(this, cct, obj.meta.mtime, rule.mp_expiration)) {
       rgw_obj_key key(obj.key);
-      auto mpu = target->get_multipart_upload(key.name);
+      auto mpu = target->get_multipart_upload(key.name,
+					      rgw::sal::no_authenticated_user);
+      mpu->set_on_behalf_of(target->get_owner());
       auto sal_obj = mpu->get_meta_obj();
 
       string etag;
@@ -1139,7 +1150,9 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
 
 static int read_obj_tags(const DoutPrefixProvider *dpp, rgw::sal::Object* obj, bufferlist& tags_bl, optional_yield y)
 {
-  std::unique_ptr<rgw::sal::Object::ReadOp> rop = obj->get_read_op();
+  std::unique_ptr<rgw::sal::Object::ReadOp> rop =
+    obj->get_read_op(rgw::sal::no_authenticated_user);
+  rop->params.on_behalf_of = obj->get_bucket()->get_owner();
 
   return rop->get_attr(dpp, RGW_ATTR_TAGS, tags_bl, y);
 }
@@ -1172,6 +1185,22 @@ static const RGWObjTags* fetch_obj_tags(
   } catch (buffer::error&) {
     return nullptr;
   }
+}
+
+/* When a noncurrent version stopped being current, where the driver
+ * records it;  none for a current entry */
+static std::optional<ceph::real_time> fetch_noncurrent_since(
+    const DoutPrefixProvider* dpp, rgw::sal::Bucket* bucket,
+    const rgw_bucket_dir_entry& obj, optional_yield y)
+{
+  if (obj.is_current()) return std::nullopt;
+
+  rgw_obj_key key = obj.key;
+  if (key.instance.empty() && bucket->versioned())
+    key.instance = "null";
+
+  auto o = bucket->get_object(key);
+  return o->get_noncurrent_since(dpp, y);
 }
 
 static bool is_valid_op(const lc_op& op)
@@ -1856,10 +1885,18 @@ void LCOpRule::update()
 LCOpAction* LCOpRule::evaluate(rgw_bucket_dir_entry& o,
 			       const DoutPrefixProvider *dpp,
 			       const RGWObjTags* cached_tags,
+			       const std::optional<ceph::real_time>& noncurrent_since,
 			       optional_yield y)
 {
   lc_op_ctx ctx(env, o, next_key_name, num_noncurrent, effective_mtime, dpp, nullptr);
   ctx.cached_tags = cached_tags;
+
+  /* The successor's mtime is when this version stopped being current
+   * only where nothing but RGW sets mtime;  a driver whose objects can
+   * be written outside S3 records the time itself. */
+  if (noncurrent_since && !o.is_current() && needs_noncurrent_since()) {
+    ctx.effective_mtime = *noncurrent_since;
+  }
 
   shared_ptr<LCOpAction> *selected = nullptr; // n.b., req'd by sharing
   real_time exp;
@@ -1933,9 +1970,10 @@ int LCOpRule::process(rgw_bucket_dir_entry& o,
 		      const DoutPrefixProvider *dpp,
 		      LCBatchCounters* batch_counters,
 		      optional_yield y,
-		      const RGWObjTags* cached_tags)
+		      const RGWObjTags* cached_tags,
+		      const std::optional<ceph::real_time>& noncurrent_since)
 {
-  auto* action = evaluate(o, dpp, cached_tags, y);
+  auto* action = evaluate(o, dpp, cached_tags, noncurrent_since, y);
   if (!action) {
     return 0;
   }
@@ -2057,10 +2095,12 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
 
   auto pf = [&bucket_name, &batch_counters](const DoutPrefixProvider* dpp, optional_yield y,
                            LCOpRule& op_rule, rgw_bucket_dir_entry& o,
-                           const RGWObjTags* cached_tags) {
+                           const RGWObjTags* cached_tags,
+                           const std::optional<ceph::real_time>& noncurrent_since) {
     ldpp_dout(dpp, 20)
       << __func__ << "(): key=" << o.key << dendl;
-    int ret = op_rule.process(o, dpp, &batch_counters, y, cached_tags);
+    int ret = op_rule.process(o, dpp, &batch_counters, y, cached_tags,
+                              noncurrent_since);
     if (ret < 0) {
       ldpp_dout(dpp, 20)
 	<< "ERROR: orule.process() returned ret=" << ret
@@ -2168,6 +2208,11 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
                     [](const LCOpRule& r) { return r.needs_tags(); }))
               cached_tags_ptr = fetch_obj_tags(dpp, bucket, obj,
                                                cached_tags, yield);
+            // and the noncurrent time, once per object, likewise
+            std::optional<ceph::real_time> noncurrent_since;
+            if (std::any_of(rules_copy.begin(), rules_copy.end(),
+                    [](const LCOpRule& r) { return r.needs_noncurrent_since(); }))
+              noncurrent_since = fetch_noncurrent_since(dpp, bucket, obj, yield);
 
             for (auto& rule : rules_copy) {
               if (rule.needs_tags() &&
@@ -2181,7 +2226,7 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
                   !cached_tags_ptr) {
                 continue;
               }
-              pf(dpp, yield, rule, obj, cached_tags_ptr);
+              pf(dpp, yield, rule, obj, cached_tags_ptr, noncurrent_since);
             }
             batch_counters.decrement_pending();
           });
@@ -2204,6 +2249,7 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
               };
 
               std::vector<tag_entry> tags(group.size());
+              std::vector<std::optional<ceph::real_time>> since(group.size());
               std::vector<action_ref> dels, non_dels;
 
               for (size_t ei = 0; ei < group.size(); ++ei) {
@@ -2213,6 +2259,10 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
                         [](const LCOpRule& r) { return r.needs_tags(); }))
                   tags[ei].ptr = fetch_obj_tags(dpp, bucket, obj,
                                                 tags[ei].buf, yield);
+                if (std::any_of(group[ei].rules.begin(),
+                        group[ei].rules.end(),
+                        [](const LCOpRule& r) { return r.needs_noncurrent_since(); }))
+                  since[ei] = fetch_noncurrent_since(dpp, bucket, obj, yield);
                 bool has_del = false;
                 std::vector<action_ref> entry_non_dels;
                 entry_non_dels.reserve(group[ei].rules.size());
@@ -2228,7 +2278,7 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
                       !tags[ei].ptr)
                     continue;
                   auto* act = rule.evaluate(
-                      group[ei].obj, dpp, tags[ei].ptr, yield);
+                      group[ei].obj, dpp, tags[ei].ptr, since[ei], yield);
                   if (!act) continue;
                   if (act->is_delete()) {
                     /*

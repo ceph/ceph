@@ -1503,7 +1503,8 @@ int main(int argc, char** argv) {
       params.attrs[RGW_ATTR_S3VECTOR_STORAGE].append("vector_bucket");
     }
 
-    r = bucket->create(env.dpp, params, null_yield);
+    r = bucket->create(env.dpp, params, null_yield,
+		       rgw::sal::no_authenticated_user);
     if (r < 0 && r != -EEXIST) {
       std::cerr << "ERROR: failed to create test bucket '" << b.name
                 << "' (r=" << r << ")" << std::endl;
@@ -1520,7 +1521,8 @@ int main(int argc, char** argv) {
   // Each SAL bucket removes its own namespace, including any leftover objects.
   for (auto& bucket : env.buckets) {
     if (bucket) {
-      r = bucket->remove(env.dpp, true, null_yield);
+      r = bucket->remove(env.dpp, true, null_yield,
+			 rgw::sal::no_authenticated_user);
       if (r < 0) {
         std::cerr << "ERROR: failed to remove test bucket '" << bucket->get_name()
                   << "' (r=" << r << ")" << std::endl;

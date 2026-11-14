@@ -172,6 +172,11 @@ static constexpr uint32_t FLAG_PREVENT_VERSIONING = 0x0002;
 static constexpr uint32_t FLAG_FORCE_OP = 0x0004;
 static constexpr uint32_t FLAG_SKIP_UPDATE_OLH = 0x0008;
 
+inline const rgw_owner no_authenticated_user{};
+
+inline constexpr std::string_view role_session_ns = "role";
+
+
 enum class RGWRestoreStatus : uint8_t {
   None  = 0,
   RestoreAlreadyInProgress = 1,
@@ -711,7 +716,8 @@ class Driver {
                                    optional_yield y,
                                    std::string_view tenant,
                                    std::vector<RGWOIDCProviderInfo>& providers) = 0;
-    /** Get a Writer that appends to an object */
+    /** Get a Writer that appends to an object, for `authenticated_user`
+     * (see no_authenticated_user) */
     virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
@@ -719,15 +725,18 @@ class Driver {
 				  const rgw_placement_rule *ptail_placement_rule,
 				  const std::string& unique_tag,
 				  uint64_t position,
-				  uint64_t *cur_accounted_size) = 0;
-    /** Get a Writer that atomically writes an entire object */
+				  uint64_t *cur_accounted_size,
+				  const rgw_owner& authenticated_user) = 0;
+    /** Get a Writer that atomically writes an entire object, for
+     * `authenticated_user` */
     virtual std::unique_ptr<Writer> get_atomic_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
 				  const ACLOwner& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,
-				  const std::string& unique_tag) = 0;
+				  const std::string& unique_tag,
+				  const rgw_owner& authenticated_user) = 0;
 
     /** Get the compression type of a placement rule */
     virtual const std::string& get_compression_type(const rgw_placement_rule& rule) = 0;
@@ -952,8 +961,11 @@ class Bucket {
     virtual Attrs& get_attrs(void) = 0;
     /** Set the cached attributes on this bucket */
     virtual int set_attrs(Attrs a) = 0;
-    /** Remove this bucket from the backing store */
-    virtual int remove(const DoutPrefixProvider* dpp, bool delete_children, optional_yield y) = 0;
+    /** Remove this bucket from the backing store.  `authenticated_user`:
+     * see no_authenticated_user */
+    virtual int remove(const DoutPrefixProvider* dpp, bool delete_children,
+		       optional_yield y,
+		       const rgw_owner& authenticated_user) = 0;
     /** Remove this bucket, bypassing garbage collection.  May be removed */
     virtual int remove_bypass_gc(int concurrent_max, bool
 				 keep_index_consistent,
@@ -983,10 +995,12 @@ class Bucket {
       std::optional<uint32_t> index_shards;
     };
 
-    /// Create this bucket in the backing store.
+    /// Create this bucket in the backing store.  `authenticated_user`:
+    /// see no_authenticated_user.
     virtual int create(const DoutPrefixProvider* dpp,
                        const CreateParams& params,
-                       optional_yield y) = 0;
+                       optional_yield y,
+                       const rgw_owner& authenticated_user) = 0;
 
     /** Load this bucket from the backing store.  Requires the key to be set, fills other fields. */
     virtual int load_bucket(const DoutPrefixProvider* dpp, optional_yield y) = 0;
@@ -1085,12 +1099,17 @@ class Bucket {
     /** Clone a copy of this bucket.  Used when modification is necessary of the copy */
     virtual std::unique_ptr<Bucket> clone() = 0;
 
-    /** Create a multipart upload in this bucket */
+    /** Create a multipart upload in this bucket.  `authenticated_user`
+     * is who the upload's operations are for (see
+     * no_authenticated_user);  it precedes the defaulted parameters,
+     * which an undefaulted one cannot follow. */
     virtual std::unique_ptr<MultipartUpload> get_multipart_upload(
 				const std::string& oid,
+				const rgw_owner& authenticated_user,
 				std::optional<std::string> upload_id=std::nullopt,
 				ACLOwner owner={}, ceph::real_time mtime=real_clock::now()) = 0;
-    /** List multipart uploads currently in this bucket */
+    /** List multipart uploads currently in this bucket.  Each upload is
+     * for `authenticated_user`, as get_multipart_upload() makes one */
     virtual int list_multiparts(const DoutPrefixProvider *dpp,
 				const std::string& prefix,
 				std::string& marker,
@@ -1098,7 +1117,8 @@ class Bucket {
 				const int& max_uploads,
 				std::vector<std::unique_ptr<MultipartUpload>>& uploads,
 				std::map<std::string, bool> *common_prefixes,
-				bool *is_truncated, optional_yield y) = 0;
+				bool *is_truncated, optional_yield y,
+				const rgw_owner& authenticated_user) = 0;
     /** Abort multipart uploads in a bucket */
     virtual int abort_multiparts(const DoutPrefixProvider* dpp,
 				 CephContext* cct, optional_yield y) = 0;
@@ -1295,6 +1315,7 @@ class Object {
         /// If the object is multipart, the total number of multipart
         /// parts is assigned to this output parameter.
         std::optional<int> parts_count;
+        rgw_owner on_behalf_of; //< see no_authenticated_user
       } params;
 
       virtual ~ReadOp() = default;
@@ -1344,6 +1365,7 @@ class Object {
 	bool abortmp{false};
 	uint64_t parts_accounted_size{0};
         RGWObjVersionTracker* objv_tracker = nullptr;
+        rgw_owner on_behalf_of; //< see no_authenticated_user
       } params;
 
       struct Result {
@@ -1368,6 +1390,7 @@ class Object {
 			      RGWObjVersionTracker* objv) = 0;
     /** Copy an this object to another object. */
     virtual int copy_object(const ACLOwner& owner, const rgw_user& remote_user,
+               const rgw_owner& authenticated_user,
                req_info* info, const rgw_zone_id& source_zone,
                rgw::sal::Object* dest_object, rgw::sal::Bucket* dest_bucket,
                rgw::sal::Bucket* src_bucket,
@@ -1460,9 +1483,12 @@ class Object {
     };
 
     /** Get a fsio view on an object or object prototype.  -ENOTSUP from a
-     *  driver with no positional view. */
+     *  driver with no positional view.
+     *
+     *  nobody says so with `rgw::sal::no_authenticated_user`. */
     using FSIOResult = std::tuple<int, std::unique_ptr<FSIOObject>>;
     virtual FSIOResult get_fsio_handle(const DoutPrefixProvider* dpp,
+				       const rgw_owner& authenticated_user,
 				       uint32_t flags = FSIOObject::OPEN_FLAG_NONE,
 				       const FSIOCreateSpec* spec = nullptr) {
       return FSIOResult{-ENOTSUP, nullptr};
@@ -1493,15 +1519,23 @@ class Object {
     /** Apply pending olh log entries left by deletes with FLAG_SKIP_UPDATE_OLH */
     virtual int update_olh(const DoutPrefixProvider* dpp, optional_yield y, uint32_t flags) = 0;
     /** Set attributes for this object from the backing store.  Attrs can be set or
-     * deleted.  @note the attribute APIs may be revisited in the future. */
-    virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y, uint32_t flags) = 0;
+     * deleted.  @note the attribute APIs may be revisited in the future.
+     *
+     * `authenticated_user`:  see no_authenticated_user. */
+    virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
+			      Attrs* delattrs, optional_yield y, uint32_t flags,
+			      const rgw_owner& authenticated_user) = 0;
     /** Get attributes for this object */
     virtual int get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp) = 0;
     /** Modify attributes for this object. */
-    virtual int modify_obj_attrs(const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp,
+    virtual int modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
+				 optional_yield y, const DoutPrefixProvider* dpp,
+				 const rgw_owner& authenticated_user,
                                  uint32_t flags = rgw::sal::FLAG_LOG_OP) = 0;
     /** Delete attributes for this object */
-    virtual int delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name, optional_yield y) = 0;
+    virtual int delete_obj_attrs(const DoutPrefixProvider* dpp,
+				 const char* attr_name, optional_yield y,
+				 const rgw_owner& authenticated_user) = 0;
     /** Check to see if this object has expired */
     virtual bool is_expired() = 0;
     /** Create a randomized instance ID for this object */
@@ -1534,6 +1568,11 @@ class Object {
 			   uint64_t& size,
 			   const DoutPrefixProvider* dpp,
 			   optional_yield y) = 0;
+    /** When this version stopped being current, where the driver records
+     * it;  lifecycle ages a noncurrent version by it in place of the
+     * mtime of the version that replaced it */
+    virtual std::optional<ceph::real_time> get_noncurrent_since(
+			   const DoutPrefixProvider* dpp, optional_yield y) = 0;
     /** Check to see if two placement rules match */
     virtual bool placement_rules_match(rgw_placement_rule& r1, rgw_placement_rule& r2) = 0;
     /** Dump driver-specific object layout info in JSON */
@@ -1628,10 +1667,13 @@ class Object {
 				      const DoutPrefixProvider* dpp,
 				      optional_yield y) = 0;
 
-    /** Get a new ReadOp for this object */
-    virtual std::unique_ptr<ReadOp> get_read_op() = 0;
-    /** Get a new DeleteOp for this object */
-    virtual std::unique_ptr<DeleteOp> get_delete_op() = 0;
+    /** Get a new ReadOp for this object, for `authenticated_user` (see
+     * no_authenticated_user) */
+    virtual std::unique_ptr<ReadOp> get_read_op(
+				const rgw_owner& authenticated_user) = 0;
+    /** Get a new DeleteOp for this object, for `authenticated_user` */
+    virtual std::unique_ptr<DeleteOp> get_delete_op(
+				const rgw_owner& authenticated_user) = 0;
 
     /// Return stored torrent info or -ENOENT if there isn't any.
     virtual int get_torrent_info(const DoutPrefixProvider* dpp,
@@ -1742,6 +1784,11 @@ public:
   MultipartUpload() = default;
   virtual ~MultipartUpload() = default;
 
+  /** For an upload no request is acting on -- lifecycle's abort --
+   * whose work it is (see no_authenticated_user).  A driver with no
+   * identity mapping ignores it. */
+  virtual void set_on_behalf_of(const rgw_owner& owner) {}
+
   /** Get the name of the object representing this upload in the backing store */
   virtual const std::string& get_meta() const = 0;
   /** Get the name of the target object for this upload */
@@ -1797,14 +1844,16 @@ public:
   /** Get placement and/or attribute info for this upload */
   virtual int get_info(const DoutPrefixProvider *dpp, optional_yield y, rgw_placement_rule** rule, rgw::sal::Attrs* attrs = nullptr) = 0;
 
-  /** Get a Writer to write to a part of this upload */
+  /** Get a Writer to write to a part of this upload, for
+   * `authenticated_user` (see no_authenticated_user) */
   virtual std::unique_ptr<Writer> get_writer(const DoutPrefixProvider *dpp,
 			  optional_yield y,
 			  rgw::sal::Object* obj,
 			  const ACLOwner& owner,
 			  const rgw_placement_rule *ptail_placement_rule,
 			  uint64_t part_num,
-			  const std::string& part_num_str) = 0;
+			  const std::string& part_num_str,
+			  const rgw_owner& authenticated_user) = 0;
 
   /** Print the Upload to @a out */
   virtual void print(std::ostream& out) const = 0;

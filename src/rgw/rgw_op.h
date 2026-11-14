@@ -100,6 +100,11 @@ int get_owner_quota_info(const DoutPrefixProvider* dpp,
                                 const rgw_owner& owner,
                                 RGWQuota& quotas);
 
+/* who a request's SAL operations are for:  `s->user`, a role
+ * session's account, or rgw::sal::no_authenticated_user where nothing
+ * authenticated */
+rgw_owner authenticated_user(const req_state* s);
+
 class RGWHandler {
 protected:
   rgw::sal::Driver* driver{nullptr};

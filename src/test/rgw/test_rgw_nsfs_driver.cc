@@ -708,7 +708,7 @@ TEST_F(NSFSDriverTest, BucketCreate)
 
   createparams.owner = owner;
 
-  int ret = bucket->create(env->dpp, createparams, null_yield);
+  int ret = bucket->create(env->dpp, createparams, null_yield, rgw::sal::no_authenticated_user);
   EXPECT_EQ(ret, 0);
   EXPECT_EQ(bucket->get_name(), testname);
   EXPECT_EQ(bucket->get_key().name, testname);
@@ -740,7 +740,7 @@ public:
 
     rgw::sal::Bucket::CreateParams createparams;
     createparams.owner = owner;
-    int ret = bucket->create(env->dpp, createparams, null_yield);
+    int ret = bucket->create(env->dpp, createparams, null_yield, rgw::sal::no_authenticated_user);
     EXPECT_EQ(ret, 0);
   }
 
@@ -769,7 +769,8 @@ TEST_F(NSFSBucketTest, ObjectWrite)
   EXPECT_NE(object.get(), nullptr);
 
   std::unique_ptr<rgw::sal::Writer> writer = driver->get_atomic_writer(
-      env->dpp, null_yield, object.get(), acl_owner, nullptr, 0, testname);
+      env->dpp, null_yield, object.get(), acl_owner, nullptr, 0, testname,
+      rgw::sal::no_authenticated_user);
   EXPECT_NE(writer.get(), nullptr);
 
   int ret = writer->prepare(null_yield);
@@ -831,7 +832,8 @@ public:
     EXPECT_NE(obj.get(), nullptr);
 
     std::unique_ptr<rgw::sal::Writer> writer = driver->get_atomic_writer(
-        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname,
+        rgw::sal::no_authenticated_user);
     EXPECT_NE(writer.get(), nullptr);
 
     int ret = writer->prepare(null_yield);
@@ -884,7 +886,7 @@ public:
 
 TEST_F(NSFSObjectTest, ObjectRead)
 {
-  std::unique_ptr<rgw::sal::Object::ReadOp> read_op(object->get_read_op());
+  std::unique_ptr<rgw::sal::Object::ReadOp> read_op(object->get_read_op(rgw::sal::no_authenticated_user));
 
   int ret = read_op->prepare(null_yield, env->dpp);
   EXPECT_EQ(ret, 0);
@@ -903,7 +905,7 @@ TEST_F(NSFSObjectTest, ObjectDelete)
   sf::path tp{bp / "root" / testname / testname};
   EXPECT_TRUE(sf::exists(tp));
 
-  std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = object->get_delete_op();
+  std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = object->get_delete_op(rgw::sal::no_authenticated_user);
   int ret = del_op->delete_obj(env->dpp, null_yield, 0);
   EXPECT_EQ(ret, 0);
 
@@ -916,7 +918,8 @@ TEST_F(NSFSBucketTest, HierarchicalDelete)
   auto write = [&](const std::string& name) {
     auto obj = bucket->get_object(rgw_obj_key(name));
     auto writer = driver->get_atomic_writer(
-        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname,
+        rgw::sal::no_authenticated_user);
     int ret = writer->prepare(null_yield);
     ASSERT_EQ(ret, 0);
     bufferlist bl;
@@ -948,7 +951,7 @@ TEST_F(NSFSBucketTest, HierarchicalDelete)
   // Delete the object
   std::unique_ptr<rgw::sal::Object> obj =
     bucket->get_object(rgw_obj_key("dir1/dir2/file.txt"));
-  std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = obj->get_delete_op();
+  std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = obj->get_delete_op(rgw::sal::no_authenticated_user);
   int ret = del_op->delete_obj(env->dpp, null_yield, 0);
   EXPECT_EQ(ret, 0);
 
@@ -963,7 +966,8 @@ TEST_F(NSFSBucketTest, DeletePreservesNeighbors)
   auto write = [&](const std::string& name) {
     auto obj = bucket->get_object(rgw_obj_key(name));
     auto writer = driver->get_atomic_writer(
-        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname,
+        rgw::sal::no_authenticated_user);
     int ret = writer->prepare(null_yield);
     ASSERT_EQ(ret, 0);
     bufferlist bl;
@@ -995,7 +999,7 @@ TEST_F(NSFSBucketTest, DeletePreservesNeighbors)
   // Delete only a.txt
   std::unique_ptr<rgw::sal::Object> obj =
     bucket->get_object(rgw_obj_key("dir1/a.txt"));
-  std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = obj->get_delete_op();
+  std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = obj->get_delete_op(rgw::sal::no_authenticated_user);
   int ret = del_op->delete_obj(env->dpp, null_yield, 0);
   EXPECT_EQ(ret, 0);
 
@@ -1104,7 +1108,8 @@ TEST_F(NSFSBucketTest, HierarchicalPut)
   EXPECT_NE(obj.get(), nullptr);
 
   std::unique_ptr<rgw::sal::Writer> writer = driver->get_atomic_writer(
-      env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+      env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname,
+      rgw::sal::no_authenticated_user);
   EXPECT_NE(writer.get(), nullptr);
 
   int ret = writer->prepare(null_yield);
@@ -1146,7 +1151,8 @@ TEST_F(NSFSBucketTest, HierarchicalGet)
     std::unique_ptr<rgw::sal::Object> obj =
       bucket->get_object(rgw_obj_key(objname));
     std::unique_ptr<rgw::sal::Writer> writer = driver->get_atomic_writer(
-        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname,
+        rgw::sal::no_authenticated_user);
 
     int ret = writer->prepare(null_yield);
     ASSERT_EQ(ret, 0);
@@ -1174,7 +1180,7 @@ TEST_F(NSFSBucketTest, HierarchicalGet)
   {
     std::unique_ptr<rgw::sal::Object> obj =
       bucket->get_object(rgw_obj_key(objname));
-    std::unique_ptr<rgw::sal::Object::ReadOp> read_op(obj->get_read_op());
+    std::unique_ptr<rgw::sal::Object::ReadOp> read_op(obj->get_read_op(rgw::sal::no_authenticated_user));
 
     int ret = read_op->prepare(null_yield, env->dpp);
     EXPECT_EQ(ret, 0);
@@ -1203,7 +1209,8 @@ TEST_F(NSFSBucketTest, FlatAndHierarchicalCoexist)
     std::unique_ptr<rgw::sal::Object> obj =
       bucket->get_object(rgw_obj_key(flat_name));
     std::unique_ptr<rgw::sal::Writer> writer = driver->get_atomic_writer(
-        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname,
+        rgw::sal::no_authenticated_user);
     int ret = writer->prepare(null_yield);
     ASSERT_EQ(ret, 0);
 
@@ -1230,7 +1237,8 @@ TEST_F(NSFSBucketTest, FlatAndHierarchicalCoexist)
     std::unique_ptr<rgw::sal::Object> obj =
       bucket->get_object(rgw_obj_key(hier_name));
     std::unique_ptr<rgw::sal::Writer> writer = driver->get_atomic_writer(
-        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname,
+        rgw::sal::no_authenticated_user);
     int ret = writer->prepare(null_yield);
     ASSERT_EQ(ret, 0);
 
@@ -1264,7 +1272,7 @@ TEST_F(NSFSBucketTest, FlatAndHierarchicalCoexist)
   {
     std::unique_ptr<rgw::sal::Object> obj =
       bucket->get_object(rgw_obj_key(flat_name));
-    std::unique_ptr<rgw::sal::Object::ReadOp> read_op(obj->get_read_op());
+    std::unique_ptr<rgw::sal::Object::ReadOp> read_op(obj->get_read_op(rgw::sal::no_authenticated_user));
     int ret = read_op->prepare(null_yield, env->dpp);
     EXPECT_EQ(ret, 0);
 
@@ -1283,7 +1291,7 @@ TEST_F(NSFSBucketTest, FlatAndHierarchicalCoexist)
   {
     std::unique_ptr<rgw::sal::Object> obj =
       bucket->get_object(rgw_obj_key(hier_name));
-    std::unique_ptr<rgw::sal::Object::ReadOp> read_op(obj->get_read_op());
+    std::unique_ptr<rgw::sal::Object::ReadOp> read_op(obj->get_read_op(rgw::sal::no_authenticated_user));
     int ret = read_op->prepare(null_yield, env->dpp);
     EXPECT_EQ(ret, 0);
 
@@ -1304,7 +1312,7 @@ TEST_F(NSFSBucketTest, MultipartUploadComplete)
   std::string objname = testname + "-mp";
   std::string upload_id = "c0ffee";
   std::unique_ptr<rgw::sal::MultipartUpload> upload =
-    bucket->get_multipart_upload(objname, upload_id);
+    bucket->get_multipart_upload(objname, rgw::sal::no_authenticated_user, upload_id);
   ASSERT_NE(upload.get(), nullptr);
 
   rgw_placement_rule placement;
@@ -1319,7 +1327,8 @@ TEST_F(NSFSBucketTest, MultipartUploadComplete)
     std::string part_name = "part-" + fmt::format("{:0>5}", i);
     std::unique_ptr<rgw::sal::Writer> writer =
       upload->get_writer(env->dpp, null_yield, nullptr, acl_owner,
-                         &placement, i, part_name);
+                         &placement, i, part_name,
+                         rgw::sal::no_authenticated_user);
     ASSERT_NE(writer.get(), nullptr);
 
     ret = writer->prepare(null_yield);
@@ -1376,7 +1385,7 @@ TEST_F(NSFSBucketTest, MultipartUploadComplete)
   EXPECT_FALSE(sf::exists(staging_path));
 
   // Verify content via GET
-  std::unique_ptr<rgw::sal::Object::ReadOp> read_op(mp_obj->get_read_op());
+  std::unique_ptr<rgw::sal::Object::ReadOp> read_op(mp_obj->get_read_op(rgw::sal::no_authenticated_user));
   ret = read_op->prepare(null_yield, env->dpp);
   EXPECT_EQ(ret, 0);
 
@@ -1392,7 +1401,7 @@ TEST_F(NSFSBucketTest, HierarchicalMultipart)
   std::string objname = "subdir/mp-object.bin";
   std::string upload_id = "beef42";
   std::unique_ptr<rgw::sal::MultipartUpload> upload =
-    bucket->get_multipart_upload(objname, upload_id);
+    bucket->get_multipart_upload(objname, rgw::sal::no_authenticated_user, upload_id);
   ASSERT_NE(upload.get(), nullptr);
 
   rgw_placement_rule placement;
@@ -1404,7 +1413,8 @@ TEST_F(NSFSBucketTest, HierarchicalMultipart)
   std::string part_name = "part-00001";
   std::unique_ptr<rgw::sal::Writer> writer =
     upload->get_writer(env->dpp, null_yield, nullptr, acl_owner,
-                       &placement, 1, part_name);
+                       &placement, 1, part_name,
+                       rgw::sal::no_authenticated_user);
   ret = writer->prepare(null_yield);
   ASSERT_EQ(ret, 0);
 
@@ -1494,7 +1504,8 @@ TEST_F(NSFSBucketTest, ListWithDelimiter)
   auto write = [&](const std::string& name) {
     auto obj = bucket->get_object(rgw_obj_key(name));
     auto writer = driver->get_atomic_writer(
-        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname,
+        rgw::sal::no_authenticated_user);
     int ret = writer->prepare(null_yield);
     ASSERT_EQ(ret, 0);
     bufferlist bl;
@@ -1554,7 +1565,8 @@ TEST_F(NSFSBucketTest, ListWithPrefix)
   auto write = [&](const std::string& name) {
     auto obj = bucket->get_object(rgw_obj_key(name));
     auto writer = driver->get_atomic_writer(
-        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname,
+        rgw::sal::no_authenticated_user);
     int ret = writer->prepare(null_yield);
     ASSERT_EQ(ret, 0);
     bufferlist bl;
@@ -1644,7 +1656,8 @@ TEST_F(NSFSBucketTest, SideloadedList)
   auto write = [&](const std::string& name) {
     auto obj = bucket->get_object(rgw_obj_key(name));
     auto writer = driver->get_atomic_writer(
-        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname,
+        rgw::sal::no_authenticated_user);
     int ret = writer->prepare(null_yield);
     ASSERT_EQ(ret, 0);
     bufferlist bl;
@@ -1701,7 +1714,8 @@ TEST_F(NSFSBucketTest, DirectoryObjectPut)
 {
   auto obj = bucket->get_object(rgw_obj_key("photos/"));
   auto writer = driver->get_atomic_writer(
-      env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+      env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname,
+      rgw::sal::no_authenticated_user);
   int ret = writer->prepare(null_yield);
   ASSERT_EQ(ret, 0);
 
@@ -1733,7 +1747,8 @@ TEST_F(NSFSBucketTest, DirectoryObjectGet)
   // PUT
   auto obj = bucket->get_object(rgw_obj_key("docs/"));
   auto writer = driver->get_atomic_writer(
-      env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+      env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname,
+      rgw::sal::no_authenticated_user);
   int ret = writer->prepare(null_yield);
   ASSERT_EQ(ret, 0);
 
@@ -1756,7 +1771,7 @@ TEST_F(NSFSBucketTest, DirectoryObjectGet)
 
   // GET
   auto robj = bucket->get_object(rgw_obj_key("docs/"));
-  std::unique_ptr<rgw::sal::Object::ReadOp> read_op(robj->get_read_op());
+  std::unique_ptr<rgw::sal::Object::ReadOp> read_op(robj->get_read_op(rgw::sal::no_authenticated_user));
   ret = read_op->prepare(null_yield, env->dpp);
   EXPECT_EQ(ret, 0);
   EXPECT_EQ(robj->get_size(), body.size());
@@ -1775,7 +1790,8 @@ TEST_F(NSFSBucketTest, DirectoryObjectList)
   auto write = [&](const std::string& name) {
     auto obj = bucket->get_object(rgw_obj_key(name));
     auto writer = driver->get_atomic_writer(
-        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname,
+        rgw::sal::no_authenticated_user);
     int ret = writer->prepare(null_yield);
     ASSERT_EQ(ret, 0);
     bufferlist bl;
@@ -1824,7 +1840,8 @@ TEST_F(NSFSBucketTest, DirectoryObjectDelete)
   // PUT directory object
   auto obj = bucket->get_object(rgw_obj_key("todelete/"));
   auto writer = driver->get_atomic_writer(
-      env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+      env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname,
+      rgw::sal::no_authenticated_user);
   int ret = writer->prepare(null_yield);
   ASSERT_EQ(ret, 0);
   bufferlist bl;
@@ -1849,7 +1866,7 @@ TEST_F(NSFSBucketTest, DirectoryObjectDelete)
 
   // DELETE
   auto dobj = bucket->get_object(rgw_obj_key("todelete/"));
-  auto del_op = dobj->get_delete_op();
+  auto del_op = dobj->get_delete_op(rgw::sal::no_authenticated_user);
   ret = del_op->delete_obj(env->dpp, null_yield, 0);
   EXPECT_EQ(ret, 0);
 
@@ -1862,7 +1879,8 @@ TEST_F(NSFSBucketTest, HierarchicalCopy)
   auto write = [&](const std::string& name) {
     auto obj = bucket->get_object(rgw_obj_key(name));
     auto writer = driver->get_atomic_writer(
-        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname,
+        rgw::sal::no_authenticated_user);
     int ret = writer->prepare(null_yield);
     ASSERT_EQ(ret, 0);
     bufferlist bl;
@@ -1894,7 +1912,8 @@ TEST_F(NSFSBucketTest, HierarchicalCopy)
   add_attr(attrs, RGW_ATTR_ACL, "");
   std::string etag, tag;
   int ret = src_obj->copy_object(
-      acl_owner, rgw_user(), nullptr, rgw_zone_id(),
+      acl_owner, rgw_user(), rgw::sal::no_authenticated_user,
+      nullptr, rgw_zone_id(),
       dst_obj.get(), bucket.get(), bucket.get(),
       rgw_placement_rule(), nullptr, nullptr,
       nullptr, nullptr, false,
@@ -1916,7 +1935,8 @@ TEST_F(NSFSBucketTest, HierarchicalChown)
   auto write = [&](const std::string& name) {
     auto obj = bucket->get_object(rgw_obj_key(name));
     auto writer = driver->get_atomic_writer(
-        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname,
+        rgw::sal::no_authenticated_user);
     int ret = writer->prepare(null_yield);
     ASSERT_EQ(ret, 0);
     bufferlist bl;

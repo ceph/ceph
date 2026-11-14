@@ -3368,7 +3368,8 @@ std::unique_ptr<Writer> NSFSDriver::get_append_writer(const DoutPrefixProvider *
 				  const rgw_placement_rule *ptail_placement_rule,
 				  const std::string& unique_tag,
 				  uint64_t position,
-				  uint64_t *cur_accounted_size)
+				  uint64_t *cur_accounted_size,
+				  const rgw_owner& authenticated_user)
 {
   return nullptr;
 }
@@ -3379,10 +3380,12 @@ std::unique_ptr<Writer> NSFSDriver::get_atomic_writer(const DoutPrefixProvider *
 				  const ACLOwner& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,
-				  const std::string& unique_tag)
+				  const std::string& unique_tag,
+				  const rgw_owner& authenticated_user)
 {
 
-  return std::make_unique<NSFSAtomicWriter>(dpp, y, _head_obj, this, owner, ptail_placement_rule, olh_epoch, unique_tag);
+  return std::make_unique<NSFSAtomicWriter>(dpp, y, _head_obj, this, owner, ptail_placement_rule, olh_epoch, unique_tag,
+					    authenticated_user);
 }
 
 const std::string& NSFSDriver::get_compression_type(const rgw_placement_rule& rule) {
@@ -3520,7 +3523,8 @@ int NSFSDriver::list_buckets(const DoutPrefixProvider* dpp, const rgw_owner& own
 
 int NSFSBucket::create(const DoutPrefixProvider* dpp,
 			const CreateParams& params,
-			optional_yield y)
+			optional_yield y,
+			const rgw_owner& authenticated_user)
 {
   info.owner = params.owner;
 
@@ -4360,7 +4364,8 @@ int NSFSBucket::list(const DoutPrefixProvider* dpp, ListParams& params,
     std::string marker;
     int ret = list_multiparts(dpp, "", marker, "",
 			      max, uploads, nullptr,
-			      &results.is_truncated, y);
+			      &results.is_truncated, y,
+			      rgw::sal::no_authenticated_user);
     if (ret < 0)
       return ret;
     for (auto& upload : uploads) {
@@ -4533,7 +4538,8 @@ int NSFSBucket::merge_and_store_attrs(const DoutPrefixProvider* dpp,
 
 int NSFSBucket::remove(const DoutPrefixProvider* dpp,
 			bool delete_children,
-			optional_yield y)
+			optional_yield y,
+			const rgw_owner& authenticated_user)
 {
   int ret = dir->remove(dpp, y, delete_children);
   if (ret < 0) {
@@ -4551,6 +4557,7 @@ int NSFSBucket::remove_bypass_gc(int concurrent_max,
 				  const DoutPrefixProvider *dpp)
 {
   return remove(dpp, true, y);
+  return remove(dpp, true, y, rgw::sal::no_authenticated_user);
 }
 
 int NSFSBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
@@ -4787,10 +4794,12 @@ int NSFSBucket::purge_instance(const DoutPrefixProvider* dpp, optional_yield y)
 
 std::unique_ptr<MultipartUpload> NSFSBucket::get_multipart_upload(
 				  const std::string& oid,
+				  const rgw_owner& authenticated_user,
 				  std::optional<std::string> upload_id,
 				  ACLOwner owner, ceph::real_time mtime)
 {
-  return std::make_unique<NSFSMultipartUpload>(driver, this, oid, upload_id, owner, mtime);
+  return std::make_unique<NSFSMultipartUpload>(driver, this, oid, upload_id, owner, mtime,
+					       authenticated_user);
 }
 
 int NSFSBucket::list_multiparts(const DoutPrefixProvider *dpp,
@@ -4800,7 +4809,8 @@ int NSFSBucket::list_multiparts(const DoutPrefixProvider *dpp,
 				  const int& max_uploads,
 				  std::vector<std::unique_ptr<MultipartUpload>>& uploads,
 				  std::map<std::string, bool> *common_prefixes,
-				  bool *is_truncated, optional_yield y)
+				  bool *is_truncated, optional_yield y,
+				  const rgw_owner& authenticated_user)
 {
   int count = 0;
   int ret;
@@ -5254,6 +5264,7 @@ int NSFSObject::rename(const DoutPrefixProvider* dpp, optional_yield y,
 
 int NSFSObject::copy_object(const ACLOwner& owner,
                               const rgw_user& remote_user,
+                              const rgw_owner& authenticated_user,
                               req_info* info,
                               const rgw_zone_id& source_zone,
                               rgw::sal::Object* dest_object,
@@ -5770,6 +5781,7 @@ static int apply_create_spec(const DoutPrefixProvider* dpp,
 }
 
 Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
+						const rgw_owner& authenticated_user,
 						uint32_t flags,
 						const FSIOCreateSpec* spec)
 {
@@ -6533,7 +6545,8 @@ int NSFSObject::load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, 
 }
 
 int NSFSObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
-                            Attrs* delattrs, optional_yield y, uint32_t flags)
+                            Attrs* delattrs, optional_yield y, uint32_t flags,
+                            const rgw_owner& authenticated_user)
 {
   std::vector<std::string> rmattrs;
   if (delattrs) {
@@ -6597,14 +6610,15 @@ int NSFSObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp)
 }
 
 int NSFSObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
-                               optional_yield y, const DoutPrefixProvider* dpp, uint32_t flags)
+                               optional_yield y, const DoutPrefixProvider* dpp,
+                               const rgw_owner& authenticated_user, uint32_t flags)
 {
   state.attrset[attr_name] = attr_val;
   return write_attrs(dpp, y);
 }
 
 int NSFSObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name,
-                               optional_yield y)
+                               optional_yield y, const rgw_owner& authenticated_user)
 {
   state.attrset.erase(attr_name);
 
@@ -7045,14 +7059,14 @@ int NSFSObject::get_owner(const DoutPrefixProvider *dpp, optional_yield y, std::
   return 0;
 }
 
-std::unique_ptr<Object::ReadOp> NSFSObject::get_read_op()
+std::unique_ptr<Object::ReadOp> NSFSObject::get_read_op(const rgw_owner& authenticated_user)
 {
-  return std::make_unique<NSFSReadOp>(this);
+  return std::make_unique<NSFSReadOp>(this, authenticated_user);
 }
 
-std::unique_ptr<Object::DeleteOp> NSFSObject::get_delete_op()
+std::unique_ptr<Object::DeleteOp> NSFSObject::get_delete_op(const rgw_owner& authenticated_user)
 {
-  return std::make_unique<NSFSDeleteOp>(this);
+  return std::make_unique<NSFSDeleteOp>(this, authenticated_user);
 }
 
 int NSFSObject::open(const DoutPrefixProvider* dpp, bool create, bool temp_file)
@@ -8520,7 +8534,6 @@ int NSFSMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct, 
   if (auto* mc = driver->get_multipart_cache()) {
     mc->remove({bucket->get_name(), mp_obj.meta});
   }
-  shadow->remove(dpp, true, y);
 
   return 0;
 }
@@ -8984,7 +8997,8 @@ std::unique_ptr<Writer> NSFSMultipartUpload::get_writer(
 				  const ACLOwner& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t part_num,
-				  const std::string& part_num_str)
+				  const std::string& part_num_str,
+				  const rgw_owner& authenticated_user)
 {
   std::string fname = MP_OBJ_PART_PFX + fmt::format("{:0>5}", part_num);
   rgw_obj_key part_key(fname);

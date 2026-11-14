@@ -1374,7 +1374,8 @@ TEST(OPEN2, MULTIPART_ASSEMBLY_BUFFERED)
   rgw_placement_rule placement = bucket->get_info().placement_rule;
 
   auto obj = bucket->get_object(rgw_obj_key(key));
-  auto upload = bucket->get_multipart_upload(key, std::nullopt, owner);
+  auto upload = bucket->get_multipart_upload(key, rgw::sal::no_authenticated_user,
+					     std::nullopt, owner);
   ASSERT_NE(upload, nullptr);
 
   rgw::sal::Attrs init_attrs;
@@ -1396,7 +1397,8 @@ TEST(OPEN2, MULTIPART_ASSEMBLY_BUFFERED)
     const std::string etag = md5_hex(parts[i]);
 
     auto writer = upload->get_writer(&dp, null_yield, obj.get(), owner,
-				     &placement, pnum, pstr);
+				     &placement, pnum, pstr,
+				     rgw::sal::no_authenticated_user);
     ASSERT_NE(writer, nullptr) << "no writer for part " << pnum;
     ASSERT_EQ(writer->prepare(null_yield), 0);
 

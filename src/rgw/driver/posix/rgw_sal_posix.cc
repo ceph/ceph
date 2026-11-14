@@ -568,7 +568,8 @@ std::unique_ptr<Writer> POSIXDriver::get_append_writer(const DoutPrefixProvider 
 				  const rgw_placement_rule *ptail_placement_rule,
 				  const std::string& unique_tag,
 				  uint64_t position,
-				  uint64_t *cur_accounted_size)
+				  uint64_t *cur_accounted_size,
+				  const rgw_owner& authenticated_user)
 {
   return nullptr;
 }
@@ -579,7 +580,8 @@ std::unique_ptr<Writer> POSIXDriver::get_atomic_writer(const DoutPrefixProvider 
 				  const ACLOwner& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,
-				  const std::string& unique_tag)
+				  const std::string& unique_tag,
+				  const rgw_owner& authenticated_user)
 {
   if (_head_obj->get_bucket()->get_info().versioning_enabled() &&
       !_head_obj->have_instance()) {
@@ -723,7 +725,8 @@ int POSIXDriver::list_buckets(const DoutPrefixProvider* dpp, const rgw_owner& ow
 
 int POSIXBucket::create(const DoutPrefixProvider* dpp,
 			const CreateParams& params,
-			optional_yield y)
+			optional_yield y,
+			const rgw_owner& authenticated_user)
 {
   info.owner = params.owner;
 
@@ -1611,7 +1614,8 @@ int POSIXBucket::list(const DoutPrefixProvider* dpp, ListParams& params,
     std::string marker;
     int ret = list_multiparts(dpp, "", marker, "",
 			      max, uploads, nullptr,
-			      &results.is_truncated, y);
+			      &results.is_truncated, y,
+			      rgw::sal::no_authenticated_user);
     if (ret < 0)
       return ret;
     for (auto& upload : uploads) {
@@ -1788,7 +1792,8 @@ int POSIXBucket::merge_and_store_attrs(const DoutPrefixProvider* dpp,
 
 int POSIXBucket::remove(const DoutPrefixProvider* dpp,
 			bool delete_children,
-			optional_yield y)
+			optional_yield y,
+			const rgw_owner& authenticated_user)
 {
   int ret = dir->remove(dpp, y, delete_children, nullptr);
   if (ret < 0) {
@@ -1805,7 +1810,7 @@ int POSIXBucket::remove_bypass_gc(int concurrent_max,
 				  optional_yield y,
 				  const DoutPrefixProvider *dpp)
 {
-  return remove(dpp, true, y);
+  return remove(dpp, true, y, rgw::sal::no_authenticated_user);
 }
 
 int POSIXBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
@@ -2043,6 +2048,7 @@ int POSIXBucket::purge_instance(const DoutPrefixProvider* dpp, optional_yield y)
 
 std::unique_ptr<MultipartUpload> POSIXBucket::get_multipart_upload(
 				  const std::string& oid,
+				  const rgw_owner& authenticated_user,
 				  std::optional<std::string> upload_id,
 				  ACLOwner owner, ceph::real_time mtime)
 {
@@ -2056,7 +2062,8 @@ int POSIXBucket::list_multiparts(const DoutPrefixProvider *dpp,
 				  const int& max_uploads,
 				  std::vector<std::unique_ptr<MultipartUpload>>& uploads,
 				  std::map<std::string, bool> *common_prefixes,
-				  bool *is_truncated, optional_yield y)
+				  bool *is_truncated, optional_yield y,
+				  const rgw_owner& authenticated_user)
 {
   int count = 0;
   int ret;
@@ -2308,6 +2315,7 @@ int POSIXObject::delete_object(const DoutPrefixProvider* dpp,
 
 int POSIXObject::copy_object(const ACLOwner& owner,
                               const rgw_user& remote_user,
+                              const rgw_owner& authenticated_user,
                               req_info* info,
                               const rgw_zone_id& source_zone,
                               rgw::sal::Object* dest_object,
@@ -2545,7 +2553,8 @@ int POSIXObject::load_obj_state(const DoutPrefixProvider* dpp, optional_yield y,
 }
 
 int POSIXObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
-                            Attrs* delattrs, optional_yield y, uint32_t flags)
+                            Attrs* delattrs, optional_yield y, uint32_t flags,
+                            const rgw_owner& authenticated_user)
 {
   if (delattrs) {
     for (auto& it : *delattrs) {
@@ -2589,14 +2598,15 @@ int POSIXObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp)
 }
 
 int POSIXObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
-                               optional_yield y, const DoutPrefixProvider* dpp, uint32_t flags)
+                               optional_yield y, const DoutPrefixProvider* dpp,
+                               const rgw_owner& authenticated_user, uint32_t flags)
 {
   state.attrset[attr_name] = attr_val;
   return write_attrs(dpp, y);
 }
 
 int POSIXObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name,
-                               optional_yield y)
+                               optional_yield y, const rgw_owner& authenticated_user)
 {
   state.attrset.erase(attr_name);
 
@@ -2887,12 +2897,12 @@ int POSIXObject::get_owner(const DoutPrefixProvider *dpp, optional_yield y, std:
   return 0;
 }
 
-std::unique_ptr<Object::ReadOp> POSIXObject::get_read_op()
+std::unique_ptr<Object::ReadOp> POSIXObject::get_read_op(const rgw_owner& authenticated_user)
 {
   return std::make_unique<POSIXReadOp>(this);
 }
 
-std::unique_ptr<Object::DeleteOp> POSIXObject::get_delete_op()
+std::unique_ptr<Object::DeleteOp> POSIXObject::get_delete_op(const rgw_owner& authenticated_user)
 {
   return std::make_unique<POSIXDeleteOp>(this);
 }
@@ -3581,7 +3591,9 @@ int POSIXMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
 
   attrs[RGW_POSIX_ATTR_MPUPLOAD] = bl;
 
-  return meta_obj->set_obj_attrs(dpp, &attrs, nullptr, y, rgw::sal::FLAG_LOG_OP);
+  return meta_obj->set_obj_attrs(dpp, &attrs, nullptr, y,
+				 rgw::sal::FLAG_LOG_OP,
+				 rgw::sal::no_authenticated_user);
 }
 
 int POSIXMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext *cct,
@@ -3683,7 +3695,7 @@ int POSIXMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct,
   if (auto* mc = driver->get_multipart_cache()) {
     mc->remove({bucket->get_name(), mp_obj.meta});
   }
-  shadow->remove(dpp, true, y);
+  shadow->remove(dpp, true, y, rgw::sal::no_authenticated_user);
 
   return 0;
 }
@@ -4004,7 +4016,8 @@ std::unique_ptr<Writer> POSIXMultipartUpload::get_writer(
 				  const ACLOwner& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t part_num,
-				  const std::string& part_num_str)
+				  const std::string& part_num_str,
+				  const rgw_owner& authenticated_user)
 {
   std::string fname = MP_OBJ_PART_PFX + fmt::format("{:0>5}", part_num);
   rgw_obj_key part_key(fname);

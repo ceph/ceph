@@ -106,7 +106,8 @@ int create_tracked_bucket(const char* name, const char* tenant, bool is_vector)
     params.attrs[RGW_ATTR_S3VECTOR_STORAGE] = std::move(bl);
   }
 
-  r = bucket->create(g_env.dpp.get(), params, null_yield);
+  r = bucket->create(g_env.dpp.get(), params, null_yield,
+		     rgw::sal::no_authenticated_user);
   if (r < 0 && r != -EEXIST) {
     std::cerr << "ERROR: failed to create bucket '" << name << "' (r=" << r
               << ")" << std::endl;
@@ -205,7 +206,8 @@ void env_teardown()
     b.tenant = tenant;
     std::unique_ptr<rgw::sal::Bucket> bucket;
     if (load_tracked_bucket(b, is_vector, &bucket) == 0 && bucket) {
-      bucket->remove(g_env.dpp.get(), true, null_yield);
+      bucket->remove(g_env.dpp.get(), true, null_yield,
+		     rgw::sal::no_authenticated_user);
     }
   }
 
@@ -279,7 +281,8 @@ int rgw_test_env_remove_bucket(const char* name, const char* tenant)
     return r < 0 ? r : -ENOENT;
   }
 
-  r = bucket->remove(g_env.dpp.get(), true, null_yield);
+  r = bucket->remove(g_env.dpp.get(), true, null_yield,
+		     rgw::sal::no_authenticated_user);
   if (r < 0) {
     return r;
   }
