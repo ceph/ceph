@@ -1818,7 +1818,13 @@ int RGWBucketAdminOp::limit_check(rgw::sal::Driver* driver,
 	{
 	  bool warn;
 	  stringstream ss;
-	  uint64_t fill_pct = objs_per_shard * 100 / safe_max_objs_per_shard;
+	  size_t bucket_safe_max_objs_per_shard = safe_max_objs_per_shard;
+	  if (bucket->get_info().versioned()) {
+	    bucket_safe_max_objs_per_shard =
+	      std::max<size_t>(1, bucket_safe_max_objs_per_shard / 3);
+	  }
+	  uint64_t fill_pct =
+	    objs_per_shard * 100 / bucket_safe_max_objs_per_shard;
 	  if (fill_pct > 100) {
 	    ss << "OVER " << fill_pct << "%";
 	    warn = true;
