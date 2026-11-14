@@ -102,7 +102,8 @@ export class CephfsMirroringListComponent implements OnInit, OnDestroy {
         permission: 'update',
         icon: Icons.add,
         click: () => this.openAddPath(),
-        disable: (selection: CdTableSelection) => !selection.hasSingleSelection
+        disable: (selection: CdTableSelection) => !selection.hasSingleSelection,
+        canBePrimary: () => false
       },
       {
         name: $localize`Disable mirroring`,
