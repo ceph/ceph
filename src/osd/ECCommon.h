@@ -207,6 +207,9 @@ struct ECCommon {
   struct read_result_t {
     int r;
     std::map<pg_shard_t, int> errors;
+    /// shards whose own store failed the read with a media error (-EIO)
+    /// and that the decode did without: a client read has them repaired
+    std::set<pg_shard_t> media_errors;
     std::optional<std::map<std::string, ceph::buffer::list, std::less<>>> attrs;
     std::optional<ceph::buffer::list> omap_header;
     std::optional<std::map<std::string, ceph::buffer::list>> omap_entries;
@@ -221,6 +224,9 @@ struct ECCommon {
 
     void print(std::ostream &os) const {
       os << "read_result_t(r=" << r << ", errors=" << errors;
+      if (!media_errors.empty()) {
+        os << ", media_errors=" << media_errors;
+      }
       if (attrs) {
         os << ", attrs=" << *(attrs);
       } else {
