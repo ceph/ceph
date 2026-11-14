@@ -72,7 +72,7 @@ Stuck in up:replay
 ------------------
 
 If your MDS is stuck in the ``up:replay`` state, then the journal is probably
-very long. The presence of ``MDS_HEALTH_TRIM`` cluster warnings can indicate
+very long. The presence of ``MDS_TRIM`` cluster warnings can indicate
 that the MDS has not yet caught up while trimming its journal. Very large
 journals can take hours to process. There is no working around this, but there
 are things you can do to speed up the process:
@@ -235,7 +235,7 @@ Do the following when restoring your file system:
 Expediting MDS journal trim
 ===========================
 
-``MDS_HEALTH_TRIM`` warnings indicate that the MDS journal has grown too large.
+``MDS_TRIM`` warnings indicate that the MDS journal has grown too large.
 When the MDS journal has grown too large, use the ``mds_tick_interval`` tunable
 to modify the "MDS tick interval". The "tick" interval drives various upkeep
 activities in the MDS, and modifying the interval will decrease the size of the

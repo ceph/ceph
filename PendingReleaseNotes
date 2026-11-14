@@ -85,6 +85,23 @@
   ``$GETOPT`` environment override so GNU getopt can be selected
   (``brew install bash gnu-getopt``).
 
+* CephFS: New MDS journal back-pressure. When the journal reaches
+  ``mds_log_hard_limit_factor`` times ``mds_log_max_segments`` segments
+  (250 times 128, or 32000 segments, by default), new client metadata
+  operations are parked until trimming brings the journal back under the
+  limit. Between the warn threshold and the hard limit, client operations that
+  modify metadata are delayed in proportion to the backlog, controlled by
+  ``mds_log_admission_min_delay`` and ``mds_log_admission_max_delay``.
+  A new health error, ``MDS_JOURNAL_HARD_LIMIT``, is raised while the limit
+  is reached. The monitor refuses ``mds fail`` and ``fs fail`` in that state
+  unless ``--yes-i-really-mean-it`` is given. Client requests refused during
+  MDS shutdown while the limit is reached fail with ``-EAGAIN``.
+
+* CephFS: Fixed a case where the MDS journal could stay above
+  ``mds_log_max_segments`` indefinitely. This happened when a large backlog
+  built up and the MDS stopped trimming before the journal was back under the
+  limit. The MDS now continues trimming until the journal is within the limit.
+
 * CephFS: Added a multi-tiered scoring matrix to the MDS Monitor to dynamically
   prioritize standby promotion during failover events. The ``mds_join_fs`` configuration
   variable is now checked in combination with infrastructure topology rules to enforce
