@@ -272,6 +272,7 @@ const ReservedNames& PerPartMPUStrategy::reserved_names() const
 static int create_output(const DoutPrefixProvider* dpp, const FSIdentity& id,
 			 int dir_fd, const std::string& name)
 {
+  const int flags = O_WRONLY | O_NOFOLLOW | O_CREAT | O_TRUNC;
   if (id.active()) {
     return open_as(dpp, id, dir_fd, name.c_str(), flags, file_create_mode());
   }
@@ -288,6 +289,7 @@ static int open_input(const DoutPrefixProvider* dpp, const FSIdentity& id,
   if (id.active()) {
     return open_as(dpp, id, dir_fd, name.c_str(), O_RDONLY, 0);
   }
+  const int fd = ::openat(dir_fd, name.c_str(), O_RDONLY | O_NOFOLLOW);
   return (fd < 0) ? -errno : fd;
 }
 
@@ -470,6 +472,7 @@ int StridedMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
 	return -ret;
       }
 
+      int out_fd = openat(dir_fd, output_name.c_str(), O_WRONLY | O_NOFOLLOW);
       if (out_fd < 0) {
 	int ret = errno;
 	ldpp_dout_fmt(dpp, 0, "ERROR: could not open {} to trim: {}",
@@ -605,6 +608,7 @@ static bool nb_create_params(const DoutPrefixProvider* dpp, int root_fd,
   }
 
   const std::string path = fmt::format("{}/{}", dname, NB_CREATE_NAME);
+  int fd = ::openat(root_fd, path.c_str(), O_RDONLY | O_NOFOLLOW);
   if (fd < 0) {
     return false;
   }
@@ -986,6 +990,8 @@ bool NooBaaMPUStrategy::part_record(const DoutPrefixProvider* dpp,
     }
   }
 
+  int part_fd = ::openat(dir_fd, std::string(pname).c_str(),
+			 O_RDONLY | O_NOFOLLOW);
   if (part_fd < 0) {
     return false;
   }

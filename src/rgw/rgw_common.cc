@@ -69,6 +69,7 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_INVALID_PART_ORDER, {400, "InvalidPartOrder" }},
     { ERR_REQUEST_TIMEOUT, {400, "RequestTimeout" }},
     { ERR_TOO_LARGE, {400, "EntityTooLarge" }},
+    { ERR_KEY_TOO_LONG, {400, "KeyTooLongError" }},
     { ERR_TOO_SMALL, {400, "EntityTooSmall" }},
     { ERR_TOO_MANY_BUCKETS, {400, "TooManyBuckets" }},
     { ERR_MALFORMED_XML, {400, "MalformedXML" }},

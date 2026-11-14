@@ -912,6 +912,8 @@ int acquire_personality(const DoutPrefixProvider* dpp, const rgw_owner& key,
   if (ret < 0) {
     return ret;
   }
+  /* O_NOFOLLOW for every caller:  nothing nsfs opens by name is a link
+   * (DECISIONS.md 2026-10-22) */
 
 static std::atomic<uint64_t> raised_ops{0};
 
@@ -976,6 +978,7 @@ int open_as_or_raise(const DoutPrefixProvider* dpp, const FSIdentity& id,
     *raised = false;
   }
   const auto plain = [&]() -> int {
+    const int fd = ::openat(dirfd, path, flags | O_NOFOLLOW, mode);
     return (fd < 0) ? -errno : fd;
   };
   if (! id.active()) {

@@ -231,21 +231,7 @@ struct ObjectType {
   }
   friend inline std::ostream &operator<<(std::ostream &out,
                                          const ObjectType &t) {
-    switch (t.type) {
-    case UNKNOWN:
-      out << "UNKNOWN";
-      break;
-    case FILE:
-      out << "FILE";
-      break;
-    case DIRECTORY:
-      out << "DIRECTORY";
-      break;
-    case MULTIPART:
-      out << "MULTIPART";
-      break;
-    }
-    return out;
+    return out << t.name();
   }
 };
 WRITE_CLASS_ENCODER(ObjectType);
@@ -263,10 +249,17 @@ class Directory;
  * MERGE is the object contract, matching RGWRados::set_attrs():  the
  * incoming set is added or overwritten, nothing else is touched, and
  * removals are named explicitly in rmattrs.
+ *
+ * DELTA is a bucket write's (NSFSBucket::write_attrs(), DECISIONS.md
+ * 2026-11-05):  MERGE's shape -- the set given and the removals named,
+ * nothing else touched -- with an empty value written rather than
+ * skipped, because a bucket attribute can be its own presence:
+ * ConfirmRemoveSelfBucketAccess is stored empty (rgw_op.cc).
  */
 enum class AttrWriteMode {
   REPLACE_ALL,
   MERGE,
+  DELTA,
 };
 
 class FSEnt {
@@ -389,6 +382,7 @@ public:
    * unlink is performed by the gateway where it permits
    * AccessClass::data (with_identity_or_raise()). */
   void set_access_model(const nsfs::AccessStrategy* m) { access_model = m; }
+  const nsfs::AccessStrategy* get_access_model() const { return access_model; }
 
   /* Ask for no more access than the caller needs.
    *
@@ -454,6 +448,7 @@ public:
    * source the filesystem denies the authenticated user.  Resolved by the
    * caller, which knows the bucket;  see clone_file_by_copy(). */
   virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name, const CopyHints& hints, bool src_as_gateway = false) = 0;
+  /* excl:  fail with -EEXIST rather than replace, for If-None-Match: * */
   virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y,
 			     std::string target_fname, bool excl = false,
 			     bool as_gateway = false) = 0;
@@ -511,8 +506,6 @@ public:
 };
 
 class Directory : public FSEnt {
-protected:
-
 public:
   Directory(std::string _name, Directory* _parent, CephContext* _ctx, FSStrategy* _strat = nullptr) : FSEnt(_name, _parent, _ctx, _strat)
     {}
@@ -1022,6 +1015,11 @@ protected:
   std::atomic<bool> inject_etag_as_gateway_armed{false};
   ceph::mutex inject_etag_as_gateway_lock =
       ceph::make_mutex("NSFSDriver::inject_etag_as_gateway_lock");
+  /* read a denial in a delete the way the defect did -- as an absent
+   * object -- so a test can watch a denied delete answer success, or
+   * -EINVAL, rather than deleting the fix to prove it can fail.
+   * Atomic:  a test thread arms it while another deletes */
+  std::atomic<bool> inject_denial_as_absence{false};
   /* the user whose credentials not resolving NSFSReadOp::prepare(),
    * get_attr(), check_owner_access() and create() pass over, as they did
    * before work-plan stage N-F2, so a test can watch a metadata read served,
@@ -1057,6 +1055,35 @@ protected:
    * test can assert the rollback:  nothing in an ordinary setup makes
    * the steps after mkdir fail */
   bool inject_create_failure{false};
+  /* fail an object's attribute read under get_obj_attrs() after its
+   * open has succeeded, for objects in these buckets, so a test can
+   * assert what a delete does when the object lock cannot be read.
+   * Keyed by bucket, as inject_delta_by_upload is by upload:  armed
+   * for the driver it would fail every lock test running at the
+   * time */
+  std::set<std::string> inject_attr_read_fail_buckets;
+  std::atomic<bool> inject_attr_read_fail_armed{false};
+  std::atomic<uint64_t> attr_read_fails_injected{0};
+  ceph::mutex inject_attr_read_fail_lock =
+      ceph::make_mutex("NSFSDriver::inject_attr_read_fail_lock");
+  /* fail, with EIO, the attribute writes a copy, a delete marker and a
+   * multipart completion make after the object exists, in these
+   * buckets, so a test can assert each returns the failure rather
+   * than discarding it.  Keyed by bucket, as the read failure is */
+  std::set<std::string> inject_attr_write_fail_buckets;
+  std::atomic<bool> inject_attr_write_fail_armed{false};
+  std::atomic<uint64_t> attr_write_fails_injected{0};
+  ceph::mutex inject_attr_write_fail_lock =
+      ceph::make_mutex("NSFSDriver::inject_attr_write_fail_lock");
+  /* return no non-current time for these buckets' versions, so
+   * lifecycle ages them by their successor's mtime, as it did before
+   * get_noncurrent_since():  the test of the aging shows both results
+   * in one run.  Keyed by bucket, as the attribute failures are */
+  std::set<std::string> inject_noncurrent_since_none_buckets;
+  std::atomic<bool> inject_noncurrent_since_none_armed{false};
+  std::atomic<uint64_t> noncurrent_since_none_injected{0};
+  ceph::mutex inject_noncurrent_since_none_lock =
+      ceph::make_mutex("NSFSDriver::inject_noncurrent_since_none_lock");
   /* lift the gate on a bucket not taken over, for these buckets, so a
    * test can show a rejection is the gate's:  the same write succeeds
    * with it lifted.  Keyed by bucket, as the attribute-read injection
@@ -1075,6 +1102,27 @@ protected:
   ceph::mutex inject_hold_adoption_lock =
       ceph::make_mutex("NSFSDriver::inject_hold_adoption_lock");
   ceph::condition_variable inject_hold_adoption_cond;
+  /* hold a write in these buckets just after its publish, until it is
+   * released, so a test can list the object while it is in place and
+   * nothing after the publish has run.  `waiting` is the held buckets
+   * a write has reached.  Keyed by bucket, as the attribute-read
+   * injection is */
+  std::set<std::string> inject_hold_after_publish_buckets;
+  std::set<std::string> inject_hold_after_publish_waiting;
+  std::atomic<bool> inject_hold_after_publish_armed{false};
+  ceph::mutex inject_hold_after_publish_lock =
+      ceph::make_mutex("NSFSDriver::inject_hold_after_publish_lock");
+  ceph::condition_variable inject_hold_after_publish_cond;
+  /* write the attributes derived from the inode -- the `version_id`
+   * attribute and a non-MD5 etag -- after the publish rather than
+   * before it, in these buckets:  the order that let a listing read a
+   * published object with no version id, so a test can show it fails
+   * on that order and passes on the one used */
+  std::set<std::string> inject_version_id_after_publish_buckets;
+  std::atomic<bool> inject_version_id_after_publish_armed{false};
+  ceph::mutex inject_version_id_after_publish_lock =
+      ceph::make_mutex("NSFSDriver::inject_version_id_after_publish_lock");
+
 
   /* Which POSIX identity a converted consumer chose for one named
    * object, so a test can assert the uid and not the status --  (n)
@@ -1214,6 +1262,14 @@ public:
     return sync_set ? sync_set->devices() : std::vector<dev_t>{};
   }
 
+  /* Construct the multipart part cache.  Sizing is the caller's, because
+   * it decides whether eviction -- and so the stabilize callback -- is
+   * ever reached;  initialize() passes the configured values and a test
+   * driver passes its own. */
+  void init_multipart_cache(const DoutPrefixProvider* dpp,
+			    uint64_t mp_max, uint64_t mp_lanes,
+			    uint64_t mp_parts, uint64_t mp_max_parts,
+			    file::listing::MultipartCachePolicy mp_policy);
 
   virtual int initialize(CephContext *cct, const DoutPrefixProvider *dpp);
   virtual const std::string get_name() const override { return "nsfs"; }
@@ -1854,6 +1910,7 @@ public:
     std::lock_guard l{inject_etag_as_gateway_lock};
     return inject_etag_as_gateway_buckets.contains(bucket);
   }
+  bool denial_as_absence_injected() const { return inject_denial_as_absence; }
   bool unresolved_as_gateway_injected(const rgw_owner& who) {
     std::lock_guard l{unresolved_as_gateway_lock};
     return !unresolved_as_gateway_user.empty() &&
@@ -1861,6 +1918,42 @@ public:
   }
   bool no_chown_injected() const { return inject_no_chown; }
   bool create_failure_injected() const { return inject_create_failure; }
+  bool attr_read_fail_injected(const std::string& bucket) {
+    if (!inject_attr_read_fail_armed.load(std::memory_order_relaxed)) {
+      return false;
+    }
+    std::lock_guard l{inject_attr_read_fail_lock};
+    return inject_attr_read_fail_buckets.contains(bucket);
+  }
+  void record_attr_read_fail() { ++attr_read_fails_injected; }
+  bool version_id_after_publish_injected(const std::string& bucket) {
+    if (!inject_version_id_after_publish_armed.load(
+	  std::memory_order_relaxed)) {
+      return false;
+    }
+    std::lock_guard l{inject_version_id_after_publish_lock};
+    return inject_version_id_after_publish_buckets.contains(bucket);
+  }
+  /* waits while `bucket` is held, up to a minute, so a test that fails
+   * before releasing it cannot wedge the write for good */
+  void hold_after_publish(const DoutPrefixProvider* dpp,
+			  const std::string& bucket);
+  bool attr_write_fail_injected(const std::string& bucket) {
+    if (!inject_attr_write_fail_armed.load(std::memory_order_relaxed)) {
+      return false;
+    }
+    std::lock_guard l{inject_attr_write_fail_lock};
+    return inject_attr_write_fail_buckets.contains(bucket);
+  }
+  void record_attr_write_fail() { ++attr_write_fails_injected; }
+  bool noncurrent_since_none_injected_for(const std::string& bucket) {
+    if (!inject_noncurrent_since_none_armed.load(std::memory_order_relaxed)) {
+      return false;
+    }
+    std::lock_guard l{inject_noncurrent_since_none_lock};
+    return inject_noncurrent_since_none_buckets.contains(bucket);
+  }
+  void record_noncurrent_since_none() { ++noncurrent_since_none_injected; }
   bool adoption_gate_lifted(const std::string& bucket) {
     if (!inject_lift_adoption_gate_armed.load(std::memory_order_relaxed)) {
       return false;
@@ -2155,10 +2248,19 @@ private:
    * not translate whole:  why.  A client's load is then refused
    * (DECISIONS.md 2026-11-02). */
   std::string untranslated;
+  /* What this handle loaded of the bucket's metadata from its
+   * directory, before any fallback filled it in:  a write applies only
+   * what differs from it, so two handles writing different things do
+   * not undo each other (DECISIONS.md 2026-11-05).  No info when the
+   * directory held none. */
+  Attrs loaded_attrs;
+  std::optional<RGWBucketInfo> loaded_info;
 
 public:
-  /* every nsfs bucket serves the positional view */
-  bool have_fsio() const override { return true; }
+  /* Whether this is a bucket of RGW's own, such as an upload's staging
+   * directory, rather than a client's:  its keys are not clients'
+   * names, so nsfs::resolve_key_path() does not reject reserved ones. */
+  bool is_internal() const { return ns.has_value(); }
 
   NSFSBucket(NSFSDriver *_dr, nsfs::Directory* _p_dir, const rgw_bucket& _b, std::optional<std::string> _ns = std::nullopt)
     : StoreBucket(_b),
@@ -2408,6 +2510,27 @@ public:
                     const rgw_owner& new_owner,
                     const std::string& new_owner_name,
                     optional_yield y) override;
+
+  /* What a bucket chown changes (DECISIONS.md 2026-10-11).
+   *
+   * `metadata` is the owner, the bucket ACL and the listing cache, and
+   * nothing on disk:  no file's uid, gid or mode moves.  That is what
+   * NooBaa's `bucket update --owner` does, and what every RGW path
+   * gets -- the SAL chown() above calls it.  A new owner whose POSIX
+   * identity differs is not rejected;  the files are left to the
+   * operator, as NooBaa leaves them.
+   *
+   * `posix` is the same and then gives the new owner's POSIX identity
+   * every file and directory under the bucket, the bucket directory
+   * excepted, which is the gateway's (NSFS_IMPERSONATION.md 8a).  It
+   * rejects, before changing anything, a new owner with no identity
+   * row or a directory-backed one.  Nothing calls it yet:  it is the
+   * full chown with a model shift, kept where the next reader finds it
+   * beside the one in use. */
+  enum class ChownMode { metadata, posix };
+  int chown(const DoutPrefixProvider* dpp, const rgw_owner& new_owner,
+	    const std::string& new_owner_name, ChownMode mode,
+	    optional_yield y);
   virtual int put_info(const DoutPrefixProvider* dpp, bool exclusive,
                        ceph::real_time mtime, optional_yield y) override;
   virtual int check_empty(const DoutPrefixProvider* dpp, optional_yield y) override;
@@ -2515,6 +2638,9 @@ private:
   std::map<std::string, int64_t> parts;
   std::unique_ptr<rgw::sal::Bucket> pinned_bucket;
   std::string dm_version_id;
+  /* the last stat() found a directory under a key without the trailing
+   * '/', which has no object (stat()) */
+  bool names_directory{false};
 
   /* How this object's entry is to be reached, held until an entry
    * exists to apply it to.
@@ -2565,6 +2691,8 @@ public:
    * the driver's for an object with no bucket, which is what a few
    * internal paths construct. */
   nsfs::XattrStrategy* xattr_strategy() const;
+  /* the bucket's fallback, null unless it is mid-conversion */
+  nsfs::XattrStrategy* xattr_fallback() const;
   nsfs::PathStrategy* path_strategy() const;
 
   struct NSFSReadOp : ReadOp {
@@ -2740,6 +2868,8 @@ public:
 			   uint64_t& size,
 			   const DoutPrefixProvider* dpp,
 			   optional_yield y) override;
+  virtual std::optional<ceph::real_time> get_noncurrent_since(
+			   const DoutPrefixProvider* dpp, optional_yield y) override;
   virtual bool placement_rules_match(rgw_placement_rule& r1, rgw_placement_rule& r2) override;
   virtual int dump_obj_layout(const DoutPrefixProvider *dpp, optional_yield y, Formatter* f) override;
   virtual int swift_versioning_restore(const ACLOwner& owner, const rgw_user& remote_user, bool& restored,
@@ -2766,9 +2896,12 @@ public:
 	   bool temp_file = false);
   int close();
   int write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y);
+  /* `only`, if given, is what to write in place of the whole loaded
+   * set:  an attribute operation's change (DECISIONS.md 2026-11-05). */
   int write_attrs(const DoutPrefixProvider* dpp, optional_yield y,
-		  const std::vector<std::string>* rmattrs = nullptr);
-  int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y);
+		  const std::vector<std::string>* rmattrs = nullptr,
+		  int use_fd = -1, const Attrs* only = nullptr);
+  int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, bool excl = false);
   std::string gen_temp_fname();
   const std::string get_fname(bool use_version);
   bool check_exists(const DoutPrefixProvider* dpp) { stat(dpp); return state.exists; }
@@ -2892,10 +3025,7 @@ public:
 
 protected:
   int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y);
-  int generate_attrs(const DoutPrefixProvider* dpp, optional_yield y);
 private:
-  int generate_mp_etag(const DoutPrefixProvider* dpp, optional_yield y);
-  int generate_etag(const DoutPrefixProvider* dpp, optional_yield y);
   int get_cur_version(const DoutPrefixProvider *dpp, rgw_obj_key &key);
 };
 
@@ -2939,7 +3069,8 @@ public:
 class NSFSMultipartUpload : public StoreMultipartUpload {
 protected:
   NSFSDriver* driver;
-  NSFSMPObj mp_obj;
+  /* read through mpo() everywhere but init();  see NSFSMPObj */
+  mutable NSFSMPObj mp_obj;
   ceph::real_time mtime;
   std::unique_ptr<rgw::sal::NSFSBucket> shadow;
   /* who the upload's operations are for, from get_multipart_upload() */
@@ -2957,10 +3088,14 @@ public:
     auth_user(_auth_user) {}
   virtual ~NSFSMultipartUpload() = default;
 
-  virtual const std::string& get_meta() const override { return mp_obj.meta; }
-  virtual const std::string& get_key() const override { return mp_obj.oid; }
-  virtual const std::string& get_upload_id() const override { return mp_obj.upload_id; }
-  virtual const ACLOwner& get_owner() const override { return mp_obj.owner; }
+protected:
+  /* An existing upload:  a name given without an id is its meta */
+  NSFSMPObj& mpo() const {
+    mp_obj.resolve_meta();
+    return mp_obj;
+  }
+
+public:
 
   virtual void set_on_behalf_of(const rgw_owner& owner) override {
     on_behalf_of = owner;
@@ -2974,6 +3109,10 @@ public:
    * staging as the authenticated user (DECISIONS.md 2026-10-23);  ListParts
    * stays the gateway's (DECISIONS.md 2026-10-15). */
 
+  virtual const std::string& get_meta() const override { return mpo().meta; }
+  virtual const std::string& get_key() const override { return mpo().oid; }
+  virtual const std::string& get_upload_id() const override { return mpo().upload_id; }
+  virtual const ACLOwner& get_owner() const override { return mpo().owner; }
   virtual ceph::real_time& get_mtime() override { return mtime; }
   virtual std::unique_ptr<rgw::sal::Object> get_meta_obj() override;
 
@@ -3034,6 +3173,8 @@ private:
    * completes into is written in the bucket's format, not the
    * driver's */
   nsfs::XattrStrategy* xattr_strategy() const;
+  /* the bucket's fallback, null unless it is mid-conversion */
+  nsfs::XattrStrategy* xattr_fallback() const;
   nsfs::PathStrategy* path_strategy() const;
 
   /* The directory holding staging directories, where the format keeps

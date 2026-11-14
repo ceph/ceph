@@ -182,6 +182,24 @@ public:
                              optional_yield y,
                              const nsfs::FSIdentity& id = {}) = 0;
 
+  /* publish only if the name is free, returning -EEXIST if it is not.
+   *
+   * This is the primitive S3's If-None-Match: * needs.  The ordinary
+   * publish above replaces, so deciding from an earlier stat and then
+   * calling it leaves a window in which two writers both see the name
+   * free and both succeed -- measured, and it happens readily.  Clients
+   * build commit protocols on put-if-absent, so two winners is a
+   * correctness failure in their data, not only a conformance one.
+   *
+   * linkat(2) is the primitive:  it cannot replace, which is exactly why
+   * the ordinary path links to a temp name and renames, and exactly why
+   * this one does not.  Shared by both strategies -- GPFS needs
+   * gpfs_linkat only for the atomic *replace* the ordinary path wants. */
+  virtual int link_temp_file_excl(int temp_fd, int dir_fd,
+                                  const std::string& name,
+                                  const DoutPrefixProvider* dpp,
+                                  optional_yield y,
+                                  const nsfs::FSIdentity& id = {});
 
   /* CAS link: link src to dst, verify inode+mtime match expected;
    * undo on mismatch */

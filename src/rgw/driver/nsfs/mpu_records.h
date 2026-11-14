@@ -63,11 +63,51 @@ struct NSFSMPObj {
   ACLOwner owner;
   multipart_upload_info upload_info;
   std::string meta;
+  /* constructed with a name and no id, and not yet told which it is */
+  bool unresolved{false};
+
+  /* A name without an id is either a key for a new upload or the meta
+   * of an existing one, and only the operation tells them apart:
+   * init() makes a new upload, and resolve_new() generates its id;
+   * every other operation acts on an existing one, and resolve_meta()
+   * splits the name.  RGWInitMultipart is the first case, lifecycle's
+   * abort -- which names an upload by the meta its listing returned --
+   * the second.
+   *
+   * The split is never tried on a new upload's key.  from_meta()
+   * splits at the last dot and cannot tell a meta from a key that
+   * merely contains one, so when the constructor tried it first, every
+   * key ending `.bin` or `.jpg` yielded the upload id `bin` or `jpg`
+   * and no id was generated at all.  Two uploads in a bucket whose keys
+   * shared a suffix then shared an upload id, and with the staging
+   * directory named for that id they shared a directory:  each
+   * completed object was assembled from both sets of parts, silently. */
   NSFSMPObj(NSFSDriver* driver, const std::string& _oid,
 	     std::optional<std::string> _upload_id, ACLOwner& _owner) {
     if (_upload_id && !_upload_id->empty()) {
       init(_oid, *_upload_id, _owner);
     } else if (!_oid.empty()) {
+      oid = _oid;
+      owner = _owner;
+      unresolved = true;
+    }
+  }
+  void resolve_new(NSFSDriver* driver) {
+    if (unresolved) {
+      unresolved = false;
+      init_gen(driver, oid, owner);
+    }
+  }
+  /* A name that does not split leaves no upload id, and the upload is
+   * not found. */
+  void resolve_meta() {
+    if (unresolved) {
+      unresolved = false;
+      const std::string name = oid;
+      if (!from_meta(name, owner)) {
+	clear();
+      }
+    }
   }
   /* parse <objname>.<uploadid> — the format produced by get_meta().
    * Only for a caller which knows it holds a meta;  an upload id

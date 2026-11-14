@@ -2326,7 +2326,7 @@ class GetLCEntryOp: virtual public DBOp {
                           from '{}' where LCIndex = {} and BucketName = {}";
     static constexpr std::string_view NextQuery = "SELECT  \
                           LCIndex, BucketName, StartTime, Status \
-                          from '{}' where LCIndex = {} and BucketName > {} ORDER BY BucketName ASC";
+                          from '{}' where LCIndex = {} and BucketName > {} ORDER BY BucketName ASC LIMIT 1";
 
   public:
     virtual ~GetLCEntryOp() {}

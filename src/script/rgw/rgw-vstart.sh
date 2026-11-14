@@ -27,6 +27,10 @@
 #   --with-lifecycle     Set rgw_lc_debug_interval=10 so lifecycle
 #                       expiration tests complete in seconds, and
 #                       uncomment lc_debug_interval in s3tests.conf
+#   --with-non-md5-etag Set rgw_non_md5_etag=true, so the etag is the
+#                       mtime-ino string the version ids use rather
+#                       than a content digest.  Off by default, and
+#                       the only way the suite can reach that path
 #   --with-impersonation
 #                       Serve each request as its own POSIX identity.
 #                       Creates the fixture users and groups, seeds a
@@ -106,6 +110,7 @@ KEYCLOAK=false
 KAFKA=false
 VAULT=false
 LIFECYCLE=false
+NON_MD5_ETAG=false
 IMPERSONATE=false
 IMPERSONATE_CLEAN=false
 NO_FIXTURE=false
@@ -138,6 +143,7 @@ while [[ $# -gt 0 ]]; do
 		--with-kafka) KAFKA=true; shift ;;
 		--with-vault) VAULT=true; shift ;;
 		--with-lifecycle) LIFECYCLE=true; shift ;;
+		--with-non-md5-etag) NON_MD5_ETAG=true; shift ;;
 		--with-impersonation) IMPERSONATE=true; shift ;;
 		--no-fixture) NO_FIXTURE=true; shift ;;
 		--with-inotify) INOTIFY=true; shift ;;
@@ -540,6 +546,11 @@ VSTART_OPTS=(
 
 if $LIFECYCLE; then
 	VSTART_OPTS+=(-o 'rgw_lc_debug_interval=10')
+fi
+
+if $NON_MD5_ETAG; then
+	VSTART_OPTS+=(-o 'rgw_non_md5_etag=true')
+fi
 
 if [[ -n "$BUCKET_PROFILE" ]]; then
 	case "$BUCKET_PROFILE" in
@@ -1054,6 +1065,10 @@ else
 fi
 if $LIFECYCLE; then
 	echo "    Lifecycle: rgw_lc_debug_interval=10"
+fi
+if $NON_MD5_ETAG; then
+	echo "    ETag: rgw_non_md5_etag=true (mtime-ino, not a digest)"
+fi
 if $IMPERSONATE; then
 	echo "    Impersonation: on;  bucket $IMP_BUCKET has open.txt (0644)" \
 		"and grouped.txt (0040 root:$IMP_GRP_NAME, gid $IMP_GRP_GID)"

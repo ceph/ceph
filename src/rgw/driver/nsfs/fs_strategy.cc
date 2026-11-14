@@ -555,6 +555,14 @@ bool probe_shares_extents(const DoutPrefixProvider* dpp,
   return shares;
 }
 
+
+
+int FSStrategy::link_temp_file_excl(int temp_fd, int dir_fd,
+				    const std::string& name,
+				    const DoutPrefixProvider* dpp,
+				    optional_yield y,
+				    const nsfs::FSIdentity& id)
+{
   if (id.active() && nsfs::ring_metadata_changes()) {
     const std::string proc = fmt::format("/proc/self/fd/{}", temp_fd);
     UringOp link = ring_op(UringOp::Kind::linkat, AT_FDCWD, proc.c_str(), dir_fd,
@@ -569,6 +577,19 @@ bool probe_shares_extents(const DoutPrefixProvider* dpp,
   }
 
   return nsfs::with_identity(dpp, id, nsfs::HopKind::link, [&]() -> int {
+  const std::string temp_file_path = fmt::format("/proc/self/fd/{}", temp_fd);
+
+  int ret = ::linkat(AT_FDCWD, temp_file_path.c_str(), dir_fd, name.c_str(),
+		     AT_SYMLINK_FOLLOW);
+  if (ret < 0) {
+    ret = errno;
+    if (ret != EEXIST) {
+      ldpp_dout_fmt(dpp, 0, "ERROR: exclusive linkat for temp file: {}",
+                            cpp_strerror(ret));
+    }
+    return -ret;
+  }
+  return 0;
   }, y);
 }
 
@@ -819,8 +840,14 @@ int POSIXStrategy::remove_xattrs(const DoutPrefixProvider* dpp, int fd,
     int ret = ::fremovexattr(fd, name.c_str());
     if (ret < 0 && errno != ENODATA) {
       int err = errno;
-      ldpp_dout(dpp, 0) << "ERROR: fsetxattr " << name
-        << " failed: " << cpp_strerror(err) << dendl;
+      /* a denial is the caller's to handle, as set_xattrs()'s is */
+      if ((err == EACCES) || (err == EPERM)) {
+        ldpp_dout_fmt(dpp, 10, "fremovexattr {} denied: {}", name,
+                               cpp_strerror(err));
+      } else {
+        ldpp_dout_fmt(dpp, 0, "ERROR: fremovexattr {} failed: {}", name,
+                              cpp_strerror(err));
+      }
       return -err;
     }
   }
@@ -839,7 +866,6 @@ int FSStrategy::clone_file_by_copy(const DoutPrefixProvider* dpp,
                                    const nsfs::FSIdentity& id,
                                    bool src_as_gateway)
 {
-  int src_fd = ::openat(src_dir_fd, src_name.c_str(), O_RDONLY);
   /* A copy is a read of the source and a write of the destination,
    * and both are on the access-model axis.  The read can be an
    * operation S3 authorised against an object `id` does not
@@ -874,6 +900,7 @@ int FSStrategy::clone_file_by_copy(const DoutPrefixProvider* dpp,
 
   int src_fd = -1;
   auto open_src = [&]() -> int {
+    src_fd = ::openat(src_dir_fd, src_name.c_str(), O_RDONLY | O_NOFOLLOW);
     return (src_fd < 0) ? -errno : 0;
   };
   int oret = nsfs::with_identity(dpp, id, open_src, y);
@@ -963,23 +990,6 @@ int FSStrategy::clone_file_by_copy(const DoutPrefixProvider* dpp,
   if (ret == 0) {
     ret = copy_range(dpp, src_fd, 0, dst_fd, 0, stx.stx_size, hints);
   }
-
-  int dst_flags = O_WRONLY | O_CREAT | (excl ? O_EXCL : O_TRUNC);
-  int dst_fd = ::openat(dst_dir_fd, dst_name.c_str(), dst_flags, 0644);
-  if (dst_fd < 0) {
-    int err = errno;
-    ::close(src_fd);
-    if (excl && (err == EEXIST)) {
-      /* lost the race;  the caller joins the winner's file */
-      return -EEXIST;
-    }
-    ldpp_dout(dpp, 0) << "ERROR: clone_file: openat dst=" << dst_name
-      << " failed: " << cpp_strerror(err) << dendl;
-    return -err;
-  }
-
-  ret = copy_range(dpp, src_fd, 0, dst_fd, 0, stx.stx_size);
-  ::close(src_fd);
   ::close(dst_fd);
 
   if (ret < 0) {
@@ -1440,7 +1450,7 @@ SafeResult GPFSStrategy::safe_unlink(const DoutPrefixProvider* dpp,
   return nsfs::with_identity_r(dpp, id, [&]() -> SafeResult {
   /* open the target to get an fd; gpfs_unlinkat removes the entry
    * only if its inode matches this fd */
-  int fd = ::openat(dir_fd, name.c_str(), O_RDONLY);
+  int fd = ::openat(dir_fd, name.c_str(), O_RDONLY | O_NOFOLLOW);
   if (fd < 0) {
     int err = errno;
     if (err == ENOENT) {
@@ -1614,7 +1624,7 @@ void GPFSStrategy::cleanup_clone(const DoutPrefixProvider* dpp,
   }
 
   std::string snap_name = clone_parent_name(name);
-  int fd = ::openat(dir_fd, snap_name.c_str(), O_RDONLY);
+  int fd = ::openat(dir_fd, snap_name.c_str(), O_RDONLY | O_NOFOLLOW);
   if (fd < 0) {
     return;
   }
@@ -1628,9 +1638,9 @@ void GPFSStrategy::cleanup_clone(const DoutPrefixProvider* dpp,
      * expected if the child hasn't been unlinked yet, or if
      * multiple clones share the same parent.  Log at debug
      * level; a future sweep can retry. */
-    ldpp_dout(dpp, 10) << "gpfs cleanup_clone: unsnap "
-      << snap_name << " failed: " << cpp_strerror(err)
-      << " (may still have children)" << dendl;
+    ldpp_dout_fmt(dpp, 10, "gpfs cleanup_clone: unsnap {} failed: {} (may "
+                           "still have children)", snap_name,
+                           cpp_strerror(err));
     return;
   }
 

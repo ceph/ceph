@@ -15,6 +15,7 @@
 #include "acconfig.h"
 #include "rgw_sal_nsfs.h"
 #include <gtest/gtest.h>
+#include <gmock/gmock.h>
 #include <algorithm>
 #include <array>
 #include <set>
@@ -70,7 +71,24 @@ const std::string ATTR3{"attr3"};
 const std::string ATTR_OBJECT_TYPE{"object_type"};
 
 namespace {
-  bool do_create = false;
+  /* Start each run from an empty tree.
+   *
+   * **Default, and it was not.**  The wipe existed behind `--create`,
+   * off unless asked for, so the suite passed on its first run against
+   * a fresh directory and failed 40 tests on every run after it:  a
+   * test asserting a path is absent read the path the previous run
+   * created.  Worse, one of those stale states left the multipart
+   * cache non-empty at teardown and the process segfaulted.  A suite
+   * that only passes with an undocumented flag reports "the unit tests
+   * pass" from a state nobody can reproduce.
+   *
+   * `--reuse` restores the old behaviour for anyone who wants to run
+   * against a tree a previous run left.  `--create` is kept, and now
+   * asks for what already happens. */
+  bool clean_first = true;
+  /* Remove the tree on the way out.  Off by default, so the tree
+   * survives a run and can be inspected after a failure -- which is
+   * safe now that the next run starts by clearing it. */
   bool do_delete = false;
   bool verbose = false;
 }
@@ -139,7 +157,7 @@ public:
   virtual ~Environment() {}
 
   void SetUp() override {
-    if (do_create) {
+    if (clean_first) {
       sf::remove_all(base_path);
     }
     sf::create_directories(base_path);
@@ -327,7 +345,10 @@ TEST(FSEnt, DirBase)
   attrs.clear();
   ret = testdir->read_attrs(env->dpp, null_yield, attrs);
   EXPECT_EQ(ret, 0);
-  EXPECT_EQ(attrs.size(), 4);
+  /* the three written here.  object_type was removed in 4cd543aa56c:
+   * it recorded one fact, staging directory or ordinary, which the
+   * directory's name already settles. */
+  EXPECT_EQ(attrs.size(), 3);
   std::string val;
   bool success = decode_attr(attrs, ATTR1.c_str(), val);
   EXPECT_TRUE(success);
@@ -338,10 +359,6 @@ TEST(FSEnt, DirBase)
   success = decode_attr(attrs, ATTR3.c_str(), val);
   EXPECT_TRUE(success);
   EXPECT_EQ(val, ATTR3);
-  nsfs::ObjectType type;
-  success = decode_attr(attrs, ATTR_OBJECT_TYPE.c_str(), type);
-  EXPECT_TRUE(success);
-  EXPECT_EQ(type.type, nsfs::ObjectType::DIRECTORY);
 
   ret = testdir->close();
   EXPECT_EQ(ret, 0);
@@ -381,7 +398,7 @@ TEST(FSEnt, DirBase)
   attrs.clear();
   ret = copydir->read_attrs(env->dpp, null_yield, attrs);
   EXPECT_EQ(ret, 0);
-  EXPECT_EQ(attrs.size(), 4);
+  EXPECT_EQ(attrs.size(), 3);
   success = decode_attr(attrs, ATTR1.c_str(), val);
   EXPECT_TRUE(success);
   EXPECT_EQ(val, ATTR1);
@@ -531,7 +548,8 @@ TEST(FSEnt, FileBase)
   attrs.clear();
   ret = testfile->read_attrs(env->dpp, null_yield, attrs);
   EXPECT_EQ(ret, 0);
-  EXPECT_EQ(attrs.size(), 4);
+  /* see FSEnt.DirBase:  object_type went in 4cd543aa56c */
+  EXPECT_EQ(attrs.size(), 3);
   std::string val;
   bool success = decode_attr(attrs, ATTR1.c_str(), val);
   EXPECT_TRUE(success);
@@ -542,10 +560,6 @@ TEST(FSEnt, FileBase)
   success = decode_attr(attrs, ATTR3.c_str(), val);
   EXPECT_TRUE(success);
   EXPECT_EQ(val, ATTR3);
-  nsfs::ObjectType type;
-  success = decode_attr(attrs, ATTR_OBJECT_TYPE.c_str(), type);
-  EXPECT_TRUE(success);
-  EXPECT_EQ(type.type, nsfs::ObjectType::FILE);
 
   ret = testfile->close();
   EXPECT_EQ(ret, 0);
@@ -709,6 +723,10 @@ public:
       return r;
     }
 
+    /* Small, like the bucket cache above:  the configured defaults are
+     * large enough that nothing is ever evicted, and eviction is what
+     * runs the stabilize callback.  writeback is the policy that has
+     * one, so it is the policy worth testing against. */
     init_multipart_cache(dpp, mp_entries, mp_lanes, mp_parts, mp_budget,
 			 mp_policy);
 
@@ -915,7 +933,12 @@ TEST_F(NSFSDriverTest, BucketCreate)
   EXPECT_EQ(bucket->get_name(), testname);
   EXPECT_EQ(bucket->get_key().name, testname);
   EXPECT_EQ(bucket->get_key().tenant, "");
-  // bucket_id is set to a random value
+  /* create() generates marker and bucket_id as `<name>.<random>` when
+   * the caller supplies no marker, and sets the id from the marker.
+   * The posix driver does the same, and its own test carries the same
+   * stale expectation of "". */
+  EXPECT_EQ(bucket->get_key().bucket_id, bucket->get_info().bucket.marker);
+  EXPECT_THAT(bucket->get_key().bucket_id, ::testing::StartsWith(testname + "."));
 
   sf::path tp{bp / "root" / testname};
   EXPECT_TRUE(sf::exists(tp));
@@ -928,6 +951,16 @@ protected:
 
 public:
   NSFSBucketTest() {}
+
+  sf::path bucket_path() const { return bp / "root" / testname; }
+
+  static mode_t file_mode(const sf::path& p) {
+    struct stat st{};
+    if (::stat(p.c_str(), &st) != 0) {
+      return 0;
+    }
+    return st.st_mode & 07777;
+  }
 
   void SetUp() {
     NSFSDriverTest::SetUp();
@@ -969,6 +1002,157 @@ public:
   }
 };
 
+/* Two writers of one bucket's state, each on its own handle, as two
+ * concurrent requests are, interleaved by hand.  The second must not
+ * silently undo the first.  RGW wraps a bucket write in
+ * retry_raced_bucket_write() (rgw_op.h), which refreshes the bucket and
+ * retries on -ECANCELED, so the second write either carries the first's
+ * state or is refused with -ECANCELED (the lost-update race,
+ * NSFS_WORK_PLAN.md §3). */
+class NSFSBucketRaceTest : public NSFSBucketTest {
+public:
+  std::unique_ptr<rgw::sal::Bucket> handle() {
+    std::unique_ptr<rgw::sal::Bucket> h;
+    EXPECT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname}, &h,
+				  null_yield), 0);
+    return h;
+  }
+
+  static rgw::sal::Attrs one(const char* key, const std::string& v) {
+    bufferlist bl;
+    bl.append(v);
+    return {{key, bl}};
+  }
+};
+
+TEST_F(NSFSBucketRaceTest, AnAttributeWriteKeepsAnotherHandlesAttribute)
+{
+  auto a = handle();
+  auto b = handle();
+
+  auto tags = one(RGW_ATTR_TAGS, "tags-from-a");
+  ASSERT_EQ(a->merge_and_store_attrs(env->dpp, tags, null_yield), 0);
+  auto policy = one(RGW_ATTR_IAM_POLICY, "{\"Version\":\"2012-10-17\"}");
+  const int r = b->merge_and_store_attrs(env->dpp, policy, null_yield);
+  if (r == -ECANCELED) {
+    return;   /* refused, for the caller to refresh and retry */
+  }
+  ASSERT_EQ(r, 0);
+
+  auto fresh = handle();
+  EXPECT_TRUE(fresh->get_attrs().contains(RGW_ATTR_IAM_POLICY));
+  EXPECT_TRUE(fresh->get_attrs().contains(RGW_ATTR_TAGS))
+      << "b's write, from a handle loaded before a's, removed a's tags";
+}
+
+TEST_F(NSFSBucketRaceTest, AnAttributeWriteKeepsAnotherHandlesVersioning)
+{
+  auto a = handle();
+  auto b = handle();
+  ASSERT_FALSE(a->versioned());
+
+  a->get_info().flags |= BUCKET_VERSIONED;
+  ASSERT_EQ(a->put_info(env->dpp, false, real_time(), null_yield), 0);
+  auto tags = one(RGW_ATTR_TAGS, "tags-from-b");
+  const int r = b->merge_and_store_attrs(env->dpp, tags, null_yield);
+  if (r == -ECANCELED) {
+    return;
+  }
+  ASSERT_EQ(r, 0);
+
+  auto fresh = handle();
+  EXPECT_TRUE(fresh->get_attrs().contains(RGW_ATTR_TAGS));
+  EXPECT_TRUE(fresh->versioned())
+      << "b's write, from a handle loaded before a's, turned versioning "
+      << "back off";
+}
+
+/* The delete ops erase an attribute from the map and write:  a write
+ * that is a delta still removes, and leaves another handle's write. */
+TEST_F(NSFSBucketRaceTest, ARemovalStillRemoves)
+{
+  auto seed = handle();
+  auto tags = one(RGW_ATTR_TAGS, "tags-to-remove");
+  ASSERT_EQ(seed->merge_and_store_attrs(env->dpp, tags, null_yield), 0);
+
+  auto a = handle();
+  auto b = handle();
+  auto policy = one(RGW_ATTR_IAM_POLICY, "{\"Version\":\"2012-10-17\"}");
+  ASSERT_EQ(a->merge_and_store_attrs(env->dpp, policy, null_yield), 0);
+  b->get_attrs().erase(RGW_ATTR_TAGS);
+  ASSERT_EQ(b->put_info(env->dpp, false, real_time(), null_yield), 0);
+
+  auto fresh = handle();
+  EXPECT_FALSE(fresh->get_attrs().contains(RGW_ATTR_TAGS));
+  EXPECT_TRUE(fresh->get_attrs().contains(RGW_ATTR_IAM_POLICY));
+}
+
+/* An attribute can be its own presence:  PutBucketPolicy with
+ * ConfirmRemoveSelfBucketAccess stores RGW_ATTR_IAM_POLICY_REMOVE_SELF_ACCESS
+ * empty (rgw_op.cc).  A delta write keeps it, where MERGE would skip an
+ * empty value as "leave it alone". */
+TEST_F(NSFSBucketRaceTest, AnEmptyAttributeIsWritten)
+{
+  auto a = handle();
+  rgw::sal::Attrs flag{{RGW_ATTR_IAM_POLICY_REMOVE_SELF_ACCESS, bufferlist{}}};
+  ASSERT_EQ(a->merge_and_store_attrs(env->dpp, flag, null_yield), 0);
+  EXPECT_TRUE(handle()->get_attrs().contains(
+      RGW_ATTR_IAM_POLICY_REMOVE_SELF_ACCESS));
+
+  a->get_attrs().erase(RGW_ATTR_IAM_POLICY_REMOVE_SELF_ACCESS);
+  ASSERT_EQ(a->put_info(env->dpp, false, real_time(), null_yield), 0);
+  EXPECT_FALSE(handle()->get_attrs().contains(
+      RGW_ATTR_IAM_POLICY_REMOVE_SELF_ACCESS));
+}
+
+/* The metadata lock is scaffolding:  not listed, and not content, so a
+ * bucket holding only it is empty and can be removed.  It carries
+ * NooBaa's object mode, as every file in the tree does. */
+TEST_F(NSFSBucketRaceTest, TheMetaLockIsScaffolding)
+{
+  auto a = handle();
+  auto tags = one(RGW_ATTR_TAGS, "t");
+  ASSERT_EQ(a->merge_and_store_attrs(env->dpp, tags, null_yield), 0);
+  const sf::path lock{bucket_path() / std::string(nsfs::BUCKET_META_LOCK)};
+  ASSERT_TRUE(sf::exists(lock));
+  EXPECT_EQ(file_mode(lock), nsfs::file_create_mode());
+
+  rgw::sal::Bucket::ListParams params;
+  rgw::sal::Bucket::ListResults results;
+  ASSERT_EQ(a->list(env->dpp, params, 100, results, null_yield), 0);
+  EXPECT_TRUE(results.objs.empty());
+  EXPECT_EQ(static_cast<rgw::sal::NSFSBucket*>(a.get())
+	      ->check_empty(env->dpp, null_yield), 0);
+}
+
+/* A File is opened O_NOFOLLOW (the symlink policy, DECISIONS.md 2026-10-22).
+ * A File stands only for a regular file -- get_ent() and stat() refuse
+ * anything else -- so the case is the race:  the entry stat'ed as a
+ * regular file, then swapped for a link before the open.  The open
+ * finds no object there, since a link is not one, rather than reaching
+ * the link's target, here a file outside the bucket.  The control is
+ * the same sequence without the swap. */
+TEST_F(NSFSBucketTest, AFileSwappedForALinkAfterItsStatIsNotOpened)
+{
+  auto* dir = static_cast<rgw::sal::NSFSBucket*>(bucket.get())->get_dir();
+  ASSERT_EQ(dir->open(env->dpp), 0);
+  const sf::path outside = bp / "outside-the-bucket";
+  for (const sf::path& p : {outside, bucket_path() / "plain",
+			    bucket_path() / "swapped"}) {
+    std::ofstream(p) << "x";
+  }
+
+  nsfs::File control("plain", dir, env->cct.get());
+  ASSERT_EQ(control.stat(env->dpp), 0);
+  EXPECT_EQ(control.open(env->dpp), 0) << "the control did not open";
+
+  nsfs::File f("swapped", dir, env->cct.get());
+  ASSERT_EQ(f.stat(env->dpp), 0) << "stat'ed as a regular file";
+  ASSERT_TRUE(sf::remove(bucket_path() / "swapped"));
+  sf::create_symlink(outside, bucket_path() / "swapped");
+  EXPECT_EQ(f.open(env->dpp), -ENOENT)
+      << "the link swapped in after the stat was followed";
+}
 
 /* A file that arrives in a marked bucket without going through RGW is
  * its bucket owner's.
@@ -1030,6 +1214,213 @@ TEST_F(NSFSBucketTest, ASideloadedFileIsItsBucketOwners)
   EXPECT_EQ(rgw_owner{u->get_id()}, bucket->get_info().owner);
 }
 
+/* A bucket chown changes the owner and nothing on disk.
+ *
+ * Metadata only, as NooBaa's `bucket update --owner` (DECISIONS.md
+ * 2026-10-11):  the bucket's owner and its ACL move, and an object
+ * that records no owner lists as the new owner -- which needs the
+ * listing cache dropped, since the first listing filled it with the
+ * old one.  No file's uid or gid moves. */
+TEST_F(NSFSBucketTest, AChownMovesTheOwnerAndNoFile)
+{
+  const sf::path f{bucket_path() / "nobodys.txt"};
+  {
+    int fd = ::open(f.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    ASSERT_GE(fd, 0) << cpp_strerror(errno);
+    ASSERT_EQ(::write(fd, "x", 1), 1);
+    ::close(fd);
+  }
+  struct stat before{};
+  ASSERT_EQ(::stat(f.c_str(), &before), 0);
+
+  auto owner_listed = [&](rgw::sal::Bucket* b) {
+    rgw::sal::Bucket::ListParams params;
+    rgw::sal::Bucket::ListResults results;
+    EXPECT_EQ(b->list(env->dpp, params, 128, results, null_yield), 0);
+    for (const auto& e : results.objs) {
+      if (e.key.name == "nobodys.txt") {
+	return e.meta.owner;
+      }
+    }
+    return std::string{"<not listed>"};
+  };
+  /* the control, and it fills the cache with the old owner */
+  ASSERT_EQ(owner_listed(bucket.get()), to_string(bucket->get_info().owner));
+
+  const rgw_owner acct{rgw_account_id{"RGW22222222222222222"}};
+  ASSERT_NE(acct, bucket->get_info().owner);
+  ASSERT_EQ(bucket->chown(env->dpp, acct, "new-acct", null_yield), 0);
+
+  RGWBucketInfo info;
+  info.bucket.name = testname;
+  auto fresh = driver->get_bucket(info);
+  ASSERT_EQ(fresh->load_bucket(env->dpp, null_yield), 0);
+  EXPECT_EQ(fresh->get_info().owner, acct) << "the owner did not persist";
+  if (auto i = fresh->get_attrs().find(RGW_ATTR_ACL);
+      i != fresh->get_attrs().end()) {
+    RGWAccessControlPolicy policy;
+    auto p = i->second.cbegin();
+    ASSERT_NO_THROW(policy.decode(p));
+    EXPECT_EQ(policy.get_owner().id, acct) << "the bucket ACL kept its owner";
+  }
+  EXPECT_EQ(owner_listed(fresh.get()), to_string(acct))
+      << "the listing still carries the old owner";
+
+  struct stat after{};
+  ASSERT_EQ(::stat(f.c_str(), &after), 0);
+  EXPECT_EQ(after.st_uid, before.st_uid) << "a metadata chown moved a uid";
+  EXPECT_EQ(after.st_gid, before.st_gid) << "a metadata chown moved a gid";
+}
+
+/* An object chown rewrites a recorded owner and nothing else.
+ *
+ * It used to fchown the file to uid 0.  An object recording no owner is
+ * already its bucket owner's, so it is left without an ACL;  that is
+ * the control, because a chown that wrote an ACL everywhere would pass
+ * the first half. */
+TEST_F(NSFSBucketTest, AnObjectChownRewritesOnlyARecordedOwner)
+{
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  const std::string disk = b->xattr_strategy()->disk_name(RGW_ATTR_ACL);
+  ASSERT_FALSE(disk.empty());
+
+  auto sideload = [&](const char* name) {
+    const sf::path f{bucket_path() / name};
+    int fd = ::open(f.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    EXPECT_GE(fd, 0) << cpp_strerror(errno);
+    EXPECT_EQ(::write(fd, "x", 1), 1);
+    ::close(fd);
+    return f;
+  };
+  const sf::path recorded = sideload("recorded.txt");
+  const sf::path bare = sideload("bare.txt");
+  {
+    RGWAccessControlPolicy policy;
+    policy.create_default(rgw_user("", "old-owner"), "Old Owner");
+    bufferlist bl;
+    policy.encode(bl);
+    ASSERT_EQ(::setxattr(recorded.c_str(), disk.c_str(), bl.c_str(),
+			 bl.length(), 0), 0);
+  }
+  struct stat before{};
+  ASSERT_EQ(::stat(recorded.c_str(), &before), 0);
+
+  std::unique_ptr<rgw::sal::User> newu =
+    driver->get_user(rgw_user("", "new-owner"));
+  for (const char* name : {"recorded.txt", "bare.txt"}) {
+    auto obj = bucket->get_object(rgw_obj_key(name));
+    ASSERT_EQ(obj->chown(env->dpp, newu->get_id(), newu->get_display_name(), null_yield), 0) << name;
+  }
+
+  char buf[4096];
+  ssize_t len = ::getxattr(recorded.c_str(), disk.c_str(), buf, sizeof(buf));
+  ASSERT_GT(len, 0);
+  bufferlist bl;
+  bl.append(buf, len);
+  RGWAccessControlPolicy policy;
+  auto it = bl.cbegin();
+  ASSERT_NO_THROW(policy.decode(it));
+  EXPECT_EQ(policy.get_owner().id, rgw_owner{rgw_user("", "new-owner")});
+
+  EXPECT_EQ(::getxattr(bare.c_str(), disk.c_str(), nullptr, 0), -1)
+      << "an object recording no owner was given an ACL";
+
+  struct stat after{};
+  ASSERT_EQ(::stat(recorded.c_str(), &after), 0);
+  EXPECT_EQ(after.st_uid, before.st_uid) << "an object chown moved a uid";
+}
+
+/* The full chown gives the new owner's POSIX identity to everything
+ * under the bucket, and not to the bucket directory, which is the
+ * gateway's (NSFS_IMPERSONATION.md 8a).
+ *
+ * A test cannot change a file's uid without privilege, so the new
+ * owner's identity is this process's uid with one of its other groups,
+ * and the gid is what moves.  Skipped when the process has no second
+ * group, because then the gid cannot move either and the assertion
+ * would pass on a no-op. */
+TEST_F(NSFSBucketTest, APosixChownGivesTheFilesTheNewOwnersIdentity)
+{
+  gid_t other = 0;
+  bool have_other = false;
+  {
+    int n = ::getgroups(0, nullptr);
+    std::vector<gid_t> g(n > 0 ? n : 0);
+    n = (n > 0) ? ::getgroups(n, g.data()) : 0;
+    for (int i = 0; i < n; ++i) {
+      if (g[i] != ::getegid()) {
+	other = g[i];
+	have_other = true;
+	break;
+      }
+    }
+  }
+  if (!have_other) {
+    GTEST_SKIP() << "the process has no group besides its primary one";
+  }
+
+  const sf::path top{bucket_path() / "top.txt"};
+  const sf::path deep{bucket_path() / "a" / "b" / "deep.txt"};
+  sf::create_directories(deep.parent_path());
+  for (const auto& f : {top, deep}) {
+    int fd = ::open(f.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    ASSERT_GE(fd, 0) << cpp_strerror(errno);
+    ::close(fd);
+  }
+  struct stat bdir_before{};
+  ASSERT_EQ(::stat(bucket_path().c_str(), &bdir_before), 0);
+  struct stat top_before{};
+  ASSERT_EQ(::stat(top.c_str(), &top_before), 0);
+  ASSERT_NE(top_before.st_gid, other) << "nothing to prove";
+
+  const rgw_account_id acct{"RGW33333333333333333"};
+  nsfs::Identity row;
+  row.key = acct;
+  row.uid = ::getuid();
+  row.gid = other;
+  ASSERT_EQ(driver->get_identity_db()->put_identity(env->dpp, row), 0);
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->chown(env->dpp, rgw_owner{acct}, "posix-acct",
+		     rgw::sal::NSFSBucket::ChownMode::posix, null_yield), 0);
+
+  for (const auto& p : {top, deep, deep.parent_path(),
+			deep.parent_path().parent_path()}) {
+    struct stat st{};
+    ASSERT_EQ(::stat(p.c_str(), &st), 0) << p;
+    EXPECT_EQ(st.st_gid, other) << p << " did not take the new owner's gid";
+  }
+  struct stat bdir_after{};
+  ASSERT_EQ(::stat(bucket_path().c_str(), &bdir_after), 0);
+  EXPECT_EQ(bdir_after.st_gid, bdir_before.st_gid)
+      << "the bucket directory, which is the gateway's, was chowned";
+  EXPECT_EQ(b->get_info().owner, rgw_owner{acct});
+}
+
+/* The full chown rejects, before changing anything, a new owner it
+ * cannot give the files to:  none with no identity row, and none with
+ * a directory-backed one, whose ids live in a directory not consulted. */
+TEST_F(NSFSBucketTest, APosixChownRejectsWithoutAUsableIdentity)
+{
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  const rgw_owner was = b->get_info().owner;
+
+  const rgw_account_id none{"RGW44444444444444444"};
+  EXPECT_EQ(b->chown(env->dpp, rgw_owner{none}, "none",
+		     rgw::sal::NSFSBucket::ChownMode::posix, null_yield),
+	    -ENOENT);
+  EXPECT_EQ(b->get_info().owner, was) << "a rejected chown moved the owner";
+
+  const rgw_account_id dirbacked{"RGW55555555555555555"};
+  nsfs::Identity row;
+  row.key = dirbacked;
+  row.distinguished_name = "uid=someone,dc=example,dc=com";
+  ASSERT_EQ(driver->get_identity_db()->put_identity(env->dpp, row), 0);
+  EXPECT_EQ(b->chown(env->dpp, rgw_owner{dirbacked}, "dirbacked",
+		     rgw::sal::NSFSBucket::ChownMode::posix, null_yield),
+	    -EPERM);
+  EXPECT_EQ(b->get_info().owner, was) << "a rejected chown moved the owner";
+}
 
 /* I9:  a user stored for the first time in an account gets a copy of
  * its account's identity row, as NooBaa's CreateUser copies the
@@ -3816,11 +4207,72 @@ TEST_F(NSFSObjectTest, ObjectAttrs)
   bufferlist origbl;
   encode(ATTR1, origbl);
 
-  // attr1 + object_type + synthesized etag
-  EXPECT_EQ(object->get_attrs().size(), 3);
+  /* attr1 and the synthesized etag.  object_type went in 4cd543aa56c,
+   * and there is no `owner` attribute:  ownership is read from the ACL,
+   * which XattrStrategy::object_owner() takes from RGW_ATTR_ACL. */
+  EXPECT_EQ(object->get_attrs().size(), 2);
   EXPECT_EQ(object->get_attrs()[ATTR1], origbl);
-  EXPECT_TRUE(object->get_attrs().contains(ATTR_OBJECT_TYPE));
   EXPECT_TRUE(object->get_attrs().contains(RGW_ATTR_ETAG));
+  EXPECT_FALSE(object->get_attrs().contains(ATTR_OBJECT_TYPE));
+  EXPECT_FALSE(object->get_attrs().contains("owner"));
+}
+
+/* An attribute write on an object nothing has loaded opens it, as the
+ * attribute delete does, rather than dereferencing an entry that does not
+ * exist yet:  it was a segfault at write_attrs() (work-plan stage N-D4).  The
+ * core loads before an attribute operation, so no S3 path reached it.  ATTR1,
+ * written with the object, surviving shows the write merged. */
+TEST_F(NSFSObjectTest, AnAttributeWriteOnAnUnloadedObjectLoadsIt)
+{
+  const std::string probe = RGW_ATTR_META_PREFIX "probe";
+  /* the probe's value as the core sends one, raw;  ATTR1 as the
+   * fixture wrote it, encoded */
+  auto read = [&](const std::string& name) -> std::optional<bufferlist> {
+    auto obj = bucket->get_object(rgw_obj_key(testname));
+    EXPECT_EQ(obj->get_obj_attrs(null_yield, env->dpp), 0);
+    auto it = obj->get_attrs().find(name);
+    if (it == obj->get_attrs().end()) {
+      return std::nullopt;
+    }
+    return it->second;
+  };
+  auto has_probe = [&](const std::string& value) {
+    auto bl = read(probe);
+    if (!bl) {
+      return false;
+    }
+    std::string got = bl->to_str();
+    while (!got.empty() && (got.back() == '\0')) {
+      got.pop_back();
+    }
+    return got == value;
+  };
+  auto has_attr1 = [&]() {
+    bufferlist want;
+    encode(ATTR1, want);
+    return read(ATTR1) == want;
+  };
+
+  bufferlist v;
+  v.append("modified");
+  EXPECT_EQ(bucket->get_object(rgw_obj_key(testname))->modify_obj_attrs(
+	      probe.c_str(), v, null_yield, env->dpp, rgw_user()), 0);
+  EXPECT_TRUE(has_probe("modified"));
+  EXPECT_TRUE(has_attr1()) << "the write replaced the object's attributes";
+
+  Attrs set;
+  set[probe].append("set");
+  EXPECT_EQ(bucket->get_object(rgw_obj_key(testname))->set_obj_attrs(
+	      env->dpp, &set, nullptr, null_yield, rgw::sal::FLAG_LOG_OP,
+	      rgw_user()), 0);
+  EXPECT_TRUE(has_probe("set"));
+  EXPECT_TRUE(has_attr1()) << "the write replaced the object's attributes";
+
+  EXPECT_EQ(bucket->get_object(rgw_obj_key("nosuch"))->modify_obj_attrs(
+	      probe.c_str(), v, null_yield, env->dpp, rgw_user()), -ENOENT);
+  EXPECT_EQ(bucket->get_object(rgw_obj_key("nosuch"))->set_obj_attrs(
+	      env->dpp, &set, nullptr, null_yield, rgw::sal::FLAG_LOG_OP,
+	      rgw_user()), -ENOENT);
 }
 
 TEST_F(NSFSObjectTest, XattrOnDisk)
@@ -3846,7 +4298,9 @@ TEST_F(NSFSObjectTest, XattrOnDisk)
     }
   }
 
-  // nsfs-specific attrs use user.nsfs.* prefix
+  /* neither is written any more -- see NSFSObjectTest.ObjectAttrs.
+   * Asserted absent rather than dropped, because their reappearance
+   * would mean something started writing them again. */
   EXPECT_FALSE(xattr_names.contains("user.nsfs:object_type"));
   EXPECT_FALSE(xattr_names.contains("user.nsfs:owner"));
 
@@ -4076,6 +4530,43 @@ TEST_F(NSFSBucketTest, FlatAndHierarchicalCoexist)
     decode(result, bufit);
     EXPECT_EQ(result, hier_content);
   }
+}
+
+/* An upload asked for without an id is new when it is initialised, and
+ * the one its meta names otherwise -- as lifecycle's abort names it,
+ * from the multipart listing.  A new key ending `.jpg` is never split:
+ * two such uploads once shared the id `jpg`, and a staging directory. */
+TEST_F(NSFSBucketTest, MultipartUploadWithoutIdNewOrNamedByMeta)
+{
+  rgw_placement_rule placement;
+  Attrs attrs;
+  const std::string objname = testname + "-mp.jpg";
+  auto created = bucket->get_multipart_upload(
+    objname, rgw::sal::no_authenticated_user, std::nullopt);
+  ASSERT_EQ(created->init(env->dpp, null_yield, acl_owner, placement,
+			  attrs), 0);
+  const std::string id = created->get_upload_id();
+  EXPECT_FALSE(id.empty());
+  EXPECT_NE(id, "jpg");
+  EXPECT_EQ(created->get_key(), objname);
+
+  auto other = bucket->get_multipart_upload(
+    testname + "-other.jpg", rgw::sal::no_authenticated_user, std::nullopt);
+  ASSERT_EQ(other->init(env->dpp, null_yield, acl_owner, placement,
+			attrs), 0);
+  EXPECT_NE(other->get_upload_id(), id);
+
+  const std::string meta = created->get_meta();
+  sf::path staging{bp / "root" / testname / (".multipart_" + meta)};
+  ASSERT_TRUE(sf::exists(staging)) << "no staging at " << staging;
+
+  auto named = bucket->get_multipart_upload(
+    meta, rgw::sal::no_authenticated_user, std::nullopt);
+  EXPECT_EQ(named->get_key(), objname);
+  EXPECT_EQ(named->get_upload_id(), id);
+  EXPECT_EQ(named->abort(env->dpp, env->cct.get(), null_yield), 0);
+  EXPECT_FALSE(sf::exists(staging)) << "staging left at " << staging;
+  EXPECT_EQ(other->abort(env->dpp, env->cct.get(), null_yield), 0);
 }
 
 TEST_F(NSFSBucketTest, MultipartUploadComplete)
@@ -4903,9 +5394,18 @@ TEST_F(NSFSBucketTest, HierarchicalChown)
   sf::path file_path{bp / "root" / testname / "dir1" / "file.txt"};
   ASSERT_TRUE(sf::is_regular_file(file_path));
 
+  struct stat before{};
+  ASSERT_EQ(::stat(file_path.c_str(), &before), 0);
   auto obj = bucket->get_object(rgw_obj_key("dir1/file.txt"));
   TestUser user(driver.get());
-  int ret = obj->chown(env->dpp, user.get_id(), user.get_display_name(), null_yield);
+  /* metadata only (DECISIONS.md 2026-10-11):  it rewrites the recorded
+   * owner and moves no uid -- it used to fchown to root, which only
+   * root could do */
+  EXPECT_EQ(obj->chown(env->dpp, user.get_id(), user.get_display_name(), null_yield), 0);
+  struct stat after{};
+  ASSERT_EQ(::stat(file_path.c_str(), &after), 0);
+  EXPECT_EQ(after.st_uid, before.st_uid);
+}
 
 /* nsfs creates objects and their directories in NooBaa's modes, under
  * `rgw_nsfs_umask` (DECISIONS.md 2026-10-11).
@@ -5432,6 +5932,17 @@ TEST_F(NSFSGatewayAttrReadTest, AnAttributeIsReadOnAnotherThread)
   EXPECT_EQ(std::string(buf, len), "v");
 }
 
+/* A raise does not take read-search away.
+ *
+ * `with_capabilities()` saves the thread's set and puts it back after
+ * the call.  A thread whose first gateway read falls inside the raise
+ * takes read-search there, so the restore would drop it while
+ * `tl_holds_read_search` stayed set, and every later gateway read on
+ * the thread would be denied in a directory it could not search.
+ * Under `s3-native` the first raise is the publish, and listings,
+ * stats and attribute reads failed after it.  The control is a raw
+ * statx into the uploader's `0700` directory on the same thread:  it
+ * must fail, or the read after the raise shows nothing. */
 TEST_F(NSFSGatewayAttrReadTest, ARaiseKeepsReadSearch)
 {
   if (!permitted(CAP_FOWNER) || !permitted(CAP_DAC_OVERRIDE)) {
@@ -5571,6 +6082,11 @@ protected:
     return driver->driver_hint(env->dpp, "access-model", {{"set", m}}, &out);
   }
 
+  int inject_denial_as_absence(bool on) {
+    std::map<std::string, std::string> out;
+    return driver->driver_hint(env->dpp, "inject-denial-as-absence",
+			       {{"enable", on ? "true" : "false"}}, &out);
+  }
 
   /* how many operations the gateway performed for a denied user */
   uint64_t raised() {
@@ -5816,6 +6332,46 @@ TEST_F(NSFSImpersonatedRenameTest, TheRenameRecordsTheIdentityItChose)
       << "the row moved and the rename's choice did not follow it";
 }
 
+/* The identity's open refuses a link swapped in after the stat, as the
+ * gateway's does (AFileSwappedForALinkAfterItsStatIsNotOpened):
+ * open_as() adds O_NOFOLLOW for every caller.  The entry is alice's
+ * object;  the bucket directory is the gateway's, so the test can
+ * replace it.  The control is the same open without the swap. */
+TEST_F(NSFSImpersonatedRenameTest, AnIdentitysOpenRefusesALinkSwappedIn)
+{
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "plain", "alice's"));
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "swapped", "alice's"));
+  const sf::path outside = bp / "outside-the-bucket";
+  std::ofstream(outside) << "x";
+  const nsfs::FSIdentity id{alice, creds_for(owner_uid)};
+
+  int control = 0, swapped = 0;
+  std::thread t([&] {
+    auto* dir = static_cast<rgw::sal::NSFSBucket*>(bucket.get())->get_dir();
+    if (dir->open(env->dpp) < 0) {
+      control = swapped = -EBADF;
+      return;
+    }
+    nsfs::File c("plain", dir, env->cct.get());
+    c.set_identity(id);
+    control = (c.stat(env->dpp) < 0) ? -EIO : c.open(env->dpp);
+
+    nsfs::File f("swapped", dir, env->cct.get());
+    f.set_identity(id);
+    if (f.stat(env->dpp) < 0) {
+      swapped = -EIO;
+      return;
+    }
+    std::error_code ec;
+    sf::remove(bucket_path() / "swapped", ec);
+    sf::create_symlink(outside, bucket_path() / "swapped", ec);
+    swapped = ec ? -EIO : f.open(env->dpp);
+  });
+  t.join();
+  EXPECT_EQ(control, 0) << "the control did not open";
+  EXPECT_EQ(swapped, -ENOENT)
+      << "the link swapped in after the stat was followed";
+}
 
 /* A tag removal runs as the authenticated user (phase C's validation clause,
  * the call-site table's remove_x_attr row), under each access model.
@@ -6369,6 +6925,103 @@ TEST_F(NSFSImpersonatedRenameTest, ALifecycleDeleteRunsAsWhomItIsFor)
   EXPECT_EQ(owned("src/k").err, -ENOENT) << "the current version stayed";
 }
 
+/* A lifecycle delete follows the access model:  for an identity the
+ * filesystem denies, posix-strict lets the denial stand and s3-native
+ * raises (DECISIONS.md 2026-10-24, lifecycle's raise). */
+TEST_F(NSFSImpersonatedRenameTest, ALifecycleDeleteFollowsTheAccessModel)
+{
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "src/k", "alice's"));
+  auto lc_delete_for_bob = [this]() {
+    int ret = 0;
+    std::thread t([&] {
+      auto obj = bucket->get_object(rgw_obj_key("src/k"));
+      auto del = obj->get_delete_op(rgw::sal::no_authenticated_user);
+      del->params.versioning_status = bucket->get_info().versioning_status();
+      del->params.bucket_owner = rgw_owner{bob};
+      del->params.on_behalf_of = rgw_owner{bob};
+      ret = del->delete_obj(env->dpp, null_yield, 0);
+    });
+    t.join();
+    return ret;
+  };
+
+  ASSERT_EQ(set_model("posix-strict"), 0);
+  /* the control:  read as an absent object, the denial became -EINVAL */
+  ASSERT_EQ(inject_denial_as_absence(true), 0);
+  const int iret = lc_delete_for_bob();
+  ASSERT_EQ(inject_denial_as_absence(false), 0);
+  EXPECT_EQ(iret, -EINVAL) << "the injection did not reproduce the defect: "
+      << cpp_strerror(-iret);
+  EXPECT_EQ(owned("src/k").err, 0) << "the denied delete removed the object";
+
+  const int sret = lc_delete_for_bob();
+  EXPECT_TRUE(sret == -EACCES || sret == -EPERM)
+      << "posix-strict let the delete through: " << cpp_strerror(-sret);
+  EXPECT_EQ(owned("src/k").err, 0) << "the denied delete removed the object";
+
+  ASSERT_EQ(set_model("s3-native"), 0);
+  const uint64_t before = raised();
+  const int nret = lc_delete_for_bob();
+  ASSERT_EQ(nret, 0) << "s3-native did not raise: " << cpp_strerror(-nret);
+  EXPECT_GT(raised(), before);
+  EXPECT_EQ(owned("src/k").err, -ENOENT) << "the current version stayed";
+}
+
+/* A lifecycle version delete -- noncurrent and delete-marker
+ * expiration -- follows the access model too.  posix-strict's denial
+ * reaches the caller as a denial:  the version-specific branch read a
+ * denied stat as an absent object and answered success for a version
+ * it never touched. */
+TEST_F(NSFSImpersonatedRenameTest, ALifecycleVersionDeleteFollowsTheAccessModel)
+{
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "src/k", "first"));
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "src/k", "second"));
+  const auto hist = versions_in("src");
+  ASSERT_EQ(hist.size(), 1u) << "the first version was not demoted";
+  const std::string entry = hist.front();
+  ASSERT_EQ(entry.rfind("k_", 0), 0u) << entry;
+  const std::string vid = entry.substr(2);
+
+  auto lc_version_delete_for_bob = [&]() {
+    int ret = 0;
+    std::thread t([&] {
+      auto obj = bucket->get_object(rgw_obj_key("src/k", vid));
+      auto del = obj->get_delete_op(rgw::sal::no_authenticated_user);
+      del->params.versioning_status = bucket->get_info().versioning_status();
+      del->params.bucket_owner = rgw_owner{bob};
+      del->params.on_behalf_of = rgw_owner{bob};
+      ret = del->delete_obj(env->dpp, null_yield, 0);
+    });
+    t.join();
+    return ret;
+  };
+
+  ASSERT_EQ(set_model("posix-strict"), 0);
+  /* the control:  read as an absent object, the denial answered
+   * success for a version it never touched */
+  ASSERT_EQ(inject_denial_as_absence(true), 0);
+  const int iret = lc_version_delete_for_bob();
+  ASSERT_EQ(inject_denial_as_absence(false), 0);
+  EXPECT_EQ(iret, 0) << "the injection did not reproduce the defect: "
+      << cpp_strerror(-iret);
+  EXPECT_EQ(owned("src/.versions/" + entry).err, 0)
+      << "the injected delete removed the version";
+
+  const int sret = lc_version_delete_for_bob();
+  EXPECT_TRUE(sret == -EACCES || sret == -EPERM)
+      << "posix-strict answered " << cpp_strerror(-sret)
+      << " for a version it was denied";
+  EXPECT_EQ(owned("src/.versions/" + entry).err, 0)
+      << "the denied delete removed the version";
+
+  ASSERT_EQ(set_model("s3-native"), 0);
+  const uint64_t before = raised();
+  const int nret = lc_version_delete_for_bob();
+  ASSERT_EQ(nret, 0) << "s3-native did not raise: " << cpp_strerror(-nret);
+  EXPECT_GT(raised(), before);
+  EXPECT_EQ(owned("src/.versions/" + entry).err, -ENOENT)
+      << "the version stayed";
+}
 
 /* A lifecycle abort runs as whom it is for:  one with no row is
  * refused and the upload stays, where an abort for nobody would run
@@ -6534,6 +7187,47 @@ TEST_F(NSFSImpersonatedRenameTest, AnInterruptedMoveIsRecoveredInTheOwnersTree)
  * from noobaa-core 68ca22d33, the constant block at the head of
  * `namespace_fs.js` and `to_fs_xattr()`.
  */
+/* parses_disk_attr() names exactly what parse_disk_attrs() reads:  an
+ * identity's read on the ring calls parse_disk_attrs() only for a name
+ * this claims, so a family read there and missing here is never read --
+ * the object-lock family was, and a NooBaa object served to an identity
+ * carried no retention and no legal hold. */
+TEST(NooBaaXattr, ParsesDiskAttrNamesWhatParseDiskAttrsReads)
+{
+  nsfs::NooBaaXattrStrategy nb;
+  const sf::path p{base_path / get_test_name()};
+  {
+    std::ofstream f(p);
+    f << "bytes";
+  }
+  const std::map<std::string, std::string> on_disk = {
+    {"user.noobaa.tag.colour", "red"},
+    {"user.noobaa.legal_hold", "ON"},
+    {"user.noobaa.retention_mode", "GOVERNANCE"},
+    {"user.noobaa.retention_date", "2030-01-01T00:00:00.000Z"},
+    {"user.unrelated", "x"},
+  };
+  for (const auto& [n, v] : on_disk) {
+    ASSERT_EQ(::setxattr(p.c_str(), n.c_str(), v.data(), v.size(), 0), 0) << n;
+  }
+  std::vector<std::string> names;
+  for (const auto& [n, v] : on_disk) {
+    names.push_back(n);
+  }
+  const int fd = ::open(p.c_str(), O_RDONLY);
+  ASSERT_GE(fd, 0);
+  Attrs out;
+  nb.parse_disk_attrs(env->dpp, fd, names, out);
+  ::close(fd);
+  sf::remove(p);
+
+  EXPECT_TRUE(out.contains(RGW_ATTR_TAGS));
+  EXPECT_TRUE(out.contains(RGW_ATTR_OBJECT_LEGAL_HOLD));
+  EXPECT_TRUE(out.contains(RGW_ATTR_OBJECT_RETENTION));
+  for (const auto& [n, v] : on_disk) {
+    EXPECT_EQ(nb.parses_disk_attr(n), n != "user.unrelated") << n;
+  }
+}
 
 TEST(NooBaaXattr, NamesNooBaaAttributes)
 {
@@ -7605,6 +8299,92 @@ public:
   sf::path bucket_path() const { return bp / "root" / testname; }
 };
 
+/* Write `body` to `key` with a content type, as a client's PUT does. */
+static void put_object(rgw::sal::Driver* driver, rgw::sal::Bucket* bucket,
+		       const DoutPrefixProvider* dpp, const ACLOwner& owner,
+		       const std::string& key, const std::string& body,
+		       const std::string& content_type, int expect = 0)
+{
+  auto obj = bucket->get_object(rgw_obj_key(key));
+  auto writer = driver->get_atomic_writer(dpp, null_yield, obj.get(), owner,
+					  nullptr, 0, "put",
+					  rgw::sal::no_authenticated_user);
+  ASSERT_EQ(writer->prepare(null_yield), 0) << key;
+  bufferlist bl;
+  bl.append(body);
+  ASSERT_EQ(writer->process(std::move(bl), 0), 0);
+  ASSERT_EQ(writer->process({}, body.size()), 0);
+  Attrs attrs;
+  bufferlist ct;
+  ct.append(content_type);
+  attrs[RGW_ATTR_CONTENT_TYPE] = ct;
+  ceph::real_time mtime;
+  std::string etag;
+  req_context rctx{dpp, null_yield, nullptr};
+  EXPECT_EQ(writer->complete(body.size(), etag, &mtime, real_time(), attrs,
+			     std::nullopt, real_time(), nullptr, nullptr,
+			     nullptr, nullptr, nullptr, rctx, 0), expect) << key;
+}
+
+
+/* Two writers of one object's attributes, each on its own handle loaded
+ * before the other wrote, as two concurrent requests are, interleaved
+ * by hand.  RGW asks for one attribute written (modify_obj_attrs()) or a
+ * named set (set_obj_attrs()), and RADOS writes only those
+ * (RGWRados::set_attrs()), so a write of the tags and a write of the ACL
+ * both survive, whichever lands last (NSFS_WORK_PLAN.md §3). */
+TEST_F(NSFSBucketRaceTest, AnObjectAttributeWriteKeepsAnotherHandlesAttribute)
+{
+  put_object(driver.get(), bucket.get(), env->dpp, acl_owner, "k", "body",
+	     "text/plain");
+  /* tags already there, so each handle holds a value of the attribute
+   * the other changes */
+  {
+    RGWObjTags old;
+    old.add_tag("from", "before");
+    bufferlist obl;
+    old.encode(obl);
+    auto seed = bucket->get_object(rgw_obj_key("k"));
+    ASSERT_EQ(seed->load_obj_state(env->dpp, null_yield), 0);
+    ASSERT_EQ(seed->modify_obj_attrs(RGW_ATTR_TAGS, obl, null_yield, env->dpp,
+				     rgw_user()), 0);
+  }
+  auto a = bucket->get_object(rgw_obj_key("k"));
+  auto b = bucket->get_object(rgw_obj_key("k"));
+  /* as the ops load before writing:  the object, then its attributes */
+  for (auto* h : {a.get(), b.get()}) {
+    ASSERT_EQ(h->load_obj_state(env->dpp, null_yield), 0);
+    ASSERT_EQ(h->get_obj_attrs(null_yield, env->dpp), 0);
+  }
+
+  RGWObjTags tags;
+  tags.add_tag("from", "a");
+  bufferlist tbl;
+  tags.encode(tbl);
+  ASSERT_EQ(a->modify_obj_attrs(RGW_ATTR_TAGS, tbl, null_yield, env->dpp,
+				rgw_user()), 0);
+
+  RGWAccessControlPolicy policy;
+  policy.create_default(acl_owner.id, "from-b");
+  rgw::sal::Attrs acl;
+  policy.encode(acl[RGW_ATTR_ACL]);
+  ASSERT_EQ(b->set_obj_attrs(env->dpp, &acl, nullptr, null_yield,
+			     rgw::sal::FLAG_LOG_OP, rgw_user()), 0);
+
+  auto fresh = bucket->get_object(rgw_obj_key("k"));
+  ASSERT_EQ(fresh->load_obj_state(env->dpp, null_yield), 0);
+  ASSERT_EQ(fresh->get_obj_attrs(null_yield, env->dpp), 0);
+  const auto& attrs = fresh->get_attrs();
+  ASSERT_TRUE(attrs.contains(RGW_ATTR_ACL));
+  EXPECT_TRUE(attrs.at(RGW_ATTR_ACL).contents_equal(acl[RGW_ATTR_ACL]))
+      << "a's tag write, from a handle loaded before b's, put the old ACL "
+      << "back";
+  ASSERT_TRUE(attrs.contains(RGW_ATTR_TAGS))
+      << "b's ACL write, from a handle loaded before a's, removed a's tags";
+  EXPECT_TRUE(attrs.at(RGW_ATTR_TAGS).contents_equal(tbl))
+      << "b's ACL write, from a handle loaded before a's, put the old tags "
+      << "back";
+}
 
 /* A directory object as NooBaa lays it down:  the marker and the
  * object's attributes on the directory, and the bytes in `.folder` only
@@ -7923,6 +8703,45 @@ TEST_F(NSFSNooBaaBucketTest, AWriteToADirectoryObjectIsRejected)
       << "a sentinel was written into a base bucket";
 }
 
+/* GET a key, optionally a version of it;  "<absent>" when there is none. */
+static std::string read_version(rgw::sal::Bucket* bucket,
+				const DoutPrefixProvider* dpp,
+				const std::string& key, const std::string& vid,
+				std::string* reported = nullptr)
+{
+  auto obj = bucket->get_object(rgw_obj_key(key, vid));
+  std::unique_ptr<rgw::sal::Object::ReadOp> rop(obj->get_read_op(rgw::sal::no_authenticated_user));
+  if (rop->prepare(null_yield, dpp) < 0) {
+    return "<absent>";
+  }
+  if (reported) {
+    *reported = obj->get_instance();
+  }
+  bufferlist bl;
+  Read_CB cb(&bl);
+  if (obj->get_size() > 0) {
+    EXPECT_EQ(rop->iterate(dpp, 0, obj->get_size() - 1, &cb, null_yield), 0);
+  }
+  return bl.to_str();
+}
+
+/* The version rows a listing gives for one key, instance -> latest. */
+static std::map<std::string, bool> listed_versions(rgw::sal::Bucket* bucket,
+						   const DoutPrefixProvider* dpp,
+						   const std::string& key)
+{
+  rgw::sal::Bucket::ListParams params;
+  params.list_versions = true;
+  rgw::sal::Bucket::ListResults results;
+  EXPECT_EQ(bucket->list(dpp, params, 1000, results, null_yield), 0);
+  std::map<std::string, bool> out;
+  for (auto& e : results.objs) {
+    if (e.key.name == key) {
+      out[e.key.instance] = e.is_current();
+    }
+  }
+  return out;
+}
 
 /* ------------------------------------------------------------------ *
  * The gate on a bucket not taken over (DECISIONS.md 2026-10-21).
@@ -8225,6 +9044,25 @@ TEST_F(NSFSAdoptionGateTest, ACopyOutIsARead)
   EXPECT_EQ(put(marked.get(), "new"), 0) << "a marked bucket rejected a write";
 }
 
+/* Their empty directory object, copied to a key that names a directory
+ * in a marked bucket, is refused as any copy onto a directory is
+ * (refuse_directory_name()):  the directory holds its name, and the
+ * keys under it are other objects.  An empty one, because a directory
+ * object with bytes copies through its `.folder`, a File. */
+TEST_F(NSFSAdoptionGateTest, ACopyOfTheirDirectoryObjectOntoADirectoryKeepsTheKeysUnderIt)
+{
+  ASSERT_NO_FATAL_FAILURE(lay_noobaa_directory_object(
+      bucket_path() / "s", "", "application/x-directory", "s"));
+  auto marked = marked_bucket(testname + "-ours");
+  ASSERT_EQ(put(marked.get(), "e/x"), 0);
+  const sf::path kept = bp / "root" / (testname + "-ours") / "e" / "x";
+  ASSERT_TRUE(sf::is_regular_file(kept));
+
+  EXPECT_EQ(copy(bucket.get(), "s/", marked.get(), "e"),
+	    -ERR_KEY_PATH_CONFLICT);
+  EXPECT_TRUE(sf::is_regular_file(kept))
+      << "the copy removed the keys under its destination";
+}
 
 /* Nothing returns a bucket to base:  set_profile() rejects it for every
  * caller, the profile hint among them, and the bucket stays marked. */
@@ -8275,13 +9113,44 @@ TEST_F(NSFSBucketTest, TheUnmarkedBucketHintIsNarrow)
   EXPECT_EQ(std::stoull(f1["hint_unmarked_buckets"]), count + 1);
 }
 
+/* A version keeps the id it was recorded with (DECISIONS.md 2026-10-13).
+ *
+ * NooBaa records each version's id when it writes it, and the id it
+ * records drops the low bits of the mtime, so one recomputed from the
+ * stat differs.  The recorded id below is deliberately not what the stat
+ * would give.  A client that was handed it must find the version by it
+ * before adoption, after it, and after the next PUT demotes it. */
+TEST_F(NSFSNooBaaBucketTest, AVersionKeepsTheIdItWasRecordedWith)
+{
   /* versioning in the bucket's state, as adoption's first step writes
    * it from NooBaa's record */
   auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  bucket->get_info().flags |= BUCKET_VERSIONED;
   rgw::sal::Attrs none;
   ASSERT_EQ(b->merge_and_store_attrs(env->dpp, none, null_yield,
 				     rgw::sal::MutationPurpose::adoption), 0);
 
+  const sf::path cur = bucket_path() / "v";
+  write_file(cur, "first");
+  struct stat st{};
+  ASSERT_EQ(::stat(cur.c_str(), &st), 0);
+  auto b36 = [](uint64_t n) {
+    std::string r;
+    do { r.insert(r.begin(), "0123456789abcdefghijklmnopqrstuvwxyz"[n % 36]); n /= 36; } while (n);
+    return r;
+  };
+  const std::string recorded = "mtime-" + b36(1700000000000000000ull) +
+			       "-ino-" + b36(st.st_ino);
+  ASSERT_EQ(::setxattr(cur.c_str(), "user.noobaa.version_id",
+		       recorded.data(), recorded.size(), 0), 0);
+
+  std::string reported;
+  EXPECT_EQ(read_version(bucket.get(), env->dpp, "v", "", &reported), "first");
+  EXPECT_EQ(reported, recorded) << "HEAD reported an id derived from the stat";
+  EXPECT_EQ(read_version(bucket.get(), env->dpp, "v", recorded), "first")
+      << "the recorded id does not find the current version";
+  auto rows = listed_versions(bucket.get(), env->dpp, "v");
+  EXPECT_TRUE(rows.count(recorded)) << "the listing shows another id";
 
   /* adoption keeps the id;  a PUT can only come after it, since nothing
    * writes a bucket not taken over */
@@ -8289,6 +9158,17 @@ TEST_F(NSFSBucketTest, TheUnmarkedBucketHintIsNarrow)
   EXPECT_EQ(read_version(bucket.get(), env->dpp, "v", recorded), "first")
       << "adoption lost the id the client holds";
 
+  /* a new version demotes this one, under the id it was recorded with */
+  put_object(driver.get(), bucket.get(), env->dpp, acl_owner, "v", "second",
+	     "text/plain");
+  EXPECT_EQ(read_version(bucket.get(), env->dpp, "v", recorded), "first")
+      << "the demoted version lost the id the client holds";
+  EXPECT_EQ(read_version(bucket.get(), env->dpp, "v", ""), "second");
+  rows = listed_versions(bucket.get(), env->dpp, "v");
+  ASSERT_TRUE(rows.count(recorded));
+  EXPECT_FALSE(rows[recorded]);
+  EXPECT_EQ(rows.size(), 2u);
+}
 
 /* NooBaa's temp directory is content only while it holds something.
  *
@@ -10455,16 +11335,100 @@ TEST_F(NSFSConvertingBucketTest, AnAttributeWrittenBeforeTheSweepIsRefused)
   EXPECT_TRUE(v1.listed);
 }
 
+/* A file with no recorded id is the null version:  it was placed
+ * outside S3, or written while versioning was disabled (DECISIONS.md
+ * 2026-10-13).  Before, HEAD and the listing reported an id derived from
+ * its stat, while demotion treated it as null. */
+TEST_F(NSFSBucketTest, AFileWithNoRecordedIdIsTheNullVersion)
+{
+  bucket->get_info().flags |= BUCKET_VERSIONED;
+  ASSERT_EQ(bucket->put_info(env->dpp, false, real_time(), null_yield), 0);
+  write_file(bp / "root" / testname / "sideloaded", "outside S3");
+
+  std::string reported;
+  EXPECT_EQ(read_version(bucket.get(), env->dpp, "sideloaded", "", &reported),
+	    "outside S3");
+  EXPECT_EQ(reported, "null");
+  EXPECT_EQ(read_version(bucket.get(), env->dpp, "sideloaded", "null"),
+	    "outside S3");
+  auto rows = listed_versions(bucket.get(), env->dpp, "sideloaded");
+  EXPECT_EQ(rows.size(), 1u);
+  EXPECT_TRUE(rows.count("null")) << "the listing gave it a non-null id";
+}
+
+/* Mid-conversion, an object the sweep has not reached is read under
+ * NooBaa's name for the record. */
+TEST_F(NSFSConvertingBucketTest, AnUnreachedVersionKeepsItsRecordedId)
+{
   /* versioning on, past the gate a converting bucket keeps for clients;
    * what is under test is the read */
   std::map<std::string, std::string> out;
   ASSERT_EQ(driver->driver_hint(env->dpp, "inject-lift-adoption-gate",
 				{{"enable", "true"}, {"bucket", testname}},
 				&out), 0);
+  bucket->get_info().flags |= BUCKET_VERSIONED;
+  ASSERT_EQ(bucket->put_info(env->dpp, false, real_time(), null_yield), 0);
   ASSERT_EQ(driver->driver_hint(env->dpp, "inject-lift-adoption-gate",
 				{{"enable", "false"}, {"bucket", testname}},
 				&out), 0);
   write_nb_object("w");
+  const std::string recorded = "mtime-abc123-ino-def456";
+  ASSERT_EQ(::setxattr((bucket_path() / "w").c_str(), "user.noobaa.version_id",
+		       recorded.data(), recorded.size(), 0), 0);
+
+  std::string reported;
+  EXPECT_EQ(read_version(bucket.get(), env->dpp, "w", "", &reported),
+	    "their bytes");
+  EXPECT_EQ(reported, recorded);
+  EXPECT_EQ(read_version(bucket.get(), env->dpp, "w", recorded), "their bytes");
+}
+
+/* One over-long name in a tree another gateway wrote must not hide its
+ * bucket (PUNCHLIST.md, OPEN:  "one over-long name in a foreign tree
+ * empties the whole listing").
+ *
+ * The listing is served from the LMDB cache, which holds at most
+ * max_key_size() - 1 bytes of name.  A PUT of a longer key is rejected,
+ * but NooBaa accepts S3's 1024 bytes, so an adopted tree can hold one.
+ * Today the cache fill fails on it and the listing comes back empty --
+ * every object in the bucket, not only the long one.
+ *
+ * DISABLED until that is fixed, so that every run reports it ("YOU HAVE
+ * 1 DISABLED TEST") without failing;  --gtest_also_run_disabled_tests
+ * runs it.  What it asserts is the property any fix must give:  the
+ * ordinary objects beside the long name are listed.  Whether the long
+ * name is listed too depends on the fix chosen, so it is not asserted. */
+TEST_F(NSFSBucketTest, DISABLED_AnOverLongNameDoesNotHideItsBucket)
+{
+  const int cap = driver->get_bucket_cache()->max_key_size();
+  ASSERT_GT(cap, 0) << "the cache reports no key size";
+
+  /* a key over the ceiling, each component well under NAME_MAX */
+  sf::path dir = bucket_path() / "long";
+  std::string key = "long";
+  while (key.size() < static_cast<size_t>(cap) + 16) {
+    const std::string comp(200, 'y');
+    dir /= comp;
+    key += "/" + comp;
+  }
+  sf::create_directories(dir);
+  write_file(dir / "end", "over the ceiling");
+  key += "/end";
+  ASSERT_GT(key.size() + 1, static_cast<size_t>(cap));
+
+  write_file(bucket_path() / "a", "a");
+  write_file(bucket_path() / "b", "b");
+
+  rgw::sal::Bucket::ListParams params;
+  rgw::sal::Bucket::ListResults results;
+  ASSERT_EQ(bucket->list(env->dpp, params, 1000, results, null_yield), 0);
+  std::set<std::string> names;
+  for (auto& e : results.objs) {
+    names.insert(e.key.name);
+  }
+  EXPECT_TRUE(names.contains("a")) << "an over-long name hid its bucket";
+  EXPECT_TRUE(names.contains("b")) << "an over-long name hid its bucket";
+}
 
 /* A bucket that does not own its directory still has its deletion
  * rejected while it holds an object, as S3 rejects any non-empty bucket
@@ -11926,6 +12890,115 @@ static std::vector<std::string> listing_rows(rgw::sal::Bucket* bucket,
   return rows;
 }
 
+/* A symbolic link is not an object (DECISIONS.md 2026-10-23;  a link is an
+ * object only beneath the bucket).  One link of each kind the rule
+ * covers:  to a file in the bucket, to a directory in the bucket, out of
+ * the bucket, to nothing, and to itself.  `o00` and `sub/inner` are
+ * objects. */
+static void plant_links(const sf::path& bucket_dir, const sf::path& outside)
+{
+  write_file(bucket_dir / "o00", "o00");
+  sf::create_directories(bucket_dir / "sub");
+  write_file(bucket_dir / "sub" / "inner", "inner");
+  write_file(outside, "outside");
+  sf::create_symlink("o00", bucket_dir / "l-file");
+  sf::create_symlink("sub", bucket_dir / "l-dir");
+  sf::create_symlink(outside, bucket_dir / "l-out");
+  sf::create_symlink("nowhere", bucket_dir / "l-dangling");
+  sf::create_symlink("l-loop", bucket_dir / "l-loop");
+}
+
+static const std::array<const char*, 5> planted_links{
+  "l-file", "l-dir", "l-out", "l-dangling", "l-loop"};
+
+static bool is_link(const sf::path& p)
+{
+  return sf::is_symlink(sf::symlink_status(p));
+}
+
+/* One link in a directory ended that directory's listing:  the walk
+ * returned get_ent()'s refusal, and BucketCache::fill() kept what it had
+ * collected.  Twenty objects and a link of every kind, so readdir order
+ * cannot put the links last;  every object lists and no link does. */
+TEST_F(NSFSBucketTest, ALinkIsNotListedAndDoesNotEndTheListing)
+{
+  const sf::path outside = bp / "outside-the-bucket";
+  plant_links(bucket_path(), outside);
+  std::set<std::string> want{"o00", "sub/inner"};
+  for (int i = 1; i < 20; ++i) {
+    const std::string k = fmt::format("o{:02}", i);
+    write_file(bucket_path() / k, k);
+    want.insert(k);
+  }
+
+  rgw::sal::Bucket::ListParams params;
+  rgw::sal::Bucket::ListResults results;
+  ASSERT_EQ(bucket->list(env->dpp, params, 1000, results, null_yield), 0);
+  std::set<std::string> got;
+  for (const auto& e : results.objs) {
+    got.insert(e.key.name);
+  }
+  for (const auto& k : want) {
+    EXPECT_TRUE(got.count(k)) << k << " is missing from the listing";
+  }
+  for (const auto& k : got) {
+    EXPECT_FALSE(k.starts_with("l-")) << k << ", a link, was listed";
+  }
+}
+
+/* A key that names a link is NoSuchKey, whatever the link points at.
+ * The control is the object `o00`, which `l-file` names. */
+TEST_F(NSFSBucketTest, ALinkReadsAsNoSuchKey)
+{
+  plant_links(bucket_path(), bp / "outside-the-bucket");
+  for (const char* k : planted_links) {
+    auto obj = bucket->get_object(rgw_obj_key(k));
+    EXPECT_EQ(obj->load_obj_state(env->dpp, null_yield), -ENOENT) << k;
+  }
+  auto control = bucket->get_object(rgw_obj_key("o00"));
+  EXPECT_EQ(control->load_obj_state(env->dpp, null_yield), 0);
+}
+
+/* A DELETE of a link's name unlinks the link and never its target --
+ * the one S3 operation that clears a name no listing shows. */
+TEST_F(NSFSBucketTest, DeletingALinksNameUnlinksTheLinkAndNotItsTarget)
+{
+  const sf::path outside = bp / "outside-the-bucket";
+  plant_links(bucket_path(), outside);
+  for (const char* k : planted_links) {
+    auto obj = bucket->get_object(rgw_obj_key(k));
+    auto del = obj->get_delete_op(rgw::sal::no_authenticated_user);
+    EXPECT_EQ(del->delete_obj(env->dpp, null_yield, 0), 0) << k;
+    EXPECT_FALSE(is_link(bucket_path() / k)) << k << " is still there";
+  }
+  EXPECT_EQ(read_all(bucket_path() / "o00"), "o00");
+  EXPECT_EQ(read_all(bucket_path() / "sub" / "inner"), "inner");
+  EXPECT_EQ(read_all(outside), "outside");
+}
+
+/* A bucket is empty when it lists nothing (DECISIONS.md 2026-10-13), so
+ * links do not keep it, and its delete removes them -- the links, not
+ * what they point at.  The control is the same bucket with an object. */
+TEST_F(NSFSBucketTest, ALinkDoesNotKeepABucket)
+{
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  const sf::path outside = bp / "outside-the-bucket";
+  write_file(outside, "outside");
+  sf::create_symlink(outside, bucket_path() / "l-out");
+  sf::create_symlink("nowhere", bucket_path() / "l-dangling");
+  sf::create_symlink("l-loop", bucket_path() / "l-loop");
+
+  write_file(bucket_path() / "o00", "o00");
+  EXPECT_EQ(b->check_empty(env->dpp, null_yield), -ENOTEMPTY)
+      << "the control:  an object did not count as content";
+  sf::remove(bucket_path() / "o00");
+
+  EXPECT_EQ(b->check_empty(env->dpp, null_yield), 0)
+      << "a link counted as content";
+  EXPECT_EQ(bucket->remove(env->dpp, false, null_yield, rgw::sal::no_authenticated_user), 0);
+  EXPECT_FALSE(sf::exists(sf::symlink_status(bucket_path())));
+  EXPECT_EQ(read_all(outside), "outside");
+}
 
 /* An upload in progress does not keep its bucket, and deleting the
  * bucket aborts it, as RADOS does (check_bucket_empty(),
@@ -11964,6 +13037,105 @@ TEST_F(NSFSBucketTest, DeletingABucketAbortsItsUploads)
   EXPECT_FALSE(sf::exists(bucket_path()));
 }
 
+/* An entry readdir returned and a concurrent DELETE removed before the
+ * walk reached it ended the listing as a link did.  readdir hands the
+ * walk a batch of names, so the callback removing every other object
+ * when the first is emitted stands in for the DELETE:  the names are
+ * still in the batch and the files are gone. */
+TEST_F(NSFSBucketTest, AnEntryRemovedDuringTheWalkIsSkipped)
+{
+  std::set<std::string> names;
+  for (int i = 0; i < 20; ++i) {
+    const std::string k = fmt::format("o{:02}", i);
+    write_file(bucket_path() / k, k);
+    names.insert(k);
+  }
+  auto* dir = static_cast<rgw::sal::NSFSBucket*>(bucket.get())->get_dir();
+  ASSERT_EQ(dir->open(env->dpp), 0);
+
+  int emitted = 0;
+  const sf::path bdir = bucket_path();
+  nsfs::fill_cache_cb_t cb =
+    [&](const DoutPrefixProvider*, rgw_bucket_dir_entry& bde) -> int {
+      if (emitted++ == 0) {
+	for (const auto& k : names) {
+	  if (k != bde.key.name) {
+	    sf::remove(bdir / k);
+	  }
+	}
+      }
+      return 0;
+    };
+  EXPECT_EQ(dir->fill_cache(env->dpp, null_yield, cb, 0, acl_owner), 0);
+  EXPECT_EQ(emitted, 1) << "an entry that was gone was emitted";
+}
+
+/* A PUT of a link's name replaces the link with the object, and the
+ * link's target is untouched -- including under If-None-Match:  *, since
+ * a link is not an object for the condition to find. */
+TEST_F(NSFSBucketTest, APutOfALinksNameReplacesTheLink)
+{
+  const sf::path outside = bp / "outside-the-bucket";
+  plant_links(bucket_path(), outside);
+  put_object(driver.get(), bucket.get(), env->dpp, acl_owner, "l-out",
+	     "replaced", "text/plain");
+  EXPECT_FALSE(is_link(bucket_path() / "l-out"));
+  EXPECT_EQ(read_all(bucket_path() / "l-out"), "replaced");
+  EXPECT_EQ(read_all(outside), "outside");
+
+  auto obj = bucket->get_object(rgw_obj_key("l-file"));
+  auto writer = driver->get_atomic_writer(env->dpp, null_yield, obj.get(),
+					  acl_owner, nullptr, 0, "put",
+					  rgw::sal::no_authenticated_user);
+  ASSERT_EQ(writer->prepare(null_yield), 0);
+  bufferlist bl;
+  bl.append("excl");
+  ASSERT_EQ(writer->process(std::move(bl), 0), 0);
+  ASSERT_EQ(writer->process({}, 4), 0);
+  Attrs attrs;
+  ceph::real_time mtime;
+  std::string etag;
+  req_context rctx{env->dpp, null_yield, nullptr};
+  EXPECT_EQ(writer->complete(4, etag, &mtime, real_time(), attrs,
+			     std::nullopt, real_time(), nullptr, "*",
+			     nullptr, nullptr, nullptr, rctx, 0), 0)
+      << "If-None-Match:  * found a link to refuse on";
+  EXPECT_FALSE(is_link(bucket_path() / "l-file"));
+  EXPECT_EQ(read_all(bucket_path() / "l-file"), "excl");
+  EXPECT_EQ(read_all(bucket_path() / "o00"), "o00");
+}
+
+/* In a versioned bucket a link is not a version:  a PUT of its name
+ * demotes nothing, and a DELETE of it leaves only a delete marker.  No
+ * link reaches `.versions`. */
+TEST_F(NSFSBucketTest, AVersionedWriteOverALinkMakesNoVersionOfIt)
+{
+  bucket->get_info().flags |= BUCKET_VERSIONED;
+  ASSERT_EQ(bucket->put_info(env->dpp, false, real_time(), null_yield), 0);
+  const sf::path outside = bp / "outside-the-bucket";
+  plant_links(bucket_path(), outside);
+
+  put_object(driver.get(), bucket.get(), env->dpp, acl_owner, "l-out",
+	     "replaced", "text/plain");
+  EXPECT_EQ(listed_versions(bucket.get(), env->dpp, "l-out").size(), 1u)
+      << "the link was demoted as a version";
+
+  auto obj = bucket->get_object(rgw_obj_key("l-file"));
+  auto del = obj->get_delete_op(rgw::sal::no_authenticated_user);
+  EXPECT_EQ(del->delete_obj(env->dpp, null_yield, 0), 0);
+  EXPECT_FALSE(is_link(bucket_path() / "l-file"));
+  EXPECT_EQ(listed_versions(bucket.get(), env->dpp, "l-file").size(), 1u)
+      << "a version besides the delete marker";
+
+  const sf::path vers = bucket_path() / ".versions";
+  if (sf::exists(vers)) {
+    for (const auto& e : sf::directory_iterator(vers)) {
+      EXPECT_FALSE(is_link(e.path())) << e.path() << " is a link";
+    }
+  }
+  EXPECT_EQ(read_all(bucket_path() / "o00"), "o00");
+  EXPECT_EQ(read_all(outside), "outside");
+}
 
 /* The listing cache needs no invalidation when a bucket is converted
  * (DECISIONS.md 2026-10-13).
@@ -12427,24 +13599,158 @@ TEST_F(NSFSStrongBucketTest, AClosedGateRejectsAWriteHandle)
   driver->gate_open(testname);
 }
 
+/* A PUT over a side-loaded file replaces the inode.
+ *
+ * This is the premise the mode narrowings rested on, and the reason
+ * removing them is safe.  The write path narrowed the mode with an
+ * fchmod on every write call;  if a PUT wrote *into* a file that was
+ * already there, that fchmod would be re-permissioning somebody
+ * else's file, and dropping it would change behaviour on a tree that
+ * is shared with NFS clients and with NooBaa -- side-loading is a
+ * first-class case here, not an edge.
+ *
+ * It does not write into it.  File::create() opens O_TMPFILE and
+ * link_temp_file() links the result over the name, so the published
+ * object is always an inode this gateway made, and the mode comes
+ * from that create.  Asserting the inode *changed* is what
+ * distinguishes the two, because the mode alone comes out the same
+ * either way.
+ */
+TEST_F(NSFSBucketTest, APutOverASideLoadedFileReplacesTheInode)
+{
+  const mode_t saved = ::umask(022);
+  auto restore = make_scope_guard([saved] { ::umask(saved); });
   nsfs::init_create_modes(env->dpp, env->cct.get());
 
+  /* a file somebody else put in the tree, with somebody else's mode */
+  const sf::path p{bucket_path() / "sideloaded.bin"};
+  {
+    std::ofstream f(p);
+    f << "not ours";
+  }
+  ASSERT_EQ(::chmod(p.c_str(), 0644), 0);
+  struct stat before{};
+  ASSERT_EQ(::stat(p.c_str(), &before), 0);
+  ASSERT_EQ(before.st_mode & 07777, 0644u) << "the side-load did not take";
+
+  auto obj = bucket->get_object(rgw_obj_key("sideloaded.bin"));
+  rgw_owner acl_owner_id = owner;
+  ACLOwner acl_owner{acl_owner_id, ""};
+  auto writer = driver->get_atomic_writer(env->dpp, null_yield, obj.get(),
+					  acl_owner, nullptr, 0, testname,
+					  rgw::sal::no_authenticated_user);
+  ASSERT_NE(writer.get(), nullptr);
+  ASSERT_EQ(writer->prepare(null_yield), 0);
+
+  bufferlist bl;
+  bl.append("ours");
+  const uint64_t len = bl.length();
+  ASSERT_EQ(writer->process(std::move(bl), 0), 0);
+  ASSERT_EQ(writer->process({}, len), 0);
+
+  ceph::real_time mtime;
+  Attrs attrs;
+  std::string etag;
+  req_context rctx{env->dpp, null_yield, nullptr};
+  ASSERT_EQ(writer->complete(len, etag, &mtime, real_time(), attrs,
+			     std::nullopt, real_time(), nullptr, nullptr,
+			     nullptr, nullptr, nullptr, rctx, 0), 0);
+
+  struct stat after{};
+  ASSERT_EQ(::stat(p.c_str(), &after), 0);
+  EXPECT_NE(after.st_ino, before.st_ino)
+      << "the PUT wrote into the side-loaded file rather than replacing "
+	 "it;  the mode narrowing in the write path is therefore not "
+	 "redundant and must not be removed";
   EXPECT_EQ(after.st_mode & 07777, nsfs::file_create_mode());
 }
 
+/* An object published through FSIO carries the mode an object carries.
+ *
+ * The NFS gateway writes through FSIO rather than through
+ * NSFSAtomicWriter, so it reaches none of the three places the mode is
+ * narrowed:  File::write(), UringWriteWindow and
+ * NSFSAtomicWriter::complete().  Whatever mode the shadow was created
+ * with is the mode the published object ends up with, because publish
+ * renames the shadow into place.
+ *
+ * umask is pinned, and that is the whole reason this test can mean
+ * anything.  umask only *clears* bits, so a shadow created with the
+ * wrong mode could still land right under a tight umask.  022 takes
+ * the group write bit the create mode asks for, so passing also
+ * requires that bit to be restored.
+ */
 TEST_F(NSFSStrongBucketTest, AnFSIOPublishedObjectCarriesTheObjectMode)
 {
+  const mode_t saved = ::umask(022);
+  auto restore = make_scope_guard([saved] { ::umask(saved); });
   nsfs::init_create_modes(env->dpp, env->cct.get());
 
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->resolve_profile(env->dpp), 0);
+  ASSERT_TRUE(b->has_extension(nsfs::EXT_SHADOW))
+      << "nothing to test:  FSIO needs EXT_SHADOW";
+
+  auto obj = bucket->get_object(rgw_obj_key("fsio-new.bin"));
+  auto [rc, hdl] = obj->get_fsio_handle(
+      env->dpp, rgw::sal::no_authenticated_user,
+      rgw::sal::Object::FSIOObject::OPEN_FLAG_CREATE |
+		rgw::sal::Object::FSIOObject::OPEN_FLAG_WRITE);
+  ASSERT_EQ(rc, 0);
+  ASSERT_NE(hdl.get(), nullptr);
+  ASSERT_EQ(hdl->commit(env->dpp,
+			rgw::sal::Object::FSIOObject::COMMIT_FLAG_NONE), 0);
+  ASSERT_EQ(hdl->publish(env->dpp,
+			 rgw::sal::Object::FSIOObject::PUBLISH_FLAG_NONE), 0);
+  hdl->close(env->dpp, rgw::sal::Object::FSIOObject::CLOSE_FLAG_NONE);
+  hdl.reset();
+
+  const sf::path published{bucket_path() / "fsio-new.bin"};
+  ASSERT_TRUE(sf::exists(published)) << "the handle published nothing";
   EXPECT_EQ(file_mode(published), nsfs::file_create_mode())
       << "an object written through the NFS gateway does not carry the "
 	 "mode of the same object written through S3";
 }
 
+/* And re-opening an existing object for write, which clones it.
+ *
+ * A second write handle on an object that already exists takes
+ * FSStrategy::clone_file() rather than the O_TMPFILE branch, so the
+ * shadow comes from a different create with its own mode.  Same
+ * question, different line.
+ */
 TEST_F(NSFSStrongBucketTest, AnFSIOClonedObjectCarriesTheObjectMode)
 {
+  const mode_t saved = ::umask(022);
+  auto restore = make_scope_guard([saved] { ::umask(saved); });
   nsfs::init_create_modes(env->dpp, env->cct.get());
 
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->resolve_profile(env->dpp), 0);
+  ASSERT_TRUE(b->has_extension(nsfs::EXT_SHADOW));
+
+  const char* name = "fsio-clone.bin";
+  for (int pass = 0; pass < 2; ++pass) {
+    auto obj = bucket->get_object(rgw_obj_key(name));
+    auto [rc, hdl] = obj->get_fsio_handle(
+	env->dpp, rgw::sal::no_authenticated_user,
+	rgw::sal::Object::FSIOObject::OPEN_FLAG_CREATE |
+		  rgw::sal::Object::FSIOObject::OPEN_FLAG_WRITE);
+    ASSERT_EQ(rc, 0) << "pass " << pass;
+    ASSERT_NE(hdl.get(), nullptr);
+    ASSERT_EQ(hdl->commit(env->dpp,
+			  rgw::sal::Object::FSIOObject::COMMIT_FLAG_NONE), 0);
+    ASSERT_EQ(hdl->publish(env->dpp,
+			   rgw::sal::Object::FSIOObject::PUBLISH_FLAG_NONE), 0);
+    hdl->close(env->dpp, rgw::sal::Object::FSIOObject::CLOSE_FLAG_NONE);
+  }
+
+  const sf::path published{bucket_path() / name};
+  ASSERT_TRUE(sf::exists(published));
+  EXPECT_EQ(file_mode(published), nsfs::file_create_mode())
+      << "the clone path left the object a different mode from an object "
+	 "written through S3";
+}
 
 /* Re-issuing the same request resumes a stopped conversion.
  *
@@ -20949,7 +22255,11 @@ int main(int argc, char *argv[]) {
 
   for (auto arg_iter = args.begin(); arg_iter != args.end();) {
     if (ceph_argparse_flag(args, arg_iter, "--create", (char*) nullptr)) {
-      do_create = true;
+      /* what already happens;  accepted so an existing invocation
+       * keeps working */
+      clean_first = true;
+    } else if (ceph_argparse_flag(args, arg_iter, "--reuse", (char*) nullptr)) {
+      clean_first = false;
     } else if (ceph_argparse_flag(args, arg_iter, "--delete", (char*) nullptr)) {
       do_delete = true;
     } else if (ceph_argparse_flag(args, arg_iter, "--verbose", (char*) nullptr)) {
@@ -20959,7 +22269,7 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  std::cout << "flags: do_create=" << do_create
+  std::cout << "flags: clean_first=" << clean_first
             << " do_delete=" << do_delete
             << " verbose=" << verbose
             << " cwd=" << sf::current_path()

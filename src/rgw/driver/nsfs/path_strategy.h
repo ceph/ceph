@@ -36,6 +36,9 @@ namespace rgw { namespace sal { namespace nsfs {
 inline constexpr std::string_view VERSIONS_DIR = ".versions";
 inline constexpr std::string_view SHADOW_DIR = ".shadow";
 inline constexpr std::string_view VERSIONS_LOCK = ".lock";
+/* At a bucket's root:  the lock one writer of the bucket's metadata
+ * holds at a time (NSFSBucket::write_attrs(), DECISIONS.md 2026-11-05). */
+inline constexpr std::string_view BUCKET_META_LOCK = ".bucket_meta_lock";
 /* The nsfs name.  Borrowed from NooBaa by `61de07d3bf2` and kept as a decision
  * rather than a default:  a sentinel inside the directory costs the
  * listing walk nothing, because it sees the entry anyway.  NooBaa's name
