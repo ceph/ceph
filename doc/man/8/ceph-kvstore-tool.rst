@@ -57,9 +57,12 @@ which are as follows:
 :command:`rm-prefix <prefix>`
     Remove all KV pairs stored with the URL encoded prefix.
 
-:command:`store-copy <path> [num-keys-per-tx]`
+:command:`store-copy <path> [num-keys-per-tx] [store-type]`
     Copy all KV pairs to another directory specified by ``path``. 
     [num-keys-per-tx] is the number of KV pairs copied for a transaction.
+    [store-type] is the type of the new store, by default the type of the
+    source store. A ``bluestore-kv`` store cannot be created, so copying
+    from ``bluestore-kv`` needs a type such as ``rocksdb``.
 
 :command:`store-crc <path>`
     Store CRC of all KV pairs to a file specified by ``path``.
