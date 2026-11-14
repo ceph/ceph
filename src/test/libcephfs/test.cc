@@ -4960,6 +4960,225 @@ TEST(LibCephFS, AsyncReadAndWriteMultiClient) {
   ceph_shutdown(r_cmount);
 }
 
+// A non-blocking read that comes back short while another client has the
+// file open for write: the reader holds neither Fc nor Fs, so the read goes
+// to the OSDs and its completion asks the MDS for the file size. With one
+// messenger worker thread, that thread reads both the OSD's and the MDS's
+// replies, so the completion must not wait for the MDS on it. (If the read
+// does not complete, the test fails and leaves both mounts behind, the
+// reader's hung.)
+TEST(LibCephFS, AsyncShortReadWithoutSizeCap) {
+  pid_t mypid = getpid();
+  struct ceph_mount_info *w_cmount, *r_cmount;
+  UserPerm *w_perms, *r_perms = NULL;
+  Inode *w_parent, *w_inode, *r_parent, *r_inode = NULL;
+  struct ceph_statx stx = {0};
+  struct ceph_ll_io_info io_info;
+  struct iovec iov;
+  struct Fh *w_fh, *r_fh;
+  char out_buf[4096];
+  char in_buf[2 * sizeof(out_buf)];
+  char filename[PATH_MAX];
+
+  sprintf(filename, "/nonblock_short_read_%d", mypid);
+  memset(out_buf, 'x', sizeof(out_buf));
+
+  ASSERT_EQ(ceph_create(&w_cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(w_cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(w_cmount, NULL));
+  ASSERT_EQ(0, ceph_mount(w_cmount, NULL));
+
+  ASSERT_EQ(ceph_create(&r_cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(r_cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(r_cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_set(r_cmount, "ms_async_op_threads", "1"));
+  ASSERT_EQ(0, ceph_mount(r_cmount, NULL));
+
+  w_perms = ceph_mount_perms(w_cmount);
+  ASSERT_EQ(ceph_ll_lookup_root(w_cmount, &w_parent), 0);
+
+  r_perms = ceph_mount_perms(r_cmount);
+  ASSERT_EQ(ceph_ll_lookup_root(r_cmount, &r_parent), 0);
+
+  ASSERT_EQ(ceph_ll_create(w_cmount, w_parent, filename, 0744,
+			   O_RDWR | O_CREAT | O_EXCL | O_NOFOLLOW,
+			   &w_inode, &w_fh, &stx, CEPH_STATX_INO, 0, w_perms), 0);
+  ASSERT_EQ(ceph_ll_write(w_cmount, w_fh, 0, sizeof(out_buf), out_buf),
+	    (int)sizeof(out_buf));
+  ASSERT_EQ(ceph_ll_fsync(w_cmount, w_fh, 0), 0);
+
+  // the writer keeps the file open
+  ASSERT_EQ(ceph_ll_lookup(r_cmount, r_parent, filename, &r_inode,
+			   &stx, CEPH_STATX_INO, 0, r_perms), 0);
+  ASSERT_EQ(ceph_ll_open(r_cmount, r_inode, O_RDONLY | O_NOFOLLOW,
+			 &r_fh, r_perms), 0);
+
+  // read past the end of the file
+  iov.iov_base = in_buf;
+  iov.iov_len = sizeof(in_buf);
+
+  io_info.callback = io_callback;
+  io_info.iov = &iov;
+  io_info.iovcnt = 1;
+  io_info.off = 0;
+  io_info.result = 0;
+  io_info.fh = r_fh;
+  io_info.write = false;
+  io_info.fsync = false;
+  io_info.syncdataonly = false;
+
+  read_done = false;
+  ASSERT_EQ(ceph_ll_nonblocking_readv_writev(r_cmount, &io_info), 0);
+
+  std::cout << ": waiting for read to finish" << std::endl;
+  {
+    std::unique_lock lock(mtx);
+    ASSERT_TRUE(cond.wait_for(lock, std::chrono::seconds(60), []{
+      return read_done;
+    })) << "the non-blocking read did not complete";
+  }
+  std::cout << ": read finished" << std::endl;
+  ASSERT_EQ(io_info.result, (int64_t)sizeof(out_buf));
+  ASSERT_EQ(0, memcmp(in_buf, out_buf, sizeof(out_buf)));
+
+  ASSERT_EQ(0, ceph_ll_close(r_cmount, r_fh));
+  ASSERT_EQ(0, ceph_ll_close(w_cmount, w_fh));
+  ASSERT_EQ(0, ceph_ll_unlink(w_cmount, w_parent, filename, w_perms));
+
+  ASSERT_EQ(0, ceph_unmount(w_cmount));
+  ASSERT_EQ(0, ceph_unmount(r_cmount));
+  ceph_shutdown(w_cmount);
+  ceph_shutdown(r_cmount);
+}
+
+static int reads_done = 0;
+static bool truncate_done = false;
+static int truncate_result = 0;
+
+static void count_read_callback(struct ceph_ll_io_info *io_info) {
+  std::unique_lock lock(mtx);
+  std::cout << "read at " << io_info->off << "=" << io_info->result
+	    << std::endl;
+  reads_done++;
+  cond.notify_one();
+}
+
+// Two non-blocking reads in flight on a file, one of them short, while
+// another client changes the size: the MDS revokes Fr from the reader
+// before it answers the short read's getattr, so no read may keep its Fr
+// reference while it waits for the getattr or for its turn to complete.
+TEST(LibCephFS, AsyncReadsWithSizeChange) {
+  pid_t mypid = getpid();
+  struct ceph_mount_info *w_cmount, *r_cmount;
+  UserPerm *w_perms, *r_perms = NULL;
+  Inode *w_parent, *w_inode, *r_parent, *r_inode = NULL;
+  struct ceph_statx stx = {0};
+  struct ceph_ll_io_info io_info[2];
+  struct iovec iov[2];
+  struct Fh *w_fh, *r_fh;
+  char out_buf[8192];
+  char short_buf[8192];
+  char full_buf[4096];
+  char filename[PATH_MAX];
+
+  sprintf(filename, "/nonblock_reads_size_change_%d", mypid);
+  memset(out_buf, 'x', sizeof(out_buf));
+
+  ASSERT_EQ(ceph_create(&w_cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(w_cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(w_cmount, NULL));
+  ASSERT_EQ(0, ceph_mount(w_cmount, NULL));
+
+  // The reader gets its OSD replies late (and in order), so that the size
+  // change arrives while both reads are in flight.
+  ASSERT_EQ(ceph_create(&r_cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(r_cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(r_cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_set(r_cmount, "ms_inject_delay_type", "osd"));
+  ASSERT_EQ(0, ceph_conf_set(r_cmount, "ms_inject_delay_probability", "1"));
+  ASSERT_EQ(0, ceph_conf_set(r_cmount, "ms_inject_delay_max", "2"));
+  ASSERT_EQ(0, ceph_mount(r_cmount, NULL));
+
+  w_perms = ceph_mount_perms(w_cmount);
+  ASSERT_EQ(ceph_ll_lookup_root(w_cmount, &w_parent), 0);
+
+  r_perms = ceph_mount_perms(r_cmount);
+  ASSERT_EQ(ceph_ll_lookup_root(r_cmount, &r_parent), 0);
+
+  ASSERT_EQ(ceph_ll_create(w_cmount, w_parent, filename, 0744,
+			   O_RDWR | O_CREAT | O_EXCL | O_NOFOLLOW,
+			   &w_inode, &w_fh, &stx, CEPH_STATX_INO, 0, w_perms), 0);
+  ASSERT_EQ(ceph_ll_write(w_cmount, w_fh, 0, sizeof(out_buf), out_buf),
+	    (int)sizeof(out_buf));
+  ASSERT_EQ(ceph_ll_fsync(w_cmount, w_fh, 0), 0);
+
+  // the writer keeps the file open
+  ASSERT_EQ(ceph_ll_lookup(r_cmount, r_parent, filename, &r_inode,
+			   &stx, CEPH_STATX_INO, 0, r_perms), 0);
+  ASSERT_EQ(ceph_ll_open(r_cmount, r_inode, O_RDONLY | O_NOFOLLOW,
+			 &r_fh, r_perms), 0);
+
+  // the first read goes past the end of the file, the second does not
+  iov[0].iov_base = short_buf;
+  iov[0].iov_len = sizeof(short_buf);
+  iov[1].iov_base = full_buf;
+  iov[1].iov_len = sizeof(full_buf);
+  for (int i = 0; i < 2; i++) {
+    io_info[i].callback = count_read_callback;
+    io_info[i].iov = &iov[i];
+    io_info[i].iovcnt = 1;
+    io_info[i].off = i == 0 ? 4096 : 0;
+    io_info[i].result = 0;
+    io_info[i].fh = r_fh;
+    io_info[i].write = false;
+    io_info[i].fsync = false;
+    io_info[i].syncdataonly = false;
+  }
+
+  reads_done = 0;
+  truncate_done = false;
+  ASSERT_EQ(ceph_ll_nonblocking_readv_writev(r_cmount, &io_info[0]), 0);
+  ASSERT_EQ(ceph_ll_nonblocking_readv_writev(r_cmount, &io_info[1]), 0);
+
+  // Waits for the reader to give back Fr. Detached: if the reads never
+  // finish, neither does this.
+  std::thread([w_cmount, w_inode, w_perms] {
+    struct ceph_statx size_stx = {0};
+    size_stx.stx_size = 16384;
+    int r = ceph_ll_setattr(w_cmount, w_inode, &size_stx, CEPH_SETATTR_SIZE,
+			    w_perms);
+    std::unique_lock lock(mtx);
+    truncate_result = r;
+    truncate_done = true;
+    cond.notify_one();
+  }).detach();
+
+  std::cout << ": waiting for the reads and the size change" << std::endl;
+  {
+    std::unique_lock lock(mtx);
+    ASSERT_TRUE(cond.wait_for(lock, std::chrono::seconds(60), []{
+      return reads_done == 2 && truncate_done;
+    })) << reads_done << " of 2 non-blocking reads completed, the size change "
+	<< (truncate_done ? "completed" : "did not complete");
+  }
+  ASSERT_EQ(truncate_result, 0);
+  // The short read saw the old end of the file or the new one.
+  ASSERT_GE(io_info[0].result, 4096);
+  ASSERT_LE(io_info[0].result, (int64_t)sizeof(short_buf));
+  ASSERT_EQ(0, memcmp(short_buf, out_buf, 4096));
+  ASSERT_EQ(io_info[1].result, (int64_t)sizeof(full_buf));
+  ASSERT_EQ(0, memcmp(full_buf, out_buf, sizeof(full_buf)));
+
+  ASSERT_EQ(0, ceph_ll_close(r_cmount, r_fh));
+  ASSERT_EQ(0, ceph_ll_close(w_cmount, w_fh));
+  ASSERT_EQ(0, ceph_ll_unlink(w_cmount, w_parent, filename, w_perms));
+
+  ASSERT_EQ(0, ceph_unmount(w_cmount));
+  ASSERT_EQ(0, ceph_unmount(r_cmount));
+  ceph_shutdown(w_cmount);
+  ceph_shutdown(r_cmount);
+}
+
 TEST(LibCephFS, UmountHangAfterLlLookupFilePath) {
   struct ceph_statx stx;
   struct ceph_mount_info *cmount;
