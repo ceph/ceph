@@ -28,24 +28,26 @@ Encryption Algorithm
 
 .. versionadded:: Umbrella
 
+.. versionchanged:: Vampire
+   The default algorithm changed from ``aes-256-cbc`` to ``aes-256-gcm``.
+
 The Ceph Object Gateway supports two AES-256 encryption algorithms for
 server-side encryption:
 
 **AES-256-CBC** (Cipher Block Chaining)
   The legacy encryption algorithm. This mode is compatible with older Ceph
-  releases and is the default for backward compatibility. CBC mode encrypts
-  data but does not provide built-in integrity verification.
+  releases. CBC mode encrypts data but does not provide built-in integrity
+  verification.
 
 **AES-256-GCM** (Galois/Counter Mode)
   A modern authenticated encryption algorithm that provides both
   confidentiality and integrity protection. GCM mode detects any tampering
-  or corruption of encrypted data. This is the recommended algorithm for
-  new deployments.
+  or corruption of encrypted data. This is the default.
 
 The encryption algorithm for new objects can be configured with::
 
-  rgw crypt sse algorithm = aes-256-cbc    # default, for backward compatibility
-  rgw crypt sse algorithm = aes-256-gcm    # recommended for new deployments
+  rgw crypt sse algorithm = aes-256-gcm    # default
+  rgw crypt sse algorithm = aes-256-cbc    # compatible with older releases
 
 .. note:: This setting only affects newly encrypted objects. Existing objects
           are always decrypted using the algorithm that was used when they
@@ -53,10 +55,13 @@ The encryption algorithm for new objects can be configured with::
           CBC-encrypted and GCM-encrypted objects to coexist in the same
           cluster.
 
-.. important:: When upgrading from an older Ceph release, keep the default
-               ``aes-256-cbc`` setting until all RGW instances have been
-               upgraded. Once all instances support GCM, you can enable
-               ``aes-256-gcm`` for new uploads.
+.. important:: Gateways that do not support GCM cannot decrypt GCM-encrypted
+               objects. When upgrading from an older Ceph release, set
+               ``rgw crypt sse algorithm`` to ``aes-256-cbc`` before the
+               upgrade and keep it until all RGW instances, including those
+               in other zones of a multisite configuration, have been
+               upgraded. Then remove the setting to use ``aes-256-gcm`` for
+               new uploads.
 
 GCM Encryption Format
 ---------------------
