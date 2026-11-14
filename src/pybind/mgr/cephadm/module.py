@@ -2805,8 +2805,14 @@ Then run the following:
             # and if so, place the host into maintenance by disabling the target
             rc, msg = self._host_ok_to_stop(hostname, force)
             if rc and not yes_i_really_mean_it:
-                raise OrchestratorError(
-                    msg + '\nNote: Warnings can be bypassed with the --force flag', errno=rc)
+                if force:
+                    # force already let the warnings through, only alerts are left
+                    note = ('\nNote: --force does not bypass this check. Adding '
+                            '--yes-i-really-mean-it to --force bypasses all safety checks, '
+                            'which is dangerous and can cause loss of data availability')
+                else:
+                    note = '\nNote: Warnings can be bypassed with the --force flag'
+                raise OrchestratorError(msg + note, errno=rc)
 
             if 'nvmeof' in host_daemons:
                 _updated, nvmeof_err = self._set_nvmeof_gateways_admin_state(
