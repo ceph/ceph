@@ -12,10 +12,9 @@ that Insights depends on. The insights reports contain the following:
   that are transient and may not be present at the moment the report is
   generated. Health checks are deduplicated to avoid unbounded data growth.
 
-* **Crash reports**. A summary of any daemon crashes in the past 24 hours is
-  included in the insights report. Crashes are reported as the number of
-  crashes per daemon type (e.g. ``ceph-osd``) within the time window. Full
-  details of a crash may be obtained using the `crash module`_.
+* **Crash reports**. The report includes the number of crash reports per
+  process name (for example, ``ceph-osd``). Full details of a crash are
+  available from the :doc:`crash module <crash>`.
 
 * Software version, storage utilization, cluster maps, placement group
   summary, monitor status, cluster configuration, and OSD metadata.
@@ -49,7 +48,7 @@ The ``prune-health`` subcommand is useful for cleaning the health history
 before automated nightly reports are generated. Unpruned health histories may
 contain spurious health checks accumulated while performing system maintenance
 and other health checks that have been resolved. There is no need to prune
-health data to reclaim storage space; garbage collection is performed
-regularly to remove old health data from persistent storage.
-
-.. _crash module: ../crash
+health data to reclaim storage space. The module keeps its health history only
+in the memory of the active Manager, in one-hour slots, and deletes slots older
+than 30 hours. The history starts empty again whenever the active Manager
+restarts or fails over.
