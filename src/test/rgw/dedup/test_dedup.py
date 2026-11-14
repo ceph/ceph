@@ -5587,3 +5587,30 @@ def test_dedup_maintain_mtime():
 
     finally:
         cleanup(bucket_name, conn)
+
+#-------------------------------------------------------------------------------
+@pytest.mark.basic_test
+def test_dedup_skips_parts_of_upload_in_progress():
+    prepare_test()
+    bucket_name = gen_bucket_name()
+    conn = get_single_connection()
+    data = os.urandom(8*MB)
+
+    try:
+        conn.create_bucket(Bucket=bucket_name)
+        conn.put_object(Bucket=bucket_name, Key='obj', Body=data)
+        upload_id = conn.create_multipart_upload(Bucket=bucket_name, Key='mp')['UploadId']
+        part = conn.upload_part(Bucket=bucket_name, Key='mp', UploadId=upload_id,
+                                PartNumber=1, Body=data)
+
+        ret = exec_dedup_internal(Dedup_Stats(), dry_run=False, max_dedup_time=5*60)
+        assert ret[1].deduped_obj == 0
+
+        conn.complete_multipart_upload(Bucket=bucket_name, Key='mp', UploadId=upload_id,
+                                       MultipartUpload={'Parts': [{'ETag': part['ETag'],
+                                                                   'PartNumber': 1}]})
+        for key in ('obj', 'mp'):
+            assert conn.get_object(Bucket=bucket_name, Key=key)['Body'].read() == data
+
+    finally:
+        cleanup(bucket_name, conn)
