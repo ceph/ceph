@@ -680,7 +680,10 @@ public:
     }
     void set_bin_count(uint32_t count) {
       std::lock_guard l(lock);
-      age_bins.set_capacity(count);
+      // keep at least one bin: push_front() on a zero-capacity circular_buffer
+      // inserts nothing, and front() then dereferences null (all-zero
+      // bluestore_cache_age_bins_* config)
+      age_bins.set_capacity(std::max<uint32_t>(count, 1));
     }
     uint64_t sum_bins(uint32_t start, uint32_t end) {
       std::lock_guard l(lock);
