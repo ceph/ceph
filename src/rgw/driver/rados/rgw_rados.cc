@@ -8142,10 +8142,21 @@ int RGWRados::set_attrs(const DoutPrefixProvider *dpp, RGWObjectCtx* octx, RGWBu
    * set the metadata.
    * Hence do not update mtime for any other attr changes */
   real_time mtime = state->mtime;
+  bufferlist internal_mtime_bl;
   if (log_op) {
     // make a tiny adjustment to the existing mtime so that fetch_remote_obj()
     // won't return ERR_NOT_MODIFIED when syncing the modified object
     mtime += ceph::timespan{std::chrono::nanoseconds{1}};
+
+    // sync compares the later of mtime and the internal mtime that a cloud
+    // restore sets, so move that past the previous value as well
+    obj_time_weight weight;
+    weight.init(state);
+    if (weight.mtime >= mtime) {
+      weight.mtime += ceph::timespan{std::chrono::nanoseconds{1}};
+      encode(weight.mtime, internal_mtime_bl);
+      op.setxattr(RGW_ATTR_INTERNAL_MTIME, internal_mtime_bl);
+    }
   }
   struct timespec mtime_ts = real_clock::to_timespec(mtime);
   op.mtime2(&mtime_ts);
@@ -8272,6 +8283,9 @@ int RGWRados::set_attrs(const DoutPrefixProvider *dpp, RGWObjectCtx* octx, RGWBu
 
     for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
       state->attrset[iter->first] = iter->second;
+    }
+    if (internal_mtime_bl.length()) {
+      state->attrset[RGW_ATTR_INTERNAL_MTIME] = std::move(internal_mtime_bl);
     }
 
     auto iter = state->attrset.find(RGW_ATTR_ID_TAG);
