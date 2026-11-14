@@ -2796,9 +2796,11 @@ void Client::_kick_stale_sessions()
   for (auto it = mds_sessions.begin(); it != mds_sessions.end(); ) {
     auto s = it->second;
     if (s->state == MetaSession::STATE_REJECTED) {
-      mds_sessions.erase(it->first);
+      it = mds_sessions.erase(it);
       continue;
     }
+    // _closed_mds_session() erases s from mds_sessions
+    ++it;
     if (s->state == MetaSession::STATE_STALE)
       _closed_mds_session(s.get());
   }
