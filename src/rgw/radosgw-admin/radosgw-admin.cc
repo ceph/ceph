@@ -6863,7 +6863,7 @@ int main(int argc, const char **argv)
       if (!access_key.empty() && !user_op.found_by_key) {
         cerr << "ERROR: could not find user for access-key: "
              << access_key << std::endl;
-        return -ENOENT;
+        return -ret;
       }
       cerr << "user.init failed: " << cpp_strerror(-ret) << std::endl;
       return -ret;
