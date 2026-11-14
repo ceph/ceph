@@ -131,6 +131,17 @@ enum class SafeResult {
   OK = 0,
   MISMATCH = 1,
   ERROR = 2,
+  /* The filesystem denied this identity:  EACCES or EPERM, as
+   * distinct from an I/O failure.
+   *
+   * Separate because the two mean opposite things to a client.  A
+   * denial is the intersection rule working -- S3 allowed the
+   * request and POSIX did not -- and it is a 403;  an I/O failure is
+   * a 500.  With one ERROR for both, a cross-identity overwrite
+   * reached the client as `-ERR_INTERNAL_ERROR`, which reads as a
+   * gateway bug rather than as a permission the tree does not
+   * grant. */
+  DENIED = 3,
 };
 
 /* RAII handle returned by FSStrategy::version_lock().
@@ -216,18 +227,13 @@ public:
    * probes/results-copyprobe-2026-09-23.txt. */
   virtual size_t preferred_io_size(int fd) const;
 
-  /* test hook:  make copy_range() skip copy_file_range and take the
-   * buffered path.  On a filesystem that shares extents the fallback is
-   * otherwise unreachable, so the only path GPFS ever takes would never
-   * run under test here.  Driven by the "inject-buffered-copy" driver
-   * hint;  never by config. */
-  void set_force_buffered_copy(bool on) { force_buffered_copy = on; }
-
-  /* bytes copied through the buffered fallback, reset when read.  This is
-   * what lets a test assert that the fallback actually ran, rather than
-   * that a flag was set:  on a filesystem which shares extents the two are
-   * otherwise indistinguishable from outside. */
-  uint64_t take_buffered_bytes() { return buffered_copy_bytes.exchange(0); }
+  /* How many copy sources the gateway read because the access model
+   * permits it, the filesystem having denied `id`.  Read,
+   * not drained:  a test compares it across an operation, since the
+   * gateway is shared.  Reported by the `access-model` driver hint. */
+  uint64_t cross_account_source_reads() const {
+    return cross_account_sources.load(std::memory_order_relaxed);
+  }
 
   /* Does the namespace's filesystem share extents, i.e. does
    * copy_file_range(2) actually clone rather than copy?  Established once
@@ -256,10 +262,15 @@ protected:
   int clone_file_by_copy(const DoutPrefixProvider* dpp,
                          int src_dir_fd, const std::string& src_name,
                          int dst_dir_fd, const std::string& dst_name,
-                         bool excl);
+                         optional_yield y, const CopyHints& hints,
+                         bool excl, const nsfs::FSIdentity& id = {},
+                         bool src_as_gateway = false);
 
   int clone_fd_by_copy(const DoutPrefixProvider* dpp, int src_fd,
-                       int dst_dir_fd, const std::string& dst_name);
+                       int dst_dir_fd, const std::string& dst_name,
+                       optional_yield y, const CopyHints& hints,
+                       const nsfs::FSIdentity& id = {},
+                       bool src_as_gateway = false);
 
   int copy_buffered(const DoutPrefixProvider* dpp, size_t bufsz,
                     int src_fd, off_t src_off,
@@ -267,7 +278,7 @@ protected:
                     const CopyHints& hints);
 
   bool fs_shares_extents{false};
-  std::atomic<uint64_t> buffered_copy_bytes{0};
+  std::atomic<uint64_t> cross_account_sources{0};
 
 public:
 
@@ -293,7 +304,10 @@ public:
   virtual int clone_file(const DoutPrefixProvider* dpp,
                          int src_dir_fd, const std::string& src_name,
                          int dst_dir_fd, const std::string& dst_name,
-                         bool excl = false) = 0;
+                         optional_yield y, const CopyHints& hints,
+                         bool excl = false,
+                         const nsfs::FSIdentity& id = {},
+                         bool src_as_gateway = false) = 0;
 
   /* clone from an open source fd — used when the source pathname is
    * no longer valid (e.g. versioned self-copy after demote).  `id` as
@@ -301,7 +315,10 @@ public:
    * descriptor, so its permissions are checked. */
   virtual int clone_fd(const DoutPrefixProvider* dpp,
                        int src_fd,
-                       int dst_dir_fd, const std::string& dst_name) = 0;
+                       int dst_dir_fd, const std::string& dst_name,
+                       optional_yield y, const CopyHints& hints,
+                       const nsfs::FSIdentity& id = {},
+                       bool src_as_gateway = false) = 0;
 
   /* remove the hidden clone parent associated with name, if any.
    * Call when an object created by clone_file is deleted or
@@ -393,11 +410,17 @@ public:
   int clone_file(const DoutPrefixProvider* dpp,
                  int src_dir_fd, const std::string& src_name,
                  int dst_dir_fd, const std::string& dst_name,
-                 bool excl = false) override;
+                 optional_yield y, const CopyHints& hints,
+                 bool excl = false,
+                 const nsfs::FSIdentity& id = {},
+                 bool src_as_gateway = false) override;
 
   int clone_fd(const DoutPrefixProvider* dpp,
                int src_fd,
-               int dst_dir_fd, const std::string& dst_name) override;
+               int dst_dir_fd, const std::string& dst_name,
+               optional_yield y, const CopyHints& hints,
+               const nsfs::FSIdentity& id = {},
+               bool src_as_gateway = false) override;
 
   void cleanup_clone(const DoutPrefixProvider* dpp,
                      int dir_fd, const std::string& name) override {}
@@ -516,11 +539,17 @@ public:
   int clone_file(const DoutPrefixProvider* dpp,
                  int src_dir_fd, const std::string& src_name,
                  int dst_dir_fd, const std::string& dst_name,
-                 bool excl = false) override;
+                 optional_yield y, const CopyHints& hints,
+                 bool excl = false,
+                 const nsfs::FSIdentity& id = {},
+                 bool src_as_gateway = false) override;
 
   int clone_fd(const DoutPrefixProvider* dpp,
                int src_fd,
-               int dst_dir_fd, const std::string& dst_name) override;
+               int dst_dir_fd, const std::string& dst_name,
+               optional_yield y, const CopyHints& hints,
+               const nsfs::FSIdentity& id = {},
+               bool src_as_gateway = false) override;
 
   void cleanup_clone(const DoutPrefixProvider* dpp,
                      int dir_fd, const std::string& name) override;

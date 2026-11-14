@@ -15,6 +15,7 @@
 
 #include <dirent.h>
 #include <fcntl.h>
+#include <linux/capability.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -34,6 +35,7 @@
 
 #include "noobaa_config_store.h"
 #include "noobaa_schema.h"
+#include "../impersonate.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -44,10 +46,34 @@ namespace rgw { namespace sal { namespace nsfs {
  * from being read into memory whole. */
 static constexpr size_t NB_RECORD_MAX = 1u << 20;
 
+/* NooBaa's store is root's -- `BASE_MODE_CONFIG_DIR` 0700 and
+ * `BASE_MODE_CONFIG_FILE` 0600, config.js -- and the gateway has to read
+ * it whether or not it impersonates:  raise site 7.  Read-search, at
+ * the three calls that resolve a path in it, raised after a denial so
+ * a store this process owns still reads with no capability at all;  a
+ * read on the descriptor an open returned needs nothing. */
+static constexpr uint64_t STORE_READ_CAPS = cap_bit(CAP_DAC_READ_SEARCH);
+
+static int as_store_reader(const DoutPrefixProvider* dpp,
+			   const ImpersonatedFn& fn)
+{
+  const int ret = fn();
+  if (ret != -EACCES) {
+    return ret;
+  }
+  return with_capabilities(dpp, STORE_READ_CAPS, fn);
+}
 
 int read_record_file(const DoutPrefixProvider* dpp, const std::string& path,
 		     std::string& out)
 {
+  int fd = -1;
+  const int oret = as_store_reader(dpp, [&]() -> int {
+    fd = ::open(path.c_str(), O_RDONLY | O_CLOEXEC);
+    return (fd < 0) ? -errno : 0;
+  });
+  if (oret < 0) {
+    return oret;
   }
   auto close_fd = make_scope_guard([fd] { ::close(fd); });
 
@@ -359,6 +385,16 @@ namespace {
  * no concurrency anywhere in this file -- NooBaa's own config-directory
  * restructure is the only prior art for walking one of these trees and
  * it is serial (ACCOUNT_IMPORT.md §6.4). */
+int list_dir(const DoutPrefixProvider* dpp, const std::string& dir,
+	     std::vector<std::string>& out)
+{
+  DIR* d = nullptr;
+  const int oret = as_store_reader(dpp, [&]() -> int {
+    d = ::opendir(dir.c_str());
+    return d ? 0 : -errno;
+  });
+  if (oret < 0) {
+    return oret;
   }
   auto close_dir = make_scope_guard([d] { ::closedir(d); });
 
@@ -382,7 +418,13 @@ namespace {
   return 0;
 }
 
+bool path_exists(const DoutPrefixProvider* dpp, const std::string& path)
+{
   struct stat st;
+  return as_store_reader(dpp, [&]() -> int {
+    return (::stat(path.c_str(), &st) < 0) ? -errno : 0;
+  }) == 0;
+}
 
 /* Decode one identity out of a parsed record.
  *
@@ -683,12 +725,15 @@ int NooBaaConfigStore::read(const DoutPrefixProvider* dpp,
     }
   }
 
+  out.master_keys_present =
+    path_exists(dpp, fmt::format("{}/master_keys.json", root));
 
   /* identities/<id>/identity.json.  A directory per identity, not a
    * file per identity:  verified against a store NooBaa's CLI wrote. */
   {
     const std::string dir = fmt::format("{}/identities", root);
     std::vector<std::string> entries;
+    int ret = list_dir(dpp, dir, entries);
     if (ret == -ENOENT) {
       /* no identities directory at all:  not a NooBaa store, or an
        * empty one.  Reported, because an import with nothing to import
@@ -778,6 +823,7 @@ int NooBaaConfigStore::read(const DoutPrefixProvider* dpp,
   {
     const std::string dir = fmt::format("{}/buckets", root);
     std::vector<std::string> entries;
+    int ret = list_dir(dpp, dir, entries);
     if (ret == -ENOENT) {
       /* a store with no buckets is ordinary */
     } else if (ret < 0) {

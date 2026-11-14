@@ -913,6 +913,81 @@ int acquire_personality(const DoutPrefixProvider* dpp, const rgw_owner& key,
     return ret;
   }
 
+static std::atomic<uint64_t> raised_ops{0};
+
+uint64_t raised_operations()
+{
+  return raised_ops.load(std::memory_order_relaxed);
+}
+
+/* Whether the gateway performs what `id` was denied:  the decision
+ * both entry points below take, so it is made in one place. */
+static bool raise_permitted(const FSIdentity& id, const AccessStrategy* model,
+			    AccessClass what, int ret)
+{
+  return id.active() && ((ret == -EACCES) || (ret == -EPERM)) &&
+    model && model->permits(what);
+}
+
+static int raise_for(const DoutPrefixProvider* dpp, const FSIdentity& id,
+		     const AccessStrategy* model, uint64_t caps,
+		     const ImpersonatedFn& fn, bool* raised)
+{
+  const int ret = with_capabilities(dpp, caps, fn);
+  if (ret < 0) {
+    ldpp_dout_fmt(dpp, 4, "nsfs: uid {} was denied, and the gateway's call "
+			  "failed even raised: {}", id.cred.uid,
+			  cpp_strerror(-ret));
+    return ret;
+  }
+  raised_ops.fetch_add(1, std::memory_order_relaxed);
+  if (raised) {
+    *raised = true;
+  }
+  ldpp_dout_fmt(dpp, 10, "nsfs: the filesystem denied uid {}, so the gateway "
+			 "performed it (access model {})", id.cred.uid,
+			 model->name());
+  return ret;
+}
+
+int with_identity_or_raise(const DoutPrefixProvider* dpp,
+			   const FSIdentity& id, const AccessStrategy* model,
+			   AccessClass what, uint64_t caps,
+			   const ImpersonatedFn& fn,
+			   optional_yield y, bool* raised)
+{
+  if (raised) {
+    *raised = false;
+  }
+  const int ret = with_identity(dpp, id, fn, y);
+  if (! raise_permitted(id, model, what, ret)) {
+    return ret;
+  }
+  return raise_for(dpp, id, model, caps, fn, raised);
+}
+
+int open_as_or_raise(const DoutPrefixProvider* dpp, const FSIdentity& id,
+		     const AccessStrategy* model, AccessClass what,
+		     uint64_t caps,
+		     int dirfd, const char* path, uint64_t flags,
+		     uint64_t mode, bool* raised)
+{
+  if (raised) {
+    *raised = false;
+  }
+  const auto plain = [&]() -> int {
+    return (fd < 0) ? -errno : fd;
+  };
+  if (! id.active()) {
+    return plain();
+  }
+  const int ret = open_as(dpp, id, dirfd, path, flags, mode);
+  if (! raise_permitted(id, model, what, ret)) {
+    return ret;
+  }
+  return raise_for(dpp, id, model, caps, plain, raised);
+}
+
 namespace {
 std::atomic<bool> g_ring_metadata_changes{true};
 }

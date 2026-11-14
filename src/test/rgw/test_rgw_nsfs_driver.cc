@@ -5542,6 +5542,8 @@ protected:
   }
 
   void TearDown() override {
+    if (driver) {
+      (void) set_model("default");
     }
     set_impersonate("false");
     /* Always, unlike the suite's other trees:  the key directories are
@@ -5564,6 +5566,18 @@ protected:
     g_conf().apply_changes(nullptr);
   }
 
+  int set_model(const std::string& m) {
+    std::map<std::string, std::string> out;
+    return driver->driver_hint(env->dpp, "access-model", {{"set", m}}, &out);
+  }
+
+
+  /* how many operations the gateway performed for a denied user */
+  uint64_t raised() {
+    std::map<std::string, std::string> out;
+    EXPECT_EQ(driver->driver_hint(env->dpp, "access-model", {}, &out), 0);
+    return std::stoull(out["raised_operations"]);
+  }
 
   /* `who`'s hops to the helper pool since the last call, by kind */
   std::map<std::string, uint64_t> pool_hops(const rgw_user& who,
@@ -5588,6 +5602,17 @@ protected:
 				  &out), 0);
   }
 
+  /* on a thread of its own, as put_as() */
+  int delete_as(const rgw_user& who, const std::string& key) {
+    int ret = 0;
+    std::thread deleter([&] {
+      auto obj = bucket->get_object(rgw_obj_key(key));
+      auto del = obj->get_delete_op(who);
+      ret = del->delete_obj(env->dpp, null_yield, 0);
+    });
+    deleter.join();
+    return ret;
+  }
 
   int delete_version_as(const rgw_user& who, const std::string& key,
 			const std::string& vid) {
@@ -5752,6 +5777,43 @@ TEST_F(NSFSImpersonatedRenameTest, TheOwnersRenameRunsAsTheOwner)
   const auto moved = versions_in("dst");
   ASSERT_EQ(moved.size(), 1u) << "the history did not follow the leaf";
   EXPECT_EQ(owned("dst/.versions/" + moved[0]).uid, owner_uid);
+}
+
+/* The rename records the identity it chose for the authenticated user
+ * (phase C's validation clause):  that user's row, and -- the other polarity,
+ * so this discriminates -- a different uid once that row moves.  Only
+ * librgw renames, so this is the unit test the suite's
+ * test_attrs_and_delete_run_as_the_member cannot be for it. */
+TEST_F(NSFSImpersonatedRenameTest, TheRenameRecordsTheIdentityItChose)
+{
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "src/k", "alice's"));
+  auto ran_as = [this]() {
+    std::map<std::string, std::string> out;
+    EXPECT_EQ(driver->driver_hint(env->dpp, "ran-as", {}, &out), 0);
+    return out["ran_as_rename"];
+  };
+  auto select = [this]() {
+    std::map<std::string, std::string> out;
+    ASSERT_EQ(driver->driver_hint(env->dpp, "ran-as",
+				  {{"select", alice.to_str()}}, &out), 0);
+  };
+
+  select();
+  ASSERT_EQ(rename_as(alice, "src/k", "dst/k"), 0);
+  EXPECT_EQ(ran_as(), std::to_string(owner_uid));
+
+  /* the row moves;  a rename of a key that is not there still pins
+   * the authenticated user first, so the choice is recorded */
+  static constexpr uid_t moved_uid = 70162;
+  nsfs::Identity row;
+  row.key = to_string(rgw_owner{alice});
+  row.uid = moved_uid;
+  row.gid = moved_uid;
+  ASSERT_EQ(driver->get_identity_db()->put_identity(env->dpp, row), 0);
+  select();
+  (void) rename_as(alice, "never-here", "nowhere");
+  EXPECT_EQ(ran_as(), std::to_string(moved_uid))
+      << "the row moved and the rename's choice did not follow it";
 }
 
 
@@ -5994,6 +6056,72 @@ TEST_F(NSFSImpersonatedRenameTest, AnotherIdentitysRenameIsDenied)
   EXPECT_EQ(owned("dst/k").err, -ENOENT) << "the leaf arrived";
 }
 
+/* s3-native:  another identity's writes in the owner's key directory
+ * are the gateway's to perform, and what they create is the
+ * writer's object in the owner's directories (DECISIONS.md
+ * 2026-10-20). */
+TEST_F(NSFSImpersonatedRenameTest, UnderS3NativeAnotherIdentitysPutIsRaised)
+{
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "src/k", "alice's"));
+  ASSERT_EQ(owned("src").mode, 0770u);
+  ASSERT_EQ(set_model("s3-native"), 0);
+  const uint64_t before = raised();
+
+  /* twice each:  the second demotes the first, into a `.versions` */
+  ASSERT_NO_FATAL_FAILURE(put_as(bob, "src/m", "bob's first"));
+  ASSERT_NO_FATAL_FAILURE(put_as(bob, "src/m", "bob's second"));
+  ASSERT_NO_FATAL_FAILURE(put_as(bob, "src/new/m", "bob's first"));
+  ASSERT_NO_FATAL_FAILURE(put_as(bob, "src/new/m", "bob's second"));
+  EXPECT_GT(raised(), before)
+      << "nothing was raised, so the filesystem never denied bob and the "
+	 "test shows nothing";
+
+  const Owned m = owned("src/m");
+  ASSERT_EQ(m.err, 0);
+  EXPECT_EQ(m.uid, other_uid) << "the object is its writer's";
+  EXPECT_EQ(m.mode, 0660u);
+
+  const Owned nd = owned("src/new");
+  ASSERT_EQ(nd.err, 0);
+  EXPECT_EQ(nd.uid, owner_uid) << "a key directory is its parent's owner's";
+  EXPECT_EQ(nd.mode, 0770u);
+  EXPECT_EQ(owned("src/new/m").uid, other_uid);
+  const Owned nv = owned("src/new/.versions");
+  ASSERT_EQ(nv.err, 0) << "the second put made no history";
+  EXPECT_EQ(nv.uid, owner_uid) << "`.versions` is its parent's owner's";
+
+  const auto hist = versions_in("src/new");
+  ASSERT_EQ(hist.size(), 1u);
+  EXPECT_EQ(owned("src/new/.versions/" + hist[0]).uid, other_uid)
+      << "the demoted version is still its writer's object";
+}
+
+/* s3-native:  another identity's delete in the owner's key directory
+ * is performed, and the delete marker is the deleting user's. */
+TEST_F(NSFSImpersonatedRenameTest, UnderS3NativeAnotherIdentitysDeleteIsRaised)
+{
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "src/k", "alice's"));
+  ASSERT_EQ(set_model("s3-native"), 0);
+  const uint64_t before = raised();
+
+  const int ret = delete_as(bob, "src/k");
+  ASSERT_EQ(ret, 0) << "the delete failed: " << cpp_strerror(-ret);
+  EXPECT_GT(raised(), before);
+
+  EXPECT_EQ(owned("src/k").err, -ENOENT) << "the current version stayed";
+  const auto hist = versions_in("src");
+  ASSERT_EQ(hist.size(), 2u) << "the demoted version and the marker";
+  int markers = 0;
+  for (const auto& v : hist) {
+    const Owned o = owned("src/.versions/" + v);
+    if (o.uid == other_uid) {
+      ++markers;
+    } else {
+      EXPECT_EQ(o.uid, owner_uid) << v << " changed owner";
+    }
+  }
+  EXPECT_EQ(markers, 1) << "the delete marker is the deleting user's";
+}
 
 static std::map<std::string, bool> listed_versions(rgw::sal::Bucket* bucket,
 						   const DoutPrefixProvider* dpp,
@@ -6045,6 +6173,101 @@ TEST_F(NSFSImpersonatedRenameTest, ABucketEmptiedByItsWriterIsDeleted)
   EXPECT_EQ(owned("").err, -ENOENT) << "the bucket directory stayed";
 }
 
+/* Raise site 3 where it is needed:  a bucket made in the default
+ * location under a base path that is sticky and not the gateway's --
+ * an operator's shared directory at 1777.  The gateway removes the
+ * directory's entry, which is its creator's, and the sticky rule lets
+ * only the entry's owner, the directory's owner or CAP_FOWNER do that;
+ * DAC_OVERRIDE does not reach it (probes/stickyprobe.c).  The premise:
+ * with DAC_OVERRIDE alone the gateway cannot.  GPFS admits only the
+ * owners whatever is raised, so there this delete fails:  a documented
+ * limitation (work plan, Future work 10). */
+TEST_F(NSFSImpersonatedRenameTest, ABucketUnderAStickyBasePathIsDeleted)
+{
+  constexpr uid_t operator_uid = 65534;
+  const sf::path base = bp / "root";
+  struct stat was{};
+  ASSERT_EQ(::stat(base.c_str(), &was), 0);
+  ASSERT_EQ(::chmod(base.c_str(), 01777), 0);
+  ASSERT_EQ(with_capabilities_elsewhere(nsfs::cap_bit(CAP_CHOWN), [&]() -> int {
+	return (::chown(base.c_str(), operator_uid, static_cast<gid_t>(-1)) < 0)
+	    ? -errno : 0;
+      }), 0);
+  auto restore = make_scope_guard([&] {
+    (void) with_capabilities_elsewhere(
+	nsfs::cap_bit(CAP_CHOWN) | nsfs::cap_bit(CAP_FOWNER), [&]() -> int {
+	  (void) ::chown(base.c_str(), was.st_uid, was.st_gid);
+	  (void) ::chmod(base.c_str(), was.st_mode & 07777);
+	  return 0;
+	});
+  });
+
+  const std::string name = "sticky-base";
+  RGWBucketInfo info;
+  info.bucket.name = name;
+  info.owner = alice;
+  info.creation_time = ceph::real_clock::now();
+  auto b = driver->get_bucket(info);
+  rgw::sal::Bucket::CreateParams cp;
+  cp.owner = alice;
+  int ret = -1;
+  std::thread([&] {
+    ret = b->create(env->dpp, cp, null_yield, alice);
+  }).join();
+  ASSERT_EQ(ret, 0) << cpp_strerror(-ret);
+
+  nsfs::BucketPlacement row;
+  ASSERT_EQ(driver->get_identity_db()->get_bucket_placement(
+		env->dpp, name, "", row), 0);
+  ASSERT_TRUE(row.default_location)
+      << "the premise:  the gateway made the directory, in the default "
+	 "location";
+  struct stat bst{};
+  ASSERT_EQ(::stat((base / name).c_str(), &bst), 0);
+  ASSERT_EQ(bst.st_uid, owner_uid)
+      << "the premise:  the directory is its creator's";
+
+  const int dac_only = with_capabilities_elsewhere(
+      nsfs::cap_bit(CAP_DAC_OVERRIDE), [&]() -> int {
+	return (::rmdir((base / name).c_str()) < 0) ? -errno : 0;
+      });
+  ASSERT_EQ(dac_only, -EPERM)
+      << "the premise:  DAC_OVERRIDE alone removed an entry from another "
+	 "uid's sticky directory, so this test could not fail";
+
+  bool still_raised = true;
+  std::thread([&] {
+    ret = b->remove(env->dpp, false, null_yield, alice);
+    still_raised = nsfs::capability_is_effective(CAP_FOWNER);
+  }).join();
+  ASSERT_EQ(ret, 0) << cpp_strerror(-ret);
+  EXPECT_FALSE(still_raised) << "the delete left CAP_FOWNER raised";
+  EXPECT_FALSE(sf::exists(base / name)) << "the bucket directory stayed";
+}
+
+/* s3-native:  another identity's rename out of the owner's key
+ * directory is performed, and the leaf and its history move. */
+TEST_F(NSFSImpersonatedRenameTest, UnderS3NativeAnotherIdentitysRenameIsRaised)
+{
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "src/k", "first"));
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "src/k", "second"));
+  ASSERT_EQ(set_model("s3-native"), 0);
+  const uint64_t before = raised();
+
+  const int ret = rename_as(bob, "src/k", "dst/k");
+  ASSERT_EQ(ret, 0) << "the rename failed: " << cpp_strerror(-ret);
+  EXPECT_GT(raised(), before);
+
+  EXPECT_EQ(owned("src/k").err, -ENOENT) << "the leaf was not moved";
+  const Owned leaf = owned("dst/k");
+  ASSERT_EQ(leaf.err, 0) << "the leaf did not arrive";
+  EXPECT_EQ(leaf.uid, owner_uid) << "a rename keeps the inode's owner";
+  EXPECT_EQ(owned("dst").uid, other_uid)
+      << "the renaming user made the destination key directory, unraised";
+  EXPECT_TRUE(versions_in("src").empty()) << "the history stayed behind";
+  EXPECT_EQ(versions_in("dst").size(), 1u)
+      << "the history did not follow the leaf";
+}
 
 /* FSIO in a key directory an identity made (n plan D4a).  Under
  * impersonation the directory is its owner's at 0770, so a handle
@@ -6239,6 +6462,69 @@ TEST_F(NSFSImpersonatedRenameTest, ALifecycleTagReadRunsAsWhomItIsFor)
       "attributes, as the gateway would";
 }
 
+/* Recovery is the gateway's (raise site 5):  it moves version entries
+ * another identity wrote, under whichever request takes the version
+ * lock next.  Here the owner's own move is interrupted after one
+ * version has gone across, and the owner's next write into the source
+ * directory has to bring it back -- in `.versions` directories that are
+ * the owner's at 0770, which the gateway cannot write unraised. */
+TEST_F(NSFSImpersonatedRenameTest, AnInterruptedMoveIsRecoveredInTheOwnersTree)
+{
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "src/k", "first"));
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "src/k", "secnd"));
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "src/k", "third"));
+  ASSERT_EQ(versions_in("src").size(), 2u)
+      << "need more than one version entry, or stopping after one does "
+	 "not leave a split";
+  ASSERT_EQ(owned("src/.versions").uid, owner_uid);
+  ASSERT_EQ(owned("src/.versions").mode, 0770u);
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  const std::string intent_x = b->xattr_strategy()->disk_name("rename_intent");
+  auto intent_present = [&]() {
+    bool present = false;
+    EXPECT_EQ(with_capabilities_elsewhere(
+				      nsfs::cap_bit(CAP_DAC_READ_SEARCH),
+	[&]() -> int {
+	  const sf::path v = bucket_path() / "src" / ".versions";
+	  present = (::getxattr(v.c_str(), intent_x.c_str(), nullptr, 0) >= 0);
+	  return 0;
+	}), 0);
+    return present;
+  };
+
+  std::map<std::string, std::string> out;
+  ASSERT_EQ(driver->driver_hint(env->dpp, "inject-rename-fail-after",
+				{{"count", "1"}, {"abandon", "versions"}},
+				&out), 0);
+  EXPECT_NE(rename_as(alice, "src/k", "dst/k"), 0)
+      << "the injected abandon did not fail the rename";
+  ASSERT_EQ(driver->driver_hint(env->dpp, "inject-rename-fail-after",
+				{{"count", "-1"}, {"abandon", "none"}},
+				&out), 0);
+
+  /* the split itself, asserted before repairing it, or this cannot tell
+   * a recovery from a move that never broke */
+  ASSERT_EQ(versions_in("dst").size(), 1u)
+      << "the abandon did not leave a version at the destination";
+  ASSERT_EQ(versions_in("src").size(), 1u)
+      << "the abandon did not leave the rest at the source";
+  ASSERT_TRUE(intent_present())
+      << "the abandon left no intent record;  nothing below tests recovery";
+  ASSERT_EQ(owned("dst/.versions").uid, owner_uid);
+
+  /* an unrelated write by the owner into the same directory takes the
+   * version lock, which is where recovery runs */
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "src/other", "unrelated"));
+
+  EXPECT_FALSE(intent_present())
+      << "a write to the directory did not clear the intent record";
+  EXPECT_TRUE(versions_in("dst").empty())
+      << "recovery left the stranded version at the destination";
+  EXPECT_EQ(versions_in("src").size(), 2u)
+      << "recovery did not return the whole history";
+  EXPECT_EQ(owned("src/k").err, 0) << "the leaf left its source";
+}
 
 /* NooBaa's attribute names.
  *
@@ -8581,6 +8867,136 @@ TEST_F(NSFSNooBaaBucketTest, ConversionGivesTheSentinelTheDirectorysGroup)
       "directory's";
 }
 
+/* A directory object in a tree the gateway does not own converts:  the
+ * sentinel's creation, the removal of NooBaa's attributes and the
+ * clearing of `dir_content` are each raised, as conversion's other
+ * writes are (raise site 2).  An adopted tree's directories are
+ * whoever NooBaa ran as;  here another uid's, at a mode the gateway
+ * can read through its group and not write, which is what read-search
+ * leaves it under impersonation.  The premise:  unraised, the gateway
+ * can neither remove one of the attributes nor make the sentinel.
+ * Both shapes:  an empty object, which conversion gives a sentinel,
+ * and one with a body, which has one already. */
+TEST_F(NSFSNooBaaBucketTest, ADirectoryObjectAnotherUidOwnsConverts)
+{
+  lay_noobaa_directory_object(bucket_path() / "e", "", "text/x-e", "e");
+  lay_noobaa_directory_object(bucket_path() / "c", "dir bytes", "text/x-c", "c");
+  const sf::path e = bucket_path() / "e", c = bucket_path() / "c";
+  constexpr uid_t other = 65534;
+  const gid_t mine = ::getgid();
+
+  /* what is the other uid's, afterwards as before */
+  auto give = [&](uid_t u) {
+    return with_capabilities_elsewhere(
+	nsfs::cap_bit(CAP_CHOWN) | nsfs::cap_bit(CAP_DAC_READ_SEARCH),
+	[&]() -> int {
+	  for (const auto& p : {c / ".folder", e / ".folder", e, c}) {
+	    if ((::lchown(p.c_str(), u, mine) < 0) && (errno != ENOENT)) {
+	      return -errno;
+	    }
+	  }
+	  return 0;
+	});
+  };
+  for (const auto& d : {e, c}) {
+    ASSERT_EQ(::chmod(d.c_str(), 0750), 0) << d;
+  }
+  /* NooBaa's object mode;  write_file() makes 0600 */
+  ASSERT_EQ(::chmod((c / ".folder").c_str(), 0660), 0);
+  const int given = give(other);
+  if (given == -EPERM) {
+    GTEST_SKIP() << "CAP_CHOWN is not permitted, so the tree cannot be made "
+		    "another uid's;  setcap the unit binary";
+  }
+  ASSERT_EQ(given, 0);
+  auto restore = make_scope_guard([&] { (void) give(::getuid()); });
+
+  int removed = 0, made = 0;
+  std::thread([&] {
+    removed = (::removexattr(c.c_str(), "user.noobaa.content_type") < 0) ? errno : 0;
+    const int fd = ::open((e / ".folder").c_str(), O_RDONLY | O_CREAT, 0660);
+    made = (fd < 0) ? errno : 0;
+    if (fd >= 0) {
+      ::close(fd);
+    }
+  }).join();
+  ASSERT_EQ(removed, EACCES) << "the gateway removed an attribute unraised";
+  ASSERT_EQ(made, EACCES) << "the gateway made a sentinel unraised";
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  int ret = -1;
+  std::thread([&] {
+    ret = b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_SHARED);
+  }).join();
+  ASSERT_EQ(ret, 0);
+
+  for (const auto& d : {e, c}) {
+    for (const char* n : {"user.noobaa.content_type", "user.noobaa.dir_content"}) {
+      EXPECT_LT(::getxattr(d.c_str(), n, nullptr, 0), 0)
+	  << d << " still carries " << n;
+    }
+  }
+  EXPECT_TRUE(sf::exists(e / ".folder")) << "the empty object got no sentinel";
+  EXPECT_EQ(client_view(bucket.get(), env->dpp, "c/").body, "dir bytes");
+}
+
+/* A directory object whose directory is sticky and another uid's
+ * converts.  Neither nsfs nor NooBaa makes a sticky directory, but an
+ * adopted tree can hold one -- here world-writable, as an operator's
+ * shared directory is -- and a `user.*` attribute on a sticky directory
+ * the caller does not own needs CAP_FOWNER, which DAC_OVERRIDE does not
+ * stand in for (probes/stickyprobe.c).  The premise:  with DAC_OVERRIDE
+ * alone the gateway cannot remove one of NooBaa's attributes from it. */
+TEST_F(NSFSNooBaaBucketTest, AStickyDirectoryAnotherUidOwnsConverts)
+{
+  lay_noobaa_directory_object(bucket_path() / "s", "dir bytes", "text/x-s", "s");
+  const sf::path s = bucket_path() / "s";
+  constexpr uid_t other = 65534;
+  const gid_t mine = ::getgid();
+
+  auto give = [&](uid_t u) {
+    return with_capabilities_elsewhere(
+	nsfs::cap_bit(CAP_CHOWN) | nsfs::cap_bit(CAP_DAC_READ_SEARCH),
+	[&]() -> int {
+	  for (const auto& p : {s / ".folder", s}) {
+	    if ((::lchown(p.c_str(), u, mine) < 0) && (errno != ENOENT)) {
+	      return -errno;
+	    }
+	  }
+	  return 0;
+	});
+  };
+  ASSERT_EQ(::chmod(s.c_str(), 01777), 0);
+  ASSERT_EQ(::chmod((s / ".folder").c_str(), 0660), 0);
+  const int given = give(other);
+  if (given == -EPERM) {
+    GTEST_SKIP() << "CAP_CHOWN is not permitted, so the tree cannot be made "
+		    "another uid's;  setcap the unit binary";
+  }
+  ASSERT_EQ(given, 0);
+  auto restore = make_scope_guard([&] { (void) give(::getuid()); });
+
+  const int dac_only = with_capabilities_elsewhere(
+      nsfs::cap_bit(CAP_DAC_OVERRIDE), [&]() -> int {
+	return (::removexattr(s.c_str(), "user.noobaa.content_type") < 0)
+	    ? -errno : 0;
+      });
+  ASSERT_EQ(dac_only, -EPERM)
+      << "DAC_OVERRIDE alone removed an attribute from another uid's sticky "
+	 "directory, so this test could not fail";
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  int ret = -1;
+  std::thread([&] {
+    ret = b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_SHARED);
+  }).join();
+  ASSERT_EQ(ret, 0) << "conversion stopped at a sticky directory";
+
+  for (const char* n : {"user.noobaa.content_type", "user.noobaa.dir_content"}) {
+    EXPECT_LT(::getxattr(s.c_str(), n, nullptr, 0), 0)
+	<< s << " still carries " << n;
+  }
+}
 
 /* Without the capability, conversion fails and leaves nothing behind.
  *
@@ -13285,6 +13701,77 @@ TEST_F(NooBaaStoreTest, AStoreOnDiskReadsWithoutComplaint)
   }
 }
 
+/* A store root owns, at NooBaa's modes -- 0700 directories, 0600 files,
+ * config.js `BASE_MODE_CONFIG_*` -- reads whole:  raise site 7.  The
+ * premise is that the gateway, unraised, cannot open one record of it.
+ * Each on a thread of its own, as every read-search case is. */
+TEST_F(NooBaaStoreTest, AStoreRootOwnsReadsWhole)
+{
+  const std::string id = "6ac7cb27fd4af356919110a3";
+  add_identity(id, NB_ACCOUNT_PLAIN);
+  add_bucket("a-bucket", R"({"_id":"1","name":"a-bucket","versioning":"ENABLED"})");
+  write_file(store + "/master_keys.json", R"({"active_master_key":"x"})");
+  const std::vector<std::string> dirs = {
+    store, store + "/identities", store + "/identities/" + id,
+    store + "/buckets"};
+  const std::vector<std::string> files = {
+    store + "/master_keys.json", store + "/buckets/a-bucket.json",
+    store + "/identities/" + id + "/identity.json"};
+  /* NooBaa's directory mode while the directories are still ours */
+  for (const auto& d : dirs) {
+    ASSERT_EQ(::chmod(d.c_str(), 0700), 0) << d;
+  }
+  /* files before their directories:  once a directory is root's at
+   * 0700, what is in it is reached only with read-search */
+  auto give = [&](uid_t u, gid_t g) {
+    return with_capabilities_elsewhere(
+	nsfs::cap_bit(CAP_CHOWN) | nsfs::cap_bit(CAP_DAC_READ_SEARCH),
+	[&]() -> int {
+	  for (const auto* list : {&files, &dirs}) {
+	    for (auto it = list->rbegin(); it != list->rend(); ++it) {
+	      if (::lchown(it->c_str(), u, g) < 0) {
+		return -errno;
+	      }
+	    }
+	  }
+	  return 0;
+	});
+  };
+  const int given = give(0, 0);
+  if (given == -EPERM) {
+    GTEST_SKIP() << "CAP_CHOWN is not permitted, so the store cannot be "
+		    "made root's;  setcap the unit binary";
+  }
+  ASSERT_EQ(given, 0);
+  auto restore = make_scope_guard([&] { (void) give(::getuid(), ::getgid()); });
+
+  int premise = 0;
+  std::thread([&] {
+    const int fd = ::open(files[0].c_str(), O_RDONLY | O_CLOEXEC);
+    premise = (fd < 0) ? errno : 0;
+    if (fd >= 0) {
+      ::close(fd);
+    }
+  }).join();
+  ASSERT_EQ(premise, EACCES)
+      << "the root-owned store opened unraised, so nothing here is tested";
+
+  nsfs::NooBaaStoreContents c;
+  int ret = -1;
+  std::thread([&] {
+    nsfs::NooBaaConfigStore cs(store);
+    ret = cs.read(env->dpp, c);
+  }).join();
+  ASSERT_EQ(ret, 0);
+  std::string complaints;
+  for (const auto& u : c.unreadable) {
+    complaints += "\n  " + u.path + ": " + u.why;
+  }
+  EXPECT_TRUE(c.unreadable.empty()) << complaints;
+  EXPECT_EQ(c.identities.size(), 1u);
+  EXPECT_EQ(c.buckets.size(), 1u);
+  EXPECT_TRUE(c.master_keys_present);
+}
 
 /* Nothing in the store is written, which is the whole of I1's
  * contract.
@@ -19811,11 +20298,97 @@ TEST_F(NSFSPlaceBucketTest, AUserIsRejectedAsOwner)
       << "the control:  the account may own it";
 }
 
+/* Raise site 1:  a bucket placed over a directory another uid owns at 0770
+ * still takes its state -- placement's marks, put_info()'s mtime, an attribute
+ * write and a profile change -- because each bucket-state write raises
+ * BUCKET_STATE_CAPS once the gateway is denied.  The premise is that the
+ * gateway, unraised, is denied;  `archive/n-plan.md` §4 records placement
+ * rolled back on exactly that, under impersonation -- where the gateway holds
+ * read-search and so opens the directory, and only the write is
+ * denied.  Without impersonation it cannot open another uid's 0770 directory
+ * at all, and placement is refused there, which is right.  The account the
+ * directory belongs to has a row naming its uid, which placement under
+ * impersonation checks.  The driver calls run on a thread of their own:  a
+ * raise takes read-search for the life of the thread, which would spoil other
+ * tests' controls on this one. */
+TEST_F(NSFSPlaceBucketTest, ABucketOverAnotherUidsDirectoryTakesItsState)
+{
   static constexpr uid_t other_uid = 70170;
+  auto impersonate = [](const char* v) {
+    g_conf().set_val_or_die("rgw_nsfs_impersonate", v);
+    g_conf().apply_changes(nullptr);
+  };
+  nsfs::Identity row;
+  row.key = to_string(account);
   row.uid = other_uid;
   row.gid = other_uid;
+  ASSERT_EQ(driver->get_identity_db()->put_identity(env->dpp, row), 0);
+  impersonate("true");
+  auto restore = make_scope_guard([&] { impersonate("false"); });
+  const sf::path at = elsewhere() / "theirs";
+  sf::create_directories(at);
+  ASSERT_EQ(::chmod(at.c_str(), 0770), 0);
+  const int cret = with_capabilities_elsewhere(nsfs::cap_bit(CAP_CHOWN),
+    [&]() -> int {
       return (::chown(at.c_str(), other_uid, other_uid) < 0) ? -errno : 0;
     });
+  if (cret == -EPERM) {
+    GTEST_SKIP() << "the binary cannot give the directory away;  run the "
+		    "setcap step";
+  }
+  ASSERT_EQ(cret, 0);
+  /* given back, pass or fail, so the fixture's teardown can remove it */
+  auto give_back = make_scope_guard([&] {
+    (void) with_capabilities_elsewhere(nsfs::cap_bit(CAP_CHOWN),
+      [&]() -> int {
+	return (::chown(at.c_str(), ::geteuid(), ::getegid()) < 0) ? -errno : 0;
+      });
+  });
+
+  int premise = 0;
+  std::thread fresh([&] {
+    premise = (::setxattr(at.c_str(), "user.nsfs:probe", "x", 1, 0) < 0)
+	? -errno : 0;
+  });
+  fresh.join();
+  ASSERT_EQ(premise, -EACCES)
+      << "the premise:  the gateway, unraised, could write the directory";
+
+  std::thread work([&] {
+    ASSERT_EQ(place("theirs", at), 0) << "placement's marks were denied";
+    std::unique_ptr<rgw::sal::Bucket> b;
+    ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", "theirs"}, &b,
+				  null_yield), 0);
+    b->get_info().flags |= BUCKET_VERSIONED;
+    EXPECT_EQ(b->put_info(env->dpp, false, ceph::real_clock::now(),
+			  null_yield), 0) << "put_info()'s mtime and info";
+    Attrs a;
+    bufferlist v;
+    v.append("site 1");
+    a["user.rgw.probe"] = v;
+    EXPECT_EQ(b->merge_and_store_attrs(env->dpp, a, null_yield), 0)
+	<< "an attribute write";
+    uint32_t had = 0;
+    std::string had_profile;
+    EXPECT_EQ(driver->set_bucket_profile(
+		  env->dpp, null_yield, "theirs",
+		  *nsfs::extensions_for_profile("strong"), &had, &had_profile),
+	      0) << "a profile change";
+
+    std::unique_ptr<rgw::sal::Bucket> again;
+    ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", "theirs"}, &again,
+				  null_yield), 0);
+    EXPECT_TRUE(again->get_info().versioned()) << "the info did not persist";
+    EXPECT_TRUE(again->get_attrs().count("user.rgw.probe"))
+	<< "the attribute did not persist";
+    uint32_t ext = 0;
+    std::string pname;
+    ASSERT_EQ(driver->get_bucket_profile(env->dpp, null_yield, "theirs", &ext,
+					 &pname), 0);
+    EXPECT_EQ(pname, "strong") << "the profile change did not persist";
+  });
+  work.join();
+}
 
 /* Each rejection writes nothing:  no row, and nothing on the directory. */
 TEST_F(NSFSPlaceBucketTest, RejectionsWriteNothing)

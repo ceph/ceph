@@ -13,6 +13,8 @@
  *
  */
 
+#include <linux/capability.h>
+
 #include "fs_strategy.h"
 
 #include <algorithm>
@@ -399,6 +401,9 @@ SafeResult POSIXStrategy::safe_link(const DoutPrefixProvider* dpp,
     if (errno == EEXIST) {
       return SafeResult::MISMATCH;
     }
+    if ((errno == EACCES) || (errno == EPERM)) {
+      return SafeResult::DENIED;
+    }
     return SafeResult::ERROR;
   }
   if (stat_matches(dst_dir_fd, dst_name, expected_mtime_ns, expected_ino)) {
@@ -465,6 +470,9 @@ SafeResult POSIXStrategy::safe_unlink(const DoutPrefixProvider* dpp,
   if (ret < 0) {
     if (errno == ENOENT) {
       return SafeResult::OK;
+    }
+    if ((errno == EACCES) || (errno == EPERM)) {
+      return SafeResult::DENIED;
     }
     return SafeResult::ERROR;
   }
@@ -825,17 +833,69 @@ int FSStrategy::clone_file_by_copy(const DoutPrefixProvider* dpp,
                                    const std::string& src_name,
                                    int dst_dir_fd,
                                    const std::string& dst_name,
-                                   bool excl)
+                                   optional_yield y,
+                                   const CopyHints& hints,
+                                   bool excl,
+                                   const nsfs::FSIdentity& id,
+                                   bool src_as_gateway)
 {
   int src_fd = ::openat(src_dir_fd, src_name.c_str(), O_RDONLY);
-  if (src_fd < 0) {
+  /* A copy is a read of the source and a write of the destination,
+   * and both are on the access-model axis.  The read can be an
+   * operation S3 authorised against an object `id` does not
+   * own;  the write can be a create S3 authorised in a directory
+   * `id` cannot write, a bucket another identity created.  Either
+   * is performed raised where the model permits it (`src_as_gateway`,
+   * the model's answer for data), and the destination is then given to
+   * `id`, as every raised create is (DECISIONS.md 2026-10-20),
+   * so a copy they are entitled to never lands owned by the gateway.
+   *
+   * A retry rather than a decision, unlike the publish
+   * (NSFSObject::link_temp_file):  opening the source is idempotent,
+   * so only a copy whose source open fails with EACCES moves to the
+   * gateway.  The publish had to
+   * be decided in advance because its first step spends the
+   * O_TMPFILE's one link.
+   *
+   * Hoisted out of the identity block below, because
+   * nsfs::with_capabilities() rejects a raise on a thread that is
+   * impersonating.
+   *
+   * CAP_DAC_OVERRIDE alone:  the open is read-only, so only the
+   * permission check needs bypassing.  with_cross_account_retry()
+   * raises CAP_FOWNER as well because it also serves attribute
+   * writes. */
+  static constexpr uint64_t COPY_SOURCE_CAPS =
+    nsfs::cap_bit(CAP_DAC_OVERRIDE);
   /* the destination's create, and then what gives it its owner */
   static constexpr uint64_t COPY_DEST_CAPS =
     nsfs::cap_bit(CAP_DAC_OVERRIDE);
   static constexpr uint64_t COPY_CHOWN_CAPS = nsfs::cap_bit(CAP_CHOWN);
 
+  int src_fd = -1;
+  auto open_src = [&]() -> int {
+    return (src_fd < 0) ? -errno : 0;
   };
   int oret = nsfs::with_identity(dpp, id, open_src, y);
+  if ((oret == -EACCES) && src_as_gateway) {
+    oret = nsfs::with_capabilities(dpp, COPY_SOURCE_CAPS, open_src);
+    if (oret == 0) {
+      cross_account_sources.fetch_add(1, std::memory_order_relaxed);
+      ldpp_dout_fmt(dpp, 10, "nsfs: clone_file: the filesystem denied the "
+                             "identity the source {} and the gateway read it, "
+                             "which the access model permits", src_name);
+    }
+  }
+  if (oret < 0) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: clone_file: openat src={} failed: {}",
+                          src_name, cpp_strerror(-oret));
+    return oret;
+  }
+  auto close_src = make_scope_guard([&src_fd] {
+    if (src_fd >= 0) {
+      ::close(src_fd);
+    }
+  });
 
   /* The destination as `id`, and raised where the filesystem denies it
    * and the model permits;  hoisted out of the identity block below
@@ -942,13 +1002,40 @@ int FSStrategy::clone_file_by_copy(const DoutPrefixProvider* dpp,
 }
 
 int FSStrategy::clone_fd_by_copy(const DoutPrefixProvider* dpp,
-                                 int src_fd,
-                                 int dst_dir_fd, const std::string& dst_name)
+                                 int gw_src_fd,
+                                 int dst_dir_fd, const std::string& dst_name,
+                                 optional_yield y,
+                                 const CopyHints& hints,
+                                 const nsfs::FSIdentity& id,
+                                 bool src_as_gateway)
 {
+  /* As `id`, the source reopened through the descriptor:  an open of
+   * the magic link checks the file's permissions against the caller,
+   * so the read is `id`'s and not the gateway's, which holds
+   * `gw_src_fd`.
+   *
+   * Where the filesystem denies `id` and the access model
+   * permits it, there is nothing to reopen:  `gw_src_fd` is already
+   * the gateway's descriptor, so using it as it stands *is* the
+   * gateway performing the read.  Hoisted out of the identity block
+   * because the reopen is `id`'s and the fallback is not. */
   int own_fd = -1;
   if (id.active()) {
     const std::string via = fmt::format("/proc/self/fd/{}", gw_src_fd);
+    int oret = nsfs::with_identity(dpp, id, [&]() -> int {
+      own_fd = ::open(via.c_str(), O_RDONLY | O_CLOEXEC);
+      return (own_fd < 0) ? -errno : 0;
     }, y);
+    if ((oret == -EACCES) && src_as_gateway) {
+      cross_account_sources.fetch_add(1, std::memory_order_relaxed);
+      ldpp_dout_fmt(dpp, 10, "nsfs: clone_fd: the filesystem denied the "
+                             "identity the source and the gateway read it, "
+                             "which the access model permits");
+    } else if (oret < 0) {
+      ldpp_dout_fmt(dpp, 0, "ERROR: clone_fd: reopening the source failed: {}",
+                            cpp_strerror(-oret));
+      return oret;
+    }
   }
   auto close_own = make_scope_guard([own_fd] {
     if (own_fd >= 0) {
@@ -965,32 +1052,85 @@ int FSStrategy::clone_fd_by_copy(const DoutPrefixProvider* dpp,
     return -err;
   }
 
-  int tmp_fd = ::openat(dst_dir_fd, ".", O_TMPFILE | O_WRONLY, 0644);
-  if (tmp_fd < 0) {
-    int err = errno;
-    ldpp_dout(dpp, 0) << "ERROR: clone_fd: O_TMPFILE failed: "
-      << cpp_strerror(err) << dendl;
-    return -err;
+  /* The destination is on the access-model axis as the source is, and
+   * as clone_file_by_copy()'s is:  the O_TMPFILE as `id`, and raised
+   * where the filesystem denies it and the model permits, then given
+   * to `id`.  An O_TMPFILE open spends nothing, so a retry is safe;
+   * its mode is set while the gateway may still set it. */
+  static constexpr uint64_t COPY_DEST_CAPS =
+    nsfs::cap_bit(CAP_DAC_OVERRIDE);
+  static constexpr uint64_t COPY_CHOWN_CAPS = nsfs::cap_bit(CAP_CHOWN);
+  int tmp_fd = -1;
+  auto open_tmp = [&]() -> int {
+    tmp_fd = ::openat(dst_dir_fd, ".", O_TMPFILE | O_WRONLY,
+		      file_create_mode());
+    return (tmp_fd < 0) ? -errno : 0;
+  };
+  int ret = nsfs::with_identity(dpp, id, open_tmp, y);
+  if (((ret == -EACCES) || (ret == -EPERM)) && src_as_gateway &&
+      id.active()) {
+    ret = nsfs::with_capabilities(dpp, COPY_DEST_CAPS, open_tmp);
+    if (ret == 0) {
+      ret = apply_create_mode(dpp, tmp_fd, file_create_mode(), null_yield);
+    }
+    if (ret == 0) {
+      ret = nsfs::with_capabilities(dpp, COPY_CHOWN_CAPS, [&]() -> int {
+	return (::fchown(tmp_fd, id.cred.uid, id.cred.gid) < 0) ? -errno : 0;
+      });
+    }
+    if (ret == 0) {
+      ldpp_dout_fmt(dpp, 10, "nsfs: clone_fd: the filesystem denied the "
+                             "identity the destination {} and the gateway "
+                             "made it as theirs, which the access model "
+                             "permits", dst_name);
+    }
   }
+  if (ret < 0) {
+    if (tmp_fd >= 0) {
+      ::close(tmp_fd);
+    }
+    ldpp_dout_fmt(dpp, 0, "ERROR: clone_fd: O_TMPFILE failed: {}",
+                          cpp_strerror(-ret));
+    return ret;
+  }
+  auto close_tmp = make_scope_guard([tmp_fd] { ::close(tmp_fd); });
 
+  ret = nsfs::with_identity(dpp, id, [&]() -> int {
+    int r = apply_create_mode(dpp, tmp_fd, file_create_mode(), null_yield);
+    if (r == 0) {
       r = copy_range(dpp, src_fd, 0, tmp_fd, 0, stx.stx_size, hints);
     }
+    return r;
+  }, y);
   if (ret < 0) {
-    ::close(tmp_fd);
-    ldpp_dout(dpp, 0) << "ERROR: clone_fd: copy -> " << dst_name
-      << " failed: " << cpp_strerror(-ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: clone_fd: copy -> {} failed: {}", dst_name,
+                          cpp_strerror(-ret));
     return ret;
   }
 
-  ret = link_temp_file(tmp_fd, dst_dir_fd, dst_name, dpp);
-  ::close(tmp_fd);
-  return ret;
+  /* The publish is decided in advance, as NSFSObject::link_temp_file()
+   * decides it:  its first linkat spends the O_TMPFILE's one link, so it
+   * cannot be retried after a denial.  Under a model that permits it
+   * the gateway publishes, with CAP_FOWNER for fs.protected_hardlinks
+   * on `id`'s inode and CAP_DAC_OVERRIDE for a directory that
+   * is not the gateway's;  the inode stays `id`'s. */
+  static constexpr uint64_t PUBLISH_AS_GATEWAY_CAPS =
+    nsfs::cap_bit(CAP_FOWNER) | nsfs::cap_bit(CAP_DAC_OVERRIDE);
+  if (src_as_gateway && id.active()) {
+    return nsfs::with_capabilities(dpp, PUBLISH_AS_GATEWAY_CAPS,
+				   [&]() -> int {
+      return link_temp_file(tmp_fd, dst_dir_fd, dst_name, dpp, null_yield);
+    });
+  }
+  return link_temp_file(tmp_fd, dst_dir_fd, dst_name, dpp, null_yield, id);
 }
 
 int POSIXStrategy::clone_file(const DoutPrefixProvider* dpp,
                               int src_dir_fd, const std::string& src_name,
                               int dst_dir_fd, const std::string& dst_name,
-                              bool excl)
+                              optional_yield y, const CopyHints& hints,
+                              bool excl, const nsfs::FSIdentity& id,
+                              bool src_as_gateway)
 {
   return clone_file_by_copy(dpp, src_dir_fd, src_name,
                             dst_dir_fd, dst_name, y, hints, excl, id,
@@ -999,9 +1139,13 @@ int POSIXStrategy::clone_file(const DoutPrefixProvider* dpp,
 
 int POSIXStrategy::clone_fd(const DoutPrefixProvider* dpp,
                             int src_fd,
-                            int dst_dir_fd, const std::string& dst_name)
+                            int dst_dir_fd, const std::string& dst_name,
+                            optional_yield y, const CopyHints& hints,
+                            const nsfs::FSIdentity& id,
+                            bool src_as_gateway)
 {
-  return clone_fd_by_copy(dpp, src_fd, dst_dir_fd, dst_name);
+  return clone_fd_by_copy(dpp, src_fd, dst_dir_fd, dst_name, y, hints, id,
+                          src_as_gateway);
 }
 
 /* --- GPFSStrategy ----------------------------------------------------- */
@@ -1268,6 +1412,9 @@ SafeResult GPFSStrategy::safe_link(const DoutPrefixProvider* dpp,
     }
     ldpp_dout_fmt(dpp, 0, "ERROR: linkat failed: {} src={} dst={}",
                           cpp_strerror(err), src_name, dst_name);
+    if ((err == EACCES) || (err == EPERM)) {
+      return SafeResult::DENIED;
+    }
     return SafeResult::ERROR;
   }
 
@@ -1299,8 +1446,11 @@ SafeResult GPFSStrategy::safe_unlink(const DoutPrefixProvider* dpp,
     if (err == ENOENT) {
       return SafeResult::OK;
     }
-    ldpp_dout(dpp, 0) << "ERROR: gpfs safe_unlink: openat " << name
-      << " failed: " << cpp_strerror(err) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: gpfs safe_unlink: openat {} failed: {}", name,
+                          cpp_strerror(err));
+    if ((err == EACCES) || (err == EPERM)) {
+      return SafeResult::DENIED;
+    }
     return SafeResult::ERROR;
   }
 
@@ -1323,6 +1473,9 @@ SafeResult GPFSStrategy::safe_unlink(const DoutPrefixProvider* dpp,
                           cpp_strerror(err), name);
     if (err == EEXIST) {
       return SafeResult::MISMATCH;
+    }
+    if ((err == EACCES) || (err == EPERM)) {
+      return SafeResult::DENIED;
     }
     return SafeResult::ERROR;
   }
@@ -1352,18 +1505,24 @@ static std::string clone_parent_name(const std::string& name)
 int GPFSStrategy::clone_file(const DoutPrefixProvider* dpp,
                              int src_dir_fd, const std::string& src_name,
                              int dst_dir_fd, const std::string& dst_name,
-                             bool excl)
+                             optional_yield y, const CopyHints& hints,
+                             bool excl, const nsfs::FSIdentity& id,
+                             bool src_as_gateway)
 {
   if (!has_clone()) {
     ldpp_dout_fmt(dpp, 10, "gpfs clone_file: clone symbols not available, "
                            "falling back to copy");
     return clone_file_by_copy(dpp, src_dir_fd, src_name,
-                              dst_dir_fd, dst_name, excl);
+                              dst_dir_fd, dst_name, y, hints, excl, id,
+                              src_as_gateway);
   }
   /* The clone path makes its parent and child as the gateway.  As an
    * identity, copy instead, so the clone is its own and the read of
    * the source is checked against it. */
   if (id.active()) {
+    return clone_file_by_copy(dpp, src_dir_fd, src_name,
+                              dst_dir_fd, dst_name, y, hints, excl, id,
+                              src_as_gateway);
   }
 
   /* gpfs_clone_copy() has no exclusive-create mode, so the best we
@@ -1438,9 +1597,13 @@ int GPFSStrategy::clone_file(const DoutPrefixProvider* dpp,
 
 int GPFSStrategy::clone_fd(const DoutPrefixProvider* dpp,
                            int src_fd,
-                           int dst_dir_fd, const std::string& dst_name)
+                           int dst_dir_fd, const std::string& dst_name,
+                           optional_yield y, const CopyHints& hints,
+                           const nsfs::FSIdentity& id,
+                           bool src_as_gateway)
 {
-  return clone_fd_by_copy(dpp, src_fd, dst_dir_fd, dst_name);
+  return clone_fd_by_copy(dpp, src_fd, dst_dir_fd, dst_name, y, hints, id,
+                          src_as_gateway);
 }
 
 void GPFSStrategy::cleanup_clone(const DoutPrefixProvider* dpp,

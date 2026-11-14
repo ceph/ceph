@@ -5293,6 +5293,29 @@ options:
   default: false
   services:
   - rgw
+- name: rgw_nsfs_access_model
+  type: str
+  level: advanced
+  desc: Which access path is native, when S3 and the filesystem disagree
+  long_desc: An operation S3 authorises may be one the filesystem denies
+    the requester, because nsfs serves each request as its POSIX identity.
+    This selects what happens then. posix-strict, the default, requires
+    both to allow - so cross-identity sharing is arranged in the
+    filesystem with a supplementary group, and a side-loading NFS or SMB
+    client sees permissions that describe who can reach the data. It
+    matches NooBaa, which performs every operation as the requesting
+    account and whose IAM users and roles all share their account's uid,
+    so S3 and POSIX cannot disagree within an account. s3-native makes S3
+    the authority, which is what every other RGW backend does and
+    what the posix driver does; the filesystem becomes storage, and its
+    permissions no longer describe who can reach the bytes, so a
+    deployment serving the same tree over NFS or SMB should not use it.
+  default: posix-strict
+  enum_values:
+  - posix-strict
+  - s3-native
+  services:
+  - rgw
 - name: rgw_nsfs_dynamic_supplemental_groups
   type: bool
   level: advanced
@@ -5556,6 +5579,7 @@ options:
   long_desc: When true, the bucket ARN a notification record carries names the
     zonegroup in its region field, as arn:aws:s3:<zonegroup>::<bucket>.  When
     false, it is the bucket ARN AWS S3 uses, arn:aws:s3:::<bucket>, with no
+    region and no account.
   default: true
   services:
   - rgw

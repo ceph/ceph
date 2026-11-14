@@ -39,6 +39,7 @@
 #include "mpu_strategy.h"
 #include "xattr_strategy.h"
 #include "path_strategy.h"
+#include "access_strategy.h"
 #include "bucket_state_strategy.h"
 #include "identity_db.h"
 #include "impersonate.h"
@@ -274,6 +275,9 @@ protected:
   Directory* parent;
   int fd{-1};
   nsfs::FSIdentity identity;
+  /* What decides once the filesystem denies `identity`;  null lets
+   * no denial through.  See set_access_model(). */
+  const nsfs::AccessStrategy* access_model{nullptr};
   bool read_only{false};
   bool need_fsync{false};
   bool exist{false};
@@ -380,6 +384,11 @@ public:
   void set_identity(const nsfs::FSIdentity& id) { identity = id; }
   const nsfs::FSIdentity& get_identity() const { return identity; }
 
+  /* Where `identity` is denied:  a walk goes on as the gateway where
+   * the model permits AccessClass::path, and a create, link, rename or
+   * unlink is performed by the gateway where it permits
+   * AccessClass::data (with_identity_or_raise()). */
+  void set_access_model(const nsfs::AccessStrategy* m) { access_model = m; }
 
   /* Ask for no more access than the caller needs.
    *
@@ -402,16 +411,52 @@ public:
   virtual int stat(const DoutPrefixProvider *dpp, bool force = false);
   virtual int remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children) = 0;
   virtual int write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) = 0;
-  virtual int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) = 0;
+  /* `use_fd` >= 0 reads from the caller's descriptor rather than the
+   * entry's, for the same reason write_attrs() takes one:  it was
+   * opened as the gateway and the caller holds the raise.  Reaching
+   * this for *data* needs an access model that says so, and no
+   * configured model does. */
+  virtual int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y,
+		   int use_fd = -1) = 0;
+  /* A descriptor for this entry opened as the **gateway**, owned by
+   * the caller.
+   *
+   * Not the entry's `fd`, and deliberately:  a descriptor the gateway
+   * obtained must not be reachable from the object, or a data path
+   * finds it already open and serves bytes the filesystem denied
+   * this identity -- measured 2026-10-16, and the reason this exists
+   * rather than a flag on the entry.
+   *
+   * The caller closes it, and holds whatever raise it needs around
+   * both this and the attribute calls it hands the descriptor to:
+   * the open and the `user.*` syscalls are each tested on their own.
+   *
+   * Only the attribute paths want this.  A data path opens as the
+   * authenticated user or not at all. */
+  virtual int open_scratch_as_gateway(const DoutPrefixProvider* dpp,
+				      bool read_only);
+
+  /* `use_fd` >= 0 does the attribute work on that descriptor rather
+   * than opening the entry, and with no identity -- it is the
+   * caller's, obtained above, and the caller holds the raise.  The
+   * default is what every caller has always had. */
   virtual int write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs, Attrs* extra_attrs,
 			  AttrWriteMode mode = AttrWriteMode::REPLACE_ALL,
-			  const std::vector<std::string>* rmattrs = nullptr);
-  virtual int read_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs);
-  virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname) = 0;
+			  const std::vector<std::string>* rmattrs = nullptr,
+			  int use_fd = -1);
   /* `unknown`, if given, receives every `user.noobaa.*` name the
    * reviewed releases do not write (X4's third layer);  a caller that
    * hands out the object refuses on one, and listing passes none */
+  virtual int read_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs,
+			 int use_fd = -1,
+			 std::vector<std::string>* unknown = nullptr);
+  /* src_as_gateway:  the access model permits the gateway to read a
+   * source the filesystem denies the authenticated user.  Resolved by the
+   * caller, which knows the bucket;  see clone_file_by_copy(). */
   virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name, const CopyHints& hints, bool src_as_gateway = false) = 0;
+  virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y,
+			     std::string target_fname, bool excl = false,
+			     bool as_gateway = false) = 0;
   virtual std::unique_ptr<FSEnt> clone_base() = 0;
   /* Build this entry's listing row.  Only Directory::fill_cache()
    * composes keys from a path prefix as it descends;  every other caller
@@ -450,10 +495,13 @@ public:
   virtual int stat(const DoutPrefixProvider *dpp, bool force = false) override;
   virtual int remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children) override;
   virtual int write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) override;
-  virtual int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) override;
+  virtual int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y,
+		   int use_fd = -1) override;
   virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name, const CopyHints& hints, bool src_as_gateway = false) override;
   virtual int rename(const DoutPrefixProvider* dpp, optional_yield y, Directory* dst_dir, const std::string& dst_name);
-  virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname) override;
+  virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y,
+			     std::string target_fname, bool excl = false,
+			     bool as_gateway = false) override;
   virtual std::unique_ptr<FSEnt> clone_base() override {
     return std::make_unique<File>(*this);
   }
@@ -486,7 +534,8 @@ public:
     int for_each(const DoutPrefixProvider* dpp, const F& func);
   virtual int rename(const DoutPrefixProvider* dpp, optional_yield y, Directory* dst_dir, std::string dst_name);
   virtual int write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) override;
-  virtual int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) override;
+  virtual int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y,
+		   int use_fd = -1) override;
   virtual std::unique_ptr<FSEnt> clone_base() override {
     return std::make_unique<Directory>(*this);
   }
@@ -496,8 +545,10 @@ public:
   std::unique_ptr<Directory> clone() {
     return std::make_unique<Directory>(*this);
   }
-  virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname) override;
   virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name, const CopyHints& hints, bool src_as_gateway = false) override;
+  virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y,
+			     std::string target_fname, bool excl = false,
+			     bool as_gateway = false) override;
 
   int get_ent(const DoutPrefixProvider *dpp, optional_yield y, const std::string& name, const std::string& version, std::unique_ptr<FSEnt>& ent);
 
@@ -528,9 +579,12 @@ public:
   virtual ~MPDirectory() { close(); }
 
   virtual ObjectType get_type() override { return ObjectType::MULTIPART; };
-  virtual int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) override;
-  virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname) override;
   virtual int create(const DoutPrefixProvider *dpp, optional_yield y, bool* existed = nullptr, bool temp_file = false) override;
+  virtual int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y,
+		   int use_fd = -1) override;
+  virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y,
+			     std::string target_fname, bool excl = false,
+			     bool as_gateway = false) override;
   virtual int remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children) override;
   virtual int stat(const DoutPrefixProvider *dpp, bool force = false) override;
   std::unique_ptr<File> get_part_file(int partnum);
@@ -589,7 +643,19 @@ public:
   virtual int stat(const DoutPrefixProvider *dpp, bool force = false) override;
   virtual int remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children) override;
   virtual int write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) override;
+  virtual int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y,
+		   int use_fd = -1) override;
+  virtual int write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs, Attrs* extra_attrs,
+			  AttrWriteMode mode = AttrWriteMode::REPLACE_ALL,
+			  const std::vector<std::string>* rmattrs = nullptr,
+			  int use_fd = -1) override;
+  virtual int read_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs,
+			 int use_fd = -1,
+			 std::vector<std::string>* unknown = nullptr) override;
   virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name, const CopyHints& hints, bool src_as_gateway = false) override;
+  virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y,
+			     std::string target_fname, bool excl = false,
+			     bool as_gateway = false) override;
   virtual std::unique_ptr<FSEnt> clone_base() override {
     return std::make_unique<NooBaaDirectoryObject>(*this);
   }
@@ -856,6 +922,23 @@ protected:
    * because which format a bucket is in is not known until it is
    * loaded, and constructing a strategy costs nothing. */
   std::unique_ptr<nsfs::BucketStateStrategy> bucket_state_strategy;
+  /* the access model, beside the format strategies and selected the
+   * same way -- once, at startup, from configuration.
+   *
+   * `live` is what every caller reads, and the `access-model` driver
+   * hint can point it at another one for the length of a test:  an
+   * invariant nothing can break on demand is an invariant nothing
+   * has tested.  The targets are statics, so the swap is a pointer
+   * and no reader can be left holding a freed strategy. */
+  std::unique_ptr<nsfs::AccessStrategy> access_strategy;
+  std::atomic<const nsfs::AccessStrategy*> access_strategy_live{nullptr};
+  /* How many operations the access model let the gateway perform
+   * after the filesystem denied the authenticated user, by class.
+   *
+   * Reported by the `access-model` hint.  Without it a test that
+   * sees a read succeed cannot tell *why*:  because the model
+   * permitted it, or because the filesystem never objected and the
+   * fixture is wrong.  The counts make a success attributable. */
 
   /* When a NooBaa tree is adopted (DECISIONS.md 2026-10-11).
    *
@@ -930,6 +1013,15 @@ protected:
   ceph::mutex inject_delta_lock =
       ceph::make_mutex("NSFSDriver::inject_delta_lock");
   bool inject_skip_reclone{false};
+  /* write the non-md5 etag the way the defect did -- by the calling
+   * thread, with the result discarded -- so a suite can watch the etag
+   * the client is given diverge from the one recorded on disk, rather
+   * than deleting the fix and rebuilding to prove the test can fail.
+   * By bucket, since the suite runs in parallel */
+  std::set<std::string> inject_etag_as_gateway_buckets;
+  std::atomic<bool> inject_etag_as_gateway_armed{false};
+  ceph::mutex inject_etag_as_gateway_lock =
+      ceph::make_mutex("NSFSDriver::inject_etag_as_gateway_lock");
   /* the user whose credentials not resolving NSFSReadOp::prepare(),
    * get_attr(), check_owner_access() and create() pass over, as they did
    * before work-plan stage N-F2, so a test can watch a metadata read served,
@@ -983,6 +1075,28 @@ protected:
   ceph::mutex inject_hold_adoption_lock =
       ceph::make_mutex("NSFSDriver::inject_hold_adoption_lock");
   ceph::condition_variable inject_hold_adoption_cond;
+
+  /* Which POSIX identity a converted consumer chose for one named
+   * object, so a test can assert the uid and not the status --  (n)
+   * phase D's validation clause.  Phase C plumbed the authenticated
+   * user and the compiler catches a missing identity, not a wrong
+   * one;  this records the choice so a wrong one is a test failure
+   * rather than a silent inversion.
+   *
+   * Selected by user, not global.  A global slot would hold
+   * whatever ran last, and the suite runs in parallel -- see the
+   * buffered-bytes counter, which is global and has no such
+   * protection.
+   *
+   * By user rather than by object because the question is
+   * whether *this caller's* operations ran as it, which is not a
+   * per-object question:  a test may touch several objects, and a
+   * bucket-level attribute write names no key at all.  A selected
+   * user is also its own switch -- empty means record nothing -- so
+   * there is no second flag to leave set. */
+  ceph::mutex ran_as_lock = ceph::make_mutex("NSFSDriver::ran_as_lock");
+  std::string ran_as_who;
+  std::vector<std::pair<std::string, uid_t>> ran_as_seen;
 
   /* The `inject-buffered-copy` hint, by user.  Armed with `user=`,
    * a bundle applies to that user's copies only;  armed without,
@@ -1733,6 +1847,13 @@ public:
     }
   }
   bool skip_reclone_injected() const { return inject_skip_reclone; }
+  bool etag_as_gateway_injected(const std::string& bucket) {
+    if (!inject_etag_as_gateway_armed.load(std::memory_order_relaxed)) {
+      return false;
+    }
+    std::lock_guard l{inject_etag_as_gateway_lock};
+    return inject_etag_as_gateway_buckets.contains(bucket);
+  }
   bool unresolved_as_gateway_injected(const rgw_owner& who) {
     std::lock_guard l{unresolved_as_gateway_lock};
     return !unresolved_as_gateway_user.empty() &&
@@ -1753,9 +1874,63 @@ public:
   bool fsio_link_fail_injected() const { return inject_fsio_link_fail; }
   bool fsio_skip_cleanup_injected() const { return inject_fsio_skip_cleanup; }
 
+  /* Record what this user's operations choose, discarding
+   * anything held for a previous one.  See ran_as_lock. */
+  void select_ran_as(const std::string& who) {
+    std::lock_guard l{ran_as_lock};
+    ran_as_who = who;
+    ran_as_seen.clear();
+  }
+  /* Record the identity `site` chose, if this is the selected
+   * user.
+   * An inactive identity is the gateway, which is the answer when
+   * impersonation is off and is worth recording rather than
+   * dropping:  the test then has both polarities. */
+  void note_ran_as(const char* site, const std::string& who,
+		   const nsfs::FSIdentity& id) {
+    std::lock_guard l{ran_as_lock};
+    if (ran_as_who.empty() || (who != ran_as_who)) {
+      return;
+    }
+    ran_as_seen.emplace_back(site,
+			     id.active() ? id.cred.uid : ::geteuid());
+  }
+  /* Drain, and stop selecting:  a read answers for the operations
+   * between the select and itself and for nothing after them. */
+  std::vector<std::pair<std::string, uid_t>> take_ran_as() {
+    std::lock_guard l{ran_as_lock};
+    ran_as_who.clear();
+    return std::move(ran_as_seen);
+  }
+
   /* Internal APIs */
   rgw::store::POSIXUserDB* get_user_db() { return userDB.get(); }
   nsfs::IdentityDB* get_identity_db() { return userDB.get(); }
+  const nsfs::AccessStrategy* get_access_strategy() const {
+    return access_strategy_live.load(std::memory_order_relaxed);
+  }
+
+  /* How many operations the access model let the gateway perform
+   * after the filesystem denied the authenticated user, by class.
+   *
+   * Reported by the `access-model` hint.  Without it a test that
+   * sees a read succeed cannot tell *why*:  because the model
+   * permitted it, or because the filesystem never objected and the
+   * fixture proves nothing.  The counts make a success
+   * attributable. */
+  std::atomic<uint64_t> cross_account_attrs_served{0};
+  std::atomic<uint64_t> cross_account_data_served{0};
+
+  /* How many publishes the gateway performed itself, which the
+   * access model permits.
+   *
+   * Separate from the two counts above, which record a denial the
+   * model turned into service.  The publish never learns of a denial
+   * -- it is decided from the model before the first syscall, because
+   * its first step spends the O_TMPFILE's one link
+   * (NSFSObject::link_temp_file) -- so this counts what the gateway
+   * did and not what the filesystem said. */
+  std::atomic<uint64_t> publishes_as_gateway{0};
 
   /* The POSIX credentials `who` is served as, by the same resolution
    * every operation for it uses:  a user's own row under the user
@@ -2360,9 +2535,14 @@ private:
     ent->set_read_only(pending_read_only);
     if (pending_identity.active()) {
       ent->set_identity(pending_identity);
+      ent->set_access_model(driver->get_access_strategy());
       /* and the key's directories, which a delete prunes */
       for (auto& d : dir_chain) {
 	d->set_identity(pending_identity);
+	d->set_access_model(driver->get_access_strategy());
+      }
+    }
+  }
 
 public:
   /* Say how the entry is to be opened before anything opens it.
@@ -2595,6 +2775,10 @@ public:
   int get_owner(const DoutPrefixProvider *dpp, optional_yield y, std::unique_ptr<User> *owner);
   int copy(const DoutPrefixProvider *dpp, optional_yield y, NSFSBucket *sb,
            NSFSBucket *db, NSFSObject *dobj, const nsfs::CopyHints& hints);
+  /* Whether the access model lets the gateway read a source the
+   * filesystem denies this authenticated user.  Resolved here because this is
+   * where the driver and the object are both in hand. */
+  bool copy_source_as_gateway() const;
   int fill_cache(const DoutPrefixProvider *dpp, optional_yield y, nsfs::fill_cache_cb_t& cb);
   int stat(const DoutPrefixProvider *dpp);
   int make_ent(nsfs::ObjectType type);
@@ -2615,6 +2799,29 @@ public:
   int pin_identity_for_attrs(const DoutPrefixProvider* dpp,
 			     const rgw_owner& who, optional_yield y);
 
+  /* Run an attribute operation, and where the filesystem denied the
+   * authenticated user an operation S3 had authorised, run it again as the
+   * gateway with a raise.
+   *
+   * This is the whole of `rgw_nsfs_cross_account_permission`, and it
+   * is off by default.  Off, an attribute write or read must pass
+   * both S3 and the filesystem, which is NooBaa's model:  they
+   * perform every operation as the requesting account, and their IAM
+   * users and roles all carry their account's uid, so S3 and POSIX
+   * cannot disagree inside an account.  Cross-account sharing is then
+   * arranged in the filesystem, with a supplementary group (§6.2).
+   *
+   * On, an S3 grant to another account takes effect on the object's
+   * tags and ACL -- the gateway's own records about the object.  Not
+   * on its bytes:  no value of this setting makes the gateway read
+   * out or overwrite data for an identity the filesystem denies.
+   *
+   * The retry is the promote's last rung in miniature, and for the
+   * same reason:  attempt as the identity, and raise only where that
+   * is denied, so a tree that needs no raise never pays for one. */
+  int with_cross_account_retry(const DoutPrefixProvider* dpp,
+			       nsfs::AccessClass what,
+			       std::function<int(int use_fd)> fn);
 
  class NSFSFSIOObject : public FSIOObject {
   private:
