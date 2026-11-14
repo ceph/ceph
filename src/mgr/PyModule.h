@@ -26,6 +26,7 @@
 #include "common/perf_counters.h"
 #include "Python.h"
 #include "Gil.h"
+#include "SharedStore.h"
 #include "mon/MgrMap.h"
 
 #ifdef WITH_CRIMSON
@@ -106,6 +107,13 @@ private:
   int load_notify_types();
   std::set<std::string> notify_types;
 
+  int load_shared_store();
+  SharedStorePolicy shared_store;
+
+  int load_remote_exports();
+  // Fixed once the module is loaded, so read without the lock.
+  std::set<std::string, std::less<>> remote_exports;
+
 public:
   std::unique_ptr<PerfCounters> perfcounter;
   static std::string mgr_store_prefix;
@@ -177,6 +185,18 @@ public:
 
   bool should_notify(const std::string& notify_type) const {
     return notify_types.count(notify_type);
+  }
+
+  bool can_read_shared(std::string_view reader, std::string_view key) const {
+    return shared_store.allows(reader, key);
+  }
+
+  SharedStorePolicy::Readers get_shared_store_readers() const {
+    return shared_store.all_readers();
+  }
+
+  const std::set<std::string, std::less<>> &get_remote_exports() const {
+    return remote_exports;
   }
 
   const std::string &get_name() const {

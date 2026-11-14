@@ -127,6 +127,14 @@ void PyModuleRegistry::init()
   if (module_names.empty()) {
     clog->error() << "No ceph-mgr modules found in " << module_path;
   }
+  for (const auto& [name, mod] : modules) {
+    for (const auto& reader : mod->get_shared_store_readers()) {
+      if (!modules.contains(reader)) {
+        derr << "Module '" << name << "' shares KV data with unknown module '"
+             << reader << "'" << dendl;
+      }
+    }
+  }
   if (!failed_modules.empty()) {
     clog->error() << "Failed to load ceph-mgr modules: " << joinify(
         failed_modules.begin(), failed_modules.end(), std::string(", "));

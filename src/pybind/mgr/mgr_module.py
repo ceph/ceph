@@ -22,6 +22,7 @@ from typing import (
     Set,
     TYPE_CHECKING,
     Tuple,
+    TypeVar,
     Union,
     cast,
 )
@@ -1093,6 +1094,19 @@ class API:
     expose = DecoratorFactory('expose', default=False)(True)
 
 
+_REMOTE_EXPORT_ATTR = '__mgr_remote_export__'
+FuncT = TypeVar('FuncT', bound=Callable[..., Any])
+
+
+def remote_export(func: FuncT) -> FuncT:
+    """
+    Mark a method as part of the module's interface for other modules,
+    which call it with :func:`MgrModule.remote`.
+    """
+    setattr(func, _REMOTE_EXPORT_ATTR, True)
+    return func
+
+
 class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     MGR_POOL_NAME = ".mgr"
 
@@ -1204,6 +1218,24 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             cls.COMMANDS = []
 
         cls.COMMANDS.extend(cls.CLICommand.dump_cmd_list())
+
+    @classmethod
+    def _remote_exports(cls) -> List[str]:
+        """
+        Names of the methods marked with @remote_export, including inherited
+        and overridden ones. Read by ceph-mgr when it loads the module.
+        """
+        def exported(name: str) -> bool:
+            # The closest marked definition decides, so an override of an
+            # exported method stays exported. vars() runs no descriptors.
+            for klass in cls.__mro__:
+                attr = vars(klass).get(name)
+                attr = getattr(attr, '__func__', attr)
+                marked = getattr(attr, _REMOTE_EXPORT_ATTR, None)
+                if marked is not None:
+                    return marked is True
+            return False
+        return sorted(name for name in dir(cls) if exported(name))
 
     @property
     def log(self) -> logging.Logger:
@@ -2318,6 +2350,31 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         else:
             return r
 
+    def get_store_ex(self, module: str, key: str, default: Optional[str] = None) -> Optional[str]:
+        """
+        Get a value from the persistent key value store of another module.
+
+        The other module (the owner) must have shared the key with this
+        module, by listing it in its ``SHARED_STORE`` class attribute::
+
+            SHARED_STORE = [{'prefix': 'telemetry/', 'readers': ['telemetry']}]
+
+        The key is relative to the owner's store, as for :func:`get_store`,
+        and the value comes from the same local cache. Only the owner can
+        write to its store.
+
+        :param module: name of the module that owns the data
+        :param key: the key, relative to the owner's store
+        :param default: returned if the key does not exist
+        :raises PermissionError: the owner does not share this key with this module
+        :raises ImportError: the owner is not found or failed to load
+        """
+        r = self._ceph_get_store_ex(module, key)
+        if r is None:
+            return default
+        else:
+            return r
+
     @API.expose
     def get_localized_store(self, key: str, default: Optional[str] = None) -> Optional[str]:
         r = self._ceph_get_store(_get_localized_key(self.get_mgr_id(), key))
@@ -2332,6 +2389,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     def set_localized_store(self, key: str, val: Optional[str]) -> None:
         return self._set_localized(key, val, self.set_store)
 
+    @remote_export
     def self_test(self) -> Optional[str]:
         """
         Run a self-test on the module. Override this function and implement
@@ -2673,6 +2731,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         return self._cephfs
 
     @staticmethod
+    @remote_export
     def can_run() -> Tuple[bool, str]:
         """
         Implement this function to report whether the module's dependencies

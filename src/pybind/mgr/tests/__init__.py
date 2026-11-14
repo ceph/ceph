@@ -62,6 +62,10 @@ if 'UNITTEST' in os.environ:
         def _ceph_get_store_prefix(self, prefix):
             return self.mock_store_prefix('store', prefix)
 
+        def _ceph_get_store_ex(self, module, key):
+            # data another module shares with this one, see mock_store_set
+            return self.mock_store_get('store_ex', f'{module}/{key}', None)
+
         def _ceph_get_module_option(self, module, key, localized_prefix=None):
             try:
                 _, val, _ = self.check_mon_command({

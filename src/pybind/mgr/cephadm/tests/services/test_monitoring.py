@@ -1912,8 +1912,7 @@ spec:
         daemon_spec.service_name = 'prometheus'
         daemon_spec.host = 'test'
 
-        cephadm_module.mon_command = Mock(return_value=(-2, '', ''))
-        cephadm_module.check_mon_command = Mock()
+        cephadm_module.set_store('services/prometheus/prometheus.yml', None)
 
         loader = Mock()
         loader.get_source.return_value = ("raw_template_content", None, None)
@@ -1932,11 +1931,7 @@ spec:
 
         svc.generate_config(DaemonDeployContext(daemon_spec))
 
-        cephadm_module.check_mon_command.assert_called_once_with({
-            'prefix': 'config-key set',
-            'key': 'mgr/cephadm/services/prometheus/prometheus.yml',
-            'val': "raw_template_content"
-        })
+        assert cephadm_module.get_store('services/prometheus/prometheus.yml') == "raw_template_content"
 
     @patch("cephadm.services.monitoring.PrometheusService.get_dependencies", lambda *a, **k: [])
     def test_prometheus_config_does_not_override_existing(self, cephadm_module):
@@ -1948,8 +1943,7 @@ spec:
         daemon_spec.service_name = 'prometheus'
         daemon_spec.host = 'test'
 
-        cephadm_module.mon_command = Mock(return_value=(0, 'existing', ''))
-        cephadm_module.check_mon_command = Mock()
+        cephadm_module.set_store('services/prometheus/prometheus.yml', 'existing')
 
         cephadm_module.template.render = Mock(return_value="rendered_config")
 
@@ -1964,7 +1958,7 @@ spec:
 
         svc.generate_config(DaemonDeployContext(daemon_spec))
 
-        cephadm_module.check_mon_command.assert_not_called()
+        assert cephadm_module.get_store('services/prometheus/prometheus.yml') == 'existing'
 
     @pytest.mark.parametrize(
         "server_addr,expected",
