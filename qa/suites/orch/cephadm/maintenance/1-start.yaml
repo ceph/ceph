@@ -1,0 +1,23 @@
+roles:
+- - host.a
+  - mon.a
+  - mgr.a
+  - osd.0
+  - osd.1
+- - host.b
+  - mon.b
+  - mgr.b
+  - osd.2
+  - osd.3
+- - host.c
+  - mon.c
+  - osd.4
+  - osd.5
+overrides:
+  ceph:
+    log-only-match:
+      - CEPHADM_
+    log-ignorelist: []
+tasks:
+- install:
+- cephadm:
