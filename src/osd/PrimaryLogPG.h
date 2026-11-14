@@ -950,8 +950,6 @@ protected:
 
   OpRequestRef active_coro_op = nullptr;
   std::shared_ptr<resume_token_t> coro_resumer = nullptr;
-  bool coro_op_in_flight = false;
-  std::list<OpRequestRef> waiting_for_coro_op;
   OpContext* active_coro_ctx = nullptr;
   /// the coroutine waits for active_coro_ctx's async reads, to run the op
   /// again itself (OpContext::finish_read() resumes it)
