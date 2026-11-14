@@ -2822,15 +2822,16 @@ class C_MDS_ImportDirLoggedStart : public MigratorLogContext {
   dirfrag_t df;
   CDir *dir;
   mds_rank_t from;
+  uint64_t tid;
 public:
   map<client_t,pair<Session*,uint64_t> > imported_session_map;
 
-  C_MDS_ImportDirLoggedStart(Migrator *m, CDir *d, mds_rank_t f) :
-    MigratorLogContext(m), df(d->dirfrag()), dir(d), from(f) {
+  C_MDS_ImportDirLoggedStart(Migrator *m, CDir *d, mds_rank_t f, uint64_t t) :
+    MigratorLogContext(m), df(d->dirfrag()), dir(d), from(f), tid(t) {
     dir->get(CDir::PIN_PTRWAITER);
   }
   void finish(int r) override {
-    mig->import_logged_start(df, dir, from, imported_session_map);
+    mig->import_logged_start(df, dir, from, tid, imported_session_map);
     dir->put(CDir::PIN_PTRWAITER);
   }
 };
@@ -2858,7 +2859,8 @@ void Migrator::handle_export_dir(const cref_t<MExportDir> &m)
 
   mdcache->show_subtrees();
 
-  C_MDS_ImportDirLoggedStart *onlogged = new C_MDS_ImportDirLoggedStart(this, dir, oldauth);
+  C_MDS_ImportDirLoggedStart *onlogged = new C_MDS_ImportDirLoggedStart(this, dir, oldauth,
+									 it->second.tid);
 
   // start the journal entry
   EImportStart *le = new EImportStart(mds->mdlog, dir->dirfrag(), m->bounds, oldauth);
@@ -3093,14 +3095,17 @@ void Migrator::import_reverse(CDir *dir)
       }
       in->put(CInode::PIN_IMPORTINGCAPS);
     }
-  }
 
-  if (stat.state == IMPORT_LOGGINGSTART || stat.state == IMPORT_ACKING) {
     for (auto& p : stat.session_map) {
       Session *session = p.second.first;
       session->dec_importing();
     }
     mds->server->close_forced_opened_sessions(stat.session_map);
+  } else if (stat.state == IMPORT_LOGGINGSTART) {
+    // caps are not imported yet. the forced opened sessions are still held
+    // by C_MDS_ImportDirLoggedStart, import_logged_start() cleans them up.
+    for (auto& p : stat.peer_exports)
+      p.first->put(CInode::PIN_IMPORTINGCAPS);
   }
 	 
   // log our failure
@@ -3196,15 +3201,23 @@ void Migrator::import_reverse_final(CDir *dir)
 
 
 
-void Migrator::import_logged_start(dirfrag_t df, CDir *dir, mds_rank_t from,
+void Migrator::import_logged_start(dirfrag_t df, CDir *dir, mds_rank_t from, uint64_t tid,
 				   map<client_t,pair<Session*,uint64_t> >& imported_session_map)
 {
   dout(7) << *dir << dendl;
 
   map<dirfrag_t, import_state_t>::iterator it = import_state.find(dir->dirfrag());
-  ceph_assert(it != import_state.end());
-  if (it->second.state != IMPORT_LOGGINGSTART) {
+  if (it == import_state.end() ||
+      it->second.peer != from ||
+      it->second.tid != tid ||
+      it->second.state != IMPORT_LOGGINGSTART) {
     dout(7) << "import " << df << " must have aborted" << dendl;
+    // EImportStart is journaled, finish opening the sessions to consume the
+    // projected sessionmap version, then close the ones the client never opened.
+    mds->server->finish_force_open_sessions(imported_session_map, false);
+    for (auto& p : imported_session_map)
+      p.second.first->dec_importing();
+    mds->server->close_forced_opened_sessions(imported_session_map);
     return;
   }
 
@@ -3298,6 +3311,7 @@ void Migrator::import_finish(CDir *dir, bool notify, bool last)
     for (auto& p : it->second.session_map) {
       Session *session = p.second.first;
       session->dec_importing();
+      session->forced_open_unused = false;
     }
   }
 
