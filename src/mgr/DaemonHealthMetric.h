@@ -14,14 +14,18 @@ namespace ceph { class Formatter; }
 enum class daemon_metric : uint8_t {
   SLOW_OPS = 0,
   PENDING_CREATING_PGS = 1,
-  NONE = 2,
-  HIGH_DEBUG_LEVEL = 3,
+  CEPHFS_MIRROR_FAILURE = 2,
+  CEPHFS_MIRROR_SNAP_SYNC_FAILURE = 3,
+  NONE = 4,
+  HIGH_DEBUG_LEVEL = 5,
 };
 
 static inline const char *daemon_metric_name(daemon_metric t) {
   switch (t) {
   case daemon_metric::SLOW_OPS: return "SLOW_OPS";
   case daemon_metric::PENDING_CREATING_PGS: return "PENDING_CREATING_PGS";
+  case daemon_metric::CEPHFS_MIRROR_FAILURE: return "CEPHFS_MIRROR_FAILURE";
+  case daemon_metric::CEPHFS_MIRROR_SNAP_SYNC_FAILURE: return "CEPHFS_MIRROR_SNAP_SYNC_FAILURE";
   case daemon_metric::NONE: return "NONE";
   case daemon_metric::HIGH_DEBUG_LEVEL: return "HIGH_DEBUG_LEVEL";
   default: return "???";
