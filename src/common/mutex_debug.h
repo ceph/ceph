@@ -36,7 +36,10 @@ class mutex_debugging_base
 {
 protected:
   std::string group;
-  int id = -1;
+  // lockdep id. _will_lock() reads and updates it before the mutex is
+  // acquired, while the current owner may be updating it in _locked() or
+  // _will_unlock(), so it must be atomic
+  std::atomic<int> id = -1;
   bool lockdep;   // track this mutex using lockdep_*
   bool backtrace; // gather backtrace on lock acquisition
 
