@@ -797,6 +797,12 @@ namespace rgw::sal {
       const DoutPrefixProvider* dpp,
       optional_yield y)
   {
+    // nothing is copied, so the data cannot be decrypted or encrypted
+    if (dp_factory && dp_factory->need_crypt()) {
+      ldpp_dout(dpp, 0) << "ERROR: cannot copy " << get_name()
+                        << ": decrypting or encrypting the data is not supported" << dendl;
+      return -ERR_NOT_IMPLEMENTED;
+    }
     if (dest_if_match || dest_if_nomatch) {
       return -ERR_NOT_IMPLEMENTED;
     }

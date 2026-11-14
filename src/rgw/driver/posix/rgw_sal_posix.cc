@@ -3319,6 +3319,13 @@ int POSIXObject::copy_object(const ACLOwner& owner,
                               const DoutPrefixProvider* dpp,
                               optional_yield y)
 {
+  // the bytes are copied as they are, so they cannot be decrypted or encrypted
+  if (dp_factory && dp_factory->need_crypt()) {
+    ldpp_dout(dpp, 0) << "ERROR: cannot copy " << get_name()
+                      << ": decrypting or encrypting the data is not supported" << dendl;
+    return -ERR_NOT_IMPLEMENTED;
+  }
+
   int ret;
   POSIXBucket *db = static_cast<POSIXBucket*>(dest_bucket);
   POSIXBucket *sb = static_cast<POSIXBucket*>(src_bucket);
