@@ -69,15 +69,21 @@ class ListPaginator:
             for item in self.input_list:
                 for searchable_param in self.searchable_params:
                     value = self.find_value(item, searchable_param)
+                    if isinstance(value, (list, tuple, set)):
+                        value = ' '.join(str(v) for v in value)
                     if isinstance(value, (int, str)):
                         if self.search in str(value):
                             trimmed_list.append(item)
+                            break
 
         else:
             trimmed_list = self.input_list
 
         def sort(item):
-            return self.find_value(item, sort_by)
+            value = self.find_value(item, sort_by)
+            if isinstance(value, (list, tuple, set)):
+                return ' '.join(str(v) for v in value)
+            return value
 
         sorted_list = sorted(trimmed_list, key=sort, reverse=desc)
         self.count = len(sorted_list)
