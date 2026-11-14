@@ -14131,6 +14131,41 @@ def test_bucket_policy_put_obj_s3_noenc():
     response = client.put_object(Bucket=bucket_name, Key=key1_str, ServerSideEncryption='AES256')
     assert response['ResponseMetadata']['HTTPHeaders']['x-amz-server-side-encryption'] == 'AES256'
 
+@pytest.mark.encryption
+@pytest.mark.bucket_policy
+@pytest.mark.sse_s3
+@pytest.mark.fails_on_dbstore
+def test_bucket_policy_copy_obj_s3_noenc():
+    bucket_name = get_new_bucket()
+    client = get_client()
+
+    src_key = 'testobj'
+    client.put_object(Bucket=bucket_name, Key=src_key, Body=src_key,
+                      ServerSideEncryption='AES256')
+
+    deny_unencrypted_obj = {
+        "Null" : {
+          "s3:x-amz-server-side-encryption": "true"
+        }
+    }
+
+    p = Policy()
+    resource = _make_arn_resource("{}/{}".format(bucket_name, "*"))
+
+    s = Statement("s3:PutObject", resource, effect="Deny", condition=deny_unencrypted_obj)
+    policy_document = p.add_statement(s).to_json()
+
+    client.put_bucket_policy(Bucket=bucket_name, Policy=policy_document)
+
+    copy_source = {'Bucket': bucket_name, 'Key': src_key}
+
+    # the copy is a new object, so the policy applies to it as well
+    check_access_denied(client.copy_object, Bucket=bucket_name, Key='copy_noenc',
+                        CopySource=copy_source)
+
+    response = client.copy_object(Bucket=bucket_name, Key='copy_enc',
+                                  CopySource=copy_source, ServerSideEncryption='AES256')
+    assert response['ResponseMetadata']['HTTPHeaders']['x-amz-server-side-encryption'] == 'AES256'
 
 @pytest.mark.encryption
 @pytest.mark.bucket_policy
