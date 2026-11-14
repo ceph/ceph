@@ -15,6 +15,7 @@
 #include "cls/lock/cls_lock_client.h"
 #include "include/random.h"
 #include "rgw_gc_log.h"
+#include "perfglue/heap_profiler.h"
 
 #include <list> // XXX
 #include <sstream>
@@ -721,6 +722,7 @@ std::ostream& RGWGC::gen_prefix(std::ostream& out) const
 }
 
 void *RGWGC::GCWorker::entry() {
+  ceph::real_time last_idle;
   do {
     utime_t start = ceph_clock_now();
     ldpp_dout(dpp, 2) << "garbage collection: start" << dendl;
@@ -742,6 +744,7 @@ void *RGWGC::GCWorker::entry() {
 
     secs -= end.sec();
 
+    last_idle = ceph_heap_mark_thread_temporarily_idle(cct, last_idle);
     std::unique_lock locker{lock};
     cond.wait_for(locker, std::chrono::seconds(secs));
   } while (!gc->going_down());
