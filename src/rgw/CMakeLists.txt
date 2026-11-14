@@ -690,7 +690,14 @@ gperf_generate(${CMAKE_SOURCE_DIR}/src/rgw/rgw_iam_policy_keywords.gperf
 set_source_files_properties(rgw_iam_policy.cc PROPERTIES
   OBJECT_DEPENDS ${CMAKE_BINARY_DIR}/src/rgw/rgw_iam_policy_keywords.frag.cc
   COMPILE_FLAGS -I${CMAKE_BINARY_DIR}/src/rgw)
-
+# Own target: Ninja runs gperf without waiting for rgw_common's dependencies,
+# and Make runs it once.
+add_custom_target(rgw_iam_policy_keywords
+  DEPENDS rgw_iam_policy_keywords.frag.cc)
+add_dependencies(rgw_common rgw_iam_policy_keywords)
+if(WITH_RADOSGW_STANDALONE)
+  add_dependencies(rgw_common_standalone rgw_iam_policy_keywords)
+endif()
 
 add_library(rgw_a STATIC
     ${rgw_a_srcs}
