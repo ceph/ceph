@@ -1414,6 +1414,7 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue, MDSCon
 	// to mixed
       case LOCK_TSYN_MIX:
       case LOCK_SYNC_MIX:
+      case LOCK_LOCK_MIX:
       case LOCK_EXCL_MIX:
       case LOCK_XSYN_MIX:
 	in->start_scatter(static_cast<ScatterLock *>(lock));
@@ -2243,7 +2244,15 @@ void Locker::_finish_xlock(SimpleLock *lock, client_t xlocker, bool *pneed_issue
       lock->get_state() != LOCK_XLOCKSNAP) {
     CInode *in = static_cast<CInode*>(lock->get_parent());
     client_t loner = in->get_target_loner();
-    if (loner >= 0 && (xlocker < 0 || xlocker == loner)) {
+    // The xlock states let other clients keep caps (Fcb for the file lock)
+    // that EXCL gives only the loner. Going straight to EXCL would issue the
+    // loner Fr/Fw while they're still being recalled, so gather instead.
+    int other_issued = 0;
+    if (lock->get_cap_shift() && in->is_head())
+      in->get_caps_issued(nullptr, &other_issued, nullptr,
+			  lock->get_cap_shift(), lock->get_cap_mask());
+    if (loner >= 0 && (xlocker < 0 || xlocker == loner) &&
+	!(other_issued & ~lock->get_sm()->states[LOCK_EXCL].caps)) {
       lock->set_state(LOCK_EXCL);
       lock->get_parent()->auth_unpin(lock);
       lock->finish_waiters(SimpleLock::WAIT_STABLE|SimpleLock::WAIT_WR|SimpleLock::WAIT_RD);
@@ -5823,7 +5832,20 @@ void Locker::scatter_mix(ScatterLock *lock, bool *need_issue)
   ceph_assert(in->is_auth());
   ceph_assert(lock->is_stable());
 
-  if (lock->get_state() == LOCK_LOCK) {
+  // LOCK lets any client keep Fc and Fb, so a client may still be buffering
+  // writes. Those caps must come back (and the data be written back) before
+  // MIX gives anyone Fr or Fw, or a reader can read objects that aren't
+  // written yet and get zeros. Directories keep the direct path: there these
+  // bits are async dirop caps, which no data depends on.
+  bool need_cap_gather = false;
+  if (lock->get_state() == LOCK_LOCK && lock->get_cap_shift() &&
+      in->is_file() && in->is_head()) {
+    int issued = in->get_caps_issued(nullptr, nullptr, nullptr,
+				     lock->get_cap_shift(), lock->get_cap_mask());
+    need_cap_gather = issued & ~lock->get_sm()->states[LOCK_MIX].caps;
+  }
+
+  if (lock->get_state() == LOCK_LOCK && !need_cap_gather) {
     in->start_scatter(lock);
     if (in->is_replicated()) {
       // data
@@ -5846,6 +5868,7 @@ void Locker::scatter_mix(ScatterLock *lock, bool *need_issue)
   } else {
     // gather?
     switch (lock->get_state()) {
+    case LOCK_LOCK: lock->set_state(LOCK_LOCK_MIX); break;
     case LOCK_SYNC: lock->set_state(LOCK_SYNC_MIX); break;
     case LOCK_EXCL: lock->set_state(LOCK_EXCL_MIX); break;
     case LOCK_XSYN: lock->set_state(LOCK_XSYN_MIX); break;
