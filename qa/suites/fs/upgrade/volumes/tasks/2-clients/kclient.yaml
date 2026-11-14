@@ -1,0 +1,8 @@
+teuthology:
+  postmerge:
+    # Once can we make sure the distro kernels have included the newops fixes
+    # we can remove the is_kupstream() restriction. While since the Nautilus
+    # will only support the 'v1' mount syntax, so don't touch the mount syntax
+    # restriction.
+    - if not is_kupstream() or syntax_version() == 'v2' then reject() end
+tasks:

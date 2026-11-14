@@ -27,6 +27,7 @@
 #include "include/buffer.h"
 #include "include/object.h" // for snapid_t
 #include "include/utime.h"
+#include "include/ceph_assert.h"
 
 namespace ceph { class Formatter; }
 
@@ -116,6 +117,10 @@ struct sr_t {
                                         // was last changed.
   uint64_t change_attr = 0;             // tracks changes to snap
                                         // realm attrs.
+
+  // for auto-allowing subvol clients v3 path access after it has been upgraded
+  // from pre-v3 versions.
+  std::string subvol_prev_path;
 
   enum {
     PARENT_GLOBAL	= 1 << 0,
