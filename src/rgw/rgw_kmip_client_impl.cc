@@ -460,6 +460,8 @@ RGWKmipHandles::do_one_entry(RGWKMIPTransceiver &element)
 
   if (!h) {
     element.ret = -ERR_SERVICE_UNAVAILABLE;
+    element.done = true;
+    element.cond.notify_all();
     return element.ret;
   }
   memset(a, 0, sizeof *a);
