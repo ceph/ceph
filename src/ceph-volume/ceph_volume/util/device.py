@@ -369,7 +369,7 @@ class Device(object):
                 self.all_devices_vgs = lvm.get_all_devices_vgs()
             for path in device_to_check:
                 for dev_vg in self.all_devices_vgs:
-                    if dev_vg.pv_name == path:
+                    if os.path.realpath(dev_vg.pv_name) == os.path.realpath(path):
                         vgs = [dev_vg]
                 if vgs:
                     self.vgs.extend(vgs)
