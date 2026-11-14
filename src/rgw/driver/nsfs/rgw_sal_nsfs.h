@@ -30,6 +30,7 @@
 #include "../posix/posixDB.h"
 #include "../posix/user_cache.h"
 #include "../posix/userdb_watcher.h"
+#include "../posix/fs_notification.h"
 #include "../posix/qd2_pending.h"
 #include "../posix/posix_io_uring.h"
 #include "fs_strategy.h"

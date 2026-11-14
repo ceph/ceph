@@ -72,7 +72,15 @@ Unsupported Fields in the Event Record
 
 The records sent for bucket notification follows the format described in:
 `Event Message Structure`_.
-However, the ``requestParameters.sourceIPAddress`` field will be sent empty.
+The ``requestParameters.sourceIPAddress`` field is the client's address, as
+``rgw_remote_addr_param`` selects it, or the connection's when that is unset.
+It is empty for an event no client request caused, such as a lifecycle
+expiration or the completion of a restore.
+
+The bucket ARN, ``s3.bucket.arn``, names the zonegroup in its region field,
+``arn:aws:s3:<zonegroup>::<bucket>``.  With
+``rgw_notification_bucket_arn_region`` set to ``false`` it is the bucket ARN
+AWS S3 sends, ``arn:aws:s3:::<bucket>``, with no region and no account.
 
 
 Event Types
@@ -150,6 +158,18 @@ Event Types
 +--------------------------------------------------------+-------------------------------------------+
 | ``s3:ObjectRestore:Delete``                            | Supported                                 |
 +--------------------------------------------------------+-------------------------------------------+
+| ``s3:ObjectTagging:*``                                 | Supported                                 |
++--------------------------------------------------------+-------------------------------------------+
+| ``s3:ObjectTagging:Put``                               | Supported                                 |
++--------------------------------------------------------+-------------------------------------------+
+| ``s3:ObjectTagging:Delete``                            | Supported                                 |
++--------------------------------------------------------+-------------------------------------------+
+| ``s3:ObjectAcl:Put``                                   | Supported                                 |
++--------------------------------------------------------+-------------------------------------------+
+| ``s3:ObjectRetention:*``                               | Supported                                 |
++--------------------------------------------------------+-------------------------------------------+
+| ``s3:ObjectRetention:Put``                             | Supported                                 |
++--------------------------------------------------------+-------------------------------------------+
 | ``s3:ReducedRedundancyLostObject``                     | Not applicable                            |
 +--------------------------------------------------------+-------------------------------------------+
 
@@ -167,6 +187,21 @@ Event Types
 
    The ``s3:ObjectSynced:Create`` event is sent when an object successfully
    syncs to a zone. It must be explicitly set for each zone.
+
+.. note::
+
+   The ``s3:ObjectAcl:Put`` event is sent when a request sets an object's
+   ACL, and only when the ACL it sets differs from the one it replaces.
+   A bucket's ACL sends no event.
+
+.. note::
+
+   The ``s3:ObjectRetention:Put`` event is sent when a request sets an
+   object's Object Lock retention (``PutObjectRetention``).  Its record
+   carries ``objectRetentionEventData``, with the ``mode`` and
+   ``retainUntilDate`` the request set.  RGW has no event holds, so the
+   ``eventHold`` and ``eventHoldDuration`` fields AWS defines are never
+   present.
 
 Topic Configuration
 -------------------

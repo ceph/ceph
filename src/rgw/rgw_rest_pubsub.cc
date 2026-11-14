@@ -10,6 +10,7 @@
 #include "rgw_iam_policy.h"
 #include "rgw_rest_pubsub.h"
 #include "rgw_pubsub.h"
+#include "rgw_pubsub_push.h"
 #include "rgw_op.h"
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
@@ -36,7 +37,8 @@ bool verify_transport_security(CephContext *cct, const RGWEnv& env) {
 // make sure that if user/password are passed inside URL, it is over secure connection
 // update rgw_pubsub_dest to indicate that a password is stored in the URL
 bool validate_and_update_endpoint_secret(rgw_pubsub_dest& dest, CephContext *cct,
-                                         const req_info& ri, std::string& message)
+                                         const req_info& ri, const RGWHTTPArgs& args,
+                                         std::string& message)
 {
   if (dest.push_endpoint.empty()) {
     return true;
@@ -48,7 +50,6 @@ bool validate_and_update_endpoint_secret(rgw_pubsub_dest& dest, CephContext *cct
     return false;
   }
 
-  const auto& args=ri.args;
   auto topic_user_name=args.get_optional("user-name");
   auto topic_password=args.get_optional("password");
 
@@ -67,8 +68,11 @@ bool validate_and_update_endpoint_secret(rgw_pubsub_dest& dest, CephContext *cct
     password = topic_password.get();
   }
 
-  // this should be verified inside parse_url()
-  ceph_assert(user.empty() == password.empty());
+  // the URL holds both or neither, but an attribute can replace either one
+  if (user.empty() != password.empty()) {
+    message = "user-name and password must be provided together";
+    return false;
+  }
   if (!user.empty()) {
     dest.stored_secret = true;
     if (!verify_transport_security(cct, *ri.env)) {
@@ -87,6 +91,33 @@ bool validate_and_update_endpoint_secret(rgw_pubsub_dest& dest, CephContext *cct
     }
   }
 
+  return true;
+}
+
+// check the endpoint arguments only the endpoint type knows, and mark the
+// topic as holding a secret when they do
+static bool validate_endpoint_config(const DoutPrefixProvider* dpp,
+                                     rgw_pubsub_dest& dest, CephContext* cct,
+                                     const req_info& ri, std::string& message)
+{
+  if (dest.push_endpoint.empty()) {
+    return true;
+  }
+  bool has_secret;
+  try {
+    has_secret = RGWPubSubEndpoint::validate_config(
+        dest.push_endpoint, RGWHTTPArgs(dest.push_endpoint_args, dpp), cct);
+  } catch (const RGWPubSubEndpoint::configuration_error& e) {
+    message = e.what();
+    return false;
+  }
+  if (has_secret) {
+    dest.stored_secret = true;
+    if (!verify_transport_security(cct, *ri.env)) {
+      message = "Topic contains secrets that must be transmitted over a secure transport";
+      return false;
+    }
+  }
   return true;
 }
 
@@ -267,7 +298,8 @@ class RGWPSCreateTopicOp : public RGWOp {
     s->info.args.get_int("max_retries", reinterpret_cast<int *>(&dest.max_retries), rgw::notify::DEFAULT_GLOBAL_VALUE);
     s->info.args.get_int("retry_sleep_duration", reinterpret_cast<int *>(&dest.retry_sleep_duration), rgw::notify::DEFAULT_GLOBAL_VALUE);
 
-    if (!validate_and_update_endpoint_secret(dest, s->cct, s->info, s->err.message)) {
+    if (!validate_and_update_endpoint_secret(dest, s->cct, s->info, s->info.args,
+                                             s->err.message)) {
       return -EINVAL;
     }
     // Store topic Policy.
@@ -292,12 +324,16 @@ class RGWPSCreateTopicOp : public RGWOp {
       if (param.first == "Action" || param.first == "Name" || param.first == "PayloadHash") {
         continue;
       }
-      dest.push_endpoint_args.append(param.first+"="+url_encode(param.second, true)+"&");
+      dest.push_endpoint_args.append(param.first+"="+escape_endpoint_arg(param.second)+"&");
     }
 
     if (!dest.push_endpoint_args.empty()) {
       // remove last separator
       dest.push_endpoint_args.pop_back();
+    }
+
+    if (!validate_endpoint_config(this, dest, s->cct, s->info, s->err.message)) {
+      return -EINVAL;
     }
 
     // dest object only stores endpoint info
@@ -784,7 +820,12 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
                            rgw::notify::DEFAULT_GLOBAL_VALUE);
     } else if (attribute_name == "push-endpoint") {
       dest.push_endpoint = s->info.args.get("AttributeValue");
-      if (!validate_and_update_endpoint_secret(dest, s->cct, s->info, s->err.message)) {
+      if (!validate_and_update_endpoint_secret(
+              dest, s->cct, s->info, RGWHTTPArgs(dest.push_endpoint_args, this),
+              s->err.message)) {
+        return -EINVAL;
+      }
+      if (!validate_endpoint_config(this, dest, s->cct, s->info, s->err.message)) {
         return -EINVAL;
       }
     } else if (attribute_name == "Policy") {
@@ -797,25 +838,42 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
       const auto replace_str = [&](const std::string& param,
                                    const std::string& val) {
         auto& push_endpoint_args = dest.push_endpoint_args;
-        const std::string replaced_str = param + "=" + url_encode(val, true);
-        const auto pos = push_endpoint_args.find(param);
-        if (pos == std::string::npos) {
-          dest.push_endpoint_args.append("&" + replaced_str);
-          return;
+        const std::string name = param + "=";
+        const std::string replaced_str = name + escape_endpoint_arg(val);
+        for (size_t pos = 0; pos < push_endpoint_args.length();) {
+          auto end_pos = push_endpoint_args.find('&', pos);
+          end_pos = end_pos == std::string::npos ? push_endpoint_args.length()
+                                                 : end_pos;
+          if (push_endpoint_args.compare(pos, name.length(), name) == 0) {
+            push_endpoint_args.replace(pos, end_pos - pos, replaced_str);
+            return;
+          }
+          pos = end_pos + 1;
         }
-        auto end_pos = dest.push_endpoint_args.find("&", pos);
-        end_pos = end_pos == std::string::npos ? push_endpoint_args.length()
-                                               : end_pos;
-        push_endpoint_args.replace(pos, end_pos - pos, replaced_str);
+        if (!push_endpoint_args.empty()) {
+          push_endpoint_args.append("&");
+        }
+        push_endpoint_args.append(replaced_str);
       };
       static constexpr std::initializer_list<const char*> args = {
           "verify-ssl",    "use-ssl",         "ca-location", "ca-cert", "amqp-ack-level",
           "amqp-exchange", "kafka-ack-level", "mechanism",   "cloudevents",
           "user-name",     "password",
           "ssl-certificate-location", "ssl-key-location", "ssl-key-password",
-          "sasl-kerberos-service-name", "sasl-kerberos-principal", "sasl-kerberos-keytab"};
+          "sasl-kerberos-service-name", "sasl-kerberos-principal", "sasl-kerberos-keytab",
+          "kafka-config"};
       if (std::find(args.begin(), args.end(), attribute_name) != args.end()) {
         replace_str(attribute_name, s->info.args.get("AttributeValue"));
+        if (((attribute_name == "user-name") || (attribute_name == "password") ||
+             (attribute_name == "ssl-key-password")) &&
+            !validate_and_update_endpoint_secret(
+                dest, s->cct, s->info, RGWHTTPArgs(dest.push_endpoint_args, this),
+                s->err.message)) {
+          return -EINVAL;
+        }
+        if (!validate_endpoint_config(this, dest, s->cct, s->info, s->err.message)) {
+          return -EINVAL;
+        }
         return 0;
       }
       s->err.message = fmt::format("Invalid value for AttributeName '{}'",

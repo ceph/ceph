@@ -5283,6 +5283,16 @@ options:
   - rgw
   see_also:
   - rgw_trust_forwarded_https
+- name: rgw_notification_bucket_arn_region
+  type: bool
+  level: advanced
+  desc: Put the zonegroup in the region field of a notification's bucket ARN
+  long_desc: When true, the bucket ARN a notification record carries names the
+    zonegroup in its region field, as arn:aws:s3:<zonegroup>::<bucket>.  When
+    false, it is the bucket ARN AWS S3 uses, arn:aws:s3:::<bucket>, with no
+  default: true
+  services:
+  - rgw
 - name: daos_pool
   type: str
   level: advanced
@@ -5518,6 +5528,21 @@ options:
   services:
   - rgw
   with_legacy: true
+  type: str
+  level: advanced
+  desc: Comma separated list of librdkafka configuration keys a topic may set in its kafka-config attribute
+  long_desc: A Kafka topic's kafka-config attribute is a JSON object of librdkafka
+    configuration keys and values, applied to the topic's producer after the settings
+    radosgw derives from the topic's other attributes. Only the keys listed here are
+    accepted, and the list is checked again whenever a connection is made. When empty,
+    kafka-config is refused. Topics are created by tenants, and some keys act on the
+    gateway host. "plugin.library.paths" loads shared libraries into radosgw,
+    "sasl.kerberos.kinit.cmd" runs a shell command, and keys ending in ".location"
+    or ".file" read files radosgw can read. List only keys every tenant may be trusted with.
+  services:
+  - rgw
+  see_also:
+  - rgw_allow_notification_secrets_in_cleartext
 - name: rgw_http_notif_message_timeout
   type: uint
   level: advanced

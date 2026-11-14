@@ -74,6 +74,20 @@ namespace rgw::notify {
       return "s3:ObjectRestore:Completed";
     case ObjectRestoreExpired:
       return "s3:ObjectRestore:Delete";
+    case ObjectTagging:
+      return "s3:ObjectTagging:*";
+    case ObjectTaggingPut:
+      return "s3:ObjectTagging:Put";
+    case ObjectTaggingDelete:
+      return "s3:ObjectTagging:Delete";
+    case ObjectAcl:
+      return "s3:ObjectAcl:*";
+    case ObjectAclPut:
+      return "s3:ObjectAcl:Put";
+    case ObjectRetention:
+      return "s3:ObjectRetention:*";
+    case ObjectRetentionPut:
+      return "s3:ObjectRetention:Put";
     case UnknownEvent:
         return "s3:UnknownEvent";
     }
@@ -155,6 +169,18 @@ namespace rgw::notify {
       return ObjectRestoreCompleted;
     if (s == "s3:ObjectRestore:Delete")
       return ObjectRestoreExpired;
+    if (s == "s3:ObjectTagging:*")
+      return ObjectTagging;
+    if (s == "s3:ObjectTagging:Put")
+      return ObjectTaggingPut;
+    if (s == "s3:ObjectTagging:Delete")
+      return ObjectTaggingDelete;
+    if (s == "s3:ObjectAcl:Put")
+      return ObjectAclPut;
+    if (s == "s3:ObjectRetention:*")
+      return ObjectRetention;
+    if (s == "s3:ObjectRetention:Put")
+      return ObjectRetentionPut;
     return UnknownEvent;
   }
 

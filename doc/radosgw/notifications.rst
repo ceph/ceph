@@ -254,6 +254,7 @@ and must be between 1 and 256 characters long. To relax these requirements, use:
    [&Attributes.entry.23.key=sasl-kerberos-principal&Attributes.entry.23.value=<kerberos-principal>]
    [&Attributes.entry.24.key=sasl-kerberos-keytab&Attributes.entry.24.value=<kerberos-keytab-path>]
    [&Attributes.entry.25.key=ca-cert&Attributes.entry.25.value=<PEM encoded CA certificate>]
+   [&Attributes.entry.26.key=kafka-config&Attributes.entry.26.value=<JSON object>]
 
 Request parameters:
 
@@ -304,6 +305,16 @@ Request parameters:
  - ``cloudevents``: This indicates whether the HTTP header should contain
    attributes according to the `S3 CloudEvents Spec`_. (This is "false" by
    default.)
+ - ``ca-location``: If this is provided and the server certificate is
+   validated, the specified CA file is used instead of the default CA to
+   authenticate the server.
+ - ``ssl-certificate-location``: The path to a PEM-encoded client certificate
+   file to present to the server for mutual TLS (mTLS) authentication. It must
+   be provided together with ``ssl-key-location``, or topic creation is
+   rejected.
+ - ``ssl-key-location``: The path to a PEM-encoded private key file
+   corresponding to the client certificate specified in
+   ``ssl-certificate-location``.
 
 - AMQP0.9.1 endpoint
 
@@ -400,6 +411,32 @@ Request parameters:
    The same security considerations in place for this parameter as
    for ``user``/``password``: it should be provided over HTTPS or
    ``rgw_allow_notification_secrets_in_cleartext`` must be set to "true".
+ - ``kafka-config``: A JSON object of `librdkafka configuration`_ properties
+   and their values, for settings the parameters above do not cover, e.g.
+   Kerberos::
+
+     {"security.protocol": "SASL_SSL", "sasl.mechanism": "GSSAPI",
+      "sasl.kerberos.service.name": "kafka",
+      "sasl.kerberos.keytab": "/etc/ceph/rgw.keytab",
+      "sasl.kerberos.principal": "rgw@EXAMPLE.COM"}
+
+   Values are strings, numbers or booleans. The properties are applied after
+   the ones RGW derives from the parameters above, so they take precedence.
+   Only the properties listed in ``rgw_kafka_config_allowed_keys`` are
+   accepted, and the list is checked again whenever a connection is made.
+   It is empty by default, which refuses ``kafka-config``. Topics are
+   created by tenants, and some properties act on the gateway host:
+   ``plugin.library.paths`` loads shared libraries into radosgw,
+   ``sasl.kerberos.kinit.cmd`` runs a shell command, and properties ending in
+   ``.location`` or ``.file`` read files radosgw can read. Properties
+   librdkafka marks as sensitive (for example ``sasl.password`` and
+   ``ssl.keystore.password``) have the same security considerations as
+   ``user``/``password``, and are refused when the connection to the
+   broker is not secure (``security.protocol`` is ``PLAINTEXT`` or
+   ``SASL_PLAINTEXT``, or ``use-ssl`` is "false" and ``security.protocol``
+   is not given) unless ``rgw_allow_notification_secrets_in_cleartext`` is
+   "true". A property or value librdkafka rejects causes topic creation to
+   be rejected.
 
  - ``sasl-kerberos-service-name``: Kerberos service name used with
    ``GSSAPI`` (per-topic override). If not provided, the global
@@ -698,6 +735,12 @@ Valid ``AttributeName`` that can be passed:
 - ``sasl-kerberos-service-name``: Kerberos service name for Kafka SASL/GSSAPI.
 - ``sasl-kerberos-principal``: Kerberos principal for the RGW client when using ``GSSAPI``.
 - ``sasl-kerberos-keytab``: Path to the keytab to use with ``GSSAPI``.
+- ``kafka-config``: A JSON object of librdkafka configuration properties,
+  replacing the topic's whole set. An empty value or ``{}`` removes them.
+  The same checks apply as at topic creation.
+
+The ``ca-location``, ``ssl-certificate-location`` and ``ssl-key-location``
+attributes apply to HTTP endpoints as well as Kafka endpoints.
 
 Notifications
 ~~~~~~~~~~~~~
@@ -729,7 +772,7 @@ For example:
                "principalId":"tester"
            },
            "requestParameters":{
-               "sourceIPAddress":""
+               "sourceIPAddress":"192.168.1.10"
            },
            "responseElements":{
                "x-amz-request-id":"503a4c37-85eb-47cd-8681-2817e80b4281.5330.903595",
@@ -766,7 +809,10 @@ For example:
 - ``eventName``: For a list of supported events, see: :ref:`radosgw-s3-notification-compatibility`.
   Note that ``eventName`` values do not start with the ``s3:`` prefix.
 - ``userIdentity.principalId``: The user that triggered the change
-- ``requestParameters.sourceIPAddress``: Not supported
+- ``requestParameters.sourceIPAddress``: The client's address, as
+  ``rgw_remote_addr_param`` selects it, or the connection's when that is unset.
+  It is empty for an event no client request caused, such as a lifecycle
+  expiration or the completion of a restore.
 - ``responseElements.x-amz-request-id``: The request ID of the original change
 - ``responseElements.x_amz_id_2``: The RGW on which the change was made
 - ``s3.configurationId``: The notification ID that created the event
@@ -793,7 +839,11 @@ For example:
 - ``s3.opaqueData``: This means that "opaque data" is set in the topic configuration
   and is added to all notifications triggered by the topic. (This is an
   extension to the S3 notification API.)
+- ``objectRetentionEventData.mode`` and ``objectRetentionEventData.retainUntilDate``:
+  The Object Lock retention mode and retain-until date the request set.  Present
+  only in an ``ObjectRetention:Put`` event.
 
 .. _ARN: https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html
 .. _AWS Create Topic: https://docs.aws.amazon.com/sns/latest/api/API_CreateTopic.html
 .. _S3 CloudEvents Spec: https://github.com/cloudevents/spec/blob/main/cloudevents/adapters/aws-s3.md
+.. _librdkafka configuration: https://github.com/confluentinc/librdkafka/blob/master/CONFIGURATION.md
