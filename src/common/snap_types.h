@@ -51,8 +51,8 @@ WRITE_CLASS_ENCODER(SnapRealmInfo)
 struct SnapRealmInfoNew {
   SnapRealmInfo info;
   utime_t last_modified;
-  uint64_t change_attr;
-  uint32_t flags;
+  uint64_t change_attr = 0;
+  uint32_t flags = 0;
   enum {
     SNAPDIR_VISIBILITY = 4,
   };
