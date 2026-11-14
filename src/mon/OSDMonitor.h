@@ -23,6 +23,7 @@
 #define CEPH_OSDMONITOR_H
 
 #include <map>
+#include <optional>
 #include <set>
 #include <utility>
 #include <sstream>
@@ -249,6 +250,14 @@ public:
   bool has_osdmap_manifest;
   osdmap_manifest_t osdmap_manifest;
 
+  /// extended features an operator required of clients (osd
+  /// require-client-features); kept in the store, not in the map
+  ceph::feature_set_t required_client_ext_features;
+  std::optional<ceph::feature_set_t> pending_required_client_ext_features;
+  void load_required_client_ext_features();
+  bool prepare_require_client_features(MonOpRequestRef op, bool require,
+                                       std::ostream& ss, int& err);
+
   bool check_failures(utime_t now);
   bool check_failure(utime_t now, int target_osd, failure_info_t& fi);
   utime_t get_grace_time(utime_t now, int target_osd, failure_info_t& fi) const;
@@ -369,6 +378,11 @@ private:
   void encode_trim_extra(MonitorDBStore::TransactionRef tx, version_t first) override;
 
   void update_msgr_features();
+public:
+  const ceph::feature_set_t& get_required_client_ext_features() const {
+    return required_client_ext_features;
+  }
+private:
   /**
    * check if the cluster supports the features required by the
    * given crush map. Outputs the daemons which don't support it

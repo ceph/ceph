@@ -368,6 +368,7 @@ private:
   ceph::condition_variable auth_cond;
   int authenticate_err = 0;
   bool authenticated = false;
+  int last_hunt_err = 0;  ///< how the last hunt ended
 
   std::list<MessageRef> waiting_for_session;
   utime_t last_rotating_renew_sent;

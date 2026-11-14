@@ -271,6 +271,8 @@ COMMAND("report name=tags,type=CephString,n=N,req=false",
 	"mon", "r")
 COMMAND("features", "report of connected features",
         "mon", "r")
+COMMAND("features extended", "report of connected extended features",
+        "mon", "r")
 COMMAND("quorum_status", "report status of monitor quorum",
 	"mon", "r")
 COMMAND("mon ok-to-stop "
@@ -890,6 +892,15 @@ COMMAND("osd set-require-min-compat-client "
 	"name=version,type=CephString "
         "name=yes_i_really_mean_it,type=CephBool,req=false",
 	"set the minimum client version we will maintain compatibility with",
+	"osd", "rw")
+COMMAND("osd require-client-features "
+	"name=features,type=CephString,n=N "
+	"name=yes_i_really_mean_it,type=CephBool,req=false",
+	"require extended features of clients; refused while a connected client lacks them",
+	"osd", "rw")
+COMMAND("osd unrequire-client-features "
+	"name=features,type=CephString,n=N",
+	"stop requiring extended features of clients",
 	"osd", "rw")
 COMMAND("osd pause", "pause osd", "osd", "rw")
 COMMAND("osd unpause", "unpause osd", "osd", "rw")

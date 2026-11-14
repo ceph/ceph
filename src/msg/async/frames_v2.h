@@ -4,6 +4,7 @@
 #include "include/buffer.h"
 #include "include/byteorder.h" // for ceph_le*
 #include "include/ceph_features.h" // for CEPH_FEATUREMASK_*
+#include "include/feature_set.h"
 #include "include/intarith.h" // for p2roundup()
 #include "include/sha_digest.h" // for sha256_digest_t
 #include "common/Clock.h"
@@ -564,6 +565,30 @@ protected:
   using ControlFrame::ControlFrame;
 };
 
+// AUTH_BAD_METHOD with the trailer a server may add for a peer that
+// offered CEPH_MSGR2_FEATURE_EXTENDED_FEATURES: why it was refused.
+struct AuthBadMethodReasonFrame
+  : public ControlFrame<AuthBadMethodReasonFrame,
+                        uint32_t, // method
+                        int32_t,  // result
+                        std::vector<uint32_t>,   // allowed methods
+                        std::vector<uint32_t>,   // allowed modes
+                        std::string,             // reason
+                        uint64_t,                // missing features
+                        ceph::feature_set_t> {   // missing extended features
+  static const Tag tag = Tag::AUTH_BAD_METHOD;
+  using ControlFrame::Encode;
+  using ControlFrame::Decode;
+
+  inline int32_t &result() { return get_val<1>(); }
+  inline std::string &reason() { return get_val<4>(); }
+  inline uint64_t &missing_features() { return get_val<5>(); }
+  inline ceph::feature_set_t &missing_ext_features() { return get_val<6>(); }
+
+protected:
+  using ControlFrame::ControlFrame;
+};
+
 struct AuthReplyMoreFrame : public ControlFrame<AuthReplyMoreFrame,
                                                 bufferlist> { // auth payload
   static const Tag tag = Tag::AUTH_REPLY_MORE;
@@ -757,6 +782,25 @@ struct IdentMissingFeaturesFrame
   using ControlFrame::Decode;
 
   inline uint64_t &features() { return get_val<0>(); }
+
+protected:
+  using ControlFrame::ControlFrame;
+};
+
+// IDENT_MISSING_FEATURES with the same trailer as AuthBadMethodReasonFrame
+struct IdentMissingFeaturesReasonFrame
+    : public ControlFrame<IdentMissingFeaturesReasonFrame,
+                          uint64_t,              // missing features mask
+                          std::string,           // reason
+                          uint64_t,              // missing features
+                          ceph::feature_set_t> { // missing extended features
+  static const Tag tag = Tag::IDENT_MISSING_FEATURES;
+  using ControlFrame::Encode;
+  using ControlFrame::Decode;
+
+  inline std::string &reason() { return get_val<1>(); }
+  inline uint64_t &missing_features() { return get_val<2>(); }
+  inline ceph::feature_set_t &missing_ext_features() { return get_val<3>(); }
 
 protected:
   using ControlFrame::ControlFrame;

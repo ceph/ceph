@@ -22,6 +22,7 @@
 #include <optional>
 #include <unordered_map>
 
+#include "include/ceph_features_ext.h"
 #include "include/types.h"
 #include "include/xlist.h"
 #include "include/spinlock.h"
@@ -363,6 +364,10 @@ private:
     local_connection->peer_addrs = *my_addrs;
     local_connection->peer_type = my_name.type();
     local_connection->set_features(CEPH_FEATURES_ALL);
+    local_connection->set_features_ext(ceph_features_ext_supported());
+    local_connection->peer_banner_valid = true;
+    local_connection->peer_banner_features = CEPH_FEATURES_ALL;
+    local_connection->peer_banner_ext = ceph_features_ext_supported();
     ms_deliver_handle_fast_connect(local_connection.get());
   }
 

@@ -87,6 +87,7 @@
 
 #include "include/compat.h"
 #include "include/ceph_assert.h"
+#include "include/ceph_features_ext.h"
 #include "include/stringify.h"
 #include "include/util.h"
 #include "common/cmdparse.h"
@@ -134,6 +135,7 @@ using namespace std::literals;
 
 #define dout_subsys ceph_subsys_mon
 static const string OSD_PG_CREATING_PREFIX("osd_pg_creating");
+static const string REQUIRED_CLIENT_EXT_FEATURES_KEY("required_client_ext_features");
 static const string OSD_METADATA_PREFIX("osd_metadata");
 static const string OSD_SNAP_PREFIX("osd_snap");
 
@@ -506,7 +508,9 @@ std::vector<std::string> OSDMonitor::get_tracked_keys() const noexcept
   return {
     "mon_memory_target"s,
     "mon_memory_autotune"s,
-    "rocksdb_cache_size"s
+    "rocksdb_cache_size"s,
+    "mon_reject_clients_at_auth"s,
+    "mon_debug_require_client_ext_features"s
   };
 }
 
@@ -517,6 +521,13 @@ void OSDMonitor::handle_conf_change(const ConfigProxy& conf,
 
   if (changed.count("mon_memory_autotune")) {
     _set_cache_autotuning();
+  }
+  if (changed.count("mon_reject_clients_at_auth") ||
+      changed.count("mon_debug_require_client_ext_features")) {
+    mon.finisher.queue(new C_MonContext{&mon, [this](int) {
+      std::lock_guard l{mon.lock};
+      update_msgr_features();
+    }});
   }
   if (changed.count("mon_memory_target") ||
       changed.count("rocksdb_cache_size")) {
@@ -965,6 +976,7 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
   update_logger();
   process_failures();
 
+  load_required_client_ext_features();
   // make sure our feature bits reflect the latest map
   update_msgr_features();
 
@@ -1123,6 +1135,43 @@ void OSDMonitor::update_msgr_features()
       p.features_required = (p.features_required & ~mask) | features;
       mon.messenger->set_policy(type, p);
     }
+
+    ceph::feature_set_t ext;
+    std::string reason;
+    if (type == entity_name_t::TYPE_CLIENT) {
+      ext = required_client_ext_features;
+      if (!ext.empty()) {
+        reason = fmt::format(
+          "an operator required extended features {} of clients "
+          "(ceph osd require-client-features)", stringify(ext));
+      }
+      std::string bad;
+      auto debug = ceph_parse_features_ext(g_conf().get_val<std::string>(
+        "mon_debug_require_client_ext_features"), &bad);
+      if (!bad.empty()) {
+        derr << "mon_debug_require_client_ext_features: ignoring " << bad
+             << dendl;
+      }
+      if (!debug.empty()) {
+        ext |= debug;
+        reason += fmt::format(
+          "{}the monitors require extended features {} of clients "
+          "(mon_debug_require_client_ext_features)",
+          reason.empty() ? "" : "; ", stringify(debug));
+      }
+    }
+    bool by_auth = type == entity_name_t::TYPE_CLIENT &&
+      g_conf().get_val<bool>("mon_reject_clients_at_auth");
+    if (mon.messenger->get_policy(type).features_ext_required != ext ||
+        mon.messenger->get_policy(type).features_checked_by_auth != by_auth) {
+      dout(0) << "adjusting msgr requires of " << ceph_entity_type_name(type)
+              << " to extended features " << ext << dendl;
+      ceph::net::Policy p = mon.messenger->get_policy(type);
+      p.features_ext_required = ext;
+      p.features_required_reason = reason;
+      p.features_checked_by_auth = by_auth;
+      mon.messenger->set_policy(type, p);
+    }
   }
 }
 
@@ -1186,6 +1235,7 @@ void OSDMonitor::create_pending()
   pending_inc.fsid = mon.monmap->fsid;
   pending_metadata.clear();
   pending_metadata_rm.clear();
+  pending_required_client_ext_features.reset();
 
   dout(10) << "create_pending e " << pending_inc.epoch << dendl;
 
@@ -1658,6 +1708,11 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     }
     encode(pending_creatings, creatings_bl, features);
     t->put(OSD_PG_CREATING_PREFIX, "creating", creatings_bl);
+    if (pending_required_client_ext_features) {
+      bufferlist bl;
+      encode(*pending_required_client_ext_features, bl);
+      t->put(get_service_name(), REQUIRED_CLIENT_EXT_FEATURES_KEY, bl);
+    }
 
     // remove any old (or incompat) POOL_CREATING flags
     for (auto& i : tmp.get_pools()) {
@@ -2391,6 +2446,103 @@ void OSDMonitor::encode_trim_extra(MonitorDBStore::TransactionRef tx,
  *
  * for more information, please refer to doc/dev/mon-osdmap-prune.rst
  */
+
+void OSDMonitor::load_required_client_ext_features()
+{
+  bufferlist bl;
+  ceph::feature_set_t f;
+  if (mon.store->get(get_service_name(), REQUIRED_CLIENT_EXT_FEATURES_KEY,
+                     bl) == 0) {
+    auto p = bl.cbegin();
+    decode(f, p);
+  }
+  if (f != required_client_ext_features) {
+    dout(1) << __func__ << " clients must have extended features " << f
+            << dendl;
+    required_client_ext_features = f;
+  }
+}
+
+// osd require-client-features / osd unrequire-client-features
+bool OSDMonitor::prepare_require_client_features(MonOpRequestRef op,
+                                                 bool require,
+                                                 std::ostream& ss, int& err)
+{
+  auto m = op->get_req<MMonCommand>();
+  cmdmap_t cmdmap;
+  std::stringstream unused;
+  if (!cmdmap_from_json(m->cmd, &cmdmap, unused)) {
+    err = -EINVAL;
+    return false;
+  }
+  std::vector<std::string> names;
+  cmd_getval(cmdmap, "features", names);
+  std::string joined, bad;
+  for (auto& n : names) {
+    joined += (joined.empty() ? "" : ",") + n;
+  }
+  auto features = ceph_parse_features_ext(joined, &bad);
+  if (!bad.empty() || features.empty()) {
+    ss << "unknown extended feature(s) " << bad;
+    err = -EINVAL;
+    return false;
+  }
+  auto required = pending_required_client_ext_features.value_or(
+    required_client_ext_features);
+  auto wanted = required;
+  if (require) {
+    wanted |= features;
+  } else {
+    wanted = wanted - features;
+  }
+  if (wanted == required) {
+    ss << "clients are required to have extended features " << required
+       << " already";
+    err = 0;
+    return false;
+  }
+  bool sure = false;
+  cmd_getval(cmdmap, "yes_i_really_mean_it", sure);
+  if (require && !sure) {
+    // like set-require-min-compat-client: the clients connected now
+    // would hang later, so refuse while any lacks the features
+    FeatureMap fm;
+    mon.get_combined_feature_map(&fm);
+    uint64_t lacking = 0, incapable = 0;
+    for (int type : {CEPH_ENTITY_TYPE_CLIENT, CEPH_ENTITY_TYPE_MDS,
+                     CEPH_ENTITY_TYPE_MGR}) {
+      auto p = fm.ext.find(type);
+      if (p == fm.ext.end()) {
+        continue;
+      }
+      for (auto& [key, num] : p->second) {
+        auto& [capable, have] = key;
+        if (!capable) {
+          incapable += num;
+        } else if (!have.contains(features)) {
+          lacking += num;
+        }
+      }
+    }
+    if (lacking || incapable) {
+      ss << "cannot require extended features " << features << " of clients: ";
+      if (lacking) {
+        ss << lacking << " connected client(s) lack them";
+      }
+      if (incapable) {
+        ss << (lacking ? "; " : "") << incapable
+           << " connected client(s) cannot exchange extended features";
+      }
+      ss << "; they would hang later. Upgrade or stop them, or add "
+         << "--yes-i-really-mean-it to do it anyway";
+      err = -EPERM;
+      return false;
+    }
+  }
+  pending_required_client_ext_features = wanted;
+  ss << "clients must have extended features " << wanted;
+  return true;
+}
 
 void OSDMonitor::load_osdmap_manifest()
 {
@@ -12867,6 +13019,13 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
 							  get_last_committed() + 1));
     return true;
+  } else if (prefix == "osd require-client-features" ||
+             prefix == "osd unrequire-client-features") {
+    if (!prepare_require_client_features(
+          op, prefix == "osd require-client-features", ss, err)) {
+      goto reply_no_propose;
+    }
+    goto update;
   } else if (prefix == "osd pause") {
     return prepare_set_flag(op, CEPH_OSDMAP_PAUSERD | CEPH_OSDMAP_PAUSEWR);
 

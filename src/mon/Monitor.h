@@ -31,6 +31,7 @@
 
 #include "include/types.h"
 #include "include/health.h"
+#include "mon/PeerFeatureGate.h"
 
 #include "common/Timer.h"
 
@@ -154,6 +155,12 @@ public:
   ThreadPool cpu_tp;  ///< threadpool for CPU intensive work
 
   ceph::mutex auth_lock = ceph::make_mutex("Monitor::auth_lock");
+
+  /// clients turned away at authentication for lacking required features
+  PeerFeatureGate peer_gate;
+  bool rejects_peer(Connection *con, std::string *reason);
+  void handle_peer_missing_features(Connection *con,
+                                    uint64_t missing) override;
 
   /// true if we have ever joined a quorum.  if false, we are either a
   /// new cluster, a newly joining monitor, or a just-upgraded
