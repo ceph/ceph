@@ -95,7 +95,8 @@ stores relatively little data. That said, for this purpose, more but smaller
 OSDs are better than fewer but larger. Say you have four 7.6 TiB NVMe SSDs total: you
 will gain performance by splitting each into 3 or 4 OSDs.
 
-The first data pool may be erasure-coded, but we also recommend that it be
+The first data pool may be erasure-coded (a tech preview feature, see
+:ref:`cephfs-ec-metadata-pools`), but we also recommend that it be
 replicated and placed on SSDs, which will often be the same OSDs as above. Then
 one or more additional data pools may be attached and client data directed
 to them via :doc:`/cephfs/file-layouts`.  The advantage of this strategy is

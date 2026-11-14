@@ -6,8 +6,9 @@ Ceph authentication capabilities are used to restrict CephFS clients to
 the lowest level of authority necessary.
 
 .. note:: Using Erasure Coded (EC) pools with CephFS is supported only with
-   :term:`BlueStore`. Erasure-coded pools cannot be used as metadata pools.
-   Overwrites must be enabled on erasure-coded data pools.
+   :term:`BlueStore`. Overwrites must be enabled on erasure-coded data pools.
+   Using erasure-coded pools as metadata pools or default data pools is a tech
+   preview feature; see :ref:`cephfs-ec-metadata-pools`.
 
 
 Path restriction
