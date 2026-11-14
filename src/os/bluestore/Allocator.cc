@@ -137,7 +137,11 @@ double Allocator::get_fragmentation_score()
     sum += len;
   };
   foreach_interruptible(iterated_allocation);
-  if (sum == 0) {
+  // Free space of at most one block cannot be fragmented; report 0.
+  // sum == 0: get_score(0) is not defined.
+  // sum == block_size: ideal == terrible (one block_size chunk either way),
+  // so (ideal - score_sum) / (ideal - terrible) below would be 0/0 = NaN.
+  if (sum <= static_cast<uint64_t>(block_size)) {
     return 0.0;
   }
 
