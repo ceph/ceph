@@ -106,18 +106,28 @@ WRITE_CLASS_ENCODER(RGWDefaultSystemMetaObjInfo)
 struct RGWZoneStorageClass {
   boost::optional<rgw_pool> data_pool;
   boost::optional<std::string> compression_type;
+  // objects whose logical size is below this are stored uncompressed, on
+  // the write paths listed in doc/radosgw/compression.rst. unset or 0
+  // compresses objects of any size
+  boost::optional<uint64_t> compression_min_size;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(data_pool, bl);
     encode(compression_type, bl);
+    encode(compression_min_size, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(data_pool, bl);
     decode(compression_type, bl);
+    if (struct_v >= 2) {
+      decode(compression_min_size, bl);
+    } else {
+      compression_min_size.reset();
+    }
     DECODE_FINISH(bl);
   }
 
@@ -188,6 +198,10 @@ public:
     if (compression_type) {
       storage_class.compression_type = *compression_type;
     }
+  }
+
+  void set_compression_min_size(const std::string& sc, uint64_t size) {
+    m[sc.empty() ? RGW_STORAGE_CLASS_STANDARD : sc].compression_min_size = size;
   }
 
   void remove_storage_class(const std::string& sc) {
@@ -300,6 +314,14 @@ struct RGWZonePlacementInfo {
       return no_compression;
     }
     return storage_class->compression_type.get_value_or(no_compression);
+  }
+
+  uint64_t get_compression_min_size(const std::string& sc) const {
+    const RGWZoneStorageClass *storage_class;
+    if (!storage_classes.find(sc, &storage_class)) {
+      return 0;
+    }
+    return storage_class->compression_min_size.get_value_or(0);
   }
 
   bool storage_class_exists(const std::string& sc) const {

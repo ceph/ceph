@@ -1600,9 +1600,13 @@ struct multipart_upload_info
   RGWObjectLegalHold obj_legal_hold;
   rgw::cksum::Type cksum_type {rgw::cksum::Type::none};
   uint16_t cksum_flags{rgw::cksum::Cksum::FLAG_CKSUM_NONE};
+  // placement target's compression type at upload init, so parts don't pick
+  // up a config change made mid-upload. unset means not frozen (e.g. upload
+  // initiated by an older rgw), so parts use the current placement config
+  std::optional<std::string> compression_type;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(4, 1, bl);
+    ENCODE_START(5, 1, bl);
     encode(dest_placement, bl);
     encode(obj_retention_exist, bl);
     encode(obj_legal_hold_exist, bl);
@@ -1611,11 +1615,12 @@ struct multipart_upload_info
     uint16_t ct{uint16_t(cksum_type)};
     encode(ct, bl);
     encode(cksum_flags, bl);
+    encode(compression_type, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(4, 1, 1, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(5, 1, 1, bl);
     decode(dest_placement, bl);
     if (struct_v >= 2) {
       decode(obj_retention_exist, bl);
@@ -1634,11 +1639,17 @@ struct multipart_upload_info
       obj_retention_exist = false;
       obj_legal_hold_exist = false;
     }
+    if (struct_v >= 5) {
+      decode(compression_type, bl);
+    }
     DECODE_FINISH(bl);
   }
 
   void dump(Formatter *f) const {
     dest_placement.dump(f);
+    if (compression_type) {
+      f->dump_string("compression_type", *compression_type);
+    }
   }
 
   static std::list<multipart_upload_info> generate_test_instances() {
@@ -1647,6 +1658,7 @@ struct multipart_upload_info
     o.emplace_back();
     o.back().dest_placement.name = "dest_placement";
     o.back().dest_placement.storage_class = "dest_storage_class";
+    o.back().compression_type = "zstd";
     return o;
   }
 };

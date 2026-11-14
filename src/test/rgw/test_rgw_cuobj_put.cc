@@ -100,7 +100,8 @@ public:
       const std::string&) override {
     return std::make_unique<FakeWriter>();
   }
-  const std::string& get_compression_type(const rgw_placement_rule&) override {
+  const std::string& get_compression_type(const rgw_placement_rule&,
+                                          std::optional<uint64_t> = std::nullopt) override {
     static const std::string none = "none";
     return none;
   }

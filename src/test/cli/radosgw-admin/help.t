@@ -320,6 +320,7 @@
      --placement-inline-data=<true>    set whether the placement target is configured to store a data
                                        chunk inline in head objects
      --compression=<type>              placement target compression type (plugin name or empty/none)
+     --compression-min-size=<size>     placement target minimum object size to compress (e.g. 64K; 0 compresses any size)
      --tier-type=<type>                zone tier type
      --tier-config=<k>=<v>[,...]       set zone tier config keys, values
      --tier-config-rm=<k>[,...]        unset zone tier config keys
