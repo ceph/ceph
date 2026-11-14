@@ -17,6 +17,8 @@ Implements the functionality needed to deploy OSDs from the ``lvm`` subcommand:
 
 * :ref:`ceph-volume-lvm-migrate`
 
+* :ref:`ceph-volume-lvm-migrate-block-devices`
+
 * :ref:`ceph-volume-lvm-newdb`
 
 * :ref:`ceph-volume-lvm-newwal`
