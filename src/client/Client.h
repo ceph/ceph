@@ -19,6 +19,13 @@
 
 #include <dirent.h>
 
+namespace ceph {
+class ZeroCopyClient;
+class C_ZC_Read;
+class C_ZC_Write;
+class C_ZC_Fsync;
+} // namespace ceph
+
 #include "common/admin_socket.h"
 #include "common/CommandTable.h"
 #include "common/Finisher.h"
@@ -382,6 +389,10 @@ public:
   friend class C_Deleg_Timeout; // Asserts on client_lock, called when a delegation is unreturned
   friend class C_Client_CacheRelease; // Asserts on client_lock
   friend class SyntheticClient;
+  friend class ceph::ZeroCopyClient; // Filer-only zero-copy data plane
+  friend class ceph::C_ZC_Read;
+  friend class ceph::C_ZC_Write;
+  friend class ceph::C_ZC_Fsync;
   friend void intrusive_ptr_release(Inode *in);
   template <typename T> friend struct RWRefState;
   template <typename T> friend class RWRef;
