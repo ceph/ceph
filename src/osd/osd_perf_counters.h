@@ -47,6 +47,7 @@ enum osd_counter_idx_t {
   l_osd_replica_read_redirect_missing,
   l_osd_replica_read_redirect_conflict,
   l_osd_replica_read_served,
+  l_osd_ec_direct_read_redirect_eio,
 
   l_osd_sop,
   l_osd_sop_inb,
