@@ -1447,6 +1447,7 @@ class NFSServiceSpec(ServiceSpec):
                  cephfs_client_log_dir: Optional[str] = None,
                  mem_stats_disable: bool = False,
                  clients_per_pool: Optional[int] = None,
+                 log_to_file: bool = False,
                  ):
         assert service_type == 'nfs'
         super(NFSServiceSpec, self).__init__(
@@ -1492,6 +1493,8 @@ class NFSServiceSpec(ServiceSpec):
         # Disables per-component memory-statistics capture in NFS_CORE_PARAM.
         # Applied at daemon startup only; requires daemon restart to take effect.
         self.mem_stats_disable = mem_stats_disable
+        # When True, NFS-Ganesha writes server logs to a file instead of STDERR.
+        self.log_to_file = log_to_file
 
         # Max independent CephFS client handles Ganesha may use per filesystem.
         self.clients_per_pool = clients_per_pool
