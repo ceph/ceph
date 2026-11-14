@@ -190,6 +190,8 @@ public:
     if (seastar::this_shard_id() == core) {
       ++shard_services.local().pg_op_shard_local[
         static_cast<size_t>(T::type)];
+      ++shard_services.local().pg_op_shard_executed[
+        static_cast<size_t>(T::type)];
       auto f_conn = op->prepare_remote_submission();
       op->finish_remote_submission(std::move(f_conn));
       auto &target_shard_services = shard_services.local();
@@ -220,6 +222,8 @@ public:
         ](auto &target_shard_services) mutable {
         op->finish_remote_submission(std::move(f_conn));
         target_shard_services.local_state.registry.add_to_registry(*op);
+        ++target_shard_services.pg_op_shard_executed[
+          static_cast<size_t>(T::type)];
         return this->template process_ordered_op_remotely<T>(
             cc_seq, target_shard_services, std::move(op), std::move(f));
       });
@@ -410,7 +414,17 @@ public:
       return opref.template enter_stage<>(
 	opref.get_connection_pipeline().get_pg_mapping);
     }).then([this, &opref] {
-      return get_pg_to_shard_mapping().get_or_create_pg_mapping(opref.get_pgid());
+      const auto pgid = opref.get_pgid();
+      const auto &local_state = get_shard_services().local_state;
+      const auto &osdmap = local_state.get_osdmap();
+      bool is_primary = false;
+      if (osdmap->have_pg_pool(pgid.pool())) {
+        int acting_primary = -1;
+        osdmap->pg_to_acting_osds(pgid.pgid, nullptr, &acting_primary);
+        is_primary = acting_primary == local_state.whoami;
+      }
+      return get_pg_to_shard_mapping().get_or_create_pg_mapping(
+        pgid, NULL_CORE, NULL_STORE_INDEX, is_primary);
     }).then_wrapped([this, &logger, op=std::move(op)](auto fut) mutable {
       if (unlikely(fut.failed())) {
         logger.error("{}: failed before with_pg", *op);

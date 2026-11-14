@@ -257,6 +257,7 @@ seastar::future<> ClientRequest::with_pg_process(
   OperationRef opref{this};
   auto instance_handle = get_instance_handle();
   auto &ihref = *instance_handle;
+  shard_services->client_op_started();
   return interruptor::with_interruption(
     [FNAME, this, pgref, this_instance_id, &ihref]() mutable {
       return with_pg_process_interruptible(
@@ -274,6 +275,7 @@ seastar::future<> ClientRequest::with_pg_process(
       [this, FNAME, opref=std::move(opref), pgref,
        this_instance_id, instance_handle=std::move(instance_handle), &ihref]() mutable {
 	DEBUGDPP("{}.{}: exit", *pgref, *this, this_instance_id);
+	shard_services->client_op_finished();
 	return ihref.handle.complete(
 	).finally([instance_handle=std::move(instance_handle)] {});
     });

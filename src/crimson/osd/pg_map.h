@@ -4,6 +4,7 @@
 #pragma once
 
 #include <map>
+#include <set>
 #include <algorithm>
 
 #include <seastar/core/future.hh>
@@ -34,14 +35,20 @@ public:
     return iter == pg_to_core.end() ? NULL_CORE : iter->second.first;
   }
 
-  /// Returns mapping for pgid, creates new one if it doesn't already exist
+  /// Returns mapping for pgid, creates new one if it doesn't already exist.
+  /// is_primary places it on the core with the fewest primary PGs.
   seastar::future<std::pair<core_id_t, store_index_t>> get_or_create_pg_mapping(
     spg_t pgid,
     core_id_t core_expected = NULL_CORE,
-    store_index_t store_index = NULL_STORE_INDEX);
+    store_index_t store_index = NULL_STORE_INDEX,
+    bool is_primary = false);
 
   /// Remove pgid mapping
   seastar::future<> remove_pg_mapping(spg_t pgid);
+
+  /// Record pgid's current role, so later placements see up to date counts.
+  /// The pg itself stays on its core.
+  seastar::future<> set_pg_primary(spg_t pgid, bool is_primary);
 
   size_t get_num_pgs() const { return pg_to_core.size(); }
 
@@ -62,6 +69,7 @@ public:
         }
       }
       core_to_num_pgs.emplace(i, 0);
+      core_to_num_primaries.emplace(i, 0);
       for (unsigned int j = 0; j < num_alien_cores; ++j) {
         if (store_shard_nums * j + i < core_mapping_limit) {
           core_alien_to_num_pgs[i].emplace(store_shard_nums * j + i, 0);
@@ -83,6 +91,10 @@ private:
   // only in shard 0
   //<core_id, num_pgs>
   std::map<core_id_t, unsigned> core_to_num_pgs;
+  //<core_id, num_primary_pgs>
+  std::map<core_id_t, unsigned> core_to_num_primaries;
+  // pgs counted in core_to_num_primaries
+  std::set<spg_t> primary_pgs;
   //<core_id, <shard_index, num_pgs>>  // when smp < store_shard_nums, each core more than one store shard
   std::map<core_id_t, std::map<unsigned, unsigned>> core_shard_to_num_pgs;
   //<core_id, <alien_core_id, num_pgs>> // when smp > store_shard_nums, more than one core share store shard
