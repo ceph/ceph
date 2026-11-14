@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Optional, List, cast, Dict, Any, Union, Tuple,
 
 from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec
+from ceph.deployment.hostspec import HostSpec
 from ceph.deployment.service_spec import (
     ArgumentList,
     ArgumentSpec,
@@ -28,6 +29,7 @@ from orchestrator import OrchestratorError, set_exception_subject, OrchestratorE
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, DaemonDeployContext
 from cephadm.schedule import HostAssignment, HostSelector
 from cephadm.autotune import MemoryAutotuner
+from cephadm.inventory import SpecStore
 from cephadm.utils import forall_hosts, cephadmNoImage, is_repo_digest, \
     CephadmNoImage, CEPH_TYPES, ContainerInspectInfo, SpecialHostLabels, \
     build_ceph_volume_cmd
@@ -69,6 +71,12 @@ class CephadmServe:
         self.mgr: "CephadmOrchestrator" = mgr
         self.log = logger
         self.last_certificates_check: Optional[datetime.datetime] = None
+        # Per serve-loop-pass bookkeeping used to record the last spec that was
+        # fully applied (``ceph orch spec last-success get``).
+        # service_name -> snapshot of the spec revision that was applied
+        self._applied_spec_snapshots: Dict[str, Dict[str, Any]] = {}
+        # services whose apply was skipped, deferred or (partially) failed
+        self._incomplete_specs: Set[str] = set()
 
     def serve(self) -> None:
         """
@@ -117,6 +125,8 @@ class CephadmServe:
                         continue  # did something, refresh
 
                     self._check_daemons()
+
+                    self._record_last_working_specs()
 
                     self._check_certificates()
 
@@ -690,11 +700,19 @@ class CephadmServe:
         for name in ['CEPHADM_APPLY_SPEC_FAIL', 'CEPHADM_DAEMON_PLACE_FAIL']:
             self.mgr.remove_health_warning(name)
         self.mgr.apply_spec_fails = []
+        self._applied_spec_snapshots = {}
+        self._incomplete_specs = set()
         for spec in specs:
+            # snapshot the exact revision being applied *before* applying it,
+            # so a spec replaced or mutated in the meantime is not recorded.
+            snapshot = SpecStore.spec_snapshot(spec)
             try:
                 if self._apply_service(spec):
                     r = True
+                if spec.service_name() not in self._incomplete_specs:
+                    self._applied_spec_snapshots[spec.service_name()] = snapshot
             except Exception as e:
+                self._mark_spec_incomplete(spec.service_name())
                 msg = f'Failed to apply {spec.service_name()} spec {spec}: {str(e)}'
                 self.log.exception(msg)
                 self.mgr.events.for_service(spec, 'ERROR', 'Failed to apply: ' + str(e))
@@ -709,6 +727,84 @@ class CephadmServe:
         self.mgr.update_watched_hosts()
         self.mgr.tuned_profile_utils._write_all_tuned_profiles()
         return r
+
+    def _mark_spec_incomplete(self, service_name: str) -> None:
+        """The current serve loop pass did not fully apply *service_name*."""
+        self._incomplete_specs.add(service_name)
+
+    def _record_last_working_specs(self) -> None:
+        """Record the specs that were fully applied in this serve loop pass.
+
+        Must run after _check_daemons(), and only on a pass where
+        _apply_all_services() made no changes, i.e. once every service has
+        converged. A spec is recorded only if placement, daemon deployment
+        and OSD creation succeeded, no daemon action was still needed for it
+        in this pass, all of its daemons are healthy as of a host refresh
+        done after their last (re)deploy, and the spec was not replaced or
+        modified while it was being applied.
+        """
+        if not self._applied_spec_snapshots:
+            return
+        # computed once per pass, shared by all services
+        unreachable = {h.hostname for h in self.mgr.cache.get_unreachable_hosts()}
+        # don't use get_schedulable_hosts(): it leaves out a host without any
+        # cached daemon whose refresh is pending (see _service_daemons_healthy)
+        placement_candidates = [
+            h for h in self.mgr.inventory.all_specs()
+            if h.hostname not in unreachable
+            and SpecialHostLabels.DRAIN_DAEMONS not in h.labels
+        ]
+        for name, snapshot in self._applied_spec_snapshots.items():
+            if name in self._incomplete_specs:
+                continue
+            current = self.mgr.spec_store.active_specs.get(name)
+            if current is None or SpecStore.spec_snapshot(current) != snapshot:
+                continue
+            if not self._service_daemons_healthy(current, unreachable, placement_candidates):
+                continue
+            self.mgr.spec_store.mark_last_working_spec(name, snapshot)
+        self._applied_spec_snapshots = {}
+
+    def _service_daemons_healthy(self,
+                                 spec: ServiceSpec,
+                                 unreachable: Set[str],
+                                 placement_candidates: List[HostSpec]) -> bool:
+        """All daemons of *spec* are known to be running, as of a fresh refresh.
+
+        A deploy whose "systemctl start" fails (cephadm rc 17) is reported as
+        success: the daemon is not cached and only shows up, in error state,
+        after the next refresh of its host. Deploying invalidates the host's
+        daemon cache (dropping it from last_daemon_update) until that refresh.
+
+        So require that:
+        * no daemon of the service is on an unreachable host, whose cached
+          status (and last_daemon_update) may be stale,
+        * every host that has a daemon of the service *or* is targeted by its
+          placement has been refreshed since its last (re)deploy. The latter
+          covers a first deploy on a host (e.g. an OSD host) that left nothing
+          in the cache,
+        * every daemon is running, or stopped on purpose by the user.
+
+        *unreachable* are the unreachable hostnames, *placement_candidates*
+        the reachable, non-draining hosts (see _record_last_working_specs).
+        """
+        daemons = self.mgr.cache.get_daemons_by_service(spec.service_name())
+        hosts: Set[str] = set()
+        for dd in daemons:
+            if not dd.hostname or dd.hostname in unreachable:
+                return False
+            hosts.add(dd.hostname)
+        hosts.update(spec.placement.filter_matching_hostspecs(placement_candidates))
+        for host in hosts:
+            if host not in self.mgr.cache.last_daemon_update:
+                return False
+        for dd in daemons:
+            if dd.status == DaemonDescriptionStatus.running:
+                continue
+            if dd.status == DaemonDescriptionStatus.stopped and dd.user_stopped:
+                continue
+            return False
+        return True
 
     def _apply_service_config(self, spec: ServiceSpec) -> None:
         if spec.config:
@@ -742,6 +838,9 @@ class CephadmServe:
                         self.log.warning(msg)
                         options_failed_to_set.append(msg)
 
+            if invalid_config_options or options_failed_to_set:
+                # the spec's config was not (fully) applied
+                self._mark_spec_incomplete(spec.service_name())
             if invalid_config_options:
                 self.mgr.set_health_warning('CEPHADM_INVALID_CONFIG_OPTION', f'Ignoring {len(invalid_config_options)} invalid config option(s)', len(
                     invalid_config_options), invalid_config_options)
@@ -814,6 +913,8 @@ class CephadmServe:
         rc, out, err = self.mgr.mon_command(zone_update_cmd)
         rgw_spec.update_endpoints = (rc != 0)  # keep trying on failure
         if rc != 0:
+            # zone endpoints not updated: don't record this spec as last-success
+            self._mark_spec_incomplete(rgw_spec.service_name())
             self.log.error(f'Error when trying to update rgw zone: {err}')
             self.mgr.set_health_warning('CEPHADM_RGW', 'Cannot update rgw endpoints, error: {err}', 1,
                                         [f'Cannot update rgw endpoints for daemon {rgw_spec.service_name()}, error: {err}'])
@@ -832,9 +933,11 @@ class CephadmServe:
         service_name = spec.service_name()
         if spec.unmanaged:
             self.log.debug('Skipping unmanaged service %s' % service_name)
+            self._mark_spec_incomplete(service_name)
             return False
         if spec.preview_only:
             self.log.debug('Skipping preview_only service %s' % service_name)
+            self._mark_spec_incomplete(service_name)
             return False
         self.log.debug('Applying service %s spec' % service_name)
 
@@ -845,12 +948,16 @@ class CephadmServe:
             except Exception:
                 self.log.info(
                     'Delaying applying agent spec until cephadm endpoint root cert created')
+                self._mark_spec_incomplete(service_name)
                 return False
 
         self._apply_service_config(spec)
 
         if service_type == 'osd':
-            self.mgr.osd_service.create_from_spec(cast(DriveGroupSpec, spec))
+            _, osd_errors = self.mgr.osd_service.create_from_spec_with_errors(
+                cast(DriveGroupSpec, spec))
+            if osd_errors:
+                self._mark_spec_incomplete(service_name)
             # TODO: return True would result in a busy loop
             # can't know if daemon count changed; create_from_spec doesn't
             # return a solid indication
@@ -973,6 +1080,10 @@ class CephadmServe:
                         'status', '').lower() not in ['maintenance', 'offline']
                     and d.hostname not in self.mgr.offline_hosts)]
             self.log.debug('Add %s, remove %s' % (slots_to_add, daemons_to_remove))
+            if ha.unfulfilled_slots:
+                self.log.debug('Placement of %s not fully satisfied, unreachable or blocking '
+                               'hosts for %s' % (service_name, ha.unfulfilled_slots))
+                self._mark_spec_incomplete(service_name)
         except OrchestratorError as e:
             msg = f'Failed to apply {spec.service_name()} spec {spec}: {str(e)}'
             self.log.error(msg)
@@ -985,6 +1096,7 @@ class CephadmServe:
                                         f"Failed to apply {len(self.mgr.apply_spec_fails)} service(s): {','.join(x[0] for x in self.mgr.apply_spec_fails)}",
                                         len(self.mgr.apply_spec_fails),
                                         warnings)
+            self._mark_spec_incomplete(service_name)
             return False
 
         r = None
@@ -993,6 +1105,7 @@ class CephadmServe:
         final_count = len(daemons) + len(slots_to_add) - len(daemons_to_remove)
         if service_type in ['mon', 'mgr'] and final_count < 1:
             self.log.debug('cannot scale mon|mgr below 1)')
+            self._mark_spec_incomplete(service_name)
             return False
 
         # progress
@@ -1144,6 +1257,7 @@ class CephadmServe:
                 self.mgr.cache.append_tmp_daemon(slot.hostname, sd)
 
             if daemon_place_fails:
+                self._mark_spec_incomplete(service_name)
                 self.mgr.set_health_warning('CEPHADM_DAEMON_PLACE_FAIL', f'Failed to place {len(daemon_place_fails)} daemon(s)', len(
                     daemon_place_fails), daemon_place_fails)
 
@@ -1166,6 +1280,7 @@ class CephadmServe:
                 r = svc.ok_to_stop(cast(List[str], daemon_ids), force=True)
                 return not r.retval
 
+            num_daemons_to_remove = len(daemons_to_remove)
             while daemons_to_remove and not _ok_to_stop(daemons_to_remove):
                 # let's find a subset that is ok-to-stop
                 non_error_daemon_index = -1
@@ -1180,6 +1295,9 @@ class CephadmServe:
                     # all daemons in list are in error state
                     # we should be able to remove all of them
                     break
+            if len(daemons_to_remove) < num_daemons_to_remove:
+                # some removals are deferred to a later pass
+                self._mark_spec_incomplete(service_name)
             for d in daemons_to_remove:
                 r = True
                 assert d.hostname is not None
@@ -1349,6 +1467,11 @@ class CephadmServe:
                         action = 'start'
 
             if action:
+                # The outcome of a daemon action is only known after the next
+                # host refresh (e.g. a deploy whose "systemctl start" fails is
+                # reported as success and the daemon later shows up in error
+                # state), so don't record the spec as last-success this pass.
+                self._mark_spec_incomplete(dd.service_name())
                 if scheduled_action == 'redeploy' and action == 'reconfig':
                     action = 'redeploy'
                 # For OSD redeploy/reconfig that was NOT explicitly scheduled by
@@ -1369,6 +1492,7 @@ class CephadmServe:
                             'will retry next serve loop',
                             action, dd.name(), r.stderr,
                         )
+                        self._mark_spec_incomplete(dd.service_name())
                         continue
                 try:
                     daemon_spec = CephadmDaemonDeploySpec.from_daemon_description(dd)
@@ -1383,12 +1507,14 @@ class CephadmServe:
                 except OrchestratorError as e:
                     self.log.exception(e)
                     self.mgr.events.from_orch_error(e)
+                    self._mark_spec_incomplete(dd.service_name())
                     if dd.daemon_type in daemons_post:
                         del daemons_post[dd.daemon_type]
                     # continue...
                 except Exception as e:
                     self.log.exception(e)
                     self.mgr.events.for_daemon_from_exception(dd.name(), e)
+                    self._mark_spec_incomplete(dd.service_name())
                     if dd.daemon_type in daemons_post:
                         del daemons_post[dd.daemon_type]
                     # continue...

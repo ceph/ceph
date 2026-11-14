@@ -243,6 +243,9 @@ class HostAssignment(object):
         self.unreachable_hosts: List[orchestrator.HostSpec] = unreachable_hosts
         self.draining_hosts: List[orchestrator.HostSpec] = draining_hosts
         self.blocking_daemon_hosts: List[orchestrator.HostSpec] = blocking_daemon_hosts or []
+        # Slots that place() wanted to add but skipped because their host is
+        # unreachable or blocking, i.e. the placement is not fully satisfied.
+        self.unfulfilled_slots: List[DaemonPlacement] = []
         self.filter_new_host = filter_new_host
         self.service_name = spec.service_name()
         self.daemons = daemons
@@ -343,6 +346,7 @@ class HostAssignment(object):
         """
 
         self.validate()
+        self.unfulfilled_slots = []
 
         count = self.spec.placement.count
 
@@ -444,6 +448,9 @@ class HostAssignment(object):
         unreachable_hostnames = [
             h.hostname for h in self.unreachable_hosts
         ]
+        # candidate slots skipped only because their host is unreachable or
+        # blocking (see unfulfilled_slots)
+        skipped: List[DaemonPlacement] = []
         if not count:
             to_add = [
                 dd for dd in others if (
@@ -451,6 +458,7 @@ class HostAssignment(object):
                     and dd.hostname not in unreachable_hostnames
                 )
             ]
+            self.unfulfilled_slots = [dd for dd in others if dd not in to_add]
         else:
             if blocking_daemon_hostnames:
                 to_remove.extend([
@@ -528,6 +536,8 @@ class HostAssignment(object):
                         logger.debug(f'Preferring {dp.hostname} for service {self.service_name} as related daemons have been placed there')
                         to_add.append(dp)
                         need -= 1  # this is last use of need so it can work as a counter
+                    else:
+                        skipped.append(dp)
                 # at this point, we've either met our placement quota entirely using hosts with related
                 # service daemons, or we still need to place more. If we do need to place more,
                 # we should make sure not to re-use hosts with related service daemons by filtering
@@ -544,6 +554,11 @@ class HostAssignment(object):
                 ):
                     to_add.append(dp)
                     need -= 1  # this is last use of need in this function so it can work as a counter
+                else:
+                    skipped.append(dp)
+            if need > 0:
+                # count not reached, at least partly because of skipped hosts
+                self.unfulfilled_slots = skipped[:need]
 
         if self.rank_map is not None:
             # assign unused ranks (and rank_generations) to to_add

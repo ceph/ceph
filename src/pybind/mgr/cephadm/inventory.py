@@ -1,6 +1,6 @@
 import datetime
 import enum
-from copy import copy
+from copy import copy, deepcopy
 import ipaddress
 import itertools
 import json
@@ -338,6 +338,10 @@ class SpecStore():
         self.spec_deleted = {}  # type: Dict[str, Tuple[datetime.datetime, bool]]
         self.spec_preview = {}  # type: Dict[str, ServiceSpec]
         self._needs_configuration: Dict[str, bool] = {}
+        # service_name -> json snapshot of the last spec that was fully applied.
+        # Kept as a detached json copy so later in-place mutations of the
+        # live spec (e.g. set_unmanaged) can't alter the recorded state.
+        self._last_working_specs: Dict[str, Dict[str, Any]] = {}
 
     @property
     def all_specs(self) -> Mapping[str, ServiceSpec]:
@@ -399,6 +403,19 @@ class SpecStore():
                 self._specs[service_name] = spec
                 self.spec_created[service_name] = created
 
+                if 'last_working_spec' in j:
+                    try:
+                        # validate it, but keep the detached json snapshot.
+                        # from_json() may modify nested dicts of its input
+                        # in place (e.g. DriveGroupSpec), so pass a copy.
+                        snapshot = j['last_working_spec']
+                        ServiceSpec.from_json(deepcopy(snapshot))
+                        self._last_working_specs[service_name] = snapshot
+                    except Exception as e:
+                        self.mgr.log.warning(
+                            'unable to load last_working_spec for %s: %s' % (service_name, e)
+                        )
+
                 if 'deleted' in j:
                     deleted_ts = str_to_datetime(cast(str, j['deleted']))
                     force_delete_data = cast(
@@ -457,7 +474,7 @@ class SpecStore():
         self._rank_maps[name] = rank_map
         self._save(name)
 
-    def _save(self, name: str) -> None:
+    def _save(self, name: str, emit_event: bool = True) -> None:
         data: Dict[str, Any] = {
             'spec': self._specs[name].to_json(),
         }
@@ -471,14 +488,16 @@ class SpecStore():
             data['force_delete_data'] = force_delete_data
         if name in self._needs_configuration:
             data['needs_configuration'] = self._needs_configuration[name]
-
+        if name in self._last_working_specs:
+            data['last_working_spec'] = self._last_working_specs[name]
         self.mgr.set_store(
             SPEC_STORE_PREFIX + name,
             json.dumps(data, sort_keys=True),
         )
-        self.mgr.events.for_service(self._specs[name],
-                                    OrchestratorEvent.INFO,
-                                    'service was created')
+        if emit_event:
+            self.mgr.events.for_service(self._specs[name],
+                                        OrchestratorEvent.INFO,
+                                        'service was created')
 
     def _save_certs_and_keys(self, spec: ServiceSpec) -> None:
         if spec.service_type == 'rgw':
@@ -598,6 +617,8 @@ class SpecStore():
                 del self.spec_deleted[service_name]
             if service_name in self._needs_configuration:
                 del self._needs_configuration[service_name]
+            if service_name in self._last_working_specs:
+                del self._last_working_specs[service_name]
             self.mgr.set_store(SPEC_STORE_PREFIX + service_name, None)
         return found
 
@@ -639,6 +660,45 @@ class SpecStore():
             self._save(name)
         else:
             self.mgr.log.warning(f'Attempted to mark unknown service "{name}" as needing configuration')
+
+    @staticmethod
+    def spec_snapshot(spec: ServiceSpec) -> Dict[str, Any]:
+        """Return a detached, json-normalized copy of *spec*.
+
+        Round-tripping through json makes the snapshot independent of the
+        live spec object (including nested fields) and makes it directly
+        comparable with a snapshot loaded back from the mon store.
+        """
+        return cast(Dict[str, Any], json.loads(json.dumps(spec.to_json())))
+
+    def get_last_working_spec(self, name: str) -> Optional[ServiceSpec]:
+        """Return the last successfully applied spec for *name*, or None."""
+        snapshot = self._last_working_specs.get(name)
+        if snapshot is None:
+            return None
+        # from_json() may modify nested dicts of its input in place
+        # (e.g. DriveGroupSpec replaces data_devices with DeviceSelection),
+        # which would corrupt the stored snapshot. Always pass a copy.
+        return ServiceSpec.from_json(deepcopy(snapshot))
+
+    def mark_last_working_spec(self, name: str, snapshot: Dict[str, Any]) -> None:
+        """Record *snapshot* (see spec_snapshot()) as the last working spec of *name*.
+
+        The caller passes the snapshot of the exact spec revision that was
+        applied, so a spec submitted while that apply was in flight is never
+        recorded by mistake. Only persisted when the snapshot changes, to
+        avoid a mon store write per service on every serve loop pass.
+        """
+        if name not in self._specs or name in self.spec_deleted:
+            self.mgr.log.debug(
+                f'Not recording last working spec for unknown or deleted service "{name}"'
+            )
+            return
+        if self._last_working_specs.get(name) == snapshot:
+            return
+        self._last_working_specs[name] = snapshot
+        self._save(name, emit_event=False)
+        self.mgr.log.info(f'SpecStore: recorded last working spec for {name}')
 
     def mark_configured(self, name: str) -> None:
         if name in self._specs:
