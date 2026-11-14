@@ -21,11 +21,17 @@
 #include "rgw/fdb/interface.h"
 
 #include <algorithm>
+#include <concepts>
 #include <cstdio>
+#include <exception>
 #include <expected>
 #include <print>
 #include <stdexcept>
 #include <string>
+#include <system_error>
+#include <type_traits>
+#include <utility>
+#include <variant>
 #include <vector>
 
 namespace lfdb = ceph::libfdb;
@@ -56,13 +62,13 @@ static const vector<person> nifty_people {
   }
 };
 
-enum struct write_error { empty_name };
+enum struct people_error { empty_name, missing_people };
 
 static auto store_people(lfdb::transaction_handle& txn, const vector<person>& people)
- -> expected<size_t, write_error>
+ -> expected<size_t, people_error>
 {
  if (ranges::any_of(people, [](const auto& name) { return name.empty(); }, &person::name)) {
-  return unexpected(write_error::empty_name);
+  return unexpected(people_error::empty_name);
  }
 
  lfdb::set(txn, "example/people", people);
@@ -70,28 +76,64 @@ static auto store_people(lfdb::transaction_handle& txn, const vector<person>& pe
  return people.size();
 }
 
+static auto read_people(lfdb::transaction_handle& txn)
+{
+ expected<vector<person>, people_error> people {in_place};
+ if (not lfdb::get(txn, "example/people", *people)) {
+  people = unexpected(people_error::missing_people);
+ }
+
+ return people;
+}
+
+static void report_exception(const exception_ptr& failure)
+try
+ {
+  rethrow_exception(failure);
+ }
+catch (const std::exception& error)
+ {
+  println(stderr, "{}", error.what());
+ }
+catch (...)
+ {
+  println(stderr, "Nonstandard C++ exception");
+ }
+
 template <typename ErrorT>
 static void report_failure(const lfdb::transaction_failure<ErrorT>& failure)
 {
- println(stderr, "Transaction failed; uncertain: {}, may finish later: {}",
+ println(stderr, "Transaction failed in phase {} after {} attempt(s); uncertain: {}, may finish later: {}",
+         to_underlying(failure.phase), failure.status.attempts,
          failure.status.has_unknown_commit(), failure.status.may_commit_later());
+ if (failure.status.first_unknown_commit_error) {
+  println(stderr, "First uncertain commit error: {}", failure.status.first_unknown_commit_error->message());
+ }
+ if constexpr (not is_void_v<ErrorT>) {
+  if (const auto *rejection = get_if<lfdb::application_error<ErrorT>>(&failure.cause)) {
+   println(stderr, "Application error: {}", static_cast<int>(rejection->error));
+   return;
+  }
+ }
  if (const auto *native = get_if<lfdb::fdb_error>(&failure.cause)) {
   println(stderr, "{} {}: {}", native->code.category().name(), native->code.value(), native->code.message());
+  if (native->exception) {
+   report_exception(native->exception);
+  }
+  visit([](const auto& recovery) {
+   using recovery_type = remove_cvref_t<decltype(recovery)>;
+   if constexpr (same_as<recovery_type, error_code>) {
+    println(stderr, "Recovery failed: {} {}: {}",
+            recovery.category().name(), recovery.value(), recovery.message());
+   }
+   if constexpr (same_as<recovery_type, exception_ptr>) {
+    report_exception(recovery);
+   }
+  }, native->retry_error);
+  return;
  }
- if (const auto *exception = get_if<exception_ptr>(&failure.cause)) {
-  try
-   {
-    rethrow_exception(*exception);
-   }
-  catch (const std::exception& error)
-   {
-    println(stderr, "{}", error.what());
-   }
-  catch (...)
-   {
-    println(stderr, "Nonstandard C++ exception");
-   }
- }
+
+ report_exception(get<exception_ptr>(failure.cause));
 }
 
 static int run_example()
@@ -115,8 +157,45 @@ try
  }
  println("managed transaction: stored {} people", stored->value);
 
+ // The same body runs either in an existing transaction or under an owning call.
+ // The complete and_then chain stays inside the invocation's exception boundary.
+ auto round_trip = [&](auto& current) {
+  return txr(current, read_people).and_then([&](auto&& people) {
+   return txr(current, store_people, people);
+  });
+ };
+ auto caller_txn = lfdb::make_transaction(dbh);
+ const auto working = txr(caller_txn, round_trip);
+ if (not working) {
+  report_failure(working.error());
+  return 1;
+ }
+ println("borrowed transaction: prepared {} people before commit", *working);
+ if (const auto caller_commit = lfdb::commit(caller_txn); not caller_commit) {
+  report_failure(caller_commit.error());
+  return 1;
+ }
+ println("caller commit: confirmed");
+
+ const auto composed = txr(round_trip);
+ if (not composed) {
+  report_failure(composed.error());
+  return 1;
+ }
+ println("composed transaction: stored {} people", composed->value);
+
+ // Replacing this key with the same value tolerates repeated commits. Incremental
+ // effects need their own idempotency strategy before opting into this policy.
+ const auto replaying = lfdb::make_transactor(dbh, {}, lfdb::retry_policy::replay_unknown);
+ const auto replaced = replaying(store_people, nifty_people);
+ if (not replaced) {
+  report_failure(replaced.error());
+  return 1;
+ }
+ println("explicit replay_unknown: replaced {} people", replaced->value);
+
  if (const auto rejected = txr(store_people, vector<person> {person {}});
-     rejected or not holds_alternative<lfdb::application_error<write_error>>(rejected.error().cause) or
+     rejected or not holds_alternative<lfdb::application_error<people_error>>(rejected.error().cause) or
      rejected.error().status.commit != lfdb::commit_status::not_submitted) {
   throw runtime_error("empty name did not reject the attempt before commit");
  }

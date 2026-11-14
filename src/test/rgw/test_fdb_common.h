@@ -32,7 +32,8 @@
 namespace lfdb = ceph::libfdb;
 
 template <typename ValueT, typename ErrorT>
-const lfdb::fdb_error& native_failure(const lfdb::transaction_result<ValueT, ErrorT>& result)
+const lfdb::fdb_error& native_failure(
+ const std::expected<ValueT, lfdb::transaction_failure<ErrorT>>& result)
 {
  REQUIRE_FALSE(result);
  const auto *native = std::get_if<lfdb::fdb_error>(&result.error().cause);
