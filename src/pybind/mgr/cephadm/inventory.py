@@ -586,6 +586,25 @@ class SpecStore():
         self.save(self._specs[service_name], update_create=False)
         return True
 
+    def undelete(self, service_name: str) -> bool:
+        """
+        Cancel the pending removal of a service.
+
+        After `rm()`, a spec stays in the store, marked deleted, until all its
+        daemons are gone and `_purge_deleted_services()` drops it. While it is
+        marked, `save()` keeps the mark: the spec is not reconciled and its
+        daemons are removed as orphans. Callers that apply the service again
+        must call this first.
+
+        Returns True if a pending removal was cancelled.
+        """
+        if service_name not in self.spec_deleted:
+            return False
+        del self.spec_deleted[service_name]
+        if service_name in self._specs:
+            self._save(service_name)
+        return True
+
     def finally_rm(self, service_name):
         # type: (str) -> bool
         found = service_name in self._specs
@@ -2139,6 +2158,35 @@ class AgentCache():
             j['agent_timestamp'] = datetime_to_str(self.agent_timestamp[host])
 
         self.mgr.set_store(AGENT_CACHE_PREFIX + host, json.dumps(j))
+
+    def rm_agent(self, host: str) -> None:
+        """
+        Forget everything about the agent on `host`, in memory and in the
+        store. Called when the agent daemon or the host is removed, so a
+        later agent on that host starts from scratch (keyring, counter,
+        listener port) instead of inheriting stale state.
+        """
+        host = normalize_hostname(host)
+        for d in self._per_host_maps():
+            d.pop(host, None)
+        self.mgr.set_store(AGENT_CACHE_PREFIX + host, None)
+
+    def rm_all_agents(self) -> None:
+        hosts: Set[str] = set()
+        for d in self._per_host_maps():
+            hosts.update(d.keys())
+        for host in hosts:
+            self.rm_agent(host)
+
+    def _per_host_maps(self) -> List[Dict[str, Any]]:
+        return [
+            self.agent_config_deps,
+            self.agent_counter,
+            self.agent_timestamp,
+            self.agent_keys,
+            self.agent_ports,
+            self.sending_agent_message,
+        ]
 
     def update_agent_config_deps(self, host: str, deps: List[str], stamp: datetime.datetime) -> None:
         self.agent_config_deps[host] = {

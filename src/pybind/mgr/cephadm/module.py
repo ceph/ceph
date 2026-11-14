@@ -2589,6 +2589,7 @@ Then run the following:
 
         self.inventory.rm_host(host)
         self.cache.rm_host(host)
+        self.agent_cache.rm_agent(host)
         self.ssh.reset_con(host)
         # if host was in offline host list, we should remove it now.
         self.offline_hosts_remove(host)
@@ -3517,6 +3518,8 @@ Then run the following:
         )
         self._trigger_preview_refresh(service_name=service_name)
         if service_name in self.spec_store:
+            if self.spec_store[service_name].spec.service_type == 'agent':
+                self.agent_helpers.check_agent_service_remove()
             if self.spec_store[service_name].spec.service_type in ('mon', 'mgr'):
                 return (
                     f'Unable to remove {service_name} service.\n'
@@ -4878,6 +4881,10 @@ Then run the following:
         spec.rgw_frontend_ssl_certificate = None
 
     def _apply_service_spec(self, spec: ServiceSpec) -> str:
+        agent_note = ''
+        if spec.service_type == 'agent':
+            spec, agent_note = self.agent_helpers.check_agent_spec_apply(spec)
+
         if spec.placement.is_empty():
             # fill in default placement
             defaults = {
@@ -4977,11 +4984,24 @@ Then run the following:
             allow_colo=service_registry.get_service(spec.service_type).allow_colo(),
         ).validate()
 
+        revived = False
+        if not spec.preview_only and self.spec_store.undelete(spec.service_name()):
+            # Applying a service that is pending removal ('orch rm') cancels
+            # the removal. Otherwise the spec would stay marked deleted: it
+            # would not be reconciled and its daemons would be removed as
+            # orphans, while 'orch apply' reported success.
+            revived = True
+            self.log.info('Cancelled the pending removal of service %s' % spec.service_name())
         self.log.info('Saving service %s spec with placement %s' % (
             spec.service_name(), spec.placement.pretty_str()))
         self.spec_store.save(spec)
         self._kick_serve_loop()
-        msg = f"Scheduled {spec.service_name()} update...{cert_warning}"
+        msg = f"Scheduled {spec.service_name()} update...{cert_warning}{agent_note}"
+        if revived:
+            msg += (
+                f'\nNOTE: {spec.service_name()} was pending removal. The'
+                f' removal has been cancelled.'
+            )
         if spec.unmanaged:
             # Spec is stored, but reconciliation/_check_daemons will no-op until
             # the service is managed again. Do not special-case OSDs here: an
