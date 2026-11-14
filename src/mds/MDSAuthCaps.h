@@ -54,6 +54,8 @@ struct MDSCapSpec {
   static const unsigned Q               = (1 << 6);
   // if the capability permits access to all quarantined dirs
   static const unsigned Q_PRIME         = (1 << 7);
+  // if the capability permits access to fscrypt encryption
+  static const unsigned ENCRYPTION      = (1 << 8);
 
   static const unsigned RW		= (READ|WRITE);
   static const unsigned RWF		= (READ|WRITE|FULL);
@@ -63,11 +65,12 @@ struct MDSCapSpec {
   static const unsigned RWFS		= (READ|WRITE|FULL|SNAPSHOT);
   static const unsigned RWPS		= (READ|WRITE|SET_VXATTR|SNAPSHOT);
   static const unsigned RWFPS		= (READ|WRITE|FULL|SET_VXATTR|SNAPSHOT);
+  static const unsigned RWEFPS		= (READ|WRITE|ENCRYPTION|FULL|SET_VXATTR|SNAPSHOT);
 
   MDSCapSpec() = default;
   MDSCapSpec(unsigned _caps) : caps(_caps) {
     if (caps & ALL)
-      caps |= RWFPS;
+      caps |= RWEFPS;
     // Q and Q_PRIME are never implied by ALL — quarantine access
     // must be granted explicitly to limit who can access compromised data.
   }
@@ -108,6 +111,9 @@ struct MDSCapSpec {
   // check access for all dirs (superset access to all quarantined dirs)
   bool allow_qtine_prime_access() const {
     return (caps & Q_PRIME);
+  }
+  bool allow_encryption() const {
+    return (caps & ENCRYPTION);
   }
 
   unsigned get_caps() {
@@ -272,6 +278,7 @@ public:
   bool merge(MDSAuthCaps newcaps);
 
   bool allow_all() const;
+  bool allow_encryption() const;
   bool is_capable(std::string_view fs_name,
                   std::string_view inode_path,
 		  uid_t inode_uid, gid_t inode_gid, unsigned inode_mode,

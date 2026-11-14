@@ -10,6 +10,7 @@ from logging import getLogger
 from teuthology.contextutil import safe_while
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from tasks.cephfs.xfstests_dev import XFSTestsDev
+from teuthology.exceptions import CommandFailedError
 
 log = getLogger(__name__)
 
@@ -20,10 +21,8 @@ class FSCryptTestCase(CephFSTestCase):
         super().setUp()
 
         self.get_ceph_cmd_result(
-                'auth', 'caps', "client.0",
-                'mds', 'allow *',
-                'mon', 'allow *',
-                 'osd', 'allow *')
+                'fs', 'authorize', 'cephfs',
+                'client.0', '/', 'rwe')
         self.mount_a.umount_wait()
         self.mount_a.mount_wait()
 
@@ -46,6 +45,44 @@ class FSCryptTestCase(CephFSTestCase):
         self.mount_a.run_shell_payload(f"sudo fscrypt purge --force --verbose {self.mount_a.hostfs_mntpt}")
 
         super().tearDown()
+
+class TestFSCryptAuthCaps(CephFSTestCase):
+
+    def tearDown(self):
+        # make sure to reset dummy encryption
+        self.fs.set_ceph_conf('client.0', 'client_fscrypt_dummy_encryption', 'False')
+        super().tearDown()
+
+    def check_auth_cap(self, create_sv):
+        mds_auth_cap = "allow rwe"
+        mount_path = "/"
+
+        self.fs.set_ceph_conf('client.0', 'client_fscrypt_dummy_encryption', 'True')
+        if create_sv:
+            self.run_ceph_cmd('fs subvolume create cephfs sv1 --mode=777')
+            mds_auth_cap = f"allow rwe fsname=cephfs path={mount_path}"
+            sv_path = self.get_ceph_cmd_stdout('fs subvolume getpath cephfs sv1')
+            mount_path = sv_path.strip()
+
+        #no encryption auth cap set, ensure it fails
+        with self.assertRaises(CommandFailedError):
+            self.mount_a.remount(cephfs_mntpt=mount_path)
+
+        #set auth cap, verify success
+        self.get_ceph_cmd_result(
+                     'auth', 'caps', "client.0",
+                     'mds', f'{mds_auth_cap}',
+                     'mon', 'allow *',
+                     'osd', 'allow *')
+        self.mount_a.remount(cephfs_mntpt=mount_path)
+
+    def test_encryption_auth_cap(self):
+        """ Test that encryption auth cap allows set enc policy """
+        self.check_auth_cap(False)
+
+    def test_encryption_auth_cap_path(self):
+        """ Test that encryption auth cap allows set enc policy using path """
+        self.check_auth_cap(True)
 
 class TestFSCrypt(FSCryptTestCase):
 
@@ -376,10 +413,8 @@ class _FSCryptVolumeTestCase(CephFSTestCase):
         super().setUp()
 
         self.get_ceph_cmd_result(
-                'auth', 'caps', "client.0",
-                'mds', 'allow *',
-                'mon', 'allow *',
-                 'osd', 'allow *')
+                'fs', 'authorize', 'cephfs',
+                'client.0', '/', 'rwe')
         self.mount_a.umount_wait()
         self.mount_a.mount_wait()
 
