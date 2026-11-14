@@ -69,6 +69,11 @@ private:
 
   uint64_t instance_id{0};
 
+  // Optional name suffix for objecter admin socket command.
+  // If empty, registers as "objecter_requests".
+  // If non-empty, registers as "objecter_requests.<name>".
+  std::string objecter_admin_socket_name;
+
   bool _dispatch(Message *m);
   bool ms_dispatch(Message *m) override;
 
@@ -105,6 +110,13 @@ public:
   int ping_monitor(std::string mon_id, std::string *result);
   int connect();
   void shutdown();
+
+  /// Set the name suffix for the objecter admin socket command.
+  /// Call before connect(). If non-empty, the command will be
+  /// registered as "objecter_requests.<name>" instead of "objecter_requests".
+  void set_objecter_admin_socket_name(std::string name) {
+    objecter_admin_socket_name = std::move(name);
+  }
 
   int watch_flush();
   int async_watch_flush(AioCompletionImpl *c);
