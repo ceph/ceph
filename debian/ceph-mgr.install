@@ -4,3 +4,5 @@ usr/share/ceph/mgr/mgr_module.*
 usr/share/ceph/mgr/mgr_util.*
 usr/share/ceph/mgr/object_format.*
 usr/share/ceph/mgr/cherrypy_mgr.*
+usr/share/ceph/mgr/ceph_secrets_client.*
+usr/share/ceph/mgr/ceph_secrets_types.*
