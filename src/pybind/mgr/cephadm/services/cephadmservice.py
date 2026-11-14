@@ -935,6 +935,17 @@ class CephadmService(metaclass=ABCMeta):
         logger.debug(out)
         return HandleCommandResult(r.retval, out, r.stderr)
 
+    def ok_to_upgrade(self,
+                      to_upgrade: str,
+                      known: Optional[List[str]] = None) -> HandleCommandResult:
+        """Default ok-to-upgrade: always safe. Services override for custom logic.
+
+        Args:
+            to_upgrade: daemon name to check
+            known:      output list — daemon name appended if safe
+        """
+        return HandleCommandResult(0, f'{to_upgrade} is safe to upgrade', '')
+
     def _enough_daemons_to_stop(self, daemon_type: str, daemon_ids: List[str], service: str, low_limit: int, alert: bool = False) -> Tuple[bool, str]:
         # Provides a warning about if it possible or not to stop <n> daemons in a service
         names = [f'{daemon_type}.{d_id}' for d_id in daemon_ids]
