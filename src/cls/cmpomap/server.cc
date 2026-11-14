@@ -284,7 +284,7 @@ static int cmp_rm_keys(cls_method_context_t hctx, bufferlist *in, bufferlist *ou
 
 CLS_INIT(cmpomap)
 {
-  CLS_LOG(1, "Loaded cmpomap class!");
+  CLS_LOG(0, "Loaded cmpomap class!");
 
   cls_handle_t h_class;
   cls_method_handle_t h_cmp_vals;
