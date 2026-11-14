@@ -94,9 +94,78 @@ inline constexpr const char* MARKER_XATTR_PREFIX = "user.nsfs:marker.";
  * its own fgetxattr, before any strategy is consulted. */
 inline constexpr const char* EXTENSIONS_XATTR = "user.nsfs:marker.extensions";
 
+/* The tree still holds structure somebody else wrote.
+ *
+ * Read the same way and for the same reason, and deliberately NOT a bit
+ * in the extensions mask.  That mask says what structure *of nsfs's* a
+ * tree carries and every bit in it is something nsfs added;  what remains
+ * of another format is the opposite fact, and a reader that finds them
+ * in one word comes to treat a leftover as a feature.
+ *
+ * Set by the upgrade from base to a named profile and cleared when that
+ * upgrade finishes, so it is the upgrade's progress flag and not a
+ * steady state.  Its presence is what brings the fallback strategies
+ * into play:  a bucket we created never pays for one, and a bucket
+ * that has finished converting stops paying.
+ *
+ * The value is the format the tree is being converted FROM -- today
+ * only "noobaa", which is the only other format that exists.  A name
+ * rather than a flag because a reader has to know which fallback to
+ * fall back to, and guessing from the one that happens to be
+ * compiled in is how the wrong parser gets applied to the right
+ * bytes. */
 inline constexpr const char* CONVERTING_XATTR = "user.nsfs:marker.converting";
+inline constexpr const char* CONVERTING_FROM_NOOBAA = "noobaa";
+
+/* WHETHER THE DIRECTORY EXISTS FOR THIS BUCKET, OR PREDATES IT.
+ *
+ * A bucket the gateway created owns its directory:  the directory
+ * exists only because a bucket was wanted, so deleting the bucket
+ * removes it.  A bucket adopted over a directory that was already
+ * there does not, and deleting that bucket must leave the directory
+ * and its contents alone -- it may be a fileset junction, or anything
+ * else an administrator made and pointed the gateway at.
+ *
+ * Nothing on disk distinguishes the two afterwards.  A directory that
+ * exists says nothing about who made it, which is why NooBaa records
+ * the same fact as `should_create_underlying_storage`:  NooBaa's create
+ * path doubles as adopt, so NooBaa has to write down which one
+ * happened.  Splitting the operations makes it obvious when it
+ * happens and no more recoverable later, so it still has to be
+ * written down.
+ *
+ * ABSENT MEANS THE BUCKET OWNS IT.  Every bucket that existed before
+ * this attribute did was created by the gateway, so the absent case
+ * has to be the owning one or they would all become undeletable.
+ * Only adoption over a pre-existing directory writes it, with "0".
+ *
+ * NooBaa's value carries across on adoption, and it is not always 0:  a
+ * bucket NooBaa created has a directory that exists only because a
+ * gateway made it for that bucket, and taking it over does not change
+ * that.  Defaulting adopted buckets to 0 would leave every migrated
+ * bucket undeletable. */
 inline constexpr const char* OWNS_STORAGE_XATTR = "user.nsfs:marker.owns_storage";
 
+/* The markers on a directory below a bucket's root.  A bucket's markers
+ * say what the bucket is;  these say what one subtree is, so they have
+ * a prefix of their own, which carries_nsfs_state() -- is this
+ * directory, or was it, a bucket -- skips as a class (DECISIONS.md
+ * 2026-11-05).  Never written on a bucket's root. */
+inline constexpr const char* SUBTREE_MARKER_PREFIX =
+  "user.nsfs:marker.subtree.";
+
+/* The subtree is converted:  this directory's files, versions and
+ * directory object, and every subdirectory, are in the bucket's format.
+ * Written after the children, so a walk that stops partway leaves it
+ * off the directory it stopped in, and a resumed walk passes a marked
+ * subdirectory, and everything under it, with one read.
+ *
+ * The value is the extension set the subtree was converted to, as
+ * EXTENSIONS_XATTR writes it, and a walk skips only a marker naming its
+ * own target.  Left after the conversion completes:  nothing reads it
+ * once the bucket's converting marker is gone. */
+inline constexpr const char* SUBTREE_CONVERTED_XATTR =
+  "user.nsfs:marker.subtree.converted";
 
 /* THE VALUE IS A SET, NOT A LEVEL.
  *

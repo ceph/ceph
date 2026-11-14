@@ -117,7 +117,26 @@ public:
     bool content_in_sentinel{false};
   };
 
+  /* `dir_fd` is the directory itself, not its parent.  The listing
+   * walk already opens every subdirectory before recursing into it, so
+   * asking there costs one fgetxattr on a descriptor it holds -- the
+   * openat and close a parent-relative form would need are what made
+   * the probe look expensive. */
+  virtual bool directory_object(const DoutPrefixProvider* dpp,
+				int dir_fd,
+				DirectoryObject& out) const = 0;
 
+  /* Stop this directory being an object in this format.
+   *
+   * The counterpart of directory_object(), for the upgrade:  a
+   * directory carried across to another format must stop reading as
+   * one in the format it came from, and which attribute says so is the
+   * format's business and not the converter's.  The nsfs format has
+   * nothing to clear -- the sentinel file is the marker and removing it
+   * is a delete, not a conversion -- so the nsfs strategy does
+   * nothing. */
+  virtual int clear_directory_object(const DoutPrefixProvider* dpp,
+				     int dir_fd) const = 0;
 
   /* names this layout creates which are not objects.  Contributed to the
    * driver's aggregate;  the listing paths match against that, so no
@@ -158,6 +177,10 @@ public:
       const std::optional<std::string>& ns) const override;
   std::string folder_object_name() const override;
   bool names_directory_object(std::string_view entry) const override;
+  bool directory_object(const DoutPrefixProvider* dpp, int dir_fd,
+			DirectoryObject& out) const override;
+  int clear_directory_object(const DoutPrefixProvider* dpp,
+			     int dir_fd) const override;
   const ReservedNames& reserved_names() const override;
 
   const char* name() const override { return "rgw"; }
@@ -200,6 +223,10 @@ public:
       const std::optional<std::string>& ns) const override;
   std::string folder_object_name() const override;
   bool names_directory_object(std::string_view entry) const override;
+  bool directory_object(const DoutPrefixProvider* dpp, int dir_fd,
+			DirectoryObject& out) const override;
+  int clear_directory_object(const DoutPrefixProvider* dpp,
+			     int dir_fd) const override;
   const ReservedNames& reserved_names() const override;
 
   const char* name() const override { return "noobaa"; }

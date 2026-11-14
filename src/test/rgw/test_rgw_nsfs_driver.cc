@@ -4391,6 +4391,49 @@ TEST_F(NSFSBucketTest, SideloadedList)
   }
 }
 
+/* Deleting a bucket the gateway made removes its directory.
+ *
+ * The control for the test below:  without it, a directory surviving
+ * a delete would prove nothing about the attribute, since it might
+ * never have been removed by this path at all. */
+TEST_F(NSFSBucketTest, DeletingABucketTheGatewayMadeRemovesTheDirectory)
+{
+  const sf::path d = bp / "root" / testname;
+  ASSERT_TRUE(sf::is_directory(d));
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->remove(env->dpp, false, null_yield, rgw::sal::no_authenticated_user), 0);
+  EXPECT_FALSE(sf::exists(d));
+}
+
+TEST_F(NSFSBucketTest, DeletingAnAdoptedBucketLeavesItsDirectory)
+{
+  const sf::path d = bp / "root" / testname;
+  {
+    const sf::path f = d / "predates.txt";
+    int fd = ::open(f.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    ASSERT_GT(fd, 0);
+    const char* data = "written before the bucket existed";
+    ASSERT_EQ(::write(fd, data, strlen(data)), (ssize_t)strlen(data));
+    ::close(fd);
+  }
+  ASSERT_EQ(::setxattr(d.c_str(), nsfs::OWNS_STORAGE_XATTR, "0", 1, 0), 0);
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->remove(env->dpp, false, null_yield, rgw::sal::no_authenticated_user), 0);
+
+  EXPECT_TRUE(sf::is_directory(d))
+      << "removed a directory the bucket was only lent";
+
+  char buf[8192];
+  const ssize_t len = ::listxattr(d.c_str(), buf, sizeof(buf));
+  ASSERT_GE(len, 0);
+  for (const char* q = buf; q < buf + len; q += strlen(q) + 1) {
+    EXPECT_FALSE(std::string_view(q).starts_with("user.nsfs:"))
+	<< q << " survived the delete";
+  }
+}
+
 TEST_F(NSFSBucketTest, DirectoryObjectPut)
 {
   auto obj = bucket->get_object(rgw_obj_key("photos/"));
@@ -6574,19 +6617,38 @@ TEST(NooBaaPath, DirectoryObjectFromTheAttribute)
   set_u64_xattr(b / "withcontent", "user.noobaa.dir_content", 17);
   write_file(b / "withcontent" / ".folder", std::string(17, 'x'));
 
+  /* the directory's own descriptor, which is what the listing walk
+   * holds by the time it asks */
+  auto dfd = [&b](const char* n) {
+    int fd = ::open((b / n).c_str(), O_RDONLY | O_DIRECTORY);
+    EXPECT_GE(fd, 0) << n;
+    return fd;
+  };
 
   nsfs::PathStrategy::DirectoryObject d{};
+  int fd = dfd("empty");
+  ASSERT_TRUE(nb.directory_object(env->dpp, fd, d));
   EXPECT_EQ(d.size, 0u);
   EXPECT_FALSE(d.content_in_sentinel);
+  /* the nsfs strategy never marks a directory, and says so without looking */
+  nsfs::PathStrategy::DirectoryObject od{};
   EXPECT_FALSE(sentinel.directory_object(env->dpp, fd, od));
+  ::close(fd);
 
   d = {};
+  fd = dfd("withcontent");
+  ASSERT_TRUE(nb.directory_object(env->dpp, fd, d));
   EXPECT_EQ(d.size, 17u);
   EXPECT_TRUE(d.content_in_sentinel);
+  ::close(fd);
 
   /* a directory without the attribute is not an object;  NooBaa's own
    * read path throws NoSuchKey for one */
   d = {};
+  fd = dfd("plain");
+  EXPECT_FALSE(nb.directory_object(env->dpp, fd, d));
+  ::close(fd);
+}
 
 /* A bucket's format, and the strategies it selects.
  *
@@ -7135,6 +7197,162 @@ public:
 };
 
 
+/* A directory object as NooBaa lays it down:  the marker and the
+ * object's attributes on the directory, and the bytes in `.folder` only
+ * when there are any (`namespace_fs.js`, _create_empty_dir_content). */
+static void lay_noobaa_directory_object(const sf::path& dir,
+					const std::string& body,
+					const std::string& content_type,
+					const std::string& probe)
+{
+  sf::create_directories(dir);
+  if (!body.empty()) {
+    write_file(dir / ".folder", body);
+  }
+  set_u64_xattr(dir, "user.noobaa.dir_content", body.size());
+  ASSERT_EQ(::setxattr(dir.c_str(), "user.noobaa.content_type",
+		       content_type.data(), content_type.size(), 0), 0);
+  ASSERT_EQ(::setxattr(dir.c_str(), "user.probe",
+		       probe.data(), probe.size(), 0), 0);
+}
+
+/* An attribute value as the S3 front end puts it in a header:
+ * rgw_bl_str() for the content type and rgw_sanitized_hdrval() for
+ * metadata both drop the trailing NUL, which the nsfs format stores and
+ * NooBaa's does not. */
+static std::string as_sent(const bufferlist& bl)
+{
+  std::string v = bl.to_str();
+  while (!v.empty() && v.back() == '\0') {
+    v.pop_back();
+  }
+  return v;
+}
+
+/* What a client sees of one object:  HEAD, GET and its listing row. */
+
+struct ClientView {
+  bool exists{false};
+  uint64_t size{0};
+  std::string content_type;
+  std::string probe;
+  std::string etag;
+  ceph::real_time mtime;
+  std::string body;
+  bool listed{false};
+  uint64_t listed_size{0};
+  std::string listed_etag;
+  ceph::real_time listed_mtime;
+};
+
+static ClientView client_view(rgw::sal::Bucket* bucket,
+			      const DoutPrefixProvider* dpp,
+			      const std::string& key)
+{
+  ClientView v;
+  auto obj = bucket->get_object(rgw_obj_key(key));
+  std::unique_ptr<rgw::sal::Object::ReadOp> rop(obj->get_read_op(rgw::sal::no_authenticated_user));
+  if (rop->prepare(null_yield, dpp) == 0) {
+    v.exists = true;
+    v.size = obj->get_size();
+    v.mtime = obj->get_mtime();
+    auto& attrs = obj->get_attrs();
+    if (auto a = attrs.find(RGW_ATTR_CONTENT_TYPE); a != attrs.end()) {
+      v.content_type = as_sent(a->second);
+    }
+    if (auto a = attrs.find(RGW_ATTR_META_PREFIX "probe"); a != attrs.end()) {
+      v.probe = as_sent(a->second);
+    }
+    if (auto a = attrs.find(RGW_ATTR_ETAG); a != attrs.end()) {
+      v.etag = as_sent(a->second);
+    }
+    if (v.size > 0) {
+      bufferlist bl;
+      Read_CB cb(&bl);
+      EXPECT_EQ(rop->iterate(dpp, 0, v.size - 1, &cb, null_yield), 0) << key;
+      v.body = bl.to_str();
+    }
+  }
+
+  rgw::sal::Bucket::ListParams params;
+  rgw::sal::Bucket::ListResults results;
+  EXPECT_EQ(bucket->list(dpp, params, 1000, results, null_yield), 0);
+  for (auto& e : results.objs) {
+    if (e.key.name == key) {
+      EXPECT_FALSE(v.listed) << key << " listed twice";
+      v.listed = true;
+      v.listed_size = e.meta.size;
+      v.listed_etag = e.meta.etag;
+      v.listed_mtime = e.meta.mtime;
+    }
+  }
+  return v;
+}
+
+/* A bucket being converted is, to a client, the bucket it becomes
+ * (DECISIONS.md 2026-10-13).  Directory objects in NooBaa's format,
+ * read before conversion and again after, must look the same.
+ *
+ * Before this, `e/` was 404 and unlisted, and `c/` lost its content type
+ * and metadata, because the reader took `.folder` for the whole object.
+ *
+ * Everything is compared, an empty one's ETag and Last-Modified
+ * included:  conversion gives it a new sentinel, and must not let the
+ * new inode change either (DECISIONS.md 2026-10-13). */
+TEST_F(NSFSNooBaaBucketTest, ADirectoryObjectReadsTheSameBeforeAndAfterConversion)
+{
+  lay_noobaa_directory_object(bucket_path() / "e", "", "text/x-e", "e");
+  lay_noobaa_directory_object(bucket_path() / "c", "dir bytes", "text/x-c", "c");
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  const ClientView e0 = client_view(bucket.get(), env->dpp, "e/");
+  const ClientView c0 = client_view(bucket.get(), env->dpp, "c/");
+
+  ASSERT_TRUE(e0.exists) << "an empty directory object was not found";
+  EXPECT_EQ(e0.size, 0u);
+  EXPECT_EQ(e0.content_type, "text/x-e");
+  EXPECT_EQ(e0.probe, "e");
+  EXPECT_TRUE(e0.listed);
+  ASSERT_TRUE(c0.exists);
+  EXPECT_EQ(c0.size, 9u);
+  EXPECT_EQ(c0.content_type, "text/x-c")
+      << "attributes were read from .folder rather than the directory";
+  EXPECT_EQ(c0.probe, "c");
+  EXPECT_EQ(c0.body, "dir bytes");
+  EXPECT_TRUE(c0.listed);
+  EXPECT_EQ(c0.listed_size, 9u);
+  EXPECT_EQ(c0.listed_etag, c0.etag);
+
+  ASSERT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_SHARED), 0);
+
+  const ClientView e1 = client_view(bucket.get(), env->dpp, "e/");
+  const ClientView c1 = client_view(bucket.get(), env->dpp, "c/");
+
+  EXPECT_EQ(e1.exists, e0.exists);
+  EXPECT_EQ(e1.size, e0.size);
+  EXPECT_EQ(e1.content_type, e0.content_type);
+  EXPECT_EQ(e1.probe, e0.probe);
+  EXPECT_EQ(e1.etag, e0.etag) << "conversion changed an empty object's ETag";
+  EXPECT_EQ(e1.mtime, e0.mtime)
+      << "conversion changed an empty object's Last-Modified";
+  EXPECT_EQ(e1.listed, e0.listed);
+  EXPECT_EQ(e1.listed_size, e0.listed_size);
+  EXPECT_EQ(e1.listed_etag, e0.listed_etag);
+  EXPECT_EQ(e1.listed_mtime, e0.listed_mtime);
+
+  EXPECT_EQ(c1.exists, c0.exists);
+  EXPECT_EQ(c1.size, c0.size);
+  EXPECT_EQ(c1.content_type, c0.content_type);
+  EXPECT_EQ(c1.probe, c0.probe);
+  EXPECT_EQ(c1.etag, c0.etag);
+  EXPECT_EQ(c1.mtime, c0.mtime);
+  EXPECT_EQ(c1.body, c0.body);
+  EXPECT_EQ(c1.listed, c0.listed);
+  EXPECT_EQ(c1.listed_size, c0.listed_size);
+  EXPECT_EQ(c1.listed_etag, c0.listed_etag);
+  EXPECT_EQ(c1.listed_mtime, c0.listed_mtime);
+}
+
 /* The root object is converted as the directory object it is:  its
  * bytes and attributes move to the root's `.folder`, and none of them
  * become the bucket's (DECISIONS.md 2026-10-13).  Before, the bucket
@@ -7211,6 +7429,76 @@ TEST_F(NSFSNooBaaBucketTest, AStrayAttributeOnTheBucketDirectoryIsNotBucketState
       << "conversion made a stray attribute bucket state";
   EXPECT_EQ(str_xattr(bucket_path(), "user.stray"), "stray")
       << "conversion removed a name that was not its to remove";
+}
+
+/* With MD5 on, NooBaa stores the ETag, and conversion carries it across:
+ * the ETag recorded for an empty object must not replace it. */
+TEST_F(NSFSNooBaaBucketTest, ConversionKeepsAnEmptyDirectoryObjectsStoredMD5)
+{
+  lay_noobaa_directory_object(bucket_path() / "e", "", "text/x-e", "e");
+  const std::string md5{"d41d8cd98f00b204e9800998ecf8427e"};
+  ASSERT_EQ(::setxattr((bucket_path() / "e").c_str(), "user.content_md5",
+		       md5.data(), md5.size(), 0), 0);
+
+  const ClientView e0 = client_view(bucket.get(), env->dpp, "e/");
+  ASSERT_EQ(e0.etag, md5) << "the stored MD5 was not read as the ETag";
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_SHARED), 0);
+  const ClientView e1 = client_view(bucket.get(), env->dpp, "e/");
+  EXPECT_EQ(e1.etag, md5);
+  EXPECT_EQ(e1.listed_etag, md5);
+  EXPECT_EQ(e1.mtime, e0.mtime);
+}
+
+/* The root object in NooBaa's format:  the marker and its attributes on
+ * the bucket's own directory, which also carries the bucket's state
+ * under `user.nsfs:`.  Only the object's are its attributes. */
+TEST_F(NSFSNooBaaBucketTest, TheRootObjectReadsWithoutTheBucketsState)
+{
+  lay_noobaa_directory_object(bucket_path(), "root bytes", "text/x-root", "root");
+  ASSERT_EQ(::getxattr(bucket_path().c_str(), "user.nsfs:bucket_info",
+		       nullptr, 0) > 0, true)
+      << "the bucket directory carries no state;  nothing here would be "
+	 "proving the exclusion";
+
+  const ClientView r = client_view(bucket.get(), env->dpp, "/");
+  ASSERT_TRUE(r.exists);
+  EXPECT_EQ(r.size, 10u);
+  EXPECT_EQ(r.content_type, "text/x-root");
+  EXPECT_EQ(r.probe, "root");
+  EXPECT_EQ(r.body, "root bytes");
+  EXPECT_FALSE(r.listed);
+
+  auto obj = bucket->get_object(rgw_obj_key("/"));
+  ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
+  EXPECT_EQ(obj->get_attrs().count("bucket_info"), 0u)
+      << "the bucket's state was read as the root object's";
+}
+
+/* A `.folder` without the marker is not a directory object to NooBaa,
+ * whose reader returns NoSuchKey for a directory that lacks it.  It is
+ * the control for the marker:  the same layout with the marker is. */
+TEST_F(NSFSNooBaaBucketTest, ADirectoryWithoutTheMarkerIsNotItsObject)
+{
+  lay_noobaa_directory_object(bucket_path() / "m", "marked", "text/x-m", "m");
+  sf::create_directories(bucket_path() / "u");
+  write_file(bucket_path() / "u" / "x", "x");
+
+  EXPECT_TRUE(client_view(bucket.get(), env->dpp, "m/").exists);
+  const ClientView u = client_view(bucket.get(), env->dpp, "u/");
+  EXPECT_FALSE(u.exists) << "a plain directory read as an object";
+  EXPECT_FALSE(u.listed);
+}
+
+TEST_F(NSFSNooBaaBucketTest, AWriteToADirectoryObjectIsRejected)
+{
+  lay_noobaa_directory_object(bucket_path() / "e", "", "text/x-e", "e");
+
+  auto obj = bucket->get_object(rgw_obj_key("e/"));
+  EXPECT_TRUE(client_view(bucket.get(), env->dpp, "e/").exists);
+  EXPECT_FALSE(sf::exists(bucket_path() / "e" / ".folder"))
+      << "a sentinel was written into a base bucket";
 }
 
   auto marked = marked_bucket(testname + "-ours");
@@ -7393,12 +7681,78 @@ TEST_F(NSFSNooBaaStateTest, NsfsStateWinsOverNooBaas)
       << "their record was consulted for a bucket that has state of ours";
 }
 
+/* Conversion records the bucket's owner on an object that records none.
+ *
+ * NooBaa's format has nowhere to put an ACL, so
+ * `NooBaaXattrStrategy::disk_name(RGW_ATTR_ACL)` is empty and nothing
+ * is stored;  NooBaa returns the bucket's `owner_account` as every
+ * object's owner.  Adoption is where the tree becomes consistent with
+ * the imported accounts, so conversion writes the bucket's owner down
+ * (DECISIONS.md 2026-10-11).  Not the file's uid:  that is the POSIX
+ * identity the file was written as, and the assertion against it is
+ * what distinguishes the two owners.
+ *
+ * The sideloaded file has no ACL by construction, which is the case. */
+TEST_F(NSFSNooBaaBucketTest, ConversionRecordsTheBucketOwner)
+{
+  const sf::path obj{bucket_path() / "sideloaded.txt"};
+  {
+    int fd = ::open(obj.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    ASSERT_GE(fd, 0) << cpp_strerror(errno);
+    ASSERT_EQ(::write(fd, "x", 1), 1);
+    ::close(fd);
+  }
+
+  struct stat st{};
+  ASSERT_EQ(::stat(obj.c_str(), &st), 0);
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_TRUE(b->xattr_strategy()->disk_name(RGW_ATTR_ACL).empty())
+      << "their mapping has somewhere to put an ACL after all;  the "
+	 "premise of this test is gone";
+
+  /* Where the ACL will land once the bucket is shared.  Asked of the
+   * strategy directly, because the bucket is still base and its own
+   * strategy has no name for an ACL at all. */
   nsfs::PrefixedXattrStrategy prefixed;
   const std::string disk = prefixed.disk_name(RGW_ATTR_ACL);
+  ASSERT_FALSE(disk.empty()) << "shared has nowhere to put an ACL";
+
+  /* Both polarities, in one run.  Absent before, present after -- so
+   * the assertion after the conversion is reachable, and what satisfies
+   * it is the conversion rather than something that was already
+   * there. */
+  ASSERT_EQ(::getxattr(obj.c_str(), disk.c_str(), nullptr, 0), -1);
+  ASSERT_EQ(errno, ENODATA)
+      << "the sideloaded object already carries " << disk
+      << ";  nothing here would then be proving the capture";
+
+  ASSERT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_SHARED), 0);
+  ASSERT_STREQ(b->profile_name(), "shared");
+
+  char buf[4096];
+  ssize_t len = ::getxattr(obj.c_str(), disk.c_str(), buf, sizeof(buf));
+  ASSERT_GT(len, 0)
+      << "the converted object carries no " << disk
+      << ";  it has no owner recorded and lists as unknown";
+
+  bufferlist bl;
+  bl.append(buf, len);
+  RGWAccessControlPolicy policy;
+  auto it = bl.cbegin();
+  ASSERT_NO_THROW(policy.decode(it));
+
   EXPECT_EQ(policy.get_owner().id, bucket->get_info().owner)
       << "the recorded owner is not the bucket's";
   EXPECT_NE(to_string(policy.get_owner().id), std::to_string(st.st_uid))
       << "the file's uid was recorded as its S3 owner";
+
+  /* RGW's default policy, not a bare owner.  An owner with no grants
+   * is more restrictive than the absence it replaced:  with no ACL,
+   * authorization falls through to the bucket. */
+  EXPECT_FALSE(policy.get_acl().get_grant_map().empty())
+      << "the captured ACL grants nobody anything";
+}
 
 /* A base bucket loaded the way a request loads it lists in NooBaa's format.
  *
@@ -7467,8 +7821,40 @@ TEST_F(NSFSNooBaaBucketTest, ALoadedBaseBucketListsInNooBaaFormat)
   EXPECT_STREQ(mb->get_dir()->get_xattr_strategy()->name(), "rgw");
 }
 
+/* The sentinel carries the mode every object nsfs creates carries:
+ * NooBaa's, 0660 by default (DECISIONS.md 2026-10-11).
+ *
+ * umask is set for the duration, because `openat` applies it and a
+ * developer's umask is not the test's to assume;  022 takes the group
+ * write bit, so this also requires the create mode to be restored. */
+TEST_F(NSFSNooBaaBucketTest, ConversionGivesTheSentinelAnObjectMode)
+{
+  const mode_t saved = ::umask(022);
+  auto restore = make_scope_guard([saved] { ::umask(saved); });
   nsfs::init_create_modes(env->dpp, env->cct.get());
 
+  const sf::path dir{bucket_path() / "dirobj"};
+  ASSERT_TRUE(sf::create_directories(dir));
+  {
+    const char* v = "0";
+    ASSERT_EQ(::setxattr(dir.c_str(), "user.noobaa.dir_content", v, 1, 0), 0)
+	<< cpp_strerror(errno)
+	<< ";  without their marker this is an ordinary directory and the "
+	   "sentinel is never created";
+  }
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_SHARED), 0);
+
+  const sf::path sentinel{dir / ".folder"};
+  ASSERT_TRUE(sf::exists(sentinel))
+      << "the directory object was not converted to a sentinel";
+
+  struct stat st{};
+  ASSERT_EQ(::stat(sentinel.c_str(), &st), 0);
+  EXPECT_EQ(st.st_mode & 07777, nsfs::file_create_mode())
+      << "the sentinel does not carry the mode an object written through "
+	 "S3 carries";
 }
 
 /* An object carrying a `user.noobaa.*` attribute no reviewed release of
@@ -7536,6 +7922,127 @@ TEST_F(NSFSNooBaaBucketTest, AnUnknownNooBaaAttributeStopsTheConversion)
   EXPECT_EQ(client_view(bucket.get(), env->dpp, "odd").body, "abc");
 }
 
+/* A group the process belongs to that is not its primary one.
+ *
+ * `chown(2)` lets an unprivileged owner change a file's group to any
+ * group it is a member of.  That is what makes the inheritance path
+ * reachable without root:  `inherit_ids()` skips only when the uid
+ * *and* the gid already match the gateway's, so a source whose group
+ * differs forces the `fchown` that carries ownership across. */
+static std::optional<gid_t> other_group()
+{
+  int n = ::getgroups(0, nullptr);
+  if (n <= 0) {
+    return std::nullopt;
+  }
+  std::vector<gid_t> gs(n);
+  if (::getgroups(n, gs.data()) != n) {
+    return std::nullopt;
+  }
+  const gid_t mine = ::getegid();
+  for (gid_t g : gs) {
+    if (g != mine) {
+      return g;
+    }
+  }
+  return std::nullopt;
+}
+
+/* What conversion creates inherits the ownership of what it
+ * re-expresses.
+ *
+ * The sentinel stands in for the directory, so it carries the
+ * directory's uid and gid -- not the gateway's, which would leave a
+ * converted directory object unreadable to the account that owns the
+ * data.  The uid cannot be varied without privilege, so the group is
+ * what this varies, and it exercises the same `fchown`. */
+TEST_F(NSFSNooBaaBucketTest, ConversionGivesTheSentinelTheDirectorysGroup)
+{
+  const auto alt = other_group();
+  if (!alt) {
+    GTEST_SKIP() << "only one group;  nothing to inherit that differs";
+  }
+
+  const sf::path dir{bucket_path() / "dirobj"};
+  ASSERT_TRUE(sf::create_directories(dir));
+  {
+    const char* v = "0";
+    ASSERT_EQ(::setxattr(dir.c_str(), "user.noobaa.dir_content", v, 1, 0), 0)
+	<< cpp_strerror(errno);
+  }
+  ASSERT_EQ(::chown(dir.c_str(), static_cast<uid_t>(-1), *alt), 0)
+      << cpp_strerror(errno);
+
+  struct stat dst{};
+  ASSERT_EQ(::stat(dir.c_str(), &dst), 0);
+  ASSERT_EQ(dst.st_gid, *alt) << "the premise is gone;  the chown did nothing";
+  ASSERT_NE(dst.st_gid, ::getegid())
+      << "the source group matches ours, so inherit_ids() would skip and "
+	 "this test could not fail";
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_SHARED), 0);
+
+  const sf::path sentinel{dir / ".folder"};
+  ASSERT_TRUE(sf::exists(sentinel));
+  struct stat st{};
+  ASSERT_EQ(::stat(sentinel.c_str(), &st), 0);
+  EXPECT_EQ(st.st_gid, *alt)
+      << "the sentinel kept the gateway's group instead of the group of "
+	 "the directory it re-expresses";
+  EXPECT_EQ(st.st_uid, dst.st_uid) << "the sentinel's uid is not the "
+      "directory's";
+}
+
+
+/* Without the capability, conversion fails and leaves nothing behind.
+ *
+ * `CAP_CHOWN` cannot be dropped in a test process -- a thread that
+ * drops it cannot regain it, which would poison every later test -- so
+ * the condition is injected through the same hint the suite uses.
+ *
+ * Both halves matter.  Failing is the point, and so is removing the
+ * file it had already created:  a sentinel left behind with the
+ * gateway's ownership is the outcome the failure exists to prevent. */
+TEST_F(NSFSNooBaaBucketTest, ConversionFailsWhenItCannotInheritOwnership)
+{
+  const auto alt = other_group();
+  if (!alt) {
+    GTEST_SKIP() << "only one group;  the chown would be skipped anyway";
+  }
+
+  const sf::path dir{bucket_path() / "dirobj"};
+  ASSERT_TRUE(sf::create_directories(dir));
+  {
+    const char* v = "0";
+    ASSERT_EQ(::setxattr(dir.c_str(), "user.noobaa.dir_content", v, 1, 0), 0)
+	<< cpp_strerror(errno);
+  }
+  ASSERT_EQ(::chown(dir.c_str(), static_cast<uid_t>(-1), *alt), 0)
+      << cpp_strerror(errno);
+
+  std::map<std::string, std::string> params{{"enable", "true"}};
+  std::map<std::string, std::string> out;
+  ASSERT_EQ(driver->driver_hint(env->dpp, "inject-no-chown", params, &out), 0);
+  ASSERT_EQ(out["enabled"], "true");
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  EXPECT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_SHARED),
+	    -EPERM)
+      << "conversion proceeded without being able to set ownership";
+
+  EXPECT_FALSE(sf::exists(dir / ".folder"))
+      << "the failed conversion left a sentinel owned by the gateway, which "
+	 "is the state failing is meant to prevent";
+
+  /* and the other polarity:  with the injection off the same tree
+   * converts, so the failure above was the injection and not some
+   * unrelated failure */
+  params["enable"] = "false";
+  ASSERT_EQ(driver->driver_hint(env->dpp, "inject-no-chown", params, &out), 0);
+  EXPECT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_SHARED), 0);
+  EXPECT_TRUE(sf::exists(dir / ".folder"));
+}
 
 /* Object lock reaches RGW.
  *
@@ -8615,24 +9122,212 @@ TEST_F(NSFSBucketTest, ObjectsInAMarkedBucketKeepNsfsNames)
   EXPECT_FALSE(names.contains("user.noobaa.content_type"));
 }
 
+/* A bucket mid-upgrade:  marked as nsfs, and still holding objects in
+ * NooBaa's format.
+ *
+ * The bucket is created marked, which is what every bucket this
+ * gateway makes is, and then told it is converting -- which is what
+ * the upgrade command will do at its start and undo when it finishes.
+ * Nothing else may set that marker.
+ */
+class NSFSConvertingBucketTest : public NSFSBucketTest {
+public:
+  void SetUp() override {
+    NSFSBucketTest::SetUp();
+    auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+    ASSERT_EQ(b->resolve_profile(env->dpp), 0);
     ASSERT_STREQ(b->profile_name(), "shared");
+    ASSERT_EQ(b->mark_converting(env->dpp), 0);
+    ASSERT_TRUE(b->is_converting());
+  }
+
+  sf::path bucket_path() const { return bp / "root" / testname; }
+
+  /* a NooBaa object, laid down by hand:  NooBaa's attribute names,
+   * with no nsfs attribute anywhere on it */
   void write_nb_object(const std::string& name) {
+    const sf::path p{bucket_path() / name};
+    write_file(p, "their bytes");
+    const std::string ct{"text/plain"};
+    ASSERT_EQ(::setxattr(p.c_str(), "user.noobaa.content_type",
+			 ct.data(), ct.size(), 0), 0);
+    const std::string md5{"0123456789abcdef0123456789abcdef"};
+    ASSERT_EQ(::setxattr(p.c_str(), "user.content_md5",
+			 md5.data(), md5.size(), 0), 0);
+  }
+};
+
+/* NooBaa's attributes are read on a converting bucket. */
 TEST_F(NSFSConvertingBucketTest, ReadsNooBaaAttributes)
 {
   write_nb_object("theirs.bin");
 
+  auto obj = bucket->get_object(rgw_obj_key("theirs.bin"));
+  ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
+  ASSERT_EQ(obj->get_obj_attrs(null_yield, env->dpp), 0);
+
+  auto& attrs = obj->get_attrs();
+  auto ct = attrs.find(RGW_ATTR_CONTENT_TYPE);
+  ASSERT_NE(ct, attrs.end()) << "content type was dropped as foreign";
+  EXPECT_EQ(ct->second.to_str(), "text/plain");
+  auto etag = attrs.find(RGW_ATTR_ETAG);
+  ASSERT_NE(etag, attrs.end()) << "etag was dropped as foreign";
+  EXPECT_EQ(etag->second.to_str(), "0123456789abcdef0123456789abcdef");
+}
+
+/* And are not, on a bucket that is not converting.
+ *
+ * The control the chain needs:  without it the test above passes for a
+ * driver that reads both formats everywhere, which is the arrangement
+ * the marker exists to avoid. */
 TEST_F(NSFSBucketTest, DoesNotReadNooBaaAttributesWithoutTheMarker)
 {
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->resolve_profile(env->dpp), 0);
+  ASSERT_FALSE(b->is_converting());
+
+  const sf::path p{bp / "root" / testname / "theirs.bin"};
+  write_file(p, "their bytes");
   const std::string ctype{"text/plain"};
+  ASSERT_EQ(::setxattr(p.c_str(), "user.noobaa.content_type",
+		       ctype.data(), ctype.size(), 0), 0);
+  const std::string md5{"0123456789abcdef0123456789abcdef"};
+  ASSERT_EQ(::setxattr(p.c_str(), "user.content_md5",
+		       md5.data(), md5.size(), 0), 0);
+
+  auto obj = bucket->get_object(rgw_obj_key("theirs.bin"));
+  ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
+  ASSERT_EQ(obj->get_obj_attrs(null_yield, env->dpp), 0);
+
+  /* Both keys are present either way:  the driver guesses a content
+   * type from the name and synthesizes an etag from the stat when an
+   * object carries neither.  So the values are what distinguish the
+   * two cases, and what is asserted is that neither came from NooBaa's
+   * attribute. */
+  auto& attrs = obj->get_attrs();
+  auto ct = attrs.find(RGW_ATTR_CONTENT_TYPE);
+  if (ct != attrs.end()) {
+    EXPECT_NE(ct->second.to_str(), "text/plain")
+	<< "their content type was read on a bucket that is not converting";
+  }
+  auto etag = attrs.find(RGW_ATTR_ETAG);
+  if (etag != attrs.end()) {
+    EXPECT_NE(etag->second.to_str(), "0123456789abcdef0123456789abcdef")
+	<< "their etag was read on a bucket that is not converting";
+  }
+}
+
+/* A NooBaa directory object, which the walk cannot see.
+ *
+ * NooBaa's empty one has no sentinel:  the fact is
+ * user.noobaa.dir_content on the directory.  This is the consumer the
+ * marker is worth having for -- it is a syscall per subdirectory, and
+ * the attribute chain is not. */
 TEST_F(NSFSConvertingBucketTest, ListsNooBaaEmptyDirectoryObject)
 {
+  sf::create_directories(bucket_path() / "photos");
+  set_u64_xattr(bucket_path() / "photos", "user.noobaa.dir_content", 0);
+  /* an ordinary prefix directory beside it, which must not be emitted */
+  sf::create_directories(bucket_path() / "plain");
+  write_file(bucket_path() / "plain" / "a.txt", "x");
+
+  rgw::sal::Bucket::ListParams params;
+  rgw::sal::Bucket::ListResults results;
+  ASSERT_EQ(bucket->list(env->dpp, params, 128, results, null_yield), 0);
+
+  std::set<std::string> keys;
+  for (auto& o : results.objs) {
+    keys.insert(o.key.name);
+  }
+  EXPECT_TRUE(keys.contains("photos/")) << "their folder was invisible";
+  EXPECT_TRUE(keys.contains("plain/a.txt"));
+  EXPECT_FALSE(keys.contains("plain/")) << "a prefix was emitted as an object";
+}
+
+/* NooBaa's directory objects on a bucket mid-conversion, before the
+ * sweep reaches them:  read through the fallback, with the directory's
+ * attributes. */
 TEST_F(NSFSConvertingBucketTest, ReadsNooBaaDirectoryObjects)
 {
+  lay_noobaa_directory_object(bucket_path() / "e", "", "text/x-e", "e");
+  lay_noobaa_directory_object(bucket_path() / "c", "dir bytes", "text/x-c", "c");
+
+  const ClientView e = client_view(bucket.get(), env->dpp, "e/");
+  ASSERT_TRUE(e.exists);
+  EXPECT_EQ(e.size, 0u);
+  EXPECT_EQ(e.content_type, "text/x-e");
+  EXPECT_EQ(e.probe, "e");
+  EXPECT_TRUE(e.listed);
+
+  const ClientView c = client_view(bucket.get(), env->dpp, "c/");
+  ASSERT_TRUE(c.exists);
+  EXPECT_EQ(c.size, 9u);
+  EXPECT_EQ(c.content_type, "text/x-c");
+  EXPECT_EQ(c.probe, "c");
+  EXPECT_EQ(c.body, "dir bytes");
+  EXPECT_TRUE(c.listed);
+  EXPECT_EQ(c.listed_size, 9u);
+}
+
+  lay_noobaa_directory_object(bucket_path() / "e", "", "text/x-e", "e");
+  lay_noobaa_directory_object(bucket_path() / "c", "dir bytes", "text/x-c", "c");
+
+  for (const char* k : {"e/", "c/"}) {
+    auto obj = bucket->get_object(rgw_obj_key(k));
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->convert_tree(env->dpp, null_yield, nullptr, nullptr), 0);
+  for (const char* k : {"e/", "c/"}) {
+    const ClientView v = client_view(bucket.get(), env->dpp, k);
+  lay_noobaa_directory_object(bucket_path() / "c", "dir bytes", "text/x-c", "c");
+  const ClientView v0 = client_view(bucket.get(), env->dpp, "c/");
+  ASSERT_TRUE(v0.exists);
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->convert_tree(env->dpp, null_yield, nullptr, nullptr), 0);
+  const ClientView v1 = client_view(bucket.get(), env->dpp, "c/");
+  lay_noobaa_directory_object(bucket_path() / "e", "", "text/x-e", "e");
+
+  Attrs attrs;
+  bufferlist v;
+  v.append("changed");
+  attrs[RGW_ATTR_META_PREFIX "probe"] = v;
+  {
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->convert_tree(env->dpp, null_yield, nullptr, nullptr), 0);
+  const ClientView v1 = client_view(bucket.get(), env->dpp, "e/");
   write_nb_object("w");
 
 TEST_F(NSFSBucketTest, DoesNotListNooBaaDirectoryObjectWithoutTheMarker)
 {
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->resolve_profile(env->dpp), 0);
+  ASSERT_FALSE(b->is_converting());
+
+  sf::create_directories(bp / "root" / testname / "photos");
+  set_u64_xattr(bp / "root" / testname / "photos",
+		"user.noobaa.dir_content", 0);
+
+  rgw::sal::Bucket::ListParams params;
+  rgw::sal::Bucket::ListResults results;
+  ASSERT_EQ(bucket->list(env->dpp, params, 128, results, null_yield), 0);
+  for (auto& o : results.objs) {
+    EXPECT_NE(o.key.name, "photos/");
+  }
+}
+
   write_nb_object("theirs.bin");
+  const sf::path p{bucket_path() / "theirs.bin"};
+  for (const auto& [k, v] : {std::pair{"a", "1"}, std::pair{"b", "2"}}) {
+    const std::string n = std::string("user.noobaa.tag.") + k;
+    ASSERT_EQ(::setxattr(p.c_str(), n.c_str(), v, strlen(v), 0), 0) << n;
+  }
+  Attrs del;
+  del[RGW_ATTR_TAGS] = bufferlist{};
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->convert_tree(env->dpp, null_yield, nullptr, nullptr), 0);
   EXPECT_TRUE(after.contains("user.nsfs:rgw.content_type"));
 
 /* Object lock:  three plain NooBaa attributes, two encoded nsfs
@@ -8886,14 +9581,123 @@ TEST_F(NSFSBucketTest, TagsInAMarkedBucketAreOneAttribute)
   EXPECT_TRUE(encoded) << "our encoded tag set was not written";
 }
 
+/* The upgrade:  a bucket in NooBaa's format moved to an nsfs one,
+ * with its tree rewritten.
+ *
+ * Starts from base, which is what a tree we adopted is, and asks for
+ * strong -- which is what set_profile() does for an operator through
+ * /admin/nsfs/profile.
+ */
+class NSFSUpgradeTest : public NSFSNooBaaBucketTest {
+public:
+  /* a NooBaa object, by hand:  NooBaa's names, nothing of nsfs's */
   void nb_object(const std::string& name, const char* ctype) {
-  void nb_folder(const std::string& name, const char* ctype) {
-  void nb_delete_marker(const std::string& leaf, const std::string& vid) {
+    const sf::path p{bucket_path() / name};
+    sf::create_directories(p.parent_path());
+    write_file(p, "their bytes");
+    const std::string ct{ctype};
+    ASSERT_EQ(::setxattr(p.c_str(), "user.noobaa.content_type",
+			 ct.data(), ct.size(), 0), 0);
+    const std::string md5{"0123456789abcdef0123456789abcdef"};
+    ASSERT_EQ(::setxattr(p.c_str(), "user.content_md5",
+			 md5.data(), md5.size(), 0), 0);
+  }
 
+  /* an empty NooBaa directory object:  no sentinel, the fact is on
+   * the directory */
+  void nb_folder(const std::string& name, const char* ctype) {
+    const sf::path p{bucket_path() / name};
+    sf::create_directories(p);
+    set_u64_xattr(p, "user.noobaa.dir_content", 0);
+    const std::string ct{ctype};
+    ASSERT_EQ(::setxattr(p.c_str(), "user.noobaa.content_type",
+			 ct.data(), ct.size(), 0), 0);
+  }
+
+  /* a NooBaa version entry, under .versions/.  NooBaa's layout is
+   * nsfs's -- nsfs borrowed it -- so only the attribute names differ. */
+  void nb_version(const std::string& leaf, const std::string& vid,
+		     const char* ctype) {
+    const sf::path vdir{bucket_path() / ".versions"};
+    sf::create_directories(vdir);
+    const sf::path p{vdir / (leaf + "_" + vid)};
+    write_file(p, "their old bytes");
+    const std::string ct{ctype};
+    ASSERT_EQ(::setxattr(p.c_str(), "user.noobaa.content_type",
+			 ct.data(), ct.size(), 0), 0);
+    ASSERT_EQ(::setxattr(p.c_str(), "user.noobaa.version_id",
+			 vid.data(), vid.size(), 0), 0);
+  }
+
+  /* a NooBaa delete marker:  no bytes, and no ACL of any kind */
+  void nb_delete_marker(const std::string& leaf, const std::string& vid) {
+    const sf::path vdir{bucket_path() / ".versions"};
+    sf::create_directories(vdir);
+    const sf::path p{vdir / (leaf + "_" + vid)};
+    write_file(p, "");
+    const std::string t{"true"};
+    ASSERT_EQ(::setxattr(p.c_str(), "user.noobaa.delete_marker",
+			 t.data(), t.size(), 0), 0);
+    ASSERT_EQ(::setxattr(p.c_str(), "user.noobaa.version_id",
+			 vid.data(), vid.size(), 0), 0);
+  }
+
+  sf::path version_path(const std::string& leaf, const std::string& vid) {
+    return bucket_path() / ".versions" / (leaf + "_" + vid);
+  }
+
+  /* RGW stores several string attributes as counted strings, so a
+   * value read back through the nsfs strategy carries the terminator
+   * and one read through NooBaa's does not -- NooBaa's is not a counted
+   * format.  The conversion is not supposed to change the value, and
+   * the byte is how RGW represents it rather than part of it. */
+  static std::string unterminated(const bufferlist& bl) {
+    std::string v = bl.to_str();
+    while (!v.empty() && (v.back() == '\0')) {
+      v.pop_back();
+    }
+    return v;
+  }
+
+  static std::set<std::string> xattr_names(const sf::path& p) {
+    char buf[8192];
+    std::set<std::string> names;
+    ssize_t len = ::listxattr(p.c_str(), buf, sizeof(buf));
+    if (len <= 0) {
+      return names;
+    }
+    for (const char* q = buf; q < buf + len; q += strlen(q) + 1) {
+      names.insert(q);
+    }
+    return names;
+  }
+
+  int upgrade(nsfs::convert_cb_t* cb, nsfs::ConvertProgress* progress) {
+    auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+    return b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_STRONG,
+			  cb, progress);
+  }
+};
+
+/* A bucket's own state is held as RGW attributes whatever its format
+ * (DECISIONS.md 2026-10-13), so a base bucket writes it there and the
+ * upgrade has nothing to rewrite.
+ *
+ * Before, a base bucket named it through NooBaa's strategy, which put
+ * RGW_ATTR_IAM_POLICY under `user.nsfs:user.rgw.iam-policy`, and the
+ * upgrade carried a step to rename it. */
 TEST_F(NSFSUpgradeTest, ABaseBucketWritesItsStateAsRGWAttributes)
 {
   static constexpr const char* base_name = "user.nsfs:user.rgw.iam-policy";
   static constexpr const char* nsfs_name = "user.nsfs:rgw.iam-policy";
+  const std::string policy{"{\"Version\":\"2012-10-17\"}"};
+
+  bufferlist bl;
+  bl.append(policy);
+  rgw::sal::Attrs add;
+  add[RGW_ATTR_IAM_POLICY] = bl;
+
+  auto before = xattr_names(bucket_path());
   EXPECT_TRUE(before.contains(nsfs_name))
       << "a base bucket did not write its state as RGW attributes";
   EXPECT_FALSE(before.contains(base_name));
@@ -8904,23 +9708,103 @@ TEST_F(NSFSUpgradeTest, ABaseBucketWritesItsStateAsRGWAttributes)
   ASSERT_NE(p, bucket->get_attrs().end()) << "the policy was not read back";
   EXPECT_EQ(p->second.to_str(), policy);
 
+  nsfs::ConvertProgress prog;
+  ASSERT_EQ(upgrade(nullptr, &prog), 0);
+  ASSERT_TRUE(prog.complete);
+
+  auto after = xattr_names(bucket_path());
   EXPECT_TRUE(after.contains(nsfs_name));
   EXPECT_FALSE(after.contains(base_name));
   EXPECT_EQ(str_xattr(bucket_path(), nsfs_name), policy);
 
+  /* the profile markers are not bucket state and the pass leaves them
+   * alone;  the mask is still there and still says strong */
+  EXPECT_TRUE(after.contains(nsfs::EXTENSIONS_XATTR));
+  EXPECT_FALSE(after.contains(nsfs::CONVERTING_XATTR));
+}
+
+/* .versions/ is a reserved name, so the tree walk skips it.  It skipped
+ * the version entries with it until convert_versions() existed, which
+ * left every one of them with NooBaa attributes while the bucket read
+ * RGW's. */
+TEST_F(NSFSUpgradeTest, ConvertsVersionEntries)
+{
+  const std::string v1{"mtime-dlyy3p93o4mt-ino-430o2"};
+  const std::string v2{"mtime-dlyy3p96naq6-ino-430o3"};
   nb_object("photo.jpg", "image/jpeg");
   nb_version("photo.jpg", v1, "image/jpeg");
+  /* a leaf with an underscore in it, which is what makes the entry
+   * name ambiguous and the split non-trivial */
   nb_version("my_photo.jpg", v2, "image/png");
 
+  nsfs::ConvertProgress prog;
+  ASSERT_EQ(upgrade(nullptr, &prog), 0);
+  EXPECT_EQ(prog.objects, 1u);
+  EXPECT_EQ(prog.versions, 2u)
+      << "the version entries were not visited";
+  EXPECT_TRUE(prog.complete);
+
+  for (const auto& [leaf, vid] :
+       std::vector<std::pair<std::string, std::string>>{
+	 {"photo.jpg", v1}, {"my_photo.jpg", v2}}) {
+    auto names = xattr_names(version_path(leaf, vid));
+    EXPECT_TRUE(names.contains("user.nsfs:rgw.content_type"))
+	<< leaf << " version kept no content type we can read";
+    EXPECT_FALSE(names.contains("user.noobaa.content_type"))
+	<< leaf << " version kept their attribute;  a later write would "
+	<< "add ours beside it";
+  }
+}
+
   nb_object("photo.jpg", "image/jpeg");
+
+/* The severe one.  NooBaa's delete marker is user.noobaa.delete_marker and
+ * nsfs's is user.nsfs:delete_marker;  every read resolves the name
+ * through the bucket's strategy, and there is no chaining reader, so a
+ * marker left as a NooBaa attribute stops being a marker once the mask is
+ * written.  The object it deleted comes back -- 200 with no bytes where
+ * S3 owes 404 -- and nothing reports it. */
+TEST_F(NSFSUpgradeTest, ADeleteMarkerStillReadsAsOneAfterConversion)
+{
+  const std::string vid{"mtime-dlyy3p9ezde0-ino-hu35vm"};
+  /* no leaf object:  a DELETE of a key that does not exist still
+   * writes a marker, and that is the case with no ACL to inherit */
   nb_delete_marker("gone.bin", vid);
+
+  nsfs::ConvertProgress prog;
+  ASSERT_EQ(upgrade(nullptr, &prog), 0);
+  EXPECT_EQ(prog.versions, 1u);
+
+  auto names = xattr_names(version_path("gone.bin", vid));
+  EXPECT_TRUE(names.contains("user.nsfs:delete_marker"))
+      << "the marker is no longer a marker;  the deleted object is back";
+  EXPECT_FALSE(names.contains("user.noobaa.delete_marker"));
+}
 
 /* Conversion records the bucket's owner on a version, as on any object
  * that records none (DECISIONS.md 2026-10-11).  A delete marker needs
  * this too -- RGW emits an <Owner> for one. */
+TEST_F(NSFSUpgradeTest, ConversionCapturesTheOwnerOfAVersion)
+{
+  const std::string vid{"mtime-dlyy3p99mgtk-ino-430o4"};
+  const std::string dmid{"mtime-dlyy3p9muo1r-ino-hu35vn"};
   nb_version("doc.txt", vid, "text/plain");
   nb_delete_marker("doc.txt", dmid);
 
+  for (const auto& p : {version_path("doc.txt", vid),
+			version_path("doc.txt", dmid)}) {
+    ASSERT_FALSE(xattr_names(p).contains("user.nsfs:rgw.acl"))
+	<< "nothing to prove:  " << p << " already had an ACL";
+  }
+
+  nsfs::ConvertProgress prog;
+  ASSERT_EQ(upgrade(nullptr, &prog), 0);
+  EXPECT_EQ(prog.versions, 2u);
+
+  for (const auto& p : {version_path("doc.txt", vid),
+			version_path("doc.txt", dmid)}) {
+    EXPECT_TRUE(xattr_names(p).contains("user.nsfs:rgw.acl"))
+	<< p << " has no owner after conversion, so it lists as unknown";
     char buf[4096];
     ssize_t len = ::getxattr(p.c_str(), "user.nsfs:rgw.acl", buf, sizeof(buf));
     ASSERT_GT(len, 0);
@@ -8933,16 +9817,42 @@ TEST_F(NSFSUpgradeTest, ABaseBucketWritesItsStateAsRGWAttributes)
 	<< p << " records an owner that is not the bucket's";
   }
 }
+
+/* The lock file is nsfs's, not a version, and must not be counted or
+ * rewritten as one. */
+TEST_F(NSFSUpgradeTest, TheVersionsLockIsNotAVersion)
+{
+  const std::string vid{"mtime-dlyy3p9clmwx-ino-430o5"};
   nb_version("only.bin", vid, "text/plain");
+  write_file(bucket_path() / ".versions" / ".lock", "");
+
+  nsfs::ConvertProgress prog;
+  ASSERT_EQ(upgrade(nullptr, &prog), 0);
+  EXPECT_EQ(prog.versions, 1u);
+}
 
 /* No marker is bucket metadata, so none reaches the S3 attribute set
  * -- including while a conversion is in flight, which is the only time
  * the converting marker exists -- and a write of the bucket's
  * attributes, which replaces them all, leaves every marker in place. */
+TEST_F(NSFSUpgradeTest, TheMarkersAreNotBucketAttributes)
+{
   nb_object("flat.bin", "text/plain");
   ASSERT_EQ(static_cast<rgw::sal::NSFSBucket*>(bucket.get())
 	      ->set_owns_storage(env->dpp, false), 0);
 
+  nsfs::convert_cb_t stop =
+    [](const DoutPrefixProvider*, const nsfs::ConvertEvent& ev) {
+      return (ev.kind == nsfs::ConvertEvent::Kind::object) ? -EIO : 0;
+    };
+  nsfs::ConvertProgress prog;
+  ASSERT_NE(upgrade(&stop, &prog), 0);
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_TRUE(b->is_converting())
+      << "nothing to check:  the conversion did not stop";
+
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
   auto no_marker = [](const rgw::sal::Attrs& attrs) {
     for (const auto& [k, _] : attrs) {
       EXPECT_FALSE(k.starts_with("marker.")) << k;
@@ -9045,42 +9955,542 @@ TEST_F(NSFSUpgradeTest, RootMetadataCannotForgeAMarker)
   EXPECT_EQ(rgw_bl_str(attrs[key]), v);
 }
 
+/* Everything in the tree ends up in nsfs names, and the marker is gone. */
+TEST_F(NSFSUpgradeTest, ConvertsTheTree)
+{
   nb_object("flat.bin", "text/plain");
   nb_object("deep/nested.bin", "application/json");
   nb_folder("photos", "application/directory");
 
+  nsfs::ConvertProgress prog;
+  ASSERT_EQ(upgrade(nullptr, &prog), 0);
+  EXPECT_EQ(prog.objects, 2u);
+  EXPECT_EQ(prog.directory_objects, 1u);
+  EXPECT_TRUE(prog.complete);
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  EXPECT_STREQ(b->profile_name(), "strong");
+  EXPECT_FALSE(b->is_converting());
+
+  for (const char* k : {"flat.bin", "deep/nested.bin"}) {
+    auto names = xattr_names(bucket_path() / k);
     EXPECT_TRUE(names.contains("user.nsfs:rgw.content_type")) << k;
     EXPECT_TRUE(names.contains("user.nsfs:rgw.etag")) << k;
+    EXPECT_FALSE(names.contains("user.noobaa.content_type")) << k;
+    EXPECT_FALSE(names.contains("user.content_md5")) << k;
+  }
 
+  /* the folder's fact moved:  NooBaa's attribute on the directory, nsfs's
+   * in the sentinel beside it */
+  EXPECT_TRUE(sf::is_regular_file(bucket_path() / "photos" / ".folder"));
+  EXPECT_FALSE(xattr_names(bucket_path() / "photos")
+		   .contains("user.noobaa.dir_content"));
+  EXPECT_TRUE(xattr_names(bucket_path() / "photos" / ".folder")
+		  .contains("user.nsfs:rgw.content_type"));
+
+  /* and the values survived the move */
+  auto obj = bucket->get_object(rgw_obj_key("flat.bin"));
+  ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
+  ASSERT_EQ(obj->get_obj_attrs(null_yield, env->dpp), 0);
+  auto& attrs = obj->get_attrs();
+  ASSERT_NE(attrs.find(RGW_ATTR_CONTENT_TYPE), attrs.end());
+  EXPECT_EQ(unterminated(attrs[RGW_ATTR_CONTENT_TYPE]), "text/plain");
+  EXPECT_EQ(unterminated(attrs[RGW_ATTR_ETAG]),
+	    "0123456789abcdef0123456789abcdef");
+}
+
+/* Every phase is reported, in order, for every item. */
+TEST_F(NSFSUpgradeTest, ReportsEachPhase)
+{
   nb_object("a.bin", "text/plain");
   nb_object("b.bin", "text/plain");
 
+  std::vector<std::string> seen;
+  nsfs::convert_cb_t cb =
+    [&seen](const DoutPrefixProvider*, const nsfs::ConvertEvent& ev) {
+      seen.push_back(std::string(nsfs::to_string(ev.phase)) + ":" + ev.key);
+      return 0;
+    };
+
+  nsfs::ConvertProgress prog;
+  ASSERT_EQ(upgrade(&cb, &prog), 0);
   /* No bucket phases:  the bucket's own state is held as RGW attributes
    * in every format, so there is nothing of it to convert */
   ASSERT_EQ(seen.size(), 6u) << "three phases for each of two objects";
 
+  /* readdir order is the filesystem's, so what is asserted is that
+   * each object's three phases arrive together and in order */
+  for (size_t i = 0; i < seen.size(); i += 3) {
+    const std::string key = seen[i].substr(seen[i].find(':') + 1);
+    EXPECT_EQ(seen[i], "before:" + key);
+    EXPECT_EQ(seen[i + 1], "written:" + key);
+    EXPECT_EQ(seen[i + 2], "pruned:" + key);
+  }
+}
+
+/* A reader held at `written` sees the new value, not the old.
+ *
+ * That instant is the only state the conversion creates which did not
+ * exist before -- the RGW and NooBaa attributes on the file at once --
+ * and it is where "nsfs first" in the read chain stops being
+ * incidental.  The callback is what makes it reachable:  without a hold
+ * there is no way to arrive inside one item's conversion.
+ */
+TEST_F(NSFSUpgradeTest, AReaderHeldAtWrittenSeesTheNewValue)
+{
   nb_object("held.bin", "text/plain");
 
+  std::string seen_ct, seen_etag;
+  nsfs::convert_cb_t cb =
+    [&](const DoutPrefixProvider*, const nsfs::ConvertEvent& ev) {
+      if ((ev.phase != nsfs::ConvertEvent::Phase::written) ||
+	  (ev.key != "held.bin")) {
+	return 0;
       }
       /* both attributes are on the file right now */
+      auto names = xattr_names(bucket_path() / "held.bin");
       EXPECT_TRUE(names.contains("user.nsfs:rgw.content_type"));
+      EXPECT_TRUE(names.contains("user.noobaa.content_type"));
+
+      auto rd = bucket->get_object(rgw_obj_key("held.bin"));
+      EXPECT_EQ(rd->load_obj_state(env->dpp, null_yield), 0);
+      EXPECT_EQ(rd->get_obj_attrs(null_yield, env->dpp), 0);
+      auto& a = rd->get_attrs();
+      auto ct = a.find(RGW_ATTR_CONTENT_TYPE);
+      if (ct != a.end()) {
+	seen_ct = ct->second.to_str();
+      }
+      auto et = a.find(RGW_ATTR_ETAG);
+      if (et != a.end()) {
+	seen_etag = et->second.to_str();
+      }
+      return 0;
+    };
+
+  ASSERT_EQ(upgrade(&cb, nullptr), 0);
+  EXPECT_EQ(seen_ct, "text/plain");
+  EXPECT_EQ(seen_etag, "0123456789abcdef0123456789abcdef");
+}
+
+/* Stopping leaves the marker, and a second run finishes the job.
+ *
+ * The control the resumability claim needs:  the abort has to leave a
+ * tree that is genuinely half-converted, and the restart has to be
+ * able to tell which half is which -- which is what the marker and
+ * the chain are for.
+ */
+TEST_F(NSFSUpgradeTest, StopsAndResumes)
+{
+  for (int i = 0; i < 4; ++i) {
     nb_object("obj-" + std::to_string(i) + ".bin", "text/plain");
   }
 
+  int seen = 0;
+  nsfs::convert_cb_t stop =
+    [&seen](const DoutPrefixProvider*, const nsfs::ConvertEvent& ev) {
+      if ((ev.kind != nsfs::ConvertEvent::Kind::object) ||
+	  (ev.phase != nsfs::ConvertEvent::Phase::pruned)) {
+	return 0;
+      }
+      return (++seen == 2) ? -EINTR : 0;
+    };
+
+  nsfs::ConvertProgress first;
+  EXPECT_EQ(upgrade(&stop, &first), -EINTR);
+  EXPECT_FALSE(first.complete);
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  EXPECT_STREQ(b->profile_name(), "strong")
+      << "the mask went down before the walk, so a stopped run is still "
+	 "marked";
+  EXPECT_TRUE(b->is_converting()) << "the marker was cleared by a run that "
+				     "did not finish";
+
+  /* half the tree is nsfs's and half is NooBaa's, and both read */
   int nsfs_count = 0, nb_count = 0;
+  for (int i = 0; i < 4; ++i) {
+    auto names = xattr_names(bucket_path() /
+			     ("obj-" + std::to_string(i) + ".bin"));
+    if (names.contains("user.noobaa.content_type")) {
       ++nb_count;
+    } else {
       ++nsfs_count;
     }
+    auto obj = bucket->get_object(
+	rgw_obj_key("obj-" + std::to_string(i) + ".bin"));
+    ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
+    ASSERT_EQ(obj->get_obj_attrs(null_yield, env->dpp), 0);
+    EXPECT_EQ(unterminated(obj->get_attrs()[RGW_ATTR_ETAG]),
+	      "0123456789abcdef0123456789abcdef")
+	<< "obj-" << i << " unreadable mid-conversion";
   }
   EXPECT_EQ(nsfs_count, 2);
   EXPECT_EQ(nb_count, 2);
 
+  /* and the rest of it converts */
+  nsfs::ConvertProgress second;
+  ASSERT_EQ(b->convert_tree(env->dpp, null_yield, nullptr, &second), 0);
+  EXPECT_TRUE(second.complete);
+  EXPECT_FALSE(b->is_converting());
+  for (int i = 0; i < 4; ++i) {
+    EXPECT_FALSE(xattr_names(bucket_path() /
+			     ("obj-" + std::to_string(i) + ".bin"))
+		     .contains("user.noobaa.content_type"));
+  }
+}
+
+/* Converting a tree that is already nsfs's changes nothing.
+ *
+ * Resumption reruns items it already did, so the pass has to be
+ * idempotent or a restart corrupts what the first run finished. */
+TEST_F(NSFSUpgradeTest, ConvertingTwiceIsTheSameAsOnce)
+{
   nb_object("once.bin", "text/plain");
+  ASSERT_EQ(upgrade(nullptr, nullptr), 0);
+  const auto after_one = xattr_names(bucket_path() / "once.bin");
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->mark_converting(env->dpp), 0);
+  nsfs::ConvertProgress prog;
+  ASSERT_EQ(b->convert_tree(env->dpp, null_yield, nullptr, &prog), 0);
+  EXPECT_TRUE(prog.complete);
+
+  EXPECT_EQ(xattr_names(bucket_path() / "once.bin"), after_one);
+  auto obj = bucket->get_object(rgw_obj_key("once.bin"));
+  ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
+  ASSERT_EQ(obj->get_obj_attrs(null_yield, env->dpp), 0);
+  EXPECT_EQ(unterminated(obj->get_attrs()[RGW_ATTR_CONTENT_TYPE]),
+	    "text/plain");
+}
+
+/* An upload in flight crosses the upgrade.
+ *
+ * It cannot be drained:  UploadPart terminates, the upload it belongs
+ * to does not, so the tree arrives at the conversion with staging in
+ * NooBaa's layout.  The alternative is aborting it, which throws away
+ * work the client already did.
+ */
+TEST_F(NSFSUpgradeTest, ReStagesAnUploadInFlight)
+{
+  TestTree tree;
+  make_noobaa_tree(bucket_path(), TreeShape::with_upload, tree);
   nb_object("beside.bin", "text/plain");
 
+  nsfs::ConvertProgress prog;
+  ASSERT_EQ(upgrade(nullptr, &prog), 0);
+  EXPECT_EQ(prog.uploads, 1u);
+  EXPECT_EQ(prog.parts, tree.parts);
+  EXPECT_TRUE(prog.complete);
+
+  /* NooBaa's staging is gone */
+  EXPECT_FALSE(sf::exists(tree.staging)) << tree.staging;
+
+  /* and the nsfs one is there, named as nsfs names one */
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  const std::string meta = tree.key + "." + tree.upload_id;
   const sf::path staging{bucket_path() / b->mpu_strategy()->staging_dir_name(meta)};
   ASSERT_TRUE(sf::is_directory(staging)) << staging;
 
+  /* the upload lists, through the nsfs layout */
+  std::vector<std::unique_ptr<rgw::sal::MultipartUpload>> uploads;
+  std::string marker;
+  bool truncated = false;
+  ASSERT_EQ(bucket->list_multiparts(env->dpp, "", marker, "", 100, uploads,
+				    nullptr, &truncated, null_yield,
+				    rgw::sal::no_authenticated_user), 0);
+  ASSERT_EQ(uploads.size(), 1u);
+  EXPECT_EQ(uploads[0]->get_key(), tree.key);
+  EXPECT_EQ(uploads[0]->get_upload_id(), tree.upload_id);
+
+  /* its parts report the sizes they were staged with */
+  auto upload = bucket->get_multipart_upload(tree.key, rgw::sal::no_authenticated_user, tree.upload_id);
+  int next = 0;
+  ASSERT_EQ(upload->list_parts(env->dpp, env->cct.get(), 100, 0, &next,
+			       &truncated, null_yield), 0);
+  const auto& parts = upload->get_parts();
+  ASSERT_EQ(parts.size(), tree.parts);
+  for (uint32_t k = 1; k <= tree.parts; ++k) {
+    ASSERT_NE(parts.find(k), parts.end()) << k;
+    EXPECT_EQ(parts.at(k)->get_size(), tree.part_size) << k;
+  }
+
+  /* and it completes, into the object the client asked for */
+  std::map<int, std::string> etags;
+  for (auto& [num, part] : upload->get_parts()) {
+    etags[num] = part->get_etag();
+  }
+  ASSERT_EQ(complete_mp(bucket.get(), upload.get(), owner, tree.key,
+			etags), 0);
+  EXPECT_EQ(read_all(bucket_path() / tree.key), tree.payload);
+}
+
+/* NooBaa's temp directory goes with the last upload in it.  Each upload's
+ * staging is removed as it is re-staged, and the directory that held
+ * them is NooBaa's alone:  left, it is no longer hidden once the bucket
+ * stops converting, since only NooBaa's path strategy reserves the
+ * name. */
+TEST_F(NSFSUpgradeTest, ConversionRemovesTheirEmptiedTempDirectory)
+{
+  TestTree tree;
+  make_noobaa_tree(bucket_path(), TreeShape::with_upload, tree);
+  nb_object("beside.bin", "text/plain");
+  const sf::path tmpdir = tree.staging.parent_path().parent_path();
+  ASSERT_TRUE(sf::is_directory(tmpdir)) << tmpdir;
+  /* an object write of theirs cut short before its move into place
+   * (`namespace_fs.js:1301`):  never an object, and it goes too */
+  sf::create_directories(tmpdir / "uploads");
+  write_file(tmpdir / "uploads" / fake_uuid("partial"), "half");
+
+  nsfs::ConvertProgress prog;
+  ASSERT_EQ(upgrade(nullptr, &prog), 0);
+  ASSERT_TRUE(prog.complete);
+
+  for (const char* delim : {"", "/"}) {
+    rgw::sal::Bucket::ListParams params;
+    params.delim = delim;
+    rgw::sal::Bucket::ListResults results;
+    ASSERT_EQ(bucket->list(env->dpp, params, 1000, results, null_yield), 0);
+    for (const auto& e : results.objs) {
+      EXPECT_FALSE(e.key.name.starts_with(".noobaa-nsfs"))
+	<< "delim '" << delim << "' lists " << e.key.name;
+    }
+    for (const auto& [cp, _] : results.common_prefixes) {
+      EXPECT_FALSE(cp.starts_with(".noobaa-nsfs"))
+	<< "delim '" << delim << "' lists the prefix " << cp;
+    }
+  }
+  EXPECT_FALSE(sf::exists(tmpdir)) << tmpdir;
+}
+
+/* The subtree marker's value, or nullopt when there is none. */
+static std::optional<std::string> subtree_marker(const sf::path& p)
+{
+  char buf[64];
+  const ssize_t n = ::getxattr(p.c_str(), nsfs::SUBTREE_CONVERTED_XATTR,
+			       buf, sizeof(buf));
+  if (n < 0) {
+    return std::nullopt;
+  }
+  return std::string(buf, n);
+}
+
+/* What every subtree marker of an upgrade to strong names. */
+static const std::string STRONG_SET = std::to_string(nsfs::EXTENSIONS_STRONG);
+
+/* Stops each walk at its first upload, which comes after the tree:  so
+ * every subdirectory is converted and marked, and the bucket is not. */
+static nsfs::convert_cb_t stop_at_upload()
+{
+  return [](const DoutPrefixProvider*, const nsfs::ConvertEvent& ev) {
+    return (ev.kind == nsfs::ConvertEvent::Kind::upload) ? -EINTR : 0;
+  };
+}
+
+/* A finished subdirectory is marked with the target set, after what is
+ * under it;  the root is not, its completion being the bucket's.  A
+ * resumed walk passes each marked one with one read, reaching nothing
+ * under it, and counts it.  The markers stay after completion. */
+TEST_F(NSFSUpgradeTest, AResumedWalkPassesAConvertedSubtree)
+{
+  TestTree tree;
+  make_noobaa_tree(bucket_path(), TreeShape::with_upload, tree);
+  nb_object("top.bin", "text/plain");
+  nb_object("a/one.bin", "text/plain");
+  nb_object("a/deep/two.bin", "text/plain");
+  nb_object("b/three.bin", "text/plain");
+  nb_folder("c", "application/x-directory");
+
+  auto stop = stop_at_upload();
+  nsfs::ConvertProgress first;
+  ASSERT_EQ(upgrade(&stop, &first), -EINTR);
+  for (const char* d : {"a", "a/deep", "b", "c"}) {
+    EXPECT_EQ(subtree_marker(bucket_path() / d), STRONG_SET) << d;
+  }
+  EXPECT_EQ(subtree_marker(bucket_path()), std::nullopt);
+
+  std::vector<std::string> seen;
+  nsfs::convert_cb_t record =
+    [&seen](const DoutPrefixProvider*, const nsfs::ConvertEvent& ev) {
+      if (ev.phase == nsfs::ConvertEvent::Phase::before) {
+	seen.push_back(ev.key);
+      }
+      return 0;
+    };
+  nsfs::ConvertProgress second;
+  ASSERT_EQ(upgrade(&record, &second), 0);
+  EXPECT_TRUE(second.complete);
+  /* a, b and c;  a/deep is under a, and not reached */
+  EXPECT_EQ(second.directories_skipped, 3u);
+  for (const auto& k : seen) {
+    EXPECT_FALSE(k.starts_with("a/") || k.starts_with("b/") ||
+		 k.starts_with("c/")) << k << " is under a converted subtree";
+  }
+  EXPECT_NE(std::find(seen.begin(), seen.end(), "top.bin"), seen.end());
+
+  for (const char* d : {"a", "a/deep", "b", "c"}) {
+    EXPECT_EQ(subtree_marker(bucket_path() / d), STRONG_SET)
+	<< d << ":  the marker stays after completion";
+  }
+}
+
+/* A subtree marker naming another extension set says nothing of this
+ * conversion, and the walk goes through the subtree. */
+TEST_F(NSFSUpgradeTest, AMarkerNamingAnotherSetIsNotPassed)
+{
+  TestTree tree;
+  make_noobaa_tree(bucket_path(), TreeShape::with_upload, tree);
+  nb_object("a/one.bin", "text/plain");
+  nb_object("b/two.bin", "text/plain");
+
+  auto stop = stop_at_upload();
+  ASSERT_EQ(upgrade(&stop, nullptr), -EINTR);
+  const std::string other = std::to_string(nsfs::EXTENSIONS_SHARED);
+  ASSERT_EQ(::setxattr((bucket_path() / "a").c_str(),
+		       nsfs::SUBTREE_CONVERTED_XATTR, other.data(),
+		       other.size(), 0), 0);
+
+  nsfs::ConvertProgress second;
+  ASSERT_EQ(upgrade(nullptr, &second), 0);
+  EXPECT_EQ(second.directories_skipped, 1u) << "b only";
+  EXPECT_EQ(second.objects, 1u) << "a/one.bin, walked again";
+  EXPECT_EQ(subtree_marker(bucket_path() / "a"), STRONG_SET);
+}
+
+/* A walk that reaches an object already converted writes no RGW
+ * attribute to it again, which would move its ctime (DECISIONS.md
+ * 2026-11-02).  The object had one-to-many NooBaa attributes, whose
+ * names a key's removal used to list whether or not they were there. */
+TEST_F(NSFSUpgradeTest, AWalkWritesNothingToAConvertedObject)
+{
+  nb_object("top.bin", "text/plain");
+  nb_object("d/inner.bin", "text/plain");
+  {
+    const sf::path p{bucket_path() / "top.bin"};
+    ASSERT_EQ(::setxattr(p.c_str(), "user.noobaa.tag.a", "1", 1, 0), 0);
+    ASSERT_EQ(::setxattr(p.c_str(), "user.noobaa.legal_hold", "ON", 2, 0), 0);
+  }
+  ASSERT_EQ(upgrade(nullptr, nullptr), 0);
+
+  auto ctime = [](const sf::path& p) {
+    struct statx stx{};
+    EXPECT_EQ(::statx(AT_FDCWD, p.c_str(), 0, STATX_CTIME, &stx), 0) << p;
+    return std::pair{stx.stx_ctime.tv_sec, stx.stx_ctime.tv_nsec};
+  };
+  const auto top = ctime(bucket_path() / "top.bin");
+  const auto inner = ctime(bucket_path() / "d/inner.bin");
+
+  /* the bucket converting again, and d's marker gone, so the walk
+   * reaches both objects */
+  ASSERT_EQ(::setxattr(bucket_path().c_str(), nsfs::CONVERTING_XATTR,
+		       nsfs::CONVERTING_FROM_NOOBAA,
+		       std::strlen(nsfs::CONVERTING_FROM_NOOBAA), 0), 0);
+  ASSERT_EQ(::removexattr((bucket_path() / "d").c_str(),
+			  nsfs::SUBTREE_CONVERTED_XATTR), 0);
+  ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname},
+				&bucket, null_yield), 0);
+  ASSERT_TRUE(static_cast<rgw::sal::NSFSBucket*>(bucket.get())
+		->is_converting());
+
+  nsfs::ConvertProgress again;
+  ASSERT_EQ(upgrade(nullptr, &again), 0);
+  EXPECT_EQ(again.objects, 2u) << "both reached";
+  EXPECT_EQ(ctime(bucket_path() / "top.bin"), top);
+  EXPECT_EQ(ctime(bucket_path() / "d/inner.bin"), inner);
+}
+
+/* What a directory object is served with:  its ETag and Last-Modified. */
+static std::pair<std::string, ceph::real_time>
+served_as(rgw::sal::Bucket* bucket, const DoutPrefixProvider* dpp,
+	  const std::string& key)
+{
+  auto obj = bucket->get_object(rgw_obj_key(key));
+  EXPECT_EQ(obj->load_obj_state(dpp, null_yield), 0) << key;
+  EXPECT_EQ(obj->get_obj_attrs(null_yield, dpp), 0) << key;
+  auto& attrs = obj->get_attrs();
+  auto i = attrs.find(RGW_ATTR_ETAG);
+  return {(i == attrs.end()) ? std::string() : rgw_bl_str(i->second),
+	  obj->get_mtime()};
+}
+
+/* An empty directory object keeps the ETag and Last-Modified it was
+ * served with, through a walk stopped after its sentinel is linked and
+ * the walk that resumes it.  Both come from the directory's stat, which
+ * making the sentinel changes, so they are on the sentinel before it
+ * appears (DECISIONS.md 2026-10-13). */
+TEST_F(NSFSUpgradeTest, AnEmptyDirectoryObjectKeepsItsETagAcrossAStop)
+{
+  nb_folder("photos", "application/x-directory");
+  const auto before = served_as(bucket.get(), env->dpp, "photos/");
+  ASSERT_FALSE(before.first.empty());
+
+  nsfs::convert_cb_t stop =
+    [](const DoutPrefixProvider*, const nsfs::ConvertEvent& ev) {
+      return ((ev.kind == nsfs::ConvertEvent::Kind::directory_object) &&
+	      (ev.phase == nsfs::ConvertEvent::Phase::written)) ? -EINTR : 0;
+    };
+  ASSERT_EQ(upgrade(&stop, nullptr), -EINTR);
+  ASSERT_TRUE(sf::exists(bucket_path() / "photos" / ".folder"));
+  ASSERT_EQ(upgrade(nullptr, nullptr), 0);
+
+  const auto after = served_as(bucket.get(), env->dpp, "photos/");
+  EXPECT_EQ(after.first, before.first);
+  EXPECT_EQ(after.second, before.second);
+}
+
+/* A walk on a filesystem without O_TMPFILE names its sentinel and gives
+ * it the directory's mtime straight after.  Stopped there, the sentinel
+ * exists and holds nothing, and dir_content still says the object is
+ * empty:  the resumed walk records the ETag the object was served with,
+ * from the directory's inode and the sentinel's mtime.  It used to take
+ * the sentinel for NooBaa's and record none. */
+TEST_F(NSFSUpgradeTest, AResumedWalkRecordsTheETagOfAnEmptyDirectoryObject)
+{
+  nb_folder("photos", "application/x-directory");
+  const auto before = served_as(bucket.get(), env->dpp, "photos/");
+  ASSERT_FALSE(before.first.empty());
+
+  const sf::path d{bucket_path() / "photos"};
+  struct statx dstx{};
+  ASSERT_EQ(::statx(AT_FDCWD, d.c_str(), 0, STATX_MTIME, &dstx), 0);
+  const sf::path sentinel{d / ".folder"};
+  write_file(sentinel, "");
+  const struct timespec times[2] = {
+    { 0, UTIME_OMIT },
+    { dstx.stx_mtime.tv_sec, dstx.stx_mtime.tv_nsec },
+  };
+  ASSERT_EQ(::utimensat(AT_FDCWD, sentinel.c_str(), times, 0), 0);
+
+  ASSERT_EQ(upgrade(nullptr, nullptr), 0);
+  const auto after = served_as(bucket.get(), env->dpp, "photos/");
+  EXPECT_EQ(after.first, before.first);
+  EXPECT_EQ(after.second, before.second);
+}
+
+/* Nothing changes a converting bucket's profile (DECISIONS.md
+ * 2026-11-05):  between two nsfs profiles only the mask would be
+ * written, reporting the bucket complete over a mixed tree.  Asking for
+ * the profile it is converting to still resumes it. */
+TEST_F(NSFSUpgradeTest, AConvertingBucketKeepsItsProfile)
+{
+  TestTree tree;
+  make_noobaa_tree(bucket_path(), TreeShape::with_upload, tree);
+  nb_object("a/one.bin", "text/plain");
+
+  auto stop = stop_at_upload();
+  ASSERT_EQ(upgrade(&stop, nullptr), -EINTR);
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_TRUE(b->is_converting());
+
+  nsfs::ConvertProgress prog;
+  EXPECT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_SHARED,
+			   nullptr, &prog), -ERR_INVALID_BUCKET_STATE);
+  EXPECT_FALSE(prog.complete);
+  EXPECT_STREQ(b->profile_name(), "strong");
+  EXPECT_TRUE(b->is_converting());
+
+  ASSERT_EQ(upgrade(nullptr, &prog), 0) << "the resume is still asked for";
+  EXPECT_TRUE(prog.complete);
+}
 
 /* An upload whose parts were listed before the upgrade still lists and
  * completes after it.
@@ -9311,19 +10721,330 @@ TEST_F(NSFSUpgradeTest, ReStagingDropsCachedPartsWhosePlacementChanged)
   EXPECT_EQ(pi.offset, 0u);
 }
 
+/* Every part is reported, and a stop inside one leaves the rest. */
+TEST_F(NSFSUpgradeTest, ReportsPartsAndStopsInsideAnUpload)
+{
+  TestTree tree;
+  make_noobaa_tree(bucket_path(), TreeShape::with_upload, tree);
+
+  std::vector<std::string> seen;
+  nsfs::convert_cb_t record =
+    [&seen](const DoutPrefixProvider*, const nsfs::ConvertEvent& ev) {
+      if ((ev.kind == nsfs::ConvertEvent::Kind::upload) ||
+	  (ev.kind == nsfs::ConvertEvent::Kind::part)) {
+	seen.push_back(std::string(nsfs::to_string(ev.kind)) + ":" +
+		       std::string(nsfs::to_string(ev.phase)) + ":" +
+		       std::to_string(ev.part));
+      }
+      return 0;
+    };
+  nsfs::ConvertProgress prog;
+  ASSERT_EQ(upgrade(&record, &prog), 0);
+
+  /* the upload brackets its parts */
+  ASSERT_FALSE(seen.empty());
+  EXPECT_EQ(seen.front(), "upload:before:0");
+  EXPECT_EQ(seen.back(), "upload:pruned:0");
+  size_t part_phases = 0;
+  for (auto& e : seen) {
+    if (e.rfind("part:", 0) == 0) {
+      ++part_phases;
+    }
+  }
+  EXPECT_EQ(part_phases, tree.parts * 3);
+}
+
+/* Stopping between parts leaves NooBaa's staging in place.
+ *
+ * NooBaa's directory is removed last for exactly this reason:  a run that
+ * dies partway has copied some parts and must leave the source where
+ * the next run can find it. */
 TEST_F(NSFSUpgradeTest, StoppingMidUploadKeepsNooBaaStaging)
 {
+  TestTree tree;
+  make_noobaa_tree(bucket_path(), TreeShape::with_upload, tree);
+
+  nsfs::convert_cb_t stop =
+    [](const DoutPrefixProvider*, const nsfs::ConvertEvent& ev) {
+      if ((ev.kind == nsfs::ConvertEvent::Kind::part) && (ev.part == 2) &&
+	  (ev.phase == nsfs::ConvertEvent::Phase::written)) {
+	return -EINTR;
+      }
+      return 0;
+    };
+  nsfs::ConvertProgress first;
+  EXPECT_EQ(upgrade(&stop, &first), -EINTR);
+  EXPECT_FALSE(first.complete);
+  EXPECT_TRUE(sf::exists(tree.staging)) << "the source went before the copy "
+					   "had finished";
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_TRUE(b->is_converting());
+
+  nsfs::ConvertProgress second;
+  ASSERT_EQ(b->convert_tree(env->dpp, null_yield, nullptr, &second), 0);
+  EXPECT_TRUE(second.complete);
+  EXPECT_FALSE(sf::exists(tree.staging));
+
+  auto upload = bucket->get_multipart_upload(tree.key, rgw::sal::no_authenticated_user, tree.upload_id);
+  int next = 0;
+  bool truncated = false;
+  ASSERT_EQ(upload->list_parts(env->dpp, env->cct.get(), 100, 0, &next,
+			       &truncated, null_yield), 0);
+  EXPECT_EQ(upload->get_parts().size(), tree.parts);
+  std::map<int, std::string> etags;
+  for (auto& [num, part] : upload->get_parts()) {
+    etags[num] = part->get_etag();
+  }
+  ASSERT_EQ(complete_mp(bucket.get(), upload.get(), owner, tree.key,
+			etags), 0);
+  EXPECT_EQ(read_all(bucket_path() / tree.key), tree.payload);
+}
+
+/* An upload is listed throughout the conversion, not only at its
+ * ends.
+ *
+ * The re-stage moves one upload at a time, so mid-run some are in the nsfs
+ * root and the rest are still in NooBaa's.  A listing that scanned one
+ * root would report half the uploads in flight and call itself
+ * complete.  Held at the moment NooBaa's staging still exists and nsfs's
+ * already does, the same upload must be reported once -- not twice,
+ * which is what a naive union of the two roots would give.
+ */
+TEST_F(NSFSUpgradeTest, AnUploadIsListedThroughoutTheConversion)
+{
+  TestTree tree;
+  make_noobaa_tree(bucket_path(), TreeShape::with_upload, tree);
+
+  std::vector<size_t> counts;
+  nsfs::convert_cb_t watch =
+    [&](const DoutPrefixProvider*, const nsfs::ConvertEvent& ev) {
+      if (ev.kind != nsfs::ConvertEvent::Kind::upload) {
+	return 0;
+      }
+      std::vector<std::unique_ptr<rgw::sal::MultipartUpload>> uploads;
+      std::string marker;
+      bool truncated = false;
+      EXPECT_EQ(bucket->list_multiparts(env->dpp, "", marker, "", 100,
+					uploads, nullptr, &truncated,
+					null_yield,
+					rgw::sal::no_authenticated_user), 0);
+      counts.push_back(uploads.size());
+      for (auto& u : uploads) {
+	EXPECT_EQ(u->get_key(), tree.key);
+	EXPECT_EQ(u->get_upload_id(), tree.upload_id);
+      }
+      return 0;
+    };
+
+  ASSERT_EQ(upgrade(&watch, nullptr), 0);
+  ASSERT_EQ(counts.size(), 3u) << "three phases for the upload";
+  /* before:  only NooBaa's exists.  written:  both do, and it is one
+   * upload either way.  pruned:  only nsfs's. */
+  EXPECT_EQ(counts[0], 1u) << "invisible before it was moved";
+  EXPECT_EQ(counts[1], 1u) << "reported twice while both roots hold it";
+  EXPECT_EQ(counts[2], 1u);
+}
+
+/* Mutations are held off while the tree is rewritten, and reads are
+ * not.
+ *
+ * The conversion reads an object's attributes and writes them back, so
+ * a write landing between those two is lost.  Rados has the same
+ * problem during a reshard and handles it the same way:  hold the
+ * mutation server-side for a bound, then let a retryable error reach
+ * the client.
+ */
+TEST_F(NSFSUpgradeTest, HoldsOffMutationsAndNotReads)
+{
+  /* the rejection is what is under test, not how long it takes to
+   * arrive;  the production wait would put five seconds in the suite */
+  driver->set_gate_waits(std::chrono::milliseconds(20),
+			 std::chrono::milliseconds(60000));
   nb_object("gated.bin", "text/plain");
 
+  bool checked = false;
+  nsfs::convert_cb_t probe =
+    [&](const DoutPrefixProvider*, const nsfs::ConvertEvent& ev) {
+      if ((ev.phase != nsfs::ConvertEvent::Phase::written) || checked) {
+	return 0;
+      }
+      checked = true;
+
+      EXPECT_TRUE(driver->gate_is_closed(testname));
+
+      /* a read goes through */
+      auto rd = bucket->get_object(rgw_obj_key("gated.bin"));
+      EXPECT_EQ(rd->load_obj_state(env->dpp, null_yield), 0);
+      EXPECT_EQ(rd->get_obj_attrs(null_yield, env->dpp), 0);
+
+      auto wr = bucket->get_object(rgw_obj_key("gated.bin"));
+      EXPECT_EQ(wr->load_obj_state(env->dpp, null_yield), 0);
+      Attrs a;
+      bufferlist v;
+      v.append("text/html");
+      a[RGW_ATTR_CONTENT_TYPE] = v;
+      return 0;
+    };
+
+  ASSERT_EQ(upgrade(&probe, nullptr), 0);
+  EXPECT_TRUE(checked) << "the probe never ran, so nothing was asserted";
+
+  /* and the gate is open again afterwards */
+  EXPECT_FALSE(driver->gate_is_closed(testname));
+  auto wr = bucket->get_object(rgw_obj_key("gated.bin"));
+  ASSERT_EQ(wr->load_obj_state(env->dpp, null_yield), 0);
+  Attrs a;
+  bufferlist v;
+  v.append("text/html");
+  a[RGW_ATTR_CONTENT_TYPE] = v;
+  EXPECT_EQ(wr->set_obj_attrs(env->dpp, &a, nullptr, null_yield,
+			      rgw::sal::FLAG_LOG_OP, rgw_user()), 0);
+}
+
+TEST_F(NSFSUpgradeTest, AStoppedConversionReopensTheGate)
+{
   nb_object("a.bin", "text/plain");
   nb_object("b.bin", "text/plain");
 
+  nsfs::convert_cb_t stop =
+    [](const DoutPrefixProvider*, const nsfs::ConvertEvent& ev) {
+      return (ev.phase == nsfs::ConvertEvent::Phase::pruned) ? -EINTR : 0;
+    };
+  EXPECT_EQ(upgrade(&stop, nullptr), -EINTR);
+
+  EXPECT_FALSE(driver->gate_is_closed(testname));
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  EXPECT_TRUE(b->is_converting());
+
+  auto wr = bucket->get_object(rgw_obj_key("b.bin"));
+  ASSERT_EQ(wr->load_obj_state(env->dpp, null_yield), 0);
+  Attrs a;
+  bufferlist v;
+  v.append("text/html");
+  a[RGW_ATTR_CONTENT_TYPE] = v;
+  EXPECT_EQ(wr->set_obj_attrs(env->dpp, &a, nullptr, null_yield,
+			      rgw::sal::FLAG_LOG_OP, rgw_user()), 0);
+}
+
+/* Two conversions of one bucket do not run together.
+ *
+ * Each would read what the other had half written.  The second is
+ * rejected rather than queued:  it has nothing to wait for that the
+ * first is not already doing. */
+TEST_F(NSFSUpgradeTest, RejectsASecondConversion)
+{
   nb_object("a.bin", "text/plain");
 
+  int inner = 0;
+  nsfs::convert_cb_t reenter =
+    [&](const DoutPrefixProvider*, const nsfs::ConvertEvent& ev) {
+      if (ev.phase != nsfs::ConvertEvent::Phase::written) {
+	return 0;
+      }
+      auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+      nsfs::ConvertProgress p;
+      inner = b->convert_tree(env->dpp, null_yield, nullptr, &p);
+      return 0;
+    };
+
+  ASSERT_EQ(upgrade(&reenter, nullptr), 0);
+  EXPECT_EQ(inner, -EBUSY);
+}
+
+/* An FSIO write handle is a mutation for as long as it is open.
+ *
+ * It is not a request:  it is opened once and written through many
+ * times, and those writes are parts of one mutation rather than
+ * separate ones.  So opening one to write takes the slot and
+ * releasing it gives the slot back, and a bucket drains as its write
+ * handles are released.  A conversion cannot start while one is open,
+ * which is the point -- converting under an open writer is what the
+ * gate exists to prevent.
+ *
+ * Strong rather than the upgrade fixture:  FSIO needs EXT_SHADOW,
+ * which base does not have and an upgrade to strong only acquires at
+ * its end.
+ */
 TEST_F(NSFSStrongBucketTest, AWriteHandleHoldsTheGateOpen)
 {
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->resolve_profile(env->dpp), 0);
+  ASSERT_TRUE(b->has_extension(nsfs::EXT_SHADOW));
+  driver->set_gate_waits(std::chrono::milliseconds(20),
+			 std::chrono::milliseconds(20));
+
+  auto obj = bucket->get_object(rgw_obj_key("handle.bin"));
+  auto [rc, hdl] = obj->get_fsio_handle(
+      env->dpp, rgw::sal::no_authenticated_user,
+      rgw::sal::Object::FSIOObject::OPEN_FLAG_CREATE |
+		rgw::sal::Object::FSIOObject::OPEN_FLAG_WRITE);
+  ASSERT_EQ(rc, 0) << "could not open a write handle";
+  ASSERT_NE(hdl.get(), nullptr);
+
+  /* the gate will not close while it is open */
+  EXPECT_EQ(driver->gate_close(env->dpp, testname), -ETIMEDOUT);
+  /* and having failed, it left the gate open rather than half shut */
+  EXPECT_FALSE(driver->gate_is_closed(testname));
+
+  hdl->close(env->dpp, rgw::sal::Object::FSIOObject::CLOSE_FLAG_NONE);
+  hdl.reset();
+
+  /* released, so the bucket has drained */
+  EXPECT_EQ(driver->gate_close(env->dpp, testname), 0);
+  driver->gate_open(testname);
+}
+
+/* And a closed gate rejects a new write handle while serving a read
+ * one. */
 TEST_F(NSFSStrongBucketTest, AClosedGateRejectsAWriteHandle)
 {
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->resolve_profile(env->dpp), 0);
+  driver->set_gate_waits(std::chrono::milliseconds(20),
+			 std::chrono::milliseconds(20));
+
+  /* an object to read;  a read handle binds to the published object */
+  {
+    auto obj = bucket->get_object(rgw_obj_key("there.bin"));
+    auto [rc, hdl] = obj->get_fsio_handle(
+	env->dpp, rgw::sal::no_authenticated_user,
+	rgw::sal::Object::FSIOObject::OPEN_FLAG_CREATE |
+		  rgw::sal::Object::FSIOObject::OPEN_FLAG_WRITE);
+    ASSERT_EQ(rc, 0);
+    ASSERT_EQ(hdl->commit(env->dpp,
+			  rgw::sal::Object::FSIOObject::COMMIT_FLAG_NONE), 0);
+    ASSERT_EQ(hdl->publish(env->dpp,
+			   rgw::sal::Object::FSIOObject::PUBLISH_FLAG_NONE), 0);
+    hdl->close(env->dpp, rgw::sal::Object::FSIOObject::CLOSE_FLAG_NONE);
+  }
+
+  ASSERT_EQ(driver->gate_close(env->dpp, testname), 0);
+
+  {
+    auto obj = bucket->get_object(rgw_obj_key("rejected.bin"));
+    auto [rc, hdl] = obj->get_fsio_handle(
+	env->dpp, rgw::sal::no_authenticated_user,
+	rgw::sal::Object::FSIOObject::OPEN_FLAG_CREATE |
+		  rgw::sal::Object::FSIOObject::OPEN_FLAG_WRITE);
+    EXPECT_EQ(rc, -ERR_SERVICE_UNAVAILABLE);
+    EXPECT_EQ(hdl.get(), nullptr) << "a rejected open left a handle behind";
+  }
+
+  {
+    auto obj = bucket->get_object(rgw_obj_key("there.bin"));
+    auto [rc, hdl] = obj->get_fsio_handle(
+	env->dpp, rgw::sal::no_authenticated_user,
+	rgw::sal::Object::FSIOObject::OPEN_FLAG_NONE);
+    EXPECT_EQ(rc, 0) << "a read handle was rejected";
+    if (hdl) {
+      hdl->close(env->dpp, rgw::sal::Object::FSIOObject::CLOSE_FLAG_NONE);
+    }
+  }
+
+  driver->gate_open(testname);
+}
+
   nsfs::init_create_modes(env->dpp, env->cct.get());
 
   EXPECT_EQ(after.st_mode & 07777, nsfs::file_create_mode());
@@ -9342,12 +11063,92 @@ TEST_F(NSFSStrongBucketTest, AnFSIOClonedObjectCarriesTheObjectMode)
 {
   nsfs::init_create_modes(env->dpp, env->cct.get());
 
+
+/* Re-issuing the same request resumes a stopped conversion.
+ *
+ * That is what a resume looks like from outside:  the operator asks
+ * for the profile again.  Before this it returned success and did
+ * nothing, because the bucket was already in the target profile --
+ * so a conversion that stopped could never be finished through the
+ * only interface there is, and the marker stayed for ever.
+ */
+TEST_F(NSFSUpgradeTest, ReissuingTheSameProfileResumes)
+{
+  for (int i = 0; i < 4; ++i) {
     nb_object("obj-" + std::to_string(i) + ".bin", "text/plain");
   }
 
+  int seen = 0;
+  nsfs::convert_cb_t stop =
+    [&seen](const DoutPrefixProvider*, const nsfs::ConvertEvent& ev) {
+      if (ev.phase != nsfs::ConvertEvent::Phase::pruned) {
+	return 0;
+      }
+      return (++seen == 2) ? -EINTR : 0;
+    };
+
+  nsfs::ConvertProgress first;
+  EXPECT_EQ(upgrade(&stop, &first), -EINTR);
+  EXPECT_TRUE(first.profile_set) << "the mask went down before the walk";
+  EXPECT_FALSE(first.complete);
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_TRUE(b->is_converting());
+
+  /* the same call again, through set_profile and not convert_tree */
+  nsfs::ConvertProgress second;
+  ASSERT_EQ(upgrade(nullptr, &second), 0);
+  EXPECT_TRUE(second.profile_set);
+  EXPECT_TRUE(second.complete);
+  EXPECT_FALSE(b->is_converting());
+
+  for (int i = 0; i < 4; ++i) {
+    EXPECT_FALSE(xattr_names(bucket_path() /
+			     ("obj-" + std::to_string(i) + ".bin"))
+		     .contains("user.noobaa.content_type")) << i;
+  }
+
+  /* and once more, on a bucket with nothing left to do */
+  nsfs::ConvertProgress third;
+  ASSERT_EQ(upgrade(nullptr, &third), 0);
+  EXPECT_EQ(third.objects, 0u) << "a settled bucket was walked again";
+}
+
+/* The driver reports the profile and whether it is still converting.
+ *
+ * What the GET renders, and what an operator polls while a long
+ * rewrite runs. */
+TEST_F(NSFSUpgradeTest, ReportsTheProfileAndTheConvertingState)
+{
   nb_object("a.bin", "text/plain");
   nb_object("b.bin", "text/plain");
 
+  uint32_t ext = 0;
+  std::string pname;
+  bool converting = true;
+  ASSERT_EQ(driver->get_bucket_profile(env->dpp, null_yield, testname,
+				       &ext, &pname, &converting), 0);
+  EXPECT_EQ(pname, "base");
+  EXPECT_FALSE(converting) << "a base bucket is not converting;  it is "
+			      "simply in their format";
+
+  nsfs::convert_cb_t stop =
+    [](const DoutPrefixProvider*, const nsfs::ConvertEvent& ev) {
+      return (ev.phase == nsfs::ConvertEvent::Phase::pruned) ? -EINTR : 0;
+    };
+  EXPECT_EQ(upgrade(&stop, nullptr), -EINTR);
+
+  ASSERT_EQ(driver->get_bucket_profile(env->dpp, null_yield, testname,
+				       &ext, &pname, &converting), 0);
+  EXPECT_EQ(pname, "strong");
+  EXPECT_EQ(ext, nsfs::EXTENSIONS_STRONG);
+  EXPECT_TRUE(converting) << "a stopped conversion did not report itself";
+
+  ASSERT_EQ(upgrade(nullptr, nullptr), 0);
+  ASSERT_EQ(driver->get_bucket_profile(env->dpp, null_yield, testname,
+				       &ext, &pname, &converting), 0);
+  EXPECT_FALSE(converting);
+}
 
 /* Two temp directories means two bucket ids have written here, and
  * which holds the uploads is not decidable.  Rejected rather than
@@ -10017,6 +11818,8 @@ TEST_F(NooBaaImportTest, ReplanningWithAnIamUserKeepsTheAccountId)
   write_nb_record("ENABLED");
 
   write_nb_record("ENABLED");
+
+  std::map<std::string, std::string> out;
   write_nb_record("ENABLED");
   remove_rgw_bucket_info();
 
@@ -10316,6 +12119,20 @@ TEST_F(NSFSCustomPathTest, TheRolesOwnAllowlistAdmitsUnderTheOverride)
   db->force_role_identity_override(std::nullopt);
 }
       if (std::string_view(q).starts_with("user.nsfs:")) {
+
+/* A subtree marker is not bucket state:  it is written below a bucket's
+ * root, and says the directory was converted as part of one.  A bucket
+ * removed with its directory kept leaves its subdirectories marked, and
+ * one of them can be placed (DECISIONS.md 2026-11-05). */
+TEST_F(NSFSPlaceBucketTest, ASubtreeMarkerIsNotBucketState)
+{
+  const sf::path at = elsewhere() / "was-a-subdirectory";
+  sf::create_directories(at);
+  ASSERT_EQ(::setxattr(at.c_str(), nsfs::SUBTREE_CONVERTED_XATTR, "3", 1, 0),
+	    0);
+  EXPECT_EQ(place("was-a-subdirectory", at), 0);
+}
+
   static constexpr uid_t other_uid = 70170;
   row.uid = other_uid;
   row.gid = other_uid;

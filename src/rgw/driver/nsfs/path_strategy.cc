@@ -22,6 +22,7 @@
 #include <fmt/format.h>
 
 #include "common/dout_fmt.h"
+#include "common/errno.h"
 #include "include/scope_guard.h"
 
 namespace rgw { namespace sal { namespace nsfs {
@@ -97,9 +98,20 @@ bool SentinelPathStrategy::names_directory_object(std::string_view entry) const
 
 /* Never, and without a syscall.  The sentinel is the nsfs marker, and the
  * walk sees it while enumerating the directory anyway. */
+bool SentinelPathStrategy::directory_object(const DoutPrefixProvider* dpp,
+					    int dir_fd,
+					    DirectoryObject& out) const
+{
   return false;
 }
 
+/* Nothing:  the nsfs marker is the sentinel file, and removing that is a
+ * delete of the object rather than a change of format. */
+int SentinelPathStrategy::clear_directory_object(const DoutPrefixProvider* dpp,
+						 int dir_fd) const
+{
+  return 0;
+}
 
 const ReservedNames& SentinelPathStrategy::reserved_names() const
 {
@@ -200,7 +212,13 @@ bool NooBaaPathStrategy::names_directory_object(std::string_view entry) const
  * length as a string.  Absent means this directory is not an object --
  * NooBaa's own read path throws NoSuchKey (`namespace_fs.js:1008`) -- and
  * "0" means the object is empty, with no sentinel file to find. */
+bool NooBaaPathStrategy::directory_object(const DoutPrefixProvider* dpp,
+					  int dir_fd,
+					  DirectoryObject& out) const
+{
   char buf[32];
+  ssize_t len = nsfs::fgetxattr(dir_fd, NB_XATTR_DIR_CONTENT, buf,
+			    sizeof(buf) - 1);
   if (len < 0) {
     return false;
   }
@@ -210,6 +228,8 @@ bool NooBaaPathStrategy::names_directory_object(std::string_view entry) const
   errno = 0;
   unsigned long long v = ::strtoull(buf, &end, 10);
   if (errno || (end == buf) || (*end != '\0')) {
+    ldpp_dout_fmt(dpp, 4, "unreadable {} (\"{}\");  not treating this "
+		  "directory as an object", NB_XATTR_DIR_CONTENT, buf);
     return false;
   }
 
@@ -218,6 +238,18 @@ bool NooBaaPathStrategy::names_directory_object(std::string_view entry) const
   return true;
 }
 
+int NooBaaPathStrategy::clear_directory_object(const DoutPrefixProvider* dpp,
+					       int dir_fd) const
+{
+  if ((::fremovexattr(dir_fd, NB_XATTR_DIR_CONTENT) < 0) &&
+      (errno != ENODATA)) {
+    int ret = -errno;
+    ldpp_dout_fmt(dpp, 0, "ERROR: removing {}: {}", NB_XATTR_DIR_CONTENT,
+		  cpp_strerror(-ret));
+    return ret;
+  }
+  return 0;
+}
 
 const ReservedNames& NooBaaPathStrategy::reserved_names() const
 {

@@ -54,6 +54,75 @@ class NSFSObject;
 
 namespace nsfs {
 
+/* What the upgrade is doing, at the moment it calls back.
+ *
+ * A bucket moving from base to a named profile rewrites every object
+ * in the tree, and the callback is how a caller follows that:  for
+ * progress and checkpointing in a deployment, and in a test for
+ * sequencing a concurrent reader against the exact instant it wants.
+ *
+ * Three phases, because the interesting state is inside an item and
+ * not between two of them.  `before` is the old format, which the read
+ * fallback strategy serves.  `written` is the only genuinely new state
+ * -- the target format is on disk and the old attribute has not gone --
+ * and it is where asking the nsfs strategy first stops being incidental.
+ * `pruned` is the RGW attribute alone, and the item is native.
+ *
+ * A non-zero return stops the conversion with the marker still set, so
+ * the same hook that sequences a reader injects a failure and leaves a
+ * tree for a restart to finish. */
+struct ConvertEvent {
+  enum class Kind { bucket, object, directory_object, version, upload,
+                    part };
+  enum class Phase { before, written, pruned };
+
+  Kind kind;
+  Phase phase;
+  std::string key;         /* the object, or the upload's object;
+                            * the bucket name when kind is bucket.
+                            * For a version it is the object the
+                            * version belongs to, with no suffix --
+                            * version_id carries the rest. */
+  std::string upload_id;   /* empty unless kind is upload or part */
+  std::string version_id;  /* empty unless kind is version */
+  uint32_t part{0};
+  uint64_t index{0};       /* items reached so far, this run */
+};
+
+const char* to_string(ConvertEvent::Kind k);
+const char* to_string(ConvertEvent::Phase p);
+
+using convert_cb_t =
+  const fu2::unique_function<int(const DoutPrefixProvider*,
+				 const ConvertEvent&) const>;
+
+/* What a conversion run did, whether or not it finished. */
+struct ConvertProgress {
+  uint64_t objects{0};
+  uint64_t directory_objects{0};
+  /* Counted apart from objects, because a resumed run has only these
+   * numbers and its marker to report from:  folded together, a count
+   * of 1540 cannot be reconciled against a bucket of 1200 keys, and a
+   * half-finished sweep reads the same as a bucket with history. */
+  uint64_t versions{0};
+  uint64_t uploads{0};
+  uint64_t parts{0};
+  /* Subdirectories a resumed walk passed over, their subtree already
+   * converted (SUBTREE_CONVERTED_XATTR).  One each:  what is under one
+   * is not counted, since counting it is the walk the marker saves
+   * (DECISIONS.md 2026-11-05). */
+  uint64_t directories_skipped{0};
+  bool complete{false};    /* nothing foreign left;  the marker is gone */
+  /* the mask was written, so the bucket IS in the target profile.
+   *
+   * Separate from `complete` because they fail apart:  a run that
+   * stops halfway has changed the profile and not finished the tree,
+   * and the bucket is servable in exactly that state.  A caller that
+   * reads only the return code cannot tell the two, and the two need
+   * different things done about them -- nothing, and a resume. */
+  bool profile_set{false};
+};
+
 using BucketCache = file::listing::BucketCache<NSFSDriver, NSFSBucket>;
 using MultipartCache = file::listing::MultipartCache<>;
 
@@ -157,6 +226,11 @@ protected:
    * built from its parent */
   XattrStrategy* xattr_strategy{nullptr};
   PathStrategy* path_strategy{nullptr};
+  /* the fallback strategies, null unless the bucket is
+   * mid-upgrade;  carried and inherited for the same reason as the
+   * others.  See NSFSBucket::xattr_fallback(). */
+  XattrStrategy* xattr_fallback{nullptr};
+  PathStrategy* path_fallback{nullptr};
   /* The names for this entry's own attributes, when they are not the
    * format's:  a bucket's directory carries the bucket's state, which is
    * RGW's in every format (DECISIONS.md 2026-10-13).  Not inherited --
@@ -182,7 +256,14 @@ public:
     stx(_ent.stx),
     stat_done(_ent.stat_done),
     ctx(_ent.ctx),
-    fs_strategy(_ent.fs_strategy)
+    fs_strategy(_ent.fs_strategy),
+    mpu_strategy(_ent.mpu_strategy),
+    xattr_strategy(_ent.xattr_strategy),
+    path_strategy(_ent.path_strategy),
+    xattr_fallback(_ent.xattr_fallback),
+    path_fallback(_ent.path_fallback),
+    own_xattr_strategy(_ent.own_xattr_strategy),
+    reserved_names(_ent.reserved_names)
   { }
 
   virtual ~FSEnt() { }
@@ -196,6 +277,10 @@ public:
   XattrStrategy* get_xattr_strategy() const { return xattr_strategy; }
   void set_path_strategy(PathStrategy* s) { path_strategy = s; }
   PathStrategy* get_path_strategy() const { return path_strategy; }
+  void set_xattr_fallback(XattrStrategy* s) { xattr_fallback = s; }
+  XattrStrategy* get_xattr_fallback() const { return xattr_fallback; }
+  void set_path_fallback(PathStrategy* s) { path_fallback = s; }
+  PathStrategy* get_path_fallback() const { return path_fallback; }
   void set_own_xattr_strategy(XattrStrategy* s) { own_xattr_strategy = s; }
   void set_reserved_names(const ReservedNames* r) { reserved_names = r; }
   const ReservedNames* get_reserved_names() const { return reserved_names; }
@@ -347,6 +432,14 @@ public:
   virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name, const CopyHints& hints, bool src_as_gateway = false) override;
 
   int get_ent(const DoutPrefixProvider *dpp, optional_yield y, const std::string& name, const std::string& version, std::unique_ptr<FSEnt>& ent);
+
+  /* Is this directory itself an object, in a format that marks the
+   * directory rather than relying on its sentinel?  Asks the bucket's
+   * own path strategy and then the fallback.  The nsfs strategy returns
+   * false without a syscall and the fallback is null except mid-
+   * conversion, so a bucket in the nsfs format pays nothing here. */
+  bool directory_object(const DoutPrefixProvider* dpp,
+			PathStrategy::DirectoryObject& out);
 };
 
 class MPDirectory : public Directory {
@@ -385,10 +478,56 @@ public:
   virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags, const std::string& path_prefix = "") override;
 };
 
-std::string get_key_fname(rgw_obj_key& key, bool use_version);
+/* A directory object in NooBaa's format.
+ *
+ * NooBaa marks the directory itself:  user.noobaa.dir_content holds the
+ * object's size, the object's attributes are the directory's, and the
+ * bytes are in the sentinel only when there are any
+ * (PathStrategy::directory_object()).  So one object is spread over two
+ * entries, and this keeps that rule in one place behind the interface
+ * every caller already uses (DECISIONS.md 2026-10-13).
+ *
+ * It reports what conversion will leave, because a client must not see
+ * a bucket being converted differ from the bucket it becomes
+ * (DECISIONS.md 2026-10-13):
+ *
+ *   - stat is the sentinel's when the object has content, and the
+ *     directory's when it is empty, with the size from the marker
+ *   - attributes are read from the directory, without the `user.nsfs:`
+ *     names:  on the bucket root those are the bucket's own state, and
+ *     nothing else in NooBaa's format carries them
+ *   - data is the sentinel's, or nothing
+ *
+ * `parent` is the directory, and `fname` the sentinel's name.  Read
+ * only:  a write to such an object has to convert it, which this does
+ * not do, so the mutators reject it. */
+class NooBaaDirectoryObject : public FSEnt {
+  PathStrategy::DirectoryObject dobj;
+  /* the sentinel, present only when the object has content */
+  std::unique_ptr<File> content;
+
+public:
+  NooBaaDirectoryObject(const std::string& sentinel, Directory* dir,
+			const PathStrategy::DirectoryObject& _dobj,
+			CephContext* _ctx);
+  NooBaaDirectoryObject(const NooBaaDirectoryObject& o);
+  virtual ~NooBaaDirectoryObject() { close(); }
+
+  virtual ObjectType get_type() override { return ObjectType::FILE; };
 
   virtual int create(const DoutPrefixProvider *dpp, optional_yield y, bool* existed = nullptr, bool temp_file = false) override;
+  virtual int open(const DoutPrefixProvider *dpp) override;
+  virtual int close() override;
+  virtual int stat(const DoutPrefixProvider *dpp, bool force = false) override;
+  virtual int remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children) override;
+  virtual int write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) override;
   virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name, const CopyHints& hints, bool src_as_gateway = false) override;
+  virtual std::unique_ptr<FSEnt> clone_base() override {
+    return std::make_unique<NooBaaDirectoryObject>(*this);
+  }
+};
+
+
 /* Walk `key_path` from `root`, making missing directories when
  * `create_dirs`.
  *
@@ -556,6 +695,37 @@ protected:
   std::unique_ptr<nsfs::BucketCache> bucket_cache;
   std::unique_ptr<nsfs::MultipartCache> multipart_cache;
   std::unique_ptr<rgw::posix::SyncFsThread> syncfs_thread;
+
+  /* Buckets whose mutations are held off, and how many are still
+   * running in each.
+   *
+   * An upgrade rewrites a tree, and a write arriving in the middle of
+   * one object's conversion can be lost:  the converter read the
+   * attributes before the write and writes them back after it.  So
+   * the upgrade closes the gate, waits for what is already running to
+   * finish -- every operation terminates, which is what makes the
+   * wait bounded -- and converts.
+   *
+   * Reads are not gated.  A half-converted tree is readable through
+   * the fallback strategies, which is why they exist, and blocking
+   * reads for
+   * the length of a conversion is the cost we set out to avoid.
+   *
+   * Per process.  A gate one gateway closes is invisible to the one
+   * beside it until the invalidate upcall exists;  today that is not a
+   * gap in practice, because the per-instance cache already prevents
+   * two of them serving one root, but it is a gap in principle and
+   * the upcall is what closes it. */
+  ceph::mutex gate_lock = ceph::make_mutex("NSFSDriver::gate_lock");
+  ceph::condition_variable gate_cond;
+  struct BucketGate {
+    bool closed{false};
+    uint64_t inflight{0};
+  };
+  std::map<std::string, BucketGate, std::less<>> bucket_gates;
+  /* the two waits;  see the constants they are seeded from */
+  std::chrono::milliseconds mutation_gate_wait{5000};
+  std::chrono::milliseconds gate_drain_wait{60000};
   UserCache user_cache;
 #ifdef __linux__
   std::unique_ptr<UserDBWatcher> userdb_watcher;
@@ -647,6 +817,11 @@ protected:
    * inject_skip_reclone:  the negative case belongs in the test rather than
    * in a hand-edited build */
   bool inject_fsio_skip_cleanup{false};
+  /* make conversion behave as a daemon without CAP_CHOWN, so a test can
+   * assert that it fails rather than creating a file whose owner is
+   * wrong.  The capability is not droppable in a test process -- a
+   * thread cannot regain it -- so the condition has to be injected */
+  bool inject_no_chown{false};
 
   /* The `inject-buffered-copy` hint, by user.  Armed with `user=`,
    * a bundle applies to that user's copies only;  armed without,
@@ -1056,6 +1231,38 @@ public:
   virtual void register_admin_apis(RGWRESTMgr* mgr) override;
   void get_features(std::map<std::string, std::string>& features) override;
 
+  /* Take a slot for a mutation on this bucket.
+   *
+   * Waits while the gate is closed and gives up rather than waiting
+   * out a whole conversion, which is the shape resharding already
+   * uses:  guard_reshard() blocks for a bound and then lets a
+   * retryable error reach the client.  -ERR_SERVICE_UNAVAILABLE is
+   * 503 ServiceUnavailable, which every SDK retries.
+   *
+   * Paired with mutation_leave(), or held through NSFSMutationGuard. */
+  void mutation_leave(const std::string& bucket);
+
+  /* Hold mutations off, and wait for the ones already running.
+   *
+   * Returns once the bucket has none in flight, which is what makes
+   * it safe to rewrite the tree.  -ETIMEDOUT if something is still
+   * running after the bound, and the gate is left open again -- a
+   * conversion that cannot start is better than one that starts
+   * beside a writer. */
+  int gate_close(const DoutPrefixProvider* dpp, const std::string& bucket);
+  void gate_open(const std::string& bucket);
+  bool gate_is_closed(const std::string& bucket);
+
+  /* Test support.  A test which means to observe a rejected mutation
+   * would otherwise wait out the production timeout, and shortening
+   * the constant would shorten it for a deployment too. */
+  void set_gate_waits(std::chrono::milliseconds mutation,
+		      std::chrono::milliseconds drain) {
+    mutation_gate_wait = mutation;
+    gate_drain_wait = drain;
+  }
+
+
   int driver_hint(const DoutPrefixProvider* dpp,
 		  const std::string& hint,
 		  const std::map<std::string, std::string>& params,
@@ -1086,6 +1293,8 @@ public:
     std::lock_guard l{unresolved_as_gateway_lock};
     return !unresolved_as_gateway_user.empty() &&
 	   (unresolved_as_gateway_user == to_string(who));
+  }
+  bool no_chown_injected() const { return inject_no_chown; }
   int rename_fail_after_injected() const { return inject_rename_fail_after; }
   int rename_abandon_injected() const { return inject_rename_abandon; }
   bool fsio_attrs_fail_injected() const { return inject_fsio_attrs_fail; }
@@ -1117,12 +1326,22 @@ public:
   nsfs::MPUStrategy* get_mpu_strategy() { return mpu_strategy.get(); }
   nsfs::XattrStrategy* get_xattr_strategy() { return xattr_strategy.get(); }
   nsfs::PathStrategy* get_path_strategy() { return path_strategy.get(); }
+  /* The foreign readers.  Reached only through a bucket that is
+   * mid-upgrade;  see NSFSBucket::xattr_fallback(). */
   nsfs::BucketStateStrategy* get_bucket_state_strategy() {
     return bucket_state_strategy.get();
   }
   nsfs::BucketStateStrategy* get_noobaa_bucket_state_strategy() {
     return nb_bucket_state_strategy.get();
   }
+  nsfs::XattrStrategy* get_noobaa_xattr_strategy() {
+    return nb_xattr_strategy.get();
+  }
+  nsfs::PathStrategy* get_noobaa_path_strategy() {
+    return nb_path_strategy.get();
+  }
+  nsfs::MPUStrategy* get_noobaa_mpu_strategy() {
+    return nb_mpu_strategy.get();
   }
   const nsfs::ReservedNames& get_reserved_names() const { return reserved_names; }
 
@@ -1167,8 +1386,18 @@ public:
    * bucket already at this version. */
   /* Set a named bucket's profile, and report what it was so a caller
    * can tell a change from a no-op. */
+  int set_bucket_profile(const DoutPrefixProvider* dpp, optional_yield y,
+			 const std::string& name, uint32_t target,
+			 uint32_t* had /* OUT */,
+			 std::string* had_profile /* OUT */,
+			 nsfs::ConvertProgress* progress = nullptr /* OUT */);
 
   /* Read it without changing it. */
+  int get_bucket_profile(const DoutPrefixProvider* dpp, optional_yield y,
+			 const std::string& name,
+			 uint32_t* extensions /* OUT */,
+			 std::string* pname /* OUT */,
+			 bool* converting = nullptr /* OUT */);
 
   /* called by nsfs::BucketCache layer when a new object is discovered
    * by inotify or similar */
@@ -1259,6 +1488,37 @@ public:
                   GroupList& listing) override;
 };
 
+/* A mutation's slot, held for the length of the operation.
+ *
+ * Constructed at the top of a mutating SAL method;  the caller checks
+ * result() and returns it if it is negative.  Nothing is held when it
+ * is, so the destructor has nothing to release. */
+class NSFSMutationGuard {
+  NSFSDriver* driver;
+  std::string bucket;
+  int rc;
+
+public:
+  ~NSFSMutationGuard() {
+    if ((rc == 0) && driver) {
+      driver->mutation_leave(bucket);
+    }
+  }
+  NSFSMutationGuard(const NSFSMutationGuard&) = delete;
+  NSFSMutationGuard& operator=(const NSFSMutationGuard&) = delete;
+
+  /* Movable, because a slot outlives the scope that took it when the
+   * mutation is an open write handle rather than a request:  see
+   * NSFSObject::get_fsio_handle().  The moved-from guard releases
+   * nothing. */
+  NSFSMutationGuard(NSFSMutationGuard&& o) noexcept
+    : driver(o.driver), bucket(std::move(o.bucket)), rc(o.rc) {
+    o.driver = nullptr;
+  }
+
+  int result() const { return rc; }
+};
+
 class NSFSBucket : public StoreBucket {
 private:
   NSFSDriver* driver;
@@ -1267,6 +1527,9 @@ private:
   std::unique_ptr<nsfs::Directory> dir;
   /* resolved from the extensions marker;  null until it has been read */
   const nsfs::BucketProfile* profile{nullptr};
+  /* read beside it:  the format this tree is being converted from, or
+   * none.  Only meaningful once profile is non-null. */
+  bool converting{false};
   /* default_object_owner(), once looked up */
   std::optional<ACLOwner> default_owner;
 
@@ -1404,12 +1667,79 @@ public:
    * none. */
   nsfs::BucketStateStrategy* bucket_state_fallback() const;
 
+  /* The fallback strategies, or null.
+   *
+   * A bucket being converted holds objects in two formats and its mark
+   * cannot say which an individual object is in, so a reader asks the
+   * bucket's own strategy first and these second.  Null on every
+   * bucket that is not mid-conversion, which is every bucket we
+   * created and every one whose conversion has finished -- so the
+   * fallback costs nothing to have and is unreachable rather than
+   * merely unused.
+   *
+   * Not a vector.  Two formats exist, so there is one fallback and
+   * never a sequence of them, and a container would put an
+   * indirection on a path that has one element in every case but
+   * this one. */
+  nsfs::XattrStrategy* xattr_fallback() const;
+  nsfs::PathStrategy* path_fallback() const;
+  nsfs::MPUStrategy* mpu_fallback() const;
+  bool is_converting() const { return converting; }
 
+  /* Move the bucket to a profile.  The one way a bucket's profile
+   * changes:  adding extensions is a write, dropping them requires the
+   * bucket to hold no content and removes the scaffolding the dropped
+   * extensions own.
+   *
+   * Leaving base is the upgrade, and it rewrites the tree.  `cb`, when
+   * given, is called for each item and phase;  see ConvertEvent.  The
+   * REST path passes none.  `progress`, when given, is filled in
+   * whether the run finished or stopped. */
+  int set_profile(const DoutPrefixProvider* dpp, optional_yield y,
+		  uint32_t target,
+		  nsfs::convert_cb_t* cb = nullptr,
+		  nsfs::ConvertProgress* progress = nullptr);
+
+  /* Rewrite what is still in the other format.  Reached through
+   * set_profile();  separate so a stopped run can be resumed without
+   * touching the marker again. */
+  int convert_tree(const DoutPrefixProvider* dpp, optional_yield y,
+		   nsfs::convert_cb_t* cb,
+		   nsfs::ConvertProgress* progress);
+
+
+private:
+  /* Re-stage the uploads still in the other format.  Part of
+   * convert_tree();  separate because staging is a different shape
+   * from the object tree and shares nothing with the walk. */
+  int convert_uploads(const DoutPrefixProvider* dpp, optional_yield y,
+		      nsfs::convert_cb_t* cb,
+		      nsfs::ConvertProgress& progress);
+public:
 
   /* Write the extensions attribute.  Reached through set_profile(),
    * and directly at creation. */
   int mark_extensions(const DoutPrefixProvider* dpp, uint32_t version);
 
+
+  /* Write the converting marker, and remove it.
+   *
+   * Two functions rather than one with a flag.  The flag was named
+   * `from_noobaa`, which reads as the source format -- and the
+   * attribute's *value* is exactly that, so `mark_converting(dpp,
+   * false)` read as "converting, but not from NooBaa" when it meant
+   * "stop converting".  The value dimension is real and the set/clear
+   * dimension is real;  one bool cannot carry both.
+   *
+   * There is one source format, so `mark_converting` names it in the
+   * body rather than taking it.  A second format is when a parameter
+   * earns its place.
+   *
+   * Written by the upgrade leaving base and removed when it finishes;
+   * nothing else may touch it, because it is what says a foreign
+   * reader is still needed. */
+  int mark_converting(const DoutPrefixProvider* dpp);
+  int clear_converting(const DoutPrefixProvider* dpp);
   virtual RGWAccessControlPolicy& get_acl(void) override { return acls; }
   virtual int set_acl(const DoutPrefixProvider* dpp, RGWAccessControlPolicy& acl,
 		      optional_yield y) override;
@@ -1433,6 +1763,9 @@ public:
   virtual int put_info(const DoutPrefixProvider* dpp, bool exclusive,
                        ceph::real_time mtime, optional_yield y) override;
   virtual int check_empty(const DoutPrefixProvider* dpp, optional_yield y) override;
+  /* whether this bucket's directory exists for it or predates it, and
+   * what remove() does when it predates it -- see OWNS_STORAGE_XATTR */
+  bool owns_storage(const DoutPrefixProvider* dpp);
   virtual int check_quota(const DoutPrefixProvider *dpp, RGWQuota& quota, uint64_t obj_size, optional_yield y, bool check_size_only = false) override;
   virtual int try_refresh_info(const DoutPrefixProvider* dpp, ceph::real_time* pmtime, optional_yield y) override;
   virtual int read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch,
@@ -1806,6 +2139,14 @@ public:
    std::string leaf_name;
    bool ephemeral{false};
    std::vector<std::unique_ptr<nsfs::Directory>> dir_chain;
+   /* A write handle's slot, held for the handle's whole life.
+    *
+    * Opening one is the mutation;  the writes through it are parts of
+    * that mutation and not separate ones, and releasing the handle is
+    * what retires it.  So the gate is entered at open and left at
+    * destruction, and a bucket drains as its write handles are
+    * released.  Empty on a read handle, which mutates nothing. */
+   std::optional<NSFSMutationGuard> gate;
    /* who the handle is for (n plan D4a):  librgw's mount user, pinned
     * at get_fsio_handle() and held for the handle's life;  every call
     * on the tree runs as it, and as the gateway where it is inactive */
@@ -1817,8 +2158,10 @@ public:
    friend class NSFSObject;
 
   protected:
-   NSFSFSIOObject(NSFSObject* _obj, NSFSDriver* _drv, bool _ephemeral)
-     : src_obj(_obj), driver(_drv), ephemeral(_ephemeral) {}
+   NSFSFSIOObject(NSFSObject* _obj, NSFSDriver* _drv, bool _ephemeral,
+		  std::optional<NSFSMutationGuard>&& _gate = std::nullopt)
+     : src_obj(_obj), driver(_drv), ephemeral(_ephemeral),
+       gate(std::move(_gate)) {}
 
   public:
     virtual int preadv(const struct iovec* iov, int iovcnt,
@@ -2019,6 +2362,8 @@ private:
   optional_yield yield;
   rgw_owner auth_user;
   nsfs::FSIdentity identity;
+  /* who uring_write's transfers run as;  declared before it, so it
+   * outlives it */
   nsfs::IdentityPersonality uring_identity{identity};
   std::unique_ptr<UringWriteWindow> uring_write;
 
@@ -2063,6 +2408,8 @@ class NSFSMultipartWriter : public StoreWriter {
 private:
   rgw_owner auth_user;
   nsfs::FSIdentity identity;
+  /* who uring_write's transfers run as;  declared before it, so it
+   * outlives it */
   nsfs::IdentityPersonality uring_identity{identity};
   NSFSDriver* driver;
   /* the upload's staging layout, resolved once by get_writer();  this

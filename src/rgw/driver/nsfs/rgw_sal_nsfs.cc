@@ -33,6 +33,7 @@
 #include <sys/uio.h>
 #include <sys/xattr.h>
 #include <unistd.h>
+#include <algorithm>
 #include <atomic>
 #include <charconv>
 #include <cstdint>
@@ -349,8 +350,34 @@ static std::string etag_from_fd(int fd, const nsfs::XattrStrategy* xs)
   return std::string(buf, len);
 }
 
+/* The object's recorded owner, from its ACL xattr.
+ *
+ * XattrStrategy::object_owner() reads an attribute map, so this builds
+ * the single entry it looks at.  The ACL is ceph-encoded rather than a
+ * counted string, so the bytes on disk go into the map unchanged.
+ *
+ * Sized from the attribute rather than from a fixed buffer:  a policy
+ * with many grants would otherwise be truncated, and a truncated
+ * encoding fails to decode, which would look like an object with no
+ * owner rather than like an error.
+ */
+static int owner_from_fd(int fd, const nsfs::XattrStrategy* xs,
+			 ACLOwner& owner)
+{
+  Attrs attrs;
+  const std::string xattr = xs->disk_name(RGW_ATTR_ACL);
+  if (!xattr.empty()) {
     ssize_t len = nsfs::fgetxattr(fd, xattr.c_str(), nullptr, 0);
+    if (len > 0) {
+      bufferlist bl;
+      bl.push_back(buffer::create(len));
       len = nsfs::fgetxattr(fd, xattr.c_str(), bl.c_str(), len);
+      if (len > 0) {
+	bl.splice(len, bl.length() - len);
+	attrs[RGW_ATTR_ACL] = std::move(bl);
+      }
+    }
+  }
   return xs->object_owner(attrs, owner);
 }
 
@@ -378,7 +405,7 @@ static void set_dir_entry_owner(rgw_bucket_dir_entry& bde, int ret,
 static inline std::string nsfs_ver_entry(const std::string& leaf,
                                          const std::string& vid)
 {
-  return leaf + "_" + vid;
+  return fmt::format("{}_{}", leaf, vid);
 }
 
 static std::string synthesize_etag(const struct statx& stx)
@@ -463,10 +490,71 @@ static int nsfs_record_non_md5_etag(const DoutPrefixProvider* dpp, int fd,
     ::fsetxattr(fd, xattr.c_str(), etag.c_str(), etag.size(), 0);
     return 0;
   }
-  return true;
   return fsetxattr_as(dpp, id, fd, xattr, etag, y);
 }
+
+/* The uid and gid of an open descriptor.
+ *
+ * Conversion wants them twice:  for the owner it records on an object
+ * that never had one, and for the files it creates. */
+static int statx_ids(int fd, struct statx& stx)
+{
   if (nsfs::statx(fd, "", AT_EMPTY_PATH, STATX_UID | STATX_GID, &stx) < 0) {
+    return -errno;
+  }
+  if ((stx.stx_mask & (STATX_UID | STATX_GID))
+      != (STATX_UID | STATX_GID)) {
+    return -EOPNOTSUPP;
+  }
+  return 0;
+}
+
+/* Conversion creates nothing new.  Every file it writes re-expresses
+ * something that is already there, so it takes that thing's uid and
+ * gid -- the sentinel from the directory it replaces, an upload's
+ * files from NooBaa's.
+ *
+ * Not the gateway's, which would leave a converted directory object
+ * unreadable to the account that owns the data.  And not an
+ * account's:  a sideloaded file may belong to a uid no account maps
+ * to, and there would be nobody to be.
+ *
+ * A no-op when the source is already the gateway's, which is every file on a
+ * tree this gateway wrote, and which needs no capability.  Otherwise
+ * it needs CAP_CHOWN -- a fourth beyond the three the daemon is given
+ * -- and without it conversion fails rather than leaving behind a
+ * file whose owner is wrong.
+ *
+ * **Call this after the mode is set, never before.**  A file's mode is
+ * fixed by the open that creates it, while the gateway still owns it;
+ * chowning first would leave us modifying a file owned by somebody
+ * else, which needs CAP_FOWNER as well.  One capability rather than
+ * two, and only because of the order. */
+static int inherit_ids(const DoutPrefixProvider* dpp, int fd,
+		       const struct statx& src, bool no_chown,
+		       std::string_view what)
+{
+  if ((src.stx_uid == ::geteuid()) && (src.stx_gid == ::getegid())) {
+    return 0;
+  }
+  if (no_chown) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: not creating {} for uid {}:{}:  chown is "
+			  "unavailable (injected)", what, src.stx_uid,
+			  src.stx_gid);
+    return -EPERM;
+  }
+  if (::fchown(fd, src.stx_uid, src.stx_gid) < 0) {
+    int ret = -errno;
+    ldpp_dout_fmt(dpp, 0, "ERROR: cannot give {} the uid {}:{} of what it "
+			  "re-expresses: {}{}", what, src.stx_uid, src.stx_gid,
+			  cpp_strerror(-ret),
+			  (ret == -EPERM
+			   ? ";  the daemon needs CAP_CHOWN to convert a tree "
+			     "it does not own"
+			   : ""));
+    return ret;
+  }
+  return 0;
 }
 
 
@@ -1341,7 +1429,22 @@ version_lock_recovering(const DoutPrefixProvider* dpp, NSFSDriver* driver,
 struct DemoteResult {
   bool did_demote{false};
   std::string demoted_ver_id;
+
+  /* The demoted version's own facts, captured where the demotion
+   * happens.
+   *
+   * A caller that has already replaced the object cannot read them
+   * afterwards:  by then the inode under the leaf name is the *new*
+   * version.  That is why four of the five demoted cache entries were
+   * built from a key and almost nothing else -- the facts were never
+   * carried out of here, and only the delete path, which still holds
+   * the pre-delete object, could fill them in for itself.
+   *
+   * See fill_demoted_entry(). */
+  struct statx stx{};
+  std::string etag;
   /* what object_owner() returned for the demoted version */
+  ACLOwner owner;
   int owner_ret{-ENODATA};
 };
 
@@ -1440,8 +1543,6 @@ static int demote_current_version(const DoutPrefixProvider* dpp,
       const auto now_ms = std::to_string(
 	std::chrono::duration_cast<std::chrono::milliseconds>(
 	  std::chrono::system_clock::now().time_since_epoch()).count());
-      ::fsetxattr(demoted_fd, ts_x.c_str(),
-		  now_ms.c_str(), now_ms.size(), 0);
       const std::string ts_x =
 	xs->disk_name(RGW_NSFS_ATTR_NON_CURRENT_TS);
       const int tret = nsfs::as_identity_or_raise(dpp, id, model,
@@ -1453,9 +1554,15 @@ static int demote_current_version(const DoutPrefixProvider* dpp,
       if (tret < 0) {
 	ldpp_dout_fmt(dpp, 4, "nsfs: demote {}:  its non-current timestamp "
 			      "was not written: {}", leaf, cpp_strerror(-tret));
+      }
+      /* While the fd that can return them is open.  cur_stx was taken
+       * on the leaf before the link and safe_link moves no bytes, so
+       * it describes this same inode. */
+      result.etag = etag_from_fd(demoted_fd, xs);
       result.owner_ret = owner_from_fd(demoted_fd, xs, result.owner);
       ::close(demoted_fd);
     }
+    result.stx = cur_stx;
     result.did_demote = true;
     result.demoted_ver_id = cur_ver_id;
   } else if (sr == SafeResult::MISMATCH && cur_is_null) {
@@ -1672,6 +1779,44 @@ static inline ceph::real_time from_statx_timestamp(const struct statx_timestamp&
   return ceph::real_clock::from_timespec(ts);
 }
 
+/* The cache entry for a version a write has just demoted.
+ *
+ * One function because every caller of demote_current_version() needs
+ * this entry and each of them built a different subset of it:  the PUT
+ * path set the key and the flags and nothing else, so on a warm cache
+ * every non-current version listed as zero-length with no etag and no
+ * owner.  The bytes were never at risk -- a versioned GET reads the
+ * file -- but the listing said otherwise.
+ *
+ * It hid because a listing that misses runs Directory::fill_cache(),
+ * which reads each entry's xattrs and fills everything in.  A bucket
+ * listed for the first time after its writes therefore looks correct,
+ * and so does every test that creates a bucket, writes, and lists
+ * once.  The same mechanism hid the FLAG_CURRENT half of this bug
+ * until it was fixed in NSFSFSIOObject::publish(), whose comment
+ * describes it.
+ */
+static void fill_demoted_entry(const std::string& obj_name,
+			       const DemoteResult& d,
+			       const ACLOwner& bucket_owner,
+			       rgw_bucket_dir_entry& bde)
+{
+  bde.key.name = obj_name;
+  bde.key.instance = d.demoted_ver_id;
+  bde.ver.pool = 1;
+  bde.ver.epoch = 1;
+  bde.exists = true;
+  bde.meta.category = RGWObjCategory::Main;
+  bde.meta.size = d.stx.stx_size;
+  bde.meta.accounted_size = d.stx.stx_size;
+  bde.meta.mtime = from_statx_timestamp(d.stx.stx_mtime);
+  bde.meta.storage_class = RGW_STORAGE_CLASS_STANDARD;
+  /* its own digest where it has one;  see etag_from_fd() for why the
+   * synthesized token must not stand in for a real one */
+  bde.meta.etag = d.etag.empty() ? synthesize_etag(d.stx) : d.etag;
+  /* FLAG_VER without FLAG_CURRENT is what demotion means, and clearing
+   * that flag is why the entry is rewritten at all */
+  bde.flags = rgw_bucket_dir_entry::FLAG_VER;
   set_dir_entry_owner(bde, d.owner_ret, d.owner, bucket_owner);
 }
 
@@ -1680,6 +1825,27 @@ static inline int copy_dir_fd(int old_fd)
   return openat(old_fd, ".", O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
 }
 
+/* Read an object's attributes, through one format or through two.
+ *
+ * `alt` is the fallback strategy and is null everywhere but
+ * a bucket mid-upgrade -- see NSFSBucket::xattr_fallback().  It is
+ * asked only about a name the bucket's own format declines, so a tree
+ * with nothing foreign left runs the loop it ran before:  no extra
+ * syscall, and one more string comparison for each name neither format
+ * owns, which in practice is `security.selinux`.
+ *
+ * The nsfs format first.  An object rewritten during the conversion
+ * carries nsfs names and must be read as nsfs's even while the bucket
+ * still holds objects that are not.
+ *
+ * Names starting with `skip` are not read at all:  NooBaaDirectoryObject
+ * reads a directory that may also carry the bucket's own state.
+ *
+ * `unknown`, if given, receives every `user.noobaa.*` name the reviewed
+ * releases of NooBaa do not write (X4's third layer, DECISIONS.md
+ * 2026-10-26).  Reported rather than refused here, because listing reads
+ * through this too, and one object must not end a listing;  the callers
+ * that hand out or convert an object refuse. */
 /* One value of get_x_attrs() into `attrs`. */
 static void put_x_attr(const DoutPrefixProvider* dpp, Attrs& attrs,
 		       std::string key, const nsfs::XattrStrategy* owner,
@@ -1831,11 +1997,15 @@ static int get_x_attrs(optional_yield y, const DoutPrefixProvider* dpp, int fd,
     std::string xattr_name(keyptr);
     std::string key;
 
-    if (!parse_xattr_name(xattr_name, key)) {
+    if (!skip.empty() && xattr_name.starts_with(skip)) {
       buflen -= keylen;
       keyptr += keylen;
       continue;
+    }
+
+    const nsfs::XattrStrategy* owner = xs;
     if (!xs->parse_disk_name(xattr_name, key)) {
+      if (!alt || !alt->parse_disk_name(xattr_name, key)) {
 	/* Neither format places this name.  Kept rather than
 	 * forgotten:  a one-to-many attribute -- object tags, which
 	 * are one per tag in NooBaa's format -- cannot be placed a name at
@@ -1846,6 +2016,11 @@ static int get_x_attrs(optional_yield y, const DoutPrefixProvider* dpp, int fd,
 	  unknown->push_back(xattr_name);
 	}
 	unclaimed.emplace_back(std::move(xattr_name));
+	buflen -= keylen;
+	keyptr += keylen;
+	continue;
+      }
+      owner = alt;
     }
 
     /* Read straight into a stack buffer.  Sizing the value first with a
@@ -2164,12 +2339,24 @@ namespace nsfs {
 
 FSEnt::FSEnt(std::string _name, Directory* _parent, CephContext* _ctx, FSStrategy* _strat)
   : fname(_name), parent(_parent), ctx(_ctx),
-    fs_strategy(_strat ? _strat : (_parent ? _parent->fs_strategy : nullptr))
+    fs_strategy(_strat ? _strat : (_parent ? _parent->fs_strategy : nullptr)),
+    mpu_strategy(_parent ? _parent->mpu_strategy : nullptr),
+    xattr_strategy(_parent ? _parent->xattr_strategy : nullptr),
+    path_strategy(_parent ? _parent->path_strategy : nullptr),
+    xattr_fallback(_parent ? _parent->xattr_fallback : nullptr),
+    path_fallback(_parent ? _parent->path_fallback : nullptr),
+    reserved_names(_parent ? _parent->reserved_names : nullptr)
 {}
 
 FSEnt::FSEnt(std::string _name, Directory* _parent, struct statx& _stx, CephContext* _ctx, FSStrategy* _strat)
   : fname(_name), parent(_parent), exist(true), stx(_stx), stat_done(true), ctx(_ctx),
-    fs_strategy(_strat ? _strat : (_parent ? _parent->fs_strategy : nullptr))
+    fs_strategy(_strat ? _strat : (_parent ? _parent->fs_strategy : nullptr)),
+    mpu_strategy(_parent ? _parent->mpu_strategy : nullptr),
+    xattr_strategy(_parent ? _parent->xattr_strategy : nullptr),
+    path_strategy(_parent ? _parent->path_strategy : nullptr),
+    xattr_fallback(_parent ? _parent->xattr_fallback : nullptr),
+    path_fallback(_parent ? _parent->path_fallback : nullptr),
+    reserved_names(_parent ? _parent->reserved_names : nullptr)
 {}
 
 int FSEnt::stat(const DoutPrefixProvider* dpp, bool force)
@@ -2284,7 +2471,6 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
       place(key, bl);
     }
 
-    std::vector<std::string> to_remove;
     if (mode == AttrWriteMode::REPLACE_ALL) {
       nsfs::xattr_map_t old_raw;
       fs_strategy->get_xattrs(dpp, afd, old_raw, y, aid);
@@ -2310,6 +2496,8 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
          * it.  DeleteObjectTagging arrives here, and without this it
          * removed the one nsfs name and left NooBaa's tags. */
         bufferlist none;
+          continue;
+        }
           to_remove.push_back(std::move(disk_name));
         }
       }
@@ -2376,7 +2564,8 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
       if (skip_empty && !it.second.length()) {
         continue;
       }
-      ret = write_x_attr(dpp, y, fd, it.first, it.second, get_name());
+      ret = write_x_attr(dpp, y, fd, it.first, it.second, get_name(),
+			 xs, aid);
       if (ret < 0) {
         return ret;
       }
@@ -2387,7 +2576,8 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
     if (skip_empty && !it.second.length()) {
       continue;
     }
-    ret = write_x_attr(dpp, y, fd, it.first, it.second, get_name());
+    ret = write_x_attr(dpp, y, fd, it.first, it.second, get_name(),
+		       xs, aid);
     if (ret < 0) {
       return ret;
     }
@@ -2458,7 +2648,9 @@ int FSEnt::make_dir_entry(const DoutPrefixProvider *dpp, optional_yield y,
   if (ret < 0)
     return ret;
 
-  ret = get_x_attrs(y, dpp, get_fd(), attrs, get_name());
+  /* through the entry, which knows where its attributes are:  a
+   * NooBaaDirectoryObject's are on its directory */
+  ret = read_attrs(dpp, y, attrs);
   if (ret < 0)
     return ret;
 
@@ -3306,8 +3498,18 @@ int Directory::get_ent(const DoutPrefixProvider *dpp, optional_yield y, const st
                   AT_SYMLINK_NOFOLLOW, STATX_ALL, &nstx);
   if (ret < 0) {
       ret = errno;
-      ldpp_dout(dpp, 0) << "ERROR: could not stat object " << name << " in dir "
-                        << get_name() << " : " << cpp_strerror(ret) << dendl;
+      /* Absence is a result here, not a failure.  This is the "does
+       * this object exist" path -- a HEAD of something that is not
+       * there, a GET before a PUT, and get_fsio_handle() statting an
+       * object it is about to create, which discards the result for
+       * exactly that reason.  Logging it at 0 put an ERROR in the log
+       * for every such request. */
+      ldpp_dout_fmt(dpp, (ret == ENOENT) ? 15 : 0,
+		    "{}{} in dir {} : {}",
+		    ((ret == ENOENT)
+		     ? "no object "
+		     : "ERROR: could not stat object "),
+		    name, get_name(), cpp_strerror(ret));
       return -ret;
   }
   if (S_ISREG(nstx.stx_mode)) {
@@ -3342,14 +3544,80 @@ int Directory::get_ent(const DoutPrefixProvider *dpp, optional_yield y, const st
   return 0;
 }
 
-int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
-                          fill_cache_cb_t &cb, uint32_t flags,
-                          const std::string& path_prefix)
+bool Directory::directory_object(const DoutPrefixProvider* dpp,
+				 PathStrategy::DirectoryObject& out)
 {
-  int ret = for_each(dpp, [this, &cb, &dpp, &y, &path_prefix, flags](const char *name) {
-    std::unique_ptr<FSEnt> ent;
+  if (open(dpp) < 0) {
+    return false;
+  }
+  if (path_strategy && path_strategy->directory_object(dpp, get_fd(), out)) {
+    return true;
+  }
+  return path_fallback &&
+	 path_fallback->directory_object(dpp, get_fd(), out);
+}
 
     if (is_reserved_name(name) && name != NSFS_FOLDER_OBJECT_NAME) {
+NooBaaDirectoryObject::NooBaaDirectoryObject(
+    const std::string& sentinel, Directory* dir,
+    const PathStrategy::DirectoryObject& _dobj, CephContext* _ctx)
+  : FSEnt(sentinel, dir, _ctx), dobj(_dobj)
+{
+  if (dobj.content_in_sentinel) {
+    content = std::make_unique<File>(sentinel, dir, _ctx);
+  }
+}
+
+NooBaaDirectoryObject::NooBaaDirectoryObject(const NooBaaDirectoryObject& o)
+  : FSEnt(o), dobj(o.dobj)
+{
+  if (o.content) {
+    content = o.content->clone();
+  }
+}
+
+int NooBaaDirectoryObject::open(const DoutPrefixProvider* dpp)
+{
+  int ret = parent->open(dpp);
+  if (ret < 0) {
+    return ret;
+  }
+  if (!content) {
+    return 0;
+  }
+  /* the access this entry was given, which the caller set on it and not
+   * on the sentinel */
+  content->set_identity(identity);
+  content->set_read_only(read_only);
+  ret = content->open(dpp);
+  if (ret < 0) {
+    return ret;
+  }
+  fd = content->get_fd();
+  return 0;
+}
+
+int NooBaaDirectoryObject::close()
+{
+  if (content) {
+    content->close();
+  }
+  fd = -1;
+  return 0;
+}
+
+/* NooBaa's own choice of stat (`namespace_fs.js` read_object_md):  the
+ * sentinel's when the object has content, the directory's when it is
+ * empty, with the size from the marker either way.  Reported as a
+ * regular file, which is what the object is to every caller. */
+int NooBaaDirectoryObject::stat(const DoutPrefixProvider* dpp, bool force)
+{
+  if (force) {
+    stat_done = false;
+  }
+  if (stat_done) {
+    return 0;
+  }
 
   /* The directory's stat afresh:  for the root object the directory is
    * the bucket's own, a long-lived entry whose stat was taken when the
@@ -3357,19 +3625,103 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
    * changed. */
   int ret = content ? content->stat(dpp, force)
 		    : parent->stat(dpp, /*force=*/true);
+  if (ret < 0) {
+    exist = false;
+    return ret;
+  }
+  stx = content ? content->get_stx() : parent->get_stx();
+  stx.stx_mode = (stx.stx_mode & ~S_IFMT) | S_IFREG;
+  stx.stx_size = dobj.size;
+  exist = true;
+  stat_done = true;
+  return 0;
 }
 
+  if (!content) {
+    return 0;
+  }
+  if (content->get_fd() < 0) {
+    int ret = open(dpp);
+    if (ret < 0) {
+      return ret;
+    }
+  }
+  return content->read(ofs, left, bl, dpp, y);
+}
+
+  int ret = parent->open(dpp);
+  if (ret < 0) {
+    return ret;
+  }
+  return get_x_attrs(y, dpp, parent->get_fd(), attrs, parent->get_name(),
+		     xattr_strategy, xattr_fallback, identity, "user.nsfs:",
+		     unknown);
+}
+
+  if (content) {
     return content->copy(dpp, y, dst_dir, name, hints, src_as_gateway);
   }
+
+  /* An empty object copies to an empty file.  The destination's
+   * attributes are written by the caller, as for any copy. */
+  std::unique_ptr<FSEnt> del;
+  int ret = dst_dir->get_ent(dpp, y, name, std::string(), del);
     }
     /* as the authenticated user;  see File::copy() */
     del->set_identity(identity);
     del->set_access_model(access_model);
+    ret = del->remove(dpp, y, /*delete_children=*/true);
+    if (ret < 0) {
+      ldpp_dout_fmt(dpp, 0, "ERROR: could not remove dest {}", name);
+      return ret;
+    }
+  }
+  File dst(name, dst_dir, ctx);
   return dst.create(dpp, y);
 }
+
+/* Changing such an object has to convert it -- move it into the nsfs
+ * format and clear NooBaa's marker -- or the change is read back
+ * through the marker as if it had not happened.  Not built yet, so a
+ * change is rejected rather than half made. */
+static int reject_noobaa_directory_object_change(const DoutPrefixProvider* dpp,
+						 const std::string& dir)
+{
+  ldpp_dout_fmt(dpp, 1, "nsfs: rejecting a change to the directory object at "
+			"{}:  it is in NooBaa's format, and converting it on "
+			"write is not built", dir);
+  return -EOPNOTSUPP;
+}
+
+int NooBaaDirectoryObject::create(const DoutPrefixProvider* dpp,
+				  optional_yield y,
+				  bool* existed, bool temp_file)
+{
+  return reject_noobaa_directory_object_change(dpp, parent->get_name());
+}
+
+int NooBaaDirectoryObject::remove(const DoutPrefixProvider* dpp,
+				  optional_yield y, bool delete_children)
+{
+  return reject_noobaa_directory_object_change(dpp, parent->get_name());
+}
+
+int NooBaaDirectoryObject::write(int64_t ofs, bufferlist& bl,
+				 const DoutPrefixProvider* dpp, optional_yield y)
+{
+  return reject_noobaa_directory_object_change(dpp, parent->get_name());
+}
+
+  return reject_noobaa_directory_object_change(dpp, parent->get_name());
+}
+
+  return reject_noobaa_directory_object_change(dpp, parent->get_name());
+}
+
   const auto& rn = reserved_or_none(reserved_names);
       return 0;
     }
+  }
 
     int ret = get_ent(dpp, y, name, std::string(), ent);
     if (ret < 0)
@@ -3403,6 +3755,7 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
       } else {
         bde.meta.owner = "unknown";
         bde.meta.owner_display_name = "unknown";
+	if (ret < 0) {
       }
     }
 
@@ -3519,7 +3872,8 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
             }
 
             Attrs attrs;
-            ret = get_x_attrs(y, dpp, tfd, attrs, vname);
+            ret = get_x_attrs(y, dpp, tfd, attrs, vname, xattr_strategy,
+			      xattr_fallback);
 
             ACLOwner acl_owner;
             set_dir_entry_owner(bde,
@@ -3992,6 +4346,17 @@ void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp,
     };
     add(path_strategy->reserved_names());
     add(mpu_strategy->reserved_names());
+    /* NooBaa's too, and unconditionally.
+     *
+     * The aggregate exists so that no strategy is consulted per
+     * directory entry, which means it cannot depend on the bucket --
+     * and a base bucket's scaffolding is NooBaa's.  Without this a
+     * bucket in NooBaa's format listed `.noobaa-nsfs_<id>/...` as
+     * objects, and an upgraded one would list whatever the conversion
+     * left behind.  The cost is a few more comparisons per entry,
+     * which is what an aggregate is for. */
+    add(nb_path_strategy->reserved_names());
+    add(nb_mpu_strategy->reserved_names());
     reserved_names.prefixes.emplace_back(nsfs::TMP_LINK_PREFIX);
     reserved_names.prefixes.emplace_back(nsfs::UNLINK_TMP_PREFIX);
     reserved_names.prefixes.emplace_back(nsfs::CLONE_PARENT_PREFIX);
@@ -4578,6 +4943,9 @@ rgw_owner NSFSDriver::new_bucket_path_source(const DoutPrefixProvider* dpp,
       }, y);
 }
 
+    const std::string_view n(q);
+    if (n.starts_with("user.nsfs:") &&
+	!n.starts_with(nsfs::SUBTREE_MARKER_PREFIX)) {
   }
   int ret = nb_state->list_records(dpp, records);
     std::string recorded;
@@ -4788,10 +5156,6 @@ int NSFSDriver::list_buckets(const DoutPrefixProvider* dpp, const rgw_owner& own
     std::unique_ptr<RGWRole> role = driver->get_role(user->id);
     const int ret = role->load_by_id(dpp, y);
     if (ret < 0) {
-      if (ret == -ENOENT) {
-	errno = 0;
-	continue;
-      }
       return ret;
     }
     if (account) {
@@ -5813,6 +6177,11 @@ if (max <= 0) {
 int NSFSBucket::merge_and_store_attrs(const DoutPrefixProvider* dpp,
 					Attrs& new_attrs, optional_yield y)
 {
+  /* held off while this bucket's tree is being rewritten;  see
+   * NSFSDriver::mutation_enter() */
+  if (mg.result() < 0) {
+    return mg.result();
+  }
   for (auto& it : new_attrs) {
 	  attrs[it.first] = it.second;
   }
@@ -5885,6 +6254,11 @@ int NSFSBucket::remove(const DoutPrefixProvider* dpp,
 			const rgw_owner& authenticated_user)
 {
   int ret = dir->remove(dpp, y, delete_children);
+  /* held off while this bucket's tree is being rewritten;  see
+   * NSFSDriver::mutation_enter() */
+  if (mg.result() < 0) {
+    return mg.result();
+  }
   nsfs::FSIdentity id;
   if (!is_internal() && !nsfs::owner_empty(authenticated_user)) {
     const int pret = pin_personality_for(dpp, driver, authenticated_user,
@@ -5971,9 +6345,56 @@ int NSFSBucket::remove(const DoutPrefixProvider* dpp,
   driver->get_bucket_cache()->invalidate_bucket(dpp, get_name());
 
   return ret;
+}
+
+/* Does this bucket's directory exist for it, or did it predate it?
+ *
+ * Absent means it owns the directory, which is what every bucket
+ * created by the gateway is;  see OWNS_STORAGE_XATTR.  Anything other
+ * than "0" is read as owning, so a value nobody wrote and nobody
+ * understands does not make a bucket undeletable. */
+bool NSFSBucket::owns_storage(const DoutPrefixProvider* dpp)
+{
+  if (dir->open(dpp) < 0) {
+    return true;
+  }
+  char buf[8];
+  ssize_t len = nsfs::fgetxattr(dir->get_fd(), nsfs::OWNS_STORAGE_XATTR,
+			    buf, sizeof(buf));
+  if (len <= 0) {
+    return true;
+  }
+  return std::string_view(buf, len) != "0";
+}
+
+  int ret = dir->open(dpp);
+  if (ret < 0) {
+    return ret;
+  }
+
+  nsfs::xattr_map_t present;
+  ret = driver->get_fs_strategy()->get_xattrs(dpp, dir->get_fd(), present,
+					      null_yield, nsfs::FSIdentity::none());
+  if (ret < 0) {
+    return ret;
+  }
 
   static constexpr std::string_view nsfs_prefix{"user.nsfs:"};
+  for (const auto& [name, _] : present) {
     if (! std::string_view(name).starts_with(nsfs_prefix)) {
+      continue;
+    }
+      ldpp_dout_fmt(dpp, 0, "ERROR: removing {} from bucket {}: {}", name,
+			    get_name(), cpp_strerror(-ret));
+      return ret;
+    }
+  }
+
+
+  ldpp_dout_fmt(dpp, 1, "nsfs: bucket {} removed;  its directory predates the "
+			"bucket and is left in place with its contents",
+			get_name());
+  return 0;
 }
 
 int NSFSBucket::remove_bypass_gc(int concurrent_max,
@@ -5981,7 +6402,6 @@ int NSFSBucket::remove_bypass_gc(int concurrent_max,
 				  optional_yield y,
 				  const DoutPrefixProvider *dpp)
 {
-  return remove(dpp, true, y);
   return remove(dpp, true, y, rgw::sal::no_authenticated_user);
 }
 
@@ -6082,9 +6502,82 @@ int NSFSBucket::resolve_profile(const DoutPrefixProvider* dpp)
     return -ERR_NOT_IMPLEMENTED;
   }
 
+  /* And whether a foreign reader is still needed.  On the same fd and
+   * once per resolve, so it costs nothing per object.  Only a marked
+   * bucket can be converting -- base IS NooBaa's format and reads it
+   * directly -- so this is not asked of one. */
+  converting = false;
+  if (profile->extended()) {
+    char cbuf[32];
+    ssize_t clen = nsfs::fgetxattr(dir->get_fd(), nsfs::CONVERTING_XATTR,
+			       cbuf, sizeof(cbuf) - 1);
+    if (clen > 0) {
+      std::string from(cbuf, clen);
+      if (from == nsfs::CONVERTING_FROM_NOOBAA) {
+	converting = true;
+      } else {
+	/* A format we do not have a reader for.  The objects written in
+	 * it are unreadable whatever we do, and serving them through
+	 * the wrong parser turns that into wrong results. */
+	ldpp_dout_fmt(dpp, 0, "ERROR: bucket {} is being converted from "
+			      "\"{}\", which this gateway cannot read;  not "
+			      "serving it", get_name(), from);
+	profile = nullptr;
+	return -ERR_NOT_IMPLEMENTED;
+      }
+    }
+  }
 
   apply_format();
 
+  ldpp_dout_fmt(dpp, 20, "bucket {} profile {}{}", get_name(), profile->name(),
+			 (converting ? " (converting from noobaa)" : ""));
+  return 0;
+}
+
+/* Set or clear it.  An empty `from` removes the attribute, which is
+ * what finishing the conversion does. */
+int NSFSBucket::mark_converting(const DoutPrefixProvider* dpp)
+{
+  int ret = dir->open(dpp);
+  if (ret < 0) {
+    return ret;
+  }
+
+  /* The value is the format being converted FROM, and NooBaa's is the
+   * only other format there is;  `load()` rejects a value it has no
+   * reader for rather than guessing. */
+  const std::string v{nsfs::CONVERTING_FROM_NOOBAA};
+    ldpp_dout_fmt(dpp, 0, "ERROR: writing {} on bucket {}: {}",
+			  nsfs::CONVERTING_XATTR, get_name(),
+			  cpp_strerror(-ret));
+    return ret;
+  }
+
+  converting = true;
+  /* the fallbacks the subtree inherits follow the marker */
+  apply_format();
+  return 0;
+}
+
+int NSFSBucket::clear_converting(const DoutPrefixProvider* dpp)
+{
+  int ret = dir->open(dpp);
+  if (ret < 0) {
+    return ret;
+  }
+
+  /* Absent already is the state being asked for, so ENODATA is not an
+   * error -- a resumed run clears a marker a previous one removed. */
+    ldpp_dout_fmt(dpp, 0, "ERROR: removing {} from bucket {}: {}",
+			  nsfs::CONVERTING_XATTR, get_name(),
+			  cpp_strerror(-ret));
+    return ret;
+  }
+
+  converting = false;
+  /* the fallbacks the subtree inherits follow the marker */
+  apply_format();
   return 0;
 }
 
@@ -6161,6 +6654,8 @@ void NSFSBucket::apply_format()
   dir->set_xattr_strategy(xattr_strategy());
   dir->set_path_strategy(path_strategy());
   dir->set_mpu_strategy(mpu_strategy());
+  dir->set_xattr_fallback(xattr_fallback());
+  dir->set_path_fallback(path_fallback());
   /* the bucket's own state, as RGW attributes whatever the format */
   dir->set_own_xattr_strategy(driver->get_xattr_strategy());
 }
@@ -6168,7 +6663,26 @@ void NSFSBucket::apply_format()
 /* The fallback strategy.  Null unless the bucket is mid-upgrade, so
  * on every other bucket it is not merely unused -- there is nothing
  * there to call. */
+nsfs::XattrStrategy* NSFSBucket::xattr_fallback() const
+{
+  return converting ? driver->get_noobaa_xattr_strategy() : nullptr;
+}
 
+nsfs::PathStrategy* NSFSBucket::path_fallback() const
+{
+  return converting ? driver->get_noobaa_path_strategy() : nullptr;
+}
+
+nsfs::MPUStrategy* NSFSBucket::mpu_fallback() const
+{
+  return converting ? driver->get_noobaa_mpu_strategy() : nullptr;
+}
+
+int NSFSBucket::set_profile(const DoutPrefixProvider* dpp, optional_yield y,
+			    uint32_t target,
+			    nsfs::convert_cb_t* cb,
+			    nsfs::ConvertProgress* progress)
+{
   if (! nsfs::is_named_profile(target)) {
     ldpp_dout_fmt(dpp, 0, "ERROR: not setting bucket {} to extension set {}:  "
 			  "no profile names it", get_name(), target);
@@ -6184,10 +6698,36 @@ void NSFSBucket::apply_format()
 
 
   if (target == current) {
+    /* Asking for the profile a bucket is already in is a no-op --
+     * unless it is still converting, in which case it is a request to
+     * finish.  That is what resuming a stopped run looks like from
+     * outside:  the same call, issued again.  Without this the
+     * re-issue returned success and did nothing, and the marker
+     * stayed for ever. */
+    if (progress) {
+      /* the bucket is in the target profile either way -- that is
+       * what makes this a no-op */
+      progress->profile_set = true;
+      progress->complete = !converting;
+    }
+    if (converting) {
+      return convert_tree(dpp, y, cb, progress);
     }
     return 0;
   }
 
+  /* Nothing changes a converting bucket's profile (DECISIONS.md
+   * 2026-11-05).  Between two nsfs profiles only the mask is written,
+   * which would report the bucket complete over a tree still mixed, and
+   * check_empty() below would read it half converted.  Asking for the
+   * profile it is converting to is the resume above. */
+  if (converting) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: not setting bucket {} to extension set {}:  "
+			  "it is converting to {}, and its profile changes "
+			  "once it is adopted", get_name(), target,
+			  profile->name());
+    return -ERR_INVALID_BUCKET_STATE;
+  }
 
   if (target & ~current) {
     if (current == nsfs::EXTENSIONS_BASE) {
@@ -6213,6 +6753,146 @@ void NSFSBucket::apply_format()
   }
 
 
+  if (current != nsfs::EXTENSIONS_BASE) {
+    /* Between two nsfs profiles.  Both formats are rgw-meta, so nothing in
+     * the tree is in the wrong one and there is nothing to convert --
+     * only the mask changes, and what the dropped extensions owned was
+     * removed above. */
+    ret = mark_extensions(dpp, target);
+    if ((ret == 0) && progress) {
+      progress->profile_set = true;
+      progress->complete = true;
+    }
+    return ret;
+  }
+
+  /* Leaving base:  the upgrade.
+   *
+   * First, persist the bucket state this bucket is being served with.
+   *
+   * A base bucket's state comes from NooBaa's record through
+   * bucket_state_fallback(), and that fallback is consulted only for
+   * EXTENSIONS_NONE -- so the moment the mask goes down NooBaa's record
+   * stops being read.  Without this write, load_bucket() then finds
+   * no nsfs state, falls back to the seeded defaults, and a
+   * versioned bucket reads as unversioned:  the next PUT overwrites in
+   * place instead of demoting into .versions/, and object lock, policy
+   * and the public access block all revert to permissive.
+   *
+   * Before the markers, not after, because the failure is then
+   * harmless:  the bucket stays base and keeps reading NooBaa's record.
+   * Writing after the mask would leave a marked bucket with no state
+   * if it failed, and re-issuing set_profile() would not retry it --
+   * the re-issue takes the target == current path, not this one.
+   *
+   * The bucket's state is written as RGW attributes whatever the
+   * format (DECISIONS.md 2026-10-13), so it needs no rewriting
+   * afterwards. */
+  if (current == nsfs::EXTENSIONS_BASE) {
+    ret = write_attrs(dpp, y);
+    if (ret < 0) {
+      ldpp_dout_fmt(dpp, 0, "ERROR: not converting bucket {}:  its state "
+			    "could not be written, and converting would lose "
+			    "what NooBaa's record was supplying: {}",
+			    get_name(), cpp_strerror(-ret));
+      return ret;
+    }
+  }
+
+  /* The marker goes down before the mask, and the order is the crash
+   * order.  Marked with no marker is a bucket in the nsfs format full
+   * of objects in NooBaa's, with no reader that can see them;  the marker
+   * with no mask is a base bucket carrying an attribute base does not
+   * consult, which is nothing.  So the harmless one is written first.
+   */
+  ret = mark_converting(dpp);
+  if (ret < 0) {
+    return ret;
+  }
+  ret = mark_extensions(dpp, target);
+  if (ret < 0) {
+    /* the marker is inert on a base bucket;  leaving it costs a
+     * read of one attribute on the next resolve */
+    return ret;
+  }
+  if (progress) {
+    progress->profile_set = true;
+  }
+
+  return convert_tree(dpp, y, cb, progress);
+}
+
+const char* nsfs::to_string(nsfs::ConvertEvent::Kind k)
+{
+  switch (k) {
+  case nsfs::ConvertEvent::Kind::bucket:           return "bucket";
+  case nsfs::ConvertEvent::Kind::object:           return "object";
+  case nsfs::ConvertEvent::Kind::directory_object: return "directory object";
+  case nsfs::ConvertEvent::Kind::version:          return "version";
+  case nsfs::ConvertEvent::Kind::upload:           return "upload";
+  case nsfs::ConvertEvent::Kind::part:             return "part";
+  }
+  return "?";
+}
+
+const char* nsfs::to_string(nsfs::ConvertEvent::Phase p)
+{
+  switch (p) {
+  case nsfs::ConvertEvent::Phase::before:  return "before";
+  case nsfs::ConvertEvent::Phase::written: return "written";
+  case nsfs::ConvertEvent::Phase::pruned:  return "pruned";
+  }
+  return "?";
+}
+
+
+/* The NooBaa attributes on the file that hold `key`, added to `out`.
+ * One name for most keys;  for one NooBaa spreads over several -- tags,
+ * one per tag;  retention, two;  legal hold -- the ones its disk_attrs()
+ * names.  disk_name() alone names none of those, and conversion left
+ * them on the file.
+ *
+ * Only names in `names`, the file's own:  removing one that is not
+ * there is a syscall for nothing, one for every attribute of an object
+ * a resumed walk reaches again. */
+  std::vector<std::string> candidates;
+  if (!nb->disk_attrs(key, none, names, none_written, candidates)) {
+    const std::string foreign = nb->disk_name(key);
+    if (!foreign.empty() && (foreign != ours)) {
+      candidates.push_back(foreign);
+    }
+  }
+  for (auto& c : candidates) {
+    if (std::find(names.begin(), names.end(), c) != names.end()) {
+      out.push_back(std::move(c));
+    }
+  }
+}
+
+/* Rewrite one file's attributes into the bucket's format.
+ *
+ * Not through FSEnt::write_attrs(), which does the write and the prune
+ * in one call.  The phases have to be separable:  `written` -- the RGW
+ * attribute and the NooBaa one both on disk -- is the only state the
+ * conversion creates that did not exist before, and a caller that
+ * cannot be held there cannot observe it.
+ *
+ * `fd` is the file carrying the attributes, which for a directory
+ * object in the nsfs format is the sentinel and in NooBaa's is the directory.
+ */
+static int convert_attrs(const DoutPrefixProvider* dpp, optional_yield y,
+			 int fd, const std::string& display,
+			 nsfs::FSStrategy* fs,
+			 const nsfs::XattrStrategy* xs,
+			 const nsfs::XattrStrategy* xattr_fallback,
+			 const ACLOwner& bucket_owner,
+			 nsfs::convert_cb_t* cb,
+			 const nsfs::ConvertEvent& base_ev,
+			 const std::vector<std::string>* leave_alone = nullptr)
+{
+  Attrs attrs;
+  if (ret < 0) {
+    return ret;
   }
   /* X4's third layer:  an attribute no reviewed release writes stops
    * the bucket's conversion, which resumes once the release is
@@ -6225,12 +6905,59 @@ void NSFSBucket::apply_format()
     return -ERR_INVALID_OBJECT_STATE;
   }
 
+  nsfs::xattr_map_t to_write;
+  std::vector<std::string> to_remove;
+  for (const auto& [key, bl] : attrs) {
+    if (leave_alone &&
+	(std::find(leave_alone->begin(), leave_alone->end(), key)
+	 != leave_alone->end())) {
+      continue;
     }
     const std::string disk_name = xs->disk_name(key);
+    const size_t foreign = to_remove.size();
+    foreign_names(xattr_fallback, key, names, disk_name, to_remove);
+    /* Already converted:  the RGW attribute is on the file and no
+     * NooBaa attribute for the key is, so the value read is the RGW
+     * attribute's, and writing it again changes nothing (DECISIONS.md
+     * 2026-11-02).  A key with both, a walk stopped between `written`
+     * and `pruned`, is written again:  rare, and the same bytes. */
+    const bool converted = (to_remove.size() == foreign) &&
+      (std::find(names.begin(), names.end(), disk_name) != names.end());
+    if (!disk_name.empty() && !converted) {
       to_write.try_emplace(disk_name, attr_on_disk(xs, key, bl));
     }
   }
 
+  /* Record the owner:  the bucket's (DECISIONS.md 2026-10-11).
+   *
+   * NooBaa records no per-object owner;  `get_default_object_owner()`
+   * returns the bucket's `owner_account` for every object, and the
+   * account import has made that an RGW account.  Adoption is where the
+   * tree becomes consistent with the imported accounts, so an object
+   * that records no owner is given its bucket's here -- the owner an
+   * unconverted listing shows, and the one RGW records as the owner of
+   * a write into a BucketOwnerEnforced bucket.
+   * Never the file's uid, which is the POSIX identity it was written
+   * as, not an S3 owner.
+   *
+   * What it writes is RGW's default policy and not an owner alone,
+   * because an owner-with-no-grants is a shape RGW never produces.
+   *
+   * Objects and versions.  A version entry is an object's earlier
+   * content and records its owner exactly the same way, so it needs
+   * the same capture;  a delete marker included, because RGW emits an
+   * <Owner> for one -- rgw_rest_s3.cc's version listing calls
+   * dump_owner() outside the is_delete_marker() guard, which suppresses
+   * only ETag, Size and StorageClass.  No bytes does not mean no owner.
+   *
+   * A bucket's owner is not an inode fact and arrives with the account
+   * import;  a directory object does not come through here at all,
+   * because its attributes move from the directory to the sentinel
+   * rather than being rewritten in place, and convert_directory()
+   * captures its owner where that move happens. */
+  if (((base_ev.kind == nsfs::ConvertEvent::Kind::object) ||
+       (base_ev.kind == nsfs::ConvertEvent::Kind::version)) &&
+      (attrs.find(RGW_ATTR_ACL) == attrs.end())) {
     RGWAccessControlPolicy policy;
     policy.create_default(bucket_owner.id, bucket_owner.display_name);
     bufferlist aclbl;
@@ -6241,19 +6968,249 @@ void NSFSBucket::apply_format()
 						   aclbl));
     }
   }
+
+  if (cb) {
+    nsfs::ConvertEvent ev = base_ev;
+    ev.phase = nsfs::ConvertEvent::Phase::before;
+    ret = (*cb)(dpp, ev);
+    if (ret != 0) {
+      return ret;
+    }
+  }
+
+  if (!to_write.empty()) {
       return fs->set_xattrs(dpp, fd, to_write, y);
+    });
+    if (ret < 0) {
+      return ret;
+    }
+  }
+
+  if (cb) {
+    nsfs::ConvertEvent ev = base_ev;
+    ev.phase = nsfs::ConvertEvent::Phase::written;
+    ret = (*cb)(dpp, ev);
+    if (ret != 0) {
+      return ret;
+    }
+  }
+
+  if (!to_remove.empty()) {
     /* the upgrade command's own rewrite, not a request:  it runs on
      * an operator's instruction across objects of many identities,
      * so it uses the gateway's credentials deliberately */
       return fs->remove_xattrs(dpp, fd, to_remove, y);
+    });
+    if (ret < 0) {
+      return ret;
+    }
+  }
+
+  if (cb) {
+    nsfs::ConvertEvent ev = base_ev;
+    ev.phase = nsfs::ConvertEvent::Phase::pruned;
+    ret = (*cb)(dpp, ev);
+    if (ret != 0) {
+      return ret;
+    }
+  }
+
+  return 0;
+}
+
+/* Split a ".versions/" entry into the object and the version id.
+ *
+ * "<leaf>_<version-id>", and a leaf may itself contain '_', so the
+ * split is the rightmost separator whose suffix is a version id.  The
+ * test is the one list_leaf_versions() applies:  "null", or the
+ * "mtime-" form. */
+static bool split_version_entry(const std::string& entry,
+				std::string& leaf, std::string& vid)
+{
+  size_t pos = entry.rfind('_');
+  while (pos != std::string::npos) {
+    const std::string cand = entry.substr(pos + 1);
+    if ((cand == NULL_VERSION_ID) || cand.starts_with("mtime-")) {
+      if (pos == 0) {
+	return false; /* no leaf */
+      }
+      leaf = entry.substr(0, pos);
+      vid = cand;
+      return true;
+    }
+    if (pos == 0) {
+      break;
+    }
+    pos = entry.rfind('_', pos - 1);
+  }
+  return false;
+}
+
+/* The version entries of one directory.
+ *
+ * .versions/ is a reserved name, so the walk in convert_directory()
+ * skips it, and until this existed the conversion skipped the versions
+ * with it.  That was not a cosmetic gap.  Every read resolves an
+ * attribute name through the *bucket's* strategy, there is one
+ * strategy per bucket and no chaining reader, so once the mask is
+ * written a user.noobaa.* name on a version entry is invisible:  a
+ * NooBaa delete marker stops reading as a delete marker and the object
+ * it deleted comes back, 200 with no bytes where S3 owes 404.
+ *
+ * A version also needs its owner recorded, like any object:  it is one
+ * of the kinds convert_attrs() records the bucket's owner for.
+ *
+ * Flat:  the entries belong to leaves in this directory, so there is
+ * nothing to recurse into.  Anything that is not a regular file is
+ * left alone -- the lock file is nsfs's, and a subdirectory here is a
+ * shape neither format produces.
+ */
+static int convert_versions(const DoutPrefixProvider* dpp, optional_yield y,
+			    nsfs::Directory* d, CephContext* cct,
+			    const std::string& prefix,
+			    nsfs::FSStrategy* fs,
+			    const nsfs::XattrStrategy* xs,
+			    const nsfs::XattrStrategy* xattr_fallback,
+			    const ACLOwner& bucket_owner,
+			    nsfs::convert_cb_t* cb,
+			    nsfs::ConvertProgress& progress)
+{
+  /* Checked before opening because most directories have no history,
+   * and Directory::open() logs at level 0 on failure -- an ENOENT per
+   * directory would bury the run's real output. */
+  struct statx vstx;
   if (nsfs::statx(d->get_fd(), HIDDEN_VERSIONS_PATH.c_str(),
 		  AT_SYMLINK_NOFOLLOW, STATX_MODE, &vstx) < 0) {
+    return 0;
+  }
+  if (!S_ISDIR(vstx.stx_mode)) {
+    return 0;
+  }
+
+  nsfs::Directory vers(HIDDEN_VERSIONS_PATH, d, cct);
+  int ret = vers.open(dpp);
+  if (ret < 0) {
+    /* it is there and unreadable, which is the case this pass must not
+     * pass over silently */
+    return ret;
+  }
+
+  std::vector<std::string> entries;
+  ret = vers.for_each(dpp, [&](const char* name) {
+    std::string_view n(name);
+    if ((n == ".") || (n == "..") || (n == VERSIONS_LOCK_NAME)) {
+      return 0;
+    }
+    struct statx stx;
+    if (nsfs::statx(vers.get_fd(), name, AT_SYMLINK_NOFOLLOW, STATX_MODE,
+	      &stx) < 0) {
+      return 0;
+    }
+    if (S_ISREG(stx.stx_mode)) {
+      entries.emplace_back(name);
+    }
+    return 0;
+  });
+  if (ret < 0) {
+    return ret;
+  }
+
+  for (const auto& name : entries) {
+    if (fd < 0) {
+      if (errno == ENOENT) {
+	/* deleted under us;  one version, not a failed conversion */
+	continue;
+      }
+      /* there and unopenable:  passed over, it would be left in
+       * NooBaa's format under a directory marked converted */
+      ret = -errno;
+      ldpp_dout_fmt(dpp, 0, "ERROR: not converting version {} under {}: {}",
+			    name, prefix, cpp_strerror(-ret));
+      return ret;
+    }
+    auto close_fd = make_scope_guard([fd] { ::close(fd); });
+
+    nsfs::ConvertEvent ev{};
+    ev.kind = nsfs::ConvertEvent::Kind::version;
+    std::string leaf;
+    if (!split_version_entry(name, leaf, ev.version_id)) {
+      /* A name neither format produces.  Still converted, because the
+       * attributes are the whole point and leaving them is the defect;
+       * reported under the entry name, which is all there is. */
+      leaf = name;
+    }
+    ev.key = fmt::format("{}{}", prefix, leaf);
+    ev.index = progress.objects + progress.directory_objects
+      + progress.versions;
 
     ret = convert_attrs(dpp, y, fd, ev.key, fs, xs, xattr_fallback,
 			bucket_owner, cb, ev);
+    if (ret != 0) {
+      return ret;
+    }
+    ++progress.versions;
+  }
+
+  return 0;
+}
+
+/* Convert one directory object from NooBaa's format.
+ *
+ * `dir_fd` is the directory the object is stored at, `key` its key, for
+ * the log and the callback, and `dobj` what its dir_content says.
+ *
+ * NooBaa's marker is user.noobaa.dir_content on the directory and
+ * nsfs's is the sentinel file, and the attributes move with it:
+ * NooBaa's live on the directory, nsfs's on `.folder`.  So converting
+ * one is a move, not a rename of an attribute -- make the sentinel if
+ * the object was empty, carry the attributes across, and drop
+ * dir_content.
+ *
+ * Empty is what dir_content says, a size of 0, and not whether a
+ * sentinel is there:  dir_content goes last, so a resumed walk still
+ * reads it after the sentinel is made.
+ *
+ * A sentinel the walk makes is built nameless (O_TMPFILE) -- its mode,
+ * the directory's mtime, and every attribute, the ETag the reader
+ * reported among them -- and linked into place whole.  The reader
+ * reports an empty object with the directory's stat, and making the
+ * sentinel changes the directory's mtime, so the object keeps the ETag
+ * and Last-Modified it had (DECISIONS.md 2026-10-13) only if they are
+ * on the sentinel before it appears:  a walk stopped before the link
+ * leaves the directory as it was, and one stopped after finds them
+ * there.  A filesystem without O_TMPFILE gets a named sentinel and its
+ * mtime straight after, as before, which a stop between the two still
+ * loses. */
+static int convert_directory_object(const DoutPrefixProvider* dpp,
+				    optional_yield y, int dir_fd,
+				    const std::string& key,
+				    const nsfs::PathStrategy::DirectoryObject& dobj,
+				    nsfs::FSStrategy* fs,
+				    const nsfs::XattrStrategy* xs,
+				    const nsfs::XattrStrategy* xattr_fallback,
+				    const ACLOwner& bucket_owner,
+				    const nsfs::PathStrategy* path_fallback,
+				    nsfs::convert_cb_t* cb,
+				    nsfs::ConvertProgress& progress,
+				    bool no_chown)
+{
+  int ret;
   const std::string sname = path_fallback->folder_object_name();
+  const bool empty = !dobj.content_in_sentinel;
+
+  nsfs::ConvertEvent ev{};
+  ev.kind = nsfs::ConvertEvent::Kind::directory_object;
+  ev.key = key;
+  ev.index = progress.objects + progress.directory_objects;
+
+  Attrs dattrs;
+  /* Not `user.nsfs:`:  on the bucket root those are the bucket's own
+   * state, which is not the object's to carry, and nothing else in
+   * NooBaa's format has them. */
   ret = get_x_attrs(y, dpp, dir_fd, dattrs, ev.key, xs, xattr_fallback, {},
 		    "user.nsfs:", &unknown, &names);
+  if (ret < 0) {
+    return ret;
   }
   if (!unknown.empty()) {
     ldpp_dout_fmt(dpp, 0, "ERROR: not converting directory object {}:  it "
@@ -6263,37 +7220,590 @@ void NSFSBucket::apply_format()
     return -ERR_INVALID_OBJECT_STATE;
   }
 
+  if (cb) {
+    nsfs::ConvertEvent b = ev;
+    b.phase = nsfs::ConvertEvent::Phase::before;
+    ret = (*cb)(dpp, b);
+    if (ret != 0) {
+      return ret;
+    }
+  }
+
+  /* The sentinel, where there is one:  NooBaa's, holding the bytes, or
+   * the one a stopped walk linked.  Raised, as the directory's other
+   * writes below are:  in an adopted tree the directory is whoever
+   * NooBaa ran as, at `0770`. */
+  int sfd = -1;
+  ret = nsfs::with_capabilities(dpp, CONVERT_REWRITE_CAPS, [&]() -> int {
+    sfd = ::openat(dir_fd, sname.c_str(), O_RDONLY | O_NOFOLLOW);
+    return (sfd < 0) ? -errno : 0;
+  });
+  if ((ret < 0) && (ret != -ENOENT)) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: opening {} under {}: {}", sname, key,
+			  cpp_strerror(-ret));
+    return ret;
+  }
+  auto close_sfd = make_scope_guard([&sfd] {
+    if (sfd >= 0) {
+      ::close(sfd);
+    }
+  });
+  const bool make = (sfd < 0);
+
+  /* What a walk stopped after `written`, or after its link, already put
+   * on the sentinel, which a resumed one does not write again.  Only
+   * that walk can have:  NooBaa writes nothing under `user.nsfs:`
+   * (DECISIONS.md 2026-11-05), so what is there is what this would
+   * write. */
+  std::vector<std::string> on_sentinel;
+  if (!make) {
+    Attrs sattrs;
+    ret = get_x_attrs(y, dpp, sfd, sattrs, ev.key, xs, nullptr, {}, {},
+		      nullptr, &on_sentinel);
+    if (ret < 0) {
+      return ret;
+    }
+  }
+  auto written_before = [&on_sentinel](const std::string& n) {
+    return std::find(on_sentinel.begin(), on_sentinel.end(), n)
+      != on_sentinel.end();
+  };
+
+  nsfs::xattr_map_t to_write;
+  for (const auto& [key, bl] : dattrs) {
     const std::string disk_name = xs->disk_name(key);
+    if (!disk_name.empty() && !written_before(disk_name)) {
       to_write.try_emplace(disk_name, attr_on_disk(xs, key, bl));
     }
   }
 
+  /* The stat the reader reported an empty object with:  the directory's,
+   * taken before anything changes it.  A sentinel a stopped walk made
+   * without O_TMPFILE carries the directory's mtime already, and the
+   * directory keeps its inode. */
+  struct statx reported{};
+  const std::string etag_name = xs->disk_name(RGW_ATTR_ETAG);
+  const bool record_etag = (make || empty) && !etag_name.empty() &&
+    !written_before(etag_name);
+  if (make || record_etag) {
+    if (nsfs::statx(dir_fd, "", AT_EMPTY_PATH, STATX_BASIC_STATS,
+		    &reported) < 0) {
+      ret = -errno;
+      ldpp_dout_fmt(dpp, 0, "ERROR: cannot stat {}: {}", key,
+			    cpp_strerror(-ret));
+      return ret;
+    }
+  }
+  if (record_etag && !make) {
+    struct statx sstx{};
+    if (nsfs::statx(sfd, "", AT_EMPTY_PATH, STATX_MTIME, &sstx) < 0) {
+      ret = -errno;
+      ldpp_dout_fmt(dpp, 0, "ERROR: cannot stat {} under {}: {}", sname, key,
+			    cpp_strerror(-ret));
+      return ret;
+    }
+    reported.stx_mtime = sstx.stx_mtime;
+  }
+  /* The ETag the reader reported for an empty object, recorded so the
+   * sentinel does not change it.  A stored MD5 has already been carried
+   * across and is kept. */
+  if (record_etag) {
+    bufferlist ebl;
+    ebl.append(synthesize_etag(reported));
+    to_write.try_emplace(etag_name, attr_on_disk(xs, RGW_ATTR_ETAG, ebl));
+  }
+  /* Record the owner, for the reason convert_attrs() gives:  the
+   * bucket's.  It lands on the sentinel along with everything else
+   * that moves. */
+  if (dattrs.find(RGW_ATTR_ACL) == dattrs.end()) {
+    RGWAccessControlPolicy policy;
+    policy.create_default(bucket_owner.id, bucket_owner.display_name);
+    bufferlist aclbl;
+    policy.encode(aclbl);
     const std::string disk_name = xs->disk_name(RGW_ATTR_ACL);
+    if (!disk_name.empty() && !written_before(disk_name)) {
+      to_write.insert_or_assign(disk_name, attr_on_disk(xs, RGW_ATTR_ACL,
+						       aclbl));
+    }
+  }
+
+  /* NooBaa's object mode, as every object nsfs creates carries
+   * (DECISIONS.md 2026-10-11), and the directory's mtime on a sentinel
+   * the walk makes.  While the gateway still owns the file, because the
+   * ids are taken from the directory below. */
+  auto shape = [&](int fd) -> int {
+    int r = nsfs::apply_create_mode(dpp, fd, nsfs::file_create_mode(), y);
+    if ((r < 0) || !make) {
+      return r;
+    }
+    const struct timespec times[2] = {
+      { 0, UTIME_OMIT },
+      { reported.stx_mtime.tv_sec, reported.stx_mtime.tv_nsec },
+    };
+    if (::futimens(fd, times) < 0) {
+      r = -errno;
+      ldpp_dout_fmt(dpp, 0, "ERROR: giving {} under {} its directory's mtime: "
+			    "{}", sname, key, cpp_strerror(-r));
+    }
+    return r;
+  };
+
+  bool written = false;
+  if (make) {
+    int tfd = -1;
+    ret = nsfs::with_capabilities(dpp, CONVERT_REWRITE_CAPS, [&]() -> int {
+      tfd = ::openat(dir_fd, ".", O_TMPFILE | O_RDWR,
+		     nsfs::file_create_mode());
+      return (tfd < 0) ? -errno : 0;
+    });
+    if ((ret == -EOPNOTSUPP) || (ret == -EISDIR) || (ret == -EINVAL)) {
+      /* a filesystem without O_TMPFILE:  a named sentinel */
+      ret = nsfs::with_capabilities(dpp, CONVERT_REWRITE_CAPS, [&]() -> int {
+	sfd = ::openat(dir_fd, sname.c_str(),
+		       O_RDONLY | O_NOFOLLOW | O_CREAT | O_EXCL,
+		       nsfs::file_create_mode());
+	return (sfd < 0) ? -errno : 0;
+      });
+      if (ret == 0) {
+	ret = shape(sfd);
+      }
+    } else if (ret == 0) {
+      sfd = tfd;
+      ret = shape(sfd);
+      if ((ret == 0) && !to_write.empty()) {
+	ret = fs->set_xattrs(dpp, sfd, to_write, y);
+      }
+      if (ret == 0) {
+	ret = nsfs::with_capabilities(dpp, CONVERT_REWRITE_CAPS,
+				      [&]() -> int {
+	  return fs->link_temp_file_excl(sfd, dir_fd, sname, dpp, y);
+	});
+      }
+      written = (ret == 0);
+    }
+    if (ret < 0) {
+      ldpp_dout_fmt(dpp, 0, "ERROR: making {} under {}: {}", sname, key,
+			    cpp_strerror(-ret));
+      return ret;
+    }
+  } else {
+    ret = shape(sfd);
+    if (ret < 0) {
+      return ret;
+    }
+  }
+
+  /* The sentinel re-expresses the directory, so it takes the
+   * directory's uid and gid. */
+  struct statx dstx{};
+  ret = statx_ids(dir_fd, dstx);
+  if (ret < 0) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: cannot stat {} to give {} its owner: {}", key,
+			  sname, cpp_strerror(-ret));
+    return ret;
+  }
+  ret = nsfs::with_capabilities(dpp, CONVERT_CHOWN_CAPS, [&]() -> int {
+    return inherit_ids(dpp, sfd, dstx, no_chown, sname);
+  });
+  if (ret < 0) {
+    /* The whole point of failing is not to leave a file whose owner is
+     * wrong, so a sentinel this walk made is taken back out:  the
+     * directory object is still in NooBaa's format and still readable
+     * through the fallback, which is where a stopped conversion leaves
+     * everything else.  Never NooBaa's own, which holds the object's
+     * bytes.  Raised, as its making was. */
+    if (make) {
+      const int uret = nsfs::with_capabilities(dpp, CONVERT_REWRITE_CAPS,
+					       [&]() -> int {
+	return (::unlinkat(dir_fd, sname.c_str(), 0) < 0) ? -errno : 0;
+      });
+      if (uret < 0) {
+	ldpp_dout_fmt(dpp, 0, "ERROR: could not remove {} after giving it its "
+			      "owner failed: {}", sname, cpp_strerror(-uret));
+      }
+    }
+    return ret;
+  }
+
+  if (!written && !to_write.empty()) {
       return fs->set_xattrs(dpp, sfd, to_write, y);
+    });
+    if (ret < 0) {
+      return ret;
+    }
+  }
+
+  if (cb) {
+    nsfs::ConvertEvent w = ev;
+    w.phase = nsfs::ConvertEvent::Phase::written;
+    ret = (*cb)(dpp, w);
+    if (ret != 0) {
+      return ret;
+    }
+  }
+
+  /* dir_content last:  while it is there the directory is still an
+   * object to NooBaa's reader, and removing it before the sentinel
+   * exists would make the object vanish for the length of a
+   * syscall. */
+  std::vector<std::string> gone;
+  for (const auto& [key, bl] : dattrs) {
+  }
+  if (!gone.empty()) {
+    });
+    if (ret < 0) {
+      return ret;
+    }
+  }
+  });
+  if (ret < 0) {
+    return ret;
+  }
+
+  if (cb) {
+    nsfs::ConvertEvent pr = ev;
+    pr.phase = nsfs::ConvertEvent::Phase::pruned;
+    ret = (*cb)(dpp, pr);
+    if (ret != 0) {
+      return ret;
+    }
+  }
+  ++progress.directory_objects;
+  return 0;
+}
+
+
+/* Whether the subtree at `fd` was converted to `converted_to`, the
+ * target extension set as EXTENSIONS_XATTR writes it.  A marker naming
+ * another set is a conversion to that one, and says nothing of this. */
+static bool subtree_converted(int fd, const std::string& converted_to)
+{
+  char buf[32];
+  const ssize_t n = nsfs::fgetxattr(fd, nsfs::SUBTREE_CONVERTED_XATTR,
+				    buf, sizeof(buf));
+  return (n >= 0) && (std::string_view(buf, n) == converted_to);
+}
+
+/* Mark the subtree at `fd` converted to `converted_to`.  Only after
+ * everything under it is.  Not a failure of the walk when it cannot be
+ * written:  the subtree is converted either way, and a resumed walk
+ * converts it again, writing nothing (DECISIONS.md 2026-11-02). */
+static void mark_subtree_converted(const DoutPrefixProvider* dpp, int fd,
+				   const std::string& converted_to,
+				   const std::string& prefix)
+{
+  /* raised, as the walk's other writes are:  in an adopted tree the
+   * directory is whoever NooBaa ran as */
+  const int ret = nsfs::with_capabilities(dpp, CONVERT_REWRITE_CAPS,
+					  [&]() -> int {
+    return (::fsetxattr(fd, nsfs::SUBTREE_CONVERTED_XATTR,
+			converted_to.data(), converted_to.size(), 0) < 0)
+      ? -errno : 0;
+  });
+  if (ret < 0) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: not marking {} converted: {};  a resumed "
+			  "walk goes through it again", prefix,
+			  cpp_strerror(-ret));
+  }
+}
+
+/* One directory of the tree, and everything under it.
+ *
+ * Depth first, and the order within a directory is readdir's, so a
+ * caller sequencing against this gets whatever the filesystem gives.
+ * Nothing here depends on the order:  each item is converted on its
+ * own and a run that stops leaves the rest for the next one.
+ *
+ * A subdirectory whose subtree is converted to `converted_to` is
+ * passed with one read, and one this converts is marked once it and
+ * everything under it is.  The root is not marked:  its completion is
+ * the bucket's, which clear_converting() records.
+ */
+static int convert_directory(const DoutPrefixProvider* dpp, optional_yield y,
+			     nsfs::Directory* d, CephContext* cct,
+			     const std::string& prefix,
+			     nsfs::FSStrategy* fs,
+			     const nsfs::XattrStrategy* xs,
+			     const nsfs::XattrStrategy* xattr_fallback,
+			     const ACLOwner& bucket_owner,
+			     const nsfs::PathStrategy* path_fallback,
+			     const nsfs::ReservedNames& rn,
+			     const std::string& converted_to,
+			     nsfs::convert_cb_t* cb,
+			     nsfs::ConvertProgress& progress,
+			     bool no_chown)
+{
+  int ret = d->open(dpp);
+  if (ret < 0) {
+    return ret;
+  }
+
+  /* The sentinel first, where there is one:  it carries this
+   * directory's object attributes in the nsfs format, and converting it
+   * before recursing keeps the whole of one object in one step. */
+  std::vector<std::string> subdirs;
+  std::vector<std::string> files;
+
+  ret = d->for_each(dpp, [&](const char* name) {
+    std::string_view n(name);
+    if ((n == ".") || (n == "..")) {
+      return 0;
+    }
+    /* Scaffolding is skipped, the sentinel included.  A directory
+     * object in NooBaa's format keeps its attributes on the directory whether
+     * or not it has a sentinel, so the sentinel is never where the
+     * conversion has to look -- the directory branch below owns the
+     * whole of that case.  Treating it as an object here converted
+     * nothing and counted the same directory object twice. */
+    if (is_reserved_name(name, rn)) {
+      return 0;
+    }
+    struct statx stx;
     if (nsfs::statx(d->get_fd(), name, AT_SYMLINK_NOFOLLOW, STATX_MODE,
 		    &stx) < 0) {
+      return 0;
+    }
+    if (S_ISDIR(stx.stx_mode)) {
+      subdirs.emplace_back(name);
+    } else if (S_ISREG(stx.stx_mode)) {
+      files.emplace_back(name);
+    }
+    return 0;
+  });
+  if (ret < 0) {
+    return ret;
+  }
+
+  for (const auto& name : files) {
+    if (fd < 0) {
+      if (errno == ENOENT) {
+	/* deleted under us;  one object, not a failed conversion */
+	continue;
+      }
+      /* there and unopenable:  passed over, it would be left in
+       * NooBaa's format under a directory marked converted */
+      ret = -errno;
+      ldpp_dout_fmt(dpp, 0, "ERROR: not converting {}{}: {}", prefix, name,
+			    cpp_strerror(-ret));
+      return ret;
+    }
+    auto close_fd = make_scope_guard([fd] { ::close(fd); });
+
+    nsfs::ConvertEvent ev{};
+    ev.kind = nsfs::ConvertEvent::Kind::object;
+    ev.key = fmt::format("{}{}", prefix, name);
+    ev.index = progress.objects + progress.directory_objects;
 
     ret = convert_attrs(dpp, y, fd, ev.key, fs, xs, xattr_fallback,
 			bucket_owner, cb, ev);
+    if (ret != 0) {
+      return ret;
+    }
+    ++progress.objects;
+  }
+
+  /* Before descending, so the whole of this directory -- its objects
+   * and their history -- is done in one step. */
+  ret = convert_versions(dpp, y, d, cct, prefix, fs, xs, xattr_fallback,
+			 bucket_owner, cb,
+			 progress);
+  if (ret != 0) {
+    return ret;
+  }
+
+  for (const auto& name : subdirs) {
+    nsfs::Directory sub(name, d, cct);
+    ret = sub.open(dpp);
+    if (ret == -ENOENT) {
+      continue;   /* removed under us */
+    }
+    if (ret < 0) {
+      /* there and unopenable:  passed over, this directory would be
+       * marked converted over it */
+      return ret;
+    }
+
+    /* Before its directory object, which the walk converts before
+     * descending:  a marked subtree's is converted already. */
+    if (subtree_converted(sub.get_fd(), converted_to)) {
+      ++progress.directories_skipped;
+      continue;
+    }
+
     const std::string sub_prefix = fmt::format("{}{}/", prefix, name);
+    nsfs::PathStrategy::DirectoryObject dobj{};
     if (path_fallback->directory_object(dpp, sub.get_fd(), dobj)) {
+      ret = convert_directory_object(dpp, y, sub.get_fd(), sub_prefix,
+				     dobj, fs, xs, xattr_fallback, bucket_owner,
+				     path_fallback, cb, progress, no_chown);
+      if (ret != 0) {
+	return ret;
+      }
+    }
+
+    ret = convert_directory(dpp, y, &sub, cct, sub_prefix, fs,
+			    xs, xattr_fallback, bucket_owner, path_fallback, rn,
+			    converted_to, cb, progress, no_chown);
+    if (ret != 0) {
+      return ret;
+    }
+    mark_subtree_converted(dpp, sub.get_fd(), converted_to, sub_prefix);
+  }
+
+  return 0;
+}
+
+/* NooBaa's bucket temp directory, removed whole once the walk and the
+ * uploads are converted (DECISIONS.md 2026-11-05).  Its
+ * multipart-uploads/ is empty by then;  uploads/ holds whatever NooBaa
+ * wrote and never moved into place, writes cut short that were never
+ * objects, counted so the log says what went.  Nothing finds no
+ * directory, and a tree with more than one has none found. */
+static int remove_noobaa_temp_dir(const DoutPrefixProvider* dpp,
+				  int bucket_fd,
+				  const nsfs::MPUStrategy* nb_mpu,
+				  const nsfs::ReservedNames& rn,
+				  const std::string& bucket)
+{
+  const auto tmp = nb_mpu ? nb_mpu->temp_dir(dpp, bucket_fd) : std::nullopt;
+  if (!tmp) {
+    return 0;
+  }
+
+  uint64_t partial = 0;
+  const std::string uploads = fmt::format("{}/uploads", *tmp);
+  const int ufd = ::openat(bucket_fd, uploads.c_str(),
+			   O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+  if (ufd >= 0) {
+    DIR* ud = ::fdopendir(ufd);
+    if (ud) {
+      while (const struct dirent* e = ::readdir(ud)) {
+	const std::string_view n(e->d_name);
+	if ((n != ".") && (n != "..")) {
+	  ++partial;
+	}
+      }
+      ::closedir(ud);
+    } else {
+      ::close(ufd);
+    }
+  }
+
+  /* theirs, and in an adopted tree whoever NooBaa ran as */
+  const int ret = nsfs::with_capabilities(dpp, CONVERT_REWRITE_CAPS,
+					  [&]() -> int {
+    return delete_directory(bucket_fd, tmp->c_str(), true, dpp, rn);
+  });
+  if ((ret < 0) && (ret != -ENOENT)) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: removing NooBaa's temp directory {} from "
+			  "bucket {}: {}", *tmp, bucket, cpp_strerror(-ret));
+    return ret;
+  }
+  ldpp_dout_fmt(dpp, 1, "nsfs: bucket {}:  removed NooBaa's temp directory "
+			"{}, with {} unfinished writes of theirs", bucket, *tmp,
+			partial);
+  return 0;
+}
+
+/* Re-stage an upload the other format started.
+ *
+ * S3 lets a multipart upload stay open indefinitely, so the drain that
+ * precedes an upgrade cannot wait for one:  UploadPart terminates, the
+ * upload it belongs to does not.  A tree therefore arrives at the
+ * conversion with staging in the old layout, and leaving it is the one
+ * thing that would keep the bucket mixed after the walk had finished
+ * -- for three operations that would then be reading the wrong layout,
+ * which is worse than a fallback because it is a lie rather than a
+ * fallback.  Aborting is the alternative and throws away work the
+ * client already did.
+ *
+ * Re-staged one file per part, whatever the nsfs layout is.  The stride
+ * exists because parts arrive one at a time and a writer can place
+ * them as they come;  here every part is already on disk and there is
+ * nothing to gain by reconstructing it.  A record saying the bytes are
+ * in the part's own file is what the nsfs assembly reads for a
+ * diverted part, so both nsfs layouts complete it.
+ */
+int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
+				optional_yield y,
+				nsfs::convert_cb_t* cb,
+				nsfs::ConvertProgress& progress)
+{
   auto* nb_mpu = mpu_fallback();
   auto* mpu = mpu_strategy();
   if (!nb_mpu || !mpu) {
+    return 0;
+  }
+
+  int ret = dir->open(dpp);
+  if (ret < 0) {
+    return ret;
+  }
 
   auto fallback_root = nb_mpu->staging_root(dpp, dir->get_fd());
   if (!fallback_root) {
+    return 0;   /* they never took an upload here */
+  }
 
   nsfs::Directory root(*fallback_root, dir.get(), driver->ctx());
+  ret = root.open(dpp);
+  if (ret < 0) {
+    return ret;
+  }
+
+  std::vector<std::string> dnames;
+  ret = root.for_each(dpp, [&dnames](const char* name) {
+    std::string_view n(name);
+    if ((n != ".") && (n != "..")) {
+      dnames.emplace_back(name);
+    }
+    return 0;
+  });
+  if (ret < 0) {
+    return ret;
+  }
+
+  auto* fs = driver->get_fs_strategy();
+
+  for (const auto& dname : dnames) {
+    nsfs::MPUStrategy::StagedUpload su;
     if (!nb_mpu->staged_upload(dpp, root.get_fd(), dname, su)) {
       continue;   /* not an upload of NooBaa's */
     }
 
+    nsfs::ConvertEvent ev{};
+    ev.kind = nsfs::ConvertEvent::Kind::upload;
+    ev.key = su.key;
+    ev.upload_id = su.upload_id;
+    ev.index = progress.uploads;
+    if (cb) {
+      nsfs::ConvertEvent b = ev;
+      b.phase = nsfs::ConvertEvent::Phase::before;
+      ret = (*cb)(dpp, b);
+      if (ret != 0) {
+	return ret;
+      }
+    }
 
     nsfs::Directory fallback_dir(dname, &root, driver->ctx());
     ret = fallback_dir.open(dpp);
+    if (ret < 0) {
+      continue;
+    }
+
+    /* the nsfs one, beside it.  NooBaa's staging is two levels down
+     * and nsfs's is the bucket directory, so this is not a rename. */
+    const std::string meta = fmt::format("{}.{}", su.key, su.upload_id);
+    nsfs::Directory staging_dir(mpu->staging_dir_name(meta), dir.get(),
+			   driver->ctx());
+    bool existed = false;
+    });
+    if (ret < 0) {
+      return ret;
     }
     ret = staging_dir.open(dpp);
+    if (ret < 0) {
+      return ret;
     }
     /* Marked with this bucket's extension set, as a staging directory an
      * upload RGW starts is (the shadow bucket's create()).  The shadow
@@ -6315,25 +7825,87 @@ void NSFSBucket::apply_format()
      * the multipart cache below */
     bool placement_changed = false;
 
+    /* the upload's own record, in the nsfs format */
     {
       const std::string mname = mpu->meta_name();
+      if (mfd < 0) {
+	ret = -errno;
+	ldpp_dout_fmt(dpp, 0, "ERROR: creating {} for {}: {}", mname, meta,
+			      cpp_strerror(-ret));
+	return ret;
+      }
+      auto close_mfd = make_scope_guard([mfd] { ::close(mfd); });
       ret = nsfs::apply_create_mode(dpp, mfd, nsfs::file_create_mode(), y);
       if (ret < 0) {
 	return ret;
       }
 
+      /* re-expresses NooBaa's staging directory, so it takes its ids */
+      struct statx tdstx{};
       ret = statx_ids(fallback_dir.get_fd(), tdstx);
+      if (ret < 0) {
+	ldpp_dout_fmt(dpp, 0, "ERROR: cannot stat the staging of {} to give "
+			      "{} its owner: {}", meta, mname,
+			      cpp_strerror(-ret));
+	return ret;
+      }
+      });
+      if (ret < 0) {
 	if (::unlinkat(staging_dir.get_fd(), mname.c_str(), 0) < 0) {
+	  ldpp_dout_fmt(dpp, 0, "ERROR: could not remove {} after its "
+				"creation failed: {}", mname,
+				cpp_strerror(errno));
+	}
+	return ret;
+      }
+
+      ACLOwner mp_owner;
       /* The bucket's owner.  NooBaa's staging records none, so the
        * upload is the bucket's owner's, and the re-staged upload needs
        * it recorded now. */
+      mp_owner.id = get_owner();
+      NSFSMPObj mp(driver, su.key, su.upload_id, mp_owner);
+
+      bufferlist bl;
+      encode(mp, bl);
+      const std::string xn = xattr_strategy()->disk_name(RGW_NSFS_ATTR_MPUPLOAD);
+      const std::string xv = attr_on_disk(xattr_strategy(),
+					  RGW_NSFS_ATTR_MPUPLOAD, bl);
+	ldpp_dout_fmt(dpp, 0, "ERROR: writing the upload record for {}: {}",
+			      meta, cpp_strerror(-ret));
+	return ret;
       }
       ret = mpu->write_staged_upload(dpp, staging_dir.get_fd(), su);
+      if (ret < 0) {
+	return ret;
+      }
+    }
+
+    /* the parts */
+    std::vector<std::string> pnames;
     ret = fallback_dir.for_each(dpp, [&](const char* name) {
       if (nb_mpu->part_number(name)) {
+	pnames.emplace_back(name);
+      }
+      return 0;
+    });
+    if (ret < 0) {
+      return ret;
+    }
+
+    for (const auto& pname : pnames) {
       auto num = nb_mpu->part_number(pname);
+      if (!num) {
+	continue;
+      }
+
+      Attrs pattrs;
       int pfd = ::openat(fallback_dir.get_fd(), pname.c_str(), O_RDONLY | O_NOFOLLOW);
+      if (pfd >= 0) {
 	std::vector<std::string> unknown;
+	get_x_attrs(y, dpp, pfd, pattrs, pname, xattr_strategy(),
+		    xattr_fallback(), {}, {}, &unknown);
+	::close(pfd);
 	/* X4's third layer, as for an object */
 	if (!unknown.empty()) {
 	  ldpp_dout_fmt(dpp, 0, "ERROR: not converting part {} of an upload "
@@ -6351,6 +7923,7 @@ void NSFSBucket::apply_format()
        * alone was skipped -- and its bytes deleted with NooBaa's
        * staging below.  Re-staging writes every record to disk, so the
        * cache entry is not needed afterwards. */
+      nsfs::MPUStrategy::PartRecord rec{};
       file::listing::MultipartPartInfo cached;
       auto* mc = driver->get_multipart_cache();
 	rec.size = cached.size;
@@ -6364,24 +7937,153 @@ void NSFSBucket::apply_format()
 	rec.cksum = cached.cksum;
       } else if (!nb_mpu->part_record(dpp, fallback_dir.get_fd(), pname, pattrs,
 				      rec)) {
+	ldpp_dout_fmt(dpp, 4, "no record for {} of {};  skipping it", pname,
+			      meta);
+	continue;
+      }
+
+      nsfs::ConvertEvent pev{};
+      pev.kind = nsfs::ConvertEvent::Kind::part;
+      pev.key = su.key;
+      pev.upload_id = su.upload_id;
+      pev.part = *num;
+      pev.index = progress.parts;
+      if (cb) {
+	nsfs::ConvertEvent b = pev;
+	b.phase = nsfs::ConvertEvent::Phase::before;
+	ret = (*cb)(dpp, b);
+	if (ret != 0) {
+	  return ret;
+	}
+      }
+
+      /* where NooBaa's bytes are:  the size-keyed file when the record
+       * says the part shares one, the part's own file otherwise */
+      std::string sname = pname;
+      if (rec.shared) {
 	auto sn = nb_mpu->shared_name(rec.stored);
+	if (!sn) {
+	  ldpp_dout_fmt(dpp, 0, "ERROR: {} of {} says it shares a file the "
+				"layout does not name", pname, meta);
+	  return -EIO;
+	}
+	sname = *sn;
       }
       int sfd = ::openat(fallback_dir.get_fd(), sname.c_str(), O_RDONLY | O_NOFOLLOW);
+      if (sfd < 0) {
+	ret = -errno;
+	ldpp_dout_fmt(dpp, 0, "ERROR: opening {} for {} of {}: {}", sname,
+			      pname, meta, cpp_strerror(-ret));
+	return ret;
+      }
+      auto close_sfd = make_scope_guard([sfd] { ::close(sfd); });
 
       const std::string part_name = mpu->part_name(*num);
+      if (dfd < 0) {
+	ret = -errno;
+	ldpp_dout_fmt(dpp, 0, "ERROR: creating {} for {}: {}", part_name, meta,
+			      cpp_strerror(-ret));
+	return ret;
+      }
+      auto close_dfd = make_scope_guard([dfd] { ::close(dfd); });
       ret = nsfs::apply_create_mode(dpp, dfd, nsfs::file_create_mode(), y);
       if (ret < 0) {
 	return ret;
       }
 
+      /* re-expresses NooBaa's part file, so it takes its ids */
+      struct statx pstx{};
+      ret = statx_ids(sfd, pstx);
+      if (ret < 0) {
+	ldpp_dout_fmt(dpp, 0, "ERROR: cannot stat {} to give {} its owner: {}",
+			      sname, part_name, cpp_strerror(-ret));
+	return ret;
+      }
       });
+      if (ret < 0) {
 	if (::unlinkat(staging_dir.get_fd(), part_name.c_str(), 0) < 0) {
+	  ldpp_dout_fmt(dpp, 0, "ERROR: could not remove {} after its "
+				"creation failed: {}", part_name,
+				cpp_strerror(errno));
+	}
+	return ret;
+      }
+
+      if (rec.stored > 0) {
 	ret = fs->copy_range(dpp, sfd, rec.offset, dfd, 0, rec.stored,
 			     driver->copy_hints_for(no_authenticated_user));
+	if (ret < 0) {
+	  ldpp_dout_fmt(dpp, 0, "ERROR: copying part {} of {}: {}", *num, meta,
+				cpp_strerror(-ret));
+	  return ret;
+	}
+      }
+
+      if (cb) {
+	nsfs::ConvertEvent w = pev;
+	w.phase = nsfs::ConvertEvent::Phase::written;
+	ret = (*cb)(dpp, w);
+	if (ret != 0) {
+	  return ret;
+	}
+      }
+
+      NSFSUploadPartInfo upi;
+      upi.num = *num;
+      upi.size = rec.size;
+      upi.etag = rec.etag;
+      upi.mtime = rec.mtime;
+      upi.cksum = rec.cksum;
+      /* its own file now, whatever it was in */
+      upi.shared = false;
+      upi.offset = 0;
+      upi.stored = rec.stored;
+
+      bufferlist pbl;
+      encode(upi, pbl);
+      const std::string pxn =
+	  xattr_strategy()->disk_name(RGW_NSFS_ATTR_MPUPLOAD);
+      const std::string pxv = attr_on_disk(xattr_strategy(),
+					   RGW_NSFS_ATTR_MPUPLOAD, pbl);
+	ldpp_dout_fmt(dpp, 0, "ERROR: writing the record for part {} of {}: {}",
+			      *num, meta, cpp_strerror(-ret));
+	return ret;
+      }
+      nsfs::MPUStrategy::PartRecord outrec = rec;
+      outrec.shared = false;
+      outrec.offset = 0;
       if ((outrec.shared != rec.shared) || (outrec.offset != rec.offset)) {
 	placement_changed = true;
       }
       ret = mpu->write_part_record(dpp, staging_dir.get_fd(), part_name, outrec);
+      if (ret < 0) {
+	return ret;
+      }
+
+      if (cb) {
+	nsfs::ConvertEvent pr = pev;
+	pr.phase = nsfs::ConvertEvent::Phase::pruned;
+	ret = (*cb)(dpp, pr);
+	if (ret != 0) {
+	  return ret;
+	}
+      }
+      ++progress.parts;
+    }
+
+    if (cb) {
+      nsfs::ConvertEvent w = ev;
+      w.phase = nsfs::ConvertEvent::Phase::written;
+      ret = (*cb)(dpp, w);
+      if (ret != 0) {
+	return ret;
+      }
+    }
+
+    /* NooBaa's staging goes last.  Until it does the upload exists twice,
+     * which a listing that scans one root at a time reports once;
+     * removing it first would lose the parts if anything below
+     * failed. */
     struct statx tdstx{};
     ret = statx_ids(fallback_dir.get_fd(), tdstx);
     if (ret < 0) {
@@ -6390,6 +8092,13 @@ void NSFSBucket::apply_format()
       return ret;
     }
     fallback_dir.close();
+    });
+    if (ret < 0) {
+      ldpp_dout_fmt(dpp, 0, "ERROR: removing their staging for {}: {}", meta,
+			    cpp_strerror(-ret));
+      return ret;
+    }
+
     /* The staging re-expresses NooBaa's, so it takes its ids, as the
      * meta object and the parts did:  staging is its uploader's
      * (DECISIONS.md 2026-10-23).  After theirs is gone, so a run
@@ -6412,19 +8121,263 @@ void NSFSBucket::apply_format()
     if (placement_changed) {
       if (auto* mc = driver->get_multipart_cache()) {
 
+    if (cb) {
+      nsfs::ConvertEvent pr = ev;
+      pr.phase = nsfs::ConvertEvent::Phase::pruned;
+      ret = (*cb)(dpp, pr);
+      if (ret != 0) {
+	return ret;
+      }
+    }
+    ++progress.uploads;
+  }
+
+  return 0;
+}
+
+/* Rewrite whatever in this tree is still in the other format.
+ *
+ * Runs with the bucket already marked -- so writes go in the nsfs format
+ * and the fallback strategies are in play -- and clears the marker
+ * when it gets to
+ * the end.  A run that stops leaves the marker, which is what makes
+ * it resumable:  the state on disk is "some of this is still NooBaa's",
+ * and that is exactly what the marker says.
+ *
+ * Idempotent, and cheap to resume.  An item already converted costs its
+ * attribute read and writes nothing:  no RGW attribute is written again
+ * and no NooBaa attribute that is not there is removed.  A subdirectory
+ * whose subtree is converted is passed with one read
+ * (SUBTREE_CONVERTED_XATTR).
+ */
+/* How long a mutation waits on a closed gate before giving up, and how
+ * long an upgrade waits for the mutations already running.
+ *
+ * Not configurable, and the two are different questions.  A mutation
+ * must not wait out a whole conversion -- that is unbounded, and a
+ * client holding a connection open for it is worse than a retry -- so
+ * it waits about as long as a request may reasonably stall.  The
+ * upgrade's wait is bounded by what is running when it arrives, and
+ * every operation terminates, so this only has to be longer than the
+ * slowest single operation rather than longer than any queue.
+ */
+/* Seeded in the header, where the members are declared.  A mutation
+ * waits about as long as a request may reasonably stall;  the drain
+ * only has to outlast the slowest single operation, because every
+ * operation terminates. */
+
+
+/* What the gate covers.
+ *
+ * There is no single choke point.  Rados has one -- every mutation
+ * reaches the bucket index, which is where guard_reshard() sits -- and
+ * a filesystem tree has none, so the guard is taken at each mutating
+ * SAL entry point by name:
+ *
+ *   NSFSObject::set_obj_attrs, delete_obj_attrs, copy_object, rename
+ *   NSFSObject::NSFSDeleteOp::delete_obj
+ *   NSFSAtomicWriter::complete          (PUT)
+ *   NSFSMultipartWriter::complete       (UploadPart)
+ *   NSFSMultipartUpload::init, complete, abort
+ *   NSFSBucket::merge_and_store_attrs, remove, set_acl
+ *
+ * The FSIO path -- how librgw and the NFS gateway write -- passes
+ * through none of them, because its unit is not a request.  A handle
+ * is opened once and written through many times, so opening one to
+ * write is the mutation and releasing it is what retires it:  the
+ * slot is taken in get_fsio_handle() and held for the handle's life.
+ * A bucket with an NFS client holding a write handle open therefore
+ * does not drain until that handle is released, and the conversion
+ * does not start rather than run beside it.  That is the
+ * intent, not a shortcoming:  converting under an open write handle
+ * is the thing being prevented.
+ */
+
+
+
+  std::unique_lock l{gate_lock};
+  auto& g = bucket_gates[bucket];
+  if (g.closed) {
+    const bool opened = gate_cond.wait_for(l, mutation_gate_wait,
+					   [&g] { return !g.closed; });
+    if (!opened) {
+      ldpp_dout_fmt(dpp, 4, "nsfs: bucket {} is being rewritten;  rejecting a "
+			    "mutation after waiting {}ms", bucket,
+			    mutation_gate_wait.count());
+      return -ERR_SERVICE_UNAVAILABLE;
+    }
+  }
+  ++g.inflight;
+  return 0;
+}
+
+void NSFSDriver::mutation_leave(const std::string& bucket)
+{
+  std::lock_guard l{gate_lock};
+  auto i = bucket_gates.find(bucket);
+  if (i == bucket_gates.end()) {
+    return;
+  }
+  if (i->second.inflight > 0) {
+    --i->second.inflight;
+  }
+  /* The drain is waiting on this, and an entry with nothing in flight
+   * and an open gate is not worth a map slot. */
+  if ((i->second.inflight == 0) && !i->second.closed) {
+    bucket_gates.erase(i);
+  }
+  gate_cond.notify_all();
+}
+
+int NSFSDriver::gate_close(const DoutPrefixProvider* dpp,
+			   const std::string& bucket)
+{
+  std::unique_lock l{gate_lock};
+  auto& g = bucket_gates[bucket];
+  if (g.closed) {
+    /* Somebody else is already rewriting this tree.  Two conversions
+     * at once would each read what the other had half written. */
+    return -EBUSY;
+  }
+  g.closed = true;
+
+  if (g.inflight > 0) {
+    const bool drained = gate_cond.wait_for(l, gate_drain_wait,
+					    [&g] { return g.inflight == 0; });
+    if (!drained) {
+      g.closed = false;
+      gate_cond.notify_all();
+      ldpp_dout_fmt(dpp, 0, "ERROR: bucket {} still had {} mutations running "
+			    "after {}ms;  not starting the rewrite", bucket,
+			    g.inflight, gate_drain_wait.count());
+      return -ETIMEDOUT;
+    }
+  }
+  return 0;
+}
+
+void NSFSDriver::gate_open(const std::string& bucket)
+{
+  std::lock_guard l{gate_lock};
+  auto i = bucket_gates.find(bucket);
+  if (i == bucket_gates.end()) {
+    return;
+  }
+  i->second.closed = false;
+  if (i->second.inflight == 0) {
+    bucket_gates.erase(i);
+  }
+  gate_cond.notify_all();
+}
+
+bool NSFSDriver::gate_is_closed(const std::string& bucket)
+{
+  std::lock_guard l{gate_lock};
+  auto i = bucket_gates.find(bucket);
+  return (i != bucket_gates.end()) && i->second.closed;
+}
+
+int NSFSBucket::convert_tree(const DoutPrefixProvider* dpp, optional_yield y,
+			     nsfs::convert_cb_t* cb,
+			     nsfs::ConvertProgress* progress)
+{
+  nsfs::ConvertProgress local;
+  nsfs::ConvertProgress& prog = progress ? *progress : local;
+
   auto* nb_xattrs = xattr_fallback();
   auto* nb_paths = path_fallback();
   if (!nb_xattrs || !nb_paths) {
+    /* Not converting, so there is nothing in another format to find.
+     * Reached when a caller resumes a bucket whose marker is already
+     * gone, which is a no-op and not an error. */
+    prog.complete = true;
+    return 0;
+  }
 
+  /* Mutations are held off for the length of the rewrite, and the
+   * ones already running are waited for.  A write arriving between an
+   * object's `before` and its `written` is lost:  the converter read
+   * the attributes before it and writes them back after.  Reads are
+   * not held -- a half-converted tree reads through the fallback
+   * strategies, which is the whole reason they exist. */
+  int ret = driver->gate_close(dpp, get_name());
+  if (ret < 0) {
+    return ret;
+  }
+  auto reopen = make_scope_guard(
+      [this] { driver->gate_open(get_name()); });
+
+  /* The bucket's own state needs nothing:  it is held as RGW
+   * attributes in every format (DECISIONS.md 2026-10-13).
+   *
+   * The root object does.  NooBaa stores it as any directory object,
+   * with the bucket's own directory as the directory, so it is
+   * converted as one, before the walk -- which reaches only the
+   * directories beneath.  convert_directory_object() takes nothing under
+   * `user.nsfs:`, which on this directory is the bucket's state. */
+  ret = dir->open(dpp);
+  if (ret < 0) {
+    return ret;
+  }
   {
     nsfs::PathStrategy::DirectoryObject dobj{};
     if (nb_paths->directory_object(dpp, dir->get_fd(), dobj)) {
+      ret = convert_directory_object(dpp, y, dir->get_fd(), "/", dobj,
+				     driver->get_fs_strategy(), xattr_strategy(),
+				     nb_xattrs, default_object_owner(dpp, y),
+				     nb_paths, cb, prog,
+				     driver->no_chown_injected());
       if (ret != 0) {
 	return ret;
       }
     }
   }
 
+  /* the set the subtree markers name, as the bucket's mask names it */
+  ret = resolve_profile(dpp);
+  if (ret < 0) {
+    return ret;
+  }
+  const std::string converted_to = std::to_string(profile->extensions);
+
+  ret = convert_directory(dpp, y, dir.get(), driver->ctx(),
+			  std::string(), driver->get_fs_strategy(),
+			  xattr_strategy(), nb_xattrs,
+			  default_object_owner(dpp, y), nb_paths,
+			  driver->get_reserved_names(), converted_to, cb, prog,
+			  driver->no_chown_injected());
+  if (ret == 0) {
+    ret = convert_uploads(dpp, y, cb, prog);
+  }
+  if (ret == 0) {
+    ret = remove_noobaa_temp_dir(dpp, dir->get_fd(), mpu_fallback(),
+				 driver->get_reserved_names(), get_name());
+  }
+  if (ret != 0) {
+    ldpp_dout_fmt(dpp, 1, "nsfs: converting bucket {} stopped after {} "
+			  "objects, {} directory objects, {} versions and {} "
+			  "uploads, passing {} converted subtrees: {};  the "
+			  "marker stays and a later run resumes", get_name(),
+			  prog.objects, prog.directory_objects, prog.versions,
+			  prog.uploads, prog.directories_skipped,
+			  cpp_strerror(-ret));
+    return ret;
+  }
+
+  ret = clear_converting(dpp);
+  if (ret < 0) {
+    return ret;
+  }
+  prog.complete = true;
+
+  ldpp_dout_fmt(dpp, 1, "nsfs: bucket {} converted: {} objects, {} directory "
+			"objects, {} versions, {} uploads ({} parts), passing "
+			"{} converted subtrees", get_name(), prog.objects,
+			prog.directory_objects, prog.versions, prog.uploads,
+			prog.parts, prog.directories_skipped);
+  }
+  return 0;
+}
 
 int NSFSBucket::mark_extensions(const DoutPrefixProvider* dpp,
 				uint32_t version)
@@ -6533,6 +8486,11 @@ int NSFSBucket::set_acl(const DoutPrefixProvider* dpp,
 			 RGWAccessControlPolicy& acl,
 			 optional_yield y)
 {
+  /* held off while this bucket's tree is being rewritten;  see
+   * NSFSDriver::mutation_enter() */
+  if (mg.result() < 0) {
+    return mg.result();
+  }
   bufferlist aclbl;
 
   acls = acl;
@@ -6744,6 +8702,13 @@ std::unique_ptr<MultipartUpload> NSFSBucket::get_multipart_upload(
   return std::make_unique<NSFSMultipartUpload>(driver, this, oid, upload_id, owner, mtime,
 					       authenticated_user);
 }
+  /* which root it was found in, and which layout reads it.  A bucket
+   * mid-upgrade has staging in both, and an entry has to remember
+   * which one it came from so the owner and the mtime are read from
+   * the right place. */
+  nsfs::Directory* src{nullptr};
+  nsfs::MPUStrategy* mpu{nullptr};
+
 
 int NSFSBucket::list_multiparts(const DoutPrefixProvider *dpp,
 				  const std::string& prefix,
@@ -6758,11 +8723,13 @@ int NSFSBucket::list_multiparts(const DoutPrefixProvider *dpp,
   int count = 0;
   int ret;
 
-  ret = dir->for_each(dpp, [this, dpp, y, &count, &max_uploads, &is_truncated, &uploads] (const char* name) {
-    std::string_view d_name = name;
-    static std::string mp_pre{"." + mp_ns + "_"};
-    if (!d_name.starts_with(mp_pre)) {
-      /* Skip non-uploads */
+  /* One upload, once.
+   *
+   * The re-stage writes the nsfs upload before removing NooBaa's, so
+   * for the length of one upload's conversion the same key and id are
+   * in both roots.  The nsfs root is scanned first and wins, which is
+   * also the right preference:  it is the copy that is complete. */
+  std::set<std::pair<std::string, std::string>> seen;
 
   /* Where this format keeps staging directories.  None means no upload
    * has ever been started here, which is an empty listing and not an
@@ -6777,6 +8744,42 @@ int NSFSBucket::list_multiparts(const DoutPrefixProvider *dpp,
     return oret;
   }
 
+  /* Both layouts, where the bucket is mid-upgrade.
+   *
+   * The conversion re-stages one upload at a time, so during it some
+   * are in the nsfs root and the rest are still in NooBaa's.  Scanning one
+   * would report half the uploads in flight and call the listing
+   * complete, which is worse than the cost of the second scan:  a
+   * staging_root() that returns nothing, on every bucket that is not
+   * converting. */
+  nsfs::MPUStrategy* layouts[2] = { mpu_strategy(), mpu_fallback() };
+  std::unique_ptr<nsfs::Directory> roots[2];
+  nsfs::Directory* scans[2] = { nullptr, nullptr };
+  int ret = 0;
+
+  for (int i = 0; i < 2; ++i) {
+    auto* mpu = layouts[i];
+    if (!mpu) {
+      continue;
+    }
+    auto root = mpu->staging_root(dpp, dir->get_fd());
+    if (!root) {
+      continue;
+    }
+
+    nsfs::Directory* scan = dir.get();
+    if (*root != ".") {
+      roots[i] = std::make_unique<nsfs::Directory>(*root, dir.get(),
+						   driver->ctx());
+      int rret = roots[i]->open(dpp);
+      if (rret < 0) {
+	return rret;
+      }
+      scan = roots[i].get();
+    }
+    scans[i] = scan;
+
+    ret = scan->for_each(dpp, [&, mpu, scan] (const char* name) {
     /* What upload is here, if any.  The nsfs format returns it from the
      * name;  NooBaa's opens the directory's metadata, because that is
      * where NooBaa keeps the key. */
@@ -6785,17 +8788,15 @@ int NSFSBucket::list_multiparts(const DoutPrefixProvider *dpp,
       return 0;
     }
 
-    if (count >= max_uploads) {
-      if (is_truncated) {
-	*is_truncated = true;
-      }
-
-      return -EAGAIN;
+    if (!seen.emplace(su.key, su.upload_id).second) {
+      return 0;
     }
 
     UploadEnt ent;
     ent.key = std::move(su.key);
     ent.upload_id = std::move(su.upload_id);
+    ent.src = scan;
+    ent.mpu = mpu;
 
     /* use the staging directory's mtime as the upload creation time */
     struct statx stx;
@@ -6804,6 +8805,12 @@ int NSFSBucket::list_multiparts(const DoutPrefixProvider *dpp,
     }
     auto mtime = from_statx_timestamp(stx.stx_mtime);
 
+    });
+    if (ret < 0) {
+      return ret;
+    }
+  }
+
     }
     /* S3 reports an owner, so one has to be found -- and where it
      * lives is the format's business.  The nsfs format keeps it with
@@ -6811,12 +8818,8 @@ int NSFSBucket::list_multiparts(const DoutPrefixProvider *dpp,
      * none anywhere, and the upload is its bucket's owner's.  This is a
      * read per upload RETURNED, not per entry examined. */
     ACLOwner owner;
-    std::string upload_id{d_name};
-    std::unique_ptr<MultipartUpload> upload =
-        std::make_unique<NSFSMultipartUpload>(
-            mtime);
-      return 0;
-    uploads.emplace(uploads.end(), std::move(upload));
+    const int oret =
+	ent.mpu->upload_owner(dpp, ent.src->get_fd(), ent.dname, owner);
     if (oret == -ENODATA) {
       owner = default_object_owner(dpp, y);
     }
@@ -7106,6 +9109,22 @@ int NSFSObject::rename(const DoutPrefixProvider* dpp, optional_yield y,
   if (! sb || ! db) {
     return -EINVAL;
   }
+
+  /* both trees:  a rename moves a name out of one bucket and into
+   * another, and either may be mid-rewrite.  Ordered by name so two
+   * renames crossing in opposite directions cannot each hold the
+   * gate the other wants. */
+  NSFSMutationGuard mg1(dpp, driver, first);
+  if (mg1.result() < 0) {
+    return mg1.result();
+  }
+  std::optional<NSFSMutationGuard> mg2;
+    mg2.emplace(dpp, driver, second);
+    if (mg2->result() < 0) {
+      return mg2->result();
+    }
+  }
+
   /* the authenticated user's, from the walk through the moves to the intent
    * record:  both key directories and their `.versions` are theirs.
    * Nobody named is the gateway, as for set_obj_attrs(). */
@@ -7147,9 +9166,9 @@ int NSFSObject::rename(const DoutPrefixProvider* dpp, optional_yield y,
   }
   const std::string src_leaf = sent->get_name();
 
-  /* Refuse before deciding how to do it.
+  /* Reject before deciding how to do it.
    *
-   * Moving history into a bucket that cannot hold it is refused further
+   * Moving history into a bucket that cannot hold it is rejected further
    * down, under the version lock, where the list is authoritative.  But
    * that check used to sit behind the mechanism gates below:  a driver
    * which cannot move a name returns -ENOTSUP first, and RGWLibFS::rename
@@ -7444,6 +9463,14 @@ int NSFSObject::copy_object(const ACLOwner& owner,
                               const DoutPrefixProvider* dpp,
                               optional_yield y)
 {
+  if (cg1.result() < 0) {
+    return cg1.result();
+  }
+  std::optional<NSFSMutationGuard> cg2;
+    if (cg2->result() < 0) {
+      return cg2->result();
+    }
+  }
   int ret;
   NSFSBucket *db = static_cast<NSFSBucket*>(dest_bucket);
   NSFSBucket *sb = static_cast<NSFSBucket*>(src_bucket);
@@ -7726,7 +9753,10 @@ int NSFSObject::copy_object(const ACLOwner& owner,
     bcache->add_entry(dpp, db->get_name(), new_bde);
       }
     }
-    bcache->add_entry(dpp, db->get_name(), new_bde);
+  }
+
+  /* the copy's mtime, which RGWCopyObj gives its notification as the
+   * event's time */
     *mtime = from_statx_timestamp(ent->get_stx().stx_mtime);
   }
 
@@ -8008,6 +10038,26 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
   const bool as_gateway =
     identity.active() && model->permits(nsfs::AccessClass::data);
   set_access(identity, /*ro=*/false);
+
+  /* Opening to write is the mutation.
+   *
+   * An FSIO handle is not a request:  it is opened once and written
+   * through many times, and the writes are parts of one mutation
+   * rather than separate ones.  So the slot is taken here and held
+   * until the handle is destroyed, and a bucket drains as its write
+   * handles are released.
+   *
+   * Taken before anything is resolved or created, so a rejection costs
+   * nothing and leaves nothing behind.  A read handle takes none --
+   * reads are served throughout a conversion, which is what the
+   * fallback strategies are for. */
+  std::optional<NSFSMutationGuard> gate;
+  if (flags & FSIOObject::OPEN_FLAG_WRITE) {
+    if (gate->result() < 0) {
+      return FSIOResult{gate->result(), nullptr};
+    }
+  }
+
   if (!ent) {
     (void) stat(dpp);
   }
@@ -8046,7 +10096,7 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
   bool for_write = (flags & FSIOObject::OPEN_FLAG_WRITE) != 0;
 
   auto hdl = std::unique_ptr<NSFSFSIOObject>(
-    new NSFSFSIOObject(this, driver, ephemeral));
+    new NSFSFSIOObject(this, driver, ephemeral, std::move(gate)));
   hdl->parent_fd = parent_fd;
   hdl->leaf_name = leaf;
   hdl->dir_chain = std::move(resolved_dirs);
@@ -8896,6 +10946,11 @@ int NSFSObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
                             Attrs* delattrs, optional_yield y, uint32_t flags,
                             const rgw_owner& authenticated_user)
 {
+  /* held off while this bucket's tree is being rewritten;  see
+   * NSFSDriver::mutation_enter() */
+  if (mg.result() < 0) {
+    return mg.result();
+  }
   std::vector<std::string> rmattrs;
   if (delattrs) {
     for (auto& it : *delattrs) {
@@ -8972,6 +11027,11 @@ int NSFSObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
                                optional_yield y, const DoutPrefixProvider* dpp,
                                const rgw_owner& authenticated_user, uint32_t flags)
 {
+  /* held off while this bucket's tree is being rewritten, as the other
+   * attribute writes are;  see NSFSDriver::mutation_enter() */
+  if (mg.result() < 0) {
+    return mg.result();
+  }
   state.attrset[attr_name] = attr_val;
   return write_attrs(dpp, y);
   {
@@ -9000,6 +11060,11 @@ int NSFSObject::pin_identity_for_attrs(const DoutPrefixProvider* dpp,
 int NSFSObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name,
                                optional_yield y, const rgw_owner& authenticated_user)
 {
+  /* held off while this bucket's tree is being rewritten;  see
+   * NSFSDriver::mutation_enter() */
+  if (mg.result() < 0) {
+    return mg.result();
+  }
   state.attrset.erase(attr_name);
 
   int ret = open(dpp);
@@ -9016,9 +11081,9 @@ int NSFSObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr
    * parameter has been here all along and no caller passed one. */
       const int oret = open(dpp, y);
   if (ret < 0) {
-    ret = errno;
-    ldpp_dout(dpp, 0) << "ERROR: could not remover attribute " << attr_name << " for " << get_name() << ": " << cpp_strerror(ret) << dendl;
-    return -ret;
+    ldpp_dout_fmt(dpp, 0, "ERROR: could not remover attribute {} for {}: {}",
+			  attr_name, get_name(), cpp_strerror(-ret));
+    return ret;
   }
 
   return 0;
@@ -9028,9 +11093,8 @@ bool NSFSObject::is_expired()
 {
   utime_t delete_at;
   if (!decode_attr(state.attrset, RGW_ATTR_DELETE_AT, delete_at)) {
-    ldout(driver->ctx(), 0)
-        << "ERROR: " << __func__
-        << ": failed to decode " RGW_ATTR_DELETE_AT " attr" << dendl;
+    ldout_fmt(driver->ctx(), 0, "ERROR: {}: failed to decode "
+	      RGW_ATTR_DELETE_AT " attr", __func__);
     return false;
   }
 
@@ -9200,7 +11264,23 @@ int NSFSObject::stat(const DoutPrefixProvider* dpp)
     NSFSBucket* b = static_cast<NSFSBucket*>(bucket);
     bool versioned = b && b->get_info().versioned();
 
-    if (versioned && !req_ver.empty()) {
+    /* A directory object in NooBaa's format:  the directory is marked,
+     * and may hold no sentinel at all.  Unversioned buckets only, for
+     * now;  NooBaa keeps a versioned directory object's history
+     * differently. */
+    nsfs::PathStrategy::DirectoryObject dobj{};
+    const std::string& kname = state.obj.key.name;
+    if (!versioned && !kname.empty() && (kname.back() == '/') &&
+	leaf_dir->directory_object(dpp, dobj)) {
+      ent = std::make_unique<NooBaaDirectoryObject>(leaf_name, leaf_dir, dobj,
+						    driver->ctx());
+      apply_pending_access();
+      ret = ent->stat(dpp);
+      if (ret < 0) {
+	state.exists = false;
+	return ret;
+      }
+    } else if (versioned && !req_ver.empty()) {
       /* version-aware stat: check current first, fall back to .versions/ */
       ret = leaf_dir->get_ent(dpp, null_yield, leaf_name, req_ver, ent);
       apply_pending_access();
@@ -9404,7 +11484,10 @@ int NSFSObject::stat(const DoutPrefixProvider* dpp)
 int NSFSObject::make_ent(ObjectType type)
 {
   if (ent)
+  if (ent && !dynamic_cast<nsfs::NooBaaDirectoryObject*>(ent.get())) {
     return 0;
+  }
+  ent.reset();
 
   Directory* leaf_dir;
   std::string leaf_name;
@@ -9826,6 +11909,24 @@ static int nsfs_data_file_fd(nsfs::FSEnt* ent)
 }
 
 
+/* Resolve this operation's identity into `ident`:  the key and the
+ * credentials, and a personality registered for it on this thread.
+ *
+ * The personality is not kept.  An id names a credential only on the
+ * ring it was registered on, and the operation may resume on another
+ * thread after any yield, so each submission looks it up where it runs
+ * (IdentityPersonality, open_as()).  Registering here still checks the
+ * credentials can be applied, before anything is served.
+ *
+ * Returns -ENODATA when impersonation is off, which is not a
+ * failure:  the caller submits with no personality and the request
+ * is served exactly as it was before any of this existed.
+ *
+ * Every other negative is a denial.  With the switch on, a request
+ * whose credentials cannot be applied must not fall back to the
+ * gateway's own -- the daemon reaches more of the filesystem than
+ * the user it would be acting for.
+ */
 static int pin_personality_for(const DoutPrefixProvider* dpp,
 			       NSFSDriver* driver, const rgw_owner& who,
 			       nsfs::FSIdentity* ident, optional_yield y)
@@ -10207,6 +12308,11 @@ static void cache_promoted_current(NSFSDriver* driver,
 int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
 					   optional_yield y, uint32_t flags)
 {
+  /* held off while this bucket's tree is being rewritten;  see
+   * NSFSDriver::mutation_enter() */
+  if (mg.result() < 0) {
+    return mg.result();
+  }
   /* Who this delete is for.  Resolved once, here, rather than at
    * each site that needs it:  a delete in a versioned bucket links
    * and unlinks inside `.versions`, and those are writes against an
@@ -10261,9 +12367,9 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
     }
   }
 
-  ldpp_dout(dpp, 10) << "delete_obj: key=" << source->get_name()
-    << " versioned=" << versioned << " ver_enabled=" << ver_enabled
-    << " req_version_id=" << req_version_id << dendl;
+  ldpp_dout_fmt(dpp, 10, "delete_obj: key={} versioned={:d} ver_enabled={:d} "
+			 "req_version_id={}", source->get_name(), versioned,
+			 ver_enabled, req_version_id);
 
   if (!versioned) {
     if (has_cond) {
@@ -10932,10 +13038,20 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
                    rgw_bucket_dir_entry::FLAG_CURRENT |
                    rgw_bucket_dir_entry::FLAG_DELETE_MARKER;
     {
+      /* The source has no ACL when the key being deleted does not
+       * exist, and a DELETE of a key that does not exist still writes
+       * a marker.  params.obj_owner is what the SAL hands us for
+       * exactly that case, and it is the same owner the marker's own
+       * ACL was just written with, so the cache entry and the disk
+       * agree. */
       ACLOwner acl_owner;
-      if (decode_acl_owner(source->get_attrs(), acl_owner) >= 0) {
+      if (source->xattr_strategy()->object_owner(source->get_attrs(),
+						 acl_owner) >= 0) {
         dm_bde.meta.owner = to_string(acl_owner.id);
         dm_bde.meta.owner_display_name = acl_owner.display_name;
+      } else {
+        dm_bde.meta.owner = to_string(params.obj_owner.id);
+        dm_bde.meta.owner_display_name = params.obj_owner.display_name;
       }
     }
     bcache->add_entry(dpp, b->get_name(), dm_bde);
@@ -11114,6 +13230,12 @@ int NSFSMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
 				ACLOwner& owner, rgw_placement_rule& dest_placement,
 				rgw::sal::Attrs& attrs)
 {
+
+  /* held off while this bucket's tree is being rewritten;  see
+   * NSFSDriver::mutation_enter() */
+  if (mg.result() < 0) {
+    return mg.result();
+  }
   int ret;
 
   /* who staging, the meta object and its record are made as */
@@ -11320,6 +13442,11 @@ int NSFSMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext *
 
 int NSFSMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct, optional_yield y)
 {
+  /* held off while this bucket's tree is being rewritten;  see
+   * NSFSDriver::mutation_enter() */
+  if (mg.result() < 0) {
+    return mg.result();
+  }
   int ret;
 
   ret = load(dpp);
@@ -11384,6 +13511,11 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
             const char *if_match,
             const char *if_nomatch)
 {
+  /* held off while this bucket's tree is being rewritten;  see
+   * NSFSDriver::mutation_enter() */
+  if (mg.result() < 0) {
+    return mg.result();
+  }
   /* who the object will belong to.  Denied where it cannot be applied,
    * as the writers deny it, rather than made as the gateway. */
   {
@@ -11721,7 +13853,20 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
       new_bde.flags = rgw_bucket_dir_entry::FLAG_VER |
                       rgw_bucket_dir_entry::FLAG_CURRENT;
       {
+        /* The ACL comes from the attrs this write was handed, for the
+         * same reason the etag just above does:  target_obj's
+         * in-memory state is the object as it was *before* the write,
+         * so a new version has no ACL there and the entry went into
+         * the cache with no owner at all.
+         *
+         * Invisible on a cold cache, because a listing that misses
+         * runs fill_cache(), which reads the xattrs and supplies one.
+         * It showed up only when a version was written to a bucket
+         * that had already been listed -- found by running the
+         * conversion corpus twice against one gateway. */
         ACLOwner acl_owner;
+        const Attrs& osrc = (attrs.find(RGW_ATTR_ACL) != attrs.end())
+          ? attrs : target_obj->get_attrs();
         set_dir_entry_owner(new_bde,
                             xattr_strategy()->object_owner(osrc, acl_owner),
                             acl_owner, pb->default_object_owner(dpp, y));
@@ -11751,7 +13896,11 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
       bde.meta.etag = (eit2 != attrs.end())
 	? eit2->second.to_str() : synthesize_etag(new_stx);
       {
+        /* the write's attrs, not the pre-write state;  see the
+         * versioned branch above */
         ACLOwner acl_owner;
+        const Attrs& osrc = (attrs.find(RGW_ATTR_ACL) != attrs.end())
+          ? attrs : target_obj->get_attrs();
         set_dir_entry_owner(bde,
                             xattr_strategy()->object_owner(osrc, acl_owner),
                             acl_owner, pb->default_object_owner(dpp, y));
@@ -12241,14 +14390,14 @@ int NSFSMultipartWriter::complete(
                        const req_context& rctx,
                        uint32_t flags)
 {
+  /* held off while this bucket's tree is being rewritten;  see
+   * NSFSDriver::mutation_enter() */
+  if (mg.result() < 0) {
+    return mg.result();
+  }
   int ret = 0;
   if (uring_write) {
     ret = uring_write->drain();
-    if (ret < 0) {
-      ldpp_dout(dpp, 1) << "URING: ERROR: NSFSMultipartWriter::complete drain failed: "
-                        << cpp_strerror(-ret) << " (" << ret << ")" << dendl;
-      return ret;
-    }
   } else {
     ret = pending_write.drain();
     if (ret < 0) {
@@ -12507,12 +14656,7 @@ int NSFSAtomicWriter::process(bufferlist&& data, uint64_t offset)
         obj->get_fsent()->set_sync_on_close(true);
       }
     }
-    int r = uring_write->process(std::move(data), offset);
-    if (r < 0) {
-      ldpp_dout(dpp, 1) << "URING: ERROR: NSFSAtomicWriter::process failed: "
-                        << cpp_strerror(-r) << " (" << r << ")" << dendl;
-    }
-    return r;
+    return uring_write->process(std::move(data), offset);
   }
   unsigned iodepth = posix_sync_clamp_iodepth(
       dpp, dpp->get_cct()->_conf.get_val<uint64_t>("rgw_nsfs_put_iodepth"),
@@ -12535,14 +14679,14 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
                        const req_context& rctx,
                        uint32_t flags)
 {
+  /* held off while this bucket's tree is being rewritten;  see
+   * NSFSDriver::mutation_enter() */
+  if (mg.result() < 0) {
+    return mg.result();
+  }
   int ret = 0;
   if (uring_write) {
     ret = uring_write->drain();
-    if (ret < 0) {
-      ldpp_dout(dpp, 1) << "URING: ERROR: NSFSAtomicWriter::complete drain failed: "
-                        << cpp_strerror(-ret) << " (" << ret << ")" << dendl;
-      return ret;
-    }
   } else {
     ret = pending_write.drain();
     if (ret < 0) {
@@ -12688,6 +14832,8 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
     fill_demoted_entry(obj_name, demote,
 		       b->default_object_owner(rctx.dpp, rctx.y), dem_bde);
     bcache->add_entry(rctx.dpp, b->get_name(), dem_bde);
+    /* the caller's mtime, which RGWPutObj gives its notification as the
+     * event's time */
     if (mtime) {
       *mtime = from_statx_timestamp(ent->get_stx().stx_mtime);
     }
@@ -12821,6 +14967,12 @@ void NSFSDriver::get_features(std::map<std::string, std::string>& features)
   }
 }
 
+int NSFSDriver::set_bucket_profile(const DoutPrefixProvider* dpp,
+				   optional_yield y,
+				   const std::string& name, uint32_t target,
+				   uint32_t* had, std::string* had_profile,
+				   nsfs::ConvertProgress* progress)
+{
   if (ret < 0) {
     return ret;
   }
@@ -12835,7 +14987,15 @@ void NSFSDriver::get_features(std::map<std::string, std::string>& features)
     *had_profile = bucket.profile_name();
   }
 
+  return bucket.set_profile(dpp, y, target, nullptr, progress);
+}
 
+int NSFSDriver::get_bucket_profile(const DoutPrefixProvider* dpp,
+				   optional_yield y,
+				   const std::string& name,
+				   uint32_t* extensions, std::string* pname,
+				   bool* converting)
+{
   if ((ret < 0) && (ret != -EBADMSG)) {
     return ret;
   }
@@ -12847,6 +15007,8 @@ void NSFSDriver::get_features(std::map<std::string, std::string>& features)
   if (pname) {
     *pname = bucket.profile_name();
   }
+  if (converting) {
+    *converting = bucket.is_converting();
   }
   return 0;
 }
@@ -12876,6 +15038,7 @@ void NSFSDriver::register_admin_apis(RGWRESTMgr* mgr)
   for (const auto& u : ir.unresolved_uids) {
     ldpp_dout_fmt(dpp, 0, "WARNING: adoption:  an identity with no group list "
 			  "runs as a uid nsswitch does not know:  {}", u);
+  put_report("directories_skipped", std::to_string(prog.directories_skipped));
 /* A user's credentials as a request resolves them -- its own row, else
  * its account's, and a role session's as resolve_role_credentials() --
  * for the hints that act as a user.  -ENOENT for an
@@ -13138,6 +15301,24 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
     }
     return 0;
   }
+
+  if (hint == "inject-no-chown") {
+    /* behave as a daemon without CAP_CHOWN, so a test can assert that
+     * conversion fails rather than creating a file owned by the
+     * gateway.  The capability cannot be dropped in a test process --
+     * a thread that drops it cannot regain it, which would poison
+     * every later test -- so the condition is injected instead. */
+    auto it = params.find("enable");
+    if (it == params.end()) {
+      return -EINVAL;
+    }
+    inject_no_chown = (it->second == "true");
+    if (out) {
+      (*out)["enabled"] = inject_no_chown ? "true" : "false";
+    }
+    return 0;
+  }
+
     std::optional<nsfs::Credentials> as;
     if (auto a = params.find("as"); a != params.end()) {
       nsfs::Credentials cred;
