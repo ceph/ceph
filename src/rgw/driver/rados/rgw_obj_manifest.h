@@ -20,7 +20,9 @@
 
 #pragma once
 
+#include <algorithm>
 #include <optional>
+#include <ranges>
 #include "rgw_zone_types.h"
 #include "rgw_bucket_types.h"
 #include "rgw_obj_types.h"
@@ -379,6 +381,14 @@ public:
     }
 
     DECODE_FINISH(bl);
+
+    // Callers may replace the decoded head size, exposing otherwise hidden tails.
+    if (!explicit_objs &&
+        std::ranges::any_of(rules | std::views::values, [](const auto& rule) {
+          return 0 == rule.stripe_max_size;
+        })) {
+      throw buffer::malformed_input("implicit manifest rule has zero stripe size");
+    }
   }
 
   void dump(Formatter *f) const;
