@@ -18,6 +18,7 @@
 #include "rgw_oidc_provider.h"
 #include "rgw_process_env.h"
 #include "rgw_sal.h"
+#include "rgw_zone.h"
 
 #define dout_subsys ceph_subsys_rgw
 

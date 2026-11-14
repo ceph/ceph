@@ -26,6 +26,7 @@
 #include "rgw_perf_counters.h"
 #include "rgw_common.h"
 #include "rgw_bucket.h"
+#include "rgw_formats.h"
 #include "rgw_restore.h"
 #include "rgw_restore_waiter.h"
 #include "rgw_zone.h"

@@ -19,6 +19,7 @@
 #include "rgw_role.h"
 #include "rgw_lc.h"
 #include "rgw_multi.h"
+#include "rgw_zone.h"
 
 #include "driver/dbstore/common/dbstore.h"
 #include "driver/dbstore/dbstore_mgr.h"

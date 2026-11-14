@@ -13,6 +13,7 @@
 #include "librbd/io/Utils.h"
 #include "librbd/object_map/DiffRequest.h"
 #include "include/rados/librados.hpp"
+#include "include/intarith.h"
 #include "include/interval_set.h"
 #include "common/Clock.h" // for ceph_clock_now()
 #include "common/errno.h"

@@ -21,6 +21,7 @@
 #include <charconv>
 #include <fmt/format.h>
 #include <future>
+#include <shared_mutex>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>

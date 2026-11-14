@@ -26,8 +26,6 @@
 #include "common/ceph_time.h"
 #include "common/dout.h"
 
-#include "osd/osd_types.h"
-
 #include "rgw_common.h"
 #include "rgw_obj_types.h"
 #include "rgw_pool_types.h"
@@ -46,8 +44,6 @@ int rgw_init_ioctx(const DoutPrefixProvider *dpp,
                    bool create = false,
                    bool mostly_omap = false,
                    bool bulk = false);
-
-#define RGW_NO_SHARD -1
 
 #define RGW_SHARDS_PRIME_0 7877
 #define RGW_SHARDS_PRIME_1 65521
@@ -314,7 +310,7 @@ auto create_pool(const DoutPrefixProvider* dpp, neorados::RADOS& rados,
 	   throw;
 	 }
 	 co_await rados.enable_application(std::move(name),
-					   pg_pool_t::APPLICATION_NAME_RGW,
+					   "rgw",
 					   false, asio::deferred);
 	 co_return sys::error_code{};
        } catch (const std::system_error& e) {

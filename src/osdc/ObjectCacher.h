@@ -16,6 +16,7 @@
 #include "common/snap_types.h" // for class SnapContext
 #include "common/Thread.h"
 #include "common/zipkin_trace.h"
+#include "osd/osd_types.h" // for object_locator_t, ObjectExtent
 
 #include "Striper.h"
 
