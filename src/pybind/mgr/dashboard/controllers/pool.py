@@ -218,6 +218,29 @@ class Pool(RESTController):
         self._wait_for_pgs(pool)
 
     @RESTController.Resource(method='POST', path='/migrate', status=201)
+    @EndpointDoc("Migrate a pool",
+                 parameters={
+                     'pool_name': (str, 'Pool name'),
+                     'pg_num': (int, 'Number of PGs'),
+                     'pgp_num': (int, 'Number of PGs for placement'),
+                     'pool_type': (str, 'Pool type (replicated or erasure)'),
+                     'erasure_code_profile': (str, 'Erasure code profile name'),
+                     'rule': (str, 'CRUSH rule name'),
+                     'expected_num_objects': (int, 'Expected number of objects'),
+                     'size': (int, 'Replica count'),
+                     'pg_num_min': (int, 'Minimum number of PGs'),
+                     'pg_num_max': (int, 'Maximum number of PGs'),
+                     'autoscale_mode': (str, 'PG autoscale mode'),
+                     'bulk': (bool, 'Bulk pool flag'),
+                     'target_size_bytes': (int, 'Target size in bytes'),
+                     'target_size_ratio': (float, 'Target size ratio'),
+                     'force_pg_limit': (bool, 'Force PG limit'),
+                     'yes_i_really_mean_it': (bool, 'Confirmation flag'),
+                     'crimson': (bool, 'Crimson OSD flag'),
+                     'enable_ec_optimizations': (bool, 'Enable EC optimizations'),
+                     'application_metadata': ([str], 'Application metadata'),
+                     'flags': ([str], 'Pool flags'),
+                 })
     @pool_task('migrate', ['{pool_name}'])
     @handle_send_command_error('pool')
     @allow_empty_body
@@ -226,11 +249,16 @@ class Pool(RESTController):
                 size=None, pg_num_min=None, pg_num_max=None, autoscale_mode=None,
                 bulk=None, target_size_bytes=None, target_size_ratio=None,
                 force_pg_limit=None, yes_i_really_mean_it=None, crimson=None,
-                enable_ec_optimizations=None):
+                enable_ec_optimizations=None,
+                application_metadata=None, flags=None, **kwargs):
         """
         Migrate a pool to a new pool with the given parameters while keeping the
         same name. Accepts the same parameters as pool creation; any parameter
         left unset keeps its default. See the 'osd pool migrate' mon command.
+
+        After issuing the migrate command, pool metadata (applications,
+        compression, quotas) is applied to the target pool via _set_pool_values,
+        matching the behaviour of the create endpoint.
         """
         params = {
             'pg_num': pg_num,
@@ -269,6 +297,7 @@ class Pool(RESTController):
                 cmd_args[key] = value
         CephService.send_command('mon', 'osd pool migrate', pool=pool_name,
                                  **cmd_args)
+        self._set_pool_values(pool_name, application_metadata, flags, False, kwargs)
 
     def _set_mirroring_mode(self, mirroring_enabled, pool):
         rbd_mirroring = RbdMirroringPoolMode()
@@ -428,12 +457,14 @@ class PoolUi(Pool):
                 used_profiles[profile] = [name]
 
         mgr_config = mgr.get('config')
+        osd_map = mgr.get('osd_map')
+        osd_map_dump = mgr.get_osdmap().dump()
         return {
             "pool_names": pool_names,
             "crush_rules_replicated": rules(1),
             "crush_rules_erasure": rules(3),
             "is_all_bluestore": all_bluestore(),
-            "osd_count": len(mgr.get('osd_map')['osds']),
+            "osd_count": len(osd_map['osds']),
             "bluestore_compression_algorithm": mgr_config['bluestore_compression_algorithm'],
             "compression_algorithms": get_config_option_enum('bluestore_compression_algorithm'),
             "compression_modes": get_config_option_enum('bluestore_compression_mode'),
@@ -442,7 +473,9 @@ class PoolUi(Pool):
             "erasure_code_profiles": profiles,
             "used_rules": used_rules,
             "used_profiles": used_profiles,
-            'nodes': mgr.get('osd_map_tree')['nodes']
+            'nodes': mgr.get('osd_map_tree')['nodes'],
+            'require_min_compat_client': osd_map_dump.get('require_min_compat_client', ''),
+            'require_osd_release': osd_map_dump.get('require_osd_release', ''),
         }
 
 

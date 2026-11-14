@@ -1,8 +1,8 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
 import _ from 'lodash';
-import { BehaviorSubject } from 'rxjs';
-import { mergeMap } from 'rxjs/operators';
+import { BehaviorSubject, EMPTY } from 'rxjs';
+import { map, mergeMap } from 'rxjs/operators';
 
 import { PgCategoryService } from '~/app/ceph/shared/pg-category.service';
 import { ConfigurationService } from '~/app/shared/api/configuration.service';
@@ -29,10 +29,25 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { TaskListService } from '~/app/shared/services/task-list.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
-import { mapPoolApplications, Pool, PoolType, transformPgStatus } from '../pool';
+import {
+  EXPERIMENTAL_FEATURES_CONFIG,
+  getPoolBusyReason,
+  isPoolMigrationFlagEnabled,
+  isReleaseAtLeast,
+  MIN_POOL_MIGRATION_RELEASE,
+  mapPoolApplications,
+  Pool,
+  PoolAction,
+  PoolType,
+  transformPgStatus
+} from '../pool';
 import { PoolStat, PoolStats } from '../pool-stat';
+import { PoolMigrationClusterSettingsModalComponent } from '../pool-migration-cluster-settings-modal/pool-migration-cluster-settings-modal.component';
+import { PoolMigrationOsdReleaseModalComponent } from '../pool-migration-osd-release-modal/pool-migration-osd-release-modal.component';
+import { PoolBusyModalComponent } from '../pool-busy-modal/pool-busy-modal.component';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
+import { Router } from '@angular/router';
 
 const BASE_URL = 'pool';
 const POOL_CONFIG = 'mon_allow_pool_delete';
@@ -88,7 +103,8 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
     private pgCategoryService: PgCategoryService,
     private urlBuilder: URLBuilderService,
     private configurationService: ConfigurationService,
-    public actionLabels: ActionLabelsI18n
+    public actionLabels: ActionLabelsI18n,
+    private router: Router
   ) {
     super();
     this.permissions = this.authStorageService.getPermissions();
@@ -102,14 +118,22 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
       {
         permission: 'update',
         icon: Icons.edit,
-        routerLink: () =>
-          this.urlBuilder.getEdit(encodeURIComponent(this.selection.first().pool_name)),
+        click: () => this.editPool(),
+        disable: (selection: CdTableSelection) => !selection.hasSingleSelection,
         name: this.actionLabels.EDIT
+      },
+      {
+        permission: 'create',
+        icon: Icons.exchange,
+        click: () => this.migratePool(),
+        disable: (selection: CdTableSelection) => !selection.hasSingleSelection,
+        name: this.actionLabels.MIGRATE
       },
       {
         permission: 'delete',
         icon: Icons.destroy,
         click: () => this.deletePoolModal(),
+        disable: (selection: CdTableSelection) => !selection.hasSingleSelection,
         name: this.actionLabels.DELETE
       }
     ];
@@ -191,8 +215,41 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
     this.selection = selection;
   }
 
+  editPool() {
+    const pool = this.selection.first();
+    if (!pool) {
+      return;
+    }
+
+    const busyReason = getPoolBusyReason(pool);
+    if (busyReason) {
+      this.modalService.show(PoolBusyModalComponent, {
+        reason: busyReason,
+        taskDescription: pool.cdExecuting,
+        action: PoolAction.EDIT
+      });
+      return;
+    }
+    this.router.navigate([`/pool/${URLVerbs.EDIT}`, pool.pool_name]);
+  }
+
   deletePoolModal() {
-    const name = this.selection.first().pool_name;
+    const pool = this.selection.first();
+    if (!pool) {
+      return;
+    }
+
+    const busyReason = getPoolBusyReason(pool);
+    if (busyReason) {
+      this.modalService.show(PoolBusyModalComponent, {
+        reason: busyReason,
+        taskDescription: pool.cdExecuting,
+        action: PoolAction.DELETE
+      });
+      return;
+    }
+
+    const name = pool.pool_name;
     if (!this.monAllowPoolDelete$.getValue()) {
       if (this.permissions.configOpt.read && this.permissions.pool.read) {
         this.modalService.show(ConfirmationModalComponent, {
@@ -221,6 +278,63 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
           call: this.poolService.delete(name)
         })
     });
+  }
+
+  /**
+   * Migration prerequisites are verified in order. The first unmet one shows
+   * its own modal and stops the flow.
+   */
+  migratePool() {
+    this.poolService
+      .getInfo()
+      .pipe(
+        mergeMap((info: any) => {
+          if (!isReleaseAtLeast(info?.require_osd_release || '', MIN_POOL_MIGRATION_RELEASE)) {
+            this.modalService.show(PoolMigrationOsdReleaseModalComponent);
+            return EMPTY;
+          }
+          return this.configurationService
+            .get(EXPERIMENTAL_FEATURES_CONFIG)
+            .pipe(map((config) => ({ info, config })));
+        })
+      )
+      .subscribe(({ info, config }) => {
+        const flagValue = this.configurationService.getValue(config, 'global');
+        const needsFlag = !isPoolMigrationFlagEnabled(flagValue);
+        const needsMinCompatClient = !isReleaseAtLeast(
+          info?.require_min_compat_client || '',
+          MIN_POOL_MIGRATION_RELEASE
+        );
+
+        if (needsFlag || needsMinCompatClient) {
+          this.modalService.show(PoolMigrationClusterSettingsModalComponent, {
+            needsFlag,
+            needsMinCompatClient,
+            flagValue,
+            onComplete: () => this.goToMigrateForm()
+          });
+          return;
+        }
+        this.goToMigrateForm();
+      });
+  }
+
+  private goToMigrateForm() {
+    const pool = this.selection.first();
+    if (!pool) {
+      return;
+    }
+
+    const busyReason = getPoolBusyReason(pool);
+    if (busyReason) {
+      this.modalService.show(PoolBusyModalComponent, {
+        reason: busyReason,
+        taskDescription: pool.cdExecuting,
+        action: PoolAction.MIGRATE
+      });
+      return;
+    }
+    this.router.navigate([`/pool/${URLVerbs.MIGRATE}`, pool.pool_name]);
   }
 
   enablePoolDeletion() {
@@ -275,12 +389,18 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
       pool['stats'] = stats;
       pool['usage'] = stats.percent_used?.latest ?? 0;
 
-      if (
-        !pool.cdExecuting &&
-        pool.pg_num + pool.pg_placement_num !== pool.pg_num_target + pool.pg_placement_num_target
-      ) {
-        pool['cdExecuting'] = 'Updating';
+      if (!pool.cdExecuting) {
+        if (pool.migration_src != null || pool.migration_target != null) {
+          pool['cdExecuting'] = 'Migrating';
+        } else if (
+          pool.pg_num + pool.pg_placement_num !==
+          pool.pg_num_target + pool.pg_placement_num_target
+        ) {
+          pool['cdExecuting'] = 'Updating';
+        }
       }
+
+      pool['migrationTag'] = this.getMigrationTag(pool);
 
       ['rd_bytes', 'wr_bytes'].forEach((stat) => {
         const statData = pool.stats?.[stat] || emptyStat;
@@ -314,5 +434,24 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
   setExpandedRow(expandedRow: any) {
     super.setExpandedRow(expandedRow);
     this.getSelectionTiers();
+  }
+
+  private getMigrationTag(pool: Pool): { label: string; cssClass: string } | null {
+    const hasMigrationError = pool['pg_status']
+      ?.toString()
+      .match(/migration_(toofull|unfound|error)/);
+
+    if (pool.migration_src != null || pool.migration_target != null) {
+      if (hasMigrationError) {
+        return { label: $localize`Migration Error`, cssClass: 'tag-danger' };
+      }
+      return { label: $localize`Migrating`, cssClass: 'tag-info' };
+    }
+
+    if (pool.pool_name?.startsWith('.migrate-')) {
+      return { label: $localize`Migration Stub`, cssClass: 'tag-background-gray' };
+    }
+
+    return null;
   }
 }

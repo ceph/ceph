@@ -20968,9 +20968,13 @@ paths:
       description: "\n        Migrate a pool to a new pool with the given parameters\
         \ while keeping the\n        same name. Accepts the same parameters as pool\
         \ creation; any parameter\n        left unset keeps its default. See the 'osd\
-        \ pool migrate' mon command.\n        "
+        \ pool migrate' mon command.\n\n        After issuing the migrate command,\
+        \ pool metadata (applications,\n        compression, quotas) is applied to\
+        \ the target pool via _set_pool_values,\n        matching the behaviour of\
+        \ the create endpoint.\n        "
       parameters:
-      - in: path
+      - description: Pool name
+        in: path
         name: pool_name
         required: true
         schema:
@@ -20980,40 +20984,67 @@ paths:
           application/json:
             schema:
               properties:
+                application_metadata:
+                  description: Application metadata
+                  items:
+                    type: string
+                  type: array
                 autoscale_mode:
+                  description: PG autoscale mode
                   type: string
                 bulk:
-                  type: string
+                  description: Bulk pool flag
+                  type: boolean
                 crimson:
-                  type: string
+                  description: Crimson OSD flag
+                  type: boolean
                 enable_ec_optimizations:
-                  type: string
+                  description: Enable EC optimizations
+                  type: boolean
                 erasure_code_profile:
+                  description: Erasure code profile name
                   type: string
                 expected_num_objects:
+                  description: Expected number of objects
                   type: integer
+                flags:
+                  description: Pool flags
+                  items:
+                    type: string
+                  type: array
                 force_pg_limit:
-                  type: string
+                  description: Force PG limit
+                  type: boolean
                 pg_num:
+                  description: Number of PGs
                   type: integer
                 pg_num_max:
+                  description: Maximum number of PGs
                   type: integer
                 pg_num_min:
+                  description: Minimum number of PGs
                   type: integer
                 pgp_num:
+                  description: Number of PGs for placement
                   type: integer
                 pool_type:
+                  description: Pool type (replicated or erasure)
                   type: string
                 rule:
+                  description: CRUSH rule name
                   type: string
                 size:
+                  description: Replica count
                   type: integer
                 target_size_bytes:
+                  description: Target size in bytes
                   type: integer
                 target_size_ratio:
-                  type: integer
+                  description: Target size ratio
+                  type: number
                 yes_i_really_mean_it:
-                  type: string
+                  description: Confirmation flag
+                  type: boolean
               type: object
       responses:
         '201':
@@ -21045,6 +21076,7 @@ paths:
             trace.
       security:
       - jwt: []
+      summary: Migrate a pool
       tags:
       - Pool
   /api/prometheus:
