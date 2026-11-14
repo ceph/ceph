@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock
 from typing import List
-from cephadm.services.service_discovery import Root
+from cephadm.services.service_discovery import Root, ServiceDiscovery
 from cephadm.services.service_registry import service_registry
 
 
@@ -316,3 +316,39 @@ class TestServiceDiscovery:
         root = Root(mgr)
         cfg = root.get_sd_config('invalid-service')
         assert cfg == []
+
+
+class FakeStoreMgr:
+    def __init__(self, store=None):
+        self.store = dict(store or {})
+
+    def get_store(self, key):
+        return self.store.get(key)
+
+    def set_store(self, key, value):
+        self.store[key] = value
+
+
+class TestServiceDiscoveryCredentials:
+
+    def test_get_credentials_before_auth_enabled(self):
+        # security was just enabled: the server has not restarted yet
+        mgr = FakeStoreMgr()
+        sd = ServiceDiscovery(mgr)
+        username, password = sd.get_credentials()
+        assert username and password
+        assert mgr.store == {'service_discovery/root/username': username,
+                             'service_discovery/root/password': password}
+        # the same ones on later calls, and once the server enables auth
+        assert sd.get_credentials() == (username, password)
+        sd.enable_auth()
+        assert (sd.username, sd.password) == (username, password)
+        assert sd.validate_password('localhost', username, password)
+
+    def test_get_credentials_from_store(self):
+        mgr = FakeStoreMgr({'service_discovery/root/username': 'user',
+                            'service_discovery/root/password': 'secret'})
+        sd = ServiceDiscovery(mgr)
+        assert sd.get_credentials() == ('user', 'secret')
+        assert mgr.store == {'service_discovery/root/username': 'user',
+                             'service_discovery/root/password': 'secret'}
