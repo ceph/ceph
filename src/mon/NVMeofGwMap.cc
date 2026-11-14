@@ -311,6 +311,17 @@ int NVMeofGwMap::is_ok_to_stop(const NvmeGroupKey& group_key, const NvmeGwId &gw
               << created_gws[group_key][gw_id].gw_admin_state << dendl;
       return -EALREADY;
     }
+    /* It is safe to stop the Gateway that is not Active - no impact on IOs*/
+    if (created_gws[group_key][gw_id].availability
+      != gw_availability_t::GW_AVAILABLE ) {
+          dout(1) << "Safe to stop the gw " << gw_id << " in availability state "
+                  << created_gws[group_key][gw_id].availability << dendl;
+      if (disable_if_ok) {
+        return cfg_admin_state_change(gw_id, group_key,
+           gw_admin_state_t::GW_ADMIN_DISABLED, propose_pending);
+      }
+      return 0;
+    }
   }
   for (const auto& [_, state] : grp_it->second) {
     if (state.availability != gw_availability_t::GW_AVAILABLE) {
