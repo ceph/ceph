@@ -148,7 +148,7 @@ export const ICON_TYPE = {
   deploy: 'deploy',
   edit: 'edit',
   error: 'error--filled',
-  infoCircle: 'info-circle',
+  infoCircle: 'infoCircle',
   notification: 'notification',
   notificationOff: 'notification--off',
   notificationNew: 'notification--new',

@@ -3,41 +3,27 @@ import json
 import logging
 import re
 import socket
-from typing import cast, Dict, List, Any, Optional, TYPE_CHECKING, Union
-
-from mgr_module import NFS_POOL_NAME as POOL_NAME
-from ceph.deployment.service_spec import NFSServiceSpec, PlacementSpec, IngressSpec
-from object_format import ErrorResponse
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union, cast
 
 import orchestrator
+from ceph.deployment.service_spec import IngressSpec, NFSServiceSpec, PlacementSpec
+from mgr_module import NFS_POOL_NAME as POOL_NAME
+from object_format import ErrorResponse
 from orchestrator.module import IngressType
 
 from .exception import NFSInvalidOperation, ClusterNotFound, NFSObjectNotFound
-from .utils import (
-    ManualRestartRequired,
-    NonFatalError,
-    available_clusters,
-    conf_obj_name,
-    restart_nfs_service,
-    redeploy_nfs_service,
-    user_conf_obj_name,
-    USER_CONF_PREFIX,
-    qos_conf_obj_name,
-    normalize_auth_entity,
-    entity_belongs_to_nfs_cluster)
+from .ganesha_conf import GaneshaConfParser, format_block
+from .qos_conf import QOS, QOSBandwidthControl, QOSOpsControl, QOSParams, \
+    QOSType, validate_clust_qos_msg_interval
 from .rados_utils import NFSRados
-from .ganesha_conf import format_block, GaneshaConfParser
-from .qos_conf import (
-    QOS,
-    QOSType,
-    QOSBandwidthControl,
-    QOSOpsControl,
-    QOSParams,
-    validate_clust_qos_msg_interval)
+from .utils import USER_CONF_PREFIX, ManualRestartRequired, NonFatalError, \
+    available_clusters, conf_obj_name, entity_belongs_to_nfs_cluster, \
+    normalize_auth_entity, qos_conf_obj_name, \
+    redeploy_nfs_service, restart_nfs_service, user_conf_obj_name
 
 if TYPE_CHECKING:
-    from nfs.module import Module
     from mgr_module import MgrModule
+    from nfs.module import Module
 
 
 log = logging.getLogger(__name__)
@@ -923,7 +909,11 @@ class NFSCluster:
             if cluster_id in available_clusters(self.mgr):
                 self.update_cluster_qos_obj(cluster_id, qos_obj, enable_qos,
                                             clust_qos_msg_interval, qos_type, bw_obj, ops_obj)
-                restart_nfs_service(self.mgr, cluster_id)
+                try:
+                    restart_nfs_service(self.mgr, cluster_id)
+                except orchestrator.OrchestratorError:
+                    log.warning(f"QoS config saved for {cluster_id} but NFS service "
+                                "restart failed. No running daemons found.")
                 return
             raise ClusterNotFound()
         except NotImplementedError:
@@ -963,7 +953,8 @@ class NFSCluster:
     def enable_cluster_qos_bw(self,
                               cluster_id: str,
                               qos_type: QOSType,
-                              bw_obj: QOSBandwidthControl
+                              bw_obj: QOSBandwidthControl,
+                              skip_qos_type_validation: bool = False
                               ) -> None:
         """
         There are 2 cases to consider:
@@ -979,7 +970,7 @@ class NFSCluster:
         """
         try:
             qos_obj = self.get_cluster_qos_config(cluster_id)
-            if qos_obj:
+            if qos_obj and not skip_qos_type_validation:
                 self.validate_qos_type(qos_obj, qos_type, bw_obj=bw_obj)
             bw_obj.qos_bandwidth_checks(qos_type)
             self.update_cluster_qos(
@@ -1029,10 +1020,14 @@ class NFSCluster:
             log.exception(f"Setting NFS-Ganesha QoS bandwidth control config failed for {cluster_id}")
             raise ErrorResponse.wrap(e)
 
-    def enable_cluster_qos_ops(self, cluster_id: str, qos_type: QOSType, ops_obj: QOSOpsControl) -> None:
+    def enable_cluster_qos_ops(self,
+                               cluster_id: str,
+                               qos_type: QOSType,
+                               ops_obj: QOSOpsControl,
+                               skip_qos_type_validation: bool = False) -> None:
         try:
             qos_obj = self.get_cluster_qos_config(cluster_id)
-            if qos_obj:
+            if qos_obj and not skip_qos_type_validation:
                 self.validate_qos_type(qos_obj, qos_type, ops_obj=ops_obj)
             ops_obj.qos_ops_checks(qos_type)
             self.update_cluster_qos(
@@ -1070,6 +1065,76 @@ class NFSCluster:
             return
         except Exception as e:
             log.exception(f"Setting NFS-Ganesha QoS IOPS control config failed for {cluster_id}")
+            raise ErrorResponse.wrap(e)
+
+    def apply_cluster_qos(self,
+                          cluster_id: str,
+                          qos_type: Optional[QOSType] = None,
+                          bw_obj: Optional[QOSBandwidthControl] = None,
+                          ops_obj: Optional[QOSOpsControl] = None,
+                          disable_bw: bool = False,
+                          disable_ops: bool = False) -> None:
+        """
+        Apply bandwidth and/or IOPS QoS together in a single config write and restart.
+
+        This avoids the inconsistent intermediate state that occurs when changing the
+        shared qos_type via separate bandwidth and IOPS enable calls.
+        """
+        try:
+            qos_obj = self.get_cluster_qos_config(cluster_id)
+            clust_qos_msg_interval = qos_obj.clust_qos_msg_interval if qos_obj else 0
+
+            final_bw = qos_obj.bw_obj if qos_obj else None
+            final_ops = qos_obj.ops_obj if qos_obj else None
+
+            if disable_bw:
+                final_bw = QOSBandwidthControl()
+            elif bw_obj is not None:
+                if not qos_type:
+                    raise Exception("qos_type is required when enabling bandwidth control")
+                bw_obj.qos_bandwidth_checks(qos_type)
+                final_bw = bw_obj
+
+            if disable_ops:
+                final_ops = QOSOpsControl()
+            elif ops_obj is not None:
+                if not qos_type:
+                    raise Exception("qos_type is required when enabling IOPS control")
+                ops_obj.qos_ops_checks(qos_type)
+                final_ops = ops_obj
+
+            bw_enabled = bool(final_bw and final_bw.enable_bw_ctrl)
+            ops_enabled = bool(final_ops and final_ops.enable_iops_ctrl)
+            enable_qos = bw_enabled or ops_enabled
+
+            if enable_qos:
+                if not qos_type and qos_obj:
+                    qos_type = qos_obj.qos_type
+                if not qos_type:
+                    raise Exception("qos_type is required when QoS remains enabled")
+            else:
+                qos_type = None
+
+            self.update_cluster_qos(
+                cluster_id,
+                qos_obj,
+                enable_qos,
+                clust_qos_msg_interval,
+                qos_type=qos_type,
+                bw_obj=final_bw if final_bw is not None else QOSBandwidthControl(),
+                ops_obj=final_ops if final_ops is not None else QOSOpsControl(),
+            )
+            log.info(
+                "Cluster QoS applied atomically for %s "
+                "(bw=%s, ops=%s, qos_type=%s)",
+                cluster_id,
+                bw_enabled,
+                ops_enabled,
+                qos_type.name if qos_type else None,
+            )
+            return
+        except Exception as e:
+            log.exception(f"Applying NFS-Ganesha QoS config failed for {cluster_id}")
             raise ErrorResponse.wrap(e)
 
     def cluster_qos_set_config(

@@ -4,28 +4,31 @@ import { take } from 'rxjs/operators';
 
 import { NfsClusterResourceStateService } from './nfs-cluster-resource-state.service';
 import { NfsService } from '~/app/shared/api/nfs.service';
-import { NFSCluster } from '../../ceph/nfs/models/nfs-cluster-config';
+import { NFSCluster } from '../../ceph/nfs/models/nfs.model';
 
 describe('NfsClusterResourceStateService', () => {
   let service: NfsClusterResourceStateService;
-  let nfsServiceSpy: { getCluster: jest.Mock };
+  let nfsServiceSpy: { getCluster: jest.Mock; getClusterBandwidthOpsConfig: jest.Mock };
 
   const clusters: NFSCluster[] = [
     {
       name: 'demo-nfs-cluster',
       virtual_ip: null,
-      backend: [{ hostname: 'host1', ip: '1.2.3.4', status: 'running' }]
+      backend: [{ hostname: 'host1', ip: '1.2.3.4', status: 'running' }],
+      placement: {}
     },
     {
       name: 'other-cluster',
       virtual_ip: null,
-      backend: []
+      backend: [],
+      placement: {}
     }
   ];
 
   beforeEach(() => {
     nfsServiceSpy = {
-      getCluster: jest.fn()
+      getCluster: jest.fn(),
+      getClusterBandwidthOpsConfig: jest.fn().mockReturnValue(of(null))
     };
 
     TestBed.configureTestingModule({
@@ -40,7 +43,7 @@ describe('NfsClusterResourceStateService', () => {
   });
 
   describe('load()', () => {
-    it('should emit null when clusterIdRoute is empty', (done) => {
+    it('should emit null cluster when clusterIdRoute is empty', (done) => {
       service.cluster$.pipe(take(1)).subscribe((cluster) => {
         expect(cluster).toBeNull();
         expect(nfsServiceSpy.getCluster).not.toHaveBeenCalled();
@@ -62,7 +65,21 @@ describe('NfsClusterResourceStateService', () => {
       service.load('demo-nfs-cluster');
     });
 
-    it('should emit null when cluster is not found', (done) => {
+    it('should emit cluster and qos together via state$', (done) => {
+      const qos = { enable_iops_control: true, enable_bw_control: false };
+      nfsServiceSpy.getCluster.mockReturnValue(of(clusters[0]));
+      nfsServiceSpy.getClusterBandwidthOpsConfig.mockReturnValue(of(qos));
+
+      service.state$.pipe(take(1)).subscribe((state) => {
+        expect(state.cluster).toEqual(clusters[0]);
+        expect(state.qos).toEqual(qos);
+        done();
+      });
+
+      service.load('demo-nfs-cluster');
+    });
+
+    it('should emit null cluster when cluster is not found', (done) => {
       nfsServiceSpy.getCluster.mockReturnValue(throwError(() => new Error('not found')));
 
       service.cluster$.pipe(take(1)).subscribe((cluster) => {
@@ -73,11 +90,26 @@ describe('NfsClusterResourceStateService', () => {
       service.load('missing-cluster');
     });
 
-    it('should emit null when getCluster fails', (done) => {
+    it('should emit null cluster when getCluster fails', (done) => {
       nfsServiceSpy.getCluster.mockReturnValue(throwError(() => new Error('boom')));
 
       service.cluster$.pipe(take(1)).subscribe((cluster) => {
         expect(cluster).toBeNull();
+        done();
+      });
+
+      service.load('demo-nfs-cluster');
+    });
+
+    it('should still emit cluster when QoS fetch fails', (done) => {
+      nfsServiceSpy.getCluster.mockReturnValue(of(clusters[0]));
+      nfsServiceSpy.getClusterBandwidthOpsConfig.mockReturnValue(
+        throwError(() => new Error('qos error'))
+      );
+
+      service.state$.pipe(take(1)).subscribe((state) => {
+        expect(state.cluster).toEqual(clusters[0]);
+        expect(state.qos).toBeNull();
         done();
       });
 
@@ -99,8 +131,11 @@ describe('NfsClusterResourceStateService', () => {
       service.load('demo-nfs-cluster');
       service.load('other-cluster');
 
+      // forkJoin requires all sources to complete; complete secondRequest$ to allow emission
       secondRequest$.next(clusters[1]);
+      secondRequest$.complete();
       firstRequest$.next(clusters[0]);
+      firstRequest$.complete();
 
       expect(emitted).toEqual(['other-cluster']);
     });

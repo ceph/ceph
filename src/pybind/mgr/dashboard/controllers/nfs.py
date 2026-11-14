@@ -17,7 +17,7 @@ from ..services.exception import DashboardException, handle_cephfs_error, \
 from ..tools import str_to_bool
 from . import APIDoc, APIRouter, BaseController, CreatePermission, \
     DeletePermission, Endpoint, EndpointDoc, ReadPermission, RESTController, \
-    Task, UIRouter
+    Task, UIRouter, UpdatePermission
 from ._version import APIVersion
 
 logger = logging.getLogger(__name__)
@@ -120,6 +120,65 @@ CREATE_EXPORT_SCHEMA = {
         'access_type': (str, 'Client access type'),
         'squash': (str, 'Client squash policy')
     }], 'List of client configurations')
+}
+
+QOS_TYPE_DOC = (str, 'QoS scope: PerShare, PerClient, or PerShare_PerClient')
+
+CLUSTER_QOS_BW_SCHEMA = {
+    'cluster_id': (str, 'Cluster identifier'),
+    'qos_type': (str, 'QoS scope: PerShare, PerClient, or PerShare_PerClient', True),
+    'max_export_write_bw': (int, 'Max export write bandwidth in bytes/s', True),
+    'max_export_read_bw': (int, 'Max export read bandwidth in bytes/s', True),
+    'max_client_write_bw': (int, 'Max client write bandwidth in bytes/s', True),
+    'max_client_read_bw': (int, 'Max client read bandwidth in bytes/s', True),
+    'max_export_combined_bw': (int, 'Max combined export read/write bandwidth in bytes/s', True),
+    'max_client_combined_bw': (int, 'Max combined client read/write bandwidth in bytes/s', True),
+    'disable_qos': (bool, 'If true, disable cluster bandwidth QoS', True),
+}
+
+CLUSTER_QOS_OPS_SCHEMA = {
+    'cluster_id': (str, 'Cluster identifier'),
+    'qos_type': QOS_TYPE_DOC,
+    'max_export_iops': (int, 'Max export IOPS limit', True),
+    'max_client_iops': (int, 'Max client IOPS limit', True),
+    'disable_ops': (bool, 'If true, disable cluster IOPS QoS', True),
+}
+
+CLUSTER_QOS_APPLY_SCHEMA = {
+    'cluster_id': (str, 'Cluster identifier'),
+    'qos_type': (str, 'QoS scope: PerShare, PerClient, or PerShare_PerClient', True),
+    'enable_bw': (bool, 'Enable bandwidth QoS as part of this apply', True),
+    'enable_ops': (bool, 'Enable IOPS QoS as part of this apply', True),
+    'disable_qos': (bool, 'If true, disable cluster bandwidth QoS', True),
+    'disable_ops': (bool, 'If true, disable cluster IOPS QoS', True),
+    'max_export_write_bw': (int, 'Max export write bandwidth in bytes/s', True),
+    'max_export_read_bw': (int, 'Max export read bandwidth in bytes/s', True),
+    'max_client_write_bw': (int, 'Max client write bandwidth in bytes/s', True),
+    'max_client_read_bw': (int, 'Max client read bandwidth in bytes/s', True),
+    'max_export_combined_bw': (int, 'Max combined export read/write bandwidth in bytes/s', True),
+    'max_client_combined_bw': (int, 'Max combined client read/write bandwidth in bytes/s', True),
+    'max_export_iops': (int, 'Max export IOPS limit', True),
+    'max_client_iops': (int, 'Max client IOPS limit', True),
+}
+
+EXPORT_QOS_BW_SCHEMA = {
+    'cluster_id': (str, 'Cluster identifier'),
+    'pseudo_path': (str, 'Export pseudo path'),
+    'max_export_write_bw': (int, 'Max export write bandwidth in bytes/s', True),
+    'max_export_read_bw': (int, 'Max export read bandwidth in bytes/s', True),
+    'max_client_write_bw': (int, 'Max client write bandwidth in bytes/s', True),
+    'max_client_read_bw': (int, 'Max client read bandwidth in bytes/s', True),
+    'max_export_combined_bw': (int, 'Max combined export read/write bandwidth in bytes/s', True),
+    'max_client_combined_bw': (int, 'Max combined client read/write bandwidth in bytes/s', True),
+    'disable_qos': (bool, 'If true, disable export bandwidth QoS', True),
+}
+
+EXPORT_QOS_OPS_SCHEMA = {
+    'cluster_id': (str, 'Cluster identifier'),
+    'pseudo_path': (str, 'Export pseudo path'),
+    'max_export_iops': (int, 'Max export IOPS limit', True),
+    'max_client_iops': (int, 'Max client IOPS limit', True),
+    'disable_ops': (bool, 'If true, disable export IOPS QoS', True),
 }
 
 
@@ -255,6 +314,126 @@ class NFSGaneshaCluster(RESTController):
         except Exception as e:
             raise NFSException(str(e)) from e
 
+    @Endpoint(method='GET', path='/qos')
+    @EndpointDoc("Get the cluster QoS configuration for bandwidth and iops",
+                 parameters={
+                     'cluster_id': (str, 'Cluster identifier')
+                 })
+    @ReadPermission
+    def qos(self, cluster_id: str):
+        return mgr.remote('nfs', 'get_cluster_qos', cluster_id, True)
+
+    @Endpoint(method='PATCH', path='/qos')
+    @EndpointDoc(
+        "Apply cluster bandwidth and IOPS QoS together in one update",
+        parameters=CLUSTER_QOS_APPLY_SCHEMA)
+    @UpdatePermission
+    def apply_cluster_qos(self,
+                          cluster_id: str,
+                          qos_type: str = '',
+                          enable_bw: bool = False,
+                          enable_ops: bool = False,
+                          disable_qos: bool = False,
+                          disable_ops: bool = False,
+                          max_export_write_bw: Optional[int] = None,
+                          max_export_read_bw: Optional[int] = None,
+                          max_client_write_bw: Optional[int] = None,
+                          max_client_read_bw: Optional[int] = None,
+                          max_export_combined_bw: Optional[int] = None,
+                          max_client_combined_bw: Optional[int] = None,
+                          max_export_iops: int = 0,
+                          max_client_iops: int = 0):
+        try:
+            qos_obj: Dict[str, Any] = {}
+            if max_export_write_bw:
+                qos_obj['max_export_write_bw'] = str(max_export_write_bw)
+            if max_export_read_bw:
+                qos_obj['max_export_read_bw'] = str(max_export_read_bw)
+            if max_client_write_bw:
+                qos_obj['max_client_write_bw'] = str(max_client_write_bw)
+            if max_client_read_bw:
+                qos_obj['max_client_read_bw'] = str(max_client_read_bw)
+            if max_export_combined_bw:
+                qos_obj['max_export_combined_bw'] = str(max_export_combined_bw)
+            if max_client_combined_bw:
+                qos_obj['max_client_combined_bw'] = str(max_client_combined_bw)
+            if max_export_iops:
+                qos_obj['max_export_iops'] = max_export_iops
+            if max_client_iops:
+                qos_obj['max_client_iops'] = max_client_iops
+            return mgr.remote(
+                'nfs', 'apply_cluster_qos', cluster_id, qos_type,
+                enable_bw and not disable_qos,
+                enable_ops and not disable_ops,
+                disable_qos,
+                disable_ops,
+                False,
+                **qos_obj)
+        except Exception as e:
+            raise NFSException(
+                f"Failed to apply QoS for cluster '{cluster_id}': {e}")
+
+    @Endpoint(method='PATCH', path='/qos/bandwidth')
+    @EndpointDoc("Enable/disable QoS configuration for bandwidth",
+                 parameters=CLUSTER_QOS_BW_SCHEMA)
+    @UpdatePermission
+    def toggle_cluster_qos_bandwidth(self,
+                                     cluster_id: str,
+                                     qos_type: str = '',
+                                     max_export_write_bw: Optional[int] = None,
+                                     max_export_read_bw: Optional[int] = None,
+                                     max_client_write_bw: Optional[int] = None,
+                                     max_client_read_bw: Optional[int] = None,
+                                     max_export_combined_bw: Optional[int] = None,
+                                     max_client_combined_bw: Optional[int] = None,
+                                     disable_qos: bool = False):
+        try:
+            if disable_qos:
+                return mgr.remote('nfs', 'disable_cluster_qos_bw', cluster_id)
+            qos_obj = {}
+            if max_export_write_bw:
+                qos_obj['max_export_write_bw'] = str(max_export_write_bw)
+            if max_export_read_bw:
+                qos_obj['max_export_read_bw'] = str(max_export_read_bw)
+            if max_client_write_bw:
+                qos_obj['max_client_write_bw'] = str(max_client_write_bw)
+            if max_client_read_bw:
+                qos_obj['max_client_read_bw'] = str(max_client_read_bw)
+            if max_export_combined_bw:
+                qos_obj['max_export_combined_bw'] = str(max_export_combined_bw)
+            if max_client_combined_bw:
+                qos_obj['max_client_combined_bw'] = str(max_client_combined_bw)
+            # passing False for combined bandwidth, later can be changed to
+            # True when combined bandwidth functionality is added
+            return mgr.remote('nfs', 'enable_cluster_qos_bw', cluster_id, qos_type,
+                              False, **qos_obj)
+        except Exception as e:
+            raise NFSException(
+                f"Failed to update QoS bandwidth for cluster '{cluster_id}': {e}")
+
+    @Endpoint(method='PATCH', path='/qos/ops')
+    @EndpointDoc("Enable/disable QoS configuration for NFS IOPs",
+                 parameters=CLUSTER_QOS_OPS_SCHEMA)
+    @UpdatePermission
+    def toggle_cluster_qos_operation(self,
+                                     cluster_id: str,
+                                     qos_type: str,
+                                     max_export_iops: int = 0,
+                                     max_client_iops: int = 0,
+                                     disable_ops: bool = False):
+        try:
+            if disable_ops:
+                return mgr.remote('nfs', 'disable_cluster_qos_ops', cluster_id)
+            obj = {}
+            if max_export_iops:
+                obj['max_export_iops'] = max_export_iops
+            if max_client_iops:
+                obj['max_client_iops'] = max_client_iops
+            return mgr.remote('nfs', 'enable_cluster_qos_ops', cluster_id, qos_type, **obj)
+        except Exception as e:
+            raise NFSException(
+                f"Failed to update QoS IOPS for cluster '{cluster_id}': {e}")
+
 
 @APIRouter('/nfs-ganesha/export', Scope.NFS_GANESHA)
 @APIDoc(group="NFS-Ganesha")
@@ -385,6 +564,75 @@ class NFSGaneshaExports(RESTController):
                 msg=f'Export with id {export_id} not found.',
                 component='nfs')
         mgr.remote('nfs', 'export_rm', cluster_id, export['pseudo'])
+
+    @Endpoint(method='GET', path='/qos')
+    @EndpointDoc("Get the export QoS configuration for bandwidth and IOPS",
+                 parameters={
+                     'cluster_id': (str, 'Cluster identifier'),
+                     'pseudo_path': (str, 'Export pseudo path')
+                 })
+    @ReadPermission
+    def qos(self, cluster_id: str, pseudo_path: str):
+        return mgr.remote('nfs', 'get_export_qos', cluster_id, pseudo_path, True)
+
+    @Endpoint(method='PATCH', path='/qos')
+    @EndpointDoc("Enable/disable export QoS configuration for bandwidth",
+                 parameters=EXPORT_QOS_BW_SCHEMA)
+    @UpdatePermission
+    def toggle_export_qos_bandwidth(self,
+                                    cluster_id: str,
+                                    pseudo_path: str,
+                                    max_export_write_bw: Optional[int] = None,
+                                    max_export_read_bw: Optional[int] = None,
+                                    max_client_write_bw: Optional[int] = None,
+                                    max_client_read_bw: Optional[int] = None,
+                                    max_export_combined_bw: Optional[int] = None,
+                                    max_client_combined_bw: Optional[int] = None,
+                                    disable_qos: bool = False):
+        try:
+            if disable_qos:
+                return mgr.remote('nfs', 'disable_export_qos_bw', cluster_id, pseudo_path)
+            qos_obj = {}
+            if max_export_write_bw:
+                qos_obj['max_export_write_bw'] = str(max_export_write_bw)
+            if max_export_read_bw:
+                qos_obj['max_export_read_bw'] = str(max_export_read_bw)
+            if max_client_write_bw:
+                qos_obj['max_client_write_bw'] = str(max_client_write_bw)
+            if max_client_read_bw:
+                qos_obj['max_client_read_bw'] = str(max_client_read_bw)
+            if max_export_combined_bw:
+                qos_obj['max_export_combined_bw'] = str(max_export_combined_bw)
+            if max_client_combined_bw:
+                qos_obj['max_client_combined_bw'] = str(max_client_combined_bw)
+            return mgr.remote('nfs', 'enable_export_qos_bw', cluster_id, pseudo_path,
+                              False, **qos_obj)
+        except Exception as e:
+            raise NFSException(
+                f"Failed to update QoS bandwidth for export '{pseudo_path}': {e}")
+
+    @Endpoint(method='PATCH', path='/qos/ops')
+    @EndpointDoc("Enable/disable export QoS configuration for operations",
+                 parameters=EXPORT_QOS_OPS_SCHEMA)
+    @UpdatePermission
+    def toggle_export_qos_operations(self,
+                                     cluster_id: str,
+                                     pseudo_path: str,
+                                     max_export_iops: Optional[int] = 0,
+                                     max_client_iops: Optional[int] = 0,
+                                     disable_ops: bool = False):
+        try:
+            if disable_ops:
+                return mgr.remote('nfs', 'disable_export_qos_ops', cluster_id, pseudo_path)
+            obj = {}
+            if max_export_iops:
+                obj['max_export_iops'] = max_export_iops
+            if max_client_iops:
+                obj['max_client_iops'] = max_client_iops
+            return mgr.remote('nfs', 'enable_export_qos_ops', cluster_id, pseudo_path, **obj)
+        except Exception as e:
+            raise NFSException(
+                f"Failed to update QoS IOPS for export '{pseudo_path}': {e}")
 
 
 @UIRouter('/nfs-ganesha', Scope.NFS_GANESHA)

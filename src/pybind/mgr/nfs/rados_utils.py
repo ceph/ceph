@@ -51,12 +51,18 @@ class NFSRados:
             log.debug("Added %s url to %s", obj, config_obj)
 
     def read_obj(self, obj: str) -> Optional[str]:
-        with self.rados.open_ioctx(self.pool) as ioctx:
-            ioctx.set_namespace(self.namespace)
-            try:
-                return ioctx.read(obj, 1048576).decode()
-            except ObjectNotFound:
-                return None
+        try:
+            with self.rados.open_ioctx(self.pool) as ioctx:
+                ioctx.set_namespace(self.namespace)
+                try:
+                    return ioctx.read(obj, 1048576).decode()
+                except ObjectNotFound:
+                    return None
+        except ObjectNotFound as e:
+            # Missing pool or object only; propagate other read failures.
+            log.debug("Failed to read NFS rados object %s/%s/%s: %s",
+                      self.pool, self.namespace, obj, e)
+            return None
 
     def update_obj(self, conf_block: str, obj: str, config_obj: str,
                    should_notify: Optional[bool] = True) -> None:
