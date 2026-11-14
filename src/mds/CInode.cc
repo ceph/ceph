@@ -3295,6 +3295,11 @@ void CInode::purge_stale_snap_data(const set<snapid_t>& snaps)
     }
   }
 
+  // project_rstat_inode_to_frag() looks up each dirty_old_rstats entry in
+  // old_inodes, so drop the entries of the purged old inodes as well.
+  for (auto id : to_remove)
+    dirty_old_rstats.erase(id);
+
   if (to_remove.size() == get_old_inodes()->size()) {
     reset_old_inodes(old_inode_map_ptr());
   } else if (!to_remove.empty()) {
