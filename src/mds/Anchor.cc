@@ -53,9 +53,9 @@ void Anchor::dump(Formatter *f) const
   f->dump_unsigned("d_type", d_type);
 }
 
-std::list<Anchor> Anchor::generate_test_instances()
+std::vector<Anchor> Anchor::generate_test_instances()
 {
-  std::list<Anchor> ls;
+  std::vector<Anchor> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().ino = 1;

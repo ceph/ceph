@@ -57,7 +57,6 @@
 
 using std::cerr;
 using std::cout;
-using std::list;
 using std::map;
 using std::ostringstream;
 using std::string;
@@ -535,13 +534,13 @@ int main(int argc, const char **argv)
 	}
       } else {
 	// is a local address listed without a name?  if so, name myself.
-	list<entity_addr_t> ls;
-	monmap.list_addrs(ls);
-	dout(0) << " monmap addrs are " << ls << ", checking if any are local"
+	vector<entity_addr_t> addresses;
+	monmap.list_addrs(addresses);
+	dout(0) << " monmap addrs are " << addresses << ", checking if any are local"
 		<< dendl;
 
 	entity_addr_t local;
-	if (have_local_addr(g_ceph_context, ls, &local)) {
+	if (have_local_addr(g_ceph_context, addresses, local)) {
 	  dout(0) << " have local addr " << local << dendl;
 	  string name;
 	  local.set_type(entity_addr_t::TYPE_MSGR2);

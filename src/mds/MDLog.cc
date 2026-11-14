@@ -428,7 +428,7 @@ LogSegment::seq_t MDLog::_submit_entry(LogEvent *le, MDSLogContextBase* c)
   le->set_stamp(ceph_clock_now());
 
   mdsmap_up_features = mds->mdsmap->get_up_features();
-  pending_events[ls->seq].push_back(PendingEvent(le, c));
+  pending_events[ls->seq].emplace_back(le, c);
   num_events++;
 
   if (logger) {
@@ -500,7 +500,7 @@ void MDLog::_submit_thread()
       continue;
     }
 
-    map<uint64_t,list<PendingEvent> >::iterator it = pending_events.begin();
+    auto it = pending_events.begin();
     if (it == pending_events.end()) {
       submit_cond.wait(locker);
       continue;
@@ -587,7 +587,7 @@ void MDLog::wait_for_safe(Context* c)
 
   bool no_pending = true;
   if (!pending_events.empty()) {
-    pending_events.rbegin()->second.push_back(PendingEvent(NULL, c));
+    pending_events.rbegin()->second.emplace_back(nullptr, c);
     no_pending = false;
     submit_cond.notify_all();
   }
@@ -605,7 +605,7 @@ void MDLog::flush()
   bool do_flush = unflushed > 0;
   unflushed = 0;
   if (!pending_events.empty()) {
-    pending_events.rbegin()->second.push_back(PendingEvent(NULL, NULL, true));
+    pending_events.rbegin()->second.emplace_back(nullptr, nullptr, true);
     do_flush = false;
     submit_cond.notify_all();
   }

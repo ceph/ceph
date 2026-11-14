@@ -228,21 +228,27 @@ void NVMeofGwMonitorClient::send_beacon()
   subsystems_info gw_subsystems;
   bool ok = gw_client.get_subsystems(gw_subsystems);
   if (ok) {
+    current_subsystems.reserve(gw_subsystems.subsystems_size());
+
     for (int i = 0; i < gw_subsystems.subsystems_size(); i++) {
       const subsystem& sub = gw_subsystems.subsystems(i);
       BeaconSubsystem bsub;
       bsub.nqn = sub.nqn();
+      bsub.namespaces.reserve(sub.namespaces_size());
+
       for (int j = 0; j < sub.namespaces_size(); j++) {
         const auto& ns = sub.namespaces(j);
-        BeaconNamespace bns = {ns.anagrpid(), ns.nonce()};
-        bsub.namespaces.push_back(bns);
+        bsub.namespaces.push_back({ns.anagrpid(), ns.nonce()});
       }
+
+      bsub.listeners.reserve(sub.listen_addresses_size());
+
       for (int k = 0; k < sub.listen_addresses_size(); k++) {
         const auto& ls = sub.listen_addresses(k);
-        BeaconListener bls = { ls.adrfam(), ls.traddr(), ls.trsvcid() };
-        bsub.listeners.push_back(bls);
+        bsub.listeners.push_back({ls.adrfam(), ls.traddr(), ls.trsvcid()});
       }
-      current_subsystems.push_back(bsub);
+
+      current_subsystems.push_back(std::move(bsub));
     }
   }
 

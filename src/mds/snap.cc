@@ -143,9 +143,9 @@ void SnapInfo::do_md_op(const string& key, const string& val,
   }
 }
 
-std::list<SnapInfo> SnapInfo::generate_test_instances()
+std::vector<SnapInfo> SnapInfo::generate_test_instances()
 {
-  std::list<SnapInfo> ls;
+  std::vector<SnapInfo> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().snapid = 1;
@@ -202,9 +202,9 @@ void snaplink_t::dump(Formatter *f) const
   f->dump_unsigned("first", first);
 }
 
-std::list<snaplink_t> snaplink_t::generate_test_instances()
+std::vector<snaplink_t> snaplink_t::generate_test_instances()
 {
-  std::list<snaplink_t> ls;
+  std::vector<snaplink_t> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().ino = 2;
@@ -314,9 +314,9 @@ void sr_t::dump(Formatter *f) const
   f->close_section();
 }
 
-std::list<sr_t> sr_t::generate_test_instances()
+std::vector<sr_t> sr_t::generate_test_instances()
 {
-  std::list<sr_t> ls;
+  std::vector<sr_t> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().seq = 1;

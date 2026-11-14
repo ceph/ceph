@@ -3,6 +3,7 @@
 
 #include <map>
 #include <set>
+#include <deque>
 #include <string>
 
 #include "kv/KeyValueDB.h"
@@ -65,7 +66,7 @@ public:
 
   class TransactionImpl_ : public TransactionImpl {
   public:
-    std::list<Context *> on_commit;
+    std::deque<Context *> on_commit;
     KeyValueDBMemory *db;
 
     explicit TransactionImpl_(KeyValueDBMemory *db) : db(db) {}
@@ -141,19 +142,20 @@ public:
     }
 
     int complete() {
-      for (auto i = on_commit.begin();
-	   i != on_commit.end();
-	   on_commit.erase(i++)) {
-	(*i)->complete(0);
+      while (!on_commit.empty()) {
+        auto *operation = on_commit.front();
+        on_commit.pop_front();
+        operation->complete(0);
       }
+
       return 0;
     }
 
     ~TransactionImpl_() override {
-      for (auto i = on_commit.begin();
-	   i != on_commit.end();
-	   on_commit.erase(i++)) {
-	delete *i;
+      while (!on_commit.empty()) {
+        auto *operation = on_commit.front();
+        on_commit.pop_front();
+        delete operation;
       }
     }
   };

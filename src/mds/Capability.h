@@ -17,6 +17,9 @@
 #ifndef CEPH_CAPABILITY_H
 #define CEPH_CAPABILITY_H
 
+#include <deque>
+#include <list>
+#include <vector>
 #include "include/buffer_fwd.h"
 #include "include/ceph_fs.h" // for CEPH_CAP_*
 #include "include/client_t.h"
@@ -84,7 +87,7 @@ public:
     void encode(ceph::buffer::list &bl) const;
     void decode(ceph::buffer::list::const_iterator &p);
     void dump(ceph::Formatter *f) const;
-    static std::list<Export> generate_test_instances();
+    static std::vector<Export> generate_test_instances();
 
     int64_t cap_id = 0;
     int32_t wanted = 0;
@@ -102,7 +105,7 @@ public:
     void encode(ceph::buffer::list &bl) const;
     void decode(ceph::buffer::list::const_iterator &p);
     void dump(ceph::Formatter *f) const;
-    static std::list<Import> generate_test_instances();
+    static std::vector<Import> generate_test_instances();
 
     int64_t cap_id = 0;
     ceph_seq_t issue_seq = 0;
@@ -114,7 +117,7 @@ public:
     void encode(ceph::buffer::list& bl) const;
     void decode(ceph::buffer::list::const_iterator& bl);
     void dump(ceph::Formatter *f) const;
-    static std::list<revoke_info> generate_test_instances();
+    static std::vector<revoke_info> generate_test_instances();
 
     __u32 before = 0;
     ceph_seq_t seq = 0;
@@ -328,7 +331,7 @@ public:
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   void dump(ceph::Formatter *f) const;
-  static std::list<Capability> generate_test_instances();
+  static std::deque<Capability> generate_test_instances();
 
   snapid_t client_follows = 0;
   version_t client_xattr_version = 0;
@@ -373,9 +376,9 @@ private:
 
   // track in-flight caps --------------
   //  - add new caps to _pending
-  //  - track revocations in _revokes list
+  //  - track revocations in _revokes history
   __u32 _pending = 0, _issued = 0;
-  mempool::mds_co::list<revoke_info> _revokes;
+  std::list<revoke_info, mempool::mds_co::pool_allocator<revoke_info>> _revokes;
 
   ceph_seq_t last_sent = 0;
   ceph_seq_t last_issue = 0;

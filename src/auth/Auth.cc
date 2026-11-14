@@ -54,8 +54,8 @@ void EntityAuth::dump(ceph::Formatter *f) const {
   f->close_section();
 }
 
-std::list<EntityAuth> EntityAuth::generate_test_instances() {
-  std::list<EntityAuth> ls;
+std::vector<EntityAuth> EntityAuth::generate_test_instances() {
+  std::vector<EntityAuth> ls;
   ls.emplace_back();
   return ls;
 }
@@ -95,8 +95,8 @@ void AuthCapsInfo::dump(ceph::Formatter *f) const {
   f->dump_unsigned("caps_len", caps.length());
 }
 
-std::list<AuthCapsInfo> AuthCapsInfo::generate_test_instances() {
-  std::list<AuthCapsInfo> ls;
+std::vector<AuthCapsInfo> AuthCapsInfo::generate_test_instances() {
+  std::vector<AuthCapsInfo> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().allow_all = true;
@@ -143,8 +143,8 @@ void AuthTicket::dump(ceph::Formatter *f) const {
   f->dump_unsigned("flags", flags);
 }
 
-std::list<AuthTicket> AuthTicket::generate_test_instances() {
-  std::list<AuthTicket> ls;
+std::vector<AuthTicket> AuthTicket::generate_test_instances() {
+  std::vector<AuthTicket> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().name.set_id("client.123");
@@ -161,8 +161,8 @@ void ExpiringCryptoKey::dump(ceph::Formatter *f) const {
   f->dump_stream("expiration") << expiration;
 }
 
-std::list<ExpiringCryptoKey> ExpiringCryptoKey::generate_test_instances() {
-  std::list<ExpiringCryptoKey> ls;
+std::vector<ExpiringCryptoKey> ExpiringCryptoKey::generate_test_instances() {
+  std::vector<ExpiringCryptoKey> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().key.set_secret(
@@ -203,8 +203,8 @@ void RotatingSecrets::dump(ceph::Formatter *f) const {
   f->close_section();
 }
 
-std::list<RotatingSecrets> RotatingSecrets::generate_test_instances() {
-  std::list<RotatingSecrets> ls;
+std::vector<RotatingSecrets> RotatingSecrets::generate_test_instances() {
+  std::vector<RotatingSecrets> ls;
   ls.emplace_back();
   ls.emplace_back();
   ExpiringCryptoKey eck{};

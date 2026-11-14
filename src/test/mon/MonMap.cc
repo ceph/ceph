@@ -34,6 +34,7 @@ using ::testing::Return;
 using ::testing::_;
 using ::testing::SetArrayArgument;
 using ::testing::DoAll;
+using ::testing::ElementsAre;
 using ::testing::StrEq;
 
 
@@ -239,4 +240,61 @@ TEST(MonMapBuildInitial, build_initial_mon_host_from_dns_fail) {
   MonMap monmap;
   int r = monmap.build_initial(cct.get(), false, std::cerr);
   ASSERT_EQ(r, -EINVAL);
+}
+
+TEST(MonMapSequences, list_addrs)
+{
+  entity_addr_t addr_a;
+  entity_addr_t addr_b;
+  ASSERT_TRUE(addr_a.parse("127.0.0.1:6789"));
+  ASSERT_TRUE(addr_b.parse("127.0.0.2:6789"));
+
+  entity_addrvec_t addrs_a;
+  entity_addrvec_t addrs_b;
+  addrs_a.v.push_back(addr_a);
+  addrs_b.v.push_back(addr_b);
+
+  MonMap monmap;
+  monmap.add("a", addrs_a);
+  monmap.add("b", addrs_b);
+
+  std::vector<entity_addr_t> addresses;
+  monmap.list_addrs(addresses);
+
+  EXPECT_THAT(addresses, ElementsAre(addr_a, addr_b));
+}
+
+TEST(MonMapSequences, set_initial_members)
+{
+  entity_addr_t addr_a;
+  entity_addr_t addr_b;
+  entity_addr_t addr_c;
+  ASSERT_TRUE(addr_a.parse("127.0.0.1:6789"));
+  ASSERT_TRUE(addr_b.parse("127.0.0.2:6789"));
+  ASSERT_TRUE(addr_c.parse("127.0.0.3:6789"));
+
+  entity_addrvec_t addrs_a;
+  entity_addrvec_t addrs_b;
+  entity_addrvec_t addrs_c;
+  addrs_a.v.push_back(addr_a);
+  addrs_b.v.push_back(addr_b);
+  addrs_c.v.push_back(addr_c);
+
+  MonMap monmap;
+  monmap.add("a", addrs_a);
+  monmap.add("b", addrs_b);
+
+  const std::vector<std::string> initial_members {"b", "c"};
+  std::set<entity_addrvec_t> removed;
+  boost::intrusive_ptr<CephContext> cct(
+    new CephContext(CEPH_ENTITY_TYPE_MON), false);
+
+  monmap.set_initial_members(
+    cct.get(), initial_members, "c", addrs_c, removed);
+
+  EXPECT_FALSE(monmap.contains("a"));
+  EXPECT_TRUE(monmap.contains("b"));
+  EXPECT_TRUE(monmap.contains("c"));
+  EXPECT_EQ(1u, removed.size());
+  EXPECT_TRUE(removed.contains(addrs_a));
 }

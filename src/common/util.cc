@@ -47,9 +47,9 @@
 
 #include <stdio.h>
 
-using std::list;
 using std::map;
 using std::string;
+using std::vector;
 
 using ceph::bufferlist;
 using ceph::Formatter;
@@ -383,7 +383,7 @@ void collect_sys_info(map<string, string> *m, CephContext *cct)
   distro_detect(m, cct);
 }
 
-void dump_services(Formatter* f, const map<string, list<int> >& services, const char* type)
+void dump_services(Formatter* f, const map<string, vector<int>>& services, const char* type)
 {
   ceph_assert(f);
 
@@ -391,7 +391,7 @@ void dump_services(Formatter* f, const map<string, list<int> >& services, const 
   for (auto host = services.begin();
        host != services.end(); ++host) {
     f->open_array_section(host->first.c_str());
-    const list<int>& hosted = host->second;
+    const vector<int>& hosted = host->second;
     for (auto s = hosted.cbegin();
 	 s != hosted.cend(); ++s) {
       f->dump_int(type, *s);
@@ -401,7 +401,7 @@ void dump_services(Formatter* f, const map<string, list<int> >& services, const 
   f->close_section();
 }
 
-void dump_services(Formatter* f, const map<string, list<string> >& services, const char* type)
+void dump_services(Formatter* f, const map<string, vector<string>>& services, const char* type)
 {
   ceph_assert(f);
 
