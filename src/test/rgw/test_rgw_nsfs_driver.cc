@@ -24,6 +24,8 @@
 #include <fstream>
 #include <filesystem>
 #include <sys/xattr.h>
+#include <sys/wait.h>
+#include <climits>
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
 #include "common/errno.h"
@@ -279,6 +281,67 @@ std::string get_test_name()
   return name;
 }
 
+
+// Temporary names
+
+/* Two gateways on one tree, on different nodes or one after the
+ * other's restart, can have the same pid;  the nonce keeps their
+ * temporary names apart.  A forked child stands for the other process:
+ * another pid, and a nonce drawn again rather than inherited. */
+TEST(FSStrategy, TempNamesDifferAcrossProcesses)
+{
+  char h[HOST_NAME_MAX + 1] = {};
+  ASSERT_EQ(::gethostname(h, sizeof(h) - 1), 0);
+  std::string host = h;
+  for (auto& c : host) {
+    if (!(std::isalnum(static_cast<unsigned char>(c)) || (c == '.') ||
+	  (c == '-'))) {
+      c = '-';
+    }
+  }
+  const auto head = [&](pid_t pid) {
+    return fmt::format("{}{}@{}_", nsfs::TMP_LINK_PREFIX, pid, host);
+  };
+  const auto nonce = [](const std::string& name, const std::string& h) {
+    return name.substr(h.size(), 16);
+  };
+
+  const std::string mine = head(::getpid());
+  const std::string a = nsfs::temp_name(nsfs::TMP_LINK_PREFIX);
+  const std::string b = nsfs::temp_name(nsfs::TMP_LINK_PREFIX);
+  ASSERT_EQ(a.rfind(mine, 0), 0u) << a;
+  ASSERT_EQ(b.rfind(mine, 0), 0u) << b;
+  EXPECT_NE(a, b);
+  EXPECT_EQ(nonce(a, mine), nonce(b, mine));
+  /* every part after a '_' begins with a digit:  none can read as a
+   * version id ("null", "mtime-...") */
+  for (size_t p = a.find('_', nsfs::TMP_LINK_PREFIX.size());
+       p != std::string::npos; p = a.find('_', p + 1)) {
+    EXPECT_TRUE(std::isxdigit(static_cast<unsigned char>(a[p + 1]))) << a;
+  }
+
+  int fds[2];
+  ASSERT_EQ(::pipe(fds), 0);
+  const pid_t child = ::fork();
+  ASSERT_GE(child, 0);
+  if (child == 0) {
+    ::close(fds[0]);
+    const std::string n = nsfs::temp_name(nsfs::TMP_LINK_PREFIX);
+    const ssize_t w = ::write(fds[1], n.data(), n.size());
+    ::_exit(w == static_cast<ssize_t>(n.size()) ? 0 : 1);
+  }
+  ::close(fds[1]);
+  char buf[512];
+  const ssize_t r = ::read(fds[0], buf, sizeof(buf));
+  ::close(fds[0]);
+  int status = 0;
+  ::waitpid(child, &status, 0);
+  ASSERT_GT(r, 0);
+  const std::string theirs_head = head(child);
+  const std::string theirs(buf, r);
+  ASSERT_EQ(theirs.rfind(theirs_head, 0), 0u) << theirs;
+  EXPECT_NE(nonce(theirs, theirs_head), nonce(a, mine));
+}
 
 // Directory
 

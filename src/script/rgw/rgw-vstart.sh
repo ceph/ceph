@@ -81,11 +81,12 @@
 #                       The LMDB cache and userdb stay in the build dir.
 #                       Rejects --clean:  DIR/root is not ours to wipe.
 #   --perf              Performance tuning: NUMA pinning, tcmalloc
-#                       thread cache, tcp_nodelay, no request timeout
+#                       thread cache, no request timeout.  tcp_nodelay
+#                       is on in every gateway this script starts
 #   -o 'key=value'      Pass extra config option through to vstart.sh
 #                       (e.g. -o 'rgw_posix_sync_policy=relaxed')
-#   --profile           Start without debug logging (no -d to vstart.sh)
-#                       for performance profiling; sets all debug to 0
+#   --profile           Start with debug_rgw, debug_rgw_access and
+#                       debug_ms at 0, for profiling and performance runs
 #   --foreground        Print the radosgw command instead of running it;
 #                       use this to start the daemon as root in another
 #                       terminal (LWE requires root for DMAPI handles)
@@ -218,6 +219,7 @@ patch_conf_bool() {
 # --- build the radosgw command line, and start it ---
 
 start_radosgw() {
+	BEAST_OPTS="beast port=$RGW_PORT tcp_nodelay=1"
 	RGW_PREFIX=()
 
 	if $PERF; then
@@ -243,6 +245,9 @@ start_radosgw() {
 		-n "client.rgw.$RGW_PORT"
 		--rgw_frontends="$BEAST_OPTS"
 	)
+	if $PROFILE; then
+		RGW_CMD+=(--debug-rgw-access=0)
+	fi
 
 	# On the gateway's command line, not in ceph.conf:  radosgw-admin reads
 	# ceph.conf, and nsfs impersonates wherever it is configured to.
@@ -542,6 +547,9 @@ VSTART_OPTS=(
 	# DELETE /admin/driver/hint;  dev-level and off by default, so a
 	# development cluster has to ask for it
 	-o 'rgw_driver_debug_apis=true'
+	# without it a small response waits out the client's delayed ACK,
+	# about 40 ms a GET;  vstart.sh appends port=
+	--rgw_frontend 'beast tcp_nodelay=1'
 )
 
 if $LIFECYCLE; then
@@ -604,6 +612,10 @@ VSTART_FLAGS=(-n -d)
 if $PROFILE; then
 	VSTART_FLAGS=(-n)
 	DEBUG_RGW=0
+	# without -d vstart.sh's gateway runs at the defaults, debug_rgw and
+	# debug_rgw_access 1/5 and debug_ms 1:  three log lines a request
+	VSTART_OPTS+=(-o 'debug_rgw=0' -o 'debug_rgw_access=0' -o 'debug_ms=0')
+fi
 
 # --- impersonation:  users, groups and the capability ------------
 #

@@ -28,7 +28,12 @@
 #include <fcntl.h>
 #include <linux/fs.h>
 #include <linux/stat.h>
+#include <cctype>
+#include <climits>
+#include <mutex>
+#include <random>
 #include <sys/ioctl.h>
+#include <sys/random.h>
 #include <sys/stat.h>
 #include <sys/vfs.h>
 #include <sys/xattr.h>
@@ -64,6 +69,63 @@ static bool stat_matches(int fd, const std::string& name,
          stx.stx_ino == expected_ino;
 }
 
+namespace {
+
+struct TempNameSource {
+  std::mutex m;
+  std::string host;
+  pid_t pid{0};
+  uint64_t nonce{0};
+  std::atomic<uint64_t> seq{0};
+
+  TempNameSource() {
+    char h[HOST_NAME_MAX + 1] = {};
+    if (::gethostname(h, sizeof(h) - 1) == 0) {
+      host = h;
+    }
+    for (auto& c : host) {
+      if (!(std::isalnum(static_cast<unsigned char>(c)) || (c == '.') ||
+	    (c == '-'))) {
+	c = '-';
+      }
+    }
+  }
+};
+
+TempNameSource& temp_name_source()
+{
+  static TempNameSource s;
+  return s;
+}
+
+uint64_t draw_nonce()
+{
+  uint64_t n = 0;
+  if (::getrandom(&n, sizeof(n), 0) != static_cast<ssize_t>(sizeof(n))) {
+    std::random_device rd;
+    n = (static_cast<uint64_t>(rd()) << 32) ^ rd();
+  }
+  return n;
+}
+
+} // anonymous namespace
+
+std::string temp_name(std::string_view prefix)
+{
+  auto& s = temp_name_source();
+  const pid_t pid = ::getpid();
+  uint64_t nonce;
+  {
+    std::lock_guard lock(s.m);
+    if (s.pid != pid) {
+      s.pid = pid;
+      s.nonce = draw_nonce();
+    }
+    nonce = s.nonce;
+  }
+  return fmt::format("{}{}@{}_{:016x}_{}", prefix, pid, s.host, nonce,
+		     s.seq.fetch_add(1, std::memory_order_relaxed));
+}
 
 /* --- the ring, for an identity (N-D3) -----------------------------------
  *
@@ -327,10 +389,9 @@ int POSIXStrategy::link_temp_file(int temp_fd, int dir_fd,
   /* link the O_TMPFILE into the directory under a temp name, then
    * rename to the final name — two-step because linkat(2) cannot
    * atomically replace an existing entry */
-  std::string tmp_name = std::string(TMP_LINK_PREFIX) +
-    std::to_string(getpid()) + "_" + std::to_string(temp_fd);
+  std::string tmp_name = temp_name(TMP_LINK_PREFIX);
 
-  int ret = ::linkat(AT_FDCWD, temp_file_path,
+  int ret = ::linkat(AT_FDCWD, temp_file_path.c_str(),
                      dir_fd, tmp_name.c_str(), AT_SYMLINK_FOLLOW);
   if (ret < 0) {
     ret = errno;
@@ -464,6 +525,7 @@ SafeResult POSIXStrategy::safe_unlink(const DoutPrefixProvider* dpp,
   }
 
   return nsfs::with_identity_r(dpp, id, nsfs::HopKind::link, [&]() -> SafeResult {
+  std::string tmp_name = temp_name(UNLINK_TMP_PREFIX);
 
   int ret = ::renameat(dir_fd, name.c_str(),
                        tmp_dir_fd, tmp_name.c_str());

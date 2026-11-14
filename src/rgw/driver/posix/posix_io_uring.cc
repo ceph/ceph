@@ -617,13 +617,22 @@ bool posix_uring_ensure_ring(const DoutPrefixProvider* dpp, bool nsfs)
   return ret == 0;
 }
 
+int posix_uring_openat2(const DoutPrefixProvider* dpp, int dirfd,
+                        const char* path, uint64_t flags, uint64_t mode,
+                        uint16_t personality, uint64_t resolve)
+{
   if (!posix_uring_ensure_ring(dpp, /*nsfs=*/true)) {
     return -ENXIO;
   }
 
+  /* RESOLVE_NO_MAGICLINKS keeps a symlink to /proc out of the
+   * resolution, for every caller;  a caller resolving several
+   * components at once adds RESOLVE_BENEATH and RESOLVE_NO_SYMLINKS
+   * through `resolve`. */
   struct open_how how = {};
   how.flags = flags;
   how.mode = (flags & (O_CREAT | O_TMPFILE)) ? mode : 0;
+  how.resolve = RESOLVE_NO_MAGICLINKS | resolve;
 
   IoSlot slot;
   slot.disp.fn = &IoSlot::handle_cqe;
@@ -1240,7 +1249,12 @@ int posix_uring_register_personality(const DoutPrefixProvider* dpp)
   return -EOPNOTSUPP;
 }
 
+int posix_uring_openat2(const DoutPrefixProvider* dpp, int dirfd,
+                        const char* path, uint64_t flags, uint64_t mode,
+                        uint16_t personality, uint64_t resolve)
+{
   (void)dpp; (void)dirfd; (void)path; (void)flags; (void)mode;
+  (void)personality; (void)resolve;
   return -EOPNOTSUPP;
 }
 

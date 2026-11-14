@@ -14,6 +14,7 @@
  */
 
 #include <linux/capability.h>
+#include <linux/openat2.h>
 #include <sys/resource.h>
 #include <sys/sysmacros.h>
 
@@ -2235,7 +2236,20 @@ static int copy_xattrs_fd(const DoutPrefixProvider* dpp, int src_fd, int dst_fd)
 
 namespace nsfs {
 
-std::string get_key_fname(rgw_obj_key& key, bool use_version)
+int resolve_key_path(const DoutPrefixProvider* dpp,
+                     Directory* root,
+                     const rgw_obj_key& key,
+                     const std::string& key_path,
+                     const ReservedNames& rn,
+                     bool internal_bucket,
+                     bool create_dirs,
+                     CephContext* cct,
+                     std::vector<std::unique_ptr<Directory>>& dir_chain,
+                     Directory*& leaf_dir,
+                     std::string& leaf_name,
+                     const FSIdentity& id,
+                     const AccessStrategy* model,
+                     bool* one_open)
 {
   if (!internal_bucket && key.ns.empty() &&
       key_hits_reserved_name(key.name, rn)) {
@@ -2245,13 +2259,32 @@ std::string get_key_fname(rgw_obj_key& key, bool use_version)
     }
     return create_dirs ? -ERR_INVALID_OBJECT_NAME : -ENOENT;
   }
-
-  if (!key.get_ns().empty()) {
-    fname.insert(0, 1, '.');
+  if (one_open) {
+    *one_open = false;
   }
-
-  if (!fname.empty() && fname.back() == '/') {
-    fname += NSFS_FOLDER_OBJECT_NAME;
+  const auto slash = key_path.rfind('/');
+  if (one_open && !create_dirs && id.active() &&
+      (slash != std::string::npos) && (slash > 0) && (root->get_fd() >= 0)) {
+    const std::string dirs = key_path.substr(0, slash);
+    const int fd = nsfs::open_as(dpp, id, root->get_fd(), dirs.c_str(),
+				 O_RDONLY | O_DIRECTORY | O_CLOEXEC, 0,
+				 RESOLVE_BENEATH | RESOLVE_NO_SYMLINKS);
+    if (fd >= 0) {
+      auto dir = std::make_unique<Directory>(dirs, root, cct);
+      dir->set_identity(id);
+      dir->set_access_model(model);
+      dir->adopt_fd(fd);
+      leaf_dir = dir.get();
+      dir_chain.push_back(std::move(dir));
+      leaf_name = key_path.substr(slash + 1);
+      *one_open = true;
+      return 0;
+    }
+    if ((fd == -ENOENT) || (fd == -ENOTDIR)) {
+      return fd;
+    }
+    /* refused, a link on the way, or anything else:  the walk, whose
+     * every step the access model decides */
   }
   const int ret = resolve_path(dpp, root, key_path, create_dirs, cct,
 			       dir_chain, leaf_dir, leaf_name, id, model);
@@ -2815,6 +2848,19 @@ static const char* removal_log_prefix(int err)
   return removal_log_level(err) ? "" : "ERROR: ";
 }
 
+/* ENOENT means the entry does not exist, which a new object or a
+ * missing key meets on every request;  the caller decides whether that
+ * is an error, so it is not one here. */
+static int absent_log_level(int err)
+{
+  return (err == ENOENT) ? 10 : 0;
+}
+
+static const char* absent_log_prefix(int err)
+{
+  return absent_log_level(err) ? "" : "ERROR: ";
+}
+
 static int delete_directory(int parent_fd, const char* dname, bool delete_children,
 		     const DoutPrefixProvider* dpp,
 		     const nsfs::ReservedNames& rn);
@@ -2978,8 +3024,8 @@ int FSEnt::stat(const DoutPrefixProvider* dpp, bool force)
 		  AT_SYMLINK_NOFOLLOW, STATX_ALL, &stx);
   if (ret < 0) {
     ret = errno;
-    ldpp_dout(dpp, 0) << "ERROR: could not stat " << get_name() << ": "
-                  << cpp_strerror(ret) << dendl;
+    ldpp_dout_fmt(dpp, absent_log_level(ret), "{}could not stat {}: {}",
+			  absent_log_prefix(ret), get_name(), cpp_strerror(ret));
     exist = false;
     return -ret;
   }
@@ -3473,9 +3519,11 @@ int File::open(const DoutPrefixProvider* dpp)
     return -ENOENT;
   }
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: could not open object " << get_name() << ": "
-                      << cpp_strerror(ret) << dendl;
     ret = -ret;
+    ldpp_dout_fmt(dpp, absent_log_level(ret), "{}could not open object {} "
+		  "(flags 0x{:x}, as uid {}, read_only {:d}): {}",
+		  absent_log_prefix(ret), get_name(), flags,
+		  identity.cred.uid, read_only, cpp_strerror(ret));
     return -ret;
     }
 
@@ -3978,6 +4026,9 @@ int Directory::open(const DoutPrefixProvider* dpp)
     }
     if (!(access_model && access_model->permits(nsfs::AccessClass::path) &&
 	  ((r == -EACCES) || (r == -EPERM)))) {
+      ldpp_dout_fmt(dpp, absent_log_level(-r), "{}could not open dir {} as "
+			    "uid {}: {}", absent_log_prefix(-r), get_name(),
+			    identity.cred.uid, cpp_strerror(-r));
       return r;
     }
     ldpp_dout_fmt(dpp, 10, "nsfs: walk denied at {} as uid {};  going on as "
@@ -3994,8 +4045,8 @@ int Directory::open(const DoutPrefixProvider* dpp)
   int ret = openat(pfd, fname.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
   if (ret < 0) {
     ret = errno;
-    ldpp_dout(dpp, 0) << "ERROR: could not open dir " << get_name() << ": "
-                  << cpp_strerror(ret) << dendl;
+    ldpp_dout_fmt(dpp, absent_log_level(ret), "{}could not open dir {}: {}",
+			  absent_log_prefix(ret), get_name(), cpp_strerror(ret));
     return -ret;
   }
 
@@ -12210,6 +12261,28 @@ int NSFSObject::delete_object(const DoutPrefixProvider* dpp,
   if (ret < 0)
     return ret;
 
+  /* The prune removes the key's directories one at a time, so where
+   * stat() opened them as one, they are walked again;  what stat()
+   * added after them -- .versions -- stays, and so does the one
+   * directory, its parent, until the prune is done. */
+  std::unique_ptr<Directory> one_open_dir;
+  if (dir_chain_one_open && !dir_chain.empty()) {
+    std::vector<std::unique_ptr<Directory>> walked;
+    Directory* walked_leaf;
+    std::string walked_name;
+    if (nsfs::resolve_path(dpp, b->get_dir(), get_fname(/*use_version=*/false),
+			   /*create_dirs=*/false, driver->ctx(), walked,
+			   walked_leaf, walked_name, pending_identity,
+			   driver->get_access_strategy()) == 0) {
+      one_open_dir = std::move(dir_chain.front());
+      for (size_t i = 1; i < dir_chain.size(); ++i) {
+	walked.push_back(std::move(dir_chain[i]));
+      }
+      dir_chain = std::move(walked);
+    }
+    dir_chain_one_open = false;
+  }
+
   for (auto it = dir_chain.rbegin(); it != dir_chain.rend(); ++it) {
     int r = (*it)->remove(dpp, y, /*delete_children=*/false);
     if (r < 0)
@@ -13271,8 +13344,6 @@ out:
 }
 
 
-static std::atomic<uint64_t> fsio_build_seq{0};
-
 /* Apply what a create asked for to a shadow which has no name yet.
  *
  * Order matters.  Size first, because a truncate moves mtime;  then the
@@ -13526,9 +13597,8 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
 
   if (src_exists && !(flags & FSIOObject::OPEN_FLAG_TRUNC)) {
     /* COW clone of the published object.  clone_file() works by name, so
-     * this arm needs a named temp rather than O_TMPFILE. */
-    tmp_name = std::string(nsfs::TMP_LINK_PREFIX) + std::to_string(::getpid()) +
-      "_" + std::to_string(fsio_build_seq.fetch_add(1));
+     * this branch needs a named temp rather than O_TMPFILE. */
+    tmp_name = nsfs::temp_name(nsfs::TMP_LINK_PREFIX);
     int ret = driver->get_fs_strategy()->clone_file(
       dpp, parent_fd, leaf, sdir_fd, tmp_name, null_yield,
       driver->copy_hints_for(authenticated_user), true /* excl */,
@@ -13567,7 +13637,7 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
     if ((build_fd == -EOPNOTSUPP) || (build_fd == -EISDIR) ||
 	(build_fd == -EINVAL)) {
       /* filesystem without O_TMPFILE:  fall back to a named temp */
-      tmp_name = std::string(nsfs::TMP_LINK_PREFIX) + std::to_string(::getpid()) +
+      tmp_name = nsfs::temp_name(nsfs::TMP_LINK_PREFIX);
       build_fd = nsfs::open_as_or_raise(dpp, identity, model,
 					nsfs::AccessClass::data,
 					RAISED_CREATE_CAPS, sdir_fd,
@@ -14788,7 +14858,9 @@ int NSFSObject::stat(const DoutPrefixProvider* dpp)
         static_cast<NSFSBucket *>(bucket)->is_internal(),
         /*create_dirs=*/false,
         driver->ctx(),
-        dir_chain, leaf_dir, leaf_name);
+        dir_chain, leaf_dir, leaf_name,
+        pending_identity, driver->get_access_strategy(),
+        &dir_chain_one_open);
     if (ret < 0) {
       state.exists = false;
       return ret;
@@ -16747,9 +16819,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
   }
 
   /* create delete marker as zero-byte file in .versions/ */
-  static std::atomic<uint64_t> dm_counter{0};
-  std::string dm_tmp = ".dm_tmp_" +
-    std::to_string(getpid()) + "_" + std::to_string(dm_counter.fetch_add(1));
+  std::string dm_tmp = nsfs::temp_name(nsfs::DM_TMP_PREFIX);
 
   /* As the authenticated user, all of it.
    *

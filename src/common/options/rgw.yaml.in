@@ -5550,15 +5550,16 @@ options:
 - name: rgw_nsfs_gpfs_batch_xattrs
   type: bool
   level: advanced
-  desc: Use gpfs_fcntl for batch xattr operations (experimental)
+  desc: Use gpfs_fcntl for batch xattr operations on GPFS
   long_desc: >
-    When enabled, xattr read/write operations use gpfs_fcntl to pack
-    multiple xattr operations into a single kernel call instead of
-    individual fgetxattr/fsetxattr syscalls.  Reduces syscall count
-    from O(N) to O(1) per object for metadata-heavy operations like
-    PUT, GET, and listing.  Falls back to POSIX xattr calls when
-    disabled or when gpfs_fcntl is unavailable.
-  default: false
+    When enabled, the GPFS strategy's attribute writes, removals and
+    reads use gpfs_fcntl to pack an object's attributes into a single
+    kernel call instead of one fsetxattr, fremovexattr or fgetxattr per
+    attribute.  An object's own attribute reads do not go through it.
+    Measured on a single-node GPFS, a PUT's batched attribute write ran
+    20-50% faster with one caller and level under load.  Falls back to
+    POSIX xattr calls when disabled or when gpfs_fcntl is unavailable.
+  default: true
   services:
   - rgw
 - name: rgw_luarocks_location

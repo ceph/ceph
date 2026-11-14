@@ -516,6 +516,10 @@ public:
   Directory(const Directory& _d) : FSEnt(_d) {}
   virtual ~Directory() { close(); }
 
+  /* a descriptor already open on this directory, taken over;  open()
+   * then does nothing */
+  void adopt_fd(int _fd) { close(); fd = _fd; }
+
   virtual ObjectType get_type() override { return ObjectType::DIRECTORY; };
 
   virtual bool file_exists(std::string& name);
@@ -685,6 +689,45 @@ int resolve_path(const DoutPrefixProvider* dpp,
                  const FSIdentity& id,
                  const AccessStrategy* model);
 
+/* Resolve a client's S3 key to its path:  the one way a key reaches the
+ * tree.  `key_path` is the key's on-disk name (object_name()).
+ *
+ * A key with a component the driver reserves -- `.folder`, `.versions`
+ * -- is rejected here, for every operation:  such a name is schema, not
+ * an object (DECISIONS.md 2026-10-12).  A key of slashes alone is not
+ * rejected:  it is the root object, stored in the root's `.folder`
+ * (DECISIONS.md 2026-10-13).  A lookup
+ * (`create_dirs` false) returns -ENOENT, so a read is NoSuchKey and a
+ * delete deletes nothing;  a create returns -ERR_INVALID_OBJECT_NAME.
+ * Keys in a namespace of RGW's own are not clients' names and pass, as
+ * do keys in an internal bucket (`internal_bucket`, NSFSBucket::
+ * is_internal()):  an upload's own directory holds `.meta`.
+ *
+ * resolve_path() stays for paths that are not keys:  crash recovery,
+ * conversion, the listing walk.
+ *
+ * `one_open`, where a caller gives it, lets a lookup (`create_dirs`
+ * false) as an identity open the key's directories in one openat2,
+ * RESOLVE_BENEATH | RESOLVE_NO_SYMLINKS, rather than one at a time
+ * (work plan N-D2).  `dir_chain` then holds that one directory, named
+ * by the whole path, and `*one_open` is set:  a caller that needs each
+ * directory -- the delete's prune -- walks them again.  A refusal, or
+ * anything but a missing or non-directory component, falls back to the
+ * walk, so the access model decides a denial as before. */
+int resolve_key_path(const DoutPrefixProvider* dpp,
+                     Directory* root,
+                     const rgw_obj_key& key,
+                     const std::string& key_path,
+                     const ReservedNames& rn,
+                     bool internal_bucket,
+                     bool create_dirs,
+                     CephContext* cct,
+                     std::vector<std::unique_ptr<Directory>>& dir_chain,
+                     Directory*& leaf_dir,
+                     std::string& leaf_name,
+                     const FSIdentity& id,
+                     const AccessStrategy* model,
+                     bool* one_open = nullptr);
 
 } // namespace nsfs
 
@@ -2673,6 +2716,9 @@ private:
   /* the last stat() found a directory under a key without the trailing
    * '/', which has no object (stat()) */
   bool names_directory{false};
+  /* the last stat() opened the key's directories in one openat2, so
+   * dir_chain holds one directory for all of them (resolve_key_path()) */
+  bool dir_chain_one_open{false};
 
   /* How this object's entry is to be reached, held until an entry
    * exists to apply it to.
