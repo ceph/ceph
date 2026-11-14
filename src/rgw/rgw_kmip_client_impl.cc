@@ -6,6 +6,9 @@
 #include <mutex>
 #include <string.h>
 
+#include <sys/socket.h>
+#include <sys/time.h>
+
 #include "include/compat.h"
 #include "common/errno.h"
 #include "rgw_common.h"
@@ -24,6 +27,21 @@ extern "C" {
 #define dout_subsys ceph_subsys_rgw
 
 static enum kmip_version protocol_version = KMIP_1_0;
+
+static void kmip_bio_set_socket_io_timeout(BIO *bio, time_t seconds)
+{
+  if (seconds <= 0) {
+    return;
+  }
+  const int fd = BIO_get_fd(bio, nullptr);
+  if (fd < 0) {
+    return;
+  }
+  struct timeval tv = {};
+  tv.tv_sec = seconds;
+  setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+  setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+}
 
 struct RGWKmipHandle {
   int uses;
@@ -202,6 +220,9 @@ RGWKmipHandleBuilder::build() const
     ERR_print_errors_ceph(cct);
     goto Done;
   }
+
+  kmip_bio_set_socket_io_timeout(r->bio,
+    cct->_conf->rgw_crypt_kmip_socket_io_timeout_sec);
 
   // setup kmip
 
@@ -429,6 +450,7 @@ RGWKmipHandles::do_one_entry(RGWKMIPTransceiver &element)
 {
   auto h = get_kmip_handle();
   std::unique_lock l{element.lock};
+  bool drop_conn = false;  // set when the connection may be out of step
   Attribute a[8], *ap;
   TextString nvalue[1], uvalue[1];
   Name nattr[1];
@@ -587,6 +609,7 @@ RGWKmipHandles::do_one_entry(RGWKMIPTransceiver &element)
   if (i < 0) {
     lderr(cct) << "Problem sending request to " << what << " " << i << " context error message " << h->kmip_ctx->error_message << dendl;
     element.ret = -EINVAL;
+    drop_conn = true;
     goto Done;
   }
   kmip_free_buffer(h->kmip_ctx, h->encoding,
@@ -598,11 +621,13 @@ RGWKmipHandles::do_one_entry(RGWKMIPTransceiver &element)
   if (i != KMIP_OK) {
     lderr(cct) << "Failed to decode " << what << " " << i << " context error message " << h->kmip_ctx->error_message << dendl;
     element.ret = -EINVAL;
+    drop_conn = true;
     goto Done;
   }
   if (resp_m->batch_count != 1) {
     lderr(cct) << "Failed; weird response count doing " << what << " " << resp_m->batch_count << dendl;
     element.ret = -EINVAL;
+    drop_conn = true;
     goto Done;
   }
   req = resp_m->batch_items;
@@ -615,6 +640,7 @@ RGWKmipHandles::do_one_entry(RGWKMIPTransceiver &element)
   if (req->operation != rbi->operation) {
     lderr(cct) << "Failed; response operation mismatch, got " << req->operation << " expected " << rbi->operation << dendl;
     element.ret = -EINVAL;
+    drop_conn = true;
     goto Done;
   }
   switch(req->operation)
@@ -689,7 +715,10 @@ Done:
     kmip_free_response_message(h->kmip_ctx, resp_m);
   element.done = true;
   element.cond.notify_all();
-  release_kmip_handle(h);
+  if (drop_conn)
+    release_kmip_handle_now(h);
+  else
+    release_kmip_handle(h);
   return element.ret;
 }
 
