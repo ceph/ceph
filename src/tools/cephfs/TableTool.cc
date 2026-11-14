@@ -17,10 +17,12 @@
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/JSONFormatter.h"
+#include "include/str_list.h"
 
 #include "mds/SessionMap.h"
 #include "mds/InoTable.h"
 #include "mds/SnapServer.h"
+#include "messages/MRemoveSnaps.h"
 
 #include "TableTool.h"
 
@@ -37,9 +39,27 @@ void TableTool::usage()
   std::cout << "Usage: \n"
     << "  cephfs-table-tool <all|[mds rank]> <reset|show> <session|snap|inode>"
     << "  cephfs-table-tool <all|[mds rank]> <take_inos> <max_ino>"
+    << "\n  cephfs-table-tool <all|[mds rank]> purge_snaps <pool> <snapid>[-<snapid>][,...]"
+    << " [--yes-i-really-mean-it]"
     << std::endl;
 
   generic_client_usage();
+}
+
+
+bool TableTool::ms_dispatch(Message *m)
+{
+  if (m->get_type() != MSG_REMOVE_SNAPS) {
+    return MDSUtility::ms_dispatch(m);
+  }
+  dout(10) << *m << dendl;
+  {
+    std::lock_guard locker{lock};
+    remove_snaps_acked = true;
+  }
+  remove_snaps_cond.notify_all();
+  m->put();
+  return true;
 }
 
 
@@ -128,37 +148,47 @@ public:
     object_name = oss.str();
   }
 
-  int load_and_dump(librados::IoCtx *io, Formatter *f)
+  int load(librados::IoCtx *io, A *table_inst, version_t *version)
   {
     ceph_assert(io != NULL);
-    ceph_assert(f != NULL);
 
     // Attempt read
     bufferlist table_bl;
     int read_r = io->read(object_name, table_bl, 0, 0);
-    if (read_r >= 0) {
-      auto q = table_bl.cbegin();
-      try {
-        if (mds_table) {
-          version_t version;
-          decode(version, q);
-          f->dump_int("version", version);
-        }
-        A table_inst;
-        table_inst.set_rank(role.rank);
-        table_inst.decode(q);
-        table_inst.dump(f);
-
-        return 0;
-      } catch (buffer::error &e) {
-        derr << "table " << object_name << " is corrupt" << dendl;
-        return -EIO;
-      }
-    } else {
+    if (read_r < 0) {
       derr << "error reading table object " << object_name
         << ": " << cpp_strerror(read_r) << dendl;
       return read_r;
     }
+    auto q = table_bl.cbegin();
+    try {
+      if (mds_table) {
+        decode(*version, q);
+      }
+      table_inst->set_rank(role.rank);
+      table_inst->decode(q);
+    } catch (buffer::error &e) {
+      derr << "table " << object_name << " is corrupt" << dendl;
+      return -EIO;
+    }
+    return 0;
+  }
+
+  int load_and_dump(librados::IoCtx *io, Formatter *f)
+  {
+    ceph_assert(f != NULL);
+
+    A table_inst;
+    version_t version;
+    int r = load(io, &table_inst, &version);
+    if (r < 0) {
+      return r;
+    }
+    if (mds_table) {
+      f->dump_int("version", version);
+    }
+    table_inst.dump(f);
+    return 0;
   }
 
   int reset(librados::IoCtx *io)
@@ -319,6 +349,148 @@ class InoTableHandler : public TableHandler<InoTable>
 };
 
 
+/**
+ * Ask the monitors to remove snapids from a data pool that was detached from
+ * the file system (`fs rm_data_pool`) while snapshots referenced objects in it,
+ * so that the OSDs trim the clones the MDS never purged there. Snapids that
+ * the snap table in RADOS still references, or that are newer than its
+ * last_snap, are skipped; a table older than the MDS journal only makes us
+ * skip more.
+ */
+int TableTool::purge_snaps(const std::string &pool_str,
+                           const std::string &snapids_str,
+                           bool really, Formatter *f)
+{
+  interval_set<snapid_t> requested;
+  for (const auto &part : get_str_vec(snapids_str, ",")) {
+    auto dash = part.find('-');
+    std::string err;
+    long long first = strict_strtoll(part.substr(0, dash), 10, &err);
+    long long last = dash == std::string::npos ? first :
+      strict_strtoll(part.substr(dash + 1), 10, &err);
+    if (!err.empty() || first <= 0 || last < first) {
+      derr << "Bad snapid range '" << part << "'" << dendl;
+      return -EINVAL;
+    }
+    requested.union_insert(first, last - first + 1);
+  }
+
+  int64_t pool_id = -ENOENT;
+  pg_pool_t pool;
+  objecter->with_osdmap([&](const OSDMap &o) {
+    pool_id = o.lookup_pg_pool_name(pool_str);
+    if (pool_id < 0) {
+      std::string err;
+      pool_id = strict_strtoll(pool_str, 10, &err);
+      if (!err.empty() || !o.have_pg_pool(pool_id)) {
+        pool_id = -ENOENT;
+        return;
+      }
+    }
+    pool = *o.get_pg_pool(pool_id);
+  });
+  if (pool_id < 0) {
+    derr << "Pool '" << pool_str << "' not found" << dendl;
+    return -ENOENT;
+  }
+
+  const std::string fs_name =
+    fsmap->get_filesystem(role_selector.get_ns()).get_mds_map().get_fs_name();
+  if (fsmap->pool_in_use(pool_id)) {
+    derr << "Pool " << pool_id << " is in use by a file system, whose MDS "
+         << "purges its snapshots" << dendl;
+    return -EBUSY;
+  }
+  if (pool.is_pool_snaps_mode()) {
+    derr << "Pool " << pool_id << " uses pool snapshots" << dendl;
+    return -EINVAL;
+  }
+  // `fs rm_data_pool` leaves the tag that `fs add_data_pool` set
+  auto app = pool.application_metadata.find(pg_pool_t::APPLICATION_NAME_CEPHFS);
+  if (app == pool.application_metadata.end() || app->second["data"] != fs_name) {
+    derr << "Pool " << pool_id << " was not a data pool of file system '"
+         << fs_name << "'" << dendl;
+    return -EINVAL;
+  }
+  // the selfmanaged snapids of another application can equal ours
+  for (const auto &[app_name, app_meta] : pool.application_metadata) {
+    if (app_name != pg_pool_t::APPLICATION_NAME_CEPHFS) {
+      derr << "Pool " << pool_id << " also has application '" << app_name
+           << "' enabled" << dendl;
+      return -EINVAL;
+    }
+  }
+
+  SnapServer table;
+  version_t version;
+  int r = TableHandler<SnapServer>(
+      mds_role_t(), "snaptable", true).load(&io, &table, &version);
+  if (r < 0) {
+    return r;
+  }
+
+  const snapid_t last_snap = table.get_last_snap();
+  interval_set<snapid_t> referenced, newer, purge;
+  for (auto p = requested.begin(); p != requested.end(); ++p) {
+    for (snapid_t s = p.get_start(); s < p.get_end(); ++s) {
+      if (s > last_snap) {
+        newer.insert(s, p.get_end() - s);
+        break;
+      }
+      if (table.is_snap_referenced(s)) {
+        referenced.insert(s, 1);
+      } else {
+        purge.insert(s, 1);
+      }
+    }
+  }
+
+  f->dump_int("pool", pool_id);
+  f->dump_unsigned("last_snap", last_snap);
+  f->dump_stream("skipped_referenced") << referenced;
+  f->dump_stream("skipped_newer") << newer;
+  f->dump_stream("purge") << purge;
+  f->dump_bool("dry_run", !really);
+
+  if (!referenced.empty() || !newer.empty()) {
+    std::cerr << "If snapshots were deleted recently, run 'ceph tell mds."
+              << fs_name << ":0 flush journal' and try again" << std::endl;
+  }
+  if (purge.empty()) {
+    return 0;
+  }
+  if (!really) {
+    std::cerr << "Dry run; add --yes-i-really-mean-it to purge" << std::endl;
+    return 0;
+  }
+
+  // Unlike the selfmanaged snap pool op, MRemoveSnaps also raises the pool's
+  // snap_seq up to the snapids it removes.
+  std::map<int, std::vector<snapid_t>> snaps;
+  auto &v = snaps[pool_id];
+  for (auto p = purge.begin(); p != purge.end(); ++p) {
+    for (snapid_t s = p.get_start(); s < p.get_end(); ++s) {
+      v.push_back(s);
+    }
+  }
+  monc->send_mon_message(ceph::make_message<MRemoveSnaps>(snaps).detach());
+
+  // the monitors drop the request without replying if our caps lack
+  // 'osd pool rmsnap'
+  auto timeout = g_conf().get_val<std::chrono::seconds>("rados_mon_op_timeout");
+  auto acked = [this] { return remove_snaps_acked; };
+  std::unique_lock locker{lock};
+  if (timeout.count() == 0) {
+    remove_snaps_cond.wait(locker, acked);
+  } else if (!remove_snaps_cond.wait_for(locker, timeout, acked)) {
+    derr << "No reply from the monitors; check that the client is allowed "
+         << "'osd pool rmsnap'" << dendl;
+    return -ETIMEDOUT;
+  }
+  return 0;
+}
+
+
 int TableTool::main(std::vector<const char*> &argv)
 {
   int r;
@@ -426,6 +598,18 @@ int TableTool::main(std::vector<const char*> &argv)
     r = apply_role_fn([this, ino](mds_role_t rank, Formatter *f) -> int {
       return InoTableHandler(rank).take_inos(&io, ino, f);
     }, &jf);
+  } else if (mode == "purge_snaps") {
+    bool really = argv.size() == 5 &&
+      std::string(argv[4]) == "--yes-i-really-mean-it";
+    if (argv.size() < 4 || (argv.size() > 4 && !really)) {
+      cerr << "Usage: purge_snaps <pool> <snapids> [--yes-i-really-mean-it]"
+           << std::endl;
+      return -EINVAL;
+    }
+    jf.open_object_section("purge_snaps");
+    r = purge_snaps(argv[2], argv[3], really, &jf);
+    jf.dump_int("result", r);
+    jf.close_section();
   } else {
     cerr << "Invalid mode '" << mode << "'" << std::endl;
     return -EINVAL;
