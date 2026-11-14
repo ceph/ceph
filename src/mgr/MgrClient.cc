@@ -502,7 +502,15 @@ bool MgrClient::handle_mgr_configure(ref_t<MMgrConfigure> m)
   }
 
   bool starting = (stats_period == 0) && (m->stats_period != 0);
+  bool stopping = (stats_period != 0) && (m->stats_period == 0);
   stats_period = m->stats_period;
+  if (stopping && report_callback != nullptr) {
+    // Cancel the pending report, or it would still fire once. If the
+    // period went back to non-zero before it fired, _send_stats() would
+    // forget it, and both events would keep rescheduling themselves.
+    timer.cancel_event(report_callback);
+    report_callback = nullptr;
+  }
   if (starting) {
     _send_stats();
   }
