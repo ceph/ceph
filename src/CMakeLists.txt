@@ -95,6 +95,7 @@ add_definitions(
 
 if(LINUX)
   add_definitions("-D_GNU_SOURCE")
+  add_definitions("-D_LARGEFILE64_SOURCE")
 endif()
 
 add_compile_options(

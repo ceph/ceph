@@ -19,6 +19,7 @@
 
 #include <stdlib.h>
 
+#include <cstdint>
 #include <list>
 #include <string>
 #include <fstream>
