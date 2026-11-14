@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 #include <iostream>
+#include <vector>
 #include <string.h>
 
 #include "include/types.h"
@@ -292,6 +293,30 @@ TEST(Crc32c, RangeNull) {
   for (int i = 0 ; i < len; i++, check++) {
     crc = ceph_crc32c(crc, NULL, len-i);
     ASSERT_EQ(crc, *check);
+  }
+}
+
+TEST(Crc32c, BlockBoundaries) {
+  // Every length across several of the blocks the optimized implementations
+  // work in (e.g. 2032 then 1024 bytes on aarch64), at every alignment,
+  // against the table-driven sctp implementation. NULL buffers go to
+  // ceph_crc32c_func directly; ceph_crc32c would hand them to
+  // ceph_crc32c_zeros.
+  const unsigned maxlen = 3 * 2032 + 1024 + 64;
+  std::vector<unsigned char> buf(maxlen + 8), zeros(maxlen);
+  for (size_t i = 0; i < buf.size(); i++)
+    buf[i] = (unsigned char)((i * 2654435761u) >> 13);
+  for (unsigned len = 0; len <= maxlen; len++) {
+    for (unsigned a = 0; a < 8; a++) {
+      uint32_t seed = (len * 8 + a) * 2654435761u;
+      ASSERT_EQ(ceph_crc32c_sctp(seed, &buf[a], len),
+                ceph_crc32c(seed, &buf[a], len))
+        << "len " << len << " align " << a;
+    }
+    uint32_t seed = len * 2654435761u + 1;
+    ASSERT_EQ(ceph_crc32c_sctp(seed, zeros.data(), len),
+              ceph_crc32c_func(seed, nullptr, len))
+      << "len " << len << " NULL";
   }
 }
 

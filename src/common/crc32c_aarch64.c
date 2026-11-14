@@ -17,10 +17,10 @@ asm(".arch_extension crypto");
 #define CRC32CH(crc, value) __asm__("crc32ch %w[c], %w[c], %w[v]":[c]"+r"(crc):[v]"r"(value))
 #define CRC32CB(crc, value) __asm__("crc32cb %w[c], %w[c], %w[v]":[c]"+r"(crc):[v]"r"(value))
 
-#define CRC32C3X8(ITR) \
-	__asm__("crc32cx %w[c1], %w[c1], %x[v]":[c1]"+r"(crc1):[v]"r"(*((const uint64_t *)buffer + 42*1 + (ITR))));\
-	__asm__("crc32cx %w[c2], %w[c2], %x[v]":[c2]"+r"(crc2):[v]"r"(*((const uint64_t *)buffer + 42*2 + (ITR))));\
-	__asm__("crc32cx %w[c0], %w[c0], %x[v]":[c0]"+r"(crc0):[v]"r"(*((const uint64_t *)buffer + 42*0 + (ITR))));
+#define CRC32C3X8(N, ITR) \
+	__asm__("crc32cx %w[c1], %w[c1], %x[v]":[c1]"+r"(crc1):[v]"r"(*((const uint64_t *)buffer + (N)*1 + (ITR))));\
+	__asm__("crc32cx %w[c2], %w[c2], %x[v]":[c2]"+r"(crc2):[v]"r"(*((const uint64_t *)buffer + (N)*2 + (ITR))));\
+	__asm__("crc32cx %w[c0], %w[c0], %x[v]":[c0]"+r"(crc0):[v]"r"(*((const uint64_t *)buffer + (N)*0 + (ITR))));
 
 #define CRC32C3X8_ZERO \
 	__asm__("crc32cx %w[c0], %w[c0], xzr":[c0]"+r"(crc0));
@@ -35,24 +35,25 @@ asm(".arch_extension crypto");
 #define CRC32CH(crc, value) (crc) = __crc32ch((crc), (value))
 #define CRC32CB(crc, value) (crc) = __crc32cb((crc), (value))
 
-#define CRC32C3X8(ITR) \
-	crc1 = __crc32cd(crc1, *((const uint64_t *)buffer + 42*1 + (ITR)));\
-	crc2 = __crc32cd(crc2, *((const uint64_t *)buffer + 42*2 + (ITR)));\
-	crc0 = __crc32cd(crc0, *((const uint64_t *)buffer + 42*0 + (ITR)));
+#define CRC32C3X8(N, ITR) \
+	crc1 = __crc32cd(crc1, *((const uint64_t *)buffer + (N)*1 + (ITR)));\
+	crc2 = __crc32cd(crc2, *((const uint64_t *)buffer + (N)*2 + (ITR)));\
+	crc0 = __crc32cd(crc0, *((const uint64_t *)buffer + (N)*0 + (ITR)));
 
 #define CRC32C3X8_ZERO \
 	crc0 = __crc32cd(crc0, (const uint64_t)0);
 
 #endif /* HAVE_ARMV8_CRC_CRYPTO_INTRINSICS */
 
-#define CRC32C7X3X8(ITR) do {\
-	CRC32C3X8((ITR)*7+0) \
-	CRC32C3X8((ITR)*7+1) \
-	CRC32C3X8((ITR)*7+2) \
-	CRC32C3X8((ITR)*7+3) \
-	CRC32C3X8((ITR)*7+4) \
-	CRC32C3X8((ITR)*7+5) \
-	CRC32C3X8((ITR)*7+6) \
+/* 7 words of each of 3 streams that are N words apart */
+#define CRC32C7X3X8(N, ITR) do {\
+	CRC32C3X8(N, (ITR)*7+0) \
+	CRC32C3X8(N, (ITR)*7+1) \
+	CRC32C3X8(N, (ITR)*7+2) \
+	CRC32C3X8(N, (ITR)*7+3) \
+	CRC32C3X8(N, (ITR)*7+4) \
+	CRC32C3X8(N, (ITR)*7+5) \
+	CRC32C3X8(N, (ITR)*7+6) \
 	} while(0)
 
 #define CRC32C7X3X8_ZERO do {\
@@ -66,10 +67,10 @@ asm(".arch_extension crypto");
 	} while(0)
 
 #define PREF4X64L1(PREF_OFFSET, ITR) \
-	__asm__("PRFM PLDL1KEEP, [%x[v],%[c]]"::[v]"r"(buffer), [c]"I"((PREF_OFFSET) + ((ITR) + 0)*64));\
-	__asm__("PRFM PLDL1KEEP, [%x[v],%[c]]"::[v]"r"(buffer), [c]"I"((PREF_OFFSET) + ((ITR) + 1)*64));\
-	__asm__("PRFM PLDL1KEEP, [%x[v],%[c]]"::[v]"r"(buffer), [c]"I"((PREF_OFFSET) + ((ITR) + 2)*64));\
-	__asm__("PRFM PLDL1KEEP, [%x[v],%[c]]"::[v]"r"(buffer), [c]"I"((PREF_OFFSET) + ((ITR) + 3)*64));
+	__asm__("PRFM PLDL1KEEP, [%x[v],%[c]]"::[v]"r"(buffer), [c]"n"((PREF_OFFSET) + ((ITR) + 0)*64));\
+	__asm__("PRFM PLDL1KEEP, [%x[v],%[c]]"::[v]"r"(buffer), [c]"n"((PREF_OFFSET) + ((ITR) + 1)*64));\
+	__asm__("PRFM PLDL1KEEP, [%x[v],%[c]]"::[v]"r"(buffer), [c]"n"((PREF_OFFSET) + ((ITR) + 2)*64));\
+	__asm__("PRFM PLDL1KEEP, [%x[v],%[c]]"::[v]"r"(buffer), [c]"n"((PREF_OFFSET) + ((ITR) + 3)*64));
 
 #define PREF1KL1(PREF_OFFSET) \
 	PREF4X64L1((PREF_OFFSET), 0) \
@@ -78,10 +79,10 @@ asm(".arch_extension crypto");
 	PREF4X64L1((PREF_OFFSET), 12)
 
 #define PREF4X64L2(PREF_OFFSET, ITR) \
-	__asm__("PRFM PLDL2KEEP, [%x[v],%[c]]"::[v]"r"(buffer), [c]"I"((PREF_OFFSET) + ((ITR) + 0)*64));\
-	__asm__("PRFM PLDL2KEEP, [%x[v],%[c]]"::[v]"r"(buffer), [c]"I"((PREF_OFFSET) + ((ITR) + 1)*64));\
-	__asm__("PRFM PLDL2KEEP, [%x[v],%[c]]"::[v]"r"(buffer), [c]"I"((PREF_OFFSET) + ((ITR) + 2)*64));\
-	__asm__("PRFM PLDL2KEEP, [%x[v],%[c]]"::[v]"r"(buffer), [c]"I"((PREF_OFFSET) + ((ITR) + 3)*64));
+	__asm__("PRFM PLDL2KEEP, [%x[v],%[c]]"::[v]"r"(buffer), [c]"n"((PREF_OFFSET) + ((ITR) + 0)*64));\
+	__asm__("PRFM PLDL2KEEP, [%x[v],%[c]]"::[v]"r"(buffer), [c]"n"((PREF_OFFSET) + ((ITR) + 1)*64));\
+	__asm__("PRFM PLDL2KEEP, [%x[v],%[c]]"::[v]"r"(buffer), [c]"n"((PREF_OFFSET) + ((ITR) + 2)*64));\
+	__asm__("PRFM PLDL2KEEP, [%x[v],%[c]]"::[v]"r"(buffer), [c]"n"((PREF_OFFSET) + ((ITR) + 3)*64));
 
 #define PREF1KL2(PREF_OFFSET) \
 	PREF4X64L2((PREF_OFFSET), 0) \
@@ -99,14 +100,30 @@ uint32_t ceph_crc32c_aarch64(uint32_t crc, unsigned char const *buffer, unsigned
 #ifdef HAVE_ARMV8_CRYPTO
 	        if (ceph_arch_aarch64_pmull) {
 #ifdef HAVE_ARMV8_CRC_CRYPTO_INTRINSICS
-		/* Calculate reflected crc with PMULL Instruction */
-		const poly64_t k1 = 0xe417f38a, k2 = 0x8f158014;
+		/* Calculate reflected crc with PMULL Instruction
+		 *
+		 * A block is 8 + 3*8*N + 8 bytes, crc'd as three independent
+		 * streams of N words (crc0 also takes the first word and crc2 the
+		 * last), which are then merged: crc32cx(0, pmull(c, K(n))) is the
+		 * crc state c advanced over n zero bytes, where
+		 *   K(n) = bitreflect32(x^(8n-33) mod P), P = 0x1EDC6F41 (crc32c).
+		 * crc0 is advanced over the other two streams (16N+8 bytes), crc1
+		 * over crc2 (8N+8 bytes):
+		 *   2032 byte block, N = 84: k1 = K(1352), k2 = K(680)
+		 *   1024 byte block, N = 42: k3 = K(680),  k4 = K(344)
+		 * The merge is on the critical path (crc0 of the next block needs
+		 * its result), so larger blocks are faster; the 1024 byte block is
+		 * kept for what is left after the 2032 byte blocks so that shorter
+		 * inputs do not fall back to the single stream loop. */
+		const poly64_t k1 = 0x397d84a1, k2 = 0xe417f38a;
+		const poly64_t k3 = 0xe417f38a, k4 = 0x8f158014;
 		uint64_t t0, t1;
 
-		/* crc done "by 3" for fixed input block size of 1024 bytes */
-		while ((length -= 1024) >= 0) {
+		/* crc done "by 3" for fixed input block size of 2032 bytes */
+		while ((length -= 2032) >= 0) {
 			/* Prefetch data for following block to avoid cache miss */
-			PREF1KL2(1024*3);
+			PREF1KL2(2048*3);
+			PREF1KL2(2048*3 + 1024);
 			/* Do first 8 bytes here for better pipelining */
 			crc0 = __crc32cd(crc, *(const uint64_t *)buffer);
 			crc1 = 0;
@@ -115,16 +132,23 @@ uint32_t ceph_crc32c_aarch64(uint32_t crc, unsigned char const *buffer, unsigned
 
 			/* Process block inline
 			Process crc0 last to avoid dependency with above */
-			CRC32C7X3X8(0);
-			CRC32C7X3X8(1);
-			CRC32C7X3X8(2);
-			CRC32C7X3X8(3);
-			CRC32C7X3X8(4);
-			CRC32C7X3X8(5);
+			CRC32C7X3X8(84, 0);
+			CRC32C7X3X8(84, 1);
+			CRC32C7X3X8(84, 2);
+			CRC32C7X3X8(84, 3);
+			CRC32C7X3X8(84, 4);
+			CRC32C7X3X8(84, 5);
+			CRC32C7X3X8(84, 6);
+			CRC32C7X3X8(84, 7);
+			CRC32C7X3X8(84, 8);
+			CRC32C7X3X8(84, 9);
+			CRC32C7X3X8(84, 10);
+			CRC32C7X3X8(84, 11);
 
-			buffer += 42*3*sizeof(uint64_t);
+			buffer += 84*3*sizeof(uint64_t);
 			/* Prefetch data for following block to avoid cache miss */
-			PREF1KL1(1024);
+			PREF1KL1(2048);
+			PREF1KL1(2048 + 1024);
 
 			/* Merge crc0 and crc1 into crc2
 			   crc1 multiply by K2
@@ -132,6 +156,34 @@ uint32_t ceph_crc32c_aarch64(uint32_t crc, unsigned char const *buffer, unsigned
 
 			t1 = (uint64_t)vmull_p64(crc1, k2);
 			t0 = (uint64_t)vmull_p64(crc0, k1);
+			crc = __crc32cd(crc2, *(const uint64_t *)buffer);
+			crc1 = __crc32cd(0, t1);
+			crc ^= crc1;
+			crc0 = __crc32cd(0, t0);
+			crc ^= crc0;
+
+			buffer += sizeof(uint64_t);
+		}
+		length += 2032;
+
+		/* At most one block of 1024 bytes is left; nothing to prefetch */
+		while ((length -= 1024) >= 0) {
+			crc0 = __crc32cd(crc, *(const uint64_t *)buffer);
+			crc1 = 0;
+			crc2 = 0;
+			buffer += sizeof(uint64_t);
+
+			CRC32C7X3X8(42, 0);
+			CRC32C7X3X8(42, 1);
+			CRC32C7X3X8(42, 2);
+			CRC32C7X3X8(42, 3);
+			CRC32C7X3X8(42, 4);
+			CRC32C7X3X8(42, 5);
+
+			buffer += 42*3*sizeof(uint64_t);
+
+			t1 = (uint64_t)vmull_p64(crc1, k4);
+			t0 = (uint64_t)vmull_p64(crc0, k3);
 			crc = __crc32cd(crc2, *(const uint64_t *)buffer);
 			crc1 = __crc32cd(0, t1);
 			crc ^= crc1;
@@ -157,12 +209,12 @@ uint32_t ceph_crc32c_aarch64(uint32_t crc, unsigned char const *buffer, unsigned
 			crc2 = 0;
 			buffer += sizeof(uint64_t);
 
-			CRC32C7X3X8(0);
-			CRC32C7X3X8(1);
-			CRC32C7X3X8(2);
-			CRC32C7X3X8(3);
-			CRC32C7X3X8(4);
-			CRC32C7X3X8(5);
+			CRC32C7X3X8(42, 0);
+			CRC32C7X3X8(42, 1);
+			CRC32C7X3X8(42, 2);
+			CRC32C7X3X8(42, 3);
+			CRC32C7X3X8(42, 4);
+			CRC32C7X3X8(42, 5);
 
 			buffer += 42*3*sizeof(uint64_t);
 			PREF1KL1(1024);
