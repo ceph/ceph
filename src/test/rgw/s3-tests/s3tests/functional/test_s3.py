@@ -7891,6 +7891,34 @@ def test_ranged_request_empty_object():
     assert status == 416
     assert error_code == 'InvalidRange'
 
+def _object_url(bucket_name, key):
+    endpoint = get_config_endpoint().rstrip('/')
+    return '{endpoint}/{bucket}/{key}'.format(
+        endpoint=endpoint, bucket=bucket_name, key=key)
+
+def test_object_unrecognized_http_method_not_implemented():
+    bucket_name = get_new_bucket()
+    client = get_client()
+    client.put_object(Bucket=bucket_name, Key='testobj', Body=b'x')
+    url = _object_url(bucket_name, 'testobj')
+
+    for method in ('PATCH', 'TRACE'):
+        res = requests.request(method, url, verify=get_config_ssl_verify())
+        assert res.status_code == 501
+
+def test_object_unsupported_http_method_allow_header():
+    bucket_name = get_new_bucket()
+    client = get_client()
+    client.put_object(Bucket=bucket_name, Key='testobj', Body=b'x')
+    url = _object_url(bucket_name, 'testobj')
+
+    res = requests.request('COPY', url, verify=get_config_ssl_verify())
+    assert res.status_code == 405
+    allow = res.headers.get('Allow') or res.headers.get('allow')
+    assert allow is not None
+    for method in ('GET', 'HEAD', 'PUT', 'DELETE'):
+        assert method in allow
+
 @pytest.mark.versioning
 def test_versioning_bucket_create_suspend():
     bucket_name = get_new_bucket()
