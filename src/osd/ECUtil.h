@@ -648,6 +648,20 @@ public:
   }
 
   /**
+   * Return raw_shard's data within the ro range as {shard offset, length}.
+   * The length is zero if the range holds none of raw_shard's data.
+   */
+  std::pair<uint64_t, uint64_t> ro_range_to_shard_range(
+      uint64_t ro_offset, uint64_t ro_size, raw_shard_id_t raw_shard) const {
+    if (unsigned(int(raw_shard)) >= k) {
+      return {0, 0};
+    }
+    uint64_t start = ro_offset_to_shard_offset(ro_offset, raw_shard);
+    uint64_t end = ro_offset_to_shard_offset(ro_offset + ro_size, raw_shard);
+    return {start, end - start};
+  }
+
+  /**
    * Return true if shard does not require metadata updates
    */
   bool is_nonprimary_shard(const shard_id_t shard) const {
