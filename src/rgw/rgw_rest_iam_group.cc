@@ -1451,8 +1451,8 @@ class RGWDeleteGroupPolicy_IAM : public RGWOp {
   void execute(optional_yield y) override;
   void send_response() override;
 
-  const char* name() const override { return "detach_group_policy"; }
-  RGWOpType get_type() override { return RGW_OP_DETACH_GROUP_POLICY; }
+  const char* name() const override { return "delete_group_policy"; }
+  RGWOpType get_type() override { return RGW_OP_DELETE_GROUP_POLICY; }
 };
 
 int RGWDeleteGroupPolicy_IAM::init_processing(optional_yield y)
