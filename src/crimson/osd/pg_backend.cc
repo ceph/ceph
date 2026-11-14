@@ -489,7 +489,9 @@ PGBackend::write_iertr::future<> PGBackend::_writefull(
   unsigned flags)
 {
   const bool existing = maybe_create_new_object(os, txn, delta_stats);
-  if (existing && bl.length() < os.oi.size) {
+  if (existing && is_erasure()) {
+    txn.truncate(coll->get_cid(), ghobject_t{os.oi.soid}, 0);
+  } else if (existing && bl.length() < os.oi.size) {
 
     txn.truncate(coll->get_cid(), ghobject_t{os.oi.soid}, bl.length());
     truncate_update_size_and_usage(delta_stats, os.oi, truncate_size);
@@ -502,15 +504,15 @@ PGBackend::write_iertr::future<> PGBackend::_writefull(
     txn.write(
       coll->get_cid(), ghobject_t{os.oi.soid}, 0, bl.length(),
       bl, flags);
-    update_size_and_usage(
-      delta_stats,
-      osd_op_params.modified_ranges,
-      os.oi, 0,
-      bl.length(), true);
-    osd_op_params.clean_regions.mark_data_region_dirty(
-      0,
-      std::max((uint64_t)bl.length(), os.oi.size));
   }
+  osd_op_params.clean_regions.mark_data_region_dirty(
+    0,
+    std::max((uint64_t)bl.length(), os.oi.size));
+  update_size_and_usage(
+    delta_stats,
+    osd_op_params.modified_ranges,
+    os.oi, 0,
+    bl.length(), true); 
   return seastar::now();
 }
 
