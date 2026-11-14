@@ -25,7 +25,7 @@
 
 #include "Gil.h"
 
-static void assert_gil()
+void assert_gil()
 {
   /* Using PyGILState_Check() isn't appropriate:
    *
