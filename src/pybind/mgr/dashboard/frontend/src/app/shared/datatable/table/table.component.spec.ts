@@ -644,6 +644,20 @@ describe('TableComponent', () => {
       }
     });
 
+    it('should emit columnVisibilityChange when a column is toggled', () => {
+      const emitSpy = jest.spyOn(component.columnVisibilityChange, 'emit');
+      const column = component.columns[0];
+      component.toggleColumn(column);
+      expect(emitSpy).toHaveBeenCalledWith(column);
+    });
+
+    it('should pass the visible columns to the fetch data context', () => {
+      const fetchSpy = jest.spyOn(component.fetchData, 'emit');
+      component.reloadData();
+      const context = fetchSpy.mock.calls[0][0] as CdTableFetchDataContext;
+      expect(context.visibleColumns).toEqual(component.visibleColumns.map((c) => c.prop));
+    });
+
     afterEach(() => {
       clearLocalStorage();
     });
