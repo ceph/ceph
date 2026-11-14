@@ -895,6 +895,147 @@ A full list of supported attributes:
    :exclude-members: from_json
 
 
+.. _cephadm-osd-spec-explain:
+
+Explaining Device Selection
+---------------------------
+
+To understand why an OSD spec does, or does not, select a device, run:
+
+.. prompt:: bash #
+
+   ceph orch osd spec explain [<service_name>] [--host <hostname> ...] [--verbose]
+
+Without ``service_name``, all the OSD specs of the cluster are explained. To
+explain a spec before applying it, pass the spec file instead:
+
+.. prompt:: bash #
+
+   ceph orch osd spec explain -i <osd_spec_file>
+
+The command only uses the device inventory cached by cephadm (see ``ceph
+orch device ls --refresh``): it doesn't run anything on the hosts and never
+deploys anything.
+
+For each host matched by the placement of the spec, the command reports
+whether cephadm can deploy OSDs on it (for example, the host may be offline,
+in maintenance or have the ``_no_schedule`` label), which devices are selected
+for each role (``data_devices``, ``db_devices``, ``wal_devices``), and, for
+each other device, why it is not selected:
+
+- the filter criteria that don't match, with the expected value and the value
+  reported by the inventory,
+- or the reason why a device matching the filters is not selected: it is
+  unavailable (with the reject reasons of ``ceph orch device ls``), used by an
+  OSD of another spec, already selected for another role, or beyond the
+  ``limit`` of the role.
+
+Unlike the deployment itself, all the filter criteria are evaluated, so that
+all the mismatching ones are reported at once. Use ``--host`` to restrict the
+output to some hosts, ``--verbose`` to also show the criteria that match, and
+``--format json`` or ``--format yaml`` for a machine-readable output.
+
+Example output:
+
+.. code-block:: console
+
+   osd.hdd_ssd_db
+     host node1: eligible, inventory updated 3m ago
+       data_devices: 0 selected
+       db_devices: 1 selected (/dev/sdc)
+       NOTE: data_devices selects no device: no OSD will be created
+       PATH      TYPE  SIZE     MODEL                 ROLE          SELECTED  REASON
+       /dev/sdb  hdd   3.64 TB  ST4000NM0035          data_devices  no        size: '3.64 TB' (3.64e+12 B), expected >= 4TB (4e+12 B) [1]
+                                                      db_devices    no        model: 'ST4000NM0035', expected contains 'MZ7L3'
+       /dev/sdc  ssd   1.75 TB  SAMSUNG MZ7L31T9HBLT  data_devices  no        size: '1.75 TB' (1.75e+12 B), expected >= 4TB (4e+12 B)
+                                                                              rotational: 0 (non-rotational), expected 1 (rotational) [2]
+                                                      db_devices    yes       selected
+
+   [1] the size filter is compared to '3.64 TB', which ceph-volume computes in base 1024 (TiB, GiB) but labels TB, GB, while the filter uses base 1000 units. The device actually has 4000787030016 bytes and would match the filter in base 1000
+   [2] as reported by the kernel (/sys/block/<dev>/queue/rotational); RAID controllers and virtual disks may report it wrongly
+
+.. note::
+
+   Devices that ``ceph-volume inventory`` filters out, such as devices with
+   partitions or mounted devices, are not part of the cephadm inventory and
+   are therefore not reported.
+
+
+.. _cephadm-osd-spec-status:
+
+Outcome of OSD Spec Applies
+---------------------------
+
+cephadm records, for each OSD spec and each host matched by its placement, the
+outcome of the last time it applied the spec on the host:
+
+.. list-table::
+   :header-rows: 1
+
+   * - Outcome
+     - Meaning
+   * - ``failed``
+     - ceph-volume (or the deployment) failed, or ceph-volume did not create
+       any OSD although new data devices were selected. See ``error``.
+   * - ``blocked``
+     - Reserved: the deployment was refused, e.g. because ``db_devices`` or
+       ``wal_devices`` selects no device.
+   * - ``nothing_selected``
+     - ``data_devices`` selects no device on the host.
+   * - ``not_schedulable``
+     - The host is offline, in maintenance, or has the ``_no_schedule``
+       label. See ``reason``.
+   * - ``pending``
+     - The host has not been evaluated yet. See ``reason``.
+   * - ``deployed``
+     - At least one OSD was created. See ``osds_created``.
+   * - ``up_to_date``
+     - All the selected data devices already back OSDs of the spec.
+
+To show it, run:
+
+.. prompt:: bash #
+
+   ceph orch osd spec status [<service_name>] [--host <hostname> ...] [--format json|yaml]
+
+Example output:
+
+.. code-block:: console
+
+   osd.hdd_ssd_db: 4 host(s) matched (1 failed, 1 nothing_selected, 1 deployed, 1 up_to_date)
+
+   HOST   OUTCOME           SINCE    LAST ATTEMPT  INVENTORY  DATA  DB  NEW  DETAIL
+   node6  failed            4h ago   4h ago        4h ago     3     1   3    ceph-volume lvm batch: 1 fast devices were passed, but none are available
+   node5  nothing_selected  34h ago  98m ago       103m ago   0     2   0    data_devices selects no device (size: 10 mismatches)
+   node4  deployed          6h ago   6h ago        6h ago     12    2   1    created osd.42
+   node1  up_to_date        5w ago   47h ago*      47h ago    12    2   0    -
+
+   Run 'ceph orch osd spec explain osd.hdd_ssd_db --host <host>' for the per-device details.
+
+   * the inventory or the spec changed since the last attempt, or the last attempt did not complete: the host is re-evaluated on the next pass
+
+``SINCE`` is when the host entered its current outcome, ``LAST ATTEMPT`` when
+cephadm last evaluated the spec on the host, and ``INVENTORY`` the age of the
+device inventory that evaluation was based on. A host is only re-evaluated when
+its device inventory or the spec changes, or when the last attempt did not
+complete. The ``DATA``, ``DB`` and ``WAL`` columns give the number of devices
+selected for each role, and ``NEW`` the number of selected data devices that
+don't back an OSD yet.
+
+The command only shows what cephadm did. To understand why devices are, or
+are not, selected, use :ref:`ceph orch osd spec explain
+<cephadm-osd-spec-explain>`.
+
+The same information is available to tools in the ``status.osd_apply`` block of
+``ceph orch ls osd --format yaml`` (or ``json``). To keep that output small,
+the block counts all the hosts but only lists the hosts that are not
+``up_to_date``. In addition to the outcome, it reports, per role, the number of
+excluded devices per reason and per failing filter criterion.
+
+When the outcome of a host changes, cephadm emits a service event, for example
+``node5: deployed -> nothing_selected``.
+
+
 Examples
 ========
 

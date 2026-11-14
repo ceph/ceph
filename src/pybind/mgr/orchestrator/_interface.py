@@ -758,6 +758,34 @@ class Orchestrator(object):
         """ Get a preview for OSD deployments """
         raise NotImplementedError()
 
+    def explain_osdspecs(self,
+                         service_name: Optional[str] = None,
+                         osdspecs: Optional[List[DriveGroupSpec]] = None,
+                         hosts: Optional[List[str]] = None
+                         ) -> OrchResult[List[Dict[str, Any]]]:
+        """
+        Explain which devices OSD specs select on each host, and why the
+        other devices are not selected.
+
+        :param service_name: explain this stored OSD spec only
+        :param osdspecs: explain these specs instead of the stored ones
+        :param hosts: limit the explanation to these hosts
+        """
+        raise NotImplementedError()
+
+    def osdspec_apply_status(self,
+                             service_name: Optional[str] = None,
+                             hosts: Optional[List[str]] = None
+                             ) -> OrchResult[List[Dict[str, Any]]]:
+        """
+        Outcome of the last apply of the OSD specs on each host matched by
+        their placement (deployed, up to date, nothing selected, failed, ...).
+
+        :param service_name: report this OSD spec only
+        :param hosts: limit the report to these hosts
+        """
+        raise NotImplementedError()
+
     def remove_osds(self, osd_ids: List[str],
                     replace: bool = False,
                     replace_block: bool = False,
@@ -1602,7 +1630,8 @@ class ServiceDescription(object):
                  running: int = 0,
                  events: Optional[List['OrchestratorEvent']] = None,
                  virtual_ip: Optional[str] = None,
-                 ports: List[int] = []) -> None:
+                 ports: List[int] = [],
+                 osd_apply: Optional[Dict[str, Any]] = None) -> None:
         # Not everyone runs in containers, but enough people do to
         # justify having the container_image_id (image hash) and container_image
         # (image name)
@@ -1631,6 +1660,10 @@ class ServiceDescription(object):
         self.virtual_ip = virtual_ip
         self.ports = ports
 
+        # OSD services only: outcome of the last apply of the spec on each
+        # host, see 'ceph orch osd spec status'
+        self.osd_apply = osd_apply
+
     def service_type(self) -> str:
         return self.spec.service_type
 
@@ -1655,6 +1688,7 @@ class ServiceDescription(object):
             'created': self.created,
             'virtual_ip': self.virtual_ip,
             'ports': self.ports if self.ports else None,
+            'osd_apply': self.osd_apply,
         }
         for k in ['last_refresh', 'created']:
             if getattr(self, k):
@@ -1677,6 +1711,7 @@ class ServiceDescription(object):
             'created': self.created,
             'virtual_ip': self.virtual_ip,
             'ports': self.ports if self.ports else None,
+            'osd_apply': self.osd_apply,
         }
         for k in ['last_refresh', 'created']:
             if getattr(self, k):

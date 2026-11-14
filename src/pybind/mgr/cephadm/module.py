@@ -3086,6 +3086,12 @@ Then run the following:
                 ports=spec.get_port_start(),
             )
 
+            if isinstance(spec, DriveGroupSpec):
+                try:
+                    svc_desc.osd_apply = self.osd_service.apply_status(spec, attention_only=True)
+                except Exception as e:
+                    logger.warning(f'Failed to get the apply status of {nm}: {e}')
+
             if spec.service_type == 'rgw':
                 try:
                     rgw_service = RgwService(self)
@@ -3938,6 +3944,35 @@ Then run the following:
         # 'ceph orch daemon add osd' must always run ceph-volume for this request.
         # osdspec_needs_apply() only compares timestamps and would skip when inventory did not change.
         return self.osd_service.create_from_spec(drive_group, force_apply=True)
+
+    @handle_orch_error
+    def explain_osdspecs(self,
+                         service_name: Optional[str] = None,
+                         osdspecs: Optional[List[DriveGroupSpec]] = None,
+                         hosts: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+        if osdspecs is None:
+            osdspecs = [cast(DriveGroupSpec, spec)
+                        for name, spec in self.spec_store.active_specs.items()
+                        if spec.service_type == 'osd'
+                        and (service_name is None or name == service_name)]
+            if service_name and not osdspecs:
+                raise OrchestratorError(f'No OSD spec named {service_name} found')
+        return [self.osd_service.explain_osdspec(spec, hosts)
+                for spec in sorted(osdspecs, key=lambda s: s.service_name())]
+
+    @handle_orch_error
+    def osdspec_apply_status(self,
+                             service_name: Optional[str] = None,
+                             hosts: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+        osdspecs = [cast(DriveGroupSpec, spec)
+                    for name, spec in self.spec_store.all_specs.items()
+                    if spec.service_type == 'osd'
+                    and (service_name is None or name == service_name)]
+        if service_name and not osdspecs:
+            raise OrchestratorError(f'No OSD spec named {service_name} found')
+        return [dict(service_name=spec.service_name(),
+                     **self.osd_service.apply_status(spec, hosts=hosts))
+                for spec in sorted(osdspecs, key=lambda s: s.service_name())]
 
     def _preview_osdspecs(self,
                           osdspecs: Optional[List[DriveGroupSpec]] = None
