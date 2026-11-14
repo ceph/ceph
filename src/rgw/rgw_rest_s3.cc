@@ -6658,7 +6658,10 @@ AWSGeneralAbstractor::get_auth_data(const req_state* const s) const
   AwsRoute route;
   std::tie(version, route) = discover_aws_flavour(s->info);
 
-  if (s->cct->_conf->rgw_s3_auth_disable_signature_url) {
+  /* x-amz-algorithm in the query means a presigned v4 url, even when signed in the header */
+  if (s->cct->_conf->rgw_s3_auth_disable_signature_url &&
+      (route == AwsRoute::QUERY_STRING ||
+       s->info.args.exists("x-amz-algorithm"))) {
     ldpp_dout(s, 10) << "Presigned URLs are disabled by admin" << dendl;
     throw -ERR_PRESIGNED_URL_DISABLED;
   }
