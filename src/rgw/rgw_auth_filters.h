@@ -192,9 +192,9 @@ auto ThirdPartyAccountApplier<T>::load_acct_info(const DoutPrefixProvider* dpp) 
      * to the correct tenant */
     luser = driver->get_user(rgw_user(RGW_USER_ANON_ID));
     if (acct_user_override.tenant.empty())
-      luser->get_info().user_id = rgw_user(acct_user_override.id, RGW_USER_ANON_ID);
+      luser->get_info_mut().user_id = rgw_user(acct_user_override.id, RGW_USER_ANON_ID);
     else
-      luser->get_info().user_id = rgw_user(acct_user_override.tenant, RGW_USER_ANON_ID);
+      luser->get_info_mut().user_id = rgw_user(acct_user_override.tenant, RGW_USER_ANON_ID);
   } else {
     /* Compatibility mechanism for multi-tenancy. For more details refer to
      * load_acct_info method of rgw::auth::RemoteApplier. */

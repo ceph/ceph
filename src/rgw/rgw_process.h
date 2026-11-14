@@ -135,7 +135,7 @@ public:
   void gen_request(const std::string& method, const std::string& resource,
 		  int content_length, std::atomic<bool>* fail_flag);
 
-  void set_access_key(RGWAccessKey& key) { access_key = key; }
+  void set_access_key(const RGWAccessKey& key) { access_key = key; }
 };
 /* process stream request */
 extern int process_request(const RGWProcessEnv& penv,
