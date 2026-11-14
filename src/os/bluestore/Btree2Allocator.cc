@@ -2,6 +2,9 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 #include "Btree2Allocator.h"
+
+#include <limits>
+
 #include "common/debug.h"
 
 #define dout_context (get_context())
@@ -413,6 +416,61 @@ void Btree2Allocator::_try_remove_from_tree(uint64_t start, uint64_t size,
   if (start < end) {
     cb(start, end - start, false);
   }
+}
+
+int64_t Btree2Allocator::claim_range(
+  uint64_t offset,
+  uint64_t length,
+  PExtentVector *extents)
+{
+  if (length == 0) {
+    return 0;
+  }
+  check_claim_range_args(offset, length);
+
+  std::lock_guard l(lock);
+  return _claim_range(offset, length, extents);
+}
+
+int64_t Btree2Allocator::_claim_range(
+  uint64_t offset,
+  uint64_t length,
+  PExtentVector *extents)
+{
+  // release() may park free extents in the lockless cache instead of the
+  // tree, where _try_remove_from_tree() cannot see them. Fold the whole
+  // cache into the tree first so no free space in the range is missed.
+  if (cache) {
+    cache->drain([&](uint64_t o, uint64_t l) {
+      // try_put_cache() already counted these as free, and _add_to_tree()
+      // counts them again
+      ceph_assert(num_free >= l);
+      num_free -= l;
+      _add_to_tree(o, l);
+    });
+  }
+
+  // bluestore_pextent_t::length is 32 bit, so a longer run has to be reported
+  // as several extents. Round down and align - the cap itself is not a
+  // multiple of block_size.
+  constexpr auto cap =
+    std::numeric_limits<decltype(bluestore_pextent_t::length)>::max();
+  const uint64_t max_extent_len = p2align(uint64_t(cap), (uint64_t)block_size);
+
+  uint64_t sum = 0;
+  _try_remove_from_tree(offset, length,
+    [&](uint64_t o, uint64_t l, bool found){
+      if (found) {
+        sum += l;
+        while (l > max_extent_len) {
+          extents->emplace_back(o, max_extent_len);
+          o += max_extent_len;
+          l -= max_extent_len;
+        }
+        extents->emplace_back(o, l);
+      }
+  });
+  return sum;
 }
 
 int64_t Btree2Allocator::__allocate(
