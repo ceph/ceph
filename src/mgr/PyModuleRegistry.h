@@ -23,6 +23,8 @@
 #include "ActivePyModules.h"
 #include "StandbyPyModules.h"
 
+#include <chrono>
+#include <functional>
 #include <map>
 #include <memory>
 #include <set>
@@ -47,6 +49,13 @@ private:
 
   std::map<std::string, PyModuleRef> modules;
   std::multimap<std::string, entity_addrvec_t> clients;
+
+  // Invoked with no lock held when the client set changes, so the beacon
+  // carrying it can go out without waiting for the next tick.
+  std::function<void()> clients_changed_cb;
+
+  // Wakes wait_client_registered() to re-check its client.
+  ceph::condition_variable clients_cond;
 
   std::unique_ptr<ActivePyModules> active_modules;
   std::unique_ptr<StandbyPyModules> standby_modules;
@@ -230,24 +239,48 @@ public:
     return active_modules->get_services();
   }
 
-  void register_client(std::string_view name, entity_addrvec_t addrs, bool replace)
+  void set_clients_changed_callback(std::function<void()> cb)
   {
     std::lock_guard l(lock);
-    auto n = std::string(name);
-    if (replace) {
-      clients.erase(n);
+    clients_changed_cb = std::move(cb);
+  }
+
+  void register_client(std::string_view name, entity_addrvec_t addrs, bool replace)
+  {
+    std::function<void()> cb;
+    {
+      std::lock_guard l(lock);
+      auto n = std::string(name);
+      if (replace && clients.erase(n) > 0) {
+        // Dropped another address under this name; whoever was waiting
+        // on it will never see it in the MgrMap.
+        clients_cond.notify_all();
+      }
+      clients.emplace(n, std::move(addrs));
+      cb = clients_changed_cb;
     }
-    clients.emplace(n, std::move(addrs));
+    // Outside the lock: the callback sends a beacon, which reads clients.
+    if (cb) {
+      cb();
+    }
   }
   void unregister_client(std::string_view name, const entity_addrvec_t& addrs)
   {
-    std::lock_guard l(lock);
-    auto itp = clients.equal_range(std::string(name));
-    for (auto it = itp.first; it != itp.second; ++it) {
-      if (it->second == addrs) {
-        clients.erase(it);
-        return;
+    std::function<void()> cb;
+    {
+      std::lock_guard l(lock);
+      auto itp = clients.equal_range(std::string(name));
+      for (auto it = itp.first; it != itp.second; ++it) {
+        if (it->second == addrs) {
+          clients.erase(it);
+          cb = clients_changed_cb;
+          clients_cond.notify_all();
+          break;
+        }
       }
+    }
+    if (cb) {
+      cb();
     }
   }
 
@@ -256,6 +289,19 @@ public:
     std::lock_guard l(lock);
     return clients;
   }
+
+  /**
+   * Block until the monitor has <name, addrs> in the MgrMap, so a module
+   * that is about to use the client cannot outrun the registration that
+   * makes it blocklistable on failover.
+   *
+   * Returns 0 once the client is in the MgrMap, -ECANCELED if it was
+   * unregistered while waiting (another module replacing a shared
+   * address, say), or -ETIMEDOUT.
+   */
+  int wait_client_registered(std::string_view name,
+                             const entity_addrvec_t& addrs,
+                             std::chrono::seconds timeout);
 
   bool is_module_active(const std::string &name) {
     ceph_assert(active_modules);

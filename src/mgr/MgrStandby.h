@@ -16,6 +16,8 @@
 #ifndef MGR_STANDBY_H_
 #define MGR_STANDBY_H_
 
+#include <atomic>
+
 #include "auth/Auth.h"
 #include "common/async/context_pool.h"
 #include "common/Finisher.h"
@@ -69,6 +71,11 @@ protected:
   void handle_mgr_map(ceph::ref_t<MMgrMap> m);
   void _update_log_config();
   void send_beacon();
+  void request_beacon();
+
+  // Set while a requested beacon is queued on the finisher, so a burst of
+  // client registrations results in one beacon rather than one each.
+  std::atomic<bool> beacon_requested = false;
 
   bool available_in_map;
 
