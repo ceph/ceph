@@ -1,0 +1,17 @@
+roles:
+- - osd.0
+
+tasks:
+- install:
+- crimson_store_bench:
+    work_load_type: rgw_index
+    duration: 30
+    num_concurrent_io: 4
+    smp: 4
+    num_indices: 16
+    key_size: 1024
+    value_size: 1024
+    target_keys_per_bucket: 256
+    tolerance_range: 10
+    num_buckets_per_collection: 16
+    dump_metrics: true
