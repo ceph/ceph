@@ -5613,11 +5613,39 @@ options:
 - name: bluestore_allocation_from_file
   type: bool
   level: dev
-  desc: Remove allocation info from RocksDB and store the info in a new allocation file
+  desc: Selects allocator storage
+  long_desc: Selects location to store BlueStore allocator.
+    True = BlueFS file, false = RocksDB column "b".
   default: true
   with_legacy: true
   flags:
     - startup
+  see_also:
+    - bluestore_allocation_from_file_rotational
+- name: bluestore_allocation_from_file_rotational
+  type: bool
+  level: dev
+  desc: Selects allocator storage
+  long_desc: Selects location to store BlueStore allocator.
+    True = BlueFS file, false = RocksDB column "b".
+    This variant applies when main RocksDB volume is on spinner.
+  default: true
+  with_legacy: true
+  flags:
+    - startup
+  see_also:
+    - bluestore_allocation_from_file
+- name: bluestore_allocation_from_file_convert_on_mount
+  type: bool
+  level: dev
+  desc: Convert to selected allocator storage
+  long_desc: When true, mounting BlueStore triggers conversion to the selected allocator storage.
+  default: false
+  with_legacy: false
+  flags:
+    - startup
+  see_also:
+    - bluestore_allocation_from_file
 - name: bluestore_allocation_recovery_threads
   type: uint
   level: basic
