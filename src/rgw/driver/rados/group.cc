@@ -100,15 +100,62 @@ static int read_name(const DoutPrefixProvider* dpp,
 static int write_name(const DoutPrefixProvider* dpp,
                       optional_yield y,
                       RGWSI_SysObj& sysobj,
-                      NameObj& name)
+                      NameObj& name,
+                      bool exclusive)
 {
   bufferlist bl;
   encode(name.data, bl);
 
-  constexpr bool exclusive = true;
   return rgw_put_system_obj(dpp, &sysobj, name.obj.pool,
                             name.obj.oid, bl, exclusive,
                             &name.objv, ceph::real_time{}, y);
+}
+
+static int claim_name(const DoutPrefixProvider* dpp,
+                      optional_yield y,
+                      RGWSI_SysObj& sysobj,
+                      NameObj& name,
+                      bool from_remote_zone)
+{
+  NameObj existing;
+  existing.obj = name.obj;
+  int r = read_name(dpp, y, sysobj, existing);
+  if (r == -ENOENT) {
+    // if name is free create it exclusively
+    name.objv.generate_new_write_ver(dpp->get_cct());
+    return write_name(dpp, y, sysobj, name, true);
+  }
+  if (r < 0) {
+    return r;
+  }
+  if (existing.data.id == name.data.id) {
+    // already this group. a retry must not return -EEXIST
+    return 0;
+  }
+  if (!from_remote_zone) {
+    // local put. another group still holds this name
+    ldpp_dout(dpp, 1) << "ERROR: group name obj " << name.obj
+        << " already taken for group id " << existing.data.id << dendl;
+    return -EEXIST;
+  }
+  // remote put. overwrite using the version just read. a newer writer
+  // makes this -ECANCELED
+  name.objv = existing.objv;
+  name.objv.generate_new_write_ver(dpp->get_cct());
+  return write_name(dpp, y, sysobj, name, false);
+}
+
+static int delete_name(const DoutPrefixProvider* dpp,
+                       optional_yield y,
+                       RGWSI_SysObj& sysobj,
+                       NameObj& name)
+{
+  int r = rgw_delete_system_obj(dpp, &sysobj, name.obj.pool,
+                                name.obj.oid, &name.objv, y);
+  if (r == -ENOENT || r == -ECANCELED) {
+    return 0;
+  }
+  return r;
 }
 
 
@@ -179,7 +226,8 @@ int write(const DoutPrefixProvider* dpp,
           const std::map<std::string, ceph::buffer::list>& attrs,
           ceph::real_time mtime,
           bool exclusive,
-          RGWObjVersionTracker& objv)
+          RGWObjVersionTracker& objv,
+          bool from_remote_zone)
 {
   const rgw_raw_obj obj = get_group_obj(zone, info.id);
 
@@ -209,17 +257,37 @@ int write(const DoutPrefixProvider* dpp,
   } // old_info
 
   if (!same_name && !info.name.empty()) {
-    // read new account name object
     NameObj nameobj;
     nameobj.obj = get_name_obj(zone, info.account_id, info.name);
-    int r = read_name(dpp, y, sysobj, nameobj);
-    if (r == -ENOENT) {
-      // write the new name object below
-    } else if (r == 0) {
-      ldpp_dout(dpp, 1) << "ERROR: group name obj " << nameobj.obj
-          << " already taken for group id " << nameobj.data.id << dendl;
-      return -EEXIST;
-    } else if (r < 0) {
+    nameobj.data.id = info.id;
+    int r = claim_name(dpp, y, sysobj, nameobj, from_remote_zone);
+    if (r < 0) {
+      ldpp_dout(dpp, 1) << "ERROR: failed to write group name obj "
+          << nameobj.obj << " with: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+    const auto& users = account::get_groups_obj(zone, info.account_id);
+    r = groups::add(dpp, y, rados, users, info, false,
+                    std::numeric_limits<uint32_t>::max());
+    if (r < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: could not link to account "
+          << info.account_id << ": " << cpp_strerror(r) << dendl;
+      return r;
+    }
+  }
+  if (remove_name) {
+    int r = delete_name(dpp, y, sysobj, *remove_name);
+    if (r < 0) {
+      ldpp_dout(dpp, 1) << "ERROR: failed to remove old group name obj "
+          << remove_name->obj.oid << " with: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+    const auto& users = account::get_groups_obj(zone, old_info->account_id);
+    r = groups::remove_if_owner(dpp, y, rados, users, old_info->name,
+                                old_info->path, info.id);
+    if (r < 0 && r != -ENOENT) {
+      ldpp_dout(dpp, 0) << "ERROR: could not unlink from account "
+          << old_info->account_id << ": " << cpp_strerror(r) << dendl;
       return r;
     }
   }
@@ -237,45 +305,6 @@ int write(const DoutPrefixProvider* dpp,
           << " with: " << cpp_strerror(r) << dendl;
       return r;
     }
-  }
-
-  if (remove_name) {
-    // remove the old name object, ignoring errors
-    auto& nameobj = *remove_name;
-    int r = rgw_delete_system_obj(dpp, &sysobj, nameobj.obj.pool,
-                                  nameobj.obj.oid, &nameobj.objv, y);
-    if (r < 0) {
-      ldpp_dout(dpp, 20) << "WARNING: failed to remove old name obj "
-          << nameobj.obj.oid << ": " << cpp_strerror(r) << dendl;
-    } // not fatal
-    // unlink the old name from its account
-    const auto& users = account::get_groups_obj(zone, old_info->account_id);
-    r = groups::remove(dpp, y, rados, users, old_info->name);
-    if (r < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: could not unlink from account "
-          << old_info->account_id << ": " << cpp_strerror(r) << dendl;
-    } // not fatal
-  }
-  if (!same_name && !info.name.empty()) {
-    // write the new name object
-    NameObj nameobj;
-    nameobj.obj = get_name_obj(zone, info.account_id, info.name);
-    nameobj.data.id = info.id;
-    nameobj.objv.generate_new_write_ver(dpp->get_cct());
-
-    int r = write_name(dpp, y, sysobj, nameobj);
-    if (r < 0) {
-      ldpp_dout(dpp, 20) << "WARNING: failed to write name obj "
-          << nameobj.obj << " with: " << cpp_strerror(r) << dendl;
-    } // not fatal
-    // link the new name to its account
-    const auto& users = account::get_groups_obj(zone, info.account_id);
-    r = groups::add(dpp, y, rados, users, info, false,
-                    std::numeric_limits<uint32_t>::max());
-    if (r < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: could not link to account "
-          << info.account_id << ": " << cpp_strerror(r) << dendl;
-    } // not fatal
   }
 
   return 0;
@@ -448,7 +477,7 @@ class MetadataHandler : public RGWMetadataHandler {
     constexpr bool exclusive = false;
     return write(dpp, y, sysobj, rados, zone, new_info, pold_info,
                  group_obj->get().attrs, obj->get_mtime(),
-                 exclusive, objv);
+                 exclusive, objv, from_remote_zone);
   }
 
   int remove(std::string& entry, RGWObjVersionTracker& objv,

@@ -2820,7 +2820,8 @@ int RGWUserMetadataHandler::put(std::string& entry, RGWMetadataObject *obj,
   auto mtime = obj->get_mtime();
 
   ret = svc_user->store_user_info(uci.info, pold_info, &objv_tracker,
-                                  mtime, false, pattrs, y, dpp);
+                                  mtime, false, pattrs, y, dpp,
+                                  from_remote_zone);
   if (ret < 0) {
     return ret;
   }
@@ -3004,7 +3005,8 @@ int RGWUserCtl::store_info(const DoutPrefixProvider *dpp,
                                    params.exclusive,
                                    params.attrs,
                                    y,
-                                   dpp);
+                                   dpp,
+                                   params.from_remote_zone);
 }
 
 int RGWUserCtl::remove_info(const DoutPrefixProvider *dpp, 
