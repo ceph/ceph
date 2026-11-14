@@ -111,6 +111,7 @@ target_compile_definitions(ceph-dencoder PRIVATE
 target_link_libraries(ceph-dencoder
   global
   ${DENCODER_EXTRALIBS}
+  librados
   cls_log_client
   cls_version_client
   cls_user_client
