@@ -4527,8 +4527,8 @@ int RGWPutObj::init_processing(optional_yield y) {
 
   /* handle x-amz-copy-source */
   std::string_view cs_view(copy_source);
-  if (! cs_view.empty()) {
-    if (cs_view[0] == '/')
+  if (s->info.env->exists("HTTP_X_AMZ_COPY_SOURCE")) {
+    if (cs_view.starts_with('/'))
       cs_view.remove_prefix(1);
     copy_source_bucket_name = std::string(cs_view);
     pos = copy_source_bucket_name.find("/");
