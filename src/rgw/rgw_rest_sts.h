@@ -17,6 +17,7 @@
 #pragma clang diagnostic pop
 #pragma GCC diagnostic pop
 #include "rgw_oidc_provider.h"
+#include "rgw_sts_jwks_cache.h"
 
 
 namespace rgw::auth::sts {
@@ -38,6 +39,7 @@ class WebTokenEngine : public rgw::auth::Engine {
 
   bool is_client_id_valid(std::vector<std::string>& client_ids, const std::string& client_id) const;
 
+  std::string get_cert_thumbprint(const std::string& cert) const;
   bool is_cert_valid(const std::vector<std::string>& thumbprints, const std::string& cert) const;
 
   int load_provider(const DoutPrefixProvider *dpp, optional_yield y,
@@ -51,12 +53,31 @@ class WebTokenEngine : public rgw::auth::Engine {
 
   std::string get_cert_url(const std::string& iss, const DoutPrefixProvider *dpp,optional_yield y) const;
 
+  mutable detail::JWKSCache jwks_cache;
+
+  struct fetched_jwks {
+    std::string document;
+    std::string cert_thumbprint; // of the JWKS endpoint, empty if not verified
+  };
+
+  fetched_jwks fetch_jwks(const DoutPrefixProvider* dpp, const std::string& iss,
+                          const std::vector<std::string>& thumbprints,
+                          optional_yield y) const;
+
+  // served from the cache only when token_kid is in the cached document
+  std::string get_jwks(const DoutPrefixProvider* dpp, const std::string& iss,
+                       const std::vector<std::string>& thumbprints,
+                       const std::optional<std::string>& token_kid,
+                       const detail::JWKSCache::Key& cache_key,
+                       uint64_t jwks_generation,
+                       optional_yield y) const;
+
   std::tuple<boost::optional<WebTokenEngine::token_t>, boost::optional<WebTokenEngine::principal_tags_t>, bool>
   get_from_jwt(const DoutPrefixProvider* dpp, const std::string& token, const req_state* const s, optional_yield y) const;
 
  bool validate_signature_using_n_e(const DoutPrefixProvider* dpp, const jwt::decoded_jwt& decoded, const std::string &algorithm, const std::string& n, const std::string& e) const;
 
-  void validate_signature (const DoutPrefixProvider* dpp, const jwt::decoded_jwt& decoded, const std::string& algorithm, const std::string& iss, const std::vector<std::string>& thumbprints, optional_yield y) const;
+  void validate_signature (const DoutPrefixProvider* dpp, const jwt::decoded_jwt& decoded, const std::string& algorithm, const std::string& iss, const std::vector<std::string>& thumbprints, const detail::JWKSCache::Key& cache_key, uint64_t jwks_generation, optional_yield y) const;
 
   result_t authenticate(const DoutPrefixProvider* dpp,
                         const std::string& token,
@@ -70,7 +91,7 @@ class WebTokenEngine : public rgw::auth::Engine {
   std::string connect_to_host_get_cert_chain(const DoutPrefixProvider* dpp, const std::string& hostname, int port = 443) const;
   std::string extract_last_certificate(const DoutPrefixProvider* dpp, const std::string& pem_chain) const;
   bool verify_oidc_thumbprint(const DoutPrefixProvider* dpp, const std::string& cert_url,
-      const std::vector<std::string>& thumbprints) const;
+      const std::vector<std::string>& thumbprints, std::string& cert_thumbprint) const;
   void shutdown_ssl(const DoutPrefixProvider* dpp, SSL* ssl, SSL_CTX* ctx) const;
 
 public:
