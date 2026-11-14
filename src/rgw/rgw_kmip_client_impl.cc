@@ -158,6 +158,10 @@ RGWKmipHandleBuilder::build() const
 	size_t ns;
 
   r->ctx = SSL_CTX_new(TLS_client_method());
+  if (!r->ctx) {
+    lderr(cct) << "SSL_CTX_new failed" << dendl;
+    goto Done;
+  }
 
   if (!clientcert)
     ;
@@ -236,7 +240,7 @@ RGWKmipHandleBuilder::build() const
     r->credential->credential_value = r->upc;
     int i = kmip_add_credential(r->kmip_ctx, r->credential);
     if (i != KMIP_OK) {
-      fprintf(stderr,"failed to add credential to kmip\n");
+      lderr(cct) << "kmip_add_credential failed err=" << i << dendl;
       goto Done;
     }
   }
