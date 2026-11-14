@@ -166,6 +166,7 @@ private:
   std::unique_ptr<lua_state_guard> initialize_lguard_state();
 
   void process_scripts();
+  void awaken();
 
  public:
   Background(CephContext* _cct,
