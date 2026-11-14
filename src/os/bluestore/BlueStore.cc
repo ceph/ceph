@@ -1708,6 +1708,7 @@ void *BlueStore::MempoolThread::entry()
     // Update pcm cache settings if related configuration was changed
     uint32_t cur_config_change = store->config_changed.load();
     if (cur_config_change != prev_config_change) {
+      store->_set_cache_age_bins();
       _update_cache_settings();
       prev_config_change = cur_config_change;
     }
@@ -2019,10 +2020,10 @@ std::vector<std::string> BlueStore::get_tracked_keys() const noexcept
     "bluestore_cache_autotune"s,
     "bluestore_cache_autotune_interval"s,
     "bluestore_cache_age_bin_interval"s,
-    "bluestore_cache_kv_age_bins"s,
-    "bluestore_cache_kv_onode_age_bins"s,
-    "bluestore_cache_meta_age_bins"s,
-    "bluestore_cache_data_age_bins"s,
+    "bluestore_cache_age_bins_kv"s,
+    "bluestore_cache_age_bins_kv_onode"s,
+    "bluestore_cache_age_bins_meta"s,
+    "bluestore_cache_age_bins_data"s,
     "bluestore_warn_on_legacy_statfs"s,
     "bluestore_warn_on_no_per_pool_omap"s,
     "bluestore_warn_on_no_per_pg_omap"s,
@@ -2122,6 +2123,16 @@ void BlueStore::handle_conf_change(const ConfigProxy& conf,
       changed.count("osd_memory_cache_min") ||
       changed.count("osd_memory_expected_fragmentation")) {
     _update_osd_memory_options();
+  }
+  if (changed.count("bluestore_cache_age_bin_interval") ||
+      changed.count("bluestore_cache_age_bins_kv") ||
+      changed.count("bluestore_cache_age_bins_kv_onode") ||
+      changed.count("bluestore_cache_age_bins_meta") ||
+      changed.count("bluestore_cache_age_bins_data")) {
+    // The mempool thread is the only reader of the age bin settings once
+    // the store is mounted, so let it re-read them rather than modifying
+    // the vectors under its feet.
+    config_changed++;
   }
   if (changed.count("bluestore_allocator_lookup_policy")) {
     _update_allocator_lookup_policy();
@@ -2288,18 +2299,17 @@ void BlueStore::_update_allocator_lookup_policy()
           << dendl;
 }
 
-int BlueStore::_set_cache_sizes()
+void BlueStore::_set_cache_age_bins()
 {
-  ceph_assert(bdev);
-  cache_autotune = cct->_conf.get_val<bool>("bluestore_cache_autotune");
-  cache_autotune_interval =
-      cct->_conf.get_val<double>("bluestore_cache_autotune_interval");
   cache_age_bin_interval =
       cct->_conf.get_val<double>("bluestore_cache_age_bin_interval");
   auto _set_bin = [&](std::string conf_name, std::vector<uint64_t>* intervals)
   {
     std::string intervals_str = cct->_conf.get_val<std::string>(conf_name);
     std::istringstream interval_stream(intervals_str);
+    // This runs on every open of the main device and on every runtime
+    // change, so start from scratch instead of appending to the old list.
+    intervals->clear();
     std::copy(
       std::istream_iterator<uint64_t>(interval_stream),
       std::istream_iterator<uint64_t>(),
@@ -2309,6 +2319,15 @@ int BlueStore::_set_cache_sizes()
   _set_bin("bluestore_cache_age_bins_kv_onode", &kv_onode_bins);
   _set_bin("bluestore_cache_age_bins_meta", &meta_bins);
   _set_bin("bluestore_cache_age_bins_data", &data_bins);
+}
+
+int BlueStore::_set_cache_sizes()
+{
+  ceph_assert(bdev);
+  cache_autotune = cct->_conf.get_val<bool>("bluestore_cache_autotune");
+  cache_autotune_interval =
+      cct->_conf.get_val<double>("bluestore_cache_autotune_interval");
+  _set_cache_age_bins();
 
   osd_memory_target = cct->_conf.get_val<Option::size_t>("osd_memory_target");
   osd_memory_base = cct->_conf.get_val<Option::size_t>("osd_memory_base");

@@ -312,6 +312,7 @@ public:
   void _set_csum();
   void _set_compression();
   void _set_throttle_params();
+  void _set_cache_age_bins();
   int _set_cache_sizes();
   void _set_max_defer_interval() {
     max_defer_interval =
