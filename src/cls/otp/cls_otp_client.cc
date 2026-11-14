@@ -70,17 +70,30 @@ namespace rados {
         bufferlist out;
         encode(op, in);
         librados::ObjectWriteOperation wop;
-        wop.exec(method::check, in);
-        int r = ioctx.operate(oid, &wop);
+        wop.exec(method::check, in, &out, nullptr);
+        int r = ioctx.operate(oid, &wop, librados::OPERATION_RETURNVEC);
         if (r < 0) {
           return r;
         }
 
-        cls_otp_get_result_op op2;
-        op2.token = op.token;
-        bufferlist in2;
-        bufferlist out2;
-        encode(op2, in2);
+        if (out.length() > 0) {
+          auto iter = out.cbegin();
+          cls_otp_check_otp_reply reply;
+          try {
+            decode(reply, iter);
+          } catch (ceph::buffer::error& err) {
+            return -EBADMSG;
+          }
+          result->token = op.token;
+          result->timestamp = reply.timestamp;
+          result->result = reply.result;
+          return 0;
+        }
+
+        // an osd running an older cls_otp doesn't return the result from
+        // check, so read it back with get_result. get_result decodes the
+        // same cls_otp_check_otp_op that check takes, so reuse its input
+        out.clear();
         r = ioctx.exec(oid, method::get_result, in, out);
         if (r < 0) {
           return r;

@@ -484,6 +484,16 @@ static int otp_check_op(cls_method_context_t hctx,
     }
   }
 
+  // the client only sees this if it sets RETURNVEC on the op; older clients
+  // still read the result with a separate get_result call
+  otp_check_t check;
+  instance.find(op.token, &check);
+
+  cls_otp_check_otp_reply reply;
+  reply.timestamp = check.timestamp;
+  reply.result = check.result;
+  encode(reply, *out);
+
   return 0;
 }
 
