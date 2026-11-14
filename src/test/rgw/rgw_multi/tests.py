@@ -1,4 +1,5 @@
 import json
+import os
 import random
 import re
 import string
@@ -7041,6 +7042,56 @@ def test_period_update_commit():
             )
         log.info(f"delete bucket={bucket.name}")
         primary_zone_client_conn.s3_client.delete_bucket(Bucket=bucket.name)
+
+def test_period_commit_graceful_inflight():
+    object_size = 64 * 1024 * 1024
+    read_chunk_size = 1024 * 1024
+    read_chunk_delay = 0.1
+    graceful_options = {
+        'rgw_graceful_stop': 'true',
+        'rgw_realm_reload_pause_timeout': '60',
+    }
+
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    master_zone_conn = zonegroup_conns.master_zone
+    master_zone = zonegroup.master_zone
+    cluster = master_zone.cluster
+
+    bucket = master_zone_conn.create_bucket(gen_bucket_name())
+    key = 'large-obj'
+    body = os.urandom(object_size)
+    master_zone_conn.s3_client.put_object(Bucket=bucket.name, Key=key, Body=body)
+
+    for name, value in graceful_options.items():
+        cluster.ceph_admin(['config', 'set', 'client', name, value])
+    try:
+        # a slow reader keeps the GET outstanding for several seconds, so the
+        # realm reload triggered by the commit must wait for it to finish
+        resp = master_zone_conn.s3_client.get_object(Bucket=bucket.name, Key=key)
+        stream = resp['Body']
+        received = bytearray(stream.read(read_chunk_size))
+
+        log.info('issue period update commit while the GET is outstanding')
+        zonegroup.period.update(master_zone, commit=True)
+
+        while True:
+            chunk = stream.read(read_chunk_size)
+            if not chunk:
+                break
+            received += chunk
+            time.sleep(read_chunk_delay)
+
+        assert len(received) == object_size
+        assert received == body
+
+        log.info('verify the gateway serves requests after the reload')
+        master_zone_conn.s3_client.head_object(Bucket=bucket.name, Key=key)
+    finally:
+        for name in graceful_options:
+            cluster.ceph_admin(['config', 'rm', 'client', name])
+        master_zone_conn.s3_client.delete_object(Bucket=bucket.name, Key=key)
+        master_zone_conn.s3_client.delete_bucket(Bucket=bucket.name)
 
 def test_bucket_full_sync_when_the_bucket_is_deleted_in_the_meantime():
     num_objects_to_upload = (
