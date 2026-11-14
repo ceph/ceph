@@ -7468,6 +7468,7 @@ void RGWOptionsCORS::execute(optional_yield y)
   read_global_cors();
   if (!cors_exist) {
       ldpp_dout(this, 2) << "No CORS configuration set yet for this bucket nor globally" << dendl;
+      op_ret = -ENOENT;
       return;
   }
 
@@ -7481,11 +7482,6 @@ void RGWOptionsCORS::execute(optional_yield y)
   if (!req_meth) {
     ldpp_dout(this, 0) << "Missing mandatory Access-control-request-method header" << dendl;
     op_ret = -EINVAL;
-    return;
-  }
-  if (!cors_exist) {
-    ldpp_dout(this, 2) << "No CORS configuration set yet for this bucket" << dendl;
-    op_ret = -ENOENT;
     return;
   }
   req_hdrs = s->info.env->get("HTTP_ACCESS_CONTROL_REQUEST_HEADERS");
