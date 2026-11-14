@@ -13,6 +13,7 @@
 #include "include/scope_guard.h"
 #include "rgw/rgw_cksum.h"
 #include <xxhash.h>
+#include <atomic>
 
 /* MultipartCache — in-memory cache for uncompleted multipart upload state
  *
@@ -26,15 +27,26 @@
  * on disk is the source of truth; a miss just rescans.  In volatile mode,
  * eviction loses metadata for parts that were never written to disk.
  *
+ * INVARIANT:  a resident entry is COMPLETE.  It holds every part of its
+ * upload, up to S3's maximum of 10000, and nothing caps it below that.
+ * A per-entry cap cannot work here:  any bound lower than the legal part
+ * maximum turns into a cliff that a valid upload can cross, and on the
+ * far side the parts of one upload come from two places -- which is how
+ * an upload of 513 parts came to behave differently from one of 512.
+ *
+ * Memory is bounded instead by parts_budget, a ceiling on the TOTAL part
+ * records held across the cache.  When it is exhausted the loser is a
+ * whole entry, never part of one:  add_part() drops what it has cached
+ * for that upload and reports false, the caller writes the xattr, and a
+ * later read refills from disk.  Filling is allowed to overshoot the
+ * budget -- correctness first, and the next write brings it back.
+ *
  * Three cache policies govern xattr write behavior:
  *
  *   writethrough — always write xattrs on part upload; cache is pure
  *                  acceleration.
  *   writeback    — skip xattrs; flush dirty parts to disk on eviction.
  *   volatile_    — skip xattrs; discard on eviction.
- *
- * In all modes, parts beyond max_parts_per_entry overflow to xattr
- * writes regardless of policy.
  *
  * Not templated on driver type — fill-on-miss is delegated to the
  * caller via a lambda, keeping all filesystem knowledge in the driver.
@@ -76,7 +88,6 @@ struct MultipartCacheEntry : public cohort::lru::Object
   static constexpr uint32_t FLAG_FILLED    = 0x0001;
   static constexpr uint32_t FLAG_DELETED   = 0x0002;
   static constexpr uint32_t FLAG_DIRTY     = 0x0004;
-  static constexpr uint32_t FLAG_OVERFLOW  = 0x0008;
 
   static constexpr uint64_t seed = 3141592653;
 
@@ -88,6 +99,10 @@ struct MultipartCacheEntry : public cohort::lru::Object
   std::mutex mtx;
   uint32_t flags;
   boost::container::flat_map<uint32_t, MultipartPartInfo> parts;
+  /* how many of `parts` are currently counted in MultipartCache::
+   * total_parts;  kept so every mutation can post a delta rather than
+   * the cache having to recount */
+  uint32_t counted{0};
 
 public:
   MultipartCacheEntry(MultipartCache<YP>* mc, const MultipartCacheKey& key,
@@ -97,7 +112,6 @@ public:
   inline bool deleted() const { return flags & FLAG_DELETED; }
   inline bool filled() const { return flags & FLAG_FILLED; }
   inline bool dirty() const { return flags & FLAG_DIRTY; }
-  inline bool overflowed() const { return flags & FLAG_OVERFLOW; }
 
   struct MultipartCacheEntryLT
   {
@@ -222,6 +236,7 @@ public:
 	  mc->stabilize_fn(key, parts);
 	}
 	parts.clear();
+	mc->account(this);
 
 	if (mc->cache.is_same_partition(hk, factory->hk)) {
 	  mc->cache.remove(hk, this, mp_avl_cache::FLAG_NONE);
@@ -268,17 +283,19 @@ struct MultipartCache
   typename Entry::mp_avl_cache cache;
   MultipartCachePolicy policy;
   stabilize_fn_t stabilize_fn;
-  uint32_t max_parts_per_entry;
+  /* ceiling on part records across the whole cache, not per entry */
+  uint64_t parts_budget;
+  std::atomic<uint64_t> total_parts{0};
 
   MultipartCache(uint32_t max_entries, uint8_t n_lanes,
-		 uint8_t n_partitions, uint32_t max_parts,
+		 uint8_t n_partitions, uint64_t parts_budget,
 		 MultipartCachePolicy policy,
 		 stabilize_fn_t&& stabilize = nullptr)
     : lru(n_lanes, max_entries / n_lanes),
       cache(n_partitions, max_entries / n_partitions),
       policy(policy),
       stabilize_fn(std::move(stabilize)),
-      max_parts_per_entry(max_parts) {}
+      parts_budget(parts_budget) {}
 
   virtual ~MultipartCache() {
     cache.drain(
@@ -286,6 +303,18 @@ struct MultipartCache
 	lru.unref(e, cohort::lru::FLAG_NONE);
       },
       Entry::mp_avl_cache::FLAG_LOCK);
+  }
+
+  /* post the difference between what an entry holds and what it is
+   * counted for.  Called with the entry locked, after any mutation. */
+  void account(Entry* b) {
+    const uint64_t now = b->parts.size();
+    if (now >= b->counted) {
+      total_parts += (now - b->counted);
+    } else {
+      total_parts -= (b->counted - now);
+    }
+    b->counted = now;
   }
 
   typedef std::tuple<Entry*, uint32_t> GetEntryResult;
@@ -352,11 +381,21 @@ struct MultipartCache
 	lru.unref(b, cohort::lru::FLAG_NONE);
       });
 
-    if (b->parts.size() >= max_parts_per_entry) {
-      b->flags |= Entry::FLAG_OVERFLOW;
+    /* replacing a part already held costs nothing;  only a new record
+     * has to fit the budget */
+    const bool is_new = !b->parts.contains(info.num);
+    if (is_new && (total_parts.load() >= parts_budget)) {
+      /* Cannot afford to keep this upload cached.  Drop what we have
+       * rather than hold a partial map:  a resident entry is complete, so
+       * that no upload is ever served from two places.  The caller writes
+       * the xattr, and a later read refills from disk. */
+      b->parts.clear();
+      b->flags &= ~Entry::FLAG_FILLED;
+      account(b);
       return false;
     }
     b->parts[info.num] = std::move(info);
+    account(b);
     if (policy != MultipartCachePolicy::writethrough) {
       b->flags |= Entry::FLAG_DIRTY;
     }
@@ -377,10 +416,12 @@ struct MultipartCache
 	lru.unref(b, cohort::lru::FLAG_NONE);
       });
 
-    if (!b->filled() || b->overflowed()) {
+    if (!b->filled()) {
+      /* allowed to overshoot the budget:  the page has to be correct, and
+       * the next add_part() brings the total back */
       fill_fn(b->parts);
       b->flags |= Entry::FLAG_FILLED;
-      b->flags &= ~Entry::FLAG_OVERFLOW;
+      account(b);
     }
 
     auto it = b->parts.lower_bound(marker + 1);
@@ -401,6 +442,7 @@ struct MultipartCache
       return;
     }
     b->parts.clear();
+    account(b);
     b->flags = Entry::FLAG_NONE;
     b->mtx.unlock();
     lru.unref(b, cohort::lru::FLAG_NONE);

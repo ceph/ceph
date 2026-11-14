@@ -169,39 +169,21 @@ int POSIXLuaManager::reload_packages(const DoutPrefixProvider* dpp, optional_yie
   return -ENOENT;
 }
 
-int POSIXDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
+/* Build the multipart part cache.
+ *
+ * Sizing is the caller's, not the configuration's.  The sizes decide
+ * whether eviction ever happens, and eviction is what runs the
+ * stabilize callback below, so a caller which wants that path reachable
+ * has to be able to ask for it -- the defaults are large enough that it
+ * never fires.  What is shared here is the structure:  the policy, the
+ * callback, and how they are wired.
+ */
+void POSIXDriver::init_multipart_cache(const DoutPrefixProvider* dpp,
+				       uint64_t mp_max, uint64_t mp_lanes,
+				       uint64_t mp_parts,
+				       uint64_t mp_max_parts,
+				       file::listing::MultipartCachePolicy mp_policy)
 {
-  int ret = -1;
-  base_path = g_conf().get_val<std::string>("rgw_posix_base_path");
-
-  ldpp_dout(dpp, 20) << "Initializing POSIX driver: " << base_path << dendl;
-
-  /* ordered listing cache */
-  bucket_cache.reset(
-    new posix::BucketCache(
-      this, base_path,
-      g_conf().get_val<std::string>("rgw_posix_database_root"),
-      g_conf().get_val<int64_t>("rgw_posix_cache_max_buckets"),
-      g_conf().get_val<int64_t>("rgw_posix_cache_lanes"),
-      g_conf().get_val<int64_t>("rgw_posix_cache_partitions"),
-      g_conf().get_val<int64_t>("rgw_posix_cache_lmdb_count"),
-      g_conf().get_val<bool>("rgw_posix_inotify")));
-
-  /* multipart upload cache */
-  {
-    auto mp_max = g_conf().get_val<uint64_t>("rgw_posix_multipart_cache_max");
-    auto mp_lanes = g_conf().get_val<uint64_t>("rgw_posix_multipart_cache_lanes");
-    auto mp_parts = g_conf().get_val<uint64_t>("rgw_posix_multipart_cache_partitions");
-    auto mp_max_parts = g_conf().get_val<uint64_t>("rgw_posix_multipart_cache_max_parts");
-    auto mp_pol_str = g_conf().get_val<std::string>("rgw_posix_multipart_cache_policy");
-
-    auto mp_policy = file::listing::MultipartCachePolicy::writethrough;
-    if (mp_pol_str == "writeback") {
-      mp_policy = file::listing::MultipartCachePolicy::writeback;
-    } else if (mp_pol_str == "volatile") {
-      mp_policy = file::listing::MultipartCachePolicy::volatile_;
-    }
-
     file::listing::stabilize_fn_t stabilize;
     if (mp_policy == file::listing::MultipartCachePolicy::writeback) {
       stabilize = [this](const file::listing::MultipartCacheKey& key,
@@ -209,7 +191,11 @@ int POSIXDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
 	    file::listing::MultipartPartInfo>& parts) {
 	std::optional<std::string> ns{mp_ns};
 	auto staging_name = bucket_fname(key.upload_meta, ns);
-	int dir_fd = ::openat(root_fd, (key.bucket_name + "/" +
+	/* get_root_fd(), not the root_fd member:  that member was
+	 * declared and never assigned, and this was its only reader, so
+	 * every stabilize opened a directory relative to an
+	 * uninitialized descriptor.  The member is gone. */
+	int dir_fd = ::openat(get_root_fd(), (key.bucket_name + "/" +
 	  staging_name).c_str(), O_RDONLY | O_DIRECTORY);
 	if (dir_fd < 0) {
 	  return;
@@ -238,6 +224,43 @@ int POSIXDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
       new posix::MultipartCache(
 	mp_max, mp_lanes, mp_parts, mp_max_parts,
 	mp_policy, std::move(stabilize)));
+}
+
+int POSIXDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
+{
+  int ret = -1;
+  base_path = g_conf().get_val<std::string>("rgw_posix_base_path");
+
+  ldpp_dout(dpp, 20) << "Initializing POSIX driver: " << base_path << dendl;
+
+  /* ordered listing cache */
+  bucket_cache.reset(
+    new posix::BucketCache(
+      this, base_path,
+      g_conf().get_val<std::string>("rgw_posix_database_root"),
+      g_conf().get_val<int64_t>("rgw_posix_cache_max_buckets"),
+      g_conf().get_val<int64_t>("rgw_posix_cache_lanes"),
+      g_conf().get_val<int64_t>("rgw_posix_cache_partitions"),
+      g_conf().get_val<int64_t>("rgw_posix_cache_lmdb_count"),
+      g_conf().get_val<bool>("rgw_posix_inotify")));
+
+  /* multipart upload cache */
+  {
+    auto mp_pol_str =
+      g_conf().get_val<std::string>("rgw_posix_multipart_cache_policy");
+    auto mp_policy = file::listing::MultipartCachePolicy::writethrough;
+    if (mp_pol_str == "writeback") {
+      mp_policy = file::listing::MultipartCachePolicy::writeback;
+    } else if (mp_pol_str == "volatile") {
+      mp_policy = file::listing::MultipartCachePolicy::volatile_;
+    }
+    init_multipart_cache(
+      dpp,
+      g_conf().get_val<uint64_t>("rgw_posix_multipart_cache_max"),
+      g_conf().get_val<uint64_t>("rgw_posix_multipart_cache_lanes"),
+      g_conf().get_val<uint64_t>("rgw_posix_multipart_cache_partitions"),
+      g_conf().get_val<uint64_t>("rgw_posix_multipart_cache_max_parts"),
+      mp_policy);
   }
 
   /* user info cache */
@@ -475,10 +498,22 @@ int POSIXDriver::load_owner_by_email(const DoutPrefixProvider* dpp,
   RGWUserInfo uinfo;
   int ret = get_user_db()->get_user(dpp, "email", std::string{email},
 				   uinfo, nullptr, nullptr);
+  if (ret == 0) {
+    owner = std::move(uinfo.user_id);
+    return 0;
+  }
+  if (ret != -ENOENT) {
+    return ret;
+  }
+  /* else an account's, as RADOS's email index holds both */
+  RGWAccountInfo info;
+  Attrs attrs;
+  RGWObjVersionTracker objv;
+  ret = load_account_by_email(dpp, y, email, info, attrs, objv);
   if (ret < 0) {
     return ret;
   }
-  owner = std::move(uinfo.user_id);
+  owner = info.id;
   return 0;
 }
 
@@ -2831,10 +2866,10 @@ int POSIXObject::open(const DoutPrefixProvider* dpp, bool create, bool temp_file
   return ent->open(dpp);
 }
 
-int POSIXObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y)
+int POSIXObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, bool excl)
 {
   std::string temp_fname = gen_temp_fname();
-  int ret = ent->link_temp_file(dpp, y, temp_fname);
+  int ret = ent->link_temp_file(dpp, y, temp_fname, excl);
   if (ret < 0)
     return ret;
 
@@ -3168,7 +3203,8 @@ int POSIXObject::POSIXReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs
       if (chunk <= 0) {
         chunk = READ_SIZE;
       }
-      UringReadWindow win(dpp, y, fd, qd, chunk, dio, std::move(resolve));
+      UringReadWindow win(dpp, y, fd, qd, chunk, dio, /*nsfs=*/false,
+                          /*personality=*/nullptr, std::move(resolve));
       int r = win.iterate(cur_ofs, left,
           [dpp, cb, source = source](bufferlist& bl, int len) {
             int ret = cb->handle_data(bl, 0, len);
@@ -3943,7 +3979,7 @@ int POSIXMultipartWriter::process(bufferlist&& data, uint64_t offset)
       unsigned qd = dpp->get_cct()->_conf.get_val<uint64_t>("rgw_posix_put_iodepth");
       bool dio = dpp->get_cct()->_conf.get_val<bool>("rgw_posix_direct_io");
       uring_write = std::make_unique<UringWriteWindow>(
-          dpp, yield, part_file->get_fd(), qd, dio);
+          dpp, yield, part_file->get_fd(), qd, dio, /*nsfs=*/false);
       part_file->set_sync_on_close(true);
     }
     int r = uring_write->process(std::move(data), offset);
@@ -4070,7 +4106,8 @@ int POSIXAtomicWriter::process(bufferlist&& data, uint64_t offset)
     if (!uring_write) {
       unsigned qd = dpp->get_cct()->_conf.get_val<uint64_t>("rgw_posix_put_iodepth");
       bool dio = dpp->get_cct()->_conf.get_val<bool>("rgw_posix_direct_io");
-      uring_write = std::make_unique<UringWriteWindow>(dpp, yield, fd, qd, dio);
+      uring_write = std::make_unique<UringWriteWindow>(dpp, yield, fd, qd, dio,
+                                                       /*nsfs=*/false);
       if (obj->get_fsent()) {
         obj->get_fsent()->set_sync_on_close(true);
       }
@@ -4143,6 +4180,13 @@ int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
       }
     }
   }
+  /* If-None-Match: * is decided by the publish, not here.  `exists` came
+   * from a stat taken before the attributes were written, so two writers
+   * can both see the name free;  the exclusive link below is what makes
+   * exactly one of them win.  This check is kept so the uncontended case
+   * fails before doing the work. */
+  const bool excl_publish = if_nomatch && (strcmp(if_nomatch, "*") == 0);
+
   if (if_nomatch) {
     if (strcmp(if_nomatch, "*") == 0) {
       // test the object is not existing
@@ -4170,7 +4214,11 @@ int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
     return ret;
   }
 
-  ret = obj->link_temp_file(rctx.dpp, rctx.y);
+  ret = obj->link_temp_file(rctx.dpp, rctx.y, excl_publish);
+  if (ret == -EEXIST && excl_publish) {
+    /* somebody else took the name between the check above and the link */
+    return -ERR_PRECONDITION_FAILED;
+  }
   if (ret < 0) {
     ldpp_dout(dpp, 20) << "ERROR: POSIXAtomicWriter failed writing temp file" << dendl;
     return ret;

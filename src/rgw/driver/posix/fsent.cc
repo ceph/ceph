@@ -462,7 +462,17 @@ int File::create(const DoutPrefixProvider *dpp, bool* existed, bool temp_file)
     flags |= O_DIRECT;
   }
 
-  ret = openat(parent->get_fd(), path.c_str(), flags | O_NOFOLLOW, S_IRWXU);
+  /* 0600, not 0700.  File::write() below fchmods to S_IRUSR|S_IWUSR
+   * on every call, so for an object that is written this is already
+   * the mode it ends up with and this line changes nothing.  It is
+   * the files that are never written -- a zero-length object, a
+   * staging record -- that kept the create mode, and 0700 gave them
+   * owner-execute, which nothing wants on a data file.  Narrowing
+   * here makes them agree with what this driver already imposes
+   * everywhere else rather than giving posix a permission policy it
+   * does not have. */
+  ret = openat(parent->get_fd(), path.c_str(), flags | O_NOFOLLOW,
+	       S_IRUSR | S_IWUSR);
   if (ret < 0) {
     ret = errno;
     if (ret == EEXIST) {
@@ -567,13 +577,6 @@ int File::write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp,
     ctx->_conf.get_val<Option::size_t>("rgw_posix_write_chunk_size");
   int64_t left = bl.length();
   ssize_t ret;
-
-  ret = fchmod(fd, S_IRUSR|S_IWUSR);
-  if(ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: could not change permissions on object " << get_name() << ": "
-                  << cpp_strerror(ret) << dendl;
-    return ret;
-  }
 
   if (direct_io) {
     /* Never fcntl-off O_DIRECT on a shared fd; pad or RMW instead. */
@@ -764,7 +767,7 @@ int File::remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_ch
   return 0;
 }
 
-int File::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, std::string temp_fname)
+int File::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, std::string temp_fname, bool excl)
 {
   if (fd < 0) {
     return 0;
@@ -773,6 +776,25 @@ int File::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, std::s
   char temp_file_path[PATH_MAX];
   // Only works on Linux - Non-portable
   snprintf(temp_file_path, PATH_MAX,  "/proc/self/fd/%d", fd);
+
+  if (excl) {
+    /* Publish only if the name is free.  linkat(2) cannot replace, which
+     * is why the ordinary path below links to a temp name and renames --
+     * and exactly why If-None-Match: * wants this one instead.  Deciding
+     * from an earlier stat and then replacing lets two writers both find
+     * the name free and both succeed. */
+    int eret = linkat(AT_FDCWD, temp_file_path, parent->get_fd(),
+		      get_name().c_str(), AT_SYMLINK_FOLLOW);
+    if (eret < 0) {
+      eret = errno;
+      if (eret != EEXIST) {
+	ldpp_dout(dpp, 0) << "ERROR: exclusive linkat for temp file: "
+	  << cpp_strerror(eret) << dendl;
+      }
+      return -eret;
+    }
+    return stat(dpp);
+  }
 
   int ret = linkat(AT_FDCWD, temp_file_path, parent->get_fd(), temp_fname.c_str(), AT_SYMLINK_FOLLOW);
   if(ret < 0) {
@@ -906,7 +928,7 @@ int Directory::read(int64_t ofs, int64_t left, bufferlist &bl,
 }
 
 int Directory::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y,
-                              std::string temp_fname)
+                              std::string temp_fname, bool excl)
 {
   return -EINVAL;
 }
@@ -1118,6 +1140,21 @@ int Symlink::create(const DoutPrefixProvider* dpp, bool* existed, bool temp_file
     return -EINVAL;
   }
 
+  /* A symlink with no target cannot be created, and used to try.
+   *
+   * target is set by fill_target(), which the target-taking
+   * constructors call;  it can return without setting one -- its
+   * readlinkat() path, taken when the target name is empty -- and the
+   * dereference below then faulted.  The copy constructor does not
+   * copy the target either, so a cloned Symlink reaches here with
+   * none.  Rejecting the call is what the caller can act on. */
+  if (! target) {
+    ldpp_dout(dpp, 0) << "ERROR: Symlink::create: " << fname
+		      << " has no target:  fill_target() returned "
+		      << cpp_strerror(-target_ret)
+		      << " and did not set one" << dendl;
+    return (target_ret < 0) ? target_ret : -EINVAL;
+  }
   int ret = symlinkat(target->get_name().c_str(), parent->get_fd(), fname.c_str());
   if (ret < 0) {
     ret = errno;
@@ -1274,7 +1311,7 @@ int MPDirectory::read(int64_t ofs, int64_t left, bufferlist &bl,
 }
 
 int MPDirectory::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y,
-                                std::string temp_fname)
+                                std::string temp_fname, bool excl)
 {
   if (tmpname.empty()) {
     return 0;
@@ -1601,7 +1638,7 @@ int VersionedDirectory::read(int64_t ofs, int64_t left, bufferlist &bl,
 }
 
 int VersionedDirectory::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y,
-                              std::string temp_fname)
+                              std::string temp_fname, bool excl)
 {
   if (!cur_version)
     return -EINVAL;
@@ -1681,6 +1718,9 @@ int VersionedDirectory::copy(const DoutPrefixProvider *dpp, optional_yield y,
     }
     if (!cur_version) {
       /* Delete marker */
+      ldpp_dout(dpp, 10) << "VersionedDirectory::copy: " << get_name()
+                         << " has no current version to copy:  it is a delete marker"
+                         << dendl;
       return -ENOENT;
     }
     ret = cur_version->copy(dpp, y, dest.get(), dst_name);
@@ -1705,6 +1745,11 @@ int VersionedDirectory::copy(const DoutPrefixProvider *dpp, optional_yield y,
     });
   }
   if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: VersionedDirectory::copy: copying "
+                      << (instance_id.empty() ? std::string("the current version")
+                                              : "version " + instance_id)
+                      << " of " << get_name() << " to " << dst_name
+                      << " failed: " << cpp_strerror(-ret) << dendl;
     return ret;
   }
 
@@ -1712,8 +1757,15 @@ int VersionedDirectory::copy(const DoutPrefixProvider *dpp, optional_yield y,
     /* Set current version symlink for new object */
     std::unique_ptr<FSEnt> dobj;
     ret = dest->get_ent(dpp, y, dst_name, std::string(), dobj);
-    if (ret < 0)
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: VersionedDirectory::copy: " << dst_name
+                        << " is not in " << dest->get_name() << " after the copy"
+                        << (instance_id.empty() ? std::string()
+                                                : ":  no version of " + get_name() +
+                                                  " matched " + instance_id)
+                        << ": " << cpp_strerror(-ret) << dendl;
       return ret;
+    }
 
     ret = dest->set_cur_version_ent(dpp, dobj.get());
   }

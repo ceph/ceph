@@ -278,7 +278,8 @@ public:
   virtual int write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs, Attrs* extra_attrs);
   virtual int read_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs);
   virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name) = 0;
-  virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname) = 0;
+  /* excl:  fail with -EEXIST rather than replace, for If-None-Match: * */
+  virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname, bool excl = false) = 0;
   virtual std::unique_ptr<FSEnt> clone_base() = 0;
   virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags);
   virtual std::string get_cur_version() { return ""; };
@@ -309,7 +310,7 @@ public:
   virtual int write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) override;
   virtual int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) override;
   virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name) override;
-  virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname) override;
+  virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname, bool excl = false) override;
   virtual std::unique_ptr<FSEnt> clone_base() override {
     return std::make_unique<File>(*this);
   }
@@ -353,7 +354,7 @@ public:
     return std::make_unique<Directory>(*this);
   }
   virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name) override;
-  virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname) override;
+  virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname, bool excl = false) override;
   virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags) override;
 
   int get_ent(const DoutPrefixProvider *dpp, optional_yield y, const std::string& name, const std::string& version, std::unique_ptr<FSEnt>& ent);
@@ -419,16 +420,25 @@ int Directory::for_each(const DoutPrefixProvider* dpp, const F& func)
 
 class Symlink: public File {
   std::unique_ptr<FSEnt> target;
+  /* fill_target()'s result, kept rather than discarded.
+   *
+   * A constructor cannot report one, and these have no
+   * DoutPrefixProvider to log with either, so the failure used to be
+   * both silent and unloggable where it happened -- fill_target() can
+   * return without setting the target, and create() then dereferenced
+   * it.  create() is the first place with both a result and a dpp, so
+   * it is where this is reported. */
+  int target_ret{0};
 public:
   Symlink(std::string _name, Directory* _parent, std::string _tgt, CephContext* _ctx) :
     File(_name, _parent, _ctx)
-    { fill_target(nullptr, parent, fname,_tgt, target, _ctx); }
+    { target_ret = fill_target(nullptr, parent, fname,_tgt, target, _ctx); }
   Symlink(std::string _name, Directory* _parent, CephContext* _ctx) :
     File(_name, _parent, _ctx)
     {}
   Symlink(std::string _name, Directory* _parent, struct statx& _stx, std::string _tgt, CephContext* _ctx) :
     File(_name, _parent, _stx, _ctx)
-    { fill_target(nullptr, parent, fname,_tgt, target, _ctx); }
+    { target_ret = fill_target(nullptr, parent, fname,_tgt, target, _ctx); }
   Symlink(std::string _name, Directory* _parent, struct statx& _stx, CephContext* _ctx) :
     File(_name, _parent, _stx, _ctx)
     {}
@@ -471,7 +481,7 @@ public:
   virtual ObjectType get_type() override { return ObjectType::MULTIPART; };
   virtual int create(const DoutPrefixProvider *dpp, bool* existed = nullptr, bool temp_file = false) override;
   virtual int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) override;
-  virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname) override;
+  virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname, bool excl = false) override;
   virtual int remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children, DeleteResult* result) override;
   virtual int stat(const DoutPrefixProvider *dpp, bool force = false) override;
   std::unique_ptr<File> get_part_file(int partnum);
@@ -529,7 +539,7 @@ public:
   virtual int write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs, Attrs* extra_attrs) override;
   virtual int write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) override;
   virtual int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) override;
-  virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname) override;
+  virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname, bool excl = false) override;
   virtual int remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children, DeleteResult* result) override;
   virtual std::string get_cur_version() override;
   virtual std::string get_instance() override { return instance_id; };
