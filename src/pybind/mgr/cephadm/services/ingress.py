@@ -4,7 +4,7 @@ import random
 import string
 from typing import List, Dict, Any, Tuple, cast, Optional, TYPE_CHECKING
 
-from ceph.deployment.service_spec import ServiceSpec, IngressSpec, MonitorCertSource
+from ceph.deployment.service_spec import ServiceSpec, IngressSpec, MgmtGatewaySpec, MonitorCertSource
 from ceph.deployment.utils import is_ipv6
 from mgr_util import build_url
 from cephadm import utils
@@ -18,6 +18,10 @@ if TYPE_CHECKING:
     from ..module import CephadmOrchestrator
 
 logger = logging.getLogger(__name__)
+
+# keepalived's backend health check: fail on HTTP errors too (curl exits 0
+# on them otherwise) and never hang the check
+HEALTH_CHECK_CURL = '/usr/bin/curl -fs --connect-timeout 2 --max-time 3'
 
 # A dependency diff confined to these prefixes is a log-only change for haproxy.
 HAPROXY_LOG_DEP_PREFIXES = ('haproxy_log_target:', 'haproxy_log_level:')
@@ -511,11 +515,21 @@ class IngressService(CephService):
                     assert d.ports
                     port = d.ports[1]   # monitoring port
                     host_ip = d.ip or self.mgr.inventory.get_addr(d.hostname)
-                    script = f'/usr/bin/curl {build_url(scheme="http", host=host_ip, port=port)}/health'
+                    script = f'{HEALTH_CHECK_CURL} {build_url(scheme="http", host=host_ip, port=port)}/health'
                 elif d.daemon_type == 'mgmt-gateway':
+                    mgmt_gw_spec = cast(MgmtGatewaySpec, self.mgr.spec_store[d.service_name()].spec)
                     mgmt_gw_port = d.ports[0] if d.ports else None
-                    host_ip = d.ip or self.mgr.inventory.get_addr(d.hostname)
-                    script = f'/usr/bin/curl -k {build_url(scheme="https", host=host_ip, port=mgmt_gw_port)}/health'
+                    # Check the gateway on this host through the loopback:
+                    # with a virtual_ip nginx serves clients on the VIP only
+                    # (not on the host address, see tracker 74929) and
+                    # answers this check on 127.0.0.1; keepalived and nginx
+                    # both use the host network.
+                    if mgmt_gw_spec.ssl:
+                        url = build_url(scheme='https', host='127.0.0.1', port=mgmt_gw_port)
+                        script = f'{HEALTH_CHECK_CURL} -k {url}/health'
+                    else:
+                        url = build_url(scheme='http', host='127.0.0.1', port=mgmt_gw_port)
+                        script = f'{HEALTH_CHECK_CURL} {url}/health'
         assert script
 
         states = []

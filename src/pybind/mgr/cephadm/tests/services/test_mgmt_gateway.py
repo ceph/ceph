@@ -10,8 +10,10 @@ from orchestrator._interface import DaemonDescription
 from cephadm.module import CephadmOrchestrator
 from ceph.deployment.service_spec import (
     CertificateSource,
+    IngressSpec,
     MgmtGatewaySpec,
     OAuth2ProxySpec,
+    PlacementSpec,
 )
 from cephadm.services.cephadmservice import (
     CephadmDaemonDeploySpec,
@@ -714,6 +716,63 @@ class TestMgmtGateway:
                 assert args[3] == vip
                 deployed = json.loads(_run_cephadm.call_args.kwargs['stdin'])
                 assert deployed['config_blobs']['files']['nginx_internal.crt'] == ceph_generated_cert
+
+    @pytest.mark.parametrize("ssl,expected_check", [
+        (True, '/usr/bin/curl -fs --connect-timeout 2 --max-time 3 -k https://127.0.0.1:5555/health'),
+        (False, '/usr/bin/curl -fs --connect-timeout 2 --max-time 3 http://127.0.0.1:5555/health'),
+    ])
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_service_endpoints", lambda _, name: [])
+    @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_service_discovery_endpoints", lambda _: [])
+    @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_self_signed_certificates_with_label",
+           lambda instance, svc_spec, dspec, label, ip: TLSCredentials(ceph_generated_cert, ceph_generated_key))
+    @patch("cephadm.services.cephadmservice.CephadmService.get_certificates",
+           lambda instance, dspec, ips=None: TLSCredentials(ceph_generated_cert, ceph_generated_key))
+    @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '::1')
+    @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: cephadm_root_ca)
+    @patch("cephadm.services.mgmt_gateway.get_dashboard_endpoints",
+           lambda _: (["ceph-node-2:8443", "ceph-node-2:8443"], "https"))
+    def test_keepalived_checks_mgmt_gateway_on_loopback(
+        self, _run_cephadm, cephadm_module: CephadmOrchestrator, ssl, expected_check
+    ):
+        """HA mode: with a virtual_ip nginx serves clients on the VIP only
+        (no wildcard listener, tracker 74929), so keepalived must check the
+        gateway on the host's loopback, where nginx answers /health, with
+        the gateway's scheme. Checking the host address failed on every
+        host and kept the VIP on a host whose gateway was down."""
+        vip = '10.0.0.200'
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+        with with_host(cephadm_module, 'ceph-node', addr='10.0.0.1'):
+            cephadm_module.cache.update_host_networks('ceph-node', {
+                '10.0.0.0/24': {'if0': ['10.0.0.1']},
+            })
+            placement = PlacementSpec(hosts=['ceph-node'])
+            gw_spec = MgmtGatewaySpec(port=5555, ssl=ssl, virtual_ip=vip, placement=placement)
+            ingress_spec = IngressSpec(service_type='ingress', service_id='mgmt-gw',
+                                       backend_service='mgmt-gateway',
+                                       virtual_ip=f'{vip}/24', keepalive_only=True,
+                                       keepalived_password='12345', placement=placement)
+            with with_service(cephadm_module, gw_spec):
+                nginx_conf = None
+                for call in _run_cephadm.call_args_list:
+                    stdin = call.kwargs.get('stdin')
+                    if stdin:
+                        files = json.loads(stdin).get('config_blobs', {}).get('files', {})
+                        nginx_conf = files.get('nginx_external_server.conf', nginx_conf)
+                assert nginx_conf is not None
+                listens = [line.split()[1] for line in nginx_conf.splitlines()
+                           if line.strip().startswith('listen')]
+                if ssl:
+                    # clients on the VIP only, the check on the loopback only
+                    assert listens == [f'{vip}:5555', '127.0.0.1:5555']
+                else:
+                    # plain HTTP listens on every address, the loopback included
+                    assert listens == ['5555;']
+                with with_service(cephadm_module, ingress_spec):
+                    keepalived_conf, _ = service_registry.get_service('ingress').keepalived_generate_config(
+                        CephadmDaemonDeploySpec(host='ceph-node', daemon_id='mgmt-gw',
+                                                service_name=ingress_spec.service_name()))
+                    assert f'script "{expected_check}"' in keepalived_conf['files']['keepalived.conf']
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_service_endpoints")
