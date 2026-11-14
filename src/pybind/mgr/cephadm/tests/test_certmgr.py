@@ -1528,7 +1528,9 @@ class TestCertMgr(object):
         assert "cephadm-signed" in warning
         assert "reference" in warning
         assert "per-host certificates" in warning
-        assert "ceph orch certmgr cert set" in warning
+        assert ("ceph orch certmgr cert-key set --consumer grafana --service-name grafana "
+                "--hostname <host> -i <cert-key-pem-file>") in warning
+        assert "certmgr key set" not in warning
 
     def test_check_cert_source_all_transitions_warn(self, cephadm_module: CephadmOrchestrator):
         """Every cross-source transition should produce a certificate_source warning."""
@@ -1741,6 +1743,99 @@ class TestCertMgr(object):
     #  cleans up TLS artifacts when a daemon is removed, respecting       #
     #  scope, remaining daemons, and reference cert preservation.         #
     # ------------------------------------------------------------------ #
+
+    @pytest.mark.parametrize(
+        'by_hostname, by_fqdn, expected',
+        [
+            # complete pair under the host name only
+            (('cert-a', 'key-a'), None, ('cert-a', 'key-a')),
+            # complete pair under the FQDN only
+            (None, ('cert-b', 'key-b'), ('cert-b', 'key-b')),
+            # complete pairs under both names: the host name wins
+            (('cert-a', 'key-a'), ('cert-b', 'key-b'), ('cert-a', 'key-a')),
+            # an incomplete pair under the host name does not block the FQDN pair
+            (('cert-a', None), ('cert-b', 'key-b'), ('cert-b', 'key-b')),
+            # nothing registered
+            (None, None, ('', '')),
+        ],
+        ids=['hostname', 'fqdn', 'both-hostname-wins', 'incomplete-hostname', 'missing'],
+    )
+    def test_reference_host_scope_lookup_precedence(self, by_hostname, by_fqdn, expected,
+                                                    cephadm_module: CephadmOrchestrator):
+        """Host-scoped reference certificates are taken from the first complete
+        cert/key pair found under the orchestrator host name, then the FQDN."""
+        from ceph.deployment.service_spec import GrafanaSpec
+        from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
+        from cephadm.services.service_registry import service_registry
+
+        cephadm_module._init_cert_mgr()
+        cm = cephadm_module.cert_mgr
+        for target, pair in (('host1', by_hostname), ('host1.example.com', by_fqdn)):
+            if not pair:
+                continue
+            cert, key = pair
+            cm.save_cert('grafana_ssl_cert', cert, host=target, user_made=True, editable=True)
+            if key:
+                cm.save_key('grafana_ssl_key', key, host=target, user_made=True, editable=True)
+
+        creds = service_registry.get_service('grafana')._get_certificates_from_certmgr_store(
+            GrafanaSpec(certificate_source='reference'),
+            CephadmDaemonDeploySpec(host='host1', daemon_id='host1', service_name='grafana',
+                                    daemon_type='grafana'),
+            ['host1.example.com', 'grafana_servers'],
+            'grafana_ssl_cert', 'grafana_ssl_key')
+
+        assert (creds.cert, creds.key) == expected
+
+    def test_reference_service_scope_lookup_ignores_host(self, cephadm_module: CephadmOrchestrator):
+        """Service-scoped reference certificates are looked up once, by service,
+        whatever host the daemon runs on."""
+        from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
+        from cephadm.services.service_registry import service_registry
+
+        cephadm_module._init_cert_mgr()
+        cm = cephadm_module.cert_mgr
+        svc_spec = mock.MagicMock()
+        svc_spec.service_name.return_value = 'ingress.foo'
+        daemon_spec = CephadmDaemonDeploySpec(host='host1', daemon_id='foo.host1',
+                                              service_name='ingress.foo', daemon_type='haproxy')
+        ingress = service_registry.get_service('ingress')
+
+        with mock.patch.object(cm, 'get_cert', wraps=cm.get_cert) as get_cert:
+            creds = ingress._get_certificates_from_certmgr_store(
+                svc_spec, daemon_spec, ['host1.example.com'], 'ingress_ssl_cert', 'ingress_ssl_key')
+        assert not creds.cert and not creds.key
+        assert get_cert.call_count == 1
+
+        cm.save_cert('ingress_ssl_cert', 'ref-cert', service_name='ingress.foo', user_made=True, editable=True)
+        cm.save_key('ingress_ssl_key', 'ref-key', service_name='ingress.foo', user_made=True, editable=True)
+        creds = ingress._get_certificates_from_certmgr_store(
+            svc_spec, daemon_spec, ['host1.example.com'], 'ingress_ssl_cert', 'ingress_ssl_key')
+        assert (creds.cert, creds.key) == ('ref-cert', 'ref-key')
+
+    def test_cli_cert_and_key_set_survive_reference_reconciliation(self, cephadm_module: CephadmOrchestrator):
+        """Cert and key provisioned through 'certmgr cert set' and 'certmgr key set'
+        are kept as editable user-made objects when a reference service reconciles."""
+        from cephadm.tests.fixtures import wait
+
+        cephadm_module._init_cert_mgr()
+        cm = cephadm_module.cert_mgr
+        host = 'host1'
+
+        with mock.patch.object(cm, 'check_certificate_state') as mock_check:
+            mock_check.return_value = CertInfo('grafana_ssl_cert', host, user_made=True, is_valid=True,
+                                               is_close_to_expiration=False, days_to_expiration=300)
+            wait(cephadm_module, cephadm_module.cert_store_set_cert('grafana_ssl_cert', 'ref-cert', hostname=host))
+        wait(cephadm_module, cephadm_module.cert_store_set_key('ref-key', 'grafana_ssl_key', hostname=host))
+
+        key_obj = cm.key_store.get_tlsobject('grafana_ssl_key', host=host)
+        assert key_obj.user_made and key_obj.editable
+
+        self._run_reconciliation_cleanup(cm, 'reference', 'grafana', host,
+                                         cert_name='grafana_ssl_cert', key_name='grafana_ssl_key')
+
+        assert cm.get_cert('grafana_ssl_cert', host=host) == 'ref-cert'
+        assert cm.get_key('grafana_ssl_key', host=host) == 'ref-key'
 
     def test_post_remove_cleans_cephadm_signed_regardless_of_source(self, cephadm_module: CephadmOrchestrator):
         """post_remove always calls try_rm_self_signed_cert_key_pair, even when
