@@ -463,7 +463,10 @@ For versioned and locked objects, similar semantics as that of LifecycleExpirati
 
 * If the object is current, post transitioning to cloud, it is made noncurrent with delete marker created.
 
-* If the object is noncurrent and is locked, its transition is skipped.
+* If a version, current or non-current, is locked (it has an unexpired
+  object lock retention period or a legal hold), its transition is skipped,
+  so its data stays in the cluster. It is transitioned by a later
+  lifecycle run once the lock no longer applies.
 
 
 Restoring Objects
