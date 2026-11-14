@@ -1,0 +1,274 @@
+#!/bin/bash
+# CLI11 migration tests for cross-cutting global handling:
+#   1. ceph global flags stripped by rgw_global_init before CLI11 parses
+#   2. the --cli11-help "Ceph options" footer (every command, aligned)
+#   3. radosgw-admin's own global --account-id (positions, values)
+#
+# Usage:
+#   ./test_cli11_globals.sh
+#   RGW_ADMIN=/path/to/radosgw-admin ./test_cli11_globals.sh
+#   CEPH_CONF=/path/to/ceph.conf ./test_cli11_globals.sh
+#
+# Run from the build directory:
+#   cd /path/to/ceph/build && bash /path/to/test_cli11_globals.sh
+
+RGW_ADMIN="${RGW_ADMIN:-./bin/radosgw-admin}"
+export CEPH_CONF="${CEPH_CONF:-./ceph.conf}"
+# Route dout/derr log lines off stderr so async cluster logs can't interleave
+# mid-line with the cerr messages we grep. Consumed by rgw_global_init.
+export CEPH_ARGS="--log-to-stderr=false${CEPH_ARGS:+ ${CEPH_ARGS}}"
+PASS=0
+FAIL=0
+SKIP=0
+
+# Filter out noisy ceph log lines and config-not-found lines
+filter() {
+  grep -v "^[0-9]\{4\}-" | \
+  grep -v "^did not load config" | \
+  grep -v "^unable to get monitor" | \
+  grep -v "^failed to fetch mon config"
+}
+
+# --no-mon-config skips monitor connection so check()/help checks run without a cluster.
+_run() { "$RGW_ADMIN" --no-mon-config "$@"; }
+
+cluster_running() { pgrep -x radosgw > /dev/null 2>&1; }
+
+check() {
+  local desc="$1" expected_exit="$2" expected_msg="$3"
+  shift 3
+  local tmpfile; tmpfile=$(mktemp)
+  _run "$@" >"$tmpfile" 2>&1
+  local exit_code=$?
+  local output; output=$(filter <"$tmpfile")
+  rm -f "$tmpfile"
+
+  local ok=1
+  if [ "$exit_code" != "$expected_exit" ]; then
+    echo "FAIL [$desc]: expected exit $expected_exit, got $exit_code"
+    echo "     output: $output"
+    ok=0
+  fi
+  if [ -n "$expected_msg" ] && ! echo "$output" | grep -qF -- "$expected_msg"; then
+    echo "FAIL [$desc]: expected message not found: $expected_msg"
+    echo "     output: $output"
+    ok=0
+  fi
+  [ "$ok" = "1" ] && { echo "PASS [$desc]"; PASS=$((PASS+1)); } || FAIL=$((FAIL+1))
+}
+
+# check_cluster "desc" expected_exit "expected_msg_or_empty" -- command args
+check_cluster() {
+  local desc="$1" expected_exit="$2" expected_msg="$3"
+  shift 3
+  shift  # skip --
+
+  if ! cluster_running; then
+    echo "SKIP [$desc]: no cluster running"
+    SKIP=$((SKIP+1))
+    return
+  fi
+
+  local tmpfile; tmpfile=$(mktemp)
+  "$RGW_ADMIN" "$@" >"$tmpfile" 2>&1
+  local exit_code=$?
+  local output; output=$(filter <"$tmpfile")
+  rm -f "$tmpfile"
+
+  local ok=1
+  if [ "$exit_code" != "$expected_exit" ]; then
+    echo "FAIL [$desc]: expected exit $expected_exit, got $exit_code"
+    echo "     output: $output"
+    ok=0
+  fi
+  if [ -n "$expected_msg" ] && ! echo "$output" | grep -qF -- "$expected_msg"; then
+    echo "FAIL [$desc]: expected message not found: $expected_msg"
+    echo "     output: $output"
+    ok=0
+  fi
+  [ "$ok" = "1" ] && { echo "PASS [$desc]"; PASS=$((PASS+1)); } || FAIL=$((FAIL+1))
+}
+
+# check_help_content "desc" "expected_substring" -- command args
+# Asserts exit 0 and that the (verbatim) substring appears in help output.
+check_help_content() {
+  local desc="$1" expected_content="$2"; shift 2
+  local output; output=$(_run "$@" 2>&1)
+  local exit_code=$?
+  if [ "$exit_code" != "0" ]; then
+    echo "FAIL [$desc]: expected exit 0, got $exit_code"
+    FAIL=$((FAIL+1))
+    return
+  fi
+  if ! echo "$output" | grep -qF -- "$expected_content"; then
+    echo "FAIL [$desc]: expected '$expected_content' in help output"
+    echo "     output: $(echo "$output" | head -3)"
+    FAIL=$((FAIL+1))
+  else
+    echo "PASS [$desc]"
+    PASS=$((PASS+1))
+  fi
+}
+
+# ============================================================
+# ceph global flags are consumed by rgw_global_init (ceph_argparse early_args +
+# md_config) BEFORE CLI11 parses, so CLI11 never sees them and cannot reject them
+# as "unexpected argument" / "invalid flag". Regression: space-form values (e.g.
+# --rgw-zone foo) used to strand as a stray positional and get rejected. One
+# global per parsing tier, in space and = form, plus no-value and pre-command.
+# A stripped global lets the command run, so these need a cluster; one that
+# reached CLI11 would be rejected before the driver is initialized (exit 22
+# "invalid flag"). object shard prints "shard": 10, showing the flag reached
+# the handler; bucket list repeats the check.
+# ============================================================
+echo ""
+echo "=== ceph globals stripped before CLI11 (with cluster) ==="
+check_cluster "global tier1 --cluster (space) stripped"               0 '"shard": 10' -- \
+  bucket object shard --object foo --num-shards 11 --cluster ceph
+check_cluster "global tier1 --cluster=ceph (= form) stripped"         0 '"shard": 10' -- \
+  bucket object shard --object foo --num-shards 11 --cluster=ceph
+check_cluster "global tier1 --no-config-file (no value) stripped"     0 '"shard": 10' -- \
+  bucket object shard --object foo --num-shards 11 --no-config-file
+check_cluster "global tier2 -d (no value) stripped"                   0 '"shard": 10' -- \
+  bucket object shard --object foo --num-shards 11 -d
+check_cluster "global tier3 --rgw-zone (space) stripped [regression]" 0 '"shard": 10' -- \
+  bucket object shard --object foo --num-shards 11 --rgw-zone default
+check_cluster "global tier3 --rgw-zone=default (= form) stripped"     0 '"shard": 10' -- \
+  bucket object shard --object foo --num-shards 11 --rgw-zone=default
+check_cluster "global tier3 --debug-rgw (space) stripped"             0 '"shard": 10' -- \
+  bucket object shard --object foo --num-shards 11 --debug-rgw 5
+check_cluster "global tier3 --debug-rgw=5 (= form) stripped"          0 '"shard": 10' -- \
+  bucket object shard --object foo --num-shards 11 --debug-rgw=5
+check_cluster "global --rgw-zone default before command stripped"     0 '"shard": 10' -- \
+  --rgw-zone default bucket object shard --object foo --num-shards 11
+check_cluster "global --rgw-zone default (space) on bucket list"        0 "" -- bucket list --rgw-zone default
+check_cluster "global --rgw-zone=default (= form) on bucket list"       0 "" -- bucket list --rgw-zone=default
+check_cluster "global --debug-rgw 5 (space) on bucket list"             0 "" -- bucket list --debug-rgw 5
+check_cluster "global --rgw-zone default before command on bucket list" 0 "" -- --rgw-zone default bucket list
+
+# ============================================================
+# --account-id: radosgw-admin's own global flag, registered once on the root,
+# so it is tested here across command families. Accepted before the command,
+# between the command words, or after them, with no position warning.
+# ============================================================
+WARN_ACCOUNT_ID_DUP="Warning: --account-id specified multiple times, using last value"
+ERR_NO_BUCKET="ERROR: bucket name not specified"
+
+echo ""
+echo "=== --account-id parsing (no cluster) ==="
+check "chown: --account-id missing value"    1 "--account-id: 1 required TEXT missing" \
+  bucket chown --account-id
+check "--account-id missing value (at root)" 1 "--account-id: 1 required TEXT missing" \
+  --account-id
+# another command family: script get is run without its required --context,
+# so it stops with that error (exit 22), which comes after parsing succeeded
+check "script get: --account-id accepted" 22 "ERROR: context was not provided (via --context)" \
+  script get --account-id a
+
+echo ""
+echo "=== --account-id parsing on bucket chown (with cluster) ==="
+# Run without --bucket, so chown stops with "bucket name not specified"
+# (exit 22). That check is in the handler, after parsing succeeded and the
+# driver is up, hence the cluster.
+check_cluster "chown: --account-id after the command"        22 "$ERR_NO_BUCKET" -- \
+  bucket chown --account-id a
+check_cluster "chown: --account-id before the command"       22 "$ERR_NO_BUCKET" -- \
+  --account-id a bucket chown
+check_cluster "chown: --account-id between bucket and chown" 22 "$ERR_NO_BUCKET" -- \
+  bucket --account-id a chown
+check_cluster "chown: --account-id=a (= form)"               22 "$ERR_NO_BUCKET" -- \
+  bucket chown --account-id=a
+check_cluster "chown: --account-id= (empty value)"           22 "$ERR_NO_BUCKET" -- \
+  bucket chown --account-id=
+check_cluster "chown: duplicate --account-id same level"     22 "$WARN_ACCOUNT_ID_DUP" -- \
+  bucket chown --account-id foo --account-id bar
+check_cluster "chown: duplicate --account-id cross level"    22 "$WARN_ACCOUNT_ID_DUP" -- \
+  --account-id foo bucket chown --account-id bar
+
+echo ""
+echo "=== --account-id value reaches the handler (with cluster) ==="
+# bucket stats --account-id loads that account: a nonexistent one fails
+# (exit 2); an empty value means no account, so all buckets are listed (exit 0).
+check_cluster "stats: nonexistent account after the command"  2 "" -- \
+  bucket stats --account-id nosuch
+check_cluster "stats: nonexistent account before the command" 2 "" -- \
+  --account-id nosuch bucket stats
+check_cluster "stats: nonexistent account between bucket and stats" 2 "" -- \
+  bucket --account-id nosuch stats
+check_cluster "stats: nonexistent account (= form)"           2 "" -- \
+  bucket stats --account-id=nosuch
+check_cluster "stats: --account-id= (empty) means no account" 0 "" -- \
+  bucket stats --account-id=
+check_cluster "stats: duplicate, last (empty) wins"           0 "$WARN_ACCOUNT_ID_DUP" -- \
+  bucket stats --account-id nosuch --account-id=
+check_cluster "stats: duplicate, last (nonexistent) wins"     2 "$WARN_ACCOUNT_ID_DUP" -- \
+  bucket stats --account-id= --account-id nosuch
+check_cluster "stats: duplicate cross level, last wins"       0 "$WARN_ACCOUNT_ID_DUP" -- \
+  --account-id nosuch bucket stats --account-id=
+
+# ============================================================
+# --cli11-help footer: ceph globals can't be real CLI11 options (stripped before
+# parse), so they are documented in the footer. Three properties:
+#   everywhere - the "Ceph options" footer is set before the subcommands are
+#                created, so footer_ is copied to every child and each command's
+#                help is self-contained (root and subcommands all show it).
+#   own globals - --tenant/--uid/--account-id ARE real root options and DO inherit into every
+#                subcommand's help.
+#   aligned    - footer paragraph formatting is disabled, so the column padding
+#                is emitted verbatim (multi-space gaps survive).
+# ============================================================
+echo ""
+echo "=== --cli11-help footer at root (no cluster) ==="
+check_help_content "root footer heading"      "Ceph options:"       --cli11-help
+check_help_content "root footer --conf"        "--conf/-c FILE"       --cli11-help
+check_help_content "root footer --cluster"     "--cluster NAME"       --cli11-help
+check_help_content "root footer --id/--user"   "--id/--user ID"       --cli11-help
+check_help_content "root footer --name"        "--name/-n TYPE.ID"    --cli11-help
+check_help_content "root footer --no-config-file" "--no-config-file"  --cli11-help
+check_help_content "root footer --setuser"     "--setuser USER"       --cli11-help
+check_help_content "root footer --setgroup"    "--setgroup GROUP"     --cli11-help
+check_help_content "root footer --version"     "--version/-v"         --cli11-help
+check_help_content "root footer --show_args"   "--show_args"          --cli11-help
+check_help_content "root footer config placeholder" "--<config>=<value>" --cli11-help
+# alignment: multi-space gap between flag column and description survives verbatim
+check_help_content "root footer aligned (padding kept)" "FILE       read configuration" --cli11-help
+# radosgw-admin's own globals render as real options at root
+check_help_content "root own-global --tenant" "--tenant"             --cli11-help
+check_help_content "root own-global --uid"     "--uid"                --cli11-help
+check_help_content "root own-global --account-id" "--account-id"     --cli11-help
+
+echo ""
+echo "=== --cli11-help footer on bucket subcommands (no cluster) ==="
+# subcommand help is self-contained: the ceph footer renders there too ...
+check_help_content "bucket link: footer heading"    "Ceph options:"  bucket link --cli11-help
+check_help_content "bucket link: footer --conf"     "--conf/-c"      bucket link --cli11-help
+check_help_content "bucket link: footer --setuser"  "--setuser"      bucket link --cli11-help
+check_help_content "bucket link: footer --setgroup" "--setgroup"     bucket link --cli11-help
+# alignment survives in subcommand help too (formatter is shared with children)
+check_help_content "bucket link: footer aligned (padding kept)" "FILE       read configuration" bucket link --cli11-help
+# ... and own globals inherit into subcommand help as real options
+check_help_content "bucket link: own-global --tenant" "--tenant"    bucket link --cli11-help
+check_help_content "bucket link: own-global --uid"     "--uid"       bucket link --cli11-help
+check_help_content "bucket link: own-global --account-id" "--account-id" bucket link --cli11-help
+
+echo ""
+echo "=== --cli11-help footer on script subcommands (no cluster) ==="
+check_help_content "script get: footer heading"    "Ceph options:"  script get --cli11-help
+check_help_content "script get: footer --conf"     "--conf/-c"      script get --cli11-help
+check_help_content "script get: footer --setuser"  "--setuser"      script get --cli11-help
+check_help_content "script get: footer --setgroup" "--setgroup"     script get --cli11-help
+check_help_content "script put: footer heading"    "Ceph options:"  script put --cli11-help
+check_help_content "script rm: footer heading"     "Ceph options:"  script rm --cli11-help
+# own globals inherit into script subcommand help too
+check_help_content "script get: own-global --tenant" "--tenant"     script get --cli11-help
+check_help_content "script get: own-global --uid"     "--uid"        script get --cli11-help
+check_help_content "script get: own-global --account-id" "--account-id" script get --cli11-help
+check_help_content "script put: own-global --tenant" "--tenant"     script put --cli11-help
+
+# ============================================================
+echo ""
+echo "========================================"
+echo "Results: $PASS passed, $FAIL failed, $SKIP skipped"
+[ "$SKIP" -gt 0 ] && echo "(some tests require a running cluster)"
+echo "========================================"
+[ "$FAIL" -eq 0 ] && exit 0 || exit 1
