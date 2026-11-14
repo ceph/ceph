@@ -19,22 +19,21 @@ context::
     cluster.connect()
     ioctx = cluster.open_ioctx('mypool')
 
-Then you instantiate an :class:rbd.RBD object, which you use to create the
+Then you instantiate an :class:`rbd.RBD` object, which you use to create the
 image::
 
     rbd_inst = rbd.RBD()
     size = 4 * 1024**3  # 4 GiB
     rbd_inst.create(ioctx, 'myimage', size)
 
-To perform I/O on the image, you instantiate an :class:rbd.Image object::
+To perform I/O on the image, you instantiate an :class:`rbd.Image` object::
 
     image = rbd.Image(ioctx, 'myimage')
     data = b'foo' * 200
     image.write(data, 0)
 
 This writes 'foo' to the first 600 bytes of the image. Note that data
-cannot be :type:unicode - `Librbd` does not know how to deal with
-characters wider than a :c:type:char.
+must be ``bytes``; a ``str`` raises ``TypeError``.
 
 In the end, you will want to close the image, the I/O context and the connection to RADOS::
 
@@ -42,7 +41,7 @@ In the end, you will want to close the image, the I/O context and the connection
     ioctx.close()
     cluster.shutdown()
 
-To be safe, each of these calls would need to be in a separate :finally
+To be safe, each of these calls would need to be in a separate ``finally``
 block::
 
     cluster = rados.Rados(conffile='my_ceph_conf')

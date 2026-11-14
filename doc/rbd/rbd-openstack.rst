@@ -50,10 +50,9 @@ Three parts of OpenStack integrate with Ceph's block devices:
 
 - **Guest Disks**: Guest disks are guest operating system disks. By default,
   when you boot a virtual machine, its disk appears as a file on the file system
-  of the hypervisor (usually under ``/var/lib/nova/instances/<uuid>/``). Prior
-  to OpenStack Havana, the only way to boot a VM in Ceph was to use the
-  boot-from-volume functionality of Cinder. However, now it is possible to boot
-  every virtual machine inside Ceph directly without using Cinder, which is
+  of the hypervisor (usually under ``/var/lib/nova/instances/<uuid>/``). It is
+  possible to boot every virtual machine inside Ceph directly without using
+  Cinder, which is
   advantageous because it allows you to perform maintenance operations easily
   with the live-migration process. Additionally, if your hypervisor dies it is
   also convenient to trigger ``nova evacuate`` and reinstate the virtual machine
@@ -163,7 +162,7 @@ Add the keyrings for ``client.cinder``, ``client.glance``, and
 
   ceph auth get-or-create client.glance | ssh {your-glance-api-server} sudo tee /etc/ceph/ceph.client.glance.keyring
   ssh {your-glance-api-server} sudo chown glance:glance /etc/ceph/ceph.client.glance.keyring
-  ceph auth get-or-create client.cinder | ssh {your-volume-server} sudo tee /etc/ceph/ceph.client.cinder.keyring
+  ceph auth get-or-create client.cinder | ssh {your-cinder-volume-server} sudo tee /etc/ceph/ceph.client.cinder.keyring
   ssh {your-cinder-volume-server} sudo chown cinder:cinder /etc/ceph/ceph.client.cinder.keyring
   ceph auth get-or-create client.cinder-backup | ssh {your-cinder-backup-server} sudo tee /etc/ceph/ceph.client.cinder-backup.keyring
   ssh {your-cinder-backup-server} sudo chown cinder:cinder /etc/ceph/ceph.client.cinder-backup.keyring
@@ -277,7 +276,6 @@ specify the pool name for the block device. On your OpenStack node, edit
     [DEFAULT]
     ...
     enabled_backends = ceph
-    glance_api_version = 2
     ...
     [ceph]
     volume_driver = cinder.volume.drivers.rbd.RBDDriver
@@ -297,9 +295,6 @@ the secret you added to ``libvirt`` as documented earlier::
     rbd_user = cinder
     rbd_secret_uuid = 457eb676-33da-42ec-9a8c-9293d545c337
 
-Note that if you are configuring multiple cinder back ends,
-``glance_api_version = 2`` must be in the ``[DEFAULT]`` section.
-
 
 Configuring Cinder Backup
 -------------------------
@@ -307,7 +302,7 @@ Configuring Cinder Backup
 OpenStack Cinder Backup requires a specific daemon so don't forget to install it.
 On your Cinder Backup node, edit ``/etc/cinder/cinder.conf`` and add::
 
-    backup_driver = cinder.backup.drivers.ceph
+    backup_driver = cinder.backup.drivers.ceph.CephBackupDriver
     backup_ceph_conf = /etc/ceph/ceph.conf
     backup_ceph_user = cinder-backup
     backup_ceph_chunk_size = 134217728
@@ -340,7 +335,7 @@ In order to boot virtual machines directly from Ceph volumes, you must
 configure the ephemeral backend for Nova.
 
 It is recommended to enable the RBD cache in your Ceph configuration file; this
-has been enabled by default since the Giant release. Moreover, enabling the
+is enabled by default. Moreover, enabling the
 client admin socket allows the collection of metrics and can be invaluable
 for troubleshooting.
 
