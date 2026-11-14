@@ -509,6 +509,18 @@ OpsExecuter::call_errorator::future<> OpsExecuter::do_assert_ver(
   return seastar::now();
 }
 
+auto OpsExecuter::do_assert_time_range(OSDOp& osd_op)
+  -> call_errorator::future<>
+{
+  const utime_t now = ceph_clock_now();
+  const utime_t after(osd_op.op.assert_time_range.after);
+  const utime_t before(osd_op.op.assert_time_range.before);
+  if (now < after || now > before) {
+    return crimson::ct_error::etime::make();
+  }
+  return seastar::now();
+}
+
 OpsExecuter::list_snaps_iertr::future<> OpsExecuter::do_list_snaps(
   OSDOp& osd_op,
   const ObjectState& os,
@@ -860,6 +872,10 @@ OpsExecuter::do_execute_op(OSDOp& osd_op)
   case CEPH_OSD_OP_ASSERT_VER:
     return do_read_op([this, &osd_op](auto&, const auto& os) {
       return do_assert_ver(osd_op, os);
+    });
+  case CEPH_OSD_OP_ASSERT_TIME_RANGE:
+    return do_read_op([this, &osd_op](auto&, const auto& os) {
+      return do_assert_time_range(osd_op);
     });
   case CEPH_OSD_OP_LIST_SNAPS:
     return do_snapset_op([this, &osd_op](const auto &os, const auto &ss) {
