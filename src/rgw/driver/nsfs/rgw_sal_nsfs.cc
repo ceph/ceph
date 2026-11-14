@@ -14,17 +14,21 @@
  */
 
 #include <sys/resource.h>
+#include <sys/sysmacros.h>
+
 #include "rgw_sal_nsfs.h"
 #include "rgw_rest_user.h"
 #include "driver/posix/sync_policy.h"
 #include "rgw_rest_driver_hint.h"
 #include "rgw_rest_nsfs_profile.h"
+#include "rgw_rest_nsfs_bucket.h"
 #include "rgw_rest_nsfs_identity.h"
 #include "common/code_environment.h"
 
 #include "impersonate.h"
 #include "rgw_pubsub_push.h"
 #include "rgw_pubsub.h"
+#include "rgw_object_ownership.h"
 #include "rgw_s3_filter.h"
 #include <dirent.h>
 #include <fcntl.h>
@@ -2369,8 +2373,12 @@ int FSEnt::stat(const DoutPrefixProvider* dpp, bool force)
     return 0;
   }
 
-  int ret = statx(parent->get_fd(), fname.c_str(), AT_SYMLINK_NOFOLLOW,
-		  STATX_ALL, &stx);
+  /* AT_FDCWD with no parent, which is how `Directory::open()` has
+   * always resolved one:  a parentless entry's `fname` is an absolute
+   * path.  The base path is such an entry and so is a bucket served
+   * from a stored path (P2), and this dereferenced the null. */
+  int ret = nsfs::statx(parent ? parent->get_fd() : AT_FDCWD, fname.c_str(),
+		  AT_SYMLINK_NOFOLLOW, STATX_ALL, &stx);
   if (ret < 0) {
     ret = errno;
     ldpp_dout(dpp, 0) << "ERROR: could not stat " << get_name() << ": "
@@ -3136,7 +3144,6 @@ int Directory::create(const DoutPrefixProvider* dpp, optional_yield y,
     return -EINVAL;
   }
 
-  int ret = mkdirat(parent->get_fd(), fname.c_str(), S_IRWXU);
   /* A key directory made by a walk is its creator's, at NooBaa's
    * mode (resolve_path()).  mkdir(2) masks the mode with the umask, so
    * the mode is then set outright, as the directory's new owner. */
@@ -3166,6 +3173,10 @@ int Directory::create(const DoutPrefixProvider* dpp, optional_yield y,
    * is the account's at 0770 with no sticky bit, as NooBaa's is
    * (DECISIONS.md 2026-10-15). */
   const mode_t dir_mode = nsfs::dir_create_mode();
+  /* A bucket at a stored path has no parent entry, and its fname is the
+   * whole path:  AT_FDCWD, as Directory::open() resolves one. */
+  const int at = parent ? parent->get_fd() : AT_FDCWD;
+  int ret = mkdirat(at, fname.c_str(), dir_mode);
   const bool made = (ret == 0);
   if (ret < 0) {
     ret = -errno;
@@ -3188,6 +3199,7 @@ int Directory::create(const DoutPrefixProvider* dpp, optional_yield y,
    * or one an operator placed -- and a create that found it there does
    * not change it. */
   if (made) {
+    ret = nsfs::apply_create_mode_at(dpp, at, fname.c_str(), dir_mode);
     if (ret < 0) {
       ldpp_dout_fmt(dpp, 0, "ERROR: could not set the mode on {}: {}",
 			    get_name(), cpp_strerror(-ret));
@@ -3265,7 +3277,7 @@ int Directory::stat(const DoutPrefixProvider* dpp, bool force)
 
   if (!S_ISDIR(stx.stx_mode)) {
     /* Not a directory */
-    ldpp_dout(dpp, 0) << "ERROR: " << get_name() << " is not a directory" << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: {} is not a directory", get_name());
     return -EINVAL;
   }
 
@@ -3274,7 +3286,9 @@ int Directory::stat(const DoutPrefixProvider* dpp, bool force)
 
 int Directory::remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children)
 {
-  return delete_directory(parent->get_fd(), fname.c_str(), delete_children, dpp);
+  /* AT_FDCWD with no parent, as FSEnt::stat() has it:  a parentless
+   * directory's name is an absolute path, which is how a bucket served
+   * from a stored path is built. */
   const int at = parent ? parent->get_fd() : AT_FDCWD;
   /* A key directory pruned after a delete is its creator's.  A
    * removal with its children is a bucket's, which is the gateway's
@@ -3284,6 +3298,8 @@ int Directory::remove(const DoutPrefixProvider* dpp, optional_yield y, bool dele
 			      reserved_or_none(reserved_names));
     }, y);
   }
+  return delete_directory(at, fname.c_str(), delete_children, dpp,
+			  reserved_or_none(reserved_names));
 }
 
 int Directory::write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp,
@@ -4214,28 +4230,26 @@ int NSFSLuaManager::reload_packages(const DoutPrefixProvider* dpp, optional_yiel
 void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp,
 				 std::optional<bool> shares_extents)
 {
-  int ret = -1;
-  base_path = g_conf().get_val<std::string>("rgw_nsfs_base_path");
-
-  ldpp_dout(dpp, 20) << "Initializing NSFS driver: " << base_path << dendl;
-
   auto gpfs_lib = g_conf().get_val<std::string>("rgw_nsfs_gpfs_lib_path");
   bool gpfs_clone = g_conf().get_val<bool>("rgw_nsfs_gpfs_clone_files");
   bool gpfs_lwe = g_conf().get_val<bool>("rgw_nsfs_gpfs_lwe_locking");
   bool gpfs_batch = g_conf().get_val<bool>("rgw_nsfs_gpfs_batch_xattrs");
-  fs_strategy = nsfs::GPFSStrategy::try_create(dpp, gpfs_lib, base_path,
+  fs_strategy = nsfs::GPFSStrategy::try_create(dpp, gpfs_lib,
+					       fs_reference_path(),
                                                gpfs_clone, gpfs_lwe,
                                                gpfs_batch);
   if (!fs_strategy) {
     fs_strategy = std::make_unique<nsfs::POSIXStrategy>();
   }
-  fs_strategy->set_shares_extents(nsfs::probe_shares_extents(dpp, base_path));
   ldpp_dout_fmt(dpp, 1, "nsfs: using {} fs strategy", fs_strategy->name());
   nsfs::set_ring_metadata_changes(fs_strategy->ring_metadata_changes());
   /* Probed unless the caller says otherwise.  The strided layout, the
    * extent guard and the divert path are reached only where a copy is
    * real, which on a developer machine is nowhere -- so a caller which
    * means to exercise them has to be able to say so. */
+  fs_strategy->set_shares_extents(
+      shares_extents ? *shares_extents
+		     : nsfs::probe_shares_extents(dpp, fs_reference_path()));
 
   /* Which staging layout.
    *
@@ -4369,10 +4383,6 @@ void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp,
       stabilize = [this](const file::listing::MultipartCacheKey& key,
 	  const boost::container::flat_map<uint32_t,
 	    file::listing::MultipartPartInfo>& parts) {
-	auto staging_name = bucket_fname(key.upload_meta, ns);
-	int dir_fd = ::openat(root_fd, (key.bucket_name + "/" +
-	  staging_name).c_str(), O_RDONLY | O_DIRECTORY);
-	if (dir_fd < 0) {
 	/* Eviction is the only thing that writes these records under
 	 * this policy, so whatever it cannot find is lost. */
 	/* ctx() and not the cct member:  eviction can run from anywhere
@@ -4381,9 +4391,17 @@ void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp,
 	const DoutPrefix dp{ctx(), dout_subsys,
 			    "nsfs multipart stabilize: "};
 
+	/* Resolved as every lookup is, from the row or NooBaa's record:
+	 * a bucket at a stored path is not under the base path, and the
+	 * key carries the tenant the row is keyed by. */
+	const auto [tenant, name] =
+	  nsfs::mp_cache_bucket_split(key.bucket_name);
+	auto bdir = placed_bucket_dir(&dp, name, tenant);
+	if (!bdir || (bdir->open(&dp) < 0)) {
 	  return;
 	}
 	  int pfd = ::openat(dir_fd, fname.c_str(), O_RDWR);
+	const int bfd = bdir->get_fd();
 
 	/* RGW's layout only.  NooBaa's staging is read and never written
 	 * (DECISIONS.md 2026-10-21):  its part records are on disk where
@@ -4519,6 +4537,10 @@ void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp,
       new nsfs::MultipartCache(
 	mp_max, mp_lanes, mp_parts, mp_max_parts,
 	mp_policy, std::move(stabilize)));
+  base_path_ = g_conf().get_val<std::string>("rgw_nsfs_base_path");
+
+  ldpp_dout_fmt(dpp, 20, "Initializing NSFS driver: {}", base_path_);
+
   /* Do not start in a mode we cannot honour.
    *
    * With impersonation on, a request whose credentials cannot be
@@ -4604,21 +4626,9 @@ void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp,
   }
 #endif
 
-  root_dir = std::make_unique<Directory>(base_path, nullptr, ctx(), fs_strategy.get());
-  ret = root_dir->open(dpp);
+  ret = open_base_path(dpp);
   if (ret < 0) {
-    if (ret == -ENOTDIR) {
-      ldpp_dout(dpp, 0) << " ERROR: base path (" << base_path
-	<< "): was not a directory." << dendl;
-      return ret;
-    } else if (ret == -ENOENT) {
-      ret = root_dir->create(dpp);
-      if (ret < 0) {
-	ldpp_dout(dpp, 0) << " ERROR: could not create base path ("
-	  << base_path << "): " << cpp_strerror(-ret) << dendl;
-	return ret;
-      }
-    }
+    return ret;
   }
   lc = new RGWLC();
   lc->initialize(cct, this);
@@ -4626,7 +4636,7 @@ void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp,
   if (use_lc_thread) {
     ret = userDB->createLCTables(dpp);
     if (ret < 0) {
-      ldpp_dout(dpp, 0) << "Failed to create LC tables, ret=" << ret << dendl;
+      ldpp_dout_fmt(dpp, 0, "Failed to create LC tables, ret={}", ret);
       return ret;
     }
     lc->start_processor();
@@ -4641,18 +4651,10 @@ void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp,
 
   quota_handler = RGWQuotaHandler::generate_handler(this, true);
 
-  auto policy = rgw::posix::parse_sync_policy(
-    cct->_conf.get_val<std::string>("rgw_posix_sync_policy"));
-  if (policy == rgw::posix::SyncPolicy::RELAXED) {
-    uint64_t interval_ms = cct->_conf.get_val<uint64_t>("rgw_posix_sync_interval_ms");
-    syncfs_thread = std::make_unique<rgw::posix::SyncFsThread>(
-      root_dir->get_fd(), interval_ms);
-    syncfs_thread->start();
-    ldpp_dout(dpp, 1) << "sync policy: relaxed (syncfs every "
-      << interval_ms << "ms)" << dendl;
-  } else {
-    ldpp_dout(dpp, 1) << "sync policy: "
-      << cct->_conf.get_val<std::string>("rgw_posix_sync_policy") << dendl;
+  init_sync_policy(dpp);
+
+  if (!RGWPubSubEndpoint::init_all(cct)) {
+    ldpp_dout_fmt(dpp, 1, "WARNING: failed to init notification endpoints");
   }
 
   if (!RGWPubSubEndpoint::init_all(cct)) {
@@ -4661,20 +4663,85 @@ void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp,
 
   ldpp_dout(dpp, 20) << "SUCCESS" << dendl;
   return 0;
+}
+
+int NSFSDriver::open_base_path(const DoutPrefixProvider* dpp)
+{
+  /* Made as a bucket directory is made, so its mode is the one the
+   * gateway gives directories;  then held only as a descriptor, not as
+   * a Directory, so that nothing can open a bucket relative to it. */
+  {
+    nsfs::Directory d(base_path_, nullptr, ctx(), fs_strategy.get());
+    int ret = d.open(dpp);
+    if (ret == -ENOTDIR) {
+      ldpp_dout_fmt(dpp, 0, " ERROR: base path ({}): was not a directory.",
+			    base_path_);
+      return ret;
+    }
+    if (ret == -ENOENT) {
       ret = d.create(dpp, null_yield);
+      if (ret < 0) {
+	ldpp_dout_fmt(dpp, 0, " ERROR: could not create base path ({}): {}",
+			      base_path_, cpp_strerror(-ret));
+	return ret;
+      }
+    }
+  }
+  base_fd = ::open(base_path_.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+  if (base_fd < 0) {
+    const int ret = -errno;
+    ldpp_dout_fmt(dpp, 0, " ERROR: could not open base path ({}): {}",
+			  base_path_, cpp_strerror(-ret));
+    return ret;
+  }
+  return 0;
+}
+
+void NSFSDriver::init_sync_policy(const DoutPrefixProvider* dpp)
+{
+  const auto& name = g_conf().get_val<std::string>("rgw_posix_sync_policy");
+  if (rgw::posix::parse_sync_policy(name) != rgw::posix::SyncPolicy::RELAXED) {
+    ldpp_dout_fmt(dpp, 1, "sync policy: {}", name);
+    return;
+  }
+  const uint64_t interval_ms =
+    g_conf().get_val<uint64_t>("rgw_posix_sync_interval_ms");
+  sync_set = std::make_unique<nsfs::SyncFsSet>(interval_ms);
+  /* the default location's filesystem, before any bucket is loaded */
+  struct statx stx{};
   if (nsfs::statx(base_fd, "", AT_EMPTY_PATH, STATX_INO, &stx) == 0) {
+    note_bucket_filesystem(dpp, stx, base_fd);
+  }
+  sync_set->start();
+  ldpp_dout_fmt(dpp, 1, "sync policy: relaxed (syncfs every {}ms, on every "
+			"filesystem that holds a bucket)", interval_ms);
+}
+
+void NSFSDriver::note_bucket_filesystem(const DoutPrefixProvider* dpp,
+					const struct statx& stx, int fd)
+{
+  if (!sync_set) {
+    return;
+  }
+  const dev_t dev = makedev(stx.stx_dev_major, stx.stx_dev_minor);
+  if (sync_set->add(dev, fd)) {
+    ldpp_dout_fmt(dpp, 1, "sync policy: relaxed now syncs filesystem {}:{}",
+			  stx.stx_dev_major, stx.stx_dev_minor);
+  }
+}
+
 }
 
 void NSFSDriver::finalize()
 {
+  if (sync_set) {
+    sync_set->shutdown();
+  }
 #ifdef __linux__
   if (userdb_watcher) {
     userdb_watcher->stop();
   }
 #endif
-  if (syncfs_thread) {
-    syncfs_thread->shutdown();
-  }
   RGWPubSubEndpoint::shutdown_all();
   RGWQuotaHandler::free_handler(quota_handler);
 }
@@ -4848,12 +4915,18 @@ int NSFSDriver::load_owner_by_email(const DoutPrefixProvider* dpp,
   RGWUserInfo uinfo;
   int ret = get_user_db()->get_user(dpp, "email", std::string{email},
 				   uinfo, nullptr, nullptr);
+  if (ret == 0) {
     owner = std::move(uinfo.user_id);
     return 0;
+  }
+  if (ret != -ENOENT) {
     return ret;
   }
   /* else an account's, as RADOS's email index holds both */
   RGWAccountInfo info;
+  Attrs attrs;
+  RGWObjVersionTracker objv;
+  ret = load_account_by_email(dpp, y, email, info, attrs, objv);
   if (ret < 0) {
     return ret;
   }
@@ -4866,8 +4939,107 @@ std::unique_ptr<Object> NSFSDriver::get_object(const rgw_obj_key& k)
   return std::make_unique<NSFSObject>(this, k);
 }
 
+/* P2 and P5.  Where a bucket's storage is, resolved per lookup:
+ *
+ *     placement row for (name, tenant)?          ->  its Path
+ *     NooBaa's record, adoption not complete?    ->  its path
+ *     otherwise                                  ->  null:  nothing places it
+ *
+ * Only a placed directory is a bucket (`RGW_NSFS_VADE_MECUM.md` §1).  A
+ * bucket nothing places is not looked for anywhere:  bucket_dir() gives
+ * it a Directory with no path, which is -ENOENT when opened.
+ *
+ * **Bound per lookup, not cached.**  NooBaa's is read on every lookup --
+ * `read_bucket_sdk_info()` builds the namespace resource around the
+ * record each time, so changing the record changes where the next
+ * request goes -- and storage is attachable to a running Scale cluster
+ * at any time, so a design that binds a location once is wrong on the
+ * platform this driver exists for.  That also disposes of whether a
+ * path is "mutable":  binding late makes mutability a non-event.
+ */
+std::unique_ptr<nsfs::Directory>
+NSFSDriver::placed_bucket_dir(const DoutPrefixProvider* dpp,
+			      const std::string& name,
+			      const std::string& tenant)
+{
+  if (!userDB) {
+    return nullptr;
+  }
+  std::string path;
+
+  nsfs::BucketPlacement bp;
+  if (userDB->get_bucket_placement(dpp, name, tenant, bp) == 0) {
+    /* A row is nsfs's and is authoritative:  it stops here rather than
+     * falling through to NooBaa's record. */
+    path = bp.path;
+  } else {
+    /* P5.  No row in the index, so ask NooBaa's record.
+     *
+     * `path` is required on every NooBaa bucket record, so a real
+     * deployment's buckets are scattered -- and in `serve` mode
+     * nothing is written, so there is no row to have.  Without this,
+     * serve mode only ever works for buckets at the default location,
+     * which is not what a deployment we have not touched looks like.
+     *
+     * The read is the one serve mode already does for a bucket's
+     * configuration, through the component that owns it, so this adds
+     * no consumer of NooBaa's store.
+     *
+     * **It never adopts.**  Resolving where a bucket lives is
+     * read-only;  adoption happens because the mode says so, or by
+     * explicit command. */
+      return nullptr;
     }
+    auto* nb_state = static_cast<nsfs::NooBaaBucketStateStrategy*>(
+	nb_bucket_state_strategy.get());
     if (nb_state->recorded_path(dpp, name, path) < 0) {
+      return nullptr;
+    }
+    if (path.empty()) {
+      return nullptr;
+    }
+    /* NooBaa's path names the bucket's own directory, and a path nsfs
+     * would not store is one it will not serve from either -- the
+     * record is a store nsfs did not write (`RGW_NSFS_VADE_MECUM.md` §1). */
+    if (!nsfs::placement_path_is_acceptable(path)) {
+      ldpp_dout_fmt(dpp, 0, "ERROR: bucket {}: their record says {}, which is "
+			    "not an absolute canonical path", name, path);
+      return nullptr;
+    }
+  }
+
+  ldpp_dout_fmt(dpp, 10, "nsfs: bucket {} is placed at {}", name, path);
+  return make_placed_dir(path);
+}
+
+std::unique_ptr<nsfs::Directory>
+NSFSDriver::make_placed_dir(const std::string& path)
+{
+  /* No parent, and the whole path as the name -- which is how the
+   * base path itself is built.  The FSStrategy has to be passed
+   * explicitly for the same reason it is there:  a Directory built
+   * without one leaves every File below it with a null strategy. */
+  auto d = std::make_unique<nsfs::Directory>(path, nullptr, ctx(),
+					     fs_strategy.get());
+  /* Seeded exactly as the base path is.
+   *
+   * A child inherits its strategies from its parent, and this has no
+   * parent -- so without this its xattr strategy is null and the first
+   * `read_attrs()` faults.  The same four the root is given, because a
+   * placed bucket is a root of its own as far as resolution is
+   * concerned.
+   *
+   * Which format's strategies these are is the driver's default, the
+   * same as the root's.  A placed bucket in NooBaa's format still has
+   * its profile recognised per bucket, which is where the per-format
+   * strategies come from;  this is only the seed. */
+  d->set_mpu_strategy(mpu_strategy.get());
+  d->set_xattr_strategy(xattr_strategy.get());
+  d->set_path_strategy(path_strategy.get());
+  d->set_reserved_names(&reserved_names);
+  return d;
+}
+
 namespace {
 
 bool is_role_principal(const rgw_owner& who)
@@ -4927,35 +5099,446 @@ rgw_owner NSFSDriver::new_bucket_path_source(const DoutPrefixProvider* dpp,
   }
   return authenticated_user;
 }
+
+int NSFSDriver::new_bucket_path(const DoutPrefixProvider* dpp,
+				const rgw_owner& owner, const rgw_bucket& b,
+				std::string& path, bool* owners_path)
+{
+  if (owners_path) {
+    *owners_path = false;
+  }
+  /* NooBaa has no tenants, so only an untenanted name can be one of
+   * its buckets. */
+    auto* nb_state = static_cast<nsfs::NooBaaBucketStateStrategy*>(
+      nb_bucket_state_strategy.get());
+    std::string recorded;
     if (nb_state->recorded_path(dpp, b.name, recorded) != -ENOENT) {
+      ldpp_dout_fmt(dpp, 1, "nsfs: not creating bucket {}:  a NooBaa bucket "
+			    "record holds the name", b.name);
+      return -EEXIST;
+    }
+  }
+
+  const std::string dname =
+    b.tenant.empty() ? b.name : fmt::format("{}${}", b.tenant, b.name);
   const std::string key = identity_key_for(owner);
+
+  nsfs::Identity id;
+  int ret = userDB->get_identity(dpp, key, id);
+  if ((ret < 0) && (ret != -ENOENT)) {
+    return ret;
+  }
+  if ((ret == 0) && !id.new_buckets_path.empty()) {
+    std::string at = id.new_buckets_path;
+    while ((at.size() > 1) && (at.back() == '/')) {
+      at.pop_back();
+    }
+    path = fmt::format("{}/{}", at, dname);
+    if (owners_path) {
+      *owners_path = true;
+    }
+    return 0;
+  }
+
+  bool imported = false;
+  ret = userDB->owner_was_imported(dpp, key, imported);
+  if (ret < 0) {
+    return ret;
+  }
+  if (imported) {
+    ldpp_dout_fmt(dpp, 1, "nsfs: {} has no new_buckets_path, and an account "
+			  "imported from NooBaa without one cannot create "
+			  "buckets", key);
+    return -EACCES;
+  }
+  path = fmt::format("{}/{}", default_bucket_location(), dname);
+  return 0;
+}
+
+/* The directory of a bucket nothing places:  no row, and no NooBaa
+ * record.  It has no path, so opening it is -ENOENT and nothing on disk
+ * is consulted -- a directory under the base path is not a bucket
+ * because of where it sits (DECISIONS.md 2026-10-13).  The handle is
+ * still a bucket, because RGW's CreateBucket creates through the one
+ * load_bucket() returned, and create() places it. */
+std::unique_ptr<nsfs::Directory>
+NSFSDriver::bucket_dir(const DoutPrefixProvider* dpp, const std::string& name,
+		       const std::string& tenant)
+{
+  if (auto placed = placed_bucket_dir(dpp, name, tenant)) {
+    return placed;
+  }
+  return make_placed_dir(std::string{});
+}
+
+int NSFSDriver::custom_bucket_path(const DoutPrefixProvider* dpp,
+				   const rgw_owner& owner, const RGWEnv* env,
+				   std::optional<std::string>& path)
+{
+  path.reset();
+  if (!env) {
+    return 0;
+  }
+  /* the header as RGWEnv keeps it:  HTTP_, upper case, '-' as '_' */
+  std::string var = "HTTP_";
+  for (char c : g_conf().get_val<std::string>(
+	 "rgw_nsfs_custom_bucket_path_header")) {
+    var += (c == '-') ? '_' : static_cast<char>(std::toupper(
+						   static_cast<unsigned char>(c)));
+  }
+  const char* asked = env->get(var.c_str());
+  if (!asked || !*asked) {
+    return 0;
+  }
+
+  std::string list;
+  nsfs::Identity id;
+  if ((userDB->get_identity(dpp, identity_key_for(owner), id) == 0) &&
+      !id.custom_bucket_path_allowed_list.empty()) {
+    list = id.custom_bucket_path_allowed_list;
+  } else {
+    /* the global fallback, which nothing validated when it was set */
+    std::string bad;
+    if (nsfs::normalize_allowed_list(
+	  g_conf().get_val<std::string>("rgw_nsfs_custom_bucket_path_allowed_list"),
+	  list, bad) < 0) {
+      ldpp_dout_fmt(dpp, 0, "ERROR: rgw_nsfs_custom_bucket_path_allowed_list "
+			    "entry \"{}\" is not an absolute canonical path;  "
+			    "denying custom bucket paths", bad);
+      return -EACCES;
+    }
+  }
+  if (list.empty() || !nsfs::allowed_list_admits(list, asked)) {
+    ldpp_dout_fmt(dpp, 1, "nsfs: custom bucket path {} denied:  {}", asked,
+			  (list.empty()
+			   ? "no allowlist"
+			   : "not in the allowlist " + list));
+    return -EACCES;
+  }
+  if (!nsfs::placement_path_is_acceptable(asked)) {
+    ldpp_dout_fmt(dpp, 1, "nsfs: custom bucket path {} rejected:  not an "
+			  "absolute canonical path", asked);
+    return -EINVAL;
+  }
+  path = asked;
+  return 0;
+}
+
+int NSFSDriver::check_owner_access(const DoutPrefixProvider* dpp,
+				   const rgw_owner& owner,
+				   const std::string& path, int mode,
+				   optional_yield y)
+{
+  /* Only when the gateway writes as identities:  without impersonation
+   * an account's uid never touches the filesystem, and a gateway that
+   * cannot assume one has nothing to check with. */
+  if (!nsfs::impersonation_enabled()) {
+    return 0;
+  }
+  nsfs::Credentials cred;
   /* a role principal resolves as its session does */
   int ret = is_role_principal(owner)
     ? get_credentials_for(dpp, owner, y, cred)
     : nsfs::resolve_credentials(dpp, *userDB, owner, cred, y);
   if ((ret == -ENOENT) && unresolved_as_gateway_injected(owner)) {
+    return 0;
+  }
   if (ret == -ENOENT) {
     /* credentials that do not resolve are denied, not checked as the gateway
      * (`RGW_NSFS_VADE_MECUM.md` §12, "No authenticated user means refuse") */
     ldpp_dout_fmt(dpp, 1, "nsfs: {} may not access {}:  no credentials "
 			  "resolve for it", to_string(owner), path);
     return -EACCES;
+  }
+  if (ret < 0) {
+    return ret;
+  }
+  /* The directory itself, not the path to it:  the gateway opens a
+   * bucket's directory and serves everything below it from that handle,
+   * so the directories above it are never the owner's to pass through
+   * (DECISIONS.md 2026-10-15).  NooBaa resolves the whole path as the
+   * account, because it serves by path. */
+  const int fd = ::open(path.c_str(), O_PATH | O_DIRECTORY | O_CLOEXEC);
+  if (fd < 0) {
+    ret = -errno;
+  } else {
+    ret = nsfs::run_as(dpp, cred, [fd, mode]() -> int {
+	return (::faccessat(fd, "", mode, AT_EMPTY_PATH | AT_EACCESS) < 0)
+	  ? -errno : 0;
       }, y);
+    ::close(fd);
+  }
+  if (ret < 0) {
+    ldpp_dout_fmt(dpp, 1, "nsfs: {} (uid {}) may not access {}:  {}",
+			  to_string(owner), cred.uid, path, cpp_strerror(-ret));
+    return -EACCES;
+  }
+  return 0;
 }
 
+int NSFSDriver::check_owner_can_create_at(const DoutPrefixProvider* dpp,
+					  const rgw_owner& owner,
+					  const std::string& path,
+					  optional_yield y)
+{
+  return check_owner_access(
+    dpp, owner, std::filesystem::path(path).parent_path().string(),
+    W_OK | X_OK, y);
+}
+
+/* Whether `path` carries any user.nsfs:* attribute:  1 if it does, 0 if
+ * not, else a negative errno.  More attributes than fit counts as
+ * carrying them, since a directory nothing wrote to has few.
+ *
+ * Not a subtree marker.  The question is whether the directory is, or
+ * was, a bucket, and a subtree marker is written only below a bucket's
+ * root:  it says the directory was converted as part of one, and a
+ * bucket placed there after that one is removed is not over a bucket
+ * (DECISIONS.md 2026-11-05). */
+static int carries_nsfs_state(const std::string& path)
+{
+  char names[8192];
+  const ssize_t len = ::listxattr(path.c_str(), names, sizeof(names));
+  if (len < 0) {
+    return (errno == ERANGE) ? 1 : -errno;
+  }
+  for (const char* q = names; q < names + len; q += std::strlen(q) + 1) {
     const std::string_view n(q);
     if (n.starts_with("user.nsfs:") &&
 	!n.starts_with(nsfs::SUBTREE_MARKER_PREFIX)) {
+      return 1;
+    }
   }
+  return 0;
+}
+
+/* Until adoption is complete a NooBaa bucket not yet imported has no
+ * row, so no row insert rejects a bucket at its directory or nested
+ * with it;  its record's path is checked here instead, for creation
+ * and placement alike.  Only the bucket records are read. */
+int NSFSDriver::check_clear_of_noobaa_paths(const DoutPrefixProvider* dpp,
+					    const std::string& name,
+					    const std::string& path)
+{
+    return 0;
+  }
+  auto* nb_state = static_cast<nsfs::NooBaaBucketStateStrategy*>(
+    nb_bucket_state_strategy.get());
+  std::vector<std::string> records;
   int ret = nb_state->list_records(dpp, records);
+  if (ret < 0) {
+    return ret;
+  }
+  auto nested = [](std::string_view a, std::string_view b) {
+    return (a == b) ||
+      (a.starts_with(b) && (a[b.size()] == '/')) ||
+      (b.starts_with(a) && (b[a.size()] == '/'));
+  };
+  for (const auto& rec : records) {
     std::string recorded;
     if (nb_state->recorded_path(dpp, rec, recorded) < 0) {
+      continue;
+    }
+    /* NooBaa writes its paths with a trailing slash as often as not */
     while ((recorded.size() > 1) && (recorded.back() == '/')) {
       recorded.pop_back();
     }
     if (nested(path, recorded)) {
+      ldpp_dout_fmt(dpp, 1, "nsfs: bucket {}:  {} is NooBaa bucket {}'s "
+			    "directory {}, or nested with it", name, path, rec,
+			    recorded);
+      return -EEXIST;
+    }
+  }
+  return 0;
+}
+
+int NSFSDriver::place_bucket(const DoutPrefixProvider* dpp, optional_yield y,
+			     const std::string& name, const std::string& path,
+			     const rgw_owner& owner,
+			     const RGWZoneGroup& zonegroup,
+			     std::string* profile)
+{
+  if (!nsfs::placement_path_is_acceptable(path)) {
+    ldpp_dout_fmt(dpp, 1, "nsfs: not placing bucket {} at {}:  not an "
+			  "absolute canonical path", name, path);
+    return -EINVAL;
+  }
+  struct stat st;
+  if (::stat(path.c_str(), &st) < 0) {
+    int ret = -errno;
+    ldpp_dout_fmt(dpp, 1, "nsfs: not placing bucket {} at {}:  {}", name, path,
+			  cpp_strerror(-ret));
+    return ret;
+  }
+  if (!S_ISDIR(st.st_mode)) {
+    ldpp_dout_fmt(dpp, 1, "nsfs: not placing bucket {} at {}:  not a directory",
+			  name, path);
+    return -EINVAL;
+  }
+
+  /* the owner exists, as NooBaa's `bucket add` requires */
+  ACLOwner acl_owner;
+  acl_owner.id = owner;
+  if (const auto* a = std::get_if<rgw_account_id>(&owner)) {
+    RGWAccountInfo ainfo;
+    Attrs aattrs;
+    RGWObjVersionTracker objv;
+    if (load_account_by_id(dpp, y, *a, ainfo, aattrs, objv) < 0) {
+      ldpp_dout_fmt(dpp, 1, "nsfs: not placing bucket {}:  no account {}", name,
+			    *a);
+      return -ERR_NO_SUCH_USER;
+    }
+    acl_owner.display_name = ainfo.name;
+  } else {
+    std::unique_ptr<User> user = get_user(std::get<rgw_user>(owner));
+    if (user->load_user(dpp, y) < 0) {
+      ldpp_dout_fmt(dpp, 1, "nsfs: not placing bucket {}:  no user {}", name,
+			    to_string(owner));
+      return -ERR_NO_SUCH_USER;
+    }
+    /* A placed bucket's owner is an account, never a user (DECISIONS.md
+     * 2026-10-15).  A user in no account has no place in NooBaa's model,
+     * where every bucket belongs to an account, and a BucketOwnerEnforced
+     * bucket would leave it unable to read its objects without a policy.
+     * A user in an account is rejected as NooBaa's `bucket add` rejects
+     * an IAM user:  the caller names the account. */
+    const auto& account = user->get_info().account_id;
+    ldpp_dout_fmt(dpp, 1, "nsfs: not placing bucket {}:  {}{}, and a placed "
+			  "bucket's owner must be an account", name,
+			  to_string(owner),
+			  (account.empty()
+			   ? " belongs to no account"
+			   : " is a user of account " + account
+			     + ";  name the account"));
+    return -EINVAL;
+  }
+
+  /* NooBaa checks the owner can read and write the directory, as the
+   * owner (`is_dir_accessible`);  here the kernel decides */
   int ret = check_owner_access(dpp, owner, path, R_OK | W_OK, y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  /* The name is taken by a row, or by a NooBaa record until adoption
+   * is complete -- the same rejection creation makes.  Nesting with
+   * another bucket's directory is the row insert's. */
+    auto* nb_state = static_cast<nsfs::NooBaaBucketStateStrategy*>(
+      nb_bucket_state_strategy.get());
+    std::string recorded;
     if (nb_state->recorded_path(dpp, name, recorded) != -ENOENT) {
+      ldpp_dout_fmt(dpp, 1, "nsfs: not placing bucket {}:  a NooBaa bucket "
+			    "record holds the name", name);
+      return -EEXIST;
+    }
+  }
+
+  /* Never over an existing bucket.  A directory carrying nsfs state is
+   * one, or was one;  and until adoption is complete a NooBaa record
+   * not yet imported serves its directory with no row to stop it, so
+   * its path is checked here as the rows are, nesting included. */
+  ret = carries_nsfs_state(path);
+  if (ret < 0) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: not placing bucket {}:  reading the "
+			  "attributes of {}: {}", name, path,
+			  cpp_strerror(-ret));
+    return ret;
+  }
+  if (ret > 0) {
+    ldpp_dout_fmt(dpp, 1, "nsfs: not placing bucket {}:  {} carries nsfs "
+			  "state, so it is or was a bucket's", name, path);
+    return -EEXIST;
+  }
+  ret = check_clear_of_noobaa_paths(dpp, name, path);
+  if (ret < 0) {
+    return ret;
+  }
+
+  nsfs::BucketPlacement bp;
+  bp.bucket_name = name;
+  bp.path = path;
+  bp.owner = to_string(owner);
+  ret = userDB->insert_bucket_placement(dpp, bp);
+  if (ret == -EADDRINUSE) {
+    ldpp_dout_fmt(dpp, 1, "nsfs: not placing bucket {}:  {} is another "
+			  "bucket's directory, or nested with one", name, path);
+    return -EEXIST;
+  }
+  if (ret < 0) {
+    return ret;
+  }
+
+  /* The bucket an RGW CreateBucket would have made, over a directory
+   * that was already there:  the configured profile, marked at once;
+   * versioning off;  BucketOwnerEnforced;  its creation time the
+   * directory's, which load_bucket() seeds;  and the directory left in
+   * place when the bucket is deleted (DECISIONS.md 2026-10-14). */
+  RGWBucketInfo seed;
+  seed.bucket.name = name;
+  seed.owner = owner;
+  std::unique_ptr<Bucket> loaded = get_bucket(seed);
+  auto* bucket = static_cast<NSFSBucket*>(loaded.get());
+  bool marked = false;
+  ret = bucket->load_bucket(dpp, y);
+  if (ret == 0) {
+    RGWBucketInfo& info = bucket->get_info();
+    info.owner = owner;
+    char buf[17];
+    gen_rand_alphanumeric(ctx(), buf, sizeof(buf) - 1);
+    buf[16] = '\0';
+    info.bucket.marker = fmt::format("{}.{}", name, buf);
+    info.bucket.bucket_id = info.bucket.marker;
+    /* the site's, as CreateBucket records it:  a bucket in another
+     * zonegroup is redirected */
+    info.zonegroup = zonegroup.get_id();
+    info.placement_rule = zonegroup.default_placement;
+    info.flags = 0;
+    info.requester_pays = false;
+
+  }
+  if (ret == 0) {
+    Attrs attrs;
+    RGWAccessControlPolicy acl;
+    acl.create_default(acl_owner.id, acl_owner.display_name);
+    bufferlist aclbl;
+    acl.encode(aclbl);
+    attrs[RGW_ATTR_ACL] = std::move(aclbl);
+    rgw::s3::OwnershipControls oc;
+    oc.object_ownership = rgw::s3::ObjectOwnership::BucketOwnerEnforced;
+    bufferlist ocbl;
+    encode(oc, ocbl);
+    attrs[RGW_ATTR_OWNERSHIP_CONTROLS] = std::move(ocbl);
+    ret = create_failure_injected() ? -EIO
+				    : bucket->merge_and_store_attrs(dpp, attrs, y);
+  }
+  if (ret == 0) {
+    ret = bucket->set_owns_storage(dpp, false);
+  }
+  if (ret < 0) {
+    /* taken back whole:  what was written to the directory, then the
+     * row, so the directory is as it was and the name is free */
+    if (marked) {
+      bucket->release_nsfs_state(dpp);
+    }
+    userDB->remove_bucket_placement(dpp, name, "");
+    ldpp_dout_fmt(dpp, 0, "ERROR: placing bucket {} at {}: {}", name, path,
+			  cpp_strerror(-ret));
+    return ret;
+  }
+  if (profile) {
+    *profile = bucket->profile_name();
+  }
+  ldpp_dout_fmt(dpp, 1, "nsfs: bucket {} placed at {} for {}, profile {}", name,
+			path, to_string(owner), bucket->profile_name());
+  return 0;
+}
+
+  *bucket = std::make_unique<NSFSBucket>(this, bucket_dir(dpp, b.name,
+							  b.tenant), b);
+  return (*bucket)->load_bucket(dpp, y);
+}
+
 int NSFSDriver::load_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b, std::unique_ptr<Bucket>* bucket, optional_yield y)
 {
   *bucket = std::make_unique<NSFSBucket>(this, root_dir.get(), b);
@@ -4965,19 +5548,15 @@ int NSFSDriver::load_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b, 
 std::unique_ptr<Bucket> NSFSDriver::get_bucket(const RGWBucketInfo& i)
 {
   /* Don't need to fetch the bucket info, use the provided one */
-  return std::make_unique<NSFSBucket>(this, root_dir.get(), i);
+  return std::make_unique<NSFSBucket>(
+    this, bucket_dir(nullptr, i.bucket.name, i.bucket.tenant), i);
 }
 
 std::string NSFSDriver::zone_unique_trans_id(const uint64_t unique_num)
 {
-  char buf[41]; /* 2 + 21 + 1 + 16 (timestamp can consume up to 16) + 1 */
-  time_t timestamp = time(NULL);
-
-  snprintf(buf, sizeof(buf), "tx%021llx-%010llx",
-           (unsigned long long)unique_num,
-           (unsigned long long)timestamp);
-
-  return std::string(buf);
+  const time_t timestamp = time(NULL);
+  return fmt::format("tx{:021x}-{:010x}", unique_num,
+		     static_cast<unsigned long long>(timestamp));
 }
 
 int NSFSDriver::get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* zg)
@@ -5008,7 +5587,7 @@ int NSFSDriver::cluster_stat(RGWClusterStat& stats)
    * asks for this on every statfs, and a client uses it to decide
    * whether a write can fit, so leaving it unfilled is not harmless */
   struct statvfs vfs;
-  if (::statvfs(base_path.c_str(), &vfs) < 0) {
+  if (::statvfs(fs_reference_path().c_str(), &vfs) < 0) {
     return -errno;
   }
 
@@ -5090,58 +5669,84 @@ int NSFSDriver::list_buckets(const DoutPrefixProvider* dpp, const rgw_owner& own
 			     const std::string& end_marker, uint64_t max,
 			     bool need_stats, BucketList &result, optional_yield y)
 {
-  DIR* dir;
-  struct dirent* entry;
-  int dfd;
-  int ret;
-
   result.buckets.clear();
-
-  /* it's not sufficient to dup(root_fd), as as the new fd would share
-   * the file position of root_fd */
-  dfd = copy_dir_fd(get_root_fd());
-  if (dfd == -1) {
-    ret = errno;
-    ldpp_dout(dpp, 0) << "ERROR: could not open root to list buckets: "
-      << cpp_strerror(ret) << dendl;
-    return -errno;
+  result.next_marker.clear();
+  if (max == 0) {
+    return 0;
   }
 
-  dir = fdopendir(dfd);
-  if (dir == NULL) {
-    ret = errno;
-    ldpp_dout(dpp, 0) << "ERROR: could not open root to list buckets: "
-      << cpp_strerror(ret) << dendl;
-    ::close(dfd);
-    return -ret;
-  }
-
-  auto cleanup_guard = make_scope_guard(
-    [&dir]
-      {
-	closedir(dir);
-	// dfd is also closed
-      }
-    );
-
-  errno = 0;
-  while ((entry = readdir(dir)) != NULL) {
-    struct statx stx;
-
-    ret = statx(get_root_fd(), entry->d_name, AT_SYMLINK_NOFOLLOW, STATX_ALL, &stx);
+  /* The caller's rows, in name order:  a bucket exists because a record
+   * says so, and the row says whose it is, so no other owner's bucket is
+   * opened (DECISIONS.md 2026-10-13).  A NooBaa bucket not yet imported
+   * has no row and an owner no RGW owner matches, so it is not listed
+   * until the import, as before. */
+  const std::string key = to_string(owner);
+  std::string after = marker;
+  for (;;) {
+    std::vector<nsfs::BucketPlacement> rows;
+    int ret = userDB->list_bucket_placements_by_owner(
+      dpp, key, tenant, after, end_marker, max - result.buckets.size(), rows);
     if (ret < 0) {
-      ret = errno;
-      if (ret == ENOENT) {
-	errno = 0;
+      ldpp_dout_fmt(dpp, 0, "ERROR: could not list buckets for {}: {}",
+			    to_string(owner), cpp_strerror(-ret));
+      return ret;
+    }
+    if (rows.empty()) {
+      return 0;
+    }
+    for (const auto& row : rows) {
+      after = row.bucket_name;
+      std::unique_ptr<Bucket> bucket;
+      if (ret < 0) {
+	/* A bucket we cannot read is one bucket, not a failed listing.
+	 * -ENOENT is a row whose directory is gone.
+	 * ERR_NOT_IMPLEMENTED is an extension set this build does not
+	 * implement -- written by a newer gateway, or restored from one.
+	 * -EBADMSG is stored state that does not decode, which fails
+	 * that bucket closed.  The account's other buckets are fine. */
+	if ((ret == -ENOENT) || (ret == -ERR_NOT_IMPLEMENTED) ||
+	    (ret == -EBADMSG)) {
+	  ldpp_dout_fmt(dpp, 1, "list_buckets: skipping {}: {}",
+				row.bucket_name, cpp_strerror(-ret));
+	  continue;
+	}
+	return ret;
+      }
+      /* The row's owner indexes the one bucket_info records;  they
+       * disagree only if an owner was changed somewhere that did not
+       * update the row, which is a defect to see, not to paper over. */
+      if (bucket->get_owner() != owner) {
+	ldpp_dout_fmt(dpp, 0, "ERROR: bucket {} is listed for {} but owned by "
+			      "{};  its placement row is stale",
+			      row.bucket_name, to_string(owner),
+			      to_string(bucket->get_owner()));
 	continue;
       }
-      ldpp_dout(dpp, 0) << "ERROR: could not stat object " << entry->d_name << ": "
-	<< cpp_strerror(ret) << dendl;
-      return -ret;
+      RGWBucketEnt ent;
+      ent.bucket = bucket->get_key();
+      /* from the bucket just loaded, not from stx_btime:  the birth time
+       * is optional and a filesystem which does not report it -- GPFS --
+       * leaves it zeroed, and load_bucket() has already decided what
+       * this bucket's creation time is. */
+      ent.creation_time = bucket->get_creation_time();
+      // TODO: ent.size and ent.count
+      result.buckets.push_back(std::move(ent));
+      if (result.buckets.size() == max) {
+	result.next_marker = row.bucket_name;
+	return 0;
+      }
     }
+  }
+}
 
     if (!S_ISDIR(stx.stx_mode)) {
       /* Not a bucket, skip it */
+static int resolve_credentials_for(const DoutPrefixProvider* dpp,
+				   NSFSDriver* driver, const rgw_owner& who,
+			     optional_yield y, rgw_account_id* account,
+			     nsfs::Credentials& cred,
+			     std::string* row = nullptr)
+{
   const auto* user = std::get_if<rgw_user>(&who);
     const int ret = nsfs::resolve_credentials(dpp, *driver->get_identity_db(),
 					      who, cred, y);
@@ -5161,7 +5766,6 @@ int NSFSDriver::list_buckets(const DoutPrefixProvider* dpp, const rgw_owner& own
     if (account) {
       *account = role->get_account_id();
     }
-    // TODO: ent.size and ent.count
     return nsfs::resolve_role_credentials(dpp, *driver->get_identity_db(),
 					  user->id, role->get_account_id(),
 					  cred, y, row);
@@ -5170,6 +5774,10 @@ int NSFSDriver::list_buckets(const DoutPrefixProvider* dpp, const rgw_owner& own
   std::unique_ptr<User> u = driver->get_user(*user);
   if (u->load_user(dpp, y) == 0) {
     acct = u->get_info().account_id;
+  }
+  if (account) {
+    *account = acct;
+  }
   return nsfs::resolve_credentials(dpp, *driver->get_identity_db(),
 				   *user, acct, cred, y, row);
 }
@@ -5195,11 +5803,12 @@ int NSFSBucket::create(const DoutPrefixProvider* dpp,
 {
   info.owner = params.owner;
 
+
   if (params.marker.empty()) {
     char buf[17];
     gen_rand_alphanumeric(driver->ctx(), buf, sizeof(buf) - 1);
     buf[16] = '\0';
-    info.bucket.marker = info.bucket.name + "." + buf;
+    info.bucket.marker = fmt::format("{}.{}", info.bucket.name, buf);
     info.bucket.bucket_id = info.bucket.marker;
   } else {
     info.bucket.marker = params.marker;
@@ -5230,17 +5839,73 @@ int NSFSBucket::create(const DoutPrefixProvider* dpp,
     return ret;
   }
 
+  /* A client's bucket is placed the way NooBaa places one:  the record
+   * first, carrying the path, then the directory, and the record taken
+   * back if the directory cannot be made (`bucketspace_fs.js`
+   * create_bucket and _create_uls).  The row is what makes the name
+   * taken:  of two creations of one name, one insert succeeds. */
+  if (!is_internal()) {
+    nsfs::BucketPlacement bp;
+    bp.bucket_name = get_name();
+    bp.tenant = get_tenant();
+    bp.owner = to_string(params.owner);
     /* the owner's new_buckets_path and allowlist, or under the I9
      * override the creating user's own;  the bucket is the owner's
      * either way */
     const rgw_owner path_source = driver->new_bucket_path_source(
       dpp, params.owner, authenticated_user, y);
+    bool owners_path = false;
+    ret = driver->new_bucket_path(dpp, path_source, get_key(), bp.path,
+				  &owners_path);
+    if (ret < 0) {
+      return ret;
+    }
+    std::optional<std::string> custom;
     ret = driver->custom_bucket_path(dpp, path_source, params.env, custom);
+    if (ret < 0) {
+      return ret;
+    }
+    if (custom) {
+      bp.path = *custom;
+    }
+    bp.default_location = !owners_path && !custom;
+    /* NooBaa's guard applies where NooBaa has it:  a path the account
+     * chose.  The base path is the gateway's default, not the
+     * account's. */
+    if (owners_path || custom) {
       ret = driver->check_owner_can_create_at(dpp, path_source, bp.path, y);
+      if (ret < 0) {
+	return ret;
+      }
+    }
+    ret = driver->check_clear_of_noobaa_paths(dpp, get_name(), bp.path);
+    if (ret < 0) {
+      return ret;
+    }
+    ret = driver->get_identity_db()->insert_bucket_placement(dpp, bp);
+    if (ret == -EADDRINUSE) {
+      ldpp_dout_fmt(dpp, 0, "ERROR: bucket {}:  {} is another bucket's "
+			    "directory, or nested with one", get_name(),
+			    bp.path);
+      return -EEXIST;
+    }
+    if (ret < 0) {
+      return ret;
+    }
+    dir = driver->make_placed_dir(bp.path);
+  }
+
   bool existed = false;
   ret = create(dpp, y, &existed, authenticated_user);
   if (ret < 0) {
+    if (!is_internal()) {
+      driver->get_identity_db()->remove_bucket_placement(dpp, get_name(),
+							 get_tenant());
+    }
     return ret;
+  }
+  if (!is_internal() && (dir->stat(dpp) == 0) && (dir->open(dpp) == 0)) {
+    driver->note_bucket_filesystem(dpp, dir->get_stx(), dir->get_fd());
   }
 
   return 0;
@@ -5271,7 +5936,8 @@ int NSFSUser::read_attrs(const DoutPrefixProvider* dpp, optional_yield y)
   bool cache_hit;
   int ret = load_user_from_cache_or_db(dpp, cache_hit);
   if (cache_hit) {
-    ldpp_dout(dpp, 21) << "UserCache: read_attrs: cache hit for uid=" << this->get_id().id << dendl;
+    ldpp_dout_fmt(dpp, 21, "UserCache: read_attrs: cache hit for uid={}",
+			   this->get_id().id);
   }
   return ret;
 }
@@ -5834,9 +6500,6 @@ struct meta_list_handle {
   std::string marker;
   std::string section;
 
-  DIR *dir = nullptr;
-  long dpos = -1;
-
   meta_list_handle(const std::string& _section, const std::string& _marker) {
     marker = _marker;
     section = _section;
@@ -5850,25 +6513,6 @@ int NSFSDriver::meta_list_keys_init(const DoutPrefixProvider *dpp,
 {
   meta_list_handle* stuff = new meta_list_handle(section, marker);
   *phandle = (void *)stuff;
-  if (section == "bucket") {
-    int ret;
-    int dfd = copy_dir_fd(get_root_fd());
-    if (dfd == -1) {
-      ret = errno;
-      ldpp_dout(dpp, 0) << "ERROR: could not open root to list buckets: "
-                        << cpp_strerror(errno) << dendl;
-      return -ret;
-    }
-
-    stuff->dir = fdopendir(dfd);
-    if (stuff->dir == NULL) {
-      ret = errno;
-      ldpp_dout(dpp, 0) << "ERROR: could not open root to list buckets: "
-                        << cpp_strerror(ret) << dendl;
-      ::close(dfd);
-      return -ret;
-    }
-  }
   return 0;
   }
 
@@ -5892,40 +6536,45 @@ int NSFSDriver::meta_list_keys_next(const DoutPrefixProvider *dpp, void* handle,
       }
     }
   } else if (h->section == "bucket") {
-    if (h->dpos != -1) {
-      seekdir(h->dir, h->dpos);
+    /* Every bucket a record places:  each row, and each NooBaa record
+     * not yet imported, which has no row (DECISIONS.md 2026-10-13).
+     * A row and a record of one name are one bucket, the row's.  No
+     * owner filter, since this is the operator's listing.  Keys are
+     * RGW's, `<tenant>/<name>` for a tenant's bucket. */
+    std::vector<nsfs::BucketPlacement> rows;
+    ret = userDB->list_bucket_placements(dpp, "", UINT64_MAX, rows);
+    if (ret < 0) {
+      return ret;
     }
-    struct dirent* entry;
-    while ((entry = readdir(h->dir)) != NULL) {
-      if (entry->d_type == DT_UNKNOWN) {
-        struct statx stx;
-
-        ret = statx(get_root_fd(), entry->d_name, AT_SYMLINK_NOFOLLOW, STATX_ALL, &stx);
-        if (ret < 0) {
-          ret = errno;
-          ldpp_dout(dpp, 0) << "ERROR: could not stat object " << entry->d_name << ": "
-	                    << cpp_strerror(ret) << dendl;
-          return -ret;
-        }
-        if (!S_ISDIR(stx.stx_mode)) {
-        /* Not a bucket, skip it */
-          continue;
-        }
-      } else if (entry->d_type != DT_DIR) {
-        continue;
+    std::set<std::string> all;
+    std::set<std::string> untenanted;
+    for (const auto& r : rows) {
+      all.insert(r.tenant.empty() ? r.bucket_name
+				  : fmt::format("{}/{}", r.tenant, r.bucket_name));
+      if (r.tenant.empty()) {
+	untenanted.insert(r.bucket_name);
       }
-      if (entry->d_name[0] == '.') {
-        /* Skip dotfiles */
-        continue;
      }
-      keys.push_back(entry->d_name);
-      if (std::cmp_equal(keys.size(),max)) {
-        h->dpos = telldir(h->dir);
-        *truncated = true;
-        break;
       std::vector<std::string> records;
+      ret = static_cast<nsfs::NooBaaBucketStateStrategy*>(
+	nb_bucket_state_strategy.get())->list_records(dpp, records);
+      if (ret < 0) {
+	return ret;
       }
       for (const auto& n : records) {
+	if (!untenanted.contains(n)) {
+	  all.insert(n);
+	}
+      }
+    }
+    for (auto it = all.upper_bound(h->marker); it != all.end(); ++it) {
+      keys.push_back(*it);
+      h->marker = *it;
+      if (std::cmp_equal(keys.size(), max)) {
+	*truncated = (std::next(it) != all.end());
+	break;
+      }
+    }
     }
   }
   return 0;
@@ -5935,9 +6584,6 @@ void NSFSDriver::meta_list_keys_complete(void* handle)
 {
   if (handle) {
     meta_list_handle *h = static_cast<meta_list_handle *>(handle);
-    if (h->section == "bucket") {
-      closedir(h->dir);
-    }
     delete h;
   }
   return;
@@ -6192,6 +6838,24 @@ int NSFSBucket::merge_and_store_attrs(const DoutPrefixProvider* dpp,
 static constexpr uint64_t BUCKET_DELETE_CAPS =
   nsfs::cap_bit(CAP_DAC_OVERRIDE) | nsfs::cap_bit(CAP_FOWNER);
 
+/* Who acts on the bucket directory's entry follows who had to be able
+ * to make it (DECISIONS.md 2026-10-24):  in the default location the
+ * gateway, which makes the directory for its creator (raise site 4);
+ * under a location the account owns -- its new_buckets_path, or a
+ * custom path -- the authenticated user, as NooBaa makes and removes it
+ * as the account.  Which it was is the placement row's record, written
+ * at creation, never where the directory sits relative to the base
+ * path now:  the base path is a default for new buckets, and may have
+ * moved since. */
+bool NSFSBucket::made_in_default_location(const DoutPrefixProvider* dpp) const
+{
+  auto* db = driver->get_identity_db();
+  nsfs::BucketPlacement row;
+  return db && (db->get_bucket_placement(dpp, get_name(), get_tenant(), row) == 0) &&
+    row.default_location;
+}
+
+
 int NSFSBucket::remove_dir_as(const DoutPrefixProvider* dpp, optional_yield y,
 			      const nsfs::FSIdentity& id,
 			      const nsfs::AccessStrategy* model,
@@ -6212,6 +6876,7 @@ int NSFSBucket::remove_dir_as(const DoutPrefixProvider* dpp, optional_yield y,
   auto close_pfd = make_scope_guard([pfd] { ::close(pfd); });
 
   int ret;
+  if (made_in_default_location(dpp)) {
     /* what is in it, as the authenticated user, on a descriptor of its
      * own:  a dup of the bucket's would share the offset check_empty()
      * has already read to the end */
@@ -6228,6 +6893,9 @@ int NSFSBucket::remove_dir_as(const DoutPrefixProvider* dpp, optional_yield y,
     }, y);
     if (ret < 0) {
       return ret;
+    }
+    /* its entry, as the gateway, which made it:  raise site 3,
+     * CAP_FOWNER where its parent is sticky and not the gateway's */
     auto rm = [&]() -> int {
       return ((::unlinkat(pfd, leaf.c_str(), AT_REMOVEDIR) < 0) &&
 	      (errno != ENOENT)) ? -errno : 0;
@@ -6259,6 +6927,30 @@ int NSFSBucket::remove(const DoutPrefixProvider* dpp,
   if (mg.result() < 0) {
     return mg.result();
   }
+  /* A non-empty bucket is rejected whether or not it owns its
+   * directory, as S3 rejects one and as NooBaa rejects one over a
+   * supplied directory.  Ownership decides only what an allowed delete
+   * removes:  the directory, or just the bucket's record.
+   *
+   * The root object does not keep a bucket alive:  NooBaa judges a
+   * bucket empty by listing it, and the root object is never listed
+   * (DECISIONS.md 2026-10-13).  delete_directory() counts any `.folder`
+   * as content, because in a directory it is that directory's object,
+   * so once an owned bucket is known to be empty the root's is removed
+   * here, before the directory.  A bucket that does not own its storage
+   * keeps it, with the directory. */
+  const bool owns = owns_storage(dpp);
+
+  /* Who acts at each layer follows who had to be able to create it
+   * (DECISIONS.md 2026-10-24).  The authenticated user, where a request
+   * names one under impersonation, is checked at the bucket directory,
+   * removes what is below it, and removes its entry from a location the
+   * account owns;  the gateway removes its entry where it made the
+   * directory, in the default location.
+   * Each of that user's refusals stands under `posix-strict` and is
+   * a model's raise under `s3-native`.  No authenticated user -- the
+   * switch off, or a caller with no request -- is the gateway
+   * throughout, raised after a denial as before. */
   nsfs::FSIdentity id;
   if (!is_internal() && !nsfs::owner_empty(authenticated_user)) {
     const int pret = pin_personality_for(dpp, driver, authenticated_user,
@@ -6289,6 +6981,8 @@ int NSFSBucket::remove(const DoutPrefixProvider* dpp,
       return r;
     }
   }
+
+  if (!delete_children) {
     int r = check_empty(dpp, y);
     if (r < 0) {
       return r;
@@ -6301,6 +6995,9 @@ int NSFSBucket::remove(const DoutPrefixProvider* dpp,
     if (r < 0) {
       return r;
     }
+  }
+  if (owns && !delete_children) {
+    int r = 0;
     if (const auto* ps = path_strategy(); ps) {
       const std::string root_folder = ps->folder_object_name();
       auto unlink_root = [&]() -> int {
@@ -6338,11 +7035,21 @@ int NSFSBucket::remove(const DoutPrefixProvider* dpp,
 			      cpp_strerror(-ret));
       }
     }
+    ret = release_nsfs_state(dpp);
+  }
   if (ret < 0) {
     return ret;
   }
 
   driver->get_bucket_cache()->invalidate_bucket(dpp, get_name());
+
+  ret = driver->get_identity_db()->remove_bucket_placement(dpp, get_name(),
+							   get_tenant());
+  if (ret < 0) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: bucket {} was deleted, but its placement "
+			  "row was not:  {}", get_name(), cpp_strerror(-ret));
+    return ret;
+  }
 
   return ret;
 }
@@ -6367,6 +7074,36 @@ bool NSFSBucket::owns_storage(const DoutPrefixProvider* dpp)
   return std::string_view(buf, len) != "0";
 }
 
+int NSFSBucket::set_owns_storage(const DoutPrefixProvider* dpp, bool owns)
+{
+  int ret = dir->open(dpp);
+  if (ret < 0) {
+    return ret;
+  }
+  });
+  if (ret < 0) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: recording whether bucket {} owns its "
+			  "storage: {}", get_name(), cpp_strerror(-ret));
+  }
+  return ret;
+}
+
+/* Remove the bucket without removing the directory it was made over,
+ * by removing what nsfs wrote to that directory.
+ *
+ * It leaves the directory as it was beforehand:  present, found by the
+ * base path's readdir, and carrying nothing of nsfs's, which is what
+ * carries_nsfs_state() checks.  That is the same state every directory
+ * nsfs has not made a bucket of is in, so this introduces no condition
+ * the driver did not already have to handle.
+ *
+ * Of the attributes, the whole nsfs namespace goes, not a list of
+ * names.  user.nsfs: is exactly what the gateway wrote, so naming the
+ * prefix cannot leave behind an attribute a later version adds;
+ * anything of NooBaa's, or anyone else's, is not the gateway's to
+ * remove. */
+int NSFSBucket::release_nsfs_state(const DoutPrefixProvider* dpp)
+{
   int ret = dir->open(dpp);
   if (ret < 0) {
     return ret;
@@ -6390,6 +7127,19 @@ bool NSFSBucket::owns_storage(const DoutPrefixProvider* dpp)
     }
   }
 
+
+  /* The version lockfile too:  it is the gateway's mutex, which NooBaa
+   * never writes, and no object.  `.versions` stays:  it is NooBaa's
+   * layout as much as ours, so it is not ours alone to remove. */
+  ret = write_bucket_state(dpp, [&]() -> int {
+    return ((::unlinkat(dir->get_fd(), VERSIONS_LOCKFILE.c_str(), 0) < 0) &&
+	    (errno != ENOENT)) ? -errno : 0;
+  });
+  if (ret < 0) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: removing {} from bucket {}: {}",
+			  VERSIONS_LOCKFILE, get_name(), cpp_strerror(-ret));
+    return ret;
+  }
 
   ldpp_dout_fmt(dpp, 1, "nsfs: bucket {} removed;  its directory predates the "
 			"bucket and is left in place with its contents",
@@ -7926,6 +8676,8 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
       nsfs::MPUStrategy::PartRecord rec{};
       file::listing::MultipartPartInfo cached;
       auto* mc = driver->get_multipart_cache();
+      if (mc && mc->peek_part({nsfs::mp_cache_bucket(get_tenant(), get_name()), meta},
+				  *num, cached)) {
 	rec.size = cached.size;
 	/* a part in a file of its own leaves `stored` at 0 in the cache;
 	 * its bytes are then the part's accounted size */
@@ -8120,6 +8872,9 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
      * part was already in its own file (DECISIONS.md 2026-10-13). */
     if (placement_changed) {
       if (auto* mc = driver->get_multipart_cache()) {
+	mc->remove({nsfs::mp_cache_bucket(get_tenant(), get_name()), meta});
+      }
+    }
 
     if (cb) {
       nsfs::ConvertEvent pr = ev;
@@ -8432,6 +9187,14 @@ int NSFSBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
   info.creation_time = ceph::real_clock::from_time_t(dir->get_stx().stx_btime.tv_sec);
 
   ret = dir->open(dpp);
+  if (ret < 0) {
+    return ret;
+  }
+  /* a write reaches a bucket only after it is loaded, so its filesystem
+   * is in the relaxed policy's set before the write is */
+  if (!is_internal()) {
+    driver->note_bucket_filesystem(dpp, dir->get_stx(), dir->get_fd());
+  }
 
   /* before the attributes, because which names are nsfs's to read is
    * decided by the profile */
@@ -8497,9 +9260,15 @@ int NSFSBucket::set_acl(const DoutPrefixProvider* dpp,
   acl.encode(aclbl);
 
   attrs[RGW_ATTR_ACL] = aclbl;
+  const bool owner_changed = (info.owner != acl.get_owner().id);
   info.owner = acl.get_owner().id;
 
-  return write_attrs(dpp, y);
+  int ret = write_attrs(dpp, y);
+  if ((ret == 0) && owner_changed && !is_internal()) {
+    ret = driver->get_identity_db()->set_bucket_placement_owner(
+      dpp, get_name(), get_tenant(), to_string(info.owner));
+  }
+  return ret;
 }
 
 int NSFSBucket::read_stats(const DoutPrefixProvider *dpp, optional_yield y,
@@ -8575,6 +9344,13 @@ int NSFSBucket::chown(const DoutPrefixProvider* dpp,
   return 0;
       ret = nsfs::resolve_credentials(dpp, *db, new_owner, cred, y);
     }
+  }
+  ret = driver->get_identity_db()->set_bucket_placement_owner(
+    dpp, get_name(), get_tenant(), to_string(new_owner));
+  if (ret < 0) {
+    return ret;
+  }
+
 }
 
 int NSFSBucket::put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time _mtime, optional_yield y)
@@ -8585,6 +9361,10 @@ int NSFSBucket::put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::re
   ts[0].tv_nsec = UTIME_OMIT;
   ts[1] = ceph::real_clock::to_timespec(mtime);
   int ret = utimensat(dir->get_parent()->get_fd(), get_fname().c_str(), ts, AT_SYMLINK_NOFOLLOW);
+  /* A bucket served from a stored path has no parent Directory and its
+   * own name is the absolute path, so resolve it from the cwd -- the
+   * same way `Directory::open()` does (P2). */
+  const bool placed = (dir->get_parent() == nullptr);
   if (ret < 0) {
     ret = errno;
     ldpp_dout(dpp, 0) << "ERROR: could not set mtime on bucket " << get_name() << ": "
@@ -8898,11 +9678,19 @@ int NSFSBucket::abort_multiparts_as(const DoutPrefixProvider* dpp,
 int NSFSBucket::make_dir(const DoutPrefixProvider* dpp, optional_yield y,
 			 bool* existed, const rgw_owner& creator)
 {
+  if (is_internal() || nsfs::owner_empty(creator) ||
+      made_in_default_location(dpp)) {
     return dir->create(dpp, y, existed);
   }
   nsfs::FSIdentity id;
   const int pret = pin_personality_for(dpp, driver, creator, &id, y);
+  if ((pret < 0) && (pret != -ENODATA) &&
+      !((pret == -EACCES) && driver->unresolved_as_gateway_injected(creator))) {
     return pret;
+  }
+  /* inactive where impersonation is off, or under
+   * inject-unresolved-as-gateway, which makes it as the gateway as the
+   * defect did */
   if (!id.active()) {
     return dir->create(dpp, y, existed);
   }
@@ -8956,12 +9744,28 @@ int NSFSBucket::create(const DoutPrefixProvider* dpp, optional_yield y, bool* ex
     return ret;
   }
 
-  return write_attrs(dpp, y);
+  /* A client's bucket is never created over a directory that is already
+   * there:  NooBaa's mkdir fails and the bucket with it, and a directory
+   * nobody recorded is not ours to take.  Rejected before anything is
+   * written to it. */
+  if (!is_internal() && existed && *existed) {
+    ldpp_dout_fmt(dpp, 1, "nsfs: not creating bucket {}:  its directory {} "
+			  "already exists", get_name(), dir->get_name());
+    return -EEXIST;
+  }
 
+  const bool made = !existed || !*existed;
+
+  if (!is_internal() && driver->create_failure_injected()) {
+    ret = -EIO;
     ret = mark_extensions(dpp, driver->new_bucket_extensions());
   } else if (!profile) {
     profile = driver->get_base_profile();
   }
+  if (ret == 0) {
+    ret = write_attrs(dpp, y);
+  }
+
   /* Raise site 4:  a client's bucket directory is its creator's, as NooBaa's
    * mkdir as the performing account makes it (bucketspace_fs.js:1055-1062,
    * DECISIONS.md 2026-10-23);  the owner's where no request made it.  Given
@@ -8990,14 +9794,28 @@ int NSFSBucket::create(const DoutPrefixProvider* dpp, optional_yield y, bool* ex
       ret = -EACCES;
     }
   }
+
+  /* A client's bucket that failed here is taken back whole:  the
+   * directory this call made goes, and the caller then removes the row.
+   * Left in place it would hold the name, since creation rejects a
+   * directory that already exists. */
+  if ((ret < 0) && made && !is_internal()) {
     /* by whoever made it:  under a location the account owns the
      * gateway cannot remove its entry (make_dir()) */
     nsfs::FSIdentity id;
+    if (!nsfs::owner_empty(creator) && !made_in_default_location(dpp)) {
       (void) pin_personality_for(dpp, driver, creator, &id, y);
     }
     const int r = id.active()
       ? remove_dir_as(dpp, y, id, driver->get_access_strategy(), true)
       : dir->remove(dpp, y, true);
+    if (r < 0) {
+      ldpp_dout_fmt(dpp, 0, "ERROR: bucket {} failed, and the directory it "
+			    "made, {}, could not be removed: {}", get_name(),
+			    dir->get_name(), cpp_strerror(-r));
+    }
+  }
+  return ret;
 }
 
 std::string NSFSBucket::get_fname()
@@ -14973,9 +15791,11 @@ int NSFSDriver::set_bucket_profile(const DoutPrefixProvider* dpp,
 				   uint32_t* had, std::string* had_profile,
 				   nsfs::ConvertProgress* progress)
 {
+  std::unique_ptr<rgw::sal::Bucket> loaded;
   if (ret < 0) {
     return ret;
   }
+  auto& bucket = *static_cast<NSFSBucket*>(loaded.get());
 
   const nsfs::BucketProfile* was = bucket.get_profile();
   if (had) {
@@ -14996,9 +15816,17 @@ int NSFSDriver::get_bucket_profile(const DoutPrefixProvider* dpp,
 				   uint32_t* extensions, std::string* pname,
 				   bool* converting)
 {
+  /* -EBADMSG is unreadable bucket state, and a profile does not come
+   * from bucket state -- resolve_profile() has already read the marker
+   * by the time the state is loaded.  An operator diagnosing a bucket
+   * that fails closed needs this endpoint precisely then, so it is the
+   * one caller that does not treat unreadable state as fatal.
+   * load_bucket() hands back the bucket whatever it returns. */
+  std::unique_ptr<rgw::sal::Bucket> loaded;
   if ((ret < 0) && (ret != -EBADMSG)) {
     return ret;
   }
+  auto& bucket = *static_cast<NSFSBucket*>(loaded.get());
 
   const nsfs::BucketProfile* p = bucket.get_profile();
   if (extensions) {
@@ -15025,6 +15853,7 @@ void NSFSDriver::register_admin_apis(RGWRESTMgr* mgr)
   nsfs_mgr->register_resource("identity", new RGWRESTMgr_NSFS_Identity);
   nsfs_mgr->register_resource("credentials",
 			      new RGWRESTMgr_NSFS_Credentials);
+  nsfs_mgr->register_resource("bucket", new RGWRESTMgr_NSFS_Bucket);
   mgr->register_resource("nsfs", nsfs_mgr);
 }
 
@@ -15089,6 +15918,7 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
     inject_fork_race = (it->second == "true");
     if (out) {
       (*out)["enabled"] = inject_fork_race ? "true" : "false";
+      (*out)["base_path"] = default_bucket_location();
 
   if (hint == "mpu-state") {
     /* Read-back, the half that lets a test check a result.
@@ -15271,7 +16101,6 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
     if (out) {
       (*out)["enabled"] = on ? "true" : "false";
       /* bytes the fallback has copied since this hint was last called,
-       * so a test can prove which path ran rather than assume it */
       (*out)["buffered_bytes"] =
 	std::to_string(fs_strategy->take_buffered_bytes());
       (*out)["link"] = std::to_string(hops[size_t(nsfs::HopKind::link)]);
@@ -15319,6 +16148,51 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
     return 0;
   }
 
+  if (hint == "inject-create-failure") {
+    /* fail a client's bucket creation after its directory is made, or a
+     * placement after its directory is marked, so the rollback is
+     * reachable from a test */
+    auto it = params.find("enable");
+    if (it == params.end()) {
+      return -EINVAL;
+    }
+    inject_create_failure = (it->second == "true");
+    if (out) {
+      (*out)["enabled"] = inject_create_failure ? "true" : "false";
+    }
+    return 0;
+  }
+
+
+  if (hint == "unplaced-directory") {
+    /* A directory under the base path that nothing has placed, for the
+     * placement endpoint's tests:  the gateway makes it, so a test needs
+     * no access to the gateway's filesystem, and the gateway owns it, as
+     * it owns the base path.
+     *
+     *   op=create name= [mode=] [file= content=]   rejected if it exists
+     *   op=mode name= mode=
+     *   op=remove name=   its regular files and empty directories, then it
+     *
+     * `mode` and `remove` reject a directory carrying nsfs state, so
+     * neither touches a bucket's.
+     *
+     * as=<user>:  the directory is that user's, as a NooBaa bucket's is
+     * its account's, changed and emptied as the user on the helper
+     * pool.  The base path is the gateway's, where no identity may
+     * create, so the gateway makes `<name>` at 0711 and `<name>/d` in
+     * it, and gives `d` to the user as it gives a bucket directory to
+     * its owner;  that is the path reported, and remove takes both. */
+    auto op = params.find("op");
+    auto nm = params.find("name");
+    if ((op == params.end()) || (nm == params.end())) {
+      return -EINVAL;
+    }
+    const std::string& name = nm->second;
+    if (name.empty() || (name == ".") || (name == "..") ||
+	(name.find('/') != std::string::npos)) {
+      return -EINVAL;
+    }
     std::optional<nsfs::Credentials> as;
     if (auto a = params.find("as"); a != params.end()) {
       nsfs::Credentials cred;
@@ -15330,10 +16204,29 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
     }
     const std::string parent = fmt::format("{}/{}", default_bucket_location(), name);
     const std::string path = as ? fmt::format("{}/d", parent) : parent;
+    auto mode_of = [&params](mode_t& m) -> int {
+      auto it = params.find("mode");
+      if (it == params.end()) {
+	return -ENOENT;
+      }
+      try {
+	m = static_cast<mode_t>(std::stoul(it->second, nullptr, 8)) & 07777;
+      } catch (const std::exception&) {
+	return -EINVAL;
+      }
+      return 0;
+    };
     /* `fn` as the `as` user, or as the gateway */
     auto acting = [&](const nsfs::ImpersonatedFn& fn) -> int {
       return as ? nsfs::run_as(dpp, *as, fn, null_yield) : fn();
     };
+
+    if (op->second == "create") {
+      mode_t m = 0755;
+      int r = mode_of(m);
+      if ((r < 0) && (r != -ENOENT)) {
+	return r;
+      }
       if (as) {
 	if (::mkdir(parent.c_str(), 0711) < 0) {
 	  return -errno;
@@ -15363,6 +16256,7 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
     if (op->second == "create") {
       mode_t m = 0755;
       (void) mode_of(m);
+      auto f = params.find("file");
       auto c = params.find("content");
       if (as) {
 	if (::mkdirat(pfd, leaf, m) < 0) {
@@ -15383,18 +16277,46 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
 	}
 	if (f == params.end()) {
 	  return 0;
+	}
+	const std::string content = (c == params.end()) ? "" : c->second;
 	const std::string fname = fmt::format("{}/{}", leaf, f->second);
 	int fd = ::openat(pfd, fname.c_str(),
 			  O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0644);
+	if (fd < 0) {
+	  return -errno;
+	}
+	const ssize_t n = ::write(fd, content.data(), content.size());
+	const int werr = (n < 0) ? errno : 0;
+	::close(fd);
+	if (werr || (static_cast<size_t>(n) != content.size())) {
+	  return werr ? -werr : -EIO;
+	}
 	return 0;
       });
       if (r < 0) {
 	return r;
+      }
+    } else if (op->second == "mode") {
+      mode_t m = 0;
+      int r = mode_of(m);
+      if (r < 0) {
+	return (r == -ENOENT) ? -EINVAL : r;
+      }
+      r = carries_nsfs_state(path);
+      if (r != 0) {
+	return (r > 0) ? -EEXIST : r;
+      }
       r = acting([&]() -> int {
 	return (::fchmodat(pfd, leaf, m, 0) < 0) ? -errno : 0;
       });
       if (r < 0) {
 	return r;
+      }
+    } else if (op->second == "remove") {
+      int r = carries_nsfs_state(path);
+      if (r != 0) {
+	return (r > 0) ? -EEXIST : r;
+      }
       r = acting([&]() -> int {
 	if (fd < 0) {
 	  return -errno;
@@ -15422,6 +16344,13 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
       }
       if (as && ((::unlinkat(pfd, leaf, AT_REMOVEDIR) < 0) ||
 		 (::rmdir(parent.c_str()) < 0))) {
+	return -errno;
+      }
+    } else {
+      return -EINVAL;
+    }
+    if (out) {
+      (*out)["path"] = path;
     }
     return 0;
   }
@@ -15499,9 +16428,11 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
       return -EINVAL;
     }
 
+    std::unique_ptr<rgw::sal::Bucket> loaded;
     if (ret < 0) {
       return ret;
     }
+    auto& bucket = *static_cast<NSFSBucket*>(loaded.get());
     if (out) {
       (*out)["had_profile"] = bucket.profile_name();
     }

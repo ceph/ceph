@@ -13,6 +13,8 @@
  *
  */
 
+#include <algorithm>
+#include <dirent.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <fmt/format.h>
@@ -777,6 +779,77 @@ int from_noobaa_cors(const DoutPrefixProvider* dpp, CephContext* cct,
 
 } // namespace
 
+int NooBaaBucketStateStrategy::list_records(const DoutPrefixProvider* dpp,
+					    std::vector<std::string>& names) const
+{
+  names.clear();
+  if (config_root.empty()) {
+    return 0;
+  }
+  const std::string dir = fmt::format("{}/buckets", config_root);
+  DIR* d = ::opendir(dir.c_str());
+  if (!d) {
+    if (errno == ENOENT) {
+      return 0;
+    }
+    const int ret = -errno;
+    ldpp_dout_fmt(dpp, 0, "ERROR: listing {}: {}", dir, cpp_strerror(-ret));
+    return ret;
+  }
+  auto close_dir = make_scope_guard([d] { ::closedir(d); });
+
+  static const std::string suffix = ".json";
+  for (;;) {
+    errno = 0;
+    struct dirent* e = ::readdir(d);
+    if (!e) {
+      if (errno != 0) {
+	return -errno;
+      }
+      break;
+    }
+    const std::string_view n(e->d_name);
+    /* `<name>.json.lock` sits beside each record, and is NooBaa's write
+     * path's, not a record */
+    if ((n.size() > suffix.size()) && n.ends_with(suffix)) {
+      names.emplace_back(n.substr(0, n.size() - suffix.size()));
+    }
+  }
+  std::sort(names.begin(), names.end());
+  return 0;
+}
+
+
+int NooBaaBucketStateStrategy::recorded_path(const DoutPrefixProvider* dpp,
+					     const std::string& bucket_name,
+					     std::string& out) const
+{
+  out.clear();
+  if (config_root.empty()) {
+    return -ENOENT;
+  }
+  const std::string path =
+    fmt::format("{}/buckets/{}.json", config_root, bucket_name);
+
+  std::string doc;
+  int ret = read_record_file(dpp, path, doc);
+  if (ret < 0) {
+    return ret;
+  }
+  JSONParser p;
+  if (!p.parse(doc.data(), doc.size())) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: {} is not JSON", path);
+    return -EBADMSG;
+  }
+  try {
+    JSONDecoder::decode_json("path", out, &p);
+  } catch (const JSONDecoder::err& e) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: {} has a path this gateway cannot read: {}",
+			  path, e.what());
+    return -EBADMSG;
+  }
+  return 0;
+}
 
 int NooBaaBucketStateStrategy::load(const DoutPrefixProvider* dpp, int dir_fd,
 				    const std::string& bucket_name,

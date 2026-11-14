@@ -82,6 +82,78 @@ struct Identity {
   bool directory_backed() const { return !distinguished_name.empty(); }
   bool local() const { return uid.has_value(); }
 };
+
+/* Where a bucket's storage is.
+ *
+ * Every bucket nsfs creates has one, carrying its path, as every NooBaa
+ * bucket record carries `path` (DECISIONS.md 2026-10-13:  nsfs enacts
+ * NooBaa's placement model).  A bucket at the base path has a row naming
+ * `<base path>/<bucket>` like any other;  there is no empty path meaning
+ * "the default".
+ *
+ * Whether the bucket owns its directory is not here:  it is kept on the
+ * directory itself, as user.nsfs:marker.owns_storage, and nowhere else
+ * (DECISIONS.md 2026-10-13). */
+struct BucketPlacement {
+  std::string bucket_name;
+  /* Part of the key from the start.  dbstore's own bucket table has
+   * `BucketName NOT NULL UNIQUE` with the tenant outside the key, and
+   * its comment has said for years that both should be the key once
+   * one handle holds several tenants;  an nsfs table need not
+   * inherit that. */
+  std::string tenant;
+
+  /* absolute, canonical, no `..`.  Never empty. */
+  std::string path;
+
+  /* to_string(rgw_owner), the key identity rows use.  An index of the
+   * owner bucket_info records on the directory, so that ListBuckets
+   * opens only the caller's buckets:  written where the owner is set
+   * (creation, the import, chown, set_acl) and nowhere else. */
+  std::string owner;
+
+  /* Whether the directory was made in the default location -- the base
+   * path, for an owner with no new_buckets_path -- and so by the
+   * gateway, which removes its entry too.  Written at creation;  false
+   * for a path the owner, the operator or NooBaa chose.  Where the
+   * directory sits relative to the base path says nothing, since the
+   * base path may have moved since. */
+  bool default_location{false};
+};
+
+
+/* Whether a path may be stored.
+ *
+ * A stored path is input:  it arrives over Admin Ops or is translated
+ * out of a NooBaa bucket record at adopt time -- operator-initiated,
+ * so semi-trusted, but adopt reads a store this driver does not own
+ * and did not write.
+ *
+ * **Checked where it is stored, never on the request path.**  By then
+ * it is a row we wrote, and re-checking each time would put a policy
+ * decision on the hot path (`archive/NSFS_BUCKET_PLACEMENT_PLAN.md` §9).
+ *
+ * This is the lexical half:  absolute, no `..`, no empty component,
+ * no trailing slash.  Opening it safely is a different question and a
+ * later stage -- `openat2` with `RESOLVE_NO_SYMLINKS` -- and so is the
+ * per-account allowlist NooBaa's `custom_bucket_path_allowed_list`
+ * already expresses.  Neither is attempted here, and a lexically
+ * clean path is not an authorized one. */
+bool placement_path_is_acceptable(std::string_view path);
+
+/* A custom-bucket-path allowlist, NooBaa's colon-separated string of path
+ * prefixes, checked and normalised where it is stored (DECISIONS.md
+ * 2026-10-14).  Entries are trimmed of blanks and empty ones dropped, as
+ * NooBaa's parse does;  each that remains must be a path
+ * placement_path_is_acceptable() accepts.  `out` is the entries joined
+ * by ':' again.  -EINVAL names the first bad entry in `bad`. */
+int normalize_allowed_list(std::string_view in, std::string& out,
+			   std::string& bad);
+
+/* Whether `path` starts with an entry of a normalised allowlist:  a
+ * string prefix, as NooBaa matches (DECISIONS.md 2026-10-14). */
+bool allowed_list_admits(std::string_view list, std::string_view path);
+
 /* The driver's database, plus the identity table.
  *
  * A subclass rather than a second database:  one file, one
@@ -104,6 +176,13 @@ class IdentityDB : public rgw::store::POSIXUserDB {
    * NooBaa's name is not stable across a rename (ACCOUNT_IMPORT.md
    * §3.4). */
   const std::string noobaa_id_table;
+  /* The driver's second owned table.  Placement is bucket metadata
+   * unique to this backend, so it lives in schema this backend owns
+   * rather than changing dbstore's shared bucket table -- which nsfs
+   * does not use at all.  Decided 2026-10-08.
+   *
+   * The class name is narrower than what it now holds. */
+  const std::string placement_table;
   /* what each row's `distinguished_name` resolved to (I7) */
   mutable NsswitchCache names;
 
@@ -121,6 +200,9 @@ class IdentityDB : public rgw::store::POSIXUserDB {
    * but the base one is what SQLiteDB itself opens and closes, so
    * that is the one to use. */
   sqlite3* handle() const { return reinterpret_cast<sqlite3*>(DB::db); }
+
+  int write_bucket_placement(const DoutPrefixProvider* dpp,
+			     const BucketPlacement& bp, bool repoint);
 public:
   IdentityDB(std::string db_name, CephContext* cct)
     : POSIXUserDB(db_name, cct),
@@ -129,6 +211,49 @@ public:
        * path is orphaned the moment the directory moves. */
 
   int Initialize(std::string logfile, int loglevel);
+
+  /* Bucket placement.  Write, read, and remove;  enumeration is P3's.
+   *
+   * Both writers reject a path `placement_path_is_acceptable()` does
+   * not accept, with -EINVAL.  `insert` is creation's:  -EEXIST when the name is
+   * taken, so of two creations of one name exactly one succeeds.  `put`
+   * repoints an existing row instead.  Both return -EADDRINUSE when
+   * another bucket's directory is this path, contains it, or lies inside
+   * it.  `get` returns -ENOENT when a bucket has no row. */
+  int insert_bucket_placement(const DoutPrefixProvider* dpp,
+			      const BucketPlacement& bp);
+  int put_bucket_placement(const DoutPrefixProvider* dpp,
+			   const BucketPlacement& bp);
+  int get_bucket_placement(const DoutPrefixProvider* dpp,
+			   const std::string& bucket_name,
+			   const std::string& tenant,
+			   BucketPlacement& out) const;
+  int remove_bucket_placement(const DoutPrefixProvider* dpp,
+			      const std::string& bucket_name,
+			      const std::string& tenant);
+
+  /* The owner changed.  A bucket with no row -- one NooBaa's record
+   * still places -- has nothing to update, which is not an error. */
+  int set_bucket_placement_owner(const DoutPrefixProvider* dpp,
+				 const std::string& bucket_name,
+				 const std::string& tenant,
+				 const std::string& owner);
+
+  /* Rows in name order, after `marker` and up to `end_marker` when it
+   * is not empty, at most `max`.  The first is one owner's in one
+   * tenant, which is ListBuckets;  the second is every row, which is
+   * the metadata listing. */
+  int list_bucket_placements_by_owner(const DoutPrefixProvider* dpp,
+				      const std::string& owner,
+				      const std::string& tenant,
+				      const std::string& marker,
+				      const std::string& end_marker,
+				      uint64_t max,
+				      std::vector<BucketPlacement>& out) const;
+  int list_bucket_placements(const DoutPrefixProvider* dpp,
+			     const std::string& marker, uint64_t max,
+			     std::vector<BucketPlacement>& out) const;
+
   /* Insert or replace.  `id.key` must be set;  everything else is
    * optional subject to the exclusivity rule. */
   int put_identity(const DoutPrefixProvider* dpp, const Identity& id);
@@ -149,6 +274,11 @@ public:
   int put_noobaa_id(const DoutPrefixProvider* dpp,
 		    const std::string& noobaa_id,
 		    const std::string& owner_key);
+
+  /* Whether `owner_key` was imported from NooBaa. */
+  int owner_was_imported(const DoutPrefixProvider* dpp,
+			 const std::string& owner_key, bool& imported) const;
+
   /* The re-import lookup.  -ENOENT when the id was never imported. */
   int get_owner_by_noobaa_id(const DoutPrefixProvider* dpp,
 			     const std::string& noobaa_id,

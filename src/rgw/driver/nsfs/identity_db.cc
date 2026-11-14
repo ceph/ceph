@@ -12,10 +12,16 @@
  * Foundation. See file COPYING.
  *
  */
+
+#include <algorithm>
 #include <charconv>
+#include <climits>
 #include <mutex>
 #include <sqlite3.h>
+
+#include "common/dout_fmt.h"
 #include "common/errno.h"
+#include "common/split.h"
 #include "include/scope_guard.h"
 
 #include "rgw_common.h"
@@ -141,6 +147,85 @@ int row_to_identity(const DoutPrefixProvider* dpp, sqlite3_stmt* st,
 }
 
 } // namespace
+
+int normalize_allowed_list(std::string_view in, std::string& out,
+			   std::string& bad)
+{
+  out.clear();
+  for (std::string_view entry : ceph::split(in, ":")) {
+    while (!entry.empty() && ((entry.front() == ' ') || (entry.front() == '\t'))) {
+      entry.remove_prefix(1);
+    }
+    while (!entry.empty() && ((entry.back() == ' ') || (entry.back() == '\t'))) {
+      entry.remove_suffix(1);
+    }
+    if (entry.empty()) {
+      continue;
+    }
+    if (!placement_path_is_acceptable(entry)) {
+      bad = std::string(entry);
+      return -EINVAL;
+    }
+    if (!out.empty()) {
+      out += ':';
+    }
+    out += entry;
+  }
+  return 0;
+}
+
+bool allowed_list_admits(std::string_view list, std::string_view path)
+{
+  for (std::string_view prefix : ceph::split(list, ":")) {
+    if (path.starts_with(prefix)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool placement_path_is_acceptable(std::string_view path)
+{
+  /* Empty is the default location, and saying so is not a path. */
+  if (path.empty()) {
+    return false;
+  }
+  if (path.front() != '/') {
+    return false;
+  }
+  /* `/` itself is absolute and is not a place to put a bucket. */
+  if (path.size() == 1) {
+    return false;
+  }
+  if (path.back() == '/') {
+    return false;
+  }
+  if (path.size() > PATH_MAX) {
+    return false;
+  }
+
+  /* Canonical:  every component non-empty, and none of them `.` or
+   * `..`.  Checked lexically rather than by resolving, because
+   * resolving establishes something different -- what the path points
+   * at now -- and that changes under us.  What this rules out is a
+   * stored path that *means* something other than it reads. */
+  size_t i = 1;
+  while (i <= path.size()) {
+    const size_t end = std::min(path.find('/', i), path.size());
+    const std::string_view part = path.substr(i, end - i);
+    if (part.empty() || (part == ".") || (part == "..")) {
+      return false;
+    }
+    /* A newline in a path would be legal on the filesystem and would
+     * make every log line that quotes it ambiguous. */
+    if (part.find_first_of("\n\r") != std::string_view::npos) {
+      return false;
+    }
+    i = end + 1;
+  }
+  return true;
+}
+
 int IdentityDB::Initialize(std::string logfile, int loglevel)
 {
   int ret = POSIXUserDB::Initialize(logfile, loglevel);
@@ -176,6 +261,43 @@ int IdentityDB::Initialize(std::string logfile, int loglevel)
     "CREATE INDEX IF NOT EXISTS '" + identity_table + "_uid' ON '"
     + identity_table + "' (Uid);"
 
+
+    /* P1.  Bucket placement, in a table this backend owns.
+     *
+     * `(BucketName, Tenant)` is the key from the start.  dbstore's
+     * own bucket table makes BucketName unique and leaves the tenant
+     * out, and its comment has said for years that both should be the
+     * key;  an nsfs table need not inherit that.
+     *
+     * The path guard is a CHECK as well as a C++ check, for the
+     * reason the group list's GLOB is one:  the schema is the only
+     * place a guard survives a caller written later.  It cannot
+     * express the whole rule -- stock SQLite has no regex -- so it
+     * rejects what matters most:  a relative path, and `..` in any
+     * position.
+     *
+     * Every row carries a path, and no two rows share one:  two
+     * buckets in one directory would be one tree served twice.  That a
+     * path lies inside another row's is rejected by the writers, since
+     * a CHECK cannot see other rows. */
+    "CREATE TABLE IF NOT EXISTS '" + placement_table + "' ("
+    "  BucketName TEXT NOT NULL,"
+    "  Tenant TEXT NOT NULL DEFAULT '',"
+    "  Path TEXT NOT NULL,"
+    "  Owner TEXT NOT NULL,"
+    /* under X1's rule:  added 2026-11-12, and not migrated */
+    "  DefaultLocation INTEGER NOT NULL DEFAULT 0,"
+    "  PRIMARY KEY (BucketName, Tenant),"
+    "  UNIQUE (Path),"
+    "  CHECK (Owner != ''),"
+    "  CHECK (DefaultLocation IN (0, 1)),"
+    "  CHECK (Path GLOB '/*'"
+    "         AND Path NOT GLOB '*/../*'"
+    "         AND Path NOT GLOB '*/..'"
+    "         AND Path NOT GLOB '*//*')"
+    ");"
+
+    /* ListBuckets is one owner's rows in one tenant, in name order. */
   ret = exec(&dp, schema.c_str(), nullptr);
   if (ret < 0) {
     ldpp_dout_fmt(&dp, 0, "ERROR: could not create {}", identity_table);
@@ -189,6 +311,38 @@ int IdentityDB::put_identity(const DoutPrefixProvider* dpp, const Identity& id)
 {
   if (id.key.empty()) {
     return -EINVAL;
+  }
+  /* The custom-bucket-path allowlist is checked here, where it is stored,
+   * so a bad entry is rejected with a message rather than found by a
+   * CreateBucket later.  Both writers come through here:  the import and
+   * the identity Admin Ops. */
+  /* new_buckets_path, the same way:  its form is checked here, where it
+   * is stored (DECISIONS.md 2026-10-14).  A trailing slash, which an
+   * operator may well write, is dropped rather than rejected.  Whether the
+   * directory exists is not asked:  storage on Scale is attachable later,
+   * and a missing parent fails CreateBucket plainly. */
+  std::string nbp = id.new_buckets_path;
+  while ((nbp.size() > 1) && (nbp.back() == '/')) {
+    nbp.pop_back();
+  }
+  if (!nbp.empty() && !placement_path_is_acceptable(nbp)) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: identity {} rejected:  its new_buckets_path "
+			  "\"{}\" is not an absolute canonical path", id.key,
+			  id.new_buckets_path);
+    return -EINVAL;
+  }
+  std::string allowed;
+  if (!id.custom_bucket_path_allowed_list.empty()) {
+    std::string bad;
+    if (normalize_allowed_list(id.custom_bucket_path_allowed_list, allowed,
+			       bad) < 0) {
+      ldpp_dout_fmt(dpp, 0, "ERROR: identity {} rejected:  its "
+			    "custom_bucket_path_allowed_list entry \"{}\" is "
+			    "not an absolute canonical path", id.key, bad);
+      return -EINVAL;
+    }
+  }
+
   Identity old;
   const bool had = (get_identity(dpp, id.key, old) == 0);
 
@@ -217,6 +371,8 @@ int IdentityDB::put_identity(const DoutPrefixProvider* dpp, const Identity& id)
     sqlite3_bind_null(st, 4);
   }
   bind_text_or_null(st, 5, id.distinguished_name);
+  bind_text_or_null(st, 6, nbp);
+  bind_text_or_null(st, 7, allowed);
   bind_text_or_null(st, 8, id.fs_backend);
   id.force_md5_etag ? sqlite3_bind_int64(st, 9, *id.force_md5_etag ? 1 : 0)
 		    : sqlite3_bind_null(st, 9);
@@ -332,6 +488,30 @@ int IdentityDB::get_owner_by_noobaa_id(const DoutPrefixProvider* dpp,
   std::lock_guard held{conn};
   ConnectionMutex conn{sqlite3_db_mutex(handle())};
   std::lock_guard held{conn};
+
+int IdentityDB::owner_was_imported(const DoutPrefixProvider* dpp,
+				   const std::string& owner_key,
+				   bool& imported) const
+{
+
+  sqlite3_stmt* st = nullptr;
+  if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
+      != SQLITE_OK) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: {}", sqlite3_errmsg(handle()));
+    return -EIO;
+  }
+  auto finalize = make_scope_guard([st] { sqlite3_finalize(st); });
+  sqlite3_bind_text(st, 1, owner_key.c_str(), -1, SQLITE_TRANSIENT);
+
+  const int step = sqlite3_step(st);
+  if ((step != SQLITE_ROW) && (step != SQLITE_DONE)) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: {}", sqlite3_errmsg(handle()));
+    return -EIO;
+  }
+  imported = (step == SQLITE_ROW);
+  return 0;
+}
+
 int IdentityDB::remove_identity(const DoutPrefixProvider* dpp,
 				const std::string& key)
 {
@@ -733,6 +913,279 @@ int resolve_credentials(const DoutPrefixProvider* dpp, const IdentityDB& db,
   }
   return ret;
 }
+
+/* ---------------------------------------------------------------- *
+ * Bucket placement.  P1:  the column and the accessor.
+ * ---------------------------------------------------------------- */
+
+namespace {
+
+constexpr const char* PLACEMENT_COLUMNS =
+  "BucketName, Tenant, Path, Owner, DefaultLocation";
+
+BucketPlacement row_to_placement(sqlite3_stmt* st)
+{
+  BucketPlacement bp;
+  bp.bucket_name = column_text(st, 0);
+  bp.tenant = column_text(st, 1);
+  bp.path = column_text(st, 2);
+  bp.owner = column_text(st, 3);
+  bp.default_location = (sqlite3_column_int(st, 4) != 0);
+  return bp;
+}
+
+} // namespace
+
+/* Both writers.  `repoint` is put's:  an existing row for the key
+ * takes the new path.  Without it a second row for the key is rejected,
+ * which is what makes creation exclusive.
+ *
+ * Neither uses OR REPLACE.  With UNIQUE (Path) it would delete
+ * whichever other bucket's row held the path, silently. */
+int IdentityDB::write_bucket_placement(const DoutPrefixProvider* dpp,
+				       const BucketPlacement& bp,
+				       bool repoint)
+{
+  if (bp.bucket_name.empty() || bp.owner.empty()) {
+    return -EINVAL;
+  }
+  /* Rejected here with a message rather than left to the CHECK, so an
+   * operator learns what was wrong with it
+   * (`archive/NSFS_BUCKET_PLACEMENT_PLAN.md` §9). */
+  if (!placement_path_is_acceptable(bp.path)) {
+    ldpp_dout_fmt(dpp, 4, "bucket placement {} rejected: \"{}\" is not an "
+			  "absolute canonical path", bp.bucket_name, bp.path);
+    return -EINVAL;
+  }
+
+  /* One statement, so that the containment test and the write cannot
+   * be separated by another writer:  the row goes in only if no other
+   * bucket's path contains this one or lies inside it.  Equality is
+   * UNIQUE (Path)'s. */
+  std::string sql =
+    "INSERT INTO '" + placement_table + "' (" + PLACEMENT_COLUMNS + ") "
+    "SELECT ?1, ?2, ?3, ?4, ?5 WHERE NOT EXISTS ("
+    "  SELECT 1 FROM '" + placement_table + "'"
+    "  WHERE NOT (BucketName = ?1 AND Tenant = ?2)"
+    "  AND (substr(?3, 1, length(Path) + 1) = Path || '/'"
+    "       OR substr(Path, 1, length(?3) + 1) = ?3 || '/'))";
+  if (repoint) {
+    sql += " ON CONFLICT (BucketName, Tenant) DO UPDATE SET Path = excluded.Path,"
+	   " Owner = excluded.Owner, DefaultLocation = excluded.DefaultLocation";
+  }
+  sql += ";";
+
+  sqlite3_stmt* st = nullptr;
+  if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
+      != SQLITE_OK) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: {}", sqlite3_errmsg(handle()));
+    return -EIO;
+  }
+  auto finalize = make_scope_guard([st] { sqlite3_finalize(st); });
+
+  sqlite3_bind_text(st, 1, bp.bucket_name.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(st, 2, bp.tenant.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(st, 3, bp.path.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(st, 4, bp.owner.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_int(st, 5, bp.default_location ? 1 : 0);
+
   ConnectionMutex conn{sqlite3_db_mutex(handle())};
   std::lock_guard held{conn};
+  if (sqlite3_step(st) != SQLITE_DONE) {
+    const int ext = sqlite3_extended_errcode(handle());
+    ldpp_dout_fmt(dpp, 4, "bucket placement {} at {} failed: {}",
+			  bp.bucket_name, bp.path, sqlite3_errmsg(handle()));
+    if ((ext != SQLITE_CONSTRAINT_PRIMARYKEY) &&
+	(ext != SQLITE_CONSTRAINT_UNIQUE)) {
+      return -EINVAL;
+    }
+    /* A row this name already has is -EEXIST, whichever constraint
+     * SQLite names:  the same name at the same path breaks both the key
+     * and UNIQUE (Path), and it reports the latter. */
+    BucketPlacement held;
+    if (get_bucket_placement(dpp, bp.bucket_name, bp.tenant, held) == 0) {
+      return -EEXIST;
+    }
+    return -EADDRINUSE;
+  }
+  if (sqlite3_changes(handle()) == 0) {
+    ldpp_dout_fmt(dpp, 4, "bucket placement {} at {} rejected: another "
+			  "bucket's directory contains it or lies inside it",
+			  bp.bucket_name, bp.path);
+    return -EADDRINUSE;
+  }
+  return 0;
+}
+
+int IdentityDB::put_bucket_placement(const DoutPrefixProvider* dpp,
+				     const BucketPlacement& bp)
+{
+  return write_bucket_placement(dpp, bp, true);
+}
+
+int IdentityDB::insert_bucket_placement(const DoutPrefixProvider* dpp,
+					const BucketPlacement& bp)
+{
+  return write_bucket_placement(dpp, bp, false);
+}
+
+int IdentityDB::get_bucket_placement(const DoutPrefixProvider* dpp,
+				     const std::string& bucket_name,
+				     const std::string& tenant,
+				     BucketPlacement& out) const
+{
+  const std::string sql =
+    std::string("SELECT ") + PLACEMENT_COLUMNS + " FROM '"
+    + placement_table + "' WHERE BucketName = ? AND Tenant = ?;";
+
+  sqlite3_stmt* st = nullptr;
+  if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
+      != SQLITE_OK) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: {}", sqlite3_errmsg(handle()));
+    return -EIO;
+  }
+  auto finalize = make_scope_guard([st] { sqlite3_finalize(st); });
+
+  sqlite3_bind_text(st, 1, bucket_name.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(st, 2, tenant.c_str(), -1, SQLITE_TRANSIENT);
+
+  const int step = sqlite3_step(st);
+  if (step == SQLITE_DONE) {
+    /* No row, which is what a bucket at the default location looks
+     * like.  The ordinary case, and not an error. */
+    return -ENOENT;
+  }
+  if (step != SQLITE_ROW) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: {}", sqlite3_errmsg(handle()));
+    return -EIO;
+  }
+
+  out = row_to_placement(st);
+  return 0;
+}
+
+int IdentityDB::remove_bucket_placement(const DoutPrefixProvider* dpp,
+					const std::string& bucket_name,
+					const std::string& tenant)
+{
+  const std::string sql =
+    "DELETE FROM '" + placement_table
+    + "' WHERE BucketName = ? AND Tenant = ?;";
+
+  sqlite3_stmt* st = nullptr;
+  if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
+      != SQLITE_OK) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: {}", sqlite3_errmsg(handle()));
+    return -EIO;
+  }
+  auto finalize = make_scope_guard([st] { sqlite3_finalize(st); });
+
+  sqlite3_bind_text(st, 1, bucket_name.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(st, 2, tenant.c_str(), -1, SQLITE_TRANSIENT);
+
+  if (sqlite3_step(st) != SQLITE_DONE) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: {}", sqlite3_errmsg(handle()));
+    return -EIO;
+  }
+  /* Removing a row that is not there is not a failure:  a bucket at
+   * the default location has none. */
+  return 0;
+}
+
+int IdentityDB::set_bucket_placement_owner(const DoutPrefixProvider* dpp,
+					   const std::string& bucket_name,
+					   const std::string& tenant,
+					   const std::string& owner)
+{
+  if (owner.empty()) {
+    return -EINVAL;
+  }
+  const std::string sql =
+    "UPDATE '" + placement_table + "' SET Owner = ? "
+    "WHERE BucketName = ? AND Tenant = ?;";
+
+  sqlite3_stmt* st = nullptr;
+  if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
+      != SQLITE_OK) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: {}", sqlite3_errmsg(handle()));
+    return -EIO;
+  }
+  auto finalize = make_scope_guard([st] { sqlite3_finalize(st); });
+  sqlite3_bind_text(st, 1, owner.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(st, 2, bucket_name.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(st, 3, tenant.c_str(), -1, SQLITE_TRANSIENT);
+
+  if (sqlite3_step(st) != SQLITE_DONE) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: {}", sqlite3_errmsg(handle()));
+    return -EIO;
+  }
+  return 0;
+}
+
+namespace {
+
+/* Run a placement query with its parameters bound, collecting rows. */
+template <typename Bind>
+int collect_placements(const DoutPrefixProvider* dpp, sqlite3* h,
+		       const std::string& sql, Bind&& bind,
+		       std::vector<BucketPlacement>& out)
+{
+  sqlite3_stmt* st = nullptr;
+  if (sqlite3_prepare_v2(h, sql.c_str(), -1, &st, nullptr) != SQLITE_OK) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: {}", sqlite3_errmsg(h));
+    return -EIO;
+  }
+  auto finalize = make_scope_guard([st] { sqlite3_finalize(st); });
+  bind(st);
+
+  int rc;
+  while ((rc = sqlite3_step(st)) == SQLITE_ROW) {
+    out.push_back(row_to_placement(st));
+  }
+  if (rc != SQLITE_DONE) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: {}", sqlite3_errmsg(h));
+    return -EIO;
+  }
+  return 0;
+}
+
+} // namespace
+
+int IdentityDB::list_bucket_placements_by_owner(
+  const DoutPrefixProvider* dpp, const std::string& owner,
+  const std::string& tenant, const std::string& marker,
+  const std::string& end_marker, uint64_t max,
+  std::vector<BucketPlacement>& out) const
+{
+  out.clear();
+  const std::string sql =
+    std::string("SELECT ") + PLACEMENT_COLUMNS + " FROM '"
+    + placement_table + "' WHERE Owner = ?1 AND Tenant = ?2"
+    " AND BucketName > ?3 AND (?4 = '' OR BucketName < ?4)"
+    " ORDER BY BucketName LIMIT ?5;";
+  return collect_placements(dpp, handle(), sql, [&](sqlite3_stmt* st) {
+      sqlite3_bind_text(st, 1, owner.c_str(), -1, SQLITE_TRANSIENT);
+      sqlite3_bind_text(st, 2, tenant.c_str(), -1, SQLITE_TRANSIENT);
+      sqlite3_bind_text(st, 3, marker.c_str(), -1, SQLITE_TRANSIENT);
+      sqlite3_bind_text(st, 4, end_marker.c_str(), -1, SQLITE_TRANSIENT);
+      sqlite3_bind_int64(st, 5, static_cast<sqlite3_int64>(max));
+    }, out);
+}
+
+int IdentityDB::list_bucket_placements(const DoutPrefixProvider* dpp,
+				       const std::string& marker,
+				       uint64_t max,
+				       std::vector<BucketPlacement>& out) const
+{
+  out.clear();
+  const std::string sql =
+    std::string("SELECT ") + PLACEMENT_COLUMNS + " FROM '"
+    + placement_table + "' WHERE BucketName > ?1"
+    " ORDER BY BucketName, Tenant LIMIT ?2;";
+  return collect_placements(dpp, handle(), sql, [&](sqlite3_stmt* st) {
+      sqlite3_bind_text(st, 1, marker.c_str(), -1, SQLITE_TRANSIENT);
+      sqlite3_bind_int64(st, 2, static_cast<sqlite3_int64>(max));
+    }, out);
+}
+
 }}} // namespace rgw::sal::nsfs

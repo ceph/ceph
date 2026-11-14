@@ -113,6 +113,38 @@ public:
 	   const std::string& bucket_name,
 	   Attrs& attrs, RGWBucketInfo& info) const override;
 
+  /* P5.  Where NooBaa's record says the bucket's storage is.
+   *
+   * `path` is required on every NooBaa bucket record, so a real
+   * deployment's buckets are scattered and unreachable without this --
+   * and in `serve` mode nothing is written, so there is no index row
+   * to read instead.  That is what makes serve mode mean anything for
+   * a deployment we have not touched.
+   *
+   * **This is the existing consumer returning one more field, not a
+   * new one.**  `archive/NSFS_BUCKET_PLACEMENT_PLAN.md` §7 withdrew a
+   * resolution branch that would read NooBaa's store on the request path,
+   * because the plan must not add a second consumer of it.  Serve mode
+   * already reads this record on every request for a bucket's
+   * configuration (`NSFS_ADOPTION.md` §7), so taking `path` from the
+   * same place adds no access -- which is why the method lives here
+   * rather than in the resolver.
+   *
+   * **Reading it never adopts.**  Resolution is read-only;  adoption
+   * happens because the mode says so, or by explicit command.
+   *
+   * Returns -ENOENT when there is no record, and 0 with `out` empty
+   * when the record names no path. */
+  int recorded_path(const DoutPrefixProvider* dpp,
+		    const std::string& bucket_name,
+		    std::string& out) const;
+
+
+  /* The names NooBaa's store has a bucket record for, sorted:  every
+   * `buckets/<name>.json`, without reading any of them.  Empty with no
+   * store. */
+  int list_records(const DoutPrefixProvider* dpp,
+		   std::vector<std::string>& names) const;
 
   const char* name() const override { return "noobaa"; }
 };
