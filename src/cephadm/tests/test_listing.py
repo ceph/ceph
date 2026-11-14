@@ -7,7 +7,7 @@ from .fixtures import funkypatch, with_cephadm_ctx, import_cephadm, cephadm_fs
 
 
 
-def test_list_daemons_no_detail_nothing(funkypatch):
+def test_list_daemons_no_detail_nothing(cephadm_fs, funkypatch):
     _cephadm = import_cephadm()
     _call = funkypatch.patch('cephadmlib.call_wrappers.call')
 
