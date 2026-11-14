@@ -1,5 +1,6 @@
 import subprocess
 import os
+import time
 import random
 import string
 import argparse
@@ -45,6 +46,19 @@ def bash(cmd, **kwargs):
     if check_retcode:
         assert(process.returncode == 0)
     return (s, process.returncode)
+
+def wait_for_radosgw(url):
+    """ poll the url until radosgw accepts connections, like
+    qa/tasks/util/rgw.py's wait_for_radosgw() """
+    retcode = 0
+    num_retries = 8
+    for seconds in range(num_retries):
+        _, retcode = bash(['curl', '-s', '-o', '/dev/null', '--max-time', '10', url], check_retcode=False)
+        if retcode == 0:
+            break
+        time.sleep(2**seconds)
+
+    assert retcode == 0
 
 class Cluster(multisite.Cluster):
     """ cluster implementation based on mstart/mrun scripts """
@@ -108,6 +122,8 @@ class Gateway(multisite.Gateway):
         if args:
             cmd += args
         bash(cmd, env=env)
+        # wait until startup completes
+        wait_for_radosgw(self.endpoint())
 
     def stop(self):
         """ stop the gateway """
