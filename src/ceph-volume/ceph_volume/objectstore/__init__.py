@@ -14,6 +14,7 @@ mapping: Dict[str, Any] = {
         ObjectStore.seastore: lvm.Lvm
     },
     'RAW': {
-        ObjectStore.bluestore: raw.Raw
+        ObjectStore.bluestore: raw.Raw,
+        ObjectStore.seastore: raw.RawSeastore,
     }
 }
