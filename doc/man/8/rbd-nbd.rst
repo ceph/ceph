@@ -1,7 +1,7 @@
 :orphan:
 
 =========================================
- rbd-nbd -- map rbd images to nbd device
+ rbd-nbd -- map RBD images to NBD devices
 =========================================
 
 .. program:: rbd-nbd
@@ -18,9 +18,9 @@ Synopsis
 Description
 ===========
 
-**rbd-nbd** is a client for RADOS block device (rbd) images like rbd kernel module.
-It will map a rbd image to a nbd (Network Block Device) device, allowing access it
-as regular local block device.
+**rbd-nbd** is a client for RADOS Block Device (RBD) images, like the rbd kernel module.
+It will map an RBD image to an NBD (Network Block Device) device, allowing access to it
+as a regular local block device.
 
 Options
 =======
@@ -28,7 +28,7 @@ Options
 .. option:: -c ceph.conf
 
    Use *ceph.conf* configuration file instead of the default
-   ``/etc/ceph/ceph.conf`` to determine monitor addresses during startup.
+   ``/etc/ceph/ceph.conf`` to determine Monitor addresses during startup.
 
 .. option:: --read-only
 
@@ -37,7 +37,7 @@ Options
 .. option:: --nbds_max *limit*
 
    Override the parameter nbds_max of NBD kernel module when modprobe, used to
-   limit the count of nbd device.
+   limit the count of NBD devices.
 
 .. option:: --max_part *limit*
 
@@ -67,7 +67,7 @@ Options
 
 .. option:: --reattach-timeout *seconds*
 
-   Specify timeout for the kernel to wait for a new rbd-nbd process is
+   Specify timeout for the kernel to wait for a new rbd-nbd process to be
    attached after the old process is detached. The default is 30
    second.
 
