@@ -488,6 +488,14 @@ public:
   }
   void fetch_keys(const std::vector<dentry_key_t>& keys, MDSContext *c);
 
+  // What fetch_snapdiff() loaded, for the request that asked for it.
+  struct snapdiff_fetch_t {
+    std::vector<CDentry*> loaded;
+    bool done = false;  // false if it fell back to a full fetch()
+  };
+  void fetch_snapdiff(snapid_t snap1, snapid_t snap2,
+                      snapdiff_fetch_t *out, MDSContext *c);
+
 #if 0  // unused?
   void wait_for_commit(Context *c, version_t v=0);
 #endif
@@ -663,6 +671,7 @@ protected:
   friend class C_IO_Dir_TMAP_Fetched;
   friend class C_IO_Dir_OMAP_Fetched;
   friend class C_IO_Dir_OMAP_FetchedMore;
+  friend class C_IO_Dir_OMAP_FetchedSnapDiff;
   friend class C_IO_Dir_Committed;
   friend class C_IO_Dir_Commit_Ops;
 
@@ -686,6 +695,14 @@ protected:
 
   void _omap_fetched(ceph::buffer::list& hdrbl, std::map<std::string, ceph::buffer::list>& omap,
 		     bool complete, const std::set<std::string>& keys, int r);
+  void _omap_fetch_snapdiff(snapid_t snap1, snapid_t snap2,
+			    snapdiff_fetch_t *out, MDSContext *fin,
+			    version_t omap_version, ceph::buffer::list&& hdrbl,
+			    std::map<std::string, ceph::buffer::list>&& omap);
+  void _omap_fetched_snapdiff(ceph::buffer::list& hdrbl,
+			      std::map<std::string, ceph::buffer::list>& omap,
+			      snapid_t snap1, snapid_t snap2,
+			      snapdiff_fetch_t *out, int r);
 
   // -- commit --
   void _commit(version_t want, int op_prio);
