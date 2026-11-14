@@ -8,13 +8,14 @@ The :term:`Ceph Storage Cluster` is the foundation for all Ceph deployments.
 Based upon :abbr:`RADOS (Reliable Autonomic Distributed Object Store)`, Ceph
 Storage Clusters consist of several types of daemons: 
 
-  1. a :term:`Ceph OSD Daemon` (OSD) stores data as objects on a storage node
-  2. a :term:`Ceph Monitor` (MON) maintains a master copy of the cluster map
-  3. a :term:`Ceph Manager` daemon
+- a :term:`Ceph OSD Daemon` (OSD) stores data as objects on a storage node
+- a :term:`Ceph Monitor` (MON) maintains a master copy of the cluster map
+- a :term:`Ceph Manager` daemon
        
-A Ceph Storage Cluster might contain thousands of storage nodes. A
-minimal system has at least one Ceph Monitor and two Ceph OSD
-Daemons for data replication. 
+A Ceph Storage Cluster may comprise thousands of storage nodes. A minimal
+system runs at least one Ceph Monitor, one Ceph Manager, and as many Ceph OSD
+Daemons as the number of object replicas or shards in its pools (three for the
+default pool size). See :ref:`ceph-cluster-components`.
 
 The Ceph File System, Ceph Object Storage and Ceph Block Devices read data from
 and write data to the Ceph Storage Cluster.
