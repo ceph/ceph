@@ -283,6 +283,8 @@ class OSDThrasher(Thrasher):
             self.dump_ops_thread = gevent.spawn(self.do_dump_ops)
         if self.noscrub_toggle_delay:
             self.noscrub_toggle_thread = gevent.spawn(self.do_noscrub_toggle)
+        self.paused_backfills = {}
+        self.paused_backfills_lock = threading.Lock()
 
     def log(self, msg, *args, **kwargs):
         self.logger.info(msg, *args, **kwargs)
@@ -638,6 +640,31 @@ class OSDThrasher(Thrasher):
         self.in_osds.append(osd)
         self.ceph_manager.mark_in_osd(osd)
         self.log("Added osd %s" % (str(osd),))
+
+    def resume_backfill(self, pool):
+        """
+        Resume the backfills in the pool
+        """
+        self.ceph_manager.raw_cluster_cmd(
+            'osd', 'pool', 'set', str(pool), 'nobackfill', 'false')
+        with self.paused_backfills_lock:
+            self.paused_backfills.pop(pool)
+
+    def pause_backfill(self):
+        """
+        Pick a pool and pause its backfills
+        """
+        pool = self.ceph_manager.get_pool()
+        if not pool:
+            return
+        with self.paused_backfills_lock:
+            if pool in self.paused_backfills:
+                return
+        self.ceph_manager.raw_cluster_cmd(
+            'osd', 'pool', 'set', str(pool), 'nobackfill', 'true')
+        self.paused_backfills[pool] = threading.Timer(
+            20.0, self.resume_backfill, args=(pool,))
+        self.paused_backfills[pool].start()
 
     def reweight_osd_or_by_util(self, osd=None):
         """
@@ -1332,6 +1359,8 @@ class OSDThrasher(Thrasher):
                         self.config.get('chance_test_min_size', 0),))
         actions.append((self.test_backfill_full,
                         chance_test_backfill_full,))
+        actions.append((self.pause_backfill,
+                        self.config.get('chance_pause_backfills', .5)))
         if self.chance_thrash_cluster_full > 0:
             actions.append((self.thrash_cluster_full, self.chance_thrash_cluster_full,))
         if self.chance_thrash_pg_upmap > 0:

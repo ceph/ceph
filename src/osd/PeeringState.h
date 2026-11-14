@@ -586,6 +586,7 @@ public:
   TrivialEvent(RemoteBackfillPreempted)
   TrivialEvent(BackfillTooFull)
   TrivialEvent(RecoveryTooFull)
+  TrivialEvent(PauseBackfill)
 
   TrivialEvent(MakePrimary)
   TrivialEvent(MakeStray)
@@ -1039,13 +1040,17 @@ public:
       boost::statechart::custom_reaction<StartTargetPoolMigration>,
       boost::statechart::custom_reaction<RemotePoolMigrationReserved>,
       boost::statechart::custom_reaction<SetForceRecovery>,
-      boost::statechart::custom_reaction<SetForceBackfill>
+      boost::statechart::custom_reaction<SetForceBackfill>,
+      boost::statechart::custom_reaction<RequestBackfill>
     > reactions;
     explicit Clean(my_context ctx);
     void exit();
     boost::statechart::result react(const StartTargetPoolMigration &evt);
     boost::statechart::result react(const RemotePoolMigrationReserved &evt);
     boost::statechart::result react(const boost::statechart::event_base&) {
+      return discard_event();
+    }
+    boost::statechart::result react(const RequestBackfill &) {
       return discard_event();
     }
   };
@@ -1055,7 +1060,8 @@ public:
       boost::statechart::transition< GoClean, Clean >,
       boost::statechart::transition< StartTargetPoolMigration, WaitRemotePoolMigrationReserved >,
       boost::statechart::transition< DoRecovery, WaitLocalRecoveryReserved >,
-      boost::statechart::custom_reaction< AllReplicasActivated >
+      boost::statechart::custom_reaction< AllReplicasActivated >,
+      boost::statechart::custom_reaction< RequestBackfill >
     > reactions;
     explicit Recovered(my_context ctx);
     void exit();
@@ -1069,6 +1075,9 @@ public:
       }
       return forward_event();
     }
+    boost::statechart::result react(const RequestBackfill &) {
+      return discard_event();
+    }
   };
 
   struct Backfilling : boost::statechart::state< Backfilling, Active >, NamedState {
@@ -1080,6 +1089,9 @@ public:
       boost::statechart::custom_reaction< RemoteReservationRevokedTooFull>,
       boost::statechart::custom_reaction< RemoteReservationRevoked>,
       boost::statechart::custom_reaction< DoPoolMigration >
+      boost::statechart::custom_reaction< PauseBackfill >
+      boost::statechart::custom_reaction< PauseBackfill >,
+      boost::statechart::custom_reaction< RequestBackfill >
       > reactions;
     explicit Backfilling(my_context ctx);
     boost::statechart::result react(const RemoteReservationRejectedTooFull& evt) {
@@ -1087,7 +1099,6 @@ public:
       post_event(RemoteReservationRevokedTooFull());
       return discard_event();
     }
-    void backfill_release_reservations();
     boost::statechart::result react(const Backfilled& evt);
     boost::statechart::result react(const RemoteReservationRevokedTooFull& evt);
     boost::statechart::result react(const RemoteReservationRevoked& evt);
@@ -1095,6 +1106,10 @@ public:
     boost::statechart::result react(const UnfoundBackfill& evt);
     boost::statechart::result react(const DoPoolMigration& evt);
     void suspend_backfill();
+    boost::statechart::result react(const PauseBackfill& evt);
+    boost::statechart::result react(const RequestBackfill &) {
+      return discard_event();
+    }
     void exit();
   };
 
@@ -1103,7 +1118,9 @@ public:
       boost::statechart::custom_reaction< RemoteBackfillReserved >,
       boost::statechart::custom_reaction< RemoteReservationRejectedTooFull >,
       boost::statechart::custom_reaction< RemoteReservationRevoked >,
-      boost::statechart::transition< AllBackfillsReserved, Backfilling >
+      boost::statechart::transition< AllBackfillsReserved, Backfilling >,
+      boost::statechart::custom_reaction< PauseBackfill >,
+      boost::statechart::custom_reaction< RequestBackfill >
       > reactions;
     std::set<pg_shard_t>::const_iterator backfill_osd_it;
     explicit WaitRemoteBackfillReserved(my_context ctx);
@@ -1112,15 +1129,27 @@ public:
     boost::statechart::result react(const RemoteBackfillReserved& evt);
     boost::statechart::result react(const RemoteReservationRejectedTooFull& evt);
     boost::statechart::result react(const RemoteReservationRevoked& evt);
+    boost::statechart::result react(const PauseBackfill &evt);
+    boost::statechart::result react(const RequestBackfill &) {
+      return discard_event();
+    }
   };
 
   struct WaitLocalBackfillReserved : boost::statechart::state< WaitLocalBackfillReserved, Active >, NamedState {
     typedef boost::mpl::list<
       boost::statechart::transition< LocalBackfillReserved, WaitRemoteBackfillReserved >
+      boost::statechart::transition< LocalBackfillReserved, WaitRemoteBackfillReserved >,
+      boost::statechart::custom_reaction< RemoteBackfillReserved >,
+      boost::statechart::custom_reaction< PauseBackfill >,
+      boost::statechart::custom_reaction< RequestBackfill >
       > reactions;
     explicit WaitLocalBackfillReserved(my_context ctx);
     boost::statechart::result react(const RemoteBackfillReserved& evt) {
       /* no-op */
+      return discard_event();
+    }
+    boost::statechart::result react(const PauseBackfill &evt);
+    boost::statechart::result react(const RequestBackfill &) {
       return discard_event();
     }
     void exit();
@@ -1206,15 +1235,20 @@ public:
   struct NotBackfilling : boost::statechart::state< NotBackfilling, Active>, NamedState {
     typedef boost::mpl::list<
       boost::statechart::custom_reaction< QueryUnfound >,
-      boost::statechart::transition< RequestBackfill, WaitLocalBackfillReserved>,
+      boost::statechart::custom_reaction< RequestBackfill >,
       boost::statechart::custom_reaction< RemoteBackfillReserved >,
-      boost::statechart::custom_reaction< RemoteReservationRejectedTooFull >
+      boost::statechart::custom_reaction< RemoteReservationRejectedTooFull >,
+      boost::statechart::custom_reaction< PauseBackfill >,
+      boost::statechart::custom_reaction< LocalBackfillReserved >
       > reactions;
     explicit NotBackfilling(my_context ctx);
     void exit();
     boost::statechart::result react(const QueryUnfound& q);
     boost::statechart::result react(const RemoteBackfillReserved& evt);
     boost::statechart::result react(const RemoteReservationRejectedTooFull& evt);
+    boost::statechart::result react(const PauseBackfill &evt);
+    boost::statechart::result react(const LocalBackfillReserved &ext);
+    boost::statechart::result react(const RequestBackfill &evt);
   };
 
   struct NotRecovering : boost::statechart::state< NotRecovering, Active>, NamedState {
@@ -1484,8 +1518,10 @@ public:
       boost::statechart::transition< DoRecovery, WaitLocalRecoveryReserved >,
       boost::statechart::transition< RequestBackfill, WaitLocalBackfillReserved >,
       boost::statechart::transition< DoPoolMigration, WaitLocalPoolMigrationReserved >
+      boost::statechart::custom_reaction< RequestBackfill >
       > reactions;
     explicit Activating(my_context ctx);
+    boost::statechart::result react(const RequestBackfill &evt);
     void exit();
   };
 
@@ -1954,6 +1990,8 @@ public:
     }
   }
 
+  void suspend_backfill();
+  void backfill_release_reservations();
 private:
   bool check_prior_readable_down_osds(const OSDMapRef& map);
 
