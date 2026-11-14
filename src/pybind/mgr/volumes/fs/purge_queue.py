@@ -112,6 +112,7 @@ class ThreadPoolPurgeQueueMixin(AsyncJobs):
     of small files in a directory w/ deep directory trees), this model may lead to
     _all_ threads purging entries for one volume (starving other volumes).
     """
+
     def __init__(self, volume_client, tp_size):
         super(ThreadPoolPurgeQueueMixin, self).__init__(volume_client, "purgejob", tp_size)
 

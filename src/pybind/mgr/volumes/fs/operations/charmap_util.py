@@ -11,6 +11,7 @@ _charmap_type = {
     "encoding": lambda x: str(x),
 }
 
+
 def charmap_set(fs, path, setting, value):
     """
     Set and get a charmap on a directory.
@@ -34,6 +35,7 @@ def charmap_set(fs, path, setting, value):
     except cephfs.Error as e:
         raise VolumeException(-e.args[0], e.args[1])
 
+
 def charmap_rm(fs, path):
     """
     Remove a charmap on a directory.
@@ -43,6 +45,7 @@ def charmap_rm(fs, path):
         fs.removexattr(path, "ceph.dir.charmap", 0)
     except cephfs.Error as e:
         raise VolumeException(-e.args[0], e.args[1])
+
 
 def charmap_get(fs, path, setting):
     """

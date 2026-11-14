@@ -11,26 +11,31 @@ from .exception import VolumeException
 
 log = logging.getLogger(__name__)
 
+
 def create_pool(mgr, pool_name, **extra_args):
     # create the given pool
     command = extra_args
     command.update({'prefix': 'osd pool create', 'pool': pool_name})
     return mgr.mon_command(command)
 
+
 def remove_pool(mgr, pool_name):
     command = {'prefix': 'osd pool rm', 'pool': pool_name, 'pool2': pool_name,
                'yes_i_really_really_mean_it': True}
     return mgr.mon_command(command)
+
 
 def rename_pool(mgr, pool_name, new_pool_name):
     command = {'prefix': 'osd pool rename', 'srcpool': pool_name,
                'destpool': new_pool_name}
     return mgr.mon_command(command)
 
+
 def create_filesystem(mgr, fs_name, metadata_pool, data_pool):
     command = {'prefix': 'fs new', 'fs_name': fs_name, 'metadata': metadata_pool,
                'data': data_pool}
     return mgr.mon_command(command)
+
 
 def remove_filesystem(mgr, fs_name):
     command = {'prefix': 'fs fail', 'fs_name': fs_name}
@@ -41,10 +46,12 @@ def remove_filesystem(mgr, fs_name):
     command = {'prefix': 'fs rm', 'fs_name': fs_name, 'yes_i_really_mean_it': True}
     return mgr.mon_command(command)
 
+
 def rename_filesystem(mgr, fs_name, new_fs_name):
     command = {'prefix': 'fs rename', 'fs_name': fs_name, 'new_fs_name': new_fs_name,
                'yes_i_really_mean_it': True}
     return mgr.mon_command(command)
+
 
 def create_mds(mgr, fs_name, placement):
     try:
@@ -65,12 +72,14 @@ def create_mds(mgr, fs_name, placement):
         return -errno.EINVAL, "", str(e)
     return 0, "", ""
 
+
 def volume_exists(mgr, fs_name):
     fs_map = mgr.get('fs_map')
     for fs in fs_map['filesystems']:
         if fs['mdsmap']['fs_name'] == fs_name:
             return True
     return False
+
 
 def listdir(fs, dirpath, filter_entries=None, filter_files=True):
     """
@@ -118,11 +127,13 @@ def has_subdir(fs, dirpath, filter_entries=None):
         raise VolumeException(-e.args[0], e.args[1])
     return res
 
+
 def is_inherited_snap(snapname):
     """
     Returns True if the snapname is inherited else False
     """
     return snapname.startswith("_")
+
 
 def listsnaps(fs, volspec, snapdirpath, filter_inherited_snaps=False):
     """
@@ -146,6 +157,7 @@ def listsnaps(fs, volspec, snapdirpath, filter_inherited_snaps=False):
         raise VolumeException(-e.args[0], e.args[1])
     return snaps
 
+
 def list_one_entry_at_a_time(fs, dirpath):
     """
     Get a directory entry (one entry a time)
@@ -159,6 +171,7 @@ def list_one_entry_at_a_time(fs, dirpath):
                 d = fs.readdir(dir_handle)
     except cephfs.Error as e:
         raise VolumeException(-e.args[0], e.args[1])
+
 
 def copy_file(fs, src, dst, mode, cancel_check=None):
     """
@@ -193,6 +206,7 @@ def copy_file(fs, src, dst, mode, cancel_check=None):
         fs.close(src_fd)
         fs.close(dst_fd)
 
+
 def get_ancestor_xattr(fs, path, attr):
     """
     Helper for reading layout information: if this xattr is missing
@@ -205,6 +219,7 @@ def get_ancestor_xattr(fs, path, attr):
             raise VolumeException(-e.args[0], e.args[1])
         else:
             return get_ancestor_xattr(fs, os.path.split(path)[0], attr)
+
 
 def create_base_dir(fs, path, mode):
     """

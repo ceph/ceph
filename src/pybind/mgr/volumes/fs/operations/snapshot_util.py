@@ -18,7 +18,7 @@ def mksnap(fs, snappath):
     except cephfs.Error as e:
         raise VolumeException(-e.args[0], e.args[1])
 
-        
+
 def rmsnap(fs, snappath):
     """
     Remove a snapshot
