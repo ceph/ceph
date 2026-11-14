@@ -25319,6 +25319,8 @@ paths:
                 master:
                   default: false
                   type: boolean
+                realm_name:
+                  type: string
                 secret_key:
                   type: string
                 sync_from:
@@ -25526,6 +25528,9 @@ paths:
                   type: string
                 zone_name:
                   type: string
+                zonegroup_name:
+                  default: ''
+                  type: string
               required:
               - zone_name
               - placement_target
@@ -25581,6 +25586,9 @@ paths:
                 storage_class:
                   type: string
                 zone_name:
+                  type: string
+                zonegroup_name:
+                  default: ''
                   type: string
               required:
               - zone_name
@@ -25751,6 +25759,8 @@ paths:
                 placement_target:
                   default: ''
                   type: string
+                realm_name:
+                  type: string
                 secret_key:
                   default: ''
                   type: string
@@ -25920,6 +25930,11 @@ paths:
         required: true
         schema:
           type: string
+      - default: ''
+        in: query
+        name: zonegroup_name
+        schema:
+          type: string
       responses:
         '200':
           content:
@@ -25953,6 +25968,8 @@ paths:
               properties:
                 placement_targets:
                   default: []
+                  type: string
+                realm_name:
                   type: string
                 zone_group:
                   type: string
@@ -26000,6 +26017,8 @@ paths:
               properties:
                 placement_targets:
                   default: []
+                  type: string
+                realm_name:
                   type: string
                 zone_group:
                   type: string
@@ -26054,6 +26073,16 @@ paths:
       - default: ''
         in: query
         name: zone_name
+        schema:
+          type: string
+      - default: ''
+        in: query
+        name: zonegroup_name
+        schema:
+          type: string
+      - default: ''
+        in: query
+        name: realm_name
         schema:
           type: string
       responses:
@@ -26150,6 +26179,11 @@ paths:
         required: true
         schema:
           type: string
+      - allowEmptyValue: true
+        in: query
+        name: realm_name
+        schema:
+          type: string
       responses:
         '200':
           content:
@@ -26208,7 +26242,6 @@ paths:
                   default: ''
                   type: string
               required:
-              - realm_name
               - new_zonegroup_name
               type: object
       responses:
