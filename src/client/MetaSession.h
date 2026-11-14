@@ -49,6 +49,9 @@ struct MetaSession {
   bool readonly = false;
 
   std::vector<Context*> waiting_for_open;
+  // MDS pushes received before the session OPEN reply; see
+  // Client::maybe_defer_mds_msg().
+  std::vector<MessageConstRef> deferred_msgs;
 
   xlist<Cap*> caps;
   // dirty_list keeps all the dirty inodes before flushing in current session.
