@@ -18,6 +18,7 @@
 #include <seastar/core/print.hh>
 
 #include "crimson/osd/scheduler/scheduler.h"
+#include "crimson/osd/scheduler/level_queue.h"
 #include "crimson/osd/scheduler/mclock_scheduler.h"
 #include "common/WeightedPriorityQueue.h"
 #include "common/mclock_common.h"
@@ -27,15 +28,20 @@ namespace crimson::osd::scheduler {
 /**
  * Implements Scheduler in terms of OpQueue
  *
- * Templated on queue type to avoid dynamic dispatch, T should implement
- * OpQueue<Scheduleritem_t, client_t>.  This adapter is mainly responsible for
- * the boilerplate priority cutoff/strict concept which is needed for
- * OpQueue based implementations.
+ * Keep one eligible head per priority and owner in WPQ. Dependency levels
+ * share that owner's turn, rather than becoming extra weighted clients.
  */
-template <typename T>
 class ClassedOpQueueScheduler final : public Scheduler {
   const SchedulerClass cutoff;
-  T queue;
+  struct QueueKey {
+    bool strict;
+    unsigned priority;
+    client_t owner;
+
+    auto operator<=>(const QueueKey&) const = default;
+  };
+  std::map<QueueKey, LevelQueue> waiting;
+  WeightedPriorityQueue<LevelQueue*, QueueKey> queue;
 
   using priority_t = uint64_t;
   std::array<
@@ -88,53 +94,74 @@ public:
     ] = conf.get_val<uint64_t>("osd_client_op_priority");
   }
 
-  void enqueue(item_t &&item) final {
-     // immediate ops bypass class-based priority -- use message priority directly
-    // matching classic WPQ which uses numeric priority, not SchedulerClass
-    if (item.params.klass == SchedulerClass::immediate) {
-      queue.enqueue_strict(
-        item.params.owner,
-        item.params.priority,  // use message priority directly
-        std::move(item));
-      return;
-    }
+private:
+  QueueKey queue_key(const params_t &params) const {
+    return {
+      .strict = use_strict(params.klass),
+      .priority = params.klass == SchedulerClass::immediate
+        ? params.priority : static_cast<unsigned>(get_priority(params.klass)),
+      .owner = params.owner,
+    };
+  }
 
-    if (use_strict(item.params.klass)) {
-      queue.enqueue_strict(
-	item.params.owner, get_priority(item.params.klass), std::move(item));
+  void enqueue_queue(const QueueKey &key, LevelQueue *pending) {
+    if (key.strict) {
+      queue.enqueue_strict(key, key.priority, std::move(pending));
     } else {
-      queue.enqueue(
-	item.params.owner, get_priority(item.params.klass),
-	item.params.cost, std::move(item));
+      auto cost = pending->front(throttle_level_t::foreground)->item.get_cost();
+      queue.enqueue(key, key.priority, cost, std::move(pending));
     }
+  }
+
+  void enqueue(item_t &&item, bool front) {
+    auto [it, inserted] = waiting.try_emplace(queue_key(item.params));
+    it->second.push(std::move(item), front);
+    if (inserted) {
+      enqueue_queue(it->first, &it->second);
+    }
+  }
+
+public:
+  void enqueue(item_t &&item) final {
+    enqueue(std::move(item), false);
   }
 
   void enqueue_front(item_t &&item) final {
-    if (item.params.klass == SchedulerClass::immediate) {
-      // same for enqueue_front
-      queue.enqueue_strict_front(
-        item.params.owner,
-        item.params.priority,
-        std::move(item));
-      return;
-    }
-
-    if (use_strict(item.params.klass)) {
-      queue.enqueue_strict_front(
-	item.params.owner, get_priority(item.params.klass), std::move(item));
-    } else {
-      queue.enqueue_front(
-	item.params.owner, get_priority(item.params.klass),
-	item.params.cost, std::move(item));
-    }
+    enqueue(std::move(item), true);
   }
 
   bool empty() const final {
-    return queue.empty();
+    return waiting.empty();
   }
 
-  WorkItem dequeue() final {
-    return queue.dequeue();
+  WorkItem dequeue(throttle_level_t max_level) final {
+    auto next = queue.dequeue_eligible([max_level](LevelQueue *pending)
+        -> std::optional<unsigned> {
+      if (auto *candidate = pending->front(max_level)) {
+        return candidate->item.get_cost();
+      }
+      return std::nullopt;
+    });
+    if (!next) {
+      return std::monostate{};
+    }
+    auto *pending = *next;
+    auto item = pending->pop(pending->front(max_level));
+    auto key = queue_key(item.params);
+    if (pending->empty()) {
+      waiting.erase(key);
+    } else {
+      enqueue_queue(key, pending);
+    }
+    return item;
+  }
+
+  void abort(std::exception_ptr error) final {
+    for (auto &[key, pending] : waiting) {
+      queue.remove_by_class(key);
+      pending.abort(error);
+    }
+    waiting.clear();
   }
 
   void dump(ceph::Formatter &f) const final {
@@ -165,8 +192,7 @@ SchedulerRef make_scheduler(CephContext *cct, ConfigProxy &conf, int whoami, uin
 
   if (*type == "wpq" ) {
     // default is 'wpq'
-    return std::make_unique<
-      ClassedOpQueueScheduler<WeightedPriorityQueue<item_t, client_t>>>(
+    return std::make_unique<ClassedOpQueueScheduler>(
 	conf,
 	conf.get_val<uint64_t>("osd_op_pq_max_tokens_per_priority"),
 	conf->osd_op_pq_min_cost

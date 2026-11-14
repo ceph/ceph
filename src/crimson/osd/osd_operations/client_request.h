@@ -17,6 +17,7 @@
 #include "crimson/osd/osd_operation.h"
 #include "crimson/osd/pg_activation_blocker.h"
 #include "crimson/osd/pg_map.h"
+#include "crimson/osd/request_orderer.h"
 #include "crimson/osd/scrub/pg_scrubber.h"
 #include "crimson/common/type_helpers.h"
 #include "crimson/common/utility.h"
@@ -192,6 +193,7 @@ public:
     list_t list;
 
   public:
+    RequestOrderer<hobject_t> admission_orderer;
     void add_request(ClientRequest &request) {
       assert(!request.ordering_hook.is_linked());
       intrusive_ptr_add_ref(&request);
@@ -229,7 +231,8 @@ public:
   PerShardPipeline &get_pershard_pipeline(ShardServices &);
 
   interruptible_future<> with_pg_process_interruptible(
-    Ref<PG> pgref, const unsigned instance_id, instance_handle_t &ihref);
+    Ref<PG> pgref, const unsigned instance_id, instance_handle_t &ihref,
+    seastar::future<RequestOrderer<hobject_t>::Turn> admission_turn);
 
   seastar::future<> with_pg_process(Ref<PG> pg);
 
