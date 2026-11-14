@@ -1,7 +1,8 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
+import { SimpleChange } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
-import { BehaviorSubject, of, throwError } from 'rxjs';
+import { BehaviorSubject, of, Subject, throwError } from 'rxjs';
 
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
@@ -248,6 +249,120 @@ describe('NvmeofGatewayNodeComponent', () => {
 
     tick(100);
     expect(nvmeofService.getAvailableHosts).not.toHaveBeenCalled();
+  }));
+
+  it('should reload edit-mode hosts when the current group arrives during a fetch', fakeAsync(() => {
+    const available$ = new Subject<any>();
+    spyOn(nvmeofService, 'getAvailableHosts').and.returnValue(available$);
+    spyOn(nvmeofService, 'fetchHostsAndGroups').and.returnValue(
+      of({
+        groups: [
+          [
+            {
+              service_id: 'group1',
+              spec: { group: 'group1' },
+              placement: { hosts: ['gateway-node-1', 'gateway-node-2'] }
+            }
+          ]
+        ],
+        hosts: mockGatewayNodes
+      })
+    );
+
+    component.mode = 'selector';
+    component.groupName = 'group1';
+    const tableSelection = new CdTableSelection();
+    tableSelection.selected = [mockGatewayNodes[2]];
+    component.table = {
+      selection: tableSelection,
+      model: { data: [], selectRow: () => undefined },
+      updateSelection: {
+        emit: (selection: CdTableSelection) => component.updateSelection(selection)
+      }
+    } as any;
+
+    component.getHosts(new CdTableFetchDataContext(() => undefined));
+    expect(nvmeofService.getAvailableHosts).toHaveBeenCalled();
+    expect(nvmeofService.fetchHostsAndGroups).not.toHaveBeenCalled();
+
+    component.preSelectedHostnames = ['gateway-node-1', 'gateway-node-2'];
+    component.ngOnChanges({
+      preSelectedHostnames: new SimpleChange([], component.preSelectedHostnames, false)
+    });
+
+    available$.next([mockGatewayNodes[2]]);
+    available$.complete();
+    tick();
+
+    expect(nvmeofService.fetchHostsAndGroups).toHaveBeenCalled();
+    expect(component.hosts.map((host) => host.hostname)).toEqual([
+      'gateway-node-1',
+      'gateway-node-2',
+      'gateway-node-3'
+    ]);
+    expect(component.getSelectedHostnames()).toEqual([
+      'gateway-node-1',
+      'gateway-node-2',
+      'gateway-node-3'
+    ]);
+  }));
+
+  it('should not reload hosts after the component is destroyed', fakeAsync(() => {
+    const available$ = new Subject<any>();
+    spyOn(nvmeofService, 'getAvailableHosts').and.returnValue(available$);
+    spyOn(nvmeofService, 'fetchHostsAndGroups');
+
+    component.mode = 'selector';
+    component.getHosts(new CdTableFetchDataContext(() => undefined));
+    component.preSelectedHostnames = ['gateway-node-1'];
+    component.ngOnChanges({
+      preSelectedHostnames: new SimpleChange([], component.preSelectedHostnames, false)
+    });
+
+    component.ngOnDestroy();
+    available$.next([]);
+    available$.complete();
+    tick();
+
+    expect(nvmeofService.fetchHostsAndGroups).not.toHaveBeenCalled();
+  }));
+
+  it('should keep gateways across a table rebuild and allow a later clear', fakeAsync(() => {
+    spyOn(nvmeofService, 'fetchHostsAndGroups').and.returnValue(
+      of({
+        groups: [
+          [
+            {
+              spec: { group: 'group1' },
+              placement: { hosts: ['gateway-node-1', 'gateway-node-2'] }
+            }
+          ]
+        ],
+        hosts: mockGatewayNodes
+      })
+    );
+
+    component.mode = 'selector';
+    component.groupName = 'group1';
+    component.preSelectedHostnames = ['gateway-node-1', 'gateway-node-2'];
+    const tableSelection = new CdTableSelection();
+    component.table = {
+      selection: tableSelection,
+      model: { data: [], selectRow: () => undefined },
+      updateSelection: {
+        emit: (selection: CdTableSelection) => component.updateSelection(selection)
+      }
+    } as any;
+
+    component.getHosts(new CdTableFetchDataContext(() => undefined));
+
+    component.updateSelection(new CdTableSelection());
+    expect(component.getSelectedHostnames()).toEqual(['gateway-node-1', 'gateway-node-2']);
+
+    tick();
+    component.table.selection.selected = [];
+    component.updateSelection(new CdTableSelection());
+    expect(component.getSelectedHostnames()).toEqual([]);
   }));
 
   it('should unsubscribe on component destroy', fakeAsync(() => {
