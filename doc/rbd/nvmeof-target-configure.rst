@@ -9,13 +9,13 @@ Prerequisites
 
 -  NVMe-oF gateways, which can either be colocated with OSD nodes or on dedicated nodes
 
--  Separate network subnets for NVME-oF front-end traffic and Ceph back-end traffic
+-  Separate network subnets for NVMe-oF front-end traffic and Ceph back-end traffic
 
 Explanation
 ===========
 
 The Ceph NVMe-oF gateway is both an NVMe-oF target and a Ceph client. Think of
-it as a "translator" between Ceph's RBD interface and the NVME-oF protocol. The
+it as a "translator" between Ceph's RBD interface and the NVMe-oF protocol. The
 Ceph NVMe-oF gateway can run on a standalone node or be colocated with other
 daemons, for example on an OSD node. When colocating the Ceph NVMe-oF gateway
 with other daemons, ensure that sufficient CPU and memory are available.
@@ -26,7 +26,7 @@ for basic operation.
 Installation
 ============
 
-Complete the following steps to install the Ceph NVME-oF gateway:
+Complete the following steps to install the Ceph NVMe-oF gateway:
 
 #. Create a pool in which the gateways configuration can be managed:
 
@@ -44,7 +44,7 @@ Complete the following steps to install the Ceph NVME-oF gateway:
 
    .. prompt:: bash #
    
-      ceph orch apply nvmeof NVME-OF_POOL_NAME NVME_OF_GROUP_NAME --placement="host01, host02"
+      ceph orch apply nvmeof --pool NVME-OF_POOL_NAME --group NVME_OF_GROUP_NAME --placement="host01 host02"
 
 Configuration
 =============
@@ -65,25 +65,28 @@ Use the ``ceph nvmeof`` command to configure NVMe-oF gateways.
 
    .. prompt:: bash #
 
-      ceph nvmeof subsystem add --nqn SUBSYSTEM_NQN
+      ceph nvmeof subsystem add --nqn SUBSYSTEM_NQN --gw-group NVME_OF_GROUP_NAME --no-group-append
 
-   The subsystem NQN is a user-defined string, for example
-   ``nqn.2016-06.io.spdk:cnode1``.
+   The subsystem NQN is a user-defined string in NQN format, for example
+   ``nqn.2016-06.io.spdk:cnode1``. The ``--no-group-append`` option stops
+   the gateway from appending the group name to the NQN, so the commands
+   below can use the same NQN.
 
-#. Define the IP port on the gateway that will process the NVMe/TCP
+#. Define the IP port on each gateway that will process the NVMe/TCP
    commands and I/O:
 
-    a. On the install node, get the NVMe-oF gateway name:
+    a. On the install node, get the host name of each NVMe-oF gateway:
 
        .. prompt:: bash #
 
           ceph orch ps | grep nvme
 
-    b. Define the IP port for the gateway:
+    b. Define the IP port for each gateway, using its host name and IP
+       address:
 
        .. prompt:: bash #
 
-          ceph nvmeof listener add --nqn SUBSYSTEM_NQN --host-name HOST_NAME --traddr GATEWAY_IP --trsvcid 4420
+          ceph nvmeof listener add --nqn SUBSYSTEM_NQN --gw-group NVME_OF_GROUP_NAME --host-name HOST_NAME --traddr GATEWAY_IP --trsvcid 4420
 
 #. Get the host NQN (NVMe Qualified Name) for each host:
 
@@ -100,31 +103,31 @@ Use the ``ceph nvmeof`` command to configure NVMe-oF gateways.
 
    .. prompt:: bash #
 
-      ceph nvmeof host add --nqn SUBSYSTEM_NQN --host-nqn HOST_NQN
+      ceph nvmeof host add --nqn SUBSYSTEM_NQN --gw-group NVME_OF_GROUP_NAME --host-nqn HOST_NQN
 
    To allow any host to connect, use ``*`` as the host NQN:
 
    .. prompt:: bash #
 
-      ceph nvmeof host add --nqn SUBSYSTEM_NQN --host-nqn "*"
+      ceph nvmeof host add --nqn SUBSYSTEM_NQN --gw-group NVME_OF_GROUP_NAME --host-nqn "*"
 
 #. List all subsystems configured in the gateway:
 
    .. prompt:: bash #
 
-      ceph nvmeof subsystem list
+      ceph nvmeof subsystem list --gw-group NVME_OF_GROUP_NAME
 
 #. Create a new NVMe namespace:
 
    .. prompt:: bash #
 
-      ceph nvmeof namespace add --nqn SUBSYSTEM_NQN --rbd-pool POOL_NAME --rbd-image-name IMAGE_NAME
+      ceph nvmeof namespace add --nqn SUBSYSTEM_NQN --gw-group NVME_OF_GROUP_NAME --rbd-pool POOL_NAME --rbd-image-name IMAGE_NAME
 
 #. List all namespaces in the subsystem:
 
    .. prompt:: bash #
 
-      ceph nvmeof namespace list --nqn SUBSYSTEM_NQN
+      ceph nvmeof namespace list --nqn SUBSYSTEM_NQN --gw-group NVME_OF_GROUP_NAME
 
 
 .. _nvmeof-monitor-commands:
@@ -148,7 +151,7 @@ following form:
 
 .. prompt:: bash #
 
-   ceph nvme-gw show POOL_NAME GROUP_NAME
+   ceph nvme-gw show NVME-OF_POOL_NAME NVME_OF_GROUP_NAME
 
 The JSON output includes the number of gateways in the group, the ANA
 group list, the total namespace count, and one entry per gateway
@@ -156,7 +159,7 @@ showing its ANA group, location, administrative state (``ENABLED`` or
 ``DISABLED``), availability (for example ``AVAILABLE``, ``CREATED``,
 or ``DELETING``), listener count, and per-ANA-group state.
 
-To dump every gateway group in the cluster, run:
+On Umbrella and later, to dump every gateway group in the cluster, run:
 
 .. prompt:: bash #
 
@@ -168,13 +171,12 @@ through the ``ceph nvmeof`` CLI, run a command of the following form:
 
 .. prompt:: bash #
 
-   ceph nvme-gw listeners POOL_NAME GROUP_NAME
+   ceph nvme-gw listeners NVME-OF_POOL_NAME NVME_OF_GROUP_NAME
 
 The output groups listeners by subsystem NQN and shows the address
 family, address, service ID, and owning gateway of each listener.
 Only gateways that are currently available contribute listeners to
-the output. The ``listeners`` command was added in the Tentacle
-release.
+the output. The ``listeners`` command was added in Tentacle 20.2.1.
 
 Commands managed by the orchestrator
 ------------------------------------
@@ -188,24 +190,25 @@ issued by cephadm, not by operators:
   a cephadm-managed cluster: deleting a gateway triggers an immediate
   failover of its ANA groups.
 * ``ceph nvme-gw enable`` and ``ceph nvme-gw disable`` set a single
-  gateway's administrative state. cephadm uses them to quiesce
-  gateways when a host enters maintenance and to bring them back
-  afterwards. Disabling an available gateway takes it out of service
-  and temporarily suppresses failovers while its ANA groups move, so
-  disabling all the gateways in a group removes NVMe-oF access to its
-  namespaces.
+  gateway's administrative state. They were added in Tentacle 20.2.2.
+  On Umbrella and later, cephadm uses them to quiesce gateways when a
+  host enters maintenance and to bring them back afterwards. Disabling
+  an available gateway takes it out of service and temporarily
+  suppresses failovers while its ANA groups move, so disabling all the
+  gateways in a group removes NVMe-oF access to its namespaces.
 
 Locations and disaster recovery
 -------------------------------
 
 Gateways can be assigned a *location*, an availability domain label
 such as a site or rack, which the Monitors use for disaster-recovery
-handling. These commands require the ``beacon-diff`` Monitor feature
-and fail cleanly when it is not available:
+handling. These commands were added in Tentacle 20.2.2. They require
+the ``beacon-diff`` Monitor feature and fail cleanly when it is not
+available:
 
 .. prompt:: bash #
 
-   ceph nvme-gw set-location GATEWAY_ID POOL_NAME GROUP_NAME LOCATION
+   ceph nvme-gw set-location GATEWAY_ID NVME-OF_POOL_NAME NVME_OF_GROUP_NAME LOCATION
 
 When all the gateways in a location have become unavailable, for
 example after the loss of a site, the location can be declared to be
@@ -214,7 +217,7 @@ groups without waiting for a failback:
 
 .. prompt:: bash #
 
-   ceph nvme-gw disaster-set POOL_NAME GROUP_NAME LOCATION
+   ceph nvme-gw disaster-set NVME-OF_POOL_NAME NVME_OF_GROUP_NAME LOCATION
 
 The command is rejected while any gateway in the location is still
 available, which prevents declaring a disaster during a transient
@@ -223,7 +226,7 @@ permit failback:
 
 .. prompt:: bash #
 
-   ceph nvme-gw disaster-clear POOL_NAME GROUP_NAME LOCATION
+   ceph nvme-gw disaster-clear NVME-OF_POOL_NAME NVME_OF_GROUP_NAME LOCATION
 
 .. warning:: ``disaster-set`` and ``disaster-clear`` move live I/O
    paths between locations. Use them only as part of a planned
