@@ -1,0 +1,1134 @@
+//! The POSIX identity an owner is served as.
+//!
+//! The record says which uid and gid the gateway acts as for an
+//! owner, and which supplementary groups go with them.  Nothing
+//! inside the gateway can invent one -- the values come from a
+//! directory or from an operator -- so the whole field set is managed
+//! over Admin Ops, including the fields no request path reads yet.
+//! A field that cannot be written and read back is a field whose
+//! first real consumer finds its bugs.
+//!
+//! PUT is a full replace.  An absent parameter means the field is
+//! unset, not that it keeps its previous value.  That is what lets
+//! `groups` travel in all three of its states -- absent is unset,
+//! empty is an explicit "this identity has none", a list is the list
+//! -- and the difference between the first two is what the directory-backed
+//! form will turn on.
+
+use s3_tests_rs::admin::{
+    admin_request, admin_request_as, as_json, driver_hint_results, nsfs_credentials,
+    nsfs_credentials_as, nsfs_credentials_for, nsfs_delete_identity,
+    nsfs_get_identity, grant_user_caps, nsfs_list_identities,
+    nsfs_put_identity, q,
+};
+use s3_tests_rs::client::build_s3_client;
+use s3_tests_rs::config::get_config;
+use s3_tests_rs::features::features;
+use s3_tests_rs::fixtures::{PrivateAccount, PrivateUser, TestGuard};
+
+/// `None` from the accessor means unknown, so skip rather than assert.
+async fn nsfs_only() -> bool {
+    match features().await {
+        Some(f) => f.backend.as_deref() == Some("nsfs"),
+        None => false,
+    }
+}
+
+/// The gateway's `rgw_nsfs_user_identity_override` (I9), read and not
+/// changed:  it is daemon-global and these tests run beside others.
+/// A gateway without the hint is one without the override.
+async fn user_identity_override() -> bool {
+    let on = driver_hint_results("identity-override", &[]).await
+        .and_then(|r| r.get("user_identity_override").cloned())
+        .map(|v| v == "true")
+        .unwrap_or(false);
+    eprintln!("user identity override {}", if on { "on" } else { "off" });
+    on
+}
+
+/// Every field, so a round trip proves the record and not the subset
+/// impersonation will consume.
+fn full_record(key: &str) -> Vec<(&'static str, String)> {
+    vec![
+        ("identity", key.to_string()),
+        ("uid", "1001".to_string()),
+        ("gid", "2002".to_string()),
+        ("groups", "10,20,30".to_string()),
+        ("new_buckets_path", "/gpfs/rgw1/nsfs/newbuckets".to_string()),
+        ("custom_bucket_path_allowed_list",
+         "/gpfs/rgw1/nsfs/allowed".to_string()),
+        ("fs_backend", "GPFS".to_string()),
+    ]
+}
+
+fn as_params<'a>(v: &'a [(&'static str, String)]) -> Vec<(&'static str, &'a str)> {
+    v.iter().map(|(k, val)| (*k, val.as_str())).collect()
+}
+
+/// Leave no row behind:  the table is gateway-wide, not per-bucket,
+/// so a test that does not clean up interferes with the list case.
+async fn scrub(key: &str) {
+    let _ = nsfs_delete_identity(key).await;
+}
+
+#[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
+#[tokio::test]
+async fn test_identity_every_field_round_trips() {
+    let _guard = TestGuard::setup();
+    if !nsfs_only().await {
+        eprintln!("not nsfs;  nothing to check");
+        return;
+    }
+    let key = "identity-round-trip";
+    scrub(key).await;
+
+    /* the control:  absent before it is written, so a leftover row
+     * cannot make the assertions below pass */
+    let before = nsfs_get_identity(key).await;
+    assert_ne!(before.status, 200,
+        "a row for {key} already existed;  the round trip would prove nothing");
+
+    let rec = full_record(key);
+    let resp = nsfs_put_identity(&as_params(&rec)).await;
+    assert_eq!(resp.status, 200, "put failed: {}", resp.body);
+
+    let resp = nsfs_get_identity(key).await;
+    assert_eq!(resp.status, 200, "get failed: {}", resp.body);
+    let j = as_json(&resp).expect("the response is not JSON");
+
+    assert_eq!(j["identity"], key);
+    assert_eq!(j["uid"], 1001);
+    assert_eq!(j["gid"], 2002);
+    assert_eq!(j["groups"], serde_json::json!([10, 20, 30]));
+    assert_eq!(j["new_buckets_path"], "/gpfs/rgw1/nsfs/newbuckets");
+    assert_eq!(j["custom_bucket_path_allowed_list"],
+               "/gpfs/rgw1/nsfs/allowed");
+    assert_eq!(j["fs_backend"], "GPFS");
+    assert!(j.get("distinguished_name").is_none(),
+        "an unset field was rendered anyway");
+
+    scrub(key).await;
+}
+
+/// Each field changes on its own.  A full replace resends the rest,
+/// so what this proves is that the one that moved is the one that was
+/// meant to and the others came back unchanged.
+#[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
+#[tokio::test]
+async fn test_identity_fields_update_independently() {
+    let _guard = TestGuard::setup();
+    if !nsfs_only().await {
+        eprintln!("not nsfs;  nothing to check");
+        return;
+    }
+    let key = "identity-independent";
+    scrub(key).await;
+
+    let base = full_record(key);
+    assert_eq!(nsfs_put_identity(&as_params(&base)).await.status, 200);
+
+    let changes: &[(&str, &str, serde_json::Value)] = &[
+        ("uid", "1234", serde_json::json!(1234)),
+        ("gid", "5678", serde_json::json!(5678)),
+        ("groups", "7", serde_json::json!([7])),
+        ("new_buckets_path", "/gpfs/rgw1/nsfs/other",
+         serde_json::json!("/gpfs/rgw1/nsfs/other")),
+        ("custom_bucket_path_allowed_list", "/gpfs/rgw1/nsfs/elsewhere",
+         serde_json::json!("/gpfs/rgw1/nsfs/elsewhere")),
+        ("fs_backend", "CEPH_FS", serde_json::json!("CEPH_FS")),
+    ];
+
+    for (field, value, want) in changes {
+        let mut rec = full_record(key);
+        for entry in rec.iter_mut() {
+            if entry.0 == *field {
+                entry.1 = value.to_string();
+            }
+        }
+        let resp = nsfs_put_identity(&as_params(&rec)).await;
+        assert_eq!(resp.status, 200, "put of {field} failed: {}", resp.body);
+
+        let j = as_json(&nsfs_get_identity(key).await)
+            .expect("the response is not JSON");
+        assert_eq!(&j[*field], want, "{field} did not take");
+
+        /* and nothing else moved */
+        for (other, orig) in full_record(key) {
+            if other == *field || other == "identity" {
+                continue;
+            }
+            let got = &j[other];
+            let expected: serde_json::Value = if other == "groups" {
+                serde_json::json!([10, 20, 30])
+            } else if other == "uid" || other == "gid" {
+                serde_json::json!(orig.parse::<u64>().unwrap())
+            } else {
+                serde_json::json!(orig)
+            };
+            assert_eq!(got, &expected,
+                "changing {field} disturbed {other}");
+        }
+    }
+
+    scrub(key).await;
+}
+
+/// Unset, explicitly empty, and populated are three answers, and the
+/// wire has to carry all three.  Omitting the parameter is unset;
+/// `groups=` is the empty list;  a value is the list.  Collapse the
+/// first two and a read-modify-write silently converts "nobody has
+/// said" into "this identity has none", which are different
+/// instructions to the group loader.
+#[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
+#[tokio::test]
+async fn test_identity_groups_distinguish_unset_from_empty() {
+    let _guard = TestGuard::setup();
+    if !nsfs_only().await {
+        eprintln!("not nsfs;  nothing to check");
+        return;
+    }
+    let key = "identity-groups";
+    scrub(key).await;
+
+    /* populated first, so the two erasing cases below have something
+     * to erase and cannot pass by never having written anything */
+    assert_eq!(nsfs_put_identity(&[
+        ("identity", key), ("uid", "1"), ("gid", "1"),
+        ("groups", "10,20,30")]).await.status, 200);
+    let j = as_json(&nsfs_get_identity(key).await).unwrap();
+    assert_eq!(j["groups"], serde_json::json!([10, 20, 30]));
+
+    /* present and empty:  an explicit empty list */
+    assert_eq!(nsfs_put_identity(&[
+        ("identity", key), ("uid", "1"), ("gid", "1"),
+        ("groups", "")]).await.status, 200);
+    let j = as_json(&nsfs_get_identity(key).await).unwrap();
+    assert_eq!(j["groups"], serde_json::json!([]),
+        "an explicit empty list did not survive");
+
+    /* absent:  unset, which renders as no key at all */
+    assert_eq!(nsfs_put_identity(&[
+        ("identity", key), ("uid", "1"), ("gid", "1")]).await.status, 200);
+    let j = as_json(&nsfs_get_identity(key).await).unwrap();
+    assert!(j.get("groups").is_none(),
+        "an omitted group list came back as something: {j}");
+
+    scrub(key).await;
+}
+
+/// The directory-backed form:  a name and no ids.
+#[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
+#[tokio::test]
+async fn test_identity_directory_backed() {
+    let _guard = TestGuard::setup();
+    if !nsfs_only().await {
+        eprintln!("not nsfs;  nothing to check");
+        return;
+    }
+    let key = "identity-directory";
+    scrub(key).await;
+
+    let resp = nsfs_put_identity(&[
+        ("identity", key),
+        ("distinguished_name", "someone"),
+        ("new_buckets_path", "/gpfs/rgw1/nsfs/someone")]).await;
+    assert_eq!(resp.status, 200, "put failed: {}", resp.body);
+
+    let j = as_json(&nsfs_get_identity(key).await).unwrap();
+    assert_eq!(j["distinguished_name"], "someone");
+    assert!(j.get("uid").is_none(), "a directory-backed record carried a uid");
+    assert!(j.get("gid").is_none(), "a directory-backed record carried a gid");
+
+    scrub(key).await;
+}
+
+/// The rejections, each with the accepting control first.  A rejection
+/// that cannot be contrasted with an acceptance proves only that the
+/// endpoint says no to something.
+#[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
+#[tokio::test]
+async fn test_identity_invalid_records_are_rejected() {
+    let _guard = TestGuard::setup();
+    if !nsfs_only().await {
+        eprintln!("not nsfs;  nothing to check");
+        return;
+    }
+    let key = "identity-rejected";
+    scrub(key).await;
+
+    /* the controls */
+    assert_eq!(nsfs_put_identity(&[
+        ("identity", key), ("uid", "5"), ("gid", "5")]).await.status, 200,
+        "the local arm alone should be accepted");
+    assert_eq!(nsfs_put_identity(&[
+        ("identity", key), ("distinguished_name", "someone")]).await.status,
+        200, "the directory arm alone should be accepted");
+    scrub(key).await;
+
+    let bad: &[(&str, Vec<(&str, &str)>)] = &[
+        ("both identity arms", vec![
+            ("identity", key), ("uid", "5"), ("gid", "5"),
+            ("distinguished_name", "someone")]),
+        ("a uid with no gid", vec![("identity", key), ("uid", "5")]),
+        ("a gid with no uid", vec![("identity", key), ("gid", "5")]),
+        ("a malformed group list", vec![
+            ("identity", key), ("uid", "5"), ("gid", "5"),
+            ("groups", "1,,2")]),
+        ("a non-numeric group", vec![
+            ("identity", key), ("uid", "5"), ("gid", "5"),
+            ("groups", "1,x")]),
+        ("a non-numeric uid", vec![
+            ("identity", key), ("uid", "root"), ("gid", "5")]),
+        ("the invalid uid", vec![
+            ("identity", key), ("uid", "4294967295"), ("gid", "5")]),
+        ("no key at all", vec![("uid", "5"), ("gid", "5")]),
+        /* Keys no owner can ever render to.  `$alice` parses to an
+         * empty tenant and renders back as `alice`, so a row under
+         * that key could never be found;  `alice$` round-trips but
+         * is a user with no id.  Both would otherwise be accepted
+         * with a 200 that told an operator nothing was wrong. */
+        ("a leading tenant separator", vec![
+            ("identity", "$alice"), ("uid", "5"), ("gid", "5")]),
+        ("an empty tenant and namespace", vec![
+            ("identity", "$$alice"), ("uid", "5"), ("gid", "5")]),
+        ("an empty user id", vec![
+            ("identity", "alice$"), ("uid", "5"), ("gid", "5")]),
+    ];
+
+    for (what, params) in bad {
+        let resp = nsfs_put_identity(params).await;
+        /* 400, not merely "not 200":  an error for the wrong
+         * reason -- a 403 from the capability gate, a 500 from a
+         * crash in the parser -- would otherwise read as success */
+        assert_eq!(resp.status, 400,
+            "{what} was not rejected as malformed: {} {}",
+            resp.status, resp.body);
+        let wrote = params.iter()
+            .find(|(k, _)| *k == "identity")
+            .map(|(_, v)| *v)
+            .unwrap_or(key);
+        assert_eq!(nsfs_get_identity(wrote).await.status, 404,
+            "{what} was rejected but left a row behind");
+    }
+}
+
+/// Whether the key names anything is reported, not enforced.
+///
+/// A record may legitimately be written before the account it names,
+/// so an unresolved key is not an error -- but an operator who has
+/// mistyped one deserves to see it at the moment they make it.  Both
+/// polarities, because a flag that is always false says nothing.
+#[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
+#[tokio::test]
+async fn test_identity_reports_whether_the_key_resolves() {
+    let _guard = TestGuard::setup();
+    if !nsfs_only().await {
+        eprintln!("not nsfs;  nothing to check");
+        return;
+    }
+    let unknown = "identity-nobody-by-that-name";
+    /* A user of this module's own.  `resolves` is true only for a user
+     * that exists, so this needs a real one -- and it scrubs and
+     * rewrites the row of whoever it names, which the main user cannot
+     * afford while 590 tests authenticate as it. */
+    let Some(user) = PrivateUser::create("identity").await else {
+        eprintln!("no IAM root credentials;  nothing to check");
+        return;
+    };
+    let known = user.id.clone();
+    scrub(&known).await;
+    scrub(unknown).await;
+
+    let resp = nsfs_put_identity(&[
+        ("identity", &known), ("uid", "12"), ("gid", "12")]).await;
+    assert_eq!(resp.status, 200, "put failed: {}", resp.body);
+    let j = as_json(&resp).unwrap();
+    assert_eq!(j["resolves"], true,
+        "{known} is a real user and the put did not say so");
+    let j = as_json(&nsfs_get_identity(&known).await).unwrap();
+    assert_eq!(j["resolves"], true, "the get disagreed with the put");
+
+    let resp = nsfs_put_identity(&[
+        ("identity", unknown), ("uid", "13"), ("gid", "13")]).await;
+    assert_eq!(resp.status, 200,
+        "an unresolved key is not an error: {}", resp.body);
+    let j = as_json(&resp).unwrap();
+    assert_eq!(j["resolves"], false,
+        "a key naming nothing was reported as resolving");
+    /* and it was still written */
+    let j = as_json(&nsfs_get_identity(unknown).await)
+        .expect("the row should exist regardless");
+    assert_eq!(j["uid"], 13);
+
+    scrub(unknown).await;
+}
+
+/// An owner key carries a tenant separator, and the endpoint has to
+/// round-trip it rather than truncate at the `$`.
+#[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
+#[tokio::test]
+async fn test_identity_tenant_qualified_key() {
+    let _guard = TestGuard::setup();
+    if !nsfs_only().await {
+        eprintln!("not nsfs;  nothing to check");
+        return;
+    }
+    let key = "atenant$auser";
+    scrub(key).await;
+
+    assert_eq!(nsfs_put_identity(&[
+        ("identity", key), ("uid", "3"), ("gid", "3")]).await.status, 200);
+    let j = as_json(&nsfs_get_identity(key).await).unwrap();
+    assert_eq!(j["identity"], key, "the tenant separator did not survive");
+
+    scrub(key).await;
+}
+
+/// List and delete.  Removing what is not there succeeds, because
+/// the caller asked for the row to be gone and it is -- an importer
+/// re-run should not have to distinguish the cases.
+#[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
+#[tokio::test]
+async fn test_identity_list_and_delete() {
+    let _guard = TestGuard::setup();
+    if !nsfs_only().await {
+        eprintln!("not nsfs;  nothing to check");
+        return;
+    }
+    let (a, b) = ("identity-list-a", "identity-list-b");
+    scrub(a).await;
+    scrub(b).await;
+
+    for key in [a, b] {
+        assert_eq!(nsfs_put_identity(&[
+            ("identity", key), ("uid", "1"), ("gid", "1")]).await.status, 200);
+    }
+
+    let resp = nsfs_list_identities().await;
+    assert_eq!(resp.status, 200, "list failed: {}", resp.body);
+    let j = as_json(&resp).expect("the response is not JSON");
+    let keys: Vec<String> = j["identities"].as_array()
+        .expect("identities is not an array")
+        .iter()
+        .filter_map(|e| e["identity"].as_str().map(|s| s.to_string()))
+        .collect();
+    assert!(keys.iter().any(|k| k == a), "{a} missing from the list");
+    assert!(keys.iter().any(|k| k == b), "{b} missing from the list");
+
+    assert_eq!(nsfs_delete_identity(a).await.status, 200);
+    assert_eq!(nsfs_get_identity(a).await.status, 404);
+    assert_eq!(nsfs_delete_identity(a).await.status, 200,
+        "deleting an absent identity should succeed");
+
+    let j = as_json(&nsfs_list_identities().await).unwrap();
+    let keys: Vec<String> = j["identities"].as_array().unwrap().iter()
+        .filter_map(|e| e["identity"].as_str().map(|s| s.to_string()))
+        .collect();
+    assert!(!keys.iter().any(|k| k == a), "{a} survived its delete");
+    assert!(keys.iter().any(|k| k == b), "{b} was deleted too");
+
+    scrub(b).await;
+}
+
+/// The capability gate, both polarities.
+///
+/// Every verb is gated -- READ on the getter, WRITE on the writers --
+/// and a record carrying uid and gid is a grant of filesystem
+/// identity, so an ordinary S3 credential must not be able to read
+/// one or mint one.  The control is the same request signed by the
+/// admin credential, which must succeed;  without it a gate that
+/// denied everyone would pass.
+#[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
+#[tokio::test]
+async fn test_identity_requires_the_nsfs_capability() {
+    let _guard = TestGuard::setup();
+    if !nsfs_only().await {
+        eprintln!("not nsfs;  nothing to check");
+        return;
+    }
+    let cfg = get_config();
+    let key = "identity-caps";
+    scrub(key).await;
+
+    /* the control:  the admin credential can do all three */
+    assert_eq!(nsfs_put_identity(&[
+        ("identity", key), ("uid", "8"), ("gid", "8")]).await.status, 200);
+    assert_eq!(nsfs_get_identity(key).await.status, 200);
+
+    let unprivileged = |method: reqwest::Method, query: String| {
+        /* the alt user, which carries no capabilities at all.  The
+         * main user has `nsfs: *` from the gateway's own bootstrap,
+         * so it is the wrong control -- it would prove the gate open
+         * for everyone. */
+        let ak = cfg.alt_access_key.clone();
+        let sk = cfg.alt_secret_key.clone();
+        async move {
+            admin_request_as(&ak, &sk, method, "/admin/nsfs/identity",
+                             &query, None).await
+        }
+    };
+
+    let r = unprivileged(reqwest::Method::GET,
+                         format!("identity={}", q(key))).await;
+    assert_eq!(r.status, 403,
+        "an ordinary credential read an identity record: {}", r.body);
+
+    let r = unprivileged(reqwest::Method::GET, String::new()).await;
+    assert_eq!(r.status, 403,
+        "an ordinary credential listed the identity table: {}", r.body);
+
+    let r = unprivileged(reqwest::Method::PUT,
+                         format!("identity={}&uid=0&gid=0", q(key))).await;
+    assert_eq!(r.status, 403,
+        "an ordinary credential wrote an identity record: {}", r.body);
+
+    let r = unprivileged(reqwest::Method::DELETE,
+                         format!("identity={}", q(key))).await;
+    assert_eq!(r.status, 403,
+        "an ordinary credential deleted an identity record: {}", r.body);
+
+    /* the denials changed nothing:  the record is as the control
+     * left it, not uid 0 and not gone */
+    let j = as_json(&nsfs_get_identity(key).await)
+        .expect("the record should still be readable by the admin");
+    assert_eq!(j["uid"], 8, "a denied write took effect anyway");
+
+    scrub(key).await;
+}
+
+// ---------------------------------------------------------------
+// Resolution, through real authentication.
+//
+// Everything above writes and reads rows.  These drive the other
+// end:  what a *request* is resolved to.  The key a request
+// produces is the part most likely to be wrong, and a unit test
+// that builds an applier by hand assumes the answer it is checking.
+// ---------------------------------------------------------------
+
+/// The caller's own credentials, all three outcomes.
+#[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
+#[tokio::test]
+async fn test_credentials_resolve_the_caller() {
+    let _guard = TestGuard::setup();
+    if !nsfs_only().await {
+        eprintln!("not nsfs;  nothing to check");
+        return;
+    }
+    /* The caller is whoever signs the request:  here a user of this
+     * test's own, so the row it removes and rewrites is nobody else's.
+     * Getting the caller wrong the first time is what the endpoint's
+     * `identity` field is for. */
+    let Some(user) = PrivateUser::create("resolvecaller").await else {
+        eprintln!("could not make this test's own user");
+        return;
+    };
+    let r = grant_user_caps(&user.id, "nsfs=read").await;
+    assert_eq!(r.status, 200, "granting nsfs to the user failed: {}", r.body);
+    let me = user.id.clone();
+    let ask = || nsfs_credentials_as(&user.access_key, &user.secret_key);
+    scrub(&me).await;
+
+    /* no row:  no impersonation, and a 200 saying so rather than an
+     * error -- the diagnostic has to work in the broken case */
+    let resp = ask().await;
+    assert_eq!(resp.status, 200, "credentials failed: {}", resp.body);
+    let j = as_json(&resp).expect("not JSON");
+    assert_eq!(j["outcome"], "none");
+    assert_eq!(j["identity"], me,
+        "the endpoint resolved under a key that is not the caller");
+    assert!(j.get("uid").is_none(), "an unresolved answer carried a uid");
+
+    /* a row:  the credentials come back */
+    assert_eq!(nsfs_put_identity(&[
+        ("identity", &me), ("uid", "1001"), ("gid", "2002"),
+        ("groups", "10,20,30")]).await.status, 200);
+    let j = as_json(&ask().await).unwrap();
+    assert_eq!(j["outcome"], "resolved");
+    assert_eq!(j["uid"], 1001);
+    assert_eq!(j["gid"], 2002);
+    assert_eq!(j["groups"], serde_json::json!([10, 20, 30]));
+
+    /* an absent group list clears rather than inherits -- the same
+     * property the unit test asserts, now through a real request */
+    assert_eq!(nsfs_put_identity(&[
+        ("identity", &me), ("uid", "1001"), ("gid", "2002")]).await.status,
+        200);
+    let j = as_json(&ask().await).unwrap();
+    assert_eq!(j["groups"], serde_json::json!([]),
+        "an absent list resolved to something");
+
+    /* a directory-backed row:  asked for, cannot be supplied, and
+     * must not fall back to serving the request unimpersonated */
+    assert_eq!(nsfs_put_identity(&[
+        ("identity", &me),
+        ("distinguished_name", "uid=someone,dc=example,dc=com")])
+        .await.status, 200);
+    let j = as_json(&ask().await).unwrap();
+    assert_eq!(j["outcome"], "refused");
+    assert!(j.get("uid").is_none());
+
+}
+
+/// Asking about somebody else is the same gate, and reaches rows
+/// that are not the caller's.
+#[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
+#[tokio::test]
+async fn test_credentials_for_another_identity() {
+    let _guard = TestGuard::setup();
+    if !nsfs_only().await {
+        eprintln!("not nsfs;  nothing to check");
+        return;
+    }
+    let cfg = get_config();
+    let other = "credentials-somebody-else";
+    scrub(other).await;
+
+    assert_eq!(nsfs_put_identity(&[
+        ("identity", other), ("uid", "31"), ("gid", "32")]).await.status, 200);
+
+    let j = as_json(&nsfs_credentials_for(other).await).unwrap();
+    assert_eq!(j["identity"], other);
+    assert_eq!(j["outcome"], "resolved");
+    assert_eq!(j["uid"], 31);
+
+    /* and it is genuinely not the caller's own answer */
+    let j = as_json(&nsfs_credentials().await).unwrap();
+    assert_ne!(j["identity"], other);
+
+    /* a key no owner renders to is malformed, not merely unfound */
+    assert_eq!(nsfs_credentials_for("$alice").await.status, 400);
+
+    /* the gate holds here too */
+    let r = nsfs_credentials_as(&cfg.alt_access_key,
+                                &cfg.alt_secret_key).await;
+    assert_eq!(r.status, 403,
+        "an uncapped credential read an identity: {}", r.body);
+
+    scrub(other).await;
+}
+
+/// The key choice, made falsifiable.
+///
+/// Every other test here runs as a standalone user, for whom
+/// `s->owner` and `s->user` are the same value — so they pass
+/// whichever key the driver uses, and prove nothing about the
+/// choice.  This one runs as a **user inside an account**, where the
+/// two differ: `get_aclowner()` reports the account, `s->user`
+/// reports that user.
+///
+/// Which row wins is `rgw_nsfs_user_identity_override` (I9):  on, a
+/// row keyed on the user takes precedence where one exists, as NooBaa
+/// serves an IAM user from its own record;  off, the user runs as its
+/// account whatever rows exist.  The test reads the gateway's setting
+/// and expects accordingly, so the deployments with and without the
+/// override each check their own half.  With a row under each:  on,
+/// the user is served as its own (4242, not 9999), which fails if the
+/// driver keys on the ACL owner;  off, as the account (9999), which
+/// fails if the user's row is consulted.  With the user's row removed
+/// it is served as the account either way, which fails if the driver
+/// keys on the user alone.
+#[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
+#[tokio::test]
+async fn test_credentials_of_a_user_in_an_account() {
+    let _guard = TestGuard::setup();
+    if !nsfs_only().await {
+        eprintln!("not nsfs;  nothing to check");
+        return;
+    }
+    let cfg = get_config();
+    /* An account of this test's own:  both cases set the account's row,
+     * and the suite's `[iam root]` account is in use by every IAM test
+     * at once. */
+    let Some(acct) = PrivateAccount::create("nsfscred").await else {
+        eprintln!("could not make this test's own account");
+        return;
+    };
+    let root = &acct.root;
+    let account = acct.id.clone();
+    let name = format!("{}nsfscred", cfg.iam_name_prefix);
+
+    /* leave nothing from a previous run */
+    let _ = root.delete_access_key().user_name(&name)
+        .access_key_id("x").send().await;
+    let _ = root.delete_user().user_name(&name).send().await;
+
+    let created = root.create_user()
+        .user_name(&name)
+        .path(&cfg.iam_path_prefix)
+        .send().await.expect("create_user");
+    /* IAM returns the user's rgw_user directly -- a generated
+     * UUID, unique across accounts.  This is the key. */
+    let acct_user = created.user().unwrap().user_id().to_string();
+    assert_ne!(acct_user, account, "the user's id is its account's");
+
+    let ak = root.create_access_key().user_name(&name).send().await
+        .expect("create_access_key");
+    let k = ak.access_key().unwrap();
+    let (mak, msk) = (k.access_key_id().to_string(),
+                      k.secret_access_key().to_string());
+
+    /* Admin Ops always needs a cap, so the user is given one
+     * rather than the endpoint being opened. */
+    let r = grant_user_caps(&acct_user, "nsfs=read").await;
+    assert_eq!(r.status, 200, "granting nsfs to the user failed: {}",
+               r.body);
+
+    scrub(&acct_user).await;
+    scrub(&account).await;
+
+    /* two rows, deliberately different */
+    assert_eq!(nsfs_put_identity(&[
+        ("identity", &acct_user), ("uid", "4242"), ("gid", "4242"),
+        ("groups", "77")]).await.status, 200);
+    assert_eq!(nsfs_put_identity(&[
+        ("identity", &account), ("uid", "9999"), ("gid", "9999")])
+        .await.status, 200);
+
+    /* the control:  the account's own row resolves to 9999, so
+     * "not 9999" below is a real discrimination and not an artifact
+     * of that row being missing */
+    let j = as_json(&nsfs_credentials_for(&account).await).unwrap();
+    assert_eq!(j["outcome"], "resolved");
+    assert_eq!(j["uid"], 9999);
+
+    let overriding = user_identity_override().await;
+
+    /* and now as the user itself, through real authentication */
+    let resp = nsfs_credentials_as(&mak, &msk).await;
+    assert_eq!(resp.status, 200, "its credentials failed: {}", resp.body);
+    let j = as_json(&resp).expect("not JSON");
+
+    assert_eq!(j["identity"], acct_user,
+        "the request resolved under {} rather than the user",
+        j["identity"]);
+    assert_ne!(j["identity"], serde_json::json!(account),
+        "the user collapsed onto its account");
+    if overriding {
+        assert_eq!(j["uid"], 4242, "the user was served as the wrong row");
+        assert_ne!(j["uid"], serde_json::json!(9999),
+            "the user was served as its account");
+        assert_eq!(j["groups"], serde_json::json!([77]));
+        assert_eq!(j["row"], acct_user,
+            "the answer did not come from the user's row");
+    } else {
+        assert_eq!(j["uid"], 9999,
+            "without the override the user's own row was consulted");
+        assert_eq!(j["row"], account,
+            "without the override the answer did not come from the account's row");
+    }
+
+    /* no row of its own:  the user runs as its account, and the
+     * answer says which row it came from */
+    scrub(&acct_user).await;
+    let j = as_json(&nsfs_credentials_as(&mak, &msk).await).expect("not JSON");
+    assert_eq!(j["identity"], acct_user,
+        "the request resolved under {} rather than the user",
+        j["identity"]);
+    assert_eq!(j["outcome"], "resolved",
+        "a user with no row was not served as its account");
+    assert_eq!(j["row"], account,
+        "the fallback did not come from the account's row");
+    assert_eq!(j["uid"], 9999);
+    assert_eq!(j["gid"], 9999);
+
+    /* clean up */
+    scrub(&acct_user).await;
+    let _ = root.delete_access_key().user_name(&name)
+        .access_key_id(&mak).send().await;
+    let _ = root.delete_user().user_name(&name).send().await;
+}
+
+
+/// An attribute write and a delete run as the **user**, not as its
+/// account -- under `rgw_nsfs_user_identity_override`;  without it,
+/// as the account, whatever row the user has (I9).  The test reads
+/// the gateway's setting and expects accordingly.
+///
+/// (n) phase D's validation clause.  Phase C plumbed the
+/// authenticated user to `DeleteOp` and the attribute setters, and
+/// nothing asserted that the *right* one arrives:  the compiler
+/// catches a missing identity, not a wrong one, so a later refactor
+/// can collapse a user onto its account in silence and every status
+/// code stays 200.
+///
+/// A user inside an account is the case that discriminates, because it
+/// is the only one where the two differ -- `get_aclowner()` reports
+/// the account and `s->user` the user (see
+/// `test_credentials_of_a_user_in_an_account`).
+///
+/// **Three cases**, because one assertion proves nothing on its own:
+/// the user's row is used when it has one;  moving that row moves
+/// what is recorded, so the value tracks the row rather than being
+/// echoed;  and such a user with **no** row is served as its account,
+/// which is the Scale case and the one the consumer sites must get
+/// right.
+///
+/// The account is the test's own ([`PrivateAccount`]), so its row can
+/// hold whatever the fallback case needs without touching a principal
+/// another test is using.
+///
+/// **Asserts the identity and not the status**, as `nested-identity`
+/// and `raise` do.  The `ran-as` hint reports which identity the
+/// driver *chose* at each consumer;  that the switch itself works is
+/// what those two establish.
+#[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
+#[tokio::test]
+async fn test_attrs_and_delete_run_as_the_account_user() {
+    let _guard = TestGuard::setup();
+    if !nsfs_only().await {
+        eprintln!("not nsfs;  nothing to check");
+        return;
+    }
+    if features().await.and_then(|f| f.get_bool("impersonate"))
+        != Some(true) {
+        eprintln!("impersonation is off;  the user and the gateway \
+                   are the same uid and nothing discriminates");
+        return;
+    }
+
+    /* alice's uid, because the fixture already makes her able to write
+     * in a bucket directory;  what is under test is which identity is
+     * chosen, not whether the filesystem lets it through. */
+    const ACCT_USER_UID: &str = "70101";
+    const MEMBER_GRP: &str = "70010";
+    /* bob's, for the second case.  Any second value would do;  one the
+     * fixture already creates keeps the test from inventing uids. */
+    const OTHER_UID: &str = "70102";
+    const ACCOUNT_UID: &str = "9999";
+
+    let cfg = get_config();
+    let Some(acct) = PrivateAccount::create("ranas").await else {
+        eprintln!("could not make this test's own account");
+        return;
+    };
+    let root = &acct.root;
+    let account = acct.id.clone();
+    let name = format!("{}ranasacctuser", cfg.iam_name_prefix);
+
+    /* Leave nothing from a previous run.  A user with a key or a
+     * policy still attached cannot be deleted, and an earlier failure
+     * leaves both, so each is removed by enumeration rather than by
+     * guessing its name. */
+    if let Ok(keys) = root.list_access_keys().user_name(&name).send().await {
+        for k in keys.access_key_metadata() {
+            if let Some(id) = k.access_key_id() {
+                let _ = root.delete_access_key().user_name(&name)
+                    .access_key_id(id).send().await;
+            }
+        }
+    }
+    if let Ok(pols) = root.list_user_policies().user_name(&name).send().await {
+        for pn in pols.policy_names() {
+            let _ = root.delete_user_policy().user_name(&name)
+                .policy_name(pn).send().await;
+        }
+    }
+    let _ = root.delete_user().user_name(&name).send().await;
+
+    let created = root.create_user()
+        .user_name(&name)
+        .path(&cfg.iam_path_prefix)
+        .send().await.expect("create_user");
+    let acct_user = created.user().unwrap().user_id().to_string();
+    assert_ne!(acct_user, account, "the user's id is its account's");
+
+    let ak = root.create_access_key().user_name(&name).send().await
+        .expect("create_access_key");
+    let k = ak.access_key().unwrap();
+    let (mak, msk) = (k.access_key_id().to_string(),
+                      k.secret_access_key().to_string());
+
+    /* Such a user has no S3 permissions of its own;  without this every
+     * request below is a 403 from IAM and never reaches the driver. */
+    root.put_user_policy()
+        .user_name(&name)
+        .policy_name("RanAsAllAccess")
+        .policy_document(serde_json::to_string(&serde_json::json!({
+            "Version": "2012-10-17",
+            "Statement": { "Effect": "Allow", "Action": "*",
+                           "Resource": "*" }
+        })).unwrap())
+        .send().await.expect("put_user_policy");
+
+    /* the fallback case below needs the account's row to hold a known
+     * uid */
+    scrub(&acct_user).await;
+    scrub(&account).await;
+    assert_eq!(nsfs_put_identity(&[
+        ("identity", &account), ("uid", ACCOUNT_UID),
+        ("gid", ACCOUNT_UID)]).await.status, 200);
+    assert_eq!(nsfs_put_identity(&[
+        ("identity", &acct_user), ("uid", ACCT_USER_UID), ("gid", ACCT_USER_UID),
+        ("groups", MEMBER_GRP)]).await.status, 200);
+
+    let s3 = build_s3_client(&mak, &msk);
+    let bucket = format!("{}ranas", cfg.bucket_prefix);
+    let key = "ran-as-object";
+    let _ = s3.delete_object().bucket(&bucket).key(key).send().await;
+    let _ = s3.delete_bucket().bucket(&bucket).send().await;
+    s3.create_bucket().bucket(&bucket).send().await
+        .expect("the user could not create its bucket");
+    s3.put_object().bucket(&bucket).key(key)
+        .body(b"ran-as".to_vec().into())
+        .send().await.expect("the user could not write its object");
+
+    /* from here on, record what each consumer chooses for the
+     * user's requests.  By user and not by object:  the
+     * question is whether its operations ran as itself,
+     * which no object names. */
+    let selecting = driver_hint_results(
+        "ran-as", &[("select", &acct_user)]).await
+        .expect("selecting ran-as failed;  is rgw_driver_debug_apis on?");
+    assert_eq!(selecting.get("selecting").map(String::as_str),
+               Some(acct_user.as_str()));
+
+    /* the attribute write */
+    s3.put_object_tagging().bucket(&bucket).key(key)
+        .tagging(aws_sdk_s3::types::Tagging::builder()
+            .tag_set(aws_sdk_s3::types::Tag::builder()
+                .key("phase").value("d").build().unwrap())
+            .build().unwrap())
+        .send().await.expect("the user could not tag its object");
+
+    /* and the delete */
+    s3.delete_object().bucket(&bucket).key(key).send().await
+        .expect("the user could not delete its object");
+
+    let seen = driver_hint_results("ran-as", &[]).await
+        .expect("reading ran-as failed");
+
+    /* Nothing recorded is its own failure, and a distinct one:  it
+     * means neither consumer saw that user itself, so the user was
+     * collapsed onto its account before these sites were reached
+     * rather than at them. */
+    let count: usize = seen.get("count").and_then(|c| c.parse().ok())
+        .unwrap_or(0);
+    assert!(count >= 2,
+        "ran-as recorded {count} choices for the user;  expected the \
+         attribute write and the delete.  Neither site saw {acct_user} \
+         itself");
+
+    let overriding = user_identity_override().await;
+    /* what the user's own row is expected to yield:  itself under the
+     * override, the account's without it */
+    let mine = if overriding { ACCT_USER_UID } else { ACCOUNT_UID };
+    let attrs = seen.get("ran_as_attrs").map(String::as_str);
+    let del = seen.get("ran_as_delete").map(String::as_str);
+    assert_eq!(attrs, Some(mine),
+        "the attribute write chose {attrs:?}, not {mine}");
+    assert_eq!(del, Some(mine),
+        "the delete chose {del:?}, not {mine}");
+
+    /* The other polarity, so a pass here is a discrimination and not
+     * a tautology.  Move the user's row to a different uid and the
+     * same site must record the new one:  that is what shows the
+     * recorded value tracks the row rather than being echoed from
+     * somewhere.  A driver that had collapsed the user onto its
+     * account would fail both cases, since neither value would be the
+     * account's.  Without this case the assertions above would hold
+     * against a driver that ignored the user entirely -- the shape
+     * `inject-no-chown` had, one polarity asserted twice.
+     *
+     * A delete of a key that was never there:  the identity is pinned
+     * before anything touches the filesystem, so the choice is
+     * recorded whether or not that uid could have written. */
+    assert_eq!(nsfs_put_identity(&[
+        ("identity", &acct_user), ("uid", OTHER_UID), ("gid", OTHER_UID)])
+        .await.status, 200);
+    assert_eq!(driver_hint_results("ran-as", &[("select", &acct_user)])
+        .await.expect("re-selecting failed")
+        .get("selecting").map(String::as_str), Some(acct_user.as_str()));
+    let _ = s3.delete_object().bucket(&bucket).key("never-here")
+        .send().await;
+    let moved = driver_hint_results("ran-as", &[]).await
+        .expect("reading ran-as failed");
+    /* without the override the moved row is still not consulted,
+     * which is that setting's discrimination:  the user has a row and
+     * it is not what runs */
+    let moved_to = if overriding { OTHER_UID } else { ACCOUNT_UID };
+    assert_eq!(moved.get("ran_as_delete").map(String::as_str),
+               Some(moved_to),
+        "the user's row moved to {OTHER_UID} and the delete \
+         chose {:?}, not {moved_to}",
+        moved.get("ran_as_delete"));
+
+    /* And the fallback, which is the Scale case and the one the
+     * consumer sites have to get right:  a user with **no row of
+     * its own** is served as its account
+     * (`test_credentials_of_a_user_in_an_account` settles the
+     * resolution;  this asserts it reaches the consumer).  On Scale
+     * every such user ordinarily has no row, so this is the common
+     * shape there and not an edge. */
+    scrub(&acct_user).await;
+    assert_eq!(driver_hint_results("ran-as", &[("select", &acct_user)])
+        .await.expect("re-selecting failed")
+        .get("selecting").map(String::as_str), Some(acct_user.as_str()));
+    let _ = s3.delete_object().bucket(&bucket).key("never-here")
+        .send().await;
+    let fellback = driver_hint_results("ran-as", &[]).await
+        .expect("reading ran-as failed");
+    assert_eq!(fellback.get("ran_as_delete").map(String::as_str),
+               Some(ACCOUNT_UID),
+        "a user with no row of its own chose {:?};  it should be \
+         served as its account",
+        fellback.get("ran_as_delete"));
+
+    let _ = s3.delete_bucket().bucket(&bucket).send().await;
+    let _ = root.delete_user_policy().user_name(&name)
+        .policy_name("RanAsAllAccess").send().await;
+    scrub(&acct_user).await;
+    let _ = root.delete_access_key().user_name(&name)
+        .access_key_id(&mak).send().await;
+    let _ = root.delete_user().user_name(&name).send().await;
+}
+
+/// Every principal the suite authenticates as has an identity row.
+///
+/// With impersonation on, a request whose identity has no record is
+/// denied before any file is opened -- correctly, since no identity
+/// means denial ((n) 6.1).  The denial lands on whatever test happens
+/// to use that principal, as an `AccessDenied` that looks like the
+/// thing the test was checking, so the cause has been found three
+/// times by excavation rather than by being told:  the tenanted user
+/// (2026-10-16, the cors `_tenant` tests), anonymous (2026-10-19, six
+/// acl and post_object tests), then the IAM user, the policy-only user
+/// and both IAM root accounts (2026-10-19, three `user_policy` tests).
+///
+/// So this asserts the fixture's side of it, and names what is
+/// missing.  It is the cheapest test in the suite to satisfy and the
+/// most expensive failure to diagnose without.
+#[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
+#[tokio::test]
+async fn test_every_principal_is_provisioned() {
+    let _guard = TestGuard::setup();
+    if !nsfs_only().await {
+        eprintln!("not nsfs;  nothing to check");
+        return;
+    }
+    let impersonating = match s3_tests_rs::features::features().await {
+        Some(f) => f.get_bool("impersonate").unwrap_or(false),
+        None => false,
+    };
+    if !impersonating {
+        eprintln!("impersonation is off;  a record is not needed");
+        return;
+    }
+    let cfg = get_config();
+    /* Named rather than enumerated:  Rust has no reflection, and a
+     * list that must be extended by hand is exactly the failure this
+     * test exists to make loud rather than to avoid. */
+    let principals: Vec<(&str, &str)> = vec![
+        ("main", &cfg.main_user_id),
+        ("alt", &cfg.alt_user_id),
+        ("quota", &cfg.quota_user_id),
+        ("policy-only", &cfg.policy_only_user_id),
+        ("tenant", &cfg.tenant_user_id),
+        ("iam", &cfg.iam_user_id),
+        ("iam root account", &cfg.iam_root_user_id),
+        ("iam alt root account", &cfg.iam_alt_root_user_id),
+        /* not a configured user:  the identity an unauthenticated
+         * request is served as, which the driver names itself */
+        ("anonymous", "anonymous"),
+    ];
+
+    let mut missing = Vec::new();
+    for (what, who) in &principals {
+        if who.is_empty() {
+            continue;
+        }
+        /* A row with a uid, not `resolves`:  that field says the key
+         * names a real RGW user, and `anonymous` names none -- it is
+         * the identity an unauthenticated request is served as.  What
+         * matters here is that the driver has a uid to run as. */
+        let r = nsfs_get_identity(who).await;
+        let found = (r.status == 200)
+            && as_json(&r).map_or(false, |j| j["uid"].is_number());
+        if !found {
+            missing.push(format!("{what} ({who}) -> {}", r.status));
+        }
+    }
+    assert!(missing.is_empty(),
+        "principals the suite authenticates as with no identity row, so \
+         every request they make is denied before it reaches a file:\n  {}\n\
+         If rgw-vstart.sh's fixture does not bind it, add it there.  If it \
+         does, a test removed the row and did not put it back, and the \
+         absence persists for the rest of the run and every run after -- \
+         restart with --with-impersonation to re-provision, then find the \
+         test.",
+        missing.join("\n  "));
+}
+
+/// A role's identity row (I9):  `role=<role id>` in place of `identity=`
+/// on the identity endpoint, keyed `role:<id>`, apart from every owner's.
+/// The role is RGW's, made here through IAM;  the row is the identity it
+/// is given.  An owner key that begins `role:` is refused, so a role's
+/// row cannot be written as a user's, and naming both forms at once is
+/// refused.  `resolves` says whether the role exists, as it does for an
+/// owner.
+#[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
+#[tokio::test]
+async fn test_a_role_is_given_an_identity_by_its_id() {
+    let _guard = TestGuard::setup();
+    if !nsfs_only().await {
+        eprintln!("not nsfs;  nothing to check");
+        return;
+    }
+    let cfg = get_config();
+    let Some(acct) = PrivateAccount::create("roleid").await else {
+        eprintln!("could not make this test's own account");
+        return;
+    };
+    let name = format!("{}RoleIdentity", cfg.iam_name_prefix);
+    let _ = acct.root.delete_role().role_name(&name).send().await;
+    let trust = serde_json::json!({
+        "Version": "2012-10-17",
+        "Statement": [{"Effect": "Allow", "Principal": {"AWS": "*"},
+                       "Action": "sts:AssumeRole"}]
+    }).to_string();
+    let made = acct.root.create_role().role_name(&name)
+        .assume_role_policy_document(&trust).send().await
+        .expect("create_role");
+    let role_id = made.role().unwrap().role_id().to_string();
+    let key = format!("role:{role_id}");
+
+    let put = nsfs_put_identity(&[("role", role_id.as_str()), ("uid", "70109"),
+                                  ("gid", "70109")]).await;
+    assert_eq!(put.status, 200, "giving the role an identity: {}", put.body);
+    let j = as_json(&put).expect("not JSON");
+    assert_eq!(j["identity"], key, "the role's row is not keyed role:<id>");
+    assert_eq!(j["resolves"], true, "the role was not found by its id");
+
+    let got = admin_request(reqwest::Method::GET, "/admin/nsfs/identity",
+                            &format!("role={}", q(&role_id)), None).await;
+    assert_eq!(got.status, 200, "{}", got.body);
+    assert_eq!(as_json(&got).unwrap()["uid"], 70109);
+
+    /* the role's key as an owner key:  refused, both ways */
+    assert_eq!(nsfs_put_identity(&[("identity", key.as_str()), ("uid", "5"),
+                                   ("gid", "5")]).await.status, 400,
+               "a role's key was accepted as an owner's");
+    assert_eq!(nsfs_put_identity(&[("identity", "someone"),
+                                   ("role", role_id.as_str()),
+                                   ("uid", "5"), ("gid", "5")]).await.status, 400,
+               "both forms at once were accepted");
+    assert_eq!(nsfs_put_identity(&[("role", ""), ("uid", "5"),
+                                   ("gid", "5")]).await.status, 400,
+               "an empty role id was accepted");
+
+    /* a role that does not exist is written and reported, as an owner is */
+    let ghost = nsfs_put_identity(&[("role", "no-such-role-id"), ("uid", "5"),
+                                    ("gid", "5")]).await;
+    assert_eq!(ghost.status, 200, "{}", ghost.body);
+    assert_eq!(as_json(&ghost).unwrap()["resolves"], false,
+               "a role that does not exist was reported found");
+
+    for id in [role_id.as_str(), "no-such-role-id"] {
+        let del = admin_request(reqwest::Method::DELETE, "/admin/nsfs/identity",
+                                &format!("role={}", q(id)), None).await;
+        assert_eq!(del.status, 200, "removing {id}'s row: {}", del.body);
+    }
+    let gone = admin_request(reqwest::Method::GET, "/admin/nsfs/identity",
+                             &format!("role={}", q(&role_id)), None).await;
+    assert_eq!(gone.status, 404, "the role's row outlived its delete: {}", gone.body);
+    let _ = acct.root.delete_role().role_name(&name).send().await;
+}
