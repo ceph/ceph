@@ -91,6 +91,7 @@ APIs
    AWS S3 <s3>
    AWS SNS <notifications>
    AWS STS <STS>
+   STS External Authorization <ext_authz>
    OpenStack Swift <swift>
    Admin Ops API <adminops>
    Python Binding <api>

@@ -9,6 +9,7 @@
 #include "rgw_common.h"
 #include "rgw_auth.h"
 #include "rgw_quota.h"
+#include "rgw_ext_authz.h"
 #include "driver/rados/rgw_user.h"
 #include "rgw_http_client.h"
 #include "rgw_iam_managed_policy.h"
@@ -785,10 +786,14 @@ void rgw::auth::WebIdentityApplier::modify_request_state(const DoutPrefixProvide
 
   if (role_tags) {
     for (auto& it : role_tags.get()) {
-      std::string p_key = "aws:PrincipalTag/";
-      p_key.append(it.first);
-      s->principal_tags.emplace_back(std::make_pair(p_key, it.second));
-      ldpp_dout(dpp, 10) << "Principal Tag Key: " << p_key << " Value: " << it.second << dendl;
+      // RGW control metadata, not an identity attribute: it must neither
+      // require sts:TagSession nor reach the session as a principal tag
+      if (it.first != rgw::ext_authz::required_tag_key) {
+        std::string p_key = "aws:PrincipalTag/";
+        p_key.append(it.first);
+        s->principal_tags.emplace_back(std::make_pair(p_key, it.second));
+        ldpp_dout(dpp, 10) << "Principal Tag Key: " << p_key << " Value: " << it.second << dendl;
+      }
 
       std::string e_key = "iam:ResourceTag/";
       e_key.append(it.first);

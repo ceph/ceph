@@ -1,0 +1,41 @@
+# Mock IBM IAM for exercising RGW ext-authz inside an OCS/Rook cluster.
+# Create the script ConfigMap first:
+#   oc -n openshift-storage create configmap ext-authz-mock-script \
+#       --from-file=ext_authz_mock.py=qa/workunits/rgw/ext_authz_mock.py
+# Then: oc -n openshift-storage apply -f qa/workunits/rgw/ext_authz_mock.k8s.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ext-authz-mock
+  labels:
+    app: ext-authz-mock
+spec:
+  containers:
+  - name: mock
+    image: quay.io/ceph/ceph:v20.2.4
+    command: ["python3", "/scripts/ext_authz_mock.py"]
+    args:
+    - --host=0.0.0.0
+    - --port=8443
+    - --cert=/tmp/mock.pem
+    - --san=DNS:ext-authz-mock,DNS:ext-authz-mock.openshift-storage.svc,DNS:ext-authz-mock.openshift-storage.svc.cluster.local
+    ports:
+    - containerPort: 8443
+    volumeMounts:
+    - name: script
+      mountPath: /scripts
+  volumes:
+  - name: script
+    configMap:
+      name: ext-authz-mock-script
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ext-authz-mock
+spec:
+  selector:
+    app: ext-authz-mock
+  ports:
+  - port: 8443
+    targetPort: 8443

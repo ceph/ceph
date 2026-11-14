@@ -4559,6 +4559,87 @@ def test_account_metadata_sync():
             check_groups_eq(source_conn, target_conn)
             check_oidc_providers_eq(source_conn, target_conn)
 
+def ext_authz_get(zone):
+    """ the redacted external authorizer config as seen by one zone """
+    cmd = ['ext-authz', 'get'] + zone.zone_args()
+    out, retcode = zone.cluster.admin(cmd, check_retcode=False, read_only=True)
+    if retcode != 0:
+        return None
+    return json.loads(out)
+
+def test_ext_authz_config_sync():
+    """
+    The STS external authorizer config is zone-wide metadata. Setting it on
+    the metadata master must show up in every zone, and removing it too.
+    """
+    import os
+    import tempfile
+
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    master = zonegroup_conns.master_zone.zone
+
+    config = {
+        'enabled': True,
+        'provider': 'ibm-iam',
+        'endpoint': 'https://iam.test.cloud.ibm.com',
+        'service_credential': 'multisite-test-api-key',
+        'service_instance': 'crn:v1:bluemix:public:software-defined-storage:'
+                            'us-south:a/0123456789abcdef0123456789abcdef:'
+                            '11111111-2222-3333-4444-555555555555::',
+        'readonly_role_name': 'fusion-reader',
+        'readwrite_role_name': 'fusion-writer',
+    }
+
+    with tempfile.NamedTemporaryFile('w', suffix='.json', delete=False) as f:
+        json.dump(config, f)
+        infile = f.name
+    try:
+        master.cluster.admin(['ext-authz', 'set', '--infile', infile] +
+                             master.zone_args())
+    finally:
+        os.unlink(infile)
+
+    realm_meta_checkpoint(realm)
+
+    expected = ext_authz_get(master)
+    eq(expected['provider'], 'ibm-iam')
+    eq(expected['enabled'], True)
+    # the credential is never printed
+    eq(expected['service_credential'], '<redacted>')
+    for zone_conn in zonegroup_conns.zones:
+        eq(ext_authz_get(zone_conn.zone), expected)
+
+    # the real credential does replicate, for sync
+    for zone_conn in zonegroup_conns.zones:
+        zone = zone_conn.zone
+        out, _ = zone.cluster.admin(
+            ['metadata', 'get', 'ext_authz:default'] + zone.zone_args(),
+            read_only=True)
+        eq(json.loads(out)['data']['service_credential'],
+           'multisite-test-api-key')
+
+    # an invalid config is rejected and leaves the stored one untouched
+    bad = dict(config, endpoint='http://not-tls.example.com')
+    with tempfile.NamedTemporaryFile('w', suffix='.json', delete=False) as f:
+        json.dump(bad, f)
+        infile = f.name
+    try:
+        _, retcode = master.cluster.admin(
+            ['ext-authz', 'set', '--infile', infile] + master.zone_args(),
+            check_retcode=False)
+        assert retcode != 0
+    finally:
+        os.unlink(infile)
+    eq(ext_authz_get(master), expected)
+
+    master.cluster.admin(['ext-authz', 'rm'] + master.zone_args())
+
+    realm_meta_checkpoint(realm)
+
+    for zone_conn in zonegroup_conns.zones:
+        eq(ext_authz_get(zone_conn.zone), None)
+
 def get_bucket_read_tracker(zone_conn, bucket_name):
     """ radosgw-admin runs as its own process"""
     cmd = ['bucket', 'stats', '--bucket', bucket_name] + zone_conn.zone.zone_args()

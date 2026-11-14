@@ -8,6 +8,10 @@
 #include <curl/curl.h>
 #include <curl/easy.h>
 #include <curl/multi.h>
+#include <openssl/err.h>
+#include <openssl/pem.h>
+#include <openssl/ssl.h>
+#include <openssl/x509.h>
 
 #include "rgw_asio_thread.h"
 #include "rgw_common.h"
@@ -585,6 +589,39 @@ int RGWHTTPClient::get_req_retcode()
   return req_data->get_retcode();
 }
 
+#if LIBCURL_VERSION_NUM < 0x074d00 // 7.77.0
+// Replace the trust store of an OpenSSL context with the PEM certificates in
+// 'parm' (a std::string). A bundle without a usable certificate fails the
+// handshake, so a bad bundle never falls back to the system store.
+static CURLcode ssl_ctx_set_ca_blob(CURL*, void* sslctx, void* parm)
+{
+  auto* pem = static_cast<const std::string*>(parm);
+  auto* ctx = static_cast<SSL_CTX*>(sslctx);
+  BIO* bio = BIO_new_mem_buf(pem->data(), pem->size());
+  X509_STORE* store = X509_STORE_new();
+  if (!bio || !store) {
+    BIO_free(bio);
+    X509_STORE_free(store);
+    return CURLE_OUT_OF_MEMORY;
+  }
+  int added = 0;
+  while (X509* cert = PEM_read_bio_X509(bio, nullptr, nullptr, nullptr)) {
+    if (X509_STORE_add_cert(store, cert) == 1) {
+      ++added;
+    }
+    X509_free(cert);
+  }
+  BIO_free(bio);
+  ERR_clear_error(); // the end of the bundle is reported as a PEM error
+  if (added == 0) {
+    X509_STORE_free(store);
+    return CURLE_SSL_CACERT_BADFILE;
+  }
+  SSL_CTX_set_cert_store(ctx, store); // the context owns the store now
+  return CURLE_OK;
+}
+#endif
+
 /*
  * init request, will be used later with RGWHTTPManager
  */
@@ -666,7 +703,38 @@ int RGWHTTPClient::init_request(rgw_http_req_data *_req_data)
     curl_easy_setopt(easy_handle, CURLOPT_SSL_VERIFYHOST, 0L);
     dout(20) << "ssl verification is set to off" << dendl;
   } else {
-    if (!ca_path.empty()) {
+    if (!ca_blob.empty()) {
+#if LIBCURL_VERSION_NUM >= 0x074d00 // 7.77.0
+      curl_blob blob;
+      blob.data = const_cast<char*>(ca_blob.data());
+      blob.len = ca_blob.size();
+      blob.flags = CURL_BLOB_COPY;
+      if (curl_easy_setopt(easy_handle, CURLOPT_CAINFO_BLOB, &blob) != CURLE_OK) {
+        dout(0) << "ERROR: failed to set the custom ca bundle" << dendl;
+        return -EINVAL;
+      }
+      dout(20) << "using custom ca bundle for ssl" << dendl;
+#else
+      // CURLOPT_CAINFO_BLOB needs libcurl 7.77. Older versions load the
+      // bundle into curl's OpenSSL context instead, which only works with
+      // the OpenSSL backend.
+      const curl_version_info_data* vi = curl_version_info(CURLVERSION_NOW);
+      if (!vi || !vi->ssl_version ||
+          strncmp(vi->ssl_version, "OpenSSL", 7) != 0) {
+        dout(0) << "ERROR: a ca bundle needs libcurl >= 7.77 or the OpenSSL "
+            "backend" << dendl;
+        return -ENOTSUP;
+      }
+      if (curl_easy_setopt(easy_handle, CURLOPT_SSL_CTX_FUNCTION,
+                           ssl_ctx_set_ca_blob) != CURLE_OK ||
+          curl_easy_setopt(easy_handle, CURLOPT_SSL_CTX_DATA,
+                           &ca_blob) != CURLE_OK) {
+        dout(0) << "ERROR: failed to set the custom ca bundle" << dendl;
+        return -EINVAL;
+      }
+      dout(20) << "using custom ca bundle for ssl" << dendl;
+#endif
+    } else if (!ca_path.empty()) {
       curl_easy_setopt(easy_handle, CURLOPT_CAINFO, ca_path.c_str());
       dout(20) << "using custom ca cert "<< ca_path.c_str() << " for ssl" << dendl;
     }
