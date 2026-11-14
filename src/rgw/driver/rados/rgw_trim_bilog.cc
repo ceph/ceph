@@ -669,6 +669,56 @@ public:
   }
 };
 
+/// remove this zone's full sync status of a deleted bucket for each of its
+/// source zones, before the bucket instance goes. data sync removes the
+/// per-shard status once it reaches the source's Deleted log. this assumes
+/// inbound sync has finished: if it is still running, data sync recreates the
+/// status (and the per-shard status stays). only same-bucket pipes are handled
+class RemoveDeletedBucketSyncStatusCR : public RGWCoroutine {
+  rgw::sal::RadosStore* const store;
+  const RGWBucketSyncPolicyHandlerRef handler;
+  const rgw_bucket bucket;
+  int child_ret = 0;
+
+public:
+  RemoveDeletedBucketSyncStatusCR(rgw::sal::RadosStore* store,
+                                  RGWBucketSyncPolicyHandlerRef handler,
+                                  const rgw_bucket& bucket) :
+    RGWCoroutine(store->ctx()), store(store), handler(std::move(handler)),
+    bucket(bucket)
+  {}
+
+  int operate(const DoutPrefixProvider* dpp) override
+  {
+    reenter(this)
+    {
+      yield
+      {
+        rgw_zone_id last_zid;
+        for (const auto& [zid, pipe] : handler->get_all_sources()) {
+          if (zid == last_zid) {
+            continue;
+          }
+          last_zid = zid;
+          const rgw_raw_obj obj{store->svc()->zone->get_zone_params().log_pool,
+                                RGWBucketPipeSyncStatusManager::full_status_oid(
+                                    zid, bucket, bucket)};
+          spawn(new RGWRadosRemoveCR(store, obj), false);
+        }
+      }
+      while (num_spawned()) {
+        yield wait_for_child();
+        collect(&child_ret, nullptr);
+        if (child_ret < 0 && child_ret != -ENOENT) {
+          drain_all();
+          return set_cr_error(child_ret);
+        }
+      }
+      return set_cr_done();
+    }
+    return 0;
+  }
+};
 
 /// trim the bilog of all of the given bucket instance's shards
 class BucketTrimInstanceCR : public RGWCoroutine {
@@ -1099,6 +1149,13 @@ int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
       ldpp_dout(dpp, 1) << "all peers report bucket gone, removing "
 			 << "orphaned bucket instance metadata" << dendl;
       _bucket_info = *pbucket_info;
+      yield call(new RemoveDeletedBucketSyncStatusCR(
+          store, source_policy->policy_handler, _bucket_info.bucket));
+      if (retcode < 0) {
+        ldpp_dout(dpp, 0) << "failed to remove bucket sync status: "
+                          << cpp_strerror(retcode) << dendl;
+        return set_cr_error(retcode);
+      }
       yield call(new RGWRemoveBucketInstanceInfoCR(
 	store->svc()->async_processor,
 	store, _bucket_info.bucket,
@@ -1118,6 +1175,19 @@ int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
 	ldpp_dout(dpp, 0) << "Unable to clean log of unknown type "
 			  << clean_info->second.layout.type << dendl;
 	return set_cr_error(-EINVAL);
+      }
+
+      // the bucket instance goes once this generation is cleaned. remove the
+      // sync status before changing anything, so a failure is retried
+      if (clean_info->first.layout.logs.front().layout.type ==
+          rgw::BucketLogType::Deleted) {
+        yield call(new RemoveDeletedBucketSyncStatusCR(
+            store, source_policy->policy_handler, clean_info->first.bucket));
+        if (retcode < 0) {
+          ldpp_dout(dpp, 0) << "failed to remove bucket sync status: "
+                            << cpp_strerror(retcode) << dendl;
+          return set_cr_error(retcode);
+        }
       }
 
       yield call(new BucketCleanIndexCollectCR(dpp, store, clean_info->first,
