@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 #include "common/Clock.h"
 #include "include/utime.h"
+#include "test/sanitized_bench.h"
 #include <boost/tuple/tuple.hpp>
 
 using namespace std;
@@ -215,7 +216,7 @@ TEST(Transaction, GetNumBytesAligned)
 
 void bench_num_bytes(bool legacy)
 {
-  const int max = 2500000;
+  const int max = sanitized_bench_rounds(2500000);
   auto a = generate_transaction();
 
   if (legacy) {
