@@ -20,7 +20,10 @@
 #include "rgw_rest_user.h"
 #include "driver/posix/sync_policy.h"
 #include "rgw_rest_driver_hint.h"
+#include "common/iso_8601.h"
+#include "common/version.h"
 #include "rgw_rest_nsfs_profile.h"
+#include "rgw_rest_nsfs_abandoned.h"
 #include "rgw_rest_nsfs_bucket.h"
 #include "rgw_rest_nsfs_identity.h"
 #include "common/code_environment.h"
@@ -51,7 +54,16 @@
 #include "common/dout_fmt.h"
 #include "common/errno.h"
 #include "rgw_lc.h"
+
+/* I6:  the import the adoption mode runs.  These are the only place
+ * the request path reaches the adopt code, and it reaches it once, at
+ * startup. */
+#include "adopt/noobaa_config_store.h"
+#include "adopt/noobaa_master_keys.h"
+#include "adopt/noobaa_import_plan.h"
+#include "adopt/noobaa_import.h"
 #include "adopt/noobaa_schema.h"
+#include "adopt/noobaa_bucket_import.h"
 
 #define dout_subsys ceph_subsys_rgw
 #define dout_context g_ceph_context
@@ -1196,8 +1208,8 @@ static int recover_rename_intent(const nsfs::XattrStrategy* xs,
   std::string dst_leaf;
   int dst_parent_fd = -1;
 
-  int ret = driver->load_bucket(dpp, rgw_bucket(in.tenant, in.bucket),
-				&dbucket, null_yield);
+  int ret = driver->load_bucket_internal(dpp, rgw_bucket(in.tenant, in.bucket),
+					 &dbucket, null_yield);
   if (ret == 0) {
     auto* db = static_cast<NSFSBucket*>(dbucket.get());
     ret = nsfs::resolve_path(dpp, db->get_dir(), in.key,
@@ -1219,10 +1231,10 @@ static int recover_rename_intent(const nsfs::XattrStrategy* xs,
 		    AT_SYMLINK_NOFOLLOW | AT_EACCESS) == 0);
 
   if (at_src == at_dst) {
-    ldpp_dout(dpp, 0) << "ERROR: rename recovery: " << in.leaf << " -> "
-      << in.bucket << "/" << in.key << " is present at "
-      << (at_src ? "both keys" : "neither key")
-      << ";  leaving the intent record for manual attention" << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: rename recovery: {} -> {}/{} is present at "
+			  "{};  leaving the intent record for manual attention",
+			  in.leaf, in.bucket, in.key,
+			  (at_src ? "both keys" : "neither key"));
     return -EBUSY;
   }
 
@@ -1420,9 +1432,10 @@ version_lock_recovering(const DoutPrefixProvider* dpp, NSFSDriver* driver,
   int ret = recover_rename_intent(xs, dpp, driver,
 				  bucket_name, parent_fd, in);
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: recovering the interrupted move of "
-      << in.leaf << " failed: " << cpp_strerror(-ret) << ";  the record "
-      << "stays and the next write to this directory will retry" << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: recovering the interrupted move of {} "
+			  "failed: {};  the record stays and the next write "
+			  "to this directory will retry", in.leaf,
+			  cpp_strerror(-ret));
     if (recovery_ret) {
       *recovery_ret = ret;
     }
@@ -1961,7 +1974,13 @@ static int get_x_attrs_ring(optional_yield y, const DoutPrefixProvider* dpp,
 }
 
 static int get_x_attrs(optional_yield y, const DoutPrefixProvider* dpp, int fd,
-		       Attrs& attrs, const std::string& display)
+		       Attrs& attrs, const std::string& display,
+		       const nsfs::XattrStrategy* xs,
+		       const nsfs::XattrStrategy* alt = nullptr,
+		       const nsfs::FSIdentity& id = {},
+		       std::string_view skip = {},
+		       std::vector<std::string>* unknown = nullptr,
+		       std::vector<std::string>* names = nullptr)
 {
   if (id.active()) {
     const int r = get_x_attrs_ring(y, dpp, fd, attrs, display, xs, alt, id,
@@ -2000,6 +2019,9 @@ static int get_x_attrs(optional_yield y, const DoutPrefixProvider* dpp, int fd,
     keylen = strlen(keyptr) + 1;
     std::string xattr_name(keyptr);
     std::string key;
+    if (names) {
+      names->push_back(xattr_name);
+    }
 
     if (!skip.empty() && xattr_name.starts_with(skip)) {
       buflen -= keylen;
@@ -2403,10 +2425,10 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
 
   need_fsync = true;
 
-  /* Set the type */
-  bufferlist type_bl;
-  ObjectType type{get_type()};
-  type.encode(type_bl);
+  /* this entry's own names, where it has them;  see own_xattr_strategy.
+   * Only the bucket's format:  no client writes to a bucket being
+   * converted (DECISIONS.md 2026-11-02), so nothing written here has
+   * a NooBaa attribute beside it. */
   const XattrStrategy* xs = own_xattr_strategy ? own_xattr_strategy
 					       : xattr_strategy;
 
@@ -2484,9 +2506,11 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
       fs_strategy->get_xattrs(dpp, afd, old_raw, y, aid);
 
       for (auto& [disk_name, _] : old_raw) {
-        if (disk_name.compare(0, NSFS_XATTR_PREFIX.size(),
-                              NSFS_XATTR_PREFIX) != 0) {
+        /* Only names the strategy claims are pruned, so the bucket's
+         * markers, which it does not claim, survive
+         * (MARKER_XATTR_PREFIX). */
         std::string logical;
+        if (!xs->parse_disk_name(disk_name, logical)) {
           continue;
         }
         if (to_write.find(disk_name) == to_write.end()) {
@@ -2495,8 +2519,6 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
       }
     } else if (rmattrs) {
       for (auto& key : *rmattrs) {
-        std::string disk_name{make_xattr_name(key)};
-        if (to_write.find(disk_name) == to_write.end()) {
         /* The same translation, with nothing to write.  A key one
          * format spreads over several names is removed by naming
          * none of them:  disk_attrs() supersedes whatever is on disk
@@ -2504,8 +2526,13 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
          * it.  DeleteObjectTagging arrives here, and without this it
          * removed the one nsfs name and left NooBaa's tags. */
         bufferlist none;
+        if (xs->disk_attrs(key, none, disk_names(), to_write,
+                           to_remove)) {
           continue;
         }
+        std::string disk_name{xs->disk_name(key)};
+        if (!disk_name.empty() &&
+            (to_write.find(disk_name) == to_write.end())) {
           to_remove.push_back(std::move(disk_name));
         }
       }
@@ -2554,7 +2581,8 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
       for (auto& it : old_attrs) {
         if (attrs.find(it.first) == attrs.end() &&
             (!extra_attrs || extra_attrs->find(it.first) == extra_attrs->end())) {
-          remove_x_attr(dpp, y, fd, it.first, get_name());
+          remove_x_attr(dpp, y, afd, it.first, get_name(), xs, nullptr,
+			aid);
         }
       }
     }
@@ -2562,7 +2590,7 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
     for (auto& key : *rmattrs) {
       if (attrs.find(key) == attrs.end() &&
           (!extra_attrs || extra_attrs->find(key) == extra_attrs->end())) {
-        remove_x_attr(dpp, y, fd, key, get_name());
+        remove_x_attr(dpp, y, afd, key, get_name(), xs, nullptr, aid);
       }
     }
   }
@@ -4285,15 +4313,37 @@ void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp,
     const auto& nb_root =
       g_conf().get_val<std::string>("rgw_nsfs_noobaa_config_root");
     if (!nb_root.empty()) {
+      nb_bucket_state_strategy =
+	std::make_unique<nsfs::NooBaaBucketStateStrategy>(nb_root,
+							  userDB.get());
       ldpp_dout_fmt(dpp, 1, "nsfs: reading NooBaa bucket state from {}",
 			    nb_root);
 
-    auto mp_policy = file::listing::MultipartCachePolicy::writethrough;
-    if (mp_pol_str == "writeback") {
-      mp_policy = file::listing::MultipartCachePolicy::writeback;
-    } else if (mp_pol_str == "volatile") {
-      mp_policy = file::listing::MultipartCachePolicy::volatile_;
+      /* The mode, read beside the store it governs.  Read here and
+       * not earlier because it means nothing without one. */
+      const auto& m =
+	g_conf().get_val<std::string>("rgw_nsfs_adoption_mode");
+      /* in either mode:  the `adoption` hint can switch to automatic */
+      adoption_wait_ms = g_conf().get_val<uint64_t>("rgw_nsfs_adoption_wait_ms");
+      if (m == "automatic") {
+	adoption_mode = AdoptionMode::Automatic;
+      } else {
+	adoption_mode = AdoptionMode::Command;
+	if (!m.empty() && (m != "command")) {
+	  /* The option is an enum, so this is a deployment that got
+	   * past validation somehow;  the safe reading is the one that
+	   * changes nothing on disk. */
+	  ldpp_dout_fmt(dpp, 0, "ERROR: rgw_nsfs_adoption_mode is \"{}\", "
+				"which is neither command nor automatic;  "
+				"adopting by command", m);
+	}
+      }
+      ldpp_dout_fmt(dpp, 1, "nsfs: adoption mode {}{}", m,
+			    (adoption_mode == AdoptionMode::Command
+			     ? ";  nothing is adopted until a command asks"
+			     : ""));
     }
+  }
 
   if (userDB) {
     ldpp_dout_fmt(dpp, 1, "nsfs: user identity override {}, role identity "
@@ -4341,6 +4391,8 @@ void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp,
   shared_profile.format = &rgw_meta_format;
   extended_profile.extensions = nsfs::EXTENSIONS_STRONG;
   extended_profile.format = &rgw_meta_format;
+  ldpp_dout_fmt(dpp, 1, "nsfs: new buckets are marked with extension set {}",
+			new_bucket_extensions());
 
   /* Every strategy names some scaffolding, and the listing paths test one
    * name at a time;  assemble the union once so that no strategy is
@@ -4657,11 +4709,11 @@ void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp,
     ldpp_dout_fmt(dpp, 1, "WARNING: failed to init notification endpoints");
   }
 
-  if (!RGWPubSubEndpoint::init_all(cct)) {
-    ldpp_dout(dpp, 1) << "WARNING: failed to init notification endpoints" << dendl;
+  if (int r = start_adoption(dpp); r < 0) {
+    return r;
   }
 
-  ldpp_dout(dpp, 20) << "SUCCESS" << dendl;
+  ldpp_dout_fmt(dpp, 20, "SUCCESS");
   return 0;
 }
 
@@ -4730,6 +4782,15 @@ void NSFSDriver::note_bucket_filesystem(const DoutPrefixProvider* dpp,
   }
 }
 
+void NSFSDriver::shutdown()
+{
+  /* before the io_context is finished:  a worker parked on it would
+   * keep it running */
+  std::lock_guard l{adoption_queue_start_mtx};
+  adoption_queue_shut = true;
+  if (adoption_queue_owner) {
+    adoption_queue_owner->shutdown();
+  }
 }
 
 void NSFSDriver::finalize()
@@ -4988,6 +5049,7 @@ NSFSDriver::placed_bucket_dir(const DoutPrefixProvider* dpp,
      * **It never adopts.**  Resolving where a bucket lives is
      * read-only;  adoption happens because the mode says so, or by
      * explicit command. */
+    if (!nb_bucket_state_strategy || reread_adoption_complete(dpp)) {
       return nullptr;
     }
     auto* nb_state = static_cast<nsfs::NooBaaBucketStateStrategy*>(
@@ -5109,6 +5171,8 @@ int NSFSDriver::new_bucket_path(const DoutPrefixProvider* dpp,
   }
   /* NooBaa has no tenants, so only an untenanted name can be one of
    * its buckets. */
+  if (b.tenant.empty() && nb_bucket_state_strategy &&
+      !reread_adoption_complete(dpp)) {
     auto* nb_state = static_cast<nsfs::NooBaaBucketStateStrategy*>(
       nb_bucket_state_strategy.get());
     std::string recorded;
@@ -5320,6 +5384,7 @@ int NSFSDriver::check_clear_of_noobaa_paths(const DoutPrefixProvider* dpp,
 					    const std::string& name,
 					    const std::string& path)
 {
+  if (!nb_bucket_state_strategy || reread_adoption_complete(dpp)) {
     return 0;
   }
   auto* nb_state = static_cast<nsfs::NooBaaBucketStateStrategy*>(
@@ -5424,6 +5489,7 @@ int NSFSDriver::place_bucket(const DoutPrefixProvider* dpp, optional_yield y,
   /* The name is taken by a row, or by a NooBaa record until adoption
    * is complete -- the same rejection creation makes.  Nesting with
    * another bucket's directory is the row insert's. */
+  if (nb_bucket_state_strategy && !reread_adoption_complete(dpp)) {
     auto* nb_state = static_cast<nsfs::NooBaaBucketStateStrategy*>(
       nb_bucket_state_strategy.get());
     std::string recorded;
@@ -5496,6 +5562,8 @@ int NSFSDriver::place_bucket(const DoutPrefixProvider* dpp, optional_yield y,
     info.flags = 0;
     info.requester_pays = false;
 
+    ret = bucket->mark_extensions(dpp, new_bucket_extensions());
+    marked = true;
   }
   if (ret == 0) {
     Attrs attrs;
@@ -5534,15 +5602,90 @@ int NSFSDriver::place_bucket(const DoutPrefixProvider* dpp, optional_yield y,
   return 0;
 }
 
+int NSFSDriver::load_bucket_internal(const DoutPrefixProvider* dpp,
+				     const rgw_bucket& b,
+				     std::unique_ptr<Bucket>* bucket,
+				     optional_yield y)
+{
   *bucket = std::make_unique<NSFSBucket>(this, bucket_dir(dpp, b.name,
 							  b.tenant), b);
   return (*bucket)->load_bucket(dpp, y);
 }
 
+int NSFSDriver::store_admits_adoption(const DoutPrefixProvider* dpp,
+				      std::string& why)
+{
+  const auto& root =
+    g_conf().get_val<std::string>("rgw_nsfs_noobaa_config_root");
+  nsfs::NooBaaConfigStore store(root);
+  nsfs::NooBaaStoreContents contents;
+  if (int ret = store.read(dpp, contents); ret < 0) {
+    why = root + ":  " + cpp_strerror(-ret);
+    return ret;
+  }
+  if (const auto skew = contents.version_skew(); !skew.empty()) {
+    why = root + ":  " + skew.front();
+    return -ENOTSUP;
+  }
+  return 0;
+}
+
+bool NSFSDriver::adoption_failed(const std::string& bucket)
+{
+  std::lock_guard l{adoption_failures_mtx};
+  return adoption_failures.contains(bucket);
+}
+
 int NSFSDriver::load_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b, std::unique_ptr<Bucket>* bucket, optional_yield y)
 {
-  *bucket = std::make_unique<NSFSBucket>(this, root_dir.get(), b);
-  return (*bucket)->load_bucket(dpp, y);
+  int ret = load_bucket_internal(dpp, b, bucket, y);
+
+  /* A bucket that cannot be adopted cannot be served (DECISIONS.md
+   * 2026-10-29). */
+  auto refuse = [&] {
+    ldpp_dout_fmt(dpp, 4, "nsfs: bucket {} is not served:  its adoption "
+			  "failed, and waits for an operator", b.name);
+    bucket->reset();
+    return -ERR_INVALID_BUCKET_STATE;
+  };
+  if ((ret == 0) && adoption_failed(b.name)) {
+    return refuse();
+  }
+
+  /* A request promotes the bucket it reaches, and waits for it up to the
+   * quantum.  Only a request:  work with no coroutine is the driver's
+   * own and must not wait on itself.  Adopted in time, the bucket is
+   * loaded again as it now is;  failed, it is refused;  otherwise it is
+   * served as found, and a write is refused retryably
+   * (reject_unadopted()). */
+  if ((ret == 0) && y &&
+      awaits_adoption(dpp, *static_cast<NSFSBucket*>(bucket->get()))) {
+    if (adoption_queue.load(std::memory_order_acquire)->promote(
+	  b.name, std::chrono::milliseconds(adoption_wait_ms.load()), y) == 0) {
+      ret = load_bucket_internal(dpp, b, bucket, y);
+    } else if (adoption_failed(b.name)) {
+      return refuse();
+    }
+  }
+
+  /* Served as found only when NooBaa's record translates whole:  what is
+   * served is what NooBaa served, or nothing (DECISIONS.md 2026-11-02).
+   * Refused as a client write to it is, retryably while the queue may
+   * yet adopt it. */
+  if (ret == 0) {
+    if (const auto& why =
+	  static_cast<NSFSBucket*>(bucket->get())->untranslated_by();
+	!why.empty()) {
+      ldpp_dout_fmt(dpp, 4, "nsfs: bucket {} is not served:  {}", b.name, why);
+      bucket->reset();
+      if (adoption_queue.load(std::memory_order_acquire) &&
+	  !adoption_complete()) {
+	return -ERR_SERVICE_UNAVAILABLE;
+      }
+      return -ERR_INVALID_BUCKET_STATE;
+    }
+  }
+  return ret;
 }
 
 std::unique_ptr<Bucket> NSFSDriver::get_bucket(const RGWBucketInfo& i)
@@ -5697,6 +5840,8 @@ int NSFSDriver::list_buckets(const DoutPrefixProvider* dpp, const rgw_owner& own
     for (const auto& row : rows) {
       after = row.bucket_name;
       std::unique_ptr<Bucket> bucket;
+      ret = load_bucket_internal(dpp, rgw_bucket(row.tenant, row.bucket_name), &bucket,
+				 y);
       if (ret < 0) {
 	/* A bucket we cannot read is one bucket, not a failed listing.
 	 * -ENOENT is a row whose directory is gone.
@@ -6511,6 +6656,14 @@ int NSFSDriver::meta_list_keys_init(const DoutPrefixProvider *dpp,
                                      const std::string& section,
                                      const std::string& marker, void** phandle)
 {
+  /* A section this driver does not list is rejected here, as RADOS's
+   * metadata manager rejects one it has no handler for;  an empty
+   * listing would read as "there are none". */
+  if ((section != "user") && (section != "bucket") &&
+      (section != "account") && (section != "topic")) {
+    ldpp_dout_fmt(dpp, 1, "nsfs: no metadata section {}", section);
+    return -ENOENT;
+  }
   meta_list_handle* stuff = new meta_list_handle(section, marker);
   *phandle = (void *)stuff;
   return 0;
@@ -6554,7 +6707,8 @@ int NSFSDriver::meta_list_keys_next(const DoutPrefixProvider *dpp, void* handle,
       if (r.tenant.empty()) {
 	untenanted.insert(r.bucket_name);
       }
-     }
+    }
+    if (nb_bucket_state_strategy && !reread_adoption_complete(dpp)) {
       std::vector<std::string> records;
       ret = static_cast<nsfs::NooBaaBucketStateStrategy*>(
 	nb_bucket_state_strategy.get())->list_records(dpp, records);
@@ -6575,6 +6729,22 @@ int NSFSDriver::meta_list_keys_next(const DoutPrefixProvider *dpp, void* handle,
 	break;
       }
     }
+  } else if ((h->section == "account") || (h->section == "topic")) {
+    /* one more than asked for, so a full page says whether another
+     * follows */
+    const uint64_t ask = static_cast<uint64_t>(max) + 1;
+    ret = (h->section == "account")
+      ? userDB->list_account_ids(dpp, h->marker, ask, keys)
+      : userDB->list_topic_keys(dpp, h->marker, ask, keys);
+    if (ret < 0) {
+      return ret;
+    }
+    if (std::cmp_greater(keys.size(), max)) {
+      keys.pop_back();
+      *truncated = true;
+    }
+    if (!keys.empty()) {
+      h->marker = keys.back();
     }
   }
   return 0;
@@ -6811,8 +6981,8 @@ if (max <= 0) {
     });
 
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: could not list bucket " << get_name() << ": "
-      << cpp_strerror(ret) << dendl;
+    ldpp_dout_fmt(dpp, 0, "ERROR: could not list bucket {}: {}", get_name(),
+			  cpp_strerror(ret));
     results.objs.clear();
     return ret;
   }
@@ -6823,8 +6993,16 @@ if (max <= 0) {
 int NSFSBucket::merge_and_store_attrs(const DoutPrefixProvider* dpp,
 					Attrs& new_attrs, optional_yield y)
 {
+  return merge_and_store_attrs(dpp, new_attrs, y, MutationPurpose::client);
+}
+
+int NSFSBucket::merge_and_store_attrs(const DoutPrefixProvider* dpp,
+				      Attrs& new_attrs, optional_yield y,
+				      MutationPurpose purpose)
+{
   /* held off while this bucket's tree is being rewritten;  see
    * NSFSDriver::mutation_enter() */
+  NSFSMutationGuard mg(dpp, driver, this, purpose);
   if (mg.result() < 0) {
     return mg.result();
   }
@@ -6924,6 +7102,7 @@ int NSFSBucket::remove(const DoutPrefixProvider* dpp,
   int ret = dir->remove(dpp, y, delete_children);
   /* held off while this bucket's tree is being rewritten;  see
    * NSFSDriver::mutation_enter() */
+  NSFSMutationGuard mg(dpp, driver, this);
   if (mg.result() < 0) {
     return mg.result();
   }
@@ -7334,6 +7513,9 @@ int NSFSBucket::clear_converting(const DoutPrefixProvider* dpp)
 /* Remove the extensions attribute, which is how a bucket reaches base.
  * Reached through set_profile(), which is where the conditions on
  * getting there are enforced. */
+int NSFSBucket::unmark_extensions(const DoutPrefixProvider* dpp,
+				  const UnmarkPasskey&)
+{
   int ret = dir->open(dpp);
   if (ret < 0) {
     return ret;
@@ -7350,6 +7532,24 @@ int NSFSBucket::clear_converting(const DoutPrefixProvider* dpp)
   return 0;
 }
 
+/* Set a bucket's profile.
+ *
+ * Adding extensions is a write and nothing else.  Shared and strong both
+ * hold everything base does, so the attribute is the whole change and
+ * the tree is already in the shape the new profile describes.
+ *
+ * Dropping them is a conversion.  The structures the dropped extensions
+ * allowed are still in the tree afterwards, and nothing walks every
+ * object to take an S3 ACL back off it, so the bucket has to hold no
+ * content:  check_empty() decides that with the content-versus-
+ * scaffolding rules the delete path already uses.  The scaffolding those
+ * extensions own is then removed, because check_empty() counts an empty
+ * .shadow as scaffolding and a bucket must never end up claiming a
+ * profile while holding structure the profile does not describe.
+ *
+ * Leaving base takes a tree nsfs did not write into its management.  It
+ * is never inferred from access, and nothing returns a bucket to base.
+ */
 nsfs::XattrStrategy* NSFSBucket::xattr_strategy() const
 {
   auto* f = get_format();
@@ -7446,6 +7646,17 @@ int NSFSBucket::set_profile(const DoutPrefixProvider* dpp, optional_yield y,
 
   const uint32_t current = profile->extensions;
 
+  /* Nothing takes a bucket back into base (DECISIONS.md 2026-10-21):
+   * adoption is one-way, and an RGW bucket in NooBaa's format is one
+   * nothing may write.  Rejected for every caller -- the profile
+   * endpoint, the `bucket-profile` hint, adoption -- before anything is
+   * removed.  A bucket already in base asking for base is the no-op
+   * below. */
+  if ((target == nsfs::EXTENSIONS_BASE) && (current != target)) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: not returning bucket {} to the base "
+			  "profile:  adoption is one-way", get_name());
+    return -ERR_INVALID_BUCKET_STATE;
+  }
 
   if (target == current) {
     /* Asking for the profile a bucket is already in is a no-op --
@@ -7481,8 +7692,39 @@ int NSFSBucket::set_profile(const DoutPrefixProvider* dpp, optional_yield y,
 
   if (target & ~current) {
     if (current == nsfs::EXTENSIONS_BASE) {
+      /* Leaving base is adopting the bucket (DECISIONS.md 2026-10-11),
+       * so its NooBaa record is imported first:  owner, versioning,
+       * policy and the rest arrive as nsfs bucket state, and the
+       * conversion below records that owner on the objects.  A bucket
+       * NooBaa holds no record of has nothing to import and converts
+       * with what load_bucket() reconstructed.
+       *
+       * The import writes through its own handle, so this one is
+       * reloaded to carry what it wrote;  write_attrs() below would
+       * otherwise put the pre-import state back. */
       ldpp_dout_fmt(dpp, 1, "nsfs: bucket {} leaves the base profile for "
 			    "extension set {}", get_name(), target);
+      ret = driver->import_noobaa_bucket(dpp, y, get_name(), nullptr);
+      if ((ret < 0) && (ret != -ENOENT)) {
+	ldpp_dout_fmt(dpp, 0, "ERROR: not converting bucket {}:  its NooBaa "
+			      "record could not be imported: {}", get_name(),
+			      cpp_strerror(-ret));
+	return ret;
+      }
+      if (ret == 0) {
+	/* Cleared first:  load_bucket() reads into `attrs` without
+	 * replacing a name already held, so this handle's NooBaa-format
+	 * policy, its principals unrewritten, would survive the reload
+	 * and write_attrs() below would put it back over the import's. */
+	attrs.clear();
+	ret = load_bucket(dpp, y);
+	if (ret < 0) {
+	  return ret;
+	}
+	default_owner.reset();
+      }
+    }
+  }
 
   if (current & ~target) {
     ret = check_empty(dpp, y);
@@ -7605,7 +7847,15 @@ const char* nsfs::to_string(nsfs::ConvertEvent::Phase p)
  * Only names in `names`, the file's own:  removing one that is not
  * there is a syscall for nothing, one for every attribute of an object
  * a resumed walk reaches again. */
+static void foreign_names(const nsfs::XattrStrategy* nb,
+			  const std::string& key,
+			  const std::vector<std::string>& names,
+			  const std::string& ours,
+			  std::vector<std::string>& out)
+{
   std::vector<std::string> candidates;
+  nsfs::xattr_map_t none_written;
+  bufferlist none;
   if (!nb->disk_attrs(key, none, names, none_written, candidates)) {
     const std::string foreign = nb->disk_name(key);
     if (!foreign.empty() && (foreign != ours)) {
@@ -7641,6 +7891,9 @@ static int convert_attrs(const DoutPrefixProvider* dpp, optional_yield y,
 			 const std::vector<std::string>* leave_alone = nullptr)
 {
   Attrs attrs;
+  std::vector<std::string> unknown, names;
+  int ret = get_x_attrs(y, dpp, fd, attrs, display, xs, xattr_fallback, {},
+			{}, &unknown, &names);
   if (ret < 0) {
     return ret;
   }
@@ -7957,6 +8210,7 @@ static int convert_directory_object(const DoutPrefixProvider* dpp,
   /* Not `user.nsfs:`:  on the bucket root those are the bucket's own
    * state, which is not the object's to carry, and nothing else in
    * NooBaa's format has them. */
+  std::vector<std::string> unknown, names;
   ret = get_x_attrs(y, dpp, dir_fd, dattrs, ev.key, xs, xattr_fallback, {},
 		    "user.nsfs:", &unknown, &names);
   if (ret < 0) {
@@ -8198,6 +8452,7 @@ static int convert_directory_object(const DoutPrefixProvider* dpp,
    * syscall. */
   std::vector<std::string> gone;
   for (const auto& [key, bl] : dattrs) {
+    foreign_names(xattr_fallback, key, names, xs->disk_name(key), gone);
   }
   if (!gone.empty()) {
     });
@@ -8222,6 +8477,78 @@ static int convert_directory_object(const DoutPrefixProvider* dpp,
   return 0;
 }
 
+/* The path a descriptor is open on, or empty. */
+static std::string fd_path(int fd)
+{
+  char buf[PATH_MAX];
+  const std::string proc = fmt::format("/proc/self/fd/{}", fd);
+  const ssize_t n = ::readlink(proc.c_str(), buf, sizeof(buf) - 1);
+  return (n < 0) ? std::string() : std::string(buf, n);
+}
+
+/* Count and log one symbolic link met by the conversion walk.  `dir_fd`
+ * is the directory the walk reached at `prefix` without following a
+ * link, so the bucket's real path is that directory's with `prefix`
+ * taken off.  The link resolves as NooBaa resolved it:  following it,
+ * then comparing its real path with the bucket's. */
+static void count_link(const DoutPrefixProvider* dpp, int dir_fd,
+		       const std::string& prefix, const char* name,
+		       nsfs::ConvertProgress& progress)
+{
+  const std::string key = fmt::format("{}{}", prefix, name);
+  char target[PATH_MAX];
+  const ssize_t tlen = ::readlinkat(dir_fd, name, target, sizeof(target) - 1);
+  const std::string to = (tlen < 0) ? std::string("?")
+				     : std::string(target, tlen);
+
+  /* With read-search, as the gateway's other reads take it, so the
+   * count describes the tree and not the uid the gateway runs as */
+  if (nsfs::impersonation_enabled()) {
+    (void) nsfs::hold_thread_capabilities(dpp);
+  }
+  const char* what = nullptr;
+  const int fd = ::openat(dir_fd, name, O_PATH | O_CLOEXEC);
+  if (fd < 0) {
+    const int err = errno;
+    if (err == ELOOP) {
+      ++progress.links.loop;
+      what = "loops";
+    } else {
+      ++progress.links.dangling;
+      what = "resolves to nothing";
+      if ((err != ENOENT) && (err != ENOTDIR)) {
+	/* a filesystem error, not a kind of link:  counted, and the
+	 * conversion goes on, since a link is not converted */
+	ldpp_dout_fmt(dpp, 0, "ERROR: nsfs: convert: link {} -> {} cannot be "
+			      "resolved: {};  counted dangling", key, to,
+			      cpp_strerror(err));
+      }
+    }
+  } else {
+    auto close_fd = make_scope_guard([fd] { ::close(fd); });
+    std::string root = fd_path(dir_fd);
+    if (root.size() >= prefix.size()) {
+      root.resize(root.size() - prefix.size());
+    }
+    const std::string real = fd_path(fd);
+    const bool inside = !root.empty() &&
+      ((real == root) || real.starts_with(fmt::format("{}/", root)));
+    struct stat st{};
+    if (!inside) {
+      ++progress.links.outside;
+      what = "leaves the bucket";
+    } else if ((::fstat(fd, &st) == 0) && S_ISDIR(st.st_mode)) {
+      ++progress.links.directory;
+      what = "is a directory in the bucket";
+    } else {
+      ++progress.links.file;
+      what = "is a file in the bucket";
+    }
+  }
+  ldpp_dout_fmt(dpp, 1, "nsfs: convert: {} is a symbolic link ({}), which {}; "
+			" a link is not an object, and it is not served", key,
+			to, what);
+}
 
 /* Whether the subtree at `fd` was converted to `converted_to`, the
  * target extension set as EXTENSIONS_XATTR writes it.  A marker naming
@@ -8317,6 +8644,8 @@ static int convert_directory(const DoutPrefixProvider* dpp, optional_yield y,
       subdirs.emplace_back(name);
     } else if (S_ISREG(stx.stx_mode)) {
       files.emplace_back(name);
+    } else if (S_ISLNK(stx.stx_mode)) {
+      count_link(dpp, d->get_fd(), prefix, name, progress);
     }
     return 0;
   });
@@ -8948,7 +9277,55 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
  * is the thing being prevented.
  */
 
+/* A bucket not adopted takes no client writes (DECISIONS.md 2026-10-21,
+ * the gate;  2026-11-02):  no `user.nsfs:marker.extensions` means the
+ * bucket is NooBaa's until adoption marks it, and
+ * `user.nsfs:marker.converting` that its walk has not finished, whether
+ * it is running or stopped.  InvalidBucketState says the request is not
+ * valid in the bucket's current state, which a command can change. */
+int NSFSDriver::reject_unadopted(const DoutPrefixProvider* dpp,
+				 NSFSBucket* b, MutationPurpose purpose)
+{
+  if (purpose != MutationPurpose::client) {
+    return 0;
+  }
+  const int pret = b->resolve_profile(dpp);
+  if (pret < 0) {
+    return pret;
+  }
+  if ((b->extended() && !b->is_converting()) ||
+      adoption_gate_lifted(b->get_name())) {
+    return 0;
+  }
+  unadopted_writes_rejected.fetch_add(1, std::memory_order_relaxed);
+  ldpp_dout_fmt(dpp, 4, "nsfs: bucket {} is not adopted;  a client write "
+			"waits for adoption", b->get_name());
+  /* Under `automatic` the bucket is queued and its adoption needs no
+   * command, so the write is worth retrying. */
+  if (adoption_queue.load(std::memory_order_acquire) &&
+      !adoption_complete()) {
+    return -ERR_SERVICE_UNAVAILABLE;
+  }
+  return -ERR_INVALID_BUCKET_STATE;
+}
 
+NSFSMutationGuard::NSFSMutationGuard(const DoutPrefixProvider* dpp,
+				     NSFSDriver* _driver, NSFSBucket* _bucket,
+				     MutationPurpose purpose)
+  : driver(_driver), bucket(_bucket->get_name()),
+    rc(_driver ? _driver->mutation_enter(dpp, _bucket, purpose) : 0)
+{ }
+
+int NSFSDriver::mutation_enter(const DoutPrefixProvider* dpp,
+			       NSFSBucket* b, MutationPurpose purpose)
+{
+  const std::string& bucket = b->get_name();
+
+  /* checked before the slot, so a rejection holds nothing */
+  const int gret = reject_unadopted(dpp, b, purpose);
+  if (gret < 0) {
+    return gret;
+  }
 
   std::unique_lock l{gate_lock};
   auto& g = bucket_gates[bucket];
@@ -9130,6 +9507,14 @@ int NSFSBucket::convert_tree(const DoutPrefixProvider* dpp, optional_yield y,
 			"{} converted subtrees", get_name(), prog.objects,
 			prog.directory_objects, prog.versions, prog.uploads,
 			prog.parts, prog.directories_skipped);
+  if (prog.links.total() > 0) {
+    ldpp_dout_fmt(dpp, 1, "nsfs: bucket {} holds {} symbolic links, not "
+			  "served:  {} to a file in the bucket, {} to a "
+			  "directory in the bucket, {} out of the bucket, {} "
+			  "dangling, {} looping", get_name(),
+			  prog.links.total(), prog.links.file,
+			  prog.links.directory, prog.links.outside,
+			  prog.links.dangling, prog.links.loop);
   }
   return 0;
 }
@@ -9235,8 +9620,25 @@ int NSFSBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
     auto* nb_state = bucket_state_fallback();
     ret = nb_state ? nb_state->load(dpp, dir->get_fd(), get_name(), attrs, info)
 		 : -ENOENT;
+    /* NooBaa's record names principals as NooBaa does;  served here as
+     * adoption will write them.  Its owner_account, which NooBaa
+     * requires, translates only once that account is imported. */
+    untranslated.clear();
+    if ((ret == 0) && to_string(info.owner).empty()) {
+      untranslated = "its owner_account is not an imported account";
+    }
+    if (ret == 0) {
+      ret = driver->rewrite_unadopted_policy(dpp, get_name(), attrs,
+					     untranslated);
+    }
   }
   if (ret == -ENOENT) {
+    /* No state anywhere:  the info the caller seeded stands, owner
+     * included.  A bucket's owner is not derived from its directory's
+     * uid -- the uid is a POSIX identity, several accounts can share
+     * one, and an owner comes only from stored state, nsfs's or
+     * NooBaa's `owner_account` as the import maps it (DECISIONS.md
+     * 2026-10-11). */
     info = bak_info;
   } else if (ret < 0) {
     return ret;
@@ -9251,6 +9653,7 @@ int NSFSBucket::set_acl(const DoutPrefixProvider* dpp,
 {
   /* held off while this bucket's tree is being rewritten;  see
    * NSFSDriver::mutation_enter() */
+  NSFSMutationGuard mg(dpp, driver, this);
   if (mg.result() < 0) {
     return mg.result();
   }
@@ -9342,6 +9745,7 @@ int NSFSBucket::chown(const DoutPrefixProvider* dpp,
                        optional_yield y) {
   /* TODO map user to UID/GID, and change it */
   return 0;
+  NSFSMutationGuard mg(dpp, driver, this);
       ret = nsfs::resolve_credentials(dpp, *db, new_owner, cred, y);
     }
   }
@@ -9355,6 +9759,14 @@ int NSFSBucket::chown(const DoutPrefixProvider* dpp,
 
 int NSFSBucket::put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time _mtime, optional_yield y)
 {
+  /* a client's change to the bucket's own state -- versioning, object
+   * lock, the rest of RGWBucketInfo -- so the gate on a bucket not taken
+   * over asks, and a conversion holds it off;  see
+   * NSFSDriver::mutation_enter() */
+  NSFSMutationGuard mg(dpp, driver, this);
+  if (mg.result() < 0) {
+    return mg.result();
+  }
   mtime = _mtime;
 
   struct timespec ts[2];
@@ -9756,8 +10168,16 @@ int NSFSBucket::create(const DoutPrefixProvider* dpp, optional_yield y, bool* ex
 
   const bool made = !existed || !*existed;
 
+  /* Mark a bucket we made with its extension set (mark_extensions()),
+   * so that everything this deployment creates is marked and only
+   * trees that came from somewhere else are not.
+   * Only an internal bucket reaches here over a directory that already
+   * exists -- a client's is rejected above -- and that directory keeps
+   * the profile it already has:  marking is adoption's act, not a side
+   * effect of re-creating scaffolding. */
   if (!is_internal() && driver->create_failure_injected()) {
     ret = -EIO;
+  } else if (made) {
     ret = mark_extensions(dpp, driver->new_bucket_extensions());
   } else if (!profile) {
     profile = driver->get_base_profile();
@@ -9932,11 +10352,14 @@ int NSFSObject::rename(const DoutPrefixProvider* dpp, optional_yield y,
    * another, and either may be mid-rewrite.  Ordered by name so two
    * renames crossing in opposite directions cannot each hold the
    * gate the other wants. */
+  NSFSBucket* first = (sb->get_name() < db->get_name()) ? sb : db;
+  NSFSBucket* second = (first == sb) ? db : sb;
   NSFSMutationGuard mg1(dpp, driver, first);
   if (mg1.result() < 0) {
     return mg1.result();
   }
   std::optional<NSFSMutationGuard> mg2;
+  if (first->get_name() != second->get_name()) {
     mg2.emplace(dpp, driver, second);
     if (mg2->result() < 0) {
       return mg2->result();
@@ -10281,10 +10704,25 @@ int NSFSObject::copy_object(const ACLOwner& owner,
                               const DoutPrefixProvider* dpp,
                               optional_yield y)
 {
+  /* both trees, ordered by name;  see NSFSObject::rename().  The source
+   * is read, not written, so the gate on a bucket not taken over asks
+   * only of the destination;  a self-copy writes its one bucket. */
+  NSFSBucket* csrc = static_cast<NSFSBucket*>(src_bucket);
+  NSFSBucket* cdst = static_cast<NSFSBucket*>(dest_bucket);
+  const bool cself = (csrc->get_name() == cdst->get_name());
+  NSFSBucket* cfirst = (csrc->get_name() < cdst->get_name()) ? csrc : cdst;
+  NSFSBucket* csecond = (cfirst == csrc) ? cdst : csrc;
+  auto cpurpose = [&](NSFSBucket* b) {
+    return (!cself && (b == csrc)) ? MutationPurpose::copy_source
+				   : MutationPurpose::client;
+  };
+  NSFSMutationGuard cg1(dpp, driver, cfirst, cpurpose(cfirst));
   if (cg1.result() < 0) {
     return cg1.result();
   }
   std::optional<NSFSMutationGuard> cg2;
+  if (!cself) {
+    cg2.emplace(dpp, driver, csecond, cpurpose(csecond));
     if (cg2->result() < 0) {
       return cg2->result();
     }
@@ -10661,6 +11099,16 @@ int NSFSObject::resolve_parent_dir(const DoutPrefixProvider* dpp,
   return 0;
 }
 
+/* FSIO is an extension, so it is rejected on a bucket that does not carry
+ * the marker.
+ *
+ * The shadow model puts a .shadow subtree and attributes into the bucket
+ * which NooBaa has no reading of.  Serving it on an unmarked bucket would
+ * add exactly the structure whose absence is that bucket's whole claim,
+ * and would do it silently, on a bucket nobody has asked to convert.
+ * Reject rather than degrade:  a caller handed a handle whose
+ * semantics are missing is worse off than one told the bucket does not
+ * offer them. */
 int NSFSObject::fsio_allowed(const DoutPrefixProvider* dpp)
 {
   auto* b = static_cast<NSFSBucket*>(get_bucket());
@@ -10871,6 +11319,7 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
    * fallback strategies are for. */
   std::optional<NSFSMutationGuard> gate;
   if (flags & FSIOObject::OPEN_FLAG_WRITE) {
+    gate.emplace(dpp, driver, static_cast<NSFSBucket*>(get_bucket()));
     if (gate->result() < 0) {
       return FSIOResult{gate->result(), nullptr};
     }
@@ -11766,9 +12215,11 @@ int NSFSObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
 {
   /* held off while this bucket's tree is being rewritten;  see
    * NSFSDriver::mutation_enter() */
+  NSFSMutationGuard mg(dpp, driver, static_cast<NSFSBucket*>(get_bucket()));
   if (mg.result() < 0) {
     return mg.result();
   }
+  int ret;
   std::vector<std::string> rmattrs;
   if (delattrs) {
     for (auto& it : *delattrs) {
@@ -11847,6 +12298,7 @@ int NSFSObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
 {
   /* held off while this bucket's tree is being rewritten, as the other
    * attribute writes are;  see NSFSDriver::mutation_enter() */
+  NSFSMutationGuard mg(dpp, driver, static_cast<NSFSBucket*>(get_bucket()));
   if (mg.result() < 0) {
     return mg.result();
   }
@@ -11880,9 +12332,11 @@ int NSFSObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr
 {
   /* held off while this bucket's tree is being rewritten;  see
    * NSFSDriver::mutation_enter() */
+  NSFSMutationGuard mg(dpp, driver, static_cast<NSFSBucket*>(get_bucket()));
   if (mg.result() < 0) {
     return mg.result();
   }
+  int ret;
   state.attrset.erase(attr_name);
 
   int ret = open(dpp);
@@ -12301,7 +12755,10 @@ int NSFSObject::stat(const DoutPrefixProvider* dpp)
 
 int NSFSObject::make_ent(ObjectType type)
 {
-  if (ent)
+  /* A NooBaaDirectoryObject is for reading:  a writer needs the sentinel
+   * itself, and no client writes to a bucket until its adoption has
+   * converted every directory object (reject_unadopted()), so by the time
+   * a write is published the object is in RGW's format. */
   if (ent && !dynamic_cast<nsfs::NooBaaDirectoryObject*>(ent.get())) {
     return 0;
   }
@@ -13128,6 +13585,8 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
 {
   /* held off while this bucket's tree is being rewritten;  see
    * NSFSDriver::mutation_enter() */
+  NSFSMutationGuard mg(dpp, source->driver,
+		       static_cast<NSFSBucket*>(source->get_bucket()));
   if (mg.result() < 0) {
     return mg.result();
   }
@@ -14051,6 +14510,7 @@ int NSFSMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
 
   /* held off while this bucket's tree is being rewritten;  see
    * NSFSDriver::mutation_enter() */
+  NSFSMutationGuard mg(dpp, driver, static_cast<NSFSBucket*>(bucket));
   if (mg.result() < 0) {
     return mg.result();
   }
@@ -14262,6 +14722,7 @@ int NSFSMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct, 
 {
   /* held off while this bucket's tree is being rewritten;  see
    * NSFSDriver::mutation_enter() */
+  NSFSMutationGuard mg(dpp, driver, static_cast<NSFSBucket*>(bucket));
   if (mg.result() < 0) {
     return mg.result();
   }
@@ -14331,6 +14792,7 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
 {
   /* held off while this bucket's tree is being rewritten;  see
    * NSFSDriver::mutation_enter() */
+  NSFSMutationGuard mg(dpp, driver, static_cast<NSFSBucket*>(bucket));
   if (mg.result() < 0) {
     return mg.result();
   }
@@ -14984,6 +15446,18 @@ std::unique_ptr<Writer> NSFSMultipartUpload::get_writer(
 
 int NSFSMultipartWriter::prepare(optional_yield y)
 {
+  /* The gate first:  a part's record and bytes are written here and in
+   * process(), before complete() takes the mutation slot, so a part for a
+   * bucket not taken over is rejected before anything lands in its
+   * staging (DECISIONS.md 2026-10-21). */
+  if (bucket) {
+    const int gret = driver->reject_unadopted(dpp, bucket,
+					      MutationPurpose::client);
+    if (gret < 0) {
+      return gret;
+    }
+  }
+
   /* Resolve and pin before anything else this operation does.
    *
    * Here rather than where the SQE is built, because that is one
@@ -15210,6 +15684,7 @@ int NSFSMultipartWriter::complete(
 {
   /* held off while this bucket's tree is being rewritten;  see
    * NSFSDriver::mutation_enter() */
+  NSFSMutationGuard mg(rctx.dpp, driver, bucket);
   if (mg.result() < 0) {
     return mg.result();
   }
@@ -15499,6 +15974,8 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
 {
   /* held off while this bucket's tree is being rewritten;  see
    * NSFSDriver::mutation_enter() */
+  NSFSMutationGuard mg(rctx.dpp, driver,
+		       static_cast<NSFSBucket*>(obj->get_bucket()));
   if (mg.result() < 0) {
     return mg.result();
   }
@@ -15732,6 +16209,11 @@ void NSFSDriver::get_features(std::map<std::string, std::string>& features)
    *                   marker is read as NooBaa wrote it and the
    *                   extension-only interfaces are rejected on it.
    *   bucket_profile  the profile a bucket created here is marked with,
+   *                   rgw_nsfs_bucket_profile.  Every bucket created here
+   *                   is marked.
+   *   hint_unmarked_buckets
+   *                   buckets the `unmarked-bucket` test hint has
+   *                   unmarked;  0 on any gateway not under test.
    *   strategy        which FSStrategy was selected by probing at startup.
    *   can_rename      a rename moves the name.  When false, RGWLibFS::rename
    *                   emulates it by copy-and-delete, so the object does not
@@ -15759,9 +16241,13 @@ void NSFSDriver::get_features(std::map<std::string, std::string>& features)
   features["rename_enabled"] =
     ctx()->_conf->rgw_nsfs_enable_rename ? "true" : "false";
   features["extensions"] = std::to_string(nsfs::EXTENSIONS_KNOWN);
+  features["hint_unmarked_buckets"] =
+    std::to_string(hint_unmarked_buckets.load(std::memory_order_relaxed));
   {
     nsfs::BucketProfile p;
     p.extensions = new_bucket_extensions();
+    features["bucket_profile"] = p.name();
+  }
   /* Whether requests are served as their own POSIX identity.  A test
    * needs to know this from the gateway rather than infer it:  the
    * credential endpoint resolves a record whether or not the switch
@@ -15785,6 +16271,13 @@ void NSFSDriver::get_features(std::map<std::string, std::string>& features)
   }
 }
 
+/* Set the profile of a bucket that already exists.
+ *
+ * The reason setting one at creation is not enough:  a tree that came
+ * from NooBaa has buckets nobody wrote an attribute onto.  It is a
+ * declared act on a named bucket rather than something inferred on
+ * first access, because inference would convert a bucket nobody had
+ * decided to adopt. */
 int NSFSDriver::set_bucket_profile(const DoutPrefixProvider* dpp,
 				   optional_yield y,
 				   const std::string& name, uint32_t target,
@@ -15792,6 +16285,7 @@ int NSFSDriver::set_bucket_profile(const DoutPrefixProvider* dpp,
 				   nsfs::ConvertProgress* progress)
 {
   std::unique_ptr<rgw::sal::Bucket> loaded;
+  int ret = load_bucket_internal(dpp, rgw_bucket{"", name}, &loaded, y);
   if (ret < 0) {
     return ret;
   }
@@ -15823,6 +16317,7 @@ int NSFSDriver::get_bucket_profile(const DoutPrefixProvider* dpp,
    * one caller that does not treat unreadable state as fatal.
    * load_bucket() hands back the bucket whatever it returns. */
   std::unique_ptr<rgw::sal::Bucket> loaded;
+  int ret = load_bucket_internal(dpp, rgw_bucket{"", name}, &loaded, y);
   if ((ret < 0) && (ret != -EBADMSG)) {
     return ret;
   }
@@ -15844,7 +16339,6 @@ int NSFSDriver::get_bucket_profile(const DoutPrefixProvider* dpp,
 void NSFSDriver::register_admin_apis(RGWRESTMgr* mgr)
 {
   mgr->register_resource("user", new RGWRESTMgr_User);
-  /* TODO: register "bucket" once rgw_rest_bucket is decoupled from rados */
   auto* driver_mgr = new RGWRESTMgr;
   driver_mgr->register_resource("hint", new RGWRESTMgr_Driver_Hint);
   mgr->register_resource("driver", driver_mgr);
@@ -15853,11 +16347,216 @@ void NSFSDriver::register_admin_apis(RGWRESTMgr* mgr)
   nsfs_mgr->register_resource("identity", new RGWRESTMgr_NSFS_Identity);
   nsfs_mgr->register_resource("credentials",
 			      new RGWRESTMgr_NSFS_Credentials);
+  nsfs_mgr->register_resource("abandoned", new RGWRESTMgr_NSFS_Abandoned);
   nsfs_mgr->register_resource("bucket", new RGWRESTMgr_NSFS_Bucket);
   mgr->register_resource("nsfs", nsfs_mgr);
 }
 
+/* I6, the last step of initialize().  `automatic` adopts the store at
+ * startup;  `command` waits to be asked (DECISIONS.md 2026-10-11).
+ * Last, so everything it needs -- the strategies, the root, the
+ * database -- is up.
+ *
+ * **A failed import does not fail startup.**  It reports to the log
+ * and the gateway comes up, because the tree is still readable and not
+ * starting would take away the one thing an operator can use to see
+ * what went wrong.  Re-running is the recovery, and the mode still says
+ * to, so a restart retries it. */
+int NSFSDriver::start_adoption(const DoutPrefixProvider* dpp)
+{
+  if (int r = load_adoption_completion(dpp); r < 0) {
+    return r;
+  }
+  if (adoption_complete()) {
+    ldpp_dout_fmt(dpp, 1, "nsfs: adoption completed at {} from {};  NooBaa's "
+			  "store is not read", completion->completed_at,
+			  completion->config_root);
+  } else if (adoption_configured() &&
+	     (adoption_mode == AdoptionMode::Automatic) &&
+	     io_context && background_tasks) {
+    /* A gateway that serves adopts while it serves.  The identities
+     * are imported first and here, because every bucket's owner
+     * resolves through them;  each bucket waits in the queue, and one a
+     * request reaches goes ahead of the rest. */
+    if (int r = start_adoption_queue(dpp); r < 0) {
+      ldpp_dout_fmt(dpp, 0, "ERROR: adoption did not start: {};  the "
+			    "deployment is readable and a restart will retry "
+			    "it", cpp_strerror(-r));
+    }
+  } else if (adoption_configured() &&
+	     (adoption_mode == AdoptionMode::Automatic)) {
+    nsfs::AdoptionFindings::Gathering gathering;
+    std::map<std::string, std::string> counts;
+    if (int r = run_adoption(dpp, null_yield, &counts); r < 0) {
+      ldpp_dout_fmt(dpp, 0, "ERROR: adoption did not finish: {};  the "
+			    "deployment is readable and a restart will retry "
+			    "it", cpp_strerror(-r));
+    }
+    write_adoption_report(dpp, "run", counts);
+  }
+  return 0;
+}
+
+/* Import the store's identities:  phases 0 and 1 of
+ * ACCOUNT_IMPORT.md §6.1, store-wide and first, because every bucket's
+ * owner and every policy principal resolves through them.  A command in
+ * `command` mode (the `adoption` driver hint), and the first step of
+ * run_adoption().
+ *
+ * Failures report to the log.  A phase-0 failure costs nothing, which
+ * is the point of the phase;  a later one leaves RGW state behind and
+ * re-running is the recovery, keyed on NooBaa's `_id` (§6.2). */
+int NSFSDriver::adopt_identities(const DoutPrefixProvider* dpp,
+				 optional_yield y,
+				 std::map<std::string, std::string>* report,
+				 bool preview)
+{
+  auto put_report = [report](const char* k, const std::string& v) {
+    if (report) {
+      (*report)[k] = v;
+    }
+  };
+
+  if (!adoption_configured()) {
+    put_report("ran", "false");
+    put_report("why", "no NooBaa configuration store is configured");
+    return -ENOENT;
+  }
+
+  const auto& root =
+    g_conf().get_val<std::string>("rgw_nsfs_noobaa_config_root");
+
+  /* ---- phase 0:  preflight.  Nothing is written. ---- */
+
+  nsfs::NooBaaConfigStore store(root);
+  nsfs::NooBaaStoreContents contents;
+  int ret = store.read(dpp, contents);
+  if (ret < 0) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: adoption: cannot read {}: {}", root,
+			  cpp_strerror(-ret));
+    put_report("ran", "false");
+    put_report("error", cpp_strerror(-ret));
+    return ret;
+  }
+  if (contents.settings.ldap_configured) {
+    adoption_findings.add(nsfs::FindingKind::ldap_configured,
+      contents.settings.ldap_config_path + " exists, so NooBaa served "
+      "AssumeRoleWithWebIdentity against LDAP");
+  }
+  {
+    const auto d = contents.setting_differences(g_conf());
+    adoption_findings.add(nsfs::FindingKind::setting_differs,
+			  d.option_differs);
+    adoption_findings.add(nsfs::FindingKind::setting_not_carried,
+			  d.not_carried);
+    for (const auto& why : contents.md5_etag_divergence()) {
+      adoption_findings.add(nsfs::FindingKind::setting_differs,
+	why + ";  this gateway has rgw_non_md5_etag \"" +
+	(g_conf().get_val<bool>("rgw_non_md5_etag") ? "true" : "false") +
+	"\" for every bucket");
+    }
+  }
+  if (!contents.unreadable.empty()) {
+    for (const auto& u : contents.unreadable) {
+      ldpp_dout_fmt(dpp, 0, "ERROR: adoption: {}: {}", u.path, u.why);
+      adoption_findings.add(nsfs::FindingKind::store_unreadable, u.path + ": " + u.why);
+    }
+    put_report("ran", "false");
+    put_report("unreadable", std::to_string(contents.unreadable.size()));
+    return -EBADMSG;
+  }
+  if (const auto skew = contents.version_skew(); !skew.empty()) {
+    for (const auto& why : skew) {
+      ldpp_dout_fmt(dpp, 0, "ERROR: adoption: {}: {}", root, why);
+      adoption_findings.add(nsfs::FindingKind::store_version, root + ": " + why);
+    }
+    put_report("ran", "false");
+    put_report("version_skew", std::to_string(skew.size()));
+    return -ENOTSUP;
+  }
+  if (const size_t n = drop_abandoned_identities(dpp, contents); n) {
+    put_report("identities_abandoned", std::to_string(n));
+  }
+
+  nsfs::NooBaaMasterKeys keys;
+  ret = keys.load(dpp, contents.settings, root);
+  if (ret < 0) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: adoption: no usable master key: {}",
+			  cpp_strerror(-ret));
+    adoption_findings.add(nsfs::FindingKind::identity_failed,
+			  "no usable master key: " + cpp_strerror(-ret));
+    put_report("ran", "false");
+    put_report("error", "master keys");
+    return ret;
+  }
+  std::vector<std::string> failures;
+  ret = nsfs::decrypt_store_secrets(dpp, keys, contents, failures);
+  if (ret < 0) {
+    for (const auto& r : failures) {
+      ldpp_dout_fmt(dpp, 0, "ERROR: adoption: {}", r);
+    }
+    adoption_findings.add(nsfs::FindingKind::identity_failed, failures);
+    put_report("ran", "false");
+    put_report("error", "secrets");
+    return ret;
+  }
+
+  nsfs::ImportPlan plan;
+  ret = nsfs::build_import_plan(dpp, ctx(), contents, plan,
+				  get_identity_db());
+  adoption_findings.add(nsfs::FindingKind::user_drift, plan.drift);
+  adoption_findings.add(nsfs::FindingKind::limit_raised, plan.raised);
+  adoption_findings.add(nsfs::FindingKind::root_widened, plan.widened);
+  put_report("drift", std::to_string(plan.drift.size()));
+  put_report("limits_to_raise", std::to_string(plan.raised.size()));
+  put_report("roots_widened", std::to_string(plan.widened.size()));
+  if (ret < 0) {
+    adoption_findings.add(nsfs::FindingKind::collision, plan.collisions);
+    put_report("ran", "false");
+    put_report("collisions", std::to_string(plan.collisions.size()));
+    return ret;
+  }
+  /* each collision with RGW's state fails its identity, as the plan's
+   * do (DECISIONS.md 2026-11-02) */
+  ret = nsfs::check_rgw_state(dpp, y, this, plan);
+  if (ret < 0) {
+    put_report("ran", "false");
+    put_report("error", cpp_strerror(-ret));
+    return ret;
+  }
+
+  /* ---- phase 1:  identities ---- */
+
+  nsfs::ImportResult ir;
+  ret = nsfs::import_identities(dpp, y, this, contents, plan, ir, preview);
+  if (!preview) {
+    /* the principals an unadopted bucket's policy maps to have changed */
+    invalidate_unadopted_mapping();
+  }
+  adoption_findings.add(nsfs::FindingKind::identity_failed, ir.failures);
+  adoption_findings.add(nsfs::FindingKind::unresolved_name, ir.unresolved_names);
+  adoption_findings.add(nsfs::FindingKind::unresolved_uid, ir.unresolved_uids);
+  adoption_findings.add(nsfs::FindingKind::trust_narrowed, ir.trust_narrowed);
+  adoption_findings.add(nsfs::FindingKind::arn_matched, ir.arns_matched);
+  adoption_findings.add(nsfs::FindingKind::role_config_superseded,
+			ir.role_config_superseded);
+  put_report("accounts", std::to_string(ir.accounts_created));
+  put_report("accounts_present", std::to_string(ir.accounts_skipped));
+  put_report("users", std::to_string(ir.users_created));
+  put_report("users_present", std::to_string(ir.users_skipped));
+  put_report("identity_rows", std::to_string(ir.identity_rows));
   put_report("user_rows", std::to_string(ir.user_rows));
+  put_report("limits_raised", std::to_string(ir.limits_raised));
+  put_report("anonymous", ir.anonymous_imported ? "true" : "false");
+  put_report("anonymous_present", ir.anonymous_present ? "true" : "false");
+  put_report("roles", std::to_string(ir.roles_created));
+  put_report("identities_failed", std::to_string(ir.failed_ids.size()));
+  if (!preview) {
+    std::lock_guard l{adoption_failures_mtx};
+    identity_failures = ir.failed_ids;
+  }
+  put_report("role_rights", ir.role_rights);
+  put_report("role_policies", std::to_string(ir.role_policies_written));
   put_report("unresolved_names", std::to_string(ir.unresolved_names.size()));
   for (const auto& u : ir.unresolved_names) {
     ldpp_dout_fmt(dpp, 0, "WARNING: adoption:  an identity names a user "
@@ -15867,7 +16566,1086 @@ void NSFSDriver::register_admin_apis(RGWRESTMgr* mgr)
   for (const auto& u : ir.unresolved_uids) {
     ldpp_dout_fmt(dpp, 0, "WARNING: adoption:  an identity with no group list "
 			  "runs as a uid nsswitch does not know:  {}", u);
+  }
+  put_report("trust_narrowed", std::to_string(ir.trust_narrowed.size()));
+  for (const auto& t : ir.trust_narrowed) {
+    ldpp_dout_fmt(dpp, 0, "WARNING: adoption:  {}", t);
+  }
+  put_report("arns_matched", std::to_string(ir.arns_matched.size()));
+  put_report("role_config_superseded",
+	     std::to_string(ir.role_config_superseded.size()));
+  for (const auto& s : ir.role_config_superseded) {
+    ldpp_dout_fmt(dpp, 0, "WARNING: adoption:  {}", s);
+  }
+  for (const auto& a : ir.arns_matched) {
+    ldpp_dout_fmt(dpp, 0, "WARNING: adoption:  a trust policy now matches an "
+			  "ARN NooBaa never matched:  {}", a);
+  }
+  /* -EIO is some identities written and some not:  the rest of the pass
+   * goes on, and adoption does not complete until each failure is fixed
+   * or abandoned.  Anything else wrote nothing. */
+  if (ret == -EIO) {
+    put_report("ran", "partial");
+    return ret;
+  }
+  if (ret < 0) {
+    put_report("ran", "false");
+    put_report("error", cpp_strerror(-ret));
+    return ret;
+  }
+
+  put_report("ran", "true");
+  return 0;
+}
+
+/* Adopt the whole store:  its identities, then every bucket, each the
+ * way a command adopts one.  What `automatic` runs at startup when
+ * there is no io_context or no background tasks, and what `run=true`
+ * runs;  a gateway that serves adopts through the queue instead
+ * (start_adoption_queue()).  A bucket that fails is reported and the
+ * rest continue;  re-running adopts what is left. */
+void NSFSDriver::write_adoption_report(
+  const DoutPrefixProvider* dpp, const char* pass,
+  const std::map<std::string, std::string>& counts)
+{
+  nsfs::AdoptionReport r;
+  r.pass = pass;
+  r.gateway = fmt::format("{}-{}", ctx()->_conf->cluster,
+			  ctx()->_conf->name.to_str());
+  r.store = g_conf().get_val<std::string>("rgw_nsfs_noobaa_config_root");
+  r.findings = adoption_findings.take(r.since);
+  r.ended = ceph::real_clock::now();
+  r.counts = counts;
+  r.complete = adoption_complete();
+  if (auto w = counts.find("why_not_complete"); w != counts.end()) {
+    r.why_not_complete = w->second;
+  }
+  std::vector<nsfs::AbandonedRecord> abandoned;
+  if (list_abandoned(dpp, abandoned) == 0) {
+    for (const auto& a : abandoned) {
+      r.findings.push_back({nsfs::FindingKind::abandoned,
+	  a.kind + " " + a.name + " (" + a.noobaa_id + "): " + a.stage +
+	  ";  " + a.reason});
+    }
+  }
+
+  const auto& dir =
+    g_conf().get_val<std::string>("rgw_nsfs_adoption_report_dir");
+  if (dir.empty()) {
+    return;
+  }
+  std::string path;
+  nsfs::write_adoption_report(dpp, dir, r, path);
+}
+
+int NSFSDriver::run_adoption(const DoutPrefixProvider* dpp,
+			     optional_yield y,
+			     std::map<std::string, std::string>* report)
+{
+  /* identities that failed stop nothing else (DECISIONS.md 2026-11-02) */
+  const int iret = adopt_identities(dpp, y, report);
+  if ((iret < 0) && (iret != -EIO)) {
+    return iret;
+  }
+  int ret;
+
+  const auto& root =
+    g_conf().get_val<std::string>("rgw_nsfs_noobaa_config_root");
+  nsfs::NooBaaConfigStore store(root);
+  nsfs::NooBaaStoreContents contents;
+  ret = store.read(dpp, contents);
+  if (ret < 0) {
+    return ret;
+  }
+  size_t adopted = 0, failed = 0, abandoned = 0, blocked = 0;
+  for (const auto& b : contents.buckets) {
+    nsfs::AbandonedRecord ab;
+    if (userDB->get_abandoned(dpp, b.id, ab) == 0) {
+      ++abandoned;
+      continue;
+    }
+    std::map<std::string, std::string> one;
+    if (adopt_one_bucket(dpp, y, b.name, &one) < 0) {
+      if (one["blocked"] == "true") {
+	++blocked;
+	continue;
+      }
+      ++failed;
+      ldpp_dout_fmt(dpp, 0, "ERROR: adoption: bucket {}: {}", b.name,
+			    (one.count("error") ? one["error"] : one["why"]));
+    } else {
+      ++adopted;
+    }
+  }
+  if (report) {
+    (*report)["buckets_adopted"] = std::to_string(adopted);
+    (*report)["buckets_abandoned"] = std::to_string(abandoned);
+    (*report)["buckets_failed"] = std::to_string(failed);
+    (*report)["buckets_blocked"] = std::to_string(blocked);
+  }
+  ldpp_dout_fmt(dpp, 1, "nsfs: adopted {}: {} buckets, {} failed, {} blocked "
+			"by an identity", root, adopted, failed, blocked);
+  if (failed || blocked || (iret < 0)) {
+    return -EIO;
+  }
+  return observe_adoption_completion(dpp, y, root, contents, report);
+}
+
+/* What run_adoption() would do, with nothing written (DECISIONS.md
+ * 2026-11-02):  the identities as adopt_identities() would import them,
+ * then each bucket's record up to its first write, against the mapping
+ * that import would leave.  Not while the queue runs, whose findings it
+ * would share. */
+int NSFSDriver::preview_adoption(const DoutPrefixProvider* dpp,
+				 optional_yield y,
+				 std::map<std::string, std::string>* report)
+{
+  std::map<std::string, std::string> counts;
+  auto done = [&](int ret) {
+    if (report) {
+      *report = counts;
+    }
+    return ret;
+  };
+  if (!adoption_configured()) {
+    counts["why"] = "no NooBaa configuration store is configured";
+    return done(-ENOENT);
+  }
+  if (adoption_queue.load(std::memory_order_acquire)) {
+    counts["why"] = "the adoption queue is running";
+    return done(-EBUSY);
+  }
+
+  nsfs::AdoptionFindings::Gathering gathering;
+  int ret = adopt_identities(dpp, y, &counts, true);
+  if ((ret < 0) && (ret != -EIO)) {
+    write_adoption_report(dpp, "preview", counts);
+    return done(0);
+  }
+
+  const auto& root =
+    g_conf().get_val<std::string>("rgw_nsfs_noobaa_config_root");
+  nsfs::NooBaaConfigStore store(root);
+  nsfs::NooBaaStoreContents contents;
+  ret = store.read(dpp, contents);
+  if (ret < 0) {
+    return done(ret);
+  }
+  nsfs::IdentityMapping mapping;
+  ret = imported_identity_mapping(dpp, contents, mapping, true);
+  if (ret < 0) {
+    return done(ret);
+  }
+  if (!contents.connections.empty()) {
+    nsfs::NooBaaMasterKeys keys;
+    std::vector<std::string> failures;
+    if ((keys.load(dpp, contents.settings, root) < 0) ||
+	(nsfs::decrypt_store_secrets(dpp, keys, contents, failures) < 0)) {
+      /* adopt_identities() has reported it */
+      write_adoption_report(dpp, "preview", counts);
+      return done(0);
+    }
+  }
+
+  /* the buckets a pass would adopt:  not abandoned, and not imported */
+  size_t abandoned = 0, present = 0;
+  std::erase_if(contents.buckets, [&](const nsfs::NooBaaBucketRecord& b) {
+    nsfs::AbandonedRecord ab;
+    if (userDB->get_abandoned(dpp, b.id, ab) == 0) {
+      ++abandoned;
+      return true;
+    }
+    nsfs::BucketPlacement row;
+    if (userDB->get_bucket_placement(dpp, b.name, "", row) == 0) {
+      ++present;
+      return true;
+    }
+    return false;
+  });
+  nsfs::BucketImportResult br;
+  nsfs::import_bucket_state(dpp, y, this, root, contents, mapping, br, true);
+  adoption_findings.add(nsfs::FindingKind::policy_refused, br.policies_refused);
+  adoption_findings.add(nsfs::FindingKind::arn_matched, br.arns_matched);
+  adoption_findings.add(nsfs::FindingKind::notification_not_carried,
+			br.notifications_reported);
+  adoption_findings.add(nsfs::FindingKind::notification_needs_operator,
+			br.notifications_need_operator);
+  adoption_findings.add(nsfs::FindingKind::bucket_failed, br.failures);
+  adoption_findings.add(nsfs::FindingKind::bucket_failed, br.blocked);
+  counts["buckets_adopted"] = std::to_string(br.buckets_written);
+  counts["buckets_blocked"] = std::to_string(br.blocked.size());
+  counts["buckets_failed"] = std::to_string(br.failures.size());
+  counts["buckets_abandoned"] = std::to_string(abandoned);
+  counts["buckets_present"] = std::to_string(present);
+  counts["topics"] = std::to_string(br.topics_written);
+  counts["notifications"] = std::to_string(br.notifications_carried);
+  counts["why_not_complete"] = "a preview:  nothing was written, and a "
+    "tree's conversion is not predicted";
+  write_adoption_report(dpp, "preview", counts);
+  return done(0);
+}
+
+/* Abandon one NooBaa record (DECISIONS.md 2026-10-13):  find it by
+ * `_id`, work out how far it got, and record that with the operator's
+ * reason.  A record fully consumed has nothing to abandon, and nothing
+ * is abandoned once adoption is complete. */
+int NSFSDriver::abandon_noobaa_record(const DoutPrefixProvider* dpp,
+				      optional_yield y,
+				      const std::string& noobaa_id,
+				      const std::string& reason,
+				      nsfs::AbandonedRecord& out)
+{
+  if (noobaa_id.empty() || reason.empty()) {
+    return -EINVAL;
+  }
+  int ret = load_adoption_completion(dpp);
+  if (ret < 0) {
+    return ret;
+  }
+  if (adoption_complete()) {
+    ldpp_dout_fmt(dpp, 1, "nsfs: not abandoning {}:  adoption is complete",
+			  noobaa_id);
+    return -EEXIST;
+  }
+  if (!adoption_configured()) {
+    return -ENOENT;
+  }
+
+  const auto& root =
+    g_conf().get_val<std::string>("rgw_nsfs_noobaa_config_root");
+  nsfs::NooBaaConfigStore store(root);
+  nsfs::NooBaaStoreContents contents;
+  ret = store.read(dpp, contents);
+  if (ret < 0) {
+    return ret;
+  }
+
+  nsfs::AbandonedRecord r;
+  r.noobaa_id = noobaa_id;
+  r.reason = reason;
+  for (const auto& id : contents.identities) {
+    if (id.id != noobaa_id) {
+      continue;
+    }
+    std::string owner;
+    if (userDB->get_owner_by_noobaa_id(dpp, id.id, owner) == 0) {
+      ldpp_dout_fmt(dpp, 1, "nsfs: not abandoning identity {}:  it is imported",
+			    id.name);
+      return -EEXIST;
+    }
+    r.kind = "identity";
+    r.name = id.name;
+    r.stage = "not imported";
+    for (const auto& b : contents.buckets) {
+      if (b.owner_account == id.id) {
+	r.dependent_buckets.push_back(b.name);
+      }
+    }
+  }
+  for (const auto& role : contents.roles) {
+    if (role.id != noobaa_id) {
+      continue;
+    }
+    std::string account;
+    if (userDB->get_owner_by_noobaa_id(dpp, role.owner, account) == 0) {
+      auto written = get_role(role.name, "", rgw_account_id{account});
+      if (written->load_by_name(dpp, y) == 0) {
+	ldpp_dout_fmt(dpp, 1, "nsfs: not abandoning role {}:  it is imported",
+			      role.name);
+	return -EEXIST;
+      }
+    }
+    /* an identity in NooBaa's terms:  `identities/<id>/identity.json`,
+     * `identity_type: "ROLE"` */
+    r.kind = "identity";
+    r.name = role.name;
+    r.stage = "not imported";
+  }
+  for (const auto& b : contents.buckets) {
+    if (b.id != noobaa_id) {
+      continue;
+    }
+    r.kind = "bucket";
+    r.name = b.name;
+    nsfs::BucketPlacement row;
+    if (userDB->get_bucket_placement(dpp, b.name, "", row) < 0) {
+      r.stage = "not imported";
+      break;
+    }
+    r.stage = "not converted";
+    std::unique_ptr<Bucket> loaded;
+    if (load_bucket_internal(dpp, rgw_bucket{"", b.name}, &loaded, y) == 0) {
+      auto* nb = static_cast<NSFSBucket*>(loaded.get());
+      if (nb->is_converting()) {
+	/* an escape hatch for a conversion that will not finish:
+	 * allowed, and said, since the bucket stays half-converted */
+	r.stage = "partly converted";
+      } else if (std::strcmp(nb->profile_name(), "base")) {
+	ldpp_dout_fmt(dpp, 1, "nsfs: not abandoning bucket {}:  it is adopted",
+			      b.name);
+	return -EEXIST;
+      }
+    }
+  }
+  if (r.kind.empty()) {
+    return -ENOENT;
+  }
+
+  r.at = to_iso_8601(ceph::real_clock::now());
+  ret = userDB->put_abandoned(dpp, r);
+  if (ret < 0) {
+    return ret;
+  }
+  if (r.kind == "bucket") {
+    /* an operator acted:  the escape hatch decides what is served */
+    std::lock_guard l{adoption_failures_mtx};
+    adoption_failures.erase(r.name);
+  }
+  ldpp_dout_fmt(dpp, 0, "nsfs: abandoned {} {} ({}), {}:  {}", r.kind, r.name,
+			r.noobaa_id, r.stage, r.reason);
+  if (!r.dependent_buckets.empty()) {
+    ldpp_dout_fmt(dpp, 0, "nsfs: {} owns {} bucket records, which will now "
+			  "fail their imports and block completion until each "
+			  "is decided", r.name, r.dependent_buckets.size());
+  }
+  /* the record may have been the last thing blocking completion, and
+   * under `automatic` nothing else would look again */
+  if (auto* q = adoption_queue.load(std::memory_order_acquire); q) {
+    q->recheck();
+  } else if ((adoption_mode == AdoptionMode::Automatic) && io_context &&
+	     background_tasks) {
+    /* no queue:  the identity import failed at startup, and this
+     * record may be what stopped it */
+    if (int r2 = start_adoption_queue(dpp); r2 < 0) {
+      ldpp_dout_fmt(dpp, 0, "ERROR: adoption did not start: {}",
+			    cpp_strerror(-r2));
+    }
+  }
+  out = std::move(r);
+  return 0;
+}
+
+int NSFSDriver::abandoned_bucket(const DoutPrefixProvider* dpp,
+				 const std::string& bucket_name,
+				 nsfs::AbandonedRecord& out)
+{
+  if (!nb_bucket_state_strategy) {
+    return -ENOENT;
+  }
+  std::string id;
+  int ret = static_cast<nsfs::NooBaaBucketStateStrategy*>(
+    nb_bucket_state_strategy.get())->recorded_id(dpp, bucket_name, id);
+  if (ret < 0) {
+    return ret;
+  }
+  return userDB->get_abandoned(dpp, id, out);
+}
+
+int NSFSDriver::unabandon_noobaa_record(const DoutPrefixProvider* dpp,
+					const std::string& noobaa_id)
+{
+  int ret = load_adoption_completion(dpp);
+  if (ret < 0) {
+    return ret;
+  }
+  if (adoption_complete()) {
+    return -EEXIST;
+  }
+  return userDB->remove_abandoned(dpp, noobaa_id);
+}
+
+int NSFSDriver::list_abandoned(const DoutPrefixProvider* dpp,
+			       std::vector<nsfs::AbandonedRecord>& out)
+{
+  return userDB->list_abandoned(dpp, out);
+}
+
+int NSFSDriver::load_adoption_completion(const DoutPrefixProvider* dpp)
+{
+  nsfs::AdoptionCompletion c;
+  const int ret = userDB->get_adoption_completion(dpp, c);
+  if (ret == -ENOENT) {
+    return 0;
+  }
+  if (ret < 0) {
+    return ret;
+  }
+  set_completion(std::move(c));
+  return 0;
+}
+
+void NSFSDriver::set_completion(nsfs::AdoptionCompletion c)
+{
+  {
+    std::lock_guard l{completion_mtx};
+    if (completion) {
+      return;
+    }
+    completion = std::move(c);
+    completed.store(true, std::memory_order_release);
+  }
+  /* every bucket is adopted or abandoned, and no policy is served
+   * through NooBaa's identities */
+  {
+    std::lock_guard l{adoption_failures_mtx};
+    adoption_failures.clear();
+  }
+  invalidate_unadopted_mapping();
+  if (auto* q = adoption_queue.load(std::memory_order_acquire); q) {
+    q->stop();
+  }
+}
+
+bool NSFSDriver::reread_adoption_complete(const DoutPrefixProvider* dpp)
+{
+  if (adoption_complete()) {
+    return true;
+  }
+  if (int r = load_adoption_completion(dpp); r < 0) {
+    ldpp_dout_fmt(dpp, 1, "nsfs: the completion record did not read: {};  "
+			  "NooBaa's store is read", cpp_strerror(-r));
+  }
+  return adoption_complete();
+}
+
+/* Whether this pass has consumed NooBaa's store, and if it has, the
+ * record that says so.  Observed, not declared:  every identity
+ * imported, every bucket record with a row, and every bucket that came
+ * from NooBaa adopted -- out of base, and not converting.  A store with
+ * a record that would not read is not consumed. */
+int NSFSDriver::observe_adoption_completion(
+  const DoutPrefixProvider* dpp, optional_yield y, const std::string& root,
+  const nsfs::NooBaaStoreContents& contents,
+  std::map<std::string, std::string>* report)
+{
+  auto not_yet = [&](const std::string& why) {
+    ldpp_dout_fmt(dpp, 1, "nsfs: adoption not complete:  {}", why);
+    if (report) {
+      (*report)["complete"] = "false";
+      (*report)["why_not_complete"] = why;
+    }
+    return 0;
+  };
+
+  if (!contents.unreadable.empty()) {
+    return not_yet(contents.unreadable.front().path + " does not read");
+  }
+  auto abandoned = [&](const std::string& id) {
+    nsfs::AbandonedRecord r;
+    return userDB->get_abandoned(dpp, id, r) == 0;
+  };
+  /* what the identity pass did not write, roles included, which have no
+   * record of their own to look for */
+  {
+    std::set<std::string> failed;
+    {
+      std::lock_guard l{adoption_failures_mtx};
+      failed = identity_failures;
+    }
+    for (const auto& id : failed) {
+      if (!abandoned(id)) {
+	return not_yet("NooBaa record " + id + " did not import");
+      }
+    }
+  }
+  for (const auto& id : contents.identities) {
+    std::string owner;
+    if (abandoned(id.id)) {
+      continue;
+    }
+    if (userDB->get_owner_by_noobaa_id(dpp, id.id, owner) < 0) {
+      return not_yet("identity " + id.name + " (" + id.id +
+		     ") is not imported");
+    }
+  }
+  for (const auto& b : contents.buckets) {
+    if (abandoned(b.id)) {
+      continue;
+    }
+    nsfs::BucketPlacement row;
+    if (userDB->get_bucket_placement(dpp, b.name, "", row) < 0) {
+      return not_yet("bucket " + b.name + " has no placement row");
+    }
+    std::unique_ptr<Bucket> loaded;
+    if (load_bucket_internal(dpp, rgw_bucket{"", b.name}, &loaded, y) < 0) {
+      return not_yet("bucket " + b.name + " does not load");
+    }
+    auto* nb = static_cast<NSFSBucket*>(loaded.get());
+    if (nb->is_converting() || !std::strcmp(nb->profile_name(), "base")) {
+      return not_yet("bucket " + b.name + " is not converted");
+    }
+  }
+
+  nsfs::AdoptionCompletion c;
+  c.completed_at = to_iso_8601(ceph::real_clock::now());
+  c.config_root = root;
+  c.identities = contents.identities.size();
+  c.buckets = contents.buckets.size();
+  c.gateway_version = pretty_version_to_str();
+  c.extensions = new_bucket_extensions();
+  int ret = userDB->put_adoption_completion(dpp, c);
+  if (ret == -EEXIST) {
+    /* another gateway got there first;  theirs is the record */
+    return load_adoption_completion(dpp);
+  }
+  if (ret < 0) {
+    return ret;
+  }
+  set_completion(std::move(c));
+  ldpp_dout_fmt(dpp, 0, "nsfs: adoption is complete:  {} is consumed and is "
+			"not read again", root);
+  if (report) {
+    (*report)["complete"] = "true";
+    (*report)["completed_at"] = completion->completed_at;
+  }
+  return 0;
+}
+
+/* Import one bucket's NooBaa record:  its owner, versioning, policy,
+ * logging and the rest of its configuration, written as nsfs bucket
+ * state.  The tree is not touched;  set_profile() leaving base calls
+ * this and then rewrites the tree, which is what adopting a bucket is.
+ *
+ * The bucket half of the import (§6.1), against identities already
+ * imported.  A principal may name any identity, so the mapping is
+ * built over the whole store -- but only from identities that are
+ * imported:  a plan mints an id for one that is not, and a bucket
+ * written with that id would name an account that does not exist.  An
+ * owner or principal not yet imported is a failure of this bucket,
+ * reported by the import, and `identities=true` is the remedy.
+ *
+ * Returns -ENOENT when the store holds no record of the bucket, or no
+ * store is configured. */
+int NSFSDriver::import_noobaa_bucket(const DoutPrefixProvider* dpp,
+				     optional_yield y,
+				     const std::string& bucket_name,
+				     std::map<std::string, std::string>* report)
+{
+  auto put_report = [report](const char* k, const std::string& v) {
+    if (report) {
+      (*report)[k] = v;
+    }
+  };
+
+  if (!adoption_configured()) {
+    put_report("configured", "false");
+    put_report("why", "no NooBaa configuration store is configured");
+    return -ENOENT;
+  }
+  /* once adoption is complete NooBaa's store is not an input, so there
+   * is no record to import */
+  if (adoption_complete()) {
+    put_report("why", "adoption is complete");
+    return -ENOENT;
+  }
+  /* an operator decided this record goes no further;  a profile change
+   * that would import it is rejected with it, not quietly converted
+   * without its state */
+  if (nsfs::AbandonedRecord ab; abandoned_bucket(dpp, bucket_name, ab) == 0) {
+    put_report("why", "abandoned:  " + ab.reason);
+    return -EEXIST;
+  }
+
+  const auto& root =
+    g_conf().get_val<std::string>("rgw_nsfs_noobaa_config_root");
+
+  nsfs::NooBaaConfigStore store(root);
+  nsfs::NooBaaStoreContents contents;
+  int ret = store.read(dpp, contents);
+  if (ret < 0) {
+    put_report("configured", "false");
+    put_report("error", cpp_strerror(-ret));
+    return ret;
+  }
+  /* X4's version gate, here as well as in adopt_identities():  this is
+   * what set_profile() leaving base calls before it rewrites a tree */
+  if (const auto skew = contents.version_skew(); !skew.empty()) {
+    for (const auto& why : skew) {
+      ldpp_dout_fmt(dpp, 0, "ERROR: not importing bucket {}: {}: {}",
+			    bucket_name, root, why);
+    }
+    put_report("configured", "false");
+    put_report("version_skew", std::to_string(skew.size()));
+    return -ENOTSUP;
+  }
+  /* and its record must read:  one that does not, or that holds a field
+   * NooBaa at the store's release does not write (X4's second layer), is
+   * not imported, as adopt_identities() refuses the store for it.  So
+   * must every connection, since its notifications may name any (I10). */
+  {
+    const std::string path = fmt::format("{}/buckets/{}.json", root, bucket_name);
+    const std::string connections = fmt::format("{}/connections/", root);
+    for (const auto& u : contents.unreadable) {
+      if ((u.path != path) && !u.path.starts_with(connections)) {
+	continue;
+      }
+      ldpp_dout_fmt(dpp, 0, "ERROR: not importing bucket {}: {}: {}",
+			    bucket_name, u.path, u.why);
+      put_report("configured", "false");
+      put_report("unreadable", u.why);
+      return -EBADMSG;
+    }
+  }
+
+  nsfs::IdentityMapping mapping;
+  ret = imported_identity_mapping(dpp, contents, mapping);
+  if (ret < 0) {
+    put_report("configured", "false");
+    return ret;
+  }
+
+  /* a connection's auth is encrypted with the master key, as an access
+   * key's secret is (I10) */
+  if (!contents.connections.empty()) {
+    nsfs::NooBaaMasterKeys keys;
+    ret = keys.load(dpp, contents.settings, root);
+    if (ret < 0) {
+      ldpp_dout_fmt(dpp, 0, "ERROR: not importing bucket {}: no usable master "
+			    "key: {}", bucket_name, cpp_strerror(-ret));
+      put_report("configured", "false");
+      put_report("error", "master keys");
+      return ret;
+    }
+    std::vector<std::string> failures;
+    ret = nsfs::decrypt_store_secrets(dpp, keys, contents, failures);
+    if (ret < 0) {
+      for (const auto& r : failures) {
+	ldpp_dout_fmt(dpp, 0, "ERROR: not importing bucket {}: {}", bucket_name,
+			      r);
+      }
+      put_report("configured", "false");
+      put_report("error", "secrets");
+      return ret;
+    }
+  }
+
+  nsfs::BucketImportResult br;
+  ret = nsfs::import_one_bucket(dpp, y, this, root, bucket_name, contents,
+				mapping, br);
+  adoption_findings.add(nsfs::FindingKind::policy_refused, br.policies_refused);
+  adoption_findings.add(nsfs::FindingKind::arn_matched, br.arns_matched);
+  adoption_findings.add(nsfs::FindingKind::notification_not_carried, br.notifications_reported);
+  adoption_findings.add(nsfs::FindingKind::notification_needs_operator,
+			br.notifications_need_operator);
+  adoption_findings.add(nsfs::FindingKind::bucket_failed, br.failures);
+  adoption_findings.add(nsfs::FindingKind::bucket_failed, br.blocked);
+  {
+    std::lock_guard l{adoption_failures_mtx};
+    if (br.blocked.empty()) {
+      adoption_blocked.erase(bucket_name);
+    } else {
+      adoption_blocked.insert(bucket_name);
+    }
+  }
+  put_report("configured", (ret == 0) ? "true" : "false");
+  if (!br.blocked.empty()) {
+    put_report("blocked", br.blocked.front());
+  }
+  put_report("buckets", std::to_string(br.buckets_written));
+  put_report("policies", std::to_string(br.policies_rewritten));
+  put_report("policies_refused", std::to_string(br.policies_refused.size()));
+  put_report("arns_matched", std::to_string(br.arns_matched.size()));
+  put_report("logging", std::to_string(br.logging_carried));
+  put_report("topics", std::to_string(br.topics_written));
+  put_report("notifications", std::to_string(br.notifications_carried));
+  put_report("notifications_reported",
+	     std::to_string(br.notifications_reported.size()));
+  put_report("notifications_need_operator",
+	     std::to_string(br.notifications_need_operator.size()));
+  if (ret < 0) {
+    put_report("error", cpp_strerror(-ret));
+  }
+  return ret;
+}
+
+/* An identity an operator abandoned is not imported, and does not stop
+ * the others -- a collision is the usual reason to abandon one.
+ * Returns how many were left out. */
+size_t NSFSDriver::drop_abandoned_identities(
+  const DoutPrefixProvider* dpp, nsfs::NooBaaStoreContents& contents)
+{
+  const size_t before = contents.identities.size() + contents.roles.size();
+  std::erase_if(contents.identities, [this, dpp](const auto& id) {
+    nsfs::AbandonedRecord r;
+    return userDB->get_abandoned(dpp, id.id, r) == 0;
+  });
+  std::erase_if(contents.roles, [this, dpp](const auto& role) {
+    nsfs::AbandonedRecord r;
+    return userDB->get_abandoned(dpp, role.id, r) == 0;
+  });
+  return before - contents.identities.size() - contents.roles.size();
+}
+
+int NSFSDriver::imported_identity_mapping(const DoutPrefixProvider* dpp,
+					  const nsfs::NooBaaStoreContents& contents,
+					  nsfs::IdentityMapping& out,
+					  bool preview)
+{
+  /* planned as the identity import was, so an abandoned identity is
+   * neither written nor planned */
+  nsfs::NooBaaStoreContents planned = contents;
+  drop_abandoned_identities(dpp, planned);
+  nsfs::ImportPlan plan;
+  int ret = nsfs::build_import_plan(dpp, ctx(), planned, plan,
+				    get_identity_db());
+  if (ret < 0) {
+    return ret;
+  }
+  auto whole = std::make_shared<nsfs::IdentityMapping>(nsfs::mapping_from(plan));
+  if (preview) {
+    ret = nsfs::check_rgw_state(dpp, null_yield, this, plan);
+    if (ret < 0) {
+      return ret;
+    }
+    std::erase_if(plan.entries, [](const nsfs::ImportEntry& e) {
+      return !e.failed.empty();
+    });
+  } else {
+    std::erase_if(plan.entries, [this, dpp](const nsfs::ImportEntry& e) {
+      std::string owner;
+      return get_identity_db()->get_owner_by_noobaa_id(dpp, e.noobaa_id,
+						       owner) < 0;
+    });
+  }
+  out = nsfs::mapping_from(plan);
+  out.planned = std::move(whole);
+  return 0;
+}
+
+void NSFSDriver::invalidate_unadopted_mapping()
+{
+  std::lock_guard l(unadopted_mapping_mtx);
+  unadopted_mapping.reset();
+}
+
+int NSFSDriver::rewrite_unadopted_policy(const DoutPrefixProvider* dpp,
+					 const std::string& bucket,
+					 Attrs& attrs,
+					 std::string& untranslated)
+{
+  auto i = attrs.find(RGW_ATTR_IAM_POLICY);
+  if (i == attrs.end()) {
+    return 0;
+  }
+  std::shared_ptr<const nsfs::IdentityMapping> m;
+  {
+    std::lock_guard l(unadopted_mapping_mtx);
+    m = unadopted_mapping;
+  }
+  if (!m) {
+    const auto& root =
+      g_conf().get_val<std::string>("rgw_nsfs_noobaa_config_root");
+    nsfs::NooBaaConfigStore store(root);
+    nsfs::NooBaaStoreContents contents;
+    int ret = store.read(dpp, contents);
+    auto built = std::make_shared<nsfs::IdentityMapping>();
+    if (ret == 0) {
+      ret = imported_identity_mapping(dpp, contents, *built);
+    }
+    if (ret < 0) {
+      ldpp_dout_fmt(dpp, 0, "ERROR: bucket {}:  NooBaa's principals cannot be "
+			    "mapped ({});  its policy is not served", bucket,
+			    cpp_strerror(-ret));
+      attrs.erase(i);
+      return ret;
+    }
+    std::lock_guard l(unadopted_mapping_mtx);
+    unadopted_mapping = built;
+    m = std::move(built);
+  }
+  std::vector<std::string> unresolved;
+  std::string rewritten;
+  if (nsfs::rewrite_policy_principals(dpp, i->second.to_str(), *m,
+				      rewritten, unresolved) < 0) {
+    const std::string why = unresolved.empty()
+      ? std::string("its policy does not parse")
+      : "its policy names principals the import has not written (" +
+	nsfs::describe_unresolved(*m, unresolved) + ")";
+    ldpp_dout_fmt(dpp, 1, "nsfs: bucket {}:  {}", bucket, why);
+    if (untranslated.empty()) {
+      untranslated = why;
+    }
+    attrs.erase(i);
+    return 0;
+  }
+  bufferlist bl;
+  bl.append(rewritten);
+  i->second = std::move(bl);
+  return 0;
+}
+
+/* Adopt one bucket:  import its NooBaa record and bring its tree into
+ * the shared profile (DECISIONS.md 2026-10-11).  set_profile() leaving
+ * base does both;  this is that call, by name, and the same thing the
+ * profile endpoint does with whichever profile it is given. */
+int NSFSDriver::adopt_one_bucket(const DoutPrefixProvider* dpp,
+				 optional_yield y,
+				 const std::string& bucket_name,
+				 std::map<std::string, std::string>* report,
+				 nsfs::convert_cb_t* cb)
+{
+  auto put_report = [report](const char* k, const std::string& v) {
+    if (report) {
+      (*report)[k] = v;
+    }
+  };
+
+  /* An operator decided this record goes no further, so adopting it by
+   * name is rejected as the full pass skips it.  Take the abandonment
+   * back first to adopt it. */
+  if (nsfs::AbandonedRecord ab; abandoned_bucket(dpp, bucket_name, ab) == 0) {
+    put_report("adopted", "false");
+    put_report("why", "abandoned:  " + ab.reason);
+    return -EEXIST;
+  }
+
+  /* A refusal of the whole store is not this bucket's failure:  adoption
+   * is in place, so it proceeds only where success is expected, and
+   * every bucket stays served as found (DECISIONS.md 2026-10-29). */
+  std::string store_why;
+  if (int r = store_admits_adoption(dpp, store_why); r < 0) {
+    put_report("adopted", "false");
+    put_report("why", store_why);
+    return r;
+  }
+
+  std::unique_ptr<rgw::sal::Bucket> b;
+  rgw_bucket rb;
+  rb.name = bucket_name;
+  int ret = load_bucket_internal(dpp, rb, &b, y);
+  if (ret < 0) {
+    put_report("adopted", "false");
+    put_report("error", cpp_strerror(-ret));
+    return ret;
+  }
+
+  nsfs::ConvertProgress prog;
+  ret = static_cast<NSFSBucket*>(b.get())->set_profile(
+    dpp, y, nsfs::EXTENSIONS_SHARED, cb, &prog);
+  /* Every adoption path comes here, so a failure is recorded once, the
+   * same for the command, the full pass and the queue.  A walk stopped
+   * by shutdown has not failed;  its marker stands for the next start. */
+  bool blocked = false;
+  {
+    std::lock_guard l{adoption_failures_mtx};
+    blocked = (ret < 0) && adoption_blocked.contains(bucket_name);
+    if (blocked) {
+      /* not failed:  served as its translation allows, and adopted once
+       * the identity that blocks it is fixed or abandoned */
+      adoption_failures.erase(bucket_name);
+    } else if ((ret < 0) ? (ret != -ECANCELED) : !prog.complete) {
+      adoption_failures[bucket_name] = (ret < 0) ? ret : -EAGAIN;
+      /* the import's own finding names the cause, where it found one */
+      if (!adoption_findings.contains(nsfs::FindingKind::bucket_failed,
+				      bucket_name + ": ")) {
+	adoption_findings.add(nsfs::FindingKind::bucket_failed,
+	  bucket_name + ": " +
+	  ((ret < 0) ? cpp_strerror(-ret) : "the walk did not finish"));
+      }
+    } else if (ret == 0) {
+      adoption_failures.erase(bucket_name);
+      adoption_findings.remove(nsfs::FindingKind::bucket_failed,
+			       bucket_name + ": ");
+    }
+  }
+  if (const auto& l = prog.links;
+      l.file + l.directory + l.outside + l.dangling + l.loop) {
+    adoption_findings.add(nsfs::FindingKind::links_not_served, bucket_name + ": " +
+      std::to_string(l.file) + " to a file in the bucket, " +
+      std::to_string(l.directory) + " to a directory in the bucket, " +
+      std::to_string(l.outside) + " out of the bucket, " +
+      std::to_string(l.dangling) + " dangling, " +
+      std::to_string(l.loop) + " in a loop");
+  }
+  /* Reported as the struct counts them, which is deliberately not one
+   * number:  a resumed run has only these and its marker to report
+   * from, and a half-finished walk otherwise reads the same as a bucket
+   * with history. */
+  put_report("objects", std::to_string(prog.objects));
+  put_report("directory_objects", std::to_string(prog.directory_objects));
+  put_report("versions", std::to_string(prog.versions));
+  put_report("uploads", std::to_string(prog.uploads));
+  put_report("parts", std::to_string(prog.parts));
   put_report("directories_skipped", std::to_string(prog.directories_skipped));
+  put_report("links_file", std::to_string(prog.links.file));
+  put_report("links_directory", std::to_string(prog.links.directory));
+  put_report("links_outside", std::to_string(prog.links.outside));
+  put_report("links_dangling", std::to_string(prog.links.dangling));
+  put_report("links_loop", std::to_string(prog.links.loop));
+  put_report("profile_set", prog.profile_set ? "true" : "false");
+  put_report("profile", static_cast<NSFSBucket*>(b.get())->profile_name());
+  if (blocked) {
+    put_report("adopted", "false");
+    put_report("blocked", "true");
+    put_report("why", "blocked by an identity that did not import");
+    return -EAGAIN;
+  }
+  if (ret < 0) {
+    put_report("adopted", "false");
+    put_report("error", cpp_strerror(-ret));
+    return ret;
+  }
+  /* `complete` and `profile_set` fail apart, and the struct says why:
+   * a run that stops halfway has changed the profile and not finished
+   * the tree, and the bucket is servable in exactly that state.  So
+   * adoption is complete only when nothing foreign is left. */
+  put_report("adopted", prog.complete ? "true" : "false");
+  if (!prog.complete) {
+    put_report("why", "the walk did not finish;  the converting marker stands "
+	       "and a later run resumes it");
+  }
+  return 0;
+}
+
+int NSFSDriver::start_adoption_queue(const DoutPrefixProvider* dpp,
+				     std::optional<uint64_t> workers)
+{
+  std::lock_guard start_l{adoption_queue_start_mtx};
+  if (adoption_queue_shut) {
+    return -ESHUTDOWN;
+  }
+  if (adoption_queue_owner || adoption_complete()) {
+    return 0;
+  }
+  nsfs::AdoptionFindings::Gathering gathering;
+  if (std::map<std::string, std::string> counts;
+      adopt_identities(dpp, null_yield, &counts) < 0 &&
+      counts["ran"] != "partial") {
+    /* the queue's pass ends before it begins;  identities that failed
+     * stop nothing else (DECISIONS.md 2026-11-02) */
+    write_adoption_report(dpp, "queue", counts);
+    return -EAGAIN;
+  }
+  const auto& root =
+    g_conf().get_val<std::string>("rgw_nsfs_noobaa_config_root");
+  nsfs::NooBaaConfigStore store(root);
+  nsfs::NooBaaStoreContents contents;
+  if (int ret = store.read(dpp, contents); ret < 0) {
+    return ret;
+  }
+
+  auto adopt = [this] (const std::string& bucket,
+		       const std::atomic<bool>& stopping) {
+    nsfs::AdoptionFindings::Gathering gathering;
+    {
+      std::unique_lock l{inject_hold_adoption_lock};
+      if (inject_hold_adoption_buckets.contains(bucket)) {
+	inject_hold_adoption_waiting.insert(bucket);
+	/* polled, because the queue sets `stopping` and then waits for
+	 * this thread */
+	while (inject_hold_adoption_buckets.contains(bucket) && !stopping) {
+	  inject_hold_adoption_cond.wait_for(l, std::chrono::milliseconds(100));
+	}
+	inject_hold_adoption_waiting.erase(bucket);
+	if (stopping) {
+	  return -ECANCELED;
+	}
+      }
+    }
+    /* between objects:  a walk stopped here leaves its marker, and the
+     * next start resumes it */
+    nsfs::convert_cb_t cb =
+      [&stopping] (const DoutPrefixProvider*, const nsfs::ConvertEvent&) {
+	return stopping ? -ECANCELED : 0;
+      };
+    std::map<std::string, std::string> one;
+    const int ret = adopt_one_bucket(&driver_prefix, null_yield, bucket,
+				     &one, &cb);
+    if ((ret < 0) && (one["blocked"] == "true")) {
+      ldpp_dout_fmt(&driver_prefix, 1, "nsfs: bucket {} is blocked by an "
+				       "identity that did not import", bucket);
+      return ret;
+    }
+    if (ret < 0) {
+      ldpp_dout_fmt(&driver_prefix, 0, "ERROR: adoption: bucket {}: {}", bucket,
+				       (one.count("error")
+					? one["error"]
+					: one["why"]));
+      return ret;
+    }
+    if (one["adopted"] != "true") {
+      return -EAGAIN;
+    }
+    ldpp_dout_fmt(&driver_prefix, 1, "nsfs: adopted bucket {}", bucket);
+    return 0;
+  };
+  auto drained = [this, root] {
+    if (adoption_complete()) {
+      return;
+    }
+    std::map<std::string, std::string> counts;
+    nsfs::NooBaaConfigStore store(root);
+    nsfs::NooBaaStoreContents contents;
+    if (store.read(&driver_prefix, contents) < 0) {
+      return;
+    }
+    observe_adoption_completion(&driver_prefix, null_yield, root, contents,
+				&counts);
+    if (auto* q = adoption_queue.load(std::memory_order_acquire)) {
+      const auto st = q->stats();
+      counts["buckets_adopted"] = std::to_string(st.adopted);
+      counts["buckets_failed"] = std::to_string(st.failed);
+    }
+    {
+      std::lock_guard l{adoption_failures_mtx};
+      counts["buckets_blocked"] = std::to_string(adoption_blocked.size());
+    }
+    write_adoption_report(&driver_prefix, "queue", counts);
+  };
+
+  auto q = std::make_unique<nsfs::AdoptionQueue>(
+    *io_context,
+    workers.value_or(g_conf().get_val<uint64_t>("rgw_nsfs_adoption_workers")),
+    std::move(adopt), std::move(drained));
+  size_t queued = 0;
+  for (const auto& b : contents.buckets) {
+    nsfs::AbandonedRecord ab;
+    if (userDB->get_abandoned(dpp, b.id, ab) == 0) {
+      continue;
+    }
+    q->enqueue(b.name);
+    ++queued;
+  }
+  q->start();
+  adoption_queue.store(q.get(), std::memory_order_release);
+  adoption_queue_owner = std::move(q);
+  ldpp_dout_fmt(dpp, 1, "nsfs: adopting {} while serving:  {} buckets queued",
+			root, queued);
+  return 0;
+}
+
+bool NSFSDriver::awaits_adoption(const DoutPrefixProvider* dpp,
+				 NSFSBucket& b)
+{
+  if (!adoption_queue.load(std::memory_order_acquire) ||
+      adoption_complete() || b.extended()) {
+    return false;
+  }
+  if (!b.get_tenant().empty()) {
+    return false;
+  }
+  /* the import writes the row, so a bucket with one has been adopted
+   * as far as its profile takes it;  one left base by extensions off
+   * stays unmarked */
+  nsfs::BucketPlacement row;
+  if (userDB->get_bucket_placement(dpp, b.get_name(), "", row) == 0) {
+    return false;
+  }
+  std::string path;
+  auto* nb_state = static_cast<nsfs::NooBaaBucketStateStrategy*>(
+    nb_bucket_state_strategy.get());
+  if (nb_state->recorded_path(dpp, b.get_name(), path) < 0) {
+    return false;
+  }
+  nsfs::AbandonedRecord ab;
+  const bool awaits = abandoned_bucket(dpp, b.get_name(), ab) < 0;
+  if (awaits) {
+    ldpp_dout_fmt(dpp, 10, "nsfs: bucket {} is not adopted;  promoting it",
+			   b.get_name());
+  }
+  return awaits;
+}
+
 /* A user's credentials as a request resolves them -- its own row, else
  * its account's, and a role session's as resolve_role_credentials() --
  * for the hints that act as a user.  -ENOENT for an
@@ -15885,6 +17663,72 @@ static int hint_credentials(const DoutPrefixProvider* dpp, NSFSDriver* driver,
 					  null_yield, nullptr, cred);
   return (ret == -EPERM) ? -ENOENT : ret;
 }
+
+/* `unmarked-bucket`:  make a test's unmarked bucket.  The one place an
+ * UnmarkPasskey is made.
+ *
+ * Narrow on purpose (DECISIONS.md 2026-10-21, the gate):  only a bucket
+ * this gateway marked, holding no content, which NooBaa's store has no
+ * record of.  So all it can produce is an empty directory with no
+ * marker -- never RGW-written objects in a bucket that claims to be
+ * NooBaa's, and never a bucket adoption would treat as NooBaa's. */
+int NSFSDriver::hint_unmarked_bucket(
+    const DoutPrefixProvider* dpp,
+    const std::map<std::string, std::string>& params,
+    std::map<std::string, std::string>* out)
+{
+  auto it = params.find("bucket");
+  if ((it == params.end()) || it->second.empty()) {
+    return -EINVAL;
+  }
+  const std::string& name = it->second;
+
+  std::unique_ptr<rgw::sal::Bucket> loaded;
+  int ret = load_bucket_internal(dpp, rgw_bucket{"", name}, &loaded, null_yield);
+  if (ret < 0) {
+    return ret;
+  }
+  auto& b = *static_cast<NSFSBucket*>(loaded.get());
+  ret = b.resolve_profile(dpp);
+  if (ret < 0) {
+    return ret;
+  }
+  if (!b.extended() || b.is_converting()) {
+    ldpp_dout_fmt(dpp, 1, "nsfs: unmarked-bucket:  {} is not a marked bucket "
+			  "at rest", name);
+    return -ERR_INVALID_BUCKET_STATE;
+  }
+  if (adoption_configured()) {
+    const std::string record = fmt::format(
+      "{}/buckets/{}.json",
+      g_conf().get_val<std::string>("rgw_nsfs_noobaa_config_root"), name);
+    if (::access(record.c_str(), F_OK) == 0) {
+      ldpp_dout_fmt(dpp, 1, "nsfs: unmarked-bucket:  NooBaa holds a record of "
+			    "{}", name);
+      return -ERR_INVALID_BUCKET_STATE;
+    }
+  }
+  ret = b.check_empty(dpp, null_yield);
+  if (ret < 0) {
+    ldpp_dout_fmt(dpp, 1, "nsfs: unmarked-bucket:  {} holds content", name);
+    return ret;
+  }
+
+  ret = b.unmark_extensions(dpp, UnmarkPasskey{});
+  if (ret < 0) {
+    return ret;
+  }
+  hint_unmarked_buckets.fetch_add(1, std::memory_order_relaxed);
+  ldpp_dout_fmt(dpp, 1, "nsfs: unmarked-bucket:  {} is now unmarked, for a "
+			"test", name);
+  if (out) {
+    (*out)["bucket"] = name;
+    (*out)["profile"] = b.profile_name();
+    (*out)["unmarked"] = std::to_string(hint_unmarked_buckets.load());
+  }
+  return 0;
+}
+
 nsfs::CopyHints NSFSDriver::copy_hints_for(const rgw_owner& who)
 {
   CopyBundle* b = &daemon_copy_bundle;
@@ -15918,7 +17762,135 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
     inject_fork_race = (it->second == "true");
     if (out) {
       (*out)["enabled"] = inject_fork_race ? "true" : "false";
+    }
+    return 0;
+  }
+
+  /* `adoption` -- what the mode is, and a way to run it.
+   *
+   * The import has no endpoint on purpose, so this is how the suite
+   * drives it.  `run=true` runs it;  without that the hint only
+   * reports, which is what a test asserting the default needs. */
+  if (hint == "adoption") {
+    if (out) {
+      (*out)["configured"] = adoption_configured() ? "true" : "false";
+      /* what this gateway serves, so a caller can tell whether it is the
+       * gateway over the tree it means before adopting through it */
       (*out)["base_path"] = default_bucket_location();
+      (*out)["config_root"] =
+	g_conf().get_val<std::string>("rgw_nsfs_noobaa_config_root");
+      (*out)["mode"] =
+	adoption_mode == AdoptionMode::Automatic ? "automatic" : "command";
+    }
+    auto it = params.find("mode");
+    if (it != params.end()) {
+      /* Set the mode, for a test that cannot restart the gateway.  A
+       * deployment sets it in configuration and this is the same
+       * assignment, reachable only through a hint. */
+      if (it->second == "automatic") {
+	adoption_mode = AdoptionMode::Automatic;
+      } else if (it->second == "command") {
+	adoption_mode = AdoptionMode::Command;
+      } else {
+	return -EINVAL;
+      }
+      if (out) {
+	(*out)["mode"] = it->second;
+      }
+    }
+    /* Re-read, so that a record another gateway wrote is seen before a
+     * command acts;  once it is there every command is rejected, since
+     * NooBaa's store is no longer an input. */
+    if (int r = load_adoption_completion(dpp); r < 0) {
+      return r;
+    }
+    const auto done = adoption_completion();
+    if (out && done) {
+      (*out)["complete"] = "true";
+      (*out)["completed_at"] = done->completed_at;
+      (*out)["completed_from"] = done->config_root;
+      (*out)["completed_identities"] = std::to_string(done->identities);
+      (*out)["completed_buckets"] = std::to_string(done->buckets);
+      (*out)["completed_by"] = done->gateway_version;
+    } else if (out) {
+      (*out)["complete"] = "false";
+    }
+    /* `wait_ms=N` sets the quantum, so a test can reach a wait that
+     * outlasts it and one that does not */
+    if (auto w = params.find("wait_ms"); w != params.end()) {
+      auto ms = ceph::parse<uint64_t>(w->second);
+      if (!ms) {
+	return -EINVAL;
+      }
+      adoption_wait_ms = *ms;
+    }
+    if (out) {
+      (*out)["wait_ms"] = std::to_string(adoption_wait_ms.load());
+    }
+    /* `mode=automatic` in a gateway that serves does what startup in
+     * that mode does:  it starts the queue.  A test sets its holds
+     * first, so no worker takes a bucket before the test can hold it.
+     * `workers=N` overrides rgw_nsfs_adoption_workers. */
+    if ((it != params.end()) && (it->second == "automatic") && !done &&
+	adoption_configured() && io_context && background_tasks) {
+      std::optional<uint64_t> workers;
+      if (auto w = params.find("workers"); w != params.end()) {
+	workers = ceph::parse<uint64_t>(w->second);
+	if (!workers || (*workers == 0)) {
+	  return -EINVAL;
+	}
+      }
+      if (int r = start_adoption_queue(dpp, workers); r < 0) {
+	return r;
+      }
+    }
+    /* `automatic` while serving:  the queue's counts since startup */
+    if (auto* q = adoption_queue.load(std::memory_order_acquire);
+	out && q) {
+      const auto s = q->stats();
+      (*out)["queue_queued"] = std::to_string(s.queued);
+      (*out)["queue_running"] = std::to_string(s.running);
+      (*out)["queue_adopted"] = std::to_string(s.adopted);
+      (*out)["queue_failed"] = std::to_string(s.failed);
+      (*out)["queue_promotions"] = std::to_string(s.promotions);
+      (*out)["queue_waits_timed_out"] = std::to_string(s.waits_timed_out);
+    }
+    if (done) {
+      for (const char* cmd : {"identities", "bucket", "run", "preview"}) {
+	if (params.count(cmd)) {
+	  if (out) {
+	    (*out)["why"] = "adoption is complete";
+	  }
+	  /* 409:  EALREADY has no HTTP mapping and would be a 500 */
+	  return -EEXIST;
+	}
+      }
+    }
+    /* The commands (DECISIONS.md 2026-10-11).  `identities=true`
+     * imports the store's identities;  `bucket=<name>` adopts that
+     * bucket -- writes its state from NooBaa's configuration store, marks
+     * it, converts its tree -- against identities already imported;
+     * `run=true` runs what `automatic` runs at startup -- the
+     * identities, then every bucket;  `preview=true` reports what `run`
+     * would do, writing nothing (DECISIONS.md 2026-11-02). */
+    if (auto pv = params.find("preview");
+	(pv != params.end()) && (pv->second == "true")) {
+      return preview_adoption(dpp, null_yield, out);
+    }
+    auto ids = params.find("identities");
+    if ((ids != params.end()) && (ids->second == "true")) {
+      return adopt_identities(dpp, null_yield, out);
+    }
+    auto one = params.find("bucket");
+    if (one != params.end()) {
+      return adopt_one_bucket(dpp, null_yield, one->second, out);
+    }
+    auto run = params.find("run");
+    if ((run != params.end()) && (run->second == "true")) {
+      return run_adoption(dpp, null_yield, out);
+    }
+    return 0;
+  }
 
   if (hint == "mpu-state") {
     /* Read-back, the half that lets a test check a result.
@@ -15948,6 +17920,7 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
     std::unique_ptr<rgw::sal::Bucket> bucket;
     rgw_bucket rb;
     rb.name = b_it->second;
+    int ret = load_bucket_internal(dpp, rb, &bucket, null_yield);
     if (ret < 0) {
       return ret;
     }
@@ -16159,6 +18132,71 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
     inject_create_failure = (it->second == "true");
     if (out) {
       (*out)["enabled"] = inject_create_failure ? "true" : "false";
+    }
+    return 0;
+  }
+
+
+  if (hint == "unmarked-bucket") {
+    return hint_unmarked_bucket(dpp, params, out);
+  }
+
+  if (hint == "inject-lift-adoption-gate") {
+    /* lift the gate on a bucket not taken over, in one bucket, so a test
+     * can show a rejection is the gate's:  the same write succeeds with
+     * it lifted.  `rejected` counts every write the gate turned away. */
+    auto it = params.find("enable");
+    auto b_it = params.find("bucket");
+    if ((it == params.end()) || (b_it == params.end()) ||
+	b_it->second.empty()) {
+      return -EINVAL;
+    }
+    const bool on = (it->second == "true");
+    {
+      std::lock_guard l{inject_lift_adoption_gate_lock};
+      if (on) {
+	inject_lift_adoption_gate_buckets.insert(b_it->second);
+      } else {
+	inject_lift_adoption_gate_buckets.erase(b_it->second);
+      }
+      inject_lift_adoption_gate_armed =
+	  !inject_lift_adoption_gate_buckets.empty();
+    }
+    if (out) {
+      (*out)["enabled"] = on ? "true" : "false";
+      (*out)["bucket"] = b_it->second;
+      (*out)["rejected"] = std::to_string(unadopted_writes_rejected.load());
+    }
+    return 0;
+  }
+
+  if (hint == "inject-hold-adoption") {
+    /* keep one bucket not adopted while the queue runs, so a test can
+     * reach a wait that outlasts its quantum, and release it during a
+     * wait that does not.  `waiting` is true once a worker has taken
+     * the bucket and is held on it. */
+    auto it = params.find("enable");
+    auto b_it = params.find("bucket");
+    if ((it == params.end()) || (b_it == params.end()) ||
+	b_it->second.empty()) {
+      return -EINVAL;
+    }
+    const bool on = (it->second == "true");
+    bool waiting;
+    {
+      std::lock_guard l{inject_hold_adoption_lock};
+      if (on) {
+	inject_hold_adoption_buckets.insert(b_it->second);
+      } else {
+	inject_hold_adoption_buckets.erase(b_it->second);
+      }
+      waiting = inject_hold_adoption_waiting.contains(b_it->second);
+    }
+    inject_hold_adoption_cond.notify_all();
+    if (out) {
+      (*out)["enabled"] = on ? "true" : "false";
+      (*out)["bucket"] = b_it->second;
+      (*out)["waiting"] = waiting ? "true" : "false";
     }
     return 0;
   }
@@ -16429,6 +18467,8 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
     }
 
     std::unique_ptr<rgw::sal::Bucket> loaded;
+    int ret = load_bucket_internal(dpp, rgw_bucket{"", it->second}, &loaded,
+			  null_yield);
     if (ret < 0) {
       return ret;
     }
@@ -16492,6 +18532,7 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
 
     int ret = hint_credentials(dpp, this, u_it->second, cred);
     if (ret == -ENOENT) {
+    ret = load_bucket_internal(dpp, rb, &bucket, null_yield);
     if ((m_it->second == "c") || (m_it->second == "d")) {
       /* The key's directory, walked as the gateway, and asked as the
        * identity.  -ENOENT when a directory on the way is missing:  ask
@@ -16665,9 +18706,10 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
 
 extern "C" {
 
-rgw::sal::Driver* newNSFSDriver(CephContext *cct)
+rgw::sal::Driver* newNSFSDriver(CephContext *cct,
+				boost::asio::io_context& io_context)
 {
-  rgw::sal::NSFSDriver* driver = new rgw::sal::NSFSDriver(cct);
+  rgw::sal::NSFSDriver* driver = new rgw::sal::NSFSDriver(cct, &io_context);
 
   int ret = -1;
   const static std::string tenant = "default_ns";

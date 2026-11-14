@@ -30,6 +30,7 @@
 #include "rgw_lc_s3.h"
 #include "rgw_cors.h"
 #include "rgw_cors_s3.h"
+#include "rgw_bucket_logging.h"
 #include "rgw_xml.h"
 #include "common/XMLFormatter.h"
 #include "common/dout_fmt.h"
@@ -37,6 +38,8 @@
 #include "include/scope_guard.h"
 
 #include "bucket_state_strategy.h"
+#include "identity_db.h"
+#include "adopt/noobaa_config_store.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -776,6 +779,54 @@ int from_noobaa_cors(const DoutPrefixProvider* dpp, CephContext* cct,
   return 0;
 }
 
+/* NooBaa's `logging` into RGW's bucket-logging configuration.
+ *
+ * `{log_bucket, log_prefix}` is the whole of NooBaa's record, and it maps
+ * onto `target_bucket` and `target_prefix` with logging enabled.  The
+ * rest of RGW's configuration -- the key format, the roll time, the
+ * batch size -- has no counterpart in NooBaa's record, so it keeps RGW's
+ * defaults rather than being invented.
+ *
+ * This is one of the three fields `NOOBAA_WRITE_SURFACE.md` lists as
+ * not read during conversion, and a bucket converted without it loses
+ * its logging silently.  Read here rather than by the import, so a
+ * bucket served before its adoption reads its configuration back too.
+ *
+ * nsfs stores and returns the configuration and delivers no log
+ * records:  the driver implements none of the SAL's logging-object
+ * calls (PUNCHLIST, "nsfs delivers no bucket logs"). */
+int from_noobaa_logging(const DoutPrefixProvider* dpp, JSONObj* obj,
+			Attrs& attrs)
+{
+  std::string target, prefix;
+  try {
+    JSONDecoder::decode_json("log_bucket", target, obj);
+    JSONDecoder::decode_json("log_prefix", prefix, obj);
+  } catch (const JSONDecoder::err& e) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: logging does not decode: {}", e.what());
+    return -EBADMSG;
+  }
+  if (target.empty()) {
+    /* a logging record naming no target is not a configuration */
+    return 0;
+  }
+
+  rgw::bucketlogging::configuration conf;
+  /* `enabled` is set for a reader of the object in memory and is
+   * **not part of the encoded form** -- the serialisation carries
+   * target, prefix, key format, roll time, type, batch size and date
+   * source, and nothing else.  So on disk the *presence* of this
+   * attribute is what says logging is configured, which is why the
+   * absent case writes no attribute rather than a disabled one. */
+  conf.enabled = true;
+  conf.target_bucket = target;
+  conf.target_prefix = prefix;
+
+  bufferlist bl;
+  conf.encode(bl);
+  attrs[RGW_ATTR_BUCKET_LOGGING] = std::move(bl);
+  return 1;
+}
 
 } // namespace
 
@@ -819,6 +870,32 @@ int NooBaaBucketStateStrategy::list_records(const DoutPrefixProvider* dpp,
   return 0;
 }
 
+int NooBaaBucketStateStrategy::recorded_id(const DoutPrefixProvider* dpp,
+					   const std::string& bucket_name,
+					   std::string& out) const
+{
+  out.clear();
+  if (config_root.empty()) {
+    return -ENOENT;
+  }
+  const std::string path =
+    fmt::format("{}/buckets/{}.json", config_root, bucket_name);
+  std::string doc;
+  int ret = read_record_file(dpp, path, doc);
+  if (ret < 0) {
+    return ret;
+  }
+  JSONParser p;
+  if (!p.parse(doc.data(), doc.size())) {
+    return -EBADMSG;
+  }
+  try {
+    JSONDecoder::decode_json("_id", out, &p);
+  } catch (const JSONDecoder::err&) {
+    return -EBADMSG;
+  }
+  return out.empty() ? -EBADMSG : 0;
+}
 
 int NooBaaBucketStateStrategy::recorded_path(const DoutPrefixProvider* dpp,
 					     const std::string& bucket_name,
@@ -863,6 +940,7 @@ int NooBaaBucketStateStrategy::load(const DoutPrefixProvider* dpp, int dir_fd,
     fmt::format("{}/buckets/{}.json", config_root, bucket_name);
 
   std::string doc;
+  int ret = read_record_file(dpp, path, doc);
   if (ret == -ENOENT) {
     /* no record:  this bucket has no state in NooBaa's store, which is
      * the absent case and not a failure */
@@ -918,6 +996,27 @@ int NooBaaBucketStateStrategy::load(const DoutPrefixProvider* dpp, int dir_fd,
     }
   }
 
+  /* The owner, as the account import recorded it.  A bucket served in
+   * NooBaa's format has no owner of its own, and without one the
+   * core's default ACL names nobody and every request is denied. */
+  std::string owner_account;
+  JSONDecoder::decode_json("owner_account", owner_account, &p);
+  if (!owner_account.empty() && identity_db) {
+    std::string owner_key;
+    const int r = identity_db->get_owner_by_noobaa_id(dpp, owner_account,
+						      owner_key);
+    if (r == 0) {
+      info.owner = parse_owner(owner_key);
+    } else if (r == -ENOENT) {
+      ldpp_dout_fmt(dpp, 1, "nsfs: bucket {}'s owner_account {} is not "
+			    "imported;  the bucket has no owner", bucket_name,
+			    owner_account);
+    } else {
+      ldpp_dout_fmt(dpp, 0, "ERROR: looking up bucket {}'s owner_account {}: "
+			    "{}", bucket_name, owner_account, cpp_strerror(-r));
+      return r;
+    }
+  }
 
   /* Object lock.  First of NooBaa's optional features, and the one whose
    * absence is a compliance breach rather than a missing feature:  a
@@ -987,6 +1086,40 @@ int NooBaaBucketStateStrategy::load(const DoutPrefixProvider* dpp, int dir_fd,
     }
   }
 
+  /* Bucket logging.  The attribute map. */
+  if (JSONObj* lg = p.find_obj("logging"); lg) {
+    ret = from_noobaa_logging(dpp, lg, attrs);
+    if (ret < 0) {
+      return ret;
+    }
+  }
+
+  /* X1.  `force_md5_etag`, carried and **not enforced**
+   * (`ACCOUNT_IMPORT.md` §6.1a).
+   *
+   * NooBaa's value, in NooBaa's shape:  the literal `true` or `false`, and
+   * no attribute at all when the record does not mention it.  The
+   * tri-state is the point -- NooBaa's precedence is a cascade, bucket
+   * if defined else account if defined else NooBaa's global, and `false`
+   * counts as defined -- so a bucket that turns it off is not a
+   * bucket that said nothing.
+   *
+   * Carried rather than applied because `rgw_non_md5_etag` is the
+   * single deployment-wide control and NooBaa's global maps to it.  A
+   * deployment that varies this per bucket is doing something nsfs does
+   * not intend to support, and carrying the value is what lets the
+   * import report say so rather than leaving an operator to discover
+   * it.
+   *
+   * Written into the attribute map so it survives conversion:  once a
+   * bucket is adopted, nothing reads NooBaa's record again. */
+  if (p.find_obj("force_md5_etag")) {
+    bool force = false;
+    JSONDecoder::decode_json("force_md5_etag", force, &p);
+    bufferlist fbl;
+    fbl.append(force ? "true" : "false");
+    attrs[RGW_NSFS_ATTR_FORCE_MD5_ETAG] = std::move(fbl);
+  }
 
   ldpp_dout_fmt(dpp, 10, "nsfs: bucket {} took versioning from {}: {}",
 			 bucket_name, path,

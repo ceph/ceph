@@ -79,6 +79,24 @@ struct Identity {
   std::string new_buckets_path;
   std::string custom_bucket_path_allowed_list;
   std::string fs_backend;
+
+  /* X1.  NooBaa's per-account `force_md5_etag`, carried and **not
+   * enforced** (`ACCOUNT_IMPORT.md` §6.1a).
+   *
+   * Three states, like `groups` above, and for the same reason:
+   * NooBaa's precedence is a cascade -- bucket if defined, else account
+   * if defined, else NooBaa's global -- and `false` counts as defined.
+   * So an account that turns it off is not an account that said
+   * nothing, and collapsing the two would change which value a later
+   * decision inherits.
+   *
+   * Nothing consults it at request time.  `rgw_non_md5_etag` is the
+   * single deployment-wide control and NooBaa's global maps to it;  the
+   * option exists so a proof of concept would not read slower than
+   * NooBaa, and making it per-bucket turns a deployment posture into
+   * per-object luck. */
+  std::optional<bool> force_md5_etag;
+
   bool directory_backed() const { return !distinguished_name.empty(); }
   bool local() const { return uid.has_value(); }
 };
@@ -121,6 +139,44 @@ struct BucketPlacement {
   bool default_location{false};
 };
 
+/* Adoption's completion record:  NooBaa's store has been consumed and
+ * is never read again (DECISIONS.md 2026-10-13).  One row, written by
+ * the adoption pass that observes it, beside the placement rows it
+ * describes and restored with them. */
+struct AdoptionCompletion {
+  /* ISO 8601, UTC */
+  std::string completed_at;
+  /* the store that was consumed */
+  std::string config_root;
+  uint64_t identities{0};
+  uint64_t buckets{0};
+  /* what did the conversion */
+  std::string gateway_version;
+  uint32_t extensions{0};
+};
+
+/* A NooBaa record an operator decided will not be carried further, and
+ * why (DECISIONS.md 2026-10-13).  It counts as consumed for adoption's
+ * completion, and is fixed once adoption is complete. */
+struct AbandonedRecord {
+  std::string noobaa_id;
+  /* "identity" or "bucket" */
+  std::string kind;
+  std::string name;
+  /* "not imported", "not converted" or "partly converted" -- what was
+   * left undone, which decides what becomes of a bucket:  one not
+   * imported leaves S3 at completion;  one not converted stays, in
+   * NooBaa's format;  one partly converted stays, served through the
+   * conversion's fallback indefinitely, since nothing finishes it */
+  std::string stage;
+  std::string reason;
+  /* ISO 8601, UTC */
+  std::string at;
+  /* Not stored:  for an identity, the bucket records it owns at the
+   * moment it is abandoned.  Each of them then fails its import, and
+   * needs a decision of its own. */
+  std::vector<std::string> dependent_buckets;
+};
 
 /* Whether a path may be stored.
  *
@@ -183,6 +239,11 @@ class IdentityDB : public rgw::store::POSIXUserDB {
    *
    * The class name is narrower than what it now holds. */
   const std::string placement_table;
+  /* adoption's completion record:  at most one row */
+  const std::string completion_table;
+  /* NooBaa records abandoned by an operator */
+  const std::string abandoned_table;
+
   /* what each row's `distinguished_name` resolved to (I7) */
   mutable NsswitchCache names;
 
@@ -203,12 +264,29 @@ class IdentityDB : public rgw::store::POSIXUserDB {
 
   int write_bucket_placement(const DoutPrefixProvider* dpp,
 			     const BucketPlacement& bp, bool repoint);
+  /* complete when `pending_user_id` is null */
+  int insert_noobaa_id(const DoutPrefixProvider* dpp,
+		       const std::string& noobaa_id,
+		       const std::string& owner_key,
+		       const std::string* pending_user_id);
+
 public:
   IdentityDB(std::string db_name, CephContext* cct)
     : POSIXUserDB(db_name, cct),
       /* the basename, which is how DB names every other table.
        * db_name is a full path here, and a table named after the
        * path is orphaned the moment the directory moves. */
+      identity_table(fmt::format("{}_nsfs_identity",
+		     std::filesystem::path(db_name).filename().string())),
+      noobaa_id_table(fmt::format("{}_nsfs_noobaa_id",
+		      std::filesystem::path(db_name).filename().string())),
+      placement_table(fmt::format("{}_nsfs_bucket_placement",
+		      std::filesystem::path(db_name).filename().string())),
+      completion_table(fmt::format("{}_nsfs_adoption_complete",
+		       std::filesystem::path(db_name).filename().string())),
+      abandoned_table(fmt::format("{}_nsfs_noobaa_abandoned",
+		      std::filesystem::path(db_name).filename().string())),
+      names(cct) {}
 
   int Initialize(std::string logfile, int loglevel);
 
@@ -254,6 +332,19 @@ public:
 			     const std::string& marker, uint64_t max,
 			     std::vector<BucketPlacement>& out) const;
 
+  /* Account ids in order, after `marker`, at most `max`:  the metadata
+   * listing's `account` section.  The shared user database stores
+   * accounts and has no operation to enumerate them. */
+  int list_account_ids(const DoutPrefixProvider* dpp,
+		       const std::string& marker, uint64_t max,
+		       std::list<std::string>& out);
+  /* Topic metadata keys, `<tenant>:<name>`, likewise:  the `topic`
+   * section, which ListTopics reads for a tenant that is not an
+   * account. */
+  int list_topic_keys(const DoutPrefixProvider* dpp,
+		      const std::string& marker, uint64_t max,
+		      std::list<std::string>& out);
+
   /* Insert or replace.  `id.key` must be set;  everything else is
    * optional subject to the exclusivity rule. */
   int put_identity(const DoutPrefixProvider* dpp, const Identity& id);
@@ -274,6 +365,44 @@ public:
   int put_noobaa_id(const DoutPrefixProvider* dpp,
 		    const std::string& noobaa_id,
 		    const std::string& owner_key);
+
+  /* An import in progress:  `noobaa_id` is being imported as
+   * `owner_key`, with `user_id` the RGW user it creates.  Written before
+   * anything else, so a run that stops part way is resumed with the
+   * same ids;  complete_noobaa_id() ends it.  Until then the id is not
+   * imported:  get_owner_by_noobaa_id() and owner_was_imported() do not
+   * see it.  -EEXIST as put_noobaa_id(). */
+  int put_pending_noobaa_id(const DoutPrefixProvider* dpp,
+			    const std::string& noobaa_id,
+			    const std::string& owner_key,
+			    const std::string& user_id);
+  /* -ENOENT when `noobaa_id` has no import in progress. */
+  int get_pending_noobaa_id(const DoutPrefixProvider* dpp,
+			    const std::string& noobaa_id,
+			    std::string& owner_key,
+			    std::string& user_id) const;
+  /* -ENOENT when `noobaa_id` has no import in progress. */
+  int complete_noobaa_id(const DoutPrefixProvider* dpp,
+			 const std::string& noobaa_id);
+
+  /* The completion record.  `put` is a plain INSERT:  -EEXIST once it
+   * is written, since completion happens once.  `get` is -ENOENT before
+   * it. */
+  int put_adoption_completion(const DoutPrefixProvider* dpp,
+			      const AdoptionCompletion& c);
+  int get_adoption_completion(const DoutPrefixProvider* dpp,
+			      AdoptionCompletion& c) const;
+
+  /* Abandoned records.  `put` is a plain INSERT, -EEXIST when the id is
+   * abandoned already;  `remove` is -ENOENT when it is not;  `get` is
+   * -ENOENT when it is not. */
+  int put_abandoned(const DoutPrefixProvider* dpp, const AbandonedRecord& r);
+  int remove_abandoned(const DoutPrefixProvider* dpp,
+		       const std::string& noobaa_id);
+  int get_abandoned(const DoutPrefixProvider* dpp,
+		    const std::string& noobaa_id, AbandonedRecord& r) const;
+  int list_abandoned(const DoutPrefixProvider* dpp,
+		     std::vector<AbandonedRecord>& out) const;
 
   /* Whether `owner_key` was imported from NooBaa. */
   int owner_was_imported(const DoutPrefixProvider* dpp,

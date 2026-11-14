@@ -317,6 +317,15 @@ list(APPEND librgw_nsfs_srcs
   driver/nsfs/mpu_strategy.cc
   driver/nsfs/xattr_strategy.cc
   driver/nsfs/bucket_state_strategy.cc
+  driver/nsfs/adopt/noobaa_config_store.cc
+  driver/nsfs/adopt/noobaa_schema.cc
+  driver/nsfs/adopt/noobaa_master_keys.cc
+  driver/nsfs/adopt/noobaa_import_plan.cc
+  driver/nsfs/adopt/noobaa_import.cc
+  driver/nsfs/adopt/noobaa_bucket_import.cc
+  driver/nsfs/adopt/noobaa_notification_import.cc
+  driver/nsfs/adopt/adoption_queue.cc
+  driver/nsfs/adopt/adoption_report.cc
   driver/nsfs/identity_db.cc
   driver/nsfs/name_resolve.cc
   driver/nsfs/impersonate.cc

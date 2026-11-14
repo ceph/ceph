@@ -44,6 +44,8 @@
 #include "impersonate.h"
 #include "bucket_profile.h"
 #include "sync_fs_set.h"
+#include "adopt/adoption_queue.h"
+#include "adopt/adoption_report.h"
 
 class RGWLC;
 
@@ -53,7 +55,19 @@ class NSFSDriver;
 class NSFSBucket;
 class NSFSObject;
 
+/* What a mutation's slot is for (DECISIONS.md 2026-10-21, the gate).
+ *
+ * A bucket without `user.nsfs:marker.extensions` has not been taken
+ * over, and a client's write to it is rejected until adoption marks it.  Two
+ * writers are not a client's:  adoption, which writes a bucket's state
+ * before it marks it, and a copy's source, which is read and not
+ * written but takes the slot so it waits out a rewrite. */
+enum class MutationPurpose { client, adoption, copy_source };
+
 namespace nsfs {
+
+struct NooBaaStoreContents;
+struct IdentityMapping;
 
 /* The multipart cache's bucket field, which has to find the bucket again
  * from an eviction with nothing else in hand.  `<tenant>/<name>`, or the
@@ -133,6 +147,22 @@ struct ConvertProgress {
    * is not counted, since counting it is the walk the marker saves
    * (DECISIONS.md 2026-11-05). */
   uint64_t directories_skipped{0};
+  /* Symbolic links, which are not objects and are not converted (DECISIONS.md
+   * 2026-10-23).  Counted by what each resolves to as NooBaa resolved it, its
+   * real path against the bucket's, with read-search held so the count does
+   * not depend on the gateway's uid, and so an operator sees what the gateway
+   * no longer serves.  A link a filesystem error keeps from resolving is
+   * counted dangling, and logged as an error. */
+  struct Links {
+    uint64_t file{0};       /* to a file in the bucket */
+    uint64_t directory{0};  /* to a directory in the bucket */
+    uint64_t outside{0};    /* out of the bucket */
+    uint64_t dangling{0};   /* to nothing */
+    uint64_t loop{0};       /* to itself, directly or through others */
+    uint64_t total() const {
+      return file + directory + outside + dangling + loop;
+    }
+  } links;
   bool complete{false};    /* nothing foreign left;  the marker is gone */
   /* the mask was written, so the bucket IS in the target profile.
    *
@@ -180,6 +210,23 @@ struct ObjectType {
     DECODE_START(1, bl);
     ceph::decode(type, bl);
     DECODE_FINISH(bl);
+  }
+  /* empty for a value outside Type, as operator<< printed nothing */
+  const char* name() const {
+    switch (type) {
+    case UNKNOWN:
+      return "UNKNOWN";
+    case FILE:
+      return "FILE";
+    case DIRECTORY:
+      return "DIRECTORY";
+    case MULTIPART:
+      return "MULTIPART";
+    }
+    return "";
+  }
+  auto fmt_print_ctx(auto &ctx) const -> decltype(ctx.out()) {
+    return fmt::format_to(ctx.out(), "{}", name());
   }
   friend inline std::ostream &operator<<(std::ostream &out,
                                          const ObjectType &t) {
@@ -692,8 +739,19 @@ public:
 };
 
 class NSFSDriver : public StoreDriver {
+  /* the `unmarked-bucket` hint, the only maker of an UnmarkPasskey */
+  friend class UnmarkPasskey;
+  int hint_unmarked_bucket(const DoutPrefixProvider* dpp,
+			   const std::map<std::string, std::string>& params,
+			   std::map<std::string, std::string>* out);
+  /* buckets that hint has unmarked;  in the features map, 0 in service */
+  std::atomic<uint64_t> hint_unmarked_buckets{0};
+
 protected:
   CephContext *cct;
+  /* The executor AppMain serves requests on, for work the driver spawns
+   * itself.  Null only in unit tests that construct the driver directly. */
+  boost::asio::io_context* io_context;
   /* The prefix for work that belongs to no request:  an FSIO handle is
    * shared, and its destructor runs wherever the last reference drops,
    * as late as an RGWFileHandle's reclaim.  It reads `cct` at each
@@ -746,6 +804,44 @@ protected:
   /* the two waits;  see the constants they are seeded from */
   std::chrono::milliseconds mutation_gate_wait{5000};
   std::chrono::milliseconds gate_drain_wait{60000};
+  /* Written by an adoption command on its request's thread and by the
+   * queue's drain on its own, and read by every request that resolves a
+   * bucket, so the record is held under a lock and whether there is
+   * one is an atomic. */
+  mutable std::mutex completion_mtx;
+  std::optional<nsfs::AdoptionCompletion> completion;
+  std::atomic<bool> completed{false};
+  /* One-way, since nothing removes the record.  The first record seen
+   * ends adoption's in-memory state. */
+  void set_completion(nsfs::AdoptionCompletion c);
+  /* `automatic` adoption while serving;  null in any other mode, in a
+   * process with no background tasks, and once adoption is complete at
+   * startup.  Published whole, since the `adoption` hint can start it
+   * while requests read it;  the owner keeps it until the driver goes. */
+  std::atomic<nsfs::AdoptionQueue*> adoption_queue{nullptr};
+  std::unique_ptr<nsfs::AdoptionQueue> adoption_queue_owner;
+  std::mutex adoption_queue_start_mtx;
+  /* under adoption_queue_start_mtx:  set by shutdown(), after which
+   * nothing starts the queue */
+  bool adoption_queue_shut{false};
+  /* the quantum, in ms;  set at runtime by the `adoption` hint's
+   * `wait_ms`, while requests read it */
+  std::atomic<uint64_t> adoption_wait_ms{1000};
+  /* Buckets whose adoption failed, with the error, in either mode:  not
+   * served until an operator acts -- adopts by command, abandons, or
+   * restarts the gateway, which forgets them (DECISIONS.md 2026-10-29). */
+  std::mutex adoption_failures_mtx;
+  std::map<std::string, int> adoption_failures;
+  /* Buckets whose import is blocked by an identity that did not import:
+   * not failed, and adopted once it is fixed or abandoned (DECISIONS.md
+   * 2026-11-02).  Under adoption_failures_mtx. */
+  std::set<std::string> adoption_blocked;
+  /* The `_id` of each identity and role the last identity pass did not
+   * write.  Adoption does not complete while one is not abandoned.
+   * Under adoption_failures_mtx. */
+  std::set<std::string> identity_failures;
+  /* what `automatic` adoption found since its last report */
+  nsfs::AdoptionFindings adoption_findings;
   /* under the relaxed sync policy only;  see init_sync_policy() */
   std::unique_ptr<nsfs::SyncFsSet> sync_set;
   UserCache user_cache;
@@ -760,6 +856,20 @@ protected:
    * because which format a bucket is in is not known until it is
    * loaded, and constructing a strategy costs nothing. */
   std::unique_ptr<nsfs::BucketStateStrategy> bucket_state_strategy;
+
+  /* When a NooBaa tree is adopted (DECISIONS.md 2026-10-11).
+   *
+   * Meaningful only when a NooBaa configuration store is configured:
+   * with no store there is nothing to adopt, so the mode is inert and
+   * an ordinary nsfs deployment behaves as it always has.
+   *
+   * `Command`, the default, adopts nothing unless asked through Admin
+   * Ops:  the `adoption` driver hint imports the store's identities or
+   * adopts a bucket, and so does changing a bucket's profile out of
+   * base.  Nothing on disk changes until then.  `Automatic` imports
+   * the identities and adopts every bucket at startup. */
+  enum class AdoptionMode { Command, Automatic };
+  AdoptionMode adoption_mode{AdoptionMode::Command};
 
   /* null unless rgw_nsfs_noobaa_config_root names a store */
   std::unique_ptr<nsfs::BucketStateStrategy> nb_bucket_state_strategy;
@@ -789,6 +899,8 @@ protected:
   RGWLC* lc{nullptr};
   bool use_lc_thread{false};
   bool background_tasks{false};
+  std::mutex unadopted_mapping_mtx;
+  std::shared_ptr<const nsfs::IdentityMapping> unadopted_mapping;
   /* driver hint state (test only)--see driver_hint() */
   bool inject_fork_race{false};
 
@@ -853,6 +965,24 @@ protected:
    * test can assert the rollback:  nothing in an ordinary setup makes
    * the steps after mkdir fail */
   bool inject_create_failure{false};
+  /* lift the gate on a bucket not taken over, for these buckets, so a
+   * test can show a rejection is the gate's:  the same write succeeds
+   * with it lifted.  Keyed by bucket, as the attribute-read injection
+   * is.  The count is every write the gate rejected. */
+  std::set<std::string> inject_lift_adoption_gate_buckets;
+  std::atomic<bool> inject_lift_adoption_gate_armed{false};
+  std::atomic<uint64_t> unadopted_writes_rejected{0};
+  ceph::mutex inject_lift_adoption_gate_lock =
+      ceph::make_mutex("NSFSDriver::inject_lift_adoption_gate_lock");
+  /* hold these buckets' adoption before it begins, so a test can keep
+   * one not adopted while the queue runs:  a worker that takes a held
+   * bucket waits until it is released or the gateway stops.  `waiting`
+   * is the held buckets a worker has taken. */
+  std::set<std::string> inject_hold_adoption_buckets;
+  std::set<std::string> inject_hold_adoption_waiting;
+  ceph::mutex inject_hold_adoption_lock =
+      ceph::make_mutex("NSFSDriver::inject_hold_adoption_lock");
+  ceph::condition_variable inject_hold_adoption_cond;
 
   /* The `inject-buffered-copy` hint, by user.  Armed with `user=`,
    * a bundle applies to that user's copies only;  armed without,
@@ -871,11 +1001,14 @@ protected:
   std::atomic<bool> any_copy_bundle{false};
 
 public:
-  NSFSDriver(CephContext *_cct) : StoreDriver(), cct(_cct), zone(this)
+  NSFSDriver(CephContext *_cct,
+	     boost::asio::io_context* _io_context = nullptr)
+    : StoreDriver(), cct(_cct), io_context(_io_context), zone(this)
   {
     const static std::string tenant = "default_ns";
     const auto& db_path = g_conf().get_val<std::string>("rgw_nsfs_userdb_dir");
-    const auto& db_name = g_conf().get_val<std::string>("dbstore_db_name_prefix") + "-" + tenant;
+    const auto db_name = fmt::format(
+      "{}-{}", g_conf().get_val<std::string>("dbstore_db_name_prefix"), tenant);
     auto db_full_path = std::filesystem::path(db_path) / db_name;
 
     userDB = std::make_unique<nsfs::IdentityDB>(db_full_path.string(), cct);
@@ -1203,8 +1336,21 @@ public:
 		   std::string* profile);
 
   virtual std::unique_ptr<Bucket> get_bucket(const RGWBucketInfo& i)  override;
+  /* What a client reaches:  a bucket whose adoption failed is refused,
+   * and a request promotes a bucket not yet adopted. */
   virtual int load_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b,
                           std::unique_ptr<Bucket>* bucket, optional_yield y) override;
+  /* The driver's own work -- adoption, abandonment, the profile
+   * endpoints, the hints -- which must reach a bucket whose adoption
+   * failed, and must not wait on adoption. */
+  int load_bucket_internal(const DoutPrefixProvider* dpp, const rgw_bucket& b,
+                           std::unique_ptr<Bucket>* bucket, optional_yield y);
+  /* Whether `bucket`'s adoption failed and no operator has acted since. */
+  bool adoption_failed(const std::string& bucket);
+  /* 0 when NooBaa's store as a whole admits adoption:  it reads, and
+   * its release is one adoption is verified against (X4).  Otherwise
+   * the error, with `why` set. */
+  int store_admits_adoption(const DoutPrefixProvider* dpp, std::string& why);
   virtual int list_buckets(const DoutPrefixProvider* dpp,
 			   const rgw_owner& owner, const std::string& tenant,
 			   const std::string& marker, const std::string& end_marker,
@@ -1374,6 +1520,7 @@ public:
 			     uint64_t max, BucketList& buckets,
 			     optional_yield y) override { return -ENOTSUP; }
 
+  virtual void shutdown(void) override;
   virtual void finalize(void) override;
 
   virtual CephContext* ctx(void) override { return userDB->ctx(); }
@@ -1390,6 +1537,15 @@ public:
    * 503 ServiceUnavailable, which every SDK retries.
    *
    * Paired with mutation_leave(), or held through NSFSMutationGuard. */
+  int mutation_enter(const DoutPrefixProvider* dpp, NSFSBucket* bucket,
+		     MutationPurpose purpose);
+  /* The gate's question alone, without a slot:  0, or
+   * -ERR_INVALID_BUCKET_STATE for a client's write to a bucket not taken
+   * over.  mutation_enter() asks it, and so does a path that writes
+   * before it takes its slot -- UploadPart writes the part's bytes before
+   * its writer's complete(). */
+  int reject_unadopted(const DoutPrefixProvider* dpp, NSFSBucket* bucket,
+		       MutationPurpose purpose);
   void mutation_leave(const std::string& bucket);
 
   /* Hold mutations off, and wait for the ones already running.
@@ -1412,6 +1568,144 @@ public:
     gate_drain_wait = drain;
   }
 
+  AdoptionMode get_adoption_mode() const { return adoption_mode; }
+
+  /* Whether the mode governs anything.  It does not without a store
+   * to adopt from, which is what keeps this option from changing an
+   * ordinary deployment by existing. */
+  /* Adoption's completion record, read once at startup and updated by
+   * the pass that writes it.  Once set, NooBaa's store is not read:  no
+   * record serves a bucket, lists one, holds a name, or is adopted. */
+  bool adoption_complete() const {
+    return completed.load(std::memory_order_acquire);
+  }
+  std::optional<nsfs::AdoptionCompletion> adoption_completion() const {
+    std::lock_guard l{completion_mtx};
+    return completion;
+  }
+  /* Read the record from the identity DB.  Called by initialize() and a
+   * test driver, and by each adoption command before it acts, which is
+   * how a record another gateway wrote is seen. */
+  int load_adoption_completion(const DoutPrefixProvider* dpp);
+  /* adoption_complete(), re-reading the record first when this gateway
+   * has not seen it:  a read of NooBaa's store is the reason to look,
+   * since another gateway may have written it. */
+  bool reread_adoption_complete(const DoutPrefixProvider* dpp);
+  /* An operator's decision that one NooBaa record goes no further,
+   * with the reason.  -EINVAL with no reason;  -ENOENT for an `_id` the
+   * store does not hold, or no store;  -EEXIST for a record fully
+   * consumed, one already abandoned, or once adoption is complete. */
+  int abandon_noobaa_record(const DoutPrefixProvider* dpp, optional_yield y,
+			    const std::string& noobaa_id,
+			    const std::string& reason,
+			    nsfs::AbandonedRecord& out);
+  /* -ENOENT when it is not abandoned;  -EEXIST once adoption is
+   * complete. */
+  int unabandon_noobaa_record(const DoutPrefixProvider* dpp,
+			      const std::string& noobaa_id);
+  int list_abandoned(const DoutPrefixProvider* dpp,
+		     std::vector<nsfs::AbandonedRecord>& out);
+  /* The abandoned entry for NooBaa's record of `bucket_name`.  -ENOENT
+   * when there is no record, or it is not abandoned. */
+  int abandoned_bucket(const DoutPrefixProvider* dpp,
+		       const std::string& bucket_name,
+		       nsfs::AbandonedRecord& out);
+
+  int observe_adoption_completion(const DoutPrefixProvider* dpp,
+				  optional_yield y, const std::string& root,
+				  const nsfs::NooBaaStoreContents& contents,
+				  std::map<std::string, std::string>* report);
+
+  bool adoption_configured() const {
+    return nb_bucket_state_strategy != nullptr;
+  }
+
+  /* The end of an `automatic` adoption pass:  every finding gathered
+   * since the last one, and every abandoned record, written to a file of
+   * its own in rgw_nsfs_adoption_report_dir.  `pass` is "run" (the
+   * synchronous startup) or "queue". */
+  void write_adoption_report(const DoutPrefixProvider* dpp, const char* pass,
+			     const std::map<std::string, std::string>& counts);
+
+  /* Adopt the whole store:  its identities, then every bucket.  What
+   * `automatic` runs at startup in a process with no background tasks;
+   * one that serves adopts through the queue instead. */
+  int run_adoption(const DoutPrefixProvider* dpp, optional_yield y,
+		   std::map<std::string, std::string>* report = nullptr);
+
+  /* Import the store's identities, and nothing else.  Store-wide and
+   * first, because every bucket's owner and every policy principal
+   * resolves through them. */
+  int adopt_identities(const DoutPrefixProvider* dpp, optional_yield y,
+		       std::map<std::string, std::string>* report = nullptr,
+		       bool preview = false);
+
+  /* What a pass would do, with nothing written:  the identities as
+   * adopt_identities() would import them, and each bucket's record up to
+   * its first write.  The conversion of a tree is not predicted.  Writes
+   * the report under rgw_nsfs_adoption_report_dir, as pass "preview". */
+  int preview_adoption(const DoutPrefixProvider* dpp, optional_yield y,
+		       std::map<std::string, std::string>* report = nullptr);
+
+  /* Adopt one bucket now, against identities already imported:  its
+   * profile out of base, which imports its NooBaa record and rewrites
+   * its tree.  With extensions off a tree stays base, so only the
+   * record is imported. */
+  int adopt_one_bucket(const DoutPrefixProvider* dpp, optional_yield y,
+		       const std::string& bucket_name,
+		       std::map<std::string, std::string>* report = nullptr,
+		       nsfs::convert_cb_t* cb = nullptr);
+
+  /* initialize()'s last step:  the completion record read, and under
+   * `automatic` the store adopted, through the queue in a gateway that
+   * serves and at once otherwise.  Fails only when the record does not
+   * load. */
+  int start_adoption(const DoutPrefixProvider* dpp);
+
+  /* `automatic` while serving:  the identities now, every bucket
+   * through the queue.  -EAGAIN when the identities do not import, and
+   * nothing is queued;  0 with nothing done when a queue is running.
+   * `workers` overrides rgw_nsfs_adoption_workers. */
+  int start_adoption_queue(const DoutPrefixProvider* dpp,
+			   std::optional<uint64_t> workers = std::nullopt);
+  /* Whether a request on `b` should promote its adoption:  the queue
+   * runs, and `b` is NooBaa's, not yet imported and not abandoned. */
+  bool awaits_adoption(const DoutPrefixProvider* dpp, NSFSBucket& b);
+
+  /* Import one bucket's NooBaa record:  the half of a bucket's adoption
+   * that set_profile() runs before it rewrites the tree.  -ENOENT when
+   * the store holds no record for it. */
+  int import_noobaa_bucket(const DoutPrefixProvider* dpp, optional_yield y,
+			   const std::string& bucket_name,
+			   std::map<std::string, std::string>* report = nullptr);
+
+  /* Leave out the identities an operator abandoned.  Returns how many. */
+  size_t drop_abandoned_identities(const DoutPrefixProvider* dpp,
+				   nsfs::NooBaaStoreContents& contents);
+  /* NooBaa's principals as RGW names them, for the identities the import
+   * has written:  what adoption rewrites a bucket policy through.  Its
+   * `planned` is the whole plan's, abandoned identities aside.
+   * `preview` holds instead every identity the plan and RGW's state do
+   * not fail, as though the import had run. */
+  int imported_identity_mapping(const DoutPrefixProvider* dpp,
+				const nsfs::NooBaaStoreContents& contents,
+				nsfs::IdentityMapping& out,
+				bool preview = false);
+
+  /* A bucket served in NooBaa's format serves its policy with the same
+   * principals adoption will write:  NooBaa's names name nobody in RGW.
+   * A policy naming anyone the import did not write does not translate,
+   * and `untranslated` says so;  the bucket is then not served
+   * (DECISIONS.md 2026-11-02).  0, or the error that kept the mapping
+   * from being built. */
+  int rewrite_unadopted_policy(const DoutPrefixProvider* dpp,
+			       const std::string& bucket, Attrs& attrs,
+			       std::string& untranslated);
+
+  /* The mapping rewrite_unadopted_policy() uses is built from the whole
+   * store, once, and rebuilt after an identities import, the only thing
+   * that changes it. */
+  void invalidate_unadopted_mapping();
 
   int driver_hint(const DoutPrefixProvider* dpp,
 		  const std::string& hint,
@@ -1446,6 +1740,13 @@ public:
   }
   bool no_chown_injected() const { return inject_no_chown; }
   bool create_failure_injected() const { return inject_create_failure; }
+  bool adoption_gate_lifted(const std::string& bucket) {
+    if (!inject_lift_adoption_gate_armed.load(std::memory_order_relaxed)) {
+      return false;
+    }
+    std::lock_guard l{inject_lift_adoption_gate_lock};
+    return inject_lift_adoption_gate_buckets.contains(bucket);
+  }
   int rename_fail_after_injected() const { return inject_rename_fail_after; }
   int rename_abandon_injected() const { return inject_rename_abandon; }
   bool fsio_attrs_fail_injected() const { return inject_fsio_attrs_fail; }
@@ -1534,6 +1835,9 @@ public:
   }
   const nsfs::BucketProfile* get_base_profile() const { return &base_profile; }
 
+  /* What a bucket created here is marked with:  rgw_nsfs_bucket_profile.
+   * Read per call, so a test can select strong for a bucket it is about
+   * to create. */
   uint32_t new_bucket_extensions() {
     auto ext = nsfs::extensions_for_profile(
       ctx()->_conf.get_val<std::string>("rgw_nsfs_bucket_profile"));
@@ -1566,43 +1870,21 @@ public:
   RGWQuotaHandler* get_quota_handler() {return quota_handler;}
 };
 
-class NSFSNotification : public StoreNotification {
-protected:
-  NSFSDriver* driver;
-  rgw::sal::Bucket* bucket = nullptr;
-  std::string user_id;
-  std::string user_tenant;
-  std::string req_id;
-  rgw_pubsub_bucket_topics bucket_topics;
-  std::vector<rgw_pubsub_topic_filter> matched;
-  RGWObjTags* obj_tags_ptr = nullptr;
-  KeyValueMap x_meta_map;
-  friend class NSFSDriver;
-public:
- NSFSNotification(NSFSDriver* _driver,
-		   Object* _obj,
-		   Object* _src_obj,
-		   const rgw::notify::EventTypeList& _types)
-		   : StoreNotification(_obj, _src_obj, _types),
-		     driver(_driver) {}
- NSFSNotification(NSFSDriver* _driver,
-		   Object* _obj,
-		   Object* _src_obj,
-		   const rgw::notify::EventTypeList& _types,
-		   rgw::sal::Bucket* _bucket,
-		   std::string _user_id,
-		   std::string _user_tenant,
-		   std::string _req_id)
-		   : StoreNotification(_obj, _src_obj, _types),
-		     driver(_driver), bucket(_bucket),
-		     user_id(std::move(_user_id)),
-		     user_tenant(std::move(_user_tenant)),
-		     req_id(std::move(_req_id)) {}
- ~NSFSNotification() = default;
-
- virtual int publish_reserve(const DoutPrefixProvider *dpp, RGWObjTags* obj_tags = nullptr) override;
- virtual int publish_commit(const DoutPrefixProvider* dpp, uint64_t size,
-			   const ceph::real_time& mtime, const std::string& etag, const std::string& version) override;
+/* The one key to NSFSBucket::unmark_extensions().
+ *
+ * An unmarked bucket made by RGW is the state the gate exists to keep
+ * clients out of (DECISIONS.md 2026-10-21), and tests need one.  So the
+ * capability is contained by the compiler rather than by review:  the
+ * constructor is private and its only friend is the hint that makes a
+ * test's unmarked bucket, which takes only an empty bucket this gateway
+ * marked and NooBaa holds no record of.  Any other call does not
+ * compile. */
+class UnmarkPasskey {
+  friend int NSFSDriver::hint_unmarked_bucket(
+      const DoutPrefixProvider* dpp,
+      const std::map<std::string, std::string>& params,
+      std::map<std::string, std::string>* out);
+  UnmarkPasskey() = default;
 };
 
 class NSFSUser : public StoreUser {
@@ -1658,6 +1940,9 @@ class NSFSMutationGuard {
   int rc;
 
 public:
+  NSFSMutationGuard(const DoutPrefixProvider* dpp, NSFSDriver* _driver,
+		    NSFSBucket* _bucket,
+		    MutationPurpose purpose = MutationPurpose::client);
   ~NSFSMutationGuard() {
     if ((rc == 0) && driver) {
       driver->mutation_leave(bucket);
@@ -1691,6 +1976,10 @@ private:
   bool converting{false};
   /* default_object_owner(), once looked up */
   std::optional<ACLOwner> default_owner;
+  /* Set by load_bucket() when NooBaa's record served this bucket and did
+   * not translate whole:  why.  A client's load is then refused
+   * (DECISIONS.md 2026-11-02). */
+  std::string untranslated;
 
 public:
   /* every nsfs bucket serves the positional view */
@@ -1750,6 +2039,10 @@ public:
 		   ListResults&, optional_yield y) override;
   virtual int merge_and_store_attrs(const DoutPrefixProvider* dpp,
 				    Attrs& new_attrs, optional_yield y) override;
+  /* The same, for a writer that is not a client:  adoption writes a
+   * bucket's state before it marks it (MutationPurpose). */
+  int merge_and_store_attrs(const DoutPrefixProvider* dpp, Attrs& new_attrs,
+			    optional_yield y, MutationPurpose purpose);
   virtual int remove(const DoutPrefixProvider* dpp, bool delete_children,
 		     optional_yield y,
 		     const rgw_owner& authenticated_user) override;
@@ -1782,6 +2075,9 @@ public:
     return profile && profile->has(ext);
   }
 
+  /* FSIO needs the shadow subtree, so only strong serves it.  librgw
+   * asks this before an FSIO open;  fsio_allowed() is the same
+   * rule inside the driver. */
   bool have_fsio() const override { return has_extension(nsfs::EXT_SHADOW); }
 
   const char* profile_name() const {
@@ -1857,6 +2153,8 @@ public:
   nsfs::PathStrategy* path_fallback() const;
   nsfs::MPUStrategy* mpu_fallback() const;
   bool is_converting() const { return converting; }
+  /* empty when what is served is what NooBaa served */
+  const std::string& untranslated_by() const { return untranslated; }
 
   /* Move the bucket to a profile.  The one way a bucket's profile
    * changes:  adding extensions is a write, dropping them requires the
@@ -1893,6 +2191,9 @@ public:
    * and directly at creation. */
   int mark_extensions(const DoutPrefixProvider* dpp, uint32_t version);
 
+  /* Only the `unmarked-bucket` test hint can call this;  see
+   * UnmarkPasskey. */
+  int unmark_extensions(const DoutPrefixProvider* dpp, const UnmarkPasskey&);
 
   /* Write the converting marker, and remove it.
    *
@@ -2648,6 +2949,9 @@ private:
    * injection map is keyed by this rather than by the internal meta,
    * so a test can arm exactly the upload it created. */
   std::string upload_id;
+  /* the bucket the part is for, which the mutation gate asks;  the
+   * staging directory is the shadow bucket's, not this one */
+  NSFSBucket* bucket{nullptr};
   std::unique_ptr<nsfs::Directory> upload_dir;
   /* the part's RECORD -- part-NNNNN -- which carries its attributes.
    * Always this file, whatever the layout, because complete() writes
@@ -2679,7 +2983,15 @@ public:
                     const ACLOwner& _owner,
                     const rgw_placement_rule *_ptail_placement_rule,
                     uint64_t _part_num,
-		    file::listing::MultipartCacheKey&& _mp_cache_key) :
+		    nsfs::MPUStrategy* _mpu_strat,
+		    file::listing::MultipartCacheKey&& _mp_cache_key,
+		    const rgw_owner& _auth_user,
+		    uint64_t _base_offset = 0,
+		    bool _shared_target = false,
+		    const std::string& _shared_name = std::string(),
+		    const std::string& _upload_id = std::string(),
+		    std::optional<uint64_t> _extent = std::nullopt,
+		    NSFSBucket* _bucket = nullptr) :
     StoreWriter(dpp, y),
     auth_user(_auth_user),
     driver(_driver),
@@ -2687,6 +2999,11 @@ public:
     owner(_owner),
     ptail_placement_rule(_ptail_placement_rule),
     part_num(_part_num),
+    base_offset(_base_offset),
+    shared_target(_shared_target),
+    extent(_extent),
+    upload_id(_upload_id),
+    bucket(_bucket),
     upload_dir(_shadow_bucket->get_dir()->clone()),
     part_file(std::make_unique<nsfs::File>(
 		_driver->get_path_strategy()->object_name(_key, false),

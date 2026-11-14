@@ -12,6 +12,7 @@
  * Foundation.  See file COPYING.
  */
 
+#include "acconfig.h"
 #include "rgw_sal_nsfs.h"
 #include <gtest/gtest.h>
 #include <algorithm>
@@ -44,9 +45,22 @@
 #include <boost/asio/spawn.hpp>
 #include <linux/capability.h>
 #include <sys/syscall.h>
+#include "driver/nsfs/adopt/noobaa_config_store.h"
+#include "driver/nsfs/adopt/noobaa_master_keys.h"
+#include "driver/nsfs/adopt/noobaa_import_plan.h"
+#include "driver/nsfs/adopt/noobaa_import.h"
+#include "driver/nsfs/adopt/noobaa_bucket_import.h"
+#include "driver/nsfs/adopt/noobaa_notification_import.h"
+#include "driver/nsfs/adopt/noobaa_schema.h"
+#include "rgw_bucket_logging.h"
+#include "rgw_pubsub.h"
+#include "rgw_account.h"
+#include "rgw_user.h"
+#include "rgw_object_ownership.h"
 #include "driver/nsfs/personality.h"
 #include "rgw_auth.h"
 #include "common/ceph_json.h"
+#include "common/split.h"
 
 using namespace rgw::sal;
 
@@ -626,6 +640,10 @@ public:
 
   TestDriver(std::string _base_path) : NSFSDriver(nullptr), driver_base(_base_path)
   { }
+  /* with an io_context, for `automatic` adoption's queue */
+  TestDriver(std::string _base_path, boost::asio::io_context* io)
+    : NSFSDriver(nullptr, io), driver_base(_base_path)
+  { }
   virtual ~TestDriver() = default;
 
   int init(const DoutPrefixProvider* dpp,
@@ -638,8 +656,25 @@ public:
     std::string cache_base = driver_base + "/cache";
     base_path_ = driver_base + "/root";
 
-      fs_strategy = std::make_unique<nsfs::POSIXStrategy>();
-    root_dir = std::make_unique<nsfs::Directory>(base_path, nullptr, env->cct.get(),
+    /* A database of this test's own.
+     *
+     * `NSFSDriver`'s constructor builds `userDB` from
+     * `rgw_nsfs_userdb_dir`, which is a global and defaults to a path
+     * no test may write -- and one database shared by every test is
+     * the cross-test interference the suite just finished removing.
+     * `userDB` is protected, so a subclass can simply point it
+     * somewhere per-test;  no hook in the driver is needed for it.
+     *
+     * Without this the account and user write paths cannot run at
+     * all, because both go through this handle. */
+    userDB = std::make_unique<nsfs::IdentityDB>(driver_base + "/userdb",
+						env->cct.get());
+    if (int r = userDB->Initialize("", -1); r < 0) {
+      ldpp_dout(env->dpp, 0) << " ERROR: could not open the test userdb: "
+			     << cpp_strerror(-r) << dendl;
+      return r;
+    }
+    set_context(env->cct.get());
 
     /* The base path first, because the extents probe reads it, then the
      * strategies, then the base path's descriptor, which open_base_path()
@@ -668,6 +703,12 @@ public:
     /* as initialize() does, from rgw_posix_sync_policy */
     init_sync_policy(dpp);
 
+    /* as initialize() does:  adoption's completion record, read once,
+     * and under `automatic` the store adopted */
+    if (int r = start_adoption(dpp); r < 0) {
+      return r;
+    }
+
     init_multipart_cache(dpp, mp_entries, mp_lanes, mp_parts, mp_budget,
 			 mp_policy);
 
@@ -679,15 +720,35 @@ public:
   }
 
   virtual std::unique_ptr<User> get_user(const rgw_user& u) override;
+
+  /* adoption's in-memory state, which completion ends */
+  void fail_adoption_for_test(const std::string& bucket, int r) {
+    std::lock_guard l{adoption_failures_mtx};
+    adoption_failures[bucket] = r;
+  }
+  void hold_unadopted_mapping_for_test() {
+    std::lock_guard l{unadopted_mapping_mtx};
+    unadopted_mapping = std::make_shared<const nsfs::IdentityMapping>();
+  }
+  bool holds_unadopted_mapping_for_test() {
+    std::lock_guard l{unadopted_mapping_mtx};
+    return bool(unadopted_mapping);
+  }
+  /* the queue's workers not yet exited, if there is a queue */
+  std::optional<uint64_t> adoption_queue_workers_for_test() {
+    auto* q = adoption_queue.load(std::memory_order_acquire);
+    return q ? std::optional<uint64_t>{q->stats().workers} : std::nullopt;
+  }
 };
 
 class TestUser : public StoreUser {
   Attrs attrs;
+  TestDriver* dr{nullptr};
 
 public:
-  TestUser(TestDriver *_dr, const rgw_user& _u) : StoreUser(_u) { }
-  TestUser(TestDriver *_dr, const RGWUserInfo& _i) : StoreUser(_i) { }
-  TestUser(TestDriver *_dr)  { }
+  TestUser(TestDriver *_dr, const rgw_user& _u) : StoreUser(_u), dr(_dr) { }
+  TestUser(TestDriver *_dr, const RGWUserInfo& _i) : StoreUser(_i), dr(_dr) { }
+  TestUser(TestDriver *_dr) : dr(_dr) { }
   TestUser(TestUser& _o) = default;
   virtual ~TestUser() = default;
 
@@ -705,9 +766,28 @@ public:
              std::map<rgw_user_bucket, rgw_usage_log_entry> &usage) override { return 0; }
   virtual int trim_usage(const DoutPrefixProvider* dpp, uint64_t start_epoch,
                          uint64_t end_epoch, optional_yield y) override { return 0; }
-  virtual int load_user(const DoutPrefixProvider* dpp, optional_yield y) override { return 0; }
+  /* Real, not stubbed.
+   *
+   * These were `{ return 0; }`, which makes any test of a write
+   * through them vacuous:  the import reported a user created, the
+   * user table was empty, and nothing failed until an assertion went
+   * looking.  They now do what `NSFSUser` does -- the driver's one
+   * handle -- so a test can ask whether a user was really written. */
+  virtual int load_user(const DoutPrefixProvider* dpp,
+			optional_yield y) override {
+    return dr ? dr->get_user_db()->get_user(dpp, "user_id", get_id().id,
+					    get_info(), &get_attrs(),
+					    &get_version_tracker())
+	      : 0;
+  }
   virtual int store_user(const DoutPrefixProvider* dpp, optional_yield y, bool
-			 exclusive, RGWUserInfo* old_info = nullptr) override { return 0; }
+			 exclusive, RGWUserInfo* old_info = nullptr) override {
+    return dr ? dr->get_user_db()->store_user(dpp, get_info(), exclusive,
+					      &get_attrs(),
+					      &get_version_tracker(),
+					      old_info)
+	      : 0;
+  }
   virtual int remove_user(const DoutPrefixProvider* dpp, optional_yield y) override { return 0; }
   virtual int verify_mfa(const std::string &mfa_str, bool *verified,
                          const DoutPrefixProvider* dpp,
@@ -4826,7 +4906,6 @@ TEST_F(NSFSBucketTest, HierarchicalChown)
   auto obj = bucket->get_object(rgw_obj_key("dir1/file.txt"));
   TestUser user(driver.get());
   int ret = obj->chown(env->dpp, user.get_id(), user.get_display_name(), null_yield);
-  EXPECT_TRUE(ret == 0 || ret == -EPERM);
 
 /* nsfs creates objects and their directories in NooBaa's modes, under
  * `rgw_nsfs_umask` (DECISIONS.md 2026-10-11).
@@ -7209,10 +7288,29 @@ TEST_F(NSFSStridedEvictingBucketTest, AnEvictedPartRecordsItsPlacement)
 	 "the shared file";
 }
 
+/* A bucket in NooBaa's format, served by the driver.
+ *
+ * The bucket is created marked -- every bucket this gateway makes is
+ * -- and then unmarked while it is still empty, through the
+ * `unmarked-bucket` hint:  nothing else makes an RGW bucket unmarked
+ * (UnmarkPasskey;  DECISIONS.md 2026-10-21).  From there every strategy
+ * the bucket uses is NooBaa's, and a client's write to it is rejected
+ * until it is adopted. */
 class NSFSNooBaaBucketTest : public NSFSBucketTest {
 public:
   void SetUp() override {
     NSFSBucketTest::SetUp();
+    ASSERT_NO_FATAL_FAILURE(unmark());
+  }
+
+  /* Unmark the empty bucket and take a fresh handle, since a loaded one
+   * keeps the profile it resolved. */
+  void unmark() {
+    std::map<std::string, std::string> out;
+    ASSERT_EQ(driver->driver_hint(env->dpp, "unmarked-bucket",
+				  {{"bucket", testname}}, &out), 0);
+    ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname},
+				  &bucket, null_yield), 0);
     auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
     ASSERT_STREQ(b->profile_name(), "base");
     ASSERT_STREQ(b->get_format()->name(), "noobaa");
@@ -7396,10 +7494,18 @@ TEST_F(NSFSNooBaaBucketTest, TheRootObjectReadsTheSameBeforeAndAfterConversion)
     if (body.empty()) {
       /* back to base for the second case;  the bucket is empty but for
        * the root object, which does not keep a bucket from changing */
+      ASSERT_NO_FATAL_FAILURE(unmark());
+    }
+    auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+
+    /* the bucket's state as adoption's first step writes it, before the
+     * bucket is marked */
     bufferlist tag;
     tag.append("bucket-tag");
     rgw::sal::Attrs add;
     add[RGW_ATTR_TAGS] = tag;
+    ASSERT_EQ(b->merge_and_store_attrs(env->dpp, add, null_yield,
+				       rgw::sal::MutationPurpose::adoption), 0);
     lay_noobaa_directory_object(bucket_path(), body, "text/x-root", "root");
 
     const ClientView r0 = client_view(bucket.get(), env->dpp, "/");
@@ -7516,20 +7622,386 @@ TEST_F(NSFSNooBaaBucketTest, ADirectoryWithoutTheMarkerIsNotItsObject)
   EXPECT_FALSE(u.listed);
 }
 
+/* On a bucket not taken over a client's write is rejected
+ * (DECISIONS.md 2026-10-21), a write to a NooBaa directory object among
+ * them, and nothing is put in the nsfs format beside NooBaa's. */
 TEST_F(NSFSNooBaaBucketTest, AWriteToADirectoryObjectIsRejected)
 {
   lay_noobaa_directory_object(bucket_path() / "e", "", "text/x-e", "e");
 
   auto obj = bucket->get_object(rgw_obj_key("e/"));
+  EXPECT_EQ(obj->get_delete_op(rgw::sal::no_authenticated_user)->delete_obj(env->dpp, null_yield, 0),
+	    -ERR_INVALID_BUCKET_STATE);
   EXPECT_TRUE(client_view(bucket.get(), env->dpp, "e/").exists);
   EXPECT_FALSE(sf::exists(bucket_path() / "e" / ".folder"))
       << "a sentinel was written into a base bucket";
 }
 
+
+/* ------------------------------------------------------------------ *
+ * The gate on a bucket not taken over (DECISIONS.md 2026-10-21).
+ *
+ * A bucket directory without `user.nsfs:marker.extensions` has not been
+ * taken over, and a client's write to it is rejected with
+ * InvalidBucketState.  The status code is the weakest evidence there
+ * is, so each case also compares the tree before and after, byte for
+ * byte:  every name, its
+ * type, mode, owner, size, mtime and attribute values.
+ * ------------------------------------------------------------------ */
+
+/* The tree as the filesystem has it, one line per name, sorted. */
+static std::vector<std::string> tree_snapshot(const sf::path& root)
+{
+  std::vector<std::string> out;
+  auto one = [&](const sf::path& p) {
+    struct stat st{};
+    if (::lstat(p.c_str(), &st) < 0) {
+      out.push_back(p.string() + " unstattable");
+      return;
+    }
+    std::string line = sf::relative(p, root).string() + " " +
+      std::to_string(st.st_mode) + " " + std::to_string(st.st_uid) + ":" +
+      std::to_string(st.st_gid) + " " + std::to_string(st.st_size) + " " +
+      std::to_string(st.st_mtim.tv_sec) + "." +
+      std::to_string(st.st_mtim.tv_nsec);
+    char names[8192];
+    const ssize_t n = ::llistxattr(p.c_str(), names, sizeof(names));
+    std::vector<std::string> xs;
+    for (ssize_t i = 0; (n > 0) && (i < n); i += strlen(names + i) + 1) {
+      char v[4096];
+      const ssize_t vl = ::lgetxattr(p.c_str(), names + i, v, sizeof(v));
+      xs.push_back(std::string(names + i) + "=" +
+		   ((vl >= 0) ? std::string(v, vl) : std::string("?")));
+    }
+    std::sort(xs.begin(), xs.end());
+    for (const auto& x : xs) {
+      line += " " + x;
+    }
+    out.push_back(line);
+  };
+  one(root);
+  for (const auto& e : sf::recursive_directory_iterator(root)) {
+    one(e.path());
+  }
+  std::sort(out.begin(), out.end());
+  return out;
+}
+
+class NSFSAdoptionGateTest : public NSFSNooBaaBucketTest {
+public:
+  /* a NooBaa object and a NooBaa upload in flight, laid by hand */
+  TestTree tree;
+  void SetUp() override {
+    NSFSNooBaaBucketTest::SetUp();
+    if (HasFatalFailure()) {
+      return;
+    }
+    make_noobaa_tree(bucket_path(), TreeShape::with_upload, tree);
+    write_file(bucket_path() / "obj", "their bytes");
+  }
+
+  /* a bucket this gateway made, so marked */
+  std::unique_ptr<rgw::sal::Bucket> marked_bucket(const std::string& name) {
+    RGWBucketInfo info;
+    info.bucket.name = name;
+    info.owner = owner;
+    info.creation_time = ceph::real_clock::now();
+    auto b = driver->get_bucket(info);
+    EXPECT_NE(b.get(), nullptr);
+    rgw::sal::Bucket::CreateParams cp;
+    cp.owner = owner;
+    EXPECT_EQ(b->create(env->dpp, cp, null_yield, rgw::sal::no_authenticated_user), 0);
+    return b;
+  }
+
+  int put(rgw::sal::Bucket* b, const std::string& key) {
+    auto obj = b->get_object(rgw_obj_key(key));
+    auto writer = driver->get_atomic_writer(env->dpp, null_yield, obj.get(),
+					    acl_owner, nullptr, 0, "put",
+					    rgw::sal::no_authenticated_user);
+    int r = writer->prepare(null_yield);
+    if (r < 0) {
+      return r;
+    }
+    bufferlist bl;
+    bl.append("ours");
+    if ((r = writer->process(std::move(bl), 0)) < 0 ||
+	(r = writer->process({}, 4)) < 0) {
+      return r;
+    }
+    Attrs attrs;
+    ceph::real_time mtime;
+    std::string etag;
+    req_context rctx{env->dpp, null_yield, nullptr};
+    return writer->complete(4, etag, &mtime, real_time(), attrs,
+			    std::nullopt, real_time(), nullptr, nullptr,
+			    nullptr, nullptr, nullptr, rctx, 0);
+  }
+
+  int upload_part(rgw::sal::MultipartUpload* upload, int num) {
+    rgw_placement_rule placement;
+    auto writer = upload->get_writer(env->dpp, null_yield, nullptr, acl_owner,
+				     &placement, num, std::to_string(num),
+				     rgw::sal::no_authenticated_user);
+    if (!writer) {
+      return -EINVAL;
+    }
+    int r = writer->prepare(null_yield);
+    if (r < 0) {
+      return r;
+    }
+    bufferlist bl;
+    bl.append(std::string(16, 'p'));
+    if ((r = writer->process(std::move(bl), 0)) < 0 ||
+	(r = writer->process({}, 16)) < 0) {
+      return r;
+    }
+    Attrs attrs;
+    ceph::real_time mtime;
+    std::string etag = std::to_string(num);
+    req_context rctx{env->dpp, null_yield, nullptr};
+    return writer->complete(16, etag, &mtime, real_time(), attrs,
+			    std::nullopt, real_time(), nullptr, nullptr,
+			    nullptr, nullptr, nullptr, rctx, 0);
+  }
+
+  int copy(rgw::sal::Bucket* src_b, const std::string& src,
+	   rgw::sal::Bucket* dst_b, const std::string& dst) {
+    auto src_obj = src_b->get_object(rgw_obj_key(src));
+    auto dst_obj = dst_b->get_object(rgw_obj_key(dst));
+    Attrs attrs;
+    std::string etag, tag;
+    return src_obj->copy_object(
+	acl_owner, rgw_user(), rgw::sal::no_authenticated_user,
+	nullptr, rgw_zone_id(),
+	dst_obj.get(), dst_b, src_b,
+	rgw_placement_rule(), nullptr, nullptr,
+	nullptr, nullptr, false,
+	nullptr, nullptr,
+	ATTRSMOD_NONE, false, attrs,
+	RGWObjCategory::Main, 0,
+	boost::none, nullptr, &tag, &etag,
+	nullptr, nullptr, nullptr,
+	env->dpp, null_yield);
+  }
+};
+
+/* Every mutating entry point, on a bucket not taken over:  rejected, and
+ * nothing in the tree changes.  An entry point added later and missing
+ * here is a missing row, not a silent gap. */
+TEST_F(NSFSAdoptionGateTest, AClientWriteIsRejectedAndChangesNothing)
+{
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  bufferlist v;
+  v.append("x");
+  const std::vector<std::pair<std::string, std::function<int()>>> ops = {
+    {"PutObject", [&] { return put(bucket.get(), "new"); }},
+    {"PutObject over theirs", [&] { return put(bucket.get(), "obj"); }},
+    {"set_obj_attrs", [&] {
+      Attrs a;
+      a[RGW_ATTR_META_PREFIX "probe"] = v;
+      return bucket->get_object(rgw_obj_key("obj"))->set_obj_attrs(
+	  env->dpp, &a, nullptr, null_yield, rgw::sal::FLAG_LOG_OP,
+	  rgw_user());
+    }},
+    {"modify_obj_attrs", [&] {
+      return bucket->get_object(rgw_obj_key("obj"))->modify_obj_attrs(
+	  RGW_ATTR_META_PREFIX "probe", v, null_yield, env->dpp, rgw_user());
+    }},
+    {"delete_obj_attrs", [&] {
+      return bucket->get_object(rgw_obj_key("obj"))->delete_obj_attrs(
+	  env->dpp, RGW_ATTR_TAGS, null_yield, rgw_user());
+    }},
+    {"DeleteObject", [&] {
+      return bucket->get_object(rgw_obj_key("obj"))->get_delete_op(rgw::sal::no_authenticated_user)
+	  ->delete_obj(env->dpp, null_yield, 0);
+    }},
+    {"CopyObject within", [&] {
+      return copy(bucket.get(), "obj", bucket.get(), "copied");
+    }},
+    {"rename", [&] {
+      return bucket->get_object(rgw_obj_key("obj"))->rename(
+	  env->dpp, null_yield, bucket.get(), rgw_obj_key("renamed"),
+	  rgw::sal::Object::FLAG_RENAME_NONE, rgw_user());
+    }},
+    {"CreateMultipartUpload", [&] {
+      auto u = bucket->get_multipart_upload("started", rgw::sal::no_authenticated_user,
+					    "44444444-5555-4666-8777-888888888888");
+      rgw_placement_rule placement;
+      Attrs a;
+      return u->init(env->dpp, null_yield, acl_owner, placement, a);
+    }},
+    {"UploadPart into theirs", [&] {
+      auto u = bucket->get_multipart_upload(tree.key, rgw::sal::no_authenticated_user, tree.upload_id);
+      return upload_part(u.get(), 9);
+    }},
+    {"CompleteMultipartUpload of theirs", [&] {
+      auto u = bucket->get_multipart_upload(tree.key, rgw::sal::no_authenticated_user, tree.upload_id);
+      std::map<int, std::string> etags;
+      return complete_mp(bucket.get(), u.get(), owner, tree.key, etags);
+    }},
+    {"AbortMultipartUpload of theirs", [&] {
+      auto u = bucket->get_multipart_upload(tree.key, rgw::sal::no_authenticated_user, tree.upload_id);
+      return u->abort(env->dpp, env->cct.get(), null_yield);
+    }},
+    {"bucket attributes", [&] {
+      Attrs a;
+      a["user.rgw.probe"] = v;
+      return bucket->merge_and_store_attrs(env->dpp, a, null_yield);
+    }},
+    {"bucket info", [&] {
+      bucket->get_info().flags |= BUCKET_VERSIONED;
+      return bucket->put_info(env->dpp, false, real_time(), null_yield);
+    }},
+    {"bucket ACL", [&] {
+      RGWAccessControlPolicy acl;
+      acl.create_default(acl_owner.id, acl_owner.display_name);
+      return b->set_acl(env->dpp, acl, null_yield);
+    }},
+    {"bucket chown", [&] {
+      return b->chown(env->dpp, owner, "", null_yield);
+    }},
+    {"DeleteBucket", [&] {
+      return bucket->remove(env->dpp, false, null_yield, rgw::sal::no_authenticated_user);
+    }},
+  };
+  for (const auto& [name, op] : ops) {
+    SCOPED_TRACE(name);
+    const auto before = tree_snapshot(bucket_path());
+    EXPECT_EQ(op(), -ERR_INVALID_BUCKET_STATE);
+    EXPECT_EQ(tree_snapshot(bucket_path()), before)
+	<< "a rejected write changed the tree";
+  }
+}
+
+/* Reads are served on a bucket not taken over, and write nothing:  the
+ * hazard serve mode's refusal named, a GET writing an attribute. */
+TEST_F(NSFSAdoptionGateTest, ReadsWriteNothing)
+{
+  const auto before = tree_snapshot(bucket_path());
+  EXPECT_TRUE(client_view(bucket.get(), env->dpp, "obj").exists);
+  EXPECT_EQ(read_version(bucket.get(), env->dpp, "obj", ""), "their bytes");
+  (void) listed_versions(bucket.get(), env->dpp, "obj");
+  std::vector<std::unique_ptr<rgw::sal::MultipartUpload>> uploads;
+  std::string marker;
+  bool truncated = false;
+  EXPECT_EQ(bucket->list_multiparts(env->dpp, "", marker, "", 100, uploads,
+				    nullptr, &truncated, null_yield,
+				    rgw::sal::no_authenticated_user), 0);
+  EXPECT_EQ(uploads.size(), 1u) << "their upload in flight is listed";
+  EXPECT_EQ(tree_snapshot(bucket_path()), before) << "a read wrote";
+}
+
+/* The rejection is the gate's:  with it lifted for this bucket the same
+ * write succeeds, and each rejection is counted. */
+TEST_F(NSFSAdoptionGateTest, TheRejectionIsTheGates)
+{
+  std::map<std::string, std::string> out;
+  ASSERT_EQ(driver->driver_hint(env->dpp, "inject-lift-adoption-gate",
+				{{"enable", "false"}, {"bucket", testname}},
+				&out), 0);
+  const uint64_t before = std::stoull(out["rejected"]);
+  EXPECT_EQ(put(bucket.get(), "lifted"), -ERR_INVALID_BUCKET_STATE);
+
+  ASSERT_EQ(driver->driver_hint(env->dpp, "inject-lift-adoption-gate",
+				{{"enable", "true"}, {"bucket", testname}},
+				&out), 0);
+  const int lifted = put(bucket.get(), "lifted");
+  ASSERT_EQ(driver->driver_hint(env->dpp, "inject-lift-adoption-gate",
+				{{"enable", "false"}, {"bucket", testname}},
+				&out), 0);
+  EXPECT_EQ(lifted, 0) << "the write failed for a reason other than the gate";
+  EXPECT_EQ(std::stoull(out["rejected"]), before + 1)
+      << "the rejection was not counted";
+}
+
+/* Adoption's own write gets in;  the same call as a client does not. */
+TEST_F(NSFSAdoptionGateTest, OnlyAdoptionsWriteGetsIn)
+{
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  Attrs a;
+  EXPECT_EQ(b->merge_and_store_attrs(env->dpp, a, null_yield,
+				     rgw::sal::MutationPurpose::client),
+	    -ERR_INVALID_BUCKET_STATE);
+  EXPECT_EQ(b->merge_and_store_attrs(env->dpp, a, null_yield,
+				     rgw::sal::MutationPurpose::adoption), 0);
+}
+
+/* Copying out of a bucket not taken over is a read of it:  the copy into
+ * a marked bucket succeeds and the source is unchanged.  A marked bucket
+ * takes the write the unmarked one rejects. */
+TEST_F(NSFSAdoptionGateTest, ACopyOutIsARead)
+{
   auto marked = marked_bucket(testname + "-ours");
+  const auto before = tree_snapshot(bucket_path());
   EXPECT_EQ(copy(bucket.get(), "obj", marked.get(), "copied"), 0);
+  EXPECT_EQ(tree_snapshot(bucket_path()), before) << "the copy wrote its source";
   EXPECT_EQ(put(marked.get(), "new"), 0) << "a marked bucket rejected a write";
 }
+
+
+/* Nothing returns a bucket to base:  set_profile() rejects it for every
+ * caller, the profile hint among them, and the bucket stays marked. */
+TEST_F(NSFSBucketTest, NothingReturnsABucketToBase)
+{
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->resolve_profile(env->dpp), 0);
+  EXPECT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_BASE),
+	    -ERR_INVALID_BUCKET_STATE);
+  std::map<std::string, std::string> out;
+  EXPECT_EQ(driver->driver_hint(env->dpp, "bucket-profile",
+				{{"bucket", testname}, {"profile", "base"}},
+				&out), -ERR_INVALID_BUCKET_STATE);
+  std::unique_ptr<rgw::sal::Bucket> loaded;
+  ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname}, &loaded,
+				null_yield), 0);
+  EXPECT_STRNE(static_cast<rgw::sal::NSFSBucket*>(loaded.get())
+		 ->profile_name(), "base");
+}
+
+/* The `unmarked-bucket` hint is narrow:  it rejects a bucket holding
+ * content and one already unmarked, makes an empty marked one unmarked,
+ * and is counted in the features map. */
+TEST_F(NSFSBucketTest, TheUnmarkedBucketHintIsNarrow)
+{
+  std::map<std::string, std::string> f0;
+  driver->get_features(f0);
+  const uint64_t count = std::stoull(f0["hint_unmarked_buckets"]);
+
+  put_object(driver.get(), bucket.get(), env->dpp, acl_owner, "content", "c",
+	     "text/plain");
+  std::map<std::string, std::string> out;
+  EXPECT_NE(driver->driver_hint(env->dpp, "unmarked-bucket",
+				{{"bucket", testname}}, &out), 0)
+      << "a bucket holding content was unmarked";
+  ASSERT_EQ(bucket->get_object(rgw_obj_key("content"))->get_delete_op(rgw::sal::no_authenticated_user)
+	      ->delete_obj(env->dpp, null_yield, 0), 0);
+
+  ASSERT_EQ(driver->driver_hint(env->dpp, "unmarked-bucket",
+				{{"bucket", testname}}, &out), 0);
+  EXPECT_EQ(out["profile"], "base");
+  EXPECT_EQ(driver->driver_hint(env->dpp, "unmarked-bucket",
+				{{"bucket", testname}}, &out),
+	    -ERR_INVALID_BUCKET_STATE) << "an unmarked bucket was unmarked again";
+
+  std::map<std::string, std::string> f1;
+  driver->get_features(f1);
+  EXPECT_EQ(std::stoull(f1["hint_unmarked_buckets"]), count + 1);
+}
+
+  /* versioning in the bucket's state, as adoption's first step writes
+   * it from NooBaa's record */
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  rgw::sal::Attrs none;
+  ASSERT_EQ(b->merge_and_store_attrs(env->dpp, none, null_yield,
+				     rgw::sal::MutationPurpose::adoption), 0);
+
+
+  /* adoption keeps the id;  a PUT can only come after it, since nothing
+   * writes a bucket not taken over */
+  ASSERT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_SHARED), 0);
+  EXPECT_EQ(read_version(bucket.get(), env->dpp, "v", recorded), "first")
+      << "adoption lost the id the client holds";
 
 
 /* NooBaa's temp directory is content only while it holds something.
@@ -7543,7 +8015,9 @@ TEST_F(NSFSNooBaaBucketTest, AnEmptyTempDirectoryDoesNotKeepABucket)
 {
   sf::create_directories(bucket_path() / ".noobaa-nsfs_6ace0000aaaabbbbccccdddd"
 			 / "multipart-uploads");
+  /* adopted first:  a bucket not taken over takes no DeleteBucket */
   auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_SHARED), 0);
   EXPECT_EQ(b->check_empty(env->dpp, null_yield), 0)
       << "an empty temp directory counted as an upload in flight";
   EXPECT_EQ(bucket->remove(env->dpp, false, null_yield, rgw::sal::no_authenticated_user), 0);
@@ -7582,6 +8056,14 @@ TEST_F(NSFSNooBaaBucketTest, DeletingABucketAbortsTheUploadTheyStarted)
  * The config root is set before the driver is built, because that is
  * when the reader is constructed:  an address we were not given means
  * do not consult a store. */
+/* `system.json` as NooBaa wrote it, in the store `standup.rs` stood up
+ * at noobaa-core 08d063f86:  one host, and the store's own entry.  The
+ * version gate (X4) admits exactly this. */
+static constexpr const char* NB_SYSTEM_JSON =
+  R"({"fedora.private":{"current_version":"5.23.0","config_dir_version":"1.0.0",)"
+  R"("upgrade_history":{"successful_upgrades":[]}},"config_directory":)"
+  R"({"config_dir_version":"1.0.0","upgrade_package_version":"5.23.0",)"
+  R"("phase":"CONFIG_DIR_UNLOCKED","upgrade_history":{"successful_upgrades":[]}}})";
 
 class NSFSNooBaaStateTest : public NSFSNooBaaBucketTest {
 public:
@@ -7589,11 +8071,27 @@ public:
     return sf::absolute(sf::path{base_path / get_test_name()}) / "noobaa-conf";
   }
 
+  sf::path report_dir() const {
+    return sf::absolute(sf::path{base_path / get_test_name()}) / "reports";
+  }
+
+  /* the adoption reports written, oldest first */
+  std::vector<sf::path> reports() const {
+    std::vector<sf::path> out;
+    for (const auto& e : sf::directory_iterator(report_dir())) {
+      out.push_back(e.path());
+    }
+    std::sort(out.begin(), out.end());
+    return out;
+  }
 
   void SetUp() override {
     sf::create_directories(conf_root() / "buckets");
+    sf::create_directories(report_dir());
     g_conf().set_val("rgw_nsfs_noobaa_config_root", conf_root().string());
+    g_conf().set_val("rgw_nsfs_adoption_report_dir", report_dir().string());
     NSFSNooBaaBucketTest::SetUp();
+    write_file(conf_root() / "system.json", NB_SYSTEM_JSON);
     /* NooBaa made this bucket, so nsfs holds no row for it:  what places
      * a NooBaa bucket is its record, until the import writes a row. */
     ASSERT_EQ(driver->get_identity_db()->remove_bucket_placement(
@@ -7603,9 +8101,20 @@ public:
   void TearDown() override {
     NSFSNooBaaBucketTest::TearDown();
     g_conf().set_val("rgw_nsfs_noobaa_config_root", "");
+    g_conf().rm_val("rgw_nsfs_adoption_report_dir");
+    g_conf().rm_val("rgw_nsfs_adoption_mode");
     g_conf().apply_changes(nullptr);
   }
 
+  /* A gateway started under `automatic` with no io_context, which
+   * adopts the whole store at startup (run_adoption()). */
+  void start_automatic() {
+    g_conf().set_val("rgw_nsfs_adoption_mode", "automatic");
+    bucket.reset();
+    driver.reset();
+    driver = std::make_unique<TestDriver>(bp);
+    ASSERT_EQ(driver->init(env->dpp), 0);
+  }
 
   /* A tree we did not write.  The fixture creates its bucket through
    * the SAL, which is the only way to get a Bucket, and that writes the nsfs
@@ -7667,17 +8176,45 @@ public:
   }
 };
 
+/* X1.  NooBaa's per-bucket force_md5_etag is carried into the attribute
+ * map, in NooBaa's shape, with the tri-state intact.
+ *
+ * Carried and **not enforced**:  `rgw_non_md5_etag` is the single
+ * deployment-wide control and NooBaa's global maps to it
+ * (`ACCOUNT_IMPORT.md` §6.1a).  What this asserts is that the value
+ * survives -- into an attribute rather than only into NooBaa's record,
+ * because once a bucket is adopted nothing reads NooBaa's record again.
+ *
+ * All three states, because NooBaa's precedence is a cascade and `false`
+ * counts as defined:  a bucket that turns it off must not arrive
+ * looking like a bucket that said nothing. */
 TEST_F(NSFSNooBaaStateTest, ForceMd5EtagIsCarriedInNooBaaShape)
 {
+  RGWBucketInfo info;
+  Attrs attrs;
 
   write_nb_record("DISABLED");
   ASSERT_EQ(read_nb_record(info, attrs), 0);
+  EXPECT_EQ(attrs.find(RGW_NSFS_ATTR_FORCE_MD5_ETAG), attrs.end())
+      << "a record that says nothing produced an attribute";
 
   write_nb_record("DISABLED", ",\"force_md5_etag\":true");
   ASSERT_EQ(read_nb_record(info, attrs), 0);
+  auto on = attrs.find(RGW_NSFS_ATTR_FORCE_MD5_ETAG);
+  ASSERT_NE(on, attrs.end()) << "their true was dropped";
+  EXPECT_EQ(on->second.to_str(), "true");
 
   write_nb_record("DISABLED", ",\"force_md5_etag\":false");
   ASSERT_EQ(read_nb_record(info, attrs), 0);
+  auto off = attrs.find(RGW_NSFS_ATTR_FORCE_MD5_ETAG);
+  ASSERT_NE(off, attrs.end())
+      << "their explicit false read as unset -- the cascade is lost";
+  EXPECT_EQ(off->second.to_str(), "false");
+
+  /* and nothing about the gateway's own behaviour changed:  the flag
+   * is carried, and no request path consults it */
+  EXPECT_FALSE(info.flags & BUCKET_VERSIONED);
+}
 
 /* NooBaa's versioning reaches RGW, which is what a base bucket loses today.
  *
@@ -8464,15 +9001,39 @@ TEST_F(NSFSNooBaaStateTest, AnEmptyEncryptionRecordConfiguresNothing)
   EXPECT_EQ(attrs.find(RGW_ATTR_BUCKET_ENCRYPTION_POLICY), attrs.end());
 }
 
+/* `logging` reads as RGW's bucket-logging configuration from the record
+ * alone, so a bucket served before its adoption returns it.  The rest
+ * of RGW's configuration keeps its defaults. */
 TEST_F(NSFSNooBaaStateTest, LoggingIsReadFromNooBaaRecord)
 {
+  RGWBucketInfo info;
+  Attrs attrs;
 
+  write_nb_record("DISABLED",
+		     R"(,"logging":{"log_bucket":"logs","log_prefix":"p/"})");
 
   ASSERT_EQ(read_nb_record(info, attrs), 0);
+  auto i = attrs.find(RGW_ATTR_BUCKET_LOGGING);
+  ASSERT_NE(i, attrs.end());
+  rgw::bucketlogging::configuration conf;
+  auto it = i->second.cbegin();
+  conf.decode(it);
+  EXPECT_EQ(conf.target_bucket, "logs");
+  EXPECT_EQ(conf.target_prefix, "p/");
+}
+
+/* A logging record naming no target is not a configuration, and writes
+ * no attribute:  the attribute's presence is what says logging is on. */
+TEST_F(NSFSNooBaaStateTest, LoggingWithoutATargetIsNoConfiguration)
+{
+  RGWBucketInfo info;
+  Attrs attrs;
 
   write_nb_record("DISABLED", R"(,"logging":{"log_prefix":"p/"})");
 
   ASSERT_EQ(read_nb_record(info, attrs), 0);
+  EXPECT_EQ(attrs.find(RGW_ATTR_BUCKET_LOGGING), attrs.end());
+}
 
 /* An encryption algorithm other than NooBaa's two, AES256 and aws:kms,
  * is stored as the bucket's configuration rather than failing its load.
@@ -8985,10 +9546,19 @@ TEST_F(NSFSNooBaaBucketTest, ListsThePartsOfNooBaaUpload)
   }
 }
 
+/* An upload NooBaa started completes after the bucket is adopted.
+ *
+ * NooBaa's gateway has stopped by then -- the handoff is sequential --
+ * and nothing completes an upload on a bucket not taken over
+ * (DECISIONS.md 2026-10-21), so the upload is completed through RGW once
+ * adoption has carried its staging into RGW's layout. */
 TEST_F(NSFSNooBaaBucketTest, CompletesAnUploadTheyStarted)
 {
   TestTree tree;
   make_noobaa_tree(bucket_path(), TreeShape::with_upload, tree);
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_SHARED), 0)
+      << "adoption did not carry the upload across";
 
   auto upload = bucket->get_multipart_upload(tree.key, rgw::sal::no_authenticated_user, tree.upload_id);
   ASSERT_NE(upload.get(), nullptr);
@@ -9013,6 +9583,71 @@ TEST_F(NSFSNooBaaBucketTest, CompletesAnUploadTheyStarted)
   EXPECT_EQ(read_all(obj), tree.payload);
 }
 
+/* An UploadPart into an upload NooBaa started, while the bucket's
+ * adoption is underway and has not reached that upload (D4 measurement
+ * 2, `inflight/base-write-damage.md`).
+ *
+ * The bucket is marked and converting, so its staging layout is RGW's,
+ * while the upload is still in NooBaa's.  Uploads are converted after the
+ * walk over objects, so stopping at the first upload event leaves exactly
+ * that state.  No client writes to a bucket until it is adopted:  the
+ * part is refused with InvalidBucketState, there being no queue, and
+ * nothing is written (DECISIONS.md 2026-11-02).  Once adoption finishes
+ * the same part is taken, and the completion assembles all four. */
+TEST_F(NSFSNooBaaBucketTest, APartUploadedMidAdoptionIsRefused)
+{
+  TestTree tree;
+  make_noobaa_tree(bucket_path(), TreeShape::with_upload, tree);
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+
+  nsfs::convert_cb_t stop =
+    [](const DoutPrefixProvider*, const nsfs::ConvertEvent& ev) {
+      return (ev.kind == nsfs::ConvertEvent::Kind::upload) ? -EINTR : 0;
+    };
+  ASSERT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_SHARED,
+			   &stop, nullptr), -EINTR);
+  ASSERT_TRUE(b->is_converting()) << "the control:  adoption is underway";
+  ASSERT_TRUE(sf::is_directory(tree.staging))
+      << "the control:  the upload is still in NooBaa's staging";
+
+  rgw_placement_rule placement;
+  const std::string extra(tree.part_size, 'z');
+  auto part = [&](rgw::sal::MultipartUpload* u) {
+    auto writer = u->get_writer(env->dpp, null_yield, nullptr, acl_owner,
+				&placement, tree.parts + 1,
+				std::to_string(tree.parts + 1),
+				rgw::sal::no_authenticated_user);
+    return writer ? writer->prepare(null_yield) : -EINVAL;
+  };
+  {
+    auto upload = bucket->get_multipart_upload(tree.key, rgw::sal::no_authenticated_user, tree.upload_id);
+    const auto before = tree_snapshot(bucket_path());
+    EXPECT_EQ(part(upload.get()), -ERR_INVALID_BUCKET_STATE)
+	<< "a part was taken into an upload the adoption had not reached";
+    EXPECT_EQ(tree_snapshot(bucket_path()), before)
+	<< "the refused part wrote something";
+    std::map<int, std::string> none;
+    EXPECT_EQ(complete_mp(bucket.get(), upload.get(), owner, tree.key, none),
+	      -ERR_INVALID_BUCKET_STATE)
+	<< "the completion was taken before the adoption";
+  }
+
+  /* adoption finishes;  the same part is taken, and all four complete */
+  ASSERT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_SHARED), 0);
+  auto after = bucket->get_multipart_upload(tree.key, rgw::sal::no_authenticated_user, tree.upload_id);
+  write_mp_part(after.get(), acl_owner, &placement, tree.parts + 1, extra);
+  int next = 0;
+  bool truncated = false;
+  ASSERT_EQ(after->list_parts(env->dpp, env->cct.get(), 100, 0, &next,
+			      &truncated, null_yield), 0);
+  EXPECT_EQ(after->get_parts().size(), tree.parts + 1);
+  std::map<int, std::string> etags;
+  for (auto& [num, p] : after->get_parts()) {
+    etags[num] = p->get_etag();
+  }
+  ASSERT_EQ(complete_mp(bucket.get(), after.get(), owner, tree.key, etags), 0);
+  EXPECT_EQ(read_all(bucket_path() / tree.key), tree.payload + extra);
+}
 
 /* get_info() on an upload they started.
  *
@@ -9319,23 +9954,62 @@ TEST_F(NSFSConvertingBucketTest, ReadsNooBaaDirectoryObjects)
   EXPECT_EQ(c.listed_size, 9u);
 }
 
+/* A write to a bucket being converted is refused until its adoption
+ * completes, and converts nothing (DECISIONS.md 2026-11-02):  before the
+ * sweep it is answered with InvalidBucketState, there being no queue to
+ * adopt it, and the object is unchanged;  after it, the same write takes
+ * effect.  Each case reads the object at all three points, on a NooBaa
+ * directory object, which the sweep rewrites the most. */
+TEST_F(NSFSConvertingBucketTest, ADeleteBeforeTheSweepIsRefused)
+{
   lay_noobaa_directory_object(bucket_path() / "e", "", "text/x-e", "e");
   lay_noobaa_directory_object(bucket_path() / "c", "dir bytes", "text/x-c", "c");
 
   for (const char* k : {"e/", "c/"}) {
     auto obj = bucket->get_object(rgw_obj_key(k));
+    EXPECT_EQ(obj->get_delete_op(rgw::sal::no_authenticated_user)->delete_obj(env->dpp, null_yield, 0),
+	      -ERR_INVALID_BUCKET_STATE) << k;
+    EXPECT_TRUE(client_view(bucket.get(), env->dpp, k).exists)
+	<< k << " was deleted before the sweep reached it";
+  }
 
   auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
   ASSERT_EQ(b->convert_tree(env->dpp, null_yield, nullptr, nullptr), 0);
   for (const char* k : {"e/", "c/"}) {
+    auto obj = bucket->get_object(rgw_obj_key(k));
+    EXPECT_EQ(obj->get_delete_op(rgw::sal::no_authenticated_user)->delete_obj(env->dpp, null_yield, 0), 0) << k;
     const ClientView v = client_view(bucket.get(), env->dpp, k);
+    EXPECT_FALSE(v.exists) << k << " survived its delete";
+    EXPECT_FALSE(v.listed) << k << " listed after its delete";
+  }
+}
+
+TEST_F(NSFSConvertingBucketTest, APutBeforeTheSweepIsRefused)
+{
   lay_noobaa_directory_object(bucket_path() / "c", "dir bytes", "text/x-c", "c");
+  put_object(driver.get(), bucket.get(), env->dpp, acl_owner, "c/", "new body",
+	     "text/x-new", -ERR_INVALID_BUCKET_STATE);
   const ClientView v0 = client_view(bucket.get(), env->dpp, "c/");
   ASSERT_TRUE(v0.exists);
+  EXPECT_EQ(v0.body, "dir bytes") << "the PUT took effect before the sweep";
+  EXPECT_EQ(v0.probe, "c");
 
   auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
   ASSERT_EQ(b->convert_tree(env->dpp, null_yield, nullptr, nullptr), 0);
+  put_object(driver.get(), bucket.get(), env->dpp, acl_owner, "c/", "new body",
+	     "text/x-new");
   const ClientView v1 = client_view(bucket.get(), env->dpp, "c/");
+  ASSERT_TRUE(v1.exists);
+  EXPECT_EQ(v1.body, "new body");
+  EXPECT_EQ(v1.size, 8u);
+  EXPECT_EQ(v1.content_type, "text/x-new");
+  EXPECT_EQ(v1.probe, "") << "the replaced object's metadata survived the PUT";
+  EXPECT_TRUE(v1.listed);
+  EXPECT_EQ(v1.listed_size, 8u);
+}
+
+TEST_F(NSFSConvertingBucketTest, AnAttributeWrittenBeforeTheSweepIsRefused)
+{
   lay_noobaa_directory_object(bucket_path() / "e", "", "text/x-e", "e");
 
   Attrs attrs;
@@ -9343,10 +10017,37 @@ TEST_F(NSFSConvertingBucketTest, ReadsNooBaaDirectoryObjects)
   v.append("changed");
   attrs[RGW_ATTR_META_PREFIX "probe"] = v;
   {
+    auto obj = bucket->get_object(rgw_obj_key("e/"));
+    ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
+    EXPECT_EQ(obj->set_obj_attrs(env->dpp, &attrs, nullptr, null_yield,
+				 rgw::sal::FLAG_LOG_OP, rgw_user()),
+	      -ERR_INVALID_BUCKET_STATE);
+  }
+  EXPECT_EQ(client_view(bucket.get(), env->dpp, "e/").probe, "e")
+      << "the attribute was written before the sweep";
 
   auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
   ASSERT_EQ(b->convert_tree(env->dpp, null_yield, nullptr, nullptr), 0);
+  auto obj = bucket->get_object(rgw_obj_key("e/"));
+  ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
+  ASSERT_EQ(obj->set_obj_attrs(env->dpp, &attrs, nullptr, null_yield,
+			       rgw::sal::FLAG_LOG_OP, rgw_user()), 0);
   const ClientView v1 = client_view(bucket.get(), env->dpp, "e/");
+  ASSERT_TRUE(v1.exists);
+  EXPECT_EQ(v1.probe, "changed");
+  EXPECT_EQ(v1.content_type, "text/x-e") << "the write lost the object's other attributes";
+  EXPECT_TRUE(v1.listed);
+}
+
+  /* versioning on, past the gate a converting bucket keeps for clients;
+   * what is under test is the read */
+  std::map<std::string, std::string> out;
+  ASSERT_EQ(driver->driver_hint(env->dpp, "inject-lift-adoption-gate",
+				{{"enable", "true"}, {"bucket", testname}},
+				&out), 0);
+  ASSERT_EQ(driver->driver_hint(env->dpp, "inject-lift-adoption-gate",
+				{{"enable", "false"}, {"bucket", testname}},
+				&out), 0);
   write_nb_object("w");
 
 /* A bucket that does not own its directory still has its deletion
@@ -9399,18 +10100,71 @@ TEST_F(NSFSBucketTest, DoesNotListNooBaaDirectoryObjectWithoutTheMarker)
   }
 }
 
+/* An ordinary object's write is refused while its bucket converts, as a
+ * directory object's is (DECISIONS.md 2026-11-02):  the bucket is
+ * converting with its gate open, which is the state of every conversion
+ * that stopped partway, and no client mutates it until it is adopted.
+ * Each write leaves the object as NooBaa wrote it;  once the sweep has
+ * run the same writes take effect, as RGW attributes only. */
+TEST_F(NSFSConvertingBucketTest, AnOrdinaryObjectsWriteIsRefusedWhileConverting)
+{
   write_nb_object("theirs.bin");
   const sf::path p{bucket_path() / "theirs.bin"};
   for (const auto& [k, v] : {std::pair{"a", "1"}, std::pair{"b", "2"}}) {
     const std::string n = std::string("user.noobaa.tag.") + k;
     ASSERT_EQ(::setxattr(p.c_str(), n.c_str(), v, strlen(v), 0), 0) << n;
   }
+  auto names = [&p]() {
+    char buf[8192];
+    const ssize_t nlen = ::listxattr(p.c_str(), buf, sizeof(buf));
+    std::set<std::string> out;
+    for (const char* q = buf; (nlen > 0) && (q < buf + nlen);
+	 q += strlen(q) + 1) {
+      out.insert(q);
+    }
+    return out;
+  };
+  const auto before = names();
+
+  Attrs attrs;
+  bufferlist ct;
+  ct.append("application/octet-stream");
+  attrs[RGW_ATTR_CONTENT_TYPE] = ct;
   Attrs del;
   del[RGW_ATTR_TAGS] = bufferlist{};
+  auto writes = [&]() {
+    std::vector<int> rets;
+    auto obj = bucket->get_object(rgw_obj_key("theirs.bin"));
+    EXPECT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
+    rets.push_back(obj->set_obj_attrs(env->dpp, &attrs, nullptr, null_yield,
+				      rgw::sal::FLAG_LOG_OP, rgw_user()));
+    rets.push_back(obj->set_obj_attrs(env->dpp, nullptr, &del, null_yield,
+				      rgw::sal::FLAG_LOG_OP, rgw_user()));
+    rets.push_back(obj->delete_obj_attrs(env->dpp, RGW_ATTR_TAGS, null_yield,
+					 rgw_user()));
+    return rets;
+  };
+  for (const int r : writes()) {
+    EXPECT_EQ(r, -ERR_INVALID_BUCKET_STATE);
+  }
+  EXPECT_EQ(names(), before) << "a refused write changed the object";
 
   auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
   ASSERT_EQ(b->convert_tree(env->dpp, null_yield, nullptr, nullptr), 0);
+  for (const int r : writes()) {
+    EXPECT_EQ(r, 0);
+  }
+  const auto after = names();
   EXPECT_TRUE(after.contains("user.nsfs:rgw.content_type"));
+  for (const auto& n : after) {
+    EXPECT_FALSE(n.starts_with("user.noobaa.")) << n;
+  }
+  auto rd = bucket->get_object(rgw_obj_key("theirs.bin"));
+  ASSERT_EQ(rd->load_obj_state(env->dpp, null_yield), 0);
+  ASSERT_EQ(rd->get_obj_attrs(null_yield, env->dpp), 0);
+  EXPECT_EQ(rd->get_attrs().count(RGW_ATTR_TAGS), 0u)
+      << "the tags survived their removal after the sweep";
+}
 
 /* Object lock:  three plain NooBaa attributes, two encoded nsfs
  * ones.
@@ -9778,6 +10532,10 @@ TEST_F(NSFSUpgradeTest, ABaseBucketWritesItsStateAsRGWAttributes)
   bl.append(policy);
   rgw::sal::Attrs add;
   add[RGW_ATTR_IAM_POLICY] = bl;
+  /* as adoption's first step writes it, before the bucket is marked */
+  ASSERT_EQ(static_cast<rgw::sal::NSFSBucket*>(bucket.get())
+	      ->merge_and_store_attrs(env->dpp, add, null_yield,
+				      rgw::sal::MutationPurpose::adoption), 0);
 
   auto before = xattr_names(bucket_path());
   EXPECT_TRUE(before.contains(nsfs_name))
@@ -9838,7 +10596,54 @@ TEST_F(NSFSUpgradeTest, ConvertsVersionEntries)
   }
 }
 
+/* Adoption reports every link (DECISIONS.md 2026-10-23;  a link is an object
+ * only beneath the bucket):  the conversion counts each by what it
+ * resolves to, as NooBaa resolved it, and converts none.  An absolute
+ * link into the bucket is among them, which NooBaa served;  so are links
+ * in a subdirectory, one to the bucket itself and one climbing out of
+ * it, which make the walk recover the bucket's real path from below its
+ * root. */
+TEST_F(NSFSUpgradeTest, TheConversionCountsEveryLinkByWhatItResolvesTo)
+{
   nb_object("photo.jpg", "image/jpeg");
+  const sf::path bdir = bucket_path();
+  const sf::path outside = bp / "outside-the-bucket";
+  write_file(outside, "outside");
+  sf::create_directories(bdir / "sub");
+  const std::array<sf::path, 7> links{
+    bdir / "l-file", bdir / "l-abs", bdir / "sub" / "l-up",
+    bdir / "l-out", bdir / "sub" / "l-climb", bdir / "l-dangling",
+    bdir / "l-loop"};
+  sf::create_symlink("photo.jpg", links[0]);
+  sf::create_symlink(sf::canonical(bdir) / "photo.jpg", links[1]);
+  sf::create_symlink("..", links[2]);
+  sf::create_symlink(outside, links[3]);
+  sf::create_symlink("../..", links[4]);
+  sf::create_symlink("nowhere", links[5]);
+  sf::create_symlink("l-loop", links[6]);
+
+  nsfs::ConvertProgress prog;
+  ASSERT_EQ(upgrade(nullptr, &prog), 0);
+  EXPECT_TRUE(prog.complete);
+  EXPECT_EQ(prog.objects, 1u) << "a link was converted as an object";
+  EXPECT_EQ(prog.links.file, 2u) << "relative and absolute, into the bucket";
+  EXPECT_EQ(prog.links.directory, 1u) << "sub/l-up, the bucket itself";
+  EXPECT_EQ(prog.links.outside, 2u) << "l-out and sub/l-climb";
+  EXPECT_EQ(prog.links.dangling, 1u);
+  EXPECT_EQ(prog.links.loop, 1u);
+
+  for (const auto& l : links) {
+    EXPECT_TRUE(sf::is_symlink(sf::symlink_status(l))) << l << " was touched";
+  }
+  EXPECT_EQ(read_all(outside), "outside");
+  char names[4096];
+  const ssize_t len = ::listxattr(outside.c_str(), names, sizeof(names));
+  ASSERT_GE(len, 0) << cpp_strerror(errno);
+  for (ssize_t i = 0; i < len; i += std::strlen(names + i) + 1) {
+    EXPECT_FALSE(std::string_view(names + i).starts_with("user."))
+	<< names + i << ":  the conversion wrote through a link";
+  }
+}
 
 /* The severe one.  NooBaa's delete marker is user.noobaa.delete_marker and
  * nsfs's is user.nsfs:delete_marker;  every read resolves the name
@@ -9959,6 +10764,61 @@ TEST_F(NSFSUpgradeTest, TheMarkersAreNotBucketAttributes)
   no_marker(bucket->get_attrs());
 }
 
+/* A key NooBaa spreads over several names -- tags, one per tag;
+ * retention, two;  legal hold -- leaves none of them behind.  Only the
+ * names on the file say which those are, and conversion used to remove
+ * the one disk_name() gives, which for these is none of them:  the
+ * object kept NooBaa's attributes beside the RGW ones, unread.  A directory
+ * object's move from the directory to its sentinel removes them the same
+ * way. */
+TEST_F(NSFSUpgradeTest, ConversionLeavesNoSpreadNooBaaName)
+{
+  nb_object("locked.bin", "text/plain");
+  nb_folder("photos", "application/directory");
+  const sf::path p{bucket_path() / "locked.bin"};
+  const sf::path d{bucket_path() / "photos"};
+  auto set = [](const sf::path& at, const std::string& n,
+		const std::string& v) {
+    ASSERT_EQ(::setxattr(at.c_str(), n.c_str(), v.data(), v.size(), 0), 0)
+	<< n;
+  };
+  for (const auto& at : {p, d}) {
+    set(at, "user.noobaa.tag.a", "1");
+    set(at, "user.noobaa.tag.b", "2");
+  }
+  set(p, "user.noobaa.legal_hold", "ON");
+  set(p, "user.noobaa.retention_mode", "COMPLIANCE");
+  set(p, "user.noobaa.retention_date", "2030-01-01T00:00:00.000Z");
+
+  ASSERT_EQ(upgrade(nullptr, nullptr), 0);
+
+  for (const auto& at : {p, d, d / ".folder"}) {
+    for (const auto& n : xattr_names(at)) {
+      EXPECT_FALSE(n.starts_with("user.noobaa.")) << at << ":  " << n;
+    }
+  }
+
+  /* and what they recorded is carried */
+  auto obj = bucket->get_object(rgw_obj_key("locked.bin"));
+  ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
+  ASSERT_EQ(obj->get_obj_attrs(null_yield, env->dpp), 0);
+  auto& attrs = obj->get_attrs();
+  ASSERT_TRUE(attrs.contains(RGW_ATTR_TAGS));
+  RGWObjTags tags;
+  auto ti = attrs[RGW_ATTR_TAGS].cbegin();
+  tags.decode(ti);
+  EXPECT_EQ(tags.get_tags().size(), 2u);
+  ASSERT_TRUE(attrs.contains(RGW_ATTR_OBJECT_LEGAL_HOLD));
+  RGWObjectLegalHold hold;
+  auto hi = attrs[RGW_ATTR_OBJECT_LEGAL_HOLD].cbegin();
+  hold.decode(hi);
+  EXPECT_EQ(hold.get_status(), "ON");
+  ASSERT_TRUE(attrs.contains(RGW_ATTR_OBJECT_RETENTION));
+  RGWObjectRetention ret;
+  auto ri = attrs[RGW_ATTR_OBJECT_RETENTION].cbegin();
+  ret.decode(ri);
+  EXPECT_EQ(ret.get_mode(), "COMPLIANCE");
+}
 
 /* NooBaa user metadata whose key begins "nsfs." is user metadata, served
  * as found and after conversion.  NooBaa stores it as `user.` + the key,
@@ -10703,6 +11563,11 @@ TEST_F(NSFSBucketTest, DeletingABucketAbortsItsUploads)
 TEST_F(NSFSUpgradeTest, AListingCachedBeforeTheUpgradeEqualsOneBuiltAfterIt)
 {
   bucket->get_info().flags |= BUCKET_VERSIONED;
+  /* as adoption's first step writes it from NooBaa's record */
+  rgw::sal::Attrs none;
+  ASSERT_EQ(static_cast<rgw::sal::NSFSBucket*>(bucket.get())
+	      ->merge_and_store_attrs(env->dpp, none, null_yield,
+				      rgw::sal::MutationPurpose::adoption), 0);
 
   nb_object("plain.bin", "text/plain");
   lay_noobaa_directory_object(bucket_path() / "e", "", "text/x-e", "e");
@@ -10960,12 +11825,18 @@ TEST_F(NSFSUpgradeTest, HoldsOffMutationsAndNotReads)
       EXPECT_EQ(rd->load_obj_state(env->dpp, null_yield), 0);
       EXPECT_EQ(rd->get_obj_attrs(null_yield, env->dpp), 0);
 
+      /* a write does not:  the bucket is converting, and no client
+       * writes to it until it is adopted (DECISIONS.md 2026-11-02);
+       * InvalidBucketState, there being no queue to adopt it */
       auto wr = bucket->get_object(rgw_obj_key("gated.bin"));
       EXPECT_EQ(wr->load_obj_state(env->dpp, null_yield), 0);
       Attrs a;
       bufferlist v;
       v.append("text/html");
       a[RGW_ATTR_CONTENT_TYPE] = v;
+      EXPECT_EQ(wr->set_obj_attrs(env->dpp, &a, nullptr, null_yield,
+				  rgw::sal::FLAG_LOG_OP, rgw_user()),
+		-ERR_INVALID_BUCKET_STATE);
       return 0;
     };
 
@@ -10984,6 +11855,13 @@ TEST_F(NSFSUpgradeTest, HoldsOffMutationsAndNotReads)
 			      rgw::sal::FLAG_LOG_OP, rgw_user()), 0);
 }
 
+/* A stopped conversion reopens the gate, and a client write is still
+ * refused until the resumed walk finishes (DECISIONS.md 2026-11-02).
+ *
+ * The bucket stays marked and half-converted, which it is read in;  the
+ * gate is the walk's and goes with it, so nothing stale holds a
+ * resumption off.  What refuses the write is that the bucket is not
+ * adopted.  Resumed and finished, the same write is taken. */
 TEST_F(NSFSUpgradeTest, AStoppedConversionReopensTheGate)
 {
   nb_object("a.bin", "text/plain");
@@ -11005,6 +11883,12 @@ TEST_F(NSFSUpgradeTest, AStoppedConversionReopensTheGate)
   bufferlist v;
   v.append("text/html");
   a[RGW_ATTR_CONTENT_TYPE] = v;
+  EXPECT_EQ(wr->set_obj_attrs(env->dpp, &a, nullptr, null_yield,
+			      rgw::sal::FLAG_LOG_OP, rgw_user()),
+	    -ERR_INVALID_BUCKET_STATE);
+
+  ASSERT_EQ(b->convert_tree(env->dpp, null_yield, nullptr, nullptr), 0);
+  ASSERT_FALSE(b->is_converting());
   EXPECT_EQ(wr->set_obj_attrs(env->dpp, &a, nullptr, null_yield,
 			      rgw::sal::FLAG_LOG_OP, rgw_user()), 0);
 }
@@ -11433,12 +12317,849 @@ TEST_P(NSFSFormatTest, MultipartShortFinalPart)
   EXPECT_EQ(read_all(obj), expected);
 }
 
+INSTANTIATE_TEST_SUITE_P(
+    Formats, NSFSFormatTest,
+    ::testing::Values(
+	FormatCase{"rgw", true, nsfs::EXTENSIONS_STRONG, "rgw",
+		   make_nsfs_tree},
+	FormatCase{"rgwstrided", false, nsfs::EXTENSIONS_STRONG,
+		   "rgw-strided", make_nsfs_tree}),
+    [](const ::testing::TestParamInfo<FormatCase>& i) {
       return std::string(i.param.label);
     });
 
 
+/* ------------------------------------------------------------------ *
+ * I1 -- reading NooBaa's configuration store.
+ *
+ * The records below are **verbatim what NooBaa's CLI and gateway wrote**,
+ * copied out of a store stood up at noobaa-core 08d063f86 by the
+ * stand-up driver, now `src/test/rgw/adoption/standup.rs`.  That matters:  every earlier
+ * control in the import work was composed from a reading of NooBaa's
+ * schema, so it demonstrated that we read what we *believe* they
+ * write.  These are NooBaa's bytes.  The directory is the test's, the
+ * content is not.
+ * ------------------------------------------------------------------ */
+
+/* A root account with credentials.  Eight required fields and nothing
+ * optional, which is what `account add` with no extra flags produces. */
+static constexpr const char* NB_ACCOUNT_PLAIN = R"({
+  "_id": "6ac7cb27fd4af356919110a3",
+  "name": "interchange",
+  "email": "interchange",
+  "creation_date": "2026-10-08T16:56:07.864Z",
+  "access_keys": [
+    {
+      "access_key": "INTERCHANGEACCESSKEY",
+      "encrypted_secret_key": "AlSvZsxnqaN+QX3A/wUwFB0kJwM01TDOXKmNFnV51FijvRm3nJgdKQ=="
+    }
+  ],
+  "nsfs_account_config": {
+    "uid": 1000,
+    "gid": 1000,
+    "new_buckets_path": "/lv2tb/nsfs-interchange/data/root"
+  },
+  "allow_bucket_creation": true,
+  "master_key_id": "6ac7cb2751b72219a4bae375"
+})";
+
+/* The same, plus the two optional fields that change behaviour:  an
+ * explicit supplemental group list, and force_md5_etag. */
+static constexpr const char* NB_ACCOUNT_GROUPS = R"({
+  "_id": "6ac7d2121e63a748e37663e0",
+  "name": "ix-groups",
+  "email": "ix-groups",
+  "creation_date": "2026-10-08T17:25:38.981Z",
+  "access_keys": [
+    {
+      "access_key": "IXGROUPSACCESSKEY001",
+      "encrypted_secret_key": "DEi0ds53sqdzVH3H8QM7FhsgNwouyCHIXK+RHH5n1lmpqxuhm5YbIg=="
+    }
+  ],
+  "force_md5_etag": true,
+  "nsfs_account_config": {
+    "uid": 1000,
+    "gid": 1000,
+    "new_buckets_path": "/lv2tb/nsfs-interchange/data/root",
+    "supplemental_groups": [1000, 4, 27]
+  },
+  "allow_bucket_creation": true,
+  "master_key_id": "6ac7cb2751b72219a4bae375"
+})";
+
+/* The anonymous account, `account add --anonymous`.  Note what it is
+ * and is not:  an empty key list, no new_buckets_path, bucket creation
+ * off -- and it still carries a master_key_id. */
+static constexpr const char* NB_ACCOUNT_ANONYMOUS = R"({
+  "_id": "6ac7d213cac521f05aac9fb4",
+  "name": "anonymous",
+  "email": "anonymous",
+  "creation_date": "2026-10-08T17:25:39.650Z",
+  "access_keys": [],
+  "nsfs_account_config": {
+    "uid": 65534,
+    "gid": 65534
+  },
+  "allow_bucket_creation": false,
+  "master_key_id": "6ac7cb2751b72219a4bae375"
+})";
+
+/* A `CreateRole` role as noobaa-core `6db404dad` writes one
+ * (`_new_role_defaults`, then PutRolePolicy), trusting `principal`. */
+static std::string nb_role(const std::string& id, const std::string& owner,
+			   const std::string& name,
+			   const std::string& principal)
+{
+  return R"({"_id":")" + id + R"(","name":")" + name + R"(","email":")" +
+    name + R"(","identity_type":"ROLE","owner":")" + owner +
+    R"(","iam_path":"/eng/","creation_date":"2026-08-25T10:00:00.000Z",)"
+    R"("description":"reads the reports","max_session_duration":7200,)"
+    R"("assume_role_policy_document":{"Version":"2012-10-17","Statement":[)"
+    R"({"Effect":"Allow","Principal":{"AWS":[")" + principal + R"("]},)"
+    R"("Action":["sts:AssumeRole"]}]},)"
+    R"("nsfs_account_config":{"uid":1000,"gid":1000},)"
+    R"("iam_inline_policies":[{"policy_name":"reports","policy_document":)"
+    R"({"Version":"2012-10-17","Statement":[{"Effect":"Allow",)"
+    R"("Action":["s3:GetObject"],"Resource":["arn:aws:s3:::reports/*"]}]}}]})";
+}
+
+class NooBaaStoreTest : public NSFSDriverTest {
+protected:
+  std::string store;
+
+public:
+  void SetUp() {
+    NSFSDriverTest::SetUp();
+    store = (bp / "noobaa.conf.d").string();
+    std::filesystem::create_directories(store + "/identities");
+    std::filesystem::create_directories(store + "/buckets");
+  }
+
+  void write_file(const std::string& path, const std::string& text) {
+    std::filesystem::create_directories(
+	std::filesystem::path(path).parent_path());
+    int fd = ::open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
+    ASSERT_GE(fd, 0) << path << ": " << cpp_strerror(errno);
+    ASSERT_EQ(::write(fd, text.data(), text.size()),
+	      static_cast<ssize_t>(text.size()));
+    ::close(fd);
+  }
+
+  /* NooBaa's layout:  a directory per identity holding identity.json, not
+   * a file per identity.  Read off a store NooBaa's CLI wrote. */
+  void add_identity(const std::string& id, const char* record) {
+    write_file(store + "/identities/" + id + "/identity.json", record);
+  }
+
+  void add_bucket(const std::string& name, const std::string& record) {
+    write_file(store + "/buckets/" + name + ".json", record);
+  }
+
+  /* A role's record and, when `link`, the symlink by which NooBaa
+   * finds it by name (`config_fs.js` create_role_config_file). */
+  void add_role(const std::string& id, const std::string& owner,
+		const std::string& name, const std::string& record,
+		bool link = true) {
+    add_identity(id, record.c_str());
+    if (link) {
+      const std::string roles = store + "/identities/" + owner + "/roles";
+      std::filesystem::create_directories(roles);
+      std::filesystem::create_symlink("../../" + id + "/identity.json",
+				      roles + "/" + name + ".symlink");
+    }
+  }
+
+  nsfs::NooBaaStoreContents read_store() {
+    nsfs::NooBaaConfigStore cs(store);
+    nsfs::NooBaaStoreContents out;
+    EXPECT_EQ(cs.read(env->dpp, out), 0);
+    return out;
+  }
+
+  const nsfs::NooBaaIdentity* by_name(const nsfs::NooBaaStoreContents& c,
+				      const std::string& name) {
+    for (const auto& i : c.identities) {
+      if (i.name == name) {
+	return &i;
+      }
+    }
+    return nullptr;
+  }
+};
+
+/* The three records NooBaa's CLI wrote, read back whole.
+ *
+ * One test over all three rather than one each, because the thing
+ * being established is that a store reads as a store. */
 TEST_F(NooBaaStoreTest, AStoreNooBaaToolsWroteReadsBack)
 {
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  add_identity("6ac7d2121e63a748e37663e0", NB_ACCOUNT_GROUPS);
+  add_identity("6ac7d213cac521f05aac9fb4", NB_ACCOUNT_ANONYMOUS);
+  add_bucket("a-bucket", R"({"_id":"1","name":"a-bucket","versioning":"ENABLED"})");
+  write_file(store + "/master_keys.json", R"({"active_master_key":"x"})");
+
+  auto c = read_store();
+  EXPECT_TRUE(c.unreadable.empty()) << c.unreadable[0].path << ": "
+				    << c.unreadable[0].why;
+  EXPECT_EQ(c.identities.size(), 3u);
+  EXPECT_EQ(c.accounts(), 3u);
+  EXPECT_EQ(c.iam_users(), 0u);
+  EXPECT_EQ(c.buckets.size(), 1u);
+  EXPECT_EQ(c.buckets[0].name, "a-bucket");
+  EXPECT_TRUE(c.master_keys_present);
+
+  const auto* plain = by_name(c, "interchange");
+  ASSERT_NE(plain, nullptr);
+  EXPECT_EQ(plain->id, "6ac7cb27fd4af356919110a3");
+  /* NooBaa's email is a copy of the name, which is I3's likeliest
+   * collision against RGW's cross-account email uniqueness */
+  EXPECT_EQ(plain->email, "interchange");
+  EXPECT_EQ(plain->master_key_id, "6ac7cb2751b72219a4bae375");
+  EXPECT_TRUE(plain->allow_bucket_creation);
+  ASSERT_EQ(plain->access_keys.size(), 1u);
+  EXPECT_EQ(plain->access_keys[0].access_key, "INTERCHANGEACCESSKEY");
+  /* the secret is still NooBaa's, encrypted -- decrypting is I2 */
+  EXPECT_EQ(plain->access_keys[0].encrypted_secret_key,
+	    "AlSvZsxnqaN+QX3A/wUwFB0kJwM01TDOXKmNFnV51FijvRm3nJgdKQ==");
+  EXPECT_EQ(plain->posix.kind, nsfs::NooBaaPosixConfig::Kind::Ids);
+  EXPECT_EQ(plain->posix.uid, 1000);
+  EXPECT_EQ(plain->posix.gid, 1000);
+  EXPECT_EQ(plain->posix.new_buckets_path,
+	    "/lv2tb/nsfs-interchange/data/root");
+  EXPECT_FALSE(plain->have_force_md5_etag);
+  EXPECT_FALSE(plain->posix.have_supplemental_groups);
+  EXPECT_FALSE(plain->is_anonymous());
+  EXPECT_FALSE(plain->is_iam_user());
+
+  const auto* groups = by_name(c, "ix-groups");
+  ASSERT_NE(groups, nullptr);
+  EXPECT_TRUE(groups->have_force_md5_etag);
+  EXPECT_TRUE(groups->force_md5_etag);
+  ASSERT_TRUE(groups->posix.have_supplemental_groups);
+  EXPECT_EQ(groups->posix.supplemental_groups,
+	    (std::vector<int64_t>{1000, 4, 27}));
+
+  const auto* anon = by_name(c, "anonymous");
+  ASSERT_NE(anon, nullptr);
+  EXPECT_TRUE(anon->is_anonymous());
+  EXPECT_TRUE(anon->access_keys.empty());
+  EXPECT_FALSE(anon->allow_bucket_creation);
+  EXPECT_TRUE(anon->posix.new_buckets_path.empty());
+  EXPECT_EQ(anon->posix.uid, 65534);
+  /* it carries one even with no secret to protect */
+  EXPECT_FALSE(anon->master_key_id.empty());
+}
+
+/* A record that will not parse is reported, and the rest are still
+ * read.
+ *
+ * The failure mode this exists for:  an import that discovered its
+ * third bad record after writing two accounts leaves a state nobody
+ * asked for.  So the read must report everything wrong with a store in
+ * one pass.
+ *
+ * Both polarities, and the negative case is reachable:  a reader that
+ * stopped at the first bad record would return fewer than two good
+ * identities, and a reader that ignored bad records would report none
+ * unreadable. */
+TEST_F(NooBaaStoreTest, EveryUnreadableRecordIsReportedAndTheRestAreRead)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  add_identity("aaaaaaaaaaaaaaaaaaaaaaaa", "{ this is not json");
+  add_identity("6ac7d2121e63a748e37663e0", NB_ACCOUNT_GROUPS);
+  /* right shape, wrong type:  JSONDecoder throws rather than the
+   * parser failing, which is a different path through the reader */
+  add_identity("bbbbbbbbbbbbbbbbbbbbbbbb",
+	       R"({"_id":"b","name":"n","nsfs_account_config":{"uid":"ten","gid":1}})");
+  /* no identifier:  parses, and cannot be imported */
+  add_identity("cccccccccccccccccccccccc", R"({"name":"no-id"})");
+  add_bucket("good", R"({"_id":"1","name":"good"})");
+  add_bucket("bad", "}{");
+
+  auto c = read_store();
+  EXPECT_EQ(c.identities.size(), 2u)
+      << "a bad record stopped the traversal";
+  EXPECT_EQ(c.unreadable.size(), 4u) << [&] {
+    std::string s;
+    for (const auto& u : c.unreadable) {
+      s += "\n  " + u.path + ": " + u.why;
+    }
+    return s;
+  }();
+  EXPECT_EQ(c.buckets.size(), 1u);
+  EXPECT_EQ(c.buckets[0].name, "good");
+
+  /* each complaint names the file, which is what makes a preflight
+   * report actionable rather than a count */
+  for (const auto& u : c.unreadable) {
+    EXPECT_FALSE(u.path.empty());
+    EXPECT_FALSE(u.why.empty());
+  }
+}
+
+/* I10:  connections/<name>.json, as `noobaa-cli connection add` writes
+ * them.  The three objects are kept as JSON text and `auth` is lifted
+ * out of the request object;  a lock file and NooBaa's temp entry,
+ * which have no `.json` suffix, are not records;  a file whose object
+ * member is not an object is reported, and the others are read. */
+TEST_F(NooBaaStoreTest, ConnectionsAreReadAndAnUnreadableOneReported)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  write_file(store + "/connections/hook.json",
+	     R"({"name":"hook","notification_protocol":"http","master_key_id":"k1",
+	       "agent_request_object":{"host":"127.0.0.1","port":9101},
+	       "request_options_object":{"path":"/","auth":"ENCRYPTED"}})");
+  write_file(store + "/connections/broker.json",
+	     R"({"name":"broker","notification_protocol":"kafka","topic":"events",
+	       "kafka_options_object":{"metadata.broker.list":"k:9092"}})");
+  write_file(store + "/connections/hook.json.lock", "");
+  write_file(store + "/connections/.noobaa-config-nsfs_x/tmp", "{");
+  write_file(store + "/connections/broken.json",
+	     R"({"notification_protocol":"http","agent_request_object":"host"})");
+
+  auto c = read_store();
+  ASSERT_EQ(c.connections.size(), 2u);
+  const auto& broker = c.connections[0];
+  const auto& hook = c.connections[1];
+  EXPECT_EQ(broker.name, "broker");
+  EXPECT_EQ(broker.topic, "events");
+  EXPECT_NE(broker.kafka_options_object.find("metadata.broker.list"), std::string::npos);
+  EXPECT_EQ(hook.name, "hook");
+  EXPECT_EQ(hook.notification_protocol, "http");
+  EXPECT_EQ(hook.master_key_id, "k1");
+  EXPECT_EQ(hook.auth, "ENCRYPTED") << "auth is decrypted by I2, not here";
+  EXPECT_NE(hook.agent_request_object.find("9101"), std::string::npos);
+
+  ASSERT_EQ(c.unreadable.size(), 1u);
+  EXPECT_NE(c.unreadable[0].path.find("broken.json"), std::string::npos);
+}
+
+/* An absent supplemental group list is not an empty one.
+ *
+ * §2.4:  an explicit list overrides the directory entirely, and with
+ * no list and no dynamic resolution there are *no* supplementary
+ * groups at all.  Violating this one grants access, so the reader has
+ * to distinguish "no list" from "an empty list" -- which a bare
+ * vector cannot. */
+TEST_F(NooBaaStoreTest, AnAbsentGroupListIsNotAnEmptyOne)
+{
+  add_identity("a", NB_ACCOUNT_PLAIN);
+  add_identity("b", R"({"_id":"b","name":"empty-list",
+    "nsfs_account_config":{"uid":1,"gid":1,"supplemental_groups":[]}})");
+
+  auto c = read_store();
+  ASSERT_EQ(c.identities.size(), 2u);
+
+  const auto* absent = by_name(c, "interchange");
+  ASSERT_NE(absent, nullptr);
+  EXPECT_FALSE(absent->posix.have_supplemental_groups);
+  EXPECT_TRUE(absent->posix.supplemental_groups.empty());
+
+  const auto* empty = by_name(c, "empty-list");
+  ASSERT_NE(empty, nullptr);
+  EXPECT_TRUE(empty->posix.have_supplemental_groups)
+      << "an explicit empty list read as no list at all";
+  EXPECT_TRUE(empty->posix.supplemental_groups.empty());
+}
+
+/* A missing config.json is not a stored false.
+ *
+ * NSFS_ENABLE_DYNAMIC_SUPPLEMENTAL_GROUPS defaults to false in NooBaa's
+ * config.js, and false is a live permission fact:  with it off, a
+ * directory-backed identity carrying no list runs with zero
+ * supplementary groups.  So "the file did not say" and "the file said
+ * false" must not arrive as the same value -- §2.5 point 4 is that
+ * the value travels with the deployment. */
+TEST_F(NooBaaStoreTest, AMissingSettingIsNotAStoredFalse)
+{
+  add_identity("a", NB_ACCOUNT_PLAIN);
+
+  auto absent = read_store();
+  EXPECT_FALSE(absent.settings.have_config_json);
+  EXPECT_FALSE(absent.settings.have_dynamic_supplemental_groups);
+  EXPECT_FALSE(absent.settings.dynamic_supplemental_groups);
+
+  write_file(store + "/config.json",
+	     R"({"NSFS_ENABLE_DYNAMIC_SUPPLEMENTAL_GROUPS": false})");
+  auto stored_false = read_store();
+  EXPECT_TRUE(stored_false.settings.have_config_json);
+  EXPECT_TRUE(stored_false.settings.have_dynamic_supplemental_groups)
+      << "a stored false is indistinguishable from the file being absent";
+  EXPECT_FALSE(stored_false.settings.dynamic_supplemental_groups);
+
+  write_file(store + "/config.json",
+	     R"({"NSFS_ENABLE_DYNAMIC_SUPPLEMENTAL_GROUPS": true})");
+  auto stored_true = read_store();
+  EXPECT_TRUE(stored_true.settings.have_dynamic_supplemental_groups);
+  EXPECT_TRUE(stored_true.settings.dynamic_supplemental_groups);
+
+  /* a config.json that exists and does not mention it */
+  write_file(store + "/config.json", R"({"ALLOW_HTTP": true})");
+  auto silent = read_store();
+  EXPECT_TRUE(silent.settings.have_config_json);
+  EXPECT_FALSE(silent.settings.have_dynamic_supplemental_groups);
+}
+
+/* uid-and-gid and distinguished_name are different identities.
+ *
+ * NooBaa's schema is a `oneOf` and the two resolve groups differently
+ * (§2.3), so flattening both into an optional uid would lose which
+ * one a record was. */
+TEST_F(NooBaaStoreTest, ADistinguishedNameIdentityIsNotAUidOne)
+{
+  add_identity("a", NB_ACCOUNT_PLAIN);
+  add_identity("b", R"({"_id":"b","name":"dn-backed",
+    "nsfs_account_config":{"distinguished_name":"uid=jo,ou=people,dc=x"}})");
+  add_identity("c", R"({"_id":"c","name":"no-posix-config"})");
+
+  auto c = read_store();
+  ASSERT_EQ(c.identities.size(), 3u);
+
+  EXPECT_EQ(by_name(c, "interchange")->posix.kind,
+	    nsfs::NooBaaPosixConfig::Kind::Ids);
+
+  const auto* dn = by_name(c, "dn-backed");
+  ASSERT_NE(dn, nullptr);
+  EXPECT_EQ(dn->posix.kind, nsfs::NooBaaPosixConfig::Kind::DistinguishedName);
+  EXPECT_EQ(dn->posix.distinguished_name, "uid=jo,ou=people,dc=x");
+  EXPECT_EQ(dn->posix.uid, -1) << "a dn identity was given a uid";
+
+  EXPECT_EQ(by_name(c, "no-posix-config")->posix.kind,
+	    nsfs::NooBaaPosixConfig::Kind::Unset);
+}
+
+/* An IAM user is the one with an owner, and a role is the one with a
+ * trust policy.
+ *
+ * One schema serves accounts, IAM users and roles, so the reader has
+ * to tell them apart from the record rather than from where it sat
+ * (§2.8).  The trust policy is kept as text:  translating it is I4. */
+TEST_F(NooBaaStoreTest, AnIamUserIsTheOneWithAnOwner)
+{
+  add_identity("a", NB_ACCOUNT_PLAIN);
+  add_identity("b", R"({"_id":"b","name":"a-user","email":"u@x",
+    "owner":"6ac7cb27fd4af356919110a3","creator":"6ac7cb27fd4af356919110a3",
+    "iam_path":"/eng/"})");
+  /* role_config as NooBaa writes it at the pin:  the CLI's own example
+   * (`manage_nsfs_help_utils.js:148`), with this test's names */
+  add_identity("c", R"({"_id":"c","name":"a-role",
+    "role_config":{"role_name":"r","assume_role_policy":{
+      "statement":[{"effect":"allow","action":["sts:AssumeRole"],
+      "principal":["u@x"]}]}}})");
+
+  auto c = read_store();
+  ASSERT_EQ(c.identities.size(), 3u);
+  EXPECT_EQ(c.accounts(), 2u);
+  EXPECT_EQ(c.iam_users(), 1u);
+
+  const auto* user = by_name(c, "a-user");
+  ASSERT_NE(user, nullptr);
+  EXPECT_TRUE(user->is_iam_user());
+  EXPECT_EQ(user->owner, "6ac7cb27fd4af356919110a3");
+  EXPECT_EQ(user->iam_path, "/eng/");
+
+  const auto* role = by_name(c, "a-role");
+  ASSERT_NE(role, nullptr);
+  EXPECT_FALSE(role->is_iam_user());
+  EXPECT_FALSE(role->role_config.empty())
+      << "the trust policy was dropped";
+  EXPECT_NE(role->role_config.find("sts:AssumeRole"), std::string::npos);
+}
+
+/* A store that is not there, and one that is not a directory.
+ *
+ * Distinguished, because they mean different things to an operator:
+ * one is a path that was never created, the other is a path that names
+ * something else. */
+TEST_F(NooBaaStoreTest, ADirectoryThatIsNotAStoreIsRejected)
+{
+  nsfs::NooBaaStoreContents out;
+
+  nsfs::NooBaaConfigStore missing((bp / "nowhere").string());
+  EXPECT_EQ(missing.read(env->dpp, out), -ENOENT);
+
+  const std::string file = (bp / "a-file").string();
+  write_file(file, "{}");
+  nsfs::NooBaaConfigStore notdir(file);
+  EXPECT_EQ(notdir.read(env->dpp, out), -ENOTDIR);
+
+  nsfs::NooBaaConfigStore nowhere("");
+  EXPECT_EQ(nowhere.read(env->dpp, out), -ENOENT);
+}
+
+/* A directory with no identities is reported rather than read as
+ * empty.
+ *
+ * An import with nothing to import is almost certainly pointed at the
+ * wrong directory, and saying so costs one line.  NooBaa's lock files
+ * sitting beside the bucket records are not records and must not be
+ * counted as unreadable ones. */
+TEST_F(NooBaaStoreTest, AStoreWithNoIdentitiesSaysSo)
+{
+  std::filesystem::remove_all(store + "/identities");
+  add_bucket("b", R"({"_id":"1","name":"b"})");
+  write_file(store + "/buckets/b.json.lock", "");
+
+  auto c = read_store();
+  EXPECT_TRUE(c.identities.empty());
+  ASSERT_EQ(c.unreadable.size(), 1u);
+  EXPECT_NE(c.unreadable[0].why.find("identities"), std::string::npos);
+  EXPECT_EQ(c.buckets.size(), 1u) << "a lock file was read as a record";
+}
+
+/* The version gate admits a store only a verified NooBaa wrote, and
+ * only while no upgrade of it runs.
+ *
+ * Each case is NooBaa's `system.json` with one documented change:  a
+ * host, or the package, at a later release;  a second host at a later
+ * one, which is what a cluster upgraded part way looks like;  the
+ * phase an upgrade of the store sets (`_update_config_dir_upgrade_start()`
+ * in nc_upgrade_manager.js);  no `config_directory`, as a store from
+ * before NooBaa recorded one has;  and no `system.json`, or one that
+ * does not parse.  The first case is the control. */
+TEST_F(NooBaaStoreTest, TheVersionGateAdmitsOnlyAVerifiedUnlockedStore)
+{
+  auto changed = [](std::string doc, const std::string& from,
+		    const std::string& to) {
+    const auto at = doc.find(from);
+    EXPECT_NE(at, std::string::npos) << from;
+    return doc.replace(at, from.size(), to);
+  };
+  const std::string sys = NB_SYSTEM_JSON;
+
+  struct Case {
+    const char* what;
+    std::optional<std::string> doc;
+    /* empty:  admitted */
+    std::string expect;
+  };
+  const std::vector<Case> cases = {
+    {"as NooBaa wrote it", sys, ""},
+    {"a later host",
+     changed(sys, R"("current_version":"5.23.0")",
+	     R"("current_version":"5.24.0")"),
+     "host fedora.private runs NooBaa 5.24.0"},
+    {"a second host, later",
+     changed(sys, R"({"fedora.private")",
+	     R"({"other.host":{"current_version":"5.24.0"},"fedora.private")"),
+     "host other.host runs NooBaa 5.24.0"},
+    {"a later package",
+     changed(sys, R"("upgrade_package_version":"5.23.0")",
+	     R"("upgrade_package_version":"5.24.0")"),
+     "upgrade_package_version is 5.24.0"},
+    {"an upgrade running",
+     changed(sys, "CONFIG_DIR_UNLOCKED", "CONFIG_DIR_LOCKED"),
+     "phase is CONFIG_DIR_LOCKED"},
+    {"no config_directory",
+     sys.substr(0, sys.find(R"(,"config_directory")")) + "}",
+     "no config_directory"},
+    {"no system.json", std::nullopt, "no readable system.json"},
+    {"not JSON", std::string("{ not json"), "no readable system.json"},
+  };
+
+  for (const auto& tc : cases) {
+    SCOPED_TRACE(tc.what);
+    std::filesystem::remove(store + "/system.json");
+    if (tc.doc) {
+      write_file(store + "/system.json", *tc.doc);
+    }
+    auto c = read_store();
+    const auto skew = c.version_skew();
+    std::string all;
+    for (const auto& s : skew) {
+      all += "\n  " + s;
+    }
+    if (tc.expect.empty()) {
+      EXPECT_TRUE(skew.empty()) << all;
+      continue;
+    }
+    ASSERT_FALSE(skew.empty()) << "admitted";
+    EXPECT_NE(all.find(tc.expect), std::string::npos) << all;
+  }
+}
+
+/* A record holding a field NooBaa does not write is not read (X4's
+ * second layer).
+ *
+ * Each refused case is NooBaa's bytes with one documented change, and
+ * each is one NooBaa's own validator at the pin refuses too
+ * (`nsfs_schema_utils.js` `validate_account_schema()` and
+ * `validate_bucket_schema()`, run against the same records):  a field at
+ * the top, one inside `nsfs_account_config`, a group list on the
+ * directory-backed form, which only the uid form carries, a field inside
+ * a lifecycle rule, a key inside a policy statement, and a principal
+ * in a namespace other than `AWS`, which NooBaa's schema has no form
+ * for.  The accepted cases are the controls:  NooBaa's own records, the
+ * uid form with groups, and a principal's string form with a
+ * condition's open map, which NooBaa's validator accepts as well. */
+TEST_F(NooBaaStoreTest, ARecordHoldingAFieldNooBaaDoesNotWriteIsNotRead)
+{
+  auto changed = [](std::string doc, const std::string& from,
+		    const std::string& to) {
+    const auto at = doc.find(from);
+    EXPECT_NE(at, std::string::npos) << from;
+    return doc.replace(at, from.size(), to);
+  };
+  const std::string plain = NB_ACCOUNT_PLAIN;
+  const std::string bucket =
+    R"({"_id":"1","name":"b","owner_account":"2","versioning":"ENABLED",)"
+    R"("path":"/x","should_create_underlying_storage":true,)"
+    R"("creation_date":"2026-01-02T03:04:05.000Z"})";
+  auto with = [&](const std::string& extra) {
+    return bucket.substr(0, bucket.size() - 1) + "," + extra + "}";
+  };
+
+  struct Case {
+    const char* what;
+    bool is_bucket;
+    std::string doc;
+    /* empty:  read */
+    std::string expect;
+  };
+  const std::vector<Case> cases = {
+    {"an account as NooBaa wrote it", false, plain, ""},
+    {"a group list on the uid form", false, NB_ACCOUNT_GROUPS, ""},
+    {"a field at the top", false,
+     changed(plain, R"("_id")", R"("new_field":1,"_id")"),
+     ".new_field is not a field NooBaa writes"},
+    {"a field in nsfs_account_config", false,
+     changed(plain, R"("nsfs_account_config": {)",
+	     R"("nsfs_account_config": {"new_field":1,)"),
+     ".nsfs_account_config.new_field is not a field"},
+    {"a group list on the directory-backed form", false,
+     changed(changed(plain, R"("uid": 1000,)", ""), R"("gid": 1000)",
+	     R"("distinguished_name":"cn=x","supplemental_groups":[4])"),
+     ".nsfs_account_config matches none of the forms"},
+    {"a bucket as NooBaa wrote it", true, bucket, ""},
+    {"a field in a lifecycle rule", true,
+     with(R"("lifecycle_configuration_rules":[{"id":"r","status":"Enabled",)"
+	  R"("filter":{"prefix":""},"expiration":{"days":1},"new_field":1}])"),
+     ".lifecycle_configuration_rules[0].new_field is not a field"},
+    {"a key in a policy statement", true,
+     with(R"("s3_policy":{"Version":"2012-10-17","Statement":[{"Effect":)"
+	  R"("Allow","Principal":{"AWS":["*"]},"Action":["s3:*"],)"
+	  R"("Resource":["*"],"Foo":1}]})"),
+     ".s3_policy.Statement[0].Foo is not a field"},
+    {"a principal's string form and a condition's map", true,
+     with(R"("s3_policy":{"Version":"2012-10-17","Statement":[{"Effect":)"
+	  R"("Allow","Principal":"*","Action":"s3:*",)"
+	  R"("Resource":"*","Condition":{"StringEquals":{"aws:any":"v"}}}]})"),
+     ""},
+    {"a principal naming a namespace other than AWS", true,
+     with(R"("s3_policy":{"Version":"2012-10-17","Statement":[{"Effect":)"
+	  R"("Allow","Principal":{"Service":"x"},"Action":"s3:*",)"
+	  R"("Resource":"*"}]})"),
+     ".Principal matches none of the forms"},
+  };
+
+  for (const auto& tc : cases) {
+    SCOPED_TRACE(tc.what);
+    std::filesystem::remove_all(store + "/identities");
+    std::filesystem::remove_all(store + "/buckets");
+    std::filesystem::create_directories(store + "/identities");
+    std::filesystem::create_directories(store + "/buckets");
+    if (tc.is_bucket) {
+      add_bucket("b", tc.doc);
+    } else {
+      add_identity("i", tc.doc.c_str());
+    }
+    auto c = read_store();
+    std::string all;
+    for (const auto& u : c.unreadable) {
+      if (u.why != "no identities directory") {
+	all += "\n  " + u.path + ": " + u.why;
+      }
+    }
+    if (tc.expect.empty()) {
+      EXPECT_TRUE(all.empty()) << all;
+      EXPECT_EQ(tc.is_bucket ? c.buckets.size() : c.identities.size(), 1u);
+      continue;
+    }
+    EXPECT_NE(all.find(tc.expect), std::string::npos) << all;
+    EXPECT_EQ(tc.is_bucket ? c.buckets.size() : c.identities.size(), 0u)
+	<< "a record holding an unknown field was read";
+  }
+}
+
+/* A `CreateRole` role is read as a role, not an identity, with its
+ * fields, its policies, and whether NooBaa reaches it by name. */
+TEST_F(NooBaaStoreTest, ACreateRoleRoleIsReadAsARole)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  add_role("r1", "6ac7cb27fd4af356919110a3", "reader",
+	   nb_role("r1", "6ac7cb27fd4af356919110a3", "reader", "interchange"));
+  add_role("r2", "6ac7cb27fd4af356919110a3", "reader",
+	   nb_role("r2", "6ac7cb27fd4af356919110a3", "reader", "interchange"),
+	   false);
+  auto c = read_store();
+  EXPECT_TRUE(c.unreadable.empty())
+      << c.unreadable.front().path << ": " << c.unreadable.front().why;
+  EXPECT_EQ(c.identities.size(), 1u) << "a role was read as an identity";
+  ASSERT_EQ(c.roles.size(), 2u);
+  const auto& r = c.roles[0];
+  EXPECT_EQ(r.id, "r1");
+  EXPECT_EQ(r.name, "reader");
+  EXPECT_EQ(r.owner, "6ac7cb27fd4af356919110a3");
+  EXPECT_EQ(r.iam_path, "/eng/");
+  EXPECT_EQ(r.description, "reads the reports");
+  EXPECT_EQ(r.max_session_duration, 7200u);
+  EXPECT_NE(r.assume_role_policy_document.find("interchange"),
+	    std::string::npos) << r.assume_role_policy_document;
+  ASSERT_EQ(r.inline_policies.size(), 1u);
+  EXPECT_EQ(r.inline_policies[0].first, "reports");
+  EXPECT_NE(r.inline_policies[0].second.find("arn:aws:s3:::reports/*"),
+	    std::string::npos) << r.inline_policies[0].second;
+  EXPECT_TRUE(r.linked);
+  EXPECT_FALSE(c.roles[1].linked)
+      << "a record the symlink does not name was reached by name";
+}
+
+/* A role is held to the role structure:  a field it does not write, a
+ * statement key NooBaa's trust schema forbids, and NooBaa's earlier
+ * `type: "role"` shape are each unreadable (DECISIONS.md 2026-10-30,
+ * amended 2026-11-02). */
+TEST_F(NooBaaStoreTest, ARoleRecordIsHeldToTheRoleShape)
+{
+  const std::string role =
+    nb_role("r1", "6ac7cb27fd4af356919110a3", "reader", "interchange");
+  auto changed = [&](const std::string& from, const std::string& to) {
+    std::string doc = role;
+    const auto at = doc.find(from);
+    EXPECT_NE(at, std::string::npos) << from;
+    return doc.replace(at, from.size(), to);
+  };
+  struct Case {
+    const char* what;
+    std::string doc;
+    std::string expect;
+  };
+  const std::vector<Case> cases = {
+    {"a field at the top", changed(R"("_id")", R"("new_field":1,"_id")"),
+     ".new_field is not a field NooBaa writes"},
+    {"a NotPrincipal in the trust policy",
+     changed(R"("Principal":)", R"("NotPrincipal":)"),
+     "NotPrincipal is not a field NooBaa writes"},
+    {"an account's field on a role",
+     changed(R"("_id")", R"("access_keys":[],"_id")"),
+     ".access_keys is not a field NooBaa writes"},
+    {"the shape before 6db404dad",
+     changed(R"("identity_type":"ROLE")", R"("type":"role")"),
+     "before 6db404dad"},
+  };
+  for (const auto& tc : cases) {
+    SCOPED_TRACE(tc.what);
+    std::filesystem::remove_all(store + "/identities");
+    std::filesystem::create_directories(store + "/identities");
+    add_identity("r1", tc.doc.c_str());
+    auto c = read_store();
+    std::string all;
+    for (const auto& u : c.unreadable) {
+      all += "\n  " + u.path + ": " + u.why;
+    }
+    EXPECT_NE(all.find(tc.expect), std::string::npos) << all;
+    EXPECT_TRUE(c.roles.empty());
+    EXPECT_TRUE(c.identities.empty());
+  }
+}
+
+/* A deployment with NooBaa's schema check off can hold such a record at
+ * any release, and the refusal says so. */
+TEST_F(NooBaaStoreTest, ARefusalSaysWhenNooBaaSchemaCheckWasOff)
+{
+  std::string doc = NB_ACCOUNT_PLAIN;
+  doc.replace(doc.find(R"("_id")"), 5, R"("new_field":1,"_id")");
+  add_identity("i", doc.c_str());
+  write_file(store + "/config.json", R"({"NC_DISABLE_SCHEMA_CHECK":true})");
+
+  auto c = read_store();
+  EXPECT_TRUE(c.settings.schema_check_disabled);
+  ASSERT_EQ(c.unreadable.size(), 1u);
+  EXPECT_NE(c.unreadable[0].why.find("NC_DISABLE_SCHEMA_CHECK"),
+	    std::string::npos) << c.unreadable[0].why;
+}
+
+/* A field is known from the release that first writes it, as a Ceph
+ * decoder reads a field only from the struct version that added it.
+ *
+ * A tree of the test's own, since every field at the pin is 5.23.0's:  a
+ * field from 5.24.0 is unknown to a 5.23.0 store and known to a 5.24.0
+ * one, and a release that does not parse, or one before any review,
+ * reads as the newest or the oldest reviewed release. */
+TEST(NooBaaSchema, AFieldIsKnownFromTheReleaseThatWritesIt)
+{
+  namespace ns = rgw::sal::nsfs::noobaa_schema;
+  static constexpr ns::Node scalar{.kind = ns::Node::Kind::Scalar};
+  static constexpr ns::Field fields[] = {
+    {"old", "5.23.0", ns::Disposition::Translated, &scalar},
+    {"new", "5.24.0", ns::Disposition::NotCarried, &scalar},
+  };
+  static constexpr ns::Node tree{.kind = ns::Node::Kind::Object,
+				 .fields = fields};
+
+  JSONParser both, old_only;
+  const std::string b = R"({"old":1,"new":2})", o = R"({"old":1})";
+  ASSERT_TRUE(both.parse(b.data(), b.size()));
+  ASSERT_TRUE(old_only.parse(o.data(), o.size()));
+
+  EXPECT_EQ(ns::unknown_field(tree, &old_only, "5.23.0"), "");
+  EXPECT_EQ(ns::unknown_field(tree, &both, "5.23.0"),
+	    ".new is written from NooBaa 5.24.0");
+  EXPECT_EQ(ns::unknown_field(tree, &both, "5.24.0"), "");
+  EXPECT_EQ(ns::unknown_field(tree, &both, "5.24"),
+	    ".new is written from NooBaa 5.24.0")
+      << "a release that does not parse is not read as the newest reviewed "
+	 "one";
+  EXPECT_EQ(ns::unknown_field(tree, &old_only, "5.20.0"), "")
+      << "a release before the first review is not read as the oldest";
+}
+
+/* The schema tree accepts and refuses exactly what NooBaa's validator
+ * does, over records NooBaa wrote.
+ *
+ * `NSFS_NOOBAA_SCHEMA_CASES` names the file `standup.rs schema-agreement`
+ * writes:  every record in a store NooBaa stood up, and each with an
+ * unknown key planted at every object inside it, with whether NooBaa's
+ * validator at the pin refuses each (`schema-agreement.js`).  Skipped when unset,
+ * as the on-disk store tests are.  The tree is checked against NooBaa
+ * itself here, not against a reading of its schema files. */
+TEST(NooBaaSchema, AgreesWithNooBaasValidator)
+{
+  const char* file = ::getenv("NSFS_NOOBAA_SCHEMA_CASES");
+  if (!file || !*file) {
+    GTEST_SKIP() << "NSFS_NOOBAA_SCHEMA_CASES is unset;  see "
+		 << "src/test/rgw/adoption/standup.rs schema-agreement";
+  }
+  namespace ns = rgw::sal::nsfs::noobaa_schema;
+  std::ifstream in(file);
+  ASSERT_TRUE(in) << file;
+  size_t cases = 0;
+  std::string disagree;
+  for (std::string line; std::getline(in, line);) {
+    auto parts = ceph::split(line, "\t");
+    auto it = parts.begin();
+    std::vector<std::string> col;
+    for (; it != parts.end() && col.size() < 3; ++it) {
+      col.emplace_back(*it);
+    }
+    ASSERT_EQ(col.size(), 3u) << line;
+    const std::string json = line.substr(col[0].size() + col[1].size() +
+					 col[2].size() + 3);
+    JSONParser p;
+    ASSERT_TRUE(p.parse(json.data(), json.size())) << line;
+    const ns::Node& schema = (col[0] == "bucket") ? ns::bucket : ns::account;
+    const std::string why = ns::unknown_field(schema, &p, "5.23.0");
+    const bool noobaa_refused = (col[1] == "1");
+    if (!why.empty() != noobaa_refused) {
+      disagree += "\n  " + col[0] + " " + col[2] + ":  NooBaa " +
+	(noobaa_refused ? "refuses" : "accepts") + ", the tree " +
+	(why.empty() ? "accepts" : "refuses (" + why + ")") + ":  " + json;
+    }
+    ++cases;
+  }
+  EXPECT_GT(cases, 0u) << file << " holds no cases";
+  EXPECT_TRUE(disagree.empty()) << "they disagree on" << disagree;
+}
 
 /* The object attributes NooBaa writes at the pin are known, and nothing
  * else under `user.noobaa.` is.  Names outside it -- user metadata, nsfs's
@@ -11506,9 +13227,724 @@ TEST(NooBaaSchema, ObjectAttributesAgreeWithWhatNooBaaWrote)
       << "NooBaa wrote attributes the table does not know:" << unknown;
 }
 
+/* A store on disk, read without complaint.
+ *
+ * `NSFS_NOOBAA_STORE` names a real NooBaa configuration directory and
+ * this reads it.  Skipped when unset, the way the suite's other
+ * tests that need something stood up behave -- so it is a no-op
+ * everywhere except on a machine where
+ * `src/test/rgw/adoption/standup.rs` has run;  its `store-tests`
+ * step runs these four against its own store.
+ *
+ * The fixtures above are NooBaa's bytes but the test's layout.  This is
+ * the other way round, and it is what catches an assumption about the
+ * tree rather than about a record:  that identities are directories,
+ * that a `.json.lock` beside a record is not a record, that the
+ * symlink indexes are elsewhere. */
+TEST_F(NooBaaStoreTest, AStoreOnDiskReadsWithoutComplaint)
+{
+  const char* dir = ::getenv("NSFS_NOOBAA_STORE");
+  if (!dir || !*dir) {
+    GTEST_SKIP() << "NSFS_NOOBAA_STORE is unset;  see "
+		 << "src/test/rgw/adoption/standup.rs";
+  }
+
+  nsfs::NooBaaConfigStore cs(dir);
+  nsfs::NooBaaStoreContents c;
+  ASSERT_EQ(cs.read(env->dpp, c), 0);
+
+  std::string complaints;
+  for (const auto& u : c.unreadable) {
+    complaints += "\n  " + u.path + ": " + u.why;
+  }
+  EXPECT_TRUE(c.unreadable.empty()) << complaints;
+
+  /* and its NooBaa is the one adoption is verified against */
+  std::string skew;
+  for (const auto& s : c.version_skew()) {
+    skew += "\n  " + s;
+  }
+  EXPECT_TRUE(skew.empty()) << skew;
+
+  /* A store with no identities is not one an import can act on, and
+   * reading one as success would make this test vacuous. */
+  EXPECT_GT(c.identities.size(), 0u);
+  EXPECT_TRUE(c.master_keys_present)
+      << "no master_keys.json, so no secret could be decrypted";
+
+  for (const auto& i : c.identities) {
+    EXPECT_FALSE(i.id.empty());
+    EXPECT_FALSE(i.name.empty());
+    /* Every account at this pin has access_keys and master_key_id --
+     * eight required fields, and those two among them.  The anonymous
+     * account is the one with an empty key list, not a missing one. */
+    EXPECT_FALSE(i.master_key_id.empty()) << i.name;
+    if (!i.is_anonymous() && !i.is_iam_user()) {
+      EXPECT_FALSE(i.access_keys.empty()) << i.name;
+    }
+  }
+}
+
+
+/* Nothing in the store is written, which is the whole of I1's
+ * contract.
+ *
+ * Checked by mtime over every file and directory in the store rather
+ * than by reading the code:  a read that opened a record O_RDWR, or
+ * created an index, or dropped a lock file, would change one.  The
+ * negative case is reachable -- the same comparison catches a write
+ * made deliberately below. */
+TEST_F(NooBaaStoreTest, ReadingTheStoreWritesNothing)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  add_identity("6ac7d213cac521f05aac9fb4", NB_ACCOUNT_ANONYMOUS);
+  add_bucket("a-bucket", R"({"_id":"1","name":"a-bucket"})");
+  write_file(store + "/config.json", R"({"ALLOW_HTTP": true})");
+  write_file(store + "/master_keys.json", R"({"active_master_key":"x"})");
+
+  auto snapshot = [this] {
+    std::map<std::string, std::pair<time_t, off_t>> m;
+    for (const auto& e :
+	 std::filesystem::recursive_directory_iterator(store)) {
+      struct stat st;
+      if (::lstat(e.path().c_str(), &st) == 0) {
+	m[e.path().string()] = {st.st_mtime, st.st_size};
+      }
+    }
+    return m;
+  };
+
+  const auto before = snapshot();
+  ASSERT_FALSE(before.empty());
+
+  auto c = read_store();
+  ASSERT_TRUE(c.unreadable.empty());
+  EXPECT_EQ(snapshot(), before) << "reading the store changed it";
+
+  /* the comparison can fail:  one deliberate write, detected */
+  write_file(store + "/buckets/a-bucket.json",
+	     R"({"_id":"1","name":"a-bucket","versioning":"ENABLED"})");
+  EXPECT_NE(snapshot(), before)
+      << "the mtime comparison cannot detect a write, so it proves nothing";
+}
+
+/* ------------------------------------------------------------------ *
+ * I2 -- the master key, and the secrets it opens.
+ *
+ * The master key below is **the one NooBaa generated** in the store
+ * `standup.rs` stood up, and `NB_ACCOUNT_PLAIN` above carries the
+ * ciphertext **NooBaa's CLI produced** under it.  The plaintext is known
+ * because the stand-up chose the secret:  so these tests decrypt real
+ * NooBaa output and compare against a known result, which is the
+ * strongest control available for this stage and the one §9 asks for.
+ * ------------------------------------------------------------------ */
+
+static constexpr const char* NB_MASTER_KEYS = R"({
+  "timestamp": 1791478567852,
+  "active_master_key": "6ac7cb2751b72219a4bae375",
+  "master_keys_by_id": {
+    "6ac7cb2751b72219a4bae375": {
+      "id": "6ac7cb2751b72219a4bae375",
+      "cipher_key": "I/WLyx1+z7KYouUZAwp6b7WT9QdBFqstDu+67OPlnX4=",
+      "cipher_iv": "EUWSw9er4NMWTkuJkB2PsQ==",
+      "encryption_type": "aes-256-gcm"
+    }
+  }
+})";
+
+/* what `account add --secret_key` was given */
+static constexpr const char* NB_PLAIN_SECRET =
+  "interchangesecretkeyinterchangesecretkey";
+
+class NooBaaKeysTest : public NooBaaStoreTest {
+public:
+  nsfs::NooBaaSettings file_store() {
+    nsfs::NooBaaSettings s;
+    s.master_keys_store_type = "file";
+    return s;
+  }
+
+  nsfs::NooBaaMasterKeys load(const nsfs::NooBaaSettings& s, int expect = 0) {
+    nsfs::NooBaaMasterKeys keys;
+    EXPECT_EQ(keys.load(env->dpp, s, store), expect);
+    return keys;
+  }
+};
+
+/* The plausibility check, which is the only thing that reports a wrong
+ * master key.
+ *
+ * Pure, so both polarities are here without a cipher.  NooBaa's
+ * construction computes no authentication tag, so a wrong key
+ * decrypts to keystream of exactly the right length and the cipher
+ * reports success -- this function is what stands between that and an
+ * import full of credentials that do not authenticate. */
+TEST(NooBaaSecretShape, OnlyACredentialIsPlausible)
+{
+  EXPECT_TRUE(nsfs::secret_is_plausible(NB_PLAIN_SECRET));
+  EXPECT_TRUE(nsfs::secret_is_plausible(
+      "h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q=="));
+  EXPECT_TRUE(nsfs::secret_is_plausible("12345678"));
+
+  /* keystream:  what a wrong key actually produced against the real
+   * ciphertext, measured before this was written */
+  EXPECT_FALSE(nsfs::secret_is_plausible(
+      std::string("\x19\x21\xb7\xe7o'9Y\x8a\x83;\xb8\xf2""aPp", 16)));
+  /* a single control character is enough, which is the point */
+  EXPECT_FALSE(nsfs::secret_is_plausible(std::string("abcdefgh\x01", 9)));
+  EXPECT_FALSE(nsfs::secret_is_plausible(std::string("abcdefgh\0", 9)));
+  EXPECT_FALSE(nsfs::secret_is_plausible(""));
+  EXPECT_FALSE(nsfs::secret_is_plausible("short"));
+  EXPECT_FALSE(nsfs::secret_is_plausible(std::string(257, 'a')));
+}
+
+/* The real key opens the real ciphertext.
+ *
+ * **This is also the IV-length control.**  NooBaa's IV is 16 bytes and
+ * GCM's default is 12;  a decryption that did not set the length
+ * explicitly would run a different construction and this comparison
+ * would fail rather than merely warn. */
 TEST_F(NooBaaKeysTest, NooBaaKeyOpensNooBaaSecret)
 {
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+  auto keys = load(file_store());
+  ASSERT_EQ(keys.size(), 1u);
+  EXPECT_EQ(keys.active(), "6ac7cb2751b72219a4bae375");
+  EXPECT_TRUE(keys.have("6ac7cb2751b72219a4bae375"));
+
+  std::string secret;
+  ASSERT_EQ(keys.decrypt(env->dpp, "6ac7cb2751b72219a4bae375",
+			 "AlSvZsxnqaN+QX3A/wUwFB0kJwM01TDOXKmNFnV51Fijv"
+			 "Rm3nJgdKQ==", secret), 0);
+  EXPECT_EQ(secret, NB_PLAIN_SECRET);
+}
+
+/* A wrong key is detected, and that is the stage.
+ *
+ * The cipher cannot report it -- no tag is computed -- so the only
+ * thing that can is what came out.  Both polarities against one
+ * ciphertext:  the right key yields the secret, a key of the right
+ * shape and the wrong bytes fails with -EKEYREJECTED rather than
+ * returning garbage a caller would store. */
+TEST_F(NooBaaKeysTest, AWrongKeyIsDetectedRatherThanReturned)
+{
+  const std::string ct = "AlSvZsxnqaN+QX3A/wUwFB0kJwM01TDOXKmNFnV51Fijv"
+			 "Rm3nJgdKQ==";
+  const std::string id = "6ac7cb2751b72219a4bae375";
+
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+  std::string good;
+  ASSERT_EQ(load(file_store()).decrypt(env->dpp, id, ct, good), 0);
+  ASSERT_EQ(good, NB_PLAIN_SECRET);
+
+  /* the same store with 32 zero bytes for a key:  valid base64, right
+   * length, wrong key */
+  std::string wrong{NB_MASTER_KEYS};
+  const std::string zeros = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+  auto at = wrong.find("I/WLyx1+z7KYouUZAwp6b7WT9QdBFqstDu+67OPlnX4=");
+  ASSERT_NE(at, std::string::npos);
+  wrong.replace(at, 44, zeros);
+  write_file(store + "/master_keys.json", wrong);
+
+  std::string bad{"untouched"};
+  EXPECT_EQ(load(file_store()).decrypt(env->dpp, id, ct, bad),
+	    -EKEYREJECTED);
+  EXPECT_TRUE(bad.empty()) << "a rejected secret was still handed back";
+}
+
+/* The executable store form.
+ *
+ * `NC_MASTER_KEYS_STORE_TYPE` may be `executable`, and then no key
+ * file exists at all -- a reader that assumed `master_keys.json` would
+ * report a broken deployment rather than a differently configured one.
+ * NooBaa runs the program with the record's name, `master_keys`, and
+ * reads an envelope whose `data` is the file's JSON
+ * (`nc_master_key_manager.js:239`);  the script here answers as NooBaa's
+ * own test helper and IBM's `cess3_key_get` do, NOT_FOUND for any other
+ * name, exiting 0 either way.  The same key, delivered so, opens the
+ * same secret. */
+TEST_F(NooBaaKeysTest, TheKeysMayComeFromAProgram)
+{
+  const std::string prog = (bp / "say-keys").string();
+  write_file(prog, std::string(
+      "#!/bin/sh\n"
+      "if [ \"$#\" -ne 1 ] || [ \"$1\" != master_keys ]; then\n"
+      "  echo '{\"status\":\"NOT_FOUND\"}'\n"
+      "  exit 0\n"
+      "fi\n"
+      "cat <<'EOJ'\n"
+      "{\"status\":\"OK\",\"version\":1,\"data\":") + NB_MASTER_KEYS +
+      "}\nEOJ\n");
+  ASSERT_EQ(::chmod(prog.c_str(), 0700), 0);
+
+  nsfs::NooBaaSettings s;
+  s.master_keys_store_type = "executable";
+  s.master_keys_get_executable = prog;
+
+  /* and no key file:  this must not be reading one by accident */
+  ASSERT_FALSE(std::filesystem::exists(store + "/master_keys.json"));
+
+  auto keys = load(s);
+  std::string secret;
+  ASSERT_EQ(keys.decrypt(env->dpp, "6ac7cb2751b72219a4bae375",
+			 "AlSvZsxnqaN+QX3A/wUwFB0kJwM01TDOXKmNFnV51Fijv"
+			 "Rm3nJgdKQ==", secret), 0);
+  EXPECT_EQ(secret, NB_PLAIN_SECRET);
+
+  /* a program named without a directory is found on PATH */
+  {
+    const char* old = ::getenv("PATH");
+    const std::string saved = old ? old : "";
+    ::setenv("PATH", (bp.string() + ":" + saved).c_str(), 1);
+    nsfs::NooBaaSettings bare = s;
+    bare.master_keys_get_executable = "say-keys";
+    nsfs::NooBaaMasterKeys found;
+    EXPECT_EQ(found.load(env->dpp, bare, store), 0);
+    EXPECT_FALSE(found.empty());
+    ::setenv("PATH", saved.c_str(), 1);
+  }
+
+  /* a program that fails is not an empty key store */
+  nsfs::NooBaaSettings broken = s;
+  broken.master_keys_get_executable = (bp / "no-such-program").string();
+  nsfs::NooBaaMasterKeys none;
+  EXPECT_LT(none.load(env->dpp, broken, store), 0);
+  EXPECT_TRUE(none.empty());
+
+  nsfs::NooBaaSettings unset;
+  unset.master_keys_store_type = "executable";
+  EXPECT_EQ(none.load(env->dpp, unset, store), -ENOENT);
+
+  /* each other answer the envelope can carry */
+  auto answering = [&](const std::string& name, const std::string& body) {
+    const std::string path = (bp / name).string();
+    write_file(path, "#!/bin/sh\ncat <<'EOJ'\n" + body + "\nEOJ\n");
+    EXPECT_EQ(::chmod(path.c_str(), 0700), 0);
+    nsfs::NooBaaSettings t = s;
+    t.master_keys_get_executable = path;
+    nsfs::NooBaaMasterKeys k;
+    const int r = k.load(env->dpp, t, store);
+    EXPECT_TRUE(k.empty()) << name;
+    return r;
+  };
+  EXPECT_EQ(answering("not-found", R"({"status":"NOT_FOUND"})"), -ENOENT);
+  EXPECT_EQ(answering("internal", R"({"status":"INTERNAL"})"), -EIO);
+  EXPECT_EQ(answering("no-status", NB_MASTER_KEYS), -EBADMSG)
+      << "the file's shape, unwrapped, was taken as an envelope";
+  EXPECT_EQ(answering("no-data", R"({"status":"OK","version":1})"), -EBADMSG);
+  {
+    const std::string path = (bp / "exits-1").string();
+    write_file(path, "#!/bin/sh\nexit 1\n");
+    ASSERT_EQ(::chmod(path.c_str(), 0700), 0);
+    nsfs::NooBaaSettings t = s;
+    t.master_keys_get_executable = path;
+    nsfs::NooBaaMasterKeys k;
+    EXPECT_EQ(k.load(env->dpp, t, store), -EIO);
+  }
+}
+
+/* A store this cannot read says so, each in its own way.
+ *
+ * Distinguished because they mean different things:  a cipher we do
+ * not implement is a deployment we cannot import, a corrupt file is a
+ * file, and a key a record names and the store lacks is §5's hard
+ * failure with nothing to fall back to. */
+TEST_F(NooBaaKeysTest, AStoreThisCannotUseFailsSpecifically)
+{
+  nsfs::NooBaaMasterKeys keys;
+
+  EXPECT_EQ(keys.load(env->dpp, file_store(), store), -ENOENT);
+
+  write_file(store + "/master_keys.json", "{ not json");
+  EXPECT_EQ(keys.load(env->dpp, file_store(), store), -EBADMSG);
+
+  write_file(store + "/master_keys.json", R"({"active_master_key":"x"})");
+  EXPECT_EQ(keys.load(env->dpp, file_store(), store), -ENOKEY);
+
+  /* a cipher we do not implement.  Rejected rather than attempted:
+   * decrypting it as though it were NooBaa's would produce garbage, and
+   * then the plausibility check would be the only thing to notice. */
+  std::string other{NB_MASTER_KEYS};
+  auto at = other.find("aes-256-gcm");
+  ASSERT_NE(at, std::string::npos);
+  other.replace(at, 11, "aes-256-ctr");
+  write_file(store + "/master_keys.json", other);
+  EXPECT_EQ(keys.load(env->dpp, file_store(), store), -EPROTONOSUPPORT);
+
+  /* a 16-byte key, which is not AES-256 */
+  std::string shortkey{NB_MASTER_KEYS};
+  at = shortkey.find("I/WLyx1+z7KYouUZAwp6b7WT9QdBFqstDu+67OPlnX4=");
+  ASSERT_NE(at, std::string::npos);
+  shortkey.replace(at, 44, "AAAAAAAAAAAAAAAAAAAAAA==");
+  write_file(store + "/master_keys.json", shortkey);
+  EXPECT_EQ(keys.load(env->dpp, file_store(), store), -EBADMSG);
+
+  /* a key a record names and the store does not hold */
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+  auto good = load(file_store());
+  std::string secret;
+  EXPECT_EQ(good.decrypt(env->dpp, "6ac7cb2751b72219a4bae999",
+			 "AlSvZsxnqaN+QX3A/wUwFB0kJwM01TDOXKmNFnV51Fijv"
+			 "Rm3nJgdKQ==", secret), -ENOKEY);
+
+  /* ciphertext that is not base64 */
+  EXPECT_EQ(good.decrypt(env->dpp, "6ac7cb2751b72219a4bae375", "", secret),
+	    -EINVAL);
+}
+
+/* Every secret in a store, opened in one pass, and every failure
+ * reported.
+ *
+ * Collected rather than stopped at the first, for the reason I1
+ * collects unreadable records -- one run should say everything that is
+ * wrong -- and still an error, so no caller proceeds past a wrong key
+ * by ignoring the list. */
+TEST_F(NooBaaKeysTest, EverySecretOpensOrTheImportFails)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  add_identity("6ac7d213cac521f05aac9fb4", NB_ACCOUNT_ANONYMOUS);
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+
+  auto c = read_store();
+  ASSERT_EQ(c.identities.size(), 2u);
+  auto keys = load(file_store());
+
+  std::vector<std::string> failures;
+  ASSERT_EQ(nsfs::decrypt_store_secrets(env->dpp, keys, c, failures), 0)
+      << failures.size() << " failed, first: "
+      << (failures.empty() ? std::string{} : failures[0]);
+
+  const auto* plain = by_name(c, "interchange");
+  ASSERT_NE(plain, nullptr);
+  ASSERT_EQ(plain->access_keys.size(), 1u);
+  EXPECT_EQ(plain->access_keys[0].secret_key, NB_PLAIN_SECRET);
+  /* the ciphertext is still there:  nothing is rewritten in place */
+  EXPECT_FALSE(plain->access_keys[0].encrypted_secret_key.empty());
+
+  /* the anonymous account has no keys, so there is nothing to open and
+   * that is not a failure */
+  const auto* anon = by_name(c, "anonymous");
+  ASSERT_NE(anon, nullptr);
+  EXPECT_TRUE(anon->access_keys.empty());
+
+  /* and the negative case:  with the wrong key the whole store fails,
+   * rather than importing two accounts with garbage credentials */
+  std::string wrong{NB_MASTER_KEYS};
+  auto at = wrong.find("I/WLyx1+z7KYouUZAwp6b7WT9QdBFqstDu+67OPlnX4=");
+  ASSERT_NE(at, std::string::npos);
+  wrong.replace(at, 44, "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=");
+  write_file(store + "/master_keys.json", wrong);
+
+  auto c2 = read_store();
+  auto badkeys = load(file_store());
+  std::vector<std::string> failures2;
+  EXPECT_EQ(nsfs::decrypt_store_secrets(env->dpp, badkeys, c2, failures2),
+	    -EKEYREJECTED);
+  ASSERT_EQ(failures2.size(), 1u);
+  EXPECT_NE(failures2[0].find("interchange"), std::string::npos)
+      << "the report does not name the identity: " << failures2[0];
+  for (const auto& i : c2.identities) {
+    for (const auto& ak : i.access_keys) {
+      EXPECT_TRUE(ak.secret_key.empty())
+	  << i.name << " was given a secret from the wrong key";
+    }
+  }
+}
+
+/* I10:  a connection's `request_options_object.auth`, opened with the
+ * key its `master_key_id` names, as NooBaa's `parse_connect_file()`
+ * opens it;  without a `master_key_id` it is cleartext and stays as
+ * read, and a key the store does not hold fails the store. */
+TEST_F(NooBaaKeysTest, AConnectionsAuthOpensWithTheMasterKey)
+{
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+  auto keys = load(file_store());
+
+  nsfs::NooBaaStoreContents c;
+  nsfs::NooBaaConnection enc;
+  enc.name = "hook";
+  enc.master_key_id = "6ac7cb2751b72219a4bae375";
+  enc.auth = "AlSvZsxnqaN+QX3A/wUwFB0kJwM01TDOXKmNFnV51FijvRm3nJgdKQ==";
+  nsfs::NooBaaConnection clear;
+  clear.name = "plain";
+  clear.auth = "user:pass";
+  c.connections = {enc, clear};
+
+  std::vector<std::string> failures;
+  ASSERT_EQ(nsfs::decrypt_store_secrets(env->dpp, keys, c, failures), 0)
+      << (failures.empty() ? std::string{} : failures[0]);
+  EXPECT_EQ(c.connections[0].auth, NB_PLAIN_SECRET);
+  EXPECT_EQ(c.connections[1].auth, "user:pass");
+
+  c.connections[0].auth = enc.auth;
+  c.connections[0].master_key_id = "6ac7cb2751b72219a4bae999";
+  failures.clear();
+  EXPECT_EQ(nsfs::decrypt_store_secrets(env->dpp, keys, c, failures), -EKEYREJECTED);
+  ASSERT_EQ(failures.size(), 1u);
+  EXPECT_NE(failures[0].find("connection hook"), std::string::npos) << failures[0];
+}
+
+/* A real store on disk, opened with its own key.
+ *
+ * `NSFS_NOOBAA_STORE` names a NooBaa configuration directory;  skipped
+ * when unset.  Where the tests above use NooBaa's bytes in this test's
+ * layout, this is NooBaa's store entire -- the key file where they put
+ * it, read through whatever `config.json` says the store type is. */
+TEST_F(NooBaaKeysTest, AStoreOnDiskOpensItsOwnSecrets)
+{
+  const char* dir = ::getenv("NSFS_NOOBAA_STORE");
+  if (!dir || !*dir) {
+    GTEST_SKIP() << "NSFS_NOOBAA_STORE is unset";
+  }
+
+  nsfs::NooBaaConfigStore cs(dir);
+  nsfs::NooBaaStoreContents c;
+  ASSERT_EQ(cs.read(env->dpp, c), 0);
+  ASSERT_GT(c.identities.size(), 0u);
+
+  nsfs::NooBaaMasterKeys keys;
+  ASSERT_EQ(keys.load(env->dpp, c.settings, dir), 0);
+
+  std::vector<std::string> rejected;
+  std::string why;
+  for (const auto& r : rejected) {
+    why += "\n  " + r;
+  }
+  ASSERT_EQ(nsfs::decrypt_store_secrets(env->dpp, keys, c, rejected), 0)
+      << why;
+
+  size_t opened = 0;
+  for (const auto& i : c.identities) {
+    for (const auto& ak : i.access_keys) {
+      EXPECT_TRUE(nsfs::secret_is_plausible(ak.secret_key)) << i.name;
+      ++opened;
+    }
+  }
+  /* an assertion over an empty set proves nothing */
+  EXPECT_GT(opened, 0u) << "no secret in the store was opened";
+}
+
+/* ------------------------------------------------------------------ *
+ * X1 -- carrying force_md5_etag, and enforcing nothing.
+ *
+ * Three states everywhere, because NooBaa's precedence is a cascade --
+ * bucket if defined, else account if defined, else NooBaa's global -- and
+ * `false` counts as defined.  So "off" and "said nothing" inherit
+ * differently and collapsing them changes behaviour a later decision
+ * would honour.  `ACCOUNT_IMPORT.md` §6.1a.
+ * ------------------------------------------------------------------ */
+
+/* The account flag round-trips in all three states.
+ *
+ * The same shape as `GroupsDistinguishUnsetFromEmpty` above, for the
+ * same reason:  a column that cannot tell NULL from 0 cannot carry a
+ * cascade. */
+TEST_F(NSFSIdentityDBTest, ForceMd5EtagDistinguishesUnsetFromFalse)
+{
+  nsfs::Identity unset = local_identity("x1-unset");
+  ASSERT_FALSE(unset.force_md5_etag.has_value());
+  ASSERT_EQ(db->put_identity(env->dpp, unset), 0);
+
+  nsfs::Identity off = local_identity("x1-off");
+  off.force_md5_etag = false;
+  ASSERT_EQ(db->put_identity(env->dpp, off), 0);
+
+  nsfs::Identity on = local_identity("x1-on");
+  on.force_md5_etag = true;
+  ASSERT_EQ(db->put_identity(env->dpp, on), 0);
+
+  nsfs::Identity got;
+  ASSERT_EQ(db->get_identity(env->dpp, "x1-unset", got), 0);
+  EXPECT_FALSE(got.force_md5_etag.has_value())
+      << "an unset flag came back set";
+
+  ASSERT_EQ(db->get_identity(env->dpp, "x1-off", got), 0);
+  ASSERT_TRUE(got.force_md5_etag.has_value())
+      << "an explicit false came back as unset -- the cascade is lost";
+  EXPECT_FALSE(*got.force_md5_etag);
+
+  ASSERT_EQ(db->get_identity(env->dpp, "x1-on", got), 0);
+  ASSERT_TRUE(got.force_md5_etag.has_value());
+  EXPECT_TRUE(*got.force_md5_etag);
+
+  /* and it updates independently, including back to unset */
+  off.force_md5_etag = std::nullopt;
+  ASSERT_EQ(db->put_identity(env->dpp, off), 0);
+  ASSERT_EQ(db->get_identity(env->dpp, "x1-off", got), 0);
+  EXPECT_FALSE(got.force_md5_etag.has_value());
+  /* the other columns survived the rewrite */
+  EXPECT_EQ(got.uid, 1001u);
   EXPECT_EQ(got.fs_backend, "GPFS");
+}
+
+/* I1 carries each bucket's value, in three states.
+ *
+ * Read in I1 as well as by the state strategy because the question
+ * X1 exists to answer -- does this deployment vary it per bucket? --
+ * is about the deployment and cannot be answered one bucket at a
+ * time. */
+TEST_F(NooBaaStoreTest, EachBucketsForceMd5EtagIsCarried)
+{
+  add_bucket("says-nothing", R"({"_id":"1","name":"says-nothing"})");
+  add_bucket("says-true",
+	     R"({"_id":"2","name":"says-true","force_md5_etag":true})");
+  add_bucket("says-false",
+	     R"({"_id":"3","name":"says-false","force_md5_etag":false})");
+
+  auto c = read_store();
+  ASSERT_EQ(c.buckets.size(), 3u);
+
+  std::map<std::string, std::optional<bool>> got;
+  for (const auto& b : c.buckets) {
+    got[b.name] = b.force_md5_etag;
+  }
+  EXPECT_FALSE(got["says-nothing"].has_value());
+  ASSERT_TRUE(got["says-true"].has_value());
+  EXPECT_TRUE(*got["says-true"]);
+  ASSERT_TRUE(got["says-false"].has_value())
+      << "an explicit false read as unset -- the cascade is lost";
+  EXPECT_FALSE(*got["says-false"]);
+}
+
+/* A deployment that varies it per bucket is reported.
+ *
+ * X1 enforces nothing, so this report is the whole of what an
+ * operator gets.  Both polarities:  a uniform deployment is silent,
+ * and each kind of divergence is named. */
+TEST_F(NooBaaStoreTest, VaryingItPerBucketIsReported)
+{
+  /* uniform:  one account says true, every bucket agrees or is silent */
+  add_identity("a", R"({"_id":"a","name":"acct","force_md5_etag":true})");
+  add_bucket("quiet", R"({"_id":"1","name":"quiet"})");
+  add_bucket("agrees",
+	     R"({"_id":"2","name":"agrees","force_md5_etag":true})");
+  EXPECT_TRUE(read_store().md5_etag_divergence().empty())
+      << "a uniform deployment was reported as varying";
+
+  /* one bucket turns it off against the account */
+  add_bucket("differs",
+	     R"({"_id":"3","name":"differs","force_md5_etag":false})");
+  auto one = read_store().md5_etag_divergence();
+  ASSERT_EQ(one.size(), 1u);
+  EXPECT_NE(one[0].find("differs"), std::string::npos) << one[0];
+  EXPECT_NE(one[0].find("false"), std::string::npos) << one[0];
+
+  /* a second account that disagrees with the first */
+  add_identity("b", R"({"_id":"b","name":"other","force_md5_etag":false})");
+  auto two = read_store().md5_etag_divergence();
+  EXPECT_GE(two.size(), 2u);
+  bool said_accounts = false;
+  for (const auto& line : two) {
+    if (line.find("accounts do not agree") != std::string::npos) {
+      said_accounts = true;
+    }
+  }
+  EXPECT_TRUE(said_accounts) << "two accounts disagreed and nothing said so";
+}
+
+/* A bucket with no account to compare against is still reported.
+ *
+ * The value cannot be inherited from anything, so a bucket stating it
+ * is the only thing stating it -- which is the per-bucket posture X1
+ * exists to surface, not an absence of information. */
+TEST_F(NooBaaStoreTest, ABucketStatingItAloneIsReported)
+{
+  add_identity("a", R"({"_id":"a","name":"acct"})");
+  add_bucket("alone",
+	     R"({"_id":"1","name":"alone","force_md5_etag":true})");
+
+  auto d = read_store().md5_etag_divergence();
+  ASSERT_EQ(d.size(), 1u);
+  EXPECT_NE(d[0].find("no account states"), std::string::npos) << d[0];
+}
+
+/* NooBaa merges host_customization[<its hostname>] over the rest of
+ * config.json (`config.js:1432`), so the import reads a key from the
+ * section for its host, and from the rest otherwise -- including the
+ * settings it acts on. */
+TEST_F(NooBaaStoreTest, HostCustomizationForThisHostIsMerged)
+{
+  write_file(store + "/config.json", R"({
+    "NSFS_UMASK": 7,
+    "NC_DISABLE_SCHEMA_CHECK": false,
+    "host_customization": {
+      "gw-a": {"NSFS_UMASK": 18, "NC_DISABLE_SCHEMA_CHECK": true},
+      "gw-b": {"WORM_ENABLED": true}
+    }
+  })");
+
+  nsfs::NooBaaStoreContents a;
+  ASSERT_EQ(nsfs::NooBaaConfigStore(store, "gw-a").read(env->dpp, a), 0);
+  EXPECT_EQ(a.settings.host_section, "gw-a");
+  EXPECT_TRUE(a.settings.schema_check_disabled)
+      << "a setting the import acts on was read from the shared section";
+  ASSERT_EQ(a.settings.behaviour.count("NSFS_UMASK"), 1u);
+  EXPECT_EQ(a.settings.behaviour["NSFS_UMASK"].value, "18");
+  EXPECT_TRUE(a.settings.behaviour["NSFS_UMASK"].from_host);
+  EXPECT_EQ(a.settings.behaviour.count("WORM_ENABLED"), 0u)
+      << "another host's section was merged";
+
+  nsfs::NooBaaStoreContents c;
+  ASSERT_EQ(nsfs::NooBaaConfigStore(store, "gw-c").read(env->dpp, c), 0);
+  EXPECT_TRUE(c.settings.host_section.empty());
+  EXPECT_FALSE(c.settings.schema_check_disabled);
+  EXPECT_EQ(c.settings.behaviour["NSFS_UMASK"].value, "7");
+  EXPECT_FALSE(c.settings.behaviour["NSFS_UMASK"].from_host);
+}
+
+/* Each setting is compared with what this gateway does:  a setting an
+ * RGW option controls, with the option;  one RGW has no counterpart
+ * for, with RGW's fixed behaviour.  NooBaa's default counts when
+ * config.json says nothing. */
+TEST_F(NooBaaStoreTest, SettingsThatDifferFromTheGatewayAreReported)
+{
+  auto has = [](const std::vector<std::string>& v, const std::string& key) {
+    return std::any_of(v.begin(), v.end(), [&](const std::string& s) {
+      return s.rfind(key + " ", 0) == 0;
+    });
+  };
+  auto& conf = g_conf();
+  const auto saved_umask = conf.get_val<std::string>("rgw_nsfs_umask");
+  const auto saved_md5 = conf.get_val<bool>("rgw_non_md5_etag");
+  conf.set_val_or_die("rgw_nsfs_umask", "0007");
+  conf.set_val_or_die("rgw_non_md5_etag", "false");
+
+  /* NooBaa's defaults */
+  auto d = read_store().setting_differences(conf);
+  EXPECT_TRUE(has(d.option_differs, "NSFS_CALCULATE_MD5"))
+      << "NooBaa's synthetic ETags against this gateway's MD5 ones";
+  EXPECT_FALSE(has(d.option_differs, "NSFS_UMASK"));
+  EXPECT_TRUE(has(d.not_carried, "S3_CORS_DEFAULTS_ENABLED"));
+  EXPECT_TRUE(has(d.not_carried, "S3_MAX_KEY_LENGTH"));
+  EXPECT_TRUE(has(d.not_carried, "WORM_ENABLED"));
+  EXPECT_FALSE(has(d.not_carried, "NSFS_TRIGGER_FSYNC"));
+
+  /* what config.json sets */
+  write_file(store + "/config.json", R"({
+    "NSFS_UMASK": 18,
+    "NSFS_CALCULATE_MD5": true,
+    "S3_CORS_DEFAULTS_ENABLED": false,
+    "NSFS_TRIGGER_FSYNC": false
+  })");
+  d = read_store().setting_differences(conf);
+  ASSERT_TRUE(has(d.option_differs, "NSFS_UMASK"));
+  for (const auto& s : d.option_differs) {
+    if (s.rfind("NSFS_UMASK ", 0) == 0) {
+      EXPECT_NE(s.find("\"0022\""), std::string::npos) << s;
+      EXPECT_NE(s.find("rgw_nsfs_umask \"0007\""), std::string::npos) << s;
+    }
+  }
+  EXPECT_FALSE(has(d.option_differs, "NSFS_CALCULATE_MD5"));
+  EXPECT_FALSE(has(d.not_carried, "S3_CORS_DEFAULTS_ENABLED"));
+  EXPECT_TRUE(has(d.not_carried, "NSFS_TRIGGER_FSYNC"));
+
+  /* the gateway set to match */
+  conf.set_val_or_die("rgw_nsfs_umask", "0022");
+  d = read_store().setting_differences(conf);
+  EXPECT_FALSE(has(d.option_differs, "NSFS_UMASK"));
+
+  conf.set_val_or_die("rgw_nsfs_umask", saved_umask);
+  conf.set_val_or_die("rgw_non_md5_etag", saved_md5 ? "true" : "false");
 }
 
 /* ------------------------------------------------------------------ *
@@ -11869,8 +14305,439 @@ TEST_F(NSFSIdentityDBTest, AnUnacceptablePathIsRejectedWhereItIsStored)
   sqlite3_free(err);
 }
 
+/* ------------------------------------------------------------------ *
+ * I3 -- the mapping, and the collision gate.
+ *
+ * No secrets:  an access key's id is cleartext, so this runs against
+ * a store whose master key is missing.  Nothing is written.
+ * ------------------------------------------------------------------ */
+
+class NooBaaPlanTest : public NooBaaStoreTest {
+public:
+  nsfs::ImportPlan plan;
+
+  int build(int expect_entries = -1) {
+    auto c = read_store();
+    int ret = nsfs::build_import_plan(env->dpp, env->cct.get(), c, plan);
+    if (expect_entries >= 0) {
+      EXPECT_EQ(static_cast<int>(plan.entries.size()), expect_entries);
+    }
+    return ret;
+  }
+
+  const nsfs::ImportEntry* entry(const std::string& name) const {
+    for (const auto& e : plan.entries) {
+      if (e.noobaa_name == name) {
+	return &e;
+      }
+    }
+    return nullptr;
+  }
+
+  /* the plan's failures and its collisions, together */
+  std::vector<std::string> reported() const {
+    auto r = plan.failures();
+    r.insert(r.end(), plan.collisions.begin(), plan.collisions.end());
+    return r;
+  }
+
+  bool said(const std::string& fragment) const {
+    for (const auto& c : reported()) {
+      if (c.find(fragment) != std::string::npos) {
+	return true;
+      }
+    }
+    return false;
+  }
+
+  bool failed(const std::string& name) const {
+    const auto* e = entry(name);
+    return e && !e->failed.empty();
+  }
+
+  std::string why() const {
+    std::string s;
+    for (const auto& c : reported()) {
+      s += "\n  " + c;
+    }
+    return s;
+  }
+};
+
+/* A store NooBaa's tools wrote maps cleanly.
+ *
+ * The three records are NooBaa's own bytes.  Note what the ids look
+ * like:  NooBaa's `_id` is a 24-character hex ObjectId and the minted
+ * account id is `RGW` followed by digits, which is why no
+ * transformation of one is the other. */
 TEST_F(NooBaaPlanTest, AStoreNooBaaToolsWroteMapsCleanly)
 {
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  add_identity("6ac7d2121e63a748e37663e0", NB_ACCOUNT_GROUPS);
+  add_identity("6ac7d213cac521f05aac9fb4", NB_ACCOUNT_ANONYMOUS);
+
+  ASSERT_EQ(build(3), 0) << why();
+  EXPECT_TRUE(reported().empty()) << why();
+  EXPECT_EQ(plan.accounts(), 3u);
+  EXPECT_EQ(plan.iam_users(), 0u);
+
+  const auto* e = entry("interchange");
+  ASSERT_NE(e, nullptr);
+  EXPECT_EQ(e->noobaa_id, "6ac7cb27fd4af356919110a3");
+  EXPECT_EQ(e->name, "interchange");
+  /* NooBaa's email is a copy of the name, carried as it is */
+  EXPECT_EQ(e->email, "interchange");
+  /* what principal matching consults */
+  EXPECT_EQ(e->display_name, "interchange");
+  EXPECT_TRUE(e->tenant.empty());
+  ASSERT_EQ(e->access_key_ids.size(), 1u);
+  EXPECT_EQ(e->access_key_ids[0], "INTERCHANGEACCESSKEY");
+  EXPECT_FALSE(e->iam_user);
+
+  /* a minted id in RGW's own form, not a transformation of NooBaa's */
+  EXPECT_TRUE(rgw::account::validate_id(e->account_id))
+      << e->account_id << " is not an RGW account id";
+  EXPECT_NE(e->account_id, e->noobaa_id);
+  EXPECT_EQ(e->account_id.compare(0, 3, "RGW"), 0);
+
+  /* every account gets its own */
+  std::set<std::string> ids;
+  for (const auto& x : plan.entries) {
+    EXPECT_TRUE(ids.insert(x.account_id).second)
+	<< "two accounts were minted the same id";
+  }
+
+  EXPECT_TRUE(entry("anonymous")->anonymous);
+  EXPECT_TRUE(entry("anonymous")->access_key_ids.empty());
+}
+
+/* It needs no secrets.
+ *
+ * The same store with no master_keys.json maps identically:  the gate
+ * is about ids and names, so a deployment whose key is missing can
+ * still be told what its import would hit. */
+TEST_F(NooBaaPlanTest, ThePlanNeedsNoMasterKey)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  ASSERT_FALSE(std::filesystem::exists(store + "/master_keys.json"));
+
+  ASSERT_EQ(build(1), 0) << why();
+  EXPECT_EQ(entry("interchange")->access_key_ids[0],
+	    "INTERCHANGEACCESSKEY");
+}
+
+/* An IAM user takes its owner's account id.
+ *
+ * Root accounts are mapped first so a user can be placed without a
+ * second pass, and an orphan user fails rather than being given an
+ * invented account;  the rest of the plan stands. */
+TEST_F(NooBaaPlanTest, AnIamUserTakesItsOwnersAccount)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  add_identity("b", R"({"_id":"b","name":"a-user","email":"u@x",
+    "owner":"6ac7cb27fd4af356919110a3"})");
+
+  ASSERT_EQ(build(2), 0) << why();
+  EXPECT_EQ(plan.accounts(), 1u);
+  EXPECT_EQ(plan.iam_users(), 1u);
+
+  const auto* acct = entry("interchange");
+  const auto* user = entry("a-user");
+  ASSERT_NE(acct, nullptr);
+  ASSERT_NE(user, nullptr);
+  EXPECT_TRUE(user->iam_user);
+  EXPECT_EQ(user->account_id, acct->account_id)
+      << "the user was not placed in its owner's account";
+
+  /* an owner that is not in the store */
+  add_identity("c", R"({"_id":"c","name":"orphan","email":"o@x",
+    "owner":"6ac7cb27fd4af3569191ffff"})");
+  EXPECT_EQ(build(3), 0);
+  EXPECT_TRUE(said("whose owner")) << why();
+  EXPECT_TRUE(said("6ac7cb27fd4af3569191ffff")) << why();
+  EXPECT_TRUE(failed("orphan"));
+  EXPECT_FALSE(failed("interchange")) << why();
+  EXPECT_FALSE(failed("a-user")) << why();
+}
+
+/* Two IAM users named `alice` under different root accounts do not
+ * collide.
+ *
+ * NooBaa's email is a copy of the name, and RGW's email index is shared
+ * across users and accounts, but an IAM user is written with no email:
+ * a user's name is unique only in its account, in NooBaa and in AWS. */
+TEST_F(NooBaaPlanTest, TwoUsersOfOneNameUnderDifferentAccountsDoNotCollide)
+{
+  add_identity("a1", R"({"_id":"a1","name":"acct-one","email":"acct-one"})");
+  add_identity("a2", R"({"_id":"a2","name":"acct-two","email":"acct-two"})");
+  ASSERT_EQ(build(2), 0) << why();
+
+  add_identity("u1", R"({"_id":"u1","name":"alice","email":"alice",
+    "owner":"a1"})");
+  add_identity("u2", R"({"_id":"u2","name":"alice","email":"alice",
+    "owner":"a2"})");
+
+  EXPECT_EQ(build(4), 0) << why();
+  EXPECT_TRUE(reported().empty()) << why();
+}
+
+/* Every collision is reported, not the first, and fails each record it
+ * names.
+ *
+ * Fixing them one import at a time means one failed import per
+ * collision, so the list is the deliverable.  Four kinds at once, and
+ * the count is asserted so a gate that stopped early would fail.  The
+ * plan stands:  a collision fails its records, not the pass
+ * (DECISIONS.md 2026-11-02), and the control is the record no
+ * collision names. */
+TEST_F(NooBaaPlanTest, EveryCollisionIsReportedTogether)
+{
+  add_identity("a1", R"({"_id":"a1","name":"same-name","email":"e1",
+    "access_keys":[{"access_key":"KEYAAAAAAAAAAAAAAAAA",
+    "encrypted_secret_key":"x"}]})");
+  add_identity("a2", R"({"_id":"a2","name":"same-name","email":"e2",
+    "access_keys":[{"access_key":"KEYAAAAAAAAAAAAAAAAA",
+    "encrypted_secret_key":"x"}]})");
+  add_identity("a3", R"({"_id":"a3","name":"third","email":"e1"})");
+  add_identity("a4", R"({"_id":"a4","name":"has$dollar","email":"e4"})");
+  add_identity("a5", R"({"_id":"a5","name":"bystander","email":"e5"})");
+
+  EXPECT_EQ(build(5), 0);
+
+  EXPECT_TRUE(said("two accounts are named same-name")) << why();
+  EXPECT_TRUE(said("both carry the email \"e1\"")) << why();
+  EXPECT_TRUE(said("both carry the access key KEYAAAAAAAAAAAAAAAAA"))
+      << why();
+  EXPECT_TRUE(said("has$dollar")) << why();
+  EXPECT_GE(reported().size(), 4u)
+      << "the gate stopped before reporting everything:" << why();
+  for (const auto* id : {"a1", "a2", "a3", "a4"}) {
+    const auto e = std::find_if(plan.entries.begin(), plan.entries.end(),
+      [&](const nsfs::ImportEntry& x) { return x.noobaa_id == id; });
+    ASSERT_NE(e, plan.entries.end());
+    EXPECT_FALSE(e->failed.empty()) << id << " did not fail";
+  }
+  EXPECT_FALSE(failed("bystander")) << why();
+  EXPECT_TRUE(plan.collisions.empty()) << why();
+}
+
+/* A name RGW will not accept is reported, not rewritten.
+ *
+ * NooBaa validates only *new* names and says so, so a legacy name may
+ * contain anything.  Rewriting one silently invalidates every
+ * name-form principal referring to it, so this reports. */
+TEST_F(NooBaaPlanTest, ANameRgwRejectsIsReportedNotRewritten)
+{
+  add_identity("a", R"({"_id":"a","name":"has:colon","email":"a"})");
+  EXPECT_EQ(build(1), 0);
+  EXPECT_TRUE(failed("has:colon"));
+  EXPECT_TRUE(said("has:colon")) << why();
+  EXPECT_TRUE(said("will not accept")) << why();
+  /* the name is carried through unchanged */
+  EXPECT_EQ(plan.entries[0].name, "has:colon");
+
+  /* and a plain name is accepted, so the check is not rejecting
+   * everything */
+  nsfs::ImportPlan clean;
+  std::filesystem::remove_all(store + "/identities");
+  std::filesystem::create_directories(store + "/identities");
+  add_identity("b", R"({"_id":"b","name":"ordinary","email":"b"})");
+  auto c = read_store();
+  EXPECT_EQ(nsfs::build_import_plan(env->dpp, env->cct.get(), c, clean), 0);
+  EXPECT_TRUE(clean.failures().empty());
+}
+
+/* A duplicated NooBaa id is rejected, because re-import depends on it.
+ *
+ * The id is what a second pass recognises an identity by -- the name
+ * is not, since a rename rewrites the name and leaves the id -- so two
+ * records claiming one id make that recognition ambiguous. */
+TEST_F(NooBaaPlanTest, ADuplicatedNooBaaIdIsRejected)
+{
+  /* two directories, one `_id` inside both */
+  add_identity("dir-one", R"({"_id":"same","name":"one","email":"one"})");
+  add_identity("dir-two", R"({"_id":"same","name":"two","email":"two"})");
+
+  EXPECT_EQ(build(2), -EEXIST);
+  EXPECT_TRUE(said("appears on more than one record")) << why();
+}
+
+/* An account user's name is held to the IAM UserName rules.
+ *
+ * RGW's user-add path applies them to every account user, the root
+ * included, so a name the account rules accept -- they reject only
+ * `$` and `:` -- can still be rejected when the user is written.  The
+ * plan reports it before anything is. */
+TEST_F(NooBaaPlanTest, AnAccountUsersNameFollowsTheIamRules)
+{
+  add_identity("a", R"({"_id":"a","name":"has space","email":"a"})");
+  EXPECT_EQ(build(1), 0);
+  EXPECT_TRUE(failed("has space"));
+  EXPECT_TRUE(said("has space")) << why();
+  EXPECT_TRUE(said("as an account user's")) << why();
+
+  /* and an IAM path RGW would reject */
+  std::filesystem::remove_all(store + "/identities");
+  std::filesystem::create_directories(store + "/identities");
+  add_identity("a", R"({"_id":"a","name":"acct","email":"a"})");
+  add_identity("u", R"({"_id":"u","name":"user","email":"u",
+    "owner":"a","iam_path":"eng"})");
+  EXPECT_EQ(build(2), 0);
+  EXPECT_TRUE(said("IAM path")) << why();
+  EXPECT_TRUE(failed("user"));
+  EXPECT_FALSE(failed("acct")) << why();
+
+  /* the control:  the same store with a valid path is clean */
+  add_identity("u", R"({"_id":"u","name":"user","email":"u",
+    "owner":"a","iam_path":"/eng/"})");
+  EXPECT_EQ(build(2), 0) << why();
+  EXPECT_TRUE(reported().empty()) << why();
+}
+
+/* An account above RGW's default limits is created with them raised.
+ *
+ * The admin path does not check `max_users` or `max_access_keys`;
+ * RGW's IAM API does, so for an account imported above either, every
+ * later CreateUser or CreateAccessKey would be rejected.  RGW counts the
+ * root among an account's users.  The control is the boundary:  an
+ * account holding exactly the default fits, and nothing is raised. */
+TEST_F(NooBaaPlanTest, LimitsAreRaisedToFit)
+{
+  auto keys = [](int n) {
+    std::string k;
+    for (int i = 0; i < n; ++i) {
+      k += std::string(i ? "," : "") + R"({"access_key":"KEY)" +
+	   std::to_string(i) + R"(AAAAAAAAAAAAAAAAA","encrypted_secret_key":"x"})";
+    }
+    return k;
+  };
+  const std::string root = R"({"_id":"a","name":"acct","email":"a",
+    "access_keys":[)" + keys(RGWAccountInfo::DEFAULT_ACCESS_KEY_LIMIT) + "]}";
+  add_identity("a", root.c_str());
+  const int fits = RGWAccountInfo::DEFAULT_USER_LIMIT - 1;
+  for (int i = 0; i < fits; ++i) {
+    const std::string n = "user-" + std::to_string(i);
+    const std::string rec = R"({"_id":")" + n + R"(","name":")" + n +
+      R"(","email":")" + n + R"(","owner":"a"})";
+    add_identity(n, rec.c_str());
+  }
+
+  ASSERT_EQ(build(fits + 1), 0) << why();
+  EXPECT_FALSE(entry("acct")->max_users) << "an account that fits was raised";
+  EXPECT_FALSE(entry("acct")->max_access_keys);
+  EXPECT_TRUE(plan.raised.empty()) << plan.raised[0];
+
+  /* one more user, and one more key on the root */
+  add_identity("over", R"({"_id":"over","name":"over","email":"over",
+    "owner":"a"})");
+  const std::string more = R"({"_id":"a","name":"acct","email":"a",
+    "access_keys":[)" + keys(RGWAccountInfo::DEFAULT_ACCESS_KEY_LIMIT + 1) +
+    "]}";
+  add_identity("a", more.c_str());
+
+  ASSERT_EQ(build(fits + 2), 0) << why();
+  ASSERT_TRUE(entry("acct")->max_users);
+  EXPECT_EQ(*entry("acct")->max_users, RGWAccountInfo::DEFAULT_USER_LIMIT + 1);
+  ASSERT_TRUE(entry("acct")->max_access_keys);
+  EXPECT_EQ(*entry("acct")->max_access_keys,
+	    RGWAccountInfo::DEFAULT_ACCESS_KEY_LIMIT + 1);
+  ASSERT_EQ(plan.raised.size(), 2u);
+  EXPECT_NE(plan.raised[0].find("max_users"), std::string::npos)
+      << plan.raised[0];
+  EXPECT_NE(plan.raised[1].find("max_access_keys"), std::string::npos)
+      << plan.raised[1];
+  /* an IAM user's entry carries no limits;  they are the account's */
+  EXPECT_FALSE(entry("over")->max_users);
+}
+
+/* A real store on disk plans without collisions.
+ *
+ * Skipped when `NSFS_NOOBAA_STORE` is unset.  Three accounts NooBaa's CLI
+ * and gateway made, which is the case an import will actually meet
+ * first. */
+TEST_F(NooBaaPlanTest, AStoreOnDiskPlansCleanly)
+{
+  const char* dir = ::getenv("NSFS_NOOBAA_STORE");
+  if (!dir || !*dir) {
+    GTEST_SKIP() << "NSFS_NOOBAA_STORE is unset";
+  }
+
+  nsfs::NooBaaConfigStore cs(dir);
+  nsfs::NooBaaStoreContents c;
+  ASSERT_EQ(cs.read(env->dpp, c), 0);
+  ASSERT_GT(c.identities.size(), 0u);
+
+  nsfs::ImportPlan p;
+  const int ret = nsfs::build_import_plan(env->dpp, env->cct.get(), c, p);
+  std::string s;
+  for (const auto& x : p.failures()) {
+    s += "\n  " + x;
+  }
+  for (const auto& x : p.collisions) {
+    s += "\n  " + x;
+  }
+  EXPECT_EQ(ret, 0) << s;
+  EXPECT_TRUE(s.empty()) << s;
+  EXPECT_EQ(p.entries.size(), c.identities.size());
+  for (const auto& e : p.entries) {
+    EXPECT_FALSE(e.account_id.empty()) << e.noobaa_name;
+    EXPECT_TRUE(rgw::account::validate_id(e.account_id)) << e.account_id;
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * I4 -- writing identities into RGW.
+ *
+ * The first stage that writes, so these tests look at what is in RGW
+ * afterwards rather than at a returned structure.  The driver gets a
+ * database of its own per test (see TestDriver::init), which is what
+ * makes the account and user write paths reachable at all.
+ * ------------------------------------------------------------------ */
+
+class NooBaaImportTest : public NooBaaStoreTest {
+public:
+  nsfs::ImportPlan plan;
+  nsfs::ImportResult result;
+
+  /* read, plan, write -- the three stages in the order the import
+   * runs them */
+  int run() {
+    auto c = read_store();
+    nsfs::NooBaaMasterKeys keys;
+    nsfs::NooBaaSettings fs;
+    fs.master_keys_store_type = "file";
+    if (keys.load(env->dpp, fs, store) == 0) {
+      std::vector<std::string> failures;
+      nsfs::decrypt_store_secrets(env->dpp, keys, c, failures);
+    }
+    plan = nsfs::ImportPlan{};
+    result = nsfs::ImportResult{};
+    if (int r = nsfs::build_import_plan(env->dpp, env->cct.get(), c, plan);
+	r < 0) {
+      return r;
+    }
+    return nsfs::import_identities(env->dpp, null_yield, driver.get(), c,
+				   plan, result);
+  }
+
+  std::string why() const {
+    std::string s;
+    for (const auto& f : result.failures) {
+      s += "\n  " + f;
+    }
+    return s;
+  }
+
+  const nsfs::ImportEntry* entry(const std::string& name) const {
+    for (const auto& e : plan.entries) {
+      if (e.noobaa_name == name) {
+	return &e;
+      }
+    }
+    return nullptr;
+  }
+};
+
 /* An nsswitch-resolved account whose name nsswitch does not know is imported as
  * NooBaa's record stood, and named in the result, so the operator
  * learns of it at the import rather than from a refused request.  The
@@ -11958,14 +14825,93 @@ TEST_F(NooBaaImportTest, DynamicGroupsMustMatchTheStore)
   EXPECT_NE(result.unresolved_uids[0].find("70199"), std::string::npos)
       << result.unresolved_uids[0];
 }
+
+/* A store NooBaa's tools wrote lands in RGW.
+ *
+ * The account, the user that holds its keys, and the identity row --
+ * three writes per root account, because `RGWAccountInfo` holds no
+ * credentials and neither holds the POSIX fields. */
+TEST_F(NooBaaImportTest, AnAccountBecomesAnAccountAUserAndARow)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.accounts_created, 1u);
+  EXPECT_EQ(result.users_created, 1u);
+  EXPECT_EQ(result.identity_rows, 1u);
+  EXPECT_EQ(result.accounts_skipped, 0u);
+
+  const auto* e = entry("interchange");
+  ASSERT_NE(e, nullptr);
+
+  /* the account, by the id that was minted for it */
+  RGWAccountInfo got;
+  Attrs attrs;
+  RGWObjVersionTracker objv;
+  ASSERT_EQ(driver->load_account_by_id(env->dpp, null_yield, e->account_id,
+				       got, attrs, objv), 0);
+  EXPECT_EQ(got.name, "interchange");
+  EXPECT_EQ(got.email, "interchange");
+
+  /* and by name and by email, which are the indexes a collision would
+   * have hit */
+  RGWAccountInfo byname;
+  ASSERT_EQ(driver->load_account_by_name(env->dpp, null_yield, "",
+					 "interchange", byname, attrs,
+					 objv), 0);
+  EXPECT_EQ(byname.id, e->account_id);
+
+  /* the user that carries the credential, found the way an
+   * authenticated request finds it */
+  std::unique_ptr<rgw::sal::User> user;
+  ASSERT_EQ(driver->get_user_by_access_key(env->dpp, "INTERCHANGEACCESSKEY",
+					   null_yield, &user), 0)
+      << "the imported credential does not authenticate";
+  EXPECT_EQ(user->get_info().account_id, e->account_id);
+  EXPECT_EQ(user->get_display_name(), "interchange");
+  /* the account's root, which is what carries the account's implicit
+   * grant (`evaluate_iam_policies`);  without it the credential
+   * authenticates and is denied everything the account owns */
+  EXPECT_EQ(user->get_info().type, TYPE_ROOT);
+  /* NooBaa's creation date, not the import's */
+  ceph::real_time made;
+  ASSERT_EQ(parse_time("2026-10-08T16:56:07.864Z", &made), 0);
+  EXPECT_EQ(user->get_info().create_date, made);
+  /* NooBaa's record allows bucket creation, so RGW's limit does too */
+  EXPECT_GE(user->get_info().max_buckets, 0);
+  /* and the account carries RGW's defaults, nothing raised */
+  EXPECT_EQ(got.max_users, RGWAccountInfo::DEFAULT_USER_LIMIT);
+  EXPECT_EQ(got.max_access_keys, RGWAccountInfo::DEFAULT_ACCESS_KEY_LIMIT);
+  EXPECT_EQ(result.limits_raised, 0u);
+  const auto& keys = user->get_info().access_keys;
+  ASSERT_EQ(keys.size(), 1u);
+  /* the decrypted secret, which is what makes the credential usable
+   * and is why I2 comes first */
+  EXPECT_EQ(keys.begin()->second.key, NB_PLAIN_SECRET);
+
   /* NooBaa's id, recorded against the account it became */
   std::string owner;
+  ASSERT_EQ(driver->get_identity_db()->get_owner_by_noobaa_id(
+		env->dpp, "6ac7cb27fd4af356919110a3", owner), 0)
+      << "re-import could not recognise what it just wrote";
   EXPECT_EQ(owner, e->account_id);
 
   /* the identity row, keyed on the account */
   nsfs::Identity row;
   ASSERT_EQ(driver->get_identity_db()->get_identity(
 		env->dpp, e->account_id, row), 0);
+  EXPECT_EQ(row.uid, 1000u);
+  EXPECT_EQ(row.gid, 1000u);
+  EXPECT_EQ(row.new_buckets_path, "/lv2tb/nsfs-interchange/data/root");
+}
+
+/* Running it twice writes nothing the second time.
+ *
+ * Keyed on NooBaa's `_id`, because the name is not stable:  a rename
+ * rewrites `name` and `email` and leaves `_id` alone.  A name-keyed
+ * re-run would collide on the name it wrote itself, or worse, mint a
+ * second id for an identity already imported. */
 /* NooBaa's `allow_bucket_creation` reaches RGW as the user's bucket
  * limit:  false is a negative limit, which RGW reads as "may not create
  * buckets", and true leaves the limit alone.  Both polarities on two
@@ -12005,26 +14951,169 @@ TEST_F(NooBaaImportTest, AllowBucketCreationBecomesTheBucketLimit)
       << "allow_bucket_creation false still allowed buckets";
 }
 
+TEST_F(NooBaaImportTest, ASecondRunRecognisesWhatTheFirstWrote)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  add_identity("6ac7d2121e63a748e37663e0", NB_ACCOUNT_GROUPS);
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+
+  ASSERT_EQ(run(), 0) << why();
+  ASSERT_EQ(result.accounts_created, 2u);
+  const std::string first_id = entry("interchange")->account_id;
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.accounts_created, 0u) << "it wrote again";
+  EXPECT_EQ(result.users_created, 0u);
+  EXPECT_EQ(result.identity_rows, 0u);
+  EXPECT_EQ(result.accounts_skipped, 2u);
+  EXPECT_EQ(result.users_skipped, 2u)
+      << "the accounts' root users were not reported as present";
+
+  /* and the account it already had is still the one it had:  the
+   * second run minted a new id in its plan, and must not have used
+   * it */
   std::string owner;
   ASSERT_EQ(driver->get_identity_db()->get_owner_by_noobaa_id(
 		env->dpp, "6ac7cb27fd4af356919110a3", owner), 0);
+  EXPECT_EQ(owner, first_id)
+      << "the second run re-minted an id for an identity already imported";
+}
+
+/* A rename on NooBaa's side does not produce a duplicate.
+ *
+ * This is why the id is the key and the name is not.  The same record
+ * under a new name is the same identity. */
 TEST_F(NooBaaImportTest, ARenameInNooBaaIsStillTheSameIdentity)
 {
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+  ASSERT_EQ(run(), 0) << why();
+  const std::string id = entry("interchange")->account_id;
+
+  /* NooBaa's rename:  name and email change, `_id` does not */
+  std::string renamed{NB_ACCOUNT_PLAIN};
+  auto at = renamed.find("\"name\": \"interchange\"");
+  ASSERT_NE(at, std::string::npos);
+  renamed.replace(at, 21, "\"name\": \"renamed-acct\"");
+  at = renamed.find("\"email\": \"interchange\"");
+  ASSERT_NE(at, std::string::npos);
+  renamed.replace(at, 22, "\"email\": \"renamed-acct\"");
+  add_identity("6ac7cb27fd4af356919110a3", renamed.c_str());
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.accounts_created, 0u)
+      << "a rename produced a second account";
+  EXPECT_EQ(result.accounts_skipped, 1u);
+
   std::string owner;
   ASSERT_EQ(driver->get_identity_db()->get_owner_by_noobaa_id(
 		env->dpp, "6ac7cb27fd4af356919110a3", owner), 0);
   EXPECT_EQ(owner, id);
 }
+
+/* The anonymous account gets a row and nothing else.
+ *
+ * RGW's anonymous identity is built in and is not an account, so
+ * importing it as one is wrong;  skipping it loses the uid mapping
+ * nsfs needs, and then an unauthenticated request has no POSIX
+ * identity to act as.  Keyed on RGW's own owner string, so resolution
+ * reaches it by the same path as any other owner (§6.8). */
+TEST_F(NooBaaImportTest, AnonymousGetsARowAndNothingElse)
+{
+  add_identity("6ac7d213cac521f05aac9fb4", NB_ACCOUNT_ANONYMOUS);
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_TRUE(result.anonymous_imported);
+  EXPECT_FALSE(result.anonymous_present);
+  EXPECT_EQ(result.identity_rows, 1u);
+  EXPECT_EQ(result.accounts_created, 0u) << "anonymous became an account";
+  EXPECT_EQ(result.users_created, 0u) << "anonymous got a user";
+
+  /* A second run finds the row, and says so as the anonymous row rather
+   * than as an account */
+  {
+    ASSERT_EQ(run(), 0) << why();
+    EXPECT_FALSE(result.anonymous_imported);
+    EXPECT_TRUE(result.anonymous_present)
+	<< "an imported anonymous account was reported as absent";
+    EXPECT_EQ(result.accounts_skipped, 0u)
+	<< "the anonymous row was counted as an account";
+    EXPECT_EQ(result.users_skipped, 0u);
+  }
+
+  nsfs::Identity row;
+  ASSERT_EQ(driver->get_identity_db()->get_identity(
+		env->dpp, RGW_USER_ANON_ID, row), 0)
+      << "nothing resolves for " << RGW_USER_ANON_ID
+      << ", so an unauthenticated request has no identity";
+  EXPECT_EQ(row.uid, 65534u);
+  EXPECT_EQ(row.gid, 65534u);
   std::string owner;
   ASSERT_EQ(driver->get_identity_db()->get_owner_by_noobaa_id(
 		env->dpp, "6ac7d213cac521f05aac9fb4", owner), 0);
   EXPECT_EQ(owner, RGW_USER_ANON_ID);
+
+  /* nothing was minted for it */
+  const auto* e = entry("anonymous");
+  ASSERT_NE(e, nullptr);
+  RGWAccountInfo got;
+  Attrs attrs;
+  RGWObjVersionTracker objv;
+  EXPECT_NE(driver->load_account_by_name(env->dpp, null_yield, "",
+					 "anonymous", got, attrs, objv), 0)
+      << "an RGW account named anonymous was created";
+}
+
+/* An IAM user lands in its owner's account, with its own row.
+ *
+ * One schema serves accounts and users, so the import tells them apart
+ * by `owner` and places the user in the account that owner became.
+ * The user's row is its tuple as NooBaa holds it (I9).  This user's
+ * NooBaa copy says uid 1500 where its account says 1000 -- the drift an
+ * account update leaves behind -- so the plan reports it, and which
+ * row the user runs as is rgw_nsfs_user_identity_override's:  the
+ * account's without it, its own with it. */
+TEST_F(NooBaaImportTest, AnIamUserLandsInItsOwnersAccount)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  add_identity("u1", R"({"_id":"u1","name":"a-user","email":"u@x",
+    "owner":"6ac7cb27fd4af356919110a3","iam_path":"/eng/",
+    "nsfs_account_config":{"uid":1500,"gid":1500,
+      "new_buckets_path":"/lv2tb/nsfs-interchange/data/root"},
+    "access_keys":[{"access_key":"USERAAAAAAAAAAAAAAAA",
+      "encrypted_secret_key":"AlSvZsxnqaN+QX3A/wUwFB0kJwM01TDOXKmNFnV51FijvRm3nJgdKQ=="}],
+    "master_key_id":"6ac7cb2751b72219a4bae375"})");
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.accounts_created, 1u);
+  EXPECT_EQ(result.users_created, 2u) << "the account's own user, and the "
+					 "IAM user";
   EXPECT_EQ(result.identity_rows, 1u) << "an account row too many or few";
   EXPECT_EQ(result.user_rows, 1u) << "the IAM user's own row was not written";
 
   const std::string account = entry("interchange")->account_id;
+  std::unique_ptr<rgw::sal::User> user;
+  ASSERT_EQ(driver->get_user_by_access_key(env->dpp, "USERAAAAAAAAAAAAAAAA",
+					   null_yield, &user), 0);
+  EXPECT_EQ(user->get_info().account_id, account)
+      << "the user was not placed in its owner's account";
+  EXPECT_EQ(user->get_info().path, "/eng/");
+  EXPECT_EQ(user->get_display_name(), "a-user");
+  EXPECT_NE(user->get_info().type, TYPE_ROOT)
+      << "an IAM user was made its account's root";
+  /* its record carries no allow_bucket_creation, which NooBaa reads as
+   * denied, and RGW expresses as a negative bucket limit */
+  EXPECT_LT(user->get_info().max_buckets, 0);
+  /* and the root of the same account is the root */
+  std::unique_ptr<rgw::sal::User> root;
+  ASSERT_EQ(driver->get_user_by_access_key(env->dpp, "INTERCHANGEACCESSKEY",
+					   null_yield, &root), 0);
+  EXPECT_EQ(root->get_info().type, TYPE_ROOT);
+
   /* the account's row is the account's, not overwritten by the
    * member -- which is what keying every identity on the account did */
+  nsfs::Identity row;
   ASSERT_EQ(driver->get_identity_db()->get_identity(
 		env->dpp, account, row), 0);
   EXPECT_EQ(row.uid, 1000u) << "the member's copy replaced the account's";
@@ -12133,16 +15222,1201 @@ TEST_F(NooBaaImportTest, ReplanningWithAnIamUserKeepsTheAccountId)
 	<< e.noobaa_name << " was planned into a different account";
   }
 }
+
+/* A key with no decrypted secret is rejected, not written.
+ *
+ * A user written with an unusable credential is worse than one not
+ * written:  the credential silently does not authenticate and nothing
+ * says why.  So the master-key step comes first and this is what
+ * happens when it did not. */
+TEST_F(NooBaaImportTest, AnIdentityWithAnUndecryptedSecretIsRejected)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  /* no master_keys.json, so no secret is opened */
+  ASSERT_FALSE(std::filesystem::exists(store + "/master_keys.json"));
+
+  EXPECT_EQ(run(), -EIO);
+  EXPECT_EQ(result.users_created, 0u);
+  bool said = false;
+  for (const auto& f : result.failures) {
+    if (f.find("no decrypted secret") != std::string::npos) {
+      said = true;
+    }
+  }
+  EXPECT_TRUE(said) << why();
+
+  /* and nothing authenticates with it */
+  std::unique_ptr<rgw::sal::User> user;
+  EXPECT_NE(driver->get_user_by_access_key(env->dpp, "INTERCHANGEACCESSKEY",
+					   null_yield, &user), 0)
+      << "a credential was written with no usable secret";
+}
+
+/* A run that fails after writing part of an identity is re-run once the
+ * cause is fixed, and the re-run completes it.
+ *
+ * The first run has no master key, so the account is written and its
+ * user is not;  the second has one. */
+TEST_F(NooBaaImportTest, APartialImportIsCompletedByARerun)
+{
+  /* as adopt_identities() runs it:  read, plan, check RGW's state, write */
+  auto adopt = [this] {
+    auto c = read_store();
+    nsfs::NooBaaMasterKeys keys;
+    nsfs::NooBaaSettings fs;
+    fs.master_keys_store_type = "file";
+    if (keys.load(env->dpp, fs, store) == 0) {
+      std::vector<std::string> failures;
+      nsfs::decrypt_store_secrets(env->dpp, keys, c, failures);
+    }
+    plan = nsfs::ImportPlan{};
+    result = nsfs::ImportResult{};
+    EXPECT_EQ(nsfs::build_import_plan(env->dpp, env->cct.get(), c, plan,
+				      driver->get_identity_db()), 0);
+    EXPECT_EQ(nsfs::check_rgw_state(env->dpp, null_yield, driver.get(), plan),
+	      0);
+    return nsfs::import_identities(env->dpp, null_yield, driver.get(), c,
+				   plan, result);
+  };
+
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  ASSERT_EQ(adopt(), -EIO);
+  {
+    RGWAccountInfo info;
+    rgw::sal::Attrs attrs;
+    RGWObjVersionTracker objv;
+    EXPECT_NE(driver->load_account_by_name(env->dpp, null_yield, "",
+					   "interchange", info, attrs, objv), 0)
+	<< "a run with no master key wrote the account";
+  }
+
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+  ASSERT_EQ(adopt(), 0) << why();
+  EXPECT_EQ(result.accounts_created, 1u);
+
+  std::string owner;
+  ASSERT_EQ(driver->get_identity_db()->get_owner_by_noobaa_id(
+		env->dpp, "6ac7cb27fd4af356919110a3", owner), 0);
+  std::unique_ptr<rgw::sal::User> user;
+  EXPECT_EQ(driver->get_user_by_access_key(env->dpp, "INTERCHANGEACCESSKEY",
+					   null_yield, &user), 0);
+}
+
+/* A run that stopped after writing an identity's account, user, keys
+ * and row, before recording it as imported, is resumed into what it
+ * wrote:  nothing is written twice and nothing is found to collide.
+ *
+ * The stop is made by setting the finished import's `_id` row back to
+ * in progress, which is the state a crash before the last step leaves. */
+TEST_F(NooBaaImportTest, AnImportStoppedBeforeItsLastStepIsResumed)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+
+  auto adopt = [this] {
+    auto c = read_store();
+    nsfs::NooBaaMasterKeys keys;
+    nsfs::NooBaaSettings fs;
+    fs.master_keys_store_type = "file";
+    EXPECT_EQ(keys.load(env->dpp, fs, store), 0);
+    std::vector<std::string> failures;
+    nsfs::decrypt_store_secrets(env->dpp, keys, c, failures);
+    plan = nsfs::ImportPlan{};
+    result = nsfs::ImportResult{};
+    EXPECT_EQ(nsfs::build_import_plan(env->dpp, env->cct.get(), c, plan,
+				      driver->get_identity_db()), 0);
+    EXPECT_EQ(nsfs::check_rgw_state(env->dpp, null_yield, driver.get(), plan),
+	      0);
+    return nsfs::import_identities(env->dpp, null_yield, driver.get(), c,
+				   plan, result);
+  };
+
+  ASSERT_EQ(adopt(), 0) << why();
+  auto* db = driver->get_identity_db();
+  std::string account;
+  ASSERT_EQ(db->get_owner_by_noobaa_id(env->dpp, "6ac7cb27fd4af356919110a3",
+				       account), 0);
+  std::unique_ptr<rgw::sal::User> user;
+  ASSERT_EQ(driver->get_user_by_access_key(env->dpp, "INTERCHANGEACCESSKEY",
+					   null_yield, &user), 0);
+  const rgw_user uid = user->get_id();
+
+  {
+    const std::string file = (bp / "userdb.db").string();
+    sqlite3* raw = nullptr;
+    ASSERT_EQ(sqlite3_open(file.c_str(), &raw), SQLITE_OK);
+    auto close_raw = make_scope_guard([raw] { sqlite3_close(raw); });
+    const std::string sql =
+      "UPDATE 'userdb_nsfs_noobaa_id' SET Complete = 0, UserId = '" +
+      uid.id + "' WHERE NoobaaId = '6ac7cb27fd4af356919110a3';";
+    ASSERT_EQ(sqlite3_exec(raw, sql.c_str(), nullptr, nullptr, nullptr),
+	      SQLITE_OK) << sqlite3_errmsg(raw);
+    ASSERT_EQ(sqlite3_changes(raw), 1);
+  }
+  std::string ignored;
+  ASSERT_EQ(db->get_owner_by_noobaa_id(env->dpp, "6ac7cb27fd4af356919110a3",
+				       ignored), -ENOENT)
+      << "an import in progress reads as imported";
+
+  ASSERT_EQ(adopt(), 0) << why();
+  EXPECT_EQ(entry("interchange")->account_id, account)
+      << "the plan minted a new account id for the import in progress";
+  EXPECT_EQ(result.accounts_created, 0u) << "the account was written twice";
+  EXPECT_EQ(result.users_created, 0u) << "the user was written twice";
+  EXPECT_EQ(result.accounts_skipped, 1u);
+  EXPECT_EQ(result.users_skipped, 1u);
+
+  std::string owner;
+  ASSERT_EQ(db->get_owner_by_noobaa_id(env->dpp, "6ac7cb27fd4af356919110a3",
+				       owner), 0);
+  EXPECT_EQ(owner, account);
+  ASSERT_EQ(driver->get_user_by_access_key(env->dpp, "INTERCHANGEACCESSKEY",
+					   null_yield, &user), 0);
+  EXPECT_EQ(user->get_id(), uid);
+}
+
+/* allow_bypass_governance becomes an IAM grant on an IAM user, and a
+ * root needs none.
+ *
+ * NooBaa's flag is a boolean;  RGW expresses the same permission as an
+ * action, so the import writes a policy rather than inventing a column
+ * (§2.2).  A root is RGW's account root, allowed every action on what
+ * its account owns, so a grant would add nothing.  A root NooBaa did
+ * not allow is reported instead:  RGW's root semantics were accepted
+ * over NooBaa's restriction (DECISIONS.md 2026-10-10). */
+TEST_F(NooBaaImportTest, BypassGovernanceBecomesAGrant)
+{
+  std::string with{NB_ACCOUNT_PLAIN};
+  auto at = with.find("\"gid\": 1000");
+  ASSERT_NE(at, std::string::npos);
+  with.replace(at, 11, "\"gid\": 1000,\n    \"allow_bypass_governance\": true");
+  add_identity("6ac7cb27fd4af356919110a3", with.c_str());
+  add_identity("u1", R"({"_id":"u1","name":"a-user","email":"u@x",
+    "owner":"6ac7cb27fd4af356919110a3",
+    "nsfs_account_config":{"uid":1000,"gid":1000,
+      "new_buckets_path":"/lv2tb/nsfs-interchange/data/root",
+      "allow_bypass_governance":true},
+    "access_keys":[{"access_key":"USERAAAAAAAAAAAAAAAA",
+      "encrypted_secret_key":"AlSvZsxnqaN+QX3A/wUwFB0kJwM01TDOXKmNFnV51FijvRm3nJgdKQ=="}],
+    "master_key_id":"6ac7cb2751b72219a4bae375"})");
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.grants_written, 1u) << "only the IAM user needs one";
+  EXPECT_TRUE(plan.widened.empty())
+      << "a root NooBaa allowed was reported as widened:  " << plan.widened[0];
+
+  std::unique_ptr<rgw::sal::User> user;
+  ASSERT_EQ(driver->get_user_by_access_key(env->dpp, "USERAAAAAAAAAAAAAAAA",
+					   null_yield, &user), 0);
+  auto p = user->get_attrs().find(RGW_ATTR_USER_POLICY);
+  ASSERT_NE(p, user->get_attrs().end()) << "no policy was attached";
+  std::map<std::string, std::string> policies;
+  auto bl = p->second.cbegin();
+  ceph::decode(policies, bl);
+  ASSERT_EQ(policies.size(), 1u);
+  EXPECT_NE(policies.begin()->second.find("s3:BypassGovernanceRetention"),
+	    std::string::npos);
+
+  std::unique_ptr<rgw::sal::User> root;
+  ASSERT_EQ(driver->get_user_by_access_key(env->dpp, "INTERCHANGEACCESSKEY",
+					   null_yield, &root), 0);
+  EXPECT_EQ(root->get_attrs().count(RGW_ATTR_USER_POLICY), 0u)
+      << "a policy was attached to the account's root";
+
+  /* a root without the flag:  no policy, and reported as widened */
+  std::filesystem::remove_all(store + "/identities");
+  std::filesystem::create_directories(store + "/identities");
+  add_identity("other", NB_ACCOUNT_GROUPS);
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.grants_written, 0u);
+  ASSERT_EQ(plan.widened.size(), 1u);
+  EXPECT_NE(plan.widened[0].find("ix-groups"), std::string::npos)
+      << plan.widened[0];
+}
+
+/* A collision against RGW's existing state is caught before writing.
+ *
+ * I3 sees the collisions in the store;  this is the other half, and it
+ * needs a lookup.  Each fails its identity, as I3's do.  An identity
+ * already imported is **not** one -- it is recognised by its id and
+ * skipped, which is what makes a re-run safe, so the check has to ask
+ * that question first. */
+TEST_F(NooBaaImportTest, ACollisionWithExistingRgwStateIsCaught)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+  ASSERT_EQ(run(), 0) << why();
+
+  /* a second, different NooBaa identity claiming the same name */
+  add_identity("different", R"({"_id":"different","name":"interchange",
+    "email":"interchange"})");
+
+  auto c = read_store();
+  nsfs::ImportPlan p;
+  ASSERT_EQ(nsfs::build_import_plan(env->dpp, env->cct.get(), c, p), 0);
+  ASSERT_EQ(p.entries.size(), 2u);
+  for (const auto& e : p.entries) {
+    EXPECT_FALSE(e.failed.empty())
+	<< "two records of one name should collide in the store alone";
+  }
+  /* with the database consulted, the one already imported stays so,
+   * and only the newcomer fails */
+  nsfs::ImportPlan pd;
+  ASSERT_EQ(nsfs::build_import_plan(env->dpp, env->cct.get(), c, pd,
+				    driver->get_identity_db()), 0);
+  for (const auto& e : pd.entries) {
+    EXPECT_EQ(e.failed.empty(), e.noobaa_id == "6ac7cb27fd4af356919110a3")
+	<< e.noobaa_id;
+  }
+
+  /* and with only the new one in the store, the store looks clean and
+   * RGW is the only thing that knows */
+  std::filesystem::remove_all(store + "/identities");
+  std::filesystem::create_directories(store + "/identities");
+  add_identity("different", R"({"_id":"different","name":"interchange",
+    "email":"interchange"})");
+  auto c2 = read_store();
+  nsfs::ImportPlan p2;
+  ASSERT_EQ(nsfs::build_import_plan(env->dpp, env->cct.get(), c2, p2), 0);
+  ASSERT_TRUE(p2.failures().empty()) << "the store half should be clean here";
+
+  EXPECT_EQ(nsfs::check_rgw_state(env->dpp, null_yield, driver.get(), p2), 0);
+  /* its name and its email, each already RGW's */
+  const auto f2 = p2.failures();
+  ASSERT_EQ(f2.size(), 2u) << "a name already in RGW was not noticed";
+  EXPECT_NE(f2[0].find("an RGW account named interchange"), std::string::npos)
+      << f2[0];
+  EXPECT_NE(f2[1].find("the email \"interchange\""), std::string::npos)
+      << f2[1];
+
+  /* and the same check passes for an identity already imported, which
+   * is the case it must not call a collision */
+  std::filesystem::remove_all(store + "/identities");
+  std::filesystem::create_directories(store + "/identities");
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  auto c3 = read_store();
+  nsfs::ImportPlan p3;
+  ASSERT_EQ(nsfs::build_import_plan(env->dpp, env->cct.get(), c3, p3), 0);
+  EXPECT_EQ(nsfs::check_rgw_state(env->dpp, null_yield, driver.get(), p3), 0);
+  EXPECT_TRUE(p3.failures().empty())
+      << "an identity already imported was called a collision";
+}
+
+/* An account is created with the limits its plan raised.
+ *
+ * Five keys on the root, one above RGW's default.  Every key is the
+ * same ciphertext under a different id, which the master key opens
+ * the same way. */
+TEST_F(NooBaaImportTest, AnAccountIsCreatedWithItsRaisedLimit)
+{
+  const int n = RGWAccountInfo::DEFAULT_ACCESS_KEY_LIMIT + 1;
+  std::string k;
+  for (int i = 0; i < n; ++i) {
+    k += std::string(i ? "," : "") + R"({"access_key":"KEY)" +
+	 std::to_string(i) + R"(AAAAAAAAAAAAAAAAA","encrypted_secret_key":)"
+	 R"("AlSvZsxnqaN+QX3A/wUwFB0kJwM01TDOXKmNFnV51FijvRm3nJgdKQ=="})";
+  }
+  const std::string rec = R"({"_id":"a","name":"acct","email":"a",
+    "allow_bucket_creation":true,"access_keys":[)" + k +
+    R"(],"master_key_id":"6ac7cb2751b72219a4bae375"})";
+  add_identity("a", rec.c_str());
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.limits_raised, 1u);
+
+  RGWAccountInfo got;
+  Attrs attrs;
+  RGWObjVersionTracker objv;
+  ASSERT_EQ(driver->load_account_by_id(env->dpp, null_yield,
+				       entry("acct")->account_id,
+				       got, attrs, objv), 0);
+  EXPECT_EQ(got.max_access_keys, n);
+  EXPECT_EQ(got.max_users, RGWAccountInfo::DEFAULT_USER_LIMIT)
+      << "a limit nothing exceeded was raised";
+
+  std::unique_ptr<rgw::sal::User> user;
+  ASSERT_EQ(driver->get_user_by_access_key(env->dpp, "KEY0AAAAAAAAAAAAAAAAA",
+					   null_yield, &user), 0);
+  EXPECT_EQ(user->get_info().access_keys.size(), static_cast<size_t>(n));
+}
+
+/* A key NooBaa holds deactivated stays inactive.
+ *
+ * RGW's add path creates every key active, so the import deactivates
+ * one with a second operation.  A key that came back active would
+ * authenticate a credential the NooBaa operator turned off. */
+TEST_F(NooBaaImportTest, ADeactivatedKeyStaysInactive)
+{
+  std::string rec{NB_ACCOUNT_PLAIN};
+  auto at = rec.find("\"encrypted_secret_key\"");
+  ASSERT_NE(at, std::string::npos);
+  rec.insert(at, "\"deactivated\": true,\n      ");
+  add_identity("6ac7cb27fd4af356919110a3", rec.c_str());
+  /* the control:  an account whose key is active */
+  add_identity("6ac7d2121e63a748e37663e0", NB_ACCOUNT_GROUPS);
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+
+  ASSERT_EQ(run(), 0) << why();
+
+  std::unique_ptr<rgw::sal::User> off;
+  ASSERT_EQ(driver->get_user_by_access_key(env->dpp, "INTERCHANGEACCESSKEY",
+					   null_yield, &off), 0);
+  const auto& k = off->get_info().access_keys.at("INTERCHANGEACCESSKEY");
+  EXPECT_FALSE(k.active) << "a deactivated key came back active";
+  EXPECT_EQ(k.key, NB_PLAIN_SECRET) << "deactivating lost the secret";
+
+  std::unique_ptr<rgw::sal::User> on;
+  ASSERT_EQ(driver->get_user_by_access_key(env->dpp, "IXGROUPSACCESSKEY001",
+					   null_yield, &on), 0);
+  EXPECT_TRUE(on->get_info().access_keys.at("IXGROUPSACCESSKEY001").active);
+}
+
+/* A key another RGW user already holds is caught before writing.
+ *
+ * Access keys are unique across RGW.  The user-add path would reject
+ * the key, but only after the account and the user exist;  the check
+ * against RGW's state fails the identity first. */
+TEST_F(NooBaaImportTest, AKeyRgwAlreadyHoldsIsCaught)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  auto c = read_store();
+  nsfs::ImportPlan p;
+  ASSERT_EQ(nsfs::build_import_plan(env->dpp, env->cct.get(), c, p), 0);
+
+  /* the control:  nothing holds it yet */
+  ASSERT_EQ(nsfs::check_rgw_state(env->dpp, null_yield, driver.get(), p), 0);
+  ASSERT_TRUE(p.failures().empty()) << p.failures()[0];
+
+  /* an RGW user, from no import, takes the key */
+  RGWUserAdminOpState op(driver.get());
+  op.set_user_id(rgw_user{"", "someone"});
+  op.set_display_name("someone");
+  op.set_access_key("INTERCHANGEACCESSKEY");
+  op.set_secret_key("somebodyelsessecret");
+  RGWUser u;
+  std::string err;
+  ASSERT_EQ(u.init(env->dpp, driver.get(), op, null_yield), 0);
+  ASSERT_EQ(u.add(env->dpp, op, null_yield, &err), 0) << err;
+
+  EXPECT_EQ(nsfs::check_rgw_state(env->dpp, null_yield, driver.get(), p), 0);
+  const auto f = p.failures();
+  ASSERT_EQ(f.size(), 1u);
+  EXPECT_NE(f[0].find("already held by RGW user someone"),
+	    std::string::npos) << f[0];
+}
+
+/* A real store on disk imports.
+ *
+ * Skipped when `NSFS_NOOBAA_STORE` is unset.  Three accounts NooBaa's CLI
+ * and gateway wrote, NooBaa's master key, NooBaa's ciphertext -- read,
+ * planned, decrypted and written, which is the whole of phases 0 and 1
+ * against output nobody composed. */
+TEST_F(NooBaaImportTest, AStoreOnDiskImports)
+{
+  const char* dir = ::getenv("NSFS_NOOBAA_STORE");
+  if (!dir || !*dir) {
+    GTEST_SKIP() << "NSFS_NOOBAA_STORE is unset";
+  }
+
+  nsfs::NooBaaConfigStore cs(dir);
+  nsfs::NooBaaStoreContents c;
+  ASSERT_EQ(cs.read(env->dpp, c), 0);
+
+  nsfs::NooBaaMasterKeys keys;
+  ASSERT_EQ(keys.load(env->dpp, c.settings, dir), 0);
+  std::vector<std::string> failures;
+  ASSERT_EQ(nsfs::decrypt_store_secrets(env->dpp, keys, c, failures), 0);
+
+  nsfs::ImportPlan p;
+  ASSERT_EQ(nsfs::build_import_plan(env->dpp, env->cct.get(), c, p), 0);
+
+  ASSERT_EQ(nsfs::check_rgw_state(env->dpp, null_yield, driver.get(), p), 0);
+  ASSERT_TRUE(p.failures().empty()) << p.failures()[0];
+
   /* The gateway set as a deployment adopting this store sets it:  the
    * import refuses a store with NooBaa's dynamic groups on when
    * rgw_nsfs_dynamic_supplemental_groups is off (I8), and the stand-up
    * writes one under impersonation. */
   driver->get_identity_db()->nsswitch_cache().override_dynamic_groups(
     c.settings.dynamic_supplemental_groups);
+
+  nsfs::ImportResult r;
+  std::string s;
+  int ret = nsfs::import_identities(env->dpp, null_yield, driver.get(), c,
+				    p, r);
+  for (const auto& f : r.failures) {
+    s += "\n  " + f;
+  }
+  ASSERT_EQ(ret, 0) << s;
   EXPECT_TRUE(r.unresolved_names.empty()) << r.unresolved_names.front();
   EXPECT_TRUE(r.unresolved_uids.empty()) << r.unresolved_uids.front();
+  EXPECT_GT(r.accounts_created, 0u);
+  EXPECT_GT(r.identity_rows, 0u);
+  /* An anonymous account, where the store has one, becomes a row rather
+   * than an account.  A store need not have one:  NooBaa creates it
+   * only when asked, for a deployment that serves unauthenticated
+   * requests. */
+  const bool has_anonymous =
+    std::any_of(c.identities.begin(), c.identities.end(),
+		[](const auto& i) { return i.is_anonymous(); });
+  EXPECT_EQ(r.anonymous_imported, has_anonymous);
+
+  /* every imported credential authenticates */
+  size_t checked = 0;
+  for (const auto& id : c.identities) {
+    for (const auto& ak : id.access_keys) {
+      std::unique_ptr<rgw::sal::User> user;
+      EXPECT_EQ(driver->get_user_by_access_key(env->dpp, ak.access_key,
+					       null_yield, &user), 0)
+	  << ak.access_key << " does not authenticate";
+      ++checked;
+    }
+  }
+  EXPECT_GT(checked, 0u) << "no credential was checked";
+
+  /* and a second run writes nothing */
+  nsfs::ImportResult again;
+  ASSERT_EQ(nsfs::import_identities(env->dpp, null_yield, driver.get(), c,
+				    p, again), 0);
+  EXPECT_EQ(again.accounts_created, 0u);
+  EXPECT_EQ(again.users_created, 0u);
+}
+
+/* ------------------------------------------------------------------ *
+ * I5 -- bucket state, and the principals in it.
+ *
+ * Most of the translation already existed;  what is new is the owner,
+ * the principal rewriting, and `logging`.  The rewriting gets the most
+ * tests because it is the part where being subtly wrong changes who
+ * may do what, and nobody notices until an access decision goes the
+ * wrong way.
+ * ------------------------------------------------------------------ */
+
+/* A role NooBaa holds becomes an RGW role in its account (DECISIONS.md
+ * 2026-10-26).
+ *
+ * NooBaa's bytes for `ix-groups`, with one documented change:  the
+ * `role_config` that `account update --role_config` writes, in the CLI's
+ * own shape.  Its three statements are the three cases NooBaa 5.23's
+ * evaluation distinguishes (`sts_rest.js:195-232`):  `allow` for a
+ * named account, an `effect` other than `allow`, which NooBaa partitions
+ * with the denies, and an action that is not an AssumeRole, which never
+ * applies. */
+static std::string nb_role_account(const std::string& principal)
+{
+  std::string rec = NB_ACCOUNT_GROUPS;
+  const std::string from = R"("master_key_id")";
+  rec.replace(rec.find(from), from.size(),
+    R"("role_config": {"role_name": "nb-role", "assume_role_policy": {)"
+    R"("version": "2012-10-17", "statement": [)"
+    R"({"effect": "allow", "action": ["sts:*"], "principal": [")" +
+    principal + R"("]},)"
+    R"({"effect": "Allow", "action": ["sts:AssumeRole"], "principal": ["*"]},)"
+    R"({"effect": "allow", "action": ["s3:GetObject"], "principal": ["*"]})"
+    R"(]}}, "master_key_id")");
+  return rec;
+}
+
+/* The trust policy is NooBaa's, translated as it evaluates:  the named
+ * account's principal rewritten to its RGW account, the second statement
+ * a deny, and the third dropped.  Under the default the role carries
+ * NooBaaRoleMigration, which is 5.23's account rights. */
+TEST_F(NooBaaImportTest, ARoleIsAnRgwRoleWithItsTrustPolicyTranslated)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  add_identity("6ac7d2121e63a748e37663e0",
+	       nb_role_account("interchange").c_str());
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.roles_created, 1u);
+  EXPECT_EQ(result.role_rights, "account");
+  EXPECT_EQ(result.role_policies_written, 1u);
+
+  const auto* holder = entry("ix-groups");
+  const auto* named = entry("interchange");
+  ASSERT_NE(holder, nullptr);
+  ASSERT_NE(named, nullptr);
+  auto role = driver->get_role("nb-role", holder->tenant,
+			       rgw_account_id{holder->account_id});
+  ASSERT_EQ(role->load_by_name(env->dpp, null_yield), 0)
+      << "the role is not in its account";
+  const auto& info = role->get_info();
+  /* what IAM CreateRole gives a role, and what a client is handed as
+   * the ARN to assume after adoption */
+  EXPECT_EQ(info.arn, "arn:aws:iam::" + holder->account_id + ":role/nb-role");
+  EXPECT_FALSE(info.id.empty()) << "the role has no id";
+  EXPECT_FALSE(info.creation_date.empty()) << "the role has no creation date";
+  EXPECT_EQ(info.max_session_duration, 3600u);
+
+  JSONParser p;
+  ASSERT_TRUE(p.parse(info.trust_policy.data(), info.trust_policy.size()))
+      << info.trust_policy;
+  std::vector<std::string> effects, principals;
+  JSONObj* stmts = p.find_obj("Statement");
+  ASSERT_NE(stmts, nullptr) << info.trust_policy;
+  for (auto i = stmts->find_first(); !i.end(); ++i) {
+    std::string effect, action;
+    std::vector<std::string> aws;
+    JSONDecoder::decode_json("Effect", effect, *i);
+    JSONDecoder::decode_json("Action", action, *i);
+    JSONDecoder::decode_json("AWS", aws, (*i)->find_obj("Principal"));
+    EXPECT_EQ(action, "sts:AssumeRole") << info.trust_policy;
+    effects.push_back(effect);
+    principals.insert(principals.end(), aws.begin(), aws.end());
+  }
+  EXPECT_EQ(effects, (std::vector<std::string>{"Allow", "Deny"}))
+      << info.trust_policy;
+  EXPECT_EQ(principals,
+	    (std::vector<std::string>{named->account_id, "*"}))
+      << "the named account's principal is not its RGW account: "
+      << info.trust_policy;
+
+  ASSERT_EQ(info.perm_policy_map.count("NooBaaRoleMigration"), 1u);
+  EXPECT_NE(info.perm_policy_map.at("NooBaaRoleMigration").find(
+	      R"("Action":"s3:*","Resource":"*")"), std::string::npos);
+}
+
+/* `rgw_nsfs_adoption_role_rights=none` imports the role as NooBaa 6
+ * migrates one:  the same trust policy, and no permission policy. */
+TEST_F(NooBaaImportTest, RoleRightsNoneImportsTheRoleWithNoPolicy)
+{
+  g_conf().set_val("rgw_nsfs_adoption_role_rights", "none");
+  auto reset = make_scope_guard([] {
+    g_conf().set_val("rgw_nsfs_adoption_role_rights", "account");
+  });
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  add_identity("6ac7d2121e63a748e37663e0",
+	       nb_role_account("interchange").c_str());
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.roles_created, 1u);
+  EXPECT_EQ(result.role_rights, "none");
+  EXPECT_EQ(result.role_policies_written, 0u);
+
+  const auto* holder = entry("ix-groups");
+  ASSERT_NE(holder, nullptr);
+  auto role = driver->get_role("nb-role", holder->tenant,
+			       rgw_account_id{holder->account_id});
+  ASSERT_EQ(role->load_by_name(env->dpp, null_yield), 0);
+  EXPECT_TRUE(role->get_info().perm_policy_map.empty());
+  EXPECT_FALSE(role->get_info().trust_policy.empty());
+}
+
+/* A principal that resolves to nothing fails the role rather than being
+ * dropped:  dropped, an allow would stop admitting the account it named,
+ * and a deny would stop refusing it. */
+TEST_F(NooBaaImportTest, ARolePrincipalThatResolvesToNothingFailsTheRole)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  add_identity("6ac7d2121e63a748e37663e0", nb_role_account("nobody").c_str());
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+
+  EXPECT_LT(run(), 0);
+  EXPECT_EQ(result.roles_created, 0u);
+  EXPECT_NE(why().find("resolve to nothing: nobody"), std::string::npos)
+      << why();
+}
+
+/* An IAM user of the trust policy's name, in another account. */
+static constexpr const char* NB_USER_NAMED_INTERCHANGE = R"({"_id":"u9",
+  "name":"interchange","email":"interchange",
+  "owner":"6ac7d2121e63a748e37663e0",
+  "nsfs_account_config":{"uid":1500,"gid":1500,
+    "new_buckets_path":"/lv2tb/nsfs-interchange/data/root"},
+  "access_keys":[{"access_key":"USERNAMEDINTERCHANGE",
+    "encrypted_secret_key":"AlSvZsxnqaN+QX3A/wUwFB0kJwM01TDOXKmNFnV51FijvRm3nJgdKQ=="}],
+  "master_key_id":"6ac7cb2751b72219a4bae375"})";
+
+/* A trust policy naming only an IAM user's name resolves to nothing,
+ * so the role fails as for any unresolved principal, and the failure
+ * says why. */
+TEST_F(NooBaaImportTest, ATrustNameOnlyAUserHasFailsTheRole)
+{
+  add_identity("6ac7d2121e63a748e37663e0",
+	       nb_role_account("interchange").c_str());
+  add_identity("u9", NB_USER_NAMED_INTERCHANGE);
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+
+  EXPECT_LT(run(), 0);
+  EXPECT_EQ(result.roles_created, 0u);
+  EXPECT_NE(why().find("resolve to nothing: interchange (an IAM user's "
+		       "name;  a name resolves only to an account)"),
+	    std::string::npos) << why();
+}
+
+/* A trust policy naming an account that an IAM user's name also matches
+ * trusts the account only, and reports the user NooBaa's STS also
+ * admitted (DECISIONS.md 2026-10-30, amended 2026-11-01). */
+TEST_F(NooBaaImportTest, ATrustNameAnAccountAndAUserShareTrustsTheAccount)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  add_identity("6ac7d2121e63a748e37663e0",
+	       nb_role_account("interchange").c_str());
+  add_identity("u9", NB_USER_NAMED_INTERCHANGE);
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.roles_created, 1u);
+
+  const auto* holder = entry("ix-groups");
+  const auto* named = entry("interchange");
+  ASSERT_NE(holder, nullptr);
+  ASSERT_NE(named, nullptr);
+  auto role = driver->get_role("nb-role", holder->tenant,
+			       rgw_account_id{holder->account_id});
+  ASSERT_EQ(role->load_by_name(env->dpp, null_yield), 0);
+  const auto& trust = role->get_info().trust_policy;
+  EXPECT_NE(trust.find(named->account_id), std::string::npos) << trust;
+  EXPECT_EQ(trust.find(":user/"), std::string::npos) << trust;
+
+  ASSERT_EQ(result.trust_narrowed.size(), 1u);
+  const auto& t = result.trust_narrowed[0];
+  EXPECT_NE(t.find("role nb-role trusts the account interchange (arn:aws:"
+		   "iam::" + holder->account_id + ":user/"),
+	    std::string::npos) << t;
+}
+
+/* A trust policy naming an account by NooBaa's ARN trusts the RGW
+ * account, and the role is returned as matching it. */
+TEST_F(NooBaaImportTest, ATrustArnTrustsTheAccountAndIsReturned)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  add_identity("6ac7d2121e63a748e37663e0",
+	       nb_role_account(
+		 "arn:aws:iam::6ac7cb27fd4af356919110a3:root").c_str());
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.roles_created, 1u);
+
+  const auto* holder = entry("ix-groups");
+  const auto* named = entry("interchange");
+  ASSERT_NE(holder, nullptr);
+  ASSERT_NE(named, nullptr);
+  const std::string arn = "arn:aws:iam::" + named->account_id + ":root";
+  auto role = driver->get_role("nb-role", holder->tenant,
+			       rgw_account_id{holder->account_id});
+  ASSERT_EQ(role->load_by_name(env->dpp, null_yield), 0);
+  const auto& trust = role->get_info().trust_policy;
+  EXPECT_NE(trust.find(arn), std::string::npos) << trust;
+
+  ASSERT_EQ(result.arns_matched.size(), 1u);
+  EXPECT_EQ(result.arns_matched[0].find(
+	      "ix-groups: role nb-role: arn:aws:iam::6ac7cb27fd4af356919110a3"
+	      ":root as " + arn + " ("), 0u) << result.arns_matched[0];
+}
+
+/* A `CreateRole` role becomes an RGW role in its owner account:  its
+ * path, description and session duration, its trust policy with its
+ * principals rewritten, and its own policies as they are.  An ARN in
+ * its trust policy is rewritten and not reported, since NooBaa's STS
+ * matched it (DECISIONS.md 2026-10-30, amended 2026-11-02). */
+TEST_F(NooBaaImportTest, ACreateRoleRoleIsAnRgwRoleWithItsOwnPolicies)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  add_role("r1", "6ac7cb27fd4af356919110a3", "reader",
+	   nb_role("r1", "6ac7cb27fd4af356919110a3", "reader",
+		   "arn:aws:iam::6ac7cb27fd4af356919110a3:root"));
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.roles_created, 1u);
+  EXPECT_EQ(result.role_policies_written, 1u);
+  EXPECT_TRUE(result.arns_matched.empty()) << result.arns_matched.front();
+
+  const auto* acct = entry("interchange");
+  ASSERT_NE(acct, nullptr);
+  auto role = driver->get_role("reader", acct->tenant,
+			       rgw_account_id{acct->account_id});
+  ASSERT_EQ(role->load_by_name(env->dpp, null_yield), 0);
+  const auto& info = role->get_info();
+  EXPECT_EQ(info.path, "/eng/");
+  EXPECT_EQ(info.description, "reads the reports");
+  EXPECT_EQ(info.max_session_duration, 7200u);
+  EXPECT_NE(info.trust_policy.find(
+	      "arn:aws:iam::" + acct->account_id + ":root"),
+	    std::string::npos) << info.trust_policy;
+  ASSERT_EQ(info.perm_policy_map.count("reports"), 1u);
+  EXPECT_NE(info.perm_policy_map.at("reports").find("arn:aws:s3:::reports/*"),
+	    std::string::npos);
+  EXPECT_EQ(info.perm_policy_map.count("NooBaaRoleMigration"), 0u);
+}
+
+/* An account's `role_config` role is not imported when a ROLE record of
+ * its name in that account is, and is reported (DECISIONS.md 2026-10-30,
+ * amended 2026-11-02). */
+TEST_F(NooBaaImportTest, ARoleRecordSupersedesTheRoleConfigOfItsName)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  add_identity("6ac7d2121e63a748e37663e0",
+	       nb_role_account("interchange").c_str());
+  add_role("r1", "6ac7d2121e63a748e37663e0", "nb-role",
+	   nb_role("r1", "6ac7d2121e63a748e37663e0", "nb-role",
+		   "interchange"));
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.roles_created, 1u);
+  ASSERT_EQ(result.role_config_superseded.size(), 1u);
+  EXPECT_EQ(result.role_config_superseded[0],
+	    "ix-groups: role_config role nb-role is not imported;  the ROLE "
+	    "record r1 of that name is");
+
+  const auto* holder = entry("ix-groups");
+  ASSERT_NE(holder, nullptr);
+  auto role = driver->get_role("nb-role", holder->tenant,
+			       rgw_account_id{holder->account_id});
+  ASSERT_EQ(role->load_by_name(env->dpp, null_yield), 0);
+  EXPECT_EQ(role->get_info().description, "reads the reports")
+      << "the role_config role was imported, not the ROLE record";
+}
+
+/* A role that cannot be written fails alone:  one whose owner is not in
+ * the store, and one its name's symlink does not name.  Everything else
+ * is imported (DECISIONS.md 2026-10-30, amended 2026-11-02). */
+TEST_F(NooBaaImportTest, ARoleThatCannotBeWrittenStopsNothingElse)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  add_role("r1", "6ac7cb27fd4af356919110a3", "reader",
+	   nb_role("r1", "6ac7cb27fd4af356919110a3", "reader", "interchange"));
+  add_role("r2", "6ac7cb27fd4af356919110a3", "reader",
+	   nb_role("r2", "6ac7cb27fd4af356919110a3", "reader", "interchange"),
+	   false);
+  add_role("r3", "6ac7cb27fd4af3569191dead", "orphan",
+	   nb_role("r3", "6ac7cb27fd4af3569191dead", "orphan", "interchange"));
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+
+  EXPECT_LT(run(), 0);
+  EXPECT_EQ(result.accounts_created, 1u);
+  EXPECT_EQ(result.roles_created, 1u);
+  ASSERT_EQ(result.failures.size(), 2u) << why();
+  EXPECT_NE(why().find("role reader (_id r2): identities/6ac7cb27fd4af356919110a3"
+		       "/roles/reader.symlink does not name this record"),
+	    std::string::npos) << why();
+  EXPECT_NE(why().find("role orphan (_id r3): its owner 6ac7cb27fd4af3569191dead "
+		       "is not an account in this store"),
+	    std::string::npos) << why();
+}
+
+/* An IAM user whose name, and so whose NooBaa email, is an imported
+ * account's email is no collision with RGW's state:  the user is
+ * written with no email. */
+TEST_F(NooBaaImportTest, AUserOfAnImportedAccountsEmailIsNoCollision)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+  ASSERT_EQ(run(), 0) << why();
+
+  std::filesystem::remove_all(store + "/identities");
+  std::filesystem::create_directories(store + "/identities");
+  add_identity("6ac7d2121e63a748e37663e0", NB_ACCOUNT_GROUPS);
+  add_identity("u9", NB_USER_NAMED_INTERCHANGE);
+  auto c = read_store();
+  nsfs::ImportPlan p;
+  ASSERT_EQ(nsfs::build_import_plan(env->dpp, env->cct.get(), c, p), 0);
+  EXPECT_EQ(nsfs::check_rgw_state(env->dpp, null_yield, driver.get(), p), 0);
+  EXPECT_TRUE(p.failures().empty()) << p.failures().front();
+}
+
+class NooBaaPolicyTest : public ::testing::Test {
+public:
+  nsfs::IdentityMapping mapping;
+
+  void SetUp() override {
+    mapping.account_by_noobaa_id["6ac7cb27fd4af356919110a3"] =
+      "RGW11111111111111111";
+    mapping.noobaa_id_by_account_name["acct-one"] = "6ac7cb27fd4af356919110a3";
+    mapping.user_arn_by_noobaa_id["u1"] =
+      "arn:aws:iam::RGW11111111111111111:user/alice";
+    mapping.user_arns_by_name.emplace(
+      "alice", "arn:aws:iam::RGW11111111111111111:user/alice");
+    mapping.user_arn_by_account_and_path_name[
+      {"RGW11111111111111111", "/alice"}] =
+      "arn:aws:iam::RGW11111111111111111:user/alice";
+    mapping.user_arn_by_noobaa_id["u2"] =
+      "arn:aws:iam::RGW11111111111111111:user/eng/bob";
+    mapping.user_arn_by_account_and_path_name[
+      {"RGW11111111111111111", "/eng/bob"}] =
+      "arn:aws:iam::RGW11111111111111111:user/eng/bob";
+  }
+
+  std::string rewrite(const std::string& doc, int expect = 0) {
+    std::string out;
+    std::vector<std::string> unresolved;
+    EXPECT_EQ(nsfs::rewrite_policy_principals(env->dpp, doc, mapping, out,
+					      unresolved), expect)
+	<< (unresolved.empty() ? std::string{} : unresolved[0]);
+    return out;
+  }
+};
+
+/* Id first, then an account's name -- which is the whole of the
+ * disambiguation.
+ *
+ * A name and an id are both bare strings and cannot be told apart
+ * syntactically:  an account may legally be *named* twenty-four hex
+ * characters.  So the order matters, and it mirrors NooBaa's.  A user is
+ * reached by its id only:  NooBaa matches a bare name only for an
+ * account (DECISIONS.md 2026-10-30). */
+TEST_F(NooBaaPolicyTest, APrincipalResolvesByIdThenByName)
+{
+  EXPECT_EQ(*mapping.resolve("6ac7cb27fd4af356919110a3"),
+	    "RGW11111111111111111");
+  EXPECT_EQ(*mapping.resolve("acct-one"), "RGW11111111111111111");
+  EXPECT_EQ(*mapping.resolve("u1"),
+	    "arn:aws:iam::RGW11111111111111111:user/alice");
+  EXPECT_FALSE(mapping.resolve("alice").has_value())
+      << "a user's name resolved";
+  EXPECT_TRUE(mapping.names_only_users("alice"));
+  EXPECT_FALSE(mapping.resolve("nobody").has_value());
+  EXPECT_FALSE(mapping.names_only_users("nobody"));
+
+  /* an account *named* like an id resolves as the id it is, not the
+   * name it looks like */
+  nsfs::IdentityMapping ambiguous = mapping;
+  ambiguous.account_by_noobaa_id["6ac7cb27fd4af3569191ffff"] =
+    "RGW22222222222222222";
+  ambiguous.noobaa_id_by_account_name["6ac7cb27fd4af356919110a3"] =
+    "6ac7cb27fd4af3569191ffff";
+  EXPECT_EQ(*ambiguous.resolve("6ac7cb27fd4af356919110a3"),
+	    "RGW11111111111111111")
+      << "the name branch won, so the order is wrong";
+}
+
+/* An unresolved principal that is an IAM user's name says so. */
+TEST_F(NooBaaPolicyTest, AnUnresolvedUserNameSaysWhy)
+{
+  EXPECT_EQ(nsfs::describe_unresolved(mapping, {"ghost", "alice"}),
+	    "ghost, alice (an IAM user's name;  a name resolves only to an "
+	    "account)");
+}
+
+/* An account's name that IAM users also have resolves to the account,
+ * and each such name is returned with the users' ARNs.  An id is never
+ * one of them. */
+TEST_F(NooBaaPolicyTest, AnAccountNameUsersAlsoHaveIsReturned)
+{
+  mapping.user_arns_by_name.emplace(
+    "acct-one", "arn:aws:iam::RGW22222222222222222:user/acct-one");
+  mapping.user_arns_by_name.emplace(
+    "acct-one", "arn:aws:iam::RGW33333333333333333:user/acct-one");
+  const std::string doc = R"({"Version":"2012-10-17","Statement":[{
+    "Effect":"Allow","Principal":{"AWS":["acct-one","u1"]},
+    "Action":["sts:AssumeRole"]}]})";
+  std::string out;
+  std::vector<std::string> unresolved, also_users;
+  ASSERT_EQ(nsfs::rewrite_policy_principals(env->dpp, doc, mapping, out,
+					    unresolved, &also_users), 0);
+  EXPECT_NE(out.find("\"RGW11111111111111111\""), std::string::npos) << out;
+  ASSERT_EQ(also_users.size(), 1u);
+  EXPECT_EQ(also_users[0],
+	    "acct-one (arn:aws:iam::RGW22222222222222222:user/acct-one, "
+	    "arn:aws:iam::RGW33333333333333333:user/acct-one)");
+}
+
+/* Everything outside Principal survives byte-for-byte.
+ *
+ * This is why it is a DOM and not a string substitution.  A policy's
+ * `Condition` is the difference between a narrow grant and a broad
+ * one, and a value that happens to equal a principal must not be
+ * rewritten because it is a resource or a condition value. */
+TEST_F(NooBaaPolicyTest, OnlyPrincipalsAreTouched)
+{
+  const std::string doc = R"({
+    "Version":"2012-10-17",
+    "Statement":[{
+      "Sid":"acct-one",
+      "Effect":"Allow",
+      "Principal":{"AWS":["acct-one"]},
+      "Action":["s3:GetObject"],
+      "Resource":["arn:aws:s3:::acct-one/*"],
+      "Condition":{"StringEquals":{"s3:prefix":"acct-one"}}
+    }]
+  })";
+
+  const std::string out = rewrite(doc);
+  /* the principal moved */
+  EXPECT_NE(out.find("RGW11111111111111111"), std::string::npos) << out;
+  /* and nothing else did -- a Sid, a Resource and a Condition value
+   * that all equal the principal's name are untouched */
+  EXPECT_NE(out.find("\"Sid\":\"acct-one\""), std::string::npos) << out;
+  EXPECT_NE(out.find("arn:aws:s3:::acct-one/*"), std::string::npos) << out;
+  EXPECT_NE(out.find("\"s3:prefix\":\"acct-one\""), std::string::npos)
+      << out;
+  /* the condition survived at all, which a model-and-re-emit rewrite
+   * is what would quietly drop */
+  EXPECT_NE(out.find("StringEquals"), std::string::npos) << out;
+}
+
+/* NooBaa's three principal shapes, and the namespaces that are not nsfs's.
+ *
+ * A bare string, an array, and an object with an `AWS` member;
+ * `Service` and `Federated` are AWS's own namespaces and are left
+ * exactly as they are. */
+TEST_F(NooBaaPolicyTest, EveryPrincipalShapeIsRewritten)
+{
+  EXPECT_NE(rewrite(R"({"Statement":[{"Principal":"u1"}]})")
+		.find("user/alice"), std::string::npos);
+  EXPECT_NE(rewrite(R"({"Statement":[{"Principal":["u1","acct-one"]}]})")
+		.find("RGW11111111111111111"), std::string::npos);
+
+  const std::string obj =
+    rewrite(R"({"Statement":[{"Principal":{"AWS":"acct-one",
+      "Service":"acct-one"}}]})");
+  EXPECT_NE(obj.find("\"AWS\":\"RGW11111111111111111\""),
+	    std::string::npos) << obj;
+  EXPECT_NE(obj.find("\"Service\":\"acct-one\""), std::string::npos)
+      << "a Service principal was rewritten: " << obj;
+
+  /* NotPrincipal is a denial's subject and matters just as much */
+  EXPECT_NE(rewrite(R"({"Statement":[{"NotPrincipal":{"AWS":"u1"}}]})")
+		.find("user/alice"), std::string::npos);
+
+  /* `*` means everyone on both sides */
+  const std::string star = rewrite(R"({"Statement":[{"Principal":"*"}]})");
+  EXPECT_NE(star.find("\"*\""), std::string::npos) << star;
+
+  /* a single statement rather than an array */
+  EXPECT_NE(rewrite(R"({"Statement":{"Principal":"u1"}})")
+		.find("user/alice"), std::string::npos);
+}
+
+/* A policy with an unresolved principal is rejected, and every such
+ * principal is named.
+ *
+ * A principal resolving to nothing is a grant or a denial that will
+ * not take effect.  Every one is listed, because an operator fixing
+ * them needs the list rather than the first. */
+TEST_F(NooBaaPolicyTest, APolicyWithAnUnresolvedPrincipalIsRejected)
+{
+  std::string out{"untouched"};
+  std::vector<std::string> unresolved;
+  EXPECT_EQ(nsfs::rewrite_policy_principals(
+		env->dpp,
+		R"({"Statement":[{"Principal":{"AWS":["u1","ghost",
+		  "phantom"]}}]})",
+		mapping, out, unresolved), -ENOENT);
+  ASSERT_EQ(unresolved.size(), 2u);
+  EXPECT_EQ(unresolved[0], "ghost");
+  EXPECT_EQ(unresolved[1], "phantom");
+
+  /* and a document that will not parse is a different result */
+  unresolved.clear();
+  EXPECT_EQ(nsfs::rewrite_policy_principals(env->dpp, "{not json",
+					    mapping, out, unresolved),
+	    -EBADMSG);
+  EXPECT_TRUE(unresolved.empty());
+}
+
+/* NooBaa's ARN forms resolve by the account `_id` they carry and, for
+ * a user, by its path and name in that account;  an account's name in
+ * the account component, another account's user, and every other ARN
+ * are unresolved (DECISIONS.md 2026-10-30, amended 2026-11-01). */
+TEST_F(NooBaaPolicyTest, ANooBaaArnResolvesByItsAccountId)
+{
+  EXPECT_EQ(*mapping.resolve("arn:aws:iam::6ac7cb27fd4af356919110a3:root"),
+	    "arn:aws:iam::RGW11111111111111111:root");
+  EXPECT_EQ(
+    *mapping.resolve("arn:aws:iam::6ac7cb27fd4af356919110a3:user/alice"),
+    "arn:aws:iam::RGW11111111111111111:user/alice");
+  EXPECT_EQ(
+    *mapping.resolve("arn:aws:iam::6ac7cb27fd4af356919110a3:user/eng/bob"),
+    "arn:aws:iam::RGW11111111111111111:user/eng/bob");
+
+  for (const char* p : {
+	 "arn:aws:iam::acct-one:root",
+	 "arn:aws:iam::6ac7cb27fd4af356919110a3:user/bob",
+	 "arn:aws:iam::6ac7cb27fd4af356919110a3:user/eng/alice",
+	 "arn:aws:iam::6ac7cb27fd4af3569191ffff:user/alice",
+	 "arn:aws:iam::6ac7cb27fd4af356919110a3:role/r",
+	 "arn:aws:sts::6ac7cb27fd4af356919110a3:assumed-role/r/s",
+	 "arn:aws:iam::6ac7cb27fd4af356919110a3",
+	 "arn:aws:iam::RGW11111111111111111:root"}) {
+    EXPECT_FALSE(mapping.resolve(p).has_value()) << p;
+  }
+}
+
+/* Each rewritten ARN is returned with its statement's Effect and
+ * whether it is a Principal or a NotPrincipal;  an id or a name is
+ * not. */
+TEST_F(NooBaaPolicyTest, EachRewrittenArnIsReturnedWithItsStatement)
+{
+  const std::string doc = R"({"Version":"2012-10-17","Statement":[
+    {"Effect":"Allow","Principal":{"AWS":[
+      "arn:aws:iam::6ac7cb27fd4af356919110a3:user/eng/bob","u1",
+      "acct-one"]},"Action":["s3:GetObject"]},
+    {"Effect":"Deny","NotPrincipal":{"AWS":
+      "arn:aws:iam::6ac7cb27fd4af356919110a3:root"},
+      "Action":["s3:DeleteObject"]}]})";
+  std::string out;
+  std::vector<std::string> unresolved, arns;
+  ASSERT_EQ(nsfs::rewrite_policy_principals(env->dpp, doc, mapping, out,
+					    unresolved, nullptr, &arns), 0);
+  EXPECT_NE(out.find("\"arn:aws:iam::RGW11111111111111111:user/eng/bob\""),
+	    std::string::npos) << out;
+  EXPECT_NE(out.find("\"arn:aws:iam::RGW11111111111111111:root\""),
+	    std::string::npos) << out;
+  ASSERT_EQ(arns.size(), 2u);
+  EXPECT_EQ(arns[0], "arn:aws:iam::6ac7cb27fd4af356919110a3:user/eng/bob as "
+	    "arn:aws:iam::RGW11111111111111111:user/eng/bob (Allow, Principal)");
+  EXPECT_EQ(arns[1], "arn:aws:iam::6ac7cb27fd4af356919110a3:root as "
+	    "arn:aws:iam::RGW11111111111111111:root (Deny, NotPrincipal)");
+}
+
+/* The mapping is built from the plan, so it is what I4 wrote by. */
+TEST_F(NooBaaPlanTest, TheMappingFollowsThePlan)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  add_identity("u1", R"({"_id":"u1","name":"alice","email":"alice",
+    "owner":"6ac7cb27fd4af356919110a3"})");
+  ASSERT_EQ(build(2), 0);
+
+  const auto m = nsfs::mapping_from(plan);
+  const std::string acct = entry("interchange")->account_id;
+
+  EXPECT_EQ(*m.resolve("6ac7cb27fd4af356919110a3"), acct);
+  EXPECT_EQ(*m.resolve("interchange"), acct);
+  /* an IAM user resolves to an ARN, because that is what an RGW user
+   * principal is, and it matches on display_name */
+  EXPECT_EQ(*m.resolve("u1"), "arn:aws:iam::" + acct + ":user/alice");
+  /* and by name not at all:  a bare name is an account's only */
+  EXPECT_FALSE(m.resolve("alice").has_value());
+  EXPECT_TRUE(m.names_only_users("alice"));
+}
+
+/* A user's ARN carries its `iam_path`, which the import makes the RGW
+ * user's path and RGW matches before the name;  by id and by NooBaa's
+ * ARN alike. */
+TEST_F(NooBaaPlanTest, AUserArnCarriesItsPath)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  add_identity("u1", R"({"_id":"u1","name":"alice","email":"alice",
+    "owner":"6ac7cb27fd4af356919110a3","iam_path":"/eng/"})");
+  ASSERT_EQ(build(2), 0);
+
+  const auto m = nsfs::mapping_from(plan);
+  const std::string arn = "arn:aws:iam::" +
+    entry("interchange")->account_id + ":user/eng/alice";
+  EXPECT_EQ(*m.resolve("u1"), arn);
+  EXPECT_EQ(
+    *m.resolve("arn:aws:iam::6ac7cb27fd4af356919110a3:user/eng/alice"), arn);
+  EXPECT_FALSE(
+    m.resolve("arn:aws:iam::6ac7cb27fd4af356919110a3:user/alice").has_value());
+}
+
+/* NooBaa's bucket state reaches RGW:  the owner, the policy and logging.
+ *
+ * The owner is the field the state strategy reads and does not apply,
+ * because turning NooBaa's account id into an `rgw_owner` needs the
+ * mapping.  `logging` is one of three fields nothing read before, and
+ * a bucket converted without it loses its logging silently. */
+class NooBaaBucketImportTest : public NSFSNooBaaStateTest {
+public:
+  nsfs::IdentityMapping mapping;
+  nsfs::BucketImportResult result;
+  std::vector<nsfs::NooBaaConnection> connections;
+
+  void SetUp() override {
+    NSFSNooBaaStateTest::SetUp();
+
+    mapping.account_by_noobaa_id["6560e1f1c0ffee0000000002"] =
+      "RGW11111111111111111";
+    mapping.noobaa_id_by_account_name["their-acct"] = "6560e1f1c0ffee0000000002";
+  }
+
+  int run() {
+    nsfs::NooBaaStoreContents c;
+    nsfs::NooBaaBucketRecord rec;
+    rec.name = testname;
+    c.buckets.push_back(rec);
+    c.connections = connections;
+    result = nsfs::BucketImportResult{};
+    /* The fixture's bucket exists on disk;  release the handle it
+     * holds so the import opens its own, which is what the real
+     * sequence does -- identities, then buckets, with nothing else
+     * holding them. */
+    bucket.reset();
+    return nsfs::import_bucket_state(env->dpp, null_yield, driver.get(),
+				     conf_root().string(), c, mapping,
+				     result);
+  }
+
+  std::string why() const {
+    std::string s;
+    for (const auto& f : result.failures) {
+      s += "\n  " + f;
+    }
+    for (const auto& r : result.policies_refused) {
+      s += "\n  " + r;
+    }
+    return s;
+  }
+};
+
+TEST_F(NooBaaBucketImportTest, TheOwnerAndLoggingReachRgw)
+{
+  write_nb_record("ENABLED",
+      R"(,"logging":{"log_bucket":"audit","log_prefix":"logs/"})");
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.buckets_written, 1u);
+  EXPECT_EQ(result.logging_carried, 1u);
+
+  /* read it back through the bucket, which is what a request would */
+  RGWBucketInfo info;
+  info.bucket.name = testname;
+  auto bucket = driver->get_bucket(info);
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
+
+  /* the owner the strategy would not apply */
+  EXPECT_EQ(to_string(bucket->get_owner()), "RGW11111111111111111")
+      << "owner_account was read and not applied";
+  EXPECT_TRUE(bucket->versioned()) << "versioning was lost on the write";
+
+  /* The attribute's presence is what says logging is configured:
+   * `enabled` is an in-memory field and is not part of the encoded
+   * form, so a round trip cannot carry it and asserting it would be
+   * asserting nothing. */
+  auto lg = bucket->get_attrs().find(RGW_ATTR_BUCKET_LOGGING);
+  ASSERT_NE(lg, bucket->get_attrs().end()) << "logging was dropped";
+  rgw::bucketlogging::configuration conf;
+  auto bl = lg->second.cbegin();
+  conf.decode(bl);
+  EXPECT_EQ(conf.target_bucket, "audit");
+  EXPECT_EQ(conf.target_prefix, "logs/");
+}
+
+/* An imported bucket is BucketOwnerEnforced.
+ *
+ * NooBaa gives every object its bucket's `owner_account`, and
+ * BucketOwnerEnforced is RGW's name for that rule (DECISIONS.md
+ * 2026-10-11):  an object RGW writes afterwards is the bucket owner's,
+ * and object ACLs do not apply.  The control is the same bucket before
+ * the import, which carries RGW's default, ObjectWriter. */
+TEST_F(NooBaaBucketImportTest, AnImportedBucketIsBucketOwnerEnforced)
+{
   write_nb_record("DISABLED");
 
+  auto load = [&] {
+    RGWBucketInfo info;
+    info.bucket.name = testname;
+    auto b = driver->get_bucket(info);
+    EXPECT_EQ(b->load_bucket(env->dpp, null_yield), 0);
+    return rgw::s3::get_object_ownership(b->get_attrs());
+  };
+  ASSERT_EQ(load(), rgw::s3::ObjectOwnership::ObjectWriter)
+      << "the bucket was enforced before the import";
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(load(), rgw::s3::ObjectOwnership::BucketOwnerEnforced);
+}
+
+/* A bucket whose owner this import did not write is rejected, not
+ * guessed.  There is no correct account to invent. */
 /* Whether deleting the bucket deletes its directory comes across from
  * NooBaa's should_create_underlying_storage, onto the directory, which is
  * the one place it is kept (DECISIONS.md 2026-10-13).  Both values, so
@@ -12258,7 +16532,20 @@ TEST_F(NooBaaBucketImportTest, TheMetadataListingIsRowsAndUnimportedRecords)
       << "after import:  the row and the record are one bucket";
 }
 
+TEST_F(NooBaaBucketImportTest, ABucketWithAnUnknownOwnerIsRejected)
+{
   write_nb_record("DISABLED");
+  mapping.account_by_noobaa_id.clear();
+
+  EXPECT_EQ(run(), -EIO);
+  EXPECT_EQ(result.buckets_written, 0u);
+  bool said = false;
+  for (const auto& f : result.failures) {
+    if (f.find("is not an account this import wrote") != std::string::npos) {
+      said = true;
+    }
+  }
+  EXPECT_TRUE(said) << why();
 
   /* the row is written last, so a rejected bucket has none, and is still
    * placed by their record */
@@ -12267,12 +16554,122 @@ TEST_F(NooBaaBucketImportTest, TheMetadataListingIsRowsAndUnimportedRecords)
 		env->dpp, testname, "", row), -ENOENT);
 }
 
+/* A policy whose principals do not resolve is dropped, the rest of
+ * the bucket is written, and the rejection is reported.
+ *
+ * The bucket's other state is correct and worth having;  a policy
+ * pointing at nothing is not. */
+TEST_F(NooBaaBucketImportTest, TheBucketIsWrittenWhenItsPolicyIsRejected)
+{
+  write_nb_record("ENABLED",
+      R"(,"s3_policy":{"Version":"2012-10-17","Statement":[{
+        "Effect":"Allow","Principal":{"AWS":["ghost"]},
+        "Action":["s3:GetObject"],
+        "Resource":["arn:aws:s3:::b/*"]}]})");
 
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.buckets_written, 1u) << "the bucket was rejected too";
+  EXPECT_EQ(result.policies_rewritten, 0u);
+  ASSERT_EQ(result.policies_refused.size(), 1u);
+  EXPECT_NE(result.policies_refused[0].find("ghost"), std::string::npos)
+      << result.policies_refused[0];
+
+  RGWBucketInfo info;
+  info.bucket.name = testname;
+  auto bucket = driver->get_bucket(info);
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
+  EXPECT_EQ(bucket->get_attrs().find(RGW_ATTR_IAM_POLICY),
+	    bucket->get_attrs().end())
+      << "a policy pointing at nothing was written anyway";
+  EXPECT_TRUE(bucket->versioned()) << "the rest of the state was lost";
+}
+
+/* And a resolvable one is written, rewritten. */
+TEST_F(NooBaaBucketImportTest, AResolvablePolicyIsRewrittenAndWritten)
+{
+  write_nb_record("DISABLED",
+      R"(,"s3_policy":{"Version":"2012-10-17","Statement":[{
+        "Effect":"Allow","Principal":{"AWS":["their-acct"]},
+        "Action":["s3:GetObject"],
+        "Resource":["arn:aws:s3:::b/*"]}]})");
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.policies_rewritten, 1u);
+
+  RGWBucketInfo info;
+  info.bucket.name = testname;
+  auto bucket = driver->get_bucket(info);
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
+  auto p = bucket->get_attrs().find(RGW_ATTR_IAM_POLICY);
+  ASSERT_NE(p, bucket->get_attrs().end());
+  const std::string stored = p->second.to_str();
+  EXPECT_NE(stored.find("RGW11111111111111111"), std::string::npos)
+      << stored;
+  EXPECT_EQ(stored.find("their-acct"), std::string::npos)
+      << "their name survived in the stored policy: " << stored;
+}
+
+/* A bucket policy naming a NooBaa ARN is written with the RGW ARN, and
+ * the bucket's import returns it as matched. */
+TEST_F(NooBaaBucketImportTest, AnArnPrincipalIsRewrittenAndReturned)
+{
+  write_nb_record("DISABLED",
+      R"(,"s3_policy":{"Version":"2012-10-17","Statement":[{
+        "Effect":"Allow",
+        "Principal":{"AWS":["arn:aws:iam::6560e1f1c0ffee0000000002:root"]},
+        "Action":["s3:GetObject"],
+        "Resource":["arn:aws:s3:::b/*"]}]})");
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.policies_rewritten, 1u);
+  ASSERT_EQ(result.arns_matched.size(), 1u);
+  EXPECT_EQ(result.arns_matched[0], testname + ": "
+	    "arn:aws:iam::6560e1f1c0ffee0000000002:root as "
+	    "arn:aws:iam::RGW11111111111111111:root (Allow, Principal)");
+
+  RGWBucketInfo info;
+  info.bucket.name = testname;
+  auto bucket = driver->get_bucket(info);
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
+  auto p = bucket->get_attrs().find(RGW_ATTR_IAM_POLICY);
+  ASSERT_NE(p, bucket->get_attrs().end());
+  const std::string stored = p->second.to_str();
+  EXPECT_NE(stored.find("arn:aws:iam::RGW11111111111111111:root"),
+	    std::string::npos) << stored;
+}
+
+/* What is read and not translated is reported rather than silent, and
+ * what is translated is not reported as waiting.
+ *
+ * Notifications need an RGW topic per destination, a deliberate
+ * boundary an operator should learn from the report.  A path outside
+ * the base path used to be reported too, until the index recorded it;
+ * the import now writes the row (P6), so the path is recorded rather
+ * than deferred. */
+TEST_F(NooBaaBucketImportTest, WhatWaitsForAnotherStageIsReported)
+{
   const sf::path elsewhere = bp / "another-filesystem" / testname;
   sf::create_directories(elsewhere);
+  write_nb_record("DISABLED",
+      R"(,"notifications":[{"id":["n1"],"event":["s3:ObjectCreated:*"],
+        "topic":["arn:noobaa:sns:::t1"]}])",
+      "2026-01-02T03:04:05.000Z", elsewhere.string());
 
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.buckets_written, 1u);
+
+  /* the notification names a connection the store does not hold */
+  bool notif = false, path = false;
+  for (const auto& d : result.notifications_reported) {
+    if ((d.find("n1") != std::string::npos) &&
+	(d.find("does not hold") != std::string::npos)) {
+      notif = true;
     }
     if (d.find(elsewhere.string()) != std::string::npos) {
+      path = true;
+    }
+  }
+  EXPECT_TRUE(notif) << "a notification was dropped silently";
   EXPECT_FALSE(path) << "a recorded path was still reported as waiting";
 
   nsfs::BucketPlacement row;
@@ -12282,6 +16679,10 @@ TEST_F(NooBaaBucketImportTest, TheMetadataListingIsRowsAndUnimportedRecords)
   EXPECT_EQ(row.path, elsewhere.string());
 }
 
+/* The import records the path NooBaa's record names, as the row that
+ * places the bucket from then on (P6).  Importing again finds the row
+ * it wrote and changes nothing, since adoption imports a bucket that
+ * an earlier, interrupted adoption already did. */
 TEST_F(NooBaaBucketImportTest, TheImportRecordsTheBucketsPath)
 {
   write_nb_record("DISABLED");
@@ -12352,6 +16753,330 @@ TEST_F(NooBaaBucketImportTest, ARecordNestedWithAnotherBucketIsRejected)
 		env->dpp, testname, "", row), -ENOENT);
 }
 
+/* I10:  a NooBaa connection, as an RGW topic's destination.
+ *
+ * NooBaa hands `agent_request_object` and `request_options_object` to
+ * Node's HTTP client, and `kafka_options_object` to librdkafka, so the
+ * translation is checked member by member against what those clients
+ * would do with them. */
+class NooBaaConnectionTest : public ::testing::Test {
+public:
+  CephContext* cct() { return env->dpp->get_cct(); }
+
+  static nsfs::NooBaaConnection http(const std::string& agent,
+				     const std::string& request,
+				     const std::string& auth = {}) {
+    nsfs::NooBaaConnection c;
+    c.name = "hook";
+    c.notification_protocol = "http";
+    c.agent_request_object = agent;
+    c.request_options_object = request;
+    c.auth = auth;
+    return c;
+  }
+  static nsfs::NooBaaConnection kafka(const std::string& options,
+				      const std::string& topic = "events") {
+    nsfs::NooBaaConnection c;
+    c.name = "broker";
+    c.notification_protocol = "kafka";
+    c.kafka_options_object = options;
+    c.topic = topic;
+    return c;
+  }
+  nsfs::TranslatedTopic translate(const nsfs::NooBaaConnection& c,
+				  const std::string& kafka_topic = {}) {
+    nsfs::TranslatedTopic t;
+    std::string why;
+    EXPECT_EQ(nsfs::translate_connection(cct(), c, kafka_topic, t, why), 0) << why;
+    return t;
+  }
+  std::string refused(const nsfs::NooBaaConnection& c,
+		      const std::string& kafka_topic = {}) {
+    nsfs::TranslatedTopic t;
+    std::string why;
+    EXPECT_EQ(nsfs::translate_connection(cct(), c, kafka_topic, t, why), -EINVAL);
+    return why;
+  }
+  static bool has(const std::vector<std::string>& v, const std::string& s) {
+    return std::any_of(v.begin(), v.end(), [&](const std::string& e) {
+      return e.find(s) != std::string::npos;
+    });
+  }
+};
+
+/* Node's Agent merges its options over the request's when it
+ * connects, so the agent's host and port win;  the request's own come
+ * from `hostname`, then `host`, then `localhost`. */
+TEST_F(NooBaaConnectionTest, AnHttpDestinationIsWhereNodeWouldConnect)
+{
+  EXPECT_EQ(translate(http(R"({"host":"a.example","port":9000})",
+			   R"({"host":"b.example","port":80,"path":"/hook"})"))
+		.dest.push_endpoint, "http://a.example:9000/hook");
+  EXPECT_EQ(translate(http("", R"({"hostname":"c.example","host":"d.example","path":"x"})"))
+		.dest.push_endpoint, "http://c.example/x");
+  EXPECT_EQ(translate(http("", "")).dest.push_endpoint, "http://localhost");
+  EXPECT_EQ(translate(http(R"({"host":"::1","port":81})", "")).dest.push_endpoint,
+	    "http://[::1]:81");
+
+  auto https = http("", R"({"host":"e.example"})");
+  https.notification_protocol = "HTTPS";
+  EXPECT_EQ(translate(https).dest.push_endpoint, "https://e.example");
+
+  const auto t = translate(http("", ""));
+  EXPECT_EQ(t.name, "hook");
+  EXPECT_EQ(t.dest.arn_topic, "hook");
+  EXPECT_FALSE(t.dest.persistent);
+  EXPECT_FALSE(t.dest.stored_secret);
+}
+
+/* `auth` goes in the URL, as RGW's HTTP endpoint carries a credential,
+ * each half percent-encoded;  it is a stored secret, and reported when
+ * it goes over http. */
+TEST_F(NooBaaConnectionTest, AnHttpCredentialIsCarriedAndAnInsecureOneReported)
+{
+  auto t = translate(http(R"({"host":"h"})", "", "us er:p@ss:w"));
+  EXPECT_EQ(t.dest.push_endpoint, "http://us%20er:p%40ss%3Aw@h");
+  EXPECT_TRUE(t.dest.stored_secret);
+  EXPECT_TRUE(has(t.warnings, "over http"));
+
+  auto c = http(R"({"host":"h"})", "", "user:pass");
+  c.notification_protocol = "https";
+  t = translate(c);
+  EXPECT_TRUE(t.dest.stored_secret);
+  EXPECT_TRUE(t.warnings.empty());
+
+  EXPECT_NE(refused(http("", "", "user-only")).find("no password"), std::string::npos);
+}
+
+/* `rejectUnauthorized` and the `local_file_*` members, from either
+ * object;  anything else is reported by name. */
+TEST_F(NooBaaConnectionTest, HttpTlsMembersAreCarriedAndTheRestReported)
+{
+  auto c = http(R"({"host":"h","rejectUnauthorized":false,"local_file_ca":"/etc/ca.pem","timeout":100})",
+		R"({"local_file_cert":"/etc/c.pem","local_file_key":"/etc/k&+%.pem","headers":{"x":"y"}})");
+  c.notification_protocol = "https";
+  const auto t = translate(c);
+  const RGWHTTPArgs args(t.dest.push_endpoint_args, env->dpp);
+  EXPECT_EQ(args.get("verify-ssl"), "false");
+  EXPECT_EQ(args.get("ca-location"), "/etc/ca.pem");
+  EXPECT_EQ(args.get("ssl-certificate-location"), "/etc/c.pem");
+  EXPECT_EQ(args.get("ssl-key-location"), "/etc/k&+%.pem")
+      << "a stored value is read back as it was given";
+  EXPECT_TRUE(has(t.not_carried, "agent_request_object.timeout"));
+  EXPECT_TRUE(has(t.not_carried, "request_options_object.headers"));
+  EXPECT_EQ(t.not_carried.size(), 2u);
+
+  EXPECT_TRUE(RGWHTTPArgs(translate(http(R"({"rejectUnauthorized":true})", ""))
+			      .dest.push_endpoint_args, env->dpp)
+		  .get("verify-ssl").empty());
+}
+
+/* A name RGW's topic names cannot hold, and a protocol NooBaa does not
+ * write, are refused with the reason. */
+TEST_F(NooBaaConnectionTest, WhatCannotBeATopicIsRefused)
+{
+  auto c = http("", "");
+  c.name = "has.dot";
+  EXPECT_NE(refused(c).find("has.dot"), std::string::npos);
+  c = http("", "");
+  c.notification_protocol = "amqp";
+  EXPECT_NE(refused(c).find("amqp"), std::string::npos);
+  EXPECT_NE(refused(http("[]", "")).find("agent_request_object"), std::string::npos);
+}
+
+#ifdef WITH_RADOSGW_KAFKA_ENDPOINT
+/* The broker list is the endpoint and kafka-brokers;  every other
+ * setting is librdkafka's, carried as kafka-config with its JSON type;
+ * the topic is the connection's, or the one a notification names. */
+TEST_F(NooBaaConnectionTest, AKafkaConnectionIsItsBrokersAndItsSettings)
+{
+  const auto t = translate(kafka(
+      R"({"metadata.broker.list":"k1:9092,k2:9093","linger.ms":5,"enable.idempotence":true,"client.id":"nb"})"));
+  EXPECT_EQ(t.name, "events");
+  EXPECT_EQ(t.dest.push_endpoint, "kafka://k1:9092");
+  const RGWHTTPArgs args(t.dest.push_endpoint_args, env->dpp);
+  EXPECT_EQ(args.get("kafka-brokers"), "k2:9093");
+  EXPECT_EQ(args.get("kafka-ack-level"), "broker");
+  EXPECT_EQ(args.get("kafka-config"),
+	    R"({"linger.ms":5,"enable.idempotence":true,"client.id":"nb"})");
+  EXPECT_FALSE(t.dest.stored_secret);
+
+  EXPECT_EQ(translate(kafka(R"({"bootstrap.servers":"k3:9092"})")).dest.push_endpoint,
+	    "kafka://k3:9092");
+  EXPECT_TRUE(RGWHTTPArgs(translate(kafka(R"({"bootstrap.servers":"k3:9092"})"))
+			      .dest.push_endpoint_args, env->dpp)
+		  .get("kafka-config").empty());
+  EXPECT_EQ(translate(kafka(R"({"bootstrap.servers":"k"})"), "named").name, "named");
+
+  EXPECT_NE(refused(kafka(R"({"client.id":"nb"})")).find("metadata.broker.list"),
+	    std::string::npos);
+  EXPECT_NE(refused(kafka(R"({"bootstrap.servers":"k"})", "")).find("no Kafka topic"),
+	    std::string::npos);
+  EXPECT_NE(refused(kafka(R"({"bootstrap.servers":"k"})", "a.b")).find("a.b"),
+	    std::string::npos);
+}
+
+/* A key the allowlist does not list is carried and reported, naming the
+ * option (DECISIONS 2026-10-30);  a sensitive one makes a stored
+ * secret, and to a plaintext broker is reported with the cleartext
+ * option. */
+TEST_F(NooBaaConnectionTest, KafkaSettingsNeedingTheOperatorAreReported)
+{
+  const auto saved = cct()->_conf.get_val<std::string>("rgw_kafka_config_allowed_keys");
+  cct()->_conf.set_val_or_die("rgw_kafka_config_allowed_keys", "client.id");
+
+  auto t = translate(kafka(R"({"bootstrap.servers":"k","client.id":"nb","linger.ms":5})"));
+  EXPECT_TRUE(has(t.warnings, "linger.ms is not in rgw_kafka_config_allowed_keys"));
+  EXPECT_FALSE(has(t.warnings, "client.id"));
+  EXPECT_NE(RGWHTTPArgs(t.dest.push_endpoint_args, env->dpp).get("kafka-config")
+		.find("linger.ms"), std::string::npos) << "an unlisted key was not carried";
+
+  t = translate(kafka(R"({"bootstrap.servers":"k","sasl.username":"u","sasl.password":"p"})"));
+  EXPECT_TRUE(t.dest.stored_secret);
+  EXPECT_TRUE(has(t.warnings, "rgw_allow_notification_secrets_in_cleartext"));
+
+  t = translate(kafka(R"({"bootstrap.servers":"k","security.protocol":"SASL_SSL","sasl.password":"p"})"));
+  EXPECT_TRUE(t.dest.stored_secret);
+  EXPECT_FALSE(has(t.warnings, "rgw_allow_notification_secrets_in_cleartext"));
+
+  cct()->_conf.set_val_or_die("rgw_kafka_config_allowed_keys", saved);
+}
+#endif
+
+/* NooBaa matches event names ignoring case, so they map to RGW's
+ * spelling ignoring case;  a name RGW has no event for is set aside. */
+TEST_F(NooBaaConnectionTest, EventsMapToRgwsIgnoringCase)
+{
+  rgw::notify::EventTypeList events;
+  std::vector<std::string> unknown;
+  nsfs::translate_events({"s3:ObjectCreated:*", "s3:objectremoved:delete",
+			  "S3:OBJECTTAGGING:PUT", "s3:ObjectAcl:Put",
+			  "s3:ObjectNothing:Put"}, events, unknown);
+  ASSERT_EQ(events.size(), 4u);
+  EXPECT_EQ(rgw::notify::to_string(events[0]), "s3:ObjectCreated:*");
+  EXPECT_EQ(rgw::notify::to_string(events[1]), "s3:ObjectRemoved:Delete");
+  EXPECT_EQ(rgw::notify::to_string(events[2]), "s3:ObjectTagging:Put");
+  EXPECT_EQ(rgw::notify::to_string(events[3]), "s3:ObjectAcl:Put");
+  ASSERT_EQ(unknown.size(), 1u);
+  EXPECT_EQ(unknown[0], "s3:ObjectNothing:Put");
+}
+
+/* I10 end to end:  the bucket's notification becomes a topic of its
+ * account, the bucket's attribute names it with NooBaa's id and
+ * events, and the topic is mapped to the bucket.  A second import
+ * writes nothing new. */
+TEST_F(NooBaaBucketImportTest, ANotificationBecomesATopicAndTheBucketsAttribute)
+{
+  connections.push_back(NooBaaConnectionTest::http(
+      R"({"host":"127.0.0.1","port":9101})", R"({"path":"/"})"));
+  write_nb_record("DISABLED",
+      R"(,"notifications":[{"id":["n1"],"event":["s3:ObjectCreated:*"],"topic":["hook"]}])");
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.topics_written, 1u);
+  EXPECT_EQ(result.notifications_carried, 1u);
+  EXPECT_TRUE(result.notifications_reported.empty());
+
+  rgw_pubsub_topic topic;
+  ASSERT_EQ(driver->read_topic_v2("hook", "RGW11111111111111111", topic,
+				  nullptr, null_yield, env->dpp), 0);
+  EXPECT_EQ(topic.dest.push_endpoint, "http://127.0.0.1:9101/");
+  EXPECT_EQ(to_string(topic.owner), "RGW11111111111111111");
+  EXPECT_EQ(topic.arn.rfind("arn:aws:sns:", 0), 0u) << topic.arn;
+  EXPECT_NE(topic.arn.find(":RGW11111111111111111:hook"), std::string::npos) << topic.arn;
+
+  RGWBucketInfo info;
+  info.bucket.name = testname;
+  auto b = driver->get_bucket(info);
+  ASSERT_EQ(b->load_bucket(env->dpp, null_yield), 0);
+  auto a = b->get_attrs().find(RGW_ATTR_BUCKET_NOTIFICATION);
+  ASSERT_NE(a, b->get_attrs().end());
+  rgw_pubsub_bucket_topics bt;
+  auto it = a->second.cbegin();
+  bt.decode(it);
+  ASSERT_EQ(bt.topics.size(), 1u);
+  const auto& f = bt.topics.begin()->second;
+  EXPECT_EQ(f.s3_id, "n1");
+  EXPECT_EQ(f.topic.name, "hook");
+  ASSERT_EQ(f.events.size(), 1u);
+  EXPECT_EQ(rgw::notify::to_string(f.events[0]), "s3:ObjectCreated:*");
+
+  std::set<std::string> mapped;
+  ASSERT_EQ(driver->get_bucket_topic_mapping(topic, mapped, null_yield, env->dpp), 0);
+  EXPECT_EQ(mapped.count(rgw_make_bucket_entry_name("", testname)), 1u);
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.topics_written, 0u) << "a second import wrote the topic again";
+  EXPECT_EQ(result.notifications_carried, 1u);
+}
+
+/* A topic of the same name with another destination is not
+ * overwritten:  the notification is reported and left out, and the
+ * bucket's other state is written. */
+TEST_F(NooBaaBucketImportTest, ATopicWithAnotherDestinationIsNotOverwritten)
+{
+  rgw_pubsub_topic other;
+  other.owner = rgw_owner{rgw_account_id{"RGW11111111111111111"}};
+  other.name = "hook";
+  other.dest.push_endpoint = "http://elsewhere:1/";
+  other.dest.arn_topic = "hook";
+  RGWObjVersionTracker objv;
+  objv.generate_new_write_ver(env->dpp->get_cct());
+  ASSERT_EQ(driver->write_topic_v2(other, false, objv, null_yield, env->dpp), 0);
+
+  connections.push_back(NooBaaConnectionTest::http(R"({"host":"127.0.0.1"})", ""));
+  write_nb_record("DISABLED",
+      R"(,"notifications":[{"id":["n1"],"event":[],"topic":["hook"]}])");
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.buckets_written, 1u);
+  EXPECT_EQ(result.notifications_carried, 0u);
+  EXPECT_TRUE(NooBaaConnectionTest::has(result.notifications_reported,
+					"another destination"));
+
+  rgw_pubsub_topic topic;
+  ASSERT_EQ(driver->read_topic_v2("hook", "RGW11111111111111111", topic,
+				  nullptr, null_yield, env->dpp), 0);
+  EXPECT_EQ(topic.dest.push_endpoint, "http://elsewhere:1/");
+}
+
+/* A notification carried that needs the operator is reported apart
+ * from one not carried:  here a credential NooBaa sent over http. */
+TEST_F(NooBaaBucketImportTest, ACredentialOverHttpIsCarriedAndNeedsTheOperator)
+{
+  connections.push_back(NooBaaConnectionTest::http(R"({"host":"127.0.0.1"})",
+						   "", "user:secret"));
+  write_nb_record("DISABLED",
+      R"(,"notifications":[{"id":["n1"],"event":[],"topic":["hook"]}])");
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.notifications_carried, 1u);
+  EXPECT_TRUE(NooBaaConnectionTest::has(result.notifications_need_operator,
+					"over http"));
+  EXPECT_FALSE(NooBaaConnectionTest::has(result.notifications_reported,
+					 "over http"));
+}
+
+/* `kafka:::topic/<connection>/<topic>` names the Kafka topic, and the
+ * RGW topic is named after it;  an event RGW does not name is left
+ * out and reported. */
+#ifdef WITH_RADOSGW_KAFKA_ENDPOINT
+TEST_F(NooBaaBucketImportTest, AKafkaTopicNamedByTheNotificationIsTheTopic)
+{
+  connections.push_back(NooBaaConnectionTest::kafka(R"({"bootstrap.servers":"k:9092"})"));
+  write_nb_record("DISABLED",
+      R"(,"notifications":[{"id":["n2"],"event":["s3:ObjectCreated:Put","s3:Nothing:Put"],
+        "topic":["kafka:::topic/broker/audit"]}])");
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.notifications_carried, 1u);
+  EXPECT_TRUE(NooBaaConnectionTest::has(result.notifications_reported, "s3:Nothing:Put"));
+  rgw_pubsub_topic topic;
+  ASSERT_EQ(driver->read_topic_v2("audit", "RGW11111111111111111", topic,
+				  nullptr, null_yield, env->dpp), 0);
+  EXPECT_EQ(topic.dest.push_endpoint, "kafka://k:9092");
+}
+#endif
 
 /* An account to own placed buckets, as every bucket in NooBaa's model is
  * owned (DECISIONS.md 2026-10-15). */
@@ -12449,51 +17174,1361 @@ TEST_F(NSFSPlaceOverNooBaaTest, CreationInsideANooBaaBucketsDirectoryIsRejected)
   EXPECT_TRUE(sf::is_directory(nb_dir / "inner"));
 }
 
-  void add_nb_identity(const std::string& id, const std::string& record) {
+/* A completion record another gateway wrote is seen at the first read
+ * of NooBaa's store, which it stops, and it ends adoption's in-memory
+ * state as a record written here does (DECISIONS.md 2026-10-31). */
+TEST_F(NSFSPlaceOverNooBaaTest, AnotherGatewaysCompletionIsSeenWhereTheStoreIsRead)
+{
+  const sf::path nb_dir = bp / "noobaa-data" / "theirs";
+  sf::create_directories(nb_dir);
+  write_nb_record("DISABLED", "", "2026-01-02T03:04:05.000Z",
+		     nb_dir.string());
+  EXPECT_EQ(place("another-name", nb_dir), -EEXIST)
+      << "the control:  the record holds its directory";
 
+  driver->fail_adoption_for_test(testname, -EIO);
+  driver->hold_unadopted_mapping_for_test();
+  nsfs::AdoptionCompletion c;
+  c.completed_at = "2026-10-31T00:00:00Z";
+  c.config_root = conf_root().string();
+  ASSERT_EQ(driver->get_identity_db()->put_adoption_completion(env->dpp, c),
+	    0);
+  EXPECT_FALSE(driver->adoption_complete())
+      << "seen before anything read the store";
+
+  EXPECT_EQ(place("another-name", nb_dir), 0)
+      << "the store was read after completion";
+  EXPECT_TRUE(driver->adoption_complete());
+  EXPECT_FALSE(driver->adoption_failed(testname));
+  EXPECT_FALSE(driver->holds_unadopted_mapping_for_test());
+}
+
+/* ------------------------------------------------------------------ *
+ * I6 -- the mode, and what it does.
+ *
+ * There is no endpoint and no operator verb:  the mode is read at
+ * startup and the import runs because of it.  The suite reaches it
+ * through the `adoption` driver hint, which is how an intrusive
+ * trigger stays out of a production surface.
+ * ------------------------------------------------------------------ */
+
+/* One adoption report's findings, as kind -> {text, effect, action}. */
+static std::multimap<std::string, std::array<std::string, 3>>
+report_findings(const sf::path& file, JSONParser& p)
+{
+  std::ifstream in(file);
+  const std::string doc{std::istreambuf_iterator<char>(in), {}};
+  EXPECT_TRUE(p.parse(doc.data(), doc.size())) << doc;
+  std::multimap<std::string, std::array<std::string, 3>> out;
+  auto* fs = p.find_obj("findings");
+  if (!fs) {
+    ADD_FAILURE() << "no findings:  " << doc;
+    return out;
+  }
+  for (auto i = fs->find_first(); !i.end(); ++i) {
+    std::string kind, text, effect, action;
+    JSONDecoder::decode_json("kind", kind, *i);
+    JSONDecoder::decode_json("text", text, *i);
+    JSONDecoder::decode_json("effect", effect, *i);
+    JSONDecoder::decode_json("action", action, *i);
+    out.emplace(kind, std::array<std::string, 3>{text, effect, action});
+  }
+  return out;
+}
+
+class NooBaaModeTest : public NSFSNooBaaStateTest {
+public:
+  /* The fixture's write_file() does not create parents, and an
+   * identity lives at identities/<id>/identity.json. */
+  void add_nb_identity(const std::string& id, const std::string& record) {
+    const auto dir = conf_root() / "identities" / id;
+    std::filesystem::create_directories(dir);
+    write_file(dir / "identity.json", record);
+  }
+
+  /* The account `write_nb_record()`'s bucket is owned by.
+   *
+   * NooBaa's bucket record names its owner by `_id`, and the bucket
+   * import rejects a bucket whose owner this run did not write -- so
+   * the account has to carry the id the record names, not an
+   * arbitrary one. */
+  static constexpr const char* NB_OWNER_ID =
+    "6560e1f1c0ffee0000000002";
+
+  void add_the_owning_account() {
+    std::string rec{NB_ACCOUNT_PLAIN};
+    const std::string from = "6ac7cb27fd4af356919110a3";
+    for (auto at = rec.find(from); at != std::string::npos;
+	 at = rec.find(from)) {
       rec.replace(at, from.size(), NB_OWNER_ID);
     }
     add_nb_identity(NB_OWNER_ID, rec);
   }
 
+  std::map<std::string, std::string> ask(
+      const std::map<std::string, std::string>& params = {}) {
+    std::map<std::string, std::string> out;
+    EXPECT_EQ(driver->driver_hint(env->dpp, "adoption", params, &out), 0);
+    return out;
+  }
+};
+
+/* The default is `command`, and it adopts nothing.
+ *
+ * A deployment pointed at a NooBaa store is served as it is found:
+ * writes go through, and nothing is imported or rewritten until an
+ * operator asks.  That is the state for inspection and validation. */
+TEST_F(NooBaaModeTest, CommandIsTheDefaultAndAdoptsNothing)
+{
+  add_the_owning_account();
+  write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
   write_nb_record("ENABLED");
 
+  auto st = ask();
+  EXPECT_EQ(st["configured"], "true") << "the fixture has a store";
+  EXPECT_EQ(st["mode"], "command") << "the default changed";
+  /* and it says what it serves */
   EXPECT_EQ(st["base_path"], driver->default_bucket_location());
+  EXPECT_EQ(st["config_root"], conf_root().string());
+
+  /* A client's write is rejected:  the bucket is not adopted, and
+   * `command` means only that nothing adopts it automatically
+   * (DECISIONS.md 2026-10-21).  Adoption's own write gets in. */
+  auto* nb = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  EXPECT_EQ(driver->mutation_enter(env->dpp, nb,
+				   rgw::sal::MutationPurpose::client),
+	    -ERR_INVALID_BUCKET_STATE);
+  ASSERT_EQ(driver->mutation_enter(env->dpp, nb,
+				   rgw::sal::MutationPurpose::adoption), 0);
+  driver->mutation_leave(testname);
+
+  /* nothing imported:  the credential NooBaa's record carries does not
+   * authenticate, and the bucket is still in NooBaa's format */
+  std::unique_ptr<rgw::sal::User> user;
+  EXPECT_LT(driver->get_user_by_access_key(env->dpp, "INTERCHANGEACCESSKEY",
+					   null_yield, &user), 0);
+  EXPECT_STREQ(static_cast<rgw::sal::NSFSBucket*>(bucket.get())
+		 ->profile_name(), "base");
+}
+
+/* The mode is inert without a store.
+ *
+ * An ordinary nsfs deployment has nothing to adopt, so the option must
+ * not change it by existing.  This is the fixture *without* a NooBaa
+ * configuration root, which is every deployment today. */
+TEST_F(NSFSBucketTest, TheAdoptionModeIsInertWithoutAStore)
+{
+  std::map<std::string, std::string> out;
+  ASSERT_EQ(driver->driver_hint(env->dpp, "adoption", {}, &out), 0);
+  EXPECT_EQ(out["configured"], "false");
+
+  /* a command has nothing to act on */
+  out.clear();
+  EXPECT_EQ(driver->driver_hint(env->dpp, "adoption",
+				{{"identities", "true"}}, &out), -ENOENT);
+  EXPECT_EQ(out["ran"], "false");
+
+  /* and writes work on a bucket this gateway made, which is marked */
+  ASSERT_EQ(driver->mutation_enter(
+	      env->dpp, static_cast<rgw::sal::NSFSBucket*>(bucket.get()),
+	      rgw::sal::MutationPurpose::client), 0);
+  driver->mutation_leave(testname);
+}
+
+/* `identities=true` imports the store's identities, and nothing else.
+ *
+ * Phases 0 and 1, reported back through the hint so a test can see
+ * what each did.  No bucket is touched:  buckets are adopted one at a
+ * time, by their own command. */
+TEST_F(NooBaaModeTest, IdentitiesAreImportedByCommand)
+{
+  add_the_owning_account();
+  write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
   write_nb_record("ENABLED");
 
+  auto st = ask({{"identities", "true"}});
+  EXPECT_EQ(st["ran"], "true") << " error=" << st["error"];
+  EXPECT_EQ(st["accounts"], "1");
+  EXPECT_EQ(st["users"], "1");
+  EXPECT_EQ(st["identity_rows"], "1");
+
+  /* the credential NooBaa's record carried now authenticates */
+  std::unique_ptr<rgw::sal::User> user;
+  EXPECT_EQ(driver->get_user_by_access_key(env->dpp, "INTERCHANGEACCESSKEY",
+					   null_yield, &user), 0);
+
+  /* the bucket is not adopted */
+  std::unique_ptr<rgw::sal::Bucket> loaded;
+  ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname},
+				&loaded, null_yield), 0);
+  EXPECT_STREQ(static_cast<rgw::sal::NSFSBucket*>(loaded.get())
+		 ->profile_name(), "base");
+
+  /* and a second run is a no-op, because re-running is the recovery */
+  auto again = ask({{"identities", "true"}});
+  EXPECT_EQ(again["ran"], "true");
+  EXPECT_EQ(again["accounts"], "0");
+  EXPECT_EQ(again["accounts_present"], "1");
+}
+
+/* A store that will not preflight is rejected before anything is
+ * written, which is the point of phase 0. */
+TEST_F(NooBaaModeTest, APreflightFailureWritesNothing)
+{
+  /* a record that does not parse */
   add_nb_identity("bad", "{ not json");
-  write_nb_record("ENABLED");
-
-  write_nb_record("ENABLED");
+  write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
 
   std::map<std::string, std::string> out;
+  const int ret = driver->driver_hint(
+      env->dpp, "adoption", {{"identities", "true"}}, &out);
+  EXPECT_LT(ret, 0);
+  EXPECT_EQ(out["ran"], "false");
+  EXPECT_EQ(out["unreadable"], "1");
+  EXPECT_TRUE(out.find("accounts") == out.end())
+      << "a preflight failure got as far as writing";
+}
+
+/* A store a later NooBaa wrote is refused before anything is written
+ * (X4, DECISIONS.md 2026-10-21).
+ *
+ * Both entry points are tried:  the identities, and one bucket, whose
+ * adoption imports its record before set_profile() rewrites the tree.
+ * Neither writes:  the credential does not authenticate, the bucket
+ * has no row and is still base.  The same store with NooBaa's own
+ * `system.json` put back then adopts, so the gate is what refused. */
+TEST_F(NooBaaModeTest, AStoreALaterNooBaaWroteIsRefusedBeforeAnyWrite)
+{
+  add_the_owning_account();
+  write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
+  write_nb_record("ENABLED");
+  std::string later = NB_SYSTEM_JSON;
+  const std::string from = R"("current_version":"5.23.0")";
+  later.replace(later.find(from), from.size(),
+		R"("current_version":"5.24.0")");
+  write_file(conf_root() / "system.json", later);
+
+  std::map<std::string, std::string> ids;
+  EXPECT_EQ(driver->driver_hint(env->dpp, "adoption",
+				{{"identities", "true"}}, &ids), -ENOTSUP);
+  EXPECT_EQ(ids["ran"], "false");
+  EXPECT_EQ(ids["version_skew"], "1");
+  EXPECT_TRUE(ids.find("accounts") == ids.end())
+      << "a skewed store got as far as writing";
+
+  std::map<std::string, std::string> one;
+  EXPECT_LT(driver->driver_hint(env->dpp, "adoption",
+				{{"bucket", testname}}, &one), 0);
+  EXPECT_EQ(one["adopted"], "false");
+
+  std::unique_ptr<rgw::sal::User> user;
+  EXPECT_LT(driver->get_user_by_access_key(env->dpp, "INTERCHANGEACCESSKEY",
+					   null_yield, &user), 0);
+  nsfs::BucketPlacement row;
+  EXPECT_LT(driver->get_identity_db()->get_bucket_placement(
+	      env->dpp, testname, "", row), 0)
+      << "a skewed store's bucket record was imported";
+  /* the refusal is the store's, not the bucket's:  it stays served as
+   * found (DECISIONS.md 2026-10-29) */
+  std::unique_ptr<rgw::sal::Bucket> loaded;
+  ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname},
+				&loaded, null_yield), 0);
+  EXPECT_STREQ(static_cast<rgw::sal::NSFSBucket*>(loaded.get())
+		 ->profile_name(), "base");
+
+  /* the control:  NooBaa's own system.json, and the same store adopts */
+  write_file(conf_root() / "system.json", NB_SYSTEM_JSON);
+  auto st = ask({{"identities", "true"}});
+  EXPECT_EQ(st["ran"], "true") << st["error"];
+  auto again = ask({{"bucket", testname}});
+  EXPECT_EQ(again["adopted"], "true") << again["error"];
+}
+
+/* A bucket record holding a field NooBaa does not write is not imported
+ * (X4's second layer), and neither is the store's identities, since a
+ * preflight that does not read a record stops.  The same record without
+ * the field then adopts, so the field is what refused it. */
+TEST_F(NooBaaModeTest, ABucketRecordHoldingAnUnknownFieldIsNotImported)
+{
+  add_the_owning_account();
+  write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
+  write_nb_record("ENABLED", R"(,"new_field":1)");
+
+  std::map<std::string, std::string> ids;
+  EXPECT_EQ(driver->driver_hint(env->dpp, "adoption",
+				{{"identities", "true"}}, &ids), -EBADMSG);
+  EXPECT_EQ(ids["unreadable"], "1");
+
+  std::map<std::string, std::string> one;
+  EXPECT_LT(driver->driver_hint(env->dpp, "adoption",
+				{{"bucket", testname}}, &one), 0);
+  EXPECT_EQ(one["adopted"], "false");
+  nsfs::BucketPlacement row;
+  EXPECT_LT(driver->get_identity_db()->get_bucket_placement(
+	      env->dpp, testname, "", row), 0)
+      << "the record was imported";
+
+  /* the control */
+  write_nb_record("ENABLED");
+  auto st = ask({{"identities", "true"}});
+  EXPECT_EQ(st["ran"], "true") << st["error"];
+  auto again = ask({{"bucket", testname}});
+  EXPECT_EQ(again["adopted"], "true") << again["error"];
+}
+
+/* One bucket, adopted by command.
+ *
+ * Identities are store-wide because a principal resolves against the
+ * complete mapping;  buckets are the unit that can be done one at a
+ * time.  Adopting one imports its NooBaa record and rewrites its tree,
+ * which is the profile change out of base -- the same call the
+ * profile endpoint makes. */
+TEST_F(NooBaaModeTest, OneBucketIsAdoptedByCommand)
+{
+  add_the_owning_account();
+  write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
+  write_nb_record("ENABLED");
+
+  /* identities first, which is the store-wide half */
+  auto st = ask({{"identities", "true"}});
+  ASSERT_EQ(st["ran"], "true") << st["error"];
+
+  /* then the one bucket, which is the increment */
+  auto one = ask({{"bucket", testname}});
+
+  /* Adopted means the objects are nsfs's too, not just the record.
+   *
+   * Asserted because the report used to say "adopted" after writing
+   * bucket configuration alone, while every object kept NooBaa's
+   * arrangement.  `profile` is what makes the claim checkable:  a
+   * bucket that was only configured still reads base. */
+  EXPECT_EQ(one["adopted"], "true") << one["error"];
+  EXPECT_EQ(one["profile_set"], "true");
+  /* Equality, not "not base":  an absent key is not base either, so a
+   * negative assertion would pass against a report that omitted it.
+   * `shared` is the target for a NooBaa migration. */
+  EXPECT_EQ(one["profile"], "shared")
+      << "the bucket claims adoption and is not in the nsfs profile";
+
+  /* and the record's state is on the bucket:  its versioning, its
+   * owner as the imported account, and BucketOwnerEnforced */
+  std::unique_ptr<rgw::sal::User> user;
+  ASSERT_EQ(driver->get_user_by_access_key(env->dpp, "INTERCHANGEACCESSKEY",
+					   null_yield, &user), 0);
+  std::unique_ptr<rgw::sal::Bucket> loaded;
+  ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname},
+				&loaded, null_yield), 0);
+  EXPECT_TRUE(loaded->versioned())
+      << "NooBaa's versioning did not reach the adopted bucket";
+  EXPECT_EQ(to_string(loaded->get_owner()), user->get_info().account_id)
+      << "the adopted bucket is not owned by the imported account";
+  EXPECT_TRUE(loaded->get_attrs().count(RGW_ATTR_OWNERSHIP_CONTROLS))
+      << "the adopted bucket is not BucketOwnerEnforced";
+
+  /* a name nothing holds is an error, not a silent success -- an
+   * operator adopting a bucket by name needs to know they named one
+   * that exists */
+  std::map<std::string, std::string> out;
+  EXPECT_LT(driver->driver_hint(env->dpp, "adoption",
+				{{"bucket", "no-such-bucket"}}, &out), 0);
+  EXPECT_EQ(out["adopted"], "false");
+}
+
+/* A bucket whose owner is not imported is not adopted.
+ *
+ * A plan mints an account id for an identity not yet imported, and a
+ * bucket written with it names an account that does not exist.  The
+ * other polarity is OneBucketIsAdoptedByCommand:  the same bucket, with
+ * the identities imported first, is adopted.  It is blocked by its
+ * owner rather than failing (DECISIONS.md 2026-11-02), and is not served,
+ * since its owner does not translate. */
+TEST_F(NooBaaModeTest, ABucketIsNotAdoptedBeforeItsOwner)
+{
+  add_the_owning_account();
+  write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
+  write_nb_record("ENABLED");
+  remove_rgw_bucket_info();
+
+  std::map<std::string, std::string> out;
+  EXPECT_LT(driver->driver_hint(env->dpp, "adoption",
+				{{"bucket", testname}}, &out), 0);
+  EXPECT_EQ(out["adopted"], "false");
+  EXPECT_EQ(out["blocked"], "true");
+  EXPECT_FALSE(driver->adoption_failed(testname));
+
+  /* not served, and its tree was not converted */
+  std::unique_ptr<rgw::sal::Bucket> loaded;
+  EXPECT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname},
+				&loaded, null_yield), -ERR_INVALID_BUCKET_STATE);
+  ASSERT_EQ(driver->load_bucket_internal(env->dpp, rgw_bucket{"", testname},
+					 &loaded, null_yield), 0);
+  EXPECT_STREQ(static_cast<rgw::sal::NSFSBucket*>(loaded.get())
+		 ->profile_name(), "base")
+      << "a bucket whose owner does not exist was converted";
+}
+
+/* A bucket served in NooBaa's format takes its owner from
+ * `owner_account`, as the account import recorded it, so it is
+ * consumable before its adoption.  The control is the same bucket
+ * before the identities are imported, which has none, and so is not
+ * served (DECISIONS.md 2026-11-02). */
+TEST_F(NooBaaModeTest, AnUnadoptedBucketTakesItsOwnerFromTheImport)
+{
+  add_the_owning_account();
+  write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
   write_nb_record("ENABLED");
   remove_rgw_bucket_info();
 
   {
+    std::unique_ptr<rgw::sal::Bucket> b;
+    EXPECT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname}, &b,
+				  null_yield), -ERR_INVALID_BUCKET_STATE)
+	<< "the control:  a bucket with no owner was served";
+  }
 
+  ASSERT_EQ(ask({{"identities", "true"}})["ran"], "true");
+  std::string imported;
+  ASSERT_EQ(driver->get_identity_db()->get_owner_by_noobaa_id(
+		env->dpp, NB_OWNER_ID, imported), 0);
+
+  std::unique_ptr<rgw::sal::Bucket> served;
+  ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname}, &served,
+				null_yield), 0);
+  EXPECT_EQ(to_string(served->get_owner()), imported);
+  std::unique_ptr<rgw::sal::Bucket> b;
+  ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname}, &b,
+				null_yield), 0);
+  EXPECT_STREQ(static_cast<rgw::sal::NSFSBucket*>(b.get())->profile_name(),
+	       "base") << "taking the owner adopted the bucket";
+}
+
+/* Adoption's completion record (DECISIONS.md 2026-10-13):  written by the
+ * pass that observes NooBaa's store consumed, and from then on the store
+ * is not read. */
+class NooBaaCompletionTest : public NooBaaModeTest {
+public:
+  void SetUp() override {
+    NooBaaModeTest::SetUp();
+    add_the_owning_account();
+    write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
     write_nb_record("ENABLED");
   }
 
+  void restart() {
+    bucket.reset();
+    driver.reset();
+    driver = std::make_unique<TestDriver>(bp);
+    ASSERT_EQ(driver->init(env->dpp), 0);
+  }
+};
+
+/* A pass over a store it consumes writes the record, and the hint
+ * reports it. */
+TEST_F(NooBaaCompletionTest, ACompletePassWritesTheRecord)
+{
+  EXPECT_FALSE(driver->adoption_complete());
+  auto run = ask({{"run", "true"}});
+  EXPECT_EQ(run["complete"], "true") << run["why_not_complete"];
+  ASSERT_TRUE(driver->adoption_complete());
+
+  nsfs::AdoptionCompletion c;
+  ASSERT_EQ(driver->get_identity_db()->get_adoption_completion(env->dpp, c),
+	    0);
+  EXPECT_EQ(c.config_root, conf_root().string());
+  EXPECT_EQ(c.buckets, 1u);
+  EXPECT_GE(c.identities, 1u);
+  EXPECT_FALSE(c.completed_at.empty());
+
+  auto st = ask();
+  EXPECT_EQ(st["complete"], "true");
+  EXPECT_EQ(st["completed_at"], c.completed_at);
+}
+
+/* A NooBaa bucket policy names an account by its NooBaa name, and RGW
+ * names it by account id.  The policy a request is evaluated against
+ * must name the imported account at every stage:  served in NooBaa's
+ * format after the identities are imported, and after the bucket is
+ * adopted.  The order is the stand-up's -- the bucket is loaded before
+ * its adoption, then again after -- because a request against an
+ * unadopted bucket is what precedes adoption in a deployment.  Found by
+ * the stand-up's `groups` step, whose writes RGW refused against the
+ * unrewritten principal.  The control is the owner, mapped through the
+ * identity database at both stages. */
+TEST_F(NooBaaCompletionTest, ABucketPolicyNamesTheImportedAccountAtEveryStage)
+{
+  /* a tree NooBaa made, so its state comes from the record until adopted */
+  remove_rgw_bucket_info();
+  write_nb_record("ENABLED",
+      R"(,"s3_policy":{"Version":"2012-10-17","Statement":[{
+        "Effect":"Allow","Principal":{"AWS":["interchange"]},
+        "Action":["s3:GetObject"],
+        "Resource":["arn:aws:s3:::b/*"]}]})");
+  ASSERT_EQ(ask({{"identities", "true"}})["ran"], "true");
+  std::string account;
+  ASSERT_EQ(driver->get_identity_db()->get_owner_by_noobaa_id(
+		env->dpp, NB_OWNER_ID, account), 0);
+
+  auto policy_and_owner = [&] () {
+    std::unique_ptr<rgw::sal::Bucket> b;
+    EXPECT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname}, &b,
+				  null_yield), 0);
+    std::string pol;
+    if (auto p = b->get_attrs().find(RGW_ATTR_IAM_POLICY);
+	p != b->get_attrs().end()) {
+      pol = p->second.to_str();
+    }
+    return std::make_pair(pol, to_string(b->get_owner()));
+  };
+
+  auto [before, owner_before] = policy_and_owner();
+  EXPECT_EQ(owner_before, account) << "control:  the owner was not mapped";
+  EXPECT_NE(before.find(account), std::string::npos)
+      << "unadopted, the policy does not name the imported account: "
+      << before;
+  EXPECT_EQ(before.find("interchange"), std::string::npos)
+      << "unadopted, the policy names NooBaa's account: " << before;
+
+  ASSERT_EQ(ask({{"bucket", testname}})["adopted"], "true");
+  auto [after, owner_after] = policy_and_owner();
+  EXPECT_EQ(owner_after, account) << "control:  the owner was not mapped";
+  EXPECT_NE(after.find(account), std::string::npos)
+      << "adopted, the policy does not name the imported account: " << after;
+  EXPECT_EQ(after.find("interchange"), std::string::npos)
+      << "adopted, the policy names NooBaa's account: " << after;
+}
+
+/* Unadopted, a bucket whose policy names a principal the import did not
+ * write is not served (DECISIONS.md 2026-11-02):  without its policy it
+ * would grant nothing and deny nothing it was meant to, which is not
+ * what NooBaa served.  The control is the same policy naming the
+ * imported account, which is served with it. */
+TEST_F(NooBaaCompletionTest, AnUnadoptedBucketWhosePolicyNamesNobodyIsNotServed)
+{
+  remove_rgw_bucket_info();
+  ASSERT_EQ(ask({{"identities", "true"}})["ran"], "true");
+  auto load = [&] (const char* who, std::unique_ptr<rgw::sal::Bucket>& b) {
+    write_nb_record("ENABLED", std::string(
+	R"(,"s3_policy":{"Version":"2012-10-17","Statement":[{)"
+	R"("Effect":"Allow","Principal":{"AWS":[")") + who + R"("]},)"
+	R"("Action":["s3:GetObject"],"Resource":["arn:aws:s3:::b/*"]}]})");
+    return driver->load_bucket(env->dpp, rgw_bucket{"", testname}, &b,
+			       null_yield);
+  };
+  std::unique_ptr<rgw::sal::Bucket> b;
+  ASSERT_EQ(load("interchange", b), 0);
+  EXPECT_TRUE(b->get_attrs().count(RGW_ATTR_IAM_POLICY))
+      << "control:  a policy naming the imported account was not served";
+  EXPECT_EQ(load("nobody-imported", b), -ERR_INVALID_BUCKET_STATE)
+      << "a bucket whose policy names a principal the import did not write "
+	 "was served";
+}
+
+/* A record that does not adopt keeps adoption incomplete:  the control
+ * that the record is observed, not merely written at the end of a
+ * pass. */
+TEST_F(NooBaaCompletionTest, AnUnadoptedRecordKeepsItIncomplete)
+{
+  const sf::path stray = bp / "root" / "unowned";
+  sf::create_directories(stray);
+  write_file(conf_root() / "buckets" / "unowned.json",
+	     R"({"_id":"6560e1f1c0ffee00000000dd","name":"unowned",)"
+	     R"("owner_account":"6560e1f1c0ffee00000000ee",)"
+	     R"("versioning":"DISABLED","path":")" + stray.string() +
+	     R"(","should_create_underlying_storage":true,)"
+	     R"("creation_date":"2026-01-02T03:04:05.000Z"})");
+
+  std::map<std::string, std::string> out;
+  EXPECT_LT(driver->driver_hint(env->dpp, "adoption", {{"run", "true"}},
+				&out), 0);
+  EXPECT_FALSE(driver->adoption_complete());
+  nsfs::AdoptionCompletion c;
+  EXPECT_EQ(driver->get_identity_db()->get_adoption_completion(env->dpp, c),
+	    -ENOENT);
+}
+
+/* After completion NooBaa's store is not read:  a record that appears
+ * places no bucket, lists none, holds no name, and the commands
+ * are rejected. */
+TEST_F(NooBaaCompletionTest, AfterCompletionTheStoreIsNotRead)
+{
+  ASSERT_EQ(ask({{"run", "true"}})["complete"], "true");
+
+  const sf::path late = bp / "late-dir";
+  sf::create_directories(late);
+  write_file(conf_root() / "buckets" / "late.json",
+	     R"({"_id":"6560e1f1c0ffee00000000ff","name":"late","path":")" +
+	     late.string() + R"("})");
+
+  std::unique_ptr<rgw::sal::Bucket> loaded;
+  EXPECT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", "late"}, &loaded,
+				null_yield), -ENOENT)
+      << "a NooBaa record served a bucket after completion";
+
+  void* h = nullptr;
+  ASSERT_EQ(driver->meta_list_keys_init(env->dpp, "bucket", "", &h), 0);
+  std::list<std::string> keys;
+  bool truncated = false;
+  ASSERT_EQ(driver->meta_list_keys_next(env->dpp, h, 1000, keys,
+					&truncated), 0);
+  driver->meta_list_keys_complete(h);
+  EXPECT_EQ(std::find(keys.begin(), keys.end(), "late"), keys.end());
+
+  RGWBucketInfo info;
+  info.bucket.name = "late";
+  info.owner = owner;
+  auto b = driver->get_bucket(info);
+  rgw::sal::Bucket::CreateParams cp;
+  cp.owner = owner;
+  EXPECT_EQ(b->create(env->dpp, cp, null_yield, rgw::sal::no_authenticated_user), 0)
+      << "NooBaa's record still held the name";
+
+  std::map<std::string, std::string> out;
+  /* and adoption's first step, called directly, finds nothing to read */
+  EXPECT_NE(driver->import_noobaa_bucket(env->dpp, null_yield, testname,
+					 nullptr), 0);
+  for (const char* cmd : {"identities", "bucket", "run"}) {
+    out.clear();
+    EXPECT_EQ(driver->driver_hint(env->dpp, "adoption",
+				  {{cmd, std::string(cmd) == "identities" ||
+					 std::string(cmd) == "run"
+					   ? "true" : "late"}}, &out),
+	      -EEXIST) << cmd;
+    EXPECT_EQ(out["why"], "adoption is complete") << cmd;
+  }
+}
+
+/* The record is read at startup:  a restarted gateway is complete. */
+TEST_F(NooBaaCompletionTest, TheRecordSurvivesARestart)
+{
+  ASSERT_EQ(ask({{"run", "true"}})["complete"], "true");
+  restart();
+  EXPECT_TRUE(driver->adoption_complete());
+}
+
+/* Abandoning a NooBaa record (DECISIONS.md 2026-10-13).  The fixture's
+ * store has one account and one bucket;  `unowned` is a second bucket
+ * whose owner is not in the store, so it can never be adopted. */
+class NooBaaAbandonTest : public NooBaaCompletionTest {
+public:
+  static constexpr const char* UNOWNED_ID = "6560e1f1c0ffee00000000dd";
   /* the `_id` write_nb_record() writes */
   static constexpr const char* NB_BUCKET_ID = "6560e1f1c0ffee0000000001";
 
+  void add_unowned() {
+    const sf::path at = bp / "root" / "unowned";
+    sf::create_directories(at);
+    write_file(conf_root() / "buckets" / "unowned.json",
+	       std::string(R"({"_id":")") + UNOWNED_ID +
+	       R"(","name":"unowned","owner_account":"6560e1f1c0ffee00000000ee",)"
+	       R"("versioning":"DISABLED","path":")" + at.string() +
+	       R"(","should_create_underlying_storage":true,)"
+	       R"("creation_date":"2026-01-02T03:04:05.000Z"})");
+  }
+
+  int abandon(const std::string& id, const std::string& reason,
+	      nsfs::AbandonedRecord* out = nullptr) {
+    nsfs::AbandonedRecord r;
+    const int ret = driver->abandon_noobaa_record(env->dpp, null_yield, id,
+						  reason, r);
+    if (out) {
+      *out = r;
+    }
+    return ret;
+  }
+
+  int run() {
+    std::map<std::string, std::string> out;
+    return driver->driver_hint(env->dpp, "adoption", {{"run", "true"}},
+			       &out);
+  }
+
+  /* An account the plan fails:  RGW will not accept its name. */
+  static constexpr const char* DAMAGED_ID = "6560e1f1c0ffee00000000aa";
+  void add_damaged_account() {
+    std::string rec{NB_ACCOUNT_PLAIN};
+    auto replace_all = [&](const std::string& from, const std::string& to) {
+      for (auto at = rec.find(from); at != std::string::npos;
+	   at = rec.find(from, at + to.size())) {
+	rec.replace(at, from.size(), to);
+      }
+    };
+    replace_all("6ac7cb27fd4af356919110a3", DAMAGED_ID);
+    replace_all("\"interchange\"", "\"has$dollar\"");
+    replace_all("INTERCHANGEACCESSKEY", "DOLLARSACCESSKEYAAAA");
+    add_nb_identity(DAMAGED_ID, rec);
+  }
+
+  /* A bucket of the damaged account's. */
+  static constexpr const char* DOLLARS_ID = "6560e1f1c0ffee00000000ab";
+  void add_dollars() {
+    const sf::path at = bp / "root" / "dollars";
+    sf::create_directories(at);
+    write_file(conf_root() / "buckets" / "dollars.json",
+	       std::string(R"({"_id":")") + DOLLARS_ID +
+	       R"(","name":"dollars","owner_account":")" + DAMAGED_ID +
+	       R"(","versioning":"DISABLED","path":")" + at.string() +
+	       R"(","should_create_underlying_storage":true,)"
+	       R"("creation_date":"2026-01-02T03:04:05.000Z"})");
+  }
+
+  int load(const std::string& name, std::unique_ptr<rgw::sal::Bucket>& b) {
+    return driver->load_bucket(env->dpp, rgw_bucket{"", name}, &b,
+			       null_yield);
+  }
+
+  bool adopted(const std::string& name) {
+    std::unique_ptr<rgw::sal::Bucket> b;
+    return (load(name, b) == 0) &&
+      std::strcmp(static_cast<rgw::sal::NSFSBucket*>(b.get())->profile_name(),
+		  "base");
+  }
+};
+
+/* What abandoning rejects:  no reason, an `_id` the store does not
+ * hold, and a record already consumed. */
+TEST_F(NooBaaAbandonTest, AbandoningRejectsWhatItShould)
+{
   EXPECT_EQ(abandon(NB_BUCKET_ID, ""), -EINVAL);
-  ASSERT_EQ(abandon(NB_BUCKET_ID, "left in NooBaa's format", &r), 0);
-  ASSERT_EQ(abandon(NB_BUCKET_ID, "not this one"), 0);
+  EXPECT_EQ(abandon("6560e1f1c0ffee0000000bad", "gone"), -ENOENT);
 
+  ASSERT_EQ(ask({{"identities", "true"}})["ran"], "true");
+  EXPECT_EQ(abandon(NB_OWNER_ID, "imported already"), -EEXIST)
+      << "an imported identity was abandoned";
 
-  ASSERT_EQ(driver->unabandon_noobaa_record(env->dpp, NB_BUCKET_ID), 0);
-  ASSERT_EQ(abandon(NB_BUCKET_ID, "the rest will not convert", &r), 0);
+  ASSERT_EQ(run(), 0);
+  EXPECT_EQ(abandon(NB_BUCKET_ID, "adopted already"), -EEXIST)
+      << "an adopted bucket, or anything after completion, was abandoned";
 }
 
+/* A role that cannot be written keeps adoption incomplete until it is
+ * abandoned, which is the override (DECISIONS.md 2026-10-30, amended
+ * 2026-11-02);  then the pass completes. */
+TEST_F(NooBaaAbandonTest, AbandoningARoleThatCannotBeWrittenLetsAdoptionComplete)
+{
+  sf::create_directories(conf_root() / "identities" / "r3");
+  write_file(conf_root() / "identities" / "r3" / "identity.json",
+	     nb_role("r3", "6560e1f1c0ffee00000000ee", "orphan", "x"));
+  EXPECT_LT(run(), 0) << "the control:  the orphan role blocks it";
+  EXPECT_FALSE(driver->adoption_complete());
+  /* and stops nothing else:  the bucket is adopted all the same */
+  EXPECT_TRUE(adopted(testname));
+
+  nsfs::AbandonedRecord r;
+  ASSERT_EQ(abandon("r3", "its account was deleted in NooBaa", &r), 0);
+  EXPECT_EQ(r.kind, "identity");
+  EXPECT_EQ(r.name, "orphan");
+  EXPECT_EQ(r.stage, "not imported");
+
+  ASSERT_EQ(run(), 0);
+  EXPECT_TRUE(driver->adoption_complete());
+}
+
+/* An identity the plan fails stops nothing else (DECISIONS.md
+ * 2026-11-02).  The rest of the store is adopted;  the failed account's
+ * bucket is blocked, neither failed nor served, since its owner does not
+ * translate.  Abandoning the account leaves the bucket an owner nobody
+ * will write, so it fails;  abandoning it too lets adoption complete. */
+TEST_F(NooBaaAbandonTest, AFailedIdentityStopsNothingElse)
+{
+  add_damaged_account();
+  add_dollars();
+  EXPECT_LT(run(), 0);
+  EXPECT_FALSE(driver->adoption_complete());
+
+  EXPECT_TRUE(adopted(testname)) << "an identity failure stopped the pass";
+  std::string owner;
+  EXPECT_EQ(driver->get_identity_db()->get_owner_by_noobaa_id(
+	      env->dpp, DAMAGED_ID, owner), -ENOENT);
+
+  EXPECT_FALSE(driver->adoption_failed("dollars"))
+      << "a bucket blocked by its owner was recorded as failed";
+  std::unique_ptr<rgw::sal::Bucket> b;
+  EXPECT_EQ(load("dollars", b), -ERR_INVALID_BUCKET_STATE)
+      << "a bucket whose owner did not import was served";
+
+  ASSERT_EQ(abandon(DAMAGED_ID, "renamed in NooBaa"), 0);
+  EXPECT_LT(run(), 0);
+  EXPECT_TRUE(driver->adoption_failed("dollars"));
+  EXPECT_FALSE(driver->adoption_complete());
+
+  ASSERT_EQ(abandon(DOLLARS_ID, "its owner is abandoned"), 0);
+  ASSERT_EQ(run(), 0);
+  EXPECT_TRUE(driver->adoption_complete());
+}
+
+/* A bucket whose policy names an identity that did not import is
+ * blocked by it:  a
+ * policy written now would name nobody, and a denial in it would not
+ * apply to the identity once it imports.  Until it is adopted it is not
+ * served, since its policy does not translate.  Abandoning the identity
+ * is the operator's choice to adopt it without the policy. */
+TEST_F(NooBaaAbandonTest, APolicyNamingAFailedIdentityBlocksItsBucket)
+{
+  remove_rgw_bucket_info();
+  add_damaged_account();
+  write_nb_record("ENABLED",
+	       R"(,"s3_policy":{"Version":"2012-10-17","Statement":[)"
+	       R"({"Effect":"Allow","Principal":{"AWS":["has$dollar"]},)"
+	       R"("Action":["s3:GetObject"],)"
+	       R"("Resource":["arn:aws:s3:::)" + std::string(testname) +
+	       R"(/*"]}]})");
+  EXPECT_LT(run(), 0);
+  EXPECT_FALSE(adopted(testname));
+  EXPECT_FALSE(driver->adoption_failed(testname));
+  std::unique_ptr<rgw::sal::Bucket> b;
+  EXPECT_EQ(load(testname, b), -ERR_INVALID_BUCKET_STATE)
+      << "a bucket whose policy did not translate was served";
+
+  ASSERT_EQ(abandon(DAMAGED_ID, "renamed in NooBaa"), 0);
+  ASSERT_EQ(run(), 0);
+  EXPECT_TRUE(driver->adoption_complete());
+  ASSERT_EQ(load(testname, b), 0);
+  EXPECT_EQ(b->get_attrs().count(RGW_ATTR_IAM_POLICY), 0u)
+      << "a policy naming an abandoned identity was written";
+}
+
+/* A preview reports what a pass would do and writes nothing:  no
+ * identity, no bucket row, no conversion.  Its report is the pass's, as
+ * predictions. */
+TEST_F(NooBaaAbandonTest, APreviewWritesNothing)
+{
+  add_damaged_account();
+  add_dollars();
+  auto pv = ask({{"preview", "true"}});
+  EXPECT_EQ(pv["accounts"], "1");
+  EXPECT_EQ(pv["identities_failed"], "1");
+  EXPECT_EQ(pv["buckets_adopted"], "1");
+  EXPECT_EQ(pv["buckets_blocked"], "1");
+  EXPECT_EQ(pv["buckets_failed"], "0");
+
+  std::string owner;
+  EXPECT_EQ(driver->get_identity_db()->get_owner_by_noobaa_id(
+	      env->dpp, NB_OWNER_ID, owner), -ENOENT);
+  nsfs::BucketPlacement row;
+  EXPECT_EQ(driver->get_identity_db()->get_bucket_placement(
+	      env->dpp, testname, "", row), -ENOENT);
+  EXPECT_FALSE(adopted(testname));
+  EXPECT_FALSE(driver->adoption_complete());
+
+  const auto r = reports();
+  ASSERT_EQ(r.size(), 1u);
+  JSONParser p;
+  const auto found = report_findings(r[0], p);
+  std::string pass;
+  JSONDecoder::decode_json("pass", pass, &p);
+  EXPECT_EQ(pass, "preview");
+  auto named = [&](const char* kind, const char* what) {
+    auto f = found.equal_range(kind);
+    return std::any_of(f.first, f.second, [&](const auto& x) {
+      return x.second[0].find(what) != std::string::npos;
+    });
+  };
+  EXPECT_TRUE(named("identity_failed", "has$dollar"));
+  EXPECT_TRUE(named("bucket_failed", "dollars: its owner_account"));
+
+  /* the control:  the pass it predicted */
+  EXPECT_LT(run(), 0);
+  EXPECT_TRUE(adopted(testname));
+}
+
+/* A record that can never be adopted keeps adoption incomplete until it
+ * is abandoned;  then the pass completes, and the bucket, never
+ * imported, is not served. */
+TEST_F(NooBaaAbandonTest, AbandoningAnUnimportedBucketLetsAdoptionComplete)
+{
+  add_unowned();
+  EXPECT_LT(run(), 0) << "the control:  the unowned bucket blocks it";
+  EXPECT_FALSE(driver->adoption_complete());
+
+  nsfs::AbandonedRecord r;
+  ASSERT_EQ(abandon(UNOWNED_ID, "its owner was deleted in NooBaa", &r), 0);
+  EXPECT_EQ(r.kind, "bucket");
+  EXPECT_EQ(r.name, "unowned");
+  EXPECT_EQ(r.stage, "not imported");
+
+  ASSERT_EQ(run(), 0);
+  EXPECT_TRUE(driver->adoption_complete());
+
+  std::unique_ptr<rgw::sal::Bucket> loaded;
+  EXPECT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", "unowned"}, &loaded,
+				null_yield), -ENOENT)
+      << "a bucket abandoned before its import is served after completion";
+
+  /* and it is fixed now */
+  EXPECT_EQ(driver->unabandon_noobaa_record(env->dpp, UNOWNED_ID), -EEXIST);
+  std::vector<nsfs::AbandonedRecord> all;
+  ASSERT_EQ(driver->list_abandoned(env->dpp, all), 0);
+  ASSERT_EQ(all.size(), 1u);
+  EXPECT_EQ(all[0].reason, "its owner was deleted in NooBaa");
+}
+
+/* A bucket abandoned after its import, before its conversion, stays
+ * served, in NooBaa's format. */
+TEST_F(NooBaaAbandonTest, AnUnconvertedBucketAbandonedStaysServed)
+{
+  ASSERT_EQ(ask({{"identities", "true"}})["ran"], "true");
+  /* adoption's first step alone:  the bucket's state written, the
+   * bucket not marked */
+  ASSERT_EQ(driver->import_noobaa_bucket(env->dpp, null_yield, testname,
+					 nullptr), 0);
+
+  nsfs::AbandonedRecord r;
+  ASSERT_EQ(abandon(NB_BUCKET_ID, "left in NooBaa's format", &r), 0);
+  EXPECT_EQ(r.stage, "not converted");
+
+  ASSERT_EQ(run(), 0);
+  EXPECT_TRUE(driver->adoption_complete());
+
+  std::unique_ptr<rgw::sal::Bucket> loaded;
+  ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname}, &loaded,
+				null_yield), 0);
+  EXPECT_STREQ(static_cast<rgw::sal::NSFSBucket*>(loaded.get())
+		 ->profile_name(), "base")
+      << "the pass converted a bucket whose conversion was abandoned";
+}
+
+/* Adopting or importing an abandoned record by name is rejected, as the
+ * full pass skips it;  so is the profile change that would import it.
+ * Taking the abandonment back is the way to adopt it after all, and is
+ * the control. */
+TEST_F(NooBaaAbandonTest, AnAbandonedRecordIsNotAdoptedByName)
+{
+  ASSERT_EQ(ask({{"identities", "true"}})["ran"], "true");
+  ASSERT_EQ(abandon(NB_BUCKET_ID, "not this one"), 0);
+
+  std::map<std::string, std::string> out;
+  EXPECT_EQ(driver->driver_hint(env->dpp, "adoption", {{"bucket", testname}},
+				&out), -EEXIST);
+  EXPECT_EQ(out["why"], "abandoned:  not this one");
+  out.clear();
+  EXPECT_EQ(driver->import_noobaa_bucket(env->dpp, null_yield, testname,
+					 &out), -EEXIST);
+  uint32_t had = 0;
+  std::string had_profile;
+  EXPECT_LT(driver->set_bucket_profile(env->dpp, null_yield, testname,
+				       *nsfs::extensions_for_profile("shared"),
+				       &had, &had_profile), 0)
+      << "the profile endpoint adopted an abandoned bucket";
+
+  ASSERT_EQ(driver->unabandon_noobaa_record(env->dpp, NB_BUCKET_ID), 0);
+  EXPECT_EQ(ask({{"bucket", testname}})["adopted"], "true");
+}
+
+/* A conversion that stopped partway can be abandoned, as an exception:
+ * a tree that will not convert (DECISIONS.md 2026-10-21).  It is recorded
+ * as partly converted, adoption completes, and the bucket is left as it
+ * stopped, still converting.  Its objects are NooBaa's, laid as files,
+ * since nothing writes a bucket not taken over. */
+TEST_F(NooBaaAbandonTest, APartlyConvertedBucketCanBeAbandoned)
+{
+  ASSERT_EQ(ask({{"identities", "true"}})["ran"], "true");
+  /* adoption's first step alone:  the bucket's state written, the
+   * bucket not marked */
+  ASSERT_EQ(driver->import_noobaa_bucket(env->dpp, null_yield, testname,
+					 nullptr), 0);
+  {
+    std::unique_ptr<rgw::sal::Bucket> b;
+    ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname}, &b,
+				  null_yield), 0);
+    write_file(bucket_path() / "one", "1");
+    write_file(bucket_path() / "two", "2");
+    nsfs::convert_cb_t stop =
+      [](const DoutPrefixProvider*, const nsfs::ConvertEvent& ev) {
+	return (ev.phase == nsfs::ConvertEvent::Phase::pruned) ? -EINTR : 0;
+      };
+    ASSERT_EQ(static_cast<rgw::sal::NSFSBucket*>(b.get())->set_profile(
+		  env->dpp, null_yield, nsfs::EXTENSIONS_SHARED, &stop, nullptr),
+	      -EINTR);
+  }
+
+  nsfs::AbandonedRecord r;
+  ASSERT_EQ(abandon(NB_BUCKET_ID, "the rest will not convert", &r), 0);
+  EXPECT_EQ(r.stage, "partly converted");
+
+  ASSERT_EQ(run(), 0);
+  EXPECT_TRUE(driver->adoption_complete());
+  std::unique_ptr<rgw::sal::Bucket> loaded;
+  ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname}, &loaded,
+				null_yield), 0);
+  EXPECT_TRUE(static_cast<rgw::sal::NSFSBucket*>(loaded.get())
+		->is_converting())
+      << "the control:  the bucket was really left partway";
+}
+
+/* Taking an abandonment back lets the next pass try the record again. */
+TEST_F(NooBaaAbandonTest, UnabandoningLetsThePassTryAgain)
+{
+  add_unowned();
+  ASSERT_EQ(abandon(UNOWNED_ID, "for now"), 0);
+  EXPECT_EQ(abandon(UNOWNED_ID, "again"), -EEXIST);
+  ASSERT_EQ(driver->unabandon_noobaa_record(env->dpp, UNOWNED_ID), 0);
+  EXPECT_EQ(driver->unabandon_noobaa_record(env->dpp, UNOWNED_ID), -ENOENT);
+
+  EXPECT_LT(run(), 0) << "the record was not tried again";
+  EXPECT_FALSE(driver->adoption_complete());
+}
+
+/* An abandoned identity is left out of the import, and the others are
+ * not held up by it. */
+TEST_F(NooBaaAbandonTest, AnAbandonedIdentityIsNotImported)
+{
+  nsfs::AbandonedRecord r;
+  ASSERT_EQ(abandon(NB_OWNER_ID, "a collision nobody will resolve", &r),
+	    0);
+  /* what depends on it is said, since each now fails its import */
+  EXPECT_EQ(r.dependent_buckets, std::vector<std::string>{testname});
+  auto st = ask({{"identities", "true"}});
+  EXPECT_EQ(st["identities_abandoned"], "1");
+  std::string owner;
+  EXPECT_EQ(driver->get_identity_db()->get_owner_by_noobaa_id(
+		env->dpp, NB_OWNER_ID, owner), -ENOENT);
+}
+
+/* An abandoned identity does not stop the buckets either:  each bucket's
+ * import plans its owners as the identity import did, without it. */
+TEST_F(NooBaaAbandonTest, AnAbandonedIdentityDoesNotStopTheBuckets)
+{
+  static constexpr const char* ORPHAN_ID = "6560e1f1c0ffee00000000aa";
+  add_nb_identity(ORPHAN_ID, std::string(R"({"_id":")") + ORPHAN_ID +
+		  R"(","name":"orphan","email":"orphan",)"
+		  R"("owner":"6560e1f1c0ffee00000000ee"})");
+  EXPECT_LT(run(), 0) << "the control:  the orphan keeps it incomplete";
+
+  ASSERT_EQ(abandon(ORPHAN_ID, "its owner was deleted in NooBaa"), 0);
+  ASSERT_EQ(run(), 0);
+  EXPECT_TRUE(driver->adoption_complete());
+}
+
+/* Under `automatic`, an identity import that fails leaves no queue,
+ * and abandoning the record that failed it starts one;  the queue
+ * adopts, observes completion, and completion stops it.  Two records of
+ * one `_id` are what still fail the import whole (DECISIONS.md
+ * 2026-11-02), and abandoning the `_id` leaves out both
+ * (DECISIONS.md 2026-10-31). */
+TEST_F(NooBaaAbandonTest, AbandoningWhatStoppedTheIdentitiesStartsTheQueue)
+{
+  static constexpr const char* TWICE_ID = "6560e1f1c0ffee00000000aa";
+  for (const char* dir : {"twice-one", "twice-two"}) {
+    add_nb_identity(dir, std::string(R"({"_id":")") + TWICE_ID +
+		    R"(","name":")" + dir + R"(","email":")" + dir + R"("})");
+  }
+
+  boost::asio::io_context io;
+  auto guard = boost::asio::make_work_guard(io);
+  std::vector<std::thread> threads;
+  for (int i = 0; i < 2; ++i) {
+    threads.emplace_back([&io] { io.run(); });
+  }
+  bucket.reset();
+  driver.reset();
+  driver = std::make_unique<TestDriver>(bp, &io);
+  driver->set_background_tasks(true);
+  ASSERT_EQ(driver->init(env->dpp), 0);
+
+  /* the control:  the import fails on the `_id`, so nothing adopts */
+  std::map<std::string, std::string> out;
+  EXPECT_EQ(driver->driver_hint(env->dpp, "adoption",
+				{{"mode", "automatic"}}, &out), -EAGAIN);
+  EXPECT_EQ(driver->adoption_queue_workers_for_test(), std::nullopt)
+      << "a queue started with the identities not imported";
+  /* and the queue's pass, ended before it began, wrote what stopped it */
+  {
+    const auto files = reports();
+    ASSERT_EQ(files.size(), 1u);
+    JSONParser p;
+    const auto found = report_findings(files[0], p);
+    std::string pass;
+    JSONDecoder::decode_json("pass", pass, &p);
+    EXPECT_EQ(pass, "queue");
+    auto c = found.equal_range("collision");
+    EXPECT_TRUE(std::any_of(c.first, c.second, [](const auto& f) {
+      return f.second[0].find(TWICE_ID) != std::string::npos;
+    })) << "no collision names the _id";
+  }
+
+  ASSERT_EQ(abandon(TWICE_ID, "two records claim it"), 0);
+  EXPECT_NE(driver->adoption_queue_workers_for_test(), std::nullopt)
+      << "the abandonment did not start the queue";
+
+  for (int i = 0; i < 1000 && !driver->adoption_complete(); ++i) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  EXPECT_TRUE(driver->adoption_complete());
+  for (int i = 0; i < 1000 && driver->adoption_queue_workers_for_test() !=
+	 std::optional<uint64_t>{0}; ++i) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  EXPECT_EQ(driver->adoption_queue_workers_for_test(),
+	    std::optional<uint64_t>{0})
+      << "completion did not stop the queue";
+
+  driver->shutdown();
+  guard.reset();
+  for (auto& t : threads) {
+    t.join();
+  }
+}
+
+/* import_noobaa_bucket(), adoption's first step, imports a bucket's
+ * record and nothing else.
+ *
+ * The record lands as nsfs bucket state on the bucket directory --
+ * owner, versioning, BucketOwnerEnforced -- and the objects are not
+ * touched, so the bucket stays base.  The control is the same bucket
+ * read before the import, which has none of it;  and adopting it
+ * afterwards converts it, so the import left nothing in the way. */
+TEST_F(NooBaaModeTest, ImportWritesTheRecordAndNotTheObjects)
+{
+  add_the_owning_account();
+  write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
   write_nb_record("ENABLED");
+  auto ids = ask({{"identities", "true"}});
+  ASSERT_EQ(ids["ran"], "true") << ids["error"];
+
+  auto load = [this] {
+    std::unique_ptr<rgw::sal::Bucket> b;
+    EXPECT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname},
+				  &b, null_yield), 0);
+    return b;
+  };
+  EXPECT_FALSE(load()->get_attrs().count(RGW_ATTR_OWNERSHIP_CONTROLS))
+      << "the premise is gone:  the record is there before the import";
+
+  std::map<std::string, std::string> imp;
+  EXPECT_EQ(driver->import_noobaa_bucket(env->dpp, null_yield, testname,
+					 &imp), 0) << imp["error"];
+  EXPECT_EQ(imp["buckets"], "1");
+
+  std::unique_ptr<rgw::sal::User> user;
+  ASSERT_EQ(driver->get_user_by_access_key(env->dpp, "INTERCHANGEACCESSKEY",
+					   null_yield, &user), 0);
+  auto b = load();
+  EXPECT_STREQ(static_cast<rgw::sal::NSFSBucket*>(b.get())->profile_name(),
+	       "base") << "the import converted the bucket";
+  EXPECT_TRUE(b->get_attrs().count(RGW_ATTR_OWNERSHIP_CONTROLS))
+      << "the record was not imported";
+  EXPECT_EQ(to_string(b->get_owner()), user->get_info().account_id);
+  EXPECT_TRUE(b->versioned());
+
+  auto on = ask({{"bucket", testname}});
+  EXPECT_EQ(on["adopted"], "true") << on["error"];
+  EXPECT_EQ(on["profile"], "shared");
+}
+
+/* `run=true` is what `automatic` runs at startup:  the identities, then
+ * every bucket the store holds a record of. */
+TEST_F(NooBaaModeTest, ARunAdoptsTheWholeStore)
+{
+  add_the_owning_account();
+  write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
   write_nb_record("ENABLED");
 
+  auto st = ask({{"run", "true"}});
+  EXPECT_EQ(st["ran"], "true") << st["error"];
+  EXPECT_EQ(st["accounts"], "1");
+  EXPECT_EQ(st["buckets_adopted"], "1");
+  EXPECT_EQ(st["buckets_failed"], "0");
+
+  std::unique_ptr<rgw::sal::Bucket> loaded;
+  ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname},
+				&loaded, null_yield), 0);
+  EXPECT_STREQ(static_cast<rgw::sal::NSFSBucket*>(loaded.get())
+		 ->profile_name(), "shared");
+}
+
+/* Converting a base bucket must not drop the state NooBaa's record was
+ * supplying.
+ *
+ * bucket_state_fallback() returns null the moment the bucket carries
+ * an extension bit, so after the conversion NooBaa's record is no longer
+ * read.  set_profile() therefore has to leave the nsfs bucket_info
+ * behind -- or the bucket loads from seeded defaults and a versioned
+ * bucket comes back unversioned, after which the next PUT overwrites
+ * in place instead of demoting into .versions/.
+ *
+ * The control is the assertion before the conversion:  the bucket is
+ * versioned there, and only from NooBaa's record, so the assertion after
+ * it is able to fail. */
 TEST_F(NooBaaModeTest, ConversionKeepsTheVersioningNooBaaRecordSupplied)
 {
   remove_rgw_bucket_info();
   write_nb_record("ENABLED");
+  /* Leaving base imports the record, which needs its owner imported */
+  add_the_owning_account();
+  write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
+  ASSERT_EQ(ask({{"identities", "true"}})["ran"], "true");
+
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
+  ASSERT_TRUE(bucket->get_info().versioned())
+      << "not versioned before the conversion;  the premise is gone";
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_SHARED), 0);
+  ASSERT_STREQ(b->profile_name(), "shared");
+
+  /* A fresh handle, which is what a request gets.  Re-loading the
+   * handle used above would prove nothing:  load_bucket() keeps the
+   * info it already holds when nothing on disk is found
+   * (`info = bak_info`), so the versioning read from NooBaa's record the
+   * first time would survive in memory whatever the conversion did. */
+  RGWBucketInfo fresh_info;
+  fresh_info.bucket.name = testname;
+  auto fresh = driver->get_bucket(fresh_info);
+  ASSERT_NE(fresh.get(), nullptr);
+  ASSERT_EQ(fresh->load_bucket(env->dpp, null_yield), 0);
+
+  EXPECT_TRUE(fresh->get_info().versioned())
+      << "the conversion dropped the versioning their record supplied;  "
+	 "the next PUT overwrites in place instead of demoting";
+  EXPECT_TRUE(fresh->get_info().versioning_enabled())
+      << "versioned but not enabled after the conversion";
+}
+
+/* An unknown mode is rejected rather than guessed -- including the
+ * three this option once took. */
+TEST_F(NooBaaModeTest, AnUnknownModeIsRejected)
+{
+  for (const char* m : {"sideways", "serve", "adopt", "convert"}) {
+    std::map<std::string, std::string> out;
+    EXPECT_EQ(driver->driver_hint(env->dpp, "adoption",
+				  {{"mode", m}}, &out), -EINVAL) << m;
+  }
+  /* and the mode it had is unchanged */
+  EXPECT_EQ(ask()["mode"], "command");
+}
+
+/* `automatic` adoption writes what it found to a file of its own, each
+ * finding with its kind's effect and action (DECISIONS.md 2026-10-30,
+ * amended 2026-11-01).  NooBaa's LDAP config file is the finding here:
+ * it is the only sign NooBaa served AssumeRoleWithWebIdentity against
+ * LDAP. */
+TEST_F(NooBaaModeTest, AnAutomaticStartupWritesAReportOfWhatItFound)
+{
+  add_the_owning_account();
+  write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
+  const auto ldap = conf_root() / "ldap_config";
+  write_file(ldap, R"({"uri":"ldaps://ldap.example:636"})");
+  write_file(conf_root() / "config.json",
+	     R"({"LDAP_CONFIG_PATH":")" + ldap.string() + R"("})");
+  write_nb_record("ENABLED");
+
+  ASSERT_NO_FATAL_FAILURE(start_automatic());
+  EXPECT_TRUE(driver->adoption_complete());
+
+  const auto files = reports();
+  ASSERT_EQ(files.size(), 1u);
+  EXPECT_TRUE(files[0].filename().string().starts_with("nsfs-adoption-"))
+      << files[0];
+  JSONParser p;
+  const auto found = report_findings(files[0], p);
+  std::string pass;
+  JSONDecoder::decode_json("pass", pass, &p);
+  EXPECT_EQ(pass, "run");
+  bool complete = false;
+  JSONDecoder::decode_json("complete", complete, &p);
+  EXPECT_TRUE(complete);
+
+  ASSERT_EQ(found.count("ldap_configured"), 1u);
+  const auto& f = found.find("ldap_configured")->second;
+  EXPECT_NE(f[0].find(ldap.string()), std::string::npos) << f[0];
+  const auto& t = nsfs::kind_text(nsfs::FindingKind::ldap_configured);
+  EXPECT_EQ(f[1], t.effect);
+  EXPECT_EQ(f[2], t.action);
+}
+
+/* Each startup writes a file of its own, and one that stops at the
+ * store writes what stopped it. */
+TEST_F(NooBaaModeTest, EachAutomaticPassWritesAReportOfItsOwn)
+{
+  add_the_owning_account();
+  write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
+  add_nb_identity("broken", "not JSON");
+  write_nb_record("ENABLED");
+
+  for (int i = 0; i < 2; ++i) {
+    ASSERT_NO_FATAL_FAILURE(start_automatic());
+  }
+  const auto files = reports();
+  ASSERT_EQ(files.size(), 2u);
+  for (const auto& file : files) {
+    JSONParser p;
+    const auto found = report_findings(file, p);
+    ASSERT_EQ(found.count("store_unreadable"), 1u) << file;
+    EXPECT_NE(found.find("store_unreadable")->second[0].find("broken"),
+	      std::string::npos);
+    bool complete = true;
+    JSONDecoder::decode_json("complete", complete, &p);
+    EXPECT_FALSE(complete);
+  }
+}
+
+/* A command writes no report and gathers nothing:  its findings are
+ * its response's and the log's.  Here a bucket command fails before the
+ * owner is imported, and the automatic startup after it, which adopts
+ * the bucket, reports no failure. */
+TEST_F(NooBaaModeTest, ACommandWritesNoReportAndGathersNothing)
+{
+  add_the_owning_account();
+  write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
+  add_nb_identity("broken", "not JSON");
+  write_nb_record("ENABLED");
+
+  std::map<std::string, std::string> out;
+  EXPECT_LT(driver->driver_hint(env->dpp, "adoption", {{"run", "true"}},
+				&out), 0)
+      << "the control:  the unreadable record stops the run";
+  EXPECT_LT(driver->driver_hint(env->dpp, "adoption",
+				{{"bucket", testname}}, &out), 0);
+  EXPECT_TRUE(reports().empty());
+
+  sf::remove_all(conf_root() / "identities" / "broken");
+  ASSERT_NO_FATAL_FAILURE(start_automatic());
+  EXPECT_TRUE(driver->adoption_complete());
+  const auto files = reports();
+  ASSERT_EQ(files.size(), 1u);
+  JSONParser p;
+  const auto found = report_findings(files[0], p);
+  EXPECT_EQ(found.count("store_unreadable"), 0u);
+  EXPECT_EQ(found.count("bucket_failed"), 0u);
+}
+
+/* With no directory, no file is written. */
+TEST_F(NooBaaModeTest, NoReportDirectoryWritesNoReport)
+{
+  g_conf().set_val("rgw_nsfs_adoption_report_dir", "");
+  add_the_owning_account();
+  write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
+  write_nb_record("ENABLED");
+
+  ASSERT_NO_FATAL_FAILURE(start_automatic());
+  EXPECT_TRUE(driver->adoption_complete());
+  EXPECT_TRUE(reports().empty());
+}
+
+/* What the report gathers:  only on a thread holding a Gathering, once
+ * each, and a bucket's failure gone once it adopts. */
+TEST(AdoptionFindings, GathersOnceAndOnlyWhenGathering)
+{
+  using K = nsfs::FindingKind;
+  nsfs::AdoptionFindings af;
+  af.add(K::bucket_failed, "b0: outside");
+  ceph::real_time since;
+  EXPECT_TRUE(af.take(since).empty()) << "gathered outside a Gathering";
+
+  nsfs::AdoptionFindings::Gathering g;
+  af.add(K::bucket_failed, "b1: owner not imported");
+  af.add(K::bucket_failed, "b1: owner not imported");
+  af.add(K::bucket_failed, "b10: owner not imported");
+  af.add(K::policy_refused, "b1: a principal resolves to nothing");
+  EXPECT_TRUE(af.contains(K::bucket_failed, "b1: "));
+  af.remove(K::bucket_failed, "b1: ");
+  EXPECT_FALSE(af.contains(K::bucket_failed, "b1: "));
+  const auto got = af.take(since);
+  ASSERT_EQ(got.size(), 2u);
+  EXPECT_EQ(got[0].text, "b10: owner not imported");
+  EXPECT_EQ(got[1].kind, K::policy_refused);
+  EXPECT_TRUE(af.take(since).empty()) << "take() left findings behind";
+}
 
 /* ------------------------------------------------------------------ *
  * P2 -- resolution from a stored path.
@@ -12521,6 +18556,14 @@ public:
 							      bp2), 0);
   }
 
+  /* Mark a hand-made directory as a bucket RGW placed (P4) carries:
+   * these tests are about the row and the path, and an unmarked
+   * directory is a bucket not taken over, which takes no client write
+   * (DECISIONS.md 2026-10-21). */
+  static void mark(const sf::path& at) {
+    const std::string v = std::to_string(nsfs::EXTENSIONS_SHARED);
+    ASSERT_EQ(::setxattr(at.c_str(), nsfs::EXTENSIONS_XATTR, v.data(),
+			 v.size(), 0), 0) << at;
   }
   std::unique_ptr<rgw::sal::Bucket> make_bucket(const std::string& name) {
     RGWBucketInfo info;
@@ -12559,6 +18602,7 @@ TEST_F(NSFSPlacedBucketTest, ARowServesTheBucketFromItsStoredPath)
 {
   const sf::path at = elsewhere() / "placed";
   sf::create_directories(at);
+  mark(at);
   place("placed", at);
 
   std::unique_ptr<rgw::sal::Bucket> loaded;
@@ -12600,6 +18644,7 @@ TEST_F(NSFSPlacedBucketTest, AnOwnedPlacedBucketIsDeletedWithItsDirectory)
 {
   const sf::path at = elsewhere() / "placed-and-owned";
   sf::create_directories(at);
+  mark(at);
   place("placed-and-owned", at);
 
   std::unique_ptr<rgw::sal::Bucket> loaded;
@@ -12627,6 +18672,8 @@ TEST_F(NSFSPlacedBucketTest, ThePathIsBoundPerLookup)
   const sf::path second = elsewhere() / "second";
   sf::create_directories(first);
   sf::create_directories(second);
+  mark(first);
+  mark(second);
 
   place("moving", first);
   std::unique_ptr<rgw::sal::Bucket> a;
@@ -13109,6 +19156,7 @@ TEST_F(NSFSPlacedBucketTest, ListBucketsIsTheOwnersRows)
   auto b2 = make_bucket("lb-c");
   const sf::path at = elsewhere() / "lb-b";
   sf::create_directories(at);
+  mark(at);
   place("lb-b", at);
   ASSERT_EQ(driver->get_bucket_profile(env->dpp, null_yield, "lb-b",
 				       nullptr, nullptr), 0);
@@ -13803,6 +19851,96 @@ TEST_F(NSFSPlaceBucketTest, RejectionsWriteNothing)
   EXPECT_EQ(place("candidate", at), 0) << "the control:  it can be placed";
 }
 
+/* Every key a metadata section lists, paging `page` at a time;  each
+ * page's truncation is recorded, so a test sees the marker carry. */
+static std::list<std::string> meta_list_all(TestDriver& driver,
+					    const std::string& section,
+					    int page,
+					    std::vector<bool>* truncations)
+{
+  void* h = nullptr;
+  EXPECT_EQ(driver.meta_list_keys_init(env->dpp, section, "", &h), 0);
+  std::list<std::string> all;
+  bool truncated = true;
+  while (truncated) {
+    std::list<std::string> keys;
+    EXPECT_EQ(driver.meta_list_keys_next(env->dpp, h, page, keys,
+					 &truncated), 0);
+    if (truncations) {
+      truncations->push_back(truncated);
+    }
+    all.splice(all.end(), keys);
+    if (!truncated) {
+      break;
+    }
+  }
+  driver.meta_list_keys_complete(h);
+  return all;
+}
+
+/* The `account` section lists every account, in id order, across pages:
+ * `radosgw-admin account list` reads it, and it was answered empty. */
+TEST_F(NSFSDriverTest, MetadataListsAccounts)
+{
+  for (const char* id : {"RGW00000000000000003", "RGW00000000000000001",
+			 "RGW00000000000000002"}) {
+    RGWAccountInfo ai;
+    ai.id = id;
+    ai.name = std::string("acct-") + id;
+    RGWObjVersionTracker objv;
+    ASSERT_EQ(driver->store_account(env->dpp, null_yield, true, ai, nullptr,
+				    rgw::sal::Attrs{}, objv), 0);
+  }
+  std::vector<bool> truncations;
+  const auto keys = meta_list_all(*driver, "account", 2, &truncations);
+  EXPECT_EQ(keys, (std::list<std::string>{"RGW00000000000000001",
+					  "RGW00000000000000002",
+					  "RGW00000000000000003"}));
+  EXPECT_EQ(truncations, (std::vector<bool>{true, false}))
+      << "a full first page did not say another follows";
+}
+
+/* A section this driver does not list is rejected at init with -ENOENT,
+ * as RADOS rejects one it has no handler for, and no handle is made;
+ * the sections it lists are accepted. */
+TEST_F(NSFSDriverTest, MetadataRejectsASectionItDoesNotList)
+{
+  for (const char* section : {"bucket.instance", "roles", "group", "otp",
+			      "no-such-section"}) {
+    void* h = nullptr;
+    EXPECT_EQ(driver->meta_list_keys_init(env->dpp, section, "", &h),
+	      -ENOENT) << section;
+    EXPECT_EQ(h, nullptr) << section;
+  }
+  for (const char* section : {"user", "bucket", "account", "topic"}) {
+    void* h = nullptr;
+    EXPECT_EQ(driver->meta_list_keys_init(env->dpp, section, "", &h), 0)
+	<< "the control:  " << section;
+    driver->meta_list_keys_complete(h);
+  }
+}
+
+/* The `topic` section lists RGW's topic metadata keys, `<tenant>:<name>`,
+ * the tenant being an account's id for an account's topic:  ListTopics
+ * reads it for a tenant that is not an account. */
+TEST_F(NSFSDriverTest, MetadataListsTopicsByTheirKeys)
+{
+  struct T { rgw_owner owner; const char* name; };
+  for (const auto& t : {T{rgw_user{"t1", "u1"}, "alpha"},
+			T{rgw_user{"", "u2"}, "beta"},
+			T{rgw_account_id{"RGW00000000000000007"}, "gamma"}}) {
+    rgw_pubsub_topic topic;
+    topic.owner = t.owner;
+    topic.name = t.name;
+    RGWObjVersionTracker objv;
+    ASSERT_EQ(driver->write_topic_v2(topic, true, objv, null_yield,
+				     env->dpp), 0);
+  }
+  const auto keys = meta_list_all(*driver, "topic", 2, nullptr);
+  EXPECT_EQ(keys, (std::list<std::string>{":beta",
+					  "RGW00000000000000007:gamma",
+					  "t1:alpha"}));
+}
 
 /* Deleting a bucket deletes its row. */
 TEST_F(NSFSPlacedBucketTest, RemovalDeletesTheRow)
@@ -13845,6 +19983,7 @@ TEST_F(NSFSPlacedBucketTest, TheTenantSelectsTheRow)
 {
   const sf::path a = elsewhere() / "tenant-a";
   sf::create_directories(a);
+  mark(a);
   place("shared", a, "tenant-a");
 
   /* the untenanted bucket has no row and stays at the default */
@@ -14046,6 +20185,26 @@ public:
     write_file(conf_root() / "buckets" / (testname + ".json"), doc);
   }
 
+  /* The account record_at()'s bucket is owned by, imported:  a bucket
+   * not yet adopted is served only once its owner translates
+   * (DECISIONS.md 2026-11-02). */
+  void import_owner() {
+    std::string rec{NB_ACCOUNT_PLAIN};
+    const std::string from = "6ac7cb27fd4af356919110a3";
+    for (auto at = rec.find(from); at != std::string::npos;
+	 at = rec.find(from)) {
+      rec.replace(at, from.size(), "6560e1f1c0ffee0000000002");
+    }
+    const auto dir = conf_root() / "identities" / "6560e1f1c0ffee0000000002";
+    sf::create_directories(dir);
+    write_file(dir / "identity.json", rec);
+    write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
+    std::map<std::string, std::string> out;
+    ASSERT_EQ(driver->driver_hint(env->dpp, "adoption",
+				  {{"identities", "true"}}, &out), 0);
+    ASSERT_EQ(out["ran"], "true") << out["error"];
+  }
+};
 
 /* NooBaa's recorded path is where the bucket is served from.
  *
@@ -14058,6 +20217,10 @@ TEST_F(NSFSRecordedPathTest, ABaseBucketIsServedAtNooBaaRecordedPath)
   record_at(at, "ENABLED");
 
   std::unique_ptr<rgw::sal::Bucket> loaded;
+  EXPECT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname},
+				&loaded, null_yield), -ERR_INVALID_BUCKET_STATE)
+      << "the control:  a bucket whose owner is not imported was served";
+  import_owner();
   ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname},
 				&loaded, null_yield), 0)
       << "a bucket at the path their record names did not load";
@@ -14065,6 +20228,12 @@ TEST_F(NSFSRecordedPathTest, ABaseBucketIsServedAtNooBaaRecordedPath)
       << "their versioning did not come with it";
 }
 
+/* And resolving it writes nothing.
+ *
+ * In `command` mode nothing changes on disk until adoption is asked
+ * for, so the decision to adopt stays open.  Reading where a
+ * bucket lives must not adopt it -- adoption happens at startup in
+ * `automatic` mode, or by command. */
 TEST_F(NSFSRecordedPathTest, ResolvingNooBaaPathDoesNotAdoptTheBucket)
 {
   const sf::path at = nb_storage() / "untouched";
@@ -14087,6 +20256,7 @@ TEST_F(NSFSRecordedPathTest, ResolvingNooBaaPathDoesNotAdoptTheBucket)
     return m;
   };
 
+  import_owner();
   const auto before = snapshot();
 
   std::unique_ptr<rgw::sal::Bucket> loaded;
@@ -14122,6 +20292,7 @@ TEST_F(NSFSRecordedPathTest, PlacementRowWinsOverNooBaaRecord)
   sf::create_directories(recorded);
   sf::create_directories(placed);
   record_at(recorded);
+  import_owner();
 
   nsfs::BucketPlacement row;
 

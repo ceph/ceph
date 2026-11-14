@@ -46,6 +46,15 @@
 #                       (for sideloaded file detection; off by default)
 #   --ramdisk           Mount tmpfs on data root and LMDB cache dirs
 #                       (eliminates I/O latency for test runs)
+#   --noobaa-config-root DIR
+#                       Read NooBaa's configuration store from DIR.  Needed
+#                       to adopt a NooBaa deployment;  without it the
+#                       adoption mode is inert.
+#   --adoption-mode M   command | automatic.  The driver defaults to
+#                       command, which adopts nothing until asked through
+#                       Admin Ops (the adoption driver hint, or a profile
+#                       change out of base);  automatic adopts the whole
+#                       store at startup.
 #   --bucket-profile P  shared | strong:  the profile new nsfs buckets are
 #                       marked with.  The driver defaults to shared;  FSIO
 #                       (librgw, the librgw_file tests) needs strong.
@@ -102,6 +111,8 @@ NO_FIXTURE=false
 INOTIFY=false
 RAMDISK=false
 DATA_ROOT=""
+NOOBAA_CONFIG_ROOT=""
+ADOPTION_MODE=""
 BUCKET_PROFILE=""
 ACCESS_MODEL=""
 USER_IDENTITY_OVERRIDE=false
@@ -131,6 +142,8 @@ while [[ $# -gt 0 ]]; do
 		--with-inotify) INOTIFY=true; shift ;;
 		--ramdisk) RAMDISK=true; shift ;;
 		--data-root) DATA_ROOT="$2"; shift 2 ;;
+		--noobaa-config-root) NOOBAA_CONFIG_ROOT="$2"; shift 2 ;;
+		--adoption-mode) ADOPTION_MODE="$2"; shift 2 ;;
 		--bucket-profile) BUCKET_PROFILE="$2"; shift 2 ;;
 		--access-model) ACCESS_MODEL="$2"; shift 2 ;;
 		--user-identity-override) USER_IDENTITY_OVERRIDE=true; shift ;;
@@ -217,6 +230,7 @@ start_radosgw() {
 		--admin-socket="$BUILD_DIR/out/radosgw.$RGW_PORT.asok"
 		--pid-file="$PID"
 		--rgw_luarocks_location="$BUILD_DIR/out/radosgw.$RGW_PORT.luarocks"
+		--rgw_nsfs_adoption_report_dir="$BUILD_DIR/out"
 		--debug-rgw="$DEBUG_RGW"
 		--debug-ms=0
 		-n "client.rgw.$RGW_PORT"
@@ -813,15 +827,25 @@ elif [[ -n "$DATA_ROOT" ]]; then
 	}
 fi
 
-patch_conf_bool() {
-	local key="$1" val="$2"
-	if grep -q "$key" "$CONF"; then
-		sed -i "s/$key = .*/$key = $val/" "$CONF"
-	else
-		sed -i "/rgw nsfs base path/a\\        $key = $val" "$CONF"
+if [[ -n "$NOOBAA_CONFIG_ROOT" ]]; then
+	if [[ ! -d "$NOOBAA_CONFIG_ROOT" ]]; then
+		echo "error: --noobaa-config-root $NOOBAA_CONFIG_ROOT is not a directory" >&2
+		exit 1
 	fi
-	echo "    $key = $val"
-}
+	patch_conf_bool "rgw nsfs noobaa config root" "$NOOBAA_CONFIG_ROOT"
+fi
+
+if [[ -n "$ADOPTION_MODE" ]]; then
+	case "$ADOPTION_MODE" in
+		command|automatic) ;;
+		*) echo "error: --adoption-mode must be command or automatic" >&2
+		   exit 1 ;;
+	esac
+	patch_conf_bool "rgw nsfs adoption mode" "$ADOPTION_MODE"
+	if [[ -z "$NOOBAA_CONFIG_ROOT" ]]; then
+		echo "    note: the mode is inert without --noobaa-config-root"
+	fi
+fi
 
 if $CLONE; then
 	patch_conf_bool "rgw nsfs gpfs clone files" "true"

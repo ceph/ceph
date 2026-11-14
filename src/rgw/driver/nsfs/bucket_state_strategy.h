@@ -22,6 +22,16 @@
 
 namespace rgw { namespace sal { namespace nsfs {
 
+/* NooBaa's per-bucket `force_md5_etag`, carried and not enforced.
+ *
+ * NooBaa's field name, so the provenance of the value is readable on
+ * disk;  the XattrStrategy supplies the prefix, making it
+ * `user.nsfs:force_md5_etag` in the nsfs format.  The value is NooBaa's
+ * literal -- `true` or `false` -- and the attribute is absent when
+ * NooBaa's record did not mention it, which keeps the tri-state
+ * NooBaa's cascade depends on.  See `ACCOUNT_IMPORT.md` §6.1a. */
+#define RGW_NSFS_ATTR_FORCE_MD5_ETAG "force_md5_etag"
+
 
 /* The attribute a bucket's encoded RGWBucketInfo is written to.
  *
@@ -103,11 +113,57 @@ public:
   const char* name() const override { return "rgw"; }
 };
 
+/* NooBaa's:  one JSON record per bucket in a store outside the tree.
+ *
+ * `<config_root>/buckets/<name>.json`.  This is the reader the interface
+ * exists for -- the thing `bucket_info_key()` structurally could not
+ * name.
+ *
+ * WHERE THE ADDRESS COMES FROM.  `rgw_nsfs_noobaa_config_root`, which
+ * names the *resolved* directory.  NooBaa starts at `/etc/noobaa.conf.d`,
+ * which is the configuration directory itself unless it holds a
+ * `config_dir_redirect` file naming another one (`config.js`,
+ * `_get_config_root()`;  NooBaa's `Configuration.md`).  nsfs holds the
+ * resolved address rather than repeating that lookup, because an upgrade that
+ * removes NooBaa's package removes the well-known path -- and in an
+ * un-redirected deployment removes the directory itself, since the RPM
+ * created it.  A bucket's retention settings must not depend on a step
+ * of the cutover that nobody thinks of as data.
+ *
+ * WE READ ONE SUBDIRECTORY OF IT.  `buckets/`, and nothing else.  Of the
+ * eight entries a configuration directory holds, `system.json`,
+ * `config.json` and `certificates/` are NooBaa's service's own and mean
+ * nothing here;  `identities/`, `accounts_by_name/`, `access_keys/` and
+ * `master_keys.json` are an account import's business and not the
+ * request path's.  nsfs is not a NooBaa, and most of what NooBaa keeps
+ * there describes NooBaa's deployment rather than the data.
+ *
+ * WE NEVER WRITE IT.  Not a preference:  Madhu, 2026-09-29 -- NooBaa
+ * owns the shared root entirely and nothing populates it from outside.
+ *
+ * WHAT IS MAPPED, AND WHAT IS NOT.  Versioning and the creation date,
+ * which is what a base bucket loses today and what silently costs
+ * versions:  a bucket that reads as unversioned takes a PUT in place
+ * instead of demoting the current version into `.versions/`.
+ *
+ * `owner_account` is an account id in NooBaa's store, applied through
+ * the account import's record of it (IdentityDB::get_owner_by_noobaa_id).
+ * Before the identities are imported there is no such record, and the
+ * owner stays whatever load_bucket() seeded.  `path` likewise -- placement is a path and the fileset is
+ * observed, not stored (ACCOUNT_METADATA.md 8.1), but nothing consumes
+ * it here yet.  NooBaa's optional features -- policy, lifecycle, CORS,
+ * encryption, website, public access block, object lock, tags -- are
+ * each a shape translation into the attribute map and are the step
+ * after this one. */
+class IdentityDB;
 
 class NooBaaBucketStateStrategy : public BucketStateStrategy {
   std::string config_root;
+  const IdentityDB* identity_db;
 
 public:
+  NooBaaBucketStateStrategy(std::string root, const IdentityDB* idb)
+    : config_root(std::move(root)), identity_db(idb) {}
 
   int load(const DoutPrefixProvider* dpp, int dir_fd,
 	   const std::string& bucket_name,
@@ -139,6 +195,10 @@ public:
 		    const std::string& bucket_name,
 		    std::string& out) const;
 
+  /* The `_id` NooBaa's record of `bucket_name` carries.  -ENOENT when
+   * there is no record. */
+  int recorded_id(const DoutPrefixProvider* dpp,
+		  const std::string& bucket_name, std::string& out) const;
 
   /* The names NooBaa's store has a bucket record for, sorted:  every
    * `buckets/<name>.json`, without reading any of them.  Empty with no

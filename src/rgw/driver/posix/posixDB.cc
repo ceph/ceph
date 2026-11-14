@@ -76,6 +76,16 @@ int POSIXUserDB::Initialize(string logfile, int loglevel)
   params.quota_table = getQuotaTable();
   params.lc_entry_table = getLCEntryTable();
   params.lc_head_table = getLCHeadTable();
+  /* And the join tables, because the GetUser below is a lookup **by
+   * access key** -- it sets `access_keys` on the query -- so its
+   * statement is the by-access-key variant, whose SQL interpolates
+   * this name.  Unset, it prepared `from ''`, and the statement is
+   * cached:  every later lookup by access key in the process reused
+   * the broken one and returned ENOENT. */
+  params.access_keys_table = getAccessKeysTable();
+  params.account_table = getAccountTable();
+  params.group_table = getGroupTable();
+  params.group_users_table = getGroupUsersTable();
 
   params.op.user.uinfo.display_name = "tester";
   params.op.user.uinfo.user_id.id = "test";

@@ -5525,6 +5525,20 @@ TEST(OPEN2, VER_TIMER_LONGER_IN_VERSIONED_BUCKET)
   g_conf().apply_changes(nullptr);
 }
 
+/* FSIO is an extension, so a base bucket does not serve it.
+ *
+ * Both polarities, because the refusing branch is otherwise unreachable:
+ * this suite creates its buckets strong, so there is no base bucket to
+ * try until the `unmarked-bucket` hint makes one.  Without the second
+ * leg this would pass against an open2 that was broken outright.
+ *
+ * Base first, then strong.  The hint unmarks only an empty bucket, so
+ * it has to run before anything is written.  Nothing returns a bucket
+ * to base (DECISIONS.md 2026-10-21), so the last leg shows the profile
+ * change rejected once the bucket has left it.
+ *
+ * Its own bucket, since moving the suite's shared one would take FSIO
+ * away from every test after it. */
 TEST(OPEN2, EXT_FSIO_REFUSED_ON_BASE_BUCKET)
 {
   const DoutPrefix dp(g_ceph_context, dout_subsys, "write2 test: ");
@@ -5553,7 +5567,10 @@ TEST(OPEN2, EXT_FSIO_REFUSED_ON_BASE_BUCKET)
 		      &bfh, RGW_MKDIR_FLAG_NONE), 0);
 
   std::map<std::string, std::string> out;
+  int ret = driver->driver_hint(&dp, "unmarked-bucket",
+				{{"bucket", bname}}, &out);
   if (ret == -ENOTSUP || ret == -EINVAL) {
+    GTEST_SKIP() << "driver does not implement unmarked-bucket";
   }
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(out["profile"], std::string("base"));
@@ -5582,7 +5599,13 @@ TEST(OPEN2, EXT_FSIO_REFUSED_ON_BASE_BUCKET)
     ASSERT_EQ(o2h.close(std::get<1>(ofr)), 0);
   }
 
+  /* and it cannot go back:  adoption is one-way */
   out.clear();
+  ASSERT_EQ(driver->driver_hint(&dp, "bucket-profile",
+				{{"bucket", bname},
+				 {"profile", "base"}}, &out),
+	    -ERR_INVALID_BUCKET_STATE)
+    << "a bucket was returned to base";
 
   (void) rgw_unlink(fs, bfh, "ext1", RGW_UNLINK_FLAG_NONE);
   (void) rgw_unlink(fs, bfh, "ext2", RGW_UNLINK_FLAG_NONE);
@@ -5661,6 +5684,14 @@ TEST(OPEN2, EXT_FSIO_REFUSED_ON_SHARED_BUCKET)
     ASSERT_EQ(o2h.close(std::get<1>(ofr)), 0);
   }
 
+  /* and the bucket now holds an object, so it cannot be reduced:  the
+   * shadow subtree an extension was allowed to create stays in the tree
+   * whatever the attribute says. */
+  out.clear();
+  ASSERT_EQ(driver->driver_hint(&dp, "bucket-profile",
+				{{"bucket", bname},
+				 {"profile", "shared"}}, &out), -ENOTEMPTY)
+    << "a bucket holding content was reduced to shared";
 
   (void) rgw_unlink(fs, bfh, "sh1", RGW_UNLINK_FLAG_NONE);
   (void) rgw_unlink(fs, bfh, "sh2", RGW_UNLINK_FLAG_NONE);

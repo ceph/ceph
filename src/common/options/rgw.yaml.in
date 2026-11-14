@@ -4965,6 +4965,88 @@ options:
   default: /var/lib/ceph/radosgw
   services:
   - rgw
+- name: rgw_nsfs_adoption_mode
+  type: str
+  level: advanced
+  desc: Whether a NooBaa tree is adopted automatically or by command
+  long_desc: Meaningful only when rgw_nsfs_noobaa_config_root names a NooBaa
+    configuration store;  with no store there is nothing to adopt and this
+    is inert.  "command" (default) adopts nothing unless asked;  the
+    store's identities and each bucket are adopted by command, through
+    Admin Ops -- the adoption driver hint, or changing a bucket's profile
+    out of base.
+    Nothing on disk changes until then, which is the state for
+    inspection and validation.  "automatic" imports the store's
+    identities at startup and adopts every bucket in the background
+    while the gateway serves, a bucket a request reaches ahead of the
+    rest.  Adopting a bucket imports its NooBaa record and rewrites its
+    tree into the nsfs format.
+  default: command
+  enum_values:
+  - command
+  - automatic
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_nsfs_adoption_workers
+  type: uint
+  level: advanced
+  desc: How many buckets automatic adoption adopts at once
+  long_desc: Each worker adopts one bucket at a time on a thread of its
+    own, which exists only while it is adopting.  Meaningful only when
+    rgw_nsfs_adoption_mode is automatic.
+  default: 3
+  min: 1
+  services:
+  - rgw
+- name: rgw_nsfs_adoption_wait_ms
+  type: uint
+  level: advanced
+  desc: How long a request waits for its bucket's automatic adoption
+  long_desc: A request on a bucket not yet adopted asks for the bucket
+    to be adopted next and waits up to this long for it.  If the
+    adoption has not finished by then, a read is served from the bucket
+    as found and a write is answered 503, which a client retries.
+    Zero asks without waiting.  Meaningful only when
+    rgw_nsfs_adoption_mode is automatic.
+  default: 1000
+  services:
+  - rgw
+- name: rgw_nsfs_adoption_role_rights
+  type: str
+  level: advanced
+  desc: What a role imported from NooBaa may do
+  long_desc: Meaningful only when rgw_nsfs_noobaa_config_root names a NooBaa
+    configuration store.  At NooBaa 5.23 a role is an account's role_config,
+    and a session of it acts with all of that account's rights.  "account"
+    (default) keeps that -- the import writes the inline role policy
+    NooBaaRoleMigration, allowing s3:* on *, on each role it creates, and
+    reports how many carry it.  "none" imports the role with no permission
+    policy, as NooBaa 6 migrates one;  a session can then do only what
+    bucket policies grant until an operator attaches a policy.  Read when a
+    role is imported;  changing it later changes no imported role.
+  default: account
+  enum_values:
+  - account
+  - none
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_nsfs_adoption_report_dir
+  type: str
+  level: advanced
+  desc: Directory each automatic adoption pass writes its report to
+  long_desc: Meaningful only when rgw_nsfs_noobaa_config_root names a NooBaa
+    configuration store and rgw_nsfs_adoption_mode is automatic.  Each
+    automatic adoption pass writes the findings it gathered to a file of its
+    own here, named
+    nsfs-adoption-$cluster-$name-<UTC timestamp>.json.  Each finding names
+    its kind, what it does to the conversion and a proposed course of action.
+    Empty writes no report file.
+  default: /var/log/ceph
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_nsfs_noobaa_config_root
   type: str
   level: advanced

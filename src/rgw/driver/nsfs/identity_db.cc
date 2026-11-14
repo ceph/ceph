@@ -140,6 +140,7 @@ int row_to_identity(const DoutPrefixProvider* dpp, sqlite3_stmt* st,
   out.new_buckets_path = column_text(st, 5);
   out.custom_bucket_path_allowed_list = column_text(st, 6);
   out.fs_backend = column_text(st, 7);
+  /* NULL is "said nothing", which is not the same as 0 */
   if (sqlite3_column_type(st, 8) != SQLITE_NULL) {
     out.force_md5_etag = (sqlite3_column_int64(st, 8) != 0);
   }
@@ -253,6 +254,22 @@ int IdentityDB::Initialize(std::string logfile, int loglevel)
     "  NewBucketsPath TEXT,"
     "  CustomBucketPathAllowedList TEXT,"
     "  FsBackend TEXT,"
+    /* X1.  A column added here does not reach a table that already
+     * exists -- `CREATE TABLE IF NOT EXISTS` does nothing to one --
+     * and that is accepted rather than migrated:  nsfs has not
+     * shipped, so no deployment holds this table, and vstart.sh
+     * removes the userdb on every start.  A migration belongs here
+     * once there is a released schema to migrate *from*, written
+     * against that rather than against a guess. */
+    "  ForceMd5Etag INTEGER,"
+    "  CHECK (ForceMd5Etag IS NULL OR ForceMd5Etag IN (0, 1)),"
+    "  CHECK ((Uid IS NULL) = (Gid IS NULL)),"
+    "  CHECK (NOT (Uid IS NOT NULL AND DistinguishedName IS NOT NULL)),"
+    "  CHECK (Uid IS NULL OR (typeof(Uid) = 'integer' AND Uid >= 0)),"
+    "  CHECK (Gid IS NULL OR (typeof(Gid) = 'integer' AND Gid >= 0)),"
+    "  CHECK (SupplementalGroups IS NULL"
+    "         OR SupplementalGroups NOT GLOB '*[^0-9,]*')"
+    ");"
 
     /* Completing a credential built from a file reads by uid, which
      * is the only lookup here not keyed on `Identity`.  Unlike a
@@ -261,6 +278,20 @@ int IdentityDB::Initialize(std::string logfile, int loglevel)
     "CREATE INDEX IF NOT EXISTS '" + identity_table + "_uid' ON '"
     + identity_table + "' (Uid);"
 
+    /* Provenance:  NooBaa's `_id` to the owner it was imported as.
+     * The primary key is the whole uniqueness rule, and nothing writes
+     * here with OR REPLACE, so a second import of one id is rejected
+     * rather than repointed.  An import in progress writes its row
+     * first, with Complete 0 and the RGW user it creates, so a run that
+     * stops part way is resumed with the same ids. */
+    "CREATE TABLE IF NOT EXISTS '" + noobaa_id_table + "' ("
+    "  NoobaaId TEXT NOT NULL PRIMARY KEY,"
+    "  Owner TEXT NOT NULL,"
+    "  UserId TEXT,"
+    "  Complete INTEGER NOT NULL DEFAULT 1,"
+    "  CHECK (NoobaaId != '' AND Owner != ''),"
+    "  CHECK (Complete IN (0, 1))"
+    ");"
 
     /* P1.  Bucket placement, in a table this backend owns.
      *
@@ -298,6 +329,37 @@ int IdentityDB::Initialize(std::string logfile, int loglevel)
     ");"
 
     /* ListBuckets is one owner's rows in one tenant, in name order. */
+    "CREATE INDEX IF NOT EXISTS '" + placement_table + "_owner' ON '"
+    + placement_table + "' (Owner, Tenant, BucketName);"
+
+    /* Adoption's completion record.  Id is fixed at 1, so the key is
+     * the whole of "at most one row". */
+    "CREATE TABLE IF NOT EXISTS '" + completion_table + "' ("
+    "  Id INTEGER NOT NULL PRIMARY KEY CHECK (Id = 1),"
+    "  CompletedAt TEXT NOT NULL,"
+    "  ConfigRoot TEXT NOT NULL,"
+    "  Identities INTEGER NOT NULL,"
+    "  Buckets INTEGER NOT NULL,"
+    "  GatewayVersion TEXT NOT NULL,"
+    "  Extensions INTEGER NOT NULL"
+    ");"
+
+    /* NooBaa records abandoned by an operator, by `_id`.  A reason is
+     * required:  the point of the table is that an operator can see
+     * later what was left behind and why. */
+    "CREATE TABLE IF NOT EXISTS '" + abandoned_table + "' ("
+    "  NoobaaId TEXT NOT NULL PRIMARY KEY,"
+    "  Kind TEXT NOT NULL,"
+    "  Name TEXT NOT NULL,"
+    "  Stage TEXT NOT NULL,"
+    "  Reason TEXT NOT NULL,"
+    "  At TEXT NOT NULL,"
+    "  CHECK (NoobaaId != '' AND Reason != ''),"
+    "  CHECK (Kind IN ('identity', 'bucket')),"
+    "  CHECK (Stage IN ('not imported', 'not converted',"
+    "                   'partly converted'))"
+    ");";
+
   ret = exec(&dp, schema.c_str(), nullptr);
   if (ret < 0) {
     ldpp_dout_fmt(&dp, 0, "ERROR: could not create {}", identity_table);
@@ -428,9 +490,36 @@ int IdentityDB::get_identity(const DoutPrefixProvider* dpp,
   return row_to_identity(dpp, st, out);
 }
 
+int IdentityDB::put_noobaa_id(const DoutPrefixProvider* dpp,
+			       const std::string& noobaa_id,
+			       const std::string& owner_key)
+{
+  return insert_noobaa_id(dpp, noobaa_id, owner_key, nullptr);
+}
+
+int IdentityDB::put_pending_noobaa_id(const DoutPrefixProvider* dpp,
+				       const std::string& noobaa_id,
+				       const std::string& owner_key,
+				       const std::string& user_id)
+{
+  if (user_id.empty()) {
+    return -EINVAL;
+  }
+  return insert_noobaa_id(dpp, noobaa_id, owner_key, &user_id);
+}
+
+int IdentityDB::insert_noobaa_id(const DoutPrefixProvider* dpp,
+				  const std::string& noobaa_id,
+				  const std::string& owner_key,
+				  const std::string* pending_user_id)
+{
   if (noobaa_id.empty() || owner_key.empty()) {
     return -EINVAL;
   }
+
+  const std::string sql =
+    "INSERT INTO '" + noobaa_id_table + "' (NoobaaId, Owner, UserId, "
+    "Complete) VALUES (?,?,?,?);";
 
   sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
@@ -442,6 +531,13 @@ int IdentityDB::get_identity(const DoutPrefixProvider* dpp,
   auto done = make_scope_guard([st] { sqlite3_finalize(st); });
   sqlite3_bind_text(st, 1, noobaa_id.c_str(), -1, SQLITE_TRANSIENT);
   sqlite3_bind_text(st, 2, owner_key.c_str(), -1, SQLITE_TRANSIENT);
+  if (pending_user_id) {
+    sqlite3_bind_text(st, 3, pending_user_id->c_str(), -1, SQLITE_TRANSIENT);
+  } else {
+    sqlite3_bind_null(st, 3);
+  }
+  sqlite3_bind_int(st, 4, pending_user_id ? 0 : 1);
+
   ConnectionMutex conn{sqlite3_db_mutex(handle())};
   std::lock_guard held{conn};
   if (sqlite3_step(st) != SQLITE_DONE) {
@@ -464,6 +560,10 @@ int IdentityDB::get_owner_by_noobaa_id(const DoutPrefixProvider* dpp,
     return -EINVAL;
   }
 
+  const std::string sql =
+    "SELECT Owner FROM '" + noobaa_id_table + "' WHERE NoobaaId = ? "
+    "AND Complete = 1;";
+
   sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
       != SQLITE_OK) {
@@ -482,17 +582,267 @@ int IdentityDB::get_owner_by_noobaa_id(const DoutPrefixProvider* dpp,
   owner_key = column_text(st, 0);
   return 0;
 }
+
+int IdentityDB::get_pending_noobaa_id(const DoutPrefixProvider* dpp,
+				       const std::string& noobaa_id,
+				       std::string& owner_key,
+				       std::string& user_id) const
+{
+  if (noobaa_id.empty()) {
+    return -EINVAL;
+  }
+
+  const std::string sql =
+    "SELECT Owner, UserId FROM '" + noobaa_id_table + "' "
+    "WHERE NoobaaId = ? AND Complete = 0;";
+
+  sqlite3_stmt* st = nullptr;
+  if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
+      != SQLITE_OK) {
+    return -EIO;
+  }
+  auto done = make_scope_guard([st] { sqlite3_finalize(st); });
+  sqlite3_bind_text(st, 1, noobaa_id.c_str(), -1, SQLITE_TRANSIENT);
+
+  int rc = sqlite3_step(st);
+  if (rc == SQLITE_DONE) {
+    return -ENOENT;
+  }
+  if (rc != SQLITE_ROW) {
+    return -EIO;
+  }
+  owner_key = column_text(st, 0);
+  user_id = column_text(st, 1);
+  return 0;
+}
+
+int IdentityDB::complete_noobaa_id(const DoutPrefixProvider* dpp,
+				    const std::string& noobaa_id)
+{
+  const std::string sql =
+    "UPDATE '" + noobaa_id_table + "' SET Complete = 1 "
+    "WHERE NoobaaId = ? AND Complete = 0;";
+  sqlite3_stmt* st = nullptr;
+  if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
+      != SQLITE_OK) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: {}", sqlite3_errmsg(handle()));
+    return -EIO;
+  }
+  auto finalize = make_scope_guard([st] { sqlite3_finalize(st); });
+  sqlite3_bind_text(st, 1, noobaa_id.c_str(), -1, SQLITE_TRANSIENT);
   ConnectionMutex conn{sqlite3_db_mutex(handle())};
   std::lock_guard held{conn};
+  if (sqlite3_step(st) != SQLITE_DONE) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: {}", sqlite3_errmsg(handle()));
+    return -EIO;
+  }
+  return (sqlite3_changes(handle()) == 0) ? -ENOENT : 0;
+}
+
+int IdentityDB::put_adoption_completion(const DoutPrefixProvider* dpp,
+					const AdoptionCompletion& c)
+{
+  const std::string sql =
+    "INSERT INTO '" + completion_table + "' (Id, CompletedAt, ConfigRoot, "
+    "Identities, Buckets, GatewayVersion, Extensions) "
+    "VALUES (1, ?, ?, ?, ?, ?, ?);";
+
+  sqlite3_stmt* st = nullptr;
+  if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
+      != SQLITE_OK) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: {}", sqlite3_errmsg(handle()));
+    return -EIO;
+  }
+  auto finalize = make_scope_guard([st] { sqlite3_finalize(st); });
+  sqlite3_bind_text(st, 1, c.completed_at.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(st, 2, c.config_root.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_int64(st, 3, static_cast<sqlite3_int64>(c.identities));
+  sqlite3_bind_int64(st, 4, static_cast<sqlite3_int64>(c.buckets));
+  sqlite3_bind_text(st, 5, c.gateway_version.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_int64(st, 6, c.extensions);
+
   ConnectionMutex conn{sqlite3_db_mutex(handle())};
   std::lock_guard held{conn};
+  if (sqlite3_step(st) != SQLITE_DONE) {
+    if (sqlite3_extended_errcode(handle()) == SQLITE_CONSTRAINT_PRIMARYKEY) {
+      return -EEXIST;
+    }
+    ldpp_dout_fmt(dpp, 0, "ERROR: writing the completion record: {}",
+			  sqlite3_errmsg(handle()));
+    return -EIO;
+  }
+  return 0;
+}
+
+int IdentityDB::get_adoption_completion(const DoutPrefixProvider* dpp,
+					AdoptionCompletion& c) const
+{
+  const std::string sql =
+    "SELECT CompletedAt, ConfigRoot, Identities, Buckets, GatewayVersion, "
+    "Extensions FROM '" + completion_table + "' WHERE Id = 1;";
+
+  sqlite3_stmt* st = nullptr;
+  if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
+      != SQLITE_OK) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: {}", sqlite3_errmsg(handle()));
+    return -EIO;
+  }
+  auto finalize = make_scope_guard([st] { sqlite3_finalize(st); });
+
+  const int step = sqlite3_step(st);
+  if (step == SQLITE_DONE) {
+    return -ENOENT;
+  }
+  if (step != SQLITE_ROW) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: {}", sqlite3_errmsg(handle()));
+    return -EIO;
+  }
+  c.completed_at = column_text(st, 0);
+  c.config_root = column_text(st, 1);
+  c.identities = static_cast<uint64_t>(sqlite3_column_int64(st, 2));
+  c.buckets = static_cast<uint64_t>(sqlite3_column_int64(st, 3));
+  c.gateway_version = column_text(st, 4);
+  c.extensions = static_cast<uint32_t>(sqlite3_column_int64(st, 5));
+  return 0;
+}
+
+namespace {
+
+constexpr const char* ABANDONED_COLUMNS =
+  "NoobaaId, Kind, Name, Stage, Reason, At";
+
+AbandonedRecord row_to_abandoned(sqlite3_stmt* st)
+{
+  AbandonedRecord r;
+  r.noobaa_id = column_text(st, 0);
+  r.kind = column_text(st, 1);
+  r.name = column_text(st, 2);
+  r.stage = column_text(st, 3);
+  r.reason = column_text(st, 4);
+  r.at = column_text(st, 5);
+  return r;
+}
+
+} // namespace
+
+int IdentityDB::put_abandoned(const DoutPrefixProvider* dpp,
+			      const AbandonedRecord& r)
+{
+  if (r.noobaa_id.empty() || r.reason.empty()) {
+    return -EINVAL;
+  }
+  const std::string sql =
+    "INSERT INTO '" + abandoned_table + "' (" + ABANDONED_COLUMNS + ") "
+    "VALUES (?, ?, ?, ?, ?, ?);";
+
+  sqlite3_stmt* st = nullptr;
+  if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
+      != SQLITE_OK) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: {}", sqlite3_errmsg(handle()));
+    return -EIO;
+  }
+  auto finalize = make_scope_guard([st] { sqlite3_finalize(st); });
+  sqlite3_bind_text(st, 1, r.noobaa_id.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(st, 2, r.kind.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(st, 3, r.name.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(st, 4, r.stage.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(st, 5, r.reason.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(st, 6, r.at.c_str(), -1, SQLITE_TRANSIENT);
+
   ConnectionMutex conn{sqlite3_db_mutex(handle())};
   std::lock_guard held{conn};
+  if (sqlite3_step(st) != SQLITE_DONE) {
+    if (sqlite3_extended_errcode(handle()) == SQLITE_CONSTRAINT_PRIMARYKEY) {
+      return -EEXIST;
+    }
+    ldpp_dout_fmt(dpp, 4, "abandoning {} failed: {}", r.noobaa_id,
+			  sqlite3_errmsg(handle()));
+    return -EINVAL;
+  }
+  return 0;
+}
+
+int IdentityDB::remove_abandoned(const DoutPrefixProvider* dpp,
+				 const std::string& noobaa_id)
+{
+  const std::string sql =
+    "DELETE FROM '" + abandoned_table + "' WHERE NoobaaId = ?;";
+  sqlite3_stmt* st = nullptr;
+  if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
+      != SQLITE_OK) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: {}", sqlite3_errmsg(handle()));
+    return -EIO;
+  }
+  auto finalize = make_scope_guard([st] { sqlite3_finalize(st); });
+  sqlite3_bind_text(st, 1, noobaa_id.c_str(), -1, SQLITE_TRANSIENT);
+  ConnectionMutex conn{sqlite3_db_mutex(handle())};
+  std::lock_guard held{conn};
+  if (sqlite3_step(st) != SQLITE_DONE) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: {}", sqlite3_errmsg(handle()));
+    return -EIO;
+  }
+  return (sqlite3_changes(handle()) == 0) ? -ENOENT : 0;
+}
+
+int IdentityDB::get_abandoned(const DoutPrefixProvider* dpp,
+			      const std::string& noobaa_id,
+			      AbandonedRecord& r) const
+{
+  const std::string sql =
+    std::string("SELECT ") + ABANDONED_COLUMNS + " FROM '" + abandoned_table
+    + "' WHERE NoobaaId = ?;";
+  sqlite3_stmt* st = nullptr;
+  if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
+      != SQLITE_OK) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: {}", sqlite3_errmsg(handle()));
+    return -EIO;
+  }
+  auto finalize = make_scope_guard([st] { sqlite3_finalize(st); });
+  sqlite3_bind_text(st, 1, noobaa_id.c_str(), -1, SQLITE_TRANSIENT);
+  const int step = sqlite3_step(st);
+  if (step == SQLITE_DONE) {
+    return -ENOENT;
+  }
+  if (step != SQLITE_ROW) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: {}", sqlite3_errmsg(handle()));
+    return -EIO;
+  }
+  r = row_to_abandoned(st);
+  return 0;
+}
+
+int IdentityDB::list_abandoned(const DoutPrefixProvider* dpp,
+			       std::vector<AbandonedRecord>& out) const
+{
+  out.clear();
+  const std::string sql =
+    std::string("SELECT ") + ABANDONED_COLUMNS + " FROM '" + abandoned_table
+    + "' ORDER BY NoobaaId;";
+  sqlite3_stmt* st = nullptr;
+  if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
+      != SQLITE_OK) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: {}", sqlite3_errmsg(handle()));
+    return -EIO;
+  }
+  auto finalize = make_scope_guard([st] { sqlite3_finalize(st); });
+  int rc;
+  while ((rc = sqlite3_step(st)) == SQLITE_ROW) {
+    out.push_back(row_to_abandoned(st));
+  }
+  if (rc != SQLITE_DONE) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: {}", sqlite3_errmsg(handle()));
+    return -EIO;
+  }
+  return 0;
+}
 
 int IdentityDB::owner_was_imported(const DoutPrefixProvider* dpp,
 				   const std::string& owner_key,
 				   bool& imported) const
 {
+  const std::string sql =
+    "SELECT 1 FROM '" + noobaa_id_table + "' WHERE Owner = ? "
+    "AND Complete = 1 LIMIT 1;";
 
   sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
@@ -1186,6 +1536,58 @@ int IdentityDB::list_bucket_placements(const DoutPrefixProvider* dpp,
       sqlite3_bind_text(st, 1, marker.c_str(), -1, SQLITE_TRANSIENT);
       sqlite3_bind_int64(st, 2, static_cast<sqlite3_int64>(max));
     }, out);
+}
+
+namespace {
+/* One text column per row, in order, after `marker`, at most `max`.
+ * `sql` binds the marker as ?1 and the limit as ?2. */
+int list_keys(const DoutPrefixProvider* dpp, sqlite3* db,
+	      const std::string& sql, const char* what,
+	      const std::string& marker, uint64_t max,
+	      std::list<std::string>& out)
+{
+  out.clear();
+  sqlite3_stmt* st = nullptr;
+  if (sqlite3_prepare_v2(db, sql.c_str(), -1, &st, nullptr) != SQLITE_OK) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: listing {}: {}", what, sqlite3_errmsg(db));
+    return -EIO;
+  }
+  auto done = make_scope_guard([st] { sqlite3_finalize(st); });
+  sqlite3_bind_text(st, 1, marker.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_int64(st, 2, static_cast<sqlite3_int64>(max));
+  int rc;
+  while ((rc = sqlite3_step(st)) == SQLITE_ROW) {
+    const unsigned char* key = sqlite3_column_text(st, 0);
+    if (key) {
+      out.emplace_back(reinterpret_cast<const char*>(key));
+    }
+  }
+  return (rc == SQLITE_DONE) ? 0 : -EIO;
+}
+} // namespace
+
+int IdentityDB::list_account_ids(const DoutPrefixProvider* dpp,
+				 const std::string& marker, uint64_t max,
+				 std::list<std::string>& out)
+{
+  return list_keys(dpp, handle(),
+		   "SELECT AccountID FROM '" + getAccountTable() + "'"
+		   " WHERE AccountID > ?1 ORDER BY AccountID LIMIT ?2;",
+		   "accounts", marker, max, out);
+}
+
+int IdentityDB::list_topic_keys(const DoutPrefixProvider* dpp,
+				const std::string& marker, uint64_t max,
+				std::list<std::string>& out)
+{
+  /* RGW's topic metadata key, `<tenant>:<name>`;  the table's Tenant is
+   * the owner's tenant, or its account id, which is the key's first
+   * half either way (`get_topic_metadata_key()`) */
+  return list_keys(dpp, handle(),
+		   "SELECT Tenant || ':' || TopicName AS MetaKey FROM '"
+		   + getTopicTable() + "'"
+		   " WHERE MetaKey > ?1 ORDER BY MetaKey LIMIT ?2;",
+		   "topics", marker, max, out);
 }
 
 }}} // namespace rgw::sal::nsfs
