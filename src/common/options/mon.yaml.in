@@ -607,6 +607,23 @@ options:
   see_also:
   - osd_pool_default_size
   - osd_pool_default_min_size
+- name: mon_warn_on_pool_min_size_too_low
+  type: bool
+  level: advanced
+  desc: Issue a health warning if any pool has a min_size that is too low
+  fmt_desc: Raise ``HEALTH_WARN`` if any pool has a ``min_size`` that allows
+    writes to be acknowledged without any remaining redundancy.
+  long_desc: Issue a health warning if a replicated pool with ``size`` >= 2 has
+    ``min_size`` <= 1, or if an erasure-coded pool has ``min_size`` <= k.
+    Pools with ``size`` 1 are reported by POOL_NO_REDUNDANCY instead, and
+    stretch pools are not reported while the cluster is in degraded stretch
+    mode.
+  default: true
+  services:
+  - mon
+  see_also:
+  - osd_pool_default_min_size
+  - mon_warn_on_pool_no_redundancy
 - name: mon_warn_on_osd_down_out_interval_zero
   type: bool
   level: advanced
