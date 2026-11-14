@@ -54,3 +54,61 @@ TEST_F(MgrOpRequestTestHelper, MarkFlagPointStringSetsLastEventDetail) {
          "latest detail; Got: \""
       << req->_get_state_string() << "\"";
 }
+
+// private flag_*_mon_command values from MgrOpRequest.h
+static constexpr uint8_t kFlagStartMonCommand = 1 << 3;
+static constexpr uint8_t kFlagFinishMonCommand = 1 << 4;
+
+TEST_F(MgrOpRequestTestHelper, MarkFinishMonCommandSetsCorrectFlag) {
+  auto msg = ceph::make_message<MCommand>();
+  auto req = tracker->create_request<MgrOpRequest>(msg);
+  ASSERT_TRUE(req);
+
+  req->mark_start_mon_command();
+  EXPECT_EQ(req->state_flag(), kFlagStartMonCommand)
+      << "mark_start_mon_command() should set the start-mon-command flag.";
+
+  req->mark_finish_mon_command();
+  EXPECT_EQ(req->state_flag(), kFlagFinishMonCommand)
+      << "Current: flag_start_mon_command set twice, flag_finish_mon_command "
+         "never set; Expected: flag_finish_mon_command set after "
+         "mark_finish_mon_command().";
+  EXPECT_EQ(req->_get_state_string(), "mon command finished")
+      << "_get_state_string() should report the finished state after "
+         "mark_finish_mon_command().";
+}
+
+// Regression guard for the ReplyOnFinish lifecycle ordering bug.
+//
+// ReplyOnFinish::finish() must call mark_finish_mon_command(), not the
+// constructor.  If the finish flag were set at construction time (i.e. before
+// monc->start_mon_command() is called), dump_ops_in_flight would report
+// "mon command finished" while the mon command is still in-flight.
+//
+// Because ReplyOnFinish is a file-local class in DaemonServer.cc it cannot be
+// instantiated here.  This test therefore guards the contract at the
+// MgrOpRequest level: after mark_start_mon_command() the flag must still be
+// kFlagStartMonCommand, not kFlagFinishMonCommand.  Any code that calls
+// mark_finish_mon_command() too early (e.g. in a constructor executed before
+// the mon command is dispatched) would make this test fail.
+TEST_F(MgrOpRequestTestHelper, FinishFlagNotSetBeforeFinish) {
+  auto msg = ceph::make_message<MCommand>();
+  auto req = tracker->create_request<MgrOpRequest>(msg);
+  ASSERT_TRUE(req);
+
+  // Simulate the state right after ReplyOnFinish is constructed but before
+  // finish() is called: only the start flag should be set.
+  req->mark_start_mon_command();
+  EXPECT_NE(req->state_flag(), kFlagFinishMonCommand)
+      << "flag_finish_mon_command must not be set before mark_finish_mon_command() "
+         "is called (i.e. finish() has not been invoked yet).";
+  EXPECT_EQ(req->_get_state_string(), "start mon command")
+      << "_get_state_string() must report \"start mon command\" while the mon "
+         "command is still in-flight.";
+
+  // Now simulate finish() completing and verify the flag advances correctly.
+  req->mark_finish_mon_command();
+  EXPECT_EQ(req->state_flag(), kFlagFinishMonCommand)
+      << "flag_finish_mon_command must be set after mark_finish_mon_command().";
+  EXPECT_EQ(req->_get_state_string(), "mon command finished");
+}
