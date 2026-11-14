@@ -1,4 +1,5 @@
 export const RGW = 'rgw';
+export const ACCOUNT_ROOT = 'root';
 
 export enum ManagedPolicyName {
   AmazonS3FullAccess = 'AmazonS3FullAccess',
