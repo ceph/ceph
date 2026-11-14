@@ -1447,6 +1447,7 @@ class NFSServiceSpec(ServiceSpec):
                  cephfs_client_log_dir: Optional[str] = None,
                  mem_stats_disable: bool = False,
                  clients_per_pool: Optional[int] = None,
+                 max_ceph_clients: Optional[int] = None,
                  ):
         assert service_type == 'nfs'
         super(NFSServiceSpec, self).__init__(
@@ -1495,6 +1496,10 @@ class NFSServiceSpec(ServiceSpec):
 
         # Max independent CephFS client handles Ganesha may use per filesystem.
         self.clients_per_pool = clients_per_pool
+
+        # Upper limit on the total number of CephFS clients the Ganesha
+        # process may create.  0 means no limit (upstream default).
+        self.max_ceph_clients = max_ceph_clients
 
         # colocation_ports is a list of port dicts for ADDITIONAL colocated daemons
         # The first daemon always uses port and monitoring_port from the spec
@@ -1639,6 +1644,13 @@ class NFSServiceSpec(ServiceSpec):
                     f"and {self.MAX_CLIENTS_PER_POOL} (NFS-Ganesha rejects a larger "
                     "pool). Once an NFS cluster uses a pool this field can only "
                     "be raised."
+                )
+        if self.max_ceph_clients is not None:
+            verify_int(self.max_ceph_clients, "max_ceph_clients")
+            if not 1 <= self.max_ceph_clients <= 65535:
+                raise SpecValidationError(
+                    "Invalid NFS spec: max_ceph_clients must be an integer "
+                    "between 1 and 65535."
                 )
         cache_size = verify_size_with_units(
             self.client_object_cache_size, "client_object_cache_size"

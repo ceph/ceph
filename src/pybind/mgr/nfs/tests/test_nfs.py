@@ -283,7 +283,8 @@ QOS_BLOCK {
         }
 
     @contextmanager
-    def _mock_orchestrator(self, enable: bool, clients_per_pool: Optional[int] = None) -> Iterator:
+    def _mock_orchestrator(self, enable: bool, clients_per_pool: Optional[int] = None,
+                               max_ceph_clients: Optional[int] = None) -> Iterator:
         self.io_mock = MagicMock()
         self.io_mock.set_namespace.side_effect = self._ioctx_set_namespace_mock
         self.io_mock.read = self._ioctl_read_mock
@@ -298,6 +299,7 @@ QOS_BLOCK {
             ServiceDescription(spec=NFSServiceSpec(
                 service_id=self.cluster_id,
                 clients_per_pool=clients_per_pool,
+                max_ceph_clients=max_ceph_clients,
             ))
         ] if enable else []
 
@@ -535,8 +537,10 @@ NFS_CORE_PARAM {
         assert blocks[1].block_name == "%url"
         assert blocks[1].values['value'] == f"rados://{NFS_POOL_NAME}/{self.cluster_id}/export-2"
 
-    def _do_mock_test(self, func, *args, clients_per_pool: Optional[int] = None) -> None:
-        with self._mock_orchestrator(True, clients_per_pool=clients_per_pool):
+    def _do_mock_test(self, func, *args, clients_per_pool: Optional[int] = None,
+                      max_ceph_clients: Optional[int] = None) -> None:
+        with self._mock_orchestrator(True, clients_per_pool=clients_per_pool,
+                                     max_ceph_clients=max_ceph_clients):
             func(*args)
             self._reset_temp_store()
 

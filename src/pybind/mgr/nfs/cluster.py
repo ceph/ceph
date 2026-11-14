@@ -238,6 +238,7 @@ class NFSCluster:
             ingress_placement: Optional[str] = None,
             networks: Optional[List[str]] = None,
             clients_per_pool: Optional[int] = None,
+            max_ceph_clients: Optional[int] = None,
     ) -> None:
         if not port:
             port = 2049   # default nfs port
@@ -295,7 +296,8 @@ class NFSCluster:
                                   enable_rdma=enable_rdma,
                                   rdma_port=rdma_port,
                                   networks=networks,
-                                  clients_per_pool=clients_per_pool)
+                                  clients_per_pool=clients_per_pool,
+                                  max_ceph_clients=max_ceph_clients)
             completion = self.mgr.apply_nfs(spec)
             orchestrator.raise_if_exception(completion)
             ispec = IngressSpec(service_type='ingress',
@@ -335,7 +337,8 @@ class NFSCluster:
                                   enable_rdma=enable_rdma,
                                   rdma_port=rdma_port,
                                   networks=networks,
-                                  clients_per_pool=clients_per_pool)
+                                  clients_per_pool=clients_per_pool,
+                                  max_ceph_clients=max_ceph_clients)
             completion = self.mgr.apply_nfs(spec)
             orchestrator.raise_if_exception(completion)
         log.debug("Successfully deployed nfs daemons with cluster id %s and placement %s",
@@ -382,6 +385,7 @@ class NFSCluster:
             ingress_placement: Optional[str] = None,
             networks: Optional[List[str]] = None,
             clients_per_pool: Optional[int] = None,
+            max_ceph_clients: Optional[int] = None,
     ) -> None:
         try:
             if virtual_ip:
@@ -440,7 +444,8 @@ class NFSCluster:
                         rdma_port=rdma_port,
                         ingress_placement=ingress_placement,
                         networks=networks,
-                        clients_per_pool=clients_per_pool
+                        clients_per_pool=clients_per_pool,
+                        max_ceph_clients=max_ceph_clients
                     )
                 except Exception:
                     try:
@@ -753,6 +758,7 @@ class NFSCluster:
         enable_rdma = False
         enable_nfs_metrics = False
         clients_per_pool = None
+        max_ceph_clients = None
 
         nfs_spec = get_nfs_spec_for_cluster(self.mgr, cluster_id)
         if nfs_spec:
@@ -761,6 +767,7 @@ class NFSCluster:
             enable_rdma = bool(getattr(nfs_spec, 'enable_rdma', False))
             enable_nfs_metrics = bool(getattr(nfs_spec, 'enable_nfs_metrics', False))
             clients_per_pool = getattr(nfs_spec, 'clients_per_pool', None)
+            max_ceph_clients = getattr(nfs_spec, 'max_ceph_clients', None)
 
         if ingress_mode:
             if placement and placement.count and placement.count > 1:
@@ -788,6 +795,8 @@ class NFSCluster:
             r['monitor_port'] = monitor_port
         if clients_per_pool is not None:
             r['clients_per_pool'] = clients_per_pool
+        if max_ceph_clients is not None:
+            r['max_ceph_clients'] = max_ceph_clients
 
         log.debug("Successfully fetched %s info: %s", cluster_id, r)
         return r

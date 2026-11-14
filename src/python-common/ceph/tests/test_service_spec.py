@@ -967,6 +967,27 @@ def test_nfs_spec_clients_per_pool_out_of_range(clients_per_pool):
         ).validate()
 
 
+@pytest.mark.parametrize('max_ceph_clients', [1, 10, 65535])
+def test_nfs_spec_max_ceph_clients_accepted(max_ceph_clients):
+    """Values within 1..65535 accepted by NFS-Ganesha."""
+    NFSServiceSpec(
+        service_id='mynfs',
+        placement=PlacementSpec(count=1),
+        max_ceph_clients=max_ceph_clients,
+    ).validate()
+
+
+@pytest.mark.parametrize('max_ceph_clients', [-1, 0, 65536, 100000])
+def test_nfs_spec_max_ceph_clients_out_of_range(max_ceph_clients):
+    """Values outside 1..65535 are rejected."""
+    with pytest.raises(SpecValidationError, match='max_ceph_clients'):
+        NFSServiceSpec(
+            service_id='mynfs',
+            placement=PlacementSpec(count=1),
+            max_ceph_clients=max_ceph_clients,
+        ).validate()
+
+
 def test_repr():
     val = """ServiceSpec.from_json(yaml.safe_load('''service_type: crash
 service_name: crash
