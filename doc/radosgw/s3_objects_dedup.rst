@@ -97,7 +97,7 @@ The dedup estimate process does not access the objects themselves
 (data/metadata), which means its processing time won't be affected by the
 underlying media (SSD/HDD) storing the objects. The bucket indices are
 virtually always accessed from a fast medium: placement on SSD
-:ref:`is recommended <hardware-recommendations>` and they are cached heavily
+:ref:`is recommended <hardware-storage-devices>` and they are cached heavily
 in memory.
 
 The administrator can throttle the estimate process by setting a limit on the
