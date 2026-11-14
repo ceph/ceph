@@ -56,6 +56,7 @@ class MonCommandCompletion : public Context
   ActivePyModules *py_modules;
   PyObject *python_completion;
   const std::string tag;
+  const std::string module_name;
   SafeThreadState pThreadState;
 
 public:
@@ -64,9 +65,10 @@ public:
 
   MonCommandCompletion(
       ActivePyModules *py_modules_, PyObject* ev,
-      const std::string &tag_, PyThreadState *ts_)
+      const std::string &tag_, const std::string &module_name_,
+      PyThreadState *ts_)
     : py_modules(py_modules_), python_completion(ev),
-      tag(tag_), pThreadState(ts_)
+      tag(tag_), module_name(module_name_), pThreadState(ts_)
   {
     ceph_assert(python_completion != nullptr);
     Py_INCREF(python_completion);
@@ -77,7 +79,7 @@ public:
     if (python_completion) {
       // Usually do this in finish(): this path is only for if we're
       // being destroyed without completing.
-      Gil gil(pThreadState, true);
+      Gil gil(pThreadState, true, module_name);
       Py_DECREF(python_completion);
       python_completion = nullptr;
     }
@@ -92,7 +94,7 @@ public:
       // Scoped so the Gil is released before calling notify_all()
       // Create new thread state because this is called via the MonClient
       // Finisher, not the PyModules finisher.
-      Gil gil(pThreadState, true);
+      Gil gil(pThreadState, true, module_name);
 
       auto set_fn = PyObject_GetAttrString(python_completion, "complete");
       ceph_assert(set_fn != nullptr);
@@ -159,9 +161,9 @@ ceph_send_command(BaseMgrModule *self, PyObject *args, PyObject *kwargs)
   Py_DECREF(set_fn);
 
   MonCommandCompletion *command_c = new MonCommandCompletion(self->py_modules,
-      completion, tag, PyThreadState_Get());
+      completion, tag, self->this_module->get_name(), PyThreadState_Get());
 
-  PyThreadState *tstate = PyEval_SaveThread();
+  without_gil_t no_gil;
 
   if (std::string(type) == "mon") {
 
@@ -193,7 +195,7 @@ ceph_send_command(BaseMgrModule *self, PyObject *args, PyObject *kwargs)
       delete command_c;
       string msg("invalid osd_id: ");
       msg.append("\"").append(name).append("\"");
-      PyEval_RestoreThread(tstate);
+      no_gil.acquire_gil();
       PyErr_SetString(PyExc_ValueError, msg.c_str());
       return nullptr;
     }
@@ -213,7 +215,7 @@ ceph_send_command(BaseMgrModule *self, PyObject *args, PyObject *kwargs)
   } else if (std::string(type) == "mds") {
     string msg("cannot send command to mds via this interface: ");
     msg.append(cpp_strerror(-ENOSYS));
-    PyEval_RestoreThread(tstate);
+    no_gil.acquire_gil();
     PyErr_SetString(PyExc_RuntimeError, msg.c_str());
     return nullptr;
   } else if (std::string(type) == "pg") {
@@ -222,7 +224,7 @@ ceph_send_command(BaseMgrModule *self, PyObject *args, PyObject *kwargs)
       delete command_c;
       string msg("invalid pgid: ");
       msg.append("\"").append(name).append("\"");
-      PyEval_RestoreThread(tstate);
+      no_gil.acquire_gil();
       PyErr_SetString(PyExc_ValueError, msg.c_str());
       return nullptr;
     }
@@ -239,18 +241,18 @@ ceph_send_command(BaseMgrModule *self, PyObject *args, PyObject *kwargs)
 	  command_c->outbl = std::move(bl);
 	  f->queue(command_c);
 	});
-    PyEval_RestoreThread(tstate);
+    no_gil.acquire_gil();
     return nullptr;
   } else {
     delete command_c;
     string msg("unknown service type: ");
     msg.append(type);
-    PyEval_RestoreThread(tstate);
+    no_gil.acquire_gil();
     PyErr_SetString(PyExc_ValueError, msg.c_str());
     return nullptr;
   }
 
-  PyEval_RestoreThread(tstate);
+  no_gil.acquire_gil();
   Py_RETURN_NONE;
 }
 
@@ -897,10 +899,10 @@ ceph_dispatch_remote(BaseMgrModule *self, PyObject *args)
 
   // Drop GIL from calling python thread state, it will be taken
   // both for checking for method existence and for executing method.
-  PyThreadState *tstate = PyEval_SaveThread();
+  without_gil_t no_gil;
 
   if (!self->py_modules->method_exists(other_module, method)) {
-    PyEval_RestoreThread(tstate);
+    no_gil.acquire_gil();
     PyErr_SetString(PyExc_NameError, "Method not found");
 
     Py_DECREF(pickled_args);
@@ -919,7 +921,7 @@ ceph_dispatch_remote(BaseMgrModule *self, PyObject *args)
       &err,
       &crash_dump);
 
-  PyEval_RestoreThread(tstate);
+  no_gil.acquire_gil();
 
   // we retain these references across the dispatch_remote call so that
   // we can pass string_view and avoid the copy

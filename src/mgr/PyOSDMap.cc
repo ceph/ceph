@@ -153,13 +153,13 @@ static PyObject *osdmap_calc_pg_upmaps(BasePyOSDMap* self, PyObject *args)
 	   << " max_iterations " << max_iterations
 	   << " pools " << pools
 	   << dendl;
-  PyThreadState *tstate = PyEval_SaveThread();
+  without_gil_t no_gil;
   int r = self->osdmap->calc_pg_upmaps(g_ceph_context,
 				 max_deviation,
 				 max_iterations,
 				 pools,
 				 incobj->inc);
-  PyEval_RestoreThread(tstate);
+  no_gil.acquire_gil();
   dout(10) << __func__ << " r = " << r << dendl;
   return PyLong_FromLong(r);
 }
@@ -182,14 +182,14 @@ static PyObject *osdmap_balance_primaries(BasePyOSDMap* self, PyObject *args)
            << " pool_id " << pool_id
            << " inc " << incobj->inc
            << dendl;
-  PyThreadState *tstate = PyEval_SaveThread();
+  without_gil_t no_gil;
   OSDMap tmp_osd_map;
   tmp_osd_map.deepish_copy_from(*(self->osdmap));
   int r = self->osdmap->balance_primaries(g_ceph_context,
                                  pool_id,
                                  incobj->inc,
 				 tmp_osd_map);
-  PyEval_RestoreThread(tstate);
+  no_gil.acquire_gil();
   dout(10) << __func__ << " r = " << r << dendl;
   return PyLong_FromLong(r);
 }
