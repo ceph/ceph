@@ -2684,6 +2684,33 @@ ESubtreeMap *MDCache::create_subtree_map()
     }
   }
 
+  /*
+   * An import stays open in the journal until its EImportFinish is logged.
+   * In resolve, a peer's claim gives an ambiguous import of ours back to its
+   * exporter in cache (handle_resolve()) before disambiguate_my_imports()
+   * logs the EImportFinish that cancels it, and a map journaled in between
+   * would leave it out.  Replay has it as ours and ambiguous there, from its
+   * EImportStart, so journal it that way, with the bounds it was imported
+   * with.
+   */
+  for (const auto& [df, bounds] : my_ambiguous_imports) {
+    if (le->subtrees.count(df))
+      continue;
+    CDir *dir = get_dirfrag(df);
+    if (!dir)
+      continue;
+    dout(15) << " ambig subtree claimed by a peer " << *dir << dendl;
+    le->ambiguous_subtrees.insert(df);
+    dirs_to_add[df] = dir;
+    auto& lbounds = le->subtrees[df];
+    lbounds.clear();
+    for (const auto& b : bounds) {
+      if (CDir *bound = get_dirfrag(b))
+        dirs_to_add[b] = bound;
+      lbounds.push_back(b);
+    }
+  }
+
   // apply projected renames
   for (const auto& [diri, renames] : projected_subtree_renames) {
     for (const auto& [olddir, newdir] : renames) {
