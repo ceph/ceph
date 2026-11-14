@@ -60,6 +60,7 @@ class RGWSI_Bucket_SObj : public RGWSI_Bucket
                                    std::map<std::string, bufferlist> *pattrs,
                                    rgw_cache_entry_info *cache_info,
                                    boost::optional<obj_version> refresh_version,
+                                   boost::optional<obj_version> expected_version,
                                    optional_yield y,
                                    const DoutPrefixProvider *dpp);
 
@@ -108,7 +109,8 @@ public:
                                   optional_yield y,
                                   const DoutPrefixProvider *dpp,
                                   rgw_cache_entry_info *cache_info = nullptr,
-                                  boost::optional<obj_version> refresh_version = boost::none) override;
+                                  boost::optional<obj_version> refresh_version = boost::none,
+                                  boost::optional<obj_version> expected_version = boost::none) override;
 
   int store_bucket_entrypoint_info(const std::string& key,
                                    RGWBucketEntryPoint& info,
@@ -131,7 +133,8 @@ public:
                                 optional_yield y,
                                 const DoutPrefixProvider *dpp,
                                 rgw_cache_entry_info *cache_info = nullptr,
-                                boost::optional<obj_version> refresh_version = boost::none) override;
+                                boost::optional<obj_version> refresh_version = boost::none,
+                                boost::optional<obj_version> expected_version = boost::none) override;
 
   int read_bucket_info(const rgw_bucket& bucket,
                        RGWBucketInfo *info,

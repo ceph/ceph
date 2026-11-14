@@ -202,7 +202,8 @@ int rgw_get_system_obj(RGWSI_SysObj* svc_sysobj, const rgw_pool& pool, const str
                        RGWObjVersionTracker *objv_tracker, real_time *pmtime, optional_yield y,
                        const DoutPrefixProvider *dpp, map<string, bufferlist> *pattrs,
                        rgw_cache_entry_info *cache_info,
-		       boost::optional<obj_version> refresh_version, bool raw_attrs)
+		       boost::optional<obj_version> refresh_version, bool raw_attrs,
+		       boost::optional<obj_version> expected_version)
 {
   const rgw_raw_obj obj(pool, key);
   auto sysobj = svc_sysobj->get_obj(obj);
@@ -213,6 +214,7 @@ int rgw_get_system_obj(RGWSI_SysObj* svc_sysobj, const rgw_pool& pool, const str
             .set_raw_attrs(raw_attrs)
             .set_cache_info(cache_info)
             .set_refresh_version(refresh_version)
+            .set_expected_version(expected_version)
             .read(dpp, &bl, y);
 }
 

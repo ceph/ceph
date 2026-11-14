@@ -46,7 +46,8 @@ public:
                                           optional_yield y,
                                           const DoutPrefixProvider *dpp,
                                           rgw_cache_entry_info *cache_info = nullptr,
-                                          boost::optional<obj_version> refresh_version = boost::none) = 0;
+                                          boost::optional<obj_version> refresh_version = boost::none,
+                                          boost::optional<obj_version> expected_version = boost::none) = 0;
 
   virtual int store_bucket_entrypoint_info(const std::string& key,
                                    RGWBucketEntryPoint& info,
@@ -69,7 +70,8 @@ public:
                                 optional_yield y,
                                 const DoutPrefixProvider *dpp,
                                 rgw_cache_entry_info *cache_info = nullptr,
-                                boost::optional<obj_version> refresh_version = boost::none) = 0;
+                                boost::optional<obj_version> refresh_version = boost::none,
+                                boost::optional<obj_version> expected_version = boost::none) = 0;
 
   virtual int read_bucket_info(const rgw_bucket& bucket,
                        RGWBucketInfo *info,
