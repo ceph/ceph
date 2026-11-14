@@ -273,9 +273,9 @@ export class RgwMultisiteZoneFormComponent extends CdForm implements OnInit {
       this.zone.system_key.access_key = values['access_key'];
       this.zone.system_key.secret_key = values['secret_key'];
       this.zone.tier_type = values['archive_zone'] ? 'archive' : '';
-      this.zone.sync_from = values['sync_from_zones']
-        ? values['sync_from_zones'].map((zone: RgwZone) => zone.name).join(',')
-        : '';
+      this.zone.sync_from = values['sync_from_all']
+        ? ''
+        : (values['sync_from_zones'] || []).map((zone: ComboBoxItem) => zone.name).join(',');
       this.zone.sync_from_all = values['sync_from_all'];
       this.rgwZoneService
         .create(
@@ -307,9 +307,26 @@ export class RgwMultisiteZoneFormComponent extends CdForm implements OnInit {
       this.zone.system_key.access_key = values['access_key'];
       this.zone.system_key.secret_key = values['secret_key'];
       this.zone.tier_type = values['archive_zone'] ? 'archive' : '';
-      this.zone.sync_from = values['sync_from_zones']
-        ? values['sync_from_zones'].map((zone: RgwZone) => zone.name).join(',')
-        : '';
+      // Include previously saved sync_from entries (e.g. renamed zones) that are no longer in the options
+      const removalCandidatesEdit = _.union(
+        this.info?.data?.info?.sync_from || [],
+        this.syncFromZonesOptions.map((opt) => opt.name)
+      );
+      if (values['sync_from_all']) {
+        this.zone.sync_from = '';
+        this.zone.sync_from_rm = removalCandidatesEdit.join(',');
+      } else {
+        const selectedNamesEdit = new Set(
+          (values['sync_from_zones'] || []).map((zone: ComboBoxItem) => zone.name)
+        );
+        this.zone.sync_from =
+          values['sync_from_zones'] && values['sync_from_zones'].length > 0
+            ? values['sync_from_zones'].map((zone: ComboBoxItem) => zone.name).join(',')
+            : '';
+        this.zone.sync_from_rm = removalCandidatesEdit
+          .filter((name) => !selectedNamesEdit.has(name))
+          .join(',');
+      }
       this.zone.sync_from_all = values['sync_from_all'];
       this.rgwZoneService
         .update(
