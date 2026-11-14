@@ -793,24 +793,69 @@ class TestKillExports(CephFSTestCase):
             # for multiple tests
             self.mount_a.remount()
 
+    def _client_holds_cap(self, rank, ino, client_id):
+        inode = self.fs.rank_asok(['dump', 'inode', str(ino)], rank=rank, status=self.status)
+        return any(c['client_id'] == client_id for c in inode.get('client_caps', []))
+
+    def _client_addr(self, rank, client_id):
+        session = self._session_by_id(self._session_list(rank, self.status))[client_id]
+        addr = session['entity']['addr']
+        return f"{addr['addr']}/{addr['nonce']}"
+
     def test_client_eviction(self):
+        """
+        Test that the importer does not evict a client whose session it force
+        opened for an import that was later reversed.
+
+        With 'mds_kill_export_at' set to 9 or 10, the exporter dies after the
+        importer has force opened the client sessions (IMPORT_ACKING) but
+        before the client is told about them. The client never renews those
+        sessions, so unless the importer closes them in import_reverse() it
+        evicts (and blocklists) the client after 'session_autoclose' seconds.
+
+        Note that the client may legitimately open its own session with the
+        importer (e.g. a read-only request routed to a replica), so the absence
+        of a session on the importer is not what is checked here.
+        """
+
         # modify the timeout so that we don't have to wait too long
         timeout = 30
+        autoclose = timeout + 5
         self.fs.set_session_timeout(timeout)
-        self.fs.set_session_autoclose(timeout + 5)
+        self.fs.set_session_autoclose(autoclose)
 
         kill_export_at = [9, 10]
 
         exporter_rank = 0
         importer_rank = 1
 
+        client_id = self.mount_a.get_global_id()
+
         for kill in kill_export_at:
             log.info(f"kill_export_at: {kill}")
+
+            # the client must hold caps in the exported subtree so that the
+            # importer force opens a session for it
+            path = f"test/export/file_{kill}"
+            self.mount_a.write_n_mb(path, 1)
+            ino = self.mount_a.path_to_ino(path)
+            self.assertTrue(self._client_holds_cap(exporter_rank, ino, client_id))
+
+            client_addr = self._client_addr(exporter_rank, client_id)
+
             self._run_kill_export(kill, exporter_rank, importer_rank)
 
-            client_id = self.mount_a.get_global_id()
-            self.wait_until_evicted(client_id, importer_rank, timeout + 10)
-            time.sleep(1)
+            # give the importer enough time to close the forced opened session
+            time.sleep(autoclose + 10)
+
+            self.assertNotIn(client_addr, self.get_ceph_cmd_stdout("osd", "blocklist", "ls"))
+
+            # a session the client has with the importer must be one that it
+            # renews, not a leftover forced opened session
+            ls = self.fs.rank_asok(['session', 'ls'], rank=importer_rank, status=self.status)
+            session = self._session_by_id(ls).get(client_id)
+            if session is not None:
+                self.assertEqual(session['state'], 'open')
 
             # failed if buggy
-            self.mount_a.ls()
+            self.assertIn(f"file_{kill}", self.mount_a.ls("test/export"))
