@@ -93,7 +93,8 @@ def with_cephadm_module(module_options=None, store=None):
     with mock.patch("cephadm.module.CephadmOrchestrator.get_ceph_option", get_ceph_option), \
             mock.patch("cephadm.services.osd.RemoveUtil._run_mon_cmd"), \
             mock.patch('cephadm.module.CephadmOrchestrator.get_module_option_ex', get_module_option_ex), \
-            mock.patch("cephadm.module.CephadmOrchestrator.get_osdmap"), \
+            mock.patch("cephadm.module.CephadmOrchestrator.get_osdmap",
+                       **{'return_value.get_require_osd_release.return_value': 'umbrella'}), \
             mock.patch("cephadm.module.CephadmOrchestrator.remote"), \
             mock.patch("cephadm.module.CephadmOrchestrator.get_fqdn", lambda a, b: 'host_fqdn'), \
             mock.patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '::1'), \
