@@ -55,11 +55,19 @@ target_include_directories(cephfs-tool PRIVATE ${PROJECT_SOURCE_DIR}/src/include
 target_link_libraries(cephfs-tool ceph-common librados cephfs osdc global
   ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} Boost::program_options)
 
+set(cephfs_mdsbench_srcs
+  cephfs-mdsbench.cc)
+add_executable(cephfs-mdsbench ${cephfs_mdsbench_srcs})
+target_include_directories(cephfs-mdsbench PRIVATE ${PROJECT_SOURCE_DIR}/src/include)
+target_link_libraries(cephfs-mdsbench ceph-common librados cephfs osdc global
+  ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} Boost::program_options)
+
 install(TARGETS
   cephfs-journal-tool
   cephfs-table-tool
   cephfs-data-scan
   cephfs-tool
+  cephfs-mdsbench
   DESTINATION bin)
 
 option(WITH_CEPHFS_SHELL "install cephfs-shell" OFF)
