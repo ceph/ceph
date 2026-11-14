@@ -20,6 +20,7 @@ from ceph_argparse import validate_command, parse_json_funcsigs, validate, \
     parse_funcsig, ArgumentError, ArgumentTooFew, ArgumentMissing, \
     ArgumentNumber, ArgumentValid
 
+import json
 import os
 import random
 import re
@@ -48,6 +49,12 @@ class ParseJsonFuncsigs(unittest.TestCase):
         # syntax error https://github.com/ceph/ceph/pull/585
         commands = get_command_descriptions("pull585")
         self.assertRaises(TypeError, parse_json_funcsigs, commands, 'cli')
+
+    def test_req_fasle(self):
+        commands = json.loads(get_command_descriptions("req-fasle"))
+        pool = commands['cmd000']['sig'][4]
+        self.assertEqual('pool', pool['name'])
+        self.assertIs(False, pool['req'])
 
 sigdict = parse_json_funcsigs(get_command_descriptions("all"), 'cli')
 
