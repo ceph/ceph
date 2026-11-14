@@ -1076,6 +1076,8 @@ public:
     default:
       ceph_abort_msg("bad cache_private");
     }
+    // re-bin into this shard's newest age bin, as _add() does
+    b->cache_age_bin = age_bins.front();
     if (!b->is_empty()) {
       buffer_bytes += b->length;
       list_bytes[b->cache_private] += b->length;
