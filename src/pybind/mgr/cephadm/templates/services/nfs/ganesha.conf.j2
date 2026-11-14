@@ -11,6 +11,9 @@ NFS_CORE_PARAM {
         Enable_UDP = false;
         NFS_Port = {{ port }};
         allow_set_io_flusher_fail = true;
+{% if ceph_nodes %}
+        Cluster_Members = {{ ceph_nodes|join(", ") }};
+{% endif %}
 {% if haproxy_hosts %}
         HAProxy_Hosts = {{ haproxy_hosts|join(", ") }};
 {% endif %}
@@ -51,10 +54,6 @@ RADOS_KV {
         nodeid = "{{ nodeid }}";
         pool = "{{ pool }}";
         namespace = "{{ namespace }}";
-}
-
-CEPH_NODES_LIST {
-        Ceph_Nodes = {{ ceph_nodes|join(", ") }};
 }
 
 RADOS_URLS {
