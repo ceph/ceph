@@ -2900,6 +2900,13 @@ namespace rgw::dedup {
                              << "/" << marker.name << "::instance=" << marker.instance << dendl;
           continue;
         }
+        else if (unlikely(!rgw_obj_key(dirent.key).ns.empty())) {
+          // only uploads in progress have namespaced entries. complete reads
+          // the part manifests from the upload's omap, not the part heads
+          ldpp_dout(dpp, 20) << __func__ << "::skip namespaced entry::" << bucket->get_name()
+                             << "/" << marker.name << "::instance=" << marker.instance << dendl;
+          continue;
+        }
         ret = ingress_bucket_idx_single_object(disk_arr, bucket, dirent, p_worker_stats);
       }
       // TBD: advance marker only once here!
