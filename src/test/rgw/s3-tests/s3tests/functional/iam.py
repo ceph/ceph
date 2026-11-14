@@ -178,8 +178,8 @@ def iam_root(configfile):
         pytest.skip('[iam root] user does not belong to an account')
 
     yield client
-    nuke_users(client, PathPrefix=get_iam_path_prefix())
     nuke_groups(client, PathPrefix=get_iam_path_prefix())
+    nuke_users(client, PathPrefix=get_iam_path_prefix())
     nuke_roles(client, PathPrefix=get_iam_path_prefix())
     nuke_oidc_providers(client, get_iam_path_prefix())
 
