@@ -19,6 +19,7 @@
 #include <array>
 #include <cstdint>
 #include <iterator>
+#include <memory>
 #include <ranges>
 #include <string_view>
 #include <unordered_map>
@@ -49,7 +50,7 @@
 #include "cls/version/cls_version_types.h"
 #include "cls/user/cls_user_types.h"
 #include "cls/rgw/cls_rgw_types.h"
-#include "include/rados/librados.hpp"
+#include "include/rados/librados_fwd.hpp"
 #include "rgw_public_access.h"
 #include "rgw_sal_fwd.h"
 
@@ -2329,11 +2330,6 @@ rgw_global_init(const std::map<std::string,std::string> *defaults,
 		    uint32_t module_type, code_environment_t code_env,
 		    int flags);
 
-
-struct AioCompletionDeleter {
-  void operator()(librados::AioCompletion* c) { c->release(); }
-};
-using aio_completion_ptr = std::unique_ptr<librados::AioCompletion, AioCompletionDeleter>;
 
 extern boost::optional<rgw::IAM::Policy>
 get_iam_policy_from_attr(CephContext* cct,
