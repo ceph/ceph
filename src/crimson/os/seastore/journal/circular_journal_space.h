@@ -50,7 +50,9 @@ class CircularJournalSpace : public JournalAllocator {
     return written_to;
   }
 
-  write_ertr::future<> write(ceph::bufferlist&& to_write) final;
+  write_ertr::future<> write(
+    ceph::bufferlist&& to_write,
+    dma_write_times_t *dma_times = nullptr) final;
 
   void update_modify_time(record_t& record) final {}
 
@@ -79,10 +81,14 @@ class CircularJournalSpace : public JournalAllocator {
    *
    * @param device address to write
    * @param bufferlist to write
+   * @param if given, filled in with when the device write ran
    *
    */
   submit_ertr::future<>
-  device_write_bl(rbm_abs_addr offset, ceph::bufferlist &bl);
+  device_write_bl(
+    rbm_abs_addr offset,
+    ceph::bufferlist &bl,
+    dma_write_times_t *dma_times = nullptr);
 
   using read_ertr = crimson::errorator<
     crimson::ct_error::input_output_error,

@@ -182,7 +182,9 @@ SegmentAllocator::get_written_to() const
 }
 
 SegmentAllocator::write_ertr::future<>
-SegmentAllocator::write(ceph::bufferlist&& to_write)
+SegmentAllocator::write(
+  ceph::bufferlist&& to_write,
+  dma_write_times_t *)
 {
   LOG_PREFIX(SegmentAllocator::write);
   assert(can_write());

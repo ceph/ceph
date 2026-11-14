@@ -232,10 +232,20 @@ void SeaStore::Shard::register_metrics(store_index_t store_index)
     {txn_stage_t::SUBMIT_TOTAL,          sm::label_instance("stage", "submit_total")},
     {txn_stage_t::SUBMIT_RESERVE,        sm::label_instance("stage", "submit_reserve")},
     {txn_stage_t::SUBMIT_OOL_WRITE,      sm::label_instance("stage", "submit_ool_write")},
+    {txn_stage_t::SUBMIT_OOL_THROTTLE,   sm::label_instance("stage", "submit_ool_throttle")},
+    {txn_stage_t::SUBMIT_OOL_PREPARE,    sm::label_instance("stage", "submit_ool_prepare")},
+    {txn_stage_t::SUBMIT_OOL_DISK_WRITE, sm::label_instance("stage", "submit_ool_disk_write")},
     {txn_stage_t::SUBMIT_LBA_UPDATE,     sm::label_instance("stage", "submit_lba_update")},
     {txn_stage_t::SUBMIT_PREPARE_ENTER,  sm::label_instance("stage", "submit_prepare_enter")},
     {txn_stage_t::SUBMIT_PREPARE_RECORD, sm::label_instance("stage", "submit_prepare_record")},
     {txn_stage_t::SUBMIT_JOURNAL,        sm::label_instance("stage", "submit_journal")},
+    {txn_stage_t::SUBMIT_COMPLETE_COMMIT, sm::label_instance("stage", "submit_complete_commit")},
+    {txn_stage_t::SUBMIT_JOURNAL_BATCH_WAIT, sm::label_instance("stage", "submit_journal_batch_wait")},
+    {txn_stage_t::SUBMIT_JOURNAL_DISK_WRITE, sm::label_instance("stage", "submit_journal_disk_write")},
+    {txn_stage_t::SUBMIT_JOURNAL_FINALIZE_WAIT, sm::label_instance("stage", "submit_journal_finalize_wait")},
+    {txn_stage_t::SUBMIT_JOURNAL_PRE_DMA, sm::label_instance("stage", "submit_journal_pre_dma")},
+    {txn_stage_t::SUBMIT_JOURNAL_DMA, sm::label_instance("stage", "submit_journal_dma")},
+    {txn_stage_t::SUBMIT_JOURNAL_POST_DMA, sm::label_instance("stage", "submit_journal_post_dma")},
   };
   // Three tiers of the same per-stage histograms
   std::pair<std::array<seastar::metrics::histogram, STAGE_MAX>*, const char*>
@@ -2122,10 +2132,20 @@ seastar::future<> SeaStore::Shard::run_one_batch(
         {txn_stage_t::SUBMIT_TOTAL,          ctx.submit_time},
         {txn_stage_t::SUBMIT_RESERVE,        pd.reserve},
         {txn_stage_t::SUBMIT_OOL_WRITE,      pd.ool_write},
+        {txn_stage_t::SUBMIT_OOL_THROTTLE,   pd.ool_throttle},
+        {txn_stage_t::SUBMIT_OOL_PREPARE,    pd.ool_prepare},
+        {txn_stage_t::SUBMIT_OOL_DISK_WRITE, pd.ool_disk_write},
         {txn_stage_t::SUBMIT_LBA_UPDATE,     pd.lba_update},
         {txn_stage_t::SUBMIT_PREPARE_ENTER,  pd.prepare_enter},
         {txn_stage_t::SUBMIT_PREPARE_RECORD, pd.prepare_record},
         {txn_stage_t::SUBMIT_JOURNAL,        pd.journal},
+        {txn_stage_t::SUBMIT_COMPLETE_COMMIT, pd.complete_commit},
+        {txn_stage_t::SUBMIT_JOURNAL_BATCH_WAIT, pd.journal_batch_wait},
+        {txn_stage_t::SUBMIT_JOURNAL_DISK_WRITE, pd.journal_disk_write},
+        {txn_stage_t::SUBMIT_JOURNAL_FINALIZE_WAIT, pd.journal_finalize_wait},
+        {txn_stage_t::SUBMIT_JOURNAL_PRE_DMA, pd.journal_pre_dma},
+        {txn_stage_t::SUBMIT_JOURNAL_DMA, pd.journal_dma},
+        {txn_stage_t::SUBMIT_JOURNAL_POST_DMA, pd.journal_post_dma},
       }};
 
     for (auto& [stage, dur] : stage_samples) {
