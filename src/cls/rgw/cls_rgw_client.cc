@@ -527,6 +527,12 @@ void cls_rgw_suggest_changes(ObjectWriteOperation& o, bufferlist& updates)
   o.exec(method::dir_suggest_changes, updates);
 }
 
+void cls_rgw_suggest_changes(ObjectWriteOperation& o, bufferlist& updates,
+                             bufferlist* out)
+{
+  o.exec(method::dir_suggest_changes, updates, out, nullptr);
+}
+
 void cls_rgw_bilog_start(ObjectWriteOperation& op)
 {
   bufferlist in;
