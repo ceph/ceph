@@ -308,6 +308,18 @@ TEST_CASE("concept edge cases",
 
 /*** Tests for library helpers: */
 
+TEST_CASE("contains prefers member lookup and falls back to range search",
+          "[concepts][util]")
+{
+  const std::map<int, int> keyed_values{{1, 10}};
+  const std::vector values{1, 2, 3};
+
+  CHECK(ceph::util::contains(keyed_values, 1));
+  CHECK_FALSE(ceph::util::contains(keyed_values, 2));
+  CHECK(ceph::util::contains(values, 2));
+  CHECK_FALSE(ceph::util::contains(values, 4));
+}
+
 TEMPLATE_PRODUCT_TEST_CASE("helpers compose into container-generic algorithms",
                            "[concepts][util]",
                            (std::deque, std::list, std::vector),
@@ -569,6 +581,8 @@ TEST_CASE("optional sizing helpers call supported operations only",
     (ceph::concepts::has_erase_range<int_forward_list, int_forward_list::iterator, int_forward_list::iterator>)) \
   X(remove_if, (ceph::concepts::has_remove_if<int_list, int_predicate>),        \
     (ceph::concepts::has_remove_if<int_vector, int_predicate>))                 \
+  X(contains, (ceph::concepts::has_contains<int_set, int>),                    \
+    (ceph::concepts::has_contains<int_vector, int>))                           \
   X(clear, (ceph::concepts::has_clear<int_vector>),                             \
     (ceph::concepts::has_clear<int>))                                           \
   X(reserve, (ceph::concepts::has_reserve<int_vector>),                         \
