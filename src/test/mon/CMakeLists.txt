@@ -63,6 +63,14 @@ add_executable(unittest_mon_montypes
 add_ceph_unittest(unittest_mon_montypes)
 target_link_libraries(unittest_mon_montypes mon global)
 
+# unittest_mon_last_epoch_clean
+add_executable(unittest_mon_last_epoch_clean
+  test_last_epoch_clean.cc
+  $<TARGET_OBJECTS:unit-main>
+  )
+add_ceph_unittest(unittest_mon_last_epoch_clean)
+target_link_libraries(unittest_mon_last_epoch_clean mon global)
+
 # ceph_test_mon_memory_target
 add_executable(ceph_test_mon_memory_target
   test_mon_memory_target.cc)
