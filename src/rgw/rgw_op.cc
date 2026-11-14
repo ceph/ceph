@@ -3472,7 +3472,6 @@ void RGWSetBucketVersioning::execute(optional_yield y)
       } else {
 	return op_ret;
       }
-      s->bucket->set_attrs(rgw::sal::Attrs(s->bucket_attrs));
       return s->bucket->put_info(this, false, real_time(), y);
     }, y);
 
@@ -4116,16 +4115,21 @@ int put_swift_bucket_metadata(const DoutPrefixProvider* dpp,
                               std::optional<std::string> swift_ver_location,
                               const std::set<std::string>& rmattr_names,
                               optional_yield y) {
-  std::map<std::string, ceph::bufferlist> attrs;
-  int op_ret = rgw_get_request_metadata(dpp, s->cct, s->info, attrs, false);
+  std::map<std::string, ceph::bufferlist> req_attrs;
+  int op_ret = rgw_get_request_metadata(dpp, s->cct, s->info, req_attrs, false);
   if (op_ret < 0) {
     return op_ret;
   }
 
   return retry_raced_bucket_write(
       dpp, s->bucket.get(),
-      [s, has_policy, policy_rw_mask, &policy, cors_config, has_cors, &attrs,
+      [s, has_policy, policy_rw_mask, &policy, cors_config, has_cors, &req_attrs,
        dpp, rmattr_names, swift_ver_location] {
+        /* Start every attempt from the request's metadata. The bucket's
+         * attrs may have been reloaded after losing a race, so merge with
+         * those rather than with the ones read at the start of the request. */
+        std::map<std::string, ceph::bufferlist> attrs = req_attrs;
+
         /* Encode special metadata first as we're using std::map::emplace under
          * the hood. This method will add the new items only if the map doesn't
          * contain such keys yet. */
@@ -4147,7 +4151,7 @@ int put_swift_bucket_metadata(const DoutPrefixProvider* dpp,
         /* It's supposed that following functions WILL NOT change any
          * special attributes (like RGW_ATTR_ACL) if they are already
          * present in attrs. */
-        prepare_add_del_attrs(s->bucket_attrs, rmattr_names, attrs);
+        prepare_add_del_attrs(s->bucket->get_attrs(), rmattr_names, attrs);
         populate_with_generic_attrs(s, attrs);
 
         /* According to the Swift's behaviour and its container_quota
@@ -7384,7 +7388,7 @@ void RGWPutCORS::execute(optional_yield y)
   }
 
   op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this] {
-      rgw::sal::Attrs attrs(s->bucket_attrs);
+      rgw::sal::Attrs attrs = s->bucket->get_attrs();
       attrs[RGW_ATTR_CORS] = cors_bl;
       return s->bucket->merge_and_store_attrs(this, attrs, s->yield);
     }, y);
@@ -9691,14 +9695,14 @@ void RGWPutBucketPolicy::execute(optional_yield y)
     const Policy p(
       s->cct, &s->bucket_tenant, data.to_str(),
       s->cct->_conf.get_val<bool>("rgw_policy_reject_invalid_principals"));
-    rgw::sal::Attrs attrs(s->bucket_attrs);
     if (s->public_access_block.BlockPublicPolicy &&
         rgw::IAM::is_public(this, p)) {
       op_ret = -EACCES;
       return;
     }
 
-    op_ret = retry_raced_bucket_write(this, s->bucket.get(), [&p, this, &attrs] {
+    op_ret = retry_raced_bucket_write(this, s->bucket.get(), [&p, this] {
+        rgw::sal::Attrs attrs = s->bucket->get_attrs();
         attrs[RGW_ATTR_IAM_POLICY].clear();
         attrs[RGW_ATTR_IAM_POLICY].append(p.text);
         if (s->info.env->exists("HTTP_X_AMZ_CONFIRM_REMOVE_SELF_BUCKET_ACCESS")) {
@@ -10301,7 +10305,7 @@ void RGWPutBucketPublicAccessBlock::execute(optional_yield y)
   bufferlist bl;
   access_conf.encode(bl);
   op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this, &bl] {
-      rgw::sal::Attrs attrs(s->bucket_attrs);
+      rgw::sal::Attrs attrs = s->bucket->get_attrs();
       attrs[RGW_ATTR_PUBLIC_ACCESS] = bl;
       return s->bucket->merge_and_store_attrs(this, attrs, s->yield);
     }, y);
