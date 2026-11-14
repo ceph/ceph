@@ -114,6 +114,7 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
       enableMtls: new UntypedFormControl(false),
       certificateType: new UntypedFormControl(CertificateType.internal),
       custom_sans: new UntypedFormControl([]),
+      listener_network_masks: new UntypedFormControl([]),
       rootCACert: new UntypedFormControl(null, requiredIfExternalMtls()),
       clientCert: new UntypedFormControl(null, requiredIfExternalMtls()),
       clientKey: new UntypedFormControl(null, requiredIfExternalMtls()),
@@ -198,7 +199,9 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
                       encryption_key: group.spec?.encryption_key,
                       certificate_source:
                         group.spec?.certificate_source ?? svcSpec.certificate_source,
-                      custom_sans: group.spec?.custom_sans ?? svcSpec.custom_sans
+                      custom_sans: group.spec?.custom_sans ?? svcSpec.custom_sans,
+                      listener_network_masks:
+                        group.spec?.listener_network_masks ?? svcSpec.listener_network_masks
                     }
                   } as CephServiceSpec);
                 }
@@ -241,7 +244,8 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
           enableMtls && spec.certificate_source !== 'cephadm-signed'
             ? CertificateType.external
             : CertificateType.internal,
-        custom_sans: spec.custom_sans || []
+        custom_sans: spec.custom_sans || [],
+        listener_network_masks: spec.listener_network_masks || []
       },
       { emitEvent: false }
     );
@@ -344,6 +348,12 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
       if (pool) {
         serviceSpec['pool'] = pool;
       }
+    }
+
+    if (formValues.listener_network_masks?.length > 0) {
+      serviceSpec['listener_network_masks'] = formValues.listener_network_masks;
+    } else if (this.editing) {
+      serviceSpec['listener_network_masks'] = null;
     }
 
     if (formValues.enableEncryption || formValues.enable_auth) {
