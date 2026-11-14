@@ -2523,6 +2523,8 @@ def test_post_object_upload_amqp():
     url = resp['url']
 
     bucket = conn1.create_bucket(ACL='public-read-write', Bucket=bucket_name)
+    conn1.put_bucket_versioning(Bucket=bucket_name,
+                                VersioningConfiguration={'Status': 'Enabled'})
 
     # start amqp receivers
     exchange = 'ex1'
@@ -2555,11 +2557,17 @@ def test_post_object_upload_amqp():
     events = receiver1.get_and_reset_events()
     assert len(events) == 1
 
+    # the event describes the uploaded version. LastModified has second precision
+    record = events[0]['Records'][0]
+    head = conn1.head_object(Bucket=bucket_name, Key=key_name)
+    assert record['s3']['object']['versionId'] == head['VersionId']
+    assert parser.parse(record['eventTime']).replace(microsecond=0) == head['LastModified']
+
     # cleanup
     stop_amqp_receiver(receiver1, task1)
     s3_notification_conf.del_config()
     topic_conf1.del_config()
-    conn1.delete_object(Bucket=bucket_name, Key=key_name)
+    conn1.delete_object(Bucket=bucket_name, Key=key_name, VersionId=head['VersionId'])
     # delete the bucket
     conn1.delete_bucket(Bucket=bucket_name)
 
