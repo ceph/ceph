@@ -1,0 +1,7 @@
+tier:
+  max_inline: 256
+  max_kv_store: 4096
+  kv_store_coalescing: false
+  batch_size: 5
+  batch_timeout_us: 1000
+  batch_threads: 8
