@@ -3257,9 +3257,9 @@ int D4NFilterMultipartUpload::complete(const DoutPrefixProvider *dpp,
 
 extern "C" {
 
-rgw::sal::Driver* newD4NFilter(rgw::sal::Driver* next, void* io_context, bool admin)
+rgw::sal::Driver* newD4NFilter(rgw::sal::Driver* next, boost::asio::io_context& io_context, bool admin)
 {
-  rgw::sal::D4NFilterDriver* driver = new rgw::sal::D4NFilterDriver(next, *static_cast<boost::asio::io_context*>(io_context), admin);
+  rgw::sal::D4NFilterDriver* driver = new rgw::sal::D4NFilterDriver(next, io_context, admin);
 
   return driver;
 }

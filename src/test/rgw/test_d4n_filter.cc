@@ -26,7 +26,7 @@ const static std::string TEST_OBJ = "test_object_";
 uint64_t ofs;
 
 extern "C" {
-extern rgw::sal::Driver* newD4NFilter(rgw::sal::Driver* next, boost::asio::io_context& io_context);
+extern rgw::sal::Driver* newD4NFilter(rgw::sal::Driver* next, boost::asio::io_context& io_context, bool admin);
 }
 
 namespace fs = std::filesystem;
@@ -124,7 +124,7 @@ class D4NFilterFixture: public ::testing::Test {
 							  cfg, io, site_config, cfgstore.get());
 
       rgw::sal::Driver* next = filterDriver;
-      driver = newD4NFilter(next, io);
+      driver = newD4NFilter(next, io, false);
       d4nFilter = dynamic_cast<rgw::sal::D4NFilterDriver*>(driver);
 
       /* Reset Redis state */
