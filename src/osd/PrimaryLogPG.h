@@ -944,6 +944,8 @@ protected:
   bool coro_op_in_flight = false;
   std::list<OpRequestRef> waiting_for_coro_op;
   OpContext* active_coro_ctx = nullptr;
+  // true while the op's coroutine is suspended waiting for its async reads
+  bool coro_awaits_reads = false;
 
   /**
    * Grabs locks for OpContext, should be cleaned up in close_op_ctx
@@ -1574,6 +1576,7 @@ public:
   void do_op_impl(OpRequestRef op);
   void do_op(OpRequestRef& op);
   void on_coroutine_complete();
+  void stop_coroutine();
   void record_write_error(OpRequestRef op, const hobject_t &soid,
 			  MOSDOpReply *orig_reply, int r,
 			  OpContext *ctx_for_op_returns=nullptr);
