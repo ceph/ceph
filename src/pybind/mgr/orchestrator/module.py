@@ -502,7 +502,11 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
                   addr: Optional[str] = None,
                   labels: Optional[List[str]] = None,
                   maintenance: Optional[bool] = False) -> HandleCommandResult:
-        """Add a host"""
+        """
+        Add a host. For more than one label, use --labels label1,label2,... or
+        list them after <addr> separated by spaces (without <addr>, the first
+        label is taken as the address).
+        """
         _status = 'maintenance' if maintenance else ''
 
         # split multiple labels passed in with --labels=label1,label2
