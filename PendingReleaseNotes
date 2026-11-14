@@ -181,6 +181,13 @@
   and such an image simply runs without a cache. Note that ``ceph config set
   ... rwl`` now fails, which may break automation.
 
+* OSD: The ``osd_memory_target`` autotuner now credits a cache with the
+  memory it is granted at its last priority. BlueStore's caches ask at that
+  priority for content older than their last age bin (720 s by default); the
+  grant was taken from the pool but committed to no cache, so an OSD holding
+  such content ran below ``osd_memory_target``. After the upgrade such OSDs
+  use that memory, and their RSS moves closer to ``osd_memory_target``.
+
 >=21.0.0
 * CephFS: The ``fs subvolumegroup create`` command now supports the
   ``--namespace-isolated`` option. When a subvolume group is created with this flag,
