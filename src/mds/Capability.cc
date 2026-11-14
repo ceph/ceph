@@ -190,7 +190,7 @@ client_t Capability::get_client() const
 }
 
 int Capability::confirm_receipt(ceph_seq_t seq, unsigned caps) {
-  int was_revoking = (_issued & ~_pending);
+  int was_revoking = revoking();
   if (seq == last_sent) {
     _revokes.clear();
     _issued = caps;
@@ -221,11 +221,7 @@ int Capability::confirm_receipt(ceph_seq_t seq, unsigned caps) {
     }
   }
 
-  if (was_revoking && _issued == _pending) {
-    item_revoking_caps.remove_myself();
-    item_client_revoking_caps.remove_myself();
-    maybe_clear_notable();
-  }
+  maybe_finish_revoking(was_revoking);
   return was_revoking & ~_issued; // return revoked
 }
 
