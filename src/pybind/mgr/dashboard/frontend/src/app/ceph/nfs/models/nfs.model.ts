@@ -16,14 +16,20 @@ export interface NFSClusterPlacement {
 
 export interface NFSCluster {
   name: string;
+  ingress?: boolean;
   virtual_ip: string | null;
   port?: number;
   backend: NFSBackend[];
-  enable_nfsv3?: boolean;
   placement: NFSClusterPlacement;
+  networks?: string[];
+  bind_addrs?: NFSBindAddr[];
   enable_rdma?: boolean;
+  rdma_port?: number;
+  enable_nfsv3?: boolean;
   deployment_type?: string;
-  ingress_mode?: IngressMode;
+  ingress_mode?: IngressMode | string;
+  ingress_placement?: NFSClusterPlacement;
+  monitoring_port?: number;
   monitor_port?: number;
   error?: string;
 }
@@ -52,7 +58,7 @@ export interface NFSClusterPayload {
   ingress?: boolean;
   virtual_ip?: string;
   ingress_mode?: IngressMode;
-  ingress_placement?: { hosts?: string[]; count?: number };
+  ingress_placement?: NFSClusterPlacement;
   enable_nfsv3?: boolean;
   enable_rdma?: boolean;
   rdma_port?: number;

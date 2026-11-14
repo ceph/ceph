@@ -1659,6 +1659,7 @@ EXPORT {
         out = cluster.show_nfs_cluster_info(self.cluster_id)
         assert out == {"foo": {
             "deployment_type": "standalone",
+            "ingress": False,
             "virtual_ip": None,
             "backend": [],
             "placement": {},
@@ -1689,6 +1690,7 @@ EXPORT {
 
         assert out == {"foo": {
             "deployment_type": "standalone",
+            "ingress": False,
             "virtual_ip": None,
             "backend": [],
             "placement": {},
@@ -1719,6 +1721,7 @@ EXPORT {
 
         assert out == {"foo": {
             "deployment_type": "standalone",
+            "ingress": False,
             "virtual_ip": None,
             "backend": [],
             "placement": {},
@@ -1749,6 +1752,7 @@ EXPORT {
 
         assert out == {"foo": {
             "deployment_type": "standalone",
+            "ingress": False,
             "virtual_ip": None,
             "backend": [],
             "placement": {},
@@ -3861,3 +3865,193 @@ class TestClusterCreateNormalizers:
         assert _normalize_ingress_mode('haproxy-protocol') == IngressType.haproxy_protocol
         with pytest.raises(NFSInvalidOperation):
             _normalize_ingress_mode('not-a-valid-mode')
+
+
+class TestClusterUpdateIngressRemoval:
+    def _mgr(self):
+        from nfs.module import Module
+        mgr = MagicMock()
+        mgr.nfs._call_orch_apply_nfs.return_value = None
+        mgr._described_spec = Module._described_spec.__get__(mgr, Module)
+        mgr._remove_ingress_service = Module._remove_ingress_service.__get__(mgr, Module)
+        mgr._restore_ingress_service = Module._restore_ingress_service.__get__(mgr, Module)
+        return mgr, Module
+
+    def _describe(self, nfs_spec=None, ingress_spec=None):
+        from orchestrator import OrchResult, ServiceDescription
+
+        def describe(service_type=None, service_name=None):
+            spec = nfs_spec if service_type == 'nfs' else ingress_spec
+            if spec is None:
+                return OrchResult([])
+            return OrchResult([ServiceDescription(spec=spec)])
+
+        return describe
+
+    def test_absent_ingress_service_still_applies(self):
+        mgr, Module = self._mgr()
+        mgr.describe_service.side_effect = self._describe()
+
+        Module.cluster_update(mgr, cluster_id='foo', ingress=False, placement='host1')
+
+        mgr.remove_service.assert_not_called()
+        mgr.nfs._call_orch_apply_nfs.assert_called_once()
+
+    def test_remove_failure_is_propagated(self):
+        from ceph.deployment.service_spec import IngressSpec
+        from orchestrator import OrchResult, OrchestratorError
+        mgr, Module = self._mgr()
+        ingress = IngressSpec(
+            service_id='nfs.foo',
+            backend_service='nfs.foo',
+            virtual_ip='10.0.0.5/24',
+        )
+        mgr.describe_service.side_effect = self._describe(ingress_spec=ingress)
+        mgr.remove_service.return_value = OrchResult(
+            None, exception=OrchestratorError('remove failed'))
+
+        with pytest.raises(OrchestratorError, match='remove failed'):
+            Module.cluster_update(mgr, cluster_id='foo', ingress=False, placement='host1')
+
+        mgr.nfs._call_orch_apply_nfs.assert_not_called()
+
+    def test_edit_preserves_settings_the_form_cannot_represent(self):
+        from nfs.cluster import NFSCluster
+        from ceph.deployment.service_spec import IngressSpec, NFSServiceSpec, PlacementSpec
+        from orchestrator import OrchResult
+        from orchestrator.module import IngressType
+        mgr, Module = self._mgr()
+        mgr.nfs = NFSCluster(mgr)
+        mgr.apply_nfs.return_value = OrchResult('ok')
+        mgr.apply_ingress.return_value = OrchResult('ok')
+        nfs_spec = NFSServiceSpec(
+            service_id='foo',
+            placement=PlacementSpec(count=1),
+            port=12049,
+            ssl=True,
+            certificate_source='inline',
+            ssl_cert='cert',
+            ssl_key='key',
+            ssl_ca_cert='ca',
+            kmip_cert='kmip-cert',
+            kmip_key='kmip-key',
+            kmip_ca_cert='kmip-ca',
+            kmip_host_list=[{'addr': 'kmip.example', 'port': 5696}],
+            enable_nfs_metrics=True,
+            monitoring_ip_addrs={'host1': '10.1.1.1'},
+            clients_per_pool=4,
+        )
+        ingress = IngressSpec(
+            service_id='nfs.foo',
+            backend_service='nfs.foo',
+            virtual_ip='10.0.0.5/24',
+            frontend_port=2049,
+            monitor_port=9049,
+            monitor_password='keep-me',
+            placement=PlacementSpec(hosts=['host1']),
+        )
+        mgr.describe_service.side_effect = self._describe(nfs_spec, ingress)
+
+        Module.cluster_update(
+            mgr,
+            cluster_id='foo',
+            placement='2 host1 host2',
+            ingress=True,
+            virtual_ip='10.0.0.5/24',
+            ingress_mode=IngressType.haproxy_protocol,
+            port=2049,
+            enable_nfsv3=False,
+            enable_rdma=False,
+        )
+
+        updated = mgr.apply_nfs.call_args[0][0]
+        assert updated.ssl is True
+        assert updated.certificate_source == 'inline'
+        assert updated.ssl_ca_cert == 'ca'
+        assert updated.ssl_cert == 'cert'
+        assert updated.kmip_cert == 'kmip-cert'
+        assert updated.kmip_host_list == [{'addr': 'kmip.example', 'port': 5696}]
+        assert updated.enable_nfs_metrics is True
+        assert updated.monitoring_ip_addrs == {'host1': '10.1.1.1'}
+        assert updated.clients_per_pool == 4
+        assert updated.placement.count == 2
+        assert [host.hostname for host in updated.placement.hosts] == ['host1', 'host2']
+
+        updated_ingress = mgr.apply_ingress.call_args[0][0]
+        assert updated_ingress.monitor_password == 'keep-me'
+        assert updated_ingress.monitor_port == 9049
+        assert updated_ingress.virtual_ip == '10.0.0.5/24'
+        mgr.remove_service.assert_not_called()
+
+    def test_omitted_bindings_stay_and_empty_bindings_clear(self):
+        from nfs.cluster import NFSCluster
+        from ceph.deployment.service_spec import NFSServiceSpec, PlacementSpec
+        from orchestrator import OrchResult
+        mgr, Module = self._mgr()
+        mgr.nfs = NFSCluster(mgr)
+        mgr.apply_nfs.return_value = OrchResult('ok')
+        nfs_spec = NFSServiceSpec(
+            service_id='foo',
+            placement=PlacementSpec(hosts=['host1']),
+            port=2049,
+            networks=['10.0.0.0/24'],
+            ip_addrs={'host1': '10.0.0.8'},
+            monitoring_ip_addrs={'host1': '10.1.1.1'},
+        )
+        mgr.describe_service.side_effect = self._describe(nfs_spec)
+
+        Module.cluster_update(
+            mgr, cluster_id='foo', placement='host1', ingress=False, port=2049)
+
+        kept = mgr.apply_nfs.call_args[0][0]
+        assert kept.networks == ['10.0.0.0/24']
+        assert kept.ip_addrs == {'host1': '10.0.0.8'}
+        assert kept.monitoring_ip_addrs == {'host1': '10.1.1.1'}
+
+        Module.cluster_update(
+            mgr,
+            cluster_id='foo',
+            placement='host1',
+            ingress=False,
+            port=2049,
+            networks=[],
+            bind_addrs='',
+        )
+        cleared = mgr.apply_nfs.call_args[0][0]
+        assert not cleared.networks
+        assert not cleared.ip_addrs
+        assert cleared.monitoring_ip_addrs == {'host1': '10.1.1.1'}
+
+    def test_failed_apply_restores_removed_ingress(self):
+        from nfs.cluster import NFSCluster
+        from ceph.deployment.service_spec import IngressSpec, NFSServiceSpec, PlacementSpec
+        from orchestrator import OrchResult, OrchestratorError
+        mgr, Module = self._mgr()
+        mgr.nfs = NFSCluster(mgr)
+        mgr.apply_nfs.return_value = OrchResult(
+            None, exception=OrchestratorError('apply failed'))
+        mgr.apply_ingress.return_value = OrchResult('ok')
+        mgr.remove_service.return_value = OrchResult('removed')
+        nfs_spec = NFSServiceSpec(
+            service_id='foo',
+            placement=PlacementSpec(hosts=['host1']),
+            port=2049,
+        )
+        ingress = IngressSpec(
+            service_id='nfs.foo',
+            backend_service='nfs.foo',
+            virtual_ip='10.0.0.5/24',
+            frontend_port=2049,
+            monitor_port=9049,
+            placement=PlacementSpec(hosts=['host1']),
+        )
+        mgr.describe_service.side_effect = self._describe(nfs_spec, ingress)
+
+        with pytest.raises(OrchestratorError, match='apply failed'):
+            Module.cluster_update(
+                mgr, cluster_id='foo', placement='host1', ingress=False, port=2049)
+
+        mgr.remove_service.assert_called_once_with('ingress.nfs.foo')
+        restored = mgr.apply_ingress.call_args[0][0]
+        assert restored.virtual_ip == '10.0.0.5/24'
+        assert restored.monitor_port == 9049

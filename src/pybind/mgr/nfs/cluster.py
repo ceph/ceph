@@ -3,10 +3,15 @@ import json
 import logging
 import re
 import socket
-from typing import cast, Dict, List, Any, Optional, TYPE_CHECKING, Union
+from typing import cast, Dict, List, Any, Optional, Tuple, TYPE_CHECKING, Union
 
 from mgr_module import NFS_POOL_NAME as POOL_NAME
-from ceph.deployment.service_spec import NFSServiceSpec, PlacementSpec, IngressSpec
+from ceph.deployment.service_spec import (
+    IngressSpec,
+    NFSServiceSpec,
+    PlacementSpec,
+    ServiceSpec,
+)
 from object_format import ErrorResponse
 
 import orchestrator
@@ -102,21 +107,6 @@ def create_ganesha_pool(mgr: 'MgrModule') -> None:
                                'pool': POOL_NAME,
                                'app': 'nfs'})
         log.debug("Successfully created nfs-ganesha pool %s", POOL_NAME)
-
-
-def get_nfs_spec_for_cluster(mgr: 'Module', cluster_id: str) -> Optional[NFSServiceSpec]:
-    nfs_sc = mgr.describe_service(
-        service_type='nfs',
-        service_name=f'nfs.{cluster_id}'
-    )
-    try:
-        nfs_services = orchestrator.raise_if_exception(nfs_sc)
-    except orchestrator.OrchestratorError:
-        return None
-    for svc in nfs_services:
-        if getattr(svc.spec, 'service_id', None) == cluster_id:
-            return cast(NFSServiceSpec, svc.spec)
-    return None
 
 
 def config_cluster_qos_from_dict(
@@ -340,6 +330,124 @@ class NFSCluster:
             orchestrator.raise_if_exception(completion)
         log.debug("Successfully deployed nfs daemons with cluster id %s and placement %s",
                   cluster_id, placement)
+
+    def prepare_cluster_update(
+            self,
+            existing_nfs: NFSServiceSpec,
+            existing_ingress: Optional[IngressSpec],
+            cluster_id: str,
+            placement: Optional[str] = None,
+            virtual_ip: Optional[str] = None,
+            ingress_mode: Optional[IngressType] = None,
+            port: Optional[int] = None,
+            enable_nfsv3: bool = False,
+            ip_addrs: Optional[Dict[str, str]] = None,
+            monitoring_port: Optional[int] = None,
+            enable_rdma: bool = False,
+            rdma_port: Optional[int] = None,
+            ingress_placement: Optional[str] = None,
+            networks: Optional[List[str]] = None,
+    ) -> Tuple[NFSServiceSpec, Optional[IngressSpec]]:
+        """Build an updated NFS spec from the deployed spec.
+
+        Fields the editor does not send, such as TLS, KMIP, metrics, and
+        monitoring address bindings, stay as they are. Only the requested
+        placement, protocol, and ingress settings are replaced.
+        """
+        spec = cast(NFSServiceSpec, ServiceSpec.from_json(existing_nfs.to_json()))
+        # The form sends the client-facing port. A deployed HAProxy cluster
+        # stores that port plus 10000 on the NFS spec, so an omitted port has
+        # to be translated back before it is written again.
+        stored_port = getattr(spec, 'port', None)
+        if port:
+            client_port = port
+        elif (virtual_ip and stored_port and not getattr(spec, 'virtual_ip', None)
+              and stored_port >= 10000):
+            client_port = stored_port - 10000
+        else:
+            client_port = stored_port or 2049
+        if placement is not None:
+            spec.placement = PlacementSpec.from_string(placement)
+        if networks is not None:
+            spec.networks = networks
+        if ip_addrs is not None:
+            spec.ip_addrs = ip_addrs
+        if monitoring_port is not None:
+            spec.monitoring_port = monitoring_port
+        spec.enable_rdma = enable_rdma
+        if rdma_port is not None:
+            spec.rdma_port = rdma_port
+        spec.enable_nfsv3 = enable_nfsv3
+
+        updated_ingress: Optional[IngressSpec] = None
+        if virtual_ip:
+            if not ingress_mode:
+                ingress_mode = IngressType.default
+            ingress_mode = ingress_mode.canonicalize()
+            ingress_pspec = (PlacementSpec.from_string(ingress_placement)
+                             if ingress_placement else None)
+            keepalive_only = ingress_mode == IngressType.keepalive_only
+            enable_haproxy_protocol = ingress_mode == IngressType.haproxy_protocol
+            if keepalive_only:
+                spec.placement.count = 1
+                if ingress_pspec:
+                    ingress_pspec.count = 1
+                spec.port = client_port
+                spec.virtual_ip = virtual_ip.split('/')[0]
+                spec.enable_haproxy_protocol = False
+                spec.networks = []
+                spec.ip_addrs = None
+                frontend_port = None
+            else:
+                spec.port = 10000 + client_port
+                spec.virtual_ip = None
+                spec.enable_haproxy_protocol = enable_haproxy_protocol
+                frontend_port = client_port
+
+            ingress_placement_spec = ingress_pspec or spec.placement
+            if existing_ingress is not None:
+                updated_ingress = cast(
+                    IngressSpec, ServiceSpec.from_json(existing_ingress.to_json()))
+                updated_ingress.virtual_ip = virtual_ip
+                updated_ingress.placement = ingress_placement_spec
+                updated_ingress.backend_service = 'nfs.' + cluster_id
+                updated_ingress.keepalive_only = keepalive_only
+                updated_ingress.enable_haproxy_protocol = enable_haproxy_protocol
+                if getattr(existing_ingress, 'frontend_port', None) != frontend_port:
+                    updated_ingress.frontend_port = frontend_port
+                    updated_ingress.monitor_port = 7000 + client_port
+            else:
+                updated_ingress = IngressSpec(
+                    service_type='ingress',
+                    service_id='nfs.' + cluster_id,
+                    backend_service='nfs.' + cluster_id,
+                    placement=ingress_placement_spec,
+                    frontend_port=frontend_port,
+                    monitor_port=7000 + client_port,
+                    virtual_ip=virtual_ip,
+                    keepalive_only=keepalive_only,
+                    enable_haproxy_protocol=enable_haproxy_protocol)
+        else:
+            if port:
+                spec.port = port
+            spec.virtual_ip = None
+            spec.enable_haproxy_protocol = False
+
+        spec.validate()
+        if updated_ingress is not None:
+            updated_ingress.validate()
+        return spec, updated_ingress
+
+    def apply_prepared_cluster_update(
+            self,
+            nfs_spec: NFSServiceSpec,
+            ingress_spec: Optional[IngressSpec],
+    ) -> None:
+        completion = self.mgr.apply_nfs(nfs_spec)
+        orchestrator.raise_if_exception(completion)
+        if ingress_spec is not None:
+            completion = self.mgr.apply_ingress(ingress_spec)
+            orchestrator.raise_if_exception(completion)
 
     def create_empty_rados_obj(self, cluster_id: str) -> None:
         common_conf = conf_obj_name(cluster_id)
@@ -615,8 +723,7 @@ class NFSCluster:
                     )
                     if stale:
                         problems.append(
-                            "exports or client-pool users left with a "
-                            f"pre-rotation keyring: {', '.join(stale)}")
+                            f"exports left with a pre-rotation keyring: {', '.join(stale)}")
                 except Exception as e:
                     log.exception("Failed to refresh exports of cluster %s", cluster_id)
                     problems.append(f"failed to refresh export keyrings: {e}")
@@ -693,6 +800,7 @@ class NFSCluster:
         virtual_ip: Optional[str] = None
         ingress_port: Optional[int] = None
         monitor_port: Optional[int] = None
+        ingress_placement = None
 
         sc = self.mgr.describe_service(
             service_type='ingress',
@@ -703,7 +811,9 @@ class NFSCluster:
             if ingress_services:
                 svc = ingress_services[0]
                 spec = cast(IngressSpec, svc.spec)
-                virtual_ip = svc.virtual_ip.split('/')[0] if svc.virtual_ip else None
+                if spec.placement:
+                    ingress_placement = spec.placement
+                virtual_ip = svc.virtual_ip if svc.virtual_ip else None
                 if spec.keepalive_only:
                     ingress_mode = IngressType.keepalive_only
                 elif spec.enable_haproxy_protocol:
@@ -749,18 +859,57 @@ class NFSCluster:
 
         deployment_type = "standalone"
         placement = None
-        enable_nfsv3 = False
         enable_rdma = False
+        rdma_port = None
+        enable_nfsv3 = False
         enable_nfs_metrics = False
+        monitoring_port = None
         clients_per_pool = None
+        nfs_networks: List[str] = []
+        nfs_ip_addrs: Dict[str, str] = {}
+        nfs_port: Optional[int] = None
 
-        nfs_spec = get_nfs_spec_for_cluster(self.mgr, cluster_id)
-        if nfs_spec:
-            placement = nfs_spec.placement
-            enable_nfsv3 = bool(getattr(nfs_spec, 'enable_nfsv3', False))
-            enable_rdma = bool(getattr(nfs_spec, 'enable_rdma', False))
-            enable_nfs_metrics = bool(getattr(nfs_spec, 'enable_nfs_metrics', False))
-            clients_per_pool = getattr(nfs_spec, 'clients_per_pool', None)
+        try:
+            nfs_sc = self.mgr.describe_service(
+                service_type='nfs',
+                service_name=f'nfs.{cluster_id}'
+            )
+            nfs_services = orchestrator.raise_if_exception(nfs_sc)
+            for svc in nfs_services or []:
+                if svc.spec.service_id == cluster_id:
+                    placement = svc.spec.placement
+                    enable_rdma = bool(getattr(svc.spec, 'enable_rdma', False))
+                    rdma_port = getattr(svc.spec, 'rdma_port', None)
+                    enable_nfsv3 = bool(getattr(svc.spec, 'enable_nfsv3', False))
+                    enable_nfs_metrics = bool(getattr(svc.spec, 'enable_nfs_metrics', False))
+                    monitoring_port = getattr(svc.spec, 'monitoring_port', None)
+                    clients_per_pool = getattr(svc.spec, 'clients_per_pool', None)
+                    nfs_networks = list(getattr(svc.spec, 'networks', []) or [])
+                    nfs_ip_addrs = dict(getattr(svc.spec, 'ip_addrs', {}) or {})
+                    nfs_port = getattr(svc.spec, 'port', None)
+                    break
+        except orchestrator.OrchestratorError:
+            log.debug("Failed to get NFS service spec for cluster %s", cluster_id)
+
+        if not backends and placement:
+            hosts = getattr(placement, 'hosts', None) or []
+            for host in hosts:
+                hostname = getattr(host, 'hostname', None) or str(host)
+                ip = ''
+                try:
+                    if hostname in hosts_map:
+                        ip = resolve_ip(hosts_map[hostname].addr)
+                    else:
+                        ip = resolve_ip(hostname)
+                except Exception:
+                    pass
+                backends.append({
+                    "hostname": hostname,
+                    "ip": ip,
+                    "port": None,
+                    "status": "unknown"
+                })
+            backends.sort(key=lambda x: x["hostname"])
 
         if ingress_mode:
             if placement and placement.count and placement.count > 1:
@@ -770,8 +919,11 @@ class NFSCluster:
             else:
                 deployment_type = "active-passive"
 
+        bind_addrs = [{'hostname': h, 'ip': ip} for h, ip in nfs_ip_addrs.items() if h and ip]
+
         r: Dict[str, Any] = {
             'deployment_type': deployment_type,
+            'ingress': virtual_ip is not None,
             'virtual_ip': virtual_ip,
             'backend': backends,
             'placement': placement.to_json() if placement else {},
@@ -780,10 +932,23 @@ class NFSCluster:
             'enable_nfs_metrics': enable_nfs_metrics,
         }
 
+        if rdma_port is not None:
+            r['rdma_port'] = rdma_port
+        if monitoring_port is not None:
+            r['monitoring_port'] = monitoring_port
+        if nfs_networks:
+            r['networks'] = nfs_networks
+        if bind_addrs:
+            r['bind_addrs'] = bind_addrs
+
         if ingress_mode:
             r['ingress_mode'] = ingress_mode.value
+        if ingress_placement is not None:
+            r['ingress_placement'] = ingress_placement.to_json()
         if ingress_port is not None:
             r['port'] = ingress_port
+        elif nfs_port is not None:
+            r['port'] = nfs_port
         if monitor_port is not None:
             r['monitor_port'] = monitor_port
         if clients_per_pool is not None:
@@ -807,10 +972,15 @@ class NFSCluster:
                     res = self._show_nfs_cluster_info(cid)
                     if res:
                         info_res[cid] = res
-                except Exception as e:
+                except Exception:
                     log.exception("Failed to show info for NFS cluster %s", cid)
                     # Still surface the cluster in listings even if details fail
-                    info_res[cid] = {'backend': [], 'placement': {}, 'error': str(e)}
+                    info_res[cid] = {
+                        'deployment_type': 'standalone',
+                        'virtual_ip': None,
+                        'backend': [],
+                        'placement': {},
+                    }
             return info_res
         except Exception as e:
             log.exception("Failed to show info for cluster")
