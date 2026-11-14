@@ -23,6 +23,7 @@
 #endif
 #include "rgw_reshard.h"
 #include "rgw_pubsub.h"
+#include "rgw_zone.h"
 
 // stolen from src/cls/version/cls_version.cc
 #define VERSION_ATTR "ceph.objclass.version"
@@ -1683,6 +1684,11 @@ static int bucket_stats(rgw::sal::Driver* driver, const rgw::SiteConfig& site,
 			 ? (bucket->versioning_enabled() ? "enabled" : "suspended")
 			 : "off");
   formatter->dump_string("zonegroup", bucket_info.zonegroup);
+  if (const RGWZoneGroup* bucket_zonegroup = rgw::find_zonegroup_by_id(
+          site.get_zonegroup(), site.get_period(), bucket_info.zonegroup);
+      bucket_zonegroup != nullptr) {
+    formatter->dump_string("zonegroup_name", bucket_zonegroup->get_name());
+  }
   formatter->dump_string("placement_rule", bucket_info.placement_rule.to_str());
   ::encode_json("explicit_placement", bucket->get_key().explicit_placement, formatter);
   formatter->dump_string("id", bucket->get_bucket_id());

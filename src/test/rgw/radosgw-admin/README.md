@@ -38,7 +38,9 @@ MON=1 OSD=1 MDS=0 MGR=1 RGW=1 ../src/vstart.sh -n -d
 
 The bucket suite also has a group of rows that need a real bucket. It creates
 one over S3 with the `aws` CLI, and removes the test user afterwards. Without
-`aws` installed those rows are skipped.
+`aws` installed those rows are skipped. One of those rows checks that
+`bucket stats --format json` includes `zonegroup_name` and that it matches
+`zonegroup get` for the bucket's `zonegroup` id.
 
 ## Using a different build or cluster
 

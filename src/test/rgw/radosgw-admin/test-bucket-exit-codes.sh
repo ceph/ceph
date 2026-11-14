@@ -111,6 +111,79 @@ check_bucket() {
   check_cluster "$@"
 }
 
+# check_bucket_stats_zonegroup_name "desc"
+# bucket stats JSON must include zonegroup_name consistent with zonegroup get.
+check_bucket_stats_zonegroup_name() {
+  local desc="$1"
+  if [ "$_have_bucket" != "1" ]; then
+    echo "SKIP [$desc]: $_bucket_skip_reason"
+    SKIP=$((SKIP+1))
+    return
+  fi
+  if ! cluster_running; then
+    echo "SKIP [$desc]: no cluster running"
+    SKIP=$((SKIP+1))
+    return
+  fi
+
+  local tmpfile; tmpfile=$(mktemp)
+  "$RGW_ADMIN" bucket stats --format json --bucket "$_test_bucket" >"$tmpfile" 2>&1
+  local exit_code=$?
+  if [ "$exit_code" != 0 ]; then
+    echo "FAIL [$desc]: bucket stats exit $exit_code"
+    echo "     output: $(filter <"$tmpfile")"
+    FAIL=$((FAIL+1))
+    rm -f "$tmpfile"
+    return
+  fi
+
+  if python3 - "$tmpfile" "$RGW_ADMIN" <<'PY'
+import json
+import os
+import subprocess
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as f:
+    stats = json.load(f)
+
+zg_id = stats.get("zonegroup")
+zg_name = stats.get("zonegroup_name")
+if not zg_id or not zg_name:
+    print("missing zonegroup or zonegroup_name", file=sys.stderr)
+    sys.exit(1)
+
+env = os.environ.copy()
+proc = subprocess.run(
+    [sys.argv[2], "zonegroup", "get", "--format", "json"],
+    capture_output=True,
+    text=True,
+    env=env,
+)
+if proc.returncode != 0:
+    print(proc.stderr or proc.stdout, file=sys.stderr)
+    sys.exit(2)
+
+zg = json.loads(proc.stdout)
+if zg.get("id") != zg_id:
+    print(f"bucket zonegroup id {zg_id!r} != zonegroup get id {zg.get('id')!r}",
+          file=sys.stderr)
+    sys.exit(3)
+if zg.get("name") != zg_name:
+    print(f"zonegroup_name {zg_name!r} != zonegroup get name {zg.get('name')!r}",
+          file=sys.stderr)
+    sys.exit(4)
+PY
+  then
+    echo "PASS [$desc]"
+    PASS=$((PASS+1))
+  else
+    echo "FAIL [$desc]: zonegroup_name JSON check"
+    echo "     output: $(filter <"$tmpfile")"
+    FAIL=$((FAIL+1))
+  fi
+  rm -f "$tmpfile"
+}
+
 # ============================================================
 echo "=== bucket (bare) ==="
 # ============================================================
@@ -1851,6 +1924,7 @@ check_bucket "lifecycle: bucket list --allow-unordered" 0 -- bucket list --allow
 check_bucket "lifecycle: bucket list --format json" 0 -- bucket list --format json --bucket "$_test_bucket"
 check_bucket "lifecycle: bucket stats --show-restore-stats" 0 -- bucket stats --show-restore-stats --bucket "$_test_bucket"
 check_bucket "lifecycle: bucket stats --format json" 0 -- bucket stats --format json --bucket "$_test_bucket"
+check_bucket_stats_zonegroup_name "integration: bucket stats JSON zonegroup_name"
 
 # bucket layout: dumps the bucket's layout as JSON (index/log generations)
 check_bucket "integration: bucket layout" 0 -- bucket layout --bucket "$_test_bucket"

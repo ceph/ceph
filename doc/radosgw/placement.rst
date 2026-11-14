@@ -10,7 +10,9 @@ Placement Targets
 Placement targets control which :ref:`radosgw-pools` are associated with a particular
 bucket. A bucket's placement target is selected on creation, and cannot be
 modified. The ``radosgw-admin bucket stats`` command will display its
-``placement_rule``.
+``placement_rule``, the owning zonegroup's id in ``zonegroup``, and (when
+that id is present in the current period) the zonegroup name in
+``zonegroup_name``.
 
 The zonegroup configuration contains a list of placement targets with an
 initial target named ``default-placement``. The zone configuration then maps
