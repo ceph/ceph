@@ -1,0 +1,23 @@
+---
+public_network: "192.168.3.0/24"
+cluster_network: "192.168.4.0/24"
+dmcrypt: false
+osd_devices:
+  - data_devices:
+      - /dev/vdb
+      - /dev/vdc
+  - data_devices:
+      - /dev/vdd
+      - /dev/vde
+    db_devices:
+      - /dev/nvme0n1
+      - /dev/nvme1n1
+  - data_devices:
+      - /dev/vdf
+    db_devices:
+      - /dev/nvme2n1
+    wal_devices:
+      - /dev/nvme3n1
+num_osds: "{{ osd_devices | map(attribute='data_devices') | flatten | length | int }}"
+expected_osds: 5
+osd_ids: "{{ range(0, num_osds | int) }}"
