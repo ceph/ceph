@@ -1613,6 +1613,16 @@ COMMAND("nvme-gw listeners"
 	" show all nvmeof gateways listeners within (pool, group)",
 	"mon", "r")
 
+COMMAND("nvme-gw ok-to-stop"
+	" name=pool,type=CephString"
+	" name=group,type=CephString"
+	" name=id,type=CephString,req=false"
+	" name=disable-if-ok,type=CephBool,req=false",
+	" check whether one gateway in (pool, group) may stop."
+	" id - optional; when set, the check applies to this gateway"
+	" disable-if-ok - true/false, requires id; admin-disable that gateway if checks pass",
+	"mgr", "rw")
+
 COMMAND("nvme-gw enable"
    " name=id,type=CephString"
    " name=pool,type=CephString"
