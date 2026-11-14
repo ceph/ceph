@@ -59,6 +59,15 @@ def create_parser(prog: str, description: str) -> argparse.ArgumentParser:
         help='Enable device encryption via dm-crypt',
     )
     parser.add_argument(
+        '--hw-opal-only',
+        dest='hw_opal_only',
+        action='store_true',
+        help=('Enable SED OPAL hardware-only encryption via cryptsetup '
+              '--hw-opal-only. Implies encrypted OSD setup. Mutually exclusive '
+              'with --dmcrypt. Optional CEPH_VOLUME_OPAL_ADMIN_KEY overrides '
+              'the OPAL admin password (defaults to the LUKS key / lockbox).'),
+    )
+    parser.add_argument(
         '--with-tpm',
         dest='with_tpm',
         help='Whether encrypted OSDs should be enrolled with TPM.',

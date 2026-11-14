@@ -26,7 +26,49 @@ class Lvm(BaseObjectStore):
         self.method = 'lvm'
         self.tags: Dict[str, Any] = {}
 
+    def existing_hw_opal_dmcrypt_key(self, device: str) -> Optional[str]:
+        mapping = encryption_utils.hw_opal_mapping_name(device)
+        mapper_path = '/dev/mapper/%s' % mapping
+        for candidate in (mapper_path, device):
+            if not os.path.exists(candidate):
+                continue
+            vgs = api.get_device_vgs(candidate, 'ceph')
+            for vg in vgs:
+                lvs = api.get_lvs(filters={'vg_name': vg.vg_name})
+                for lv in lvs:
+                    if lv.tags.get('ceph.hw_opal_only') != '1':
+                        continue
+                    lockbox = lv.tags.get('ceph.cephx_lockbox_secret')
+                    osd_id = lv.tags.get('ceph.osd_id')
+                    osd_fsid = lv.tags.get('ceph.osd_fsid')
+                    cluster_name = lv.tags.get('ceph.cluster_name') or conf.cluster
+                    if not (lockbox and osd_id and osd_fsid):
+                        continue
+                    conf.cluster = cluster_name
+                    encryption_utils.write_lockbox_keyring(osd_id, osd_fsid, lockbox)
+                    return encryption_utils.get_dmcrypt_key(osd_id, osd_fsid)
+        return None
+
     def pre_prepare(self) -> None:
+        if self.hw_opal_only:
+            try:
+                vg_name, lv_name = self.args.data.split('/')
+                if api.get_single_lv(filters={'lv_name': lv_name, 'vg_name': vg_name}):
+                    raise RuntimeError(
+                        '--hw-opal-only requires a raw device or partition as --data, '
+                        'not an existing LV (OPAL locking ranges are device-level)'
+                    )
+            except ValueError:
+                pass
+            if not (disk.is_device(self.args.data) or disk.is_partition(self.args.data)):
+                raise RuntimeError(
+                    '--hw-opal-only requires a raw device or partition as --data'
+                )
+            if not self.with_tpm:
+                existing_key = self.existing_hw_opal_dmcrypt_key(self.args.data)
+                if existing_key:
+                    self.dmcrypt_key = existing_key
+
         if self.encrypted and not self.with_tpm:
             self.secrets['dmcrypt_key'] = self.dmcrypt_key
 
@@ -67,6 +109,10 @@ class Lvm(BaseObjectStore):
         self.tags['ceph.encrypted'] = self.encrypted
         self.tags['ceph.with_tpm'] = 1 if self.with_tpm else 0
         self.tags['ceph.vdo'] = api.is_vdo(self.block_lv.__dict__['lv_path'])
+        if self.hw_opal_only:
+            self.tags['ceph.hw_opal_only'] = '1'
+            self.tags['ceph.luks_device'] = self.luks_device
+            self.tags['ceph.luks_uuid'] = self.luks_uuid
 
     def prepare_data_device(self,
                             device_type: str,
@@ -84,7 +130,19 @@ class Lvm(BaseObjectStore):
 
         device = self.args.data
         if disk.is_partition(device) or disk.is_device(device):
-            if device_type == 'block' and self.objectstore == 'bluestore':
+            if self.hw_opal_only:
+                physical = device
+                mapping = encryption_utils.hw_opal_mapping_name(physical)
+                device = encryption_utils.prepare_hw_opal_device(
+                    self.dmcrypt_key,
+                    physical,
+                    mapping,
+                    with_tpm=self.with_tpm,
+                    enroll_tpm2=self.enroll_tpm2 if self.with_tpm else None,
+                )
+                self.luks_device = physical
+                self.luks_uuid = mapping
+            elif device_type == 'block' and self.objectstore == 'bluestore':
                 # NVMe preformat already discards, skip mkfs discard.
                 # Only preformat when no ceph VG already exists on the device.
                 # With --osds-per-device > 1, the first OSD creates the VG;
@@ -146,7 +204,8 @@ class Lvm(BaseObjectStore):
             self.block_lv.set_tags(self.tags)
 
         # 3/ encryption-only operations
-        if self.encrypted:
+        # hw-opal-only already applied LUKS on the physical device before LVM.
+        if self.encrypted and not self.hw_opal_only:
             self.prepare_dmcrypt()
 
         # 4/ osd_prepare req
@@ -261,6 +320,20 @@ class Lvm(BaseObjectStore):
         if not (disk.is_partition(device_name) or disk.is_device(device_name)):
             return None
 
+        physical = device_name
+        if self.hw_opal_only:
+            mapping = encryption_utils.hw_opal_mapping_name(physical)
+            device_name = encryption_utils.prepare_hw_opal_device(
+                self.dmcrypt_key,
+                physical,
+                mapping,
+                with_tpm=self.with_tpm,
+                enroll_tpm2=self.enroll_tpm2 if self.with_tpm else None,
+            )
+            tags['ceph.hw_opal_only'] = '1'
+            tags[f'ceph.{device_type}_luks_device'] = physical
+            tags[f'ceph.{device_type}_luks_uuid'] = mapping
+
         lv_type = f"osd-{device_type}"
         name_uuid = system.generate_uuid()
 
@@ -275,7 +348,8 @@ class Lvm(BaseObjectStore):
             "tags": tags,
         }
 
-        lv = None if disk.is_partition(device_name) else api.create_lv(**kwargs)
+        # Partitions stay as-is for non-OPAL; with OPAL create an LV on the mapper.
+        lv = None if (disk.is_partition(physical) and not self.hw_opal_only) else api.create_lv(**kwargs)
 
         if lv is not None:
             tags.update(
@@ -288,7 +362,7 @@ class Lvm(BaseObjectStore):
             lv.set_tags(tags)
             return lv.lv_path
 
-        return device_name
+        return device_name if self.hw_opal_only else physical
 
     def get_osd_device_path(self,
                             osd_lvs: List[api.Volume],
@@ -304,12 +378,16 @@ class Lvm(BaseObjectStore):
         """
         # TODO(guits): this should be moved in a new function get_device_uuid_from_lv()
         osd_block_lv = None
+        is_encrypted = False
+        is_hw_opal = False
+        device_uuid = ''
         for lv in osd_lvs:
             if lv.tags.get('ceph.type') == 'block':
                 osd_block_lv = lv
                 break
         if osd_block_lv:
             is_encrypted = osd_block_lv.tags.get('ceph.encrypted', '0') == '1'
+            is_hw_opal = osd_block_lv.tags.get('ceph.hw_opal_only') == '1'
             logger.debug('Found block device (%s) with encryption: %s',
                          osd_block_lv.name, is_encrypted)
             uuid_tag = 'ceph.%s_uuid' % device_type
@@ -323,7 +401,7 @@ class Lvm(BaseObjectStore):
                 device_lv = lv
                 break
         if device_lv:
-            if is_encrypted:
+            if is_encrypted and not is_hw_opal:
                 encryption_utils.luks_open(dmcrypt_secret,
                                            device_lv.__dict__['lv_path'],
                                            device_uuid,
@@ -334,7 +412,7 @@ class Lvm(BaseObjectStore):
         # this could be a regular device, so query it with blkid
         physical_device = disk.get_device_from_partuuid(device_uuid)
         if physical_device:
-            if is_encrypted:
+            if is_encrypted and not is_hw_opal:
                 encryption_utils.luks_open(dmcrypt_secret,
                                            physical_device,
                                            device_uuid,
@@ -357,6 +435,7 @@ class Lvm(BaseObjectStore):
             raise RuntimeError('could not find a bluestore OSD to activate')
 
         is_encrypted = osd_block_lv.tags.get('ceph.encrypted', '0') == '1'
+        is_hw_opal = osd_block_lv.tags.get('ceph.hw_opal_only') == '1'
         dmcrypt_secret = ''
         osd_id = osd_block_lv.tags['ceph.osd_id']
         conf.cluster = osd_block_lv.tags['ceph.cluster_name']
@@ -378,7 +457,17 @@ class Lvm(BaseObjectStore):
         self.unlink_bs_symlinks()
 
         # encryption is handled here, before priming the OSD dir
-        if is_encrypted:
+        if is_encrypted and is_hw_opal:
+            # Disk-level OPAL LUKS is opened by OsdLvmMappers; OSD uses the LV path.
+            osd_lv_path = osd_block_lv.__dict__['lv_path']
+            self.with_tpm = osd_block_lv.tags.get('ceph.with_tpm') == '1'
+            if not self.with_tpm:
+                lockbox_secret = osd_block_lv.tags['ceph.cephx_lockbox_secret']
+                encryption_utils.write_lockbox_keyring(osd_id,
+                                                       osd_fsid,
+                                                       lockbox_secret)
+                dmcrypt_secret = encryption_utils.get_dmcrypt_key(osd_id, osd_fsid)
+        elif is_encrypted:
             osd_lv_path = '/dev/mapper/%s' % osd_block_lv.__dict__['lv_uuid']
             lockbox_secret = osd_block_lv.tags['ceph.cephx_lockbox_secret']
             self.with_tpm = osd_block_lv.tags.get('ceph.with_tpm') == '1'

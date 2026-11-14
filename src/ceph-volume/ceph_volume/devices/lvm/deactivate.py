@@ -4,6 +4,7 @@ import sys
 from textwrap import dedent
 from ceph_volume import conf
 from ceph_volume.util import encryption, system
+from ceph_volume.util.lvm_osd_mappers import OsdLvmMappers
 from ceph_volume.api.lvm import get_lvs_by_tag
 from typing import List, Optional
 
@@ -27,6 +28,10 @@ def deactivate_osd(osd_id: Optional[str] = None,
 
     tmpfs_path = '/var/lib/ceph/osd/{}-{}'.format(conf.cluster, osd_id)
     system.unmount_tmpfs(tmpfs_path)
+
+    if data_lv.tags.get('ceph.hw_opal_only') == '1':
+        OsdLvmMappers(osd_id, data_lv.tags['ceph.osd_fsid'], lvs=lvs).close()
+        return
 
     for lv in lvs:
         if lv.tags.get('ceph.encrypted', '0') == '1':
