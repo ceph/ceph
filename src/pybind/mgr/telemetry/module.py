@@ -1392,6 +1392,25 @@ class Module(MgrModule):
         # NOTE: We do not include the 'device' channel in this report; it is
         # sent to a different endpoint.
 
+        # -- Dashboard metrics --
+        try:
+            r, outb, outs = self.mon_command({
+                'prefix': 'config-key get',
+                'key': 'mgr/dashboard/telemetry/metrics/authentication_user_signals'
+            })
+            auth_raw = outb.strip() if r == 0 and outb else None
+            dashboard = cast(Dict[str, Any], report.setdefault('dashboard', {}))
+            dashboard['authentication_user_signals'] = (
+                json.loads(auth_raw) if auth_raw else {}
+            )
+        except Exception as e:
+            self.log.warning(
+                'telemetry: failed to attach dashboard '
+                'authentication_user_signals: %s',
+                e
+            )
+        # -- End Dashboard metrics --
+
         return report
 
     def get_rook_data(self, report: Dict[str, object]) -> None:
