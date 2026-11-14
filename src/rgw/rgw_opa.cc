@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include "rgw_opa.h"
+#include "rgw_auth.h"
 #include "rgw_http_client.h"
 
 #define dout_context g_ceph_context

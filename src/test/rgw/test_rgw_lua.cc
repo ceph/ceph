@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include "rgw_auth.h"
 #include "rgw_common.h"
 #include "rgw_process_env.h"
 #include "rgw_sal_rados.h"
