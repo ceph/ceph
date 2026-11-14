@@ -205,6 +205,13 @@ add_executable(unittest_context
 add_ceph_unittest(unittest_context)
 target_link_libraries(unittest_context ceph-common)
 
+# unittest_tracked_op
+add_executable(unittest_tracked_op
+  test_tracked_op.cc
+  )
+add_ceph_unittest(unittest_tracked_op)
+target_link_libraries(unittest_tracked_op ceph-common)
+
 # unittest_safe_io
 add_executable(unittest_safe_io
   test_safe_io.cc
