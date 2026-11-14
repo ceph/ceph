@@ -22,7 +22,6 @@ EnvironmentFile=-/etc/environment
 ExecStart=/bin/bash {{ctx.data_dir}}/{{fsid}}/%i/unit.run{% if has_docker_engine %} %t/%n-pid{% endif %}
 ExecStop=-/bin/bash -c 'bash {{ctx.data_dir}}/{{fsid}}/%i/unit.stop'
 ExecStopPost=-/bin/bash {{ctx.data_dir}}/{{fsid}}/%i/unit.poststop
-KillMode=none
 RestartSec=10s
 TimeoutStartSec=200
 TimeoutStopSec=120
