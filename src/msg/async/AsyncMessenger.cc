@@ -1215,4 +1215,15 @@ void AsyncMessenger::reap_dead()
     }
     deleted_conns.clear();
   }
+
+  // Update the SMC counters if SMC is enabled
+  if (stack->get_smc_perf_counters()) {
+    SmcSocketChecker smcChecker;
+    smcChecker.updateStatistics();
+    SmcSocketStats stats = smcChecker.getStatistics();
+
+    // Update the single global SMC perf counter
+    get_stack()->get_smc_perf_counters()->set(l_msgr_smc_connections, stats.total_sockets);
+    get_stack()->get_smc_perf_counters()->set(l_msgr_smc_connection_fallbacks, stats.fallback_count);
+  }
 }
