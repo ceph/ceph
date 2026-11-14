@@ -125,9 +125,11 @@ protected:
     return info;
   }
 
-  int put(RGWBucketInfo info, bool from_remote_zone) {
+  int put(RGWBucketInfo info, bool from_remote_zone,
+          std::map<std::string, bufferlist> attrs = {}) {
     RGWBucketCompleteInfo bci;
     bci.info = std::move(info);
+    bci.attrs = std::move(attrs);
     RGWObjVersionTracker objv;
     RGWBucketInstanceMetadataObject obj(bci, {}, {});
     return handler->put(entry, &obj, objv, null_yield, &dpp,
@@ -219,6 +221,17 @@ TEST_P(BucketInstanceMetadata, IndexlessWithoutLayoutLogs) {
   EXPECT_EQ(STATUS_APPLIED, put(incoming, false));
   EXPECT_EQ(1, service.writes);
   EXPECT_TRUE(service.info.layout.logs.empty());
+}
+
+TEST_P(BucketInstanceMetadata, RejectNonRgwAttrs) {
+  std::map<std::string, bufferlist> attrs;
+  attrs[RGW_ATTR_ACL].append("acl");
+  ASSERT_EQ(STATUS_APPLIED, put(bucket_info(), false, attrs));
+  // would overwrite the object's cls_version xattr
+  attrs["ceph.objclass.version"].append("garbage");
+  EXPECT_EQ(-EINVAL, put(bucket_info(), false, attrs));
+  EXPECT_EQ(1, service.writes);
+  EXPECT_EQ(1, index.calls);
 }
 
 TEST_P(BucketInstanceMetadata, MetadataSync) {
