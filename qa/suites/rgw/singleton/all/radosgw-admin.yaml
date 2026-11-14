@@ -24,5 +24,6 @@ tasks:
     clients:
       client.0:
         - rgw/test_account_migration.sh
+        - rgw/test_rgw_credential_file.sh
 - radosgw-admin:
 - radosgw-admin-rest:
