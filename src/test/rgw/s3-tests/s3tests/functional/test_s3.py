@@ -15874,6 +15874,36 @@ def test_delete_bucket_encryption_kms():
 
     assert response_code == 'ServerSideEncryptionConfigurationNotFoundError'
 
+def _test_put_bucket_encryption_invalid(by_default, expected_code):
+    bucket_name = get_new_bucket()
+    client = get_client()
+
+    conf = {'Rules': [{'ApplyServerSideEncryptionByDefault': by_default}]}
+    e = assert_raises(ClientError, client.put_bucket_encryption, Bucket=bucket_name,
+                      ServerSideEncryptionConfiguration=conf)
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 400
+    assert error_code == expected_code
+
+    # nothing was stored
+    e = assert_raises(ClientError, client.get_bucket_encryption, Bucket=bucket_name)
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 404
+    assert error_code == 'ServerSideEncryptionConfigurationNotFoundError'
+
+@pytest.mark.bucket_encryption
+def test_put_bucket_encryption_unknown_sse_algorithm():
+    _test_put_bucket_encryption_invalid({'SSEAlgorithm': 'foo'}, 'MalformedXML')
+
+@pytest.mark.bucket_encryption
+def test_put_bucket_encryption_empty_sse_algorithm():
+    _test_put_bucket_encryption_invalid({'SSEAlgorithm': ''}, 'MalformedXML')
+
+@pytest.mark.bucket_encryption
+def test_put_bucket_encryption_s3_with_kms_key_id():
+    by_default = {'SSEAlgorithm': 'AES256', 'KMSMasterKeyID': 'testkey-1'}
+    _test_put_bucket_encryption_invalid(by_default, 'InvalidArgument')
+
 def _put_bucket_blocked_encryption_types(client, bucket_name, types):
     """
     block the given encryption types on the bucket. 'NONE' unblocks
