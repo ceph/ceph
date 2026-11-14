@@ -1045,8 +1045,11 @@ class HostCache():
             self._tmp_daemons[host] = {}
         self._tmp_daemons[host][dd.name()] = dd
 
-    def update_host_facts(self, host, facts):
-        # type: (str, Dict[str, Dict[str, Any]]) -> None
+    def update_host_facts(
+        self,
+        host: str,
+        facts: Dict[str, Dict[str, Any]],
+    ) -> None:
         host = normalize_hostname(host)
         self.facts[host] = facts
         hostnames: List[str] = []
@@ -1055,6 +1058,8 @@ class HostCache():
             hostnames.append(v if isinstance(v, str) else '')
         self.mgr.inventory.update_known_hostnames(hostnames[0], hostnames[1], hostnames[2])
         self.last_facts_update[host] = datetime_now()
+        if self.mgr.registry_credential_urls and not facts.get('logged_into_all_container_registries', True):
+            self.registry_login_queue.add(host)
 
     def get_host_fips_enabled(self, host: str) -> Optional[bool]:
         facts = self.get_facts(host)

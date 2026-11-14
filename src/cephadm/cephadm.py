@@ -6449,6 +6449,9 @@ def _get_parser():
     parser_gather_facts = subparsers.add_parser(
         'gather-facts', help='gather and return host related information (JSON format)')
     parser_gather_facts.set_defaults(func=command_gather_facts)
+    parser_gather_facts.add_argument(
+        '--container-registries-to-check',
+        help='Comma separated list of container registries to check if host is logged into')
 
     parser_remove_file = subparsers.add_parser(
         'remove-file', help='remove a file on the host')
