@@ -395,8 +395,7 @@ TEST_F(TestMockOperationSnapshotRemoveRequest, FlattenedCloneRemovesChild) {
   ASSERT_EQ(0, open_image(clone_name, &ictx));
   ASSERT_EQ(0, snap_create(*ictx, "snap1"));
 
-  librbd::NoOpProgressContext prog_ctx;
-  ASSERT_EQ(0, flatten(*ictx, prog_ctx));
+  ASSERT_EQ(0, flatten(ictx));
   ASSERT_EQ(0, ictx->state->refresh_if_required());
 
   MockImageCtx mock_image_ctx(*ictx);
@@ -779,8 +778,7 @@ TEST_F(TestMockOperationSnapshotRemoveRequest, RemoveChildError) {
 
   ASSERT_EQ(0, snap_create(*ictx, "snap1"));
 
-  librbd::NoOpProgressContext prog_ctx;
-  ASSERT_EQ(0, flatten(*ictx, prog_ctx));
+  ASSERT_EQ(0, flatten(ictx));
   ASSERT_EQ(0, ictx->state->refresh_if_required());
 
   MockImageCtx mock_image_ctx(*ictx);
