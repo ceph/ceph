@@ -125,7 +125,9 @@ void MgrStatMonitor::clear_pool_availability(int64_t poolid)
   std::scoped_lock l(lock);
   auto pool_itr = pending_pool_availability.find(poolid);
   if (pool_itr != pending_pool_availability.end()) {
-    pool_itr->second = PoolAvailability();
+    PoolAvailability cleared;
+    cleared.pool_name = pool_itr->second.pool_name;
+    pool_itr->second = std::move(cleared);
   } else {
     dout(1) << "failed to clear a non-existing pool: " << poolid << dendl;
     return; 
@@ -159,8 +161,8 @@ void MgrStatMonitor::calc_pool_availability()
 
   // Add new pools from digest
   for ([[maybe_unused]] const auto& [poolid, _] : digest.pool_pg_unavailable_map) {
-    if (!pool_availability.contains(poolid)) {
-      pool_availability.emplace(poolid, PoolAvailability{});
+    if (!pending_pool_availability.contains(poolid)) {
+      pending_pool_availability.emplace(poolid, PoolAvailability{});
       dout(20) << fmt::format("{}: Adding pool: {}",
                               __func__, poolid) << dendl;
     }
@@ -170,7 +172,7 @@ void MgrStatMonitor::calc_pool_availability()
   // A pool is removed if it meets either of the following criteria:
   // 1. It is not present in the digest's pool_pg_unavailable_map.
   // 2. It is not present in the osdmap (checked via mon.osdmon()->osdmap).
-  std::erase_if(pool_availability, [&](const auto& kv) {
+  std::erase_if(pending_pool_availability, [&](const auto& kv) {
     const auto& poolid = kv.first;
 
     if (!digest.pool_pg_unavailable_map.contains(poolid)) {
@@ -188,7 +190,7 @@ void MgrStatMonitor::calc_pool_availability()
 
   // Update pool availability
   utime_t now(ceph_clock_now());
-  for (auto& [poolid, avail] : pool_availability) {
+  for (auto& [poolid, avail] : pending_pool_availability) {
     avail.pool_name = mon.osdmon()->osdmap.get_pool_name(poolid);
 
     auto it = digest.pool_pg_unavailable_map.find(poolid);
@@ -226,7 +228,6 @@ void MgrStatMonitor::calc_pool_availability()
     }
 
   }
-  pending_pool_availability = pool_availability;
   pool_availability_last_updated = now; 
 }
 
@@ -262,6 +263,18 @@ void MgrStatMonitor::update_from_paxos(bool *need_bootstrap)
   check_subs();
   update_logger();
   mon.osdmon()->notify_new_pg_digest();
+
+  {
+    // pending_pool_availability holds results that are not committed yet.
+    // This refresh can come from a commit of any service, so reload it from
+    // the committed state only if it is not based on the last committed
+    // version (e.g. a peon, or a new leader after an election).
+    std::scoped_lock l(lock);
+    if (!mon.is_leader() || pending_pool_availability_version != version) {
+      pending_pool_availability = pool_availability;
+      pending_pool_availability_version = version;
+    }
+  }
 
   // only calculate pool_availability within leader mon
   // and if configured interval has elapsed
@@ -332,7 +345,11 @@ void MgrStatMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   ceph_assert(pending_service_map_bl.length());
   bl.append(pending_service_map_bl);
   encode(pending_progress_events, bl);
-  encode(pending_pool_availability, bl);
+  {
+    std::scoped_lock l(lock);
+    encode(pending_pool_availability, bl);
+    pending_pool_availability_version = version;
+  }
   put_version(t, version, bl);
   put_last_committed(t, version);
 }
