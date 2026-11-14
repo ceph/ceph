@@ -90,6 +90,10 @@ MgrStandby::MgrStandby(int argc, const char **argv) :
 }
 
 MgrStandby::~MgrStandby() {
+  if (active_mgr) {
+    active_mgr->shutdown();
+    active_mgr.reset();
+  }
   if (asok_hook) {
     g_ceph_context->get_admin_socket()->unregister_commands(asok_hook.get());
     asok_hook.reset();
