@@ -868,8 +868,7 @@ OpsExecuter::do_execute_op(OSDOp& osd_op)
 
   default:
     logger().warn("unknown op {}", ceph_osd_op_name(op.op));
-    throw std::runtime_error(
-      fmt::format("op '{}' not supported", ceph_osd_op_name(op.op)));
+    return crimson::ct_error::operation_not_supported::make();
   }
 }
 
