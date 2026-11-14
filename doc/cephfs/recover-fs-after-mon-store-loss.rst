@@ -16,12 +16,16 @@ in more detail below.
 
 First up, recreate the file system using the recovered file system pools. The
 new FSMap will have the filesystem's default settings. However, the user defined
-file system settings such as ``standby_count_wanted``, ``required_client_features``,
-extra data pools, etc., are lost and need to be reapplied later.
+file system settings such as ``standby_count_wanted`` and ``required_client_features``
+are lost and need to be reapplied later. Additional data pools must be added back
+before the MDS daemons join the file system, as described below.
 
 ::
 
     ceph fs new <fs_name> <metadata_pool> <data_pool> --force --recover
+
+For ``<data_pool>``, give the file system's default data pool: the data pool
+that the file system was created with, not one that was added later.
 
 The ``recover`` flag sets the state of file system's rank 0 to existing but
 failed. So when a MDS daemon eventually picks up rank 0, the daemon reads the
@@ -33,6 +37,21 @@ This behaviour may not be desirable for certain applications (e.g., Ceph CSI)
 that expect the file system to be unchanged across recovery. To fix this, you
 can optionally set the ``fscid`` option in the above command (see
 :ref:`advanced-cephfs-admin-settings`).
+
+If the file system had additional data pools, for example an erasure-coded
+data pool, add them back before you allow MDS daemons to join the file system.
+Until a pool is added, the MDS refuses to create files in directories whose
+layout names that pool. The rebuilt Monitor stores keep each pool's ``cephfs``
+application tag, and ``ceph fs add_data_pool`` refuses a pool that already has
+one, so remove the tag from each additional data pool and then add the pool:
+
+::
+
+    ceph osd pool application rm <extra_data_pool> cephfs data
+    ceph fs add_data_pool <fs_name> <extra_data_pool>
+
+``ceph fs add_data_pool`` sets the tag again. Client OSD capabilities created
+by ``ceph fs authorize`` match data pools by this tag.
 
 Allow standby MDS daemons to join the file system.
 
