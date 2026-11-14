@@ -1022,3 +1022,107 @@ class TestExportToStoppingRank(CephFSTestCase):
         self.wait_until_true(lambda: rank2['name'] in self.mds_cluster.get_standby_daemons(),
                              timeout=60)
         self.status = self.fs.wait_for_daemons()
+
+class TestExportCancelFlushingSessions(CephFSTestCase):
+    MDSS_REQUIRED = 3
+    CLIENTS_REQUIRED = 1
+
+    def setUp(self):
+        super().setUp()
+
+        self.fs.set_max_mds(2)
+        self.fs.set_var('balance_automate', False)
+        self.status = self.fs.wait_for_daemons()
+
+    def _export_states(self, rank):
+        return self.fs.rank_asok(['dump_export_states'], rank=rank, status=self.status)
+
+    def _export_state(self, rank):
+        states = self._export_states(rank)
+        return states[0]['state'] if states else None
+
+    def _dirfrags(self, path, rank):
+        return self.fs.rank_tell(['dirfrag', 'ls', path], rank=rank)
+
+    def test_fragment_after_cancel(self):
+        """
+        That a dirfrag can be split after its export was cancelled while the
+        exporter was flushing the client sessions.
+
+        Once the subtree is frozen, the exporter flushes the sessions of the
+        clients that hold caps in it. The client's network is down, so that
+        flush is still pending when the importer fails and the export is
+        cancelled. Splitting the dirfrag used to trip the reference count
+        assert in CDir::finish_old_fragment() on the exporter, because the
+        pending flush held a pin on the dirfrag.
+
+        See: https://tracker.ceph.com/issues/82968
+        """
+
+        if self.mount_a.nsid == -1:
+            self.skipTest("the client must be in a netns to cut its network")
+
+        self.mount_a.run_shell_payload(
+            'mkdir -p test/export && for i in $(seq 1 10); do echo x > test/export/f$i; done')
+        # the early replied mkdir links the dentry only once it is journaled
+        self.fs.rank_asok(['flush', 'journal'], rank=0, status=self.status)
+        self.assertEqual(len(self._dirfrags('/test/export', 0)), 1)
+
+        rank0 = self.fs.get_rank(rank=0, status=self.status)
+        rank1 = self.fs.get_rank(rank=1, status=self.status)
+
+        # Pause the importer, so that the export waits in DISCOVERING. The
+        # client still answers the cap revokes of the export's locks, but
+        # it is cut off before the subtree is frozen and its session is
+        # flushed.
+        self.fs.rank_freeze(True, rank=1)
+        self.fs.mds_signal(rank1['name'], signal.SIGSTOP)
+        try:
+            self.fs.rank_asok(['export', 'dir', '/test/export', '1'], rank=0,
+                              status=self.status)
+            self.wait_until_equal(lambda: self._export_state(0), 'discovering',
+                                  timeout=30)
+            self.mount_a.suspend_netns()
+        finally:
+            self.fs.mds_signal(rank1['name'], signal.SIGCONT)
+            self.wait_until_true(lambda: 'laggy_since' not in self.fs.get_rank(rank=1),
+                                 timeout=self.fs.beacon_timeout)
+            self.fs.rank_freeze(False, rank=1)
+
+        try:
+            # The importer acks the prep, so the export goes on to WARNING,
+            # where it waits for the session flush too (MDS_RANK_NONE in
+            # warning_ack_waiting), and that flush never ends.
+            self.wait_until_equal(lambda: self._export_state(0), 'warning',
+                                  timeout=30)
+            time.sleep(5)
+            states = self._export_states(0)
+            self.assertEqual(len(states), 1, f'unexpected export states: {states}')
+            self.assertEqual(states[0]['state'], 'warning')
+            self.assertIn(-1, states[0]['warning_ack_waiting'])
+            self.assertIn(self.mount_a.get_global_id(), states[0]['flushed_clients'])
+
+            # cancel the export
+            self.fs.rank_fail(rank=1)
+            self.status = self.fs.wait_for_daemons()
+            self.wait_until_true(lambda: len(self._export_states(0)) == 0, timeout=30)
+
+            try:
+                self.fs.rank_asok(['dirfrag', 'split', '/test/export', '0/0', '1'],
+                                  rank=0, status=self.status)
+            except CommandFailedError:
+                # failed if buggy: the exporter asserts in
+                # CDir::finish_old_fragment()
+                def lost():
+                    info = self.fs.get_rank(rank=0)
+                    return info['gid'] != rank0['gid'] or 'laggy_since' in info
+                self.wait_until_true(lost, timeout=self.fs.beacon_timeout)
+                self.fail(f"mds.{rank0['name']} crashed splitting the dirfrag")
+            self.wait_until_equal(lambda: len(self._dirfrags('/test/export', 0)), 2,
+                                  timeout=30)
+        finally:
+            self.mount_a.resume_netns()
+
+        info = self.fs.get_rank(rank=0)
+        self.assertEqual(info['gid'], rank0['gid'], f"mds.{rank0['name']} crashed")
+        self.assertEqual(len(self.mount_a.ls('test/export')), 10)
