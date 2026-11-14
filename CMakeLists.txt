@@ -693,7 +693,7 @@ if(WITH_RADOSGW_FDB)
  find_package(FoundationDB REQUIRED)
  include(CPM)
 
- CPMAddPackage("gh:eyalz800/zpp_bits@4.5.1")
+ CPMAddPackage("gh:eyalz800/zpp_bits@4.7.6")
  message("-- enabled zpp_bits")
 
 endif()

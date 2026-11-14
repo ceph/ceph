@@ -15,6 +15,10 @@ add_catch2_test(${test_name}
  EXTRA_INCS "SYSTEM PRIVATE ${CMAKE_SOURCE_DIR}/src/rgw")
 endfunction()
 
+if(WITH_CATCH2)
+  include(datum.cmake)
+endif()
+
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   # amqp mock library
   set(amqp_mock_src

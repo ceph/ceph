@@ -460,6 +460,11 @@ else()
   set(fmt_VERSION "${FMT_VERSION}")
 endif()
 
+set(HAVE_DATUM ${WITH_RADOSGW})
+if(WITH_RADOSGW)
+  add_subdirectory(rgw/datum)
+endif()
+
 # in osd/PeeringState.h, the number of elements in PeeringState::Active::reactions
 # now exceeds the default value of BOOST_MPL_LIMIT_LIST_SIZE, which is 20, so we
 # override it. The limit must be a multiple of 10, and
