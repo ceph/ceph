@@ -1307,6 +1307,8 @@ struct req_init_state {
   /* Keeps [[tenant]:]bucket until we parse the token. */
   std::string url_bucket;
   std::string src_bucket;
+  /* Swift account segment from the URL (AUTH_/KEY_ prefix intact) for challenges. */
+  std::string swift_account_realm;
 };
 
 #include "rgw_auth.h"
