@@ -659,6 +659,7 @@ class Orchestrator(object):
             'pushgateway': self.apply_pushgateway,
             'rbd-mirror': self.apply_rbd_mirror,
             'rgw': self.apply_rgw,
+            'rgw-gap-list': self.apply_rgw_gap_list,
             'ingress': self.apply_ingress,
             'snmp-gateway': self.apply_snmp_gateway,
             'host': self.add_host,
@@ -924,6 +925,10 @@ class Orchestrator(object):
         """Update existing a pushgateway daemon(s)"""
         raise NotImplementedError()
 
+    def apply_rgw_gap_list(self, spec: ServiceSpec) -> OrchResult[str]:
+        """Update existing rgw-gap-list daemon(s)"""
+        raise NotImplementedError()
+
     def apply_crash(self, spec: ServiceSpec) -> OrchResult[str]:
         """Update existing a crash daemon(s)"""
         raise NotImplementedError()
@@ -1059,6 +1064,7 @@ def daemon_type_to_service(dtype: str) -> str:
         'pushgateway': 'pushgateway',
         'crash': 'crash',
         'crashcollector': 'crash',  # Specific Rook Daemon
+        'rgw-gap-list': 'rgw-gap-list',
         'container': 'container',
         'agent': 'agent',
         'node-proxy': 'node-proxy',
@@ -1097,6 +1103,7 @@ def service_to_daemon_types(stype: str) -> List[str]:
         'node-exporter': ['node-exporter'],
         'ceph-exporter': ['ceph-exporter'],
         'crash': ['crash'],
+        'rgw-gap-list': ['rgw-gap-list'],
         'container': ['container'],
         'agent': ['agent'],
         'node-proxy': ['node-proxy'],

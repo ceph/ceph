@@ -3773,6 +3773,35 @@ class TestRmClusterConfigCleanup(fake_filesystem_unittest.TestCase):
         assert os.path.exists('/var/lib/keep-me/data')
         assert os.path.exists(other)
 
+    @mock.patch('cephadm.get_ceph_cluster_count', return_value=1)
+    @mock.patch('cephadm.daemons_summary', return_value=[])
+    @mock.patch('cephadmlib.systemd.terminate_service')
+    @mock.patch('cephadm.terminate_service')
+    @mock.patch('cephadmlib.call_wrappers.call', return_value=('', '', 0))
+    @mock.patch('cephadm.call', return_value=('', '', 0))
+    @mock.patch('cephadm.logger')
+    def test_gap_list_units_removed(
+        self, _logger, _call, _call2, _term, _term2, _daemons, _count
+    ):
+        """gap-list timer/service units and drop-in dirs must be removed."""
+        unit_dir = '/etc/systemd/system'
+        prefix = f'ceph-{self.TEST_FSID}-gap-list@rgw-gap-list.foo'
+        self.fs.create_file(f'{unit_dir}/{prefix}.service', contents='[Service]\n')
+        self.fs.create_file(f'{unit_dir}/{prefix}.timer', contents='[Timer]\n')
+        dropin = f'{unit_dir}/{prefix}.service.d'
+        self.fs.create_file(f'{dropin}/override.conf', contents='[Service]\n')
+        other_fsid = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
+        other = f'{unit_dir}/ceph-{other_fsid}-gap-list@rgw-gap-list.foo.service'
+        self.fs.create_file(other, contents='[Service]\n')
+
+        ctx = self._make_ctx()
+        _cephadm._rm_cluster(ctx, keep_logs=True, zap_osds=False)
+
+        assert not os.path.exists(f'{unit_dir}/{prefix}.service')
+        assert not os.path.exists(f'{unit_dir}/{prefix}.timer')
+        assert not os.path.exists(dropin)
+        assert os.path.exists(other)
+
 
 def _metrics_endpoint_record(endpoint, url, zone):
     return (
@@ -3795,6 +3824,22 @@ def test_metrics_push_timer_repeats_after_the_run_finishes():
     assert 'OnActiveSec=60s' in unit
     assert 'OnUnitInactiveSec=60s' in unit
     assert 'OnUnitActiveSec=' not in unit
+
+
+def test_timer_initial_trigger_separate_from_interval():
+    from cephadmlib.templating import Templates
+    unit = _cephadm.templating.render(
+        _cephadm.CephadmContext(),
+        Templates.ceph_timer,
+        fsid='fsid',
+        job_description='rgw-gap-list scan',
+        interval_sec=1296000,
+        randomized_delay_sec=300,
+        on_active_sec=600,
+    )
+    # first run soon after activation, recurrence on the long interval
+    assert 'OnActiveSec=600s' in unit
+    assert 'OnUnitInactiveSec=1296000s' in unit
 
 
 def test_read_metrics_push_endpoint_roundtrip(tmp_path):
@@ -4118,3 +4163,96 @@ class TestZapOsds(object):
             },
         )
         assert zapped == []
+
+
+class TestGapListTimer:
+    def _deploy(self, tmp_path, gap_list):
+        ctx = _cephadm.CephadmContext()
+        ctx.data_dir = str(tmp_path)
+        ctx.container_engine = mock.Mock(path='/usr/bin/podman')
+        ident = _cephadm.DaemonIdentity('fsid', 'rgw-gap-list', 'host.abc')
+        (tmp_path / 'fsid' / 'rgw-gap-list.host.abc').mkdir(parents=True)
+        with mock.patch('cephadmlib.systemd_unit.install_timer_unit') as timer:
+            _cephadm._deploy_gap_list_timer(ctx, ident, gap_list)
+        script = (
+            tmp_path / 'fsid' / 'rgw-gap-list.host.abc' / 'gap-list.run'
+        ).read_text()
+        return script, timer
+
+    def test_script_uses_daemon_identity_not_admin(self, tmp_path):
+        script, _ = self._deploy(
+            tmp_path, {'scan_interval': 900, 'scan_timeout': 200}
+        )
+        client = 'client.rgw-gap-list.host.abc'
+        keyring = '/var/lib/ceph/rgw-gap-list/ceph-host.abc/keyring'
+        # the script's own rados connection
+        assert f'--ceph_client_name {client}' in script
+        assert f'--ceph_client_keyring {keyring}' in script
+        # radosgw-admin subprocesses only understand CEPH_ARGS
+        assert f'CEPH_ARGS="-n {client} -k {keyring}"' in script
+        assert 'client.admin' not in script
+
+    def test_timeout_runs_inside_container_and_filter_is_anchored(
+        self, tmp_path
+    ):
+        script, timer = self._deploy(
+            tmp_path, {'scan_interval': 900, 'scan_timeout': 200}
+        )
+        # in-container timeout escalates to SIGKILL after a grace period
+        assert 'timeout --kill-after=30s 200s /usr/bin/rgw-gap-list.py' in script
+        assert '--filter "name=^' in script
+        assert timer.call_args.kwargs['interval_sec'] == 900
+        # host deadline outlasts in-container timeout (200) + grace (30) + 60
+        assert timer.call_args.kwargs['timeout_sec'] == 290
+        # First run fires soon after (re)activation, not a full interval
+        # later, so reboots cannot indefinitely postpone the initial scan.
+        assert timer.call_args.kwargs['on_active_sec'] == 600
+
+    def test_initial_trigger_capped_by_short_interval(self, tmp_path):
+        _, timer = self._deploy(
+            tmp_path, {'scan_interval': 400, 'scan_timeout': 200}
+        )
+        assert timer.call_args.kwargs['on_active_sec'] == 400
+
+    def test_host_deadline_outlasts_in_container_timeout(self, tmp_path):
+        # Large timeout: grace caps at 300, host deadline = timeout+300+60,
+        # and must be strictly greater than the in-container timeout so the
+        # wrapper always records a result before systemd force-stops it.
+        script, timer = self._deploy(
+            tmp_path, {'scan_interval': 1296000, 'scan_timeout': 86400}
+        )
+        assert 'timeout --kill-after=300s 86400s' in script
+        assert timer.call_args.kwargs['timeout_sec'] == 86760
+        assert timer.call_args.kwargs['timeout_sec'] > 86400
+
+    def test_options_are_quoted(self, tmp_path):
+        script, _ = self._deploy(
+            tmp_path,
+            {
+                'pool': 'a b',
+                'bucket_list': 'x; y',
+                'exclude_list': 'z',
+                'extra_opts': '-vv',
+            },
+        )
+        assert "-p 'a b'" in script
+        assert "-b 'x; y'" in script
+        assert '-e z' in script
+        assert script.rstrip().count('-vv') == 1
+
+    def test_script_missing_is_skipped_not_failed(self, tmp_path):
+        script, _ = self._deploy(tmp_path, {})
+        assert 'command -v /usr/bin/rgw-gap-list.py' in script
+        assert '"reason\\": \\"script_missing' in script
+
+    def test_extra_opts_with_hash_produces_valid_bash(self, tmp_path):
+        # A stray '#' in extra_opts must not comment out the rest of the
+        # generated command line; each token is shell-quoted.
+        script, _ = self._deploy(tmp_path, {'extra_opts': '-vv #'})
+        assert "-vv '#'" in script
+        import shutil
+        bash = shutil.which('bash')
+        if bash:
+            p = tmp_path / 'fsid' / 'rgw-gap-list.host.abc' / 'gap-list.run'
+            rc = subprocess.run([bash, '-n', str(p)])
+            assert rc.returncode == 0

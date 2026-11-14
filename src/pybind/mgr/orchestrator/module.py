@@ -193,6 +193,7 @@ class ServiceType(enum.Enum):
     promtail = 'promtail'
     alloy = 'alloy'
     pushgateway = 'pushgateway'
+    rgw_gap_list = 'rgw-gap-list'
     mds = 'mds'
     rgw = 'rgw'
     nfs = 'nfs'

@@ -1436,6 +1436,106 @@ def _deploy_metrics_push_timer(
     )
 
 
+def _deploy_gap_list_timer(
+    ctx: CephadmContext,
+    ident: 'DaemonIdentity',
+    gap_list: Dict[str, Any],
+) -> None:
+    """Set up a systemd timer that periodically runs rgw-gap-list.py
+    inside the gap-list container."""
+    # Fallback defaults mirror RGWGapListSpec.DEFAULT_* constants.
+    # The mgr always sends explicit values, so these only apply if the
+    # config dict is somehow incomplete.
+    interval = int(gap_list.get('scan_interval', 1296000))
+    timeout = int(gap_list.get('scan_timeout', 86400))
+    max_age = int(gap_list.get('max_age', 604800))
+
+    # timeout sends SIGTERM first, then SIGKILL after kill_after, so a stuck
+    # scan does not keep running. systemd gets a little extra time so the
+    # script can still write the status before it is stopped.
+    kill_after = min(300, max(30, timeout // 10))
+    host_deadline = timeout + kill_after + 60
+    pool = gap_list.get('pool', 'default.rgw.buckets.data default.rgw.buckets.non-ec')
+    sync_pool = gap_list.get('sync_pool', 'default.rgw.buckets.index')
+    namespace = gap_list.get('namespace', 'rgw-gap-list')
+    inflight = int(gap_list.get('inflight', 15000))
+
+    # The container only has the daemon's own keyring, so the scan must
+    # authenticate as client.rgw-gap-list.<id> rather than client.admin.
+    client_name = f'client.rgw-gap-list.{ident.daemon_id}'
+    keyring_path = f'/var/lib/ceph/rgw-gap-list/ceph-{ident.daemon_id}/keyring'
+
+    # build CLI flags for rgw-gap-list.py
+    opts_parts = [
+        f'--ceph_client_name {shlex.quote(client_name)}',
+        f'--ceph_client_keyring {shlex.quote(keyring_path)}',
+        f'-a {max_age}',
+        f'-p {shlex.quote(pool)}',
+        f'-s {shlex.quote(sync_pool)}',
+        f'--namespace {shlex.quote(namespace)}',
+        f'-i {inflight}',
+    ]
+    bucket_list = gap_list.get('bucket_list', '')
+    if bucket_list:
+        opts_parts.append(f'-b {shlex.quote(bucket_list)}')
+    exclude_list = gap_list.get('exclude_list', '')
+    if exclude_list:
+        opts_parts.append(f'-e {shlex.quote(exclude_list)}')
+    extra_opts = gap_list.get('extra_opts', '')
+    if extra_opts:
+        # extra_opts is already checked in the spec. Split it and quote
+        # each part so something like '#' does not break the script.
+        opts_parts.extend(shlex.quote(tok) for tok in shlex.split(extra_opts))
+    opts = ' '.join(opts_parts)
+
+    data_dir = ident.data_dir(ctx.data_dir)
+    container_name = ident.container_name
+    legacy_container_name = ident.legacy_container_name
+    unit_id = f'gap-list@{ident.daemon_type}.{ident.daemon_id}'
+    script_path = os.path.join(data_dir, 'gap-list.run')
+    status_file = os.path.join(data_dir, 'gap-list.status')
+
+    # radosgw-admin, which the script runs as a subprocess, has no such
+    # flags and reads its identity from CEPH_ARGS instead.
+    ceph_args = f'-n {shlex.quote(client_name)} -k {shlex.quote(keyring_path)}'
+
+    engine = ctx.container_engine.path
+    script = templating.render(
+        ctx,
+        templating.Templates.gap_list_run,
+        status_file=status_file,
+        engine=engine,
+        container_name=container_name,
+        legacy_container_name=legacy_container_name,
+        ceph_args=ceph_args,
+        opts=opts,
+        timeout=timeout,
+        kill_after=kill_after,
+    )
+    with write_new(script_path, owner=None, perms=0o755) as f:
+        f.write(script)
+
+    logger.info(
+        f'Installing gap-list timer for {ident.daemon_name} '
+        f'(interval={interval}s)'
+    )
+    systemd_unit.install_timer_unit(
+        ctx,
+        fsid=ident.fsid,
+        unit_id=unit_id,
+        job_description=f'rgw-gap-list scan for {ident.daemon_name}',
+        script_path=script_path,
+        interval_sec=interval,
+        timeout_sec=host_deadline,
+        randomized_delay_sec=min(300, interval // 10),
+        # Run soon after (re)activation instead of a full interval later, so
+        # frequent reboots cannot indefinitely postpone the first scan on a
+        # long interval. max_age coordination makes an early run cheap: it
+        # only scans buckets that are actually due.
+        on_active_sec=min(600, interval),
+    )
+
+
 def deploy_daemon(
     ctx: CephadmContext,
     ident: 'DaemonIdentity',
@@ -1535,6 +1635,13 @@ def deploy_daemon(
                     desired=target if isinstance(target, dict) else None,
                     force_delete=bool(config_json.get('metrics_push_cleanup')),
                 )
+
+        if ident.daemon_type == 'rgw-gap-list':
+            config_json = fetch_configs(ctx)
+            gap_list = config_json.get('gap_list')
+            if gap_list:
+                assert isinstance(gap_list, dict)
+                _deploy_gap_list_timer(ctx, ident, gap_list)
 
     # only write out unit files and start daemon
     # with systemd if this is not a reconfig
@@ -4747,6 +4854,10 @@ def command_rm_daemon(ctx):
         timer_unit_id = f'metrics-push@{ident.daemon_type}.{ident.daemon_id}'
         systemd_unit.remove_timer_unit(ctx, ctx.fsid, timer_unit_id)
 
+    if ident.daemon_type == 'rgw-gap-list':
+        timer_unit_id = f'gap-list@{ident.daemon_type}.{ident.daemon_id}'
+        systemd_unit.remove_timer_unit(ctx, ctx.fsid, timer_unit_id)
+
     if ident.daemon_type in ['mon', 'osd', 'prometheus'] and \
        not ctx.force_delete_data:
         # rename it out of the way -- do not delete
@@ -4924,6 +5035,11 @@ def _rm_cluster(ctx: CephadmContext, keep_logs: bool, zap_osds: bool) -> None:
     # unlink() raises IsADirectoryError on a real directory and would abort
     # rm-cluster before the cluster data is deleted.
     for p in unit_dir.glob(f'ceph-{ctx.fsid}-metrics-push@*'):
+        if p.is_dir() and not p.is_symlink():
+            shutil.rmtree(p)
+        else:
+            unlink_file(p, missing_ok=True)
+    for p in unit_dir.glob(f'ceph-{ctx.fsid}-gap-list@*'):
         if p.is_dir() and not p.is_symlink():
             shutil.rmtree(p)
         else:
