@@ -3,6 +3,7 @@ import pytest
 from unittest.mock import patch
 from ceph_volume import process, exceptions
 from ceph_volume.api import lvm as api
+from ceph_volume.util.nvme import FcmDedupInfo
 
 
 class TestParseTags(object):
@@ -134,17 +135,17 @@ class TestCreateLVs(object):
                                          vg_free_count=999)
 
     def test_creates_correct_lv_number_from_parts(self, monkeypatch):
-        monkeypatch.setattr('ceph_volume.api.lvm.create_lv', lambda *a, **kw: (a, kw))
+        monkeypatch.setattr('ceph_volume.api.lvm.create_lv', lambda *a, **kw: ((a, kw), None))
         lvs = api.create_lvs(self.vg, parts=4)
         assert len(lvs) == 4
 
     def test_suffixes_the_size_arg(self, monkeypatch):
-        monkeypatch.setattr('ceph_volume.api.lvm.create_lv', lambda *a, **kw: (a, kw))
+        monkeypatch.setattr('ceph_volume.api.lvm.create_lv', lambda *a, **kw: ((a, kw), None))
         lvs = api.create_lvs(self.vg, parts=4)
         assert lvs[0][1]['extents'] == 249
 
     def test_only_uses_free_size(self, monkeypatch):
-        monkeypatch.setattr('ceph_volume.api.lvm.create_lv', lambda *a, **kw: (a, kw))
+        monkeypatch.setattr('ceph_volume.api.lvm.create_lv', lambda *a, **kw: ((a, kw), None))
         vg = api.VolumeGroup(vg_name='ceph',
                              vg_extent_size=1073741824,
                              vg_extent_count=99999999,
@@ -153,12 +154,12 @@ class TestCreateLVs(object):
         assert lvs[0][1]['extents'] == 250
 
     def test_null_tags_are_set_by_default(self, monkeypatch):
-        monkeypatch.setattr('ceph_volume.api.lvm.create_lv', lambda *a, **kw: (a, kw))
+        monkeypatch.setattr('ceph_volume.api.lvm.create_lv', lambda *a, **kw: ((a, kw), None))
         kwargs = api.create_lvs(self.vg, parts=4)[0][1]
         assert list(kwargs['tags'].values()) == ['null', 'null', 'null', 'null']
 
     def test_fallback_to_one_part(self, monkeypatch):
-        monkeypatch.setattr('ceph_volume.api.lvm.create_lv', lambda *a, **kw: (a, kw))
+        monkeypatch.setattr('ceph_volume.api.lvm.create_lv', lambda *a, **kw: ((a, kw), None))
         lvs = api.create_lvs(self.vg)
         assert len(lvs) == 1
 
@@ -255,6 +256,53 @@ class TestCreateLV(object):
         api.create_lv('foo', '1234-abcd', vg=self.foo_group, size=419430400, tags={'ceph.type': 'data'})
         expected = (['lvcreate', '--yes', '-l', '100', '-n', 'foo-1234-abcd', 'foo_group'])
         m_run.assert_called_with(expected, run_on_host=True)
+
+    @patch('ceph_volume.api.lvm.process.run')
+    @patch('ceph_volume.api.lvm.process.call')
+    @patch('ceph_volume.api.lvm.get_single_lv')
+    def test_returns_tuple_with_none_fcm_reservation_for_non_fcm_device(self, m_get_single_lv, m_call, m_run, monkeypatch):
+        """Verify create_lv returns (lv, None) for non-FCM devices."""
+        m_get_single_lv.return_value = self.foo_volume
+        lv, fcm_reservation = api.create_lv('foo', '1234-abcd', vg=self.foo_group, size=419430400, tags={'ceph.type': 'data'})
+        # For non-FCM devices (no FCM probe triggered), fcm_reservation should be None
+        assert lv is not None
+        assert fcm_reservation is None
+
+    @patch('ceph_volume.api.lvm.get_device_vgs', return_value=[])
+    @patch('ceph_volume.api.lvm.create_vg')
+    @patch('ceph_volume.api.lvm.fcm_dedup_info')
+    def test_fcm_device_rejects_multiple_slots(self, m_fcm_info, m_create_vg, m_get_vgs):
+        """Verify create_lv raises RuntimeError if slots > 1 on FCM device."""
+        m_fcm_info.return_value = FcmDedupInfo(supported=True, slot_size_bytes=16384, dvs=4, lba_size_bytes=512)
+        m_create_vg.return_value = self.foo_group
+        with pytest.raises(RuntimeError, match='FCM drives require 1 OSD per physical device'):
+            api.create_lv('foo', '1234-abcd', device='/dev/nvme0n1', slots=2)
+
+    @patch('ceph_volume.api.lvm.process.run')
+    @patch('ceph_volume.api.lvm.process.call')
+    @patch('ceph_volume.api.lvm.get_single_lv')
+    @patch('ceph_volume.api.lvm.fcm_dedup_info')
+    def test_fcm_device_computes_reservation(self, m_fcm_info, m_get_single_lv, m_call, m_run):
+        """Verify create_lv calculates reservation on FCM device."""
+        m_fcm_info.return_value = FcmDedupInfo(supported=True, slot_size_bytes=16384, dvs=4, lba_size_bytes=512)
+        m_get_single_lv.return_value = self.foo_volume
+
+        # 1 TiB VG
+        vg = api.VolumeGroup(
+            vg_name='ceph-fcm',
+            vg_extent_size=4194304,
+            vg_extent_count=262144,
+            vg_free_count=262144,
+            vg_size=1099511627776
+        )
+
+        lv, fcm_reservation = api.create_lv('foo', '1234-abcd', vg=vg, device='/dev/nvme0n1', slots=1)
+        assert lv is not None
+        assert fcm_reservation is not None
+        assert 'total_bytes' in fcm_reservation
+        assert fcm_reservation['lv_size_bytes'] == 1099511627776
+        assert fcm_reservation['lba_size_bytes'] == 512
+        assert fcm_reservation['slot_size_bytes'] == 16384
 
     @patch('ceph_volume.api.lvm.process.run')
     @patch('ceph_volume.api.lvm.process.call')
