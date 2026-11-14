@@ -23,9 +23,14 @@
 #include <algorithm>
 #include <cmath>
 #include <optional>
+#include <sstream>
 #include <string>
+#include <string_view>
+#include <vector>
 #include "include/encoding.h"
-#include "common/ceph_json.h"
+
+class JSONObj;
+namespace ceph { class Formatter; }
 
 namespace rgw {
 

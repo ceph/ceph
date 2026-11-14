@@ -15,6 +15,7 @@
 
 #include <boost/algorithm/string.hpp>
 #include "rgw_bucket_layout.h"
+#include "common/ceph_json.h"
 #include "include/utime.h"
 
 namespace rgw {
