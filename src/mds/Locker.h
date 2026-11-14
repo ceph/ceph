@@ -65,6 +65,10 @@ public:
   void handle_lock(const cref_t<MLock> &m);
 
   void tick();
+  void handle_conf_change(const std::set<std::string>& changed);
+  bool defers_open_client_range() const {
+    return defer_open_client_range;
+  }
 
   bool nudge_log(SimpleLock *lock);
 
@@ -203,12 +207,15 @@ public:
 
   void request_inode_file_caps(CInode *in);
 
-  bool check_client_ranges(CInode *in, uint64_t size);
+  bool check_client_ranges(CInode *in, uint64_t size,
+			   client_t req_client=client_t());
   bool calc_new_client_ranges(CInode *in, uint64_t size,
-			      bool *max_increased=nullptr);
+			      bool *max_increased=nullptr,
+			      client_t req_client=client_t());
   bool check_inode_max_size(CInode *in, bool force_wrlock=false,
                             uint64_t newmax=0, uint64_t newsize=0,
-			    utime_t mtime=utime_t());
+			    utime_t mtime=utime_t(),
+			    client_t req_client=client_t());
   void share_inode_max_size(CInode *in, Capability *only_cap=0);
 
   // -- client leases --
@@ -247,7 +254,8 @@ protected:
 
   void scatter_writebehind_finish(ScatterLock *lock, MutationRef& mut);
 
-  bool _need_flush_mdlog(CInode *in, int wanted_caps, bool lock_state_any=false);
+  bool _need_flush_mdlog(CInode *in, int wanted_caps, bool lock_state_any=false,
+			 const MutationImpl *mut=nullptr);
   void adjust_cap_wanted(Capability *cap, int wanted, int issue_seq);
   void handle_client_caps(const cref_t<MClientCaps> &m);
   void _update_cap_fields(CInode *in, int dirty, const cref_t<MClientCaps> &m, mempool_inode *pi);
@@ -302,8 +310,12 @@ private:
 			 mempool_xattr_map *px,
 			 const cref_t<MClientCaps> &m);
 
+  bool defer_client_range(client_t client, client_t req_client) const;
+
   MDSRank *mds;
   MDCache *mdcache;
   xlist<ScatterLock*> updated_filelocks;
+  // mds_defer_open_client_range
+  bool defer_open_client_range;
 };
 #endif
