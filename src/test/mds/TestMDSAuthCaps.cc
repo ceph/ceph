@@ -539,3 +539,15 @@ TEST(MDSAuthCaps, QuarantineOutputParsed) {
     ASSERT_EQ(test_values[i].output, stringify(cap));
   }
 }
+
+TEST(MDSAuthCaps, ToStringKeepsNetworkAndQuotedPath) {
+  // "fs authorize" stores the output of to_string() when it merges caps,
+  // so it must read back as the same grants.
+  MDSAuthCaps cap;
+  ASSERT_TRUE(cap.parse("allow rw path=\"/foo bar\" network 10.0.0.0/8", &cout));
+  string str = cap.to_string();
+  ASSERT_EQ("allow rw path=\"foo bar\" network 10.0.0.0/8", str);
+  MDSAuthCaps reparsed;
+  ASSERT_TRUE(reparsed.parse(str, &cout));
+  ASSERT_EQ(str, reparsed.to_string());
+}

@@ -1425,3 +1425,49 @@ TEST(OSDCap, network) {
   ASSERT_TRUE(cap.is_capable("foo", "", {}, "asdf", true, true, {{"cls", "", true, true, true}}, b));
   ASSERT_FALSE(cap.is_capable("foo", "", {}, "asdf", true, true, {{"cls", "", true, true, true}}, c));
 }
+
+TEST(OSDCap, MergeKeepsExistingGrants) {
+  // "fs authorize" merges the grant it generates into the caps an entity
+  // already holds; the grants that were already there must survive.
+  struct MergeTest {
+    const char *cur;
+    bool updated;
+    const char *merged;
+  };
+  MergeTest tests[] = {
+    {"allow *", true, "allow *, allow rw tag cephfs data=a"},
+    {"allow rw pool=foo namespace=bar", true,
+     "allow rw pool foo namespace bar, allow rw tag cephfs data=a"},
+    {"allow r namespace=ns1 tag cephfs data=a", true,
+     "allow r namespace ns1 tag cephfs data=a, allow rw tag cephfs data=a"},
+    {"allow rw namespace=ns*", true,
+     "allow rw namespace ns*, allow rw tag cephfs data=a"},
+    {"allow rw namespace \"\"", true,
+     "allow rw namespace \"\", allow rw tag cephfs data=a"},
+    {"allow rwx pool foo object_prefix rbd_data", true,
+     "allow rwx pool foo object_prefix rbd_data, allow rw tag cephfs data=a"},
+    {"profile rbd pool=rbd", true,
+     "profile rbd pool rbd, allow rw tag cephfs data=a"},
+    {"allow pool foo class lock", true,
+     "allow pool foo class 'lock', allow rw tag cephfs data=a"},
+    {"allow rw network 10.0.0.0/8", true,
+     "allow rw network 10.0.0.0/8, allow rw tag cephfs data=a"},
+    {"allow r tag cephfs data=a", true, "allow rw tag cephfs data=a"},
+    {"allow rw tag cephfs data=a", false, nullptr},
+  };
+
+  for (auto& t : tests) {
+    OSDCap cap, newcap;
+    ASSERT_TRUE(cap.parse(t.cur, &cout)) << t.cur;
+    ASSERT_TRUE(newcap.parse("allow rw tag cephfs data=a", &cout));
+    ASSERT_EQ(t.updated, cap.merge(newcap)) << t.cur;
+    if (!t.updated) {
+      continue;
+    }
+    string merged = cap.to_string();
+    ASSERT_EQ(t.merged, merged) << t.cur;
+    OSDCap reparsed;
+    ASSERT_TRUE(reparsed.parse(merged, &cout)) << merged;
+    ASSERT_EQ(merged, reparsed.to_string()) << merged;
+  }
+}
