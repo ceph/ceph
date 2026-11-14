@@ -218,9 +218,9 @@ auto ThirdPartyAccountApplier<T>::load_acct_info(const DoutPrefixProvider* dpp) 
       /* We aren't trying to recover from ENOENT here. It's supposed that creating
        * someone else's account isn't a thing we want to support in this filter. */
       if (ret == -ENOENT) {
-        throw -EACCES;
+        throw boost::system::system_error(ceph::to_error_code(-EACCES));
       } else {
-        throw ret;
+        throw boost::system::system_error(ceph::to_error_code(ret));
       }
     }
     // the user_info in luser is initialized by user->load_user(...)
@@ -328,7 +328,7 @@ auto SysReqApplier<T>::load_acct_info(const DoutPrefixProvider* dpp) const -> st
         user = driver->get_user(*uid);
         if (user->load_user(dpp, null_yield) < 0) {
           //ldpp_dout(dpp, 0) << "User lookup failed!" << dendl;
-          throw -EACCES;
+          throw boost::system::system_error(ceph::to_error_code(-EACCES));
         }
         effective_owner->display_name = user->get_display_name();
         effective_tenant = uid->tenant;
@@ -338,7 +338,7 @@ auto SysReqApplier<T>::load_acct_info(const DoutPrefixProvider* dpp) const -> st
         RGWObjVersionTracker objv;
         int r = driver->load_account_by_id(dpp, null_yield, *id, info, attrs, objv);
         if (r < 0) {
-          throw -EACCES;
+          throw boost::system::system_error(ceph::to_error_code(-EACCES));
         }
         effective_tenant = info.tenant;
       }

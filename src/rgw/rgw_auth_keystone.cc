@@ -60,7 +60,7 @@ admin_token_retry:
 
   std::string url = config.get_endpoint_url();
   if (url.empty()) {
-    throw -EINVAL;
+    throw boost::system::system_error(ceph::to_error_code(-EINVAL));
   }
 
   url.append("v3/auth/tokens");
@@ -76,7 +76,7 @@ admin_token_retry:
   int ret = rgw::keystone::Service::get_admin_token(dpp, token_cache, config,
                                                     y, admin_token, admin_token_cached);
   if (ret < 0) {
-    throw -EINVAL;
+    throw boost::system::system_error(ceph::to_error_code(-EINVAL));
   }
 
   if (allow_expired) {
@@ -124,7 +124,7 @@ admin_token_retry:
   }
   // throw any other http or connection errors
   if (ret < 0) {
-    throw ret;
+    throw boost::system::system_error(ceph::to_error_code(ret));
   }
 
   ldpp_dout(dpp, 20) << "received response status=" << validate.get_http_status()
@@ -133,7 +133,7 @@ admin_token_retry:
   TokenEngine::token_envelope_t token_body;
   ret = token_body.parse(dpp, token, token_body_bl);
   if (ret < 0) {
-    throw ret;
+    throw boost::system::system_error(ceph::to_error_code(ret));
   }
 
   return token_body;
@@ -433,7 +433,7 @@ EC2Engine::get_from_keystone(const DoutPrefixProvider* dpp, const std::string_vi
   /* prepare keystone url */
   std::string keystone_url = config.get_endpoint_url();
   if (keystone_url.empty()) {
-    throw -EINVAL;
+    throw boost::system::system_error(ceph::to_error_code(-EINVAL));
   }
 
   keystone_url.append("v3/s3tokens");
@@ -446,7 +446,7 @@ EC2Engine::get_from_keystone(const DoutPrefixProvider* dpp, const std::string_vi
   if (ret < 0) {
     ldpp_dout(dpp, 2) << "s3 keystone: cannot get token for keystone access"
                   << dendl;
-    throw ret;
+    throw boost::system::system_error(ceph::to_error_code(ret));
   }
 
   using RGWValidateKeystoneToken
@@ -494,7 +494,7 @@ EC2Engine::get_from_keystone(const DoutPrefixProvider* dpp, const std::string_vi
   if (ret < 0) {
     ldpp_dout(dpp, 2) << "s3 keystone: token validation ERROR: "
                   << token_body_bl.c_str() << dendl;
-    throw ret;
+    throw boost::system::system_error(ceph::to_error_code(ret));
   }
 
   /* now parse response */
@@ -503,7 +503,7 @@ EC2Engine::get_from_keystone(const DoutPrefixProvider* dpp, const std::string_vi
   if (ret < 0) {
     ldpp_dout(dpp, 2) << "s3 keystone: token parsing failed, ret=0" << ret
                   << dendl;
-    throw ret;
+    throw boost::system::system_error(ceph::to_error_code(ret));
   }
 
   return std::make_pair(std::move(token_envelope), 0);
