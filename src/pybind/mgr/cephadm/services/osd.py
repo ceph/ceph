@@ -1,5 +1,7 @@
+import copy
 import json
 import logging
+import math
 from asyncio import gather, to_thread
 from threading import Lock
 from typing import List, Dict, Any, Set, Tuple, cast, Optional, TYPE_CHECKING
@@ -26,6 +28,13 @@ if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
 
 logger = logging.getLogger(__name__)
+
+
+class DeviceConstraintError(OrchestratorError):
+    """
+    Device constraints (e.g. a required size reservation) make it impossible
+    to create OSDs on a host with the given spec.
+    """
 
 
 @register_cephadm_service
@@ -94,6 +103,119 @@ class OSDService(CephService):
 
         return creation_cfg, post_create_cfg
 
+    async def get_data_allocate_fraction(self,
+                                         host: str,
+                                         drive_group: DriveGroupSpec,
+                                         drive_selection: DriveSelection) -> Optional[float]:
+        """
+        Ask the optional 'fcm_ad' mgr module whether any data device needs space
+        reserved. Returns the data_allocate_fraction to pass to ceph-volume
+        lvm batch, or None when no reservation is needed (including when the
+        module is not loaded).
+
+        Devices that already host an OSD are not queried: ceph-volume will not
+        create anything on them, and the module must not be told to expect a
+        new OSD there.
+
+        :raises DeviceConstraintError: when the reservation cannot be applied
+        """
+        # DriveSelection consumes its disk list and, for explicit paths, hands
+        # back bare path objects, so look devices up in the host inventory.
+        inv_devices = self.mgr.cache.devices.get(host, [])
+        inventory: Dict[str, Device] = {}
+        for d in inv_devices:
+            inventory[d.path] = d
+
+        fractions: Dict[str, float] = {}
+        plain: List[str] = []
+        for device in drive_selection.data_devices():
+            path = device.path
+            inv_dev = inventory.get(path)
+            if inv_dev is None:
+                # Without the inventory entry there is no ceph_device_lvm to
+                # read, so the "already hosts an OSD" check below cannot be
+                # made and a provisioned device could be reported as free.
+                logger.warning(f'{path} on {host} is not in the inventory; '
+                               'cannot tell whether it already hosts an OSD')
+                inv_dev = device
+            if getattr(inv_dev, 'ceph_device_lvm', False):
+                logger.debug(f'{path} on {host} already hosts an OSD, '
+                             'not asking fcm_ad for constraints')
+                continue
+            try:
+                # remote() blocks, and the module may call back into cephadm,
+                # so keep it off the event loop thread.
+                constraints = await to_thread(
+                    self.mgr.remote, 'fcm_ad', 'get_device_constraints', host, path)
+            except (ImportError, NameError):
+                # ImportError: the module is not loaded. NameError: it is
+                # loaded but has no such method, which an older build gives.
+                # Either way it has no opinion about any device here.
+                #
+                # Partway through the loop that is not benign: returning None
+                # would discard what earlier devices already asked for and let
+                # ceph-volume take the whole drive.
+                if fractions:
+                    raise DeviceConstraintError(
+                        f'fcm_ad stopped answering partway through {host}: '
+                        f'{sorted(fractions)} require a size reservation but '
+                        f'{path} could not be checked')
+                return None
+            except Exception as e:
+                raise DeviceConstraintError(
+                    f'fcm_ad get_device_constraints failed for {path} on {host}: {e}')
+            if constraints is None:
+                plain.append(path)
+                continue
+            try:
+                data_size = constraints['data_size_bytes']
+                device_size = constraints['device_bytes']
+                valid = (
+                    type(data_size) in (int, float)
+                    and type(device_size) in (int, float)
+                    and 0 < data_size <= device_size
+                )
+            except (KeyError, TypeError):
+                valid = False
+            if not valid:
+                raise DeviceConstraintError(
+                    f'Invalid fcm_ad constraints for {path} on {host}: {constraints!r}')
+            fractions[path] = data_size / device_size
+
+        if not fractions:
+            return None
+
+        if plain:
+            raise DeviceConstraintError(
+                f'Devices {sorted(fractions)} require a size reservation but '
+                f'{sorted(plain)} do not. Use separate OSD specs per drive type.')
+        frac_values = list(fractions.values())
+        if any(not math.isclose(f, frac_values[0], rel_tol=1e-5) for f in frac_values[1:]):
+            raise DeviceConstraintError(
+                'Devices in this DriveGroup spec require different size '
+                'reservations. Use separate OSD specs per drive type.')
+        if drive_group.method == 'raw':
+            raise DeviceConstraintError(
+                f'Devices {sorted(fractions)} require a size reservation, which '
+                'is not supported with method: raw.')
+        if drive_group.data_allocate_fraction:
+            raise DeviceConstraintError(
+                f'Devices {sorted(fractions)} require a size reservation, so '
+                'data_allocate_fraction must not be set in the OSD spec.')
+        if drive_group.osds_per_device and drive_group.osds_per_device > 1:
+            raise DeviceConstraintError(
+                f'Devices {sorted(fractions)} require a size reservation, so '
+                'osds_per_device must not be greater than 1.')
+
+        # One fraction is applied to every device, and the isclose check above
+        # still admits a spread: rel_tol 1e-5 of a 30 TB drive is a few hundred
+        # MB. Take the smallest, so the value applied is never larger than any
+        # one device asked for -- over-allocating is what eats into a reserved
+        # region, under-allocating only wastes a little space.
+        fraction = min(frac_values)
+        logger.debug(f'fcm_ad size reservation on {host}: data_allocate_fraction={fraction}')
+        return fraction
+
     def create_from_spec(self, drive_group: DriveGroupSpec, force_apply: bool = False) -> str:
         """
         :param force_apply: If True, do not check osdspec_needs_apply(). Used by
@@ -120,7 +242,17 @@ class OSDService(CephService):
 
             osd_id_claims_for_host = osd_id_claims.filtered_by_host(host)
 
-            cmds: List[str] = self.driveselection_to_ceph_volume(drive_selection,
+            # Apply any device size reservation to a copy so the stored spec
+            # is left untouched.
+            fraction = await self.get_data_allocate_fraction(
+                host, drive_group, drive_selection)
+            selection_for_cmds = drive_selection
+            if fraction is not None:
+                selection_for_cmds = copy.copy(drive_selection)
+                selection_for_cmds.spec = copy.copy(drive_selection.spec)
+                selection_for_cmds.spec.data_allocate_fraction = fraction
+
+            cmds: List[str] = self.driveselection_to_ceph_volume(selection_for_cmds,
                                                                  osd_id_claims_for_host)
             if not cmds:
                 logger.debug("No data_devices, skipping DriveGroup: {}".format(
@@ -144,12 +276,21 @@ class OSDService(CephService):
             return ret_msg
 
         async def all_hosts() -> List[str]:
-            futures = [create_from_spec_one(h, ds)
-                       for h, ds in self.prepare_drivegroup(drive_group)]
+            host_selections = self.prepare_drivegroup(drive_group)
+            futures = [create_from_spec_one(h, ds) for h, ds in host_selections]
             results = await gather(*futures, return_exceptions=True)
-            for result in results:
+            constraint_errors: List[str] = []
+            for (h, _), result in zip(host_selections, results):
                 if isinstance(result, Exception):
                     self.mgr.log.error(f'Failed to create OSD: {result}')
+                    if isinstance(result, DeviceConstraintError):
+                        constraint_errors.append(f'{h}: {result}')
+            if constraint_errors:
+                # Every host has been processed at this point. Raising makes the
+                # failure visible: the serve loop turns it into a service event
+                # and a CEPHADM_APPLY_SPEC_FAIL warning, and the CLI returns it
+                # for 'ceph orch daemon add osd'.
+                raise OrchestratorError('; '.join(constraint_errors))
             return [result for result in results if isinstance(result, str)]
 
         with self.mgr.async_timeout_handler('cephadm deploy (osd daemon)'):
