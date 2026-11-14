@@ -3322,6 +3322,194 @@ function TEST_rebuild_perf_replica_history_survives_handover_after_close() {
     kill_daemons $dir || return 1
 }
 
+# Test stale-onset fix, open side: arm_rebuild_span()/pause_rebuild_span()
+# and prepare_stats_for_publish()'s vulnerability-window open branch mark
+# info dirty for a local write, but gave replicas no guarantee the onset
+# would be shared before a handover. A promoted peer that never received it
+# latched a fresh onset of its own instead of inheriting the true one,
+# understating the real exposure/rebuild time.
+#
+# Deterministic, not timing-dependent: after confirming Recovering has armed
+# both counters, an explicit noout toggle forces an ordinary OSDMap epoch
+# advance on the primary -- Active::react(AdvMap)'s retry-share
+# (rebuild_stats_unshared) always fires on the very next one, the same
+# mechanism already relied on for the close side above, just triggered
+# deterministically here instead of via incidental map churn. noscrub/
+# nodeep-scrub are set so nothing else gets a chance to re-share info on its
+# own first. primary-affinity (not a kill) is used for the handover so all
+# three OSDs stay up+in and no new, legitimate degradation is introduced of
+# its own.
+function TEST_rebuild_perf_replica_history_shares_handover_after_open() {
+    local dir=$1
+    local OSDS=3
+
+    run_mon $dir a || return 1
+    run_mgr $dir x || return 1
+    for osd in $(seq 0 $(expr $OSDS - 1))
+    do
+      run_osd $dir $osd --osd-mclock-skip-benchmark=true --debug-osd=15 || return 1
+    done
+
+    ceph osd set noscrub || return 1
+    ceph osd set nodeep-scrub || return 1
+
+    create_pool $poolname 1 1 replicated || return 1
+    ceph osd pool set $poolname size 3 || return 1
+    ceph osd pool set $poolname min_size 2 || return 1
+    wait_for_clean || return 1
+
+    for i in $(seq 1 5)
+    do
+      rados -p $poolname put obj$i /etc/hostname || return 1
+    done
+    wait_for_clean || return 1
+
+    local PG
+    PG=$(get_pg $poolname obj1)
+    local primary_a
+    primary_a=$(get_primary $poolname obj1)
+    local otherosd
+    otherosd=$(get_not_primary $poolname obj1)
+    local log_a=$dir/osd.${primary_a}.log
+
+    # Degrade: same small, log-continuous gap as
+    # TEST_rebuild_perf_recovering_case, forcing a genuine Recovering
+    # episode -- but deliberately do NOT wait for clean below: the handover
+    # must land while both counters are still open.
+    ceph osd set noup || return 1
+    ceph osd down osd.${otherosd} || return 1
+
+    for i in $(seq 6 10)
+    do
+      rados -p $poolname put obj$i /etc/hostname || return 1
+    done
+
+    ceph osd unset noup || return 1
+
+    local armed=0
+    for i in $(seq 1 60)
+    do
+      test -f "$log_a" && grep -q "enter Started/Primary/Active/Recovering" $log_a && {
+        armed=1
+        break
+      }
+      sleep 1
+    done
+    test "$armed" = 1 || {
+      echo "FAIL: ${PG} never entered Recovering -- test setup assumption" \
+           "broken, this isn't testing the open/arm path"
+      return 1
+    }
+
+    # Capture both onsets before the handover, to compare against what the
+    # new primary ends up with.
+    local q
+    q=$(ceph pg $PG query) || return 1
+    local original_vuln_onset original_rebuild_onset
+    original_vuln_onset=$(jq -r '.info.history.last_degraded' <<< "$q")
+    original_rebuild_onset=$(jq -r '.info.history.last_rebuild_active_start' <<< "$q")
+    test -n "$original_vuln_onset" -a "$original_vuln_onset" != "null" || {
+      echo "FAIL: couldn't read info.history.last_degraded from" \
+           "osd.${primary_a}"
+      return 1
+    }
+    test -n "$original_rebuild_onset" -a "$original_rebuild_onset" != "null" || {
+      echo "FAIL: couldn't read info.history.last_rebuild_active_start from" \
+           "osd.${primary_a}"
+      return 1
+    }
+
+    # Force an ordinary OSDMap epoch advance on osd.${primary_a} -- this is
+    # what gives the fix's retry-share a guaranteed trigger point before the
+    # handover below.
+    ceph osd set noout || return 1
+    ceph osd unset noout || return 1
+    sleep 2
+
+    # --- Handover: primary-affinity, not a kill -- see header comment.
+    ceph osd primary-affinity osd.${primary_a} 0 || return 1
+
+    local primary_b=""
+    for i in $(seq 1 30)
+    do
+      primary_b=$(get_primary $poolname obj1)
+      test -n "$primary_b" -a "$primary_b" != "$primary_a" && break
+      sleep 1
+    done
+    test -n "$primary_b" -a "$primary_b" != "$primary_a" || {
+      echo "FAIL: primary never changed after osd.${primary_a}'s" \
+           "primary-affinity was lowered"
+      return 1
+    }
+
+    # The new primary must show the exact same onsets, not fresh ones of
+    # its own.
+    local vuln_onset="" rebuild_onset=""
+    for i in $(seq 1 30)
+    do
+      flush_pg_stats || return 1
+      q=$(ceph pg $PG query 2>/dev/null) || { sleep 1; continue; }
+      vuln_onset=$(jq -r '.info.history.last_degraded' <<< "$q")
+      rebuild_onset=$(jq -r '.info.history.last_rebuild_active_start' <<< "$q")
+      test "$vuln_onset" = "$original_vuln_onset" \
+        -a "$rebuild_onset" = "$original_rebuild_onset" && break
+      sleep 1
+    done
+    test "$vuln_onset" = "$original_vuln_onset" || {
+      echo "FAIL: osd.${primary_b}'s info.history.last_degraded" \
+           "(${vuln_onset}) does not match the original onset" \
+           "(${original_vuln_onset}) -- the vulnerability-window onset did" \
+           "not survive the handover"
+      return 1
+    }
+    test "$rebuild_onset" = "$original_rebuild_onset" || {
+      echo "FAIL: osd.${primary_b}'s info.history.last_rebuild_active_start" \
+           "(${rebuild_onset}) does not match the original onset" \
+           "(${original_rebuild_onset}) -- the active-rebuild onset did not" \
+           "survive the handover"
+      return 1
+    }
+
+    # --- Restore osd.${primary_a}'s primary-affinity and let the episode
+    # resolve, ending this test in its default state.
+    ceph osd primary-affinity osd.${primary_a} 1 || return 1
+    wait_for_clean || return 1
+    flush_pg_stats || return 1
+
+    # Both episodes must still be recorded exactly ONCE, spanning the full
+    # handover-inclusive window, not fragmented or double-counted.
+    local vuln_avgcount=0 rebuild_avgcount=0
+    for osd in $(seq 0 $(expr $OSDS - 1))
+    do
+      test -S $(get_asok_path osd.${osd}) || continue
+      local d
+      d=$(CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${osd}) perf dump 2>/dev/null) || continue
+      local vc rc
+      vc=$(jq '.recoverystate_perf.pg_vulnerability_duration.avgcount' <<< "$d")
+      rc=$(jq '.recoverystate_perf.pg_rebuild_duration.avgcount' <<< "$d")
+      vuln_avgcount=$(expr $vuln_avgcount + ${vc:-0})
+      rebuild_avgcount=$(expr $rebuild_avgcount + ${rc:-0})
+    done
+
+    echo "INFO: summed pg_vulnerability_duration.avgcount=${vuln_avgcount}," \
+         "pg_rebuild_duration.avgcount=${rebuild_avgcount}"
+    test "$vuln_avgcount" = 1 || {
+      echo "FAIL: expected summed pg_vulnerability_duration.avgcount=1 for" \
+           "${PG}'s single handover-spanning episode, got $vuln_avgcount"
+      return 1
+    }
+    test "$rebuild_avgcount" = 1 || {
+      echo "FAIL: expected summed pg_rebuild_duration.avgcount=1 for" \
+           "${PG}'s single handover-spanning episode, got $rebuild_avgcount"
+      return 1
+    }
+
+    ceph osd unset noscrub || return 1
+    ceph osd unset nodeep-scrub || return 1
+    delete_pool $poolname
+    kill_daemons $dir || return 1
+}
+
 
 main osd-recovery-stats "$@"
 
