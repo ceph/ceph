@@ -542,6 +542,49 @@ class TestCephadm(object):
                 ]
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    @mock.patch("cephadm.module.HostCache.save_host")
+    def test_daemon_action_priority(self, _save_host, cephadm_module: CephadmOrchestrator):
+        # user-scheduled daemon actions (e.g. `ceph orch daemon redeploy`)
+        # must be processed before dependency-driven reconfigurations of
+        # other daemons
+        cephadm_module.service_cache_timeout = 10
+        with with_host(cephadm_module, 'test'):
+            with with_service(cephadm_module, RGWSpec(service_id='myrgw.foobar'), host='test') as d_names1, \
+                    with_service(cephadm_module, RGWSpec(service_id='myrgw.bazqux'), host='test') as d_names2:
+
+                assert len(d_names1) == 1
+                assert len(d_names2) == 1
+                d_name1 = d_names1[0]
+                d_name2 = d_names2[0]
+
+                # Make sure, _check_daemons wants to reconfigure both
+                # daemons due to a monmap change:
+                cephadm_module.mock_store_set('_ceph_get', 'mon_map', {
+                    'modified': datetime_to_str(datetime_now()),
+                    'fsid': 'foobar',
+                })
+                cephadm_module.notify('mon_map', None)
+
+                # user-scheduled redeploy for the daemon that would
+                # otherwise be processed second
+                cephadm_module._schedule_daemon_action(d_name2, 'redeploy')
+
+                processed = []
+
+                def _record_daemon_action(daemon_spec, action, **kwargs):
+                    processed.append(daemon_spec.name())
+                    return ''
+
+                with mock.patch.object(cephadm_module, '_daemon_action',
+                                       side_effect=_record_daemon_action):
+                    CephadmServe(cephadm_module)._check_daemons()
+
+                # the daemon with the user-scheduled action must be
+                # processed first
+                assert processed[0] == d_name2
+                assert sorted(processed) == sorted([d_name1, d_name2])
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
     def test_daemon_action_fail(self, cephadm_module: CephadmOrchestrator):
         cephadm_module.service_cache_timeout = 10
         with with_host(cephadm_module, 'test'):
