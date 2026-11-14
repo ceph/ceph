@@ -5620,29 +5620,21 @@ void PeeringState::calc_trim_to_aggressive()
 	cct->_conf->osd_pg_log_trim_max >= cct->_conf->osd_pg_log_trim_min) {
       return;
     }
-    auto it = pg_log.get_log().log.begin(); // oldest log entry
-    auto rit = pg_log.get_log().log.rbegin();
-    eversion_t by_n_to_keep; // start from tail
-    eversion_t by_n_to_trim = eversion_t::max(); // start from head
-    for (size_t i = 0; it != pg_log.get_log().log.end(); ++it, ++rit) {
-      i++;
-      if (i > target && by_n_to_keep == eversion_t()) {
-        by_n_to_keep = rit->version;
-      }
-      if (i >= num_to_trim && by_n_to_trim == eversion_t::max()) {
-        by_n_to_trim = it->version;
-      }
-      if (by_n_to_keep != eversion_t() &&
-          by_n_to_trim != eversion_t::max()) {
-        break;
-      }
-    }
-
-    if (by_n_to_keep == eversion_t()) {
+    // Keep the newest `target` entries and trim at most num_to_trim from the
+    // tail. Versions grow towards the head, so the trim point is the entry
+    // min(num_to_trim, size - target) from the tail: walk only that far,
+    // not `target` entries from the head as well. num_to_trim is 0 when
+    // osd_pg_log_trim_max is 0; the trim point is then the oldest entry.
+    const auto& log = pg_log.get_log().log;
+    const size_t len = log.size();
+    if (len <= target) {
       return;
     }
+    auto it = log.begin(); // oldest log entry
+    std::advance(it, std::min<uint64_t>(std::max<uint64_t>(num_to_trim, 1),
+                                        len - target) - 1);
 
-    pg_trim_to = std::min({by_n_to_keep, by_n_to_trim, limit});
+    pg_trim_to = std::min(it->version, limit);
     psdout(10) << "pg_trim_to now " << pg_trim_to << dendl;
     ceph_assert(pg_trim_to <= pg_log.get_head());
   }
