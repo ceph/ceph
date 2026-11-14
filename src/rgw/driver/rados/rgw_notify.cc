@@ -17,6 +17,7 @@
 #include "rgw_pubsub_push.h"
 #include "rgw_zone_features.h"
 #include "rgw_perf_counters.h"
+#include "rgw_tools.h"
 #include "services/svc_zone.h"
 #include "common/dout.h"
 #include "rgw_url.h"

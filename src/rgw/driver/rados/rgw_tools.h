@@ -5,6 +5,7 @@
 
 #include <coroutine>
 #include <functional>
+#include <memory>
 #include <string>
 #include <string_view>
 
@@ -22,6 +23,7 @@
 #include "include/ceph_hash.h"
 
 #include "include/neorados/RADOS.hpp"
+#include "include/rados/librados.hpp"
 
 #include "common/ceph_time.h"
 #include "common/dout.h"
@@ -39,6 +41,11 @@ struct RGWObjVersionTracker;
 class optional_yield;
 
 struct obj_version;
+
+struct AioCompletionDeleter {
+  void operator()(librados::AioCompletion* c) { c->release(); }
+};
+using aio_completion_ptr = std::unique_ptr<librados::AioCompletion, AioCompletionDeleter>;
 
 int rgw_init_ioctx(const DoutPrefixProvider *dpp,
                    librados::Rados *rados, const rgw_pool& pool,
