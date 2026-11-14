@@ -158,8 +158,9 @@ public:
    * walk through ops in flight
    *
    * @param oldest_sec the amount of time since the oldest op was initiated
-   * @param check a function consuming tracked ops, the function returns
-   *              false if it don't want to be fed with more ops
+   * @param visit a function consuming tracked ops, oldest first; the
+   *              function returns false if it does not want to be fed
+   *              with more ops
    * @return True if there are any Ops to warn on, false otherwise
    */
   bool visit_ops_in_flight(utime_t* oldest_secs,
