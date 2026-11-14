@@ -1280,7 +1280,8 @@ static PG::interruptible_future<ceph::bufferlist> do_pgnls_common(
         lower_bound.is_max() ||
         (lower_bound >= pg_start && lower_bound < pg_end))) {
     // this should only happen with a buggy client.
-    throw std::invalid_argument("outside of PG bounds");
+    logger().warn("do_pgnls_common: outside of PG bounds");
+    throw crimson::osd::invalid_argument{};
   }
 
   return backend.list_objects(lower_bound, limit).then_interruptible(
@@ -1360,7 +1361,8 @@ static PG::interruptible_future<> do_pgnls(
   try {
     ceph::decode(lower_bound, osd_op.indata);
   } catch (const buffer::error&) {
-    throw std::invalid_argument("unable to decode PGNLS handle");
+    logger().warn("do_pgnls: unable to decode PGNLS handle");
+    throw crimson::osd::invalid_argument{};
   }
   const auto pg_start = pg.get_pgid().pgid.get_hobj_start();
   const auto pg_end = \
@@ -1399,7 +1401,9 @@ static PG::interruptible_future<> do_pgnls_filtered(
   try {
     lower_bound.decode(bp);
   } catch (const buffer::error&) {
-    throw std::invalid_argument("unable to decode PGNLS_FILTER description");
+    logger().warn(
+      "do_pgnls_filtered: unable to decode PGNLS_FILTER description");
+    throw crimson::osd::invalid_argument{};
   }
 
   logger().debug("{}: cname={}, mname={}, type={}, lower_bound={}, filter={}",
@@ -1436,7 +1440,8 @@ static PG::interruptible_future<ceph::bufferlist> do_pgls_common(
         lower_bound.is_max() ||
         (lower_bound >= pg_start && lower_bound < pg_end))) {
     // this should only happen with a buggy client.
-    throw std::invalid_argument("outside of PG bounds");
+    logger().warn("do_pgls_common: outside of PG bounds");
+    throw crimson::osd::invalid_argument{};
   }
 
   using entries_t = decltype(pg_ls_response_t::entries);
@@ -1489,7 +1494,8 @@ static PG::interruptible_future<> do_pgls(
   try {
     lower_bound.decode(bp);
   } catch (const buffer::error&) {
-    throw std::invalid_argument{"unable to decode PGLS handle"};
+    logger().warn("do_pgls: unable to decode PGLS handle");
+    throw crimson::osd::invalid_argument{};
   }
   const auto pg_start = pg.get_pgid().pgid.get_hobj_start();
   const auto pg_end =
@@ -1528,7 +1534,8 @@ static PG::interruptible_future<> do_pgls_filtered(
   try {
     lower_bound.decode(bp);
   } catch (const buffer::error&) {
-    throw std::invalid_argument("unable to decode PGLS_FILTER description");
+    logger().warn("do_pgls_filtered: unable to decode PGLS_FILTER description");
+    throw crimson::osd::invalid_argument{};
   }
 
   logger().debug("{}: cname={}, mname={}, type={}, lower_bound={}, filter={}",
@@ -1567,8 +1574,7 @@ PgOpsExecuter::execute_op(OSDOp& osd_op)
     return do_pgnls_filtered(pg, nspace, osd_op);
   default:
     logger().warn("unknown op {}", ceph_osd_op_name(op.op));
-    throw std::runtime_error(
-      fmt::format("op '{}' not supported", ceph_osd_op_name(op.op)));
+    throw crimson::osd::invalid_argument{};
   }
 }
 
