@@ -7,6 +7,7 @@ if(${WITH_CEPHFS})
     nonblocking.cc
     commands.cc
     syncio.cc
+    flush_range.cc
     fscrypt_conf.cc
     subs.cc
     )

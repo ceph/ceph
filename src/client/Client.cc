@@ -4938,28 +4938,30 @@ bool Client::_flush(Inode *in, Context *onfinish)
   return objectcacher->flush_set(&in->oset, onfinish);
 }
 
-void Client::_flush_range(Inode *in, int64_t offset, uint64_t size)
+int Client::_flush_range(Inode *in, int64_t offset, uint64_t size)
 {
   ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
   if (!in->oset.dirty_or_tx) {
     ldout(cct, 10) << " nothing to flush" << dendl;
-    return;
+    return 0;
   }
 
   if (size == 0) {
     ldout(cct, 10) << "zero size flush is not supported by OSD" << dendl;
-    return;
+    return 0;
   }
 
   C_SaferCond onflush("Client::_flush_range flock");
   bool ret = objectcacher->file_flush(&in->oset, &in->layout, in->snaprealm->get_snap_context(),
 				      offset, size, &onflush);
+  int r = 0;
   if (!ret) {
     // wait for flush
     client_lock.unlock();
-    onflush.wait();
+    r = onflush.wait();
     client_lock.lock();
   }
+  return r;
 }
 
 void Client::flush_set_callback(ObjectCacher::ObjectSet *oset)
@@ -12112,8 +12114,11 @@ retry:
   } else {
     // CASE 3 - blocking call by the caller
 
-    if (f->flags & O_DIRECT)
-      _flush_range(in, offset, size);
+    if (f->flags & O_DIRECT) {
+      rc = _flush_range(in, offset, size);
+      if (rc < 0)
+        goto done;
+    }
 
     bool checkeof = false;
     rc = _read_sync(f, offset, size, bl, &checkeof);
@@ -12757,13 +12762,18 @@ void Client::C_Write_Finisher::finish_io(int r)
   clnt->put_cap_ref(in, CEPH_CAP_FILE_BUFFER);
 
   if (r >= 0) {
+    int flush_r = 0;
     if (is_file_write) {
       if ((f->flags & O_SYNC) || (f->flags & O_DSYNC)) {
-        clnt->_flush_range(in, offset, size);
+        flush_r = clnt->_flush_range(in, offset, size);
       }
     }
 
-    r = clnt->_write_success(f, start, fpos, req_ofs, req_size, offset, size, in, encrypted);
+    // As in _write(), account for the write even if its flush failed, but
+    // leave the file position unchanged.
+    r = clnt->_write_success(f, start, flush_r < 0 ? 0 : fpos, req_ofs, req_size, offset, size, in, encrypted);
+    if (flush_r < 0)
+      r = flush_r;
   }
 
   iofinished = true;
@@ -13156,6 +13166,7 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, bufferlist bl,
   std::unique_ptr<C_SaferCond> onuninline = nullptr;
   CWF_iofinish *cwf_iofinish = NULL;
   C_SaferCond *cond_iofinish = NULL;
+  int flush_r = 0;
 
   if (size < 1) { // zero bytes write is not supported by osd
     return -EINVAL;
@@ -13242,6 +13253,15 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, bufferlist bl,
     have &= ~(CEPH_CAP_FILE_BUFFER | CEPH_CAP_FILE_LAZYIO);
 
   bool buffered_write = (cct->_conf->client_oc && (have & (CEPH_CAP_FILE_BUFFER | CEPH_CAP_FILE_LAZYIO)));
+  if (!buffered_write && (f->flags & O_DIRECT)) {
+    // Flush before setting up encryption, inline conversion or completion
+    // state, so that a failure only has to drop Fw.
+    r = _flush_range(in, offset, size);
+    if (r < 0) {
+      put_cap_ref(in, CEPH_CAP_FILE_WR);
+      return r;
+    }
+  }
   ceph::ref_t<WriteEncMgr> enc_mgr;
 
   if (buffered_write) {
@@ -13372,12 +13392,9 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, bufferlist bl,
     // O_DSYNC == O_SYNC on linux < 2.6.33
     // O_SYNC = __O_SYNC | O_DSYNC on linux >= 2.6.33
     if ((f->flags & O_SYNC) || (f->flags & O_DSYNC)) {
-      _flush_range(in, offset, size);
+      flush_r = _flush_range(in, offset, size);
     }
   } else {
-    if (f->flags & O_DIRECT)
-      _flush_range(in, offset, size);
-
     // simple, non-atomic sync write
     if (onfinish == nullptr) {
       // We need a safer condition to wait on.
@@ -13429,7 +13446,12 @@ success:
 
   // do not get here if non-blocking caller (onfinish != nullptr)
   ldout(cct, 10) << " _write_filer_succeess" << dendl;
-  r = _write_success(f, start, fpos, request_offset, request_size, enc_mgr->get_ofs(), enc_mgr->get_size(), in, enc_mgr->encrypted());
+  // An OSD write error leaves the data dirty in the cache, so account for
+  // the write even if the O_SYNC flush failed. As on Linux, return the
+  // error without moving the file position.
+  r = _write_success(f, start, flush_r < 0 ? 0 : fpos, request_offset, request_size, enc_mgr->get_ofs(), enc_mgr->get_size(), in, enc_mgr->encrypted());
+  if (flush_r < 0)
+    r = flush_r;
   if (enc_mgr->encrypted()) {
     logger->tinc(l_c_fscrypt_wr_lat, mono_clock_now() - start);
   }
@@ -14572,15 +14594,27 @@ int Client::_sync_fs()
 
   wait_sync_caps(flush_tid);
 
+  int r = 0;
   if (nullptr != cond) {
     client_lock.unlock();
     ldout(cct, 15) << __func__ << " waiting on data to flush" << dendl;
-    cond->wait();
-    ldout(cct, 15) << __func__ << " flush finished" << dendl;
+    r = cond->wait();
+    ldout(cct, 15) << __func__ << " flush finished: " << r << dendl;
     client_lock.lock();
   }
 
-  return 0;
+  // Report writeback errors that happened since the last sync_fs, including
+  // those that came back after the file was closed and so could not be
+  // returned by close() or fsync(). If the flush itself failed, report that
+  // and keep the saved error for the next sync_fs.
+  if (r == 0) {
+    r = std::exchange(sync_fs_err, 0);
+  }
+  if (r < 0) {
+    ldout(cct, 1) << __func__ << " caught writeback error: "
+                  << cpp_strerror(r) << dendl;
+  }
+  return r;
 }
 
 int Client::sync_fs()

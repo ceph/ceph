@@ -982,7 +982,7 @@ public:
    * @returns true if the data was already flushed, false otherwise.
    */
   bool _flush(Inode *in, Context *c);
-  void _flush_range(Inode *in, int64_t off, uint64_t size);
+  int _flush_range(Inode *in, int64_t off, uint64_t size);
   void _flushed(Inode *in);
   void flush_set_callback(ObjectCacher::ObjectSet *oset);
 
@@ -1114,6 +1114,13 @@ public:
   }
   void dec_opened_files() {
     --opened_files;
+  }
+
+  // Remember a writeback/flush error so that the next sync_fs() reports
+  // it, even if no open Fh was left to receive it (e.g. the error came
+  // back after the file was closed).
+  void set_sync_fs_err(int r) {
+    sync_fs_err = r;
   }
   std::pair<uint64_t, uint64_t> get_opened_files_rates() {
     return std::make_pair(opened_files, inode_map.size());
@@ -2476,6 +2483,10 @@ private:
 
   bool   mount_aborted = false;
   bool   blocklisted = false;
+
+  // last error recorded by set_sync_fs_err(), cleared when sync_fs()
+  // reports it
+  int sync_fs_err = 0;
 
   std::unordered_map<vinodeno_t, Inode*> inode_map;
   std::unordered_map<ino_t, vinodeno_t> faked_ino_map;
