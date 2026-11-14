@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 # TODO: remove noqa and update to python3/mypy style type annotations
-from typing import Tuple, Optional, Any, Union, Iterator  # noqa: F401
+from typing import Tuple, Optional, Any, Union, Iterator, NamedTuple, Dict  # noqa: F401
 
 from ceph.deployment.inventory import Device  # noqa: F401
 
@@ -13,6 +13,24 @@ logger = logging.getLogger(__name__)
 
 class _MatchInvalid(Exception):
     pass
+
+
+MATCH = 'match'
+MISMATCH = 'mismatch'
+ERROR = 'error'
+
+
+class MatchEvaluation(NamedTuple):
+    """ Outcome of a single filter criterion against a single device,
+    as reported by ``Matcher.evaluate()``. """
+    criterion: str
+    expected: str
+    actual: Optional[str]
+    result: str  # MATCH, MISMATCH or ERROR
+    hint: Optional[str] = None
+
+    def to_json(self) -> Dict[str, Any]:
+        return self._asdict()
 
 
 # pylint: disable=too-few-public-methods
@@ -34,6 +52,9 @@ class Matcher(object):
         self.key = key
         self.value = value
         self.fallback_key = ''  # type: Optional[str]
+        # name of the filter in the spec; ``key`` may be overwritten by
+        # subclasses with the inventory attribute actually read.
+        self.criterion = key
 
     def _get_disk_key(self, device):
         # type: (Device) -> Any
@@ -87,6 +108,44 @@ class Matcher(object):
         """
         raise NotImplementedError
 
+    def describe_expected(self):
+        # type: () -> str
+        return str(self.value)
+
+    def describe_actual(self, disk_value):
+        # type: (Any) -> str
+        return repr(disk_value) if isinstance(disk_value, str) else str(disk_value)
+
+    def hint(self, disk, disk_value):
+        # type: (Device, Any) -> Optional[str]
+        """ Explain a mismatch when it is likely to be surprising """
+        return None
+
+    def evaluate(self, disk):
+        # type: (Device) -> MatchEvaluation
+        """ Same outcome as ``compare()``, along with the expected and
+        actual values, so that a mismatch can be explained to the user.
+        Never raises: invalid filters or missing inventory attributes are
+        reported with the ``error`` result.
+        """
+        expected = self.describe_expected()
+        try:
+            disk_value = self._get_disk_key(disk)
+        except _MatchInvalid:
+            return MatchEvaluation(
+                self.criterion, expected, None, ERROR,
+                'the inventory does not report this attribute for this device')
+        actual = self.describe_actual(disk_value)
+        try:
+            matched = self.compare(disk)
+        except (_MatchInvalid, ValueError, TypeError, IndexError) as e:
+            return MatchEvaluation(self.criterion, expected, actual, ERROR,
+                                   f'cannot evaluate filter: {e}')
+        if matched:
+            return MatchEvaluation(self.criterion, expected, actual, MATCH)
+        return MatchEvaluation(self.criterion, expected, actual, MISMATCH,
+                               self.hint(disk, disk_value))
+
 
 # pylint: disable=too-few-public-methods
 class SubstringMatcher(Matcher):
@@ -114,6 +173,16 @@ class SubstringMatcher(Matcher):
             return True
         return False
 
+    def describe_expected(self):
+        # type: () -> str
+        return f"contains '{self.value}'"
+
+    def hint(self, disk, disk_value):
+        # type: (Device, Any) -> Optional[str]
+        if str(self.value).strip().lower() in str(disk_value).lower():
+            return 'matching is case-sensitive and whitespace-sensitive'
+        return None
+
 
 # pylint: disable=too-few-public-methods
 class AllMatcher(Matcher):
@@ -140,6 +209,11 @@ class AllMatcher(Matcher):
         if not disk:
             return False
         return True
+
+    def evaluate(self, disk):
+        # type: (Device) -> MatchEvaluation
+        return MatchEvaluation(self.criterion, 'any device', None,
+                               MATCH if self.compare(disk) else MISMATCH)
 
 
 # pylint: disable=too-few-public-methods
@@ -169,6 +243,27 @@ class EqualityMatcher(Matcher):
         if not ret:
             logger.debug('{} != {}'.format(disk_value, self.value))
         return ret
+
+    _ROTATIONAL = {'1': '1 (rotational)', '0': '0 (non-rotational)'}
+
+    def describe_expected(self):
+        # type: () -> str
+        if self.key == 'rotational':
+            return self._ROTATIONAL.get(str(self.value), str(self.value))
+        return str(self.value)
+
+    def describe_actual(self, disk_value):
+        # type: (Any) -> str
+        if self.key == 'rotational':
+            return self._ROTATIONAL.get(str(disk_value), str(disk_value))
+        return str(disk_value)
+
+    def hint(self, disk, disk_value):
+        # type: (Device, Any) -> Optional[str]
+        if self.key == 'rotational':
+            return ("as reported by the kernel (/sys/block/<dev>/queue/rotational); "
+                    "RAID controllers and virtual disks may report it wrongly")
+        return None
 
 
 class SizeMatcher(Matcher):
@@ -357,6 +452,13 @@ class SizeMatcher(Matcher):
         # type: (str) -> float
         return SizeMatcher.to_byte(SizeMatcher._get_k_v(input))
 
+    @classmethod
+    def _disk_value_to_byte(cls, disk_value):
+        # type: (str) -> float
+        disk_size = re.findall(r"\d+\.\d+", disk_value)[0]
+        disk_suffix = cls._parse_suffix(disk_value)
+        return cls.to_byte((disk_size, disk_suffix))
+
     # pylint: disable=inconsistent-return-statements, too-many-return-statements
     def compare(self, disk):
         # type: (Device) -> bool
@@ -381,10 +483,10 @@ class SizeMatcher(Matcher):
             logger.warning("Could not retrieve value for disk")
             return False
 
-        disk_size = re.findall(r"\d+\.\d+", disk_value)[0]
-        disk_suffix = self._parse_suffix(disk_value)
-        disk_size_in_byte = self.to_byte((disk_size, disk_suffix))
+        return self._matches_bytes(self._disk_value_to_byte(disk_value))
 
+    def _matches_bytes(self, disk_size_in_byte):
+        # type: (float) -> bool
         if all(self.high) and all(self.low):
             if disk_size_in_byte <= self.to_byte(
                     self.high) and disk_size_in_byte >= self.to_byte(self.low):
@@ -411,3 +513,43 @@ class SizeMatcher(Matcher):
             logger.debug("Neither high, low, nor exact was given")
             raise _MatchInvalid("No filters applied")
         return False
+
+    @classmethod
+    def _fmt(cls, tpl):
+        # type: (Tuple[Optional[str], Optional[str]]) -> str
+        return f'{tpl[0]}{tpl[1]} ({cls.to_byte(tpl):.3g} B)'
+
+    def describe_expected(self):
+        # type: () -> str
+        if all(self.high) and all(self.low):
+            return f'between {self._fmt(self.low)} and {self._fmt(self.high)}'
+        if all(self.low):
+            return f'>= {self._fmt(self.low)}'
+        if all(self.high):
+            return f'<= {self._fmt(self.high)}'
+        if all(self.exact):
+            return f'== {self._fmt(self.exact)}'
+        return str(self.value)
+
+    def describe_actual(self, disk_value):
+        # type: (Any) -> str
+        try:
+            return f"'{disk_value}' ({self._disk_value_to_byte(disk_value):.3g} B)"
+        except (ValueError, TypeError, IndexError):
+            return str(disk_value)
+
+    def hint(self, disk, disk_value):
+        # type: (Device, Any) -> Optional[str]
+        # ceph-volume computes 'human_readable_size' in base 1024 but labels
+        # it 'TB', 'GB', ..., while the filter units are base 1000: a disk
+        # sold as 4 TB is seen as '3.64 TB'.
+        try:
+            size_in_byte = int((disk.sys_api or {}).get('size', 0))
+        except (TypeError, ValueError):
+            return None
+        if size_in_byte and self._matches_bytes(size_in_byte):
+            return (f"the size filter is compared to {disk_value!r}, which ceph-volume "
+                    "computes in base 1024 (TiB, GiB) but labels TB, GB, while the filter "
+                    f"uses base 1000 units. The device actually has {size_in_byte} bytes "
+                    "and would match the filter in base 1000")
+        return None

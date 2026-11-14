@@ -1641,6 +1641,88 @@ class TestCephadm(object):
             out = wait(cephadm_module, c)
             assert "Error: Device path is empty." in out
 
+    @staticmethod
+    def _explain_inventory() -> List[Device]:
+        def dev(path, rotational, model, size):
+            return Device(path, available=True, sys_api={
+                'rotational': rotational, 'model': model, 'vendor': 'ATA', 'size': size,
+                'human_readable_size': '%.2f TB' % (size / 1024 ** 4)})
+        return [dev('/dev/sdb', '1', 'ST4000NM0035', 4000787030016),
+                dev('/dev/sdc', '0', 'SAMSUNG MZ7L31T9HBLT', 1920383410176)]
+
+    @staticmethod
+    def _explain_spec(**kwargs) -> DriveGroupSpec:
+        return DriveGroupSpec(service_id='hdd_ssd_db',
+                              placement=PlacementSpec(host_pattern='node*'),
+                              data_devices=DeviceSelection(rotational=True, size='4TB:'),
+                              db_devices=DeviceSelection(model='MZ7L3'),
+                              **kwargs)
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_explain_osdspecs(self, cephadm_module):
+        with with_host(cephadm_module, 'node1'), with_host(cephadm_module, 'other'):
+            cephadm_module.cache.update_host_devices('node1', self._explain_inventory())
+            res = wait(cephadm_module, cephadm_module.explain_osdspecs(
+                osdspecs=[self._explain_spec()]))
+
+            assert len(res) == 1
+            assert res[0]['service_name'] == 'osd.hdd_ssd_db'
+            assert res[0]['notes'] == ['1 host(s) not matched by the placement: other']
+            assert [h['hostname'] for h in res[0]['hosts']] == ['node1']
+            host = res[0]['hosts'][0]
+            assert host['status'] == 'eligible'
+            assert host['inventory_updated'] is not None
+
+            sel = host['selection']
+            assert {r['role']: r['selected'] for r in sel['roles']} == {
+                'data_devices': [], 'db_devices': ['/dev/sdc']}
+            sdb = [d for d in sel['devices'] if d['path'] == '/dev/sdb'][0]
+            data = [r for r in sdb['roles'] if r['role'] == 'data_devices'][0]
+            assert data['reason'] == 'filter_mismatch'
+            assert {c['criterion']: c['result'] for c in data['criteria']} == {
+                'size': 'mismatch', 'rotational': 'match'}
+            assert 'base 1024' in [c for c in data['criteria']
+                                   if c['criterion'] == 'size'][0]['hint']
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_explain_osdspecs_host_status(self, cephadm_module):
+        with with_host(cephadm_module, 'node1'), with_host(cephadm_module, 'node2'), \
+                with_host(cephadm_module, 'other'):
+            cephadm_module.inventory.add_label('node2', SpecialHostLabels.DRAIN_DAEMONS)
+            cephadm_module.cache.devices.pop('node1', None)
+            res = wait(cephadm_module, cephadm_module.explain_osdspecs(
+                osdspecs=[self._explain_spec()], hosts=['node1', 'node2', 'other', 'nope']))
+
+            status = {h['hostname']: h['status'] for h in res[0]['hosts']}
+            assert status == {
+                'node1': 'no_inventory',
+                'node2': 'draining',
+                'other': 'not_matched',
+                'nope': 'unknown_host',
+            }
+            assert all(h['selection'] is None for h in res[0]['hosts']
+                       if h['hostname'] != 'node2')
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_explain_osdspecs_stored(self, cephadm_module):
+        with with_host(cephadm_module, 'node1'):
+            spec = self._explain_spec(unmanaged=True)
+            c = cephadm_module.apply([spec])
+            assert wait(cephadm_module, c)[0].startswith('Scheduled osd.hdd_ssd_db update...')
+            cephadm_module.cache.update_host_devices('node1', self._explain_inventory())
+
+            res = wait(cephadm_module, cephadm_module.explain_osdspecs())
+            assert [r['service_name'] for r in res] == ['osd.hdd_ssd_db']
+            assert 'the spec is unmanaged: cephadm does not deploy OSDs from it' \
+                in res[0]['notes']
+
+            res = wait(cephadm_module, cephadm_module.explain_osdspecs(
+                service_name='osd.hdd_ssd_db'))
+            assert len(res) == 1
+
+            with pytest.raises(OrchestratorError, match='No OSD spec named osd.nope found'):
+                wait(cephadm_module, cephadm_module.explain_osdspecs(service_name='osd.nope'))
+
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     @mock.patch('cephadm.services.osd.OSDService._run_ceph_volume_command')
     @mock.patch('cephadm.services.osd.OSDService.driveselection_to_ceph_volume')

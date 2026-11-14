@@ -1,4 +1,5 @@
 
+import errno
 import json
 import textwrap
 
@@ -832,3 +833,96 @@ class TestCertStoreCertKeySet:
             None,
             False,
         )
+
+
+class TestOsdSpecExplain:
+
+    SPEC_YAML = textwrap.dedent("""
+        service_type: osd
+        service_id: hdd_ssd_db
+        placement:
+          host_pattern: 'node*'
+        spec:
+          data_devices:
+            rotational: 1
+            size: '4TB:'
+          db_devices:
+            model: MZ7L3
+        """)
+
+    @staticmethod
+    def _result():
+        from ceph.deployment.drive_group import DriveGroupSpec
+        from ceph.deployment.drive_selection.explain import explain_drive_selection
+
+        def dev(path, rotational, model, size):
+            return Device(path, available=True, sys_api={
+                'rotational': rotational, 'model': model, 'vendor': 'ATA', 'size': size,
+                'human_readable_size': '%.2f TB' % (size / 1024 ** 4)})
+
+        spec = DriveGroupSpec.from_json(yaml.safe_load(TestOsdSpecExplain.SPEC_YAML))
+        inventory = [dev('/dev/sdb', '1', 'ST4000NM0035', 4000787030016),
+                     dev('/dev/sdc', '0', 'SAMSUNG MZ7L31T9HBLT', 1920383410176)]
+        return [{
+            'service_name': 'osd.hdd_ssd_db',
+            'notes': ['1 host(s) not matched by the placement: other'],
+            'hosts': [{
+                'hostname': 'node1',
+                'status': 'eligible',
+                'detail': None,
+                'inventory_updated': None,
+                'selection': explain_drive_selection(spec, inventory).to_json(),
+            }],
+        }]
+
+    def _run(self, cmd, inbuf=None):
+        m = OrchestratorCli('orchestrator', 0, 0)
+        with mock.patch('orchestrator.OrchestratorCli.explain_osdspecs',
+                        return_value=OrchResult(self._result())) as explain:
+            r = m._handle_command(inbuf, dict(cmd, prefix='orch osd spec explain'))
+        return r, explain
+
+    def test_plain(self):
+        r, explain = self._run({'service_name': 'hdd_ssd_db'})
+        assert r.retval == 0, r.stderr
+        explain.assert_called_once_with(service_name='osd.hdd_ssd_db', osdspecs=None, hosts=None)
+        out = r.stdout
+        assert out.startswith('osd.hdd_ssd_db\n  NOTE: 1 host(s) not matched by the placement: other\n'
+                              '  host node1: eligible\n')
+        assert '    data_devices: 0 selected\n' in out
+        assert '    db_devices: 1 selected (/dev/sdc)\n' in out
+        assert 'NOTE: data_devices selects no device: no OSD will be created' in out
+        # only failing criteria are shown, with a reference to the hint
+        assert "size: '3.64 TB' (3.64e+12 B), expected >= 4TB (4e+12 B) [1]" in out
+        assert 'rotational: 1 (rotational), expected' not in out
+        assert "model: 'ST4000NM0035', expected contains 'MZ7L3'" in out
+        assert '\n[1] the size filter is compared to' in out
+
+    def test_verbose(self):
+        r, _ = self._run({'verbose': True})
+        assert r.retval == 0, r.stderr
+        assert 'ok: rotational: 1 (rotational), expected 1 (rotational)' in r.stdout
+        assert "MISMATCH: size: '3.64 TB'" in r.stdout
+
+    def test_inbuf(self):
+        r, explain = self._run({}, inbuf=self.SPEC_YAML)
+        assert r.retval == 0, r.stderr
+        osdspecs = explain.call_args.kwargs['osdspecs']
+        assert [s.service_name() for s in osdspecs] == ['osd.hdd_ssd_db']
+        assert explain.call_args.kwargs['service_name'] is None
+
+    def test_inbuf_not_osd(self):
+        r, explain = self._run({}, inbuf='service_type: mon\nplacement:\n  count: 3\n')
+        assert r.retval == -errno.EINVAL
+        assert 'mon is not an OSD spec' in r.stderr
+        explain.assert_not_called()
+
+    def test_inbuf_and_service_name(self):
+        r, explain = self._run({'service_name': 'osd.foo'}, inbuf=self.SPEC_YAML)
+        assert r.retval == -errno.EINVAL
+        explain.assert_not_called()
+
+    def test_json(self):
+        r, _ = self._run({'format': 'json'})
+        assert r.retval == 0, r.stderr
+        assert json.loads(r.stdout) == self._result()
