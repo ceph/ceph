@@ -1,0 +1,41 @@
+# Integration test for src/tools/contrib/upmap-remapped.py
+roles:
+- - mon.a
+  - mon.b
+  - mon.c
+  - mgr.x
+  - osd.0
+  - osd.1
+  - osd.2
+  - osd.3
+  - osd.4
+- - osd.5
+  - osd.6
+  - osd.7
+  - osd.8
+  - osd.9
+  - client.0
+openstack:
+  - volumes: # attached to each instance
+      count: 5
+      size: 10 # GB
+  - volumes: # attached to each instance
+      count: 3
+      size: 10 # GB
+tasks:
+- install:
+- ceph:
+    log-ignorelist:
+      - overall HEALTH_
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_
+      - \(PG_
+      - \(OBJECT_MISPLACED\)
+      - \(POOL_APP_NOT_ENABLED\)
+      - \(TOO_FEW_PGS\)
+      - \(SLOW_OPS\)
+      - slow request
+- workunit:
+    clients:
+      client.0:
+        - rados/test_upmap_remapped.sh
