@@ -28,8 +28,6 @@
 #include <boost/container/flat_map.hpp>
 #include <boost/container/flat_set.hpp>
 
-#include "include/neorados/RADOS.hpp"
-
 #include "common/ceph_crypto.h"
 #include "common/random_string.h"
 #include "common/tracer.h"
@@ -57,6 +55,11 @@
 
 namespace ceph {
   class Formatter;
+}
+
+namespace neorados {
+  class ReadOp;
+  class WriteOp;
 }
 
 namespace rgw::sal {
