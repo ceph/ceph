@@ -5517,6 +5517,9 @@ void RGWPostObj::execute(optional_yield y)
     return;
   }
 
+  real_time mtime;
+  std::string version_id;
+
   /* Start iteration over data fields. It's necessary as Swift's FormPost
    * is capable to handle multiple files in single form. */
   do {
@@ -5730,7 +5733,8 @@ void RGWPostObj::execute(optional_yield y)
     }
 
     const req_context rctx{this, s->yield, s->trace.get()};
-    op_ret = processor->complete(s->obj_size, etag, nullptr, real_time(),
+    mtime = real_time{};
+    op_ret = processor->complete(s->obj_size, etag, &mtime, real_time(),
 				 attrs, cksum,
 				 (delete_at ? *delete_at : real_time()),
 				 nullptr, nullptr, nullptr, nullptr, nullptr,
@@ -5738,13 +5742,14 @@ void RGWPostObj::execute(optional_yield y)
     if (op_ret < 0) {
       return;
     }
+    version_id = obj->get_instance();
 
     /* XXX shouldn't we have an op-counter update here? */
 
   } while (is_next_file_to_upload());
 
   // send request to notification manager
-  int ret = res->publish_commit(this, ofs, s->object->get_mtime(), etag, s->object->get_instance());
+  int ret = res->publish_commit(this, ofs, mtime, etag, version_id);
   if (ret < 0) {
     ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
     // too late to rollback operation, hence op_ret is not set here
