@@ -1,0 +1,5 @@
+# no client, snapshots or clones
+overrides:
+  volumes_upgrade:
+    subvolumes:
+      sv_attr_0: partial
