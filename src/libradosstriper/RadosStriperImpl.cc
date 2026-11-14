@@ -1073,8 +1073,7 @@ int libradosstriper::RadosStriperImpl::trunc(const std::string& soid, uint64_t s
   librados::ObjectWriteOperation op;
   op.assert_exists();
   std::string lockCookie = RadosStriperImpl::getUUID();
-  utime_t dur = utime_t();
-  rados::cls::lock::lock(&op, RADOS_LOCK_NAME, ClsLockType::EXCLUSIVE, lockCookie, "", "", dur, 0);
+  rados::cls::lock::lock(&op, RADOS_LOCK_NAME, ClsLockType::EXCLUSIVE, lockCookie, "", "", ceph::timespan::zero(), 0);
   int rc = m_ioCtx.operate(firstObjOid, &op);
   if (rc) return rc;
   // load layout and size
@@ -1346,8 +1345,7 @@ int libradosstriper::RadosStriperImpl::openStripedObjectForRead(
   librados::ObjectWriteOperation op;
   op.assert_exists();
   *lockCookie = getUUID();
-  utime_t dur = utime_t();
-  rados::cls::lock::lock(&op, RADOS_LOCK_NAME, ClsLockType::SHARED, *lockCookie, "Tag", "", dur, 0);
+  rados::cls::lock::lock(&op, RADOS_LOCK_NAME, ClsLockType::SHARED, *lockCookie, "Tag", "", ceph::timespan::zero(), 0);
   std::string firstObjOid = getObjectId(soid, 0);
   int rc = m_ioCtx.operate(firstObjOid, &op);
   if (rc) {
@@ -1375,8 +1373,7 @@ int libradosstriper::RadosStriperImpl::openStripedObjectForWrite(const std::stri
   librados::ObjectWriteOperation op;
   op.assert_exists();
   *lockCookie = getUUID();
-  utime_t dur = utime_t();
-  rados::cls::lock::lock(&op, RADOS_LOCK_NAME, ClsLockType::SHARED, *lockCookie, "Tag", "", dur, 0);
+  rados::cls::lock::lock(&op, RADOS_LOCK_NAME, ClsLockType::SHARED, *lockCookie, "Tag", "", ceph::timespan::zero(), 0);
   std::string firstObjOid = getObjectId(soid, 0);
   int rc = m_ioCtx.operate(firstObjOid, &op);
   if (rc) {

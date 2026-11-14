@@ -921,8 +921,7 @@ retry:
   d(5) << "attempting to clean up the lock state" << dendl;
   {
     auto op = librados::ObjectWriteOperation();
-    auto tv = ceph::to_timeval(lock_keeper_timeout);
-    utime_t duration; duration.set_from_timeval(&tv);
+    const ceph::timespan duration = lock_keeper_timeout;
     int flags = LOCK_FLAG_MAY_RENEW;
     op.cmpxattr(XATTR_EXCL, LIBRADOS_CMPXATTR_OP_EQ, str2bl(exclusive_holder));
     op.setxattr(XATTR_EXCL, bufferlist());
@@ -976,8 +975,7 @@ int SimpleRADOSStriper::lock(LockLevel ilock)
   auto last_print_time = start_time;
   bool first_print = true;
   auto ext = get_first_extent();
-  auto tv = ceph::to_timeval(lock_keeper_timeout);
-  utime_t duration; duration.set_from_timeval(&tv);
+  const ceph::timespan duration = lock_keeper_timeout;
 
   if (locked == None) {
     if (int rc = get_metadata(); rc < 0) {
@@ -1185,8 +1183,7 @@ int SimpleRADOSStriper::_unlock(LockLevel ilock)
   }
 
   auto ext = get_first_extent();
-  auto tv = ceph::to_timeval(lock_keeper_timeout);
-  utime_t duration; duration.set_from_timeval(&tv);
+  const ceph::timespan duration = lock_keeper_timeout;
 
   auto op = librados::ObjectWriteOperation();
 

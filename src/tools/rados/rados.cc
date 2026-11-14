@@ -1339,7 +1339,9 @@ static int do_lock_cmd(std::vector<const char*> &nargs,
       formatter->dump_stream("name") << id.locker;
       formatter->dump_string("cookie", id.cookie);
       formatter->dump_string("description", info.description);
-      formatter->dump_stream("expiration") << info.expiration;
+      // print through utime_t to keep the existing output format, which
+      // shows a lock without expiration as "0.000000"
+      formatter->dump_stream("expiration") << utime_t(info.expiration);
       formatter->dump_stream("addr") << info.addr.get_legacy_str();
       formatter->close_section();
     }
@@ -1352,7 +1354,7 @@ static int do_lock_cmd(std::vector<const char*> &nargs,
     rados::cls::lock::Lock l(lock_name);
     l.set_cookie(lock_cookie);
     l.set_tag(lock_tag);
-    l.set_duration(utime_t(lock_duration, 0));
+    l.set_duration(std::chrono::seconds(lock_duration));
     l.set_description(lock_description);
     int ret;
     switch (lock_type) {

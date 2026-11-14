@@ -63,7 +63,7 @@ std::list<locker_info_t> locker_info_t::generate_test_instances()
 {
   std::list<locker_info_t> o;
   locker_info_t i;
-  i.expiration = utime_t(5, 0);
+  i.expiration = ceph::real_time(std::chrono::seconds(5));
   generate_test_addr(i.addr, 1, 2);
   i.description = "description";
   o.push_back(std::move(i));
@@ -92,7 +92,7 @@ std::list<lock_info_t> lock_info_t::generate_test_instances()
   locker_id_t id;
   locker_info_t info;
   generate_lock_id(id, 1, "cookie");
-  info.expiration = utime_t(5, 0);
+  info.expiration = ceph::real_time(std::chrono::seconds(5));
   generate_test_addr(info.addr, 1, 2);
   info.description = "description";
   i.lockers[id] = info;

@@ -688,7 +688,7 @@ private:
       // duration, even if the option is changed at runtime
       const auto queues_update_period = std::chrono::seconds(
           cct->_conf.get_val<uint64_t>("rgw_topic_ownership_update_period"));
-      const utime_t failover_time = utime_t(queues_update_period*3);
+      const ceph::timespan failover_time = queues_update_period*3;
       // check if queue list needs to be refreshed
       if (ceph::coarse_real_clock::now() > next_check_time) {
         next_check_time = ceph::coarse_real_clock::now() + queues_update_period;
@@ -1406,7 +1406,7 @@ int get_persistent_queue_stats(const DoutPrefixProvider *dpp, librados::IoCtx &r
       const auto& info = lockers.begin()->second;
       owner.lock = rgw_topic_shard_lock{info.description,
                                         info.addr.get_legacy_str(),
-                                        info.expiration};
+                                        utime_t(info.expiration)};
     }
     stats.shard_owners.push_back(std::move(owner));
   }

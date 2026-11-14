@@ -490,8 +490,7 @@ int RGWSimpleRadosLockCR::send_request(const DoutPrefixProvider *dpp)
   set_status() << "sending request";
 
   rados::cls::lock::Lock l(lock_name);
-  utime_t dur(duration, 0);
-  l.set_duration(dur);
+  l.set_duration(std::chrono::seconds(duration));
   l.set_cookie(cookie);
   l.set_may_renew(true);
 
