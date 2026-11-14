@@ -245,6 +245,22 @@ class TestCephadm(object):
             assert wait(cephadm_module, cephadm_module.get_hosts()) == [HostSpec('test', '1::4')]
         assert wait(cephadm_module, cephadm_module.get_hosts()) == []
 
+    def test_get_network_for_ip(self, cephadm_module):
+        cephadm_module.cache.update_host_networks('test', {
+            '10.0.0.0/24': {},
+            '1.2.3.0/24': {'if0': ['1.2.3.1', '1.2.3.2']},
+            'fd00::/64': {'if1': ['fd00::1']},
+        })
+        cache = cephadm_module.cache
+        assert cache.get_network_for_ip('test', '1.2.3.100') == \
+            ('1.2.3.0/24', {'if0': ['1.2.3.1', '1.2.3.2']})
+        assert cache.get_network_for_ip('TEST', 'fd00::100') == \
+            ('fd00::/64', {'if1': ['fd00::1']})
+        # a subnet without interfaces is not a match
+        assert cache.get_network_for_ip('test', '10.0.0.5') is None
+        assert cache.get_network_for_ip('test', '4.5.6.7') is None
+        assert cache.get_network_for_ip('unknown', '1.2.3.100') is None
+
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
     @mock.patch("cephadm.utils.resolve_ip")
     def test_re_add_host_receive_loopback(self, resolve_ip, cephadm_module):
