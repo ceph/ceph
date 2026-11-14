@@ -319,9 +319,18 @@ SchedTarget& ScrubJob::delay_on_failure(
 
   auto& delayed_target =
       (level == scrub_level_t::deep) ? deep_target : shallow_target;
-  delayed_target.sched_info.schedule.not_before =
-      std::max(scrub_clock_now, delayed_target.sched_info.schedule.not_before) +
-      utime_t{delay};
+  auto& not_before = delayed_target.sched_info.schedule.not_before;
+
+  if (not_before == utime_t::max()) {
+    // 'utime_t::max()' is the "no time was set for this target" sentinel
+    // (see start_scrub_session(), which resets the target right before the
+    // reservations are granted). Adding the retry delay to it saturates
+    // right back to the same value (utime_t caps tv_sec at 2^32-1), i.e. -
+    // the target would be scheduled for never (tracker issue #79134).
+    // Anchor the delay on the current time instead.
+    not_before = scrub_clock_now;
+  }
+  not_before = std::max(scrub_clock_now, not_before) + utime_t{delay};
   delayed_target.sched_info.last_issue = delay_cause;
   dout(20) << fmt::format(
 		  "delayed {}scrub due to {} for {}s. Updated: {}",

@@ -919,6 +919,199 @@ function TEST_abort_periodic_for_operator() {
 
 
 
+# Reproduces https://tracker.ceph.com/issues/79134
+#
+# When a periodic (reservation-requiring) scrub is initiated, the PG's
+# scheduling target is wiped (SchedTarget::reset() inside
+# start_scrub_session()) *before* the replica reservations are granted.
+# If a replica then rejects the reservation, retry_penalized ->
+# delay_on_failure() adds the retry delay to the wiped 'not_before' field,
+# which holds the utime_t::max() sentinel (2106-02-07T06:28:15.999999).
+# As utime_t saturates at 2^32-1 seconds, the addition leaves the target
+# at 'never': the PG is never auto-scrubbed again (until an operator
+# command or a configuration change recomputes its schedule).
+#
+# This test forces exactly that sequence:
+# - PG 'A' runs a long periodic shallow scrub, holding the reservation of
+#   a replica OSD 'R' (osd_max_scrubs=1; reservation queuing disabled, so
+#   that a busy replica answers with an immediate REJECT);
+# - PG 'B' (sharing R, different primary) is made overdue, so the OSD tick
+#   selects its periodic deep scrub while R is still busy;
+# - B's deep target gets wiped and its reservation is rejected by R.
+#
+# The test then verifies that B's deep target carries a real retry time
+# (approx. now + osd_scrub_retry_delay) - and not the 2106 sentinel.
+# On a cluster with the #79134 defect the test fails, reporting the parked
+# target.
+function TEST_reservation_reject_parks_target() {
+    local dir=$1
+    local poolname=test
+    local OSDS=4
+    local pool_size=3
+    local retry_delay=5
+
+    run_mon $dir a --osd_pool_default_size=$pool_size || return 1
+    run_mgr $dir x --mgr_stats_period=1 || return 1
+    local ceph_osd_args="--osd_max_scrubs=1 --osd_scrub_retry_delay=$retry_delay "
+    ceph_osd_args+="--osd_scrub_interval_randomize_ratio=0 --osd_deep_scrub_randomize_ratio=0 "
+    ceph_osd_args+="--osd_scrub_backoff_ratio=0 --osd_op_queue=wpq "
+    ceph_osd_args+="--osd_scrub_disable_reservation_queuing=true "
+    ceph_osd_args+="--osd_scrub_chunk_max=1 --osd_scrub_sleep=3.0 "
+    ceph_osd_args+="--debug_osd=20 "
+    ceph_osd_args+="--osd_stats_update_period_not_scrubbing=3 --osd_stats_update_period_scrubbing=2"
+    for osd in $(seq 0 $(expr $OSDS - 1)); do
+        run_osd $dir $osd $ceph_osd_args || return 1
+    done
+
+    create_pool $poolname 4 4 || return 1
+    wait_for_clean || return 1
+    local poolid=$(ceph osd dump | grep "^pool.*[']${poolname}[']" | awk '{ print $2 }')
+
+    TESTDATA="testdata.$$"
+    dd if=/dev/urandom of=$TESTDATA bs=4096 count=1
+    for i in $(seq 1 40); do
+        rados -p $poolname put obj${i} $TESTDATA || return 1
+    done
+    rm -f $TESTDATA
+    wait_for_clean || return 1
+
+    # let the system-created pools' never-scrubbed PGs drain, so that our
+    # PGs are not starved by earlier (1970-stamped) queue entries
+    local busy i
+    for i in $(seq 1 60); do
+        busy=$(ceph pg dump pgs --format json 2>/dev/null | \
+            jq '[.pg_stats[] | select(.state | contains("scrubbing"))] | length')
+        [ "$busy" = "0" ] && break
+        sleep 3
+    done
+
+    # deep-scrub our pool's PGs once (operator-initiated - no reservations),
+    # so that afterwards only the PG we deliberately make overdue is a
+    # deep-scrub candidate
+    local pg
+    for pg in $(ceph pg dump pgs --format json 2>/dev/null | \
+            jq -r ".pg_stats[] | select(.pgid | startswith(\"${poolid}.\")) | .pgid"); do
+        ceph tell $pg deep-scrub >/dev/null 2>&1
+    done
+    sleep 3
+    wait_for_clean || return 1
+
+    # find PGs 'A' and 'B': different primaries, intersecting replica sets;
+    # 'R' is their shared replica OSD
+    local A="" B="" Aprim="" Bprim="" R="" Areps=""
+    local pgid prim acting reps cand
+    while read -r pgid prim acting; do
+        reps=${acting#*,}   # drop the primary
+        if [ -z "$A" ]; then
+            A=$pgid
+            Aprim=$prim
+            Areps=$reps
+            continue
+        fi
+        if [ "$prim" = "$Aprim" ]; then
+            continue
+        fi
+        cand=$(comm -12 \
+            <(echo $Areps | tr ',' '\n' | sort) \
+            <(echo $reps | tr ',' '\n' | sort) | head -1)
+        if [ -n "$cand" ]; then
+            B=$pgid
+            Bprim=$prim
+            R=$cand
+            break
+        fi
+    done < <(ceph pg dump pgs --format json 2>/dev/null | \
+        jq -r ".pg_stats[] | select(.pgid | startswith(\"${poolid}.\")) | \
+               select((.acting | length) == 3) | \
+               \"\(.pgid) \(.acting_primary) \(.acting | join(\",\"))\"")
+    if [ -z "$B" ]; then
+        echo "no suitable (A,B) PG pair with intersecting replicas found"
+        return 1
+    fi
+    echo "A=$A (primary osd.$Aprim), B=$B (primary osd.$Bprim), shared replica R=osd.$R"
+
+    local found_failure=false
+    local found_sentinel=false
+    local attempt act
+    for attempt in 1 2 3 4 5; do
+        # arm A: a periodic-urgency shallow scrub that holds R's reservation
+        # for a while (40 objects / chunk_max=1 / scrub_sleep=2s)
+        ceph tell $A schedule-scrub >/dev/null 2>&1
+        act=false
+        for i in $(seq 1 30); do
+            act=$(ceph pg $A query --format json 2>/dev/null | \
+                jq -r '.scrubber.active // false')
+            [ "$act" = "true" ] && break
+            sleep 2
+        done
+        if [ "$act" != "true" ]; then
+            echo "attempt $attempt: A ($A) did not start scrubbing"
+            continue
+        fi
+
+        # confirm that A actually holds R's replica reservation before
+        # triggering B (otherwise B's request may be granted and scrub)
+        local held=""
+        for i in $(seq 1 15); do
+            held=$(CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${R}) \
+                dump_scrub_reservations 2>/dev/null | \
+                jq -r "[.remote_scrub_reservations.in_progress[].item] | join(\",\")")
+            [[ "$held" == *"$A"* ]] && break
+            sleep 2
+        done
+        if [[ "$held" != *"$A"* ]]; then
+            echo "attempt $attempt: A did not take R's reservation (held: '$held')"
+            continue
+        fi
+
+        # make B's deep scrub overdue, so that the OSD tick selects it while
+        # R is still busy with A
+        local logmark
+        logmark=$(wc -l < $dir/osd.${Bprim}.log 2>/dev/null || echo 0)
+        ceph tell $B schedule-deep-scrub >/dev/null 2>&1
+
+        # poll for the rejection for up to ~30s (tick interval is 5s)
+        local fresh
+        for i in $(seq 1 15); do
+            fresh=$(tail -n +$((logmark + 1)) $dir/osd.${Bprim}.log 2>/dev/null | \
+                grep "scrub-job:pg\[${B}\]:delay_on_failure: delayed deep scrub due to replicas")
+            if [ -n "$fresh" ]; then
+                found_failure=true
+                echo "$fresh" | grep -q "nb:2106-02-07" && found_sentinel=true
+                echo "rejection recorded: $fresh"
+                break
+            fi
+            sleep 2
+        done
+        [ -n "$fresh" ] && break
+        echo "attempt $attempt: B's reservation was not rejected (A released too soon?)"
+    done
+
+    # the replica-rejection path must have been exercised for B's deep scrub
+    if [ "$found_failure" != "true" ]; then
+        echo "could not exercise the replica-rejection path for $B"
+        return 1
+    fi
+
+    # the regression assertion: the rescheduled target must carry a real
+    # retry time - never the 'utime_t::max()' sentinel. Two sources:
+    # - the fresh 'delay_on_failure' log line (authoritative);
+    # - 'dump_scrubs', if the target is still queued (it may have already
+    #   been retried successfully - and dequeued - by now).
+    local sched="--"
+    sched=$(CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${Bprim}) dump_scrubs 2>/dev/null | \
+        jq -r --arg pg "$B" \
+            '[.[] | select(.pgid==$pg) | select(.level=="deep")][0].sched_time // "--"')
+    echo "B ($B) deep target after the reservation failure: $sched"
+    if [ "$found_sentinel" = "true" ] || [[ "$sched" == 2106-02-07* ]]; then
+        echo "FAIL: tracker issue #79134 reproduced:"
+        echo "  the failed scrub target was parked at the utime_t::max() sentinel"
+        echo "  (2106-02-07T06:28:15.999999) instead of being rescheduled for a retry"
+        return 1
+    fi
+
+    perf_counters $dir $OSDS
+}
 main osd-scrub-test "$@"
 
 # Local Variables:
