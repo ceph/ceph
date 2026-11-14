@@ -2848,6 +2848,11 @@ private:
 			   static_cast<int64_t>(
 			     cct->_conf->objecter_inflight_ops)};
  public:
+  /// The op throttle budget currently held, as (bytes, ops).
+  std::pair<int64_t, int64_t> get_op_budget_in_use() const {
+    return {op_throttle_bytes.get_current(), op_throttle_ops.get_current()};
+  }
+
   /// @param admin_socket_name Optional name for the admin socket command.
   ///        If empty (default), registers as "objecter_requests".
   ///        If non-empty, registers as "objecter_requests.<name>".
