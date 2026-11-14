@@ -587,46 +587,23 @@ def _deps_from_deb(tempdir, config, dinfo, pkg):
     else:
         deb_pkg_name = f'python3-{pkg_lower}'
 
-    # First, try to find the package using apt-cache
-    # This helps verify the package exists before trying to list its files
+    # Query the installed package database, not the apt package lists.
     try:
         res = subprocess.run(
-            ['apt-cache', 'show', deb_pkg_name],
+            ['dpkg-query', '-W', '-f=${db:Status-Status} ${Version}', deb_pkg_name],
             check=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
     except subprocess.CalledProcessError:
-        # Package not found, try alternative naming
-        log.warning(f"Package {deb_pkg_name} not found via apt-cache, trying dpkg -S")
-        # Try to search for files that might belong to this package
-        # Search for the Python module in site-packages
-        search_pattern = f'/usr/lib/python3*/dist-packages/{pkg.lower()}*'
-        try:
-            res = subprocess.run(
-                ['dpkg', '-S', search_pattern],
-                check=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-            )
-            # dpkg -S output format: "package: /path/to/file"
-            deb_pkg_name = res.stdout.decode('utf8').split(':')[0].strip()
-        except subprocess.CalledProcessError as err:
-            log.error(f"Could not find Debian package for {pkg}")
-            log.error(f"Tried: {deb_pkg_name} and pattern search")
-            sys.exit(1)
-
-    # Get version information using dpkg-query
-    try:
-        res = subprocess.run(
-            ['dpkg-query', '-W', '-f=${Version}\\n', deb_pkg_name],
-            check=True,
-            stdout=subprocess.PIPE,
-        )
-        version = res.stdout.decode('utf8').strip()
-    except subprocess.CalledProcessError as err:
-        log.error(f"Could not query version for package {deb_pkg_name}: {err}")
+        log.error(f"Required Debian package {deb_pkg_name} is not installed")
         sys.exit(1)
+
+    fields = res.stdout.decode('utf8').split()
+    if len(fields) != 2 or fields[0] != 'installed':
+        log.error(f"Required Debian package {deb_pkg_name} is not installed")
+        sys.exit(1)
+    version = fields[1]
 
     log.info(f"Debian Package: {deb_pkg_name} (version: {version})")
     dinfo.add(
