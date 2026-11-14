@@ -5146,7 +5146,281 @@ TEST_CASE("block_generator should correctly handle value types") {
 }
 
 
+template <typename FnT, typename ...ArgTs>
+concept can_borrow_transactor = requires(const lfdb::transactor& txr,
+                                        lfdb::transaction_handle& txn, FnT& fn, ArgTs&& ...args) {
+ txr(txn, fn, std::forward<ArgTs>(args)...);
+};
+
+using borrowed_reference_body = decltype([](auto&) -> int& {
+ static int value = 0;
+ return value;
+});
+using borrowed_staged_body = decltype([](auto&, auto& output) { output += 1; });
+static_assert(not can_borrow_transactor<borrowed_reference_body>);
+static_assert(not can_borrow_transactor<borrowed_staged_body,
+  decltype(lfdb::staged(std::declval<int&>()))>);
+
+TEST_CASE("borrowed transactor invocation leaves ownership with its caller", "[fdb][transactor][borrowed]")
+{
+ janitor dbh;
+ const auto txr = lfdb::make_transactor(dbh);
+ auto txn = lfdb::make_transaction(dbh);
+ const auto key = test_key("borrowed-transaction");
+
+ SECTION("working values do not submit the transaction") {
+  auto result = txr(txn, [&](auto& current) {
+   lfdb::set(current, key, 42);
+   return std::make_unique<int>(42);
+  });
+  static_assert(std::same_as<decltype(result),
+    std::expected<std::unique_ptr<int>, lfdb::transaction_failure<>>>);
+  REQUIRE(result);
+  CHECK(42 == **result);
+  CHECK_FALSE(lfdb::key_exists(dbh, key));
+  REQUIRE(lfdb::commit(txn));
+  CHECK(lfdb::key_exists(dbh, key));
+  auto another = lfdb::make_transaction(dbh);
+  auto false_value = txr(another, [](auto&) { return false; });
+  REQUIRE(false_value);
+  CHECK_FALSE(*false_value);
+ }
+
+ SECTION("application rejection preserves pending stamps and earlier writes") {
+  lfdb::versionstamp stamp;
+  lfdb::set(txn, key, lfdb::versioned("", stamp));
+  enum struct rejection { invalid };
+  const auto result = txr(txn, [](auto&) {
+   return std::expected<void, rejection> {std::unexpected(rejection::invalid)};
+  });
+  REQUIRE_FALSE(result);
+  CHECK(std::get<lfdb::application_error<rejection>>(result.error().cause).error == rejection::invalid);
+  CHECK_FALSE(stamp.is_ready());
+  REQUIRE(lfdb::commit(txn));
+  CHECK(stamp.has_value());
+  CHECK(lfdb::key_exists(dbh, key));
+ }
+
+ SECTION("invalid handles fail before the body") {
+  lfdb::transaction_handle empty;
+  bool invoked = false;
+  const auto result = txr(empty, [&](auto&) { invoked = true; });
+  REQUIRE_FALSE(result);
+  CHECK_FALSE(invoked);
+  CHECK(lfdb::transaction_phase::setup == result.error().phase);
+  CHECK(0 == result.error().status.attempts);
+  CHECK(lfdb::commit_status::not_submitted == result.error().status.commit);
+ }
+
+ SECTION("native failures keep their identity without local recovery") {
+  fdb_transaction_cancel(txn->raw_handle());
+  const auto result = txr(txn, [&](auto& current) { return lfdb::key_exists(current, key); });
+  CHECK(lfdb::fdb_error_code::transaction_cancelled == native_failure(result).code);
+  CHECK(native_failure(result).exception);
+  CHECK(std::holds_alternative<std::monostate>(native_failure(result).retry_error));
+  CHECK(lfdb::transaction_phase::body == result.error().phase);
+  CHECK(1 == result.error().status.attempts);
+  CHECK(lfdb::commit_status::not_submitted == result.error().status.commit);
+ }
+
+ SECTION("mutable callbacks and immovable arguments are borrowed directly") {
+  struct argument final {
+   int value = 0;
+   argument() = default;
+   argument(const argument&) = delete;
+   argument(argument&&) = delete;
+  } input;
+  auto body = [count = std::make_unique<int>(0)](auto&, argument& value) mutable {
+   value.value += ++*count;
+   return value.value;
+  };
+  CHECK(1 == txr(txn, body, input).value());
+  CHECK(3 == txr(txn, body, input).value());
+  CHECK(3 == input.value);
+ }
+}
+
+TEST_CASE("classified failures compose through expected", "[fdb][transactor][borrowed]")
+{
+ janitor dbh;
+ const auto txr = lfdb::make_transactor(dbh);
+ const auto key = test_key("expected-composition");
+ enum struct domain_error { missing };
+ auto load_value = [](auto& txn, const std::string& current_key) {
+  std::expected<int, domain_error> value {0};
+  if (not lfdb::get(txn, current_key, *value)) {
+   value = std::unexpected(domain_error::missing);
+  }
+  return value;
+ };
+
+ SECTION("real commit conflict replays the whole composed body") {
+  lfdb::set(dbh, key, 0);
+  int attempts = 0;
+  const auto result = txr([&](auto& txn) {
+   ++attempts;
+   return txr(txn, load_value, key).and_then([&](const int value) {
+    if (1 == attempts) {
+     lfdb::set(dbh, key, 100);
+    }
+    return txr(txn, [&](auto& current) {
+     lfdb::set(current, key, value + 1);
+     return std::expected<int, domain_error> {value + 1};
+    });
+   });
+  });
+  static_assert(std::same_as<std::remove_cv_t<decltype(result)>,
+    lfdb::transaction_result<int, domain_error>>);
+  REQUIRE(result);
+  CHECK(result->value == 101);
+  CHECK(result->status.attempts == 2);
+  CHECK(2 == attempts);
+ }
+
+ SECTION("returned native body failure enters the owning recovery path") {
+  // Only the body exception is injected; native on_error and whole-body replay are real.
+  int attempts = 0;
+  int decisions = 0;
+  const auto result = txr(lfdb::retry_if([&](const lfdb::transaction_failure<>& failure) {
+   ++decisions;
+   CHECK(lfdb::transaction_phase::body == failure.phase);
+   CHECK(std::get<lfdb::fdb_error>(failure.cause).code == lfdb::fdb_error_code::not_committed);
+   return true;
+  }), [&](auto& txn) {
+   ++attempts;
+   lfdb::set(txn, key, attempts);
+   return txr(txn, [&](auto&) {
+    if (1 == attempts) {
+     throw lfdb::libfdb_exception(lfdb::fdb_error_code::not_committed);
+    }
+    return 42;
+   });
+  });
+  REQUIRE(result);
+  CHECK(result->value == 42);
+  CHECK(result->status.attempts == 2);
+  CHECK(2 == attempts);
+  CHECK(1 == decisions);
+  int committed = 0;
+  REQUIRE(lfdb::get(dbh, key, committed));
+  CHECK(2 == committed);
+ }
+
+ SECTION("application rejection short-circuits and leaves staged output unpublished") {
+  int published = 41;
+  bool continued = false;
+  const auto result = txr([&](auto& txn, auto& output) {
+   output += 1;
+   return txr(txn, load_value, key).transform([&](const int) { continued = true; });
+  }, lfdb::staged(published));
+  REQUIRE_FALSE(result);
+  CHECK(std::get<lfdb::application_error<domain_error>>(result.error().cause).error == domain_error::missing);
+  CHECK_FALSE(continued);
+  CHECK(41 == published);
+ }
+
+ SECTION("native-looking application data remains application rejection") {
+  int attempts = 0;
+  const auto result = txr([&](auto& txn) {
+   return txr(txn, [&](auto&) {
+    std::expected<void, std::error_code> outcome;
+    if (1 == ++attempts) {
+     outcome = std::unexpected(lfdb::make_error_code(lfdb::fdb_error_code::not_committed));
+    }
+    return outcome;
+   });
+  });
+  REQUIRE_FALSE(result);
+  CHECK(std::get<lfdb::application_error<std::error_code>>(result.error().cause).error ==
+        lfdb::fdb_error_code::not_committed);
+  CHECK(1 == attempts);
+ }
+
+ SECTION("move-only errors do not acquire a copy requirement") {
+  const auto result = txr([&](auto& txn) {
+   return txr(txn, [](auto&) {
+    return std::expected<void, std::unique_ptr<int>> {std::unexpected(std::make_unique<int>(7))};
+   });
+  });
+  REQUIRE_FALSE(result);
+  CHECK(*std::get<lfdb::application_error<std::unique_ptr<int>>>(result.error().cause).error == 7);
+ }
+
+ SECTION("monadic callback exceptions are captured by the enclosing invocation") {
+  const auto original = std::make_exception_ptr(std::logic_error("callback failure"));
+  lfdb::set(dbh, key, 7);
+  auto txn = lfdb::make_transaction(dbh);
+  const auto result = txr(txn, [&](auto& current) {
+   return txr(current, load_value, key).transform([&](const int) -> void {
+    std::rethrow_exception(original);
+   });
+  });
+  REQUIRE_FALSE(result);
+  CHECK(std::get<std::exception_ptr>(result.error().cause) == original);
+ }
+
+ SECTION("propagating recovery exhaustion does not restart its budget") {
+  const auto limited = lfdb::make_transactor(dbh, {{FDB_TR_OPTION_RETRY_LIMIT, std::int64_t {0}}});
+  const auto exhausted = limited([&](auto& txn) {
+   return limited(txn, [](auto&) -> void {
+    throw lfdb::libfdb_exception(lfdb::fdb_error_code::not_committed);
+   });
+  });
+  REQUIRE_FALSE(exhausted);
+  CHECK_FALSE(std::holds_alternative<std::monostate>(native_failure(exhausted).retry_error));
+  int decisions = 0;
+  const auto result = txr(lfdb::retry_if([&](const lfdb::transaction_failure<>&) {
+   ++decisions;
+   return false;
+  }), [&](auto&) { return exhausted; });
+  REQUIRE_FALSE(result);
+  CHECK(native_failure(result).code == native_failure(exhausted).code);
+  CHECK(0 == decisions);
+ }
+}
+
+TEST_CASE("returned body failures preserve earlier owning uncertainty", "[fdb][completion][borrowed]")
+{
+ // Only completion is scripted. The native owner prepares replay on its own handle.
+ janitor dbh;
+ const auto txr = lfdb::make_transactor(dbh);
+ auto txn = lfdb::make_transaction(dbh);
+ enum struct domain_error { rejected };
+ int attempts = 0;
+ int submissions = 0;
+ auto body = [&](auto& current) {
+  return txr(current, [&](auto&) {
+   std::expected<int, domain_error> outcome {++attempts};
+   if (2 == attempts) {
+    outcome = std::unexpected(domain_error::rejected);
+   }
+   return outcome;
+  });
+ };
+ auto submit = [&](auto&) -> lfdb::transaction_result<void> {
+  ++submissions;
+  const auto error = lfdb::make_error_code(lfdb::fdb_error_code::commit_unknown_result);
+  lfdb::transaction_status status;
+  status.attempts = 1;
+  lfdb::detail::uncertain_commit(status, lfdb::commit_status::unknown_result, error);
+  return lfdb::detail::fail_transaction(lfdb::fdb_error {error, {}}, lfdb::transaction_phase::commit, status);
+ };
+ lfdb::retry_if<> policy;
+ const auto result = lfdb::detail::invoke_with_retry(txn, body, submit, policy,
+                                                   lfdb::retry_policy::replay_unknown);
+ REQUIRE_FALSE(result);
+ CHECK(std::get<lfdb::application_error<domain_error>>(result.error().cause).error == domain_error::rejected);
+ CHECK(lfdb::transaction_phase::body == result.error().phase);
+ CHECK(2 == result.error().status.attempts);
+ CHECK(lfdb::commit_status::unknown_result == result.error().status.prior_unknown_commit);
+ CHECK(lfdb::fdb_error_code::commit_unknown_result == result.error().status.first_unknown_commit_error);
+ CHECK(result.error().status.has_unknown_commit());
+ CHECK(2 == attempts);
+ CHECK(1 == submissions);
+}
+
 static_assert(std::is_empty_v<lfdb::retry_if<>>);
+static_assert(lfdb::retry_policy {} == lfdb::retry_policy::no_replay_unknown);
 using policy_returns_int = decltype([](const lfdb::transaction_failure<>&) { return 1; });
 static_assert(not std::constructible_from<lfdb::retry_if<policy_returns_int>, policy_returns_int>);
 
@@ -5238,9 +5512,10 @@ TEST_CASE("transactor retry policy owns decisions and preserves failures", "[fdb
 
  SECTION("policy exceptions are retained separately from their trigger") {
   const auto phase = GENERATE(lfdb::transaction_phase::body, lfdb::transaction_phase::commit);
+  const auto observe_uncertainty = lfdb::make_transactor(dbh, {}, lfdb::retry_policy::replay_unknown);
   const auto error = std::make_exception_ptr(
    lfdb::libfdb_exception(lfdb::fdb_error_code::not_committed, "policy failure"));
-  const auto result = run(lfdb::retry_if([&](const lfdb::transaction_failure<>& failure) -> bool {
+  const auto result = observe_uncertainty(lfdb::retry_if([&](const lfdb::transaction_failure<>& failure) -> bool {
    ++decisions;
    CHECK(phase == failure.phase);
    std::rethrow_exception(error);
@@ -5443,8 +5718,7 @@ TEST_CASE("manual and managed completion preserve their error contracts", "[fdb]
  SECTION("known noncommit can replay even when risky writes are configured") {
   lfdb::set(dbh, key, std::uint64_t {0});
   int attempts = 0;
-  const auto txr = lfdb::make_transactor(dbh, {{FDB_TR_OPTION_CAUSAL_WRITE_RISKY, lfdb::option_flag}},
-                                        lfdb::retry_policy::retryable_not_committed);
+  const auto txr = lfdb::make_transactor(dbh, {{FDB_TR_OPTION_CAUSAL_WRITE_RISKY, lfdb::option_flag}});
   const auto result = txr([&](auto txn) {
    std::uint64_t value = 0;
    REQUIRE(lfdb::get(txn, key, value));
@@ -5469,6 +5743,39 @@ TEST_CASE("manual and managed completion preserve their error contracts", "[fdb]
   CHECK(result->status.has_unknown_commit());
   CHECK(result->status.may_commit_later());
  }
+}
+
+TEST_CASE("default recovery stops after an uncertain commit", "[fdb][completion][policy]")
+{
+ // The commit outcome is scripted; default gating must precede native recovery.
+ janitor dbh;
+ auto txn = lfdb::make_transaction(dbh);
+ const auto uncertain = GENERATE(lfdb::commit_status::unknown_result, lfdb::commit_status::unconfirmed);
+ int attempts = 0;
+ int submissions = 0;
+ int decisions = 0;
+ auto body = [&](auto&) { ++attempts; };
+ auto submit = [&](auto&) -> lfdb::transaction_result<void> {
+  ++submissions;
+  const auto error = lfdb::make_error_code(lfdb::fdb_error_code::commit_unknown_result);
+  lfdb::transaction_status status;
+  status.attempts = 1;
+  lfdb::detail::uncertain_commit(status, uncertain, error);
+  return lfdb::detail::fail_transaction(lfdb::fdb_error {error, {}},
+                                       lfdb::transaction_phase::commit, status);
+ };
+ auto policy = lfdb::retry_if([&](const lfdb::transaction_failure<>&) {
+  ++decisions;
+  return false;
+ });
+ const auto result = lfdb::detail::invoke_with_retry(txn, body, submit, policy);
+ CHECK(lfdb::fdb_error_code::commit_unknown_result == native_failure(result).code);
+ CHECK(result.error().status.commit == uncertain);
+ CHECK(1 == result.error().status.attempts);
+ CHECK(result.error().status.has_unknown_commit());
+ CHECK(1 == attempts);
+ CHECK(1 == submissions);
+ CHECK(0 == decisions);
 }
 
 TEST_CASE("scripted completion history survives later outcomes", "[fdb][completion]")
@@ -5511,7 +5818,7 @@ TEST_CASE("scripted completion history survives later outcomes", "[fdb][completi
  };
  lfdb::retry_if<> policy;
  const auto result = lfdb::detail::invoke_with_retry(txn, body, submit, policy,
-  conservative ? lfdb::retry_policy::retryable_not_committed : lfdb::retry_policy::retryable);
+  conservative ? lfdb::retry_policy::no_replay_unknown : lfdb::retry_policy::replay_unknown);
  if (conservative) {
   CHECK(lfdb::fdb_error_code::commit_unknown_result == native_failure(result).code);
   CHECK(std::holds_alternative<std::monostate>(native_failure(result).retry_error));

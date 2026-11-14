@@ -24,11 +24,32 @@ Foundation. See file COPYING.
   after a confirmed commit. See EXAMPLES.md for the Staged Proxies contract.
 
 * transaction_result.h defines the shared completion/error vocabulary. Ordinary
-  commit(txn), commit(txn, stamp), and libfdb Transactor invocations return this
+  commit(txn), commit(txn, stamp), and owning Transactor invocations return this
   result family, preserving phase and commit history. Manual commit submits once;
-  only the Transactor owns body replay. Completion has no with_result selector.
-  An unexpected expected-body result rejects an attempt; other ordinary values
-  authorize commit. See EXAMPLES.md for result handling and uncertainty.
+  only an owning Transactor call replays the body. Completion has no with_result
+  selector. A returned application error rejects the attempt; other ordinary
+  values authorize commit. See EXAMPLES.md for result handling and uncertainty.
+
+* txr(txn, body, args...) borrows an existing transaction for one synchronous
+  invocation. It returns expected<T, transaction_failure<E>> with working data,
+  without commit, recovery, stamp completion, or argument copying. Its failures
+  use the same classification as owning results. Returning that expected to the
+  owner preserves native recovery eligibility and application rejection, while
+  the owner retains attempt counts and earlier uncertainty. Borrowed calls do not
+  accept staged arguments; put staged output on the owning call.
+
+* Standard expected and_then/transform compose typed results; keep the complete
+  chain inside a Transactor invocation to capture throwing callbacks. and_then
+  requires matching error types. The standalone example includes owned/borrowed
+  execution, caller commit, application rejection, and centralized reporting.
+
+* Managed execution defaults to retry_policy::no_replay_unknown: native recovery
+  handles eligible failures until an attempt leaves its commit outcome uncertain.
+  retry_policy::replay_unknown explicitly permits native recovery after uncertainty
+  when the application can tolerate or deduplicate repeated database effects.
+  Both policies retain native retry/timeout budgets and stop after commit
+  observation failure. "Unknown" includes unknown_result, unconfirmed, and earlier
+  uncertainty retained by the owner. The native error predicates keep their names.
 
 * Native commit attempts produce that same completion result internally.
   Synchronous and asynchronous owners share failure classification, exception

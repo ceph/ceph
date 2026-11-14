@@ -26,7 +26,8 @@ namespace ceph::libfdb {
 
 enum struct transaction_phase { setup, body, commit, commit_observation };
 enum struct commit_status { not_submitted, not_committed, committed, unknown_result, unconfirmed };
-enum struct retry_policy { retryable, retryable_not_committed };
+// Unknown includes unconfirmed submission and uncertainty retained from earlier attempts.
+enum struct retry_policy { no_replay_unknown, replay_unknown };
 
 struct transaction_status final
 {
