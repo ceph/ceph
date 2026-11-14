@@ -3728,7 +3728,8 @@ int BlueStore::_init_alloc()
       derr << __func__ << "::NCB::Please change the value of bluestore_allocation_from_file to TRUE in your ceph.conf file" << dendl;
       return -ENOTSUP; // Operation not supported
     }
-    if (restore_allocator(alloc, &num, &bytes) == 0) {
+    bool statfs_restored = _load_statfs_from_file();
+    if (statfs_restored && (restore_allocator(alloc, &num, &bytes) == 0)) {
       dout(5) << __func__ << "::NCB::restore_allocator() completed successfully alloc=" << alloc << dendl;
 
       if (before_expansion_bdev_size > 0 &&
@@ -4273,6 +4274,8 @@ int BlueStore::_open_db_and_around(
   if (r < 0)
     goto out_fm;
 
+  _open_statfs();
+
   if (bdev_label_multi) {
     _main_bdev_label_try_reserve();
   }
@@ -4538,6 +4541,7 @@ int BlueStore::_prepare_db_environment(bool create, bool read_only,
   FreelistManager::setup_merge_operators(db, freelist_type);
   db->set_merge_operator(PREFIX_STAT, merge_op);
   db->set_cache_size(cache_kv_ratio * cache_size);
+  db_env = env;
   return 0;
 }
 
@@ -4609,16 +4613,10 @@ int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
   return 0;
 }
 
-void BlueStore::_close_db()
+// now only useful for transition file<->db storage
+void BlueStore::_save_statfs_to_db()
 {
-  dout(10) << __func__ << ":read_only=" << db_was_opened_read_only
-           << " fm=" << fm
-           << " destage_alloc_file=" << need_to_destage_allocation_file
-           << " per_pool=" << per_pool_stat_collection
-           << " pool stats=" << osd_pools.size()
-           << dendl;
-  bool do_destage = !db_was_opened_read_only && need_to_destage_allocation_file;
-  if (do_destage && is_statfs_recoverable()) {
+  { // useless indent to keep diff minimal
     auto t = db->get_transaction();
     store_statfs_t s;
     if (per_pool_stat_collection) {
@@ -4661,6 +4659,138 @@ void BlueStore::_close_db()
     int r = db->submit_transaction_sync(t);
     dout(10) << __func__ << " statfs persisted." << dendl;
     ceph_assert(r >= 0);
+  }
+}
+
+void BlueStore::_statfs_to_bufferlist(bufferlist& stats_out)
+{
+  store_statfs_t s;
+  if (per_pool_stat_collection) {
+    std::lock_guard l(vstatfs_lock);
+    for (auto& p : osd_pools) {
+      string key;
+      get_pool_stat_key(p.first, &key);
+      if (!p.second.is_empty()) {
+        encode(key, stats_out);
+        p.second.encode(stats_out);
+        p.second.publish(&s); // for dout
+        dout(10) << __func__ << " persisting: " << p.first << "->" << s << dendl;
+      }
+    }
+  } else {
+    string key = BLUESTORE_GLOBAL_STATFS_KEY;
+    std::lock_guard l(vstatfs_lock);
+    bufferlist bl;
+    vstatfs.encode(bl);
+    encode(key, stats_out);
+    encode(bl, stats_out);
+    vstatfs.publish(&s); // for dout
+    dout(10) << __func__ << "persisting: " << s << dendl;
+  }
+}
+
+// this is a adaptation of _load_statfs_from_db() for bufferlist
+bool BlueStore::_statfs_from_bufferlist(const bufferlist& stats_in)
+{
+  bool decoded = false;
+  osd_pools.clear();
+  vstatfs.reset();
+
+  auto it = stats_in.cbegin();
+  try {
+    string key;
+    decode(key, it);
+    if (key == BLUESTORE_GLOBAL_STATFS_KEY) {
+      vstatfs.decode(it);
+      dout(10) << __func__ << " store_statfs is found" << dendl;
+      per_pool_stat_collection = false;
+      _check_legacy_statfs_alert();
+    } else {
+      it = stats_in.cbegin(); // start from beginning again
+      while (!it.end()) {
+        decode(key, it);
+        uint64_t pool_id;
+        int r = get_key_pool_stat(key, &pool_id);
+        ceph_assert(r == 0);
+        auto& st = osd_pools[pool_id];
+        st.decode(it);
+        vstatfs += st;
+        dout(10) << __func__ << " pool " << std::hex << pool_id
+                 << " statfs(hex) " << st << std::dec << dendl;
+      }
+      dout(10) << __func__ << " per-pool statfs is enabled" << dendl;
+      per_pool_stat_collection = true;
+    }
+    decoded = true;
+  } catch (ceph::buffer::error& e) {
+    derr << __func__ << " failed to decode statfs, using empty" << dendl;
+    osd_pools.clear();
+    vstatfs.reset();
+  }
+  dout(10) << __func__ << " statfs " << std::hex
+           << vstatfs  << std::dec << dendl;
+  return decoded;
+}
+
+void BlueStore::_save_statfs_to_file() {
+  using namespace rocksdb;
+  bufferlist stat_bl;
+  _statfs_to_bufferlist(stat_bl);
+
+  db_env->CreateDirIfMissing(statfs_cache_dir);
+  std::unique_ptr<WritableFile> handle;
+  db_env->NewWritableFile(statfs_cache_dir_file, &handle,EnvOptions());
+  handle->Append(Slice(stat_bl.c_str(), stat_bl.length()));
+  handle->Close();
+  handle.reset();
+}
+
+bool BlueStore::_load_statfs_from_file() {
+  using namespace rocksdb;
+  bool result = false;
+  bufferlist stat_bl;
+  std::unique_ptr<SequentialFile> handle;
+  Status s = db_env->NewSequentialFile(statfs_cache_dir_file, &handle, EnvOptions());
+  if (s.ok()) {
+    rocksdb::Slice slice;
+    do {
+      constexpr size_t bufsize = 4096;
+      char buffer[bufsize];
+      s = handle->Read(bufsize, &slice, &buffer[0]);
+      if (s.ok() && !slice.empty()) {
+        stat_bl.append(slice.data(), slice.size());
+        continue;
+      }
+    } while (false);
+  }
+  if (stat_bl.length() == 0) {
+    dout(5) << "Empty " << statfs_cache_dir_file << dendl;
+  } else {
+    handle.reset();
+    bool decoded = _statfs_from_bufferlist(stat_bl);
+    if (decoded) {
+      dout(5) << "Loading " << statfs_cache_dir_file << " OK" << dendl;
+      result = true;
+      statfs_loaded = true;
+    } else {
+      dout(5) << "Failed decoding " << statfs_cache_dir_file << dendl;
+    }
+  }
+  return result;
+}
+
+void BlueStore::_close_db()
+{
+  dout(10) << __func__ << ":read_only=" << db_was_opened_read_only
+           << " fm=" << fm
+           << " destage_alloc_file=" << need_to_destage_allocation_file
+           << " per_pool=" << per_pool_stat_collection
+           << " pool stats=" << osd_pools.size()
+           << dendl;
+  bool do_destage = !db_was_opened_read_only && need_to_destage_allocation_file;
+  if (do_destage && is_statfs_recoverable()) {
+    _save_statfs_to_file();
+    _save_statfs_to_db();
   }
   ceph_assert(db);
   delete db;
@@ -4794,6 +4924,15 @@ void BlueStore::_set_per_pool_omap()
 }
 
 void BlueStore::_open_statfs()
+{
+  if (statfs_loaded) {
+    //we loaded statfs already, either from file or by reconstruction from onodes
+  } else {
+    _load_statfs_from_db();
+  }
+}
+
+void BlueStore::_load_statfs_from_db()
 {
   osd_pools.clear();
   vstatfs.reset();
@@ -5840,6 +5979,8 @@ int BlueStore::_mount_readonly()
   }
   // replay pending deferred, but do not prepare keys for removal
   _deferred_replay(nullptr);
+
+  _open_statfs();
   return 0;
 
 out_db:
@@ -10948,7 +11089,6 @@ int BlueStore::_open_super_meta()
 
   _set_per_pool_omap();
 
-  _open_statfs();
   _set_alloc_sizes();
   _set_throttle_params();
 
@@ -16845,22 +16985,8 @@ int BlueStore::invalidate_allocation_file_on_bluefs()
     return 0;
   }
 
-
   ret = bluefs->open_for_write(allocator_dir, allocator_file, &p_handle, true);
-  if (ret != 0) {
-    derr << __func__ << "::NCB:: Failed open_for_write with error-code "
-         << ret << dendl;
-    return -1;
-  }
-
-  dout(5) << "invalidate using bluefs->truncate(p_handle, 0)" << dendl;
-  ret = bluefs->truncate(p_handle, 0);
-  if (ret != 0) {
-    derr << __func__ << "::NCB:: Failed truncaste with error-code "
-         << ret << dendl;
-    bluefs->close_writer(p_handle);
-    return -1;
-  }
+  ceph_assert(ret == 0 && "failed to clear allocator file");
 
   bluefs->fsync(p_handle);
   bluefs->close_writer(p_handle);
@@ -16952,11 +17078,9 @@ int BlueStore::store_allocator(Allocator* src_allocator)
     }
   }
   bluefs->compact_log();
-  // reuse previous file-allocation if exists
-  ret = bluefs->stat(allocator_dir, allocator_file, nullptr, nullptr);
-  bool overwrite_file = (ret == 0);
+
   BlueFS::FileWriter *p_handle = nullptr;
-  ret = bluefs->open_for_write(allocator_dir, allocator_file, &p_handle, overwrite_file);
+  ret = bluefs->open_for_write(allocator_dir, allocator_file, &p_handle, true);
   if (ret != 0) {
     derr <<  __func__ << "Failed open_for_write with error-code " << ret << dendl;
     return -1;
@@ -17658,6 +17782,7 @@ int BlueStore::reconstruct_allocations(SimpleBitmap *sbmap, read_alloc_stats_t &
   }
   vstatfs = stats.actual_store_vstatfs;
   vstatfs.publish(&s);
+  statfs_loaded = true;
   dout(5) << __func__ << " recovered " << s
           << dendl;
 
