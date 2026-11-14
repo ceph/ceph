@@ -2362,6 +2362,12 @@ function test_mon_osd_pool_set()
   ceph osd pool set $TEST_POOL_GETSET scrub_priority 0
   ceph osd pool get $TEST_POOL_GETSET scrub_priority | expect_false grep '.'
 
+  expect_false ceph osd pool set $TEST_POOL_GETSET read_lease_interval -1
+  expect_true ceph osd pool set $TEST_POOL_GETSET read_lease_interval 5
+  ceph osd pool get $TEST_POOL_GETSET read_lease_interval | grep 'read_lease_interval: 5'
+  expect_true ceph osd pool set $TEST_POOL_GETSET read_lease_interval 0
+  ceph osd pool get $TEST_POOL_GETSET read_lease_interval | expect_false grep '.'
+
   expect_false ceph osd pool set $TEST_POOL_GETSET target_size_ratio -3
   expect_false ceph osd pool set $TEST_POOL_GETSET target_size_ratio abc
   expect_true ceph osd pool set $TEST_POOL_GETSET target_size_ratio 0.1
