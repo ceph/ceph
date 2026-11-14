@@ -364,7 +364,7 @@ else:
                                     NVMeoFClient.pb2.list_namespaces_io_stats_req(), client)
             logger.debug("list_namespaces_io_stats stats=%s", stats)
             if stats is None:
-                return
+                return False
             if daemon_name not in self.iostats:
                 self.iostats[daemon_name] = {}
 
@@ -386,6 +386,7 @@ else:
                 ns_stats.write_bytes.update(ns.bytes_written)
                 ns_stats.write_secs.update((ns.write_latency_ticks / stats.tick_rate))
                 ns_stats.calculate(self.delay)
+            return True
 
         def _fetch_namespaces(self, subsystem_nqn):
             return self._call_grpc(
@@ -399,7 +400,7 @@ else:
                                     NVMeoFClient.pb2.get_thread_stats_req(), client)
             logger.debug("get_thread_stats stats=%s", stats)
             if stats is None:
-                return
+                return False
             if gateway_addr not in self.reactor_stats:
                 self.reactor_stats[gateway_addr] = {}
             tick_rate = stats.tick_rate
@@ -417,6 +418,7 @@ else:
                 thread_stats.busy_secs.update(thread.busy / tick_rate)
                 thread_stats.idle_secs.update(thread.idle / tick_rate)
                 thread_stats.calculate(self.delay)
+            return True
 
         def _fetch_gateway_info(self, client):
             return self._call_grpc(
@@ -503,20 +505,37 @@ else:
             self.delay = (now - self.timestamp)
             self.timestamp = now
 
-            self.client = next(iter(self.clients.values()))
-
             if self.gw_info is None:
-                self.gw_info = self._fetch_gateway_info(self.client)
-                if not self.ready:
-                    self.health.msg = f"Unable to connect to {self.client.gateway_addr}"
+                for client in self.clients.values():
+                    gw_info = self._fetch_gateway_info(client)
+                    if gw_info is not None:
+                        self.client = client
+                        self.gw_info = gw_info
+                        logger.debug("Connected to %s", client.gateway_addr)
+                        break
+                self.health = Health()
+                if self.gw_info is None:
+                    self.health.rc = -errno.ECONNREFUSED
+                    self.health.msg = "Unable to connect to any gateway in the group"
                     return
-                logger.debug("Connected to %s", self.client.gateway_addr)
+
+            if self.client is None:
+                self.client = next(iter(self.clients.values()))
 
         def collect_cpu_data(self):
+            reachable = 0
             for client in self.clients.values():
-                self._fetch_thread_stats(client)
-                if not self.ready:
-                    return
+                gw_addr = client.gateway_addr
+                if self._fetch_thread_stats(client):
+                    reachable += 1
+                else:
+                    logger.warning("Gateway %s unreachable, skipping", gw_addr)
+                    self.reactor_stats.pop(gw_addr, None)
+            if reachable == 0:
+                self.health.rc = -errno.ECONNREFUSED
+                self.health.msg = "Unable to connect to any gateway in the group"
+                return
+            self.health = Health()
             logger.debug("collect_cpu_data completed")
 
         def _set_subsystem_and_namespaces(self):
@@ -565,33 +584,43 @@ else:
                         f'mapping for service {self.service}'
                     )
                     return
+            reachable = 0
             for client in self.clients.values():
-                self._fetch_namespace_iostats(client)
-                if not self.ready:
-                    return
+                if self._fetch_namespace_iostats(client):
+                    reachable += 1
+                else:
+                    logger.warning("Gateway %s unreachable, skipping", client.gateway_addr)
+                    self.iostats.pop(client.daemon_name, None)
+            if reachable == 0:
+                self.health.rc = -errno.ECONNREFUSED
+                self.health.msg = "Unable to connect to any gateway in the group"
+                return
+            self.health = Health()
             logger.debug("collect_io_data completed")
 
         def collect_connection_data(self):
             nqn = self.tool.subsystem_nqn
             host_nqn = self.tool.host_nqn
+            reachable = 0
             for client in self.clients.values():
+                gw_addr = client.gateway_addr
                 req = NVMeoFClient.pb2.get_connection_io_statistics_req(
                     subsystem_nqn=nqn,
                     host_nqn=host_nqn,
                     reset=False
                 )
                 ret = self._call_grpc('get_connection_io_statistics', req, client)
-                if ret is None:
-                    if not self.ready:
-                        return
-                    continue
-                gw_addr = client.gateway_addr
-                if ret.status != 0:
-                    logger.debug("No connection stats from %s: %s",
-                                 gw_addr, ret.error_message)
-                    stale_keys = [key for key in self.connection_stats if key[0] == gw_addr]
-                    for key in stale_keys:
-                        del self.connection_stats[key]
+                if ret is not None:
+                    reachable += 1
+                if ret is None or ret.status != 0:
+                    if ret is None:
+                        logger.warning("Gateway %s unreachable, skipping", gw_addr)
+                    else:
+                        logger.debug("No connection stats from %s: %s",
+                                     gw_addr, ret.error_message)
+                    for key in list(self.connection_stats):
+                        if key[0] == gw_addr:
+                            del self.connection_stats[key]
                     continue
                 for bucket in ret.buckets:
                     key = (gw_addr, bucket.size)
@@ -610,6 +639,11 @@ else:
                             lat_group.total.mean,
                         )
                         self.connection_stats[key][io_type].calculate(self.delay)
+            if reachable == 0:
+                self.health.rc = -errno.ECONNREFUSED
+                self.health.msg = "Unable to connect to any gateway in the group"
+                return
+            self.health = Health()
             logger.debug("collect_connection_data completed")
 
     class NVMeoFTopTool:
