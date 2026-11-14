@@ -3779,9 +3779,9 @@ TEST_F(D4NFilterFixture, BucketRemoveDeleteMarker)
   env->cct->_conf->d4n_writecache_enabled = true;
   const std::string testName = "PutObjectWrite";
   const std::string bucketName = "/tmp/d4n_filter_tests/dbstore-default_ns.1";
-  std::string instance_1, instance_2, instance_3;
- 
-  net::spawn(io, [this, &testName, &bucketName, &instance_1, &instance_2, &instance_3] (net::yield_context yield) {
+  std::string instance_1;
+
+  net::spawn(io, [this, &testName, &bucketName, &instance_1] (net::yield_context yield) {
     init_driver(yield);
     create_bucket(testName, yield);
     testBucket->get_info().bucket.bucket_id = bucketName;
