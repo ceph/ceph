@@ -40,6 +40,7 @@ class Monitor;
  * Leader; if we lose, it means we are a Peon.
  */
 class Elector : public ElectionOwner, RankProvider {
+  friend class ElectorPingTest;
   /**
    * @defgroup Elector_h_class Elector
    * @{
