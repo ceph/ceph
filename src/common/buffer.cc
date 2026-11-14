@@ -539,6 +539,22 @@ static ceph::spinlock debug_lock;
 
   const char *buffer::ptr::raw_c_str() const { ceph_assert(_raw); return _raw->get_data(); }
   unsigned buffer::ptr::raw_length() const { ceph_assert(_raw); return _raw->get_len(); }
+  void buffer::ptr::set_crc32c_cache(uint32_t base, uint32_t crc) const {
+    ceph_assert(_raw);
+    _raw->set_crc({_off, _off + _len}, {base, crc});
+  }
+  std::optional<uint32_t> buffer::ptr::cached_crc32c(uint32_t crc) const {
+    ceph_assert(_raw);
+    std::pair<uint32_t, uint32_t> ccrc;
+    if (!_raw->get_crc({_off, _off + _len}, &ccrc)) {
+      return std::nullopt;
+    }
+    if (ccrc.first == crc) {
+      return ccrc.second;
+    }
+    // cached for another seed: shift by the seeds' difference over zeros
+    return ceph_crc32c(crc ^ ccrc.first, nullptr, _len) ^ ccrc.second;
+  }
   int buffer::ptr::raw_nref() const { ceph_assert(_raw); return _raw->nref; }
 
   void buffer::ptr::copy_out(unsigned o, unsigned l, char *dest) const {
