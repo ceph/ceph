@@ -6,11 +6,93 @@
   }
 }
 @if (used >= 0 && total > 0) {
-  <ibm-meter-chart
-    [data]="data"
-    [options]="options"
+  <cds-tooltip
+    class="usage-bar__tooltip"
+    [style.width]="width"
+    [description]="usageTooltipTpl"
+    [caret]="true"
+    [highContrast]="false"
+    [autoAlign]="true"
+    align="top"
+    data-testid="usage-bar-tooltip"
   >
-  </ibm-meter-chart>
+    <div
+      class="usage-bar"
+      data-testid="usage-bar"
+    >
+      @if (!customLabel) {
+        <div class="usage-bar__labels">
+          <span
+            class="usage-bar__breakdown"
+            data-testid="usage-bar-breakdown"
+            >{{ breakdownLabel }}</span
+          >
+          @if (totalLabel) {
+            <span
+              class="usage-bar__total"
+              data-testid="usage-bar-total"
+              >{{ totalLabel }}</span
+            >
+          }
+          @if (status !== 'normal') {
+            <svg
+              class="usage-bar__status"
+              [class.usage-bar__status--warning]="status === 'warning'"
+              [class.usage-bar__status--danger]="status === 'danger'"
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              aria-hidden="true"
+              data-testid="usage-bar-status"
+            >
+              <circle
+                class="usage-bar__status-circle"
+                cx="8"
+                cy="8"
+                r="8"
+              ></circle>
+              @if (status === 'warning') {
+                <path
+                  class="usage-bar__status-inner"
+                  d="M7.9375,11.125 C7.41973305,11.125 7,11.544733 7,12.0625 C7,12.580267 7.41973305,13 7.9375,13 C8.45526695,13 8.875,12.580267 8.875,12.0625 C8.875,11.544733 8.45526695,11.125 7.9375,11.125 M7.3125,3 8.5625,3 8.5625,9.875 7.3125,9.875 7.3125,3 Z"
+                ></path>
+              } @else {
+                <path
+                  class="usage-bar__status-inner"
+                  d="M10.7 11.5 4.5 5.3 5.3 4.5 11.5 10.7 Z"
+                ></path>
+              }
+            </svg>
+          }
+        </div>
+      }
+      <div
+        class="usage-bar__track"
+        role="meter"
+        aria-valuemin="0"
+        aria-valuemax="100"
+        [attr.aria-valuenow]="usedPercent"
+        [attr.aria-valuetext]="breakdownLabel"
+        [attr.aria-label]="title || null"
+      >
+        <div
+          class="usage-bar__fill"
+          [class.usage-bar__fill--warning]="status === 'warning'"
+          [class.usage-bar__fill--danger]="status === 'danger'"
+          [style.width.%]="usedPercent"
+          data-testid="usage-bar-fill"
+        ></div>
+      </div>
+    </div>
+  </cds-tooltip>
 } @else {
   <span i18n>{{ noDataText }}</span>
 }
+
+<ng-template #usageTooltipTpl>
+  <div class="usage-bar-tooltip">
+    <div><strong i18n>Used:</strong> {{ usedText }}</div>
+    <div><strong i18n>Available:</strong> {{ availableText }}</div>
+    <div><strong i18n>Total:</strong> {{ totalText }}</div>
+  </div>
+</ng-template>

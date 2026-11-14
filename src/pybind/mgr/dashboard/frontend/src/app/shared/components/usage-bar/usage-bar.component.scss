@@ -1,22 +1,126 @@
 @use '@carbon/type';
 
-::ng-deep {
-  .cds--cc--chart-wrapper {
-    text {
-      @include type.type-style('heading-01');
+// The meter follows the look of the Carbon meter chart, but is plain
+// HTML/CSS: it needs no layout measurements, so many of them (e.g. one per
+// table row) can be rendered at once without blocking the browser.
 
-      font-family: inherit;
-      font-weight: normal;
-    }
+// The tooltip trigger takes the width of the bar (the `width` input), so
+// that the tooltip is centered on the bar and the bar still shrinks in
+// narrow columns.
+//
+// The tooltip is light, like the tooltip of the Carbon meter chart this
+// component used before (white, with a shadow), set through the Carbon
+// popover custom properties. [highContrast]="false" keeps Carbon from
+// overriding the colors on the inner popover element.
+.usage-bar__tooltip {
+  --cds-popover-background-color: #fff;
+  --cds-popover-text-color: var(--cds-text-primary, #161616);
+  --cds-popover-border-radius: 0;
+  --cds-popover-offset: 0.375rem;
+  --cds-tooltip-padding-block: 0.25rem;
+  --cds-tooltip-padding-inline: 0.25rem;
+
+  display: block;
+  max-width: 100%;
+
+  // The shadow is set on the tooltip content (which holds the caret too), not
+  // through --cds-popover-drop-shadow: that one puts a filter on the popover
+  // wrapper, which then becomes the containing block of the fixed-positioned
+  // content. The auto alignment then treats the scroll container of the
+  // table as clipping and moves the tooltip below or beside the bar in the
+  // first rows and in short tables.
+  ::ng-deep .cds--popover-content {
+    filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 20%));
+  }
+}
+
+.usage-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  width: 100%;
+}
+
+.usage-bar__labels {
+  @include type.type-style('heading-01');
+
+  align-items: center;
+  color: var(--cds-text-primary, #161616);
+  display: flex;
+  font-weight: normal;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.usage-bar__breakdown,
+.usage-bar__total {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.usage-bar__total {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.usage-bar__status {
+  flex-shrink: 0;
+  margin-left: auto;
+
+  .usage-bar__total + & {
+    margin-left: 0;
+  }
+}
+
+.usage-bar__status--warning {
+  .usage-bar__status-circle {
+    fill: var(--cds-support-warning, #f1c21b);
   }
 
-  .meter-tooltip {
-    @include type.type-style('helper-text-01');
+  .usage-bar__status-inner {
+    fill: #000;
+  }
+}
 
-    padding-top: 0.25rem;
+.usage-bar__status--danger {
+  .usage-bar__status-circle {
+    fill: var(--cds-support-error, #da1e28);
+  }
 
-    div {
-      padding-bottom: 0.25rem;
-    }
+  .usage-bar__status-inner {
+    fill: var(--cds-layer-01-absolute, #fff);
+  }
+}
+
+.usage-bar__track {
+  background-color: var(--cds-layer-02, #f4f4f4);
+  // Range indicator at the end of the track.
+  box-shadow: inset -1px 0 0 var(--cds-meter-range-indicator, #a8a8a8);
+  height: 0.625rem;
+  overflow: hidden;
+  width: 100%;
+}
+
+.usage-bar__fill {
+  background-color: var(--primary);
+  height: 100%;
+}
+
+.usage-bar__fill--warning {
+  background-color: var(--cds-support-warning, #f1c21b);
+}
+
+.usage-bar__fill--danger {
+  background-color: var(--cds-support-error, #da1e28);
+}
+
+.usage-bar-tooltip {
+  @include type.type-style('helper-text-01');
+
+  padding-top: 0.25rem;
+
+  div {
+    padding-bottom: 0.25rem;
   }
 }
