@@ -31,6 +31,12 @@ function(add_options name)
   set(options_yamls ${options_yamls} PARENT_SCOPE)
   set(cc_file "${name}_options.cc")
   set(h_file "${PROJECT_BINARY_DIR}/include/${name}_legacy_options.h")
+  set(update_timestamp)
+  if(CMAKE_GENERATOR MATCHES "Makefiles")
+    # Make does not restat unchanged outputs. Advance the primary output so an
+    # input-only change does not cause generation to repeat on every invocation.
+    set(update_timestamp COMMAND ${CMAKE_COMMAND} -E touch_nocreate ${cc_file})
+  endif()
   add_custom_command(
     OUTPUT ${cc_file} ${h_file}
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/y2c.py
@@ -38,7 +44,8 @@ function(add_options name)
       --output ${cc_file}
       --legacy ${h_file}
       --name ${name}
-      DEPENDS ${yaml_file})
+    ${update_timestamp}
+    DEPENDS ${yaml_file} ${CMAKE_CURRENT_SOURCE_DIR}/y2c.py)
   list(APPEND common_options_srcs ${cc_file})
   set(common_options_srcs ${common_options_srcs} PARENT_SCOPE)
   list(APPEND legacy_options_headers ${h_file})
@@ -114,3 +121,12 @@ target_sources(legacy-option-headers
 include(AddCephTest)
 add_ceph_test(validate-options
   ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/validate-options.py ${options_yamls})
+
+if(WITH_TESTS)
+  add_ceph_test(test-options-generator
+    ${CMAKE_COMMAND}
+    -DPYTHON_EXECUTABLE=${Python3_EXECUTABLE}
+    -DGENERATOR_SCRIPT=${CMAKE_CURRENT_SOURCE_DIR}/y2c.py
+    -DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/test-options-generator
+    -P ${CMAKE_CURRENT_SOURCE_DIR}/test_y2c.cmake)
+endif()
