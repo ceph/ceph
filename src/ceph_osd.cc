@@ -138,6 +138,7 @@ int main(int argc, const char **argv)
     args, CEPH_ENTITY_TYPE_OSD,
     CODE_ENVIRONMENT_DAEMON, 0);
   ceph_heap_profiler_init();
+  OSD::scale_memory_target_defaults(g_ceph_context, true);
 
   Preforker forker;
 
