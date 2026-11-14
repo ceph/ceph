@@ -15960,7 +15960,7 @@ struct C_Migrate : public Context {
         auto head = oid.get_head();
         if (!stale) {
           pg->pgbackend->cancel_recovery_op(head);
-          pg->recovering.erase(head);
+          pg->release_recovering(head);
         }
         pg->pool_migrations_in_flight.erase(head);
         // handle_pool_migration_copy_failure already checked for quiesce
@@ -16346,6 +16346,20 @@ void PrimaryLogPG::handle_pool_migration_quiesce_complete()
   }
 }
 
+void PrimaryLogPG::release_recovering(const hobject_t &oid)
+{
+  auto i = recovering.find(oid);
+  if (i == recovering.end()) {
+    return;
+  }
+  if (i->second && i->second->rwstate.recovery_read_marker) {
+    list<OpRequestRef> requeue_list;
+    i->second->drop_recovery_read(&requeue_list);
+    requeue_ops(requeue_list);
+  }
+  recovering.erase(i);
+}
+
 void PrimaryLogPG::handle_pool_migration_copy_failure(hobject_t oid, int r, bool stale)
 {
   dout(10) << __func__ << " " << oid << " failed with " << r << dendl;
@@ -16397,10 +16411,9 @@ void PrimaryLogPG::handle_pool_migration_copy_failure(hobject_t oid, int r, bool
       pool_migration_source_delete_pending_lock.erase(pool_migration_source_delete_pending_lock.begin());
 
       // Clean up recovering state for pending deletes
-      auto i = recovering.find(pending_oid);
-      ceph_assert(i != recovering.end());
+      ceph_assert(recovering.count(pending_oid));
       pgbackend->cancel_recovery_op(pending_oid);
-      recovering.erase(i);
+      release_recovering(pending_oid);
       finish_recovery_op(pending_oid);
       // Abandon this deferred source-delete. Its copy already completed (so no
       // C_Migrate will ever drain it) and the delete now never runs, so it would
@@ -16447,13 +16460,10 @@ void PrimaryLogPG::handle_pool_migration_copy_failure(hobject_t oid, int r, bool
              << " in-flight migrations to complete" << dendl;
   }
 
-  if (!stale) {
-    auto i = recovering.find(oid);
-    if (i != recovering.end()) {
-      pgbackend->cancel_recovery_op(oid);
-      recovering.erase(i);
-      finish_recovery_op(oid);
-    }
+  if (!stale && recovering.count(oid)) {
+    pgbackend->cancel_recovery_op(oid);
+    release_recovering(oid);
+    finish_recovery_op(oid);
   }
 }
 
@@ -16876,10 +16886,9 @@ void PrimaryLogPG::on_pool_migration_source_suspended()
   while (!pool_migration_source_delete_pending_lock.empty()) {
     hobject_t pending_oid = *pool_migration_source_delete_pending_lock.begin();
     pool_migration_source_delete_pending_lock.erase(pool_migration_source_delete_pending_lock.begin());
-    auto i = recovering.find(pending_oid);
-    ceph_assert(i != recovering.end());
+    ceph_assert(recovering.count(pending_oid));
     pgbackend->cancel_recovery_op(pending_oid);
-    recovering.erase(i);
+    release_recovering(pending_oid);
     finish_recovery_op(pending_oid);
     pool_migrations_in_flight.erase(pending_oid);
     dout(20) << __func__ << " flushed pending delete for " << pending_oid << dendl;

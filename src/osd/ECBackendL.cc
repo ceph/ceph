@@ -1211,15 +1211,6 @@ void ECBackendL::handle_sub_write_reply(
     i->second->pending_apply.erase(from);
   }
 
-  if (i->second->pending_commit.empty() &&
-      i->second->on_all_commit &&
-      // also wait for apply, to preserve ordering with luminous peers.
-      i->second->pending_apply.empty()) {
-    dout(10) << __func__ << " Calling on_all_commit on " << i->second << dendl;
-    i->second->on_all_commit->complete(0);
-    i->second->on_all_commit = 0;
-    i->second->trace.event("ec write all committed");
-  }
   if (cct->_conf->bluestore_debug_inject_read_err &&
       (i->second->pending_commit.size() == 1) &&
       ECInject::test_write_error2(i->second->hoid)) {
@@ -1228,6 +1219,21 @@ void ECBackendL::handle_sub_write_reply(
     vector<std::string> vcmd{cmd};
     dout(0) << __func__ << " Error inject - marking OSD down" << dendl;
     get_parent()->start_mon_command(std::move(vcmd), {}, nullptr, nullptr, nullptr);
+  }
+
+  if (i->second->pending_commit.empty() &&
+      i->second->on_all_commit &&
+      // also wait for apply, to preserve ordering with luminous peers.
+      i->second->pending_apply.empty()) {
+    dout(10) << __func__ << " Calling on_all_commit on " << i->second << dendl;
+    i->second->trace.event("ec write all committed");
+    // The callback may submit further writes (e.g. chained pool migration
+    // deletes) which re-enter rmw_pipeline.check_ops() and can finish and
+    // destroy this Op before the callback returns. Take ownership of the
+    // callback so ~Op() does not delete it while it is running.
+    Context *on_all_commit = nullptr;
+    std::swap(on_all_commit, i->second->on_all_commit);
+    on_all_commit->complete(0);
   }
   rmw_pipeline.check_ops();
 }
