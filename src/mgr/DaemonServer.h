@@ -348,6 +348,10 @@ public:
   void adjust_pgs();
 
   void _send_configure(ConnectionRef c);
+  // mark the connection down and forget it, as ms_handle_reset would (a
+  // local mark_down does not trigger it); the daemon reconnects.
+  // Caller holds lock.
+  void _drop_session(const ConnectionRef& con);
 
   MetricQueryID add_osd_perf_query(
       const OSDPerfMetricQuery &query,
