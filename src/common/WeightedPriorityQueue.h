@@ -18,6 +18,9 @@
 
 #include "OpQueue.h"
 
+#include <optional>
+#include <vector>
+
 #include <boost/intrusive/list.hpp>
 #include <boost/intrusive/rbtree.hpp>
 #include <boost/intrusive/avl_set.hpp>
@@ -170,6 +173,29 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
         check_end();
 	return ret;
       }
+      // Find the next eligible owner without advancing the round-robin
+      // cursor. A blocked owner keeps its turn until work can run.
+      template <typename Cost>
+      std::optional<unsigned> eligible_cost(Cost cost) {
+        auto current = next;
+        do {
+          if (auto value = cost(current->lp.front().item)) {
+            return value;
+          }
+          if (++current == klasses.end()) {
+            current = klasses.begin();
+          }
+        } while (current != next);
+        return std::nullopt;
+      }
+      template <typename Cost>
+      T pop_eligible(Cost cost) {
+        while (!cost(next->lp.front().item)) {
+          ++next;
+          check_end();
+        }
+        return pop();
+      }
       void filter_class(K& cl, std::list<T>* out) {
         Kit i = klasses.find(cl, MapKey<Klass, K>());
         if (i != klasses.end()) {
@@ -267,6 +293,59 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
 	  }
 	  return ret;
 	}
+
+        // The callback supplies the eligible head's cost, or nullopt when
+        // this owner is blocked. Keep blocked owners in place so temporarily
+        // losing eligibility does not reset the round-robin cursor.
+        template <typename Cost>
+        std::optional<T> pop_eligible(Cost cost, bool strict = false) {
+          struct Candidate {
+            Sit queue;
+            unsigned cost;
+          };
+          std::vector<Candidate> eligible;
+          unsigned eligible_prio = 0;
+          for (auto i = queues.end(); i != queues.begin();) {
+            --i;
+            if (auto value = i->eligible_cost(cost)) {
+              if (strict) {
+                T ret = i->pop_eligible(cost);
+                if (i->empty()) {
+                  queues.erase_and_dispose(i, DelItem<SubQueue>());
+                }
+                return ret;
+              }
+              eligible.push_back({i, *value});
+              eligible_prio += i->key;
+              max_cost = std::max(max_cost, *value);
+            }
+          }
+          if (eligible.empty()) {
+            return std::nullopt;
+          }
+          auto selected = eligible.begin();
+          if (eligible.size() > 1) {
+            while (true) {
+              unsigned prio = rand() % eligible_prio + 1;
+              selected = eligible.begin();
+              while (prio > selected->queue->key) {
+                prio -= selected->queue->key;
+                ++selected;
+              }
+              if (max_cost == 0 || rand() % max_cost <=
+                  max_cost - ((selected->cost * 9) / 10)) {
+                break;
+              }
+            }
+          }
+          auto i = selected->queue;
+          T ret = i->pop_eligible(cost);
+          if (i->empty()) {
+            total_prio -= i->key;
+            queues.erase_and_dispose(i, DelItem<SubQueue>());
+          }
+          return ret;
+        }
 	void filter_class(K& cl, std::list<T>* out) {
 	  for (Sit i = queues.begin(); i != queues.end();) {
 	    i->filter_class(cl, out);
@@ -333,6 +412,13 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
 	return strict.pop(true);
       }
       return normal.pop();
+    }
+    template <typename Cost>
+    std::optional<T> dequeue_eligible(Cost cost) {
+      if (auto item = strict.pop_eligible(cost, true)) {
+        return item;
+      }
+      return normal.pop_eligible(cost);
     }
     unsigned get_size_slow() {
       return strict.get_size_slow() + normal.get_size_slow();
