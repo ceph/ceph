@@ -175,6 +175,7 @@ int RGWPutPublicAccessBlock_S3Control::init_processing(optional_yield y)
                               public_access_block, &parser, true);
   } catch (RGWXMLDecoder::err& err) {
     ldpp_dout(this, 5) << "unexpected xml:" << err << dendl;
+    s->err.message = err.what();
     return -ERR_MALFORMED_XML;
   }
   return 0;
