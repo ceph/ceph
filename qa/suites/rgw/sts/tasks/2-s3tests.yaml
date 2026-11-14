@@ -3,4 +3,5 @@ tasks:
     client.0:
       sts_tests: True
       webidentity_tests: True
+      sts_session_duration: 60
       rgw_server: client.0
