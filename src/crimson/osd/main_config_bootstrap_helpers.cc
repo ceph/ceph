@@ -3,6 +3,7 @@
 
 #include "crimson/osd/main_config_bootstrap_helpers.h"
 
+#include <cstring>
 #include <fcntl.h>
 #include <fmt/ranges.h>
 #include <seastar/core/app-template.hh>
@@ -39,7 +40,9 @@ namespace crimson::osd {
 
 void usage(const char* prog)
 {
-  std::cout << "crimson osd usage: " << prog << " -i <ID> [flags...]" << std::endl;
+  std::cout << "crimson osd usage: " << prog << " -i <ID> [flags...]\n"
+            << "  --help-seastar    show Seastar help messages\n"
+            << "  --help-loggers    show available loggers" << std::endl;
   generic_server_usage();
 }
 
@@ -319,6 +322,17 @@ get_early_config(
   if (ceph_argparse_need_usage(args)) {
     usage(argv[0]);
     exit(0);
+  }
+  for (auto a : args) {
+    if (std::strcmp(a, "--help-seastar") == 0 ||
+        std::strcmp(a, "--help-loggers") == 0) {
+      seastar::app_template::config app_cfg;
+      app_cfg.name = "Crimson";
+      app_cfg.auto_handle_sigint_sigterm = false;
+      seastar::app_template app(std::move(app_cfg));
+      char* help_argv[] = { const_cast<char*>(argv[0]), const_cast<char*>(a) };
+      exit(app.run(2, help_argv, [] { return seastar::now(); }));
+    }
   }
   int pipes[2];
   int r = pipe2(pipes, O_CLOEXEC);
