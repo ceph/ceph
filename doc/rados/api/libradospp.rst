@@ -1,3 +1,5 @@
+.. _rados api cpp:
+
 ==================
  LibradosPP (C++)
 ==================
@@ -6,4 +8,17 @@
    between major releases. All applications using the librados C++ API must
    be recompiled and relinked against a specific Ceph release.
 
-.. todo:: write me!
+Cluster handle, I/O context and operations
+==========================================
+
+.. autodoxygenfile:: librados.hpp
+
+Types
+=====
+
+.. autodoxygenfile:: rados_types.hpp
+
+Object class method traits
+==========================
+
+.. autodoxygenfile:: cls_traits.hpp
