@@ -5036,13 +5036,22 @@ void Client::add_update_cap(Inode *in, MetaSession *mds_session, uint64_t cap_id
      *
      * "ceph_seq_cmp(seq, cap->seq) <= 0" means we are processing
      * a message that was send before the cap import message. So
-     * don't remove caps.
+     * don't remove caps -- but only when this is still the same
+     * Cap (matching cap_id).  A different cap_id with a lower seq
+     * means the MDS dropped our Cap and is issuing a new one
+     * (e.g. after a CapRelease raced with Cap re-acquire); accept
+     * the re-issue instead of treating it as a delayed update.
      */
-    if (ceph_seq_cmp(seq, cap.seq) <= 0) {
+    if (cap.cap_id != cap_id) {
+      ldout(cct, 1) << __func__ << " mds." << mds << " Cap re-issue on " << *in
+                    << " cap_id " << cap.cap_id << " -> " << cap_id << " seq "
+                    << cap.seq << " -> " << seq << dendl;
+      // Drop issued/implemented state tied to the old Cap identity.
+      cap.implemented = 0;
+    } else if (ceph_seq_cmp(seq, cap.seq) <= 0) {
       if (&cap != in->auth_cap)
          ldout(cct, 0) << "WARNING: " <<  "inode " << *in << " caps on mds." << mds << " != auth_cap." << dendl;
 
-      ceph_assert(cap.cap_id == cap_id);
       seq = cap.seq;
       mseq = cap.mseq;
       issued |= cap.issued;
@@ -5051,6 +5060,17 @@ void Client::add_update_cap(Inode *in, MetaSession *mds_session, uint64_t cap_id
   } else {
     inc_pinned_icaps();
     inc_caps();
+  }
+
+  // Cap is (re)held locally; any CapRelease still queued for this
+  // ino is stale and must not reach the MDS (RELEASE after re-acquire
+  // would drop the MDS Cap while we keep ours).
+  if (size_t n = mds_session->cancel_pending_cap_releases(in->ino)) {
+    ldout(cct, 10) << __func__ << " cancelled " << n
+                   << " pending CapRelease(s) for " << in->ino << dendl;
+    // remove_cap(queue_release) defers dec_pinned_icaps until flush;
+    // cancelling those items must complete the same accounting.
+    dec_pinned_icaps(n);
   }
 
   check_cap_issue(in, issued);
