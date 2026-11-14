@@ -3,6 +3,7 @@
 import argparse
 
 from ceph_volume import terminal
+from ceph_volume.api import lvm as api
 from ceph_volume.objectstore.lvm import Lvm as LVMActivate
 from ceph_volume.objectstore.raw import Raw as RAWActivate
 from ceph_volume.devices.simple.activate import Activate as SimpleActivate
@@ -14,6 +15,26 @@ class Activate(object):
 
     def __init__(self, argv):
         self.argv = argv
+
+    def _has_osd_lvs(self):
+        """
+        Return True if an LV is tagged with the OSD fsid (and the OSD id, if
+        given), i.e. the OSD is an LVM OSD. A failed lookup returns False.
+        """
+        if self.args.osd_fsid is None:
+            return False
+        tags = {'ceph.osd_fsid': self.args.osd_fsid}
+        if self.args.osd_id is not None:
+            tags['ceph.osd_id'] = self.args.osd_id
+        try:
+            lvs = api.get_lvs(tags=tags)
+        except Exception as e:
+            terminal.info(f'Failed to look up the LVs of the OSD: {e}')
+            return False
+        if lvs:
+            terminal.info(f'Found LVM OSD {self.args.osd_fsid}, '
+                          'skipping raw activation')
+        return bool(lvs)
 
     def main(self):
         parser = argparse.ArgumentParser(
@@ -50,13 +71,16 @@ class Activate(object):
         if self.args.osd_id is not None and self.args.osd_fsid is not None:
             OsdLvmMappers(self.args.osd_id, self.args.osd_fsid).close()
 
-        # first try raw
-        try:
-            raw_activate = RAWActivate(self.args)
-            raw_activate.activate()
-            return
-        except Exception as e:
-            terminal.info(f'Failed to activate via raw: {e}')
+        # first try raw, unless an LV carries this OSD's fsid: raw skips
+        # LVM-backed OSDs anyway, and probing every block device of the
+        # host for them is slow on hosts with many devices.
+        if not self._has_osd_lvs():
+            try:
+                raw_activate = RAWActivate(self.args)
+                raw_activate.activate()
+                return
+            except Exception as e:
+                terminal.info(f'Failed to activate via raw: {e}')
 
         # then try lvm
         try:
