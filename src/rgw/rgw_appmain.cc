@@ -44,6 +44,7 @@
 #include "rgw_rest_swift.h"
 #include "rgw_rest_admin.h"
 #include "rgw_rest_info.h"
+#include "rgw_rest_features.h"
 #include "rgw_rest_usage.h"
 #include "rgw_rest_account.h"
 #include "rgw_rest_bucket.h"
@@ -507,6 +508,7 @@ void rgw::AppMain::cond_init_apis()
     if (apis_set.contains("admin")) {
       RGWRESTMgr_Admin *admin_resource = new RGWRESTMgr_Admin;
       admin_resource->register_resource("info", new RGWRESTMgr_Info);
+      admin_resource->register_resource("features", new RGWRESTMgr_Features);
       admin_resource->register_resource("usage", new RGWRESTMgr_Usage);
       admin_resource->register_resource("account", new RGWRESTMgr_Account);
       admin_resource->register_resource("restore", new RGWRESTMgr_Restore);

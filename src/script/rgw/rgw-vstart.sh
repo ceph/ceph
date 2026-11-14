@@ -207,6 +207,9 @@ echo "==> running vstart.sh --rgw_store $STORE"
 VSTART_OPTS=(
 	-o "rgw_${STORE}_cache_max_buckets=500"
 	-o 'rgw_multipart_min_part_size=32'
+	# DELETE /admin/driver/hint;  dev-level and off by default, so a
+	# development cluster has to ask for it
+	-o 'rgw_driver_debug_apis=true'
 )
 
 if $LIFECYCLE; then

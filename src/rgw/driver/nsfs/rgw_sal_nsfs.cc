@@ -16,6 +16,7 @@
 #include "rgw_sal_nsfs.h"
 #include "rgw_rest_user.h"
 #include "driver/posix/sync_policy.h"
+#include "rgw_rest_driver_hint.h"
 #include "rgw_pubsub_push.h"
 #include "rgw_pubsub.h"
 #include "rgw_s3_filter.h"
@@ -9430,14 +9431,13 @@ std::unique_ptr<LCSerializer> NSFSLifecycle::get_serializer(const std::string& l
 
 void NSFSDriver::get_features(std::map<std::string, std::string>& features)
 {
-  /* What the fs-features hint returns.  Each of these is something the
-   * driver knows and a client cannot work out without reading a failed
-   * operation as a defect.  Meanings, since
+  /* Each of these is something the driver knows and a client cannot work
+   * out without reading a failed operation as a defect.  Meanings, since
    * this is where these names are first defined:
    *
    *   fsio            the driver implements the FSIO interfaces -- rgw_open2
    *                   and the shadow model.  A suite written against them
-   *                   is testing nothing on a driver which answers no.
+   *                   is testing nothing on a driver which returns no.
    *   strategy        which FSStrategy was selected by probing at startup.
    *   can_rename      a rename moves the name.  When false, RGWLibFS::rename
    *                   emulates it by copy-and-delete, so the object does not
@@ -9466,6 +9466,9 @@ void NSFSDriver::register_admin_apis(RGWRESTMgr* mgr)
 {
   mgr->register_resource("user", new RGWRESTMgr_User);
   /* TODO: register "bucket" once rgw_rest_bucket is decoupled from rados */
+  auto* driver_mgr = new RGWRESTMgr;
+  driver_mgr->register_resource("hint", new RGWRESTMgr_Driver_Hint);
+  mgr->register_resource("driver", driver_mgr);
 }
 
 int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
@@ -9545,6 +9548,8 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
   }
 
   if (hint == "fs-features") {
+    /* the same set GET /admin/features reports, for a test which holds the
+     * driver rather than a socket */
     if (! out) {
       return -EINVAL;
     }

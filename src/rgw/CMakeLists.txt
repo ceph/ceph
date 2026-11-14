@@ -69,6 +69,7 @@ set(librgw_common_srcs
   rgw_env.cc
   rgw_es_query.cc
   rgw_formats.cc
+  rgw_hint_registry.cc
   rgw_http_client.cc
   rgw_keystone.cc
   rgw_keystone_scope.cc
@@ -702,6 +703,7 @@ set(rgw_a_srcs
   rgw_process.cc
   rgw_realm_reloader.cc
   rgw_rest_config.cc
+  rgw_rest_features.cc
   rgw_rest_info.cc
   rgw_rest_metadata.cc
   rgw_rest_ratelimit.cc

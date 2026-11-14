@@ -1993,6 +1993,9 @@ do_rgw_create_users()
     s3_skey='h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q=='
     debug echo "setting up user testid"
     $CEPH_BIN/radosgw-admin user create --uid testid --access-key $s3_akey --secret $s3_skey --display-name 'M. Tester' --email tester@ceph.com -c $conf_fn > /dev/null
+    # info=read reaches GET /admin/info and GET /admin/nsfs, which report
+    # what the deployment is -- a suite can then read its own expectations
+    # off the cluster instead of being told by its invocation
 
     # Create S3-test users
     # See: https://github.com/ceph/s3-tests

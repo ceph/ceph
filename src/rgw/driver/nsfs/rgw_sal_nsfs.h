@@ -807,7 +807,7 @@ public:
   virtual CephContext* ctx(void) override { return userDB->ctx(); }
 
   virtual void register_admin_apis(RGWRESTMgr* mgr) override;
-  void get_features(std::map<std::string, std::string>& features);
+  void get_features(std::map<std::string, std::string>& features) override;
 
   int driver_hint(const DoutPrefixProvider* dpp,
 		  const std::string& hint,

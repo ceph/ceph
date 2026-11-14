@@ -768,6 +768,33 @@ class Driver {
     /** Register admin APIs unique to this driver */
     virtual void register_admin_apis(RGWRESTMgr* mgr) = 0;
 
+    /** What this deployment implements, as name to value.
+     *
+     *  Reported by GET /admin/features, and meant for a client which
+     *  has to decide what to expect of a backend it did not choose --
+     *  a test suite, most immediately.  Which interfaces a driver
+     *  implements is not static as FSIO reaches posix and rados, and it
+     *  is not a question a client can answer by probing without reading
+     *  a failed operation as a defect.
+     *
+     *  Deliberately an open namespace of strings rather than an enum or a
+     *  fixed struct:  a driver can report something this interface did not
+     *  anticipate, which is the property that lets features be added one
+     *  at a time by whoever needs one.  Two rules go with that.  A feature
+     *  is added when a caller needs it, never speculatively.
+     *  And an absent name means UNKNOWN, never false -- a client which
+     *  cannot tell those apart will assert the opposite of the truth
+     *  against any driver that does not report.
+     *
+     *  Values are free-form;  "true" and "false" are rendered as JSON
+     *  booleans.  A name's meaning is documented where it is first added,
+     *  and a second driver adopting the name takes that meaning with it.
+     *
+     *  The default reports nothing, which reads as "unknown", correctly,
+     *  for every driver that has not been taught to answer. */
+    virtual void get_features(std::map<std::string, std::string>& features)
+    {}
+
     /** Send a driver-level hint with optional parameters.
      *  Hints are string-keyed, extensible commands for debug, testing,
      *  and administrative operations that don't warrant dedicated SAL
