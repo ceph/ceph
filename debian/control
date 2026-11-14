@@ -1744,6 +1744,8 @@ Depends: libcephfs-jni (= ${binary:Version}),
          ${java:Depends},
          ${misc:Depends},
 Description: Java libraries for the Ceph File System
+ This package provides the Java language bindings for libcephfs, so
+ that Java applications can access the Ceph File System (CephFS).
 
 Package: libcephfs-jni
 Architecture: linux-any
@@ -1753,6 +1755,8 @@ Depends: libcephfs2 (= ${binary:Version}),
          ${misc:Depends},
          ${shlibs:Depends},
 Description: Java Native Interface library for CephFS Java bindings
+ This package contains the native JNI library on which the Java
+ language bindings in libcephfs-java are built.
 
 Package: rados-objclass-dev
 Architecture: linux-any
