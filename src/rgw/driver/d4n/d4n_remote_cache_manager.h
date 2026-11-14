@@ -1,3 +1,14 @@
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2026 International Business Machines Corp. (IBM)
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software
+ * Foundation. See file COPYING.
+ */
+
 #pragma once
 
 #include <boost/asio/awaitable.hpp>
@@ -7,6 +18,7 @@
 #include <boost/system/detail/errc.hpp>
 
 #include <aio.h>
+#include <expected>
 #include "rgw_common.h"
 #include "rgw_sal_d4n.h"
 
@@ -53,6 +65,9 @@ class RemoteCacheOp {
     virtual int send_and_complete_request(const DoutPrefixProvider* dpp, optional_yield& y, bufferlist* bl = nullptr);
 
   protected:
+    std::expected<RGWAccessKey, int> load_access_key(const DoutPrefixProvider *dpp,
+                                                    optional_yield y);
+
     rgw::sal::Driver* driver;
     RemoteCacheOpData op;
     std::unique_ptr<RGWRESTStreamRWRequest> sender;
@@ -98,10 +113,11 @@ class RemoteCachePutOp : public RemoteCacheOp {
     };
 
   private:
-    RemoteCachePutOpData put_op; // Store PUT-specific data including old_version
+    std::string old_version;
 
   public:
-    RemoteCachePutOp(rgw::sal::Driver* driver, RemoteCachePutOpData& op, bool block_only = false) : RemoteCacheOp(driver, op), block_only(block_only), put_op(op) {}
+    RemoteCachePutOp(rgw::sal::Driver* driver, RemoteCachePutOpData& op, bool block_only = false)
+      : RemoteCacheOp(driver, op), block_only(block_only), old_version(op.old_version) {}
     virtual ~RemoteCachePutOp() = default;
 
 	virtual int send_request(const DoutPrefixProvider* dpp, optional_yield& y, bufferlist* bl = nullptr) override;

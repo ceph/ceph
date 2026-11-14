@@ -27,9 +27,4 @@ rgw::sal::Driver* newDaosStore(CephContext *cct)
   return NULL;
 }
 
-rgw::sal::Driver* newD4NFilter(rgw::sal::Driver* next, boost::asio::io_context& io_context, bool admin)
-{
-  return NULL;
-}
-
 }

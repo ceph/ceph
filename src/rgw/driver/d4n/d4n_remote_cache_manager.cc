@@ -1,28 +1,48 @@
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2026 International Business Machines Corp. (IBM)
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software
+ * Foundation. See file COPYING.
+ */
+
 #include "d4n_remote_cache_manager.h"
 
 #include "../../../common/async/yield_context.h"
 #include "common/async/blocked_completion.h"
+#include <utility>
 
 namespace rgw::d4n {
+
+std::expected<RGWAccessKey, int> RemoteCacheOp::load_access_key(
+    const DoutPrefixProvider *dpp, const optional_yield y)
+{
+  auto user = driver->get_user(op.bucket_owner);
+  if (0 > user->load_user(dpp, y)) {
+    return std::unexpected(-EPERM);
+  }
+
+  const auto& keys = user->get_info().access_keys;
+  if (keys.empty()) {
+    return std::unexpected(-EINVAL);
+  }
+
+  const auto& key = keys.begin()->second;
+
+  return std::expected<RGWAccessKey, int>{std::in_place, key.id, key.key};
+}
 
 int RemoteCacheGetOp::send_request(const DoutPrefixProvider* dpp, optional_yield& y, bufferlist* bl)
 {
   in_bl.clear();
-  RGWAccessKey accessKey;
-  std::string findKey;
 
-  std::unique_ptr<rgw::sal::User> c_user = driver->get_user(op.bucket_owner);
-  int ret = c_user->load_user(dpp, y);
-  if (ret < 0) {
-    return -EPERM;
+  auto access_key = load_access_key(dpp, y);
+  if (!access_key) {
+    return access_key.error();
   }
-
-  if (c_user->get_info().access_keys.empty()) {
-    return -EINVAL;
-  }
-
-  accessKey.id = c_user->get_info().access_keys.begin()->second.id;
-  accessKey.key = c_user->get_info().access_keys.begin()->second.key;
 
   HostStyle host_style = PathStyle;
   std::map<std::string, std::string> extra_headers;
@@ -39,8 +59,7 @@ int RemoteCacheGetOp::send_request(const DoutPrefixProvider* dpp, optional_yield
   auto resource = get_resource(op.bucket_name, op.object_name);
   sender = std::make_unique<RGWRESTStreamRWRequest>(dpp->get_cct(), "GET", op.remote_addr, &cb, nullptr, &params, "", host_style);
 
-  ret = sender->send_request(dpp, &accessKey, extra_headers, resource, nullptr, bl);
-  if (ret < 0) {
+  if (const auto ret = sender->send_request(dpp, &*access_key, extra_headers, resource, nullptr, bl); ret < 0) {
     return ret;
   }
 
@@ -54,25 +73,14 @@ rgw::AioResultList RemoteCacheGetOp::send_request(const DoutPrefixProvider* dpp,
 
   auto op_func = [this, dpp, y](Aio* aio, AioResult& r) mutable {
     this->r = &r;
-    RGWAccessKey accessKey;
-    std::string findKey;
 
-    std::unique_ptr<rgw::sal::User> c_user = driver->get_user(op.bucket_owner);
-    int ret = c_user->load_user(dpp, y);
-    if (ret < 0) {
-      r.result = -EPERM;
-      aio->put(r);
+    auto access_key = load_access_key(dpp, y);
+    if (!access_key) {
+      r.result = access_key.error();
       this->r = nullptr;
-    }
-
-    if (c_user->get_info().access_keys.empty()) {
-      r.result = -EINVAL;
       aio->put(r);
-      this->r = nullptr;
+      return;
     }
-
-    accessKey.id = c_user->get_info().access_keys.begin()->second.id;
-    accessKey.key = c_user->get_info().access_keys.begin()->second.key;
 
     HostStyle host_style = PathStyle;
     std::map<std::string, std::string> extra_headers;
@@ -90,11 +98,13 @@ rgw::AioResultList RemoteCacheGetOp::send_request(const DoutPrefixProvider* dpp,
     auto resource = get_resource(op.bucket_name, op.object_name);
     sender = std::make_unique<RGWRESTStreamRWRequest>(dpp->get_cct(), "GET", op.remote_addr, &cb, nullptr, &params, "", host_style);
 
-    ret = sender->send_request(dpp, &accessKey, extra_headers, resource, nullptr, nullptr);
-    if (ret < 0) {
+    if (const auto ret = sender->send_request(dpp, &*access_key, extra_headers, resource, nullptr, nullptr);
+        ret < 0) {
+      sender.reset();
       r.result = ret;
-      aio->put(r);
       this->r = nullptr;
+      aio->put(r);
+      return;
     }
   };
 
@@ -110,11 +120,12 @@ int RemoteCacheGetOp::complete_request(const DoutPrefixProvider* dpp, optional_y
   int ret = sender->complete_request(dpp, y);
   sender.reset();
 
-  if (this->aio) {
-    r->result = ret;
+  if (this->aio && r) {
+    auto* result = std::exchange(r, nullptr);
+    result->result = ret;
     ldpp_dout(dpp, 20) << "RemoteCacheGetOp:: " << __func__ <<  " length of buffer received: " << in_bl.length() << dendl;
-    r->data = std::move(in_bl);
-    this->aio->put(*r);
+    result->data = std::move(in_bl);
+    this->aio->put(*result);
   }
   return ret;
 }
@@ -168,21 +179,10 @@ int RemoteCacheDeleteOp::send_request(const DoutPrefixProvider* dpp, optional_yi
 {
   in_bl.clear();
 
-  RGWAccessKey accessKey;
-  std::string findKey;
-
-  std::unique_ptr<rgw::sal::User> c_user = driver->get_user(op.bucket_owner);
-  int ret = c_user->load_user(dpp, y);
-  if (ret < 0) {
-    return -EPERM;
+  auto access_key = load_access_key(dpp, y);
+  if (!access_key) {
+    return access_key.error();
   }
-
-  if (c_user->get_info().access_keys.empty()) {
-    return -EINVAL;
-  }
-
-  accessKey.id = c_user->get_info().access_keys.begin()->second.id;
-  accessKey.key = c_user->get_info().access_keys.begin()->second.key;
 
   HostStyle host_style = PathStyle;
   std::map<std::string, std::string> extra_headers;
@@ -198,8 +198,7 @@ int RemoteCacheDeleteOp::send_request(const DoutPrefixProvider* dpp, optional_yi
   auto resource = get_resource(op.bucket_name, op.object_name);
   sender = std::make_unique<RGWRESTStreamRWRequest>(dpp->get_cct(), "DELETE", op.remote_addr, &cb, nullptr, nullptr, "", host_style);
 
-  ret = sender->send_request(dpp, &accessKey, extra_headers, resource, nullptr, bl);
-  if (ret < 0) {
+  if (const auto ret = sender->send_request(dpp, &*access_key, extra_headers, resource, nullptr, bl); ret < 0) {
     return ret;
   }
 
@@ -210,28 +209,17 @@ int RemoteCachePutOp::send_request(const DoutPrefixProvider* dpp, optional_yield
 {
   in_bl.clear();
 
-  RGWAccessKey accessKey;
-  std::string findKey;
-
-  std::unique_ptr<rgw::sal::User> c_user = driver->get_user(op.bucket_owner);
-  int ret = c_user->load_user(dpp, y);
-  if (ret < 0) {
-    return -EPERM;
+  auto access_key = load_access_key(dpp, y);
+  if (!access_key) {
+    return access_key.error();
   }
-
-  if (c_user->get_info().access_keys.empty()) {
-    return -EINVAL;
-  }
-
-  accessKey.id = c_user->get_info().access_keys.begin()->second.id;
-  accessKey.key = c_user->get_info().access_keys.begin()->second.key;
 
   HostStyle host_style = PathStyle;
   std::map<std::string, std::string> extra_headers;
   extra_headers["x-rgw-remote-cache-request"] = "true";
   extra_headers["x-rgw-cache-object-version"] = op.version;
-  if (!put_op.old_version.empty()) {
-    extra_headers["x-rgw-cache-old-version"] = put_op.old_version;
+  if (!old_version.empty()) {
+    extra_headers["x-rgw-cache-old-version"] = old_version;
   }
   extra_headers["x-rgw-cache-blk-offset"] = std::to_string(op.offset);
   extra_headers["x-rgw-cache-blk-len"] = std::to_string(op.len);
@@ -245,7 +233,7 @@ int RemoteCachePutOp::send_request(const DoutPrefixProvider* dpp, optional_yield
   auto resource = get_resource(op.bucket_name, op.object_name);
   sender = std::make_unique<RGWRESTStreamRWRequest>(dpp->get_cct(), "PUT", op.remote_addr, &cb, nullptr, nullptr, "", host_style);
 
-  return sender->send_request(dpp, &accessKey, extra_headers, resource, nullptr, bl);
+  return sender->send_request(dpp, &*access_key, extra_headers, resource, nullptr, bl);
 }
 
 int RemoteCachePutBatch::send(const DoutPrefixProvider* dpp,

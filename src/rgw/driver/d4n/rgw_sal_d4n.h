@@ -5,6 +5,7 @@
  * Ceph - scalable distributed file system
  *
  * Copyright (C) 2022 Red Hat, Inc.
+ * Copyright (C) 2026 International Business Machines Corp. (IBM)
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -25,7 +26,7 @@
 #include "rgw_redis_driver.h"
 #include "rgw_rest_conn.h"
 
-#include "driver/d4n/d4n_directory.h"
+#include "driver/d4n/d4n_backend.h"
 #include "driver/d4n/d4n_policy.h"
 #include "driver/d4n/d4n_remote_cache_manager.h"
 
@@ -35,8 +36,18 @@
 #include <boost/redis/connection.hpp>
 #include <boost/asio/thread_pool.hpp>
 #include <boost/asio/experimental/concurrent_channel.hpp>
+#include <boost/compat/function_ref.hpp>
 
+#include <expected>
+#include <future>
 #include <limits>
+#include <map>
+#include <memory>
+#include <optional>
+#include <source_location>
+#include <string>
+#include <type_traits>
+#include <vector>
 
 #include <fmt/core.h>
 
@@ -46,9 +57,6 @@ namespace rgw::d4n {
   class RemoteCacheDeleteOp;
   class RemoteCachePutOp;
   class RemoteCachePutBatch;
-  class TransactionFactory;
-  class RedisTransactionFactory;
-  class FDBTransactionFactory;
 }
 
 namespace rgw::sal {
@@ -299,27 +307,17 @@ private:
 
 class D4NFilterDriver : public FilterDriver {
   private:
-    std::shared_ptr<rgw::d4n::DirectoryConnection> conn;
+    std::shared_ptr<rgw::d4n::Backend> backend;
 
     std::unique_ptr<rgw::cache::CacheDriver> cacheDriver;
-    std::unique_ptr<rgw::d4n::Directory> dir;
-    std::unique_ptr<rgw::d4n::ObjectDirectory> objDir;
-    std::unique_ptr<rgw::d4n::BlockDirectory> blockDir;
-    std::unique_ptr<rgw::d4n::BucketDirectory> bucketDir;
     std::unique_ptr<rgw::d4n::PolicyDriver> policyDriver;
-    std::unique_ptr<rgw::d4n::Lease> lease;
     boost::asio::io_context& io_context;
     optional_yield y;
-    std::string directory_type;
 
     std::unique_ptr<boost::asio::thread_pool> d4n_thread_pool;
     std::unique_ptr<CoroutinePool> d4n_coroutine_pool;
     std::unique_ptr<CoroutinePool> d4n_coroutine_get_pool;
 
-    // Redis connection pool
-    std::shared_ptr<rgw::d4n::RedisPool> redis_pool;
-
-    std::shared_ptr<rgw::d4n::TransactionFactory> txn_factory;
 
   public:
     void initialize_pool(const DoutPrefixProvider *dpp,
@@ -382,20 +380,28 @@ class D4NFilterDriver : public FilterDriver {
 				  uint64_t olh_epoch,
 				  const std::string& unique_tag) override;
     rgw::cache::CacheDriver* get_cache_driver() { return cacheDriver.get(); }
-    rgw::d4n::Directory* get_dir() { return dir.get(); }
-    rgw::d4n::ObjectDirectory* get_obj_dir() { return objDir.get(); }
-    rgw::d4n::BlockDirectory* get_block_dir() { return blockDir.get(); }
-    rgw::d4n::BucketDirectory* get_bucket_dir() { return bucketDir.get(); }
+    rgw::d4n::Directory* get_dir();
+    rgw::d4n::ObjectDirectory* get_obj_dir();
+    rgw::d4n::BlockDirectory* get_block_dir();
+    rgw::d4n::BucketDirectory* get_bucket_dir();
     rgw::d4n::PolicyDriver* get_policy_driver() { return policyDriver.get(); }
-    rgw::d4n::Lease* get_lease() { return lease.get(); }
+    rgw::d4n::Lease* get_lease();
     void save_y(optional_yield y) { this->y = y; }
-    std::shared_ptr<rgw::d4n::DirectoryConnection> get_conn() { return conn; }
-    std::shared_ptr<rgw::d4n::RedisPool> get_redis_pool() { return redis_pool; }
-    std::shared_ptr<rgw::d4n::TransactionFactory> get_txn_factory() { return txn_factory; }
+    rgw::d4n::TransactionResult retry_transaction(const DoutPrefixProvider *dpp, optional_yield y,
+        boost::compat::function_ref<int(rgw::d4n::Transaction&)> fn, unsigned max_attempts = 5);
+    int execute_transaction(const DoutPrefixProvider *dpp, optional_yield y,
+        boost::compat::function_ref<int(rgw::d4n::Transaction&)> body, unsigned max_attempts = 5,
+        std::source_location whence = std::source_location::current());
+
+    int populate_listing_metadata(const DoutPrefixProvider *dpp, const std::string& bucket_id,
+                                  std::vector<rgw_bucket_dir_entry>& entries, optional_yield y);
+
+    rgw::d4n::Pipeline *make_pipeline(std::optional<rgw::d4n::Pipeline>& pipeline);
 
     boost::asio::io_context& get_io_context() { return io_context; }
 
-    std::string get_directory_type(){ return directory_type; }
+    bool uses_fdb() const noexcept;
+    bool uses_redis() const noexcept;
 
     void shutdown() override;
     auto get_d4n_executor() {
@@ -428,23 +434,33 @@ class D4NFilterBucket : public FilterBucket {
 
     struct FetchContext {
       std::vector<rgw::d4n::CacheObject> objects;
-      bool has_more = false;
-      std::string next_cursor_or_start;  // Next cursor for scan_objects or start for get_range
+      std::string continuation_token;
     };
-    int fetch_objects_batch(const DoutPrefixProvider* dpp, const ListParams& params, int batch_size,
-                            std::string& cursor_or_start, std::string& marker, bool is_first_batch, FetchContext& fetch_ctx,
-                            std::optional<std::reference_wrapper<rgw::d4n::Transaction>> txn, optional_yield y);
+
+    struct ListingBatch
+    {
+     ListResults results;
+     std::string continuation_token;
+    };
+
+    [[nodiscard]] std::expected<FetchContext, int> fetch_objects_batch(const DoutPrefixProvider* dpp, const ListParams& params, int batch_size,
+                            const std::string& cursor_or_start, bool is_first_batch,
+                            std::optional<rgw::d4n::Transaction> txn, optional_yield y);
+
     int build_versioned_entries(const DoutPrefixProvider* dpp, const rgw::d4n::CacheObject& obj,
                               const ListParams& params, std::vector<rgw_bucket_dir_entry>& entries,
                               std::string& last_version, int& num_objs, bool& object_exhausted, int max,
-                              std::optional<std::reference_wrapper<rgw::d4n::Transaction>> txn, optional_yield y);
-    int process_objects_batch(const DoutPrefixProvider* dpp, const std::vector<rgw::d4n::CacheObject>& input_objects,
-                              const ListParams& params, ListResults& cache_results,
-                              ListResults& store_results, std::string& last_version,
-                              int& num_objs, int max, bool is_truncated, bool& stopped_early,
-                              std::optional<std::reference_wrapper<rgw::d4n::Transaction>> txn, optional_yield y);
-    int populate_cache_results(const DoutPrefixProvider* dpp, std::vector<rgw_bucket_dir_entry>& entries,
-                                std::optional<std::reference_wrapper<rgw::d4n::Transaction>> txn, optional_yield y);
+                              std::optional<rgw::d4n::Transaction> txn, optional_yield y);
+
+    [[nodiscard]] std::expected<ListResults, int> process_objects_batch(const DoutPrefixProvider* dpp, const std::vector<rgw::d4n::CacheObject>& input_objects,
+                              const ListParams& params, const std::map<std::string, bool>& known_prefixes, int max, bool is_truncated,
+                              std::optional<rgw::d4n::Transaction> txn, optional_yield y);
+
+    [[nodiscard]] std::expected<ListingBatch, int> read_listing_batch(
+        const DoutPrefixProvider *dpp, const ListParams& params, int max,
+        const std::string& cursor_or_start, bool is_first_batch,
+        const ListResults& committed, optional_yield y);
+
     void merge_results(const DoutPrefixProvider* dpp, const ListParams& params,
                         ListResults& cache_results, ListResults& store_results,
                         int max, ListResults& results);
@@ -489,6 +505,16 @@ struct RemoteTaskResult {
 
 class D4NFilterObject : public FilterObject {
   private:
+    struct held_lease final
+    {
+     std::string resource;
+     std::string holder;
+     std::string token;
+    };
+
+    // Publishing confirmed acquisition must not allocate or throw.
+    static_assert(std::is_nothrow_move_constructible_v<held_lease>);
+
     D4NFilterDriver* driver;
     std::string version;
     std::string old_version;  // Previous version to invalidate (for PUT overwrites in non-versioned buckets)
@@ -506,15 +532,26 @@ class D4NFilterObject : public FilterObject {
     bool cache_request{false};
     bool remote_cache_request{false}; //sent by another rgw
     std::string delete_marker_version; //version of a delete marker to replicate on the remote rgw
-    // Lease management for concurrent GET/PUT protection
-    std::string lease_resource;    // Unique lease key for this GET
-    std::string lease_holder;      // Holder ID (node/process)
-    std::string lease_token;       // Unique token
-    bool lease_acquired = false;   // Track if lease was acquired
+    std::optional<held_lease> read_lease; // Present after successful GET lease acquisition.
     uint64_t blk_offset;
     uint64_t blk_len;
     uint64_t obj_size; //sent by remote rgw
     bool block_only = false; // sent by remote rgw; used in PUT op for an evicted block
+
+  private:
+    // Query without changing SAL state or acquiring a read lease; borrowed results are working data.
+    [[nodiscard]] std::expected<std::optional<rgw::d4n::CacheBlock>, int>
+    lookup_cached_head(const DoutPrefixProvider *dpp, optional_yield y,
+                       std::optional<rgw::d4n::Transaction> txn = std::nullopt);
+
+    // Install readable metadata while preserving the requested instance.
+    int load_cached_head(const DoutPrefixProvider *dpp, rgw::d4n::CacheBlock&& head);
+
+    void resolve_cached_instance();
+
+    // Keep lookup state from a failed attempt out of later attribute operations.
+    rgw::d4n::TransactionResult retry_attribute_transaction(const DoutPrefixProvider *dpp,
+        optional_yield y, boost::compat::function_ref<int(rgw::d4n::Transaction&)> fn);
 
   public:
     struct D4NFilterReadOp : FilterReadOp {
@@ -678,13 +715,13 @@ class D4NFilterObject : public FilterObject {
     const std::string get_prefix() { return this->prefix; }
     void set_object_attrs(Attrs attrs) { this->attrs_d4n = attrs; }
     Attrs get_object_attrs() { return this->attrs_d4n; }
-    int get_obj_attrs_from_cache(const DoutPrefixProvider* dpp, optional_yield y);
     void set_attrs_from_obj_state(const DoutPrefixProvider* dpp, optional_yield y, rgw::sal::Attrs& attrs, bool dirty = false);
     int calculate_version(const DoutPrefixProvider* dpp, optional_yield y, std::string& version, rgw::sal::Attrs& attrs);
-    int set_head_block_dir_entry(const DoutPrefixProvider* dpp, optional_yield y, rgw::sal::Attrs& attrs, bool is_latest_version = true, bool dirty = false, std::optional<std::reference_wrapper<rgw::d4n::Transaction>> txn = std::nullopt);
+    int set_head_block_dir_entry(const DoutPrefixProvider* dpp, optional_yield y, rgw::sal::Attrs& attrs, bool is_latest_version = true, bool dirty = false, std::optional<rgw::d4n::Transaction> txn = std::nullopt);
     int set_data_block_dir_entries(const DoutPrefixProvider* dpp, optional_yield y, std::string& version, bool dirty = false);
     int delete_data_block_cache_entries(const DoutPrefixProvider* dpp, optional_yield y, std::string& version, bool dirty = false);
-    int check_head_exists_in_cache_get_oid(const DoutPrefixProvider* dpp, std::string& head_oid_in_cache, rgw::sal::Attrs& attrs, rgw::d4n::CacheBlock& blk, optional_yield y, bool acquire_lease = false, std::optional<std::reference_wrapper<rgw::d4n::Transaction>> txn = std::nullopt);
+    // Positive: live head; zero: cache miss or delete marker (returned in blk); negative: error/local tombstone.
+    int check_head_exists_in_cache_get_oid(const DoutPrefixProvider* dpp, std::string& head_oid_in_cache, rgw::d4n::CacheBlock& blk, optional_yield y, std::optional<rgw::d4n::Transaction> txn = std::nullopt);
     rgw::sal::Bucket* get_destination_bucket(const DoutPrefixProvider* dpp) { return dest_bucket;}
     rgw::sal::Object* get_destination_object(const DoutPrefixProvider* dpp) { return dest_object; }
     bool is_multipart() { return multipart; }
@@ -692,7 +729,7 @@ class D4NFilterObject : public FilterObject {
     int create_delete_marker(const DoutPrefixProvider* dpp, optional_yield y,
                              const std::string& forced_version = "",
                              bool remote = false,
-                             std::optional<std::reference_wrapper<rgw::d4n::Transaction>> txn = std::nullopt);
+                             std::optional<rgw::d4n::Transaction> txn = std::nullopt);
     bool is_delete_marker() { return delete_marker; }
     bool exists(void) override { if (exists_in_cache) { return true;} return next->exists(); };
     bool load_obj_from_store() { return load_from_store; }
@@ -815,3 +852,6 @@ public:
 };
 
 } // namespace rgw::sal
+
+extern "C" rgw::sal::Driver *newD4NFilter(rgw::sal::Driver *next,
+    boost::asio::io_context& io_context, bool admin);

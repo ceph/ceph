@@ -70,9 +70,6 @@ extern rgw::sal::Driver* newPOSIXDriver(CephContext *cct);
 extern rgw::sal::Driver* newDaosStore(CephContext *cct);
 #endif
 extern rgw::sal::Driver* newBaseFilter(rgw::sal::Driver* next);
-#ifdef RGW_HAVE_D4N_FILTER
- extern rgw::sal::Driver* newD4NFilter(rgw::sal::Driver* next, boost::asio::io_context& io_context, bool admin);
-#endif
 }
 
 

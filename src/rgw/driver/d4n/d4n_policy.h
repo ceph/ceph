@@ -1,3 +1,14 @@
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2026 International Business Machines Corp. (IBM)
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software
+ * Foundation. See file COPYING.
+ */
+
 #pragma once
 
 #include <boost/asio/awaitable.hpp>
@@ -8,6 +19,8 @@
 #include <boost/asio/thread_pool.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/post.hpp>
+#include <expected>
+#include <future>
 
 #include "d4n_directory.h"
 #include "rgw_sal_d4n.h"
@@ -21,20 +34,17 @@ namespace rgw::sal {
 }
 
 namespace rgw::d4n {
-class DirectoryConnection;
 class Directory;
 class BucketDirectory;
 class ObjectDirectory;
 class BlockDirectory;
 class CacheBlock;
 
-class DirectoryConnection;
 class BucketDirectory;
 class ObjectDirectory;
 class BlockDirectory;
 class CacheBlock;
 
-class DirectoryConnection;
 class BucketDirectory;
 class ObjectDirectory;
 class BlockDirectory;
@@ -285,7 +295,6 @@ class LFUDAPolicy : public CachePolicy {
              ObjectDirectory& objDir,
              BucketDirectory& bucketDir,
              Lease* lease,
-	     std::string_view dir_type,
 	     rgw::cache::CacheDriver* cacheDriver,
 	     optional_yield y) :
 				 CachePolicy(cacheDriver),
@@ -326,8 +335,11 @@ class LFUDAPolicy : public CachePolicy {
     int get_age() { return age; }
 
   private:
+    // True requests deletion of the backend object after confirmed completion.
+    std::expected<bool, int> stage_writeback_directory(const DoutPrefixProvider *dpp,
+        LFUDAObjEntry& entry, rgw::sal::Object& object, Transaction& txn, optional_yield y);
     int mark_data_blocks_dir_clean(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, optional_yield y,
-                                   std::optional<std::reference_wrapper<Transaction>> txn);
+                                   std::optional<Transaction> txn);
     int mark_local_blocks_clean(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, optional_yield y);
 };
 
@@ -370,7 +382,6 @@ class PolicyDriver {
              ObjectDirectory& objDir,
              BucketDirectory& bucketDir,
              Lease* lease,
-	     std::string directory_type,
 	     rgw::cache::CacheDriver* cacheDriver,
 	     const std::string& _policyName,
 	     optional_yield y) : policyName(_policyName)
@@ -381,7 +392,6 @@ class PolicyDriver {
              objDir,
              bucketDir,
              lease,
-	     directory_type,
 	     cacheDriver, y);
       } else if (policyName == "lru") {
 	cachePolicy = std::make_unique<LRUPolicy>(cacheDriver);

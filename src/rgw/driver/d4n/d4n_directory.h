@@ -1,16 +1,40 @@
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2026 International Business Machines Corp. (IBM)
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software
+ * Foundation. See file COPYING.
+ */
+
 #pragma once
 
 #include "rgw_common.h"
 #include "rgw_asio_thread.h"
-#include "driver/d4n/d4n_connection.h"
+#include "d4n_log.h"
+#include "rgw/ceph_fdb.h"
+#include "rgw/fdb/transaction_result.h"
+#include "d4n_transaction_result.h"
 
+#include <boost/asio/consign.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/redis/connection.hpp>
 #include <boost/version.hpp>
+#include <expected>
+#include <functional>
 #include <condition_variable>
 #include <deque>
 #include <memory>
+#include <mutex>
 #include <concepts>
+#include <optional>
+#include <source_location>
+#include <string_view>
+#include <utility>
+#include <variant>
+#include <vector>
 
 namespace rgw::d4n {
 
@@ -21,19 +45,14 @@ using boost::redis::request;
 using boost::redis::response;
 using boost::redis::ignore_t;
 
-class Transaction;
+class RedisTransaction;
 
-inline int check_bool(std::string_view str) {
-  if (str == "true" || str == "1") {
-    return 1;
-  } else if (str == "false" || str == "0") {
-    return 0;
-  } else {
-    return -EINVAL;
-  }
-}
+using fdb_txn_ref = std::reference_wrapper<ceph::libfdb::transaction_handle>;
+using redis_txn_ref = std::reference_wrapper<RedisTransaction>;
 
-//FIXME: should be moved to redis directory
+// A view into one active attempt; its backend coordinator retains completion ownership.
+using Transaction = std::variant<fdb_txn_ref, redis_txn_ref>;
+
 class RedisPool {
 public:
     RedisPool(boost::asio::io_context* ioc, const boost::redis::config& cfg, std::size_t size)
@@ -123,28 +142,8 @@ class Pipeline {
     bool pipeline_mode{false};
 };
 
-// Result type for lease check operations
-// Distinguishes between "lease not active" and "database error"
-struct LeaseCheckResult {
-  bool active = false;    // true if an active lease exists/is valid
-  int error = 0;          // 0 = success, -EIO = database error, etc.
-
-  // Convenience: explicit conversion to bool for simple checks
-  // Returns true only if active AND no error occurred
-  explicit operator bool() const {
-    return active && error == 0;
-  }
-
-  // Check if operation succeeded (regardless of active status)
-  bool succeeded() const {
-    return error == 0;
-  }
-
-  // Check if a database/network error occurred
-  bool has_error() const {
-    return error != 0;
-  }
-};
+// Successful checks distinguish active and inactive leases; failures carry a D4N error:
+using LeaseCheckResult = std::expected<bool, int>;
 
 // Distributed lease/lock interface for coordinating access to resources
 //
@@ -177,11 +176,13 @@ struct LeaseCheckResult {
 //
 //   is_active():
 //     true    : Lease exists, not expired, and owned by caller
-//     false   : Lease not found, expired, owned by someone else, or DB error
+//     false   : Lease not found, expired, or owned by someone else
+//     unexpected(error): Database/network error or invalid input
 //
 //   any_active():
 //     true    : At least one active lease exists with matching prefix
-//     false   : No active leases found or DB error
+//     false   : No active leases found
+//     unexpected(error): Database/network error or invalid input
 //
 // Transaction safety note:
 //   If is_active() authorizes a later FDB update, consider sharing the transaction:
@@ -205,7 +206,7 @@ class Lease {
 	                const std::string& holder_id,
             		const std::string& token,
             		uint64_t ttl_nanoseconds,
-    			std::optional<std::reference_wrapper<Transaction>> txn = std::nullopt) = 0;
+                        std::optional<Transaction> txn = std::nullopt) = 0;
 
     // Renew an existing lease
     //
@@ -234,15 +235,12 @@ class Lease {
     //
     // resource_prefix: hierarchical prefix (e.g., "bucket" matches "bucket/obj1", "bucket/obj2")
     //
-    // Returns: LeaseCheckResult with:
-    //   - active: true if any active lease found
-    //   - error: 0 on success, -EIO on database/network error
+    // Returns true for an active lease, false for inactivity, or an unexpected D4N error.
     //
-    // Usage:
-    //   auto result = lease->any_active(dpp, "bucket");
-    //   if (result.has_error()) { /* database error */ }
-    //   else if (result.active) { /* lease exists */ }
-    //   else { /* no active lease */ }
+    // Check success before inspecting the active flag:
+    //   const auto result = lease.any_active(dpp, "bucket");
+    //   if (!result) { return result.error(); }
+    //   if (*result) { /* active lease */ }
     //
     // Side effect: opportunistically deletes expired leases during scan
     virtual LeaseCheckResult any_active(const DoutPrefixProvider* dpp,
@@ -252,36 +250,18 @@ class Lease {
     //
     // Validates: lease exists, not expired, matches holder_id and token
     //
-    // Returns: LeaseCheckResult with:
-    //   - active: true if lease is valid and owned by caller
-    //   - error: 0 on success, -EIO on database/network error
+    // Returns true for an active lease, false for inactivity, or an unexpected D4N error.
     //
-    // Usage:
-    //   auto result = lease->is_active(dpp, resource, holder, token);
-    //   if (result.has_error()) { /* database error */ }
-    //   else if (result.active) { /* lease is valid */ }
-    //   else { /* lease not active/expired/wrong owner */ }
+    // Check success before inspecting the active flag:
+    //   const auto result = lease.is_active(dpp, resource, holder, token);
+    //   if (!result) { return result.error(); }
+    //   if (*result) { /* active lease */ }
     //
     // Side effect: opportunistically deletes expired lease if found
     virtual LeaseCheckResult is_active(const DoutPrefixProvider* dpp,
                                        const std::string& resource_name,
                                        const std::string& holder_id,
                                        const std::string& token) = 0;
-};
-
-template<typename T>
-concept SeqContainer =
-requires(T& t, typename T::value_type v) {
-    t.insert(v);
-} || requires(T& t, typename T::value_type v) {
-    t.push_back(v);
-};
-
-template<typename C>
-concept AssociativeContainer = requires(C c, typename C::key_type k) {
-    typename C::key_type;
-    { c.find(k) } -> std::convertible_to<typename C::iterator>;
-    { c.count(k) } -> std::convertible_to<std::size_t>;
 };
 
 enum class ObjectFields { // Fields stored in object directory 
@@ -365,139 +345,83 @@ struct CacheBlock {
   /* Blocks use the cacheObj's dirty and hostsList metadata to store their dirty flag values and locations in the block directory. */
 };
 
-enum class TransactionStatus {
-  success,
-  retryable_not_committed,
-  uncertain,
-  failed,
-  retries_exhausted
-};
+namespace detail {
 
-struct TransactionResult {
-  TransactionStatus status;
-  int error = 0;
-  int directory_error = 0;
-};
-
-//Used for Batching/Transaction in Directory
-class Transaction {
-public:
-  virtual ~Transaction() = default;
-
-  virtual TransactionResult commit_with_outcome(const DoutPrefixProvider* dpp, optional_yield y)
-  {
-    const int ret = commit(dpp, y);
-
-    if (ret == 0) {
-      return {TransactionStatus::success, 0, 0};
-    }
-
-    if (ret == -EAGAIN) {
-      return {TransactionStatus::retryable_not_committed, ret, 0};
-    }
-
-    return {TransactionStatus::failed, ret, 0};
-  }
-
-  virtual int commit(const DoutPrefixProvider* dpp, optional_yield y) = 0;
-  virtual int abort(const DoutPrefixProvider* dpp, optional_yield y) = 0;
-};
-
-class TransactionFactory {
-public:
-  virtual ~TransactionFactory() = default;
-  virtual std::unique_ptr<Transaction> create_transaction(const DoutPrefixProvider* dpp) = 0;
-};
-
-
-
-template <typename CreateTransaction, typename Operation>
-TransactionResult retry_transaction(const DoutPrefixProvider* dpp, optional_yield y, CreateTransaction&& create_transaction, Operation&& operation, unsigned max_attempts = 5)
+inline int report_transaction_failure(const DoutPrefixProvider *dpp, const ResultInfo& info,
+                                      const int error, const std::source_location whence)
 {
-  for (unsigned attempt = 1; attempt <= max_attempts; ++attempt) {
-    auto txn = create_transaction();
+  const auto report_error = [&](const std::string_view message) {
+    log_message(dpp, whence, "{}, ret={}, error={}:{}", message, error,
+                info.source_error.category().name(), info.source_error.value());
+  };
 
-    const int ret = operation(*txn);
-
-    if (ret < 0) {
-      txn->abort(dpp, y);
-
-      if (ret == -EAGAIN) {
-        ldpp_dout(dpp, 10) << __func__ << "(): Operation returned EAGAIN; retrying attempt " << attempt << "/" << max_attempts << dendl;
-        continue;
-      }
-
-      return {TransactionStatus::failed, ret, 0};
-    }
-
-    const auto outcome = txn->commit_with_outcome(dpp, y);
-
-    switch (outcome.status) {
-    case TransactionStatus::success:
-      return {TransactionStatus::success, 0, 0};
-
-    case TransactionStatus::retryable_not_committed:
-      ldpp_dout(dpp, 10) << __func__ << "(): Commit definitely not committed; retrying attempt " << attempt << "/" << max_attempts << dendl;
-      continue;
-
-    case TransactionStatus::uncertain:
-      ldpp_dout(dpp, 0) << __func__ << "(): Commit outcome uncertain; not retrying automatically" << dendl;
-      return {TransactionStatus::uncertain, outcome.error, outcome.directory_error};
-
-    case TransactionStatus::retries_exhausted:
-      ldpp_dout(dpp, 0) << __func__ << "(): Transaction retry budget exhausted" << dendl;
-      return {TransactionStatus::retries_exhausted, outcome.error < 0 ? outcome.error : -EAGAIN, outcome.directory_error};
-
-    case TransactionStatus::failed:
-      return {TransactionStatus::failed, outcome.error, outcome.directory_error};
-    }
-  }
-
-  ldpp_dout(dpp, 0) << __func__ << "(): Transaction failed after " << max_attempts << " attempts" << dendl;
-
-  return {TransactionStatus::retries_exhausted, -EAGAIN, 0};
-}
-
-
-template <typename UncertainHandler>
-int handle_transaction_result(const DoutPrefixProvider* dpp, const char* component, const char* function, const TransactionResult& result, UncertainHandler&& handle_uncertain)
-{
-  switch (result.status) {
+  switch (info.status) {
   case TransactionStatus::success:
     return 0;
 
-  case TransactionStatus::retryable_not_committed:
-    ldpp_dout(dpp, 0) << component << "::" << function
-                      << "(): Transaction remains retryable, ret="
-                      << result.error
-                      << ", error=" << result.directory_error << dendl;
-    return result.error < 0 ? result.error : -EAGAIN;
-
-  //Each caller should provide the method for uncertain case.
   case TransactionStatus::uncertain:
-    ldpp_dout(dpp, 0) << component << "::" << function
-                      << "(): Transaction outcome is uncertain, error="
-                      << result.error
-                      << ", error=" << result.directory_error << dendl;
-
-    return std::invoke(std::forward<UncertainHandler>(handle_uncertain), result);
+    report_error("Transaction outcome is uncertain");
+    break;
 
   case TransactionStatus::retries_exhausted:
-    ldpp_dout(dpp, 0) << component << "::" << function
-                      << "(): Transaction retry budget exhausted, ret="
-                      << result.error
-                      << ", error=" << result.directory_error << dendl;
-    return result.error < 0 ? result.error : -EAGAIN;
+    report_error("Transaction retry budget exhausted");
+    break;
 
   case TransactionStatus::failed:
-    ldpp_dout(dpp, 0) << component << "::" << function
-                      << "(): Transaction failed, ret="
-                      << result.error
-                      << ", error=" << result.directory_error << dendl;
-    return result.error < 0 ? result.error : -EIO;
+    report_error("Transaction failed");
+    break;
   }
 
-  return -EIO;
+  return 0 > error ? error : TransactionStatus::retries_exhausted == info.status ? -EAGAIN : -EIO;
+}
+
+template <typename UncertainHandler>
+int handle_transaction_failure(const DoutPrefixProvider *dpp, const int error, const bool exhausted,
+                               UncertainHandler&, const std::source_location whence)
+{
+  return report_transaction_failure(dpp, describe_failure(error, exhausted), error, whence);
+}
+
+template <uncertainty_handler UncertainHandler>
+int handle_transaction_failure(const DoutPrefixProvider *dpp, const fdb_failure& failure,
+                               const bool exhausted, UncertainHandler& handle_uncertain,
+                               const std::source_location whence)
+{
+  const auto info = describe_failure(failure, exhausted);
+  const auto error = return_d4n_error(dpp, failure, whence);
+  const auto result = report_transaction_failure(dpp, info,
+    TransactionStatus::retries_exhausted == info.status ? -EAGAIN : error, whence);
+
+  // Handle FoundationDB unknown_commit: pass the complete native failure to the caller:
+  if (TransactionStatus::uncertain == info.status) {
+    return std::invoke(handle_uncertain, failure);
+  }
+
+  return result;
+}
+
+} // namespace detail
+
+template <detail::uncertainty_handler UncertainHandler>
+int handle_transaction_result(const DoutPrefixProvider *dpp, const TransactionResult& result,
+                              UncertainHandler&& handle_uncertain,
+                              const std::source_location whence = std::source_location::current())
+{
+  return result.inspect([&](const auto& execution) {
+    if (execution) {
+      return 0;
+    }
+
+    return detail::handle_transaction_failure(dpp, execution.error(),
+      result.retry_limit_reached(), handle_uncertain, whence);
+  });
+}
+
+inline int handle_transaction_result(const DoutPrefixProvider *dpp, const TransactionResult& result,
+                                    const std::source_location whence = std::source_location::current())
+{
+  // Handle FoundationDB unknown_commit: the default D4N policy returns -EIO:
+  return handle_transaction_result(dpp, result, [](const auto&) { return -EIO; }, whence);
 }
 
 
@@ -511,30 +435,31 @@ public:
                        const std::string& key,
                        const std::string& field,
                        std::string& out_val,
-		       std::optional<std::reference_wrapper<Transaction>> txn) = 0;
+                       std::optional<Transaction> txn) = 0;
 
     virtual int set_kv(const DoutPrefixProvider* dpp, optional_yield y,
                        const std::string& key,
                        const std::string& field,
                        const std::string& val,
-		       std::optional<std::reference_wrapper<Transaction>> txn) = 0;
+                       std::optional<Transaction> txn) = 0;
 
     // Multi-field get/set
     virtual int get_kv_multi(const DoutPrefixProvider* dpp, optional_yield y,
                             const std::string& key,
                             const std::vector<std::string>& fields,
-                            std::map<std::string, std::string>& out_vals, std::optional<std::reference_wrapper<Transaction>> txn) = 0;
+                            std::map<std::string, std::string>& out_vals,
+                            std::optional<Transaction> txn) = 0;
 
     virtual int set_kv_multi(const DoutPrefixProvider* dpp, optional_yield y,
                             const std::string& key,
                             const std::map<std::string, std::string>& vals,
-			    std::optional<std::reference_wrapper<Transaction>> txn) = 0;
+                            std::optional<Transaction> txn) = 0;
 
     virtual int set_kv_if_not_exists(const DoutPrefixProvider* dpp, optional_yield y,
                                      const std::string& key,
                                      const std::string& field,
                                      const std::string& val,
-				     std::optional<std::reference_wrapper<Transaction>> txn) = 0;
+                                     std::optional<Transaction> txn) = 0;
 
 };
 
@@ -546,11 +471,12 @@ class BucketDirectory: virtual public Directory {
     BucketDirectory() = default;
     virtual ~BucketDirectory() = default;
 
-    virtual int exist_key(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, std::optional<std::reference_wrapper<Transaction>> txn) = 0;
-    virtual int del(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, std::optional<std::reference_wrapper<Transaction>> txn) = 0;
-    virtual int add_object(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, const std::string& object_name, std::optional<CacheObject> params, std::optional<std::reference_wrapper<Transaction>> txn) = 0;
-    virtual int remove_object(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, const std::string& object_name, std::optional<std::reference_wrapper<Transaction>> txn) = 0;
-    virtual int list_objects(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, const std::string& start_token, const std::string& prefix, const std::string& marker, uint64_t count, bool marker_inclusive, std::vector<CacheObject>& objs_info, std::string& continuation_token, std::optional<std::reference_wrapper<Transaction>> txn) = 0;
+    virtual int exist_key(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, std::optional<Transaction> txn) = 0;
+    virtual int del(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, std::optional<Transaction> txn) = 0;
+    virtual int add_object(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, const std::string& object_name, std::optional<CacheObject> params, std::optional<Transaction> txn) = 0;
+    virtual int remove_object(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, const std::string& object_name, std::optional<Transaction> txn) = 0;
+    // end_marker carries the exclusive object-name bound:
+    virtual int list_objects(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, const std::string& start_token, const std::string& prefix, const std::string& marker, std::string_view end_marker, uint64_t count, bool marker_inclusive, std::vector<CacheObject>& objs_info, std::string& continuation_token, std::optional<Transaction> txn) = 0;
 
   private:
 };
@@ -564,20 +490,17 @@ class ObjectDirectory: virtual public Directory {
     ObjectDirectory() = default;
     virtual ~ObjectDirectory() = default;
 	
-    virtual int exist_key(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, const std::string& obj_name, std::optional<std::reference_wrapper<Transaction>> txn) = 0;
-    virtual int del(const DoutPrefixProvider* dpp, optional_yield y, CacheObj* object, std::optional<std::reference_wrapper<Transaction>> txn) = 0;
+    virtual int exist_key(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, const std::string& obj_name, std::optional<Transaction> txn) = 0;
+    virtual int del(const DoutPrefixProvider* dpp, optional_yield y, CacheObj* object, std::optional<Transaction> txn) = 0;
     //version ordering is a function of creation time, hence adding creation time to the interface
-    virtual int add_version(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, const std::string& obj_name, const std::string& version, ceph::real_time& creation_time, std::optional<CacheObjectVersion> params, std::optional<std::reference_wrapper<Transaction>> txn) = 0;
-    virtual int remove_version(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, const std::string& obj_name, const std::string& version, std::optional<std::reference_wrapper<Transaction>> txn) = 0;
+    virtual int add_version(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, const std::string& obj_name, const std::string& version, ceph::real_time& creation_time, std::optional<CacheObjectVersion> params, std::optional<Transaction> txn) = 0;
+    virtual int remove_version(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, const std::string& obj_name, const std::string& version, std::optional<Transaction> txn) = 0;
     //this can be removed and remove_version can be used instead
-    virtual int remove_version_by_creation_time(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, const std::string& obj_name, ceph::real_time creation_time, std::optional<std::reference_wrapper<Transaction>> txn) = 0;
-    virtual int list_versions(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, const std::string& obj_name, const std::string& marker_version, uint64_t count, std::vector<CacheObjectVersion>& obj_versions, std::string& continuation_token, std::optional<std::reference_wrapper<Transaction>> txn) = 0;
-
-  private:
+    virtual int remove_version_by_creation_time(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, const std::string& obj_name, ceph::real_time creation_time, std::optional<Transaction> txn) = 0;
+    virtual int list_versions(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, const std::string& obj_name, const std::string& marker_version, uint64_t count, std::vector<CacheObjectVersion>& obj_versions, std::string& continuation_token, std::optional<Transaction> txn) = 0;
 
   protected:
-    //should this be made virtual override as derived classes may want to override it
-    std::string build_index(const std::string& bucket_id, const std::string& obj_name);
+    static std::string build_index(const std::string& bucket_id, const std::string& obj_name);
 };
 
 //Namespace to store key, value pairs of a block
@@ -586,23 +509,30 @@ class BlockDirectory: virtual public Directory {
     BlockDirectory() = default;
     virtual ~BlockDirectory() = default;
     
-	
-    virtual int exist_key(const DoutPrefixProvider* dpp, optional_yield y, CacheBlock* block, std::optional<std::reference_wrapper<Transaction>> txn) = 0;
+    virtual int exist_key(const DoutPrefixProvider* dpp, optional_yield y, CacheBlock* block, std::optional<Transaction> txn) = 0;
 
-    virtual int set(const DoutPrefixProvider* dpp, optional_yield y, std::vector<CacheBlock>& blocks, std::optional<std::reference_wrapper<Transaction>> txn) = 0;
-    virtual int set(const DoutPrefixProvider* dpp, optional_yield y, CacheBlock* block, std::optional<std::reference_wrapper<Transaction>> txn) = 0;
-    virtual int get(const DoutPrefixProvider* dpp, optional_yield y, CacheBlock* block, std::optional<std::reference_wrapper<Transaction>> txn) = 0;
-    virtual int get(const DoutPrefixProvider* dpp, optional_yield y, std::vector<CacheBlock>& blocks, std::optional<std::reference_wrapper<Transaction>> txn) = 0;
+    virtual int set(const DoutPrefixProvider* dpp, optional_yield y, std::vector<CacheBlock>& blocks, std::optional<Transaction> txn) = 0;
+    virtual int set(const DoutPrefixProvider* dpp, optional_yield y, CacheBlock* block, std::optional<Transaction> txn) = 0;
 
-    virtual int copy(const DoutPrefixProvider* dpp, optional_yield y, CacheBlock* block, const std::string& copyName, const std::string& copyBucketName, std::optional<std::reference_wrapper<Transaction>> txn) = 0;
-    virtual int del(const DoutPrefixProvider* dpp, optional_yield y, CacheBlock* block, std::optional<std::reference_wrapper<Transaction>> txn) = 0;
-    virtual int update_field(const DoutPrefixProvider* dpp, optional_yield y, CacheBlock* block, const std::string& field, std::string& value, std::optional<std::reference_wrapper<Transaction>> txn) = 0;
-	
-    virtual int remove_host(const DoutPrefixProvider* dpp, optional_yield y, CacheBlock* block, const std::string& value, std::optional<std::reference_wrapper<Transaction>> txn) = 0;
-	
-  private:
+    // Absence is a successful lookup; deletion flags remain part of a present record.
+    [[nodiscard]] virtual std::expected<std::optional<CacheBlock>, int>
+    find(const DoutPrefixProvider *dpp, optional_yield y, const CacheBlock& key,
+         std::optional<Transaction> txn = std::nullopt) = 0;
 
+    // Existing callers require an entry and publish output only on success:
+    int get(const DoutPrefixProvider* dpp, optional_yield y, CacheBlock* block, std::optional<Transaction> txn);
+
+    virtual int get(const DoutPrefixProvider* dpp, optional_yield y, std::vector<CacheBlock>& blocks, std::optional<Transaction> txn) = 0;
+
+    virtual int copy(const DoutPrefixProvider* dpp, optional_yield y, CacheBlock* block, const std::string& copyName, const std::string& copyBucketName, std::optional<Transaction> txn) = 0;
+    virtual int del(const DoutPrefixProvider* dpp, optional_yield y, CacheBlock* block, std::optional<Transaction> txn) = 0;
+    virtual int update_field(const DoutPrefixProvider* dpp, optional_yield y, CacheBlock* block, const std::string& field, std::string& value, std::optional<Transaction> txn) = 0;
+	
+    virtual int remove_host(const DoutPrefixProvider* dpp, optional_yield y, CacheBlock* block, const std::string& value, std::optional<Transaction> txn) = 0;
+	
   protected:
+    static std::map<std::string, std::string> encode_fields(const CacheBlock& block);
+
     std::string build_index(const CacheBlock* block);
 };
 

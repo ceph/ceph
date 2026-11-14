@@ -4541,6 +4541,33 @@ options:
   flags:
   - startup
   with_legacy: true
+- name: rgw_d4n_fdb_cluster_file
+  type: str
+  level: advanced
+  desc: FoundationDB cluster file for the D4N directory.
+  long_desc: An empty value preserves FoundationDB's native cluster-file discovery,
+    including FDB_CLUSTER_FILE. A non-empty value selects an explicit cluster file.
+    This option applies only when rgw_d4n_directory_type is fdb. It is read when
+    the process first initializes its D4N FoundationDB runtime and requires a
+    process restart to change.
+  services:
+  - rgw
+  flags:
+  - startup
+- name: rgw_d4n_fdb_trace_directory
+  type: str
+  level: advanced
+  desc: Directory for FoundationDB client trace files used by the D4N directory.
+  long_desc: A non-empty value enables FoundationDB client tracing in this directory.
+    An empty value preserves FoundationDB's native tracing configuration. Use a dot
+    to select the working directory. The directory must already exist and be writable
+    by the RGW process. This option applies only when rgw_d4n_directory_type is fdb.
+    It is read before the process first starts the FoundationDB network and requires
+    a process restart to change.
+  services:
+  - rgw
+  flags:
+  - startup
 - name: rgw_d4n_remote_delete_enabled
   type: bool
   level: advanced
@@ -5166,9 +5193,9 @@ options:
   type: str
   level: advanced
   desc: local Redis cache address
-  long_desc: This is the address used to configure the Redis cache backend connection. The default
-    value is the same address used by Redis without any additional configuration. The SSD cache
-    does not use this option.
+  long_desc: This host:port address configures the Redis cache backend and the Redis D4N
+    directory. The default uses Redis's standard address. The SSD cache and the
+    FoundationDB D4N directory do not use this option.
   default: 127.0.0.1:6379
   services:
   - rgw

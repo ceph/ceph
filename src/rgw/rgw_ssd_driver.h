@@ -8,6 +8,8 @@
 #include "rgw_cache_driver.h"
 #include <filesystem>
 #include <shared_mutex>
+#include <future>
+#include <atomic>
 #include <boost/asio.hpp>
 #include "rgw_cache_driver.h"
 
