@@ -107,6 +107,8 @@ class Gateway(multisite.Gateway):
         cmd += ['--debug-rgw=20', '--debug-ms=1']
         if args:
             cmd += args
+        elif os.environ.get('RGW_TEST_COPY_PROGRESS_OFF'):
+            cmd += ['--rgw-copy-obj-progress=false']
         bash(cmd, env=env)
 
     def stop(self):

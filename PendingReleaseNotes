@@ -38,6 +38,9 @@
   next realm reload. Now changes to ``rgw_dynamic_resharding`` require a
   restart. Running RGWs will ignore the change.
 
+* RGW: Cross-zonegroup ``CopyObject`` with ``rgw_copy_obj_progress`` disabled
+  no longer hangs on large objects (regression from the #62887 progress path).
+
 * RGW: The Elasticsearch sync module is deprecated in Vampire and will
   be removed in the X release. People wanting to continue using
   Elasticsearch can populate it with bucket notifications. The
