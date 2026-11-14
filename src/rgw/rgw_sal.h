@@ -152,7 +152,6 @@ namespace rgw { namespace sal {
 
 #define RGW_SAL_VERSION 1
 
-struct MPSerializer;
 class GCChain;
 class RGWRole;
 
@@ -1059,6 +1058,8 @@ class Bucket {
 
     /** Create a multipart upload in this bucket */
     virtual std::unique_ptr<MultipartUpload> get_multipart_upload(
+				const DoutPrefixProvider* dpp,
+				optional_yield y,
 				const std::string& oid,
 				std::optional<std::string> upload_id=std::nullopt,
 				ACLOwner owner={}, ceph::real_time mtime=real_clock::now()) = 0;
@@ -1322,9 +1323,6 @@ class Object {
     virtual bool is_expired() = 0;
     /** Create a randomized instance ID for this object */
     virtual void gen_rand_obj_instance_name() = 0;
-    /** Get a multipart serializer for this object */
-    virtual std::unique_ptr<MPSerializer> get_serializer(const DoutPrefixProvider *dpp, optional_yield y,
-							 const std::string& lock_name) = 0;
     /** Move the data of an object to new placement storage */
     virtual int transition(Bucket* bucket,
 			   const rgw_placement_rule& placement_rule,
@@ -1409,18 +1407,10 @@ class Object {
     virtual Bucket* get_bucket(void) const = 0;
     /** Set the bucket containing this object */
     virtual void set_bucket(Bucket* b) = 0;
-    /** Get the sharding hash representation of this object */
-    virtual std::string get_hash_source(void) = 0;
-    /** Set the sharding hash representation of this object */
-    virtual void set_hash_source(std::string s) = 0;
     /** Build an Object Identifier string for this object */
     virtual std::string get_oid(void) const = 0;
-    /** True if this object is stored in the extra data pool */
-    virtual bool get_in_extra_data(void) = 0;
     /** True if this object exists in the store */
     virtual bool exists(void) = 0;
-    /** Set the in_extra_data field */
-    virtual void set_in_extra_data(bool i) = 0;
     /** Helper to sanitize object size, offset, and end values */
     int range_to_ofs(uint64_t obj_size, int64_t &ofs, int64_t &end);
     /** Set the cached size of this object */
@@ -1622,6 +1612,14 @@ public:
 			  uint64_t part_num,
 			  const std::string& part_num_str) = 0;
 
+  /** Try to take the lock for the given amount of time. */
+  virtual int try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y) = 0;
+  /** Unlock the lock */
+  virtual int unlock(const DoutPrefixProvider *dpp, optional_yield y)  = 0;
+  /** Check to see if locked */
+  virtual bool is_locked() = 0;
+  virtual void clear_locked() = 0;
+
   /** Print the Upload to @a out */
   virtual void print(std::ostream& out) const = 0;
 
@@ -1670,18 +1668,6 @@ public:
       s->print(out);
     return out;
   }
-};
-
-/** @brief Abstraction of a serializer for multipart uploads
- */
-class MPSerializer : public Serializer {
-public:
-  MPSerializer() = default;
-  virtual ~MPSerializer() = default;
-
-  virtual void clear_locked() = 0;
-  /** Check to see if locked */
-  virtual bool is_locked() = 0;
 };
 
 /** @brief Abstraction of a serializer for Lifecycle

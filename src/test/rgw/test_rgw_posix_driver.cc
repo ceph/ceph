@@ -1592,7 +1592,7 @@ TEST_F(POSIXObjectTest, ObjectAttrs)
 TEST_F(POSIXBucketTest, MultipartUpload)
 {
   std::string upload_id = "c0ffee";
-  std::unique_ptr<rgw::sal::MultipartUpload> upload = bucket->get_multipart_upload(testname, upload_id);
+  std::unique_ptr<rgw::sal::MultipartUpload> upload = bucket->get_multipart_upload(env->dpp, null_yield, testname, upload_id);
 
   EXPECT_NE(upload.get(), nullptr);
   EXPECT_EQ(upload->get_meta(), testname + "." + upload_id);
@@ -1607,7 +1607,7 @@ TEST_F(POSIXBucketTest, MPUploadCreate)
   sf::path tp{bp / "root" / testname / mpname};
   EXPECT_FALSE(sf::exists(tp));
 
-  std::unique_ptr<rgw::sal::MultipartUpload> upload = bucket->get_multipart_upload(testname, upload_id);
+  std::unique_ptr<rgw::sal::MultipartUpload> upload = bucket->get_multipart_upload(env->dpp, null_yield, testname, upload_id);
   EXPECT_NE(upload.get(), nullptr);
 
   rgw_placement_rule placement;
@@ -1638,7 +1638,7 @@ public:
     mpname = ".multipart_" + testname + "." + upload_id;
 
     std::unique_ptr<rgw::sal::MultipartUpload> upload =
-      bucket->get_multipart_upload(testname, upload_id);
+      bucket->get_multipart_upload(env->dpp, null_yield, testname, upload_id);
     EXPECT_NE(upload.get(), nullptr);
 
     rgw_placement_rule placement;
@@ -2424,7 +2424,7 @@ public:
     POSIXVerObjectTest::SetUp();
     mpname = ".multipart_" + testname + "." + upload_id;
 
-    upload = bucket->get_multipart_upload(testname, upload_id);
+    upload = bucket->get_multipart_upload(env->dpp, null_yield, testname, upload_id);
     EXPECT_NE(upload.get(), nullptr);
 
     rgw_placement_rule placement;

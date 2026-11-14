@@ -962,6 +962,8 @@ public:
   }
 
   virtual std::unique_ptr<MultipartUpload> get_multipart_upload(
+				const DoutPrefixProvider* dpp,
+				optional_yield y,
 				const std::string& oid,
 				std::optional<std::string> upload_id=std::nullopt,
 				ACLOwner owner={}, ceph::real_time mtime=real_clock::now()) override;
@@ -1109,8 +1111,6 @@ public:
 			       optional_yield y) override;
   virtual bool is_expired() override;
   virtual void gen_rand_obj_instance_name() override;
-  virtual std::unique_ptr<MPSerializer> get_serializer(const DoutPrefixProvider *dpp, optional_yield y,
-						       const std::string& lock_name) override;
   virtual int transition(Bucket* bucket,
 			 const rgw_placement_rule& placement_rule,
 			 const real_time& mtime,
@@ -1308,6 +1308,7 @@ protected:
   POSIXMPObj mp_obj;
   ceph::real_time mtime;
   std::unique_ptr<rgw::sal::POSIXBucket> shadow;
+  bool locked = false;
 
 public:
   POSIXMultipartUpload(POSIXDriver* _driver, Bucket* _bucket, const std::string& _oid,
@@ -1357,6 +1358,11 @@ public:
 			  const rgw_placement_rule *ptail_placement_rule,
 			  uint64_t part_num,
 			  const std::string& part_num_str) override;
+
+  int try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y) override;
+  int unlock(const DoutPrefixProvider* dpp, optional_yield y) override;
+  bool is_locked() override { return locked; }
+  void clear_locked() override { locked = false; }
 
   POSIXBucket* get_shadow() { return shadow.get(); }
 private:
@@ -1446,16 +1452,6 @@ public:
 		       const req_context& rctx,
                        uint32_t flags) override;
 
-};
-
-class MPPOSIXSerializer : public StoreMPSerializer {
-  POSIXObject* obj;
-
-public:
-  MPPOSIXSerializer(const DoutPrefixProvider *dpp, POSIXDriver* driver, POSIXObject* _obj, const std::string& lock_name) : obj(_obj) {}
-
-  virtual int try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y) override;
-  virtual int unlock(const DoutPrefixProvider* dpp, optional_yield y) override;
 };
 
 class LCPOSIXSerializer : public StoreLCSerializer {

@@ -188,6 +188,8 @@ protected:
         return std::make_unique<DBBucket>(*this);
       }
       virtual std::unique_ptr<MultipartUpload> get_multipart_upload(
+				const DoutPrefixProvider* dpp,
+				optional_yield y,
 				const std::string& oid, std::optional<std::string> upload_id,
 				ACLOwner owner={}, ceph::real_time mtime=ceph::real_clock::now()) override;
       virtual int list_multiparts(const DoutPrefixProvider *dpp,
@@ -440,6 +442,7 @@ protected:
     ACLOwner owner;
     ceph::real_time mtime;
     rgw_placement_rule placement;
+    bool locked = false;
 
   public:
     DBMultipartUpload(DBStore* _store, Bucket* _bucket, const std::string& oid, std::optional<std::string> upload_id, ACLOwner _owner, ceph::real_time _mtime) : StoreMultipartUpload(_bucket), store(_store), mp_obj(oid, upload_id), owner(_owner), mtime(_mtime) {}
@@ -482,6 +485,11 @@ protected:
 			  const rgw_placement_rule *ptail_placement_rule,
 			  uint64_t part_num,
 			  const std::string& part_num_str) override;
+
+    int try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y) override;
+    int unlock(const DoutPrefixProvider *dpp, optional_yield y) override;
+    bool is_locked() override;
+    void clear_locked() override;
   };
 
   class DBObject : public StoreObject {
@@ -590,9 +598,6 @@ protected:
       virtual std::unique_ptr<Object> clone() override {
         return std::unique_ptr<Object>(new DBObject(*this));
       }
-      virtual std::unique_ptr<MPSerializer> get_serializer(const DoutPrefixProvider *dpp,
-							   optional_yield y,
-							   const std::string& lock_name) override;
       virtual int transition(Bucket* bucket,
           const rgw_placement_rule& placement_rule,
           const real_time& mtime,
@@ -627,15 +632,6 @@ protected:
                         optional_yield y) override;
     private:
       int read_attrs(const DoutPrefixProvider* dpp, DB::Object::Read &read_op, optional_yield y, rgw_obj* target_obj = nullptr);
-  };
-
-  class MPDBSerializer : public StoreMPSerializer {
-
-  public:
-    MPDBSerializer(const DoutPrefixProvider *dpp, DBStore* store, DBObject* obj, const std::string& lock_name) {}
-
-    virtual int try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y) override;
-    virtual int unlock(const DoutPrefixProvider* dpp, optional_yield y) override;
   };
 
   class DBAtomicWriter : public StoreWriter {

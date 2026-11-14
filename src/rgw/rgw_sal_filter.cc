@@ -975,13 +975,15 @@ int FilterBucket::purge_instance(const DoutPrefixProvider* dpp, optional_yield y
   return next->purge_instance(dpp, y);
 }
 
-std::unique_ptr<MultipartUpload> FilterBucket::get_multipart_upload(
-				  const std::string& oid,
-				  std::optional<std::string> upload_id,
-				  ACLOwner owner, ceph::real_time mtime)
+auto FilterBucket::get_multipart_upload(const DoutPrefixProvider* dpp,
+                                        optional_yield y,
+                                        const std::string& oid,
+                                        std::optional<std::string> upload_id,
+                                        ACLOwner owner, ceph::real_time mtime)
+  -> std::unique_ptr<MultipartUpload>
 {
   std::unique_ptr<MultipartUpload> nmu =
-    next->get_multipart_upload(oid, upload_id, owner, mtime);
+    next->get_multipart_upload(dpp, y, oid, upload_id, owner, mtime);
 
   return std::make_unique<FilterMultipartUpload>(std::move(nmu), this);
 }
@@ -1126,13 +1128,6 @@ bool FilterObject::is_expired()
 void FilterObject::gen_rand_obj_instance_name()
 {
   return next->gen_rand_obj_instance_name();
-}
-
-std::unique_ptr<MPSerializer> FilterObject::get_serializer(const DoutPrefixProvider *dpp, optional_yield y,
-							   const std::string& lock_name)
-{
-  std::unique_ptr<MPSerializer> s = next->get_serializer(dpp, y, lock_name);
-  return std::make_unique<FilterMPSerializer>(std::move(s));
 }
 
 int FilterObject::transition(Bucket* bucket,
@@ -1401,14 +1396,24 @@ std::unique_ptr<Writer> FilterMultipartUpload::get_writer(
   return std::make_unique<FilterWriter>(std::move(writer), obj);
 }
 
-int FilterMPSerializer::try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur,
-				 optional_yield y)
+int FilterMultipartUpload::try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y)
 {
   return next->try_lock(dpp, dur, y);
 }
-int FilterMPSerializer::unlock(const DoutPrefixProvider* dpp, optional_yield y)
+
+int FilterMultipartUpload::unlock(const DoutPrefixProvider *dpp, optional_yield y)
 {
   return next->unlock(dpp, y);
+}
+
+bool FilterMultipartUpload::is_locked()
+{
+  return next->is_locked();
+}
+
+void FilterMultipartUpload::clear_locked()
+{
+  return next->clear_locked();
 }
 
 int FilterLCSerializer::try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur,
