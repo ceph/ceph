@@ -4,6 +4,7 @@ https://tracker.ceph.com/issues/80402 (TestRejoinGather) and
 https://tracker.ceph.com/issues/80407 (TestCacheRejoin).
 """
 import logging
+from io import StringIO
 
 from tasks.ceph_test_case import TestTimeoutError
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
@@ -344,6 +345,26 @@ class TestCacheRejoin(CephFSTestCase):
         status = self.fs.wait_for_daemons(timeout=180)
         self.assertEqual(len(list(self.fs.get_ranks(status=status))), 3)
         self.assertEqual(len(self.fs.get_damaged(status=status)), 0)
+
+        # S also survives when the race is missed, for example when the
+        # expire beats the split, so check that R hit it: the fix logs each
+        # replica it drops instead of acking (debug mds >= 10).
+        self.assertGreater(self._mds_log_count(R_RANK, "dropping stale replica"),
+                           0, "R never dropped a stale replica, so the race was missed")
+
+    def _mds_log_count(self, rank, pattern):
+        """
+        Count the lines matching `pattern` in the log file of the MDS
+        holding `rank`.  The daemon reports its own log path, which differs
+        between teuthology and vstart_runner.
+        """
+        name = self.fs.get_rank(rank=rank)['name']
+        log_file = self.fs.rank_tell(['config', 'get', 'log_file'],
+                                     rank=rank)['log_file']
+        remote = self.fs.mon_manager.find_remote('mds', name)
+        out = remote.run(args=['grep', '-c', pattern, log_file],
+                         stdout=StringIO(), check_status=False)
+        return int(out.stdout.getvalue().strip() or 0)
 
     def _configure_mds(self, conf):
         for k, v in conf.items():
