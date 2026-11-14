@@ -1901,6 +1901,20 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
   } else if (prefix == "fs authorize") {
     string filesystem;
     cmd_getval(cmdmap, "filesystem", filesystem);
+
+    // Changing the caps of client.admin with `fs authorize` can lock the
+    // administrator out of the cluster, so require an explicit confirmation.
+    if (entity.is_client() && entity.get_id() == "admin") {
+      bool sure = false;
+      cmd_getval(cmdmap, "yes_i_really_mean_it", sure);
+      if (!sure) {
+        ss << "changing the caps of client.admin is dangerous. "
+              "Add --yes-i-really-mean-it if you are sure you wish to continue.";
+        err = -EPERM;
+        goto done;
+      }
+    }
+
     string mon_cap_string = "allow r";
     string mds_cap_string, osd_cap_string;
     string osd_cap_wanted = "r";
