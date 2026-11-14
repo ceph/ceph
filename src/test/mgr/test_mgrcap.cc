@@ -179,6 +179,9 @@ TEST(MgrCap, ParseBad)
     MgrCap cap;
     std::cout << "Testing bad input: '" << unparseable << "'" << std::endl;
     ASSERT_FALSE(cap.parse(unparseable, &cout));
+    // a failed parse must leave the object empty
+    ASSERT_TRUE(cap.grants.empty());
+    ASSERT_EQ("", cap.get_str());
   }
 }
 
