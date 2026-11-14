@@ -32,6 +32,24 @@ fi
 outfile="ceph-$version"
 echo "version $version"
 
+# x.1.z is an rc and x.2.z is stable (see src/CMakeLists.txt), so refuse to
+# package one from a tree whose src/ceph_release hasn't caught up. Other minor
+# numbers, such as main's v21.3.0 ordering tag, aren't checked. Set
+# CEPH_SKIP_RELEASE_TYPE_CHECK=1 for a version scheme that doesn't follow this.
+release_type=$(sed -n 3p src/ceph_release)
+if [ -z "$CEPH_SKIP_RELEASE_TYPE_CHECK" ]; then
+    case "$(echo $version | cut -d . -f 2):$release_type" in
+        1:dev)
+            echo "$SCRIPTNAME: version $version is an rc, but src/ceph_release says $release_type."
+            exit 1
+            ;;
+        2:dev|2:rc)
+            echo "$SCRIPTNAME: version $version is stable, but src/ceph_release says $release_type."
+            exit 1
+            ;;
+    esac
+fi
+
 # update submodules
 echo "updating submodules..."
 force=$(if git submodule usage 2>&1 | grep --quiet 'update.*--force'; then echo --force ; fi)
