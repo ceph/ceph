@@ -2938,21 +2938,25 @@ int CrushWrapper::device_class_clone(
       n.weight_set[s].size = copy->size;
       n.weight_set[s].weights = (__u32*)calloc(copy->size, sizeof(__u32));
     }
+    auto& item_weight = (*cmap_item_weight)[w.first];
+    vector<int> bucket_weights(n.weight_set_positions);
     for (size_t s = 0; s < n.weight_set_positions; ++s) {
-      vector<int> bucket_weights(n.weight_set_positions);
       for (size_t i = 0; i < copy->size; ++i) {
 	int item = copy->items[i];
 	if (item >= 0) {
 	  n.weight_set[s].weights[i] = o.weight_set[s].weights[item_orig_pos[i]];
-	} else if ((*cmap_item_weight)[w.first].count(item)) {
-	  n.weight_set[s].weights[i] = (*cmap_item_weight)[w.first][item][s];
+	} else if (auto p = item_weight.find(item);
+		   p != item_weight.end() && !p->second.empty()) {
+	  // a child with fewer positions uses its last one, as CRUSH does
+	  n.weight_set[s].weights[i] =
+	    p->second[std::min<size_t>(s, p->second.size() - 1)];
 	} else {
 	  n.weight_set[s].weights[i] = 0;
 	}
 	bucket_weights[s] += n.weight_set[s].weights[i];
       }
-      (*cmap_item_weight)[w.first][bno] = bucket_weights;
     }
+    item_weight[bno] = bucket_weights;
   }
   return 0;
 }
