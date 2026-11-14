@@ -5277,6 +5277,25 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
   ldpp_dout(dpp, 5) << "Copy object " << src_obj.bucket << ":" << src_obj.get_oid() << " => " << dest_obj.bucket << ":" << dest_obj.get_oid() << dendl;
 
   if (remote_src || !source_zone.empty()) {
+    const rgw_owner remote_user_owner(remote_user);
+
+    // Progress-off clusters (common in production): skip #62887's spawn +
+    // progress_cb_handler(), which would block a frontend thread while remote
+    // fetch runs.  Use null_yield like #61009/ca36171c (tracker #69169/#70840):
+    // client yield must not flow into fetch_remote_obj/Aio completions on the
+    // connection strand.
+    if (!cct->_conf->rgw_copy_obj_progress) {
+      const req_context rctx{dpp, null_yield, nullptr};
+      return fetch_remote_obj(dest_obj_ctx, &remote_user_owner, &remote_user, info, source_zone,
+                 dest_obj, src_obj, dest_bucket_info, &src_bucket_info,
+                 dest_placement, src_mtime, mtime, mod_ptr,
+                 unmod_ptr, high_precision_time,
+                 if_match, if_nomatch, dest_if_match, dest_if_nomatch,
+                 attrs_mod, copy_if_newer, attrs, category,
+                 olh_epoch, delete_at, ptag, petag, progress_cb, progress_data, rctx,
+                 nullptr /* filter */, stat_follow_olh, stat_dest_obj, std::nullopt);
+    }
+
     RGWCopyObj *op = static_cast<RGWCopyObj *>(progress_data);
     auto& progress_tracker = op->get_progress_tracker();
 
@@ -5284,7 +5303,6 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
     boost::asio::spawn(driver->get_io_context(),
       [&](boost::asio::yield_context yield) {
         const req_context rctx{dpp, yield, nullptr};
-        const rgw_owner remote_user_owner(remote_user);
         ret = fetch_remote_obj(dest_obj_ctx, &remote_user_owner, &remote_user, info, source_zone,
                    dest_obj, src_obj, dest_bucket_info, &src_bucket_info,
                    dest_placement, src_mtime, mtime, mod_ptr,

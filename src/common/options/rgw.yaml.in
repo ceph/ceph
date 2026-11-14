@@ -2427,6 +2427,9 @@ options:
   level: advanced
   desc: Send progress reports through a copy operation
   long_desc: If true, RGW sends progress information while a copy operation runs.
+    When false, cross-zonegroup remote CopyObject does not block the frontend
+    connection on the progress handler and runs fetch synchronously with
+    null_yield (no progress chunks on the response).
   default: true
   services:
   - rgw

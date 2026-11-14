@@ -1,0 +1,9 @@
+# Teuthology fragment: multisite CopyObject with progress disabled.
+# Schedule with rgw/multisite (e.g. two-zonegroup realm) and tasks/test_multi.yaml.
+overrides:
+  ceph:
+    conf:
+      client:
+        rgw copy obj progress: false
+  rgw-multisite-tests:
+    args: [tests.py:test_copy_obj_between_zonegroups]
