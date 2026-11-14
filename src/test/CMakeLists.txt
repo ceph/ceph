@@ -721,6 +721,10 @@ if(NOT WIN32)
     ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_ceph_crash.py)
 endif()
 
+# perf counters that hold bytes or latencies must declare their unit
+add_ceph_test(check-perf-counter-units.py
+  ${CMAKE_CURRENT_SOURCE_DIR}/check-perf-counter-units.py ${CMAKE_SOURCE_DIR}/src)
+
 # unittest_admin_socket
 add_executable(unittest_admin_socket
   admin_socket.cc

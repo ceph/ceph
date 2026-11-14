@@ -266,7 +266,7 @@ PeerReplayer::PeerReplayer(CephContext *cct, FSMirror *fs_mirror,
   plb.add_time_avg(l_cephfs_mirror_peer_replayer_avg_sync_time,
 		   "avg_sync_time", "Average Sync Time", "asyn", prio);
   plb.add_u64_counter(l_cephfs_mirror_peer_replayer_sync_bytes,
-		      "sync_bytes", "Sync Bytes", "sbye", prio);
+		      "sync_bytes", "Sync Bytes", "sbye", prio, unit_t(UNIT_BYTES));
   plb.add_time(l_cephfs_mirror_peer_replayer_last_synced_start,
 	       "last_synced_start", "Last Synced Start", "lsst", prio);
   plb.add_time(l_cephfs_mirror_peer_replayer_last_synced_end,
@@ -274,7 +274,8 @@ PeerReplayer::PeerReplayer(CephContext *cct, FSMirror *fs_mirror,
   plb.add_time(l_cephfs_mirror_peer_replayer_last_synced_duration,
 	       "last_synced_duration", "Last Synced Duration", "lsdn", prio);
   plb.add_u64_counter(l_cephfs_mirror_peer_replayer_last_synced_bytes,
-		      "last_synced_bytes", "Last Synced Bytes", "lsbt", prio);
+		      "last_synced_bytes", "Last Synced Bytes", "lsbt", prio,
+		      unit_t(UNIT_BYTES));
   plb.add_u64_counter(l_cephfs_mirror_peer_replayer_add_directory,
 		      "add_directory", "Add Directory Calls", "adir", prio);
   m_perf_counters = plb.create_perf_counters();
@@ -339,9 +340,11 @@ void PeerReplayer::create_directory_perf_counters(const std::string &dir_root) {
               "datasync_wait_duration_seconds",
               "Current datasync queue wait duration seconds", "dwdn", prio);
   plb.add_u64(l_cephfs_mirror_directory_current_sync_bytes,
-              "current_sync_bytes", "Current sync bytes", "csby", prio);
+              "current_sync_bytes", "Current sync bytes", "csby", prio,
+              unit_t(UNIT_BYTES));
   plb.add_u64(l_cephfs_mirror_directory_current_total_bytes,
-              "current_total_bytes", "Current total bytes", "ctby", prio);
+              "current_total_bytes", "Current total bytes", "ctby", prio,
+              unit_t(UNIT_BYTES));
   plb.add_u64(l_cephfs_mirror_directory_current_sync_bytes_percent,
               "current_sync_bytes_percent",
               "Current sync bytes percent in basis points", "csbp", prio);
@@ -376,7 +379,8 @@ void PeerReplayer::create_directory_perf_counters(const std::string &dir_root) {
   plb.add_time(l_cephfs_mirror_directory_last_sync_timestamp,
                "last_sync_timestamp", "Last synced snapshot timestamp", "lsts", prio);
   plb.add_u64(l_cephfs_mirror_directory_last_sync_bytes,
-              "last_sync_bytes", "Last synced snapshot bytes", "lsby", prio);
+              "last_sync_bytes", "Last synced snapshot bytes", "lsby", prio,
+              unit_t(UNIT_BYTES));
   plb.add_u64(l_cephfs_mirror_directory_last_sync_files,
               "last_sync_files", "Last synced snapshot files", "lsfl", prio);
 
