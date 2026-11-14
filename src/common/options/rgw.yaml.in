@@ -4960,6 +4960,21 @@ options:
   default: /var/lib/ceph/radosgw
   services:
   - rgw
+- name: rgw_nsfs_bucket_profile
+  type: str
+  level: advanced
+  desc: The profile a bucket created here is marked with
+  long_desc: The default, shared, is the nsfs model, an S3 view of a native
+    filesystem namespace, and the profile a NooBaa bucket is adopted into.
+    Strong adds the shadow subtree that FSIO, the librgw file interface,
+    writes through;  FSIO is rejected on a bucket that is not strong.
+  default: shared
+  enum_values:
+  - shared
+  - strong
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_nsfs_enable_rename
   type: bool
   level: advanced

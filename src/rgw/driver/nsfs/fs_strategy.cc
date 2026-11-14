@@ -19,9 +19,12 @@
 #include <cerrno>
 #include <cstdio>
 #include <cstring>
+#include <fmt/format.h>
 #include <dlfcn.h>
 #include <fcntl.h>
+#include <linux/fs.h>
 #include <linux/stat.h>
+#include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <sys/vfs.h>
 #include <sys/xattr.h>
@@ -30,7 +33,8 @@
 #include "gpfs/gpfs.h"
 #include "gpfs/gpfs_fcntl.h"
 
-#include "common/dout.h"
+#include "common/dout_fmt.h"
+#include "include/scope_guard.h"
 #include "common/errno.h"
 
 #define dout_subsys ceph_subsys_rgw
@@ -146,35 +150,68 @@ SafeResult POSIXStrategy::safe_unlink(const DoutPrefixProvider* dpp,
 bool probe_shares_extents(const DoutPrefixProvider* dpp,
                           const std::string& dir)
 {
-  const std::string src = dir + "/.cfr-probe.src";
-  const std::string dst = dir + "/.cfr-probe.dst";
-  bool shares = false;
+  /* ASK FICLONE, and measure nothing.
+   *
+   * Three signals were tried here and two of them lie (measured
+   * 2026-09-26, probes/cfrprobe.c, XFS reflink=1 against tmpfs):
+   *
+   *   copy_file_range's return value -- positive on both, because it
+   *   copies where it cannot share.  This reported "shares extents" for
+   *   every filesystem but GPFS.
+   *
+   *   the destination's st_blocks -- 2048 on both, because a reflinked
+   *   file's extents still count toward its own block total.  This
+   *   reported "does not share" for XFS with reflink on.
+   *
+   *   statfs free space -- 0 on XFS, a full megabyte on tmpfs, so it
+   *   does discriminate.  Not used:  the data root may have other
+   *   gateways writing to it, and a concurrent write moves free space
+   *   under the probe.
+   *
+   * FICLONE is the same kernel path (remap_file_range) that lets
+   * copy_file_range share, it returns locally and deterministically,
+   * and GPFS returns EOPNOTSUPP to it exactly as it does to
+   * copy_file_range at every granularity. */
+  const std::string src = fmt::format("{}/.cfr-probe.src", dir);
+  const std::string dst = fmt::format("{}/.cfr-probe.dst", dir);
 
   int sfd = ::open(src.c_str(), O_RDWR | O_CREAT | O_TRUNC, 0600);
   if (sfd < 0) {
-    ldpp_dout(dpp, 5) << "probe_shares_extents: cannot write in " << dir
-      << ": " << cpp_strerror(errno) << dendl;
+    ldpp_dout_fmt(dpp, 5, "probe_shares_extents: cannot write in {}: {}", dir,
+                          cpp_strerror(errno));
     return false;
   }
+  auto close_src = make_scope_guard([sfd, &src] {
+    ::close(sfd);
+    ::unlink(src.c_str());
+  });
+
   char buf[4096];
   memset(buf, 0, sizeof(buf));
-  if (::write(sfd, buf, sizeof(buf)) == (ssize_t) sizeof(buf)) {
-    int dfd = ::open(dst.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
-    if (dfd >= 0) {
-      loff_t soff = 0, doff = 0;
-      shares = (::copy_file_range(sfd, &soff, dfd, &doff,
-                                  sizeof(buf), 0) > 0);
-      ::close(dfd);
-    }
+  if (::write(sfd, buf, sizeof(buf)) != (ssize_t) sizeof(buf)) {
+    return false;
   }
-  ::close(sfd);
-  ::unlink(src.c_str());
-  ::unlink(dst.c_str());
 
-  ldpp_dout(dpp, 1) << "nsfs: filesystem at " << dir
-    << (shares ? " shares extents via copy_file_range"
-               : " does not share extents;  copies fall back to a buffer")
-    << dendl;
+  int dfd = ::open(dst.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
+  if (dfd < 0) {
+    return false;
+  }
+  auto close_dst = make_scope_guard([dfd, &dst] {
+    ::close(dfd);
+    ::unlink(dst.c_str());
+  });
+
+  const bool shares = (::ioctl(dfd, FICLONE, sfd) == 0);
+  const int err = errno;
+
+  ldpp_dout_fmt(dpp, 1, "nsfs: filesystem at {}{}{}", dir,
+                        (shares
+                         ? " shares extents (FICLONE)"
+                         : " does not share extents;  copies fall back to "
+                           "a buffer"),
+                        (shares
+                         ? ""
+                         : std::string(" (") + cpp_strerror(err) + ")"));
   return shares;
 }
 
@@ -781,10 +818,17 @@ int GPFSStrategy::clone_file(const DoutPrefixProvider* dpp,
                               dst_dir_fd, dst_name, excl);
   }
 
-  /* gpfs_clone_copy() has no exclusive-create mode, so the best we can
-   * do here is check first.  this narrows the race, it does not close
-   * it;  the appliance target is a local fs, which takes the POSIX
-   * path above. */
+  /* gpfs_clone_copy() has no exclusive-create mode, so the best we
+   * can do here is check first.  This narrows the race, it does not
+   * close it:  two forks of the same shadow can both pass this check,
+   * and both then believe they won, so neither joins.
+   *
+   * What bounds it is the caller, not the filesystem.  Both callers
+   * passing excl are the shadow fork -- NSFSObject::get_fsio_handle()
+   * and NSFSFSIOObject::reclone() -- and both are reached only from
+   * rgw_file.cc, so no S3 request takes this path.  It also needs
+   * has_clone(), and an active identity falls back to the copy
+   * above. */
   if (excl &&
       (::faccessat(dst_dir_fd, dst_name.c_str(), F_OK, 0) == 0)) {
     return -EEXIST;

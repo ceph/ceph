@@ -14,7 +14,9 @@
 
 #include "rgw_sal_nsfs.h"
 #include <gtest/gtest.h>
+#include <array>
 #include <iostream>
+#include <fstream>
 #include <filesystem>
 #include <sys/xattr.h>
 #include "common/ceph_argparse.h"
@@ -43,9 +45,56 @@ std::unique_ptr<nsfs::Directory> root;
 std::unique_ptr<nsfs::FSStrategy> fs_strategy;
 std::vector<const char*> args;
 
+/* The strategies a driverless FSEnt runs with.
+ *
+ * An FSEnt reads and writes attributes and names scaffolding, so it
+ * carries a strategy for each and dereferences them;  the tests below
+ * build Directory and File objects with no driver, and until this
+ * existed every one of them died on a null pointer.
+ *
+ * Fixed rather than probed, deliberately.  A unit test wants a known
+ * layout, not whatever the filesystem under the build directory
+ * happens to support, and a driver's own selection is factored into
+ * NSFSDriver::init_strategies() for the cases that want it. */
+class DriverlessStrategies {
+public:
+  nsfs::POSIXStrategy fs;
+  nsfs::PerPartMPUStrategy mpu;
+  nsfs::PrefixedXattrStrategy xattr;
+  nsfs::SentinelPathStrategy path;
+  nsfs::ReservedNames reserved;
+
+  DriverlessStrategies() {
+    auto add = [this](const nsfs::ReservedNames& r) {
+      reserved.exact.insert(reserved.exact.end(),
+			    r.exact.begin(), r.exact.end());
+      reserved.prefixes.insert(reserved.prefixes.end(),
+			       r.prefixes.begin(), r.prefixes.end());
+      reserved.staging_prefixes.insert(reserved.staging_prefixes.end(),
+				       r.staging_prefixes.begin(),
+				       r.staging_prefixes.end());
+      reserved.content_exact.insert(reserved.content_exact.end(),
+				    r.content_exact.begin(),
+				    r.content_exact.end());
+    };
+    add(path.reserved_names());
+    add(mpu.reserved_names());
+  }
+
+  void seed(nsfs::FSEnt* ent) {
+    ent->set_mpu_strategy(&mpu);
+    ent->set_xattr_strategy(&xattr);
+    ent->set_path_strategy(&path);
+    ent->set_reserved_names(&reserved);
+  }
+};
+
+std::unique_ptr<DriverlessStrategies> strategies;
+
 class Environment : public ::testing::Environment {
 public:
   boost::intrusive_ptr<CephContext> cct;
+  std::unique_ptr<DoutPrefix> dp;
   DoutPrefixProvider* dpp{nullptr};
 
   Environment() {}
@@ -66,14 +115,19 @@ public:
                       CODE_ENVIRONMENT_UTILITY,
                       CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
 
-    //dpp = nullptr;
-    dpp = new NoDoutPrefix(cct.get(), 1);
+    /* A real prefix provider, not nullptr.  The driver reads
+     * configuration through dpp->get_cct() on the write path, so a null
+     * one crashes every test that puts an object. */
+    dp = std::make_unique<DoutPrefix>(cct.get(), ceph_subsys_rgw,
+				      "nsfs unittest: ");
+    dpp = dp.get();
 
     rgw_mime_init(dpp, cct.get());
 
-    fs_strategy = std::make_unique<nsfs::POSIXStrategy>();
+    strategies = std::make_unique<DriverlessStrategies>();
     root = std::make_unique<nsfs::Directory>(base_path, nullptr, cct.get(),
-                                             fs_strategy.get());
+					     &strategies->fs);
+    strategies->seed(root.get());
     ASSERT_EQ(root->open(dpp), 0);
 
     if (verbose) {
@@ -543,35 +597,38 @@ public:
   { }
   virtual ~TestDriver() = default;
 
-  int init(const DoutPrefixProvider* dpp)
+  int init(const DoutPrefixProvider* dpp,
+	   std::optional<bool> shares_extents = std::nullopt,
+	   file::listing::MultipartCachePolicy mp_policy =
+	     file::listing::MultipartCachePolicy::writethrough,
+	   uint64_t mp_entries = 16, uint64_t mp_lanes = 2,
+	   uint64_t mp_parts = 2, uint64_t mp_budget = 64)
   {
     std::string cache_base = driver_base + "/cache";
     base_path = driver_base + "/root";
 
-    if (!fs_strategy)
       fs_strategy = std::make_unique<nsfs::POSIXStrategy>();
     root_dir = std::make_unique<nsfs::Directory>(base_path, nullptr, env->cct.get(),
                                                  fs_strategy.get());
     int ret = root_dir->open(env->dpp);
-    if (ret < 0) {
-      if (ret == -ENOTDIR) {
-        ldpp_dout(env->dpp, 0) << " ERROR: base path (" << base_path
-                          << "): was not a directory." << dendl;
-        return ret;
-      } else if (ret == -ENOENT) {
-        ret = root_dir->create(env->dpp);
-        if (ret < 0) {
-          ldpp_dout(env->dpp, 0)
-              << " ERROR: could not create base path (" << base_path
-              << "): " << cpp_strerror(-ret) << dendl;
-          return ret;
-        }
-      }
+
+    std::error_code ec;
+    if (ec) {
+      return -ec.value();
     }
+
+    init_strategies(dpp, shares_extents);
+
+    if (ret < 0) {
+      return ret;
+    }
+
     quota_handler = RGWQuotaHandler::generate_handler(this, false);
     bucket_cache.reset(new nsfs::BucketCache(
         this, base_path, cache_base, 100, 3, 3, 3));
     multipart_cache.reset(new TestMultipartCache<cohort::lru::NullYieldPolicy>());
+    init_multipart_cache(dpp, mp_entries, mp_lanes, mp_parts, mp_budget,
+			 mp_policy);
 
     ldpp_dout(env->dpp, 20) << "SUCCESS" << dendl;
     return 0;
@@ -652,13 +709,37 @@ class NSFSDriverTest : public ::testing::Test {
   public:
     NSFSDriverTest() {}
 
+    /* Probe the filesystem, which on a developer machine always reports
+     * that extents are shared.  A fixture which means to exercise the
+     * strided layout overrides this. */
+    virtual std::optional<bool> shares_extents() const {
+      return std::nullopt;
+    }
+
+    /* writethrough, as a deployment gets by default */
+    virtual file::listing::MultipartCachePolicy mp_cache_policy() const {
+      return file::listing::MultipartCachePolicy::writethrough;
+    }
+
+    /* max entries, lanes, partitions, parts budget.
+     *
+     * Large enough that nothing is evicted, which is what a
+     * deployment gets.  A fixture that means to reach the eviction
+     * path -- the only thing that writes a record under writeback --
+     * shrinks it until a second upload displaces the first. */
+    virtual std::array<uint64_t, 4> mp_cache_sizes() const {
+      return {16, 2, 2, 64};
+    }
+
     void SetUp() {
       testname = get_test_name();
       bp = sf::path{sf::absolute(sf::path{base_path / testname})};
       sf::create_directories(bp / "cache");
       sf::create_directories(bp / "root");
       driver = std::make_unique<TestDriver>(bp);
-      int ret = driver->init(env->dpp);
+      const auto sz = mp_cache_sizes();
+      int ret = driver->init(env->dpp, shares_extents(), mp_cache_policy(),
+			     sz[0], sz[1], sz[2], sz[3]);
       EXPECT_EQ(ret, 0);
 
       rgw_user uid{"tenant", testname};
@@ -748,6 +829,27 @@ public:
     NSFSDriverTest::TearDown();
   }
 };
+
+/* A bucket created strong, for the tests that exercise FSIO.
+ *
+ * New buckets are shared by default (rgw_nsfs_bucket_profile), and FSIO
+ * is rejected on a bucket without the shadow subtree.  The option is
+ * read when the bucket is created and marked, so it is restored as soon
+ * as the fixture's bucket exists. */
+class NSFSStrongBucketTest : public NSFSBucketTest {
+public:
+  void SetUp() override {
+    g_conf().set_val("rgw_nsfs_bucket_profile", "strong");
+    NSFSBucketTest::SetUp();
+    g_conf().set_val("rgw_nsfs_bucket_profile", "shared");
+    auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+    ASSERT_EQ(b->resolve_profile(env->dpp), 0);
+    ASSERT_STREQ(b->profile_name(), "strong");
+  }
+};
+
+  static constexpr const char* key = "user.nsfs:bucket_info";
+
 
 TEST_F(NSFSBucketTest, Object)
 {
@@ -1077,12 +1179,13 @@ TEST_F(NSFSObjectTest, XattrOnDisk)
   }
 
   // nsfs-specific attrs use user.nsfs.* prefix
-  EXPECT_TRUE(xattr_names.contains("user.nsfs.object_type"));
+  EXPECT_FALSE(xattr_names.contains("user.nsfs:object_type"));
+  EXPECT_FALSE(xattr_names.contains("user.nsfs:owner"));
 
-  // user-supplied attrs use user.nsfs.* prefix
-  EXPECT_TRUE(xattr_names.contains("user.nsfs." + ATTR1));
+  // user-supplied attrs use user.nsfs:* prefix
+  EXPECT_TRUE(xattr_names.contains("user.nsfs:" + ATTR1));
 
-  // RGW common attrs use user.nsfs.rgw.* prefix (etag present only if set)
+  // RGW common attrs use user.nsfs:rgw.* prefix (etag present only if set)
   // The write_object helper doesn't set an explicit etag, so skip that check
 
   // no old-style prefixes
@@ -1966,6 +2069,1048 @@ TEST_F(NSFSBucketTest, HierarchicalChown)
   int ret = obj->chown(env->dpp, user.get_id(), user.get_display_name(), null_yield);
   // chown to uid/gid 0 requires root; EPERM is expected for non-root
   EXPECT_TRUE(ret == 0 || ret == -EPERM);
+  nsfs::StridedMPUStrategy strided;
+
+  EXPECT_EQ(nb.shared_name(1048576), strided.shared_name(1048576));
+
+  EXPECT_NE(nb.meta_name(), strided.meta_name());
+  EXPECT_NE(nb.assembled_name(), strided.assembled_name());
+  EXPECT_NE(nb.part_name(1), strided.part_name(1));
+}
+
+  static constexpr const char* attr = "user.nsfs:test";
+
+TEST(NooBaaXattr, NamesNooBaaAttributes)
+{
+  nsfs::PrefixedXattrStrategy prefixed;
+  ASSERT_EQ(prefixed.object_owner(with, owner), 0);
+
+  EXPECT_EQ(nb.disk_name("bucket_info"), "user.nsfs:bucket_info");
+  EXPECT_EQ(nb.disk_name("rename_intent"), "user.nsfs:rename_intent");
+
+
+/* Neither format claims a marker (DECISIONS.md 2026-11-02), so none
+ * reaches an attribute set and no REPLACE_ALL prunes one.  The control is
+ * a neighbour under user.nsfs: that each still claims. */
+TEST(MarkerXattr, NeitherFormatClaimsAMarker)
+{
+  nsfs::PrefixedXattrStrategy prefixed;
+  nsfs::NooBaaXattrStrategy nb;
+  for (const nsfs::XattrStrategy* xs :
+	 std::initializer_list<const nsfs::XattrStrategy*>{&prefixed, &nb}) {
+    std::string key;
+    for (const char* m : {nsfs::EXTENSIONS_XATTR, nsfs::CONVERTING_XATTR,
+			  nsfs::OWNS_STORAGE_XATTR}) {
+      EXPECT_TRUE(std::string_view(m).starts_with(nsfs::MARKER_XATTR_PREFIX))
+	  << m;
+      EXPECT_FALSE(xs->parse_disk_name(m, key)) << xs->name() << ":  " << m;
+    }
+    EXPECT_TRUE(xs->parse_disk_name("user.nsfs:bucket_info", key))
+	<< xs->name();
+    EXPECT_EQ(key, "bucket_info");
+  }
+}
+
+TEST(NooBaaXattr, LeavesNooBaaStructuredAttributesAlone)
+{
+  nsfs::PrefixedXattrStrategy prefixed;
+
+  nsfs::StridedMPUStrategy strided;
+  EXPECT_FALSE(strided.is_staging_dir(tree.upload_id));
+  EXPECT_FALSE(sf::exists(tree.staging / strided.meta_name()));
+  EXPECT_FALSE(sf::exists(tree.staging / strided.part_name(1)));
+
+  EXPECT_FALSE(strided.staged_upload(env->dpp, ofd, tree.upload_id, none));
+TEST(NooBaaPath, KeyConventionsMatchSentinel)
+{
+  nsfs::SentinelPathStrategy sentinel;
+
+    EXPECT_EQ(nb.object_name(key, false), sentinel.object_name(key, false))
+      << k;
+  }
+
+  EXPECT_EQ(nb.folder_object_name(), sentinel.folder_object_name());
+  EXPECT_TRUE(sentinel.names_directory_object(".folder"));
+  nsfs::SentinelPathStrategy sentinel;
+  EXPECT_EQ(sentinel.bucket_dir_name("b", mp), ".multipart_b");
+TEST(NooBaaPath, ReservesNooBaaNamesAndNotSentinels)
+{
+  nsfs::SentinelPathStrategy sentinel;
+  const auto& orn = sentinel.reserved_names();
+  nsfs::SentinelPathStrategy sentinel;
+  EXPECT_FALSE(sentinel.directory_object(env->dpp, fd, od));
+
+/* The strided staging layout, on a filesystem that shares extents.
+ *
+ * The driver chooses strided only where assembling from per-part files
+ * would copy the whole object, which is GPFS and nothing a developer
+ * machine mounts.  So the layout, the extent guard and the divert path
+ * have had no test outside a Storage Scale run.  These force the
+ * result instead of measuring it.
+ *
+ * What they do not test is the premise:  XFS still shares extents
+ * underneath, so this exercises placement, the guard and assembly, not
+ * the cost that motivates them.
+ */
+class NSFSStridedBucketTest : public NSFSBucketTest {
+public:
+  std::optional<bool> shares_extents() const override { return false; }
+};
+
+/* Both polarities.  Forced false must select strided and forced true
+ * must not -- an override stuck at one value would otherwise pass. */
+TEST_F(NSFSStridedBucketTest, StridedLayoutIsSelected)
+{
+  EXPECT_STREQ(driver->get_mpu_strategy()->name(), "rgw-strided");
+
+  TestDriver other{bp};
+  ASSERT_EQ(other.init(env->dpp, true), 0);
+  EXPECT_STREQ(other.get_mpu_strategy()->name(), "rgw");
+}
+
+namespace {
+
+/* one part through the SAL;  returns the etag the upload will be
+ * completed with */
+std::string write_mp_part(rgw::sal::MultipartUpload* upload,
+			  const ACLOwner& acl_owner,
+			  rgw_placement_rule* placement,
+			  int num, const std::string& payload)
+{
+  std::unique_ptr<rgw::sal::Writer> writer =
+    upload->get_writer(env->dpp, null_yield, nullptr, acl_owner,
+		       placement, num, std::to_string(num),
+		       rgw::sal::no_authenticated_user);
+  EXPECT_NE(writer.get(), nullptr);
+  EXPECT_EQ(writer->prepare(null_yield), 0);
+
+  bufferlist bl;
+  bl.append(payload);
+  const int len = bl.length();
+  EXPECT_EQ(writer->process(std::move(bl), 0), 0);
+  EXPECT_EQ(writer->process({}, len), 0);
+
+  ceph::real_time mtime;
+  Attrs part_attrs;
+  req_context rctx{env->dpp, null_yield, nullptr};
+  std::string etag = std::to_string(num);
+  EXPECT_EQ(writer->complete(len, etag, &mtime, real_time(), part_attrs,
+			     std::nullopt, real_time(), nullptr, nullptr,
+			     nullptr, nullptr, nullptr, rctx, 0), 0);
+  return etag;
+}
+
+int complete_mp(rgw::sal::Bucket* bucket, rgw::sal::MultipartUpload* upload,
+		const rgw_owner& owner, const std::string& objname,
+		std::map<int, std::string>& part_etags)
+{
+  std::list<rgw_obj_index_key> remove_objs;
+  bool compressed = false;
+  RGWCompressionInfo cs_info;
+  off_t ofs{0};
+  uint64_t accounted_size{0};
+  std::string tag;
+  rgw::sal::MultipartUpload::prefix_map_t processed_prefixes;
+  ACLOwner mp_owner;
+  mp_owner.id = owner;
+  std::unique_ptr<rgw::sal::Object> mp_obj =
+    bucket->get_object(rgw_obj_key(objname));
+  return upload->complete(env->dpp, null_yield, get_pointer(env->cct),
+			  part_etags, remove_objs, accounted_size, compressed,
+			  cs_info, ofs, tag, mp_owner, 0, mp_obj.get(),
+			  processed_prefixes);
+}
+
+} /* anonymous namespace */
+
+/* Uniform parts land in one file at (K-1) * stride, and completing the
+ * upload links that file rather than copying it. */
+TEST_F(NSFSStridedBucketTest, StridedMultipartCompletes)
+{
+  const std::string objname = testname + "-mp";
+  const std::string upload_id = "c0ffee";
+  auto upload = bucket->get_multipart_upload(objname, rgw::sal::no_authenticated_user, upload_id);
+  ASSERT_NE(upload.get(), nullptr);
+
+  rgw_placement_rule placement;
+  Attrs attrs;
+  ASSERT_EQ(upload->init(env->dpp, null_yield, acl_owner, placement, attrs), 0);
+
+  const size_t stride = 64;
+  std::string expected;
+  std::map<int, std::string> part_etags;
+  for (int i = 1; i <= 3; ++i) {
+    std::string payload(stride, static_cast<char>('a' + i));
+    part_etags[i] = write_mp_part(upload.get(), acl_owner, &placement, i,
+				  payload);
+    expected += payload;
+  }
+
+  /* the shared file is named for the stride, and holds the parts in
+   * order, before anything is completed */
+  sf::path staging{bp / "root" / testname /
+		   (".multipart_" + objname + "." + upload_id)};
+  sf::path shared{staging / ("parts-size-" + std::to_string(stride))};
+  ASSERT_TRUE(sf::exists(shared)) << "no shared file at " << shared;
+  EXPECT_EQ(sf::file_size(shared), stride * 3);
+
+  ASSERT_EQ(complete_mp(bucket.get(), upload.get(), owner, objname,
+			part_etags), 0);
+
+  sf::path obj_path{bp / "root" / testname / objname};
+  ASSERT_TRUE(sf::is_regular_file(obj_path));
+  EXPECT_EQ(sf::file_size(obj_path), expected.size());
+
+  EXPECT_EQ(read_all(obj_path), expected);
+}
+
+/* A part longer than the stride must not write into the next part's
+ * region.  Before the guard, the object came back the right length
+ * with another part's bytes inside it -- found on GPFS, and until now
+ * reachable nowhere else. */
+TEST_F(NSFSStridedBucketTest, StridedOversizedPartDiverts)
+{
+  const std::string objname = testname + "-mp";
+  const std::string upload_id = "c0ffee";
+  auto upload = bucket->get_multipart_upload(objname, rgw::sal::no_authenticated_user, upload_id);
+  ASSERT_NE(upload.get(), nullptr);
+
+  rgw_placement_rule placement;
+  Attrs attrs;
+  ASSERT_EQ(upload->init(env->dpp, null_yield, acl_owner, placement, attrs), 0);
+
+  const size_t stride = 64;
+  std::string expected;
+  std::map<int, std::string> part_etags;
+
+  /* part 1 establishes the stride */
+  std::string p1(stride, 'a');
+  part_etags[1] = write_mp_part(upload.get(), acl_owner, &placement, 1, p1);
+  expected += p1;
+
+  /* part 2 exceeds it, so it cannot stay where the stride would put it */
+  std::string p2(stride + 17, 'b');
+  part_etags[2] = write_mp_part(upload.get(), acl_owner, &placement, 2, p2);
+  expected += p2;
+
+  /* part 3 would have been overwritten by part 2's overrun */
+  std::string p3(stride, 'c');
+  part_etags[3] = write_mp_part(upload.get(), acl_owner, &placement, 3, p3);
+  expected += p3;
+
+  ASSERT_EQ(complete_mp(bucket.get(), upload.get(), owner, objname,
+			part_etags), 0);
+
+  sf::path obj_path{bp / "root" / testname / objname};
+  ASSERT_TRUE(sf::is_regular_file(obj_path));
+
+  const std::string got = read_all(obj_path);
+  EXPECT_EQ(got.size(), expected.size());
+  /* the length was right even when the bytes were not, so compare the
+   * bytes and say which part was corrupted if they differ */
+  EXPECT_EQ(got, expected)
+      << "part 2's overrun reached part 3's region";
+}
+
+
+/* The strided layout under the writeback cache policy.
+ *
+ * A part's record reaches its xattr only when the cache entry is
+ * evicted, so part 1's stored length -- which is what establishes the
+ * stride -- does not exist on disk while the upload is in flight.  A
+ * reader consulting disk alone finds no stride and stages every part
+ * after the first in its own file:  the objects are correct and the
+ * layout is silently never used, on the one filesystem it exists for.
+ *
+ * established_stride() asks the cache first for that reason, and this
+ * is what holds it to it. */
+class NSFSStridedWritebackBucketTest : public NSFSStridedBucketTest {
+public:
+  file::listing::MultipartCachePolicy mp_cache_policy() const override {
+    return file::listing::MultipartCachePolicy::writeback;
+  }
+};
+
+TEST_F(NSFSStridedWritebackBucketTest, StrideSurvivesWriteback)
+{
+  const std::string objname = testname + "-mp";
+  const std::string upload_id = "c0ffee";
+  auto upload = bucket->get_multipart_upload(objname, rgw::sal::no_authenticated_user, upload_id);
+  ASSERT_NE(upload.get(), nullptr);
+
+  rgw_placement_rule placement;
+  Attrs attrs;
+  ASSERT_EQ(upload->init(env->dpp, null_yield, acl_owner, placement, attrs), 0);
+
+  const size_t stride = 64;
+  std::string expected;
+  std::map<int, std::string> part_etags;
+  for (int i = 1; i <= 3; ++i) {
+    std::string payload(stride, static_cast<char>('a' + i));
+    part_etags[i] = write_mp_part(upload.get(), acl_owner, &placement, i,
+				  payload);
+    expected += payload;
+  }
+
+  sf::path staging{bp / "root" / testname /
+		   (".multipart_" + objname + "." + upload_id)};
+  sf::path shared{staging / ("parts-size-" + std::to_string(stride))};
+  ASSERT_TRUE(sf::exists(shared)) << "no shared file at " << shared;
+  EXPECT_EQ(sf::file_size(shared), stride * 3)
+      << "parts after the first did not reach the shared file, so the "
+	 "stride was not found under writeback";
+
+  ASSERT_EQ(complete_mp(bucket.get(), upload.get(), owner, objname,
+			part_etags), 0);
+
+  EXPECT_EQ(read_all(bp / "root" / testname / objname), expected);
+}
+
+
+/* The writeback cache, small enough to evict.
+ *
+ * Eviction is the only thing that writes a part's record under this
+ * policy, so it is the only thing that can get it wrong -- and with
+ * the configured sizes nothing is ever evicted, which is why the
+ * existing writeback test never reached it.  One entry, so a second
+ * upload displaces the first.
+ */
+class NSFSStridedEvictingBucketTest : public NSFSStridedBucketTest {
+public:
+  file::listing::MultipartCachePolicy mp_cache_policy() const override {
+    return file::listing::MultipartCachePolicy::writeback;
+  }
+  std::array<uint64_t, 4> mp_cache_sizes() const override {
+    return {1, 1, 1, 8};
+  }
+};
+
+/* An evicted part's record says where its bytes are.
+ *
+ * Under the strided layout a part lives in the shared file at an
+ * offset, and once part 1 is linked to that file the record is the
+ * only source for the placement -- a stat reports the whole upload.
+ * The eviction path copied num, size, etag, mtime and cksum and
+ * stopped, so `shared`, `offset` and `stored` defaulted to "its own
+ * file, offset zero, nothing stored".  Assembly then read a shared
+ * part out of the empty record file:  the object came back the right
+ * length, because `size` was copied, with another part's absence
+ * inside it.
+ */
+TEST_F(NSFSStridedEvictingBucketTest, AnEvictedPartRecordsItsPlacement)
+{
+  const std::string objname = "evicted.bin";
+  const std::string upload_id = "c0ffee";
+  auto upload = bucket->get_multipart_upload(objname, rgw::sal::no_authenticated_user, upload_id);
+  ASSERT_NE(upload.get(), nullptr);
+
+  rgw_placement_rule placement;
+  Attrs attrs;
+  ASSERT_EQ(upload->init(env->dpp, null_yield, acl_owner, placement, attrs), 0);
+
+  const size_t stride = 64;
+  std::string expected;
+  std::map<int, std::string> part_etags;
+  for (int i = 1; i <= 3; ++i) {
+    std::string payload(stride, static_cast<char>('a' + i));
+    part_etags[i] = write_mp_part(upload.get(), acl_owner, &placement, i,
+				  payload);
+    expected += payload;
+  }
+
+  /* a second upload, which displaces the first and stabilises it.
+   *
+   * One is enough:  the entry reaches the evictable queue when its
+   * last reference goes, and the release that puts the second one
+   * there is what finds the queue over its high-water mark. */
+  {
+    auto other = bucket->get_multipart_upload("other.bin", rgw::sal::no_authenticated_user, "beef42");
+    ASSERT_EQ(other->init(env->dpp, null_yield, acl_owner, placement,
+			  attrs), 0);
+    write_mp_part(other.get(), acl_owner, &placement, 1,
+		  std::string(stride, 'z'));
+  }
+
+  /* the records are on disk now, and they have to say the parts are
+   * in the shared file rather than in their own */
+  const sf::path staging{bp / "root" / testname /
+			 (".multipart_" + objname + "." + upload_id)};
+  ASSERT_TRUE(sf::is_directory(staging)) << staging;
+  for (int i = 2; i <= 3; ++i) {
+    const sf::path rec{staging / fmt::format("part-{:0>5}", i)};
+    ASSERT_TRUE(sf::exists(rec)) << rec;
+    EXPECT_EQ(sf::file_size(rec), 0u)
+	<< "a shared part's record file holds no bytes, which is why its "
+	   "record has to say so";
+  }
+
+  ASSERT_EQ(complete_mp(bucket.get(), upload.get(), owner, objname,
+			part_etags), 0);
+  const sf::path obj{bp / "root" / testname / objname};
+  ASSERT_TRUE(sf::is_regular_file(obj)) << obj;
+  EXPECT_EQ(sf::file_size(obj), expected.size());
+  EXPECT_EQ(read_all(obj), expected)
+      << "the object was assembled from the record files rather than from "
+	 "the shared file";
+}
+
+
+  auto marked = marked_bucket(testname + "-ours");
+  EXPECT_EQ(copy(bucket.get(), "obj", marked.get(), "copied"), 0);
+  EXPECT_EQ(put(marked.get(), "new"), 0) << "a marked bucket rejected a write";
+}
+
+  void remove_rgw_bucket_info() {
+  }
+
+
+  int read_nb_record(RGWBucketInfo& info, Attrs& attrs) {
+
+    auto* nb_state = driver->get_noobaa_bucket_state_strategy();
+    if (! nb_state) {
+    }
+    return nb_state->load(env->dpp, -1, testname, attrs, info);
+  }
+};
+
+TEST_F(NSFSNooBaaStateTest, ForceMd5EtagIsCarriedInNooBaaShape)
+{
+
+  write_nb_record("DISABLED");
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
+
+  write_nb_record("DISABLED", ",\"force_md5_etag\":true");
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
+
+  write_nb_record("DISABLED", ",\"force_md5_etag\":false");
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
+TEST_F(NSFSNooBaaStateTest, VersioningComesFromNooBaaRecord)
+{
+
+  write_nb_record("ENABLED");
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
+
+  write_nb_record("SUSPENDED");
+
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
+TEST_F(NSFSNooBaaStateTest, NsfsStateWinsOverNooBaas)
+{
+  write_nb_record("ENABLED");
+
+  nsfs::PrefixedXattrStrategy prefixed;
+  const std::string disk = prefixed.disk_name(RGW_ATTR_ACL);
+TEST_F(NSFSNooBaaBucketTest, ALoadedBaseBucketListsInNooBaaFormat)
+{
+TEST_F(NSFSNooBaaStateTest, ObjectLockComesFromNooBaaRecord)
+{
+  write_nb_record("ENABLED");
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
+
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
+
+
+
+  EXPECT_EQ(read_nb_record(info, attrs), -EBADMSG);
+}
+
+
+
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
+
+
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
+TEST_F(NSFSNooBaaStateTest, NooBaaDisabledLockIsNoLock)
+{
+
+
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
+
+
+TEST_F(NSFSNooBaaStateTest, BucketPolicyComesFromNooBaaRecord)
+{
+  write_nb_record("ENABLED");
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
+
+
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
+
+
+  EXPECT_EQ(read_nb_record(info, attrs), -EBADMSG);
+}
+
+TEST_F(NSFSNooBaaStateTest, PublicAccessBlockComesFromNooBaaRecord)
+{
+  write_nb_record("ENABLED");
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
+
+
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
+
+
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
+
+
+  EXPECT_EQ(read_nb_record(info, attrs), -EBADMSG);
+}
+
+TEST_F(NSFSNooBaaStateTest, WebsiteComesFromNooBaaRecord)
+{
+  write_nb_record("ENABLED");
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
+
+
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
+
+
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
+
+
+  EXPECT_EQ(read_nb_record(info, attrs), -EBADMSG);
+}
+
+TEST_F(NSFSNooBaaStateTest, EncryptionComesFromNooBaaRecord)
+{
+  write_nb_record("ENABLED");
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
+
+
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
+
+  write_nb_record("ENABLED", R"(,"encryption":{})");
+
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
+TEST_F(NSFSNooBaaStateTest, LoggingIsReadFromNooBaaRecord)
+{
+
+
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
+
+  write_nb_record("DISABLED", R"(,"logging":{"log_prefix":"p/"})");
+
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
+
+  write_nb_record("ENABLED", R"(,"encryption":{"algorithm":"rot13"})");
+
+TEST_F(NSFSNooBaaStateTest, BucketTagsComeFromNooBaaRecord)
+{
+  write_nb_record("ENABLED");
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
+
+
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
+  write_nb_record("ENABLED", arr);
+
+
+  write_nb_record("ENABLED", R"(,"tag":[{"key":"","value":"orphan"}])");
+
+  EXPECT_EQ(read_nb_record(info, attrs), -EBADMSG);
+}
+
+TEST_F(NSFSNooBaaStateTest, LifecycleComesFromNooBaaRecord)
+{
+  write_nb_record("ENABLED");
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
+
+
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
+
+
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
+
+
+
+
+  EXPECT_EQ(read_nb_record(info, attrs), -EBADMSG);
+}
+
+
+
+  EXPECT_EQ(read_nb_record(info, attrs), -EBADMSG);
+}
+
+TEST_F(NSFSNooBaaStateTest, CorsComesFromNooBaaRecord)
+{
+  write_nb_record("ENABLED");
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
+
+
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
+
+
+  EXPECT_EQ(read_nb_record(info, attrs), -EBADMSG);
+}
+
+
+
+  EXPECT_EQ(read_nb_record(info, attrs), -EBADMSG);
+}
+
+  write_nb_record("ENABLED");
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
+
+  EXPECT_EQ(read_nb_record(info, attrs), -EBADMSG);
+
+  write_nb_record("PERHAPS");
+  remove_rgw_bucket_info();
+  write_nb_record("ENABLED");
+TEST_F(NSFSNooBaaBucketTest, ListsThePartsOfNooBaaUpload)
+{
+TEST_F(NSFSNooBaaBucketTest, GetInfoCarriesNooBaaCreateParams)
+{
+TEST_F(NSFSBucketTest, GetInfoOnAnNsfsUpload)
+{
+TEST_F(NSFSBucketTest, ObjectsInAMarkedBucketKeepNsfsNames)
+{
+  }
+  EXPECT_TRUE(names.contains("user.nsfs:rgw.content_type"));
+    ASSERT_STREQ(b->profile_name(), "shared");
+  void write_nb_object(const std::string& name) {
+TEST_F(NSFSConvertingBucketTest, ReadsNooBaaAttributes)
+{
+  write_nb_object("theirs.bin");
+
+TEST_F(NSFSBucketTest, DoesNotReadNooBaaAttributesWithoutTheMarker)
+{
+  const std::string ctype{"text/plain"};
+TEST_F(NSFSConvertingBucketTest, ListsNooBaaEmptyDirectoryObject)
+{
+TEST_F(NSFSConvertingBucketTest, ReadsNooBaaDirectoryObjects)
+{
+  write_nb_object("w");
+
+TEST_F(NSFSBucketTest, DoesNotListNooBaaDirectoryObjectWithoutTheMarker)
+{
+  write_nb_object("theirs.bin");
+  EXPECT_TRUE(after.contains("user.nsfs:rgw.content_type"));
+TEST_F(NSFSNooBaaBucketTest, ReadsNooBaaObjectLock)
+{
+  EXPECT_TRUE(names.contains("user.nsfs:rgw.object-legal-hold"));
+}
+
+TEST_F(NSFSNooBaaBucketTest, ReadsNooBaaStorageClass)
+{
+TEST_F(NSFSTagTest, ReadsNooBaaTags)
+{
+  nb_tagged_object("tagged.bin", {{"colour", "green"}, {"size", "large"}});
+
+  bool encoded = false;
+      encoded = true;
+    }
+  }
+  EXPECT_TRUE(encoded) << "our encoded tag set was not written";
+}
+
+  void nb_object(const std::string& name, const char* ctype) {
+  void nb_folder(const std::string& name, const char* ctype) {
+  void nb_delete_marker(const std::string& leaf, const std::string& vid) {
+
+TEST_F(NSFSUpgradeTest, ABaseBucketWritesItsStateAsRGWAttributes)
+{
+  static constexpr const char* base_name = "user.nsfs:user.rgw.iam-policy";
+  static constexpr const char* nsfs_name = "user.nsfs:rgw.iam-policy";
+  EXPECT_TRUE(before.contains(nsfs_name))
+      << "a base bucket did not write its state as RGW attributes";
+  EXPECT_TRUE(after.contains(nsfs_name));
+  EXPECT_EQ(str_xattr(bucket_path(), nsfs_name), policy);
+
+  nb_object("photo.jpg", "image/jpeg");
+  nb_version("photo.jpg", v1, "image/jpeg");
+  nb_version("my_photo.jpg", v2, "image/png");
+
+  nb_object("photo.jpg", "image/jpeg");
+  nb_delete_marker("gone.bin", vid);
+
+  nb_version("doc.txt", vid, "text/plain");
+  nb_delete_marker("doc.txt", dmid);
+
+    ssize_t len = ::getxattr(p.c_str(), "user.nsfs:rgw.acl", buf, sizeof(buf));
+  nb_version("only.bin", vid, "text/plain");
+
+/* No marker is bucket metadata, so none reaches the S3 attribute set
+ * -- including while a conversion is in flight, which is the only time
+ * the converting marker exists -- and a write of the bucket's
+ * attributes, which replaces them all, leaves every marker in place. */
+  nb_object("flat.bin", "text/plain");
+  ASSERT_EQ(static_cast<rgw::sal::NSFSBucket*>(bucket.get())
+	      ->set_owns_storage(env->dpp, false), 0);
+
+  auto no_marker = [](const rgw::sal::Attrs& attrs) {
+    for (const auto& [k, _] : attrs) {
+      EXPECT_FALSE(k.starts_with("marker.")) << k;
+      EXPECT_NE(k, "converting");
+      EXPECT_NE(k, "extensions");
+      EXPECT_NE(k, "owns_storage");
+    }
+  };
+  no_marker(bucket->get_attrs());
+
+  /* a write of the bucket's state, as adoption's own */
+  rgw::sal::Attrs more;
+  more["user.rgw.x-amz-meta-probe"].append("x");
+  ASSERT_EQ(b->merge_and_store_attrs(env->dpp, more, null_yield,
+				     rgw::sal::MutationPurpose::adoption), 0);
+  for (const char* m : {nsfs::EXTENSIONS_XATTR, nsfs::CONVERTING_XATTR,
+			nsfs::OWNS_STORAGE_XATTR}) {
+    EXPECT_GT(::getxattr(bucket_path().c_str(), m, nullptr, 0), 0)
+	<< m << " was pruned by a write of the bucket's attributes";
+  }
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
+  no_marker(bucket->get_attrs());
+}
+
+
+/* NooBaa user metadata whose key begins "nsfs." is user metadata, served
+ * as found and after conversion.  NooBaa stores it as `user.` + the key,
+ * so it lands under `user.nsfs.`;  ours is under `user.nsfs:`, which no
+ * header name can reach (DECISIONS.md 2026-11-05).  Before the rename
+ * the first of these read as our content type and the second as a
+ * marker. */
+TEST_F(NSFSUpgradeTest, NooBaaMetadataUnderNsfsStaysMetadata)
+{
+  nb_object("aliased.bin", "text/plain");
+  const sf::path p{bucket_path() / "aliased.bin"};
+  const std::map<std::string, std::string> meta{
+    {"nsfs.rgw.content_type", "not/ours"},
+    {"nsfs.marker.converting", "noobaa"},
+  };
+  for (const auto& [k, v] : meta) {
+    const std::string n = "user." + k;
+    ASSERT_EQ(::setxattr(p.c_str(), n.c_str(), v.data(), v.size(), 0), 0)
+	<< n;
+  }
+
+  auto check = [&](const char* when) {
+    auto obj = bucket->get_object(rgw_obj_key("aliased.bin"));
+    ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0) << when;
+    ASSERT_EQ(obj->get_obj_attrs(null_yield, env->dpp), 0) << when;
+    auto& attrs = obj->get_attrs();
+    ASSERT_TRUE(attrs.contains(RGW_ATTR_CONTENT_TYPE)) << when;
+    EXPECT_EQ(rgw_bl_str(attrs[RGW_ATTR_CONTENT_TYPE]), "text/plain")
+	<< when;
+    for (const auto& [k, v] : meta) {
+      const std::string key = std::string(RGW_ATTR_META_PREFIX) + k;
+      ASSERT_TRUE(attrs.contains(key)) << when << ":  " << key;
+      EXPECT_EQ(rgw_bl_str(attrs[key]), v) << when << ":  " << key;
+    }
+  };
+  check("served as found");
+
+  ASSERT_EQ(upgrade(nullptr, nullptr), 0);
+  check("converted");
+
+  /* carried as RGW user metadata, and nothing under the old prefix */
+  const auto names = xattr_names(p);
+  EXPECT_TRUE(names.contains("user.nsfs:rgw.x-amz-meta-nsfs.rgw.content_type"));
+  EXPECT_TRUE(names.contains("user.nsfs:rgw.x-amz-meta-nsfs.marker.converting"));
+  for (const auto& n : names) {
+    EXPECT_FALSE(n.starts_with("user.nsfs.")) << n;
+  }
+}
+
+/* A NooBaa bucket's root directory object keeps its metadata on the
+ * bucket's directory, so `x-amz-meta-nsfs.marker.extensions` lands
+ * beside where our marker would go.  It is not our marker:  the bucket
+ * is still base, and the metadata is the root object's. */
+TEST_F(NSFSUpgradeTest, RootMetadataCannotForgeAMarker)
+{
+  set_u64_xattr(bucket_path(), "user.noobaa.dir_content", 0);
+  const std::string v{"3"};
+  ASSERT_EQ(::setxattr(bucket_path().c_str(),
+		       "user.nsfs.marker.extensions", v.data(), v.size(), 0),
+	    0);
+
+  std::unique_ptr<rgw::sal::Bucket> fresh;
+  ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname},
+				&fresh, null_yield), 0);
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(fresh.get());
+  EXPECT_STREQ(b->profile_name(), "base");
+
+  ASSERT_EQ(upgrade(nullptr, nullptr), 0);
+  auto obj = bucket->get_object(rgw_obj_key("/"));
+  ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
+  ASSERT_EQ(obj->get_obj_attrs(null_yield, env->dpp), 0);
+  auto& attrs = obj->get_attrs();
+  const std::string key =
+    std::string(RGW_ATTR_META_PREFIX) + "nsfs.marker.extensions";
+  ASSERT_TRUE(attrs.contains(key));
+  EXPECT_EQ(rgw_bl_str(attrs[key]), v);
+}
+
+  nb_object("flat.bin", "text/plain");
+  nb_object("deep/nested.bin", "application/json");
+  nb_folder("photos", "application/directory");
+
+    EXPECT_TRUE(names.contains("user.nsfs:rgw.content_type")) << k;
+    EXPECT_TRUE(names.contains("user.nsfs:rgw.etag")) << k;
+
+  nb_object("a.bin", "text/plain");
+  nb_object("b.bin", "text/plain");
+
+  nb_object("held.bin", "text/plain");
+
+      }
+      /* both attributes are on the file right now */
+      EXPECT_TRUE(names.contains("user.nsfs:rgw.content_type"));
+    nb_object("obj-" + std::to_string(i) + ".bin", "text/plain");
+  }
+
+  int nsfs_count = 0, nb_count = 0;
+      ++nb_count;
+      ++nsfs_count;
+    }
+  }
+  EXPECT_EQ(nsfs_count, 2);
+  EXPECT_EQ(nb_count, 2);
+
+  nb_object("once.bin", "text/plain");
+  nb_object("beside.bin", "text/plain");
+
+  const sf::path staging{bucket_path() / b->mpu_strategy()->staging_dir_name(meta)};
+  ASSERT_TRUE(sf::is_directory(staging)) << staging;
+
+
+/* An upload whose parts were listed before the upgrade still lists and
+ * completes after it.
+ *
+ * The test above starts from a cold multipart cache.  A client does
+ * not:  it lists the parts, the upgrade re-stages the upload into the
+ * nsfs layout, and the client then lists again or completes with the
+ * part ETags it already has.  If the cache kept what it read from
+ * NooBaa's staging, which conversion has removed, that is where it would
+ * show.  A bucket being converted must look to a client like the bucket
+ * it becomes (DECISIONS.md 2026-10-13), so the ETags must not change
+ * either. */
+TEST_F(NSFSUpgradeTest, AnUploadListedBeforeTheUpgradeCompletesAfterIt)
+{
+  TestTree tree;
+  make_noobaa_tree(bucket_path(), TreeShape::with_upload, tree);
+
+  /* the client's view before:  warms the multipart cache */
+  std::map<int, std::string> before;
+  {
+    auto upload = bucket->get_multipart_upload(tree.key, rgw::sal::no_authenticated_user, tree.upload_id);
+    int next = 0;
+    bool truncated = false;
+    ASSERT_EQ(upload->list_parts(env->dpp, env->cct.get(), 100, 0, &next,
+				 &truncated, null_yield), 0);
+    for (auto& [num, part] : upload->get_parts()) {
+      before[num] = part->get_etag();
+    }
+    ASSERT_EQ(before.size(), tree.parts);
+  }
+
+  nsfs::ConvertProgress prog;
+  ASSERT_EQ(upgrade(nullptr, &prog), 0);
+  ASSERT_EQ(prog.uploads, 1u);
+  ASSERT_FALSE(sf::exists(tree.staging)) << "the upload was not re-staged";
+
+  /* the same listing after:  the same parts, the same ETags */
+  auto upload = bucket->get_multipart_upload(tree.key, rgw::sal::no_authenticated_user, tree.upload_id);
+  int next = 0;
+  bool truncated = false;
+  ASSERT_EQ(upload->list_parts(env->dpp, env->cct.get(), 100, 0, &next,
+			       &truncated, null_yield), 0)
+      << "the parts no longer list after the upgrade";
+  std::map<int, std::string> after;
+  for (auto& [num, part] : upload->get_parts()) {
+    after[num] = part->get_etag();
+    EXPECT_EQ(part->get_size(), tree.part_size) << num;
+  }
+  EXPECT_EQ(after, before) << "the upgrade changed the parts' ETags";
+
+  /* and it completes with the ETags the client had before */
+  ASSERT_EQ(complete_mp(bucket.get(), upload.get(), owner, tree.key,
+			before), 0);
+  EXPECT_EQ(read_all(bucket_path() / tree.key), tree.payload);
+}
+
+
+  nb_object("plain.bin", "text/plain");
+  nb_object("v.bin", "text/plain");
+
+/* Re-staging an upload drops its cached part records when a part's
+ * placement changed, and only then (DECISIONS.md 2026-10-13).
+ *
+ * The multipart cache is keyed by the upload, not by where it is
+ * staged, so a record cached before the upgrade survives it.  NooBaa
+ * puts parts of one size in a shared file at an offset;  re-staging
+ * gives each part its own file at offset 0.  A cached "shared, at offset
+ * N" would then describe bytes that are no longer there. */
+TEST_F(NSFSUpgradeTest, ReStagingDropsCachedPartsWhosePlacementChanged)
+{
+  TestTree tree;
+  make_noobaa_tree(bucket_path(), TreeShape::with_upload, tree);
+  ASSERT_GE(tree.parts, 2u);
+  auto* mc = driver->get_multipart_cache();
+  ASSERT_NE(mc, nullptr);
+  const file::listing::MultipartCacheKey ck{bucket->get_name(),
+					    tree.key + "." + tree.upload_id};
+
+  {
+    auto upload = bucket->get_multipart_upload(tree.key, rgw::sal::no_authenticated_user, tree.upload_id);
+    int next = 0;
+    bool truncated = false;
+    ASSERT_EQ(upload->list_parts(env->dpp, env->cct.get(), 100, 0, &next,
+				 &truncated, null_yield), 0);
+  }
+
+  /* the control:  the cache holds NooBaa's placement, which re-staging
+   * will change, or nothing below could fail */
+  file::listing::MultipartPartInfo pi;
+  ASSERT_TRUE(mc->peek_part(ck, 2, pi)) << "listing cached no part record";
+  ASSERT_TRUE(pi.shared) << "the fixture's part 2 is not in a shared file";
+  ASSERT_EQ(pi.offset, tree.part_size);
+
+  nsfs::ConvertProgress prog;
+  ASSERT_EQ(upgrade(nullptr, &prog), 0);
+  ASSERT_EQ(prog.uploads, 1u);
+
+  EXPECT_FALSE(mc->peek_part(ck, 2, pi))
+      << "a record of where NooBaa kept part 2 survived its re-staging";
+
+  /* and listing again records where the part is now */
+  auto upload = bucket->get_multipart_upload(tree.key, rgw::sal::no_authenticated_user, tree.upload_id);
+  int next = 0;
+  bool truncated = false;
+  ASSERT_EQ(upload->list_parts(env->dpp, env->cct.get(), 100, 0, &next,
+			       &truncated, null_yield), 0);
+  ASSERT_TRUE(mc->peek_part(ck, 2, pi));
+  EXPECT_FALSE(pi.shared);
+  EXPECT_EQ(pi.offset, 0u);
+}
+
+TEST_F(NSFSUpgradeTest, StoppingMidUploadKeepsNooBaaStaging)
+{
+  nb_object("gated.bin", "text/plain");
+
+  nb_object("a.bin", "text/plain");
+  nb_object("b.bin", "text/plain");
+
+  nb_object("a.bin", "text/plain");
+
+TEST_F(NSFSStrongBucketTest, AWriteHandleHoldsTheGateOpen)
+{
+TEST_F(NSFSStrongBucketTest, AClosedGateRejectsAWriteHandle)
+{
+TEST_F(NSFSStrongBucketTest, AnFSIOPublishedObjectCarriesTheObjectMode)
+{
+TEST_F(NSFSStrongBucketTest, AnFSIOClonedObjectCarriesTheObjectMode)
+{
+    nb_object("obj-" + std::to_string(i) + ".bin", "text/plain");
+  }
+
+  nb_object("a.bin", "text/plain");
+  nb_object("b.bin", "text/plain");
+
+TEST_F(NooBaaStoreTest, AStoreNooBaaToolsWroteReadsBack)
+{
+TEST_F(NooBaaKeysTest, NooBaaKeyOpensNooBaaSecret)
+{
+TEST_F(NooBaaPlanTest, AStoreNooBaaToolsWroteMapsCleanly)
+{
+TEST_F(NooBaaImportTest, ARenameInNooBaaIsStillTheSameIdentity)
+{
+  write_nb_record("DISABLED");
+
+  write_nb_record("DISABLED");
+  write_nb_record("DISABLED");
+  write_nb_record("DISABLED");
+  write_nb_record("DISABLED");
+  write_nb_record("DISABLED");
+  const sf::path nb_dir = bp / "noobaa-data" / "theirs";
+  sf::create_directories(nb_dir / "inside");
+  write_nb_record("DISABLED", "", "2026-01-02T03:04:05.000Z",
+		     nb_dir.string() + "/");
+
+  EXPECT_EQ(place("another-name", nb_dir), -EEXIST);
+  EXPECT_EQ(place("another-name", nb_dir), 0);
+}
+
+  const sf::path nb_dir = bp / "noobaa-data" / "theirs";
+  sf::create_directories(nb_dir);
+  write_nb_record("DISABLED", "", "2026-01-02T03:04:05.000Z",
+		     nb_dir.string() + "/");
+  id.new_buckets_path = nb_dir.string();
+  EXPECT_FALSE(sf::exists(nb_dir / "inner")) << "the directory was made";
+  EXPECT_TRUE(sf::is_directory(nb_dir / "inner"));
+}
+
+  void add_nb_identity(const std::string& id, const std::string& record) {
+
+      rec.replace(at, from.size(), NB_OWNER_ID);
+    }
+    add_nb_identity(NB_OWNER_ID, rec);
+  }
+
+  write_nb_record("ENABLED");
+
+  write_nb_record("ENABLED");
+
+  add_nb_identity("bad", "{ not json");
+  write_nb_record("ENABLED");
+
+  write_nb_record("ENABLED");
+  write_nb_record("ENABLED");
+  remove_rgw_bucket_info();
+
+  {
+
+    write_nb_record("ENABLED");
+  }
+
+  /* the `_id` write_nb_record() writes */
+  static constexpr const char* NB_BUCKET_ID = "6560e1f1c0ffee0000000001";
+
+  EXPECT_EQ(abandon(NB_BUCKET_ID, ""), -EINVAL);
+  ASSERT_EQ(abandon(NB_BUCKET_ID, "left in NooBaa's format", &r), 0);
+  ASSERT_EQ(abandon(NB_BUCKET_ID, "not this one"), 0);
+
+
+  ASSERT_EQ(driver->unabandon_noobaa_record(env->dpp, NB_BUCKET_ID), 0);
+  ASSERT_EQ(abandon(NB_BUCKET_ID, "the rest will not convert", &r), 0);
+}
+
+  write_nb_record("ENABLED");
+  write_nb_record("ENABLED");
+
+TEST_F(NooBaaModeTest, ConversionKeepsTheVersioningNooBaaRecordSupplied)
+{
+  remove_rgw_bucket_info();
+  write_nb_record("ENABLED");
+
+
+  auto own = make_bucket("mine");
+
+  auto others = driver->get_bucket(info);
+  ASSERT_EQ(others->create(env->dpp, cp, null_yield, rgw::sal::no_authenticated_user), 0);
+      if (std::string_view(q).starts_with("user.nsfs:")) {
+  static constexpr uid_t other_uid = 70170;
+  row.uid = other_uid;
+  row.gid = other_uid;
+      return (::chown(at.c_str(), other_uid, other_uid) < 0) ? -errno : 0;
+    });
+  sf::path nb_storage() const { return bp / "their-filesystem"; }
+
+TEST_F(NSFSRecordedPathTest, ABaseBucketIsServedAtNooBaaRecordedPath)
+{
+  const sf::path at = nb_storage() / "scattered";
+TEST_F(NSFSRecordedPathTest, ResolvingNooBaaPathDoesNotAdoptTheBucket)
+{
+  const sf::path at = nb_storage() / "untouched";
+TEST_F(NSFSRecordedPathTest, PlacementRowWinsOverNooBaaRecord)
+{
+  const sf::path recorded = nb_storage() / "theirs";
+  const sf::path placed = nb_storage() / "ours";
+  sf::create_directories(recorded);
+  sf::create_directories(placed);
+  record_at(recorded);
+  row.path = placed.string();
+  const sf::path recorded = nb_storage() / "elsewhere";
+  sf::create_directories(recorded);
+  record_at(recorded);
+
+TEST_F(NSFSBucketTest, WithoutANooBaaStoreResolutionIsUnchanged)
+{
 }
 
 int main(int argc, char *argv[]) {

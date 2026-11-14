@@ -821,8 +821,8 @@ TEST(OPEN2, CREATEMODE_ATTRS_ARE_DURABLE_BEFORE_PUBLISH)
       << "no shadow -- this test is not measuring what it thinks";
   char buf[512];
   /* make_xattr_name() maps RGW_ATTR_PREFIX ("user.rgw.") onto nsfs's own
-   * namespace, so the name on disk is user.nsfs.rgw.unix1 */
-  EXPECT_GT(::getxattr(sp.c_str(), "user.nsfs.rgw.unix1", buf, sizeof(buf)), 0)
+   * namespace, so the name on disk is user.nsfs:rgw.unix1 */
+  EXPECT_GT(::getxattr(sp.c_str(), "user.nsfs:rgw.unix1", buf, sizeof(buf)), 0)
       << "initial attributes were not made durable at create;  they would "
 	 "not be readable until publish";
 
@@ -1808,7 +1808,7 @@ TEST(OPEN2, XATTR_STORED_AS_S3_STORES_IT)
     GTEST_SKIP() << "not a filesystem-backed driver";
   }
   const auto path = published_path("xattrtest1");
-  const std::string disk_key{"user.nsfs.rgw.x-amz-meta-shape"};
+  const std::string disk_key{"user.nsfs:rgw.x-amz-meta-shape"};
 
   char buf[64];
   ssize_t len = ::getxattr(path.c_str(), disk_key.c_str(), buf, sizeof(buf));
@@ -3541,7 +3541,7 @@ TEST(OPEN2, UNIX_ATTRS_PERSIST)
    * only overwrites it when the attrs are actually present. */
   ASSERT_TRUE(sf::exists(published_path("uxattr1")));
   ASSERT_GE(::getxattr(published_path("uxattr1").c_str(),
-		       "user.nsfs.rgw.unix1", nullptr, 0), 0)
+		       "user.nsfs:rgw.unix1", nullptr, 0), 0)
       << "unix attrs were not written to the object";
 
   /* and come back on a handle which never saw them set */
@@ -4172,14 +4172,14 @@ TEST(OPEN2, RENAME_PRESERVES_ETAG)
   ASSERT_EQ(rn_make(bucket_fh, src, "etag me"), 0);
 
   const std::string before = rn_xattr(rn_path(bucket_name, src),
-				      "user.nsfs.rgw.etag");
+				      "user.nsfs:rgw.etag");
   ASSERT_FALSE(before.empty()) << "no etag on the source to compare";
 
   ASSERT_EQ(rgw_rename(fs, bucket_fh, src.c_str(),
 		       bucket_fh, dst.c_str(), RGW_RENAME_FLAG_NONE), 0);
 
   const std::string after = rn_xattr(rn_path(bucket_name, dst),
-				     "user.nsfs.rgw.etag");
+				     "user.nsfs:rgw.etag");
   ASSERT_EQ(after, before) << "etag changed across the rename";
 }
 
@@ -4419,7 +4419,7 @@ static bool rn_intent_present(const std::string& bkt)
 {
   auto vdir = nsfs_base() / bkt / ".versions";
   char buf[512];
-  return ::getxattr(vdir.c_str(), "user.nsfs.rename_intent",
+  return ::getxattr(vdir.c_str(), "user.nsfs:rename_intent",
 		    buf, sizeof(buf)) > 0;
 }
 
@@ -4798,7 +4798,7 @@ TEST(OPEN2, RENAME_RECOVERY_REFUSES_WHEN_LEAF_IS_AT_BOTH_KEYS)
 
   /* leave the directory usable for anything that runs after this */
   auto vdir = nsfs_base() / ver_bucket_name / ".versions";
-  ASSERT_EQ(::removexattr(vdir.c_str(), "user.nsfs.rename_intent"), 0);
+  ASSERT_EQ(::removexattr(vdir.c_str(), "user.nsfs:rename_intent"), 0);
   EXPECT_EQ(rgw_rename(fs, ver_bucket_fh, other.c_str(),
 		       ver_bucket_fh, "rnv-dst6b", RGW_RENAME_FLAG_NONE), 0)
       << "the directory did not become usable once the ambiguity was removed";
@@ -5375,7 +5375,7 @@ TEST(OPEN2, VER_SUSPEND_ON_DISK)
   ASSERT_TRUE(sf::exists(cur)) << "no current object after a suspended write";
 
   char buf[64];
-  std::string vid_x = std::string("user.nsfs.") + "version_id";
+  std::string vid_x = std::string("user.nsfs:") + "version_id";
   ssize_t len = ::getxattr(cur.c_str(), vid_x.c_str(), buf, sizeof(buf));
   ASSERT_GT(len, 0) << "current object carries no version id";
   ASSERT_EQ(std::string(buf, len), std::string("null"))
@@ -5514,6 +5514,149 @@ TEST(OPEN2, VER_TIMER_LONGER_IN_VERSIONED_BUCKET)
   g_conf().set_val("rgw_nfs_stateless_finalize_secs", "300");
   g_conf().set_val("rgw_nfs_stateless_finalize_versioned_secs", "1800");
   g_conf().apply_changes(nullptr);
+}
+
+TEST(OPEN2, EXT_FSIO_REFUSED_ON_BASE_BUCKET)
+{
+  const DoutPrefix dp(g_ceph_context, dout_subsys, "write2 test: ");
+  auto* driver = rgw::g_rgwlib->get_driver();
+
+  const std::string bname{"s4base"};
+
+  /* Leave nothing behind from a previous run.  A leftover would still be
+   * in whichever profile this test left it, and the first leg would fail
+   * for the wrong reason. */
+  {
+    struct rgw_file_handle* old{nullptr};
+    if (rgw_lookup(fs, fs->root_fh, bname.c_str(), &old, nullptr, 0,
+		   RGW_LOOKUP_FLAG_NONE) == 0) {
+      (void) rgw_unlink(fs, old, "ext1", RGW_UNLINK_FLAG_NONE);
+      (void) rgw_unlink(fs, old, "ext2", RGW_UNLINK_FLAG_NONE);
+      (void) rgw_fh_rele(fs, old, RGW_FH_RELE_FLAG_NONE);
+      (void) rgw_unlink(fs, fs->root_fh, bname.c_str(),
+			RGW_UNLINK_FLAG_NONE);
+    }
+  }
+
+  struct stat st;
+  struct rgw_file_handle* bfh{nullptr};
+  ASSERT_EQ(rgw_mkdir(fs, fs->root_fh, bname.c_str(), &st, create_mask,
+		      &bfh, RGW_MKDIR_FLAG_NONE), 0);
+
+  std::map<std::string, std::string> out;
+  if (ret == -ENOTSUP || ret == -EINVAL) {
+  }
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(out["profile"], std::string("base"));
+
+  /* it now reads as NooBaa wrote it, so it must not acquire a shadow */
+  {
+    Open2Helper o2h(fs, bfh);
+    ASSERT_EQ(std::get<0>(o2h.lookup("ext1")), 0);
+    auto ofr = o2h.open(O_RDWR, RGW_OPEN_FLAG_CREATE);
+    ASSERT_EQ(std::get<0>(ofr), -ENOTSUP)
+      << "FSIO served on a base bucket";
+  }
+
+  out.clear();
+  ASSERT_EQ(driver->driver_hint(&dp, "bucket-profile",
+				{{"bucket", bname},
+				 {"profile", "strong"}}, &out), 0);
+  ASSERT_EQ(out["profile"], std::string("strong"));
+
+  {
+    Open2Helper o2h(fs, bfh);
+    ASSERT_EQ(std::get<0>(o2h.lookup("ext2")), 0);
+    auto ofr = o2h.open(O_RDWR, RGW_OPEN_FLAG_CREATE);
+    ASSERT_EQ(std::get<0>(ofr), 0)
+      << "FSIO refused on a bucket in the strong profile";
+    ASSERT_EQ(o2h.close(std::get<1>(ofr)), 0);
+  }
+
+  out.clear();
+
+  (void) rgw_unlink(fs, bfh, "ext1", RGW_UNLINK_FLAG_NONE);
+  (void) rgw_unlink(fs, bfh, "ext2", RGW_UNLINK_FLAG_NONE);
+  ASSERT_EQ(rgw_fh_rele(fs, bfh, RGW_FH_RELE_FLAG_NONE), 0);
+  (void) rgw_unlink(fs, fs->root_fh, bname.c_str(), RGW_UNLINK_FLAG_NONE);
+}
+
+/* The shared profile carries the nsfs metadata representation and no shadow
+ * subtree, so it does not serve FSIO.
+ *
+ * Shared is the case a test of whether the bucket is marked gets
+ * wrong:  shared is marked, with EXT_RGW_META, so such a test says yes
+ * and the bucket acquires a shadow tree its profile has nowhere to put.
+ * The interlock asks for EXT_SHADOW, and this holds it to that.
+ *
+ * Shared first, then strong, for the reason the base test gives:
+ * reducing a profile requires the bucket to hold no content.
+ *
+ * Its own bucket, since moving the suite's shared one would change FSIO
+ * for every test after it. */
+TEST(OPEN2, EXT_FSIO_REFUSED_ON_SHARED_BUCKET)
+{
+  const DoutPrefix dp(g_ceph_context, dout_subsys, "write2 test: ");
+  auto* driver = rgw::g_rgwlib->get_driver();
+
+  const std::string bname{"s4shared"};
+
+  {
+    struct rgw_file_handle* old{nullptr};
+    if (rgw_lookup(fs, fs->root_fh, bname.c_str(), &old, nullptr, 0,
+		   RGW_LOOKUP_FLAG_NONE) == 0) {
+      (void) rgw_unlink(fs, old, "sh1", RGW_UNLINK_FLAG_NONE);
+      (void) rgw_unlink(fs, old, "sh2", RGW_UNLINK_FLAG_NONE);
+      (void) rgw_fh_rele(fs, old, RGW_FH_RELE_FLAG_NONE);
+      (void) rgw_unlink(fs, fs->root_fh, bname.c_str(),
+			RGW_UNLINK_FLAG_NONE);
+    }
+  }
+
+  struct stat st;
+  struct rgw_file_handle* bfh{nullptr};
+  ASSERT_EQ(rgw_mkdir(fs, fs->root_fh, bname.c_str(), &st, create_mask,
+		      &bfh, RGW_MKDIR_FLAG_NONE), 0);
+
+  std::map<std::string, std::string> out;
+  int ret = driver->driver_hint(&dp, "bucket-profile",
+				{{"bucket", bname},
+				 {"profile", "shared"}}, &out);
+  if (ret == -ENOTSUP || ret == -EINVAL) {
+    GTEST_SKIP() << "driver does not implement bucket-profile";
+  }
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(out["profile"], std::string("shared"));
+
+  {
+    Open2Helper o2h(fs, bfh);
+    ASSERT_EQ(std::get<0>(o2h.lookup("sh1")), 0);
+    auto ofr = o2h.open(O_RDWR, RGW_OPEN_FLAG_CREATE);
+    ASSERT_EQ(std::get<0>(ofr), -ENOTSUP)
+      << "FSIO served on a shared bucket, which carries no shadow tree";
+  }
+
+  out.clear();
+  ASSERT_EQ(driver->driver_hint(&dp, "bucket-profile",
+				{{"bucket", bname},
+				 {"profile", "strong"}}, &out), 0);
+  ASSERT_EQ(out["had_profile"], std::string("shared"));
+  ASSERT_EQ(out["profile"], std::string("strong"));
+
+  {
+    Open2Helper o2h(fs, bfh);
+    ASSERT_EQ(std::get<0>(o2h.lookup("sh2")), 0);
+    auto ofr = o2h.open(O_RDWR, RGW_OPEN_FLAG_CREATE);
+    ASSERT_EQ(std::get<0>(ofr), 0)
+      << "FSIO refused after the bucket was raised to strong";
+    ASSERT_EQ(o2h.close(std::get<1>(ofr)), 0);
+  }
+
+
+  (void) rgw_unlink(fs, bfh, "sh1", RGW_UNLINK_FLAG_NONE);
+  (void) rgw_unlink(fs, bfh, "sh2", RGW_UNLINK_FLAG_NONE);
+  ASSERT_EQ(rgw_fh_rele(fs, bfh, RGW_FH_RELE_FLAG_NONE), 0);
+  (void) rgw_unlink(fs, fs->root_fh, bname.c_str(), RGW_UNLINK_FLAG_NONE);
 }
 
 TEST(OPEN2, DELETE_BUCKET) {

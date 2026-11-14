@@ -11,7 +11,8 @@ implements.
 
 Companion documents: [RGW_FILE_API.md](RGW_FILE_API.md) for how a consumer
 uses the resulting interface, and under `driver/nsfs/`,
-[DESIGN.md](driver/nsfs/DESIGN.md) for the driver,
+`driver/nsfs/bucket_profile.h` and the strategy headers beside it for
+the driver,
 [RENAME_DESIGN.md](driver/nsfs/RENAME_DESIGN.md),
 [HANDLE_IDENTITY.md](driver/nsfs/HANDLE_IDENTITY.md) and
 [ETAG_STRATEGY.md](driver/nsfs/ETAG_STRATEGY.md) for the questions that

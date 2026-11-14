@@ -48,13 +48,44 @@ inline constexpr std::string_view CLONE_PARENT_PREFIX = ".clone_parent.";
 inline constexpr size_t MIN_COPY_IO_SIZE = 1u << 20;
 inline constexpr size_t MAX_COPY_IO_SIZE = 4u << 20;
 
-/* Try a real copy_file_range in dir and see whether it consumed no space:
- * the one question a strategy cannot answer about itself.  Returns false on
+/* Can this filesystem make a copy free?  The one property a strategy
+ * cannot determine about itself.  Returns false on
  * any error, so an unwritable or odd directory reads as "does not share",
- * which is the conservative answer -- it only costs a fallback that would
- * have worked. */
+ * which is the conservative result -- it only costs a fallback that would
+ * have worked.
+ *
+ * Asks FICLONE rather than measuring a copy.  copy_file_range returns a
+ * positive count whether it shared or copied, and a reflinked file's
+ * st_blocks still covers its own extents, so neither says anything;
+ * only free space or FICLONE do.  See the comment on the definition. */
 bool probe_shares_extents(const DoutPrefixProvider* dpp,
                           const std::string& dir);
+
+/* The names a layout creates which are not objects.
+ *
+ * Handed over as data rather than returned one name at a time, because
+ * the listing paths ask per directory entry:  a virtual call there would
+ * sit in the readdir loop, where this is a few string_view compares the
+ * compiler can inline.  The caller fetches this once and matches against
+ * it, so the format still owns what its scaffolding is called.
+ *
+ * Being able to enumerate them is worth something on its own -- anything
+ * that has to recognise another gateway's names needs the list, not a
+ * predicate bound to one implementation. */
+struct ReservedNames {
+  /* matched exactly */
+  std::vector<std::string> exact;
+  /* any name with this prefix */
+  std::vector<std::string> prefixes;
+  /* prefixes naming an upload in flight.  Separated because they are
+   * scaffolding to a listing and *content* to S3, which reports
+   * incomplete uploads and must not call such a bucket empty. */
+  std::vector<std::string> staging_prefixes;
+  /* names which are scaffolding to a listing but mean the object exists
+   * -- the sentinel inside a directory which is itself an object.  Same
+   * split as staging_prefixes, matched exactly. */
+  std::vector<std::string> content_exact;
+};
 
 enum class SafeResult {
   OK = 0,
@@ -172,7 +203,6 @@ protected:
                     int src_fd, off_t src_off,
                     int dst_fd, off_t dst_off, off_t len);
 
-  bool force_buffered_copy{false};
   bool fs_shares_extents{false};
   std::atomic<uint64_t> buffered_copy_bytes{0};
 

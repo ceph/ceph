@@ -13,7 +13,8 @@ call it correctly;  §11 works the other way round, from NFS and FSAL
 operations to the sequences that serve them.
 
 Where behaviour depends on the backend it says so.  Implementation notes live
-beside the nsfs driver: [DESIGN.md](driver/nsfs/DESIGN.md) for the driver,
+beside the nsfs driver:  its headers, `bucket_profile.h` first, for the
+driver,
 [HANDLE_IDENTITY.md](driver/nsfs/HANDLE_IDENTITY.md) for what a filehandle
 names and for how long, [RENAME_DESIGN.md](driver/nsfs/RENAME_DESIGN.md) for
 rename, [ETAG_STRATEGY.md](driver/nsfs/ETAG_STRATEGY.md) for the ETag option.

@@ -34,6 +34,10 @@
 #include "../posix/qd2_pending.h"
 #include "../posix/posix_io_uring.h"
 #include "fs_strategy.h"
+#include "mpu_strategy.h"
+#include "xattr_strategy.h"
+#include "path_strategy.h"
+#include "bucket_profile.h"
 
 class RGWLC;
 
@@ -133,6 +137,19 @@ protected:
   bool stat_done{false};
   CephContext* ctx;
   FSStrategy* fs_strategy;
+  /* the multipart layout, carried the same way and for the same reason as
+   * fs_strategy:  an MPDirectory has to name and enumerate parts, and is
+   * built from its parent rather than from the driver */
+  MPUStrategy* mpu_strategy{nullptr};
+  /* selected by the bucket's recorded format;  carried here for the same
+   * reason as the others -- an FSEnt reads and writes attributes and is
+   * built from its parent */
+  XattrStrategy* xattr_strategy{nullptr};
+  PathStrategy* path_strategy{nullptr};
+  /* the union of what every strategy calls its own scaffolding, assembled
+   * once by the driver.  Carried rather than asked for, because the
+   * listing paths test it per directory entry. */
+  const ReservedNames* reserved_names{nullptr};
 
 public:
   static constexpr uint32_t FLAG_NONE =      0x0;
@@ -154,6 +171,16 @@ public:
   virtual ~FSEnt() { }
 
   int get_fd() { return fd; };
+  /* seeded on the root directory by the driver;  every child inherits it
+   * through the constructors above */
+  void set_mpu_strategy(MPUStrategy* s) { mpu_strategy = s; }
+  MPUStrategy* get_mpu_strategy() const { return mpu_strategy; }
+  void set_xattr_strategy(XattrStrategy* s) { xattr_strategy = s; }
+  XattrStrategy* get_xattr_strategy() const { return xattr_strategy; }
+  void set_path_strategy(PathStrategy* s) { path_strategy = s; }
+  PathStrategy* get_path_strategy() const { return path_strategy; }
+  void set_reserved_names(const ReservedNames* r) { reserved_names = r; }
+  const ReservedNames* get_reserved_names() const { return reserved_names; }
   void set_sync_on_close(bool sync) { need_fsync = sync; }
   std::string& get_name() { return fname; }
   Directory* get_parent() { return parent; }
@@ -443,14 +470,48 @@ protected:
 #endif
   std::unique_ptr<nsfs::FSStrategy> fs_strategy;
   std::string base_path;
-  std::unique_ptr<nsfs::Directory> root_dir;
   int root_fd;
+  std::unique_ptr<nsfs::MPUStrategy> mpu_strategy;
+  std::unique_ptr<nsfs::XattrStrategy> xattr_strategy;
+  std::unique_ptr<nsfs::PathStrategy> path_strategy;
+  /* what a bucket's extensions marker resolves to;  both resolve to the
+   * same strategy instances until S5 supplies the noobaa ones */
+  nsfs::BucketProfile base_profile;
+  nsfs::BucketProfile shared_profile;
+  nsfs::BucketProfile extended_profile;
+  nsfs::ReservedNames reserved_names;
   RGWSyncModuleInstanceRef sync_module;
   RGWQuotaHandler* quota_handler{nullptr};
   RGWLC* lc{nullptr};
   bool use_lc_thread{false};
   /* driver hint state (test only)--see driver_hint() */
   bool inject_fork_race{false};
+
+  /* Added to the accounted size before the multipart writer compares it
+   * against the bytes it actually stored.
+   *
+   * The strided staging layout does not establish a stride when those
+   * two disagree, because a disagreement means a filter between the op
+   * layer and the writer changed the byte count and the client's length
+   * cannot place anything.  Compression and AEAD are the real causes,
+   * and NEITHER IS REACHABLE ON NSFS:  NSFSZone hardcodes its one
+   * storage class with no compression type, so the suppressing branch
+   * has no way to be taken in a test.  A control whose negative case
+   * cannot occur proves nothing, so this makes it occur. */
+  /* Scoped to one upload, not global.
+   *
+   * A multipart upload is concurrent by nature and so is the test
+   * suite:  a delta armed for the whole driver perturbs every upload
+   * running at the time, which is how one test's negative case
+   * silently suppressed another test's stride.  The unit the control
+   * acts on is the upload -- the condition it forces is evaluated once
+   * per upload, at part 1's completion -- so that is the unit it is
+   * keyed by.  A bucket would isolate test from test but still not let
+   * one test arm one upload and not another. */
+  std::atomic<uint64_t> mpu_diverts{0};
+  std::map<std::string, int64_t> inject_delta_by_upload;
+  ceph::mutex inject_delta_lock =
+      ceph::make_mutex("NSFSDriver::inject_delta_lock");
   bool inject_skip_reclone{false};
   /* -1 disables;  otherwise fail a rename after this many version entries
    * have moved, so the rollback path is exercised rather than assumed */
@@ -481,7 +542,32 @@ public:
 
     userDB = std::make_unique<rgw::store::POSIXUserDB>(db_full_path.string(), cct);
   }
-  virtual ~NSFSDriver() { }
+  /* The multipart cache goes before anything it calls back into.
+   *
+   * A writeback entry's eviction runs `stabilize_fn`, which captures
+   * the driver and asks it for the root fd.  The cache is a member, so
+   * without this it is destroyed in reverse declaration order -- after
+   * `root_dir`, which `get_root_fd()` dereferences -- and a cache
+   * still holding a dirty entry segfaults the process on the way out.
+   * It took the unit suite's second run to show it, because the cache
+   * has to be non-empty at teardown for `drain()` to evict anything.
+   *
+   * Dropped here rather than reordered.  Reordering the members would
+   * work and would leave nothing saying why the order matters, so the
+   * next member added in the wrong place brings the crash back.
+   *
+   * Stabilizing on the way out is wanted, not merely tolerated:  under
+   * writeback, eviction is the only thing that writes those part
+   * records, so a shutdown that skipped it would lose the parts of
+   * every multipart upload still in flight.  This makes it happen
+   * while the driver can still serve it.
+   *
+   * posix has the same two members in the same order
+   * (`rgw_sal_posix.h`) and an empty destructor, so it has the same
+   * latent crash;  that line is rgw-standalone's and is noted rather
+   * than changed here. */
+  virtual ~NSFSDriver() {
+    multipart_cache.reset();
 
   void set_context(CephContext *_cct) {
     cct = _cct;
@@ -493,6 +579,10 @@ public:
   }
 
   bool have_fsio() const override { return true; }
+
+  void init_strategies(const DoutPrefixProvider* dpp,
+		       std::optional<bool> shares_extents = std::nullopt);
+
 
   virtual int initialize(CephContext *cct, const DoutPrefixProvider *dpp);
   virtual const std::string get_name() const override { return "nsfs"; }
@@ -816,6 +906,25 @@ public:
 		  std::map<std::string, std::string>* out = nullptr) override;
 
   bool fork_race_injected() const { return inject_fork_race; }
+  int64_t stored_size_delta_injected(const std::string& upload) {
+    std::lock_guard l{inject_delta_lock};
+    auto it = inject_delta_by_upload.find(upload);
+    return it == inject_delta_by_upload.end() ? 0 : it->second;
+  }
+  /* how many parts have been moved out of a shared staging file
+   * because they would have crossed their extent.  Reported by the
+   * mpu-state hint:  a divert is correct behaviour and leaves no trace
+   * a test can see otherwise, since the object it produces is right. */
+  void record_mpu_divert() { ++mpu_diverts; }
+  uint64_t mpu_diverts_seen() const { return mpu_diverts.load(); }
+  void set_stored_size_delta(const std::string& upload, int64_t bytes) {
+    std::lock_guard l{inject_delta_lock};
+    if (bytes == 0) {
+      inject_delta_by_upload.erase(upload);
+    } else {
+      inject_delta_by_upload[upload] = bytes;
+    }
+  }
   bool skip_reclone_injected() const { return inject_skip_reclone; }
   int rename_fail_after_injected() const { return inject_rename_fail_after; }
   int rename_abandon_injected() const { return inject_rename_abandon; }
@@ -832,6 +941,55 @@ public:
   nsfs::MultipartCache* get_multipart_cache() { return multipart_cache.get(); }
   UserCache& get_user_cache() { return user_cache; }
   nsfs::FSStrategy* get_fs_strategy() { return fs_strategy.get(); }
+  nsfs::MPUStrategy* get_mpu_strategy() { return mpu_strategy.get(); }
+  nsfs::XattrStrategy* get_xattr_strategy() { return xattr_strategy.get(); }
+  nsfs::PathStrategy* get_path_strategy() { return path_strategy.get(); }
+  }
+  const nsfs::ReservedNames& get_reserved_names() const { return reserved_names; }
+
+  /* The profile an extension set selects, or nullptr for a bucket this
+   * build cannot serve -- rejected rather than guessed.  Base is not
+   * reachable from here:  it is the absence of the attribute, and
+   * load_bucket resolves it without asking.
+   *
+   * The profile objects differ only in which strategies they point
+   * at, and today all of them point at the same ones.  When S5 makes them
+   * differ, a bucket carrying a *subset* of the known bits will need to
+   * carry its own mask rather than borrow the profile's;  the profile
+   * selects implementations, the mask says what the bucket has. */
+  const nsfs::BucketProfile* resolve_profile(uint32_t extensions) const {
+    if (extensions & ~nsfs::EXTENSIONS_KNOWN) {
+      return nullptr;
+    }
+    /* An attribute holding zero names no profile.  Base is the absence
+     * of the attribute, and nothing we write produces an empty mask, so
+     * a zero here is a tree somebody edited or a truncated write. */
+    if (extensions == nsfs::EXTENSIONS_NONE) {
+      return nullptr;
+    }
+    /* Anything adding structure is strong.  A mask holding only
+     * EXT_RGW_META changes attribute names and packing and adds no file,
+     * which is what shared is. */
+    if (extensions & ~nsfs::EXT_RGW_META) {
+      return &extended_profile;
+    }
+    return &shared_profile;
+  }
+  const nsfs::BucketProfile* get_base_profile() const { return &base_profile; }
+
+  uint32_t new_bucket_extensions() {
+    auto ext = nsfs::extensions_for_profile(
+      ctx()->_conf.get_val<std::string>("rgw_nsfs_bucket_profile"));
+    return (ext && (*ext != nsfs::EXTENSIONS_BASE)) ? *ext
+						      : nsfs::EXTENSIONS_SHARED;
+  }
+
+  /* Write the marker onto an existing bucket directory.  Idempotent for a
+   * bucket already at this version. */
+  /* Set a named bucket's profile, and report what it was so a caller
+   * can tell a change from a no-op. */
+
+  /* Read it without changing it. */
 
   /* called by nsfs::BucketCache layer when a new object is discovered
    * by inotify or similar */
@@ -926,6 +1084,8 @@ private:
   RGWAccessControlPolicy acls;
   std::optional<std::string> ns{std::nullopt};
   std::unique_ptr<nsfs::Directory> dir;
+  /* resolved from the extensions marker;  null until it has been read */
+  const nsfs::BucketProfile* profile{nullptr};
 
 public:
   /* every nsfs bucket serves the positional view */
@@ -959,7 +1119,8 @@ public:
     StoreBucket(_b),
     driver(_b.driver),
     acls(_b.acls),
-    ns(_b.ns)
+    ns(_b.ns),
+    profile(_b.profile)
     {
       dir = _b.dir->clone_dir();
     }
@@ -983,7 +1144,39 @@ public:
 		     optional_yield y,
 		     const rgw_owner& authenticated_user) override;
   virtual int load_bucket(const DoutPrefixProvider* dpp, optional_yield y) override;
+
+  /* Read the extensions marker and resolve it, if that has not happened
+   * already.  Returns -ENOTSUP for a marker this build does not
+   * implement:  a bucket written by a newer gateway is rejected, not
+   * served on the assumption that its additions are ignorable. */
+  int resolve_profile(const DoutPrefixProvider* dpp);
+  const nsfs::BucketProfile* get_profile() const { return profile; }
+
+  /* Whether this bucket carries the nsfs extensions at all -- shared or
+   * strong, not base.  Unresolved reads as base, which is the safe
+   * direction:  the interlocks reject. */
+  bool extended() const { return profile && profile->extended(); }
+
+  /* Whether it carries one particular extension.  What an interlock
+   * guarding a single structure should ask:  extended() is true for
+   * shared, which has the nsfs attribute names and none of the structures. */
+  bool has_extension(uint32_t ext) const {
+    return profile && profile->has(ext);
+  }
+
   bool have_fsio() const override { return has_extension(nsfs::EXT_SHADOW); }
+
+  const char* profile_name() const {
+    return profile ? profile->name() : "unresolved";
+  }
+
+
+
+
+  /* Write the extensions attribute.  Reached through set_profile(),
+   * and directly at creation. */
+  int mark_extensions(const DoutPrefixProvider* dpp, uint32_t version);
+
   virtual RGWAccessControlPolicy& get_acl(void) override { return acls; }
   virtual int set_acl(const DoutPrefixProvider* dpp, RGWAccessControlPolicy& acl,
 		      optional_yield y) override;
@@ -1161,6 +1354,9 @@ public:
   FSIOResult get_fsio_handle(const DoutPrefixProvider* dpp,
 			     uint32_t flags = FSIOObject::OPEN_FLAG_NONE,
 			     const FSIOCreateSpec* spec = nullptr) override;
+
+  /* whether this object's bucket carries the extensions FSIO needs */
+  int fsio_allowed(const DoutPrefixProvider* dpp);
 
   int stat_fsio_view(const DoutPrefixProvider* dpp, struct stat* st,
 		     Attrs* attrs, uint32_t flags) override;
@@ -1491,6 +1687,16 @@ public:
 			  const rgw_owner& authenticated_user) override;
 
   NSFSBucket* get_shadow() { return shadow.get(); }
+
+  /* the stride this upload runs at, or nothing;  see the definition.
+   * Public because the driver-hint read-back asks it:  whether an
+   * upload established a stride is the one fact a test cannot see
+   * through S3, and it is what makes the establishment conditions
+   * assertable in both polarities. */
+  std::optional<uint64_t> established_stride(const DoutPrefixProvider* dpp,
+					     optional_yield y);
+  int load_for_hint(const DoutPrefixProvider* dpp) { return load(dpp); }
+
 private:
   std::string get_fname();
   int load(const DoutPrefixProvider *dpp, bool create=false);
@@ -1548,8 +1754,58 @@ private:
   const ACLOwner& owner;
   const rgw_placement_rule *ptail_placement_rule;
   uint64_t part_num;
+  /* where this part's bytes begin in the file it is written to.  Zero
+   * for a layout giving each part its own file;  MPUStrategy decides
+   * (see part_target()). */
+  uint64_t base_offset;
+  /* bytes stored for this part, counted as they are written.
+   *
+   * NOT accounted_size, which complete() is handed:  that is the
+   * pre-filter length the client sent, which is what ListParts must
+   * report and what quota bills.  Compression and AEAD sit between the
+   * op layer and this writer, so the two differ whenever one of them is
+   * active, and only the stored count can place a part. */
+  uint64_t high_water{0};
+  /* does base_offset point into a file other parts also write?  From
+   * MPUStrategy::part_target;  recorded so assembly knows where to read
+   * this part from. */
+  bool shared_target{false};
+  /* how much this part may write at base_offset before it would run
+   * into the next part's region.  Unset where the part has a file to
+   * itself and nothing bounds it. */
+  std::optional<uint64_t> extent;
+  /* set once this part has been moved out of the shared file */
+  bool diverted{false};
+
+  /* Move this part out of the shared file and into its own.
+   *
+   * Called when a write would cross the extent.  S3 does not require
+   * parts to be equal -- only that every part but the last reaches a
+   * minimum -- so a part longer than the stride is legal, and the
+   * stride is an inference from part 1 with nothing behind it.
+   * Writing past the extent would land in part K+1's region, and the
+   * damage is invisible afterwards:  each record still describes where
+   * its part was meant to go. */
+  int divert(uint64_t written);
+  /* the upload this part belongs to, as the client knows it.  The
+   * injection map is keyed by this rather than by the internal meta,
+   * so a test can arm exactly the upload it created. */
+  std::string upload_id;
   std::unique_ptr<nsfs::Directory> upload_dir;
+  /* the part's RECORD -- part-NNNNN -- which carries its attributes.
+   * Always this file, whatever the layout, because complete() writes
+   * the record and only process() writes bytes. */
   std::unique_ptr<nsfs::File> part_file;
+  /* the file the BYTES go to, when that is not the record.  Null in the
+   * one-file-per-part layout, where the two coincide;  the shared data
+   * file otherwise, in which case the record file stays empty and its
+   * size means nothing. */
+  std::unique_ptr<nsfs::File> shared_file;
+
+  /* where this part's bytes are written */
+  nsfs::File* data_file() {
+    return shared_file ? shared_file.get() : part_file.get();
+  }
   file::listing::MultipartCacheKey mp_cache_key;
   QD2PendingWrite pending_write;
   optional_yield yield;
@@ -1571,9 +1827,19 @@ public:
     ptail_placement_rule(_ptail_placement_rule),
     part_num(_part_num),
     upload_dir(_shadow_bucket->get_dir()->clone()),
-    part_file(std::make_unique<nsfs::File>(nsfs::get_key_fname(_key, false), upload_dir.get(), _driver->ctx())),
-    mp_cache_key(std::move(_mp_cache_key)), yield(y) { upload_dir->open(dpp); }
-
+    part_file(std::make_unique<nsfs::File>(
+		_driver->get_path_strategy()->object_name(_key, false),
+		upload_dir.get(), _driver->ctx())),
+    mp_cache_key(std::move(_mp_cache_key)),
+    yield(y)
+  {
+    upload_dir->open(dpp);
+    if (!_shared_name.empty()) {
+      shared_file = std::make_unique<nsfs::File>(_shared_name,
+						 upload_dir.get(),
+						 _driver->ctx());
+    }
+  }
   virtual ~NSFSMultipartWriter() = default;
 
   virtual int prepare(optional_yield y) override;

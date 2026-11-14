@@ -1992,10 +1992,10 @@ do_rgw_create_users()
     s3_akey='0555b35654ad1656d804'
     s3_skey='h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q=='
     debug echo "setting up user testid"
-    $CEPH_BIN/radosgw-admin user create --uid testid --access-key $s3_akey --secret $s3_skey --display-name 'M. Tester' --email tester@ceph.com -c $conf_fn > /dev/null
     # info=read reaches GET /admin/info and GET /admin/nsfs, which report
     # what the deployment is -- a suite can then read its own expectations
     # off the cluster instead of being told by its invocation
+    $CEPH_BIN/radosgw-admin user create --uid testid --access-key $s3_akey --secret $s3_skey --display-name 'M. Tester' --email tester@ceph.com --caps="info=read;driver-hint=*;nsfs=*" -c $conf_fn > /dev/null
 
     # Create S3-test users
     # See: https://github.com/ceph/s3-tests
@@ -2006,7 +2006,7 @@ do_rgw_create_users()
         --access-key ABCDEFGHIJKLMNOPQRST \
         --secret abcdefghijklmnopqrstuvwxyzabcdefghijklmn \
         --display-name youruseridhere \
-        --email s3@example.com --caps="roles=*;user-policy=*;oidc-provider=*;users=*;buckets=*" -c $conf_fn > /dev/null
+        --email s3@example.com --caps="roles=*;user-policy=*;oidc-provider=*;users=*;buckets=*;info=read;driver-hint=*;nsfs=*" -c $conf_fn > /dev/null
     $CEPH_BIN/radosgw-admin user create \
         --uid 56789abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234 \
         --access-key NOPQRSTUVWXYZABCDEFG \
