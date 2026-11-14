@@ -328,3 +328,40 @@ TEST_F(TestSSEKMS, TestingBackendDifferentKeyselSameKeyIdDoNotCollide) {
   ASSERT_EQ(0, get_actual_key_from_conf(&no_dpp, "foo", gen_rand_alphanumeric(cct, AES_256_KEYSIZE), out_b));
   ASSERT_NE(out_a, out_b);
 }
+
+
+TEST(TestSSEKMSKeyScope, disabled_by_default_allows_anything)
+{
+  std::string err;
+  ASSERT_EQ(rgw_crypt_sse_kms_key_scope_check("none", ":", "tenantA", "some-uuid", &err), 0);
+  ASSERT_EQ(rgw_crypt_sse_kms_key_scope_check("", ":", "tenantA", "some-uuid", &err), 0);
+  ASSERT_EQ(rgw_crypt_sse_kms_key_scope_check("bogus", ":", "tenantA", "some-uuid", &err), 0);
+}
+
+TEST(TestSSEKMSKeyScope, matching_prefix_is_allowed)
+{
+  std::string err;
+  ASSERT_EQ(rgw_crypt_sse_kms_key_scope_check("tenant", ":", "tenantA", "tenantA:some-uuid", &err), 0);
+  ASSERT_EQ(rgw_crypt_sse_kms_key_scope_check("owner", ":", "tenantA$userX", "tenantA$userX:some-uuid", &err), 0);
+}
+
+TEST(TestSSEKMSKeyScope, mismatched_prefix_is_denied)
+{
+  std::string err;
+  ASSERT_EQ(rgw_crypt_sse_kms_key_scope_check("tenant", ":", "tenantA", "tenantB:some-uuid", &err), -EACCES);
+  ASSERT_FALSE(err.empty());
+}
+
+TEST(TestSSEKMSKeyScope, missing_separator_is_denied)
+{
+  std::string err;
+  // fail closed: a key id with no owner prefix at all must not be usable
+  // once scoping is turned on, even though it would have been fine before.
+  ASSERT_EQ(rgw_crypt_sse_kms_key_scope_check("tenant", ":", "tenantA", "some-uuid-with-no-colon", &err), -EACCES);
+}
+
+TEST(TestSSEKMSKeyScope, empty_expected_owner_is_denied)
+{
+  std::string err;
+  ASSERT_EQ(rgw_crypt_sse_kms_key_scope_check("owner", ":", "", "some-uuid", &err), -EACCES);
+}
