@@ -2005,6 +2005,7 @@ std::vector<std::string> BlueStore::get_tracked_keys() const noexcept
     "bluestore_deferred_batch_ops_ssd"s,
     "bluestore_throttle_bytes"s,
     "bluestore_throttle_deferred_bytes"s,
+    "bluestore_throttle_trace_rate"s,
     "bluestore_throttle_cost_per_io_hdd"s,
     "bluestore_throttle_cost_per_io_ssd"s,
     "bluestore_throttle_cost_per_io"s,
