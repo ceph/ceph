@@ -2062,6 +2062,83 @@ class TestCephadm(object):
             assert 'Failed to apply 1 service(s)' in cephadm_module.health_checks[
                 'CEPHADM_APPLY_SPEC_FAIL']['summary']
 
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    @mock.patch('cephadm.services.osd.OSDService.create_single_host')
+    @mock.patch('cephadm.services.osd.OSDService.driveselection_to_ceph_volume')
+    @mock.patch('cephadm.services.osd.OsdIdClaims.refresh', lambda _: None)
+    @mock.patch('cephadm.services.osd.OsdIdClaims.get', lambda _: {})
+    @mock.patch('cephadm.inventory.HostCache.osdspec_needs_apply', lambda *_: True)
+    @pytest.mark.parametrize('failing_hosts', [['host2'], ['host1', 'host2']])
+    def test_apply_osd_spec_fail_health_warning(self, d_to_cv, create_single_host,
+                                                _run_cephadm, failing_hosts,
+                                                cephadm_module: CephadmOrchestrator):
+        # A failure on any host while applying an OSD spec must be surfaced
+        # as CEPHADM_APPLY_SPEC_FAIL, while hosts that succeeded still record
+        # their last-applied timestamp.
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+        d_to_cv.return_value = ['lvm batch --no-auto /dev/sdb']
+        failing_hosts = list(failing_hosts)
+
+        async def _create_single_host(drive_group, host, *args, **kwargs):
+            if host in failing_hosts:
+                raise RuntimeError(f'cephadm exited with an error code: 1, stderr: boom on {host}')
+            return f'Created osd(s) 0 on host \'{host}\''
+        create_single_host.side_effect = _create_single_host
+
+        all_hosts = ['host1', 'host2', 'host3']
+        with with_host(cephadm_module, 'host1'), \
+                with_host(cephadm_module, 'host2'), \
+                with_host(cephadm_module, 'host3'):
+            spec = DriveGroupSpec(service_id='foo',
+                                  placement=PlacementSpec(host_pattern='*'),
+                                  data_devices=DeviceSelection(all=True))
+            cephadm_module.spec_store.save(spec)
+
+            CephadmServe(cephadm_module)._apply_all_services()
+
+            # every host was attempted, even after a failure
+            assert sorted(c.args[1] for c in create_single_host.call_args_list) == all_hosts
+
+            hc = cephadm_module.health_checks.get('CEPHADM_APPLY_SPEC_FAIL')
+            assert hc is not None
+            assert hc['count'] == 1
+            assert 'Failed to apply 1 service(s): osd.foo' in hc['summary']
+            detail = '\n'.join(hc['detail'])
+            assert 'osd.foo:' in detail
+            # the first failure is surfaced (with the original ceph-volume error)
+            assert any(f'boom on {h}' in detail for h in failing_hosts)
+
+            for h in all_hosts:
+                applied = cephadm_module.cache.osdspec_last_applied.get(h, {})
+                if h in failing_hosts:
+                    assert 'osd.foo' not in applied
+                else:
+                    assert 'osd.foo' in applied
+
+            # once the hosts recover, the warning is cleared on the next pass
+            failing_hosts.clear()
+            CephadmServe(cephadm_module)._apply_all_services()
+            assert cephadm_module.health_checks.get('CEPHADM_APPLY_SPEC_FAIL') is None
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    @mock.patch('cephadm.services.osd.OSDService.create_single_host')
+    @mock.patch('cephadm.services.osd.OSDService.driveselection_to_ceph_volume')
+    @mock.patch('cephadm.services.osd.OsdIdClaims.refresh', lambda _: None)
+    @mock.patch('cephadm.services.osd.OsdIdClaims.get', lambda _: {})
+    def test_daemon_add_osd_reports_failure(self, d_to_cv, create_single_host, cephadm_module):
+        # 'ceph orch daemon add osd' must not report success when ceph-volume
+        # refused the device.
+        d_to_cv.return_value = ['lvm batch --no-auto /dev/sdb']
+        create_single_host.side_effect = RuntimeError(
+            'cephadm exited with an error code: 1, stderr: device /dev/sdb is unavailable')
+        with with_host(cephadm_module, 'test'):
+            dg = DriveGroupSpec(placement=PlacementSpec(host_pattern='test'),
+                                data_devices=DeviceSelection(paths=['/dev/sdb']))
+            # handle_orch_error re-raises under UNITTEST; in production the
+            # exception is returned in the OrchResult and the CLI exits non-zero.
+            with pytest.raises(RuntimeError, match='device /dev/sdb is unavailable'):
+                wait(cephadm_module, cephadm_module.create_osds(dg))
+
     @mock.patch("cephadm.module.CephadmOrchestrator.get_foreign_ceph_option")
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
     @mock.patch("cephadm.module.HostCache.save_host_devices")
