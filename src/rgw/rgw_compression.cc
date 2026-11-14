@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include "rgw_compression.h"
+#include "common/ceph_json.h"
 #include "rgw_range_projection.h"
 
 #define dout_subsys ceph_subsys_rgw

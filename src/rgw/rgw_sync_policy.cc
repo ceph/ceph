@@ -2,6 +2,7 @@
 
 #include "rgw_common.h"
 #include "rgw_sync_policy.h"
+#include "common/ceph_json.h"
 #include "rgw_bucket.h"
 
 #define dout_subsys ceph_subsys_rgw

@@ -4,6 +4,7 @@
 #pragma once
 
 #include "cls/rgw/cls_rgw_types.h"
+#include "common/ceph_json.h"
 #include "include/rados/librados_fwd.hpp"
 
 struct rgw_cls_tag_timeout_op

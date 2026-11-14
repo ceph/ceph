@@ -3,6 +3,7 @@
 
 //
 #include "rgw_object_lock.h"
+#include "common/ceph_json.h"
 
 using namespace std;
 
