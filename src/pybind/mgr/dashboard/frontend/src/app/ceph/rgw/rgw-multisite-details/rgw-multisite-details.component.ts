@@ -345,6 +345,30 @@ export class RgwMultisiteDetailsComponent extends CdForm implements OnDestroy, O
     this.realms = multisiteInfo[0]['realms'];
     this.zonegroups = multisiteInfo[1]['zonegroups'];
     this.zones = multisiteInfo[2]['zones'];
+    type RgwEntity = RgwRealm | RgwZonegroup | RgwZone;
+    const allEntities = new Map<string, RgwEntity>([
+      ...this.realms.map((r: RgwRealm): [string, RgwEntity] => [r.id, r]),
+      ...this.zonegroups.map((zg: RgwZonegroup): [string, RgwEntity] => [zg.id, zg]),
+      ...this.zones.map((z: RgwZone): [string, RgwEntity] => [z.id, z])
+    ]);
+    if (this.activeNodeId) {
+      const knownEntity = allEntities.get(this.activeNodeId);
+      if (!knownEntity) {
+        this.metadata = undefined;
+        this.metadataTitle = undefined;
+        this.activeNodeId = undefined;
+      } else {
+        // For zones that belong to a zonegroup, use the entry from the zonegroup's "zones" list
+        const zonegroupZone = this.zonegroups
+          .flatMap((zg: RgwZonegroup) => zg.zones || [])
+          .find((z: RgwZone) => z.id === this.activeNodeId);
+        const activeEntity = zonegroupZone || knownEntity;
+        this.metadataTitle = activeEntity.name;
+        if (!_.isEqual(this.metadata, activeEntity)) {
+          this.metadata = activeEntity;
+        }
+      }
+    }
     this.defaultRealmId = multisiteInfo[0]['default_realm'];
     this.defaultZonegroupId = multisiteInfo[1]['default_zonegroup'];
     this.defaultZoneId = multisiteInfo[2]['default_zone'];
