@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <fmt/format.h>
 
+#include "common/dout_fmt.h"
 #include "common/random_string.h"
 #include "common/utf8.h"
 
