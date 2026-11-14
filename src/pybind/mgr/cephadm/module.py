@@ -56,7 +56,7 @@ from ceph.deployment.service_spec import (
 from ceph.deployment.drive_group import DeviceSelection
 from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
 from ceph.cryptotools.select import choose_crypto_caller
-from cephadm.serve import CephadmServe
+from cephadm.serve import CephadmServe, _ceph_service_next_action
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, DaemonDeployContext
 from cephadm.http_server import CephadmHttpServer
 from cephadm.agent import CephadmAgentHelpers
@@ -4702,11 +4702,63 @@ Then run the following:
         ha.validate()
         hosts, to_add, to_remove = ha.place()
 
+        to_reconfig: List[str] = []
+        to_redeploy: List[str] = []
+
+        if not spec.unmanaged:
+            staying_hostnames = {h.hostname for h in hosts}
+            remove_names = {d.name() for d in to_remove}
+            current_daemons = self.cache.get_daemons_by_service(spec.service_name())
+            for daemon in current_daemons:
+                if daemon.hostname not in staying_hostnames or daemon.name() in remove_names:
+                    continue
+
+                last_deps, last_config = self.cache.get_daemon_last_config_deps(
+                    daemon.hostname, daemon.name())
+
+                if not last_config:
+                    to_reconfig.append(daemon.name())
+                    continue
+
+                if (hasattr(spec, 'extra_container_args')
+                        and daemon.extra_container_args != spec.extra_container_args):
+                    to_redeploy.append(daemon.name())
+                    continue
+
+                if (hasattr(spec, 'extra_entrypoint_args')
+                        and daemon.extra_entrypoint_args != spec.extra_entrypoint_args):
+                    to_redeploy.append(daemon.name())
+                    continue
+
+                curr_deps = svc.sorted_dependencies(self, spec, daemon.daemon_type)
+                effective_last_deps = last_deps if last_deps is not None else []
+                _step = svc.choose_next_action(
+                    utils.Action.NO_ACTION,
+                    daemon.daemon_type,
+                    spec,
+                    curr_deps=curr_deps,
+                    last_deps=effective_last_deps,
+                    daemon=daemon,
+                )
+                if _step.action == utils.Action.REDEPLOY:
+                    to_redeploy.append(daemon.name())
+                    continue
+                if _step.action == utils.Action.RECONFIG:
+                    to_reconfig.append(daemon.name())
+                    continue
+
+                if _ceph_service_next_action(
+                        None, daemon.daemon_type, daemon.name(), self, last_config, dry_run=True) == 'reconfig':
+                    to_reconfig.append(daemon.name())
+                    continue
+
         return {
             'service_name': spec.service_name(),
             'service_type': spec.service_type,
             'add': [f'{spec.service_name()}.{hs.hostname}' for hs in to_add],
-            'remove': [d.name() for d in to_remove]
+            'remove': [d.name() for d in to_remove],
+            'reconfig': to_reconfig,
+            'redeploy': to_redeploy
         }
 
     @handle_orch_error
