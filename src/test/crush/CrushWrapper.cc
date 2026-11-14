@@ -1249,6 +1249,70 @@ TEST_F(CrushWrapperTest, trim_roots_with_class) {
   ASSERT_FALSE(c.name_exists("default~ssd"));
 }
 
+TEST_F(CrushWrapperTest, device_class_clone_empty_weight_set) {
+  // a straw2 bucket with no weight set gets a shadow with no weight set,
+  // not one that is empty but not NULL
+  CrushWrapper c;
+  c.create();
+  c.set_type_name(0, "osd");
+  c.set_type_name(1, "host");
+  c.set_type_name(2, "root");
+  // a straw (v1) root, as older maps have
+  int root;
+  ASSERT_EQ(0, c.add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_DEFAULT, 2, 0,
+			    NULL, NULL, &root));
+  c.set_item_name(root, "default");
+  c.set_max_devices(6);
+  for (int i = 0; i < 6; ++i) {
+    map<string,string> loc = {{"host", "host" + stringify(i / 2)},
+			      {"root", "default"}};
+    ASSERT_EQ(0, c.insert_item(cct, i, 1, "osd." + stringify(i), loc));
+    ostringstream ss;
+    ASSERT_LE(0, c.update_device_class(i, "hdd", "osd." + stringify(i), &ss))
+      << ss.str();
+  }
+  ostringstream err;
+  int rule = c.add_simple_rule("hdd_by_host", "default", "host", "hdd",
+			       "firstn", pg_pool_t::TYPE_REPLICATED, &err);
+  ASSERT_LE(0, rule) << err.str();
+  // a compat weight set leaves the straw root out
+  ASSERT_TRUE(c.create_choose_args(CrushWrapper::DEFAULT_CHOOSE_ARGS, 1));
+  // then convert straw buckets to straw2, as
+  // osd crush set-all-straw-buckets-to-straw2 does
+  for (int b = 0; b < c.get_max_buckets(); ++b) {
+    int bid = -1 - b;
+    if (c.bucket_exists(bid) && c.get_bucket_alg(bid) == CRUSH_BUCKET_STRAW) {
+      ASSERT_EQ(0, c.bucket_set_alg(bid, CRUSH_BUCKET_STRAW2));
+    }
+  }
+  ASSERT_EQ(0, c.rebuild_roots_with_classes(cct));
+  c.finalize();
+
+  auto cmap = c.choose_args_get(CrushWrapper::DEFAULT_CHOOSE_ARGS);
+  const crush_choose_arg& ra = cmap.args[-1 - root];
+  ASSERT_EQ(0u, ra.weight_set_positions);
+  ASSERT_EQ(nullptr, ra.weight_set);
+  int shadow = c.get_item_id("default~hdd");
+  ASSERT_TRUE(c.bucket_exists(shadow));
+  ASSERT_EQ(CRUSH_BUCKET_STRAW2, c.get_bucket_alg(shadow));
+  const crush_choose_arg& sa = cmap.args[-1 - shadow];
+  ASSERT_EQ(0u, sa.weight_set_positions);
+  ASSERT_EQ(nullptr, sa.weight_set);
+
+  // every input maps to three OSDs on three hosts
+  vector<__u32> weight(c.get_max_devices(), 0x10000);
+  for (int x = 0; x < 1024; ++x) {
+    vector<int> out;
+    c.do_rule(rule, x, out, 3, weight, 1);
+    ASSERT_EQ(3u, out.size()) << "x " << x;
+    set<int> hosts;
+    for (int o : out) {
+      hosts.insert(o / 2);
+    }
+    ASSERT_EQ(3u, hosts.size()) << "x " << x;
+  }
+}
+
 TEST_F(CrushWrapperTest, device_class_clone) {
   CrushWrapper c;
   c.create();

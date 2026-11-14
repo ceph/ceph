@@ -3254,8 +3254,10 @@ int CrushWrapper::device_class_clone(
     auto& n = cmap.args[-1-bno];
     n.ids_size = 0; // FIXME: implement me someday
     n.weight_set_positions = o.weight_set_positions;
-    n.weight_set = static_cast<crush_weight_set*>(calloc(
-      n.weight_set_positions, sizeof(crush_weight_set)));
+    // CRUSH uses any weight set that is not NULL, even one with no positions
+    n.weight_set = n.weight_set_positions == 0 ? nullptr :
+      static_cast<crush_weight_set*>(calloc(
+	n.weight_set_positions, sizeof(crush_weight_set)));
     for (size_t s = 0; s < n.weight_set_positions; ++s) {
       n.weight_set[s].size = copy->size;
       n.weight_set[s].weights = (__u32*)calloc(copy->size, sizeof(__u32));
