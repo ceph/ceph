@@ -127,15 +127,17 @@ MESSAGE
       e.m_prio,
       e.m_thread);
 
-    uint64_t msg_len = boost::endian::native_to_little<uint64_t>(e.size());
+    const auto str = e.strv();
+
+    uint64_t msg_len = boost::endian::native_to_little<uint64_t>(str.size());
     meta_buf.resize(meta_buf.size() + sizeof(msg_len));
     memcpy(meta_buf.end() - sizeof(msg_len), &msg_len, sizeof(msg_len));
 
     meta_vec().iov_base = meta_buf.data();
     meta_vec().iov_len = meta_buf.size();
 
-    msg_vec().iov_base = (void *)e.strv().data();
-    msg_vec().iov_len = e.size();
+    msg_vec().iov_base = (void *)str.data();
+    msg_vec().iov_len = str.size();
   }
 };
 
