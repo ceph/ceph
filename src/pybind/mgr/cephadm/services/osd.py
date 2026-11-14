@@ -32,6 +32,20 @@ logger = logging.getLogger(__name__)
 class OSDService(CephService):
     TYPE = 'osd'
 
+    @staticmethod
+    def unsatisfied_roles_msg(drive_group: DriveGroupSpec, host: str,
+                              roles: List[str]) -> str:
+        roles_str = ' and '.join(roles)
+        if drive_group.allow_collocated_fallback:
+            return (f'{drive_group.service_name()}: {roles_str} defined but no device '
+                    f'selected on host {host}; deploying OSDs with DB/WAL collocated on '
+                    'the data devices (allow_collocated_fallback is set)')
+        return (f'{drive_group.service_name()}: not deploying OSDs on host {host}: '
+                f'{roles_str} defined but no device selected, OSDs would be created '
+                'without dedicated DB/WAL. Check the device filters and availability '
+                '(ceph orch device ls), or set allow_collocated_fallback: true in the '
+                'spec to deploy them anyway')
+
     def validate_encryption(self, spec: DriveGroupSpec) -> None:
         if spec.method == 'raw' and spec.encrypted and not spec.tpm2:
             raise OrchestratorError(
@@ -117,6 +131,22 @@ class OSDService(CephService):
             # skip this host if we cannot schedule here
             if self.mgr.inventory.has_label(host, SpecialHostLabels.DRAIN_DAEMONS):
                 return None
+
+            unsatisfied_roles = drive_selection.unsatisfied_roles()
+            if unsatisfied_roles:
+                msg = self.unsatisfied_roles_msg(drive_group, host, unsatisfied_roles)
+                self.mgr.log.warning(msg)
+                if not drive_group.allow_collocated_fallback:
+                    self.mgr.events.for_service(drive_group, 'ERROR', msg)
+                    # Record the attempt so that we only re-evaluate once the
+                    # inventory of this host or the spec changes, instead of
+                    # warning again on every serve loop.
+                    self.mgr.cache.update_osdspec_last_applied(
+                        host, drive_group.service_name(), datetime_now()
+                    )
+                    self.mgr.cache.save_host(host)
+                    return None
+                self.mgr.events.for_service(drive_group, 'INFO', msg)
 
             osd_id_claims_for_host = osd_id_claims.filtered_by_host(host)
 
@@ -395,6 +425,18 @@ class OSDService(CephService):
                 if host != for_host:
                     continue
 
+                notes = []
+                unsatisfied_roles = ds.unsatisfied_roles()
+                if unsatisfied_roles:
+                    notes.append('NOTE: ' + self.unsatisfied_roles_msg(osdspec, host,
+                                                                       unsatisfied_roles))
+                    if not osdspec.allow_collocated_fallback:
+                        ret_all.append({'data': [],
+                                        'osdspec': osdspec.service_id,
+                                        'host': host,
+                                        'notes': notes})
+                        continue
+
                 # driveselection for host
                 cmds: List[str] = self.driveselection_to_ceph_volume(ds,
                                                                      osd_id_claims.filtered_by_host(
@@ -415,7 +457,7 @@ class OSDService(CephService):
                         except ValueError:
                             logger.exception('Cannot decode JSON: \'%s\'' % ' '.join(out))
                             concat_out = {}
-                        notes = []
+                        cmd_notes = list(notes)
                         if (
                             osdspec.data_devices is not None
                             and osdspec.data_devices.limit
@@ -423,13 +465,13 @@ class OSDService(CephService):
                         ):
                             found = len(concat_out)
                             limit = osdspec.data_devices.limit
-                            notes.append(
+                            cmd_notes.append(
                                 f'NOTE: Did not find enough disks matching filter on host {host} to reach data device limit\n'
                                 f'(New Devices: {found} | Existing Matching Daemons: {ds.existing_daemons} | Limit: {limit})')
                         ret_all.append({'data': concat_out,
                                         'osdspec': osdspec.service_id,
                                         'host': host,
-                                        'notes': notes})
+                                        'notes': cmd_notes})
         return ret_all
 
     def resolve_hosts_for_osdspecs(self,

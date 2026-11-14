@@ -1226,6 +1226,49 @@ via the ``paths`` keyword with the following syntax:
         - /dev/sde
 
 
+.. _cephadm-osd-unsatisfied-db-wal:
+
+When ``db_devices`` or ``wal_devices`` Selects No Device
+--------------------------------------------------------
+
+If an OSD spec defines ``db_devices`` or ``wal_devices`` but the filter does
+not select any device on a host, for example because of a typo in a ``model``
+filter, a ``size`` filter that does not match, or because the fast device is
+unavailable (not zapped, used by another OSD spec, being replaced), cephadm
+does not deploy new OSDs from this spec on that host. Without this check, the
+OSDs would be created without the dedicated DB/WAL that the spec asks for,
+with DB/WAL collocated on the data devices.
+
+The condition is reported as a service event, visible with ``ceph orch ls
+osd --format yaml``, and in the cephadm log (``ceph log last cephadm``).
+``ceph orch apply --dry-run`` reports it as well. Other hosts that match the
+spec are not affected.
+
+Once the device filter or the fast device has been fixed, cephadm deploys the
+OSDs on the next refresh of the host inventory or the next update of the spec.
+
+To deploy the OSDs anyway, with DB/WAL collocated on the data devices, set
+``allow_collocated_fallback`` in the spec:
+
+.. code-block:: yaml
+
+    service_type: osd
+    service_id: hdd_with_ssd_db
+    placement:
+      host_pattern: '*'
+    spec:
+      data_devices:
+        rotational: 1
+      db_devices:
+        rotational: 0
+      allow_collocated_fallback: true
+
+.. note::
+
+    If ``block_db_size`` is also set, a fallback deployment uses the collocated
+    LV split described in :ref:`cephadm-osd-collocated-db`.
+
+
 .. _cephadm-osd-collocated-db:
 
 DB on the Same Device (Collocated LV Split)
