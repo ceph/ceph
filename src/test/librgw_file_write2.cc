@@ -409,7 +409,16 @@ static void load_fs_profile(const DoutPrefixProvider* dpp)
 }
 
 TEST(OPEN2, INIT) {
-  int ret = librgw_create(&rgw_h, saved_args.argc, saved_args.argv);
+  /* These tests write through FSIO, which nsfs refuses on a bucket that
+   * is not strong, and new nsfs buckets are shared by default.  The
+   * option is nsfs's and inert on other drivers.  Inserted before the
+   * last argument, which librgw_create() splits as the ceph args
+   * string. */
+  static char strong[] = "--rgw_nsfs_bucket_profile=strong";
+  static std::vector<char*> argv(saved_args.argv,
+				 saved_args.argv + saved_args.argc);
+  argv.insert((argv.size() > 1) ? (argv.end() - 1) : argv.end(), strong);
+  int ret = librgw_create(&rgw_h, argv.size(), argv.data());
   ASSERT_EQ(ret, 0);
   ASSERT_NE(rgw_h, nullptr);
 }

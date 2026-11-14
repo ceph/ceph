@@ -982,6 +982,7 @@ public:
 		     optional_yield y,
 		     const rgw_owner& authenticated_user) override;
   virtual int load_bucket(const DoutPrefixProvider* dpp, optional_yield y) override;
+  bool have_fsio() const override { return has_extension(nsfs::EXT_SHADOW); }
   virtual RGWAccessControlPolicy& get_acl(void) override { return acls; }
   virtual int set_acl(const DoutPrefixProvider* dpp, RGWAccessControlPolicy& acl,
 		      optional_yield y) override;

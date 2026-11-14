@@ -409,6 +409,25 @@ static int get_obj_policy_from_attr(const DoutPrefixProvider *dpp,
   bufferlist bl;
   int ret = 0;
 
+  /* The ACL read runs as the authenticated user, not as the daemon.
+   *
+   * A driver which serves requests under the caller's filesystem
+   * identity opens the object here, and that descriptor is the one
+   * the data read goes on to use -- POSIX decides access at open.
+   * Reading the attribute as the daemon would therefore hand the
+   * data path a descriptor that user could not have obtained.
+   *
+   * Empty where there is no authenticated user -- lifecycle,
+   * anonymous access -- and a driver treats that as "serve this as
+   * yourself", which is what it did for every caller before this
+   * parameter existed.
+   *
+   * It costs no extra open:  the alternative is to leave the
+   * daemon's descriptor in place and reopen on the data path.
+   *
+   * A user permitted by bucket policy but refused by the
+   * filesystem now fails here rather than at the data read.  Same
+   * status, same request, earlier. */
   std::unique_ptr<rgw::sal::Object::ReadOp> rop = obj->get_read_op(auth_user);
 
   ret = rop->prepare(y, dpp);
@@ -4581,7 +4600,18 @@ void RGWDeleteBucket::execute(optional_yield y)
 }
 
 int RGWPutObj::init_processing(optional_yield y) {
-  copy_source = url_decode(s->info.env->get("HTTP_X_AMZ_COPY_SOURCE", ""));
+  const std::string_view raw_copy_source =
+    s->info.env->get("HTTP_X_AMZ_COPY_SOURCE", "");
+  copy_source = url_decode(raw_copy_source);
+  /* url_decode() returns an empty string for a malformed percent
+   * sequence, which would read as no copy source and turn the request
+   * into an upload of its body */
+  if (!raw_copy_source.empty() && copy_source.empty()) {
+    s->err.message = "Invalid copy source encoding";
+    ldpp_dout(this, 5) << "x-amz-copy-source does not decode: "
+                       << raw_copy_source << dendl;
+    return -EINVAL;
+  }
   copy_source_range = s->info.env->get("HTTP_X_AMZ_COPY_SOURCE_RANGE");
   size_t pos;
   int ret;
@@ -6208,8 +6238,10 @@ void RGWDeleteObj::execute(optional_yield y)
       }
     }
 
-    // make reservation for notification if needed
-    const auto versioned_object = s->bucket->versioning_enabled();
+    // make reservation for notification if needed;  a delete naming no
+    // version makes a delete marker whether versioning is enabled or
+    // suspended
+    const auto versioned_object = s->bucket->versioned();
     const auto event_type = versioned_object &&
       s->object_key.instance.empty() ?
       rgw::notify::ObjectRemovedDeleteMarkerCreated :
@@ -8512,8 +8544,10 @@ void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object
     }
   }
 
-  // make reservation for notification if needed
-  const auto versioned_object = s->bucket->versioning_enabled();
+  // make reservation for notification if needed;  a delete naming no
+  // version makes a delete marker whether versioning is enabled or
+  // suspended
+  const auto versioned_object = s->bucket->versioned();
   const auto event_type = versioned_object && o.instance.empty() ?
                           rgw::notify::ObjectRemovedDeleteMarkerCreated :
                           rgw::notify::ObjectRemovedDelete;
@@ -10116,7 +10150,7 @@ void RGWGetObjRetention::execute(optional_yield y)
   rgw::sal::Attrs attrs = s->object->get_attrs();
   auto aiter = attrs.find(RGW_ATTR_OBJECT_RETENTION);
   if (aiter == attrs.end()) {
-    op_ret = -ERR_NO_SUCH_OBJECT_LOCK_CONFIGURATION;
+    op_ret = -ERR_NO_SUCH_OBJECT_RETENTION_OR_HOLD;
     return;
   }
 
@@ -10242,7 +10276,7 @@ void RGWGetObjLegalHold::execute(optional_yield y)
   }
   auto aiter = s->object->get_attrs().find(RGW_ATTR_OBJECT_LEGAL_HOLD);
   if (aiter == s->object->get_attrs().end()) {
-    op_ret = -ERR_NO_SUCH_OBJECT_LOCK_CONFIGURATION;
+    op_ret = -ERR_NO_SUCH_OBJECT_RETENTION_OR_HOLD;
     return;
   }
 
