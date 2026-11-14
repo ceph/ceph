@@ -13,6 +13,13 @@ log = logging.getLogger(__name__)
 
 _SIZE_RE = re.compile(r'^\s*(\d+)\s*([KMGTP]?)\s*([iI]?[bB])?\s*$')
 
+# The format written by datetime_to_str() (and by the cephadm binary, which
+# converts container runtime timestamps to it): '%Y-%m-%dT%H:%M:%S.%fZ'.
+_DATETIME_TO_STR_RE = re.compile(
+    r'([0-9]{4})-([0-9]{2})-([0-9]{2})'
+    r'T([0-9]{2}):([0-9]{2}):([0-9]{2})\.([0-9]{6})Z'
+)
+
 
 def datetime_now() -> datetime.datetime:
     """
@@ -51,6 +58,21 @@ def str_to_datetime(string: str) -> datetime.datetime:
     :raises: :exc:`~exceptions.ValueError` for an unknown
         datetime string.
     """
+    # Fast path for the format datetime_to_str() writes, which is nearly
+    # every timestamp the mgr parses: build the datetime directly instead
+    # of calling strptime() twice (the first format below never matches a
+    # 'Z' suffix), and each strptime() call takes a module-wide lock.
+    # Out-of-range values (e.g. Feb 30) fall through, so they raise the
+    # same error as before; every other string is handled as before.
+    m = _DATETIME_TO_STR_RE.fullmatch(string)
+    if m:
+        year, month, day, hour, minute, second, usec = map(int, m.groups())
+        try:
+            return datetime.datetime(year, month, day, hour, minute, second,
+                                     usec, tzinfo=datetime.timezone.utc)
+        except ValueError:
+            pass
+
     fmts = [
         '%Y-%m-%dT%H:%M:%S.%f',
         '%Y-%m-%dT%H:%M:%S.%f%z',
