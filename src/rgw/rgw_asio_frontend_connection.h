@@ -1,10 +1,14 @@
 #pragma once
 
+#include <atomic>
+#include <chrono>
+#include <memory>
 #include <mutex>
 
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/dispatch.hpp>
 #include <boost/asio/ip/tcp.hpp>
+#include <boost/asio/steady_timer.hpp>
 #include <boost/beast/core/flat_static_buffer.hpp>
 #include <boost/intrusive/list.hpp>
 #include <boost/smart_ptr/intrusive_ptr.hpp>
@@ -87,4 +91,36 @@ class ConnectionList {
     }
   }
 };
+
+/// Wait synchronously for an exclusive lock on the pause mutex. If outstanding
+/// requests still hold shared locks after the timeout, close all connections
+/// so they fail and release them. A zero timeout waits without a limit. Must
+/// not be called from a thread running the mutex's executor. Returns true if
+/// the timeout expired and connections were closed.
+template <typename SharedMutex>
+bool lock_or_close_on_timeout(SharedMutex& mutex, ConnectionList& connections,
+                              std::chrono::steady_clock::duration timeout,
+                              boost::system::error_code& ec)
+{
+  if (timeout <= timeout.zero()) {
+    mutex.lock(ec);
+    return false;
+  }
+  // the timer handler may run after we return, so it must not reference
+  // anything on this stack frame
+  auto claimed = std::make_shared<std::atomic<bool>>(false);
+  auto timer = std::make_shared<boost::asio::steady_timer>(
+      mutex.get_executor(), timeout);
+  timer->async_wait(
+      [timer, claimed, &connections] (boost::system::error_code e) {
+        if (!e && !claimed->exchange(true)) {
+          connections.close();
+        }
+      });
+  mutex.lock(ec);
+  const bool timed_out = claimed->exchange(true);
+  timer->cancel();
+  return timed_out;
+}
+
 } // namespace rgw::asio
