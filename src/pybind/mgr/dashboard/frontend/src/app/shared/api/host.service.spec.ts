@@ -107,4 +107,32 @@ describe('HostService', () => {
     req = httpTesting.expectOne('ui-api/host/inventory?refresh=true');
     expect(req.request.method).toBe('GET');
   });
+
+  describe('memory helpers', () => {
+    it('getTotalMemoryBytes converts kb to bytes', () => {
+      expect(service.getTotalMemoryBytes({ memory_total_kb: 1024 })).toBe(1048576);
+      expect(service.getTotalMemoryBytes({ memory_total_kb: '2048' })).toBe(2097152);
+    });
+
+    it('getTotalMemoryBytes returns undefined for missing values', () => {
+      expect(service.getTotalMemoryBytes({})).toBeUndefined();
+      expect(service.getTotalMemoryBytes({ memory_total_kb: 'n/a' })).toBeUndefined();
+      expect(service.getTotalMemoryBytes()).toBeUndefined();
+    });
+
+    it('getHostsTotalMemoryBytes sums raw bytes and skips invalid hosts', () => {
+      expect(
+        service.getHostsTotalMemoryBytes([
+          { memory_total_kb: 1024 },
+          { memory_total_kb: undefined },
+          { memory_total_kb: 2048 }
+        ])
+      ).toBe(1048576 + 2097152);
+    });
+
+    it('getHostsTotalMemoryBytes returns undefined when no host has memory', () => {
+      expect(service.getHostsTotalMemoryBytes([])).toBeUndefined();
+      expect(service.getHostsTotalMemoryBytes([{ memory_total_kb: 'bad' }])).toBeUndefined();
+    });
+  });
 });
