@@ -54,19 +54,50 @@ auto make_redis_connection(boost::asio::io_context& io)
   return std::make_shared<boost::redis::connection>(boost::asio::make_strand(io));
 }
 
-lfdb::database_handle create_fdb_database(CephContext *cct)
+// The process CephContext outlives its drivers and is torn down before static libraries.
+// Keep the non-restartable FDB runtime there, including when driver initialization fails.
+struct FDBRuntime final
 {
-  const std::filesystem::path cluster_file = cct->_conf.get_val<std::string>("rgw_d4n_fdb_cluster_file");
-  lfdb::network_options network_options;
-  if (auto trace_directory = cct->_conf.get_val<std::string>("rgw_d4n_fdb_trace_directory");
-      !trace_directory.empty()) {
-    network_options.emplace(FDB_NET_OPTION_TRACE_ENABLE, std::move(trace_directory));
-  }
-  if (cluster_file.empty()) {
-    return lfdb::create_database(lfdb::database_options {}, network_options);
-  }
-  return lfdb::create_database(lfdb::connection_source {cluster_file}, {}, network_options);
-}
+ NoDoutPrefix dpp;
+ std::filesystem::path cluster_file;
+ lfdb::network_options network_options;
+
+ public:
+ explicit FDBRuntime(CephContext *cct)
+  : dpp(cct, ceph_subsys_rgw),
+    cluster_file(cct->_conf.get_val<std::string>("rgw_d4n_fdb_cluster_file"))
+ {
+   if(auto trace_directory = cct->_conf.get_val<std::string>("rgw_d4n_fdb_trace_directory"); !trace_directory.empty()) {
+     network_options.emplace(FDB_NET_OPTION_TRACE_ENABLE, std::move(trace_directory));
+   }
+ }
+
+ public:
+ lfdb::database_handle create_database() const
+ {
+   // Use FDB_CLUSTER_FILE and built-in cluster-file discovery:
+   if (cluster_file.empty()) {
+     return lfdb::create_database(network_options);
+   }
+
+   // Use the configuration:
+   return lfdb::create_database(lfdb::connection_source {cluster_file}, {}, network_options);
+ }
+
+ public:
+ ~FDBRuntime()
+ {
+   try
+    {
+     ceph::libfdb::shutdown_libfdb();
+    }
+   catch (...)
+    {
+     rgw::d4n::detail::report_fdb_exception(&dpp, std::current_exception());
+    }
+ }
+
+};
 
 int populate_from_heads(RedisBlockDirectory& block_dir, const DoutPrefixProvider *dpp,
                         const std::string& bucket_id, std::vector<rgw_bucket_dir_entry>& entries,
@@ -312,7 +343,8 @@ int D4NFilterDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
   if ("fdb" == directory_type) {
     try
      {
-      backend = std::make_shared<Backend>(std::in_place_type<FDBBackend>, create_fdb_database(cct));
+      auto& runtime = cct->lookup_or_create_singleton_object<FDBRuntime>("d4n_fdb_runtime", false, cct);
+      backend = std::make_shared<Backend>(std::in_place_type<FDBBackend>, runtime.create_database());
      }
     catch (...)
      {
@@ -2351,23 +2383,19 @@ void D4NFilterDriver::shutdown()
   if (auto *redis = std::get_if<RedisBackend>(backend.get())) {
     redis->stop();
   }
-  else if (backend && std::holds_alternative<FDBBackend>(*backend)) {
-    try
-     {
-      ceph::libfdb::shutdown_libfdb();
-     }
-    catch (...)
-     {
-      const NoDoutPrefix dpp(g_ceph_context, ceph_subsys_rgw);
-      rgw::d4n::detail::report_fdb_exception(&dpp, std::current_exception());
-     }
-  }
 
+  policyDriver.reset();
   cacheDriver.reset();
   backend.reset();
-  policyDriver.reset();
 
   next->shutdown();
+}
+
+void D4NFilterDriver::finalize()
+{
+  FilterDriver::finalize();
+  // close_storage() deletes this filter; release the wrapped driver and its context references too.
+  delete std::exchange(next, nullptr);
 }
 
 std::unique_ptr<Object::ReadOp> D4NFilterObject::get_read_op()

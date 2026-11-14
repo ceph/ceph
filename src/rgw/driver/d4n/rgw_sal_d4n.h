@@ -404,6 +404,7 @@ class D4NFilterDriver : public FilterDriver {
     bool uses_redis() const noexcept;
 
     void shutdown() override;
+    void finalize() override;
     auto get_d4n_executor() {
       return d4n_thread_pool->get_executor();
     }
