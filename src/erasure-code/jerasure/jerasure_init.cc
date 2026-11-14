@@ -47,6 +47,13 @@ void jerasure_finish()
   // Note:
   // - Operations for word sizes > 32 bits are not yet implemented
   // - Jerasure only supports word sizes that are power of 2.
+  // - With WITH_SYSTEM_JERASURE the fields live in the shared libJerasure,
+  //   which every jerasure based plugin loaded into the process (jerasure,
+  //   shec and their legacy flavors) uses. Each of those plugins runs this
+  //   destructor, and a freed field stays in galois.c's table, so the next
+  //   plugin would free it again and corrupt the heap at exit. Leave them to
+  //   the library in that case.
+#ifndef WITH_SYSTEM_JERASURE
   static const int words[] = {4, 8, 16, 32};
   for (auto w : words) {
     gf_t* gf = galois_get_field_ptr(w);
@@ -55,4 +62,5 @@ void jerasure_finish()
       free(gf);
     }
   }
+#endif
 }
