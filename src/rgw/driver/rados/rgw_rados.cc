@@ -2188,8 +2188,9 @@ int RGWRados::Bucket::List::list_objects_ordered(
       }
 
       if (count < max) {
-	params.marker = index_key;
-	next_marker = index_key;
+        const auto marker = rgw_list_resume_marker(entry, params.list_versions);
+        params.marker = marker;
+        next_marker = marker;
       }
 
       if (params.access_list_filter &&
@@ -2446,8 +2447,9 @@ int RGWRados::Bucket::List::list_objects_unordered(const DoutPrefixProvider *dpp
       rgw_obj_key obj(index_key);
 
       if (count < max) {
-	params.marker.set(index_key);
-	next_marker.set(index_key);
+        const auto marker = rgw_list_resume_marker(entry, params.list_versions);
+        params.marker.set(marker);
+        next_marker.set(marker);
       }
 
       /* note that parse_raw_oid() here will not set the correct
