@@ -3,7 +3,9 @@
 Guidance for AI coding agents working in the Ceph repository. Ceph is a large
 C++/Python monorepo (RADOS, RBD, CephFS, RGW, MGR, cephadm, dashboard). Human
 contributor docs remain the source of truth; this file summarises the rules
-that are easy to miss and links to the canonical documents.
+that are easy to miss and links to the canonical documents. A nearer
+`AGENTS.md` describes the directory it sits in. This file is the process
+policy for the whole tree.
 
 - Contribution rules: [`SubmittingPatches.rst`](SubmittingPatches.rst),
   [`SubmittingPatches-backports.rst`](SubmittingPatches-backports.rst),
@@ -12,9 +14,14 @@ that are easy to miss and links to the canonical documents.
 - Detailed build, test, and troubleshooting notes:
   [`.github/copilot-instructions.md`](.github/copilot-instructions.md)
 - Developer guide: [`doc/dev/developer_guide/`](doc/dev/developer_guide/)
+- Security reports: [`SECURITY.md`](SECURITY.md)
 
 ## Rules
 
+- Act only on the human's say-so. An agent may push, comment, label, or
+  retrigger CI on the human's behalf only when the human has asked for that
+  specific action. Do not send anything the human has not seen. Maintainers
+  treat what an agent posts as the human's own words.
 - Target `main`. Fixes land in `main` first and are cherry-picked to stable
   branches (`squid`, `tentacle`, ...) with `git cherry-pick -x`; never open a
   feature PR against a stable branch.
@@ -27,9 +34,12 @@ that are easy to miss and links to the canonical documents.
 - New code must be LGPL-2.1/LGPL-3.0 compatible. Do not copy GPL code, and do
   not add new third-party dependencies or vendored code without asking first.
 - Do not change on-disk or on-wire encodings (`ENCODE_START`/`DECODE_START`,
-  `struct_v`) without bumping versions and keeping old decoders working:
-  mixed-version clusters and upgrades must keep working. Corpus checks live in
-  `ceph-object-corpus` and `src/test/encoding/`.
+  `struct_v`) casually. Bumping `struct_v` is not enough. A new decoder can
+  read old data, but during an upgrade old daemons and clients still have to
+  decode, and sometimes re-encode, what new ones send. Gate a new field on a
+  feature bit or on `require_osd_release`, so it is encoded only once every
+  peer understands it. Mixed-version clusters and upgrades must keep working.
+  Corpus checks live in `ceph-object-corpus` and `src/test/encoding/`.
 - Configuration options are defined in `src/common/options/*.yaml.in`, not in
   C++ headers. Add or change options there, and reference them from the docs
   with `.. confval:: <name>`.
@@ -40,6 +50,20 @@ that are easy to miss and links to the canonical documents.
   CI enforces this with `src/script/verify-qa`.
 - Do not edit generated files or build output (`build/`, dashboard
   `dist/`, `node_modules/`); change the source and regenerate.
+- Do not hide a failure to make a test pass. Do not add an entry to a QA log
+  ignorelist, loosen an assert, or catch and drop an error unless that change
+  is the fix, and then explain why in the commit message.
+
+## Fixing Bugs
+
+- For a non-trivial bug, reproduce it first with a unit test, a standalone
+  test, or vstart before writing a fix. If it does not reproduce, say so
+  and stop rather than guessing at a fix.
+- Show that the test fails without the fix and passes with it.
+- State what was not built or tested.
+- If the bug may be a vulnerability, stop. Follow [`SECURITY.md`](SECURITY.md):
+  mail security@ceph.io, and put nothing about it in a public tracker, pull
+  request, or commit message.
 
 ## Commits And Pull Requests
 
@@ -56,6 +80,9 @@ that are easy to miss and links to the canonical documents.
   ```
   `Fixes:` may also reference the SHA1 of the commit that introduced a
   regression. Sign off with `git commit -s` (DCO); real names only.
+- Do not add `Co-authored-by` for an AI tool. That trailer names the tool as
+  an author. There is no separate attribution trailer: say which tools were
+  used, and how, in the commit message or the pull request description.
 - Agents must not add a `Signed-off-by` on the human's behalf, invent tracker
   numbers, or fabricate test results. Leave placeholders and say so.
 - PR titles use the same `<subsystem>: <description>` form; they feed the
@@ -66,6 +93,10 @@ that are easy to miss and links to the canonical documents.
   (tracker, component impact, docs, tests). CI checks it.
 
 ## Build
+
+The commands and the failure modes are in
+[`.github/copilot-instructions.md`](.github/copilot-instructions.md). Short
+version:
 
 ```bash
 git submodule update --init --recursive --recommend-shallow
@@ -78,44 +109,41 @@ ninja <target>           # build only what you touched, e.g. ceph-osd, radosgw
 - Extra CMake flags go through `ARGS`, e.g.
   `ARGS="-DWITH_RADOSGW=OFF" ./do_cmake.sh`. Use `RelWithDebInfo` for any
   performance measurement; Debug builds are several times slower.
-- A full build needs tens of GB of disk and a long time. Prefer building and
-  testing the specific targets affected by your change.
+- A full build needs tens of GB of disk and a long time. Prefer building the
+  targets affected by the change.
 - Containerised builds: `src/script/build-with-container.py`.
 
 ## Test
 
-- C++ unit tests (`unittest_*` targets) run via ctest:
-  `cd build && ninja unittest_foo && ctest -R unittest_foo -V`.
-  `ceph_test_*` binaries are not run by ctest and must be invoked manually.
-- Full "make check": `./run-make-check.sh` (slow; Jenkins runs it on every PR).
-- Standalone tests: `cd build && ../qa/run-standalone.sh <script>`.
-- Local dev cluster: `cd build && ninja vstart &&
-  ../src/vstart.sh -d -n -x --localhost` then `./bin/ceph -s`; stop with
-  `../src/stop.sh`.
-- Python components use tox in their own directory:
-  - `src/pybind/mgr`: `tox -e py3,mypy,flake8,check-black,check-isort`
-    (fix formatting with `tox -e format-black,format-isort`)
-  - `src/cephadm`: `tox -e flake8,mypy,check-black,py3`
-  - `src/ceph-volume`, `src/python-common`, `qa`: see each `tox.ini`
-- Dashboard frontend (`src/pybind/mgr/dashboard/frontend`):
-  `npm ci`, `npm run lint`, `npm run fix`, `npx jest <path>`; use
-  `npm run test:ci` for a full run.
+How to run ctest, make check, standalone tests, vstart, tox, and the
+dashboard frontend is in
+[`.github/copilot-instructions.md`](.github/copilot-instructions.md). In
+short: `unittest_*` targets run under ctest, `ceph_test_*` binaries do not,
+`./run-make-check.sh` is the full check Jenkins runs, and a local cluster is
+`ninja vstart` plus `src/vstart.sh`. Python components use tox in their own
+directory.
+
+- A feature behind a config option or pool flag that defaults to off is not
+  covered by existing suites. Enable it in at least one client suite
+  (rbd, fs, rgw) and one upgrade suite under `qa/suites/`, or link a tracker
+  for doing so, and state in the PR which suites exercise it.
 - Bug fixes should come with a test that reproduces the bug. Integration tests
   live in `qa/` (teuthology suites); they cannot be run locally in full.
 
 ## Code Style
 
 - C++: follow `CodingStyle` (Google style with Ceph changes): 2-space indent,
-  `snake_case` functions, `CamelCase` classes, `m_` member prefix,
-  `ALL_CAPS` constants and enums, braces on every conditional,
-  `#pragma once`. Format only the lines you change with `clang-format`;
-  never reformat whole files.
+  `snake_case` functions, `CamelCase` classes, member names with an `m_`
+  prefix or with none at all, `ALL_CAPS` constants and enums, braces on every
+  conditional, `#pragma once`. Format only the lines you change with
+  `clang-format`; never reformat whole files.
 - Use Ceph's logging (`dout`/`ldout`, `derr`) and subsystem debug levels, not
   `std::cout`. Respect existing locking and `ceph::mutex` conventions.
 - Python: PEP 8, type hints for new code, must pass the component's `mypy`
   and `flake8` tox environments.
-- Docs: reStructuredText under `doc/`, following the Google developer
-  documentation style guide. Build with `admin/build-doc`.
+- Docs: reStructuredText under `doc/`. See
+  [`doc/dev/documenting.rst`](doc/dev/documenting.rst). Build with
+  `admin/build-doc`.
 
 ## Ask First
 
