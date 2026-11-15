@@ -2871,8 +2871,9 @@ private:
   /// now be routed to. No lock is held
   void handle_core_con_connect(Connection *con);
   /// give up on the core connections (osd, connection, why) found by
-  /// tick(): not connected in time (their hosts then blocked: see
-  /// core_host_blocks)
+  /// tick(): carrying laggy ops but not answering a keepalive in time, or
+  /// not connected in time (their hosts then blocked: see
+  /// core_host_blocks). Their ops are resent
   void _give_up_core_cons(
     const std::vector<std::tuple<int, ConnectionRef,
                                  osdc::core_route::drop_why_t>>& cons,
