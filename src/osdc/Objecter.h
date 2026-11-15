@@ -69,6 +69,7 @@
 
 #include "osd/OSDMap.h"
 #include "osd/error_code.h"
+#include "osdc/crimson_core_route/session_routes.h"
 
 class Messenger;
 class MonClient;
@@ -1882,10 +1883,9 @@ private:
   mutable ceph::shared_mutex rwlock =
 	   ceph::make_shared_mutex("Objecter::rwlock");
   ceph::timer<ceph::coarse_mono_clock> timer;
-  /// the id of the last hold (see OSDSession::pg_route_t::holding). Not
-  /// per session: a stale timer event of a closed session must not match
-  /// a hold of the OSD's next session
-  std::atomic<uint64_t> last_hold_seq = 0;
+  /// the hosts to which no core connection is opened for now (see
+  /// osdc::core_route::SessionRoutes::follow_hint())
+  osdc::core_route::HostBlocks core_host_blocks;
 
   PerfCounters* logger = nullptr;
 
@@ -2137,16 +2137,8 @@ public:
     /// true if we should resend this message on failure
     bool should_resend = true;
 
-    /// set while the op is accounted for as in flight in its session's
-    /// pg_routes: the PG it was sent for, and the core connection it was
-    /// sent on (nullopt: the session's main connection)
-    std::optional<spg_t> routed_pgid;
-    std::optional<uint32_t> routed_core;
-    /// held, not sent, until its PG switches to another connection (see
-    /// OSDSession::pg_route_t::holding); still in its session's ops. Set
-    /// only while that hold lasts: when it ends, the op is sent, or, if
-    /// paused, waits to be resent when unpaused (as any paused op)
-    bool switch_held = false;
+    /// its route to the OSD core owning its PG (objecter_use_osd_core_hints)
+    osdc::core_route::op_route_t core_route;
 
     /// true if the throttle budget is get/put on a series of OPs,
     /// instead of per OP basis, when this flag is set, the budget is
@@ -2646,82 +2638,10 @@ public:
     int incarnation;
     ConnectionRef con;
 
-    /// connections to the per-core listeners of a Crimson OSD (see
-    /// osd_core_hint_t), by core; in addition to 'con'. Protected by this
-    /// session's lock (OSDSession::lock).
-    std::map<uint32_t, ConnectionRef> core_cons;
-
-    /// how a PG's ops are routed to the OSD core owning it
-    struct pg_route_t {
-      /// the core the OSD last hinted for the PG
-      std::optional<uint32_t> hinted_core;
-      /// the core connection the PG's ops are sent on (nullopt: 'con').
-      /// Changed only while no op of the PG is in flight, so that the
-      /// PG's ops arrive in order. Always one of core_cons.
-      std::optional<uint32_t> core;
-      /// the PG's ops in flight (sent, and still assigned to the session)
-      unsigned in_flight = 0;
-      /// the PG's ops canceled after being sent, and not answered yet
-      /// (see OSDSession::unanswered)
-      unsigned unanswered = 0;
-      /// since when the PG has been due to switch to another connection
-      /// (see _route_desired()), but could not, being busy(). Unset: not
-      /// due to switch
-      std::optional<ceph::coarse_mono_time> switch_pending_since;
-      /// whether, while due to switch, the PG was kept from switching
-      /// only by canceled ops not answered yet (for the perf counters)
-      bool delayed_by_unanswered = false;
-      /// since when the PG has been due to switch, and the holds started
-      /// since; unlike switch_pending_since, not restarted by an expired
-      /// hold (for the perf counters)
-      std::optional<ceph::coarse_mono_time> switch_due_since;
-      unsigned switch_holds = 0;
-      /// the PG is no longer due to switch: it switched, the hint went
-      /// away, or the route was reset
-      void end_switch_wait() {
-        switch_pending_since.reset();
-        delayed_by_unanswered = false;
-        switch_due_since.reset();
-        switch_holds = 0;
-      }
-      /// After a switch has been pending for objecter_osd_core_switch_grace,
-      /// the PG's new ops are held (Op::switch_held), so that its ops in
-      /// flight drain, and the PG switches. The hold ends once they drain,
-      /// or after objecter_osd_core_switch_max_hold at most (the held ops
-      /// are then sent on the current connection, and the cycle restarts).
-      bool holding = false;
-      ceph::coarse_mono_time hold_since;
-      /// the timer event ending the hold (0: none); and the hold's id, to
-      /// tell a stale event
-      uint64_t hold_event = 0;
-      uint64_t hold_seq = 0;
-      /// whether ops of the PG may still be on their way to (or queued at)
-      /// the OSD on the route's connection: the route may not change
-      bool busy() const { return in_flight + unanswered > 0; }
-    };
-    /// by PG; protected by this session's lock (OSDSession::lock)
-    std::map<spg_t, pg_route_t> pg_routes;
-
-    /// An op canceled after it was sent (e.g. timed out): the OSD may still
-    /// execute it, on the connection it was sent on, and it still answers
-    /// it. Until the answer arrives (or the connection resets), a new op of
-    /// the PG on another connection could overtake it.
-    struct unanswered_op_t {
-      spg_t pgid;
-      /// the core connection it was sent on (nullopt: 'con')
-      std::optional<uint32_t> core;
-      ceph::coarse_mono_time since;
-    };
-    /// by tid; protected by this session's lock (OSDSession::lock)
-    std::map<ceph_tid_t, unanswered_op_t> unanswered;
-
-    /// the PGs whose hold may end, their ops having drained. Their held
-    /// ops are sent by _release_drained_holds(), not where the drain is
-    /// noticed (_op_unroute() and alike). Protected by this session's
-    /// lock (OSDSession::lock)
-    std::set<spg_t> drained_holds;
-    /// whether drained_holds is not empty: readable without the lock
-    std::atomic<bool> has_drained_holds = false;
+    /// routing ops to the cores of a Crimson OSD
+    /// (objecter_use_osd_core_hints); protected by this session's lock
+    /// (OSDSession::lock)
+    osdc::core_route::SessionRoutes core_routes;
 
     int num_locks;
     std::unique_ptr<std::mutex[]> completion_locks;
@@ -2737,10 +2657,9 @@ public:
 
     /// whether c is one of our connections ('con' or a core connection);
     /// OSDSession::lock is locked
-    bool owns_con(const ConnectionRef& c) const;
-
-    /// the core of c, if c is one of core_cons; OSDSession::lock is locked
-    std::optional<uint32_t> core_of(const ConnectionRef& c) const;
+    bool owns_con(const ConnectionRef& c) const {
+      return c == con || core_routes.core_of(c).has_value();
+    }
 
     std::unique_lock<std::mutex> get_lock(object_t& oid);
   };
@@ -2905,66 +2824,42 @@ private:
   void get_session(OSDSession *s);
   void _reopen_session(OSDSession *session);
   void close_session(OSDSession *session);
-  /// mark down and forget all of s's core connections; s->lock is locked
+  /// mark down and forget all of s's core connections, all of its
+  /// connections having reset; s->lock is locked
   void _close_core_cons(OSDSession *s);
-  /// handle the reset of one of s's core connections: mark it down and
-  /// forget it, and resend the ops sent on it via the main connection.
-  /// The lingers to re-register are added to lresend.
+  /// drop the core connection con of s, for 'why' (see
+  /// SessionRoutes::drop_core_con()): mark it down and forget it, and
+  /// resend the ops sent on it via the main connection, and those whose
+  /// hold ended. The lingers to re-register are added to lresend. Returns
+  /// false if con is not (or no longer) one to drop.
   /// rwlock is locked unique, s->lock is locked
-  void _reset_core_con(OSDSession *s,
-		       uint32_t core,
-		       std::map<uint64_t, LingerOp *>& lresend);
-  /// the core connection a PG's ops should be sent on (nullopt: the main
-  /// connection): the hinted core's, once connected to it. s->lock is locked
-  std::optional<uint32_t> _route_desired(
-    const OSDSession *s,
-    const OSDSession::pg_route_t& route) const;
+  bool _drop_core_con(OSDSession *s,
+		      const ConnectionRef& con,
+		      osdc::core_route::drop_why_t why,
+		      std::map<uint64_t, LingerOp *>& lresend);
   /// choose the connection to send op on, and account for op as in flight
-  /// on it; op->session->lock is locked
-  ConnectionRef _op_route(Op *op);
-  /// stop accounting for op as in flight; op->session->lock is locked
-  void _op_unroute(Op *op);
+  /// on it; or hold op, if its PG holds its new ops to switch connections
+  /// (see core_route::pg_route_t::holding). Returns the connection, or
+  /// null if op is held. rwlock is locked, op->session->lock is locked
+  ConnectionRef _op_route_or_hold(Op *op);
+  /// op is not sent (any more): stop accounting for it as in flight or
+  /// held; op->session->lock is locked
+  void _op_retire(Op *op);
   /// op is being canceled: if it was sent, keep its PG's route busy until
-  /// the OSD answers it (see OSDSession::unanswered). Call before
-  /// _finish_op(); op->session->lock is locked
-  void _op_note_unanswered(Op *op);
-  /// a reply for a tid no longer in s->ops arrived: if it answers an
-  /// unanswered op, forget that op. s->lock is locked
+  /// the OSD answers it (see SessionRoutes::retire_canceled_op()). Call
+  /// before _finish_op(); op->session->lock is locked
+  void _op_retire_canceled(Op *op);
+  /// a reply for a tid no longer in s->ops arrived: if it answers a
+  /// canceled op, that op is no longer awaited. s->lock is locked
   void _op_answered_late(OSDSession *s, ceph_tid_t tid);
-  /// forget the unanswered ops of s sent on the core connection 'core'
-  /// (nullopt: on the main connection), or all of them if 'all';
-  /// s->lock is locked
-  void _forget_unanswered(OSDSession *s,
-			  std::optional<uint32_t> core,
-			  bool all);
-  /// forget the unanswered ops older than the age limit: the OSD may
-  /// have dropped them (e.g. at an interval change), and their answer
-  /// would never arrive. s->lock is locked
-  void _prune_unanswered(OSDSession *s);
-  /// the age beyond which an unanswered op is forgotten
-  ceph::timespan _unanswered_max_age() const;
-
-  /// whether op is to be held (see OSDSession::pg_route_t::holding):
-  /// its PG is holding, or should start to. op->session->lock is locked
-  bool _op_hold_for_switch(Op *op);
-  /// note that the PG's hold may end, if the route is no longer busy.
-  /// s->lock is locked
-  void _route_maybe_drained(OSDSession *s,
-			    const spg_t& pgid,
-			    const OSDSession::pg_route_t& route);
-  /// end the PG's hold, without sending its held ops. drained: the route
-  /// is no longer busy (else: the hold expired). s->lock is locked
-  void _end_core_switch_hold(OSDSession *s,
-			     const spg_t& pgid,
-			     OSDSession::pg_route_t& route,
-			     bool drained);
-  /// end the PG's hold, and send its held ops in tid order. rwlock is
-  /// locked, s->lock is locked
-  void _release_core_switch_hold(OSDSession *s,
-				 const spg_t& pgid,
-				 bool drained);
-  /// end the holds of s->drained_holds that drained. rwlock is locked,
-  /// s->lock is locked
+  /// count and log the canceled ops of s no longer awaited
+  void _note_forgotten(OSDSession *s,
+		       const osdc::core_route::forgotten_t& forgotten);
+  /// a hold of s ended: count it, and send its held ops in tid order.
+  /// rwlock is locked, s->lock is locked
+  void _send_held_ops(OSDSession *s, const osdc::core_route::hold_end_t& ended);
+  /// end the holds that drained (SessionRoutes::release_drained_holds()).
+  /// rwlock is locked, s->lock is locked
   void _release_drained_holds(OSDSession *s);
   /// as _release_drained_holds(), taking the locks only if needed; no
   /// lock is held, and the caller holds a reference to s
@@ -4424,6 +4319,13 @@ private:
   /// see objecter_use_osd_core_hints
   const bool use_osd_core_hints =
     cct->_conf.get_val<bool>("objecter_use_osd_core_hints");
+  /// the configuration of routing ops to OSD cores
+  /// (objecter_use_osd_core_hints and the options it uses), as last set:
+  /// read by the routing events (see OSDSession::core_routes). Written
+  /// with rwlock locked unique (handle_conf_change()), read with rwlock
+  /// locked
+  osdc::core_route::config_t core_cfg = read_core_cfg(cct->_conf);
+  static osdc::core_route::config_t read_core_cfg(const ConfigProxy& conf);
 
   bool dispatch_to_session_strand = false;
 

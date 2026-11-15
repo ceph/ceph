@@ -143,8 +143,31 @@ protected:
     core_con = ceph::make_ref<RecordingConnection>(osd);
     core_con->set_peer_addrs(core_addrs);
     core_con->set_priv(RefCountedPtr{session});
-    session->core_cons[pg_core] = core_con;
+    open_core_con(true);
     objecter->osd_sessions[osd] = session;
+  }
+
+  /// core_con is opened, for a PG of its own (not the tests' one), and, if
+  /// 'connect', connected
+  void open_core_con(bool connect)
+  {
+    std::unique_lock l(session->lock);
+    osdc::core_route::HostBlocks blocks;
+    const auto out = session->core_routes.follow_hint(
+      spg_t(pg_t(1, pool_id)),
+      osd_core_hint_t(pg_core, core_addrs.front().get_port()), main_con,
+      ceph::coarse_mono_clock::now(), blocks,
+      [this](const entity_addr_t&) -> ConnectionRef { return core_con; },
+      [this](const osdc::core_route::op_visitor_t& visit) {
+        for (auto& [tid, op] : session->ops) {
+          visit(op->target.actual_pgid, op->core_route);
+        }
+      },
+      osdc::core_route::config_t{.enabled = true});
+    ceph_assert(out.opened == core_con);
+    if (connect) {
+      ceph_assert(session->core_routes.admit_core_con(core_con, blocks));
+    }
   }
 
   void TearDown() override
@@ -234,7 +257,8 @@ protected:
   bool route_holding()
   {
     std::shared_lock l(session->lock);
-    return session->pg_routes.at(spg_t(pgid)).holding;
+    const auto route = session->core_routes.route_of(spg_t(pgid));
+    return route && route->holding;
   }
 
   /// the Objecter's perf counter 'name' (each test has its own Objecter)
@@ -411,7 +435,7 @@ TEST_F(TestObjecterCoreRoutes, PausedOpNotHeldAfterHold)
   {
     std::unique_lock l(session->lock);
     paused_op = session->ops.at(d);
-    EXPECT_TRUE(paused_op->switch_held);
+    EXPECT_TRUE(session->core_routes.is_held(paused_op->core_route));
     paused_op->target.paused = true;
   }
 
@@ -421,8 +445,8 @@ TEST_F(TestObjecterCoreRoutes, PausedOpNotHeldAfterHold)
   EXPECT_EQ((tids_t{e}), core_con->tids());
   EXPECT_EQ(sent, main_con->tids());
   std::shared_lock l(session->lock);
-  EXPECT_FALSE(paused_op->switch_held);
-  EXPECT_FALSE(session->ops.at(e)->switch_held);
+  EXPECT_FALSE(session->core_routes.is_held(paused_op->core_route));
+  EXPECT_FALSE(session->core_routes.is_held(session->ops.at(e)->core_route));
 }
 
 // an op canceled after being sent keeps its PG from switching until it is
@@ -493,14 +517,14 @@ TEST_F(TestObjecterCoreRoutes, CanceledOpOnResetCon)
   poll();
   {
     std::shared_lock l(session->lock);
-    EXPECT_EQ(1u, session->unanswered.size());
+    EXPECT_TRUE(session->core_routes.has_unanswered());
   }
   objecter->ms_handle_reset(core_con.get());
   poll();
   {
     std::shared_lock l(session->lock);
-    EXPECT_TRUE(session->unanswered.empty());
-    EXPECT_FALSE(session->pg_routes.at(spg_t(pgid)).busy());
+    EXPECT_FALSE(session->core_routes.has_unanswered());
+    EXPECT_FALSE(session->core_routes.route_of(spg_t(pgid))->busy());
   }
   EXPECT_EQ(1u, counter("op_unanswered"));
   EXPECT_EQ(1u, counter("op_unanswered_reset"));
