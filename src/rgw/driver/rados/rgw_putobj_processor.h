@@ -171,6 +171,8 @@ class AtomicObjectProcessor : public ManifestObjectProcessor {
   const std::optional<uint64_t> olh_epoch;
   const std::string unique_tag;
   bufferlist first_chunk; // written with the head in complete()
+  // see RGWRados::Object::Write::MetaParams::apply_default_retention
+  const bool apply_default_retention;
 
   int process_first_chunk(bufferlist&& data, rgw::sal::DataProcessor **processor) override;
  public:
@@ -181,10 +183,12 @@ class AtomicObjectProcessor : public ManifestObjectProcessor {
                         RGWObjectCtx& obj_ctx, const rgw_obj& _head_obj,
                         std::optional<uint64_t> olh_epoch,
                         const std::string& unique_tag,
+                        bool apply_default_retention,
                         const DoutPrefixProvider *dpp, optional_yield y, jspan_context& trace)
     : ManifestObjectProcessor(aio, store, bucket_info, ptail_placement_rule,
                               owner, obj_ctx, _head_obj, dpp, y, trace),
-      olh_epoch(olh_epoch), unique_tag(unique_tag)
+      olh_epoch(olh_epoch), unique_tag(unique_tag),
+      apply_default_retention(apply_default_retention)
   {}
 
   // prepare a trivial manifest
