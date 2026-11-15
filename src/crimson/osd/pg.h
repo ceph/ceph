@@ -1126,7 +1126,9 @@ public:
   // PeeringListener
   void publish_stats_to_osd() final;
   void clear_publish_stats() final;
-  pg_stat_t get_stats() const;
+  /// the stats last published by this PG, or nullopt if there are none
+  /// (e.g. at the start of a new interval, before peering publishes them)
+  std::optional<pg_stat_t> get_stats() const;
   void apply_stats(
     const hobject_t &soid,
     const object_stat_sum_t &delta_stats) final;

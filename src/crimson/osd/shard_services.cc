@@ -80,12 +80,21 @@ std::map<pg_t, pg_stat_t> PerShardState::get_pg_stats()
   assert_core();
   std::map<pg_t, pg_stat_t> ret;
   for (auto [pgid, pg] : pg_map.get_pgs()) {
-    if (pg->is_primary()) {
-      auto stats = pg->get_stats();
-      // todo: update reported_epoch,reported_seq,last_fresh
-      stats.reported_epoch = osdmap->get_epoch();
-      ret.emplace(pgid.pgid, std::move(stats));
+    if (!pg->is_primary()) {
+      continue;
     }
+    auto stats = pg->get_stats();
+    if (!stats) {
+      // Nothing published yet in this interval. Reporting a
+      // default-constructed pg_stat_t would make the mgr replace the
+      // PG's last known stats with zeroes: state 'unknown', no objects,
+      // and scrub stamps of 0, which raise PG_NOT_SCRUBBED and
+      // PG_NOT_DEEP_SCRUBBED. Skip the PG, as the classic OSD does.
+      continue;
+    }
+    // todo: update reported_epoch,reported_seq,last_fresh
+    stats->reported_epoch = osdmap->get_epoch();
+    ret.emplace(pgid.pgid, std::move(*stats));
   }
   return ret;
 }
