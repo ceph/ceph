@@ -2137,6 +2137,7 @@ public:
   RGWCompleteMultipart() {}
   ~RGWCompleteMultipart() = default;
 
+  int init_processing(optional_yield y) override;
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
   void execute(optional_yield y) override;

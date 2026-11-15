@@ -4520,6 +4520,10 @@ void RGWDeleteBucket::execute(optional_yield y)
 }
 
 int RGWPutObj::init_processing(optional_yield y) {
+  // writes don't target the version named by a versionId param. execute()
+  // gives versioning-enabled buckets a new version, others get the null version
+  s->object->clear_instance();
+
   copy_source = url_decode(s->info.env->get("HTTP_X_AMZ_COPY_SOURCE", ""));
   copy_source_range = s->info.env->get("HTTP_X_AMZ_COPY_SOURCE_RANGE");
   size_t pos;
@@ -5013,6 +5017,12 @@ void RGWPutObj::execute(optional_yield y)
 	s->object->gen_rand_obj_instance_name();
         version_id = s->object->get_instance();
       }
+    } else {
+      // get_obj_attrs() sets the current version as the instance, so reading
+      // the attrs (for a notification metadata filter, or for policy tag
+      // conditions) may have pinned it. without versioning enabled, write
+      // the null version
+      s->object->clear_instance();
     }
     processor = driver->get_atomic_writer(this, s->yield, s->object.get(),
 					 s->owner,
@@ -6454,6 +6464,9 @@ bool RGWCopyObj::parse_copy_location(const std::string_view& url_src,
 
 int RGWCopyObj::init_processing(optional_yield y)
 {
+  // see RGWPutObj::init_processing()
+  s->object->clear_instance();
+
   op_ret = RGWOp::init_processing(y);
   if (op_ret < 0) {
     return op_ret;
@@ -7644,6 +7657,14 @@ void RGWInitMultipart::execute(optional_yield y)
 
 } /* RGWInitMultipart::execute() */
 
+int RGWCompleteMultipart::init_processing(optional_yield y)
+{
+  // see RGWPutObj::init_processing()
+  s->object->clear_instance();
+
+  return RGWOp::init_processing(y);
+}
+
 int RGWCompleteMultipart::verify_permission(optional_yield y)
 {
   auto [has_s3_existing_tag, has_s3_resource_tag] = rgw_check_policy_condition(this, s);
@@ -7930,6 +7951,9 @@ void RGWCompleteMultipart::execute(optional_yield y)
       s->object->gen_rand_obj_instance_name();
       version_id = s->object->get_instance();
     }
+  } else {
+    // see RGWPutObj::execute()
+    s->object->clear_instance();
   }
 
   auto& target_attrs = meta_obj->get_attrs();
