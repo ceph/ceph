@@ -56,6 +56,7 @@
 
 using namespace std;
 
+
 namespace rgw::auth::sts {
 
 bool
@@ -176,57 +177,70 @@ template <typename T>
 void
 WebTokenEngine::recurse_and_insert(const string& key, const jwt::claim& c, T& t) const
 {
-  string s_val;
-  jwt::claim::type c_type = c.get_type();
+  jwt::json::type c_type = c.get_type();
+
+  // Ignore root placeholder or namespace keys if passed on non-container types
+  if ((key == "dummy" || key == "https://aws.amazon.com/tags") &&
+      c_type != jwt::json::type::object && c_type != jwt::json::type::array) {
+    return;
+  }
+
   switch(c_type) {
-    case jwt::claim::type::null:
-      break;
-    case jwt::claim::type::boolean:
-    case jwt::claim::type::number:
-    case jwt::claim::type::int64:
+    case jwt::json::type::boolean:
+    case jwt::json::type::number:
+    case jwt::json::type::integer:
     {
-      s_val = c.to_json().serialize();
-      t.emplace(std::make_pair(key, s_val));
+      t.emplace(std::make_pair(key, c.to_json().serialize()));
       break;
     }
-    case jwt::claim::type::string:
+    case jwt::json::type::string:
     {
-      s_val = c.to_json().to_str();
-      t.emplace(std::make_pair(key, s_val));
+      t.emplace(std::make_pair(key, c.as_string()));
       break;
     }
-    case jwt::claim::type::array:
+    case jwt::json::type::array:
     {
       const picojson::array& arr = c.as_array();
       for (auto& a : arr) {
-        recurse_and_insert(key, jwt::claim(a), t);
+        // Drop wrapper keys for child containers; preserve valid keys for array items
+        std::string next_key = (key == "dummy" || key == "https://aws.amazon.com/tags") ? "" : key;
+        jwt::claim elem_claim(a);
+
+        if (elem_claim.get_type() == jwt::json::type::object || elem_claim.get_type() == jwt::json::type::array) {
+          recurse_and_insert(next_key, elem_claim, t);
+        } else if (!next_key.empty()) {
+          std::string s_val = (elem_claim.get_type() == jwt::json::type::string)
+                            ? elem_claim.as_string()
+                            : elem_claim.to_json().serialize();
+          t.emplace(std::make_pair(next_key, s_val));
+        }
       }
       break;
     }
-    case jwt::claim::type::object:
+    case jwt::json::type::object:
     {
-      const picojson::object& obj = c.as_object();
+      const picojson::object& obj = c.to_json().get<picojson::object>();
       for (auto& m : obj) {
+        // Discard parent/wrapper keys and recurse using the object's internal key (m.first)
         recurse_and_insert(m.first, jwt::claim(m.second), t);
       }
       break;
     }
   }
-  return;
 }
 
 //Extract all token claims so that they can be later used in the Condition element of Role's trust policy
 WebTokenEngine::token_t
-WebTokenEngine::get_token_claims(const jwt::decoded_jwt& decoded) const
+WebTokenEngine::get_token_claims(const rgw_decoded_jwt& decoded) const
 {
   WebTokenEngine::token_t token;
-  const auto& claims = decoded.get_payload_claims();
+  const auto& claims = decoded.get_payload_json();
 
   for (auto& c : claims) {
     if (c.first == string(princTagsNamespace)) {
       continue;
     }
-    recurse_and_insert(c.first, c.second, token);
+    recurse_and_insert(c.first, jwt::claim(c.second), token);
   }
   return token;
 }
@@ -277,8 +291,8 @@ WebTokenEngine::get_from_jwt(const DoutPrefixProvider* dpp, const std::string& t
       throw std::system_error(EACCES, std::system_category());
     }
     if (decoded.has_payload_claim(string(princTagsNamespace))) {
-      auto& cl = decoded.get_payload_claim(string(princTagsNamespace));
-      if (cl.get_type() == jwt::claim::type::object || cl.get_type() == jwt::claim::type::array) {
+      auto cl = decoded.get_payload_claim(string(princTagsNamespace));
+      if (cl.get_type() == jwt::json::type::object || cl.get_type() == jwt::json::type::array) {
         recurse_and_insert("dummy", cl, principal_tags);
         for (auto it : principal_tags) {
           ldpp_dout(dpp, 5) << "Key: " << it.first << " Value: " << it.second << dendl;
@@ -303,7 +317,7 @@ WebTokenEngine::get_from_jwt(const DoutPrefixProvider* dpp, const std::string& t
     }
     //Validate signature
     if (decoded.has_algorithm()) {
-      auto& algorithm = decoded.get_algorithm();
+      auto algorithm = decoded.get_algorithm();
       try {
         validate_signature(dpp, decoded, algorithm, iss, provider.thumbprints, y);
       } catch (const std::exception& e) {
@@ -544,28 +558,68 @@ WebTokenEngine::connect_to_host_get_cert_chain(const DoutPrefixProvider* dpp, co
   return chain_pem;
 }
 
+std::string
+WebTokenEngine::get_pem_from_jwk(const std::string& n_b64url, const std::string& e_b64url) const
+{
+    auto url_safe_to_standard = [](std::string s) {
+        std::replace(s.begin(), s.end(), '_', '/');
+        std::replace(s.begin(), s.end(), '-', '+');
+        std::string padding = "====";
+        size_t mod = s.length() % 4;
+        if (mod > 0) {
+            s += padding.substr(0, 4 - mod);
+        }
+        return s;
+    };
+
+    std::string n_bin = rgw::from_base64(url_safe_to_standard(n_b64url));
+    std::string e_bin = rgw::from_base64(url_safe_to_standard(e_b64url));
+
+    BIGNUM* n = BN_bin2bn((const unsigned char*)n_bin.data(), n_bin.size(), nullptr);
+    BIGNUM* e = BN_bin2bn((const unsigned char*)e_bin.data(), e_bin.size(), nullptr);
+    
+    RSA* rsa = RSA_new();
+    RSA_set0_key(rsa, n, e, nullptr);
+
+    EVP_PKEY* pkey = EVP_PKEY_new();
+    EVP_PKEY_assign_RSA(pkey, rsa);
+
+    BIO* bio = BIO_new(BIO_s_mem());
+    PEM_write_bio_PUBKEY(bio, pkey);
+    
+    char* ptr = nullptr;
+    long len = BIO_get_mem_data(bio, &ptr);
+    std::string pem(ptr, len);
+
+    BIO_free(bio);
+    EVP_PKEY_free(pkey);
+    return pem;
+}
+
 bool
-WebTokenEngine::validate_signature_using_n_e(const DoutPrefixProvider* dpp, const jwt::decoded_jwt& decoded, const std::string &algorithm, const std::string& n, const std::string& e) const
+WebTokenEngine::validate_signature_using_n_e(const DoutPrefixProvider* dpp, const rgw_decoded_jwt& decoded, const std::string &algorithm, const std::string& n, const std::string& e) const
 {
   try {
+    std::string pem_key = get_pem_from_jwk(n, e);
+    auto verifier = jwt::verify();
+
     if (algorithm == "RS256") {
-      auto verifier = jwt::verify()
-                  .allow_algorithm(jwt::algorithm::rs256().setModulusAndExponent(n,e));
-      verifier.verify(decoded);
+      verifier.allow_algorithm(jwt::algorithm::rs256(pem_key));
     } else if (algorithm == "RS384") {
-      auto verifier = jwt::verify()
-                  .allow_algorithm(jwt::algorithm::rs384().setModulusAndExponent(n,e));
-      verifier.verify(decoded);
+      verifier.allow_algorithm(jwt::algorithm::rs384(pem_key));
     } else if (algorithm == "RS512") {
-      auto verifier = jwt::verify()
-                  .allow_algorithm(jwt::algorithm::rs512().setModulusAndExponent(n,e));
-      verifier.verify(decoded);
+      verifier.allow_algorithm(jwt::algorithm::rs512(pem_key));
+    } else {
+      ldpp_dout(dpp, 5) << "Unsupported algorithm for bare key validation: " << algorithm << dendl;
+      return false;
     }
-  } catch (const std::exception& e) {
-    ldpp_dout(dpp, 10) << std::string("Signature validation using n, e failed: ") + e.what() << dendl;
+
+    verifier.verify(decoded);
+  } catch (const std::exception& err) {
+    ldpp_dout(dpp, 10) << "Signature validation using n, e failed: " << err.what() << dendl;
     return false;
   }
-  ldpp_dout(dpp, 10) << "Verified signature using n and e"<< dendl;
+  ldpp_dout(dpp, 10) << "Verified signature using n and e" << dendl;
   return true;
 }
 
@@ -610,7 +664,7 @@ bool WebTokenEngine::verify_oidc_thumbprint(const DoutPrefixProvider* dpp, const
 }
 
 void
-WebTokenEngine::validate_signature(const DoutPrefixProvider* dpp, const jwt::decoded_jwt& decoded, const string& algorithm, const string& iss, const vector<string>& thumbprints, optional_yield y) const
+WebTokenEngine::validate_signature(const DoutPrefixProvider* dpp, const rgw_decoded_jwt& decoded, const string& algorithm, const string& iss, const vector<string>& thumbprints, optional_yield y) const
 {
   if (algorithm != "HS256" && algorithm != "HS384" && algorithm != "HS512") {
     const auto cert_url = get_cert_url(iss, dpp, y);

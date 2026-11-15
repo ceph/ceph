@@ -13,7 +13,16 @@
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+
+#pragma push_macro("expect")
+#undef expect
 #include "jwt-cpp/jwt.h"
+#pragma pop_macro("expect")
+#undef JWT_DISABLE_PICOJSON
+#include <jwt-cpp/traits/kazuho-picojson/traits.h>
+
+using rgw_decoded_jwt = jwt::decoded_jwt<jwt::traits::kazuho_picojson>;
+
 #pragma clang diagnostic pop
 #pragma GCC diagnostic pop
 #include "rgw_oidc_provider.h"
@@ -54,9 +63,11 @@ class WebTokenEngine : public rgw::auth::Engine {
   std::tuple<boost::optional<WebTokenEngine::token_t>, boost::optional<WebTokenEngine::principal_tags_t>, bool>
   get_from_jwt(const DoutPrefixProvider* dpp, const std::string& token, const req_state* const s, optional_yield y) const;
 
- bool validate_signature_using_n_e(const DoutPrefixProvider* dpp, const jwt::decoded_jwt& decoded, const std::string &algorithm, const std::string& n, const std::string& e) const;
+  std::string get_pem_from_jwk(const std::string& n_b64url, const std::string& e_b64url) const;
 
-  void validate_signature (const DoutPrefixProvider* dpp, const jwt::decoded_jwt& decoded, const std::string& algorithm, const std::string& iss, const std::vector<std::string>& thumbprints, optional_yield y) const;
+  bool validate_signature_using_n_e(const DoutPrefixProvider* dpp, const rgw_decoded_jwt& decoded, const std::string &algorithm, const std::string& n, const std::string& e) const;
+
+  void validate_signature (const DoutPrefixProvider* dpp, const rgw_decoded_jwt& decoded, const std::string& algorithm, const std::string& iss, const std::vector<std::string>& thumbprints, optional_yield y) const;
 
   result_t authenticate(const DoutPrefixProvider* dpp,
                         const std::string& token,
@@ -64,7 +75,7 @@ class WebTokenEngine : public rgw::auth::Engine {
 
   template <typename T>
   void recurse_and_insert(const string& key, const jwt::claim& c, T& t) const;
-  WebTokenEngine::token_t get_token_claims(const jwt::decoded_jwt& decoded) const;
+  WebTokenEngine::token_t get_token_claims(const rgw_decoded_jwt& decoded) const;
 
   int create_connection(const DoutPrefixProvider* dpp, const std::string& hostname, int port) const;
   std::string connect_to_host_get_cert_chain(const DoutPrefixProvider* dpp, const std::string& hostname, int port = 443) const;
