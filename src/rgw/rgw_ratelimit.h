@@ -4,6 +4,7 @@
 #include <thread>
 #include <condition_variable>
 #include "rgw_common.h"
+#include "common/dout.h"
 
 enum class OpType { Read, Write, List, Delete };
 

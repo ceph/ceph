@@ -3,6 +3,7 @@
 
 #include "rgw_bucket.h"
 
+#include "common/dout.h"
 #include "common/errno.h"
 #include "common/strtol.h"
 

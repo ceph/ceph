@@ -8,7 +8,10 @@
  *      Author: adam
  */
 
+#include "common/ceph_context.h"
+#include "global/global_context.h"
 #include "rgw_common.h"
+#include "rgw_req_state.h"
 #include "rgw_crypt_sanitize.h"
 #include "boost/algorithm/string/predicate.hpp"
 

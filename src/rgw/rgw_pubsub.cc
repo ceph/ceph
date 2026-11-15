@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
+#include "common/dout.h"
 #include "services/svc_zone.h"
 #include "rgw_account.h"
 #include "rgw_b64.h"

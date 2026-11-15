@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include "rgw_cache.h"
+#include "common/dout.h"
 #include "common/ceph_json.h"
 #include "rgw_perf_counters.h"
 

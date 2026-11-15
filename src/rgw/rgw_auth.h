@@ -16,6 +16,7 @@
 #include "include/function2.hpp"
 
 #include "rgw_common.h"
+#include "rgw_iam_policy.h"
 #include "rgw_web_idp.h"
 #include "rgw_keystone_scope.h"
 

@@ -14,6 +14,7 @@
 
 #include "cls/version/cls_version_types.h"
 #include "rgw_common.h"
+#include "common/ceph_context.h"
 
 enum {
   UPDATE_OBJ,
