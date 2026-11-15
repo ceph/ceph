@@ -22,6 +22,7 @@
 #include <fmt/ostream.h>
 
 #include "common/ceph_time.h"
+#include "common/dout.h"
 #include "common/iso_8601.h"
 #include "log/Log.h"
 

@@ -12,9 +12,9 @@
 #include <boost/optional.hpp>
 #include <boost/algorithm/string/predicate.hpp>
 
-#include "common/debug.h"
-
 #include "rgw_basic_types.h" //includes rgw_acl_types.h
+
+class DoutPrefixProvider;
 
 // acl grantee types
 struct ACLGranteeCanonicalUser {

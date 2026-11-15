@@ -7,6 +7,7 @@
 
 #include "common/ceph_json.h"
 #include "common/Clock.h" // for ceph_clock_now()
+#include "common/debug.h"
 #include "include/timegm.h"
 #include "rgw_common.h"
 #include "rgw_crypt_sanitize.h"

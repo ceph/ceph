@@ -19,13 +19,18 @@
 
 #pragma once
 
+#include <cinttypes>
+#include <cstdio>
+#include <functional>
+#include <list>
+#include <ostream>
+#include <string>
 #include <fmt/format.h>
 
 #include "rgw_pool_types.h"
 #include "rgw_user_types.h"
 #include "rgw_placement_types.h"
 
-#include "common/dout.h"
 #include "common/Formatter.h"
 
 struct cls_user_bucket;
