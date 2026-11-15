@@ -8270,6 +8270,127 @@ def test_versioning_obj_suspended_copy():
     client.delete_object(Bucket=bucket_name2, Key=key1)
     client.delete_bucket(Bucket=bucket_name2)
 
+def _add_version_id_param(client, operation, version_id):
+    # these writes take no VersionId parameter, so add the query param that
+    # a client can still send
+    def add_param(**kwargs):
+        url = kwargs['params']['url']
+        sep = '&' if '?' in url else '?'
+        kwargs['params']['url'] = url + sep + 'versionId=' + version_id
+    client.meta.events.register('before-call.s3.' + operation, add_param)
+
+def _write_with_version_id(bucket_name, key, how, version_id, body):
+    # a separate client, so that only this write sends the param
+    client = get_client()
+    if how == 'put':
+        if version_id is not None:
+            _add_version_id_param(client, 'PutObject', version_id)
+        client.put_object(Bucket=bucket_name, Key=key, Body=body)
+    elif how == 'copy':
+        # copy from a noncurrent version in another bucket, so the source's
+        # version id can't be mistaken for the destination's, and losing it
+        # would copy the wrong data
+        src_bucket = get_new_bucket()
+        check_configure_versioning_retry(src_bucket, "Enabled", "Enabled")
+        src_version = client.put_object(Bucket=src_bucket, Key='src', Body=body)['VersionId']
+        client.put_object(Bucket=src_bucket, Key='src', Body='newer source')
+        if version_id is not None:
+            _add_version_id_param(client, 'CopyObject', version_id)
+        client.copy_object(Bucket=bucket_name, Key=key,
+                           CopySource={'Bucket': src_bucket, 'Key': 'src', 'VersionId': src_version})
+    else:
+        upload_id = client.create_multipart_upload(Bucket=bucket_name, Key=key)['UploadId']
+        etag = client.upload_part(Bucket=bucket_name, Key=key, UploadId=upload_id,
+                                  PartNumber=1, Body=body)['ETag']
+        if version_id is not None:
+            _add_version_id_param(client, 'CompleteMultipartUpload', version_id)
+        client.complete_multipart_upload(Bucket=bucket_name, Key=key, UploadId=upload_id,
+                                         MultipartUpload={'Parts': [{'ETag': etag, 'PartNumber': 1}]})
+
+def _create_suspended_versions(client, bucket_name, key):
+    # a null version, then two named versions, then suspend
+    client.put_object(Bucket=bucket_name, Key=key, Body='null version')
+    check_configure_versioning_retry(bucket_name, "Enabled", "Enabled")
+    v1 = client.put_object(Bucket=bucket_name, Key=key, Body='version 1')['VersionId']
+    v2 = client.put_object(Bucket=bucket_name, Key=key, Body='version 2')['VersionId']
+    check_configure_versioning_retry(bucket_name, "Suspended", "Suspended")
+    return v1, v2
+
+def _check_suspended_write(client, bucket_name, key, v1, v2, body):
+    # the write replaced the null version, and the named versions kept their data
+    assert _get_body(client.get_object(Bucket=bucket_name, Key=key, VersionId=v1)) == 'version 1'
+    assert _get_body(client.get_object(Bucket=bucket_name, Key=key, VersionId=v2)) == 'version 2'
+    assert _get_body(client.get_object(Bucket=bucket_name, Key=key, VersionId='null')) == body
+    assert _get_body(client.get_object(Bucket=bucket_name, Key=key)) == body
+
+    versions = client.list_object_versions(Bucket=bucket_name, Prefix=key)['Versions']
+    assert sorted(v['VersionId'] for v in versions) == sorted([v1, v2, 'null'])
+    assert [v['VersionId'] for v in versions if v['IsLatest']] == ['null']
+
+# aws doesn't document a versionId param on these writes
+@pytest.mark.fails_on_aws
+@pytest.mark.versioning
+@pytest.mark.parametrize('how', ['put', 'copy', 'multipart'])
+@pytest.mark.parametrize('name', ['v1', 'null'])
+def test_versioning_obj_suspended_write_ignores_version_id(how, name):
+    bucket_name = get_new_bucket()
+    client = get_client()
+    key = 'testobj'
+    v1, v2 = _create_suspended_versions(client, bucket_name, key)
+
+    version_id = v1 if name == 'v1' else 'null'
+    _write_with_version_id(bucket_name, key, how, version_id, 'written')
+
+    _check_suspended_write(client, bucket_name, key, v1, v2, 'written')
+
+# aws doesn't document a versionId param on these writes
+@pytest.mark.fails_on_aws
+@pytest.mark.versioning
+@pytest.mark.parametrize('how', ['put', 'copy', 'multipart'])
+@pytest.mark.parametrize('version_id', ['junk', 'null'])
+def test_versioning_obj_unversioned_write_ignores_version_id(how, version_id):
+    bucket_name = get_new_bucket()
+    client = get_client()
+    key = 'testobj'
+    client.put_object(Bucket=bucket_name, Key=key, Body='original')
+
+    _write_with_version_id(bucket_name, key, how, version_id, 'written')
+
+    assert _get_body(client.get_object(Bucket=bucket_name, Key=key)) == 'written'
+    versions = client.list_object_versions(Bucket=bucket_name, Prefix=key)['Versions']
+    assert [v['VersionId'] for v in versions] == ['null']
+
+    # nothing is left behind once the object is deleted
+    client.delete_object(Bucket=bucket_name, Key=key)
+    assert 'Versions' not in client.list_object_versions(Bucket=bucket_name)
+    client.delete_bucket(Bucket=bucket_name)
+
+@pytest.mark.tagging
+@pytest.mark.bucket_policy
+@pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
+@pytest.mark.parametrize('version_id', [
+    None,
+    # aws doesn't document a versionId param on CompleteMultipartUpload
+    pytest.param('null', marks=pytest.mark.fails_on_aws)])
+def test_versioning_obj_suspended_multipart_existing_tag_policy(version_id):
+    bucket_name = get_new_bucket()
+    client = get_client()
+    key = 'testobj'
+    v1, v2 = _create_suspended_versions(client, bucket_name, key)
+
+    # the tag condition belongs to an unrelated statement, but makes
+    # CompleteMultipartUpload read the destination's tags
+    resource = _make_arn_resource("{}/{}".format(bucket_name, "*"))
+    policy_document = make_json_policy("s3:GetObject", resource, effect="Deny",
+                                       conditions={"StringEquals": {
+                                           "s3:ExistingObjectTag/security": "secret"}})
+    client.put_bucket_policy(Bucket=bucket_name, Policy=policy_document)
+
+    _write_with_version_id(bucket_name, key, 'multipart', version_id, 'written')
+
+    _check_suspended_write(client, bucket_name, key, v1, v2, 'written')
+
 @pytest.mark.versioning
 def test_versioning_obj_create_versions_remove_all():
     bucket_name = get_new_bucket()

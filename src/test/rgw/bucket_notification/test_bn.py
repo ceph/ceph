@@ -2773,6 +2773,66 @@ def metadata_filter(endpoint_type, conn):
 
 
 
+@pytest.mark.basic_test
+def test_metadata_filter_suspended_versioning():
+    """ test that a metadata filter doesn't redirect a write on a versioning-suspended bucket """
+    conn = connection()
+    zonegroup = get_config_zonegroup()
+    client = boto3.client('s3',
+                          endpoint_url='http://'+conn.host+':'+str(conn.port),
+                          aws_access_key_id=conn.aws_access_key_id,
+                          aws_secret_access_key=conn.aws_secret_access_key,
+                          config=Config(s3={'addressing_style': 'path'}))
+
+    # create bucket with a null version, then a named version that stays
+    # current after suspending
+    bucket_name = gen_bucket_name()
+    conn.create_bucket(bucket_name)
+    key = 'foo'
+    client.put_object(Bucket=bucket_name, Key=key, Body='null version')
+    client.put_bucket_versioning(Bucket=bucket_name, VersioningConfiguration={'Status': 'Enabled'})
+    v1 = client.put_object(Bucket=bucket_name, Key=key, Body='version 1')['VersionId']
+    client.put_bucket_versioning(Bucket=bucket_name, VersioningConfiguration={'Status': 'Suspended'})
+
+    # create topic and notification. the filter never matches, so nothing is
+    # sent, but it makes the write read the object's metadata
+    topic_name = bucket_name + TOPIC_SUFFIX
+    endpoint_args = 'push-endpoint=http://127.0.0.1:9001'
+    topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
+    topic_arn = topic_conf.set_config()
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name,
+                        'TopicArn': topic_arn,
+                        'Events': ['s3:ObjectCreated:*'],
+                        'Filter': {
+                            'Metadata': {
+                                'FilterRules': [{'Name': 'x-amz-meta-foo', 'Value': 'bar'}]
+                            }
+                        }
+                       }]
+    s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
+    _, status = s3_notification_conf.set_config()
+    assert status/100 == 2
+
+    client.put_object(Bucket=bucket_name, Key=key, Body='written')
+
+    # the write replaced the null version, and v1 kept its data
+    response = client.get_object(Bucket=bucket_name, Key=key, VersionId=v1)
+    assert response['Body'].read() == b'version 1'
+    response = client.get_object(Bucket=bucket_name, Key=key, VersionId='null')
+    assert response['Body'].read() == b'written'
+    versions = client.list_object_versions(Bucket=bucket_name, Prefix=key)['Versions']
+    assert sorted(v['VersionId'] for v in versions) == sorted([v1, 'null'])
+    assert [v['VersionId'] for v in versions if v['IsLatest']] == ['null']
+
+    # cleanup
+    s3_notification_conf.del_config()
+    topic_conf.del_config()
+    for v in versions:
+        client.delete_object(Bucket=bucket_name, Key=key, VersionId=v['VersionId'])
+    conn.delete_bucket(bucket_name)
+
+
 @pytest.mark.http_test
 def test_metadata_filter_http():
     """ test notification of filtering metadata, http endpoint """
