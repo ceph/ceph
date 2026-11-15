@@ -14,6 +14,7 @@
 
 #include "rgw_coroutine.h"
 #include "rgw_auth.h"
+#include "rgw_permission.h"
 #include "rgw_cr_rados.h"
 #include "rgw_http_client.h"
 #include "rgw_sal_rados.h"

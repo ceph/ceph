@@ -13,6 +13,7 @@
 
 #include "include/types.h"
 #include "rgw_common.h"
+#include "rgw_req_state.h"
 
 
 class RGWRestfulIO;

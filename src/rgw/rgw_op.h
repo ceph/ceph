@@ -37,6 +37,8 @@
 
 #include "rgw_cksum.h"
 #include "rgw_common.h"
+#include "rgw_permission.h"
+#include "rgw_req_state.h"
 #include "rgw_dmclock.h"
 #include "rgw_lua_types.h"
 

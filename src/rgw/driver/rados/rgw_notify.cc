@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 #include "rgw_notify.h"
+#include "rgw_req_state.h"
 #include "cls/2pc_queue/cls_2pc_queue_client.h"
 #include "cls/lock/cls_lock_client.h"
 #include <memory>

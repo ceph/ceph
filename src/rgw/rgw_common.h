@@ -28,16 +28,19 @@
 
 #include <boost/container/flat_map.hpp>
 #include <boost/container/flat_set.hpp>
+#include <boost/intrusive_ptr.hpp>
+#include <boost/optional.hpp>
 
+#include "include/common_fwd.h"
 #include "common/ceph_crypto.h"
+#include "common/ceph_time.h"
+#include "common/code_environment.h"
 #include "common/random_string.h"
-#include "common/tracer.h"
 #include "common/versioned_variant.h"
 #include "rgw_acl.h"
 #include "rgw_bucket_layout.h"
 #include "rgw_cors.h"
 #include "rgw_basic_types.h"
-#include "rgw_iam_policy.h"
 #include "rgw_quota_types.h"
 #include "rgw_string.h"
 #include "common/async/yield_context.h"
@@ -497,6 +500,7 @@ int rgw_conf_get_int(const std::map<std::string, std::string, ltstr_nocase>& con
 bool rgw_conf_get_bool(const std::map<std::string, std::string, ltstr_nocase>& conf_map, const char *name, bool def_val);
 
 class RGWEnv;
+struct req_state;
 
 class RGWConf {
   friend class RGWEnv;
@@ -1270,21 +1274,6 @@ struct RGWStorageStats
 
 class RGWEnv;
 
-/* Namespaced forward declarations. */
-namespace rgw {
-  namespace auth {
-    namespace s3 {
-      class AWSBrowserUploadAbstractor;
-      class STSEngine;
-    }
-    class Completer;
-    class Identity;
-  }
-  namespace io {
-    class BasicClient;
-  }
-}
-
 using meta_map_t = boost::container::flat_map <std::string, std::string>;
 
 struct req_info {
@@ -1308,192 +1297,10 @@ struct req_info {
   void init_meta_info(const DoutPrefixProvider *dpp, bool *found_bad_meta, const int prot_flags);
 };
 
-struct req_init_state {
-  /* Keeps [[tenant]:]bucket until we parse the token. */
-  std::string url_bucket;
-  std::string src_bucket;
-};
-
 class RGWObjectCtx;
 
-/** Store all the state necessary to complete and respond to an HTTP request*/
-struct req_state : DoutPrefixProvider {
-  CephContext *cct;
-  const RGWProcessEnv& penv;
-  rgw::io::BasicClient *cio{nullptr};
-  http_op op{OP_UNKNOWN};
-  RGWOpType op_type{};
-  std::shared_ptr<RateLimiter> ratelimit_data;
-  RGWRateLimitInfo user_ratelimit;
-  RGWRateLimitInfo bucket_ratelimit;
-  RGWRateLimitInfo account_ratelimit;
-  int64_t ratelimit_retry_after{0};
-  std::string ratelimit_bucket_marker;
-  std::string ratelimit_user_name;
-  bool content_started{false};
-  RGWFormat format{RGWFormat::PLAIN};
-  ceph::Formatter *formatter{nullptr};
-  std::string decoded_uri;
-  std::string relative_uri;
-  const char *length{nullptr};
-  int64_t content_length{0};
-  std::map<std::string, std::string> generic_attrs;
-  rgw_err err;
-  bool expect_cont{false};
-  uint64_t obj_size{0};
-  uint64_t rdma_bytes_transferred{0};
-  bool enable_ops_log;
-  bool enable_usage_log;
-  rgw_s3select_usage_data s3select_usage;
-  uint8_t defer_to_bucket_acls;
-  uint32_t perm_mask{0};
 
-  /* Set once when url_bucket is parsed and not violated thereafter. */
-  std::string account_name;
-
-  std::string bucket_tenant;
-  std::string bucket_name;
-  rgw_obj_key object_key; // requested object name and version id
-
-  /* bucket is only created in rgw_build_bucket_policies() and should never be
-   * overwritten */
-  std::unique_ptr<rgw::sal::Bucket> bucket;
-  std::unique_ptr<rgw::sal::Object> object;
-  std::string src_tenant_name;
-  std::string src_bucket_name;
-  rgw_obj_key src_object_key; // requested source object name and version id
-  std::unique_ptr<rgw::sal::Object> src_object;
-  ACLOwner bucket_owner;
-  // Resource owner for the authenticated identity, initialized in authorize()
-  ACLOwner owner;
-
-  std::string zonegroup_name;
-  std::string zonegroup_endpoint;
-  std::string bucket_instance_id;
-  int bucket_instance_shard_id{-1};
-  std::string redirect_zone_endpoint;
-
-  std::string redirect;
-
-  real_time bucket_mtime;
-  std::map<std::string, ceph::bufferlist> bucket_attrs;
-  bool bucket_exists{false};
-  rgw_placement_rule dest_placement;
-
-  bool has_bad_meta{false};
-
-  std::unique_ptr<rgw::sal::User> user;
-
-  struct {
-    /* TODO(rzarzynski): switch out to the static_ptr for both members. */
-
-    /* Object having the knowledge about an authenticated identity and allowing
-     * to apply it during the authorization phase (verify_permission() methods
-     * of a given RGWOp). Thus, it bounds authentication and authorization steps
-     * through a well-defined interface. For more details, see rgw_auth.h. */
-    std::unique_ptr<rgw::auth::Identity> identity;
-
-    std::shared_ptr<rgw::auth::Completer> completer;
-
-    /* A container for credentials of the S3's browser upload. It's necessary
-     * because: 1) the ::authenticate() method of auth engines and strategies
-     * take req_state only; 2) auth strategies live much longer than RGWOps -
-     * there is no way to pass additional data dependencies through ctors. */
-    class {
-      /* Writer. */
-      friend class RGWPostObj_ObjStore_S3;
-      /* Reader. */
-      friend class rgw::auth::s3::AWSBrowserUploadAbstractor;
-      friend class rgw::auth::s3::STSEngine;
-
-      std::string access_key;
-      std::string signature;
-      std::string x_amz_algorithm;
-      std::string x_amz_credential;
-      std::string x_amz_date;
-      std::string x_amz_security_token;
-      ceph::bufferlist encoded_policy;
-    } s3_postobj_creds;
-  } auth;
-
-  RGWAccessControlPolicy user_acl;
-  RGWAccessControlPolicy bucket_acl;
-  RGWAccessControlPolicy object_acl;
-
-  rgw::IAM::Environment env;
-  boost::optional<rgw::IAM::Policy> iam_policy;
-  // PublicAccessBlock configuration that applies to this request
-  PublicAccessBlockConfiguration public_access_block;
-  rgw::s3::ObjectOwnership bucket_object_ownership = rgw::s3::ObjectOwnership::ObjectWriter;
-  std::vector<rgw::IAM::Policy> iam_identity_policies;
-
-  /* Is the request made by an user marked as a system one?
-   * Being system user means we also have the admin status. */
-  bool system_request{false};
-
-  std::string canned_acl;
-  bool has_acl_header{false};
-  bool granted_by_acl{false};
-  bool local_source{false}; /* source is local */
-
-  int prot_flags{0};
-
-  /* Content-Disposition override for TempURL of Swift API. */
-  struct {
-    std::string override;
-    std::string fallback;
-  } content_disp;
-
-  std::string host_id;
-
-  req_info info;
-  req_init_state init_state;
-
-  using Clock = ceph::coarse_real_clock;
-  Clock::time_point time;
-
-  Clock::duration time_elapsed() const { return Clock::now() - time; }
-
-  std::string dialect;
-  std::string req_id;
-  std::string trans_id;
-  uint64_t id;
-
-  RGWObjTags tagset;
-
-  bool mfa_verified{false};
-
-  /// optional coroutine context
-  optional_yield yield{null_yield};
-
-  //token claims from STS token for ops log (can be used for Keystone token also)
-  std::vector<std::string> token_claims;
-
-  std::vector<rgw::IAM::Policy> session_policies;
-
-  jspan_ptr trace;
-  bool trace_enabled = false;
-
-  //Principal tags that come in as part of AssumeRoleWithWebIdentity
-  std::vector<std::pair<std::string, std::string>> principal_tags;
-
-  req_state(CephContext* _cct, const RGWProcessEnv& penv, RGWEnv* e, uint64_t id);
-  ~req_state();
-
-
-  void set_user(std::unique_ptr<rgw::sal::User>& u) { user.swap(u); }
-  bool is_err() const { return err.is_err(); }
-
-  // implements DoutPrefixProvider
-  std::ostream& gen_prefix(std::ostream& out) const override;
-  CephContext* get_cct() const override { return cct; }
-  unsigned get_subsys() const override { return ceph_subsys_rgw; }
-};
-
-void set_req_state_err(req_state*, int);
-void set_req_state_err(req_state*, int, const std::string&);
 void set_req_state_err(struct rgw_err&, int, const int);
-void dump(req_state*);
 
 /** Store basic data on bucket */
 struct RGWBucketEnt {
@@ -1735,219 +1542,6 @@ extern void rgw_to_iso8601(const real_time& t, char *dest, int buf_size);
 extern void rgw_to_iso8601(const real_time& t, std::string *dest);
 extern std::string rgw_to_asctime(const utime_t& t);
 
-struct perm_state_base {
-  CephContext *cct;
-  const rgw::IAM::Environment& env;
-  rgw::auth::Identity *identity;
-  const RGWBucketInfo bucket_info;
-  rgw::s3::ObjectOwnership bucket_object_ownership;
-  int perm_mask;
-  bool defer_to_bucket_acls;
-  PublicAccessBlockConfiguration public_access_block;
-
-  perm_state_base(CephContext *_cct,
-                  const rgw::IAM::Environment& _env,
-                  rgw::auth::Identity *_identity,
-                  const RGWBucketInfo& _bucket_info,
-                  rgw::s3::ObjectOwnership bucket_object_ownership,
-                  int _perm_mask,
-                  bool _defer_to_bucket_acls,
-                  PublicAccessBlockConfiguration _public_access_block = {}) :
-                                                cct(_cct),
-                                                env(_env),
-                                                identity(_identity),
-                                                bucket_info(_bucket_info),
-                                                bucket_object_ownership(bucket_object_ownership),
-                                                perm_mask(_perm_mask),
-                                                defer_to_bucket_acls(_defer_to_bucket_acls),
-                                                public_access_block(_public_access_block)
-  {}
-
-  virtual ~perm_state_base() {}
-
-  virtual const char *get_referer() const = 0;
-  virtual std::optional<bool> get_request_payer() const = 0; /*
-                                                              * empty state means that request_payer param was not passed in
-                                                              */
-
-};
-
-struct perm_state : public perm_state_base {
-  const char *referer;
-  bool request_payer;
-
-  perm_state(CephContext *_cct,
-             const rgw::IAM::Environment& _env,
-             rgw::auth::Identity *_identity,
-             const RGWBucketInfo& _bucket_info,
-             rgw::s3::ObjectOwnership bucket_object_ownership,
-             int _perm_mask,
-             bool _defer_to_bucket_acls,
-             const char *_referer,
-             bool _request_payer) : perm_state_base(_cct,
-                                                    _env,
-                                                    _identity,
-                                                    _bucket_info,
-                                                    bucket_object_ownership,
-                                                    _perm_mask,
-                                                    _defer_to_bucket_acls),
-                                    referer(_referer),
-                                    request_payer(_request_payer) {}
-
-  const char *get_referer() const override {
-    return referer;
-  }
-
-  std::optional<bool> get_request_payer() const override {
-    return request_payer;
-  }
-};
-
-/* A Keystone identity whose role tier caps its implicit permissions
- * (a project reader or an implicit-deny role). The identity-type check
- * matters: Swift read-only subusers of local users also carry a reduced
- * perm_mask but must not be treated as capped Keystone identities. */
-bool is_capped_keystone_identity(uint32_t perm_mask,
-                                 const rgw::auth::Identity& identity);
-
-/* Can this owner perform this operation?
- *
- * Returns true when the identity owns the resource and its permission mask
- * allows the requested permission. A normal owner has full control, so
- * anything passes. A capped identity (a Keystone reader or implicit-deny
- * role) is limited to what its mask allows: reads pass, writes do not.
- *
- * This is the one place an owner grant checks the cap. A policy that allows
- * the user runs earlier and can still grant more. */
-bool verify_owner_permission(const rgw::auth::Identity& identity,
-                             uint32_t perm_mask,
-                             const rgw_owner& owner, uint32_t perm);
-
-/** Check if the req_state's user has the necessary permissions
- * to do the requested action  */
-bool verify_bucket_permission_no_policy(
-  const DoutPrefixProvider* dpp,
-  const perm_state_base * const s,
-  const RGWAccessControlPolicy& user_acl,
-  const RGWAccessControlPolicy& bucket_acl,
-  const int perm, bool* granted_by_acl = nullptr);
-
-bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp,
-                                      struct perm_state_base * const s,
-                                      const RGWAccessControlPolicy& user_acl,
-                                      const int perm);
-
-bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp,
-                                        struct perm_state_base * const s,
-					const RGWAccessControlPolicy& user_acl,
-					const RGWAccessControlPolicy& bucket_acl,
-					const RGWAccessControlPolicy& object_acl,
-					const int perm,
-                                        bool *granted_by_acl = nullptr);
-
-// determine whether a request is allowed or denied within an account
-rgw::IAM::Effect evaluate_iam_policies(
-    const DoutPrefixProvider* dpp,
-    const rgw::IAM::Environment& env,
-    const rgw::auth::Identity& identity,
-    bool account_root, uint64_t op,
-    const rgw::ARN& identity_arn,
-    boost::optional<const rgw::ARN&> resource_arn,
-    const boost::optional<rgw::IAM::Policy>& resource_policy,
-    const std::vector<rgw::IAM::Policy>& identity_policies,
-    const std::vector<rgw::IAM::Policy>& session_policies,
-    bool cross_account);
-
-bool verify_user_permission(const DoutPrefixProvider* dpp,
-                            req_state * const s,
-                            const rgw::ARN& res,
-                            const uint64_t op,
-                            bool mandatory_policy=true);
-bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp,
-                                      req_state * const s,
-                                      int perm);
-// evaluate permissions on a non-s3 resource like a notification topic
-// or role trust policy
-rgw::IAM::Effect evaluate_resource_permission(
-    const DoutPrefixProvider* dpp,
-    const rgw::IAM::Environment& env,
-    const rgw::auth::Identity& identity,
-    uint64_t op,
-    const rgw::ARN& identity_arn,
-    boost::optional<const rgw::ARN&> resource_arn,
-    const rgw_owner& resource_owner,
-    const boost::optional<rgw::IAM::Policy>& resource_policy,
-    const std::vector<rgw::IAM::Policy>& identity_policies,
-    const std::vector<rgw::IAM::Policy>& session_policies);
-
-// verify permissions on a non-s3 resource like a notification topic
-// or role trust policy
-bool verify_resource_permission(
-    const DoutPrefixProvider* dpp,
-    const rgw::IAM::Environment& env,
-    const rgw::auth::Identity& identity,
-    uint64_t op,
-    const rgw::ARN& identity_arn,
-    boost::optional<const rgw::ARN&> resource_arn,
-    const rgw_owner& resource_owner,
-    const boost::optional<rgw::IAM::Policy>& resource_policy,
-    const std::vector<rgw::IAM::Policy>& identity_policies,
-    const std::vector<rgw::IAM::Policy>& session_policies);
-
-bool verify_bucket_permission(const DoutPrefixProvider* dpp,
-                              const perm_state_base * const s,
-                              const rgw::ARN& arn,
-                              bool account_root,
-                              const RGWAccessControlPolicy& user_acl,
-                              const RGWAccessControlPolicy& bucket_acl,
-			      const boost::optional<rgw::IAM::Policy>& bucket_policy,
-                              const std::vector<rgw::IAM::Policy>& identity_policies,
-                              const std::vector<rgw::IAM::Policy>& session_policies,
-                              const uint64_t op,
-                              bool cross_account,
-                              bool *granted_by_acl = nullptr);
-bool verify_bucket_permission(
-  const DoutPrefixProvider* dpp,
-  req_state * const s,
-  const rgw::ARN& arn,
-  const RGWAccessControlPolicy& user_acl,
-  const RGWAccessControlPolicy& bucket_acl,
-  const boost::optional<rgw::IAM::Policy>& bucket_policy,
-  const std::vector<rgw::IAM::Policy>& identity_policies,
-  const std::vector<rgw::IAM::Policy>& session_policies,
-  const uint64_t op);
-bool verify_bucket_permission(const DoutPrefixProvider* dpp, req_state* s,
-                              const rgw::ARN& arn, uint64_t op);
-bool verify_bucket_permission(const DoutPrefixProvider* dpp,
-                              req_state* s, uint64_t op);
-bool verify_bucket_permission_no_policy(
-  const DoutPrefixProvider* dpp,
-  req_state * const s,
-  const RGWAccessControlPolicy& user_acl,
-  const RGWAccessControlPolicy& bucket_acl,
-  const int perm);
-bool verify_bucket_permission_no_policy(const DoutPrefixProvider* dpp,
-                                        req_state * const s,
-					const int perm);
-extern bool verify_object_permission(
-  const DoutPrefixProvider* dpp,
-  req_state * const s,
-  const rgw_obj& obj,
-  const RGWAccessControlPolicy& user_acl,
-  const RGWAccessControlPolicy& bucket_acl,
-  const RGWAccessControlPolicy& object_acl,
-  const boost::optional<rgw::IAM::Policy>& bucket_policy,
-  const std::vector<rgw::IAM::Policy>& identity_policies,
-  const std::vector<rgw::IAM::Policy>& session_policies,
-  const uint64_t op);
-extern bool verify_object_permission(const DoutPrefixProvider* dpp, req_state *s, uint64_t op);
-extern bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp, req_state *s,
-					       int perm);
-extern int verify_object_lock(
-  const DoutPrefixProvider* dpp,
-  const rgw::sal::Attrs& attrs,
-  const bool bypass_perm,
-  const bool bypass_governance_mode);
 
 /** Convert an input URL into a sane object name
  * by converting %-escaped std::strings into characters, etc*/
@@ -2330,10 +1924,6 @@ rgw_global_init(const std::map<std::string,std::string> *defaults,
 		    int flags);
 
 
-extern boost::optional<rgw::IAM::Policy>
-get_iam_policy_from_attr(CephContext* cct,
-                         const std::map<std::string, bufferlist>& attrs,
-                         const std::string& tenant);
 
 static inline void prepend_bucket_marker(const rgw_bucket& bucket, const std::string& orig_oid, std::string& oid)
 {

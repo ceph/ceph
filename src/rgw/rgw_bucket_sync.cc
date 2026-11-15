@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include "rgw_common.h"
+#include "common/dout.h"
 #include "rgw_bucket_sync.h"
 #include "rgw_zone.h"
 

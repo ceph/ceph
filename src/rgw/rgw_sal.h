@@ -21,6 +21,7 @@
 #include <boost/intrusive_ptr.hpp>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
 
+#include "common/subsys_types.h"
 #include "common/tracer.h"
 #include "rgw_cksum.h"
 #include "rgw_common.h"
