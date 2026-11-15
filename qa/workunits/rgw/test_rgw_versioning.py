@@ -351,6 +351,44 @@ def main():
         null_bucket.object_versions.all().delete()
         null_bucket.delete()
 
+    # TESTCASE 'ordered and unordered outer pages resume after a null version'
+    outer_name = BUCKET_NAME + '-outer-null-resume'
+    outer_bucket = connection.create_bucket(Bucket=outer_name)
+    try:
+        connection.BucketVersioning(outer_name).enable()
+        for key in [f'k{i:02d}' for i in range(99)] + ['z']:
+            outer_bucket.Object(key).put(Body=b'old')
+        connection.BucketVersioning(outer_name).suspend()
+        outer_bucket.Object('z').put(Body=b'null')
+        exec_cmd(f'radosgw-admin bucket reshard --bucket {outer_name} '
+                 '--num-shards 1 --yes-i-really-mean-it')
+
+        # Both commands use outer pages of 100 entries. The current null
+        # version is entry 100, with z's older version still to be listed.
+        command = f'radosgw-admin bucket radoslist --bucket {outer_name}'
+        actual = exec_cmd(command).splitlines()
+        resync = (f'radosgw-admin bucket resync encrypted multipart '
+                  f'--bucket {outer_name} --yes-i-really-mean-it')
+        progress = json.loads(exec_cmd(resync))['progress']
+        processed = progress[-1]['total processed']
+
+        # A numbered version immediately before z moves the page boundary
+        # off the null version without changing any existing object.
+        connection.BucketVersioning(outer_name).enable()
+        outer_bucket.Object('padding').put(Body=b'padding')
+        expected = [oid for oid in exec_cmd(command).splitlines()
+                    if not oid.endswith(b'_padding')]
+        control = json.loads(exec_cmd(resync))['progress']
+        assert control[-1]['total processed'] == 102
+        log.info(f'outer pages: radoslist={len(actual)}, '
+                 f'control={len(expected)}, resync={processed}')
+        assert sorted(actual) == sorted(expected), \
+            'radoslist repeats entries at the null-version page boundary'
+        assert processed == 101, f'resync processed {processed} entries, not 101'
+    finally:
+        outer_bucket.object_versions.all().delete()
+        outer_bucket.delete()
+
     # Clean up
     log.debug("Deleting bucket {}".format(BUCKET_NAME))
     bucket.object_versions.all().delete()
