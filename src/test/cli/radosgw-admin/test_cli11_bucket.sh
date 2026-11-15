@@ -714,7 +714,7 @@ echo "=== bucket logging (info/list/flush) ==="
 # ============================================================
 
 # 'bucket logging' is an internal node (require_subcommand): both an incomplete
-# command and an unknown subcommand report "A subcommand is required", exit 106
+# command and an unknown subcommand report "A subcommand is required", exit 1
 check "logging (incomplete command)" 1 "$ERR_SUBCOMMAND" \
   bucket logging
 check "logging: unknown subcommand"  1 "$ERR_SUBCOMMAND" \
@@ -801,7 +801,7 @@ check "rewrite: stray between bucket and rewrite" 1 "ERROR: unexpected argument:
 check "rewrite: unrecognized flag" 22 "ERROR: invalid flag --fakeflag" \
   bucket rewrite --fakeflag
 
-# missing option value (parse-level, exit 114). The size flags are bound to a
+# missing option value (parse-level, exit 1). The size flags are bound to a
 # string sink (legacy atoll compat) so they behave like any other TEXT option
 # here; the date flags report the canonical name even when the alias is used.
 check "rewrite: --bucket missing value"                1 "--bucket: 1 required TEXT missing" \
@@ -903,16 +903,15 @@ check "set-min-shards: stray between bucket and leaf" 1 "ERROR: unexpected argum
 
 check "set-min-shards: unrecognized flag" 22 "ERROR: invalid flag --fakeflag" \
   bucket set-min-shards --fakeflag
-# Unrelated flags differ by TYPE, not relatedness (both --fix and --max-entries
-# are registered on the shared root via add_multilevel_*). A value option in
-# SPACE form leaks its value token as a stray positional (exit 22) — the known
-# global space-form-value divergence; legacy parsed-and-ignored it. The =form
-# binds the value and is accepted instead (see the cluster cases below).
-check_warns "set-min-shards: unrelated --max-entries 5 swallowed+warned (space form)" 234 "ERROR: bucket not specified" \
+# --fix and --max-entries are unrelated here but registered on the shared root
+# via add_multilevel_*. A value option in SPACE form takes its value and is
+# warned about; legacy parsed-and-ignored it. The =form binds the value and is
+# accepted and warned about too (see the cluster cases below).
+check_warns "set-min-shards: unrelated --max-entries 5 swallowed+warned (space form)" 22 "ERROR: bucket not specified" \
   "Warning: --max-entries is not a valid option for 'bucket set-min-shards'" -- \
   bucket set-min-shards --max-entries 5
 
-# missing option value (parse-level, exit 114)
+# missing option value (parse-level, exit 1)
 check "set-min-shards: --bucket missing value"     1 "--bucket: 1 required TEXT missing" \
   bucket set-min-shards --bucket
 check "set-min-shards: --bucket-id missing value"  1 "--bucket-id: 1 required TEXT missing" \
@@ -922,30 +921,31 @@ check "set-min-shards: --tenant missing value"     1 "--tenant: 1 required TEXT 
 check "set-min-shards: --num-shards missing value" 1 "--num-shards: 1 required INT missing" \
   bucket set-min-shards --num-shards
 # --num-shards is a strict CLI11 integer; a non-numeric value is rejected at
-# parse (exit 104), where legacy would emit its own strict_strtol error
+# parse (exit 22), where legacy would emit its own strict_strtol error
 check "set-min-shards: --num-shards non-integer"   22 "Could not convert: --num-shards = abc" \
   bucket set-min-shards --num-shards abc
 
 # handler-level (cluster): validations live inside cli11_action and run after
 # driver init. Order: bucket empty -> num-shards specified -> num-shards >= 1.
-# Each returns -EINVAL (shell exit 234), faithful to the legacy handler.
-check_cluster "set-min-shards: missing --bucket"            234 "ERROR: bucket not specified" -- \
+# Each returns EINVAL (shell exit 22), faithful to the legacy handler.
+check_cluster "set-min-shards: missing --bucket"            22 "ERROR: bucket not specified" -- \
   bucket set-min-shards --num-shards 11
-check_cluster "set-min-shards: --num-shards not specified"  234 "ERROR: --num-shards not specified" -- \
+check_cluster "set-min-shards: --num-shards not specified"  22 "ERROR: --num-shards not specified" -- \
   bucket set-min-shards --bucket cli11-no-such-bucket
-check_cluster "set-min-shards: --num-shards < 1"            234 "ERROR: --num-shards must be at least 1" -- \
+check_cluster "set-min-shards: --num-shards < 1"            22 "ERROR: --num-shards must be at least 1" -- \
   bucket set-min-shards --bucket cli11-no-such-bucket --num-shards 0
 # valid args but nonexistent bucket: init_bucket fails (exit 2, no handler message)
 check_cluster "set-min-shards: nonexistent bucket (exit 2)" 2 "" -- \
   bucket set-min-shards --bucket cli11-no-such-bucket --num-shards 11
 # The three unrelated-flag cases side by side (identical args, only the flag
-# differs): a binary flag (--fix, expected(0,1)) takes 0 values -> accepted,
-# exit 2; a value option in =form binds its value -> accepted, exit 2; the same
-# value option in SPACE form leaks its value as a stray positional -> exit 22
-# (the known global space-form-value divergence; legacy parsed-and-ignored it).
-check_cluster "set-min-shards: unrelated binary flag --fix accepted (exit 2)" 2 "" -- \
+# differs): a binary flag (--fix, expected(0,1)) takes 0 values; a value option
+# in =form binds its value; the same value option in SPACE form takes its value.
+# All three are accepted and warned about, exit 2 (legacy parsed-and-ignored them).
+check_warns "set-min-shards: unrelated binary flag --fix accepted (exit 2)" 2 "" \
+  "Warning: --fix is not a valid option for 'bucket set-min-shards'" -- \
   bucket set-min-shards --fix --bucket cli11-no-such-bucket --num-shards 11
-check_cluster "set-min-shards: unrelated value flag --max-entries=5 (=form, exit 2)" 2 "" -- \
+check_warns "set-min-shards: unrelated value flag --max-entries=5 (=form, exit 2)" 2 "" \
+  "Warning: --max-entries is not a valid option for 'bucket set-min-shards'" -- \
   bucket set-min-shards --max-entries=5 --bucket cli11-no-such-bucket --num-shards 11
 check_warns "set-min-shards: unrelated --max-entries 5 swallowed+warned (space form, +bucket+num-shards)" 2 "" \
   "Warning: --max-entries is not a valid option for 'bucket set-min-shards'" -- \
@@ -1001,7 +1001,7 @@ check "object shard: stray between object and shard" 1 "ERROR: unexpected argume
 check "object shard: stray word after leaf (banana)"  1 "ERROR: unexpected argument: 'banana'" \
   bucket object shard banana
 
-# unknown subcommand under the 'object' node: require_subcommand fires (exit 106)
+# unknown subcommand under the 'object' node: require_subcommand fires (exit 1)
 check "object: unknown subcommand (banana)"           1 "A subcommand is required" \
   bucket object banana
 check "object: no subcommand"                         1 "A subcommand is required" \
@@ -1009,19 +1009,19 @@ check "object: no subcommand"                         1 "A subcommand is require
 
 check "object shard: unrecognized flag" 22 "ERROR: invalid flag --fakeflag" \
   bucket object shard --fakeflag
-# Unrelated flags differ by TYPE (both registered on the shared root). A value
-# option in SPACE form leaks its value as a stray positional (exit 22); the =form
-# binds the value and is accepted instead (see the cluster cases below).
+# Unrelated flags registered on the shared root: a value option in SPACE form
+# takes its value and is warned about; the =form binds the value and is accepted
+# and warned about too (see the cluster cases below).
 check_warns "object shard: unrelated --max-entries 5 swallowed+warned (space form)" 0 "" \
   "Warning: --max-entries is not a valid option for 'bucket object shard'" '"shard": 10' -- \
   bucket object shard --object foo --num-shards 11 --max-entries 5
 
-# missing option value (parse-level, exit 114)
+# missing option value (parse-level, exit 1)
 check "object shard: --object missing value"     1 "--object: 1 required TEXT missing" \
   bucket object shard --object
 check "object shard: --num-shards missing value" 1 "--num-shards: 1 required INT missing" \
   bucket object shard --num-shards
-# --num-shards is a strict CLI11 integer; a non-numeric value is rejected at parse (exit 104)
+# --num-shards is a strict CLI11 integer; a non-numeric value is rejected at parse (exit 22)
 check "object shard: --num-shards non-integer"   22 "Could not convert: --num-shards = abc" \
   bucket object shard --object foo --num-shards abc
 
@@ -1040,8 +1040,8 @@ check_warns "object shard: --num-shards 010 before subcommand (base-10 + warn)" 
   bucket --num-shards 010 object shard --object bar
 
 # handler-level (cluster): validations live inside cli11_action and run after
-# driver init. The handler returns a positive EINVAL (shell exit 22), faithful
-# to the legacy handler (note: this differs from set-min-shards' -EINVAL/234).
+# driver init. The handler returns EINVAL (shell exit 22), faithful to the
+# legacy handler.
 check_cluster "object shard: missing object (only --num-shards)" 22 "ERROR: num-shards and object must be specified." -- \
   bucket object shard --num-shards 11
 check_cluster "object shard: missing num-shards (only --object)" 22 "ERROR: num-shards and object must be specified." -- \
@@ -1052,9 +1052,11 @@ check_cluster "object shard: non-positive num-shards"           22 "ERROR: non-p
 # unrelated flags alongside valid args: a binary flag (--fix) takes 0 values ->
 # accepted; a value option in =form binds its value -> accepted; both still
 # compute the shard (foo % 11 -> 10).
-check_cluster "object shard: unrelated binary flag --fix accepted"        0 '"shard": 10' -- \
+check_warns "object shard: unrelated binary flag --fix accepted"        0 "" \
+  "Warning: --fix is not a valid option for 'bucket object shard'" '"shard": 10' -- \
   bucket object shard --object foo --num-shards 11 --fix
-check_cluster "object shard: unrelated value flag --max-entries=5 (=form)" 0 '"shard": 10' -- \
+check_warns "object shard: unrelated value flag --max-entries=5 (=form)" 0 "" \
+  "Warning: --max-entries is not a valid option for 'bucket object shard'" '"shard": 10' -- \
   bucket object shard --object foo --num-shards 11 --max-entries=5
 
 # wrong-position warnings (flag before the leaf subcommand). The value still
@@ -1100,7 +1102,7 @@ check "shard objects: stray between shard and objects" 1 "ERROR: unexpected argu
 check "shard objects: stray word after leaf (banana)"  1 "ERROR: unexpected argument: 'banana'" \
   bucket shard objects banana
 
-# unknown subcommand under the 'shard' node: require_subcommand fires (exit 106)
+# unknown subcommand under the 'shard' node: require_subcommand fires (exit 1)
 check "shard: unknown subcommand (banana)"             1 "A subcommand is required" \
   bucket shard banana
 check "shard: no subcommand"                           1 "A subcommand is required" \
@@ -1108,13 +1110,14 @@ check "shard: no subcommand"                           1 "A subcommand is requir
 
 check "shard objects: unrecognized flag" 22 "ERROR: invalid flag --fakeflag" \
   bucket shard objects --fakeflag
-# value option in SPACE form leaks its value as a stray positional (exit 22); the
-# =form binds the value and is accepted instead (see the cluster cases below).
+# value option in SPACE form takes its value and is warned about; the =form
+# binds the value and is accepted and warned about too (see the cluster cases
+# below).
 check_warns "shard objects: unrelated --max-entries 5 swallowed+warned (space form)" 0 "" \
   "Warning: --max-entries is not a valid option for 'bucket shard objects'" '"objs"' -- \
   bucket shard objects --num-shards 4 --max-entries 5
 
-# missing option value (parse-level, exit 114)
+# missing option value (parse-level, exit 1)
 check "shard objects: --num-shards missing value" 1 "--num-shards: 1 required INT missing" \
   bucket shard objects --num-shards
 check "shard objects: --shard-id missing value"   1 "--shard-id: 1 required INT missing" \
@@ -1122,7 +1125,7 @@ check "shard objects: --shard-id missing value"   1 "--shard-id: 1 required INT 
 check "shard objects: --prefix missing value"     1 "--prefix: 1 required TEXT missing" \
   bucket shard objects --prefix
 # --num-shards / --shard-id are strict CLI11 integers; a non-numeric value is
-# rejected at parse (exit 104)
+# rejected at parse (exit 22)
 check "shard objects: --num-shards non-integer"   22 "Could not convert: --num-shards = abc" \
   bucket shard objects --num-shards abc
 check "shard objects: --shard-id non-integer"     22 "Could not convert: --shard-id = abc" \
@@ -1137,9 +1140,11 @@ check_cluster "shard objects: --shard-id >= num-shards" 22 "ERROR: shard-id must
 
 # unrelated flags alongside valid args: binary flag (--fix) takes 0 values ->
 # accepted; value option in =form binds -> accepted; both still list objs.
-check_cluster "shard objects: unrelated binary flag --fix accepted"        0 '"objs"' -- \
+check_warns "shard objects: unrelated binary flag --fix accepted"        0 "" \
+  "Warning: --fix is not a valid option for 'bucket shard objects'" '"objs"' -- \
   bucket shard objects --num-shards 4 --fix
-check_cluster "shard objects: unrelated value flag --max-entries=5 (=form)" 0 '"objs"' -- \
+check_warns "shard objects: unrelated value flag --max-entries=5 (=form)" 0 "" \
+  "Warning: --max-entries is not a valid option for 'bucket shard objects'" '"objs"' -- \
   bucket shard objects --num-shards 4 --max-entries=5
 
 # wrong-position warnings (flag before the leaf subcommand). The value still
@@ -1184,7 +1189,7 @@ check "resync: stray between resync and encrypted"  1 "ERROR: unexpected argumen
 check "resync: stray between encrypted and multipart" 1 "ERROR: unexpected argument: 'x'" \
   bucket resync encrypted x multipart
 
-# unknown subcommand under the resync / encrypted nodes (require_subcommand -> 106)
+# unknown subcommand under the resync / encrypted nodes (require_subcommand -> 1)
 check "resync: unknown subcommand (banana)"           1 "A subcommand is required" \
   bucket resync banana
 check "resync encrypted: unknown subcommand (banana)" 1 "A subcommand is required" \
@@ -1194,12 +1199,12 @@ check "resync: no subcommand"                         1 "A subcommand is require
 
 check "resync: unrecognized flag" 22 "ERROR: invalid flag --fakeflag" \
   bucket resync encrypted multipart --fakeflag
-# a value option in SPACE form leaks its value as a stray positional (exit 22)
+# a value option in SPACE form takes its value and is warned about
 check_warns "resync: unrelated --max-entries 5 swallowed+warned (space form)" 2 "" \
   "Warning: --max-entries is not a valid option for 'bucket resync encrypted multipart'" -- \
   bucket resync encrypted multipart --bucket cli11chk --max-entries 5 --yes-i-really-mean-it
 
-# missing option value (parse-level, exit 114)
+# missing option value (parse-level, exit 1)
 check "resync: --bucket missing value"    1 "--bucket: 1 required TEXT missing" \
   bucket resync encrypted multipart --bucket
 check "resync: --bucket-id missing value" 1 "--bucket-id: 1 required TEXT missing" \
@@ -1219,9 +1224,11 @@ check_cluster "resync: nonexistent bucket (exit 2)" 2 "" -- \
 # unrelated flags alongside valid args: a binary flag (--fix) takes 0 values ->
 # accepted; a value option in =form binds -> accepted; both proceed to init_bucket
 # (which fails on the nonexistent bucket, exit 2) rather than being rejected at parse.
-check_cluster "resync: unrelated binary flag --fix accepted (exit 2)" 2 "" -- \
+check_warns "resync: unrelated binary flag --fix accepted (exit 2)" 2 "" \
+  "Warning: --fix is not a valid option for 'bucket resync encrypted multipart'" -- \
   bucket resync encrypted multipart --fix --bucket cli11-no-such-bucket --yes-i-really-mean-it
-check_cluster "resync: unrelated value flag --max-entries=5 (=form, exit 2)" 2 "" -- \
+check_warns "resync: unrelated value flag --max-entries=5 (=form, exit 2)" 2 "" \
+  "Warning: --max-entries is not a valid option for 'bucket resync encrypted multipart'" -- \
   bucket resync encrypted multipart --max-entries=5 --bucket cli11-no-such-bucket --yes-i-really-mean-it
 
 # wrong-position warnings (flag before the leaf). Value still flows via the shared
@@ -1276,12 +1283,12 @@ check "radoslist: stray before bucket"       1 "ERROR: unexpected argument: 'foo
 
 check "radoslist: unrecognized flag" 22 "ERROR: invalid flag --fakeflag" \
   bucket radoslist --fakeflag
-# a value option in SPACE form leaks its value as a stray positional (exit 22)
+# a value option in SPACE form takes its value and is warned about
 check_warns "radoslist: unrelated --max-entries 5 swallowed+warned (space form)" 0 "" \
   "Warning: --max-entries is not a valid option for 'bucket radoslist'" -- \
   bucket radoslist --bucket cli11chk --max-entries 5
 
-# missing option value (parse-level, exit 114)
+# missing option value (parse-level, exit 1)
 check "radoslist: --bucket missing value"            1 "--bucket: 1 required TEXT missing" \
   bucket radoslist --bucket
 check "radoslist: --tenant missing value"            1 "--tenant: 1 required TEXT missing" \
@@ -1293,7 +1300,7 @@ check "radoslist: --orphan-stale-secs missing value" 1 "--orphan-stale-secs: 1 r
 check "radoslist: --rgw-obj-fs missing value"        1 "--rgw-obj-fs: 1 required TEXT missing" \
   bucket radoslist --rgw-obj-fs
 # --max-concurrent-ios (int) / --orphan-stale-secs (uint) are strict CLI11 numbers;
-# a non-numeric value is rejected at parse (exit 104)
+# a non-numeric value is rejected at parse (exit 22)
 check "radoslist: --max-concurrent-ios non-integer" 22 "Could not convert: --max-concurrent-ios = abc" \
   bucket radoslist --max-concurrent-ios abc
 check "radoslist: --orphan-stale-secs non-integer"  22 "Could not convert: --orphan-stale-secs = abc" \
@@ -1315,9 +1322,11 @@ check_cluster "radoslist: --bucket (lists, exit 0)" 0 "" -- \
   bucket radoslist --bucket cli11chk
 # unrelated flags alongside valid args: binary flag (--fix) takes 0 values ->
 # accepted; value option in =form binds -> accepted; both still exit 0.
-check_cluster "radoslist: unrelated binary flag --fix accepted"        0 "" -- \
+check_warns "radoslist: unrelated binary flag --fix accepted"        0 "" \
+  "Warning: --fix is not a valid option for 'bucket radoslist'" -- \
   bucket radoslist --bucket cli11chk --fix
-check_cluster "radoslist: unrelated value flag --max-entries=5 (=form)" 0 "" -- \
+check_warns "radoslist: unrelated value flag --max-entries=5 (=form)" 0 "" \
+  "Warning: --max-entries is not a valid option for 'bucket radoslist'" -- \
   bucket radoslist --bucket cli11chk --max-entries=5
 
 # wrong-position warnings (flag before the leaf subcommand). Value still flows in
@@ -1362,7 +1371,7 @@ check "rados list: stray after leaf (banana)" 1 "ERROR: unexpected argument: 'ba
   bucket rados list banana
 check "rados list: stray between rados and list" 1 "ERROR: unexpected argument: 'extra'" \
   bucket rados extra list
-# unknown subcommand under the 'rados' node (require_subcommand -> 106)
+# unknown subcommand under the 'rados' node (require_subcommand -> 1)
 check "rados: unknown subcommand (banana)" 1 "A subcommand is required" \
   bucket rados banana
 check "rados: no subcommand"               1 "A subcommand is required" \
@@ -1611,8 +1620,8 @@ check_warns "list: duplicate --tenant same level"  22 "ERROR: --tenant is set, b
 check_warns "list: duplicate --format same level"  0 "" "$WARN_FORMAT_DUP" -- \
   bucket list --format json --format xml
 # --uid is registered on bucket list (to filter by owner)
-# legacy returns -ENOENT from main for an unknown user, so the exit code is 254
-check_warns "list: --uid before bucket"           254 "ERROR: could not find user" -- \
+# legacy returns ENOENT from main for an unknown user, so the exit code is 2
+check_warns "list: --uid before bucket"           2 "ERROR: could not find user" -- \
   --uid testuser_cli11_test bucket list
 check_warns "list: --bucket-id before bucket"     0 "" "$WARN_BUCKETID_POS" -- \
   --bucket-id nonexistent_id_cli11_test bucket list
@@ -1648,10 +1657,10 @@ check_warns "stats: --show-restore-stats between bucket/stats" 0 "" "$WARN_SHOWR
   bucket --show-restore-stats stats
 check_warns "stats: duplicate --show-restore-stats"            0 "" "$WARN_SHOWRESTORE_DUP" -- \
   bucket stats --show-restore-stats --show-restore-stats
-# legacy returns -ENOENT from main for an unknown bucket id, so the exit code is 254
-check_warns "stats: --bucket-id before bucket"                 254 "failure: no such bucket id" "$WARN_BUCKETID_POS" -- \
+# legacy returns ENOENT from main for an unknown bucket id, so the exit code is 2
+check_warns "stats: --bucket-id before bucket"                 2 "failure: no such bucket id" "$WARN_BUCKETID_POS" -- \
   --bucket-id nonexistent_id_cli11_test bucket stats
-check_warns "stats: duplicate --bucket-id"                     254 "failure: no such bucket id" "$WARN_BUCKETID_DUP" -- \
+check_warns "stats: duplicate --bucket-id"                     2 "failure: no such bucket id" "$WARN_BUCKETID_DUP" -- \
   bucket stats --bucket-id id1_cli11_test --bucket-id id2_cli11_test
 check_warns "stats: --max-entries before bucket"               0 "" "$WARN_MAXENT_POS" -- \
   --max-entries 10 bucket stats
@@ -1825,9 +1834,10 @@ check_cluster "check: --fix=banana (warn-and-accept)"               0 "Warning: 
 # so it is reported as a stray word after the loop (exit 1), matching legacy.
 check "check: --fix banana (space non-bool, left as stray)"  1 "ERROR: unexpected argument: 'banana'" \
   bucket check --fix banana
-# parse-safety on an UNMIGRATED command: must not throw (old add_flag(int) gave
-# exit 104). Legacy ignores --fix here; we stay exit 0. (A spurious warning is
-# printed for an invalid value only -- known minor divergence, exit code right.)
+# parse-safety on an UNMIGRATED command: must not throw (old add_flag(int) threw
+# a conversion error). Legacy ignores --fix here; we stay exit 0. (A spurious
+# warning is printed for an invalid value only -- known minor divergence, exit
+# code right.)
 check_cluster "gc list --fix=banana (unmigrated stays parse-safe)"  0 "" -- \
   gc list --fix=banana
 
@@ -2403,7 +2413,7 @@ check "empty-= on -i"          1 "no value for uid"       bucket list -i=
 check "empty-= on --bucket-id" 1 "no value for bucket-id" bucket stats --bucket-id=
 # non-empty short-flag '=': the value is split off the flag, so the message
 # names the user without a leading '=' (uncaught by -b=, which never echoes)
-check_cluster "non-empty -= on -i (value split off the flag)" 254 \
+check_cluster "non-empty -= on -i (value split off the flag)" 2 \
   "ERROR: could not find user: nosuchuser_cli11" -- \
   bucket list -i=nosuchuser_cli11
 # mid-line: "" is the value; the next word strays (the collapsed flag must not eat it)
@@ -2472,22 +2482,22 @@ echo "=== legacy-only flags, eaten command words, stray tokens ==="
 # command is parsed again from them -- the same words legacy's find_command
 # would resolve.
 
-# legacy-only flag: value consumed, command runs, user init fails on the key
-check_cluster "list: legacy-only --access-key consumed"        22 "user.init failed" -- \
+# legacy-only flag: value consumed, command runs, no user is found for the key
+check_cluster "list: legacy-only --access-key consumed"        254 "could not find user for access-key" -- \
   bucket --access-key foo list
-check_cluster "list: legacy-only --access-key twice"           22 "user.init failed" -- \
+check_cluster "list: legacy-only --access-key twice"           254 "could not find user for access-key" -- \
   bucket --access-key foo list --access-key foo2
 check "list: unknown flag after legacy-only flag"              22 "ERROR: invalid flag --backet" \
   bucket --access-key foo --backet name list
-check_warns "list: legacy-only flag with misplaced --bucket"   22 "user.init failed" "$WARN_BUCKET_POS" -- \
+check_warns "list: legacy-only flag with misplaced --bucket"   254 "could not find user for access-key" "$WARN_BUCKET_POS" -- \
   bucket --access-key foo --bucket name list
 
 # eaten command word: whatever survives the loop is parsed again
-check_cluster "stats: eaten 'list', sibling command survives"  22 "user.init failed" -- \
+check_cluster "stats: eaten 'list', sibling command survives"  254 "could not find user for access-key" -- \
   bucket --access-key list stats
-check_cluster "stats: eaten 'list', underscore spelling"       22 "user.init failed" -- \
+check_cluster "stats: eaten 'list', underscore spelling"       254 "could not find user for access-key" -- \
   bucket --access_key list stats
-check_cluster "list: eaten 'list', duplicate survives"         22 "user.init failed" -- \
+check_cluster "list: eaten 'list', duplicate survives"         254 "could not find user for access-key" -- \
   bucket --access-key list list
 check "bucket: eaten 'list', stray word survives"              1 "$ERR_SUBCOMMAND" \
   bucket --access-key list banana
@@ -2801,8 +2811,8 @@ check_cluster "integration: buckets check (alias)"  0 "" -- \
   buckets check
 
 # --bucket-id without --bucket triggers rgw_find_bucket_by_id path
-# legacy returns -ENOENT from main for an unknown bucket id, so the exit code is 254
-check_cluster "integration: bucket stats --bucket-id nonexistent" 254 "failure: no such bucket id" -- \
+# legacy returns ENOENT from main for an unknown bucket id, so the exit code is 2
+check_cluster "integration: bucket stats --bucket-id nonexistent" 2 "failure: no such bucket id" -- \
   bucket stats --bucket-id nonexistent_id_cli11_test
 
 # --inconsistent-index + --yes-i-really-mean-it suppresses the warning and proceeds
