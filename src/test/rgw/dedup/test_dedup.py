@@ -1949,6 +1949,63 @@ def print_bucket_versioning(conn, bucket_name):
     else:
         log.info("%s: Status=%s, MFADelete=%s", bucket_name, status, mfadelete)
 
+@pytest.mark.basic_test
+@pytest.mark.parametrize('newer_versions', [0, 999])
+def test_dedup_null_version_resume(tmp_path, newer_versions):
+    """An estimate must count each version once across a null-version boundary."""
+    conn = get_single_connection()
+    bucket_name = gen_bucket_name()
+    conn.create_bucket(Bucket=bucket_name)
+    versions = []
+    started = False
+    try:
+        for status, count in [('Enabled', 1), ('Suspended', 1),
+                              ('Enabled', newer_versions)]:
+            conn.put_bucket_versioning(
+                Bucket=bucket_name, VersioningConfiguration={'Status': status})
+            for _ in range(count):
+                response = conn.put_object(
+                    Bucket=bucket_name, Key='key', Body=b'data')
+                version = ('null' if status == 'Suspended'
+                           else response['VersionId'])
+                versions.append({'Key': 'key', 'VersionId': version})
+        result = admin(['bucket', 'reshard', '--bucket', bucket_name,
+                        '--num-shards', '1', '--yes-i-really-mean-it'])
+        assert result[1] == 0, result
+
+        # With 999 newer versions, a full CLS page ends on the null version.
+        allowlist = tmp_path / 'buckets'
+        allowlist.write_text(bucket_name + '\n')
+        result = dedup_admin_cli('estimate', '--allow-bucket-list', str(allowlist))
+        assert result[1] == 0, result
+        started = True
+        deadline = time.monotonic() + 60
+        while time.monotonic() < deadline:
+            result = dedup_admin_cli('stats')
+            assert result[1] == 0, result
+            stats = json.loads(result[0])
+            worker_stats = stats['worker_stats']['main']
+            # The empty startup epoch reports completed before workers exist.
+            if stats['completed'] and 'Num Work-Shards' in worker_stats:
+                count = worker_stats['Ingress Objs count']
+                assert count == len(versions), (
+                    f'estimate counted {count} versions, expected {len(versions)}')
+                break
+            time.sleep(3)
+        else:
+            pytest.fail('dedup estimate did not complete within 60 seconds')
+    finally:
+        if started:
+            result = dedup_admin_cli('abort')
+            assert result[1] == 0, result
+        for offset in range(0, len(versions), 1000):
+            response = conn.delete_objects(
+                Bucket=bucket_name,
+                Delete={'Objects': versions[offset:offset + 1000]})
+            check_delete_objects_response(response)
+        conn.delete_bucket(Bucket=bucket_name)
+
+
 #-------------------------------------------------------------------------------
 # generate @num_files objects with @ver_count versions each of @obj_size
 # verify that we got the correct number of rados-objects
