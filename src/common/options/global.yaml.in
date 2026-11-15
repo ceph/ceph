@@ -2540,7 +2540,10 @@ options:
     When set, the client opens a connection to that port (on the OSD's
     address it already uses), and sends
     the PG's subsequent ops on it, saving the OSD a cross-core hop per op.
-    Read when the client starts.
+    May be changed at runtime. Turned off, each PG's ops return to the main
+    connection once those in flight are answered (see
+    objecter_osd_core_switch_grace), and the connections to the OSD cores
+    are closed once no longer used.
   see_also:
   - crimson_osd_core_listeners
   - objecter_osd_core_switch_grace
