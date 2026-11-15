@@ -1270,7 +1270,7 @@ int RedisBucketDirectory::remove_object(const DoutPrefixProvider* dpp, optional_
   return zrem(dpp, y, bucket_id, object_name, txn);
 }
 
-int RedisBucketDirectory::list_objects(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, const std::string& start_token, const std::string& prefix, const std::string& marker, [[maybe_unused]] const std::string_view end_marker, const uint64_t count, const bool marker_inclusive, std::vector<CacheObject>& objs_info, std::string& continuation_token, std::optional<Transaction> txn)
+int RedisBucketDirectory::list_objects(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, const std::string& start_token, const std::string& prefix, const std::string& marker, const std::string_view end_marker, const uint64_t count, const bool marker_inclusive, std::vector<CacheObject>& objs_info, std::string& continuation_token, std::optional<Transaction> txn)
 {
   if (!prefix.empty()) {
     // SCAN_OBJECTS path (with prefix)

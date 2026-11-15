@@ -913,10 +913,10 @@ int FDBBucketDirectory::remove_object(const DoutPrefixProvider* dpp, optional_yi
   });
 }
 
-int FDBBucketDirectory::list_objects(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, const std::string& start_token, const std::string& prefix, const std::string& marker, [[maybe_unused]] const std::string_view end_marker, uint64_t count, bool marker_inclusive, std::vector<CacheObject>& objs_info, std::string& continuation_token, std::optional<Transaction> txn)
+int FDBBucketDirectory::list_objects(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, const std::string& start_token, const std::string& prefix, const std::string& marker, const std::string_view end_marker, const uint64_t count, const bool marker_inclusive, std::vector<CacheObject>& objs_info, std::string& continuation_token, std::optional<Transaction> txn)
 try
  {
-  auto object_query = object_listing_query(bucket_id, prefix, marker, {}, marker_inclusive);
+  auto object_query = object_listing_query(bucket_id, prefix, marker, end_marker, marker_inclusive);
 
   if (q::is_empty(object_query)) {
     return -ENOENT;
@@ -987,12 +987,26 @@ lfdb::query::interval FDBBucketDirectory::object_listing_query(
     const bool marker_inclusive)
 {
   const auto parent = object_listing_subspace(bucket_id);
-  const std::string base{libfdb_key_view(parent)};
-  const auto prefix_begin = base + std::string{prefix};
-  const auto marker_key = base + std::string{marker};
-  return marker.empty() ? q::prefix(prefix_begin)
-      : marker_inclusive ? q::prefix_starting_at(prefix_begin, marker_key)
-                          : q::prefix_starting_after(prefix_begin, marker_key);
+  auto selection = q::prefix(parent);
+
+  // A partial object name is a logical interval, not a complete Content segment.
+  if (!prefix.empty()) {
+    selection &= q::at_or_after(build_object_index(parent, prefix));
+    if (const auto upper = q::byte_string_domain::successor(prefix)) {
+      selection &= q::before(build_object_index(parent, *upper));
+    }
+  }
+
+  if (!marker.empty()) {
+    const auto key = build_object_index(parent, marker);
+    selection &= marker_inclusive ? q::at_or_after(key) : q::after(key);
+  }
+
+  if (!end_marker.empty()) {
+    selection &= q::before(build_object_index(parent, end_marker));
+  }
+
+  return selection;
 }
 
 int FDBBucketDirectory::exist_key(const DoutPrefixProvider* dpp, optional_yield y,
@@ -1054,8 +1068,11 @@ fdbc::compiled_key FDBObjectDirectory::build_version_score_index(fdbc::compiled_
 lfdb::query::interval FDBObjectDirectory::version_score_query(
     const fdbc::compiled_key& versions_subspace, const int64_t min, const int64_t max)
 {
-  const std::string base{libfdb_key_view(versions_subspace)};
-  return q::prefix(base) & q::between(base + encode_score(min), base + encode_score(max) + "\xff");
+  const auto first = build_versions_score_prefix(versions_subspace, encode_score(min));
+  const auto last = build_versions_score_prefix(versions_subspace, encode_score(max));
+
+  // Include all versions at the upper score, not just the score-prefix key itself.
+  return q::prefix(versions_subspace) & q::between(first, q::prefix(last).end_key);
 }
 
 int FDBObjectDirectory::exist_key(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, const std::string& obj_name, std::optional<Transaction> txn)

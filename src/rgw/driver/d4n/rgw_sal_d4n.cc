@@ -527,10 +527,9 @@ int D4NFilterBucket::build_versioned_entries(const DoutPrefixProvider* dpp, cons
       if (versions[i].deleteMarker) {
         entry.flags |= rgw_bucket_dir_entry::FLAG_DELETE_MARKER;
       }
-      if (i == 0) {
+      // A version marker resumes older entries, so none of them is current.
+      if (i == 0 && (params.marker.name != obj.objName || params.marker.instance.empty())) {
         entry.flags |= rgw_bucket_dir_entry::FLAG_CURRENT;
-      } else {
-        entry.flags |= rgw_bucket_dir_entry::FLAG_VER_MARKER;
       }
       entry.key.instance = version;
       entry.meta.owner = versions[i].user_id;
@@ -599,13 +598,15 @@ D4NFilterBucket::process_objects_batch(const DoutPrefixProvider* dpp,
     if (!params.delim.empty()) {
       size_t pos = obj.find(params.delim, params.prefix.length());
       if (pos != std::string::npos) {
-        if (std::string delim_str = obj.substr(0, pos + 1);
-            !known_prefixes.contains(delim_str) &&
+        if (std::string delim_str = obj.substr(0, pos + params.delim.size());
+            params.marker.name < delim_str && !known_prefixes.contains(delim_str) &&
             cache_results.common_prefixes.try_emplace(delim_str, true).second) {
           num_objs++;
           if (num_objs == max) {
-            cache_results.is_truncated = true;
-            cache_results.next_marker.name = delim_str;
+            cache_results.is_truncated = more_objs_in_cur_batch || is_truncated;
+            if (cache_results.is_truncated) {
+              cache_results.next_marker.name = delim_str;
+            }
             ldpp_dout(dpp, 20) << "D4NFilterBucket::" << __func__ << " cache_results.is_truncated: " << cache_results.is_truncated << dendl;
             ldpp_dout(dpp, 20) << "D4NFilterBucket::" << __func__ << " cache_results.next_marker.name: " << cache_results.next_marker.name << dendl;
             return cache_results;   // stop immediately -- lex order preserved
@@ -718,6 +719,7 @@ void D4NFilterBucket::merge_results(const DoutPrefixProvider* dpp, const ListPar
       // streams (this can happen when list_versions is set and the two
       // sources have different numbers of versions for this key) are
       // picked up on the next outer-loop iteration
+      continue;
     } else if (take_c) {
       merged.push_back(cache_results.objs[i]);
       i++;
@@ -817,6 +819,7 @@ int D4NFilterBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int
   ldpp_dout(dpp, 20) << "D4NFilterBucket::" << __func__ << " max: " << max << dendl;
 
   if (max == 0) {
+    results = {};
     return 0;
   }
 
@@ -830,7 +833,7 @@ int D4NFilterBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int
       auto result = read_listing_batch(dpp, params, max, cursor_or_start,
                                        is_first_batch, cache_results, y);
       if (!result) {
-        break;
+        return result.error();
       }
 
       auto& batch = *result;

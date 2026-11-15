@@ -163,7 +163,7 @@ public:
                     bool marker_inclusive,
                     std::vector<CacheObject>& objs_info,
                     std::string& continuation_token,
-                    std::optional<Transaction> txn);
+                    std::optional<Transaction> txn) override;
 
 private:
     static fdbc::compiled_key object_listing_subspace(std::string_view bucket_id);
