@@ -1393,6 +1393,24 @@ public:
     set_meta(omap_node_meta_t::merge_from(left.get_meta(), right.get_meta()));
   }
 
+  /**
+   * copy_from
+   *
+   * Copies all entries and the meta of src into *this, which must be
+   * empty. *this can be larger than src: entry offsets are relative to
+   * the end of the buffer.
+   *
+   * precondition: src.used_space() <= capacity()
+   */
+  void copy_from(const StringKVLeafNodeLayout &src)
+  {
+    assert(src.used_space() <= capacity());
+    set_size(0);
+    copy_from_foreign(iter_begin(), src.iter_begin(), src.iter_end());
+    set_size(src.get_size());
+    set_meta(src.get_meta());
+  }
+
   static std::optional<uint32_t> get_balance_pivot_idx(
     const StringKVLeafNodeLayout &left,
     const StringKVLeafNodeLayout &right)

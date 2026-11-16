@@ -760,6 +760,10 @@ OMapLeafNode::insert(
     }
     co_return mutation_result_t(mutation_status_t::SUCCESS, std::nullopt, std::nullopt);
   } else {
+    // A smaller root leaf grows before insert, see
+    // BtreeOMapManager::grow_root_leaf(). Split, merge and balance
+    // need all non-root leaves to have the same size.
+    ceph_assert(get_len() == get_leaf_size(oc.type));
     auto tuple = co_await make_split_children(oc);
     auto [left, right, pivot] = tuple;
     left->init_range(get_begin(), pivot);
