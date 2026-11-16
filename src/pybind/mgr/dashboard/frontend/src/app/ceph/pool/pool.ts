@@ -130,9 +130,19 @@ const CEPH_RELEASES = [
 export const MIN_POOL_MIGRATION_RELEASE = 'umbrella';
 
 export const isReleaseAtLeast = (current: string, minimum: string): boolean => {
+  if (!current) {
+    return false;
+  }
   const currentIdx = CEPH_RELEASES.indexOf(current.toLowerCase());
   const minIdx = CEPH_RELEASES.indexOf(minimum.toLowerCase());
-  return currentIdx >= 0 && minIdx >= 0 && currentIdx >= minIdx;
+  if (minIdx < 0) {
+    return false;
+  }
+  // Unknown release names are assumed newer than the hardcoded list (forward compatible).
+  if (currentIdx < 0) {
+    return true;
+  }
+  return currentIdx >= minIdx;
 };
 
 export const EXPERIMENTAL_FEATURES_CONFIG =
@@ -156,6 +166,11 @@ export const addPoolMigrationFlag = (value: unknown): string =>
 
 export enum PoolBusyReason {
   MIGRATING = 'migrating',
+  /** ``pg_num`` is converging to ``pg_num_target``. */
+  PG_NUM_CHANGE = 'pgNumChange',
+  /** ``pgp_num`` (placement) is converging to ``pgp_num_target``. */
+  PGP_NUM_CHANGE = 'pgpNumChange',
+  /** Both ``pg_num`` and ``pgp_num`` are converging. */
   PG_CHANGE = 'pgChange',
   TASK = 'task'
 }
@@ -166,20 +181,56 @@ export enum PoolAction {
   DELETE = 'delete'
 }
 
+export const getActiveMigrationSourceIds = (pools: Pool[] | null | undefined): Set<number> => {
+  const ids = new Set<number>();
+  for (const pool of pools || []) {
+    if (pool.migration_src != null) {
+      ids.add(Number(pool.migration_src));
+    }
+  }
+  return ids;
+};
+
+/**
+ * Whether this pool is part of a migration that is still moving data.
+ * Pass ``activeSourceIds`` from {@link getActiveMigrationSourceIds} so only the
+ * stub that is the source of the current migration is included — not unrelated
+ * historical ``.migrate-*`` pools.
+ */
+export const isPoolInActiveMigration = (pool: Pool, activeSourceIds?: Set<number>): boolean => {
+  if (pool.migration_src != null) {
+    return true;
+  }
+  if (pool.migration_target == null || !activeSourceIds) {
+    return false;
+  }
+  return activeSourceIds.has(Number(pool.pool));
+};
+
 /**
  * Returns why an operation can't be performed on a pool right now, or null when it is idle.
  * Specific causes are checked before a generic running task, because an ongoing
  * migration is also reported as an executing task by the backend.
+ *
+ * @param activeSourceIds result of {@link getActiveMigrationSourceIds} when known
  */
-export const getPoolBusyReason = (pool: Pool): PoolBusyReason | null => {
-  if (pool.migration_src != null || pool.migration_target != null) {
+export const getPoolBusyReason = (
+  pool: Pool,
+  activeSourceIds?: Set<number>
+): PoolBusyReason | null => {
+  if (isPoolInActiveMigration(pool, activeSourceIds)) {
     return PoolBusyReason.MIGRATING;
   }
-  if (
-    pool.pg_num !== pool.pg_num_target ||
-    pool.pg_placement_num !== pool.pg_placement_num_target
-  ) {
+  const pgNumChanging = pool.pg_num !== pool.pg_num_target;
+  const pgpNumChanging = pool.pg_placement_num !== pool.pg_placement_num_target;
+  if (pgNumChanging && pgpNumChanging) {
     return PoolBusyReason.PG_CHANGE;
+  }
+  if (pgNumChanging) {
+    return PoolBusyReason.PG_NUM_CHANGE;
+  }
+  if (pgpNumChanging) {
+    return PoolBusyReason.PGP_NUM_CHANGE;
   }
   return pool.cdExecuting ? PoolBusyReason.TASK : null;
 };

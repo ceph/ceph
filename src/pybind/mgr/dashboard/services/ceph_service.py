@@ -127,6 +127,36 @@ class CephService(object):
         return [pool for pool in osd_map['pools']
                 if application in pool.get('application_metadata', {})]
 
+    @staticmethod
+    def _count_migrating_pgs(value):
+        """Count entries in OSDMap's migrating_pgs dump (set, list, or stream string)."""
+        if value is None:
+            return None
+        if isinstance(value, (list, set, tuple)):
+            return len(value)
+        if not isinstance(value, str):
+            return None
+        text = value.strip()
+        if not text or text in ('{}', '[]', 'set()'):
+            return 0
+        inner = text.strip('{}[]')
+        if not inner.strip():
+            return 0
+        return len([part for part in inner.split(',') if part.strip()])
+
+    @classmethod
+    def format_migrating_pgs(cls, pool):
+        """Return ``migrating/total`` for UI display, or '' when unknown."""
+        count = cls._count_migrating_pgs(pool.get('migrating_pgs'))
+        if count is None:
+            return ''
+        pg_num = pool.get('pg_num') or pool.get('pg_num_target') or 0
+        try:
+            pg_num = int(pg_num)
+        except (TypeError, ValueError):
+            pg_num = 0
+        return '{}/{}'.format(count, pg_num)
+
     @classmethod
     def get_pool_migration_info(cls, pools=None):
         """Return migration metadata for every pool that has migration_src set.
@@ -142,8 +172,8 @@ class CephService(object):
         Returns a list of migration dicts and a pool_id -> stats map used to
         inject counters into pool list/detail responses.
         """
-        migrations = []
-        migration_stats = {}
+        migrations: List[Dict[str, Any]] = []
+        migration_stats: Dict[int, Dict[str, Any]] = {}
 
         if pools is None:
             osd_map = mgr.get('osd_map')
@@ -170,12 +200,10 @@ class CephService(object):
         if not migrating_pools:
             return migrations, migration_stats
 
-        pg_dump = mgr.get('pg_dump')
+        pool_stats = mgr.get('pool_stats')
         pg_stat_sums = {}
-        if isinstance(pg_dump, dict):
-            pool_stats_list = pg_dump.get('pg_map', pg_dump).get(
-                'pool_stats', [])
-            for ps in pool_stats_list:
+        if isinstance(pool_stats, dict):
+            for ps in pool_stats.get('pool_stats', []):
                 if 'poolid' not in ps:
                     continue
                 try:
@@ -201,16 +229,19 @@ class CephService(object):
             pct = (min(int(100 * migrated_objs / total_objs), 100)
                    if total_objs > 0 else 0)
 
+            # migrating_pgs lives on the source stub, not the target.
+            src_pool = pools_by_id.get(src_id) or pools_by_id.get(str(src_id), {})
+            migrating_pgs = cls.format_migrating_pgs(src_pool)
             stats_dict = {
                 'num_objects': total_objs,
                 'num_objects_migrated': migrated_objs,
                 'num_bytes': total_bytes,
                 'num_bytes_migrated': migrated_bytes,
+                'migrating_pgs': migrating_pgs,
             }
             migration_stats[pool_id] = stats_dict
             migration_stats[src_id] = stats_dict
 
-            src_pool = pools_by_id.get(src_id) or pools_by_id.get(str(src_id), {})
             migrations.append({
                 'pool_id': pool_id,
                 'pool_name': pool.get('pool_name', str(pool_id)),
@@ -222,6 +253,7 @@ class CephService(object):
                 'num_objects_migrated': migrated_objs,
                 'num_bytes': total_bytes,
                 'num_bytes_migrated': migrated_bytes,
+                'migrating_pgs': migrating_pgs,
                 'progress': pct,
             })
         return migrations, migration_stats
@@ -268,6 +300,8 @@ class CephService(object):
                         'rate': 0,
                         'rates': [[now, ms.get(key, 0)]]
                     }
+                # Replace raw OSDMap dump with a UI-friendly "migrating/total" string.
+                pool['migrating_pgs'] = ms.get('migrating_pgs', '')
 
             pool['stats'] = s
             pools_w_stats.append(pool)

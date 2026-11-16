@@ -4,7 +4,7 @@ import { ActivatedRoute, convertToParamMap } from '@angular/router';
 import { By } from '@angular/platform-browser';
 import { BehaviorSubject, of, Subject } from 'rxjs';
 
-import { PoolResourcePageComponent } from './pool-resource-page.component';
+import { PoolMigrationCardStatus, PoolResourcePageComponent } from './pool-resource-page.component';
 import { PoolService } from '~/app/shared/api/pool.service';
 import { ErasureCodeProfileService } from '~/app/shared/api/erasure-code-profile.service';
 import { FormatterService } from '~/app/shared/services/formatter.service';
@@ -95,6 +95,7 @@ describe('PoolResourcePageComponent', () => {
 
   afterEach(() => {
     jest.clearAllMocks();
+    sessionStorage.clear();
   });
 
   it('should create', () => {
@@ -310,16 +311,23 @@ describe('PoolResourcePageComponent', () => {
       mockPoolService.get.mockReturnValue(of(migratingPool));
       load();
 
+      expect(component.migrationCard?.status).toBe(PoolMigrationCardStatus.Active);
+
       mockPoolService.get.mockReturnValue(of(mockPoolData));
       refreshInterval.next(5000);
       tick();
       fixture.detectChanges();
 
-      expect(component.overviewModel.isMigrating).toBe(false);
-      expect(component.migrationFinished).toBe(true);
-      expect(component.overviewModel.migrationProgress).toBe(100);
-      expect(component.overviewModel.migrationObjectsMigrated).toBe(100);
-      expect(component.overviewModel.migrationBytesMigrated).toBe(10000);
+      expect(component.migrationCard).toEqual(
+        expect.objectContaining({
+          status: PoolMigrationCardStatus.Finished,
+          progress: 100,
+          objectsMigrated: 100,
+          bytesMigrated: 10000,
+          sourceName: 'cache-pool',
+          targetName: 'test-pool'
+        })
+      );
       expect(
         fixture.nativeElement.querySelector('[data-testid="migration-subtitle"]').textContent
       ).toContain("Migration finished for pool 'test-pool' (source: cache-pool)");
@@ -327,7 +335,7 @@ describe('PoolResourcePageComponent', () => {
       fixture.nativeElement.querySelector('[data-testid="dismiss-migration"]').click();
       fixture.detectChanges();
 
-      expect(component.migrationFinished).toBe(false);
+      expect(component.migrationCard).toBeNull();
       expect(fixture.nativeElement.querySelector('cds-tile')).toBeFalsy();
     }));
 
@@ -336,21 +344,87 @@ describe('PoolResourcePageComponent', () => {
       refreshInterval.next(5000);
       tick();
 
-      expect(component.migrationFinished).toBe(false);
+      expect(component.migrationCard).toBeNull();
     }));
 
-    it('should reset the finished state when navigating to another pool', fakeAsync(() => {
+    it('should not carry a finished card to another pool', fakeAsync(() => {
       mockPoolService.get.mockReturnValue(of(migratingPool));
       load();
       mockPoolService.get.mockReturnValue(of(mockPoolData));
       refreshInterval.next(5000);
       tick();
-      expect(component.migrationFinished).toBe(true);
+      expect(component.migrationCard?.status).toBe(PoolMigrationCardStatus.Finished);
 
       paramMapSubject.next(convertToParamMap({ name: 'other-pool' }));
       tick();
 
-      expect(component.migrationFinished).toBe(false);
+      expect(component.migrationCard).toBeNull();
+    }));
+
+    it('should keep the finished card when the same pool paramMap re-emits', fakeAsync(() => {
+      mockPoolService.get.mockReturnValue(of(migratingPool));
+      load();
+      mockPoolService.get.mockReturnValue(of(mockPoolData));
+      refreshInterval.next(5000);
+      tick();
+      expect(component.migrationCard?.status).toBe(PoolMigrationCardStatus.Finished);
+      expect(component.migrationCard?.progress).toBe(100);
+
+      paramMapSubject.next(convertToParamMap({ name: 'test-pool' }));
+      tick();
+      fixture.detectChanges();
+
+      expect(component.migrationCard?.status).toBe(PoolMigrationCardStatus.Finished);
+      expect(component.migrationCard?.progress).toBe(100);
+      expect(component.migrationCard?.objectsMigrated).toBe(100);
+      expect(fixture.nativeElement.querySelector('[data-testid="dismiss-migration"]')).toBeTruthy();
+    }));
+
+    it('should restore a finished card from sessionStorage after remount', fakeAsync(() => {
+      mockPoolService.get.mockReturnValue(of(migratingPool));
+      load();
+      mockPoolService.get.mockReturnValue(of(mockPoolData));
+      refreshInterval.next(5000);
+      tick();
+      expect(component.migrationCard?.status).toBe(PoolMigrationCardStatus.Finished);
+
+      // Simulate component remount (e.g. tab switch away and back).
+      fixture.destroy();
+      fixture = TestBed.createComponent(PoolResourcePageComponent);
+      component = fixture.componentInstance;
+      refreshInterval = new BehaviorSubject<any>(null);
+      TestBed.inject(RefreshIntervalService).intervalData$ = refreshInterval.asObservable();
+      mockPoolService.get.mockReturnValue(of(mockPoolData));
+      fixture.detectChanges();
+      paramMapSubject.next(convertToParamMap({ name: 'test-pool' }));
+      tick();
+      fixture.detectChanges();
+
+      expect(component.migrationCard?.status).toBe(PoolMigrationCardStatus.Finished);
+      expect(component.migrationCard?.progress).toBe(100);
+      expect(fixture.nativeElement.querySelector('[data-testid="dismiss-migration"]')).toBeTruthy();
+    }));
+
+    it('should finish a restored active card when remount happens after migration completed', fakeAsync(() => {
+      mockPoolService.get.mockReturnValue(of(migratingPool));
+      load();
+      expect(component.migrationCard?.status).toBe(PoolMigrationCardStatus.Active);
+
+      // Remount while migration already finished on the backend — active card was persisted.
+      fixture.destroy();
+      fixture = TestBed.createComponent(PoolResourcePageComponent);
+      component = fixture.componentInstance;
+      refreshInterval = new BehaviorSubject<any>(null);
+      TestBed.inject(RefreshIntervalService).intervalData$ = refreshInterval.asObservable();
+      mockPoolService.get.mockReturnValue(of(mockPoolData));
+      fixture.detectChanges();
+      paramMapSubject.next(convertToParamMap({ name: 'test-pool' }));
+      tick();
+      fixture.detectChanges();
+
+      expect(component.migrationCard?.status).toBe(PoolMigrationCardStatus.Finished);
+      expect(component.migrationCard?.progress).toBe(100);
+      expect(fixture.nativeElement.querySelector('[data-testid="dismiss-migration"]')).toBeTruthy();
     }));
 
     it('should keep a single migration poll when navigating between pools', fakeAsync(() => {

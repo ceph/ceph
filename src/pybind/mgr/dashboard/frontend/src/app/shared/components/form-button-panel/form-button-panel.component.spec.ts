@@ -45,7 +45,9 @@ describe('FormButtonPanelComponent', () => {
       component.showCancel = false;
       fixture.detectChanges();
 
+      // Same Bootstrap modal-footer width pattern as cd-back-button (no Carbon width utility).
       expect(submitButton().classList).toContain('w-50');
+      expect(submitButton().classList).toContain('float-end');
       expect(submitButton().classList).not.toContain('w-100');
     });
   });

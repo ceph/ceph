@@ -27,7 +27,9 @@ import { configureTestBed, expectItemTasks, Mocks } from '~/testing/unit-test-he
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import {
   addPoolMigrationFlag,
+  getActiveMigrationSourceIds,
   getPoolBusyReason,
+  isPoolInActiveMigration,
   isPoolMigrationFlagEnabled,
   isReleaseAtLeast,
   Pool,
@@ -36,7 +38,6 @@ import {
   transformPgStatus
 } from '../pool';
 import { PoolMigrationClusterSettingsModalComponent } from '../pool-migration-cluster-settings-modal/pool-migration-cluster-settings-modal.component';
-import { PoolMigrationOsdReleaseModalComponent } from '../pool-migration-osd-release-modal/pool-migration-osd-release-modal.component';
 import { PoolBusyModalComponent } from '../pool-busy-modal/pool-busy-modal.component';
 import { ConfirmationModalComponent } from '~/app/shared/components/confirmation-modal/confirmation-modal.component';
 import { DeleteGuardModalComponent } from '~/app/shared/components/delete-guard-modal/delete-guard-modal.component';
@@ -538,8 +539,12 @@ describe('PoolListComponent', () => {
       expect(isReleaseAtLeast('reef', 'umbrella')).toBe(false);
     });
 
-    it('should return false for unknown release names', () => {
-      expect(isReleaseAtLeast('unknown', 'umbrella')).toBe(false);
+    it('should treat unknown release names as newer than the known list', () => {
+      expect(isReleaseAtLeast('unknown', 'umbrella')).toBe(true);
+    });
+
+    it('should return false for an empty current release', () => {
+      expect(isReleaseAtLeast('', 'umbrella')).toBe(false);
     });
 
     it('should be case-insensitive', () => {
@@ -597,18 +602,37 @@ describe('PoolListComponent', () => {
       expect(getPoolBusyReason(pool())).toBeNull();
     });
 
-    it('should detect a pool that is the source or target of a migration', () => {
+    it('should detect an active migration target', () => {
       expect(getPoolBusyReason(pool({ migration_src: 0 }))).toBe(PoolBusyReason.MIGRATING);
-      expect(getPoolBusyReason(pool({ migration_target: 2 }))).toBe(PoolBusyReason.MIGRATING);
     });
 
-    it('should detect a pool whose PG count is being adjusted', () => {
+    it('should not treat a completed stub (migration_target only) as migrating', () => {
+      expect(getPoolBusyReason(pool({ migration_target: 2 }))).toBeNull();
+    });
+
+    it('should treat a stub as migrating only when it is the active source', () => {
+      const stub = pool({ pool: 0, migration_target: 2 });
+      expect(getPoolBusyReason(stub, new Set([0]))).toBe(PoolBusyReason.MIGRATING);
+      expect(getPoolBusyReason(stub, new Set([99]))).toBeNull();
+    });
+
+    it('should distinguish pg_num vs pgp_num adjustments', () => {
       expect(getPoolBusyReason(pool({ pg_num: 32, pg_num_target: 64 }))).toBe(
-        PoolBusyReason.PG_CHANGE
+        PoolBusyReason.PG_NUM_CHANGE
       );
-      expect(getPoolBusyReason(pool({ pg_placement_num: 32, pg_placement_num_target: 64 }))).toBe(
-        PoolBusyReason.PG_CHANGE
+      expect(getPoolBusyReason(pool({ pg_placement_num: 1, pg_placement_num_target: 32 }))).toBe(
+        PoolBusyReason.PGP_NUM_CHANGE
       );
+      expect(
+        getPoolBusyReason(
+          pool({
+            pg_num: 16,
+            pg_num_target: 32,
+            pg_placement_num: 1,
+            pg_placement_num_target: 32
+          })
+        )
+      ).toBe(PoolBusyReason.PG_CHANGE);
     });
 
     it('should detect any other running task', () => {
@@ -621,7 +645,7 @@ describe('PoolListComponent', () => {
       );
       expect(
         getPoolBusyReason(pool({ pg_num: 32, pg_num_target: 64, cdExecuting: 'Updating' }))
-      ).toBe(PoolBusyReason.PG_CHANGE);
+      ).toBe(PoolBusyReason.PG_NUM_CHANGE);
     });
   });
 
@@ -642,7 +666,10 @@ describe('PoolListComponent', () => {
       modalShow = jest.spyOn(TestBed.inject(ModalCdsService), 'show').mockImplementation();
       navigate = jest.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
       configurationService = TestBed.inject(ConfigurationService);
-      component.selection.selected = [Mocks.getPool('test pool', 1)];
+      const idlePool = Mocks.getPool('test pool', 1);
+      component.selection.selected = [idlePool];
+      // Actions re-fetch the list before the busy check; keep it in sync with selection.
+      (poolService.getList as jasmine.Spy).and.returnValue(of([idlePool]));
     });
 
     const mockCluster = (info: object, config: object) => {
@@ -686,18 +713,32 @@ describe('PoolListComponent', () => {
       });
     });
 
-    it('should show the OSD release modal when require_osd_release is older than umbrella', () => {
+    it('should show the OSD release confirmation when require_osd_release is older than umbrella', () => {
       mockCluster({ ...umbrellaInfo, require_osd_release: 'tentacle' }, flagConfig());
       component.migratePool();
-      expect(modalShow).toHaveBeenCalledWith(PoolMigrationOsdReleaseModalComponent);
+      expect(modalShow).toHaveBeenCalledWith(
+        ConfirmationModalComponent,
+        expect.objectContaining({
+          titleText: 'Cannot migrate pool',
+          buttonText: 'Go to upgrade page'
+        })
+      );
       expect(navigate).not.toHaveBeenCalled();
+    });
+
+    it('should navigate to the upgrade page from the OSD release confirmation', () => {
+      mockCluster({ ...umbrellaInfo, require_osd_release: 'tentacle' }, flagConfig());
+      component.migratePool();
+      const { onSubmit } = modalShow.mock.calls[0][1];
+      onSubmit();
+      expect(navigate).toHaveBeenCalledWith(['/upgrade']);
     });
 
     it('should check the OSD release before the other prerequisites', () => {
       mockCluster({}, flagConfig());
       component.migratePool();
       expect(modalShow).toHaveBeenCalledTimes(1);
-      expect(modalShow).toHaveBeenCalledWith(PoolMigrationOsdReleaseModalComponent);
+      expect(modalShow).toHaveBeenCalledWith(ConfirmationModalComponent, expect.any(Object));
       expect(configurationService.get).not.toHaveBeenCalled();
     });
 
@@ -756,8 +797,11 @@ describe('PoolListComponent', () => {
     });
 
     describe('pool state prerequisites', () => {
-      const selectPool = (changes: Partial<Pool>) =>
-        (component.selection.selected = [{ ...Mocks.getPool('test pool', 1), ...changes }]);
+      const selectPool = (changes: Partial<Pool>) => {
+        const pool = { ...Mocks.getPool('test pool', 1), ...changes };
+        component.selection.selected = [pool];
+        (poolService.getList as jasmine.Spy).and.returnValue(of([pool]));
+      };
 
       it('should show the busy modal when the pool is already migrating', () => {
         mockCluster(umbrellaInfo, flagConfig('poolmigration'));
@@ -777,9 +821,25 @@ describe('PoolListComponent', () => {
         component.migratePool();
         expect(modalShow).toHaveBeenCalledWith(
           PoolBusyModalComponent,
-          expect.objectContaining({ reason: PoolBusyReason.PG_CHANGE, action: PoolAction.MIGRATE })
+          expect.objectContaining({
+            reason: PoolBusyReason.PG_NUM_CHANGE,
+            action: PoolAction.MIGRATE
+          })
         );
         expect(navigate).not.toHaveBeenCalled();
+      });
+
+      it('should show the busy modal when only pgp_num is converging', () => {
+        mockCluster(umbrellaInfo, flagConfig('poolmigration'));
+        selectPool({ pg_placement_num: 1, pg_placement_num_target: 32 });
+        component.migratePool();
+        expect(modalShow).toHaveBeenCalledWith(
+          PoolBusyModalComponent,
+          expect.objectContaining({
+            reason: PoolBusyReason.PGP_NUM_CHANGE,
+            action: PoolAction.MIGRATE
+          })
+        );
       });
 
       it('should show the busy modal with the task description for any other task', () => {
@@ -812,9 +872,28 @@ describe('PoolListComponent', () => {
         onComplete();
         expect(modalShow).toHaveBeenLastCalledWith(
           PoolBusyModalComponent,
-          expect.objectContaining({ reason: PoolBusyReason.PG_CHANGE, action: PoolAction.MIGRATE })
+          expect.objectContaining({
+            reason: PoolBusyReason.PG_NUM_CHANGE,
+            action: PoolAction.MIGRATE
+          })
         );
         expect(navigate).not.toHaveBeenCalled();
+      });
+
+      it('should re-fetch pool state before the busy check', () => {
+        mockCluster(umbrellaInfo, flagConfig('poolmigration'));
+        // Stale selection still looks busy, but the refreshed list is idle.
+        component.selection.selected = [
+          {
+            ...Mocks.getPool('test pool', 1),
+            pg_placement_num: 1,
+            pg_placement_num_target: 32
+          }
+        ];
+        (poolService.getList as jasmine.Spy).and.returnValue(of([Mocks.getPool('test pool', 1)]));
+        component.migratePool();
+        expect(modalShow).not.toHaveBeenCalled();
+        expect(navigate).toHaveBeenCalledWith(['/pool/migrate', 'test pool']);
       });
     });
   });
@@ -828,8 +907,11 @@ describe('PoolListComponent', () => {
       navigate = jest.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
     });
 
-    const selectPool = (changes: Partial<Pool> = {}) =>
-      (component.selection.selected = [{ ...Mocks.getPool('test pool', 1), ...changes }]);
+    const selectPool = (changes: Partial<Pool> = {}) => {
+      const pool = { ...Mocks.getPool('test pool', 1), ...changes };
+      component.selection.selected = [pool];
+      (poolService.getList as jasmine.Spy).and.returnValue(of([pool]));
+    };
 
     it('should navigate to the edit form when the pool is idle', () => {
       selectPool();
@@ -853,8 +935,8 @@ describe('PoolListComponent', () => {
       selectPool({ pg_num: 32, pg_num_target: 64 });
       component.editPool();
       expect(modalShow).toHaveBeenCalledWith(PoolBusyModalComponent, {
-        reason: PoolBusyReason.PG_CHANGE,
-        taskDescription: undefined,
+        reason: PoolBusyReason.PG_NUM_CHANGE,
+        taskDescription: 'Updating',
         action: PoolAction.EDIT
       });
       expect(navigate).not.toHaveBeenCalled();
@@ -879,8 +961,11 @@ describe('PoolListComponent', () => {
       modalShow = jest.spyOn(TestBed.inject(ModalCdsService), 'show').mockImplementation();
     });
 
-    const selectPool = (changes: Partial<Pool> = {}) =>
-      (component.selection.selected = [{ ...Mocks.getPool('test pool', 1), ...changes }]);
+    const selectPool = (changes: Partial<Pool> = {}) => {
+      const pool = { ...Mocks.getPool('test pool', 1), ...changes };
+      component.selection.selected = [pool];
+      (poolService.getList as jasmine.Spy).and.returnValue(of([pool]));
+    };
 
     it('should show the busy modal when the pool is migrating', () => {
       selectPool({ migration_src: 0, cdExecuting: 'Migrating' });
@@ -896,8 +981,8 @@ describe('PoolListComponent', () => {
       selectPool({ pg_num: 32, pg_num_target: 64 });
       component.deletePoolModal();
       expect(modalShow).toHaveBeenCalledWith(PoolBusyModalComponent, {
-        reason: PoolBusyReason.PG_CHANGE,
-        taskDescription: undefined,
+        reason: PoolBusyReason.PG_NUM_CHANGE,
+        taskDescription: 'Updating',
         action: PoolAction.DELETE
       });
     });
@@ -946,23 +1031,67 @@ describe('PoolListComponent', () => {
     });
   });
 
+  describe('active migration helpers', () => {
+    it('should only treat the stub that is the active migration source as active', () => {
+      const stub = _.merge(Mocks.getPool('.migrate-1', 0), { migration_target: 1 });
+      expect(isPoolInActiveMigration(stub)).toBe(false);
+      expect(isPoolInActiveMigration(stub, new Set([0]))).toBe(true);
+      expect(isPoolInActiveMigration(stub, new Set([99]))).toBe(false);
+      expect(
+        getActiveMigrationSourceIds([
+          _.merge(Mocks.getPool('target', 1), { migration_src: 0 }),
+          stub
+        ])
+      ).toEqual(new Set([0]));
+    });
+  });
+
   describe('transformPoolsData with migration', () => {
-    it('should set cdExecuting to Migrating when pool has migration_src', () => {
+    it('should set cdExecuting and Migrating tag when pool has migration_src', () => {
       const pool = _.merge(Mocks.getPool('target', 1), {
         migration_src: 0,
         stats: {}
       });
       const result = component.transformPoolsData([pool]);
       expect(result[0].cdExecuting).toBe('Migrating');
+      expect(result[0]['migrationTag']).toEqual({
+        label: 'Migrating',
+        cssClass: 'tag-info'
+      });
     });
 
-    it('should set cdExecuting to Migrating when pool has migration_target', () => {
-      const pool = _.merge(Mocks.getPool('source', 0), {
+    it('should tag only the related active stub and leave unrelated stubs untagged', () => {
+      const completedStub = _.merge(Mocks.getPool('.migrate-1', 0), {
+        migration_target: 2,
+        stats: {}
+      });
+      expect(component.transformPoolsData([completedStub])[0]['migrationTag']).toBeNull();
+      expect(component.transformPoolsData([completedStub])[0].cdExecuting).toBeUndefined();
+
+      const activeStub = _.merge(Mocks.getPool('.migrate-2', 0), {
         migration_target: 1,
         stats: {}
       });
-      const result = component.transformPoolsData([pool]);
+      const unrelatedStub = _.merge(Mocks.getPool('.migrate-1', 5), {
+        migration_target: 1,
+        stats: {}
+      });
+      const activeTarget = _.merge(Mocks.getPool('target', 1), {
+        migration_src: 0,
+        stats: {}
+      });
+      const result = component.transformPoolsData([activeStub, unrelatedStub, activeTarget]);
+      expect(result[0]['migrationTag']).toEqual({
+        label: 'Migration stub',
+        cssClass: 'tag-background-gray'
+      });
       expect(result[0].cdExecuting).toBe('Migrating');
+      expect(result[1]['migrationTag']).toBeNull();
+      expect(result[1].cdExecuting).toBeUndefined();
+      expect(result[2]['migrationTag']).toEqual({
+        label: 'Migrating',
+        cssClass: 'tag-info'
+      });
     });
 
     it('should not override cdExecuting if already set by a task', () => {

@@ -29,6 +29,25 @@ import { PoolOverviewModel } from '~/app/shared/models/pool-overview.model';
 type PoolResourceResult = [Pool, RbdConfigurationEntry[], ErasureCodeProfile[], Pool[]];
 type RatePoint = [number, number] | number;
 
+/** Lifecycle of the migration progress card. */
+export enum PoolMigrationCardStatus {
+  Active = 'active',
+  Finished = 'finished'
+}
+
+/** Dedicated UI state for the migration progress card (independent of overviewModel). */
+export interface PoolMigrationCard {
+  status: PoolMigrationCardStatus;
+  progress: number;
+  objectsMigrated: number;
+  objectsTotal: number;
+  bytesMigrated: number;
+  bytesTotal: number;
+  migratingPgs: string;
+  sourceName: string;
+  targetName: string;
+}
+
 @Component({
   selector: 'cd-pool-resource-page',
   templateUrl: './pool-resource-page.component.html',
@@ -37,6 +56,8 @@ type RatePoint = [number, number] | number;
   standalone: false
 })
 export class PoolResourcePageComponent implements OnInit, OnDestroy {
+  readonly PoolMigrationCardStatus = PoolMigrationCardStatus;
+
   private sub = new Subscription();
   poolName = '';
   section = '';
@@ -85,7 +106,11 @@ export class PoolResourcePageComponent implements OnInit, OnDestroy {
     migrationSourceName: '',
     migrationTargetName: ''
   };
-  migrationFinished = false;
+  /**
+   * Migration progress card. Kept separate from overviewModel so overview rebuilds
+   * cannot hide a finished migration before the user dismisses it.
+   */
+  migrationCard: PoolMigrationCard | null = null;
 
   omittedPoolAttributes = ['cdExecuting', 'cdIsBinary', 'stats'];
   private readonly binaryUnits = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB', 'YiB'];
@@ -114,8 +139,12 @@ export class PoolResourcePageComponent implements OnInit, OnDestroy {
       this.route.parent?.paramMap
         .pipe(
           switchMap((pm: ParamMap) => {
-            this.poolName = pm.get('name') ?? '';
-            this.migrationFinished = false;
+            const name = pm.get('name') ?? '';
+            if (name !== this.poolName) {
+              this.poolName = name;
+              // Restore any undismissed card (active or finished) so remounts don't drop it.
+              this.migrationCard = this.restoreMigrationCard(name);
+            }
 
             if (!this.poolName) {
               this.isOverviewLoading = false;
@@ -163,6 +192,7 @@ export class PoolResourcePageComponent implements OnInit, OnDestroy {
             selectedErasureProfile,
             lightweightPoolList || []
           );
+          this.updateMigrationCard(poolData, lightweightPoolList || []);
 
           CdHelperClass.updateChanged(this, {
             poolDetails: this.poolDetails,
@@ -185,7 +215,7 @@ export class PoolResourcePageComponent implements OnInit, OnDestroy {
       this.refreshIntervalService.intervalData$
         .pipe(
           switchMap(() => {
-            if (!this.overviewModel.isMigrating || !this.poolName) {
+            if (this.migrationCard?.status !== PoolMigrationCardStatus.Active || !this.poolName) {
               return of(null);
             }
             return this.poolService.get(this.poolName, true);
@@ -193,30 +223,105 @@ export class PoolResourcePageComponent implements OnInit, OnDestroy {
         )
         .subscribe((poolData: Pool | null) => {
           if (!poolData) return;
-
-          const stats = (poolData.stats || {}) as PoolStats;
-          const migrationUpdate = this.buildMigrationModel(poolData, stats);
-          if (migrationUpdate.isMigrating) {
-            this.overviewModel = { ...this.overviewModel, ...migrationUpdate };
-            return;
-          }
-          // Migration is over: the backend no longer reports progress, so pin the last
-          // known figures to 100% and keep the card until the user dismisses it.
-          this.migrationFinished = true;
-          this.overviewModel = {
-            ...this.overviewModel,
-            isMigrating: false,
-            migrationProgress: 100,
-            migrationObjectsMigrated: this.overviewModel.migrationObjectsTotal,
-            migrationBytesMigrated: this.overviewModel.migrationBytesTotal,
-            migrationMigratingPgs: ''
-          };
+          this.updateMigrationCard(poolData);
         })
     );
   }
 
   dismissMigration(): void {
-    this.migrationFinished = false;
+    this.clearMigrationCard();
+  }
+
+  /**
+   * Drive the migration card from live pool data.
+   * - Active migration → show/update the card and persist (survives remount).
+   * - Active (or restored active) → not migrating → freeze as finished until dismiss.
+   * - Finished card → keep until the user clicks X.
+   * - Never watched → stay hidden.
+   */
+  private updateMigrationCard(pool: Pool, pools: Pool[] = []): void {
+    const stats = (pool.stats || {}) as PoolStats;
+    const live = this.buildMigrationModel(pool, stats);
+    const names = this.buildMigrationNames(pool, pools);
+    const sourceName = names.migrationSourceName || this.migrationCard?.sourceName || '';
+    const targetName = names.migrationTargetName || this.migrationCard?.targetName || this.poolName;
+
+    if (live.isMigrating) {
+      this.migrationCard = {
+        status: PoolMigrationCardStatus.Active,
+        progress: live.migrationProgress,
+        objectsMigrated: live.migrationObjectsMigrated,
+        objectsTotal: live.migrationObjectsTotal,
+        bytesMigrated: live.migrationBytesMigrated,
+        bytesTotal: live.migrationBytesTotal,
+        migratingPgs: live.migrationMigratingPgs,
+        sourceName,
+        targetName
+      };
+      this.persistMigrationCard(this.migrationCard);
+      return;
+    }
+
+    if (this.migrationCard?.status === PoolMigrationCardStatus.Active) {
+      const objectsTotal = this.migrationCard.objectsTotal;
+      const bytesTotal = this.migrationCard.bytesTotal;
+      this.migrationCard = {
+        ...this.migrationCard,
+        status: PoolMigrationCardStatus.Finished,
+        progress: 100,
+        objectsMigrated: objectsTotal,
+        bytesMigrated: bytesTotal,
+        migratingPgs: '',
+        sourceName,
+        targetName
+      };
+      this.persistMigrationCard(this.migrationCard);
+    }
+  }
+
+  private migrationStorageKey(poolName: string): string {
+    return `cd.pool.migrationCard.${poolName}`;
+  }
+
+  private persistMigrationCard(card: PoolMigrationCard): void {
+    if (!this.poolName) {
+      return;
+    }
+    try {
+      sessionStorage.setItem(this.migrationStorageKey(this.poolName), JSON.stringify(card));
+    } catch {
+      // Ignore quota / private-mode failures; in-memory card still works for this session.
+    }
+  }
+
+  private restoreMigrationCard(poolName: string): PoolMigrationCard | null {
+    if (!poolName) {
+      return null;
+    }
+    try {
+      const raw = sessionStorage.getItem(this.migrationStorageKey(poolName));
+      if (!raw) {
+        return null;
+      }
+      const card = JSON.parse(raw) as PoolMigrationCard;
+      return card?.status === PoolMigrationCardStatus.Active ||
+        card?.status === PoolMigrationCardStatus.Finished
+        ? card
+        : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private clearMigrationCard(): void {
+    if (this.poolName) {
+      try {
+        sessionStorage.removeItem(this.migrationStorageKey(this.poolName));
+      } catch {
+        // ignore
+      }
+    }
+    this.migrationCard = null;
   }
 
   private buildOverviewModel(
@@ -310,8 +415,7 @@ export class PoolResourcePageComponent implements OnInit, OnDestroy {
     | 'migrationProgress'
     | 'migrationMigratingPgs'
   > {
-    const isMigrating = pool.migration_src != null || pool.migration_target != null;
-    // Backend injects totals from source+target pool stats (same as ceph status).
+    const isMigrating = pool.migration_src != null;
     const objMigrated = (stats as any)?.num_objects_migrated?.latest ?? 0;
     const bytesMigrated = (stats as any)?.num_bytes_migrated?.latest ?? 0;
     const objTotal = (stats as any)?.num_objects?.latest ?? 0;
