@@ -18,6 +18,9 @@ namespace crimson::os::seastore::omap_manager {
 
 /// The largest leaf size for this tree type. All non-root leaves have it.
 extent_len_t get_leaf_size(omap_type_t type);
+/// The leaf size of a new tree. Only a root leaf can be smaller than
+/// get_leaf_size(type).
+extent_len_t get_initial_leaf_size(omap_type_t type);
 
 /**
  * OMapInnerNode

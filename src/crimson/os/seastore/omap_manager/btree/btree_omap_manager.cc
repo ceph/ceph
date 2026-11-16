@@ -25,7 +25,8 @@ BtreeOMapManager::initialize_omap(
 {
   LOG_PREFIX(BtreeOMapManager::initialize_omap);
   DEBUGT("hint: {}", t, hint);
-  return tm.alloc_non_data_extent<OMapLeafNode>(t, hint, get_leaf_size(type))
+  return tm.alloc_non_data_extent<OMapLeafNode>(
+    t, hint, get_initial_leaf_size(type))
     .si_then([hint, &t, type](auto&& root_extent) {
       root_extent->set_size(0);
       root_extent->init_range(BEGIN_KEY, END_KEY);
