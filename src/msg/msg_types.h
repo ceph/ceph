@@ -272,9 +272,11 @@ struct entity_addr_t {
     type = o.type;
     nonce = o.nonce;
     memcpy(&u, &o.in_addr, sizeof(u));
-#if !defined(__FreeBSD__)
-    u.sa.sa_family = ntohs(u.sa.sa_family);
-#endif
+    // sa_family is a single byte on the BSDs and macOS, where a 16-bit
+    // swap would zero it
+    if constexpr (sizeof(u.sa.sa_family) == 2) {
+      u.sa.sa_family = ntohs(u.sa.sa_family);
+    }
   }
 
   uint32_t get_type() const { return type; }
@@ -387,9 +389,11 @@ struct entity_addr_t {
     a.type = 0;
     a.nonce = nonce;
     a.in_addr = get_sockaddr_storage();
-#if !defined(__FreeBSD__)
-    a.in_addr.ss_family = htons(a.in_addr.ss_family);
-#endif
+    // ss_family is a single byte on the BSDs and macOS, where a 16-bit
+    // swap would zero it
+    if constexpr (sizeof(a.in_addr.ss_family) == 2) {
+      a.in_addr.ss_family = htons(a.in_addr.ss_family);
+    }
     return a;
   }
 
