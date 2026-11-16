@@ -16,6 +16,7 @@
 
 namespace crimson::os::seastore::omap_manager {
 
+/// The largest leaf size for this tree type. All non-root leaves have it.
 extent_len_t get_leaf_size(omap_type_t type);
 
 /**
@@ -450,6 +451,34 @@ struct OMapLeafNode
     auto header = get_len() - capacity();
     return (key.length() + value.length()) >
       ((OMAP_LEAF_BLOCK_SIZE - header) / 4);
+  }
+
+  /**
+   * get_grow_len
+   *
+   * If this leaf cannot hold key and value and is smaller than max_len,
+   * return the smallest size (this size doubled one or more times, at most
+   * max_len) that holds all entries and the new one. Otherwise nullopt.
+   * Only a root leaf may grow.
+   */
+  std::optional<extent_len_t> get_grow_len(
+    size_t ksize, size_t vsize, extent_len_t max_len) const {
+    if (!is_overflow(ksize, vsize) || get_len() >= max_len) {
+      return std::nullopt;
+    }
+    extent_len_t header = get_len() - capacity();
+    size_t need = used_space() + sizeof(omap_leaf_key_le_t) + ksize + vsize;
+    extent_len_t len = get_len();
+    while (len < max_len && len - header < need) {
+      len *= 2;
+    }
+    return std::min(len, max_len);
+  }
+
+  /// Fill this new, empty leaf with the entries of a smaller root leaf.
+  void grow_from(const OMapLeafNode &src) {
+    assert(get_len() > src.get_len());
+    copy_from(src);
   }
 
   rm_key_ret rm_key(
