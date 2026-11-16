@@ -712,8 +712,6 @@ TEST_F(BlockDirectoryFixture, ZScan)
         auto size = root_array.size();
         if (size >= 2) {
           //Nothing of interest at index 0, index 1 has the next cursor value
-          std::string new_cursor = root_array[1].value;
-
           //skip the first 3 values to get the actual member, score
           for (uint64_t i = 3; i < size; i = i+2) {
             std::string member = root_array[i].value;

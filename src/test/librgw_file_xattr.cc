@@ -110,10 +110,7 @@ namespace {
   typedef std::vector<obj_rec> obj_vec;
   obj_vec ovec;
 
-  bool do_stat = false;
   bool do_create = false;
-  bool do_delete = false;
-  bool do_hexdump = false;
   bool verbose = false;
 
   struct {
@@ -398,18 +395,9 @@ int main(int argc, char *argv[])
     } else if (ceph_argparse_witharg(args, arg_iter, &val, "--bn",
 				     (char*) nullptr)) {
       bucket_name = val;
-    } else if (ceph_argparse_flag(args, arg_iter, "--stat",
-					    (char*) nullptr)) {
-      do_stat = true;
     } else if (ceph_argparse_flag(args, arg_iter, "--create",
 					    (char*) nullptr)) {
       do_create = true;
-    } else if (ceph_argparse_flag(args, arg_iter, "--delete",
-					    (char*) nullptr)) {
-      do_delete = true;
-    } else if (ceph_argparse_flag(args, arg_iter, "--hexdump",
-					    (char*) nullptr)) {
-      do_hexdump = true;
     } else if (ceph_argparse_flag(args, arg_iter, "--verbose",
 					    (char*) nullptr)) {
       verbose = true;

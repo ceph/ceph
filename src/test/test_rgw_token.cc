@@ -47,7 +47,6 @@ namespace {
   std::string non_base64_sploded{"90KLscc0Dz4U49HX-7Tx"};
 
   Formatter* token_formatter{nullptr};
-  bool verbose {false};
 }
 
 using namespace std;
@@ -94,7 +93,7 @@ TEST(TOKEN, BADINPUT2) {
 
 TEST(TOKEN, BADINPUT3) {
   try {
-    std::string stuff = from_base64(non_base64_sploded); // decode
+    from_base64(non_base64_sploded); // decode
   } catch(...) {
     // do nothing
   }
@@ -107,19 +106,6 @@ TEST(TOKEN, SHUTDOWN) {
 
 int main(int argc, char *argv[])
 {
-  auto args = argv_to_vec(argc, argv);
-  env_to_vec(args);
-
-  string val;
-  for (auto arg_iter = args.begin(); arg_iter != args.end();) {
-    if (ceph_argparse_flag(args, arg_iter, "--verbose",
-			      (char*) nullptr)) {
-      verbose = true;
-    } else {
-      ++arg_iter;
-    }
-  }
-
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
