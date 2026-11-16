@@ -30,6 +30,11 @@
   ``lockers`` field rather than the truth value of the returned object
   to determine whether any clients hold the lock.
 
+* RGW: ListObjectsV2 no longer accepts the non-S3 ``versions`` subresource
+  (``GET /bucket?list-type=2&versions``) and answers it with
+  ``405 MethodNotAllowed``. Its paging never worked. Use ListObjectVersions
+  (``GET /bucket?versions``) to list object versions.
+
 * RGW: The "Bytes Sent" field is always set to "-" when bucket-logging is enabled
   in Standard mode.
 
