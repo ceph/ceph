@@ -13,9 +13,6 @@ if(${WITH_CEPHFS})
       ceph-common
       cephfs
   )
-  if(HAVE_LINK_COPY_DT_NEEDED_ENTRIES)
-    target_link_options(ceph_test_trim_caps PRIVATE -Wl,--copy-dt-needed-entries)
-  endif()
   install(TARGETS ceph_test_trim_caps DESTINATION ${CMAKE_INSTALL_BINDIR})
 
   add_executable(ceph_test_ino_release_cb
@@ -25,8 +22,5 @@ if(${WITH_CEPHFS})
       ceph-common
       cephfs
   )
-  if(HAVE_LINK_COPY_DT_NEEDED_ENTRIES)
-    target_link_options(ceph_test_ino_release_cb PRIVATE -Wl,--copy-dt-needed-entries)
-  endif()
   install(TARGETS ceph_test_ino_release_cb DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif(${WITH_CEPHFS})
