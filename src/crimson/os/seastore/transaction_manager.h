@@ -292,6 +292,13 @@ public:
       co_return TCachedExtentRef<T>();
     }
     auto extent = ext->template cast<T>();
+    // An absent retire-by-paddr placeholder is indexed before its content is
+    // loaded; load any missing range before the user sees it.
+    if (!extent->is_fully_loaded()) {
+      auto length = extent->get_length();
+      extent = co_await cache->read_extent_maybe_partial(
+        t, std::move(extent), 0, length);
+    }
     if (!extent->is_seen_by_users()) {
       maybe_init(*extent);
       extent->set_seen_by_users();

@@ -167,6 +167,11 @@ public:
     auto ext = alloc_absent_extent<T>(
       t, paddr, length, 0, length, std::move(extent_init_func));
     SUBDEBUGT(seastore_cache, "retire {}", t, *ext);
+    // The placeholder is visible to concurrent transactions (it is added to
+    // the read set and, for the direct extent, linked into the LBA tree), so
+    // mirror it in the laddr index; the retire commit erases it again.
+    // Non-indexed types and shadow copies are skipped by laddr_index_insert.
+    laddr_index_insert(laddr, ext);
     retire_extent(t, ext);
     return ext;
   }
@@ -812,8 +817,6 @@ public:
     // Pending extents are transaction-local and must never be in the shared
     // index; insert/replace only link stable (CLEAN/DIRTY) extents.
     assert(extent.is_stable());
-    // Indexed types (onode/coll/log) are never partially loaded.
-    assert(extent.is_fully_loaded());
     if (!extent.maybe_get_transactional_view(t)) {
       // t retired it
       return get_extent_iertr::make_ready_future<CachedExtentRef>();
@@ -822,14 +825,19 @@ public:
     return get_extent_viewable_by_trans(t, CachedExtentRef(&extent));
   }
 
-  // Called after a lookup miss. Mutations update the index via
-  // laddr_index_replace; retires via laddr_index_erase. So a miss either
-  // means an empty slot or this extent is already linked (soft miss when
-  // wrong-length / not visible to t) — never a different occupant.
+  // Links a stable extent into the index. Called on a read-path lookup miss,
+  // on fresh-extent commit, and when building an absent retire-by-paddr
+  // placeholder (retire_absent_extent_addr) so it is visible to concurrent
+  // lookups by laddr and erased again on the retire commit. Mutations update
+  // the index via laddr_index_replace; retires via laddr_index_erase.
+  //
+  // Shadow copies are skipped: they alias the direct extent's laddr, so only
+  // the direct extent owns the index slot.
   //
   // Invariant: while an extent is linked into the index, its key is get_laddr().
   void laddr_index_insert(laddr_t laddr, CachedExtentRef extent) {
     if (!is_laddr_indexed(extent->get_type()) ||
+        extent->is_shadow_extent() ||
         !extent->is_valid() ||
         !extent->is_stable()) {
       return;
@@ -850,7 +858,8 @@ public:
   // read via read_extent, which links the stable extent into the index on an
   // LBA-walk miss. So prev is always linked here.
   void laddr_index_replace(CachedExtentRef next, CachedExtentRef prev) {
-    if (!is_laddr_indexed(prev->get_type())) {
+    // Shadow copies are never indexed (see laddr_index_insert).
+    if (!is_laddr_indexed(prev->get_type()) || prev->is_shadow_extent()) {
       return;
     }
     auto &lprev = static_cast<LogicalCachedExtent&>(*prev);
@@ -864,8 +873,12 @@ public:
   }
 
   // On retire commit: the extent is no longer reachable by laddr.
+  // Shadow copies are never indexed (see laddr_index_insert). Anything
+  // reachable by laddr is linked (read, fresh commit, or absent placeholder),
+  // so a retired indexed extent should be linked; assert it, but guard the
+  // unlink so release builds stay safe.
   void laddr_index_erase(CachedExtentRef ref) {
-    if (!is_laddr_indexed(ref->get_type())) {
+    if (!is_laddr_indexed(ref->get_type()) || ref->is_shadow_extent()) {
       return;
     }
     auto &lref = static_cast<LogicalCachedExtent&>(*ref);
