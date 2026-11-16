@@ -117,7 +117,7 @@ function TEST_divergent() {
     inject_eio rep data $poolname existing_$case3 $dir 0 || return 1
     rados -p $poolname get existing_$case3 $dir/existing &
     sleep 10
-    killall -9 rados
+    kill -9 $(jobs -p) 2>/dev/null
 
     # kill all the osds but leave divergent in
     echo 'killing all the osds'
@@ -287,7 +287,7 @@ function TEST_divergent_ec() {
     rados -p $poolname mksnap snap1
     rados -p $poolname put existing_$(expr $testobjects - 1) $dummyfile &
     sleep 10
-    killall -9 rados
+    kill -9 $(jobs -p) 2>/dev/null
 
     # kill all the osds but leave divergent in
     echo 'killing all the osds'
@@ -496,7 +496,7 @@ function TEST_divergent_2() {
       rados -p $poolname rm existing_$rmi &
     done
     sleep 10
-    killall -9 rados
+    kill -9 $(jobs -p) 2>/dev/null
 
     # kill all the osds but leave divergent in
     echo 'killing all the osds'
@@ -722,7 +722,7 @@ function TEST_divergent_3() {
       rados -p $poolname rm existing_$rmi &
     done
     sleep 10
-    killall -9 rados
+    kill -9 $(jobs -p) 2>/dev/null
 
     # kill all the osds but leave divergent in
     echo 'killing all the osds'
