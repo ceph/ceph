@@ -4,12 +4,13 @@
 #pragma once
 
 #include <array>
-#include <new>
 #include <vector>
 
+#include <fmt/format.h>
 #include <spdk/env.h>
 
 #include "include/buffer_raw.h"
+#include "include/ceph_assert.h"
 #include "include/intarith.h"   // CEPH_PAGE_SIZE
 
 namespace crimson::os::seastore {
@@ -71,7 +72,10 @@ private:
   static char* raw_alloc(unsigned len) {
     void* p = spdk_dma_malloc(len, CEPH_PAGE_SIZE, nullptr);
     if (!p) {
-      throw std::bad_alloc();
+      ceph_abort_msg(fmt::format(
+        "spdk_dma_malloc failed for len=0x{:x}: DPDK hugepage heap exhausted. "
+        "Raise HUGEMEM: it must cover the seastore extent cache across all "
+        "shards, not just the I/O queue depth.", len));
     }
     return static_cast<char*>(p);
   }
