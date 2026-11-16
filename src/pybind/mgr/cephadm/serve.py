@@ -1617,6 +1617,13 @@ class CephadmServe:
                 if self.mgr.log_deploy_configuration:
                     daemon_params['log_deploy_configuration'] = True
 
+                # crash daemon ids use the short hostname while the cephx key
+                # is client.crash.<inventory host>: pass the auth entity
+                # explicitly so the deployed unit authenticates as the key
+                # even when the two names differ.
+                if daemon_spec.daemon_type == 'crash':
+                    daemon_params['auth_entity'] = daemon_spec.entity_name()
+
                 daemon_spec, extra_container_args, extra_entrypoint_args = self._setup_extra_deployment_args(daemon_spec, daemon_params)
                 init_containers = self._setup_init_containers(daemon_spec, daemon_params)
 
