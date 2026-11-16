@@ -450,6 +450,15 @@ int remove(const DoutPrefixProvider* dpp,
         << obj << " with: " << cpp_strerror(r) << dendl;
     } // not fatal
   }
+  {
+    // remove the topics object
+    const rgw_raw_obj obj = get_topics_obj(zone, info.id);
+    r = rgw_delete_system_obj(dpp, &sysobj, obj.pool, obj.oid, nullptr, y);
+    if (r < 0) {
+      ldpp_dout(dpp, 20) << "WARNING: failed to remove topics obj "
+        << obj << " with: " << cpp_strerror(r) << dendl;
+    } // not fatal
+  }
 
   return 0;
 }
