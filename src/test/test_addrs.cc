@@ -463,3 +463,56 @@ TEST(Msgr, TestAddrDecodeRejectsOversizedAddr)
     ASSERT_THROW(decode(av, p), ceph::buffer::malformed_input);
   }
 }
+
+// decode() into an entity_addr_t that already holds an address gives the
+// same value as decoding into a new one.
+TEST(Msgr, TestAddrDecodeIntoUsedAddr)
+{
+  entity_addr_t v6, v4, blank;
+  ASSERT_TRUE(v6.parse("v2:[2001:db8::1:2:3:4]:6789/12345"));
+  ASSERT_TRUE(v4.parse("v2:1.2.3.4:6789/12345"));
+
+  for (uint64_t features : {uint64_t(CEPH_FEATURE_MSG_ADDR2), uint64_t(0)}) {
+    bufferlist bl6, bl4, blb;
+    encode(v6, bl6, features);
+    encode(v4, bl4, features);
+    encode(blank, blb, features);
+
+    entity_addr_t fresh4;
+    auto p = bl4.cbegin();
+    decode(fresh4, p);
+
+    // IPv6 first, then the shorter IPv4 address over it
+    entity_addr_t used;
+    p = bl6.cbegin();
+    decode(used, p);
+    ASSERT_TRUE(used.is_ipv6());
+    p = bl4.cbegin();
+    decode(used, p);
+    ASSERT_EQ(fresh4, used);
+
+    // and a blank address over that
+    entity_addr_t freshb;
+    p = blb.cbegin();
+    decode(freshb, p);
+    p = blb.cbegin();
+    decode(used, p);
+    ASSERT_EQ(freshb, used);
+  }
+}
+
+// entity_addr_t survives the conversion to ceph_entity_addr and back on
+// every platform, whatever the width of sa_family.
+TEST(Msgr, TestAddrCephEntityAddrRoundTrip)
+{
+  for (const char *s : {"v1:1.2.3.4:6789/12345",
+                        "v1:[2001:db8::1:2:3:4]:6789/12345"}) {
+    entity_addr_t a;
+    ASSERT_TRUE(a.parse(s));
+    ceph_entity_addr c = a;
+    entity_addr_t b(c);
+    b.set_type(a.get_type());  // ceph_entity_addr does not carry the type
+    ASSERT_EQ(a.get_family(), b.get_family()) << s;
+    ASSERT_EQ(a, b) << s;
+  }
+}
