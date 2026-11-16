@@ -22,6 +22,8 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <sys/statvfs.h>
+#include <sys/uio.h>
 #include <sys/xattr.h>
 #include <unistd.h>
 #include <atomic>
@@ -103,6 +105,7 @@ static inline bool parse_xattr_name(const std::string& xattr, std::string& key) 
 #define RGW_NSFS_ATTR_NON_CURRENT_TS "non_current_timestamp"
 
 static const std::string HIDDEN_VERSIONS_PATH = ".versions";
+static const std::string HIDDEN_SHADOW_PATH = ".shadow";
 static const std::string NULL_VERSION_ID = "null";
 
 static constexpr int NSFS_VERSION_RETRIES = 5;
@@ -116,6 +119,112 @@ const std::string mp_ns = "multipart";
 const std::string MP_OBJ_PART_PFX = "part-";
 const std::string MP_OBJ_HEAD_NAME = MP_OBJ_PART_PFX + "00000";
 const std::string NSFS_FOLDER_OBJECT_NAME = ".folder";
+
+/* multipart staging:  <bucket>/.multipart_<upload_id>/ holding
+ * part-NNNNN plus .meta and .assembled (see DESIGN.md) */
+static const std::string MP_STAGING_PREFIX = ".multipart_";
+static const std::string MP_META_NAME = ".meta";
+static const std::string MP_ASSEMBLED_NAME = ".assembled";
+static const std::string VERSIONS_LOCK_NAME = ".lock";
+
+/* Names this driver creates on disk which are not objects.  Listing
+ * paths suppress exactly these;  every other dot-prefixed name is an
+ * ordinary object.  Hiding all of them is a client convention -- ls
+ * filters, readdir(3) does not -- and a server which drops them from
+ * the listing leaves a namespace a client cannot see or empty. */
+static bool is_reserved_name(std::string_view name)
+{
+  if ((name == HIDDEN_SHADOW_PATH) ||
+      (name == HIDDEN_VERSIONS_PATH) ||
+      (name == NSFS_FOLDER_OBJECT_NAME) ||
+      (name == MP_META_NAME) ||
+      (name == MP_ASSEMBLED_NAME) ||
+      (name == VERSIONS_LOCK_NAME)) {
+    return true;
+  }
+  return name.starts_with(MP_STAGING_PREFIX) ||
+	 name.starts_with(nsfs::TMP_LINK_PREFIX) ||
+	 name.starts_with(nsfs::UNLINK_TMP_PREFIX) ||
+	 name.starts_with(nsfs::CLONE_PARENT_PREFIX);
+}
+
+/* Does an on-disk entry count as *content*, for deciding whether a bucket
+ * or directory is empty?
+ *
+ * Driver scaffolding does not:  the driver creates and removes it and a
+ * client cannot address it.  Everything else does -- including two kinds
+ * of write that are in flight rather than at rest:
+ *
+ *   - an unpublished shadow (.shadow/<leaf>)
+ *   - an incomplete multipart upload (.multipart_*)
+ *
+ * S3 refuses to delete a bucket holding an incomplete multipart upload
+ * even though the bucket lists as empty, and a shadow is the NFS-side
+ * equivalent of one.  Treating either as ignorable does not merely permit
+ * the delete -- delete_directory() then recurses into it, destroying a
+ * write the client believes is still in progress.  The client can see and
+ * abort an upload (ListMultipartUploads) and can close or discard a write,
+ * so refusing costs nothing it cannot resolve.
+ *
+ * .versions/ and .shadow/ are containers:  scaffolding when they hold
+ * nothing of their own, content when they do.  .folder is content -- it
+ * *is* an object.  Bucket directories carry no .folder;  their info is an
+ * xattr.
+ *
+ * NB this deliberately diverges from the posix driver, which exempts
+ * ".multipart" in POSIXBucket::check_empty() (b46ecc1d4f2, "rgw/posix:
+ * Account for incomplete uploads during deletes") and again as `is_mp` in
+ * its delete_directory().  nsfs inherited both and now aligns with S3
+ * instead.  If the posix line wants the same, the exemption there should
+ * become an abort rather than a pass. */
+static bool dir_has_content(int parent_fd, const char* dname,
+			    std::string_view ignore = {})
+{
+  int fd = ::openat(parent_fd, dname, O_RDONLY | O_DIRECTORY);
+  if (fd < 0) {
+    return false;
+  }
+  DIR* d = ::fdopendir(fd);
+  if (!d) {
+    ::close(fd);
+    return false;
+  }
+  bool found = false;
+  struct dirent* de;
+  while ((de = ::readdir(d)) != nullptr) {
+    std::string_view n = de->d_name;
+    if ((n == ".") || (n == "..")) {
+      continue;
+    }
+    if (!ignore.empty() && (n == ignore)) {
+      continue;
+    }
+    found = true;
+    break;
+  }
+  ::closedir(d);
+  return found;
+}
+
+static bool entry_is_content(int parent_fd, std::string_view name)
+{
+  if (name == HIDDEN_VERSIONS_PATH) {
+    /* version entries are user data;  the lock file is ours */
+    return dir_has_content(parent_fd, std::string(name).c_str(),
+			   VERSIONS_LOCK_NAME);
+  }
+  if (name == HIDDEN_SHADOW_PATH) {
+    return dir_has_content(parent_fd, std::string(name).c_str());
+  }
+  if (name == NSFS_FOLDER_OBJECT_NAME) {
+    return true; /* the sentinel of a directory object */
+  }
+  if (name.starts_with(MP_STAGING_PREFIX)) {
+    return true; /* an incomplete upload, as S3 has it */
+  }
+  /* remaining reserved names are scaffolding */
+  return !is_reserved_name(name);
+}
 
 /* See posix driver comment — object ownership is now read from the
  * standard RGW_ATTR_ACL attribute, matching rados. The former
@@ -199,6 +308,24 @@ static bool is_null_version_fd(int fd)
     return true;
   }
   return std::string_view(buf, len) == NULL_VERSION_ID;
+}
+
+/* The object's own digest, from its etag xattr, or empty if it carries
+ * none.  A listing must prefer this over synthesize_etag():  the token is
+ * what an object gets when nothing ever hashed it, and reporting it for an
+ * object that *was* hashed makes LIST disagree with HEAD.  The token also
+ * contains dashes, which S3 SDKs read as "multipart, do not validate", so
+ * the disagreement silently disables the client's integrity check rather
+ * than merely looking untidy. */
+static std::string etag_from_fd(int fd)
+{
+  char buf[128];
+  std::string xattr = make_xattr_name(RGW_ATTR_ETAG);
+  ssize_t len = ::fgetxattr(fd, xattr.c_str(), buf, sizeof(buf));
+  if (len <= 0) {
+    return {};
+  }
+  return std::string(buf, len);
 }
 
 /* version entry name within .versions/: <leaf>_<version_id> */
@@ -305,9 +432,22 @@ static int nsfs_lmdb_cmp(const MDB_val *a, const MDB_val *b)
  * (a concurrent writer won), the link fails with EEXIST and we skip.
  * Retries on CAS mismatch (the candidate was moved by another thread).
  */
+/* What promote_version() promoted, for a caller that has to describe the
+ * new current version.  Both fields are free here:  the version id is the
+ * suffix of the .versions/ entry name, and the etag is read from the
+ * descriptor the success path already opens to strip the non-current
+ * timestamp.  Reporting them saves the caller an openat() and an
+ * fgetxattr() it would otherwise repeat. */
+struct PromoteResult {
+  bool promoted{false};
+  std::string version_id;
+  std::string etag;
+};
+
 static void promote_version(int parent_fd, const std::string& leaf,
                             const DoutPrefixProvider* dpp,
-                            FSStrategy* fs_strategy)
+                            FSStrategy* fs_strategy,
+                            PromoteResult* out = nullptr)
 {
   ldpp_dout(dpp, 10) << "promote_version: enter leaf=" << leaf
     << " parent_fd=" << parent_fd << dendl;
@@ -337,7 +477,9 @@ static void promote_version(int parent_fd, const std::string& leaf,
     if (vdir) {
       struct dirent* de;
       while ((de = readdir(vdir)) != nullptr) {
-        if (de->d_name[0] == '.') { continue; }
+        /* no dot filter:  the key match below rejects ".", ".." and
+         * .lock, and filtering on the dot would hide the versions of
+         * an object whose own name begins with one */
         std::string vn(de->d_name);
         if (vn.size() <= leaf.size() + 1 ||
             vn.compare(0, leaf.size(), leaf) != 0 ||
@@ -399,7 +541,14 @@ static void promote_version(int parent_fd, const std::string& leaf,
       if (pfd >= 0) {
         std::string ts_x = NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_NON_CURRENT_TS;
         ::fremovexattr(pfd, ts_x.c_str());
+        if (out) {
+          out->etag = etag_from_fd(pfd);
+        }
         ::close(pfd);
+      }
+      if (out) {
+        out->promoted = true;
+        out->version_id = max_name.substr(leaf.size() + 1);
       }
       ::close(vfd);
       return;
@@ -439,6 +588,343 @@ static int open_versions_dir(int parent_fd)
   return vfd;
 }
 
+/* ---- rename support -------------------------------------------------- */
+
+/* The .versions/ entries belonging to one leaf.
+ *
+ * The suffix parse matches the listing path (see FSEnt::fill_cache):  an
+ * entry is "<leaf>_null" or "<leaf>_mtime-...".  Requiring the separator to
+ * fall exactly at leaf.size() is what stops "photo.jpg" collecting the
+ * versions of "photo.jpg.bak". */
+struct LeafVersion {
+  std::string entry;   /* <leaf>_<version-id> */
+  std::string ver_id;
+};
+
+static int list_leaf_versions(int parent_fd, const std::string& leaf,
+			      std::vector<LeafVersion>& out)
+{
+  int vfd = ::openat(parent_fd, HIDDEN_VERSIONS_PATH.c_str(),
+		     O_RDONLY | O_DIRECTORY);
+  if (vfd < 0) {
+    /* no .versions/ at all just means no history */
+    return (errno == ENOENT) ? 0 : -errno;
+  }
+  DIR* vdir = ::fdopendir(vfd);
+  if (! vdir) {
+    int err = errno;
+    ::close(vfd);
+    return -err;
+  }
+  struct dirent* de;
+  while ((de = ::readdir(vdir)) != nullptr) {
+    std::string vname(de->d_name);
+    if (vname.size() <= leaf.size() || vname.compare(0, leaf.size(), leaf) != 0
+	|| vname[leaf.size()] != '_') {
+      continue;
+    }
+    std::string vid = vname.substr(leaf.size() + 1);
+    if (vid != NULL_VERSION_ID && vid.compare(0, 6, "mtime-") != 0) {
+      continue;
+    }
+    out.push_back(LeafVersion{vname, vid});
+  }
+  ::closedir(vdir); /* closes vfd */
+  return 0;
+}
+
+/* Intent record.
+ *
+ * One xattr on the source .versions/ directory, written before the first
+ * move and cleared after the leaf lands.  It carries *what the move was*,
+ * never how far it got:  the leaf's location is the commit record, so
+ * recovery derives direction from the filesystem rather than from a progress
+ * counter that could go stale.  Two xattr operations for the whole move,
+ * whatever the version count.  See RENAME_DESIGN.md.
+ *
+ * The slice flag is part of "what the move was" and has to be recorded:
+ * with it, history left at the source is rubbish to be removed;  without it,
+ * history left at the source has to follow the leaf.  The same on-disk state
+ * means opposite things depending on it. */
+struct RenameIntent {
+  std::string leaf;
+  std::string tenant;
+  std::string bucket;
+  std::string key;
+  bool slice{false};
+};
+
+static std::string rename_intent_xattr()
+{
+  return NSFS_XATTR_PREFIX + std::string("rename_intent");
+}
+
+static int write_rename_intent(int src_parent_fd, const std::string& leaf,
+			       const std::string& dst_tenant,
+			       const std::string& dst_bucket,
+			       const std::string& dst_key,
+			       bool slice)
+{
+  int vfd = open_versions_dir(src_parent_fd);
+  if (vfd < 0) {
+    return vfd;
+  }
+  /* leaf \0 tenant \0 bucket \0 key \0 flags */
+  std::string rec = leaf;
+  rec.push_back('\0');
+  rec += dst_tenant;
+  rec.push_back('\0');
+  rec += dst_bucket;
+  rec.push_back('\0');
+  rec += dst_key;
+  rec.push_back('\0');
+  if (slice) {
+    rec.push_back('s');
+  }
+  std::string name = rename_intent_xattr();
+  int ret = ::fsetxattr(vfd, name.c_str(), rec.data(), rec.size(), 0);
+  int err = ret < 0 ? -errno : 0;
+  ::close(vfd);
+  return err;
+}
+
+static bool parse_rename_intent(const std::string& rec, RenameIntent& out)
+{
+  std::vector<std::string> f;
+  size_t pos = 0;
+  for (;;) {
+    size_t nul = rec.find('\0', pos);
+    if (nul == std::string::npos) {
+      f.push_back(rec.substr(pos));
+      break;
+    }
+    f.push_back(rec.substr(pos, nul - pos));
+    pos = nul + 1;
+  }
+  if (f.size() < 4) {
+    return false;
+  }
+  out.leaf = f[0];
+  out.tenant = f[1];
+  out.bucket = f[2];
+  out.key = f[3];
+  out.slice = (f.size() > 4) && (f[4].find('s') != std::string::npos);
+  return ! out.leaf.empty() && ! out.bucket.empty() && ! out.key.empty();
+}
+
+static void clear_rename_intent(int src_parent_fd)
+{
+  int vfd = ::openat(src_parent_fd, HIDDEN_VERSIONS_PATH.c_str(),
+		     O_RDONLY | O_DIRECTORY);
+  if (vfd < 0) {
+    return;
+  }
+  std::string name = rename_intent_xattr();
+  (void) ::fremovexattr(vfd, name.c_str());
+  ::close(vfd);
+}
+
+/* takes the .versions/ descriptor, for callers which already have one open */
+static bool rename_intent_present_at(int vfd, std::string& rec)
+{
+  char buf[1024];
+  std::string name = rename_intent_xattr();
+  ssize_t len = ::fgetxattr(vfd, name.c_str(), buf, sizeof(buf));
+  if (len <= 0) {
+    return false;
+  }
+  rec.assign(buf, len);
+  return true;
+}
+
+static bool rename_intent_present(int src_parent_fd, std::string& rec)
+{
+  int vfd = ::openat(src_parent_fd, HIDDEN_VERSIONS_PATH.c_str(),
+		     O_RDONLY | O_DIRECTORY);
+  if (vfd < 0) {
+    return false;
+  }
+  bool present = rename_intent_present_at(vfd, rec);
+  ::close(vfd);
+  return present;
+}
+
+/* Finish or undo an interrupted move.
+ *
+ * The record says what the move was;  the filesystem says how far it got.
+ * The leaf rename is the commit point, so the leaf's location decides the
+ * direction:  still at the source and the move never committed, so anything
+ * already at the destination comes back;  at the destination and it did
+ * commit, so whatever history is still behind follows it.  Nothing is
+ * inferred from a progress count, which is why the record does not keep one
+ * and why it cannot go stale.
+ *
+ * Present at both keys, or at neither, is not a state this sequence can
+ * produce -- renameat() is atomic and the version lock excludes the other
+ * mutations -- so it means something outside this code has been at the
+ * directory, most likely a client recreating the source key after the crash.
+ * Recovery refuses and leaves the record rather than guess;  destroying real
+ * data is worse than staying stuck.
+ *
+ * The caller must hold the source version lock.
+ */
+static int recover_rename_intent(const DoutPrefixProvider* dpp,
+				 NSFSDriver* driver,
+				 const std::string& src_bucket_name,
+				 int src_parent_fd, const RenameIntent& in)
+{
+  const bool at_src = (::faccessat(src_parent_fd, in.leaf.c_str(), F_OK,
+				   AT_SYMLINK_NOFOLLOW) == 0);
+
+  /* The destination may be gone entirely -- a bucket deleted since the
+   * crash, or intermediate directories never created.  Create nothing while
+   * recovering:  resolve_path() with create_dirs would manufacture the very
+   * evidence we are reading. */
+  std::unique_ptr<rgw::sal::Bucket> dbucket;
+  std::vector<std::unique_ptr<nsfs::Directory>> dchain;
+  nsfs::Directory* dst_dir{nullptr};
+  std::string dst_leaf;
+  int dst_parent_fd = -1;
+
+  int ret = driver->load_bucket(dpp, rgw_bucket(in.tenant, in.bucket),
+				&dbucket, null_yield);
+  if (ret == 0) {
+    auto* db = static_cast<NSFSBucket*>(dbucket.get());
+    ret = nsfs::resolve_path(dpp, db->get_dir(), in.key,
+			     /*create_dirs=*/false, driver->ctx(),
+			     dchain, dst_dir, dst_leaf);
+    if (ret == 0 && dst_dir) {
+      dst_parent_fd = dst_dir->get_fd();
+      if (dst_parent_fd < 0) {
+	(void) dst_dir->open(dpp);
+	dst_parent_fd = dst_dir->get_fd();
+      }
+    }
+  }
+
+  const bool at_dst = (dst_parent_fd >= 0)
+    && (::faccessat(dst_parent_fd, dst_leaf.c_str(), F_OK,
+		    AT_SYMLINK_NOFOLLOW) == 0);
+
+  if (at_src == at_dst) {
+    ldpp_dout(dpp, 0) << "ERROR: rename recovery: " << in.leaf << " -> "
+      << in.bucket << "/" << in.key << " is present at "
+      << (at_src ? "both keys" : "neither key")
+      << ";  leaving the intent record for manual attention" << dendl;
+    return -EBUSY;
+  }
+
+  int src_vfd = ::openat(src_parent_fd, HIDDEN_VERSIONS_PATH.c_str(),
+			 O_RDONLY | O_DIRECTORY);
+  if (src_vfd < 0) {
+    /* the record we just read lives on that directory */
+    return -errno;
+  }
+
+  size_t n = 0;
+
+  if (at_src) {
+    /* never committed:  bring back whatever went across */
+    std::vector<LeafVersion> stranded;
+    if (dst_parent_fd >= 0) {
+      ret = list_leaf_versions(dst_parent_fd, dst_leaf, stranded);
+      if (ret < 0) {
+	::close(src_vfd);
+	return ret;
+      }
+    }
+    int dst_vfd = -1;
+    if (! stranded.empty()) {
+      dst_vfd = ::openat(dst_parent_fd, HIDDEN_VERSIONS_PATH.c_str(),
+			 O_RDONLY | O_DIRECTORY);
+      if (dst_vfd < 0) {
+	ret = -errno;
+	::close(src_vfd);
+	return ret;
+      }
+    }
+    for (const auto& v : stranded) {
+      std::string sname = in.leaf + "_" + v.ver_id;
+      if (::renameat(dst_vfd, v.entry.c_str(), src_vfd, sname.c_str()) < 0) {
+	ret = -errno;
+	ldpp_dout(dpp, 0) << "ERROR: rename recovery: returning " << v.entry
+	  << " failed: " << cpp_strerror(-ret) << ";  the intent record stays "
+	  << "and " << in.leaf << " needs manual attention" << dendl;
+	::close(dst_vfd);
+	::close(src_vfd);
+	return ret;
+      }
+      ++n;
+    }
+    if (dst_vfd >= 0) {
+      ::close(dst_vfd);
+    }
+    ldpp_dout(dpp, 1) << "rename recovery: " << in.leaf
+      << " never committed;  returned " << n << " version(s) from "
+      << in.bucket << "/" << in.key << dendl;
+  } else {
+    /* committed:  the history that did not make it follows the leaf, or, if
+     * the move was sliced, was meant to be dropped */
+    std::vector<LeafVersion> behind;
+    ret = list_leaf_versions(src_parent_fd, in.leaf, behind);
+    if (ret < 0) {
+      ::close(src_vfd);
+      return ret;
+    }
+    int dst_vfd = -1;
+    if (! behind.empty() && ! in.slice) {
+      dst_vfd = open_versions_dir(dst_parent_fd);
+      if (dst_vfd < 0) {
+	::close(src_vfd);
+	return dst_vfd;
+      }
+    }
+    for (const auto& v : behind) {
+      if (in.slice) {
+	if (::unlinkat(src_vfd, v.entry.c_str(), 0) < 0) {
+	  ldpp_dout(dpp, 0) << "ERROR: rename recovery: sliced version "
+	    << v.entry << " could not be removed: " << cpp_strerror(errno)
+	    << dendl;
+	  continue;
+	}
+      } else {
+	std::string dname = dst_leaf + "_" + v.ver_id;
+	if (::renameat(src_vfd, v.entry.c_str(), dst_vfd, dname.c_str()) < 0) {
+	  ret = -errno;
+	  ldpp_dout(dpp, 0) << "ERROR: rename recovery: forwarding " << v.entry
+	    << " failed: " << cpp_strerror(-ret) << ";  the intent record "
+	    << "stays and " << in.leaf << " needs manual attention" << dendl;
+	  ::close(dst_vfd);
+	  ::close(src_vfd);
+	  return ret;
+	}
+      }
+      ++n;
+    }
+    if (dst_vfd >= 0) {
+      ::close(dst_vfd);
+    }
+    ldpp_dout(dpp, 1) << "rename recovery: " << in.leaf << " committed to "
+      << in.bucket << "/" << in.key << ";  " << (in.slice ? "dropped " :
+      "forwarded ") << n << " version(s)" << dendl;
+  }
+
+  ::close(src_vfd);
+  clear_rename_intent(src_parent_fd);
+
+  /* The cache cannot describe what recovery just changed:  a rekey expresses
+   * a whole move, and this was half of one.  Drop the filled flag on both
+   * sides and let the next listing rebuild from the store. */
+  auto* bcache = driver->get_bucket_cache();
+  if (bcache) {
+    (void) bcache->invalidate_bucket(dpp, src_bucket_name);
+    if (dbucket) {
+      (void) bcache->invalidate_bucket(dpp, in.bucket);
+    }
+  }
+  return 0;
+}
+
 static int open_versions_lockfile(int parent_fd)
 {
   int ret = ensure_versions_dir(parent_fd);
@@ -448,6 +934,211 @@ static int open_versions_lockfile(int parent_fd)
   int fd = ::openat(parent_fd, VERSIONS_LOCKFILE.c_str(),
                     O_RDWR | O_CREAT, 0600);
   return fd < 0 ? -errno : fd;
+}
+
+/* Take a directory's version lock, recovering an interrupted move out of it
+ * first.
+ *
+ * Every mutation of a directory's version history comes through the version
+ * lock, so this is where a half-finished rename gets noticed:  the next write
+ * to *any* object in that directory repairs it.  The intent record lives on
+ * the source, and the destination's stranded versions are reachable only from
+ * that record, so the source side is the only side that can find them -- and
+ * this is the lock recovery needs anyway.
+ *
+ * Read paths deliberately do not repair.  Directory::fill_cache() notices the
+ * record and says so in the log, but does not take this lock:  doing so would
+ * make a listing mutate and would introduce a bucket-cache-entry-lock ->
+ * version-lock ordering that does not exist today.  The cost is that a
+ * listing can show the delta until the next write to that directory.
+ *
+ * By default a failed recovery does not fail the caller.  The record may well
+ * describe a different object, and refusing every write to a directory
+ * because one object's move is stuck is worse than the delta.  Callers which
+ * cannot tolerate it -- rename(), which would overwrite the record and lose
+ * the only pointer to the stranded versions -- pass recovery_ret and check
+ * it.
+ */
+static std::unique_ptr<VersionLockHandle>
+version_lock_recovering(const DoutPrefixProvider* dpp, NSFSDriver* driver,
+			const std::string& bucket_name, int parent_fd,
+			int* recovery_ret = nullptr)
+{
+  auto vlock = driver->get_fs_strategy()->version_lock(
+    dpp, open_versions_lockfile(parent_fd));
+  if (recovery_ret) {
+    *recovery_ret = 0;
+  }
+
+  std::string rec;
+  if (! rename_intent_present(parent_fd, rec)) {
+    return vlock;
+  }
+
+  RenameIntent in;
+  if (! parse_rename_intent(rec, in)) {
+    ldpp_dout(dpp, 0) << "ERROR: .versions/ carries an unparseable "
+      << "rename_intent record (" << rec.size() << " bytes);  leaving it "
+      << "rather than guessing which move it described" << dendl;
+    if (recovery_ret) {
+      *recovery_ret = -EBUSY;
+    }
+    return vlock;
+  }
+
+  ldpp_dout(dpp, 1) << "an earlier move of " << in.leaf << " out of this "
+    << "directory did not complete;  recovering it" << dendl;
+  int ret = recover_rename_intent(dpp, driver, bucket_name, parent_fd, in);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: recovering the interrupted move of "
+      << in.leaf << " failed: " << cpp_strerror(-ret) << ";  the record "
+      << "stays and the next write to this directory will retry" << dendl;
+    if (recovery_ret) {
+      *recovery_ret = ret;
+    }
+  }
+  return vlock;
+}
+
+struct DemoteResult {
+  bool did_demote{false};
+  std::string demoted_ver_id;
+};
+
+/*
+ * Demote the current version of an object to .versions/.
+ *
+ * Caller must already hold (or not need) the version lock.
+ * parent_fd: open fd to the bucket directory
+ * leaf: object name within that directory
+ * ver_enabled: whether versioning is enabled (vs suspended)
+ * fs_strategy: for safe_link
+ *
+ * Returns 0 on success (including "nothing to demote"), negative on error.
+ */
+static int demote_current_version(const DoutPrefixProvider* dpp,
+				  FSStrategy* fs_strategy,
+				  int parent_fd,
+				  const std::string& leaf,
+				  bool ver_enabled,
+				  DemoteResult& result)
+{
+  int vfd = open_versions_dir(parent_fd);
+  if (vfd < 0) {
+    return vfd;
+  }
+  auto close_vfd = make_scope_guard([vfd] { ::close(vfd); });
+
+  if (!ver_enabled) {
+    std::string null_name = nsfs_ver_entry(leaf, NULL_VERSION_ID);
+    ::unlinkat(vfd, null_name.c_str(), 0);
+  }
+
+  struct statx cur_stx;
+  if (statx(parent_fd, leaf.c_str(),
+	    AT_SYMLINK_NOFOLLOW, STATX_ALL, &cur_stx) != 0) {
+    return 0;
+  }
+
+  bool cur_is_null = false;
+  {
+    int chk_fd = ::openat(parent_fd, leaf.c_str(), O_RDONLY);
+    if (chk_fd >= 0) {
+      cur_is_null = is_null_version_fd(chk_fd);
+      ::close(chk_fd);
+    }
+  }
+
+  if (!ver_enabled && cur_is_null) {
+    return 0;
+  }
+
+  std::string cur_ver_id = cur_is_null
+    ? NULL_VERSION_ID
+    : nsfs_version_id_from_statx(cur_stx);
+  std::string ver_name = nsfs_ver_entry(leaf, cur_ver_id);
+
+  SafeResult sr = fs_strategy->safe_link(
+    dpp, parent_fd, leaf,
+    vfd, ver_name,
+    statx_mtime_ns(cur_stx), cur_stx.stx_ino);
+
+  if (sr == SafeResult::OK) {
+    int demoted_fd = ::openat(vfd, ver_name.c_str(), O_RDONLY);
+    if (demoted_fd >= 0) {
+      auto now_ms = std::to_string(
+	std::chrono::duration_cast<std::chrono::milliseconds>(
+	  std::chrono::system_clock::now().time_since_epoch()).count());
+      std::string ts_x =
+	NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_NON_CURRENT_TS;
+      ::fsetxattr(demoted_fd, ts_x.c_str(),
+		  now_ms.c_str(), now_ms.size(), 0);
+      ::close(demoted_fd);
+    }
+    result.did_demote = true;
+    result.demoted_ver_id = cur_ver_id;
+  } else if (sr == SafeResult::MISMATCH && cur_is_null) {
+    /* null version already demoted by a concurrent writer */
+  } else if (sr != SafeResult::OK) {
+    ldpp_dout(dpp, 0) << "ERROR: version demote failed for "
+      << leaf << " sr=" << (int)sr << dendl;
+    return -ERR_INTERNAL_ERROR;
+  }
+
+  return 0;
+}
+
+static int ensure_shadow_dir(int parent_fd)
+{
+  int ret = ::mkdirat(parent_fd, HIDDEN_SHADOW_PATH.c_str(), 0755);
+  if (ret < 0 && errno != EEXIST) {
+    return -errno;
+  }
+  return 0;
+}
+
+static int open_shadow_dir(int parent_fd)
+{
+  int ret = ensure_shadow_dir(parent_fd);
+  if (ret < 0) {
+    return ret;
+  }
+  int sfd = ::openat(parent_fd, HIDDEN_SHADOW_PATH.c_str(),
+		     O_RDONLY | O_DIRECTORY);
+  if (sfd < 0) {
+    return -errno;
+  }
+  return sfd;
+}
+
+static int copy_xattrs_fd(const DoutPrefixProvider* dpp, int src_fd, int dst_fd)
+{
+  char namebuf[64 * 1024];
+  ssize_t buflen = ::flistxattr(src_fd, namebuf, sizeof(namebuf));
+  if (buflen < 0) {
+    return -errno;
+  }
+
+  char valbuf[64 * 1024];
+  const char* p = namebuf;
+  while (buflen > 0) {
+    ssize_t keylen = strlen(p) + 1;
+    ssize_t vallen = ::fgetxattr(src_fd, p, valbuf, sizeof(valbuf));
+    if (vallen < 0) {
+      if (errno == ENODATA) {
+	buflen -= keylen;
+	p += keylen;
+	continue;
+      }
+      return -errno;
+    }
+    if (::fsetxattr(dst_fd, p, valbuf, vallen, 0) < 0) {
+      return -errno;
+    }
+    buflen -= keylen;
+    p += keylen;
+  }
+  return 0;
 }
 
 namespace nsfs {
@@ -544,6 +1235,7 @@ static inline std::string bucket_fname(std::string name, std::optional<std::stri
 }
 
 static int assemble_parts(const DoutPrefixProvider* dpp,
+                          FSStrategy* fs_strategy,
                           int dir_fd,
                           int num_parts,
                           const std::string& output_name)
@@ -576,36 +1268,15 @@ static int assemble_parts(const DoutPrefixProvider* dpp,
       ret = errno;
       return -ret;
     }
-    off_t remaining = stx.stx_size;
-    off_t part_offset = 0;
 
-    while (remaining > 0) {
-      ssize_t copied = copy_file_range(part_fd, &part_offset,
-                                       out_fd, &out_offset,
-                                       remaining, 0);
-      if (copied < 0) {
-        if (errno == EXDEV || errno == ENOSYS || errno == EOPNOTSUPP) {
-          char buf[65536];
-          lseek(part_fd, part_offset, SEEK_SET);
-          while (remaining > 0) {
-            ssize_t nr = ::read(part_fd, buf,
-                                std::min(remaining, (off_t)sizeof(buf)));
-            if (nr <= 0) break;
-            ssize_t nw = ::write(out_fd, buf, nr);
-            if (nw != nr) return -EIO;
-            remaining -= nr;
-            out_offset += nr;
-            part_offset += nr;
-          }
-          break;
-        }
-        ret = errno;
-        ldpp_dout(dpp, 0) << "ERROR: copy_file_range failed for "
-                          << part_name << ": " << cpp_strerror(ret) << dendl;
-        return -ret;
-      }
-      remaining -= copied;
+    ret = fs_strategy->copy_range(dpp, part_fd, 0, out_fd, out_offset,
+                                  stx.stx_size);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: could not copy part " << part_name
+                        << ": " << cpp_strerror(-ret) << dendl;
+      return ret;
     }
+    out_offset += stx.stx_size;
   }
 
   return 0;
@@ -677,6 +1348,9 @@ static inline int copy_dir_fd(int old_fd)
 static int get_x_attrs(optional_yield y, const DoutPrefixProvider* dpp, int fd,
 		       Attrs& attrs, const std::string& display)
 {
+  /* large enough for every attribute an object carries in practice;  the
+   * biggest is the encoded ACL at a couple of hundred bytes */
+  enum { INLINE_VALUE_MAX = 1024 };
   char namebuf[64 * 1024]; // Max list size supported on linux
   ssize_t buflen;
   int ret;
@@ -705,22 +1379,24 @@ static int get_x_attrs(optional_yield y, const DoutPrefixProvider* dpp, int fd,
       continue;
     }
 
-    vallen = fgetxattr(fd, keyptr, nullptr, 0);
-    if (vallen < 0) {
-      ret = errno;
-      ldpp_dout(dpp, 0) << "ERROR: could not get attribute " << keyptr << " for " << display << ": " << cpp_strerror(ret) << dendl;
-      return -ret;
-    } else if (vallen == 0) {
-      attrs.emplace(std::move(key), bufferlist{});
-      buflen -= keylen;
-      keyptr += keylen;
-      continue;
+    /* Read straight into a stack buffer.  Sizing the value first with a
+     * nullptr call doubles the syscalls on this path, and every attribute
+     * an object actually carries fits well inside INLINE_VALUE_MAX -- the
+     * largest is the encoded ACL, a couple of hundred bytes.  A value that
+     * does not fit falls back to the size-then-read pair. */
+    char valbuf[INLINE_VALUE_MAX];
+    vallen = fgetxattr(fd, keyptr, valbuf, sizeof(valbuf));
+    vp = valbuf;
+
+    if (vallen < 0 && errno == ERANGE) {
+      vallen = fgetxattr(fd, keyptr, nullptr, 0);
+      if (vallen >= 0) {
+	value.resize(vallen);
+	vp = value.data();
+	vallen = fgetxattr(fd, keyptr, vp, vallen);
+      }
     }
 
-    value.reserve(vallen + 1);
-    vp = &value[0];
-
-    vallen = fgetxattr(fd, keyptr, vp, vallen);
     if (vallen < 0) {
       ret = errno;
       ldpp_dout(dpp, 0) << "ERROR: could not get attribute " << keyptr << " for " << display << ": " << cpp_strerror(ret) << dendl;
@@ -811,9 +1487,9 @@ static int delete_directory(int parent_fd, const char* dname, bool delete_childr
       continue;
     }
 
-    std::string_view d_name = entry->d_name;
-    bool is_mp = d_name.starts_with("." + mp_ns);
-    if (!is_mp && !delete_children) {
+    /* scaffolding is removed with the directory;  content blocks the
+     * removal unless the caller asked to recurse.  See entry_is_content. */
+    if (entry_is_content(dir_fd, entry->d_name) && !delete_children) {
       closedir(dir);
       return -ENOTEMPTY;
     }
@@ -900,7 +1576,8 @@ int FSEnt::stat(const DoutPrefixProvider* dpp, bool force)
   return 0;
 }
 
-int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs, Attrs* extra_attrs)
+int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs, Attrs* extra_attrs,
+		       AttrWriteMode mode, const std::vector<std::string>* rmattrs)
 {
   int ret = open(dpp);
   if (ret < 0) {
@@ -915,28 +1592,49 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
   type.encode(type_bl);
   attrs[RGW_NSFS_ATTR_OBJECT_TYPE] = type_bl;
 
-  if (fs_strategy) {
-    nsfs::xattr_map_t old_raw;
-    fs_strategy->get_xattrs(dpp, fd, old_raw);
+  /* An empty value means "leave this attr alone", matching
+   * RGWRados::set_attrs().  MERGE only:  under REPLACE_ALL a name absent
+   * from the write set is pruned, so skipping it here would delete the
+   * attr rather than preserve it. */
+  const bool skip_empty = (mode == AttrWriteMode::MERGE);
 
+  if (fs_strategy) {
     nsfs::xattr_map_t to_write;
     if (extra_attrs) {
       for (auto& [key, bl] : *extra_attrs) {
+        if (skip_empty && !bl.length()) {
+          continue;
+        }
         to_write.try_emplace(make_xattr_name(key), bl.to_str());
       }
     }
     for (auto& [key, bl] : attrs) {
+      if (skip_empty && !bl.length()) {
+        continue;
+      }
       to_write.try_emplace(make_xattr_name(key), bl.to_str());
     }
 
     std::vector<std::string> to_remove;
-    for (auto& [disk_name, _] : old_raw) {
-      if (disk_name.compare(0, NSFS_XATTR_PREFIX.size(),
-                            NSFS_XATTR_PREFIX) != 0) {
-        continue;
+    if (mode == AttrWriteMode::REPLACE_ALL) {
+      nsfs::xattr_map_t old_raw;
+      fs_strategy->get_xattrs(dpp, fd, old_raw);
+
+      for (auto& [disk_name, _] : old_raw) {
+        if (disk_name.compare(0, NSFS_XATTR_PREFIX.size(),
+                              NSFS_XATTR_PREFIX) != 0) {
+          continue;
+        }
+        if (to_write.find(disk_name) == to_write.end()) {
+          to_remove.push_back(disk_name);
+        }
       }
-      if (to_write.find(disk_name) == to_write.end()) {
-        to_remove.push_back(disk_name);
+    } else if (rmattrs) {
+      for (auto& key : *rmattrs) {
+        std::string disk_name{make_xattr_name(key)};
+        if (to_write.find(disk_name) == to_write.end()) {
+          to_remove.push_back(std::move(disk_name));
+        }
       }
     }
 
@@ -951,19 +1649,31 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
   }
 
   /* per-attr syscalls */
-  Attrs old_attrs;
-  ret = get_x_attrs(y, dpp, fd, old_attrs, get_name());
-  if (ret >= 0) {
-    for (auto& it : old_attrs) {
-      if (attrs.find(it.first) == attrs.end() &&
-          (!extra_attrs || extra_attrs->find(it.first) == extra_attrs->end())) {
-        remove_x_attr(dpp, y, fd, it.first, get_name());
+  if (mode == AttrWriteMode::REPLACE_ALL) {
+    Attrs old_attrs;
+    ret = get_x_attrs(y, dpp, fd, old_attrs, get_name());
+    if (ret >= 0) {
+      for (auto& it : old_attrs) {
+        if (attrs.find(it.first) == attrs.end() &&
+            (!extra_attrs || extra_attrs->find(it.first) == extra_attrs->end())) {
+          remove_x_attr(dpp, y, fd, it.first, get_name());
+        }
+      }
+    }
+  } else if (rmattrs) {
+    for (auto& key : *rmattrs) {
+      if (attrs.find(key) == attrs.end() &&
+          (!extra_attrs || extra_attrs->find(key) == extra_attrs->end())) {
+        remove_x_attr(dpp, y, fd, key, get_name());
       }
     }
   }
 
   if (extra_attrs) {
     for (auto &it : *extra_attrs) {
+      if (skip_empty && !it.second.length()) {
+        continue;
+      }
       ret = write_x_attr(dpp, y, fd, it.first, it.second, get_name());
       if (ret < 0) {
         return ret;
@@ -972,6 +1682,9 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
   }
 
   for (auto& it : attrs) {
+    if (skip_empty && !it.second.length()) {
+      continue;
+    }
     ret = write_x_attr(dpp, y, fd, it.first, it.second, get_name());
     if (ret < 0) {
       return ret;
@@ -995,8 +1708,20 @@ int FSEnt::fill_cache(const DoutPrefixProvider *dpp, optional_yield y, fill_cach
 {
   rgw_bucket_dir_entry bde{};
 
-  std::string full_key = path_prefix + get_name();
-  rgw_obj_key key = decode_obj_key(full_key);
+  rgw_obj_key key = decode_obj_key(path_prefix + get_name());
+
+  int ret = make_dir_entry(dpp, y, key, flags, bde);
+  if (ret < 0) {
+    return ret;
+  }
+  return cb(dpp, bde);
+}
+
+int FSEnt::make_dir_entry(const DoutPrefixProvider *dpp, optional_yield y,
+			  const rgw_obj_key& in_key, uint32_t flags,
+			  rgw_bucket_dir_entry& bde)
+{
+  rgw_obj_key key = in_key;
   if (parent->get_type() == ObjectType::MULTIPART) {
     key.ns = mp_ns;
   }
@@ -1064,7 +1789,7 @@ int FSEnt::fill_cache(const DoutPrefixProvider *dpp, optional_yield y, fill_cach
     }
   }
 
-  return cb(dpp, bde);
+  return 0;
 }
 
 int File::create(const DoutPrefixProvider *dpp, bool* existed, bool temp_file)
@@ -1304,6 +2029,53 @@ int File::read(int64_t ofs, int64_t left, bufferlist& bl,
   bl.append(bp, 0, ret);
 
   return ret;
+}
+
+/* Move this file's directory entry into dst_dir under dst_name.
+ *
+ * Directory::rename() exists beside this and is deliberately different:  it
+ * uses RENAME_EXCHANGE when the destination is occupied, which is what the
+ * shadow/publish flow wants.  An object rename wants POSIX replace
+ * semantics, so this is a plain renameat(). */
+int File::rename(const DoutPrefixProvider* dpp, optional_yield y,
+		 Directory* dst_dir, const std::string& dst_name)
+{
+  if (! parent || ! dst_dir) {
+    return -EINVAL;
+  }
+  int src_fd = parent->get_fd();
+  if (src_fd < 0) {
+    int ret = parent->open(dpp);
+    if (ret < 0) {
+      return ret;
+    }
+    src_fd = parent->get_fd();
+  }
+  int dst_fd = dst_dir->get_fd();
+  if (dst_fd < 0) {
+    int ret = dst_dir->open(dpp);
+    if (ret < 0) {
+      return ret;
+    }
+    dst_fd = dst_dir->get_fd();
+  }
+  if (src_fd < 0 || dst_fd < 0) {
+    return -EIO;
+  }
+
+  if (::renameat(src_fd, fname.c_str(), dst_fd, dst_name.c_str()) < 0) {
+    int err = errno;
+    ldpp_dout(dpp, 0) << "ERROR: renameat " << fname << " -> " << dst_name
+		      << ": " << cpp_strerror(err) << dendl;
+    return -err;
+  }
+
+  /* keep the FSEnt consistent with where the file now is, as
+   * Directory::rename() does -- a live ent pointing at a moved name is a
+   * hazard for anything still holding it */
+  parent = dst_dir;
+  fname = dst_name;
+  return 0;
 }
 
 int File::copy(const DoutPrefixProvider *dpp, optional_yield y,
@@ -1652,8 +2424,7 @@ int Directory::copy(const DoutPrefixProvider *dpp, optional_yield y,
   ret = for_each(dpp, [this, &dest, &dpp, &y](const char* name) {
     std::unique_ptr<FSEnt> sobj;
 
-    if (name[0] == '.') {
-      /* Skip dotfiles */
+    if (is_reserved_name(name)) {
       return 0;
     }
 
@@ -1726,7 +2497,7 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
   int ret = for_each(dpp, [this, &cb, &dpp, &y, &path_prefix, flags](const char *name) {
     std::unique_ptr<FSEnt> ent;
 
-    if (name[0] == '.' && name != NSFS_FOLDER_OBJECT_NAME) {
+    if (is_reserved_name(name) && name != NSFS_FOLDER_OBJECT_NAME) {
       return 0;
     }
 
@@ -1805,14 +2576,34 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
     int vfd = ::openat(get_fd(), HIDDEN_VERSIONS_PATH.c_str(),
                        O_RDONLY | O_DIRECTORY);
     if (vfd >= 0) {
+      /* Notice an interrupted move;  do not repair it.  Repair needs the
+       * version lock, and taking it here would put a mutation on the read
+       * path and create a bucket-cache-entry-lock -> version-lock ordering
+       * that exists nowhere else.  The next write to this directory recovers
+       * it -- see version_lock_recovering().  Until then this listing is
+       * where the delta shows, so it is worth saying so. */
+      std::string irec;
+      if (rename_intent_present_at(vfd, irec)) {
+        RenameIntent in;
+        if (parse_rename_intent(irec, in)) {
+          ldpp_dout(dpp, 0) << "WARNING: listing " << get_name()
+            << ": an interrupted move of " << in.leaf << " to " << in.bucket
+            << "/" << in.key << " has not been recovered;  this listing may "
+            << "report its history incompletely.  The next write to this "
+            << "directory will repair it" << dendl;
+        } else {
+          ldpp_dout(dpp, 0) << "WARNING: listing " << get_name()
+            << ": .versions/ carries an unparseable rename_intent record"
+            << dendl;
+        }
+      }
       DIR* vdir = fdopendir(vfd);
       if (vdir) {
         struct dirent* de;
         while ((de = readdir(vdir)) != nullptr) {
-          if (de->d_name[0] == '.') {
-            continue;
-          }
-
+          /* no dot filter:  the parse below rejects ".", ".." and
+           * .lock, and filtering on the dot would hide the versions of
+           * an object whose own name begins with one */
           std::string vname(de->d_name);
           /* parse "key_version_id" — find the last '_mtime-' or '_null' */
           std::string obj_name;
@@ -2165,6 +2956,7 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
   }
   ldpp_dout(dpp, 1) << "nsfs: using " << fs_strategy->name()
     << " fs strategy" << dendl;
+  fs_strategy->set_shares_extents(nsfs::probe_shares_extents(dpp, base_path));
 
   /* ordered listing cache */
   bucket_cache.reset(
@@ -2542,6 +3334,25 @@ int NSFSDriver::list_all_zones(const DoutPrefixProvider* dpp,
 
 int NSFSDriver::cluster_stat(RGWClusterStat& stats)
 {
+  /* the "cluster" is the filesystem the namespace lives on.  ganesha
+   * asks for this on every statfs, and a client uses it to decide
+   * whether a write can fit, so leaving it unfilled is not harmless */
+  struct statvfs vfs;
+  if (::statvfs(base_path.c_str(), &vfs) < 0) {
+    return -errno;
+  }
+
+  /* frsize is the fragment size blocks are counted in;  f_bsize is a
+   * hint for i/o size and is not what f_blocks counts */
+  uint64_t frsize = vfs.f_frsize ? vfs.f_frsize : vfs.f_bsize;
+
+  stats.kb = (vfs.f_blocks * frsize) >> 10;
+  stats.kb_avail = (vfs.f_bavail * frsize) >> 10;
+  stats.kb_used = ((vfs.f_blocks - vfs.f_bfree) * frsize) >> 10;
+  /* inodes in use is the closest thing to an object count here */
+  stats.num_objects = (vfs.f_files >= vfs.f_ffree)
+    ? (vfs.f_files - vfs.f_ffree) : 0;
+
   return 0;
 }
 
@@ -3393,6 +4204,12 @@ int NSFSDriver::list_account_topics(const DoutPrefixProvider* dpp,
   return 0;
 }
 
+/* In an anonymous namespace because the posix driver, which nsfs was
+ * forked from, defines an rgw::sal::meta_list_handle of its own with
+ * more members.  Two definitions of one name are one type to the
+ * linker, which keeps one inline constructor for both:  posix's then
+ * wrote its extra members past the end of this smaller handle. */
+namespace {
 struct meta_list_handle {
   std::string marker;
   std::string section;
@@ -3405,6 +4222,7 @@ struct meta_list_handle {
     section = _section;
   }
 };
+} // namespace
 
 int NSFSDriver::meta_list_keys_init(const DoutPrefixProvider *dpp,
                                      const std::string& section,
@@ -3799,8 +4617,7 @@ int NSFSBucket::read_stats(const DoutPrefixProvider *dpp, optional_yield y,
 
   // TODO: bucket stats shouldn't have to list all objects
   return dir->for_each(dpp, [this, dpp, y, &main] (const char* name) {
-    if (name[0] == '.') {
-      /* Skip dotfiles */
+    if (is_reserved_name(name)) {
       return 0;
     }
 
@@ -3897,10 +4714,10 @@ int NSFSBucket::write_attrs(const DoutPrefixProvider* dpp, optional_yield y)
 
 int NSFSBucket::check_empty(const DoutPrefixProvider* dpp, optional_yield y)
 {
-  return dir->for_each(dpp, [](const char* name) {
-    /* for_each filters out "." and "..", so reaching here is not empty */
-    std::string_view check_name = name;
-    if (!check_name.starts_with(".multipart")) { // incomplete uploads can be deleted
+  int bucket_fd = dir->get_fd();
+  return dir->for_each(dpp, [bucket_fd](const char* name) {
+    /* for_each filters out "." and ".." */
+    if (entry_is_content(bucket_fd, name)) {
       return -ENOTEMPTY;
     }
     return 0;
@@ -3932,6 +4749,7 @@ int NSFSBucket::read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch,
 			    bool* is_truncated, RGWUsageIter& usage_iter,
 			    std::map<rgw_user_bucket, rgw_usage_log_entry>& usage)
 {
+  *is_truncated = false;
   return 0;
 }
 
@@ -4120,6 +4938,320 @@ int NSFSObject::delete_object(const DoutPrefixProvider* dpp,
   return 0;
 }
 
+/* Move an object, with its history, without copying data.
+ *
+ * PROVISIONAL -- see RENAME_DESIGN.md.  This is the single-object case;  the
+ * general operation is expected to be a prefix-capable rebind.
+ *
+ * The order is versions first and the leaf last, so the leaf rename is the
+ * commit point and the object is resolvable at exactly one key throughout.
+ * An intent xattr on the source .versions/ makes an interrupted move
+ * recognisable;  the leaf's location tells recovery which way to go, so the
+ * record carries no progress state.
+ *
+ * Serialised against other version mutations by the version lock.  Listing
+ * does not take that lock -- it does not today for demote/promote either --
+ * so a caller racing a rename may observe an intermediate state, and one who
+ * is not racing never does.  That is a deliberate choice, argued in
+ * RENAME_DESIGN.md;  locking listing would cost every versioned LIST.
+ */
+int NSFSObject::rename(const DoutPrefixProvider* dpp, optional_yield y,
+		       rgw::sal::Bucket* dest_bucket,
+		       const rgw_obj_key& dest_key, uint32_t flags)
+{
+  NSFSBucket* sb = static_cast<NSFSBucket*>(get_bucket());
+  NSFSBucket* db = static_cast<NSFSBucket*>(dest_bucket);
+  if (! sb || ! db) {
+    return -EINVAL;
+  }
+
+  int ret = stat(dpp);
+  if (ret < 0) {
+    return ret;
+  }
+
+  nsfs::FSEnt* sent = get_fsent();
+  if (! sent || ! sent->get_parent()) {
+    return -EINVAL;
+  }
+  auto* src_file = dynamic_cast<nsfs::File*>(sent);
+  if (! src_file) {
+    /* a directory object is the prefix case, which this is not */
+    return -ENOTSUP;
+  }
+
+  nsfs::Directory* src_dir = sent->get_parent();
+  int src_parent_fd = src_dir->get_fd();
+  if (src_parent_fd < 0) {
+    (void) src_dir->open(dpp);
+    src_parent_fd = src_dir->get_fd();
+  }
+  if (src_parent_fd < 0) {
+    return -EIO;
+  }
+  const std::string src_leaf = sent->get_name();
+
+  /* Refuse before deciding how to do it.
+   *
+   * Moving history into a bucket that cannot hold it is refused further
+   * down, under the version lock, where the list is authoritative.  But
+   * that check used to sit behind the mechanism gates below:  a driver
+   * which cannot move a name returns -ENOTSUP first, and RGWLibFS::rename
+   * then emulates the rename by copy-and-delete (rgw_file.cc), performing
+   * the very operation this refuses and dropping the history silently.  On
+   * GPFS that is every rename.  So the policy is asked first and the
+   * mechanism second.  The check under the lock stays and remains the
+   * authoritative one;  this one exists to precede the gates. */
+  if (! (flags & FLAG_SLICE_VERSIONS) && ! db->get_info().versioned()) {
+    std::vector<LeafVersion> pre_versions;
+    if ((list_leaf_versions(src_parent_fd, src_leaf, pre_versions) == 0) &&
+	! pre_versions.empty()) {
+      ldpp_dout(dpp, 4) << "rename: source has " << pre_versions.size()
+	<< " non-current version(s) and " << db->get_name()
+	<< " cannot hold them;  refusing.  FLAG_SLICE_VERSIONS moves the "
+	<< "current version and drops the history" << dendl;
+      return -EINVAL;
+    }
+  }
+
+  if (! driver->ctx()->_conf->rgw_nsfs_enable_rename) {
+    return -ENOTSUP;
+  }
+  FSStrategy* fs_strategy = driver->get_fs_strategy();
+  if (! fs_strategy || ! fs_strategy->can_rename()) {
+    /* GPFS lands here deliberately */
+    return -ENOTSUP;
+  }
+
+
+  /* Serialise against other version mutations on the source.  Taken here
+   * rather than just before the first move:  recovery below repairs the
+   * source .versions/, and the version list gathered further down has to be
+   * the one recovery left behind.
+   *
+   * The lock and the intent record are both per-directory, so two renames
+   * out of the same directory serialise against each other and there is
+   * never more than one outstanding record to recover. */
+  int recovered = 0;
+  auto vlock = version_lock_recovering(dpp, driver, sb->get_name(),
+				       src_parent_fd, &recovered);
+  if (recovered < 0) {
+    /* one intent record per directory:  writing ours over a stuck one would
+     * lose the only pointer to the stranded versions.  Unlike the other
+     * mutations, this caller cannot proceed. */
+    ldpp_dout(dpp, 0) << "ERROR: rename: refusing while an earlier move out "
+      << "of this directory is unrecovered" << dendl;
+    return recovered;
+  }
+
+  /* resolve the destination, creating intermediate directories */
+  std::vector<std::unique_ptr<nsfs::Directory>> dchain;
+  nsfs::Directory* dst_dir{nullptr};
+  std::string dst_leaf;
+  ret = nsfs::resolve_path(dpp, db->get_dir(), dest_key.name,
+			   /*create_dirs=*/true, driver->ctx(),
+			   dchain, dst_dir, dst_leaf);
+  if (ret < 0 || ! dst_dir) {
+    return (ret < 0) ? ret : -EIO;
+  }
+  int dst_parent_fd = dst_dir->get_fd();
+  if (dst_parent_fd < 0) {
+    (void) dst_dir->open(dpp);
+    dst_parent_fd = dst_dir->get_fd();
+  }
+  if (dst_parent_fd < 0) {
+    return -EIO;
+  }
+
+  /* what history there is, and whether the destination can hold it */
+  std::vector<LeafVersion> versions;
+  ret = list_leaf_versions(src_parent_fd, src_leaf, versions);
+  if (ret < 0) {
+    return ret;
+  }
+
+  /* versioned() covers suspended too:  such a bucket still holds
+   * non-current versions, it only stops minting new ones */
+  const bool dst_holds_history = db->get_info().versioned();
+  const bool slice = (flags & FLAG_SLICE_VERSIONS);
+
+  if (! versions.empty() && ! dst_holds_history && ! slice) {
+    ldpp_dout(dpp, 4) << "rename: source has " << versions.size()
+      << " non-current version(s) and " << db->get_name()
+      << " cannot hold them;  refusing.  FLAG_SLICE_VERSIONS moves the "
+      << "current version and drops the history" << dendl;
+    return -EINVAL;
+  }
+  const bool slicing = (! versions.empty() && ! dst_holds_history && slice);
+
+  ret = write_rename_intent(src_parent_fd, src_leaf, db->get_tenant(),
+			    db->get_name(), dest_key.name, slicing);
+  if (ret < 0) {
+    return ret;
+  }
+
+  int src_vfd = -1;
+  int dst_vfd = -1;
+  size_t moved = 0;
+
+  auto roll_back = [&]() {
+    for (size_t k = 0; k < moved; ++k) {
+      std::string dname = dst_leaf + "_" + versions[k].ver_id;
+      if (::renameat(dst_vfd, dname.c_str(),
+		     src_vfd, versions[k].entry.c_str()) < 0) {
+	ldpp_dout(dpp, 0) << "ERROR: rename rollback failed for " << dname
+	  << ": " << cpp_strerror(errno) << ".  The intent record is left in "
+	  << "place;  " << src_leaf << " needs manual attention" << dendl;
+	return false;
+      }
+    }
+    return true;
+  };
+
+  if (! versions.empty() && ! slicing) {
+    dst_vfd = open_versions_dir(dst_parent_fd);
+    src_vfd = ::openat(src_parent_fd, HIDDEN_VERSIONS_PATH.c_str(),
+		       O_RDONLY | O_DIRECTORY);
+    if (dst_vfd < 0 || src_vfd < 0) {
+      ret = (dst_vfd < 0) ? dst_vfd : -errno;
+      if (dst_vfd >= 0) { ::close(dst_vfd); }
+      if (src_vfd >= 0) { ::close(src_vfd); }
+      clear_rename_intent(src_parent_fd);
+      return ret;
+    }
+
+    for (; moved < versions.size(); ++moved) {
+      std::string dname = dst_leaf + "_" + versions[moved].ver_id;
+      const int fail_after = driver->rename_fail_after_injected();
+      if (fail_after >= 0 && (int) moved >= fail_after) {
+	ret = -EIO;
+	if (driver->rename_abandon_injected() == 1) {
+	  /* stand in for a crash:  versions moved, leaf not, record left */
+	  ldpp_dout(dpp, 4) << "rename: injected abandon after " << moved
+	    << " version(s);  leaving the intent record" << dendl;
+	  ::close(src_vfd);
+	  ::close(dst_vfd);
+	  return ret;
+	}
+	ldpp_dout(dpp, 4) << "rename: injected failure after " << moved
+	  << " version(s);  rolling back" << dendl;
+	if (roll_back()) {
+	  clear_rename_intent(src_parent_fd);
+	}
+	::close(src_vfd);
+	::close(dst_vfd);
+	return ret;
+      }
+      if (::renameat(src_vfd, versions[moved].entry.c_str(),
+		     dst_vfd, dname.c_str()) < 0) {
+	ret = -errno;
+	ldpp_dout(dpp, 0) << "ERROR: rename: moving version "
+	  << versions[moved].entry << " failed: " << cpp_strerror(-ret)
+	  << ";  rolling back" << dendl;
+	if (roll_back()) {
+	  clear_rename_intent(src_parent_fd);
+	}
+	::close(src_vfd);
+	::close(dst_vfd);
+	return ret;
+      }
+    }
+  }
+
+  /* COMMIT:  the leaf */
+  ret = src_file->rename(dpp, y, dst_dir, dst_leaf);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: rename: moving " << src_leaf
+      << " failed: " << cpp_strerror(-ret) << ";  rolling back" << dendl;
+    if (roll_back()) {
+      clear_rename_intent(src_parent_fd);
+    }
+    if (src_vfd >= 0) { ::close(src_vfd); }
+    if (dst_vfd >= 0) { ::close(dst_vfd); }
+    return ret;
+  }
+
+  if (driver->rename_abandon_injected() == 2) {
+    /* stand in for a crash between the commit and the cleanup:  the leaf has
+     * landed, so recovery must roll *forward* from here */
+    ldpp_dout(dpp, 4) << "rename: injected abandon after the leaf landed;  "
+      << "leaving the intent record" << dendl;
+    if (src_vfd >= 0) { ::close(src_vfd); }
+    if (dst_vfd >= 0) { ::close(dst_vfd); }
+    return -EIO;
+  }
+
+  /* slicing:  the history must not outlive the key it belonged to, or it
+   * lists as versions of an object that is no longer there */
+  if (slicing) {
+    int svfd = ::openat(src_parent_fd, HIDDEN_VERSIONS_PATH.c_str(),
+			O_RDONLY | O_DIRECTORY);
+    if (svfd >= 0) {
+      for (const auto& v : versions) {
+	if (::unlinkat(svfd, v.entry.c_str(), 0) < 0) {
+	  ldpp_dout(dpp, 0) << "ERROR: rename: sliced version " << v.entry
+	    << " could not be removed: " << cpp_strerror(errno) << dendl;
+	}
+      }
+      ::close(svfd);
+    }
+  }
+
+  clear_rename_intent(src_parent_fd);
+  if (src_vfd >= 0) { ::close(src_vfd); }
+  if (dst_vfd >= 0) { ::close(dst_vfd); }
+
+  /* Cache:  move the entries, do not drop the bucket and do not re-describe
+   * them.
+   *
+   * A rename changes the key and nothing else, so the cached entries are
+   * rekeyed in place -- see BucketCache::rename_entries(), which does it in
+   * one bounded walk per chunk.  Re-reading each object to rebuild its entry
+   * would duplicate fill_cache()'s job and risk describing it differently
+   * from how it was described before, for no gain. */
+  {
+    auto* bcache = driver->get_bucket_cache();
+    const std::string src_key = get_key().get_index_key_name();
+    const bool dst_versioned = db->get_info().versioned();
+
+    if (bcache) {
+      if (slicing) {
+	/* only the current version survives, and it lands somewhere that
+	 * holds no versions:  it must shed its instance and FLAG_VER or it
+	 * would list as a version in a bucket that has none */
+	(void) bcache->rename_entries(dpp, sb->get_name(), src_key,
+	  db->get_name(), dest_key.name,
+	  [](const rgw_bucket_dir_entry& e) {
+	    return (e.flags & rgw_bucket_dir_entry::FLAG_CURRENT) != 0;
+	  },
+	  [](rgw_bucket_dir_entry& e) {
+	    e.key.instance.clear();
+	    e.flags &= ~rgw_bucket_dir_entry::FLAG_VER;
+	  });
+	/* and the history that was unlinked above goes from the cache too */
+	(void) bcache->remove_entries(dpp, sb->get_name(), src_key,
+	  [](const rgw_bucket_dir_entry&) { return true; });
+      } else {
+	(void) bcache->rename_entries(dpp, sb->get_name(), src_key,
+	  db->get_name(), dest_key.name,
+	  [](const rgw_bucket_dir_entry&) { return true; },
+	  [dst_versioned](rgw_bucket_dir_entry& e) {
+	    if (! dst_versioned) {
+	      e.key.instance.clear();
+	      e.flags &= ~rgw_bucket_dir_entry::FLAG_VER;
+	    }
+	  });
+      }
+    }
+  }
+
+  ldpp_dout(dpp, 10) << "rename: " << sb->get_name() << "/" << src_leaf
+    << " -> " << db->get_name() << "/" << dest_key.name << " ("
+    << versions.size() << " version(s)"
+    << (slicing ? ", sliced" : "") << ")" << dendl;
+  return 0;
+}
+
 int NSFSObject::copy_object(const ACLOwner& owner,
                               const rgw_user& remote_user,
                               req_info* info,
@@ -4208,17 +5340,15 @@ int NSFSObject::copy_object(const ACLOwner& owner,
   const auto& dbinfo = db->get_info();
   bool dest_versioned = dbinfo.versioned();
   bool dest_ver_enabled = dbinfo.versioning_enabled();
-  std::string demoted_ver_id;
-  bool did_demote = false;
+  DemoteResult demote;
   std::unique_ptr<VersionLockHandle> vlock;
 
   /* versioned copy: demote existing dest current to .versions/
    * (includes self-copy — S3 requires a new version even when
    * source == dest with MetadataDirective=REPLACE) */
   if (dest_versioned) {
-    /* stat destination to find existing current version */
     dobj->ent.reset();
-    int dret = dobj->stat(dpp);
+    (void)dobj->stat(dpp);
     nsfs::FSEnt* dest_ent = dobj->get_fsent();
 
     int dest_parent_fd = -1;
@@ -4234,61 +5364,15 @@ int NSFSObject::copy_object(const ACLOwner& owner,
     }
 
     if (dest_parent_fd >= 0) {
-      vlock = driver->get_fs_strategy()->version_lock(
-        dpp, open_versions_lockfile(dest_parent_fd));
+      vlock = version_lock_recovering(dpp, driver,
+				      dest_bucket->get_name(),
+				      dest_parent_fd);
 
-      int vfd = open_versions_dir(dest_parent_fd);
-      if (vfd >= 0) {
-        if (!dest_ver_enabled) {
-          std::string null_name = nsfs_ver_entry(dest_leaf, NULL_VERSION_ID);
-          ::unlinkat(vfd, null_name.c_str(), 0);
-        }
-
-        /* re-stat under lock for fresh state */
-        struct statx cur_stx;
-        if (dret == 0 && dest_ent && dest_ent->exists() &&
-            statx(dest_parent_fd, dest_leaf.c_str(),
-                  AT_SYMLINK_NOFOLLOW, STATX_ALL, &cur_stx) == 0) {
-          bool cur_is_null = false;
-          {
-            int chk_fd = ::openat(dest_parent_fd, dest_leaf.c_str(), O_RDONLY);
-            if (chk_fd >= 0) {
-              cur_is_null = is_null_version_fd(chk_fd);
-              ::close(chk_fd);
-            }
-          }
-          ldpp_dout(dpp, 20) << "copy_file_data: ver_enabled="
-            << dest_ver_enabled << " cur_is_null=" << cur_is_null
-            << " will_demote=" << !(!dest_ver_enabled && cur_is_null)
-            << dendl;
-          if (!(!dest_ver_enabled && cur_is_null)) {
-            std::string cur_ver_id = cur_is_null
-              ? NULL_VERSION_ID
-              : nsfs_version_id_from_statx(cur_stx);
-            std::string ver_name = nsfs_ver_entry(dest_leaf, cur_ver_id);
-
-            SafeResult sr = driver->get_fs_strategy()->safe_link(
-              dpp, dest_parent_fd, dest_leaf,
-              vfd, ver_name,
-              statx_mtime_ns(cur_stx), cur_stx.stx_ino);
-            if (sr == SafeResult::OK) {
-              int demoted_fd = ::openat(vfd, ver_name.c_str(), O_RDONLY);
-              if (demoted_fd >= 0) {
-                auto now_ms = std::to_string(
-                  std::chrono::duration_cast<std::chrono::milliseconds>(
-                    std::chrono::system_clock::now().time_since_epoch()).count());
-                std::string ts_x =
-                  NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_NON_CURRENT_TS;
-                ::fsetxattr(demoted_fd, ts_x.c_str(),
-                            now_ms.c_str(), now_ms.size(), 0);
-                ::close(demoted_fd);
-              }
-              demoted_ver_id = cur_ver_id;
-              did_demote = true;
-            }
-          }
-        }
-        ::close(vfd);
+      int dret2 = demote_current_version(dpp, driver->get_fs_strategy(),
+					 dest_parent_fd, dest_leaf,
+					 dest_ver_enabled, demote);
+      if (dret2 < 0) {
+        return dret2;
       }
     }
   }
@@ -4303,7 +5387,7 @@ int NSFSObject::copy_object(const ACLOwner& owner,
                           << dendl;
         return ret;
     }
-  } else if (did_demote && ent) {
+  } else if (demote.did_demote && ent) {
     rgw_obj_key dst_key = dobj->get_key();
     std::vector<std::unique_ptr<nsfs::Directory>> dst_chain;
     nsfs::Directory* dst_leaf_dir = nullptr;
@@ -4413,15 +5497,15 @@ int NSFSObject::copy_object(const ACLOwner& owner,
     auto* bcache = driver->get_bucket_cache();
     std::string obj_name = dobj->get_key().get_index_key_name();
 
-    if (did_demote) {
+    if (demote.did_demote) {
       cls_rgw_obj_key old_key;
       old_key.name = obj_name;
-      old_key.instance = demoted_ver_id;
+      old_key.instance = demote.demoted_ver_id;
       bcache->remove_entry(dpp, db->get_name(), old_key);
 
       rgw_bucket_dir_entry dem_bde{};
       dem_bde.key.name = obj_name;
-      dem_bde.key.instance = demoted_ver_id;
+      dem_bde.key.instance = demote.demoted_ver_id;
       dem_bde.ver.pool = 1;
       dem_bde.ver.epoch = 1;
       dem_bde.exists = true;
@@ -4448,7 +5532,11 @@ int NSFSObject::copy_object(const ACLOwner& owner,
     new_bde.meta.accounted_size = new_stx.stx_size;
     new_bde.meta.mtime = from_statx_timestamp(new_stx.stx_mtime);
     new_bde.meta.storage_class = RGW_STORAGE_CLASS_STANDARD;
-    new_bde.meta.etag = synthesize_etag(new_stx);
+    /* the source's digest, propagated into attrs above;  a copy preserves
+     * the source etag */
+    auto eit = attrs.find(RGW_ATTR_ETAG);
+    new_bde.meta.etag = (eit != attrs.end())
+      ? eit->second.to_str() : synthesize_etag(new_stx);
     new_bde.flags = rgw_bucket_dir_entry::FLAG_VER |
                     rgw_bucket_dir_entry::FLAG_CURRENT;
     {
@@ -4462,7 +5550,7 @@ int NSFSObject::copy_object(const ACLOwner& owner,
   }
 
   return 0;
-}
+} /* NSFSObject::copy_object */
 
 int NSFSObject::list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
 			    int max_parts, int marker, int* next_marker,
@@ -4497,6 +5585,930 @@ int NSFSObject::list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
   }
 
   return 0;
+} /* int NSFSObject::list_parts */
+
+/* Directory::open() does openat(parent->get_fd(), ...), so a directory
+ * whose ancestors were never opened yields EBADF.  ent->get_parent()
+ * hands back exactly such a directory for a nested key, which is why
+ * this resolves the chain from the bucket root instead -- the bucket's
+ * own directory is always open.  For a key at the bucket root the walk
+ * is empty and this returns the root, as before. */
+int NSFSObject::resolve_parent_dir(const DoutPrefixProvider* dpp,
+				   bool create_dirs,
+				   std::vector<std::unique_ptr<nsfs::Directory>>& chain,
+				   nsfs::Directory*& dir,
+				   std::string& leaf)
+{
+  auto* root = static_cast<NSFSBucket*>(bucket)->get_dir();
+  if (!root) {
+    return -EINVAL;
+  }
+
+  /* resolve_path() opens each component with openat(parent fd), so the
+   * root has to be open before the walk starts.  a key at the bucket
+   * root hides this: the walk is empty, and the root then opens itself
+   * against AT_FDCWD further down */
+  if (root->get_fd() < 0) {
+    int ret = root->open(dpp);
+    if (ret < 0) {
+      return ret;
+    }
+  }
+
+  nsfs::Directory* leaf_dir{nullptr};
+  int ret = nsfs::resolve_path(dpp, root,
+    get_fname(/*use_version=*/false),
+    create_dirs,
+    driver->ctx(),
+    chain, leaf_dir, leaf);
+  if (ret < 0) {
+    return ret;
+  }
+  if (!leaf_dir) {
+    return -ENOENT;
+  }
+  dir = leaf_dir;
+  return 0;
+}
+
+int NSFSObject::stat_fsio_view(const DoutPrefixProvider* dpp,
+			       struct stat* st, Attrs* attrs, uint32_t flags)
+{
+  if (!ent) {
+    (void) stat(dpp);
+  }
+
+  nsfs::Directory* dir{nullptr};
+  std::string leaf;
+  std::vector<std::unique_ptr<nsfs::Directory>> resolved_dirs;
+
+  /* a probe must not create anything on the way to an answer */
+  int rret = resolve_parent_dir(dpp, /*create_dirs=*/false,
+			        resolved_dirs, dir, leaf);
+  if (rret < 0) {
+    return rret;
+  }
+
+  int parent_fd = dir->get_fd();
+  if (parent_fd < 0) {
+    dir->open(dpp);
+    parent_fd = dir->get_fd();
+  }
+  if (parent_fd < 0) {
+    return -EBADF;
+  }
+
+  /* the shadow is the NFS view whenever one exists;  otherwise the
+   * published object is.  note the shadow directory is only opened if
+   * one is there, so the common case costs a single fstatat */
+  int dir_fd = parent_fd;
+  int sdir_fd = -1;
+
+  if (::faccessat(parent_fd, HIDDEN_SHADOW_PATH.c_str(), F_OK, 0) == 0) {
+    sdir_fd = ::openat(parent_fd, HIDDEN_SHADOW_PATH.c_str(),
+		       O_RDONLY | O_DIRECTORY);
+    if ((sdir_fd >= 0) &&
+	(::faccessat(sdir_fd, leaf.c_str(), F_OK, 0) == 0)) {
+      dir_fd = sdir_fd;
+    }
+  }
+
+  int ret = 0;
+
+  if (st) {
+    if (::fstatat(dir_fd, leaf.c_str(), st, AT_SYMLINK_NOFOLLOW) < 0) {
+      ret = -errno;
+      goto out;
+    }
+  }
+
+  if (attrs) {
+    /* A directory's attributes live on its .folder sentinel, not on the
+     * directory inode -- get_fname() maps a key ending in '/' to it.
+     * The caller resolves a name without the trailing form, so make the
+     * hop here rather than making every caller know the convention.
+     * A directory created outside RGW has no sentinel;  that is not an
+     * error, it simply carries no attributes. */
+    std::string attr_path{leaf};
+    if (st && S_ISDIR(st->st_mode)) {
+      attr_path += "/";
+      attr_path += NSFS_FOLDER_OBJECT_NAME;
+    }
+
+    /* xattrs need a descriptor;  it is transient, unlike the ones an
+     * FSIO handle retains */
+    int fd = ::openat(dir_fd, attr_path.c_str(), O_RDONLY);
+    if (fd < 0) {
+      if ((errno == ENOENT) && (attr_path != leaf)) {
+	goto out; /* no sentinel:  no attributes, not a failure */
+      }
+      ret = -errno;
+      goto out;
+    }
+    ret = get_x_attrs(null_yield, dpp, fd, *attrs, attr_path);
+    ::close(fd);
+  } else if (!st) {
+    /* existence only */
+    if (::faccessat(dir_fd, leaf.c_str(), F_OK, 0) < 0) {
+      ret = -errno;
+    }
+  }
+
+out:
+  if (sdir_fd >= 0) {
+    ::close(sdir_fd);
+  }
+  return ret;
+}
+
+
+static std::atomic<uint64_t> fsio_build_seq{0};
+
+/* Apply what a create asked for to a shadow which has no name yet.
+ *
+ * Order matters.  Size first, because a truncate moves mtime;  then the
+ * xattrs, which move only ctime;  then the times last, so what the inode
+ * ends up carrying is what the caller asked for.  That ordering is
+ * load-bearing for NFS exclusive create -- ganesha leaves its verifier in
+ * atime and mtime (set_common_verifier()) and compares tv_sec back exactly,
+ * and RGWFileHandle::stat() reports mtime from the inode whenever a handle
+ * is live, so the inode is what has to hold it. */
+static int apply_create_spec(const DoutPrefixProvider* dpp,
+			     NSFSDriver* driver, int fd,
+			     const Object::FSIOCreateSpec* spec)
+{
+  /* checked before the null-spec shortcut, so the hook can fail an
+   * ordinary create too -- the cleanup paths are what it exists to reach */
+  if (unlikely(driver->fsio_attrs_fail_injected())) {
+    return -EIO;
+  }
+  if (! spec) {
+    return 0;
+  }
+  if (spec->size >= 0) {
+    if (::ftruncate(fd, spec->size) < 0) {
+      return -errno;
+    }
+  }
+  if (spec->attrs) {
+    for (auto& [key, bl] : *spec->attrs) {
+      if (! bl.length()) {
+	continue; /* empty value means "leave this attr alone" */
+      }
+      std::string xname = make_xattr_name(key);
+      if (::fsetxattr(fd, xname.c_str(), bl.c_str(), bl.length(), 0) < 0) {
+	return -errno;
+      }
+    }
+  }
+  if (spec->times) {
+    if (::futimens(fd, spec->times) < 0) {
+      return -errno;
+    }
+  }
+  return 0;
+}
+
+Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
+						uint32_t flags,
+						const FSIOCreateSpec* spec)
+{
+  if (!ent) {
+    (void) stat(dpp);
+  }
+
+  nsfs::Directory* dir{nullptr};
+  std::string leaf;
+  std::vector<std::unique_ptr<nsfs::Directory>> resolved_dirs;
+
+  /* resolve the parent from the key path so the shadow lands beside its
+   * object for a hierarchical key (e.g. photos/vacation/pic.jpg) */
+  int rret = resolve_parent_dir(dpp, /*create_dirs=*/true,
+			        resolved_dirs, dir, leaf);
+  if (rret < 0) {
+    return FSIOResult{rret, nullptr};
+  }
+  int parent_fd = dir->get_fd();
+  if (parent_fd < 0) {
+    dir->open(dpp);
+    parent_fd = dir->get_fd();
+  }
+  if (parent_fd < 0) {
+    return FSIOResult{-EBADF, nullptr};
+  }
+
+  int sdir_fd = open_shadow_dir(parent_fd);
+  if (sdir_fd < 0) {
+    return FSIOResult{sdir_fd, nullptr};
+  }
+  bool shadow_exists = (::faccessat(sdir_fd, leaf.c_str(), F_OK, 0) == 0);
+  bool ephemeral = (flags & FSIOObject::OPEN_FLAG_EPHEMERAL) != 0;
+  bool for_write = (flags & FSIOObject::OPEN_FLAG_WRITE) != 0;
+
+  auto hdl = std::unique_ptr<NSFSFSIOObject>(
+    new NSFSFSIOObject(this, driver, ephemeral));
+  hdl->parent_fd = parent_fd;
+  hdl->leaf_name = leaf;
+  hdl->dir_chain = std::move(resolved_dirs);
+
+  /* sdir_fd stays ours until a success path hands it over.
+   *
+   * It used to be assigned to hdl->shadow_dir_fd here, above every error
+   * path -- and those paths close it and then return, destroying hdl, whose
+   * destructor closes it a second time.  Worse, the destructor's cleanup
+   * runs with the default Binding::SHADOW, so under OPEN_FLAG_EPHEMERAL it
+   * also unlinks .shadow/<leaf> -- which on the rendezvous path is a shadow
+   * this call did not create. */
+  bool sdir_committed = false;
+  auto sdir_guard = make_scope_guard([&sdir_fd, &sdir_committed] {
+    if (! sdir_committed) {
+      ::close(sdir_fd);
+    }
+  });
+  auto commit_sdir = [&]() {
+    hdl->shadow_dir_fd = sdir_fd;
+    hdl->shadow_name = leaf;
+    sdir_committed = true;
+  };
+
+  if (shadow_exists && (flags & FSIOObject::OPEN_FLAG_EXCL)) {
+    return FSIOResult{-EEXIST, nullptr};
+  }
+
+  if (shadow_exists) {
+    /* rendezvous: reuse existing shadow */
+    hdl->shadow_fd = ::openat(sdir_fd, leaf.c_str(), O_RDWR);
+    if (hdl->shadow_fd < 0) {
+      return FSIOResult{-errno, nullptr};
+    }
+    /* before anything which can fail:  this shadow is not ours to remove,
+     * and the destructor decides that from resumed_existing */
+    hdl->resumed_existing = true;
+    if (for_write && (flags & FSIOObject::OPEN_FLAG_TRUNC)) {
+      /* truncate the shadow in place;  unlinking it would strand
+       * every client already rendezvoused on it */
+      if (::ftruncate(hdl->shadow_fd, 0) < 0) {
+	return FSIOResult{-errno, nullptr};
+      }
+    }
+    hdl->binding = FSIOObject::Binding::SHADOW;
+    commit_sdir();
+    return FSIOResult{0, std::move(hdl)};
+  }
+
+  /* Ask the resolved parent directly rather than going through ent,
+   * which is null for a hierarchical key even when the object is on
+   * disk.  reclone() already tests it this way. */
+  bool src_exists = (::faccessat(parent_fd, leaf.c_str(), F_OK, 0) == 0);
+
+  if (!src_exists && !(flags & FSIOObject::OPEN_FLAG_CREATE)) {
+    ::close(sdir_fd);
+    return FSIOResult{-ENOENT, nullptr};
+  }
+
+  if (src_exists && (flags & FSIOObject::OPEN_FLAG_EXCL)) {
+    return FSIOResult{-EEXIST, nullptr};
+  }
+
+  if (! for_write && src_exists) {
+    /* no shadow exists and the caller is a reader:  bind to the
+     * published object.  readers never construct a shadow--if a
+     * writer creates one, reclone() dup2()s it onto this fd and the
+     * reader follows it */
+    hdl->shadow_fd = ::openat(parent_fd, leaf.c_str(), O_RDONLY);
+    if (hdl->shadow_fd < 0) {
+      return FSIOResult{-errno, nullptr};
+    }
+    hdl->binding = FSIOObject::Binding::PUBLISHED;
+    commit_sdir();
+    return FSIOResult{0, std::move(hdl)};
+  }
+
+  /* falling through with !for_write means OPEN_FLAG_CREATE on an
+   * object which does not exist:  there is nothing to bind to, so
+   * the shadow is the object's initial content */
+
+  if (unlikely(driver->fork_race_injected()) && for_write) {
+    /* inject-fork-race: stand in for another instance which forked first,
+     * so the linkat below loses with EEXIST and joins its shadow */
+    int rfd = ::openat(sdir_fd, leaf.c_str(),
+		       O_RDWR | O_CREAT | O_EXCL, 0644);
+    if (rfd >= 0) {
+      static const char marker[] = "RACEWON";
+      [[maybe_unused]] ssize_t nw =
+	::write(rfd, marker, sizeof(marker) - 1);
+      ::close(rfd);
+    }
+  }
+
+  /* Build the shadow away from its name, then link it into place.
+   *
+   * The name must appear only when the view is complete.  Creating it at
+   * .shadow/<leaf> first and finishing it afterwards leaves a window in
+   * which another opener rendezvouses onto a bare inode -- and if the
+   * finishing step then fails, an attribute-less shadow is left behind
+   * which rejects every later exclusive create on that name, with nothing
+   * to reap it.  linkat(2) fails with EEXIST rather than replacing, so it
+   * supplies the same exclusivity O_CREAT|O_EXCL did, at the point where
+   * the file is ready.  Same shape as POSIXStrategy::link_temp_file(). */
+  int build_fd = -1;
+  std::string tmp_name;  /* empty when the build used O_TMPFILE */
+
+  if (src_exists && !(flags & FSIOObject::OPEN_FLAG_TRUNC)) {
+    /* COW clone of the published object.  clone_file() works by name, so
+     * this arm needs a named temp rather than O_TMPFILE. */
+    tmp_name = std::string(nsfs::TMP_LINK_PREFIX) + std::to_string(::getpid()) +
+      "_" + std::to_string(fsio_build_seq.fetch_add(1));
+    int ret = driver->get_fs_strategy()->clone_file(
+      dpp, parent_fd, leaf, sdir_fd, tmp_name, true /* excl */);
+    if (ret < 0) {
+      return FSIOResult{ret, nullptr};
+    }
+    build_fd = ::openat(sdir_fd, tmp_name.c_str(), O_RDWR);
+    if (build_fd < 0) {
+      int err = -errno;
+      ::unlinkat(sdir_fd, tmp_name.c_str(), 0);
+      return FSIOResult{err, nullptr};
+    }
+    /* carry the source's attributes onto the clone */
+    int src_fd = ::openat(parent_fd, leaf.c_str(), O_RDONLY);
+    if (src_fd >= 0) {
+      copy_xattrs_fd(dpp, src_fd, build_fd);
+      ::close(src_fd);
+    }
+  } else {
+    /* New object.  O_TMPFILE keeps it nameless until the link, so a
+     * failure or a crash leaves nothing at all behind -- the inode is
+     * reclaimed when the descriptor closes. */
+    build_fd = ::openat(sdir_fd, ".", O_TMPFILE | O_RDWR, 0644);
+    if ((build_fd < 0) &&
+	((errno == EOPNOTSUPP) || (errno == EISDIR) || (errno == EINVAL))) {
+      /* filesystem without O_TMPFILE:  fall back to a named temp */
+      tmp_name = std::string(nsfs::TMP_LINK_PREFIX) + std::to_string(::getpid()) +
+	"_" + std::to_string(fsio_build_seq.fetch_add(1));
+      build_fd = ::openat(sdir_fd, tmp_name.c_str(),
+			  O_RDWR | O_CREAT | O_EXCL, 0644);
+    }
+    if (build_fd < 0) {
+      return FSIOResult{-errno, nullptr};
+    }
+    /* stamp default private ACL (owner with FULL_CONTROL) */
+    RGWAccessControlPolicy policy;
+    ACLOwner acl_owner;
+    acl_owner.id = bucket->get_owner();
+    policy.set_owner(acl_owner);
+    policy.get_acl().create_default(acl_owner.id,
+				    acl_owner.display_name);
+    bufferlist acl_bl;
+    policy.encode(acl_bl);
+    std::string xname = make_xattr_name(RGW_ATTR_ACL);
+    if (::fsetxattr(build_fd, xname.c_str(),
+		    acl_bl.c_str(), acl_bl.length(), 0) < 0) {
+      int err = -errno;
+      ::close(build_fd);
+      if ((! tmp_name.empty()) &&
+	  (! driver->fsio_skip_cleanup_injected())) {
+	::unlinkat(sdir_fd, tmp_name.c_str(), 0);
+      }
+      return FSIOResult{err, nullptr};
+    }
+  }
+
+  /* whatever the caller wants set at create, applied before the name
+   * exists rather than by a second call afterwards */
+  {
+    int ret = apply_create_spec(dpp, driver, build_fd, spec);
+    if (ret < 0) {
+      ::close(build_fd);
+      if ((! tmp_name.empty()) &&
+	  (! driver->fsio_skip_cleanup_injected())) {
+	::unlinkat(sdir_fd, tmp_name.c_str(), 0);
+      }
+      return FSIOResult{ret, nullptr};
+    }
+  }
+
+  /* COMMIT:  the name appears, complete, or not at all */
+  int link_rc = 0;
+  if (unlikely(driver->fsio_link_fail_injected())) {
+    link_rc = -EIO;
+  } else if (tmp_name.empty()) {
+    char proc_path[PATH_MAX];
+    snprintf(proc_path, sizeof(proc_path), "/proc/self/fd/%d", build_fd);
+    if (::linkat(AT_FDCWD, proc_path, sdir_fd, leaf.c_str(),
+		 AT_SYMLINK_FOLLOW) < 0) {
+      link_rc = -errno;
+    }
+  } else {
+    if (::linkat(sdir_fd, tmp_name.c_str(), sdir_fd, leaf.c_str(), 0) < 0) {
+      link_rc = -errno;
+    }
+  }
+
+  /* the temp has served its purpose on every outcome -- including an
+   * injected failure, which short-circuits the link above */
+  if ((! tmp_name.empty()) && (! driver->fsio_skip_cleanup_injected())) {
+    ::unlinkat(sdir_fd, tmp_name.c_str(), 0);
+  }
+
+  if (link_rc == -EEXIST) {
+    /* another instance forked the same shadow first.  Join the winner
+     * rather than clobbering it;  ours is discarded unnamed. */
+    ::close(build_fd);
+    hdl->shadow_fd = ::openat(sdir_fd, leaf.c_str(), O_RDWR);
+    if (hdl->shadow_fd < 0) {
+      return FSIOResult{-errno, nullptr};
+    }
+    hdl->resumed_existing = true;
+    hdl->binding = FSIOObject::Binding::SHADOW;
+    commit_sdir();
+    return FSIOResult{0, std::move(hdl)};
+  }
+
+  if (link_rc < 0) {
+    ::close(build_fd);
+    return FSIOResult{link_rc, nullptr};
+  }
+
+  hdl->shadow_fd = build_fd;
+  hdl->binding = FSIOObject::Binding::SHADOW;
+  commit_sdir();
+  return FSIOResult{0, std::move(hdl)};
+} /* get_fsio_handle */
+
+int NSFSObject::NSFSFSIOObject::preadv(const struct iovec* iov, int iovcnt,
+				       uint64_t ofs, uint64_t* bytes_read,
+				       uint32_t flags)
+{
+  if (shadow_fd < 0) {
+    return -EBADF;
+  }
+  ssize_t ret = ::preadv(shadow_fd, iov, iovcnt, ofs);
+  if (ret < 0) {
+    return -errno;
+  }
+  if (bytes_read) {
+    *bytes_read = ret;
+  }
+  return 0;
+}
+
+int NSFSObject::NSFSFSIOObject::pwritev(const struct iovec* iov, int iovcnt,
+					uint64_t ofs, uint64_t* bytes_written,
+					uint32_t flags)
+{
+  if (shadow_fd < 0) {
+    return -EBADF;
+  }
+  ssize_t ret = ::pwritev(shadow_fd, iov, iovcnt, ofs);
+  if (ret < 0) {
+    return -errno;
+  }
+  if (bytes_written) {
+    *bytes_written = ret;
+  }
+  return 0;
+}
+
+int NSFSObject::NSFSFSIOObject::commit(const DoutPrefixProvider* dpp, uint32_t flags)
+{
+  if (shadow_fd < 0) {
+    return -EBADF;
+  }
+  return ::fsync(shadow_fd) < 0 ? -errno : 0;
+}
+
+int NSFSObject::NSFSFSIOObject::publish(const DoutPrefixProvider* dpp, uint32_t flags)
+{
+  if (shadow_fd < 0) {
+    return -EBADF;
+  }
+  if (doomed) {
+    return -ESTALE; /* object was unlinked;  never publish */
+  }
+  if (binding == Binding::SHADOW_PUBLISHED) {
+    return 0;
+  }
+  if (binding != Binding::SHADOW) {
+    return -EINVAL; /* no shadow to publish */
+  }
+
+  ::fsync(shadow_fd);
+
+  /* fixup pass: stamp the etag as an xattr.
+   *
+   * no trailing NUL, in either branch:  RGW_ATTR_ETAG is stored as bare
+   * hex, the way the S3 PUT path stores it (rgw_op.cc), and dump_etag()
+   * emits the attribute verbatim.  A stored NUL reaches the client inside
+   * the quoted ETag header and makes If-Match compare unequal, since
+   * rgw_string_unquote() yields 32 bytes and the attribute is 33. */
+  {
+    bufferlist etag_bl;
+    struct statx estx;
+
+    /* rgw_non_md5_etag reaches this path too.  RGWPutObj::execute()'s
+     * skip covers the S3 writers, but an NFS write never passes through
+     * it, and hashing here is the worst case the option exists to avoid:
+     * a full extra pass over every byte just written, pread back through
+     * a 64 KiB buffer purely to digest it.
+     *
+     * Use the same mtime-ino string nsfs gives version ids.  Setting an
+     * xattr updates ctime, not mtime, and the renameat() below moves the
+     * name rather than the file -- so this is the value the version-id
+     * stamp further down computes as well, and ETag matches versionId
+     * exactly as it does on the S3 path. */
+    if (dpp->get_cct()->_conf->rgw_non_md5_etag &&
+	statx(shadow_fd, "", AT_EMPTY_PATH, STATX_ALL, &estx) == 0) {
+      std::string opaque = nsfs_version_id_from_statx(estx);
+      etag_bl.append(opaque.c_str(), opaque.size());
+    } else {
+      MD5 hash;
+      hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
+      unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
+      char buf[65536];
+      off_t off = 0;
+
+      for (;;) {
+	ssize_t nr = ::pread(shadow_fd, buf, sizeof(buf), off);
+	if (nr <= 0) {
+	  break;
+	}
+	hash.Update((const unsigned char*)buf, nr);
+	off += nr;
+      }
+      hash.Final(m);
+
+      append_bl(etag_bl, CEPH_CRYPTO_MD5_DIGESTSIZE * 2, [&](auto iter) {
+	return buf_to_hex(m, iter);
+      });
+    }
+    fsetattr(dpp, RGW_ATTR_ETAG, etag_bl, 0);
+  }
+
+  auto* bucket = static_cast<NSFSBucket*>(src_obj->get_bucket());
+  const auto& binfo = bucket->get_info();
+
+  /* scoped at function level:  the result has to outlive the lock, because
+   * the listing cache below must flip the demoted entry from current to
+   * non-current.  Declared inside the block it was discarded, so nothing
+   * could -- and two NFS writes left two entries flagged current. */
+  DemoteResult demote;
+  if (binfo.versioned() && parent_fd >= 0) {
+    auto vlock = version_lock_recovering(dpp, driver, bucket->get_name(),
+					parent_fd);
+
+    demote_current_version(dpp, driver->get_fs_strategy(),
+			   parent_fd, leaf_name,
+			   binfo.versioning_enabled(), demote);
+  }
+  {
+
+  int ret = ::renameat(shadow_dir_fd, shadow_name.c_str(),
+		       parent_fd, leaf_name.c_str());
+  if (ret < 0) {
+    return -errno;
+  }
+
+  /* Stamp the version id, as the S3 write path does in link_temp_file().
+   *
+   * demote_current_version() decides what a later write is demoting by
+   * reading this xattr, and is_null_version_fd() treats its absence as
+   * the null version.  Without it every object written over NFS was the
+   * null version:  a second write demoted the first to <leaf>_null, a
+   * third collided on that same slot, and the versions collapsed onto
+   * one entry instead of accumulating.
+   *
+   * shadow_fd still refers to this inode -- the rename moved the name,
+   * not the file -- so it stamps the published object. */
+  std::string ver_id;
+  if (binfo.versioned()) {
+    ver_id = NULL_VERSION_ID;
+    struct statx vstx;
+    if (binfo.versioning_enabled() &&
+	statx(shadow_fd, "", AT_EMPTY_PATH, STATX_ALL, &vstx) == 0) {
+      ver_id = nsfs_version_id_from_statx(vstx);
+    }
+    std::string vid_x = NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_VERSION_ID;
+    ::fsetxattr(shadow_fd, vid_x.c_str(), ver_id.c_str(), ver_id.size(), 0);
+    src_obj->set_instance(ver_id);
+  }
+
+  /* update bucket listing cache */
+  auto* bcache = driver->get_bucket_cache();
+  if (bcache) {
+    struct statx pub_stx;
+    if (statx(parent_fd, leaf_name.c_str(),
+	      AT_SYMLINK_NOFOLLOW, STATX_ALL, &pub_stx) == 0) {
+      std::string obj_name =
+	src_obj->get_key().get_index_key_name();
+      rgw_bucket_dir_entry bde{};
+      bde.key.name = obj_name;
+      bde.ver.pool = 1;
+      bde.ver.epoch = 1;
+      bde.exists = true;
+      if (binfo.versioned()) {
+	/* the id stamped above:  without it every publish writes the
+	 * same cache key and a new version replaces its predecessor's
+	 * row rather than taking a place beside it */
+	bde.key.instance = ver_id;
+	bde.flags = rgw_bucket_dir_entry::FLAG_VER |
+		    rgw_bucket_dir_entry::FLAG_CURRENT;
+      }
+      bde.meta.category = RGWObjCategory::Main;
+      bde.meta.size = pub_stx.stx_size;
+      bde.meta.accounted_size = pub_stx.stx_size;
+      bde.meta.mtime = from_statx_timestamp(pub_stx.stx_mtime);
+      bde.meta.storage_class = RGW_STORAGE_CLASS_STANDARD;
+      {
+	Attrs shadow_attrs;
+	if (fgetattrs(dpp, shadow_attrs, 0) == 0) {
+	  ACLOwner acl_owner;
+	  if (decode_acl_owner(shadow_attrs, acl_owner) >= 0) {
+	    bde.meta.owner = to_string(acl_owner.id);
+	    bde.meta.owner_display_name = acl_owner.display_name;
+	  }
+	  /* the digest stamped above, which is what HEAD returns;  the
+	   * synthesized change token is for objects that carry no etag,
+	   * i.e. sideloaded files, and reporting it here disagreed with
+	   * HEAD for every object published from NFS */
+	  bufferlist etag_bl;
+	  if (rgw::sal::get_attr(shadow_attrs, RGW_ATTR_ETAG, etag_bl)) {
+	    bde.meta.etag = etag_bl.to_str();
+	  }
+	}
+	if (bde.meta.etag.empty()) {
+	  bde.meta.etag = synthesize_etag(pub_stx);
+	}
+      }
+      bcache->add_entry(dpp, bucket->get_name(), bde);
+
+      /* and flip the version this publish demoted from current to
+       * non-current, as NSFSAtomicWriter::complete() does for an S3 PUT.
+       * Without it the previous current entry stays in the cache still
+       * flagged current, so the object lists with two.  It was invisible for
+       * a while because the first listing of a bucket fills from the store,
+       * which derives the flags correctly and repairs it -- so only a reader
+       * that got there after the cache was already filled ever saw it. */
+      if (demote.did_demote) {
+	std::string obj_name = src_obj->get_key().get_index_key_name();
+
+	cls_rgw_obj_key old_key;
+	old_key.name = obj_name;
+	old_key.instance = demote.demoted_ver_id;
+	bcache->remove_entry(dpp, bucket->get_name(), old_key);
+
+	rgw_bucket_dir_entry dem_bde{};
+	dem_bde.key.name = obj_name;
+	dem_bde.key.instance = demote.demoted_ver_id;
+	dem_bde.ver.pool = 1;
+	dem_bde.ver.epoch = 1;
+	dem_bde.exists = true;
+	dem_bde.meta.category = RGWObjCategory::Main;
+	dem_bde.flags = rgw_bucket_dir_entry::FLAG_VER;
+	bcache->add_entry(dpp, bucket->get_name(), dem_bde);
+      }
+    }
+  }
+
+  }
+  binding = Binding::SHADOW_PUBLISHED;
+  return 0;
+}
+
+int NSFSObject::NSFSFSIOObject::reclone(const DoutPrefixProvider* dpp, uint32_t flags)
+{
+  if (shadow_fd < 0) {
+    return -EINVAL;
+  }
+  if (binding == Binding::SHADOW) {
+    return 0; /* already writable */
+  }
+  if (unlikely(driver->skip_reclone_injected())) {
+    return 0; /* inject-skip-reclone */
+  }
+
+  if (shadow_dir_fd < 0) {
+    shadow_dir_fd = open_shadow_dir(parent_fd);
+    if (shadow_dir_fd < 0) {
+      return shadow_dir_fd;
+    }
+  }
+
+  int new_fd{-1};
+  bool joined{false};
+  bool src_exists =
+    (::faccessat(parent_fd, leaf_name.c_str(), F_OK, 0) == 0);
+
+  if (src_exists) {
+    int ret = driver->get_fs_strategy()->clone_file(
+      dpp, parent_fd, leaf_name, shadow_dir_fd, leaf_name, true /* excl */);
+    if (ret == -EEXIST) {
+      joined = true;
+    } else if (ret < 0) {
+      return ret;
+    } else {
+      new_fd = ::openat(shadow_dir_fd, leaf_name.c_str(), O_RDWR);
+    }
+  } else {
+    new_fd = ::openat(shadow_dir_fd, leaf_name.c_str(),
+		      O_RDWR | O_CREAT | O_EXCL, 0644);
+    if ((new_fd < 0) && (errno == EEXIST)) {
+      joined = true;
+    }
+  }
+
+  if (joined) {
+    /* another instance re-forked first;  adopt its shadow */
+    new_fd = ::openat(shadow_dir_fd, leaf_name.c_str(), O_RDWR);
+  }
+  if (new_fd < 0) {
+    return -errno;
+  }
+
+  if (src_exists && ! joined) {
+    /* copy xattrs from published object to new shadow */
+    int src_fd = ::openat(parent_fd, leaf_name.c_str(), O_RDONLY);
+    if (src_fd >= 0) {
+      copy_xattrs_fd(dpp, src_fd, new_fd);
+      ::close(src_fd);
+    }
+  }
+
+  /* atomically swap the fd so readers transition seamlessly */
+  if (::dup2(new_fd, shadow_fd) < 0) {
+    int err = -errno;
+    ::close(new_fd);
+    ::unlinkat(shadow_dir_fd, shadow_name.c_str(), 0);
+    return err;
+  }
+  ::close(new_fd);
+
+  binding = Binding::SHADOW;
+  return 0;
+}
+
+int NSFSObject::NSFSFSIOObject::fstat(struct stat* st, uint32_t flags)
+{
+  if (shadow_fd < 0) {
+    return -EBADF;
+  }
+  if (::fstat(shadow_fd, st) < 0) {
+    return -errno;
+  }
+  return 0;
+}
+
+int NSFSObject::NSFSFSIOObject::fgetattr(const DoutPrefixProvider* dpp, const std::string& name,
+					  bufferlist& dest, uint32_t flags)
+{
+  if (shadow_fd < 0) {
+    return -EBADF;
+  }
+  std::string xname = make_xattr_name(name);
+  ssize_t len = ::fgetxattr(shadow_fd, xname.c_str(), nullptr, 0);
+  if (len < 0) {
+    return -errno;
+  }
+  if (len == 0) {
+    dest.clear();
+    return 0;
+  }
+  bufferptr bp(len);
+  len = ::fgetxattr(shadow_fd, xname.c_str(), bp.c_str(), len);
+  if (len < 0) {
+    return -errno;
+  }
+  bp.set_length(len);
+  dest.push_back(std::move(bp));
+  return 0;
+}
+
+int NSFSObject::NSFSFSIOObject::fsetattr(const DoutPrefixProvider* dpp, const std::string& name,
+					  const bufferlist& val,
+					  uint32_t flags)
+{
+  if (shadow_fd < 0) {
+    return -EBADF;
+  }
+  if (!val.length()) {
+    /* an empty value means "leave this attr alone", as in
+     * RGWRados::set_attrs() and FSEnt::write_attrs()'s MERGE arm.
+     * Writing it would replace a good value with one that does not
+     * decode -- which is how an empty ACL became EIO. */
+    return 0;
+  }
+  std::string xname = make_xattr_name(name);
+  std::string sval = val.to_str();
+  if (::fsetxattr(shadow_fd, xname.c_str(),
+		   sval.c_str(), sval.length(), 0) < 0) {
+    return -errno;
+  }
+  return 0;
+}
+
+int NSFSObject::NSFSFSIOObject::fgetattrs(const DoutPrefixProvider* dpp, Attrs& attrs, uint32_t flags)
+{
+  if (shadow_fd < 0) {
+    return -EBADF;
+  }
+  return get_x_attrs(null_yield, dpp, shadow_fd, attrs, shadow_name);
+}
+
+int NSFSObject::NSFSFSIOObject::fsetattrs(const DoutPrefixProvider* dpp, Attrs& attrs, uint32_t flags)
+{
+  if (shadow_fd < 0) {
+    return -EBADF;
+  }
+  for (auto& [key, bl] : attrs) {
+    if (!bl.length()) {
+      continue; /* empty value means "leave this attr alone" */
+    }
+    std::string xname = make_xattr_name(key);
+    if (::fsetxattr(shadow_fd, xname.c_str(),
+		     bl.c_str(), bl.length(), 0) < 0) {
+      return -errno;
+    }
+  }
+  return 0;
+}
+
+int NSFSObject::NSFSFSIOObject::fremovexattr(const DoutPrefixProvider* dpp, const std::string& name,
+					     uint32_t flags)
+{
+  if (shadow_fd < 0) {
+    return -EBADF;
+  }
+  std::string xname = make_xattr_name(name);
+  if (::fremovexattr(shadow_fd, xname.c_str()) < 0) {
+    return -errno;
+  }
+  return 0;
+}
+
+int NSFSObject::NSFSFSIOObject::ftruncate(const DoutPrefixProvider* dpp,
+					  uint64_t size, uint32_t flags)
+{
+  if (shadow_fd < 0) {
+    return -EBADF;
+  }
+  if (binding != Binding::SHADOW) {
+    /* only a shadow is mutable--the published object is not */
+    return -EPERM;
+  }
+  return (::ftruncate(shadow_fd, size) < 0) ? -errno : 0;
+}
+
+int NSFSObject::NSFSFSIOObject::discard(const DoutPrefixProvider* dpp,
+					uint32_t flags)
+{
+  if (doomed) {
+    return 0;
+  }
+
+  /* posix unlink:  remove the shadow's name now, but leave the open
+   * descriptors alone--readers and writers continue to operate on it
+   * normally, and the filesystem reclaims the storage when the last
+   * one is closed.  a subsequent open finds no shadow, and so creates
+   * a new one rather than rendezvousing with this (doomed) view */
+  if (binding != Binding::PUBLISHED &&
+      shadow_dir_fd >= 0 && !shadow_name.empty()) {
+    if ((::unlinkat(shadow_dir_fd, shadow_name.c_str(), 0) < 0) &&
+	(errno != ENOENT)) {
+      return -errno;
+    }
+  }
+
+  doomed = true;
+  return 0;
+}
+
+int NSFSObject::NSFSFSIOObject::close(const DoutPrefixProvider* dpp, uint32_t flags)
+{
+  if (shadow_fd < 0 && shadow_dir_fd < 0) {
+    return 0;
+  }
+
+  if (!doomed && binding == Binding::SHADOW && ephemeral &&
+      !resumed_existing && shadow_dir_fd >= 0 && !shadow_name.empty()) {
+    ::unlinkat(shadow_dir_fd, shadow_name.c_str(), 0);
+  }
+
+  if (shadow_fd >= 0) {
+    ::close(shadow_fd);
+    shadow_fd = -1;
+  }
+
+  if (shadow_dir_fd >= 0) {
+    ::close(shadow_dir_fd);
+    shadow_dir_fd = -1;
+  }
+
+  return 0;
+}
+
+NSFSObject::NSFSFSIOObject::~NSFSFSIOObject()
+{
+  close(nullptr, CLOSE_FLAG_DETACH);
 }
 
 bool NSFSObject::is_sync_completed(const DoutPrefixProvider* dpp, optional_yield y,
@@ -4523,6 +6535,7 @@ int NSFSObject::load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, 
 int NSFSObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
                             Attrs* delattrs, optional_yield y, uint32_t flags)
 {
+  std::vector<std::string> rmattrs;
   if (delattrs) {
     for (auto& it : *delattrs) {
       if (it.first == RGW_NSFS_ATTR_OBJECT_TYPE) {
@@ -4530,6 +6543,7 @@ int NSFSObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
 	continue;
       }
       state.attrset.erase(it.first);
+      rmattrs.push_back(it.first);
     }
   }
   if (setattrs) {
@@ -4542,7 +6556,7 @@ int NSFSObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
     }
   }
 
-  write_attrs(dpp, y);
+  write_attrs(dpp, y, &rmattrs);
   return 0;
 }
 
@@ -4861,9 +6875,9 @@ int NSFSObject::stat(const DoutPrefixProvider* dpp)
               std::string max_name;
               struct dirent* de;
               while ((de = readdir(vdir)) != nullptr) {
-                if (de->d_name[0] == '.') {
-                  continue;
-                }
+                /* no dot filter:  the key match below rejects ".", ".."
+                 * and .lock, and filtering on the dot would hide the
+                 * versions of an object whose name begins with one */
                 std::string vname(de->d_name);
                 /* match entries for this key: "leafname_..." */
                 if (vname.size() <= leaf_name.size() + 1 ||
@@ -5114,11 +7128,20 @@ int NSFSObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y)
     flags = FSEnt::FLAG_LIST_VERSIONS;
   }
 
-  ent->fill_cache(nullptr, null_yield,
-      [&](const DoutPrefixProvider *dpp, rgw_bucket_dir_entry &bde) -> int {
-	driver->get_bucket_cache()->add_entry(dpp, b->get_name(), bde);
-	return 0;
-      }, flags);
+  /* Add this object's listing entry from the key we already have.  Going
+   * through fill_cache() here composed the key from an empty path prefix,
+   * so a nested object was cached under its bare leaf name -- absent
+   * under its real key, and colliding with any same-named leaf in another
+   * directory. */
+  auto* bcache = driver->get_bucket_cache();
+  if (bcache) {
+    rgw_bucket_dir_entry bde{};
+    ret = ent->make_dir_entry(dpp, y, get_key(), flags, bde);
+    if (ret < 0) {
+      return ret;
+    }
+    bcache->add_entry(dpp, b->get_name(), bde);
+  }
   return 0;
 }
 
@@ -5145,9 +7168,11 @@ int NSFSObject::write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp
   return ent->write(ofs, bl, dpp, y);
 }
 
-int NSFSObject::write_attrs(const DoutPrefixProvider* dpp, optional_yield y)
+int NSFSObject::write_attrs(const DoutPrefixProvider* dpp, optional_yield y,
+			    const std::vector<std::string>* rmattrs)
 {
-  return ent->write_attrs(dpp, y, state.attrset, nullptr);
+  return ent->write_attrs(dpp, y, state.attrset, nullptr,
+			  AttrWriteMode::MERGE, rmattrs);
 }
 
 int NSFSObject::NSFSReadOp::prepare(optional_yield y, const DoutPrefixProvider* dpp)
@@ -5299,6 +7324,18 @@ int NSFSObject::generate_mp_etag(const DoutPrefixProvider* dpp, optional_yield y
 
 int NSFSObject::generate_etag(const DoutPrefixProvider* dpp, optional_yield y)
 {
+  /* rgw_non_md5_etag reaches this path too.  It runs for a sideloaded
+   * file -- one placed in the namespace outside RGW, so carrying no etag
+   * xattr -- which is precisely the case the option is for, and noobaa's
+   * ordinary case.  Reading the object end to end on first access merely
+   * to digest it is the cost being avoided.
+   *
+   * fd -1: write_attrs() persists the map, so the helper need not set the
+   * xattr itself. */
+  if (ent && nsfs_apply_non_md5_etag(dpp, -1, ent->get_stx(), get_attrs())) {
+    return write_attrs(dpp, y);
+  }
+
   int64_t left = get_size();
   int64_t cur_ofs = 0;
   MD5 hash;
@@ -5545,6 +7582,86 @@ static int check_delete_preconditions(
   return 0;
 }
 
+/*
+ * Publish the freshly-promoted current version into the listing cache.
+ *
+ * promote_version() reports the id and etag when it actually promoted;
+ * both were free there.  When it promoted nothing -- a current version
+ * already existed, so another writer won the race -- describe what is on
+ * disk instead.  An empty instance would make a *distinct* cache key and
+ * add a row beside that writer's rather than overwriting it, which shows
+ * up as a surplus version in the listing.
+ */
+static void cache_promoted_current(NSFSDriver* driver,
+                                   const DoutPrefixProvider* dpp,
+                                   const std::string& bucket_name,
+                                   const std::string& obj_name,
+                                   int parent_fd, const std::string& leaf,
+                                   PromoteResult& promoted,
+                                   const struct statx& pstx)
+{
+  /* One descriptor, one attribute sweep.  get_x_attrs() lists and reads
+   * every xattr on the file, and parse_xattr_name() accepts both the
+   * user.nsfs.rgw. and user.nsfs. prefixes -- so the digest, the version
+   * id and the delete-marker flag all arrive in pattrs, and the separate
+   * fgetxattr() for each is redundant with the sweep. */
+  Attrs pattrs;
+  int fd = ::openat(parent_fd, leaf.c_str(), O_RDONLY);
+  if (fd >= 0) {
+    get_x_attrs(null_yield, dpp, fd, pattrs, leaf);
+    ::close(fd);
+  }
+
+  std::string promoted_ver = promoted.version_id;
+  if (!promoted.promoted) {
+    /* promote_version() promoted nothing -- a current version already
+     * existed, so another writer won -- so describe what is on disk.  An
+     * empty instance would make a *distinct* cache key and add a row
+     * beside that writer's rather than overwriting it, which shows up as
+     * a surplus version in the listing. */
+    auto vit = pattrs.find(RGW_NSFS_ATTR_VERSION_ID);
+    /* absent or empty reads as the null version, matching
+     * is_null_version_fd()'s len <= 0 case */
+    bool is_null = (vit == pattrs.end()) || (vit->second.length() == 0) ||
+                   (vit->second.to_str() == NULL_VERSION_ID);
+    promoted_ver = is_null ? NULL_VERSION_ID
+                           : nsfs_version_id_from_statx(pstx);
+  }
+  if (promoted.etag.empty()) {
+    auto eit = pattrs.find(RGW_ATTR_ETAG);
+    if (eit != pattrs.end()) {
+      promoted.etag = eit->second.to_str();
+    }
+  }
+
+  rgw_bucket_dir_entry bde{};
+  bde.key.name = obj_name;
+  bde.key.instance = promoted_ver;
+  bde.ver.pool = 1;
+  bde.ver.epoch = 1;
+  bde.exists = true;
+  bde.meta.category = RGWObjCategory::Main;
+  bde.meta.size = pstx.stx_size;
+  bde.meta.accounted_size = pstx.stx_size;
+  bde.meta.mtime = from_statx_timestamp(pstx.stx_mtime);
+  bde.meta.storage_class = RGW_STORAGE_CLASS_STANDARD;
+  bde.meta.etag = promoted.etag.empty()
+    ? synthesize_etag(pstx) : promoted.etag;
+  bde.flags = rgw_bucket_dir_entry::FLAG_VER |
+              rgw_bucket_dir_entry::FLAG_CURRENT;
+  auto dit = pattrs.find(RGW_NSFS_ATTR_DELETE_MARKER);
+  if (dit != pattrs.end() && dit->second.length() > 0) {
+    bde.flags |= rgw_bucket_dir_entry::FLAG_DELETE_MARKER;
+  }
+  ACLOwner acl_owner;
+  if (decode_acl_owner(pattrs, acl_owner) >= 0) {
+    bde.meta.owner = to_string(acl_owner.id);
+    bde.meta.owner_display_name = acl_owner.display_name;
+  }
+
+  driver->get_bucket_cache()->add_entry(dpp, bucket_name, bde);
+}
+
 int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
 					   optional_yield y, uint32_t flags)
 {
@@ -5643,8 +7760,9 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
       }
     }
     auto vlock = (lock_parent_fd >= 0)
-      ? source->driver->get_fs_strategy()->version_lock(
-          dpp, open_versions_lockfile(lock_parent_fd))
+      ? version_lock_recovering(dpp, source->driver,
+				source->get_bucket()->get_name(),
+				lock_parent_fd)
       : std::unique_ptr<VersionLockHandle>();
 
     /* re-stat under lock with original instance to get fresh state */
@@ -5718,56 +7836,15 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
         if (promote_fd >= 0) {
           ldpp_dout(dpp, 10) << "delete_obj: promoting after delete of "
             << promote_leaf << dendl;
+          PromoteResult promoted;
           promote_version(promote_fd, promote_leaf, dpp,
-                          source->driver->get_fs_strategy());
+                          source->driver->get_fs_strategy(), &promoted);
           struct statx pstx;
           if (statx(promote_fd, promote_leaf.c_str(),
                     AT_SYMLINK_NOFOLLOW, STATX_ALL, &pstx) == 0) {
-            bool promoted_is_null = false;
-            {
-              int chk = ::openat(promote_fd, promote_leaf.c_str(), O_RDONLY);
-              if (chk >= 0) {
-                promoted_is_null = is_null_version_fd(chk);
-                ::close(chk);
-              }
-            }
-            std::string promoted_ver = promoted_is_null
-              ? NULL_VERSION_ID
-              : nsfs_version_id_from_statx(pstx);
-            rgw_bucket_dir_entry bde{};
-            bde.key.name = source->get_key().get_index_key_name();
-            bde.key.instance = promoted_ver;
-            bde.ver.pool = 1;
-            bde.ver.epoch = 1;
-            bde.exists = true;
-            bde.meta.category = RGWObjCategory::Main;
-            bde.meta.size = pstx.stx_size;
-            bde.meta.accounted_size = pstx.stx_size;
-            bde.meta.mtime = from_statx_timestamp(pstx.stx_mtime);
-            bde.meta.storage_class = RGW_STORAGE_CLASS_STANDARD;
-            bde.meta.etag = synthesize_etag(pstx);
-            bde.flags = rgw_bucket_dir_entry::FLAG_VER |
-                        rgw_bucket_dir_entry::FLAG_CURRENT;
-            {
-              int afd = ::openat(promote_fd, promote_leaf.c_str(), O_RDONLY);
-              if (afd >= 0) {
-                char dm_buf[8];
-                std::string dm_x = NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_DELETE_MARKER;
-                if (::fgetxattr(afd, dm_x.c_str(), dm_buf, sizeof(dm_buf)) > 0) {
-                  bde.flags |= rgw_bucket_dir_entry::FLAG_DELETE_MARKER;
-                }
-                Attrs pattrs;
-                get_x_attrs(null_yield, dpp, afd, pattrs, promote_leaf);
-                ACLOwner acl_owner;
-                if (decode_acl_owner(pattrs, acl_owner) >= 0) {
-                  bde.meta.owner = to_string(acl_owner.id);
-                  bde.meta.owner_display_name = acl_owner.display_name;
-                }
-                ::close(afd);
-              }
-            }
-            source->driver->get_bucket_cache()->add_entry(
-              dpp, b->get_name(), bde);
+            cache_promoted_current(source->driver, dpp, b->get_name(),
+                                   source->get_key().get_index_key_name(),
+                                   promote_fd, promote_leaf, promoted, pstx);
           }
           ::close(promote_fd);
         }
@@ -5882,57 +7959,16 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
         /* if we deleted a DM from .versions/ and no current file
          * exists, promote the newest non-DM version */
         if (is_dm && parent_fd >= 0) {
+          PromoteResult promoted;
           promote_version(parent_fd, leaf_name, dpp,
-                          source->driver->get_fs_strategy());
+                          source->driver->get_fs_strategy(), &promoted);
           /* update cache for the promoted version */
           struct statx pstx;
           if (statx(parent_fd, leaf_name.c_str(),
                     AT_SYMLINK_NOFOLLOW, STATX_ALL, &pstx) == 0) {
-            bool promoted_is_null = false;
-            {
-              int chk = ::openat(parent_fd, leaf_name.c_str(), O_RDONLY);
-              if (chk >= 0) {
-                promoted_is_null = is_null_version_fd(chk);
-                ::close(chk);
-              }
-            }
-            std::string promoted_ver = promoted_is_null
-              ? NULL_VERSION_ID
-              : nsfs_version_id_from_statx(pstx);
-            rgw_bucket_dir_entry bde{};
-            bde.key.name = source->get_key().get_index_key_name();
-            bde.key.instance = promoted_ver;
-            bde.ver.pool = 1;
-            bde.ver.epoch = 1;
-            bde.exists = true;
-            bde.meta.category = RGWObjCategory::Main;
-            bde.meta.size = pstx.stx_size;
-            bde.meta.accounted_size = pstx.stx_size;
-            bde.meta.mtime = from_statx_timestamp(pstx.stx_mtime);
-            bde.meta.storage_class = RGW_STORAGE_CLASS_STANDARD;
-            bde.meta.etag = synthesize_etag(pstx);
-            bde.flags = rgw_bucket_dir_entry::FLAG_VER |
-                        rgw_bucket_dir_entry::FLAG_CURRENT;
-            {
-              int afd = ::openat(parent_fd, leaf_name.c_str(), O_RDONLY);
-              if (afd >= 0) {
-                char dm_buf[8];
-                std::string dm_x = NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_DELETE_MARKER;
-                if (::fgetxattr(afd, dm_x.c_str(), dm_buf, sizeof(dm_buf)) > 0) {
-                  bde.flags |= rgw_bucket_dir_entry::FLAG_DELETE_MARKER;
-                }
-                Attrs pattrs;
-                get_x_attrs(null_yield, dpp, afd, pattrs, leaf_name);
-                ACLOwner acl_owner;
-                if (decode_acl_owner(pattrs, acl_owner) >= 0) {
-                  bde.meta.owner = to_string(acl_owner.id);
-                  bde.meta.owner_display_name = acl_owner.display_name;
-                }
-                ::close(afd);
-              }
-            }
-            source->driver->get_bucket_cache()->add_entry(
-              dpp, b->get_name(), bde);
+            cache_promoted_current(source->driver, dpp, b->get_name(),
+                                   source->get_key().get_index_key_name(),
+                                   parent_fd, leaf_name, promoted, pstx);
           }
         }
         return 0;
@@ -6019,8 +8055,9 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
     return vfd;
   }
 
-  auto vlock = source->driver->get_fs_strategy()->version_lock(
-    dpp, open_versions_lockfile(parent_fd));
+  auto vlock = version_lock_recovering(dpp, source->driver,
+				       source->get_bucket()->get_name(),
+				       parent_fd);
 
   /* determine if current is a null version */
   bool cur_is_null = false;
@@ -6172,7 +8209,16 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
     dem_bde.meta.accounted_size = ent->get_stx().stx_size;
     dem_bde.meta.mtime = from_statx_timestamp(ent->get_stx().stx_mtime);
     dem_bde.meta.storage_class = RGW_STORAGE_CLASS_STANDARD;
-    dem_bde.meta.etag = synthesize_etag(ent->get_stx());
+    {
+      /* its own digest, as HEAD reports it;  the synthesized change
+       * token is for objects that carry no etag */
+      bufferlist etag_bl;
+      if (rgw::sal::get_attr(source->get_attrs(), RGW_ATTR_ETAG, etag_bl)) {
+	dem_bde.meta.etag = etag_bl.to_str();
+      } else {
+	dem_bde.meta.etag = synthesize_etag(ent->get_stx());
+      }
+    }
     dem_bde.flags = rgw_bucket_dir_entry::FLAG_VER;
     {
       ACLOwner acl_owner;
@@ -6301,7 +8347,7 @@ std::unique_ptr<rgw::sal::Object> NSFSMultipartUpload::get_meta_obj()
 
   load(nullptr);
 
-  static const std::string meta_name{".meta"};
+  static const std::string& meta_name = MP_META_NAME;
   if (!shadow) {
     meta_obj = bucket->get_object(rgw_obj_key(get_meta(), std::string(), mp_ns));
   } else {
@@ -6435,6 +8481,10 @@ int NSFSMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext *
 	  return 0;
 	});
     });
+
+  /* each call returns one page;  callers such as complete() sum
+   * parts.size() across pages, so the map must turn over */
+  parts.clear();
 
   for (auto& pi : result.parts) {
     auto part = std::make_unique<NSFSMultipartPart>(this);
@@ -6618,9 +8668,10 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
   NSFSBucket* pb = static_cast<NSFSBucket*>(bucket);
   int staging_fd = shadow->get_dir()->get_fd();
 
-  // assemble parts into a single file via copy_file_range
-  std::string assembled_name = ".assembled";
-  ret = assemble_parts(dpp, staging_fd, total_parts, assembled_name);
+  // assemble parts into a single file
+  std::string assembled_name = MP_ASSEMBLED_NAME;
+  ret = assemble_parts(dpp, driver->get_fs_strategy(), staging_fd,
+                       total_parts, assembled_name);
   if (ret < 0) {
     return ret;
   }
@@ -6711,76 +8762,24 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
     }
   }
 
-  bool did_demote = false;
-  std::string demoted_ver_id;
+  DemoteResult demote;
 
-  /* versioned: demote current version before publishing, with lock */
   if (versioned && leaf_fd >= 0) {
-    int vfd = open_versions_dir(leaf_fd);
-    if (vfd >= 0) {
-      auto vlock = driver->get_fs_strategy()->version_lock(
-        dpp, open_versions_lockfile(leaf_fd));
+    auto vlock = version_lock_recovering(dpp, driver, target_obj->get_bucket()
+					->get_name(), leaf_fd);
 
-      if (!ver_enabled) {
-        std::string null_name = nsfs_ver_entry(leaf_name, NULL_VERSION_ID);
-        ::unlinkat(vfd, null_name.c_str(), 0);
-      }
-
-      struct statx cur_stx;
-      if (statx(leaf_fd, leaf_name.c_str(), AT_SYMLINK_NOFOLLOW,
-                STATX_ALL, &cur_stx) == 0) {
-        bool cur_is_null = false;
-        {
-          int chk_fd = ::openat(leaf_fd, leaf_name.c_str(), O_RDONLY);
-          if (chk_fd >= 0) {
-            cur_is_null = is_null_version_fd(chk_fd);
-            ::close(chk_fd);
-          }
-        }
-        if (!(!ver_enabled && cur_is_null)) {
-          std::string cur_ver_id = cur_is_null
-            ? NULL_VERSION_ID
-            : nsfs_version_id_from_statx(cur_stx);
-          std::string ver_name = nsfs_ver_entry(leaf_name, cur_ver_id);
-
-          SafeResult sr = driver->get_fs_strategy()->safe_link(
-                                    dpp, leaf_fd, leaf_name, vfd, ver_name,
-                                    statx_mtime_ns(cur_stx), cur_stx.stx_ino);
-          if (sr == SafeResult::OK) {
-            int demoted_fd = ::openat(vfd, ver_name.c_str(), O_RDONLY);
-            if (demoted_fd >= 0) {
-              auto now_ms = std::to_string(
-                std::chrono::duration_cast<std::chrono::milliseconds>(
-                  std::chrono::system_clock::now().time_since_epoch()).count());
-              std::string ts_x =
-                NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_NON_CURRENT_TS;
-              ::fsetxattr(demoted_fd, ts_x.c_str(),
-                          now_ms.c_str(), now_ms.size(), 0);
-              ::close(demoted_fd);
-            }
-            demoted_ver_id = cur_ver_id;
-            did_demote = true;
-          } else if (sr == SafeResult::MISMATCH && cur_is_null) {
-            /* null version already demoted */
-          } else if (sr != SafeResult::OK) {
-            ldpp_dout(dpp, 0) << "ERROR: versioned MPU demote failed for "
-              << leaf_name << " sr=" << (int)sr << dendl;
-            ::close(vfd);
-            return -ERR_INTERNAL_ERROR;
-          }
-        }
-      }
-
-      ret = renameat(staging_fd, assembled_name.c_str(),
-                     leaf_fd, leaf_name.c_str());
-      ::close(vfd);
-    } else {
-      ret = renameat(staging_fd, assembled_name.c_str(),
-                     leaf_fd, leaf_name.c_str());
+    int dret = demote_current_version(dpp, driver->get_fs_strategy(),
+				      leaf_fd, leaf_name,
+				      ver_enabled, demote);
+    if (dret < 0) {
+      return dret;
     }
+
+    ret = renameat(staging_fd, assembled_name.c_str(),
+		   leaf_fd, leaf_name.c_str());
   } else {
     ret = renameat(staging_fd, assembled_name.c_str(),
-                   leaf_fd, leaf_name.c_str());
+		   leaf_fd, leaf_name.c_str());
   }
 
   if (ret < 0) {
@@ -6809,15 +8808,15 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
       auto* bcache = driver->get_bucket_cache();
       std::string obj_name = target_obj->get_key().get_index_key_name();
 
-      if (did_demote) {
+      if (demote.did_demote) {
         cls_rgw_obj_key old_key;
         old_key.name = obj_name;
-        old_key.instance = demoted_ver_id;
+        old_key.instance = demote.demoted_ver_id;
         bcache->remove_entry(dpp, pb->get_name(), old_key);
 
         rgw_bucket_dir_entry dem_bde{};
         dem_bde.key.name = obj_name;
-        dem_bde.key.instance = demoted_ver_id;
+        dem_bde.key.instance = demote.demoted_ver_id;
         dem_bde.ver.pool = 1;
         dem_bde.ver.epoch = 1;
         dem_bde.exists = true;
@@ -6844,7 +8843,12 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
       new_bde.meta.accounted_size = new_stx.stx_size;
       new_bde.meta.mtime = from_statx_timestamp(new_stx.stx_mtime);
       new_bde.meta.storage_class = RGW_STORAGE_CLASS_STANDARD;
-      new_bde.meta.etag = synthesize_etag(new_stx);
+      /* complete() computed the real <md5-of-md5s>-<parts> etag above and
+       * stored it;  listing the token instead made a completed multipart
+       * object HEAD and LIST differently */
+      auto eit = attrs.find(RGW_ATTR_ETAG);
+      new_bde.meta.etag = (eit != attrs.end())
+	? eit->second.to_str() : synthesize_etag(new_stx);
       new_bde.flags = rgw_bucket_dir_entry::FLAG_VER |
                       rgw_bucket_dir_entry::FLAG_CURRENT;
       {
@@ -6875,7 +8879,9 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
       bde.meta.accounted_size = new_stx.stx_size;
       bde.meta.mtime = from_statx_timestamp(new_stx.stx_mtime);
       bde.meta.storage_class = RGW_STORAGE_CLASS_STANDARD;
-      bde.meta.etag = synthesize_etag(new_stx);
+      auto eit2 = attrs.find(RGW_ATTR_ETAG);
+      bde.meta.etag = (eit2 != attrs.end())
+	? eit2->second.to_str() : synthesize_etag(new_stx);
       {
         ACLOwner acl_owner;
         if (decode_acl_owner(target_obj->get_attrs(), acl_owner) >= 0) {
@@ -7086,7 +9092,9 @@ int NSFSMultipartWriter::complete(
   std::string part_etag = etag;
   if (part_file) {
     int sret = part_file->stat(dpp, /*force=*/true);
-    if (sret == 0 && nsfs_apply_non_md5_etag(dpp, part_file->get_fd(),
+    /* fd -1: part_file->write_attrs() below persists this same map, so
+     * the helper's own fsetxattr() would only write the etag twice */
+    if (sret == 0 && nsfs_apply_non_md5_etag(dpp, -1,
                                              part_file->get_stx(), attrs)) {
       bufferlist bl;
       if (get_attr(attrs, RGW_ATTR_ETAG, bl)) {
@@ -7132,6 +9140,27 @@ int NSFSAtomicWriter::prepare(optional_yield y)
   int ret;
 
   ret = obj->make_ent(ObjectType::FILE);
+  if (ret == -ENOTDIR) {
+    /* A component of this key is an existing object.
+     *
+     * `foo/bar` holds bytes, so it is a file;  `foo/bar/xyzzy` needs
+     * `foo/bar` to be a directory.  One namespace entry per name, two
+     * keys that want it.  Both are legal S3, and AWS has no such
+     * conflict because its keys are opaque strings.
+     *
+     * The sentinel does not help:  it names a key ending in '/', so
+     * moving the file there would rename the object rather than
+     * re-represent it.  NooBaa has the same constraint and answers
+     * 404, which says the object is absent when the truth is that a
+     * conflicting one is present.  See DESIGN.md.
+     *
+     * 409 and a code of our own, because the client's recourse is to
+     * delete the occupying object -- a 500 invites a retry that can
+     * never succeed, and a 404 invites a write that will not land. */
+    ldpp_dout(dpp, 4) << "nsfs: refusing key " << obj->get_name()
+      << ":  a component of it is an existing object" << dendl;
+    return -ERR_KEY_PATH_CONFLICT;
+  }
   if (ret < 0) {
     return ret;
   }
@@ -7254,15 +9283,13 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
   const auto& binfo = b->get_info();
   bool versioned = binfo.versioned();
   bool ver_enabled = binfo.versioning_enabled();
-  bool did_demote = false;
-  std::string demoted_ver_id;
+  DemoteResult demote;
 
   /* versioned PUT: demote current version to .versions/ before publishing */
   if (versioned) {
     nsfs::Directory* parent = obj->get_fsent()
       ? obj->get_fsent()->get_parent() : nullptr;
     int parent_fd = -1;
-    std::string cur_leaf;
 
     if (parent) {
       parent_fd = parent->get_fd();
@@ -7270,74 +9297,22 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
         parent->open(dpp);
         parent_fd = parent->get_fd();
       }
-      cur_leaf = obj->get_fsent()->get_name();
     }
 
     if (parent_fd >= 0) {
-      int vfd = open_versions_dir(parent_fd);
-      if (vfd >= 0) {
-        auto vlock = driver->get_fs_strategy()->version_lock(
-          dpp, open_versions_lockfile(parent_fd));
+      auto vlock = version_lock_recovering(dpp, driver,
+					  obj->get_bucket()->get_name(),
+					  parent_fd);
 
-        /* in suspended mode, remove any existing _null from .versions/ */
-        if (!ver_enabled) {
-          std::string null_name = nsfs_ver_entry(cur_leaf, NULL_VERSION_ID);
-          ::unlinkat(vfd, null_name.c_str(), 0);
-        }
-
-        /* demote current under lock — fresh stat for accurate state */
-        struct statx cur_stx;
-        if (statx(parent_fd, cur_leaf.c_str(), AT_SYMLINK_NOFOLLOW,
-                  STATX_ALL, &cur_stx) == 0) {
-          bool cur_is_null = false;
-          {
-            int chk_fd = ::openat(parent_fd, cur_leaf.c_str(), O_RDONLY);
-            if (chk_fd >= 0) {
-              cur_is_null = is_null_version_fd(chk_fd);
-              ::close(chk_fd);
-            }
-          }
-          if (!(!ver_enabled && cur_is_null)) {
-            std::string cur_ver_id = cur_is_null
-              ? NULL_VERSION_ID
-              : nsfs_version_id_from_statx(cur_stx);
-            std::string ver_name = nsfs_ver_entry(cur_leaf, cur_ver_id);
-
-            SafeResult sr = driver->get_fs_strategy()->safe_link(
-                                      dpp, parent_fd, cur_leaf,
-                                      vfd, ver_name,
-                                      statx_mtime_ns(cur_stx),
-                                      cur_stx.stx_ino);
-            if (sr == SafeResult::OK) {
-              int demoted_fd = ::openat(vfd, ver_name.c_str(), O_RDONLY);
-              if (demoted_fd >= 0) {
-                auto now_ms = std::to_string(
-                  std::chrono::duration_cast<std::chrono::milliseconds>(
-                    std::chrono::system_clock::now().time_since_epoch()).count());
-                std::string ts_x =
-                  NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_NON_CURRENT_TS;
-                ::fsetxattr(demoted_fd, ts_x.c_str(),
-                            now_ms.c_str(), now_ms.size(), 0);
-                ::close(demoted_fd);
-              }
-              demoted_ver_id = cur_ver_id;
-              did_demote = true;
-            } else if (sr == SafeResult::MISMATCH && cur_is_null) {
-              /* null version already demoted by a prior writer */
-            } else if (sr != SafeResult::OK) {
-              ldpp_dout(dpp, 0) << "ERROR: versioned PUT demote failed for "
-                << cur_leaf << " sr=" << (int)sr << dendl;
-              ::close(vfd);
-              return -ERR_INTERNAL_ERROR;
-            }
-          }
-        }
-
-        ret = obj->link_temp_file(rctx.dpp, rctx.y);
-        ::close(vfd);
-      } else {
-        ret = obj->link_temp_file(rctx.dpp, rctx.y);
+      int dret = demote_current_version(dpp, driver->get_fs_strategy(),
+					parent_fd,
+					obj->get_fsent()->get_name(),
+					ver_enabled, demote);
+      if (dret < 0) {
+        return dret;
       }
+
+      ret = obj->link_temp_file(rctx.dpp, rctx.y);
     } else {
       ret = obj->link_temp_file(rctx.dpp, rctx.y);
     }
@@ -7361,18 +9336,18 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
   /* versioned PUT: link_temp_file already set the version_id xattr,
    * set_instance, and added the new current cache entry; handle the
    * demoted entry here */
-  if (versioned && did_demote) {
+  if (versioned && demote.did_demote) {
     auto* bcache = driver->get_bucket_cache();
     std::string obj_name = obj->get_key().get_index_key_name();
 
     cls_rgw_obj_key old_key;
     old_key.name = obj_name;
-    old_key.instance = demoted_ver_id;
+    old_key.instance = demote.demoted_ver_id;
     bcache->remove_entry(rctx.dpp, b->get_name(), old_key);
 
     rgw_bucket_dir_entry dem_bde{};
     dem_bde.key.name = obj_name;
-    dem_bde.key.instance = demoted_ver_id;
+    dem_bde.key.instance = demote.demoted_ver_id;
     dem_bde.ver.pool = 1;
     dem_bde.ver.epoch = 1;
     dem_bde.exists = true;
@@ -7439,10 +9414,196 @@ std::unique_ptr<LCSerializer> NSFSLifecycle::get_serializer(const std::string& l
   return std::make_unique<LCNSFSSerializer>(driver, oid, lock_name, cookie);
 }
 
+void NSFSDriver::get_features(std::map<std::string, std::string>& features)
+{
+  /* What the fs-features hint returns.  Each of these is something the
+   * driver knows and a client cannot work out without reading a failed
+   * operation as a defect.  Meanings, since
+   * this is where these names are first defined:
+   *
+   *   fsio            the driver implements the FSIO interfaces -- rgw_open2
+   *                   and the shadow model.  A suite written against them
+   *                   is testing nothing on a driver which answers no.
+   *   strategy        which FSStrategy was selected by probing at startup.
+   *   can_rename      a rename moves the name.  When false, RGWLibFS::rename
+   *                   emulates it by copy-and-delete, so the object does not
+   *                   keep its inode and history does not move.
+   *   rename_enabled  rgw_nsfs_enable_rename;  the same outcome by config
+   *                   rather than by backend.
+   *   shares_extents  copy_file_range clones rather than copies, measured
+   *                   at mount.  When false a copy costs its own size.
+   *   key_paths_exclusive
+   *                   a name holds a key or its directory form, not both:
+   *                   with `a` present, a PUT of `a/` returns
+   *                   ERR_KEY_PATH_CONFLICT, and the reverse. */
+  features["fsio"] = "true";
+  features["key_paths_exclusive"] = "true";
+  if (fs_strategy) {
+    features["strategy"] = fs_strategy->name();
+    features["can_rename"] = fs_strategy->can_rename() ? "true" : "false";
+    features["shares_extents"] =
+      fs_strategy->shares_extents() ? "true" : "false";
+  }
+  features["rename_enabled"] =
+    ctx()->_conf->rgw_nsfs_enable_rename ? "true" : "false";
+}
+
 void NSFSDriver::register_admin_apis(RGWRESTMgr* mgr)
 {
   mgr->register_resource("user", new RGWRESTMgr_User);
   /* TODO: register "bucket" once rgw_rest_bucket is decoupled from rados */
+}
+
+int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
+			    const std::string& hint,
+			    const std::map<std::string, std::string>& params,
+			    std::map<std::string, std::string>* out)
+{
+  ldpp_dout(dpp, 10) << "NSFSDriver::driver_hint: " << hint << dendl;
+
+  if (hint == "inject-fork-race") {
+    /* stand in for another instance which forks a shadow first, so that
+     * the exclusive fork and the join which follows it can be exercised
+     * deterministically from one process */
+    auto it = params.find("enable");
+    if (it == params.end()) {
+      return -EINVAL;
+    }
+    inject_fork_race = (it->second == "true");
+    if (out) {
+      (*out)["enabled"] = inject_fork_race ? "true" : "false";
+    }
+    return 0;
+  }
+
+  if (hint == "inject-rename-fail-after") {
+    /* fail a rename after N version entries have moved.  Without this the
+     * rollback path only ever runs in production:  every test rename either
+     * succeeds outright or fails before it has moved anything. */
+    auto it = params.find("count");
+    if (it == params.end()) {
+      return -EINVAL;
+    }
+    inject_rename_fail_after = std::stoi(it->second);
+
+    /* abandon=versions|leaf gives up without rolling back, leaving the
+     * intent record -- the state a crash leaves and the only state the
+     * recovery path can be tested against.  "versions" stops after count
+     * entries have moved, "leaf" after the leaf has landed. */
+    auto ab = params.find("abandon");
+    inject_rename_abandon = 0;
+    if (ab != params.end()) {
+      if (ab->second == "versions") {
+	inject_rename_abandon = 1;
+      } else if (ab->second == "leaf") {
+	inject_rename_abandon = 2;
+      }
+    }
+    if (out) {
+      (*out)["count"] = std::to_string(inject_rename_fail_after);
+      (*out)["abandon"] = std::to_string(inject_rename_abandon);
+    }
+    return 0;
+  }
+
+  if ((hint == "inject-fsio-attrs-fail") ||
+      (hint == "inject-fsio-link-fail") ||
+      (hint == "inject-fsio-skip-cleanup")) {
+    /* Make a shadow build fail after the inode exists.  Without these the
+     * cleanup paths only ever run in production:  every test create either
+     * succeeds outright or fails before anything was made. */
+    auto it = params.find("enable");
+    if (it == params.end()) {
+      return -EINVAL;
+    }
+    const bool on = (it->second == "true");
+    if (hint == "inject-fsio-attrs-fail") {
+      inject_fsio_attrs_fail = on;
+    } else if (hint == "inject-fsio-link-fail") {
+      inject_fsio_link_fail = on;
+    } else {
+      inject_fsio_skip_cleanup = on;
+    }
+    if (out) {
+      (*out)["enabled"] = on ? "true" : "false";
+    }
+    return 0;
+  }
+
+  if (hint == "fs-features") {
+    if (! out) {
+      return -EINVAL;
+    }
+    get_features(*out);
+    return out->empty() ? -EINVAL : 0;
+  }
+
+  if (hint == "inject-buffered-copy") {
+    /* make FSStrategy::copy_range skip copy_file_range and take the
+     * buffered path.  On XFS copy_file_range always succeeds, so the
+     * fallback -- the only path GPFS ever takes, since GPFS answers
+     * EOPNOTSUPP at every granularity -- would otherwise never run
+     * under test on a development filesystem */
+    auto it = params.find("enable");
+    if (it == params.end()) {
+      return -EINVAL;
+    }
+    const bool on = (it->second == "true");
+    if (! fs_strategy) {
+      return -EINVAL;
+    }
+    fs_strategy->set_force_buffered_copy(on);
+    if (out) {
+      (*out)["enabled"] = on ? "true" : "false";
+      /* bytes the fallback has copied since this hint was last called,
+       * so a test can prove which path ran rather than assume it */
+      (*out)["buffered_bytes"] =
+	std::to_string(fs_strategy->take_buffered_bytes());
+    }
+    return 0;
+  }
+
+  if (hint == "inject-skip-reclone") {
+    /* make reclone() a no-op, so a write open stays bound to the
+     * published object.  the guards which refuse to mutate or publish
+     * a non-shadow binding are otherwise unreachable--every caller
+     * reclones first */
+    auto it = params.find("enable");
+    if (it == params.end()) {
+      return -EINVAL;
+    }
+    inject_skip_reclone = (it->second == "true");
+    if (out) {
+      (*out)["enabled"] = inject_skip_reclone ? "true" : "false";
+    }
+    return 0;
+  }
+
+  if (hint == "invalidate-cache") {
+    /* drop a bucket's listing cache, so the next listing rebuilds it by
+     * enumerating the store.  The incremental and rebuild paths compose
+     * keys differently and only the rebuild walks .versions/, so a test
+     * that means to exercise the rebuild has no other way to reach it
+     * from inside one process.
+     *
+     * The side branch carries this verb too, along with
+     * invalidate-quota-cache;  they want merging. */
+    auto it = params.find("bucket");
+    if (it == params.end()) {
+      return -EINVAL;
+    }
+    auto* bcache = get_bucket_cache();
+    if (!bcache) {
+      return -ENOTSUP;
+    }
+    int ret = bcache->invalidate_bucket(dpp, it->second);
+    if (out) {
+      (*out)["invalidated"] = (ret == 0) ? "true" : "false";
+    }
+    return ret;
+  }
+
+  return -ENOTSUP;
 }
 
 } } // namespace rgw::sal
@@ -7457,6 +9618,7 @@ rgw::sal::Driver* newNSFSDriver(CephContext *cct)
   const static std::string tenant = "default_ns";
   if ((ret = driver->get_user_db()->Initialize("", -1)) < 0) {
     ldout(cct, 0) << "DB initialization failed for tenant("<<tenant<<")" << dendl;
+    delete driver;
     return nullptr;
   }
 

@@ -68,7 +68,7 @@ int POSIXStrategy::link_temp_file(int temp_fd, int dir_fd,
   /* link the O_TMPFILE into the directory under a temp name, then
    * rename to the final name — two-step because linkat(2) cannot
    * atomically replace an existing entry */
-  std::string tmp_name = ".tmp_link_" +
+  std::string tmp_name = std::string(TMP_LINK_PREFIX) +
     std::to_string(getpid()) + "_" + std::to_string(temp_fd);
 
   int ret = ::linkat(AT_FDCWD, temp_file_path,
@@ -122,7 +122,7 @@ SafeResult POSIXStrategy::safe_unlink(const DoutPrefixProvider* dpp,
                                       uint64_t expected_ino)
 {
   static std::atomic<uint64_t> counter{0};
-  std::string tmp_name = ".unlink_tmp_" +
+  std::string tmp_name = std::string(UNLINK_TMP_PREFIX) +
     std::to_string(getpid()) + "_" + std::to_string(counter.fetch_add(1));
 
   int ret = ::renameat(dir_fd, name.c_str(),
@@ -141,31 +141,135 @@ SafeResult POSIXStrategy::safe_unlink(const DoutPrefixProvider* dpp,
   return SafeResult::MISMATCH;
 }
 
-static int copy_file_data(int src_fd, int dst_fd, off64_t size)
+/* --- FSStrategy ------------------------------------------------------- */
+
+bool probe_shares_extents(const DoutPrefixProvider* dpp,
+                          const std::string& dir)
 {
-  off64_t soff = 0, doff = 0;
-  while (size > 0) {
-    ssize_t copied = ::copy_file_range(src_fd, &soff, dst_fd, &doff, size, 0);
+  const std::string src = dir + "/.cfr-probe.src";
+  const std::string dst = dir + "/.cfr-probe.dst";
+  bool shares = false;
+
+  int sfd = ::open(src.c_str(), O_RDWR | O_CREAT | O_TRUNC, 0600);
+  if (sfd < 0) {
+    ldpp_dout(dpp, 5) << "probe_shares_extents: cannot write in " << dir
+      << ": " << cpp_strerror(errno) << dendl;
+    return false;
+  }
+  char buf[4096];
+  memset(buf, 0, sizeof(buf));
+  if (::write(sfd, buf, sizeof(buf)) == (ssize_t) sizeof(buf)) {
+    int dfd = ::open(dst.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
+    if (dfd >= 0) {
+      loff_t soff = 0, doff = 0;
+      shares = (::copy_file_range(sfd, &soff, dfd, &doff,
+                                  sizeof(buf), 0) > 0);
+      ::close(dfd);
+    }
+  }
+  ::close(sfd);
+  ::unlink(src.c_str());
+  ::unlink(dst.c_str());
+
+  ldpp_dout(dpp, 1) << "nsfs: filesystem at " << dir
+    << (shares ? " shares extents via copy_file_range"
+               : " does not share extents;  copies fall back to a buffer")
+    << dendl;
+  return shares;
+}
+
+
+size_t FSStrategy::preferred_io_size(int fd) const
+{
+  struct stat st;
+
+  if (::fstat(fd, &st) < 0 || st.st_blksize <= 0) {
+    return MIN_COPY_IO_SIZE;
+  }
+  size_t blksize = (size_t)st.st_blksize;
+  if (blksize < MIN_COPY_IO_SIZE) {
+    return MIN_COPY_IO_SIZE;
+  }
+  if (blksize > MAX_COPY_IO_SIZE) {
+    return MAX_COPY_IO_SIZE;
+  }
+  return blksize;
+}
+
+int FSStrategy::copy_buffered(const DoutPrefixProvider* dpp, size_t bufsz,
+                              int src_fd, off_t src_off,
+                              int dst_fd, off_t dst_off, off_t len)
+{
+  auto buf = std::make_unique<char[]>(bufsz);
+
+  while (len > 0) {
+    size_t want = (len < (off_t)bufsz) ? (size_t)len : bufsz;
+    ssize_t nr = ::pread(src_fd, buf.get(), want, src_off);
+    if (nr < 0) {
+      int err = errno;
+      ldpp_dout(dpp, 0) << "ERROR: copy_range: pread at " << src_off
+        << " failed: " << cpp_strerror(err) << dendl;
+      return -err;
+    }
+    if (nr == 0) {
+      /* source is shorter than the caller believed;  the caller sized the
+       * copy from its own statx, so this is a truncation under us */
+      ldpp_dout(dpp, 5) << "copy_range: short source at " << src_off
+        << ", " << len << " bytes unread" << dendl;
+      break;
+    }
+
+    ssize_t done = 0;
+    while (done < nr) {
+      ssize_t nw = ::pwrite(dst_fd, buf.get() + done, nr - done,
+                            dst_off + done);
+      if (nw <= 0) {
+        int err = (nw < 0) ? errno : EIO;
+        ldpp_dout(dpp, 0) << "ERROR: copy_range: pwrite at "
+          << (dst_off + done) << " failed: " << cpp_strerror(err) << dendl;
+        return -err;
+      }
+      done += nw;
+    }
+
+    src_off += nr;
+    dst_off += nr;
+    len -= nr;
+    buffered_copy_bytes += nr;
+  }
+  return 0;
+}
+
+int FSStrategy::copy_range(const DoutPrefixProvider* dpp,
+                           int src_fd, off_t src_off,
+                           int dst_fd, off_t dst_off, off_t len)
+{
+  off_t soff = src_off, doff = dst_off;
+
+  if (force_buffered_copy) {
+    return copy_buffered(dpp, preferred_io_size(src_fd),
+                         src_fd, soff, dst_fd, doff, len);
+  }
+
+  while (len > 0) {
+    ssize_t copied = ::copy_file_range(src_fd, &soff, dst_fd, &doff,
+                                       len, 0);
     if (copied == 0) {
-      return (soff > 0) ? 0 : -EIO;
+      ldpp_dout(dpp, 5) << "copy_range: short source at " << soff
+        << ", " << len << " bytes unread" << dendl;
+      break;
     }
     if (copied < 0) {
       if (errno == EXDEV || errno == ENOSYS || errno == EOPNOTSUPP) {
-        char buf[65536];
-        ::lseek(src_fd, soff, SEEK_SET);
-        while (size > 0) {
-          ssize_t nr = ::read(src_fd, buf,
-                              std::min(size, (off64_t)sizeof(buf)));
-          if (nr <= 0) return -EIO;
-          ssize_t nw = ::write(dst_fd, buf, nr);
-          if (nw != nr) return -EIO;
-          size -= nr;
-        }
-        return 0;
+        return copy_buffered(dpp, preferred_io_size(src_fd),
+                             src_fd, soff, dst_fd, doff, len);
       }
-      return -errno;
+      int err = errno;
+      ldpp_dout(dpp, 0) << "ERROR: copy_range: copy_file_range failed: "
+        << cpp_strerror(err) << dendl;
+      return -err;
     }
-    size -= copied;
+    len -= copied;
   }
   return 0;
 }
@@ -203,6 +307,9 @@ std::unique_ptr<VersionLockHandle> POSIXStrategy::version_lock(
 int POSIXStrategy::get_xattrs(const DoutPrefixProvider* dpp, int fd,
                               xattr_map_t& attrs)
 {
+  /* large enough for every attribute an object carries in practice;  the
+   * biggest is the encoded ACL at a couple of hundred bytes */
+  enum { INLINE_VALUE_MAX = 1024 };
   char namebuf[64 * 1024];
   ssize_t list_len = ::flistxattr(fd, namebuf, sizeof(namebuf));
   if (list_len < 0) {
@@ -221,8 +328,27 @@ int POSIXStrategy::get_xattrs(const DoutPrefixProvider* dpp, int fd,
     std::string name(p);
     ssize_t keylen = name.size() + 1;
 
-    ssize_t vallen = ::fgetxattr(fd, p, nullptr, 0);
+    /* Read straight into a stack buffer.  Sizing the value with a nullptr
+     * call first doubles the syscalls on this path and nothing needs the
+     * size:  every attribute an object actually carries fits well inside
+     * INLINE_VALUE_MAX.  A value that does not fit falls back to the
+     * size-then-read pair.  Mirrors get_x_attrs() in rgw_sal_nsfs.cc. */
+    char valbuf[INLINE_VALUE_MAX];
+    std::string spill;
+    const char* vp = valbuf;
+    ssize_t vallen = ::fgetxattr(fd, p, valbuf, sizeof(valbuf));
+
+    if (vallen < 0 && errno == ERANGE) {
+      vallen = ::fgetxattr(fd, p, nullptr, 0);
+      if (vallen >= 0) {
+        spill.resize(vallen);
+        vp = spill.data();
+        vallen = ::fgetxattr(fd, p, spill.data(), vallen);
+      }
+    }
+
     if (vallen < 0) {
+      /* gone, unreadable, or it grew again between the sizing and the read */
       if (errno == ENODATA || errno == EACCES || errno == ERANGE) {
         remaining -= keylen;
         p += keylen;
@@ -234,18 +360,7 @@ int POSIXStrategy::get_xattrs(const DoutPrefixProvider* dpp, int fd,
       return -err;
     }
 
-    std::string value(vallen, '\0');
-    if (vallen > 0) {
-      ssize_t got = ::fgetxattr(fd, p, &value[0], vallen);
-      if (got < 0) {
-        remaining -= keylen;
-        p += keylen;
-        continue;
-      }
-      value.resize(got);
-    }
-
-    attrs.emplace(std::move(name), std::move(value));
+    attrs.emplace(std::move(name), std::string(vp, vallen));
     remaining -= keylen;
     p += keylen;
   }
@@ -282,9 +397,12 @@ int POSIXStrategy::remove_xattrs(const DoutPrefixProvider* dpp, int fd,
   return 0;
 }
 
-int POSIXStrategy::clone_file(const DoutPrefixProvider* dpp,
-                              int src_dir_fd, const std::string& src_name,
-                              int dst_dir_fd, const std::string& dst_name)
+int FSStrategy::clone_file_by_copy(const DoutPrefixProvider* dpp,
+                                   int src_dir_fd,
+                                   const std::string& src_name,
+                                   int dst_dir_fd,
+                                   const std::string& dst_name,
+                                   bool excl)
 {
   int src_fd = ::openat(src_dir_fd, src_name.c_str(), O_RDONLY);
   if (src_fd < 0) {
@@ -304,17 +422,21 @@ int POSIXStrategy::clone_file(const DoutPrefixProvider* dpp,
     return -err;
   }
 
-  int dst_fd = ::openat(dst_dir_fd, dst_name.c_str(),
-                         O_WRONLY | O_CREAT | O_TRUNC, 0644);
+  int dst_flags = O_WRONLY | O_CREAT | (excl ? O_EXCL : O_TRUNC);
+  int dst_fd = ::openat(dst_dir_fd, dst_name.c_str(), dst_flags, 0644);
   if (dst_fd < 0) {
     int err = errno;
     ::close(src_fd);
+    if (excl && (err == EEXIST)) {
+      /* lost the race;  the caller joins the winner's file */
+      return -EEXIST;
+    }
     ldpp_dout(dpp, 0) << "ERROR: clone_file: openat dst=" << dst_name
       << " failed: " << cpp_strerror(err) << dendl;
     return -err;
   }
 
-  ret = copy_file_data(src_fd, dst_fd, stx.stx_size);
+  ret = copy_range(dpp, src_fd, 0, dst_fd, 0, stx.stx_size);
   ::close(src_fd);
   ::close(dst_fd);
 
@@ -326,9 +448,9 @@ int POSIXStrategy::clone_file(const DoutPrefixProvider* dpp,
   return ret;
 }
 
-int POSIXStrategy::clone_fd(const DoutPrefixProvider* dpp,
-                            int src_fd,
-                            int dst_dir_fd, const std::string& dst_name)
+int FSStrategy::clone_fd_by_copy(const DoutPrefixProvider* dpp,
+                                 int src_fd,
+                                 int dst_dir_fd, const std::string& dst_name)
 {
   struct statx stx;
   if (statx(src_fd, "", AT_EMPTY_PATH, STATX_SIZE, &stx) < 0) {
@@ -346,8 +468,7 @@ int POSIXStrategy::clone_fd(const DoutPrefixProvider* dpp,
     return -err;
   }
 
-  ::lseek(src_fd, 0, SEEK_SET);
-  int ret = copy_file_data(src_fd, tmp_fd, stx.stx_size);
+  int ret = copy_range(dpp, src_fd, 0, tmp_fd, 0, stx.stx_size);
   if (ret < 0) {
     ::close(tmp_fd);
     ldpp_dout(dpp, 0) << "ERROR: clone_fd: copy -> " << dst_name
@@ -358,6 +479,22 @@ int POSIXStrategy::clone_fd(const DoutPrefixProvider* dpp,
   ret = link_temp_file(tmp_fd, dst_dir_fd, dst_name, dpp);
   ::close(tmp_fd);
   return ret;
+}
+
+int POSIXStrategy::clone_file(const DoutPrefixProvider* dpp,
+                              int src_dir_fd, const std::string& src_name,
+                              int dst_dir_fd, const std::string& dst_name,
+                              bool excl)
+{
+  return clone_file_by_copy(dpp, src_dir_fd, src_name,
+                            dst_dir_fd, dst_name, excl);
+}
+
+int POSIXStrategy::clone_fd(const DoutPrefixProvider* dpp,
+                            int src_fd,
+                            int dst_dir_fd, const std::string& dst_name)
+{
+  return clone_fd_by_copy(dpp, src_fd, dst_dir_fd, dst_name);
 }
 
 /* --- GPFSStrategy ----------------------------------------------------- */
@@ -629,18 +766,28 @@ static std::string fd_path(int dir_fd, const std::string& name)
  * out of bucket listings */
 static std::string clone_parent_name(const std::string& name)
 {
-  return ".clone_parent." + name;
+  return std::string(CLONE_PARENT_PREFIX) + name;
 }
 
 int GPFSStrategy::clone_file(const DoutPrefixProvider* dpp,
                              int src_dir_fd, const std::string& src_name,
-                             int dst_dir_fd, const std::string& dst_name)
+                             int dst_dir_fd, const std::string& dst_name,
+                             bool excl)
 {
   if (!has_clone()) {
     ldpp_dout(dpp, 10) << "gpfs clone_file: clone symbols not available, "
       << "falling back to copy" << dendl;
-    return POSIXStrategy().clone_file(dpp, src_dir_fd, src_name,
-                                      dst_dir_fd, dst_name);
+    return clone_file_by_copy(dpp, src_dir_fd, src_name,
+                              dst_dir_fd, dst_name, excl);
+  }
+
+  /* gpfs_clone_copy() has no exclusive-create mode, so the best we can
+   * do here is check first.  this narrows the race, it does not close
+   * it;  the appliance target is a local fs, which takes the POSIX
+   * path above. */
+  if (excl &&
+      (::faccessat(dst_dir_fd, dst_name.c_str(), F_OK, 0) == 0)) {
+    return -EEXIST;
   }
 
   std::string src_path = fd_path(src_dir_fd, src_name);
@@ -680,8 +827,8 @@ int GPFSStrategy::clone_file(const DoutPrefixProvider* dpp,
     ldpp_dout(dpp, 5) << "gpfs clone_file: clone_snap " << src_name
       << " failed: " << cpp_strerror(err)
       << ", falling back to copy" << dendl;
-    return POSIXStrategy().clone_file(dpp, src_dir_fd, src_name,
-                                      dst_dir_fd, dst_name);
+    return clone_file_by_copy(dpp, src_dir_fd, src_name,
+                              dst_dir_fd, dst_name, excl);
   }
 
   ret = fn_clone_copy(snap_path.c_str(), dst_path.c_str());
@@ -691,8 +838,8 @@ int GPFSStrategy::clone_file(const DoutPrefixProvider* dpp,
       << " → " << dst_name << " failed: " << cpp_strerror(err)
       << ", falling back to copy" << dendl;
     cleanup_clone(dpp, dst_dir_fd, dst_name);
-    return POSIXStrategy().clone_file(dpp, src_dir_fd, src_name,
-                                      dst_dir_fd, dst_name);
+    return clone_file_by_copy(dpp, src_dir_fd, src_name,
+                              dst_dir_fd, dst_name, excl);
   }
 
   ldpp_dout(dpp, 10) << "gpfs clone_file: cloned " << src_name
@@ -704,7 +851,7 @@ int GPFSStrategy::clone_fd(const DoutPrefixProvider* dpp,
                            int src_fd,
                            int dst_dir_fd, const std::string& dst_name)
 {
-  return POSIXStrategy().clone_fd(dpp, src_fd, dst_dir_fd, dst_name);
+  return clone_fd_by_copy(dpp, src_fd, dst_dir_fd, dst_name);
 }
 
 void GPFSStrategy::cleanup_clone(const DoutPrefixProvider* dpp,

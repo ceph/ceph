@@ -578,6 +578,25 @@ public:
   }
 };
 
+class RGWOpen : public RGWOp {
+ protected:
+   /* XXX permissions stuff, e.g., read vs write?  Unix... */
+  bool write_open{false};
+ public:
+  int verify_permission(optional_yield y) override;
+  void execute(optional_yield y) override;
+  void pre_exec() override { /* NOP? */};
+  virtual void send_response_data(bufferlist& bl) = 0;
+  const char* name() const override { return "open"; }
+  std::string canonical_name() const override {
+    return fmt::format("NFS.{}.OPEN", s->info.method); }
+  virtual uint32_t op_mask() override {
+    return write_open ? RGW_OP_TYPE_WRITE
+      : RGW_OP_TYPE_READ; }
+  RGWOpType get_type() override { return RGW_OP_OPEN; }
+
+  }; /*RGWOpen */
+
 class RGWGetObjTags : public RGWOp {
  protected:
   bufferlist tags_bl;

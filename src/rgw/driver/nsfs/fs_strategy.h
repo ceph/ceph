@@ -15,10 +15,14 @@
 
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
+
+#include <sys/types.h>
 
 #include <boost/container/flat_map.hpp>
 
@@ -29,6 +33,28 @@ class DoutPrefixProvider;
 namespace rgw { namespace sal { namespace nsfs {
 
 using xattr_map_t = boost::container::flat_map<std::string, std::string>;
+
+/* Names the strategy layer creates on disk which are not objects.  They
+ * are declared here rather than inline at their use sites so that the
+ * listing paths can suppress them without duplicating the knowledge --
+ * a name added here and nowhere else would otherwise start appearing in
+ * NFS readdir and S3 LIST. */
+inline constexpr std::string_view TMP_LINK_PREFIX = ".tmp_link_";
+inline constexpr std::string_view UNLINK_TMP_PREFIX = ".unlink_tmp_";
+inline constexpr std::string_view CLONE_PARENT_PREFIX = ".clone_parent.";
+
+/* Bounds on the I/O size FSStrategy::copy_range() uses when it has to fall
+ * back to a buffered copy.  See preferred_io_size(). */
+inline constexpr size_t MIN_COPY_IO_SIZE = 1u << 20;
+inline constexpr size_t MAX_COPY_IO_SIZE = 4u << 20;
+
+/* Try a real copy_file_range in dir and see whether it consumed no space:
+ * the one question a strategy cannot answer about itself.  Returns false on
+ * any error, so an unwritable or odd directory reads as "does not share",
+ * which is the conservative answer -- it only costs a fallback that would
+ * have worked. */
+bool probe_shares_extents(const DoutPrefixProvider* dpp,
+                          const std::string& dir);
 
 enum class SafeResult {
   OK = 0,
@@ -72,6 +98,86 @@ public:
                                  uint64_t expected_mtime_ns,
                                  uint64_t expected_ino) = 0;
 
+  /* copy a byte range between two files, by the cheapest means the
+   * filesystem offers:  copy_file_range(2), which shares extents where
+   * that is supported (XFS with reflink), and a buffered loop where it is
+   * not.  GPFS answers EOPNOTSUPP for copy_file_range at every
+   * granularity, so there the fallback is the only path -- see
+   * probes/results-cowprobe-2026-09-22.txt.
+   *
+   * Offsets are explicit;  neither file's position is read or disturbed.
+   * Implemented once here rather than once per strategy, because the only
+   * thing a strategy varies is preferred_io_size(). */
+  virtual int copy_range(const DoutPrefixProvider* dpp,
+                         int src_fd, off_t src_off,
+                         int dst_fd, off_t dst_off,
+                         off_t len);
+
+  /* I/O size for copy_range()'s buffered fallback:  the file's
+   * st_blksize, clamped to [MIN_COPY_IO_SIZE, MAX_COPY_IO_SIZE].
+   *
+   * The clamp is the measurement, not caution.  GPFS reports st_blksize
+   * 4 MiB, its block size and the right answer;  XFS and tmpfs report
+   * 4096, and honouring that would be sixteen times worse than the 64 KiB
+   * this replaced.  Above 4 MiB the cost rises again everywhere.  See
+   * probes/results-copyprobe-2026-09-23.txt. */
+  virtual size_t preferred_io_size(int fd) const;
+
+  /* test hook:  make copy_range() skip copy_file_range and take the
+   * buffered path.  On a filesystem that shares extents the fallback is
+   * otherwise unreachable, so the only path GPFS ever takes would never
+   * run under test here.  Driven by the "inject-buffered-copy" driver
+   * hint;  never by config. */
+  void set_force_buffered_copy(bool on) { force_buffered_copy = on; }
+
+  /* bytes copied through the buffered fallback, reset when read.  This is
+   * what lets a test assert that the fallback actually ran, rather than
+   * that a flag was set:  on a filesystem which shares extents the two are
+   * otherwise indistinguishable from outside. */
+  uint64_t take_buffered_bytes() { return buffered_copy_bytes.exchange(0); }
+
+  /* Does the namespace's filesystem share extents, i.e. does
+   * copy_file_range(2) actually clone rather than copy?  Established once
+   * at driver startup by probe_shares_extents() and recorded here, because
+   * it is not a property of the strategy:  POSIXStrategy serves XFS with
+   * reflink (yes) alongside ext4 and tmpfs (no), and GPFS answers no today
+   * (probes/results-cowprobe-2026-09-22.txt) but is not promised to forever.
+   * Measuring costs one small file at mount and needs no strategy to make a
+   * claim it cannot check.
+   *
+   * Reported, not acted on:  copy_range() still tries copy_file_range and
+   * falls back, so a strategy constructed outside the driver -- the xattr
+   * fallbacks build POSIXStrategy() temporaries -- is not misled by the
+   * default. */
+  bool shares_extents() const { return fs_shares_extents; }
+  void set_shares_extents(bool on) { fs_shares_extents = on; }
+
+protected:
+  /* clone by copying, which is what every strategy falls back to when its
+   * cheap path is unavailable.  Here rather than on POSIXStrategy because
+   * GPFSStrategy used to reach it by constructing a POSIXStrategy()
+   * temporary, and a temporary is a different object:  it does not carry
+   * the injected fallback flag, and the bytes it copies are accounted to
+   * something that is destroyed on the next line.  Called on `this`, the
+   * fallback belongs to the strategy the driver actually holds. */
+  int clone_file_by_copy(const DoutPrefixProvider* dpp,
+                         int src_dir_fd, const std::string& src_name,
+                         int dst_dir_fd, const std::string& dst_name,
+                         bool excl);
+
+  int clone_fd_by_copy(const DoutPrefixProvider* dpp, int src_fd,
+                       int dst_dir_fd, const std::string& dst_name);
+
+  int copy_buffered(const DoutPrefixProvider* dpp, size_t bufsz,
+                    int src_fd, off_t src_off,
+                    int dst_fd, off_t dst_off, off_t len);
+
+  bool force_buffered_copy{false};
+  bool fs_shares_extents{false};
+  std::atomic<uint64_t> buffered_copy_bytes{0};
+
+public:
+
   /* clone a file's data — GPFS can use clone_snap+clone_copy (CoW,
    * experimental) or fall back to copy_file_range / read+write.
    *
@@ -82,9 +188,14 @@ public:
    * overwritten.  A GPFS extension for automatic clone-parent
    * garbage collection would eliminate this lifecycle burden; until
    * then, the clone path is experimental. */
+  /* excl: fail with -EEXIST rather than overwrite an existing
+   * destination.  shadow forks pass it so that two instances racing to
+   * fork the same object cannot clobber each other;  the loser joins
+   * the winner's shadow instead. */
   virtual int clone_file(const DoutPrefixProvider* dpp,
                          int src_dir_fd, const std::string& src_name,
-                         int dst_dir_fd, const std::string& dst_name) = 0;
+                         int dst_dir_fd, const std::string& dst_name,
+                         bool excl = false) = 0;
 
   /* clone from an open source fd — used when the source pathname is
    * no longer valid (e.g. versioned self-copy after demote). */
@@ -129,6 +240,14 @@ public:
                             const std::vector<std::string>& names) = 0;
 
   virtual const char* name() const = 0;
+
+  /* Can this strategy move a name cheaply, i.e. is renameat() the right
+   * way to relocate an object?  Default no, so a strategy opts in rather
+   * than inherits the behaviour.  GPFS deliberately does not:  rgw-nfs on
+   * Spectrum Scale is not a productization target and this is provisional
+   * code, so it should not reach those deployments.  See
+   * RENAME_DESIGN.md. */
+  virtual bool can_rename() const { return false; }
 };
 
 class POSIXStrategy : public FSStrategy {
@@ -151,7 +270,8 @@ public:
 
   int clone_file(const DoutPrefixProvider* dpp,
                  int src_dir_fd, const std::string& src_name,
-                 int dst_dir_fd, const std::string& dst_name) override;
+                 int dst_dir_fd, const std::string& dst_name,
+                 bool excl = false) override;
 
   int clone_fd(const DoutPrefixProvider* dpp,
                int src_fd,
@@ -171,6 +291,7 @@ public:
                     const std::vector<std::string>& names) override;
 
   const char* name() const override { return "posix"; }
+  bool can_rename() const override { return true; }
 };
 
 class GPFSStrategy : public FSStrategy {
@@ -260,7 +381,8 @@ public:
 
   int clone_file(const DoutPrefixProvider* dpp,
                  int src_dir_fd, const std::string& src_name,
-                 int dst_dir_fd, const std::string& dst_name) override;
+                 int dst_dir_fd, const std::string& dst_name,
+                 bool excl = false) override;
 
   int clone_fd(const DoutPrefixProvider* dpp,
                int src_fd,

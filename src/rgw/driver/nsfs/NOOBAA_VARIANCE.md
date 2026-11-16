@@ -559,6 +559,14 @@ part metadata at complete time.
 4. **xattr compatibility layer** — if NooBaa migration is a goal,
    design a read-both-write-one xattr layer.  Scope TBD.
 
+5. **FSIO default ACL** — the FSIO positional-IO path stamps a
+   default `RGW_ATTR_ACL` (as `user.nsfs.x-rgw-acl`) on newly
+   created shadow objects using Ceph binary encoding
+   (`RGWAccessControlPolicy::encode`).  NooBaa does not store ACLs
+   as xattrs at all.  This is a new divergence introduced by the
+   FSIO work — any future noobaa compatibility layer must handle
+   or ignore this attribute.
+
 ### Documentation
 
 This variance document should move to `src/rgw/driver/nsfs/` alongside

@@ -77,6 +77,30 @@ TEST(LibRGW, MOUNT) {
   ASSERT_NE(fs, nullptr);
 }
 
+/* mkdir, tolerating one that is already there.
+ *
+ * The bucket and subdirectory names are fixed, so a second run of this
+ * suite finds them present and rgw_mkdir() returns -EEXIST.  Asserting 0
+ * made the suite pass only against a freshly wiped data root, and on a
+ * dirty one three tests failed -EEXIST -- which reads like a rename
+ * regression and is nothing of the kind. */
+static inline
+int make_dir(struct rgw_file_handle* parent_fh, const string& name,
+	     struct rgw_file_handle** fh_out) {
+  struct stat st;
+  st.st_uid = owner_uid;
+  st.st_gid = owner_gid;
+  st.st_mode = 755;
+
+  int ret = rgw_mkdir(fs, parent_fh, name.c_str(), &st, create_mask,
+		      fh_out, RGW_MKDIR_FLAG_NONE);
+  if (ret == -EEXIST) {
+    ret = rgw_lookup(fs, parent_fh, name.c_str(), fh_out,
+		     nullptr, 0, RGW_LOOKUP_FLAG_NONE);
+  }
+  return ret;
+}
+
 TEST(LibRGW, CREATE_BUCKETS) {
   if (do_create) {
     struct stat st;
@@ -86,14 +110,12 @@ TEST(LibRGW, CREATE_BUCKETS) {
     st.st_gid = owner_gid;
     st.st_mode = 755;
 
-    ret = rgw_mkdir(fs, fs->root_fh, bucket1_name.c_str(), &st, create_mask,
-			&bucket1_fh, RGW_MKDIR_FLAG_NONE);
+    ret = make_dir(fs->root_fh, bucket1_name, &bucket1_fh);
     ASSERT_EQ(ret, 0);
     ret = rgw_fh_rele(fs, bucket1_fh, 0 /* flags */);
     ASSERT_EQ(ret, 0);
 
-    ret = rgw_mkdir(fs, fs->root_fh, bucket2_name.c_str(), &st, create_mask,
-		    &bucket2_fh, RGW_MKDIR_FLAG_NONE);
+    ret = make_dir(fs->root_fh, bucket2_name, &bucket2_fh);
     ASSERT_EQ(ret, 0);
     ret = rgw_fh_rele(fs, bucket2_fh, 0 /* flags */);
     ASSERT_EQ(ret, 0); 
@@ -116,15 +138,79 @@ int make_object(struct rgw_file_handle* parent_fh, const string& name) {
   int ret{0};
   ret = rgw_lookup(fs, parent_fh, name.c_str(), &object_fh,
 		   nullptr, 0, RGW_LOOKUP_FLAG_CREATE);
-  ret = rgw_open(fs, object_fh, 0 /* posix flags */, 0 /* flags */);
+  if (ret != 0) {
+    return ret;
+  }
+
+  /* O_RDWR and RGW_OPEN_FLAG_CREATE, as librgw_file_nfsns.cc does.  The
+   * previous O_RDONLY open with no create flag could not create the
+   * object:  on a driver with an FSIO view rgw_open() opens the file for
+   * real, so it returned -ENOENT, the write then had no open to use and
+   * returned -EPERM, and every rename below failed -ENOENT on a source
+   * that had never been written. */
+  ret = rgw_open(fs, object_fh, O_RDWR,
+		 RGW_OPEN_FLAG_V3|RGW_OPEN_FLAG_CREATE);
+  if (ret != 0) {
+    return ret;
+  }
 
   size_t nbytes;
   string data = "hi mom";
   ret = rgw_write(fs, object_fh, 0, data.length(), &nbytes,
 		  (void*) data.c_str(), RGW_WRITE_FLAG_NONE);
+  if (ret != 0) {
+    return ret;
+  }
   /* commit write transaction */
-  ret = rgw_close(fs, object_fh, 0 /* flags */);
-  return ret;
+  return rgw_close(fs, object_fh, 0 /* flags */);
+}
+
+/* The bare v1 create sequence, with none of the flags an FSIO driver needs
+ * spelled out:  rgw_lookup(RGW_LOOKUP_FLAG_CREATE), then rgw_open() with
+ * posix_flags 0 and no RGW_OPEN_FLAG_CREATE, then write, then close.
+ *
+ * This is what a v1 consumer written against the rados behaviour does, and
+ * it has to keep working:  rgw_open() infers write and create intent from
+ * the handle, which rgw_lookup() marked when it found the object absent and
+ * was asked to create it.  make_object() above passes the flags explicitly,
+ * as librgw_file_nfsns.cc does, so without this test nothing would exercise
+ * the inference. */
+TEST(LibRGW, V1_CREATE_INFERS_FLAGS) {
+  const string name{"v1inferred"};
+  struct rgw_file_handle* fh = nullptr;
+
+  int ret = rgw_lookup(fs, bucket1_fh, name.c_str(), &fh,
+		       nullptr, 0, RGW_LOOKUP_FLAG_CREATE);
+  ASSERT_EQ(ret, 0);
+  ASSERT_NE(fh, nullptr);
+
+  /* deliberately the pre-FSIO flags */
+  ret = rgw_open(fs, fh, 0 /* posix flags */, 0 /* flags */);
+  ASSERT_EQ(ret, 0) << "the v1 create sequence must not require flags it "
+		       "never had to pass";
+
+  const string data{"hi mom"};
+  size_t nbytes{0};
+  ret = rgw_write(fs, fh, 0, data.length(), &nbytes,
+		  (void*) data.c_str(), RGW_WRITE_FLAG_NONE);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(nbytes, data.length());
+  ASSERT_EQ(rgw_close(fs, fh, 0 /* flags */), 0);
+  ASSERT_EQ(rgw_fh_rele(fs, fh, 0 /* flags */), 0);
+
+  /* and the object is really there, with its content -- a create that
+   * silently produced nothing is exactly the failure this guards */
+  struct rgw_file_handle* rfh = nullptr;
+  ret = rgw_lookup(fs, bucket1_fh, name.c_str(), &rfh,
+		   nullptr, 0, RGW_LOOKUP_FLAG_NONE);
+  ASSERT_EQ(ret, 0) << "object was not created";
+  ASSERT_NE(rfh, nullptr);
+
+  struct stat st;
+  ASSERT_EQ(rgw_getattr(fs, rfh, &st, RGW_GETATTR_FLAG_NONE), 0);
+  ASSERT_EQ(st.st_size, (off_t) data.length());
+
+  ASSERT_EQ(rgw_fh_rele(fs, rfh, 0 /* flags */), 0);
 }
 
 TEST(LibRGW, TOPDIR_RENAME) {
@@ -161,8 +247,7 @@ TEST(LibRGW, SUBDIR_RENAME) {
       st.st_gid = owner_gid;
       st.st_mode = 755;
 
-      ret = rgw_mkdir(fs, bucket1_fh, subdir1_name.c_str(), &st, create_mask,
-		      &subdir1_fh, RGW_MKDIR_FLAG_NONE);
+      ret = make_dir(bucket1_fh, subdir1_name, &subdir1_fh);
       ASSERT_EQ(ret, 0);
 
       ret = make_object(subdir1_fh, obj_name1);
@@ -201,8 +286,7 @@ TEST(LibRGW, CROSS_BUCKET_RENAME) {
       st.st_gid = owner_gid;
       st.st_mode = 755;
 
-      ret = rgw_mkdir(fs, bucket2_fh, subdir2_name.c_str(), &st, create_mask,
-		      &subdir2_fh, RGW_MKDIR_FLAG_NONE); // galahad/mork
+      ret = make_dir(bucket2_fh, subdir2_name, &subdir2_fh); // galahad/mork
       ASSERT_EQ(ret, 0);
 
       ret = make_object(subdir1_fh, obj_name1); // wyndemere/meep/tommy1
