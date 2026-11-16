@@ -21,6 +21,8 @@ $ src/script/qa_triage/qa_triage.sh https://pulpito.ceph.com/<run>/
 
 It clones over ssh, with your GitHub key. Where that fails, as on a host whose ssh
 key for GitHub is a deploy key, it clones over https with gh's sign-in, if gh is
-signed in (`gh auth login`), for its own git commands only;
-`QA_TRIAGE_REPO=https://github.com/aainscow/qa-triage.git` clones over https from the
+signed in (`gh auth login`), for its own git commands only. Where GitHub takes no
+ssh key from the host and gh is installed but not signed in, it stops and asks you
+to run `gh auth login` first, as qa_triage could neither stay up to date nor share
+what you teach it. `QA_TRIAGE_REPO=https://github.com/aainscow/qa-triage.git` clones over https from the
 start. Its README, `qa-triage/README.md` once it is cloned, says the rest.

@@ -8,9 +8,10 @@
 #
 # It clones over ssh, with your GitHub key; where that fails, as on a host whose
 # key for GitHub is a deploy key for another repository, it clones over https with
-# gh's sign-in, if gh is signed in. QA_TRIAGE_REPO names another repository to
-# clone, and QA_TRIAGE_CHECKOUT another directory to keep it in. Its README.md says
-# the rest.
+# gh's sign-in, if gh is signed in. Where GitHub takes no ssh key from this host and
+# gh is installed but not signed in, it stops and asks you to run gh auth login.
+# QA_TRIAGE_REPO names another repository to clone, and QA_TRIAGE_CHECKOUT another
+# directory to keep it in. Its README.md says the rest.
 
 set -euo pipefail
 
@@ -37,11 +38,46 @@ use_gh() {
     export GIT_CONFIG_COUNT=$((n + 1))
 }
 
+# As use_gh, and git reaches GitHub's ssh URLs over https too: for a clone made over
+# ssh, on a host whose ssh key GitHub no longer takes.
+over_https() {
+    use_gh || return 1
+    local n=$GIT_CONFIG_COUNT
+    export "GIT_CONFIG_KEY_$n=url.https://github.com/.insteadOf"
+    export "GIT_CONFIG_VALUE_$n=git@github.com:"
+    export GIT_CONFIG_COUNT=$((n + 1))
+}
+
+# GitHub takes no ssh key from this host: it has none, or none GitHub knows.
+key_refused() {
+    local said
+    said=$(ssh -T -o BatchMode=yes -o ConnectTimeout=10 git@github.com 2>&1 || true)
+    [[ $said == *'Permission denied'* ]]
+}
+
+# gh is installed, but not signed in.
+gh_signed_out() {
+    command -v gh > /dev/null 2>&1 && ! gh auth status > /dev/null 2>&1
+}
+
+# Stop: without an ssh key or gh's sign-in, qa_triage can neither stay up to date nor
+# share what people teach it.
+insist_on_gh() {
+    echo "qa_triage: GitHub does not accept an ssh key from this host, and gh is not" \
+         "signed in, so qa_triage cannot $1, or share what you teach it. Sign in to" \
+         "GitHub with gh, then run qa_triage again:" >&2
+    echo "    gh auth login" >&2
+    echo "qa_triage then uses gh's sign-in for its own git commands only." >&2
+    exit 2
+}
+
 if [ ! -d "$checkout/.git" ]; then
     echo "qa_triage: cloning $repo into $checkout" >&2
     if ! git clone -q "$repo" "$checkout"; then
         if [ -z "${QA_TRIAGE_REPO:-}" ] && use_gh && git clone -q "$https" "$checkout"; then
             echo "qa_triage: cloned it over https, with gh's sign-in, as ssh could not" >&2
+        elif [[ $repo == git@github.com:* ]] && gh_signed_out && key_refused; then
+            insist_on_gh "clone itself"
         else
             echo "qa_triage: could not clone $repo, which is private: its owner adds" \
                  "people as collaborators. If you are one, and your ssh key for GitHub" \
@@ -51,10 +87,26 @@ if [ ! -d "$checkout/.git" ]; then
         fi
     fi
 else
-    case $(git -C "$checkout" remote get-url origin 2> /dev/null) in
+    origin=$(git -C "$checkout" remote get-url origin 2> /dev/null || true)
+    case $origin in
         https://github.com/*) use_gh || true ;;
     esac
-    if ! out=$(git -C "$checkout" pull -q --ff-only 2>&1); then
+    pulled=0
+    out=$(git -C "$checkout" pull -q --ff-only 2>&1) && pulled=1
+    if [ $pulled = 0 ] && [[ $origin == git@github.com:* ]] && key_refused; then
+        # GitHub no longer takes this host's ssh key: over https with gh's sign-in,
+        # for this pull and for qa_triage's own pulls and pushes of the library.
+        if over_https; then
+            out=$(git -C "$checkout" pull -q --ff-only 2>&1) && pulled=1
+        elif gh_signed_out; then
+            insist_on_gh "bring itself up to date"
+        fi
+    elif [ $pulled = 0 ] && [[ $origin == https://github.com/* ]] && gh_signed_out &&
+        [[ $out == *'Authentication failed'* || $out == *'could not read Username'* ||
+           $out == *'terminal prompts disabled'* || $out == *'Repository not found'* ]]; then
+        insist_on_gh "bring itself up to date"
+    fi
+    if [ $pulled = 0 ]; then
         # Changes made in it and never shared hold it back: set aside, where git keeps
         # them, so that it runs as everyone's does.
         if [ -n "$(git -C "$checkout" status --porcelain)" ] &&
