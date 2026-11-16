@@ -343,6 +343,82 @@ describe('RgwBucketFormComponent', () => {
     expect(updateValidationSpy).toHaveBeenCalled();
   });
 
+  describe('account bucket limit alert', () => {
+    let accountGetSpy: jasmine.Spy;
+    let bucketListSpy: jasmine.Spy;
+
+    beforeEach(() => {
+      accountGetSpy = spyOn(TestBed.inject(RgwUserAccountsService), 'get');
+      bucketListSpy = spyOn(rgwBucketService, 'list');
+      enumerateSpy.and.returnValue(
+        observableOf([{ uid: 'acc-user', account_id: 'RGW11111111111111111' }])
+      );
+      accountListSpy.and.returnValue(observableOf(['RGW11111111111111111']));
+      getPlacementTargetsSpy.and.returnValue(
+        observableOf({ zonegroup: 'default', placement_targets: [] })
+      );
+      fixture.detectChanges();
+    });
+
+    it('should flag the limit as reached when bucket count equals max_buckets', () => {
+      accountGetSpy.and.returnValue(observableOf({ max_buckets: 2 }));
+      bucketListSpy.and.returnValue(observableOf(['b1', 'b2']));
+      component.bucketForm.get('accountUser').setValue('acc-user');
+      expect(bucketListSpy).toHaveBeenCalledWith(false, 'acc-user');
+      expect(component.accountBucketLimitReached).toBe(true);
+      expect(component.accountBucketLimit).toBe(2);
+    });
+
+    it('should not flag the limit when below max_buckets', () => {
+      accountGetSpy.and.returnValue(observableOf({ max_buckets: 2 }));
+      bucketListSpy.and.returnValue(observableOf(['b1']));
+      component.bucketForm.get('accountUser').setValue('acc-user');
+      expect(component.accountBucketLimitReached).toBe(false);
+    });
+
+    it('should not flag the limit when max_buckets is unlimited (0)', () => {
+      accountGetSpy.and.returnValue(observableOf({ max_buckets: 0 }));
+      bucketListSpy.and.returnValue(observableOf(['b1', 'b2', 'b3']));
+      component.bucketForm.get('accountUser').setValue('acc-user');
+      expect(component.accountBucketLimitReached).toBe(false);
+      expect(bucketListSpy).not.toHaveBeenCalled();
+    });
+
+    it('should flag the limit when bucket creation is disabled (-1)', () => {
+      accountGetSpy.and.returnValue(observableOf({ max_buckets: -1 }));
+      bucketListSpy.and.returnValue(observableOf([]));
+      component.bucketForm.get('accountUser').setValue('acc-user');
+      expect(component.accountBucketLimitReached).toBe(true);
+      expect(component.accountBucketLimit).toBe(-1);
+    });
+
+    it('should reset the flag when no account user is selected', () => {
+      accountGetSpy.and.returnValue(observableOf({ max_buckets: 1 }));
+      bucketListSpy.and.returnValue(observableOf(['b1']));
+      component.bucketForm.get('accountUser').setValue('acc-user');
+      expect(component.accountBucketLimitReached).toBe(true);
+      component.bucketForm.get('accountUser').setValue('');
+      expect(component.accountBucketLimitReached).toBe(false);
+    });
+
+    it('should flag the limit when changing the owner of an existing bucket', () => {
+      component.editing = true;
+      accountGetSpy.and.returnValue(observableOf({ max_buckets: 1 }));
+      bucketListSpy.and.returnValue(observableOf(['b1']));
+      component.bucketForm.get('accountUser').setValue('acc-user');
+      expect(component.accountBucketLimitReached).toBe(true);
+    });
+
+    it('should not check the limit when the bucket is already owned by an account', () => {
+      accountGetSpy.and.returnValue(observableOf({ max_buckets: 1 }));
+      bucketListSpy.and.returnValue(observableOf(['b1']));
+      component.bucketForm.get('isAccountOwner').disable();
+      component.bucketForm.get('accountUser').setValue('acc-user');
+      expect(accountGetSpy).not.toHaveBeenCalled();
+      expect(component.accountBucketLimitReached).toBe(false);
+    });
+  });
+
   describe('should call bucket ratelimit API with correct bucket name', () => {
     beforeEach(() => {
       component.loading = LoadingStatus.Ready;

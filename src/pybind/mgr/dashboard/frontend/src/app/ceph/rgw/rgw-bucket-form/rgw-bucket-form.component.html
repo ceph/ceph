@@ -162,6 +162,24 @@
             >
           }
         </ng-template>
+        @if (accountBucketLimitReached) {
+          <div class="cds-mt-4">
+            <cd-alert-panel
+              type="warning"
+              i18n
+            >
+              @if (accountBucketLimit < 0) {
+                Bucket creation is disabled for the account of the selected user.
+              } @else if (editing) {
+                The bucket limit ({{ accountBucketLimit }}) for the account of the selected user has
+                been reached. The bucket cannot be moved to this account.
+              } @else {
+                The bucket limit ({{ accountBucketLimit }}) for the account of the selected user has
+                been reached. New buckets cannot be created for this account.
+              }
+            </cd-alert-panel>
+          </div>
+        }
         @if (bucketForm.get('accountUser').disabled) {
           <cd-alert-panel
             type="info"
@@ -954,6 +972,7 @@
     <cd-form-button-panel
       (submitActionEvent)="submit()"
       [form]="bucketForm"
+      [disabled]="accountBucketLimitReached && bucketForm.get('isAccountOwner').value"
       [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
       wrappingClass="text-right"
     ></cd-form-button-panel>
