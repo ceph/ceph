@@ -12720,8 +12720,6 @@ TEST_F(TestLibRBD, ConfigPP)
   REQUIRE_FORMAT_V2();
 
   librbd::RBD rbd;
-  string value;
-
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
 
