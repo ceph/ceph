@@ -436,6 +436,44 @@ TEST_P(omap_manager_test_t, set_key)
   });
 }
 
+// SeaStore gives omap_manager::get_max_kv_length() to the OSD, which
+// rejects larger entries before it builds a transaction. The value must
+// match the leaf rule: the largest entry fits, one more byte returns
+// value_too_large.
+TEST_P(omap_manager_test_t, max_kv_length)
+{
+  run_async([this] {
+    const uint64_t max_kv = omap_manager::get_max_kv_length();
+    EXPECT_EQ(max_kv, 16382u);
+    EXPECT_LT(omap_manager::get_max_key_length(), max_kv);
+
+    omap_root_t omap_root = initialize();
+    const std::string key(16, 'k');
+    {
+      auto t = create_mutate_transaction();
+      set_key(omap_root, *t, key, std::string(max_kv - key.size(), 'v'));
+      submit_transaction(std::move(t));
+      check_mappings(omap_root);
+    }
+    {
+      auto t = create_mutate_transaction();
+      bufferlist val;
+      val.append(std::string(max_kv - key.size() + 1, 'v'));
+      bool too_large = false;
+      with_trans_intr(*t, [&](auto &t) {
+        return omap_manager->omap_set_key(omap_root, t, "x" + key, val);
+      }).handle_error(
+        crimson::ct_error::value_too_large::handle([&too_large] {
+          too_large = true;
+        }),
+        crimson::ct_error::assert_all{"unexpected error"}
+      ).get();
+      EXPECT_TRUE(too_large);
+    }
+    check_mappings(omap_root);
+  });
+}
+
 TEST_P(omap_manager_test_t, set_keys)
 {
   run_async([this] {

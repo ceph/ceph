@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <limits>
 #include <string>
 #include <map>
 #include <optional>
@@ -212,6 +213,27 @@ public:
       uint32_t op_flags = 0) = 0;
 
     virtual unsigned get_max_attr_name_length() const = 0;
+
+    /// Size limits, in bytes, of the xattr and omap entries that the
+    /// store can keep. A store transaction cannot fail, so the OSD must
+    /// reject a larger entry before it builds the transaction.
+    struct kv_limits_t {
+      uint64_t max_attr_name_len;
+      /// key + value of one xattr or one omap entry
+      uint64_t max_kv_len = std::numeric_limits<uint64_t>::max();
+      uint64_t max_omap_key_len = std::numeric_limits<uint64_t>::max();
+      uint64_t max_omap_header_len = std::numeric_limits<uint64_t>::max();
+    };
+
+    /**
+     * get_kv_limits
+     *
+     * All the limits in one call. The default has only the attribute
+     * name limit, and no limit for the other sizes.
+     */
+    virtual kv_limits_t get_kv_limits() const {
+      return kv_limits_t{.max_attr_name_len = get_max_attr_name_length()};
+    }
   };
 
 public:
