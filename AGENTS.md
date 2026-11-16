@@ -1,9 +1,9 @@
 # AGENTS.md
 
 Guidance for AI coding agents working in the Ceph repository. Ceph is a large
-C++/Python monorepo (RADOS, RBD, CephFS, RGW, MGR, cephadm, dashboard). Human
-contributor docs remain the source of truth; this file summarises the rules
-that are easy to miss and links to the canonical documents. A nearer
+C++/Python monorepo (RADOS, RBD, CephFS, RGW, Manager, cephadm, Dashboard).
+Human contributor docs remain the source of truth; this file summarises the
+rules that are easy to miss and links to the canonical documents. A nearer
 `AGENTS.md` describes the directory it sits in. This file is the process
 policy for the whole tree.
 
@@ -20,11 +20,16 @@ policy for the whole tree.
 
 - Act only on the human's say-so. An agent may push, comment, label, or
   retrigger CI on the human's behalf only when the human has asked for that
-  specific action. Do not send anything the human has not seen. Maintainers
-  treat what an agent posts as the human's own words.
+  specific action. Do not send anything the human has not seen. The human
+  reviews every word of comments and tracker posts, and reviews the code,
+  before it goes out. Open the pull request as a draft until that review
+  is done. Maintainers treat what an agent posts as the human's own words.
+- Use a model and an effort level that can carry the change. A weak or
+  low-effort pass produces sloppy code and comments that reviewers then
+  have to unwind.
 - Target `main`. Fixes land in `main` first and are cherry-picked to stable
-  branches (`squid`, `tentacle`, ...) with `git cherry-pick -x`; never open a
-  feature PR against a stable branch.
+  branches (`tentacle`, `umbrella`, ...) with `git cherry-pick -x`; never
+  open a feature PR against a stable branch.
 - Never stage submodule pointer changes (`src/BLAKE3`, `src/googletest`,
   `ceph-object-corpus`, ... see `.gitmodules`) unless the task is a submodule
   bump. Use `git add <paths>`, not `git add .` or `git add -A`.
@@ -44,8 +49,10 @@ policy for the whole tree.
   C++ headers. Add or change options there, and reference them from the docs
   with `.. confval:: <name>`.
 - User-visible changes (CLI flags, command output, defaults, health warnings,
-  behaviour) must update the docs under `doc/` in the same PR. Notable or
-  breaking changes also need an entry in [`PendingReleaseNotes`](PendingReleaseNotes).
+  behavior) must update the docs under `doc/` in the same PR. Code and the
+  matching doc update may be separate commits when that makes review or a
+  backport easier. Notable or breaking changes also need an entry in
+  [`PendingReleaseNotes`](PendingReleaseNotes).
 - Every directory under `qa/suites/` must contain a `.qa` symlink to `../.qa/`;
   CI enforces this with `src/script/verify-qa`.
 - Do not edit generated files or build output (`build/`, dashboard
@@ -87,7 +94,7 @@ policy for the whole tree.
   numbers, or fabricate test results. Leave placeholders and say so.
 - PR titles use the same `<subsystem>: <description>` form; they feed the
   release notes. Backport PR titles are prefixed with the branch:
-  `squid: osd: ...`.
+  `tentacle: osd: ...`.
 - Fill in the checklist in
   [`.github/pull_request_template.md`](.github/pull_request_template.md)
   (tracker, component impact, docs, tests). CI checks it.
@@ -116,7 +123,7 @@ ninja <target>           # build only what you touched, e.g. ceph-osd, radosgw
 ## Test
 
 How to run ctest, make check, standalone tests, vstart, tox, and the
-dashboard frontend is in
+Dashboard frontend is in
 [`.github/copilot-instructions.md`](.github/copilot-instructions.md). In
 short: `unittest_*` targets run under ctest, `ceph_test_*` binaries do not,
 `./run-make-check.sh` is the full check Jenkins runs, and a local cluster is
@@ -147,8 +154,8 @@ directory.
 
 ## Ask First
 
-- Changes to encodings, the messenger protocol, OSD/MON on-disk formats,
-  or cluster upgrade behaviour.
+- Changes to encodings, the messenger protocol, OSD/Monitor on-disk formats,
+  or cluster upgrade behavior.
 - New dependencies, submodule bumps, or changes to `install-deps.sh`,
   packaging (`ceph.spec.in`, `debian/`), or CI workflows.
 - Large cross-subsystem refactors.
