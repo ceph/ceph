@@ -49,8 +49,6 @@ tasks:
         # the actual names cephadm knows the host by within the mon spec
         ceph orch host ls --format json | jq -r '.[] | .hostname' > realnames
         echo $'host.a\nhost.b\nhost.c' > fakenames
-        echo $'a\nb\nc' > mon_ids
-        echo $'{datacenter=a}\n{datacenter=b,rack=2}\n{datacenter=a,rack=3}' > crush_locs
         ceph orch ls --service-name mon --export > mon.yaml
         MONSPEC=`cat mon.yaml`
         echo "$MONSPEC"
@@ -67,7 +65,50 @@ tasks:
         sleep 90
         ceph mon dump
         ceph mon dump --format json
-        # verify all the crush locations got set from "ceph mon dump" output
-        while read monid <&3 && read crushloc <&4; do
-          ceph mon dump --format json | jq --arg monid "$monid" --arg crushloc "$crushloc" -e '.mons | .[] | select(.name == $monid) | .crush_location == $crushloc'
-        done 3<mon_ids 4<crush_locs
+        # verify all the crush locations got set from "ceph mon dump" output expecting
+        # datacenter=a for mon a, datacenter=b, rack=2 for mon b, datacenter=a, rack=3 for mon c
+        # we loop over these files that tell us which mon, what crush key and what crush value to look for
+        # checking mon with id: a, b, b, c, c
+        echo $'a\nb\nb\nc\nc' > mon_ids
+        # checking crush keys: datacenter, datacenter, rack, datacenter, rack
+        echo $'datacenter\ndatacenter\nrack\ndatacenter\nrack' > crush_keys
+        # checking crush values: a, b, 2, a, 3
+        echo $'a\nb\n2\na\n3' > crush_values
+        # The expected format for each mon in the mon dump output as of writing this is (under "mons" key)
+        #         {
+        #   "rank": 1,
+        #   "name": "b",
+        #   "public_addrs": {
+        #     "addrvec": [
+        #       {
+        #         "type": "v2",
+        #         "addr": "10.20.193.146:3300",
+        #         "nonce": 0
+        #       },
+        #       {
+        #         "type": "v1",
+        #         "addr": "10.20.193.146:6789",
+        #         "nonce": 0
+        #       }
+        #     ]
+        #   },
+        #   "addr": "10.20.193.146:6789/0",
+        #   "public_addr": "10.20.193.146:6789/0",
+        #   "priority": 0,
+        #   "weight": 0,
+        #   "time_added": "2026-02-19T17:19:05:089735+0000",
+        #   "crush_location": [
+        #     {
+        #       "key": "datacenter",
+        #       "val": "b"
+        #     },
+        #     {
+        #       "key": "rack",
+        #       "val": "2"
+        #     }
+        #   ]
+        # },
+        while read monid <&3 && read crush_key <&4; read crush_value <&5; do
+          ceph mon dump --format json | jq --arg monid "$monid" --arg crush_key "$crush_key" --arg crush_value "$crush_value" -e '.mons | .[] | select(.name == $monid) | .crush_location | .[] | select(.key == $crush_key)'
+          ceph mon dump --format json | jq --arg monid "$monid" --arg crush_key "$crush_key" --arg crush_value "$crush_value" -e '.mons | .[] | select(.name == $monid) | .crush_location | .[] | select(.key == $crush_key) | .val == $crush_value'
+        done 3<mon_ids 4<crush_keys 5<crush_values
