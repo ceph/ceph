@@ -706,7 +706,7 @@ static int list_user(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_stmt *
   {
     const char *cd = (const char*)sqlite3_column_text(stmt, UserCreateDate);
     if (cd) {
-      auto tp = ceph::from_iso_8601(cd, false);
+      auto tp = ceph::from_iso_8601(cd);
       if (tp) op.user.uinfo.create_date = *tp;
     }
   }
