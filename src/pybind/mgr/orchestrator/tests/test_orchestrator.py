@@ -147,6 +147,44 @@ def test_handle_command():
         retval=-2, stdout='', stderr='No orchestrator configured (try `ceph orch set backend`)')
 
 
+@pytest.mark.parametrize('svc_arg,paths', [
+    ('host0:/dev/sda,/dev/sdb', ['/dev/sda', '/dev/sdb']),
+    (
+        'host0:/dev/disk/by-path/pci-0000:cd:00.0-nvme-1',
+        ['/dev/disk/by-path/pci-0000:cd:00.0-nvme-1'],
+    ),
+    (
+        'host0:/dev/disk/by-path/pci-0000:c9:00.0-nvme-1,'
+        '/dev/disk/by-path/pci-0000:cd:00.0-nvme-1',
+        [
+            '/dev/disk/by-path/pci-0000:c9:00.0-nvme-1',
+            '/dev/disk/by-path/pci-0000:cd:00.0-nvme-1',
+        ],
+    ),
+    (
+        'host0:data_devices=/dev/disk/by-path/pci-0000:cd:00.0-nvme-1',
+        ['/dev/disk/by-path/pci-0000:cd:00.0-nvme-1'],
+    ),
+])
+def test_daemon_add_osd_device_paths(svc_arg, paths):
+    m = OrchestratorCli('orchestrator', 0, 0)
+    with mock.patch.object(m, 'create_osds', return_value=OrchResult('Scheduled')) as create_osds:
+        r = m._daemon_add_osd(svc_arg, method='raw')
+    assert r.retval == 0
+    assert r.stdout == 'Scheduled'
+    drive_group = create_osds.call_args[0][0]
+    assert drive_group.placement.host_pattern.pattern == 'host0'
+    assert [dev.path for dev in drive_group.data_devices.paths] == paths
+    assert drive_group.method == 'raw'
+
+
+def test_daemon_add_osd_rejects_spec_without_separator():
+    m = OrchestratorCli('orchestrator', 0, 0)
+    r = m._daemon_add_osd('host0')
+    assert r.retval != 0
+    assert "Invalid 'host:device' spec" in r.stderr
+
+
 r = OrchResult([ServiceDescription(spec=ServiceSpec(service_type='osd'), running=123)])
 
 
