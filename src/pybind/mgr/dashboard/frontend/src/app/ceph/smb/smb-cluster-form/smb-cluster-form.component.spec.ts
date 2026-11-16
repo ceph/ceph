@@ -7,7 +7,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { FormArray, ReactiveFormsModule, Validators } from '@angular/forms';
 
 import { ComboBoxModule, GridModule, InputModule, SelectModule } from 'carbon-components-angular';
-import { AUTHMODE, CLIENT_COMPAT } from '../smb.model';
+import { AUTHMODE, CLIENT_COMPAT, DEBUG_LEVEL } from '../smb.model';
 import { FOO_USERSGROUPS } from '../smb-usersgroups-form/smb-usersgroups-form.component.spec';
 import { of } from 'rxjs';
 import { By } from '@angular/platform-browser';
@@ -111,6 +111,38 @@ describe('SmbClusterFormComponent', () => {
     component.smbForm.get('client_compat').setValue(false);
     const request = (component as any).buildRequest();
     expect(request.cluster_resource.client_compat).toBe(CLIENT_COMPAT.Default);
+  });
+
+  it('should have debug level control defaulting to Error', () => {
+    expect(component.smbForm.get('debug_level').value).toBe(DEBUG_LEVEL.Error);
+  });
+
+  it('should include Error debug_level in request by default', () => {
+    component.smbForm.get('auth_mode').setValue(AUTHMODE.ActiveDirectory);
+    component.smbForm.get('domain_settings').setValue('test-realm');
+    component.smbForm.get('cluster_id').setValue('cluster-id');
+    const request = (component as any).buildRequest();
+    expect(request.cluster_resource.debug_level).toEqual({
+      samba: DEBUG_LEVEL.Error
+    });
+  });
+
+  it('should include samba debug_level in request when set', () => {
+    component.smbForm.get('auth_mode').setValue(AUTHMODE.ActiveDirectory);
+    component.smbForm.get('domain_settings').setValue('test-realm');
+    component.smbForm.get('cluster_id').setValue('cluster-id');
+    component.smbForm.get('debug_level').setValue(DEBUG_LEVEL.Debug);
+    const request = (component as any).buildRequest();
+    expect(request.cluster_resource.debug_level).toEqual({
+      samba: DEBUG_LEVEL.Debug
+    });
+  });
+
+  it('should normalize numeric debug levels to named tiers', () => {
+    expect((component as any).normalizeDebugLevel('0')).toBe(DEBUG_LEVEL.Error);
+    expect((component as any).normalizeDebugLevel('8')).toBe(DEBUG_LEVEL.Info);
+    expect((component as any).normalizeDebugLevel('10')).toBe(DEBUG_LEVEL.Debug);
+    expect((component as any).normalizeDebugLevel('INFO')).toBe(DEBUG_LEVEL.Info);
   });
 
   it('should delete domain', () => {

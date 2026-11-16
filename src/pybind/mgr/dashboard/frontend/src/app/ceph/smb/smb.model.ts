@@ -1,6 +1,11 @@
 import { CephServicePlacement } from '~/app/shared/models/service.interface';
 import { USER } from '~/app/shared/constants/app.constants';
 
+export interface SMBDebugLevel {
+  samba?: string;
+  ctdb?: string;
+}
+
 export interface SMBCluster {
   resource_type: typeof CLUSTER_RESOURCE;
   cluster_id: string;
@@ -12,8 +17,28 @@ export interface SMBCluster {
   clustering?: Clustering;
   public_addrs?: PublicAddress[];
   client_compat?: ClientCompat;
+  debug_level?: SMBDebugLevel;
   count?: number;
 }
+
+export const DEBUG_LEVEL = {
+  Error: 'ERROR',
+  Warning: 'WARNING',
+  Notice: 'NOTICE',
+  Info: 'INFO',
+  Debug: 'DEBUG'
+} as const;
+
+export type DebugLevel = (typeof DEBUG_LEVEL)[keyof typeof DEBUG_LEVEL];
+
+/** Maps numeric Samba/CTDB levels to named tiers (matches mgr smb constants). */
+export const DEBUG_LEVEL_TIERS: [string, number, number][] = [
+  [DEBUG_LEVEL.Error, 0, 0],
+  [DEBUG_LEVEL.Warning, 1, 2],
+  [DEBUG_LEVEL.Notice, 3, 4],
+  [DEBUG_LEVEL.Info, 5, 8],
+  [DEBUG_LEVEL.Debug, 9, 10]
+];
 
 export const CLIENT_COMPAT = {
   Default: 'default',
