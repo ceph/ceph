@@ -935,7 +935,6 @@ int RGWLCCloudStreamPut::complete_request() {
 /* Read local copy and write to Cloud endpoint */
 static int cloud_tier_transfer_object(const DoutPrefixProvider* dpp,
                             RGWLCStreamRead* readf, RGWLCCloudStreamPut* writef) {
-  std::string url;
   bufferlist bl;
   bool sent_attrs{false};
   int ret{0};
@@ -1354,7 +1353,6 @@ static int cloud_tier_multipart_transfer(RGWLCCloudTierCtx& tier_ctx) {
   rgw_obj dest_obj;
 
   uint64_t obj_size;
-  std::string src_etag;
   rgw_rest_obj rest_obj;
 
   rgw_lc_multipart_upload_info status;

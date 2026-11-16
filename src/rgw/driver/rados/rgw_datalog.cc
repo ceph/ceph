@@ -1674,7 +1674,6 @@ RGWDataChangesLog::admin_sem_list(std::optional<int> req_shard,
 				  ceph::Formatter& formatter)
 {
   int shard = req_shard.value_or(0);
-  std::string keptmark;
 
   if (!marker.empty()) {
     // Signal caught by radosgw-admin

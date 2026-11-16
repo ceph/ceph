@@ -2812,8 +2812,6 @@ class RGWArchiveBucketMetadataHandler : public RGWBucketMetadataHandler {
         return ret;
     }
 
-    string bi_meta_name = RGWSI_Bucket::get_bi_meta_key(be.bucket);
-
     /* read original bucket instance info */
 
     map<string, bufferlist> attrs_m;

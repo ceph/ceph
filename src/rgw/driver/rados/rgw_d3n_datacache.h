@@ -168,7 +168,7 @@ int D3nRGWDataCache<T>::get_obj_iterate_cb(const DoutPrefixProvider *dpp, const 
   lsubdout(g_ceph_context, rgw_datacache, 30) << "D3nDataCache::" << __func__ << "(): is head object : " << is_head_obj << dendl;
   librados::ObjectReadOperation op;
   struct get_obj_data* d = static_cast<struct get_obj_data*>(arg);
-  std::string oid, key;
+  std::string oid;
 
   if (is_head_obj) {
     // only when reading from the head object do we need to do the atomic test
