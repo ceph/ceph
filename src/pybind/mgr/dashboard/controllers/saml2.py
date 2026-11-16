@@ -14,6 +14,8 @@ except ImportError:
 from .. import mgr
 from ..exceptions import UserDoesNotExist
 from ..services.auth import JwtManager
+from ..services.auth.signals import LOGIN_METRIC
+from ..services.telemetry import telemetry
 from ..tools import prepare_url_prefix
 from . import BaseController, ControllerAuthMixin, Endpoint, Router, allow_empty_body
 
@@ -34,6 +36,8 @@ class Saml2(BaseController, ControllerAuthMixin):
 
     @Endpoint('POST', path="", version=None)
     @allow_empty_body
+    @telemetry(LOGIN_METRIC, record_on_return=False,
+               redirect_ok=lambda e: any('access_token=' in u for u in e.urls))
     def auth_response(self, **kwargs):
         check_python_saml()
         req = Saml2._build_req(self._request, kwargs)
@@ -57,7 +61,6 @@ class Saml2(BaseController, ControllerAuthMixin):
                 mgr.ACCESS_CTRL_DB.get_user(username)
             except UserDoesNotExist:
                 raise cherrypy.HTTPRedirect("{}/#/sso/404".format(url_prefix))
-
             token = JwtManager.gen_token(username)
             JwtManager.set_user(JwtManager.decode_token(token))
 
