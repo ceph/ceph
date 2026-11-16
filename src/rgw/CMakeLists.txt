@@ -652,6 +652,7 @@ if(WITH_RADOSGW_LANCEDB)
   endif()
 endif()
 
+# Common implementations are supplied by rgw_common or rgw_common_standalone.
 set(rgw_a_srcs
   rgw_appmain.cc
   rgw_asio_client.cc
@@ -665,31 +666,22 @@ set(rgw_a_srcs
   rgw_lib.cc
   rgw_loadgen.cc
   rgw_loadgen_process.cc
-  rgw_log.cc
-  rgw_lua_request.cc
   rgw_opa.cc
   rgw_os_lib.cc
   rgw_process.cc
   rgw_realm_reloader.cc
-  rgw_rest_config.cc
   rgw_rest_info.cc
-  rgw_rest_metadata.cc
-  rgw_rest_ratelimit.cc
-  rgw_rest_sts.cc
   rgw_rest_swift.cc
   rgw_rest_usage.cc
   rgw_signal.cc
   rgw_swift_auth.cc
-  rgw_usage.cc
-  rgw_sts.cc)
+  rgw_usage.cc)
 
 set(rgw_a_rados_srcs "")
 
 if(WITH_RADOSGW_RADOS)
   list(APPEND rgw_a_rados_srcs
-    rgw_period_pusher.cc
-    rgw_rest_dedup.cc
-  )
+    rgw_period_pusher.cc)
 endif()
 
 gperf_generate(${CMAKE_SOURCE_DIR}/src/rgw/rgw_iam_policy_keywords.gperf
