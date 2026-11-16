@@ -106,7 +106,6 @@ class Module(MgrModule):
 
                     metadata = self.get_metadata('mds', info['name'],
                                                  default=defaultdict(lambda: 'unknown'))
-                    assert metadata
                     mds_versions[metadata['ceph_version']].append(info['name'])
 
                     if output_format in ('json', 'json-pretty'):
@@ -156,7 +155,6 @@ class Module(MgrModule):
 
                 metadata = self.get_metadata('mds', daemon_info['name'],
                                              default=defaultdict(lambda: 'unknown'))
-                assert metadata
                 mds_versions[metadata['ceph_version']].append(daemon_info['name'])
 
                 if output_format in ('json', 'json-pretty'):
@@ -231,7 +229,6 @@ class Module(MgrModule):
         for standby in fsmap['standbys']:
             metadata = self.get_metadata('mds', standby['name'],
                                          default=defaultdict(lambda: 'unknown'))
-            assert metadata
             mds_versions[metadata['ceph_version']].append(standby['name'])
 
             if output_format in ('json', 'json-pretty'):
@@ -334,7 +331,6 @@ class Module(MgrModule):
             if osd_id in osd_stats:
                 metadata = self.get_metadata('osd', str(osd_id), default=defaultdict(str))
                 stats = osd_stats[osd_id]
-                assert metadata
                 hostname = metadata['hostname']
                 kb_used = stats['kb_used'] * 1024
                 kb_avail = stats['kb_avail'] * 1024
