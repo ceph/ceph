@@ -5281,7 +5281,37 @@ void PeeringState::calc_trim_to_aggressive()
     // osd_pg_log_trim_max is 0; the trim point is then the oldest entry.
     const auto& log = pg_log.get_log().log;
     const size_t len = log.size();
+#ifndef NDEBUG
+    // Debug builds also run the previous algorithm, which walked the log from
+    // both ends, and check that the trim point is the same.
+    auto walk_both_ends = [&]() -> std::optional<eversion_t> {
+      auto it = log.begin(); // oldest log entry
+      auto rit = log.rbegin();
+      eversion_t by_n_to_keep; // start from tail
+      eversion_t by_n_to_trim = eversion_t::max(); // start from head
+      for (size_t i = 0; it != log.end(); ++it, ++rit) {
+        i++;
+        if (i > target && by_n_to_keep == eversion_t()) {
+          by_n_to_keep = rit->version;
+        }
+        if (i >= num_to_trim && by_n_to_trim == eversion_t::max()) {
+          by_n_to_trim = it->version;
+        }
+        if (by_n_to_keep != eversion_t() &&
+            by_n_to_trim != eversion_t::max()) {
+          break;
+        }
+      }
+      if (by_n_to_keep == eversion_t()) {
+        return std::nullopt;
+      }
+      return std::min({by_n_to_keep, by_n_to_trim, limit});
+    };
+#endif
     if (len <= target) {
+#ifndef NDEBUG
+      ceph_assert(!walk_both_ends());
+#endif
       return;
     }
     auto it = log.begin(); // oldest log entry
@@ -5289,6 +5319,9 @@ void PeeringState::calc_trim_to_aggressive()
                                         len - target) - 1);
 
     pg_trim_to = std::min(it->version, limit);
+#ifndef NDEBUG
+    ceph_assert(walk_both_ends() == pg_trim_to);
+#endif
     psdout(10) << "pg_trim_to now " << pg_trim_to << dendl;
     ceph_assert(pg_trim_to <= pg_log.get_head());
   }
