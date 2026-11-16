@@ -29,7 +29,7 @@ import { RgwRateLimitConfig } from '../models/rgw-rate-limit';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { RgwUserAccountsService } from '~/app/shared/api/rgw-user-accounts.service';
 import { Account } from '../models/rgw-user-accounts';
-import { ManagedPolicyArnMap, ManagedPolicyName, RGW } from '../utils/constants';
+import { ACCOUNT_ROOT, ManagedPolicyArnMap, ManagedPolicyName } from '../utils/constants';
 import { ComboBoxItem } from '~/app/shared/models/combo-box.model';
 
 @Component({
@@ -266,7 +266,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
           } else {
             this.userForm.get('account_id').setValue(null);
           }
-          const isAccountRoot: boolean = resp[0]['type'] !== RGW;
+          const isAccountRoot: boolean = resp[0]['type'] === ACCOUNT_ROOT;
           this.userForm.get('account_root_user').setValue(isAccountRoot);
           // Get the sub users.
           this.subusers = resp[0].subusers;
