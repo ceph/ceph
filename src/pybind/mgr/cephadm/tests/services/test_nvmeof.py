@@ -269,6 +269,9 @@ timeout = 1.0\n"""
         nvmeof_daemon_id = f'{pool}.{group}.test.qwert'
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
         _get_name.return_value = nvmeof_daemon_id
+        cephadm_module.mock_store_set('_ceph_get', 'osd_map', {
+            'pools': [{'pool': 1, 'pool_name': pool, 'type': 1}]
+        })
 
         with with_host(cephadm_module, 'test'):
             with with_service(cephadm_module, NvmeofServiceSpec(
