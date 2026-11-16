@@ -5018,6 +5018,12 @@ MPRadosSerializer::~MPRadosSerializer()
   stop_renewal();
 }
 
+void MPRadosSerializer::clear_locked()
+{
+  stop_renewal();
+  locked_until = std::nullopt;
+}
+
 void MPRadosSerializer::renewal(ceph::timespan dur,
                                 boost::asio::yield_context yield)
 {
@@ -5040,7 +5046,7 @@ void MPRadosSerializer::renewal(ceph::timespan dur,
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "MPSerializer lock renewal on "
           << oid << " failed with injected error " << ret << dendl;
-      clear_locked();
+      locked_until = std::nullopt;
       return;
     }
 
@@ -5054,7 +5060,7 @@ void MPRadosSerializer::renewal(ceph::timespan dur,
       ldpp_dout(dpp, 0) << "ERROR: MPSerializer lock renewal on "
           << oid << " failed with " << ret << ". If this upload completes, "
           "a racing request may overwrite and corrupt it." << dendl;
-      clear_locked();
+      locked_until = std::nullopt;
       return;
     }
 

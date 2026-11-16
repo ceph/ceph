@@ -918,7 +918,8 @@ public:
   int try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y);
   int unlock(const DoutPrefixProvider* dpp, optional_yield y);
   std::optional<ceph::real_time> is_locked_until() const { return locked_until; }
-  void clear_locked() { locked_until = std::nullopt; }
+  // clear the lock state and stop renewal
+  void clear_locked();
   ceph::timespan get_duration() const { return duration; }
 };
 
