@@ -149,8 +149,7 @@ static bool decode_attr(Attrs &attrs, const char *name, F &f) {
 
 static inline rgw_obj_key decode_obj_key(const char* fname)
 {
-  std::string dname, oname, ns; // XXX ns is unused?
-  dname = url_decode(fname);
+  std::string dname = url_decode(fname);
   rgw_obj_key key;
   rgw_obj_key::parse_raw_oid(dname, &key);
   return key;
