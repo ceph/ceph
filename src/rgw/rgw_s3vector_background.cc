@@ -177,12 +177,9 @@ public:
     }
 
 private:
-  // use mmap/mprotect to allocate 128k coroutine stacks
+  // use mmap/mprotect to allocate 256k coroutine stacks
   auto make_stack_allocator() {
-    // LanceDB's Rust/tokio runtime needs deep stacks for table open, index
-    // stats, and index build operations
-//note: without increasing the stack-size it may cause a crash.
-    return boost::context::protected_fixedsize_stack{1024*1024};
+    return boost::context::protected_fixedsize_stack{256*1024};
   }
   using MessageQueue =  boost::lockfree::queue<message_t*, boost::lockfree::fixed_sized<true>>;
   using Executor = boost::asio::io_context::executor_type;
