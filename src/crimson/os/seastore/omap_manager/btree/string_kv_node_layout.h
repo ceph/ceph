@@ -303,6 +303,11 @@ class StringKVInnerNodeLayout {
   static constexpr L layout{1, 1, 1}; // = L::Partial(1, 1, 1);
   friend class delta_inner_t;
 public:
+  /// Bytes before the first key: capacity() == OMAP_INNER_BLOCK_SIZE - header_size()
+  static constexpr extent_len_t header_size() {
+    return layout.template Offset<2>();
+  }
+
   template <bool is_const>
   class iter_t {
     friend class StringKVInnerNodeLayout;
@@ -944,6 +949,11 @@ class StringKVLeafNodeLayout {
   friend class delta_leaf_t;
 
 public:
+  /// Bytes before the first key: capacity() == len - header_size()
+  static constexpr extent_len_t header_size() {
+    return layout.template Offset<2>();
+  }
+
   template <bool is_const>
   class iter_t {
     friend class StringKVLeafNodeLayout;

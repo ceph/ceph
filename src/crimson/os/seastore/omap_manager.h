@@ -268,6 +268,14 @@ namespace omap_manager {
 
 OMapManagerRef create_omap_manager (
   TransactionManager &trans_manager);
+
+/// Largest key + value, in bytes, that one leaf entry of an OMAP or
+/// XATTR tree accepts. See OMapLeafNode::exceeds_max_kv_limit().
+uint64_t get_max_kv_length();
+
+/// Largest key, in bytes, that an inner node of an OMAP or XATTR tree
+/// accepts. See OMapInnerNode::exceeds_max_kv_limit().
+uint64_t get_max_key_length();
 }
 
 }
