@@ -135,7 +135,6 @@ namespace rgw {
 
     void decode_json(JSONObj* obj) {
       uint32_t version;
-      string type_name;
       string typestr;
       JSONDecoder::decode_json("version", version, obj);
       JSONDecoder::decode_json("type", typestr, obj);

@@ -2816,7 +2816,6 @@ void RGWGetObj::execute(optional_yield y)
   rgw::op_counters::inc(counters, l_rgw_op_get_obj, 1);
 
   std::unique_ptr<rgw::sal::Object::ReadOp> read_op(s->object->get_read_op());
-  std::string etag;
 
   op_ret = get_params(y);
   if (op_ret < 0)
@@ -4738,7 +4737,6 @@ int RGWPutObj::get_data(const off_t fst, const off_t lst, bufferlist& bl)
   boost::optional<RGWGetObj_Decompress> decompress;
   std::unique_ptr<RGWGetObj_Filter> decrypt;
   RGWCompressionInfo cs_info;
-  map<string, bufferlist> attrs;
   int ret = 0;
 
   uint64_t obj_size;
@@ -7189,7 +7187,6 @@ void RGWPutACLs::execute(optional_yield y)
 
   bufferlist bl;
   new_policy.encode(bl);
-  map<string, bufferlist> attrs;
 
   if (!rgw::sal::Object::empty(s->object.get())) {
     s->object->set_atomic(true);
@@ -10196,7 +10193,6 @@ void RGWGetObjLegalHold::execute(optional_yield y)
     op_ret = -ERR_INVALID_REQUEST;
     return;
   }
-  map<string, bufferlist> attrs;
   op_ret = s->object->get_obj_attrs(s->yield, this);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: failed to get obj attrs, obj=" << s->object

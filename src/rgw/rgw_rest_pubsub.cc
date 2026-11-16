@@ -1368,7 +1368,6 @@ void RGWPSCreateNotifOp::execute(optional_yield y) {
     }
     ldpp_dout(this, 20) << "successfully auto-generated unique topic '" << unique_topic_name << "'" << dendl;
     // generate the notification
-    rgw::notify::EventTypeList events;
     op_ret = b.create_notification(this, unique_topic_name, c.events, std::make_optional(c.filter), notif_name, y);
     if (op_ret < 0) {
       ldpp_dout(this, 1) << "failed to auto-generate notification for unique topic '" << unique_topic_name <<

@@ -705,7 +705,6 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
 	    }
 	  } else {
 	    /* a full object checksum, if multipart, because the checksum is CRC family */
-	    auto elt_name = cksum.element_name();
 	    auto armored_cksum = cksum.to_armor();
 
 	    ldpp_dout_fmt(this, 16,
@@ -3868,12 +3867,6 @@ struct RestoreObjectRequest {
 
 int RGWRestoreObj_ObjStore_S3::get_params(optional_yield y)
 { 
-  std::string expected_bucket_owner;
-
-  if (s->info.env->get("x-amz-expected-bucket-owner") != nullptr) {
-    expected_bucket_owner = s->info.env->get("x-amz-expected-bucket-owner");
-  }
-
   const auto max_size = s->cct->_conf->rgw_max_put_param_size;
 
   RGWXMLDecoder::XMLParser parser;
@@ -7549,7 +7542,6 @@ rgw::auth::s3::STSEngine::get_session_token(const DoutPrefixProvider* dpp, const
   }
   error.clear();
 
-  string decrypted_str;
   buffer::list en_input, dec_output;
   en_input = buffer::list::static_from_string(decodedSessionToken);
 
@@ -7660,7 +7652,6 @@ rgw::auth::s3::STSEngine::authenticate(
 
   // Get all the authorization info
   rgw_user user_id;
-  string role_id;
   rgw::auth::RoleApplier::Role r;
   rgw::auth::RoleApplier::TokenAttrs t_attrs;
   if (! token.roleId.empty()) {

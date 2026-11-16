@@ -24,7 +24,6 @@ int RGWLoadGenRequestEnv::sign(const DoutPrefixProvider *dpp, RGWAccessKey& acce
   map<string, string> sub_resources;
 
   string canonical_header;
-  string digest;
 
   rgw_create_s3_canonical_header(dpp,
                                  request_method.c_str(),

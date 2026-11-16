@@ -1699,7 +1699,6 @@ public:
 	<< dendl;
     }
 
-    std::string tier_type = ""; 
     rgw::sal::ZoneGroup& zonegroup = oc.driver->get_zone()->get_zonegroup();
 
     rgw_placement_rule target_placement;
@@ -1942,8 +1941,6 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
 {
   RGWLifecycleConfiguration  config(cct);
   std::unique_ptr<rgw::sal::Bucket> bucket;
-  string no_ns, list_versions;
-  vector<rgw_bucket_dir_entry> objs;
   vector<std::string> result;
   boost::split(result, shard_id, boost::is_any_of(":"));
   string bucket_tenant = result[0];
@@ -2543,7 +2540,6 @@ int RGWLC::process(LCWorker* worker,
   } else {
     /* generate an index-shard sequence unrelated to any other
      * that might be running in parallel */
-    std::string all_buckets{""};
     vector<int> shard_seq = random_sequence(max_objs);
     for (auto index : shard_seq) {
       ret = process(index, max_secs, worker, once);

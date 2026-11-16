@@ -303,7 +303,6 @@ static bool identify_scope(const DoutPrefixProvider *dpp,
 
   get_str_vec(host, ".", vec);
 
-  string ser = service;
   if (service.empty()) {
     service = "s3"; /* default */
   }
@@ -837,7 +836,6 @@ int RGWRESTStreamRWRequest::do_send_prepare(const DoutPrefixProvider *dpp, RGWAc
 
   string new_resource;
   string bucket_name;
-  string old_resource = resource;
   string new_host = host;
 
   if (resource[0] == '/') {
