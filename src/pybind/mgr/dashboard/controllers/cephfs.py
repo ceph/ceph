@@ -1331,34 +1331,25 @@ class CephFSSnapshotSchedule(RESTController):
     def delete_snapshot(self, fs: str, path: str, schedule: str, start: str,
                         retention_policy=None, subvol=None, group=None):
         if retention_policy:
-            # check if there are other snap schedules for this exact same path
-            error_code, out, err = mgr.remote('snap_schedule', 'snap_schedule_list',
-                                              path, False, fs, subvol, group, 'plain')
-
-            if error_code != 0:
-                raise DashboardException(
-                    f'Failed to get snapshot schedule list for path {path}: {err}'
-                )
-            # only remove the retention policies if there no other snap schedules for this path
-            snapshot_schedule_list = out.split('\n')
-            if len(snapshot_schedule_list) <= 1:
-                retention_policies = retention_policy.split('|')
-                for retention in retention_policies:
-                    retention_count = retention.split('-')[0]
-                    retention_spec_or_period = retention.split('-')[1]
-                    error_code, _, err = mgr.remote('snap_schedule',
-                                                    'snap_schedule_retention_rm',
-                                                    path,
-                                                    retention_spec_or_period,
-                                                    retention_count,
-                                                    fs,
-                                                    subvol,
-                                                    group)
-                    if error_code != 0:
-                        raise DashboardException(
-                            f'Failed to remove retention policy for path {path}: {err}'
-                        )
-        # remove snap schedule
+            error_code, out, _err = mgr.remote('snap_schedule', 'snap_schedule_list',
+                                               path, False, fs, subvol, group, 'plain')
+            snapshot_schedule_list = [
+                line for line in (out or '').split('\n') if line.strip()
+            ]
+            if error_code == 0 and len(snapshot_schedule_list) <= 1:
+                for retention in retention_policy.split('|'):
+                    parts = retention.split('-')
+                    if len(parts) != 2 or not parts[0] or not parts[1]:
+                        continue
+                    retention_count, retention_spec_or_period = parts
+                    mgr.remote('snap_schedule',
+                               'snap_schedule_retention_rm',
+                               path,
+                               retention_spec_or_period,
+                               retention_count,
+                               fs,
+                               subvol,
+                               group)
         error_code, _, err = mgr.remote('snap_schedule',
                                         'snap_schedule_rm',
                                         path,
