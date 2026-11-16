@@ -4852,6 +4852,13 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
     ret = obj_op.write_meta(ofs, accounted_size, attrs, rctx, get_trace());
   }
 
+  if (ret == -ETIMEDOUT) {
+    // if the head object write times out, it may still apply later under
+    // the assert_time_range() guard. avoid releasing the lock early so
+    // that other requests can't reacquire it until this write expires
+    serializer.clear_locked();
+  }
+
   return ret;
 }
 
