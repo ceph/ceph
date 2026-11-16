@@ -357,7 +357,6 @@ struct pstat read_pid_stat(int pid) {
 
 void DaemonMetricCollector::get_process_metrics(
     std::vector<std::pair<std::string, int>> daemon_pids) {
-  std::string path("/proc");
   std::stringstream ss;
   for (auto &[daemon_name, pid] : daemon_pids) {
     std::vector<std::string> uptimes = read_proc_stat_file("/proc/uptime");
