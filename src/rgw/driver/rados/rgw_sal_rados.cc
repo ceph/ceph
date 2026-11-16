@@ -4836,7 +4836,8 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
     // prevent the write if it gets delayed past our lock expiration.
     // this comparison is subject to clock skew between the osds, so
     // add a small fudge factor
-    constexpr auto skew = std::chrono::seconds(5); // TODO: config option
+    const auto skew = std::chrono::seconds(
+        cct->_conf.get_val<int64_t>("rgw_mp_lock_max_skew"));
     const auto end = *expires_at - skew;
     const auto dur = serializer.get_duration();
     obj_op.meta.time_range.emplace(end - dur, end);
@@ -5031,6 +5032,22 @@ void MPRadosSerializer::clear_locked()
   locked_until = std::nullopt;
 }
 
+static ceph::real_time decode_lock_reply(const bufferlist& bl,
+                                         const ConfigProxy& config)
+{
+  utime_t expires_at;
+  int ret = ::rados::cls::lock::decode_lock_reply(bl, expires_at);
+  if (ret < 0) {
+    // the osd doesn't support this use of RETURNVEC. initialize the
+    // optional<real_time> to zero, meaning that the lock is held but
+    // without a real expiration time
+    return ceph::real_clock::zero();
+  }
+  const auto skew = std::chrono::seconds(
+      config.get_val<int64_t>("rgw_mp_lock_inject_skew"));
+  return expires_at.to_real_time() + skew;
+}
+
 void MPRadosSerializer::renewal(ceph::timespan dur,
                                 boost::asio::yield_context yield)
 {
@@ -5071,13 +5088,7 @@ void MPRadosSerializer::renewal(ceph::timespan dur,
       return;
     }
 
-    utime_t expires_at;
-    ret = ::rados::cls::lock::decode_lock_reply(bl, expires_at);
-    if (ret < 0) {
-      locked_until = ceph::real_clock::zero();
-    } else {
-      locked_until = expires_at.to_real_time();
-    }
+    locked_until = decode_lock_reply(bl, dpp->get_cct()->_conf);
   }
   ldpp_dout(dpp, 20) << "MPSerializer lock renewal canceled" << dendl;
 }
@@ -5143,21 +5154,12 @@ int MPRadosSerializer::try_lock(const DoutPrefixProvider *dpp, ceph::timespan du
   lock_state.lock_exclusive(&op, &bl);
   int ret = rgw_rados_operate(dpp, ioctx, oid, std::move(op), y, flags);
   if (! ret) {
-    utime_t expires_at;
-    ret = ::rados::cls::lock::decode_lock_reply(bl, expires_at);
-    if (ret < 0) {
-      // the osd doesn't support this use of RETURNVEC. initialize the
-      // optional<real_time> to zero, meaning that the lock is held but
-      // without a real expiration time
-      locked_until = ceph::real_clock::zero();
-    } else {
-      locked_until = expires_at.to_real_time();
-    }
+    ceph_assert(dpp->get_cct());
+    locked_until = decode_lock_reply(bl, dpp->get_cct()->_conf);
 
     start_renewal(dur);
 
     // for renewal testing, inject a delay after lock acquisition
-    ceph_assert(dpp->get_cct());
     const auto inject_delay = dpp->get_cct()->_conf.get_val<int64_t>("rgw_mp_lock_inject_delay");
     if (inject_delay) {
       ldpp_dout(dpp, 10) << "MPSerializer injecting delay after lock..." << dendl;
