@@ -157,3 +157,12 @@ add_ceph_unittest(unittest-crimson-watch-notify
   --memory 256M --smp 1)
 
 add_subdirectory(cbt)
+
+add_executable(unittest-crimson-operation-throttler
+  test_operation_throttler.cc
+  ${PROJECT_SOURCE_DIR}/src/crimson/osd/operation_throttler.cc
+  ${PROJECT_SOURCE_DIR}/src/crimson/osd/scheduler/scheduler.cc
+  ${PROJECT_SOURCE_DIR}/src/crimson/osd/scheduler/mclock_scheduler.cc)
+target_link_libraries(unittest-crimson-operation-throttler
+  crimson::gtest crimson-common Boost::MPL dmclock::dmclock)
+add_ceph_unittest(unittest-crimson-operation-throttler --memory 256M --smp 1)

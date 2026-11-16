@@ -13,6 +13,7 @@
 #include "crimson/common/type_helpers.h"
 #include "crimson/common/smp_helpers.h"
 #include "crimson/osd/osd_operation.h"
+#include "crimson/osd/request_orderer.h"
 #include "osd/osd_types.h"
 
 namespace crimson::osd {
@@ -123,6 +124,10 @@ class PGMap {
   pgs_t pgs;
 
 public:
+  // Keep the lookup and wait paths in one ordering domain. A published PG
+  // must not let a new request overtake a waiter whose continuation is queued.
+  RequestOrderer<spg_t> request_orderer;
+
   using PGCreationBlocker = PGCreationState;
   using PGCreationBlockingEvent = PGCreationBlocker::BlockingEvent;
   /**

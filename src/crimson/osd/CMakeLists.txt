@@ -19,6 +19,7 @@ add_executable(crimson-osd
   object_metadata_helper.cc
   ops_executer.cc
   osd_operation.cc
+  operation_throttler.cc
   osd_operations/ecrep_request.cc
   osd_operations/client_request.cc
   osd_operations/internal_client_request.cc

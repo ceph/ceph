@@ -82,7 +82,8 @@ LogMissingRequest::with_pg_interruptible(
         1,
         static_cast<unsigned>(req->get_priority()),
         0,
-        SchedulerClass::immediate}));
+        SchedulerClass::immediate},
+      scheduler::throttle_level_t::leaf));
 
   co_await interruptor::make_interruptible(
   this->template with_blocking_event<

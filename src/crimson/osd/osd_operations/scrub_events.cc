@@ -155,7 +155,8 @@ ScrubScan::ifut<> ScrubScan::run(PG &pg)
         static_cast<int>(local_conf()->osd_scrub_event_cost),
         static_cast<unsigned>(local_conf()->osd_scrub_priority),
         0,
-        SchedulerClass::background_best_effort}));
+        SchedulerClass::background_best_effort},
+      scheduler::throttle_level_t::leaf));
   auto [objects, _] = co_await pg.backend->list_objects(begin, end);
 
   DEBUGDPP("listed {} objects", pg, objects);
