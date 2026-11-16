@@ -881,7 +881,6 @@ public:
   }
 
   void manage_pool_migrations() {
-    int migration_counter = 0;
     int initial_pg_num = get_pool_pg_num(pool_name);
     bool needs_wait = false;
     const bool source_is_erasure = is_pool_erasure(pool_name);
@@ -930,7 +929,6 @@ public:
           ceph_abort();
         }
         sleep_duration = migration_interval;
-        migration_counter++;
         needs_wait = false;
         cout_prefix() << __func__ << ": migration completed, sleeping for "
               << std::to_string(sleep_duration) << " seconds" << std::endl;
