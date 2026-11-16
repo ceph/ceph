@@ -448,7 +448,6 @@ TEST_P(TestClsRgw, index_suggest)
 
   for (int i = 0; i < num_objs; i += 2) { 
     cls_rgw_obj_key obj = str_int("obj", i);
-    string tag = str_int("tag-rm", i);
     string loc = str_int("loc", i);
 
     rgw_bucket_dir_entry dirent;
@@ -492,7 +491,6 @@ static void list_entries(librados::IoCtx& ioctx,
                          const cls_rgw_obj_key& start_key = {},
                          const std::string& delimiter = "")
 {
-  std::map<int, std::string> oids = { {0, oid} };
   string empty_prefix;
   constexpr bool list_versions = true;
   librados::ObjectReadOperation op;
@@ -1430,7 +1428,6 @@ TEST_P(TestClsRgw, usage_basic)
 
 TEST_P(TestClsRgw, usage_clear_no_obj)
 {
-  string user="user1";
   string oid="usage.10";
   librados::ObjectWriteOperation op;
   cls_rgw_usage_log_clear(op);
