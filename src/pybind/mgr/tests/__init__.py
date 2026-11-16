@@ -213,10 +213,24 @@ if 'UNITTEST' in os.environ:
         class MockObjectNotFound(Exception):
             pass
 
+        # Real Exception subclasses so `except cephfs.Error` works in unit
+        # tests (a plain Mock attribute is not a BaseException subclass).
         class MockCephFSError(Exception):
-            pass
+            def __init__(self, errorcode=-1, message=''):
+                super(MockCephFSError, self).__init__(message)
+                self.errno = errorcode
+
+            def __str__(self):
+                msg = super(MockCephFSError, self).__str__()
+                return '{0} [Errno {1}]'.format(msg, self.errno)
 
         class MockCephFSOSError(MockCephFSError):
+            pass
+
+        class MockCephFSWouldBlock(MockCephFSOSError):
+            pass
+
+        class MockCephFSPermissionError(MockCephFSOSError):
             pass
 
         class MockCephFSObjectNotFound(MockCephFSOSError):
@@ -231,9 +245,11 @@ if 'UNITTEST' in os.environ:
                 OSError=MockRadosError,
                 ObjectNotFound=MockObjectNotFound),
             'rbd': mock.Mock(),
-            'cephfs': mock.Mock(
+            'cephfs': mock.MagicMock(
                 Error=MockCephFSError,
                 OSError=MockCephFSOSError,
+                WouldBlock=MockCephFSWouldBlock,
+                PermissionError=MockCephFSPermissionError,
                 ObjectNotFound=MockCephFSObjectNotFound,
                 NoData=MockCephFSNoData),
         })
