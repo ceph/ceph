@@ -93,6 +93,9 @@ class SubvolumeV2(SubvolumeV1):
                 raise VolumeException(-e.args[0], e.args[1])
 
     def mark_subvolume(self):
+        # never mark the group/volume directory or anything outside the group
+        self._validate_path_within_group(self.base_path)
+
         # set subvolume attr, on subvolume root, marking it as a CephFS subvolume
         # subvolume root is where snapshots would be taken, and hence is the base_path for v2 subvolumes
         try:
