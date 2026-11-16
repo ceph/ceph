@@ -1937,12 +1937,11 @@ TEST_F(TestMgr, DISABLED_MgrClientShutdownCompletesPendingCommands) {
 
 // Regression for https://tracker.ceph.com/issues/83017.
 //
-// _send_report() clears report_callback without cancelling its scheduled timer
-// event. A stats_period 0->nonzero->0->nonzero sequence therefore runs
-// _send_stats() while the first report event is still pending, orphaning it in
-// the timer instead of cancelling it. Re-enable once _send_stats() cancels the
-// previous report event before scheduling the next.
-TEST_F(TestMgr, DISABLED_MgrClientSendStatsCancelsPreviousReportEvent) {
+// A stats_period 0->nonzero->0->nonzero sequence used to run _send_stats()
+// while the first report event was still pending, orphaning it in the timer
+// as a second reporting loop. handle_mgr_configure() now cancels that event
+// when the period drops to 0.
+TEST_F(TestMgr, MgrClientSendStatsCancelsPreviousReportEvent) {
   MonMap monmap;
   MgrClientTestHelper client(cct.get(), messenger.get(), &monmap);
   client.init();
