@@ -1511,7 +1511,7 @@ public:
   }
 
   int unlink_list_entry(rgw_bucket_dir_header& header) {
-    string list_idx, list_sub_ver;
+    string list_idx;
     /* this instance has a previous list entry, remove that entry */
     get_list_index_key(instance_entry, &list_idx);
     CLS_LOG(20, "unlink_list_entry() list_idx=%s", escape_str(list_idx).c_str());
@@ -1814,8 +1814,6 @@ static int convert_plain_entry_to_versioned(cls_method_context_t hctx,
 static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(10, "entered %s", __func__);
-  string olh_data_idx;
-  string instance_idx;
 
   // decode request
   rgw_cls_link_olh_op op;
@@ -2132,8 +2130,6 @@ static int rgw_bucket_refresh_instance(cls_method_context_t hctx, bufferlist *in
 static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(10, "entered %s", __func__);
-  string olh_data_idx;
-  string instance_idx;
 
   // decode request
   rgw_cls_unlink_instance_op op;
@@ -2484,7 +2480,7 @@ static int rgw_bucket_clear_olh(cls_method_context_t hctx, bufferlist *in, buffe
 
   /* read olh entry */
   rgw_bucket_olh_entry olh_data_entry;
-  string olh_data_key, olh_sub_ver;
+  string olh_data_key;
   encode_olh_data_key(op.key, &olh_data_key);
   int ret = read_index_entry(hctx, olh_data_key, &olh_data_entry);
   if (ret < 0 && ret != -ENOENT) {
@@ -3845,7 +3841,7 @@ static int bi_log_iterate_entries(cls_method_context_t hctx,
   CLS_LOG(10, "bi_log_iterate_range");
 
   map<string, bufferlist> keys;
-  string filter_prefix, end_key;
+  string end_key;
   uint32_t i = 0;
   string key;
 
@@ -4744,8 +4740,7 @@ static int gc_iterate_entries(cls_method_context_t hctx,
   CLS_LOG(10, "gc_iterate_entries");
 
   map<string, bufferlist> keys;
-  string filter_prefix, end_key;
-  string key;
+  string end_key;
 
   if (truncated)
     *truncated = false;
