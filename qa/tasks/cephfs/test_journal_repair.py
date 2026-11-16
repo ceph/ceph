@@ -208,6 +208,107 @@ class TestJournalRepair(CephFSTestCase):
         # Validate that the journal flush has trimmed the old journal objects
         self.assertGreater(len(journal_objs_before_reset), len(journal_objs_after_reset))
 
+    def test_cephfs_journal_tool_recover_dentries_with_huge_journal(self):
+        """
+        That after having a pile of unflushed dentries and mds crashed,
+        invocation of `cephfs-journal-tool recover_dentries summary` can
+        flush dentries into RADOS without getting consuming too much RSS
+        or getting OOM killed.
+
+        NOTE: this test runs through 10M iterations each with 6 ops, totalling
+        to 60K ops. Please run this with caution.
+        """
+
+        # Register cleanup of the config_set so that a partial run can still
+        # reset the state
+        self.addCleanup(self.config_rm, 'mds', 'debug_mds')
+        self.addCleanup(self.config_rm, 'mds', 'debug_ms')
+        self.addCleanup(self.config_rm, 'mds', 'mds_cache_memory_limit')
+        self.addCleanup(self.config_rm, 'mds', 'mds_log_max_segments')
+        self.addCleanup(self.config_rm, 'mds', 'mds_log_warn_factor')
+        self.addCleanup(self.config_rm, 'mds', 'mds_log_trim_upkeep_interval')
+        self.addCleanup(self.config_rm, 'mds', 'mds_verify_scatter')
+        self.addCleanup(self.config_rm, 'mds', 'mds_debug_scatterstat')
+
+        # debugging can be too slow given how long the file names are being
+        # used in the test case therefore turn off the mds
+        self.config_set('mds', 'debug_mds', '0')
+        self.config_set('mds', 'debug_ms', '0')
+
+        # We do not want any unintended failover
+        self.fs.set_joinable(False)
+
+        # Set the MDS cache limit to 32GiB
+        self.config_set('mds', 'mds_cache_memory_limit', '34359738368')
+
+        # 100K segments limit is more than enough for 60M metadata ops
+        # with mds_log_events_per_segment being 1024 (default)
+        self.config_set('mds', 'mds_log_max_segments', '100000')
+
+        # eases generating heath warnings
+        self.config_set('mds', 'mds_log_warn_factor', '1')
+
+        # Sleep trim() for a day
+        self.config_set('mds', 'mds_log_trim_upkeep_interval', '86400')
+
+        # Clutter the journal
+        self.mount_a.run_shell_payload(
+            """
+set -u
+rm -rf w*
+A200=$(printf 'A%.0s' {1..200})
+X400=$(printf 'X%.0s' {1..400})
+export A200 X400
+for w in $(seq 0 19); do
+(
+    d="w${w}"
+    mkdir -p "$d/a" "$d/b" "$d/c"
+    for ((i = 0; i < 10000; i++)); do
+        touch "$d/a/${A200}_f${i}"
+        ln "$d/a/${A200}_f${i}" "$d/b/${A200}_l${i}"
+        mv "$d/b/${A200}_l${i}" "$d/c/${A200}_r${i}"
+        ln "$d/a/${A200}_f${i}" "$d/c/${A200}_h${i}"
+        mv "$d/a/${A200}_f${i}" "$d/b/${A200}_m${i}"
+        setfattr -n user.chaos -v "$X400" "$d/b/${A200}_m${i}"
+    done
+) &
+done
+wait
+""",timeout=43200)
+        
+        # kill the mds
+        self.fs.rank_fail(rank=0)
+
+        # Try to access files from the client
+        blocked_ls = self.mount_a.run_shell(["ls", "w0/a"], wait=False)
+        log.info("Sleeping to check ls is blocked...")
+        time.sleep(60)
+        self.assertFalse(blocked_ls.finished)
+        self.mount_a.kill()
+        self.mount_a.kill_cleanup()
+
+        # flush dentries into RADOS
+        self.fs.fail()
+        result = self.fs.journal_tool(["event", "recover_dentries", "summary",
+                                       "--max-rss", "524288000"], 0,
+                                       quiet=True)
+        log.info(f"recover_dentries result:\n{result}")
+
+        # test dentries by truncating the journal
+        self.fs.journal_tool(['journal', 'reset', '--yes-i-really-really-mean-it'], 0)
+        
+        # Dir stats maybe inconsistent post journal reset
+        self.config_set('mds', 'mds_verify_scatter', 'false')
+        self.config_set('mds', 'mds_debug_scatterstat', 'false')
+
+        self.fs.set_joinable(True)
+        status = self.fs.wait_for_daemons()
+        self.assertEqual(len(list(self.fs.get_ranks(status=status))), 1)
+        self.mount_a.mount_wait()
+        # checking one of the dirs should be enough
+        self.mount_a.run_shell(["ls", "w0"], wait=True)
+
+
     @for_teuthology # 308s
     def test_reset(self):
         """
