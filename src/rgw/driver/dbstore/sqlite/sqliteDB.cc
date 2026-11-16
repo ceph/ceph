@@ -173,6 +173,14 @@ int SQLiteDB::InitPrepareParams(const DoutPrefixProvider *dpp,
   if (params->group_users_table.empty()) {
     params->group_users_table = getGroupUsersTable();
   }
+  /* The access-keys join table.  Missed when the table was added, so
+   * every statement naming it formatted against `''` -- InsertAccessKey,
+   * RemoveAccessKey, RemoveUserAccessKeys, and the GetUser variant that
+   * looks a user up *by* access key.  Prepared statements are cached,
+   * so one lookup poisoned the rest of the process. */
+  if (params->access_keys_table.empty()) {
+    params->access_keys_table = getAccessKeysTable();
+  }
   if (params->topic_table.empty()) {
     params->topic_table = getTopicTable();
   }
@@ -200,6 +208,7 @@ int SQLiteDB::InitPrepareParams(const DoutPrefixProvider *dpp,
   p_params.oidc_table = params->oidc_table;
   p_params.group_table = params->group_table;
   p_params.group_users_table = params->group_users_table;
+  p_params.access_keys_table = params->access_keys_table;
   p_params.topic_table = params->topic_table;
   p_params.bucket_topic_mapping_table = params->bucket_topic_mapping_table;
   p_params.user_table = params->user_table;
@@ -1085,6 +1094,11 @@ int SQLiteDB::createTables(const DoutPrefixProvider *dpp)
   params.oidc_table = getOIDCTable();
   params.group_table = getGroupTable();
   params.group_users_table = getGroupUsersTable();
+  /* Before `createAccessKeysTable` below, which formats this name
+   * into its DDL.  Unset, the table was created as `''` -- so the
+   * join table the access-key lookup depends on did not exist under
+   * the name every query for it uses. */
+  params.access_keys_table = getAccessKeysTable();
   params.user_table = getUserTable();
   params.bucket_table = getBucketTable();
   params.quota_table = getQuotaTable();
@@ -3186,16 +3200,31 @@ int SQLInsertUser::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.user_ver_tag, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.user.user_version.tag.c_str(), sdb);
 
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.expected_ver, sdb);
+  SQL_BIND_INT(dpp, stmt, index, params->op.user.expected_ver, sdb);
+
 out:
   return rc;
 }
 
+/* -ECANCELED when the statement changed no row:  the user exists with a
+ * version other than the one the writer read.  The connection is shared
+ * by every thread (SQLITE_OPEN_FULLMUTEX), so sqlite3_changes() is read
+ * under the connection's own mutex, held across the step, or it could
+ * report another thread's statement;  the mutex is recursive in that
+ * mode, so the step inside takes it again. */
 int SQLInsertUser::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
 {
   int ret = -1;
+  sqlite3_mutex* conn = sqlite3_db_mutex(*sdb);
 
+  sqlite3_mutex_enter(conn);
   SQL_EXECUTE(dpp, params, stmt, NULL);
+  if (sqlite3_changes(*sdb) == 0) {
+    ret = -ECANCELED;
+  }
 out:
+  sqlite3_mutex_leave(conn);
   return ret;
 }
 

@@ -69,6 +69,7 @@ set(librgw_common_srcs
   rgw_env.cc
   rgw_es_query.cc
   rgw_formats.cc
+  rgw_hint_registry.cc
   rgw_http_client.cc
   rgw_keystone.cc
   rgw_keystone_scope.cc
@@ -306,11 +307,30 @@ list(APPEND librgw_posix_srcs
   driver/posix/posixDB.cc
   driver/posix/notify.cpp
   driver/posix/userdb_watcher.cc
+  driver/posix/fs_notification.cc
 )
 list(APPEND librgw_nsfs_srcs
   driver/nsfs/rgw_sal_nsfs.cc
   driver/posix/posixDB.cc
+  driver/posix/fs_notification.cc
   driver/nsfs/fs_strategy.cc
+  driver/nsfs/mpu_strategy.cc
+  driver/nsfs/xattr_strategy.cc
+  driver/nsfs/bucket_state_strategy.cc
+  driver/nsfs/adopt/noobaa_config_store.cc
+  driver/nsfs/adopt/noobaa_schema.cc
+  driver/nsfs/adopt/noobaa_master_keys.cc
+  driver/nsfs/adopt/noobaa_import_plan.cc
+  driver/nsfs/adopt/noobaa_import.cc
+  driver/nsfs/adopt/noobaa_bucket_import.cc
+  driver/nsfs/adopt/noobaa_notification_import.cc
+  driver/nsfs/adopt/adoption_queue.cc
+  driver/nsfs/adopt/adoption_report.cc
+  driver/nsfs/identity_db.cc
+  driver/nsfs/name_resolve.cc
+  driver/nsfs/impersonate.cc
+  driver/nsfs/personality.cc
+  driver/nsfs/path_strategy.cc
   driver/posix/lmdb-safe.cc
   driver/posix/notify.cpp
   driver/posix/userdb_watcher.cc)
@@ -702,6 +722,7 @@ set(rgw_a_srcs
   rgw_process.cc
   rgw_realm_reloader.cc
   rgw_rest_config.cc
+  rgw_rest_features.cc
   rgw_rest_info.cc
   rgw_rest_metadata.cc
   rgw_rest_ratelimit.cc

@@ -1,0 +1,676 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
+
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright contributors to the Ceph project
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software
+ * Foundation. See file COPYING.
+ *
+ */
+
+#include <set>
+#include <string_view>
+#include <fmt/format.h>
+
+#include "rapidjson/document.h"
+#include "rapidjson/stringbuffer.h"
+#include "rapidjson/writer.h"
+
+#include "common/ceph_json.h"
+#include "common/dout_fmt.h"
+#include "common/errno.h"
+
+#include "rgw_bucket_logging.h"
+#include "rgw_common.h"
+#include "rgw_object_ownership.h"
+
+#include "../rgw_sal_nsfs.h"
+#include "noobaa_bucket_import.h"
+#include "noobaa_notification_import.h"
+
+#define dout_subsys ceph_subsys_rgw
+
+namespace rgw { namespace sal { namespace nsfs {
+
+std::optional<std::string>
+IdentityMapping::resolve(const std::string& principal) const
+{
+  /* NooBaa's ARN forms (`access_policy_utils.js`, create_arn_for_root
+   * and create_arn_for_user), whose account is always an `_id`.  An
+   * account's name there is unresolved, as is any other ARN. */
+  static constexpr std::string_view iam_prefix = "arn:aws:iam::";
+  if (principal.starts_with("arn:")) {
+    if (!principal.starts_with(iam_prefix)) {
+      return std::nullopt;
+    }
+    const std::string_view rest =
+      std::string_view{principal}.substr(iam_prefix.size());
+    const auto colon = rest.find(':');
+    if (colon == rest.npos) {
+      return std::nullopt;
+    }
+    auto a = account_by_noobaa_id.find(std::string{rest.substr(0, colon)});
+    if (a == account_by_noobaa_id.end()) {
+      return std::nullopt;
+    }
+    const std::string_view resource = rest.substr(colon + 1);
+    if (resource == "root") {
+      return fmt::format("arn:aws:iam::{}:root", a->second);
+    }
+    if (resource.starts_with("user/")) {
+      if (auto u = user_arn_by_account_and_path_name.find(
+	    {a->second, std::string{resource.substr(4)}});
+	  u != user_arn_by_account_and_path_name.end()) {
+	return u->second;
+      }
+    }
+    return std::nullopt;
+  }
+
+  /* Id first.  A name and an id are both bare strings and cannot be
+   * told apart syntactically -- an account may legally be *named*
+   * twenty-four hex characters -- so the order is the whole of the
+   * disambiguation, and it mirrors NooBaa's. */
+  if (auto i = user_arn_by_noobaa_id.find(principal);
+      i != user_arn_by_noobaa_id.end()) {
+    return i->second;
+  }
+  if (auto i = account_by_noobaa_id.find(principal);
+      i != account_by_noobaa_id.end()) {
+    return i->second;
+  }
+
+  /* Then an account's name, never a user's:  a user's name is not
+   * unique, and NooBaa matches a bare name only for an account. */
+  if (auto n = noobaa_id_by_account_name.find(principal);
+      n != noobaa_id_by_account_name.end()) {
+    if (auto i = account_by_noobaa_id.find(n->second);
+	i != account_by_noobaa_id.end()) {
+      return i->second;
+    }
+  }
+  return std::nullopt;
+}
+
+bool IdentityMapping::names_only_users(const std::string& principal) const
+{
+  return !resolve(principal) && user_arns_by_name.contains(principal);
+}
+
+bool IdentityMapping::names_unwritten(const std::string& principal) const
+{
+  return planned && !resolve(principal) && planned->resolve(principal);
+}
+
+std::string describe_unresolved(const IdentityMapping& mapping,
+				const std::vector<std::string>& unresolved)
+{
+  std::string out;
+  for (const auto& u : unresolved) {
+    out += (out.empty() ? "" : ", ") + u;
+    if (mapping.names_only_users(u)) {
+      out += " (an IAM user's name;  a name resolves only to an account)";
+    }
+  }
+  return out;
+}
+
+IdentityMapping mapping_from(const ImportPlan& plan)
+{
+  IdentityMapping m;
+  for (const auto& e : plan.entries) {
+    if (e.iam_user) {
+      /* RGW matches a user principal on its path, then
+       * `display_name`, which the import set to NooBaa's `iam_path`
+       * and name. */
+      const std::string path_name = fmt::format(
+	"{}{}", e.iam_path.empty() ? std::string_view("/") : std::string_view(e.iam_path),
+	e.display_name);
+      const std::string arn =
+	fmt::format("arn:aws:iam::{}:user{}", e.account_id, path_name);
+      m.user_arn_by_noobaa_id[e.noobaa_id] = arn;
+      m.user_arn_by_account_and_path_name[{e.account_id, path_name}] = arn;
+      if (!e.noobaa_name.empty()) {
+	m.user_arns_by_name.emplace(e.noobaa_name, arn);
+      }
+    } else {
+      m.account_by_noobaa_id[e.noobaa_id] = e.account_id;
+      if (!e.noobaa_name.empty()) {
+	m.noobaa_id_by_account_name[e.noobaa_name] = e.noobaa_id;
+      }
+    }
+  }
+  return m;
+}
+
+namespace {
+
+/* Rewrite one principal value in place, or record it as unresolved.
+ * `where` is the statement's "<Effect>, Principal|NotPrincipal". */
+void rewrite_one(rapidjson::Value& v, rapidjson::Document& d,
+		 const IdentityMapping& mapping,
+		 std::vector<std::string>& unresolved,
+		 std::vector<std::string>* also_users,
+		 std::vector<std::string>* arns_matched,
+		 const std::string& where)
+{
+  if (!v.IsString()) {
+    return;
+  }
+  const std::string before{v.GetString(), v.GetStringLength()};
+  /* `*` is everyone and means the same thing on both sides. */
+  if (before == "*") {
+    return;
+  }
+  auto after = mapping.resolve(before);
+  if (!after) {
+    unresolved.push_back(before);
+    return;
+  }
+  /* resolved, and not by an id, so by an account's name */
+  if (also_users &&
+      !mapping.account_by_noobaa_id.contains(before) &&
+      !mapping.user_arn_by_noobaa_id.contains(before)) {
+    auto [b, e] = mapping.user_arns_by_name.equal_range(before);
+    if (b != e) {
+      std::string users;
+      for (auto u = b; u != e; ++u) {
+	users += (users.empty() ? "" : ", ") + u->second;
+      }
+      also_users->push_back(before + " (" + users + ")");
+    }
+  }
+  if (arns_matched && before.starts_with("arn:")) {
+    arns_matched->push_back(before + " as " + *after + " (" + where + ")");
+  }
+  v.SetString(after->c_str(),
+	      static_cast<rapidjson::SizeType>(after->size()),
+	      d.GetAllocator());
+}
+
+/* The `Principal` (or `NotPrincipal`) of one statement.
+ *
+ * NooBaa's shape is AWS's:  a string, an array of strings, or an object
+ * whose `AWS` member is either.  Only the AWS member names an identity we
+ * could have imported;  `Service` and `Federated` are AWS's own
+ * namespaces and are left exactly as they are. */
+void rewrite_principal(rapidjson::Value& principal, rapidjson::Document& d,
+		       const IdentityMapping& mapping,
+		       std::vector<std::string>& unresolved,
+		       std::vector<std::string>* also_users,
+		       std::vector<std::string>* arns_matched,
+		       const std::string& where)
+{
+  if (principal.IsString()) {
+    rewrite_one(principal, d, mapping, unresolved, also_users, arns_matched,
+		where);
+    return;
+  }
+  if (principal.IsArray()) {
+    for (auto& v : principal.GetArray()) {
+      rewrite_one(v, d, mapping, unresolved, also_users, arns_matched, where);
+    }
+    return;
+  }
+  if (!principal.IsObject()) {
+    return;
+  }
+  for (const char* arm : {"AWS", "aws"}) {
+    auto i = principal.FindMember(arm);
+    if (i == principal.MemberEnd()) {
+      continue;
+    }
+    if (i->value.IsString()) {
+      rewrite_one(i->value, d, mapping, unresolved, also_users, arns_matched,
+		  where);
+    } else if (i->value.IsArray()) {
+      for (auto& v : i->value.GetArray()) {
+	rewrite_one(v, d, mapping, unresolved, also_users, arns_matched, where);
+      }
+    }
+  }
+}
+
+} // namespace
+
+int rewrite_policy_principals(const DoutPrefixProvider* dpp,
+			      const std::string& doc,
+			      const IdentityMapping& mapping,
+			      std::string& out,
+			      std::vector<std::string>& unresolved,
+			      std::vector<std::string>* also_users,
+			      std::vector<std::string>* arns_matched)
+{
+  rapidjson::Document d;
+  d.Parse(doc.c_str(), doc.size());
+  if (d.HasParseError() || !d.IsObject()) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: a bucket policy will not parse");
+    return -EBADMSG;
+  }
+
+  auto stmts = d.FindMember("Statement");
+  if (stmts == d.MemberEnd()) {
+    /* a policy with no statements grants nothing and needs no
+     * rewriting;  carried through unchanged */
+    out = doc;
+    return 0;
+  }
+
+  auto do_statement = [&](rapidjson::Value& s) {
+    if (!s.IsObject()) {
+      return;
+    }
+    std::string effect;
+    if (auto e = s.FindMember("Effect");
+	e != s.MemberEnd() && e->value.IsString()) {
+      effect.assign(e->value.GetString(), e->value.GetStringLength());
+    }
+    for (const char* key : {"Principal", "NotPrincipal"}) {
+      auto p = s.FindMember(key);
+      if (p != s.MemberEnd()) {
+	rewrite_principal(p->value, d, mapping, unresolved, also_users,
+			  arns_matched, effect + ", " + key);
+      }
+    }
+  };
+
+  if (stmts->value.IsArray()) {
+    for (auto& s : stmts->value.GetArray()) {
+      do_statement(s);
+    }
+  } else {
+    do_statement(stmts->value);
+  }
+
+  if (!unresolved.empty()) {
+    /* Not written.  A principal that resolves to nothing is a grant or
+     * a denial that will not take effect. */
+    return -ENOENT;
+  }
+
+  rapidjson::StringBuffer buf;
+  rapidjson::Writer<rapidjson::StringBuffer> w(buf);
+  if (!d.Accept(w)) {
+    return -EIO;
+  }
+  out.assign(buf.GetString(), buf.GetSize());
+  return 0;
+}
+
+namespace {
+
+
+} // namespace
+
+int import_one_bucket(const DoutPrefixProvider* dpp, optional_yield y,
+		      NSFSDriver* driver,
+		      const std::string& config_root,
+		      const std::string& bucket_name,
+		      const NooBaaStoreContents& contents,
+		      const IdentityMapping& mapping,
+		      BucketImportResult& result,
+		      bool preview)
+{
+  /* One record, by name.  Everything else is the same operation, so
+   * this narrows the input rather than taking a second path through
+   * it -- a second path is a second thing to keep in step. */
+  NooBaaStoreContents one;
+  one.settings = contents.settings;
+  one.identities = contents.identities;
+  one.connections = contents.connections;
+  for (const auto& b : contents.buckets) {
+    if (b.name == bucket_name) {
+      one.buckets.push_back(b);
+      break;
+    }
+  }
+  if (one.buckets.empty()) {
+    ldpp_dout_fmt(dpp, 4, "nsfs: no NooBaa record for bucket {}", bucket_name);
+    return -ENOENT;
+  }
+  return import_bucket_state(dpp, y, driver, config_root, one, mapping,
+			     result, preview);
+}
+
+int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
+			NSFSDriver* driver,
+			const std::string& config_root,
+			const NooBaaStoreContents& contents,
+			const IdentityMapping& mapping,
+			BucketImportResult& result,
+			bool preview)
+{
+  auto* nb_state = driver->get_noobaa_bucket_state_strategy();
+  if (!nb_state) {
+    /* no configured store, so there is nothing to read records from */
+    return -ENOENT;
+  }
+
+  for (const auto& rec : contents.buckets) {
+    RGWBucketInfo info;
+    Attrs attrs;
+
+    /* The name, which `load()` does not set:  it takes the name as a
+     * parameter and fills the state, so an info it filled still has an
+     * empty `bucket.name`.  Without this the bucket handle below names
+     * nothing and its directory does not exist. */
+    info.bucket.name = rec.name;
+
+    /* NooBaa's record, through the reader that already translates most of
+     * it.  `-1` for the dir_fd:  this reader finds
+     * `<config_root>/buckets/<name>.json` from the name alone. */
+    int ret = nb_state->load(dpp, -1, rec.name, attrs, info);
+    if (ret < 0) {
+      result.failures.push_back(rec.name + ": " + cpp_strerror(-ret));
+      continue;
+    }
+
+    /* Everything below needs the record again, for the fields the
+     * reader deliberately leaves alone. */
+    JSONParser p;
+    std::string doc;
+    const std::string path =
+      fmt::format("{}/buckets/{}.json", config_root, rec.name);
+    if ((read_record_file(dpp, path, doc) < 0) ||
+	!p.parse(doc.data(), doc.size())) {
+      result.failures.push_back(rec.name + ": could not re-read " + path);
+      continue;
+    }
+
+    /* The owner.  An id in NooBaa's store, which is why the strategy
+     * reads it and does not apply it. */
+    std::string owner_account;
+    std::string account;
+    try {
+      JSONDecoder::decode_json("owner_account", owner_account, &p);
+    } catch (const JSONDecoder::err&) {
+      owner_account.clear();
+    }
+    if (!owner_account.empty()) {
+      auto owner = mapping.account_by_noobaa_id.find(owner_account);
+      if ((owner == mapping.account_by_noobaa_id.end()) && mapping.planned &&
+	  mapping.planned->account_by_noobaa_id.contains(owner_account)) {
+	result.blocked.push_back(
+	    rec.name + ": its owner_account " + owner_account +
+	    " did not import");
+	continue;
+      }
+      if (owner == mapping.account_by_noobaa_id.end()) {
+	result.failures.push_back(
+	    rec.name + ": owner_account " + owner_account +
+	    " is not an account this import wrote");
+	continue;
+      }
+      info.owner = rgw_owner{rgw_account_id{owner->second}};
+      account = owner->second;
+    }
+
+    /* The policy, with its principals rewritten.  The strategy stored
+     * it verbatim;  what it holds names identities the way *they* name
+     * them. */
+    if (auto i = attrs.find(RGW_ATTR_IAM_POLICY); i != attrs.end()) {
+      std::vector<std::string> unresolved, arns;
+      std::string rewritten;
+      ret = rewrite_policy_principals(dpp, i->second.to_str(), mapping,
+				      rewritten, unresolved, nullptr, &arns);
+      /* A principal that names an identity yet to import is not written
+       * as nothing:  once the identity imports it names someone, and a
+       * denial written without it would not apply to it. */
+      std::string unwritten;
+      for (const auto& u : unresolved) {
+	if (mapping.names_unwritten(u)) {
+	  unwritten += (unwritten.empty() ? "" : ", ") + u;
+	}
+      }
+      if (!unwritten.empty()) {
+	result.blocked.push_back(
+	    rec.name + ": its policy names " + unwritten + ", which did "
+	    "not import");
+	continue;
+      }
+      if (ret == 0) {
+	for (const auto& a : arns) {
+	  result.arns_matched.push_back(rec.name + ": " + a);
+	}
+	bufferlist bl;
+	bl.append(rewritten);
+	i->second = std::move(bl);
+	++result.policies_rewritten;
+      } else {
+	/* The bucket's other state is correct and worth having;  a
+	 * policy pointing at nothing is not.  Dropped from the write
+	 * and reported (§6.1a). */
+	attrs.erase(i);
+	std::string why = rec.name + ": policy not written, ";
+	if (unresolved.empty()) {
+	  why += "it does not parse";
+	} else {
+	  why += "these principals resolve to nothing: " +
+	    describe_unresolved(mapping, unresolved);
+	}
+	result.policies_refused.push_back(std::move(why));
+      }
+    }
+
+    /* `logging`, translated by the reader above;  counted here for
+     * the report. */
+    if (attrs.count(RGW_ATTR_BUCKET_LOGGING)) {
+      ++result.logging_carried;
+    }
+
+    /* `notifications`:  each connection a notification names becomes a
+     * topic of the bucket's account, written now, and the notifications
+     * the bucket's attribute, written with the rest below (I10). */
+    NotificationImportResult nr;
+    if (JSONObj* n = p.find_obj("notifications")) {
+      ret = import_bucket_notifications(dpp, y, driver, rec.name,
+					n->get_data(), contents.connections,
+					account, attrs, nr, preview);
+      if (ret < 0) {
+	result.failures.push_back(
+	    rec.name + ": writing its topics: " + cpp_strerror(-ret));
+	continue;
+      }
+      result.topics_written += nr.topics_written;
+      result.notifications_carried += nr.notifications_carried;
+      result.notifications_reported.insert(result.notifications_reported.end(),
+					   nr.reported.begin(), nr.reported.end());
+      result.notifications_need_operator.insert(
+	  result.notifications_need_operator.end(),
+	  nr.needs_operator.begin(), nr.needs_operator.end());
+    }
+
+    /* BucketOwnerEnforced (DECISIONS.md 2026-10-11).  NooBaa records no
+     * per-object owner and gives every object its bucket's
+     * `owner_account`;  this is RGW's name for that rule, so an object
+     * RGW writes into the adopted bucket is the bucket owner's too, and
+     * object ACLs stop applying, as they never applied in NooBaa. */
+    {
+      rgw::s3::OwnershipControls oc;
+      oc.object_ownership = rgw::s3::ObjectOwnership::BucketOwnerEnforced;
+      bufferlist bl;
+      encode(oc, bl);
+      attrs[RGW_ATTR_OWNERSHIP_CONTROLS] = std::move(bl);
+    }
+
+    /* `path`, which places the bucket (P6).  NooBaa's schema requires
+     * it, and a bucket with none has nowhere to be, so it is rejected
+     * before anything is written. */
+    std::string recorded;
+    try {
+      JSONDecoder::decode_json("path", recorded, &p);
+    } catch (const JSONDecoder::err&) {
+      recorded.clear();
+    }
+    if (recorded.empty()) {
+      result.failures.push_back(rec.name + ": their record names no path");
+      continue;
+    }
+    if (!nsfs::placement_path_is_acceptable(recorded)) {
+      result.failures.push_back(
+	  rec.name + ": their record's path " + recorded +
+	  " is not an absolute canonical path");
+      continue;
+    }
+    /* A bucket nsfs already holds under this name, somewhere else, is a
+     * different bucket:  creation rejects a name NooBaa's store holds,
+     * so this is a record that appeared after the bucket did.  Rejected,
+     * not merged into it. */
+    {
+      nsfs::BucketPlacement row;
+      if ((driver->get_identity_db()->get_bucket_placement(
+	     dpp, rec.name, "", row) == 0) &&
+	  (row.path != recorded)) {
+	result.failures.push_back(
+	    rec.name + ": nsfs already has a bucket of this name, at " +
+	    row.path + ";  their record says " + recorded);
+	continue;
+      }
+    }
+    if (preview) {
+      ++result.buckets_written;
+      continue;
+    }
+    /* And write it.
+     *
+     * `merge_and_store_attrs()` is the path every bucket mutation
+     * uses:  it takes the driver's mutation guard, merges the map, and
+     * calls `write_attrs()`, which encodes `info` into the
+     * `bucket_info` attribute and writes the map beside it.  So
+     * setting `info` on the bucket first is what carries the
+     * versioning, the creation date and the owner across;  the map
+     * carries everything else.
+     *
+     * `load_bucket()` first, because the bucket has to be open before
+     * anything can be written to it -- the handle from `get_bucket()`
+     * is a name and an info, not an opened directory.  A bucket
+     * NooBaa's tree holds and this cannot open is a failure worth naming
+     * rather than working around. */
+    std::unique_ptr<Bucket> bucket = driver->get_bucket(info);
+    if (!bucket) {
+      result.failures.push_back(rec.name + ": no bucket handle");
+      continue;
+    }
+    ret = bucket->load_bucket(dpp, y);
+    if (ret < 0) {
+      result.failures.push_back(
+	  rec.name + ": load_bucket: " + cpp_strerror(-ret));
+      continue;
+    }
+    /* After the load, which overwrites info with what is on disk. */
+    bucket->get_info() = info;
+    /* As adoption, not as a client:  the bucket is not marked yet, and
+     * the gate rejects a client's write to it (MutationPurpose). */
+    ret = static_cast<NSFSBucket*>(bucket.get())->merge_and_store_attrs(
+	dpp, attrs, y, MutationPurpose::adoption);
+    if (ret < 0) {
+      result.failures.push_back(
+	  rec.name + ": merge_and_store_attrs: " + cpp_strerror(-ret));
+      continue;
+    }
+
+    /* Whether deleting the bucket deletes its directory.  NooBaa records
+     * it as should_create_underlying_storage:  false for a bucket put
+     * over a directory that was already there, which a delete must leave
+     * in place (`bucketspace_fs.js` delete_bucket).  Required on every
+     * NooBaa record.  A record that lacks it is read as NooBaa's delete
+     * reads it, as false, which leaves the directory:  the safe way to be
+     * wrong, since the other deletes a tree the bucket may not own. */
+    bool should_create = false;
+    try {
+      JSONDecoder::decode_json("should_create_underlying_storage",
+			       should_create, &p);
+    } catch (const JSONDecoder::err&) {
+      should_create = false;
+    }
+    ret = static_cast<NSFSBucket*>(bucket.get())
+	    ->set_owns_storage(dpp, should_create);
+    if (ret < 0) {
+      result.failures.push_back(
+	  rec.name + ": recording its storage ownership: " +
+	  cpp_strerror(-ret));
+      continue;
+    }
+
+    /* The row, last:  it is what makes nsfs the authority for where the
+     * bucket is, so an import that failed above leaves the bucket served
+     * from their record exactly as before.  Importing again finds the
+     * row it wrote, at the same path;  a different path was rejected
+     * above. */
+    {
+      nsfs::BucketPlacement row;
+      row.bucket_name = rec.name;
+      row.path = recorded;
+      row.owner = to_string(bucket->get_owner());
+      ret = driver->get_identity_db()->insert_bucket_placement(dpp, row);
+      if (ret == -EADDRINUSE) {
+	result.failures.push_back(
+	    rec.name + ": its path " + recorded + " is another bucket's "
+	    "directory, or nested with one");
+	continue;
+      }
+      if ((ret < 0) && (ret != -EEXIST)) {
+	result.failures.push_back(
+	    rec.name + ": recording its placement: " + cpp_strerror(-ret));
+	continue;
+      }
+    }
+    /* The topics to the bucket, as PutBucketNotificationConfiguration
+     * maps them after its write.  The bucket is adopted by now;  a
+     * mapping that fails is reported, and the notification still
+     * delivers, since delivery reads the bucket's attribute. */
+    for (const auto& t : nr.topics) {
+      ret = driver->update_bucket_topic_mapping(
+	  t, rgw_make_bucket_entry_name(bucket->get_tenant(), bucket->get_name()),
+	  true, y, dpp);
+      if (ret < 0) {
+	result.notifications_need_operator.push_back(
+	    rec.name + ": mapping topic " + t.name + " to the bucket: " +
+	    cpp_strerror(-ret));
+      }
+    }
+    ++result.buckets_written;
+  }
+
+  ldpp_dout_fmt(dpp, 4, "nsfs: imported {} buckets, {} policies rewritten, {} "
+			"rejected, {} logging configurations, {} topics "
+			"written, {} notifications carried, {} notification "
+			"reports, {} needing the operator, {} blocked by an "
+			"identity, {} failures", result.buckets_written,
+			result.policies_rewritten,
+			result.policies_refused.size(), result.logging_carried,
+			result.topics_written, result.notifications_carried,
+			result.notifications_reported.size(),
+			result.notifications_need_operator.size(),
+			result.blocked.size(), result.failures.size());
+  for (const auto& r : result.policies_refused) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: import: {}", r);
+  }
+  for (const auto& r : result.arns_matched) {
+    ldpp_dout_fmt(dpp, 0, "WARNING: import: a policy statement now matches an "
+			  "ARN NooBaa never matched:  {}", r);
+  }
+  for (const auto& r : result.notifications_reported) {
+    ldpp_dout_fmt(dpp, 0, "WARNING: import: {}", r);
+  }
+  for (const auto& r : result.notifications_need_operator) {
+    ldpp_dout_fmt(dpp, 0, "WARNING: import: {}", r);
+  }
+  for (const auto& w : result.blocked) {
+    ldpp_dout_fmt(dpp, 0, "WARNING: import: not attempted, blocked:  {}", w);
+  }
+  for (const auto& f : result.failures) {
+    ldpp_dout_fmt(dpp, 0, "ERROR: import: {}", f);
+  }
+  if (!result.failures.empty()) {
+    return -EIO;
+  }
+  return result.blocked.empty() ? 0 : -EAGAIN;
+}
+
+}}} // namespace rgw::sal::nsfs

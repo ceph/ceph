@@ -332,6 +332,7 @@ inline constexpr const char* RGW_REST_STS_XMLNS =
 #define ERR_INVALID_RETENTION_PERIOD 2047
 #define ERR_NO_SUCH_BUCKET_ENCRYPTION_CONFIGURATION 2048
 #define ERR_NO_SUCH_PUBLIC_ACCESS_BLOCK_CONFIGURATION 2049
+#define ERR_NO_SUCH_OBJECT_RETENTION_OR_HOLD 2050
 #define ERR_USER_SUSPENDED       2100
 #define ERR_BUCKET_SUSPENDED     2101
 #define ERR_INTERNAL_ERROR       2200
@@ -364,6 +365,8 @@ inline constexpr const char* RGW_REST_STS_XMLNS =
 #define ERR_ACLS_NOT_SUPPORTED   2227 // 400 AccessControlListNotSupported
 #define ERR_INVALID_BUCKET_ACL   2228 // 400 InvalidBucketAclWithObjectOwnership
 #define ERR_NO_SUCH_OWNERSHIP_CONTROLS 2229 // 404 OwnershipControlsNotFoundError
+#define ERR_KEY_TOO_LONG         2230 // 400 KeyTooLongError
+#define ERR_KEY_PATH_CONFLICT    2231 // 409 KeyPathConflict
 
 #define ERR_BUSY_RESHARDING      2300 // also in cls_rgw_types.h, don't change!
 #define ERR_NO_SUCH_ENTITY       2301

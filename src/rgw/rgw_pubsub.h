@@ -180,9 +180,12 @@ struct rgw_pubsub_s3_event {
   // opaque data received from the topic
   // could be used to identify the gateway
   std::string opaque_data;
+  // the object's retention after an s3:ObjectRetention:Put;  empty mode otherwise
+  std::string object_retention_mode;
+  ceph::real_time object_retention_until;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(4, 1, bl);
+    ENCODE_START(5, 1, bl);
     encode(eventVersion, bl);
     encode(eventSource, bl);
     encode(awsRegion, bl);
@@ -207,11 +210,13 @@ struct rgw_pubsub_s3_event {
     encode(x_meta_map, bl);
     encode(tags, bl);
     encode(opaque_data, bl);
+    encode(object_retention_mode, bl);
+    encode(object_retention_until, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(4, bl);
+    DECODE_START(5, bl);
     decode(eventVersion, bl);
     decode(eventSource, bl);
     decode(awsRegion, bl);
@@ -241,6 +246,10 @@ struct rgw_pubsub_s3_event {
     }
     if (struct_v >= 4) {
       decode(opaque_data, bl);
+    }
+    if (struct_v >= 5) {
+      decode(object_retention_mode, bl);
+      decode(object_retention_until, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -665,6 +674,11 @@ namespace rgw::notify {
 
 std::string topic_to_unique(const std::string& topic,
                             const std::string& notification);
+
+// a value as stored in rgw_pubsub_dest::push_endpoint_args.
+// RGWHTTPArgs::parse() splits the stored arguments on '&' and then
+// url-decodes them, so a value keeps '%', '&' and '+' only when they are escaped
+std::string escape_endpoint_arg(std::string_view value);
 
 std::optional<rgw_pubsub_topic_filter> find_unique_topic(
     const rgw_pubsub_bucket_topics& bucket_topics,

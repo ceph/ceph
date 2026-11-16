@@ -14,8 +14,11 @@
 
 #include "rgw_sal_posix.h"
 #include <gtest/gtest.h>
+#include <gmock/gmock.h>
+#include <array>
 #include <iostream>
 #include <filesystem>
+#include <sys/xattr.h>
 #include "common/common_init.h"
 #include "common/errno.h"
 #include "global/global_init.h"
@@ -37,6 +40,7 @@ uint64_t curver = UINT64_MAX - 1;
 class Environment : public ::testing::Environment {
 public:
   boost::intrusive_ptr<CephContext> cct;
+  std::unique_ptr<DoutPrefix> dp;
   DoutPrefixProvider* dpp{nullptr};
 
   Environment() {}
@@ -1103,6 +1107,14 @@ public:
 };
 
 class TestDriver : public POSIXDriver {
+  /* The cache geometry, so a fixture can make it small enough to
+   * evict.  Defaults are the small-but-not-evicting values the suite
+   * has always used;  {1,1,1,8} makes a second upload evict the
+   * first, which is the only way the stabilize callback runs. */
+  std::array<uint64_t, 4> mp_sizes{16, 2, 2, 64};
+public:
+  void set_mp_cache_sizes(const std::array<uint64_t, 4>& s) { mp_sizes = s; }
+
 public:
   std::string driver_base;
 
@@ -1139,6 +1151,15 @@ public:
     bucket_cache.reset(
         new posix::BucketCache(this, base_path, cache_base, 100, 3, 3, 3));
     multipart_cache.reset(new TestMultipartCache<cohort::lru::NullYieldPolicy>());
+
+    /* Small, like the bucket cache above:  the configured defaults are
+     * large enough that nothing is ever evicted, and eviction is what
+     * runs the stabilize callback.  Without a cache at all,
+     * POSIXMultipartUpload::list_parts() returns -ENOENT and every
+     * completion reports NoSuchUpload. */
+    init_multipart_cache(dpp, mp_sizes[0], mp_sizes[1], mp_sizes[2],
+			 mp_sizes[3],
+			 file::listing::MultipartCachePolicy::writeback);
 
     ldpp_dout(env->dpp, 20) << "SUCCESS" << dendl;
     return 0;
@@ -1287,6 +1308,12 @@ public:
   public:
     POSIXDriverTest() {}
 
+    /* max entries, lanes, partitions, total part budget.  Overridden
+     * by a fixture that needs eviction to happen. */
+    virtual std::array<uint64_t, 4> mp_cache_sizes() const {
+      return {16, 2, 2, 64};
+    }
+
     void SetUp() {
       testname = get_test_name();
       bp = sf::path{sf::absolute(sf::path{base_path / testname})};
@@ -1294,6 +1321,7 @@ public:
       sf::create_directory(bp / "cache");
       sf::create_directory(bp / "root");
       driver = std::make_unique<TestDriver>(bp);
+      driver->set_mp_cache_sizes(mp_cache_sizes());
       int ret = driver->init(env->dpp);
       EXPECT_EQ(ret, 0);
 
@@ -1341,7 +1369,7 @@ TEST_F(POSIXDriverTest, BucketCreate)
 
   createparams.owner = owner;
 
-  int ret = bucket->create(env->dpp, createparams, null_yield);
+  int ret = bucket->create(env->dpp, createparams, null_yield, rgw::sal::no_authenticated_user);
   EXPECT_EQ(ret, 0);
   EXPECT_EQ(bucket->get_name(), testname);
   EXPECT_EQ(bucket->get_key().name, testname);
@@ -1372,7 +1400,7 @@ public:
 
     rgw::sal::Bucket::CreateParams createparams;
     createparams.owner = owner;
-    int ret = bucket->create(env->dpp, createparams, null_yield);
+    int ret = bucket->create(env->dpp, createparams, null_yield, rgw::sal::no_authenticated_user);
     EXPECT_EQ(ret, 0);
   }
 
@@ -1402,7 +1430,8 @@ TEST_F(POSIXBucketTest, ObjectWrite)
   EXPECT_NE(object.get(), nullptr);
 
   std::unique_ptr<rgw::sal::Writer> writer = driver->get_atomic_writer(
-      env->dpp, null_yield, object.get(), acl_owner, nullptr, 0, testname);
+      env->dpp, null_yield, object.get(), acl_owner, nullptr, 0, testname,
+      rgw::sal::no_authenticated_user);
   EXPECT_NE(writer.get(), nullptr);
 
   int ret = writer->prepare(null_yield);
@@ -1444,6 +1473,68 @@ TEST_F(POSIXBucketTest, ObjectWrite)
   EXPECT_TRUE(sf::is_regular_file(tp));
 }
 
+/* A PUT over a side-loaded file replaces the inode.
+ *
+ * The premise behind dropping the mode narrowings.  File::write()
+ * fchmod()ed to 0600 on every write call;  if a PUT wrote *into* a
+ * file that was already there, that call was re-permissioning
+ * somebody else's file and dropping it would change behaviour.  It
+ * does not:  File::create() opens O_TMPFILE and the result is linked
+ * over the name, so the published object is always an inode this
+ * driver made and its mode comes from that create.
+ *
+ * The inode assertion is the one that distinguishes the two cases --
+ * the mode alone comes out 0600 either way.
+ *
+ * umask is pinned because `openat` applies it:  a create of 0644
+ * lands at 0600 under a umask of 077, which would make this pass for
+ * the wrong reason.
+ */
+TEST_F(POSIXBucketTest, APutOverASideLoadedFileReplacesTheInode)
+{
+  const mode_t saved = ::umask(022);
+  auto restore = make_scope_guard([saved] { ::umask(saved); });
+
+  const sf::path p{bp / "root" / testname / "sideloaded.bin"};
+  {
+    std::ofstream f(p);
+    f << "not ours";
+  }
+  ASSERT_EQ(::chmod(p.c_str(), 0644), 0);
+  struct stat before{};
+  ASSERT_EQ(::stat(p.c_str(), &before), 0);
+  ASSERT_EQ(before.st_mode & 07777, 0644u) << "the side-load did not take";
+
+  auto obj = bucket->get_object(rgw_obj_key("sideloaded.bin"));
+  auto writer = driver->get_atomic_writer(env->dpp, null_yield, obj.get(),
+					  acl_owner, nullptr, 0, testname,
+					  rgw::sal::no_authenticated_user);
+  ASSERT_NE(writer.get(), nullptr);
+  ASSERT_EQ(writer->prepare(null_yield), 0);
+
+  bufferlist bl;
+  bl.append("ours");
+  const uint64_t len = bl.length();
+  ASSERT_EQ(writer->process(std::move(bl), 0), 0);
+  ASSERT_EQ(writer->process({}, len), 0);
+
+  ceph::real_time mtime;
+  Attrs attrs;
+  std::string etag;
+  req_context rctx{env->dpp, null_yield, nullptr};
+  ASSERT_EQ(writer->complete(len, etag, &mtime, real_time(), attrs,
+			     std::nullopt, real_time(), nullptr, nullptr,
+			     nullptr, nullptr, nullptr, rctx, 0), 0);
+
+  struct stat after{};
+  ASSERT_EQ(::stat(p.c_str(), &after), 0);
+  EXPECT_NE(after.st_ino, before.st_ino)
+      << "the PUT wrote into the side-loaded file rather than replacing "
+	 "it;  the mode narrowing in the write path is therefore not "
+	 "redundant and must not be removed";
+  EXPECT_EQ(after.st_mode & 07777, 0600u);
+}
+
 class POSIXObjectTest : public POSIXBucketTest {
 protected:
   std::unique_ptr<rgw::sal::Object> object;
@@ -1463,7 +1554,8 @@ public:
     EXPECT_NE(obj.get(), nullptr);
 
     std::unique_ptr<rgw::sal::Writer> writer = driver->get_atomic_writer(
-        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname,
+        rgw::sal::no_authenticated_user);
     EXPECT_NE(writer.get(), nullptr);
 
     int ret = writer->prepare(null_yield);
@@ -1575,7 +1667,7 @@ TEST_F(POSIXObjectTest, BucketListV)
 
 TEST_F(POSIXObjectTest, ObjectRead)
 {
-  std::unique_ptr<rgw::sal::Object::ReadOp> read_op(object->get_read_op());
+  std::unique_ptr<rgw::sal::Object::ReadOp> read_op(object->get_read_op(rgw::sal::no_authenticated_user));
 
   int ret = read_op->prepare(null_yield, env->dpp);
   EXPECT_EQ(ret, 0);
@@ -1594,7 +1686,7 @@ TEST_F(POSIXObjectTest, ObjectDelete)
   sf::path tp{bp / "root" / testname / testname};
   EXPECT_TRUE(sf::exists(tp));
 
-  std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = object->get_delete_op();
+  std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = object->get_delete_op(rgw::sal::no_authenticated_user);
   int ret = del_op->delete_obj(env->dpp, null_yield, 0);
   EXPECT_EQ(ret, 0);
 
@@ -1623,6 +1715,7 @@ TEST_F(POSIXObjectTest, ObjectCopy)
 
   int ret = object->copy_object(acl_owner,
 	   std::get<rgw_user>(owner),
+	   rgw::sal::no_authenticated_user,
 	   &info,
 	   zone,
 	   dstobj.get(),
@@ -1673,7 +1766,8 @@ TEST_F(POSIXObjectTest, ObjectAttrs)
   bufferlist addbl;
   encode(addattr, addbl);
 
-  ret = object->modify_obj_attrs(addattr.c_str(), addbl, null_yield, env->dpp);
+  ret = object->modify_obj_attrs(addattr.c_str(), addbl, null_yield, env->dpp,
+				 rgw::sal::no_authenticated_user);
   EXPECT_EQ(ret, 0);
 
   EXPECT_EQ(object->get_attrs().size(), 3);
@@ -1681,7 +1775,8 @@ TEST_F(POSIXObjectTest, ObjectAttrs)
   EXPECT_EQ(object->get_attrs()[addattr], addbl);
   EXPECT_TRUE(object->get_attrs().contains(ATTR_OBJECT_TYPE));
 
-  ret = object->delete_obj_attrs(env->dpp, ATTR1.c_str(), null_yield);
+  ret = object->delete_obj_attrs(env->dpp, ATTR1.c_str(), null_yield,
+				 rgw::sal::no_authenticated_user);
   EXPECT_EQ(ret, 0);
   EXPECT_EQ(object->get_attrs().size(), 2);
   EXPECT_EQ(object->get_attrs()[addattr], addbl);
@@ -1691,7 +1786,7 @@ TEST_F(POSIXObjectTest, ObjectAttrs)
 TEST_F(POSIXBucketTest, MultipartUpload)
 {
   std::string upload_id = "c0ffee";
-  std::unique_ptr<rgw::sal::MultipartUpload> upload = bucket->get_multipart_upload(testname, upload_id);
+  std::unique_ptr<rgw::sal::MultipartUpload> upload = bucket->get_multipart_upload(testname, rgw::sal::no_authenticated_user, upload_id);
 
   EXPECT_NE(upload.get(), nullptr);
   EXPECT_EQ(upload->get_meta(), testname + "." + upload_id);
@@ -1706,7 +1801,7 @@ TEST_F(POSIXBucketTest, MPUploadCreate)
   sf::path tp{bp / "root" / testname / mpname};
   EXPECT_FALSE(sf::exists(tp));
 
-  std::unique_ptr<rgw::sal::MultipartUpload> upload = bucket->get_multipart_upload(testname, upload_id);
+  std::unique_ptr<rgw::sal::MultipartUpload> upload = bucket->get_multipart_upload(testname, rgw::sal::no_authenticated_user, upload_id);
   EXPECT_NE(upload.get(), nullptr);
 
   rgw_placement_rule placement;
@@ -1737,7 +1832,7 @@ public:
     mpname = ".multipart_" + testname + "." + upload_id;
 
     std::unique_ptr<rgw::sal::MultipartUpload> upload =
-      bucket->get_multipart_upload(testname, upload_id);
+      bucket->get_multipart_upload(testname, rgw::sal::no_authenticated_user, upload_id);
     EXPECT_NE(upload.get(), nullptr);
 
     rgw_placement_rule placement;
@@ -1760,7 +1855,8 @@ public:
     ACLOwner owner{bucket->get_owner()};
 
     writer = upload->get_writer(env->dpp, null_yield, nullptr, owner,
-                                &placement, part_num, part_name);
+                                &placement, part_num, part_name,
+                                rgw::sal::no_authenticated_user);
     EXPECT_NE(writer.get(), nullptr);
 
     int ret = writer->prepare(null_yield);
@@ -1842,7 +1938,8 @@ TEST_F(POSIXMPObjectTest, MPUploadWrite)
   rgw_placement_rule placement;
 
   writer = def_upload->get_writer(env->dpp, null_yield, nullptr, acl_owner,
-                              &placement, 1, "00001");
+                              &placement, 1, "00001",
+                              rgw::sal::no_authenticated_user);
   EXPECT_NE(writer.get(), nullptr);
 
   int ret = writer->prepare(null_yield);
@@ -1891,7 +1988,7 @@ TEST_F(POSIXMPObjectTest, MPUploadRead)
   uint64_t write_size = create_MPObj(def_upload.get(), testname);
 
   std::unique_ptr<Object> mp_obj = bucket->get_object(rgw_obj_key(testname));
-  std::unique_ptr<rgw::sal::Object::ReadOp> read_op(mp_obj->get_read_op());
+  std::unique_ptr<rgw::sal::Object::ReadOp> read_op(mp_obj->get_read_op(rgw::sal::no_authenticated_user));
 
   int ret = read_op->prepare(null_yield, env->dpp);
   EXPECT_EQ(ret, 0);
@@ -1929,6 +2026,7 @@ TEST_F(POSIXMPObjectTest, MPUploadCopy)
 
   int ret = object->copy_object(acl_owner,
 	   std::get<rgw_user>(owner),
+	   rgw::sal::no_authenticated_user,
 	   &info,
 	   zone,
 	   dstobj.get(),
@@ -2013,7 +2111,8 @@ TEST_F(POSIXBucketTest, VersionedObjectWrite)
   std::string inst_id = object->get_instance();
 
   std::unique_ptr<rgw::sal::Writer> writer = driver->get_atomic_writer(
-      env->dpp, null_yield, object.get(), acl_owner, nullptr, 0, testname);
+      env->dpp, null_yield, object.get(), acl_owner, nullptr, 0, testname,
+      rgw::sal::no_authenticated_user);
   EXPECT_NE(writer.get(), nullptr);
 
   int ret = writer->prepare(null_yield);
@@ -2077,7 +2176,8 @@ TEST_F(POSIXBucketTest, VersionedObjectWrite)
 
   writer.reset();
   writer = driver->get_atomic_writer(env->dpp, null_yield, obj2.get(), acl_owner, nullptr,
-				     0, testname);
+				     0, testname,
+				     rgw::sal::no_authenticated_user);
   EXPECT_NE(writer.get(), nullptr);
 
   ret = writer->prepare(null_yield);
@@ -2132,7 +2232,7 @@ TEST_F(POSIXBucketTest, VersionedObjectWrite)
   std::unique_ptr<rgw::sal::Object> robj = bucket->get_object(rgw_obj_key(testname));
   EXPECT_NE(robj.get(), nullptr);
 
-  std::unique_ptr<rgw::sal::Object::ReadOp> read_op(robj->get_read_op());
+  std::unique_ptr<rgw::sal::Object::ReadOp> read_op(robj->get_read_op(rgw::sal::no_authenticated_user));
   ret = read_op->prepare(null_yield, env->dpp);
   EXPECT_EQ(ret, 0);
   EXPECT_EQ(robj->get_key().instance, ver_id);
@@ -2158,7 +2258,8 @@ public:
     object->gen_rand_obj_instance_name();
 
     std::unique_ptr<rgw::sal::Writer> writer = driver->get_atomic_writer(
-        env->dpp, null_yield, object.get(), acl_owner, nullptr, 0, testname);
+        env->dpp, null_yield, object.get(), acl_owner, nullptr, 0, testname,
+        rgw::sal::no_authenticated_user);
     EXPECT_NE(writer.get(), nullptr);
 
     int ret = writer->prepare(null_yield);
@@ -2288,7 +2389,7 @@ TEST_F(POSIXVerObjectTest, DeleteCurVersion)
   EXPECT_EQ(sf::read_symlink(ops), vfname3);
 
 
-  std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = delobj->get_delete_op();
+  std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = delobj->get_delete_op(rgw::sal::no_authenticated_user);
   int ret = del_op->delete_obj(env->dpp, null_yield, 0);
   EXPECT_EQ(ret, 0);
   std::string delobj_inst = delobj->get_instance();
@@ -2343,7 +2444,7 @@ TEST_F(POSIXVerObjectTest, DeleteOldVersion)
   EXPECT_EQ(sf::read_symlink(ops), vfname3);
 
 
-  std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = delobj->get_delete_op();
+  std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = delobj->get_delete_op(rgw::sal::no_authenticated_user);
   int ret = del_op->delete_obj(env->dpp, null_yield, 0);
   EXPECT_EQ(ret, 0);
 
@@ -2390,6 +2491,7 @@ TEST_F(POSIXVerObjectTest, ObjectCopy)
 
   int ret = srcobj->copy_object(acl_owner,
 	   std::get<rgw_user>(owner),
+	   rgw::sal::no_authenticated_user,
 	   &info,
 	   zone,
 	   dstobj.get(),
@@ -2464,6 +2566,7 @@ TEST_F(POSIXVerObjectTest, CopyVersion)
 
   int ret = srcobj->copy_object(acl_owner,
 	   std::get<rgw_user>(owner),
+	   rgw::sal::no_authenticated_user,
 	   &info,
 	   zone,
 	   dstobj.get(),
@@ -2523,7 +2626,7 @@ public:
     POSIXVerObjectTest::SetUp();
     mpname = ".multipart_" + testname + "." + upload_id;
 
-    upload = bucket->get_multipart_upload(testname, upload_id);
+    upload = bucket->get_multipart_upload(testname, rgw::sal::no_authenticated_user, upload_id);
     EXPECT_NE(upload.get(), nullptr);
 
     rgw_placement_rule placement;
@@ -2543,7 +2646,8 @@ public:
     std::string part_name = "part-" + fmt::format("{:0>5}", part_num);
 
     writer = upload->get_writer(env->dpp, null_yield, nullptr, acl_owner,
-                                &placement, part_num, part_name);
+                                &placement, part_num, part_name,
+                                rgw::sal::no_authenticated_user);
     EXPECT_NE(writer.get(), nullptr);
 
     int ret = writer->prepare(null_yield);
@@ -2625,7 +2729,7 @@ public:
     }
 
     std::unique_ptr<Object> object = bucket->get_object(rgw_obj_key(objname));
-    std::unique_ptr<rgw::sal::Object::ReadOp> read_op(object->get_read_op());
+    std::unique_ptr<rgw::sal::Object::ReadOp> read_op(object->get_read_op(rgw::sal::no_authenticated_user));
 
     ret = read_op->prepare(null_yield, env->dpp);
     EXPECT_EQ(ret, 0);
@@ -2638,7 +2742,7 @@ public:
     EXPECT_EQ(type.type, posix::ObjectType::VERSIONED);
 
     std::unique_ptr<Object> vobj = bucket->get_object(rgw_obj_key(objname, inst_id));
-    std::unique_ptr<rgw::sal::Object::ReadOp> vread_op(vobj->get_read_op());
+    std::unique_ptr<rgw::sal::Object::ReadOp> vread_op(vobj->get_read_op(rgw::sal::no_authenticated_user));
 
     ret = vread_op->prepare(null_yield, env->dpp);
     EXPECT_EQ(ret, 0);
@@ -2659,6 +2763,99 @@ TEST_F(POSIXVerMPObjectTest, MPUploadComplete)
 }
 
 
+/* An evicted part's record reaches the disk.
+ *
+ * Under writeback, eviction is the only thing that writes a part's
+ * xattr, so nothing else persists it.  The callback did the write
+ * relative to `root_fd`, a member that was declared and never
+ * assigned and whose only reader this was, so every stabilize opened
+ * its staging directory relative to an uninitialized descriptor and
+ * returned having written nothing.  The suite could not see it:  no
+ * test forced an eviction and then looked.
+ *
+ * {1,1,1,8}, so the second upload below evicts the first.
+ */
+class POSIXEvictingMPTest : public POSIXBucketTest {
+public:
+  std::array<uint64_t, 4> mp_cache_sizes() const override {
+    return {1, 1, 1, 8};
+  }
+};
+
+TEST_F(POSIXEvictingMPTest, AnEvictedPartRecordReachesTheDisk)
+{
+  const std::string upload_id = "c0ffee";
+  const std::string staging = ".multipart_" + testname + "." + upload_id;
+
+  std::unique_ptr<rgw::sal::MultipartUpload> upload =
+    bucket->get_multipart_upload(testname, rgw::sal::no_authenticated_user, upload_id);
+  ASSERT_NE(upload.get(), nullptr);
+
+  rgw_placement_rule placement;
+  Attrs attrs;
+  ASSERT_EQ(upload->init(env->dpp, null_yield, acl_owner, placement, attrs), 0);
+
+  {
+    std::unique_ptr<rgw::sal::Writer> writer =
+      upload->get_writer(env->dpp, null_yield, nullptr, acl_owner, &placement,
+			 1, "part-00001",
+			 rgw::sal::no_authenticated_user);
+    ASSERT_NE(writer.get(), nullptr);
+    ASSERT_EQ(writer->prepare(null_yield), 0);
+    bufferlist bl;
+    bl.append(std::string(64, 'a'));
+    ASSERT_EQ(writer->process(std::move(bl), 0), 0);
+    ASSERT_EQ(writer->process(bufferlist(), 64), 0);
+    ceph::real_time mtime;
+    Attrs pattrs;
+    req_context rctx{env->dpp, null_yield, nullptr};
+    ASSERT_EQ(writer->complete(64, "etag", &mtime, real_time(), pattrs,
+			       std::nullopt, real_time(), nullptr, nullptr,
+			       nullptr, nullptr, nullptr, rctx, 0), 0);
+  }
+
+  /* a second upload, which evicts the first from a one-entry cache */
+  {
+    const std::string other_id = "decaf0";
+    std::unique_ptr<rgw::sal::MultipartUpload> other =
+      bucket->get_multipart_upload(testname + "-other", rgw::sal::no_authenticated_user, other_id);
+    ASSERT_NE(other.get(), nullptr);
+    ASSERT_EQ(other->init(env->dpp, null_yield, acl_owner, placement,
+			  attrs), 0);
+    std::unique_ptr<rgw::sal::Writer> writer =
+      other->get_writer(env->dpp, null_yield, nullptr, acl_owner, &placement,
+			1, "part-00001",
+			rgw::sal::no_authenticated_user);
+    ASSERT_NE(writer.get(), nullptr);
+    ASSERT_EQ(writer->prepare(null_yield), 0);
+    bufferlist bl;
+    bl.append(std::string(64, 'z'));
+    ASSERT_EQ(writer->process(std::move(bl), 0), 0);
+    ASSERT_EQ(writer->process(bufferlist(), 64), 0);
+    ceph::real_time mtime;
+    Attrs pattrs;
+    req_context rctx{env->dpp, null_yield, nullptr};
+    ASSERT_EQ(writer->complete(64, "etag", &mtime, real_time(), pattrs,
+			       std::nullopt, real_time(), nullptr, nullptr,
+			       nullptr, nullptr, nullptr, rctx, 0), 0);
+  }
+
+  const sf::path part{bp / "root" / testname / staging / "part-00001"};
+  ASSERT_TRUE(sf::exists(part)) << part;
+
+  /* the record itself, which is what eviction was supposed to write */
+  char buf[8192];
+  ssize_t len = ::listxattr(part.c_str(), buf, sizeof(buf));
+  ASSERT_GT(len, 0) << part << " carries no attributes at all";
+  std::set<std::string> names;
+  for (const char* q = buf; q < buf + len; q += strlen(q) + 1) {
+    names.insert(q);
+  }
+  EXPECT_TRUE(names.contains(std::string("user.rgw.") + RGW_POSIX_ATTR_MPUPLOAD))
+      << "the evicted part's record was not written";
+}
+
+
 int main(int argc, char *argv[]) {
   ::testing::InitGoogleTest(&argc, argv);
 
@@ -2671,7 +2868,7 @@ int main(int argc, char *argv[]) {
 TEST_F(POSIXMPObjectTest, MPUploadWithDots)
 {
   std::string objname = "host.example.com";
-  std::unique_ptr<rgw::sal::MultipartUpload> upload = bucket->get_multipart_upload(objname, std::nullopt);
+  std::unique_ptr<rgw::sal::MultipartUpload> upload = bucket->get_multipart_upload(objname, rgw::sal::no_authenticated_user, std::nullopt);
 
   ASSERT_NE(upload.get(), nullptr);
   EXPECT_EQ(upload->get_key(), objname);

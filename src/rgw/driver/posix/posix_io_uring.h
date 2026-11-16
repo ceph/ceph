@@ -6,8 +6,10 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <fcntl.h>
 #include <string>
 #include "include/buffer.h"
+#include "include/function2.hpp"
 #include "common/async/yield_context.h"
 #include "common/dout.h"
 
@@ -15,6 +17,18 @@ namespace rgw::sal {
 
 constexpr int64_t POSIX_DIRECT_ALIGN = 4096;
 constexpr unsigned POSIX_URING_MAX_IODEPTH = 128;
+
+/* Entries for a ring that carries no data transfer.
+ *
+ * With the synchronous data engine a ring exists only so that an
+ * impersonated open can name a personality;  those submissions are
+ * issued one at a time and waited on individually.  Ring memory is
+ * charged against RLIMIT_MEMLOCK and multiplied by the frontend's
+ * thread count, so the difference between this and a data-sized
+ * ring decides whether a gateway with a few hundred threads can
+ * create rings at all.  nsfs's control ring also carries chains
+ * (posix_uring_chain()), and its size is rgw_nsfs_io_uring_control_entries. */
+constexpr unsigned POSIX_URING_CONTROL_ENTRIES = 8;
 
 inline int64_t posix_align_down(int64_t x, int64_t a = POSIX_DIRECT_ALIGN) {
   return x & ~(a - 1);
@@ -37,12 +51,163 @@ bool posix_try_use_uring(const DoutPrefixProvider* dpp, optional_yield y,
 unsigned posix_sync_clamp_iodepth(const DoutPrefixProvider* dpp, unsigned qd,
                                   const char* iodepth_opt);
 
-/* Init this thread's ring from knobs latched by the first
- * posix_try_use_uring(). Beast strands do not pin a worker: after yield
- * the coroutine may resume on a different thread, so this must be called
- * on the current thread before every io_uring_get_sqe / io_uring_submit.
+/* Init this thread's ring from rgw_{posix,nsfs}_io_uring_* knobs.
  * Returns true if the ring is ready. */
-bool posix_uring_ensure_ring(const DoutPrefixProvider* dpp);
+bool posix_uring_ensure_ring(const DoutPrefixProvider* dpp, bool nsfs);
+
+/* No personality:  the SQE carries the submitting task's own
+ * credentials, which is what every caller did before impersonation
+ * existed and remains the default. */
+constexpr uint16_t POSIX_URING_NO_PERSONALITY = 0;
+
+/* Register the calling task's *current* credentials on this thread's
+ * ring, and hand back the id that names them on an SQE.
+ *
+ * IORING_REGISTER_PERSONALITY copies `current`'s credentials and
+ * takes no argument saying whose -- so a caller wanting somebody
+ * else's must become them for the duration of this call.  Doing that
+ * is the caller's business;  this knows only about the ring.
+ *
+ *   >= 0  the personality id
+ *   < 0   -errno
+ */
+int posix_uring_register_personality(const DoutPrefixProvider* dpp);
+
+/* Give one back.  Safe to call with an id this ring never issued,
+ * which is what makes teardown simple. */
+void posix_uring_unregister_personality(const DoutPrefixProvider* dpp,
+                                        uint16_t id);
+
+/* openat2(2) through the ring, under `personality`.
+ *
+ * This is where impersonation is actually enforced.  POSIX decides
+ * access at open, not at read, so a personality named on a data SQE
+ * applies to a descriptor whose permission check has already
+ * passed;  the open has to carry it or nothing is enforced.
+ *
+ * Blocks until the completion arrives rather than suspending a
+ * coroutine.  That is not a regression -- it replaces a blocking
+ * openat(2) -- and it is what lets librgw, which has no yield
+ * context, use the same path.
+ *
+ *   >= 0  the descriptor
+ *   < 0   -errno, including -EACCES when the identity is denied,
+ *         which is the result the whole mechanism exists to get
+ */
+int posix_uring_openat2(const DoutPrefixProvider* dpp, int dirfd,
+                        const char* path, uint64_t flags, uint64_t mode,
+                        uint16_t personality, uint64_t resolve = 0);
+
+/* mkdirat(2) through the ring, under `personality`.
+ *
+ * A directory the gateway creates as itself is `S_IRWXU` and owned
+ * by the gateway, so no impersonated identity can ever write inside
+ * it.  Creating it as the identity is what makes the rest usable.
+ *
+ *   0     created
+ *   < 0   -errno, -EEXIST included
+ */
+int posix_uring_mkdirat(const DoutPrefixProvider* dpp, int dirfd,
+                        const char* path, uint64_t mode,
+                        uint16_t personality);
+
+/* fsetxattr(2) and fgetxattr(2) through the ring, under
+ * `personality`.
+ *
+ * Their siblings listxattr and removexattr have no opcode, so those
+ * go through nsfs::run_as() instead.
+ */
+int posix_uring_fsetxattr(const DoutPrefixProvider* dpp, int fd,
+                          const char* name, const void* value, size_t len,
+                          int flags, uint16_t personality);
+int posix_uring_fgetxattr(const DoutPrefixProvider* dpp, int fd,
+                          const char* name, void* value, size_t len,
+                          uint16_t personality);
+
+/* One operation of a chain (posix_uring_chain()).  `fd` is the directory
+ * a path is taken relative to, or the file of an attribute operation;
+ * `fd2` and `path2` are a link's or rename's destination.  `result` is
+ * the operation's CQE:  >= 0 on success (a value's length, for
+ * fgetxattr), else -errno. */
+struct UringOp {
+  enum class Kind : uint8_t {
+    linkat, renameat, unlinkat, statx, fsetxattr, fgetxattr
+  };
+  Kind kind;
+  int fd = AT_FDCWD;
+  const char* path = nullptr;	/* or an attribute's name */
+  int fd2 = AT_FDCWD;
+  const char* path2 = nullptr;
+  int flags = 0;
+  void* buf = nullptr;		/* a statx, or an attribute's value */
+  size_t len = 0;
+  int result = 0;
+};
+
+inline constexpr size_t URING_CHAIN_MAX = 8;
+
+/* The longest batch to submit on this thread's ring:  URING_CHAIN_MAX,
+ * and at most half the ring, so a batch fits beside what else is queued
+ * on it.  A link chain is two ops, which every ring holds. */
+size_t posix_uring_chain_room(const DoutPrefixProvider* dpp);
+
+/* Whether this thread's ring polls its submission queue (SQPOLL).  Then
+ * io_uring_submit() returns before the kernel has read the SQEs. */
+bool posix_uring_sqpoll();
+
+/* `ops` through this thread's ring as one chain, every SQE under
+ * `personality` and linked to the next (IOSQE_IO_LINK).  A failed
+ * linkat, renameat or fsetxattr does not cancel the op after it
+ * (probes/linkchainprobe.c), so a chain is only for ops where the next
+ * is harmless after a failure;  a cancelled op's result is -ECANCELED.
+ *
+ * Returns once every op has completed, never before:  the completions
+ * land in slots on this frame.  `submitted` runs once the kernel has
+ * taken every SQE, before the wait, so a caller can release what it
+ * held only for the submission.  The wait suspends `y`'s coroutine when
+ * it has one that nothing can cancel, and blocks otherwise.
+ *
+ *   0       every op ran;  each `result` is its CQE
+ *   -ENXIO  this thread has no ring;  nothing was submitted
+ *   -EAGAIN the queue cannot hold the whole chain;  nothing was submitted
+ *   -EINVAL more than URING_CHAIN_MAX ops
+ *
+ * Once queued, a chain is submitted however long the kernel refuses it,
+ * logging every ten seconds while it waits:  its SQEs point at this
+ * frame, so returning would leave them for another submit on the thread
+ * to send into freed memory, and taking them back would run half the
+ * chain. */
+int posix_uring_chain(const DoutPrefixProvider* dpp, UringOp* ops, size_t n,
+                      uint16_t personality,
+                      const std::function<void()>& submitted,
+                      optional_yield y);
+
+/* Who a window's transfers run as.
+ *
+ * A personality id names a credential on the ring it was registered
+ * on, and a window's coroutine may resume on another thread between
+ * submissions.  So a window holds this rather than an id, and asks
+ * it for the id on the thread it is submitting from.  The kernel
+ * takes its own reference to the credentials when the SQE is
+ * submitted (probes/persprobe.c), so an id need be held only from
+ * acquire() until the submission returns, with no yield between --
+ * which keeps it on the thread that acquired it.
+ *
+ * A window given none runs its transfers as the submitting task, which
+ * is what posix does. */
+struct UringPersonality {
+  virtual ~UringPersonality() = default;
+  /* The id for an SQE submitted from this thread, held until release(). */
+  virtual int acquire(const DoutPrefixProvider* dpp, uint16_t* id) = 0;
+  virtual void release() = 0;
+  /* Run `fn` as this identity:  the transfer a thread with no ring
+   * does synchronously.  `y` is the window's, so a coroutine can be
+   * suspended while it runs.  Returns what `fn` returned, or -errno
+   * if the identity could not be assumed and `fn` did not run. */
+  virtual int run_as(const DoutPrefixProvider* dpp,
+                     fu2::unique_function<int() const> fn,
+                     optional_yield y) = 0;
+};
 
 class UringReadWindow {
 public:
@@ -62,8 +227,16 @@ private:
   std::unique_ptr<Impl> impl;
 
 public:
+  /* `personality` is who the reads run as;  nullptr means the
+   * submitting task, which is what posix passes.  It must outlive the
+   * window.
+   *
+   * `nsfs` says which driver's options size a ring this window makes:
+   * it submits on whichever thread it is running on, and a coroutine
+   * may resume on a thread that has not made one yet. */
   UringReadWindow(const DoutPrefixProvider* dpp, optional_yield y,
                   int fd, unsigned qd, int64_t chunk_size, bool direct_io,
+                  bool nsfs, UringPersonality* personality = nullptr,
                   ResolveRead resolve = {});
   ~UringReadWindow();
   UringReadWindow(const UringReadWindow&) = delete;
@@ -73,7 +246,7 @@ public:
 
   /* Submit up to QD reads, wait oldest, invoke on_chunk(bl, len) in order. */
   int iterate(int64_t ofs, int64_t left,
-              std::function<int(bufferlist&, int)> on_chunk);
+              fu2::unique_function<int(bufferlist&, int)> on_chunk);
 };
 
 class UringWriteWindow {
@@ -82,7 +255,8 @@ class UringWriteWindow {
 
 public:
   UringWriteWindow(const DoutPrefixProvider* dpp, optional_yield y,
-                   int fd, unsigned qd, bool direct_io);
+                   int fd, unsigned qd, bool direct_io, bool nsfs,
+                   UringPersonality* personality = nullptr);
   ~UringWriteWindow();
   UringWriteWindow(const UringWriteWindow&) = delete;
   UringWriteWindow& operator=(const UringWriteWindow&) = delete;

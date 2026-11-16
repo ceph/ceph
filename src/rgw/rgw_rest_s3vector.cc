@@ -411,7 +411,7 @@ private:
     bl.append(rgw::s3vector::to_string(mode));
     createparams.attrs[RGW_ATTR_S3VECTOR_STORAGE] = std::move(bl);
 
-    return vector_bucket->create(this, createparams, y);
+    return vector_bucket->create(this, createparams, y, authenticated_user(s));
   }
 
   void execute(optional_yield y) override {
@@ -458,7 +458,7 @@ private:
         ". error: " << op_ret << dendl;
       // Roll back the native bucket created by this request.
       if (vector_storage) {
-        if (const int r = vector_bucket->remove(this, true, y); r < 0) {
+        if (const int r = vector_bucket->remove(this, true, y, authenticated_user(s)); r < 0) {
           ldpp_dout(this, 1) << "WARNING: failed to roll back s3vector bucket " << bucket_id
             << " after backend failure. error: " << r << dendl;
         }
@@ -598,7 +598,7 @@ private:
     }
     ceph_assert(vector_bucket);
     ceph_assert(!vector_bucket->empty());
-    op_ret = vector_bucket->remove(this, false, y);
+    op_ret = vector_bucket->remove(this, false, y, authenticated_user(s));
     if (op_ret < 0) {
       const rgw_bucket bucket_id(bucket_ns.name(), configuration.rest_config.vector_bucket_name);
       ldpp_dout(this, 1) << "ERROR: failed to delete s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;

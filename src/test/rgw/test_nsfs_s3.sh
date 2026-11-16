@@ -333,10 +333,10 @@ rm -f /tmp/nsfs-part-$$-*.bin /tmp/nsfs-mp-expected-$$.bin /tmp/nsfs-mp-got-$$.b
 
 log "xattr naming verification"
 XATTRS=$(getfattr -d -m '.*' "$NSFS_ROOT/$BUCKET/flat.txt" 2>/dev/null || true)
-check "xattr uses user.nsfs. prefix" 'echo "$XATTRS" | grep -q "user.nsfs\."'
-check "xattr has user.nsfs.object_type" 'echo "$XATTRS" | grep -q "user.nsfs.object_type"'
-check "xattr has user.nsfs.owner" 'echo "$XATTRS" | grep -q "user.nsfs.owner"'
-check "xattr has user.nsfs.rgw.etag" 'echo "$XATTRS" | grep -q "user.nsfs.rgw.etag"'
+check "xattr uses user.nsfs: prefix" 'echo "$XATTRS" | grep -q "user.nsfs:"'
+check "xattr has user.nsfs:object_type" 'echo "$XATTRS" | grep -q "user.nsfs:object_type"'
+check "xattr has user.nsfs:owner" 'echo "$XATTRS" | grep -q "user.nsfs:owner"'
+check "xattr has user.nsfs:rgw.etag" 'echo "$XATTRS" | grep -q "user.nsfs:rgw.etag"'
 check "no old user.X-RGW- prefix" '! echo "$XATTRS" | grep -q "user.X-RGW-"'
 
 if [ "$VERBOSE" -eq 1 ]; then

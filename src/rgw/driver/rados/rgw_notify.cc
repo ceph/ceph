@@ -1011,6 +1011,7 @@ static inline void populate_event(reservation_t& res,
   event.eventTime = mtime;
   event.eventName = to_event_string(event_type);
   event.userIdentity = res.user_id;    // user that triggered the change
+  event.sourceIPAddress = res.source_ip;
   event.x_amz_request_id = res.req_id; // request ID of the original change
   event.x_amz_id_2 = res.store->getRados()->host_id; // RGW on which the change was made
   // configurationId is filled from notification configuration
@@ -1018,7 +1019,9 @@ static inline void populate_event(reservation_t& res,
   event.bucket_ownerIdentity = to_string(res.bucket->get_owner());
   const auto region = res.store->get_zone()->get_zonegroup().get_api_name();
   rgw::ARN bucket_arn(res.bucket->get_key());
-  bucket_arn.region = region; 
+  if (res.store->ctx()->_conf.get_val<bool>("rgw_notification_bucket_arn_region")) {
+    bucket_arn.region = region;
+  }
   event.bucket_arn = to_string(bucket_arn);
   event.object_key = res.object_name ? *res.object_name : obj->get_name();
   event.object_size = size;
@@ -1044,6 +1047,10 @@ static inline void populate_event(reservation_t& res,
     tags_from_attributes(res, obj, event.tags);
   } else {
     event.tags = (*res.tagset).get_tags();
+  }
+  if (res.retention) {
+    event.object_retention_mode = res.retention->get_mode();
+    event.object_retention_until = res.retention->get_retain_until_date();
   }
   // opaque data will be filled from topic configuration
 }
@@ -1413,6 +1420,13 @@ int get_persistent_queue_stats(const DoutPrefixProvider *dpp, librados::IoCtx &r
   return 0;
 }
 
+// the client's address, as rgw_build_iam_environment() resolved it from
+// rgw_remote_addr_param or REMOTE_ADDR
+static std::string source_ip_of(const req_state* s) {
+  const auto i = s->env.find("aws:SourceIp");
+  return i == s->env.end() ? std::string{} : i->second;
+}
+
 reservation_t::reservation_t(const DoutPrefixProvider* _dpp,
 			     rgw::sal::RadosStore* _store,
 			     const req_state* _s,
@@ -1428,6 +1442,7 @@ reservation_t::reservation_t(const DoutPrefixProvider* _dpp,
   user_id(to_string(_s->owner.id)),
   user_tenant(_s->user->get_id().tenant),
   req_id(_s->trans_id),
+  source_ip(source_ip_of(_s)),
   yield(y)
 {
   filter_amz_meta(x_meta_map, _s->info.x_meta_map);

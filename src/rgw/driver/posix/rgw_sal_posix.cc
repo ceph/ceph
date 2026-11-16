@@ -16,9 +16,11 @@
 #include "rgw_sal_posix.h"
 #include "rgw_rest_user.h"
 #include "sync_policy.h"
+#include "rgw_rest_driver_hint.h"
 #include "rgw_pubsub_push.h"
 #include "rgw_pubsub.h"
 #include "rgw_s3_filter.h"
+#include <sys/statvfs.h>
 #include <cstdint>
 #include "rgw_multi.h"
 #include "include/scope_guard.h"
@@ -167,39 +169,21 @@ int POSIXLuaManager::reload_packages(const DoutPrefixProvider* dpp, optional_yie
   return -ENOENT;
 }
 
-int POSIXDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
+/* Build the multipart part cache.
+ *
+ * Sizing is the caller's, not the configuration's.  The sizes decide
+ * whether eviction ever happens, and eviction is what runs the
+ * stabilize callback below, so a caller which wants that path reachable
+ * has to be able to ask for it -- the defaults are large enough that it
+ * never fires.  What is shared here is the structure:  the policy, the
+ * callback, and how they are wired.
+ */
+void POSIXDriver::init_multipart_cache(const DoutPrefixProvider* dpp,
+				       uint64_t mp_max, uint64_t mp_lanes,
+				       uint64_t mp_parts,
+				       uint64_t mp_max_parts,
+				       file::listing::MultipartCachePolicy mp_policy)
 {
-  int ret = -1;
-  base_path = g_conf().get_val<std::string>("rgw_posix_base_path");
-
-  ldpp_dout(dpp, 20) << "Initializing POSIX driver: " << base_path << dendl;
-
-  /* ordered listing cache */
-  bucket_cache.reset(
-    new posix::BucketCache(
-      this, base_path,
-      g_conf().get_val<std::string>("rgw_posix_database_root"),
-      g_conf().get_val<int64_t>("rgw_posix_cache_max_buckets"),
-      g_conf().get_val<int64_t>("rgw_posix_cache_lanes"),
-      g_conf().get_val<int64_t>("rgw_posix_cache_partitions"),
-      g_conf().get_val<int64_t>("rgw_posix_cache_lmdb_count"),
-      g_conf().get_val<bool>("rgw_posix_inotify")));
-
-  /* multipart upload cache */
-  {
-    auto mp_max = g_conf().get_val<uint64_t>("rgw_posix_multipart_cache_max");
-    auto mp_lanes = g_conf().get_val<uint64_t>("rgw_posix_multipart_cache_lanes");
-    auto mp_parts = g_conf().get_val<uint64_t>("rgw_posix_multipart_cache_partitions");
-    auto mp_max_parts = g_conf().get_val<uint64_t>("rgw_posix_multipart_cache_max_parts");
-    auto mp_pol_str = g_conf().get_val<std::string>("rgw_posix_multipart_cache_policy");
-
-    auto mp_policy = file::listing::MultipartCachePolicy::writethrough;
-    if (mp_pol_str == "writeback") {
-      mp_policy = file::listing::MultipartCachePolicy::writeback;
-    } else if (mp_pol_str == "volatile") {
-      mp_policy = file::listing::MultipartCachePolicy::volatile_;
-    }
-
     file::listing::stabilize_fn_t stabilize;
     if (mp_policy == file::listing::MultipartCachePolicy::writeback) {
       stabilize = [this](const file::listing::MultipartCacheKey& key,
@@ -207,7 +191,11 @@ int POSIXDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
 	    file::listing::MultipartPartInfo>& parts) {
 	std::optional<std::string> ns{mp_ns};
 	auto staging_name = bucket_fname(key.upload_meta, ns);
-	int dir_fd = ::openat(root_fd, (key.bucket_name + "/" +
+	/* get_root_fd(), not the root_fd member:  that member was
+	 * declared and never assigned, and this was its only reader, so
+	 * every stabilize opened a directory relative to an
+	 * uninitialized descriptor.  The member is gone. */
+	int dir_fd = ::openat(get_root_fd(), (key.bucket_name + "/" +
 	  staging_name).c_str(), O_RDONLY | O_DIRECTORY);
 	if (dir_fd < 0) {
 	  return;
@@ -236,6 +224,43 @@ int POSIXDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
       new posix::MultipartCache(
 	mp_max, mp_lanes, mp_parts, mp_max_parts,
 	mp_policy, std::move(stabilize)));
+}
+
+int POSIXDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
+{
+  int ret = -1;
+  base_path = g_conf().get_val<std::string>("rgw_posix_base_path");
+
+  ldpp_dout(dpp, 20) << "Initializing POSIX driver: " << base_path << dendl;
+
+  /* ordered listing cache */
+  bucket_cache.reset(
+    new posix::BucketCache(
+      this, base_path,
+      g_conf().get_val<std::string>("rgw_posix_database_root"),
+      g_conf().get_val<int64_t>("rgw_posix_cache_max_buckets"),
+      g_conf().get_val<int64_t>("rgw_posix_cache_lanes"),
+      g_conf().get_val<int64_t>("rgw_posix_cache_partitions"),
+      g_conf().get_val<int64_t>("rgw_posix_cache_lmdb_count"),
+      g_conf().get_val<bool>("rgw_posix_inotify")));
+
+  /* multipart upload cache */
+  {
+    auto mp_pol_str =
+      g_conf().get_val<std::string>("rgw_posix_multipart_cache_policy");
+    auto mp_policy = file::listing::MultipartCachePolicy::writethrough;
+    if (mp_pol_str == "writeback") {
+      mp_policy = file::listing::MultipartCachePolicy::writeback;
+    } else if (mp_pol_str == "volatile") {
+      mp_policy = file::listing::MultipartCachePolicy::volatile_;
+    }
+    init_multipart_cache(
+      dpp,
+      g_conf().get_val<uint64_t>("rgw_posix_multipart_cache_max"),
+      g_conf().get_val<uint64_t>("rgw_posix_multipart_cache_lanes"),
+      g_conf().get_val<uint64_t>("rgw_posix_multipart_cache_partitions"),
+      g_conf().get_val<uint64_t>("rgw_posix_multipart_cache_max_parts"),
+      mp_policy);
   }
 
   /* user info cache */
@@ -473,10 +498,22 @@ int POSIXDriver::load_owner_by_email(const DoutPrefixProvider* dpp,
   RGWUserInfo uinfo;
   int ret = get_user_db()->get_user(dpp, "email", std::string{email},
 				   uinfo, nullptr, nullptr);
+  if (ret == 0) {
+    owner = std::move(uinfo.user_id);
+    return 0;
+  }
+  if (ret != -ENOENT) {
+    return ret;
+  }
+  /* else an account's, as RADOS's email index holds both */
+  RGWAccountInfo info;
+  Attrs attrs;
+  RGWObjVersionTracker objv;
+  ret = load_account_by_email(dpp, y, email, info, attrs, objv);
   if (ret < 0) {
     return ret;
   }
-  owner = std::move(uinfo.user_id);
+  owner = info.id;
   return 0;
 }
 
@@ -533,6 +570,25 @@ int POSIXDriver::list_all_zones(const DoutPrefixProvider* dpp,
 
 int POSIXDriver::cluster_stat(RGWClusterStat& stats)
 {
+  /* the "cluster" is the filesystem the namespace lives on.  ganesha
+   * asks for this on every statfs, and a client uses it to decide
+   * whether a write can fit, so leaving it unfilled is not harmless */
+  struct statvfs vfs;
+  if (::statvfs(base_path.c_str(), &vfs) < 0) {
+    return -errno;
+  }
+
+  /* frsize is the fragment size blocks are counted in;  f_bsize is a
+   * hint for i/o size and is not what f_blocks counts */
+  uint64_t frsize = vfs.f_frsize ? vfs.f_frsize : vfs.f_bsize;
+
+  stats.kb = (vfs.f_blocks * frsize) >> 10;
+  stats.kb_avail = (vfs.f_bavail * frsize) >> 10;
+  stats.kb_used = ((vfs.f_blocks - vfs.f_bfree) * frsize) >> 10;
+  /* inodes in use is the closest thing to an object count here */
+  stats.num_objects = (vfs.f_files >= vfs.f_ffree)
+    ? (vfs.f_files - vfs.f_ffree) : 0;
+
   return 0;
 }
 
@@ -548,7 +604,8 @@ std::unique_ptr<Writer> POSIXDriver::get_append_writer(const DoutPrefixProvider 
 				  const rgw_placement_rule *ptail_placement_rule,
 				  const std::string& unique_tag,
 				  uint64_t position,
-				  uint64_t *cur_accounted_size)
+				  uint64_t *cur_accounted_size,
+				  const rgw_owner& authenticated_user)
 {
   return nullptr;
 }
@@ -559,7 +616,8 @@ std::unique_ptr<Writer> POSIXDriver::get_atomic_writer(const DoutPrefixProvider 
 				  const ACLOwner& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,
-				  const std::string& unique_tag)
+				  const std::string& unique_tag,
+				  const rgw_owner& authenticated_user)
 {
   if (_head_obj->get_bucket()->get_info().versioning_enabled() &&
       !_head_obj->have_instance()) {
@@ -577,14 +635,7 @@ std::unique_ptr<Notification> POSIXDriver::get_notification(rgw::sal::Object* ob
 			      rgw::notify::EventType event_type, optional_yield y,
 			      const std::string* object_name)
 {
-  rgw::notify::EventTypeList event_types = {event_type};
-  auto notif = std::make_unique<POSIXNotification>(this, obj, src_obj, event_types,
-      s->bucket.get(),
-      to_string(s->owner.id),
-      s->owner.id.index() == 0 ? std::get<rgw_user>(s->owner.id).tenant : "",
-      s->req_id);
-  notif->x_meta_map = s->info.x_meta_map;
-  return notif;
+  return std::make_unique<FSNotification>(this, obj, src_obj, event_type, s);
 }
 
 std::unique_ptr<Notification> POSIXDriver::get_notification(
@@ -597,7 +648,7 @@ std::unique_ptr<Notification> POSIXDriver::get_notification(
     std::string& _user_tenant,
     std::string& _req_id,
     optional_yield y) {
-  return std::make_unique<POSIXNotification>(this, obj, src_obj, event_types,
+  return std::make_unique<FSNotification>(this, obj, src_obj, event_types,
       _bucket, _user_id, _user_tenant, _req_id);
 }
 
@@ -703,7 +754,8 @@ int POSIXDriver::list_buckets(const DoutPrefixProvider* dpp, const rgw_owner& ow
 
 int POSIXBucket::create(const DoutPrefixProvider* dpp,
 			const CreateParams& params,
-			optional_yield y)
+			optional_yield y,
+			const rgw_owner& authenticated_user)
 {
   info.owner = params.owner;
 
@@ -1190,116 +1242,6 @@ int POSIXDriver::get_oidc_providers(const DoutPrefixProvider* dpp,
       std::string(tenant), providers);
 }
 
-/* --- Notification publish methods --- */
-
-int POSIXNotification::publish_reserve(const DoutPrefixProvider *dpp,
-				       RGWObjTags* obj_tags)
-{
-  obj_tags_ptr = obj_tags;
-
-  if (!bucket) {
-    return 0;
-  }
-
-  int ret = get_bucket_notifications(dpp, bucket, bucket_topics);
-  if (ret < 0) {
-    return ret;
-  }
-
-  const std::string obj_name = obj ? obj->get_name() : "";
-
-  for (auto& [name, filter] : bucket_topics.topics) {
-    bool event_match = false;
-    for (auto req_type : event_types) {
-      for (auto cfg_type : filter.events) {
-	if (static_cast<uint64_t>(req_type) & static_cast<uint64_t>(cfg_type)) {
-	  event_match = true;
-	  break;
-	}
-      }
-      if (event_match) break;
-    }
-    if (!event_match) continue;
-
-    if (!match(filter.s3_filter.key_filter, obj_name)) {
-      continue;
-    }
-
-    if (!filter.s3_filter.metadata_filter.kv.empty()) {
-      if (!match(filter.s3_filter.metadata_filter, x_meta_map)) {
-	continue;
-      }
-    }
-
-    if (!filter.s3_filter.tag_filter.kv.empty()) {
-      KeyMultiValueMap tags;
-      if (obj_tags) {
-	tags = obj_tags->get_tags();
-      }
-      if (!match(filter.s3_filter.tag_filter, tags)) {
-	continue;
-      }
-    }
-
-    matched.push_back(filter);
-  }
-
-  return 0;
-}
-
-int POSIXNotification::publish_commit(const DoutPrefixProvider* dpp,
-				      uint64_t size,
-				      const ceph::real_time& mtime,
-				      const std::string& etag,
-				      const std::string& version)
-{
-  if (matched.empty()) {
-    return 0;
-  }
-
-  for (auto& filter : matched) {
-    const auto& dest = filter.topic.dest;
-    if (dest.push_endpoint.empty()) {
-      continue;
-    }
-
-    rgw_pubsub_s3_event event;
-    event.eventTime = mtime;
-    event.eventName = rgw::notify::to_string(event_types.front());
-    event.userIdentity = user_id;
-    event.x_amz_request_id = req_id;
-    event.configurationId = filter.s3_id;
-    if (bucket) {
-      event.bucket_name = bucket->get_name();
-      event.bucket_ownerIdentity = to_string(bucket->get_owner());
-      event.bucket_id = bucket->get_bucket_id();
-    }
-    if (obj) {
-      event.object_key = obj->get_name();
-    }
-    event.object_size = size;
-    event.object_etag = etag;
-    event.object_versionId = version;
-
-    try {
-      RGWHTTPArgs args(dest.push_endpoint_args, dpp);
-      auto endpoint = RGWPubSubEndpoint::create(
-	  dest.push_endpoint, filter.topic.name, args,
-	  dpp->get_cct());
-      int r = endpoint->send(dpp, event, null_yield);
-      if (r < 0) {
-	ldpp_dout(dpp, 1) << "ERROR: notification endpoint send failed: "
-			  << dest.push_endpoint << " ret=" << r << dendl;
-      }
-    } catch (const RGWPubSubEndpoint::configuration_error& e) {
-      ldpp_dout(dpp, 1) << "ERROR: notification endpoint config error: "
-			<< e.what() << dendl;
-    }
-  }
-
-  return 0;
-}
-
 /* --- Topic SAL methods --- */
 
 int POSIXDriver::read_topic_v2(const std::string& topic_name,
@@ -1591,7 +1533,8 @@ int POSIXBucket::list(const DoutPrefixProvider* dpp, ListParams& params,
     std::string marker;
     int ret = list_multiparts(dpp, "", marker, "",
 			      max, uploads, nullptr,
-			      &results.is_truncated, y);
+			      &results.is_truncated, y,
+			      rgw::sal::no_authenticated_user);
     if (ret < 0)
       return ret;
     for (auto& upload : uploads) {
@@ -1768,7 +1711,8 @@ int POSIXBucket::merge_and_store_attrs(const DoutPrefixProvider* dpp,
 
 int POSIXBucket::remove(const DoutPrefixProvider* dpp,
 			bool delete_children,
-			optional_yield y)
+			optional_yield y,
+			const rgw_owner& authenticated_user)
 {
   int ret = dir->remove(dpp, y, delete_children, nullptr);
   if (ret < 0) {
@@ -1785,7 +1729,7 @@ int POSIXBucket::remove_bypass_gc(int concurrent_max,
 				  optional_yield y,
 				  const DoutPrefixProvider *dpp)
 {
-  return remove(dpp, true, y);
+  return remove(dpp, true, y, rgw::sal::no_authenticated_user);
 }
 
 int POSIXBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
@@ -1985,6 +1929,7 @@ int POSIXBucket::read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch,
 			    bool* is_truncated, RGWUsageIter& usage_iter,
 			    std::map<rgw_user_bucket, rgw_usage_log_entry>& usage)
 {
+  *is_truncated = false;
   return 0;
 }
 
@@ -2022,6 +1967,7 @@ int POSIXBucket::purge_instance(const DoutPrefixProvider* dpp, optional_yield y)
 
 std::unique_ptr<MultipartUpload> POSIXBucket::get_multipart_upload(
 				  const std::string& oid,
+				  const rgw_owner& authenticated_user,
 				  std::optional<std::string> upload_id,
 				  ACLOwner owner, ceph::real_time mtime)
 {
@@ -2035,7 +1981,8 @@ int POSIXBucket::list_multiparts(const DoutPrefixProvider *dpp,
 				  const int& max_uploads,
 				  std::vector<std::unique_ptr<MultipartUpload>>& uploads,
 				  std::map<std::string, bool> *common_prefixes,
-				  bool *is_truncated, optional_yield y)
+				  bool *is_truncated, optional_yield y,
+				  const rgw_owner& authenticated_user)
 {
   int count = 0;
   int ret;
@@ -2287,6 +2234,7 @@ int POSIXObject::delete_object(const DoutPrefixProvider* dpp,
 
 int POSIXObject::copy_object(const ACLOwner& owner,
                               const rgw_user& remote_user,
+                              const rgw_owner& authenticated_user,
                               req_info* info,
                               const rgw_zone_id& source_zone,
                               rgw::sal::Object* dest_object,
@@ -2442,7 +2390,15 @@ int POSIXObject::copy_object(const ACLOwner& owner,
   if (posix::get_attr(src_attrs, RGW_POSIX_ATTR_OBJECT_TYPE, pot)) {
     attrs[RGW_POSIX_ATTR_OBJECT_TYPE] = pot;
   }
-  return dobj->set_obj_attrs(dpp, &attrs, nullptr, y, rgw::sal::FLAG_LOG_OP);
+  ret = dobj->set_obj_attrs(dpp, &attrs, nullptr, y, rgw::sal::FLAG_LOG_OP,
+			    authenticated_user);
+  /* the copy's mtime, which RGWCopyObj gives its notification as the
+   * event's time */
+  if (auto* ent = dobj->get_fsent(); (ret == 0) && mtime && ent &&
+      (ent->stat(dpp, /*force=*/true) == 0)) {
+    *mtime = from_statx_timestamp(ent->get_stx().stx_mtime);
+  }
+  return ret;
 }
 
 int POSIXObject::list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
@@ -2524,7 +2480,8 @@ int POSIXObject::load_obj_state(const DoutPrefixProvider* dpp, optional_yield y,
 }
 
 int POSIXObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
-                            Attrs* delattrs, optional_yield y, uint32_t flags)
+                            Attrs* delattrs, optional_yield y, uint32_t flags,
+                            const rgw_owner& authenticated_user)
 {
   if (delattrs) {
     for (auto& it : *delattrs) {
@@ -2568,14 +2525,15 @@ int POSIXObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp)
 }
 
 int POSIXObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
-                               optional_yield y, const DoutPrefixProvider* dpp, uint32_t flags)
+                               optional_yield y, const DoutPrefixProvider* dpp,
+                               const rgw_owner& authenticated_user, uint32_t flags)
 {
   state.attrset[attr_name] = attr_val;
   return write_attrs(dpp, y);
 }
 
 int POSIXObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name,
-                               optional_yield y)
+                               optional_yield y, const rgw_owner& authenticated_user)
 {
   state.attrset.erase(attr_name);
 
@@ -2866,12 +2824,12 @@ int POSIXObject::get_owner(const DoutPrefixProvider *dpp, optional_yield y, std:
   return 0;
 }
 
-std::unique_ptr<Object::ReadOp> POSIXObject::get_read_op()
+std::unique_ptr<Object::ReadOp> POSIXObject::get_read_op(const rgw_owner& authenticated_user)
 {
   return std::make_unique<POSIXReadOp>(this);
 }
 
-std::unique_ptr<Object::DeleteOp> POSIXObject::get_delete_op()
+std::unique_ptr<Object::DeleteOp> POSIXObject::get_delete_op(const rgw_owner& authenticated_user)
 {
   return std::make_unique<POSIXDeleteOp>(this);
 }
@@ -2908,10 +2866,10 @@ int POSIXObject::open(const DoutPrefixProvider* dpp, bool create, bool temp_file
   return ent->open(dpp);
 }
 
-int POSIXObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y)
+int POSIXObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, bool excl)
 {
   std::string temp_fname = gen_temp_fname();
-  int ret = ent->link_temp_file(dpp, y, temp_fname);
+  int ret = ent->link_temp_file(dpp, y, temp_fname, excl);
   if (ret < 0)
     return ret;
 
@@ -3245,7 +3203,8 @@ int POSIXObject::POSIXReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs
       if (chunk <= 0) {
         chunk = READ_SIZE;
       }
-      UringReadWindow win(dpp, y, fd, qd, chunk, dio, std::move(resolve));
+      UringReadWindow win(dpp, y, fd, qd, chunk, dio, /*nsfs=*/false,
+                          /*personality=*/nullptr, std::move(resolve));
       int r = win.iterate(cur_ofs, left,
           [dpp, cb, source = source](bufferlist& bl, int len) {
             int ret = cb->handle_data(bl, 0, len);
@@ -3560,7 +3519,9 @@ int POSIXMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
 
   attrs[RGW_POSIX_ATTR_MPUPLOAD] = bl;
 
-  return meta_obj->set_obj_attrs(dpp, &attrs, nullptr, y, rgw::sal::FLAG_LOG_OP);
+  return meta_obj->set_obj_attrs(dpp, &attrs, nullptr, y,
+				 rgw::sal::FLAG_LOG_OP,
+				 rgw::sal::no_authenticated_user);
 }
 
 int POSIXMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext *cct,
@@ -3624,6 +3585,10 @@ int POSIXMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext 
 	});
     });
 
+  /* each call returns one page;  callers such as complete() sum
+   * parts.size() across pages, so the map must turn over */
+  parts.clear();
+
   for (auto& pi : result.parts) {
     auto part = std::make_unique<POSIXMultipartPart>(this);
     auto* ppart = static_cast<POSIXMultipartPart*>(part.get());
@@ -3658,7 +3623,7 @@ int POSIXMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct,
   if (auto* mc = driver->get_multipart_cache()) {
     mc->remove({bucket->get_name(), mp_obj.meta});
   }
-  shadow->remove(dpp, true, y);
+  shadow->remove(dpp, true, y, rgw::sal::no_authenticated_user);
 
   return 0;
 }
@@ -3979,7 +3944,8 @@ std::unique_ptr<Writer> POSIXMultipartUpload::get_writer(
 				  const ACLOwner& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t part_num,
-				  const std::string& part_num_str)
+				  const std::string& part_num_str,
+				  const rgw_owner& authenticated_user)
 {
   std::string fname = MP_OBJ_PART_PFX + fmt::format("{:0>5}", part_num);
   rgw_obj_key part_key(fname);
@@ -4013,7 +3979,7 @@ int POSIXMultipartWriter::process(bufferlist&& data, uint64_t offset)
       unsigned qd = dpp->get_cct()->_conf.get_val<uint64_t>("rgw_posix_put_iodepth");
       bool dio = dpp->get_cct()->_conf.get_val<bool>("rgw_posix_direct_io");
       uring_write = std::make_unique<UringWriteWindow>(
-          dpp, yield, part_file->get_fd(), qd, dio);
+          dpp, yield, part_file->get_fd(), qd, dio, /*nsfs=*/false);
       part_file->set_sync_on_close(true);
     }
     int r = uring_write->process(std::move(data), offset);
@@ -4140,7 +4106,8 @@ int POSIXAtomicWriter::process(bufferlist&& data, uint64_t offset)
     if (!uring_write) {
       unsigned qd = dpp->get_cct()->_conf.get_val<uint64_t>("rgw_posix_put_iodepth");
       bool dio = dpp->get_cct()->_conf.get_val<bool>("rgw_posix_direct_io");
-      uring_write = std::make_unique<UringWriteWindow>(dpp, yield, fd, qd, dio);
+      uring_write = std::make_unique<UringWriteWindow>(dpp, yield, fd, qd, dio,
+                                                       /*nsfs=*/false);
       if (obj->get_fsent()) {
         obj->get_fsent()->set_sync_on_close(true);
       }
@@ -4213,6 +4180,13 @@ int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
       }
     }
   }
+  /* If-None-Match: * is decided by the publish, not here.  `exists` came
+   * from a stat taken before the attributes were written, so two writers
+   * can both see the name free;  the exclusive link below is what makes
+   * exactly one of them win.  This check is kept so the uncontended case
+   * fails before doing the work. */
+  const bool excl_publish = if_nomatch && (strcmp(if_nomatch, "*") == 0);
+
   if (if_nomatch) {
     if (strcmp(if_nomatch, "*") == 0) {
       // test the object is not existing
@@ -4240,7 +4214,11 @@ int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
     return ret;
   }
 
-  ret = obj->link_temp_file(rctx.dpp, rctx.y);
+  ret = obj->link_temp_file(rctx.dpp, rctx.y, excl_publish);
+  if (ret == -EEXIST && excl_publish) {
+    /* somebody else took the name between the check above and the link */
+    return -ERR_PRECONDITION_FAILED;
+  }
   if (ret < 0) {
     ldpp_dout(dpp, 20) << "ERROR: POSIXAtomicWriter failed writing temp file" << dendl;
     return ret;
@@ -4253,6 +4231,13 @@ int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
   }
   driver->get_quota_handler()->update_stats(b->get_owner(), b->get_key(),
                                             (exists ? 0 : 1), orig_size, accounted_size);
+
+  /* the caller's mtime, which RGWPutObj gives its notification as the
+   * event's time */
+  if (auto* ent = obj->get_fsent(); mtime && ent &&
+      (ent->stat(dpp, /*force=*/true) == 0)) {
+    *mtime = from_statx_timestamp(ent->get_stx().stx_mtime);
+  }
 
   return 0;
 }
@@ -4313,7 +4298,29 @@ std::unique_ptr<LCSerializer> POSIXLifecycle::get_serializer(const std::string& 
 void POSIXDriver::register_admin_apis(RGWRESTMgr* mgr)
 {
   mgr->register_resource("user", new RGWRESTMgr_User);
-  /* TODO: register "bucket" once rgw_rest_bucket is decoupled from rados */
+  auto* driver_mgr = new RGWRESTMgr;
+  driver_mgr->register_resource("hint", new RGWRESTMgr_Driver_Hint);
+  mgr->register_resource("driver", driver_mgr);
+}
+
+int POSIXDriver::driver_hint(const DoutPrefixProvider* dpp,
+                              const std::string& hint,
+                              const std::map<std::string, std::string>& params,
+                              std::map<std::string, std::string>* out)
+{
+  ldpp_dout(dpp, 10) << "POSIXDriver::driver_hint: " << hint << dendl;
+  if (hint == "invalidate-cache") {
+    auto it = params.find("bucket");
+    if (it == params.end()) {
+      return -EINVAL;
+    }
+    int ret = get_bucket_cache()->invalidate_bucket(dpp, it->second);
+    if (out) {
+      (*out)["invalidated"] = (ret == 0) ? "true" : "false";
+    }
+    return ret;
+  }
+  return -ENOTSUP;
 }
 
 } } // namespace rgw::sal

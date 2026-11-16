@@ -142,6 +142,8 @@ public:
   FilterDriver(Driver* _next) : next(_next) {}
   virtual ~FilterDriver() = default;
 
+  bool have_fsio() const override { return next->have_fsio(); }
+
   virtual int initialize(CephContext *cct, const DoutPrefixProvider *dpp) override;
   virtual const std::string get_name() const override;
   virtual std::string get_cluster_id(const DoutPrefixProvider* dpp,
@@ -483,14 +485,16 @@ public:
 				  *ptail_placement_rule,
 				  const std::string& unique_tag,
 				  uint64_t position,
-				  uint64_t *cur_accounted_size) override;
+				  uint64_t *cur_accounted_size,
+				  const rgw_owner& authenticated_user) override;
   virtual std::unique_ptr<Writer> get_atomic_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
 				  const ACLOwner& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,
-				  const std::string& unique_tag) override;
+				  const std::string& unique_tag,
+				  const rgw_owner& authenticated_user) override;
 
   virtual const std::string& get_compression_type(const rgw_placement_rule& rule) override;
   virtual bool valid_placement(const rgw_placement_rule& rule) override;
@@ -515,6 +519,13 @@ public:
 
   virtual void register_admin_apis(RGWRESTMgr* mgr) override {
       return next->register_admin_apis(mgr);
+  }
+
+  int driver_hint(const DoutPrefixProvider* dpp,
+                  const std::string& hint,
+                  const std::map<std::string, std::string>& params,
+                  std::map<std::string, std::string>* out = nullptr) override {
+    return next->driver_hint(dpp, hint, params, out);
   }
 };
 
@@ -591,7 +602,8 @@ public:
   virtual Attrs& get_attrs(void) override { return next->get_attrs(); }
   virtual int set_attrs(Attrs a) override { return next->set_attrs(a); }
   virtual int remove(const DoutPrefixProvider* dpp, bool delete_children,
-		     optional_yield y) override;
+		     optional_yield y,
+		     const rgw_owner& authenticated_user) override;
   virtual int remove_bypass_gc(int concurrent_max, bool
 			       keep_index_consistent,
 			       optional_yield y, const
@@ -602,7 +614,8 @@ public:
 
   virtual int create(const DoutPrefixProvider* dpp,
 		     const CreateParams& params,
-		     optional_yield y) override;
+		     optional_yield y,
+		     const rgw_owner& authenticated_user) override;
   virtual int load_bucket(const DoutPrefixProvider* dpp, optional_yield y) override;
   virtual int read_stats(const DoutPrefixProvider *dpp, optional_yield y,
 			 const bucket_index_layout_generation& idx_layout,
@@ -662,6 +675,7 @@ public:
   virtual void set_version(obj_version &ver) override { next->set_version(ver); }
   virtual bool versioned() override { return next->versioned(); }
   virtual bool versioning_enabled() override { return next->versioning_enabled(); }
+  virtual bool have_fsio() const override { return next->have_fsio(); }
 
   virtual std::unique_ptr<Bucket> clone() override {
     return std::make_unique<FilterBucket>(next->clone());
@@ -669,6 +683,7 @@ public:
 
   virtual std::unique_ptr<MultipartUpload> get_multipart_upload(
 				const std::string& oid,
+				const rgw_owner& authenticated_user,
 				std::optional<std::string> upload_id=std::nullopt,
 				ACLOwner owner={}, ceph::real_time mtime=real_clock::now()) override;
   virtual int list_multiparts(const DoutPrefixProvider *dpp,
@@ -678,7 +693,8 @@ public:
 			      const int& max_uploads,
 			      std::vector<std::unique_ptr<MultipartUpload>>& uploads,
 			      std::map<std::string, bool> *common_prefixes,
-			      bool *is_truncated, optional_yield y) override;
+			      bool *is_truncated, optional_yield y,
+			      const rgw_owner& authenticated_user) override;
   virtual int abort_multiparts(const DoutPrefixProvider* dpp,
 			       CephContext* cct, optional_yield y) override;
 
@@ -789,6 +805,7 @@ public:
 			    RGWObjVersionTracker* objv) override;
   virtual int copy_object(const ACLOwner& owner,
                const rgw_user& remote_user,
+               const rgw_owner& authenticated_user,
                req_info* info, const rgw_zone_id& source_zone,
 	       rgw::sal::Object* dest_object, rgw::sal::Bucket* dest_bucket,
                rgw::sal::Bucket* src_bucket,
@@ -827,18 +844,32 @@ public:
 			 bool* truncated, list_parts_each_t&& each_func,
 			 optional_yield y) override;
 
+  FSIOResult get_fsio_handle(const DoutPrefixProvider* dpp,
+			     const rgw_owner& authenticated_user,
+			     uint32_t flags = FSIOObject::OPEN_FLAG_NONE,
+			     const FSIOCreateSpec* spec = nullptr) override {
+    return next->get_fsio_handle(dpp, authenticated_user, flags, spec);
+  }
+
+  int stat_fsio_view(const DoutPrefixProvider* dpp, struct stat* st,
+		     Attrs* attrs, uint32_t flags) override {
+    return next->stat_fsio_view(dpp, st, attrs, flags);
+  }
+
   virtual int load_obj_state(const DoutPrefixProvider *dpp, optional_yield y,
                              bool follow_olh = true) override;
   virtual int update_olh(const DoutPrefixProvider* dpp, optional_yield y,
                          uint32_t flags) override;
   virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
-			    Attrs* delattrs, optional_yield y, uint32_t flags) override;
+			    Attrs* delattrs, optional_yield y, uint32_t flags,
+			    const rgw_owner& authenticated_user) override;
   virtual int get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp) override;
   virtual int modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
 			       optional_yield y, const DoutPrefixProvider* dpp,
+			       const rgw_owner& authenticated_user,
 			       uint32_t flags = rgw::sal::FLAG_LOG_OP) override;
   virtual int delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name,
-			       optional_yield y) override;
+			       optional_yield y, const rgw_owner& authenticated_user) override;
   virtual bool is_expired() override;
   virtual void gen_rand_obj_instance_name() override;
   virtual std::unique_ptr<MPSerializer> get_serializer(const DoutPrefixProvider *dpp, optional_yield y,
@@ -866,6 +897,8 @@ public:
 			   uint64_t& size,
 			   const DoutPrefixProvider* dpp,
 			   optional_yield y) override;
+  virtual std::optional<ceph::real_time> get_noncurrent_since(
+			   const DoutPrefixProvider* dpp, optional_yield y) override;
   virtual bool placement_rules_match(rgw_placement_rule& r1, rgw_placement_rule& r2) override;
   virtual int dump_obj_layout(const DoutPrefixProvider *dpp, optional_yield y,
 			      Formatter* f) override;
@@ -915,8 +948,8 @@ public:
                                     const DoutPrefixProvider* dpp,
                                     optional_yield y) override;
 
-  virtual std::unique_ptr<ReadOp> get_read_op() override;
-  virtual std::unique_ptr<DeleteOp> get_delete_op() override;
+  virtual std::unique_ptr<ReadOp> get_read_op(const rgw_owner& authenticated_user) override;
+  virtual std::unique_ptr<DeleteOp> get_delete_op(const rgw_owner& authenticated_user) override;
 
   virtual int get_torrent_info(const DoutPrefixProvider* dpp,
                                optional_yield y, bufferlist& bl) override;
@@ -977,6 +1010,10 @@ public:
     next(std::move(_next)), bucket(_b) {}
   virtual ~FilterMultipartUpload() = default;
 
+  virtual void set_on_behalf_of(const rgw_owner& owner) override {
+    next->set_on_behalf_of(owner);
+  }
+
   virtual const std::string& get_meta() const override { return next->get_meta(); }
   virtual const std::string& get_key() const override { return next->get_key(); }
   virtual const std::string& get_upload_id() const override { return next->get_upload_id(); }
@@ -1025,7 +1062,8 @@ public:
 			  const ACLOwner& owner,
 			  const rgw_placement_rule *ptail_placement_rule,
 			  uint64_t part_num,
-			  const std::string& part_num_str) override;
+			  const std::string& part_num_str,
+			  const rgw_owner& authenticated_user) override;
   virtual void print(std::ostream& out) const override { return next->print(out); }
 };
 
@@ -1149,6 +1187,9 @@ public:
 			     const ceph::real_time& mtime,
 			     const std::string& etag,
 			     const std::string& version) override;
+  virtual void set_object_retention(const RGWObjectRetention& retention) override {
+    next->set_object_retention(retention);
+  }
 };
 
 class FilterWriter : public Writer {

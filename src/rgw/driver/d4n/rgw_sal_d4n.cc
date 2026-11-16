@@ -134,9 +134,10 @@ int D4NFilterDriver::load_bucket(const DoutPrefixProvider* dpp, const rgw_bucket
 
 int D4NFilterBucket::create(const DoutPrefixProvider* dpp,
                             const CreateParams& params,
-                            optional_yield y)
+                            optional_yield y,
+                            const rgw_owner& authenticated_user)
 {
-  return next->create(dpp, params, y);
+  return next->create(dpp, params, y, authenticated_user);
 }
 
 int D4NFilterBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int max,
@@ -653,7 +654,8 @@ constexpr int OBJECT_LIST_VAL = 1000;
 constexpr int PIPELINE_MAX = 10000;
 int D4NFilterBucket::remove(const DoutPrefixProvider* dpp,
 			    bool delete_children,
-			    optional_yield y)
+			    optional_yield y,
+			    const rgw_owner& authenticated_user)
 {
   ListParams params;
   params.list_versions = true;
@@ -801,7 +803,7 @@ int D4NFilterBucket::remove(const DoutPrefixProvider* dpp,
   }
 
   ldpp_dout(dpp, 20) << "D4NFilterBucket::" << __func__ << "(): calling next->remove" << dendl;
-  return next->remove(dpp, delete_children, y);
+  return next->remove(dpp, delete_children, y, authenticated_user);
 }
 
 int D4NFilterBucket::check_empty(const DoutPrefixProvider* dpp, optional_yield y)
@@ -821,17 +823,20 @@ int D4NFilterBucket::check_empty(const DoutPrefixProvider* dpp, optional_yield y
 
 std::unique_ptr<MultipartUpload> D4NFilterBucket::get_multipart_upload(
 				  const std::string& oid,
+				  const rgw_owner& authenticated_user,
 				  std::optional<std::string> upload_id,
 				  ACLOwner owner, ceph::real_time mtime)
 {
   std::unique_ptr<MultipartUpload> nmu =
-    next->get_multipart_upload(oid, upload_id, owner, mtime);
+    next->get_multipart_upload(oid, authenticated_user, upload_id, owner,
+			       mtime);
 
   return std::make_unique<D4NFilterMultipartUpload>(std::move(nmu), this, this->filter);
 }
 
 int D4NFilterObject::copy_object(const ACLOwner& owner,
                               const rgw_user& remote_user,
+                              const rgw_owner& authenticated_user,
                               req_info* info,
                               const rgw_zone_id& source_zone,
                               rgw::sal::Object* dest_object,
@@ -862,7 +867,8 @@ int D4NFilterObject::copy_object(const ACLOwner& owner,
 {
   bool write_to_cache = g_conf()->d4n_writecache_enabled;
   bool dirty{false};
-  std::unique_ptr<rgw::sal::Object::ReadOp> read_op(this->get_read_op());
+  std::unique_ptr<rgw::sal::Object::ReadOp> read_op(
+    this->get_read_op(remote_user));
   read_op->params.mod_ptr = mod_ptr;
   read_op->params.unmod_ptr = unmod_ptr;
   read_op->params.high_precision_time = high_precision_time;
@@ -880,7 +886,7 @@ int D4NFilterObject::copy_object(const ACLOwner& owner,
   //for multipart objects or for read only cache, write to backend store
   if (is_multipart() || !write_to_cache) {
     write_to_cache = false;
-    auto ret = next->copy_object(owner, remote_user, info, source_zone,
+    auto ret = next->copy_object(owner, remote_user, authenticated_user, info, source_zone,
                            nextObject(dest_object),
                            nextBucket(dest_bucket),
                            nextBucket(src_bucket),
@@ -1055,7 +1061,8 @@ int D4NFilterObject::load_obj_state(const DoutPrefixProvider *dpp, optional_yiel
 }
 
 int D4NFilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
-                            Attrs* delattrs, optional_yield y, uint32_t flags)
+                            Attrs* delattrs, optional_yield y, uint32_t flags,
+                            const rgw_owner& authenticated_user)
 {
   rgw::sal::Attrs attrs;
   std::string head_oid_in_cache;
@@ -1117,7 +1124,8 @@ int D4NFilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattr
     if (cache_request) {
       return -ENOENT;
     }
-    auto ret = next->set_obj_attrs(dpp, setattrs, delattrs, y, flags);
+    auto ret = next->set_obj_attrs(dpp, setattrs, delattrs, y, flags,
+                                   authenticated_user);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): set_obj_attrs method of backend store failed with ret: " << ret << dendl;
       return ret;
@@ -1782,7 +1790,8 @@ int D4NFilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* d
 }
 
 int D4NFilterObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
-                               optional_yield y, const DoutPrefixProvider* dpp,  uint32_t flags)
+                               optional_yield y, const DoutPrefixProvider* dpp,
+                               const rgw_owner& authenticated_user, uint32_t flags)
 {
   Attrs update;
   update[(std::string)attr_name] = attr_val;
@@ -1804,7 +1813,8 @@ int D4NFilterObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_va
       return -ENOENT;
     }
 
-    auto ret = next->modify_obj_attrs(attr_name, attr_val, y, dpp, flags);
+    auto ret = next->modify_obj_attrs(attr_name, attr_val, y, dpp,
+                                      authenticated_user, flags);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): modify_obj_attrs of backend store failed with ret: " << ret << dendl;
       return ret;
@@ -1814,7 +1824,7 @@ int D4NFilterObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_va
 }
 
 int D4NFilterObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name,
-                               optional_yield y)
+                               optional_yield y, const rgw_owner& authenticated_user)
 {
   buffer::list bl;
   std::string head_oid_in_cache;
@@ -1852,7 +1862,8 @@ int D4NFilterObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char*
     if (cache_request) {
       return -ENOENT;
     }
-    if (auto ret = next->delete_obj_attrs(dpp, attr_name, y); ret < 0) {
+    if (auto ret = next->delete_obj_attrs(dpp, attr_name, y,
+                                          authenticated_user); ret < 0) {
       ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): delete_obj_attrs method of backend store failed with ret: " << ret << dendl;
       return ret;
     }
@@ -1874,11 +1885,13 @@ std::unique_ptr<Writer> D4NFilterDriver::get_atomic_writer(const DoutPrefixProvi
 				  const ACLOwner& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,
-				  const std::string& unique_tag)
+				  const std::string& unique_tag,
+				  const rgw_owner& authenticated_user)
 {
   std::unique_ptr<Writer> writer = next->get_atomic_writer(dpp, y, nextObject(obj),
 							   owner, ptail_placement_rule,
-							   olh_epoch, unique_tag);
+							   olh_epoch, unique_tag,
+							   authenticated_user);
 
   return std::make_unique<D4NFilterWriter>(std::move(writer), this, obj, dpp, true, y);
 }
@@ -1897,15 +1910,15 @@ void D4NFilterDriver::shutdown()
   next->shutdown();
 }
 
-std::unique_ptr<Object::ReadOp> D4NFilterObject::get_read_op()
+std::unique_ptr<Object::ReadOp> D4NFilterObject::get_read_op(const rgw_owner& authenticated_user)
 {
-  std::unique_ptr<ReadOp> r = next->get_read_op();
+  std::unique_ptr<ReadOp> r = next->get_read_op(authenticated_user);
   return std::make_unique<D4NFilterReadOp>(std::move(r), this);
 }
 
-std::unique_ptr<Object::DeleteOp> D4NFilterObject::get_delete_op()
+std::unique_ptr<Object::DeleteOp> D4NFilterObject::get_delete_op(const rgw_owner& authenticated_user)
 {
-  std::unique_ptr<DeleteOp> d = next->get_delete_op();
+  std::unique_ptr<DeleteOp> d = next->get_delete_op(authenticated_user);
   return std::make_unique<D4NFilterDeleteOp>(std::move(d), this);
 }
 

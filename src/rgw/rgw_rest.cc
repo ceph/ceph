@@ -1622,7 +1622,8 @@ int RGWListBucketMultiparts_ObjStore::get_params(optional_yield y)
   if (!key_marker.empty()) {
     std::unique_ptr<rgw::sal::MultipartUpload> upload;
     upload = s->bucket->get_multipart_upload(key_marker,
-					 upload_id_marker);
+					     authenticated_user(s),
+					     upload_id_marker);
     marker_meta = upload->get_meta();
     marker_key = upload->get_key();
     marker_upload_id = upload->get_upload_id();

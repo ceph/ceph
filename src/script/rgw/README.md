@@ -14,21 +14,24 @@ ninja -j$(nproc) radosgw radosgw-admin ceph-conf
 # 2. Start cluster (nsfs, clean state, with sidecars)
 ../src/script/rgw/rgw-vstart.sh --store nsfs --clean --with-keycloak --with-kafka
 
-# 3. Run tests (the script prints this command with correct paths)
-cd ../qa/workunits/rgw/s3tests-rs
-S3TEST_CONF=$BUILD/s3tests.conf \
-  cargo nextest run -P all --test-threads=1 --features fails_on_nsfs
+# 3. Run tests, from your s3-tests-rs checkout
+cd /path/to/s3-tests-rs/src/test/rgw/s3-tests-rs
+S3TEST_CONF=/path/to/s3tests.conf \
+  cargo nextest run -P baseline --features fails_on_nsfs,rgw_admin
 ```
 
-The script prints the exact test command with absolute paths when it
-finishes — copy-paste from there.
+The test suite, s3-tests-rs, is its own repository.  `S3TEST_CONF` names
+your copy of its `s3tests.conf.SAMPLE`.  The script prints the test
+command when it finishes.
 
 ## rgw-vstart.sh
 
 Single entry point for the entire dev test environment.  Wraps
-`vstart.sh` to handle cleanup, user/account bootstrap, test config
-generation, optional GPFS integration, and optional sidecar services
-(Keycloak, and in the future Vault and Kafka).
+`vstart.sh` to handle cleanup, user/account bootstrap, optional GPFS
+integration, impersonation and its fixture, and optional sidecar
+services (Keycloak, Kafka, Vault).  The header comment of
+`rgw-vstart.sh` is the authoritative list of options, with the detail;
+the table below lists every one.
 
 Run from the **build directory**:
 
@@ -61,39 +64,93 @@ Run from the **build directory**:
 |------|---------|-------------|
 | `--store nsfs\|posix` | `nsfs` | Backend store |
 | `--clean` | off | Wipe config DB and all data before starting |
-| `--with-keycloak` | off | Start a local Keycloak container (see below) |
-| `--with-kafka` | off | Start a local Kafka broker (see below) |
+| `--debug-rgw N` | `20` | RGW debug log level |
+| `--port N` | `8000` | The port radosgw serves on;  the one your s3tests.conf names |
+| `--bucket-profile shared\|strong` | driver's, `shared` | The profile new nsfs buckets are marked with;  librgw and the librgw_file tests need `strong` |
+| `--with-impersonation` | off | Serve each request as its own POSIX identity;  creates the fixture (below).  Refuses root |
+| `--no-fixture` | off | With `--with-impersonation`:  the users, groups and capabilities only, for a `--data-root` another gateway wrote |
+| `--access-model posix-strict\|s3-native` | driver's, `posix-strict` | What nsfs does when S3 authorises an operation the filesystem denies (`rgw_nsfs_access_model`) |
+| `--user-identity-override` | off | An account user's own identity row overrides its account's (`rgw_nsfs_user_identity_override`) |
+| `--role-identity-override` | off | A role given an identity row runs as it, not as its account (`rgw_nsfs_role_identity_override`) |
+| `--data-root DIR` | build directory | Serve objects from `DIR/root`;  the LMDB cache and userdb stay in the build directory.  Rejects `--clean` |
+| `--noobaa-config-root DIR` | none | Read NooBaa's configuration store from `DIR`, for adoption;  under `--adoption-mode automatic` each adoption pass writes its report to `out/nsfs-adoption-*.json` |
+| `--adoption-mode command\|automatic` | driver's, `command` | `command` adopts only when asked through Admin Ops;  `automatic` adopts the whole store from startup |
+| `--with-lifecycle` | off | `rgw_lc_debug_interval=10`, so lifecycle expiry takes seconds;  uncomments `lc_debug_interval` in s3tests.conf |
+| `--with-non-md5-etag` | off | `rgw_non_md5_etag=true`:  the etag is the mtime-ino string the version ids use |
+| `--with-keycloak` | off | Start a local Keycloak container (below) |
+| `--with-kafka` | off | Start a local Kafka broker (below) |
+| `--with-vault` | off | Start a local HashiCorp Vault, for SSE-KMS and SSE-S3 |
+| `--with-inotify` | off | Watch bucket directories for files written from outside |
+| `--ramdisk` | off | tmpfs on the data root and LMDB cache directories |
 | `--gpfs` | off | Redirect data root to GPFS mount (nsfs only) |
 | `--clone` | off | Enable GPFS clone_snap+clone_copy (implies `--gpfs`) |
 | `--lwe` | off | Enable GPFS LWE cluster-wide locking (implies `--gpfs`) |
 | `--gpfs-root DIR` | `/mnt/rgw/nsfs` | GPFS data directory |
-| `--debug-rgw N` | `20` | RGW debug log level |
+| `--perf` | off | NUMA pinning, tcmalloc thread cache, no request timeout;  `tcp_nodelay` is on in every gateway the script starts |
+| `--profile` | off | `debug_rgw`, `debug_rgw_access` and `debug_ms` at 0, for profiling and performance runs |
+| `-o 'key=value'` | none | Pass a config option through to `vstart.sh` |
 | `--foreground` | off | Print the radosgw command instead of running it |
+| `--restart` | off | Stop the running radosgw and start it again on the same `ceph.conf`, without `vstart.sh` and cleaning nothing;  takes only `--store`, `--adoption-mode`, `--debug-rgw`, `--port`, `--perf` and `--with-impersonation` |
 
 ### What it does
 
-1. Kills any existing radosgw and Keycloak container
+1. Stops every radosgw this build directory runs, whatever else of
+   yours holds the port, and the sidecar containers
 2. Cleans data directories (and config DB if `--clean`)
 3. Runs `vstart.sh` to bootstrap users, accounts, and `ceph.conf`
-4. For GPFS: kills the vstart daemon, patches `ceph.conf` to redirect
-   the data root to the GPFS mount, and restarts the daemon
-5. Generates `build/s3tests.conf` from the in-tree SAMPLE template
-6. Starts sidecar services (`--with-keycloak`, `--with-kafka`)
-7. Prints cluster status and a copy-paste test command
+4. For GPFS, `--data-root`, `--perf` and `--with-impersonation`:  kills
+   the vstart daemon, patches `ceph.conf`, and starts radosgw itself
+5. Refuses the start unless the radosgw it started is alive and the
+   port is listened on (below)
+6. With `--with-impersonation`:  checks the machine (below), creates
+   the fixture's users and group, applies the capabilities, and seeds
+   the fixture
+7. Starts sidecar services (`--with-keycloak`, `--with-kafka`,
+   `--with-vault`)
+8. Prints cluster status and a copy-paste test command
+
+With `--restart` it does none of that:  it stops the running radosgw,
+patches `--adoption-mode` into `ceph.conf` if given, and starts radosgw
+again, so the userdb, the LMDB cache and the tree are as they were.
 
 ### s3tests.conf
 
-The script generates `build/s3tests.conf` automatically from
-`qa/workunits/rgw/s3tests-rs/s3tests.conf.SAMPLE`.  All credentials
-match the users that `vstart.sh` creates — no manual editing needed.
+The script does not write one.  Copy s3-tests-rs's
+`s3tests.conf.SAMPLE` once, and set `S3TEST_CONF` to the copy:  its
+credentials already match the users `vstart.sh` creates.  When
+`S3TEST_CONF` is set as the script runs, the sidecars,
+`--with-lifecycle` and `--with-vault` record what they set up in that
+file;  when it is not, the script says what to add.
 
-Set `S3TEST_CONF` when running tests:
+### Impersonation (--with-impersonation):  what it needs of the machine
 
-```bash
-S3TEST_CONF=/path/to/build/s3tests.conf cargo nextest run -P all ...
-```
+The gateway serves each request as a system user, so the script
+changes the machine, and needs the machine to allow it:
 
-The script prints the exact command at the end.
+- **`sudo`, from your own account and not as root.**  It creates the
+  fixture's users (`rgwalice`, `rgwbob`, `rgwanon`, `rgwtenant`,
+  `rgwiam`, `rgwpolicy`, `rgwacct1`, `rgwacct2`, `rgwcopya`,
+  `rgwcopyb`, at uids 70101-70110) and group (`rgwfix`, gid 70010),
+  reusing any that exist by name;  applies `setcap` to `bin/radosgw`;
+  and owns fixture files as those users.  Those ids must be free, or
+  already the fixture's.
+- **A build on a mount without `nosuid`.**  There `setcap` succeeds and
+  the kernel ignores the capabilities.  Checked:  the script refuses.
+- **Every directory above the data root searchable by every user**
+  (`o+x`).  The fixture's users own none of them;  a `0700` home
+  directory is the usual one that blocks them.  Checked:  the script
+  names the first directory that blocks them.
+- **`python3`**, for `nsfs-impersonate-fixture.py`.
+
+Both checks run before the running gateway is stopped.
+
+In every mode the gateway listens on `--port`, 8000 by default.  The
+script stops every radosgw this build directory runs, on any port,
+since they share its state, and whatever else of yours holds the port
+(`fuser -k`).  It then refuses the start unless the radosgw it started
+is alive and the port is listened on:  something it could not stop --
+a gateway of root's, say -- would otherwise answer for one that failed
+to bind.
 
 ### Accounts and IAM
 
@@ -113,8 +170,8 @@ since stale rows from interrupted runs can cause false test failures.
 
 Starts a local Keycloak container via podman for WebIdentity testing.
 Provisions a realm, client, and test user, extracts tokens and
-thumbprint, and writes the `[webidentity]` section to the generated
-`build/s3tests.conf`.
+thumbprint, and writes the `[webidentity]` section to the file
+`S3TEST_CONF` names, or prints it to add by hand when none is named.
 
 **Prerequisites:** podman, jq, openssl, curl
 
@@ -131,7 +188,9 @@ To stop Keycloak manually:
 
 Starts a single-node Kafka broker via podman (KRaft mode, no
 ZooKeeper) for S3 bucket notification testing.  Writes the `[kafka]`
-section to `build/s3tests.conf` with the broker endpoint.
+section, with the broker endpoint, to the file `S3TEST_CONF` names;
+without one, the suite's notification tests find the broker at
+`127.0.0.1:9092` anyway.
 
 **Prerequisites:** podman
 
@@ -169,22 +228,29 @@ Without root, LWE falls back to OFD locks automatically.
 ### Stopping
 
 ```bash
-kill $(cat out/radosgw.8000.pid)
+kill $(cat out/radosgw.<port>.pid)     # out/radosgw.8000.pid by default
 # if Keycloak is running:
 ../src/script/rgw/keycloak-vstart.sh --stop
 ```
 
 ## Running tests
 
-After starting a cluster, run the s3tests-rs suite from the source
-tree:
+After starting a cluster, run the s3-tests-rs suite from your
+checkout of it:
 
 ```bash
-cd qa/workunits/rgw/s3tests-rs
-S3TEST_CONF=/path/to/build/s3tests.conf \
-  cargo nextest run -P all --test-threads=1 --no-fail-fast \
-  --features fails_on_nsfs
+cd /path/to/s3-tests-rs/src/test/rgw/s3-tests-rs
+S3TEST_CONF=/path/to/s3tests.conf \
+  cargo nextest run -P baseline --no-fail-fast \
+  --features fails_on_nsfs,rgw_admin
 ```
+
+To run the suite across every nsfs configuration, use its
+`scripts/validate.rs`, which starts each gateway through this script
+on the port your s3tests.conf names:  `--preset full` for every
+configuration, `--preset quick` or `--preset cover` for a compact
+subset.  The suite's `docs/validation.md` describes it and the per-user
+config file it reads.
 
 ### Profiles
 
@@ -200,7 +266,16 @@ Run a specific test category with `-P <profile>`:
 `iam` (all IAM), `role`, `oidc`, `sts`
 
 **Composite profiles:**
-`basic` (core S3 operations), `all` (everything)
+`baseline` (what a gateway is held to;  the quick start's), `basic`
+(core S3 operations), `all` (everything)
+
+**Daemon-wide switches**, each run alone after `baseline` against the
+same gateway, since it switches a setting by driver hint:
+`access-model-switch`, `dynamic-groups`, `dynamic-groups-membership`,
+`role-identity`
+
+**Benchmarks:**
+`bench-smoke`, `bench-soak`
 
 ### Feature gates
 
@@ -208,6 +283,7 @@ Run a specific test category with `-P <profile>`:
 |---------|----------|
 | `fails_on_nsfs` | Testing nsfs backend |
 | `fails_on_posix` | Testing posix backend |
+| `rgw_admin` | Enables the tests that use Admin Ops and driver hints;  the gateway runs with `rgw_driver_debug_apis`, which this script sets |
 
 These gate tests that hit known filesystem-backend limitations (e.g.
 file-as-prefix on nsfs).  Always pass the appropriate feature flag.
@@ -215,9 +291,9 @@ file-as-prefix on nsfs).  Always pass the appropriate feature flag.
 ### Single test
 
 ```bash
-S3TEST_CONF=/path/to/build/s3tests.conf \
-  cargo nextest run -E 'test(conditional::test_put_object_if_match)' \
-  --test-threads=1
+S3TEST_CONF=/path/to/s3tests.conf \
+  cargo nextest run --features fails_on_nsfs,rgw_admin \
+  -E 'test(conditional::test_put_object_if_match)' --test-threads=1
 ```
 
 ## Why the two-phase GPFS dance?

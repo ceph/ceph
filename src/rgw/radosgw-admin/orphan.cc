@@ -1510,7 +1510,8 @@ int RGWRadosList::do_incomplete_multipart(const DoutPrefixProvider *dpp,
 
   do {
     uploads.clear();
-    ret = bucket->list_multiparts(dpp, string(), marker, string(), max_uploads, uploads, nullptr, &is_truncated, null_yield);
+    ret = bucket->list_multiparts(dpp, string(), marker, string(), max_uploads, uploads, nullptr, &is_truncated, null_yield,
+                                  rgw::sal::no_authenticated_user);
     if (ret == -ENOENT) {
       // could bucket have been removed while this is running?
       ldpp_dout(dpp, 5) << "RGWRadosList::" << __func__ <<

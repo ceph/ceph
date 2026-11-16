@@ -133,7 +133,8 @@ int RGWDataAccess::Object::put(bufferlist& data,
   }
 
   processor = driver->get_atomic_writer(dpp, y, obj.get(), owner,
-				       nullptr, olh_epoch, req_id);
+				       nullptr, olh_epoch, req_id,
+				       rgw::sal::no_authenticated_user);
 
   int ret = processor->prepare(y);
   if (ret < 0) {

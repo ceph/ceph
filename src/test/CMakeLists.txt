@@ -322,10 +322,12 @@ add_dependencies(ceph_test_librgw_file
   ceph_test_librgw_file_gp
   ceph_test_librgw_file_cpref
   ceph_test_librgw_file_rename
+  ceph_test_librgw_file_fhcache
   ceph_test_librgw_file_nfsns
   ceph_test_librgw_file_aw
   ceph_test_librgw_file_marker
   ceph_test_librgw_file_create
+  ceph_test_librgw_file_write2
   ceph_test_librgw_file_chunksim)
 
 # ceph_test_librgw_file_cd (just the rgw_file create-delete bucket ops)
@@ -404,6 +406,24 @@ target_link_libraries(ceph_test_librgw_file_aw
   )
 install(TARGETS ceph_test_librgw_file_aw DESTINATION ${CMAKE_INSTALL_BINDIR})
 
+# ceph_test_librgw_file_write2 (nfs write transaction [atomic write] tests)
+add_executable(ceph_test_librgw_file_write2
+  librgw_file_write2.cc
+  )
+target_include_directories(ceph_test_librgw_file_write2
+  PUBLIC "${LUA_INCLUDE_DIR}"
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw"
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/driver/rados")
+target_link_libraries(ceph_test_librgw_file_write2
+  rgw
+  librados
+  ceph-common
+  ${UNITTEST_LIBS}
+  ${EXTRALIBS}
+  ${ALLOC_LIBS}
+  )
+install(TARGETS ceph_test_librgw_file_write2 DESTINATION ${CMAKE_INSTALL_BINDIR})
+
 # ceph_test_librgw_file_marker (READDIR with string and uint64 offsets)
 add_executable(ceph_test_librgw_file_marker
   librgw_file_marker.cc
@@ -461,6 +481,24 @@ target_link_libraries(ceph_test_librgw_file_xattr
   ${ALLOC_LIBS}
   )
 target_link_libraries(ceph_test_librgw_file_xattr Boost::context)
+
+# ceph_test_librgw_file_fhcache (filehandle resolution + lifetime)
+add_executable(ceph_test_librgw_file_fhcache
+  librgw_file_fhcache.cc)
+target_include_directories(ceph_test_librgw_file_fhcache
+  PUBLIC "${LUA_INCLUDE_DIR}"
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw"
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/driver/rados")
+target_link_libraries(ceph_test_librgw_file_fhcache
+  rgw
+  librados
+  ceph-common
+  ${UNITTEST_LIBS}
+  ${EXTRALIBS}
+  ${LUA_LIBRARIES}
+  ${ALLOC_LIBS}
+  )
+target_link_libraries(ceph_test_librgw_file_fhcache Boost::context)
 
 # ceph_test_librgw_file_rename (mv/rename tests)
 add_executable(ceph_test_librgw_file_rename

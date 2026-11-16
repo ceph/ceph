@@ -1992,7 +1992,10 @@ do_rgw_create_users()
     s3_akey='0555b35654ad1656d804'
     s3_skey='h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q=='
     debug echo "setting up user testid"
-    $CEPH_BIN/radosgw-admin user create --uid testid --access-key $s3_akey --secret $s3_skey --display-name 'M. Tester' --email tester@ceph.com -c $conf_fn > /dev/null
+    # info=read reaches GET /admin/info and GET /admin/nsfs, which report
+    # what the deployment is -- a suite can then read its own expectations
+    # off the cluster instead of being told by its invocation
+    $CEPH_BIN/radosgw-admin user create --uid testid --access-key $s3_akey --secret $s3_skey --display-name 'M. Tester' --email tester@ceph.com --caps="info=read;driver-hint=*;nsfs=*" -c $conf_fn > /dev/null
 
     # Create S3-test users
     # See: https://github.com/ceph/s3-tests
@@ -2003,13 +2006,36 @@ do_rgw_create_users()
         --access-key ABCDEFGHIJKLMNOPQRST \
         --secret abcdefghijklmnopqrstuvwxyzabcdefghijklmn \
         --display-name youruseridhere \
-        --email s3@example.com --caps="roles=*;user-policy=*;oidc-provider=*;users=*;buckets=*" -c $conf_fn > /dev/null
+        --email s3@example.com --caps="roles=*;user-policy=*;oidc-provider=*;users=*;buckets=*;info=read;driver-hint=*;nsfs=*" -c $conf_fn > /dev/null
     $CEPH_BIN/radosgw-admin user create \
         --uid 56789abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234 \
         --access-key NOPQRSTUVWXYZABCDEFG \
         --secret nopqrstuvwxyzabcdefghijklmnabcdefghijklm \
         --display-name john.doe \
         --email john.doe@example.com -c $conf_fn > /dev/null
+    # the s3tests "[s3 quota]" category.  Declared in s3tests.conf.SAMPLE
+    # and asserted on by get_quota_client(), but nothing created it -- the
+    # quota tests are ignored on nsfs and posix (load_stats is a stub) and
+    # gated behind the rgw_admin feature, so the gap only shows on rados.
+    $CEPH_BIN/radosgw-admin user create \
+        --uid quotauser \
+        --access-key QUOTAACCESSKEY01234Q \
+        --secret quotasecretkey0123456789abcdefghijklm \
+        --display-name 'Quota Tester' \
+        --email quota@example.com -c $conf_fn > /dev/null
+
+    # a user whose permissions nothing else depends on:  the s3tests
+    # "[s3 policy only]" category.  Tests that attach an identity policy
+    # with global reach (Resource arn:aws:s3:::*) use it, because an
+    # explicit deny in such a policy overrides a bucket-policy allow for
+    # every concurrently-running test sharing that identity.
+    $CEPH_BIN/radosgw-admin user create \
+        --uid s3policyonly \
+        --access-key STUVWXYZABCDEFGHIJKL \
+        --secret stuvwxyzabcdefghijklmnopqrstuvwxyzabcdef \
+        --display-name policy.only \
+        --email policy.only@example.com -c $conf_fn > /dev/null
+
     $CEPH_BIN/radosgw-admin user create \
 	--tenant testx \
         --uid 9876543210abcdef0123456789abcdef0123456789abcdef0123456789abcdef \

@@ -15,6 +15,8 @@
 
 #pragma once
 
+#include <sys/stat.h>
+#include <sys/uio.h>
 #include <cstdint>
 #include <optional>
 #include <boost/intrusive_ptr.hpp>
@@ -34,6 +36,7 @@
 #define RGW_NO_SHARD -1
 
 struct RGWBucketEnt;
+class RGWObjectRetention;
 class RGWRESTMgr;
 class RGWLC;
 struct rgw_user_bucket;
@@ -169,6 +172,43 @@ static constexpr uint32_t FLAG_PREVENT_VERSIONING = 0x0002;
 // delete object where head object is missing)
 static constexpr uint32_t FLAG_FORCE_OP = 0x0004;
 static constexpr uint32_t FLAG_SKIP_UPDATE_OLH = 0x0008;
+
+/* No authenticated identity, for the operations that take one.
+ *
+ * An `authenticated_user` parameter names who an operation is for:
+ * the identity the request authenticated as, which for a member of an
+ * account is the member and not the account that owns what it
+ * touches, and for a session of a role in an account is the role --
+ * `rgw_user{tenant, <role id>, role_session_ns}`, since a role has no
+ * user of its own and rgw_owner names users and accounts.  A driver
+ * that maps an identity to filesystem credentials needs the member, or
+ * every member of an account is served as one, and the role, or every
+ * role of an account is;  a driver with no such mapping ignores it.
+ *
+ * The parameter is not defaulted, deliberately:  such a driver runs an
+ * unnamed operation as the daemon, which reaches more of the
+ * filesystem than any user it would be acting for, so every caller is
+ * made to say which it is.  This names the cases that genuinely have
+ * nobody -- lifecycle, restore, sync, a cache's own writeback -- and
+ * makes them greppable as a set. */
+inline const rgw_owner no_authenticated_user{};
+
+/* The namespace of a role session's `authenticated_user`, as "oidc" is
+ * a federated user's (rgw_auth.cc) */
+inline constexpr std::string_view role_session_ns = "role";
+
+/* Whose work an operation with no authenticated user is, where it is
+ * someone's:  lifecycle acts for the bucket's owner.  Carried as
+ * `on_behalf_of` in ReadOp and DeleteOp params, and by
+ * MultipartUpload::set_on_behalf_of().
+ *
+ * Not an authentication.  The operation's `authenticated_user` stays
+ * no_authenticated_user, since nobody authenticated;  this says only
+ * on whose behalf the gateway does work that no request asked for.  A
+ * driver that maps an identity to filesystem credentials decides what
+ * acting for it permits;  a driver with no such mapping ignores it, as
+ * it ignores `authenticated_user`.  Empty is nobody, which is what an
+ * operation that does not set it carries. */
 
 enum class RGWRestoreStatus : uint8_t {
   None  = 0,
@@ -321,6 +361,8 @@ class Driver {
   public:
     Driver() {}
     virtual ~Driver() = default;
+
+    virtual bool have_fsio() const { return false; } /* Supports POSIX-style positional i/o */
 
     /** Post-creation initialization of driver */
     virtual int initialize(CephContext *cct, const DoutPrefixProvider *dpp) = 0;
@@ -707,7 +749,8 @@ class Driver {
                                    optional_yield y,
                                    std::string_view tenant,
                                    std::vector<RGWOIDCProviderInfo>& providers) = 0;
-    /** Get a Writer that appends to an object */
+    /** Get a Writer that appends to an object, for `authenticated_user`
+     * (see no_authenticated_user) */
     virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
@@ -715,15 +758,18 @@ class Driver {
 				  const rgw_placement_rule *ptail_placement_rule,
 				  const std::string& unique_tag,
 				  uint64_t position,
-				  uint64_t *cur_accounted_size) = 0;
-    /** Get a Writer that atomically writes an entire object */
+				  uint64_t *cur_accounted_size,
+				  const rgw_owner& authenticated_user) = 0;
+    /** Get a Writer that atomically writes an entire object, for
+     * `authenticated_user` */
     virtual std::unique_ptr<Writer> get_atomic_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
 				  const ACLOwner& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,
-				  const std::string& unique_tag) = 0;
+				  const std::string& unique_tag,
+				  const rgw_owner& authenticated_user) = 0;
 
     /** Get the compression type of a placement rule */
     virtual const std::string& get_compression_type(const rgw_placement_rule& rule) = 0;
@@ -754,6 +800,50 @@ class Driver {
 
     /** Register admin APIs unique to this driver */
     virtual void register_admin_apis(RGWRESTMgr* mgr) = 0;
+
+    /** What this deployment implements, as name to value.
+     *
+     *  Reported by GET /admin/features, and meant for a client which
+     *  has to decide what to expect of a backend it did not choose --
+     *  a test suite, most immediately.  Which interfaces a driver
+     *  implements is not static as FSIO reaches posix and rados, and it
+     *  is not a question a client can answer by probing without reading
+     *  a failed operation as a defect.
+     *
+     *  Deliberately an open namespace of strings rather than an enum or a
+     *  fixed struct:  a driver can report something this interface did not
+     *  anticipate, which is the property that lets features be added one
+     *  at a time by whoever needs one.  Two rules go with that.  A feature
+     *  is added when a caller needs it, never speculatively.
+     *  And an absent name means UNKNOWN, never false -- a client which
+     *  cannot tell those apart will assert the opposite of the truth
+     *  against any driver that does not report.
+     *
+     *  Values are free-form;  "true" and "false" are rendered as JSON
+     *  booleans.  A name's meaning is documented where it is first added,
+     *  and a second driver adopting the name takes that meaning with it.
+     *
+     *  The default reports nothing, which reads as "unknown", correctly,
+     *  for every driver that has not been taught to answer. */
+    virtual void get_features(std::map<std::string, std::string>& features)
+    {}
+
+    /** Send a driver-level hint with optional parameters.
+     *  Hints are string-keyed, extensible commands for debug, testing,
+     *  and administrative operations that don't warrant dedicated SAL
+     *  methods.  Returns 0 on success, -ENOTSUP if unrecognized.
+     *
+     *  If out is non-null the hint may fill it with results, which is
+     *  what lets a hint assert on driver state rather than only act on
+     *  it.  Keeping it symmetric with params (string to string both
+     *  ways) means a caller can serialize the result without any type
+     *  machinery;  a hint needing structure can put JSON in a value. */
+    virtual int driver_hint(const DoutPrefixProvider* dpp,
+                            const std::string& hint,
+                            const std::map<std::string, std::string>& params,
+                            std::map<std::string, std::string>* out = nullptr) {
+      return -ENOTSUP;
+    }
 }; // class Driver
 
 
@@ -931,8 +1021,11 @@ class Bucket {
     virtual Attrs& get_attrs(void) = 0;
     /** Set the cached attributes on this bucket */
     virtual int set_attrs(Attrs a) = 0;
-    /** Remove this bucket from the backing store */
-    virtual int remove(const DoutPrefixProvider* dpp, bool delete_children, optional_yield y) = 0;
+    /** Remove this bucket from the backing store.  `authenticated_user`:
+     * see no_authenticated_user */
+    virtual int remove(const DoutPrefixProvider* dpp, bool delete_children,
+		       optional_yield y,
+		       const rgw_owner& authenticated_user) = 0;
     /** Remove this bucket, bypassing garbage collection.  May be removed */
     virtual int remove_bypass_gc(int concurrent_max, bool
 				 keep_index_consistent,
@@ -960,12 +1053,17 @@ class Bucket {
       std::optional<ceph::real_time> creation_time;
       std::optional<rgw::BucketIndexType> index_type;
       std::optional<uint32_t> index_shards;
+      // the request's headers, for a driver that reads one of its own --
+      // nsfs's custom bucket path.  Null when no request carries them.
+      const RGWEnv* env = nullptr;
     };
 
-    /// Create this bucket in the backing store.
+    /// Create this bucket in the backing store.  `authenticated_user`:
+    /// see no_authenticated_user.
     virtual int create(const DoutPrefixProvider* dpp,
                        const CreateParams& params,
-                       optional_yield y) = 0;
+                       optional_yield y,
+                       const rgw_owner& authenticated_user) = 0;
 
     /** Load this bucket from the backing store.  Requires the key to be set, fills other fields. */
     virtual int load_bucket(const DoutPrefixProvider* dpp, optional_yield y) = 0;
@@ -1049,6 +1147,13 @@ class Bucket {
     virtual bool versioned() = 0;
     /** Check if this bucket has versioning enabled */
     virtual bool versioning_enabled() = 0;
+    /** Check if this bucket supports POSIX-style positional i/o.  False
+     * unless the driver can serve it on this bucket;  librgw refuses an
+     * FSIO open on a bucket that does not.  Asked per bucket, not only
+     * per driver, because one mount sees many buckets, and a driver may
+     * serve the positional view on some and not others -- by layout,
+     * by placement, or by how far a bucket's own state has come. */
+    virtual bool have_fsio() const { return false; }
 
     /** Check if a Bucket pointer is empty */
     static bool empty(const Bucket* b) { return (!b || b->empty()); }
@@ -1057,12 +1162,17 @@ class Bucket {
     /** Clone a copy of this bucket.  Used when modification is necessary of the copy */
     virtual std::unique_ptr<Bucket> clone() = 0;
 
-    /** Create a multipart upload in this bucket */
+    /** Create a multipart upload in this bucket.  `authenticated_user`
+     * is who the upload's operations are for (see
+     * no_authenticated_user);  it precedes the defaulted parameters,
+     * which an undefaulted one cannot follow. */
     virtual std::unique_ptr<MultipartUpload> get_multipart_upload(
 				const std::string& oid,
+				const rgw_owner& authenticated_user,
 				std::optional<std::string> upload_id=std::nullopt,
 				ACLOwner owner={}, ceph::real_time mtime=real_clock::now()) = 0;
-    /** List multipart uploads currently in this bucket */
+    /** List multipart uploads currently in this bucket.  Each upload is
+     * for `authenticated_user`, as get_multipart_upload() makes one */
     virtual int list_multiparts(const DoutPrefixProvider *dpp,
 				const std::string& prefix,
 				std::string& marker,
@@ -1070,7 +1180,8 @@ class Bucket {
 				const int& max_uploads,
 				std::vector<std::unique_ptr<MultipartUpload>>& uploads,
 				std::map<std::string, bool> *common_prefixes,
-				bool *is_truncated, optional_yield y) = 0;
+				bool *is_truncated, optional_yield y,
+				const rgw_owner& authenticated_user) = 0;
     /** Abort multipart uploads in a bucket */
     virtual int abort_multiparts(const DoutPrefixProvider* dpp,
 				 CephContext* cct, optional_yield y) = 0;
@@ -1159,6 +1270,91 @@ class Bucket {
 class Object {
   public:
 
+  /**
+   * A handle exposing a posix-like, mutable i/o view on an Object
+   */
+    class FSIOObject {
+    public:
+      /* get_fsio_handle flags */
+      static constexpr uint32_t OPEN_FLAG_NONE =      0x0000;
+      static constexpr uint32_t OPEN_FLAG_CREATE =    0x0001;
+      static constexpr uint32_t OPEN_FLAG_EXCL =      0x0002;
+      static constexpr uint32_t OPEN_FLAG_TRUNC =     0x0004;
+      static constexpr uint32_t OPEN_FLAG_EPHEMERAL = 0x0008;
+      /* the caller intends to write:  a shadow is created if none
+       * exists.  absent it no shadow is ever constructed--a reader
+       * binds to the published object, and follows the shadow if a
+       * writer later creates one */
+      static constexpr uint32_t OPEN_FLAG_WRITE =     0x0010;
+
+      /* commit flags */
+      static constexpr uint32_t COMMIT_FLAG_NONE =    0x0000;
+
+      /* publish flags */
+      static constexpr uint32_t PUBLISH_FLAG_NONE =   0x0000;
+
+      /* close flags */
+      static constexpr uint32_t CLOSE_FLAG_NONE =     0x0000;
+      static constexpr uint32_t CLOSE_FLAG_DETACH =   0x0001;
+
+      virtual int preadv(const struct iovec* iov, int iovcnt,
+			  uint64_t ofs, uint64_t* bytes_read,
+			  uint32_t flags) = 0;
+      virtual int pwritev(const struct iovec* iov, int iovcnt,
+			   uint64_t ofs, uint64_t* bytes_written,
+			   uint32_t flags) = 0;
+      virtual int commit(const DoutPrefixProvider* dpp, uint32_t flags) = 0;
+      virtual int publish(const DoutPrefixProvider* dpp, uint32_t flags) = 0;
+      virtual int reclone(const DoutPrefixProvider* dpp, uint32_t flags) = 0;
+      virtual int close(const DoutPrefixProvider* dpp, uint32_t flags) = 0;
+      /* the object has been unlinked:  drop the shadow's name now,
+       * refuse to publish it, and let the storage be reclaimed when
+       * the last open descriptor is returned (posix unlink) */
+      virtual int discard(const DoutPrefixProvider* dpp, uint32_t flags) {
+	return -ENOTSUP;
+      }
+      /* truncate the shadow in place;  clients rendezvoused on it
+       * follow, which unlinking and recreating it would defeat */
+      virtual int ftruncate(const DoutPrefixProvider* dpp, uint64_t size,
+			     uint32_t flags) {
+	return -ENOTSUP;
+      }
+
+      virtual int fstat(struct stat* st, uint32_t flags) = 0;
+      virtual int fgetattr(const DoutPrefixProvider* dpp,
+			    const std::string& name, bufferlist& dest,
+			    uint32_t flags) = 0;
+      virtual int fsetattr(const DoutPrefixProvider* dpp,
+			    const std::string& name, const bufferlist& val,
+			    uint32_t flags) = 0;
+      virtual int fgetattrs(const DoutPrefixProvider* dpp,
+			     Attrs& attrs, uint32_t flags) = 0;
+      virtual int fsetattrs(const DoutPrefixProvider* dpp,
+			     Attrs& attrs, uint32_t flags) = 0;
+      virtual int fremovexattr(const DoutPrefixProvider* dpp,
+				const std::string& name, uint32_t flags) = 0;
+
+      /* what this handle's i/o fd is currently bound to */
+      enum class Binding : uint8_t {
+        PUBLISHED,        /* no shadow exists;  bound to published object */
+        SHADOW,           /* bound to the active, unpublished shadow */
+        SHADOW_PUBLISHED, /* shadow was published;  a write must re-fork */
+      };
+
+      bool resumed() const { return resumed_existing; }
+      /* true when a write requires (re-)establishing a shadow */
+      bool needs_shadow() const { return binding != Binding::SHADOW; }
+      bool is_doomed() const { return doomed; }
+
+      FSIOObject() {}
+      virtual ~FSIOObject() {}
+
+    protected:
+      bool resumed_existing{false};
+      bool doomed{false};
+      Binding binding{Binding::SHADOW};
+    }; /* FSIOObject */
+
     /**
      * @brief Read operation on an Object
      *
@@ -1182,6 +1378,7 @@ class Object {
         /// If the object is multipart, the total number of multipart
         /// parts is assigned to this output parameter.
         std::optional<int> parts_count;
+        rgw_owner on_behalf_of; //< see no_authenticated_user
       } params;
 
       virtual ~ReadOp() = default;
@@ -1231,6 +1428,7 @@ class Object {
 	bool abortmp{false};
 	uint64_t parts_accounted_size{0};
         RGWObjVersionTracker* objv_tracker = nullptr;
+        rgw_owner on_behalf_of; //< see no_authenticated_user
       } params;
 
       struct Result {
@@ -1255,6 +1453,7 @@ class Object {
 			      RGWObjVersionTracker* objv) = 0;
     /** Copy an this object to another object. */
     virtual int copy_object(const ACLOwner& owner, const rgw_user& remote_user,
+               const rgw_owner& authenticated_user,
                req_info* info, const rgw_zone_id& source_zone,
                rgw::sal::Object* dest_object, rgw::sal::Bucket* dest_bucket,
                rgw::sal::Bucket* src_bucket,
@@ -1270,6 +1469,37 @@ class Object {
                void (*progress_cb)(off_t, void *), void* progress_data,
                DataProcessorFactory* dp_factory,
                const DoutPrefixProvider* dpp, optional_yield y) = 0;
+
+    /** Move this object to another name, and optionally another bucket,
+     * without copying its data.
+     *
+     * PROVISIONAL.  This is the single-object case, which is the degenerate
+     * form of what the general operation is expected to be:  a
+     * prefix-capable rebinding of names onto objects.  Do not build on this
+     * signature.
+     *
+     * The contract is atomic from the caller's view;  a driver which cannot
+     * achieve that natively is responsible for making it so, not for
+     * advertising that it cannot.  Backends with no cheap way to move a name
+     * return -ENOTSUP and the caller falls back to copy-and-delete.
+     *
+     * History moves with the object.  A destination bucket which cannot hold
+     * the source's history -- unversioned, when the source has non-current
+     * versions -- is refused unless FLAG_SLICE_VERSIONS is given, in which
+     * case the current version moves and the history is dropped.
+     *
+     * `authenticated_user` names who the rename is for, as for
+     * set_obj_attrs():  undefaulted, so a caller with nobody says so with
+     * `rgw::sal::no_authenticated_user`.
+     */
+    static constexpr uint32_t FLAG_RENAME_NONE = 0x0000;
+    static constexpr uint32_t FLAG_SLICE_VERSIONS = 0x0001;
+
+    virtual int rename(const DoutPrefixProvider* dpp, optional_yield y,
+		       Bucket* dest_bucket, const rgw_obj_key& dest_key,
+		       uint32_t flags, const rgw_owner& authenticated_user) {
+      return -ENOTSUP;
+    }
 
     /** return logging subsystem */
     virtual unsigned get_subsys() { return ceph_subsys_rgw; };
@@ -1304,20 +1534,77 @@ class Object {
     /** Get the name of this object */
     virtual const std::string &get_name() const = 0;
 
+    /** What a create should apply to a new shadow before it becomes
+     *  visible under its name.
+     *
+     *  Passed in rather than applied by the caller afterwards, so the
+     *  shadow is linked into place only once it is complete.  Nothing can
+     *  then rendezvous onto a half-built view, and a failure leaves
+     *  nothing behind -- which matters because a leftover attribute-less
+     *  shadow would reject every later exclusive create on that name,
+     *  with no mechanism to reap it. */
+    struct FSIOCreateSpec {
+      Attrs* attrs{nullptr};                 /* xattrs to set */
+      const struct timespec* times{nullptr}; /* [2]: atime, mtime */
+      int64_t size{-1};                      /* >= 0 to set */
+    };
+
+    /** Get a fsio view on an object or object prototype.  -ENOTSUP from a
+     *  driver with no positional view.
+     *
+     *  `authenticated_user` names who the handle is for, held for the
+     *  handle's life, as for rename():  undefaulted, so a caller with
+     *  nobody says so with `rgw::sal::no_authenticated_user`. */
+    using FSIOResult = std::tuple<int, std::unique_ptr<FSIOObject>>;
+    virtual FSIOResult get_fsio_handle(const DoutPrefixProvider* dpp,
+				       const rgw_owner& authenticated_user,
+				       uint32_t flags = FSIOObject::OPEN_FLAG_NONE,
+				       const FSIOCreateSpec* spec = nullptr) {
+      return FSIOResult{-ENOTSUP, nullptr};
+    }
+
+    /** Resolve the positional (NFS) view of this name: the active
+     *  shadow if one exists, else the published object.  A probe, not
+     *  an open--it constructs no FSIOObject, retains no descriptor, and
+     *  never creates a shadow, so it is cheap enough for a lookup which
+     *  runs per dirent.  st->st_mode carries the type, so one call
+     *  disambiguates a file from a directory.
+     *
+     *  Returns -ENOENT when neither view exists, and -ENOTSUP from a
+     *  driver with no positional view;  a caller which gets -ENOTSUP
+     *  falls back to resolving through the S3 op path, which is frozen
+     *  legacy and should not be extended.  A driver which later gains a
+     *  positional view (RADOS is expected to) implements this and its
+     *  callers stop taking the fallback, with no change at the caller.
+     */
+    virtual int stat_fsio_view(const DoutPrefixProvider* dpp,
+			       struct stat* st, Attrs* attrs,
+			       uint32_t flags) {
+      return -ENOTSUP;
+    }
+
     /** Load the object state for this object. */
     virtual int load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh = true) = 0;
     /** Apply pending olh log entries left by deletes with FLAG_SKIP_UPDATE_OLH */
     virtual int update_olh(const DoutPrefixProvider* dpp, optional_yield y, uint32_t flags) = 0;
     /** Set attributes for this object from the backing store.  Attrs can be set or
-     * deleted.  @note the attribute APIs may be revisited in the future. */
-    virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y, uint32_t flags) = 0;
+     * deleted.  @note the attribute APIs may be revisited in the future.
+     *
+     * `authenticated_user`:  see no_authenticated_user. */
+    virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
+			      Attrs* delattrs, optional_yield y, uint32_t flags,
+			      const rgw_owner& authenticated_user) = 0;
     /** Get attributes for this object */
     virtual int get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp) = 0;
     /** Modify attributes for this object. */
-    virtual int modify_obj_attrs(const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp,
+    virtual int modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
+				 optional_yield y, const DoutPrefixProvider* dpp,
+				 const rgw_owner& authenticated_user,
                                  uint32_t flags = rgw::sal::FLAG_LOG_OP) = 0;
     /** Delete attributes for this object */
-    virtual int delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name, optional_yield y) = 0;
+    virtual int delete_obj_attrs(const DoutPrefixProvider* dpp,
+				 const char* attr_name, optional_yield y,
+				 const rgw_owner& authenticated_user) = 0;
     /** Check to see if this object has expired */
     virtual bool is_expired() = 0;
     /** Create a randomized instance ID for this object */
@@ -1350,6 +1637,11 @@ class Object {
 			   uint64_t& size,
 			   const DoutPrefixProvider* dpp,
 			   optional_yield y) = 0;
+    /** When this version stopped being current, where the driver records
+     * it;  lifecycle ages a noncurrent version by it in place of the
+     * mtime of the version that replaced it */
+    virtual std::optional<ceph::real_time> get_noncurrent_since(
+			   const DoutPrefixProvider* dpp, optional_yield y) = 0;
     /** Check to see if two placement rules match */
     virtual bool placement_rules_match(rgw_placement_rule& r1, rgw_placement_rule& r2) = 0;
     /** Dump driver-specific object layout info in JSON */
@@ -1444,10 +1736,13 @@ class Object {
 				      const DoutPrefixProvider* dpp,
 				      optional_yield y) = 0;
 
-    /** Get a new ReadOp for this object */
-    virtual std::unique_ptr<ReadOp> get_read_op() = 0;
-    /** Get a new DeleteOp for this object */
-    virtual std::unique_ptr<DeleteOp> get_delete_op() = 0;
+    /** Get a new ReadOp for this object, for `authenticated_user` (see
+     * no_authenticated_user) */
+    virtual std::unique_ptr<ReadOp> get_read_op(
+				const rgw_owner& authenticated_user) = 0;
+    /** Get a new DeleteOp for this object, for `authenticated_user` */
+    virtual std::unique_ptr<DeleteOp> get_delete_op(
+				const rgw_owner& authenticated_user) = 0;
 
     /// Return stored torrent info or -ENOENT if there isn't any.
     virtual int get_torrent_info(const DoutPrefixProvider* dpp,
@@ -1558,6 +1853,11 @@ public:
   MultipartUpload() = default;
   virtual ~MultipartUpload() = default;
 
+  /** For an upload no request is acting on -- lifecycle's abort --
+   * whose work it is (see no_authenticated_user).  A driver with no
+   * identity mapping ignores it. */
+  virtual void set_on_behalf_of(const rgw_owner& owner) {}
+
   /** Get the name of the object representing this upload in the backing store */
   virtual const std::string& get_meta() const = 0;
   /** Get the name of the target object for this upload */
@@ -1613,14 +1913,16 @@ public:
   /** Get placement and/or attribute info for this upload */
   virtual int get_info(const DoutPrefixProvider *dpp, optional_yield y, rgw_placement_rule** rule, rgw::sal::Attrs* attrs = nullptr) = 0;
 
-  /** Get a Writer to write to a part of this upload */
+  /** Get a Writer to write to a part of this upload, for
+   * `authenticated_user` (see no_authenticated_user) */
   virtual std::unique_ptr<Writer> get_writer(const DoutPrefixProvider *dpp,
 			  optional_yield y,
 			  rgw::sal::Object* obj,
 			  const ACLOwner& owner,
 			  const rgw_placement_rule *ptail_placement_rule,
 			  uint64_t part_num,
-			  const std::string& part_num_str) = 0;
+			  const std::string& part_num_str,
+			  const rgw_owner& authenticated_user) = 0;
 
   /** Print the Upload to @a out */
   virtual void print(std::ostream& out) const = 0;
@@ -1813,6 +2115,9 @@ protected:
     /** Indicate the successful completion of the event associated with this notification */
     virtual int publish_commit(const DoutPrefixProvider* dpp, uint64_t size,
 			       const ceph::real_time& mtime, const std::string& etag, const std::string& version) = 0;
+    /** The object's retention as the event set it, for an
+     * s3:ObjectRetention:Put event's record;  called before publish_commit() */
+    virtual void set_object_retention(const RGWObjectRetention& retention) {}
 };
 
 /**

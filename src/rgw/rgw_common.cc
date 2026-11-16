@@ -69,6 +69,7 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_INVALID_PART_ORDER, {400, "InvalidPartOrder" }},
     { ERR_REQUEST_TIMEOUT, {400, "RequestTimeout" }},
     { ERR_TOO_LARGE, {400, "EntityTooLarge" }},
+    { ERR_KEY_TOO_LONG, {400, "KeyTooLongError" }},
     { ERR_TOO_SMALL, {400, "EntityTooSmall" }},
     { ERR_TOO_MANY_BUCKETS, {400, "TooManyBuckets" }},
     { ERR_MALFORMED_XML, {400, "MalformedXML" }},
@@ -106,6 +107,7 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_NO_SUCH_ENTITY, {404, "NoSuchEntity"}},
     { ERR_NO_SUCH_CORS_CONFIGURATION, {404, "NoSuchCORSConfiguration"}},
     { ERR_NO_SUCH_OBJECT_LOCK_CONFIGURATION, {404, "ObjectLockConfigurationNotFoundError"}},
+    { ERR_NO_SUCH_OBJECT_RETENTION_OR_HOLD, {404, "NoSuchObjectLockConfiguration"}},
     { ERR_METHOD_NOT_ALLOWED, {405, "MethodNotAllowed" }},
     { ETIMEDOUT, {408, "RequestTimeout" }},
     { EEXIST, {409, "BucketAlreadyExists" }},
@@ -114,6 +116,7 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_EMAIL_EXIST, {409, "EmailExists" }},
     { ERR_KEY_EXIST, {409, "KeyExists"}},
     { ERR_TAG_CONFLICT, {409, "OperationAborted"}},
+    { ERR_KEY_PATH_CONFLICT, {409, "KeyPathConflict"}},
     { ERR_POSITION_NOT_EQUAL_TO_LENGTH, {409, "PositionNotEqualToLength"}},
     { ERR_OBJECT_NOT_APPENDABLE, {409, "ObjectNotAppendable"}},
     { ERR_INVALID_BUCKET_STATE, {409, "InvalidBucketState"}},
@@ -2331,7 +2334,10 @@ bool RGWUserCaps::is_valid_cap_type(const string& tp)
                                     "user-info-without-keys",
                                     "ratelimit",
                                     "accounts",
-                                    "dedup"};
+                                    "dedup",
+                                    "driver-hint",
+                                    "nsfs",
+                                    "nsfs-adoption"};
 
   for (unsigned int i = 0; i < sizeof(cap_type) / sizeof(char *); ++i) {
     if (tp.compare(cap_type[i]) == 0) {

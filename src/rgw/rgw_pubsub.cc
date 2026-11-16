@@ -175,6 +175,12 @@ void rgw_pubsub_s3_event::dump(Formatter *f) const {
   }
   encode_json("eventId", id, f);
   encode_json("opaqueData", opaque_data, f);
+  if (!object_retention_mode.empty()) {
+    Formatter::ObjectSection s(*f, "objectRetentionEventData");
+    encode_json("mode", object_retention_mode, f);
+    utime_t until(object_retention_until);
+    encode_json("retainUntilDate", until, f);
+  }
 }
 
 namespace rgw::notify {
@@ -581,6 +587,21 @@ int get_bucket_notifications(const DoutPrefixProvider* dpp,
     return -EIO;
   }
   return 0;
+}
+
+std::string escape_endpoint_arg(std::string_view value)
+{
+  std::string escaped;
+  escaped.reserve(value.size());
+  for (const char c : value) {
+    switch (c) {
+    case '%': escaped.append("%25"); break;
+    case '&': escaped.append("%26"); break;
+    case '+': escaped.append("%2B"); break;
+    default: escaped.push_back(c);
+    }
+  }
+  return escaped;
 }
 
 std::string topic_to_unique(const std::string& topic,

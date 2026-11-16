@@ -1,0 +1,311 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
+
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright contributors to the Ceph project
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software
+ * Foundation. See file COPYING.
+ *
+ */
+
+#pragma once
+
+#include <cstdint>
+#include <optional>
+#include <string>
+#include <string_view>
+
+namespace rgw { namespace sal { namespace nsfs {
+
+class XattrStrategy;
+class PathStrategy;
+class MPUStrategy;
+class BucketStateStrategy;
+
+/* The on-disk format of a tree:  one member per format-dependent
+ * concern, so the formats sit beside each other with the same shape.
+ *
+ * The MPU member is nullable, and null means the driver's own choice
+ * between per-part and strided, which turns on whether the filesystem
+ * shares extents.  That is a property of the mount and not of the
+ * tree, so `rgw_meta_format` leaves it unset.  A format whose staging
+ * layout is its own -- NooBaa's size-keyed one -- names it here.
+ *
+ * A Format is complete or it does not exist.  A driver must not hold
+ * one carrying another format's staging layout with the nsfs attribute
+ * names:  that is a combination no profile represents and no tree is
+ * ever in.  A test may compose one, which is how the selection is
+ * given something to be wrong about while only one real format
+ * exists. */
+struct Format {
+  XattrStrategy* xattr_strategy{nullptr};
+  PathStrategy* path_strategy{nullptr};
+  MPUStrategy* mpu_strategy{nullptr};
+  BucketStateStrategy* bucket_state_strategy{nullptr};
+  const char* fname{"unset"};
+
+  const char* name() const { return fname; }
+};
+
+/* Whether a bucket carries the nsfs extensions, and what that resolves to.
+ *
+ * THE UNMARKED CASE IS NOOBAA'S.  A bucket directory with no marker is
+ * read as NooBaa would write it and we add nothing to it:  no shadow
+ * subtree, no S3 ACL attribute.  Marking is a
+ * declared act -- at creation, or by adopting an existing tree -- and it
+ * is what buys the structure nsfs and posix want.
+ *
+ * That polarity is the point.  A NooBaa root we are asked to serve is
+ * unmarked by construction, because NooBaa never wrote a marker, so the
+ * correct reading of it is the default rather than something an operator
+ * has to remember to configure.  And a tree we have not extended can go
+ * back:  rollback after cutover is never marking it, not undoing a
+ * conversion.  See project_noobaa_interchange.
+ *
+ * It also means every nsfs tree written before this existed reads as
+ * base, although it was written with the nsfs extensions.  Those trees are
+ * adopted or wiped;  there is no way to tell them apart from a NooBaa
+ * tree by inspection, which is exactly why the marker had to exist.
+ */
+
+/* Where the markers live:  a sub-namespace of nsfs's that no
+ * XattrStrategy claims.  parse_disk_name() refuses it in both formats,
+ * so a marker never reaches an S3 attribute set, and a REPLACE_ALL
+ * write, which prunes only names a strategy claims, never removes one
+ * (DECISIONS.md 2026-11-02).  Still under user.nsfs:, so what looks for
+ * any nsfs state on a directory -- carries_nsfs_state(),
+ * release_nsfs_state(), the sentinel's read -- finds the markers too.
+ * No attribute key may begin "marker.", or its disk name would fall in
+ * here.  Under the ':' for the reason xattr_strategy.cc gives:  NooBaa
+ * user metadata cannot forge one, even on a bucket's root directory
+ * object, whose metadata NooBaa keeps on the bucket's directory. */
+inline constexpr const char* MARKER_XATTR_PREFIX = "user.nsfs:marker.";
+
+/* The marker.  A physical xattr name, deliberately NOT routed through
+ * XattrStrategy::disk_name().
+ *
+ * Reading it through a strategy would mean choosing the strategy first,
+ * and choosing the strategy is what the marker is for.  It is read with
+ * its own fgetxattr, before any strategy is consulted. */
+inline constexpr const char* EXTENSIONS_XATTR = "user.nsfs:marker.extensions";
+
+/* The tree still holds structure somebody else wrote.
+ *
+ * Read the same way and for the same reason, and deliberately NOT a bit
+ * in the extensions mask.  That mask says what structure *of nsfs's* a
+ * tree carries and every bit in it is something nsfs added;  what remains
+ * of another format is the opposite fact, and a reader that finds them
+ * in one word comes to treat a leftover as a feature.
+ *
+ * Set by the upgrade from base to a named profile and cleared when that
+ * upgrade finishes, so it is the upgrade's progress flag and not a
+ * steady state.  Its presence is what brings the fallback strategies
+ * into play:  a bucket we created never pays for one, and a bucket
+ * that has finished converting stops paying.
+ *
+ * The value is the format the tree is being converted FROM -- today
+ * only "noobaa", which is the only other format that exists.  A name
+ * rather than a flag because a reader has to know which fallback to
+ * fall back to, and guessing from the one that happens to be
+ * compiled in is how the wrong parser gets applied to the right
+ * bytes. */
+inline constexpr const char* CONVERTING_XATTR = "user.nsfs:marker.converting";
+inline constexpr const char* CONVERTING_FROM_NOOBAA = "noobaa";
+
+/* WHETHER THE DIRECTORY EXISTS FOR THIS BUCKET, OR PREDATES IT.
+ *
+ * A bucket the gateway created owns its directory:  the directory
+ * exists only because a bucket was wanted, so deleting the bucket
+ * removes it.  A bucket adopted over a directory that was already
+ * there does not, and deleting that bucket must leave the directory
+ * and its contents alone -- it may be a fileset junction, or anything
+ * else an administrator made and pointed the gateway at.
+ *
+ * Nothing on disk distinguishes the two afterwards.  A directory that
+ * exists says nothing about who made it, which is why NooBaa records
+ * the same fact as `should_create_underlying_storage`:  NooBaa's create
+ * path doubles as adopt, so NooBaa has to write down which one
+ * happened.  Splitting the operations makes it obvious when it
+ * happens and no more recoverable later, so it still has to be
+ * written down.
+ *
+ * ABSENT MEANS THE BUCKET OWNS IT.  Every bucket that existed before
+ * this attribute did was created by the gateway, so the absent case
+ * has to be the owning one or they would all become undeletable.
+ * Only adoption over a pre-existing directory writes it, with "0".
+ *
+ * NooBaa's value carries across on adoption, and it is not always 0:  a
+ * bucket NooBaa created has a directory that exists only because a
+ * gateway made it for that bucket, and taking it over does not change
+ * that.  Defaulting adopted buckets to 0 would leave every migrated
+ * bucket undeletable. */
+inline constexpr const char* OWNS_STORAGE_XATTR = "user.nsfs:marker.owns_storage";
+
+/* The markers on a directory below a bucket's root.  A bucket's markers
+ * say what the bucket is;  these say what one subtree is, so they have
+ * a prefix of their own, which carries_nsfs_state() -- is this
+ * directory, or was it, a bucket -- skips as a class (DECISIONS.md
+ * 2026-11-05).  Never written on a bucket's root. */
+inline constexpr const char* SUBTREE_MARKER_PREFIX =
+  "user.nsfs:marker.subtree.";
+
+/* The subtree is converted:  this directory's files, versions and
+ * directory object, and every subdirectory, are in the bucket's format.
+ * Written after the children, so a walk that stops partway leaves it
+ * off the directory it stopped in, and a resumed walk passes a marked
+ * subdirectory, and everything under it, with one read.
+ *
+ * The value is the extension set the subtree was converted to, as
+ * EXTENSIONS_XATTR writes it, and a walk skips only a marker naming its
+ * own target.  Left after the conversion completes:  nothing reads it
+ * once the bucket's converting marker is gone. */
+inline constexpr const char* SUBTREE_CONVERTED_XATTR =
+  "user.nsfs:marker.subtree.converted";
+
+/* THE VALUE IS A SET, NOT A LEVEL.
+ *
+ * A decimal integer in the attribute, read as a bitmask:  one bit per
+ * extension, and a profile is a named combination of them.  Not an
+ * ordinal, because features are expected to migrate into the shared
+ * profile one at a time -- a mask says that by defining a bit, where an
+ * ordinal would say it by renumbering every level above.
+ *
+ * A bucket carrying ANY bit this build does not implement is rejected
+ * rather than served on a guess.  Not a fallback and not a warning:  the
+ * bits we do not know are the ones whose structure we would corrupt.
+ *
+ * We only ever write the named profiles below, so a combination nobody
+ * named is something to reject, not something we produce. */
+
+/* 0 is not a value;  it is the absence of the attribute, and it means
+ * the bucket is NooBaa-native. */
+inline constexpr uint32_t EXTENSIONS_NONE = 0;
+
+/* The extensions, one bit each.
+ *
+ * SHADOW is first because it is what the FSIO interlock already gates,
+ * so a bucket already carrying `1` keeps its meaning and no tree needs
+ * rewriting.
+ *
+ * A bit is declared here as soon as it is named, but it belongs in
+ * EXTENSIONS_KNOWN only once this build can actually serve a bucket
+ * that carries it;  a bucket carrying a bit we cannot serve is
+ * rejected rather than served wrongly.  No bit is in that state
+ * today.
+ *
+ * 0x4 was EXT_POSITIONAL, reserved for a "positional IO layout" that
+ * was never specified -- the name appeared in feature lists beside
+ * the shadow subtree and nowhere else, and nothing recorded what it
+ * would mean that FSIO does not already do.  Removed 2026-10-05.  It
+ * was never written to a tree:  the only mask we write is
+ * EXTENSIONS_KNOWN, which never contained it. */
+inline constexpr uint32_t EXT_SHADOW      = 0x1;  /* .shadow, FSIO */
+inline constexpr uint32_t EXT_ACLS        = 0x2;  /* S3 access control lists */
+/* Object metadata in RGW's representation:  the nsfs attribute names and
+ * packing, on NooBaa's layout.
+ *
+ * It adds no file and no directory, so without a bit of its own the
+ * shared profile would be an empty set -- and an empty set is not
+ * separable from a bucket carrying no attribute at all.  Anything that
+ * strips xattrs turns one into the other, and we would then write
+ * NooBaa's attribute names onto objects holding nsfs's.  A profile has to
+ * be a value somebody can read back. */
+inline constexpr uint32_t EXT_RGW_META    = 0x8;
+
+/* WHAT EARNS A BIT.
+ *
+ * Not "a feature we implemented".  The two bits above it are the
+ * pattern:  EXT_SHADOW marks a STRUCTURE, a subtree that is in the
+ * tree or is not, and EXT_ACLS marks a fact NooBaa has no concept of
+ * -- NooBaa stores no ACL, so the nsfs one is not NooBaa's thing under
+ * another name, it is something extra.
+ *
+ * An attribute both formats keep, differing only in name or packing,
+ * needs no bit:  EXT_RGW_META already says whether this tree holds
+ * RGW attributes or NooBaa's.  Object tags were mapped without one and object
+ * lock will be.  An earlier comment here expected them to "move into
+ * shared" by defining bits;  that was written when neither had any
+ * representation in this driver, and mapping them put them in shared
+ * on their own. */
+
+/* The bits this build can serve.  The rejection test, and the reason a
+ * declared-but-unbuilt extension must stay out of it:  accepting a bit
+ * we cannot honour is exactly the corruption the rule exists to
+ * prevent. */
+inline constexpr uint32_t EXTENSIONS_KNOWN =
+    EXT_SHADOW | EXT_ACLS | EXT_RGW_META;
+
+/* The named profiles.
+ *
+ * base    -- no attribute at all.  Read and written as NooBaa does, and
+ *            nothing of nsfs's is added.  It is an absence and not a
+ *            value, so it is the one profile with no mask.
+ * shared  -- RGW's metadata representation on NooBaa's layout.  One
+ *            bit, and that is the whole of it:  an attribute whose
+ *            name differs is covered by EXT_RGW_META, so a feature
+ *            both formats have needs nothing added when it is mapped.
+ *            Object tags landed that way and so will object lock.
+ * strong  -- everything this build can serve, which is everything
+ *            named.  Should a bit ever be declared ahead of its
+ *            implementation it stays out of here, because a bucket
+ *            must never be marked with an extension the writer cannot
+ *            produce.
+ *
+ * A tree is handable back to NooBaa only at `base`. */
+inline constexpr uint32_t EXTENSIONS_BASE   = EXTENSIONS_NONE;
+inline constexpr uint32_t EXTENSIONS_SHARED = EXT_RGW_META;
+inline constexpr uint32_t EXTENSIONS_STRONG = EXTENSIONS_KNOWN;
+
+/* The extension set a profile name asks for, or nothing for a name we do
+ * not write.
+ *
+ * Callers from outside the driver name a profile and not a bitmask:  the
+ * mask is how the profile is stored, and "shared" is what an operator or
+ * a test means.  `base` is the absence of the attribute, so setting it
+ * removes rather than writes. */
+inline std::optional<uint32_t> extensions_for_profile(std::string_view name)
+{
+  if (name == "base") return EXTENSIONS_BASE;
+  if (name == "shared") return EXTENSIONS_SHARED;
+  if (name == "strong") return EXTENSIONS_STRONG;
+  return std::nullopt;
+}
+
+/* Whether a set is one of the three we name.  A bucket must never be
+ * left carrying a combination nobody defined, so this gates what can be
+ * written as well as what can be read back. */
+inline bool is_named_profile(uint32_t ext)
+{
+  return (ext == EXTENSIONS_BASE) || (ext == EXTENSIONS_SHARED) ||
+	 (ext == EXTENSIONS_STRONG);
+}
+
+/* What a bucket's marker resolves to.
+ *
+ * The strategy pointers are the reason this is a struct rather than a
+ * bool.  Both profiles resolve to the same instances today, because the
+ * noobaa implementations are S5;  what S4 buys is that S5 can land one
+ * strategy at a time without touching the call sites again. */
+struct BucketProfile {
+  uint32_t extensions{EXTENSIONS_NONE};
+  const Format* format{nullptr};
+
+  bool has(uint32_t ext) const { return (extensions & ext) != 0; }
+
+  /* whether the bucket is marked:  its extension set is not empty */
+  bool extended() const { return extensions != EXTENSIONS_NONE; }
+
+  const char* name() const {
+    if (extensions == EXTENSIONS_BASE) return "base";
+    if (extensions == EXTENSIONS_SHARED) return "shared";
+    if (extensions == EXTENSIONS_STRONG) return "strong";
+    return "mixed";
+  }
+};
+
+}}} // namespace rgw::sal::nsfs

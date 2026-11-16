@@ -518,7 +518,7 @@ public:
     position(-1),
     is_closed(false)
     {
-      op = obj->get_read_op();
+      op = obj->get_read_op(rgw::sal::no_authenticated_user);
     }
 
   arw::Status Open() {

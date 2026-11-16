@@ -440,9 +440,9 @@ TEST_F(GPFSXattrTest, DirectoryMultiXattr)
     std::string value;
   };
   std::vector<xattr_entry> entries = {
-    {"user.nsfs.bucket_info", std::string(291, 'I')},
-    {"user.nsfs.object_type", std::string(10, 'T')},
-    {"user.nsfs.rgw.acl", std::string(147, 'A')},
+    {"user.nsfs:bucket_info", std::string(291, 'I')},
+    {"user.nsfs:object_type", std::string(10, 'T')},
+    {"user.nsfs:rgw.acl", std::string(147, 'A')},
   };
 
   /* SET via POSIX first */
@@ -495,7 +495,7 @@ TEST_F(GPFSXattrTest, DirectoryMultiXattr)
   }
 
   /* now add a 4th xattr (like put_cors) and re-list */
-  std::string cors_name = "user.nsfs.rgw.cors";
+  std::string cors_name = "user.nsfs:rgw.cors";
   std::string cors_val(55, 'C');
   ASSERT_EQ(fsetxattr(dir_fd, cors_name.c_str(), cors_val.data(), cors_val.size(), 0), 0);
 
@@ -535,7 +535,7 @@ TEST_F(GPFSXattrTest, DirectoryMultiXattr)
   EXPECT_TRUE(found_cors) << cors_name << " not found after add + re-list";
 
   /* also try: SET via batch, then LIST via batch on same dir fd */
-  std::string batch_name = "user.nsfs.rgw.tagging";
+  std::string batch_name = "user.nsfs:rgw.tagging";
   std::string batch_val(30, 'G');
 
   {
@@ -614,9 +614,9 @@ TEST_F(GPFSXattrTest, TwoFdDirectoryList)
 
   /* SET via batch on fd1 */
   std::vector<std::pair<std::string, std::string>> entries = {
-    {"user.nsfs.bucket_info", std::string(291, 'I')},
-    {"user.nsfs.object_type", std::string(10, 'T')},
-    {"user.nsfs.rgw.acl", std::string(147, 'A')},
+    {"user.nsfs:bucket_info", std::string(291, 'I')},
+    {"user.nsfs:object_type", std::string(10, 'T')},
+    {"user.nsfs:rgw.acl", std::string(147, 'A')},
   };
 
   {

@@ -710,6 +710,13 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
             if (!encoding.empty()) {
               response_attrs[aiter->second] = std::move(encoding);
             }
+          } else if (aiter->first == RGW_ATTR_STORAGE_CLASS) {
+            // "Amazon S3 returns this header for all objects except for S3
+            // Standard storage class objects." (GetObject and HeadObject,
+            // x-amz-storage-class)
+            if (!s.empty() && s != RGW_STORAGE_CLASS_STANDARD) {
+              response_attrs[aiter->second] = std::move(s);
+            }
           } else {
             response_attrs[aiter->second] = std::move(s);
           }
@@ -3121,7 +3128,8 @@ int RGWPutObj_ObjStore_S3::get_encrypt_filter(
   if (!multipart_upload_id.empty()) {
     std::unique_ptr<rgw::sal::MultipartUpload> upload =
       s->bucket->get_multipart_upload(s->object->get_name(),
-				  multipart_upload_id);
+				      authenticated_user(s),
+				      multipart_upload_id);
     std::unique_ptr<rgw::sal::Object> obj = upload->get_meta_obj();
     obj->set_in_extra_data(true);
     res = obj->get_obj_attrs(s->yield, this);

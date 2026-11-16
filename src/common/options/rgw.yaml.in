@@ -1544,6 +1544,32 @@ options:
   services:
   - rgw
   with_legacy: true
+# how long a stateless (NFSv3) writer may be idle before its shadow is
+# published;  nothing is at risk while we wait--the data is durable and
+# visible to NFS--so this bounds only when the object appears in S3
+- name: rgw_nfs_stateless_finalize_secs
+  type: int
+  level: advanced
+  default: 5_min
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_nfs_stateless_finalize_versioned_secs
+  type: int
+  level: advanced
+  desc: idle interval before a stateless (NFSv3) write is finalized, in a versioned bucket
+  long_desc: NFSv3 carries no signal that a write has finished, so librgw infers
+    it from the writer going quiet.  Each inferred close publishes, and in a
+    versioned bucket every publish mints a permanent version -- so the interval
+    stops being a visibility SLA and becomes the length of pause treated as
+    still-writing.  It wants to exceed application think-time, which is why it is
+    a separate and longer value;  a client that dribbles writes to one file would
+    otherwise mint a version per pause.  The timer is idle-reset on each write, so
+    a continuous writer at any rate is unaffected either way.
+  default: 30_min
+  services:
+  - rgw
+  with_legacy: true
 # use fast S3 attrs from bucket index--currently assumes NFS mounts are immutable
 - name: rgw_nfs_s3_fast_attrs
   type: bool
@@ -3173,6 +3199,13 @@ options:
   - rgw
   - rgw
   min: 30
+- name: rgw_driver_debug_apis
+  type: bool
+  level: dev
+  desc: Enable driver-level debug admin APIs (e.g., driver hint endpoint)
+  default: false
+  services:
+  - rgw
 - name: rgw_debug_inject_latency_bi_unlink
   type: uint
   level: dev
@@ -4875,13 +4908,17 @@ options:
 - name: rgw_posix_multipart_cache_max_parts
   type: uint
   level: advanced
-  desc: Per-entry part cap for proactive multipart caching
-  long_desc: Maximum number of parts to cache per in-progress upload
-    via proactive insertion.  Uploads exceeding this fall back to xattr
-    writes for overflowing parts (even in writeback/volatile mode).
-    Controls the memory tradeoff between breadth (more uploads cached)
-    and depth (more parts per upload cached).
-  default: 512
+  desc: Total part records held across the multipart cache
+  long_desc: Ceiling on the number of per-part metadata records cached
+    across all in-progress uploads.  It is a budget for the whole cache
+    rather than a per-upload cap.  A cached upload always holds every one
+    of its parts, because any per-entry bound below S3's maximum of 10000
+    parts becomes a threshold that a legal upload can cross, after which
+    that upload's parts would come from two places.  When the budget is
+    exhausted a whole upload stops being cached, and its parts are read
+    from the staging directory instead, which is authoritative in
+    writethrough and writeback modes.
+  default: 1048576
   services:
   - rgw
 - name: rgw_posix_multipart_cache_policy
@@ -4902,9 +4939,14 @@ options:
 - name: rgw_nsfs_base_path
   type: str
   level: advanced
-  desc: Option to set base path for NSFS Driver
-  long_desc: Base path for the NSFS driver.  All operations are relative to this path.
-    Defaults to /tmp/rgw_nsfs_driver
+  desc: Where a bucket is made for an owner that has no new_buckets_path
+  long_desc: The default new_buckets_path for an owner created in RGW.  Read at
+    bucket creation only, and only once a custom bucket path and the owner's own
+    new_buckets_path have both been considered;  an owner imported from NooBaa
+    with no path is rejected rather than placed here, as NooBaa rejects it.  Nothing
+    else consults it, because a bucket is found through the record that places it
+    and the record carries its path, so no operation is relative to this.  It is
+    not a root that buckets live under.
   default: /tmp/rgw_nsfs_driver
   services:
   - rgw
@@ -4923,6 +4965,155 @@ options:
   default: /var/lib/ceph/radosgw
   services:
   - rgw
+- name: rgw_nsfs_adoption_mode
+  type: str
+  level: advanced
+  desc: Whether a NooBaa tree is adopted automatically or by command
+  long_desc: Meaningful only when rgw_nsfs_noobaa_config_root names a NooBaa
+    configuration store;  with no store there is nothing to adopt and this
+    is inert.  "command" (default) adopts nothing unless asked;  the
+    store's identities and each bucket are adopted by command, through
+    Admin Ops -- the adoption driver hint, or changing a bucket's profile
+    out of base.
+    Nothing on disk changes until then, which is the state for
+    inspection and validation.  "automatic" imports the store's
+    identities at startup and adopts every bucket in the background
+    while the gateway serves, a bucket a request reaches ahead of the
+    rest.  Adopting a bucket imports its NooBaa record and rewrites its
+    tree into the nsfs format.
+  default: command
+  enum_values:
+  - command
+  - automatic
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_nsfs_adoption_workers
+  type: uint
+  level: advanced
+  desc: How many buckets automatic adoption adopts at once
+  long_desc: Each worker adopts one bucket at a time on a thread of its
+    own, which exists only while it is adopting.  Meaningful only when
+    rgw_nsfs_adoption_mode is automatic.
+  default: 3
+  min: 1
+  services:
+  - rgw
+- name: rgw_nsfs_adoption_wait_ms
+  type: uint
+  level: advanced
+  desc: How long a request waits for its bucket's automatic adoption
+  long_desc: A request on a bucket not yet adopted asks for the bucket
+    to be adopted next and waits up to this long for it.  If the
+    adoption has not finished by then, a read is served from the bucket
+    as found and a write is answered 503, which a client retries.
+    Zero asks without waiting.  Meaningful only when
+    rgw_nsfs_adoption_mode is automatic.
+  default: 1000
+  services:
+  - rgw
+- name: rgw_nsfs_adoption_role_rights
+  type: str
+  level: advanced
+  desc: What a role imported from NooBaa may do
+  long_desc: Meaningful only when rgw_nsfs_noobaa_config_root names a NooBaa
+    configuration store.  At NooBaa 5.23 a role is an account's role_config,
+    and a session of it acts with all of that account's rights.  "account"
+    (default) keeps that -- the import writes the inline role policy
+    NooBaaRoleMigration, allowing s3:* on *, on each role it creates, and
+    reports how many carry it.  "none" imports the role with no permission
+    policy, as NooBaa 6 migrates one;  a session can then do only what
+    bucket policies grant until an operator attaches a policy.  Read when a
+    role is imported;  changing it later changes no imported role.
+  default: account
+  enum_values:
+  - account
+  - none
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_nsfs_adoption_report_dir
+  type: str
+  level: advanced
+  desc: Directory each automatic adoption pass writes its report to
+  long_desc: Meaningful only when rgw_nsfs_noobaa_config_root names a NooBaa
+    configuration store and rgw_nsfs_adoption_mode is automatic.  Each
+    automatic adoption pass writes the findings it gathered to a file of its
+    own here, named
+    nsfs-adoption-$cluster-$name-<UTC timestamp>.json.  Each finding names
+    its kind, what it does to the conversion and a proposed course of action.
+    Empty writes no report file.
+  default: /var/log/ceph
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_nsfs_noobaa_config_root
+  type: str
+  level: advanced
+  desc: Path to a NooBaa configuration directory to read bucket state from
+  long_desc: Address of a NooBaa configuration directory, whose buckets/ subdirectory
+    holds one JSON record per bucket.  That subdirectory is the only part of it this
+    driver reads, and it is read only, and only for a bucket in the base profile that
+    carries no state of ours.  Empty means do not consult one.  This names the
+    resolved directory, not the well-known path NooBaa starts from.  Theirs is
+    /etc/noobaa.conf.d, which is the configuration directory itself unless it holds a
+    config_dir_redirect file naming another one.  We hold the resolved address instead
+    of repeating that lookup, because a deployment can remove NooBaa and take the
+    well-known path with it.
+  services:
+  - rgw
+- name: rgw_nsfs_custom_bucket_path_header
+  type: str
+  level: advanced
+  desc: The request header naming a custom path for a new bucket
+  long_desc: A CreateBucket carrying this header, with a path the owner's
+    allowlist admits, creates the bucket at that path rather than at the
+    owner's new_buckets_path.  The default is NooBaa's header, so that clients
+    of a migrated deployment keep working;  naming another lets NooBaa's be
+    retired.
+  default: x-noobaa-custom-bucket-path
+  services:
+  - rgw
+- name: rgw_nsfs_custom_bucket_path_allowed_list
+  type: str
+  level: advanced
+  desc: Path prefixes a custom bucket path may start with, colon-separated
+  long_desc: The allowlist for an owner whose identity carries none of its own,
+    as NooBaa's NSFS_CUSTOM_BUCKET_PATH_ALLOWED_LIST is.  A custom path is
+    admitted when it starts with one of these, as a string prefix, as NooBaa
+    matches.  When this is empty, every custom path is denied.
+  services:
+  - rgw
+- name: rgw_nsfs_bucket_profile
+  type: str
+  level: advanced
+  desc: The profile a bucket created here is marked with
+  long_desc: The default, shared, is the nsfs model, an S3 view of a native
+    filesystem namespace, and the profile a NooBaa bucket is adopted into.
+    Strong adds the shadow subtree that FSIO, the librgw file interface,
+    writes through;  FSIO is rejected on a bucket that is not strong.
+  default: shared
+  enum_values:
+  - shared
+  - strong
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_nsfs_enable_rename
+  type: bool
+  level: advanced
+  desc: Move objects by renaming them, rather than copying and deleting.
+  long_desc: When enabled, rgw_rename() on a filesystem-backed namespace moves
+    the object's directory entry and its version history instead of copying the
+    data, so the cost does not scale with object size and the object keeps its
+    inode, etag and version ids. Only strategies which can do this cheaply
+    honour it; GPFS is excluded, and every other backend falls back to
+    copy-and-delete whatever this is set to. Provisional -- the interface is
+    expected to be replaced by a prefix-capable operation.
+  default: true
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_nsfs_cache_max_buckets
   type: int
   level: advanced
@@ -4969,6 +5160,55 @@ options:
   default: false
   services:
   - rgw
+- name: rgw_nsfs_listing_revalidate
+  type: bool
+  level: advanced
+  desc: Check a bucket's tree at listing time, so that files changed outside
+    the gateway are listed
+  long_desc: The listing cache is filled from a walk of a bucket's tree.  When
+    enabled, a listing compares each directory it reaches with the inode and
+    mtime recorded for it, and reads a directory that changed, building
+    entries only for the names it lacks and removing those gone;  and it
+    compares a listed object with its file at most once per
+    rgw_nsfs_listing_entry_interval.  Files written, removed, renamed or
+    overwritten by an NFS or SMB client, or any other process, are then
+    listed as NooBaa lists them.  When disabled, the cache is trusted until
+    the bucket is evicted or the gateway restarts.
+  default: true
+  services:
+  - rgw
+  see_also:
+  - rgw_nsfs_listing_entry_interval
+  - rgw_nsfs_listing_provisional_interval
+- name: rgw_nsfs_listing_entry_interval
+  type: int
+  level: advanced
+  desc: Seconds between comparisons of a listed object with its file
+  long_desc: Under rgw_nsfs_listing_revalidate, a listed object is compared
+    with its file (inode, size, mtime, ctime) at most once in this many
+    seconds, and its listing entry rebuilt only where the file changed.  An
+    object overwritten in place outside the gateway is listed as it now is
+    within this interval.  0 compares on every listing, as NooBaa does;  -1
+    never compares.
+  default: 30
+  services:
+  - rgw
+  see_also:
+  - rgw_nsfs_listing_revalidate
+- name: rgw_nsfs_listing_provisional_interval
+  type: int
+  level: advanced
+  desc: Seconds a directory the gateway changed is trusted without being read
+  long_desc: Under rgw_nsfs_listing_revalidate, the gateway's own change to a
+    directory moves its mtime, and is not a reason to read it.  The directory
+    is trusted for at most this many seconds after the first such change, and
+    the first listing after that reads it, so that a file another process
+    created beside the gateway's change is listed within this interval.
+  default: 300
+  services:
+  - rgw
+  see_also:
+  - rgw_nsfs_listing_revalidate
 - name: rgw_nsfs_read_fadvise
   type: int
   level: advanced
@@ -5048,6 +5288,20 @@ options:
   min: 1
   services:
   - rgw
+- name: rgw_nsfs_io_uring_control_entries
+  type: uint
+  level: advanced
+  desc: io_uring SQ entries per thread when the nsfs data engine is synchronous
+  long_desc: With rgw_nsfs_io_engine sync, a thread's ring carries only an
+    impersonated identity's operations -- its opens, and its links, renames
+    and attribute operations, in chains. A batch of attribute operations is
+    at most half the ring, and at most 8. Read when a thread creates its
+    ring, so a change applies to rings created after it, not to those that
+    exist. Rounded up to a power of two.
+  default: 32
+  min: 2
+  services:
+  - rgw
 - name: rgw_nsfs_io_uring_sqpoll
   type: bool
   level: advanced
@@ -5056,6 +5310,138 @@ options:
     sufficient privileges; initialization falls back to a non-SQPOLL
     ring if the kernel rejects it.
   default: false
+  services:
+  - rgw
+- name: rgw_nsfs_umask
+  type: str
+  level: advanced
+  desc: Permission bits nsfs removes from the files and directories it creates
+  long_desc: An octal umask applied to 0666 for files and 0777 for directories,
+    as NooBaa's NSFS_UMASK is, so the default 0007 creates objects 0660 and
+    directories 0770 -- the modes a NooBaa tree already has.  It does not
+    change the process umask.  Where the process umask removes bits this
+    asks for, nsfs restores them on each file it creates, which costs a
+    chmod per create, and under impersonation a thread hop as well;  a
+    process umask that removes none of them, such as UMask=0007 in the
+    service unit, avoids that.
+  default: '0007'
+  services:
+  - rgw
+- name: rgw_nsfs_impersonate
+  type: bool
+  level: advanced
+  desc: Serve each nsfs request as the POSIX identity that made it
+  long_desc: When set, filesystem operations are performed with the uid,
+    gid and supplementary groups recorded for the authenticated identity
+    rather than with the gateway's own credentials. Requires CAP_SETUID
+    and CAP_SETGID; the gateway does not start without them. Every
+    identity that can authenticate must have a record, and a request
+    whose identity has none is failed rather than served unimpersonated.
+    Every process that loads the nsfs driver reads it, radosgw-admin
+    included, so set it for the gateway only.
+  default: false
+  services:
+  - rgw
+- name: rgw_nsfs_access_model
+  type: str
+  level: advanced
+  desc: Which access path is native, when S3 and the filesystem disagree
+  long_desc: An operation S3 authorises may be one the filesystem denies
+    the requester, because nsfs serves each request as its POSIX identity.
+    This selects what happens then. posix-strict, the default, requires
+    both to allow - so cross-identity sharing is arranged in the
+    filesystem with a supplementary group, and a side-loading NFS or SMB
+    client sees permissions that describe who can reach the data. It
+    matches NooBaa, which performs every operation as the requesting
+    account and whose IAM users and roles all share their account's uid,
+    so S3 and POSIX cannot disagree within an account. s3-native makes S3
+    the authority, which is what every other RGW backend does and
+    what the posix driver does; the filesystem becomes storage, and its
+    permissions no longer describe who can reach the bytes, so a
+    deployment serving the same tree over NFS or SMB should not use it.
+  default: posix-strict
+  enum_values:
+  - posix-strict
+  - s3-native
+  services:
+  - rgw
+- name: rgw_nsfs_dynamic_supplemental_groups
+  type: bool
+  level: advanced
+  desc: Give nsfs identities with no group list their groups from nsswitch
+  long_desc: NooBaa's NSFS_ENABLE_DYNAMIC_SUPPLEMENTAL_GROUPS. An identity
+    row with no supplemental group list of its own then runs with the
+    user's groups as nsswitch returns them (getgrouplist), by name for an
+    nsswitch-resolved row and by uid for a local one; an explicit list,
+    an empty one included, still wins. A uid nsswitch does not know, or a
+    lookup that fails, is refused. Adoption refuses a NooBaa store that
+    has the setting on while this is off.
+  default: false
+  services:
+  - rgw
+- name: rgw_nsfs_user_identity_override
+  type: bool
+  level: advanced
+  desc: Let an nsfs account user's own identity row override its account's
+  long_desc: NooBaa serves an IAM user from its own record. With this on,
+    an account user's identity row -- uid and gid or a distinguished
+    name, supplementary groups, new_buckets_path and the custom bucket
+    path allowlist -- is consulted before its account's. Rows are written
+    whatever this is set to; adoption imports each NooBaa user's, and a
+    new account user gets a copy of its account's. Off, every account
+    user runs as its account.
+  default: false
+  services:
+  - rgw
+- name: rgw_nsfs_role_identity_override
+  type: bool
+  level: advanced
+  desc: Let a role given an nsfs identity of its own run as it
+  long_desc: A role session runs as its account's identity. With this on,
+    a role that has been given an identity row runs as that row, and a
+    role without one still runs as its account. NooBaa documents this
+    for roles and does not implement it.
+  default: false
+  services:
+  - rgw
+- name: rgw_nsfs_identity_resolve_ttl
+  type: uint
+  level: advanced
+  desc: Seconds between re-resolutions of nsswitch-resolved nsfs identities
+  long_desc: An nsswitch-resolved identity row, one carrying
+    distinguished_name, takes its uid and gid from nsswitch. The answers
+    are cached, and every this many seconds each cached name is looked up
+    again; where an answer changed, the identities served from the old
+    one are re-resolved on their next use. This bounds how long a change
+    in the directory takes to reach requests. NooBaa's group cache is one
+    minute.
+  default: 60
+  min: 1
+  services:
+  - rgw
+- name: rgw_nsfs_impersonate_helper_threads
+  type: uint
+  level: advanced
+  desc: Threads for impersonated calls io_uring cannot express
+  long_desc: listxattr and removexattr have no io_uring opcode, so they
+    cannot name a personality on a submission entry and are run instead
+    on a small pool of threads that assume the identity for the duration
+    of one call. Request-serving threads never change identity. This
+    pool is expected to disappear once those opcodes exist.
+  default: 8
+  services:
+  - rgw
+- name: rgw_nsfs_personality_table_size
+  type: uint
+  level: advanced
+  desc: Registered POSIX credentials cached per io_uring ring
+  long_desc: Each ring keeps its own table, so this is multiplied by the
+    number of rings, and every ring's working set converges on the whole
+    set of concurrently active identities. Sized comfortably above that
+    count; eviction is by age, so a table below the working set shows up
+    as repeated re-registration of the same identity. Clamped to 65535,
+    the range of sqe->personality.
+  default: 1024
   services:
   - rgw
 - name: rgw_nsfs_io_uring_sq_thread_idle_ms
@@ -5145,11 +5531,13 @@ options:
 - name: rgw_nsfs_gpfs_lwe_locking
   type: bool
   level: advanced
-  desc: Use GPFS LWE for cluster-wide version locking (experimental)
+  desc: Use GPFS LWE for cluster-wide version and bucket metadata locking (experimental)
   long_desc: >
     When enabled, versioned object operations (PUT, DELETE with version
-    demote/promote) use GPFS Lightweight Event (LWE) exclusive rights
-    for locking instead of Linux OFD locks.  LWE rights are coordinated
+    demote/promote) and writes of a bucket's metadata (its attributes
+    and bucket info, under the bucket's .bucket_meta_lock) use GPFS
+    Lightweight Event (LWE) exclusive rights for locking instead of
+    Linux OFD locks.  LWE rights are coordinated
     by the GPFS token manager across all nodes mounting the filesystem,
     which is required for correctness when multiple RGW gateways share
     a GPFS filesystem.  OFD locks only serialize within a single kernel.
@@ -5162,15 +5550,16 @@ options:
 - name: rgw_nsfs_gpfs_batch_xattrs
   type: bool
   level: advanced
-  desc: Use gpfs_fcntl for batch xattr operations (experimental)
+  desc: Use gpfs_fcntl for batch xattr operations on GPFS
   long_desc: >
-    When enabled, xattr read/write operations use gpfs_fcntl to pack
-    multiple xattr operations into a single kernel call instead of
-    individual fgetxattr/fsetxattr syscalls.  Reduces syscall count
-    from O(N) to O(1) per object for metadata-heavy operations like
-    PUT, GET, and listing.  Falls back to POSIX xattr calls when
-    disabled or when gpfs_fcntl is unavailable.
-  default: false
+    When enabled, the GPFS strategy's attribute writes, removals and
+    reads use gpfs_fcntl to pack an object's attributes into a single
+    kernel call instead of one fsetxattr, fremovexattr or fgetxattr per
+    attribute.  An object's own attribute reads do not go through it.
+    Measured on a single-node GPFS, a PUT's batched attribute write ran
+    20-50% faster with one caller and level under load.  Falls back to
+    POSIX xattr calls when disabled or when gpfs_fcntl is unavailable.
+  default: true
   services:
   - rgw
 - name: rgw_luarocks_location
@@ -5235,6 +5624,17 @@ options:
   - rgw
   see_also:
   - rgw_trust_forwarded_https
+- name: rgw_notification_bucket_arn_region
+  type: bool
+  level: advanced
+  desc: Put the zonegroup in the region field of a notification's bucket ARN
+  long_desc: When true, the bucket ARN a notification record carries names the
+    zonegroup in its region field, as arn:aws:s3:<zonegroup>::<bucket>.  When
+    false, it is the bucket ARN AWS S3 uses, arn:aws:s3:::<bucket>, with no
+    region and no account.
+  default: true
+  services:
+  - rgw
 - name: daos_pool
   type: str
   level: advanced
@@ -5470,6 +5870,22 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_kafka_config_allowed_keys
+  type: str
+  level: advanced
+  desc: Comma separated list of librdkafka configuration keys a topic may set in its kafka-config attribute
+  long_desc: A Kafka topic's kafka-config attribute is a JSON object of librdkafka
+    configuration keys and values, applied to the topic's producer after the settings
+    radosgw derives from the topic's other attributes. Only the keys listed here are
+    accepted, and the list is checked again whenever a connection is made. When empty,
+    kafka-config is refused. Topics are created by tenants, and some keys act on the
+    gateway host. "plugin.library.paths" loads shared libraries into radosgw,
+    "sasl.kerberos.kinit.cmd" runs a shell command, and keys ending in ".location"
+    or ".file" read files radosgw can read. List only keys every tenant may be trusted with.
+  services:
+  - rgw
+  see_also:
+  - rgw_allow_notification_secrets_in_cleartext
 - name: rgw_http_notif_message_timeout
   type: uint
   level: advanced

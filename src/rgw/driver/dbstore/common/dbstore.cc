@@ -455,6 +455,9 @@ int DB::store_user(const DoutPrefixProvider *dpp,
     if (exclusive) {
       return -EEXIST;
     }
+    /* the version the write requires the row still to have:  the check
+     * above is advisory, and the write itself is what decides */
+    params.op.user.expected_ver = obj_ver.ver;
     obj_ver.ver++;
   } else {
     obj_ver.ver = 1;
@@ -470,6 +473,15 @@ int DB::store_user(const DoutPrefixProvider *dpp,
 
   ret = ProcessOp(dpp, "InsertUser", &params);
 
+  if (ret == -ECANCELED) {
+    /* another writer stored this user after it was read, or created it
+     * since it was found absent */
+    ldpp_dout(dpp, 0)<<"User write lost a race:(" <<ret<<") " << dendl;
+    if (exclusive && !params.op.user.expected_ver) {
+      ret = -EEXIST;
+    }
+    goto out;
+  }
   if (ret) {
     ldpp_dout(dpp, 0)<<"store_user failed with err:(" <<ret<<") " << dendl;
     goto out;
@@ -3059,8 +3071,8 @@ int DB::get_entry(const std::string& oid, const std::string& marker,
     goto out;
   }
 
-  if (params.op.lc_entry.entry.start_time != 0) { //ensure entry found
-    entry = std::move(params.op.lc_entry.entry);
+  if (!params.op.lc_entry.list_entries.empty()) { //ensure entry found
+    entry = std::move(params.op.lc_entry.list_entries.front());
   }
 
 out:
@@ -3087,8 +3099,8 @@ int DB::get_next_entry(const std::string& oid, const std::string& marker,
     goto out;
   }
 
-  if (params.op.lc_entry.entry.start_time != 0) { //ensure entry found
-    entry = std::move(params.op.lc_entry.entry);
+  if (!params.op.lc_entry.list_entries.empty()) { //ensure entry found
+    entry = std::move(params.op.lc_entry.list_entries.front());
   }
 
 out:
