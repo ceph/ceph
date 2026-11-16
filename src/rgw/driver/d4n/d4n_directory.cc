@@ -1255,7 +1255,7 @@ int BlockDirectory::get(const DoutPrefixProvider* dpp, std::vector<CacheBlock>& 
   //j is used to keep a track of number of elements for aggregate type map or array
   auto i = 0, j = 0;
   bool field_key=true, field_val=false;
-  std::string key, fieldkey, fieldval, prev_val;
+  std::string prev_val;
   int num_elements = 0;
   for (auto& element : resp.value()) {
     ldpp_dout(dpp, 10) << "BlockDirectory::" << __func__ << "(): i is: " << i << dendl;

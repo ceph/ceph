@@ -154,7 +154,6 @@ int D4NFilterBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int
   //Get objects from cache
   auto bucketDir = this->filter->get_bucket_dir();
   auto objDir = this->filter->get_obj_dir();
-  std::vector<rgw_obj_key> objects;
   std::vector<rgw_bucket_list_entries> entries;
 
   ListResults cache_results;
@@ -1094,7 +1093,6 @@ int D4NFilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattr
     } //if setattrs != nullptr
 
     if (delattrs != nullptr) {
-      Attrs::iterator attr;
       Attrs currentattrs = this->get_attrs();
 
       /* Ensure all delAttrs exist */
@@ -1756,7 +1754,6 @@ int D4NFilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* d
     if (version.empty()) {
       ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): version could not be calculated." << dendl;
     }
-    std::string objName = this->get_name();
     head_oid_in_cache = get_cache_block_prefix(this, version);
     if (this->driver->get_policy_driver()->get_cache_policy()->update_refcount_if_key_exists(dpp, head_oid_in_cache, rgw::d4n::RefCount::INCR, y)) {
       ret = this->driver->get_cache_driver()->set_attrs(dpp, head_oid_in_cache, attrs, y);
@@ -2059,7 +2056,6 @@ void D4NFilterObject::D4NFilterReadOp::cancel() {
 int D4NFilterObject::D4NFilterReadOp::drain(const DoutPrefixProvider* dpp, optional_yield y) {
   auto c = aio->drain();
   int r = flush(dpp, std::move(c), y);
-  std::string version = source->get_object_version();
   std::string prefix = source->get_prefix();
   for (auto it : blocks_info) {
     std::pair<uint64_t, uint64_t> ofs_len_pair = it.second;
@@ -2314,11 +2310,6 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
 
   ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Fetching object from backend store" << dendl;
 
-  Attrs obj_attrs;
-  if (source->has_attrs()) {
-    obj_attrs = source->get_attrs();
-  }
-
   this->cb->set_start_ofs(start_diff_ofs);
   this->cb->set_len(len);
   this->cb->set_adjusted_start_ofs(adjusted_start_ofs);
@@ -2454,7 +2445,6 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
         if (ret == 0) {
           ret = cache_driver->put(dpp, oid, bl, bl.length(), attrs, *y);
           if (ret == 0) {
-            std::string objEtag = "";
             policy->update(dpp, oid, adjusted_start_ofs, bl.length(), version, dirty, rgw::d4n::RefCount::NOOP, *y);
             blocks.emplace_back(block);
           } else {
@@ -2866,7 +2856,6 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
         off_t fst = 0;
 
       do { // loop through the data blocks
-        std::string prefix = get_cache_block_prefix(source, version);
         if (fst >= lst) {
           break;
         }
@@ -3030,7 +3019,6 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
                        uint32_t flags)
 {
   bool dirty = false;
-  std::unordered_set<std::string> hostsList = {};
   std::string objEtag = etag;
   auto size = object->get_size();
   std::string instance;
