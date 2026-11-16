@@ -458,6 +458,8 @@ struct entity_addr_t {
     decode(marker, bl);
     decode(rest, bl);
     decode(nonce, bl);
+    // set_sockaddr() only writes the bytes of this address's family
+    memset(&u, 0, sizeof(u));
     sockaddr_storage ss;
     decode(ss, bl);
     set_sockaddr((sockaddr*)&ss);
@@ -527,6 +529,10 @@ struct entity_addr_t {
     DECODE_START(1, bl);
     decode(type, bl);
     decode(nonce, bl);
+    // the encoding only carries the bytes of this address, so clear the
+    // union: an entity_addr_t that is decoded into a second time would
+    // otherwise keep bytes of the address it held before
+    memset(&u, 0, sizeof(u));
     __u32 elen;
     decode(elen, bl);
     if (elen) {
