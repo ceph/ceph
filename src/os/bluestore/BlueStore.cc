@@ -10974,7 +10974,7 @@ int BlueStore::_fsck(BlueStore::FSCKDepth depth, bool repair)
   // enable in repair or deep mode modes only
   if (!read_only) {
     _kv_start();
-    r = _deferred_replay();
+    r = _deferred_replay(nullptr);
     _kv_stop();
   }
 
