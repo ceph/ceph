@@ -40,6 +40,7 @@
 
 #include <expected>
 #include <future>
+#include <cstdint>
 #include <limits>
 #include <map>
 #include <memory>
@@ -561,18 +562,15 @@ class D4NFilterObject : public FilterObject {
 	  private:
 	    D4NFilterDriver* filter;
 	    D4NFilterObject* source;
-	    RGWGetDataCB* client_cb;
-	    int64_t start_ofs = 0, len = 0, end_ofs = 0;
-      int64_t adjusted_start_ofs{0};
-      int64_t adjusted_end_ofs{0};
+            RGWGetDataCB* client_cb{nullptr};
+            std::uint64_t start_ofs{0}, len{0}, len_sent{0}, adjusted_start_ofs{0};
 	    bufferlist bl_rem;
-	    bool last_part{false};
 	    bool write_to_cache{true};
-	    const DoutPrefixProvider* dpp;
-	    optional_yield* y;
-      int part_num{0}, num_parts{0};
-      int len_sent = 0;
+            const DoutPrefixProvider* dpp{nullptr};
+            optional_yield* y{nullptr};
       std::vector<rgw::d4n::CacheBlock> blocks, dest_blocks;
+
+            void cache_chunk(const bufferlist& data);
 
 	  public:
 	    D4NFilterGetCB(D4NFilterDriver* _filter, D4NFilterObject* _source) : filter(_filter),
@@ -585,10 +583,8 @@ class D4NFilterObject : public FilterObject {
               this->y = y;
             }
 	    void set_start_ofs(uint64_t ofs) { this->start_ofs = ofs; }
-      void set_len(uint64_t len) { this->len = len; }
+      void set_len(uint64_t len) { this->len = len; len_sent = 0; }
       void set_adjusted_start_ofs(uint64_t adjusted_start_ofs) { this->adjusted_start_ofs = adjusted_start_ofs; }
-      void set_part_num(uint64_t part_num) { this->part_num = part_num; }
-      void set_num_parts(uint64_t num_parts) { this->num_parts = num_parts; }
 	    int flush_last_part();
 	    void bypass_cache_write() { this->write_to_cache = false; }
 	};

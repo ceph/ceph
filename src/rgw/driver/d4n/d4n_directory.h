@@ -336,10 +336,10 @@ struct CacheObj {
 
 struct CacheBlock {
   CacheObj cacheObj;
-  uint64_t blockID;
+  uint64_t blockID = 0;
   std::string version;
   bool deleteMarker{false};
-  uint64_t size; /* Block size in bytes */
+  uint64_t size = 0; /* Block size in bytes */
   uint64_t globalWeight = 0; /* LFUDA policy variable */
   bool invalid{false}; /* Tombstone flag: object logically deleted, awaiting cleanup after active leases expire */
   /* Blocks use the cacheObj's dirty and hostsList metadata to store their dirty flag values and locations in the block directory. */
@@ -522,6 +522,7 @@ class BlockDirectory: virtual public Directory {
     // Existing callers require an entry and publish output only on success:
     int get(const DoutPrefixProvider* dpp, optional_yield y, CacheBlock* block, std::optional<Transaction> txn);
 
+    // Batch lookup loads present records and preserves initialized requests for absent ones:
     virtual int get(const DoutPrefixProvider* dpp, optional_yield y, std::vector<CacheBlock>& blocks, std::optional<Transaction> txn) = 0;
 
     virtual int copy(const DoutPrefixProvider* dpp, optional_yield y, CacheBlock* block, const std::string& copyName, const std::string& copyBucketName, std::optional<Transaction> txn) = 0;

@@ -1291,28 +1291,26 @@ int FDBBlockDirectory::set(const DoutPrefixProvider* dpp, optional_yield y, std:
   });
 }
 
-int FDBBlockDirectory::populate_block(CacheBlock* block, const std::map<std::string, std::string>& kvs) const
+int FDBBlockDirectory::populate_block(CacheBlock& block, const std::map<std::string, std::string>& kvs) const
 {
-  if (!block) return -EINVAL;
-
-  block->blockID = std::stoull(kvs.at("blockID"));
-  block->version = kvs.at("version");
-  block->deleteMarker = (kvs.at("deleteMarker") == "1");
-  block->invalid = (kvs.at("invalid") == "1");
-  block->size = std::stoull(kvs.at("size"));
-  block->globalWeight = std::stoull(kvs.at("globalWeight"));
-  block->cacheObj.objName = kvs.at("objName");
-  block->cacheObj.bucketName = kvs.at("bucketName");
-  block->cacheObj.creationTime = kvs.at("creationTime");
-  block->cacheObj.dirty = (kvs.at("dirty") == "1");
-  block->cacheObj.hostsList.clear();
-  boost::split(block->cacheObj.hostsList, kvs.at("hosts"), boost::is_any_of("_"));
-  block->cacheObj.etag = kvs.at("etag");
-  block->cacheObj.size = std::stoull(kvs.at("objSize"));
-  block->cacheObj.user_id = kvs.at("userId");
-  block->cacheObj.display_name = kvs.at("displayName");
-  block->cacheObj.acl = kvs.at("acl");
-  block->cacheObj.attrs.clear();
+  block.blockID = std::stoull(kvs.at("blockID"));
+  block.version = kvs.at("version");
+  block.deleteMarker = (kvs.at("deleteMarker") == "1");
+  block.invalid = (kvs.at("invalid") == "1");
+  block.size = std::stoull(kvs.at("size"));
+  block.globalWeight = std::stoull(kvs.at("globalWeight"));
+  block.cacheObj.objName = kvs.at("objName");
+  block.cacheObj.bucketName = kvs.at("bucketName");
+  block.cacheObj.creationTime = kvs.at("creationTime");
+  block.cacheObj.dirty = (kvs.at("dirty") == "1");
+  block.cacheObj.hostsList.clear();
+  boost::split(block.cacheObj.hostsList, kvs.at("hosts"), boost::is_any_of("_"));
+  block.cacheObj.etag = kvs.at("etag");
+  block.cacheObj.size = std::stoull(kvs.at("objSize"));
+  block.cacheObj.user_id = kvs.at("userId");
+  block.cacheObj.display_name = kvs.at("displayName");
+  block.cacheObj.acl = kvs.at("acl");
+  block.cacheObj.attrs.clear();
 
   const size_t attrs_count = std::stoull(kvs.at("attrsCount"));
   size_t found_attrs = 0;
@@ -1321,7 +1319,7 @@ int FDBBlockDirectory::populate_block(CacheBlock* block, const std::map<std::str
     if (!field.starts_with("attr_")) continue;
     ceph::buffer::list bl;
     bl.append(value);
-    block->cacheObj.attrs[field.substr(5)] = std::move(bl);
+    block.cacheObj.attrs[field.substr(5)] = std::move(bl);
     ++found_attrs;
   }
 
@@ -1332,6 +1330,22 @@ int FDBBlockDirectory::populate_block(CacheBlock* block, const std::map<std::str
   return 0;
 }
 
+std::optional<CacheBlock>
+FDBBlockDirectory::read_block(const lfdb::transaction_handle& txn, const std::string& key) const
+{
+  std::map<std::string, std::string> fields;
+  if (!lfdb::get(txn, key, fields)) {
+    return std::nullopt;
+  }
+
+  CacheBlock decoded {};
+  if (const int ret = populate_block(decoded, fields); 0 > ret) {
+    throw std::system_error(-ret, std::generic_category(), "invalid D4N block record");
+  }
+
+  return decoded;
+}
+
 std::expected<std::optional<CacheBlock>, int>
 FDBBlockDirectory::find(const DoutPrefixProvider *dpp, optional_yield y, const CacheBlock& block,
                         std::optional<Transaction> txn)
@@ -1339,18 +1353,7 @@ try
  {
   const auto key = build_index(&block);
   std::optional<CacheBlock> found;
-  const auto find_block = [this, &key](auto& tr) -> std::optional<CacheBlock> {
-    std::map<std::string, std::string> fields;
-    if (!lfdb::get(tr, key, fields)) {
-      return std::nullopt;
-    }
-
-    CacheBlock decoded {};
-    if (const int ret = populate_block(&decoded, fields); 0 > ret) {
-      throw std::system_error(-ret, std::generic_category(), "invalid D4N block record");
-    }
-    return decoded;
-  };
+  const auto find_block = [this, &key](auto& tr) { return read_block(tr, key); };
   if (const int ret = fdb_invoke(FDBdb, dpp, txn, key, std::source_location::current(),
                                  find_block, found); 0 > ret) {
     return std::unexpected(ret);
@@ -1365,48 +1368,38 @@ catch(...)
 
 int FDBBlockDirectory::get(const DoutPrefixProvider* dpp, optional_yield y, std::vector<CacheBlock>& blocks, std::optional<Transaction> txn)
 try
-{
-  std::vector<std::map<std::string, std::string>> out_kvs;
-  const auto read_blocks = [&](auto& tr) {
-    std::expected<std::vector<std::map<std::string, std::string>>, int> values {
-      std::in_place, blocks.size()};
+ {
+  if (blocks.empty()) {
+    return 0;
+  }
 
-    for (size_t i = 0; i < blocks.size(); ++i) {
-      auto& block = blocks[i];
-      std::string key = build_index(&block);
-
-      ldpp_dout(dpp, 10) << "FDBBlockDirectory::" << __func__ << "(): index is: " << key << dendl;
-
-      if (!lfdb::get(tr, key, (*values)[i])) {
-        ldpp_dout(dpp, 0) << "FDBBlockDirectory::" << __func__ << "() ERROR: get function returned false!" << dendl;
-        values = std::unexpected(-ENOENT);
-        return values;
-      }
+  std::vector<std::optional<CacheBlock>> found;
+  const auto read_blocks = [this, &blocks](auto& tr) {
+    std::vector<std::optional<CacheBlock>> values;
+    values.reserve(blocks.size());
+    for (const auto& block : blocks) {
+      values.push_back(read_block(tr, build_index(&block)));
     }
 
     return values;
   };
 
-  if (const auto result = fdb_invoke(FDBdb, dpp, txn, read_blocks, out_kvs); 0 > result) {
-    return result;
+  if (const int ret = fdb_invoke(FDBdb, dpp, txn, read_blocks, found); 0 > ret) {
+    return ret;
   }
 
-  std::vector<CacheBlock> decoded(blocks.size());
-  for (auto&& [block, fields] : std::views::zip(decoded, out_kvs)) {
-    if (const auto ret = populate_block(&block, fields); 0 > ret) {
-      ldpp_dout(dpp, 0) << "FDBBlockDirectory::" << __func__
-                        << "() ERROR: failed to populate block" << dendl;
-      return ret;
+  for (auto&& [block, value] : std::views::zip(blocks, found)) {
+    if (value) {
+      block = std::move(*value);
     }
   }
 
-  blocks = std::move(decoded);
   return 0;
-}
-catch (...)
-{
+ }
+catch(...)
+ {
   return return_d4n_error(dpp, txn, std::current_exception());
-}
+ }
 
 int FDBBlockDirectory::copy(const DoutPrefixProvider* dpp, optional_yield y, CacheBlock* block, const std::string& copyName, const std::string& copyBucketName, std::optional<Transaction> txn)
 {

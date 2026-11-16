@@ -13,18 +13,20 @@
 #include "d4n_log.h"
 
 #include <iomanip>  // for std::setprecision
-#include <source_location>
+#include <utility>
 #include <string_view>
+#include <source_location>
 
-#include "../../../common/async/yield_context.h"
 #include "common/split.h"
 #include "common/dout_fmt.h"
+#include "common/random_string.h"
+#include "common/async/yield_context.h"
+#include "common/async/blocked_completion.h"
 
 #include "yield_completion.h"
-#include "common/async/blocked_completion.h"
 #include "rgw_perf_counters.h"
+
 #include "include/scope_guard.h"
-#include "common/random_string.h"
 
 namespace rgw::d4n {
 
@@ -1809,12 +1811,13 @@ int LFUDAPolicy::do_writeback(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, o
         return op_ret;
       }
       len = data.length();
-      fst += len;
-
-      if (len == 0) {
-        // TODO: if len of any block is 0 for some reason, we must return from here?
-        break;
+      if (std::cmp_not_equal(cur_len, len)) {
+        const auto whence = std::source_location::current();
+        detail::log_message(dpp, whence,
+          "writeback read expected {} bytes, got {}, key={}", cur_len, len, oid_in_cache);
+        return -EIO;
       }
+      fst += len;
 
       op_ret = filter->process(std::move(data), ofs);
       if (op_ret < 0) {

@@ -283,7 +283,10 @@ public:
                     std::optional<Transaction> txn) override;
 
 private:
-    int populate_block(CacheBlock* block, const std::map<std::string, std::string>& kvs) const;
+    std::optional<CacheBlock> read_block(const lfdb::transaction_handle& txn,
+                                       const std::string& key) const;
+
+    int populate_block(CacheBlock& block, const std::map<std::string, std::string>& kvs) const;
 };
 
 } // namespace rgw::d4n
