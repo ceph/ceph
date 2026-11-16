@@ -93,14 +93,14 @@ describe('PoolResourceSidebarComponent', () => {
       expect(poolResourceSidebarComponent.poolIsMigrating).toBe(false);
     });
 
-    it('should treat pool id 0 as a valid migration source', () => {
+    it('should treat pool id 0 as a valid active migration target', () => {
       load({ migration_src: 0 });
       expect(poolResourceSidebarComponent.poolIsMigrating).toBe(true);
     });
 
-    it('should treat pool id 0 as a valid migration target', () => {
-      load({ migration_target: 0 });
-      expect(poolResourceSidebarComponent.poolIsMigrating).toBe(true);
+    it('should not flag a completed .migrate stub (migration_target only) as migrating', () => {
+      load({ migration_target: 0, pool_name: '.migrate-1' });
+      expect(poolResourceSidebarComponent.poolIsMigrating).toBe(false);
     });
   });
 });

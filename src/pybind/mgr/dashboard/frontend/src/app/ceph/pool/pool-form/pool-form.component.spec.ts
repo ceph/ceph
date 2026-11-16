@@ -13,7 +13,6 @@ import { Observable, of, Subject } from 'rxjs';
 
 import { DashboardNotFoundError } from '~/app/core/error/error';
 import { ErrorComponent } from '~/app/core/error/error.component';
-import { ConfigurationService } from '~/app/shared/api/configuration.service';
 import { CrushRuleService } from '~/app/shared/api/crush-rule.service';
 import { ErasureCodeProfileService } from '~/app/shared/api/erasure-code-profile.service';
 import { PoolService } from '~/app/shared/api/pool.service';
@@ -1690,12 +1689,8 @@ describe('PoolFormComponent', () => {
   });
 
   describe('migrate mode', () => {
-    let configurationService: ConfigurationService;
     let pool$: Subject<Pool>;
-    let config$: Subject<any>;
     let pool: Pool;
-
-    const warnings = () => fixture.debugElement.queryAll(By.css('cds-notification'));
 
     beforeEach(() => {
       pool = new Pool('somePoolName');
@@ -1710,13 +1705,7 @@ describe('PoolFormComponent', () => {
       pool.application_metadata = ['rbd'];
 
       pool$ = new Subject<Pool>();
-      config$ = new Subject<any>();
-      configurationService = TestBed.inject(ConfigurationService);
       spyOn(poolService, 'get').and.callFake(() => pool$);
-      spyOn(configurationService, 'get').and.callFake(() => config$);
-
-      infoReturn.require_min_compat_client = 'umbrella';
-      infoReturn.require_osd_release = 'umbrella';
 
       Object.defineProperty(router, 'url', { value: '/pool/migrate/somePoolName' });
       setUpPoolComponent();
@@ -1726,68 +1715,13 @@ describe('PoolFormComponent', () => {
       expect(component.migrating).toBe(true);
     });
 
-    it('keeps the form loading and shows no warnings until all data arrived', () => {
-      expect(component.loading).toBe(LoadingStatus.Loading);
-      expect(warnings().length).toBe(0);
-
+    it('loads the form once pool data arrives', () => {
       pool$.next(pool);
       pool$.complete();
-      fixture.detectChanges();
-      // the experimental flag is still unknown, so we must not render a stale warning
-      expect(component.loading).toBe(LoadingStatus.Loading);
-      expect(warnings().length).toBe(0);
-    });
-
-    it('shows no warnings once data arrived and every precondition is met', () => {
-      pool$.next(pool);
-      pool$.complete();
-      config$.next({ value: [{ section: 'global', value: 'poolmigration' }] });
-      config$.complete();
       fixture.detectChanges();
 
       expect(component.loading).toBe(LoadingStatus.Ready);
-      expect(component.migrationPreconditionsMet).toBe(true);
-      expect(warnings().length).toBe(0);
-    });
-
-    it('shows the experimental warning when the flag is not enabled', () => {
-      pool$.next(pool);
-      pool$.complete();
-      config$.next({ value: [{ section: 'global', value: 'other' }] });
-      config$.complete();
-      fixture.detectChanges();
-
-      expect(component.loading).toBe(LoadingStatus.Ready);
-      expect(component.migrationPreconditions.experimentalFlag).toBe(false);
-      expect(component.migrationPreconditionsMet).toBe(false);
-      expect(warnings().length).toBe(1);
-    });
-
-    it.each(['other;poolmigration', '*,other'])(
-      'accepts the experimental flag value "%s" like Ceph does',
-      (value) => {
-        pool$.next(pool);
-        pool$.complete();
-        config$.next({ value: [{ section: 'global', value }] });
-        config$.complete();
-        fixture.detectChanges();
-
-        expect(component.migrationPreconditions.experimentalFlag).toBe(true);
-        expect(component.migrationPreconditionsMet).toBe(true);
-        expect(warnings().length).toBe(0);
-      }
-    );
-
-    it('treats pool id 0 as a valid migration peer', () => {
-      pool.migration_src = 0;
-      pool$.next(pool);
-      pool$.complete();
-      config$.next({ value: [{ section: 'global', value: 'poolmigration' }] });
-      config$.complete();
-      fixture.detectChanges();
-
-      expect(component.migrationPreconditions.poolNotMigrating).toBe(false);
-      expect(component.migrationPreconditionsMet).toBe(false);
+      expect(form.getRawValue().name).toBe('somePoolName');
     });
 
     describe('submit', () => {
@@ -1797,8 +1731,6 @@ describe('PoolFormComponent', () => {
         migrateSpy = spyOn(poolService, 'migrate').and.returnValue(of(null) as any);
         pool$.next(pool);
         pool$.complete();
-        config$.next({ value: [{ section: 'global', value: 'poolmigration' }] });
-        config$.complete();
         fixture.detectChanges();
       });
 
@@ -1873,16 +1805,6 @@ describe('PoolFormComponent', () => {
           expect(submittedParams()[key]).toBeUndefined()
         );
       });
-    });
-
-    it('treats a failing config request as flag not enabled and still loads the form', () => {
-      pool$.next(pool);
-      pool$.complete();
-      config$.error('boom');
-      fixture.detectChanges();
-
-      expect(component.loading).toBe(LoadingStatus.Ready);
-      expect(component.migrationPreconditions.experimentalFlag).toBe(false);
     });
   });
 

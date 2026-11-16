@@ -20,7 +20,6 @@ import { PoolListComponent } from './pool-list/pool-list.component';
 import { PoolCapacityProtectionCardComponent } from './pool-capacity-protection-card/pool-capacity-protection-card.component';
 import { PoolIoCardComponent } from './pool-io-card/pool-io-card.component';
 import { PoolMigrationClusterSettingsModalComponent } from './pool-migration-cluster-settings-modal/pool-migration-cluster-settings-modal.component';
-import { PoolMigrationOsdReleaseModalComponent } from './pool-migration-osd-release-modal/pool-migration-osd-release-modal.component';
 import { PoolBusyModalComponent } from './pool-busy-modal/pool-busy-modal.component';
 import {
   IconModule,
@@ -40,14 +39,11 @@ import {
   LinkModule,
   SkeletonModule,
   ModalModule,
-  NotificationModule,
   ButtonModule,
   GridModule,
   MenuButtonModule,
   ContextMenuModule,
-  ProgressBarModule,
-  ToggleModule,
-  DialogModule
+  ProgressBarModule
 } from 'carbon-components-angular';
 import HelpIcon from '@carbon/icons/es/help/16';
 import UnlockedIcon from '@carbon/icons/es/unlocked/16';
@@ -90,14 +86,11 @@ import UserAccessLocked from '@carbon/icons/es/user--access-locked/16';
     LinkModule,
     SkeletonModule,
     ModalModule,
-    NotificationModule,
     ButtonModule,
     GridModule,
     MenuButtonModule,
     ContextMenuModule,
     ProgressBarModule,
-    ToggleModule,
-    DialogModule,
     AreaChartComponent
   ],
   exports: [PoolListComponent, PoolFormComponent],
@@ -110,7 +103,6 @@ import UserAccessLocked from '@carbon/icons/es/user--access-locked/16';
     PoolResourcePageComponent,
     PoolCapacityProtectionCardComponent,
     PoolIoCardComponent,
-    PoolMigrationOsdReleaseModalComponent,
     PoolMigrationClusterSettingsModalComponent,
     PoolBusyModalComponent
   ]

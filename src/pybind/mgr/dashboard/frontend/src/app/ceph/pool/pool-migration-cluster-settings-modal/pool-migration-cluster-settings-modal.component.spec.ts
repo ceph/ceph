@@ -51,7 +51,7 @@ describe('PoolMigrationClusterSettingsModalComponent', () => {
 
     it('should mention both in the description', () => {
       expect(description()).toContain('pool migration capability enabled');
-      expect(description()).toContain('compatible umbrella client');
+      expect(description()).toContain('compatible vampire client');
     });
 
     it('should require acknowledging the irreversible change', () => {
@@ -73,7 +73,7 @@ describe('PoolMigrationClusterSettingsModalComponent', () => {
         value: [{ section: 'global', value: 'other,poolmigration' }],
         force_update: false
       });
-      expect(setMin).toHaveBeenCalledWith('umbrella');
+      expect(setMin).toHaveBeenCalledWith('vampire');
       expect(closeSpy).toHaveBeenCalled();
       expect(onComplete).toHaveBeenCalled();
     });
@@ -96,7 +96,7 @@ describe('PoolMigrationClusterSettingsModalComponent', () => {
 
     it('should only talk about the pool migration capability', () => {
       expect(description()).toContain('pool migration capability enabled');
-      expect(description()).not.toContain('umbrella');
+      expect(description()).not.toContain('vampire');
     });
 
     it('should not show the acknowledgement and be submittable right away', () => {
@@ -121,8 +121,8 @@ describe('PoolMigrationClusterSettingsModalComponent', () => {
   describe('when only the minimum compatible client is missing', () => {
     beforeEach(() => createComponent(false, true));
 
-    it('should only talk about the umbrella client', () => {
-      expect(description()).toContain('compatible umbrella client');
+    it('should only talk about the vampire client', () => {
+      expect(description()).toContain('compatible vampire client');
       expect(description()).not.toContain('pool migration capability');
     });
 
@@ -138,7 +138,7 @@ describe('PoolMigrationClusterSettingsModalComponent', () => {
       component.onSubmit();
 
       expect(create).not.toHaveBeenCalled();
-      expect(setMin).toHaveBeenCalledWith('umbrella');
+      expect(setMin).toHaveBeenCalledWith('vampire');
       expect(onComplete).toHaveBeenCalled();
     });
   });

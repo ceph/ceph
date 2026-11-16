@@ -298,7 +298,9 @@ class Pool(RESTController):
                 cmd_args[key] = value
         CephService.send_command('mon', 'osd pool migrate', pool=pool_name,
                                  **cmd_args)
-        self._set_pool_values(pool_name, application_metadata, flags, False, kwargs)
+        if application_metadata is not None or flags or kwargs:
+            self._set_pool_values(pool_name, application_metadata, flags, False,
+                                  kwargs)
 
     def _set_mirroring_mode(self, mirroring_enabled, pool):
         rbd_mirroring = RbdMirroringPoolMode()

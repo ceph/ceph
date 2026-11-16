@@ -4,11 +4,10 @@ import { ActivatedRoute, Router } from '@angular/router';
 
 import { NgbNav } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
-import { catchError, startWith } from 'rxjs/operators';
-import { forkJoin, Observable, of, ReplaySubject, Subscription } from 'rxjs';
+import { startWith } from 'rxjs/operators';
+import { Observable, ReplaySubject, Subscription } from 'rxjs';
 
 import { DashboardNotFoundError } from '~/app/core/error/error';
-import { ConfigurationService } from '~/app/shared/api/configuration.service';
 import { CrushRuleService } from '~/app/shared/api/crush-rule.service';
 import { ErasureCodeProfileService } from '~/app/shared/api/erasure-code-profile.service';
 import { PoolService } from '~/app/shared/api/pool.service';
@@ -35,13 +34,7 @@ import { FormatterService } from '~/app/shared/services/formatter.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { CrushRuleFormModalComponent } from '../crush-rule-form-modal/crush-rule-form-modal.component';
 import { ErasureCodeProfileFormModalComponent } from '../erasure-code-profile-form/erasure-code-profile-form-modal.component';
-import {
-  isPoolMigrationFlagEnabled,
-  isReleaseAtLeast,
-  MIN_POOL_MIGRATION_RELEASE,
-  Pool,
-  PoolType
-} from '../pool';
+import { Pool, PoolType } from '../pool';
 import { PoolFormData } from './pool-form-data';
 import { PoolEditModeResponseModel } from '../../block/mirroring/pool-edit-mode-modal/pool-edit-mode-response.model';
 import { RbdMirroringService } from '~/app/shared/api/rbd-mirroring.service';
@@ -69,8 +62,6 @@ interface EcpDetailField {
   label: string;
   plugins?: string[];
 }
-
-const EXPERIMENTAL_CONFIG = 'enable_experimental_unrecoverable_data_corrupting_features';
 
 @Component({
   selector: 'cd-pool-form',
@@ -110,35 +101,6 @@ export class PoolFormComponent extends CdForm implements OnInit {
   routeParamsSubscribe: any;
   editing = false;
   migrating = false;
-  migrationPreconditions = {
-    experimentalFlag: false,
-    minCompatClient: false,
-    osdRelease: false,
-    poolNotMigrating: true,
-    pgNumStable: true
-  };
-  migrationNotifications = {
-    experimentalFlag: {
-      title: $localize`Experimental feature not enabled`,
-      message: $localize`Pool migration requires the poolmigration experimental flag to be enabled.`
-    },
-    minCompatClient: {
-      title: $localize`Minimum compatible client too low`,
-      message: $localize`Pool migration requires require_min_compat_client to be set to umbrella or later. This is irreversible and will reject connections from older clients.`
-    },
-    osdRelease: {
-      title: $localize`OSD release too old`,
-      message: $localize`All OSDs must be upgraded to the umbrella release or later before using pool migration. Use the Cluster > Upgrade page to perform a rolling upgrade.`
-    },
-    poolNotMigrating: {
-      title: $localize`Pool already migrating`,
-      message: $localize`This pool is already part of an ongoing migration. Wait for it to complete before starting another migration.`
-    },
-    pgNumStable: {
-      title: $localize`PG count is changing`,
-      message: $localize`Cannot start migration while the pool pg_num is being adjusted. Wait for the PG change to complete and retry.`
-    }
-  };
   isReplicated = false;
   isErasure = false;
   blobUnits = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
@@ -190,7 +152,6 @@ export class PoolFormComponent extends CdForm implements OnInit {
     public actionLabels: ActionLabelsI18n,
     private rbdMirroringService: RbdMirroringService,
     private monitorService: MonitorService,
-    private configurationService: ConfigurationService,
     private cdr: ChangeDetectorRef
   ) {
     super();
@@ -220,10 +181,12 @@ export class PoolFormComponent extends CdForm implements OnInit {
 
   authenticate() {
     this.permissions = this.authStorageService.getPermissions();
+    // Migrate creates a new target pool, so it uses the same create permission as the list
+    // action and the POST /migrate API (RESTController maps POST → CREATE).
     if (
       !this.permissions?.pool?.read ||
-      (!this.permissions?.pool?.update && (this.editing || this.migrating)) ||
-      (!this.permissions?.pool?.create && !this.editing && !this.migrating)
+      (!this.permissions?.pool?.update && this.editing) ||
+      (!this.permissions?.pool?.create && !this.editing)
     ) {
       throw new DashboardNotFoundError();
     }
@@ -338,9 +301,6 @@ export class PoolFormComponent extends CdForm implements OnInit {
     this.form.silentSet('algorithm', info.bluestore_compression_algorithm);
     this.info = info;
     this.initEcp(info.erasure_code_profiles);
-    if (this.migrating) {
-      this.checkClusterPreconditions();
-    }
   }
 
   private initEcp(ecProfiles: ErasureCodeProfile[], selectedName?: string) {
@@ -416,13 +376,9 @@ export class PoolFormComponent extends CdForm implements OnInit {
 
   private initMigrateMode() {
     this.routeParamsSubscribe = this.route.params.subscribe((param: { name: string }) =>
-      forkJoin([
-        this.poolService.get(param.name),
-        this.configurationService.get(EXPERIMENTAL_CONFIG).pipe(catchError(() => of(null)))
-      ]).subscribe(([pool, experimentalConfig]: [Pool, any]) => {
+      this.poolService.get(param.name).subscribe((pool: Pool) => {
         this.data.pool = pool;
         this.initMigrateFormData(pool);
-        this.checkExperimentalFlag(experimentalConfig);
         this.loadingReady();
       })
     );
@@ -463,47 +419,6 @@ export class PoolFormComponent extends CdForm implements OnInit {
     this.setAvailableApps(this.data.applications.default.concat(pool.application_metadata || []));
 
     this.form.get('name').disable();
-
-    this.checkPoolMigrationState(pool);
-  }
-
-  private checkPoolMigrationState(pool: Pool) {
-    const pgStable =
-      pool.pg_num === pool.pg_num_target && pool.pg_placement_num === pool.pg_placement_num_target;
-    this.migrationPreconditions.pgNumStable = pgStable;
-
-    const isMigrating = pool.migration_src != null || pool.migration_target != null;
-    this.migrationPreconditions.poolNotMigrating = !isMigrating;
-  }
-
-  private checkExperimentalFlag(config: any) {
-    const globalVal = config ? this.configurationService.getValue(config, 'global') : null;
-    this.migrationPreconditions.experimentalFlag = isPoolMigrationFlagEnabled(globalVal);
-  }
-
-  private checkClusterPreconditions() {
-    if (!this.info) return;
-    const requireMinCompatClient = this.info.require_min_compat_client || '';
-    this.migrationPreconditions.minCompatClient = isReleaseAtLeast(
-      requireMinCompatClient,
-      MIN_POOL_MIGRATION_RELEASE
-    );
-
-    const requireOsdRelease = this.info.require_osd_release || '';
-    this.migrationPreconditions.osdRelease = isReleaseAtLeast(
-      requireOsdRelease,
-      MIN_POOL_MIGRATION_RELEASE
-    );
-  }
-
-  get migrationPreconditionsMet(): boolean {
-    return (
-      this.migrationPreconditions.experimentalFlag &&
-      this.migrationPreconditions.minCompatClient &&
-      this.migrationPreconditions.osdRelease &&
-      this.migrationPreconditions.poolNotMigrating &&
-      this.migrationPreconditions.pgNumStable
-    );
   }
 
   private disableForEdit() {
@@ -1125,7 +1040,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
 
     this.assignSharedPoolFields(pool, { autoscaleMode: 'pg_autoscale_mode', rule: 'rule_name' });
 
-    if (this.editing && this.info.is_all_bluestore) {
+    if (this.editing) {
       this.assignFormField(pool, {
         externalFieldName: 'srcpool',
         formControlName: 'name',

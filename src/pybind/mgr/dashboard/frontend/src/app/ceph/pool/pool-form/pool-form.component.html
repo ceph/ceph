@@ -22,76 +22,6 @@
           </cd-help-text>
         }
       </div>
-      <!-- Migration preconditions -->
-      @if (migrating) {
-        <div class="form-item">
-          @if (!migrationPreconditions.experimentalFlag) {
-            <div class="cds--mb-05">
-              <cds-notification
-                [notificationObj]="{
-                  type: 'warning',
-                  lowContrast: true,
-                  title: migrationNotifications.experimentalFlag.title,
-                  message: migrationNotifications.experimentalFlag.message,
-                  showClose: false
-                }"
-              ></cds-notification>
-            </div>
-          }
-          @if (!migrationPreconditions.minCompatClient) {
-            <div class="cds--mb-05">
-              <cds-notification
-                [notificationObj]="{
-                  type: 'warning',
-                  lowContrast: true,
-                  title: migrationNotifications.minCompatClient.title,
-                  message: migrationNotifications.minCompatClient.message,
-                  showClose: false
-                }"
-              ></cds-notification>
-            </div>
-          }
-          @if (!migrationPreconditions.osdRelease) {
-            <div class="cds--mb-05">
-              <cds-notification
-                [notificationObj]="{
-                  type: 'warning',
-                  lowContrast: true,
-                  title: migrationNotifications.osdRelease.title,
-                  message: migrationNotifications.osdRelease.message,
-                  showClose: false
-                }"
-              ></cds-notification>
-            </div>
-          }
-          @if (!migrationPreconditions.poolNotMigrating) {
-            <div class="cds--mb-05">
-              <cds-notification
-                [notificationObj]="{
-                  type: 'error',
-                  lowContrast: true,
-                  title: migrationNotifications.poolNotMigrating.title,
-                  message: migrationNotifications.poolNotMigrating.message,
-                  showClose: false
-                }"
-              ></cds-notification>
-            </div>
-          }
-          @if (!migrationPreconditions.pgNumStable) {
-            <div class="cds--mb-05">
-              <cds-notification
-                [notificationObj]="{
-                  type: 'warning',
-                  lowContrast: true,
-                  title: migrationNotifications.pgNumStable.title,
-                  message: migrationNotifications.pgNumStable.message,
-                  showClose: false
-                }"
-              ></cds-notification>
-            </div>
-          }
-        </div>
-      }
       <!-- Name -->
       <div
         class="form-item"
@@ -1226,7 +1156,6 @@
         (submitActionEvent)="submit()"
         [form]="form"
         [submitText]="submitAction"
-        [disabled]="migrating && !migrationPreconditionsMet"
         wrappingClass="text-right form-button"
       >
       </cd-form-button-panel>

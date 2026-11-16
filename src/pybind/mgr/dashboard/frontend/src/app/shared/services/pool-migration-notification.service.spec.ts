@@ -45,8 +45,16 @@ describe('PoolMigrationNotificationService', () => {
     expect(notificationService.show).not.toHaveBeenCalled();
   });
 
-  it('should notify with pool names once the migration task disappears', () => {
+  it('should not notify after a single missing poll (transient osd_map flake)', () => {
     summary$.next({ executing_tasks: [migrationTask('target', '.migrate-1')] });
+    summary$.next({ executing_tasks: [] });
+
+    expect(notificationService.show).not.toHaveBeenCalled();
+  });
+
+  it('should notify with pool names once the migration task is gone for two polls', () => {
+    summary$.next({ executing_tasks: [migrationTask('target', '.migrate-1')] });
+    summary$.next({ executing_tasks: [] });
     summary$.next({ executing_tasks: [] });
 
     expect(notificationService.show).toHaveBeenCalledTimes(1);
@@ -59,14 +67,25 @@ describe('PoolMigrationNotificationService', () => {
     summary$.next({ executing_tasks: [migrationTask('target', '.migrate-1')] });
     summary$.next({ executing_tasks: [] });
     summary$.next({ executing_tasks: [] });
+    summary$.next({ executing_tasks: [] });
 
     expect(notificationService.show).toHaveBeenCalledTimes(1);
+  });
+
+  it('should reset the absence counter if the task reappears', () => {
+    summary$.next({ executing_tasks: [migrationTask('target', '.migrate-1')] });
+    summary$.next({ executing_tasks: [] });
+    summary$.next({ executing_tasks: [migrationTask('target', '.migrate-1')] });
+    summary$.next({ executing_tasks: [] });
+
+    expect(notificationService.show).not.toHaveBeenCalled();
   });
 
   it('should track several migrations independently', () => {
     summary$.next({
       executing_tasks: [migrationTask('a', '.migrate-1'), migrationTask('b', '.migrate-2')]
     });
+    summary$.next({ executing_tasks: [migrationTask('b', '.migrate-2')] });
     summary$.next({ executing_tasks: [migrationTask('b', '.migrate-2')] });
 
     expect(notificationService.show).toHaveBeenCalledTimes(1);
@@ -79,6 +98,7 @@ describe('PoolMigrationNotificationService', () => {
         { name: 'progress/Upgrade', description: '', metadata: {}, begin_time: 0, progress: 1 }
       ]
     });
+    summary$.next({ executing_tasks: [] });
     summary$.next({ executing_tasks: [] });
 
     expect(notificationService.show).not.toHaveBeenCalled();

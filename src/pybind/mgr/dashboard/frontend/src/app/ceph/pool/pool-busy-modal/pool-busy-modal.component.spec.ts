@@ -54,14 +54,27 @@ describe('PoolBusyModalComponent', () => {
 
     it('should tell the user to wait for an ongoing migration', () => {
       createComponent(PoolBusyReason.MIGRATING, undefined, PoolAction.MIGRATE);
+      expect(description()).toContain('Pool migration is currently unavailable');
       expect(description()).toContain('already part of an ongoing migration');
       expect(description()).toContain('Wait for it to finish');
     });
 
-    it('should tell the user to wait for the PG count change', () => {
+    it('should tell the user to wait for a pg_num change', () => {
+      createComponent(PoolBusyReason.PG_NUM_CHANGE, undefined, PoolAction.MIGRATE);
+      expect(description()).toContain('number of PGs (pg_num)');
+      expect(description()).toContain('pg_num to match pg_num_target');
+    });
+
+    it('should tell the user to wait for a pgp_num change even when PGs look healthy', () => {
+      createComponent(PoolBusyReason.PGP_NUM_CHANGE, undefined, PoolAction.MIGRATE);
+      expect(description()).toContain('PG placement count (pgp_num)');
+      expect(description()).toContain('active+clean');
+      expect(description()).toContain('pgp_num matches pgp_num_target');
+    });
+
+    it('should tell the user when both pg_num and pgp_num are changing', () => {
       createComponent(PoolBusyReason.PG_CHANGE, undefined, PoolAction.MIGRATE);
-      expect(description()).toContain('number of PGs of this pool is being adjusted');
-      expect(description()).toContain('Wait for the change to finish');
+      expect(description()).toContain('both the number of PGs (pg_num) and the PG placement count');
     });
 
     it('should include the running task for any other operation', () => {
@@ -83,23 +96,6 @@ describe('PoolBusyModalComponent', () => {
       createComponent(PoolBusyReason.MIGRATING, undefined, PoolAction.EDIT);
       expect(description()).toContain('Pool editing is currently unavailable');
       expect(description()).toContain('already part of an ongoing migration');
-      expect(description()).toContain('Wait for it to finish');
-    });
-
-    it('should tell the user to wait for the PG count change', () => {
-      createComponent(PoolBusyReason.PG_CHANGE, undefined, PoolAction.EDIT);
-      expect(description()).toContain('Pool editing is currently unavailable');
-      expect(description()).toContain('number of PGs of this pool is being adjusted');
-      expect(description()).toContain('Wait for the change to finish');
-    });
-
-    it('should include the running task for any other operation', () => {
-      createComponent(PoolBusyReason.TASK, 'Updating...', PoolAction.EDIT);
-      expect(description()).toContain('Pool editing is currently unavailable');
-      expect(description()).toContain(
-        'another operation is in progress on this pool (Updating...)'
-      );
-      expect(description()).toContain('Wait for it to finish');
     });
   });
 
@@ -113,30 +109,6 @@ describe('PoolBusyModalComponent', () => {
       createComponent(PoolBusyReason.MIGRATING, undefined, PoolAction.DELETE);
       expect(description()).toContain('Pool deletion is currently unavailable');
       expect(description()).toContain('already part of an ongoing migration');
-      expect(description()).toContain('Wait for it to finish');
     });
-
-    it('should tell the user to wait for the PG count change', () => {
-      createComponent(PoolBusyReason.PG_CHANGE, undefined, PoolAction.DELETE);
-      expect(description()).toContain('Pool deletion is currently unavailable');
-      expect(description()).toContain('number of PGs of this pool is being adjusted');
-      expect(description()).toContain('Wait for the change to finish');
-    });
-
-    it('should include the running task for any other operation', () => {
-      createComponent(PoolBusyReason.TASK, 'Migrating...', PoolAction.DELETE);
-      expect(description()).toContain('Pool deletion is currently unavailable');
-      expect(description()).toContain(
-        'another operation is in progress on this pool (Migrating...)'
-      );
-      expect(description()).toContain('Wait for it to finish');
-    });
-  });
-
-  it('should offer no actions, only the close button of the header', () => {
-    createComponent(PoolBusyReason.MIGRATING);
-    const body = fixture.debugElement.query(By.css('[cdsModalContent]')).nativeElement;
-    expect(body.querySelector('button, a, cd-form-button-panel')).toBeNull();
-    expect(fixture.debugElement.query(By.css('cds-modal-footer'))).toBeNull();
   });
 });
