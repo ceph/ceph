@@ -23,8 +23,8 @@ def resolve_time_and_unit(time: str) -> Union[Tuple[int, str], Tuple[None, None]
 
 def get_dashboards_data() -> Dict[str, Any]:
     data: Dict[str, Any] = {'queries': {}, 'variables': {}, 'stats': {}}
-    for file in Path(__file__).parent.parent \
-                              .joinpath('dashboards_out').glob('*.json'):
+    for file in sorted(Path(__file__).parent.parent
+                       .joinpath('dashboards_out').glob('*.json')):
         with open(file, 'r') as f:
             dashboard_data = json.load(f)
             data['stats'][str(file)] = {'total': 0, 'tested': 0}
@@ -39,9 +39,16 @@ def add_dashboard_queries(data: Dict[str, Any], dashboard_data: Dict[str, Any], 
     Grafana panels can have more than one target/query, in order to identify each
     query in the panel we append the "legendFormat" of the target to the panel name.
     format: panel_name-legendFormat
+
+    Queries are grouped per dashboard (data['queries'][<dashboard>]) so that
+    different dashboards reusing a panel title/legend, e.g. "IOPS-Read", stay in
+    separate namespaces. Each .feature picks its dashboard so the lookup is
+    unambiguous.
     """
     if 'panels' not in dashboard_data:
         return
+    dashboard = Path(path).stem
+    queries = data['queries'].setdefault(dashboard, {})
     error = 0
     panel_ids_in_file = set()
 
@@ -57,24 +64,15 @@ def add_dashboard_queries(data: Dict[str, Any], dashboard_data: Dict[str, Any], 
                 title = panel['title']
                 legend_format = target['legendFormat'] if 'legendFormat' in target else ""
                 query_id = f'{title}-{legend_format}'
-                # Skip duplicates within collapsed rows
-                # but error on duplicates at top-level or across different contexts
+                # a repeated id within one dashboard is expected for a collapsed
+                # row; at top level it means a missing legendFormat
                 if query_id in panel_ids_in_file:
                     if legend_format != '__auto' and not in_row:
                         cprint((f'ERROR: Query in panel "{title}" with legend "{legend_format}"'
                                 f' already exists in the same file: "{path}"'), 'red')
                         error = 1
-                    # Skip adding duplicate
                     continue
-                # Also check for duplicates across different files
-                # NOTE: This silently skips duplicate panel+legend combinations across dashboards,
-                # which means some queries never get tested. A better approach would be to include
-                # dashboard name in query_id (e.g., "dashboard:panel-legend"), but that requires
-                # updating all test .feature files to specify which dashboard they're testing.
-                if query_id in data['queries']:
-                    # Skip silently for duplicates across files (first one wins)
-                    continue
-                data['queries'][query_id] = {'query': target['expr'], 'path': path}
+                queries[query_id] = {'query': target['expr'], 'path': path}
                 data['stats'][path]['total'] += 1
                 panel_ids_in_file.add(query_id)
         # Recurse into row panels
