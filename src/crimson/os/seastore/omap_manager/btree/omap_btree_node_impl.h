@@ -532,11 +532,7 @@ omap_load_extent(
 {
   LOG_PREFIX(omap_load_extent);
   assert(end <= END_KEY);
-  auto size = std::is_same_v<OMapInnerNode, T>
-    ? OMAP_INNER_BLOCK_SIZE : get_leaf_size(oc.type);
-  return oc.tm.read_extent<T>(
-    oc.t, laddr, size,
-    [begin=std::move(begin), end=std::move(end), FNAME,
+  auto init = [begin=std::move(begin), end=std::move(end), FNAME,
     oc, chp=std::move(chp)](T &extent) mutable {
       assert(!extent.is_seen_by_users());
       extent.init_range(std::move(begin), std::move(end));
@@ -548,8 +544,18 @@ omap_load_extent(
       assert(chp);
       assert(!extent.T::base_child_t::is_parent_valid());
       chp->link_child(&extent);
+    };
+  auto fut = [&] {
+    if constexpr (std::is_same_v<OMapInnerNode, T>) {
+      return oc.tm.read_extent<T>(
+        oc.t, laddr, OMAP_INNER_BLOCK_SIZE, std::move(init));
+    } else {
+      // Leaves of one tree do not have to be the same size (a root
+      // leaf can be smaller), so take the length from the LBA mapping.
+      return oc.tm.read_extent<T>(oc.t, laddr, std::move(init));
     }
-  ).handle_error_interruptible(
+  }();
+  return std::move(fut).handle_error_interruptible(
     omap_load_extent_iertr::pass_further{},
     crimson::ct_error::assert_all( "Invalid error in omap_load_extent" )
   ).si_then([](auto maybe_indirect_extent) {
