@@ -37,6 +37,9 @@ overrides:
       - CEPHADM_REFRESH_FAILED
       - failed to probe daemons or devices
 
+watchdog:
+  daemon_timeout: 600
+
 tasks:
 - nvmeof.thrash:
     checker_host: 'client.0'
