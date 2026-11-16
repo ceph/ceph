@@ -1859,6 +1859,7 @@ TEST_F(NSFSBucketTest, HierarchicalCopy)
       rgw_placement_rule(), nullptr, nullptr,
       nullptr, nullptr, false,
       nullptr, nullptr,
+      nullptr, nullptr,
       ATTRSMOD_NONE, false, attrs,
       RGWObjCategory::Main, 0,
       boost::none, nullptr, &tag, &etag,
