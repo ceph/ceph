@@ -10938,6 +10938,53 @@ def test_restore_object_permanent():
 @pytest.mark.cloud_restore
 @pytest.mark.fails_on_aws
 @pytest.mark.fails_on_dbstore
+def test_restore_object_temporary_copy():
+    cloud_sc = get_cloud_storage_class()
+    if cloud_sc is None:
+        pytest.skip('[s3 cloud] section missing cloud_storage_class')
+
+    bucket = get_new_bucket()
+    client = get_client()
+    key = 'test_restore_temp_copy'
+    # larger than the head object, so the restored copy has a tail
+    data = 'x' * (6 * 1024 * 1024)
+
+    client.put_object(Bucket=bucket, Key=key, Body=data)
+
+    # Transition object to cloud storage class
+    rules = [{'ID': 'rule1', 'Transitions': [{'Days': 1, 'StorageClass': cloud_sc}], 'Prefix': '', 'Status': 'Enabled'}]
+    client.put_bucket_lifecycle_configuration(Bucket=bucket, LifecycleConfiguration={'Rules': rules})
+    time.sleep(10 * get_lc_debug_interval())
+    verify_transition(client, bucket, key, cloud_sc)
+
+    # delete lifecycle to prevent re-transition before the copies
+    client.delete_bucket_lifecycle(Bucket=bucket)
+
+    client.restore_object(Bucket=bucket, Key=key, RestoreRequest={'Days': 20})
+    time.sleep(3 * get_restore_processor_period())
+    response = client.head_object(Bucket=bucket, Key=key)
+    assert response['ContentLength'] == len(data)
+
+    copy_source = {'Bucket': bucket, 'Key': key}
+    for directive in ['COPY', 'REPLACE']:
+        copy_key = key + '_' + directive.lower()
+        client.copy_object(Bucket=bucket, Key=copy_key, CopySource=copy_source,
+                           MetadataDirective=directive)
+
+        # the copy is a regular object with the data, not a restored one
+        response = client.head_object(Bucket=bucket, Key=copy_key)
+        assert 'Restore' not in response
+        verify_object(client, bucket, copy_key, data)
+
+        e = assert_raises(ClientError, client.restore_object, Bucket=bucket, Key=copy_key,
+                          RestoreRequest={'Days': 1})
+        status, error_code = _get_status_and_error_code(e.response)
+        assert status == 403
+        assert error_code == 'InvalidObjectState'
+
+@pytest.mark.cloud_restore
+@pytest.mark.fails_on_aws
+@pytest.mark.fails_on_dbstore
 def test_read_through():
     cloud_sc = get_cloud_storage_class()
     if cloud_sc is None:
