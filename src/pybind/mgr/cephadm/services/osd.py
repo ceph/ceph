@@ -1072,7 +1072,9 @@ class OSDRemovalQueue(object):
                             f"Could not destroy {osd}")
                     logger.info(
                         f"Successfully destroyed old {osd} on {osd.hostname}; ready for replacement")
-                    osd.zap = True
+                    # device replace needs a zap so ceph-volume can set being_replaced
+                    if any([osd.replace_block, osd.replace_db, osd.replace_wal]):
+                        osd.zap = True
                 else:
                     if not osd.purge():
                         raise orchestrator.OrchestratorError(f"Could not purge {osd}")
