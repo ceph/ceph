@@ -444,7 +444,12 @@ struct OMapLeafNode
   bool exceeds_max_kv_limit(
     const std::string &key,
     const ceph::bufferlist &value) const final {
-    return (key.length() + value.length()) > (capacity() / 4);
+    // Take the limit from the largest leaf, not from this one: a root
+    // leaf that is smaller than OMAP_LEAF_BLOCK_SIZE must accept every
+    // entry that fits after it grows.
+    auto header = get_len() - capacity();
+    return (key.length() + value.length()) >
+      ((OMAP_LEAF_BLOCK_SIZE - header) / 4);
   }
 
   rm_key_ret rm_key(
