@@ -21,7 +21,7 @@ from cephadm.tlsobject_types import TLSCredentials
 from cephadm.utils import get_node_proxy_status_value
 
 from urllib.error import HTTPError, URLError
-from typing import Any, Deque, Dict, List, Set, TYPE_CHECKING, Optional, MutableMapping, IO, Tuple
+from typing import Any, Callable, Deque, Dict, List, Set, TYPE_CHECKING, Optional, MutableMapping, IO, Tuple
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
@@ -36,6 +36,12 @@ AGENT_MESSAGE_TIMEOUT = 10.0
 # Pause before the single retry of a refused connection, which covers an
 # agent whose listener is still starting after a deploy.
 AGENT_MESSAGE_RETRY_WAIT = 2.0
+# After N consecutive failed messages to a host, the host is sent no message
+# for min(AGENT_MESSAGE_BACKOFF_BASE * 2**(N-1), AGENT_MESSAGE_BACKOFF_MAX)
+# seconds. A successful message or a (re)deploy of the agent ends the
+# back-off.
+AGENT_MESSAGE_BACKOFF_BASE = 5.0
+AGENT_MESSAGE_BACKOFF_MAX = 300.0
 
 
 class AgentEndpoint:
@@ -886,12 +892,13 @@ class AgentMessage:
             data['config'] = self.daemon_spec.final_config
         return json.dumps(data)
 
-    def send(self) -> None:
+    def send(self) -> bool:
         """Send the message and wait for the agent's reply.
 
-        A refused or reset connection is retried once after
-        AGENT_MESSAGE_RETRY_WAIT seconds. A timeout or any other error is
-        not retried.
+        Returns True when the agent replied, False when the message could
+        not be delivered. A refused or reset connection is retried once
+        after AGENT_MESSAGE_RETRY_WAIT seconds. A timeout or any other
+        error is not retried.
         """
         self.mgr.log.debug(f'Sending message to agent on host {self.host}')
         self.addr = self.mgr.inventory.get_addr(self.host) if self.host in self.mgr.inventory else self.host
@@ -900,7 +907,7 @@ class AgentMessage:
             ssl_ctx = self.agent.get_client_ssl_context()
         except Exception as e:
             self.mgr.log.error(f'Failed to get certs for connecting to agent: {e}')
-            return
+            return False
         try:
             data = self._payload()
             bytes_len: str = str(len(data.encode('utf-8')))
@@ -911,7 +918,7 @@ class AgentMessage:
                 bytes_len = '0' + bytes_len
         except Exception as e:
             self.mgr.log.error(f'Failed to get length of json payload: {e}')
-            return
+            return False
         for attempt in (1, 2):
             try:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as agent_socket:
@@ -927,7 +934,7 @@ class AgentMessage:
                     self.mgr.log.info(
                         f'HTTP config push to agent on {self.host} acknowledged; '
                         f'agent config deps updated (deps={self.daemon_spec.deps})')
-                return
+                return True
             except ConnectionError as e:
                 # The agent may have just been deployed and its listener may
                 # not be up yet: retry a refused or reset connection once.
@@ -940,14 +947,14 @@ class AgentMessage:
                 self.mgr.log.error(
                     f'Could not connect to agent on host {self.host}: {e}. '
                     f'Agent config deps left unchanged for retry')
-                return
+                return False
             except Exception as e:
                 # A timeout, TLS or other error: give up on this message.
                 # Leave agent config deps unchanged so _check_agent can retry.
                 self.mgr.log.error(
                     f'Failed to contact agent on host {self.host}: {e}. '
                     f'Agent config deps left unchanged for retry')
-                return
+                return False
 
     def get_agent_response(self) -> str:
         return self.agent_response
@@ -966,16 +973,28 @@ class AgentMessenger:
     queued behind it. The host is marked as being messaged
     (``AgentCache.messaging_agent()``) before the message is queued, so
     callers that check that flag don't queue duplicates.
+
+    A host whose messages keep failing is left alone for a growing, capped
+    window: after N consecutive failed messages it is sent nothing for
+    min(AGENT_MESSAGE_BACKOFF_BASE * 2**(N-1), AGENT_MESSAGE_BACKOFF_MAX)
+    seconds, and messages requested or queued during that window are
+    dropped. A successful message or a (re)deploy of the agent (see
+    ``reset_backoff()``) ends the back-off. Dropping messages loses
+    nothing: config pushes are retried by ``_check_agent()`` and ack
+    requests by the agent's next report.
     """
 
-    def __init__(self, mgr: "CephadmOrchestrator") -> None:
+    def __init__(self, mgr: "CephadmOrchestrator", clock: Callable[[], float] = time.monotonic) -> None:
         self.mgr = mgr
+        self._now = clock
         self._lock = threading.Lock()
         self._queue: Deque[str] = deque()
         self._pending: Dict[str, AgentMessage] = {}
         self._running: Set[str] = set()
         self._workers = 0
         self._stopping = False
+        self._failures: Dict[str, int] = {}
+        self._backoff_until: Dict[str, float] = {}
 
     def _max_workers(self) -> int:
         try:
@@ -988,6 +1007,11 @@ class AgentMessenger:
             if self._stopping:
                 return
             host = msg.host
+            if self._backing_off(host):
+                self.mgr.log.debug(
+                    f'Dropping message to agent on host {host}: '
+                    f'backing off for another {self._backoff_until[host] - self._now():.0f} seconds')
+                return
             if host in self._pending:
                 self._pending[host] = self._pending[host].merge(msg)
                 return
@@ -996,6 +1020,10 @@ class AgentMessenger:
             if host not in self._running:
                 self._queue.append(host)
                 self._maybe_start_worker()
+
+    def _backing_off(self, host: str) -> bool:
+        # called with self._lock held
+        return self._now() < self._backoff_until.get(host, 0.0)
 
     def _maybe_start_worker(self) -> None:
         # called with self._lock held
@@ -1012,18 +1040,54 @@ class AgentMessenger:
                 host = self._queue.popleft()
                 msg = self._pending.pop(host)
                 self._running.add(host)
+                # a message queued before the host started backing off is
+                # dropped instead of sent, so the host is left alone for
+                # the whole window
+                skip = self._backing_off(host)
+                if skip:
+                    self.mgr.log.debug(
+                        f'Dropping queued message to agent on host {host}: host is in back-off')
+            delivered = False
             try:
-                msg.send()
+                if not skip:
+                    delivered = msg.send()
             except Exception as e:
                 self.mgr.log.exception(f'Unexpected error sending message to agent on host {host}: {e}')
             finally:
                 with self._lock:
+                    if not skip:
+                        self._record_result(host, delivered)
                     self._running.discard(host)
                     if host in self._pending and not self._stopping:
                         self._queue.append(host)
                     else:
                         self._pending.pop(host, None)
                         self.mgr.agent_cache.sending_agent_message[host] = False
+
+    def _record_result(self, host: str, delivered: bool) -> None:
+        # called with self._lock held
+        if delivered:
+            self._failures.pop(host, None)
+            self._backoff_until.pop(host, None)
+            return
+        failures = self._failures.get(host, 0) + 1
+        self._failures[host] = failures
+        backoff = min(AGENT_MESSAGE_BACKOFF_BASE * 2 ** (failures - 1),
+                      AGENT_MESSAGE_BACKOFF_MAX)
+        self._backoff_until[host] = self._now() + backoff
+        self.mgr.log.debug(
+            f'{failures} consecutive failed message(s) to agent on host {host}; '
+            f'backing off for {backoff:.0f} seconds')
+
+    def reset_backoff(self, host: str) -> None:
+        """End the back-off for a host.
+
+        Called when the agent on the host is (re)deployed: the new agent
+        gets a fresh attempt and its listener may still be starting up.
+        """
+        with self._lock:
+            self._failures.pop(host, None)
+            self._backoff_until.pop(host, None)
 
     def stats(self) -> Dict[str, int]:
         with self._lock:
@@ -1050,6 +1114,10 @@ class CephadmAgentHelpers:
 
     def shutdown(self) -> None:
         self.messenger.shutdown()
+
+    def reset_agent_backoff(self, host: str) -> None:
+        """A (re)deploy of the agent on a host ends its messaging back-off."""
+        self.messenger.reset_backoff(host)
 
     def _request_agent_acks(self, hosts: Set[str], increment: bool = False, daemon_spec: Optional[CephadmDaemonDeploySpec] = None) -> None:
         for host in hosts:

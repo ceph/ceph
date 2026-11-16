@@ -22,14 +22,16 @@ class _RecordingMessage(AgentMessage):
                  gate: Optional[threading.Event] = None,
                  daemon_spec: Optional[mock.MagicMock] = None,
                  tracker: Optional[Dict[str, int]] = None,
-                 lock: Optional[threading.Lock] = None) -> None:
+                 lock: Optional[threading.Lock] = None,
+                 ok: bool = True) -> None:
         super().__init__(host, 1234, mgr, daemon_spec)
         self.sent = sent
         self.gate = gate
         self.tracker = tracker
         self.lock = lock or threading.Lock()
+        self.ok = ok
 
-    def send(self) -> None:
+    def send(self) -> bool:
         # the in-flight flag is set before the message runs
         assert self.mgr.agent_cache.sending_agent_message[self.host] is True
         if self.tracker is not None:
@@ -42,6 +44,20 @@ class _RecordingMessage(AgentMessage):
             with self.lock:
                 self.tracker['now'] -= 1
         self.sent.append(self)
+        return self.ok
+
+
+class _FakeClock:
+    """Controllable monotonic clock for back-off tests."""
+
+    def __init__(self) -> None:
+        self.now = 1000.0
+
+    def __call__(self) -> float:
+        return self.now
+
+    def advance(self, seconds: float) -> None:
+        self.now += seconds
 
 
 def _wait_idle(messenger: AgentMessenger, timeout: float = 10) -> None:
@@ -166,6 +182,117 @@ def test_payload_uses_the_counter_at_send_time():
     msg = AgentMessage('h', 1234, mgr)
     mgr.agent_cache.agent_counter['h'] = 3
     assert '"counter": 3' in msg._payload()
+
+
+def test_failed_message_adds_backoff():
+    mgr = _fake_mgr(max_concurrent=1)
+    clock = _FakeClock()
+    messenger = AgentMessenger(mgr, clock=clock)
+    sent: List[_RecordingMessage] = []
+    messenger.send(_RecordingMessage('h', mgr, sent, ok=False))
+    _wait_idle(messenger)
+    assert [m.ok for m in sent] == [False]
+    # the host gets no new message during the 5 s window
+    messenger.send(_RecordingMessage('h', mgr, sent))
+    assert messenger.stats() == {'workers': 0, 'queued': 0, 'running': 0}
+    assert mgr.agent_cache.sending_agent_message['h'] is False
+    # after the window a message is sent again
+    clock.advance(5.0)
+    messenger.send(_RecordingMessage('h', mgr, sent))
+    _wait_idle(messenger)
+    assert [m.ok for m in sent] == [False, True]
+
+
+def test_backoff_doubles_and_is_capped():
+    mgr = _fake_mgr(max_concurrent=1)
+    clock = _FakeClock()
+    messenger = AgentMessenger(mgr, clock=clock)
+    sent: List[_RecordingMessage] = []
+    messenger.send(_RecordingMessage('h', mgr, sent, ok=False))
+    _wait_idle(messenger)
+    # after N consecutive failures the window is min(5 * 2**(N-1), 300)
+    for failures, window in enumerate([5, 10, 20, 40, 80, 160, 300, 300], start=1):
+        clock.advance(window - 0.1)
+        messenger.send(_RecordingMessage('h', mgr, sent))
+        assert len(sent) == failures, \
+            f'message sent after only {window - 0.1} s of the {window} s window'
+        clock.advance(0.1)
+        messenger.send(_RecordingMessage('h', mgr, sent, ok=False))
+        _wait_idle(messenger)
+        assert len(sent) == failures + 1
+
+
+def test_successful_message_ends_backoff():
+    mgr = _fake_mgr(max_concurrent=1)
+    clock = _FakeClock()
+    messenger = AgentMessenger(mgr, clock=clock)
+    sent: List[_RecordingMessage] = []
+    messenger.send(_RecordingMessage('h', mgr, sent, ok=False))
+    _wait_idle(messenger)
+    clock.advance(5.0)
+    messenger.send(_RecordingMessage('h', mgr, sent))
+    _wait_idle(messenger)
+    # the failure count restarted: the next failure backs off 5 s again
+    messenger.send(_RecordingMessage('h', mgr, sent, ok=False))
+    _wait_idle(messenger)
+    clock.advance(4.9)
+    messenger.send(_RecordingMessage('h', mgr, sent))
+    assert [m.ok for m in sent] == [False, True, False]  # dropped: 5 s window after a single failure
+    clock.advance(0.1)
+    messenger.send(_RecordingMessage('h', mgr, sent))
+    _wait_idle(messenger)
+    assert [m.ok for m in sent] == [False, True, False, True]
+
+
+def test_reset_backoff_allows_immediate_send():
+    mgr = _fake_mgr(max_concurrent=1)
+    clock = _FakeClock()
+    messenger = AgentMessenger(mgr, clock=clock)
+    sent: List[_RecordingMessage] = []
+    messenger.send(_RecordingMessage('h', mgr, sent, ok=False))
+    _wait_idle(messenger)
+    # e.g. the agent on the host was redeployed
+    messenger.reset_backoff('h')
+    messenger.send(_RecordingMessage('h', mgr, sent))
+    _wait_idle(messenger)
+    assert [m.ok for m in sent] == [False, True]
+
+
+def test_queued_message_is_dropped_while_host_backs_off():
+    mgr = _fake_mgr(max_concurrent=1)
+    clock = _FakeClock()
+    messenger = AgentMessenger(mgr, clock=clock)
+    gate = threading.Event()
+    sent: List[_RecordingMessage] = []
+    # the first message for 'h' is being sent; a second one waits behind it
+    messenger.send(_RecordingMessage('h', mgr, sent, gate, ok=False))
+    _wait_running(messenger, 1)
+    messenger.send(_RecordingMessage('h', mgr, sent))
+    # the running message fails and arms the 5 s back-off; the queued
+    # message is dropped instead of sent
+    gate.set()
+    _wait_idle(messenger)
+    assert [m.host for m in sent] == ['h']
+    assert mgr.agent_cache.sending_agent_message['h'] is False
+    # the drop did not count as a failure: a new message goes through 5 s
+    # after the failure, not 10 s
+    clock.advance(5.0)
+    messenger.send(_RecordingMessage('h', mgr, sent))
+    _wait_idle(messenger)
+    assert len(sent) == 2
+
+
+def test_send_returns_whether_the_agent_replied():
+    mgr = _socket_mgr()
+    raw, secure, ctx = _patched_socket()
+    mgr.http_server.agent.get_client_ssl_context.return_value = ctx
+    with mock.patch('cephadm.agent.socket.socket', return_value=raw):
+        assert AgentMessage('h', 1234, mgr).send() is True
+    raw, secure, ctx = _patched_socket(ConnectionRefusedError('refused'))
+    mgr.http_server.agent.get_client_ssl_context.return_value = ctx
+    with mock.patch('cephadm.agent.socket.socket', return_value=raw), \
+            mock.patch('cephadm.agent.time.sleep'):
+        assert AgentMessage('h', 1234, mgr).send() is False
 
 
 def _socket_mgr() -> mock.MagicMock:

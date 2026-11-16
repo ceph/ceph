@@ -1642,6 +1642,11 @@ class CephadmServe:
                 if termination_grace_period is not None:
                     daemon_params['termination_grace_period_seconds'] = int(termination_grace_period)
 
+                if daemon_spec.daemon_type == 'agent':
+                    # an agent (re)deploy or SSH reconfig is a recovery
+                    # action on the host: end its messaging back-off
+                    self.mgr.agent_helpers.reset_agent_backoff(daemon_spec.host)
+
                 out, err, code = await self._run_cephadm(
                     daemon_spec.host,
                     daemon_spec.name(),
