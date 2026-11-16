@@ -3437,10 +3437,11 @@ CLI::Option* add_multilevel_option(CLI::App* cmd, const std::string& name, T& va
 
 // Multilevel strict base-10 integer option (sibling of add_multilevel_option):
 // binds through a string callback that parses with strict_strtol/strict_strtoll
-// (base 10), matching the legacy parse loop, instead of CLI11's integer binding,
-// which auto-detects the base ("010" -> octal 8, "0x10" -> hex 16, "08" ->
-// rejected). An invalid value fails the callback, so CLI11 emits its standard
-// conversion error (exit 104), same as a directly-bound integer.
+// (base 10), matching the legacy parse loop: "010" -> 10, "08" -> 8,
+// "0x10" -> rejected. CLI11's own integer binding auto-detects the base
+// instead ("010" -> octal 8, "0x10" -> hex 16, "08" -> rejected), so it can't
+// be used here. An invalid value fails the callback, so CLI11 raises its
+// conversion error (CLI11 code 104, which main() maps to EINVAL).
 template <typename T>
 CLI::Option* add_multilevel_strict_int(CLI::App* cmd, const std::string& name,
                                        T& target, std::string_view desc = {}) {
@@ -3451,7 +3452,8 @@ CLI::Option* add_multilevel_strict_int(CLI::App* cmd, const std::string& name,
       // int targets: strict_strtol, which adds an int range check
       target = strict_strtol(res.back(), 10, &err);
     } else {
-      // wider targets (e.g. uint64_t): strict_strtoll + the legacy cast
+      // other targets: parse as long long, then cast to T, as the legacy
+      // parser does
       target = static_cast<T>(strict_strtoll(res.back(), 10, &err));
     }
     return err.empty();
@@ -3483,11 +3485,25 @@ static void parse_binary_flag(const std::string& flag,
   out = 1;
 }
 
-// Multilevel binary flag (sibling of add_multilevel_option): a string option with
-// expected(0,1) at each level, so "--fix false" is consumed (not left as a stray) and parse()
-// stays parse-safe for unmigrated commands. The bound setter converts straight
-// into the command's int var, so no separate capture variable is needed; absent
-// leaves it untouched (add_option_function skips run_callback_for_default()).
+// Multilevel binary flag (sibling of add_multilevel_option), e.g. --fix.
+// Accepts the same forms as the legacy parser: --fix, --fix=VALUE and
+// --fix VALUE. The value is written into the command's int variable (e.g. fix):
+//   --fix, --fix true, --fix 1   -> sets the flag: fix = 1
+//   --fix false, --fix 0         -> turns the flag off: fix = 0
+//   --fix=banana                 -> sets the flag: fix = 1, with a warning
+//   --fix not given              -> the setter doesn't run; fix is unchanged
+// "--fix banana" also warns and sets the flag here, but the legacy loop,
+// which for now runs after the CLI11 parse, doesn't take "banana" as the
+// value and leaves it behind, so the check after the loop rejects it as an
+// unexpected argument (exit 1, as on main).
+// TODO: when the legacy loop is removed, keep that error for the space form
+// ("--fix banana"); "--fix=banana" stays accepted, as on main.
+// The setter never rejects a value, like the legacy parser, so this flag
+// never makes parsing fail, and commands not migrated yet still reach the
+// legacy parser as on main.
+// A plain CLI11 flag behaves differently: "--fix false" leaves "false" as an
+// extra word, "--fix=false" sets -1, and "--fix=banana" fails the whole parse,
+// so it can't be used here.
 CLI::Option* add_multilevel_binary_flag(CLI::App* cmd, const std::string& name,
                                         int& target, std::string_view desc = {}) {
   const std::string primary = name.substr(0, name.find(','));
@@ -3630,18 +3646,24 @@ void warn_underscore_options(
   }
 }
 
-// Normalize the token stream before CLI11 parses it, fixing two places where
-// CLI11's tokenizer loses information the legacy parser preserves:
+// Normalize the token stream before CLI11 parses it.
+// First, an option spelled with underscores (--max_entries) is rewritten to its
+// dash form (--max-entries), since the legacy parser treats '-' and '_' in
+// option names as the same. Only options registered on the root are rewritten;
+// others are left for the legacy parser. Each rewrite is added to
+// underscore_rewrites so the caller can warn about it.
+// Then two places where CLI11's tokenizer loses information the legacy parser
+// preserves are fixed:
 //   --name=    ->  ["--name", ""]      empty '=' form: CLI11 collapses it into
 //                                      a bare "--name" (missing value); legacy
 //                                      passes an empty-string value through.
 //   -X=value   ->  ["-X", "value"]     short flags: CLI11 has no '=' handling
 //                                      and would capture "=value" verbatim.
-// Only options registered on the root that take a value are rewritten (binary
-// flags keep their optional-value handling; unknown flags can't be arity-
-// checked, so they pass through untouched). A token in value position (right
-// after a value-taking flag) is never rewritten. Returns the full token list;
-// the caller owns it and points argv at it.
+// These two rules apply only to options registered on the root that take a
+// value (binary flags keep their optional-value handling; unknown flags can't
+// be arity-checked, so they pass through untouched). A token in value position
+// (right after a value-taking flag) is never rewritten. Returns the full token
+// list.
 std::vector<std::string> normalize_cli11_tokens(
     const CLI::App& app, const std::vector<const char*>& argv,
     std::vector<std::pair<std::string, std::string>>& underscore_rewrites) {
@@ -3664,23 +3686,18 @@ std::vector<std::string> normalize_cli11_tokens(
     // Legacy accepts '_' in long option names. Rewrite recognized option
     // names to their registered dash form before the other normalization
     // rules run, leaving unknown options untouched for legacy parsing.
-    if (token.size() >= 3 && token.starts_with("--") &&
-        token.find('_') != token.npos) {
+    if (token.starts_with("--") && token.find('_') != token.npos) {
       size_t name_len = std::min(token.find('='), token.size());
       std::string_view option_name = token.substr(0, name_len);
       if (option_name.find('_') != option_name.npos) {
-        std::string dash_name;
-        dash_name.reserve(name_len);
-        for (char c : option_name) {
-          dash_name.push_back(c == '_' ? '-' : c);
-        }
-        if (app.get_option_no_throw(dash_name) != nullptr) {
-          std::string original(option_name);
-          // dedup by name: warn_duplicates covers repeats of the same flag
-          if (seen.insert(original).second) {
-            underscore_rewrites.emplace_back(std::move(original), dash_name);
+        rewritten = option_name;
+        std::replace(rewritten.begin(), rewritten.end(), '_', '-');
+        if (app.get_option_no_throw(rewritten) != nullptr) {
+          // Warn about each underscore spelling only once, even if the flag is
+          // repeated; warn_duplicates already reports the repeat.
+          if (seen.emplace(option_name).second) {
+            underscore_rewrites.emplace_back(option_name, rewritten);
           }
-          rewritten = std::move(dash_name);
           rewritten.append(token.substr(name_len));
           token = rewritten;
         }
@@ -3731,7 +3748,7 @@ int to_errno_exit_code(const CLI::ParseError& e) {
 
     case static_cast<int>(CLI::ExitCodes::RequiredError):     // CLI11: 106 - required subcommand not provided
     case static_cast<int>(CLI::ExitCodes::ArgumentMismatch):  // CLI11: 114 - option missing its argument
-      return 1;
+      return EPERM;
 
     default:
       return e.get_exit_code();
@@ -4150,10 +4167,11 @@ int main(int argc, const char **argv)
     // options while still rejecting truly unknown options, or intentionally
     // tighten behavior to reject irrelevant options too.
     app.allow_extras();
-    // Enable fallthrough on the root so options declared here (globals) are accepted
-    // at any position: before, after, or inside a nested subcommand. fallthrough_ is
-    // INHERITABLE, so every subcommand created below copies it at construction. This
-    // must be set before the first add_subcommand call.
+    // Enable fallthrough on the root: an option a subcommand doesn't know is
+    // passed up to its parent, so options declared on the root (radosgw-admin's
+    // global options) work at any position, matching the legacy parser.
+    // Subcommands inherit this setting when they are created, so it must be set
+    // before the first add_subcommand call.
     app.fallthrough();
     // At most one command word may be matched here, so a repeated one is left over
     // and reported instead of entering the same command twice. No minimum: a command
@@ -4163,10 +4181,7 @@ int main(int argc, const char **argv)
 
     constexpr std::string_view tenant_desc     = "tenant name";
     constexpr std::string_view account_id_desc = "account id";
-    // radosgw-admin's own global flags (category 1, identity), shared across command
-    // families — owned by CLI11 on the root and declared once here instead of on every
-    // command. Matches the legacy parser, where --tenant, -i/--uid and --account-id are
-    // handled globally for any command.
+    // radosgw-admin's global options
     app.add_option("--tenant", tenant, std::string(tenant_desc))->take_last();
     // Legacy exits immediately when -i/--uid resolves to an empty user
     // ("no value for uid", e.g. -i "" or -i '$'); run the same check on
@@ -4175,7 +4190,7 @@ int main(int argc, const char **argv)
         ->each([](const std::string& value) {
           if (rgw_user(value).empty()) {
             cerr << "no value for uid" << std::endl;
-            throw CLI::RuntimeError(1);
+            throw CLI::RuntimeError(EPERM);
           }
         });
     app.add_option("--account-id", account_id, std::string(account_id_desc))->take_last();
@@ -4349,7 +4364,7 @@ int main(int argc, const char **argv)
       const auto reject_empty_bucket_id = [](const std::string& value) {
         if (value.empty()) {
           cerr << "no value for bucket-id" << std::endl;
-          throw CLI::RuntimeError(1);
+          throw CLI::RuntimeError(EPERM);
         }
       };
 
@@ -4407,8 +4422,6 @@ int main(int argc, const char **argv)
       add_multilevel_option(bucket_list, "--bucket,-b",       bucket_name,    bucket_desc);
       add_multilevel_option(bucket_list, "--bucket-id",       bucket_id,      bucket_id_desc, reject_empty_bucket_id);
       add_multilevel_option(bucket_list, "--format",          format,         format_desc);
-      // strict base-10 parsing (including overflow checks); sets max_entries_specified
-      // to mirror the legacy argparse behavior
       add_multilevel_strict_int(bucket_list, "--max-entries",     max_entries,    max_entries_desc)
           ->each([&max_entries_specified](const std::string&) { max_entries_specified = true; });
       add_multilevel_option(bucket_list, "--marker",          marker,         marker_desc);
@@ -4419,8 +4432,6 @@ int main(int argc, const char **argv)
       add_multilevel_option(bucket_stats, "--bucket,-b",          bucket_name,        bucket_desc);
       add_multilevel_option(bucket_stats, "--bucket-id",          bucket_id,          bucket_id_desc, reject_empty_bucket_id);
       add_multilevel_option(bucket_stats, "--format",             format,             format_desc);
-      // strict base-10 parsing (including overflow checks); sets max_entries_specified
-      // to mirror the legacy argparse behavior
       add_multilevel_strict_int(bucket_stats, "--max-entries",        max_entries,        max_entries_desc)
           ->each([&max_entries_specified](const std::string&) { max_entries_specified = true; });
       add_multilevel_option(bucket_stats, "--marker",             marker,             marker_desc);
@@ -4818,7 +4829,7 @@ int main(int argc, const char **argv)
                                             bypass_gc, true, false);
           } else {
             if (!yes_i_really_mean_it) {
-              cerr << "using --inconsistent_index can corrupt the bucket index " << std::endl
+              cerr << "using --inconsistent-index can corrupt the bucket index " << std::endl
                 << "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
               return 1;
             }
@@ -6153,7 +6164,7 @@ int main(int argc, const char **argv)
       // No path level is left to match this word against: a stray word.
       if (path_index == cli11_path.size()) {
         cerr << "ERROR: unexpected argument: '" << word << "'" << std::endl;
-        return 1;
+        return EPERM;
       }
       const auto& accepted = cli11_path[path_index].accepted_names;
       if (std::find(accepted.begin(), accepted.end(), word) != accepted.end()) {
@@ -6197,7 +6208,7 @@ int main(int argc, const char **argv)
       const auto extras = app.remaining(true);
       if (!extras.empty()) {
         cerr << "ERROR: unexpected argument: '" << extras.front() << "'" << std::endl;
-        return 1;
+        return EPERM;
       }
     }
   }

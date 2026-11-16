@@ -105,7 +105,7 @@ ERR_SUBCOMMAND="A subcommand is required"
 # logging list/flush on a bucket without logging: error message but exit 0 (legacy quirk)
 ERR_NO_LOGGING="does not have logging enabled"
 # legacy message spells the flag with an underscore (pre-migration typo, kept verbatim)
-ERR_INCONSISTENT="using --inconsistent_index can corrupt the bucket index"
+ERR_INCONSISTENT="using --inconsistent-index can corrupt the bucket index"
 
 # Filter out noisy ceph log lines and config-not-found lines
 filter() {
