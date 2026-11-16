@@ -152,7 +152,11 @@ int RGWGetObj_Decompress::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len
       return cr;
     }
     ++first_block;
-    while (out_bl.length() - q_ofs >=
+    // stop once the range is sent. a block written with a larger
+    // rgw_max_chunk_size can still hold a full chunk past the end of the
+    // range, and sending zero-length chunks would never shrink out_bl
+    while (q_len > 0 &&
+           out_bl.length() - q_ofs >=
 	   static_cast<off_t>(cct->_conf->rgw_max_chunk_size)) {
       off_t ch_len = std::min<off_t>(cct->_conf->rgw_max_chunk_size, q_len);
       q_len -= ch_len;
