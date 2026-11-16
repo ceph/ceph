@@ -1,6 +1,9 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
+#include <algorithm>
+#include <set>
+
 #include "test/crimson/gtest_seastar.h"
 
 #include "test/crimson/seastore/transaction_manager_test_state.h"
@@ -245,6 +248,23 @@ struct omap_manager_test_t :
     return count;
   }
 
+  /// Sizes of all live OMAP_LEAF extents, smallest first.
+  std::vector<extent_len_t> live_omap_leaf_lens() {
+    auto t = create_read_transaction();
+    std::vector<extent_len_t> lens;
+    with_trans_intr(*t, [this, &lens](auto &t) {
+      return tm->get_lba_manager()->scan_mapped_space(
+        t,
+        [&lens](paddr_t paddr, extent_len_t len, extent_types_t type, laddr_t laddr) {
+          if (type == extent_types_t::OMAP_LEAF) {
+            lens.push_back(len);
+          }
+        });
+    }).unsafe_get();
+    std::sort(lens.begin(), lens.end());
+    return lens;
+  }
+
   void list(
     const omap_root_t &omap_root,
     Transaction &t,
@@ -427,14 +447,13 @@ struct omap_manager_test_t :
     omap_manager = omap_manager::create_omap_manager(*tm);
   }
 
-  auto initialize() {
+  auto initialize(omap_type_t type = omap_type_t::OMAP) {
     auto t = create_mutate_transaction();
     omap_root_t omap_root = with_trans_intr(
       *t,
-      [this](auto &t) {
+      [this, type](auto &t) {
 	auto hint = laddr_hint_t::create_global_md_hint();
-	return omap_manager->initialize_omap(t, hint,
-	  omap_type_t::OMAP);
+	return omap_manager->initialize_omap(t, hint, type);
       }).unsafe_get();
     submit_transaction(std::move(t));
     return omap_root;
@@ -723,6 +742,142 @@ TEST_P(omap_manager_test_t, innernode_split_merge_balancing)
     clear(omap_root, *t_clear);
     submit_transaction(std::move(t_clear));
     EXPECT_EQ(count_live_omap_extents(), 0U);
+  });
+}
+
+TEST_P(omap_manager_test_t, omap_root_leaf_full_size)
+{
+  run_async([this] {
+    // Only XATTR trees start with a small root leaf.
+    initialize(omap_type_t::OMAP);
+    EXPECT_EQ(live_omap_leaf_lens(),
+              std::vector<extent_len_t>{OMAP_LEAF_BLOCK_SIZE});
+  });
+}
+
+TEST_P(omap_manager_test_t, xattr_root_leaf_grows)
+{
+  run_async([this] {
+    omap_root_t omap_root = initialize(omap_type_t::XATTR);
+    EXPECT_EQ(live_omap_leaf_lens(),
+              std::vector<extent_len_t>{XATTR_LEAF_INIT_BLOCK_SIZE});
+
+    // Add one 512 B value per transaction. The root leaf must double
+    // through every size up to OMAP_LEAF_BLOCK_SIZE, and only then split.
+    std::set<extent_len_t> root_lens{XATTR_LEAF_INIT_BLOCK_SIZE};
+    extent_len_t prev = XATTR_LEAF_INIT_BLOCK_SIZE;
+    while (omap_root.get_depth() < 2) {
+      auto t = create_mutate_transaction();
+      set_key(omap_root, *t, rand_name(STR_LEN), rand_buffer(512));
+      check_mappings(omap_root, *t);
+      submit_transaction(std::move(t));
+      check_mappings(omap_root);
+      if (omap_root.get_depth() == 1) {
+        auto lens = live_omap_leaf_lens();
+        // The old root leaf is removed when the root leaf grows.
+        ASSERT_EQ(lens.size(), 1u);
+        EXPECT_GE(lens[0], prev);
+        prev = lens[0];
+        root_lens.insert(prev);
+      }
+    }
+    EXPECT_EQ(root_lens,
+              (std::set<extent_len_t>{4096, 8192, 16384, 32768, 65536}));
+    // All leaves after the split have the full size.
+    for (auto len : live_omap_leaf_lens()) {
+      EXPECT_EQ(len, OMAP_LEAF_BLOCK_SIZE);
+    }
+
+    replay();
+    check_mappings(omap_root);
+  });
+}
+
+TEST_P(omap_manager_test_t, xattr_root_leaf_grows_in_one_step)
+{
+  run_async([this] {
+    omap_root_t omap_root = initialize(omap_type_t::XATTR);
+
+    // 12 KiB is more than a 4 KiB leaf holds and less than the
+    // OMAP_LEAF_BLOCK_SIZE / 4 limit, so it must not fail with
+    // value_too_large; the root leaf grows from 4 KiB to 16 KiB at once.
+    auto t = create_mutate_transaction();
+    set_key(omap_root, *t, rand_name(STR_LEN), rand_buffer(12 << 10));
+    check_mappings(omap_root, *t);
+    submit_transaction(std::move(t));
+    check_mappings(omap_root);
+    EXPECT_EQ(omap_root.get_depth(), 1u);
+    EXPECT_EQ(live_omap_leaf_lens(), std::vector<extent_len_t>{16384});
+
+    replay();
+    check_mappings(omap_root);
+  });
+}
+
+TEST_P(omap_manager_test_t, xattr_root_leaf_grows_in_one_transaction)
+{
+  run_async([this] {
+    omap_root_t omap_root = initialize(omap_type_t::XATTR);
+
+    // Grow 4 KiB -> 32 KiB in one transaction; only the last leaf is live.
+    auto t = create_mutate_transaction();
+    for (int i = 0; i < 40; ++i) {
+      set_key(omap_root, *t, rand_name(STR_LEN), rand_buffer(512));
+    }
+    check_mappings(omap_root, *t);
+    submit_transaction(std::move(t));
+    check_mappings(omap_root);
+    EXPECT_EQ(omap_root.get_depth(), 1u);
+    EXPECT_EQ(live_omap_leaf_lens(), std::vector<extent_len_t>{32768});
+
+    // Leaves do not shrink when keys are removed.
+    t = create_mutate_transaction();
+    while (test_omap_mappings.size() > 1) {
+      rm_key(omap_root, *t, test_omap_mappings.begin()->first);
+    }
+    check_mappings(omap_root, *t);
+    submit_transaction(std::move(t));
+    check_mappings(omap_root);
+    EXPECT_EQ(live_omap_leaf_lens(), std::vector<extent_len_t>{32768});
+
+    replay();
+    check_mappings(omap_root);
+  });
+}
+
+TEST_P(omap_manager_test_t, xattr_split_merge_after_grow)
+{
+  run_async([this] {
+    omap_root_t omap_root = initialize(omap_type_t::XATTR);
+
+    while (omap_root.get_depth() < 2) {
+      auto t = create_mutate_transaction();
+      for (int i = 0; i < 64; i++) {
+        set_random_key(omap_root, *t);
+      }
+      check_mappings(omap_root, *t);
+      submit_transaction(std::move(t));
+      check_mappings(omap_root);
+    }
+
+    // Remove keys until the tree has one leaf again. That leaf is a
+    // former child, so it has the full size.
+    while (omap_root.get_depth() > 1) {
+      auto it = std::next(test_omap_mappings.begin(),
+                          test_omap_mappings.size() / 2);
+      std::string first = it->first;
+      std::string last = std::next(it, 64)->first;
+      auto t = create_mutate_transaction();
+      rm_key_range(omap_root, *t, first, last);
+      check_mappings(omap_root, *t);
+      submit_transaction(std::move(t));
+      check_mappings(omap_root);
+    }
+    EXPECT_EQ(live_omap_leaf_lens(),
+              std::vector<extent_len_t>{OMAP_LEAF_BLOCK_SIZE});
+
+    replay();
+    check_mappings(omap_root);
   });
 }
 

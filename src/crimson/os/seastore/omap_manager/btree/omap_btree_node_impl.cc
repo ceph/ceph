@@ -1099,4 +1099,13 @@ uint64_t get_max_key_length() {
     - sizeof(laddr_le_t);
 }
 
+extent_len_t get_initial_leaf_size(omap_type_t type) {
+  if (type == omap_type_t::XATTR) {
+    // Most objects keep a few small xattrs, so start small and let the
+    // root leaf grow, see BtreeOMapManager::grow_root_leaf().
+    return XATTR_LEAF_INIT_BLOCK_SIZE;
+  }
+  return get_leaf_size(type);
+}
+
 }
