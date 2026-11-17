@@ -1364,10 +1364,12 @@ options:
   default: false
   services:
   - mon
-  fmt_desc: Compact the database used as Ceph Monitor store
-    on bootstrap. Monitors probe each other to establish
-    a quorum after bootstrap. If a Monitor times out before joining the
-    quorum, it will start over and bootstrap again.
+  fmt_desc: Queue background compaction of the database used as Ceph Monitor
+    store on bootstrap. Bootstrap continues without waiting for compaction to
+    finish, so compaction does not block dispatch or consume its watchdog
+    timeout. Monitors probe each other to establish a quorum after bootstrap.
+    If a monitor times out before joining the quorum, it will start over and
+    bootstrap again.
   with_legacy: true
 # compact (a prefix) when we trim old states
 - name: mon_compact_on_trim

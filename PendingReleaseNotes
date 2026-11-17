@@ -202,6 +202,9 @@
   the existing heartbeat suicide path so service management can restart it.
   The ``mon_inject_dispatch_delay`` developer option is available for
   fault-injection testing of this watchdog.
+  Compaction requested by ``mon_compact_on_bootstrap`` now runs in the
+  background so that a lengthy compaction does not block dispatch and trigger
+  the watchdog.
 
 * CephFS: The ``client_force_lazyio`` configuration option is now correctly marked
   as not supporting runtime updates. Previously, the configuration schema indicated

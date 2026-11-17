@@ -1422,9 +1422,12 @@ void Monitor::bootstrap()
 
   // sync store
   if (g_conf()->mon_compact_on_bootstrap) {
-    dout(10) << "bootstrap -- triggering compaction" << dendl;
-    store->compact();
-    dout(10) << "bootstrap -- finished compaction" << dendl;
+    // bootstrap() can run on a dispatch thread while holding Monitor::lock.
+    // Full compaction can legitimately outlast the dispatch watchdog deadline;
+    // queue it on the store's compaction thread instead of blocking dispatch
+    // (and other threads waiting for Monitor::lock).
+    dout(10) << "bootstrap -- queuing compaction" << dendl;
+    store->compact_async();
   }
 
   // stretch mode bits
