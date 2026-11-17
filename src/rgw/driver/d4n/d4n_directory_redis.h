@@ -88,6 +88,7 @@ public:
 
 private:
   friend struct RedisBackend;
+  friend class RedisDirectory;
   int execute_request(const DoutPrefixProvider* dpp, optional_yield y);
 
 };
@@ -107,6 +108,16 @@ class RedisDirectory: virtual public Directory {
                                     std::optional<Transaction> txn,
                                     request& req,
                                     request*& target);
+
+protected:
+  // Use the borrowed checkout now; queued commands stay with their owner.
+  template <typename Response>
+  void execute_immediate(const DoutPrefixProvider *dpp, std::optional<Transaction> txn,
+                         boost::system::error_code& ec, const request& req,
+                         Response& resp, optional_yield y,
+                         std::source_location whence = std::source_location::current());
+
+public:
  
   virtual int get_kv(const DoutPrefixProvider* dpp, optional_yield y,
                        const std::string& key,
@@ -156,8 +167,7 @@ class RedisBucketDirectory: public RedisDirectory, public BucketDirectory {
     //scan_objects(pattern="photos/*")
     //Redis filters to only "photos/*" objects
     int scan_objects(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, const std::string& start_token, const std::string& prefix, const std::string& marker, uint64_t count, bool marker_inclusive, std::vector<CacheObject>& objs_info, std::string& continuation_token, std::optional<Transaction> txn);
-    //without prefix, get_range(start="-", end="+")
-    int get_range(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, const std::string& start, uint64_t count, bool start_inclusive, std::vector<CacheObject>& objs_info, std::string& continuation_token, std::optional<Transaction> txn);
+    int get_range(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, std::string_view start, std::string_view prefix, std::string_view end_marker, uint64_t count, bool start_inclusive, std::vector<CacheObject>& objs_info, std::string& continuation_token, std::optional<Transaction> txn);
     int zadd(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, double score, const std::string& member, std::optional<Transaction> txn);
     int zrem(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, const std::string& member, std::optional<Transaction> txn);
     int zrange(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, const std::string& start, const std::string& stop, uint64_t offset, uint64_t count, std::vector<std::string>& members, std::optional<Transaction> txn);
@@ -184,7 +194,7 @@ class RedisObjectDirectory: public RedisDirectory, public ObjectDirectory {
     int zrevrange(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, const std::string& obj_name, const std::string& start, const std::string& stop, std::vector<std::string>& members, std::optional<Transaction> txn);
     int zrem(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, const std::string& obj_name, const std::string& member, std::optional<Transaction> txn);
     int zremrangebyscore(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, const std::string& obj_name, double min, double max, std::optional<Transaction> txn);
-    int zrank(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, const std::string& obj_name, const std::string& member, std::string& index, std::optional<Transaction> txn);
+    int zrevrank(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, const std::string& obj_name, const std::string& member, std::string& index, std::optional<Transaction> txn);
 
 };
 
