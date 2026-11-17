@@ -4924,7 +4924,12 @@ int RGWBucketFullSyncCR::operate(const DoutPrefixProvider *dpp)
 }
 
 static bool has_olh_epoch(RGWModifyOp op) {
-  return op == CLS_RGW_OP_LINK_OLH || op == CLS_RGW_OP_UNLINK_INSTANCE;
+  /* LINK_OLH_DM logs ver.pool=-1 and ver.epoch=<olh epoch> just like LINK_OLH, so it is an olh
+   * op too. otherwise a null-version delete marker (versioning-suspended source bucket), which
+   * shares the squash key (object, "") with the null version itself, can never win the squash
+   * slot and gets dropped before it reaches the sync module. */
+  return op == CLS_RGW_OP_LINK_OLH || op == CLS_RGW_OP_LINK_OLH_DM ||
+         op == CLS_RGW_OP_UNLINK_INSTANCE;
 }
 
 class RGWBucketShardIsDoneCR : public RGWCoroutine {
