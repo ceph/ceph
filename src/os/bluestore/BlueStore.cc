@@ -18248,6 +18248,38 @@ int BlueStore::commit_to_real_manager()
 //================================================================================================================
 //================================================================================================================
 
+int BlueStore::allocator_storage_db()
+{
+  dout(0) << "Considering converting allocator storage to db" << dendl;
+  int r = _open_db_and_around(false);
+  ceph_assert(r == 0);
+  if (freelist_type == "bitmap") {
+    dout(0) << "Allocator already on db" << dendl;
+    return 1;
+  }
+  _recreate_freelist_from_current_allocator("bitmap");
+  commit_to_real_manager();
+  dout(0) << "Allocator storage is now db" << dendl;
+  _close_db_and_around();
+  return 0;
+}
+
+int BlueStore::allocator_storage_file()
+{
+  dout(0) << "Considering converting allocator storage to file" << dendl;
+  int r = _open_db_and_around(false);
+  ceph_assert(r == 0);
+  if (freelist_type == "null") {
+    dout(0) << "Allocator already on file" << dendl;
+    return 1;
+  }
+  clear_allocation_objects_from_rocksdb();
+  commit_to_null_manager();
+  dout(0) << "Allocator storage is now file" << dendl;
+  _close_db_and_around();
+  return 0;
+}
+
 void BlueStore::_recreate_freelist_from_current_allocator(
   const std::string& freelist_name)
 {

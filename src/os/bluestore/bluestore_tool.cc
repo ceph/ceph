@@ -349,6 +349,8 @@ int main(int argc, char **argv)
         "recovery-compare, "
         "allocmap, "
         "restore_cfb, "
+        "allocator-db, "
+        "allocator-file, "
         "repair, "
         "quick-fix, "
         "bluefs-export, "
@@ -494,6 +496,7 @@ int main(int argc, char **argv)
   if (action == "fsck" || action == "repair" ||
       action == "quick-fix" || action == "allocmap" ||
       action == "qfsck" || action == "restore_cfb" ||
+      action == "allocator-file" || action == "allocator-db" ||
       action == "recovery-compare" ||
       action == "revert-wal-to-plain") {
     if (path.empty()) {
@@ -683,6 +686,22 @@ int main(int argc, char **argv)
       cout << action << " success" << std::endl;
     }
 #endif
+  }
+  else if (action == "allocator-db") {
+    validate_path(cct.get(), path, false);
+    BlueStore bluestore(cct.get(), path);
+    int r = bluestore.allocator_storage_db();
+    if (r != 0) {
+      exit(EXIT_FAILURE);
+    }
+  }
+  else if (action == "allocator-file") {
+    validate_path(cct.get(), path, false);
+    BlueStore bluestore(cct.get(), path);
+    int r = bluestore.allocator_storage_file();
+    if (r != 0) {
+      exit(EXIT_FAILURE);
+    }
   }
   else if (action == "allocmap") {
 #ifdef CEPH_BLUESTORE_TOOL_DISABLE_ALLOCMAP
