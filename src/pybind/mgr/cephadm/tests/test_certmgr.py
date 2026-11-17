@@ -1837,6 +1837,22 @@ class TestCertMgr(object):
         assert cm.get_cert('grafana_ssl_cert', host=host) == 'ref-cert'
         assert cm.get_key('grafana_ssl_key', host=host) == 'ref-key'
 
+    def test_cli_key_set_refuses_non_editable_pair(self, cephadm_module: CephadmOrchestrator):
+        """'certmgr key set' must not override the key of a non-editable (inline) pair."""
+        from cephadm.tests.fixtures import wait
+        from orchestrator import OrchestratorError
+
+        cephadm_module._init_cert_mgr()
+        cm = cephadm_module.cert_mgr
+        cm.save_cert('rgw_ssl_cert', 'inline-cert', service_name='rgw.foo', user_made=True, editable=False)
+        cm.save_key('rgw_ssl_key', 'inline-key', service_name='rgw.foo', user_made=True, editable=False)
+
+        with pytest.raises(OrchestratorError, match='is not editable'):
+            wait(cephadm_module, cephadm_module.cert_store_set_key('new-key', 'rgw_ssl_key', service_name='rgw.foo'))
+
+        key_obj = cm.key_store.get_tlsobject('rgw_ssl_key', service_name='rgw.foo')
+        assert key_obj.key == 'inline-key' and not key_obj.editable
+
     def test_post_remove_cleans_cephadm_signed_regardless_of_source(self, cephadm_module: CephadmOrchestrator):
         """post_remove always calls try_rm_self_signed_cert_key_pair, even when
         the current certificate_source is 'inline' or 'reference'."""

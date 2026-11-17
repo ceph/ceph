@@ -4480,6 +4480,11 @@ Then run the following:
         service_name: Optional[str] = None,
         hostname: Optional[str] = None,
     ) -> str:
+        # The key belongs to the pair of its certificate: do not let it override
+        # a pair that is not editable (inline in the spec or cephadm-generated).
+        cert_name = key_name.replace('_key', '_cert')
+        if not self.cert_mgr.is_cert_editable(cert_name, service_name or '', hostname or ''):
+            self._raise_non_editable_cert_error(cert_name, key_name, service_name or '', hostname or '')
         self.cert_mgr.save_key(key_name, key, service_name, hostname, user_made=True, editable=True)
         return f'Key for {key_name} set correctly'
 
