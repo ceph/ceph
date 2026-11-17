@@ -3554,6 +3554,7 @@ TEST_F(PGLogTest, merge_divergent_entries_clone_with_partial_write) {
 TEST_F(PGLogTest, merge_log_skipped_partial_write_then_newer_entry) {
   // 4+2: data shards 1-3 can never be primary. This is shard 2's log.
   pg_pool_t pool;
+  pool.size = 6;
   pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
   pool.nonprimary_shards.insert_range(shard_id_t(1), 3);
   const hobject_t hoid = mk_obj(1);
