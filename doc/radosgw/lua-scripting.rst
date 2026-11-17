@@ -129,6 +129,11 @@ To apply changes from the allowlist to all RGWs:
 
   # radosgw-admin script-package reload
 
+The command waits for all RGWs to finish installing the packages. Since
+installing packages (especially ones that need compilation) may take a while,
+the wait time is controlled by the ``rgw_lua_packages_reload_timeout``
+configuration parameter (default: 120 seconds).
+
 
 Context Free Functions
 ----------------------
