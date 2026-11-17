@@ -7,6 +7,7 @@
 #include "common/async/completion.h"
 #include "common/errno.h"
 #include "common/async/blocked_completion.h"
+#include "driver/d4n/d4n_log.h"
 #include "rgw_ssd_driver.h"
 
 #if defined(HAVE_LIBURING)
@@ -22,6 +23,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <system_error>
 #include <errno.h>
 namespace efs = std::filesystem;
 
@@ -598,22 +600,17 @@ rgw_obj_key SSDDriver::build_obj_key(const std::string& object_name,
 rgw_user SSDDriver::extract_user_from_attrs(const DoutPrefixProvider* dpp,
                                             const rgw::sal::Attrs& attrs)
 {
-    rgw_user user;
-
-    if (attrs.contains(RGW_ATTR_ACL)) {
-        try {
-            bufferlist bl_acl = attrs.at(RGW_ATTR_ACL);
-            RGWAccessControlPolicy policy;
-            auto iter = bl_acl.cbegin();
-            policy.decode(iter);
-            user = std::get<rgw_user>(policy.get_owner().id);
-            ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): rgw_user: " << user.to_str() << dendl;
-        } catch (buffer::error& err) {
-            ldpp_dout(dpp, 0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
-        }
+    const auto attr = attrs.find(RGW_ATTR_ACL);
+    if (attrs.end() == attr) {
+        return {};
     }
 
-    return user;
+    RGWAccessControlPolicy policy;
+    auto iter = attr->second.cbegin();
+    // Invalid ACLs belong to the existing per-file restoration exception boundary.
+    policy.decode(iter);
+
+    return std::get<rgw_user>(policy.get_owner().id);
 }
 
 //Helper method to check if the block is a delete marker
@@ -766,10 +763,17 @@ void SSDDriver::restore_object_files(const DoutPrefixProvider* dpp,
         if (!file_entry.is_regular_file()) continue;
         try {
             process_cache_file(dpp, file_entry.path(), bucket_id, object_name, obj_func, block_func);
-        } catch (...) {
-            ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): Exception parsing: "
-                              << file_entry.path() << dendl;
-        }
+         }
+        catch (const std::exception& error)
+         {
+            rgw::d4n::detail::log_message(dpp, std::source_location::current(),
+                "skipping cache restoration entry {}: {}", file_entry.path().string(), error.what());
+         }
+        catch (...)
+         {
+            rgw::d4n::detail::log_message(dpp, std::source_location::current(),
+                "skipping cache restoration entry {} after a nonstandard exception", file_entry.path().string());
+         }
     }
 }
 
@@ -795,24 +799,29 @@ void SSDDriver::restore_bucket_objects(const DoutPrefixProvider* dpp,
  * and is called from LFUDAPolicy::init() method
  */
 int SSDDriver::restore_blocks_objects(const DoutPrefixProvider* dpp, ObjectDataCallback obj_func, BlockDataCallback block_func)
-{
+try
+ {
     if (dpp->get_cct()->_conf->rgw_d4n_l1_evict_cache_on_start) {
         return 0;
     }
 
-    std::string cache_location = partition_info.location;
-    if (cache_location.back() == '/') {
-        cache_location.pop_back();
-    }
-
-    for (auto const& bucket_dir : efs::directory_iterator{cache_location}) {
+    for (auto const& bucket_dir : efs::directory_iterator{partition_info.location}) {
         if (!bucket_dir.is_directory()) continue;
         std::string bucket_id = url_decode(bucket_dir.path().filename().string());
         restore_bucket_objects(dpp, bucket_dir.path(), bucket_id, obj_func, block_func);
     }
 
     return 0;
-}
+ }
+catch (const efs::filesystem_error& error)
+ {
+    rgw::d4n::detail::log_message(dpp, std::source_location::current(),
+        "failed to scan cache for restoration: {} [{}:{}]",
+        error.what(), error.code().category().name(), error.code().value());
+    const auto condition = error.code().default_error_condition();
+    return std::generic_category() == condition.category() && 0 < condition.value()
+        ? -condition.value() : -EIO;
+ }
 
 uint64_t SSDDriver::get_free_space(const DoutPrefixProvider* dpp, optional_yield y)
 {

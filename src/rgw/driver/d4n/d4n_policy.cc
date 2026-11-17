@@ -242,14 +242,9 @@ int LFUDAPolicy::init(CephContext* cct, const DoutPrefixProvider* dpp, asio::io_
       }
       rgw_user user;
       if (auto i = attrs.find(RGW_ATTR_ACL); i != attrs.end()) {
-        bufferlist bl_acl = i->second;
         RGWAccessControlPolicy policy;
-        auto iter = bl_acl.cbegin();
-        try {
-          policy.decode(iter);
-        } catch (buffer::error& err) {
-          ldpp_dout(dpp, 0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
-        }
+        auto iter = i->second.cbegin();
+        policy.decode(iter);
         user = std::get<rgw_user>(policy.get_owner().id);
         ldpp_dout(dpp, 20) << "LFUDAPolicy: " << __func__ << "(): rgw_user: " << user.to_str() << dendl;
       }
@@ -283,7 +278,10 @@ int LFUDAPolicy::init(CephContext* cct, const DoutPrefixProvider* dpp, asio::io_
     update(dpp, key, offset, len, version, dirty, user, bucketName, RefCount::NOOP, y, nullptr, restore_val);
   };
 
-  cacheDriver->restore_blocks_objects(dpp, obj_callback, block_callback);
+  if (const int ret = cacheDriver->restore_blocks_objects(dpp, obj_callback, block_callback); 0 > ret) {
+    detail::log_message(dpp, std::source_location::current(), "failed to restore cached entries: {}", ret);
+    return ret;
+  }
   {
     //Now loop through the version map and populate heap with the first entry as they are sorted by creation time
     const std::lock_guard l(lfuda_cleaning_lock);
@@ -819,7 +817,7 @@ void LFUDAPolicy::update(const DoutPrefixProvider* dpp, const std::string& key, 
     if (!restore_val.empty()) {
       updateLocalWeight = false;
       updateBucketName = false;
-      localWeight = std::stoull(restore_val);
+      localWeight = std::stoi(restore_val);
       ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): restored localWeight is: " << localWeight << dendl;
     }
 

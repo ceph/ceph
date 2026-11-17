@@ -313,22 +313,24 @@ int D4NFilterDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
   namespace net = boost::asio;
   using boost::redis::config;
 
-  std::string address = cct->_conf->rgw_d4n_l1_datacache_address;
-  config cfg;
-  cfg.addr.host = address.substr(0, address.find(":"));
-  cfg.addr.port = address.substr(address.find(":") + 1, address.length());
-  cfg.clientname = "D4N.Filter";
-
-  if (!cfg.addr.host.length() || !cfg.addr.port.length()) {
-    ldpp_dout(dpp, 0) << "D4NFilterDriver::" << __func__ << "(): Endpoint was not configured correctly." << dendl;
-    return -EDESTADDRREQ;
-  }
-
-
-  const auto directory_type = dpp->get_cct()->_conf->rgw_d4n_directory_type;
+  const auto directory_type = cct->_conf->rgw_d4n_directory_type;
   if ("redis" == directory_type) {
+    const auto address = cct->_conf->rgw_d4n_l1_datacache_address;
+    const auto separator = address.find(':');
+    if (std::string::npos == separator || 0 == separator || address.size() == separator + 1 ||
+        std::string::npos != address.find(':', separator + 1)) {
+      rgw::d4n::detail::log_message(dpp, std::source_location::current(),
+        "D4N Redis endpoint requires a host:port address");
+      return -EDESTADDRREQ;
+    }
+
+    config cfg;
+    cfg.addr.host = address.substr(0, separator);
+    cfg.addr.port = address.substr(separator + 1);
+    cfg.clientname = "D4N.Filter";
+
     //setting the connection pool size and other parameters
-    uint64_t rgw_redis_connection_pool_size = dpp->get_cct()->_conf->rgw_redis_connection_pool_size;
+    uint64_t rgw_redis_connection_pool_size = cct->_conf->rgw_redis_connection_pool_size;
     std::shared_ptr<rgw::d4n::RedisPool>redis_pool = nullptr;
     if(rgw_redis_connection_pool_size>0){
       redis_pool = std::make_shared<rgw::d4n::RedisPool>(&io_context, cfg, rgw_redis_connection_pool_size);
