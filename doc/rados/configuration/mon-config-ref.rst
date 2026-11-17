@@ -450,6 +450,10 @@ Ceph Monitors can use an internal heartbeat watchdog to detect when the
 messenger dispatch path stops making progress. If the dispatch path remains
 stalled for longer than the configured timeout, the Monitor aborts through the
 existing heartbeat suicide path so that service management can restart it.
+Each dispatch thread has its own watchdog, so progress on one thread does not
+reset another thread's deadline. The timeout includes time spent waiting for the
+monitor lock. Changes to the timeout apply to the next outermost dispatch call
+on each thread; active calls retain their existing deadlines
 
 .. confval:: mon_dispatch_watchdog_timeout
 .. confval:: mon_inject_dispatch_delay

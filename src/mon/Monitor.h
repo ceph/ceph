@@ -28,13 +28,13 @@
 #include <cmath>
 #include <string>
 #include <array>
-#include <pthread.h>
 
 #include "include/types.h"
 #include "include/health.h"
 
 #include "common/Timer.h"
 
+#include "DispatchWatchdog.h"
 #include "Elector.h"
 #include "Session.h"
 #include "MonCommand.h"
@@ -62,10 +62,6 @@
 struct health_check_map_t;
 class Messenger;
 class MonMap;
-
-namespace ceph {
-  struct heartbeat_handle_d;
-}
 
 using namespace TOPNSPC::common;
 
@@ -958,26 +954,24 @@ public:
     }
   };
 
-  ceph::mutex dispatch_watchdog_lock =
-    ceph::make_mutex("Monitor::dispatch_watchdog_lock");
-  ceph::heartbeat_handle_d *dispatch_heartbeat = nullptr;
-  pthread_t dispatch_heartbeat_thread = 0;
-  unsigned dispatch_heartbeat_depth = 0;
+  DispatchWatchdog dispatch_watchdog;
 
-  void dispatch_watchdog_start();
-  void dispatch_watchdog_finish();
+  DispatchWatchdog::Token dispatch_watchdog_start();
+  void dispatch_watchdog_finish(const DispatchWatchdog::Token& token);
   void dispatch_watchdog_shutdown();
   void dispatch_watchdog_inject_delay();
 
   class DispatchWatchdogGuard {
     Monitor *mon;
+    DispatchWatchdog::Token token;
   public:
-    explicit DispatchWatchdogGuard(Monitor *m) : mon(m) {
-      mon->dispatch_watchdog_start();
-    }
+    explicit DispatchWatchdogGuard(Monitor *m)
+      : mon(m), token(mon->dispatch_watchdog_start()) {}
     ~DispatchWatchdogGuard() {
-      mon->dispatch_watchdog_finish();
+      mon->dispatch_watchdog_finish(token);
     }
+    DispatchWatchdogGuard(const DispatchWatchdogGuard&) = delete;
+    DispatchWatchdogGuard& operator=(const DispatchWatchdogGuard&) = delete;
   };
 
   //ms_dispatch handles a lot of logic and we want to reuse it

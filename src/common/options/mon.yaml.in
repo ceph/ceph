@@ -480,7 +480,10 @@ options:
     suicide path so service management can restart it.
   fmt_desc: The maximum time in seconds that a monitor dispatch operation may run
     without making heartbeat progress before the monitor aborts. Set to ``0`` to
-    disable the dispatch watchdog.
+    disable the dispatch watchdog. Each dispatch thread has an independent
+    watchdog, including time spent waiting for the monitor lock. Runtime changes
+    take effect when the next outermost dispatch call starts on each thread;
+    active calls retain their existing deadlines.
   default: 30
   services:
   - mon
