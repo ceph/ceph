@@ -212,6 +212,60 @@ TEST(TestLCConfigurationDecoder, XMLDoc5)
   ASSERT_EQ(filter.get_size_lt(), 65536);
 }
 
+static const char *xmldoc_backup_ok =
+R"(<Rule>
+        <ID>backup-purge</ID>
+        <Filter>
+           <BackupZone />
+        </Filter>
+        <Status>Enabled</Status>
+        <Expiration>
+            <ExpiredObjectDeleteMarker>true</ExpiredObjectDeleteMarker>
+        </Expiration>
+        <NoncurrentVersionExpiration>
+            <NewerNoncurrentVersions>10</NewerNoncurrentVersions>
+            <NoncurrentDays>90</NoncurrentDays>
+        </NoncurrentVersionExpiration>
+    </Rule>
+)";
+
+static const char *xmldoc_backup_expire_current =
+R"(<Rule>
+        <ID>backup-expire-current</ID>
+        <Filter>
+           <BackupZone />
+        </Filter>
+        <Status>Enabled</Status>
+        <Expiration>
+            <Days>30</Days>
+        </Expiration>
+    </Rule>
+)";
+
+static int add_rule_from_xml(const char* xml)
+{
+  RGWXMLDecoder::XMLParser parser;
+  EXPECT_TRUE(parser.init());
+  EXPECT_TRUE(parser.parse(xml, strlen(xml), 1));
+  LCRule_S3 rule;
+  EXPECT_TRUE(RGWXMLDecoder::decode_xml("Rule", rule, &parser, true));
+  RGWLifecycleConfiguration config;
+  return config.check_and_add_rule(rule);
+}
+
+TEST(TestLCConfigurationDecoder, BackupZoneNoncurrent)
+{
+  ASSERT_EQ(add_rule_from_xml(xmldoc_backup_ok), 0);
+}
+
+TEST(TestLCConfigurationDecoder, BackupZoneRejectsCurrentExpiration)
+{
+  /* expiring current versions would remove objects that still exist
+   * in the source bucket */
+  ASSERT_EQ(add_rule_from_xml(xmldoc_backup_expire_current),
+            -ERR_INVALID_REQUEST);
+}
+
 struct LCWorkTimeTests : ::testing::Test
 {
    boost::intrusive_ptr<CephContext> cct;

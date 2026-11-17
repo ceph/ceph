@@ -278,6 +278,12 @@ int RGWLifecycleConfiguration::check_and_add_rule(const LCRule& rule)
 				       !rule.get_mp_expiration().empty())) {
     return -ERR_INVALID_REQUEST;
   }
+  /* backup zones must not expire live objects, they may still exist in
+   * the source bucket */
+  if (rule.get_filter().have_flag(LCFlagType::BackupZone) &&
+      (rule.get_expiration().has_days() || rule.get_expiration().has_date())) {
+    return -ERR_INVALID_REQUEST;
+  }
   rule_map.insert(pair<string, LCRule>(id, rule));
 
   if (!_add_rule(rule)) {
@@ -466,6 +472,12 @@ class LCObjsLister {
   vector<rgw_bucket_dir_entry>::iterator obj_iter;
   rgw_bucket_dir_entry pre_obj;
   uint64_t num_noncurrent{0};
+  /* noncurrent entries of the current name that are not delete markers */
+  uint64_t num_noncurrent_versions{0};
+  /* the head (current entry) of the current name is a delete marker,
+   * i.e., the object was removed */
+  bool head_is_dm{false};
+  ceph::real_time head_dm_mtime;
   int64_t delay_ms;
 
 public:
@@ -537,8 +549,16 @@ public:
 
     if (obj_iter->key.name == pre_obj.key.name) {
       ++num_noncurrent;
+      if (!obj_iter->is_delete_marker()) {
+        ++num_noncurrent_versions;
+      }
     } else {
       num_noncurrent = 0; // XXX the first element must be current or a delete marker (?)
+      num_noncurrent_versions = 0;
+      /* versions are listed newest epoch first, so the head comes first;
+       * if it doesn't, conservatively treat the object as not removed */
+      head_is_dm = obj_iter->is_current() && obj_iter->is_delete_marker();
+      head_dm_mtime = head_is_dm ? obj_iter->meta.mtime : ceph::real_time();
     }
 
     /* returning address of entry in objs */
@@ -575,6 +595,9 @@ public:
   }
 
   uint64_t get_num_noncurrent() { return num_noncurrent; }
+  uint64_t get_num_noncurrent_versions() { return num_noncurrent_versions; }
+  bool get_head_is_dm() { return head_is_dm; }
+  ceph::real_time get_head_dm_mtime() { return head_dm_mtime; }
 }; /* LCObjsLister */
 
 struct op_env {
@@ -602,6 +625,9 @@ struct lc_op_ctx {
   boost::optional<std::string> next_key_name;
   uint64_t num_noncurrent;
   ceph::real_time effective_mtime;
+  uint64_t num_noncurrent_versions{0};
+  bool head_is_dm{false};
+  ceph::real_time head_dm_mtime;
 
   rgw::sal::Driver* driver;
   rgw::sal::Bucket* bucket;
@@ -907,6 +933,9 @@ class LCOpRule {
   boost::optional<std::string> next_key_name;
   uint64_t num_noncurrent;
   ceph::real_time effective_mtime;
+  uint64_t num_noncurrent_versions{0};
+  bool head_is_dm{false};
+  ceph::real_time head_dm_mtime;
 
   std::vector<shared_ptr<LCOpFilter> > filters; // n.b., sharing ovhd
   std::vector<shared_ptr<LCOpAction> > actions;
@@ -1394,6 +1423,43 @@ public:
 
 class LCOpAction_NonCurrentExpiration : public LCOpAction {
 protected:
+  /*
+   * Backup zone semantics. The backup bucket must keep every version
+   * that may still exist in the source bucket, so a noncurrent version
+   * is only purged when either
+   *  - the object holds more than NewerNoncurrentVersions noncurrent
+   *    (non delete marker) versions: the oldest ones over the cap are
+   *    purged regardless of age, or
+   *  - the object was removed (its head is a delete marker) at least
+   *    NoncurrentDays ago: all its noncurrent entries are purged,
+   *    counting from the removal, not from when each became noncurrent.
+   * Live objects are never purged by age.
+   */
+  bool check_backup_zone(lc_op_ctx& oc, ceph::real_time *exp_time,
+                         const DoutPrefixProvider *dpp, optional_yield y) {
+    auto& o = oc.o;
+    auto newer_noncurrent = oc.op.newer_noncurrent;
+
+    bool over_cap_p = newer_noncurrent > 0 && !o.is_delete_marker() &&
+      oc.num_noncurrent_versions > newer_noncurrent;
+    bool removed_p = oc.head_is_dm &&
+      obj_has_expired(dpp, oc.cct, oc.head_dm_mtime, oc.op.noncur_expiration,
+                      exp_time);
+    if (over_cap_p && !removed_p) {
+      /* any non-zero time selects this action */
+      *exp_time = oc.effective_mtime;
+    }
+
+    ldpp_dout(dpp, 20) << __func__ << "(): key=" << o.key
+                       << ": num_noncurrent_versions="
+                       << oc.num_noncurrent_versions << " over_cap_p: "
+                       << over_cap_p << " head_is_dm: " << oc.head_is_dm
+                       << " removed_p: " << removed_p << dendl;
+
+    return (over_cap_p || removed_p) && pass_size_limit_checks(dpp, y, oc) &&
+      pass_object_lock_check(oc.driver, oc.obj.get(), dpp, y);
+  }
+
 public:
   LCOpAction_NonCurrentExpiration(op_env& env)
     {}
@@ -1406,6 +1472,10 @@ public:
       ldpp_dout(dpp, 20) << __func__ << "(): key=" << o.key
 			<< ": current version, skipping" << dendl;
       return false;
+    }
+
+    if (oc.op.rule_flags & LCFilter::make_flag(LCFlagType::BackupZone)) {
+      return check_backup_zone(oc, exp_time, dpp, y);
     }
 
     int expiration = oc.op.noncur_expiration;
@@ -1845,6 +1915,9 @@ void LCOpRule::update()
   next_key_name = env.ol.next_key_name();
   num_noncurrent = env.ol.get_num_noncurrent();
   effective_mtime = env.ol.get_prev_obj().meta.mtime;
+  num_noncurrent_versions = env.ol.get_num_noncurrent_versions();
+  head_is_dm = env.ol.get_head_is_dm();
+  head_dm_mtime = env.ol.get_head_dm_mtime();
 }
 
 /*
@@ -1859,6 +1932,9 @@ LCOpAction* LCOpRule::evaluate(rgw_bucket_dir_entry& o,
 {
   lc_op_ctx ctx(env, o, next_key_name, num_noncurrent, effective_mtime, dpp, nullptr);
   ctx.cached_tags = cached_tags;
+  ctx.num_noncurrent_versions = num_noncurrent_versions;
+  ctx.head_is_dm = head_is_dm;
+  ctx.head_dm_mtime = head_dm_mtime;
 
   shared_ptr<LCOpAction> *selected = nullptr; // n.b., req'd by sharing
   real_time exp;
