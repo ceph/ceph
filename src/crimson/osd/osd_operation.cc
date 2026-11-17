@@ -234,50 +234,36 @@ void OperationThrottler::initialize_scheduler(CephContext *cct, ConfigProxy &con
 
 seastar::future<> OperationThrottler::background_task() {
   LOG_PREFIX(OperationThrottler::background_task);
-  while (!stopped) {
+  while (true) {
     co_await cv.wait([this] {
-      return (available() && !scheduler->empty()) || stopped;
+      return stopped || (available() && !scheduler->empty());
     });
+    if (stopped) {
+      break;
+    }
 
-    // It might be possible as mclock scheduler can return a timestamp in double means
-    // the work item is scheduled in the future, so in that case wait until
-    // the returned timestamp in the dequeue response before retrying.
-    while (available() && !scheduler->empty() && !stopped) {
-      WorkItem work_item = scheduler->dequeue();
-      if (auto when_ready = std::get_if<double>(&work_item)) {
-        ceph::real_clock::time_point future_time = ceph::real_clock::from_double(*when_ready);
-        auto now = ceph::real_clock::now();
-        if (future_time <= now) {
-          DEBUG("future_time={} already passed now={}, retrying immediately", future_time, now);
-          continue;
-        }  
-        auto wait_duration = std::chrono::duration_cast<std::chrono::milliseconds>(future_time - now);
-        DEBUG("No items ready. Retrying in {} ms", wait_duration.count());
-        // Wait on cv rather than sleep: an op enqueued meanwhile (an
-        // immediate one goes to the high-priority queue, which dequeue()
-        // serves first), a released slot or stop() must not wait out the
-        // head mClock item's tag.
+    auto work = scheduler->dequeue();
+    if (auto when = std::get_if<double>(&work)) {
+      const auto delay =
+        ceph::real_clock::from_double(*when) - ceph::real_clock::now();
+
+      if (delay > decltype(delay)::zero()) {
         try {
-          co_await cv.wait(wait_duration);
+          co_await cv.wait(delay);
         } catch (const seastar::condition_variable_timed_out&) {
-          // the head item's tag is due
+          // Retry dequeue when the scheduled time arrives.
         }
-        continue;
       }
-      if (auto *item = std::get_if<crimson::osd::scheduler::item_t>(&work_item)) {
-        DEBUG("Waking up a work item");
-        item->wake.set_value();
-        ++in_progress;
-        --pending;
-        DEBUG("Updated counters during background_task: in_progress={}, pending={}", in_progress, pending);
-      } else {
-        DEBUG("Unexpected variant in WorkItem — neither time nor item");
-      }
+    } else if (auto item = std::get_if<crimson::osd::scheduler::item_t>(&work)) {
+      ++in_progress;
+      --pending;
+      item->wake.set_value();
+    } else {
+      ceph_abort("Unexpected variant in WorkItem — neither time nor item");
     }
   }
 
   DEBUG("Background task exiting cleanly");
-  co_return;
 }
 
 void OperationThrottler::wake() {
