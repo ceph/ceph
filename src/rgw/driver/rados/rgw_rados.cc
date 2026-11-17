@@ -4141,6 +4141,20 @@ int RGWRados::rewrite_obj(RGWBucketInfo& dest_bucket_info, const rgw_obj& obj, c
   if (ret < 0)
     return ret;
 
+  // refuse a cloud-tiered object. a stub's data is in the cloud, so a
+  // rewrite would replace it with an empty object. a temporarily restored
+  // copy needs the tier config in its manifest to become a stub again
+  // when the restore expires, and a rewrite would drop it
+  RGWObjManifest *manifest = nullptr;
+  ret = op_target.get_manifest(dpp, &manifest, y);
+  if (ret < 0)
+    return ret;
+  if (manifest && manifest->is_tier_type_s3()) {
+    ldpp_dout(dpp, 0) << "ERROR: cannot rewrite " << obj
+        << ", it was transitioned to cloud-s3" << dendl;
+    return -ERR_INVALID_OBJECT_STATE;
+  }
+
   attrset.erase(RGW_ATTR_ID_TAG);
   attrset.erase(RGW_ATTR_TAIL_TAG);
   attrset.erase(RGW_ATTR_STORAGE_CLASS);
