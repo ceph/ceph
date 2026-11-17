@@ -393,7 +393,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
     const ratelimitvalue: RgwRateLimitConfig = this.rateLimitComponent.getRateLimitFormValue();
     if (!!ratelimitvalue) {
       this.submitObservables.push(
-        this.rgwUserService.updateUserRateLimit(this.userForm.getValue('user_id'), ratelimitvalue)
+        this.rgwUserService.updateUserRateLimit(this.uid, ratelimitvalue)
       );
     }
     // Finally execute all observables one by one in serial.
