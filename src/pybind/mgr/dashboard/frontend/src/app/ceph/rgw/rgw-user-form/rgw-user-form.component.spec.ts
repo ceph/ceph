@@ -732,6 +732,29 @@ describe('RgwUserFormComponent', () => {
       });
     });
 
+    it('should use the tenanted uid when updating the rate limit of a new user', () => {
+      spyOn(TestBed.inject(Router), 'navigate').and.stub();
+      spyOn(TestBed.inject(NotificationService), 'show');
+      spyOn(rgwUserService, 'create').and.returnValue(observableOf({}));
+      spyOn(rgwUserService, 'updateUserRateLimit').and.returnValue(observableOf({}));
+      formHelper.setValue('user_id', 'user1', true);
+      formHelper.setValue('tenant', 'tenant1', true);
+      formHelper.setValue('account_id', 'RGW12312312312312312', true);
+      formHelper.setValue('account_root_user', true, true);
+      childComponent.form.get('rate_limit_enabled').setValue(true);
+      childComponent.form.get('rate_limit_enabled').markAsDirty();
+      component.onSubmit();
+      expect(rgwUserService.create).toHaveBeenCalledWith(
+        jasmine.objectContaining({ uid: 'tenant1$user1' })
+      );
+      // The tenant must be part of the uid, otherwise radosgw-admin creates an
+      // additional non-tenanted user.
+      expect(rgwUserService.updateUserRateLimit).toHaveBeenCalledWith(
+        'tenant1$user1',
+        jasmine.objectContaining({ enabled: true })
+      );
+    });
+
     it('edit to link account to existing user', () => {
       spyOn(rgwUserService, 'update');
       component.editing = true;
