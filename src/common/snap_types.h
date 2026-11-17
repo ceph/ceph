@@ -51,14 +51,13 @@ WRITE_CLASS_ENCODER(SnapRealmInfo)
 struct SnapRealmInfoNew {
   SnapRealmInfo info;
   utime_t last_modified;
-  uint64_t change_attr;
-  uint32_t flags;
+  uint64_t change_attr = 0;
+  uint32_t flags = 0;
   enum {
     SNAPDIR_VISIBILITY = 4,
   };
 
-  SnapRealmInfoNew() {
-  }
+  SnapRealmInfoNew() = default;
 
   SnapRealmInfoNew(const SnapRealmInfo &info_, utime_t last_modified_, uint64_t change_attr_, __u32 flags_) {
     // FIPS zeroization audit 20191115: this memset is not security related.
