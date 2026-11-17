@@ -1187,11 +1187,16 @@ static bool is_valid_op(const lc_op& op)
 
 static bool zone_check(const lc_op& op, rgw::sal::Zone* zone)
 {
+  constexpr uint32_t archive_flag = LCFilter::make_flag(LCFlagType::ArchiveZone);
+  constexpr uint32_t backup_flag = LCFilter::make_flag(LCFlagType::BackupZone);
 
-  if (zone->get_tier_type() == "archive") {
-    return (op.rule_flags & uint32_t(LCFlagType::ArchiveZone));
+  const auto& tier_type = zone->get_tier_type();
+  if (tier_type == "archive") {
+    return (op.rule_flags & archive_flag);
+  } else if (tier_type == "backup") {
+    return (op.rule_flags & backup_flag);
   } else {
-    return (! (op.rule_flags & uint32_t(LCFlagType::ArchiveZone)));
+    return (! (op.rule_flags & (archive_flag | backup_flag)));
   }
 }
 
@@ -3562,6 +3567,9 @@ void LCFilter::dump(Formatter *f) const
   f->dump_object("obj_tags", obj_tags);
   if (have_flag(LCFlagType::ArchiveZone)) {
     f->dump_string("archivezone", "");
+  }
+  if (have_flag(LCFlagType::BackupZone)) {
+    f->dump_string("backupzone", "");
   }
 }
 

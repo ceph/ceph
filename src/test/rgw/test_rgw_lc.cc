@@ -112,6 +112,30 @@ TEST(TestLCFilterInvalidAnd, XMLDoc3)
   ASSERT_EQ(filter.get_flags(), uint32_t(LCFlagType::none));
 }
 
+static const char* xmldoc_backup =
+R"(<Filter>
+   <And>
+      <BackupZone />
+      <Prefix>logs/</Prefix>
+    </And>
+</Filter>
+)";
+
+TEST(TestLCFilterDecoder, XMLDocBackupZone)
+{
+  RGWXMLDecoder::XMLParser parser;
+  ASSERT_TRUE(parser.init());
+  ASSERT_TRUE(parser.parse(xmldoc_backup, strlen(xmldoc_backup), 1));
+  LCFilter_S3 filter;
+  auto result = RGWXMLDecoder::decode_xml("Filter", filter, &parser, true);
+  ASSERT_TRUE(result);
+  ASSERT_EQ(filter.get_prefix(), "logs/");
+  /* check our flags */
+  ASSERT_EQ(filter.get_flags(), LCFilter::make_flag(LCFlagType::BackupZone));
+  ASSERT_TRUE(filter.have_flag(LCFlagType::BackupZone));
+  ASSERT_FALSE(filter.have_flag(LCFlagType::ArchiveZone));
+}
+
 TEST(ExpHdr, ReplaceStrftime)
 {
   using namespace std::chrono;
