@@ -1839,26 +1839,58 @@ def _osd_unit_poststop_commands(
 
 
 class MgrListener(Thread):
+    # listener states reported to the mgr with each metadata report
+    STARTING = 'starting'
+    LISTENING = 'listening'
+    FAILED = 'failed'
+
     def __init__(self, agent: 'CephadmAgent') -> None:
         self.agent = agent
         self.stop = False
         self._listen_socket: Optional[ssl.SSLSocket] = None
+        self.state = self.STARTING
+        self.error = ''
         super(MgrListener, self).__init__(target=self.run)
 
-    def run(self) -> None:
+    def status(self) -> Dict[str, str]:
+        state = self.state
+        if state == self.LISTENING and not self.is_alive() and not self.stop:
+            # should not happen: the accept loop handles its own errors
+            state, self.error = self.FAILED, 'listener thread exited'
+        return {'state': state, 'error': self.error}
+
+    def _listen(self) -> ssl.SSLSocket:
         listenSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        # Allow rebinding after restart while the prior socket is in TIME_WAIT.
-        # Does not allow stealing a port from a live LISTEN socket.
-        listenSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        listenSocket.bind(('0.0.0.0', int(self.agent.listener_port)))
-        listenSocket.settimeout(60)
-        listenSocket.listen(1)
-        ssl_ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-        ssl_ctx.verify_mode = ssl.CERT_REQUIRED
-        ssl_ctx.load_cert_chain(self.agent.listener_cert_path, self.agent.listener_key_path)
-        ssl_ctx.load_verify_locations(self.agent.ca_path)
-        secureListenSocket = ssl_ctx.wrap_socket(listenSocket, server_side=True)
+        try:
+            # Allow rebinding after restart while the prior socket is in TIME_WAIT.
+            # Does not allow stealing a port from a live LISTEN socket.
+            listenSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            listenSocket.bind(('0.0.0.0', int(self.agent.listener_port)))
+            listenSocket.settimeout(60)
+            listenSocket.listen(1)
+            ssl_ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+            ssl_ctx.verify_mode = ssl.CERT_REQUIRED
+            ssl_ctx.load_cert_chain(self.agent.listener_cert_path, self.agent.listener_key_path)
+            ssl_ctx.load_verify_locations(self.agent.ca_path)
+            return ssl_ctx.wrap_socket(listenSocket, server_side=True)
+        except Exception:
+            listenSocket.close()
+            raise
+
+    def run(self) -> None:
+        try:
+            secureListenSocket = self._listen()
+        except Exception as e:
+            # Without the listener the mgr can't reach this agent. Keep
+            # reporting metadata, but tell the mgr why it can't connect.
+            self.error = f'{type(e).__name__}: {e}'
+            self.state = self.FAILED
+            logger.error(
+                f'Agent listener failed to start on port {self.agent.listener_port}: {self.error}')
+            return
         self._listen_socket = secureListenSocket
+        self.state = self.LISTENING
+        self.error = ''
         while not self.stop:
             try:
                 try:
@@ -2147,7 +2179,8 @@ class CephadmAgent(DaemonForm):
                                           and self.volume_gatherer.data is not None else ''),
                                'ack': str(ack),
                                'keyring': self.keyring,
-                               'port': self.listener_port})
+                               'port': self.listener_port,
+                               'listener': self.mgr_listener.status()})
             data = data.encode('ascii')
 
             try:

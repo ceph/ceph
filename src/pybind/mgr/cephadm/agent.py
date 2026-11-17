@@ -7,7 +7,7 @@ import time
 
 from orchestrator import DaemonDescriptionStatus, OrchestratorError
 from orchestrator._interface import daemon_type_to_service
-from ceph.utils import datetime_now, http_req
+from ceph.utils import datetime_now, datetime_to_str, http_req
 from ceph.deployment.inventory import Devices
 from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, CertificateSource
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, DaemonDeployContext
@@ -16,6 +16,7 @@ from mgr_util import verify_tls_files
 import tempfile
 from cephadm.services.service_registry import service_registry
 from cephadm.services.agent import CephadmAgent
+from cephadm.inventory import AGENT_LISTENER_FAILED, AGENT_UNREACHABLE_GRACE
 from cephadm.tlsobject_types import TLSCredentials
 from cephadm.utils import get_node_proxy_status_value
 
@@ -743,6 +744,11 @@ class HostData:
         try:
             host = data['host']
             self.mgr.agent_cache.agent_ports[host] = int(data['port'])
+            # agents older than the mgr don't report their listener state
+            listener = data.get('listener')
+            if isinstance(listener, dict):
+                self.mgr.agent_cache.record_agent_listener_state(
+                    host, str(listener.get('state', '')), str(listener.get('error', '')))
             if host not in self.mgr.agent_cache.agent_counter:
                 self.mgr.agent_cache.agent_counter[host] = 1
                 self.mgr.agent_helpers._request_agent_acks({host})
@@ -860,6 +866,7 @@ class AgentMessageThread(threading.Thread):
             self.mgr.log.error(f'Failed to get length of json payload: {e}')
             self.mgr.agent_cache.sending_agent_message[self.host] = False
             return
+        last_error = ''
         for retry_wait in [3, 5]:
             try:
                 agent_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -869,6 +876,7 @@ class AgentMessageThread(threading.Thread):
                 secure_agent_socket.sendall(msg.encode('utf-8'))
                 self.agent_response = secure_agent_socket.recv(1024).decode()
                 self.mgr.log.debug(f'Received "{self.agent_response}" from agent on host {self.host}')
+                self.mgr.agent_cache.record_agent_message_success(self.host)
                 if self.daemon_spec:
                     self.mgr.agent_cache.agent_config_successfully_delivered(self.daemon_spec)
                     self.mgr.log.info(
@@ -881,21 +889,27 @@ class AgentMessageThread(threading.Thread):
                 # We could have just deployed agent and it might not be ready
                 self.mgr.log.debug(
                     f'Retrying connection to agent on {self.host} in {str(retry_wait)} seconds. Connection failed with: {e}')
+                last_error = f'connection to {self.addr}:{self.port} failed: {e}'
                 time.sleep(retry_wait)
             except Exception as e:
                 # if it's not a connection error, something has gone wrong. Give up.
                 # Leave agent config deps unchanged so _check_agent can retry.
-                self.mgr.log.error(
-                    f'Failed to contact agent on host {self.host}: {e}. '
-                    f'Agent config deps left unchanged for retry')
-                self.mgr.agent_cache.sending_agent_message[self.host] = False
+                self._failed(f'failed to contact agent at {self.addr}:{self.port}: {e}')
                 return
         # Leave agent config deps unchanged so _check_agent can retry next cycle.
-        self.mgr.log.error(
-            f'Could not connect to agent on host {self.host}. '
+        self._failed(f'could not connect to agent ({last_error})')
+        return
+
+    def _failed(self, error: str) -> None:
+        failures = self.mgr.agent_cache.record_agent_message_failure(self.host, error)
+        # One failure per message adds up quickly on large clusters. Failures
+        # are summarized once per serve pass (_log_agent_message_summary);
+        # per-message detail is only logged at DEBUG.
+        self.mgr.log.debug(
+            f'Agent on host {self.host}: {error} '
+            f'({failures} consecutive failure(s)). '
             f'Agent config deps left unchanged for retry')
         self.mgr.agent_cache.sending_agent_message[self.host] = False
-        return
 
     def get_agent_response(self) -> str:
         return self.agent_response
@@ -914,6 +928,12 @@ class CephadmAgentHelpers:
                 self.mgr.agent_cache.agent_counter[host] = 1
             elif increment:
                 self.mgr.agent_cache.agent_counter[host] = self.mgr.agent_cache.agent_counter[host] + 1
+            if not self.mgr.agent_cache.agent_message_allowed(host):
+                # mgr->agent messages to this host have been failing. Don't
+                # start a new message thread for every report the agent
+                # sends; retry once the back-off expires.
+                self.mgr.log.debug(f'Not messaging agent on host {host}: backing off after failed messages')
+                continue
             payload: Dict[str, Any] = {'counter': self.mgr.agent_cache.agent_counter[host]}
             if daemon_spec:
                 payload['config'] = daemon_spec.final_config
@@ -968,6 +988,157 @@ class CephadmAgentHelpers:
                 detail=detail,
             )
 
+    def _agent_unreachable_grace(self) -> float:
+        """Seconds after a (re)deploy during which an agent is not reported unreachable."""
+        down_mult: float = max(self.mgr.agent_down_multiplier, 1.5)
+        return max(float(AGENT_UNREACHABLE_GRACE), down_mult * float(self.mgr.agent_refresh_rate))
+
+    def _unreachable_agent_hosts(self, exclude: Set[str]) -> List[str]:
+        """
+        Hosts whose agent the mgr can't reach (see AgentCache.agent_unreachable),
+        skipping:
+        - hosts in `exclude` (the agents already reported down);
+        - offline, maintenance and draining hosts, and hosts without an agent;
+        - agents (re)deployed less than the grace period ago, unless they
+          report that their listener failed to start.
+        """
+        if not self.mgr.use_agent:
+            return []
+        now = datetime_now()
+        grace = self._agent_unreachable_grace()
+        skip = exclude | {h.hostname for h in self.mgr.cache.get_unreachable_hosts()}
+        res: List[str] = []
+        for host in self.mgr.cache.get_hosts():
+            if host in skip or self.mgr.cache.is_host_draining(host):
+                continue
+            if not self.mgr.agent_cache.agent_unreachable(host):
+                continue
+            agents = self.mgr.cache.get_daemons_by_type(CephadmAgent.TYPE, host=host)
+            if not agents:
+                continue
+            r = self.mgr.agent_cache.get_agent_reachability(host)
+            deployed = [d for d in [r.deployed_at if r else None, agents[0].last_deployed] if d]
+            # no grace if the agent itself says its listener failed
+            listener_failed = r is not None and r.listener_state == AGENT_LISTENER_FAILED
+            if not listener_failed and deployed and (now - max(deployed)).total_seconds() < grace:
+                continue
+            res.append(host)
+        return res
+
+    def _update_agent_unreachable_healthcheck(self, down_agent_hosts: List[str]) -> List[str]:
+        """
+        Raise CEPHADM_AGENT_UNREACHABLE for agents that report to the mgr but
+        that the mgr can't reach. Agents that don't report at all are covered
+        by CEPHADM_AGENT_DOWN. Returns the unreachable hosts.
+        """
+        name = 'CEPHADM_AGENT_UNREACHABLE'
+        hosts = self._unreachable_agent_hosts(set(down_agent_hosts))
+        if not hosts:
+            self.mgr.remove_health_warning(name)
+            return hosts
+        detail: List[str] = []
+        for host in sorted(hosts):
+            r = self.mgr.agent_cache.get_agent_reachability(host)
+            assert r is not None
+            port = self.mgr.agent_cache.agent_ports.get(host)
+            since = datetime_to_str(r.first_failure) if r.first_failure else 'unknown'
+            detail.append(
+                f'Cephadm agent on host {host} (port {port}) is reporting but cannot '
+                f'be reached by the mgr since {since}. Last error: {r.last_error}')
+        summary = (f'{len(hosts)} Cephadm agent(s) are reporting but cannot be '
+                   'reached by the mgr')
+        check = {'severity': 'warning', 'summary': summary, 'count': len(hosts), 'detail': detail}
+        # the detail only changes when the set of hosts or their errors
+        # change; don't push identical health checks on every pass
+        if self.mgr.health_checks.get(name) != check:
+            self.mgr.set_health_warning(name, summary=summary, count=len(hosts), detail=detail)
+        return hosts
+
+    def _log_agent_message_summary(self, unreachable: List[str]) -> None:
+        """
+        Log one line about failed mgr->agent messages since the last summary,
+        at most every AGENT_FAILURE_SUMMARY_INTERVAL seconds.
+        """
+        summary = self.mgr.agent_cache.take_agent_message_summary()
+        if summary is None:
+            return
+        elapsed, failures, recovered = summary
+        if failures:
+            examples = []
+            for host in sorted(failures, key=lambda h: (-failures[h], h))[:5]:
+                r = self.mgr.agent_cache.get_agent_reachability(host)
+                examples.append(f'{host}: {r.last_error if r else "unknown error"}')
+            more = f', and {len(failures) - len(examples)} more' if len(failures) > len(examples) else ''
+            period = f'in the last {int(elapsed)}s' if elapsed else 'since mgr start'
+            msg = (f'{sum(failures.values())} message(s) to {len(failures)} agent(s) '
+                   f'failed {period} ({"; ".join(examples)}{more}).')
+            if unreachable:
+                msg += (f' {len(unreachable)} agent(s) are unreachable, '
+                        'see CEPHADM_AGENT_UNREACHABLE.')
+            if recovered:
+                msg += f' {len(recovered)} agent(s) are reachable again.'
+            self.mgr.log.warning(msg)
+        elif recovered:
+            self.mgr.log.info(
+                f'{len(recovered)} agent(s) are reachable again: '
+                f'{", ".join(sorted(recovered)[:5])}'
+                f'{", ..." if len(recovered) > 5 else ""}')
+
+    def agent_status(self, host: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        Per-host state of the agent as seen by the mgr: when it last
+        reported, whether its metadata is up to date (it has acknowledged
+        the latest counter), its listener state and whether the mgr can
+        reach it.
+        """
+        hosts = sorted({
+            d.hostname for d in self.mgr.cache.get_daemons_by_type(CephadmAgent.TYPE)
+            if d.hostname and (host is None or d.hostname == host)
+        })
+        ac = self.mgr.agent_cache
+        res: List[Dict[str, Any]] = []
+        for h in hosts:
+            r = ac.get_agent_reachability(h)
+            if r is None:
+                reachability = 'unknown'
+            elif ac.agent_unreachable(h):
+                reachability = 'unreachable'
+            elif r.consecutive_failures:
+                reachability = 'failing'
+            elif r.last_success:
+                reachability = 'ok'
+            else:
+                reachability = 'unknown'
+            last_report = ac.agent_timestamp.get(h)
+            res.append({
+                'hostname': h,
+                'port': ac.agent_ports.get(h),
+                'last_report': datetime_to_str(last_report) if last_report else None,
+                'counter': ac.agent_counter.get(h),
+                'metadata_up_to_date': self.mgr.cache.host_metadata_up_to_date(h),
+                'listener_state': (r.listener_state if r else '') or 'unknown',
+                'listener_error': r.listener_error if r else '',
+                'reachability': reachability,
+                'consecutive_failures': r.consecutive_failures if r else 0,
+                'total_failures': r.total_failures if r else 0,
+                'retry_in': int(r.backoff_seconds()) if r else 0,
+                'last_success': datetime_to_str(r.last_success) if r and r.last_success else None,
+                'last_failure': datetime_to_str(r.last_failure) if r and r.last_failure else None,
+                'last_error': r.last_error if r else '',
+            })
+        return res
+
+    def agent_status_desc(self, host: str) -> Optional[str]:
+        """Extra status for the agent daemon on this host in 'orch ps', if any."""
+        r = self.mgr.agent_cache.get_agent_reachability(host)
+        if r is None:
+            return None
+        if r.listener_state == AGENT_LISTENER_FAILED:
+            return 'listener down'
+        if self.mgr.agent_cache.agent_unreachable(host):
+            return 'unreachable'
+        return None
+
     # this function probably seems very unnecessary, but it makes it considerably easier
     # to get the unit tests working. All unit tests that check which daemons were deployed
     # or services setup would have to be individually changed to expect an agent service or
@@ -1003,6 +1174,7 @@ class CephadmAgentHelpers:
                 self.mgr.agent_cache.agent_timestamp = {}
                 self.mgr.agent_cache.agent_keys = {}
                 self.mgr.agent_cache.agent_ports = {}
+                self.mgr.agent_cache.reset_agent_reachability()
         return need_apply
 
     def _check_agent(self, host: str) -> bool:
@@ -1042,7 +1214,14 @@ class CephadmAgentHelpers:
                 has_agent_port = host in self.mgr.agent_cache.agent_ports
                 # we need to know the agent port to try to reconfig w/ http
                 # otherwise there is no choice but a full ssh reconfig
-                if has_agent_port and root_cert_match and not down:
+                if (
+                    has_agent_port and root_cert_match and not down
+                    and not self.mgr.agent_cache.agent_message_allowed(host)
+                ):
+                    self.mgr.log.debug(
+                        f'Agent config deps changed on {host}; HTTP push '
+                        f'postponed while backing off after failed messages')
+                elif has_agent_port and root_cert_match and not down:
                     self.mgr.log.info(
                         f'Agent config deps changed on {host} '
                         f'(last_deps={last_deps} -> deps={deps}); '

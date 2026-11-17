@@ -73,7 +73,7 @@ from mgr_module import (
 )
 from mgr_util import build_url, is_valid_container_image_ref, NvmeofMetadataPoolHelper
 import orchestrator
-from orchestrator.module import to_format, Format
+from orchestrator.module import to_format, Format, nice_delta
 
 from orchestrator import OrchestratorError, OrchestratorValidationError, HostSpec, \
     DaemonDescription, DaemonDescriptionStatus, handle_orch_error, \
@@ -5524,6 +5524,52 @@ Then run the following:
     def trigger_connect_dashboard_rgw(self) -> None:
         self.need_connect_dashboard_rgw = True
         self.event.set()
+
+    @CephadmCLICommand.Read('cephadm agent-status')
+    def _agent_status(self,
+                      hostname: Optional[str] = None,
+                      format: Format = Format.plain) -> HandleCommandResult:
+        """
+        Show, per host, when the cephadm agent last reported, whether its
+        metadata is up to date and whether the mgr can connect to it
+        """
+        if format not in [Format.plain, Format.json, Format.json_pretty, Format.yaml]:
+            return HandleCommandResult(
+                retval=-errno.EINVAL,
+                stderr='Requested format is not supported for cephadm agent status')
+        status = self.agent_helpers.agent_status(hostname)
+        if format != Format.plain:
+            return HandleCommandResult(stdout=to_format(status, format, many=True, cls=None))
+        if not status:
+            msg = f'No cephadm agent on host {hostname}' if hostname else 'No cephadm agents deployed'
+            return HandleCommandResult(stdout=msg)
+
+        now = datetime_now()
+
+        def ago(ts: Optional[str]) -> str:
+            return nice_delta(now, str_to_datetime(ts) if ts else None, ' ago')
+
+        table = PrettyTable(['HOST', 'PORT', 'LAST REPORT', 'METADATA', 'LISTENER',
+                             'MGR->AGENT', 'LAST ERROR'], border=False)
+        table.align = 'l'
+        table.left_padding_width = 0
+        table.right_padding_width = 2
+        for e in status:
+            conn = e['reachability']
+            if e['consecutive_failures']:
+                conn += f" ({e['consecutive_failures']} failures"
+                conn += f", retry in {e['retry_in']}s)" if e['retry_in'] else ')'
+            error = e['last_error'] if e['reachability'] in ['failing', 'unreachable'] else ''
+            table.add_row((
+                e['hostname'],
+                e['port'] or '-',
+                ago(e['last_report']),
+                'up to date' if e['metadata_up_to_date'] else f"pending (counter {e['counter']})",
+                e['listener_state'],
+                conn,
+                error[:80] + ('...' if len(error) > 80 else ''),
+            ))
+        return HandleCommandResult(stdout=table.get_string())
 
     @CephadmCLICommand.Read('cephadm get-cluster-version-history')
     def do_get_cluster_version_history(self, show_config: Optional[bool] = False) -> HandleCommandResult:

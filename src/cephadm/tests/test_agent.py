@@ -661,7 +661,8 @@ def test_agent_run(_pull_conf_settings, _port_in_use, _gatherer_start,
            'volume': 'ceph-volume inventory data',
            'ack': str(7),
            'keyring': 'agent keyring',
-           'port': str(open_listener_port)
+           'port': str(open_listener_port),
+           'listener': {'state': 'starting', 'error': ''},
         }
         _RQ_init.assert_called_with(
             f'https://{target_ip}:{target_port}/data',
@@ -813,6 +814,7 @@ def test_mgr_listener_run(_load_cert_chain, _load_verify_locations, _handle_json
         # verify payload was correctly extracted
         _handle_json_payload.assert_called_with(json.loads(payload))
         FakeConn.send.assert_called_once_with(b'ACK')
+        assert agent.mgr_listener.status() == {'state': 'listening', 'error': ''}
 
         # second run, with bad json data received
         _wrap_context.side_effect = [FSS_bad_json]
@@ -851,6 +853,36 @@ def test_mgr_listener_run(_load_cert_chain, _load_verify_locations, _handle_json
         agent.mgr_listener.run()
         FakeConn.send.assert_not_called()
         FSS_exc_testing.accept.call_count == 3
+
+
+@mock.patch("socket.socket")
+@mock.patch("ssl.SSLContext.load_cert_chain")
+def test_mgr_listener_reports_start_failure(_load_cert_chain, _socket, cephadm_fs):
+    with with_cephadm_ctx([]) as ctx:
+        agent = _cephadm.CephadmAgent(ctx, FSID, AGENT_ID)
+        agent.listener_port = 7777
+        assert agent.mgr_listener.status() == {'state': 'starting', 'error': ''}
+
+        _load_cert_chain.side_effect = _cephadm.ssl.SSLError(9, '[SSL] PEM lib (_ssl.c:3874)')
+        # must not raise: the agent keeps reporting without its listener
+        agent.mgr_listener.run()
+        status = agent.mgr_listener.status()
+        assert status['state'] == 'failed'
+        assert 'SSLError' in status['error']
+        assert 'PEM lib' in status['error']
+        _socket.return_value.close.assert_called_once()
+
+
+def test_mgr_listener_reports_dead_thread():
+    with with_cephadm_ctx([]) as ctx:
+        agent = _cephadm.CephadmAgent(ctx, FSID, AGENT_ID)
+        agent.mgr_listener.state = agent.mgr_listener.LISTENING
+        # thread is not alive and was not asked to stop
+        assert agent.mgr_listener.status() == {
+            'state': 'failed', 'error': 'listener thread exited'}
+        agent.mgr_listener.stop = True
+        agent.mgr_listener.state = agent.mgr_listener.LISTENING
+        assert agent.mgr_listener.status()['state'] == 'listening'
 
 
 @mock.patch("cephadm.CephadmAgent._get_ls")
