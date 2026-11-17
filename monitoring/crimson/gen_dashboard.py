@@ -91,16 +91,19 @@ def matrix(title, expr, row_field, col_field, unit, w=24, h=8, desc="",
 
 
 def ts(title, targets, unit="short", w=12, desc="", stack=False, h=8,
-       legend="bottom", repeat=None, max_per_row=2):
+       legend="bottom", repeat=None, max_per_row=2, min=None):
     """Time series panel. With repeat=<variable>, Grafana makes one copy of the
-    panel for each selected value, max_per_row copies side by side in width w."""
+    panel for each selected value, max_per_row copies side by side in width w.
+    Set min=0 for values that are never negative: without it, Grafana can draw
+    a flat line outside the y axis range (seen with unit "bytes")."""
     extra = {"repeat": repeat, "repeatDirection": "h",
              "maxPerRow": max_per_row} if repeat else {}
+    limits = {} if min is None else {"min": min}
     place({
         **extra,
         "type": "timeseries", "title": title, "datasource": DS,
         "description": desc,
-        "fieldConfig": {"defaults": {"unit": unit, "custom": {
+        "fieldConfig": {"defaults": {"unit": unit, **limits, "custom": {
             "lineWidth": 1, "fillOpacity": 10 if stack else 0,
             "stacking": {"mode": "normal" if stack else "none"}}},
             "overrides": []},
@@ -109,6 +112,29 @@ def ts(title, targets, unit="short", w=12, desc="", stack=False, h=8,
                     "tooltip": {"mode": "multi", "sort": "desc"}},
         "targets": [{"datasource": DS, "expr": e, "legendFormat": l,
                      "refId": chr(65 + i)} for i, (e, l) in enumerate(targets)],
+    }, w, h)
+
+
+def bars(title, targets, unit, w=12, h=8, desc="", max=None, decimals=None):
+    """Horizontal bar gauge, one bar for each (expr, legend) target, in order,
+    all in one colour. For histogram bands, use one target per band, so that
+    each bar has its own label (format "heatmap" labels the bars with le)."""
+    defaults = {"unit": unit, "min": 0,
+                "color": {"mode": "fixed", "fixedColor": "blue"}}
+    if max is not None:
+        defaults["max"] = max
+    if decimals is not None:
+        defaults["decimals"] = decimals
+    place({
+        "type": "bargauge", "title": title, "datasource": DS, "description": desc,
+        "targets": [{"datasource": DS, "expr": e, "refId": chr(65 + i),
+                     "legendFormat": l, "instant": True, "range": False}
+                    for i, (e, l) in enumerate(targets)],
+        "fieldConfig": {"defaults": defaults, "overrides": []},
+        "options": {"orientation": "horizontal", "displayMode": "basic",
+                    "showUnfilled": True, "valueMode": "text",
+                    "reduceOptions": {"calcs": ["lastNotNull"], "fields": "",
+                                      "values": False}},
     }, w, h)
 
 
@@ -233,6 +259,58 @@ ts("Transaction conflicts (invalidated / committed)",
    [(f"sum by (ceph_daemon) (rate(osd_cache_trans_invalidated{F}[{R}])) / "
      f"sum by (ceph_daemon) (rate(osd_cache_trans_committed{F}[{R}]))", "{{ceph_daemon}}")],
    "percentunit")
+# xattrs: SeaStore::Shard::register_metrics() (seastore.cc). The op counters
+# count each build of a transaction, so a conflict replay counts again.
+# xattr_tree_kv_size buckets are cumulative (Prometheus form): each bucket
+# counts the entries up to its bound, and _count is the total.
+S = "osd_seastore"
+SUM = "sum by (ceph_daemon)"
+ts("xattr ops / s",
+   [(f"{SUM} (rate({S}_xattr_set_ops{F}[{R}]))", "{{ceph_daemon}} setattr(s)"),
+    (f"{SUM} (rate({S}_xattr_rm_ops{F}[{R}]))", "{{ceph_daemon}} rmattr(s)")],
+   "ops", desc="setattr + setattrs and rmattr + rmattrs transaction ops.")
+ts("Avg xattr change time",
+   [(f"{SUM} (rate({S}_xattr_change_usec{F}[{R}])) / "
+     f"{SUM} (rate({S}_xattr_change_count{F}[{R}]))", "{{ceph_daemon}}")],
+   "µs", min=0, desc="xattr_change_usec / xattr_change_count: time to apply one "
+              "setattr, setattrs, rmattr or rmattrs op in the transaction "
+              "build, with waits for extent reads. Like the classic "
+              "BlueStore chgattr_lat.")
+XATTR_KV_SIZE_BUCKETS = [64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
+
+
+def size_label(n):
+    return f"{n // 1024} KiB" if n >= 1024 else f"{n} B"
+
+
+def band_label(lo, hi):
+    if lo == 0:
+        return f"0–{size_label(hi)}"
+    if lo >= 1024 or hi < 1024:
+        # same unit at both ends: "1–2 KiB", "64–128 B"
+        return f"{size_label(lo).split()[0]}–{size_label(hi)}"
+    return f"{size_label(lo)}–{size_label(hi)}"
+
+
+def kv_bucket(b):
+    # Seastar can print le as a double (64.000000), so match both forms.
+    return (f'sum(increase({S}_xattr_tree_kv_size_bucket'
+            f'{{ceph_daemon=~"$osd", le=~"{b}(\\\\.0+)?"}}[$__range]))')
+
+
+# Band (lo, hi] = bucket hi - bucket lo, as a share of all entries. increase()
+# extrapolates each series on its own, so clamp the difference at 0.
+KV_TOTAL = f"sum(increase({S}_xattr_tree_kv_size_count{F}[$__range]))"
+bars("xattr tree entry size (over time range)",
+     [((f"clamp_min({kv_bucket(hi)} - {kv_bucket(lo)}, 0)" if lo else kv_bucket(hi))
+       + f" / {KV_TOTAL}", band_label(lo, hi))
+      for lo, hi in zip([0] + XATTR_KV_SIZE_BUCKETS, XATTR_KV_SIZE_BUCKETS)],
+     "percentunit", w=24, max=1, decimals=1,
+     desc="Share of the entries written to the xattr tree in the dashboard "
+          "time range, by key + value size. A band holds the sizes above its "
+          "lower bound, up to and including its upper bound, so each entry "
+          "is in one band only, and the bands add up to 100%. A leaf accepts "
+          "at most 16,382 B, so the 16–64 KiB band stays empty.")
 end_row()
 
 # ---------------- SeaStore cache ----------------
