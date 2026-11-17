@@ -86,6 +86,7 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_ACL		RGW_ATTR_PREFIX "acl"
 #define RGW_ATTR_RATELIMIT	RGW_ATTR_PREFIX "ratelimit"
 #define RGW_ATTR_LC		RGW_ATTR_PREFIX "lc"
+#define RGW_ATTR_INVENTORY	RGW_ATTR_PREFIX "inventory"
 #define RGW_ATTR_CORS		RGW_ATTR_PREFIX "cors"
 #define RGW_ATTR_ETAG RGW_ATTR_PREFIX "etag"
 #define RGW_ATTR_CKSUM          RGW_ATTR_PREFIX "cksum"
@@ -378,6 +379,8 @@ inline constexpr const char* RGW_REST_STS_XMLNS =
 
 #define ERR_RESTORE_ALREADY_IN_PROGRESS 2500
 #define ERR_EXPIRED_TOKEN 2501
+#define ERR_NO_SUCH_CONFIGURATION 2502
+#define ERR_TOO_MANY_CONFIGURATIONS 2503
 
 #ifndef UINT32_MAX
 #define UINT32_MAX (0xffffffffu)

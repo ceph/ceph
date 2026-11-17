@@ -44,6 +44,9 @@
 #ifdef WITH_RADOSGW_LANCEDB
 #include "rgw_rest_s3vector.h"
 #endif
+#ifdef _ARROW_EXIST
+#include "rgw_rest_inventory.h"
+#endif
 #include "rgw_auth_s3.h"
 #include "rgw_acl.h"
 #include "rgw_policy_s3.h"
@@ -5470,6 +5473,13 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_get()
     return new RGWListBucketMultiparts_ObjStore_S3;
   } else if(is_lc_op()) {
     return new RGWGetLC_ObjStore_S3;
+#ifdef _ARROW_EXIST
+  } else if (is_inventory_op()) {
+    if (s->info.args.exists("id")) {
+      return RGWHandler_REST_BucketInventory_S3::create_get_op();
+    }
+    return RGWHandler_REST_BucketInventory_S3::create_list_op();
+#endif
   } else if(is_policy_op()) {
     return new RGWGetBucketPolicy;
   } else if (is_tagging_op()) {
@@ -5526,6 +5536,10 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_put()
     return new RGWSetRequestPayment_ObjStore_S3;
   } else if(is_lc_op()) {
     return new RGWPutLC_ObjStore_S3;
+#ifdef _ARROW_EXIST
+  } else if (is_inventory_op()) {
+    return RGWHandler_REST_BucketInventory_S3::create_put_op();
+#endif
   } else if(is_policy_op()) {
     return new RGWPutBucketPolicy;
   } else if (is_object_lock_op()) {
@@ -5563,6 +5577,10 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_delete()
     return new RGWDeleteCORS_ObjStore_S3;
   } else if(is_lc_op()) {
     return new RGWDeleteLC_ObjStore_S3;
+#ifdef _ARROW_EXIST
+  } else if (is_inventory_op()) {
+    return RGWHandler_REST_BucketInventory_S3::create_delete_op();
+#endif
   } else if(is_policy_op()) {
     return new RGWDeleteBucketPolicy;
   } else if (is_notification_op()) {
@@ -6888,6 +6906,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
         case RGW_OP_GET_BUCKET_PUBLIC_ACCESS_BLOCK:
         case RGW_OP_DELETE_BUCKET_PUBLIC_ACCESS_BLOCK:
 	case RGW_OP_GET_OBJ://s3select its post-method(payload contain the query) , the request is get-object
+        case RGW_OP_PUT_BUCKET_INVENTORY:
         case RGW_OP_PUT_BUCKET_LOGGING:
         case RGW_OP_POST_BUCKET_LOGGING:
         case RGW_OP_GET_BUCKET_LOGGING: 

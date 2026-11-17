@@ -158,6 +158,16 @@ set(librgw_common_srcs
   rgw_bucket_sync.cc
   rgw_rest_restore.cc)
 
+# s3 inventory writes parquet, so it is only built with arrow
+if(WITH_RADOSGW_SELECT_PARQUET OR WITH_RADOSGW_ARROW_FLIGHT)
+  list(APPEND librgw_common_srcs
+    rgw_inventory_s3.cc
+    rgw_inventory_manifest.cc
+    rgw_inventory_parquet.cc
+    rgw_inventory.cc
+    rgw_rest_inventory.cc)
+endif()
+
 list(APPEND librgw_common_srcs
   driver/immutable_config/store.cc
   driver/json_config/store.cc)

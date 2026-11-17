@@ -25,6 +25,9 @@
 #include <common/errno.h>
 #include "include/random.h"
 #include "cls/lock/cls_lock_client.h"
+#ifdef _ARROW_EXIST
+#include "rgw_inventory.h"
+#endif
 #include "rgw_perf_counters.h"
 #include "rgw_asio_thread.h"
 #include "rgw_common.h"
@@ -1965,6 +1968,25 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
     return ret;
   }
 
+#ifdef _ARROW_EXIST
+  // s3 inventory uses the lc work list; skip if the bucket was recreated.
+  // an inventory failure is logged but doesn't fail the lc pass, so the
+  // lifecycle rules of the bucket still run
+  if (bucket->get_key().marker == bucket_marker) {
+    if (int r = rgw::inventory::process_bucket(this, driver, bucket.get(),
+                                               yield); r < 0) {
+      ldpp_dout(this, 5) << "WARNING: inventory for bucket " << bucket_name
+                         << " failed: " << r << dendl;
+    }
+    // inventory only, no lc rules: return 0 so bucket_lc_post() doesn't
+    // drop the entry as stale
+    if (!bucket->get_attrs().contains(RGW_ATTR_LC) &&
+        rgw::inventory::bucket_has_inventory(bucket->get_attrs())) {
+      return 0;
+    }
+  }
+#endif
+
   /*
    * Validate the bucket before initializing per-bucket LC counters or
    * spawning a workpool. Stamping start_time/end_time for stale index
@@ -3248,6 +3270,16 @@ int RGWLC::remove_bucket_config(const DoutPrefixProvider* dpp, optional_yield y,
       return ret;
     }
   }
+
+#ifdef _ARROW_EXIST
+  // keep the entry while the bucket has inventory configs
+  if (rgw::inventory::bucket_has_inventory(attrs)) {
+    ldpp_dout(dpp, 20) << "RGWLC::remove_bucket_config(): bucket=" << b.name
+                       << " still has an inventory configuration; keeping"
+                       << " lifecycle work-list entry" << dendl;
+    return ret;
+  }
+#endif
 
   ret = guard_lc_modify(dpp, driver, sal_lc.get(), b, cookie,
 			[&](rgw::sal::Lifecycle* sal_lc, const string& oid,

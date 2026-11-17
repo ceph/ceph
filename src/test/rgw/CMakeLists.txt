@@ -634,3 +634,20 @@ add_rgw_cargo_test_binary(
   UNIT_TEST
   DEPENDS   ceph_rgw_sal_test_env)
 endif()
+
+# s3 inventory is only built with arrow. use the in-tree arrow headers, not
+# system ones
+if(WITH_RADOSGW_SELECT_PARQUET OR WITH_RADOSGW_ARROW_FLIGHT)
+  foreach(t unittest_rgw_inventory_s3 unittest_rgw_inventory_manifest
+            unittest_rgw_inventory_parquet unittest_rgw_inventory)
+    string(REPLACE "unittest_" "test_" src ${t})
+    add_executable(${t} ${src}.cc)
+    target_include_directories(${t}
+      SYSTEM PRIVATE
+        "${CMAKE_SOURCE_DIR}/src/rgw"
+        "${CMAKE_BINARY_DIR}/src/arrow/include")
+    target_link_libraries(${t} rgw_common ${rgw_libs} Catch2::Catch2WithMain)
+    add_test(NAME ${t} COMMAND ${t}
+             WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
+  endforeach()
+endif()
