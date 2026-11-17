@@ -498,13 +498,17 @@ bool new_producer(connection_t* conn) {
   rd_kafka_conf_set_log_cb(conf.get(), log_callback);
   // define poll callback to allow reconnect
   rd_kafka_conf_set_error_cb(conf.get(), poll_err_callback);
-  // create the producer and move conf ownership to it
-  conn->producer = rd_kafka_new(RD_KAFKA_PRODUCER, conf.release(), errstr, sizeof(errstr));
+  // create the producer. rd_kafka_new() takes ownership of conf only on
+  // success; on failure the caller still owns it, so keep it in the
+  // unique_ptr until the producer exists
+  conn->producer = rd_kafka_new(RD_KAFKA_PRODUCER, conf.get(), errstr, sizeof(errstr));
   if (!conn->producer) {
     conn->status = rd_kafka_last_error();
     ldout(conn->cct, 1) << "Kafka connect: failed to create producer: " << errstr << dendl;
     return false;
   }
+  // the producer now owns conf
+  std::ignore = conf.release();
   ldout(conn->cct, 20) << "Kafka connect: successfully created new producer" << dendl;
   {
     // set log level of producer
@@ -885,6 +889,8 @@ public:
     auto message_wrapper =
         std::make_unique<message_wrapper_t>(conn_id, topic, message, nullptr);
     if (messages.push(message_wrapper.get())) {
+      // the queue now owns the message; the manager thread deletes it
+      // coverity[leaked_storage:SUPPRESS]
       std::ignore = message_wrapper.release();
       ++queued;
       return 0;
@@ -902,6 +908,8 @@ public:
     auto message_wrapper =
         std::make_unique<message_wrapper_t>(conn_id, topic, message, cb);
     if (messages.push(message_wrapper.get())) {
+      // the queue now owns the message; the manager thread deletes it
+      // coverity[leaked_storage:SUPPRESS]
       std::ignore = message_wrapper.release();
       ++queued;
       return 0;
