@@ -52,6 +52,7 @@ export class RgwMultisiteZonegroupFormComponent implements OnInit {
   addedZones: string[];
   disableDefault = false;
   disableMaster = false;
+  isDefaultRealm = false;
 
   constructor(
     public activeModal: NgbActiveModal,
@@ -88,6 +89,22 @@ export class RgwMultisiteZonegroupFormComponent implements OnInit {
       }),
       placementTargets: this.formBuilder.array([])
     });
+  }
+
+  // A default zonegroup can only exist in the default realm
+  onRealmChange(realmName: string) {
+    if (this.action !== this.actionLabels.CREATE) {
+      return;
+    }
+    const defaultControl = this.multisiteZonegroupForm.get('default_zonegroup');
+    if (realmName !== this.defaultsInfo['defaultRealmName']) {
+      this.disableDefault = true;
+      defaultControl.setValue(false);
+      defaultControl.disable();
+    } else {
+      this.disableDefault = false;
+      defaultControl.enable();
+    }
   }
 
   ngOnInit(): void {
@@ -142,6 +159,7 @@ export class RgwMultisiteZonegroupFormComponent implements OnInit {
       this.multisiteZonegroupForm
         .get('selectedRealm')
         .setValue(this.defaultsInfo['defaultRealmName']);
+      this.onRealmChange(this.defaultsInfo['defaultRealmName']);
       if (this.disableMaster) {
         this.multisiteZonegroupForm.get('master_zonegroup').disable();
       }
@@ -157,18 +175,16 @@ export class RgwMultisiteZonegroupFormComponent implements OnInit {
 
       if (this.info.data.is_default) {
         this.multisiteZonegroupForm.get('default_zonegroup').disable();
+      } else {
+        this.isDefaultRealm = this.info.data.parent === this.defaultsInfo['defaultRealmName'];
+        if (this.isDefaultRealm) {
+          this.multisiteZonegroupForm.get('default_zonegroup').enable();
+        } else {
+          this.multisiteZonegroupForm.get('default_zonegroup').disable();
+        }
       }
-      if (
-        !this.info.data.is_default &&
-        this.multisiteZonegroupForm.getValue('selectedRealm') !==
-          this.defaultsInfo['defaultRealmName']
-      ) {
-        this.multisiteZonegroupForm.get('default_zonegroup').disable();
-        this.disableDefault = true;
-      }
-      if (this.info.data.is_master || this.disableMaster) {
-        this.multisiteZonegroupForm.get('master_zonegroup').disable();
-      }
+      // Master is read-only on edit in both directions
+      this.multisiteZonegroupForm.get('master_zonegroup').disable();
 
       this.zonegroupZoneNames = this.info.data.zones.map((zone: { [x: string]: any }) => {
         return zone['name'];

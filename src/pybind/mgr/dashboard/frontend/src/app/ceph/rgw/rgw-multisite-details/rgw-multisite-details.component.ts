@@ -498,9 +498,11 @@ export class RgwMultisiteDetailsComponent extends CdForm implements OnDestroy, O
 
   getDisable(nodeType?: string) {
     let isMasterZone = true;
-    // Standalone zonegroup/zone without a realm can always be edited
     if (this.defaultRealmId === '') {
-      if (nodeType !== 'realm') {
+      // Editing a node (realm/zonegroup/zone) must stay possible without a default realm,
+      // e.g. a realm has to be editable to be made the default one.
+      // Only creating a zonegroup (no nodeType) requires a default realm.
+      if (nodeType) {
         return false;
       }
       return this.messages.noDefaultRealm;

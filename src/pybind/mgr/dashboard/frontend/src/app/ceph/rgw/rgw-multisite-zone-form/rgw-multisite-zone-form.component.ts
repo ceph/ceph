@@ -40,6 +40,9 @@ export class RgwMultisiteZoneFormComponent extends CdForm implements OnInit {
   isMetadataSync: boolean = false;
   isMasterZone: boolean;
   isDefaultZone: boolean;
+  // True when this non-default zone is eligible to become the default
+  // (only allowed when the zone belongs to the default zonegroup)
+  canSetDefault: boolean = false;
   syncStatusTimedOut: boolean = false;
   bsModalRef: NgbModalRef;
   createSystemUser: boolean = false;
@@ -109,8 +112,25 @@ export class RgwMultisiteZoneFormComponent extends CdForm implements OnInit {
     });
   }
 
+  // A default zone can only exist in the default zonegroup
+  private updateDefaultZoneState(zonegroupName: string) {
+    if (this.action !== this.actionLabels.CREATE) {
+      return;
+    }
+    const defaultControl = this.multisiteZoneForm.get('default_zone');
+    if (zonegroupName !== this.defaultsInfo['defaultZonegroupName']) {
+      this.disableDefault = true;
+      defaultControl.setValue(false);
+      defaultControl.disable();
+    } else {
+      this.disableDefault = false;
+      defaultControl.enable();
+    }
+  }
+
   onZoneGroupChange(zonegroupName: string) {
     this.syncFromZonesOptions = [];
+    this.updateDefaultZoneState(zonegroupName);
 
     let zg = new RgwZonegroup();
     zg.name = zonegroupName;
@@ -144,13 +164,6 @@ export class RgwMultisiteZoneFormComponent extends CdForm implements OnInit {
         this.master_zone_name = masterZone.name;
       }
     });
-    if (
-      this.multisiteZoneForm.getValue('selectedZonegroup') !==
-      this.defaultsInfo['defaultZonegroupName']
-    ) {
-      this.disableDefault = true;
-      this.multisiteZoneForm.get('default_zone').disable();
-    }
   }
 
   ngOnInit(): void {
@@ -172,6 +185,8 @@ export class RgwMultisiteZoneFormComponent extends CdForm implements OnInit {
           .get('selectedZonegroup')
           .setValue(this.defaultsInfo['defaultZonegroupName']);
         this.onZoneGroupChange(this.defaultsInfo['defaultZonegroupName']);
+      } else {
+        this.updateDefaultZoneState(this.multisiteZoneForm.getValue('selectedZonegroup'));
       }
     }
     if (this.action === this.actionLabels.EDIT) {
@@ -201,21 +216,21 @@ export class RgwMultisiteZoneFormComponent extends CdForm implements OnInit {
       if (this.info.data.is_default) {
         this.isDefaultZone = true;
         this.multisiteZoneForm.get('default_zone').disable();
+      } else {
+        // Non-default: only allow setting as default when in the default zonegroup
+        this.canSetDefault = this.info.data.parent === this.defaultsInfo['defaultZonegroupName'];
+        if (!this.canSetDefault) {
+          this.multisiteZoneForm.get('default_zone').disable();
+        }
       }
+      // Master is read-only on edit in both directions
       if (this.info.data.is_master) {
         this.isMasterZone = true;
-        this.multisiteZoneForm.get('master_zone').disable();
       }
+      this.multisiteZoneForm.get('master_zone').disable();
       const zone = new RgwZone();
       zone.name = this.info.data.name;
       this.onZoneGroupChange(this.info.data.parent);
-    }
-    if (
-      this.multisiteZoneForm.getValue('selectedZonegroup') !==
-      this.defaultsInfo['defaultZonegroupName']
-    ) {
-      this.disableDefault = true;
-      this.multisiteZoneForm.get('default_zone').disable();
     }
   }
 
@@ -277,13 +292,27 @@ export class RgwMultisiteZoneFormComponent extends CdForm implements OnInit {
         ? ''
         : (values['sync_from_zones'] || []).map((zone: ComboBoxItem) => zone.name).join(',');
       this.zone.sync_from_all = values['sync_from_all'];
+      // Derive the realm from the selected zonegroup so update_period targets
+      // the correct realm even when creating a zone in a non-default realm.
+      const selectedZg = this.zonegroupList.find(
+        (zg: RgwZonegroup) => zg.name === values['selectedZonegroup']
+      );
+      const realmList: RgwRealm[] =
+        this.multisiteInfo[0] !== undefined &&
+        (this.multisiteInfo[0] as any).hasOwnProperty('realms')
+          ? (this.multisiteInfo[0] as any)['realms']
+          : [];
+      const zgRealm = selectedZg?.realm_id
+        ? realmList.find((r: RgwRealm) => r.id === selectedZg.realm_id)
+        : undefined;
       this.rgwZoneService
         .create(
           this.zone,
           this.zonegroup,
           values['default_zone'],
           values['master_zone'],
-          this.zone.endpoints
+          this.zone.endpoints,
+          zgRealm?.name || undefined
         )
         .subscribe(
           () => {
@@ -342,7 +371,8 @@ export class RgwMultisiteZoneFormComponent extends CdForm implements OnInit {
           values['placementDataExtraPool'],
           values['storageClass'],
           values['storageDataPool'],
-          values['storageCompression']
+          values['storageCompression'],
+          this.info?.data?.second_parent || null
         )
         .subscribe(
           () => {

@@ -35,7 +35,7 @@ export class RgwZonegroupService {
   ) {
     let requestBody = {
       zonegroup_name: zonegroup.name,
-      realm_name: realm.name,
+      realm_name: realm?.name || null,
       new_zonegroup_name: newZonegroupName,
       default: defaultZonegroup,
       master: master,

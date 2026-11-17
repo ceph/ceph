@@ -49,6 +49,8 @@ type StorageClassSectionDetails = Partial<StorageClassDetails> & {
 })
 export class RgwStorageClassResourcePageComponent implements OnInit, OnDestroy {
   private detailsCache = new Map<string, StorageClassSectionDetails>();
+  // Member zone names of the zonegroup, retained alongside the cached details.
+  private zonegroupZonesCache = new Map<string, string[]>();
   private sub = new Subscription();
   private readonly placementTargetText = $localize`Placement targets control which Pools are associated with a particular bucket.`;
   private readonly zoneText = $localize`A zone defines a logical group that consists of one or more Ceph Object Gateway instances.`;
@@ -78,6 +80,7 @@ export class RgwStorageClassResourcePageComponent implements OnInit, OnDestroy {
         this.placementTarget = pm.get('placement_target') ?? '';
         this.storageClassName = pm.get('storage_class') ?? '';
         this.detailsCache.clear();
+        this.zonegroupZonesCache.clear();
         this.loadStorageClassDetails();
       })
     );
@@ -116,7 +119,7 @@ export class RgwStorageClassResourcePageComponent implements OnInit, OnDestroy {
       this.aclKeyValueData = this.buildAclKeyValueData(this.details.acl_mappings || []);
 
       if (this.details.tier_type?.toLowerCase() === TIER_TYPE.LOCAL) {
-        this.loadLocalZoneDetails(this.details);
+        this.loadLocalZoneDetails(this.details, this.zonegroupZonesCache.get(cacheKey) ?? []);
       }
       return;
     }
@@ -143,8 +146,11 @@ export class RgwStorageClassResourcePageComponent implements OnInit, OnDestroy {
             );
 
             this.aclLoading = false;
+            const zonegroupZones =
+              BucketTieringUtils.getZonegroupZoneNames(data?.zonegroups, this.zonegroupName) ?? [];
             if (selected) {
               this.detailsCache.set(cacheKey, selected);
+              this.zonegroupZonesCache.set(cacheKey, zonegroupZones);
             }
 
             this.details = selected
@@ -157,7 +163,7 @@ export class RgwStorageClassResourcePageComponent implements OnInit, OnDestroy {
             this.aclKeyValueData = this.buildAclKeyValueData(this.details?.acl_mappings || []);
 
             if (this.details?.tier_type?.toLowerCase() === TIER_TYPE.LOCAL) {
-              this.loadLocalZoneDetails(this.details);
+              this.loadLocalZoneDetails(this.details, zonegroupZones);
             }
           },
           () => {
@@ -170,11 +176,15 @@ export class RgwStorageClassResourcePageComponent implements OnInit, OnDestroy {
     );
   }
 
-  private loadLocalZoneDetails(details: StorageClassDetails): void {
+  private loadLocalZoneDetails(details: StorageClassDetails, zonegroupZones: string[]): void {
     this.sub.add(
       this.rgwZoneService.getAllZonesInfo().subscribe(
         (data: AllZonesResponse) => {
-          const localDetails = BucketTieringUtils.getZoneInfoHelper(data?.zones, details);
+          const localDetails = BucketTieringUtils.getZoneInfoHelper(
+            data?.zones,
+            details,
+            zonegroupZones
+          );
           this.details = {
             ...details,
             zone_name: localDetails.zone_name,

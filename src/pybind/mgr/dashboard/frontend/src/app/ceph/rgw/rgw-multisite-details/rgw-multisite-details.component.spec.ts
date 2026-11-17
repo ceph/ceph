@@ -75,6 +75,22 @@ describe('RgwMultisiteDetailsComponent', () => {
     });
   });
 
+  describe('getDisable without a default realm', () => {
+    beforeEach(() => {
+      component.defaultRealmId = '';
+    });
+
+    it('should keep editing a realm, zonegroup or zone enabled', () => {
+      expect(component.getDisable('realm')).toBe(false);
+      expect(component.getDisable('zonegroup')).toBe(false);
+      expect(component.getDisable('zone')).toBe(false);
+    });
+
+    it('should disable creating a zonegroup', () => {
+      expect(component.getDisable()).toBe(component.messages.noDefaultRealm);
+    });
+  });
+
   describe('multisite create table actions', () => {
     const createFixture = (rgwPermissions: string[]) => {
       spyOn(TestBed.inject(AuthStorageService), 'getPermissions').and.returnValue(
