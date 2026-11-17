@@ -15,10 +15,13 @@
  */
 
 #include "rgw_perf_counters.h"
+
 #include <boost/asio/strand.hpp>
 #include <boost/redis/config.hpp>
 #include <boost/version.hpp>
+
 #include <algorithm>
+#include <charconv>
 #include <filesystem>
 #include <expected>
 #include <iterator>
@@ -1281,7 +1284,9 @@ int D4NFilterObject::load_obj_state(const DoutPrefixProvider *dpp, optional_yiel
     if (cache_request) {
       return -ENOENT;
     }
-    return next->load_obj_state(dpp, y, follow_olh);
+    const int ret = next->load_obj_state(dpp, y, follow_olh);
+    delete_marker = next->is_delete_marker();
+    return ret;
   }
   if (attrs_read_from_cache) {
     return 0;
@@ -1298,7 +1303,9 @@ int D4NFilterObject::load_obj_state(const DoutPrefixProvider *dpp, optional_yiel
   if (cache_request) {
     return -ENOENT;
   }
-  return next->load_obj_state(dpp, y, follow_olh);
+  const int ret = next->load_obj_state(dpp, y, follow_olh);
+  delete_marker = next->is_delete_marker();
+  return ret;
 }
 
 
@@ -1416,7 +1423,19 @@ int D4NFilterObject::load_cached_head(const DoutPrefixProvider *dpp, rgw::d4n::C
     exists_in_cache = false;
     return -ENOENT;
   }
+  delete_marker = head.deleteMarker;
   if (head.deleteMarker) {
+    int64_t nanoseconds = 0;
+    const auto& timestamp = head.cacheObj.creationTime;
+    if (const auto [end, error] = std::from_chars(timestamp.data(), timestamp.data() + timestamp.size(),
+                                                    nanoseconds);
+        std::errc{} != error || timestamp.data() + timestamp.size() != end) {
+      rgw::d4n::detail::log_message(dpp, std::source_location::current(),
+        "invalid cached delete-marker creation time: {}", timestamp);
+      return -EIO;
+    }
+    auto mtime = ceph::real_time(ceph::timespan(nanoseconds));
+    set_mtime(mtime);
     if (!is_remote_cache_request() || version.empty()) {
       set_object_version(head.version);
     }
@@ -2413,7 +2432,8 @@ D4NFilterObject::D4NFilterReadOp::~D4NFilterReadOp()
 
   // A GET lease is held locally; release its token:
   if (const auto& held = source->read_lease; lease && held) {
-    std::ignore = lease->release(nullptr, held->resource, held->holder, held->token);
+    const DoutPrefix prefix(source->driver->ctx(), ceph_subsys_rgw, "D4N GET: ");
+    std::ignore = lease->release(&prefix, held->resource, held->holder, held->token);
     source->read_lease.reset();
   }
 }
@@ -2934,6 +2954,8 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
 
                   return remove_ret;
                 }
+                // Some backends update only stored metadata; keep this attempt in sync.
+                block.cacheObj.hostsList.erase(dpp->get_cct()->_conf->rgw_d4n_local_rgw_address);
               }
 
               hostsListSize = block.cacheObj.hostsList.size();
@@ -3697,6 +3719,30 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
           return head_ret;
         }
 
+        // Clean versioned objects have no latest cache head. A suspended DELETE must
+        // still invalidate their cached null instance before delegating to the backend.
+        if (!block.cacheObj.dirty && !cache_request && !remote_cache_request && !source->have_instance() &&
+            source->get_bucket()->versioned() && !source->get_bucket()->versioning_enabled()) {
+          auto *directory = source->driver->get_block_dir();
+          rgw::d4n::CacheBlock null_head {
+            .cacheObj = {
+              .objName = get_versioned_head_block_name("null", source->get_name()),
+              .bucketName = source->get_bucket()->get_bucket_id()
+            },
+            .blockID = 0,
+            .size = 0
+          };
+          auto found = directory->find(dpp, y, null_head, txn);
+          if (!found) {
+            return found.error();
+          }
+          if (const auto& cached = *found; cached && !cached->cacheObj.dirty) {
+            if (const int ret = directory->del(dpp, y, &null_head, txn); 0 > ret) {
+              return ret;
+            }
+          }
+        }
+
         if (head_ret == 0 && !block.deleteMarker) {
           if (cache_request) {
             return -ENOENT;
@@ -3775,7 +3821,8 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
   // Special case: delete marker created for simple delete in versioned bucket
   if (delete_marker_created) {
     result.delete_marker = true;
-    result.version_id = dm_version;
+    // Suspended versioning exposes the null instance, rather than D4N's internal version.
+    result.version_id = source->get_instance();
     if (!remote_cache_request && dpp->get_cct()->_conf->rgw_d4n_remote_delete_enabled) {
       auto ret = send_remote_delete(dpp, y, objName, version, objDirty, dm_version);
       if (ret < 0) {

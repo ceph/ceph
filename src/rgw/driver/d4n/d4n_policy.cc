@@ -198,7 +198,7 @@ int LFUDAPolicy::init(CephContext* cct, const DoutPrefixProvider* dpp, asio::io_
   target_bytes = cache_capacity * TARGET_WATERMARK;
 
   response<int, int, int, int> resp;
-  static auto obj_callback = [this](
+  auto obj_callback = [this](
           const DoutPrefixProvider* dpp, const std::string& key, const std::string& version, bool deleteMarker, const std::string& bucket_id,
 			    const rgw_obj_key& obj_key, const std::string& instance, optional_yield y, std::string& restore_val) {
     std::string dirty_obj_key = rgw::sal::get_cache_block_prefix(bucket_id, obj_key.name, version);
@@ -213,7 +213,11 @@ int LFUDAPolicy::init(CephContext* cct, const DoutPrefixProvider* dpp, asio::io_
       block.cacheObj.bucketName = bucket_id;
       block.blockID = 0;
       block.size = 0;
-      if (const int ret = blockDir.get(dpp, y, &block, std::nullopt); ret < 0) {
+      // An invalid cached marker must remain restorable after its directory cleanup commits.
+      const bool invalid_marker = deleteMarker && "1" == restore_val;
+      if (const int ret = invalid_marker
+              ? cacheDriver->get_attrs(dpp, key, block.cacheObj.attrs, y)
+              : blockDir.get(dpp, y, &block, std::nullopt); ret < 0) {
         const auto whence = std::source_location::current();
         detail::log_message(dpp, whence, "failed to restore object attributes: {}", ret);
 
@@ -274,7 +278,7 @@ int LFUDAPolicy::init(CephContext* cct, const DoutPrefixProvider* dpp, asio::io_
     }
   };
 
-  static auto block_callback = [this](
+  auto block_callback = [this](
           const DoutPrefixProvider* dpp, const std::string& key, uint64_t offset, uint64_t len, const std::string& version, bool dirty, const rgw_user user, const std::string& bucketName, optional_yield y, std::string& restore_val) {
     update(dpp, key, offset, len, version, dirty, user, bucketName, RefCount::NOOP, y, nullptr, restore_val);
   };
@@ -646,7 +650,15 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
 
     int avgWeight;
     std::string remoteCacheAddress;
-    //FIXME: remoteCacheAddress is getting overriden by a new cache. it should be updates instead.
+    const rgw::d4n::CacheBlock lookup_key {
+      .cacheObj = {.objName = block.cacheObj.objName, .bucketName = block.cacheObj.bucketName},
+      .blockID = block.blockID,
+      .version = block.version,
+      .size = block.size
+    };
+    const auto local_weight = entry.localWeight;
+    const std::string local_addr = dpp->get_cct()->_conf->rgw_d4n_local_rgw_address;
+    bool remote_copy_written = false;
     ret = getMinAvgWeight(dpp, &avgWeight, &remoteCacheAddress, y);
     if (ret < 0) {
       ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): Could not retrieve min average weight." << dendl;
@@ -655,7 +667,7 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
       remoteCacheAddress.clear(); // evict normally without remote put 
     }
 
-    std::string object_name = block.cacheObj.objName; // without version
+    const auto& object_name = lookup_key.cacheObj.objName;
     bufferlist out_bl;
 	rgw::sal::Attrs obj_attrs;
 	int ret = cacheDriver->get(dpp, entry.key, block.blockID, block.size, out_bl, obj_attrs, y);
@@ -668,8 +680,6 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
 	if (obj_attrs.contains(RGW_CACHE_ATTR_VERSION_ID)) {
 	  instance_id = obj_attrs.at(RGW_CACHE_ATTR_VERSION_ID).to_str();
 	}
-
-    bool update_global_weight = true;
 
 	bufferlist bl = obj_attrs[RGW_CACHE_ATTR_INVALID];
 	if (!bl.length()) {
@@ -684,7 +694,6 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
 	  /* The following part takes care of updating the weight (globalWeight) of the block if this is the last copy in a remote setup
 	   * and is pushed out to a remote cache where space is available. */
 	  if (block.cacheObj.hostsList.size() == 1 && *(block.cacheObj.hostsList.begin()) == dpp->get_cct()->_conf->rgw_d4n_local_rgw_address) { // Last copy
-		update_global_weight = false;
 		if (block.globalWeight) {
 		  entry.localWeight += block.globalWeight;
 		  block.globalWeight = 0;
@@ -710,29 +719,52 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
 			  return ret;
 			}
 			ldpp_dout(dpp, 20) << __func__ << "(): " << __LINE__ << ": Sending to remote is done." << dendl;
-			update_global_weight = true;
+                        remote_copy_written = true;
 		  }
 		}
 	  }
     }
 
-	// Only update victim block's global weight if the block wasn't completely evicted; else, delete block from directory
-    if (update_global_weight) {
-      block.globalWeight += entry.localWeight;
-      block.cacheObj.hostsList.clear();
-      block.cacheObj.hostsList.insert(remoteCacheAddress);
-      // TODO: Need to get and then update the host atomically in a remote setup
-      // Update global weight and remove host in one directory::set call
-      if (int ret = blockDir.set(dpp, y, &block, std::nullopt); ret < 0) {
-	ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): " << __LINE__ << ": Failed to update victim block entry in directory." << dendl;
-	return ret;
+    // Re-read ownership on every attempt; preserve replicas and metadata added during remote I/O.
+    const auto update_ownership = [&](const std::optional<rgw::d4n::Transaction> txn) -> int {
+      auto found = blockDir.find(dpp, y, lookup_key, txn);
+      if (!found) {
+        return found.error();
       }
-    } else {
-      if ((ret = blockDir.del(dpp, y, &block, std::nullopt)) < 0) {
-	ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): " << __LINE__ << " Failed to delete victim block." << dendl;
-	return ret;
+      if (!*found) {
+        return 0;
       }
-    } 
+
+      auto& current = **found;
+      const bool owned_locally = 0 != current.cacheObj.hostsList.erase(local_addr);
+      if (remote_copy_written) {
+        current.cacheObj.hostsList.insert(remoteCacheAddress);
+      }
+      if (!owned_locally && !remote_copy_written) {
+        return 0;
+      }
+      if (current.cacheObj.hostsList.empty()) {
+        return blockDir.del(dpp, y, &current, txn);
+      }
+      if (owned_locally) {
+        current.globalWeight += local_weight;
+      }
+      return blockDir.set(dpp, y, &current, txn);
+    };
+
+    const int update_ret = [&] {
+      // Redis reads execute immediately; avoid holding a second pool checkout around them.
+      if (!driver->uses_fdb()) {
+        return update_ownership(std::nullopt);
+      }
+      // Handle FoundationDB unknown_commit: retain local data until directory completion is confirmed.
+      return driver->execute_transaction(dpp, y, [&](rgw::d4n::Transaction& txn) {
+        return update_ownership(txn);
+      });
+    }();
+    if (0 > update_ret) {
+      return update_ret;
+    }
 
     if ((ret = cacheDriver->delete_data(dpp, entry.key, y)) < 0) {
       ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): " << __LINE__ << ": Failed to delete victim block from cache." << dendl;
@@ -1008,9 +1040,8 @@ int LFUDAPolicy::do_delete(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, int 
   // Delete the object's HEAD block directory entries. Regular objects keep their HEAD block only
   // in the directory, so these are cleaned up together with the data
   // block directory entries, before any local cache entry is removed.
-  //  - main HEAD block:    deleted if this is a delete marker OR the entry was tombstoned
-  //  - null HEAD block:    deleted only if tombstoned
-  //  - version HEAD block: deleted whenever present. A concurrent PUT overwrite invalidates the
+  //  - main/null HEAD: deleted only if tombstoned and still referring to this version
+  //  - version HEAD: deleted when it still refers to this version. A concurrent PUT invalidates the
   //    version via invalidate_dirty_object() WITHOUT tombstoning its version-specific HEAD block,
   //    so this must not be gated on the invalid flag - the specific version has been invalidated
   //    (either by the overwrite or by delete_obj) and its HEAD block must go.
@@ -1025,7 +1056,7 @@ int LFUDAPolicy::do_delete(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, int 
     };
 
     int head_ret = blockDir.get(dpp, y, &head_block, txn);
-    if (head_ret == 0 && head_block.invalid) {
+    if (head_ret == 0 && head_block.invalid && e->version == head_block.version) {
       ret = blockDir.del(dpp, y, &head_block, txn);
       if (ret < 0) {
         ldpp_dout(dpp, 0) << "Failed to delete HEAD block for: "
@@ -1047,7 +1078,7 @@ int LFUDAPolicy::do_delete(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, int 
       };
 
       int null_ret = blockDir.get(dpp, y, &null_head, txn);
-      if (null_ret == 0 && null_head.invalid) {
+      if (null_ret == 0 && null_head.invalid && e->version == null_head.version) {
         ret = blockDir.del(dpp, y, &null_head, txn);
         if (ret < 0) {
           ldpp_dout(dpp, 0) << "Failed to delete null HEAD block for: "
@@ -1069,7 +1100,7 @@ int LFUDAPolicy::do_delete(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, int 
     };
 
     int ver_ret = blockDir.get(dpp, y, &ver_head, txn);
-    if (ver_ret == 0) {
+    if (ver_ret == 0 && e->version == ver_head.version) {
       ret = blockDir.del(dpp, y, &ver_head, txn);
       if (ret < 0) {
         ldpp_dout(dpp, 0) << "Failed to delete version-specific HEAD block for: "
@@ -1088,16 +1119,24 @@ int LFUDAPolicy::do_delete(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, int 
     // Delete markers have a HEAD block (in both the directory and the local cache) and no data
     // blocks. Remove the directory entries first, then the local cache and policy entries, so a
     // crash mid-cleanup never leaves an orphaned directory entry.
-    auto result = this->driver->retry_transaction(dpp, y,
+    // Persist cleanup intent before a commit that may succeed without confirmation.
+    if (const int ret = cacheDriver->set_attr(dpp, e->key, RGW_CACHE_ATTR_INVALID, "1", y);
+        0 > ret && -ENOENT != ret) {
+      const auto whence = std::source_location::current();
+      detail::log_message(dpp, whence, "failed to preserve marker cleanup state: {}", ret);
+
+      return ret;
+    }
+
+    const int ret_txn = this->driver->execute_transaction(dpp, y,
         [this, dpp, y, &delete_head_blocks](rgw::d4n::Transaction& txn) -> int {
           return delete_head_blocks(txn);
         });
 
-    if (const int ret_txn = handle_transaction_result(dpp, result, [](const fdb_failure&) {
-          /* FIXME: in case of uncertain, we should skip the error */
-          return 0;
-        }); ret_txn < 0)
+    // Handle FoundationDB unknown_commit: retain the cached marker for cleanup recovery.
+    if (0 > ret_txn) {
       return ret_txn;
+    }
 
     ret = cacheDriver->delete_data(dpp, e->key, y);
     if (ret == 0 || ret == -ENOENT) {
@@ -2171,6 +2210,7 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp, optional_yield y)
 
             std::unique_lock<std::mutex> fail_lock(lfuda_cleaning_lock);
             failed_entries.push_back(*(*e));
+            // An unconfirmed marker cleanup retains its invalid cached HEAD for restart recovery.
             // Note: Entry falls through to erase_dirty_object below
           }
         }
