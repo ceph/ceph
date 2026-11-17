@@ -71,25 +71,12 @@ concept materializable_string_pair_output_range =
 
 namespace detail {
 
-inline auto intervals(select selection)
-{
- // Raw selectors still execute in the ordinary FDB keyspace:
- boost::container::small_vector<select, 1> out;
- auto interval = query::intersection(std::move(selection), query::universal());
-
- if (not query::is_empty(interval)) {
-  out.push_back(std::move(interval));
- }
-
- return out;
-}
-
-template <query::non_interval_expression QueryT>
-inline auto intervals(const QueryT& query)
+template <query::expression QueryT>
+inline auto intervals(QueryT&& selection)
 {
  boost::container::small_vector<select, 1> out;
 
- query::for_each_interval(query, [&out](select interval) {
+ query::for_each_interval(std::forward<QueryT>(selection), [&out](select interval) {
   out.push_back(std::move(interval));
  });
 

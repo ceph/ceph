@@ -15,6 +15,7 @@
 #ifndef CEPH_FDB_BASE_H
  #define CEPH_FDB_BASE_H
 
+#include "key.h"
 #include "transaction_result.h"
 
 // Ceph uses libfmt rather than <format>:
@@ -152,42 +153,6 @@ inline future_value block_until_ready(future_value&& fv);
 } // namespace ceph::libfdb::detail
 
 namespace ceph::libfdb::concepts {
-
-// Note that "stringlikes" are not all "stringview-likes"-- such as when they can be written to:
-template <typename StringViewLikeT>
-concept stringview_convertible =
- std::convertible_to<std::remove_reference_t<StringViewLikeT> const&, std::string_view>;
-
-template <typename KeyViewT>
-concept libfdb_key_view = std::same_as<std::remove_cvref_t<KeyViewT>, std::string_view>;
-
-} // namespace ceph::libfdb::concepts
-
-namespace ceph::libfdb::detail {
-
-constexpr std::string_view libfdb_key_view(const concepts::stringview_convertible auto& key)
-{
- return std::string_view(key);
-}
-
-template <typename KeyT>
-concept libfdb_key_like =
- requires(const KeyT& key) {
-  { libfdb_key_view(key) } -> std::same_as<std::string_view>;
- };
-
-template <libfdb_key_like KeyT>
-constexpr std::string_view as_libfdb_key_view(const KeyT& key)
-{
- return libfdb_key_view(key);
-}
-
-} // namespace ceph::libfdb::detail
-
-namespace ceph::libfdb::concepts {
-
-template <typename KeyT>
-concept libfdb_key = ::ceph::libfdb::detail::libfdb_key_like<KeyT>;
 
 template <typename FnT>
 concept value_invocable =

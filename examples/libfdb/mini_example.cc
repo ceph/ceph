@@ -18,7 +18,7 @@
  *
 */
 
-#include "rgw/fdb/interface.h"
+#include "rgw/fdb/fdb.h"
 
 #include <algorithm>
 #include <concepts>
@@ -207,6 +207,29 @@ try
  }
 
  println("read {} people, some of them are likely nifty", people.size());
+
+ namespace q = lfdb::query;
+ auto selected = q::prefix("example/");
+ q::assign_intersection(selected, q::at_or_after("example/people"));
+ selected &= q::at_or_before("example/people");
+ const auto rows = lfdb::collect<vector<person>>(dbh, std::move(selected));
+ if (1 != rows.size() || "example/people" != rows.front().first || rows.front().second != nifty_people) {
+  throw runtime_error("intersection assignment did not select the stored people");
+ }
+ println("intersection assignment: selected {} key", rows.size());
+
+ q::interval_set visible {q::prefix("example/") | q::prefix("archive/")};
+ visible -= q::prefix("example/private/");
+ visible ^= q::prefix("archive/");
+ visible &= q::at("example/people");
+ q::interval_set excluded {~visible};
+ q::assign_complement(excluded);
+ const auto selected_people = lfdb::collect<vector<person>>(dbh, excluded);
+ if (1 != selected_people.size() || "example/people" != selected_people.front().first ||
+     selected_people.front().second != nifty_people) {
+  throw runtime_error("set operators did not select the stored people");
+ }
+ println("set operators: selected {} key", selected_people.size());
 
  return 0;
 }

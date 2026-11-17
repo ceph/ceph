@@ -40,7 +40,8 @@ make -C examples/libfdb -j8 CEPH_BUILD="$PWD/build"
 
 The program demonstrates ordinary manual completion, owned and borrowed Transactor
 calls, `and_then` composition, central failure reporting, explicit uncertain replay
-of an idempotent replacement, typed application rejection, and a verified round trip:
+of an idempotent replacement, typed application rejection, a verified round trip,
+and range and interval-set assignment:
 
 ```text
 manual commit: confirmed
@@ -51,6 +52,8 @@ composed transaction: stored 2 people
 explicit replay_unknown: replaced 2 people
 application rejection: empty name, no commit submitted
 read 2 people, some of them are likely nifty
+intersection assignment: selected 1 key
+set operators: selected 1 key
 ```
 
 It releases its handles and stops the client network before exiting, including
@@ -821,6 +824,7 @@ singleton keys, and explicit open/closed boundaries.
 | Select everything under one key prefix | `q::prefix(prefix)` | `lfdb::select` | Handles FDB prefix successor rules without hand-built byte bounds. |
 | Select an explicit half-open key interval | `q::between(lower, upper)` | `lfdb::select` | Matches the usual FoundationDB `[lower, upper)` range shape. |
 | Combine or subtract selections | `q::intersection()`, `q::set_union()`, `q::difference()` | query expression or selector | Lets the query compiler normalize intervals before execution. |
+| Tighten an existing single interval | `q::assign_intersection(range, bound)` or `range &= bound` | `lfdb::select&` | Updates the range while retaining unchanged endpoint storage. |
 | Add an explicit conflict check | `lfdb::mark_conflict_read(txn, query)` | `void` | Records transaction correctness dependencies that ordinary operations did not express. |
 | Run several dependent operations atomically | `lfdb::make_transactor(dbh)` | callable transaction runner | Replays retryable transactions while keeping user code explicit. |
 | Publish local output after a replayable transaction | `lfdb::staged(output)` | callback proxy | Prevents retries from applying the same local mutation more than once. |
@@ -898,13 +902,110 @@ at most `N` intervals without allocating container storage and throws
 Interval keys still own strings.
 Geometric predicates such as `is_universal()` ignore execution options.
 
-Union and intersection preserve matching options. When only one operand has
+Union, intersection, and symmetric difference preserve matching options. When only one operand has
 non-default options, those options apply to the result. Conflicting non-default
 options throw `libfdb_exception` with `std::errc::invalid_argument`. Configure the
 operands consistently, or combine unconfigured geometry and apply
 `with_options()` to the result.
 Difference retains its left operand's options; complement retains its operand's
 options.
+
+Use `assign_intersection()` to modify one concrete interval. `operator&=` delegates
+to that same operation; `intersection()` produces a value and `intersects()` tests
+whether the common range is nonempty. These operations describe ranges independently
+of which keys are stored in the database:
+
+```cpp
+namespace q = ceph::libfdb::query;
+
+auto people = q::prefix("person/");
+q::assign_intersection(people, q::at_or_after("person/m"));
+people &= q::before("person/z");
+
+for (const auto& [key, value] : lfdb::scan(txn, people)) {
+  fmt::println("{}: {}", key, value);
+}
+```
+
+Both mutating forms return the first interval by reference and support constant
+evaluation. Lvalue bounds remain unchanged; temporary bounds can donate tighter
+endpoint strings. Unchanged endpoints retain their storage. Aliasing the first
+interval, including `range &= std::move(range)`, is supported. On an exception the
+first interval remains unchanged; an rvalue second operand may have been consumed.
+The usual option-conflict and ordinary-keyspace rules still apply, including empty
+results. Concrete value-producing intersection uses the same mutator on its local
+first operand. This overload accepts concrete intervals; intersections involving
+composite query expressions retain their existing lazy expression interface.
+
+Selection construction can include `rgw/fdb/query.h` directly. Its shared key
+concepts and key adaptation live in `rgw/fdb/key.h`, which uses only standard
+headers. Scalar emptiness and interval-count checks borrow endpoint bytes.
+Selector materialization moves rvalue intervals and copies borrowed intervals.
+
+The full set-operator family delegates to the corresponding named functions:
+
+| Operation | Value function | Value operator | Named mutator | Compound operator |
+|---|---|---|---|---|
+| Intersection | `intersection(a, b)` | `a & b` | `assign_intersection(a, b)` | `a &= b` |
+| Union | `set_union(a, b)` | `a \| b` | `assign_set_union(a, b)` | `a \|= b` |
+| Difference | `difference(a, b)` | `a - b` | `assign_difference(a, b)` | `a -= b` |
+| Symmetric difference | `symmetric_difference(a, b)` | `a ^ b` | `assign_symmetric_difference(a, b)` | `a ^= b` |
+| Complement | `complement(a)` | `~a` | `assign_complement(a)` | C++ has no `~=` |
+
+A single interval cannot hold disconnected results. Use an explicit `interval_set`
+for general mutation; it owns canonical, ordered, nonoverlapping core intervals and
+one set of execution options, including when it is empty:
+
+```cpp
+q::interval_set visible {
+  (q::prefix("object/") | q::prefix("archive/")) - q::prefix("object/private/")};
+visible |= q::prefix("shared/");
+visible -= q::prefix("archive/obsolete/");
+visible &= q::before("shared/z");
+visible ^= q::prefix("shared/temporary/");
+
+for (const auto& [key, value] : lfdb::scan(txn, visible)) {
+  fmt::println("{}: {}", key, value);
+}
+
+auto outside = ~visible;                 // An owning expression for the complement.
+q::assign_complement(visible);           // Replace visible with its complement.
+visible = ~visible;                      // Assign an arbitrary expression back to the set.
+```
+
+The named mutators and compound operators return the destination by reference.
+General set mutation borrows its operands, builds a complete canonical replacement,
+and publishes it by swapping after all throwing work succeeds. On failure the
+destination and borrowed operands stay unchanged. Self-aliasing, including
+`selected ^= std::move(selected)`, is supported. The single-interval `&=` overload
+retains its endpoint-storage reuse; general sets materialize owned endpoint ranges
+for the replacement. These operations support constant evaluation when their
+domain and storage permit it. `with_options(interval_set, options)` retains the
+mutable set type. `compile_intervals()` still exports the existing vector or
+fixed-capacity collection. Core storage exposes const iteration to preserve its
+canonical order; exported collections are independent values.
+Geometric predicates borrow their operands and ignore execution-option conflicts.
+The dynamic pure-core algebra accepts immutable, copy-constructible keys. Fixed-
+capacity export uses preconstructed assignable slots and therefore additionally
+requires assignable interval values; this requirement is checked by its constraints.
+
+As with existing expressions, options apply to each emitted native interval;
+`result_limit` does not become a whole-query row limit. Conflicting options for
+union, intersection, and symmetric difference fail before mutation. Difference
+retains the left options and complement retains the operand's options. Symmetric
+difference selects keys present in exactly one operand. Complement is relative
+to ordinary FDB keyspace, while `selection ^= window` toggles membership inside
+the window and retains selected keys outside it. These meanings differ whenever
+the original selection contains keys outside the window.
+
+Value operators retain the named functions' eager single-interval intersection
+and otherwise lazy, owning expression behavior. An rvalue operand transfers its
+owned state; an lvalue must be copied when constructing an owning expression.
+Prefer compound assignment when a mutable result is what the caller needs.
+The pure algebra has the same operators and `interval::interval_set<Domain>`;
+its complement uses the domain's algebraic universe. Mixed core/FDB operators
+select the FDB adapter when either operand is an FDB interval or configured selection, and
+emission clips to ordinary keyspace and discards empty clipped ranges.
 
 Underneath the friendly selection helpers, libfdb queries are a compiled
 interval algebra. A query expression emits zero or more canonical `lfdb::select`

@@ -23,7 +23,9 @@
 #include <algorithm>
 #include <array>
 #include <compare>
+#include <concepts>
 #include <iterator>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -346,6 +348,148 @@ consteval bool structural_predicates_are_constant_expressions()
 }
 
 static_assert(structural_predicates_are_constant_expressions());
+
+template <typename LhsT, typename RhsT>
+concept intersection_assignable = requires(LhsT&& lhs, RhsT&& rhs) {
+ { lq::assign_intersection(std::forward<LhsT>(lhs), std::forward<RhsT>(rhs)) }
+   -> std::same_as<lq::interval&>;
+};
+
+static_assert(intersection_assignable<lq::interval&, const lq::interval&>);
+static_assert(intersection_assignable<lq::interval&, lq::interval>);
+static_assert(!intersection_assignable<const lq::interval&, lq::interval>);
+static_assert(!intersection_assignable<lq::interval, lq::interval>);
+static_assert(!intersection_assignable<lq::interval&, configured_difference>);
+static_assert([] {
+ auto selection = lq::with_options(lq::prefix("person/"), lq::query_options{.result_limit = 5});
+ lq::assign_intersection(selection, lq::at_or_after("person/m"));
+ selection &= lq::before("person/z");
+ selection &= selection;
+ selection &= std::move(selection);
+ return "person/m" == selection.begin_key && "person/z" == selection.end_key &&
+        selection.begin_inclusive && !selection.end_inclusive && 5 == selection.options.result_limit;
+}());
+
+TEST_CASE("intersection assignment reuses concrete range storage", "[fdb][query][assign]")
+{
+ SECTION("all endpoint combinations agree with independent membership") {
+  const std::array<std::string, 4> endpoints{"", "a", "b", std::string{"\xFF", 1}};
+  std::vector<lq::interval> ranges;
+  for (const auto& lower : endpoints) {
+   for (const auto& upper : endpoints) {
+    for (const bool include_lower : {false, true}) {
+     for (const bool include_upper : {false, true}) {
+      ranges.emplace_back(lower, upper, include_lower, include_upper);
+     }
+    }
+   }
+  }
+
+  for (const auto& lhs : ranges) {
+   for (const auto& rhs : ranges) {
+    auto assigned = lhs;
+    CHECK(std::addressof(assigned) == std::addressof(lq::assign_intersection(assigned, rhs)));
+    auto compound = lhs;
+    CHECK(std::addressof(compound) == std::addressof(compound &= rhs));
+    CHECK(assigned == compound);
+    CHECK(assigned == lq::intersection(lhs, rhs));
+    for (const auto key : {""sv, "a"sv, "aa"sv, "b"sv, "z"sv, "\xFF"sv}) {
+     const bool expected = lq::contains(lhs, key) && lq::contains(rhs, key);
+     CHECK(expected == lq::contains(assigned, key));
+    }
+   }
+  }
+ }
+
+ SECTION("unchanged keys and equal-position inclusion changes keep their buffers") {
+  const std::string lower(256, 'a'), upper(256, 'z');
+  auto selection = lq::closed_between(lower, upper);
+  const auto *begin_buffer = selection.begin_key.data();
+  const auto *end_buffer = selection.end_key.data();
+  selection &= lq::universal();
+  CHECK(begin_buffer == selection.begin_key.data());
+  CHECK(end_buffer == selection.end_key.data());
+  const auto bounds = lq::open_between(lower, upper);
+  selection &= bounds;
+  CHECK(begin_buffer == selection.begin_key.data());
+  CHECK(end_buffer == selection.end_key.data());
+  CHECK_FALSE(selection.begin_inclusive);
+  CHECK_FALSE(selection.end_inclusive);
+  CHECK(lower == bounds.begin_key);
+  CHECK(upper == bounds.end_key);
+ }
+
+ SECTION("borrowed tighter bounds are copied once and the other endpoint survives") {
+  auto selection = lq::between(std::string(256, 'a'), std::string(256, 'z'));
+  const auto bounds = lq::between(std::string(256, 'm'), std::string(256, 'z'));
+  const auto *end_buffer = selection.end_key.data();
+  selection &= bounds;
+  CHECK(bounds.begin_key == selection.begin_key);
+  CHECK(bounds.begin_key.data() != selection.begin_key.data());
+  CHECK(end_buffer == selection.end_key.data());
+ }
+
+ SECTION("temporary bounds donate only their tighter endpoint strings") {
+  auto selection = lq::between(std::string(256, 'a'), std::string(256, 'z'));
+  auto bounds = lq::open_between(std::string(256, 'm'), std::string(256, 'n'));
+  const auto *begin_buffer = bounds.begin_key.data();
+  const auto *end_buffer = bounds.end_key.data();
+  selection &= std::move(bounds);
+  CHECK(begin_buffer == selection.begin_key.data());
+  CHECK(end_buffer == selection.end_key.data());
+  CHECK_FALSE(selection.begin_inclusive);
+  CHECK_FALSE(selection.end_inclusive);
+  const auto original = selection;
+  selection &= selection;
+  selection &= std::move(selection);
+  CHECK(original == selection);
+  CHECK(begin_buffer == selection.begin_key.data());
+  CHECK(end_buffer == selection.end_key.data());
+ }
+
+ SECTION("options survive empty results and conflicts precede mutation") {
+  auto selection = lq::with_options(lq::between("a", "m"), lq::query_options{.result_limit = 3});
+  auto conflicting = lq::with_options(lq::between("b", "c"), lq::query_options{.result_limit = 4});
+  const auto original = selection;
+  const auto original_rhs = conflicting;
+  CHECK_THROWS_AS(selection &= std::move(conflicting), lfdb::libfdb_exception);
+  CHECK(original == selection);
+  CHECK(original_rhs == conflicting);
+  selection &= lq::between("m", "z");
+  CHECK(lq::is_empty(selection));
+  CHECK(3 == selection.options.result_limit);
+  auto unconfigured = lq::universal();
+  unconfigured &= original;
+  CHECK(original == unconfigured);
+ }
+
+ SECTION("public raw endpoints retain ordinary FDB keyspace clamping") {
+  auto selection = lq::between("a", "z");
+  selection.end_key = std::string{"\xFF", 1} + "system";
+  selection.end_inclusive = true;
+  selection &= selection;
+  CHECK("\xFF"sv == selection.end_key);
+  CHECK_FALSE(selection.end_inclusive);
+  CHECK(lq::contains(selection, "z"));
+  CHECK_FALSE(lq::contains(selection, "\xFF"sv));
+ }
+
+ SECTION("generic core adapters may return owning boundaries by value") {
+  struct owning_bounds {
+   using domain_type = lq::byte_string_domain;
+   std::string begin_key, end_key;
+   auto lower() const { return li::boundary<domain_type>::closed(begin_key); }
+   auto upper() const { return li::boundary<domain_type>::open(end_key); }
+  };
+  const auto result = li::intersection(
+      owning_bounds{std::string(256, 'a'), std::string(256, 'n')},
+      owning_bounds{std::string(256, 'm'), std::string(256, 'z')});
+  CHECK(std::string(256, 'm') == result.lower().finite_key());
+  CHECK(std::string(256, 'n') == result.upper().finite_key());
+  CHECK(result.lower().inclusive());
+  CHECK_FALSE(result.upper().inclusive());
+ }
+}
 
 TEST_CASE("generic interval algebra emits canonical intervals", "[fdb][query]")
 {
