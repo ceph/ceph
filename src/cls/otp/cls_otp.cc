@@ -138,6 +138,13 @@ bool otp_instance::verify(const ceph::real_time& timestamp, const string& val)
 {
   uint64_t index;
   uint32_t secs = (uint32_t)ceph::real_clock::to_time_t(timestamp);
+
+  /* parse_seed() refuses an empty seed now, but older objects may carry one */
+  if (otp.seed_bin.length() == 0) {
+    CLS_LOG(20, "otp check failed, empty seed");
+    return false;
+  }
+
   int result = oath_totp_validate2(otp.seed_bin.c_str(), otp.seed_bin.length(),
                                    secs, otp.step_size, otp.time_ofs, otp.window,
                                    nullptr /* otp pos */,
@@ -293,6 +300,19 @@ static int parse_seed(const string& seed, SeedType seed_type, bufferlist *seed_b
   }
   if (result != OATH_OK) {
     CLS_LOG(20, "failed to parse seed");
+    return -EINVAL;
+  }
+
+  /*
+   * oath_base32_decode() skips whitespace and oath_hex2bin() accepts "", so a
+   * seed can decode to zero bytes with OATH_OK. An empty HMAC key yields codes
+   * that depend on the time alone, so such a device must not be stored.
+   */
+  if (slen == 0) {
+    if (need_free) {
+      free(psecret);
+    }
+    CLS_LOG(20, "seed decodes to zero bytes");
     return -EINVAL;
   }
 
