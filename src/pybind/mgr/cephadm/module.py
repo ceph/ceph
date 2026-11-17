@@ -4776,6 +4776,15 @@ Then run the following:
                         f"\nunder the certificate '{svc.cert_name}' within the certmgr store. To set the certificate, use:\n"
                         f"\n  > ceph orch certmgr cert-key set --consumer {spec.service_type} --service-name {spec.service_name()} -i <cert-key-pem-file> \n"
                     )
+            elif svc.SCOPE == TLSObjectScope.GLOBAL:
+                cert_warning += (
+                    f"\n\n\nWarning: SSL is configured with '{CertificateSource.REFERENCE.value}', and this service uses a global certificate.\n\n"
+                    f"To configure the certificate/key, run:\n"
+                    f"  > ceph orch certmgr cert-key set --consumer {spec.service_type} -i <cert-key-pem-file>\n\n"
+                    f"Then run:\n"
+                    f"  > ceph orch reconfig {spec.service_name()}\n"
+                    f"to reconfigure the service with the certificate."
+                )
             else:
                 cert_warning += (
                     f"\n\n\nWarning: SSL is configured with '{CertificateSource.REFERENCE.value}', and this service uses per-host certificates.\n\n"

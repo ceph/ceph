@@ -1532,6 +1532,26 @@ class TestCertMgr(object):
                 "--hostname <host> -i <cert-key-pem-file>") in warning
         assert "certmgr key set" not in warning
 
+    def test_check_cert_source_reference_global_scope_warning(self, cephadm_module: CephadmOrchestrator):
+        """A global-scope service using reference is not told to provision per-host certificates."""
+        from cephadm.services.service_registry import service_registry
+
+        spec = mock.MagicMock()
+        spec.certificate_source = 'reference'
+        spec.service_name.return_value = 'mgmt-gateway'
+        spec.service_type = 'mgmt-gateway'
+        spec.is_using_certificates_source.return_value = True
+
+        svc_mock = mock.MagicMock()
+        svc_mock.SCOPE = TLSObjectScope.GLOBAL
+        with mock.patch.object(service_registry, 'get_service', return_value=svc_mock):
+            warning = cephadm_module._check_cert_source(spec)
+
+        assert "global certificate" in warning
+        assert "per-host" not in warning
+        assert "--hostname" not in warning
+        assert "ceph orch certmgr cert-key set --consumer mgmt-gateway -i <cert-key-pem-file>" in warning
+
     def test_check_cert_source_all_transitions_warn(self, cephadm_module: CephadmOrchestrator):
         """Every cross-source transition should produce a certificate_source warning."""
         import datetime
