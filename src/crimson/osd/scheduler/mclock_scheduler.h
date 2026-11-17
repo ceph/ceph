@@ -73,7 +73,11 @@ class mClockScheduler : public Scheduler, md_config_obs_t {
       seastar::lw_shared_ptr<job_control_t> control) {
       while (!control->stopping) {
 	std::invoke(control->body);
-	co_await control->cv.wait(control->period);
+	try {
+	  co_await control->cv.wait(control->period);
+	} catch (const seastar::condition_variable_timed_out&) {
+	  // The period elapsed; run the next cleaning pass.
+	}
       }
     }
   public:
@@ -86,8 +90,8 @@ class mClockScheduler : public Scheduler, md_config_obs_t {
     }
 
     void try_update(milliseconds _period) {
+      // Called by the cleaning body, before the next wait begins.
       control->period = _period;
-      control->cv.signal();
     }
 
     ~crimson_mclock_cleaning_job_t() {
