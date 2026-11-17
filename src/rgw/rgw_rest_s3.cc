@@ -4379,57 +4379,32 @@ void RGWGetObjAttrs_ObjStore_S3::send_response()
     if (requested_attributes & as_flag(ReqAttributes::ObjectParts)) {
       if (multipart_parts_count && multipart_parts_count > 0) {
 
-	/* XXX the following was needed to see a manifest at list_parts()! */
-	op_ret = s->object->load_obj_state(s, s->yield);
-	if (op_ret < 0) {
-	  ldpp_dout_fmt(this, 0,
-			"ERROR: {} load_obj_state() failed ret={}", __func__,
-			op_ret);
-	}
-
 	ldpp_dout_fmt(this, 16,
 		      "{} attr flags={} parts_count={}",
 		      __func__, requested_attributes, *multipart_parts_count);
 
         s->formatter->open_object_section("ObjectParts");
 
-	bool truncated = false;
-	int next_marker;
-
-	using namespace rgw::sal;
-
-	int ret =
-	  s->object->list_parts(
-            this, s->cct,
-	    max_parts ? *max_parts : 1000,
-	    marker ? *marker : 0,
-	    &next_marker, &truncated,
-	    [&](const Object::Part& part) -> int {
-	      s->formatter->open_object_section("Part");
-	      s->formatter->dump_int("PartNumber", part.part_number);
-	      s->formatter->dump_unsigned("Size", part.part_size);
-	      if (part.cksum.type != rgw::cksum::Type::none) {
-		/* parts always have a non-digest checksum */
-		s->formatter->dump_string(part.cksum.element_name(), part.cksum.to_armor());
-	      }
-	      s->formatter->close_section(); /* Part */
-	      return 0;
-	    }, s->yield);
-
-	if (ret < 0) {
-	  ldpp_dout_fmt(this, 0,
-			"ERROR: {} list-parts failed for {}",
-			__func__, s->object->get_name());
+	for (const auto& part : parts) {
+	  s->formatter->open_object_section("Part");
+	  s->formatter->dump_int("PartNumber", part.part_number);
+	  s->formatter->dump_unsigned("Size", part.part_size);
+	  if (part.cksum.type != rgw::cksum::Type::none) {
+	    /* parts always have a non-digest checksum */
+	    s->formatter->dump_string(part.cksum.element_name(), part.cksum.to_armor());
+	  }
+	  s->formatter->close_section(); /* Part */
 	}
+
 	/* AWS docs disagree on the name of this element */
 	s->formatter->dump_int("PartsCount", *multipart_parts_count);
 	s->formatter->dump_int("TotalPartsCount", *multipart_parts_count);
-	s->formatter->dump_bool("IsTruncated", truncated);
+	s->formatter->dump_bool("IsTruncated", parts_truncated);
 	if (max_parts) {
 	  s->formatter->dump_int("MaxParts", *max_parts);
 	}
-	if(truncated) {
-	  s->formatter->dump_int("NextPartNumberMarker", next_marker);
+	if (parts_truncated) {
+	  s->formatter->dump_int("NextPartNumberMarker", next_part_marker);
 	}
 	if (marker) {
 	  s->formatter->dump_int("PartNumberMarker", *marker);

@@ -1792,6 +1792,9 @@ protected:
   std::optional<int> marker;
   std::optional<int> max_parts;
   uint16_t requested_attributes{0};
+  std::vector<rgw::sal::Object::Part> parts;
+  int next_part_marker{0};
+  bool parts_truncated{false};
 #if 0
   /* used to decrypt attributes for objects stored with SSE-C */
   x-amz-server-side-encryption-customer-algorithm

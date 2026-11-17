@@ -7007,6 +7007,40 @@ void RGWGetObjAttrs::pre_exec()
 void RGWGetObjAttrs::execute(optional_yield y)
 {
   RGWGetObj::execute(y);
+  if (op_ret < 0) {
+    return;
+  }
+
+  if (!(requested_attributes & as_flag(ReqAttributes::ObjectParts)) ||
+      !multipart_parts_count || *multipart_parts_count <= 0) {
+    return;
+  }
+
+  // read the parts here rather than in send_response(): once the status
+  // line is out, a failed read can only be logged, and the client would get
+  // a 200 listing fewer parts than PartsCount with IsTruncated false
+
+  /* XXX the following was needed to see a manifest at list_parts()! */
+  op_ret = s->object->load_obj_state(this, y);
+  if (op_ret < 0) {
+    ldpp_dout_fmt(this, 0, "ERROR: {} load_obj_state() failed ret={}",
+		  __func__, op_ret);
+    return;
+  }
+
+  op_ret = s->object->list_parts(
+    this, s->cct,
+    max_parts ? *max_parts : 1000,
+    marker ? *marker : 0,
+    &next_part_marker, &parts_truncated,
+    [this](const rgw::sal::Object::Part& part) -> int {
+      parts.push_back(part);
+      return 0;
+    }, y);
+  if (op_ret < 0) {
+    ldpp_dout_fmt(this, 0, "ERROR: {} list-parts failed for {} ret={}",
+		  __func__, s->object->get_name(), op_ret);
+  }
 } /* RGWGetObjAttrs::execute */
 
 int RGWGetLC::verify_permission(optional_yield y)
