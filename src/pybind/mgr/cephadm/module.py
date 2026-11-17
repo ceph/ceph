@@ -5373,9 +5373,13 @@ Then run the following:
 
         # trigger the serve loop to initiate the removal
         self._kick_serve_loop()
+        # ceph-volume is not installed on the hosts of a cephadm cluster, so
+        # point at the containerized one. Unlike `ceph orch device zap`, it can
+        # also destroy a DB/WAL LV that lives on a shared device.
         warning_zap = "" if zap else ("\nVG/LV for the OSDs won't be zapped (--zap wasn't passed).\n"
-                                      "Run the `ceph-volume lvm zap` command with `--destroy`"
-                                      " against the VG/LV if you want them to be destroyed.")
+                                      "To destroy them, run a command of the following form on the"
+                                      " OSD's host, listing all of its VG/LVs in one command:\n\n"
+                                      "  cephadm ceph-volume -- lvm zap --destroy <VG/LV> [<VG/LV>...]")
         return f"Scheduled OSD(s) for removal.{warning_zap}"
 
     @handle_orch_error

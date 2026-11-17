@@ -354,7 +354,10 @@ Expected output without ``--zap``:
 
   Scheduled OSD(s) for removal.
   VG/LV for the OSDs won't be zapped (--zap wasn't passed).
-  Run the `ceph-volume lvm zap` command with `--destroy` against the VG/LV if you want them to be destroyed.
+  To destroy them, run a command of the following form on the OSD's host,
+  listing all of its VG/LVs in one command:
+
+    cephadm ceph-volume -- lvm zap --destroy <VG/LV> [<VG/LV>...]
 
 With ``--zap``, only the first line is printed.
 
@@ -453,7 +456,10 @@ Expected output:
 
   Scheduled OSD(s) for removal.
   VG/LV for the OSDs won't be zapped (--zap wasn't passed).
-  Run the `ceph-volume lvm zap` command with `--destroy` against the VG/LV if you want them to be destroyed.
+  To destroy them, run a command of the following form on the OSD's host,
+  listing all of its VG/LVs in one command:
+
+    cephadm ceph-volume -- lvm zap --destroy <VG/LV> [<VG/LV>...]
 
 The message is the same as for a removal without ``--replace``.
 
