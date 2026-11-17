@@ -348,7 +348,6 @@ int main(int argc, char **argv)
         "qfsck, "
         "recovery-compare, "
         "allocmap, "
-        "restore_cfb, "
         "allocator-db, "
         "allocator-file, "
         "repair, "
@@ -495,7 +494,7 @@ int main(int argc, char **argv)
 
   if (action == "fsck" || action == "repair" ||
       action == "quick-fix" || action == "allocmap" ||
-      action == "qfsck" || action == "restore_cfb" ||
+      action == "qfsck" ||
       action == "allocator-file" || action == "allocator-db" ||
       action == "recovery-compare" ||
       action == "revert-wal-to-plain") {
@@ -668,24 +667,6 @@ int main(int argc, char **argv)
            << std::endl;
       exit(EXIT_FAILURE);
     }
-  }
-
-  if (action == "restore_cfb") {
-#ifndef CEPH_BLUESTORE_TOOL_RESTORE_ALLOCATION
-    cerr << action << " bluestore.restore_cfb is not supported!!! " << std::endl;
-    exit(EXIT_FAILURE);
-#else
-    cout << action << " bluestore.restore_cfb" << std::endl;
-    validate_path(cct.get(), path, false);
-    BlueStore bluestore(cct.get(), path);
-    int r = bluestore.push_allocation_to_rocksdb();
-    if (r < 0) {
-      cerr << action << " failed: " << cpp_strerror(r) << std::endl;
-      exit(EXIT_FAILURE);
-    } else {
-      cout << action << " success" << std::endl;
-    }
-#endif
   }
   else if (action == "allocator-db") {
     validate_path(cct.get(), path, false);
