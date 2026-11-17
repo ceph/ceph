@@ -341,7 +341,7 @@ void RGWOp_Ratelimit_Set::execute(optional_yield y)
     ratelimit_info.encode(bl);
     rgw::sal::Attrs attr;
     attr[RGW_ATTR_RATELIMIT] = bl;
-    op_ret = bucket->merge_and_store_attrs(this, attr, y);
+    op_ret = rgw::sal::merge_and_store_attrs(this, bucket.get(), attr, y);
     return;
   }
 

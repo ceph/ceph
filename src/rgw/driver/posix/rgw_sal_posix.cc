@@ -2877,16 +2877,6 @@ if (max <= 0) {
   return 0;
 }
 
-int POSIXBucket::merge_and_store_attrs(const DoutPrefixProvider* dpp,
-					Attrs& new_attrs, optional_yield y)
-{
-  for (auto& it : new_attrs) {
-	  attrs[it.first] = it.second;
-  }
-
-  return write_attrs(dpp, y);
-}
-
 int POSIXBucket::remove(const DoutPrefixProvider* dpp,
 			bool delete_children,
 			optional_yield y)
@@ -3038,17 +3028,21 @@ int POSIXBucket::chown(const DoutPrefixProvider* dpp,
 
 int POSIXBucket::put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time _mtime, optional_yield y)
 {
-  mtime = _mtime;
+  // callers that only update attrs pass a zero mtime to mean "don't set it",
+  // as with the rados backend; don't stamp the bucket directory with the epoch
+  if (!ceph::real_clock::is_zero(_mtime)) {
+    mtime = _mtime;
 
-  struct timespec ts[2];
-  ts[0].tv_nsec = UTIME_OMIT;
-  ts[1] = ceph::real_clock::to_timespec(mtime);
-  int ret = utimensat(dir->get_parent()->get_fd(), get_fname().c_str(), ts, AT_SYMLINK_NOFOLLOW);
-  if (ret < 0) {
-    ret = errno;
-    ldpp_dout(dpp, 0) << "ERROR: could not set mtime on bucket " << get_name() << ": "
-      << cpp_strerror(ret) << dendl;
-    return -ret;
+    struct timespec ts[2];
+    ts[0].tv_nsec = UTIME_OMIT;
+    ts[1] = ceph::real_clock::to_timespec(mtime);
+    int ret = utimensat(dir->get_parent()->get_fd(), get_fname().c_str(), ts, AT_SYMLINK_NOFOLLOW);
+    if (ret < 0) {
+      ret = errno;
+      ldpp_dout(dpp, 0) << "ERROR: could not set mtime on bucket " << get_name() << ": "
+        << cpp_strerror(ret) << dendl;
+      return -ret;
+    }
   }
 
   return write_attrs(dpp, y);
@@ -4475,7 +4469,7 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
     manifest.encode(manifest_bl);
     attrs[RGW_POSIX_ATTR_MANIFEST] = std::move(manifest_bl);
 
-    ret = shadow->merge_and_store_attrs(dpp, attrs, y);
+    ret = rgw::sal::merge_and_store_attrs(dpp, shadow.get(), attrs, y);
     if (ret < 0) {
       return ret;
     }

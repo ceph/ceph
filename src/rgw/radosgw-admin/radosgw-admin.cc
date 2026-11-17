@@ -1287,7 +1287,7 @@ int set_bucket_ratelimit(rgw::sal::Driver* driver, OPT opt_cmd,
   ratelimit_info.encode(bl);
   rgw::sal::Attrs attr;
   attr[RGW_ATTR_RATELIMIT] = bl;
-  r = bucket->merge_and_store_attrs(dpp(), attr, null_yield);
+  r = rgw::sal::merge_and_store_attrs(dpp(), bucket.get(), attr, null_yield);
   if (r < 0) {
     cerr << "ERROR: failed writing bucket instance info: " << cpp_strerror(-r) << std::endl;
     return -r;

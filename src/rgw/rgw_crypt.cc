@@ -1845,7 +1845,7 @@ static int get_sse_s3_bucket_key(req_state *s, optional_yield y,
     for (int count = 0; count < 15; ++count) {
       rgw::sal::Attrs attrs = s->bucket->get_attrs();
       attrs[RGW_ATTR_BUCKET_ENCRYPTION_KEY_ID] = key_id_bl;
-      res = s->bucket->merge_and_store_attrs(s, attrs, s->yield);
+      res = rgw::sal::merge_and_store_attrs(s, s->bucket.get(), attrs, s->yield);
       if (res != -ECANCELED) {
         break;
       }

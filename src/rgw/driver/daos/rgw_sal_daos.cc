@@ -533,17 +533,6 @@ int DaosBucket::check_quota(const DoutPrefixProvider* dpp, RGWQuota& quota,
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
 
-int DaosBucket::merge_and_store_attrs(const DoutPrefixProvider* dpp,
-                                      Attrs& new_attrs, optional_yield y) {
-  ldpp_dout(dpp, 20) << "DEBUG: merge_and_store_attrs, new_attrs=" << new_attrs
-                     << dendl;
-  for (auto& it : new_attrs) {
-    attrs[it.first] = it.second;
-  }
-
-  return put_info(dpp, y, ceph::real_time());
-}
-
 int DaosBucket::try_refresh_info(const DoutPrefixProvider* dpp,
                                  ceph::real_time* pmtime) {
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);

@@ -902,7 +902,7 @@ int update_bucket_logging_sources(const DoutPrefixProvider* dpp, std::unique_ptr
       bufferlist bl;
       ceph::encode(sources, bl);
       attrs.insert(std::make_pair(RGW_ATTR_BUCKET_LOGGING_SOURCES, std::move(bl)));
-      return bucket->merge_and_store_attrs(dpp, attrs, y);
+      return rgw::sal::merge_and_store_attrs(dpp, bucket.get(), attrs, y);
     }
     try {
       source_buckets sources;
@@ -912,7 +912,7 @@ int update_bucket_logging_sources(const DoutPrefixProvider* dpp, std::unique_ptr
         bufferlist bl;
         ceph::encode(sources, bl);
         iter->second = std::move(bl);
-        return bucket->merge_and_store_attrs(dpp, attrs, y);
+        return rgw::sal::merge_and_store_attrs(dpp, bucket.get(), attrs, y);
       }
     } catch (buffer::error& err) {
       ldpp_dout(dpp, 5) << "WARNING: failed to decode logging sources attribute '" << RGW_ATTR_BUCKET_LOGGING_SOURCES
@@ -1014,7 +1014,7 @@ int source_bucket_cleanup(const DoutPrefixProvider* dpp,
       }
       if (remove_attr) {
         attrs.erase(iter);
-        return bucket->merge_and_store_attrs(dpp, attrs, y);
+        return rgw::sal::merge_and_store_attrs(dpp, bucket, attrs, y);
       }
     }
     // nothing to remove or no need to remove

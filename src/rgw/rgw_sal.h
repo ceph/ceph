@@ -1000,9 +1000,6 @@ class Bucket {
     virtual int check_empty(const DoutPrefixProvider* dpp, optional_yield y) = 0;
     /** Check if the given size fits within the quota */
     virtual int check_quota(const DoutPrefixProvider *dpp, RGWQuota& quota, uint64_t obj_size, optional_yield y, bool check_size_only = false) = 0;
-    /** Set the attributes in attrs, leaving any other existing attrs set, and
-     * write them to the backing store; a merge operation */
-    virtual int merge_and_store_attrs(const DoutPrefixProvider* dpp, Attrs& new_attrs, optional_yield y) = 0;
     /** Try to refresh the cached bucket info from the backing store.  Used in
      * read-modify-update loop. */
     virtual int try_refresh_info(const DoutPrefixProvider* dpp, ceph::real_time* pmtime, optional_yield y) = 0;
@@ -1145,6 +1142,13 @@ class Bucket {
     virtual bool operator==(const Bucket& b) const = 0;
     virtual bool operator!=(const Bucket& b) const = 0;
 };
+
+/** Set the attributes in new_attrs on the bucket, leaving any other existing
+ * attrs set, and write the bucket info to the backing store; a merge operation.
+ * This only needs Bucket::get_attrs() and Bucket::put_info(), so it isn't part
+ * of the backend interface. */
+int merge_and_store_attrs(const DoutPrefixProvider* dpp, Bucket* bucket,
+                          const Attrs& new_attrs, optional_yield y);
 
 /**
  * @brief Object abstraction
