@@ -4454,7 +4454,9 @@ void RGWDeleteBucket::execute(optional_yield y)
     return;
   }
 
-  const bool own_bucket = s->penv.site->get_zonegroup().get_id() == s->bucket->get_info().zonegroup;
+  // use equals() like rgw_build_bucket_policies(), so that a bucket instance
+  // with an empty zonegroup id is treated as the master zonegroup's here too
+  const bool own_bucket = s->penv.site->get_zonegroup().equals(s->bucket->get_info().zonegroup);
 
   if (own_bucket) {
     // only if we own the bucket
