@@ -66,6 +66,11 @@ def put_objects(bucket, key_list):
         objs.append((o.key, o.version_id))
     return objs
 
+def index_key_name(key):
+    # bucket index entries escape a leading '_', and that's the name that
+    # 'radosgw-admin bi list --object' filters on
+    return '_' + key if key.startswith('_') else key
+
 def create_unlinked_objects(conn, bucket, key_list):
     # creates an unlinked/unlistable object for each key in key_list
     
@@ -82,7 +87,7 @@ def create_unlinked_objects(conn, bucket, key_list):
                 })
             except Exception as e:
                 log.debug(e)
-            out = exec_cmd(f'radosgw-admin bi list --bucket {bucket.name} --object {key}')
+            out = exec_cmd(f'radosgw-admin bi list --bucket {bucket.name} --object {index_key_name(key)}')
             instance_entries = filter(
                 lambda x: x['type'] == 'instance',
                 json.loads(out.replace(b'\x80', b'0x80')))
