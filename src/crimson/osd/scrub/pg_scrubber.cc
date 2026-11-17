@@ -597,6 +597,15 @@ void PGScrubber::requeue_penalized(
       "PG not registered for scrubbing on this OSD. Won't requeue!", pg);
     return;
   }
+  // The target may have been re-queued behind our back: start_scrub() can
+  // suspend (in reserve_local()), and an interval change followed by
+  // re-activation re-registers the PG and queues fresh targets. Those
+  // targets are already scheduled - do not penalize or requeue them.
+  if (m_scrub_job->get_target(s_or_d).queued) {
+    DEBUGDPP("target already queued (re-registered while suspended). "
+      "Won't requeue!", pg);
+    return;
+  }
   auto& trgt = m_scrub_job->delay_on_failure(s_or_d, cause, scrub_clock_now);
   ceph_assert(!trgt.queued);
   DEBUGDPP("requeuing penalized scrub target: {}, delay_both_targets: {}, cause: {}",
@@ -799,30 +808,39 @@ seastar::future<schedule_result_t> PGScrubber::start_scrub(
   // try to reserve the local OSD resources. If failing: no harm. We will
   // be retried by the OSD later on.
   bool reserved = co_await reserve_local(trgt);
+  // reserve_local() is a suspension point.  If the interval changed while we
+  // were suspended, on_interval_change() has reset the FSM, and
+  // PrimaryActive::exit() has unregistered the job.  If the PG has already
+  // re-activated, the new PrimaryActive has re-registered the job and queued
+  // both targets again.  Either way, the target we popped is no longer ours to
+  // requeue; requeue_penalized() would trip ceph_assert(!trgt.queued).
+  const bool interval_changed =
+    epoch_started < pg.get_same_interval_since();
   if (!reserved) {
     DEBUGDPP("failed to reserve locally", pg);
     clear_queued_or_active();
-    requeue_penalized(
-     s_or_d, delay_both_targets_t::yes, delay_cause_t::local_resources,
-     clock_now);
+    if (!interval_changed) {
+      requeue_penalized(
+        s_or_d, delay_both_targets_t::yes, delay_cause_t::local_resources,
+        clock_now);
+    }
     co_return schedule_result_t::osd_wide_failure;
   }
 
   // Across the suspension point of reserve_local(), the PG interval,
   // peering state, or primary status may have changed.
-  if (epoch_started < pg.get_same_interval_since() ||
-      !pg.is_primary() ||
-      !pg.is_active_clean()) {
+  if (interval_changed || !pg.is_primary() || !pg.is_active_clean()) {
     DEBUGDPP("PG state or interval changed across suspension (started epoch: {}, same_interval_since: {}), aborting reservation",
       pg, epoch_started, pg.get_same_interval_since());
     m_local_osd_resource.reset();
     // see the set_queued_or_active() above reserve_local(): release the
     // claim before requeueing, or requeue_penalized() asserts.
     clear_queued_or_active();
-    if (m_scrub_job->is_registered()) {
+    // Without an interval change the job was not re-registered, so the
+    // target is still ours to requeue (with a penalty).
+    if (!interval_changed && m_scrub_job->is_registered()) {
       requeue_penalized(
-          s_or_d, delay_both_targets_t::yes,
-          (epoch_started < pg.get_same_interval_since() ? delay_cause_t::interval : delay_cause_t::pg_state),
+          s_or_d, delay_both_targets_t::yes, delay_cause_t::pg_state,
           clock_now);
     }
     co_return schedule_result_t::target_specific_failure;
