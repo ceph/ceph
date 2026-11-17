@@ -1681,12 +1681,15 @@ class CephadmServe:
                     # deployment failed the daemon is present and we should handle
                     # this as if the deploy command "succeeded" and mark the daemon
                     # as failed later when we fetch its status
-                    self.mgr.log.error(f'Deployment of {daemon_spec.name()} failed during "systemctl start" command')
+                    self.mgr.log.error(
+                        f'[{daemon_spec.host}] Deployment of {daemon_spec.name()} '
+                        f'failed during "systemctl start" command')
                 elif code:
                     # some other failure earlier in the deploy process. Just raise an exception
                     # the same as we would in _run_cephadm on a nonzero rc
                     raise OrchestratorError(
-                        f'cephadm exited with an error code: {code}, stderr: {err}')
+                        f'cephadm exited with an error code: {code} on host '
+                        f'{daemon_spec.host}, stderr: {err}')
 
                 # refresh daemon state?  (ceph daemon reconfig does not need it)
                 if not reconfig or daemon_spec.daemon_type not in CEPH_TYPES:
@@ -1895,8 +1898,8 @@ class CephadmServe:
 
         await self.mgr.ssh._remote_connection(host, addr)
 
-        self.log.debug(f"_run_cephadm : command = {command}")
-        self.log.debug(f"_run_cephadm : args = {args}")
+        self.log.debug(f"[{host}] _run_cephadm : command = {command}")
+        self.log.debug(f"[{host}] _run_cephadm : args = {args}")
 
         bypass_image = ('agent')
 
@@ -1962,16 +1965,16 @@ class CephadmServe:
         final_args += args
 
         # exec
-        self.log.debug('args: %s' % (' '.join(final_args)))
+        self.log.debug('[%s] args: %s' % (host, ' '.join(final_args)))
         if self.mgr.mode == 'root':
             # agent has cephadm binary as an extra file which is
             # therefore passed over stdin. Even for debug logs it's too much
             if stdin and 'agent' not in str(entity):
                 if isinstance(stdin, bytes):
-                    self.log.debug('stdin: <binary len %d>', len(stdin))
+                    self.log.debug('[%s] stdin: <binary len %d>', host, len(stdin))
                 else:
                     if self.mgr.log_deploy_configuration:
-                        self.log.debug('stdin: %s', stdin)
+                        self.log.debug('[%s] stdin: %s', host, stdin)
 
             # If SSH hardening is enabled, call invoker directly without which python
             if self.mgr.sudo_hardening and self.mgr.invoker_path:
@@ -2041,14 +2044,15 @@ class CephadmServe:
             assert False, 'unsupported mode'
 
         if log_output:
-            self.log.debug(f'code: {code}')
+            self.log.debug(f'[{host}] code: {code}')
             if out:
-                self.log.debug(f'out: {out}')
+                self.log.debug(f'[{host}] out: {out}')
             if err:
-                self.log.debug(f'err: {err}')
+                self.log.debug(f'[{host}] err: {err}')
         if code and not error_ok:
             raise OrchestratorError(
-                f'cephadm exited with an error code: {code}, stderr: {err}')
+                f'cephadm exited with an error code: {code} on host {host}, '
+                f'stderr: {err}')
         return [out], [err], code
 
     async def _get_container_image_info(self, image_name: str) -> ContainerInspectInfo:
