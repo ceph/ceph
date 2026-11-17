@@ -8124,11 +8124,12 @@ TEST_P(DeferredReplayTest, DeferredReplay) {
                               get_type(),
                               get_data_dir(),
                               "store_test_temp_journal");
+  // mount replays the deferred op left pending in DB
+  int replayed = 0;
+  dynamic_cast<BlueStore*>(store.get())->dtr_deferred_replay_track =
+    [&](const bluestore_deferred_transaction_t&) { ++replayed; };
   store->mount();
-  logger = store->get_perf_counters();
-  // mount performs deferred ops replay and submits pending ones,
-  // hence we get a submitted deferred write.
-  ASSERT_EQ(1, logger->get(l_bluestore_submitted_deferred_writes));
+  ASSERT_EQ(1, replayed);
 }
 
 
@@ -8210,26 +8211,29 @@ TEST_P(DeferredReplayTest, DeferredReplayInReadOnly) {
                               get_type(),
                               get_data_dir(),
                               "store_test_temp_journal");
+  // mount_readonly replays the deferred op left pending in DB.
+  // Deferred op isn't removed though - will see that on the next mount.
+  int replayed = 0;
+  dynamic_cast<BlueStore*>(store.get())->dtr_deferred_replay_track =
+    [&](const bluestore_deferred_transaction_t&) { ++replayed; };
   store->mount_readonly();
   logger = store->get_perf_counters();
   // make sure we don't inherit old perf counters from the previous mount
   ASSERT_EQ(0, logger->get(l_bluestore_issued_deferred_writes));
-  // mount_readonly performs deferred ops replay and submits pending ones,
-  // hence we get a submitted deferred write.
-  // Deferred op isn't removed though - will see that on the next mount.
-  ASSERT_EQ(1, logger->get(l_bluestore_submitted_deferred_writes));
+  ASSERT_EQ(1, replayed);
 
   store->umount_readonly();
   store = ObjectStore::create(cct,
                               get_type(),
                               get_data_dir(),
                               "store_test_temp_journal");
+  // preceding mount_readonly left the deferred op pending, although
+  // applied it, so mount replays it once again
+  replayed = 0;
+  dynamic_cast<BlueStore*>(store.get())->dtr_deferred_replay_track =
+    [&](const bluestore_deferred_transaction_t&) { ++replayed; };
   store->mount();
-  logger = store->get_perf_counters();
-  // mount performs deferred ops replay and submits pending ones,
-  // preceding mount_readonly left deferred op pending, although applied it.
-  // Hence we get a submitted deferred write once again.
-  ASSERT_EQ(1, logger->get(l_bluestore_submitted_deferred_writes));
+  ASSERT_EQ(1, replayed);
 }
 
 INSTANTIATE_TEST_SUITE_P(
