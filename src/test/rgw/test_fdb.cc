@@ -2140,6 +2140,73 @@ TEST_CASE("query algebra expressions execute through fdb operations", "[fdb][que
  CHECK(4 == key_count(dbh, select_all));
 }
 
+TEST_CASE("set operators execute canonical selections through native APIs", "[fdb][query][operators]")
+{
+ namespace q = lfdb::query;
+ janitor dbh;
+ constexpr auto prefix = "set-operators";
+ write_monotonic_kvs(dbh, 10, prefix);
+ const auto all = q::between(make_key(0, prefix), make_key(10, prefix));
+ const std::array cells {
+  q::between(make_key(0, prefix), make_key(2, prefix)), q::at(make_key(2, prefix)),
+  q::open_between(make_key(2, prefix), make_key(6, prefix)), q::at(make_key(6, prefix)),
+  q::between(q::open(make_key(6, prefix)), q::open(make_key(10, prefix)))};
+ constexpr std::array atom_for_key {0, 0, 1, 2, 2, 2, 3, 4, 4, 4};
+ const auto make_set = [&](const unsigned mask) {
+  q::interval_set selected;
+  for (unsigned atom = 0; cells.size() > atom; ++atom) {
+   if (0 != (mask & (1u << atom))) {
+    selected |= cells[atom];
+   }
+  }
+  return selected;
+ };
+ const auto expected_rows = [&](const unsigned mask, const bool reverse) {
+  std::vector<string_pair> expected;
+  for (int key = 0; 10 > key; ++key) {
+   if (0 != (mask & (1u << atom_for_key[key]))) {
+    expected.emplace_back(make_key(key, prefix), make_value(key));
+   }
+  }
+  if (reverse) {
+   std::ranges::reverse(expected);
+  }
+  return expected;
+ };
+
+ for (unsigned a = 0; 32 > a; ++a) {
+  const auto b = (13 * a + 7) & 31u;
+  const auto x = make_set(a), y = make_set(b);
+  const std::array selections {q::interval_set{x | y}, q::interval_set{x & y},
+   q::interval_set{x - y}, q::interval_set{x ^ y}, q::interval_set{~x & all}};
+  const std::array masks {a | b, a & b, a & ~b, a ^ b, 31u ^ a};
+  for (unsigned index = 0; selections.size() > index; ++index) {
+   for (const bool reverse : {false, true}) {
+    CAPTURE(a, b, index, reverse);
+    const auto selected = q::with_options(selections[index], q::query_options{
+     .result_limit = 2, .target_bytes = 128, .reverse_order = reverse,
+     .streaming_mode = FDB_STREAMING_MODE_SMALL});
+    const auto expected = expected_rows(masks[index], reverse);
+    std::vector<string_pair> read;
+    CHECK(expected.size() == lfdb::get(dbh, selected, std::back_inserter(read)));
+    CHECK(expected == read);
+    CHECK(expected == lfdb::collect(dbh, selected));
+    CHECK(expected == (lfdb::scan(dbh, selected) | std::ranges::to<std::vector<string_pair>>()));
+    CHECK(expected == (lfdb::blocks(dbh, selected) | std::views::join |
+                       std::ranges::to<std::vector<string_pair>>()));
+   }
+  }
+ }
+
+ const auto erased = make_set(21);
+ auto txn = lfdb::make_transaction(dbh);
+ lfdb::mark_conflict_read(txn, erased);
+ lfdb::mark_conflict_write(txn, erased);
+ REQUIRE(lfdb::commit(txn));
+ lfdb::erase(dbh, erased);
+ CHECK(expected_rows(31u ^ 21u, false) == lfdb::collect(dbh, all));
+}
+
 TEST_CASE("managed range get publishes output only after a successful read", "[fdb][query]")
 {
  janitor dbh;
