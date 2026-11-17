@@ -11,6 +11,7 @@ Ceph supports a RESTful API that is compatible with the basic data access model 
 
    Bucket Policy <bucketpolicy>
    Bucket Logging <bucket_logging>
+   Bucket Inventory <s3_inventory>
    Cloud Transition <cloud-transition>
    Cloud Restore <cloud-restore>
    S3-select <s3select>
@@ -96,6 +97,8 @@ The following table describes the support status for current Amazon S3 functiona
 | **Storage Class**               | Supported       | See :ref:`storage_classes`                       |
 +---------------------------------+-----------------+--------------------------------------------------+
 | **Bucket Logging**              | Supported       |                                                  |
++---------------------------------+-----------------+--------------------------------------------------+
+| **Bucket Inventory**            | Partial         | Parquet only, see :doc:`s3_inventory`            |
 +---------------------------------+-----------------+--------------------------------------------------+
 | **Object Ownership**            | Supported       |                                                  |
 +---------------------------------+-----------------+--------------------------------------------------+
