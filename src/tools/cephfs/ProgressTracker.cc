@@ -147,7 +147,7 @@ ProgressTracker::get_progress_status(const float progress) const
                               : "calculating";
 
     return fmt::format(
-        "{}/{} objects ({:.2f}%%), ETA: {}", current_processed,
+        "{}/{} objects ({:.2f}%), ETA: {}", current_processed,
         current_total, progress, eta_str);
   } else {
     return fmt::format("{} objects", current_processed);
