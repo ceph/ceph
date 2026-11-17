@@ -1,12 +1,13 @@
 import { NO_ERRORS_SCHEMA, signal } from '@angular/core';
 import { ComponentFixture, fakeAsync, flush, TestBed, tick } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
-import { asyncScheduler, defer, of, throwError } from 'rxjs';
+import { asyncScheduler, defer, of, Subject, throwError } from 'rxjs';
 import { observeOn } from 'rxjs/operators';
 
 import { CephfsAddMirroringPathComponent } from './cephfs-add-mirroring-path.component';
 import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { CephfsSnapshotScheduleService } from '~/app/shared/api/cephfs-snapshot-schedule.service';
+import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
@@ -16,6 +17,7 @@ describe('CephfsAddMirroringPathComponent', () => {
   let fixture: ComponentFixture<CephfsAddMirroringPathComponent>;
   let routerNavigateSpy: jest.Mock;
   let routerNavigateByUrlSpy: jest.Mock;
+  let updateCompleted$: Subject<void>;
 
   const cephfsServiceMock = {
     addMirrorDirectory: jest.fn()
@@ -23,6 +25,12 @@ describe('CephfsAddMirroringPathComponent', () => {
 
   const snapshotScheduleServiceMock = {
     create: jest.fn()
+  };
+
+  const mgrModuleServiceMock = {
+    list: jest.fn(),
+    updateModuleState: jest.fn(),
+    updateCompleted$: undefined as Subject<void> | undefined
   };
 
   const taskWrapperMock = {
@@ -37,6 +45,9 @@ describe('CephfsAddMirroringPathComponent', () => {
     jest.clearAllMocks();
     routerNavigateSpy = jest.fn();
     routerNavigateByUrlSpy = jest.fn();
+    updateCompleted$ = new Subject<void>();
+    mgrModuleServiceMock.updateCompleted$ = updateCompleted$;
+    mgrModuleServiceMock.list.mockReturnValue(of([{ name: 'snap_schedule', enabled: false }]));
 
     await TestBed.configureTestingModule({
       declarations: [CephfsAddMirroringPathComponent],
@@ -59,6 +70,7 @@ describe('CephfsAddMirroringPathComponent', () => {
         },
         { provide: CephfsService, useValue: cephfsServiceMock },
         { provide: CephfsSnapshotScheduleService, useValue: snapshotScheduleServiceMock },
+        { provide: MgrModuleService, useValue: mgrModuleServiceMock },
         { provide: TaskWrapperService, useValue: taskWrapperMock },
         { provide: NotificationService, useValue: notificationServiceMock }
       ],
@@ -71,6 +83,11 @@ describe('CephfsAddMirroringPathComponent', () => {
 
     fixture = TestBed.createComponent(CephfsAddMirroringPathComponent);
     component = fixture.componentInstance;
+  });
+
+  afterEach(() => {
+    updateCompleted$.complete();
+    fixture.destroy();
   });
 
   it('should create', () => {
@@ -277,6 +294,7 @@ describe('CephfsAddMirroringPathComponent', () => {
         },
         { provide: CephfsService, useValue: cephfsServiceMock },
         { provide: CephfsSnapshotScheduleService, useValue: snapshotScheduleServiceMock },
+        { provide: MgrModuleService, useValue: mgrModuleServiceMock },
         { provide: TaskWrapperService, useValue: taskWrapperMock },
         { provide: NotificationService, useValue: notificationServiceMock }
       ],
@@ -292,5 +310,79 @@ describe('CephfsAddMirroringPathComponent', () => {
 
     expect(decodedFixture.componentInstance.fsName).toBe('my fs');
     expect(decodedFixture.componentInstance.fsId).toBe(2);
+  });
+
+  it('should skip snapshot schedule creation when snap_schedule module is disabled', fakeAsync(() => {
+    component.ngOnInit();
+    mockValidPathsStep({
+      getSubmitPaths: () => ({ toAdd: ['/volumes/g1/sv1'], alreadyMirrored: [] })
+    });
+    component.snapScheduleModuleStatus$.next(false);
+
+    cephfsServiceMock.addMirrorDirectory.mockReturnValue(of({}));
+
+    component.onSubmit();
+    tick();
+    flush();
+
+    expect(cephfsServiceMock.addMirrorDirectory).toHaveBeenCalledWith('testfs', '/volumes/g1/sv1');
+    expect(snapshotScheduleServiceMock.create).not.toHaveBeenCalled();
+    expect(routerNavigateSpy).toHaveBeenCalledWith(
+      ['/cephfs/mirroring', { outlets: { modal: null } }],
+      { state: { reload: true } }
+    );
+  }));
+
+  it('should create snapshot schedules when snap_schedule module is enabled', fakeAsync(() => {
+    component.ngOnInit();
+    mockValidPathsStep({
+      getSubmitPaths: () => ({ toAdd: ['/volumes/g1/sv1'], alreadyMirrored: [] })
+    });
+    component.snapScheduleModuleStatus$.next(true);
+
+    cephfsServiceMock.addMirrorDirectory.mockReturnValue(of({}));
+
+    component.onSubmit();
+    tick();
+    flush();
+
+    expect(snapshotScheduleServiceMock.create).toHaveBeenCalledWith({
+      path: '/volumes/g1/sv1',
+      fs: 'testfs'
+    });
+  }));
+
+  it('should report schedule step valid when snap_schedule module is disabled', () => {
+    component.snapScheduleModuleStatus$.next(false);
+
+    expect(component.scheduleStepValid).toBe(true);
+  });
+
+  it('should defer schedule step validity to the form when module is enabled', () => {
+    component.snapScheduleModuleStatus$.next(true);
+
+    expect(component.scheduleStepValid).toBeNull();
+  });
+
+  it('should enable snap_schedule module when enableSnapshotSchedule is called', () => {
+    component.enableSnapshotSchedule();
+
+    expect(mgrModuleServiceMock.updateModuleState).toHaveBeenCalledWith(
+      'snap_schedule',
+      false,
+      null,
+      '',
+      expect.any(String)
+    );
+  });
+
+  it('should refresh snap_schedule module status after module update completes', () => {
+    component.ngOnInit();
+    expect(component.snapScheduleModuleStatus$.value).toBe(false);
+
+    mgrModuleServiceMock.list.mockReturnValue(of([{ name: 'snap_schedule', enabled: true }]));
+    updateCompleted$.next();
+
+    expect(component.snapScheduleModuleStatus$.value).toBe(true);
   });
 });
