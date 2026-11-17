@@ -12,7 +12,8 @@
 class Dentry : public LRUObject {
 public:
   explicit Dentry(Dir *_dir, const std::string &_name) :
-    dir(_dir), name(_name), inode_xlist_link(this)
+    dir(_dir), name(_name), client(_dir->parent_inode->client),
+    inode_xlist_link(this)
   {
     auto r = dir->dentries.insert(make_pair(name, this));
     ceph_assert(r.second);
@@ -28,12 +29,14 @@ public:
    * ref >1 -> pinned in lru
    */
   void get() {
+    assert_client_locked();
     ceph_assert(ref > 0);
     if (++ref == 2)
       lru_pin();
     //cout << "dentry.get on " << this << " " << name << " now " << ref << std::endl;
   }
   void put() {
+    assert_client_locked();
     ceph_assert(ref > 0);
     if (--ref == 1)
       lru_unpin();
@@ -110,7 +113,13 @@ public:
   bool is_renaming = false;
 
 private:
+  // ref and the LRU pin are protected by client_lock. Kept here
+  // rather than reached through dir, which detach() clears before
+  // the final put().
+  [[maybe_unused]] Client *client;
   xlist<Dentry *>::item inode_xlist_link;
+
+  void assert_client_locked() const;
 };
 
 #endif

@@ -4,12 +4,18 @@
 #include "include/types.h"
 #include "include/utime.h"
 
+#include "Client.h"
 #include "Dentry.h"
 #include "Dir.h"
 #include "Inode.h"
 
 #include "common/Formatter.h"
 #include "common/strescape.h"
+
+void Dentry::assert_client_locked() const
+{
+  ceph_assert(ceph_mutex_is_locked_by_me(client->client_lock));
+}
 
 void Dentry::dump(Formatter *f) const
 {

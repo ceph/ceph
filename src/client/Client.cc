@@ -8222,7 +8222,11 @@ int Client::walk(std::string_view path, walk_dentry_result* wdr, const UserPerm&
   ldout(cct, 10) << __func__ << ": " << path << dendl;
 
   std::scoped_lock lock(client_lock);
-  return path_walk(cwd, path, wdr, perms, {.followsym = followsym});
+  int r = path_walk(cwd, path, wdr, perms, {.followsym = followsym});
+  // Callers cannot take client_lock, so drop the dentry pin here rather
+  // than handing it to them.
+  wdr->dn.reset();
+  return r;
 }
 
 int Client::path_walk(InodeRef dirinode, const filepath& origpath, InodeRef *end, const UserPerm& perms, const PathWalk_ExtraOptions& extra_options)
