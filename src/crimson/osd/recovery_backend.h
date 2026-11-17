@@ -273,6 +273,9 @@ public:
     void repeat_pull() {
       ceph_assert(pulled);
       pulled->set_exception(crimson::ct_error::eagain::exception_ptr());
+      // Drop the failed promise so the retry's wait_for_pull() creates a
+      // fresh one instead of getting the already-failed future back.
+      pulled.reset();
     }
     bool is_pulling() const {
       return (bool)pulled;
