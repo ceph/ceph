@@ -3283,12 +3283,36 @@ RGWCoroutine *RGWBackupDataSyncModule::remove_object(const DoutPrefixProvider *d
 {
   ldout(sc->cct, 0) << "SYNC_BACKUP: remove_object: b=" << sync_pipe.info.source_bs.bucket << " k=" << key << " mtime=" << mtime
 	                            << " versioned=" << versioned << " versioned_epoch=" << versioned_epoch << dendl;
-  // TAMARA
   auto sync_env = sc->env;
+  /* never reuse the source's version id as the marker id: for UNLINK_INSTANCE that id names the
+   * copy we're retaining, and cls_rgw would rewrite it in place as a delete marker and unlink it.
+   * clearing it makes delete_obj() generate a fresh marker instance instead. */
+  rgw_obj_key marker_key = key;
+  marker_key.instance.clear();
+  /* for UNLINK_INSTANCE (versioned) the bilog timestamp is the removed instance's own mtime --
+   * cls_rgw logs it as having "no real meaning in instance removal context" -- not the time of
+   * the delete. passing it would arm del_if_older, which then compares it against whatever the
+   * olh currently resolves to, and silently skips the marker whenever a newer version exists.
+   * a null timestamp drops that guard and lets delete_obj() stamp the marker with its own now.
+   * CLS_RGW_OP_DEL does log a real delete time, so keep the guard there. */
+  real_time *pmtime = versioned ? nullptr : &mtime;
+  /* a version-specific delete should only move our head if the version it removed was the head.
+   * the source's bilog cannot tell those apart, so hand the version id down and let the olh
+   * decide. CLS_RGW_OP_DEL needs no such check -- the source dropped its only copy, so the head
+   * always becomes the marker, which olh_epoch=0 gets us by making cls_rgw stamp a fresh local
+   * now_epoch (beating the epoch sync_object() forced onto the olh when it fetched the object).
+   * for UNLINK_INSTANCE pass the source's epoch down: the olh of a versioned source's object
+   * carries source epochs, see create_delete_marker() below. */
+  std::optional<rgw_obj_key> promote_if_head;
+  uint64_t olh_epoch = 0;
+  if (versioned) {
+    promote_if_head = key;
+    olh_epoch = versioned_epoch;
+  }
   return new RGWRemoveObjCR(sync_env->dpp, sync_env->async_rados, sync_env->driver, sc->source_zone,
-                            sync_pipe, key, true, versioned_epoch,
-                            &owner.id, &owner.display_name, true, &mtime, zones_trace);
-// const rgw_obj_key& _key, bool _versioned, uint64_t _versioned_epoch, std::string *_owner, std::string *_owner_display_name, bool _delete_marker, real_time *_timestamp,
+                            sync_pipe, marker_key, true, olh_epoch,
+                            &owner.id, &owner.display_name, true, pmtime, zones_trace,
+                            promote_if_head);
 }
 
 RGWCoroutine *RGWBackupDataSyncModule::create_delete_marker(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, real_time& mtime,
@@ -3297,8 +3321,13 @@ RGWCoroutine *RGWBackupDataSyncModule::create_delete_marker(const DoutPrefixProv
   ldout(sc->cct, 0) << "SYNC_BACKUP: create_delete_marker: b=" << sync_pipe.info.source_bs.bucket << " k=" << key << " mtime=" << mtime
 	                            << " versioned=" << versioned << " versioned_epoch=" << versioned_epoch << dendl;
   auto sync_env = sc->env;
+  /* a versioned source's data versions keep their source olh epoch here, so the marker must use
+   * the source's epoch too: a locally stamped now_epoch is later than any version the source
+   * wrote before we synced the marker, and that version would never become current. without a
+   * source epoch, olh_epoch=0 lets the backup zone stamp its own, see remove_object() above */
+  uint64_t olh_epoch = versioned ? versioned_epoch : 0;
   return new RGWRemoveObjCR(sync_env->dpp, sync_env->async_rados, sync_env->driver, sc->source_zone,
-                            sync_pipe, key, versioned, versioned_epoch,
+                            sync_pipe, key, versioned, olh_epoch,
                             &owner.id, &owner.display_name, true, &mtime, zones_trace);
 }
 
