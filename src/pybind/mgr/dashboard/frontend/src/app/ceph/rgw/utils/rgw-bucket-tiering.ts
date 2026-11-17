@@ -94,9 +94,39 @@ export class BucketTieringUtils {
     return cloudProps;
   }
 
-  static getZoneInfoHelper(zones: Zone[], selectedStorageClass: Partial<StorageClassDetails>) {
+  /**
+   * Returns the names of the zones that are members of the given zonegroup.
+   * Returns undefined when the zonegroup cannot be found.
+   */
+  static getZonegroupZoneNames(
+    zonegroups: ZoneGroup[],
+    zonegroupName: string
+  ): string[] | undefined {
+    const zonegroup = zonegroups?.find((zg) => zg.name === zonegroupName);
+    if (!zonegroup) {
+      return undefined;
+    }
+    // The API returns zone objects although the model declares plain names.
+    return (zonegroup.zones || []).map((zone: string | { name: string }) =>
+      typeof zone === 'string' ? zone : zone?.name
+    );
+  }
+
+  /**
+   * Finds the zone holding the selected placement target / storage class pair.
+   * When `zonegroupZoneNames` is given, only zones that are members of the selected
+   * zonegroup are considered, so identical pairs in other zonegroups are ignored.
+   */
+  static getZoneInfoHelper(
+    zones: Zone[],
+    selectedStorageClass: Partial<StorageClassDetails>,
+    zonegroupZoneNames?: string[]
+  ) {
     if (zones && zones.length > 0 && selectedStorageClass) {
-      const zoneFound = zones.find((zone) =>
+      const candidateZones = zonegroupZoneNames
+        ? zones.filter((zone) => zonegroupZoneNames.includes(zone.name))
+        : zones;
+      const zoneFound = candidateZones.find((zone) =>
         zone.placement_pools.some(
           (placement) =>
             placement.key === selectedStorageClass?.placement_target &&

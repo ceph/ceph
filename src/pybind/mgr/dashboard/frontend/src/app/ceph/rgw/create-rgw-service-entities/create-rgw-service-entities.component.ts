@@ -87,7 +87,7 @@ export class CreateRgwServiceEntitiesComponent extends CdForm implements OnInit 
           .toPromise()
           .then(() => {
             this.rgwZoneService
-              .create(this.zone, this.zonegroup, true, true, this.zone.endpoints)
+              .create(this.zone, this.zonegroup, true, true, this.zone.endpoints, this.realm.name)
               .toPromise()
               .then(() => {
                 this.notificationService.show(
