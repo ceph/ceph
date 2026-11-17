@@ -43,15 +43,8 @@ function wait_for_log() {
 }
 
 function wait_for_pid_exit() {
-    local pidfile=$1
+    local pid=$1
     local timeout=${2:-30}
-    local pid
-
-    test -s "$pidfile" || {
-        echo "missing pid file: $pidfile"
-        return 1
-    }
-    pid=$(cat "$pidfile")
 
     for ((i=0; i < timeout; i++)); do
         if ! kill -0 "$pid" 2>/dev/null ; then
@@ -60,7 +53,7 @@ function wait_for_pid_exit() {
         sleep 1
     done
 
-    echo "process $pid from $pidfile did not exit"
+    echo "process $pid did not exit"
     return 1
 }
 
@@ -77,6 +70,11 @@ function TEST_mon_dispatch_watchdog_aborts_stalled_dispatch() {
         --heartbeat-interval=1 \
         --mon-dispatch-watchdog-timeout=2 || return 1
 
+    # The fatal signal handler removes the pid file before exiting.
+    local mon_pid
+    mon_pid=$(cat "$mon_pidfile") || return 1
+    test -n "$mon_pid" || return 1
+
     ceph ping mon.a || return 1
     ceph tell mon.a injectargs -- --mon-inject-dispatch-delay=10 || return 1
 
@@ -87,7 +85,7 @@ function TEST_mon_dispatch_watchdog_aborts_stalled_dispatch() {
 
     wait_for_log "$mon_log" "injecting monitor dispatch delay" 15 || return 1
     wait_for_log "$mon_log" "had suicide timed out" 15 || return 1
-    wait_for_pid_exit "$mon_pidfile" 15 || return 1
+    wait_for_pid_exit "$mon_pid" 15 || return 1
 }
 
 main mon-dispatch-watchdog "$@"
