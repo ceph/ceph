@@ -884,10 +884,59 @@ int RGWAsyncRemoveObj::_send_request(const DoutPrefixProvider *dpp)
 {
   ldpp_dout(dpp, 0) << __func__ << "(): deleting obj=" << obj << dendl;
 
+  /* The source's bilog logs an identical CLS_RGW_OP_UNLINK_INSTANCE no matter which version was
+   * removed, so a backup zone has to work out what to do from its own index. Do that before
+   * loading state, since it can redirect us at a different object. */
+  if (promote_if_head) {
+    /* the source's epoch for this removal, or 0 if it has none. The olh of a versioned source's
+     * object carries source epochs, so anything we link must use the source's timeline too: a
+     * locally stamped now_epoch would outrank versions the source wrote before we got here. */
+    const uint64_t source_epoch = versioned_epoch;
+    rgw_obj target_obj(bucket->get_key(), *promote_if_head);
+    rgw_bucket_dir_entry dirent;
+    int r = store->getRados()->bi_get_instance(dpp, bucket->get_info(), target_obj, &dirent,
+                                               null_yield);
+    if (r >= 0 && dirent.is_delete_marker()) {
+      /* The source removed a delete marker. Replicate that literally instead of stacking
+       * another marker on top: a tombstone holds no user data, so dropping ours costs nothing
+       * and lets cls_rgw relink the olh to the previous version, restoring the object exactly
+       * as the source did. Pointing obj at the instance, with marker_version_id left empty,
+       * makes delete_obj() take the unlink_obj_instance() path. */
+      obj = bucket->get_object(*promote_if_head);
+      versioned_epoch = source_epoch;
+      ldpp_dout(dpp, 20) << __func__ << "(): removing delete marker " << *promote_if_head
+                         << ", olh falls back to the previous version" << dendl;
+    } else {
+      /* A data version. Record a delete marker, promoted to head only if the version being
+       * removed is itself the head: the source's epoch of the removal is later than the head's
+       * (and epoch 0 lets cls_rgw stamp a fresh now_epoch), so the marker wins; epoch 1 always
+       * loses to the olh's epoch and leaves it pointing where it is. */
+      RGWOLHInfo olh;
+      int r2 = store->getRados()->get_olh(dpp, bucket->get_info(), obj->get_obj(), &olh,
+                                          null_yield);
+      if (r2 < 0 && r2 != -ENOENT) {
+        ldpp_dout(dpp, 4) << __func__ << "(): get_olh() obj=" << obj << " returned r=" << r2
+                          << ", treating removed version as non-head" << dendl;
+      }
+      const bool is_head = (r2 >= 0 && !olh.removed &&
+                            olh.target.key.instance == promote_if_head->instance);
+      versioned_epoch = (is_head ? source_epoch : 1);
+      ldpp_dout(dpp, 20) << __func__ << "(): removing " << (is_head ? "head" : "non-head")
+                         << " version " << *promote_if_head << " of obj=" << obj
+                         << ", olh_epoch=" << versioned_epoch << dendl;
+    }
+  }
+
   obj->set_atomic(true);
 
   int ret = obj->load_obj_state(dpp, null_yield);
-  if (ret < 0) {
+  if (ret == -ENOENT && promote_if_head) {
+    /* follow_olh() reports a current delete marker as ENOENT. A backup zone still has to record
+     * the removal, so carry on with empty state -- del_if_older is off for these ops, so the
+     * mtime guard below never consults it. */
+    ldpp_dout(dpp, 20) << __func__ << "(): no current version for obj=" << obj
+                       << " (delete marker is current), continuing" << dendl;
+  } else if (ret < 0) {
     ldpp_dout(dpp, 20) << __func__ << "(): load_obj_state() obj=" << obj << " returned ret=" << ret << dendl;
     return ret;
   }
