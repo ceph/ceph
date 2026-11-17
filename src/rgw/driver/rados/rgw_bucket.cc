@@ -716,7 +716,11 @@ static int check_index_olh(rgw::sal::RadosStore* const rados_store,
         continue;
       }
       if (op_state.will_fix_index()) {
-        rgw_obj obj(bucket->get_key(), olh_entry.key.name);
+        // olh_entry.key is in index form, which escapes a leading '_'.
+        // the olh itself has no instance
+        rgw_obj_key key(olh_entry.key);
+        key.instance.clear();
+        rgw_obj obj(bucket->get_key(), key);
         if (olh_entry.pending_log.empty()) {
           ret = store->clear_olh(dpp, obj_ctx, obj, bucket->get_info(), olh_entry.tag, olh_entry.epoch, y);
           if (ret < 0) {
@@ -724,7 +728,7 @@ static int check_index_olh(rgw::sal::RadosStore* const rados_store,
             continue;
           }
         } else {
-          std::unique_ptr<rgw::sal::Object> object = bucket->get_object({olh_entry.key.name});
+          std::unique_ptr<rgw::sal::Object> object = bucket->get_object(key);
           ret = object->load_obj_state(dpp, y, false);
           if (ret < 0) {
             ldpp_dout(dpp, -1) << "ERROR failed to load state for: " << olh_entry.key.name << " load_obj_state(): " << cpp_strerror(-ret) << dendl;
@@ -958,7 +962,7 @@ static int check_index_unlinked(rgw::sal::RadosStore* const rados_store,
         continue;
       }
       if (op_state.will_fix_index()) {
-        rgw_obj_key key(dir_entry.key.name, dir_entry.key.instance);
+        rgw_obj_key key(dir_entry.key);
         ret = rgw_remove_object(dpp, rados_store, bucket, key, y);
         if (ret < 0) {
           ldpp_dout(dpp, -1) << "ERROR rgw_remove_obj(key='" <<
