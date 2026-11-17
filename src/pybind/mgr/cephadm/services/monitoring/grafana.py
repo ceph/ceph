@@ -162,7 +162,9 @@ class GrafanaService(CephadmService):
             raise OrchestratorError(
                 f'Cannot get the TLS certificate/key needed to deploy Grafana on {daemon_spec.host} '
                 f'(certificate_source: {getattr(svc_spec, "certificate_source", None)}). '
-                f'Check the certificates with "ceph orch certmgr cert check".',
+                f'Check that a certificate/key pair is registered for this host with '
+                f'"ceph orch certmgr cert ls", or set one with '
+                f'"ceph orch certmgr cert-key set grafana --hostname {daemon_spec.host} -i <cert-key-pem-file>".',
                 event_kind_subject=('daemon', daemon_spec.name()),
             )
 
