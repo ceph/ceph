@@ -258,6 +258,7 @@ describe('PoolListComponent', () => {
     const testMethod = (value: string, expected: string) =>
       expect(component.getPgStatusCellClass('', '', value)).toEqual({
         'text-right': true,
+        'pool-pg-status-col': true,
         [expected]: true
       });
 
@@ -504,6 +505,78 @@ describe('PoolListComponent', () => {
       component.monAllowPoolDelete$.next(false);
       component.enablePoolDeletion();
       expect(component.monAllowPoolDelete$.value).toBe(false);
+    });
+  });
+
+  describe('internal dot pools filtering', () => {
+    beforeEach(() => {
+      localStorage.removeItem('dashboard_show_internal_pools');
+      component.showInternalPools = false;
+      component.allPools = [
+        Mocks.getPool('.mgr', 0),
+        Mocks.getPool('test-ec', 1),
+        Mocks.getPool('.rgw.root', 2),
+        Mocks.getPool('test-replica', 3)
+      ];
+    });
+
+    afterEach(() => {
+      localStorage.removeItem('dashboard_show_internal_pools');
+    });
+
+    it('should hide dot pools by default when showInternalPools is false', () => {
+      component.showInternalPools = false;
+      component.filterPools();
+
+      expect(component.pools.length).toBe(2);
+      expect(component.pools.map((p) => p.pool_name)).toEqual(['test-ec', 'test-replica']);
+    });
+
+    it('should show all pools in original order when showInternalPools is true', () => {
+      component.showInternalPools = true;
+      component.filterPools();
+
+      expect(component.pools.length).toBe(4);
+      expect(component.pools.map((p) => p.pool_name)).toEqual([
+        '.mgr',
+        'test-ec',
+        '.rgw.root',
+        'test-replica'
+      ]);
+    });
+
+    it('should toggle internal pools visibility when onToggleInternalPools is called', () => {
+      expect(component.showInternalPools).toBe(false);
+
+      component.onToggleInternalPools(true);
+      expect(component.showInternalPools).toBe(true);
+      expect(component.pools.length).toBe(4);
+      expect(component.pools.map((p) => p.pool_name)).toEqual([
+        '.mgr',
+        'test-ec',
+        '.rgw.root',
+        'test-replica'
+      ]);
+
+      component.onToggleInternalPools(false);
+      expect(component.showInternalPools).toBe(false);
+      expect(component.pools.length).toBe(2);
+      expect(component.pools.map((p) => p.pool_name)).toEqual(['test-ec', 'test-replica']);
+    });
+
+    it('should persist showInternalPools to localStorage when toggled', () => {
+      component.onToggleInternalPools(true);
+      expect(localStorage.getItem('dashboard_show_internal_pools')).toBe('true');
+
+      component.onToggleInternalPools(false);
+      expect(localStorage.getItem('dashboard_show_internal_pools')).toBe('false');
+    });
+
+    it('should load initial showInternalPools value from localStorage', () => {
+      localStorage.setItem('dashboard_show_internal_pools', 'true');
+      const newFixture = TestBed.createComponent(PoolListComponent);
+      const newComponent = newFixture.componentInstance;
+      expect(newComponent.showInternalPools).toBe(true);
     });
   });
 });

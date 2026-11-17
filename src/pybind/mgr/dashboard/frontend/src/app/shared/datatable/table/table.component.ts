@@ -104,6 +104,7 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
 
   @ContentChild(TableDetailDirective) rowDetail!: TableDetailDirective;
   @ContentChild(TableActionsComponent) tableActions!: TableActionsComponent;
+  @ContentChild('tableSettings') tableSettingsTpl?: TemplateRef<any>;
 
   private _headerTitle: string | TemplateRef<any>;
   isHeaderTitleString = false;
@@ -140,6 +141,9 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   // Display the column visibility toggle button in the toolbar?
   @Input()
   showColumnToggle? = true;
+  // Custom settings template rendered in the toolbar settings overflow menu.
+  @Input()
+  settingsTemplate?: TemplateRef<any>;
   // Placeholder text shown inside the Carbon toolbar search field.
   @Input()
   searchPlaceholder = $localize`Search`;

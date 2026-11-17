@@ -20,7 +20,26 @@
         [autoReload]="-1"
         (fetchData)="taskListService.fetch()"
         (updateSelection)="updateSelection($event)"
+        [settingsTemplate]="poolTableSettingsRef"
       >
+        <ng-template #poolTableSettingsRef>
+          <div
+            class="p-3"
+            (click)="$event.stopPropagation()"
+            tabindex="0"
+            (keydown.enter)="$event.stopPropagation()"
+          >
+            <cds-toggle
+              size="sm"
+              [checked]="showInternalPools"
+              (checkedChange)="onToggleInternalPools($event)"
+              label="Show internal pools"
+              i18n-label
+            >
+            </cds-toggle>
+          </div>
+        </ng-template>
+
         <cd-table-actions
           id="pool-list-actions"
           class="table-actions"
