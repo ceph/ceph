@@ -88,6 +88,7 @@ export enum Icons {
   dataTable = 'data-table',
   idea = 'idea',
   userAccessLocked = 'user--access-locked', // User access locked
+  userAdmin = 'user--admin', // System user
   chevronDown = 'chevron--down',
   chevronUp = 'chevron--up',
   connect = 'connect',
@@ -192,7 +193,9 @@ export const ICON_TYPE = {
   pendingFilled: 'pending--filled',
   chevronDown: 'chevron--down',
   chevronUp: 'chevron--up',
-  folder: 'folder'
+  folder: 'folder',
+  userAccessLocked: 'user--access-locked',
+  userAdmin: 'user--admin'
 } as const;
 
 export const EMPTY_STATE_IMAGE = {
