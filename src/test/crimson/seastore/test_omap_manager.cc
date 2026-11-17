@@ -107,6 +107,26 @@ struct omap_manager_test_t :
     set_key(omap_root, t, key, bl);
   }
 
+  // Returns true if the insert fails with value_too_large. The test
+  // mappings do not change.
+  bool set_key_too_large(
+    omap_root_t &omap_root,
+    Transaction &t,
+    const string &key,
+    const bufferlist &val) {
+    bool too_large = false;
+    with_trans_intr(t, [&, this](auto &t) {
+      return omap_manager->omap_set_key(omap_root, t, key, val);
+    }).handle_error(
+      crimson::ct_error::value_too_large::handle([&too_large] {
+        too_large = true;
+        return seastar::now();
+      }),
+      crimson::ct_error::assert_all("unexpected error")
+    ).get();
+    return too_large;
+  }
+
   std::string set_random_key(
     omap_root_t &omap_root,
     Transaction &t,
@@ -445,30 +465,59 @@ TEST_P(omap_manager_test_t, max_kv_length)
   run_async([this] {
     const uint64_t max_kv = omap_manager::get_max_kv_length();
     EXPECT_EQ(max_kv, 16382u);
-    EXPECT_LT(omap_manager::get_max_key_length(), max_kv);
 
     omap_root_t omap_root = initialize();
-    const std::string key(16, 'k');
     {
       auto t = create_mutate_transaction();
+      const std::string key(16, 'k');
       set_key(omap_root, *t, key, std::string(max_kv - key.size(), 'v'));
+      submit_transaction(std::move(t));
+      check_mappings(omap_root);
+    }
+    {
+      // Same key length, one more byte of value
+      auto t = create_mutate_transaction();
+      const std::string key(16, 'j');
+      bufferlist val;
+      val.append(std::string(max_kv - key.size() + 1, 'v'));
+      EXPECT_TRUE(set_key_too_large(omap_root, *t, key, val));
+    }
+    check_mappings(omap_root);
+  });
+}
+
+// SeaStore gives omap_manager::get_max_key_length() to the OSD, which
+// rejects longer omap keys. The value must match the inner node rule,
+// which applies once the tree has inner nodes: the longest key fits, one
+// more byte returns value_too_large.
+TEST_P(omap_manager_test_t, max_key_length)
+{
+  run_async([this] {
+    const uint64_t max_key = omap_manager::get_max_key_length();
+    EXPECT_EQ(max_key, 2030u);
+    EXPECT_LT(max_key, omap_manager::get_max_kv_length());
+
+    omap_root_t omap_root = initialize();
+    while (omap_root.get_depth() < 2) {
+      auto t = create_mutate_transaction();
+      for (int i = 0; i < 64; i++) {
+        set_key(omap_root, *t, rand_name(STR_LEN),
+                rand_buffer(tree_growth_value_size));
+      }
+      submit_transaction(std::move(t));
+    }
+    {
+      auto t = create_mutate_transaction();
+      set_key(omap_root, *t, std::string(max_key, 'k'), std::string("v"));
       submit_transaction(std::move(t));
       check_mappings(omap_root);
     }
     {
       auto t = create_mutate_transaction();
       bufferlist val;
-      val.append(std::string(max_kv - key.size() + 1, 'v'));
-      bool too_large = false;
-      with_trans_intr(*t, [&](auto &t) {
-        return omap_manager->omap_set_key(omap_root, t, "x" + key, val);
-      }).handle_error(
-        crimson::ct_error::value_too_large::handle([&too_large] {
-          too_large = true;
-        }),
-        crimson::ct_error::assert_all{"unexpected error"}
-      ).get();
-      EXPECT_TRUE(too_large);
+      val.append("v");
+      EXPECT_TRUE(set_key_too_large(
+        omap_root, *t, std::string(max_key + 1, 'j'), val));
     }
     check_mappings(omap_root);
   });
