@@ -462,11 +462,7 @@ void SnapshotCopyRequest<I>::handle_snap_create(int r) {
   ceph_assert(m_prev_snap_id != CEPH_NOSNAP);
 
   auto snap_it = m_dst_image_ctx->snap_ids.find(
-      {cls::rbd::UserSnapshotNamespace(), m_snap_name});
-  if (snap_it == m_dst_image_ctx->snap_ids.end()) {
-    snap_it = m_dst_image_ctx->snap_ids.find(
-        {cls::rbd::ImageSnapshotNamespaceGroup(), m_snap_name});
-  }
+      {m_snap_namespace, m_snap_name});
   ceph_assert(snap_it != m_dst_image_ctx->snap_ids.end());
   librados::snap_t dst_snap_id = snap_it->second;
 
