@@ -6,6 +6,8 @@ This document describes the design for an in-place, subvolume snapshot rollback 
 
 Rollback is an operator-driven operation. During rollback, all client IO is suspended on the target directory subtree (subvolume) for the duration of the operation. When rollback completes, IO resumes with the filesystem reflecting the snapshot state.
 
+**Related:** Cap recall, subtree freeze, and the `ready` / `freeze_epoch` contract are specified in [`cephfs_snapshot_rollback_prepare_phase_design.md`](cephfs_snapshot_rollback_prepare_phase_design.md) (prepare phase). This document covers COA, metadata splice, and data rollback after rollback **start**.
+
 ---
 
 ## 2. Scope & Constraints
@@ -18,7 +20,7 @@ Rollback is an operator-driven operation. During rollback, all client IO is susp
 * **Concurrent rollback execution** across multiple independent CephFS subvolumes.
 
 ### Constraints
-* **IO Blocking:** CephFS client capabilities (caps) are revoked on the target subtree before rollback begins. No client data or metadata IO is permitted until the rollback operation fully completes.
+* **IO Blocking:** Before rollback **start**, prepare revokes non-privileged caps and journals a subtree **freeze** (see prepare phase design). After start (COA marker), client IO rules follow COA semantics in §3.2 and §8; file caps may be withheld until per-inode data rollback completes.
 * **Atomicity:** The rollback must leave the filesystem in either the fully rolled-back state or a clean, recoverable intermediate state. Partial states must be systematically detectable and resumable following an MDS failover.
 * **Hardlinks:** The MDS enforces that hardlinks may only exist within the same directory subtree (under a subvolumes).
 
@@ -26,32 +28,32 @@ Rollback is an operator-driven operation. During rollback, all client IO is susp
 
 ## 3. Design & Operator Workflow
 
-The rollback lifecycle is initiated by an explicit operator workflow. An operator determines that a subvolume needs to be reverted to a specific snapshot and triggers the operation via the CLI. This command request is routed directly to the Ceph Metadata Server (MDS).
+The rollback lifecycle is operator-driven: an external **drain** (workload, NFS exports where applicable), then Ceph **`prepare`** (binary `ready`, `freeze_epoch`), then **`start`** (this document, COA and lazy rollback). Orchestrator details: [Tasks #82124](https://tracker.ceph.com/issues/82124); prepare: [`cephfs_snapshot_rollback_prepare_phase_design.md`](cephfs_snapshot_rollback_prepare_phase_design.md).
 
 ```
-[ Operator CLI Request ] ---> [ Ceph MDS ]
-                                   |
-                         (Revoke Client Caps)
-                                   |
-               +-------------------+-------------------+
-               |                                       |
-     [ Responsive Clients ]                 [ Unresponsive Clients ]
-     (Flush writes & invalidate)            (Timeout -> Forcefully Evicted)
-               |                                       |
-               +-------------------+-------------------+
-                                   |
-                      (All Caps Revoked/Cleared)
-                                   |
-                    [ Apply COA & Rollback Marker ]
+[ Orchestrator drain: scale down, unpublish, optional fence ]
+                          |
+                          v
+          [ ceph fs subvolume snapshot rollback prepare ]
+                          |
+            internal quiesce_path cap recall + journal freeze
+                          |
+                    ready == true ?  (freeze_epoch, ttl)
+                          |
+                          v
+          [ ceph fs subvolume snapshot rollback start ... ]
+                          |
+                          v
+                    [ MDS: COA & rollback marker ]
 ```
 
-### Step 1: Cap Revocation and Distributed Synchronization
-The primary objective of the MDS is to guarantee that no conflicting IO operations from any active clients interleave with the rollback process. This isolation is achieved via strict capability management:
-1. **Revoking Caps:** The MDS revokes all outstanding caps from all clients with active sessions on the target subtree. This forces clients to flush buffered writes, clear cached reads, and write back pending metadata updates (e.g., file size, `mtime`, `ctime`).
-2. **Cap Locking:** The MDS refrains from granting any new caps to clients on this subtree until it is structurally safe to do so, freezing client-side operations.
-3. **Fencing Unresponsive Clients:** Clients that fail to respond to cap revocation requests within the configured timeout window are forcefully evicted from the cluster and appended to the OSD blocklist. This ensures that a buggy or unresponsive client cannot indefinitely stall cluster administration and/or initiate IO in midst of a rollback operation.
+### Step 1: Prepare (separate design)
 
-Once acknowledgments are received from all remaining viable clients, the MDS proceeds with the structural namespace transformation.
+Guarantee that no non-privileged client holds caps under the subvolume and that a **rollback freeze** is journaled on the subvolume root (`freeze_epoch`, `ttl`). Implementation uses internal `MDCache::quiesce_path()` (same family as subvolume quarantine), not `ceph fs quiesce` sets.
+
+Sessions with indirect access (mount at `/`, including mgr/volumes and default NFS-Ganesha `cmount_path`) are handled by **cap recall under the subtree**, not by assuming mount root. Blocklist is a last resort for stubborn workload mounts (`--force`); rollback operator identities use MDS auth cap **`b`** / **`B`** (see prepare phase doc).
+
+Do not treat prepare as complete until `ready: true`. **Start** must verify `freeze_epoch`.
 
 ### Step 2: Applying Copy-on-Access (COA) Semantics
 The MDS marks the root inode of the target subvolume with an internal operational marker. This marker indicates that the subtree has transitioned to **Copy-on-Access (COA)** semantics relative to the designated target `snap-id`.
