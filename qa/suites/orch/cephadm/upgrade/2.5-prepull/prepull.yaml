@@ -1,0 +1,4 @@
+tasks:
+- cephadm.shell:
+    mon.a:
+      - ceph config set mgr mgr/cephadm/upgrade_prepull_image true --force
