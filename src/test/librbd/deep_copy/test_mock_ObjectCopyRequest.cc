@@ -305,6 +305,64 @@ public:
         }));
   }
 
+  void expect_sparse_read(librbd::MockTestImageCtx& mock_image_ctx,
+                          uint64_t snap_id,
+                          const interval_set<uint64_t>& extents,
+                          const interval_set<uint64_t>& data_extents,
+                          char c) {
+    // only data_extents hold data in the source object, the rest of the
+    // read extents are holes (e.g. a range zeroed by a partial discard)
+    EXPECT_CALL(*mock_image_ctx.io_image_dispatcher,
+                send(IsRead(snap_id, extents)))
+      .WillOnce(Invoke([data_extents, c](io::ImageDispatchSpec* spec) {
+          auto req = std::get_if<io::ImageDispatchSpec::Read>(&spec->request);
+          ceph_assert(req != nullptr);
+          auto aio_comp = spec->aio_comp;
+          aio_comp->read_result = std::move(req->read_result);
+          aio_comp->read_result.set_image_extents(spec->image_extents);
+
+          // split the read buffer into data and hole segments
+          std::vector<std::tuple<uint64_t, uint64_t, bool>> segments;
+          uint64_t buffer_offset = 0;
+          for (auto [image_offset, image_length] : spec->image_extents) {
+            interval_set<uint64_t> image_interval;
+            image_interval.insert(image_offset, image_length);
+            interval_set<uint64_t> data_interval;
+            data_interval.intersection_of(image_interval, data_extents);
+
+            uint64_t pos = image_offset;
+            for (auto [data_offset, data_length] : data_interval) {
+              if (data_offset > pos) {
+                segments.emplace_back(buffer_offset + pos - image_offset,
+                                      data_offset - pos, false);
+              }
+              segments.emplace_back(buffer_offset + data_offset - image_offset,
+                                    data_length, true);
+              pos = data_offset + data_length;
+            }
+            if (pos < image_offset + image_length) {
+              segments.emplace_back(buffer_offset + pos - image_offset,
+                                    image_offset + image_length - pos, false);
+            }
+            buffer_offset += image_length;
+          }
+
+          spec->dispatch_result = io::DISPATCH_RESULT_COMPLETE;
+          aio_comp->set_request_count(segments.size());
+          for (auto [segment_offset, segment_length, data] : segments) {
+            auto ctx = new io::ReadResult::C_ImageReadRequest(
+              aio_comp, segment_offset, {{0, segment_length}});
+            if (data) {
+              ctx->bl.append(std::string(segment_length, c));
+              ctx->complete(0);
+            } else {
+              ctx->ignore_enoent = true;
+              ctx->complete(-ENOENT);
+            }
+          }
+        }));
+  }
+
   void expect_write(librados::MockTestMemIoCtxImpl &mock_io_ctx,
                     uint64_t offset, uint64_t length,
                     const SnapContext &snapc, int r) {
@@ -518,6 +576,50 @@ public:
     }
 
     return 0;
+  }
+
+  void copy_full_object(librbd::MockTestImageCtx &mock_src_image_ctx,
+                        librbd::MockTestImageCtx &mock_dst_image_ctx,
+                        librbd::MockExclusiveLock &mock_exclusive_lock,
+                        librbd::MockObjectMap &mock_object_map) {
+    // write the full object, create snap1 and copy the object as of snap1
+    uint64_t object_size = 1 << m_src_image_ctx->order;
+    bufferlist bl;
+    bl.append(std::string(object_size, 'A'));
+    ASSERT_EQ(static_cast<ssize_t>(object_size),
+              api::Io<>::write(*m_src_image_ctx, 0, object_size,
+                               std::move(bl), 0));
+    ASSERT_EQ(0, create_snap("snap1"));
+    mock_dst_image_ctx.snaps = m_dst_image_ctx->snaps;
+
+    InSequence seq;
+
+    C_SaferCond ctx;
+    auto request = create_request(mock_src_image_ctx, mock_dst_image_ctx,
+                                  0, m_src_snap_ids[0], 0, 0, &ctx);
+
+    librados::MockTestMemIoCtxImpl &mock_dst_io_ctx(get_mock_io_ctx(
+      request->get_dst_io_ctx()));
+
+    expect_list_snaps(mock_src_image_ctx, 0);
+    expect_read(mock_src_image_ctx, m_src_snap_ids[0], 0, object_size, 0);
+    expect_start_op(mock_exclusive_lock);
+    expect_update_object_map(mock_dst_image_ctx, mock_object_map,
+                             m_dst_snap_ids[0], OBJECT_EXISTS, 0);
+    expect_prepare_copyup(mock_dst_image_ctx);
+    expect_start_op(mock_exclusive_lock);
+    expect_write(mock_dst_io_ctx, 0, object_size, {0, {}}, 0);
+
+    request->send();
+    ASSERT_EQ(0, ctx.wait());
+  }
+
+  int read_dst_object(librados::snap_t snap_id, bufferlist* bl) {
+    librados::IoCtx io_ctx;
+    io_ctx.dup(m_dst_image_ctx->data_ctx);
+    io_ctx.snap_set_read(snap_id);
+    return io_ctx.read(m_dst_image_ctx->get_object_name(0), *bl,
+                       1 << m_dst_image_ctx->order, 0);
   }
 
   int compare_objects() {
@@ -1604,6 +1706,472 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, IncrementalRemoveWithParent) {
 
   request->send();
   ASSERT_EQ(0, ctx.wait());
+}
+
+TEST_F(TestMockDeepCopyObjectCopyRequest, IncrementalZeroAfterUserSnap) {
+  librbd::MockTestImageCtx mock_src_image_ctx(*m_src_image_ctx);
+  librbd::MockTestImageCtx mock_dst_image_ctx(*m_dst_image_ctx);
+
+  librbd::MockExclusiveLock mock_exclusive_lock;
+  prepare_exclusive_lock(mock_dst_image_ctx, mock_exclusive_lock);
+
+  librbd::MockObjectMap mock_object_map;
+  mock_dst_image_ctx.object_map = &mock_object_map;
+
+  expect_op_work_queue(mock_src_image_ctx);
+  expect_test_features(mock_dst_image_ctx);
+  expect_get_object_count(mock_dst_image_ctx);
+
+  // the object is fully written as of snap1
+  ASSERT_NO_FATAL_FAILURE(copy_full_object(
+    mock_src_image_ctx, mock_dst_image_ctx, mock_exclusive_lock,
+    mock_object_map));
+
+  // snap2 (e.g. a user snapshot) and snap3 (e.g. the next mirror snapshot)
+  // are copied by the same incremental copy. Before snap2 the range
+  // [data_offset, data_end) is written. Before snap3 the range
+  // [zero_offset, data_end) is zeroed by a partial discard and the ranges
+  // [0, head_length) and [data_offset, zero_offset) are rewritten. The end
+  // of the object [data_end, object_size) is not touched after snap1.
+  ASSERT_EQ(0, create_snap("snap2"));
+  ASSERT_EQ(0, create_snap("snap3"));
+  mock_dst_image_ctx.snaps = m_dst_image_ctx->snaps;
+
+  uint64_t object_size = 1 << m_src_image_ctx->order;
+  uint64_t head_length = object_size / 64;
+  uint64_t data_offset = object_size * 23 / 32;
+  uint64_t zero_offset = object_size * 3 / 4;
+  uint64_t data_end = object_size * 15 / 16;
+
+  interval_set<uint64_t> two;
+  two.insert(data_offset, data_end - data_offset);
+  interval_set<uint64_t> three;
+  three.insert(0, head_length);
+  three.insert(data_offset, data_end - data_offset);
+  interval_set<uint64_t> three_data;
+  three_data.insert(0, head_length);
+  three_data.insert(data_offset, zero_offset - data_offset);
+
+  io::SnapshotDelta snapshot_delta;
+  for (auto [offset, length] : two) {
+    snapshot_delta[{m_src_snap_ids[1], m_src_snap_ids[1]}].insert(
+      offset, length, {io::SPARSE_EXTENT_STATE_DATA, length});
+  }
+  for (auto [offset, length] : three) {
+    snapshot_delta[{m_src_snap_ids[2], m_src_snap_ids[2]}].insert(
+      offset, length, {io::SPARSE_EXTENT_STATE_DATA, length});
+  }
+
+  C_SaferCond ctx;
+  auto request = create_request(mock_src_image_ctx, mock_dst_image_ctx,
+                                m_src_snap_ids[0], m_src_snap_ids[2],
+                                m_dst_snap_ids[0], 0, &ctx);
+
+  librados::MockTestMemIoCtxImpl &mock_dst_io_ctx(get_mock_io_ctx(
+    request->get_dst_io_ctx()));
+
+  // the zeroed range ends at the end of the data written before snap2, but
+  // not at the end of the object: it must not be copied as a truncate
+  EXPECT_CALL(mock_dst_io_ctx, truncate(_, _, _)).Times(0);
+
+  InSequence seq;
+  expect_list_snaps(mock_src_image_ctx, snapshot_delta);
+  expect_sparse_read(mock_src_image_ctx, m_src_snap_ids[1], two, two, 'B');
+  expect_sparse_read(mock_src_image_ctx, m_src_snap_ids[2], three,
+                     three_data, 'C');
+  expect_start_op(mock_exclusive_lock);
+  expect_update_object_map(mock_dst_image_ctx, mock_object_map,
+                           m_dst_snap_ids[1], OBJECT_EXISTS, 0);
+  expect_start_op(mock_exclusive_lock);
+  expect_update_object_map(mock_dst_image_ctx, mock_object_map,
+                           m_dst_snap_ids[2], OBJECT_EXISTS, 0);
+  expect_prepare_copyup(mock_dst_image_ctx);
+  expect_start_op(mock_exclusive_lock);
+  expect_write(mock_dst_io_ctx, two,
+               {m_dst_snap_ids[0], {m_dst_snap_ids[0]}}, 0);
+  expect_start_op(mock_exclusive_lock);
+  expect_write(mock_dst_io_ctx, three_data,
+               {m_dst_snap_ids[1], {m_dst_snap_ids[1], m_dst_snap_ids[0]}},
+               0);
+  expect_zero(mock_dst_io_ctx, zero_offset, data_end - zero_offset, 0);
+  // the test stub writes zeros for a zero op inside the object
+  expect_write(mock_dst_io_ctx, zero_offset, data_end - zero_offset,
+               {m_dst_snap_ids[1], {m_dst_snap_ids[1], m_dst_snap_ids[0]}},
+               0);
+
+  request->send();
+  ASSERT_EQ(0, ctx.wait());
+
+  // the copy of snap2 and the HEAD of the destination object keep the full
+  // object size and the untouched end of the object
+  bufferlist expected_two;
+  expected_two.append(std::string(data_offset, 'A'));
+  expected_two.append(std::string(data_end - data_offset, 'B'));
+  expected_two.append(std::string(object_size - data_end, 'A'));
+  bufferlist two_bl;
+  ASSERT_EQ(static_cast<int>(object_size),
+            read_dst_object(m_dst_snap_ids[1], &two_bl));
+  ASSERT_TRUE(two_bl.contents_equal(expected_two));
+
+  bufferlist expected_head;
+  expected_head.append(std::string(head_length, 'C'));
+  expected_head.append(std::string(data_offset - head_length, 'A'));
+  expected_head.append(std::string(zero_offset - data_offset, 'C'));
+  expected_head.append_zero(data_end - zero_offset);
+  expected_head.append(std::string(object_size - data_end, 'A'));
+  bufferlist head_bl;
+  ASSERT_EQ(static_cast<int>(object_size),
+            read_dst_object(CEPH_NOSNAP, &head_bl));
+  ASSERT_TRUE(head_bl.contents_equal(expected_head));
+}
+
+TEST_F(TestMockDeepCopyObjectCopyRequest, IncrementalTruncateAfterUserSnap) {
+  librbd::MockTestImageCtx mock_src_image_ctx(*m_src_image_ctx);
+  librbd::MockTestImageCtx mock_dst_image_ctx(*m_dst_image_ctx);
+
+  librbd::MockExclusiveLock mock_exclusive_lock;
+  prepare_exclusive_lock(mock_dst_image_ctx, mock_exclusive_lock);
+
+  librbd::MockObjectMap mock_object_map;
+  mock_dst_image_ctx.object_map = &mock_object_map;
+
+  expect_op_work_queue(mock_src_image_ctx);
+  expect_test_features(mock_dst_image_ctx);
+  expect_get_object_count(mock_dst_image_ctx);
+
+  // the object is fully written as of snap1
+  ASSERT_NO_FATAL_FAILURE(copy_full_object(
+    mock_src_image_ctx, mock_dst_image_ctx, mock_exclusive_lock,
+    mock_object_map));
+
+  // as in IncrementalZeroAfterUserSnap, but before snap3 the object is
+  // truncated at zero_offset (discard up to the end of the object)
+  ASSERT_EQ(0, create_snap("snap2"));
+  ASSERT_EQ(0, create_snap("snap3"));
+  mock_dst_image_ctx.snaps = m_dst_image_ctx->snaps;
+
+  uint64_t object_size = 1 << m_src_image_ctx->order;
+  uint64_t head_length = object_size / 64;
+  uint64_t data_offset = object_size * 23 / 32;
+  uint64_t zero_offset = object_size * 3 / 4;
+  uint64_t data_end = object_size * 15 / 16;
+
+  interval_set<uint64_t> two;
+  two.insert(data_offset, data_end - data_offset);
+  interval_set<uint64_t> three;
+  three.insert(0, head_length);
+  three.insert(data_offset, zero_offset - data_offset);
+
+  io::SnapshotDelta snapshot_delta;
+  for (auto [offset, length] : two) {
+    snapshot_delta[{m_src_snap_ids[1], m_src_snap_ids[1]}].insert(
+      offset, length, {io::SPARSE_EXTENT_STATE_DATA, length});
+  }
+  for (auto [offset, length] : three) {
+    snapshot_delta[{m_src_snap_ids[2], m_src_snap_ids[2]}].insert(
+      offset, length, {io::SPARSE_EXTENT_STATE_DATA, length});
+  }
+  snapshot_delta[{m_src_snap_ids[2], m_src_snap_ids[2]}].insert(
+    zero_offset, object_size - zero_offset,
+    {io::SPARSE_EXTENT_STATE_ZEROED, object_size - zero_offset});
+
+  C_SaferCond ctx;
+  auto request = create_request(mock_src_image_ctx, mock_dst_image_ctx,
+                                m_src_snap_ids[0], m_src_snap_ids[2],
+                                m_dst_snap_ids[0], 0, &ctx);
+
+  librados::MockTestMemIoCtxImpl &mock_dst_io_ctx(get_mock_io_ctx(
+    request->get_dst_io_ctx()));
+
+  InSequence seq;
+  expect_list_snaps(mock_src_image_ctx, snapshot_delta);
+  expect_sparse_read(mock_src_image_ctx, m_src_snap_ids[1], two, two, 'B');
+  expect_sparse_read(mock_src_image_ctx, m_src_snap_ids[2], three, three,
+                     'C');
+  expect_start_op(mock_exclusive_lock);
+  expect_update_object_map(mock_dst_image_ctx, mock_object_map,
+                           m_dst_snap_ids[1], OBJECT_EXISTS, 0);
+  expect_start_op(mock_exclusive_lock);
+  expect_update_object_map(mock_dst_image_ctx, mock_object_map,
+                           m_dst_snap_ids[2], OBJECT_EXISTS, 0);
+  expect_prepare_copyup(mock_dst_image_ctx);
+  expect_start_op(mock_exclusive_lock);
+  expect_write(mock_dst_io_ctx, two,
+               {m_dst_snap_ids[0], {m_dst_snap_ids[0]}}, 0);
+  expect_start_op(mock_exclusive_lock);
+  expect_write(mock_dst_io_ctx, three,
+               {m_dst_snap_ids[1], {m_dst_snap_ids[1], m_dst_snap_ids[0]}},
+               0);
+  expect_truncate(mock_dst_io_ctx, zero_offset, 0);
+
+  request->send();
+  ASSERT_EQ(0, ctx.wait());
+
+  bufferlist expected_head;
+  expected_head.append(std::string(head_length, 'C'));
+  expected_head.append(std::string(data_offset - head_length, 'A'));
+  expected_head.append(std::string(zero_offset - data_offset, 'C'));
+  bufferlist head_bl;
+  ASSERT_EQ(static_cast<int>(zero_offset),
+            read_dst_object(CEPH_NOSNAP, &head_bl));
+  ASSERT_TRUE(head_bl.contents_equal(expected_head));
+}
+
+TEST_F(TestMockDeepCopyObjectCopyRequest, IncrementalZeroNewObject) {
+  librbd::MockTestImageCtx mock_src_image_ctx(*m_src_image_ctx);
+  librbd::MockTestImageCtx mock_dst_image_ctx(*m_dst_image_ctx);
+
+  librbd::MockExclusiveLock mock_exclusive_lock;
+  prepare_exclusive_lock(mock_dst_image_ctx, mock_exclusive_lock);
+
+  librbd::MockObjectMap mock_object_map;
+  mock_dst_image_ctx.object_map = &mock_object_map;
+
+  expect_op_work_queue(mock_src_image_ctx);
+  expect_test_features(mock_dst_image_ctx);
+  expect_get_object_count(mock_dst_image_ctx);
+
+  ASSERT_EQ(0, create_snap("snap1"));
+  ASSERT_EQ(0, create_snap("snap2"));
+  ASSERT_EQ(0, create_snap("snap3"));
+  mock_dst_image_ctx.snaps = m_dst_image_ctx->snaps;
+
+  // as in IncrementalZeroAfterUserSnap, but the object did not exist as of
+  // snap1, so nothing follows the data written before snap2 and the zeroed
+  // range up to its end is copied as a truncate
+  uint64_t object_size = 1 << m_src_image_ctx->order;
+  uint64_t head_length = object_size / 64;
+  uint64_t data_offset = object_size * 23 / 32;
+  uint64_t zero_offset = object_size * 3 / 4;
+  uint64_t data_end = object_size * 15 / 16;
+
+  interval_set<uint64_t> two;
+  two.insert(data_offset, data_end - data_offset);
+  interval_set<uint64_t> three;
+  three.insert(0, head_length);
+  three.insert(data_offset, data_end - data_offset);
+  interval_set<uint64_t> three_data;
+  three_data.insert(0, head_length);
+  three_data.insert(data_offset, zero_offset - data_offset);
+
+  io::SnapshotDelta snapshot_delta;
+  snapshot_delta[{m_src_snap_ids[0], m_src_snap_ids[0]}].insert(
+    0, object_size, {io::SPARSE_EXTENT_STATE_DNE, object_size});
+  for (auto [offset, length] : two) {
+    snapshot_delta[{m_src_snap_ids[1], m_src_snap_ids[1]}].insert(
+      offset, length, {io::SPARSE_EXTENT_STATE_DATA, length});
+  }
+  for (auto [offset, length] : three) {
+    snapshot_delta[{m_src_snap_ids[2], m_src_snap_ids[2]}].insert(
+      offset, length, {io::SPARSE_EXTENT_STATE_DATA, length});
+  }
+
+  C_SaferCond ctx;
+  auto request = create_request(mock_src_image_ctx, mock_dst_image_ctx,
+                                m_src_snap_ids[0], m_src_snap_ids[2],
+                                m_dst_snap_ids[0], 0, &ctx);
+
+  librados::MockTestMemIoCtxImpl &mock_dst_io_ctx(get_mock_io_ctx(
+    request->get_dst_io_ctx()));
+
+  InSequence seq;
+  expect_list_snaps(mock_src_image_ctx, snapshot_delta);
+  expect_sparse_read(mock_src_image_ctx, m_src_snap_ids[1], two, two, 'B');
+  expect_sparse_read(mock_src_image_ctx, m_src_snap_ids[2], three,
+                     three_data, 'C');
+  expect_start_op(mock_exclusive_lock);
+  expect_update_object_map(mock_dst_image_ctx, mock_object_map,
+                           m_dst_snap_ids[1], OBJECT_EXISTS, 0);
+  expect_start_op(mock_exclusive_lock);
+  expect_update_object_map(mock_dst_image_ctx, mock_object_map,
+                           m_dst_snap_ids[2], OBJECT_EXISTS, 0);
+  expect_prepare_copyup(mock_dst_image_ctx);
+  expect_start_op(mock_exclusive_lock);
+  expect_write(mock_dst_io_ctx, two,
+               {m_dst_snap_ids[0], {m_dst_snap_ids[0]}}, 0);
+  expect_start_op(mock_exclusive_lock);
+  expect_write(mock_dst_io_ctx, three_data,
+               {m_dst_snap_ids[1], {m_dst_snap_ids[1], m_dst_snap_ids[0]}},
+               0);
+  expect_truncate(mock_dst_io_ctx, zero_offset, 0);
+
+  request->send();
+  ASSERT_EQ(0, ctx.wait());
+
+  bufferlist expected_head;
+  expected_head.append(std::string(head_length, 'C'));
+  expected_head.append_zero(data_offset - head_length);
+  expected_head.append(std::string(zero_offset - data_offset, 'C'));
+  bufferlist head_bl;
+  ASSERT_EQ(static_cast<int>(zero_offset),
+            read_dst_object(CEPH_NOSNAP, &head_bl));
+  ASSERT_TRUE(head_bl.contents_equal(expected_head));
+}
+
+TEST_F(TestMockDeepCopyObjectCopyRequest, ZeroAfterSnap) {
+  librbd::MockTestImageCtx mock_src_image_ctx(*m_src_image_ctx);
+  librbd::MockTestImageCtx mock_dst_image_ctx(*m_dst_image_ctx);
+
+  librbd::MockExclusiveLock mock_exclusive_lock;
+  prepare_exclusive_lock(mock_dst_image_ctx, mock_exclusive_lock);
+
+  librbd::MockObjectMap mock_object_map;
+  mock_dst_image_ctx.object_map = &mock_object_map;
+
+  expect_op_work_queue(mock_src_image_ctx);
+  expect_test_features(mock_dst_image_ctx);
+  expect_get_object_count(mock_dst_image_ctx);
+
+  ASSERT_EQ(0, create_snap("snap1"));
+  ASSERT_EQ(0, create_snap("snap2"));
+  ASSERT_EQ(0, create_snap("snap3"));
+  mock_dst_image_ctx.snaps = m_dst_image_ctx->snaps;
+
+  // the history of IncrementalZeroAfterUserSnap, copied by a full copy
+  uint64_t object_size = 1 << m_src_image_ctx->order;
+  uint64_t head_length = object_size / 64;
+  uint64_t data_offset = object_size * 23 / 32;
+  uint64_t zero_offset = object_size * 3 / 4;
+  uint64_t data_end = object_size * 15 / 16;
+
+  interval_set<uint64_t> one;
+  one.insert(0, object_size);
+  interval_set<uint64_t> two;
+  two.insert(data_offset, data_end - data_offset);
+  interval_set<uint64_t> three;
+  three.insert(0, head_length);
+  three.insert(data_offset, data_end - data_offset);
+  interval_set<uint64_t> three_data;
+  three_data.insert(0, head_length);
+  three_data.insert(data_offset, zero_offset - data_offset);
+
+  io::SnapshotDelta snapshot_delta;
+  snapshot_delta[{m_src_snap_ids[0], m_src_snap_ids[0]}].insert(
+    0, object_size, {io::SPARSE_EXTENT_STATE_DATA, object_size});
+  for (auto [offset, length] : two) {
+    snapshot_delta[{m_src_snap_ids[1], m_src_snap_ids[1]}].insert(
+      offset, length, {io::SPARSE_EXTENT_STATE_DATA, length});
+  }
+  for (auto [offset, length] : three) {
+    snapshot_delta[{m_src_snap_ids[2], m_src_snap_ids[2]}].insert(
+      offset, length, {io::SPARSE_EXTENT_STATE_DATA, length});
+  }
+
+  C_SaferCond ctx;
+  auto request = create_request(mock_src_image_ctx, mock_dst_image_ctx,
+                                0, m_src_snap_ids[2], 0, 0, &ctx);
+
+  librados::MockTestMemIoCtxImpl &mock_dst_io_ctx(get_mock_io_ctx(
+    request->get_dst_io_ctx()));
+
+  EXPECT_CALL(mock_dst_io_ctx, truncate(_, _, _)).Times(0);
+
+  InSequence seq;
+  expect_list_snaps(mock_src_image_ctx, snapshot_delta);
+  expect_sparse_read(mock_src_image_ctx, m_src_snap_ids[0], one, one, 'A');
+  expect_sparse_read(mock_src_image_ctx, m_src_snap_ids[1], two, two, 'B');
+  expect_sparse_read(mock_src_image_ctx, m_src_snap_ids[2], three,
+                     three_data, 'C');
+  expect_start_op(mock_exclusive_lock);
+  expect_update_object_map(mock_dst_image_ctx, mock_object_map,
+                           m_dst_snap_ids[0], OBJECT_EXISTS, 0);
+  expect_start_op(mock_exclusive_lock);
+  expect_update_object_map(mock_dst_image_ctx, mock_object_map,
+                           m_dst_snap_ids[1], OBJECT_EXISTS, 0);
+  expect_start_op(mock_exclusive_lock);
+  expect_update_object_map(mock_dst_image_ctx, mock_object_map,
+                           m_dst_snap_ids[2], OBJECT_EXISTS, 0);
+  expect_prepare_copyup(mock_dst_image_ctx);
+  expect_start_op(mock_exclusive_lock);
+  expect_write(mock_dst_io_ctx, 0, object_size, {0, {}}, 0);
+  expect_start_op(mock_exclusive_lock);
+  expect_write(mock_dst_io_ctx, two,
+               {m_dst_snap_ids[0], {m_dst_snap_ids[0]}}, 0);
+  expect_start_op(mock_exclusive_lock);
+  expect_write(mock_dst_io_ctx, three_data,
+               {m_dst_snap_ids[1], {m_dst_snap_ids[1], m_dst_snap_ids[0]}},
+               0);
+  expect_zero(mock_dst_io_ctx, zero_offset, data_end - zero_offset, 0);
+  // the test stub writes zeros for a zero op inside the object
+  expect_write(mock_dst_io_ctx, zero_offset, data_end - zero_offset,
+               {m_dst_snap_ids[1], {m_dst_snap_ids[1], m_dst_snap_ids[0]}},
+               0);
+
+  request->send();
+  ASSERT_EQ(0, ctx.wait());
+
+  bufferlist head_bl;
+  ASSERT_EQ(static_cast<int>(object_size),
+            read_dst_object(CEPH_NOSNAP, &head_bl));
+}
+
+TEST_F(TestMockDeepCopyObjectCopyRequest, IncrementalZeroObjectStartUserSnap) {
+  librbd::MockTestImageCtx mock_src_image_ctx(*m_src_image_ctx);
+  librbd::MockTestImageCtx mock_dst_image_ctx(*m_dst_image_ctx);
+
+  librbd::MockExclusiveLock mock_exclusive_lock;
+  prepare_exclusive_lock(mock_dst_image_ctx, mock_exclusive_lock);
+
+  librbd::MockObjectMap mock_object_map;
+  mock_dst_image_ctx.object_map = &mock_object_map;
+
+  expect_op_work_queue(mock_src_image_ctx);
+  expect_test_features(mock_dst_image_ctx);
+  expect_get_object_count(mock_dst_image_ctx);
+
+  // the object is fully written as of snap1
+  ASSERT_NO_FATAL_FAILURE(copy_full_object(
+    mock_src_image_ctx, mock_dst_image_ctx, mock_exclusive_lock,
+    mock_object_map));
+
+  // before snap2 (e.g. a user snapshot) only the start of the object is
+  // zeroed by a partial discard, nothing changes before snap3
+  ASSERT_EQ(0, create_snap("snap2"));
+  ASSERT_EQ(0, create_snap("snap3"));
+  mock_dst_image_ctx.snaps = m_dst_image_ctx->snaps;
+
+  uint64_t object_size = 1 << m_src_image_ctx->order;
+  uint64_t zero_length = object_size / 4;
+
+  io::SnapshotDelta snapshot_delta;
+  snapshot_delta[{m_src_snap_ids[1], m_src_snap_ids[1]}].insert(
+    0, zero_length, {io::SPARSE_EXTENT_STATE_DATA, zero_length});
+
+  C_SaferCond ctx;
+  auto request = create_request(mock_src_image_ctx, mock_dst_image_ctx,
+                                m_src_snap_ids[0], m_src_snap_ids[2],
+                                m_dst_snap_ids[0], 0, &ctx);
+
+  librados::MockTestMemIoCtxImpl &mock_dst_io_ctx(get_mock_io_ctx(
+    request->get_dst_io_ctx()));
+
+  // the object still exists as of snap2 and snap3, so the object map of
+  // the copy of snap2 must flag it as existing
+  InSequence seq;
+  expect_list_snaps(mock_src_image_ctx, snapshot_delta);
+  expect_sparse_read_hole(mock_src_image_ctx, m_src_snap_ids[1], 0,
+                          zero_length);
+  expect_start_op(mock_exclusive_lock);
+  expect_update_object_map(mock_dst_image_ctx, mock_object_map,
+                           m_dst_snap_ids[1], OBJECT_EXISTS, 0);
+  expect_start_op(mock_exclusive_lock);
+  expect_update_object_map(mock_dst_image_ctx, mock_object_map,
+                           m_dst_snap_ids[2], is_fast_diff(mock_dst_image_ctx) ?
+                           OBJECT_EXISTS_CLEAN : OBJECT_EXISTS, 0);
+  expect_prepare_copyup(mock_dst_image_ctx);
+  expect_start_op(mock_exclusive_lock);
+  expect_zero(mock_dst_io_ctx, 0, zero_length, 0);
+
+  request->send();
+  ASSERT_EQ(0, ctx.wait());
+
+  bufferlist expected;
+  expected.append_zero(zero_length);
+  expected.append(std::string(object_size - zero_length, 'A'));
+  bufferlist two_bl;
+  ASSERT_EQ(static_cast<int>(object_size),
+            read_dst_object(m_dst_snap_ids[1], &two_bl));
+  ASSERT_TRUE(two_bl.contents_equal(expected));
 }
 
 } // namespace deep_copy
