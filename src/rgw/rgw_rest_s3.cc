@@ -5263,20 +5263,25 @@ void RGWDeleteMultiObj_ObjStore_S3::end_response()
 
 void RGWGetObjLayout_ObjStore_S3::send_response()
 {
+  JSONFormatter f;
+
+  // build the layout before sending the status, so that an error reaches the
+  // client as an error instead of a 200 with a truncated body
+  if (op_ret >= 0) {
+    f.open_object_section("result");
+    op_ret = s->object->dump_obj_layout(this, s->yield, &f);
+    f.close_section();
+  }
+
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
   end_header(s, this, "application/json");
 
-  JSONFormatter f;
-
   if (op_ret < 0) {
     return;
   }
 
-  f.open_object_section("result");
-  s->object->dump_obj_layout(this, s->yield, &f);
-  f.close_section();
   rgw_flush_formatter(s, &f);
 }
 

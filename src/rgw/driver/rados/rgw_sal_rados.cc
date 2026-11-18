@@ -3937,6 +3937,21 @@ int RadosObject::dump_obj_layout(const DoutPrefixProvider *dpp, optional_yield y
   }
 
   ::encode_json("head", head_obj, f);
+  if (!amanifest) {
+    // an object without a manifest keeps all of its data in the head object,
+    // which is also how RGWRados::iterate_obj() reads it
+    f->open_array_section("data_location");
+    if (obj_size > 0) {
+      f->open_object_section("obj");
+      ::encode_json("ofs", 0, f);
+      ::encode_json("loc", head_obj, f);
+      ::encode_json("loc_ofs", 0, f);
+      ::encode_json("loc_size", obj_size, f);
+      f->close_section();
+    }
+    f->close_section();
+    return 0;
+  }
   ::encode_json("manifest", *amanifest, f);
   f->open_array_section("data_location");
   for (auto miter = amanifest->obj_begin(dpp); miter != amanifest->obj_end(dpp); ++miter) {
