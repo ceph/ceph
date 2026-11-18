@@ -76,7 +76,7 @@ install -d -m0755 \
 
 for opt in "$@"; do
     case $opt in
-        html|man|livehtml)
+        html|man|livehtml|linkcheck)
             sphinx_targets="$sphinx_targets $opt"
             shift
             ;;
@@ -108,6 +108,10 @@ for target in $sphinx_targets; do
             $vdir/bin/pip install --quiet sphinx-autobuild
             $vdir/bin/sphinx-autobuild --re-ignore '.*\.dot' -b dirhtml "$@" \
                                        $TOPDIR/doc $TOPDIR/build-doc/output/html
+            ;;
+        linkcheck)
+            $vdir/bin/sphinx-build -a -b linkcheck -d doctrees \
+                                   $TOPDIR/doc $TOPDIR/build-doc/output/$target
             ;;
     esac
 done

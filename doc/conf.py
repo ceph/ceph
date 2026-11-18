@@ -198,6 +198,35 @@ breathe_doxygen_config_options = {
 # graphviz options
 graphviz_output_format = 'svg'
 
+# linkcheck options
+# The release notes hold tens of thousands of PR and tracker links. Checking
+# them trips GitHub's rate limits and finds nothing to fix.
+linkcheck_exclude_documents = [r'releases/.*']
+linkcheck_ignore = [r'https?://github\.com/ceph/ceph/(pull|commit)/',
+                    r'https?://tracker\.ceph\.com/issues/\d+',
+                    # Source pinned to a commit can't move.
+                    r'https?://github\.com/ceph/ceph/blob/[0-9a-f]{40}/',
+                    # Examples and loopback addresses.
+                    r'https?://(localhost|127\.0\.0\.1|\[::1\]|'
+                    r'[^/]*\.example\.(com|net|org))([:/]|$)',
+                    # Need a login or the Sepia lab VPN.
+                    r'https://github\.com/ceph/ceph-(private|releases)',
+                    r'https://download\.ceph\.com/prerelease/',
+                    r'https://jenkins\.ceph\.com/(job/cve-pipeline|'
+                    r'view/all/job/[^/]+/build)',
+                    r'https?://[^/]*\.front\.sepia\.ceph\.com/',
+                    r'https?://tracker\.ceph\.com/projects/[^/]+/wiki',
+                    # Links with no scheme, unless they look like a host name.
+                    # linkcheck looks for them in the source tree, but the site
+                    # is built with dirhtml, so they resolve against the page's
+                    # URL instead.
+                    r'(?![a-z][a-z0-9+.-]*:)(?![\w-]+(\.[\w-]+)+(/|$))']
+# GitHub adds its heading and line anchors with JavaScript.
+linkcheck_anchors_ignore_for_url = [r'https?://github\.com/']
+# Sphinx's default user agent poses as Firefox. tracker.ceph.com, SourceForge,
+# and others answer that with 403, and wiki.samba.org with an endless 429.
+user_agent = f'Sphinx/{sphinx.__version__} (+https://docs.ceph.com)'
+
 def generate_state_diagram(input_paths, output_path):
     sys.path.append(os.path.join(top_level, 'doc', 'scripts'))
     from gen_state_diagram import do_filter, StateMachineRenderer
