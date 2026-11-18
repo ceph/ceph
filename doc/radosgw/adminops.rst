@@ -209,7 +209,7 @@ If successful, the response contains the requested information.
 Special Error Responses
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-TBD.
+None.
 
 Trim Usage
 ==========
@@ -243,6 +243,13 @@ Request Parameters
 :Example: ``foo_user``
 :Required: No
 
+``bucket``
+
+:Description: The bucket whose usage information is removed. If specified, only that bucket's usage is removed, and ``uid`` is ignored.
+:Type: String
+:Example: ``foo_bucket``
+:Required: No
+
 ``start``
 
 :Description: Date and (optional) time that specifies the start time of the requested data.
@@ -268,7 +275,10 @@ Request Parameters
 Special Error Responses
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-TBD.
+``InvalidArgument``
+
+:Description: The request names no ``uid``, ``bucket``, ``start`` or ``end``, and does not set ``remove-all``.
+:Code: 400 Bad Request
 
 Get User Info
 =============
