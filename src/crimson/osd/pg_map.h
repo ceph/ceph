@@ -103,7 +103,7 @@ class PGMap {
   struct PGCreationState : BlockerT<PGCreationState> {
     static constexpr const char * type_name = "PGCreation";
 
-    void dump_detail(Formatter *f) const final;
+    void dump_detail(Formatter *f) const final override;
 
     spg_t pgid;
     seastar::shared_promise<Ref<PG>> promise;

@@ -29,16 +29,16 @@ public:
  */
 private:
   seastar::future<> notify_out(
-      cc_seq_t cc_seq) final;
+      cc_seq_t cc_seq) override;
 
   seastar::future<> notify_out_fault(
       cc_seq_t cc_seq,
       const char *where,
       std::exception_ptr,
-      io_handler_state) final;
+      io_handler_state) override;
 
   seastar::future<> notify_mark_down(
-      cc_seq_t cc_seq) final;
+      cc_seq_t cc_seq) override;
 
 /*
 * as ProtocolV2 to be called by SocketConnection

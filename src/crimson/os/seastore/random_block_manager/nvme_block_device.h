@@ -73,10 +73,10 @@ public:
   using RBMDevice::read;
   read_ertr::future<> read(
     uint64_t offset,
-    bufferptr &bptr) final;
+    bufferptr &bptr) final override;
   read_ertr::future<> _readv(
     uint64_t offset,
-    std::vector<bufferptr> ptrs) final;
+    std::vector<bufferptr> ptrs) final override;
 
   close_ertr::future<> close() override;
 
@@ -84,18 +84,18 @@ public:
     uint64_t offset,
     uint64_t len) override;
 
-  mount_ret mount() final;
+  mount_ret mount() final override;
 
-  nvme_command_ertr::future<> initialize_nvme_features() final;
+  nvme_command_ertr::future<> initialize_nvme_features() final override;
 
-  mkfs_ret mkfs(device_config_t config) final;
+  mkfs_ret mkfs(device_config_t config) final override;
 
   write_ertr::future<> writev(
     uint64_t offset,
     ceph::bufferlist bl,
-    uint16_t stream = 0) final;
+    uint16_t stream = 0) final override;
 
-  stat_device_ret stat_device() final {
+  stat_device_ret stat_device() final override {
     // sizing only: a throwaway driver does the open + identify and reports
     // {size, block_size}, then is dropped.
     auto io_driver = make_nvme_io_driver(device_path);
@@ -110,15 +110,15 @@ public:
     co_return std::move(stat);
   }
 
-  std::string get_device_path() const final {
+  std::string get_device_path() const final override {
     return device_path;
   }
 
-  seastar::future<> start(uint32_t shard_nums) final;
+  seastar::future<> start(uint32_t shard_nums) final override;
 
-  seastar::future<> stop() final;
+  seastar::future<> stop() final override;
 
-  Device& get_sharded_device(store_index_t store_index = 0) final;
+  Device& get_sharded_device(store_index_t store_index = 0) final override;
 
   uint64_t get_preffered_write_granularity() const { return write_granularity; }
   uint64_t get_preffered_write_alignment() const { return write_alignment; }

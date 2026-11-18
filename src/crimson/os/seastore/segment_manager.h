@@ -105,7 +105,7 @@ public:
     device_type_t dtype,
     device_id_t id)
     : Device(path, dtype, id) {}
-  backend_type_t get_backend_type() const final {
+  backend_type_t get_backend_type() const final override {
     return backend_type_t::SEGMENTED;
   }
 

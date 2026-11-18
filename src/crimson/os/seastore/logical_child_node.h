@@ -22,7 +22,7 @@ public:
 
   virtual void lcn_on_invalidated(Transaction &t) {}
 
-  void on_invalidated(Transaction &t) final {
+  void on_invalidated(Transaction &t) final override {
     this->lba_child_node_t::on_invalidated();
     lcn_on_invalidated(t);
   }
@@ -59,7 +59,7 @@ public:
   }
 
 protected:
-  void on_replace_prior(Transaction &t) final {
+  void on_replace_prior(Transaction &t) final override {
     assert(is_seen_by_users());
     if (!is_rewrite_transaction(t.get_src())) {
       lba_child_node_t::on_replace_prior();
@@ -67,7 +67,7 @@ protected:
     do_on_replace_prior(t);
   }
   virtual void do_on_replace_prior(Transaction &t) {}
-  void on_data_commit() final {
+  void on_data_commit() final override {
     ceph_abort("impossible");
   }
 private:

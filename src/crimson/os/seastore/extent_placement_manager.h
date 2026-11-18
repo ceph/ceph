@@ -163,23 +163,23 @@ public:
                      SegmentSeqAllocator &ssa,
                      TokenBucket &buckets);
 
-  backend_type_t get_type() const final {
+  backend_type_t get_type() const final override {
     return backend_type_t::SEGMENTED;
   }
 
-  writer_stats_t get_stats() const final {
+  writer_stats_t get_stats() const final override {
     return record_submitter.get_stats();
   }
 
-  open_ertr::future<> open() final {
+  open_ertr::future<> open() final override {
     return record_submitter.open(store_index, false).discard_result();
   }
 
   alloc_write_iertr::future<> alloc_write_ool_extents(
     Transaction &t,
-    std::list<CachedExtentRef> &extents) final;
+    std::list<CachedExtentRef> &extents) final override;
 
-  close_ertr::future<> close() final {
+  close_ertr::future<> close() final override {
     return write_guard.close().then([this] {
       return record_submitter.close();
     }).safe_then([this] {
@@ -187,16 +187,16 @@ public:
     });
   }
 
-  paddr_t alloc_paddr(extent_len_t length) final {
+  paddr_t alloc_paddr(extent_len_t length) final override {
     return make_delayed_temp_paddr(0);
   }
 
-  std::list<alloc_paddr_result> alloc_paddrs(extent_len_t length, paddr_t) final {
+  std::list<alloc_paddr_result> alloc_paddrs(extent_len_t length, paddr_t) final override {
     return {alloc_paddr_result{make_delayed_temp_paddr(0), length}};
   }
 
   bool can_inplace_rewrite(Transaction& t,
-    CachedExtentRef extent) final {
+    CachedExtentRef extent) final override {
     return false;
   }
 
@@ -224,11 +224,11 @@ public:
   RandomBlockOolWriter(RBMCleaner* rb_cleaner, TokenBucket &bucket) :
     rb_cleaner(rb_cleaner), token_bucket(bucket) {}
 
-  backend_type_t get_type() const final {
+  backend_type_t get_type() const final override {
     return backend_type_t::RANDOM_BLOCK;
   }
 
-  writer_stats_t get_stats() const final {
+  writer_stats_t get_stats() const final override {
     writer_stats_t ret = w_stats;
     ret.minus(last_w_stats);
     last_w_stats = w_stats;
@@ -236,7 +236,7 @@ public:
   }
 
   using open_ertr = ExtentOolWriter::open_ertr;
-  open_ertr::future<> open() final {
+  open_ertr::future<> open() final override {
     w_stats = {};
     last_w_stats = {};
     return open_ertr::now();
@@ -244,28 +244,28 @@ public:
 
   alloc_write_iertr::future<> alloc_write_ool_extents(
     Transaction &t,
-    std::list<CachedExtentRef> &extents) final;
+    std::list<CachedExtentRef> &extents) final override;
 
-  close_ertr::future<> close() final {
+  close_ertr::future<> close() final override {
     return write_guard.close().then([this] {
       write_guard = seastar::gate();
       return close_ertr::now();
     });
   }
 
-  paddr_t alloc_paddr(extent_len_t length) final {
+  paddr_t alloc_paddr(extent_len_t length) final override {
     assert(rb_cleaner);
     return rb_cleaner->alloc_paddr(length);
   }
 
   std::list<alloc_paddr_result> alloc_paddrs(
-    extent_len_t length, paddr_t hint) final {
+    extent_len_t length, paddr_t hint) final override {
     assert(rb_cleaner);
     return rb_cleaner->alloc_paddrs(length, hint);
   }
 
   bool can_inplace_rewrite(Transaction& t,
-    CachedExtentRef extent) final {
+    CachedExtentRef extent) final override {
     if (!extent->is_stable_dirty()) {
       return false;
     }
@@ -278,7 +278,7 @@ public:
   }
 
 #ifdef UNIT_TESTS_BUILT
-  void prefill_fragmented_devices() final {
+  void prefill_fragmented_devices() final override {
     LOG_PREFIX(RandomBlockOolWriter::prefill_fragmented_devices);
     SUBDEBUG(seastore_epm, "");
     return rb_cleaner->prefill_fragmented_devices();
@@ -1141,7 +1141,7 @@ private:
       return main_cleaner.get();
     }
 
-    void maybe_wake_background() final {
+    void maybe_wake_background() final override {
       if (!is_running()) {
         return;
       }
@@ -1158,11 +1158,11 @@ private:
     }
 
   protected:
-    state_t get_state() const final {
+    state_t get_state() const final override {
       return state;
     }
 
-    void maybe_wake_blocked_io() final;
+    void maybe_wake_blocked_io() final override;
 
     void maybe_wake_promote() final {
       if (!is_ready()) {

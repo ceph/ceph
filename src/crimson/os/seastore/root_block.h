@@ -50,21 +50,21 @@ struct RootBlock : CachedExtent {
       backref_root_node(nullptr)
   {}
 
-  void on_rewrite(Transaction&, CachedExtent&, extent_len_t) final {}
+  void on_rewrite(Transaction&, CachedExtent&, extent_len_t) final override {}
 
-  CachedExtentRef duplicate_for_write(Transaction&) final {
+  CachedExtentRef duplicate_for_write(Transaction&) final override {
     return CachedExtentRef(new RootBlock(*this));
   };
 
   static constexpr extent_types_t TYPE = extent_types_t::ROOT;
-  extent_types_t get_type() const final {
+  extent_types_t get_type() const final override {
     return extent_types_t::ROOT;
   }
 
-  void on_replace_prior(Transaction &t) final;
+  void on_replace_prior(Transaction &t) final override;
 
   /// dumps root as delta
-  ceph::bufferlist get_delta() final {
+  ceph::bufferlist get_delta() final override {
     ceph::bufferlist bl;
     ceph::buffer::ptr bptr(sizeof(root_t));
     *reinterpret_cast<root_t*>(bptr.c_str()) = root;
@@ -73,7 +73,7 @@ struct RootBlock : CachedExtent {
   }
 
   /// overwrites root
-  void apply_delta_and_adjust_crc(paddr_t base, const ceph::bufferlist &_bl) final {
+  void apply_delta_and_adjust_crc(paddr_t base, const ceph::bufferlist &_bl) final override {
     assert(_bl.length() == sizeof(root_t));
     ceph::bufferlist bl = _bl;
     bl.rebuild();
@@ -82,21 +82,21 @@ struct RootBlock : CachedExtent {
   }
 
   /// Patches relative addrs in memory based on record commit addr
-  void on_delta_write(paddr_t record_block_offset) final {
+  void on_delta_write(paddr_t record_block_offset) final override {
     root.adjust_addrs_from_base(record_block_offset);
   }
 
-  complete_load_ertr::future<> complete_load() final {
+  complete_load_ertr::future<> complete_load() final override {
     ceph_abort_msg("Root is only written via deltas");
   }
 
-  void on_initial_write() final {
+  void on_initial_write() final override {
     ceph_abort_msg("Root is only written via deltas");
   }
 
   root_t &get_root() { return root; }
 
-  std::ostream &print_detail(std::ostream &out) const final {
+  std::ostream &print_detail(std::ostream &out) const final override {
     return out << ", root_block(lba_root_node=" << (void*)lba_root_node
 	       << ", backref_root_node=" << (void*)backref_root_node
 	       << ")";

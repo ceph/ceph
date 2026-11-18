@@ -19,7 +19,7 @@ struct SubOpBlocker : crimson::BlockerT<SubOpBlocker<T>> {
 
   using id_done_t = std::pair<crimson::OperationRef, T>;
 
-  void dump_detail(Formatter *f) const final {
+  void dump_detail(Formatter *f) const final override {
     f->open_array_section("dependent_operations");
     {
       for (const auto &kv : subops) {

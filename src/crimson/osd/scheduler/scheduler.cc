@@ -88,7 +88,7 @@ public:
     ] = conf.get_val<uint64_t>("osd_client_op_priority");
   }
 
-  void enqueue(item_t &&item) final {
+  void enqueue(item_t &&item) override {
      // immediate ops bypass class-based priority -- use message priority directly
     // matching classic WPQ which uses numeric priority, not SchedulerClass
     if (item.params.klass == SchedulerClass::immediate) {
@@ -109,7 +109,7 @@ public:
     }
   }
 
-  void enqueue_front(item_t &&item) final {
+  void enqueue_front(item_t &&item) override {
     if (item.params.klass == SchedulerClass::immediate) {
       // same for enqueue_front
       queue.enqueue_strict_front(
@@ -129,19 +129,19 @@ public:
     }
   }
 
-  bool empty() const final {
+  bool empty() const override {
     return queue.empty();
   }
 
-  WorkItem dequeue() final {
+  WorkItem dequeue() override {
     return queue.dequeue();
   }
 
-  void dump(ceph::Formatter &f) const final {
+  void dump(ceph::Formatter &f) const override {
     return queue.dump(&f);
   }
 
-  void print(std::ostream &out) const final {
+  void print(std::ostream &out) const override {
     out << "ClassedOpQueueScheduler(queue=";
     queue.print(out);
     out << ", cutoff=" << cutoff << ")";

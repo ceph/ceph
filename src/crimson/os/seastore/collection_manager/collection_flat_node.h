@@ -102,7 +102,7 @@ struct FlatCollectionNode : CollectionNode {
   coll_map_t decoded;
   delta_buffer_t delta_buffer;
 
-  CachedExtentRef duplicate_for_write(Transaction&) final {
+  CachedExtentRef duplicate_for_write(Transaction&) final override {
     assert(delta_buffer.empty());
     return CachedExtentRef(new FlatCollectionNode(*this));
   }
@@ -144,7 +144,7 @@ struct FlatCollectionNode : CollectionNode {
   void update_value(coll_context_t cc, coll_t coll, coll_value_t value) final;
 
 
-  void on_clean_read() final {
+  void on_clean_read() final override {
     bufferlist bl;
     bl.append(get_bptr());
     auto iter = bl.cbegin();
@@ -162,7 +162,7 @@ struct FlatCollectionNode : CollectionNode {
 
   }
 
-  ceph::bufferlist get_delta() final {
+  ceph::bufferlist get_delta() final override {
     ceph::bufferlist bl;
     // FIXME: FlatCollectionNodes are always first mutated and
     // 	      then checked whether they have enough space,
@@ -179,7 +179,7 @@ struct FlatCollectionNode : CollectionNode {
     return bl;
   }
 
-  void apply_delta(const ceph::bufferlist &bl) final {
+  void apply_delta(const ceph::bufferlist &bl) final override {
     assert(bl.length());
     delta_buffer_t buffer;
     auto bptr = bl.begin();
@@ -189,11 +189,11 @@ struct FlatCollectionNode : CollectionNode {
   }
 
   static constexpr extent_types_t TYPE = extent_types_t::COLL_BLOCK;
-  extent_types_t get_type() const final {
+  extent_types_t get_type() const final override {
     return TYPE;
   }
 
-  std::ostream &print_detail_l(std::ostream &out) const final;
+  std::ostream &print_detail_l(std::ostream &out) const final override;
 };
 using FlatCollectionNodeRef = FlatCollectionNode::FlatCollectionNodeRef;
 }
