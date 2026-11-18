@@ -28,12 +28,20 @@ void init_bucket(rgw_bucket *b, const char *t, const char *n, const char *dp, co
   b->explicit_placement.index_pool = rgw_pool(ip);
 }
 
-void rgw_bucket_parse_tenant(rgw_bucket& bucket)
+rgw_bucket rgw_bucket_parse_tenant(const string& tenant, const string& name,
+                                   const string& bucket_id)
 {
+  rgw_bucket bucket(tenant, name, bucket_id);
   if (auto pos = bucket.name.find('/'); pos != string::npos) {
     bucket.tenant = bucket.name.substr(0, pos);
     bucket.name.erase(0, pos + 1);
   }
+  return bucket;
+}
+
+rgw_bucket rgw_bucket_parse_tenant(const string& tenant, const string& name)
+{
+  return rgw_bucket_parse_tenant(tenant, name, {});
 }
 
 // parse key in format: [tenant/]name:instance[:shard_id]

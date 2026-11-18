@@ -2978,13 +2978,7 @@ def test_put_vectors_max_vectors():
 
 @pytest.mark.vector_test
 def test_create_index_max_indexes_per_bucket():
-    """
-    CreateIndex is rejected once a vector bucket is already over
-    "rgw_s3vector_max_indexes_per_bucket". The check uses the current index count
-    only (the new index is not pre-counted), so with a limit of 1 the first two
-    indexes succeed and the third -- when the bucket already holds more than the
-    limit -- is rejected. Setting the limit to 0 disables it.
-    """
+    """CreateIndex rejects a second index at a limit of one and allows it at zero."""
     set_rgw_config_option('rgw_s3vector_max_indexes_per_bucket', 1)
     conn = connection()
     bucket_name = gen_bucket_name()
@@ -2999,17 +2993,13 @@ def test_create_index_max_indexes_per_bucket():
                                      dataType='float32', dimension=dimension,
                                      distanceMetric='euclidean')
 
-        # empty bucket -> allowed; count becomes 1 (== limit)
         assert make_index('idx-0')['ResponseMetadata']['HTTPStatusCode'] == 200
-        # count 1 is not yet *over* the limit -> the crossing index is allowed
-        assert make_index('idx-1')['ResponseMetadata']['HTTPStatusCode'] == 200
-        # count 2 > 1 -> already over -> rejected
-        with pytest.raises(conn.exceptions.ClientError):
-            make_index('idx-2')
+        with pytest.raises(conn.exceptions.ClientError) as exc_info:
+            make_index('idx-1')
+        assert exc_info.value.response['Error']['Code'] == 'QuotaExceeded'
 
-        # disabling the limit lets creation through again
         set_rgw_config_option('rgw_s3vector_max_indexes_per_bucket', 0)
-        assert make_index('idx-2')['ResponseMetadata']['HTTPStatusCode'] == 200
+        assert make_index('idx-1')['ResponseMetadata']['HTTPStatusCode'] == 200
     finally:
         set_rgw_config_option('rgw_s3vector_max_indexes_per_bucket', 10000)
         _ = _delete_vector_bucket(conn, bucket_name)
@@ -5851,6 +5841,74 @@ def test_admin_remove_native_vector_bucket_preserves_s3(owner_type):
             admin(['account', 'rm', '--account-id', conn.account_id] + backend_admin_args())
 
 
+# Verify vector resharding preserves data and the same-name S3 bucket.
+@pytest.mark.vector_bucket_test
+def test_native_vector_bucket_reshard():
+    if get_s3vector_backend() != 'rgw' or has_backing_bucket():
+        pytest.skip('requires native vector bucket storage')
+    conn = connection()
+    s3conn = connection('s3')
+    bucket_name = gen_bucket_name()
+    index_name = 'test-index'
+    vector_args = ['--bucket', bucket_name, '--vector'] + backend_admin_args()
+    s3_args = ['--bucket', bucket_name] + backend_admin_args()
+    regular_created = False
+    try:
+        _create_s3bucket(s3conn, bucket_name)
+        regular_created = True
+        s3conn.put_object(Bucket=bucket_name, Key='sentinel', Body=b's3-data')
+        s3_before = _admin_json(['bucket', 'stats'] + s3_args)
+
+        _create_vector_bucket(conn, bucket_name)
+        conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                          dataType='float32', dimension=4, distanceMetric='euclidean')
+        vectors = [{'key': f'vec-{i}', 'data': {'float32': [float(i)] * 4}}
+                   for i in range(10)]
+        conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                         vectors=vectors)
+
+        before = _admin_json(['bucket', 'stats'] + vector_args)
+        assert before['id'] != s3_before['id']
+        num_shards = before['num_shards'] * 2 + 1
+        # An explicit instance ID must match the selected bucket type.
+        for args, wrong_id in ((vector_args, s3_before['id']), (s3_args, before['id'])):
+            out, ret = admin(['bucket', 'reshard', '--bucket-id', wrong_id,
+                              '--num-shards', str(num_shards)] + args)
+            assert ret != 0 and 'does not identify a' in out, out
+        out, ret = admin(['bucket', 'reshard', '--num-shards', str(num_shards)] +
+                         vector_args)
+        if ret != 0 and 'does not have the resharding feature enabled' in out:
+            pytest.skip('zonegroup does not support resharding')
+        assert ret == 0, out
+
+        after = _admin_json(['bucket', 'stats'] + vector_args)
+        assert after['num_shards'] == num_shards
+        assert after['id'] == before['id']
+        assert after['index_generation'] > before['index_generation']
+        s3_after = _admin_json(['bucket', 'stats'] + s3_args)
+        for key in ('id', 'num_shards', 'index_generation'):
+            assert s3_after[key] == s3_before[key], (key, s3_before, s3_after)
+        response = s3conn.get_object(Bucket=bucket_name, Key='sentinel')
+        assert response['Body'].read() == b's3-data'
+
+        response = conn.get_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                    keys=[v['key'] for v in vectors], returnData=True)
+        assert sorted(response['vectors'], key=lambda v: v['key']) == sorted(
+            vectors, key=lambda v: v['key'])
+        # Writes must also refresh the cached index layout after resharding.
+        new_vector = {'key': 'after-reshard', 'data': {'float32': [1.0] * 4}}
+        conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                         vectors=[new_vector])
+        response = conn.get_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                    keys=[new_vector['key']], returnData=True)
+        assert response['vectors'] == [new_vector]
+    finally:
+        _cleanup_vector_bucket(conn, bucket_name)
+        if regular_created:
+            s3conn.delete_object(Bucket=bucket_name, Key='sentinel')
+            s3conn.delete_bucket(Bucket=bucket_name)
+
+
 ##############################################
 # usage log and owner statistics
 ##############################################
@@ -6045,8 +6103,17 @@ def test_put_vectors_rejected_when_bucket_over_quota():
         assert ret == 0, out
         stats = json.loads(out[out.index('{'):])
         assert sum(item['size'] for item in stats['usage'].values()) > 0, stats
+        assert sum(item['num_objects'] for item in stats['usage'].values()) > 0, stats
 
-        # The bucket is already over this limit before the next write begins.
+        # Vector writes can proceed while the storage object count exceeds its quota.
+        out, ret = admin(['quota', 'enable', '--max-size', '-1',
+                          '--max-objects', '0'] + quota_args)
+        assert ret == 0, out
+        result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                  vectors=[{'key': 'object-limit', 'data': {'float32': [1.0] * 4}}])
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+        # The bucket already exceeds its byte limit before the next write begins.
         out, ret = admin(['quota', 'enable', '--max-size', '0',
                           '--max-objects', '-1'] + quota_args)
         assert ret == 0, out

@@ -4,6 +4,8 @@
 #include <limits>
 #include <sstream>
 #include <chrono>
+#include <string_view>
+#include <fmt/format.h>
 
 #include "rgw_zone.h"
 #include "driver/rados/rgw_bucket.h"
@@ -1484,7 +1486,8 @@ int RGWReshard::update(const DoutPrefixProvider *dpp,
 		       optional_yield y)
 {
   cls_rgw_reshard_entry entry;
-  entry.bucket_name = bucket_info.bucket.name;
+  entry.bucket_name = bucket_info.is_vector() ?
+      fmt::format("bucket/{}", bucket_info.bucket.name) : bucket_info.bucket.name;
   entry.bucket_id = bucket_info.bucket.bucket_id;
   entry.tenant = bucket_info.bucket.tenant;
   entry.initiator = initiator;
@@ -1645,12 +1648,21 @@ int RGWReshard::process_entry(const cls_rgw_reshard_entry& entry,
     return 0;
   };
 
+  // Like usage logs, vector entries use the ARN resource bucket/<name>.
+  // The prefix selects the entrypoint namespace; instance metadata is shared.
+  std::string bucket_name = entry.bucket_name;
+  constexpr std::string_view vector_prefix = "bucket/";
+  const bool is_vector = bucket_name.starts_with(vector_prefix);
+  if (is_vector) {
+    bucket_name.erase(0, vector_prefix.size());
+  }
+  auto* bucket_ctl = is_vector ? store->ctl()->vector_bucket : store->ctl()->bucket;
   int ret = store->getRados()->get_bucket_info(store->svc(),
                                                entry.tenant,
-					       entry.bucket_name,
+					       bucket_name,
                                                bucket_info, nullptr,
                                                y, dpp,
-                                               store->ctl()->bucket,
+                                               bucket_ctl,
 					       &bucket_attrs);
   if (ret < 0 || bucket_info.bucket.bucket_id != entry.bucket_id) {
     if (ret < 0) {

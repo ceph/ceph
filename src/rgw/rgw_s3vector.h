@@ -160,8 +160,8 @@ int get_bucket_storage_mode(const DoutPrefixProvider* dpp,
     const std::string& vector_bucket_name, StorageMode& mode, optional_yield y);
 
 // Reject a write-type vector operation when the bucket that will receive the
-// data (or its owner) is ALREADY over quota. Only the bucket's current usage is
-// compared against the effective bucket/owner quota -- the request's own payload
+// data (or its owner) is ALREADY over its byte quota. Current storage usage is
+// compared against the effective bucket and owner byte limits. The request's payload
 // is NOT pre-counted, so the write that first crosses the limit is allowed and
 // subsequent writes are rejected. For the rgw backend it loads the native vector
 // bucket (VECTOR_BUCKET mode) or the backing S3 bucket (S3_BUCKET mode); for any

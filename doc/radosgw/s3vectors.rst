@@ -146,24 +146,21 @@ storage.
 Quotas, Statistics, and Usage
 -----------------------------
 
-Native vector buckets support bucket quotas and contribute to their owner's
+Native vector buckets support bucket quotas and count against their owner's
 user or account quota.
 
 Vector quotas are enforced once, at the start of each ``PutVectors`` and
 ``CreateIndex`` operation, by comparing the current usage of the bucket that
 stores the data against the effective bucket and owner quotas.
-For native storage this is the vector bucket; when a vector
-bucket is backed by a separate S3 bucket, that backing bucket's usage and quota
-are used. A request is rejected only when the bucket (or its owner) is *already*
-over its size or object quota; the request's own payload is not pre-counted, so
-the write that first takes a bucket over quota is allowed and subsequent writes
-are rejected.
+For native storage, RGW uses the vector bucket's usage and quota. When a
+separate S3 bucket stores the vector data, RGW uses that bucket's usage and quota.
+RGW checks only byte usage for these operations because compaction can
+change the number of underlying storage objects. A write can take the bucket or
+its owner over its byte quota. RGW rejects subsequent writes while usage exceeds
+either byte limit.
 
-In addition to the storage quotas above, two service limits bound the number of
-vector-service entities. They are checked at the start of the relevant operation
-with the same *already-over* semantics (the request that first crosses the limit
-is allowed, later requests are rejected) and apply to every backend, since they
-count logical entities rather than stored bytes:
+Two RGW configuration options set service-wide limits on index and vector counts
+for every backend.
 
 * ``rgw_s3vector_max_indexes_per_bucket`` limits how many indexes a single vector
   bucket may hold and is checked by ``CreateIndex``. The default is ``10000``,
@@ -185,7 +182,7 @@ example::
    ceph config set client.rgw rgw_s3vector_max_indexes_per_bucket 100
    ceph config set client.rgw rgw_s3vector_max_vectors_per_index 1000000
 
-Use ``--vector`` to select the vector namespace for bucket listing, statistics,
+Use ``--vector`` to select vector buckets for listing, statistics,
 quotas, ownership changes, and usage commands. For example::
 
    radosgw-admin bucket stats --bucket=my-vectors --vector
@@ -193,13 +190,22 @@ quotas, ownership changes, and usage commands. For example::
    radosgw-admin quota enable --bucket=my-vectors --vector
    radosgw-admin user stats --uid=owner --sync-stats
 
-``bucket list --account-id=ACCOUNT_ID --vector`` lists an account's vector
-buckets. User and account statistics include both S3 and native vector storage;
+User and account statistics include both S3 and native vector storage.
 ``--sync-stats`` refreshes both.
 
-For a qualified bucket name, use ``--bucket=NAMESPACE/my-vectors``. If ``--tenant``
-is also supplied, it must match the prefix. For account-owned vector buckets,
-the namespace is the account ID; ordinary S3 buckets use the account's tenant.
+To list an account's vector buckets, run
+``radosgw-admin bucket list --account-id=ACCOUNT_ID --vector``.
+
+To look up one vector bucket owned by that account, prefix the bucket name
+with the account ID. For example, to get statistics for ``my-vectors``, run::
+
+   radosgw-admin bucket stats --bucket=ACCOUNT_ID/my-vectors --vector
+
+For a vector bucket owned by a user outside an account, use
+``--bucket=TENANT/my-vectors`` for a named tenant or ``--bucket=my-vectors`` for
+the default tenant. If you also supply ``--tenant`` with a prefixed bucket name,
+its value must match the prefix. For a regular S3 bucket in a named tenant,
+use the tenant prefix even when an account owns the bucket.
 
 ``bucket chown --bucket=my-vectors --uid=new-owner --vector`` changes ownership
 within the same tenant. Moving a vector bucket into another tenant or account
@@ -214,6 +220,22 @@ tenant or account, use ``--bucket=TENANT/my-vectors`` or
 ``--bucket=ACCOUNT_ID/my-vectors``. Removal applies only to the local zone
 and does not delete a separate S3 backing bucket. Vector removal does not support
 ``--bypass-gc`` or ``--inconsistent-index``.
+
+Native vector buckets support dynamic bucket-index resharding. Use ``--vector``
+with ``bucket reshard``, ``reshard add``, ``reshard status``, ``reshard cancel``,
+``bucket set-min-shards``, and ``reshardlog list`` or ``reshardlog purge`` to
+select a vector bucket. For example::
+
+   radosgw-admin bucket reshard --bucket=my-vectors --num-shards=17 --vector
+   radosgw-admin reshard add --bucket=my-vectors --num-shards=31 --vector
+   radosgw-admin reshard status --bucket=my-vectors --vector
+
+The shared reshard queue identifies vector buckets by the ARN resource
+``bucket/<name>`` and ordinary S3 buckets by their name. ``reshard list`` shows
+both types, and ``reshard process`` processes both without ``--vector``.
+Vector buckets using a separate S3 backing bucket or local storage are
+indexless and cannot be resharded. A separate S3 backing bucket can be
+resharded using the ordinary S3 commands.
 
 Multisite
 ---------

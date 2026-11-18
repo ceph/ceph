@@ -195,8 +195,7 @@ int RGWBucket::init(rgw::sal::Driver* _driver, RGWBucketAdminOpState& op_state,
     return -EINVAL;
 
   user = driver->get_user(op_state.get_user_id());
-  rgw_bucket key(user->get_tenant(), bucket_name, bucket_id);
-  rgw_bucket_parse_tenant(key);
+  const auto key = rgw_bucket_parse_tenant(user->get_tenant(), bucket_name, bucket_id);
 
   // a vector bucket lives in a separate metadata namespace, so it must be loaded
   // through load_vector_bucket()
@@ -1510,13 +1509,12 @@ int RGWBucketAdminOp::remove_bucket(rgw::sal::Driver* driver, const rgw::SiteCon
 
   const bool is_vector = op_state.is_vector_bucket();
   if (is_vector && (bypass_gc || !keep_index_consistent)) {
-    ldpp_dout(dpp, 0) << "ERROR: vector bucket removal does not support "
-                        "--bypass-gc or --inconsistent-index" << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: Cannot remove a vector bucket with garbage collection "
+                        "bypassed or bucket index consistency checks disabled." << dendl;
     return -ENOTSUP;
   }
 
-  rgw_bucket key(op_state.get_tenant(), op_state.get_bucket_name());
-  rgw_bucket_parse_tenant(key);
+  const auto key = rgw_bucket_parse_tenant(op_state.get_tenant(), op_state.get_bucket_name());
   int ret = is_vector ? driver->load_vector_bucket(dpp, key, &bucket, y)
                       : driver->load_bucket(dpp, key, &bucket, y);
   if (ret < 0) {
@@ -1659,8 +1657,7 @@ static int bucket_stats(rgw::sal::Driver* driver, const rgw::SiteConfig& site,
   std::unique_ptr<rgw::sal::Bucket> bucket;
   map<RGWObjCategory, RGWStorageStats> stats;
 
-  rgw_bucket key(tenant_name, bucket_name);
-  rgw_bucket_parse_tenant(key);
+  const auto key = rgw_bucket_parse_tenant(tenant_name, bucket_name);
   int ret = is_vector ? driver->load_vector_bucket(dpp, key, &bucket, y)
                       : driver->load_bucket(dpp, key, &bucket, y);
   if (ret < 0) {
@@ -2117,8 +2114,8 @@ void get_stale_instances(rgw::sal::Driver* driver, const std::string& bucket_nam
       continue;
     }
     binfo = bucket->get_info();
-    // vector buckets are never resharded, and have no S3 entrypoint to compare
-    // against, so they would look stale. they are listed with the S3 instances
+    // Vector instances share this listing, but only S3 entrypoints are
+    // checked below. A live vector instance could otherwise look stale.
     if (binfo.is_vector()) {
       ldpp_dout(dpp, 10) << "skipping vector bucket instance: " << bucket_instance << dendl;
       continue;

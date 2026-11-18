@@ -237,6 +237,10 @@ namespace rgw::s3vector {
 
     // obj_size=0 + check_size_only: compare current usage against the quota
     // without adding this request's payload (reject only if already over).
+    // Compaction can change the number of storage objects for the same vectors.
+    // Do not enforce object-level quota.
+    quota.bucket_quota.max_objects = -1;
+    quota.user_quota.max_objects = -1;
     ret = bucket->check_quota(dpp, quota, /*obj_size=*/0, y, /*check_size_only=*/true);
     if (ret < 0) {
       ldpp_dout(dpp, 10) << "s3vector: bucket '" << vector_bucket_name
@@ -958,9 +962,6 @@ namespace rgw::s3vector {
       return;
     }
 
-    // Reject when the bucket is already over its index-count limit. Only the
-    // current count is compared (the new index is not pre-counted), matching the
-    // storage-quota semantics. 0 disables the limit.
     const auto max_indexes =
         dpp->get_cct()->_conf.get_val<uint64_t>("rgw_s3vector_max_indexes_per_bucket");
     if (max_indexes > 0) {
@@ -978,9 +979,9 @@ namespace rgw::s3vector {
         return;
       }
       lancedb_free_table_names(index_names, index_count);
-      if (index_count > max_indexes) {
+      if (index_count >= max_indexes) {
         ldpp_dout(dpp, 10) << "s3vector: bucket '" << configuration.vector_bucket_name
-          << "' is already over its index limit (" << index_count << " > "
+          << "' has reached its index limit (" << index_count << " >= "
           << max_indexes << ")" << dendl;
         lancedb_connection_free(conn);
         ctx->result = -ERR_QUOTA_EXCEEDED;

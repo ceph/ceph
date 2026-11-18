@@ -5243,11 +5243,8 @@ options:
   type: uint
   level: advanced
   desc: Maximum number of vector indexes a single vector bucket may hold
-  long_desc: A CreateIndex request is rejected when the vector bucket already holds
-    more than this many indexes. The index count is checked at the start of the
-    operation; the request's own index is not pre-counted, so the index that first
-    takes the bucket over the limit is allowed and subsequent CreateIndex requests
-    are rejected. Set to 0 to disable the limit. The default limit is 10,000.
+  long_desc: CreateIndex rejects the request if the bucket already holds this
+    many indexes or more. Set to 0 to disable the limit.
   default: 10000
   services:
   - rgw
