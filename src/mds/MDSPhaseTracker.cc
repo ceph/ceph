@@ -108,7 +108,7 @@ MDSPhaseTracker::MDSPhaseTracker(CephContext *cct, ceph::fair_mutex& mds_lock)
   plb.add_time_avg(l_mdsp_client_session, "client_session",
                    "Time handling client session messages");
   plb.add_time_avg(l_mdsp_peer_request, "peer_request",
-                   "Time handling peer (slave) requests");
+                   "Time handling peer requests");
   plb.add_time_avg(l_mdsp_cache_message, "cache_message",
                    "Time handling MDS cache messages (discover, resolve, ...)");
   plb.add_time_avg(l_mdsp_migrator_message, "migrator_message",

@@ -77,7 +77,7 @@ class TestLsblkParser(object):
 
 
 class TestBackingDeviceIsRotational(object):
-    """Upper dm nodes lie in sysfs queue/rotational; we walk slaves/ to the leaf."""
+    """Upper dm nodes lie in sysfs queue/rotational; we walk the backing devices to the leaf."""
 
     @patch('ceph_volume.util.disk.os.path.realpath')
     def test_sysfs_dm_stack_to_nvme(self, m_realpath, fake_filesystem):
@@ -108,7 +108,7 @@ class TestBackingDeviceIsRotational(object):
 
     @patch('ceph_volume.util.disk.get_partitions', return_value={'sda1': 'sda'})
     @patch('os.path.realpath')
-    def test_dm_slave_partition_resolves_to_parent(
+    def test_dm_backing_partition_resolves_to_parent(
             self, m_realpath, m_get_partitions, fake_filesystem):
         m_realpath.return_value = '/dev/dm-0'
         fake_filesystem.create_dir('/sys/block/dm-0/slaves/sda1')
@@ -116,7 +116,7 @@ class TestBackingDeviceIsRotational(object):
         assert disk.BackingDeviceRotation.is_rotational('/dev/dm-0') is False
 
     @patch('os.path.realpath')
-    def test_multi_slave_any_rotational(self, m_realpath, fake_filesystem):
+    def test_multi_backing_any_rotational(self, m_realpath, fake_filesystem):
         m_realpath.return_value = '/dev/dm-0'
         fake_filesystem.create_dir('/sys/block/dm-0/slaves/sda')
         fake_filesystem.create_dir('/sys/block/dm-0/slaves/sdb')
@@ -126,7 +126,7 @@ class TestBackingDeviceIsRotational(object):
 
     @patch('os.listdir', side_effect=OSError(errno.EACCES, 'Permission denied'))
     @patch('os.path.realpath')
-    def test_listdir_slaves_oserror_defaults_rotational(
+    def test_listdir_backing_oserror_defaults_rotational(
             self, m_realpath, m_listdir, fake_filesystem):
         m_realpath.return_value = '/dev/dm-0'
         fake_filesystem.create_dir('/sys/block/dm-0/slaves')

@@ -228,23 +228,24 @@ def parse_tags(lv_tags: str) -> Dict[str, Any]:
 def _vdo_parents(devices: List[str]) -> List[str]:
     """
     It is possible we didn't get a logical volume, or a mapper path, but
-    a device like /dev/sda2, to resolve this, we must look at all the slaves of
-    every single device in /sys/block and if any of those devices is related to
-    VDO devices, then we can add the parent
+    a device like /dev/sda2, to resolve this, we must look at the backing
+    devices (/sys/block/<dev>/slaves) of every device in /sys/block and
+    if any of those devices is related to VDO devices, then we can add the
+    parent
     """
     parent_devices = []
     for parent in os.listdir('/sys/block'):
-        for slave in os.listdir('/sys/block/%s/slaves' % parent):
-            if slave in devices:
+        for backing in os.listdir('/sys/block/%s/slaves' % parent):
+            if backing in devices:
                 parent_devices.append('/dev/%s' % parent)
                 parent_devices.append(parent)
     return parent_devices
 
 
-def _vdo_slaves(vdo_names: List[str]) -> List[str]:
+def _vdo_backing_devices(vdo_names: List[str]) -> List[str]:
     """
-    find all the slaves associated with each vdo name (from realpath) by going
-    into /sys/block/<realpath>/slaves
+    find all the backing devices associated with each vdo name (from realpath)
+    by going into /sys/block/<realpath>/slaves
     """
     devices = []
     for vdo_name in vdo_names:
@@ -254,24 +255,24 @@ def _vdo_slaves(vdo_names: List[str]) -> List[str]:
         # resolve the realpath and realname of the vdo mapper
         vdo_realpath = os.path.realpath(mapper_path)
         vdo_realname = vdo_realpath.split('/')[-1]
-        slaves_path = '/sys/block/%s/slaves' % vdo_realname
-        if not os.path.exists(slaves_path):
+        backing_path = '/sys/block/%s/slaves' % vdo_realname
+        if not os.path.exists(backing_path):
             continue
         devices.append(vdo_realpath)
         devices.append(mapper_path)
         devices.append(vdo_realname)
-        for slave in os.listdir(slaves_path):
-            devices.append('/dev/%s' % slave)
-            devices.append(slave)
+        for backing in os.listdir(backing_path):
+            devices.append('/dev/%s' % backing)
+            devices.append(backing)
     return devices
 
 
 def _is_vdo(path: str) -> bool:
     """
     A VDO device can be composed from many different devices, go through each
-    one of those devices and its slaves (if any) and correlate them back to
-    /dev/mapper and their realpaths, and then check if they appear as part of
-    /sys/kvdo/<name>/statistics
+    one of those devices and its backing devices (if any) and correlate them
+    back to /dev/mapper and their realpaths, and then check if they appear as
+    part of /sys/kvdo/<name>/statistics
 
     From the realpath of a logical volume, determine if it is a VDO device or
     not, by correlating it to the presence of the name in
@@ -288,11 +289,12 @@ def _is_vdo(path: str) -> bool:
         if os.path.isdir('/sys/kvdo/%s/statistics' % dirname):
             vdo_names.add(dirname)
 
-    # find all the slaves associated with each vdo name (from realpath) by
-    # going into /sys/block/<realpath>/slaves
-    devices.extend(_vdo_slaves(list(vdo_names)))
+    # find all the backing devices associated with each vdo name (from
+    # realpath) by going into /sys/block/<realpath>/slaves
+    devices.extend(_vdo_backing_devices(list(vdo_names)))
 
-    # Find all possible parents, looking into slaves that are related to VDO
+    # Find all possible parents, looking into backing devices that are related
+    # to VDO
     devices.extend(_vdo_parents(devices))
 
     return any([

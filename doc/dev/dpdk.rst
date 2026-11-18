@@ -74,7 +74,9 @@ The OSD selects the NICs using ``ms_dpdk_devs_allowlist``:
 
    .. code-block:: ini
 
-      ms_dpdk_devs_allowlist=--allow=0000:7d:01.0 --allow=0000:7d:02.6 --vdev=net_bonding0,mode=2,slave=0000:7d:01.0,slave=0000:7d:02.6
+      ms_dpdk_devs_allowlist=--allow=0000:7d:01.0 --allow=0000:7d:02.6 --vdev=net_bonding0,mode=2,member=0000:7d:01.0,member=0000:7d:02.6
+
+   DPDK releases before 23.11 take ``slave=`` in place of ``member=``.
 
 DPDK-related configuration items are as follows:
 
