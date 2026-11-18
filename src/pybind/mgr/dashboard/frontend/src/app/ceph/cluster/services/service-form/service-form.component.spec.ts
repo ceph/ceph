@@ -88,6 +88,23 @@ describe('ServiceFormComponent', () => {
       spyOn(cephServiceService, 'create').and.stub();
     });
 
+    describe('should test service name field', () => {
+      it('should disable service name for services without custom names', () => {
+        formHelper.setValue('service_type', 'cephfs-mirror');
+        component.onServiceTypeChange('cephfs-mirror');
+        expect(form.get('service_id').disabled).toBe(true);
+        expect(form.get('service_id').value).toBe('cephfs-mirror');
+      });
+
+      it('should enable service name for services with custom names', () => {
+        formHelper.setValue('service_type', 'cephfs-mirror');
+        component.onServiceTypeChange('cephfs-mirror');
+        formHelper.setValue('service_type', 'mds');
+        component.onServiceTypeChange('mds');
+        expect(form.get('service_id').enabled).toBe(true);
+      });
+    });
+
     it('should test placement (host)', () => {
       formHelper.setValue('service_type', 'crash');
       formHelper.setValue('placement', 'hosts');

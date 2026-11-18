@@ -1371,6 +1371,17 @@ export class ServiceFormComponent extends CdForm implements OnInit {
 
   onServiceTypeChange(selectedServiceType: string) {
     this.setServiceId(selectedServiceType);
+
+    // Service types without custom names use a fixed name
+    if (!this.editing) {
+      const serviceIdControl = this.serviceForm.get('service_id');
+      if (this.requiresServiceId(selectedServiceType)) {
+        serviceIdControl.enable();
+      } else {
+        serviceIdControl.disable();
+      }
+    }
+
     this.updateGrafanaPasswordControlState(selectedServiceType);
 
     this.serviceIds = this.serviceList

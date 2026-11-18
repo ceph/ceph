@@ -241,7 +241,7 @@
               [invalid]="
                 serviceForm.controls.service_id.invalid && serviceForm.controls.service_id.dirty
               "
-              [disabled]="editing"
+              [disabled]="editing || serviceForm.controls.service_id.disabled"
               [invalidText]="serviceIdError"
             >
               Service name
