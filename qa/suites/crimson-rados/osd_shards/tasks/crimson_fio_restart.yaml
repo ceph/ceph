@@ -59,6 +59,19 @@ tasks:
     daemons: [osd.0, osd.1, osd.2]
     wait-for-healthy: false
     wait-for-osds-up: true
+    # Health is queried again right after this step while the OSDs are still
+    # coming back, so the mon has no stats for most PGs and reports them as
+    # never scrubbed.  Keep those transient warnings out of the cluster log
+    # rather than ignorelisting them for the whole run.
+    mon-health-to-clog: false
+
+# Assert the PGs actually re-peer after the restart.  wait-for-osds-up above
+# only checks the OSDs are marked up in the osdmap; this waits for every PG to
+# reach active+clean and, if any does not, dumps them before failing.  Using
+# the task with wait-for-healthy disabled deliberately skips wait_until_healthy,
+# which does not honour log-ignorelist and would trip over unrelated warnings.
+- ceph.healthy:
+    wait-for-healthy: false
 
 - exec:
     osd.0:
@@ -93,6 +106,19 @@ tasks:
     daemons: [osd.0, osd.1, osd.2]
     wait-for-healthy: false
     wait-for-osds-up: true
+    # Health is queried again right after this step while the OSDs are still
+    # coming back, so the mon has no stats for most PGs and reports them as
+    # never scrubbed.  Keep those transient warnings out of the cluster log
+    # rather than ignorelisting them for the whole run.
+    mon-health-to-clog: false
+
+# Assert the PGs actually re-peer after the restart.  wait-for-osds-up above
+# only checks the OSDs are marked up in the osdmap; this waits for every PG to
+# reach active+clean and, if any does not, dumps them before failing.  Using
+# the task with wait-for-healthy disabled deliberately skips wait_until_healthy,
+# which does not honour log-ignorelist and would trip over unrelated warnings.
+- ceph.healthy:
+    wait-for-healthy: false
 
 - exec:
     osd.0:

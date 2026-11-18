@@ -171,23 +171,28 @@ seastar::future<> PGAdvanceMap::split_pg(
   unsigned new_pg_num = next_map->get_pg_num(pg->get_pgid().pool());
   pg->update_snap_mapper_bits(pg->get_pgid().get_split_bits(new_pg_num));
 
+  std::vector<object_stat_sum_t> updated_stats;
+  pg->start_split_stats(split_children, &updated_stats);
+  auto stat_iter = updated_stats.begin();
+
   // Process children sequentially to avoid a race where concurrent
   // split_collection transactions overwrite the parent's split_bits
   // with a lower value. A future optimisation could re-introduce
   // parallel_for_each once we can guarantee that the bits would
   // be applied in order. 
   for (auto child_pgid : split_children) {
-    children_pgids.insert(child_pgid);
-    auto child_pg = co_await handle_split_pg_creation(child_pgid, next_map);
-    split_pgs.insert(child_pg);
+    ceph_assert(stat_iter != updated_stats.end());
+    co_await handle_split_pg_creation(child_pgid, next_map, *stat_iter);
+    ++stat_iter;
   }
-
-  split_stats(split_pgs, children_pgids);
+  ceph_assert(stat_iter != updated_stats.end());
+  pg->finish_split_stats(*stat_iter, rctx.transaction);
 }
 
 seastar::future<Ref<PG>> PGAdvanceMap::handle_split_pg_creation(
     spg_t child_pgid,
-    cached_map_t next_map)
+    cached_map_t next_map,
+    const object_stat_sum_t& stats)
 {
   LOG_PREFIX(PGAdvanceMap::handle_split_pg_creation);
 
@@ -211,6 +216,7 @@ seastar::future<Ref<PG>> PGAdvanceMap::handle_split_pg_creation(
   pg->split_into(child_pg->get_pgid().pgid, child_pg, split_bits);
   auto child_coll_ref = child_pg->get_collection_ref();
   child_rctx.transaction.touch(child_coll_ref->get_cid(), child_pg->get_pgid().make_snapmapper_oid());
+  child_pg->finish_split_stats(stats, child_rctx.transaction);
 
   // We must create a new Trigger instance for each pg.
   // The BlockingEvent object which tracks whether a pg creation is complete
@@ -239,20 +245,6 @@ seastar::future<Ref<PG>> PGAdvanceMap::handle_split_pg_creation(
   co_return child_pg;
 }
 
-
-void PGAdvanceMap::split_stats(std::set<Ref<PG>> children_pgs,
-                              const std::set<spg_t> &children_pgids)
-{
-  std::vector<object_stat_sum_t> updated_stats;
-  pg->start_split_stats(children_pgids, &updated_stats);
-  std::vector<object_stat_sum_t>::iterator stat_iter = updated_stats.begin();
-  for (std::set<Ref<PG>>::const_iterator iter = children_pgs.begin();
-       iter != children_pgs.end();
-       ++iter, ++stat_iter) {
-        (*iter)->finish_split_stats(*stat_iter, rctx.transaction);
-      }
-  pg->finish_split_stats(*stat_iter, rctx.transaction);
-}
 
 seastar::future<PGAdvanceMap::merge_result_t> PGAdvanceMap::check_for_merges(
     epoch_t old_epoch,

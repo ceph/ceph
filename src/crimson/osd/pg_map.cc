@@ -232,17 +232,43 @@ seastar::future<> PGShardMapping::remove_pg_mapping(spg_t pgid) {
       ceph_abort_msg("The pg mapping is inconsistent!");
     }
     assert(find_iter->second.first != NULL_CORE);
-    auto count_iter = primary_mapping.core_to_num_pgs.find(find_iter->second.first);
+    auto mapped_core = find_iter->second.first;
+    auto store_index = find_iter->second.second;
+
+    // When smp > store_shard_nums, PGs are mapped to alien cores (e.g. core 3
+    // or 4 when store_shard_nums=3 and smp=5).  core_to_num_pgs only tracks
+    // the store-backend cores (0 .. store_shard_nums-1), so we must derive the
+    // store core from the alien core before decrementing it.
+    core_id_t store_core;
+    if (seastar::this_smp_shard_count() > primary_mapping.store_shard_nums) {
+      store_core = mapped_core % primary_mapping.store_shard_nums;
+      // Also decrement the alien-core load counter that was incremented in
+      // get_or_create_pg_mapping.
+      auto alien_iter = primary_mapping.core_alien_to_num_pgs.find(store_core);
+      if (alien_iter != primary_mapping.core_alien_to_num_pgs.end()) {
+        auto core_iter = alien_iter->second.find(mapped_core);
+        if (core_iter != alien_iter->second.end() && core_iter->second > 0) {
+          --(core_iter->second);
+        }
+      }
+    } else {
+      store_core = mapped_core;
+    }
+
+    auto count_iter = primary_mapping.core_to_num_pgs.find(store_core);
     assert(count_iter != primary_mapping.core_to_num_pgs.end());
     assert(count_iter->second > 0);
     --(count_iter->second);
 
-    auto core_shard_iter = primary_mapping.core_shard_to_num_pgs.find(find_iter->second.first);
-    auto shard_iter = core_shard_iter->second.find(find_iter->second.second);
-    assert(shard_iter != core_shard_iter->second.end());
-    if (seastar::this_smp_shard_count() < primary_mapping.store_shard_nums) {
-      assert(shard_iter->second > 0);
-      --(shard_iter->second);
+    auto core_shard_iter = primary_mapping.core_shard_to_num_pgs.find(store_core);
+    if (core_shard_iter != primary_mapping.core_shard_to_num_pgs.end()) {
+      auto shard_iter = core_shard_iter->second.find(store_index);
+      if (shard_iter != core_shard_iter->second.end()) {
+        if (seastar::this_smp_shard_count() < primary_mapping.store_shard_nums) {
+          assert(shard_iter->second > 0);
+          --(shard_iter->second);
+        }
+      }
     }
 
     primary_mapping.pg_to_core.erase(find_iter);
