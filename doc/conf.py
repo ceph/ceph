@@ -48,7 +48,8 @@ def is_release_eol(codename):
             releases = yaml.safe_load(response)['releases']
             return 'actual_eol' in releases.get(codename, {})
     except Exception as e:
-        logger.warn(f"Failed to fetch releases.yml from main, falling back to local: {e}")
+        # Not a warning, so that a network hiccup can't fail a strict build
+        logger.info(f"Failed to fetch releases.yml from main, falling back to local: {e}")
         # Fallback to the local file if the network request fails
         with open(os.path.join(top_level, 'doc/releases/releases.yml')) as input:
             releases = yaml.safe_load(input)['releases']
