@@ -2025,20 +2025,21 @@ public:
   /// For multi-zone EC pools: absolute_shard = relative_shard + zone * (k+m)
   /// where k+m = pool.size
   shard_id_t get_relative_shard(const shard_id_t shard) const {
-
-    // Fast path for common case (id < size) and negative shards
-    if (std::cmp_less(shard.id, get_zone_size())) {
+    const int zone_size = get_zone_size();
+    // Fast path for common case (id < size), unconfigured pool size, and negative shards
+    if (zone_size <= 0 || std::cmp_less(shard.id, zone_size)) {
       return shard;
     }
     // Convert absolute to relative using modulo
-    return shard_id_t(shard.id % get_zone_size());
+    return shard_id_t(shard.id % zone_size);
   }
 
   int get_shard_zone(const shard_id_t shard) const {
-    if (std::cmp_less(shard.id, get_zone_size())) {
+    const int zone_size = get_zone_size();
+    if (zone_size <= 0 || std::cmp_less(shard.id, zone_size)) {
       return 0;
     }
-    return shard.id / get_zone_size();
+    return shard.id / zone_size;
   }
 
   /// EC multi-zone: inverse of get_relative_shard() for the given zone
