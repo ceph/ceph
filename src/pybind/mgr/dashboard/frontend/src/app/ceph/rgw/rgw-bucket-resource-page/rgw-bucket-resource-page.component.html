@@ -97,10 +97,14 @@
                 </cds-content-switcher>
               </div>
 
+              <!-- maxCollapsedNumberOfRows=0 disables CodeSnippet's self-measuring in
+                   ngAfterViewInit, which raises NG0100 when the snippet is created in a
+                   visible tab. Height is capped via CSS instead. -->
               @if (lifecycleFormat === 'json') {
                 <cds-code-snippet
-                  class="cds-mt-5"
+                  class="cds-mt-5 rgw-lifecycle-snippet"
                   display="multi"
+                  [maxCollapsedNumberOfRows]="0"
                 >
                   {{ selection.lifecycle | json }}
                 </cds-code-snippet>
@@ -108,15 +112,16 @@
 
               @if (lifecycleFormat === 'xml') {
                 <cds-code-snippet
-                  class="cds-mt-5"
+                  class="cds-mt-5 rgw-lifecycle-snippet"
                   display="multi"
+                  [maxCollapsedNumberOfRows]="0"
                 >
                   {{ selection.lifecycle | xml: { Rules: 'Rule' } | empty }}
                 </cds-code-snippet>
               }
             }
 
-            @if (selection.lifecycle_progress?.length > 0) {
+            @if (selection.lifecycle_progress?.length > 0 && lifecycleProgress?.bucket) {
               <div class="cds-mt-5">
                 <cds-tooltip
                   [description]="lifecycleProgressMap.get(lifecycleProgress.status)?.description"

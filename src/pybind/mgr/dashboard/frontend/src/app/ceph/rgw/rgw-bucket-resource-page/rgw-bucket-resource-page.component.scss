@@ -17,3 +17,8 @@ cd-rgw-bucket-resource-page .cds--content-switcher {
   inline-size: 20%;
   outline: none;
 }
+
+.rgw-lifecycle-snippet .cds--snippet-container {
+  max-block-size: 15rem;
+  overflow-y: auto;
+}

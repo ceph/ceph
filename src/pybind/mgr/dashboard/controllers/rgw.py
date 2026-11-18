@@ -494,9 +494,14 @@ class RgwBucket(RgwRESTController):
         rgw_client = RgwClient.instance(owner, daemon_name)
         return rgw_client.set_tags(bucket_name, tags)
 
-    def _get_lifecycle_progress(self):
-        rgw_client = RgwClient.admin_instance()
-        return rgw_client.get_lifecycle_progress()
+    def _get_lifecycle_progress(self, daemon_name=None):
+        try:
+            rgw_client = RgwClient.admin_instance(daemon_name=daemon_name)
+            progress = rgw_client.get_lifecycle_progress()
+        except (DashboardException, RequestException):
+            logger.exception('Failed to get lifecycle progress')
+            return []
+        return progress if isinstance(progress, list) else []
 
     def _get_lifecycle(self, bucket_name: str, daemon_name, owner):
         rgw_client = RgwClient.instance(owner, daemon_name)
@@ -672,7 +677,7 @@ class RgwBucket(RgwRESTController):
         result['acl'] = self._get_acl(bucket_name, daemon_name, owner)
         result['replication'] = self._get_replication(bucket_name, owner, daemon_name)
         result['lifecycle'] = self._get_lifecycle(bucket_name, daemon_name, owner)
-        result['lifecycle_progress'] = self._get_lifecycle_progress()
+        result['lifecycle_progress'] = self._get_lifecycle_progress(daemon_name)
         # Append the locking configuration.
         locking = self._get_locking(owner, daemon_name, bucket_name)
         result.update(locking)
