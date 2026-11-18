@@ -27,6 +27,7 @@
 #include <iterator>
 #include <memory>
 #include <ranges>
+#include <set>
 #include <source_location>
 #include <string>
 #include <tuple>
@@ -1471,7 +1472,9 @@ int D4NFilterObject::load_obj_state(const DoutPrefixProvider *dpp, optional_yiel
     return load_cached_head(dpp, std::move(*head));
   }
 
-  if (cache_request) {
+  /* A remote request without a versionId cannot be answered by the backend: it would load the current
+     object, not the version the request is about. */
+  if (cache_request || (is_remote_cache_request() && !have_instance())) {
     return -ENOENT;
   }
   const int ret = next->load_obj_state(dpp, y, follow_olh);
@@ -1508,83 +1511,28 @@ rgw::d4n::TransactionResult D4NFilterObject::retry_attribute_transaction(
 int D4NFilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
                                    Attrs* delattrs, optional_yield y, uint32_t flags)
 {
-  std::string head_oid_in_cache;
-  rgw::d4n::CacheBlock block;
-  MissingHeadAction missing_head_action = MissingHeadAction::NONE;
-  Attrs final_delattrs;
-  auto result = retry_attribute_transaction(dpp, y,
-      [this, dpp, y, setattrs, delattrs, &head_oid_in_cache, &block, &missing_head_action, &final_delattrs](rgw::d4n::Transaction& txn) -> int {
-        missing_head_action = MissingHeadAction::NONE;
-        head_oid_in_cache.clear();
-        block = rgw::d4n::CacheBlock{};
-        int head_ret = check_head_exists_in_cache_get_oid(dpp, head_oid_in_cache, block, y, txn);
-        if (head_ret == -ENOENT) {
-          ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): check_head_exists_in_cache_get_oid head block does not exist in the cache " << dendl;
-          return -ENOENT;
-        }
-        if (head_ret < 0) {
-          ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): check_head_exists_in_cache_get_oid failed with ret: " << head_ret << dendl;
-          return head_ret;
-        }
-        if (head_ret == 0) {
-          if (block.deleteMarker || cache_request) {
-            ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): object " << this->get_name() << " does not exist." << dendl;
-            return -ENOENT;
+  /* The backend sets the attrs of the object as addressed: in a versioned bucket without a versionId,
+     the plain name (olh) object, not the current version. */
+  return update_obj_attrs(dpp, y, "set_obj_attrs", false /* resolve_current_version */,
+      [setattrs, delattrs](rgw::sal::Attrs& cached) {
+        bool changed = false;
+        // Deleted first, so that an attr both set and deleted ends up set (setattrs wins, as before).
+        if (delattrs) {
+          for (const auto& attr : *delattrs) {
+            changed |= cached.erase(attr.first) > 0;
           }
-          missing_head_action = block.cacheObj.dirty ? MissingHeadAction::NOOP : MissingHeadAction::BACKEND;
-          return -ECANCELED;
         }
-
-        Attrs attempt_delattrs = delattrs != nullptr ? *delattrs : Attrs{};
-        if (setattrs != nullptr) {
-          // Setting an attribute takes precedence over deleting it.
+        if (setattrs) {
           for (const auto& attr : *setattrs) {
-            attempt_delattrs.erase(attr.first);
-            block.cacheObj.attrs[attr.first] = attr.second;
+            cached[attr.first] = attr.second;
+            changed = true;
           }
         }
-
-        if (delattrs != nullptr) {
-          std::erase_if(attempt_delattrs, [&block](const auto& attr) {
-            return !block.cacheObj.attrs.contains(attr.first);
-          });
-          for (const auto& attr : attempt_delattrs) {
-            block.cacheObj.attrs.erase(attr.first);
-          }
-        }
-
-        int set_ret = driver->get_block_dir()->set(dpp, y, &block, txn);
-        if (set_ret < 0) {
-          ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): BlockDirectory set method failed with ret: " << set_ret << dendl;
-          return set_ret;
-        }
-        final_delattrs = std::move(attempt_delattrs);
-        return 0;
+        return changed;
+      },
+      [this, dpp, setattrs, delattrs, y, flags]() {
+        return next->set_obj_attrs(dpp, setattrs, delattrs, y, flags);
       });
-
-  // Handle FoundationDB unknown_commit: attribute reconciliation remains a TODO:
-  int ret = handle_transaction_result(dpp, result);
-
-  if (ret == -ECANCELED && missing_head_action != MissingHeadAction::NONE) {
-    if (missing_head_action == MissingHeadAction::NOOP) {
-      return 0;
-    }
-    ret = next->set_obj_attrs(dpp, setattrs, delattrs, y, flags);
-    if (ret < 0) {
-      ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): set_obj_attrs method of backend store failed with ret: " << ret << dendl;
-    }
-    return ret;
-  }
-
-  if (ret < 0) {
-    return ret;
-  }
-
-  if (delattrs != nullptr) {
-    *delattrs = std::move(final_delattrs);
-  }
-
-  return 0;
 }
 
 int D4NFilterObject::load_cached_head(const DoutPrefixProvider *dpp, rgw::d4n::CacheBlock&& head)
@@ -2567,7 +2515,28 @@ D4NFilterObject::lookup_cached_head(const DoutPrefixProvider *dpp, optional_yiel
       return result;
     }
   }
-  return directory->find(dpp, y, key, txn);
+
+  auto result = directory->find(dpp, y, key, txn);
+  /* A remote request carrying a version is about that version only. The plain name HEAD stands in
+     for it only when it names the same version; a HEAD of another version (a later one, or one
+     tombstoned by a delete) would make the remote act on the wrong version, so the requested
+     version is reported as not cached. */
+  if (result && result->has_value() && is_remote_cache_request() && !have_instance() &&
+      !version.empty() && (*result)->version != version) {
+    return std::optional<rgw::d4n::CacheBlock>{};
+  }
+  /* A tombstoned plain name HEAD of a versioned bucket (a request without a versionId) means only that
+     the latest dirty version was deleted: the plain name HEAD is tombstoned when no dirty version is
+     left (deleting the latest one otherwise promotes the next). The current version, if any, is clean
+     and in the backend, and only the backend knows which it is (a version, a delete marker, or none).
+     Report it as not cached, so that every caller falls back to the backend. Any other tombstone (a
+     non-versioned object, or a version addressed by its versionId) is a deletion and stays
+     authoritative. A remote request keeps the tombstone (see load_cached_head()). */
+  if (result && result->has_value() && (*result)->invalid && !is_remote_cache_request() &&
+      !have_instance() && get_bucket()->versioned()) {
+    return std::optional<rgw::d4n::CacheBlock>{};
+  }
+  return result;
 }
 
 int D4NFilterObject::check_head_exists_in_cache_get_oid(const DoutPrefixProvider* dpp, std::string& head_oid_in_cache, rgw::d4n::CacheBlock& blk, optional_yield y, std::optional<rgw::d4n::Transaction> txn)
@@ -2582,11 +2551,16 @@ int D4NFilterObject::check_head_exists_in_cache_get_oid(const DoutPrefixProvider
     return 0;
   }
 
-  blk = std::move(*head);
-  if (blk.invalid && !is_remote_cache_request()) {
+  if (head->invalid && !is_remote_cache_request()) {
     exists_in_cache = false;
-    return -ENOENT;
+    /* Only the tombstone flag is returned, so that a caller can tell a tombstoned HEAD (a deleted
+       object) from one that is not cached; the rest of blk is left as the caller passed it. A
+       tombstoned plain name HEAD of a versioned bucket is already reported as not cached by
+       lookup_cached_head(): the current version is in the backend. */
+    blk.invalid = true;
+    return 0;
   }
+  blk = std::move(*head);
   if (!is_remote_cache_request() || version.empty()) {
     set_object_version(blk.version);
   }
@@ -2609,7 +2583,8 @@ int D4NFilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* d
     }
     auto& head = *result;
     if (!head) {
-      if (cache_request) {
+      // A remote request without a versionId cannot be answered by the backend (see load_obj_state()).
+      if (cache_request || (is_remote_cache_request() && !have_instance())) {
         return -ENOENT;
       }
       if(perfcounter) {
@@ -2670,59 +2645,219 @@ int D4NFilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* d
 int D4NFilterObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
                                       optional_yield y, const DoutPrefixProvider* dpp, uint32_t flags)
 {
+  // The backend modifies the current version (it follows the olh).
+  return update_obj_attrs(dpp, y, "modify_obj_attrs", true /* resolve_current_version */,
+      [attr_name, &attr_val](rgw::sal::Attrs& cached) {
+        cached[attr_name] = attr_val;
+        return true;
+      },
+      [this, attr_name, &attr_val, y, dpp, flags]() {
+        return next->modify_obj_attrs(attr_name, attr_val, y, dpp, flags);
+      });
+}
+
+/* An attr change of set_obj_attrs(), modify_obj_attrs() or delete_obj_attrs(): apply_to_cache changes
+   the attrs of a cached HEAD entry and returns whether it changed anything (an unchanged entry is not
+   written), apply_to_backend makes the change in the backend.
+     - dirty HEAD: only the cached HEAD entries change; write-back carries the attrs to the backend;
+     - clean HEAD: the backend first, then the cached HEAD entries that still hold that version;
+     - not cached: the backend, then, if resolve_current_version (the backend change applies to the
+       current version: modify_obj_attrs()), in a versioned bucket without a versionId the cached
+       instance entry of the current version, if any;
+     - deleted (delete marker, or tombstoned HEAD unless it is the plain name HEAD of a versioned
+       bucket): -ENOENT. */
+int D4NFilterObject::update_obj_attrs(const DoutPrefixProvider* dpp, optional_yield y, const char* component,
+                                      bool resolve_current_version,
+                                      const std::function<bool(rgw::sal::Attrs&)>& apply_to_cache,
+                                      const std::function<int()>& apply_to_backend)
+{
   std::string head_oid_in_cache;
   rgw::d4n::CacheBlock block;
-  enum class MissingHeadAction { NONE, BACKEND, NOOP };
-  MissingHeadAction missing_head_action = MissingHeadAction::NONE;
+  bool use_backend = false;
+  std::optional<rgw::d4n::CacheBlock> clean_head; // the HEAD found is clean: the backend is modified too
+
+  /* A version has up to three HEAD entries, written by set_head_block_dir_entry(): the plain name HEAD
+     (latest version), the instance entry "_:<instance>_<name>" ("_:null_<name>" for the null
+     version, and in non-versioned buckets) and the version-specific alias "_:<version>_<name>".
+     Write-back reads the attrs from one of them and a remote GET from another, so the change is
+     applied to all of them. Each is read in the transaction and updated only if it is live and holds `head`'s
+     version: the plain name HEAD, for instance, may hold a newer version, or `head` may have been
+     replaced since an earlier transaction read it. head_is_current: `head` was read in this
+     transaction, so its own entry is used as it is instead of being read again. */
+  auto apply_to_version_heads = [this, dpp, y, component, &apply_to_cache](rgw::d4n::Transaction& txn,
+                                                                            const rgw::d4n::CacheBlock& head,
+                                                                            bool head_is_current) -> int {
+    const std::string& name = this->get_name();
+    const std::string plain_name = get_latest_head_block_name(name);
+    std::set<std::string> names{head.cacheObj.objName, plain_name, get_versioned_head_block_name(head.version, name)};
+    std::string instance = this->have_instance() ? this->get_instance() : std::string{};
+    if (instance.empty()) { // no versionId in the request: the latest version's instance
+      if (auto it = head.cacheObj.attrs.find(RGW_CACHE_ATTR_VERSION_ID); it != head.cacheObj.attrs.end()) {
+        instance = it->second.to_str();
+      }
+    }
+    if (!instance.empty()) {
+      names.insert(get_versioned_head_block_name(instance, name));
+    }
+    if (!this->get_bucket()->versioned()) {
+      names.insert(get_versioned_head_block_name("null", name));
+    }
+
+    for (const auto& n : names) {
+      rgw::d4n::CacheBlock b;
+      int r;
+      if (head_is_current && n == head.cacheObj.objName) {
+        b = head;
+      } else {
+        b = rgw::d4n::CacheBlock{
+          .cacheObj = { .objName = n, .bucketName = this->get_bucket()->get_bucket_id() },
+          .blockID = 0,
+          .size = 0,
+        };
+        r = driver->get_block_dir()->get(dpp, y, &b, std::ref(txn));
+        if (r == -ENOENT) {
+          continue;
+        }
+        if (r < 0) {
+          ldpp_dout(dpp, 0) << "D4NFilterObject::" << component << "(): failed to read HEAD entry " << n << ", ret=" << r << dendl;
+          return r;
+        }
+      }
+      if (b.version != head.version || b.invalid || b.deleteMarker) {
+        continue;
+      }
+      if (!apply_to_cache(b.cacheObj.attrs)) {
+        continue;
+      }
+      if (r = driver->get_block_dir()->set(dpp, y, &b, std::ref(txn)); r < 0) {
+        ldpp_dout(dpp, 0) << "D4NFilterObject::" << component << "(): failed to set HEAD entry " << n << ", ret=" << r << dendl;
+        return r;
+      }
+    }
+    return 0;
+  };
 
   auto result = retry_attribute_transaction(dpp, y,
-      [this, dpp, y, attr_name, &attr_val, &head_oid_in_cache, &block, &missing_head_action](rgw::d4n::Transaction& txn) -> int {
-        missing_head_action = MissingHeadAction::NONE;
+      [this, dpp, y, component, &head_oid_in_cache, &block, &use_backend, &clean_head, &apply_to_version_heads](rgw::d4n::Transaction& txn) -> int {
+        use_backend = false;
+        clean_head.reset();
         head_oid_in_cache.clear();
         block = rgw::d4n::CacheBlock{};
 
         int head_ret = check_head_exists_in_cache_get_oid(dpp, head_oid_in_cache, block, y, txn);
         if (head_ret < 0) {
-          ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): check_head_exists_in_cache_get_oid failed with ret: " << head_ret << dendl;
+          ldpp_dout(dpp, 0) << "D4NFilterObject::" << component << "(): check_head_exists_in_cache_get_oid failed with ret: " << head_ret << dendl;
           return head_ret;
         }
 
         if (head_ret > 0) {
-          block.cacheObj.attrs[attr_name] = attr_val;
-          int set_ret = driver->get_block_dir()->set(dpp, y, &block, txn);
-          if (set_ret < 0) {
-            ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): BlockDirectory set method failed with ret: " << set_ret << dendl;
+          if (!block.cacheObj.dirty) {
+            /* A clean object is in the backend, and nothing writes it back: the backend is modified
+               first, outside the transaction, and then, in another transaction, the HEAD entries that
+               still hold this version (apply_to_version_heads() checks each one). The other order
+               could leave the cache with an attr the backend never got. */
+            clean_head = block;
+            return -ECANCELED;
           }
-          return set_ret;
+          // A dirty object: write-back takes its attrs from the directory HEAD entries.
+          return apply_to_version_heads(txn, block, true);
         }
 
         if (cache_request || block.deleteMarker) {
-          ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): object " << this->get_name() << " does not exist." << dendl;
+          ldpp_dout(dpp, 10) << "D4NFilterObject::" << component << "(): object " << this->get_name() << " does not exist." << dendl;
           return -ENOENT;
         }
 
-        if (!block.cacheObj.dirty) {
-          missing_head_action = MissingHeadAction::BACKEND;
-        } else {
-          missing_head_action = MissingHeadAction::NOOP;
+        /* A tombstoned HEAD is a deleted (dirty) object, unless it is the plain name HEAD of a
+           versioned bucket: then only the latest version was deleted. Deleting the latest dirty
+           version promotes the next one in the version list, which holds only dirty versions, so
+           the plain name HEAD is tombstoned only when no dirty version is left: the current version,
+           if any, is clean and in the backend. */
+        if (block.invalid && (!this->get_bucket()->versioned() || this->have_instance())) {
+          ldpp_dout(dpp, 10) << "D4NFilterObject::" << component << "(): object " << this->get_name()
+                             << " is deleted (tombstoned HEAD)." << dendl;
+          return -ENOENT;
         }
 
+        // Not cached (or the latest version of a versioned object was deleted): the backend has it.
+        use_backend = true;
         return -ECANCELED;
       });
 
-  // Handle FoundationDB unknown_commit: attribute reconciliation remains a TODO:
+  // Handle FoundationDB unknown_commit: attribute reconciliation remains a TODO (-EIO).
+  // -ECANCELED (use_backend, clean_head) comes back as the body's application error.
   int ret = handle_transaction_result(dpp, result);
 
-  if (ret == -ECANCELED && missing_head_action != MissingHeadAction::NONE) {
-    if (missing_head_action == MissingHeadAction::NOOP) {
+  /* Runs a directory transaction after the backend was modified. On failure, or an uncertain commit,
+     the backend has the attr but the cache may not: reads served from the cache miss it until the
+     HEAD is replaced or evicted. */
+  auto run_txn_after_backend = [this, dpp, y](auto& attempt) -> int {
+    // Handle FoundationDB unknown_commit: -EIO (the backend already has the change).
+    return handle_transaction_result(dpp, retry_attribute_transaction(dpp, y, attempt));
+  };
+
+  if (ret == -ECANCELED && use_backend) {
+    /* A clean version of a versioned bucket has no plain name HEAD, so without a versionId it is not
+       found above, but its instance entry may be cached. get_obj_attrs() resolves the current version
+       in the backend and sets its instance, so that the modify below applies to that version, whose
+       cached HEAD entries are then updated. */
+    const bool find_instance = resolve_current_version && this->get_bucket()->versioned() && !this->have_instance();
+    if (find_instance) {
+      ret = next->get_obj_attrs(y, dpp);
+      if (ret < 0) {
+        ldpp_dout(dpp, 0) << "D4NFilterObject::" << component << "(): get_obj_attrs of backend store failed with ret: " << ret << dendl;
+        return ret;
+      }
+    }
+
+    ret = apply_to_backend();
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "D4NFilterObject::" << component << "(): backend store failed with ret: " << ret << dendl;
+      return ret;
+    }
+    if (!find_instance) {
       return 0;
     }
 
-    ret = next->modify_obj_attrs(attr_name, attr_val, y, dpp, flags);
+    // An object written before versioning was enabled has no instance: it is the null version.
+    const std::string instance = next->get_instance().empty() ? "null" : next->get_instance();
+    auto set_instance_heads = [this, dpp, y, component, &instance, &apply_to_version_heads](rgw::d4n::Transaction& txn) -> int {
+      rgw::d4n::CacheBlock inst_head{
+        .cacheObj = { .objName = get_versioned_head_block_name(instance, this->get_name()), .bucketName = this->get_bucket()->get_bucket_id() },
+        .blockID = 0,
+        .size = 0,
+      };
+      int r = driver->get_block_dir()->get(dpp, y, &inst_head, std::ref(txn));
+      if (r == -ENOENT) {
+        return 0; // not cached
+      }
+      if (r < 0) {
+        ldpp_dout(dpp, 0) << "D4NFilterObject::" << component << "(): failed to read HEAD entry "
+                          << inst_head.cacheObj.objName << ", ret=" << r << dendl;
+        return r;
+      }
+      if (inst_head.invalid || inst_head.deleteMarker) {
+        return 0;
+      }
+      return apply_to_version_heads(txn, inst_head, true);
+    };
+    return run_txn_after_backend(set_instance_heads);
+  }
+
+  if (ret == -ECANCELED && clean_head) {
+    ret = apply_to_backend();
     if (ret < 0) {
-      ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): modify_obj_attrs of backend store failed with ret: " << ret << dendl;
+      ldpp_dout(dpp, 0) << "D4NFilterObject::" << component << "(): backend store failed with ret: " << ret << dendl;
+      return ret;
     }
-    return ret;
+
+    /* Now the clean HEAD entries, from the HEAD read before the backend modify. Each entry is read
+       again and left as it is if it no longer holds that version (it was replaced or deleted
+       meanwhile). */
+    auto set_clean_head = [&clean_head, &apply_to_version_heads](rgw::d4n::Transaction& txn) -> int {
+      return apply_to_version_heads(txn, *clean_head, false);
+    };
+    return run_txn_after_backend(set_clean_head);
   }
 
   return ret;
@@ -2730,63 +2865,15 @@ int D4NFilterObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_va
 
 int D4NFilterObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name, optional_yield y)
 {
-  std::string head_oid_in_cache;
-  rgw::d4n::CacheBlock block;
-  MissingHeadAction missing_head_action = MissingHeadAction::NONE;
-
-  const auto result = retry_attribute_transaction(dpp, y,
-      [this, dpp, y, attr_name, &head_oid_in_cache, &block, &missing_head_action](rgw::d4n::Transaction& txn) -> int {
-        missing_head_action = MissingHeadAction::NONE;
-        head_oid_in_cache.clear();
-        block = rgw::d4n::CacheBlock{};
-
-        int head_ret = check_head_exists_in_cache_get_oid(dpp, head_oid_in_cache, block, y, txn);
-        if (head_ret < 0) {
-          ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): check_head_exists_in_cache_get_oid failed with ret: " << head_ret << dendl;
-          return head_ret;
-        }
-
-        if (head_ret == 0) {
-          if (block.deleteMarker || cache_request) {
-            ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): object " << this->get_name() << " does not exist." << dendl;
-            return -ENOENT;
-          }
-
-          missing_head_action = MissingHeadAction::BACKEND;
-          return -ECANCELED;
-        }
-
-        auto it = block.cacheObj.attrs.find(attr_name);
-        if (it == block.cacheObj.attrs.end()) {
-          missing_head_action = MissingHeadAction::NOOP;
-          return -ECANCELED;
-        }
-
-        block.cacheObj.attrs.erase(it);
-        int set_ret = driver->get_block_dir()->set(dpp, y, &block, txn);
-        if (set_ret < 0) {
-          ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): BlockDirectory set method failed with ret: " << set_ret << dendl;
-        }
-        return set_ret;
+  /* As set_obj_attrs(): the backend removes the attr from the object as addressed (it does not
+     follow the olh). */
+  return update_obj_attrs(dpp, y, "delete_obj_attrs", false /* resolve_current_version */,
+      [attr_name](rgw::sal::Attrs& cached) {
+        return cached.erase(attr_name) > 0;
+      },
+      [this, dpp, attr_name, y]() {
+        return next->delete_obj_attrs(dpp, attr_name, y);
       });
-
-
-  // Handle FoundationDB unknown_commit: the caller must reconcile the attribute deletion:
-  int ret = handle_transaction_result(dpp, result);
-
-  if (-ECANCELED != ret || MissingHeadAction::NONE == missing_head_action) {
-    return ret;
-  }
-  if (MissingHeadAction::NOOP == missing_head_action) {
-    return 0;
-  }
-
-  ret = next->delete_obj_attrs(dpp, attr_name, y);
-  if (0 > ret) {
-    rgw::d4n::detail::log_message(dpp, std::source_location::current(),
-                           "delete_obj_attrs of backend store failed: {}", ret);
-  }
-  return ret;
 }
 
 std::unique_ptr<Object> D4NFilterDriver::get_object(const rgw_obj_key& k)
@@ -2884,7 +2971,8 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
     }
     auto& head = *result;
     if (!head) {
-      if (source->is_cache_request()) {
+      // A remote request without a versionId cannot be answered by the backend (see load_obj_state()).
+      if (source->is_cache_request() || (source->is_remote_cache_request() && !source->have_instance())) {
         return -ENOENT;
       }
       if(perfcounter) {

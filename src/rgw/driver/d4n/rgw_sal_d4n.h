@@ -40,9 +40,10 @@
 
 #include <array>
 #include <charconv>
-#include <expected>
-#include <future>
 #include <cstdint>
+#include <expected>
+#include <functional>
+#include <future>
 #include <limits>
 #include <map>
 #include <memory>
@@ -95,8 +96,6 @@ inline std::string get_versioned_head_block_name(const std::string& version, con
 {
   return "_:" + version + "_" + obj_name;
 }
-
-enum class MissingHeadAction { NONE, BACKEND, NOOP };
 
 // Lease TTL for GET operations to prevent concurrent deletion (in nanoseconds)
 // 30 seconds = 30,000,000,000 nanoseconds
@@ -831,6 +830,13 @@ class D4NFilterObject : public FilterObject {
     // if it is missing or tombstoned, 0 if it is live, < 0 on error. Used to resolve an uncertain
     // commit: a delete was applied if it is absent, a PUT/copy HEAD commit if it is live.
     int version_head_absent_in_directory(const DoutPrefixProvider* dpp, optional_yield y, const std::string& version);
+    // The cache and backend handling shared by set_obj_attrs(), modify_obj_attrs() and delete_obj_attrs().
+    // resolve_current_version: the backend change applies to the current version (modify_obj_attrs()),
+    // not to the object as addressed (set_obj_attrs()).
+    int update_obj_attrs(const DoutPrefixProvider* dpp, optional_yield y, const char* component,
+                         bool resolve_current_version,
+                         const std::function<bool(rgw::sal::Attrs&)>& apply_to_cache,
+                         const std::function<int()>& apply_to_backend);
     bool is_delete_marker() { return delete_marker; }
     bool exists(void) override { if (exists_in_cache) { return true;} return next->exists(); };
     bool load_obj_from_store() { return load_from_store; }
