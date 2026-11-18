@@ -140,34 +140,53 @@ class RgwService(CephService):
         # set rgw_realm rgw_zonegroup and rgw_zone, if present
         self.set_realm_zg_zone(spec)
 
-        if spec.zonegroup_hostnames:
-            san_list = spec.zonegroup_hostnames or []
-            hostnames = san_list + [f"*.{h}" for h in san_list] if spec.wildcard_enabled else san_list
-
-            # zonegroup modify requires explicit realm/zonegroup/zone identifiers.
-            # on single-site deployments, these values may be unset, avoid calling.
-            if not (spec.rgw_realm and spec.rgw_zonegroup and spec.rgw_zone):
-                logger.warning(
-                    f"Skipping 'rgw zonegroup modify' for {spec.service_name()}: "
-                    "zonegroup_hostnames is set but rgw_realm/rgw_zonegroup/rgw_zone "
-                    "were not provided in the spec."
-                )
-            else:
-                zg_update_cmd = {
-                    'prefix': 'rgw zonegroup modify',
-                    'realm_name': spec.rgw_realm,
-                    'zonegroup_name': spec.rgw_zonegroup,
-                    'zone_name': spec.rgw_zone,
-                    'hostnames': hostnames,
-                }
-                logger.debug(f'rgw cmd: {zg_update_cmd}')
-                ret, out, err = self.mgr.check_mon_command(zg_update_cmd)
-
         # TODO: fail, if we don't have a spec
         logger.info('Saving service %s spec with placement %s' % (
             spec.service_name(), spec.placement.pretty_str()))
         self.mgr.spec_store.save(spec)
         self.mgr.trigger_connect_dashboard_rgw()
+
+        # this can raise, so it goes last: the error shows up in the
+        # CEPHADM_APPLY_SPEC_FAIL health warning and config() is retried on
+        # the next serve loop pass
+        self.set_zonegroup_hostnames(spec)
+
+    def set_zonegroup_hostnames(self, spec: RGWSpec) -> None:
+        if not spec.zonegroup_hostnames:
+            return
+
+        # zonegroup modify requires explicit realm/zonegroup/zone identifiers.
+        # Fail rather than skip: a skipped update leaves the spec looking
+        # applied while the hostnames never reach the zonegroup.
+        if not (spec.rgw_realm and spec.rgw_zonegroup and spec.rgw_zone):
+            raise OrchestratorError(
+                'zonegroup_hostnames is set but rgw_realm, rgw_zonegroup and '
+                'rgw_zone are not all set in the spec, so the hostnames were '
+                'not added to the zonegroup')
+
+        # 'rgw zonegroup modify' is provided by the rgw mgr module, which is
+        # not enabled when the realm was created with radosgw-admin instead
+        # of 'ceph rgw realm bootstrap'
+        if 'rgw' not in self.mgr.get('mgr_map').get('modules', []):
+            self.mgr.check_mon_command({
+                'prefix': 'mgr module enable',
+                'module': 'rgw'
+            })
+            # the mon tells the mgr to respawn. If we get here first, the
+            # command below fails until the module loads and config() is
+            # retried.
+
+        san_list = spec.zonegroup_hostnames
+        hostnames = san_list + [f"*.{h}" for h in san_list] if spec.wildcard_enabled else san_list
+        zg_update_cmd = {
+            'prefix': 'rgw zonegroup modify',
+            'realm_name': spec.rgw_realm,
+            'zonegroup_name': spec.rgw_zonegroup,
+            'zone_name': spec.rgw_zone,
+            'hostnames': hostnames,
+        }
+        logger.debug(f'rgw cmd: {zg_update_cmd}')
+        self.mgr.check_mon_command(zg_update_cmd)
 
     def _compute_d3n_cache_for_daemon(
         self,

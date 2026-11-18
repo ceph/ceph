@@ -887,6 +887,50 @@ class TestRGWService:
                             'custom_sans': ['s3.example.com', '*.s3.example.com'],
                         }
 
+    @staticmethod
+    def _zonegroup_hostnames_config(cephadm_module, spec, enabled_modules):
+        rgw_svc = service_registry.get_service('rgw')
+        mgr_map = {'modules': enabled_modules}
+        with patch.object(cephadm_module, 'check_mon_command',
+                          return_value=(0, '', '')) as mon_cmd, \
+                patch.object(cephadm_module, 'get', return_value=mgr_map):
+            try:
+                rgw_svc.config(spec)
+            finally:
+                # the spec is saved even when the hostnames can't be applied
+                assert spec.service_name() in cephadm_module.spec_store
+        return [c.args[0] for c in mon_cmd.call_args_list]
+
+    def test_rgw_zonegroup_hostnames_without_realm_fails(
+            self, cephadm_module: CephadmOrchestrator):
+        spec = RGWSpec(service_id='foo', zonegroup_hostnames=['s3.example.com'])
+        with pytest.raises(OrchestratorError, match='hostnames were not added'):
+            self._zonegroup_hostnames_config(cephadm_module, spec, ['rgw'])
+
+    @pytest.mark.parametrize('enabled_modules', [[], ['rgw']])
+    def test_rgw_zonegroup_hostnames_enable_rgw_module(
+            self, enabled_modules, cephadm_module: CephadmOrchestrator):
+        spec = RGWSpec(service_id='foo',
+                       rgw_realm='r', rgw_zonegroup='zg', rgw_zone='z',
+                       zonegroup_hostnames=['s3.example.com'],
+                       wildcard_enabled=True)
+        cmds = self._zonegroup_hostnames_config(cephadm_module, spec, enabled_modules)
+        prefixes = [c['prefix'] for c in cmds]
+        enable = {'prefix': 'mgr module enable', 'module': 'rgw'}
+        if enabled_modules:
+            assert enable not in cmds
+        else:
+            # the module must be enabled before its command is sent
+            assert prefixes.index('mgr module enable') < prefixes.index('rgw zonegroup modify')
+            assert enable in cmds
+        assert {
+            'prefix': 'rgw zonegroup modify',
+            'realm_name': 'r',
+            'zonegroup_name': 'zg',
+            'zone_name': 'z',
+            'hostnames': ['s3.example.com', '*.s3.example.com'],
+        } in cmds
+
     @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     def test_rgw_count_per_host_two_daemons_one_uses_defined_ports_other_has_different_ports(
             self, cephadm_module: CephadmOrchestrator):
