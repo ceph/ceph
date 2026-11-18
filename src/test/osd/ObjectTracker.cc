@@ -169,9 +169,11 @@ std::string ObjectTracker::get_expected_data(
   std::string result(obj.size, '\0');
 
   for (const auto& write : obj.data_writes) {
-    // Copy the write data into the result buffer
-    for (uint64_t i = 0; i < write.data.length() && (write.offset + i) < obj.size; ++i) {
-      result[write.offset + i] = write.data[i];
+    // Copy the write data into the result buffer, up to the object size
+    if (write.offset < obj.size) {
+      const uint64_t n =
+        std::min<uint64_t>(write.data.length(), obj.size - write.offset);
+      result.replace(write.offset, n, write.data, 0, n);
     }
   }
 
