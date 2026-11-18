@@ -1,0 +1,9 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - CEPHADM_STRAY_DAEMON
+      - CEPHADM_FAILED_DAEMON
+tasks:
+- cephfs_test_runner:
+    modules:
+      - tasks.cephadm_cases.maintenance.test_ok_to_stop.TestOkToStop
