@@ -1036,6 +1036,26 @@ static int init_selected_bucket(const string& tenant_name,
   return ret;
 }
 
+static int init_reshard_bucket(const string& tenant_name,
+                                 const string& bucket_name,
+                                 const string& bucket_id,
+                                 bool is_vector,
+                                 std::unique_ptr<rgw::sal::Bucket>* bucket)
+{
+  int ret = init_selected_bucket(tenant_name, bucket_name, bucket_id, is_vector, bucket);
+  if (ret < 0) {
+    return ret;
+  }
+  // An explicit ID reads shared instance metadata, bypassing the entrypoint.
+  if (!bucket_id.empty() && (*bucket)->get_info().is_vector() != is_vector) {
+    cerr << "ERROR: bucket ID " << bucket_id << " does not identify a "
+         << (is_vector ? "vector" : "regular S3") << " bucket" << std::endl;
+    bucket->reset();
+    return -EINVAL;
+  }
+  return 0;
+}
+
 static int read_input(const string& infile, bufferlist& bl)
 {
   int fd = 0;
@@ -3099,6 +3119,7 @@ int check_reshard_bucket_params(rgw::sal::Driver* driver,
 				bool num_shards_specified,
 				int num_shards,
 				int yes_i_really_mean_it,
+				bool is_vector,
 				std::unique_ptr<rgw::sal::Bucket>* bucket)
 {
   if (bucket_name.empty()) {
@@ -3123,7 +3144,7 @@ int check_reshard_bucket_params(rgw::sal::Driver* driver,
     return -EINVAL;
   }
 
-  int ret = init_bucket(tenant, bucket_name, bucket_id, bucket);
+  int ret = init_reshard_bucket(tenant, bucket_name, bucket_id, is_vector, bucket);
   if (ret < 0) {
     cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
     return ret;
@@ -4428,7 +4449,12 @@ int main(int argc, const char **argv)
     if (bucket_vector && !std::set<OPT>{OPT::BUCKETS_LIST, OPT::BUCKET_STATS,
         OPT::BUCKET_CHOWN, OPT::BUCKET_RM, OPT::QUOTA_SET, OPT::QUOTA_ENABLE,
         OPT::QUOTA_DISABLE, OPT::USER_STATS, OPT::USAGE_SHOW,
-        OPT::USAGE_TRIM}.contains(opt_cmd)) {
+        OPT::USAGE_TRIM, OPT::BUCKET_SET_MIN_SHARDS,
+#ifdef WITH_RADOSGW_RADOS
+        OPT::BUCKET_RESHARD, OPT::RESHARD_ADD, OPT::RESHARD_STATUS,
+        OPT::RESHARD_CANCEL, OPT::RESHARDLOG_LIST, OPT::RESHARDLOG_PURGE,
+#endif
+        }.contains(opt_cmd)) {
       cerr << "ERROR: --vector is not supported for this command" << std::endl;
       return EINVAL;
     }
@@ -9009,6 +9035,7 @@ next:
 					  num_shards_specified,
 					  num_shards,
 					  yes_i_really_mean_it,
+					  bucket_vector,
 					  &bucket);
     if (ret < 0) {
       return -ret;
@@ -9065,6 +9092,7 @@ next:
 					  num_shards_specified,
 					  num_shards,
 					  yes_i_really_mean_it,
+					  bucket_vector,
 					  &bucket);
     if (ret < 0) {
       return -ret;
@@ -9075,8 +9103,9 @@ next:
     RGWReshard reshard(static_cast<rgw::sal::RadosStore*>(driver), dpp());
     cls_rgw_reshard_entry entry;
     entry.time = real_clock::now();
-    entry.tenant = tenant;
-    entry.bucket_name = bucket_name;
+    entry.tenant = bucket->get_tenant();
+    entry.bucket_name = bucket->get_info().is_vector() ?
+        fmt::format("bucket/{}", bucket->get_name()) : bucket->get_name();
     entry.bucket_id = bucket->get_info().bucket.bucket_id;
     entry.old_num_shards = num_source_shards;
     entry.new_num_shards = num_shards;
@@ -9135,7 +9164,7 @@ next:
       return EINVAL;
     }
 
-    ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
+    ret = init_reshard_bucket(tenant, bucket_name, bucket_id, bucket_vector, &bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -9172,7 +9201,12 @@ next:
     }
 
     bool bucket_initable = true;
-    ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
+    ret = init_reshard_bucket(tenant, bucket_name, bucket_id, bucket_vector, &bucket);
+    // Forced cancellation removes the queue entry by name, so it must not
+    // proceed if an explicit bucket ID conflicts with the selected type.
+    if (ret == -EINVAL) {
+      return EINVAL;
+    }
     if (ret < 0) {
       if (yes_i_really_mean_it) {
         bucket_initable = false;
@@ -9212,8 +9246,11 @@ next:
     RGWReshard reshard(static_cast<rgw::sal::RadosStore*>(driver), dpp());
 
     cls_rgw_reshard_entry entry;
-    entry.tenant = tenant;
-    entry.bucket_name = bucket_name;
+    // Forced cancellation also works after the bucket has been deleted.
+    rgw_bucket key(tenant, bucket_name);
+    rgw_bucket_parse_tenant(key);
+    entry.tenant = key.tenant;
+    entry.bucket_name = bucket_vector ? fmt::format("bucket/{}", key.name) : key.name;
 
     ret = reshard.remove(dpp(), entry, null_yield);
     if (ret == -ENOENT) {
@@ -9250,7 +9287,7 @@ next:
       return EINVAL;
     }
 
-    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_reshard_bucket(tenant, bucket_name, bucket_id, bucket_vector, &bucket);
     if (ret < 0) {
       return -ret;
     }
@@ -12137,7 +12174,7 @@ next:
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
     }
-    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_reshard_bucket(tenant, bucket_name, bucket_id, bucket_vector, &bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -12204,7 +12241,7 @@ next:
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
     }
-    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_reshard_bucket(tenant, bucket_name, bucket_id, bucket_vector, &bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;

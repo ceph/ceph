@@ -77,6 +77,10 @@ int rgw_sync_all_stats(const DoutPrefixProvider *dpp,
         ldpp_dout(dpp, 0) << "ERROR: could not sync vector bucket stats: ret=" << ret << dendl;
         return ret;
       }
+      ret = bucket->check_bucket_shards(dpp, ent.count, y);
+      if (ret < 0) {
+        ldpp_dout(dpp, 0) << "ERROR in check_bucket_shards: " << cpp_strerror(-ret) << dendl;
+      }
     }
   } while (!vlisting.next_marker.empty());
 

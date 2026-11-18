@@ -2117,8 +2117,8 @@ void get_stale_instances(rgw::sal::Driver* driver, const std::string& bucket_nam
       continue;
     }
     binfo = bucket->get_info();
-    // vector buckets are never resharded, and have no S3 entrypoint to compare
-    // against, so they would look stale. they are listed with the S3 instances
+    // Vector instances share this listing, but only S3 entrypoints are
+    // checked below. A live vector instance could otherwise look stale.
     if (binfo.is_vector()) {
       ldpp_dout(dpp, 10) << "skipping vector bucket instance: " << bucket_instance << dendl;
       continue;

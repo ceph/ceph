@@ -215,6 +215,22 @@ tenant or account, use ``--bucket=TENANT/my-vectors`` or
 and does not delete a separate S3 backing bucket. Vector removal does not support
 ``--bypass-gc`` or ``--inconsistent-index``.
 
+Native vector buckets support dynamic bucket-index resharding. Use ``--vector``
+with ``bucket reshard``, ``reshard add``, ``reshard status``, ``reshard cancel``,
+``bucket set-min-shards``, and ``reshardlog list`` or ``reshardlog purge`` to
+select a vector bucket. For example::
+
+   radosgw-admin bucket reshard --bucket=my-vectors --num-shards=17 --vector
+   radosgw-admin reshard add --bucket=my-vectors --num-shards=31 --vector
+   radosgw-admin reshard status --bucket=my-vectors --vector
+
+The shared reshard queue identifies vector buckets by the ARN resource
+``bucket/<name>`` and ordinary S3 buckets by their name. ``reshard list`` shows
+both types, and ``reshard process`` processes both without ``--vector``.
+Vector buckets using a separate S3 backing bucket or local storage are
+indexless and cannot be resharded. A separate S3 backing bucket can be
+resharded using the ordinary S3 commands.
+
 Multisite
 ---------
 
