@@ -718,9 +718,6 @@ irc.oftc.net), or at ``dev@ceph.io`` and ``ceph-users@ceph.io``. Make
 sure that you have prepared your logs and that you have them ready upon
 request.
 
-The upstream Ceph Slack workspace can be joined at this address:
-https://ceph-storage.slack.com/
-
 See https://ceph.io/en/community/connect/ for current (as of December 2023)
 information on getting in contact with the upstream Ceph community.
 
