@@ -502,6 +502,39 @@ TEST_F(OSDMapTest, Features) {
   // FIXME: test tiering feature bits
 }
 
+TEST_F(OSDMapTest, PoolMigrationFeatures) {
+  // Clients must have the feature once the operator requires it
+  set_up_map();
+  const uint64_t needed = CEPH_FEATUREMASK_POOL_MIGRATION;
+  auto requires_migration = [&](int type) {
+    uint64_t mask;
+    uint64_t features = osdmap.get_features(type, &mask);
+    EXPECT_EQ(needed, mask & needed);
+    // a release marker would turn away a backport's clients
+    EXPECT_NE(CEPH_FEATUREMASK_SERVER_VAMPIRE,
+              features & CEPH_FEATUREMASK_SERVER_VAMPIRE);
+    return (features & needed) == needed;
+  };
+  ASSERT_FALSE(requires_migration(CEPH_ENTITY_TYPE_CLIENT));
+  const uint64_t osd_features_before =
+    osdmap.get_features(CEPH_ENTITY_TYPE_OSD, nullptr);
+
+  {
+    OSDMap::Incremental inc(osdmap.get_epoch() + 1);
+    inc.new_flags = osdmap.get_flags() | CEPH_OSDMAP_REQUIRE_POOL_MIGRATION;
+    osdmap.apply_incremental(inc);
+  }
+  ASSERT_TRUE(requires_migration(CEPH_ENTITY_TYPE_CLIENT));
+  // the flag asks nothing more of OSDs: those of an earlier release still
+  // join during a rolling upgrade
+  ASSERT_EQ(osd_features_before,
+            osdmap.get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
+
+  // Luminous to Nautilus send bit 54 for OSD_HITSET_GMT
+  uint64_t nautilus = CEPH_FEATUREMASK_SERVER_NAUTILUS | (1ull << 54);
+  ASSERT_NE(needed, nautilus & needed);
+}
+
 TEST_F(OSDMapTest, MapPG) {
   set_up_map();
 
