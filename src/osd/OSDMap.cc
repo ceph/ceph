@@ -2042,12 +2042,16 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
       if (crush->is_v5_rule(ruleid))
 	features |= CEPH_FEATURE_CRUSH_TUNABLES5;
     }
-    if (pool.second.is_migrating()) {
-      features |= CEPH_FEATUREMASK_SERVER_VAMPIRE;
-    }
+  }
+  // once the operator requires clients that can follow a pool migration,
+  // the others stay out, after a migration too: a client that holds a
+  // migrated pool's old id cannot follow the redirect
+  if (entity_type == CEPH_ENTITY_TYPE_CLIENT &&
+      test_flag(CEPH_OSDMAP_REQUIRE_POOL_MIGRATION)) {
+    features |= CEPH_FEATUREMASK_POOL_MIGRATION;
   }
   mask |= CEPH_FEATURE_OSDHASHPSPOOL | CEPH_FEATURE_OSD_CACHEPOOL |
-          CEPH_FEATUREMASK_SERVER_VAMPIRE;
+          CEPH_FEATUREMASK_POOL_MIGRATION;
 
   if (osd_primary_affinity) {
     for (int i = 0; i < max_osd; ++i) {
@@ -4804,6 +4808,8 @@ string OSDMap::get_flag_string(unsigned f)
     s += ",noautoscale";
   if (f & CEPH_OSDMAP_STRETCH_ZONES)
     s += ",stretch_zones";
+  if (f & CEPH_OSDMAP_REQUIRE_POOL_MIGRATION)
+    s += ",require_pool_migration";
   if (s.length())
     s.erase(0, 1);
   return s;

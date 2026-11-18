@@ -20,6 +20,11 @@
 	const static uint64_t CEPH_FEATUREMASK_##name =			\
 		(1ULL<<bit | CEPH_FEATURE_INCARNATION_##incarnation);
 
+// a second name for a feature: *name* always ships with *of*
+#define DEFINE_CEPH_FEATURE_ALIAS(name, of)				\
+	const static uint64_t CEPH_FEATURE_##name = CEPH_FEATURE_##of;	\
+	const static uint64_t CEPH_FEATUREMASK_##name = CEPH_FEATUREMASK_##of;
+
 // this bit is ignored but still advertised by release *when*
 #define DEFINE_CEPH_FEATURE_DEPRECATED(bit, incarnation, name, when) \
 	const static uint64_t DEPRECATED_CEPH_FEATURE_##name = (1ULL<<bit); \
@@ -168,6 +173,7 @@ DEFINE_CEPH_FEATURE_RETIRED(53, 1, ERASURE_CODE_PLUGINS_V3, MIMIC, OCTOPUS)
 DEFINE_CEPH_FEATURE(53, 2, SERVER_VAMPIRE);
 DEFINE_CEPH_FEATURE_RETIRED(54, 1, OSD_HITSET_GMT, MIMIC, OCTOPUS)
 DEFINE_CEPH_FEATURE(54, 4, OSD_STRETCH_ZONES) // pools over zones
+DEFINE_CEPH_FEATURE_ALIAS(POOL_MIGRATION, OSD_STRETCH_ZONES)
 DEFINE_CEPH_FEATURE_RETIRED(55, 1, HAMMER_0_94_4, MIMIC, OCTOPUS)
 // available
 DEFINE_CEPH_FEATURE(56, 1, NEW_OSDOP_ENCODING) // 4.13 (for pg_pool_t >= v25)
