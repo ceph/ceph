@@ -271,6 +271,47 @@ void SeaStore::Shard::register_metrics(store_index_t store_index)
     }
   }
 
+  for (std::size_t idx = 0; idx < PHASE_LAT_MAX; ++idx) {
+    auto bucket = static_cast<phase_latency_bucket_t>(idx);
+    auto name = std::string(phase_latency_bucket_name(bucket));
+    auto label = sm::label_instance("phase", name);
+    auto& hist = stats.phase_lat[idx];
+    hist.buckets.resize(PHASE_LAT_BUCKETS_MS.size());
+    for (std::size_t i = 0; i < PHASE_LAT_BUCKETS_MS.size(); ++i) {
+      hist.buckets[i].upper_bound = PHASE_LAT_BUCKETS_MS[i];
+      hist.buckets[i].count = 0;
+    }
+    metrics.add_group(
+      "seastore",
+      {
+        sm::make_histogram(
+          "phase_lat",
+          [this, idx]() -> seastar::metrics::histogram& {
+            return stats.phase_lat[idx];
+          },
+          sm::description("per-transaction latency (milliseconds) of a "
+                          "seastore write phase"),
+          {label, sm::label_instance("shard_store_index", std::to_string(store_index))}
+        ),
+        sm::make_counter(
+          "phase_lat_ns",
+          [this, idx] { return stats.phase_lat_ns[idx]; },
+          sm::description("cumulative nanoseconds spent in a seastore write "
+                          "phase"),
+          {label, sm::label_instance("shard_store_index", std::to_string(store_index))}
+        ),
+        sm::make_counter(
+          "phase_lat_scopes",
+          [this, idx] { return stats.phase_lat_scopes[idx]; },
+          sm::description("number of timed scopes accumulated for a seastore "
+                          "write phase; phase_lat_ns divided by this is the "
+                          "mean cost of one operation of that phase"),
+          {label, sm::label_instance("shard_store_index", std::to_string(store_index))}
+        ),
+      }
+    );
+  }
+
   metrics.add_group(
     "onode_tree",
     {
@@ -2140,6 +2181,7 @@ seastar::future<> SeaStore::Shard::run_one_batch(
     add_latency_sample(op_type_t::DO_TRANSACTION, total);
   }
 
+  publish_phase_latency_samples(ctx.transaction->get_phase_latency_stats());
   add_onode_tree_sample(ctx.transaction->get_onode_tree_stats());
 
   throttler.put();
@@ -2250,6 +2292,10 @@ SeaStore::Shard::_do_transaction_step(
   if (!onodes[op->oid]) {
     const ghobject_t& oid = i.get_oid(op->oid);
     auto t0 = seastar::lowres_clock::now();
+    // the timer is moved into the continuation below so that it covers the
+    // whole lookup, not just its submission
+    auto phase_lat = ctx.transaction->record_phase_latency(
+      phase_latency_bucket_t::metadata_lookup);
     if (!create) {
       DEBUGT("op {}, get oid={} ...",
              *ctx.transaction, (uint32_t)op->op, oid);
@@ -2260,7 +2306,8 @@ SeaStore::Shard::_do_transaction_step(
       fut = onode_manager->get_or_create_onode(
         *ctx.transaction, col->get_cid(), oid);
     }
-    fut = std::move(fut).si_then([&ctx, t0](auto onode) {
+    fut = std::move(fut).si_then(
+      [&ctx, t0, phase_lat=std::move(phase_lat)](auto onode) {
       ctx.get_onode_time += seastar::lowres_clock::now() - t0;
       return onode_iertr::make_ready_future<OnodeRef>(std::move(onode));
     });
@@ -2282,9 +2329,11 @@ SeaStore::Shard::_do_transaction_step(
              *ctx.transaction, (uint32_t)op->op, dest_oid);
       //TODO: use when_all_succeed after making onode tree
       //      support parallel extents loading
+      auto phase_lat = ctx.transaction->record_phase_latency(
+        phase_latency_bucket_t::metadata_lookup);
       return onode_manager->get_or_create_onode(
         *ctx.transaction, col->get_cid(), dest_oid
-      ).si_then([&d_onode](auto dest_onode) {
+      ).si_then([&d_onode, phase_lat=std::move(phase_lat)](auto dest_onode) {
 	assert(dest_onode);
 	assert(!d_onode);
 	d_onode = dest_onode;
@@ -2294,9 +2343,11 @@ SeaStore::Shard::_do_transaction_step(
       const ghobject_t& dest_oid = i.get_oid(op->dest_oid);
       DEBUGT("op {}, get_onode dest oid={} ...",
              *ctx.transaction, (uint32_t)op->op, dest_oid);
+      auto phase_lat = ctx.transaction->record_phase_latency(
+        phase_latency_bucket_t::metadata_lookup);
       return onode_manager->get_or_create_onode(
         *ctx.transaction, col->get_cid(), dest_oid
-      ).si_then([&d_onode](auto target_onode) {
+      ).si_then([&d_onode, phase_lat=std::move(phase_lat)](auto target_onode) {
         d_onode = target_onode;
       });
     } else {
