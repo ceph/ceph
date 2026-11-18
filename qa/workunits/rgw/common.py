@@ -32,8 +32,8 @@ def exec_cmd(cmd, wait = True, **kwargs):
     
 def create_user(uid, display_name, access_key, secret_key):
     _, ret = exec_cmd(f'radosgw-admin user create --uid {uid} --display-name "{display_name}" --access-key {access_key} --secret {secret_key}', check_retcode=False)
-    assert(ret == 0 or errno.EEXIST)
-    
+    assert(ret == 0 or ret == errno.EEXIST)
+
 def boto_connect(access_key, secret_key, config=None):
     def try_connect(portnum, ssl, proto):
         endpoint = proto + '://localhost:' + portnum
