@@ -5762,7 +5762,8 @@ options:
   long_desc: By default the thread only changes the allocator's in-memory state,
     which keeps claims fast. Set bluestore_debug_claim_range_stress_write_sentinel
     to also write to the claimed space. Everything claimed is released at
-    umount. Read at mount.
+    umount. The thread logs a summary at debug level 1 every 60 seconds and
+    at umount. Read at mount.
   default: false
   with_legacy: false
   see_also:

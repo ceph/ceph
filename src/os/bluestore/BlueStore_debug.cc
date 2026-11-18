@@ -362,6 +362,27 @@ void *BlueStore::ClaimRangeStressThread::entry()
     pool.pop_front();
   };
 
+  // logged every summary_period as well as at exit: an OSD that is killed
+  // never reaches the exit summary, and the free space shows how full the
+  // device is when claims are made
+  const auto summary_period = std::chrono::seconds(60);
+  auto last_summary = mono_clock::now();
+  auto log_summary = [&] {
+    dout(1) << "entry claims "
+            << claims_full + claims_partial + claims_zero
+            << " (full " << claims_full
+            << " partial " << claims_partial
+            << " zero " << claims_zero << ")"
+            << " sentinels edge " << sentinels_edge
+            << " middle " << sentinels_middle
+            << " claimed " << byte_u_t(claimed_total)
+            << " released " << byte_u_t(released_total)
+            << " held " << byte_u_t(held)
+            << " in " << pool.size() << " claims"
+            << " free " << byte_u_t(store->alloc->get_free())
+            << " of " << byte_u_t(store->alloc->get_capacity()) << dendl;
+  };
+
   while (!stop) {
     if (pool.size() == max_claims) {
       release_front();
@@ -417,6 +438,10 @@ void *BlueStore::ClaimRangeStressThread::entry()
       }
     }
     cond.wait_for(l, ceph::make_timespan(interval));
+    if (mono_clock::now() - last_summary >= summary_period) {
+      log_summary();
+      last_summary = mono_clock::now();
+    }
   }
 
   // Thread stopped, release all claims
@@ -424,15 +449,7 @@ void *BlueStore::ClaimRangeStressThread::entry()
     release_front();
   }
 
-  dout(1) << __func__ << " claims "
-          << claims_full + claims_partial + claims_zero
-          << " (full " << claims_full
-          << " partial " << claims_partial
-          << " zero " << claims_zero << ")"
-          << " sentinels edge " << sentinels_edge
-          << " middle " << sentinels_middle
-          << " claimed " << byte_u_t(claimed_total)
-          << " released " << byte_u_t(released_total) << dendl;
+  log_summary();
   ceph_assert(held == 0);
   ceph_assert(claimed_total == released_total);
   stop = false;
