@@ -898,7 +898,9 @@ class AgentMessage:
         Returns True when the agent replied, False when the message could
         not be delivered. A refused or reset connection is retried once
         after AGENT_MESSAGE_RETRY_WAIT seconds. A timeout or any other
-        error is not retried.
+        error is not retried. A connection closed without a reply is a
+        failure like any other: the agent replies to every well-formed
+        message, with ACK or an error string.
         """
         self.mgr.log.debug(f'Sending message to agent on host {self.host}')
         self.addr = self.mgr.inventory.get_addr(self.host) if self.host in self.mgr.inventory else self.host
@@ -927,7 +929,16 @@ class AgentMessage:
                         secure_agent_socket.connect((self.addr, self.port))
                         msg = (bytes_len + data)
                         secure_agent_socket.sendall(msg.encode('utf-8'))
-                        self.agent_response = secure_agent_socket.recv(1024).decode()
+                        reply = secure_agent_socket.recv(1024).decode()
+                        if not reply:
+                            # The agent replies to every well-formed message,
+                            # with ACK or an error string. An empty reply means
+                            # it closed the connection without processing the
+                            # message, so the message must not count as
+                            # delivered.
+                            raise Exception(
+                                f'connection closed by agent on host {self.host} without a reply')
+                        self.agent_response = reply
                 self.mgr.log.debug(f'Received "{self.agent_response}" from agent on host {self.host}')
                 if self.daemon_spec:
                     self.mgr.agent_cache.agent_config_successfully_delivered(self.daemon_spec)

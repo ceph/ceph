@@ -295,6 +295,35 @@ def test_send_returns_whether_the_agent_replied():
         assert AgentMessage('h', 1234, mgr).send() is False
 
 
+def test_empty_reply_is_a_failed_message():
+    mgr = _socket_mgr()
+    raw, secure, ctx = _patched_socket()
+    secure.recv.return_value = b''
+    mgr.http_server.agent.get_client_ssl_context.return_value = ctx
+    msg = AgentMessage('h', 1234, mgr)
+    with mock.patch('cephadm.agent.socket.socket', return_value=raw):
+        assert msg.send() is False
+    # not retried: a connection closed without a reply is not a refused one
+    secure.connect.assert_called_once()
+    assert msg.get_agent_response() == ''
+    mgr.log.error.assert_called_once()
+
+
+def test_empty_reply_does_not_mark_config_delivered():
+    mgr = _socket_mgr()
+    raw, secure, ctx = _patched_socket()
+    secure.recv.return_value = b''
+    mgr.http_server.agent.get_client_ssl_context.return_value = ctx
+    daemon_spec = mock.MagicMock(name='daemon_spec')
+    daemon_spec.final_config = {'agent.json': '{}'}
+    msg = AgentMessage('h', 1234, mgr, daemon_spec)
+    with mock.patch('cephadm.agent.socket.socket', return_value=raw):
+        assert msg.send() is False
+    # the agent never processed the config: deps are left unchanged
+    mgr.agent_cache.agent_config_successfully_delivered.assert_not_called()
+    mgr.log.error.assert_called_once()
+
+
 def _socket_mgr() -> mock.MagicMock:
     mgr = _fake_mgr()
     mgr.agent_cache.agent_counter = {'h': 1}
