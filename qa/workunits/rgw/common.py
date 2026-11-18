@@ -49,12 +49,11 @@ def rgw_endpoints():
     return [f'http://{host}:80', f'http://{host}:8000', f'https://{host}:443']
 
 def boto_connect(access_key, secret_key, config=None):
-    def try_connect(portnum, ssl, proto):
-        endpoint = proto + '://localhost:' + portnum
+    def try_connect(endpoint):
         conn = boto3.resource('s3',
                               aws_access_key_id=access_key,
                               aws_secret_access_key=secret_key,
-                              use_ssl=ssl,
+                              use_ssl=endpoint.startswith('https://'),
                               endpoint_url=endpoint,
                               verify=False,
                               config=config,
@@ -66,14 +65,13 @@ def boto_connect(access_key, secret_key, config=None):
             raise
         print('connected to', endpoint)
         return conn
-    try:
-        return try_connect('80', False, 'http')
-    except botocore.exceptions.ConnectionError:
-        try: # retry on non-privileged http port
-            return try_connect('8000', False, 'http')
+    endpoints = rgw_endpoints()
+    for idx, endpoint in enumerate(endpoints):
+        try:
+            return try_connect(endpoint)
         except botocore.exceptions.ConnectionError:
-            # retry with ssl
-            return try_connect('443', True, 'https')
+            if idx == len(endpoints) - 1:
+                raise
 
 def object_stat(bucket_name, object_key):
     """Run radosgw-admin object stat and return parsed JSON."""
