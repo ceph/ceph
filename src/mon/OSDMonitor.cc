@@ -297,6 +297,8 @@ const uint32_t MAX_POOL_APPLICATIONS = 4;
 const uint32_t MAX_POOL_APPLICATION_KEYS = 64;
 const uint32_t MAX_POOL_APPLICATION_LENGTH = 128;
 
+const int64_t REPLICA_READ_PCT_UPDATE_DELAY = 5;
+
 bool is_osd_writable(const OSDCapGrant& grant, const std::string* pool_name) {
   // Note: this doesn't include support for the application tag match
   if ((grant.spec.allow & OSD_CAP_W) != 0) {
@@ -9728,7 +9730,7 @@ int OSDMonitor::prepare_new_pool(string& name,
   // pg_committed_to, so bound how long a pool can leave them bouncing.
   if (pool_type == pg_pool_t::TYPE_REPLICATED &&
       g_conf().get_val<string>("rados_replica_read_policy") != "default") {
-    pi->opts.set(pool_opts_t::PCT_UPDATE_DELAY, static_cast<int64_t>(5));
+    pi->opts.set(pool_opts_t::PCT_UPDATE_DELAY, REPLICA_READ_PCT_UPDATE_DELAY);
   }
 
   pi->cache_target_dirty_ratio_micro =
