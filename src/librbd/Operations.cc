@@ -1054,9 +1054,19 @@ void Operations<I>::snap_remove(const cls::rbd::SnapshotNamespace& snap_namespac
   if (proxy_op) {
     uint64_t request_id = util::reserve_async_request_id();
     auto request_type = exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL;
-    if (cls::rbd::get_snap_namespace_type(snap_namespace) ==
-        cls::rbd::SNAPSHOT_NAMESPACE_TYPE_TRASH) {
+    auto snap_namespace_type =
+      cls::rbd::get_snap_namespace_type(snap_namespace);
+    if (snap_namespace_type == cls::rbd::SNAPSHOT_NAMESPACE_TYPE_TRASH) {
       request_type = exclusive_lock::OPERATION_REQUEST_TYPE_TRASH_SNAP_REMOVE;
+    } else if (snap_namespace_type ==
+                 cls::rbd::SNAPSHOT_NAMESPACE_TYPE_GROUP) {
+      request_type = exclusive_lock::OPERATION_REQUEST_TYPE_GROUP_SNAP_REMOVE;
+    } else if (auto mirror_ns =
+                 std::get_if<cls::rbd::MirrorSnapshotNamespace>(
+                   &snap_namespace);
+               mirror_ns != nullptr && mirror_ns->group_spec.is_valid() &&
+               !mirror_ns->group_snap_id.empty()) {
+      request_type = exclusive_lock::OPERATION_REQUEST_TYPE_GROUP_SNAP_REMOVE;
     }
     C_InvokeAsyncRequest<I> *req = new C_InvokeAsyncRequest<I>(
       m_image_ctx, OPERATION_SNAP_REMOVE, request_type, true,

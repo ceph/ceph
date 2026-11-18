@@ -1171,6 +1171,13 @@ void InstanceWatcher<I>::handle_image_acquire(
 }
 
 template <typename I>
+bool InstanceWatcher<I>::prune_image_snapshot(int64_t local_pool_id,
+  const std::string &local_image_id, uint64_t snap_id) {
+  return m_instance_replayer->prune_image_snapshot(local_pool_id,
+    local_image_id, snap_id);
+}
+
+template <typename I>
 void InstanceWatcher<I>::handle_image_release(
     const std::string &global_image_id, Context *on_finish) {
   dout(10) << "global_image_id=" << global_image_id << dendl;
