@@ -3084,7 +3084,14 @@ int RGWPutObj_ObjStore_S3::get_params(optional_yield y)
     ret = -ERR_INVALID_REQUEST;
     return ret;
   }
-  multipart_upload_id = s->info.args.get("uploadId");
+  bool has_upload_id = false;
+  multipart_upload_id = s->info.args.get("uploadId", &has_upload_id);
+  if (has_upload_id && multipart_upload_id.empty()) {
+    // RGWPutObj::execute() treats an empty id as a plain PutObject, which
+    // would overwrite the object with the part's data
+    ldpp_dout(s, 10) << "empty multipart upload id" << dendl;
+    return -ERR_NO_SUCH_UPLOAD;
+  }
   multipart_part_str = s->info.args.get("partNumber");
   if (!multipart_part_str.empty()) {
     string err;
@@ -5806,12 +5813,12 @@ RGWOp *RGWHandler_REST_Obj_S3::op_delete()
   if (is_tagging_op()) {
     return new RGWDeleteObjTags_ObjStore_S3;
   }
-  string upload_id = s->info.args.get("uploadId");
-
-  if (upload_id.empty())
-    return new RGWDeleteObj_ObjStore_S3;
-  else
+  // route on the parameter's presence, so that an empty uploadId reaches
+  // AbortMultipartUpload and is refused there instead of deleting the object
+  if (s->info.args.exists("uploadId"))
     return new RGWAbortMultipart_ObjStore_S3;
+  else
+    return new RGWDeleteObj_ObjStore_S3;
 }
 
 RGWOp *RGWHandler_REST_Obj_S3::op_post()

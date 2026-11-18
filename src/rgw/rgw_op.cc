@@ -8189,8 +8189,12 @@ void RGWAbortMultipart::execute(optional_yield y)
   std::unique_ptr<rgw::sal::Object> meta_obj;
   std::unique_ptr<rgw::sal::MultipartUpload> upload;
 
-  if (upload_id.empty() || rgw::sal::Object::empty(s->object.get()))
+  if (rgw::sal::Object::empty(s->object.get()))
     return;
+  if (upload_id.empty()) {
+    op_ret = -ERR_NO_SUCH_UPLOAD;
+    return;
+  }
 
   upload = s->bucket->get_multipart_upload(s->object->get_name(), upload_id);
   meta_obj = upload->get_meta_obj();
