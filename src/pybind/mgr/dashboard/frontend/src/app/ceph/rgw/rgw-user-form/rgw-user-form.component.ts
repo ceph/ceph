@@ -4,6 +4,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 
 import _ from 'lodash';
 import { concat as observableConcat, forkJoin as observableForkJoin, Observable } from 'rxjs';
+import { tap } from 'rxjs/operators';
 
 import { RgwUserService } from '~/app/shared/api/rgw-user.service';
 import { ActionLabelsI18n, URLVerbs, USER } from '~/app/shared/constants/app.constants';
@@ -365,39 +366,46 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
       this.goToListView();
       return;
     }
+    // Observables queued by the dialogs (subuser, capability, key) are kept in
+    // 'submitObservables'. Each one is removed once it has succeeded, so that
+    // only failed/unexecuted ones are retried on the next submit.
+    const observables: Observable<Object>[] = this.submitObservables.map((observable) =>
+      observable.pipe(tap({ complete: () => _.pull(this.submitObservables, observable) }))
+    );
     if (this.editing) {
       // Edit
       if (this._isGeneralDirty()) {
         const args = this._getUpdateArgs();
-        this.submitObservables.push(this.rgwUserService.update(this.uid, args));
+        observables.push(this.rgwUserService.update(this.uid, args));
       }
       notificationTitle = $localize`Updated Object Gateway user '${this.uid}'`;
     } else {
       // Add
       const args = this._getCreateArgs();
-      this.submitObservables.push(this.rgwUserService.create(args));
+      observables.push(this.rgwUserService.create(args));
       notificationTitle = $localize`Created Object Gateway user '${this.uid}'`;
     }
     // Check if user quota has been modified.
     if (this._isUserQuotaDirty()) {
       const userQuotaArgs = this._getUserQuotaArgs();
-      this.submitObservables.push(this.rgwUserService.updateQuota(this.uid, userQuotaArgs));
+      observables.push(this.rgwUserService.updateQuota(this.uid, userQuotaArgs));
     }
     // Check if bucket quota has been modified.
     if (this._isBucketQuotaDirty()) {
       const bucketQuotaArgs = this._getBucketQuotaArgs();
-      this.submitObservables.push(this.rgwUserService.updateQuota(this.uid, bucketQuotaArgs));
+      observables.push(this.rgwUserService.updateQuota(this.uid, bucketQuotaArgs));
     }
 
     // Check if user ratelimit has been modified.
-    const ratelimitvalue: RgwRateLimitConfig = this.rateLimitComponent.getRateLimitFormValue();
+    const ratelimitvalue: RgwRateLimitConfig | null =
+      this.rateLimitComponent.getRateLimitFormValue();
     if (!!ratelimitvalue) {
-      this.submitObservables.push(
+      observables.push(
         this.rgwUserService.updateUserRateLimit(this.uid, ratelimitvalue)
       );
     }
     // Finally execute all observables one by one in serial.
-    observableConcat(...this.submitObservables).subscribe({
+    observableConcat(...observables).subscribe({
       error: () => {
         // Reset the 'Submit' button.
         this.userForm.setErrors({ cdSubmitButton: true });
