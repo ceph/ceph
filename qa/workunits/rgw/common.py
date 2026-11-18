@@ -2,6 +2,7 @@
 
 import errno
 import io
+import os
 import subprocess
 import logging as log
 import boto3
@@ -33,6 +34,19 @@ def exec_cmd(cmd, wait = True, **kwargs):
 def create_user(uid, display_name, access_key, secret_key):
     _, ret = exec_cmd(f'radosgw-admin user create --uid {uid} --display-name "{display_name}" --access-key {access_key} --secret {secret_key}', check_retcode=False)
     assert(ret == 0 or ret == errno.EEXIST)
+
+def rgw_endpoints():
+    """
+    The radosgw endpoints to try, in order.
+
+    AWS_ENDPOINT_URL, if set, is the only endpoint. Otherwise try RGW_HOST
+    (default: localhost) on port 80, then 8000, then 443 with ssl.
+    """
+    url = os.environ.get('AWS_ENDPOINT_URL')
+    if url:
+        return [url]
+    host = os.environ.get('RGW_HOST', 'localhost')
+    return [f'http://{host}:80', f'http://{host}:8000', f'https://{host}:443']
 
 def boto_connect(access_key, secret_key, config=None):
     def try_connect(portnum, ssl, proto):
