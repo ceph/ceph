@@ -3489,7 +3489,10 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
     return r;
   }
   bool guard = ((target->manifest) || (target->state->obj_tag.length() != 0)) && (!target->state->fake_tag);
-  bool set_attr_id_tag = guard && target->obj.key.instance.empty() && (meta.if_nomatch == nullptr || meta.if_nomatch != "*"sv);
+  // also guard writes to an existing object version, so that a rewrite or
+  // transition that read it can't bring it back after a concurrent delete
+  bool set_attr_id_tag = guard && (meta.if_nomatch == nullptr ||
+                                   meta.if_nomatch != "*"sv);
   r = target->prepare_atomic_modification(rctx.dpp, op, reset_obj, ptag, meta.modify_tail, set_attr_id_tag, rctx.y);
   if (r < 0)
     return r;
