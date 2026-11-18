@@ -8,6 +8,7 @@ import sys
 import tempfile
 import time
 import boto3.s3.transfer
+import botocore.exceptions
 from common import exec_cmd, create_user, boto_connect
 
 """
@@ -27,7 +28,8 @@ Test plan:
   5. GET object and verify data integrity
 
 Also checks that a transition canceled by a concurrent overwrite is
-not reported as transitioned.
+not reported as transitioned, and that a transition doesn't bring back
+an object version deleted while it ran.
 
 With --encrypt, objects are uploaded with SSE-KMS and the test
 verifies encryption is preserved across each transition. This
@@ -335,6 +337,38 @@ def run_happy_path_transition_tests(size_kb, encrypt):
     log.info(f'{label} test passed')
 
 
+def transition_with_concurrent_op(client, bucket_name, concurrent_op):
+    """
+    Run a transition to LUKEWARM of the objects in the bucket, and call
+    concurrent_op() while the transition is held after it reads an object
+    and before it rewrites it. Returns the lifecycle log.
+    """
+    # due in 5s for radosgw-admin (1s days) but in 50s for rgw's own LC thread (10s days)
+    transition_days = 5
+    put_lifecycle_rule(client, bucket_name, 'to-lukewarm', 'LUKEWARM', days=transition_days)
+    time.sleep(transition_days + 1)
+
+    with tempfile.NamedTemporaryFile(suffix='.log') as lc_log:
+        def read_lc_log():
+            with open(lc_log.name, 'rb') as f:
+                return f.read()
+
+        lc = None
+        deadline = time.time() + LC_TIMEOUT
+        while b'injecting delay' not in read_lc_log():
+            if lc is None or lc.poll() is not None:
+                lc = subprocess.Popen(
+                    f'radosgw-admin lc process --bucket={bucket_name} --rgw-lc-debug-interval=1'
+                    ' --rgw-lc-max-wp-worker=1'
+                    ' --rgw-inject-delay-sec=5 --rgw-inject-delay-pattern=delay_copy_obj_data_complete'
+                    f' --debug-rgw-lifecycle=2 --log-file={lc_log.name}', shell=True)
+            assert time.time() < deadline, 'timed out waiting for the transition to start'
+            time.sleep(0.5)
+        concurrent_op()
+        assert lc.wait(timeout=LC_TIMEOUT) == 0
+        return read_lc_log()
+
+
 def run_failure_test_canceled_transition():
     """
     Overwrite an object while lifecycle is transitioning it.
@@ -348,30 +382,10 @@ def run_failure_test_canceled_transition():
     client = conn.meta.client
     bucket = conn.create_bucket(Bucket=BUCKET_NAME)
     bucket.put_object(Key=object_key, Body=b'old data')
-    # due in 5s for radosgw-admin (1s days) but in 50s for rgw's own LC thread (10s days)
-    transition_days = 5
-    put_lifecycle_rule(client, BUCKET_NAME, 'to-lukewarm', 'LUKEWARM', days=transition_days)
-    time.sleep(transition_days + 1)
 
-    # hold the transition after it reads the object and before it rewrites it
-    with tempfile.NamedTemporaryFile(suffix='.log') as lc_log:
-        def read_lc_log():
-            with open(lc_log.name, 'rb') as f:
-                return f.read()
-
-        lc = None
-        deadline = time.time() + LC_TIMEOUT
-        while b'injecting delay' not in read_lc_log():
-            if lc is None or lc.poll() is not None:
-                lc = subprocess.Popen(
-                    f'radosgw-admin lc process --bucket={BUCKET_NAME} --rgw-lc-debug-interval=1'
-                    ' --rgw-inject-delay-sec=5 --rgw-inject-delay-pattern=delay_copy_obj_data_complete'
-                    f' --debug-rgw-lifecycle=2 --log-file={lc_log.name}', shell=True)
-            assert time.time() < deadline, 'timed out waiting for the transition to start'
-            time.sleep(0.5)
-        bucket.put_object(Key=object_key, Body=new_body)
-        assert lc.wait(timeout=LC_TIMEOUT) == 0
-        out = read_lc_log()
+    out = transition_with_concurrent_op(
+        client, BUCKET_NAME,
+        lambda: bucket.put_object(Key=object_key, Body=new_body))
 
     assert b'TRANSITIONED:' not in out, 'canceled transition was reported as transitioned'
     assert b'object changed concurrently' in out, 'canceled transition was not logged'
@@ -382,6 +396,50 @@ def run_failure_test_canceled_transition():
     bucket.objects.all().delete()
     bucket.delete()
     log.info('Canceled transition test passed')
+
+
+def run_failure_test_transition_of_deleted_version():
+    """
+    Delete an object version while lifecycle is transitioning it.
+    The transition must not bring the deleted version back.
+    """
+    log.info('=== Testing transition of a version deleted concurrently ===')
+    object_key = 'test-object-deleted-version'
+
+    conn = boto_connect(ACCESS_KEY, SECRET_KEY)
+    client = conn.meta.client
+    bucket = conn.create_bucket(Bucket=BUCKET_NAME)
+    client.put_bucket_versioning(Bucket=BUCKET_NAME,
+                                 VersioningConfiguration={'Status': 'Enabled'})
+    version_id = client.put_object(Bucket=BUCKET_NAME, Key=object_key,
+                                   Body=b'old data')['VersionId']
+    # a version nobody touches, to check that the guard lets its transition through.
+    # lc process runs with a single worker and this key sorts after object_key, so
+    # the first delayed transition is object_key's
+    other_key = 'test-object-other-version'
+    client.put_object(Bucket=BUCKET_NAME, Key=other_key, Body=b'other data')
+
+    out = transition_with_concurrent_op(
+        client, BUCKET_NAME,
+        lambda: client.delete_object(Bucket=BUCKET_NAME, Key=object_key,
+                                     VersionId=version_id))
+
+    transitioned = [l for l in out.splitlines() if b'TRANSITIONED:' in l]
+    assert not [l for l in transitioned if object_key.encode() in l], \
+        'canceled transition was reported as transitioned'
+    assert b'object changed concurrently' in out, 'canceled transition was not logged'
+    versions = client.list_object_versions(Bucket=BUCKET_NAME, Prefix=object_key)
+    assert not versions.get('Versions'), f'deleted version is listed: {versions["Versions"]}'
+    try:
+        client.head_object(Bucket=BUCKET_NAME, Key=object_key, VersionId=version_id)
+        raise AssertionError('deleted version still exists')
+    except botocore.exceptions.ClientError as e:
+        assert e.response['Error']['Code'] == '404'
+    assert get_storage_class(object_stat(BUCKET_NAME, other_key)) == 'LUKEWARM'
+
+    bucket.object_versions.all().delete()
+    bucket.delete()
+    log.info('Transition of a deleted version test passed')
 
 
 def main():
@@ -404,6 +462,7 @@ def main():
         run_happy_path_transition_tests(size_kb, encrypt)
 
     run_failure_test_canceled_transition()
+    run_failure_test_transition_of_deleted_version()
 
     suffix = ' (with encryption)' if encrypt else ''
     log.info(f'All lifecycle recompression tests passed{suffix}')
