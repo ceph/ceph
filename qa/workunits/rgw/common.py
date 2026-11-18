@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 
+"""
+Helpers shared by the rgw workunits. README.md says how they find radosgw.
+"""
+
 import errno
 import io
 import os
@@ -49,6 +53,10 @@ def rgw_endpoints():
     return [f'http://{host}:80', f'http://{host}:8000', f'https://{host}:443']
 
 def boto_connect(access_key, secret_key, config=None):
+    """
+    A boto3 s3 resource for the first of rgw_endpoints() that answers.
+    If none does, raises the connection error from the last one.
+    """
     def try_connect(endpoint):
         conn = boto3.resource('s3',
                               aws_access_key_id=access_key,
