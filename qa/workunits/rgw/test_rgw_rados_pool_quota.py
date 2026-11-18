@@ -20,7 +20,7 @@ Tests rgw behavior when backing rados pool is at quota
 """ Constants """
 USER = 'quota-tester'
 DISPLAY_NAME = 'Quota Tester'
-ACCESS_KEY = 'LTA662PVVDTDWX6M2AB0'
+ACCESS_KEY = 'QUOTATESTER0KEY00001'
 SECRET_KEY = 'pvtchqajgzqx5581t6qbddbkj0bgf3a69qdkjcea'
 BUCKET_NAME = 'quota-tester-bucket'
 DATA_POOL = 'default.rgw.buckets.data'
