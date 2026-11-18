@@ -21,6 +21,7 @@
 #include <boost/asio/post.hpp>
 #include <expected>
 #include <future>
+#include <map>
 
 #include "d4n_directory.h"
 #include "rgw_sal_d4n.h"
@@ -180,9 +181,13 @@ class LFUDAPolicy : public CachePolicy {
       void set_handle(handle_type handle_) { handle = handle_; }
     };
 
+    struct LFUDAObjEntry;
+    using ObjectVersions = std::multimap<ceph::real_time, LFUDAObjEntry*>;
+
     struct LFUDAObjEntry : public ObjEntry {
       using handle_type = boost::heap::fibonacci_heap<LFUDAObjEntry*, boost::heap::compare<ObjectComparator<LFUDAObjEntry>>>::handle_type;
       handle_type handle;
+      ObjectVersions::iterator version_position;
       int retry_count = 0;  // Initialize to 0 to track retry attempts
       ceph::real_time next_retry_time;  // Earliest time to retry after transient error (preserves creationTime for version ordering)
 
@@ -197,13 +202,12 @@ class LFUDAPolicy : public CachePolicy {
 
     using Heap = boost::heap::fibonacci_heap<LFUDAEntry*, boost::heap::compare<EntryComparator<LFUDAEntry>>>;
     using Object_Heap = boost::heap::fibonacci_heap<LFUDAObjEntry*, boost::heap::compare<ObjectComparator<LFUDAObjEntry>>>;
-    using handle_type = boost::heap::fibonacci_heap<LFUDAObjEntry*, boost::heap::compare<ObjectComparator<LFUDAObjEntry>>>::handle_type;
     Heap entries_heap;
     Object_Heap object_heap; //This heap contains dirty objects ordered by their creation time, used for cleaning method
     std::unordered_map<std::string, LFUDAEntry*> entries_map;
     std::unordered_map<std::string, std::pair<LFUDAObjEntry*, State> > o_entries_map; //Contains only dirty objects, used for look-up
-    //contains obj_name -> map of versions ordered by their creation time
-    std::unordered_map<std::string, std::map<ceph::real_time, LFUDAObjEntry*>> per_obj_versions;
+    // Bucket-qualified object -> all pending versions, including the one queued or in progress.
+    std::unordered_map<std::string, ObjectVersions> per_obj_versions;
     std::mutex lfuda_lock;
     std::mutex lfuda_cleaning_lock;
     std::optional<ceph::async::async_cond<>> cond;
@@ -279,7 +283,10 @@ class LFUDAPolicy : public CachePolicy {
     virtual void background_eviction_worker(const DoutPrefixProvider* dpp, optional_yield y);
     int do_delete(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, int interval, optional_yield y);
     int do_writeback(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, optional_yield y);
-    //helper method to create LFUDAObjEntry, add it to o_entries_map and per_obj_versions
+    static std::string object_key(const LFUDAObjEntry& entry);
+    // Call with lfuda_cleaning_lock held and no version of this object queued or in progress.
+    void queue_oldest(const ObjectVersions& versions);
+    // Add a dirty version to both maps; return nullptr if it is already tracked.
     LFUDAObjEntry* create_obj_entry(const DoutPrefixProvider* dpp, const std::string& dirty_obj_key, const std::string& version,
                                               bool deleteMarker, uint64_t size, ceph::real_time creationTime,
                                               const rgw_user& user, const std::string& etag,
@@ -320,6 +327,7 @@ class LFUDAPolicy : public CachePolicy {
     virtual void update_dirty_object(const DoutPrefixProvider* dpp, const std::string& key, const std::string& version, bool deleteMarker, uint64_t size,
 			    ceph::real_time creationTime, const rgw_user& user, const std::string& etag, const std::string& bucket_name, const std::string& bucket_id,
 			    const rgw_obj_key& obj_key, uint8_t op, optional_yield y, std::string& restore_val=empty) override;
+    // Retire an entry popped by cleaning(), then promote the next version of the same object.
     virtual bool erase_dirty_object(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y) override;
     virtual bool invalidate_dirty_object(const DoutPrefixProvider* dpp, const std::string& key) override;
     virtual void cleaning(const DoutPrefixProvider* dpp, optional_yield y) override;

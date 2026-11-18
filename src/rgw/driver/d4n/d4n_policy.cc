@@ -289,15 +289,7 @@ int LFUDAPolicy::init(CephContext* cct, const DoutPrefixProvider* dpp, asio::io_
       if (version_map.empty()) {
         continue;
       }
-      // version_map is std::map<uint64_t, LFUDAObjEntry*> sorted ascending by
-      // creationTime, so begin() is the oldest version — push that to the heap
-      LFUDAObjEntry* e = version_map.begin()->second;
-
-      // next_retry_time is initialized to creationTime in constructor
-      // cleaning() will add interval to determine when entry is ready
-
-      handle_type handle = object_heap.push(e);
-      e->set_handle(handle);
+      queue_oldest(version_map);
       ldpp_dout(dpp, 20) << "LFUDAPolicy::" << __func__
                         << "(): pushed to heap obj_name=" << obj_name
                         << " creationTime=" << version_map.begin()->first << dendl;
@@ -898,23 +890,36 @@ void LFUDAPolicy::update(const DoutPrefixProvider* dpp, const std::string& key, 
   }
 }
 
+std::string LFUDAPolicy::object_key(const LFUDAObjEntry& entry)
+{
+  return rgw::sal::get_cache_block_prefix(entry.bucket_id, entry.obj_key.name, {});
+}
+
+void LFUDAPolicy::queue_oldest(const ObjectVersions& versions)
+{
+  auto *entry = versions.begin()->second;
+  entry->set_handle(object_heap.push(entry));
+}
+
 LFUDAPolicy::LFUDAObjEntry* LFUDAPolicy::create_obj_entry(const DoutPrefixProvider* dpp, const std::string& dirty_obj_key, const std::string& version,
                                               bool deleteMarker, uint64_t size, ceph::real_time creationTime,
                                               const rgw_user& user, const std::string& etag,
                                               const std::string& bucket_name, const std::string& bucket_id,
                                               const rgw_obj_key& obj_key, State state)
 {
+  if (o_entries_map.contains(dirty_obj_key)) {
+    return nullptr;
+  }
   LFUDAObjEntry* e = new LFUDAObjEntry{dirty_obj_key, version, deleteMarker, size, creationTime,
                                         user, etag, bucket_name, bucket_id, obj_key};
   o_entries_map.emplace(dirty_obj_key, std::make_pair(e, state));
 
-  std::string obj_name = e->obj_key.name;
-  auto& versions = per_obj_versions[obj_name];
-  versions[e->creationTime] = e;
+  auto& versions = per_obj_versions[object_key(*e)];
+  e->version_position = versions.emplace(e->creationTime, e);
 
   ldpp_dout(dpp, 20) << "LFUDAPolicy::" << __func__
                      << "(): created entry key=" << dirty_obj_key
-                     << " obj_name=" << obj_name
+                     << " obj_name=" << e->obj_key.name
                      << " creationTime=" << creationTime << dendl;
   return e;
 }
@@ -926,14 +931,16 @@ void LFUDAPolicy::update_dirty_object(const DoutPrefixProvider* dpp, const std::
 
   std::unique_lock<std::mutex> l(lfuda_cleaning_lock);
   LFUDAObjEntry* e = create_obj_entry(dpp, key, version, deleteMarker, size, creationTime, user, etag, bucket_name, bucket_id, obj_key, state);
+  if (nullptr == e) {
+    return;
+  }
 
   // next_retry_time is initialized to creationTime in constructor
   // cleaning() will add interval to determine when entry is ready
 
-  auto& versions = per_obj_versions[e->obj_key.name];
-  if (versions.size() == 1) {
-    handle_type handle = object_heap.push(e);
-    e->set_handle(handle);
+  auto& versions = per_obj_versions[object_key(*e)];
+  if (1 == versions.size()) {
+    queue_oldest(versions);
     ldpp_dout(dpp, 20) << "LFUDAPolicy::" << __func__
                            << "(): added obj=" << e->obj_key.name
                            << " key=" << e->key
@@ -976,7 +983,7 @@ bool LFUDAPolicy::erase(const DoutPrefixProvider* dpp, const std::string& key, o
 
 bool LFUDAPolicy::erase_dirty_object(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y)
 {
-  const std::lock_guard l(lfuda_cleaning_lock);
+  std::unique_lock lock(lfuda_cleaning_lock);
   ldpp_dout(dpp, 20) << "LFUDAPolicy::" << __func__ 
                        << "(): erasing key=" << key << dendl;
   auto p = o_entries_map.find(key);
@@ -987,13 +994,20 @@ bool LFUDAPolicy::erase_dirty_object(const DoutPrefixProvider* dpp, const std::s
   LFUDAObjEntry* e = p->second.first;
   ldpp_dout(dpp, 20) << "LFUDAPolicy::" << __func__ 
                        << "(): obj_name=" << e->obj_key.name << dendl;
-  std::string obj_name = e->obj_key.name;
-  auto v_it = per_obj_versions.find(obj_name);
-  if (v_it != per_obj_versions.end()) {
-    v_it->second.erase(e->creationTime);
-    if (v_it->second.empty()) {
-      // No more versions for this object — full cleanup
+  if (auto v_it = per_obj_versions.find(object_key(*e)); v_it != per_obj_versions.end()) {
+    v_it->second.erase(e->version_position);
+
+    const auto versions_remain = !v_it->second.empty();
+
+    if (!versions_remain) {
       per_obj_versions.erase(v_it);
+    }
+
+    if (versions_remain) {
+      // Keep the next version tracked while queued or in progress. Retirement and
+      // promotion share the lock so a new arrival cannot schedule it a second time.
+      queue_oldest(v_it->second);
+      cond->notify(lock);
     }
   }
   delete p->second.first;
@@ -1019,12 +1033,11 @@ int LFUDAPolicy::do_delete(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, int 
   // allowing other versions to be cleaned in the meantime.
   auto defer_deletion = [&]() -> int {
     std::unique_lock<std::mutex> l(lfuda_cleaning_lock);
-    auto v_it = per_obj_versions.find(e->obj_key.name);
-    if (v_it != per_obj_versions.end()) {
-      v_it->second.erase(e->creationTime);
+    if (auto v_it = per_obj_versions.find(object_key(*e)); v_it != per_obj_versions.end()) {
+      v_it->second.erase(e->version_position);
       e->creationTime = ceph::real_clock::now() + std::chrono::seconds(interval / 2);
       e->next_retry_time = e->creationTime;
-      v_it->second[e->creationTime] = e;
+      e->version_position = v_it->second.emplace(e->creationTime, e);
     }
     ldpp_dout(dpp, 20) << "LFUDAPolicy::" << __func__
                        << "() deferring deletion due to active lease/refcount"
@@ -2026,8 +2039,6 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp, optional_yield y)
     // This is set to match the entry's state and is used to restore state on retry
     State s = State::INIT;
 
-    // Save obj_name now because we'll need it after e is reset (for version promotion)
-    std::string obj_name = (*e)->obj_key.name;
     // Debug logging for entry details
     ldpp_dout(dpp, 10) <<__LINE__ << " " << __func__ << "(): e->key=" << (*e)->key << dendl;
     ldpp_dout(dpp, 10) << __LINE__ << " " << __func__ << "(): e->delete_marker=" << (*e)->delete_marker << dendl;
@@ -2147,12 +2158,10 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp, optional_yield y)
         if (p != o_entries_map.end()) {
           p->second.second = s;  // Back to INVALID
         }
-        l.unlock();
-
-        // DON'T call erase_dirty_object - entry should remain in per_obj_versions
-        // Fall through to version promotion - allows next version to be cleaned
+        queue_oldest(per_obj_versions.at(object_key(**e)));
+        cond->notify(l);
         e.reset();
-        // Continue to STEP 6 (version promotion)
+        continue;
       } else {
         // ret < 0 (error) or ret == 0 (success)
         if (ret < 0) {
@@ -2212,61 +2221,11 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp, optional_yield y)
             // Note: Entry falls through to erase_dirty_object below
           }
         }
-        // STEP 5: Cleanup - Remove entry from tracking (for success or permanent failure)
-        // erase_dirty_object() acquires its own lock and:
-        // - Removes from o_entries_map
-        // - Removes from per_obj_versions (using creationTime as map key)
-        // - Deletes the LFUDAObjEntry object
+        // Retire this entry and promote the next version under the same lock.
         erase_dirty_object(dpp, (*e)->key, y);
 
         // Clear our local reference since entry is now deleted
         e.reset();
-      }
-
-      // STEP 6: Version Promotion - Process next version of same object
-      // Versioned objects have multiple versions tracked in per_obj_versions:
-      // - Map structure: obj_name -> sorted_map<creationTime, LFUDAObjEntry*>
-      // - Only ONE version in heap at a time (to avoid cleaning multiple versions concurrently)
-      // - After cleaning one version, promote the next (oldest) version to heap
-      {
-        ldpp_dout(dpp, 10) <<__LINE__ << " " << __func__ << "(): promoting next version" << dendl;
-        std::unique_lock<std::mutex> promote_lock(lfuda_cleaning_lock);
-
-        // Note: obj_name was saved at the top of the loop before e was reset
-        auto v_it = per_obj_versions.find(obj_name);
-
-        if (v_it != per_obj_versions.end() && !v_it->second.empty()) {
-          // More versions exist for this object - promote the oldest one
-
-          // begin() returns the entry with smallest creationTime (oldest version)
-          auto next_it = v_it->second.begin();
-          LFUDAObjEntry* next = next_it->second;
-
-          // Add to heap for cleaning
-          auto handle = object_heap.push(next);
-          next->set_handle(handle);
-
-          ldpp_dout(dpp, 20) << "LFUDAPolicy::" << __func__
-                              << "(): promoted next version key="
-                              << next->key
-                              << " creationTime="
-                              << next->creationTime
-                              << dendl;
-
-          // Remove from per_obj_versions (now tracked in heap)
-          v_it->second.erase(next_it);
-
-          // Wake cleaning thread in case it was waiting on empty heap
-          cond->notify(promote_lock);
-
-        } else if (v_it != per_obj_versions.end()) {
-          // No more versions for this object - cleanup the empty map entry
-          per_obj_versions.erase(v_it);
-          ldpp_dout(dpp, 20) << "LFUDAPolicy::" << __func__
-                              << "(): all versions processed for obj="
-                              << obj_name << dendl;
-        }
-        // else: Object not in per_obj_versions - normal case for non-versioned objects
       }
     } // end-if !e->key.empty()
   } // end-while !quit
