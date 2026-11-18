@@ -1,4 +1,7 @@
 
+# LVM tag that stores the cephx secret for an encrypted OSD lockbox
+cephx_lockbox_secret_tag = 'ceph.cephx_lockbox_secret'
+
 # mount flags
 mount = dict(
     xfs=['rw', 'noatime' , 'inode64']

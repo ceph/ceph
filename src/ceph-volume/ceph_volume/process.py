@@ -60,7 +60,7 @@ def obfuscate(command_, on=None):
     should be replaced by '*' like when creating OSDs and the keyrings are
     being passed, which should not be logged.
 
-    :param on: A string (will match a flag) or an integer (will match an index)
+    :param on: A flag, an index, or a list of either. Only the logged line is changed.
 
     If matching on a flag (when ``on`` is a string) it will obfuscate on the
     value for that flag. That is a command like ['ls', '-l', '/'] that calls
@@ -72,25 +72,28 @@ def obfuscate(command_, on=None):
     pop a value to obfuscate (vs. allowing an index or a flag)
     """
     command = command_[:]
-    msg = "Running command: %s" % ' '.join(command)
     if on in [None, False]:
-        return msg
+        return "Running command: %s" % ' '.join(command)
 
-    if isinstance(on, int):
-        index = on
-
+    # A list redacts every listed flag value or index. One flag only redacts
+    # the single argument that follows it.
+    if isinstance(on, (list, tuple)):
+        targets = on
     else:
-        try:
-            index = command.index(on) + 1
-        except ValueError:
-            # if the flag just doesn't exist then it doesn't matter just return
-            # the base msg
-            return msg
+        targets = [on]
 
-    try:
-        command[index] = '*' * len(command[index])
-    except IndexError: # the index was completely out of range
-        return msg
+    for target in targets:
+        if isinstance(target, int):
+            index = target
+        else:
+            try:
+                index = command.index(target) + 1
+            except ValueError:
+                continue
+        try:
+            command[index] = '*' * len(command[index])
+        except IndexError:
+            continue
 
     return "Running command: %s" % ' '.join(command)
 
@@ -184,7 +187,7 @@ def call(command, run_on_host=False, **kw):
     logfile_verbose = kw.pop('logfile_verbose', True)
     verbose_on_failure = kw.pop('verbose_on_failure', True)
     show_command = kw.pop('show_command', False)
-    command_msg = "Running command: %s" % ' '.join(command)
+    command_msg = obfuscate(command, kw.pop('obfuscate', None))
     stdin = kw.pop('stdin', None)
     logger.debug(command_msg)
     if show_command:
