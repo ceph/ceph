@@ -69,14 +69,6 @@ public:
   template <typename... T>
   SeastoreCollection(T&&... args) :
     FuturizedCollection(std::forward<T>(args)...) {}
-
-  struct batch_entry_t {
-    ceph::os::Transaction txn;
-    seastar::promise<> pr;
-    bool batchable = true;
-  };
-  std::deque<batch_entry_t> pending_txns;
-  bool collection_in_flight = false;
 };
 
 /**
@@ -260,14 +252,12 @@ public:
   private:
     void validate_devices();
     struct internal_context_t {
-      CollectionRef ch;
       ceph::os::Transaction ext_transaction;
 
       internal_context_t(
-        CollectionRef ch,
         ceph::os::Transaction &&_ext_transaction,
         TransactionRef &&transaction)
-        : ch(ch), ext_transaction(std::move(_ext_transaction)),
+        : ext_transaction(std::move(_ext_transaction)),
           transaction(std::move(transaction)),
           iter(ext_transaction.begin()) {}
 
@@ -286,11 +276,21 @@ public:
       }
     };
 
-    seastar::future<> dispatch_collection(CollectionRef ch);
+    // Transactions waiting to be merged into the next batch, across all the
+    // collections of this shard, in arrival order (which preserves the
+    // per-collection order). Only one batch is in flight per shard.
+    struct batch_entry_t {
+      ceph::os::Transaction txn;
+      seastar::promise<> pr;
+      bool batchable = true;
+    };
+    std::deque<batch_entry_t> pending_txns;
+    bool batch_in_flight = false;
+
+    seastar::future<> dispatch_batches();
     ceph::os::Transaction build_next_batch(
-      SeastoreCollection& coll,
       std::vector<seastar::promise<>>& pending_txns_promises);
-    seastar::future<> run_one_batch(CollectionRef ch, ceph::os::Transaction&& t);
+    seastar::future<> run_one_batch(ceph::os::Transaction&& t);
 
     TransactionManager::read_extent_iertr::future<std::optional<unsigned>>
     get_coll_bits(CollectionRef ch, Transaction &t) const;
@@ -380,12 +380,12 @@ public:
     using tm_ret = tm_iertr::future<>;
     tm_ret _do_transaction_step(
       internal_context_t &ctx,
-      CollectionRef &col,
       std::vector<OnodeRef> &onodes,
       ceph::os::Transaction::iterator &i);
 
     tm_ret _remove(
       internal_context_t &ctx,
+      const coll_t &cid,
       OnodeRef &onode,
       const ghobject_t &oid);
     tm_ret _touch(
@@ -407,6 +407,7 @@ public:
       ObjectDataHandler &handler);
     tm_ret _rename(
       internal_context_t &ctx,
+      const coll_t &cid,
       OnodeRef &onode,
       OnodeRef &d_onode);
     tm_ret _migrate_onode(
