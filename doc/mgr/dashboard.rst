@@ -897,7 +897,7 @@ in order to manage silences.
   Ensure that the Alertmanager considers your SSL certificate in terms
   of the dashboard as valid. For more information about the correct
   configuration checkout the `<http_config> documentation
-  <https://prometheus.io/docs/alerting/configuration/#%3Chttp_config%3E>`_.
+  <https://prometheus.io/docs/alerting/latest/configuration/#http_config-shared>`_.
 
 2. Use the API of Prometheus and the Alertmanager
 

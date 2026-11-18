@@ -102,9 +102,6 @@ synchronization.
 At the bottom of this diagram, we see the data distributed into the Ceph
 Storage Cluster.
 
-For additional details on setting up a cluster, see `Ceph Object Gateway for
-Production <https://access.redhat.com/documentation/en-us/red_hat_ceph_storage/3/html/ceph_object_gateway_for_production/index/>`_.
-
 Functional Changes from Infernalis
 ==================================
 

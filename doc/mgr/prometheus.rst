@@ -13,7 +13,7 @@ listens on an HTTP endpoint and retrieves the latest sample of every counter
 when scraped.  The HTTP path and query parameters are ignored. All extant
 counters for all reporting entities are returned in the Prometheus exposition
 format.  (See the Prometheus `documentation
-<https://prometheus.io/docs/instrumenting/exposition_formats/#text-format-details>`_.)
+<https://prometheus.io/docs/instrumenting/exposition_formats/#prometheus-text-format>`_.)
 
 .. note:: Ceph daemon performance counters are no longer exported by
    this module by default. That job has moved to the ``ceph-exporter``

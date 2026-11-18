@@ -15,4 +15,7 @@ Libcephfs (Javadoc)
     copies them to api/libcephfs-java/javadoc/.
 
 
-View the auto-generated `Javadoc pages for the CephFS Java bindings <javadoc/>`_.
+The Javadoc pages for the CephFS Java bindings are not published on
+docs.ceph.com. To view them, build the documentation locally with
+``admin/build-doc``, which writes them to
+``build-doc/output/html/cephfs/api/libcephfs-java/javadoc/``.

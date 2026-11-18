@@ -37,7 +37,7 @@ account, go to `github.com`_ and register.  Follow the directions for setting
 up git at `Set Up Git`_.
 
 .. _github.com: https://github.com
-.. _Set Up Git: https://help.github.com/linux-set-up-git
+.. _Set Up Git: https://docs.github.com/en/get-started/git-basics/set-up-git
 
 
 Add SSH Keys (Optional)

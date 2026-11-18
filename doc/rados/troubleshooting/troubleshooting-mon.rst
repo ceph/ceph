@@ -433,7 +433,7 @@ information about the Network Time Protocol (NTP). Your organization might
 already have quality internal NTP servers available.  Sources for NTP
 server appliances include the following:
 
-* Microsemi (formerly Symmetricom) `https://microsemi.com <https://www.microsemi.com/product-directory/3425-timing-synchronization>`_
+* Microchip (formerly Microsemi and Symmetricom) `https://microchip.com <https://www.microchip.com/en-us/products/clock-and-timing/systems/enterprise-network-time-servers>`_
 * EndRun `https://endruntechnologies.com <https://endruntechnologies.com/products/ntp-time-servers>`_
 * Netburner `https://www.netburner.com <https://www.netburner.com/products/network-time-server/pk70-ex-ntp-network-time-server>`_
 
