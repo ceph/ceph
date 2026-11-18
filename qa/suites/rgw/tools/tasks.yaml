@@ -15,6 +15,7 @@ tasks:
        client.0:
            - rgw/test_rgw_orphan_list.sh
            - rgw/test_rgw_heap_profiler.sh
+           - rgw/test_rgw_ratelimit_info_status.py
            - rgw/run-radosgw-admin-exit-codes.sh
     env:
       # rgw/run-radosgw-admin-exit-codes.sh creates a bucket with the aws CLI,
