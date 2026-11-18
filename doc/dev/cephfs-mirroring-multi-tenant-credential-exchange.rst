@@ -56,6 +56,7 @@ locally. Instead, it uses a two-tier dynamic exchange via a cluster-level **Supe
    * Contains **zero MDS and OSD capabilities**.
 
 2. **Tier 2: Pre-Created Path-Jailed Subvolume Keys**
+
    * Dedicated path-scoped credentials created directly on the secondary MON during subvolume replication
      onboarding.
    * **Entity Naming Stability:** Entities avoid volatile subvolume internal UUIDs (which cause orphaned
