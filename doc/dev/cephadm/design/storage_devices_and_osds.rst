@@ -246,7 +246,7 @@ A. Current workflow
 
 .. prompt:: bash #
 
-  ceph orch osd rm <svc_id(s)> [--replace] [--force]
+  ceph orch osd rm <osd_id(s)> [--replace] [--force]
 
     * We can verify what is the status of the delete operation
 
