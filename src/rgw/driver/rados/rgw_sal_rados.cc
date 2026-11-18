@@ -2847,6 +2847,12 @@ int RadosStore::meta_remove(const DoutPrefixProvider* dpp, std::string& metadata
 }
 
 void RadosStore::shutdown(void) {
+  if (rados) {
+    // stop workers that submit completions, then wait for already-spawned
+    // children.
+    rados->stop_background_workers();
+    rados->drain_index_completions();
+  }
   svc()->datalog_rados->blocking_shutdown();
   return;
 }

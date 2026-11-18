@@ -357,6 +357,7 @@ class RGWRados
   friend class rgw::sal::MPRadosSerializer;
   friend class rgw::sal::LCRadosSerializer;
   friend class rgw::sal::RadosStore;
+  friend class RGWIndexCompletionManager;
 
   /** Open the pool used as root for this gateway */
   int open_root_pool_ctx(const DoutPrefixProvider *dpp);
@@ -390,6 +391,7 @@ class RGWRados
   bool run_reshard_thread{false};
   bool run_notification_thread{false};
   bool run_bucket_logging_thread{false};
+  bool background_workers_stopped{false};
 
   RGWMetaNotifier* meta_notifier{nullptr};
   RGWDataNotifier* data_notifier{nullptr};
@@ -651,6 +653,11 @@ public:
   virtual int init_rados();
   int init_complete(const DoutPrefixProvider *dpp, optional_yield y, rgw::sal::ConfigStore* cfgstore);
   void finalize();
+  // stop and join background workers that may submit index completions
+  void stop_background_workers();
+  // unblock reshard_wait, then wait for already-spawned completions.
+  // invoke before the datalog and io_context are shut down.
+  void drain_index_completions();
 
   int register_to_service_map(const DoutPrefixProvider *dpp, const std::string& daemon_type, const std::map<std::string, std::string>& meta);
   int update_service_map(const DoutPrefixProvider *dpp, std::map<std::string, std::string>&& status);
