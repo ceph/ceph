@@ -474,6 +474,27 @@ with no options succeeds without changing anything; one with options succeeds
 without changing anything if it asks for the layout that the pool is being
 migrated to, and fails otherwise.
 
+Every client must be able to follow a pool migration. Clients of earlier
+releases can't, and Linux kernel clients can't until they gain the feature.
+
+Before a pool can be migrated, the cluster must require clients of the first
+release that can follow one (see :ref:`require_min_compat_client`):
+
+.. prompt:: bash $
+
+   ceph osd set-require-min-compat-client vampire
+
+The command is refused while a connected client, MDS or Manager lacks a
+feature of that release.
+
+``ceph osd pool migrate`` is refused while any client, MDS or Manager that
+can't follow a migration is connected, and names them.
+
+Once the cluster requires clients of that release, the Monitors and OSDs refuse
+clients that can't follow a migration, after a migration too: a client that
+still holds a migrated pool's old id cannot follow the redirect to it.
+
+
 .. _associate-pool-to-application:
 
 Associating a Pool with an Application
