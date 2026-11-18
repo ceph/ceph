@@ -431,6 +431,9 @@ are moved around, space becomes available. The ``backfill_toofull`` state is
 similar to ``backfill_wait`` in that backfill operations can proceed as soon as
 conditions change.
 
+PGs may also enter the ``backfill_pause`` state if the pool is set with nobackfill
+which leads to all backfills of PGs in it being canceled.
+
 Ceph provides a number of settings to manage the load spike associated with the
 reassignment of PGs to an OSD (especially a new OSD). The ``osd_max_backfills``
 setting specifies the maximum number of concurrent backfills to and from an OSD
