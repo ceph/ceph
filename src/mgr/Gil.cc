@@ -14,8 +14,11 @@
  */
 
 
+// For the GIL holder, which CPython only keeps in its internal state.
+#define Py_BUILD_CORE 1
 #include "Python.h"
 #include <frameobject.h>
+#include "internal/pycore_runtime.h"
 #include "mgr/mgr_perf_counters.h"
 #include "common/perf_counters.h"
 
@@ -25,8 +28,7 @@
 
 #include <fmt/format.h>
 
-#include <mutex>
-#include <ostream>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -45,22 +47,28 @@ namespace {
 // Empty when the thread isn't tagged with a module.
 thread_local std::string thread_module_name;
 
+// The thread state a tagged Gil last released the GIL from, and its
+// module: Gil deletes a new thread state right after releasing, so a
+// waiter can't look it up anymore. Written by ~Gil before releasing and
+// read by a waiter after acquiring, so the GIL serializes them.
+struct {
+  PyThreadState *ts = nullptr;
+  std::string module;
+} last_tagged_release;
+
 // CPython's default sys.getswitchinterval(): how long a waiter lets the
 // holder run before asking it to drop the GIL.
 constexpr auto slow_wait_threshold = 5ms;
 constexpr auto slow_wait_log_interval = 1s;
 
 // At debug_mgr 5, at most one slow wait is logged per interval; the rest
-// are summed up in the next report.
-struct slow_wait_sampler {
+// are summed up in the next report. Only used with the GIL held.
+struct {
   ceph::mono_time next_report;
   uint64_t unlogged = 0;
   ceph::timespan worst_unlogged{};
   std::string worst_unlogged_module;
-};
-// Taken with the GIL held; a leaf lock, never held while logging.
-std::mutex slow_wait_sampler_lock;
-slow_wait_sampler sampler;
+} slow_wait_rate_limit;
 
 // Read once: called with the GIL held, and get_val() takes a lock.
 std::string_view module_root()
@@ -86,38 +94,18 @@ std::string_view module_package(std::string_view path, std::string_view root)
   return slash == path.npos ? std::string_view{} : path.substr(0, slash);
 }
 
-// Calls fn(frame, code, filename) from the innermost frame outwards.
-// Needs the GIL and no pending exception.
-template <typename Fn>
-void walk_python_frames(Fn &&fn)
-{
-  PyFrameObject *frame = PyEval_GetFrame(); // borrowed
-  Py_XINCREF(frame);
-  while (frame != nullptr) {
-    PyCodeObject *code = PyFrame_GetCode(frame);
-    if (const char *filename = PyUnicode_AsUTF8(code->co_filename)) {
-      fn(frame, code, filename);
-    } else {
-      PyErr_Clear();
-    }
-    Py_DECREF(code);
-    PyFrameObject *back = PyFrame_GetBack(frame);
-    Py_DECREF(frame);
-    frame = back;
-  }
-}
-
 struct python_context {
   std::string module;
   std::string frame; // empty when the thread has no Python frames
 };
 
-// From the Python stack: the package of the outermost frame under
-// mgr_module_path, which is what a thread a module started itself runs
-// (inner frames may be shared packages such as orchestrator), and the
-// innermost frame inside a module, so a wait in a MgrModule helper such
-// as get() names the module code that called it.
-python_context get_python_context()
+// From the Python stack starting at frame (borrowed): the package of the
+// outermost frame under mgr_module_path, which is what a thread a module
+// started itself runs (inner frames may be shared packages such as
+// orchestrator), and the innermost frame inside a module, so a wait in a
+// MgrModule helper such as get() names the module code that called it.
+// Needs the GIL.
+python_context get_python_context(PyFrameObject *frame)
 {
   python_context ctx;
   if (PyErr_Occurred()) {
@@ -125,15 +113,20 @@ python_context get_python_context()
     return ctx;
   }
   const auto root = module_root();
-  bool innermost = true;
   bool have_module_frame = false;
-  walk_python_frames([&](PyFrameObject *frame, PyCodeObject *code,
-                         std::string_view path) {
+  Py_XINCREF(frame);
+  while (frame != nullptr) {
+    PyCodeObject *code = PyFrame_GetCode(frame);
+    const char *path = PyUnicode_AsUTF8(code->co_filename);
+    if (path == nullptr) {
+      PyErr_Clear();
+      path = "?";
+    }
     const auto package = module_package(path, root);
     if (!package.empty()) {
       ctx.module = package;
     }
-    if (innermost || (!have_module_frame && !package.empty())) {
+    if (ctx.frame.empty() || (!have_module_frame && !package.empty())) {
       const char *name = PyUnicode_AsUTF8(code->co_name);
       if (name == nullptr) {
         PyErr_Clear();
@@ -143,73 +136,116 @@ python_context get_python_context()
                               PyFrame_GetLineNumber(frame));
       have_module_frame = !package.empty();
     }
-    innermost = false;
-  });
+    Py_DECREF(code);
+    PyFrameObject *back = PyFrame_GetBack(frame);
+    Py_DECREF(frame);
+    frame = back;
+  }
   return ctx;
 }
 
-std::string_view tagged_module()
+// The thread state holding the GIL, or nullptr if it's free. CPython sets
+// last_holder on every take, including its own thread switches. Needs no
+// GIL; never dereference the result, the thread can exit at any time.
+PyThreadState *gil_holder()
 {
-  if (thread_module_name.empty()) {
-    return "(unknown)";
+  auto *gil = PyInterpreterState_Main()->ceval.gil;
+  if (__atomic_load_n(reinterpret_cast<int *>(&gil->locked),
+                      __ATOMIC_RELAXED) != 1) {
+    return nullptr;
   }
-  return thread_module_name;
+  return static_cast<PyThreadState *>(__atomic_load_n(
+    reinterpret_cast<void **>(&gil->last_holder), __ATOMIC_RELAXED));
 }
 
-struct slow_wait {
-  const char *what;
-  ceph::timespan wait;
-};
-
-// Walks the Python stack, so only stream it once the line is gathered.
-std::ostream &operator<<(std::ostream &out, const slow_wait &w)
+// With the GIL held: a new reference to ts's current frame, or nullptr if
+// ts has exited or has no Python frames. Thread states are only deleted
+// with the GIL held (see ~Gil; CPython does the same when a thread
+// exits), so none is freed under us. One may be added without the GIL
+// (PyThreadState_New in Gil::acquire); missing it is fine, a new thread
+// state can't be the holder we're looking for.
+PyFrameObject *live_thread_frame(PyThreadState *ts)
 {
-  const auto ctx = get_python_context();
+  for (auto *i = PyInterpreterState_Head(); i; i = PyInterpreterState_Next(i)) {
+    for (auto *t = PyInterpreterState_ThreadHead(i); t;
+         t = PyThreadState_Next(t)) {
+      if (t == ts) {
+        return PyThreadState_GetFrame(t);
+      }
+    }
+  }
+  return nullptr;
+}
+
+// The log line for a slow wait. Walks Python stacks, so only call it for
+// a line that is logged.
+std::string describe_slow_wait(const char *what, ceph::timespan wait,
+                               PyThreadState *holder)
+{
+  const auto ctx = get_python_context(PyEval_GetFrame());
   std::string_view module = thread_module_name;
   if (module.empty()) {
-    module = ctx.module.empty() ? "(unknown)" : std::string_view{ctx.module};
+    module = ctx.module;
   }
-  out << w.what << ": module '" << module << "' waited " << w.wait
-      << " for the GIL";
+  std::ostringstream out;
+  out << what << ": module '" << (module.empty() ? "(unknown)" : module)
+      << "' waited " << wait << " for the GIL";
   if (!ctx.frame.empty()) {
     out << ", python frame: " << ctx.frame;
   }
-  return out;
+  if (holder != nullptr && holder != PyThreadState_Get()) {
+    PyFrameObject *frame = live_thread_frame(holder);
+    const auto held = get_python_context(frame);
+    Py_XDECREF(frame);
+    std::string_view held_module = held.module;
+    if (held_module.empty() && holder == last_tagged_release.ts) {
+      held_module = last_tagged_release.module;
+    }
+    out << ", held by module '"
+        << (held_module.empty() ? "(unknown)" : held_module) << "'";
+    if (!held.frame.empty()) {
+      out << " at " << held.frame;
+    }
+  }
+  return out.str();
 }
 
-void log_slow_wait(const char *what, ceph::timespan wait)
+// Called with the GIL held, right after a slow acquire.
+void log_slow_wait(const char *what, ceph::timespan wait,
+                   PyThreadState *holder)
 {
   if (g_conf()->subsys.should_gather<ceph_subsys_mgr, 20>()) {
-    dout(20) << slow_wait{what, wait} << dendl;
+    dout(20) << describe_slow_wait(what, wait, holder) << dendl;
     return;
   }
   if (!g_conf()->subsys.should_gather<ceph_subsys_mgr, 5>()) {
     return;
   }
-  std::unique_lock l{slow_wait_sampler_lock};
+  auto &limit = slow_wait_rate_limit;
   const auto now = ceph::mono_clock::now();
-  if (now < sampler.next_report) {
-    ++sampler.unlogged;
-    if (wait > sampler.worst_unlogged) {
-      sampler.worst_unlogged = wait;
-      sampler.worst_unlogged_module = tagged_module();
+  if (now < limit.next_report) {
+    ++limit.unlogged;
+    if (wait > limit.worst_unlogged) {
+      limit.worst_unlogged = wait;
+      limit.worst_unlogged_module =
+        thread_module_name.empty() ? "(unknown)" : thread_module_name;
     }
     return;
   }
-  sampler.next_report = now + slow_wait_log_interval;
-  const auto unlogged = std::exchange(sampler.unlogged, 0);
-  const auto worst = std::exchange(sampler.worst_unlogged, {});
-  const auto worst_module = std::exchange(sampler.worst_unlogged_module, {});
-  l.unlock();
-  dout(5) << slow_wait{what, wait};
-  if (unlogged > 0) {
-    *_dout << " (" << unlogged << " slow waits not logged since the last "
-           << "report, worst " << worst << " in '" << worst_module << "')";
+  limit.next_report = now + slow_wait_log_interval;
+  dout(5) << describe_slow_wait(what, wait, holder);
+  if (limit.unlogged > 0) {
+    *_dout << " (" << limit.unlogged << " slow waits not logged since the "
+           << "last report, worst " << limit.worst_unlogged << " in '"
+           << limit.worst_unlogged_module << "')";
   }
   *_dout << dendl;
+  limit.unlogged = 0;
+  limit.worst_unlogged = {};
 }
 
-void record_gil_wait(const char *what, int counter, ceph::timespan wait)
+void record_gil_wait(const char *what, int counter, ceph::timespan wait,
+                     PyThreadState *holder)
 {
   if (perfcounter) {
     perfcounter->tinc_with_max(counter, wait);
@@ -220,7 +256,7 @@ void record_gil_wait(const char *what, int counter, ceph::timespan wait)
   if (perfcounter) {
     perfcounter->inc(l_mgr_gil_slow_waits);
   }
-  log_slow_wait(what, wait);
+  log_slow_wait(what, wait, holder);
 }
 
 } // anonymous namespace
@@ -299,14 +335,17 @@ void Gil::acquire(bool new_thread)
   // something that's meant to be a black box.
   //
   ceph::timespan wait;
+  PyThreadState *holder;
   if (new_thread) {
     pNewThreadState = PyThreadState_New(pThreadState.ts->interp);
+    holder = gil_holder();
     const auto start = ceph::mono_clock::now();
     PyEval_RestoreThread(pNewThreadState);
     wait = ceph::mono_clock::now() - start;
     dout(20) << "Switched to new thread state " << pNewThreadState << dendl;
   } else {
     // Acquire the GIL, set the current thread state
+    holder = gil_holder();
     const auto start = ceph::mono_clock::now();
     PyEval_RestoreThread(pThreadState.ts);
     wait = ceph::mono_clock::now() - start;
@@ -315,18 +354,23 @@ void Gil::acquire(bool new_thread)
   dout(25) << "GIL acquired for thread state "
            << (new_thread ? pNewThreadState : pThreadState.ts) << " in "
            << wait << dendl;
-  record_gil_wait("Gil::acquire", l_mgr_gil_acquire_lat, wait);
+  record_gil_wait("Gil::acquire", l_mgr_gil_acquire_lat, wait, holder);
   assert_gil();
 }
 
 Gil::~Gil()
 {
+  if (!thread_module_name.empty()) {
+    last_tagged_release.ts = pNewThreadState ? pNewThreadState
+                                             : pThreadState.ts;
+    last_tagged_release.module = thread_module_name;
+  }
   // Release the GIL, reset the thread state to NULL
   if (pNewThreadState != nullptr) {
     dout(20) << "Destroying new thread state " << pNewThreadState << dendl;
     PyThreadState_Clear(pNewThreadState);
-    PyEval_SaveThread();
-    PyThreadState_Delete(pNewThreadState);
+    // Deletes it with the GIL held, then releases the GIL.
+    PyThreadState_DeleteCurrent();
   } else {
     PyEval_SaveThread();
   }
@@ -357,11 +401,13 @@ void without_gil_t::release_gil()
 void without_gil_t::acquire_gil()
 {
   assert(save);
+  PyThreadState *holder = gil_holder();
   const auto start = ceph::mono_clock::now();
   PyEval_RestoreThread(save);
   const ceph::timespan wait = ceph::mono_clock::now() - start;
   save = nullptr;
-  record_gil_wait("without_gil_t::acquire_gil", l_mgr_gil_reacquire_lat, wait);
+  record_gil_wait("without_gil_t::acquire_gil", l_mgr_gil_reacquire_lat, wait,
+                  holder);
 }
 
 with_gil_t::with_gil_t(without_gil_t& allow_threads)

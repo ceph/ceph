@@ -201,9 +201,20 @@ metrics can be slow.
 ``max_inc`` in the two latency counters is the longest single wait. Waits that
 happen inside Python itself (I/O, ``time.sleep()``, the rados bindings) are not
 counted. To log a sample of slow waits (at most one per second) with the
-waiting module, run ``ceph config set mgr debug_mgr 5``. Each logged line
-also reports how many slow waits were skipped and the longest of them. To
-log every slow wait, use ``debug_mgr 20``.
+waiting module and the module holding the GIL, run
+``ceph config set mgr debug_mgr 5``. Each logged line also reports how many
+slow waits were skipped and the longest of them. To log every slow wait,
+use ``debug_mgr 20``.
+
+A logged line looks like this:
+
+.. code-block:: console
+
+   mgr log_slow_wait Gil::acquire: module 'balancer' waited 0.082760066s for the GIL, held by module 'selftest' at eval (/usr/share/ceph/mgr/selftest/module.py:505) (4 slow waits not logged since the last report, worst 0.292184323s in 'balancer')
+
+Here ``balancer`` is the module being slowed down, and ``selftest``, which
+held the GIL when the wait started, is the likely cause. The per-module
+``cpu_usage`` counters described above help confirm a busy module.
 
 
 Automatic Stats Period Tuning
