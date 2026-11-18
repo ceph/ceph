@@ -1213,6 +1213,7 @@ protected:
   MetaSessionRef _open_mds_session(mds_rank_t mds);
   void _close_mds_session(MetaSession *s);
   void _closed_mds_session(MetaSession *s, int err=0, bool rejected=false);
+  void reopen_session_after_missed_reconnect(mds_rank_t mds);
   bool _any_stale_sessions() const;
   void _kick_stale_sessions();
   void handle_client_session(const MConstRef<MClientSession>& m);

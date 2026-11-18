@@ -596,6 +596,76 @@ void Server::handle_client_reclaim(const cref_t<MClientReclaim> &m)
   }
 }
 
+bool Server::release_missed_reconnect_session(Session *session)
+{
+  client_t client = session->get_client();
+  if (!client_reclaim_gather.count(client))
+    return false;
+
+  /*
+   * Tracker #83081.
+   *
+   * reconnect_tick() left this session in client_reclaim_gather because
+   * its client metadata has "timeout". MDSRank::maybe_clientreplay_done()
+   * will not leave up:clientreplay while that set is non-empty, and
+   * session_autoclose (300s) is what finally evicts and blocklists it.
+   *
+   * The message we are handling is an OPEN (or the caller is about to
+   * reply to one) from this same client id. MDSDaemon::ms_handle_accept
+   * splices the new connection onto this session, so this is not a
+   * second client reclaiming by uuid. The client already dropped its
+   * caps locally in Client::_closed_mds_session(); caps restored from
+   * the journal must be dropped here or the MDS will keep issuing state
+   * the client has forgotten. kill=true marks an inode NEEDSRECOVER when
+   * the client may have had dirty data it never reconnected. That is the
+   * eviction recovery path, without the blocklist: this client is alive.
+   *
+   * Do not use MClientReclaim / CEPH_RECLAIM_RESET for this. Reclaim is a
+   * different client id destroying the session that owns the uuid. Aimed
+   * at this session it evicts the live client.
+   */
+  dout(1) << "client." << client << " (" << session->info.inst
+	  << ") reopened after missing reconnect; releasing reclaim hold"
+	  << dendl;
+  mds->clog->info() << "client " << session->info.inst
+		    << " missed MDS reconnect and reopened its session;"
+		    << " releasing reclaim hold without blocklisting";
+
+  while (!session->caps.empty()) {
+    Capability *cap = session->caps.front();
+    CInode *in = cap->get_inode();
+    dout(10) << " dropping unreconnected cap " << ccap_string(cap->issued())
+	     << " on " << *in << dendl;
+    mds->locker->remove_client_cap(in, cap, true);
+  }
+  while (!session->leases.empty()) {
+    ClientLease *r = session->leases.front();
+    CDentry *dn = static_cast<CDentry*>(r->parent);
+    dout(10) << " dropping unreconnected lease of " << *dn << dendl;
+    dn->remove_client_lease(r, mds->locker);
+  }
+
+  session->set_reconnecting(false);
+  client_reclaim_gather.erase(client);
+
+  /*
+   * last_cap_renew was stamped at reconnect start. Touch it so
+   * find_idle_sessions() does not autoclose this client in the window
+   * before it renews caps on the fresh session.
+   *
+   * Successful reconnect also registers the session with the metrics
+   * handler and the dmclock scheduler. This client never reconnected, so
+   * do that now; otherwise its later requests are invisible to both.
+   */
+  mds->sessionmap.touch_session(session);
+  metrics_handler->add_session(session);
+  mds->mds_dmclock_scheduler->add_session(session);
+
+  if (client_reclaim_gather.empty())
+    mds->maybe_clientreplay_done();
+  return true;
+}
+
 void Server::handle_client_session(const cref_t<MClientSession> &m)
 {
   version_t pv;
@@ -625,8 +695,17 @@ void Server::handle_client_session(const cref_t<MClientSession> &m)
   if (m->get_op() == CEPH_SESSION_REQUEST_RENEWCAPS) {
     // always handle renewcaps (state >= MDSMap::STATE_RECONNECT)
   } else if (m->get_op() == CEPH_SESSION_REQUEST_CLOSE) {
-    // close requests need to be handled when mds is active
-    if (mds->get_state() < MDSMap::STATE_ACTIVE) {
+    /*
+     * Close is normally deferred until up:active. A session in
+     * client_reclaim_gather is itself what keeps the rank out of
+     * up:active (maybe_clientreplay_done), so waiting here cannot
+     * succeed. Journal the close now. _session_logged() removes the
+     * gather entry and does not blocklist on a client-requested close.
+     * Any other session still waits for active, preserving the
+     * replacement-client reclaim window.
+     */
+    if (mds->get_state() < MDSMap::STATE_ACTIVE &&
+	!client_reclaim_gather.count(session->get_client())) {
       mds->wait_for_active(new C_MDS_RetryMessage(mds, m));
       return;
     }
@@ -665,20 +744,38 @@ void Server::handle_client_session(const cref_t<MClientSession> &m)
 	session->is_stale() ||
 	session->is_killing() ||
 	terminating_sessions) {
-      if (m->supported_features.test(CEPHFS_FEATURE_NOTIFY_SESSION_STATE)) {
-	if (session->is_open() && !mds->is_stopping()) {
-          dout(10) << "currently already opened" << dendl;
+      /*
+       * OPEN on a session already in client_reclaim_gather is the live
+       * client coming back after it missed reconnect. Reply OPEN even
+       * without CEPHFS_FEATURE_NOTIFY_SESSION_STATE: that client is in
+       * STATE_OPENING and will not make progress until it sees OPEN.
+       * A session that is not in the gather keeps the previous behavior.
+       */
+      bool released_reclaim = false;
+      if (!terminating_sessions && !session->is_killing() &&
+	  (session->is_open() || session->is_stale())) {
+	released_reclaim = release_missed_reconnect_session(session);
+	if (released_reclaim && session->is_stale())
+	  mds->sessionmap.set_state(session, Session::STATE_OPEN);
+      }
+      if (session->is_open() && !mds->is_stopping() &&
+	  (released_reclaim ||
+	   m->supported_features.test(CEPHFS_FEATURE_NOTIFY_SESSION_STATE))) {
+	if (released_reclaim)
+	  dout(1) << "reopened session " << session->info.inst
+		  << " was held for reclaim after a missed reconnect" << dendl;
+	else
+	  dout(10) << "currently already opened" << dendl;
 
-          auto reply = make_message<MClientSession>(CEPH_SESSION_OPEN,
-                                                    session->get_push_seq());
-          if (session->info.has_feature(CEPHFS_FEATURE_MIMIC))
-            reply->supported_features = supported_features;
-          session->auth_caps.get_cap_auths(&reply->cap_auths);
-          mds->send_message_client(reply, session);
-          if (mdcache->is_readonly()) {
-            auto m = make_message<MClientSession>(CEPH_SESSION_FORCE_RO);
-            mds->send_message_client(m, session);
-          }
+	auto reply = make_message<MClientSession>(CEPH_SESSION_OPEN,
+						  session->get_push_seq());
+	if (session->info.has_feature(CEPHFS_FEATURE_MIMIC))
+	  reply->supported_features = supported_features;
+	session->auth_caps.get_cap_auths(&reply->cap_auths);
+	mds->send_message_client(reply, session);
+	if (mdcache->is_readonly()) {
+	  auto ro = make_message<MClientSession>(CEPH_SESSION_FORCE_RO);
+	  mds->send_message_client(ro, session);
 	}
       }
       dout(10) << "currently " << session->get_state_name()
@@ -799,7 +896,32 @@ void Server::handle_client_session(const cref_t<MClientSession> &m)
       }
 
       if (auto it = client_metadata.find("uuid"); it != client_metadata.end()) {
-	if (find_session_by_uuid(it->second)) {
+	Session *existing = find_session_by_uuid(it->second);
+	/*
+	 * The usual OPEN path above handles the same client id: the new
+	 * connection is spliced onto the session kept in
+	 * client_reclaim_gather. A mon reconnect can also assign a new
+	 * global_id. This is then a different session whose uuid still
+	 * belongs to the session reconnect_tick() kept. Closing that
+	 * session is the same outcome as CEPH_RECLAIM_RESET, without
+	 * blocklisting the client that is opening here. Retry this OPEN
+	 * after the close is logged so the uuid check does not still
+	 * see the old session. Any other duplicate uuid is still rejected.
+	 */
+	if (existing && existing != session &&
+	    client_reclaim_gather.count(existing->get_client()) &&
+	    session->info.auth_name == existing->info.auth_name) {
+	  dout(1) << "client." << session->get_client()
+		  << " reopened under a new id while " << existing->info.inst
+		  << " is held for reclaim; closing the old session" << dendl;
+	  mds->clog->info() << "client " << session->info.inst
+			    << " missed MDS reconnect and reopened with a new id;"
+			    << " closing " << existing->info.inst
+			    << " without blocklisting";
+	  kill_session(existing, new C_MDS_RetryMessage(mds, m));
+	  return;
+	}
+	if (existing) {
 	  send_reject_message("duplicated session uuid");
 	  mds->clog->warn() << "client session with duplicated session uuid '"
 			    << it->second << "' denied (" << session->info.inst << ")";
@@ -1898,9 +2020,21 @@ void Server::reconnect_tick()
   MDSGatherBuilder gather(g_ceph_context);
 
   for (auto session : remaining_sessions) {
-    // Keep sessions that have specified timeout. These sessions will prevent
-    // mds from going to active. MDS goes to active after they all have been
-    // killed or reclaimed.
+    /*
+     * Keep sessions that declared a session timeout. A replacement process
+     * (nfs-ganesha restart) reclaims the same uuid via MClientReclaim, and
+     * the rank stays in up:clientreplay until every such session is
+     * reclaimed, closed, or autoclosed.
+     *
+     * That hold is wrong for the same process when it is still alive but
+     * missed MDSMap::STATE_RECONNECT: it will not start reclaim, and
+     * Client::make_request() waits for up:active, which this session is
+     * blocking. The client re-opens the session instead
+     * (reopen_session_after_missed_reconnect); release_missed_reconnect_session()
+     * drops the gather entry without blocklisting. A dead client sends
+     * nothing and stays here until reclaim or session_autoclose.
+     * See https://tracker.ceph.com/issues/83081.
+     */
     if (session->info.client_metadata.find("timeout") !=
 	session->info.client_metadata.end()) {
       dout(1) << "reconnect keeps " << session->info.inst
