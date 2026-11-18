@@ -1254,10 +1254,12 @@ static int32_t libcephfsd_ll_listxattr(proxy_client_t *client, proxy_req_t *req,
 	proxy_mount_t *mount;
 	struct Inode *inode = NULL;
 	UserPerm *perms = NULL;
+	void *buffer;
 	size_t size;
 	int32_t err;
 	bool embedded;
 
+	buffer = client->buffer;
 	embedded = false;
 
 	err = ptr_check(&client->random, req->ll_listxattr.cmount,
@@ -1274,24 +1276,37 @@ static int32_t libcephfsd_ll_listxattr(proxy_client_t *client, proxy_req_t *req,
 	if (err >= 0) {
 		size = req->ll_listxattr.size;
 		if (size > client->buffer_size) {
-			size = client->buffer_size;
+			buffer = proxy_malloc(size);
+			if (buffer == NULL) {
+				err = -ENOMEM;
+				goto done;
+			}
 		}
 		err = ceph_ll_listxattr(proxy_cmount(mount), inode,
-					client->buffer, size, &size, perms);
+					buffer, size, &size, perms);
 		TRACE("ceph_ll_listxattr(%p, %p, %lu, %p) -> %d", mount, inode,
 		      size, perms, err);
 
 		if (err >= 0) {
 			ans.size = size;
-			CEPH_BUFF_ADD(ans, client->buffer, size);
+			if (req->ll_listxattr.size > 0) {
+				CEPH_BUFF_ADD(ans, buffer, size);
+			}
 		}
 	}
 
+done:
 	if (embedded) {
 		ceph_userperm_destroy(perms);
 	}
 
-	return CEPH_COMPLETE(client, err, ans);
+	err = CEPH_COMPLETE(client, err, ans);
+
+	if (buffer != client->buffer) {
+		proxy_free(buffer);
+	}
+
+	return err;
 }
 
 static int32_t libcephfsd_ll_getxattr(proxy_client_t *client, proxy_req_t *req,
@@ -1302,10 +1317,12 @@ static int32_t libcephfsd_ll_getxattr(proxy_client_t *client, proxy_req_t *req,
 	struct Inode *inode = NULL;
 	const char *name;
 	UserPerm *perms = NULL;
+	void *buffer;
 	size_t size;
 	int32_t err;
 	bool embedded;
 
+	buffer = client->buffer;
 	embedded = false;
 
 	name = CEPH_STR_GET(req->ll_getxattr, name, data);
@@ -1326,23 +1343,34 @@ static int32_t libcephfsd_ll_getxattr(proxy_client_t *client, proxy_req_t *req,
 		size = req->ll_getxattr.size;
 
 		if (size > client->buffer_size) {
-			size = client->buffer_size;
+			buffer = proxy_malloc(size);
+			if (buffer == NULL) {
+				err = -ENOMEM;
+				goto done;
+			}
 		}
 		err = ceph_ll_getxattr(proxy_cmount(mount), inode, name,
-				       client->buffer, size, perms);
+				       buffer, size, perms);
 		TRACE("ceph_ll_getxattr(%p, %p, '%s', %p) -> %d", mount, inode,
 		      name, perms, err);
 
-		if (err >= 0) {
-			CEPH_BUFF_ADD(ans, client->buffer, err);
+		if ((err >= 0) && (size > 0)) {
+			CEPH_BUFF_ADD(ans, buffer, err);
 		}
 	}
 
+done:
 	if (embedded) {
 		ceph_userperm_destroy(perms);
 	}
 
-	return CEPH_COMPLETE(client, err, ans);
+	err = CEPH_COMPLETE(client, err, ans);
+
+	if (buffer != client->buffer) {
+		proxy_free(buffer);
+	}
+
+	return err;
 }
 
 static int32_t libcephfsd_ll_setxattr(proxy_client_t *client, proxy_req_t *req,
