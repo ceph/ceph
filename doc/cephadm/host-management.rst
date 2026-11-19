@@ -262,6 +262,19 @@ to take a host out of maintenance mode:
   to the removal of those hosts from cephadm management by running the
   ``ceph orch host rm`` command.
 
+If the host has OSDs, entering maintenance mode sets the ``noout`` flag on
+each of them before stopping the daemons, so that they are not marked ``out``
+while the host is down. ``ceph health detail`` lists these OSDs under the
+``OSD_FLAGS`` check. OSDs that already had the flag set are left alone, and
+exiting maintenance mode removes only the flags that entering it has set. When
+an offline host is taken out of maintenance mode with ``--offline``, the flags
+are left set and the command prints how to remove them.
+
+If stopping the daemons fails or times out, some of them may already have been
+stopped. The host is then kept in maintenance mode with the ``noout`` flags set
+and the command reports the failure. Run ``ceph orch host maintenance exit
+<host>`` to restart the daemons and remove the flags.
+
 .. warning:: Using the ``--yes-i-really-mean-it`` flag to force the host to
    enter maintenance mode can cause loss of data availability, breakdown of
    the Monitor quorum due to too few running Monitors, unresponsive Manager
