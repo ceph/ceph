@@ -25,6 +25,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <type_traits>
 #include <variant>
 
@@ -2841,14 +2842,15 @@ private:
   /// mark down and forget all of s's core connections, all of its
   /// connections having reset; s->lock is locked
   void _close_core_cons(OSDSession *s);
-  /// the core connection con of s reset (see
+  /// drop the core connection con of s, for 'why' (see
   /// SessionRoutes::drop_core_con()): mark it down and forget it, and
   /// resend the ops sent on it via the main connection, and those whose
   /// hold ended. The lingers to re-register are added to lresend. Returns
-  /// false if con is not (or no longer) one of s's core connections.
+  /// false if con is not (or no longer) one to drop.
   /// rwlock is locked unique, s->lock is locked
   bool _drop_core_con(OSDSession *s,
 		      const ConnectionRef& con,
+		      osdc::core_route::drop_why_t why,
 		      std::map<uint64_t, LingerOp *>& lresend);
   /// forget the backoffs of s that came on con (which reset: the OSD
   /// forgot them, and will not unblock them). Returns their PGs.
@@ -2890,6 +2892,14 @@ private:
   /// of 'core' (which goes away). s->lock is locked
   void _lingers_registered_on(OSDSession *s, uint32_t core,
                               std::map<uint64_t, LingerOp *>& lresend);
+  /// give up on the core connections (osd, connection, why) found by
+  /// tick(): carrying laggy ops but not answering a keepalive in time, or
+  /// not connected in time (their hosts then blocked: see
+  /// core_host_blocks). Their ops are resent
+  void _give_up_core_cons(
+    const std::vector<std::tuple<int, ConnectionRef,
+                                 osdc::core_route::drop_why_t>>& cons,
+    std::unique_lock<ceph::shared_mutex>& wl);
   /// note the core hinted for pgid in an op reply from s, and connect to
   /// that core if not yet connected. s->lock is locked
   void _session_apply_core_hint(OSDSession *s,
