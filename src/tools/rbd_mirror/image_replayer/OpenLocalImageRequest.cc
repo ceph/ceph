@@ -66,7 +66,6 @@ struct MirrorExclusiveLockPolicy : public librbd::exclusive_lock::Policy {
       librbd::exclusive_lock::OperationRequestType request_type) override {
     switch (request_type) {
     case librbd::exclusive_lock::OPERATION_REQUEST_TYPE_TRASH_SNAP_REMOVE:
-    case librbd::exclusive_lock::OPERATION_REQUEST_TYPE_GROUP_SNAP_REMOVE:
     case librbd::exclusive_lock::OPERATION_REQUEST_TYPE_FORCE_PROMOTION:
       return true;
     default:
