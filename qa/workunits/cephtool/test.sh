@@ -2412,6 +2412,24 @@ function test_mon_osd_pool_set()
   ceph osd pool set $TEST_POOL_GETSET compression_algorithm unset
   ceph osd pool get $TEST_POOL_GETSET compression_algorithm | expect_false grep '.'
 
+  ceph osd pool set $TEST_POOL_GETSET fingerprint_algorithm none
+  ceph osd pool get $TEST_POOL_GETSET fingerprint_algorithm | grep 'none'
+  ceph osd pool set $TEST_POOL_GETSET fingerprint_algorithm sha256
+  ceph osd pool get $TEST_POOL_GETSET fingerprint_algorithm | grep 'sha256'
+  expect_false ceph osd pool set $TEST_POOL_GETSET fingerprint_algorithm foo
+  ceph osd pool get $TEST_POOL_GETSET fingerprint_algorithm | grep 'sha256'
+  ceph osd pool set $TEST_POOL_GETSET fingerprint_algorithm unset
+  ceph osd pool get $TEST_POOL_GETSET fingerprint_algorithm | expect_false grep '.'
+
+  ceph osd pool set $TEST_POOL_GETSET dedup_chunk_algorithm none
+  ceph osd pool get $TEST_POOL_GETSET dedup_chunk_algorithm | grep 'none'
+  ceph osd pool set $TEST_POOL_GETSET dedup_chunk_algorithm fastcdc
+  ceph osd pool get $TEST_POOL_GETSET dedup_chunk_algorithm | grep 'fastcdc'
+  expect_false ceph osd pool set $TEST_POOL_GETSET dedup_chunk_algorithm foo
+  ceph osd pool get $TEST_POOL_GETSET dedup_chunk_algorithm | grep 'fastcdc'
+  ceph osd pool set $TEST_POOL_GETSET dedup_chunk_algorithm unset
+  ceph osd pool get $TEST_POOL_GETSET dedup_chunk_algorithm | expect_false grep '.'
+
   ceph osd pool get $TEST_POOL_GETSET compression_required_ratio | expect_false grep '.'
   expect_false ceph osd pool set $TEST_POOL_GETSET compression_required_ratio 1.1
   expect_false ceph osd pool set $TEST_POOL_GETSET compression_required_ratio -.2

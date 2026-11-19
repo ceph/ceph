@@ -1641,6 +1641,7 @@ public:
   pool_opts_t opts; ///< options
 
   typedef enum {
+    TYPE_FINGERPRINT_INVALID = -1,
     TYPE_FINGERPRINT_NONE = 0,
     TYPE_FINGERPRINT_SHA1 = 1,     
     TYPE_FINGERPRINT_SHA256 = 2,     
@@ -1655,7 +1656,7 @@ public:
       return TYPE_FINGERPRINT_SHA256;
     if (s == "sha512")
       return TYPE_FINGERPRINT_SHA512;
-    return (fingerprint_t)-1;
+    return TYPE_FINGERPRINT_INVALID;
   }
   const fingerprint_t get_fingerprint_type() const {
     std::string fp_str;
@@ -1680,6 +1681,7 @@ public:
   }
 
   typedef enum {
+    TYPE_DEDUP_CHUNK_INVALID = -1,
     TYPE_DEDUP_CHUNK_NONE = 0,
     TYPE_DEDUP_CHUNK_FASTCDC = 1,     
     TYPE_DEDUP_CHUNK_FIXEDCDC = 2,     
@@ -1691,7 +1693,7 @@ public:
       return TYPE_DEDUP_CHUNK_FASTCDC;
     if (s == "fixed")
       return TYPE_DEDUP_CHUNK_FIXEDCDC;
-    return (dedup_chunk_algo_t)-1;
+    return TYPE_DEDUP_CHUNK_INVALID;
   }
   const dedup_chunk_algo_t get_dedup_chunk_algorithm_type() const {
     std::string algo_str;
