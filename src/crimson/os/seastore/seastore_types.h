@@ -11,6 +11,8 @@
 #include <vector>
 #include <boost/core/ignore_unused.hpp>
 
+#include <seastar/core/future.hh>
+#include <seastar/core/future-util.hh>
 #include <seastar/core/lowres_clock.hh>
 
 #include "include/byteorder.h"
@@ -36,6 +38,46 @@ namespace crimson::os::seastore {
 
 using base_ertr = crimson::errorator<
   crimson::ct_error::input_output_error>;
+
+template <typename E>
+using trans_iertr = E;
+
+using base_iertr = base_ertr;
+
+template <typename T>
+using with_trans_ertr = typename T::base_ertr;
+
+struct trans_intr {
+  template <typename Fut>
+  static constexpr auto&& make_interruptible(Fut&& fut) noexcept {
+    return std::forward<Fut>(fut);
+  }
+
+  template <typename Container, typename Func>
+  static auto do_for_each(Container&& c, Func&& f) {
+    return seastar::do_for_each(std::forward<Container>(c), std::forward<Func>(f));
+  }
+
+  template <typename Iterator, typename Func>
+  static auto do_for_each(Iterator begin, Iterator end, Func&& f) {
+    return seastar::do_for_each(begin, end, std::forward<Func>(f));
+  }
+
+  template <typename Container, typename Func>
+  static auto parallel_for_each(Container&& c, Func&& f) {
+    return seastar::parallel_for_each(std::forward<Container>(c), std::forward<Func>(f));
+  }
+
+  template <typename Iterator, typename Func>
+  static auto parallel_for_each(Iterator begin, Iterator end, Func&& f) {
+    return seastar::parallel_for_each(begin, end, std::forward<Func>(f));
+  }
+
+  template <typename Func>
+  static auto repeat(Func&& f) {
+    return seastar::repeat(std::forward<Func>(f));
+  }
+};
 
 class cache_hint_t {
   enum hint_t {
