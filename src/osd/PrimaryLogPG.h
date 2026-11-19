@@ -1731,6 +1731,10 @@ public:
 
   void release_recovering(const hobject_t &oid);
   void handle_pool_migration_copy_failure(hobject_t oid, int r, bool stale = false);
+  /// true if soid is in the range of objects whose migration is in progress
+  bool is_pool_migration_in_progress(const hobject_t& soid) const;
+  /// requeue blocked writes for objects that have left that range
+  void kick_pool_migration_blocked_writes();
   void handle_pool_migration_quiesce_complete();
 
   void pool_migration_source_start_delete_head(hobject_t oid);

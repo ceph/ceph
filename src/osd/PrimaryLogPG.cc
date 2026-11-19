@@ -528,18 +528,10 @@ void PrimaryLogPG::on_global_recover(
 
   backfills_in_flight.erase(soid);
   if (pool_migrations_in_flight.erase(soid)) {
-    // Migrations complete in order, kick any blocked writes for this object
-    // and any earlier objects
-    for (auto it = pool_migration_blocked_writes.begin();
-         it != pool_migration_blocked_writes.end() && *it <= soid;
-         it = pool_migration_blocked_writes.erase(it)) {
-      dout(20) << " kicking degraded waiters on " << *it << dendl;
-      auto degraded_object_entry = waiting_for_degraded_object.find(*it);
-      ceph_assert(degraded_object_entry != waiting_for_degraded_object.end());
-      requeue_ops(degraded_object_entry->second,
-                  OpWaitingList::DEGRADED_OBJECT);
-      waiting_for_degraded_object.erase(degraded_object_entry);
-    }
+    // Kick blocked writes for this object and for anything else that is no
+    // longer being migrated, including objects below the new watermark that
+    // were never migrated because they did not exist.
+    kick_pool_migration_blocked_writes();
 
     for (auto it = waiting_for_degraded_object.begin();
          it != waiting_for_degraded_object.end(); ) {
@@ -714,8 +706,7 @@ bool PrimaryLogPG::is_degraded_or_backfilling_object(const hobject_t& soid)
   if (pool_migration_watermark == soid && new_pool_migration_interval)
     return true;
   // Object is in the range currently being migrated.
-  if (pool_migration_watermark <= soid &&
-      last_pool_migration_started.get_head() >= soid)
+  if (is_pool_migration_in_progress(soid))
     return true;
   // Object is a snap of a head object in the process of being migrated.
   if (soid.is_snap() && pool_migrations_in_flight.count(soid.get_head()))
@@ -764,8 +755,7 @@ void PrimaryLogPG::wait_for_degraded_object(const hobject_t& soid, OpRequestRef 
 {
   ceph_assert(is_degraded_or_backfilling_object(soid) || is_degraded_on_async_recovery_target(soid));
 
-  if (pool_migration_watermark <= soid &&
-      last_pool_migration_started.get_head() >= soid) {
+  if (is_pool_migration_in_progress(soid)) {
     pool_migration_blocked_writes.insert(soid);
   }
 
@@ -16347,6 +16337,33 @@ void PrimaryLogPG::pool_migration_target_delete(const pg_t &source_pg,
   dout(20) << __func__ << " deleted " << deleted << " stale objects" << dendl;
 }
 
+bool PrimaryLogPG::is_pool_migration_in_progress(const hobject_t& soid) const
+{
+  // [watermark, last started] only holds objects being copied while a copy
+  // is in flight; when the migration is stalled nothing needs to wait.
+  return !pool_migrations_in_flight.empty() &&
+         pool_migration_watermark <= soid &&
+         last_pool_migration_started.get_head() >= soid;
+}
+
+void PrimaryLogPG::kick_pool_migration_blocked_writes()
+{
+  for (auto it = pool_migration_blocked_writes.begin();
+       it != pool_migration_blocked_writes.end(); ) {
+    if (is_pool_migration_in_progress(*it)) {
+      ++it;
+      continue;
+    }
+    auto entry = waiting_for_degraded_object.find(*it);
+    if (entry != waiting_for_degraded_object.end()) {
+      dout(20) << __func__ << " kicking degraded waiters on " << *it << dendl;
+      requeue_ops(entry->second, OpWaitingList::DEGRADED_OBJECT);
+      waiting_for_degraded_object.erase(entry);
+    }
+    it = pool_migration_blocked_writes.erase(it);
+  }
+}
+
 void PrimaryLogPG::handle_pool_migration_quiesce_complete()
 {
   dout(10) << __func__ << " all migrations drained, quiesce_reason="
@@ -16406,6 +16423,7 @@ void PrimaryLogPG::handle_pool_migration_quiesce_complete()
       queue_recovery();
       break;
   }
+  kick_pool_migration_blocked_writes();
 }
 
 void PrimaryLogPG::release_recovering(const hobject_t &oid)
@@ -16527,6 +16545,9 @@ void PrimaryLogPG::handle_pool_migration_copy_failure(hobject_t oid, int r, bool
     release_recovering(oid);
     finish_recovery_op(oid);
   }
+
+  // last_pool_migration_started may have been rewound
+  kick_pool_migration_blocked_writes();
 }
 
 /**
@@ -16664,6 +16685,7 @@ uint64_t PrimaryLogPG::recover_pool_migration(
                  << last_pool_migration_started << " to " << pool_migration_watermark
                  << " to retry failed objects" << dendl;
         last_pool_migration_started = pool_migration_watermark;
+        kick_pool_migration_blocked_writes();
         return ops;
       }
 
@@ -16958,6 +16980,7 @@ void PrimaryLogPG::on_pool_migration_source_suspended()
 
   // Flush may have abandoned copies without advancing the watermark, so rewind
   last_pool_migration_started = pool_migration_watermark;
+  kick_pool_migration_blocked_writes();
 
   if (!pool_migrations_in_flight.empty()) {
     // If there are still in-flight migrations, let the quiesce process handle it.
