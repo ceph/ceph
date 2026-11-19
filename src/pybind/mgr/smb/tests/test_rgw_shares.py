@@ -521,6 +521,14 @@ def split_handler():
     return h, pub, priv
 
 
+def _rgw_stubs(priv, cluster_id):
+    """Return the contents of all the RGW credential stubs of a cluster."""
+    return [
+        priv[key].get()
+        for key in smb.external.stored_rgw_chunk_keys(priv, cluster_id)
+    ]
+
+
 def _rgw_cluster_and_share(cluster_id, share_id, share_name, **rgw_kwargs):
     cluster = _cluster(
         cluster_id=cluster_id,
@@ -589,7 +597,10 @@ def test_rgw_credential_stub_written_to_priv_store(split_handler):
     assert cred_dict['access_key_id'] == 'AUTO_FETCHED_ACCESS_KEY'
     assert cred_dict['secret_access_key'] == 'AUTO_FETCHED_SECRET_KEY'
 
-    stub = priv['c1', 'config.smb.rgw'].get()
+    # one credential, so one stub
+    stubs = _rgw_stubs(priv, 'c1')
+    assert len(stubs) == 1
+    stub = stubs[0]
     assert stub['samba-container-config'] == 'v0'
     assert 'config:merge' in stub
     opts = stub['config:merge']['shares']['mybucket']['options']
@@ -599,7 +610,9 @@ def test_rgw_credential_stub_written_to_priv_store(split_handler):
 
 def test_rgw_credential_stub_survives_last_share_removal(split_handler):
     """Deleting the last RGW share in a cluster must not prune the
-    credential stub from the private store.
+    credential stubs from the private store. Their uris are part of the
+    deployed daemons' configuration so they must not change, but the stubs
+    must no longer hold the credentials of the removed share.
     """
     h, pub, priv = split_handler
     cluster, share = _rgw_cluster_and_share(
@@ -611,15 +624,122 @@ def test_rgw_credential_stub_survives_last_share_removal(split_handler):
     )
     rg = h.apply([cluster, share])
     assert rg.success, rg.to_simplified()
-    assert priv['c1', 'config.smb.rgw'].exists()
+    keys_before = smb.external.stored_rgw_stub_keys(priv, 'c1')
+    assert keys_before
 
     rmshare = smb.resources.RemovedShare(cluster_id='c1', share_id='s1')
     rg = h.apply([rmshare])
     assert rg.success, rg.to_simplified()
 
-    stub_entry = priv['c1', 'config.smb.rgw']
-    assert stub_entry.exists()
-    assert stub_entry.get()['config:merge']['shares'] == {}
+    assert smb.external.stored_rgw_stub_keys(priv, 'c1') == keys_before
+    for key in keys_before:
+        stub = priv[key].get()
+        assert stub['config:merge']['shares'] == {}
+        assert 'AUTO_FETCHED' not in json.dumps(stub)
+
+
+def test_rgw_legacy_stub_kept_and_emptied_without_rgw_shares(split_handler):
+    """A legacy single-entry stub that may still be in use by deployed
+    daemons is kept, emptied of credentials, once no RGW shares remain.
+    """
+    h, pub, priv = split_handler
+    cluster, share = _rgw_cluster_and_share(
+        'c1',
+        's1',
+        'mybucket',
+        bucket='mybucket',
+        user_id='testuser',
+    )
+    rg = h.apply([cluster, share])
+    assert rg.success, rg.to_simplified()
+    legacy = priv[smb.external.rgw_config_key('c1')]
+    legacy.set(
+        smb.external.rgw_stub(
+            {'mybucket': {'options': {'ceph_rgw:access_key': 'OLD'}}}
+        )
+    )
+
+    rmshare = smb.resources.RemovedShare(cluster_id='c1', share_id='s1')
+    rg = h.apply([rmshare])
+    assert rg.success, rg.to_simplified()
+
+    assert legacy.exists()
+    assert legacy.get()['config:merge']['shares'] == {}
+
+
+def test_rgw_legacy_stub_kept_and_emptied_when_replaced_by_chunks(
+    split_handler,
+):
+    """Deployed daemons may still list the legacy single-entry stub when
+    the credentials move to numbered entries, so the legacy entry stays
+    loadable, but with its stale credentials removed.
+    """
+    h, pub, priv = split_handler
+    cluster, share = _rgw_cluster_and_share(
+        'c1',
+        's1',
+        'mybucket',
+        bucket='mybucket',
+        user_id='testuser',
+    )
+    legacy = priv[smb.external.rgw_config_key('c1')]
+    legacy.set(
+        smb.external.rgw_stub(
+            {'mybucket': {'options': {'ceph_rgw:access_key': 'OLD'}}}
+        )
+    )
+
+    rg = h.apply([cluster, share])
+    assert rg.success, rg.to_simplified()
+
+    assert legacy.exists()
+    assert legacy.get()['config:merge']['shares'] == {}
+    # the credentials are in the numbered entry, and both are handed out
+    chunk = priv[smb.external.rgw_chunk_config_key('c1', 0)].get()
+    assert 'mybucket' in chunk['config:merge']['shares']
+    assert smb.external.stored_rgw_stub_keys(priv, 'c1') == [
+        smb.external.rgw_config_key('c1'),
+        smb.external.rgw_chunk_config_key('c1', 0),
+    ]
+
+
+def test_rgw_unreadable_stub_is_replaced_not_fatal(
+    split_handler, monkeypatch
+):
+    """A stub that can not be read, for example one edited by hand into
+    invalid json, must not fail the update. It is replaced by an empty stub.
+    """
+    h, pub, priv = split_handler
+    cluster, share = _rgw_cluster_and_share(
+        'c1',
+        's1',
+        'mybucket',
+        bucket='mybucket',
+        user_id='testuser',
+    )
+    rg = h.apply([cluster, share])
+    assert rg.success, rg.to_simplified()
+    stray = smb.external.rgw_chunk_config_key('c1', 5)
+    priv[stray].set(
+        smb.external.rgw_stub(
+            {'gone': {'options': {'ceph_rgw:access_key': 'STALE'}}}
+        )
+    )
+
+    real_get = smb.config_store.MemConfigEntry.get
+
+    def _get(self):
+        if self.full_key == stray:
+            raise ValueError('not json')
+        return real_get(self)
+
+    rmshare = smb.resources.RemovedShare(cluster_id='c1', share_id='s1')
+    with monkeypatch.context() as mp:
+        mp.setattr(smb.config_store.MemConfigEntry, 'get', _get)
+        rg = h.apply([rmshare])
+    assert rg.success, rg.to_simplified()
+
+    assert priv[stray].get() == smb.external.rgw_stub({})
 
 
 def test_no_priv_store_entry_for_non_rgw_cluster(split_handler):
@@ -646,8 +766,7 @@ def test_no_priv_store_entry_for_non_rgw_cluster(split_handler):
     rg = h.apply([cluster, share])
     assert rg.success, rg.to_simplified()
 
-    stub_entry = priv['cephfs1', 'config.smb.rgw']
-    assert not stub_entry.exists()
+    assert not smb.external.stored_rgw_stub_keys(priv, 'cephfs1')
 
 
 def test_multi_share_stub_covers_all_rgw_shares(split_handler):
@@ -697,8 +816,11 @@ def test_multi_share_stub_covers_all_rgw_shares(split_handler):
         assert cred['access_key_id'] == 'AUTO_FETCHED_ACCESS_KEY'
         assert cred['secret_access_key'] == 'AUTO_FETCHED_SECRET_KEY'
 
-    stub = priv['multi', 'config.smb.rgw'].get()
-    merge_shares = stub['config:merge']['shares']
+    # the shares use different credentials but fit one stub, so they share it
+    stubs = _rgw_stubs(priv, 'multi')
+    assert len(stubs) == 1
+    merge_shares = stubs[0]['config:merge']['shares']
+    assert set(merge_shares) == {'bucket1', 'bucket2'}
     b1opts = merge_shares['bucket1']['options']
     b2opts = merge_shares['bucket2']['options']
     assert b1opts['ceph_rgw:access_key'] == 'AUTO_FETCHED_ACCESS_KEY'
@@ -1012,7 +1134,7 @@ def test_external_cluster_rgw_credential_isolation(split_handler):
     assert opts['ceph_rgw:secret_access_key'] == ''
 
     # Verify private store has real credential values
-    stub = priv['exo-iso', 'config.smb.rgw'].get()
+    stub = priv[smb.external.rgw_chunk_config_key('exo-iso', 0)].get()
     merge_opts = stub['config:merge']['shares']['Isolated Bucket']['options']
     assert merge_opts['ceph_rgw:access_key'] == 'EXTERNAL_ACCESS_KEY'
     assert merge_opts['ceph_rgw:secret_access_key'] == 'EXTERNAL_SECRET_KEY'
@@ -1985,3 +2107,343 @@ def test_share_staged_with_stale_credential():
         'shares',
         'stalecred.staleshare',
     ) not in handler2.internal_store.data
+
+
+# ---- multi-chunk credential stub tests ----
+
+
+def test_chunk_rgw_shares_splits_by_size():
+    """Every chunk fits the limit, no share is lost, and chunks are full."""
+    shares = {
+        f'share{i:03d}': {'options': {'k': 'v' * 20}} for i in range(50)
+    }
+    limit = 600
+    chunks = smb.external.chunk_rgw_shares(shares, max_bytes=limit)
+
+    assert len(chunks) > 1
+    # every share exactly once, in the order given
+    assert [name for chunk in chunks for name in chunk] == list(shares)
+    # the size computed while packing matches a real serialization
+    for chunk in chunks:
+        stub = smb.external.rgw_stub(chunk)
+        assert len(json.dumps(stub)) <= limit
+    # no chunk is left short: the next share would not have fit
+    for prev, nxt in zip(chunks, chunks[1:]):
+        first = next(iter(nxt))
+        grown = dict(prev, **{first: shares[first]})
+        assert len(json.dumps(smb.external.rgw_stub(grown))) > limit
+
+
+def test_chunk_rgw_shares_single_chunk_and_empty():
+    assert smb.external.chunk_rgw_shares({}) == []
+    shares = {'a': {'options': {}}, 'b': {'options': {}}}
+    assert smb.external.chunk_rgw_shares(shares) == [shares]
+
+
+def test_chunk_rgw_shares_oversized_share_gets_its_own_chunk():
+    shares = {
+        'a': {'options': {'k': 'v'}},
+        'b': {'options': {'k': 'v' * 1000}},
+        'c': {'options': {'k': 'v'}},
+    }
+    chunks = smb.external.chunk_rgw_shares(shares, max_bytes=300)
+    assert [list(chunk) for chunk in chunks] == [['a'], ['b'], ['c']]
+
+
+def _chunked_rgw_resources(cluster_id, cred_id, count):
+    """A cluster plus count shares that all use one RGW credential."""
+    cluster = _cluster(
+        cluster_id=cluster_id,
+        auth_mode=smb.enums.AuthMode.USER,
+        user_group_settings=[
+            smb.resources.UserGroupSource(
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
+            ),
+        ],
+    )
+    cred = smb.resources.RGWCredential(
+        rgw_credential_id=cred_id,
+        user_id='testuser',
+        access_key_id='AUTO_FETCHED_ACCESS_KEY',
+        secret_access_key='AUTO_FETCHED_SECRET_KEY',
+        linked_to_cluster=cluster_id,
+    )
+    shares = [
+        smb.resources.Share(
+            cluster_id=cluster_id,
+            share_id=f'share{i:04d}',
+            rgw=smb.resources.RGWStorage(
+                bucket='my-bucket',
+                credential_ref=cred_id,
+            ),
+        )
+        for i in range(count)
+    ]
+    return cluster, cred, shares
+
+
+def _stored_chunks(priv, cluster_id):
+    """Return {key name: stub} for all stored RGW credential chunks."""
+    return {
+        key[1]: priv[key].get()
+        for key in smb.external.stored_rgw_chunk_keys(priv, cluster_id)
+    }
+
+
+def test_rgw_credential_stub_is_chunked_under_64kb(thandler):
+    """Enough RGW shares to exceed the config-key entry limit are written
+    as several entries that each fit the limit.
+    """
+    cluster, cred, shares = _chunked_rgw_resources('chunked', 'cred1', 1000)
+    rg = thandler.apply([cluster, cred] + shares)
+    assert rg.success, rg.to_simplified()
+
+    chunks = _stored_chunks(thandler.priv_store, 'chunked')
+    # numbered consecutively and more than one
+    assert len(chunks) > 1
+    assert set(chunks) == {f'rgw.{i}.json' for i in range(len(chunks))}
+
+    seen = []
+    for name, stub in chunks.items():
+        assert len(json.dumps(stub)) <= smb.external.RGW_STUB_MAX_BYTES, name
+        assert stub['samba-container-config'] == 'v0'
+        for share, conf in stub['config:merge']['shares'].items():
+            seen.append(share)
+            assert conf['options'] == {
+                'ceph_rgw:access_key': 'AUTO_FETCHED_ACCESS_KEY',
+                'ceph_rgw:secret_access_key': 'AUTO_FETCHED_SECRET_KEY',
+            }
+    # each share is in exactly one chunk, none are missing
+    assert len(seen) == len(set(seen)) == 1000
+    assert set(seen) == {s.name for s in shares}
+    # all chunks are handed to the daemons
+    assert set(
+        smb.external.stored_rgw_stub_keys(thandler.priv_store, 'chunked')
+    ) == {('chunked', name) for name in chunks}
+
+
+def test_rgw_credential_chunks_shrink_and_are_emptied(thandler):
+    """Removing shares empties the surplus chunks but does not remove them,
+    as deployed daemons keep listing their uris until they are redeployed.
+    Removing the last share empties the remaining chunk too, so no stale
+    credentials are left behind.
+    """
+    cluster, cred, shares = _chunked_rgw_resources('shrink', 'cred1', 1000)
+    rg = thandler.apply([cluster, cred] + shares)
+    assert rg.success, rg.to_simplified()
+    before = _stored_chunks(thandler.priv_store, 'shrink')
+    assert len(before) > 1
+
+    # keep only a few shares so that a single chunk is enough
+    removed = [
+        smb.resources.RemovedShare(cluster_id='shrink', share_id=s.share_id)
+        for s in shares[10:]
+    ]
+    rg = thandler.apply(removed)
+    assert rg.success, rg.to_simplified()
+    after = _stored_chunks(thandler.priv_store, 'shrink')
+    # no entry that was listed before has gone away
+    assert set(after) == set(before)
+    assert set(after['rgw.0.json']['config:merge']['shares']) == {
+        s.name for s in shares[:10]
+    }
+    for name, stub in after.items():
+        if name != 'rgw.0.json':
+            assert stub['config:merge']['shares'] == {}, name
+            assert 'AUTO_FETCHED' not in json.dumps(stub), name
+
+    # remove the rest
+    removed = [
+        smb.resources.RemovedShare(cluster_id='shrink', share_id=s.share_id)
+        for s in shares[:10]
+    ]
+    rg = thandler.apply(removed)
+    assert rg.success, rg.to_simplified()
+    last = _stored_chunks(thandler.priv_store, 'shrink')
+    assert set(last) == set(after)
+    assert last['rgw.0.json']['config:merge']['shares'] == {}
+    assert 'AUTO_FETCHED' not in json.dumps(last)
+
+
+def test_rgw_chunks_shrink_then_grow_again_reuses_emptied_entries(thandler):
+    """Entries emptied by a shrink are filled again when the shares come
+    back, so the set of entries only ever grows, and a larger cluster than
+    before adds new entries after the existing ones.
+    """
+    cluster, cred, allshares = _chunked_rgw_resources('regrow', 'cred1', 2000)
+    shares, extra = allshares[:1000], allshares[1000:]
+    rg = thandler.apply([cluster, cred] + shares)
+    assert rg.success, rg.to_simplified()
+    full = _stored_chunks(thandler.priv_store, 'regrow')
+    assert len(full) > 1
+
+    # shrink to a single entry: the others are kept but empty
+    rg = thandler.apply(
+        [
+            smb.resources.RemovedShare(
+                cluster_id='regrow', share_id=s.share_id
+            )
+            for s in shares[10:]
+        ]
+    )
+    assert rg.success, rg.to_simplified()
+    shrunk = _stored_chunks(thandler.priv_store, 'regrow')
+    assert set(shrunk) == set(full)
+    emptied = [n for n in shrunk if n != 'rgw.0.json']
+    assert emptied
+    assert all(shrunk[n]['config:merge']['shares'] == {} for n in emptied)
+
+    # the same shares come back: same entries, same contents as before
+    rg = thandler.apply(shares[10:])
+    assert rg.success, rg.to_simplified()
+    assert _stored_chunks(thandler.priv_store, 'regrow') == full
+
+    # applying again changes nothing
+    rg = thandler.apply(shares[10:])
+    assert rg.success, rg.to_simplified()
+    assert _stored_chunks(thandler.priv_store, 'regrow') == full
+
+    # more shares than ever before add entries and keep the existing ones
+    rg = thandler.apply(extra)
+    assert rg.success, rg.to_simplified()
+    grown = _stored_chunks(thandler.priv_store, 'regrow')
+    assert set(full) < set(grown)
+    assert set(grown) == {f'rgw.{i}.json' for i in range(len(grown))}
+    seen = [
+        s for stub in grown.values() for s in stub['config:merge']['shares']
+    ]
+    assert len(seen) == len(set(seen)) == 2000
+    for name, stub in grown.items():
+        assert len(json.dumps(stub)) <= smb.external.RGW_STUB_MAX_BYTES, name
+
+
+def test_rgw_all_chunks_kept_and_emptied_without_rgw_shares(thandler):
+    """Removing every share of a multi-chunk credential in one step keeps
+    the identical set of stub entries, all empty.
+    """
+    cluster, cred, shares = _chunked_rgw_resources('emptied', 'cred1', 1000)
+    rg = thandler.apply([cluster, cred] + shares)
+    assert rg.success, rg.to_simplified()
+    before = smb.external.stored_rgw_stub_keys(thandler.priv_store, 'emptied')
+    assert len(before) > 1
+
+    removed = [
+        smb.resources.RemovedShare(cluster_id='emptied', share_id=s.share_id)
+        for s in shares
+    ]
+    rg = thandler.apply(removed)
+    assert rg.success, rg.to_simplified()
+    after = smb.external.stored_rgw_stub_keys(thandler.priv_store, 'emptied')
+    assert after == before
+    for key in after:
+        stub = thandler.priv_store[key].get()
+        assert stub['config:merge']['shares'] == {}
+        assert 'AUTO_FETCHED' not in json.dumps(stub)
+
+
+def _second_credential_share(cluster_id, cred_id, share_id):
+    cred = smb.resources.RGWCredential(
+        rgw_credential_id=cred_id,
+        user_id='testuser',
+        access_key_id='AUTO_FETCHED_ACCESS_KEY',
+        secret_access_key='AUTO_FETCHED_SECRET_KEY',
+        linked_to_cluster=cluster_id,
+    )
+    share = smb.resources.Share(
+        cluster_id=cluster_id,
+        share_id=share_id,
+        rgw=smb.resources.RGWStorage(
+            bucket='my-bucket',
+            credential_ref=cred_id,
+        ),
+    )
+    return cred, share
+
+
+def test_rgw_shares_with_different_credentials_share_one_entry(thandler):
+    """Shares using different credentials are packed into the same entry
+    while there is room, and removing one credential's shares leaves the
+    shares of the other.
+    """
+    cluster, cred1, shares1 = _chunked_rgw_resources('twocred', 'cred1', 3)
+    cred2, other = _second_credential_share('twocred', 'cred2', 'other')
+    rg = thandler.apply([cluster, cred1, cred2] + shares1 + [other])
+    assert rg.success, rg.to_simplified()
+
+    chunks = _stored_chunks(thandler.priv_store, 'twocred')
+    assert set(chunks) == {'rgw.0.json'}
+    assert set(chunks['rgw.0.json']['config:merge']['shares']) == {
+        s.name for s in shares1
+    } | {'other'}
+
+    removed = [
+        smb.resources.RemovedShare(cluster_id='twocred', share_id=s.share_id)
+        for s in shares1
+    ]
+    rg = thandler.apply(removed)
+    assert rg.success, rg.to_simplified()
+    chunks = _stored_chunks(thandler.priv_store, 'twocred')
+    assert set(chunks) == {'rgw.0.json'}
+    assert set(chunks['rgw.0.json']['config:merge']['shares']) == {'other'}
+
+
+def test_rgw_chunks_are_packed_across_credentials(thandler):
+    """Many shares with alternating credentials still fill every entry but
+    the last, rather than using at least one entry per credential.
+    """
+    cluster, cred1, shares1 = _chunked_rgw_resources('packed', 'cred1', 600)
+    cred2, _ = _second_credential_share('packed', 'cred2', 'unused')
+    shares2 = [
+        smb.resources.Share(
+            cluster_id='packed',
+            share_id=f'zshare{i:04d}',
+            rgw=smb.resources.RGWStorage(
+                bucket='my-bucket',
+                credential_ref='cred2',
+            ),
+        )
+        for i in range(600)
+    ]
+    rg = thandler.apply([cluster, cred1, cred2] + shares1 + shares2)
+    assert rg.success, rg.to_simplified()
+
+    chunks = _stored_chunks(thandler.priv_store, 'packed')
+    assert len(chunks) > 1
+    limit = smb.external.RGW_STUB_MAX_BYTES
+    names = [f'rgw.{i}.json' for i in range(len(chunks))]
+    assert list(chunks) == names
+    sizes = [len(json.dumps(chunks[n])) for n in names]
+    assert all(size <= limit for size in sizes)
+    # every entry but the last is within one share's size of the limit
+    assert all(size > limit - 200 for size in sizes[:-1])
+    seen = [s for n in names for s in chunks[n]['config:merge']['shares']]
+    assert len(seen) == len(set(seen)) == 1200
+
+
+def test_rgw_shares_ordered_by_name_across_credentials(thandler):
+    """Shares are packed in name order whatever credential they use, so the
+    same shares always end up in the same entries.
+    """
+    cluster, cred_b, shares_b = _chunked_rgw_resources('ordered', 'credb', 2)
+    cred_a, _ = _second_credential_share('ordered', 'creda', 'unused')
+    shares_a = [
+        smb.resources.Share(
+            cluster_id='ordered',
+            share_id=f'zshare{i}',
+            rgw=smb.resources.RGWStorage(
+                bucket='my-bucket',
+                credential_ref='creda',
+            ),
+        )
+        for i in range(2)
+    ]
+    rg = thandler.apply([cluster, cred_a, cred_b] + shares_b + shares_a)
+    assert rg.success, rg.to_simplified()
+
+    chunks = _stored_chunks(thandler.priv_store, 'ordered')
+    assert list(chunks['rgw.0.json']['config:merge']['shares']) == [
+        'share0000',
+        'share0001',
+        'zshare0',
+        'zshare1',
+    ]

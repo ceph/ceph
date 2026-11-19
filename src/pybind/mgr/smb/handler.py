@@ -1683,28 +1683,40 @@ def _save_pending_rgw_config(
     store: ConfigStore,
     cluster_conf: _ClusterConf,
 ) -> None:
-    """Save an RGW credential stub to the private store for RGW clusters.
+    """Save the RGW credential stubs to the private store for RGW clusters.
 
-    Writes a stub using sambacc's config:merge mechanism, which merges the
+    Writes stubs using sambacc's config:merge mechanism, which merges the
     provided JSON on top of the primary config at load time.  The mgr
-    populates the stub with only the RGW credential fields here; everything else
-    stays in the public RADOS config.  The stub URI is passed to the container
-    via extra_config_uris so credentials never appear in the public pool.
+    populates the stubs with only the RGW credential fields here; everything
+    else stays in the public RADOS config.  The stub URIs are passed to the
+    container via extra_config_uris so credentials never appear in the public
+    pool.
+
+    A mon config-key entry is size limited so the options of all RGW shares
+    are packed, in share name order, into as few numbered entries as fit the
+    limit, whatever credential each share uses. Only entries added to the
+    change group cache survive the caller's pruning of the namespace.
+
+    A stub that already exists is never pruned. Its uri is part of the
+    configuration of the deployed daemons, which keep using it until
+    cephadm redeploys them, so removing it would leave daemons that restart
+    in the meantime unable to load their configuration, and would
+    needlessly redeploy them when the last RGW share is removed. An existing
+    stub that is not needed any more (a surplus chunk after shares were
+    removed, or the legacy single entry) is kept but emptied, so that no
+    credentials of removed shares are left behind. All the stubs are removed
+    with the cluster.
     """
     cluster_id = cluster_conf.resource.cluster_id
-    rgw_shares = [s for s in cluster_conf.shares if s.resource.rgw]
-    centry = store[external.rgw_config_key(cluster_id)]
-    if not rgw_shares and not centry.exists():
-        # cluster never had RGW shares, so no stub needed
-        return
     cred_map = {
         c.rgw_credential_id: c
         for c in cluster_conf.change_group.rgw_credentials
     }
-    merge_shares: Dict[str, Any] = {}
-    for sc in rgw_shares:
+    rgw_shares: Dict[str, Dict[str, Any]] = {}
+    for sc in cluster_conf.shares:
         rgw = sc.resource.rgw
-        assert rgw is not None
+        if rgw is None:
+            continue
         assert rgw.credential_ref is not None
         cred = cred_map.get(rgw.credential_ref)
         if cred is None:
@@ -1714,20 +1726,36 @@ def _save_pending_rgw_config(
                 rgw.credential_ref,
             )
             continue
-        access_key = cred.access_key_id or ''
-        secret_key = cred.secret_access_key or ''
-        merge_shares[sc.resource.name] = {
+        rgw_shares[sc.resource.name] = {
             'options': {
-                'ceph_rgw:access_key': access_key,
-                'ceph_rgw:secret_access_key': secret_key,
+                'ceph_rgw:access_key': cred.access_key_id or '',
+                'ceph_rgw:secret_access_key': cred.secret_access_key or '',
             }
         }
-    stub = {
-        'samba-container-config': 'v0',
-        'config:merge': {'shares': merge_shares},
-    }
-    centry.set(stub)
-    cluster_conf.change_group.cache_updated_entry(centry)
+    # sorted so that the same shares always land in the same entries
+    ordered = dict(sorted(rgw_shares.items()))
+    written: Set[Tuple[str, str]] = set()
+    for idx, chunk in enumerate(external.chunk_rgw_shares(ordered)):
+        ekey = external.rgw_chunk_config_key(cluster_id, idx)
+        entry = store[ekey]
+        entry.set(external.rgw_stub(chunk))
+        cluster_conf.change_group.cache_updated_entry(entry)
+        written.add(ekey)
+    # Keep, but empty, every other stub that exists. A cluster that never had
+    # RGW shares has none and gets none.
+    empty = external.rgw_stub({})
+    for ekey in external.stored_rgw_stub_keys(store, cluster_id):
+        if ekey in written:
+            continue
+        entry = store[ekey]
+        try:
+            already_empty = entry.get() == empty
+        except (KeyError, ValueError):
+            # unreadable (for example edited by hand): replace it
+            already_empty = False
+        if not already_empty:
+            entry.set(empty)
+        cluster_conf.change_group.cache_updated_entry(entry)
 
 
 def _save_pending_spec_backup(
