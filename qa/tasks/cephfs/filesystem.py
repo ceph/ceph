@@ -716,9 +716,11 @@ class FilesystemBase(MDSClusterBase):
         if self.metadata_pool_name is None:
             self.metadata_pool_name = "{0}_metadata".format(self.name)
         if self.data_pool_name is None:
-            data_pool_name = "{0}_data".format(self.name)
-        else:
-            data_pool_name = self.data_pool_name
+            self.data_pool_name = f'{self.name}_data'
+        # TODO: remove if there are not repercussions, else needs
+        # re-consideration.
+        #else:
+        #    data_pool_name = self.data_pool_name
 
         recover = kwargs.pop("recover", False)
         metadata_overlay = kwargs.pop("metadata_overlay", False)
@@ -737,7 +739,7 @@ class FilesystemBase(MDSClusterBase):
             self.run_ceph_cmd('osd', 'pool', 'create',self.metadata_pool_name,
                               '--pg_num_min', str(self.pg_num_min))
 
-            self.run_ceph_cmd('osd', 'pool', 'create', data_pool_name,
+            self.run_ceph_cmd('osd', 'pool', 'create', self.data_pool_name,
                               str(self.pg_num),
                               '--pg_num_min', str(self.pg_num_min),
                               '--target_size_ratio',
@@ -748,13 +750,12 @@ class FilesystemBase(MDSClusterBase):
                                   self.metadata_pool_name,
                                   str(self.pg_num_min))
 
-                self.run_ceph_cmd('osd', 'pool', 'create',
-                                  data_pool_name, str(self.pg_num),
-                                  str(self.pg_num_min))
+                self.run_ceph_cmd('osd', 'pool', 'create', self.data_pool_name,
+                                  str(self.pg_num), str(self.pg_num_min))
             else:
                 raise
 
-        args = ["fs", "new", self.name, self.metadata_pool_name, data_pool_name]
+        args = ["fs", "new", self.name, self.metadata_pool_name, self.data_pool_name]
         if recover:
             args.append('--recover')
         if metadata_overlay:
@@ -769,7 +770,7 @@ class FilesystemBase(MDSClusterBase):
 
         if not recover:
             if self.ec_profile and 'disabled' not in self.ec_profile:
-                ec_data_pool_name = data_pool_name + "_ec"
+                ec_data_pool_name = self.data_pool_name + "_ec"
                 log.debug("EC profile is %s", self.ec_profile)
                 cmd = ['osd', 'erasure-code-profile', 'set', ec_data_pool_name]
                 cmd.extend(self.ec_profile)
@@ -795,7 +796,7 @@ class FilesystemBase(MDSClusterBase):
                 self.run_client_payload(f"setfattr -n ceph.dir.layout.pool -v {ec_data_pool_name} . && getfattr -n ceph.dir.layout .")
 
         self.check_pool_application(self.metadata_pool_name)
-        self.check_pool_application(data_pool_name)
+        self.check_pool_application(self.data_pool_name)
 
         # Turn off spurious standby count warnings from modifying max_mds in tests.
         try:
