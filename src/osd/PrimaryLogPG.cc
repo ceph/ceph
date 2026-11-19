@@ -14330,7 +14330,6 @@ void PrimaryLogPG::on_change(ObjectStore::Transaction &t)
     pool_migration_quiesce_reason = PoolMigrationQuiesceReason::NONE;
     pool_migration_quiesce_error_code = 0;
   }
-  pool_migration_quiesce_last_started_reset = false;
 
   if (hit_set && hit_set->insert_count() == 0) {
     dout(20) << " discarding empty hit_set" << dendl;
@@ -16486,7 +16485,6 @@ void PrimaryLogPG::handle_pool_migration_quiesce_complete()
   // Reset quiesce state
   pool_migration_quiesce_reason = PoolMigrationQuiesceReason::NONE;
   pool_migration_quiesce_error_code = 0;
-  pool_migration_quiesce_last_started_reset = false;
   pool_migration_clones_in_flight.clear();
   pool_migration_head_copy_in_flight.clear();
 
@@ -16635,12 +16633,11 @@ void PrimaryLogPG::handle_pool_migration_copy_failure(hobject_t oid, int r, bool
 
   // For retryable errors, reset last_pool_migration_started so recover_pool_migration
   // will retry this object after quiesce completes and reservation is granted
-  // Only do this once - the first error sets the retry point
-  if (pool_migration_quiesce_reason == PoolMigrationQuiesceReason::RETRY_NEEDED &&
-      !pool_migration_quiesce_last_started_reset) {
+  if (pool_migration_quiesce_reason == PoolMigrationQuiesceReason::RETRY_NEEDED) {
     last_pool_migration_started = pool_migration_watermark;
-    dout(20) << __func__ << " reset last_pool_migration_started to " << oid
-             << " for retry after quiesce" << dendl;
+    dout(20) << __func__ << " reset last_pool_migration_started to "
+             << pool_migration_watermark << " for retry of " << oid
+             << " after quiesce" << dendl;
   }
 
   // Check if all in-flight migrations have drained
@@ -16676,13 +16673,13 @@ uint16_t PrimaryLogPG::count_remaining_target_pgs(const hobject_t &hobj)
   const pg_pool_t *spi = get_osdmap()->get_pg_pool((int) get_pgid().pool());
   const pg_pool_t *tpi = get_osdmap()->get_pg_pool((int) migration_target_pool.value());
   const uint32_t position_hash = hobj.get_hash();
-  const uint32_t mask = (1UL << 32) - 1;
   vector<pg_t> still_to_migrate;
 
   for (unsigned pgid = 0;
                 pgid < std::max(spi->get_pg_num(), tpi->get_pg_num());
                 pgid++) {
-    uint32_t lowest_hash = ~((pgid + 1) ^ mask) - 1;
+    // the lowest hash that maps to this pgid
+    uint32_t lowest_hash = pgid;
     unsigned source_pgid = spi->raw_hash_to_pg(lowest_hash);
     unsigned target_pgid = tpi->raw_hash_to_pg(lowest_hash);
     pg_t source_pg{source_pgid, (uint64_t) get_pgid().pool()};

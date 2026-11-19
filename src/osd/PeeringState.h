@@ -1159,7 +1159,6 @@ public:
       > reactions;
     explicit MigratingTarget(my_context ctx);
     void migration_release_reservations();
-    void suspend_migration();
     boost::statechart::result react(const StopTargetPoolMigration& evt);
     boost::statechart::result react(const DoRecovery& evt);
     boost::statechart::result react(const RemotePoolMigrationRejectedTooFull& evt);

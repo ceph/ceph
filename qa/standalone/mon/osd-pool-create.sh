@@ -474,7 +474,7 @@ function TEST_osd_pool_create_migrate_from() {
   SRC_POOL_NAME="ecpool"
   REPPOOL_NAME="metadatapool"
 
-  #setup the cluster 
+  #setup the cluster
   #create an erasure code profile
   ceph osd erasure-code-profile set ec-prof plugin=isa k=2 m=1 crush-failure-domain=osd
 
@@ -505,14 +505,14 @@ function TEST_osd_pool_create_migrate_from() {
   ceph osd pool set $SRC_POOL_NAME pg_num 2 || return 1
 
   #Wait some of the PGs to be merged
-  sleep 10  
+  sleep 10
 
   #migrate the pool, the new pool takes over the name and the old pool is
   #renamed to .migrate-1
   ceph osd pool migrate $SRC_POOL_NAME || return 1
   TGT_POOL_NAME=$SRC_POOL_NAME
   SRC_POOL_NAME=".migrate-1"
-   
+
   #reenable autoscaling
   ceph osd pool unset noautoscale || return 1
 
@@ -522,7 +522,7 @@ function TEST_osd_pool_create_migrate_from() {
 
   #Let the message reach the logs
   sleep 2
-  
+
   grep "pool pg_num change is disabled; you must unset nopgchange flag for the pool first" $dir/mon.a.log || return 1
 
   #check that the daemonServer was blocked from changing the pg_num on the two
@@ -531,7 +531,7 @@ function TEST_osd_pool_create_migrate_from() {
   TGT_POOL_ID=$(ceph osd dump | grep " '$TGT_POOL_NAME' " | awk '{print $2}')
   echo "Source pool id: $SRC_POOL_ID"
   echo "Target pool id: $TGT_POOL_ID"
-  
+
   grep "Pool $SRC_POOL_ID has the flag NOPGCHANGE so will be skipped" $dir/mgr.x.log || return 1
   grep "Pool $TGT_POOL_ID has the flag NOPGCHANGE so will be skipped" $dir/mgr.x.log || return 1
 

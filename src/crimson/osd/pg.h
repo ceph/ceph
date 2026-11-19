@@ -707,7 +707,7 @@ public:
     recovery_handler->on_pool_migration_target_suspended(toofull);
   }
   void pool_migration_request_target_reservation() final {
-    // TODO Jamie - Crimson stub - not implemented yet
+    // TODO - Crimson stub - not implemented yet
     ceph_abort("pool_migration_request_target_reservation not implemented in crimson");
   }
   void pool_migration_release_target_reservation() final {

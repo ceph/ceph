@@ -2319,21 +2319,19 @@ public:
     ceph::buffer::list bl;   // raw data read to here
 
     // Pool Migration specific attributes
-  	std::list<librados::ListObjectImpl> tgt_list;
-  	std::list<librados::ListObjectImpl> src_list;
-  	std::list<librados::ListObjectImpl> intermediate_list;
+    std::list<librados::ListObjectImpl> tgt_list;
+    std::list<librados::ListObjectImpl> src_list;
+    std::list<librados::ListObjectImpl> intermediate_list;
 
-  	collection_list_handle_t end_of_tgt;
+    uint64_t src_pool_id = -1;
+    uint64_t tgt_pool_id = -1;
 
-	uint64_t src_pool_id = -1;
-	uint64_t tgt_pool_id = -1;
+    collection_list_handle_t src_pos;
 
-  	collection_list_handle_t src_pos;
-
-  	enum stage {TGT_READ, SRC_READ, TGT_SECOND_READ};
-  	stage current_stage = TGT_READ;
-  	bool end_of_triple_read = false;
-  	// End of Pool Migration attributes
+    enum stage {TGT_READ, SRC_READ, TGT_SECOND_READ};
+    stage current_stage = TGT_READ;
+    bool end_of_triple_read = false;
+    // End of Pool Migration attributes
 
     std::list<librados::ListObjectImpl> list;
 
@@ -2808,8 +2806,6 @@ private:
 		   epoch_t reply_epoch);
 
   void combine_result_lists(NListContext *list_context);
-
-  static uint32_t reverse_bits_32(uint32_t n);
 
   void resend_mon_ops();
 

@@ -4814,19 +4814,19 @@ void Objecter::combine_result_lists(NListContext *list_context) {
   //add all the objects from the tgt pool read
   for (const auto& obj : list_context->tgt_list) {
     uint32_t hash = get_object_hash_position(list_context->tgt_pool_id, obj.get_oid(), obj.get_nspace());
-    hash = reverse_bits_32(hash);
+    hash = hobject_t::_reverse_bits(hash);
     sortingPair.emplace_back(hash,obj);
   }
   //add all the objects from the src pool read
   for (const auto& obj : list_context->src_list) {
     uint32_t hash = get_object_hash_position(list_context->src_pool_id, obj.get_oid(), obj.get_nspace());
-    hash = reverse_bits_32(hash);
+    hash = hobject_t::_reverse_bits(hash);
     sortingPair.emplace_back(hash,obj);
   }
   //add all the objects from the second tgt pool read
   for (const auto& obj : list_context->intermediate_list) {
     uint32_t hash = get_object_hash_position(list_context->tgt_pool_id, obj.get_oid(), obj.get_nspace());
-    hash = reverse_bits_32(hash);
+    hash = hobject_t::_reverse_bits(hash);
     sortingPair.emplace_back(hash,obj);
   }
 
@@ -4854,15 +4854,6 @@ void Objecter::combine_result_lists(NListContext *list_context) {
   for (const auto& object : sortingPair) {
     list_context->list.push_back(std::move(object.second));
   }
-}
-
-// Helper function to reverse the 32 bits of a hash.
-uint32_t Objecter::reverse_bits_32(uint32_t n) {
-  n = ((n >> 1)  & 0x55555555) | ((n & 0x55555555) << 1);
-  n = ((n >> 2)  & 0x33333333) | ((n & 0x33333333) << 2);
-  n = ((n >> 4)  & 0x0F0F0F0F) | ((n & 0x0F0F0F0F) << 4);
-  n = ((n >> 8)  & 0x00FF00FF) | ((n & 0x00FF00FF) << 8);
-  return (n >> 16) | (n << 16);
 }
 
 void Objecter::put_nlist_context_budget(NListContext *list_context)

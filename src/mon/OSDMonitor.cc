@@ -6594,80 +6594,74 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       rdata.append(ss.str());
     } else {
       if (f)
- f->open_array_section("pools");
+        f->open_array_section("pools");
       std::vector<int64_t> displayed_pools;
       for (auto &[pid, pdata] : osdmap.get_pools()) {
- // Without --show-all, suppress source/intermediate pools and only
- // show the tip of each migration chain (the target pool).
- // With --show-all, show every pool in the chain.
- if (!show_all && pdata.is_migration_src()) {
-   continue;
- }
- if (f) {
-   if (detail == "detail") {
-       // Without --show-all, show the root pool's ID for the migration
-       // target so operators see the original pool ID that clients still
-       // reference.  With --show-all, every pool uses its own real ID.
-       int64_t display_pid = pid;
-       if (!show_all && osdmap.is_pool_migration_target(pid)) {
-         for (auto &[scan_pid, scan_pool] : osdmap.get_pools()) {
-  if (scan_pool.migration_target.has_value() &&
-      *scan_pool.migration_target == pid &&
-      scan_pid < display_pid) {
-    display_pid = scan_pid;
-  }
-         }
-       }
-     f->open_object_section("pool");
-     f->dump_int("pool_id", display_pid);
-     f->dump_string("pool_name", osdmap.get_pool_name(pid));
-     pdata.dump(f.get(), osdmap.crush.get(), show_rule_names);
-     osdmap.dump_read_balance_score(cct, pid, pdata, f.get());
-     f->close_section();
-   } else {
-     f->dump_string("pool_name", osdmap.get_pool_name(pid));
-   }
- } else {
-    if (show_all) {
-      auto found = std::find(displayed_pools.begin(), displayed_pools.end(), pid);
-      if (found != displayed_pools.end()) {
-        continue; // This pool has alreay been displayed as part of a migration cascade
-      }
-      auto check_id = pdata.migration_target.value_or(pid);
-      std::vector<int64_t> cascade;
-
-      for (auto &[pool_id, pool_data] : osdmap.get_pools()) { // Loop through all the pools to get the migration cascade 
-        if (pool_data.migration_target == check_id) {
-          cascade.push_back(pool_id);
+        // Without --show-all, suppress source/intermediate pools and only
+        // show the tip of each migration chain (the target pool).
+        // With --show-all, show every pool in the chain.
+        if (!show_all && pdata.is_migration_src()) {
+          continue;
         }
-      }
-      if (cascade.empty()) { //if there is no cascade then this pool is not in a migration cascade so output it normally
-        rdata.append(osdmap.get_pool_name(pid) + "\n"); // since this is a standalone pool there is also no need to add it to the outputted pools list as it will only ever occur once
-      } else { // there is a migration cascade so now output them together 
-        rdata.append(osdmap.get_pool_name(cascade.front()) + "\n"); // Print the root pool unindented
-        displayed_pools.push_back(cascade.front()); //Add this pool to the list of pools that has been outputted already
-        for (size_t i = 1; i < cascade.size(); i++) {
-          rdata.append("    " + osdmap.get_pool_name(cascade[i]) + "\n"); // Print the other pools in the cascade indented
-          displayed_pools.push_back(cascade[i]);
+        if (f) {
+          if (detail == "detail") {
+            // Without --show-all, show the root pool's ID for the migration
+            // target so operators see the original pool ID that clients still
+            // reference.  With --show-all, every pool uses its own real ID.
+            int64_t display_pid = pid;
+            if (!show_all && osdmap.is_pool_migration_target(pid)) {
+              for (auto &[scan_pid, scan_pool] : osdmap.get_pools()) {
+                if (scan_pool.migration_target.has_value() &&
+                    *scan_pool.migration_target == pid &&
+                    scan_pid < display_pid) {
+                  display_pid = scan_pid;
+                }
+              }
+            }
+            f->open_object_section("pool");
+            f->dump_int("pool_id", display_pid);
+            f->dump_string("pool_name", osdmap.get_pool_name(pid));
+            pdata.dump(f.get(), osdmap.crush.get(), show_rule_names);
+            osdmap.dump_read_balance_score(cct, pid, pdata, f.get());
+            f->close_section();
+          } else {
+            f->dump_string("pool_name", osdmap.get_pool_name(pid));
+          }
+        } else if (show_all) {
+          if (std::find(displayed_pools.begin(), displayed_pools.end(), pid) !=
+              displayed_pools.end()) {
+            continue; // already shown as part of a migration chain
+          }
+          auto check_id = pdata.migration_target.value_or(pid);
+          // all the pools in the migration chain that ends at check_id
+          std::vector<int64_t> cascade;
+          for (auto &[pool_id, pool_data] : osdmap.get_pools()) {
+            if (pool_data.migration_target == check_id) {
+              cascade.push_back(pool_id);
+            }
+          }
+          if (cascade.empty()) {
+            // not part of a migration chain, so it is only shown once
+            rdata.append(osdmap.get_pool_name(pid) + "\n");
+          } else {
+            // the root unindented, then the rest of the chain indented,
+            // ending with the current target pool
+            rdata.append(osdmap.get_pool_name(cascade.front()) + "\n");
+            displayed_pools.push_back(cascade.front());
+            for (size_t i = 1; i < cascade.size(); i++) {
+              rdata.append("    " + osdmap.get_pool_name(cascade[i]) + "\n");
+              displayed_pools.push_back(cascade[i]);
+            }
+            rdata.append("    " + osdmap.get_pool_name(check_id) + "\n");
+            displayed_pools.push_back(check_id);
+          }
+        } else {
+          rdata.append(osdmap.get_pool_name(pid) + "\n");
         }
-        rdata.append("    " + osdmap.get_pool_name(check_id) + "\n"); //finally print the current target pool also indented
-        displayed_pools.push_back(check_id);
-      }
-    } else {
-      rdata.append(osdmap.get_pool_name(pid) + "\n");
-    }
-
-
-
-
-
-
-
-}
       }
       if (f) {
- f->close_section();
- f->flush(rdata);
+        f->close_section();
+        f->flush(rdata);
       }
     }
 
@@ -8684,7 +8678,7 @@ int OSDMonitor::prepare_pool_stripe_width(const unsigned pool_type,
       uint32_t stripe_unit = g_conf().get_val<Option::size_t>("osd_pool_erasure_code_stripe_unit");
 
       if (stripe_unit == 0) {
-        if (((erasure_code->get_supported_optimizations() & 
+        if (((erasure_code->get_supported_optimizations() &
               ErasureCodeInterface::FLAG_EC_PLUGIN_OPTIMIZED_SUPPORTED) != 0) &&
             (ec_optimized ||
              cct->_conf.get_val<bool>("osd_pool_default_flag_ec_optimizations"))) {
@@ -17944,7 +17938,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
  update:
   getline(ss, rs);
   wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
- 				    get_last_committed() + 1));
+				    get_last_committed() + 1));
   return true;
 
  wait:
