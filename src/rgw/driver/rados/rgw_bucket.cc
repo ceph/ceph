@@ -625,6 +625,7 @@ int RGWBucket::check_object_index(const DoutPrefixProvider *dpp,
 
   rgw::sal::Bucket::ListResults results;
   results.is_truncated = true;
+  int ret = 0;
 
   Formatter *formatter = flusher.get_formatter();
   formatter->open_object_section("objects");
@@ -639,7 +640,13 @@ int RGWBucket::check_object_index(const DoutPrefixProvider *dpp,
     if (r == -ENOENT) {
       break;
     } else if (r < 0) {
+      // a failed listing leaves the marker and is_truncated as they were, so
+      // retrying would list the same page forever; give up with the error
       set_err_msg(err_msg, "ERROR: failed operation r=" + cpp_strerror(-r));
+      ldpp_dout(dpp, -1) << "ERROR: " << __func__ << ": listing bucket "
+          << bucket << " failed: " << cpp_strerror(-r) << dendl;
+      ret = r;
+      break;
     }
 
     dump_bucket_index(results.objs, formatter);
@@ -651,7 +658,7 @@ int RGWBucket::check_object_index(const DoutPrefixProvider *dpp,
   // restore normal tag timeout for bucket
   bucket->set_tag_timeout(dpp, y, 0);
 
-  return 0;
+  return ret;
 }
 
 /**
