@@ -1,7 +1,7 @@
 import errno
 import logging
 import json
-from typing import List, cast, Optional, NamedTuple, TYPE_CHECKING, Any
+from typing import Dict, List, cast, Optional, NamedTuple, TYPE_CHECKING, Any
 from ipaddress import ip_address, IPv6Address
 from dataclasses import replace
 
@@ -83,12 +83,30 @@ class NvmeofService(CephService):
             return []
 
         nvmeof_spec = cast(NvmeofServiceSpec, spec)
-        if not nvmeof_spec.encryption_key:
-            return []
-
-        return [
-            f'encryption_key:{utils.config_hash(nvmeof_spec.encryption_key)}'
-        ]
+        deps: List[str] = []
+        if nvmeof_spec.encryption_key:
+            deps.append(f'encryption_key:{utils.config_hash(nvmeof_spec.encryption_key)}')
+        # The declarations bind_addr reads. A gateway keeps the address it
+        # was deployed with, so moving one has to reach the daemon as a
+        # reconfig. `networks` is not here: the address it resolves to
+        # lands on the placement, which the scheduler already compares
+        # against the daemon it deployed.
+        #
+        # Only what is set, so a spec that declares no address at all
+        # carries the deps it carried before and upgrading to this does
+        # not reconfigure it. A map renders in insertion order, which a
+        # reload of the spec need not repeat, so sort it: deps that differ
+        # from one pass to the next reconfigure on every pass.
+        if nvmeof_spec.addr:
+            deps.append(f'addr: {nvmeof_spec.addr}')
+        if nvmeof_spec.addr_map:
+            deps.append(f'addr_map: {sorted(nvmeof_spec.addr_map.items())}')
+        if nvmeof_spec.discovery_addr:
+            deps.append(f'discovery_addr: {nvmeof_spec.discovery_addr}')
+        if nvmeof_spec.discovery_addr_map:
+            deps.append(
+                f'discovery_addr_map: {sorted(nvmeof_spec.discovery_addr_map.items())}')
+        return deps
 
     def choose_next_action(
         self,
@@ -168,6 +186,24 @@ class NvmeofService(CephService):
             'root_ca_cert': tls_creds.ca_cert,
         })
 
+    def bind_addr(self,
+                  listener: str,
+                  host: str,
+                  placement_addr: Optional[str],
+                  addr_map: Optional[Dict[str, str]],
+                  addr: Optional[str]) -> str:
+        """Where a gateway's `listener` listens on `host`: the per host map,
+        then the service wide address, then what the scheduler resolved for the
+        placement from `networks`, and only then the address cephadm reaches
+        the host at.
+        """
+        mapped_addr = addr_map.get(host) if addr_map else None
+        host_addr = self.mgr.inventory.get_addr(host)
+        chosen = mapped_addr or addr or placement_addr or host_addr
+        self.mgr.log.info(f'{listener} address on {host}: {chosen}, from '
+                          f'{mapped_addr=} {addr=} {placement_addr=} {host_addr=}')
+        return chosen
+
     def prepare_create(
             self,
             deploy_ctx: DaemonDeployContext,
@@ -179,9 +215,6 @@ class NvmeofService(CephService):
         spec = cast(NvmeofServiceSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
         deploy_ctx.service_spec = spec
         nvmeof_gw_id = daemon_spec.daemon_id
-        host_ip = self.mgr.inventory.get_addr(daemon_spec.host)
-        map_addr = spec.addr_map.get(daemon_spec.host) if spec.addr_map else None
-        map_discovery_addr = spec.discovery_addr_map.get(daemon_spec.host) if spec.discovery_addr_map else None
         keyring = self.get_keyring_with_caps(self.get_auth_entity(nvmeof_gw_id),
                                              ['mon', 'profile rbd',
                                               'mgr', 'allow command "service dump"',
@@ -198,13 +231,10 @@ class NvmeofService(CephService):
         name = f'{utils.name_to_config_section(self.TYPE)}.{nvmeof_gw_id}'
         rados_id = name[len('client.'):] if name.startswith('client.') else name
 
-        # The address is first searched in the per node address map,
-        # then in the spec address configuration.
-        # If neither is defined, the host IP is used as a fallback.
-        addr = map_addr or spec.addr or host_ip
-        self.mgr.log.info(f"gateway address: {addr} from {map_addr=} {spec.addr=} {host_ip=}")
-        discovery_addr = map_discovery_addr or spec.discovery_addr or host_ip
-        self.mgr.log.info(f"discovery address: {discovery_addr} from {map_discovery_addr=} {spec.discovery_addr=} {host_ip=}")
+        addr = self.bind_addr('gateway', daemon_spec.host, daemon_spec.ip,
+                              spec.addr_map, spec.addr)
+        discovery_addr = self.bind_addr('discovery', daemon_spec.host, daemon_spec.ip,
+                                        spec.discovery_addr_map, spec.discovery_addr)
         encryption_key_path = self._get_encryption_key_path(spec)
         context = {
             'spec': spec,
@@ -300,7 +330,16 @@ class NvmeofService(CephService):
                     logger.warning(f'No ServiceSpec found for {service_name}')
                     continue
 
-                ip = utils.resolve_ip(self.mgr.inventory.get_addr(dd.hostname))
+                # Register where the gateway listens, not where cephadm reaches
+                # the host, or the mgr dials an address nothing is bound to.
+                ip = utils.resolve_ip(
+                    self.bind_addr('gateway', dd.hostname, dd.ip,
+                                   spec.addr_map, spec.addr))
+                if ip_address(ip).is_unspecified:
+                    # a wildcard listener takes in every interface and so names
+                    # none of them. The host address is one it answers on, and
+                    # the mgr already reaches the host there.
+                    ip = utils.resolve_ip(self.mgr.inventory.get_addr(dd.hostname))
                 if type(ip_address(ip)) is IPv6Address:
                     ip = f'[{ip}]'
                 service_url = '{}:{}'.format(ip, spec.port or '5500')
