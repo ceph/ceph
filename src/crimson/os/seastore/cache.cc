@@ -2487,7 +2487,7 @@ void Cache::complete_commit(
       t.lognode_deltas.end());   // copy
     DEBUGT("lognode deltas start_seq:{}, oid:{}, oid queue length:{}, \
       seq queue length {}", t, start_seq, t.lognode_deltas.begin()->oid, 
-      pending_lognode_deltas_by_oid[oid].size(),
+      seqs_by_oid.size(),
       pending_lognode_deltas_by_seq.size());
   } else if (t.get_src() == Transaction::src_t::TRIM_LOG) {
     assert(t.lognode_deltas.size() > 0);
