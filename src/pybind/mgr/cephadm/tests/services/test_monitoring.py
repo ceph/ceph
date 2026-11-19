@@ -840,6 +840,10 @@ class TestMonitoring:
         s = RGWSpec(service_id="foo", placement=PlacementSpec(count=1), rgw_frontend_type='beast')
         smb_spec = SMBSpec(cluster_id='foxtrot', config_uri='rados://.smb/foxtrot/config.json',)
 
+        # the smb service looks up its rgw credential stubs with a prefixed
+        # `config-key dump`, which the mon answers with a json object
+        setattr(cephadm_module, '_mon_command_mock_config-key_dump', lambda cmd: '{}')
+
         with with_host(cephadm_module, 'test'):
             cephadm_module.secure_monitoring_stack = True
             cephadm_module.set_store(PrometheusService.USER_CFG_KEY, 'prometheus_user')
