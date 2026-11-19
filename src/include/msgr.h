@@ -67,7 +67,9 @@ DEFINE_MSGR2_FEATURE(1, 1, COMPRESSION)  // on-wire compression
 
 /*
  * Rollover-safe type and comparator for 32-bit sequence numbers.
- * The sign of the result determines the ordering for values less than 2^31 apart.
+ * Comparator returns a negative value, zero, or a positive value if a is
+ * before, equal to, or after b. Compared sequences must be less than 2^31
+ * increments apart.
  */
 typedef __u32 ceph_seq_t;
 
