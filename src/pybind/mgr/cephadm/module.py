@@ -2965,6 +2965,33 @@ Then run the following:
 
     @handle_orch_error
     @host_exists()
+    def get_nvme_device_info(self, host: str, device_path: str) -> Dict[str, Any]:
+        """Describe one NVMe namespace on a host.
+
+        Two shapes come back, and a caller must look at ``present`` before
+        reading anything else:
+
+        - the namespace is there: ``present`` is True, alongside the PCI ids,
+          the namespace id and both Identify structures as hex, exactly as
+          `cephadm nvme-info` reported them;
+        - the host has no such namespace: ``{'device': ..., 'present': False}``
+          and nothing more, so reading ``nsid`` or ``identify_controller``
+          raises KeyError. That is a fact about the host rather than a failed
+          probe -- every real failure raises instead.
+
+        Nothing is interpreted here; a caller that needs a field reads it out
+        of the Identify data itself.
+
+        :param host: (str) host name
+        :param device_path: (str) NVMe namespace path, e.g. /dev/nvme0n1
+        """
+        with self.async_timeout_handler(host, f'cephadm nvme-info {device_path}'):
+            return self.wait_async(CephadmServe(self)._run_cephadm_json(
+                host, cephadmNoImage, 'nvme-info',
+                ['--device', device_path], no_fsid=True))
+
+    @handle_orch_error
+    @host_exists()
     def rescan_host(self, hostname: str) -> str:
         """Use cephadm to issue a disk rescan on each HBA
 
@@ -3923,6 +3950,22 @@ Then run the following:
             err_msg = self.validate_device(host_name, drive_group)
             if err_msg:
                 return err_msg
+
+        # Check device constraints (e.g. a required size reservation) before
+        # saving the spec, so an impossible request is rejected here instead
+        # of leaving a spec behind that the serve loop retries and fails.
+        #
+        # Build the selection the way the apply does rather than by hand:
+        # prepare_drivegroup accounts for existing daemons and schedulable
+        # hosts, both of which feed DriveSelection's limit handling, so a
+        # hand-built selection can check a different set of devices than the
+        # one that is subsequently deployed.
+        for sel_host, drive_selection in self.osd_service.prepare_drivegroup(drive_group):
+            if sel_host != host_name:
+                continue
+            with self.async_timeout_handler(sel_host, 'device constraints'):
+                self.wait_async(self.osd_service.get_data_allocate_fraction(
+                    sel_host, drive_group, drive_selection))
 
         # Only save/apply osd.default after validation passes. Otherwise the serve loop
         # would still apply the spec and create an OSD while the CLI returns an error.

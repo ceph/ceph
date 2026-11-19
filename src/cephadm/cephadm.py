@@ -167,6 +167,7 @@ from cephadmlib.decorators import (
     require_image
 )
 from cephadmlib.host_facts import HostFacts, list_networks, list_rdma
+from cephadmlib.nvme import describe_device as describe_nvme_device
 from cephadmlib.ssh import authorize_ssh_key, check_ssh_connectivity
 from cephadmlib.daemon_form import (
     DaemonForm,
@@ -5257,6 +5258,15 @@ def command_gather_facts(ctx: CephadmContext) -> None:
     print(host.dump())
 
 
+def command_nvme_info(ctx: CephadmContext) -> None:
+    """Describe a local NVMe namespace: PCI ids and both Identify structures.
+
+    Read-only, and interprets nothing: the Identify data is returned raw so
+    the caller decides what the bytes mean.
+    """
+    print(json.dumps(describe_nvme_device(ctx.nvme_info_device)))
+
+
 def command_remove_file(ctx: CephadmContext) -> int:
     """Remove a regular file on the host
     """
@@ -6449,6 +6459,16 @@ def _get_parser():
     parser_gather_facts = subparsers.add_parser(
         'gather-facts', help='gather and return host related information (JSON format)')
     parser_gather_facts.set_defaults(func=command_gather_facts)
+
+    parser_nvme_info = subparsers.add_parser(
+        'nvme-info',
+        help='describe a local NVMe namespace (JSON format)')
+    parser_nvme_info.set_defaults(func=command_nvme_info)
+    parser_nvme_info.add_argument(
+        '--device',
+        required=True,
+        dest='nvme_info_device',
+        help='NVMe namespace path, for example /dev/nvme0n1')
 
     parser_remove_file = subparsers.add_parser(
         'remove-file', help='remove a file on the host')
