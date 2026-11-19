@@ -4213,10 +4213,9 @@ void Objecter::handle_osd_op_reply(cref_t<MOSDOpReply> m)
         }
       }
       r.update_migration_watermark(new_watermark);
-      // Remove all ops (including this one) from the OSDSession
-      // that need to be retried because the watermark has advanced.
-      // Other removed ops that are still inflight will later fail
-      // with redirect but will be ignored as stray
+      // Resend every op for this PG, on any session, whose object is between
+      // the cached watermark and the new one, this op included. A late reply
+      // to a removed op is ignored as stray or by the retry attempt check.
       //
       // Exclusive rwlock is required to:
       // 1. Ensure safe update of pool_migration_watermark
@@ -4225,31 +4224,34 @@ void Objecter::handle_osd_op_reply(cref_t<MOSDOpReply> m)
       // 3. Permit linger ops to be moved between sessions
       bool found = false;
       ldout(cct, 15) << __func__ << " redirect for " << op->target.target_oid << " previous=" << previous_watermark << " new=" << new_watermark << dendl;
-      for (auto it = s->ops.begin(); it != s->ops.end(); ) {
-        if (it->second->target.actual_pgid.pgid == m->get_pg()) {
-          auto hobj = it->second->target.get_hobj(it->second->target.pgid);
-          if (previous_watermark.get_head() <= hobj && hobj < new_watermark.get_head()) {
-            ldout(cct, 20) << __func__ << " found for retrying " << it->second->tid << " " <<it->second->target.get_hobj() << dendl;
-            if (it->second->has_completion())
-              num_in_flight--;
-            retry.push_back(it->second);
-            if (it->second == op) {
-              found = true;
+      auto collect = [&](OSDSession *from) {
+        // from->lock is locked
+        for (auto it = from->ops.begin(); it != from->ops.end(); ) {
+          if (it->second->target.actual_pgid.pgid == m->get_pg()) {
+            auto hobj = it->second->target.get_hobj(it->second->target.pgid);
+            if (previous_watermark.get_head() <= hobj && hobj < new_watermark.get_head()) {
+              ldout(cct, 20) << __func__ << " found for retrying " << it->second->tid << " " << it->second->target.get_hobj()
+                             << " on osd." << from->osd << dendl;
+              if (it->second->has_completion())
+                num_in_flight--;
+              retry.push_back(it->second);
+              if (it->second == op) {
+                found = true;
+              }
+              _session_op_remove(from, it);
+            } else {
+              ldout(cct, 20) << __func__ << " not retrying " << it->second->tid << " " << it->second->target.get_hobj() << dendl;
+              ++it;
             }
-            _session_op_remove(s, it);
           } else {
-            ldout(cct, 20) << __func__ << " not retrying " << it->second->tid << " " << it->second->target.get_hobj() << dendl;
             ++it;
           }
-        } else {
-          ++it;
         }
-      }
+      };
+      collect(s);
       if (!found) {
-        // The range above did not cover this op. That happens when the
-        // redirect came from another session for the same PG (a balanced or
-        // localized read on a replica) after a redirect on this one already
-        // advanced the cached watermark. Retry the op on its own.
+        // Its object is already below the cached watermark, but it was sent
+        // to the source PG, on an older map say: retry it on its own.
         ldout(cct, 15) << __func__ << " redirect for " << op->tid
                        << " outside [" << previous_watermark << ","
                        << new_watermark << "), retrying it alone" << dendl;
@@ -4259,6 +4261,24 @@ void Objecter::handle_osd_op_reply(cref_t<MOSDOpReply> m)
         _session_op_remove(s, op);
       }
       sl.unlock();
+
+      // In-range ops on other sessions (reads on replicas, writes on an old
+      // primary's session) would otherwise reach the target after newer ops.
+      // rwlock keeps new ops out; one session lock is held at a time.
+      for (auto& p : osd_sessions) {
+        OSDSession *other = p.second;
+        if (other == s) {
+          continue;
+        }
+        unique_lock osl(other->lock);
+        collect(other);
+      }
+      {
+        unique_lock hsl(homeless_session->lock);
+        collect(homeless_session);
+      }
+      // Resend in submission order, whichever session each op came from.
+      retry.sort([](const Op *a, const Op *b) { return a->tid < b->tid; });
 
       // Redirects from different sessions can arrive out of order, so only
       // ever move the cached watermark forward.
