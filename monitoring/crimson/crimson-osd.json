@@ -1862,15 +1862,289 @@
       }
     },
     {
+      "type": "timeseries",
+      "title": "xattr ops / s",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "setattr + setattrs and rmattr + rmattrs transaction ops.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_seastore_xattr_set_ops{ceph_daemon=~\"$osd\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}} setattr(s)",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_seastore_xattr_rm_ops{ceph_daemon=~\"$osd\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}} rmattr(s)",
+          "refId": "B"
+        }
+      ],
+      "id": 31,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 117
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Avg xattr change time",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "xattr_change_usec / xattr_change_count: time to apply one setattr, setattrs, rmattr or rmattrs op in the transaction build, with waits for extent reads. Like the classic BlueStore chgattr_lat.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "\u00b5s",
+          "min": 0,
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_seastore_xattr_change_usec{ceph_daemon=~\"$osd\"}[$__rate_interval])) / sum by (ceph_daemon) (rate(osd_seastore_xattr_change_count{ceph_daemon=~\"$osd\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}}",
+          "refId": "A"
+        }
+      ],
+      "id": 32,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 117
+      }
+    },
+    {
+      "type": "bargauge",
+      "title": "xattr tree entry size (over time range)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "Share of the entries written to the xattr tree in the dashboard time range, by key + value size. A band holds the sizes above its lower bound, up to and including its upper bound, so each entry is in one band only, and the bands add up to 100%. A leaf accepts at most 16,382 B, so the 16\u201364 KiB band stays empty.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum(increase(osd_seastore_xattr_tree_kv_size_bucket{ceph_daemon=~\"$osd\", le=~\"64(\\\\.0+)?\"}[$__range])) / sum(increase(osd_seastore_xattr_tree_kv_size_count{ceph_daemon=~\"$osd\"}[$__range]))",
+          "refId": "A",
+          "legendFormat": "0\u201364 B",
+          "instant": true,
+          "range": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "clamp_min(sum(increase(osd_seastore_xattr_tree_kv_size_bucket{ceph_daemon=~\"$osd\", le=~\"128(\\\\.0+)?\"}[$__range])) - sum(increase(osd_seastore_xattr_tree_kv_size_bucket{ceph_daemon=~\"$osd\", le=~\"64(\\\\.0+)?\"}[$__range])), 0) / sum(increase(osd_seastore_xattr_tree_kv_size_count{ceph_daemon=~\"$osd\"}[$__range]))",
+          "refId": "B",
+          "legendFormat": "64\u2013128 B",
+          "instant": true,
+          "range": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "clamp_min(sum(increase(osd_seastore_xattr_tree_kv_size_bucket{ceph_daemon=~\"$osd\", le=~\"256(\\\\.0+)?\"}[$__range])) - sum(increase(osd_seastore_xattr_tree_kv_size_bucket{ceph_daemon=~\"$osd\", le=~\"128(\\\\.0+)?\"}[$__range])), 0) / sum(increase(osd_seastore_xattr_tree_kv_size_count{ceph_daemon=~\"$osd\"}[$__range]))",
+          "refId": "C",
+          "legendFormat": "128\u2013256 B",
+          "instant": true,
+          "range": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "clamp_min(sum(increase(osd_seastore_xattr_tree_kv_size_bucket{ceph_daemon=~\"$osd\", le=~\"512(\\\\.0+)?\"}[$__range])) - sum(increase(osd_seastore_xattr_tree_kv_size_bucket{ceph_daemon=~\"$osd\", le=~\"256(\\\\.0+)?\"}[$__range])), 0) / sum(increase(osd_seastore_xattr_tree_kv_size_count{ceph_daemon=~\"$osd\"}[$__range]))",
+          "refId": "D",
+          "legendFormat": "256\u2013512 B",
+          "instant": true,
+          "range": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "clamp_min(sum(increase(osd_seastore_xattr_tree_kv_size_bucket{ceph_daemon=~\"$osd\", le=~\"1024(\\\\.0+)?\"}[$__range])) - sum(increase(osd_seastore_xattr_tree_kv_size_bucket{ceph_daemon=~\"$osd\", le=~\"512(\\\\.0+)?\"}[$__range])), 0) / sum(increase(osd_seastore_xattr_tree_kv_size_count{ceph_daemon=~\"$osd\"}[$__range]))",
+          "refId": "E",
+          "legendFormat": "512 B\u20131 KiB",
+          "instant": true,
+          "range": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "clamp_min(sum(increase(osd_seastore_xattr_tree_kv_size_bucket{ceph_daemon=~\"$osd\", le=~\"2048(\\\\.0+)?\"}[$__range])) - sum(increase(osd_seastore_xattr_tree_kv_size_bucket{ceph_daemon=~\"$osd\", le=~\"1024(\\\\.0+)?\"}[$__range])), 0) / sum(increase(osd_seastore_xattr_tree_kv_size_count{ceph_daemon=~\"$osd\"}[$__range]))",
+          "refId": "F",
+          "legendFormat": "1\u20132 KiB",
+          "instant": true,
+          "range": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "clamp_min(sum(increase(osd_seastore_xattr_tree_kv_size_bucket{ceph_daemon=~\"$osd\", le=~\"4096(\\\\.0+)?\"}[$__range])) - sum(increase(osd_seastore_xattr_tree_kv_size_bucket{ceph_daemon=~\"$osd\", le=~\"2048(\\\\.0+)?\"}[$__range])), 0) / sum(increase(osd_seastore_xattr_tree_kv_size_count{ceph_daemon=~\"$osd\"}[$__range]))",
+          "refId": "G",
+          "legendFormat": "2\u20134 KiB",
+          "instant": true,
+          "range": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "clamp_min(sum(increase(osd_seastore_xattr_tree_kv_size_bucket{ceph_daemon=~\"$osd\", le=~\"8192(\\\\.0+)?\"}[$__range])) - sum(increase(osd_seastore_xattr_tree_kv_size_bucket{ceph_daemon=~\"$osd\", le=~\"4096(\\\\.0+)?\"}[$__range])), 0) / sum(increase(osd_seastore_xattr_tree_kv_size_count{ceph_daemon=~\"$osd\"}[$__range]))",
+          "refId": "H",
+          "legendFormat": "4\u20138 KiB",
+          "instant": true,
+          "range": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "clamp_min(sum(increase(osd_seastore_xattr_tree_kv_size_bucket{ceph_daemon=~\"$osd\", le=~\"16384(\\\\.0+)?\"}[$__range])) - sum(increase(osd_seastore_xattr_tree_kv_size_bucket{ceph_daemon=~\"$osd\", le=~\"8192(\\\\.0+)?\"}[$__range])), 0) / sum(increase(osd_seastore_xattr_tree_kv_size_count{ceph_daemon=~\"$osd\"}[$__range]))",
+          "refId": "I",
+          "legendFormat": "8\u201316 KiB",
+          "instant": true,
+          "range": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "clamp_min(sum(increase(osd_seastore_xattr_tree_kv_size_bucket{ceph_daemon=~\"$osd\", le=~\"65536(\\\\.0+)?\"}[$__range])) - sum(increase(osd_seastore_xattr_tree_kv_size_bucket{ceph_daemon=~\"$osd\", le=~\"16384(\\\\.0+)?\"}[$__range])), 0) / sum(increase(osd_seastore_xattr_tree_kv_size_count{ceph_daemon=~\"$osd\"}[$__range]))",
+          "refId": "J",
+          "legendFormat": "16\u201364 KiB",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "max": 1,
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "showUnfilled": true,
+        "valueMode": "text",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "id": 33,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 125
+      }
+    },
+    {
       "type": "row",
       "title": "SeaStore cache",
-      "id": 31,
+      "id": 34,
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 117
+        "y": 133
       },
       "panels": []
     },
@@ -1962,12 +2236,12 @@
           }
         ]
       },
-      "id": 32,
+      "id": 35,
       "gridPos": {
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 118
+        "y": 134
       }
     },
     {
@@ -2017,12 +2291,12 @@
           "refId": "A"
         }
       ],
-      "id": 33,
+      "id": 36,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 126
+        "y": 142
       }
     },
     {
@@ -2081,12 +2355,12 @@
           "refId": "B"
         }
       ],
-      "id": 34,
+      "id": 37,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 126
+        "y": 142
       }
     },
     {
@@ -2136,12 +2410,12 @@
           "refId": "A"
         }
       ],
-      "id": 35,
+      "id": 38,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 134
+        "y": 150
       }
     },
     {
@@ -2200,12 +2474,12 @@
           "refId": "B"
         }
       ],
-      "id": 36,
+      "id": 39,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 134
+        "y": 150
       }
     },
     {
@@ -2273,12 +2547,12 @@
           "refId": "C"
         }
       ],
-      "id": 37,
+      "id": 40,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 142
+        "y": 158
       }
     },
     {
@@ -2346,12 +2620,12 @@
           "refId": "C"
         }
       ],
-      "id": 38,
+      "id": 41,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 142
+        "y": 158
       }
     },
     {
@@ -2401,12 +2675,12 @@
           "refId": "A"
         }
       ],
-      "id": 39,
+      "id": 42,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 150
+        "y": 166
       }
     },
     {
@@ -2456,12 +2730,12 @@
           "refId": "A"
         }
       ],
-      "id": 40,
+      "id": 43,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 150
+        "y": 166
       }
     },
     {
@@ -2511,12 +2785,12 @@
           "refId": "A"
         }
       ],
-      "id": 41,
+      "id": 44,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 158
+        "y": 174
       }
     },
     {
@@ -2593,24 +2867,24 @@
           "refId": "D"
         }
       ],
-      "id": 42,
+      "id": 45,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 158
+        "y": 174
       }
     },
     {
       "type": "row",
       "title": "Journal and background work (segmented and RBM)",
-      "id": 43,
+      "id": 46,
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 166
+        "y": 182
       },
       "panels": []
     },
@@ -2661,12 +2935,12 @@
           "refId": "A"
         }
       ],
-      "id": 44,
+      "id": 47,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 167
+        "y": 183
       }
     },
     {
@@ -2734,12 +3008,12 @@
           "refId": "C"
         }
       ],
-      "id": 45,
+      "id": 48,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 167
+        "y": 183
       }
     },
     {
@@ -2798,12 +3072,12 @@
           "refId": "B"
         }
       ],
-      "id": 46,
+      "id": 49,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 175
+        "y": 191
       }
     },
     {
@@ -2853,24 +3127,24 @@
           "refId": "A"
         }
       ],
-      "id": 47,
+      "id": 50,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 175
+        "y": 191
       }
     },
     {
       "type": "row",
       "title": "Segmented backend (segment cleaner and segment manager)",
-      "id": 48,
+      "id": 51,
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 183
+        "y": 199
       },
       "panels": []
     },
@@ -2921,12 +3195,12 @@
           "refId": "A"
         }
       ],
-      "id": 49,
+      "id": 52,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 184
+        "y": 200
       }
     },
     {
@@ -2976,12 +3250,12 @@
           "refId": "A"
         }
       ],
-      "id": 50,
+      "id": 53,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 184
+        "y": 200
       }
     },
     {
@@ -3040,12 +3314,12 @@
           "refId": "B"
         }
       ],
-      "id": 51,
+      "id": 54,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 192
+        "y": 208
       }
     },
     {
@@ -3095,24 +3369,24 @@
           "refId": "A"
         }
       ],
-      "id": 52,
+      "id": 55,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 192
+        "y": 208
       }
     },
     {
       "type": "row",
       "title": "RBM backend (RBM cleaner and circular bounded journal)",
-      "id": 53,
+      "id": 56,
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 200
+        "y": 216
       },
       "panels": []
     },
@@ -3181,12 +3455,12 @@
           "refId": "C"
         }
       ],
-      "id": 54,
+      "id": 57,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 201
+        "y": 217
       }
     },
     {
@@ -3236,12 +3510,12 @@
           "refId": "A"
         }
       ],
-      "id": 55,
+      "id": 58,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 201
+        "y": 217
       }
     },
     {
@@ -3309,12 +3583,12 @@
           "refId": "C"
         }
       ],
-      "id": 56,
+      "id": 59,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 209
+        "y": 225
       }
     },
     {
@@ -3382,12 +3656,12 @@
           "refId": "C"
         }
       ],
-      "id": 57,
+      "id": 60,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 209
+        "y": 225
       }
     },
     {
@@ -3437,12 +3711,12 @@
           "refId": "A"
         }
       ],
-      "id": 58,
+      "id": 61,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 217
+        "y": 233
       }
     },
     {
@@ -3501,24 +3775,24 @@
           "refId": "B"
         }
       ],
-      "id": 59,
+      "id": 62,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 217
+        "y": 233
       }
     },
     {
       "type": "row",
       "title": "Memory",
-      "id": 60,
+      "id": 63,
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 225
+        "y": 241
       },
       "panels": []
     },
@@ -3578,12 +3852,12 @@
           "refId": "B"
         }
       ],
-      "id": 61,
+      "id": 64,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 226
+        "y": 242
       }
     },
     {
@@ -3633,12 +3907,12 @@
           "refId": "A"
         }
       ],
-      "id": 62,
+      "id": 65,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 226
+        "y": 242
       }
     }
   ]

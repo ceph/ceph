@@ -353,7 +353,85 @@ void SeaStore::Shard::register_metrics(store_index_t store_index)
                         "stored in the xattr omap tree"),
         {sm::label_instance("shard_store_index", std::to_string(store_index)),
          sm::label_instance("attr", "oi")}
+      ),
+      sm::make_counter(
+        "attr_inline",
+        [this] { return stats.ss_inline; },
+        sm::description("attributes stored in the onode's inline slot"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index)),
+         sm::label_instance("attr", "ss")}
+      ),
+      sm::make_counter(
+        "attr_overflow",
+        [this] { return stats.ss_overflow; },
+        sm::description("attributes too large for the inline slot, "
+                        "stored in the xattr omap tree"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index)),
+         sm::label_instance("attr", "ss")}
       )
+    }
+  );
+
+  stats.xattr_tree_kv_size.buckets.resize(XATTR_KV_SIZE_BUCKETS.size());
+  for (std::size_t i = 0; i < XATTR_KV_SIZE_BUCKETS.size(); ++i) {
+    stats.xattr_tree_kv_size.buckets[i].upper_bound = XATTR_KV_SIZE_BUCKETS[i];
+    stats.xattr_tree_kv_size.buckets[i].count = 0;
+  }
+  metrics.add_group(
+    "seastore",
+    {
+      sm::make_counter(
+        "xattr_set_ops",
+        [this] { return stats.xattr_set_ops; },
+        sm::description("setattr and setattrs transaction ops, "
+                        "counted again on a conflict replay"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
+      ),
+      sm::make_counter(
+        "xattr_rm_ops",
+        [this] { return stats.xattr_rm_ops; },
+        sm::description("rmattr and rmattrs transaction ops, "
+                        "counted again on a conflict replay"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
+      ),
+      sm::make_counter(
+        "xattr_change_count",
+        [this] { return stats.xattr_change_count; },
+        sm::description("setattr, setattrs, rmattr and rmattrs ops that "
+                        "completed; the count of xattr_change_usec "
+                        "(like the classic chgattr_lat)"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
+      ),
+      sm::make_counter(
+        "xattr_change_usec",
+        [this] { return stats.xattr_change_usec; },
+        sm::description("total time (microseconds) to apply setattr, "
+                        "setattrs, rmattr and rmattrs ops in the transaction "
+                        "build, including waits for extent reads"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
+      ),
+      sm::make_counter(
+        "xattr_tree_set_records",
+        [this] { return stats.xattr_tree_set_records; },
+        sm::description("attributes written to the xattr omap tree "
+                        "(not the inline OI and SnapSet)"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
+      ),
+      sm::make_counter(
+        "xattr_tree_set_bytes",
+        [this] { return stats.xattr_tree_set_bytes; },
+        sm::description("key + value bytes written to the xattr omap tree"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
+      ),
+      sm::make_histogram(
+        "xattr_tree_kv_size",
+        [this]() -> seastar::metrics::histogram& {
+          return stats.xattr_tree_kv_size;
+        },
+        sm::description("size (bytes) of key + value of each attribute "
+                        "written to the xattr omap tree"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
+      ),
     }
   );
 }
@@ -2416,7 +2494,12 @@ SeaStore::Shard::_do_transaction_step(
         i.decode_bl(bl);
         DEBUGT("op SETATTR, oid={}, attr name={}, value length=0x{:x} ...",
                *ctx.transaction, oid, name, bl.length());
-        return _setattrs(ctx, *onode, std::move(to_set));
+        ++stats.xattr_set_ops;
+        auto start = xattr_clock_t::now();
+        return _setattrs(ctx, *onode, std::move(to_set)
+        ).si_then([this, start] {
+          add_xattr_change_sample(start);
+        });
       }
       case Transaction::OP_SETATTRS:
       {
@@ -2424,19 +2507,34 @@ SeaStore::Shard::_do_transaction_step(
         i.decode_attrset(to_set);
         DEBUGT("op SETATTRS, oid={}, attrs size={} ...",
                *ctx.transaction, oid, to_set.size());
-        return _setattrs(ctx, *onode, std::move(to_set));
+        ++stats.xattr_set_ops;
+        auto start = xattr_clock_t::now();
+        return _setattrs(ctx, *onode, std::move(to_set)
+        ).si_then([this, start] {
+          add_xattr_change_sample(start);
+        });
       }
       case Transaction::OP_RMATTR:
       {
         std::string name = i.decode_string();
         DEBUGT("op RMATTR, oid={}, attr name={} ...",
                *ctx.transaction, oid, name);
-        return _rmattr(ctx, *onode, name);
+        ++stats.xattr_rm_ops;
+        auto start = xattr_clock_t::now();
+        return _rmattr(ctx, *onode, name
+        ).si_then([this, start] {
+          add_xattr_change_sample(start);
+        });
       }
       case Transaction::OP_RMATTRS:
       {
         DEBUGT("op RMATTRS, oid={} ...", *ctx.transaction, oid);
-        return _rmattrs(ctx, *onode);
+        ++stats.xattr_rm_ops;
+        auto start = xattr_clock_t::now();
+        return _rmattrs(ctx, *onode
+        ).si_then([this, start] {
+          add_xattr_change_sample(start);
+        });
       }
       case Transaction::OP_OMAP_SETKEYS:
       {
@@ -3035,10 +3133,12 @@ SeaStore::Shard::_setattrs(
             SS_ATTR);
         });
       }
+      ++stats.ss_inline;
       onode.update_snapset(*ctx.transaction, val);
       aset.erase(it);
       DEBUGT("set ss in onode layout", *ctx.transaction);
     } else {
+      ++stats.ss_overflow;
       onode.clear_snapset(*ctx.transaction);
     }
   }
@@ -3049,6 +3149,7 @@ SeaStore::Shard::_setattrs(
   }
 
   DEBUGT("set {} attrs in omap ...", *ctx.transaction, aset.size());
+  add_xattr_tree_sample(aset);
   return std::move(fut
   ).si_then([this, &onode, &ctx, aset=std::move(aset)]() mutable {
     return omaptree_set_keys(
