@@ -92,8 +92,13 @@ protected:
   std::unique_ptr<RGWPutObj_BlockEncrypt> encrypt_filter;
   CompressorRef compressor_plugin;
   std::optional<RGWPutObj_Compress> compressor;
-  // the size of the data set_writer() set up for
-  uint64_t& data_size() { return orig_size; }
+  // set_part_writer(): the size of the current part, used in place of
+  // orig_size, and the compression type chosen for all the parts
+  std::optional<uint64_t> part_size;
+  std::optional<std::string> part_compression;
+
+  // the size of the data set_writer() or set_part_writer() set up for
+  uint64_t& data_size() { return part_size ? *part_size : orig_size; }
 
   virtual int get_decrypt_crypt(const DoutPrefixProvider* dpp,
                                 optional_yield y,
@@ -129,7 +134,43 @@ public:
                  const DoutPrefixProvider* dpp,
                  optional_yield y) override
   {
+    part_size.reset();
+    part_compression.reset();
     return setup(writer, attrs, src_attrs, dpp, y);
+  }
+
+  /*
+   * Set up the pipeline again for one part of a multipart source, so the
+   * copy keeps the part layout. part_src_attrs are the attrs of the
+   * source part's head, part_size the size of its data. Re-encryption
+   * writes a single stream, so encrypted sources can't be copied part by
+   * part.
+   */
+  int set_part_writer(rgw::sal::DataProcessor* writer,
+                      rgw::sal::Attrs& attrs,
+                      const rgw::sal::Attrs& part_src_attrs,
+                      uint64_t size,
+                      const DoutPrefixProvider* dpp,
+                      optional_yield y) override
+  {
+    if (src_attrs.count(RGW_ATTR_CRYPT_MODE)) {
+      return -ENOTSUP;
+    }
+    if (!part_compression && get_dest_compression() == "random") {
+      // all the parts need the same type, so choose it once
+      CompressorRef plugin = create_compressor("random");
+      part_compression = plugin ? plugin->get_type_name() : "none";
+    }
+    decomp.reset();
+    decrypt_filter.reset();
+    encrypt_filter.reset();
+    compressor.reset();
+    compressor_plugin.reset();
+    decompress_info = RGWCompressionInfo{};
+    cb = DataProcessorFilter{writer}; // restarts at offset 0
+    filter = &cb;
+    part_size = size;
+    return setup(writer, attrs, part_src_attrs, dpp, y);
   }
 
 protected:
@@ -219,6 +260,9 @@ protected:
 
     // determine compression match — needed for decompress decision
     std::string dest_comp = get_dest_compression();
+    if (dest_comp == "random" && part_compression) {
+      dest_comp = *part_compression;
+    }
     bool compression_matches =
         dest_comp != "random" &&
         ((!src_compressed && dest_comp == "none") ||
@@ -398,10 +442,10 @@ public:
     }
     /*
      * AEAD bookkeeping for the re-encrypted dest: ORIGINAL_SIZE must
-     * match the plaintext payload size. set_writer() guarantees
-     * orig_size is plaintext on every path (decomp output, compressed-
-     * passthrough cs_info.orig_size, AEAD ORIGINAL_SIZE/formula, or
-     * the source's logical size). PART_NUMS is cleared because re-
+     * match the plaintext payload size. set_writer()/set_part_writer()
+     * guarantee data_size() is plaintext on every path (decomp output,
+     * compressed-passthrough cs_info.orig_size, AEAD ORIGINAL_SIZE/formula,
+     * or the source's logical size). PART_NUMS is cleared because re-
      * encryption always produces a single stream. SALT and
      * PREFETCH_ALIGN are written by get_encrypt_crypt().
      */
