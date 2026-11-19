@@ -50,7 +50,47 @@ log = logging.getLogger(__name__)
         - s3tests-java:
             client.0:
                 extra-args: ['--tests', 'ObjectTest.testEncryptionKeySSECInvalidMd5']
-    
+
+    Maven Central (https://repo.maven.apache.org/maven2) rate-limits the test
+    lab, so gradle is pointed at a mirror of it instead. To use a different
+    mirror (e.g. a local artifactory):
+        - s3tests-java:
+            client.0:
+                maven-repo: https://artifactory.example.com/maven-central
+
+"""
+
+DEFAULT_MAVEN_REPO = 'https://maven-central.storage-download.googleapis.com/maven2'
+
+# Gradle init script. It runs before the test suite's own build.gradle, and
+# the repositories.all hooks fire for every repository build.gradle adds
+# later, so this redirects mavenCentral() wherever it is declared. See
+# https://docs.gradle.org/6.0.1/userguide/init_scripts.html
+GRADLE_INIT_SCRIPT = """\
+// Written by the s3tests-java teuthology task (qa/tasks/s3tests_java.py).
+//
+// Maven Central (repo.maven.apache.org) rate-limits the test lab, so send
+// every repository that points at it to a mirror instead.  The hooks fire
+// for repositories added later by build.gradle, so this works whatever the
+// test suite's own build.gradle says.
+// https://tracker.ceph.com/issues/82736
+def mirror = uri('{maven_repo}')
+def redirect = {{ repo ->
+    if (repo instanceof MavenArtifactRepository
+            && repo.url.host == 'repo.maven.apache.org') {{
+        logger.lifecycle("s3tests-java: redirecting ${{repo.url}} to ${{mirror}}")
+        repo.url = mirror
+    }}
+}}
+allprojects {{
+    buildscript.repositories.all(redirect)
+    repositories.all(redirect)
+}}
+// Only used by the plugins {{}} DSL, which the test suite does not use
+// today, but cheap to cover.
+settingsEvaluated {{ settings ->
+    settings.pluginManagement.repositories.all(redirect)
+}}
 """
 
 
@@ -59,6 +99,10 @@ class S3tests_java(Task):
     Download and install S3 tests in Java
     This will require openjdk and gradle
     """
+    # Teuthology keys the 'overrides' section by this name. Without it the
+    # key would be the lowercased class name, s3tests_java, which does not
+    # match the task name used in the suite yaml.
+    name = 's3tests-java'
 
     def __init__(self, ctx, config):
         super(S3tests_java, self).__init__(ctx, config)
@@ -81,6 +125,7 @@ class S3tests_java(Task):
         log.debug('S3 Tests Java: SETUP')
         for client in self.all_clients:
             self.download_test_suite(client)
+            self.write_gradle_init_script(client)
             self.install_required_packages(client)
 
     def begin(self):
@@ -146,6 +191,24 @@ class S3tests_java(Task):
                                 tdir=testdir)
                         ]
                     )
+
+    def _gradle_init_script_path(self):
+        testdir = teuthology.get_testdir(self.ctx)
+        return '{tdir}/s3-tests-java/ceph-mirror.init.gradle'.format(tdir=testdir)
+
+    def write_gradle_init_script(self, client):
+        """
+        Write the gradle init script that redirects Maven Central to a
+        mirror into the test suite checkout, next to its build.gradle.
+        """
+        log.info("S3 Tests Java: Writing gradle init script...")
+        maven_repo = DEFAULT_MAVEN_REPO
+        if client in self.config and self.config[client] is not None:
+            if self.config[client].get('maven-repo') is not None:
+                maven_repo = self.config[client]['maven-repo']
+        (remote,) = self.ctx.cluster.only(client).remotes.keys()
+        remote.write_file(self._gradle_init_script_path(),
+                          GRADLE_INIT_SCRIPT.format(maven_repo=maven_repo))
 
     def install_required_packages(self, client):
         """
@@ -287,6 +350,7 @@ class S3tests_java(Task):
                     run.Raw('JAVA_HOME=$(ls -d /usr/lib/jvm/* | grep -E java-8\|java-1\.8 | head -n 1)'),
                     '/opt/gradle/gradle/bin/gradle', 'clean', 'test',
                     '--rerun-tasks', '--no-build-cache',
+                    '--init-script', self._gradle_init_script_path(),
                     ]
             extra_args = []
             suppress_groups = False
