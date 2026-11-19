@@ -821,8 +821,11 @@ WebTokenEngine::authenticate( const DoutPrefixProvider* dpp,
       }
 
       boost::optional<multimap<string,string>> role_tags = role->get_tags();
+      // take the tenant from the role itself: for an account role the arn
+      // carries the account id instead, and role_tenant was cleared above.
+      // RoleApplier does the same for AssumeRole sessions
       auto apl = apl_factory->create_apl_web_identity(
-          cct, s, role->get_id(), role_session, role_tenant,
+          cct, s, role->get_id(), role_session, role->get_tenant(),
           *t, role_tags, princ_tags, std::move(account), is_global_oidc);
       return result_t::grant(std::move(apl));
     }
