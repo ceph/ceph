@@ -1704,8 +1704,16 @@ public:
     context->oid_in_use.insert(oid);
     context->oid_not_in_use.erase(oid);
 
+    // The OSD munges a zero reaching the end of the object into a truncate
+    // to offset; ZeroGenerator models this by shrinking the object.
+    std::stringstream trunc_note;
+    if (offset + length >= obj_size) {
+      trunc_note << " (reaches end of object, size "
+                 << obj_size << " -> " << offset << ")";
+    }
     context->cout_prefix() << num << ":  zero oid " << oid
-      << " [" << offset << ", " << offset + length << ")" << std::endl;
+      << " [" << offset << ", " << offset + length << ")"
+      << trunc_note.str() << std::endl;
 
     auto *cb_arg = new std::pair<TestOp*, TestOp::CallbackInfo*>(
       this, new TestOp::CallbackInfo(0));
