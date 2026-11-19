@@ -569,7 +569,6 @@ void ECPeeringTestFixture::ensure_osd_fixture_exists(int osd) {
   // Create a new store for this OSD
   osd_fixture->store = MockStore::create(g_ceph_context, osd);
   ceph_assert(osd_fixture->store);
-  osd_fixture->data_dir = osd_fixture->store->get_data_dir();
 
   // Create extent cache LRU for this OSD
   osd_fixture->lru = std::make_unique<ECExtentCache::LRU>(1024 * 1024 * 100);

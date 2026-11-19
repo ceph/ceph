@@ -54,9 +54,6 @@ public:
    */
   static std::shared_ptr<MockStore> create(CephContext *cct, int osd_id);
 
-  /// The on-disk directory this store's contents are loaded from and saved to.
-  const std::string& get_data_dir() const { return path; }
-
   /**
    * Inject a read error for a specific object.
    * The error will be returned on the next read() call for this object,
