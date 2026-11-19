@@ -3,103 +3,61 @@
 
 #pragma once
 
-#include <exception>
-#include <optional>
-#include <type_traits>
 #include <utility>
+#include <seastar/core/future-util.hh>
+#include <seastar/core/future.hh>
 
 #include "crimson/common/errorator.h"
 #include "crimson/os/seastore/seastore_types.h"
-#include "crimson/common/interruptible_future.h"
 #include "crimson/os/seastore/transaction.h"
 
 namespace crimson::os::seastore {
 
-struct TransactionConflictCondition {
-  class transaction_conflict final : public std::exception {
-  public:
-    const char* what() const noexcept final {
-      return "transaction conflict detected";
-    }
-  };
-
-public:
-  TransactionConflictCondition(Transaction &t) : t(t), tref(&t) {}
-
+/**
+ * trans_intr
+ *
+ * Transparent, zero-overhead pass-through for standard Seastar futures.
+ * Under single-writer shard execution, transactions never conflict and do not
+ * require interruption wrappers.
+ */
+struct trans_intr {
   template <typename Fut>
-  std::optional<Fut> may_interrupt() {
-    if (is_conflicted()) {
-      return seastar::futurize<Fut>::make_exception_future(
-	transaction_conflict());
-    } else {
-      return std::optional<Fut>();
-    }
+  static constexpr auto&& make_interruptible(Fut&& fut) noexcept {
+    return std::forward<Fut>(fut);
   }
 
-  template <typename T>
-  static constexpr bool is_interruption_v =
-    std::is_same_v<T, transaction_conflict>;
-
-
-  static bool is_interruption(std::exception_ptr& eptr) {
-    return *eptr.__cxa_exception_type() == typeid(transaction_conflict);
+  template <typename Container, typename Func>
+  static auto do_for_each(Container&& c, Func&& f) {
+    return seastar::do_for_each(std::forward<Container>(c), std::forward<Func>(f));
   }
 
-private:
-  bool is_conflicted() const;
+  template <typename Iterator, typename Func>
+  static auto do_for_each(Iterator begin, Iterator end, Func&& f) {
+    return seastar::do_for_each(begin, end, std::forward<Func>(f));
+  }
 
-  Transaction &t;
-  TransactionRef tref;
+  template <typename Container, typename Func>
+  static auto parallel_for_each(Container&& c, Func&& f) {
+    return seastar::parallel_for_each(std::forward<Container>(c), std::forward<Func>(f));
+  }
+
+  template <typename Iterator, typename Func>
+  static auto parallel_for_each(Iterator begin, Iterator end, Func&& f) {
+    return seastar::parallel_for_each(begin, end, std::forward<Func>(f));
+  }
+
+  template <typename Func>
+  static auto repeat(Func&& f) {
+    return seastar::repeat(std::forward<Func>(f));
+  }
 };
 
-using trans_intr = crimson::interruptible::interruptor<
-  TransactionConflictCondition
-  >;
-
 template <typename E>
-using trans_iertr =
-  crimson::interruptible::interruptible_errorator<
-    TransactionConflictCondition,
-    E
-  >;
+using trans_iertr = E;
 
-using base_iertr = trans_iertr<base_ertr>;
-
-template <typename F, typename... Args>
-auto with_trans_intr(Transaction &t, F &&f, Args&&... args) {
-  return trans_intr::with_interruption_to_error<crimson::ct_error::eagain>(
-    std::forward<F>(f),
-    TransactionConflictCondition(t),
-    t,
-    std::forward<Args>(args)...);
-}
-
-template <typename Prepare, typename F, typename... Args>
-auto with_repeat_trans_intr(Prepare &&prepare_attempt, Transaction &t, F &&f, Args&&... args) {
-  return repeat_eagain(
-    [&t,
-    prepare_attempt = std::forward<Prepare>(prepare_attempt),
-    f = std::forward<F>(f),
-    ... args = std::forward<Args>(args) ] {
-    prepare_attempt();
-    return trans_intr::with_interruption_to_error<crimson::ct_error::eagain>(
-      f,
-      TransactionConflictCondition(t),
-      t,
-      args...);
-  });
-}
-
-template <typename F, typename... Args>
-auto with_repeat_trans_intr(Transaction &t, F &&f, Args&&... args) {
-  return with_repeat_trans_intr(
-      [] {},
-      t,
-      std::forward<F>(f),
-      std::forward<Args>(args)...);
-}
+using base_iertr = base_ertr;
 
 template <typename T>
-using with_trans_ertr = typename T::base_ertr::template extend<crimson::ct_error::eagain>;
+using with_trans_ertr = typename T::base_ertr;
 
 } // namespace crimson::os::seastore

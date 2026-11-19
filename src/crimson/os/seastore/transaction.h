@@ -585,7 +585,6 @@ public:
   }
 
   friend class crimson::os::seastore::SeaStore;
-  friend class TransactionConflictCondition;
 
   uint64_t write_hit_hot = 0;
   uint64_t write_hit_cold = 0;
