@@ -2092,67 +2092,36 @@ seastar::future<> SeaStore::Shard::run_one_batch(
   --(shard_stats.waiting_throttler_io_num);
   ++(shard_stats.processing_inlock_io_num);
 
-  co_await with_repeat_trans_intr(
-    [&, this] {
-      // Preserve handle and rewind the external iterator before each attempt.
-      ctx.reset_preserve_handle(*transaction_manager);
-    },
-    *ctx.transaction,
-    seastar::coroutine::lambda([&ctx, this, FNAME](auto &t)
-			       -> tm_ret {
-      ++(shard_stats.repeat_io_num);
-#ifndef NDEBUG
-      TRACET(" transaction dump:\n", t);
-      JSONFormatter f(true);
-      f.open_object_section("transaction");
-      ctx.ext_transaction.dump(&f);
-      f.close_section();
-      std::stringstream str;
-      f.flush(str);
-      TRACET("{}", t, str.str());
-#endif
+  // Direct single-writer execution: eliminate with_repeat_trans_intr and conflict retry loops
+  ++(shard_stats.repeat_io_num);
+  auto &t = *ctx.transaction;
+  DEBUGT("{} operations, 0x{:x} bytes, {} colls, {} objects ...",
+         t,
+         ctx.ext_transaction.get_num_ops(),
+         ctx.ext_transaction.get_num_bytes(),
+         ctx.iter.colls.size(),
+         ctx.iter.objects.size());
 
-      DEBUGT("{} operations, 0x{:x} bytes, {} colls, {} objects ...",
-      t,
-      ctx.ext_transaction.get_num_ops(),
-	     ctx.ext_transaction.get_num_bytes(),
-	     ctx.iter.colls.size(),
-	     ctx.iter.objects.size());
+  std::vector<OnodeRef> onodes(
+    ctx.iter.colls.size() * ctx.iter.objects.size());
 
-      // An object index is shared by every collection of a merged batch, so
-      // onodes are cached per (collection, object).
-      std::vector<OnodeRef> onodes(
-        ctx.iter.colls.size() * ctx.iter.objects.size());
+  const size_t total_ops = ctx.ext_transaction.get_num_ops();
+  size_t current_op = 0;
 
-      // Get the total number of operations from the transaction
-      const size_t total_ops = ctx.ext_transaction.get_num_ops();
-      size_t current_op = 0;
+  auto build_start = seastar::lowres_clock::now();
+  while (ctx.iter.have_op()) {
+    current_op++;
+    DEBUGT("processing op {} of {}", t, current_op, total_ops);
+    co_await _do_transaction_step(ctx, onodes, ctx.iter);
+  }
+  ctx.build_time += seastar::lowres_clock::now() - build_start;
 
-      auto build_start = seastar::lowres_clock::now();
-      while (ctx.iter.have_op()) {
-        current_op++;
-
-        DEBUGT("processing op {} of {}", t, current_op, total_ops);
-	co_await _do_transaction_step(
-	  ctx, onodes, ctx.iter);
-      }
-      ctx.build_time += seastar::lowres_clock::now() - build_start;
-
-      DEBUGT("completed all {} ops", t, total_ops);
-      auto submit_start = seastar::lowres_clock::now();
-      co_await transaction_manager->submit_transaction(*ctx.transaction);
-      ctx.submit_time += seastar::lowres_clock::now() - submit_start;
-    })
-  ).handle_error(
-    crimson::ct_error::all_same_way([FNAME, &ctx](auto e) {
-      transaction_dump(ctx.ext_transaction);
-      ceph_abort_msg(fmt::format("{} unexpected error: {}", FNAME, e));
-      return seastar::now();
-    })
-  );
+  DEBUGT("completed all {} ops", t, total_ops);
+  auto submit_start = seastar::lowres_clock::now();
+  co_await transaction_manager->submit_transaction(*ctx.transaction);
+  ctx.submit_time += seastar::lowres_clock::now() - submit_start;
 
   DEBUGT("done", *ctx.transaction);
-  add_conflict_replay_sample(ctx.transaction->get_num_replays());
   {
     auto& pd = ctx.transaction->get_phase_durations();
     auto total = seastar::lowres_clock::now() - ctx.begin_timestamp;
