@@ -11,6 +11,11 @@ add_executable(ceph_test_msgr
   )
 target_link_libraries(ceph_test_msgr os global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${UNITTEST_LIBS})
 
+# unittest_seq_cmp
+add_executable(unittest_seq_cmp test_seq_cmp.cc)
+target_link_libraries(unittest_seq_cmp ${UNITTEST_LIBS})
+add_ceph_unittest(unittest_seq_cmp)
+
 # ceph_test_async_networkstack
 add_executable(ceph_test_async_networkstack
   test_async_networkstack.cc
