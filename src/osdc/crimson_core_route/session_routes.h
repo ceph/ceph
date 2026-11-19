@@ -53,6 +53,18 @@
  * after a grace period, its new ops are held until it drains (see
  * pg_route_t::holding).
  *
+ * Activation: a session tracks its ops only once it followed a hint of its
+ * OSD (with the routing on): before that, every op goes on the main
+ * connection, and no route is kept (e.g. for Classic OSDs, that send no
+ * hints). Only the canceled ops are: their answers are awaited all the
+ * same (see unanswered_op_t). The first hint followed counts the session's
+ * ops as in flight on the main connection, and the canceled ones as
+ * unanswered (so that their PGs switch only once they drain). A session
+ * reset makes the session inactive again.
+ *
+ * Routes left idle (see config_t::route_idle_ttl) are forgotten by the
+ * periodic check: e.g. those of PGs that moved to other OSDs.
+ *
  * SessionRoutes holds the routing state of one OSD session, and makes the
  * routing decisions. The Objecter does the rest: sending, holding and
  * resending ops, the hold timers, connecting, perf counters and logging.
@@ -98,6 +110,9 @@ struct config_t {
   /// objecter_timeout: a keepalive probe not answered by then: the
   /// connection is given up on
   ceph::timespan probe_deadline = ceph::timespan::zero();
+  /// (not an option) a route not used for that long, with no op in flight
+  /// or awaited and no hold, is forgotten by the periodic check
+  ceph::timespan route_idle_ttl = std::chrono::minutes(10);
 };
 
 /// The route of an op (kept in each of the Objecter's ops). Set and
@@ -109,8 +124,10 @@ struct op_route_t {
   /// main connection)
   std::optional<core_id_t> core;
   /// sent: the generation of its PG's route at the time. A reset of the
-  /// connection starts a new one: the op is then no longer accounted for
-  /// as in flight (SessionRoutes::is_in_flight())
+  /// connection starts a new one, as does a route forgotten and created
+  /// again: the op is then no longer accounted for as in flight
+  /// (SessionRoutes::is_in_flight()). 0 (with pgid set): sent while the
+  /// session was inactive, untracked
   uint64_t gen = 0;
   /// held, not sent: the id of the hold (pg_route_t::hold_seq; 0: not
   /// held). The op is held while that hold lasts (SessionRoutes::is_held())
@@ -130,8 +147,13 @@ struct pg_route_t {
   /// the PG's ops canceled after being sent, and not answered yet
   unsigned unanswered = 0;
   /// the generation of the route: starts anew when the connection its ops
-  /// were sent on resets (see op_route_t::gen)
+  /// were sent on resets (see op_route_t::gen). Unique in the process (as
+  /// routes are forgotten and created again): 0 is none
   uint64_t gen = 0;
+  /// when an op of the PG was last routed, a hint for it followed, or the
+  /// route last found busy (or holding) by the periodic check (see
+  /// config_t::route_idle_ttl)
+  time_point last_used;
   /// since when the PG has been due to switch to another connection,
   /// but could not, being busy(). Unset: not due to switch
   std::optional<time_point> switch_pending_since;
@@ -194,6 +216,11 @@ using forgotten_t = std::vector<std::pair<ceph_tid_t, spg_t>>;
 /// opens a connection to the core listener at the address; null if it
 /// could not
 using connect_fn_t = std::function<ConnectionRef(const entity_addr_t&)>;
+
+/// visits an op of the session: its PG, and its route
+using op_visitor_t = std::function<void(const spg_t&, op_route_t&)>;
+/// calls the visitor for each op of the session (sent or not)
+using for_each_op_fn_t = std::function<void(const op_visitor_t&)>;
 
 /// what following a hint did (SessionRoutes::follow_hint())
 struct hint_followed_t {
@@ -322,6 +349,8 @@ struct timeouts_checked_t {
   /// the PGs holding their ops, and those due to switch but busy
   uint64_t pgs_holding = 0;
   uint64_t pgs_switch_pending = 0;
+  /// the idle routes forgotten (config_t::route_idle_ttl)
+  uint64_t routes_pruned = 0;
 };
 
 /**
@@ -376,13 +405,16 @@ public:
   /// opened with connect(), unless its host is blocked; a hint it is not
   /// opened for is not recorded: a later one will try again. With the
   /// routing off (config_t::enabled), hints are ignored: no connection
-  /// would be used
+  /// would be used. The first hint followed activates the session: the
+  /// ops for_each_op() visits are then accounted for as in flight on the
+  /// main connection
   hint_followed_t follow_hint(const spg_t& pgid,
                               const osd_core_hint_t& hint,
                               const ConnectionRef& main_con,
                               time_point now,
                               HostBlocks& blocks,
                               const connect_fn_t& connect,
+                              const for_each_op_fn_t& for_each_op,
                               const config_t& cfg);
 
   /// con completed its handshake. If it is a core connection not
@@ -393,7 +425,9 @@ public:
 
   /// An op of pgid is to be sent: choose its connection, and account for
   /// it as in flight on it; or hold it, if its PG holds its new ops to
-  /// switch. A previous route (or hold) of the op is void
+  /// switch. A previous route (or hold) of the op is void. An inactive
+  /// session (see above) sends it on the main connection, and does not
+  /// account for it: it only notes it as sent (see op_route_t::gen)
   routing_t route_or_hold(const spg_t& pgid,
                           op_route_t& op,
                           time_point now,
@@ -404,9 +438,10 @@ public:
   /// release_drained_holds()
   void retire_op(op_route_t& op);
 
-  /// The op (tid) is canceled. If it is in flight, its PG stays busy until
-  /// the OSD answers it (canceled_op_answered()), or the connection it was
-  /// sent on resets, or after config_t::max_hold. Returns it then
+  /// The op (tid) is canceled. If it is in flight (or was sent while the
+  /// session was inactive), its PG stays busy until the OSD answers it
+  /// (canceled_op_answered()), or the connection it was sent on resets, or
+  /// after config_t::max_hold. Returns it then
   std::optional<unanswered_op_t> retire_canceled_op(ceph_tid_t tid,
                                                     op_route_t& op,
                                                     time_point now);
@@ -439,17 +474,18 @@ public:
                                                   HostBlocks& blocks);
 
   /// All of the session's connections reset: forget the core connections,
-  /// all hints and canceled ops, and end all holds. Nothing is in flight
-  /// any more: the Objecter resends (or moves away) all of the session's
-  /// ops
+  /// all routes and canceled ops (ending all holds), and the session is
+  /// inactive again. Nothing is in flight any more: the Objecter resends
+  /// (or moves away) all of the session's ops
   session_reset_t reset_session();
 
   /// The Objecter's periodic check: forget canceled ops awaited for
-  /// max_hold; probe the core connections carrying laggy ops (the cores of
-  /// the laggy ops sent on core connections), and find those not
-  /// answering, those not connected in time, and (the routing off) those
-  /// unused. now: as for the other events; probe_now: the clock of the
-  /// keepalives (Connection::get_last_keepalive_ack())
+  /// max_hold, and idle routes (route_idle_ttl); probe the core
+  /// connections carrying laggy ops (the cores of the laggy ops sent on
+  /// core connections), and find those not answering, those not connected
+  /// in time, and (the routing off) those unused. now: as for the other
+  /// events; probe_now: the clock of the keepalives
+  /// (Connection::get_last_keepalive_ack())
   timeouts_checked_t periodic_timeouts_check(time_point now,
                                              utime_t probe_now,
                                              const std::set<core_id_t>& laggy,
@@ -457,7 +493,10 @@ public:
 
   // -- accessors (for logging and tests)
 
-  /// the route of pgid (nullptr: none yet)
+  /// whether the session tracks its ops (see above)
+  bool is_active() const { return active; }
+
+  /// the route of pgid (nullptr: none)
   const pg_route_t* route_of(const spg_t& pgid) const;
 
   /// the connection to core (null: none)
@@ -477,6 +516,9 @@ public:
   /// whether op is accounted for as in flight
   bool is_in_flight(const op_route_t& op) const;
 
+  /// whether op was sent while the session is (still) inactive
+  bool is_sent_untracked(const op_route_t& op) const;
+
   /// whether op is held by its PG's hold
   bool is_held(const op_route_t& op) const;
 
@@ -493,6 +535,8 @@ private:
     dead,   ///< not answered in time: the connection likely stopped working
   };
 
+  /// whether the session tracks its ops: its OSD sent a hint (see above)
+  bool active = false;
   /// connections to the per-core listeners of the OSD, by core; in
   /// addition to the session's main connection
   std::map<core_id_t, ConnectionRef> core_cons;
@@ -516,9 +560,18 @@ private:
   std::optional<core_id_t> desired_core(const pg_route_t& route,
                                         bool enabled) const;
 
+  /// the route of pgid, created (with a new generation) if none
+  pg_route_t& route_for(const spg_t& pgid, time_point now);
+
+  /// start tracking the session's ops: account for those visited as in
+  /// flight on the main connection, and for the canceled ones awaited as
+  /// unanswered
+  void activate(time_point now, const for_each_op_fn_t& for_each_op);
+
   /// account for op as in flight on its PG's connection, switching it if
   /// due and possible
   void route_op(const spg_t& pgid,
+                pg_route_t& route,
                 op_route_t& op,
                 time_point now,
                 const config_t& cfg,
