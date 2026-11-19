@@ -15,7 +15,7 @@ namespace crimson::os::seastore {
 
 bool TransactionConflictCondition::is_conflicted() const
 {
-  return t.conflicted;
+  return false;
 }
 
 }
