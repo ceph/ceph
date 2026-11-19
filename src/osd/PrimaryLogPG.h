@@ -1212,6 +1212,13 @@ protected:
   std::set<hobject_t> pool_migrations_in_flight;
   /// new writes blocked by pool migration
   std::set<hobject_t> pool_migration_blocked_writes;
+  /// Deletes that advanced the watermark but have not committed on every
+  /// shard yet: version of the delete -> the watermark it moved past. Until
+  /// they commit the advance can be rolled back by peering, so do_op must not
+  /// redirect ops for objects at or above the oldest entry.
+  std::map<eversion_t, hobject_t> pool_migration_uncommitted_watermarks;
+  /// ops waiting for an entry in pool_migration_uncommitted_watermarks to commit
+  std::list<OpRequestRef> waiting_for_pool_migration_commit;
   /// count of snaps being migrated per head object
   std::map<hobject_t,int> pool_migration_clones_in_flight;
   /// Heads with a live C_Migrate callback. Distinct from a head whose own copy
@@ -1269,7 +1276,8 @@ protected:
   {
     pool_migration_watermark = watermark;
   }
-  std::optional<hobject_t> consider_updating_migration_watermark(std::set<hobject_t> &deleted) override;
+  std::optional<hobject_t> consider_updating_migration_watermark(
+    std::set<hobject_t> &deleted, const eversion_t &version) override;
 
   int prep_object_replica_pushes(const hobject_t& soid, eversion_t v,
 				 PGBackend::RecoveryHandle *h,

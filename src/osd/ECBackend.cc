@@ -1164,7 +1164,7 @@ struct ECClassicalOp : ECCommon::RMWPipeline::Op {
 	deleted.insert(hoid);
       }
     }
-    return parent->consider_updating_migration_watermark(deleted);
+    return parent->consider_updating_migration_watermark(deleted, version);
   }
 };
 

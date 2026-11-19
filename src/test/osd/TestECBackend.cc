@@ -301,7 +301,8 @@ public:
     return 0;
   }
 
-  std::optional<hobject_t> consider_updating_migration_watermark(std::set<hobject_t> &deleted) override {
+  std::optional<hobject_t> consider_updating_migration_watermark(
+    std::set<hobject_t> &deleted, const eversion_t &version) override {
     return {};
   }
 };

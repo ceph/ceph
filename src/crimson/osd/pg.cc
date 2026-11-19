@@ -2325,7 +2325,7 @@ void PG::merge_from(
 }
 
 std::optional<hobject_t> PG::consider_updating_migration_watermark(
-  std::set<hobject_t> &deleted) {
+  std::set<hobject_t> &deleted, const eversion_t &version) {
   // TODO: Implement migration watermark logic
   return std::nullopt;  // For now, return empty
 }

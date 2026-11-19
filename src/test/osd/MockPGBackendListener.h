@@ -534,7 +534,7 @@ void update_migration_watermark(const hobject_t &watermark) override {
 }
 
 std::optional<hobject_t> consider_updating_migration_watermark(
-  std::set<hobject_t> &deleted) override {
+  std::set<hobject_t> &deleted, const eversion_t &version) override {
   return std::nullopt;
 }
 

@@ -1413,7 +1413,7 @@ private:
   interval_set<snapid_t> snap_trimq;
 
   std::optional<hobject_t> consider_updating_migration_watermark(
-    std::set<hobject_t> &deleted) override;
+    std::set<hobject_t> &deleted, const eversion_t &version) override;
 };
 
 struct PG::do_osd_ops_params_t {
