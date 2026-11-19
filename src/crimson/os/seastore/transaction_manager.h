@@ -1470,41 +1470,6 @@ private:
     }
   };
 
-  using mutated_extents_set_t =
-    std::set<CachedExtentRef, mem_addr_cmp_t>;
-  struct mutated_extents_locker {
-    mutated_extents_set_t mutated_extents;
-    std::vector<std::unique_lock<seastar::shared_mutex>> unique_locks;
-    std::vector<std::shared_lock<seastar::shared_mutex>> shared_locks;
-
-    mutated_extents_locker(
-      mutated_extents_set_t &&mutated_extents,
-      std::vector<std::unique_lock<seastar::shared_mutex>> &&unique_locks,
-      std::vector<std::shared_lock<seastar::shared_mutex>> &&shared_locks)
-      : mutated_extents(mutated_extents),
-        unique_locks(std::move(unique_locks)),
-        shared_locks(std::move(shared_locks)) {}
-    mutated_extents_locker() = default;
-    mutated_extents_locker(mutated_extents_locker&&) = default;
-
-    void release_lock() {
-      unique_locks.clear();
-    }
-
-    void release_shared_lock() {
-      shared_locks.clear();
-    }
-
-    void release() {
-      unique_locks.clear();
-      shared_locks.clear();
-    }
-    ~mutated_extents_locker() {
-      release();
-    }
-  };
-  seastar::future<mutated_extents_locker> lock_mutated_nodes(
-    Transaction &t);
 
   using resolve_cursor_to_mapping_iertr = base_iertr;
   resolve_cursor_to_mapping_iertr::future<LBAMapping>

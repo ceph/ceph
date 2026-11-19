@@ -951,8 +951,6 @@ private:
 
   void new_committer(Transaction &t);
 
-  seastar::shared_mutex commit_lock;
-
   bool is_shadow = false;
 
 protected:
