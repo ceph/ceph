@@ -4244,11 +4244,29 @@ void Objecter::handle_osd_op_reply(cref_t<MOSDOpReply> m)
           ++it;
         }
       }
-      ceph_assert(found);
+      if (!found) {
+        // The range above did not cover this op. That happens when the
+        // redirect came from another session for the same PG (a balanced or
+        // localized read on a replica) after a redirect on this one already
+        // advanced the cached watermark. Retry the op on its own.
+        ldout(cct, 15) << __func__ << " redirect for " << op->tid
+                       << " outside [" << previous_watermark << ","
+                       << new_watermark << "), retrying it alone" << dendl;
+        if (op->has_completion())
+          num_in_flight--;
+        retry.push_back(op);
+        _session_op_remove(s, op);
+      }
       sl.unlock();
 
-      r.update_migration_watermark(
-         pool_migration_watermarks[m->get_pg()]);
+      // Redirects from different sessions can arrive out of order, so only
+      // ever move the cached watermark forward.
+      {
+        hobject_t& cached = pool_migration_watermarks[m->get_pg()];
+        if (cached < new_watermark) {
+          cached = new_watermark;
+        }
+      }
 
       for (auto& it : retry) {
         _op_submit(it, sul, NULL);
