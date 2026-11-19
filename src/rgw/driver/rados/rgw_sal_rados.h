@@ -893,7 +893,7 @@ class MPRadosSerializer {
   librados::IoCtx ioctx;
   ::rados::cls::lock::Lock lock_state;
   std::string oid;
-  ceph::timespan duration;
+  ceph::timespan duration = ceph::timespan::zero();
   std::atomic<std::optional<ceph::real_time>> locked_until;
 
   // lock renewal state

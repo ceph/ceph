@@ -4315,6 +4315,16 @@ int RadosMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct,
   int ret;
   uint64_t parts_accounted_size = 0;
 
+  // use assert_time_range() to guard the first gc operation. once one succeeds,
+  // the rest should too. as long as the first one is made visible before
+  // the multipart lock exires, a new Complete request that acquires the lock
+  // can safely check whether the first part was deleted/gc'd to determine
+  // whether it can still complete
+  //
+  // on bucket deletion, all incomplete uploads are aborted without a lock,
+  // so we skip the guard if try_lock() was never called to set a duration
+  bool guard_gc = (serializer.get_duration() != ceph::timespan::zero());
+
   prefix_map_t processed_prefixes;
 
   static constexpr auto MAX_DELETE_RETRIES = 15u;
@@ -4373,21 +4383,57 @@ int RadosMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct,
       }
     } while (truncated);
 
+    time_pair time_range;
+    const time_pair* ptime_range = nullptr;
+    if (guard_gc) {
+      const std::optional expires_at = serializer.is_locked_until();
+      if (!expires_at) { // lock renewal failed
+        return -ETIME;
+      }
+      if (*expires_at != ceph::real_clock::zero()) {
+        // prevent the first gc if it gets delayed past our lock expiration.
+        // this comparison is subject to clock skew between the osds, so
+        // add a small fudge factor
+        const auto skew = std::chrono::seconds(
+            cct->_conf.get_val<int64_t>("rgw_mp_lock_max_skew"));
+        time_range.second = *expires_at - skew;
+        time_range.first = time_range.second - serializer.get_duration();
+        ptime_range = &time_range;
+      }
+    }
+
     if (store->getRados()->get_gc() == nullptr) {
       //Delete objects inline if gc hasn't been initialised (in case when bypass gc is specified)
-      store->getRados()->delete_objs_inline(dpp, chain, mp_obj.get_upload_id(), y);
+      ret = store->getRados()->delete_objs_inline(
+          dpp, chain, mp_obj.get_upload_id(), y, ptime_range);
     } else {
       /* use upload id as tag and do it synchronously */
-      auto [ret, leftover_chain] = store->getRados()->send_chain_to_gc(chain, mp_obj.get_upload_id(), y);
-      if (ret < 0 && leftover_chain) {
+      std::optional<cls_rgw_obj_chain> leftover_chain;
+      std::tie(ret, leftover_chain) = store->getRados()->send_chain_to_gc(
+          chain, mp_obj.get_upload_id(), y, ptime_range);
+      if (ret == -ETIME || ret == -ETIMEDOUT) {
+        // handled below
+      } else if (ret < 0 && leftover_chain) {
         ldpp_dout(dpp, 5) << __func__ << ": gc->send_chain() returned " << ret << dendl;
         if (ret == -ENOENT) {
           return -ERR_NO_SUCH_UPLOAD;
         }
         //Delete objects inline if send chain to gc fails
-        store->getRados()->delete_objs_inline(dpp, *leftover_chain, mp_obj.get_upload_id(), y);
+        ret = store->getRados()->delete_objs_inline(
+            dpp, *leftover_chain, mp_obj.get_upload_id(), y, ptime_range);
       }
     }
+    if (ret == -ETIME) {
+      return ret;
+    }
+    if (guard_gc && ret == -ETIMEDOUT) {
+      // if the operation times out, it may still apply later under the
+      // assert_time_range() guard. avoid releasing the lock early so
+      // that other requests can't reacquire it until this write expires
+      serializer.clear_locked();
+      return ret;
+    }
+    guard_gc = false;
 
     std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = meta_obj->get_delete_op();
     del_op->params.bucket_owner = bucket->get_info().owner;
