@@ -205,6 +205,13 @@ enum {
   l_osdc_core_switch_hold_expired,
   l_osdc_op_switch_held,
   l_osdc_core_switch_hold_time,
+  l_osdc_op_unanswered,
+  l_osdc_op_unanswered_answered,
+  l_osdc_op_unanswered_reset,
+  l_osdc_op_unanswered_forgotten,
+  l_osdc_op_send_switch_unanswered,
+  l_osdc_core_switch_delayed_unanswered,
+  l_osdc_core_switch_hold_expired_unanswered,
   l_osdc_core_switch_delay,
   l_osdc_core_switch_delay_histogram,
   l_osdc_core_hint_over_limit,
@@ -503,6 +510,34 @@ void Objecter::init()
                         "OSD connection");
     pcb.add_time_avg(l_osdc_core_switch_hold_time, "core_switch_hold_time",
                      "Time PGs held their new ops (max_inc: the longest)");
+    // ops canceled after being sent, and not answered (yet): they keep
+    // their PG from switching to another OSD connection
+    pcb.add_u64_counter(l_osdc_op_unanswered, "op_unanswered",
+                        "Operations canceled after being sent, their answer "
+                        "awaited before their PG switches OSD connections");
+    pcb.add_u64_counter(l_osdc_op_unanswered_answered,
+                        "op_unanswered_answered",
+                        "Canceled operations answered by the OSD");
+    pcb.add_u64_counter(l_osdc_op_unanswered_reset, "op_unanswered_reset",
+                        "Canceled operations not answered, their connection "
+                        "reset");
+    pcb.add_u64_counter(l_osdc_op_unanswered_forgotten,
+                        "op_unanswered_forgotten",
+                        "Canceled operations not answered within "
+                        "objecter_osd_core_switch_max_hold, no longer awaited");
+    pcb.add_u64_counter(l_osdc_op_send_switch_unanswered,
+                        "op_send_switch_unanswered",
+                        "Operations sent while their PG was due to switch to "
+                        "another OSD connection, kept from it only by canceled "
+                        "operations not answered yet");
+    pcb.add_u64_counter(l_osdc_core_switch_delayed_unanswered,
+                        "core_switch_delayed_unanswered",
+                        "PG switches to another OSD connection that were "
+                        "delayed only by canceled operations not answered yet");
+    pcb.add_u64_counter(l_osdc_core_switch_hold_expired_unanswered,
+                        "core_switch_hold_expired_unanswered",
+                        "PG holds that expired with no operation in flight, "
+                        "but canceled ones not answered yet");
     // how long PGs take to switch to another OSD connection, once due to
     pcb.add_time_avg(l_osdc_core_switch_delay, "core_switch_delay",
                      "Time PGs due to switch to another OSD connection took "
@@ -785,6 +820,8 @@ void Objecter::_send_linger(LingerOp *info,
     if (info->session->ops.count(info->register_tid)) {
       auto o = info->session->ops[info->register_tid];
       _op_cancel_map_check(o);
+      // the new registration op must not overtake it
+      _op_retire_canceled(o);
       _cancel_linger_op(o);
     }
     sl.unlock();
@@ -2298,6 +2335,8 @@ void Objecter::_close_core_cons(OSDSession *s)
     con->mark_down();
   }
   logger->dec(l_osdc_core_cons, reset.cons.size());
+  // the OSD drops what it still had of these connections
+  logger->inc(l_osdc_op_unanswered_reset, reset.forgotten.size());
 }
 
 bool Objecter::_drop_core_con(OSDSession *s, const ConnectionRef& con)
@@ -2324,6 +2363,8 @@ bool Objecter::_drop_core_con(OSDSession *s, const ConnectionRef& con)
   dropped->con->mark_down();
   logger->dec(l_osdc_core_cons);
   logger->inc(l_osdc_core_con_reset);
+  // the canceled ops sent on that connection will not be answered
+  logger->inc(l_osdc_op_unanswered_reset, dropped->forgotten.size());
 
   // as in _kick_requests(), for the ops sent on that connection (no
   // longer accounted for as in flight). All of a PG's ops in flight were
@@ -2383,6 +2424,7 @@ ConnectionRef Objecter::_op_route_or_hold(Op *op)
   const auto now = ceph::coarse_mono_clock::now();
   const auto out = s->core_routes.route_or_hold(pgid, op->core_route, now,
                                                 core_cfg);
+  _note_forgotten(s, out.forgotten);
   switch (out.what) {
   case what_t::held:
     if (out.hold_started) {
@@ -2397,11 +2439,11 @@ ConnectionRef Objecter::_op_route_or_hold(Op *op)
       const auto& route = *s->core_routes.route_of(pgid);
       ldout(cct, 5) << fmt::format(
         "{} osd.{} pg {}: due to switch to core {} for {}, holding its ops "
-        "until {} ops in flight are answered (hold {})",
+        "until {} ops in flight and {} canceled ones are answered (hold {})",
         __func__, s->osd, pgid,
         route.hinted_core ? std::to_string(*route.hinted_core) : "none",
         fmt::streamed(now - *route.switch_pending_since), route.in_flight,
-        out.hold_seq) << dendl;
+        route.unanswered, out.hold_seq) << dendl;
     }
     ldout(cct, 20) << fmt::format(
       "{} holding tid {} of {} on osd.{}",
@@ -2428,12 +2470,18 @@ ConnectionRef Objecter::_op_route_or_hold(Op *op)
       const auto& route = *s->core_routes.route_of(pgid);
       ldout(cct, 15) << fmt::format(
         "{} osd.{} pg {}: to switch to core {} once {} ops in flight (this "
-        "one included) are answered",
+        "one included) and {} canceled ones are answered",
         __func__, s->osd, pgid,
-        out.desired ? std::to_string(*out.desired) : "none",
-        route.in_flight) << dendl;
+        out.desired ? std::to_string(*out.desired) : "none", route.in_flight,
+        route.unanswered) << dendl;
     }
     logger->inc(l_osdc_op_send_switch_pending);
+    if (out.pending_unanswered) {
+      logger->inc(l_osdc_op_send_switch_unanswered);
+      if (out.first_delayed_by_unanswered) {
+        logger->inc(l_osdc_core_switch_delayed_unanswered);
+      }
+    }
     break;
   }
 
@@ -2449,6 +2497,47 @@ void Objecter::_op_retire(Op *op)
 {
   // op->session->lock is locked
   op->session->core_routes.retire_op(op->core_route);
+}
+
+void Objecter::_op_retire_canceled(Op *op)
+{
+  // op->session->lock is locked
+  auto s = op->session;
+  const auto awaited = s->core_routes.retire_canceled_op(
+    op->tid, op->core_route, ceph::coarse_mono_clock::now());
+  if (!awaited) {
+    // never sent, or the connection it was sent on is gone
+    return;
+  }
+  ldout(cct, 10) << fmt::format(
+    "{} osd.{} pg {} tid {} on core {}",
+    __func__, s->osd, awaited->pgid, op->tid,
+    awaited->core ? std::to_string(*awaited->core) : "none") << dendl;
+  logger->inc(l_osdc_op_unanswered);
+}
+
+void Objecter::_op_answered_late(OSDSession *s, ceph_tid_t tid)
+{
+  // s->lock is locked
+  if (auto pgid = s->core_routes.canceled_op_answered(tid); pgid) {
+    ldout(cct, 10) << fmt::format(
+      "{} osd.{} pg {} tid {}", __func__, s->osd, *pgid, tid) << dendl;
+    logger->inc(l_osdc_op_unanswered_answered);
+  }
+}
+
+void Objecter::_note_forgotten(OSDSession *s,
+                               const osdc::core_route::forgotten_t& forgotten)
+{
+  if (forgotten.empty()) {
+    return;
+  }
+  for (const auto& [tid, pgid] : forgotten) {
+    ldout(cct, 5) << fmt::format(
+      "{} osd.{} pg {} tid {}: no answer, giving up on it",
+      __func__, s->osd, pgid, tid) << dendl;
+  }
+  logger->inc(l_osdc_op_unanswered_forgotten, forgotten.size());
 }
 
 void Objecter::_send_held_ops(OSDSession *s,
@@ -2467,10 +2556,14 @@ void Objecter::_send_held_ops(OSDSession *s,
     // the held ops go on the current connection
     const auto& route = *s->core_routes.route_of(pgid);
     logger->inc(l_osdc_core_switch_hold_expired);
+    if (route.in_flight == 0) {
+      logger->inc(l_osdc_core_switch_hold_expired_unanswered);
+    }
     ldout(cct, 1) << fmt::format(
-      "{} osd.{} pg {}: not drained after {}, {} ops in flight still "
-      "unanswered; not switching to core {} (hold {})",
+      "{} osd.{} pg {}: not drained after {}, {} ops in flight and {} "
+      "canceled ones still unanswered; not switching to core {} (hold {})",
       __func__, s->osd, pgid, fmt::streamed(ended.held_for), route.in_flight,
+      route.unanswered,
       route.hinted_core ? std::to_string(*route.hinted_core) : "none",
       ended.hold_seq) << dendl;
   }
@@ -2532,6 +2625,7 @@ void Objecter::core_switch_hold_expired(int osd, spg_t pgid, uint64_t hold_seq)
     // the hold has ended already
     return;
   }
+  _note_forgotten(s, ended->forgotten);
   _send_held_ops(s, *ended);
 }
 
@@ -3336,6 +3430,7 @@ int Objecter::op_cancel(OSDSession *s, ceph_tid_t tid, int r,
     op->complete(ec, r, service.get_executor());
   }
   _op_cancel_map_check(op);
+  _op_retire_canceled(op);
   _finish_op(op, r);
   // (rwlock is locked by our callers)
   _release_drained_holds(s);
@@ -4615,6 +4710,8 @@ void Objecter::_handle_osd_op_reply(cref_t<MOSDOpReply> m)
 		  << (m->is_ondisk() ? " ondisk" : (m->is_onnvram() ?
 						    " onnvram" : " ack"))
 		  << " ... stray" << dendl;
+    // the answer to a canceled op?
+    _op_answered_late(s, tid);
     sl.unlock();
     return;
   }

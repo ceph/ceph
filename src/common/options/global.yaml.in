@@ -2570,7 +2570,8 @@ options:
   long_desc: If a PG's ops in flight are not all answered by then (see
     objecter_osd_core_switch_grace), its held ops are sent on its current
     connection, and the PG may be held again after another
-    objecter_osd_core_switch_grace.
+    objecter_osd_core_switch_grace. Also the longest time an op canceled
+    after being sent keeps its PG from switching, while its answer is due.
   min: 0.01
   see_also:
   - objecter_osd_core_switch_grace
