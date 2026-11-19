@@ -66,8 +66,9 @@ RGW {
         name = "client.{{ rgw_user }}";
 }
 
-{% if use_old_nodeid or enable_client_object_cache or clients_per_pool %}
 CEPH {
+        register_service = true;
+        nodeid = "{{ ceph_nodeid }}";
 {% if use_old_nodeid %}
         Use_old_uuid = true;
 {% endif %}
@@ -85,7 +86,6 @@ CEPH {
 {% endif %}
 }
 
-{% endif %}
 {% if kmip_addrs %}
 %plugin ganesha/libkmip_fscrypt.so
 KMIP {
