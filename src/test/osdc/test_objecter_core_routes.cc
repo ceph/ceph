@@ -418,6 +418,7 @@ TEST_F(TestObjecterCoreRoutes, HoldExpires)
 
   EXPECT_EQ(2u, counter("core_switch_hold"));
   EXPECT_EQ(1u, counter("core_switch_hold_expired"));
+  EXPECT_EQ(0u, counter("core_switch_hold_expired_unanswered"));
   auto [holds, longest_hold] = time_avg("core_switch_hold_time");
   EXPECT_EQ(2u, holds);
   EXPECT_GE(longest_hold, max_hold);
@@ -474,4 +475,85 @@ TEST_F(TestObjecterCoreRoutes, PausedOpNotHeldAfterHold)
   std::shared_lock l(session->lock);
   EXPECT_FALSE(session->core_routes.is_held(paused_op->core_route));
   EXPECT_FALSE(session->core_routes.is_held(session->ops.at(e)->core_route));
+}
+
+// an op canceled after being sent keeps its PG from switching until it is
+// answered
+TEST_F(TestObjecterCoreRoutes, CanceledOpAnswered)
+{
+  no_holds();
+  auto a = submit();
+  auto b = submit();
+  reply(main_con, a);
+  // b times out: the OSD may still execute it, on the main connection
+  objecter->op_cancel(b, -ETIMEDOUT);
+  poll();
+  auto c = submit();
+  EXPECT_EQ((tids_t{a, b, c}), main_con->tids());
+  reply(main_con, c);
+  // c is answered, but b is not
+  auto d = submit();
+  EXPECT_EQ((tids_t{a, b, c, d}), main_con->tids());
+  reply(main_con, d);
+  // b's answer arrives, after its cancellation
+  reply(main_con, b);
+  auto e = submit();
+  EXPECT_EQ((tids_t{e}), core_con->tids());
+
+  EXPECT_EQ(1u, counter("op_unanswered"));
+  EXPECT_EQ(1u, counter("op_unanswered_answered"));
+  // c and d: nothing in flight, only b unanswered
+  EXPECT_EQ(2u, counter("op_send_switch_unanswered"));
+  EXPECT_EQ(1u, counter("core_switch_delayed_unanswered"));
+  EXPECT_EQ(1u, time_avg("core_switch_delay").first);
+}
+
+// ... or until it is old enough for its answer not to be expected anymore
+TEST_F(TestObjecterCoreRoutes, CanceledOpForgotten)
+{
+  no_holds();
+  auto a = submit();
+  auto b = submit();
+  reply(main_con, a);
+  objecter->op_cancel(b, -ETIMEDOUT);
+  poll();
+  auto c = submit();
+  reply(main_con, c);
+  EXPECT_EQ((tids_t{a, b, c}), main_con->tids());
+  wait(max_hold * 1.5);
+  auto d = submit();
+  EXPECT_EQ((tids_t{d}), core_con->tids());
+
+  EXPECT_EQ(1u, counter("op_unanswered"));
+  EXPECT_EQ(1u, counter("op_unanswered_forgotten"));
+  EXPECT_EQ(0u, counter("op_unanswered_answered"));
+  EXPECT_EQ(1u, counter("core_switch_delayed_unanswered"));
+}
+
+// a canceled op is not waited for once its connection is reset
+TEST_F(TestObjecterCoreRoutes, CanceledOpOnResetCon)
+{
+  no_holds();
+  // switch the PG to the core connection first
+  auto a = submit();
+  reply(main_con, a);
+  auto b = submit();
+  auto c = submit();
+  EXPECT_EQ((tids_t{b, c}), core_con->tids());
+  reply(core_con, b);
+  objecter->op_cancel(c, -ETIMEDOUT);
+  poll();
+  {
+    std::shared_lock l(session->lock);
+    EXPECT_TRUE(session->core_routes.has_unanswered());
+  }
+  objecter->ms_handle_reset(core_con.get());
+  poll();
+  {
+    std::shared_lock l(session->lock);
+    EXPECT_FALSE(session->core_routes.has_unanswered());
+    EXPECT_FALSE(session->core_routes.route_of(spg_t(pgid))->busy());
+  }
+  EXPECT_EQ(1u, counter("op_unanswered"));
+  EXPECT_EQ(1u, counter("op_unanswered_reset"));
 }
