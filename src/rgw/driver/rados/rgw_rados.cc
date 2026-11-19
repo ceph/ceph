@@ -6764,12 +6764,12 @@ int RGWRados::Object::complete_atomic_modification(const DoutPrefixProvider *dpp
   if (store->gc == nullptr) {
     ldpp_dout(dpp, 0) << "deleting objects inline since gc isn't initialized" << dendl;
     //Delete objects inline just in case gc hasn't been initialised, prevents crashes
-    store->delete_objs_inline(dpp, chain, tag, y);
+    std::ignore = store->delete_objs_inline(dpp, chain, tag, y);
   } else {
     auto [ret, leftover_chain] = store->gc->send_split_chain(chain, tag, y); // do it synchronously
     if (ret < 0 && leftover_chain) {
       //Delete objects inline if send chain to gc fails
-      store->delete_objs_inline(dpp, *leftover_chain, tag, y);
+      std::ignore = store->delete_objs_inline(dpp, *leftover_chain, tag, y);
     }
   }
   return 0;
@@ -6789,20 +6789,23 @@ void RGWRados::update_gc_chain(const DoutPrefixProvider *dpp, rgw_obj head_obj, 
   }
 }
 
-std::tuple<int, std::optional<cls_rgw_obj_chain>> RGWRados::send_chain_to_gc(cls_rgw_obj_chain& chain, const string& tag, optional_yield y)
+auto RGWRados::send_chain_to_gc(cls_rgw_obj_chain& chain, const std::string& tag,
+                                optional_yield y, const time_pair* time_range)
+  -> std::tuple<int, std::optional<cls_rgw_obj_chain>>
 {
   if (chain.empty()) {
     return {0, std::nullopt};
   }
 
-  return gc->send_split_chain(chain, tag, y);
+  return gc->send_split_chain(chain, tag, y, time_range);
 }
 
-void RGWRados::delete_objs_inline(const DoutPrefixProvider *dpp, cls_rgw_obj_chain& chain,
-                                  const string& tag, optional_yield y)
+int RGWRados::delete_objs_inline(const DoutPrefixProvider *dpp, cls_rgw_obj_chain& chain,
+                                 const string& tag, optional_yield y,
+                                 const time_pair* time_range)
 {
   if (chain.objs.empty()) {
-    return;
+    return 0;
   }
 
   // initialize an IoCtx for the first object's pool. RGWObjManifest uses the
@@ -6812,9 +6815,27 @@ void RGWRados::delete_objs_inline(const DoutPrefixProvider *dpp, cls_rgw_obj_cha
   librados::IoCtx ioctx;
   int ret = rgw_init_ioctx(dpp, get_rados_handle(), obj->pool, ioctx);
   if (ret < 0) {
-    return;
+    return ret;
   }
   ioctx.set_pool_full_try();  // allow deletion at pool quota limit
+
+  if (time_range) {
+    // if we're using a time guard for AbortMultipartUpload, only apply
+    // that to the first tail object and wait for it to succeed before
+    // submitting more. the result should be all-or-nothing
+    ObjectWriteOperation op;
+    const auto after = ceph::real_clock::to_timespec(time_range->first);
+    const auto before = ceph::real_clock::to_timespec(time_range->second);
+    op.assert_time_range(after, before);
+    cls_refcount_put(op, tag, true);
+
+    ioctx.locator_set_key(obj->loc);
+    ret = rgw_rados_operate(dpp, ioctx, obj->key.name, std::move(op), y);
+    if (ret < 0) {
+      return ret;
+    }
+    ++obj;
+  }
 
   // issue deletions in parallel, up to max_aio at a time
   auto aio = rgw::make_throttle(cct->_conf->rgw_multi_obj_del_max_aio, y);
@@ -6823,6 +6844,11 @@ void RGWRados::delete_objs_inline(const DoutPrefixProvider *dpp, cls_rgw_obj_cha
 
   for (; obj != chain.objs.end(); ++obj) {
     ObjectWriteOperation op;
+    if (time_range) {
+      const auto after = ceph::real_clock::to_timespec(time_range->first);
+      const auto before = ceph::real_clock::to_timespec(time_range->second);
+      op.assert_time_range(after, before);
+    }
     cls_refcount_put(op, tag, true);
 
     rgw_raw_obj raw;
@@ -6837,6 +6863,9 @@ void RGWRados::delete_objs_inline(const DoutPrefixProvider *dpp, cls_rgw_obj_cha
 
   auto completed = aio->drain();
   std::ignore = rgw::check_for_errors(completed);
+
+  // success means we tried to delete everything
+  return 0;
 }
 
 static void accumulate_raw_stats(const rgw_bucket_dir_header& header,

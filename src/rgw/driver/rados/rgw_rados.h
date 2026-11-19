@@ -68,6 +68,9 @@ namespace rgw { class SiteConfig; }
 
 struct get_obj_data;
 
+// range for assert_time_range()
+using time_pair = std::pair<ceph::real_time, ceph::real_time>;
+
 /* flags for put_obj_meta() */
 #define PUT_OBJ_CREATE      0x01
 #define PUT_OBJ_EXCL        0x02
@@ -885,7 +888,6 @@ public:
         bool keep_tail;
         bool completeMultipart;
         bool appendable;
-        using time_pair = std::pair<ceph::real_time, ceph::real_time>;
         std::optional<time_pair> time_range;
 
         MetaParams() : mtime(NULL), rmattrs(NULL), data(NULL), manifest(NULL), ptag(NULL),
@@ -1770,9 +1772,12 @@ public:
   int unlock(const rgw_pool& pool, const std::string& oid, rgw_zone_id& zone_id, std::string& owner_id);
 
   void update_gc_chain(const DoutPrefixProvider *dpp, rgw_obj head_obj, RGWObjManifest& manifest, cls_rgw_obj_chain *chain);
-  std::tuple<int, std::optional<cls_rgw_obj_chain>> send_chain_to_gc(cls_rgw_obj_chain& chain, const std::string& tag, optional_yield y);
-  void delete_objs_inline(const DoutPrefixProvider *dpp, cls_rgw_obj_chain& chain,
-                          const std::string& tag, optional_yield y);
+  auto send_chain_to_gc(cls_rgw_obj_chain& chain, const std::string& tag,
+                        optional_yield y, const time_pair* time_range = nullptr)
+      -> std::tuple<int, std::optional<cls_rgw_obj_chain>>;
+  int delete_objs_inline(const DoutPrefixProvider *dpp, cls_rgw_obj_chain& chain,
+                         const std::string& tag, optional_yield y,
+                         const time_pair* time_range = nullptr);
   int gc_operate(const DoutPrefixProvider *dpp, std::string& oid, librados::ObjectWriteOperation&& op, optional_yield y);
   int gc_aio_operate(const std::string& oid, librados::AioCompletion *c,
                      librados::ObjectWriteOperation *op);
