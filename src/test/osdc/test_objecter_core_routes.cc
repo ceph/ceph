@@ -274,6 +274,39 @@ protected:
     poll();
   }
 
+  /// the OSD backs off (or lifts, by 'op') the head of the object 'obj'
+  /// only, on con
+  void backoff_object(const ceph::ref_t<RecordingConnection>& con,
+                      const hobject_t& obj,
+                      uint8_t op)
+  {
+    const epoch_t epoch =
+      objecter->with_osdmap([](const OSDMap& m) { return m.get_epoch(); });
+    auto end = obj;
+    end.snap = CEPH_SNAPDIR;
+    auto m = ceph::make_message<MOSDBackoff>(
+      spg_t(pgid), epoch, op, 2, obj, end);
+    m->set_connection(con);
+    objecter->ms_dispatch2(m);
+    poll();
+  }
+
+  /// a notify on the object 'name' (of the single PG); its registration op
+  /// is sent, not answered yet
+  boost::intrusive_ptr<Objecter::LingerOp> notify(const std::string& name = "obj")
+  {
+    auto info = objecter->linger_register(
+      object_t(name), object_locator_t(pool_id), 0);
+    ObjectOperation op;
+    ceph::buffer::list payload;
+    ceph::buffer::list inbl;
+    op.notify(info->get_cookie(), 1, 30, payload, &inbl);
+    objecter->linger_notify(info.get(), op, CEPH_NOSNAP, inbl, nullptr,
+                            new LambdaContext([](int) {}), nullptr);
+    poll();
+    return info;
+  }
+
   /// the PG is due to switch to pg_core, with tids in flight on the main
   /// connection. Returns the tids sent
   tids_t make_busy_pg()
@@ -802,4 +835,187 @@ TEST_F(TestObjecterCoreRoutesTick, AnsweringCoreConIsKept)
   EXPECT_FALSE(wait_resent_on_main(b));
   EXPECT_EQ(0u, counter("core_con_dead"));
   EXPECT_EQ(0u, counter("core_con_reset"));
+}
+
+// objecter_use_osd_core_hints turned off at runtime: the PG's ops return to
+// the main connection once those in flight drain (never overtaking them),
+// and the then unused core connection is closed (on tick)
+TEST_F(TestObjecterCoreRoutesTick, TurningHintsOff)
+{
+  no_holds();
+  // as if each keepalive were answered at once: not given up on
+  core_con->set_last_keepalive_ack(ceph_clock_now() + utime_t(3600, 0));
+  auto a = submit();
+  reply(main_con, a);
+  auto b = submit();
+  ASSERT_EQ((tids_t{b}), core_con->tids());
+
+  auto& conf = g_ceph_context->_conf;
+  conf.set_val_or_die("objecter_use_osd_core_hints", "false");
+  conf.apply_changes(nullptr);
+  // b is in flight on the core connection: c follows it there
+  auto c = submit();
+  EXPECT_EQ((tids_t{b, c}), core_con->tids());
+  reply(core_con, b, false);
+  reply(core_con, c, false);
+  auto d = submit();
+  EXPECT_EQ((tids_t{a, d}), main_con->tids());
+
+  bool closed = false;
+  for (int i = 0; i < 300 && !closed; ++i) {
+    {
+      std::shared_lock l(session->lock);
+      closed = session->core_routes.num_core_cons() == 0;
+    }
+    if (!closed) {
+      wait(0.01);
+    }
+  }
+  EXPECT_TRUE(closed);
+  EXPECT_EQ(1u, counter("core_con_close"));
+  EXPECT_EQ(0u, counter("core_con_reset"));
+  EXPECT_EQ(0u, counter("core_con_dead"));
+}
+
+// hints turned off: a watch registered on a core connection is registered
+// again (on the main connection) before that connection is closed, so the
+// OSD does not drop it
+TEST_F(TestObjecterCoreRoutesTick, WatchMovedBeforeItsConnectionCloses)
+{
+  no_holds();
+  auto& conf = g_ceph_context->_conf;
+  // the pings would keep the PG busy on the core connection
+  conf.set_val_or_die("objecter_inject_no_watch_ping", "true");
+  conf.apply_changes(nullptr);
+  core_con->set_last_keepalive_ack(ceph_clock_now() + utime_t(3600, 0));
+  auto a = submit();
+  reply(main_con, a);
+  auto w = watch();
+  ASSERT_EQ((std::vector<uint8_t>{CEPH_OSD_WATCH_OP_WATCH}),
+            core_con->watch_ops());
+  reply(core_con, w->register_tid, false);
+
+  conf.set_val_or_die("objecter_use_osd_core_hints", "false");
+  conf.apply_changes(nullptr);
+  auto b = submit();
+  EXPECT_EQ((tids_t{a, b}), main_con->tids());
+
+  bool closed = false;
+  for (int i = 0; i < 300 && !closed; ++i) {
+    {
+      std::shared_lock l(session->lock);
+      closed = session->core_routes.num_core_cons() == 0;
+    }
+    if (!closed) {
+      wait(0.01);
+    }
+  }
+  EXPECT_TRUE(closed);
+  EXPECT_EQ((std::vector<uint8_t>{CEPH_OSD_WATCH_OP_RECONNECT}),
+            main_con->watch_ops());
+  EXPECT_EQ(1u, counter("core_linger_resend"));
+  EXPECT_EQ(1u, counter("core_con_close"));
+  conf.rm_val("objecter_inject_no_watch_ping");
+  conf.apply_changes(nullptr);
+}
+
+// hints turned off: a core connection that a backoff came on is kept, as
+// closing it would make the OSD drop the backoff, never to lift it; it is
+// closed once the backoff is lifted
+TEST_F(TestObjecterCoreRoutesTick, CoreConKeptForItsBackoff)
+{
+  no_holds();
+  core_con->set_last_keepalive_ack(ceph_clock_now() + utime_t(3600, 0));
+  auto a = submit();
+  reply(main_con, a);
+  auto b = submit("obj");
+  ASSERT_EQ((tids_t{b}), core_con->tids());
+  hobject_t obj;
+  {
+    std::shared_lock l(session->lock);
+    obj = session->ops.at(b)->target.get_hobj();
+  }
+  reply(core_con, b, false);
+  // "obj" backed off, on the core connection: its next op is not sent
+  backoff_object(core_con, obj, CEPH_OSD_BACKOFF_OP_BLOCK);
+  auto c = submit("obj");
+  EXPECT_EQ((tids_t{b}), core_con->tids());
+
+  // the PG's ops (of another object) return to the main connection: the
+  // core connection is used by nothing but the backoff
+  auto& conf = g_ceph_context->_conf;
+  conf.set_val_or_die("objecter_use_osd_core_hints", "false");
+  conf.apply_changes(nullptr);
+  auto d = submit("other");
+  EXPECT_EQ((tids_t{a, d}), main_con->tids());
+  wait(0.5);
+  {
+    std::shared_lock l(session->lock);
+    EXPECT_EQ(1u, session->core_routes.num_core_cons());
+  }
+  EXPECT_EQ(0u, counter("core_con_close"));
+
+  // the backoff is lifted: c is sent (on the main connection), and the
+  // core connection is closed
+  backoff_object(core_con, obj, CEPH_OSD_BACKOFF_OP_UNBLOCK);
+  EXPECT_EQ((tids_t{a, d, c}), main_con->tids());
+  bool closed = false;
+  for (int i = 0; i < 300 && !closed; ++i) {
+    {
+      std::shared_lock l(session->lock);
+      closed = session->core_routes.num_core_cons() == 0;
+    }
+    if (!closed) {
+      wait(0.01);
+    }
+  }
+  EXPECT_TRUE(closed);
+  EXPECT_EQ(1u, counter("core_con_close"));
+}
+
+// hints turned off: a core connection with a notify registered on it is
+// kept until the notify completes, the notify not being registered again
+// (which would notify twice)
+TEST_F(TestObjecterCoreRoutesTick, CoreConKeptForItsNotify)
+{
+  no_holds();
+  core_con->set_last_keepalive_ack(ceph_clock_now() + utime_t(3600, 0));
+  auto a = submit();
+  reply(main_con, a);
+  auto n = notify();
+  const auto ntid = n->register_tid;
+  ASSERT_EQ((tids_t{ntid}), core_con->tids());
+  reply(core_con, ntid, false);
+
+  auto& conf = g_ceph_context->_conf;
+  conf.set_val_or_die("objecter_use_osd_core_hints", "false");
+  conf.apply_changes(nullptr);
+  auto b = submit();
+  EXPECT_EQ((tids_t{a, b}), main_con->tids());
+  wait(0.5);
+  {
+    std::shared_lock l(session->lock);
+    EXPECT_EQ(1u, session->core_routes.num_core_cons());
+  }
+  // not registered again
+  EXPECT_EQ((tids_t{a, b}), main_con->tids());
+  EXPECT_EQ((tids_t{ntid}), core_con->tids());
+  EXPECT_EQ(0u, counter("core_linger_resend"));
+  EXPECT_EQ(0u, counter("core_con_close"));
+
+  // the notify completes: the core connection is closed
+  objecter->linger_cancel(n.get());
+  bool closed = false;
+  for (int i = 0; i < 300 && !closed; ++i) {
+    {
+      std::shared_lock l(session->lock);
+      closed = session->core_routes.num_core_cons() == 0;
+    }
+    if (!closed) {
+      wait(0.01);
+    }
+  }
+  EXPECT_TRUE(closed);
+  EXPECT_EQ(1u, counter("core_con_close"));
+  EXPECT_EQ(0u, counter("core_linger_resend"));
 }

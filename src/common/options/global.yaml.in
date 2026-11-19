@@ -2542,7 +2542,8 @@ options:
     ops on it, saving the OSD a cross-core hop per op.
     May be changed at runtime. Turned off, each PG's ops return to the main
     connection once those in flight are answered (see
-    objecter_osd_core_switch_grace).
+    objecter_osd_core_switch_grace), and the connections to the OSD cores
+    are closed once no longer used.
   see_also:
   - objecter_osd_core_switch_grace
   - objecter_osd_core_max_connections
