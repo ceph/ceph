@@ -21,6 +21,7 @@
 
 #include "osd/OSDMap.h"
 #include "osd/error_code.h"
+#include "osd/osd_types_fmt.h"
 #include "Filer.h"
 
 #include "mon/MonClient.h"
@@ -193,6 +194,16 @@ enum {
 
   l_osdc_split_op_reads,
 
+  l_osdc_op_send_core,
+  l_osdc_core_hint_change,
+  l_osdc_core_route_switch,
+  l_osdc_core_cons,
+  l_osdc_core_con_open,
+  l_osdc_core_con_reset,
+  l_osdc_op_send_switch_pending,
+  l_osdc_core_switch_delay,
+  l_osdc_core_hint_over_limit,
+
   l_osdc_last,
 };
 
@@ -235,6 +246,18 @@ std::vector<std::string> Objecter::get_tracked_keys() const noexcept
     "rados_osd_op_timeout"s,
     "osd_min_split_replica_read_size"s,
     "rados_replica_read_policy"s,
+    "objecter_use_osd_core_hints"s,
+    "objecter_osd_core_max_connections"s,
+  };
+}
+
+osdc::core_route::config_t Objecter::read_core_cfg(const ConfigProxy& conf)
+{
+  return osdc::core_route::config_t{
+    .enabled = conf.get_val<bool>("objecter_use_osd_core_hints"),
+    // (bounded by the option's 'max')
+    .max_core_cons = static_cast<uint16_t>(
+      conf.get_val<uint64_t>("objecter_osd_core_max_connections")),
   };
 }
 
@@ -250,6 +273,17 @@ void Objecter::handle_conf_change(const ConfigProxy& conf,
   }
   if (changed.count("rados_osd_op_timeout")) {
     osd_timeout = conf.get_val<std::chrono::seconds>("rados_osd_op_timeout");
+  }
+  if (changed.count("objecter_use_osd_core_hints") ||
+      changed.count("objecter_osd_core_max_connections")) {
+    // read by the routing events, with rwlock locked. Turned off: each PG
+    // returns to its main connection once its ops drain
+    auto cfg = read_core_cfg(conf);
+    unique_lock wl(rwlock);
+    core_cfg = cfg;
+    if (cfg.enabled) {
+      core_hints_used = true;
+    }
   }
   if (changed.count("osd_min_split_replica_read_size")) {
     min_split_replica_read_size
@@ -427,6 +461,32 @@ void Objecter::init()
 			"Operations completed by replica");
     pcb.add_u64_counter(l_osdc_split_op_reads, "split_op_reads",
                     "Client read ops split by SplitOp");
+
+    // routing ops to the OSD core owning their PG (objecter_use_osd_core_hints)
+    pcb.add_u64_counter(l_osdc_op_send_core, "op_send_core",
+                        "Operations sent to the OSD core owning their PG");
+    pcb.add_u64_counter(l_osdc_core_hint_change, "core_hint_change",
+                        "PGs hinted (by OSDs) to a new core");
+    pcb.add_u64_counter(l_osdc_core_route_switch, "core_route_switch",
+                        "PGs switched to another OSD connection");
+    pcb.add_u64(l_osdc_core_cons, "core_cons",
+                "Open connections to OSD cores");
+    pcb.add_u64_counter(l_osdc_core_con_open, "core_con_open",
+                        "Connections to OSD cores opened");
+    pcb.add_u64_counter(l_osdc_core_con_reset, "core_con_reset",
+                        "Connections to OSD cores reset");
+    pcb.add_u64_counter(l_osdc_op_send_switch_pending, "op_send_switch_pending",
+                        "Operations sent while their PG was due to switch to "
+                        "another OSD connection, but had ops in flight");
+    // how long PGs take to switch to another OSD connection, once due to
+    pcb.add_time_avg(l_osdc_core_switch_delay, "core_switch_delay",
+                     "Time PGs due to switch to another OSD connection took "
+                     "to do so, kept by their ops in flight (max_inc: the "
+                     "longest)");
+    pcb.add_u64_counter(l_osdc_core_hint_over_limit, "core_hint_over_limit",
+                        "Hints not followed, naming a new core of an OSD with "
+                        "objecter_osd_core_max_connections connections to its "
+                        "cores already");
 
     logger = pcb.create_perf_counters();
     cct->get_perfcounters_collection()->add(logger);
@@ -2101,6 +2161,7 @@ void Objecter::_reopen_session(OSDSession *s)
     s->con->mark_down();
     logger->inc(l_osdc_osd_session_close);
   }
+  _close_core_cons(s);
   s->con = messenger->connect_to_osd(addrs);
   s->con->set_priv(RefCountedPtr{s});
   s->incarnation++;
@@ -2118,6 +2179,7 @@ void Objecter::close_session(OSDSession *s)
     logger->inc(l_osdc_osd_session_close);
   }
   unique_lock sl(s->lock);
+  _close_core_cons(s);
 
   std::list<LingerOp*> homeless_lingers;
   std::list<CommandOp*> homeless_commands;
@@ -2166,6 +2228,210 @@ void Objecter::close_session(OSDSession *s)
   }
 
   logger->set(l_osdc_osd_sessions, osd_sessions.size());
+}
+
+void Objecter::_close_core_cons(OSDSession *s)
+{
+  // s->lock is locked
+  // (the ops are resent, or moved to the homeless session, by our caller,
+  // along with all of the session's ops)
+  auto reset = s->core_routes.reset_session();
+  for (auto& [core, con] : reset.cons) {
+    ldout(cct, 10) << fmt::format(
+      "{} osd.{} core {} {}",
+      __func__, s->osd, core, fmt::ptr(con.get())) << dendl;
+    con->set_priv(nullptr);
+    con->mark_down();
+  }
+  logger->dec(l_osdc_core_cons, reset.cons.size());
+}
+
+bool Objecter::_drop_core_con(OSDSession *s, const ConnectionRef& con)
+{
+  // rwlock is locked unique
+  // s->lock is locked
+
+  // the PGs routed via that core fall back to the main connection. The
+  // hints to that core are forgotten, so that the next one reconnects.
+  // TODO: back off reconnecting to a core whose connection keeps resetting
+  // after having connected
+  auto dropped = s->core_routes.drop_core_con(
+    con, osdc::core_route::drop_why_t::reset, ceph::coarse_mono_clock::now(),
+    core_host_blocks);
+  if (!dropped) {
+    // the main connection, or not ours any more
+    return false;
+  }
+  const auto core = dropped->core;
+  ldout(cct, 1) << fmt::format(
+    "{} osd.{} core {} {}: reset",
+    __func__, s->osd, core, fmt::ptr(con.get())) << dendl;
+  dropped->con->set_priv(nullptr);
+  dropped->con->mark_down();
+  logger->dec(l_osdc_core_cons);
+  logger->inc(l_osdc_core_con_reset);
+
+  // as in _kick_requests(), for the ops sent on that connection (no
+  // longer accounted for as in flight). All of a PG's ops in flight were
+  // sent on the same connection, so resending them in tid order (and
+  // before any new op) keeps them in order.
+  map<ceph_tid_t, Op*> resend;
+  for (auto p = s->ops.begin(); p != s->ops.end();) {
+    Op *op = p->second;
+    ++p;
+    const auto& route = op->core_route;
+    if (route.core != core) {
+      continue;
+    }
+    if (op->should_resend) {
+      if (!op->target.paused) {
+        resend[op->tid] = op;
+      }
+      // (else to be sent when unpaused)
+    } else {
+      _op_cancel_map_check(op);
+      _cancel_linger_op(op);
+    }
+  }
+
+  logger->inc(l_osdc_op_resend, resend.size());
+  for (auto& [tid, op] : resend) {
+    _send_op(op);
+  }
+  return true;
+}
+
+ConnectionRef Objecter::_op_route_or_hold(Op *op)
+{
+  // rwlock is locked
+  // op->session->lock is locked
+  auto s = op->session;
+  if (!core_hints_used || s->osd < 0) {
+    ceph_assert(s->con);
+    return s->con;
+  }
+
+  using what_t = osdc::core_route::routing_t::what_t;
+  const auto& pgid = op->target.actual_pgid;
+  const auto now = ceph::coarse_mono_clock::now();
+  const auto out = s->core_routes.route_or_hold(pgid, op->core_route, now,
+                                                core_cfg);
+  switch (out.what) {
+  case what_t::held:
+    // never: holds need a grace period (config_t::grace), and core_cfg
+    // has none
+    ceph_abort_msg("an op held, with no grace period");
+  case what_t::stayed:
+    break;
+  case what_t::switched:
+    ldout(cct, 15) << fmt::format(
+      "{} osd.{} pg {}: switched to core {}",
+      __func__, s->osd, pgid,
+      out.desired ? std::to_string(*out.desired) : "none") << dendl;
+    if (out.switch_delay) {
+      logger->tinc_with_max(l_osdc_core_switch_delay, *out.switch_delay);
+    }
+    logger->inc(l_osdc_core_route_switch);
+    break;
+  case what_t::pending:
+    if (out.pending_started) {
+      const auto& route = *s->core_routes.route_of(pgid);
+      ldout(cct, 15) << fmt::format(
+        "{} osd.{} pg {}: to switch to core {} once {} ops in flight (this "
+        "one included) are answered",
+        __func__, s->osd, pgid,
+        out.desired ? std::to_string(*out.desired) : "none",
+        route.in_flight) << dendl;
+    }
+    logger->inc(l_osdc_op_send_switch_pending);
+    break;
+  }
+
+  if (out.con) {
+    logger->inc(l_osdc_op_send_core);
+    return out.con;
+  }
+  ceph_assert(s->con);
+  return s->con;
+}
+
+void Objecter::_op_retire(Op *op)
+{
+  // op->session->lock is locked
+  op->session->core_routes.retire_op(op->core_route);
+}
+
+void Objecter::_session_apply_core_hint(OSDSession *s,
+                                        const spg_t& pgid,
+                                        const osd_core_hint_t& hint)
+{
+  // rwlock is locked
+  // s->lock is locked
+  using what_t = osdc::core_route::hint_followed_t::what_t;
+  const auto out = s->core_routes.follow_hint(
+    pgid, hint, s->con, ceph::coarse_mono_clock::now(), core_host_blocks,
+    [this, s](const entity_addr_t& addr) {
+      auto con = messenger->connect_to_osd(entity_addrvec_t(addr));
+      if (con) {
+        con->set_priv(RefCountedPtr{s});
+      }
+      return con;
+    },
+    // the session's ops, accounted for when the session's first hint
+    // activates it
+    [s](const osdc::core_route::op_visitor_t& visit) {
+      for (auto& [tid, op] : s->ops) {
+        visit(op->target.actual_pgid, op->core_route);
+      }
+    },
+    core_cfg);
+  switch (out.what) {
+  case what_t::unchanged:
+    // the common case
+    return;
+  case what_t::blocked:
+    ldout(cct, 20) << fmt::format(
+      "{} osd.{} pg {}: not following hint {}: connecting to its host is "
+      "blocked",
+      __func__, s->osd, pgid, hint) << dendl;
+    return;
+  case what_t::invalid:
+    ldout(cct, 1) << fmt::format(
+      "{} osd.{} pg {}: ignoring hint {}: no port (or the main "
+      "connection's), or no msgr2 address in {}",
+      __func__, s->osd, pgid, hint,
+      s->con ? s->con->get_peer_addrs() : entity_addrvec_t{}) << dendl;
+    return;
+  case what_t::too_many_cores:
+    ldout(cct, 5) << fmt::format(
+      "{} osd.{} pg {}: not following hint {}: {} core connections already "
+      "(objecter_osd_core_max_connections)",
+      __func__, s->osd, pgid, hint, s->core_routes.num_core_cons()) << dendl;
+    logger->inc(l_osdc_core_hint_over_limit);
+    return;
+  case what_t::connect_failed:
+    ldout(cct, 1) << fmt::format(
+      "{} osd.{} pg {}: not following hint {}: could not connect to {}",
+      __func__, s->osd, pgid, hint, out.addr) << dendl;
+    return;
+  case what_t::changed:
+    break;
+  }
+
+  ldout(cct, 15) << fmt::format(
+    "{} osd.{} pg {}: core {} (was {})",
+    __func__, s->osd, pgid, hint.core,
+    out.prev_core ? std::to_string(*out.prev_core) : "none") << dendl;
+  logger->inc(l_osdc_core_hint_change);
+  if (out.opened) {
+    // not routed to until connected (see ms_handle_connect())
+    ldout(cct, 10) << fmt::format(
+      "{} osd.{} core {}: connecting to {} {}",
+      __func__, s->osd, hint.core, out.addr,
+      fmt::ptr(out.opened.get())) << dendl;
+    logger->inc(l_osdc_core_cons);
+    logger->inc(l_osdc_core_con_open);
+  }
 }
 
 void Objecter::wait_for_osd_map(epoch_t e)
@@ -3652,6 +3918,9 @@ void Objecter::_session_op_remove(OSDSession *from, Op *op)
   ceph_assert(op->session == from);
   // from->lock is locked
 
+  // a route is of a session's PG
+  _op_retire(op);
+
   if (from->is_homeless()) {
     num_homeless_ops--;
   }
@@ -3668,6 +3937,10 @@ void Objecter::_session_op_remove(OSDSession *from, std::map<ceph_tid_t,Op*>::it
 {
   ceph_assert(it->second->session == from);
   // from->lock is locked
+
+  // as above: no longer accounted for in from's routes (e.g. resubmitted,
+  // after a pool migration redirect, possibly to another session)
+  _op_retire(it->second);
 
   if (from->is_homeless()) {
     num_homeless_ops--;
@@ -3908,6 +4181,9 @@ void Objecter::_send_op(Op *op)
   // rwlock is locked
   // op->session->lock is locked
 
+  // a previous send of op (if any) is void
+  _op_retire(op);
+
   // backoff?
   auto p = op->session->backoffs.find(op->target.actual_pgid);
   if (p != op->session->backoffs.end()) {
@@ -3932,6 +4208,9 @@ void Objecter::_send_op(Op *op)
     }
   }
 
+  // the connection to send it on
+  ConnectionRef con = _op_route_or_hold(op);
+
   ceph_assert(op->tid > 0);
   MOSDOp *m = _prepare_osd_op(op);
 
@@ -3946,9 +4225,6 @@ void Objecter::_send_op(Op *op)
   ldout(cct, 15) << "_send_op " << op->tid << " to "
 		 << op->target.actual_pgid << " on osd." << op->session->osd
 		 << dendl;
-
-  ConnectionRef con = op->session->con;
-  ceph_assert(con);
 
 #if 0
   // preallocated rx ceph::buffer?
@@ -3973,7 +4249,7 @@ void Objecter::_send_op(Op *op)
   if (op->trace.valid()) {
     m->trace.init("op msg", nullptr, &op->trace);
   }
-  op->session->con->send_message(m);
+  con->send_message(m);
 }
 
 int Objecter::calc_op_budget(const bc::small_vector_base<OSDOp>& ops)
@@ -4123,12 +4399,17 @@ void Objecter::handle_osd_op_reply(cref_t<MOSDOpReply> m)
   ConnectionRef con = m->get_connection();
   auto priv = con->get_priv();
   auto s = static_cast<OSDSession*>(priv.get());
-  if (!s || s->con != con) {
+  if (!s) {
     ldout(cct, 7) << __func__ << " no session on con " << con << dendl;
     return;
   }
 
   unique_lock sl(s->lock);
+  if (!s->owns_con(con)) {
+    ldout(cct, 7) << __func__ << " no session on con " << con << dendl;
+    sl.unlock();
+    return;
+  }
 
   map<ceph_tid_t, Op *>::iterator iter = s->ops.find(tid);
   if (iter == s->ops.end()) {
@@ -4177,6 +4458,12 @@ void Objecter::handle_osd_op_reply(cref_t<MOSDOpReply> m)
     // we don't know the request attempt because the server is old, so
     // just accept this one.  we may do ACK callbacks we shouldn't
     // have, but that is better than doing callbacks out of order.
+  }
+
+  if (core_cfg.enabled) {
+    if (const auto& hint = m->get_core_hint(); hint) {
+      _session_apply_core_hint(s, op->target.actual_pgid, *hint);
+    }
   }
 
   int rc = m->get_result();
@@ -4409,7 +4696,7 @@ void Objecter::handle_osd_backoff(cref_t<MOSDBackoff> m)
   ConnectionRef con = m->get_connection();
   auto priv = con->get_priv();
   auto s = static_cast<OSDSession*>(priv.get());
-  if (!s || s->con != con) {
+  if (!s) {
     ldout(cct, 7) << __func__ << " no session on con " << con << dendl;
     return;
   }
@@ -4417,6 +4704,12 @@ void Objecter::handle_osd_backoff(cref_t<MOSDBackoff> m)
   get_session(s);
 
   unique_lock sl(s->lock);
+  if (!s->owns_con(con)) {
+    ldout(cct, 7) << __func__ << " no session on con " << con << dendl;
+    sl.unlock();
+    put_session(s);
+    return;
+  }
 
   switch (m->op) {
   case CEPH_OSD_BACKOFF_OP_BLOCK:
@@ -5417,6 +5710,36 @@ void Objecter::ms_handle_connect(Connection *con)
 
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON)
     resend_mon_ops();
+  else if (con->get_peer_type() == CEPH_ENTITY_TYPE_OSD && core_hints_used)
+    handle_core_con_connect(con);
+}
+
+void Objecter::handle_core_con_connect(Connection *con)
+{
+  auto priv = con->get_priv();
+  auto s = static_cast<OSDSession*>(priv.get());
+  if (!s) {
+    return;
+  }
+  shared_lock rl(rwlock);
+  if (!initialized) {
+    return;
+  }
+  unique_lock sl(s->lock);
+  const auto admitted =
+    s->core_routes.admit_core_con(ConnectionRef(con), core_host_blocks);
+  if (!admitted) {
+    // the main connection, or not ours any more
+    return;
+  }
+  ldout(cct, 10) << fmt::format(
+    "{} osd.{} core {} {}: connected",
+    __func__, s->osd, admitted->core, fmt::ptr(con)) << dendl;
+  if (admitted->unblocked) {
+    ldout(cct, 5) << fmt::format(
+      "{} osd.{} core {}: connecting to the cores of {} no longer blocked",
+      __func__, s->osd, admitted->core, con->get_peer_addrs()) << dendl;
+  }
 }
 
 bool Objecter::ms_handle_reset(Connection *con)
@@ -5440,6 +5763,12 @@ bool Objecter::ms_handle_reset(Connection *con)
       }
       map<uint64_t, LingerOp *> lresend;
       unique_lock sl(session->lock);
+      if (_drop_core_con(session, ConnectionRef(con))) {
+        // one of the session's core connections: the rest of the session
+        // is not affected
+        sl.unlock();
+        return true;
+      }
       _reopen_session(session);
       _kick_requests(session, lresend);
       sl.unlock();
@@ -5542,6 +5871,9 @@ void Objecter::_dump_ops(const OSDSession *s, Formatter *fmt)
     fmt->dump_stream("last_sent") << op->stamp;
     fmt->dump_float("age", age.count());
     fmt->dump_int("attempts", op->attempts);
+    if (op->core_route.core && s->core_routes.is_in_flight(op->core_route)) {
+      fmt->dump_unsigned("osd_core", *op->core_route.core);
+    }
     fmt->dump_stream("snapid") << op->snapid;
     fmt->dump_stream("snap_context") << op->snapc;
     fmt->dump_stream("mtime") << op->mtime;
