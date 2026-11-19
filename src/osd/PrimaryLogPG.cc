@@ -17054,7 +17054,13 @@ void PrimaryLogPG::on_pool_migration_source_suspended()
 void PrimaryLogPG::on_pool_migration_target_reserved(HBHandle *handle) {
   dout(20) << __func__ << dendl;
 
+  // The reservation is held from here on whether or not anyone is waiting
+  // for the reply. Without the flag a later RELEASE would be ignored and a
+  // later RESERVE would wait for a grant that has already happened.
+  pool_migration_reservations_granted_target = true;
+
   if (pending_pool_migration_reservation_ops.empty()) {
+    // e.g. re-reserved after recovery, having already answered the source
     dout(10) << __func__ << " no pending reservation op, nothing to reply to" << dendl;
     return;
   }
@@ -17081,7 +17087,6 @@ void PrimaryLogPG::on_pool_migration_target_reserved(HBHandle *handle) {
     osd->send_message_osd_client(reply, m->get_connection());
   }
   pending_pool_migration_reservation_ops.clear();
-  pool_migration_reservations_granted_target = true;
 }
 
 void PrimaryLogPG::on_pool_migration_target_suspended(bool toofull)
