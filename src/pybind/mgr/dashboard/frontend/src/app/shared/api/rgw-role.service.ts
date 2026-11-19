@@ -4,8 +4,10 @@ import { Observable, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 import isFunction from 'lodash/isFunction';
 import {
+  RgwPolicyDocument,
   RgwRole,
   RgwRoleCreatePayload,
+  RgwRolePolicyResponse,
   RgwRoleUpdatePayload
 } from '~/app/ceph/rgw/models/rgw-role';
 
@@ -20,7 +22,20 @@ export class RgwRoleService {
   }
 
   list(accountId: string): Observable<RgwRole[]> {
-    return this.http.get<RgwRole[]>(this.getUrl(accountId));
+    return this.http.get<RgwRole[]>(this.getUrl(accountId)).pipe(
+      map((roles) =>
+        (roles || []).map((role) => {
+          let count = role.policies_count;
+          if (count === undefined && role.PermissionPolicies) {
+            count = role.PermissionPolicies.length;
+          }
+          return {
+            ...role,
+            policies_count: count ?? 0
+          };
+        })
+      )
+    );
   }
 
   get(roleName: string, accountId: string): Observable<RgwRole> {
@@ -64,6 +79,32 @@ export class RgwRoleService {
       policy_name: policyName,
       policy_doc: policyDoc
     });
+  }
+
+  listPolicies(roleName: string, accountId: string): Observable<string[]> {
+    return this.http.get<string[]>(`${this.getUrl(accountId)}/${roleName}/policy`);
+  }
+
+  getPolicy(roleName: string, policyName: string, accountId: string): Observable<string> {
+    return this.http
+      .get<RgwRolePolicyResponse>(`${this.getUrl(accountId)}/${roleName}/policy/${policyName}`)
+      .pipe(
+        map((res) => this.formatPolicyDocument(res.PolicyDocument ?? res['Permission policy']))
+      );
+  }
+
+  private formatPolicyDocument(policyDocument: string | RgwPolicyDocument): string {
+    if (policyDocument && typeof policyDocument === 'object') {
+      return JSON.stringify(policyDocument, null, 2);
+    }
+    if (typeof policyDocument !== 'string' || !policyDocument) {
+      return '';
+    }
+    try {
+      return JSON.stringify(JSON.parse(policyDocument), null, 2);
+    } catch {
+      return policyDocument;
+    }
   }
 
   deletePolicy(roleName: string, policyName: string, accountId: string): Observable<string> {
