@@ -68,7 +68,7 @@ class SeastoreNodeExtent final: public NodeExtent {
   explicit SeastoreNodeExtent(extent_len_t length)
     : NodeExtent(length) {}
   SeastoreNodeExtent(const SeastoreNodeExtent& other)
-    : NodeExtent(other) {}
+    : NodeExtent(other, share_buffer_t()) {}
   ~SeastoreNodeExtent() override = default;
 
   constexpr static extent_types_t TYPE = extent_types_t::ONODE_BLOCK_STAGED;
