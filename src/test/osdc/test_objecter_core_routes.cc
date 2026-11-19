@@ -12,7 +12,9 @@
 
 /**
  * Routing a PG's ops to the connection of the Crimson OSD core owning it
- * (objecter_use_osd_core_hints): when the PG switches connections.
+ * (objecter_use_osd_core_hints): when the PG switches connections, and
+ * holding its new ops so that it can (objecter_osd_core_switch_grace and
+ * objecter_osd_core_switch_max_hold).
  */
 
 #include <algorithm>
@@ -43,7 +45,8 @@ using namespace std::chrono_literals;
 
 namespace {
 
-/// records the tids of the ops sent on it
+/// records the tids of the ops sent on it. Ops may be sent from the
+/// Objecter's timer thread (a hold expiring), hence the lock
 class RecordingConnection : public MockConnection {
 public:
   explicit RecordingConnection(int osd) : MockConnection(osd)
@@ -82,6 +85,9 @@ protected:
   static constexpr int64_t pool_id = 1;
   /// the core the OSD hints for the (single) PG
   static constexpr uint32_t pg_core = 3;
+  /// short, for the tests to wait for them
+  static constexpr double grace = 0.2;
+  static constexpr double max_hold = 0.6;
   const pg_t pgid{0, pool_id};
 
   boost::asio::io_context ioc;
@@ -99,6 +105,10 @@ protected:
     auto& conf = g_ceph_context->_conf;
     // read by the Objecter's constructor
     conf.set_val_or_die("objecter_use_osd_core_hints", "true");
+    conf.set_val_or_die("objecter_osd_core_switch_grace",
+                        std::to_string(grace));
+    conf.set_val_or_die("objecter_osd_core_switch_max_hold",
+                        std::to_string(max_hold));
     conf.apply_changes(nullptr);
 
     objecter = std::make_unique<Objecter>(g_ceph_context, msgr.get(), &monc, ioc);
@@ -222,6 +232,36 @@ protected:
     return {a, b, c};
   }
 
+  static void wait(double seconds)
+  {
+    std::this_thread::sleep_for(
+      std::chrono::duration<double>(seconds));
+  }
+
+  /// for the tests that don't expect a hold, however slowly they run
+  static void no_holds()
+  {
+    auto& conf = g_ceph_context->_conf;
+    conf.set_val_or_die("objecter_osd_core_switch_grace", "3600");
+    conf.apply_changes(nullptr);
+  }
+
+  /// wait until the hold ends (on the Objecter's timer thread)
+  void wait_hold_ended()
+  {
+    for (int i = 0; i < 1000 && route_holding(); ++i) {
+      wait(0.01);
+    }
+    ASSERT_FALSE(route_holding());
+  }
+
+  bool route_holding()
+  {
+    std::shared_lock l(session->lock);
+    const auto route = session->core_routes.route_of(spg_t(pgid));
+    return route && route->holding;
+  }
+
   /// the Objecter's perf counter 'name' (each test has its own Objecter)
   static const PerfCounters::perf_counter_data_any_d& perf(
     const std::string& name)
@@ -250,11 +290,13 @@ protected:
 // an idle PG switches with its first op after the hint
 TEST_F(TestObjecterCoreRoutes, IdlePgSwitches)
 {
+  no_holds();
   auto a = submit();
   reply(main_con, a);
   auto b = submit();
   EXPECT_EQ((tids_t{a}), main_con->tids());
   EXPECT_EQ((tids_t{b}), core_con->tids());
+  EXPECT_FALSE(route_holding());
   EXPECT_EQ(1u, counter("core_route_switch"));
   EXPECT_EQ(0u, counter("op_send_switch_pending"));
   // not delayed
@@ -265,6 +307,7 @@ TEST_F(TestObjecterCoreRoutes, IdlePgSwitches)
 // Objecter::ms_handle_connect())
 TEST_F(TestObjecterCoreRoutes, NotRoutedUntilConnected)
 {
+  no_holds();
   {
     // opened again, not connected yet
     std::unique_lock l(session->lock);
@@ -287,18 +330,148 @@ TEST_F(TestObjecterCoreRoutes, NotRoutedUntilConnected)
   EXPECT_EQ(1u, counter("core_route_switch"));
 }
 
-// a busy PG keeps its connection while its ops are in flight, and switches
-// once they drain
+// a busy PG keeps its connection during the grace period, and switches
+// once its ops drain on their own
 TEST_F(TestObjecterCoreRoutes, BusyPgSwitchesWhenDrained)
 {
+  no_holds();
   auto sent = make_busy_pg();
   auto d = submit();
   EXPECT_EQ(4u, main_con->tids().size());
+  EXPECT_FALSE(route_holding());
   for (auto tid : {sent[1], sent[2], d}) {
     reply(main_con, tid);
   }
   auto e = submit();
   EXPECT_EQ((tids_t{e}), core_con->tids());
   EXPECT_EQ(2u, counter("op_send_switch_pending"));  // c and d
+  EXPECT_EQ(0u, counter("core_switch_hold"));
   EXPECT_EQ(1u, time_avg("core_switch_delay").first);
+}
+
+// after the grace period, the new ops are held until the ops in flight
+// are answered; then they are sent, in order, on the core connection
+TEST_F(TestObjecterCoreRoutes, HoldUntilDrained)
+{
+  auto sent = make_busy_pg();
+  wait(grace * 1.5);
+  auto d = submit();
+  auto e = submit();
+  EXPECT_TRUE(route_holding());
+  EXPECT_EQ(sent, main_con->tids());
+  EXPECT_TRUE(core_con->tids().empty());
+
+  reply(main_con, sent[1]);
+  EXPECT_TRUE(route_holding());
+  EXPECT_TRUE(core_con->tids().empty());
+  reply(main_con, sent[2]);
+  EXPECT_FALSE(route_holding());
+  EXPECT_EQ((tids_t{d, e}), core_con->tids());
+  EXPECT_EQ(sent, main_con->tids());
+
+  auto f = submit();
+  EXPECT_EQ((tids_t{d, e, f}), core_con->tids());
+
+  EXPECT_EQ(1u, counter("core_switch_hold"));
+  EXPECT_EQ(0u, counter("core_switch_hold_expired"));
+  EXPECT_EQ(2u, counter("op_switch_held"));
+  EXPECT_EQ(1u, time_avg("core_switch_hold_time").first);
+  // from c, the first op sent while the PG was due to switch
+  auto [delays, longest] = time_avg("core_switch_delay");
+  EXPECT_EQ(1u, delays);
+  EXPECT_GE(longest, grace);
+}
+
+// the safety hatch: if the ops in flight are not answered within
+// max_hold, the held ops are sent on the main connection, behind them;
+// another hold may start only after another grace period
+TEST_F(TestObjecterCoreRoutes, HoldExpires)
+{
+  auto sent = make_busy_pg();
+  wait(grace * 1.5);
+  auto d = submit();
+  auto e = submit();
+  EXPECT_TRUE(route_holding());
+
+  wait_hold_ended();
+  auto expected = sent;
+  expected.insert(expected.end(), {d, e});
+  EXPECT_EQ(expected, main_con->tids());
+  EXPECT_TRUE(core_con->tids().empty());
+
+  // the grace period starts again
+  auto f = submit();
+  EXPECT_FALSE(route_holding());
+  expected.push_back(f);
+  EXPECT_EQ(expected, main_con->tids());
+  wait(grace * 1.5);
+  auto g = submit();
+  EXPECT_TRUE(route_holding());
+  EXPECT_EQ(expected, main_con->tids());
+
+  // this time, the ops drain
+  for (auto tid : {sent[1], sent[2], d, e, f}) {
+    reply(main_con, tid);
+  }
+  EXPECT_FALSE(route_holding());
+  EXPECT_EQ((tids_t{g}), core_con->tids());
+
+  EXPECT_EQ(2u, counter("core_switch_hold"));
+  EXPECT_EQ(1u, counter("core_switch_hold_expired"));
+  auto [holds, longest_hold] = time_avg("core_switch_hold_time");
+  EXPECT_EQ(2u, holds);
+  EXPECT_GE(longest_hold, max_hold);
+  // a single switch, over both holds
+  auto [delays, longest] = time_avg("core_switch_delay");
+  EXPECT_EQ(1u, delays);
+  EXPECT_GE(longest, 2 * grace + max_hold);
+}
+
+// the reset of the core connection ends the hold: the held ops are sent
+// on the main connection, in order
+TEST_F(TestObjecterCoreRoutes, CoreConResetEndsHold)
+{
+  auto sent = make_busy_pg();
+  wait(grace * 1.5);
+  auto d = submit();
+  auto e = submit();
+  EXPECT_TRUE(route_holding());
+
+  objecter->ms_handle_reset(core_con.get());
+  poll();
+  EXPECT_FALSE(route_holding());
+  auto expected = sent;
+  expected.insert(expected.end(), {d, e});
+  EXPECT_EQ(expected, main_con->tids());
+  EXPECT_TRUE(core_con->tids().empty());
+  EXPECT_EQ(1u, counter("core_switch_hold"));
+  EXPECT_EQ(0u, counter("core_switch_hold_expired"));
+  EXPECT_EQ(0u, time_avg("core_switch_delay").first);
+}
+
+// a held op paused meanwhile is not sent when the hold ends, and is no
+// longer held: it waits to be resent when unpaused, as any paused op
+TEST_F(TestObjecterCoreRoutes, PausedOpNotHeldAfterHold)
+{
+  auto sent = make_busy_pg();
+  wait(grace * 1.5);
+  auto d = submit();
+  auto e = submit();
+  EXPECT_TRUE(route_holding());
+  Objecter::Op* paused_op = nullptr;
+  {
+    std::unique_lock l(session->lock);
+    paused_op = session->ops.at(d);
+    EXPECT_TRUE(session->core_routes.is_held(paused_op->core_route));
+    paused_op->target.paused = true;
+  }
+
+  reply(main_con, sent[1]);
+  reply(main_con, sent[2]);
+  EXPECT_FALSE(route_holding());
+  EXPECT_EQ((tids_t{e}), core_con->tids());
+  EXPECT_EQ(sent, main_con->tids());
+  std::shared_lock l(session->lock);
+  EXPECT_FALSE(session->core_routes.is_held(paused_op->core_route));
+  EXPECT_FALSE(session->core_routes.is_held(session->ops.at(e)->core_route));
 }

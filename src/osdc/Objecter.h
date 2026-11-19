@@ -2828,17 +2828,29 @@ private:
   void _close_core_cons(OSDSession *s);
   /// the core connection con of s reset (see
   /// SessionRoutes::drop_core_con()): mark it down and forget it, and
-  /// resend the ops sent on it via the main connection. Returns false if
-  /// con is not (or no longer) one of s's core connections. rwlock is
-  /// locked unique, s->lock is locked
+  /// resend the ops sent on it via the main connection, and those whose
+  /// hold ended. Returns false if con is not (or no longer) one of s's core
+  /// connections. rwlock is locked unique, s->lock is locked
   bool _drop_core_con(OSDSession *s, const ConnectionRef& con);
   /// choose the connection to send op on, and account for op as in flight
-  /// on it (see SessionRoutes::route_or_hold()). Returns the connection.
-  /// rwlock is locked, op->session->lock is locked
+  /// on it; or hold op, if its PG holds its new ops to switch connections
+  /// (see core_route::pg_route_t::holding). Returns the connection, or
+  /// null if op is held. rwlock is locked, op->session->lock is locked
   ConnectionRef _op_route_or_hold(Op *op);
-  /// op is not sent (any more): stop accounting for it as in flight;
-  /// op->session->lock is locked
+  /// op is not sent (any more): stop accounting for it as in flight or
+  /// held; op->session->lock is locked
   void _op_retire(Op *op);
+  /// a hold of s ended: count it, and send its held ops in tid order.
+  /// rwlock is locked, s->lock is locked
+  void _send_held_ops(OSDSession *s, const osdc::core_route::hold_end_t& ended);
+  /// end the holds that drained (SessionRoutes::release_drained_holds()).
+  /// rwlock is locked, s->lock is locked
+  void _release_drained_holds(OSDSession *s);
+  /// as _release_drained_holds(), taking the locks only if needed; no
+  /// lock is held, and the caller holds a reference to s
+  void release_drained_holds(OSDSession *s);
+  /// the timer event ending a hold that did not drain in time
+  void core_switch_hold_expired(int osd, spg_t pgid, uint64_t hold_seq);
   /// con (of an OSD) connected: if it is a core connection, its core may
   /// now be routed to. No lock is held
   void handle_core_con_connect(Connection *con);
@@ -2973,6 +2985,7 @@ private:
   void ms_fast_dispatch2(const MessageRef& m) override;
 
   void handle_osd_op_reply(cref_t<MOSDOpReply> m);
+  void _handle_osd_op_reply(cref_t<MOSDOpReply> m);
   void handle_osd_backoff(cref_t<MOSDBackoff> m);
   void handle_watch_notify(cref_t<MWatchNotify> m);
   void handle_osd_map(class MOSDMap *m);
