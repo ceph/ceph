@@ -1588,6 +1588,13 @@ int Operations<I>::metadata_set(const std::string &key,
   ldout(cct, 5) << this << " " << __func__ << ": key=" << key << ", value="
                 << value << dendl;
 
+  // metadata_list() takes a "start after" key, so a pair with an empty key
+  // could be read back but never listed
+  if (key.empty()) {
+    lderr(cct) << "metadata key cannot be empty" << dendl;
+    return -EINVAL;
+  }
+
   std::string config_key;
   bool config_override = util::is_metadata_config_override(key, &config_key);
   if (config_override) {
