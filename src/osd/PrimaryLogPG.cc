@@ -11336,7 +11336,7 @@ void PrimaryLogPG::finish_promote_manifest(int r, CopyResults *results,
 }
 
 void PrimaryLogPG::cancel_copy(CopyOpRef cop, bool requeue,
-			       vector<ceph_tid_t> *tids)
+			       vector<ceph_tid_t> *tids, int r)
 {
   dout(10) << __func__ << " " << cop->obc->obs.oi.soid
 	   << " from " << cop->src << " " << cop->oloc
@@ -11357,7 +11357,7 @@ void PrimaryLogPG::cancel_copy(CopyOpRef cop, bool requeue,
 
   kick_object_context_blocked(cop->obc);
   cop->results.should_requeue = requeue;
-  CopyCallbackResults result(-ECANCELED, &cop->results);
+  CopyCallbackResults result(r, &cop->results);
   cop->cb->complete(result);
 
   // There may still be an objecter callback referencing this copy op.
@@ -16297,6 +16297,9 @@ void PrimaryLogPG::pool_migration_target_delete(const pg_t &source_pg,
   {
     std::vector<CopyOpRef> to_cancel;
     for (auto& [dest, cop] : copy_ops) {
+      if (!(cop->flags & CEPH_OSD_COPY_FROM_FLAG_POOL_MIGRATION)) {
+        continue;
+      }
       // Don't cancel copies belonging to other source PGs.
       if (get_source_pg_from_hash(dest) != source_pg) {
         continue;
@@ -16315,7 +16318,9 @@ void PrimaryLogPG::pool_migration_target_delete(const pg_t &source_pg,
         dout(10) << __func__ << " cancelling in-flight copy for "
                  << cop->obc->obs.oi.soid << " (>= watermark " << watermark
                  << ")" << dendl;
-        cancel_copy(cop, false, &tids);
+        // Answer with a retryable error: the source only resends on an
+        // interval change of this PG, and could otherwise never quiesce.
+        cancel_copy(cop, false, &tids, -EBUSY);
       }
       osd->objecter->op_cancel(tids, -ECANCELED);
     }

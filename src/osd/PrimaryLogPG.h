@@ -1536,7 +1536,10 @@ protected:
   void _copy_some(ObjectContextRef obc, CopyOpRef cop);
   void finish_copyfrom(CopyFromCallback *cb);
   void finish_promote(int r, CopyResults *results, ObjectContextRef obc);
-  void cancel_copy(CopyOpRef cop, bool requeue, std::vector<ceph_tid_t> *tids);
+  /// r is passed to the copy callback; a copy-from op is only answered
+  /// for an r other than -ECANCELED
+  void cancel_copy(CopyOpRef cop, bool requeue, std::vector<ceph_tid_t> *tids,
+                   int r = -ECANCELED);
   void cancel_copy_ops(bool requeue, std::vector<ceph_tid_t> *tids);
   void cancel_pool_migration_copy_ops(std::vector<ceph_tid_t> *tids);
 
