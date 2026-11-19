@@ -7,6 +7,7 @@ import logging
 import random
 import signal
 import time
+import uuid
 import functools
 
 from io import BytesIO, StringIO
@@ -291,6 +292,46 @@ class TestMirroring(CephFSTestCase):
     def import_peer(self, fs_name, token):
         self.run_ceph_cmd("fs", "snapshot", "mirror", "peer_bootstrap",
                           "import", fs_name, token)
+
+    def create_super_key(self, peer_uuid, caps=None):
+        """create the super-key a per-share peer authenticates with"""
+        client_name = f'client.mirror_peer.{peer_uuid}'
+        if caps is None:
+            caps = ['mon', f'allow r, allow command "auth get" with entity prefix '
+                           f'"client.mirror.{peer_uuid}."']
+        self.run_ceph_cmd('auth', 'get-or-create', client_name, *caps)
+        return client_name
+
+    def bootstrap_per_share_peer(self, fs_name, client_name, site_name):
+        outj = json.loads(self.get_ceph_cmd_stdout(
+            "fs", "snapshot", "mirror", "peer_bootstrap", "create", fs_name,
+            client_name, site_name, "per_share"))
+        return outj['token']
+
+    def mirror_omap_keys(self, prefix):
+        out = self.fs.radosmo(['listomapkeys', 'cephfs_mirror'], stdout=BytesIO())
+        return sorted(k for k in out.decode('utf-8').splitlines() if k.startswith(prefix))
+
+    def mirror_omap_value(self, key):
+        return json.loads(self.fs.radosmo(['getomapval', 'cephfs_mirror', key, '-'],
+                                          stdout=BytesIO()))
+
+    def config_key_exists(self, key):
+        try:
+            self.run_ceph_cmd('config-key', 'exists', key)
+        except CommandFailedError as ce:
+            if ce.exitstatus != errno.ENOENT:
+                raise
+            return False
+        return True
+
+    def assert_ceph_cmd_errno(self, expected_errno, *args):
+        try:
+            self.run_ceph_cmd(*args)
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, expected_errno)
+        else:
+            raise RuntimeError(f'expected {args} to fail with errno {expected_errno}')
 
     def add_directory(self, fs_name, fs_id, dir_name, check_perf_counter=True):
         if check_perf_counter:
@@ -2092,6 +2133,146 @@ class TestMirroring(CephFSTestCase):
         # remove peer
         self.peer_remove(self.primary_fs_name, self.primary_fs_id, "client.mirror_peer_bootstrap@site-remote")
         # disable mirroring
+        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+
+    def test_cephfs_mirror_per_share_peer_bootstrap(self):
+        """Test a per-share peer: token from a super-key, import into the mirror object"""
+        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        peer_uuid = str(uuid.uuid4())
+        other_uuid = str(uuid.uuid4())
+        super_keys = [self.create_super_key(peer_uuid), self.create_super_key(other_uuid)]
+        secret_key = f'cephfs/mirror/peer/{self.primary_fs_name}/{peer_uuid}'
+        try:
+            token = self.bootstrap_per_share_peer(self.secondary_fs_name, super_keys[0], "site-remote")
+            token_dct = json.loads(base64.b64decode(token))
+            self.assertEqual(token_dct['user'], super_keys[0])
+            self.assertEqual(token_dct['peer_uuid'], peer_uuid)
+            self.assertEqual(token_dct['auth_mode'], 'per_share')
+            self.assertEqual(token_dct['filesystem'], self.secondary_fs_name)
+
+            # the super-key reaches the remote through its monitors only
+            self.import_peer(self.primary_fs_name, token)
+            record = self.mirror_omap_value(f'peer_{peer_uuid}')
+            self.assertEqual(record, {'version': 1,
+                                      'client_name': super_keys[0],
+                                      'site_name': 'site-remote',
+                                      'remote_fsid': token_dct['fsid'],
+                                      'remote_fs_name': self.secondary_fs_name,
+                                      'auth_mode': 'per_share'})
+            self.assertTrue(self.config_key_exists(secret_key))
+            # per-share peers stay out of the fs map
+            fs_map = self.fs.status().get_fsmap_byname(self.primary_fs_name)
+            self.assertEqual(fs_map['mirror_info']['peers'], {})
+            res = json.loads(self.get_ceph_cmd_stdout("fs", "snapshot", "mirror", "peer_list",
+                                                      self.primary_fs_name))
+            self.assertEqual(res[peer_uuid]['auth_mode'], 'per_share')
+
+            # importing the same token again changes nothing
+            self.import_peer(self.primary_fs_name, token)
+            self.assertEqual(self.mirror_omap_value(f'peer_{peer_uuid}'), record)
+
+            # one per-share peer per remote file system
+            other_token = self.bootstrap_per_share_peer(self.secondary_fs_name, super_keys[1],
+                                                        "site-remote")
+            self.assert_ceph_cmd_errno(errno.EEXIST, "fs", "snapshot", "mirror", "peer_bootstrap",
+                                       "import", self.primary_fs_name, other_token)
+            self.assertEqual(self.mirror_omap_keys('peer_'), [f'peer_{peer_uuid}'])
+
+            # removing the peer drops its record and its secret
+            self.run_ceph_cmd("fs", "snapshot", "mirror", "peer_remove", self.primary_fs_name, peer_uuid)
+            self.assertEqual(self.mirror_omap_keys('peer_'), [])
+            self.assertFalse(self.config_key_exists(secret_key))
+        finally:
+            for client_name in super_keys:
+                self.run_ceph_cmd('auth', 'rm', client_name)
+        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+
+    def test_cephfs_mirror_per_share_bootstrap_bad_super_key(self):
+        """Test that peer_bootstrap create refuses an unsuitable super-key"""
+        create = ["fs", "snapshot", "mirror", "peer_bootstrap", "create", self.secondary_fs_name]
+        # not named client.mirror_peer.<uuid>
+        self.assert_ceph_cmd_errno(errno.EINVAL, *create, "client.mirror_remote", "site-remote",
+                                   "per_share")
+        # named correctly but not created
+        self.assert_ceph_cmd_errno(errno.ENOENT, *create, f'client.mirror_peer.{uuid.uuid4()}',
+                                   "site-remote", "per_share")
+        # holds MDS caps
+        client_name = self.create_super_key(str(uuid.uuid4()), caps=['mon', 'allow r', 'mds', 'allow rw'])
+        try:
+            self.assert_ceph_cmd_errno(errno.EINVAL, *create, client_name, "site-remote", "per_share")
+        finally:
+            self.run_ceph_cmd('auth', 'rm', client_name)
+
+    def test_cephfs_mirror_per_share_peer_disable(self):
+        """Test that disabling mirroring removes per-share peers"""
+        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        peer_uuid = str(uuid.uuid4())
+        client_name = self.create_super_key(peer_uuid)
+        try:
+            token = self.bootstrap_per_share_peer(self.secondary_fs_name, client_name, "site-remote")
+            self.import_peer(self.primary_fs_name, token)
+            self.assertEqual(self.mirror_omap_keys('peer_'), [f'peer_{peer_uuid}'])
+
+            self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+            self.assertEqual(self.mirror_omap_keys('peer_'), [])
+            self.assertFalse(self.config_key_exists(
+                f'cephfs/mirror/peer/{self.primary_fs_name}/{peer_uuid}'))
+
+            # the peer does not come back with the next enable
+            self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+            res = json.loads(self.get_ceph_cmd_stdout("fs", "snapshot", "mirror", "peer_list",
+                                                      self.primary_fs_name))
+            self.assertEqual(res, {})
+        finally:
+            self.run_ceph_cmd('auth', 'rm', client_name)
+        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+
+    def test_cephfs_mirror_add_dir_with_per_share_peer(self):
+        """Test mapping directories to a per-share peer with fs snapshot mirror add"""
+        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        peer_uuid = str(uuid.uuid4())
+        client_name = self.create_super_key(peer_uuid)
+        self.mount_a.run_shell(["mkdir", "d0", "d1", "d2", "d3"])
+        try:
+            token = self.bootstrap_per_share_peer(self.secondary_fs_name, client_name, "site-remote")
+            self.import_peer(self.primary_fs_name, token)
+
+            # an explicit per-share peer
+            self.run_ceph_cmd("fs", "snapshot", "mirror", "add", self.primary_fs_name, "/d0", peer_uuid)
+            self.assertEqual(self.mirror_omap_value('share_/d0'), {'version': 1, 'peer_uuid': peer_uuid})
+            # without a peer uuid, the only per-share peer is used
+            self.run_ceph_cmd("fs", "snapshot", "mirror", "add", self.primary_fs_name, "/d1")
+            self.assertEqual(self.mirror_omap_value('share_/d1')['peer_uuid'], peer_uuid)
+            # a uuid that names no peer of this file system
+            self.assert_ceph_cmd_errno(errno.ENOENT, "fs", "snapshot", "mirror", "add",
+                                       self.primary_fs_name, "/d2", str(uuid.uuid4()))
+            self.assertEqual(self.mirror_omap_keys('share_'), ['share_/d0', 'share_/d1'])
+
+            # removing a directory drops its mapping
+            for dir_path in ('/d0', '/d1'):
+                self.run_ceph_cmd("fs", "snapshot", "mirror", "remove", self.primary_fs_name, dir_path)
+            with safe_while(sleep=2, tries=30, action='wait for share mappings to go') as proceed:
+                while proceed():
+                    if not self.mirror_omap_keys('share_'):
+                        break
+
+            # with a legacy peer, a directory added without a peer uuid stays unmapped,
+            # and the legacy peer's uuid is refused
+            self.peer_add(self.primary_fs_name, self.primary_fs_id, "client.mirror_remote@ceph",
+                          self.secondary_fs_name)
+            legacy_uuid = self.get_peer_uuid("client.mirror_remote@ceph")
+            self.run_ceph_cmd("fs", "snapshot", "mirror", "add", self.primary_fs_name, "/d2")
+            self.assertNotIn('share_/d2', self.mirror_omap_keys('share_'))
+            self.assert_ceph_cmd_errno(errno.EINVAL, "fs", "snapshot", "mirror", "add",
+                                       self.primary_fs_name, "/d3", legacy_uuid)
+
+            self.run_ceph_cmd("fs", "snapshot", "mirror", "remove", self.primary_fs_name, "/d2")
+            self.peer_remove(self.primary_fs_name, self.primary_fs_id, "client.mirror_remote@ceph",
+                             verify_dircount=False)
+            self.run_ceph_cmd("fs", "snapshot", "mirror", "peer_remove", self.primary_fs_name, peer_uuid)
+        finally:
+            self.run_ceph_cmd('auth', 'rm', client_name)
+            self.mount_a.run_shell(["rmdir", "d0", "d1", "d2", "d3"])
         self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
 
     def test_cephfs_mirror_symlink_sync(self):
