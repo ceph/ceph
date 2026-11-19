@@ -319,7 +319,8 @@ following:
    for erasure-coded pools. This flag can only be enabled for erasure-coded
    pools and requires all OSDs to be running Tentacle or later. If the pool
    does not support EC optimizations (e.g., non-EC pool, unsupported erasure
-   code profile, or insufficient OSD version), the flag is silently ignored.
+   code profile, or insufficient OSD version), the pool is not created and
+   the command fails with an error that gives the reason.
 
   :Type: Boolean
   :Required: No.

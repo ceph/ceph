@@ -9571,7 +9571,8 @@ int OSDMonitor::prepare_new_pool(string& name,
 
   uint32_t stripe_width = 0;
   // a pool over zones is always FastEC
-  r = prepare_pool_stripe_width(pool_type, erasure_code_profile, num_zones > 1,
+  r = prepare_pool_stripe_width(pool_type, erasure_code_profile,
+                                enable_ec_optimizations || num_zones > 1,
                                 &stripe_width, ss);
   if (r) {
     dout(10) << "prepare_pool_stripe_width returns " << r << dendl;
@@ -9740,7 +9741,13 @@ int OSDMonitor::prepare_new_pool(string& name,
 
   // for 'Classic' - we support both EC-optimized and non-optimized EC pools.
   // For Crimson - only EC-optimized pools are supported.
-  if (pi->is_erasure()) {
+  if (enable_ec_optimizations) {
+    // Requested on the command line, so report why it cannot be done.
+    if (auto r = enable_pool_ec_optimizations(*pi, true, false); !r) {
+      *ss << r.error().message;
+      return r.error().error;
+    }
+  } else if (pi->is_erasure()) {
     if (crimson) {
       if (auto r = enable_pool_ec_optimizations(*pi, true, false); !r) {
         // for Crimson - failure is not an option
@@ -9776,14 +9783,6 @@ int OSDMonitor::prepare_new_pool(string& name,
       (pool_type == pg_pool_t::TYPE_REPLICATED ||
        (pi->allows_ecoptimizations() && !crimson))) {
     pi->set_flag(pg_pool_t::FLAG_OMAP);
-  }
-
-  if (enable_ec_optimizations) {
-    // User requested EC optimizations via command line
-    if (auto r = enable_pool_ec_optimizations(*pi, true, false); !r) {
-      *ss << r.error().message;
-      return r.error().error;
-    }
   }
 
   if (source_pool_id) {
