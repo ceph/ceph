@@ -1,4 +1,5 @@
 
+import errno
 import json
 import textwrap
 
@@ -832,3 +833,179 @@ class TestCertStoreCertKeySet:
             None,
             False,
         )
+
+
+class TestOsdSpecExplain:
+
+    SPEC_YAML = textwrap.dedent("""
+        service_type: osd
+        service_id: hdd_ssd_db
+        placement:
+          host_pattern: 'node*'
+        spec:
+          data_devices:
+            rotational: 1
+            size: '4TB:'
+          db_devices:
+            model: MZ7L3
+        """)
+
+    @staticmethod
+    def _result():
+        from ceph.deployment.drive_group import DriveGroupSpec
+        from ceph.deployment.drive_selection.explain import explain_drive_selection
+
+        def dev(path, rotational, model, size):
+            return Device(path, available=True, sys_api={
+                'rotational': rotational, 'model': model, 'vendor': 'ATA', 'size': size,
+                'human_readable_size': '%.2f TB' % (size / 1024 ** 4)})
+
+        spec = DriveGroupSpec.from_json(yaml.safe_load(TestOsdSpecExplain.SPEC_YAML))
+        inventory = [dev('/dev/sdb', '1', 'ST4000NM0035', 4000787030016),
+                     dev('/dev/sdc', '0', 'SAMSUNG MZ7L31T9HBLT', 1920383410176)]
+        return [{
+            'service_name': 'osd.hdd_ssd_db',
+            'notes': ['1 host(s) not matched by the placement: other'],
+            'hosts': [{
+                'hostname': 'node1',
+                'status': 'eligible',
+                'detail': None,
+                'inventory_updated': None,
+                'selection': explain_drive_selection(spec, inventory).to_json(),
+            }],
+        }]
+
+    def _run(self, cmd, inbuf=None):
+        m = OrchestratorCli('orchestrator', 0, 0)
+        with mock.patch('orchestrator.OrchestratorCli.explain_osdspecs',
+                        return_value=OrchResult(self._result())) as explain:
+            r = m._handle_command(inbuf, dict(cmd, prefix='orch osd spec explain'))
+        return r, explain
+
+    def test_plain(self):
+        r, explain = self._run({'service_name': 'hdd_ssd_db'})
+        assert r.retval == 0, r.stderr
+        explain.assert_called_once_with(service_name='osd.hdd_ssd_db', osdspecs=None, hosts=None)
+        out = r.stdout
+        assert out.startswith('osd.hdd_ssd_db\n  NOTE: 1 host(s) not matched by the placement: other\n'
+                              '  host node1: eligible\n')
+        assert '    data_devices: 0 selected\n' in out
+        assert '    db_devices: 1 selected (/dev/sdc)\n' in out
+        assert 'NOTE: data_devices selects no device: no OSD will be created' in out
+        # only failing criteria are shown, with a reference to the hint
+        assert "size: '3.64 TB' (3.64e+12 B), expected >= 4TB (4e+12 B) [1]" in out
+        assert 'rotational: 1 (rotational), expected' not in out
+        assert "model: 'ST4000NM0035', expected contains 'MZ7L3'" in out
+        assert '\n[1] the size filter is compared to' in out
+
+    def test_verbose(self):
+        r, _ = self._run({'verbose': True})
+        assert r.retval == 0, r.stderr
+        assert 'ok: rotational: 1 (rotational), expected 1 (rotational)' in r.stdout
+        assert "MISMATCH: size: '3.64 TB'" in r.stdout
+
+    def test_inbuf(self):
+        r, explain = self._run({}, inbuf=self.SPEC_YAML)
+        assert r.retval == 0, r.stderr
+        osdspecs = explain.call_args.kwargs['osdspecs']
+        assert [s.service_name() for s in osdspecs] == ['osd.hdd_ssd_db']
+        assert explain.call_args.kwargs['service_name'] is None
+
+    def test_inbuf_not_osd(self):
+        r, explain = self._run({}, inbuf='service_type: mon\nplacement:\n  count: 3\n')
+        assert r.retval == -errno.EINVAL
+        assert 'mon is not an OSD spec' in r.stderr
+        explain.assert_not_called()
+
+    def test_inbuf_and_service_name(self):
+        r, explain = self._run({'service_name': 'osd.foo'}, inbuf=self.SPEC_YAML)
+        assert r.retval == -errno.EINVAL
+        explain.assert_not_called()
+
+    def test_json(self):
+        r, _ = self._run({'format': 'json'})
+        assert r.retval == 0, r.stderr
+        assert json.loads(r.stdout) == self._result()
+
+
+class TestOsdSpecStatus:
+
+    @staticmethod
+    def _result():
+        return [{
+            'service_name': 'osd.hdd_ssd_db',
+            'hosts_matched': 4,
+            'outcomes': {'failed': 1, 'nothing_selected': 1, 'deployed': 1, 'up_to_date': 1},
+            'hosts': {
+                'node1': {'outcome': 'up_to_date', 'since': '2026-10-01T10:00:00.000000Z',
+                          'last_attempt': '2026-11-10T10:00:00.000000Z',
+                          'inventory_refreshed': '2026-11-10T09:59:00.000000Z',
+                          'selected': {'data_devices': 12, 'db_devices': 2},
+                          'new_data_devices': 0, 'stale': True},
+                'node4': {'outcome': 'deployed', 'since': '2026-11-12T03:12:41.000000Z',
+                          'last_attempt': '2026-11-12T03:12:41.000000Z',
+                          'inventory_refreshed': '2026-11-12T03:10:02.000000Z',
+                          'selected': {'data_devices': 12, 'db_devices': 2},
+                          'new_data_devices': 1, 'osds_created': [42]},
+                'node5': {'outcome': 'nothing_selected', 'since': '2026-11-10T22:40:05.000000Z',
+                          'last_attempt': '2026-11-12T07:55:30.000000Z',
+                          'inventory_refreshed': '2026-11-12T07:50:11.000000Z',
+                          'selected': {'data_devices': 0, 'db_devices': 2},
+                          'new_data_devices': 0,
+                          'excluded': {'data_devices': {'filter_mismatch': 12}},
+                          'mismatched_criteria': {'data_devices': {'size': 10, 'model': 2}}},
+                'node6': {'outcome': 'failed', 'since': '2026-11-12T05:02:17.000000Z',
+                          'last_attempt': '2026-11-12T05:02:17.000000Z',
+                          'inventory_refreshed': '2026-11-12T05:00:40.000000Z',
+                          'selected': {'data_devices': 3, 'db_devices': 1},
+                          'new_data_devices': 3,
+                          'error': 'ceph-volume lvm batch: 1 fast devices were passed, '
+                                   'but none are available'},
+            },
+        }]
+
+    def _run(self, cmd):
+        m = OrchestratorCli('orchestrator', 0, 0)
+        with mock.patch('orchestrator.OrchestratorCli.osdspec_apply_status',
+                        return_value=OrchResult(self._result())) as status:
+            r = m._handle_command(None, dict(cmd, prefix='orch osd spec status'))
+        return r, status
+
+    def test_plain(self):
+        r, status = self._run({'service_name': 'hdd_ssd_db', 'host': ['node1']})
+        assert r.retval == 0, r.stderr
+        status.assert_called_once_with(service_name='osd.hdd_ssd_db', hosts=['node1'])
+        lines = r.stdout.splitlines()
+        assert lines[0] == ('osd.hdd_ssd_db: 4 host(s) matched '
+                            '(1 failed, 1 nothing_selected, 1 deployed, 1 up_to_date)')
+        assert lines[2].split() == ['HOST', 'OUTCOME', 'SINCE', 'LAST', 'ATTEMPT', 'INVENTORY',
+                                    'DATA', 'DB', 'NEW', 'DETAIL']
+        # most severe first
+        assert [line.split()[0] for line in lines[3:7]] == ['node6', 'node5', 'node4', 'node1']
+        out = r.stdout
+        assert 'ceph-volume lvm batch: 1 fast devices were passed, but none are available' in out
+        assert 'data_devices selects no device (size: 10 mismatches)' in out
+        assert 'created osd.42' in out
+        assert ' ago*' in lines[6]
+        assert "Run 'ceph orch osd spec explain osd.hdd_ssd_db --host <host>'" in out
+        assert out.endswith('the host is re-evaluated on the next pass')
+
+    def test_json(self):
+        r, _ = self._run({'format': 'json'})
+        assert r.retval == 0, r.stderr
+        assert json.loads(r.stdout) == self._result()
+
+
+def test_service_description_osd_apply():
+    osd_apply = {'hosts_matched': 1, 'outcomes': {'failed': 1},
+                 'hosts': {'node1': {'outcome': 'failed', 'error': 'boom'}}}
+    desc = ServiceDescription(spec=ServiceSpec.from_json({
+        'service_type': 'osd', 'service_id': 'foo',
+        'placement': {'host_pattern': '*'}, 'spec': {'data_devices': {'all': True}}}),
+        osd_apply=osd_apply)
+    j = desc.to_json()
+    assert j['status']['osd_apply'] == osd_apply
+    assert ServiceDescription.from_json(j).osd_apply == osd_apply
+    assert desc.to_dict()['status']['osd_apply'] == osd_apply
+    # absent for the other services
+    assert 'osd_apply' not in ServiceDescription(spec=ServiceSpec('mon')).to_json()['status']

@@ -1,12 +1,16 @@
 import json
 import logging
+import re
 from asyncio import gather, to_thread
+from collections import Counter
 from threading import Lock
 from typing import List, Dict, Any, Set, Tuple, cast, Optional, TYPE_CHECKING
 
 from ceph.deployment import translate
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.drive_selection import DriveSelection
+from ceph.deployment.drive_selection.explain import explain_drive_selection, FILTER_MISMATCH
+from ceph.deployment.drive_selection.matchers import MATCH
 from ceph.deployment.inventory import Device
 from ceph.utils import datetime_to_str, str_to_datetime
 
@@ -27,10 +31,168 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Outcome of the last apply of an OSD spec on a host, most severe first.
+# 'blocked' is reserved for the refusal to deploy OSDs without their
+# dedicated DB/WAL device (https://tracker.ceph.com/issues/83074).
+OSD_APPLY_OUTCOMES = ['failed', 'blocked', 'nothing_selected', 'not_schedulable',
+                      'pending', 'deployed', 'up_to_date']
+OSD_APPLY_ERROR_MAX_LEN = 512
+_CREATED_OSDS_RE = re.compile(r"^Created osd\(s\) (\S+) on host")
+
 
 @register_cephadm_service
 class OSDService(CephService):
     TYPE = 'osd'
+
+    def _selection_report(self, spec: DriveGroupSpec, host: str) -> Dict[str, Any]:
+        """ Aggregated drive selection of ``spec`` on ``host``: number of
+        devices selected per role and number of excluded devices per role
+        and reason / failing criterion. The per-device detail is left to
+        ``ceph orch osd spec explain``. """
+        existing = [dd for dd in self.mgr.cache.get_daemons_by_service(spec.service_name())
+                    if dd.hostname == host]
+        try:
+            expl = explain_drive_selection(spec, self.mgr.cache.devices.get(host, []),
+                                           existing_daemons=len(existing))
+        except Exception:
+            # reporting must never prevent the deployment
+            logger.exception(f'Failed to explain the drive selection of '
+                             f'{spec.service_name()} on {host}')
+            return {'selected': {}, 'new_data_devices': 0}
+        excluded: Dict[str, Counter] = {}
+        mismatched: Dict[str, Counter] = {}
+        for dev in expl.devices:
+            for ev in dev.roles:
+                if ev.selected:
+                    continue
+                excluded.setdefault(ev.role, Counter())[ev.reason] += 1
+                if ev.reason == FILTER_MISMATCH:
+                    for c in ev.criteria:
+                        if c.result != MATCH:
+                            mismatched.setdefault(ev.role, Counter())[c.criterion] += 1
+        report: Dict[str, Any] = {
+            'selected': {r.role: len(r.selected) for r in expl.roles},
+            'new_data_devices': len(expl.new_data_devices),
+        }
+        if excluded:
+            report['excluded'] = {role: dict(c) for role, c in excluded.items()}
+        if mismatched:
+            report['mismatched_criteria'] = {role: dict(c) for role, c in mismatched.items()}
+        unsatisfied = [r.role for r in expl.roles if r.unsatisfied]
+        if unsatisfied:
+            report['unsatisfied_roles'] = unsatisfied
+        return report
+
+    def _record_apply_report(self, spec: DriveGroupSpec, host: str,
+                             selection: Dict[str, Any], outcome: str,
+                             changes: List[Tuple[str, Optional[str], Dict[str, Any]]],
+                             **extra: Any) -> bool:
+        """ Store the outcome of the apply of ``spec`` on ``host``.
+        Returns True if the outcome changed (the host should be saved). """
+        name = spec.service_name()
+        prev = self.mgr.cache.get_osdspec_apply_report(host, name)
+        prev_outcome = prev.get('outcome') if prev else None
+        now = datetime_to_str(datetime_now())
+        inventory_refreshed = self.mgr.cache.last_device_update.get(host)
+        report: Dict[str, Any] = {
+            'outcome': outcome,
+            'since': (prev['since'] if prev and prev_outcome == outcome and prev.get('since')
+                      else now),
+            'last_attempt': now,
+            'inventory_refreshed': (datetime_to_str(inventory_refreshed)
+                                    if inventory_refreshed else None),
+        }
+        report.update(selection)
+        report.update(extra)
+        if 'error' in report:
+            report['error'] = str(report['error'])[:OSD_APPLY_ERROR_MAX_LEN]
+        self.mgr.cache.update_osdspec_apply_report(host, name, report)
+        if prev_outcome == outcome:
+            return False
+        # an existing cluster seen for the first time is not a change worth an event
+        if not (prev_outcome is None and outcome == 'up_to_date'):
+            changes.append((host, prev_outcome, report))
+        return True
+
+    def _emit_apply_changes(self, spec: DriveGroupSpec,
+                            changes: List[Tuple[str, Optional[str], Dict[str, Any]]]) -> None:
+        """ One service event per apply pass, listing the hosts whose
+        outcome changed (the event store only keeps a few events per
+        service). """
+        if not changes:
+            return
+        msgs = []
+        for host, prev_outcome, report in sorted(changes, key=lambda c: c[0]):
+            msg = f"{host}: {prev_outcome or 'new'} -> {report['outcome']}"
+            if report.get('error'):
+                msg += f" ({report['error']})"
+            elif report.get('osds_created'):
+                msg += f" (created osd.{', osd.'.join(map(str, report['osds_created']))})"
+            msgs.append(msg)
+        level = 'ERROR' if any(r['outcome'] in ('failed', 'blocked') for _, _, r in changes) \
+            else 'INFO'
+        self.mgr.events.for_service(spec, level, '; '.join(msgs))
+
+    def apply_status(self, spec: DriveGroupSpec,
+                     hosts: Optional[List[str]] = None,
+                     attention_only: bool = False) -> Dict[str, Any]:
+        """
+        Outcome of the last apply of ``spec`` on each host matched by its
+        placement, as recorded by ``create_from_spec()``. Nothing is
+        recomputed, except the hosts that can't be scheduled right now
+        and the ones that have never been evaluated.
+
+        :param hosts: only report these hosts
+        :param attention_only: don't list the ``up_to_date`` hosts (they
+            are still counted)
+        """
+        name = spec.service_name()
+        all_hosts = {h.hostname: h for h in self.mgr.inventory.all_specs()}
+        matching = set(spec.placement.filter_matching_hostspecs(list(all_hosts.values())))
+        schedulable = set(spec.placement.filter_matching_hostspecs(
+            self.mgr.cache.get_schedulable_hosts()))
+
+        entries: Dict[str, Dict[str, Any]] = {}
+        for host in sorted(matching):
+            if hosts and host not in hosts:
+                continue
+            report = self.mgr.cache.get_osdspec_apply_report(host, name)
+            host_spec = all_hosts[host]
+            reason = None
+            if host_spec.status.lower() in ('offline', 'maintenance'):
+                reason = f'host is {host_spec.status.lower()}'
+            elif SpecialHostLabels.DRAIN_DAEMONS in host_spec.labels:
+                reason = f'host has the {SpecialHostLabels.DRAIN_DAEMONS} label'
+            elif host not in schedulable:
+                reason = 'host daemons have not been refreshed yet'
+
+            if reason:
+                # keep what was recorded, but the host is not applied right now
+                entry = dict(report) if report else {}
+                entry.pop('since', None)
+                entry.update(outcome='not_schedulable', reason=reason)
+            elif not report:
+                entry = {'outcome': 'pending',
+                         'reason': ('no device inventory yet' if host not in self.mgr.cache.devices
+                                    else 'not evaluated yet')}
+            else:
+                entry = dict(report)
+                if self.mgr.cache.osdspec_needs_apply(host, spec):
+                    # the inventory or the spec changed since the last
+                    # attempt, or the last attempt didn't complete
+                    entry['stale'] = True
+            entries[host] = entry
+
+        counts = Counter(e['outcome'] for e in entries.values())
+        ret: Dict[str, Any] = {
+            'hosts_matched': len(entries),
+            'outcomes': {o: counts[o] for o in OSD_APPLY_OUTCOMES if counts[o]},
+        }
+        listed = {h: e for h, e in entries.items()
+                  if not (attention_only and e['outcome'] == 'up_to_date')}
+        if listed:
+            ret['hosts'] = listed
+        return ret
 
     def validate_encryption(self, spec: DriveGroupSpec) -> None:
         if spec.method == 'raw' and spec.encrypted and not spec.tpm2:
@@ -107,6 +269,8 @@ class OSDService(CephService):
         if osd_id_claims.get():
             logger.info(
                 f"Found osd claims for drivegroup {drive_group.service_id} -> {osd_id_claims.get()}")
+        # hosts whose apply outcome changed during this pass
+        changes: List[Tuple[str, Optional[str], Dict[str, Any]]] = []
 
         async def create_from_spec_one(host: str, drive_selection: DriveSelection) -> Optional[str]:
             # skip this host if there has been no change in inventory
@@ -119,24 +283,47 @@ class OSDService(CephService):
                 return None
 
             osd_id_claims_for_host = osd_id_claims.filtered_by_host(host)
+            selection = self._selection_report(drive_group, host)
 
-            cmds: List[str] = self.driveselection_to_ceph_volume(drive_selection,
-                                                                 osd_id_claims_for_host)
-            if not cmds:
-                logger.debug("No data_devices, skipping DriveGroup: {}".format(
-                    drive_group.service_id))
-                return None
+            try:
+                cmds: List[str] = self.driveselection_to_ceph_volume(drive_selection,
+                                                                     osd_id_claims_for_host)
+                if not cmds:
+                    logger.debug("No data_devices, skipping DriveGroup: {}".format(
+                        drive_group.service_id))
+                    if self._record_apply_report(drive_group, host, selection,
+                                                 'nothing_selected', changes):
+                        self.mgr.cache.save_host(host)
+                    return None
 
-            logger.debug('Applying service osd.%s on host %s...' % (
-                drive_group.service_id, host
-            ))
-            start_ts = datetime_now()
-            env_vars: List[str] = [f"CEPH_VOLUME_OSDSPEC_AFFINITY={drive_group.service_id}"]
-            ret_msg = await self.create_single_host(
-                drive_group, host, cmds,
-                replace_osd_ids=osd_id_claims_for_host, env_vars=env_vars,
-                creation_cfg=creation_cfg, post_create_cfg=post_create_cfg
-            )
+                logger.debug('Applying service osd.%s on host %s...' % (
+                    drive_group.service_id, host
+                ))
+                start_ts = datetime_now()
+                env_vars: List[str] = [f"CEPH_VOLUME_OSDSPEC_AFFINITY={drive_group.service_id}"]
+                ret_msg = await self.create_single_host(
+                    drive_group, host, cmds,
+                    replace_osd_ids=osd_id_claims_for_host, env_vars=env_vars,
+                    creation_cfg=creation_cfg, post_create_cfg=post_create_cfg
+                )
+            except Exception as e:
+                if self._record_apply_report(drive_group, host, selection, 'failed',
+                                             changes, error=str(e)):
+                    self.mgr.cache.save_host(host)
+                raise
+
+            created = _CREATED_OSDS_RE.match(ret_msg)
+            if created:
+                self._record_apply_report(drive_group, host, selection, 'deployed', changes,
+                                          osds_created=[int(i) for i in
+                                                        created.group(1).split(',')])
+            elif selection['new_data_devices']:
+                self._record_apply_report(
+                    drive_group, host, selection, 'failed', changes,
+                    error=(f"ceph-volume created no OSD although {selection['new_data_devices']} "
+                           f"new data device(s) were selected: {ret_msg}"))
+            else:
+                self._record_apply_report(drive_group, host, selection, 'up_to_date', changes)
             self.mgr.cache.update_osdspec_last_applied(
                 host, drive_group.service_name(), start_ts
             )
@@ -150,6 +337,7 @@ class OSDService(CephService):
             for result in results:
                 if isinstance(result, Exception):
                     self.mgr.log.error(f'Failed to create OSD: {result}')
+            self._emit_apply_changes(drive_group, changes)
             return [result for result in results if isinstance(result, str)]
 
         with self.mgr.async_timeout_handler('cephadm deploy (osd daemon)'):
@@ -431,6 +619,79 @@ class OSDService(CephService):
                                         'host': host,
                                         'notes': notes})
         return ret_all
+
+    def explain_osdspec(self, spec: DriveGroupSpec,
+                        hosts: Optional[List[str]] = None) -> Dict[str, Any]:
+        """
+        Explain, for each host, whether the spec applies to it and which
+        devices it selects, with the reason why each other device is not
+        selected. Only uses the cached inventory: nothing is run on the hosts.
+        """
+        notes = []
+        if spec.unmanaged:
+            notes.append('the spec is unmanaged: cephadm does not deploy OSDs from it')
+        if spec.preview_only:
+            notes.append('the spec is preview only: cephadm does not deploy OSDs from it')
+
+        all_hosts = self.mgr.inventory.all_specs()
+        matching = set(spec.placement.filter_matching_hostspecs(all_hosts))
+        schedulable = set(spec.placement.filter_matching_hostspecs(
+            self.mgr.cache.get_schedulable_hosts()))
+        not_matching = [h.hostname for h in all_hosts if h.hostname not in matching]
+        if not matching:
+            notes.append('the placement of the spec matches no host')
+        elif not_matching and not hosts:
+            notes.append(f'{len(not_matching)} host(s) not matched by the placement: '
+                         f'{", ".join(sorted(not_matching))}')
+
+        ret_hosts = []
+        for host_spec in sorted(all_hosts, key=lambda h: h.hostname):
+            host = host_spec.hostname
+            if hosts:
+                if host not in hosts:
+                    continue
+            elif host not in matching:
+                continue
+
+            status, detail = 'eligible', None
+            if host not in matching:
+                status, detail = 'not_matched', 'the placement of the spec does not match this host'
+            elif host_spec.status.lower() in ('offline', 'maintenance'):
+                status = host_spec.status.lower()
+            elif SpecialHostLabels.DRAIN_DAEMONS in host_spec.labels:
+                status, detail = 'draining', f'host has the {SpecialHostLabels.DRAIN_DAEMONS} label'
+            elif host not in schedulable:
+                status, detail = 'not_refreshed', 'host daemons have not been refreshed yet'
+            elif host not in self.mgr.cache.devices:
+                status, detail = 'no_inventory', 'no device inventory yet for this host'
+
+            last_update = self.mgr.cache.last_device_update.get(host)
+            entry: Dict[str, Any] = {
+                'hostname': host,
+                'status': status,
+                'detail': detail,
+                'inventory_updated': datetime_to_str(last_update) if last_update else None,
+                'selection': None,
+            }
+            if status != 'not_matched' and host in self.mgr.cache.devices:
+                existing = [dd for dd in self.mgr.cache.get_daemons_by_service(spec.service_name())
+                            if dd.hostname == host]
+                entry['selection'] = explain_drive_selection(
+                    spec, self.mgr.cache.devices[host], existing_daemons=len(existing)).to_json()
+            ret_hosts.append(entry)
+
+        if hosts:
+            unknown = sorted(set(hosts) - {h.hostname for h in all_hosts})
+            for host in unknown:
+                ret_hosts.append({'hostname': host, 'status': 'unknown_host',
+                                  'detail': 'not a host of this cluster',
+                                  'inventory_updated': None, 'selection': None})
+
+        return {
+            'service_name': spec.service_name(),
+            'notes': notes,
+            'hosts': ret_hosts,
+        }
 
     def resolve_hosts_for_osdspecs(self,
                                    specs: Optional[List[DriveGroupSpec]] = None
