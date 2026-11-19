@@ -1748,7 +1748,11 @@ public:
   }
 
   std::optional<size_t> pending_lognode_delta_size(ghobject_t oid) {
-    return pending_lognode_deltas_by_oid[oid].size();
+    auto it = pending_lognode_deltas_by_oid.find(oid);
+    if (it == pending_lognode_deltas_by_oid.end()) {
+      return std::nullopt;
+    }
+    return it->second.size();
   }
 
   void delete_lognode_delta(ghobject_t oid) {
@@ -1788,7 +1792,8 @@ public:
     ghobject_t oid, transaction_id_t trans_id, bool force = false) {
     LOG_PREFIX(Cache::get_pending_lognode_delta_by_oid);
     auto oid_iter = pending_lognode_deltas_by_oid.find(oid);
-    if (oid_iter == pending_lognode_deltas_by_oid.end()) {
+    if (oid_iter == pending_lognode_deltas_by_oid.end() ||
+	oid_iter->second.empty()) {
       return std::nullopt;
     }
     if (oid_iter->second.size() < PENDING_MAX_NODE_DELTAS && force == false) {
