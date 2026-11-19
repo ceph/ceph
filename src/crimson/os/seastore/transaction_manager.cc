@@ -794,7 +794,7 @@ TransactionManager::lock_mutated_nodes(
         std::ignore = mutated_extents.emplace(&extent);
       }
   });
-  if (unlikely(mutated_extents.empty())) {
+  if (unlikely(mutated_extents.empty()) || t.get_src() == Transaction::src_t::MUTATE) {
     co_return mutated_extents_locker();
   }
   std::vector<std::unique_lock<seastar::shared_mutex>> unique_locks;
