@@ -1,6 +1,9 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
+#include <cstdlib>
+#include <fstream>
+
 #include "Replayer.h"
 #include "GroupMirrorStateUpdateRequest.h"
 #include "RemoveImageSnapshotRequest.h"
@@ -1968,6 +1971,19 @@ void Replayer<I>::prune_image_snapshot(
     const cls::rbd::ImageSnapshotSpec& spec,
     const std::string& local_group_snap_id,
     std::unique_lock<ceph::mutex>* locker) {
+  // Functional tests retain one image's snapshots until a new group owns it.
+  // Removing the gate file resumes pruning through the normal owner lookup.
+  if (const auto gate_path = std::getenv(
+        "RBD_MIRROR_TEST_GROUP_SNAPSHOT_PRUNE_FILE"); gate_path != nullptr) {
+    std::ifstream gate(gate_path);
+    std::string image_id;
+    if (gate >> image_id && image_id == spec.image_id) {
+      dout(10) << "test gate retaining snapshot " << spec.snap_id
+               << " for image " << spec.image_id << dendl;
+      return;
+    }
+  }
+
   auto ir = std::find_if(
       m_replayers_by_image_id.begin(),
       m_replayers_by_image_id.end(),

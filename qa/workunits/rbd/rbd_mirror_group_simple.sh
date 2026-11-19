@@ -2614,6 +2614,86 @@ test_create_multiple_groups_do_io()
   done
 }
 
+declare -a test_prune_snapshot_after_group_move_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}")
+test_prune_snapshot_after_group_move_scenarios=1
+
+# Test sequence:
+# 1. Create grp1 with two images and an empty grp2 on the primary.
+#    Enable mirroring and wait for both groups to sync to the secondary.
+# 2. Pause pruning of one image's snapshots on the secondary using a test gate.
+# 3. On the primary, detach that image from grp1 and attach it to grp2.
+# 4. Wait for grp2 to sync to the secondary, then confirm grp1's old non-primary
+#    snapshot remains because the moved image's snapshot has not been pruned.
+# 5. Release the gate and wait for the old snapshots to be pruned on the secondary.
+# 6. Verify grp2's secondary membership and compare the image on both sites.
+# Expected: grp2's secondary image lock owner accepts grp1's snapshot removal
+#   request while retaining its lock. Cleanup completes without changing grp2's
+#   membership. Without the policy exception, removal returns -EROFS and
+#   grp1's old snapshot remains on the secondary.
+test_prune_snapshot_after_group_move()
+{
+  skip_without_dynamic_groups "${FUNCNAME[0]}" && return 0
+  if [ -n "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
+    echo "Skipping ${FUNCNAME[0]}: requires a daemon started with the test gate"
+    return 0
+  fi
+
+  local primary_cluster=$1 ; shift
+  local secondary_cluster=$1 ; shift
+  local pool=$1 ; shift
+  local old_group=prune-group1 new_group=prune-group2
+  local moved_image=prune-moved keeper_image=prune-keeper
+  local image_id old_snap_id image
+  local -x RBD_MIRROR_TEST_GROUP_SNAPSHOT_PRUNE_FILE="${TEMPDIR}/group-snapshot-prune-gate"
+
+  # Restart the secondary so only this test's daemon inherits the gate path.
+  stop_mirrors "${secondary_cluster}"
+  rm -f "${RBD_MIRROR_TEST_GROUP_SNAPSHOT_PRUNE_FILE}"
+  start_mirrors "${secondary_cluster}"
+  start_mirrors "${primary_cluster}"
+  group_create "${primary_cluster}" "${pool}/${old_group}"
+  group_create "${primary_cluster}" "${pool}/${new_group}"
+  for image in "${keeper_image}" "${moved_image}"; do
+    image_create "${primary_cluster}" "${pool}/${image}" 32M
+    write_image "${primary_cluster}" "${pool}" "${image}" 8 4096
+    group_image_add "${primary_cluster}" "${pool}/${old_group}" "${pool}/${image}"
+  done
+  mirror_group_enable "${primary_cluster}" "${pool}/${old_group}"
+  mirror_group_enable "${primary_cluster}" "${pool}/${new_group}"
+  wait_for_group_synced "${primary_cluster}" "${pool}/${old_group}" "${secondary_cluster}" "${pool}/${old_group}"
+  get_newest_complete_mirror_group_snapshot_id "${secondary_cluster}" "${pool}/${old_group}" old_snap_id
+  get_image_id2 "${secondary_cluster}" "${pool}/${moved_image}" image_id
+  printf '%s\n' "${image_id}" > "${RBD_MIRROR_TEST_GROUP_SNAPSHOT_PRUNE_FILE}"
+
+  group_image_remove "${primary_cluster}" "${pool}/${old_group}" "${pool}/${moved_image}"
+  wait_for_group_present "${secondary_cluster}" "${pool}" "${old_group}" 1
+  wait_for_group_synced "${primary_cluster}" "${pool}/${old_group}" "${secondary_cluster}" "${pool}/${old_group}"
+  mirror_group_snapshot "${primary_cluster}" "${pool}/${old_group}"
+  wait_for_group_image_add "${primary_cluster}" "${pool}/${new_group}" "${pool}/${moved_image}"
+  wait_for_group_present "${secondary_cluster}" "${pool}" "${new_group}" 1
+  wait_for_group_synced "${primary_cluster}" "${pool}/${new_group}" "${secondary_cluster}" "${pool}/${new_group}"
+  # A completed grp2 snapshot on the secondary confirms its image replayer has run.
+  # grp1's old non-primary snapshot must still exist at this point, otherwise the
+  # test has not reproduced the required ordering.
+  test_group_snap_present "${secondary_cluster}" "${pool}/${old_group}" "${old_snap_id}" 1
+  rm "${RBD_MIRROR_TEST_GROUP_SNAPSHOT_PRUNE_FILE}"
+  wait_for_group_snap_not_present "${secondary_cluster}" "${pool}/${old_group}" "${old_snap_id}"
+  test_group_present "${secondary_cluster}" "${pool}" "${new_group}" 1 1
+  compare_images "${primary_cluster}" "${secondary_cluster}" "${pool}" "${pool}" "${moved_image}"
+
+  for image in "${old_group}" "${new_group}"; do
+    mirror_group_disable "${primary_cluster}" "${pool}/${image}"
+    wait_for_group_not_present "${secondary_cluster}" "${pool}" "${image}"
+    group_remove "${primary_cluster}" "${pool}/${image}"
+  done
+  image_remove "${primary_cluster}" "${pool}/${keeper_image}"
+  image_remove "${primary_cluster}" "${pool}/${moved_image}"
+  wait_for_no_keys "${primary_cluster}"
+  wait_for_no_keys "${secondary_cluster}"
+  stop_mirrors "${primary_cluster}"
+  stop_mirrors "${secondary_cluster}"
+}
+
 # mirror a group then remove an image from that group and add to a different mirrored group.
 declare -a test_image_move_group_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${image_prefix}" 5)
 declare -a test_image_move_group_2=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${image_prefix}" 5)
@@ -5506,6 +5586,7 @@ run_all_tests()
   run_test_all_scenarios test_stopped_daemon
   run_test_all_scenarios test_create_group_with_regular_snapshots_then_mirror
   run_test_all_scenarios test_image_move_group
+  run_test_all_scenarios test_prune_snapshot_after_group_move
   run_test_all_scenarios test_force_promote
   run_test_all_scenarios test_resync
   run_test_all_scenarios test_multiple_mirror_group_snapshot_whilst_stopped
