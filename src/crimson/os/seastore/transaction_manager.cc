@@ -778,13 +778,6 @@ TransactionManager::update_lba_mappings(
   });
 }
 
-seastar::future<TransactionManager::mutated_extents_locker>
-TransactionManager::lock_mutated_nodes(
-  Transaction &t)
-{
-  co_return mutated_extents_locker();
-}
-
 TransactionManager::submit_transaction_direct_ret
 TransactionManager::do_submit_transaction(
   Transaction &tref,
@@ -809,8 +802,6 @@ TransactionManager::do_submit_transaction(
   tref.get_phase_durations().lba_update +=
     std::chrono::steady_clock::now() - lba_start;
 
-  auto locker = co_await lock_mutated_nodes(tref);
-
   auto num_extents = allocated_extents.size();
   SUBTRACET(seastore_t, "process {} allocated extents", tref, num_extents);
   ool_start = std::chrono::steady_clock::now();
@@ -821,12 +812,6 @@ TransactionManager::do_submit_transaction(
   SUBTRACET(seastore_t, "entering prepare", tref);
   auto prepare_enter_start = std::chrono::steady_clock::now();
   co_await tref.get_handle().enter(write_pipeline.prepare);
-
-  // For conflicting transactions, we can release the lock
-  // now. Because other transactions accessing the same
-  // extents as the current one would be invalidated later
-  // in Cache::prepare_record()
-  locker.release_shared_lock();
 
   tref.get_phase_durations().prepare_enter +=
     std::chrono::steady_clock::now() - prepare_enter_start;
@@ -855,7 +840,7 @@ TransactionManager::do_submit_transaction(
     std::move(record),
     tref.get_handle(),
     tref.get_src(),
-    [&locker, this, FNAME, &tref](record_locator_t submit_result) {
+    [this, FNAME, &tref](record_locator_t submit_result) {
     SUBDEBUGT(seastore_t, "committed with {}", tref, submit_result);
     auto start_seq = submit_result.write_result.start_seq;
     journal->get_trimmer().set_journal_head(start_seq);
@@ -863,7 +848,6 @@ TransactionManager::do_submit_transaction(
       tref,
       submit_result.record_block_base,
       start_seq);
-    locker.release_lock();
     journal->get_trimmer().update_journal_tails(
       cache->get_oldest_dirty_from().value_or(start_seq),
       cache->get_oldest_backref_dirty_from().value_or(start_seq));
