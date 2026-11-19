@@ -4615,6 +4615,12 @@ void Objecter::list_nobjects(NListContext *list_context, Context *onfinish)
         list_context->pool_id = list_context->tgt_pool_id;
         break;
     }
+    if (!pool) { // a pool in the migration chain is gone
+      rl.unlock();
+      put_nlist_context_budget(list_context);
+      onfinish->complete(-ENOENT);
+      return;
+    }
   }
 
   ldout(cct, 10) << "Starting to read pool: " << list_context->pool_id << " at pos: " << list_context->pos << dendl;
@@ -4680,7 +4686,18 @@ void Objecter::_nlist_reply(NListContext *list_context, int r,
 {
   ldout(cct, 10) << __func__ << " " << list_context << dendl;
 
-  const pg_pool_t *pool = osdmap->get_pg_pool(list_context->pool_id);
+  bool migrating;
+  {
+    shared_lock rl(rwlock);
+    const pg_pool_t *pool = osdmap->get_pg_pool(list_context->pool_id);
+    if (!pool) { // pool is gone
+      rl.unlock();
+      put_nlist_context_budget(list_context);
+      final_finish->complete(-ENOENT);
+      return;
+    }
+    migrating = pool->is_migrating();
+  }
 
   auto iter = list_context->bl.cbegin();
   pg_nls_response_t response;
@@ -4726,7 +4743,7 @@ void Objecter::_nlist_reply(NListContext *list_context, int r,
   // returned, otherwise the src and intermediate reads will re-emit every
   // object that was already paged out, causing massive duplication.
   if (list_context->current_stage == NListContext::TGT_READ &&
-      !pool->is_migrating()) {
+      !migrating) {
     if (list_context->list.size() >= list_context->max_entries) {
       ldout(cct, 20) << " hit max, returning results so far, "
          << list_context->list << dendl;
@@ -4739,7 +4756,7 @@ void Objecter::_nlist_reply(NListContext *list_context, int r,
   }
 
   //handling a pool currently in a pool-migration
-  if (pool->is_migrating()) {
+  if (migrating) {
     switch (list_context->current_stage) {
       case NListContext::TGT_READ:
         ldout(cct,10) << "Checking the tgt reading stage" << dendl;
