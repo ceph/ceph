@@ -154,14 +154,18 @@ class GrafanaService(CephadmService):
         spec = deploy_ctx.service_spec
         assert self.TYPE == daemon_spec.daemon_type
 
+        grafana_spec = cast(
+            GrafanaSpec,
+            spec if spec is not None else self.mgr.spec_store.active_specs[daemon_spec.service_name],
+        )
+
         tls_pair = self.get_grafana_certificates(daemon_spec)
-        svc_spec = self.mgr.spec_store[daemon_spec.service_name].spec
-        if svc_spec.ssl and (not tls_pair.cert or not tls_pair.key):
+        if grafana_spec.ssl and (not tls_pair.cert or not tls_pair.key):
             # Deploying without them would leave Grafana unable to start, so keep
             # the current daemon configuration and report the error instead.
             raise OrchestratorError(
                 f'Cannot get the TLS certificate/key needed to deploy Grafana on {daemon_spec.host} '
-                f'(certificate_source: {getattr(svc_spec, "certificate_source", None)}). '
+                f'(certificate_source: {grafana_spec.certificate_source}). '
                 f'Check that a certificate/key pair is registered for this host with '
                 f'"ceph orch certmgr cert ls", or set one with '
                 f'"ceph orch certmgr cert-key set grafana --hostname {daemon_spec.host} -i <cert-key-pem-file>".',
@@ -193,10 +197,6 @@ class GrafanaService(CephadmService):
             }
         }
 
-        grafana_spec = cast(
-            GrafanaSpec,
-            spec if spec is not None else self.mgr.spec_store.active_specs[daemon_spec.service_name],
-        )
         if 'dashboard' in self.mgr.get('mgr_map')['modules'] and grafana_spec.initial_admin_password:
             self.mgr.check_mon_command({'prefix': 'dashboard set-grafana-api-password'}, inbuf=grafana_spec.initial_admin_password)
 
