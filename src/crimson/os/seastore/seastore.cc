@@ -4348,13 +4348,21 @@ base_ertr::future<> SeaStore::Shard::pgoid_log_flush(const ghobject_t oid)
 {
   assert(store_active);
   LOG_PREFIX(SeaStoreS::pgoid_log_flush);
-  return ::crimson::repeat([this, FNAME, oid] {
-    auto entries = transaction_manager->pending_lognode_delta_size(oid);
-    if (!entries || *entries == 0) {
+  auto initial_count = transaction_manager->pending_lognode_delta_size(oid).value_or(0);
+  return ::crimson::repeat([this, FNAME, oid, remaining=initial_count]() mutable {
+    if (remaining == 0) {
       return base_ertr::make_ready_future<
 	seastar::stop_iteration>(seastar::stop_iteration::yes);
     }
+    auto entries =
+      transaction_manager->pending_lognode_delta_size(oid);
+    if (!entries || *entries == 0) {
+      return base_ertr::make_ready_future<
+        seastar::stop_iteration>(seastar::stop_iteration::yes);
+    }
     DEBUG("pendings:{}", *entries);
+    --remaining;
+
     return repeat_eagain([this, oid] {
       return transaction_manager->with_transaction_intr(
 	Transaction::src_t::TRIM_LOG,
