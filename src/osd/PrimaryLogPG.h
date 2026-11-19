@@ -1738,6 +1738,8 @@ public:
   bool is_pool_migration_in_progress(const hobject_t& soid) const;
   /// requeue blocked writes for objects that have left that range
   void kick_pool_migration_blocked_writes();
+  /// drop heads from pool_migrations_in_flight that no outstanding op will drain
+  void drop_pool_migration_heads_without_ops();
   void handle_pool_migration_quiesce_complete();
 
   void pool_migration_source_start_delete_head(hobject_t oid);
