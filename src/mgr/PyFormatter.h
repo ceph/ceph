@@ -143,6 +143,10 @@ private:
 
 };
 
+/// ReadOnlyDict type (dict subclass rejecting writes), created on first use.
+/// Call with the GIL held. Borrowed reference; nullptr on error.
+PyObject* get_readonly_dict_type();
+
 class PyFormatterRO : public PyFormatter {
 public:
   using PyFormatter::PyFormatter;
@@ -180,7 +184,7 @@ private:
       return convert_list_to_tuple(obj);
     }
     if (PyDict_Check(obj)) {
-      return convert_dict_to_proxy(obj);
+      return convert_dict_to_readonly(obj);
     }
     if (PySet_Check(obj)) {
       return convert_set_to_frozenset(obj);
@@ -210,8 +214,15 @@ private:
     return tuple;
   }
 
-  PyObject* convert_dict_to_proxy(PyObject* dict) {
-    PyObject* immutable_dict = PyDict_New();
+  PyObject* convert_dict_to_readonly(PyObject* dict) {
+    PyObject* ro_type = get_readonly_dict_type();
+    PyObject* immutable_dict =
+      ro_type ? PyObject_CallObject(ro_type, nullptr) : nullptr;
+    if (!immutable_dict) {
+      PyErr_Clear();
+      Py_INCREF(dict);
+      return dict;
+    }
     PyObject* key, *value;
     Py_ssize_t pos = 0;
 

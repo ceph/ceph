@@ -446,7 +446,7 @@ TEST(PyFormatter, DumpPyObject_NonUtf8ViLatin1Fallback)
 /*
  * Tests for PyFormatterRO (read-only-on-the-fly builder):
  *  - lists -> tuples, sets -> frozensets
- *  - dicts remain dicts (JSON-friendly)
+ *  - dicts -> ReadOnlyDict (dict subclass, JSON-friendly, rejects writes)
  *  - works with nested structures
  *  - can be json.dumps()-ed safely (for structures without sets)
  */
@@ -651,15 +651,35 @@ TEST_F(PyRuntime, PyFormatterRO_ReadonlyBehavior) {
     PyErr_Clear();
   }
 
-  // adict stays dict (mutable) — allowed
+  // adict -> ReadOnlyDict: still a dict, but writes fail
   {
     PyObject* adict = PyDict_GetItemString(root, "adict"); // borrowed
     ASSERT_NE(adict, nullptr);
     ASSERT_TRUE(PyDict_Check(adict));
 
-    int rc = PyDict_SetItemString(adict, "k2", PyLong_FromLong(5));
-    EXPECT_EQ(rc, 0);
-    EXPECT_EQ(PyDict_Size(adict), 2);
+    PyObject* key = PyUnicode_FromString("k");
+    EXPECT_EQ(PyObject_SetItem(adict, key, Py_None), -1);
+    EXPECT_TRUE(PyErr_ExceptionMatches(PyExc_TypeError));
+    PyErr_Clear();
+    EXPECT_EQ(PyObject_DelItem(adict, key), -1);
+    PyErr_Clear();
+    Py_DECREF(key);
+    EXPECT_EQ(PyObject_CallMethod(adict, "pop", "s", "k"), nullptr);
+    EXPECT_TRUE(PyErr_ExceptionMatches(PyExc_TypeError));
+    PyErr_Clear();
+    EXPECT_EQ(PyDict_Size(adict), 1);
+  }
+
+  // copy.deepcopy() returns a plain, writable dict
+  {
+    PyObject* copy_mod = PyImport_ImportModule("copy");
+    ASSERT_NE(copy_mod, nullptr);
+    PyObject* c = PyObject_CallMethod(copy_mod, "deepcopy", "O", root);
+    Py_DECREF(copy_mod);
+    ASSERT_NE(c, nullptr);
+    EXPECT_TRUE(PyDict_CheckExact(c));
+    EXPECT_EQ(PyDict_SetItemString(c, "k2", Py_None), 0);
+    Py_DECREF(c);
   }
 
   Py_DECREF(root);
