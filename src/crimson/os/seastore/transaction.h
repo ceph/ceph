@@ -556,7 +556,6 @@ public:
     backref_tree_stats = {};
     ool_write_stats = {};
     rewrite_stats = {};
-    force_rewrite_conflict = false;
     assert(backref_entries.empty());
     if (!has_reset) {
       has_reset = true;
@@ -697,8 +696,6 @@ public:
   }
 
   btree_cursor_stats_t cursor_stats;
-
-  bool force_rewrite_conflict = false;
 
   struct lmapping_t {
     laddr_t dest = L_ADDR_NULL;
@@ -909,15 +906,10 @@ inline TransactionRef make_test_transaction() {
  */
 constexpr bool should_use_no_conflict_publish(const Transaction &t,
                                               extent_types_t ext_type) {
-  // keep classic handling for ROOT
   if (is_root_type(ext_type)) {
     return false;
   }
-
-  // TODO: Extend this as support grows (e.g. Onode/OMAP nodes).
-  //       is_user_transaction(txn_type) && is_lba_node(ext_type)
-
-  return !t.force_rewrite_conflict && is_rewrite_transaction(t.get_src());
+  return is_rewrite_transaction(t.get_src());
 }
 
 }

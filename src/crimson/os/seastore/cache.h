@@ -2221,10 +2221,6 @@ void stage_visibility_handoff(Transaction& t,
   /// Invalidate extent and mark affected transactions
   void invalidate_extent(Transaction& t, CachedExtent& extent);
 
-  /// Mark a valid transaction as conflicted
-  void mark_transaction_conflicted(
-    Transaction& t, CachedExtent& conflicting_extent);
-
   /// Introspect transaction when it is being destructed
   void on_transaction_destruct(Transaction& t);
 

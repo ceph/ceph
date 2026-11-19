@@ -1010,13 +1010,6 @@ TransactionManager::rewrite_logical_extent(
     extent_len_t off = 0;
     auto left = extent->get_length();
     extent_ref_count_t refcount = 0;
-    // if rewriting a logical range resolves to multiple extents,
-    // the LBA update likely involves insertions/splits (structural
-    // btree changes), which the no-conflict publish-to-prior path
-    // does not currently cover safely. Fall back to optimistic
-    // conflict handling. a batch transaction rewrites many extents,
-    // and any structural rewrite taints them all.
-    t.force_rewrite_conflict |= (extents.size() > 1);
     for (auto &_nextent : extents) {
       auto nextent = _nextent->template cast<LogicalChildNode>();
       assert(nextent->get_write_policy() != write_policy_t::WRITE_THROUGH);
@@ -1399,7 +1392,6 @@ TransactionManager::promote_extent(
     auto orig_laddr = orig_ext->get_laddr();
     auto orig_paddr = orig_ext->get_paddr();
     auto orig_length = orig_ext->get_length();
-    t.force_rewrite_conflict |= (promoted_raw_extents.size() > 1);
     for (auto &extent : promoted_raw_extents) {
       auto slice_laddr = (orig_laddr + offset).checked_to_laddr();
       auto slice_length = extent->get_length();
