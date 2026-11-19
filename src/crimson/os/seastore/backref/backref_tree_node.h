@@ -191,7 +191,6 @@ struct BackrefCursor :
 
   BackrefCursor* renew_cursor(Transaction &t) {
     auto c = op_context_t{ctx.cache, t};
-    t.maybe_add_to_read_set(parent);
     return new BackrefCursor(
       c,
       std::move(parent),
