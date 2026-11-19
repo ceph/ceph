@@ -52,6 +52,7 @@ public:
 
   void build_snap_set() const;
   void get_snap_info(std::map<snapid_t, const SnapInfo*>& infomap, snapid_t first=0, snapid_t last=CEPH_NOSNAP);
+  const SnapInfo* find_snap_info(snapid_t snapid);
 
   const ceph::buffer::list& get_snap_trace() const;
   const ceph::buffer::list& get_snap_trace_new() const;
