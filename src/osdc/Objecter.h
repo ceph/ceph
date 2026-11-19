@@ -2139,6 +2139,10 @@ public:
 
     /// its route to the OSD core owning its PG (objecter_use_osd_core_hints)
     osdc::core_route::op_route_t core_route;
+    /// the linger op (its linger_id) this op registers - a watch, its
+    /// reconnect, or a notify - 0 if none. Where it is routed is recorded
+    /// in that LingerOp's registered_core
+    uint64_t registers_linger = 0;
 
     /// true if the throttle budget is get/put on a series of OPs,
     /// instead of per OP basis, when this flag is set, the budget is
@@ -2526,6 +2530,13 @@ public:
     int ctx_budget{-1};
     ceph_tid_t register_tid{0};
     ceph_tid_t ping_tid{0};
+    /// the core connection its last registration op was sent on (nullopt:
+    /// the session's main connection, or none sent; see
+    /// objecter_use_osd_core_hints). The OSD ties a watch (and a notify) to
+    /// that connection, and drops it when the connection goes away: it is
+    /// then registered again. Protected by its session's lock
+    /// (LingerOp::session->lock)
+    std::optional<uint32_t> registered_core;
     epoch_t map_dne_bound{0};
 
     void _queued_async() {
@@ -2833,9 +2844,12 @@ private:
   /// the core connection con of s reset (see
   /// SessionRoutes::drop_core_con()): mark it down and forget it, and
   /// resend the ops sent on it via the main connection, and those whose
-  /// hold ended. Returns false if con is not (or no longer) one of s's core
-  /// connections. rwlock is locked unique, s->lock is locked
-  bool _drop_core_con(OSDSession *s, const ConnectionRef& con);
+  /// hold ended. The lingers to re-register are added to lresend. Returns
+  /// false if con is not (or no longer) one of s's core connections.
+  /// rwlock is locked unique, s->lock is locked
+  bool _drop_core_con(OSDSession *s,
+		      const ConnectionRef& con,
+		      std::map<uint64_t, LingerOp *>& lresend);
   /// forget the backoffs of s that came on con (which reset: the OSD
   /// forgot them, and will not unblock them). Returns their PGs.
   /// s->lock is locked
@@ -2872,6 +2886,10 @@ private:
   /// con (of an OSD) connected: if it is a core connection, its core may
   /// now be routed to. No lock is held
   void handle_core_con_connect(Connection *con);
+  /// add to lresend the linger ops of s registered on the core connection
+  /// of 'core' (which goes away). s->lock is locked
+  void _lingers_registered_on(OSDSession *s, uint32_t core,
+                              std::map<uint64_t, LingerOp *>& lresend);
   /// note the core hinted for pgid in an op reply from s, and connect to
   /// that core if not yet connected. s->lock is locked
   void _session_apply_core_hint(OSDSession *s,
