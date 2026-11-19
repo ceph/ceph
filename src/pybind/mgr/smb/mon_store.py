@@ -219,6 +219,26 @@ class MonKeyConfigStore:
         """Return all subkeys currently in the namespace."""
         return [k[1] for k in self if k[0] == ns]
 
+    def find_keys(self, ns: str, prefix: str) -> Collection[str]:
+        """Return the subkeys in the namespace starting with prefix. Only the
+        matching keys are requested from the mon rather than dumping every
+        key of every namespace and filtering locally.
+        """
+        mon_prefix = self.PREFIX + _kjoin((ns, prefix))
+        ret, json_data, err = self._mc.mon_command(
+            {
+                'prefix': 'config-key dump',
+                'key': mon_prefix,
+            }
+        )
+        if ret != 0:
+            raise KeyError(
+                f'config-key dump {mon_prefix!r} failed [{ret}]: {err}'
+            )
+        return [
+            _ksplit(k, prefix=self.PREFIX)[1] for k in json.loads(json_data)
+        ]
+
     def __iter__(self) -> Iterator[EntryKey]:
         """Iterate over all namespaced keys currently in the store."""
         ret, json_data, err = self._mc.mon_command(
