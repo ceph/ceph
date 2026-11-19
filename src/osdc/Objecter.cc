@@ -214,6 +214,7 @@ enum {
   l_osdc_core_switch_hold_expired_unanswered,
   l_osdc_core_switch_delay,
   l_osdc_core_switch_delay_histogram,
+  l_osdc_core_linger_resend,
   l_osdc_core_hint_over_limit,
 
   l_osdc_last,
@@ -562,6 +563,9 @@ void Objecter::init()
       switch_delay_axis, switch_holds_axis,
       "Histogram of the delays of PG switches to another OSD connection, "
       "by the number of holds of their new ops it took");
+    pcb.add_u64_counter(l_osdc_core_linger_resend, "core_linger_resend",
+                        "Watches and notifies registered again, as the OSD core "
+                        "connection they were registered on went away");
     pcb.add_u64_counter(l_osdc_core_hint_over_limit, "core_hint_over_limit",
                         "Hints not followed, naming a new core of an OSD with "
                         "objecter_osd_core_max_connections connections to its "
@@ -813,6 +817,8 @@ void Objecter::_send_linger(LingerOp *info,
   // do not resend this; we will send a new op to reregister
   o->should_resend = false;
   o->ctx_budgeted = true;
+  // the OSD ties the watch (notify) to the connection this goes on
+  o->registers_linger = info->linger_id;
 
   if (info->register_tid) {
     // repeat send.  cancel old registration op, if any.
@@ -2339,7 +2345,9 @@ void Objecter::_close_core_cons(OSDSession *s)
   logger->inc(l_osdc_op_unanswered_reset, reset.forgotten.size());
 }
 
-bool Objecter::_drop_core_con(OSDSession *s, const ConnectionRef& con)
+bool Objecter::_drop_core_con(OSDSession *s,
+                              const ConnectionRef& con,
+                              map<uint64_t, LingerOp *>& lresend)
 {
   // rwlock is locked unique
   // s->lock is locked
@@ -2418,6 +2426,10 @@ bool Objecter::_drop_core_con(OSDSession *s, const ConnectionRef& con)
   for (auto& [tid, op] : resend) {
     _send_op(op);
   }
+
+  // the OSD drops the watches (notifies) registered on that connection,
+  // wherever their PGs' ops go now
+  _lingers_registered_on(s, core, lresend);
   return true;
 }
 
@@ -2522,6 +2534,13 @@ ConnectionRef Objecter::_op_route_or_hold(Op *op)
     break;
   }
 
+  if (op->registers_linger) {
+    // a watch (notify) registration: the OSD ties it to this connection
+    if (auto l = s->linger_ops.find(op->registers_linger);
+        l != s->linger_ops.end()) {
+      l->second->registered_core = out.core;
+    }
+  }
   if (out.con) {
     logger->inc(l_osdc_op_send_core);
     return out.con;
@@ -4290,6 +4309,8 @@ void Objecter::_session_linger_op_remove(OSDSession *from, LingerOp *op)
   }
 
   from->linger_ops.erase(op->linger_id);
+  // (a core of that session's OSD)
+  op->registered_core.reset();
   put_session(from);
   op->session = NULL;
 
@@ -6075,6 +6096,22 @@ void Objecter::handle_core_con_connect(Connection *con)
   }
 }
 
+void Objecter::_lingers_registered_on(OSDSession *s, uint32_t core,
+                                      map<uint64_t, LingerOp *>& lresend)
+{
+  // s->lock is locked
+  for (auto& [linger_id, info] : s->linger_ops) {
+    if (info->registered_core == core && !lresend.contains(linger_id)) {
+      ldout(cct, 10) << fmt::format(
+        "{} osd.{} core {}: linger {}",
+        __func__, s->osd, core, linger_id) << dendl;
+      info->get();
+      lresend[linger_id] = info;
+      logger->inc(l_osdc_core_linger_resend);
+    }
+  }
+}
+
 bool Objecter::ms_handle_reset(Connection *con)
 {
   if (!initialized)
@@ -6096,10 +6133,11 @@ bool Objecter::ms_handle_reset(Connection *con)
       }
       map<uint64_t, LingerOp *> lresend;
       unique_lock sl(session->lock);
-      if (_drop_core_con(session, ConnectionRef(con))) {
+      if (_drop_core_con(session, ConnectionRef(con), lresend)) {
         // one of the session's core connections: the rest of the session
         // is not affected
         sl.unlock();
+        _linger_ops_resend(lresend, wl);
         return true;
       }
       _reopen_session(session);
