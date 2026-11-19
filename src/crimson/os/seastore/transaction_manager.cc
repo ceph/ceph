@@ -786,37 +786,7 @@ seastar::future<TransactionManager::mutated_extents_locker>
 TransactionManager::lock_mutated_nodes(
   Transaction &t)
 {
-  mutated_extents_set_t mutated_extents;
-  LOG_PREFIX(TransactionManager::lock_mutated_nodes);
-  t.for_each_mutated_extent(
-    [&mutated_extents](auto &extent) {
-      if (!is_root_type(extent.get_type())) {
-        std::ignore = mutated_extents.emplace(&extent);
-      }
-  });
-  if (unlikely(mutated_extents.empty()) || t.get_src() == Transaction::src_t::MUTATE) {
-    co_return mutated_extents_locker();
-  }
-  std::vector<std::unique_lock<seastar::shared_mutex>> unique_locks;
-  std::vector<std::shared_lock<seastar::shared_mutex>> shared_locks;
-  if (auto &e = *mutated_extents.begin();
-      should_use_no_conflict_publish(t, e->get_type())) {
-    for (auto &ext : mutated_extents) {
-      assert(should_use_no_conflict_publish(t, ext->get_type()));
-      TRACET("locking {}", t, *ext);
-      auto lock = co_await seastar::get_unique_lock(ext->commit_lock);
-      unique_locks.emplace_back(std::move(lock));
-    }
-  } else {
-    for (auto &ext : mutated_extents) {
-      assert(!should_use_no_conflict_publish(t, ext->get_type()));
-      TRACET("shared locking {}", t, *ext);
-      auto lock = co_await seastar::get_shared_lock(ext->commit_lock);
-      shared_locks.emplace_back(std::move(lock));
-    }
-  }
-  co_return mutated_extents_locker(
-    std::move(mutated_extents), std::move(unique_locks), std::move(shared_locks));
+  co_return mutated_extents_locker();
 }
 
 TransactionManager::submit_transaction_direct_ret
@@ -845,17 +815,7 @@ TransactionManager::do_submit_transaction(
   tref.get_phase_durations().lba_update +=
     std::chrono::steady_clock::now() - lba_start;
 
-  // TODO: For now, we lock mutated extents after delayed ool writes
-  // and lba mappings updating, this is ok because:
-  // 1. at present, only lba/backref nodes might be modified by
-  //    no_conflict trans;
-  // 2. only ool lba/backref extents' persistence needs to be sync'd
-  //
-  // In the future, when no_conflict transactions may also modify
-  // logical extents, we should add something like "lock_logical_mutated_extents"
-  // and invoke it before writing ool extents.
-  auto locker = co_await trans_intr::make_interruptible(
-    lock_mutated_nodes(tref));
+  auto locker = co_await lock_mutated_nodes(tref);
 
   auto num_extents = allocated_extents.size();
   SUBTRACET(seastore_t, "process {} allocated extents", tref, num_extents);
