@@ -1711,6 +1711,13 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op, ThreadPool::TPHandle *handle)
           break;
         }
 
+        if (!m->get_source().is_osd()) {
+          dout(10) << __func__ << " rejecting PG_POOL_MIGRATION_RESERVE from "
+                   << m->get_source() << dendl;
+          result = -EPERM;
+          break;
+        }
+
         if (!pool.info.is_migration_target()) {
           // Our map may be behind the source's, or the migration may have
           // completed. Either way the source must hear back, or it waits
@@ -1757,6 +1764,13 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op, ThreadPool::TPHandle *handle)
     case CEPH_OSD_OP_PG_POOL_MIGRATION_RELEASE:
       {
         dout(20) << __func__ << " target CEPH_OSD_OP_PG_POOL_MIGRATION_RELEASE" << dendl;
+
+        if (!m->get_source().is_osd()) {
+          dout(10) << __func__ << " rejecting PG_POOL_MIGRATION_RELEASE from "
+                   << m->get_source() << dendl;
+          result = -EPERM;
+          break;
+        }
 
         if (pool_migration_reservations_granted_target) {
           stop_target_pool_migration();
@@ -2137,6 +2151,34 @@ bool PrimaryLogPG::should_use_coroutine(MOSDOp* m)
   return false;
 }
 
+// Writes that only OSDs send: pool migration copies from the source PG, and
+// MAP_SNAP_CLONE writes such as the cache tier flush. Pool migration relaxes
+// the snap context handling, the clone write check and the missing-snap assert
+// for these, so they must not be accepted from anyone else.
+static bool is_osd_internal_write(const OpRequestRef& op, const MOSDOp *m)
+{
+  // COPY_FROM and COPY_FROM2 are write ops, so reads never match.
+  if (!op->may_write()) {
+    return false;
+  }
+  if (m->has_flag(CEPH_OSD_FLAG_MAP_SNAP_CLONE)) {
+    return true;
+  }
+  for (const auto& osd_op : m->ops) {
+    if ((osd_op.op.op == CEPH_OSD_OP_COPY_FROM ||
+         osd_op.op.op == CEPH_OSD_OP_COPY_FROM2) &&
+        ((osd_op.op.copy_from.flags &
+          (CEPH_OSD_COPY_FROM_FLAG_POOL_MIGRATION |
+           CEPH_OSD_COPY_FROM_FLAG_POOL_MIGRATION_HAS_RES)) ||
+         // HAS_CLONES does not fit in the 8-bit flags; only flags2 carries it
+         (osd_op.op.copy_from.flags2 &
+          CEPH_OSD_COPY_FROM_FLAG2_POOL_MIGRATION_HAS_CLONES))) {
+      return true;
+    }
+  }
+  return false;
+}
+
 void PrimaryLogPG::do_op_impl(OpRequestRef op, ThreadPool::TPHandle *handle)
 {
   MOSDOp *m = static_cast<MOSDOp*>(op->get_nonconst_req());
@@ -2333,6 +2375,15 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op, ThreadPool::TPHandle *handle)
     }
     return;
   }
+  // Only OSDs may send these. They can write to clones, skip the usual snap
+  // context handling and replace whole objects; see is_osd_internal_write().
+  if (!m->get_source().is_osd() && is_osd_internal_write(op, m)) {
+    dout(10) << __func__ << " rejecting OSD-only write from "
+             << m->get_source() << ": " << *m << dendl;
+    osd->reply_op_error(op, -EPERM);
+    return;
+  }
+
   if (op->may_write()) {
 
     // invalid?
