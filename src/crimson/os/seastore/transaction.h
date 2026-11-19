@@ -141,8 +141,10 @@ public:
 
   void add_absent_to_retired_set(CachedExtentRef ref) {
     assert(ref->get_paddr().is_absolute());
-    bool added = do_add_to_read_set(ref);
-    ceph_assert(added);
+    if (read_set_enabled) {
+      bool added = do_add_to_read_set(ref);
+      ceph_assert(added);
+    }
     add_present_to_retired_set(ref);
   }
 
@@ -168,7 +170,7 @@ public:
       write_set.erase(*ref);
       assert(ref->prior_instance);
       retired_set.emplace(ref->prior_instance, *this);
-      assert(read_set.count(ref->prior_instance->get_paddr(), extent_cmp_t{}));
+      assert(!read_set_enabled || read_set.count(ref->prior_instance->get_paddr(), extent_cmp_t{}));
       ref->reset_prior_instance();
     } else {
       ceph_assert(ref->is_stable());
@@ -189,7 +191,7 @@ public:
     assert(ref->is_stable());
     assert(ref->get_paddr().is_absolute()
            || ref->get_paddr().is_record_relative());
-    if (is_weak()) {
+    if (is_weak() || !read_set_enabled) {
       return {false, true /* meaningless */};
     }
     if (ref->get_paddr().is_absolute()) {
@@ -211,7 +213,7 @@ public:
   }
 
   void add_to_read_set(CachedExtentRef ref) {
-    if (is_weak()) {
+    if (is_weak() || !read_set_enabled) {
       return;
     }
 
@@ -557,8 +559,10 @@ public:
     src_t src,
     on_destruct_func_t&& f,
     transaction_id_t trans_id,
-    cache_hint_t cache_hint
+    cache_hint_t cache_hint,
+    bool read_set_enabled = false
   ) : weak(weak),
+      read_set_enabled(read_set_enabled),
       handle(std::move(handle)),
       on_destruct(std::move(f)),
       src(src),
@@ -925,6 +929,7 @@ private:
    * consistentency allowing operations using to avoid maintaining a read_set.
    */
   const bool weak;
+  const bool read_set_enabled = false;
 
   RootBlockRef root;        ///< ref to root if read or written by transaction
 
