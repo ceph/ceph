@@ -144,6 +144,8 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_INVALID_BUCKET_ACL, {400, "InvalidBucketAclWithObjectOwnership"}},
     { ERR_NO_SUCH_OWNERSHIP_CONTROLS, {404, "OwnershipControlsNotFoundError"}},
     { ERR_EXPIRED_TOKEN, {400, "ExpiredToken"}},
+    // internal, never sent to clients
+    { ERR_SYNC_COMPRESSION_MISMATCH, {500, "InternalError"}},
 });
 
 rgw_http_errors rgw_http_swift_errors({

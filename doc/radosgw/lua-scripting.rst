@@ -12,7 +12,8 @@ This feature allows users to assign execution context to Lua scripts. The suppor
  - ``postauth`` which will execute a script after each operation is authorized but before it is performed
  - ``postrequest`` which will execute after each operation is performed
  - ``background`` which will execute within a specified time interval
- - ``getdata`` which will execute on objects' data when objects are downloaded
+ - ``getdata`` which will execute on objects' data when objects are downloaded,
+   except when multisite sync fetches a compressed object as stored
  - ``putdata`` which will execute on objects' data when objects are uploaded
 
 A request (pre or post) or data (get or put) context script may be constrained to operations belonging to a specific tenant's users.
