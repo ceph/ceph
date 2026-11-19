@@ -1137,7 +1137,7 @@ void SplitOp::prepare_single_op(Objecter::Op *op, Objecter &objecter, CephContex
   const pg_pool_t *pi = objecter.osdmap->get_pg_pool(target.base_oloc.pool);
   ceph_assert(pi);
 
-  objecter._calc_target(&op->target, op->snapid);
+  objecter._calc_target(&op->target, op->snapid, true);
   uint64_t data_chunk_count = pi->get_ec_data_shard_count();
   uint32_t chunk_size = pi->get_stripe_width() / data_chunk_count;
 
@@ -1275,7 +1275,7 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
   // short-circuits once pgid is set.
   const auto saved_target = target;
   target.flags &= ~CEPH_OSD_FLAG_BALANCE_READS;
-  objecter._calc_target(&op->target, op->snapid);
+  objecter._calc_target(&op->target, op->snapid, true);
 
   // Initialize reference_sub_read now that acting set is populated
   split_read->init_reference_sub_read();
