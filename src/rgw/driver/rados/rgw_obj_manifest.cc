@@ -263,10 +263,11 @@ int RGWObjManifest::generator::create_begin(CephContext *cct, RGWObjManifest *_m
   
   cur_part_id = rule.start_part_num;
 
-  manifest->get_implicit_location(cur_part_id, cur_stripe, 0, NULL, &cur_obj);
-
-  // Normal object which not generated through copy operation 
+  // Normal object which not generated through copy operation
+  // the first location's name includes the tail instance, so set it first
   manifest->set_tail_instance(_obj.key.instance);
+
+  manifest->get_implicit_location(cur_part_id, cur_stripe, 0, NULL, &cur_obj);
 
   return 0;
 }
