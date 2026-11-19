@@ -8314,6 +8314,18 @@ int RGWRados::get_part_obj_state(const DoutPrefixProvider* dpp, optional_yield y
         << " in the object manifest" << dendl;
     return -ERR_INVALID_PART;
   }
+  return get_part_obj_state(dpp, y, store, bucket_info, rctx, manifest,
+                            std::move(iter), prefetch, pstate, pmanifest);
+}
+
+int RGWRados::get_part_obj_state(const DoutPrefixProvider* dpp, optional_yield y,
+				 RGWRados* store, RGWBucketInfo& bucket_info,
+				 RGWObjectCtx* rctx, RGWObjManifest* manifest,
+				 RGWObjManifest::obj_iterator iter, bool prefetch,
+				 RGWObjState** pstate, RGWObjManifest** pmanifest)
+{
+  const int part_num = iter.get_cur_part_id();
+  const RGWObjManifest::obj_iterator end = manifest->obj_end(dpp);
   auto head_obj = iter.get_location().get_head_obj();
   if (!head_obj) { // iterator points to a tail object
     ldpp_dout(dpp, 20) << "object manifest for part #" << part_num
