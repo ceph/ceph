@@ -16,6 +16,7 @@
 #ifndef CEPH_OBJECTER_H
 #define CEPH_OBJECTER_H
 
+#include <atomic>
 #include <deque>
 #include <list>
 #include <map>
@@ -67,6 +68,7 @@
 
 #include "osd/OSDMap.h"
 #include "osd/error_code.h"
+#include "osdc/crimson_core_route/session_routes.h"
 
 class Messenger;
 class MonClient;
@@ -1880,6 +1882,9 @@ private:
   mutable ceph::shared_mutex rwlock =
 	   ceph::make_shared_mutex("Objecter::rwlock");
   ceph::timer<ceph::coarse_mono_clock> timer;
+  /// the hosts to which no core connection is opened for now, a previous
+  /// one having failed to connect (objecter_use_osd_core_hints)
+  osdc::core_route::HostBlocks core_host_blocks;
 
   PerfCounters* logger = nullptr;
 
@@ -2130,6 +2135,9 @@ public:
 
     /// true if we should resend this message on failure
     bool should_resend = true;
+
+    /// its route to the OSD core owning its PG (objecter_use_osd_core_hints)
+    osdc::core_route::op_route_t core_route;
 
     /// true if the throttle budget is get/put on a series of OPs,
     /// instead of per OP basis, when this flag is set, the budget is
@@ -2628,6 +2636,12 @@ public:
 
     int incarnation;
     ConnectionRef con;
+
+    /// routing ops to the cores of a Crimson OSD
+    /// (objecter_use_osd_core_hints); protected by this session's lock
+    /// (OSDSession::lock)
+    osdc::core_route::SessionRoutes core_routes;
+
     int num_locks;
     std::unique_ptr<std::mutex[]> completion_locks;
 
@@ -2639,6 +2653,12 @@ public:
     ~OSDSession() override;
 
     bool is_homeless() { return (osd == -1); }
+
+    /// whether c is one of our connections ('con' or a core connection);
+    /// OSDSession::lock is locked
+    bool owns_con(const ConnectionRef& c) const {
+      return c == con || core_routes.core_of(c).has_value();
+    }
 
     std::unique_lock<std::mutex> get_lock(object_t& oid);
   };
@@ -2803,6 +2823,30 @@ private:
   void get_session(OSDSession *s);
   void _reopen_session(OSDSession *session);
   void close_session(OSDSession *session);
+  /// mark down and forget all of s's core connections, all of its
+  /// connections having reset; s->lock is locked
+  void _close_core_cons(OSDSession *s);
+  /// the core connection con of s reset (see
+  /// SessionRoutes::drop_core_con()): mark it down and forget it, and
+  /// resend the ops sent on it via the main connection. Returns false if
+  /// con is not (or no longer) one of s's core connections. rwlock is
+  /// locked unique, s->lock is locked
+  bool _drop_core_con(OSDSession *s, const ConnectionRef& con);
+  /// choose the connection to send op on, and account for op as in flight
+  /// on it (see SessionRoutes::route_or_hold()). Returns the connection.
+  /// rwlock is locked, op->session->lock is locked
+  ConnectionRef _op_route_or_hold(Op *op);
+  /// op is not sent (any more): stop accounting for it as in flight;
+  /// op->session->lock is locked
+  void _op_retire(Op *op);
+  /// con (of an OSD) connected: if it is a core connection, its core may
+  /// now be routed to. No lock is held
+  void handle_core_con_connect(Connection *con);
+  /// note the core hinted for pgid in an op reply from s, and connect to
+  /// that core if not yet connected. s->lock is locked
+  void _session_apply_core_hint(OSDSession *s,
+				const spg_t& pgid,
+				const osd_core_hint_t& hint);
 
   void _nlist_reply(NListContext *list_context, int r, Context *final_finish,
 		   epoch_t reply_epoch);
@@ -4247,6 +4291,18 @@ private:
   epoch_t epoch_barrier = 0;
   bool retry_writes_after_first_reply =
     cct->_conf->objecter_retry_writes_after_first_reply;
+  /// the configuration of routing ops to OSD cores
+  /// (objecter_use_osd_core_hints and the options it uses), as last set:
+  /// read by the routing events (see OSDSession::core_routes). Written
+  /// with rwlock locked unique (handle_conf_change()), read with rwlock
+  /// locked
+  osdc::core_route::config_t core_cfg = read_core_cfg(cct->_conf);
+  static osdc::core_route::config_t read_core_cfg(const ConfigProxy& conf);
+  /// objecter_use_osd_core_hints was set at some point: the sessions may
+  /// have routing state (OSDSession::core_routes) even when it is off, as
+  /// their PGs drain back to their main connections. Never cleared; until
+  /// set, ops take the plain path. Readable without rwlock
+  std::atomic<bool> core_hints_used{core_cfg.enabled};
 
   bool dispatch_to_session_strand = false;
 
