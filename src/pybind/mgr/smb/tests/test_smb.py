@@ -1244,6 +1244,96 @@ def test_keybridge_config_scope_error(tmodule, params):
     assert params['expected'] in failure.msg
 
 
+def test_keybridge_config_missing_tls_credential(tmodule):
+    example = _keybridge_example()
+    example[3]['keybridge']['scopes'][1]['kmip_ca_cert'] = {'ref': 'ca-cert1'}
+    txt = json.dumps(example)
+
+    rg = tmodule.apply_resources(txt)
+    assert not rg.success, rg.to_simplified()
+    failures = [r for r in rg if not r.success]
+    assert len(failures) == 1
+    failure = failures[0]
+    assert "TLS credential 'ca-cert1' not found" in failure.msg
+    assert failure.status == {'unknown_id': 'ca-cert1'}
+    # nothing was stored, so the cluster is not half configured
+    assert tmodule.cluster_ls() == []
+
+
+def test_remote_control_missing_tls_credential(tmodule):
+    example = _keybridge_example()
+    del example[3]['keybridge']
+    del example[-1]['cephfs']['fscrypt_key']
+    example[3]['remote_control'] = {
+        'locally_enabled': True,
+        'cert': {'ref': 'cert1'},
+        'key': {'ref': 'key1'},
+        'ca_cert': {'ref': 'ca-cert1'},
+    }
+    txt = json.dumps(example)
+
+    rg = tmodule.apply_resources(txt)
+    assert not rg.success, rg.to_simplified()
+    failures = [r for r in rg if not r.success]
+    assert len(failures) == 1
+    assert "TLS credential 'ca-cert1' not found" in failures[0].msg
+
+    # the same cluster applies once the reference is fixed
+    example[3]['remote_control']['ca_cert'] = {'ref': 'cacert1'}
+    rg = tmodule.apply_resources(json.dumps(example))
+    assert rg.success, rg.to_simplified()
+
+
+def test_keybridge_config_tls_credential_removed_in_batch(tmodule):
+    example = _keybridge_example()
+    rg = tmodule.apply_resources(json.dumps(example[:3]))
+    assert rg.success, rg.to_simplified()
+
+    # the stored CA cert is removed in the same batch that adds the cluster
+    removed = {
+        'resource_type': 'ceph.smb.tls.credential',
+        'tls_credential_id': 'cacert1',
+        'intent': 'removed',
+    }
+    rg = tmodule.apply_resources(json.dumps([removed] + example[3:]))
+    assert not rg.success, rg.to_simplified()
+    failures = [r for r in rg if not r.success]
+    assert any(
+        "TLS credential 'cacert1' not found" in f.msg for f in failures
+    )
+    assert tmodule.cluster_ls() == []
+
+
+def test_remote_control_tls_credential_linked_to_other_cluster(tmodule):
+    example = _keybridge_example()
+    del example[3]['keybridge']
+    del example[-1]['cephfs']['fscrypt_key']
+    example[3]['remote_control'] = {
+        'locally_enabled': True,
+        'cert': {'ref': 'cert1'},
+        'key': {'ref': 'key1'},
+        'ca_cert': {'ref': 'cacert1'},
+    }
+    # cluster bar owns the CA cert
+    example[2]['linked_to_cluster'] = 'bar'
+    example[3]['cluster_id'] = 'bar'
+    example[-1]['cluster_id'] = 'bar'
+    rg = tmodule.apply_resources(json.dumps(example))
+    assert rg.success, rg.to_simplified()
+
+    # cluster foo may not borrow it
+    foo = dict(example[3], cluster_id='foo')
+    rg = tmodule.apply_resources(json.dumps([foo]))
+    assert not rg.success, rg.to_simplified()
+    failures = [r for r in rg if not r.success]
+    assert len(failures) == 1
+    failure = failures[0]
+    assert "TLS credential 'cacert1' linked to different cluster" in (
+        failure.msg
+    )
+    assert failure.status == {'other_cluster_id': 'bar'}
+
+
 @pytest.mark.parametrize(
     "params",
     [
