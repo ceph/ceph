@@ -1113,33 +1113,8 @@ void Cache::invalidate_extent(
     Transaction& t,
     CachedExtent& extent)
 {
-  if (!extent.may_conflict()) {
-    assert(extent.read_transactions.empty());
-    extent.set_invalid(t);
-    return;
-  }
-
-  LOG_PREFIX(Cache::invalidate_extent);
-  bool do_conflict_log = true;
-  std::vector<Transaction*> invalidated_trans;
-  for (auto &&i: extent.read_transactions) {
-    if (!i.t->conflicted) {
-      if (do_conflict_log) {
-        SUBDEBUGT(seastore_t, "conflict begin -- {}", t, extent);
-        do_conflict_log = false;
-      }
-      assert(!i.t->is_weak());
-      account_conflict(t.get_src(), i.t->get_src());
-      mark_transaction_conflicted(*i.t, extent);
-      invalidated_trans.emplace_back(i.t);
-    }
-  }
-  for (auto trans : invalidated_trans) {
-    trans->clear_read_set();
-    trans->invalidate_clear_write_set();
-    trans->retired_set.clear();
-    trans->views.clear();
-  }
+  // Under single-writer shard execution, conflict invalidation of concurrent
+  // transactions is eliminated. Extent is marked invalid directly.
   extent.set_invalid(t);
 }
 
