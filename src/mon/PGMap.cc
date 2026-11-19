@@ -2830,7 +2830,7 @@ void PGMap::get_health_checks(
     << "migrating";
 
     checks->add(
-        "POOL MIGRATION",
+        "POOL_MIGRATION",
         HEALTH_WARN,
         ss.str(),
         total_migrating_pools);
