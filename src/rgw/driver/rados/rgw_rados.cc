@@ -4155,7 +4155,8 @@ int RGWRados::rewrite_obj(RGWBucketInfo& dest_bucket_info, const rgw_obj& obj, c
   return copy_obj_data(octx, owner, dest_bucket_info,
                        dest_bucket_info.placement_rule,
                        read_op, obj_size - 1, obj, NULL, mtime,
-                       attrset, 0, real_time(), NULL, NULL, NULL, NULL, dpp, y);
+                       attrset, 0, real_time(), NULL, NULL, NULL, NULL, dpp, y,
+                       0, true, nullptr, true /* keep_parts */);
 }
 
 
@@ -5640,6 +5641,237 @@ done_ret:
   return ret;
 }
 
+/*
+ * Copy the data of a multipart object part by part, so the copy keeps its
+ * part layout: each source part becomes a part of the copy, with the attrs of
+ * the source part's head (etag, checksum, compression info) that reads of a
+ * part use. Returns -ENOTSUP before writing anything if the object can't be
+ * copied this way, and the caller copies it as a single stream.
+ */
+static int copy_obj_data_parts(
+    RGWRados* store, RGWObjectCtx& obj_ctx, const ACLOwner& owner,
+    RGWBucketInfo& dest_bucket_info, const rgw_placement_rule& dest_placement,
+    RGWRados::Object::Read& read_op, const rgw_obj& dest_obj,
+    rgw::sal::Attrs& attrs, rgw::sal::DataProcessorFactory* dp_factory,
+    rgw::Aio* aio, jspan_context& trace,
+    std::vector<std::unique_ptr<rgw::putobj::MultipartCopyPartProcessor>>& parts,
+    RGWObjManifest& manifest, std::optional<uint64_t>& accounted_size,
+    const DoutPrefixProvider* dpp, optional_yield y)
+{
+  RGWObjState* src_state = nullptr;
+  RGWObjManifest* src_manifest = nullptr;
+  int r = store->get_obj_state(dpp, &read_op.source->get_ctx(),
+                               read_op.source->get_bucket_info(),
+                               read_op.source->get_obj(), &src_state,
+                               &src_manifest, true, y);
+  if (r < 0) {
+    return r;
+  }
+  if (!src_manifest || src_manifest->obj_end(dpp).get_cur_part_id() == 0) {
+    return -ENOTSUP; // not multipart
+  }
+  if (src_state->attrset.count(RGW_ATTR_APPEND_PART_NUM)) {
+    // each append is a part, but there are no parts to keep
+    return -ENOTSUP;
+  }
+  if (dp_factory && attrs.count(RGW_ATTR_CRYPT_MODE)) {
+    return -ENOTSUP; // re-encryption writes a single stream
+  }
+
+  struct src_part {
+    RGWObjManifest::obj_iterator start; // the part's first stripe
+    uint64_t ofs; // where the part starts in the source's data
+    uint64_t size;
+    rgw::sal::Attrs attrs; // attrs of the part's head
+    int num() const { return start.get_cur_part_id(); }
+  };
+
+  std::vector<src_part> src_parts;
+  const auto src_end = src_manifest->obj_end(dpp);
+  for (auto i = src_manifest->obj_begin(dpp); i != src_end; ++i) {
+    if (src_parts.empty() || src_parts.back().num() != i.get_cur_part_id()) {
+      src_parts.push_back({i, i.get_ofs(), 0, {}});
+    }
+  }
+  if (src_parts.empty()) {
+    return -ENOTSUP;
+  }
+  const bool src_compressed = attrs.count(RGW_ATTR_COMPRESSION);
+  for (size_t k = 0; k < src_parts.size(); k++) {
+    auto& p = src_parts[k];
+    const uint64_t next = (k + 1 < src_parts.size())
+                              ? src_parts[k + 1].ofs
+                              : src_manifest->get_obj_size();
+    p.size = next - p.ofs;
+
+    RGWObjManifest* m = src_manifest;
+    RGWObjState* part_state = nullptr;
+    r = RGWRados::get_part_obj_state(dpp, y, store,
+                                     read_op.source->get_bucket_info(),
+                                     &read_op.source->get_ctx(), src_manifest,
+                                     p.start, false, &part_state, &m);
+    if (r < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__ << ": failed to read part "
+                        << p.num() << " of " << read_op.source->get_obj() << ": "
+                        << cpp_strerror(r) << dendl;
+      return r;
+    }
+    p.attrs = part_state->attrset;
+    if (dp_factory && src_compressed && !p.attrs.count(RGW_ATTR_COMPRESSION)) {
+      // can't decompress the part on its own
+      return -ENOTSUP;
+    }
+  }
+
+  const std::string prefix = dest_obj.key.name + "." +
+                             gen_rand_alphanumeric(store->ctx(), 32);
+  const auto& zonegroup = store->svc.zone->get_zonegroup();
+  const auto& zone_params = store->svc.zone->get_zone_params();
+  RGWCompressionInfo cs_info;
+  bool compressed = false;
+  uint64_t logical_size = 0;
+
+  // once data is written, the factory is set up for parts and the caller
+  // can't fall back to a single stream
+  bool written = false;
+  auto fail = [&written] (int r) { return written && r == -ENOTSUP ? -EIO : r; };
+
+  for (auto& p : src_parts) {
+    rgw::sal::Attrs part_attrs = p.attrs;
+    part_attrs.erase(
+        RGW_ATTR_MANIFEST); // the part's location is in the copy's manifest
+    part_attrs.erase(RGW_ATTR_ID_TAG);
+    part_attrs.erase(RGW_ATTR_TAIL_TAG);
+    part_attrs.erase(RGW_ATTR_SHARE_MANIFEST);
+    if (auto i = part_attrs.find(RGW_ATTR_STORAGE_CLASS);
+        i != part_attrs.end()) {
+      i->second.clear();
+      i->second.append(dest_placement.get_storage_class());
+    }
+
+    bool src_part_compressed = false;
+    RGWCompressionInfo src_part_cs;
+    r = rgw_compression_info_from_attrset(p.attrs, src_part_compressed,
+                                          src_part_cs);
+    if (r < 0) {
+      return fail(r);
+    }
+    logical_size += src_part_compressed ? src_part_cs.orig_size : p.size;
+
+    auto proc = std::make_unique<rgw::putobj::MultipartCopyPartProcessor>(
+        aio, store, dest_bucket_info, &dest_placement, owner, obj_ctx, dest_obj,
+        prefix, p.num(), dpp, y, trace);
+    r = proc->prepare(y);
+    if (r < 0) {
+      return fail(r);
+    }
+
+    DataProcessorFilter raw_filter(proc.get());
+    RGWGetObj_Filter* filter = &raw_filter;
+    if (dp_factory) {
+      r = dp_factory->set_part_writer(proc.get(), part_attrs, p.attrs, p.size,
+                                      dpp, y);
+      if (r < 0) {
+        return fail(r);
+      }
+      filter = dp_factory->get_filter();
+    }
+    written = true;
+    if (p.size > 0) {
+      r = read_op.iterate(dpp, p.ofs, p.ofs + p.size - 1, filter, y);
+      if (r < 0) {
+        ldpp_dout(dpp, 0) << "ERROR: failed to read part " << p.num()
+                          << " ret=" << r << dendl;
+        return fail(r);
+      }
+    }
+    r = filter->flush();
+    if (r < 0) {
+      return fail(r);
+    }
+    if (dp_factory) {
+      dp_factory->finalize_attrs(part_attrs);
+    }
+    r = proc->complete_part(part_attrs, y);
+    if (r < 0) {
+      return fail(r);
+    }
+
+    // the compression info of the copy covers its parts, as it does after
+    // CompleteMultipartUpload
+    bool part_compressed = false;
+    RGWCompressionInfo part_cs;
+    r = rgw_compression_info_from_attrset(part_attrs, part_compressed, part_cs);
+    if (r < 0) {
+      return fail(r);
+    }
+    if (!parts.empty() &&
+        (part_compressed != compressed ||
+         (compressed &&
+          (part_cs.compression_type != cs_info.compression_type ||
+           (cs_info.compressor_message.has_value() &&
+            part_cs.compressor_message != cs_info.compressor_message))))) {
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__ << ": part " << p.num() << " of "
+                        << dest_obj
+                        << " is compressed differently than the "
+                           "previous parts"
+                        << dendl;
+      return -EIO;
+    }
+    if (part_compressed) {
+      uint64_t new_ofs = cs_info.blocks.empty()
+                             ? 0
+                             : cs_info.blocks.back().new_ofs +
+                                   cs_info.blocks.back().len;
+      for (const auto& block : part_cs.blocks) {
+        compression_block cb;
+        cb.old_ofs = block.old_ofs + cs_info.orig_size;
+        cb.new_ofs = new_ofs;
+        cb.len = block.len;
+        cs_info.blocks.push_back(cb);
+        new_ofs = cb.new_ofs + cb.len;
+      }
+      if (!compressed) {
+        cs_info.compression_type = part_cs.compression_type;
+        cs_info.compressor_message = part_cs.compressor_message;
+      }
+      cs_info.orig_size += part_cs.orig_size;
+      compressed = true;
+    }
+
+    RGWObjManifest part_manifest = proc->get_manifest();
+    if (parts.empty()) {
+      manifest = std::move(part_manifest);
+    } else {
+      r = manifest.append(dpp, part_manifest, zonegroup, zone_params);
+      if (r < 0) {
+        return fail(r);
+      }
+    }
+    parts.push_back(std::move(proc));
+  }
+
+  // wait for the parts' writes here, so a failure removes them before the
+  // head is written
+  r = parts.back()->drain();
+  if (r < 0) {
+    return fail(r);
+  }
+
+  if (dp_factory) {
+    // the data was transformed, so the attrs of the copy describe the parts
+    if (compressed) {
+      bufferlist bl;
+      encode(cs_info, bl);
+      attrs[RGW_ATTR_COMPRESSION] = std::move(bl);
+      accounted_size = cs_info.orig_size;
+    } else {
+      attrs.erase(RGW_ATTR_COMPRESSION);
+      accounted_size = logical_size;
+    }
+  }
+  return 0;
+}
 
 int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
                const ACLOwner& owner,
@@ -5660,7 +5892,8 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
                optional_yield y,
                uint64_t src_accounted_size,
                bool log_op,
-               bool *pcanceled)
+               bool *pcanceled,
+               bool keep_parts)
 {
   string tag;
   append_rand_alpha(cct, tag, tag, 32);
@@ -5672,41 +5905,59 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
                                &dest_placement, owner,
                                obj_ctx, dest_obj, olh_epoch, tag, dpp, y, no_trace);
 
-  DataProcessorFilter aoproc_filter(&aoproc);
-  RGWGetObj_Filter *filter = &aoproc_filter;
-  if (dp_factory) {
-    int ret = dp_factory->set_writer(&aoproc, attrs, dpp, y);
-    if (ret < 0) {
+  // the parts of a multipart copy, kept until its head refers to them
+  std::vector<std::unique_ptr<MultipartCopyPartProcessor>> parts;
+  std::optional<uint64_t> parts_accounted_size;
+  int ret = -ENOTSUP;
+  if (keep_parts) {
+    RGWObjManifest manifest;
+    ret = copy_obj_data_parts(this, obj_ctx, owner, dest_bucket_info,
+                              dest_placement, read_op, dest_obj, attrs,
+                              dp_factory, aio.get(), no_trace, parts, manifest,
+                              parts_accounted_size, dpp, y);
+    if (ret == 0) {
+      aoproc.set_manifest(std::move(manifest));
+    } else if (ret != -ENOTSUP) {
       return ret;
     }
-
-    filter = dp_factory->get_filter();
-  }
-
-  int ret = aoproc.prepare(y);
-  if (ret < 0)
-    return ret;
-
-  off_t ofs = 0;
-
-  ret = read_op.iterate(dpp, ofs, end, filter, y);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: failed to read object data ret=" << ret << dendl;
-    return ret;
   }
 
   // set ofs to the total bytes read
   // `end` is always the last byte offset, so add 1
-  ofs = end + 1;
+  off_t ofs = end + 1;
 
-  // flush
-  ret = filter->flush();
-  if (ret < 0) {
-    return ret;
-  }
+  if (ret == -ENOTSUP) { // copy the data as a single stream
+    parts.clear(); // removes any parts written already
+    DataProcessorFilter aoproc_filter(&aoproc);
+    RGWGetObj_Filter *filter = &aoproc_filter;
+    if (dp_factory) {
+      ret = dp_factory->set_writer(&aoproc, attrs, dpp, y);
+      if (ret < 0) {
+        return ret;
+      }
 
-  if (dp_factory) {
-    dp_factory->finalize_attrs(attrs);
+      filter = dp_factory->get_filter();
+    }
+
+    ret = aoproc.prepare(y);
+    if (ret < 0)
+      return ret;
+
+    ret = read_op.iterate(dpp, 0, end, filter, y);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: failed to read object data ret=" << ret << dendl;
+      return ret;
+    }
+
+    // flush
+    ret = filter->flush();
+    if (ret < 0) {
+      return ret;
+    }
+
+    if (dp_factory) {
+      dp_factory->finalize_attrs(attrs);
+    }
   }
 
   string etag;
@@ -5737,7 +5988,9 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
                                 : (src_accounted_size ? src_accounted_size : ofs);
   }
 
-  if (dp_factory) {
+  if (parts_accounted_size) {
+    accounted_size = *parts_accounted_size;
+  } else if (dp_factory && parts.empty()) {
     accounted_size = dp_factory->get_accounted_size(accounted_size);
   }
 
@@ -5759,10 +6012,22 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
   }
 
   const req_context rctx{dpp, y, nullptr};
-  return aoproc.complete(accounted_size, etag, mtime, set_mtime, attrs,
+  bool canceled = false;
+  ret = aoproc.complete(accounted_size, etag, mtime, set_mtime, attrs,
 			    rgw::cksum::no_cksum, delete_at,
-                            dest_if_match, dest_if_nomatch, nullptr, nullptr, pcanceled, rctx,
+                            dest_if_match, dest_if_nomatch, nullptr, nullptr, &canceled, rctx,
                             log_op ? rgw::sal::FLAG_LOG_OP : 0);
+  if (pcanceled) {
+    *pcanceled = canceled;
+  }
+  // keep the parts if the head may have been written (see
+  // AtomicObjectProcessor::complete())
+  if ((ret == 0 && !canceled) || ret == -ETIMEDOUT) {
+    for (auto& part : parts) {
+      part->commit();
+    }
+  }
+  return ret;
 }
 
 int fixup_manifest_to_parts_len(const DoutPrefixProvider *dpp, rgw::sal::Attrs &src_attrs) {
@@ -6032,7 +6297,8 @@ int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
                       y,
                       0, /* src_accounted_size: unknown here, keep ofs-based size */
                       log_op,
-                      &canceled);
+                      &canceled,
+                      true /* keep_parts */);
   if (ret < 0) {
     return ret;
   }

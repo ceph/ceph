@@ -1335,7 +1335,9 @@ public:
                optional_yield y,
                uint64_t src_accounted_size = 0,
                bool log_op = true,
-               bool *pcanceled = nullptr);
+               bool *pcanceled = nullptr,
+               // copy a multipart object part by part, keeping its part layout
+               bool keep_parts = false);
 
   int transition_obj(RGWObjectCtx& obj_ctx,
                      RGWBucketInfo& bucket_info,
