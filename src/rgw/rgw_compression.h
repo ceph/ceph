@@ -92,6 +92,8 @@ protected:
   std::unique_ptr<RGWPutObj_BlockEncrypt> encrypt_filter;
   CompressorRef compressor_plugin;
   std::optional<RGWPutObj_Compress> compressor;
+  // the size of the data set_writer() set up for
+  uint64_t& data_size() { return orig_size; }
 
   virtual int get_decrypt_crypt(const DoutPrefixProvider* dpp,
                                 optional_yield y,
@@ -127,15 +129,25 @@ public:
                  const DoutPrefixProvider* dpp,
                  optional_yield y) override
   {
+    return setup(writer, attrs, src_attrs, dpp, y);
+  }
+
+protected:
+  int setup(rgw::sal::DataProcessor* writer,
+            rgw::sal::Attrs& attrs,
+            const rgw::sal::Attrs& src,
+            const DoutPrefixProvider* dpp,
+            optional_yield y)
+  {
     bool src_compressed = false;
     RGWCompressionInfo cs_info;
-    int ret = rgw_compression_info_from_attrset(src_attrs, src_compressed,
+    int ret = rgw_compression_info_from_attrset(src, src_compressed,
                                                 cs_info);
     if (ret < 0) return ret;
 
-    uint64_t on_disk_size = orig_size;
-    bool src_encrypted = src_attrs.count(RGW_ATTR_CRYPT_MODE);
-    const std::string src_mode = get_str_attribute(src_attrs, RGW_ATTR_CRYPT_MODE);
+    uint64_t on_disk_size = data_size();
+    bool src_encrypted = src.count(RGW_ATTR_CRYPT_MODE);
+    const std::string src_mode = get_str_attribute(src, RGW_ATTR_CRYPT_MODE);
     const bool aead_src = src_encrypted && is_aead_mode(src_mode);
 
     // capture codec before potential cs_info move
@@ -146,7 +158,7 @@ public:
 
     // determine decrypt availability first — needed for decompress decision
     std::unique_ptr<BlockCrypt> decrypt_crypt;
-    ret = get_decrypt_crypt(dpp, y, src_attrs, &decrypt_crypt);
+    ret = get_decrypt_crypt(dpp, y, src, &decrypt_crypt);
     if (ret < 0) return ret;
 
     /*
@@ -156,8 +168,8 @@ public:
     std::vector<uint64_t> decrypt_parts;
     std::vector<std::pair<uint32_t, std::string>> decrypt_part_keys;
     if (decrypt_crypt) {
-      auto parts_iter = src_attrs.find(RGW_ATTR_CRYPT_PARTS);
-      if (parts_iter != src_attrs.end()) {
+      auto parts_iter = src.find(RGW_ATTR_CRYPT_PARTS);
+      if (parts_iter != src.end()) {
         /*
          * CRYPT_PARTS present — decode it. An empty vector is the
          * sentinel for single-stream re-encrypted objects; do NOT
@@ -173,8 +185,8 @@ public:
           return -EIO;
         }
       } else {
-        auto manifest_iter = src_attrs.find(RGW_ATTR_MANIFEST);
-        if (manifest_iter != src_attrs.end()) {
+        auto manifest_iter = src.find(RGW_ATTR_MANIFEST);
+        if (manifest_iter != src.end()) {
           int r = RGWGetObj_BlockDecrypt::read_manifest_parts(
               dpp, manifest_iter->second, decrypt_parts);
           if (r < 0) {
@@ -190,8 +202,8 @@ public:
        * for per-part IV/key derivation. Empty → single-part.
        */
       if (aead_src) {
-        if (auto it = src_attrs.find(RGW_ATTR_CRYPT_PART_NUMS);
-            it != src_attrs.end()) {
+        if (auto it = src.find(RGW_ATTR_CRYPT_PART_NUMS);
+            it != src.end()) {
           auto bl = it->second;
           auto iter = bl.cbegin();
           try {
@@ -231,8 +243,8 @@ public:
       decompress_info = std::move(cs_info);
       decomp.emplace(cct, &decompress_info, false, filter);
       filter = &*decomp;
-      orig_size = decompress_info.orig_size;
-      on_obj_size_changed(orig_size);
+      data_size() = decompress_info.orig_size;
+      on_obj_size_changed(data_size());
     } else if (src_compressed) {
       /*
        * Compressed-passthrough (same codec): data stays compressed on
@@ -240,8 +252,8 @@ public:
        * orig_size to reflect the S3-logical (plaintext) size recorded
        * in the source's compression metadata.
        */
-      orig_size = cs_info.orig_size;
-      on_obj_size_changed(orig_size);
+      data_size() = cs_info.orig_size;
+      on_obj_size_changed(data_size());
     } else if (aead_src && decrypt_crypt) {
       /*
        * AEAD without compression: prefer the stored ORIGINAL_SIZE attr
@@ -250,10 +262,10 @@ public:
        * sources; the attr matches even if a chunk size ever changes.
        */
       uint64_t pt_size = 0;
-      if (rgw_get_aead_original_size(dpp, src_attrs, &pt_size) ||
-          rgw_get_aead_decrypted_size(dpp, src_attrs, on_disk_size, &pt_size)) {
-        orig_size = pt_size;
-        on_obj_size_changed(orig_size);
+      if (rgw_get_aead_original_size(dpp, src, &pt_size) ||
+          rgw_get_aead_decrypted_size(dpp, src, on_disk_size, &pt_size)) {
+        data_size() = pt_size;
+        on_obj_size_changed(data_size());
       }
     }
 
@@ -364,19 +376,21 @@ public:
     }
     if (decomp) {
       off_t ofs = 0;
-      off_t end = orig_size - 1;
+      off_t end = data_size() - 1;
       decomp->fixup_range(ofs, end);
     }
 
     return 0;
   }
 
+public:
+
   void finalize_attrs(rgw::sal::Attrs& attrs) override {
     if (compressor && compressor->is_compressed()) {
       bufferlist tmp;
       RGWCompressionInfo cs_info;
       cs_info.compression_type = compressor_plugin->get_type_name();
-      cs_info.orig_size = orig_size;
+      cs_info.orig_size = data_size();
       cs_info.compressor_message = compressor->get_compressor_message();
       cs_info.blocks = std::move(compressor->get_compression_blocks());
       encode(cs_info, tmp);
@@ -394,7 +408,7 @@ public:
     if (encrypt_filter &&
         is_aead_mode(get_str_attribute(attrs, RGW_ATTR_CRYPT_MODE))) {
       bufferlist sz_bl;
-      sz_bl.append(std::to_string(orig_size));
+      sz_bl.append(std::to_string(data_size()));
       attrs[RGW_ATTR_CRYPT_ORIGINAL_SIZE] = std::move(sz_bl);
       attrs.erase(RGW_ATTR_CRYPT_PART_NUMS);
     }
@@ -402,7 +416,7 @@ public:
 
   uint64_t get_accounted_size(uint64_t default_size) override {
     if (decomp)
-      return orig_size;
+      return data_size();
     return default_size;
   }
 
