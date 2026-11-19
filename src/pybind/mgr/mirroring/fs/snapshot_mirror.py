@@ -29,7 +29,7 @@ from .metrics.cache import (
 from .metrics import load as metrics_load
 from .exception import MirrorException
 from .dir_map.create import create_mirror_object
-from .dir_map.load import load_dir_map, load_instances
+from .dir_map.load import load_dir_map, load_instances, load_shares
 from .dir_map.update import UpdateDirMapRequest, UpdateInstanceRequest
 from .dir_map.policy import Policy
 from .dir_map.state_transition import ActionType, State
@@ -59,6 +59,9 @@ class FSPolicy:
         self.lock = threading.Lock()
         self.cond = threading.Condition(self.lock)
         self.dir_paths = []
+        # dir_path -> per-share peer uuid; directories not in here go to the
+        # legacy peer
+        self.dir_to_peer = {}
         self.async_requests = {}
         self.finisher = Finisher()
         self.op_tracker = AsyncOpTracker()
@@ -141,8 +144,9 @@ class FSPolicy:
         with watcher.lock:
             return frozenset(str(instance_id) for instance_id in watcher.instances)
 
-    def init(self, dir_mapping, instances):
+    def init(self, dir_mapping, instances, dir_to_peer):
         with self.lock:
+            self.dir_to_peer = dir_to_peer
             self.policy.init(dir_mapping)
             # we'll schedule action for all directories, so don't bother capturing
             # directory names here.
@@ -207,13 +211,14 @@ class FSPolicy:
             finally:
                 self.op_tracker.finish_async_op()
 
-    def update_mapping(self, update_map, removals, callback=None):
+    def update_mapping(self, update_map, removals, callback=None, share_updates=None):
         log.info(f'updating directory map: {len(update_map)}+{len(removals)} updates')
         request_id = str(uuid.uuid4())
         def async_callback(r):
             self.finisher.queue(self.handle_update_mapping,
                                 [list(update_map.keys()), removals, request_id, callback, r])
-        request = UpdateDirMapRequest(self.ioctx, update_map.copy(), removals.copy(), async_callback)
+        request = UpdateDirMapRequest(self.ioctx, update_map.copy(), removals.copy(), async_callback,
+                                      share_updates)
         self.async_requests[request_id] = request
         self.op_tracker.start_async_op()
         log.debug(f'async request_id: {request_id}')
@@ -255,6 +260,9 @@ class FSPolicy:
             if schedule:
                 schedules.append(dir_path)
         for dir_path in removals:
+            if r == 0:
+                # its share_ key went with its dir_map_ key
+                self.dir_to_peer.pop(dir_path, None)
             schedule = self.policy.finish_action(dir_path, r)
             if schedule:
                 schedules.append(dir_path)
@@ -336,7 +344,7 @@ class FSPolicy:
                 self.notifier.notify(dir_path, message, self.handle_peer_ack)
             self.dir_paths.clear()
 
-    def add_dir(self, dir_path):
+    def add_dir(self, dir_path, peer_uuid=None):
         with self.lock:
             lookup_info = self.policy.lookup(dir_path)
             if lookup_info:
@@ -348,12 +356,17 @@ class FSPolicy:
             if not schedule:
                 return
             update_map = {dir_path: {'version': 1, 'instance_id': '', 'last_shuffled': 0.0}}
+            # the share mapping is stored in the same write as the directory,
+            # after the checks above and before the directory is scheduled
+            share_updates = {dir_path: peer_uuid} if peer_uuid else None
+            if peer_uuid:
+                self.dir_to_peer[dir_path] = peer_uuid
             updated = False
             def update_safe(updates, removals, r):
                 nonlocal updated
                 updated = True
                 self.cond.notifyAll()
-            self.update_mapping(update_map, [], callback=update_safe)
+            self.update_mapping(update_map, [], callback=update_safe, share_updates=share_updates)
             self.cond.wait_for(lambda: updated)
             self.schedule_action([dir_path])
 
@@ -387,6 +400,9 @@ class FSPolicy:
     def status(self, dir_path):
         with self.lock:
             res = self.policy.dir_status(dir_path)
+            peer_uuid = self.dir_to_peer.get(dir_path)
+            if peer_uuid:
+                res['peer_uuid'] = peer_uuid
             return 0, json.dumps(res, indent=4, sort_keys=True), ''
 
     def summary(self):
@@ -708,10 +724,11 @@ class FSSnapshotMirror:
             # TODO: make async if required
             dir_mapping = load_dir_map(ioctx)
             instances = load_instances(ioctx)
+            dir_to_peer = load_shares(ioctx)
             # init policy
             fspolicy = FSPolicy(self.mgr, ioctx)
             log.debug(f'init policy for filesystem {filesystem}: pool-id {metadata_pool_id}')
-            fspolicy.init(dir_mapping, instances)
+            fspolicy.init(dir_mapping, instances, dir_to_peer)
             self.pool_policy[filesystem] = fspolicy
         except rados.Error as e:
             log.error(f'failed to access pool-id {metadata_pool_id} for filesystem {filesystem}: {e}')
@@ -898,6 +915,15 @@ class FSSnapshotMirror:
                 if not fspolicy:
                     raise MirrorException(-errno.EINVAL, f'filesystem {filesystem} is not mirrored')
                 if peer_uuid in FSSnapshotMirror.get_omap_peers(fspolicy.ioctx):
+                    # refuse rather than drop the share_ records: a directory without one is
+                    # unmapped, and unmapped directories sync to the legacy peer, a remote
+                    # the operator never chose for them
+                    with fspolicy.lock:
+                        busy = peer_uuid in fspolicy.dir_to_peer.values()
+                    if busy:
+                        raise MirrorException(-errno.EBUSY,
+                                              f'directories are mapped to peer {peer_uuid}; '
+                                              'remove them first')
                     self.remove_per_share_peer(filesystem, fspolicy.ioctx, peer_uuid)
                     return 0, json.dumps({}), ''
                 # ok, this is being a bit lazy. remove mirror info from peer followed
@@ -993,7 +1019,25 @@ class FSSnapshotMirror:
         remote_cluster_spec = f'{client_name}@{cluster_name}'
         return self.peer_add(filesystem, remote_cluster_spec, remote_fs_name, token_dct)
 
-    def add_dir(self, filesystem, dir_path):
+    def resolve_dir_peer(self, filesystem, ioctx, peer_uuid):
+        """the per-share peer a new directory maps to, or None to leave it
+        unmapped (it then goes to the legacy peer, or waits for one); call
+        with self.lock held"""
+        legacy_peers = self.get_filesystem_peers(filesystem)
+        per_share_peers = FSSnapshotMirror.get_omap_peers(ioctx)
+        if peer_uuid:
+            if peer_uuid in legacy_peers:
+                raise MirrorException(-errno.EINVAL, f'peer_uuid {peer_uuid} is a legacy peer; directories added without --peer_uuid already go to it')
+            if peer_uuid not in per_share_peers:
+                raise MirrorException(-errno.ENOENT, f'peer_uuid {peer_uuid} is not a valid per-share remote peer')
+            return peer_uuid
+        if legacy_peers or not per_share_peers:
+            return None
+        if len(per_share_peers) > 1:
+            raise MirrorException(-errno.EINVAL, f'filesystem {filesystem} has several per-share peers; pass --peer_uuid')
+        return next(iter(per_share_peers))
+
+    def add_dir(self, filesystem, dir_path, peer_uuid):
         try:
             with self.lock:
                 if not self.filesystem_exist(filesystem):
@@ -1001,9 +1045,10 @@ class FSSnapshotMirror:
                 fspolicy = self.pool_policy.get(filesystem, None)
                 if not fspolicy:
                     raise MirrorException(-errno.EINVAL, f'filesystem {filesystem} is not mirrored')
+                peer_uuid = self.resolve_dir_peer(filesystem, fspolicy.ioctx, peer_uuid)
                 dir_path = norm_path(dir_path)
                 log.debug(f'path normalized to {dir_path}')
-                fspolicy.add_dir(dir_path)
+                fspolicy.add_dir(dir_path, peer_uuid)
                 return 0, json.dumps({}), ''
         except MirrorException as me:
             return me.args[0], '', me.args[1]

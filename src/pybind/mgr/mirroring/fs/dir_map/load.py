@@ -1,4 +1,5 @@
 import errno
+import json
 import pickle
 import logging
 from typing import Dict
@@ -7,7 +8,7 @@ import rados
 
 from ..exception import MirrorException
 from ..utils import MIRROR_OBJECT_NAME, DIRECTORY_MAP_PREFIX, \
-    INSTANCE_ID_PREFIX
+    INSTANCE_ID_PREFIX, SHARE_KEY_PREFIX
 
 log = logging.getLogger(__name__)
 
@@ -71,4 +72,28 @@ def load_instances(ioctx):
         return instance_mapping
     except rados.Error as e:
         log.error(f'exception when loading instances: {e}')
+        raise Exception(-e.errno)
+
+def load_shares(ioctx):
+    """directories mapped to a per-share peer: dir_path -> peer uuid"""
+    dir_to_peer = {} # type: Dict[str, str]
+    log.info('loading shares...')
+    try:
+        # get_omap_vals() returns MAX_RETURN in one go, keep on reading with
+        # maintaing read_idx until the read size is < MAX_RETURN denoting end
+        read_idx = ""
+        while True:
+            with rados.ReadOpCtx() as read_op:
+                it, _ = ioctx.get_omap_vals(read_op, read_idx, SHARE_KEY_PREFIX, MAX_RETURN)
+                ioctx.operate_read_op(read_op, MIRROR_OBJECT_NAME)
+                share_map = dict(it)
+                for key, val in share_map.items():
+                    dir_to_peer[key[len(SHARE_KEY_PREFIX):]] = json.loads(val)['peer_uuid']
+                if len(share_map) < MAX_RETURN:
+                    break
+                read_idx = share_map.popitem()[0]
+        log.info(f'loaded {len(dir_to_peer)} share(s) from disk')
+        return dir_to_peer
+    except rados.Error as e:
+        log.error(f'exception when loading shares: {e}')
         raise Exception(-e.errno)

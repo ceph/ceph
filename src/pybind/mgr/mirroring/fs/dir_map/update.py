@@ -1,26 +1,34 @@
 import errno
+import json
 import pickle
 import logging
 
 import rados
 
 from ..utils import MIRROR_OBJECT_NAME, DIRECTORY_MAP_PREFIX, \
-    INSTANCE_ID_PREFIX, MIRROR_OBJECT_PREFIX
+    INSTANCE_ID_PREFIX, MIRROR_OBJECT_PREFIX, SHARE_KEY_PREFIX
 
 log = logging.getLogger(__name__)
 
 MAX_UPDATE = 256
 
 class UpdateDirMapRequest:
-    def __init__(self, ioctx, update_mapping, removals, on_finish_callback):
+    def __init__(self, ioctx, update_mapping, removals, on_finish_callback, share_updates=None):
         self.ioctx = ioctx
         self.update_mapping = update_mapping
         self.removals = removals
         self.on_finish_callback = on_finish_callback
+        # dir_path -> per-share peer uuid, stored in the same write as the
+        # directory's mapping
+        self.share_updates = share_updates or {}
 
     @staticmethod
     def omap_key(dir_path):
         return f'{DIRECTORY_MAP_PREFIX}{dir_path}'
+
+    @staticmethod
+    def share_key(dir_path):
+        return f'{SHARE_KEY_PREFIX}{dir_path}'
 
     def send(self):
         log.info('updating image map')
@@ -39,9 +47,17 @@ class UpdateDirMapRequest:
                     keys.append(UpdateDirMapRequest.omap_key(dir_path))
                     vals.append(pickle.dumps(mapping))
                     self.ioctx.set_omap(write_op, tuple(keys), tuple(vals))
-                # gather deletes
+                if self.share_updates:
+                    self.ioctx.set_omap(write_op,
+                                        tuple(UpdateDirMapRequest.share_key(p) for p in self.share_updates),
+                                        tuple(json.dumps({'version': 1, 'peer_uuid': u}).encode('utf-8')
+                                              for u in self.share_updates.values()))
+                    self.share_updates = {}
+                # gather deletes; a removed directory takes its share mapping along
                 slicept = MAX_UPDATE - len(dir_keys)
-                removals = [UpdateDirMapRequest.omap_key(dir_path) for dir_path in self.removals[0:slicept]]
+                removed_dirs = self.removals[0:slicept]
+                removals = [UpdateDirMapRequest.omap_key(dir_path) for dir_path in removed_dirs] + \
+                    [UpdateDirMapRequest.share_key(dir_path) for dir_path in removed_dirs]
                 self.removals = self.removals[slicept:]
                 self.ioctx.remove_omap_keys(write_op, tuple(removals))
                 log.debug(f'applying {len(keys)} updates, {len(removals)} deletes')
