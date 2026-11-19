@@ -475,6 +475,21 @@ with no options succeeds without changing anything; one with options succeeds
 without changing anything if it asks for the layout that the pool is being
 migrated to, and fails otherwise.
 
+Pool migration is experimental. Before it can be used:
+
+- ``poolmigration`` must be listed in the
+  ``enable_experimental_unrecoverable_data_corrupting_features``
+  option.
+- Every OSD must be running Vampire or later.
+- The cluster's ``require_min_compat_client`` setting must be Vampire or later,
+  because only Vampire and later clients can follow objects as they move to
+  the new pool.
+
+The renamed source pool is kept after the migration finishes, with its
+placement group count fixed, so that clients that still refer to it by its
+original pool ID are directed to the new pool. While it exists, clients must
+support Vampire features. It is removed when the new pool is deleted.
+
 .. _associate-pool-to-application:
 
 Associating a Pool with an Application
