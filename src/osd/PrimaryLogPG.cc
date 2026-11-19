@@ -1712,8 +1712,12 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op, ThreadPool::TPHandle *handle)
         }
 
         if (!pool.info.is_migration_target()) {
-          dout(20) << __func__ << " pool is not a migration target, migration may have completed, ignoring request" << dendl;
-          return;
+          // Our map may be behind the source's, or the migration may have
+          // completed. Either way the source must hear back, or it waits
+          // for this reservation forever: ask it to retry.
+          dout(20) << __func__ << " pool is not a migration target, asking source to retry" << dendl;
+          result = -EBUSY;
+          break;
         }
 
         epoch_t current_epoch = get_osdmap_epoch();
@@ -14393,6 +14397,13 @@ void PrimaryLogPG::on_change(ObjectStore::Transaction &t)
     unreserve_recovery_space();
     pool_migration_reservations_granted_target = false;
   }
+  // Requeue rather than drop the source PGs' reservation requests: a source
+  // only resends one when this PG's primary changes.
+  for (auto i = pending_pool_migration_reservation_ops.rbegin();
+       i != pending_pool_migration_reservation_ops.rend();
+       ++i) {
+    requeue_op(*i, OpWaitingList::IN_PROGRESS);
+  }
   pending_pool_migration_reservation_ops.clear();
   pool_migration_reservations_granted_source = false;
   cancel_pool_migration_reservation_op();
@@ -16057,10 +16068,10 @@ struct C_PoolMigrationReservationCallback : public Context {
 
   void finish(int r) override {
     ldpp_dout(pg, 20) << "C_PoolMigrationReservationCallback::finish r=" << r << dendl;
-    if (r == -ECANCELED) {
-      return;
-    }
     std::scoped_lock lock(*pg);
+    // Our own cancel (cancel_pool_migration_reservation_op) bumps the gen
+    // first, so a -ECANCELED that gets past this check came from the target
+    // PG suspending its migration, and is handled as a revoke below.
     if (last_peering_reset != pg->get_last_peering_reset() ||
         gen != pg->pool_migration_reservation_gen) {
       ldpp_dout(pg, 10) << "C_PoolMigrationReservationCallback::finish stale, ignoring" << dendl;
@@ -17087,7 +17098,6 @@ void PrimaryLogPG::pool_migration_request_target_reservation() {
     0,
     new C_OnFinisher(fin,
       osd->get_objecter_finisher(get_pg_shard())));
-  objecter_op->should_resend = false;
   ceph_tid_t tid;
   osd->objecter->op_submit(objecter_op, &tid);
   fin->tid = tid;
