@@ -4504,6 +4504,7 @@ uint32_t Objecter::list_nobjects_seek(NListContext *list_context,
 		 << " pos " << pos << " -> " << list_context->pos << dendl;
   pg_t actual = osdmap->raw_pg_to_pg(pg_t(pos, list_context->pool_id));
   list_context->current_pg = actual.ps();
+  list_context->sort_bitwise = osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE);
   list_context->at_end_of_pool = false;
   return pos;
 }

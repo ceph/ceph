@@ -128,14 +128,16 @@ inline namespace v14_2_0 {
     friend class IoCtx;
     friend class librados::NObjectIteratorImpl;
 
-    /// get current hash position of the iterator, rounded to the current pg
+    /// get hash of the current list position of the iterator (not rounded to a pg;
+    /// during iteration this reflects the next prefetched batch position, or 0 at end)
     uint32_t get_pg_hash_position() const;
 
-    /// move the iterator to a given hash position. this may (will!) be rounded
-    /// to the nearest pg. errors are thrown as exceptions
+    /// move the iterator to a given hash position and return pos unchanged (not
+    /// rounded to a pg). errors are thrown as exceptions
     uint32_t seek(uint32_t pos);
 
-    /// move the iterator to a given cursor position. errors are thrown as exceptions
+    /// move the iterator to a given cursor position and return the placement seed
+    /// of the pg containing cursor. errors are thrown as exceptions
     uint32_t seek(const ObjectCursor& cursor);
 
     /// get current cursor position
