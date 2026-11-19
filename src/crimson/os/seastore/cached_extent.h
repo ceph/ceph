@@ -830,9 +830,6 @@ public:
   }
 
 private:
-  template <typename T>
-  friend class read_set_item_t;
-
   friend struct paddr_cmp;
   friend struct ref_paddr_cmp;
   friend class ExtentIndex;

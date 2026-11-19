@@ -453,12 +453,7 @@ private:
     return seastar::do_with(
       create_transaction(src, name, cache_hint, IsWeak),
       [f=std::forward<Func>(f)](auto &ref_t) mutable {
-        return with_trans_intr(
-          *ref_t,
-          [f=std::forward<Func>(f)](auto& t) mutable {
-            return f(t);
-          }
-        );
+        return f(*ref_t);
       }
     );
   }

@@ -218,7 +218,6 @@ CachedExtent::is_viewable_by_trans(Transaction &t) {
   }
 
   // shared by multiple transactions
-  assert(t.is_in_read_set(this));
   assert(is_stable_ready());
 
   auto cmp = trans_spec_view_t::cmp_t();
@@ -536,22 +535,9 @@ void ExtentCommitter::maybe_sync_copied_lba_key() {
 
 void ExtentCommitter::commit_and_share_paddr() {
   auto &prior = *extent.prior_instance;
-  auto old_paddr = prior.get_prior_paddr_and_reset();
-  if (prior.get_paddr() == extent.get_paddr()) {
-    return;
-  }
-  if (prior.read_transactions.empty()) {
+  [[maybe_unused]] auto old_paddr = prior.get_prior_paddr_and_reset();
+  if (prior.get_paddr() != extent.get_paddr()) {
     prior.set_paddr(extent.get_paddr());
-    return;
-  }
-  for (auto &item : prior.read_transactions) {
-    auto [removed, retired] = item.t->pre_stable_extent_paddr_mod(item);
-    if (prior.get_paddr() != extent.get_paddr()) {
-      prior.set_paddr(extent.get_paddr());
-    }
-    item.t->post_stable_extent_paddr_mod(item, retired);
-    item.t->maybe_update_pending_paddr(
-      old_paddr, extent.get_paddr(), extent.get_length());
   }
 }
 

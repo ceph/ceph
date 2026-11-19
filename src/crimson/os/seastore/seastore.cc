@@ -821,15 +821,11 @@ SeaStore::Shard::mkfs_managers()
   ++(shard_stats.processing_inlock_io_num);
   TransactionRef t = transaction_manager->create_transaction(
     Transaction::src_t::MUTATE, "mkfs_seastore", CACHE_HINT_TOUCH);
-   co_await with_repeat_trans_intr(*t,
-    seastar::coroutine::lambda([&](auto &tr) -> TransactionManager::alloc_extent_iertr::future<> {
-    ++(shard_stats.repeat_io_num);
-    DEBUGT("...", tr);
-    co_await onode_manager->mkfs(tr);
-    auto coll_root = co_await collection_manager->mkfs(tr);
-    transaction_manager->write_collection_root(tr, coll_root);
-    co_await transaction_manager->submit_transaction(tr);
-  }));
+  DEBUGT("...", *t);
+  co_await onode_manager->mkfs(*t);
+  auto coll_root = co_await collection_manager->mkfs(*t);
+  transaction_manager->write_collection_root(*t, coll_root);
+  co_await transaction_manager->submit_transaction(*t);
   assert(shard_stats.pending_io_num);
   --(shard_stats.pending_io_num);
    // XXX: it's wrong to assume no failure
