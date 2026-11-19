@@ -2840,6 +2840,16 @@ private:
   /// op is not sent (any more): stop accounting for it as in flight or
   /// held; op->session->lock is locked
   void _op_retire(Op *op);
+  /// op is being canceled: if it was sent, keep its PG's route busy until
+  /// the OSD answers it (see SessionRoutes::retire_canceled_op()). Call
+  /// before _finish_op(); op->session->lock is locked
+  void _op_retire_canceled(Op *op);
+  /// a reply for a tid no longer in s->ops arrived: if it answers a
+  /// canceled op, that op is no longer awaited. s->lock is locked
+  void _op_answered_late(OSDSession *s, ceph_tid_t tid);
+  /// count and log the canceled ops of s no longer awaited
+  void _note_forgotten(OSDSession *s,
+		       const osdc::core_route::forgotten_t& forgotten);
   /// a hold of s ended: count it, and send its held ops in tid order.
   /// rwlock is locked, s->lock is locked
   void _send_held_ops(OSDSession *s, const osdc::core_route::hold_end_t& ended);
