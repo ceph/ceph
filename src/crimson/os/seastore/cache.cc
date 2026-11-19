@@ -2690,7 +2690,6 @@ Cache::get_next_dirty_extents_ret Cache::get_next_dirty_extents(
 	    }
 
 	    DEBUGT("adding dirty extent {}", t, *ext);
-	    t.add_to_read_set(ext);
 	    if (is_root_type(ext->get_type())) {
 	      if (t.root) {
 		assert(&*t.root == &*ext);
@@ -2720,7 +2719,6 @@ Cache::get_root_ret Cache::get_root(Transaction &t)
   } else {
     DEBUGT("root not on t -- {}", t, *root);
     t.root = root;
-    t.add_to_read_set(root);
     return root->wait_io().then([root=root] {
       return get_root_iertr::make_ready_future<RootBlockRef>(
 	root);
@@ -2830,7 +2828,6 @@ Cache::_get_absent_extent_by_type(
     type);
   ++access_stats.load_absent;
   ++stats.access.load_absent;
-  t.add_to_read_set(CachedExtentRef(ret));
   touch_extent_fully(*ret, &t_src, t.get_cache_hint());
   return trans_intr::make_interruptible(
     read_extent(std::move(ret), 0, length, &t_src, pin_crc
