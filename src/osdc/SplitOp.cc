@@ -860,6 +860,18 @@ void SplitOp::complete() {
  * version mismatches. If sub-operations read different versions of the object
  * (torn read), the operation will be retried.
  */
+SplitOp::InternalVersionStrategy SplitOp::internal_version_strategy(
+  const OSDMap& osdmap, const std::vector<int>& acting)
+{
+  for (int osd : acting) {
+    if (osd != CRUSH_ITEM_NONE &&
+        !HAVE_FEATURE(osdmap.get_xinfo(osd).features, INTERNAL_VERSIONS_V2)) {
+      return InternalVersionStrategy::FromPrimaryShard;
+    }
+  }
+  return InternalVersionStrategy::FromParticipatingShards;
+}
+
 void SplitOp::protect_torn_reads() {
   // If multiple reads are emitted from objecter, then it is essential that
   // each read reads the same version. It is not possible to efficiently
@@ -1290,10 +1302,8 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
     return false;
   }
 
-  split_read->strategy
-    = (objecter.osdmap->require_osd_release > ceph_release_t::umbrella) ?
-    InternalVersionStrategy::FromParticipatingShards :
-    InternalVersionStrategy::FromPrimaryShard;
+  split_read->strategy =
+    internal_version_strategy(*objecter.osdmap, target.acting);
 
   // STAGE 4: Initialize sub-operations (may set abort if problems detected)
   for (unsigned i = 0; i < op->ops.size(); ++i) {
