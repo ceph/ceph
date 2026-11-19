@@ -534,10 +534,6 @@ class TestCephAdm(object):
             dest=lambda *args, **kwargs: (None, 'running', None),
         )
         funkypatch.patch(
-            'cephadm.get_unit_name',
-            dest=lambda *args, **kwargs: 'mon-unit-name',
-        )
-        funkypatch.patch(
             'cephadm.extract_uid_gid', dest=lambda *args, **kwargs: (0, 0)
         )
         _get_container = funkypatch.patch('cephadm.get_container')
@@ -605,10 +601,6 @@ class TestCephAdm(object):
         funkypatch.patch(
             'cephadm.check_unit',
             dest=lambda *args, **kwargs: (None, 'running', None),
-        )
-        funkypatch.patch(
-            'cephadm.get_unit_name',
-            dest=lambda *args, **kwargs: 'mon-unit-name',
         )
         funkypatch.patch(
             'cephadm.extract_uid_gid', dest=lambda *args, **kwargs: (0, 0)
