@@ -635,6 +635,7 @@ void Objecter::_send_linger(LingerOp *info,
   osdc_opvec opv;
   std::shared_lock watchl(info->watch_lock);
   cb::list *poutbl = nullptr;
+  version_t *pobjver = nullptr;
   if (info->registered && info->is_watch) {
     ldout(cct, 15) << "send_linger " << info->linger_id << " reconnect"
 		   << dendl;
@@ -655,6 +656,11 @@ void Objecter::_send_linger(LingerOp *info,
       info->notify_id = 0;
       poutbl = &c->outbl;
     }
+    // a register op can be resent before an earlier one replies, and each
+    // reply would write the version through the caller's pointer even after
+    // the first commit completed the caller. have each op write into its own
+    // callback instead; _linger_commit() passes it on to the caller only once.
+    pobjver = &c->objver;
     oncommit = [c = std::move(c)](bs::error_code ec) mutable {
 		 std::move(*c)(ec);
 	       };
@@ -662,7 +668,7 @@ void Objecter::_send_linger(LingerOp *info,
   watchl.unlock();
   auto o = new Op(info->target.base_oid, info->target.base_oloc,
 		  std::move(opv), info->target.flags | CEPH_OSD_FLAG_READ,
-		  std::move(oncommit), info->pobjver);
+		  std::move(oncommit), pobjver);
   o->outbl = poutbl;
   o->snapid = info->snap;
   o->snapc = info->snapc;
@@ -692,10 +698,16 @@ void Objecter::_send_linger(LingerOp *info,
 }
 
 void Objecter::_linger_commit(LingerOp *info, bs::error_code ec,
-			      cb::list& outbl)
+			      cb::list& outbl, version_t objver)
 {
   std::unique_lock wl(info->watch_lock);
   ldout(cct, 10) << "_linger_commit " << info->linger_id << dendl;
+  // Only the commit that completes the caller may write its version. Once
+  // on_reg_commit is gone (an earlier commit, or the pool EIO/DNE checks,
+  // already completed it), the caller may have released pobjver.
+  if (info->pobjver && info->on_reg_commit) {
+    *info->pobjver = objver;
+  }
   if (info->on_reg_commit) {
     asio::defer(service.get_executor(),
 		asio::append(std::move(info->on_reg_commit),
