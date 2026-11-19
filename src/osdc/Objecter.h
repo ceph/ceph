@@ -2542,11 +2542,12 @@ public:
     Objecter *objecter;
     boost::intrusive_ptr<LingerOp> info;
     ceph::buffer::list outbl;  // used for notify only
+    version_t objver = 0;
     CB_Linger_Commit(Objecter *o, LingerOp *l) : objecter(o), info(l) {}
     ~CB_Linger_Commit() = default;
 
     void operator()(boost::system::error_code ec) {
-      objecter->_linger_commit(info.get(), ec, outbl);
+      objecter->_linger_commit(info.get(), ec, outbl, objver);
     }
   };
 
@@ -2758,7 +2759,7 @@ public:
   void _send_linger(LingerOp *info,
 		    ceph::shunique_lock<ceph::shared_mutex>& sul);
   void _linger_commit(LingerOp *info, boost::system::error_code ec,
-		      ceph::buffer::list& outbl);
+		      ceph::buffer::list& outbl, version_t objver);
   void _linger_reconnect(LingerOp *info, boost::system::error_code ec);
   void _send_linger_ping(LingerOp *info);
   void _linger_ping(LingerOp *info, boost::system::error_code ec,
