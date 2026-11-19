@@ -292,10 +292,6 @@ public:
       seastar::lowres_clock::duration get_onode_time{0};
       seastar::lowres_clock::duration submit_time{0};
 
-      void reset_preserve_handle(TransactionManager &tm) {
-        tm.reset_transaction_preserve_handle(*transaction);
-        iter = ext_transaction.begin();
-      }
     };
 
     struct batch_entry_t {
