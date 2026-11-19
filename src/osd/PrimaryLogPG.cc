@@ -16931,14 +16931,9 @@ uint64_t PrimaryLogPG::recover_pool_migration(
 
 void PrimaryLogPG::start_target_pool_migration(int64_t num_bytes, int64_t num_objects)
 {
-
-  // For erasure coded pool overestimate by a full stripe per object
-  // because we don't know how each object rounded to the nearest stripe
-  if (pool.info.is_erasure()) {
-    num_bytes /= (int) get_pgbackend()->get_ec_data_chunk_count();
-    num_bytes += get_pgbackend()->get_ec_stripe_chunk_size() * num_objects;
-  }
-
+  // num_bytes is the source's logical size. try_reserve_recovery_space()
+  // converts it to a per-shard size for erasure coded pools, on this OSD
+  // and on each OSD asked to reserve, so it must not be converted here.
   queue_peering_event(
     PGPeeringEventRef(
       std::make_shared<PGPeeringEvent>(
