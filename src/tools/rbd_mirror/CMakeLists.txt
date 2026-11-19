@@ -33,6 +33,7 @@ set(rbd_mirror_internal
   group_replayer/PrepareLocalGroupRequest.cc
   group_replayer/PrepareRemoteGroupRequest.cc
   group_replayer/RemoveLocalGroupRequest.cc
+  group_replayer/RemoveImageSnapshotRequest.cc
   group_replayer/Replayer.cc
   image_deleter/SnapshotPurgeRequest.cc
   image_deleter/TrashMoveRequest.cc

@@ -34,7 +34,7 @@ void RefreshEntitiesRequest<I>::mirror_image_list() {
 
   librados::ObjectReadOperation op;
   librbd::cls_client::mirror_image_list_start(&op, m_start_after, MAX_RETURN,
-                                              false);
+                                              m_list_all_images);
   m_out_bl.clear();
   librados::AioCompletion *aio_comp = create_rados_callback<
     RefreshEntitiesRequest<I>,
@@ -61,8 +61,9 @@ void RefreshEntitiesRequest<I>::handle_mirror_image_list(int r) {
   }
 
   for (auto &[image_id, global_image_id] : ids) {
+    size_t weight = m_list_all_images ? 0 : 1;
     m_entities->insert(
-        {{MIRROR_ENTITY_TYPE_IMAGE, global_image_id, 1}, image_id});
+        {{MIRROR_ENTITY_TYPE_IMAGE, global_image_id, weight}, image_id});
   }
 
   if (ids.size() == MAX_RETURN) {
@@ -72,6 +73,14 @@ void RefreshEntitiesRequest<I>::handle_mirror_image_list(int r) {
   }
 
   m_start_after = {};
+  if (!m_list_all_images) {
+    // The first list contains standalone images. List all images next so
+    // group members can remain in the image map with weight zero.
+    m_list_all_images = true;
+    mirror_image_list();
+    return;
+  }
+
   mirror_group_list();
 }
 

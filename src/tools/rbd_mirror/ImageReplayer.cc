@@ -281,18 +281,21 @@ void ImageReplayer<I>::add_peer(const Peer<I>& peer) {
 }
 
 template <typename I>
-void ImageReplayer<I>::prune_snapshot(uint64_t snap_id) {
+bool ImageReplayer<I>::prune_snapshot(uint64_t snap_id) {
   std::unique_lock locker(m_lock);
   if (m_replayer != nullptr) {
     m_replayer->prune_snapshot(snap_id);
+    return true;
   }
+  return false;
 }
 
 template <typename I>
-void ImageReplayer<I>::set_remote_snap_id_end_limit(uint64_t snap_id) {
+void ImageReplayer<I>::set_remote_snap_id_end_limit(uint64_t snap_id,
+  const cls::rbd::GroupSpec &local_group_spec) {
   std::unique_lock locker(m_lock);
   if (m_replayer != nullptr) {
-    m_replayer->set_remote_snap_id_end_limit(snap_id);
+    m_replayer->set_remote_snap_id_end_limit(snap_id, local_group_spec);
   }
 }
 

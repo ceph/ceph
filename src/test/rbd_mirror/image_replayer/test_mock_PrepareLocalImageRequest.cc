@@ -500,6 +500,135 @@ TEST_F(TestMockImageReplayerPrepareLocalImageRequest, ImageDisabling) {
   ASSERT_TRUE(mock_state_builder == nullptr);
 }
 
+// Test sequence: Fail removal of a standalone CREATING image with -EROFS.
+// Return that error so bootstrap cannot proceed as if the image were removed.
+TEST_F(TestMockImageReplayerPrepareLocalImageRequest, ImageCreatingTrashMoveError) {
+  InSequence seq;
+  MockGetMirrorImageIdRequest image_id_request;
+  expect_get_mirror_image_id(image_id_request, "local image id", 0);
+  expect_dir_get_name(m_local_io_ctx, "local image name", 0);
+  MockGetMirrorInfoRequest info_request;
+  expect_get_mirror_info(info_request,
+    {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT, "global image id",
+     cls::rbd::MIRROR_IMAGE_TYPE_STANDALONE,
+     cls::rbd::MIRROR_IMAGE_STATE_CREATING},
+    librbd::mirror::PROMOTION_STATE_NON_PRIMARY, "remote mirror uuid", 0);
+  MockImageDeleter deleter;
+  expect_trash_move(deleter, "global image id", false, -EROFS);
+  MockStateBuilder* state_builder = nullptr;
+  std::string image_name;
+  C_SaferCond ctx;
+  auto req = MockPrepareLocalImageRequest::create(m_local_io_ctx,
+    "global image id", &image_name, &state_builder,
+    m_threads->work_queue, &ctx);
+  req->send();
+  ASSERT_EQ(-EROFS, ctx.wait());
+  ASSERT_EQ(nullptr, state_builder);
+}
+
+
+// Test sequence: Find a DISABLING group image without live membership.
+// Complete its trash move and report that creation can retry.
+TEST_F(TestMockImageReplayerPrepareLocalImageRequest,
+       GroupDisablingWithoutMembership) {
+  InSequence seq;
+  MockGetMirrorImageIdRequest image_id_request;
+  expect_get_mirror_image_id(image_id_request, "local image id", 0);
+  expect_dir_get_name(m_local_io_ctx, "local image name", 0);
+  MockGetMirrorInfoRequest info_request;
+  expect_get_mirror_info(info_request,
+    {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT, "global image id",
+     cls::rbd::MIRROR_IMAGE_TYPE_GROUP,
+     cls::rbd::MIRROR_IMAGE_STATE_DISABLING},
+    librbd::mirror::PROMOTION_STATE_NON_PRIMARY, "remote mirror uuid", 0);
+  bufferlist bl;
+  encode(cls::rbd::GroupSpec{}, bl);
+  EXPECT_CALL(get_mock_io_ctx(m_local_io_ctx),
+    exec_internal(librbd::util::header_name("local image id"), _,
+                  StrEq("rbd"), StrEq("image_group_get"), _, _, _, _))
+    .WillOnce(DoAll(WithArg<5>(Invoke([bl](bufferlist* out_bl) {
+      *out_bl = bl;
+    })), Return(0)));
+  MockImageDeleter deleter;
+  expect_trash_move(deleter, "global image id", false, 0);
+  MockStateBuilder* state_builder = nullptr;
+  std::string image_name;
+  C_SaferCond ctx;
+  auto req = MockPrepareLocalImageRequest::create(m_local_io_ctx,
+    "global image id", &image_name, &state_builder,
+    m_threads->work_queue, &ctx);
+  req->send();
+  ASSERT_EQ(-ENOENT, ctx.wait());
+  ASSERT_EQ(nullptr, state_builder);
+}
+
+
+// Test sequence: Find a DISABLING group image that still has membership.
+// Keep it in place and let the normal group disable operation finish.
+TEST_F(TestMockImageReplayerPrepareLocalImageRequest,
+       GroupDisablingWithMembership) {
+  InSequence seq;
+  MockGetMirrorImageIdRequest image_id_request;
+  expect_get_mirror_image_id(image_id_request, "local image id", 0);
+  expect_dir_get_name(m_local_io_ctx, "local image name", 0);
+  MockGetMirrorInfoRequest info_request;
+  expect_get_mirror_info(info_request,
+    {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT, "global image id",
+     cls::rbd::MIRROR_IMAGE_TYPE_GROUP,
+     cls::rbd::MIRROR_IMAGE_STATE_DISABLING},
+    librbd::mirror::PROMOTION_STATE_NON_PRIMARY, "remote mirror uuid", 0);
+  bufferlist bl;
+  encode(cls::rbd::GroupSpec{"local group", m_local_io_ctx.get_id()}, bl);
+  EXPECT_CALL(get_mock_io_ctx(m_local_io_ctx),
+    exec_internal(librbd::util::header_name("local image id"), _,
+                  StrEq("rbd"), StrEq("image_group_get"), _, _, _, _))
+    .WillOnce(DoAll(WithArg<5>(Invoke([bl](bufferlist* out_bl) {
+      *out_bl = bl;
+    })), Return(0)));
+  MockStateBuilder* state_builder = nullptr;
+  std::string image_name;
+  C_SaferCond ctx;
+  auto req = MockPrepareLocalImageRequest::create(m_local_io_ctx,
+    "global image id", &image_name, &state_builder,
+    m_threads->work_queue, &ctx);
+  req->send();
+  ASSERT_EQ(-ERESTART, ctx.wait());
+  ASSERT_EQ(nullptr, state_builder);
+}
+
+// Test sequence: Fail the membership read for a DISABLING group image.
+// Return the read error without moving the image to trash.
+TEST_F(TestMockImageReplayerPrepareLocalImageRequest,
+       GroupDisablingMembershipReadError) {
+  InSequence seq;
+  MockGetMirrorImageIdRequest image_id_request;
+  expect_get_mirror_image_id(image_id_request, "local image id", 0);
+  expect_dir_get_name(m_local_io_ctx, "local image name", 0);
+  MockGetMirrorInfoRequest info_request;
+  expect_get_mirror_info(info_request,
+    {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT, "global image id",
+     cls::rbd::MIRROR_IMAGE_TYPE_GROUP,
+     cls::rbd::MIRROR_IMAGE_STATE_DISABLING},
+    librbd::mirror::PROMOTION_STATE_NON_PRIMARY, "remote mirror uuid", 0);
+  bufferlist bl;
+  encode(cls::rbd::GroupSpec{"local group", m_local_io_ctx.get_id()}, bl);
+  EXPECT_CALL(get_mock_io_ctx(m_local_io_ctx),
+    exec_internal(librbd::util::header_name("local image id"), _,
+                  StrEq("rbd"), StrEq("image_group_get"), _, _, _, _))
+    .WillOnce(DoAll(WithArg<5>(Invoke([bl](bufferlist* out_bl) {
+      *out_bl = bl;
+    })), Return(-EIO)));
+  MockStateBuilder* state_builder = nullptr;
+  std::string image_name;
+  C_SaferCond ctx;
+  auto req = MockPrepareLocalImageRequest::create(m_local_io_ctx,
+    "global image id", &image_name, &state_builder,
+    m_threads->work_queue, &ctx);
+  req->send();
+  ASSERT_EQ(-EIO, ctx.wait());
+  ASSERT_EQ(nullptr, state_builder);
+}
+
 } // namespace image_replayer
 } // namespace mirror
 } // namespace rbd

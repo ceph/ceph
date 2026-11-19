@@ -73,7 +73,7 @@ void CreateLocalImageRequest<I>::handle_disable_mirror_image(int r) {
   if (r < 0) {
     derr << "failed to disable mirror image " << m_global_image_id << ": "
          << cpp_strerror(r) << dendl;
-    finish(r);
+    finish(m_ret_val < 0 ? m_ret_val : r);
     return;
   }
 
@@ -103,11 +103,15 @@ void CreateLocalImageRequest<I>::handle_remove_mirror_image(int r) {
   if (r < 0) {
     derr << "failed to remove mirror image " << m_global_image_id << ": "
          << cpp_strerror(r) << dendl;
-    finish(r);
+    finish(m_ret_val < 0 ? m_ret_val : r);
     return;
   }
 
   m_state_builder->local_image_id = "";
+  if (m_ret_val < 0) {
+    finish(m_ret_val);
+    return;
+  }
   add_mirror_image();
 }
 
@@ -188,6 +192,14 @@ void CreateLocalImageRequest<I>::handle_create_local_image(int r) {
       dout(10) << "parent image does not exist" << dendl;
     } else {
       derr << "failed to create local image: " << cpp_strerror(r) << dendl;
+    }
+    if (m_local_group_ctx != nullptr) {
+      // The group can be removed before another creation retry. Remove our
+      // mirror metadata now so a daemon restart cannot find an orphan GROUP
+      // image and add a zero-weight ImageMap entry for it.
+      m_ret_val = r;
+      disable_mirror_image();
+      return;
     }
     finish(r);
     return;
