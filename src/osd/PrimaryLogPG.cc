@@ -16805,11 +16805,19 @@ uint64_t PrimaryLogPG::recover_pool_migration(
       int r = pgbackend->objects_list_range(hobject_t(), pg_end, &remaining);
       ceph_assert(r >= 0);
       if (!remaining.empty()) {
+        // Every OSD that becomes primary would hit this again, so aborting
+        // would take the PG down for good. Stop the migration with an error
+        // instead and leave the PG serving I/O.
         derr << __func__ << " pg " << info.pgid
              << " pool migration complete but PG is not empty."
              << " remaining=" << remaining
              << dendl;
-        ceph_abort_msg("pool migration finished with objects in the source PG");
+        osd->clog->error() << "pg " << info.pgid
+                           << " pool migration finished but "
+                           << remaining.size()
+                           << " object(s) remain in the source PG";
+        stop_pool_migration_error(-ENOTEMPTY);
+        return ops;
       }
 
       if (pool_migration_target_pg.has_value()) {
@@ -17048,12 +17056,14 @@ void PrimaryLogPG::stop_pool_migration_revoked()
 
 void PrimaryLogPG::stop_pool_migration_error(int error_code)
 {
-  // Always signal: this is only reached from the FATAL_ERROR quiesce completion,
-  // i.e. a genuine fatal copy failure. A racing DeferPoolMigration may already
-  // have left MigratingSource (clearing PG_STATE_MIGRATING); the Active-level
-  // reaction records the terminal state (visible in pg status and to
-  // mark_unfound_lost) rather than dropping it. Note a pending DoPoolMigration
-  // retry may re-enter MigratingSource and clear it again.
+  // Always signal: this is only reached when the migration cannot continue,
+  // from the FATAL_ERROR quiesce completion (a genuine fatal copy failure) or
+  // from recover_pool_migration() finding objects left in the source PG after
+  // every object has migrated. A racing DeferPoolMigration may already have
+  // left MigratingSource (clearing PG_STATE_MIGRATING); the Active-level
+  // reaction records the terminal state (visible in pg status) rather than
+  // dropping it. Note a pending DoPoolMigration retry may re-enter
+  // MigratingSource and clear it again.
   queue_peering_event(
     PGPeeringEventRef(
       std::make_shared<PGPeeringEvent>(
