@@ -75,6 +75,7 @@ class CommandResult:
 
 class CertMgrTestCase(MgrTestCase):
     """Shared helpers. Not collected on its own (no test_ methods)."""
+    ctx: Any  # injected by teuthology at runtime; base class declares it as None
 
     MGRS_REQUIRED = 1
 
