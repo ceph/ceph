@@ -2888,10 +2888,28 @@ private:
   /// con (of an OSD) connected: if it is a core connection, its core may
   /// now be routed to. No lock is held
   void handle_core_con_connect(Connection *con);
-  /// add to lresend the linger ops of s registered on the core connection
-  /// of 'core' (which goes away). s->lock is locked
+  /// objecter_use_osd_core_hints is off: close the core connections of s
+  /// that nothing uses any more (forgetting the hints to their cores). One
+  /// that backoffs came on, or with a notify registered on it, is kept for
+  /// now. An otherwise unused one on which watches were registered is
+  /// kept, and its core added to 'rewatch': they are to be registered
+  /// again (_reregister_off_cores()), after which it is closed.
+  /// rwlock is locked, s->lock is locked
+  void _close_unused_core_cons(
+    OSDSession *s,
+    const std::vector<std::pair<osdc::core_route::core_id_t, ConnectionRef>>& unused,
+    std::vector<std::pair<int, uint32_t>>& rewatch);
+  /// register again the watches registered on the core connections
+  /// (osd, core) of 'rewatch', on their PGs' current routes
+  void _reregister_off_cores(
+    const std::vector<std::pair<int, uint32_t>>& rewatch,
+    std::unique_lock<ceph::shared_mutex>& wl);
+  /// add to lresend the linger ops of s (only the watches, if
+  /// 'watches_only') registered on the core connection of 'core' (which
+  /// goes away, or is no longer used). s->lock is locked
   void _lingers_registered_on(OSDSession *s, uint32_t core,
-                              std::map<uint64_t, LingerOp *>& lresend);
+                              std::map<uint64_t, LingerOp *>& lresend,
+                              bool watches_only = false);
   /// give up on the core connections (osd, connection, why) found by
   /// tick(): carrying laggy ops but not answering a keepalive in time, or
   /// not connected in time (their hosts then blocked: see
