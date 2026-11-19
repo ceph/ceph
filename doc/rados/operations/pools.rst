@@ -139,21 +139,21 @@ The following output describes the same chain as the plain-text example above
            "pool_id": 3,
            "pool_name": ".migrate-1",
            "migration_target": 5,
-           "migrating_pgs": "[]",
+           "migrating_pgs": [],
            "lowest_migrated_pg": 0
        },
        {
            "pool_id": 4,
            "pool_name": ".migrate-2",
            "migration_target": 5,
-           "migrating_pgs": "[]",
+           "migrating_pgs": [],
            "lowest_migrated_pg": 0
        },
        {
            "pool_id": 5,
            "pool_name": "test-pool",
            "migration_root": 3,
-           "migrating_pgs": "[]",
+           "migrating_pgs": [],
            "lowest_migrated_pg": 0
        }
    ]

@@ -374,6 +374,9 @@ void request_redirect_t::dump(Formatter *f) const
   f->open_object_section("locator");
   redirect_locator.dump(f);
   f->close_section(); // locator
+  if (redirect_migration_watermark) {
+    f->dump_stream("migration_watermark") << *redirect_migration_watermark;
+  }
 }
 
 list<request_redirect_t> request_redirect_t::generate_test_instances()
@@ -1912,7 +1915,11 @@ void pg_pool_t::dump(Formatter *f, const CrushWrapper *crush,
     f->dump_int("migration_target", *migration_target);
   if (migration_root.has_value())
     f->dump_int("migration_root", *migration_root);
-  f->dump_stream("migrating_pgs") << migrating_pgs;
+  f->open_array_section("migrating_pgs");
+  for (const auto& pgid : migrating_pgs) {
+    f->dump_stream("pgid") << pgid;
+  }
+  f->close_section(); // migrating_pgs
   f->dump_unsigned("lowest_migrated_pg", lowest_migrated_pg);
   f->open_object_section("options");
   opts.dump(f);
