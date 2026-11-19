@@ -16505,6 +16505,17 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         goto reply_no_propose;
       }
 
+      // Wait for a pending migration of this pool, from a resent command
+      // say: the rollback of a rename here would undo its pending rename.
+      if (pending_inc.new_pool_names.count(pool_id)) {
+        goto wait;
+      }
+      for (auto& [id, name] : pending_inc.new_pool_names) {
+        if (name == poolstr) {
+          goto wait;
+        }
+      }
+
       string old_pool_name;
       int suffix_iter = 1;
       while (true) {
