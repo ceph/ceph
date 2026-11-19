@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <sstream>
+#include <tuple>
 
 #include "osd/OSDMap.h"
 #include "osd/error_code.h"
@@ -4832,17 +4833,20 @@ void Objecter::combine_result_lists(NListContext *list_context) {
   // Sort the combined list of objects
   std::sort(sortingPair.begin(),sortingPair.end(),
     [](const HashObjectPair& a, const HashObjectPair& b) {
-      if (a.first != b.first) {
-        return a.first < b.first;
-      }
-      return a.second.oid < b.second.oid;
+      // Sort on everything that identifies an object, so that copies of the
+      // same object end up next to each other for std::unique below.
+      return std::tie(a.first, a.second.nspace, a.second.locator, a.second.oid) <
+             std::tie(b.first, b.second.nspace, b.second.locator, b.second.oid);
     });
 
   //deduplicate the objects in the mega list
   auto unique = std::unique(sortingPair.begin(), sortingPair.end(),
-  [](const HashObjectPair& a, HashObjectPair& b) {
-    //object is a duplicate if the ouid and the namespace are the same.
-    return a.second.oid == b.second.oid && a.second.nspace == b.second.nspace;
+  [](const HashObjectPair& a, const HashObjectPair& b) {
+    // Objects with the same name but a different locator key are different
+    // objects.
+    return a.second.oid == b.second.oid &&
+           a.second.nspace == b.second.nspace &&
+           a.second.locator == b.second.locator;
   });
   sortingPair.erase(unique, sortingPair.end());
 
