@@ -315,15 +315,22 @@ protected:
     return name + "_" + std::to_string(index);
   }
 
-  /* Create each object and apply its committed ops, returning the models. */
+  /* Create each object and apply its committed ops, returning the models.
+   * Without verify, the caller checks the objects right after. */
   std::vector<std::string> create_objects(
       const std::string& name,
-      const std::vector<ObjectScenario>& objects) {
+      const std::vector<ObjectScenario>& objects,
+      bool verify = true) {
     std::vector<std::string> models;
     for (size_t i = 0; i < objects.size(); ++i) {
       bufferlist bl = create_random_buffer(objects[i].size);
       models.emplace_back(bl.c_str(), bl.length());
-      create_and_write_verify(object_name(name, i), models.back());
+      if (verify) {
+        create_and_write_verify(object_name(name, i), models.back());
+      } else {
+        EXPECT_EQ(0, create_and_write(object_name(name, i), models.back()))
+          << "write of " << object_name(name, i);
+      }
       for (const auto& ops : objects[i].committed) {
         EXPECT_EQ(0, submit_ops(object_name(name, i), ops, models.back()));
       }
@@ -451,7 +458,7 @@ protected:
     for (const auto& c : cases) {
       auto& s = states.emplace_back(CaseState{c.name, c.objects});
       SCOPED_TRACE(c.name);
-      s.originals = create_objects(c.name, c.objects);
+      s.originals = create_objects(c.name, c.objects, false);
       for (size_t i = 0; i < c.objects.size(); ++i) {
         s.original_shards.push_back(read_shards(object_name(c.name, i)));
       }
