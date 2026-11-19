@@ -12,8 +12,10 @@
  * cephfs-mdsbench - Client-side MDS metadata stress / benchmark
  *
  * Drives tunable lookup/stat, open/close, create/unlink, setattr, mkdir/rmdir,
- * and readdir pressure against CephFS via libcephfs. Intended for regression
- * of MDS journaler/throttle stalls and for metadata performance work.
+ * and readdir pressure against CephFS via libcephfs, or against an already-
+ * mounted host path (kernel CephFS, ceph-fuse, NFS, …) via --mount. Intended
+ * for regression of MDS journaler/throttle stalls and for metadata performance
+ * work.
  *
  * Default mix and scale target typical software-build style metadata load
  * (stat-heavy Run mix; nested Dir/bucket trees). Client mix is stat-heavy;
@@ -33,7 +35,10 @@
  */
 
 #include <cephfs/libcephfs.h>
+#include <dirent.h>
+#include <errno.h>
 #include <fcntl.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include <algorithm>
@@ -45,6 +50,7 @@
 #include <iomanip>
 #include <iostream>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <numeric>
 #include <random>
@@ -187,6 +193,9 @@ struct BenchConfig {
   MixWeights mix = MixWeights::balanced();
 
   string workdir = "/mdsbench";
+  // If set, run against this already-mounted host path (POSIX) instead of
+  // libcephfs. workdir is resolved under local_mount.
+  string local_mount;
   string ceph_conf;
   string userid = "admin";
   string keyring;
@@ -194,6 +203,12 @@ struct BenchConfig {
   string mount_root = "/";
   int uid = -1;
   int gid = -1;
+
+  bool
+  use_posix() const
+  {
+    return !local_mount.empty();
+  }
 
   string json_path;
   bool cleanup = true;
@@ -321,13 +336,233 @@ static string
 join_path(const string& a, const string& b)
 {
   if (a.empty() || a == "/") {
-    return "/" + b;
+    return string("/") + b;
   }
   if (a.back() == '/') {
     return a + b;
   }
   return a + "/" + b;
 }
+
+// Resolve --workdir under --mount (strip leading '/' from workdir).
+static string
+resolve_posix_workdir(const string& mount, const string& workdir)
+{
+  string rel = workdir;
+  while (!rel.empty() && rel.front() == '/') {
+    rel.erase(rel.begin());
+  }
+  if (rel.empty()) {
+    return mount;
+  }
+  return join_path(mount, rel);
+}
+
+// Thin FS ops layer: libcephfs or POSIX against a local mount. All methods
+// return 0 on success or -errno on failure (same convention as libcephfs).
+struct FsOps {
+  virtual ~FsOps() = default;
+  virtual const char* backend_name() const = 0;
+  virtual int mkdir_path(const string& path, mode_t mode) = 0;
+  virtual int rmdir_path(const string& path) = 0;
+  virtual int unlink_path(const string& path) = 0;
+  virtual int chmod_path(const string& path, mode_t mode) = 0;
+  // 0 if path exists; -ENOENT (or other -errno) otherwise.
+  virtual int exists(const string& path) = 0;
+  virtual int open_path(const string& path, int flags, mode_t mode) = 0;
+  virtual int write_path(int fd, const char* buf, size_t len, off_t off) = 0;
+  virtual int close_fd(int fd) = 0;
+  virtual int readdir_all(const string& path) = 0;
+  virtual void shutdown() = 0;
+};
+
+class LibcephfsFsOps : public FsOps {
+  struct ceph_mount_info* cmount_;
+
+ public:
+  explicit LibcephfsFsOps(struct ceph_mount_info* cmount) : cmount_(cmount) {}
+
+  const char*
+  backend_name() const override
+  {
+    return "libcephfs";
+  }
+
+  int
+  mkdir_path(const string& path, mode_t mode) override
+  {
+    return ceph_mkdir(cmount_, path.c_str(), mode);
+  }
+
+  int
+  rmdir_path(const string& path) override
+  {
+    return ceph_rmdir(cmount_, path.c_str());
+  }
+
+  int
+  unlink_path(const string& path) override
+  {
+    return ceph_unlink(cmount_, path.c_str());
+  }
+
+  int
+  chmod_path(const string& path, mode_t mode) override
+  {
+    return ceph_chmod(cmount_, path.c_str(), mode);
+  }
+
+  int
+  exists(const string& path) override
+  {
+    struct ceph_statx stx;
+    return ceph_statx(cmount_, path.c_str(), &stx, 0, 0);
+  }
+
+  int
+  open_path(const string& path, int flags, mode_t mode) override
+  {
+    return ceph_open(cmount_, path.c_str(), flags, mode);
+  }
+
+  int
+  write_path(int fd, const char* buf, size_t len, off_t off) override
+  {
+    return ceph_write(cmount_, fd, buf, len, off);
+  }
+
+  int
+  close_fd(int fd) override
+  {
+    return ceph_close(cmount_, fd);
+  }
+
+  int
+  readdir_all(const string& path) override
+  {
+    struct ceph_dir_result* dirp = nullptr;
+    int rc = ceph_opendir(cmount_, path.c_str(), &dirp);
+    if (rc < 0) {
+      return rc;
+    }
+    while (ceph_readdir(cmount_, dirp) != nullptr) {
+    }
+    return ceph_closedir(cmount_, dirp);
+  }
+
+  void
+  shutdown() override
+  {
+    if (cmount_) {
+      ceph_unmount(cmount_);
+      ceph_shutdown(cmount_);
+      cmount_ = nullptr;
+    }
+  }
+};
+
+class PosixFsOps : public FsOps {
+ public:
+  const char*
+  backend_name() const override
+  {
+    return "posix";
+  }
+
+  int
+  mkdir_path(const string& path, mode_t mode) override
+  {
+    if (::mkdir(path.c_str(), mode) == 0) {
+      return 0;
+    }
+    return -errno;
+  }
+
+  int
+  rmdir_path(const string& path) override
+  {
+    if (::rmdir(path.c_str()) == 0) {
+      return 0;
+    }
+    return -errno;
+  }
+
+  int
+  unlink_path(const string& path) override
+  {
+    if (::unlink(path.c_str()) == 0) {
+      return 0;
+    }
+    return -errno;
+  }
+
+  int
+  chmod_path(const string& path, mode_t mode) override
+  {
+    if (::chmod(path.c_str(), mode) == 0) {
+      return 0;
+    }
+    return -errno;
+  }
+
+  int
+  exists(const string& path) override
+  {
+    struct stat st;
+    if (::stat(path.c_str(), &st) == 0) {
+      return 0;
+    }
+    return -errno;
+  }
+
+  int
+  open_path(const string& path, int flags, mode_t mode) override
+  {
+    int fd = ::open(path.c_str(), flags, mode);
+    if (fd < 0) {
+      return -errno;
+    }
+    return fd;
+  }
+
+  int
+  write_path(int fd, const char* buf, size_t len, off_t off) override
+  {
+    ssize_t n = ::pwrite(fd, buf, len, off);
+    if (n < 0) {
+      return -errno;
+    }
+    return (int)n;
+  }
+
+  int
+  close_fd(int fd) override
+  {
+    if (::close(fd) == 0) {
+      return 0;
+    }
+    return -errno;
+  }
+
+  int
+  readdir_all(const string& path) override
+  {
+    DIR* dirp = ::opendir(path.c_str());
+    if (!dirp) {
+      return -errno;
+    }
+    while (::readdir(dirp) != nullptr) {
+    }
+    if (::closedir(dirp) != 0) {
+      return -errno;
+    }
+    return 0;
+  }
+
+  void
+  shutdown() override
+  {}
+};
 
 static string
 client_root(const BenchConfig& cfg, int id)
@@ -453,10 +688,9 @@ setup_mount(
 }
 
 static int
-ensure_dir(struct ceph_mount_info* cmount, const string& path)
+ensure_dir(FsOps* fs, const string& path)
 {
-  struct ceph_statx stx;
-  if (ceph_statx(cmount, path.c_str(), &stx, 0, 0) == 0) {
+  if (fs->exists(path) == 0) {
     return 0;
   }
   // Create each path component (skip empty / root).
@@ -464,7 +698,7 @@ ensure_dir(struct ceph_mount_info* cmount, const string& path)
   for (size_t i = 0; i < path.size(); ++i) {
     cur.push_back(path[i]);
     if ((i + 1 == path.size() || path[i + 1] == '/') && cur != "/") {
-      int rc = ceph_mkdir(cmount, cur.c_str(), 0755);
+      int rc = fs->mkdir_path(cur, 0755);
       if (rc < 0 && rc != -EEXIST) {
         return rc;
       }
@@ -475,12 +709,12 @@ ensure_dir(struct ceph_mount_info* cmount, const string& path)
 
 static int
 init_one_file(
-    struct ceph_mount_info* cmount,
+    FsOps* fs,
     const string& path,
     const vector<char>& fill_buf,
     bool do_fill)
 {
-  int fd = ceph_open(cmount, path.c_str(), O_CREAT | O_WRONLY | O_TRUNC, 0644);
+  int fd = fs->open_path(path, O_CREAT | O_WRONLY | O_TRUNC, 0644);
   if (fd < 0) {
     if (fd == -EEXIST) {
       return 0;
@@ -488,13 +722,13 @@ init_one_file(
     return fd;
   }
   if (do_fill && !fill_buf.empty()) {
-    // Write-fill like generic_init_file (dirty Fx/Fw caps → CLIENT_CAPS on close).
+    // Write-fill (dirty Fx/Fw caps → CLIENT_CAPS on close for libcephfs).
     uint64_t off = 0;
     while (off < fill_buf.size()) {
-      int n = ceph_write(cmount, fd, fill_buf.data() + off,
-                         fill_buf.size() - off, off);
+      int n = fs->write_path(fd, fill_buf.data() + off, fill_buf.size() - off,
+                             (off_t)off);
       if (n < 0) {
-        ceph_close(cmount, fd);
+        fs->close_fd(fd);
         return n;
       }
       if (n == 0) {
@@ -503,12 +737,12 @@ init_one_file(
       off += n;
     }
   }
-  return ceph_close(cmount, fd);
+  return fs->close_fd(fd);
 }
 
 static int
 precreate_tree(
-    struct ceph_mount_info* cmount,
+    FsOps* fs,
     const BenchConfig& cfg,
     const vector<PathIndex>& by_client,
     std::ostream& out)
@@ -522,8 +756,9 @@ precreate_tree(
   out << "Precreating under " << cfg.workdir << " (" << by_client.size()
       << " clients, " << total_dirs << " dirs, " << total_files << " files"
       << ", fill=" << cfg.init_fill_percent << "% @" << cfg.init_file_bytes
-      << "B, init_threads=" << cfg.init_threads << ")..." << endl;
-  if (int rc = ensure_dir(cmount, cfg.workdir); rc < 0) {
+      << "B, init_threads=" << cfg.init_threads
+      << ", backend=" << fs->backend_name() << ")..." << endl;
+  if (int rc = ensure_dir(fs, cfg.workdir); rc < 0) {
     out << "ensure workdir failed: " << strerror(-rc) << endl;
     return rc;
   }
@@ -541,7 +776,7 @@ precreate_tree(
       out << "  client " << idx.client_id << " -> " << idx.root << endl;
     }
     for (const auto& d : idx.dirs) {
-      int rc = ceph_mkdir(cmount, d.c_str(), 0755);
+      int rc = fs->mkdir_path(d, 0755);
       if (rc < 0 && rc != -EEXIST) {
         out << "mkdir " << d << " failed: " << strerror(-rc) << endl;
         return rc;
@@ -565,7 +800,7 @@ precreate_tree(
       // Deterministic fill subset (files that get data during Init).
       bool do_fill = !fill_buf.empty() &&
                      ((int)(i % 100) < cfg.init_fill_percent);
-      int rc = init_one_file(cmount, all_files[i], fill_buf, do_fill);
+      int rc = init_one_file(fs, all_files[i], fill_buf, do_fill);
       if (rc < 0) {
         int expected = 0;
         if (first_err.compare_exchange_strong(expected, rc)) {
@@ -645,7 +880,7 @@ pick_op(const MixWeights& mix, std::mt19937_64& rng)
 
 static int
 do_op(
-    struct ceph_mount_info* cmount,
+    FsOps* fs,
     OpType op,
     const BenchConfig& cfg,
     const PathIndex& idx,
@@ -666,56 +901,42 @@ do_op(
   string scratch_dir = join_path(dir, "sd_" + std::to_string(slot_dist(rng)));
 
   switch (op) {
-  case OpType::Stat: {
-    struct ceph_statx stx;
-    return ceph_statx(cmount, file.c_str(), &stx, CEPH_STATX_MODE, 0);
-  }
+  case OpType::Stat:
+  case OpType::Access:
+    // Access approximates access(2) via existence/stat of the path.
+    return fs->exists(file);
   case OpType::OpenClose: {
-    int fd = ceph_open(cmount, file.c_str(), O_RDONLY, 0);
+    int fd = fs->open_path(file, O_RDONLY, 0);
     if (fd < 0) {
       return fd;
     }
-    return ceph_close(cmount, fd);
+    return fs->close_fd(fd);
   }
   case OpType::Create: {
-    int fd = ceph_open(
-        cmount, scratch_file.c_str(), O_CREAT | O_WRONLY | O_TRUNC, 0644);
+    int fd = fs->open_path(scratch_file, O_CREAT | O_WRONLY | O_TRUNC, 0644);
     if (fd < 0) {
       return fd;
     }
-    return ceph_close(cmount, fd);
+    return fs->close_fd(fd);
   }
   case OpType::Unlink:
-    return ceph_unlink(cmount, scratch_file.c_str());
+    return fs->unlink_path(scratch_file);
   case OpType::Chmod:
-    return ceph_chmod(cmount, file.c_str(), 0644);
-  case OpType::Access: {
-    // Approximate access(2) via statx of mode bits.
-    struct ceph_statx stx;
-    return ceph_statx(cmount, file.c_str(), &stx, CEPH_STATX_MODE, 0);
-  }
+    return fs->chmod_path(file, 0644);
   case OpType::Mkdir:
-    return ceph_mkdir(cmount, scratch_dir.c_str(), 0755);
+    return fs->mkdir_path(scratch_dir, 0755);
   case OpType::Rmdir:
-    return ceph_rmdir(cmount, scratch_dir.c_str());
-  case OpType::Readdir: {
-    struct ceph_dir_result* dirp = nullptr;
-    int rc = ceph_opendir(cmount, dir.c_str(), &dirp);
-    if (rc < 0) {
-      return rc;
-    }
-    while (ceph_readdir(cmount, dirp) != nullptr) {
-    }
-    return ceph_closedir(cmount, dirp);
-  }
+    return fs->rmdir_path(scratch_dir);
+  case OpType::Readdir:
+    return fs->readdir_all(dir);
   case OpType::WriteSmall: {
-    int fd = ceph_open(cmount, file.c_str(), O_WRONLY, 0);
+    int fd = fs->open_path(file, O_WRONLY, 0);
     if (fd < 0) {
       return fd;
     }
     int n = std::min(cfg.write_bytes, (int)wbuf.size());
-    int wr = ceph_write(cmount, fd, wbuf.data(), n, 0);
-    int cl = ceph_close(cmount, fd);
+    int wr = fs->write_path(fd, wbuf.data(), n, 0);
+    int cl = fs->close_fd(fd);
     return wr < 0 ? wr : cl;
   }
   default:
@@ -799,7 +1020,7 @@ progress_reporter(
 static void
 worker(
     int client_id,
-    struct ceph_mount_info* cmount,
+    FsOps* fs,
     const BenchConfig& cfg,
     const PathIndex& idx,
     RateLimiter& limiter,
@@ -815,7 +1036,7 @@ worker(
     limiter.acquire(1);
     OpType op = pick_op(cfg.mix, rng);
     auto t0 = steady_clock::now();
-    int rc = do_op(cmount, op, cfg, idx, rng, wbuf);
+    int rc = do_op(fs, op, cfg, idx, rng, wbuf);
     auto t1 = steady_clock::now();
     // Expected misses on unlink/rmdir of empty scratch slots are fine.
     bool soft_err = (rc == -ENOENT || rc == -EEXIST);
@@ -895,16 +1116,12 @@ barrier_ready_path(const BenchConfig& cfg, int id)
 // Drop this client's ready marker so a prior crashed run cannot leave a
 // stale signal. Safe if the file does not exist.
 static void
-barrier_clear_own(
-    struct ceph_mount_info* cmount,
-    const BenchConfig& cfg,
-    int id,
-    std::ostream& out)
+barrier_clear_own(FsOps* fs, const BenchConfig& cfg, int id, std::ostream& out)
 {
   string dir = barrier_dir(cfg);
-  (void)ensure_dir(cmount, dir);
+  (void)ensure_dir(fs, dir);
   string path = barrier_ready_path(cfg, id);
-  int rc = ceph_unlink(cmount, path.c_str());
+  int rc = fs->unlink_path(path);
   if (rc == 0) {
     out << "Barrier: cleared stale " << path << endl;
   }
@@ -912,26 +1129,26 @@ barrier_clear_own(
 
 static int
 barrier_signal_ready(
-    struct ceph_mount_info* cmount,
+    FsOps* fs,
     const BenchConfig& cfg,
     int id,
     std::ostream& out)
 {
   string dir = barrier_dir(cfg);
-  if (int rc = ensure_dir(cmount, dir); rc < 0) {
+  if (int rc = ensure_dir(fs, dir); rc < 0) {
     out << "barrier mkdir failed: " << strerror(-rc) << endl;
     return rc;
   }
   string path = barrier_ready_path(cfg, id);
-  int fd = ceph_open(cmount, path.c_str(), O_CREAT | O_WRONLY | O_TRUNC, 0644);
+  int fd = fs->open_path(path, O_CREAT | O_WRONLY | O_TRUNC, 0644);
   if (fd < 0) {
     out << "barrier ready create failed (" << path << "): " << strerror(-fd)
         << endl;
     return fd;
   }
   string payload = "client " + std::to_string(id) + " ready\n";
-  (void)ceph_write(cmount, fd, payload.data(), payload.size(), 0);
-  ceph_close(cmount, fd);
+  (void)fs->write_path(fd, payload.data(), payload.size(), 0);
+  fs->close_fd(fd);
   out << "Barrier: signaled ready as client " << id << " (" << path << ")"
       << endl;
   return 0;
@@ -940,11 +1157,7 @@ barrier_signal_ready(
 // Wait until ready.0 .. ready.{expect-1} exist. Once a peer is seen, do not
 // re-stat it on later polls.
 static int
-barrier_wait(
-    struct ceph_mount_info* cmount,
-    const BenchConfig& cfg,
-    int expect,
-    std::ostream& out)
+barrier_wait(FsOps* fs, const BenchConfig& cfg, int expect, std::ostream& out)
 {
   out << "Barrier: waiting for " << expect << " clients under "
       << barrier_dir(cfg) << endl;
@@ -957,9 +1170,8 @@ barrier_wait(
       if (seen[i]) {
         continue;
       }
-      struct ceph_statx stx;
       string path = barrier_ready_path(cfg, i);
-      if (ceph_statx(cmount, path.c_str(), &stx, 0, 0) == 0) {
+      if (fs->exists(path) == 0) {
         seen[i] = 1;
         ++ready;
         progressed = true;
@@ -986,15 +1198,49 @@ barrier_wait(
 }
 
 static void
-barrier_cleanup(
-    struct ceph_mount_info* cmount,
-    const BenchConfig& cfg,
-    int expect)
+barrier_cleanup(FsOps* fs, const BenchConfig& cfg, int expect)
 {
   for (int i = 0; i < expect; ++i) {
-    (void)ceph_unlink(cmount, barrier_ready_path(cfg, i).c_str());
+    (void)fs->unlink_path(barrier_ready_path(cfg, i));
   }
-  (void)ceph_rmdir(cmount, barrier_dir(cfg).c_str());
+  (void)fs->rmdir_path(barrier_dir(cfg));
+}
+
+static int
+setup_posix_mount(const BenchConfig& config, std::ostream& out)
+{
+  struct stat st;
+  if (::stat(config.local_mount.c_str(), &st) != 0) {
+    out << "--mount path does not exist: " << config.local_mount << " ("
+        << strerror(errno) << ")" << endl;
+    return -errno;
+  }
+  if (!S_ISDIR(st.st_mode)) {
+    out << "--mount path is not a directory: " << config.local_mount << endl;
+    return -ENOTDIR;
+  }
+  return 0;
+}
+
+static std::unique_ptr<FsOps>
+setup_backend(BenchConfig& cfg, std::ostream& out)
+{
+  if (cfg.use_posix()) {
+    if (int rc = setup_posix_mount(cfg, out); rc < 0) {
+      return nullptr;
+    }
+    cfg.workdir = resolve_posix_workdir(cfg.local_mount, cfg.workdir);
+    out << "Backend: posix mount=" << cfg.local_mount
+        << " workdir=" << cfg.workdir << endl;
+    return std::make_unique<PosixFsOps>();
+  }
+
+  struct ceph_mount_info* cmount = nullptr;
+  if (int rc = setup_mount(&cmount, cfg, out); rc < 0) {
+    return nullptr;
+  }
+  out << "Backend: libcephfs workdir=" << cfg.workdir << endl;
+  return std::make_unique<LibcephfsFsOps>(cmount);
 }
 
 static int
@@ -1025,24 +1271,24 @@ run_bench(BenchConfig& cfg)
     return 1;
   }
 
-  vector<PathIndex> by_client;
-  build_all_client_paths(cfg, by_client);
-
-  struct ceph_mount_info* cmount = nullptr;
-  if (int rc = setup_mount(&cmount, cfg, cerr); rc < 0) {
+  std::unique_ptr<FsOps> fs = setup_backend(cfg, cerr);
+  if (!fs) {
     return 1;
   }
+
+  // Paths must be built after POSIX workdir resolution in setup_backend.
+  vector<PathIndex> by_client;
+  build_all_client_paths(cfg, by_client);
 
   // Clear our ready marker before seeding so a crashed prior run cannot
   // leave ready.{id} and let peers race ahead.
   if (use_barrier) {
-    barrier_clear_own(cmount, cfg, cfg.client_id, cout);
+    barrier_clear_own(fs.get(), cfg, cfg.client_id, cout);
   }
 
   if (!cfg.skip_precreate) {
-    if (int rc = precreate_tree(cmount, cfg, by_client, cout); rc < 0) {
-      ceph_unmount(cmount);
-      ceph_shutdown(cmount);
+    if (int rc = precreate_tree(fs.get(), cfg, by_client, cout); rc < 0) {
+      fs->shutdown();
       return 1;
     }
   } else {
@@ -1051,30 +1297,26 @@ run_bench(BenchConfig& cfg)
   }
 
   if (use_barrier) {
-    if (int rc = barrier_signal_ready(cmount, cfg, cfg.client_id, cout);
+    if (int rc = barrier_signal_ready(fs.get(), cfg, cfg.client_id, cout);
         rc < 0) {
-      ceph_unmount(cmount);
-      ceph_shutdown(cmount);
+      fs->shutdown();
       return 1;
     }
     if (cfg.prep_only) {
       cout << "Prep-only: ready signaled; exiting before barrier wait/bench"
            << endl;
-      ceph_unmount(cmount);
-      ceph_shutdown(cmount);
+      fs->shutdown();
       return 0;
     }
-    if (int rc = barrier_wait(cmount, cfg, cfg.clients, cout); rc < 0) {
-      ceph_unmount(cmount);
-      ceph_shutdown(cmount);
+    if (int rc = barrier_wait(fs.get(), cfg, cfg.clients, cout); rc < 0) {
+      fs->shutdown();
       return 1;
     }
     // Leave ready.* markers in place until cleanup so late waiters cannot
     // miss a peer that already passed the barrier.
   } else if (cfg.prep_only) {
     cout << "Prep-only: precreate done; exiting" << endl;
-    ceph_unmount(cmount);
-    ceph_shutdown(cmount);
+    fs->shutdown();
     return 0;
   } else if (cfg.client_id >= 0) {
     cout << "Warning: --client-id without barrier; this process may start "
@@ -1093,7 +1335,8 @@ run_bench(BenchConfig& cfg)
 
   cout << "Starting " << by_client.size() << " clients"
        << " target=" << cfg.ops_per_sec << " ops/s"
-       << " mode=" << cfg.mode << " warmup=" << cfg.warmup_sec << "s"
+       << " mode=" << cfg.mode << " backend=" << fs->backend_name()
+       << " warmup=" << cfg.warmup_sec << "s"
        << " duration=" << cfg.duration_sec << "s" << endl;
   for (const auto& idx : by_client) {
     cout << "  client " << idx.client_id << " confined to " << idx.root << endl;
@@ -1101,7 +1344,7 @@ run_bench(BenchConfig& cfg)
 
   for (size_t i = 0; i < by_client.size(); ++i) {
     threads.emplace_back(
-        worker, by_client[i].client_id, cmount, std::cref(cfg),
+        worker, by_client[i].client_id, fs.get(), std::cref(cfg),
         std::cref(by_client[i]), std::ref(limiter), std::ref(stop),
         std::ref(counting), std::ref(tstats[i]), lats);
   }
@@ -1178,6 +1421,10 @@ run_bench(BenchConfig& cfg)
     f.open_object_section("mdsbench");
     f.open_object_section("configuration");
     f.dump_string("mode", cfg.mode);
+    f.dump_string("backend", fs->backend_name());
+    if (cfg.use_posix()) {
+      f.dump_string("mount", cfg.local_mount);
+    }
     f.dump_int("clients", (int)by_client.size());
     if (cfg.client_id >= 0) {
       f.dump_int("client_id", cfg.client_id);
@@ -1247,24 +1494,23 @@ run_bench(BenchConfig& cfg)
     cout << "Cleanup: removing per-client trees (best-effort)..." << endl;
     for (const auto& idx : by_client) {
       for (const auto& file : idx.files) {
-        (void)ceph_unlink(cmount, file.c_str());
+        (void)fs->unlink_path(file);
       }
       for (auto it = idx.dirs.rbegin(); it != idx.dirs.rend(); ++it) {
-        (void)ceph_rmdir(cmount, it->c_str());
+        (void)fs->rmdir_path(*it);
       }
     }
     if (cfg.client_id >= 0) {
-      barrier_cleanup(cmount, cfg, cfg.clients);
+      barrier_cleanup(fs.get(), cfg, cfg.clients);
     }
-    (void)ceph_rmdir(cmount, cfg.workdir.c_str());
+    (void)fs->rmdir_path(cfg.workdir);
   } else if (cfg.client_id >= 0 && cfg.client_id == 0) {
     // Drop barrier markers after a successful multi-process run so a retry
     // does not immediately see a stale all-ready set.
-    barrier_cleanup(cmount, cfg, cfg.clients);
+    barrier_cleanup(fs.get(), cfg, cfg.clients);
   }
 
-  ceph_unmount(cmount);
-  ceph_shutdown(cmount);
+  fs->shutdown();
   return 0;
 }
 
@@ -1279,15 +1525,25 @@ main(int argc, char** argv)
   po::options_description desc("cephfs-mdsbench options");
   desc.add_options()
     ("help,h", "Show help")
-    ("conf,c", po::value<string>(&cfg.ceph_conf), "Ceph config file")
-    ("id,i", po::value<string>(&cfg.userid)->default_value("admin"), "Client id")
-    ("keyring,k", po::value<string>(&cfg.keyring), "Keyring path")
-    ("filesystem,fs", po::value<string>(&cfg.filesystem), "CephFS name")
-    ("root-path", po::value<string>(&cfg.mount_root)->default_value("/"), "Mount root")
-    ("uid", po::value<int>(&cfg.uid)->default_value(-1), "UID")
-    ("gid", po::value<int>(&cfg.gid)->default_value(-1), "GID")
+    ("mount", po::value<string>(&cfg.local_mount),
+     "Use already-mounted host path (kernel CephFS/ceph-fuse/NFS/…); "
+     "skips libcephfs. workdir is created under this path")
+    ("conf,c", po::value<string>(&cfg.ceph_conf),
+     "Ceph config file (libcephfs mode)")
+    ("id,i", po::value<string>(&cfg.userid)->default_value("admin"),
+     "Client id (libcephfs mode)")
+    ("keyring,k", po::value<string>(&cfg.keyring),
+     "Keyring path (libcephfs mode)")
+    ("filesystem,fs", po::value<string>(&cfg.filesystem),
+     "CephFS name (libcephfs mode)")
+    ("root-path", po::value<string>(&cfg.mount_root)->default_value("/"),
+     "Mount root inside CephFS (libcephfs mode)")
+    ("uid", po::value<int>(&cfg.uid)->default_value(-1),
+     "UID (libcephfs mode)")
+    ("gid", po::value<int>(&cfg.gid)->default_value(-1),
+     "GID (libcephfs mode)")
     ("workdir", po::value<string>(&cfg.workdir)->default_value("/mdsbench"),
-     "Work directory in CephFS")
+     "Work directory (CephFS path, or under --mount)")
     ("mode", po::value<string>(&cfg.mode)->default_value("balanced"),
      "Op mix: balanced | journal-heavy | lookup-heavy")
     ("mix", po::value<string>(&mix_override),
@@ -1362,11 +1618,16 @@ main(int argc, char** argv)
   if (vm.count("help")) {
     // clang-format off
   cout << "Usage: cephfs-mdsbench [options]\n\n"
-         << "MDS metadata stress/benchmark via libcephfs.\n"
+         << "MDS metadata stress/benchmark via libcephfs, or against an\n"
+         << "already-mounted host path (--mount) such as kernel CephFS,\n"
+         << "ceph-fuse, or NFS.\n"
          << "Targets software-build style metadata pressure for MDS regression.\n\n"
          << "Tree shape is fixed (not tied to --clients / --ops-per-sec):\n"
          << "  CL{id}_MDSBENCH/Dir{0..49}/bucket{0..25}/f{0..99}\n"
          << "  (~1300 dirs / 130k files per client)\n\n"
+         << "Local mount (POSIX):\n"
+         << "  cephfs-mdsbench --mount /mnt/ceph --workdir /mdsbench \\\n"
+         << "    --clients 1 --client-id 0 --duration 60 --progress\n\n"
          << "Init CAPS storm (tree populate create/write-fill/close):\n"
          << "  Storm is during Init, not the measured Run mix.\n"
          << "  Launch many processes together; each seeds only its CL{id}:\n"
@@ -1387,6 +1648,16 @@ main(int argc, char** argv)
   // was left at default but threads was changed.
   if (vm["clients"].defaulted() && !vm["threads"].defaulted()) {
     cfg.clients = cfg.threads;
+  }
+  if (cfg.use_posix()) {
+    // Local mount: ignore libcephfs-only connection knobs.
+    if (!cfg.ceph_conf.empty() || !cfg.keyring.empty() ||
+        !cfg.filesystem.empty() || cfg.mount_root != "/" || cfg.uid != -1 ||
+        cfg.gid != -1 ||
+        (!vm["id"].defaulted() && cfg.userid != "admin")) {
+      cerr << "Warning: --mount ignores --conf/--id/--keyring/--filesystem/"
+              "--root-path/--uid/--gid\n";
+    }
   }
   if (cfg.cap_storm) {
     // Mass create/write-fill/close during Init; measured Run mix is not the
