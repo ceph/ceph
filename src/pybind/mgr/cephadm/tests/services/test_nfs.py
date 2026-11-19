@@ -1234,6 +1234,11 @@ class TestNFS:
                         '        name = "client.nfs.foo.host1.0.0-rgw";\n'
                         '}\n'
                         '\n'
+                        'CEPH {\n'
+                        '        register_service = true;\n'
+                        '        nodeid = "foo.host1.0.0";\n'
+                        '}\n'
+                        '\n'
                         '\n'
                         '%url    rados://.nfs/foo/conf-nfs.foo'
                     )
