@@ -154,7 +154,7 @@ static int mul(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
 CLS_INIT(numops)
 {
-  CLS_LOG(20, "loading cls_numops");
+  CLS_LOG(0, "loading cls_numops");
 
   cls_handle_t h_class;
   cls_method_handle_t h_add;

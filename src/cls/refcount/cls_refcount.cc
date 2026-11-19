@@ -202,7 +202,7 @@ static int cls_rc_refcount_read(cls_method_context_t hctx, bufferlist *in, buffe
 
 CLS_INIT(refcount)
 {
-  CLS_LOG(1, "Loaded refcount class!");
+  CLS_LOG(0, "Loaded refcount class!");
 
   cls_handle_t h_class;
   cls_method_handle_t h_refcount_get;

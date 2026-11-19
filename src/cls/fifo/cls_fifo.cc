@@ -913,7 +913,7 @@ int get_part_info(cls_method_context_t hctx, ceph::buffer::list *in,
 CLS_INIT(fifo)
 {
   using namespace rados::cls::fifo;
-  CLS_LOG(10, "Loaded fifo class!");
+  CLS_LOG(0, "Loaded fifo class!");
 
   cls_handle_t h_class;
   cls_method_handle_t h_create_meta;

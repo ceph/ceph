@@ -209,7 +209,7 @@ static int references_chunk(cls_method_context_t hctx,
 
 CLS_INIT(cas)
 {
-  CLS_LOG(1, "Loaded cas class!");
+  CLS_LOG(0, "Loaded cas class!");
 
   cls_handle_t h_class;
   cls_method_handle_t h_chunk_create_or_get_ref;

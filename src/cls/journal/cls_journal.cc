@@ -1211,7 +1211,7 @@ int journal_object_append(cls_method_context_t hctx, bufferlist *in,
 
 CLS_INIT(journal)
 {
-  CLS_LOG(20, "Loaded journal class!");
+  CLS_LOG(0, "Loaded journal class!");
 
   cls_handle_t h_class;
   cls_method_handle_t h_journal_create;
