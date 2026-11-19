@@ -373,6 +373,14 @@ target_include_directories(unittest_rgw_lc
 target_link_libraries(unittest_rgw_lc
   rgw_common ${rgw_libs} ${EXPAT_LIBRARIES})
 
+# unittest_rgw_object_lock
+add_executable(unittest_rgw_object_lock test_rgw_object_lock.cc)
+add_ceph_unittest(unittest_rgw_object_lock)
+target_include_directories(unittest_rgw_object_lock
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
+target_link_libraries(unittest_rgw_object_lock
+  rgw_common ${rgw_libs} ${EXPAT_LIBRARIES})
+
 # unittest_rgw_cksum
 add_executable(unittest_rgw_cksum test_rgw_cksum.cc)
 add_ceph_unittest(unittest_rgw_cksum)
