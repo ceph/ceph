@@ -100,6 +100,11 @@ class RadosWriter : public rgw::sal::DataProcessor {
   // write the data as an exclusive create and wait for it to complete
   int write_exclusive(const bufferlist& data);
 
+  // set the attrs on obj, creating it if it doesn't exist, without waiting
+  // for it to complete
+  int set_attrs(const rgw_raw_obj& obj,
+                const std::map<std::string, bufferlist>& attrs);
+
   int drain();
 
   // when the operation completes successfully, clear the set of written objects
@@ -171,6 +176,8 @@ class AtomicObjectProcessor : public ManifestObjectProcessor {
   const std::optional<uint64_t> olh_epoch;
   const std::string unique_tag;
   bufferlist first_chunk; // written with the head in complete()
+  // manifest of data written by other processors, see set_manifest()
+  std::optional<RGWObjManifest> written_manifest;
 
   int process_first_chunk(bufferlist&& data, rgw::sal::DataProcessor **processor) override;
  public:
@@ -189,6 +196,10 @@ class AtomicObjectProcessor : public ManifestObjectProcessor {
 
   // prepare a trivial manifest
   int prepare(optional_yield y) override;
+
+  // complete() writes a head with this manifest, for data that was written by
+  // other processors, instead of processing any data itself
+  void set_manifest(RGWObjManifest m) { written_manifest = std::move(m); }
   // write the head object atomically in a bucket index transaction
   int complete(size_t accounted_size, const std::string& etag,
                ceph::real_time *mtime, ceph::real_time set_mtime,

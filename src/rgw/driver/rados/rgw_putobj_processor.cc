@@ -204,6 +204,27 @@ int RadosWriter::write_exclusive(const bufferlist& data)
   return process_completed(c, &written);
 }
 
+int RadosWriter::set_attrs(const rgw_raw_obj& obj,
+                           const std::map<std::string, bufferlist>& attrs)
+{
+  rgw_rados_ref ref;
+  int r = store->get_raw_obj_ref(dpp, obj, &ref);
+  if (r < 0) {
+    return r;
+  }
+  librados::ObjectWriteOperation op;
+  op.create(false);
+  for (const auto& [name, bl] : attrs) {
+    op.setxattr(name.c_str(), bl);
+  }
+  constexpr uint64_t cost = 0; // no data
+  constexpr uint64_t id = 0; // unused
+  auto c = aio->get(ref.obj, Aio::librados_op(std::move(ref.ioctx),
+                                              std::move(op), y, &trace),
+                    cost, id);
+  return process_completed(c, &written);
+}
+
 int RadosWriter::drain()
 {
   return process_completed(aio->drain(), &written);
@@ -388,10 +409,16 @@ int AtomicObjectProcessor::complete(
   if (r < 0) {
     return r;
   }
-  const uint64_t actual_size = get_actual_size();
-  r = manifest_gen.create_next(actual_size);
-  if (r < 0) {
-    return r;
+  uint64_t actual_size;
+  if (written_manifest) {
+    manifest = std::move(*written_manifest);
+    actual_size = manifest.get_obj_size();
+  } else {
+    actual_size = get_actual_size();
+    r = manifest_gen.create_next(actual_size);
+    if (r < 0) {
+      return r;
+    }
   }
 
   obj_ctx.set_atomic(head_obj, true);
