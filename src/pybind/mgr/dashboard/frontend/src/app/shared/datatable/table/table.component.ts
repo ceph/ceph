@@ -229,6 +229,9 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   @Input()
   status = new TableStatus();
 
+  // Accessible name of the refresh button when the table status has no message
+  readonly refreshLabel = $localize`Refresh`;
+
   // Support server-side pagination/sorting/etc.
   @Input()
   serverSide = false;
