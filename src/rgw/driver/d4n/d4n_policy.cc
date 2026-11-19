@@ -2295,7 +2295,7 @@ int LRUPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional_y
   while (freeSpace < size) {
     auto p = entries_lru_list.front();
     entries_map.erase(entries_map.find(p.key));
-    entries_lru_list.pop_front_and_dispose(Entry_delete_disposer());
+    entries_lru_list.pop_front_and_dispose(std::default_delete<Entry>{});
     auto ret = cacheDriver->delete_data(dpp, p.key, y);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << __func__ << "(): Failed to delete data from the cache backend, ret=" << ret << dendl;
@@ -2354,8 +2354,10 @@ bool LRUPolicy::_erase(const DoutPrefixProvider* dpp, const std::string& key, op
   if (p == entries_map.end()) {
     return false;
   }
+  auto *entry = p->second;
+
   entries_map.erase(p);
-  entries_lru_list.erase_and_dispose(entries_lru_list.iterator_to(*(p->second)), Entry_delete_disposer());
+  entries_lru_list.erase_and_dispose(entries_lru_list.iterator_to(*entry), std::default_delete<Entry>{});
   return true;
 }
 

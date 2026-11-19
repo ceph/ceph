@@ -14,12 +14,15 @@
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/use_awaitable.hpp>
 #include <boost/asio/co_spawn.hpp>
-#include <boost/heap/fibonacci_heap.hpp>
-#include <boost/system/detail/errc.hpp>
 #include <boost/asio/thread_pool.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/post.hpp>
+
+#include <boost/heap/fibonacci_heap.hpp>
+#include <boost/system/detail/errc.hpp>
+
 #include <expected>
+#include <memory>
 #include <future>
 #include <map>
 
@@ -85,15 +88,10 @@ class CachePolicy {
       uint64_t refcount{0};
       rgw_user user;
       std::string bucketName;
+
       Entry(const std::string& key, uint64_t offset, uint64_t len, const std::string& version, bool dirty, uint64_t refcount, rgw_user user, std::string bucketName) : key(key), offset(offset), 
-											        len(len), version(version), dirty(dirty), refcount(refcount), user(user), bucketName(bucketName) {}
-      };
-   
-    //The disposer object function
-    struct Entry_delete_disposer {
-      void operator()(Entry* e) {
-        delete e;
-      }
+                    len(len), version(version), dirty(dirty), refcount(refcount), user(user), bucketName(bucketName)
+      {}
     };
 
     struct ObjEntry {
