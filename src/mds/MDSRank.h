@@ -59,6 +59,8 @@ enum {
   l_mds_forward,
   l_mds_dir_fetch_complete,
   l_mds_dir_fetch_keys,
+  l_mds_dir_fetch_snapdiff,
+  l_mds_dir_fetch_snapdiff_skipped,
   l_mds_dir_fetch_background,
   l_mds_dir_commit,
   l_mds_dir_split,

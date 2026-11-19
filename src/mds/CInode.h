@@ -170,6 +170,11 @@ public:
   /* Serialization without ENCODE_START/FINISH blocks for use embedded in dentry */
   void encode_bare(ceph::buffer::list &bl, uint64_t features, const ceph::buffer::list *snap_blob=NULL) const;
   void decode_bare(ceph::buffer::list::const_iterator &bl, ceph::buffer::list &snap_blob, __u8 struct_v=5);
+  /* Read only whether an encode_bare() encoding is a directory and has
+   * old_inodes, skipping over the rest by length instead of decoding it.
+   * Returns false if the inode_t encoding is too old to skip over. */
+  static bool peek_bare(ceph::buffer::list::const_iterator &bl,
+                        bool *is_dir, bool *has_old_inodes);
 
   /* For test/debug output */
   void dump(ceph::Formatter *f) const;
