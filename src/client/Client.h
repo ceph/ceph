@@ -335,6 +335,18 @@ struct dir_result_t {
   struct dirent de;
 
   int fd;                // fd attached using fdopendir (-1 if none)
+
+  // A snapshot inode's request path goes through its dentries up to the
+  // snapdir, and they can be trimmed while the directory is open; without
+  // them the path is just #ino, i.e. the live directory. So the path of a
+  // snapshot directory is taken when it is opened.
+  filepath snap_path;
+  void make_request_path(filepath& p) const {
+    if (snap_path.get_ino())
+      p = snap_path;
+    else
+      inode->make_nosnap_relative_path(p);
+  }
 };
 
 /**
@@ -516,6 +528,8 @@ public:
   int readdir_snapdiff(dir_result_t* dir1, snapid_t snap2,
     unsigned diff_mask,
     struct dirent* out_de, snapid_t* out_snap);
+  int open_snapdiff_child(dir_result_t* parent, snapid_t parent_other,
+    const char* name, dir_result_t** out, snapid_t* out_other);
 
   int getdir(const char *relpath, std::list<std::string>& names,
 	     const UserPerm& perms);  // get the whole dir at once.

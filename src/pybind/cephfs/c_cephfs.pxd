@@ -181,6 +181,9 @@ cdef extern from "cephfs/libcephfs.h" nogil:
                             const char *snap2,
                             unsigned snapdiff_mask,
                             ceph_snapdiff_info2 **out)
+    int ceph_open_snapdiff2_at(ceph_snapdiff_info2 *parent,
+                               const char *name,
+                               ceph_snapdiff_info2 **out)
     int ceph_readdir_snapdiff(ceph_snapdiff_info *snapdiff, ceph_snapdiff_entry_t *out)
     int ceph_readdir_snapdiff2(ceph_snapdiff_info2 *snapdiff, ceph_snapdiff_entry_t *out)
     int ceph_close_snapdiff(ceph_snapdiff_info *snapdiff)

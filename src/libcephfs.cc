@@ -853,6 +853,8 @@ struct ceph_snapdiff_info2
 {
   struct ceph_snapdiff_info info;  // embedded legacy (v1) structure
   unsigned diff_mask;              // snapdiff file metadata mask (CEPH_SNAPDIFF_*)
+  uint64_t snap_other = 0;         // the other snapshot's id, if info.dir_aux
+                                   // is not open (ceph_open_snapdiff2_at())
 };
 
 static int _do_open_snapdiff(struct ceph_mount_info* cmount,
@@ -971,6 +973,7 @@ extern "C" int ceph_open_snapdiff2(struct ceph_mount_info* cmount,
   (*out)->info.dir1 = nullptr;
   (*out)->info.dir_aux = nullptr;
   (*out)->diff_mask = diff_mask;
+  (*out)->snap_other = 0;
 
   int r = _do_open_snapdiff(cmount, root_path,
                             rel_path, snap1, snap2,
@@ -985,22 +988,69 @@ extern "C" int ceph_open_snapdiff2(struct ceph_mount_info* cmount,
   return r;
 }
 
+extern "C" int ceph_open_snapdiff2_at(struct ceph_snapdiff_info2* parent,
+                                      const char* name,
+                                      struct ceph_snapdiff_info2** out)
+{
+  if (!parent || !parent->info.cmount || !parent->info.cmount->is_mounted()) {
+    errno = ENOTCONN;
+    return -errno;
+  }
+  if (!name || !*name || !out || !parent->info.dir1) {
+    errno = EINVAL;
+    return -errno;
+  }
+  uint64_t parent_other = parent->snap_other;
+  if (!parent_other) {
+    auto d2 = reinterpret_cast<dir_result_t*>(parent->info.dir_aux);
+    if (!d2 || !d2->inode) {
+      errno = EINVAL;
+      return -errno;
+    }
+    parent_other = d2->inode->snapid;
+  }
+
+  dir_result_t* d1 = nullptr;
+  snapid_t other;
+  int r = parent->info.cmount->get_client()->open_snapdiff_child(
+    reinterpret_cast<dir_result_t*>(parent->info.dir1), parent_other,
+    name, &d1, &other);
+  if (r < 0) {
+    errno = -r;
+    return r;
+  }
+
+  *out = new (std::nothrow) ceph_snapdiff_info2;
+  if (!*out) {
+    parent->info.cmount->get_client()->closedir(d1);
+    errno = ENOMEM;
+    return -errno;
+  }
+  (*out)->info.cmount = parent->info.cmount;
+  (*out)->info.dir1 = reinterpret_cast<struct ceph_dir_result*>(d1);
+  (*out)->info.dir_aux = nullptr;
+  (*out)->diff_mask = parent->diff_mask;
+  (*out)->snap_other = other;
+  return 0;
+}
+
 static int _do_readdir_snapdiff(struct ceph_mount_info* cmount,
                                 struct ceph_dir_result* dir1,
                                 struct ceph_dir_result* dir_aux,
                                 struct ceph_snapdiff_entry_t* out,
-                                unsigned diff_mask)
+                                unsigned diff_mask,
+                                uint64_t snap_other = 0)
 {
   dir_result_t* d1 = reinterpret_cast<dir_result_t*>(dir1);
   dir_result_t* d2 = reinterpret_cast<dir_result_t*>(dir_aux);
-  if (!d1 || !d2 || !d1->inode || !d2->inode) {
+  if (!d1 || !d1->inode || (!snap_other && (!d2 || !d2->inode))) {
     errno = EINVAL;
     return -errno;
   }
   snapid_t snapid;
   int r = cmount->get_client()->readdir_snapdiff(
     d1,
-    d2->inode->snapid,
+    snap_other ? snapid_t(snap_other) : d2->inode->snapid,
     diff_mask,
     &(out->dir_entry),
     &snapid);
@@ -1033,7 +1083,8 @@ extern "C" int ceph_readdir_snapdiff2(struct ceph_snapdiff_info2* snapdiff,
   }
 
   return _do_readdir_snapdiff(snapdiff->info.cmount, snapdiff->info.dir1,
-                              snapdiff->info.dir_aux, out, snapdiff->diff_mask);
+                              snapdiff->info.dir_aux, out, snapdiff->diff_mask,
+                              snapdiff->snap_other);
 }
 
 extern "C" int ceph_close_snapdiff(struct ceph_snapdiff_info* snapdiff)
