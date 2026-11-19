@@ -1,4 +1,4 @@
-from typing import Collection, Dict, Iterator, Optional
+from typing import Collection, Dict, Iterator, List, Optional
 
 from .proto import ConfigEntry, ConfigStore, EntryKey, FindParams, Simplified
 
@@ -185,3 +185,20 @@ def _find_in_store(
         if all(obj[pkey] == pval for pkey, pval in params.items()):
             found.append(ObjectCachingEntry(entry, obj=obj))
     return found
+
+
+def find_keys(store: ConfigStore, ns: str, prefix: str) -> List[str]:
+    """Return the sorted names of the entries in the namespace `ns` whose
+    names start with `prefix`. Only names are matched, no entry is read or
+    deserialized.
+    If the store implements the PrefixFindingConfigStore protocol the store
+    performs the search itself, otherwise all the names in the namespace are
+    listed and filtered here.
+    """
+    _find_keys = getattr(store, 'find_keys', None)
+    if _find_keys:
+        try:
+            return sorted(_find_keys(ns, prefix))
+        except NotImplementedError:
+            pass
+    return sorted(k for k in store.contents(ns) if k.startswith(prefix))
