@@ -685,6 +685,71 @@ int MultipartObjectProcessor::complete(
   return 0;
 }
 
+int MultipartCopyPartProcessor::process_first_chunk(bufferlist&& data,
+                                                    DataProcessor **processor)
+{
+  // the prefix is new, so the part head can't exist. write it without
+  // waiting, complete_part() creates it if the part is empty
+  int r = writer.process(std::move(data), 0);
+  if (r < 0) {
+    return r;
+  }
+  *processor = &stripe;
+  return 0;
+}
+
+int MultipartCopyPartProcessor::prepare(optional_yield y)
+{
+  const uint64_t default_stripe_size = store->ctx()->_conf->rgw_obj_stripe_size;
+  uint64_t chunk_size;
+  uint64_t stripe_size;
+  uint64_t alignment;
+
+  int r = store->get_max_chunk_size(tail_placement_rule, head_obj, &chunk_size,
+                                    dpp, &alignment);
+  if (r < 0) {
+    return r;
+  }
+  store->get_max_aligned_size(default_stripe_size, alignment, &stripe_size);
+
+  manifest.set_prefix(prefix);
+  manifest.set_multipart_part_rule(stripe_size, part_num);
+
+  r = manifest_gen.create_begin(store->ctx(), &manifest,
+                                bucket_info.placement_rule,
+                                &tail_placement_rule,
+                                head_obj.bucket, head_obj);
+  if (r < 0) {
+    return r;
+  }
+
+  part_head = manifest_gen.get_cur_obj(store);
+  r = writer.set_stripe_obj(part_head);
+  if (r < 0) {
+    return r;
+  }
+  stripe_size = manifest_gen.cur_stripe_max_size();
+  set_head_chunk_size(stripe_size);
+
+  chunk = ChunkProcessor(&writer, chunk_size);
+  stripe = StripeProcessor(&chunk, this, stripe_size);
+  return 0;
+}
+
+int MultipartCopyPartProcessor::complete_part(
+    const std::map<std::string, bufferlist>& attrs, optional_yield y)
+{
+  int r = manifest_gen.create_next(get_actual_size());
+  if (r < 0) {
+    return r;
+  }
+
+  // reads of the part (GET ?partNumber, GetObjectAttributes) take its etag,
+  // checksum and compression info from the attrs of its head object. rados
+  // applies them after the head's data, which this client wrote first
+  return writer.set_attrs(part_head, attrs);
+}
+
 int AppendObjectProcessor::process_first_chunk(bufferlist &&data, rgw::sal::DataProcessor **processor)
 {
   int r = writer.write_exclusive(data);

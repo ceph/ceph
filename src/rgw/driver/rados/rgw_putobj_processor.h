@@ -263,6 +263,60 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
 
 };
 
+// writes one part of a multipart object whose data is being copied, e.g. by a
+// lifecycle transition. like MultipartObjectProcessor it gives the part its
+// own head and stripes, but there's no upload: the part's attrs are set on its
+// head object, and the caller appends the part manifests into the copy's
+// manifest. the written objects are removed on destruction unless commit()
+// is called after the copy's head is written
+class MultipartCopyPartProcessor : public ManifestObjectProcessor {
+  const std::string prefix;
+  const int part_num;
+  rgw_raw_obj part_head;
+
+  int process_first_chunk(bufferlist&& data,
+                          rgw::sal::DataProcessor** processor) override;
+
+public:
+  MultipartCopyPartProcessor(
+      Aio* aio, RGWRados* store, RGWBucketInfo& bucket_info,
+      const rgw_placement_rule* ptail_placement_rule, const ACLOwner& owner,
+      RGWObjectCtx& obj_ctx, const rgw_obj& _head_obj,
+      const std::string& prefix, int part_num, const DoutPrefixProvider* dpp,
+      optional_yield y, jspan_context& trace) :
+    ManifestObjectProcessor(aio, store, bucket_info, ptail_placement_rule,
+                            owner, obj_ctx, _head_obj, dpp, y, trace),
+    prefix(prefix), part_num(part_num)
+  {}
+
+  // prepare a manifest for this part
+  int prepare(optional_yield y) override;
+  // finish the part and set the attrs on its head object. this doesn't wait
+  // for its writes, drain() does
+  int complete_part(const std::map<std::string, bufferlist>& attrs,
+                    optional_yield y);
+  // wait for the writes of all the parts, which share the aio
+  int drain() { return writer.drain(); }
+
+  const RGWObjManifest& get_manifest() const { return manifest; }
+
+  // keep the written objects, now that the copy's head refers to them
+  void commit() { writer.clear_written(); }
+
+  // parts complete with complete_part()
+  int complete(size_t accounted_size, const std::string& etag,
+               ceph::real_time* mtime, ceph::real_time set_mtime,
+               std::map<std::string, bufferlist>& attrs,
+               const std::optional<rgw::cksum::Cksum>& cksum,
+               ceph::real_time delete_at, const char* if_match,
+               const char* if_nomatch, const std::string* user_data,
+               rgw_zone_set* zones_trace, bool* canceled,
+               const req_context& rctx, uint32_t flags) override
+  {
+    return -ENOTSUP;
+  }
+};
+
   class AppendObjectProcessor : public ManifestObjectProcessor {
     uint64_t cur_part_num;
     uint64_t position;
