@@ -101,6 +101,11 @@ PG_STATES = [
     "failed_repair",
     "laggy",
     "wait",
+    "migration_wait",
+    "migrating",
+    "migration_toofull",
+    "migration_unfound",
+    "migration_error",
 ]
 
 NFS_GANESHA_SUPPORTED_FSALS = ['CEPH', 'RGW']
