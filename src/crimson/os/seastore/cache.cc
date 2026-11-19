@@ -1137,11 +1137,6 @@ void Cache::mark_transaction_conflicted(
                              conflicting_extent.get_type());
   ++counter;
 
-  io_stat_t read_stat;
-  for (auto &i: t.read_set) {
-    read_stat.increment(i.ref->get_length());
-  }
-  efforts.read.increment_stat(read_stat);
 
   if (t.get_src() != Transaction::src_t::READ) {
     io_stat_t retire_stat;
@@ -1236,16 +1231,11 @@ void Cache::on_transaction_destruct(Transaction& t)
   SUBTRACET(seastore_t, "", t);
   if (t.get_src() == Transaction::src_t::READ &&
       t.conflicted == false) {
-    io_stat_t read_stat;
-    for (auto &i: t.read_set) {
-      read_stat.increment(i.ref->get_length());
-    }
-    SUBDEBUGT(seastore_t, "done {} read", t, read_stat);
+    SUBDEBUGT(seastore_t, "done read", t);
 
     if (!t.is_weak()) {
       // exclude weak transaction as it is impossible to conflict
       ++stats.success_read_efforts.num_trans;
-      stats.success_read_efforts.read.increment_stat(read_stat);
     }
 
     // read transaction won't have non-read efforts
@@ -1544,19 +1534,6 @@ record_t Cache::prepare_record(
   auto& efforts = get_by_src(stats.committed_efforts_by_src,
                              trans_src);
 
-  // Should be valid due to interruptible future
-  io_stat_t read_stat;
-  for (auto &i: t.read_set) {
-    if (!i.ref->is_valid()) {
-      SUBERRORT(seastore_t,
-          "read_set got invalid extent, aborting -- {}", t, *i.ref);
-      ceph_abort_msg("no invalid extent allowed in transactions' read_set");
-    }
-    get_by_ext(efforts.read_by_ext,
-               i.ref->get_type()).increment(i.ref->get_length());
-    read_stat.increment(i.ref->get_length());
-  }
-  t.clear_read_set();
   t.write_set.clear();
 
   record_t record(record_type_t::JOURNAL, trans_src);

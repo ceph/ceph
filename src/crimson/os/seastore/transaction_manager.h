@@ -439,7 +439,7 @@ public:
   {
     LOG_PREFIX(TransactionManager::read_pins);
     static_assert(is_logical_type(T::TYPE));
-    co_await trans_intr::parallel_for_each(
+    co_await seastar::parallel_for_each(
       pins,
       seastar::coroutine::lambda(
 	[this, &t, FNAME, maybe_init=std::move(maybe_init)](auto &pin)
@@ -648,7 +648,7 @@ public:
       } catch(crimson::ct_error::eagain&) {}
       if (!ext) {
         epm->maybe_wake_background();
-        co_await trans_intr::make_interruptible(epm->wait_background());
+        co_await epm->wait_background();
       }
     }
     // user must initialize the logical extent themselves.
@@ -696,7 +696,7 @@ public:
       } catch (crimson::ct_error::eagain&) {}
       if (exts.empty()) {
         epm->maybe_wake_background();
-        co_await trans_intr::make_interruptible(epm->wait_background());
+        co_await epm->wait_background();
       }
     }
     // user must initialize the logical extent themselves
@@ -935,8 +935,8 @@ public:
                t, hint, num, len);
      return seastar::do_with(std::vector<TCachedExtentRef<T>>(),
        [this, &t, hint, len, num, FNAME](auto &extents) {
-       return trans_intr::do_for_each(
-                       boost::make_counting_iterator(0),
+       return seastar::do_for_each(
+                        boost::make_counting_iterator(0),
                        boost::make_counting_iterator(num),
          [this, &t, len, hint, &extents] (auto i) {
          return alloc_non_data_extent<T>(t, hint, len).si_then(
@@ -1807,7 +1807,7 @@ private:
       co_await lba_manager->update_mapping_refcount(
 	t, pin.direct_cursor, 1);
     }
-    co_await trans_intr::parallel_for_each(
+    co_await seastar::parallel_for_each(
       ret,
       [](auto &remapped_mapping) {
 	return remapped_mapping.refresh(

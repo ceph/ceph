@@ -67,81 +67,6 @@ namespace onode {
   class TestReplayExtent;
 }
 
-template <typename T>
-class read_set_item_t {
-  using set_hook_t = boost::intrusive::set_member_hook<
-    boost::intrusive::link_mode<
-      boost::intrusive::auto_unlink>>;
-  set_hook_t trans_hook; // used to attach transactions to extents
-  set_hook_t extent_hook; // used to attach extents to transactions
-  using trans_hook_options = boost::intrusive::member_hook<
-    read_set_item_t,
-    set_hook_t,
-    &read_set_item_t::trans_hook>;
-  using extent_hook_options = boost::intrusive::member_hook<
-    read_set_item_t,
-    set_hook_t,
-    &read_set_item_t::extent_hook>;
-
-public:
-  struct extent_cmp_t {
-    using is_transparent = paddr_t;
-    bool operator()(const read_set_item_t<T> &lhs, const read_set_item_t &rhs) const;
-    bool operator()(const paddr_t &lhs, const read_set_item_t<T> &rhs) const;
-    bool operator()(const read_set_item_t<T> &lhs, const paddr_t &rhs) const;
-  };
-
-  struct trans_cmp_t {
-    bool operator()(
-      const read_set_item_t<Transaction> &lhs,
-      const read_set_item_t<Transaction> &rhs) const {
-      return lhs.t < rhs.t;
-    }
-    bool operator()(
-      const Transaction *lhs,
-      const read_set_item_t<Transaction> &rhs) const {
-      return lhs < rhs.t;
-    }
-    bool operator()(
-      const read_set_item_t<Transaction> &lhs,
-      const Transaction *rhs) const {
-      return lhs.t < rhs;
-    }
-  };
-
-  using trans_set_t =  boost::intrusive::set<
-    read_set_item_t,
-    trans_hook_options,
-    boost::intrusive::constant_time_size<false>,
-    boost::intrusive::compare<trans_cmp_t>>;
-  using extent_set_t =  boost::intrusive::set<
-    read_set_item_t,
-    extent_hook_options,
-    boost::intrusive::constant_time_size<false>,
-    boost::intrusive::compare<extent_cmp_t>>;
-
-  T *t = nullptr;
-  CachedExtentRef ref;
-
-  bool is_extent_attached_to_trans() const {
-    return extent_hook.is_linked();
-  }
-
-  bool is_trans_attached_to_extent() const {
-    return trans_hook.is_linked();
-  }
-
-  read_set_item_t(T *t, CachedExtentRef ref);
-  read_set_item_t(const read_set_item_t &) = delete;
-  read_set_item_t(read_set_item_t &&) = default;
-  ~read_set_item_t() = default;
-};
-
-template <typename T>
-using read_extent_set_t = typename read_set_item_t<T>::extent_set_t;
-
-template <typename T>
-using read_trans_set_t = typename read_set_item_t<T>::trans_set_t;
 
 struct trans_spec_view_t {
   // if the extent is pending, this points to the transaction
@@ -1011,8 +936,6 @@ private:
 
   CachedExtent* maybe_get_transactional_view(Transaction &t);
 
-  read_trans_set_t<Transaction> read_transactions;
-
   placement_hint_t user_hint = PLACEMENT_HINT_NULL;
 
   write_policy_t write_policy = write_policy_t::WRITE_BACK;
@@ -1646,26 +1569,6 @@ struct ref_laddr_cmp {
   }
 };
 
-template <typename T>
-read_set_item_t<T>::read_set_item_t(T *t, CachedExtentRef ref)
-  : t(t), ref(ref)
-{}
-
-template <typename T>
-inline bool read_set_item_t<T>::extent_cmp_t::operator()(
-  const read_set_item_t<T> &lhs, const read_set_item_t<T> &rhs) const {
-  return lhs.ref->poffset < rhs.ref->poffset;
-}
-template <typename T>
-inline bool read_set_item_t<T>::extent_cmp_t::operator()(
-  const paddr_t &lhs, const read_set_item_t<T> &rhs) const {
-  return lhs < rhs.ref->poffset;
-}
-template <typename T>
-inline bool read_set_item_t<T>::extent_cmp_t::operator()(
-  const read_set_item_t<T> &lhs, const paddr_t &rhs) const {
-  return lhs.ref->poffset < rhs;
-}
 
 using lextent_set_t = addr_extent_set_base_t<
   laddr_t,

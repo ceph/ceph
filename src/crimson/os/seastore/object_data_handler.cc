@@ -556,7 +556,7 @@ ObjectDataHandler::read_unaligned_edge_data(
 
   // TODO: when_all_succeed should be utilized here, however, it doesn't
   // 	   actually work with interruptible errorated futures for now.
-  return trans_intr::parallel_for_each(
+  return seastar::parallel_for_each(
     futs, [](auto &fut) { return std::move(fut); });
 }
 
@@ -609,7 +609,7 @@ ObjectDataHandler::merge_pending_edge(
 
   // TODO: when_all_succeed should be utilized here, however, it doesn't
   // 	   actually work with interruptible errorated futures for now.
-  return trans_intr::parallel_for_each(
+  return seastar::parallel_for_each(
     futs, [](auto &fut) { return std::move(fut); });
 }
 
@@ -1278,7 +1278,7 @@ ObjectDataHandler::read_edge_for_clone_range(
   }
   // TODO: when_all_succeed should be utilized here, however, it doesn't
   //       actually work with interruptible errorated futures for now.
-  return trans_intr::parallel_for_each(
+  return seastar::parallel_for_each(
     read_paddings, [](auto &fut) { return std::move(fut); }
   ).handle_error_interruptible(
     read_iertr::pass_further{},
