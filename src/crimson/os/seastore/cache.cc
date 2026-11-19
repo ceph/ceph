@@ -2686,8 +2686,6 @@ Cache::get_next_dirty_extents_ret Cache::get_next_dirty_extents(
 	    ext->wait_io()
 	  ).then_interruptible([FNAME, this, ext, &t, &ret] {
 	    if (!ext->is_valid()) {
-	      ++(get_by_src(stats.trans_conflicts_by_unknown, t.get_src()));
-	      mark_transaction_conflicted(t, *ext);
 	      return;
 	    }
 

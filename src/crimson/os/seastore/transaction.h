@@ -459,18 +459,14 @@ public:
     return weak;
   }
 
-  void test_set_conflict() {
-    conflicted = true;
-  }
+  void test_set_conflict() {}
 
   bool is_conflicted() const {
-    return conflicted;
+    return false;
   }
 
-  // Number of times this transaction was conflicted and replayed before
-  // finally committing. do_transaction_no_callbacks() (user MUTATE writes)
   std::size_t get_num_replays() const {
-    return num_replays;
+    return 0;
   }
 
   // Time spent in each sub-phase of submit_transaction, accumulated across retries
@@ -559,7 +555,6 @@ public:
     backref_tree_stats = {};
     ool_write_stats = {};
     rewrite_stats = {};
-    conflicted = false;
     force_rewrite_conflict = false;
     assert(backref_entries.empty());
     if (!has_reset) {
@@ -857,10 +852,6 @@ private:
   tree_stats_t backref_tree_stats;
   ool_write_stats_t ool_write_stats;
   rewrite_stats_t rewrite_stats;
-
-  bool conflicted = false;
-
-  std::size_t num_replays = 0;
 
   phase_durations_t phase_durations;
 
