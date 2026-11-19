@@ -343,9 +343,10 @@ Journal::replay_ret CircularBoundedJournal::replay(
   DEBUG("header : {}", cjs.get_cbj_header());
   cjs.set_initialized(true);
   std::map<paddr_t, std::pair<CachedExtentRef, uint32_t>> crc_info;
-  assert(get_dirty_tail() <= get_log_tail());
-  auto tail = get_dirty_tail() <= get_alloc_tail() ?
-    get_dirty_tail() : get_alloc_tail();
+  auto tail = std::min(get_dirty_tail(), get_alloc_tail());
+  if (get_log_tail() != JOURNAL_SEQ_NULL) {
+    tail = std::min(tail, get_log_tail());
+  }
   set_written_to(tail);
   // the first pass to find the real journal tail.
   auto find_tail = [this](
@@ -356,7 +357,7 @@ Journal::replay_ret CircularBoundedJournal::replay(
       journal_tail_delta_t tails;
       decode(tails, e.bl);
       cjs.update_journal_tail_on_startup(
-        tails.dirty_tail, tails.alloc_tail);
+        tails.dirty_tail, tails.alloc_tail, tails.log_tail);
     }
     return replay_ertr::make_ready_future<bool>(true);
   };
