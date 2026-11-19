@@ -1645,7 +1645,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 
     int key_type = get_cipher_type(cmdmap, ss);
     if (key_type < 0) {
-      err = -EINVAL;
+      err = key_type;
       goto done;
     }
 
@@ -1741,7 +1741,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 
     int key_type = get_cipher_type(cmdmap, ss);
     if (key_type < 0) {
-      err = -EINVAL;
+      err = key_type;
       goto done;
     }
 
@@ -1825,7 +1825,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 
     int key_type = get_cipher_type(cmdmap, ss);
     if (key_type < 0) {
-      err = -EINVAL;
+      err = key_type;
       goto done;
     }
 
@@ -1908,7 +1908,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 
     int key_type = get_cipher_type(cmdmap, ss);
     if (key_type < 0) {
-      err = -EINVAL;
+      err = key_type;
       goto done;
     }
 
@@ -2075,7 +2075,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 
     int key_type = get_cipher_type(cmdmap, ss);
     if (key_type < 0) {
-      err = -EINVAL;
+      err = key_type;
       goto done;
     }
 
