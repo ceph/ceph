@@ -269,8 +269,15 @@ public:
   ZeroGenerator(uint64_t offset, uint64_t length, uint64_t obj_size)
     : zero_offset(offset), zero_length(length), obj_size(obj_size) {}
 
+  // A zero that reaches (or passes) the end of the object is converted by the
+  // OSD into a truncate to zero_offset (see "munge ZERO -> TRUNCATE" in
+  // PrimaryLogPG::do_osd_op), so the object shrinks to zero_offset.
+  bool truncates() const {
+    return zero_offset + zero_length >= obj_size;
+  }
+
   uint64_t get_length(const ContDesc &) override {
-    return obj_size;
+    return truncates() ? zero_offset : obj_size;
   }
 
   uint64_t get_zero_offset() const { return zero_offset; }
@@ -657,9 +664,11 @@ public:
   //    masked as data); the older zero's hole is clipped to the unmasked
   //    remainder, so it cannot remove bytes the newer write restored.
   //
-  // ZeroGenerator layers do not truncate.  Only write layers (VarLenGenerator,
-  // AppendGenerator, …) impose a truncation via get_length(); older data
-  // beyond any newer write-layer truncation is clamped away.
+  // Write layers (VarLenGenerator, AppendGenerator, …) impose a truncation via
+  // get_length(); older data beyond any newer write-layer truncation is
+  // clamped away.  A ZeroGenerator only truncates when the zero reaches the
+  // end of the object (the OSD converts it to a truncate to the zero offset);
+  // otherwise it does not truncate.
   //
   // EC pools (alignment > 1) have an additional consideration: the zero
   // operation in PrimaryLogPG emits a literal-zero write for any partial
@@ -680,7 +689,15 @@ public:
     for (auto &layer : layers) {
       ContentsGenerator *gen = layer.first.get();
       auto *zero_gen = dynamic_cast<ZeroGenerator *>(gen);
-      if (zero_gen != nullptr) {
+      if (zero_gen != nullptr && zero_gen->truncates()) {
+        // The zero was converted to a truncate to z_off: everything at or
+        // beyond z_off no longer exists, and nothing below z_off is changed,
+        // so there are no holes or EC edge blocks to account for.
+        const uint64_t z_off = zero_gen->get_zero_offset();
+        if (z_off < min_write_trunc) {
+          min_write_trunc = z_off;
+        }
+      } else if (zero_gen != nullptr) {
         // Compute the aligned hole range:
         //   alignment == 1 (replicated): full zeroed range is deallocated.
         //   alignment >  1 (EC):         only the aligned interior is
@@ -722,10 +739,15 @@ public:
         // mask) so the model reflects those allocations.
         if (alignment > 1) {
           // Head partial block: [z_off, hole_start).
-          // Only present if the zero range starts mid-block.
+          // Only present if the zero range starts mid-block.  Clamp to
+          // min_write_trunc: if a newer truncate cuts through the head edge,
+          // the part below the truncation point is still allocated.
           if (z_off < hole_start) {
             uint64_t head_block_end = hole_start;
-            if (min_write_trunc == UINT64_MAX || head_block_end <= min_write_trunc) {
+            if (min_write_trunc != UINT64_MAX && head_block_end > min_write_trunc) {
+              head_block_end = min_write_trunc;
+            }
+            if (z_off < head_block_end) {
               interval_set<uint64_t> head_edge;
               head_edge.insert(z_off, head_block_end - z_off);
               interval_set<uint64_t> head_unmasked;
@@ -764,6 +786,32 @@ public:
       } else {
         interval_set<uint64_t> layer_ranges;
         gen->get_ranges(layer.second, layer_ranges);
+        // EC pools (alignment > 1): if this older layer has data in the
+        // sub-alignment tail block containing min_write_trunc = T, i.e. in
+        // [T, align_up(T)), it allocated that whole block on the OSD.  A newer
+        // truncate down to T removes the data at and above T but leaves
+        // [align_down(T), T) allocated.  Record it (max_expected only;
+        // get_min_written_extents() drops it as all-zero unless a layer
+        // actually wrote data there).
+        if (alignment > 1 && min_write_trunc != UINT64_MAX &&
+            min_write_trunc % alignment != 0) {
+          const uint64_t t = min_write_trunc;
+          const uint64_t b_down = t / alignment * alignment;
+          const uint64_t b_up = b_down + alignment;
+          interval_set<uint64_t> tail_blk;
+          tail_blk.insert(t, b_up - t);
+          interval_set<uint64_t> inter;
+          inter.intersection_of(layer_ranges, tail_blk);
+          if (!inter.empty()) {
+            interval_set<uint64_t> residual;
+            residual.insert(b_down, t - b_down);
+            interval_set<uint64_t> res_decided;
+            res_decided.intersection_of(residual, masked);
+            residual.subtract(res_decided);
+            written.union_of(residual);
+            masked.union_of(residual);
+          }
+        }
         // Clamp this layer's ranges to the truncation imposed by all
         // newer write layers.
         if (min_write_trunc != UINT64_MAX) {
