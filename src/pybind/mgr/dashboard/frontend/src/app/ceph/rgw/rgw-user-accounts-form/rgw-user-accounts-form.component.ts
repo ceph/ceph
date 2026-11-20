@@ -26,7 +26,6 @@ export class RgwUserAccountsFormComponent extends CdForm implements OnInit {
   resource: string;
   editing: boolean = false;
   showAdvanced: boolean = false;
-  submitObservables: Observable<Object>[] = [];
   originalAccountName: string = '';
 
   constructor(
@@ -286,20 +285,19 @@ export class RgwUserAccountsFormComponent extends CdForm implements OnInit {
 
   setQuotaConfig() {
     const accountId: string = this.accountForm.get('id').value;
+    const observables: Observable<Object>[] = [];
     // Check if account quota has been modified.
     if (this._isQuotaConfDirty('account')) {
       const accountQuotaArgs = this._getQuotaArgs('account');
-      this.submitObservables.push(
-        this.rgwUserAccountsService.setQuota(accountId, accountQuotaArgs)
-      );
+      observables.push(this.rgwUserAccountsService.setQuota(accountId, accountQuotaArgs));
     }
     // Check if bucket quota has been modified.
     if (this._isQuotaConfDirty('bucket')) {
       const bucketQuotaArgs = this._getQuotaArgs('bucket');
-      this.submitObservables.push(this.rgwUserAccountsService.setQuota(accountId, bucketQuotaArgs));
+      observables.push(this.rgwUserAccountsService.setQuota(accountId, bucketQuotaArgs));
     }
     // Finally execute all observables one by one in serial.
-    observableConcat(...this.submitObservables).subscribe({
+    observableConcat(...observables).subscribe({
       error: () => {
         // Reset the 'Submit' button.
         this.accountForm.setErrors({ cdSubmitButton: true });
@@ -308,7 +306,7 @@ export class RgwUserAccountsFormComponent extends CdForm implements OnInit {
         this.goToListView();
       }
     });
-    if (this.submitObservables.length == 0) {
+    if (observables.length == 0) {
       this.goToListView();
     }
   }

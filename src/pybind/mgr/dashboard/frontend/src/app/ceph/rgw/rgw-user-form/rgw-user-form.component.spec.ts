@@ -7,7 +7,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
 import { PipesModule } from '~/app/shared/pipes/pipes.module';
 
-import { of as observableOf, throwError } from 'rxjs';
+import { defer, of as observableOf, throwError } from 'rxjs';
 
 import { RgwUserService } from '~/app/shared/api/rgw-user.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
@@ -375,6 +375,152 @@ describe('RgwUserFormComponent', () => {
         NotificationType.success,
         `Updated Object Gateway user 'null'`
       );
+    });
+
+    it('should not replay stale requests when re-submitting after a failure', () => {
+      const createSpy = spyOn(rgwUserService, 'create').and.returnValues(
+        throwError('invalid tenant'),
+        observableOf([])
+      );
+      component.editing = false;
+      formHelper.setValue('user_id', 'userid', true);
+      formHelper.setValue('tenant', 'tenant()', true);
+      component.onSubmit();
+      expect(notificationService.show).not.toHaveBeenCalled();
+
+      formHelper.setValue('tenant', 'tenant1', true);
+      component.onSubmit();
+
+      expect(createSpy).toHaveBeenCalledTimes(2);
+      expect(createSpy.calls.argsFor(0)[0]['uid']).toBe('tenant()$userid');
+      expect(createSpy.calls.argsFor(1)[0]['uid']).toBe('tenant1$userid');
+      expect(notificationService.show).toHaveBeenCalledWith(
+        NotificationType.success,
+        `Created Object Gateway user 'tenant1$userid'`
+      );
+    });
+
+    it('should not re-run queued dialog requests that already succeeded', () => {
+      const addCapSpy = spyOn(rgwUserService, 'addCapability').and.returnValue(observableOf([]));
+      spyOn(rgwUserService, 'create').and.returnValues(
+        throwError('invalid tenant'),
+        observableOf([])
+      );
+      component.editing = false;
+      formHelper.setValue('user_id', 'userid', true);
+      const cap = new RgwUserCapability();
+      cap.type = 'users';
+      cap.perm = 'read';
+      component.setCapability(cap);
+
+      component.onSubmit();
+      expect(component.submitObservables.length).toBe(0);
+      component.onSubmit();
+
+      expect(addCapSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('should use the latest form values for every field when re-submitting after a failure (create)', () => {
+      const createSpy = spyOn(rgwUserService, 'create').and.returnValues(
+        throwError('error'),
+        throwError('error'),
+        observableOf([])
+      );
+      component.editing = false;
+      formHelper.setValue('user_id', 'userid', true);
+      formHelper.setValue('display_name', 'first', true);
+      formHelper.setValue('email', 'first@example.com', true);
+      component.onSubmit();
+
+      // Change a different field between failures.
+      formHelper.setValue('display_name', 'second', true);
+      component.onSubmit();
+
+      // Change several fields, revert one back to its earlier value.
+      formHelper.setValue('display_name', 'third', true);
+      formHelper.setValue('email', '', true);
+      component.onSubmit();
+
+      expect(createSpy).toHaveBeenCalledTimes(3);
+      expect(createSpy.calls.argsFor(0)[0]).toEqual(
+        expect.objectContaining({ display_name: 'first', email: 'first@example.com' })
+      );
+      expect(createSpy.calls.argsFor(1)[0]).toEqual(
+        expect.objectContaining({ display_name: 'second', email: 'first@example.com' })
+      );
+      expect(createSpy.calls.argsFor(2)[0]).toEqual(
+        expect.objectContaining({ display_name: 'third', email: '' })
+      );
+    });
+
+    it('should use the latest values and keep edits when re-submitting after a failure (update)', () => {
+      const updateSpy = spyOn(rgwUserService, 'update').and.returnValues(
+        throwError('error'),
+        observableOf([])
+      );
+      component.editing = true;
+      formHelper.setValue('display_name', 'first', true);
+      component.onSubmit();
+
+      // A previously untouched field is changed before retrying.
+      formHelper.setValue('email', 'new@example.com', true);
+      component.onSubmit();
+
+      expect(updateSpy).toHaveBeenCalledTimes(2);
+      expect(updateSpy.calls.argsFor(0)[1]).toEqual(
+        expect.objectContaining({ display_name: 'first', email: null })
+      );
+      expect(updateSpy.calls.argsFor(1)[1]).toEqual(
+        expect.objectContaining({ display_name: 'first', email: 'new@example.com' })
+      );
+    });
+
+    it('should only run queued dialog requests that did not succeed, plus new ones added between failures', () => {
+      // Count how often each request is actually subscribed (i.e. sent).
+      const sent: Record<string, number> = { users: 0, buckets: 0, metadata: 0, create: 0 };
+      let bucketsFails = true;
+      spyOn(rgwUserService, 'addCapability').and.callFake((_uid: string, type: string) =>
+        defer(() => {
+          sent[type]++;
+          if (type === 'buckets' && bucketsFails) {
+            return throwError('error');
+          }
+          return observableOf([]);
+        })
+      );
+      spyOn(rgwUserService, 'create').and.callFake(() =>
+        defer(() => {
+          sent['create']++;
+          return observableOf([]);
+        })
+      );
+      component.editing = false;
+      formHelper.setValue('user_id', 'userid', true);
+      const capA = new RgwUserCapability();
+      capA.type = 'users';
+      capA.perm = 'read';
+      const capB = new RgwUserCapability();
+      capB.type = 'buckets';
+      capB.perm = 'read';
+      component.setCapability(capA);
+      component.setCapability(capB);
+
+      // capA succeeds, capB fails -> create is never sent.
+      component.onSubmit();
+      expect(sent).toEqual({ users: 1, buckets: 1, metadata: 0, create: 0 });
+      expect(component.submitObservables.length).toBe(1);
+
+      // User adds another capability between failures, and the failure is fixed.
+      const capC = new RgwUserCapability();
+      capC.type = 'metadata';
+      capC.perm = 'read';
+      component.setCapability(capC);
+      bucketsFails = false;
+      component.onSubmit();
+
+      // capA is not re-sent; capB is retried; capC and create are sent once.
+      expect(sent).toEqual({ users: 1, buckets: 2, metadata: 1, create: 1 });
+      expect(component.submitObservables.length).toBe(0);
     });
   });
 
