@@ -323,6 +323,42 @@ TEST(LibCephFS, ReconnectStaleInterval) {
   ceph_release(cmount);
 }
 
+/* The first reconnect does not wait for the interval. The interval here
+   is longer than any host has been up, so on the monotonic clock
+   "last reconnect + interval" is still in the future when the client is
+   evicted for the first time. */
+TEST(LibCephFS, ReconnectStaleFirstIgnoresInterval) {
+  struct ceph_mount_info *cmount, *admin;
+
+  ASSERT_EQ(ceph_create(&cmount, nullptr), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, nullptr), 0);
+  ASSERT_EQ(ceph_conf_parse_env(cmount, nullptr), 0);
+  ASSERT_EQ(ceph_conf_set(cmount, "client_reconnect_stale", "true"), 0);
+  // 100 years is the maximum: the client adds the interval to a time point
+  // in nanoseconds, which must not overflow
+  ASSERT_EQ(ceph_conf_set(cmount, "client_reconnect_stale_interval",
+                          "3153600001"), -EINVAL);
+  ASSERT_EQ(ceph_conf_set(cmount, "client_reconnect_stale_interval",
+                          "3153600000"), 0);
+  ASSERT_EQ(ceph_mount(cmount, "/"), 0);
+
+  ASSERT_EQ(ceph_create(&admin, nullptr), 0);
+  ASSERT_EQ(ceph_conf_read_file(admin, nullptr), 0);
+  ASSERT_EQ(ceph_conf_parse_env(admin, nullptr), 0);
+  ASSERT_EQ(ceph_mount(admin, "/"), 0);
+
+  std::string dir = "reconnect_stale_first." + std::to_string(getpid());
+  ASSERT_EQ(ceph_mkdir(cmount, dir.c_str(), 0755), 0);
+
+  ASSERT_EQ(evict_client(admin, ceph_get_instance_id(cmount)), 0);
+  ASSERT_TRUE(create_eventually(cmount, dir + "/f", 60));
+
+  ceph_unmount(admin);
+  ceph_release(admin);
+  ceph_unmount(cmount);
+  ceph_release(cmount);
+}
+
 static int update_root_mode()
 {
   struct ceph_mount_info *admin;
