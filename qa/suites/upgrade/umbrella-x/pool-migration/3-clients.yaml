@@ -4,8 +4,10 @@ meta:
    require_min_compat_client cannot be set to vampire without force, and its
    session then still blocks a migration; once it is gone a migration runs;
    umbrella clients are refused from the moment vampire is required, during
-   the migration and after it
+   the migration and after it. The bootstrap shell is an umbrella client too,
+   so the cephadm task switches to the upgraded image first.
 tasks:
+- cephadm.use_image:
 - print: "**** an umbrella client writes, then stays connected"
 - exec:
     client.1:
@@ -22,6 +24,7 @@ tasks:
       - ceph osd dump | grep -w require_pool_migration
       - ceph health detail
       - if ceph health detail | grep INCOMPATIBLE_CLIENTS ; then echo unexpected-health-check ; exit 1 ; fi
+      - if ceph osd set-require-min-compat-client umbrella ; then echo lowered-below-the-requirement ; exit 1 ; fi
       - if ceph osd pool migrate data 64 ; then echo migrated-with-an-umbrella-client-connected ; exit 1 ; fi
 - print: "**** the umbrella client leaves and cannot come back"
 - exec:
