@@ -30,6 +30,12 @@ How to Balance Capacity in Ceph
 
 See :ref:`upmap` for more information.
 
+The mgr ``upmap`` mode equalizes **PG shard counts**. When PG sizes differ
+substantially (or OSD capacities are heterogeneous), prefer the
+``upmap-utilization`` mode, which equalizes OSD **byte fill** via the same
+``pg-upmap-items`` mechanism. Capacity balancing should still be completed
+before read / primary balancing.
+
 Read Balancing
 ==============
 

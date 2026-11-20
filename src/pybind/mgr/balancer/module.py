@@ -16,6 +16,7 @@ from mgr_module import CRUSHMap
 import datetime
 
 from .cli import BalancerCLICommand
+from . import utilization as util_plan
 
 TIME_FORMAT = '%Y-%m-%d_%H:%M:%S'
 
@@ -57,6 +58,7 @@ class Mode(enum.Enum):
     none = 'none'
     crush_compat = 'crush-compat'
     upmap = 'upmap'
+    upmap_utilization = 'upmap-utilization'
     read = 'read'
     upmap_read = 'upmap-read'
 
@@ -305,7 +307,8 @@ class Module(MgrModule):
         Option(name='mode',
                desc='Balancer mode',
                default='upmap',
-               enum_allowed=['none', 'crush-compat', 'upmap', 'read', 'upmap-read'],
+               enum_allowed=['none', 'crush-compat', 'upmap', 'upmap-utilization',
+                             'read', 'upmap-read'],
                runtime=True),
         Option(name='sleep_interval',
                type='secs',
@@ -323,6 +326,18 @@ class Module(MgrModule):
                min=1,
                desc='deviation below which no optimization is attempted',
                long_desc='If the number of PGs are within this count then no optimization is attempted',
+               runtime=True),
+        Option(name='upmap_utilization_max_optimizations',
+               type='uint',
+               default=10,
+               desc='maximum utilization upmap optimizations to make per attempt',
+               runtime=True),
+        Option(name='upmap_utilization_max_deviation',
+               type='float',
+               default=0.02,
+               min=0.0,
+               desc='fill-ratio slack below which no utilization optimization is attempted',
+               long_desc='If every OSD fill ratio is within this absolute delta of the mean, no optimization is attempted (0.02 = 2%).',
                runtime=True),
         Option(name='pool_ids',
                type='str',
@@ -403,7 +418,7 @@ class Module(MgrModule):
         Set balancer mode
         """
         min_compat_client = self.get_osdmap().dump().get('require_min_compat_client', '')
-        if mode == Mode.upmap:
+        if mode in (Mode.upmap, Mode.upmap_utilization):
             try:
                 release = CephReleases[min_compat_client]
                 if release.value < CephReleases.luminous.value:
@@ -787,6 +802,7 @@ class Module(MgrModule):
             # as pg_num grows..
             plan = Plan(name, mode, osdmap, pools)
         else:
+            # crush-compat / read / upmap-read / upmap-utilization need MappingState
             plan = MsPlan(name,
                           mode,
                           MappingState(osdmap,
@@ -888,22 +904,28 @@ class Module(MgrModule):
                         bytes_by_osd[osd] = 0
                     pgs_by_osd[osd] += 1
                     objects_by_osd[osd] += ms.pg_stat[pgid]['num_objects']
-                    bytes_by_osd[osd] += ms.pg_stat[pgid]['num_bytes']
+                    # Approximate physical bytes per OSD: replicated == num_bytes;
+                    # EC ≈ num_bytes / k via pool_raw_used_rate / size.
+                    pg_num_bytes = ms.pg_stat[pgid]['num_bytes']
+                    shard_bytes = util_plan.shard_bytes_for_pg(
+                        pg_num_bytes,
+                        int(pi.get('size', 0) or 0),
+                        float(ms.osdmap.pool_raw_used_rate(poolid)))
+                    bytes_by_osd[osd] += shard_bytes
                     # pick a root to associate this pg instance with.
                     # note that this is imprecise if the roots have
                     # overlapping children.
-                    # FIXME: divide bytes by k for EC pools.
                     for root in pe.pool_roots[pool]:
                         if osd in pe.target_by_root[root]:
                             actual_by_root[root]['pgs'][osd] += 1
                             actual_by_root[root]['objects'][osd] += ms.pg_stat[pgid]['num_objects']
-                            actual_by_root[root]['bytes'][osd] += ms.pg_stat[pgid]['num_bytes']
+                            actual_by_root[root]['bytes'][osd] += shard_bytes
                             pgs += 1
                             objects += ms.pg_stat[pgid]['num_objects']
-                            bytes += ms.pg_stat[pgid]['num_bytes']
+                            bytes += shard_bytes
                             pe.total_by_root[root]['pgs'] += 1
                             pe.total_by_root[root]['objects'] += ms.pg_stat[pgid]['num_objects']
-                            pe.total_by_root[root]['bytes'] += ms.pg_stat[pgid]['num_bytes']
+                            pe.total_by_root[root]['bytes'] += shard_bytes
                             break
             pe.count_by_pool[pool] = {
                 'pgs': {
@@ -1053,7 +1075,8 @@ class Module(MgrModule):
         # misplaced beyond the usual thresholds. Only the upmap modes can help
         # here, so leave the guards in place for the other modes.
         backfill_toofull = self.has_backfill_toofull(info)
-        override_toofull = backfill_toofull and plan.mode in ('upmap', 'upmap-read')
+        override_toofull = backfill_toofull and plan.mode in (
+            'upmap', 'upmap-read', 'upmap-utilization')
 
         if unknown > 0.0:
             detail = 'Some PGs (%f) are unknown; try again later' % unknown
@@ -1080,6 +1103,8 @@ class Module(MgrModule):
                               degraded, misplaced)
             if plan.mode == 'upmap':
                 return self.do_upmap(plan)
+            elif plan.mode == 'upmap-utilization':
+                return self.do_upmap_utilization(cast(MsPlan, plan))
             elif plan.mode == 'crush-compat':
                 return self.do_crush_compat(cast(MsPlan, plan))
             elif plan.mode == 'read':
@@ -1175,6 +1200,119 @@ class Module(MgrModule):
             self.log.debug('prepared {} read changes'.format(total_num_changes))
             self.no_optimization_needed = True
             return -errno.EALREADY, msg
+        return 0, ''
+
+    def do_upmap_utilization(self, plan: MsPlan) -> Tuple[int, str]:
+        """Plan pg-upmap-items that reduce OSD byte fill-rate variance."""
+        self.log.debug('do_upmap_utilization')
+        max_optimizations = cast(int, self.get_module_option(
+            'upmap_utilization_max_optimizations'))
+        max_deviation = cast(float, self.get_module_option(
+            'upmap_utilization_max_deviation'))
+        ms = plan.initial
+        osdmap = plan.osdmap
+        osdmap_dump = plan.osdmap_dump
+
+        if len(plan.pools):
+            pools = set(plan.pools)
+        else:
+            pools = {str(i['pool_name']) for i in osdmap_dump.get('pools', [])}
+        if not pools:
+            detail = 'No pools available'
+            self.log.info(detail)
+            return -errno.ENOENT, detail
+
+        pools_with_pg_merge = {
+            p['pool_name'] for p in osdmap_dump.get('pools', [])
+            if p['pg_num'] > p['pg_num_target']
+        }
+        pool_info_by_id = {}
+        for p in osdmap_dump.get('pools', []):
+            if p['pool_name'] not in pools:
+                continue
+            if p['pool_name'] in pools_with_pg_merge:
+                self.log.info('pool %s has pending PG(s) for merging, skipping'
+                              % p['pool_name'])
+                continue
+            pool_info_by_id[p['pool']] = p
+        if not pool_info_by_id:
+            detail = 'No eligible pools available'
+            self.log.info(detail)
+            return -errno.ENOENT, detail
+
+        # Restrict to active+clean PGs (same hygiene as do_upmap).
+        active_clean: set = set()
+        for pg in ms.raw_pg_stats.get('pg_stats', []):
+            state = pg.get('state', '')
+            if state == 'active+clean' or state.startswith('active+clean+'):
+                # Exclude scrubbing / repair noise from remaps when present.
+                if 'scrubbing' in state or 'repair' in state:
+                    continue
+                active_clean.add(pg['pgid'])
+
+        def raw_rate(pool_id: int) -> float:
+            return float(osdmap.pool_raw_used_rate(pool_id))
+
+        pg_shards = util_plan.build_pg_shards(
+            ms.pg_up, ms.pg_stat, pool_info_by_id, raw_rate, active_clean)
+
+        # Capacity: prefer device size from osd_stats; fall back to crush weight.
+        capacity: Dict[int, float] = {}
+        osd_stats = {
+            int(o['osd']): o
+            for o in self.get('osd_stats').get('osd_stats', [])
+        }
+        osd_weight = {
+            int(a['osd']): float(a['weight'])
+            for a in osdmap_dump.get('osds', []) if a['weight'] > 0
+        }
+        crush = osdmap.get_crush()
+        for rootid in crush.find_takes():
+            weight_map = crush.get_take_weight_osd_map(rootid)
+            for osd, cw in weight_map.items():
+                if osd not in osd_weight or cw <= 0:
+                    continue
+                stats = osd_stats.get(osd)
+                if stats and stats.get('kb', 0):
+                    capacity[osd] = float(stats['kb']) * 1024.0
+                else:
+                    # crush weight is in TiB-ish units; scale is arbitrary for
+                    # relative fill so long as it is consistent across OSDs.
+                    capacity[osd] = float(cw) * float(osd_weight[osd])
+
+        used: Dict[int, float] = {osd: 0.0 for osd in capacity}
+        for info in pg_shards.values():
+            for osd in info['osds']:
+                if osd in used:
+                    used[osd] += float(info['bytes'])
+
+        existing = util_plan.existing_upmap_items_from_dump(osdmap_dump)
+
+        def try_fn(pool_id: int, ps: int, overfull: List[int],
+                   underfull: List[int],
+                   more_underfull: Optional[List[int]]) -> Optional[Dict[str, List[int]]]:
+            return osdmap.try_pg_upmap(
+                pool_id, ps, overfull, underfull, more_underfull)
+
+        pending = util_plan.plan_utilization_upmaps(
+            used=used,
+            capacity=capacity,
+            pg_shards=pg_shards,
+            try_pg_upmap=try_fn,
+            existing_items=existing,
+            max_optimizations=max_optimizations,
+            max_deviation=max_deviation,
+        )
+        if not pending:
+            self.no_optimization_needed = True
+            return -errno.EALREADY, (
+                'Unable to find further utilization optimization, '
+                'or pool(s) pg_num is decreasing, '
+                'or distribution is already balanced')
+
+        plan.inc.set_pg_upmap_items(pending)
+        self.log.info('prepared %d/%d utilization upmap changes'
+                      % (len(pending), max_optimizations))
         return 0, ''
 
     def do_upmap(self, plan: Plan) -> Tuple[int, str]:
@@ -1653,6 +1791,14 @@ class Module(MgrModule):
                 raise RuntimeError('upmap mode did not properly warn about min_compat_client')
             if warn == '':
                 raise RuntimeError('upmap mode warning is empty when it should not be.')
+
+        # Check upmap-utilization mode warning (same luminous gate as upmap)
+        r, _, warn = self.set_mode(Mode.upmap_utilization)
+        if release.value < CephReleases.luminous.value:
+            if r >= 0:
+                raise RuntimeError('upmap-utilization mode did not properly warn about min_compat_client')
+            if warn == '':
+                raise RuntimeError('upmap-utilization mode warning is empty when it should not be.')
 
         # Check read mode warning
         r, _, warn = self.set_mode(Mode.read)

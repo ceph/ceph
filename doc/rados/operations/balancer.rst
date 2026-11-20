@@ -34,15 +34,17 @@ The balancer mode can be changed from ``upmap`` mode to ``crush-compat`` mode.
 ``crush-compat`` mode, the balancer automatically makes small changes to the
 data distribution in order to ensure that OSDs are utilized equally.
 
-Additional modes include ``upmap-read`` and ``read``. ``upmap-read`` mode
-combines the upmap balancer with the read balancer so that both writes
-and reads are optimized. ``read`` mode can be used when only read optimization
-is desired. For more details, see :ref:`read_balancer`.
+Additional modes include ``upmap-utilization``, ``upmap-read``, and ``read``.
+``upmap-utilization`` balances by OSD **byte fill** rather than PG shard count
+(see below). ``upmap-read`` mode combines the upmap balancer with the read
+balancer so that both writes and reads are optimized. ``read`` mode can be used
+when only read optimization is desired. For more details, see
+:ref:`read_balancer`.
 
 Limitation: count-based balancing vs. size-based balancing
 ----------------------------------------------------------
 
-Ceph's built-in balancer optimizes only by **PG shard count**, not by the
+The default ``upmap`` balancer optimizes by **PG shard count**, not by the
 actual size of the data stored in each PG.
 
 This can result in clusters whose OSDs are balanced by PG shard count,
@@ -52,8 +54,11 @@ to be much higher than the cluster's ``%RAW USED``, because the
 pool's fullest OSD (which determines the pool's available space) may be
 disproportionately loaded with large PGs.
 
-Size-aware community balancers exist (for example,
-`jj-balancer <https://github.com/TheJJ/ceph-balancer>`_).
+Use ``upmap-utilization`` mode when OSD **byte utilization** (fill ratio) is
+the goal. It emits ``pg-upmap-items`` remaps that reduce fill-rate variance
+across OSDs while respecting CRUSH constraints. Historical community tools
+such as `jj-balancer <https://github.com/TheJJ/ceph-balancer>`_ pursue the
+same objective outside the mgr.
 
 Throttling
 ----------
@@ -63,14 +68,14 @@ healed itself yet), then the balancer will not make any adjustments to the PG
 distribution.
 
 There is one exception: if any PGs are stuck in the ``backfill_toofull`` state,
-the ``upmap`` and ``upmap-read`` balancers will proceed even though PGs are
-degraded or the ``target_max_misplaced_ratio`` threshold is exceeded. This can
-happen after a large number of OSDs fail (for example, when a shared
-``block.db`` device fails): OSDs in the same CRUSH bucket can receive an
-oversubscription of PGs and become stuck ``backfill_toofull`` and degraded,
-with no way to recover on their own. Because the ``upmap`` balancer optimizes
-the ``up`` set (rather than the ``acting`` set), it can move PGs off the
-too-full OSDs and allow recovery to make progress.
+the ``upmap``, ``upmap-utilization``, and ``upmap-read`` balancers will proceed
+even though PGs are degraded or the ``target_max_misplaced_ratio`` threshold is
+exceeded. This can happen after a large number of OSDs fail (for example, when
+a shared ``block.db`` device fails): OSDs in the same CRUSH bucket can receive
+an oversubscription of PGs and become stuck ``backfill_toofull`` and degraded,
+with no way to recover on their own. Because the ``upmap``-family balancers
+optimize the ``up`` set (rather than the ``acting`` set), they can move PGs off
+the too-full OSDs and allow recovery to make progress.
 
 When the cluster is healthy, the balancer will remap
 unbalanced PGs in phases to incrementally improve the uniformity
@@ -177,7 +182,7 @@ and then run the following command:
 Modes
 -----
 
-There are four supported balancer modes:
+There are five supported balancer modes:
 
 #. **crush-compat**. This mode uses the compat weight-set feature (introduced
    in Luminous) to manage an alternative set of weights for devices in the
@@ -210,6 +215,20 @@ There are four supported balancer modes:
 
    To use ``upmap``, all clients must be Luminous or newer.
 
+#. **upmap-utilization**. Like ``upmap``, this mode emits ``pg-upmap-items``
+   remaps and requires Luminous or newer clients. Instead of equalizing PG
+   shard counts, it equalizes OSD **byte fill ratios** (used bytes / capacity)
+   with a global, multi-pool planner: it evacuates shards from fuller OSDs
+   toward emptier ones when the move reduces fill-rate variance and remains
+   CRUSH-legal. Tunables include
+   ``mgr/balancer/upmap_utilization_max_optimizations`` (batch size) and
+   ``mgr/balancer/upmap_utilization_max_deviation`` (absolute fill-ratio slack
+   versus the mean; default ``0.02`` = 2%).
+
+   Prefer ``upmap`` when shard-count uniformity is the goal; prefer
+   ``upmap-utilization`` when heterogeneous PG sizes or OSD capacities leave
+   some devices much fuller than others despite an even PG count.
+
 #. **read**. In Reef and later releases, the OSDMap can store explicit
    mappings for individual primary OSDs as exceptions to the normal CRUSH
    placement calculation. These ``pg-upmap-primary`` entries provide fine-grained
@@ -236,6 +255,12 @@ The default mode is ``upmap``. The mode can be changed to ``crush-compat`` by ru
    .. prompt:: bash $
 
       ceph balancer mode crush-compat
+
+The mode can be changed to ``upmap-utilization`` by running the following command:
+
+   .. prompt:: bash $
+
+      ceph balancer mode upmap-utilization
 
 The mode can be changed to ``read`` by running the following command:
 

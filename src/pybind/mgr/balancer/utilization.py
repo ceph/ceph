@@ -1,0 +1,258 @@
+"""
+Size-aware (byte utilization) upmap planner helpers.
+
+Clean-room implementation of a utilization-based balancer inspired by jj-balancer: evacuate shards from overfull OSDs toward underfull OSDs when the move decreases fill-rate variance. CRUSH legality is left to OSDMap.try_pg_upmap.
+"""
+
+from __future__ import annotations
+
+import statistics
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
+
+
+TryPgUpmapFn = Callable[
+    [int, int, List[int], List[int], Optional[List[int]]],
+    Optional[Dict[str, List[int]]],
+]
+
+
+def utilization(used: float, capacity: float) -> float:
+    """Return fill ratio; empty capacity yields 0.0."""
+    if capacity <= 0:
+        return 0.0
+    return float(used) / float(capacity)
+
+
+def fill_variance(used: Dict[int, float], capacity: Dict[int, float]) -> float:
+    """Population variance of per-OSD utilization for OSDs with capacity > 0."""
+    fills = [
+        utilization(used.get(osd, 0.0), cap)
+        for osd, cap in capacity.items()
+        if cap > 0
+    ]
+    if len(fills) < 2:
+        return 0.0
+    return float(statistics.pvariance(fills))
+
+
+def shard_bytes_for_pg(num_bytes: float, pool_size: int, raw_used_rate: float) -> float:
+    """
+    Approximate physical bytes stored on each OSD in the PG's up set.
+
+    For replicated pools raw_used_rate == size, so this equals num_bytes.
+    For EC pools this is roughly num_bytes / k.
+    """
+    if pool_size <= 0:
+        return float(num_bytes)
+    return float(num_bytes) * float(raw_used_rate) / float(pool_size)
+
+
+def parse_pgid(pgid: str) -> Tuple[int, int]:
+    """Parse 'pool.ps' hex seed into (pool_id, ps)."""
+    pool_s, seed_s = pgid.split('.', 1)
+    return int(pool_s), int(seed_s, 16)
+
+
+def remap_pairs(orig: Sequence[int], out: Sequence[int]) -> List[Tuple[int, int]]:
+    """Build from->to pairs for positions that differ between orig and out."""
+    return [(a, b) for a, b in zip(orig, out) if a != b]
+
+
+def apply_move(used: Dict[int, float], from_osd: int, to_osd: int, bytes_: float) -> Dict[int, float]:
+    """Return a shallow-copied used map after moving bytes_ from from_osd to to_osd."""
+    next_used = dict(used)
+    next_used[from_osd] = next_used.get(from_osd, 0.0) - bytes_
+    next_used[to_osd] = next_used.get(to_osd, 0.0) + bytes_
+    return next_used
+
+
+def rank_osds_by_utilization(
+    used: Dict[int, float],
+    capacity: Dict[int, float],
+) -> Tuple[List[int], List[int]]:
+    """
+    Return (overfull_desc, underfull_asc) OSD id lists by fill ratio.
+
+    Only OSDs present in capacity with capacity > 0 are considered.
+    """
+    ranked = sorted(
+        (osd for osd, cap in capacity.items() if cap > 0),
+        key=lambda o: utilization(used.get(o, 0.0), capacity[o]),
+    )
+    # emptiest first / fullest last
+    underfull_asc = list(ranked)
+    overfull_desc = list(reversed(ranked))
+    return overfull_desc, underfull_asc
+
+
+def existing_upmap_items_from_dump(osdmap_dump: Dict[str, Any]) -> Dict[str, List[List[int]]]:
+    """Extract pgid -> [[from, to], ...] from an osdmap dump."""
+    out: Dict[str, List[List[int]]] = {}
+    for item in osdmap_dump.get('pg_upmap_items', []) or []:
+        pgid = item.get('pgid')
+        if not pgid:
+            continue
+        pairs = []
+        for m in item.get('mappings', []) or []:
+            pairs.append([int(m['from']), int(m['to'])])
+        out[str(pgid)] = pairs
+    return out
+
+
+def plan_utilization_upmaps(
+    *,
+    used: Dict[int, float],
+    capacity: Dict[int, float],
+    # pgid -> {osds, bytes, pool_id, ps}
+    pg_shards: Dict[str, Dict[str, Any]],
+    try_pg_upmap: TryPgUpmapFn,
+    existing_items: Optional[Dict[str, List[List[int]]]] = None,
+    max_optimizations: int = 10,
+    max_deviation: float = 0.02,
+) -> Dict[str, List[List[int]]]:
+    """
+    Greedy global planner: move large shards off fullest OSDs when variance drops.
+
+    max_deviation is absolute fill-ratio slack (e.g. 0.02 = 2%).  While the fullest OSD is within max_deviation of the mean fill, no work is done.
+
+    Returns pgid -> full remapping-pair list to write into OSDMapIncremental.
+    """
+    if max_optimizations <= 0 or not capacity:
+        return {}
+
+    working_used = dict(used)
+    pending: Dict[str, List[List[int]]] = {}
+    existing = dict(existing_items or {})
+    skipped: set = set()
+
+    def mean_fill() -> float:
+        fills = [
+            utilization(working_used.get(o, 0.0), c)
+            for o, c in capacity.items() if c > 0
+        ]
+        return float(sum(fills) / len(fills)) if fills else 0.0
+
+    for _ in range(int(max_optimizations)):
+        overfull_desc, underfull_asc = rank_osds_by_utilization(working_used, capacity)
+        if not overfull_desc or not underfull_asc:
+            break
+
+        mean = mean_fill()
+        fullest = overfull_desc[0]
+        if utilization(working_used.get(fullest, 0.0), capacity[fullest]) <= mean + max_deviation:
+            break
+
+        baseline = fill_variance(working_used, capacity)
+        made_progress = False
+
+        for over_osd in overfull_desc:
+            if utilization(working_used.get(over_osd, 0.0), capacity[over_osd]) <= mean + max_deviation:
+                break
+
+            # Candidate PGs on this OSD, largest shard first.
+            candidates = []
+            for pgid, info in pg_shards.items():
+                if pgid in skipped or pgid in pending:
+                    continue
+                osds = [int(o) for o in info['osds']]
+                if over_osd not in osds:
+                    continue
+                candidates.append((float(info['bytes']), pgid, info))
+            candidates.sort(key=lambda t: t[0], reverse=True)
+
+            # Prefer emptier destinations; exclude OSDs already in the PG.
+            under_pref = [
+                o for o in underfull_asc
+                if o != over_osd and utilization(working_used.get(o, 0.0), capacity[o]) < mean
+            ]
+
+            for bytes_, pgid, info in candidates:
+                if bytes_ <= 0:
+                    continue
+                pool_id = int(info['pool_id'])
+                ps = int(info['ps'])
+                pg_osds = {int(o) for o in info['osds']}
+                underfull = [o for o in under_pref if o not in pg_osds]
+                if not underfull:
+                    continue
+
+                result = try_pg_upmap(pool_id, ps, [over_osd], underfull, None)
+                if not result:
+                    continue
+                orig = list(result['orig'])
+                out = list(result['out'])
+                pairs = remap_pairs(orig, out)
+                if not pairs:
+                    continue
+
+                # Prefer the pair that evacuates the overfull OSD.
+                chosen = next((p for p in pairs if p[0] == over_osd), pairs[0])
+                from_osd, to_osd = chosen
+                if to_osd in pg_osds and to_osd != from_osd:
+                    # Destination already holds this PG (should be filtered).
+                    continue
+
+                next_used = apply_move(working_used, from_osd, to_osd, bytes_)
+                if fill_variance(next_used, capacity) >= baseline:
+                    continue
+
+                # Merge with any existing / already-planned items for this PG.
+                base_items = [list(p) for p in existing.get(pgid, [])]
+                if pgid in pending:
+                    base_items = [list(p) for p in pending[pgid]]
+                # Drop prior pairs involving either endpoint, then append.
+                merged = [
+                    p for p in base_items
+                    if p[0] not in (from_osd, to_osd) and p[1] not in (from_osd, to_osd)
+                ]
+                merged.append([from_osd, to_osd])
+                pending[pgid] = merged
+                working_used = next_used
+                skipped.add(pgid)
+                made_progress = True
+                break
+
+            if made_progress:
+                break
+
+        if not made_progress:
+            break
+
+    return pending
+
+
+def build_pg_shards(
+    pg_up: Dict[str, Iterable[int]],
+    pg_stat: Dict[str, Dict[str, Any]],
+    pool_info_by_id: Dict[int, Dict[str, Any]],
+    pool_raw_used_rate: Callable[[int], float],
+    active_clean_pgids: Optional[Iterable[str]] = None,
+) -> Dict[str, Dict[str, Any]]:
+    """
+    Build planner pg_shards map from MappingState-like inputs.
+
+    pool_info_by_id values need at least {'pool': id, 'size': N}.
+    """
+    allow = set(active_clean_pgids) if active_clean_pgids is not None else None
+    out: Dict[str, Dict[str, Any]] = {}
+    for pgid, up in pg_up.items():
+        if allow is not None and pgid not in allow:
+            continue
+        try:
+            pool_id, ps = parse_pgid(pgid)
+        except ValueError:
+            continue
+        pi = pool_info_by_id.get(pool_id)
+        if not pi:
+            continue
+        stat = pg_stat.get(pgid) or {}
+        num_bytes = float(stat.get('num_bytes', 0) or 0)
+        size = int(pi.get('size', 0) or 0)
+        rate = float(pool_raw_used_rate(pool_id))
+        out[pgid] = {
+            'osds': [int(o) for o in up],
+            'bytes': shard_bytes_for_pg(num_bytes, size, rate),
+            'pool_id': pool_id,
+            'ps': ps,
+        }
+    return out

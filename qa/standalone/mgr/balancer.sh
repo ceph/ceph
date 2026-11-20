@@ -216,6 +216,35 @@ function TEST_balancer2() {
     teardown $dir || return 1
 }
 
+function TEST_balancer_upmap_utilization() {
+    local dir=$1
+
+    setup $dir || return 1
+    run_mon $dir a || return 1
+    run_mgr $dir x || return 1
+    run_osd $dir 0 || return 1
+    run_osd $dir 1 || return 1
+    run_osd $dir 2 || return 1
+    create_pool $TEST_POOL1 8
+
+    wait_for_clean || return 1
+
+    ceph osd set-require-min-compat-client luminous || return 1
+    ceph balancer off || return 1
+    ceph balancer mode upmap-utilization || return 1
+    eval MODE=$(ceph balancer status | jq '.mode')
+    test "$MODE" = "upmap-utilization" || return 1
+
+    # Empty/even cluster: planner should report no further optimization.
+    ! ceph balancer optimize plan_util $TEST_POOL1 || return 1
+    ceph balancer status || return 1
+    eval RESULT=$(ceph balancer status | jq '.optimize_result')
+    echo "$RESULT" | grep -q "utilization" || return 1
+
+    ceph balancer mode upmap || return 1
+    teardown $dir || return 1
+}
+
 main balancer "$@"
 
 # Local Variables:

@@ -164,6 +164,84 @@ static PyObject *osdmap_calc_pg_upmaps(BasePyOSDMap* self, PyObject *args)
   return PyLong_FromLong(r);
 }
 
+// Ask CRUSH for a legal remapped up-set for one PG (evacuate overfull → underfull).
+static PyObject *osdmap_try_pg_upmap(BasePyOSDMap* self, PyObject *args)
+{
+  int pool_id = 0;
+  int ps = 0;
+  PyObject *overfull_obj = nullptr;
+  PyObject *underfull_obj = nullptr;
+  PyObject *more_underfull_obj = nullptr;
+  if (!PyArg_ParseTuple(args, "iiOO|O:try_pg_upmap",
+			&pool_id, &ps,
+			&overfull_obj, &underfull_obj,
+			&more_underfull_obj)) {
+    return nullptr;
+  }
+  if (!PyList_Check(overfull_obj) || !PyList_Check(underfull_obj)) {
+    PyErr_SetString(PyExc_TypeError, "overfull and underfull must be lists");
+    return nullptr;
+  }
+  if (more_underfull_obj && more_underfull_obj != Py_None &&
+      !PyList_Check(more_underfull_obj)) {
+    PyErr_SetString(PyExc_TypeError, "more_underfull must be a list or None");
+    return nullptr;
+  }
+
+  set<int> overfull;
+  for (Py_ssize_t i = 0; i < PyList_Size(overfull_obj); ++i) {
+    PyObject *item = PyList_GET_ITEM(overfull_obj, i);
+    if (!PyLong_Check(item)) {
+      PyErr_SetString(PyExc_TypeError, "overfull entries must be ints");
+      return nullptr;
+    }
+    overfull.insert(PyLong_AsLong(item));
+  }
+  vector<int> underfull;
+  for (Py_ssize_t i = 0; i < PyList_Size(underfull_obj); ++i) {
+    PyObject *item = PyList_GET_ITEM(underfull_obj, i);
+    if (!PyLong_Check(item)) {
+      PyErr_SetString(PyExc_TypeError, "underfull entries must be ints");
+      return nullptr;
+    }
+    underfull.push_back(PyLong_AsLong(item));
+  }
+  vector<int> more_underfull;
+  if (more_underfull_obj && more_underfull_obj != Py_None) {
+    for (Py_ssize_t i = 0; i < PyList_Size(more_underfull_obj); ++i) {
+      PyObject *item = PyList_GET_ITEM(more_underfull_obj, i);
+      if (!PyLong_Check(item)) {
+	PyErr_SetString(PyExc_TypeError, "more_underfull entries must be ints");
+	return nullptr;
+      }
+      more_underfull.push_back(PyLong_AsLong(item));
+    }
+  }
+
+  pg_t pg(ps, pool_id);
+  vector<int> raw, orig, out;
+  self->osdmap->pg_to_raw_upmap(pg, &raw, &orig);
+  vector<int> orig_before = orig;
+  bool ok = self->osdmap->try_pg_upmap(
+    g_ceph_context, pg, overfull, underfull, more_underfull, &orig, &out);
+  if (!ok) {
+    Py_RETURN_NONE;
+  }
+
+  PyFormatter f;
+  f.open_array_section("orig");
+  for (auto osd : orig_before) {
+    f.dump_int("osd", osd);
+  }
+  f.close_section();
+  f.open_array_section("out");
+  for (auto osd : out) {
+    f.dump_int("osd", osd);
+  }
+  f.close_section();
+  return f.get();
+}
+
 static PyObject *osdmap_balance_primaries(BasePyOSDMap* self, PyObject *args)
 {
   int pool_id;
@@ -356,6 +434,8 @@ PyMethodDef BasePyOSDMap_methods[] = {
    "Get pools that have CRUSH rules that TAKE the given root"},
   {"_calc_pg_upmaps", (PyCFunction)osdmap_calc_pg_upmaps, METH_VARARGS,
    "Calculate new pg-upmap values"},
+  {"_try_pg_upmap", (PyCFunction)osdmap_try_pg_upmap, METH_VARARGS,
+   "Try a CRUSH-legal remapped up-set for one PG"},
   {"_balance_primaries", (PyCFunction)osdmap_balance_primaries, METH_VARARGS,
    "Calculate new pg-upmap-primary values"},
   {"_map_pool_pgs_up", (PyCFunction)osdmap_map_pool_pgs_up, METH_VARARGS,
@@ -525,6 +605,75 @@ static PyObject *osdmap_inc_set_compat_weight_set_weights(
   Py_RETURN_NONE;
 }
 
+// Inject pg-upmap-items: { "1.0": [[from, to], ...], ... }
+static PyObject *osdmap_inc_set_pg_upmap_items(
+  BasePyOSDMapIncremental *self, PyObject *mapobj)
+{
+  if (!PyDict_Check(mapobj)) {
+    PyErr_SetString(PyExc_TypeError, "pg_upmap_items must be a dict");
+    return nullptr;
+  }
+  PyObject *items = PyDict_Items(mapobj);
+  if (!items) {
+    return nullptr;
+  }
+  for (Py_ssize_t i = 0; i < PyList_Size(items); ++i) {
+    PyObject *pair = PyList_GET_ITEM(items, i);
+    PyObject *pgid_obj = PyTuple_GET_ITEM(pair, 0);
+    PyObject *mappings_obj = PyTuple_GET_ITEM(pair, 1);
+    if (!PyUnicode_Check(pgid_obj)) {
+      Py_DECREF(items);
+      PyErr_SetString(PyExc_TypeError, "pgid keys must be strings");
+      return nullptr;
+    }
+    if (!PyList_Check(mappings_obj)) {
+      Py_DECREF(items);
+      PyErr_SetString(PyExc_TypeError, "mappings must be a list of [from, to]");
+      return nullptr;
+    }
+    pg_t pgid;
+    if (!pgid.parse(PyUnicode_AsUTF8(pgid_obj))) {
+      Py_DECREF(items);
+      PyErr_Format(PyExc_ValueError, "bad pgid %s", PyUnicode_AsUTF8(pgid_obj));
+      return nullptr;
+    }
+    mempool::osdmap::vector<std::pair<int32_t,int32_t>> um_items;
+    for (Py_ssize_t j = 0; j < PyList_Size(mappings_obj); ++j) {
+      PyObject *mapping = PyList_GET_ITEM(mappings_obj, j);
+      int from = 0;
+      int to = 0;
+      if (PyList_Check(mapping) || PyTuple_Check(mapping)) {
+	if (PySequence_Size(mapping) != 2) {
+	  Py_DECREF(items);
+	  PyErr_SetString(PyExc_ValueError, "each mapping must be [from, to]");
+	  return nullptr;
+	}
+	PyObject *from_obj = PySequence_GetItem(mapping, 0);
+	PyObject *to_obj = PySequence_GetItem(mapping, 1);
+	if (!PyLong_Check(from_obj) || !PyLong_Check(to_obj)) {
+	  Py_DECREF(from_obj);
+	  Py_DECREF(to_obj);
+	  Py_DECREF(items);
+	  PyErr_SetString(PyExc_TypeError, "mapping endpoints must be ints");
+	  return nullptr;
+	}
+	from = PyLong_AsLong(from_obj);
+	to = PyLong_AsLong(to_obj);
+	Py_DECREF(from_obj);
+	Py_DECREF(to_obj);
+      } else {
+	Py_DECREF(items);
+	PyErr_SetString(PyExc_TypeError, "each mapping must be a list/tuple");
+	return nullptr;
+      }
+      um_items.push_back(std::make_pair(from, to));
+    }
+    self->inc->new_pg_upmap_items[pgid] = um_items;
+  }
+  Py_DECREF(items);
+  Py_RETURN_NONE;
+}
+
 PyMethodDef BasePyOSDMapIncremental_methods[] = {
   {"_get_epoch", (PyCFunction)osdmap_inc_get_epoch, METH_NOARGS,
     "Get OSDMap::Incremental epoch"},
@@ -535,6 +684,9 @@ PyMethodDef BasePyOSDMapIncremental_methods[] = {
   {"_set_crush_compat_weight_set_weights",
    (PyCFunction)osdmap_inc_set_compat_weight_set_weights, METH_O,
    "Set weight values in the pending CRUSH compat weight-set"},
+  {"_set_pg_upmap_items",
+   (PyCFunction)osdmap_inc_set_pg_upmap_items, METH_O,
+   "Set pending pg-upmap-items mappings"},
   {NULL, NULL, 0, NULL}
 };
 
