@@ -337,6 +337,7 @@ public:
   int init(rgw::sal::Driver* driver, req_state *s, rgw::io::BasicClient *cio) override;
   int authorize(const DoutPrefixProvider *dpp, optional_yield y) override;
   int postauth_init(optional_yield y) override;
+  int error_handler(int err_no, std::string *error_content, optional_yield y) override;
 
   RGWAccessControlPolicy *alloc_policy() { return nullptr; /* return new RGWAccessControlPolicy_SWIFT; */ }
   void free_policy(RGWAccessControlPolicy *policy) { delete policy; }

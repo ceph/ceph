@@ -819,7 +819,7 @@ void RGW_SWIFT_Auth_Get::execute(optional_yield y)
 
 done:
   set_req_state_err(s, ret);
-  dump_errno(s);
+  dump_swift_status(s);
   end_header(s);
 }
 
