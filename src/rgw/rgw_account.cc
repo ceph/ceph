@@ -122,6 +122,13 @@ int create(const DoutPrefixProvider* dpp,
     return -EINVAL;
   }
 
+  // users in the account must share its tenant, so it has to be a valid
+  // tenant name for them
+  if (rgw_validate_tenant_name(op_state.tenant) < 0) {
+    err_msg = "tenant name may only contain alphanumeric and _ characters";
+    return -EINVAL;
+  }
+
   auto info = RGWAccountInfo{
     .tenant = op_state.tenant,
     .name = op_state.account_name,
