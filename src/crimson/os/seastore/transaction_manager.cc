@@ -1216,8 +1216,19 @@ TransactionManager::alloc_and_copy_data_extents(
   for (auto &extent : extents) {
     auto &ext = *extent;
     assert(off + ext.get_length() <= length);
-    iter.copy(ext.get_length(), ext.get_bptr().c_str());
-    off += ext.get_length();
+    auto ext_len = ext.get_length();
+    auto cur_ptr = iter.get_current_ptr();
+    if (cur_ptr.length() >= ext_len) {
+      ceph::bufferptr slice(cur_ptr, 0, ext_len);
+      if (slice.is_page_aligned() && slice.is_n_page_sized()) {
+        ext.set_bptr(std::move(slice));
+        iter += ext_len;
+        off += ext_len;
+        continue;
+      }
+    }
+    iter.copy(ext_len, ext.get_bptr().c_str());
+    off += ext_len;
   }
 }
 
@@ -1466,9 +1477,13 @@ TransactionManager::promote_extent(
 
       auto lext = extent->cast<LogicalChildNode>();
       lext->set_laddr(slice_laddr);
-      //TODO: this memory copy should be saved
-      orig_ext->get_bptr().copy_out(
-        offset, slice_length, lext->get_bptr().c_str());
+      ceph::bufferptr slice(orig_ext->get_bptr(), offset, slice_length);
+      if (slice.is_page_aligned() && slice.is_n_page_sized()) {
+        lext->set_bptr(std::move(slice));
+      } else {
+        orig_ext->get_bptr().copy_out(
+          offset, slice_length, lext->get_bptr().c_str());
+      }
       lext->set_last_committed_crc(lext->calc_crc32c());
 
       promoted_extents.push_back(lext);
@@ -1513,11 +1528,16 @@ TransactionManager::promote_extent(
       assert(!cache->is_on_cold_tier(lext->get_paddr()));
     }
     t.touch_laddr_prefix(orig_ext->get_laddr().get_object_prefix());
-    //TODO: this memory copy should be saved
-    orig_ext->get_bptr().copy_out(
-      0,
-      orig_ext->get_length(),
-      lext->get_bptr().c_str());
+    auto orig_len = orig_ext->get_length();
+    ceph::bufferptr slice(orig_ext->get_bptr(), 0, orig_len);
+    if (slice.is_page_aligned() && slice.is_n_page_sized()) {
+      lext->set_bptr(std::move(slice));
+    } else {
+      orig_ext->get_bptr().copy_out(
+        0,
+        orig_len,
+        lext->get_bptr().c_str());
+    }
     promoted_extents.push_back(lext);
     auto remapped_cold_extent = cache->alloc_remapped_extent_by_type(
       t,

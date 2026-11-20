@@ -546,7 +546,7 @@ public:
 #ifdef UNIT_TESTS_BUILT
     if (unlikely(opt.external_paddr.has_value())) {
       assert(opt.external_paddr->is_fake());
-      auto bp = create_extent_ptr_zero(length);
+      auto bp = create_extent_ptr_rand(length);
       allocs.emplace_back(alloc_result_t{*opt.external_paddr, std::move(bp), opt.gen});
     } else
 #endif
@@ -561,7 +561,7 @@ public:
           if (max_data_allocation_size) {
             len = std::min(max_data_allocation_size, len);
           }
-          auto bp = create_extent_ptr_zero(len);
+          auto bp = create_extent_ptr_rand(len);
           auto start = ext.start.is_delayed()
                         ? ext.start
                         : ext.start + (ext.len - left);

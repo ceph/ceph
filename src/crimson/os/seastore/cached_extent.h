@@ -33,6 +33,7 @@ using CachedExtentRef = boost::intrusive_ptr<CachedExtent>;
 class SegmentedAllocator;
 class TransactionManager;
 class ExtentPlacementManager;
+class ObjectDataHandler;
 
 // #define DEBUG_CACHED_EXTENT_REF
 #ifdef DEBUG_CACHED_EXTENT_REF
@@ -1267,6 +1268,7 @@ protected:
 
   friend class crimson::os::seastore::SegmentedAllocator;
   friend class crimson::os::seastore::TransactionManager;
+  friend class crimson::os::seastore::ObjectDataHandler;
   friend class crimson::os::seastore::ExtentPlacementManager;
   friend class LBAMapping;
   friend class ::btree_lba_manager_test;
