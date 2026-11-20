@@ -76,9 +76,9 @@ static bool readdir_cache_has(Inode *diri, uintptr_t dn)
   return false;
 }
 
-// readdir_cache holds no references. _try_to_trim_inode() nulls the cached
-// dentries of an inode (a rename target that has other links, say) and
-// trim_cache() then frees the null dentry, so the cache must let it go.
+// readdir_cache holds no references. If a cached dentry is nulled
+// (keepdentry=true) and trim_cache() then frees the null dentry, the cache
+// must let it go.
 TEST_F(TestClient, ReaddirCacheDropsFreedDentry) {
   const std::string path = "/readdir_cache_freed_" + std::to_string(getpid());
   std::set<std::string> names;
@@ -164,4 +164,109 @@ TEST_F(TestClient, ReaddirCacheDropsFreedDentryWhileFilling) {
   // the listing that was filling the cache cannot complete the directory
   std::scoped_lock lock(client->client_lock);
   EXPECT_FALSE(diri->flags & I_COMPLETE);
+}
+
+// Overwriting one hard link via rename must not null or trim other live hard
+// links of the overwritten inode.
+TEST_F(TestClient, RenameOverHardlinkPreservesOtherLinks) {
+  const std::string base = "/rename_hardlink_" + std::to_string(getpid());
+  const std::string dir1 = base + "/d1";
+  const std::string dir2 = base + "/d2";
+  const std::string src = dir2 + "/src";
+  const std::string dst = dir2 + "/dst";
+  const std::string other_link = dir1 + "/link";
+
+  ASSERT_EQ(0, client->mkdir(base.c_str(), 0755, myperm));
+  ASSERT_EQ(0, client->mkdir(dir1.c_str(), 0755, myperm));
+  ASSERT_EQ(0, client->mkdir(dir2.c_str(), 0755, myperm));
+  ASSERT_EQ(0, client->mknod(src.c_str(), S_IFREG | 0644, myperm));
+  ASSERT_EQ(0, client->mknod(dst.c_str(), S_IFREG | 0644, myperm));
+  ASSERT_EQ(0, client->link(dst.c_str(), other_link.c_str(), myperm, ""));
+
+  auto cleanup = make_scope_guard([&] {
+    client->unlink(src.c_str(), myperm);
+    client->unlink(dst.c_str(), myperm);
+    client->unlink(other_link.c_str(), myperm);
+    client->rmdir(dir1.c_str(), myperm);
+    client->rmdir(dir2.c_str(), myperm);
+    client->rmdir(base.c_str(), myperm);
+  });
+
+  struct stat st_before {};
+  ASSERT_EQ(0, client->stat(other_link.c_str(), &st_before, myperm));
+  ASSERT_EQ(2u, st_before.st_nlink);
+
+  // Populate dir1's readdir_cache and mark dir1 complete and ordered.
+  dir_result_t *dirp;
+  ASSERT_EQ(0, client->opendir(dir1.c_str(), &dirp, myperm));
+  InodeRef dir1_in = dirp->inode;
+  ASSERT_EQ((std::set<std::string>{"link"}), list_dir(client, dirp));
+  client->closedir(dirp);
+
+  ASSERT_EQ(0, client->rename(src.c_str(), dst.c_str(), myperm, ""));
+
+  {
+    std::scoped_lock lock(client->client_lock);
+    ASSERT_TRUE(dir1_in->dir != nullptr);
+    auto it = dir1_in->dir->dentries.find("link");
+    ASSERT_NE(it, dir1_in->dir->dentries.end());
+    EXPECT_TRUE(it->second->inode != nullptr);
+  }
+
+  struct stat st_after {};
+  ASSERT_EQ(0, client->stat(other_link.c_str(), &st_after, myperm));
+  EXPECT_EQ(st_before.st_ino, st_after.st_ino);
+  EXPECT_EQ(1u, st_after.st_nlink);
+
+  ASSERT_EQ(0, client->opendir(dir1.c_str(), &dirp, myperm));
+  EXPECT_EQ((std::set<std::string>{"link"}), list_dir(client, dirp));
+  client->closedir(dirp);
+}
+
+// Renaming a hard link onto another hard link of the same inode is a POSIX
+// no-op; both cached dentries must remain linked and accessible.
+TEST_F(TestClient, RenameSameInodeHardlinksIsNoop) {
+  const std::string dir = "/rename_same_inode_" + std::to_string(getpid());
+  const std::string a = dir + "/a";
+  const std::string b = dir + "/b";
+
+  ASSERT_EQ(0, client->mkdir(dir.c_str(), 0755, myperm));
+  ASSERT_EQ(0, client->mknod(a.c_str(), S_IFREG | 0644, myperm));
+  ASSERT_EQ(0, client->link(a.c_str(), b.c_str(), myperm, ""));
+
+  auto cleanup = make_scope_guard([&] {
+    client->unlink(a.c_str(), myperm);
+    client->unlink(b.c_str(), myperm);
+    client->rmdir(dir.c_str(), myperm);
+  });
+
+  dir_result_t *dirp;
+  ASSERT_EQ(0, client->opendir(dir.c_str(), &dirp, myperm));
+  InodeRef diri = dirp->inode;
+  ASSERT_EQ((std::set<std::string>{"a", "b"}), list_dir(client, dirp));
+  client->closedir(dirp);
+
+  ASSERT_EQ(0, client->rename(a.c_str(), b.c_str(), myperm, ""));
+
+  {
+    std::scoped_lock lock(client->client_lock);
+    ASSERT_TRUE(diri->dir != nullptr);
+    auto ita = diri->dir->dentries.find("a");
+    auto itb = diri->dir->dentries.find("b");
+    ASSERT_NE(ita, diri->dir->dentries.end());
+    ASSERT_NE(itb, diri->dir->dentries.end());
+    EXPECT_TRUE(ita->second->inode != nullptr);
+    EXPECT_TRUE(itb->second->inode != nullptr);
+    EXPECT_EQ(ita->second->inode, itb->second->inode);
+  }
+
+  struct stat sta {}, stb {};
+  ASSERT_EQ(0, client->stat(a.c_str(), &sta, myperm));
+  ASSERT_EQ(0, client->stat(b.c_str(), &stb, myperm));
+  EXPECT_EQ(sta.st_ino, stb.st_ino);
+  EXPECT_EQ(2u, sta.st_nlink);
+
+  ASSERT_EQ(0, client->opendir(dir.c_str(), &dirp, myperm));
+  EXPECT_EQ((std::set<std::string>{"a", "b"}), list_dir(client, dirp));
+  client->closedir(dirp);
 }
