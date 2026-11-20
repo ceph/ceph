@@ -519,7 +519,10 @@ class ClusterConfigHandler:
         create_only: bool = False,
     ) -> Result:
         """Check/validate a staged resource."""
-        log.debug('staging resource: %r', resource)
+        log.debug(
+            'staging resource: %r',
+            resource.convert(resources.HIDE_SECRETS),
+        )
         if create_only:
             if not staging.is_new(resource):
                 return ErrorResult(
@@ -542,9 +545,14 @@ class ClusterConfigHandler:
                 ),
             )
         except ErrorResult as err:
-            log.debug('rejected resource: %r', resource)
+            log.debug(
+                'rejected resource: %r',
+                resource.convert(resources.HIDE_SECRETS),
+            )
             return err
-        log.debug('checked resource: %r', resource)
+        log.debug(
+            'checked resource: %r', resource.convert(resources.HIDE_SECRETS)
+        )
         return ResourceResult.checked_from_result(pending_result)
 
     def _choose_path_resolver(
@@ -559,7 +567,10 @@ class ClusterConfigHandler:
                     refs,
                 )
                 return ExoResolver(cluster)
-        log.debug("Selected default path resolver for %s", resource)
+        log.debug(
+            "Selected default path resolver for %s",
+            resource.convert(resources.HIDE_SECRETS),
+        )
         return self._path_resolver
 
     def _choose_earmark_resolver(
@@ -1722,8 +1733,13 @@ def _save_pending_rgw_config(
 def _save_pending_spec_backup(
     store: ConfigStore, change_group: ClusterChangeGroup, smb_spec: SMBSpec
 ) -> None:
+    data = smb_spec.to_json()
+    # the public store must not hold secrets; drop ext cluster keys
+    for ccc in data.get('spec', {}).get('ceph_cluster_configs') or []:
+        ccc.pop('key', None)
+        ccc.pop('rgw_key', None)
     ssentry = store[external.spec_backup_key(change_group.cluster.cluster_id)]
-    ssentry.set(smb_spec.to_json())
+    ssentry.set(data)
     change_group.cache_updated_entry(ssentry)
 
 

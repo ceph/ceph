@@ -51,6 +51,20 @@ def _add_cfg(cfg_dict: Dict[str, Any], key: str, value: Any) -> None:
         cfg_dict[key] = value
 
 
+def _redacted_config(config_blobs: Dict[str, Any]) -> Dict[str, Any]:
+    """Return a copy of config_blobs that is safe to log.
+
+    The keyring and file contents (TLS keys, external cluster keyrings) are
+    secrets. Keep this in sync if new secret values are added to the config.
+    """
+    out = dict(config_blobs)
+    if 'keyring' in out:
+        out['keyring'] = '<redacted>'
+    if 'files' in out:
+        out['files'] = sorted(out['files'])
+    return out
+
+
 @register_cephadm_service
 class SMBService(CephService):
     TYPE = 'smb'
@@ -307,7 +321,9 @@ class SMBService(CephService):
         if smb_spec.tunables:
             config_blobs['tunables'] = smb_spec.tunables
 
-        logger.debug('smb generate_config: %r', config_blobs)
+        logger.debug(
+            'smb generate_config: %r', _redacted_config(config_blobs)
+        )
         self._configure_cluster_meta(smb_spec, daemon_spec)
         deps = self.get_dependencies(self.mgr, smb_spec, daemon_spec.daemon_type)
         return config_blobs, deps

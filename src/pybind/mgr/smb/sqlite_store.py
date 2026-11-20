@@ -654,9 +654,10 @@ class MirrorExternalCephCluster(Mirror):
     def filter_object(self, obj: Simplified) -> Simplified:
         """Filter ext_ceph_clusters for sqlite3 store."""
         filtered = copy.deepcopy(obj)
-        cu = filtered.get('cluster', {}).get('cephfs_user')
-        if cu:
-            cu.pop('key', None)
+        for user in ('cephfs_user', 'rgw_user'):
+            cu = filtered.get('cluster', {}).get(user)
+            if cu:
+                cu.pop('key', None)
         return filtered
 
 
