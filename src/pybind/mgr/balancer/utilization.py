@@ -23,6 +23,11 @@ def utilization(used: float, capacity: float) -> float:
     return float(used) / float(capacity)
 
 
+def pool_pg_num_unsettled(pool: Dict[str, Any]) -> bool:
+    """True while the mon is still advancing pg_num toward pg_num_target (split or merge)."""
+    return int(pool['pg_num']) != int(pool['pg_num_target'])
+
+
 def fill_variance(used: Dict[int, float], capacity: Dict[int, float]) -> float:
     """Population variance of per-OSD utilization for OSDs with capacity > 0."""
     fills = [

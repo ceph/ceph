@@ -225,6 +225,11 @@ There are five supported balancer modes:
    ``mgr/balancer/upmap_utilization_max_deviation`` (absolute fill-ratio slack
    versus the mean; default ``0.02`` = 2%).
 
+   To cooperate with the PG autoscaler, ``upmap-utilization`` (and ``upmap``)
+   skip a pool while ``pg_num`` has not yet reached ``pg_num_target`` (pending
+   split or merge). Remaps resume for that pool after ``pg_num`` settles and
+   the usual active+clean / misplaced health gates allow planning.
+
    Prefer ``upmap`` when shard-count uniformity is the goal; prefer
    ``upmap-utilization`` when heterogeneous PG sizes or OSD capacities leave
    some devices much fuller than others despite an even PG count.

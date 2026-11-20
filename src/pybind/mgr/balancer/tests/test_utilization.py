@@ -16,6 +16,16 @@ remap_pairs = _utilization.remap_pairs
 apply_move = _utilization.apply_move
 plan_utilization_upmaps = _utilization.plan_utilization_upmaps
 build_pg_shards = _utilization.build_pg_shards
+pool_pg_num_unsettled = _utilization.pool_pg_num_unsettled
+
+
+def test_pool_pg_num_unsettled():
+    # Settled: remaps allowed.
+    assert pool_pg_num_unsettled({'pg_num': 32, 'pg_num_target': 32}) is False
+    # Pending split (autoscaler raised target): defer remaps.
+    assert pool_pg_num_unsettled({'pg_num': 32, 'pg_num_target': 64}) is True
+    # Pending merge: defer remaps (same gate as stock upmap merge skip).
+    assert pool_pg_num_unsettled({'pg_num': 64, 'pg_num_target': 32}) is True
 
 
 def test_utilization_and_variance():

@@ -241,6 +241,9 @@ function TEST_balancer_upmap_utilization() {
     eval RESULT=$(ceph balancer status | jq '.optimize_result')
     echo "$RESULT" | grep -q "utilization" || return 1
 
+    # Unsettled pg_num settle-deferral is covered by
+    # src/pybind/mgr/balancer/tests/test_utilization.py::test_pool_pg_num_unsettled
+
     ceph balancer mode upmap || return 1
     teardown $dir || return 1
 }

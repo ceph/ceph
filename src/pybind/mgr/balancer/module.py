@@ -1222,21 +1222,26 @@ class Module(MgrModule):
             self.log.info(detail)
             return -errno.ENOENT, detail
 
-        pools_with_pg_merge = {
+        # Defer remaps until pg_num has caught up to pg_num_target so we do not fight the autoscaler (pending splits or merges).
+        pools_with_unsettled_pg_num = {
             p['pool_name'] for p in osdmap_dump.get('pools', [])
-            if p['pg_num'] > p['pg_num_target']
+            if util_plan.pool_pg_num_unsettled(p)
         }
         pool_info_by_id = {}
         for p in osdmap_dump.get('pools', []):
             if p['pool_name'] not in pools:
                 continue
-            if p['pool_name'] in pools_with_pg_merge:
-                self.log.info('pool %s has pending PG(s) for merging, skipping'
-                              % p['pool_name'])
+            if p['pool_name'] in pools_with_unsettled_pg_num:
+                self.log.info(
+                    'pool %s has unsettled pg_num (%d -> target %d); '
+                    'skipping until autoscaler/mon finishes'
+                    % (p['pool_name'], p['pg_num'], p['pg_num_target']))
                 continue
             pool_info_by_id[p['pool']] = p
         if not pool_info_by_id:
-            detail = 'No eligible pools available'
+            detail = (
+                'No eligible pools available '
+                '(all selected pools have unsettled pg_num)')
             self.log.info(detail)
             return -errno.ENOENT, detail
 
@@ -1307,7 +1312,7 @@ class Module(MgrModule):
             self.no_optimization_needed = True
             return -errno.EALREADY, (
                 'Unable to find further utilization optimization, '
-                'or pool(s) pg_num is decreasing, '
+                'or pool(s) pg_num is still settling, '
                 'or distribution is already balanced')
 
         plan.inc.set_pg_upmap_items(pending)
@@ -1337,16 +1342,19 @@ class Module(MgrModule):
         inc = plan.inc
         total_did = 0
         left = max_optimizations
-        pools_with_pg_merge = [p['pool_name'] for p in osdmap_dump.get('pools', [])
-                               if p['pg_num'] > p['pg_num_target']]
+        # Same settle gate as upmap-utilization: skip splits and merges.
+        pools_with_unsettled_pg_num = [
+            p['pool_name'] for p in osdmap_dump.get('pools', [])
+            if util_plan.pool_pg_num_unsettled(p)]
         crush_rule_by_pool_name = dict((p['pool_name'], p['crush_rule'])
                                        for p in osdmap_dump.get('pools', []))
         for pool in pools:
             if pool not in crush_rule_by_pool_name:
                 self.log.info('pool %s does not exist' % pool)
                 continue
-            if pool in pools_with_pg_merge:
-                self.log.info('pool %s has pending PG(s) for merging, skipping for now' % pool)
+            if pool in pools_with_unsettled_pg_num:
+                self.log.info(
+                    'pool %s has unsettled pg_num; skipping until settle' % pool)
                 continue
             adjusted_pools.append(pool)
         # shuffle so all pools get equal (in)attention
@@ -1381,7 +1389,7 @@ class Module(MgrModule):
             self.log.debug('prepared %d/%d upmap changes' % (total_did, max_optimizations))
             self.no_optimization_needed = True
             return -errno.EALREADY, 'Unable to find further optimization, ' \
-                                    'or pool(s) pg_num is decreasing, ' \
+                                    'or pool(s) pg_num is still settling, ' \
                                     'or distribution is already perfect'
         return 0, ''
 
