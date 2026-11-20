@@ -116,6 +116,9 @@ function TEST_require_pool_migration_clients() {
     start_old_client $dir $SERVER_OCTOPUS || return 1
     ! ceph osd set-require-min-compat-client vampire || return 1
     ceph osd set-require-min-compat-client vampire --yes-i-really-mean-it || return 1
+    # and it cannot be lowered again: the requirement is a feature in use
+    ! ceph osd set-require-min-compat-client umbrella 2> $dir/lower.out || return 1
+    grep "features that require vampire" $dir/lower.out || return 1
     ceph osd dump | grep -w flags | grep -w require_pool_migration || return 1
     ceph health detail | grep -q INCOMPATIBLE_CLIENTS && return 1
 
