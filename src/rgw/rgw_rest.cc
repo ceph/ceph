@@ -824,6 +824,8 @@ int RGWGetObj_ObjStore::get_params(optional_yield y)
 int RESTArgs::get_string(req_state *s, const string& name,
 			 const string& def_val, string *val, bool *existed)
 {
+  // RGWHTTPArgs::parse() has already url-decoded the value. decoding it
+  // again would turn an encoded '+' into a space and '%25XX' into a byte
   bool exists;
   *val = s->info.args.get(name, &exists);
 
@@ -835,8 +837,6 @@ int RESTArgs::get_string(req_state *s, const string& name,
     return 0;
   }
 
-  constexpr bool in_query = true; // url-decode query params
-  *val = url_decode(*val, in_query);
   return 0;
 }
 
