@@ -3716,9 +3716,10 @@ void PeeringState::consider_adjusting_pwlc(eversion_t last_complete)
     } else if (last_complete < toversion) {
       // A divergent update has advanced pwlc adhead of last_complete,
       // roll backwards to the last completed full write and then
-      // let proc_master_log roll forward partial writes
-      info.partial_writes_last_complete[shard] = std::pair(last_complete,
-							   last_complete);
+      // let proc_master_log roll forward partial writes. A shard still
+      // at fromversion must stay covered.
+      info.partial_writes_last_complete[shard] = std::pair(
+        std::min(fromversion, last_complete), last_complete);
       psdout(10) << "shard " << shard << " pwlc rolled backward to "
 		 << info.partial_writes_last_complete[shard] << dendl;
     }
