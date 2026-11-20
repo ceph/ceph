@@ -113,8 +113,17 @@ using TokenBucketRef = std::unique_ptr<TokenBucket>;
  * Different writers write extents to different locations.
  */
 class ExtentOolWriter {
+  uint8_t writer_id = 0;
 public:
   virtual ~ExtentOolWriter() {}
+
+  void set_writer_id(uint8_t id) {
+    writer_id = id;
+  }
+
+  uint8_t get_writer_id() const {
+    return writer_id;
+  }
 
   virtual backend_type_t get_type() const = 0;
 
@@ -671,8 +680,11 @@ public:
    * delayed_extents is used to update lba mapping.
    * usage is used to reserve projected space
    */
-  using extents_by_writer_t =
-    std::map<ExtentOolWriter*, std::list<CachedExtentRef>>;
+  struct writer_extents_t {
+    ExtentOolWriter* writer = nullptr;
+    std::list<CachedExtentRef> extents;
+  };
+  using extents_by_writer_t = std::vector<writer_extents_t>;
   struct dispatch_result_t {
     extents_by_writer_t alloc_map;
     std::vector<CachedExtentRef> delayed_extents;
