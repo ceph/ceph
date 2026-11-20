@@ -522,7 +522,7 @@ public:
     return alloc_result_t{addr, std::move(bp), opt.gen};
   }
 
-  std::list<alloc_result_t> alloc_new_data_extents(
+  std::vector<alloc_result_t> alloc_new_data_extents(
     Transaction& t,
     extent_types_t type,
     extent_len_t length,
@@ -542,7 +542,7 @@ public:
 
     // XXX: bp might be extended to point to different memory (e.g. PMem)
     // according to the allocator.
-    std::list<alloc_result_t> allocs;
+    std::vector<alloc_result_t> allocs;
 #ifdef UNIT_TESTS_BUILT
     if (unlikely(opt.external_paddr.has_value())) {
       assert(opt.external_paddr->is_fake());

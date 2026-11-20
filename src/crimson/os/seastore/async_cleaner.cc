@@ -93,6 +93,7 @@ std::ostream& operator<<(std::ostream &out, const segment_info_t &info)
 void segments_info_t::reset()
 {
   segments.clear();
+  empty_segments.clear();
 
   segment_size = 0;
 
@@ -143,6 +144,12 @@ void segments_info_t::add_segment_manager(
     ceph_assert(segment_size == ssize);
   }
 
+  for (std::size_t i = 0; i < nsegments; ++i) {
+    segment_id_t seg_id(d_id, i);
+    segments[seg_id].id = seg_id;
+    add_empty_segment(seg_id);
+  }
+
   // NOTE: by default the segments are empty
   num_empty += nsegments;
 
@@ -161,6 +168,7 @@ void segments_info_t::init_closed(
         category, rewrite_gen_printer_t{generation},
         segment_info, num_empty, num_open, num_closed);
   ceph_assert(segment_info.is_empty());
+  remove_empty_segment(segment);
   ceph_assert(num_empty > 0);
   --num_empty;
   ++num_closed;
@@ -195,6 +203,7 @@ void segments_info_t::mark_open(
        category, rewrite_gen_printer_t{generation},
        segment_info, num_empty, num_open, num_closed);
   ceph_assert(segment_info.is_empty());
+  remove_empty_segment(segment);
   ceph_assert(num_empty > 0);
   --num_empty;
   ++num_open;
@@ -233,6 +242,7 @@ void segments_info_t::mark_empty(
   ceph_assert(num_closed > 0);
   --num_closed;
   ++num_empty;
+  add_empty_segment(segment);
   if (type == segment_type_t::JOURNAL) {
     ceph_assert(num_type_journal > 0);
     --num_type_journal;
@@ -1107,25 +1117,20 @@ segment_id_t SegmentCleaner::allocate_segment(
   assert(seq != NULL_SEG_SEQ);
   ceph_assert(type == segment_type_t::OOL ||
               trimmer != nullptr); // segment_type_t::JOURNAL
-  for (auto it = segments.begin();
-       it != segments.end();
-       ++it) {
-    auto seg_id = it->first;
-    auto& segment_info = it->second;
-    if (segment_info.is_empty()) {
-      auto old_usage = calc_utilization(seg_id);
-      ceph_assert(is_rewrite_generation(generation, max_rewrite_generation));
-      segments.mark_open(seg_id, seq, type, category, generation);
-      if (type == segment_type_t::JOURNAL) {
-        assert(trimmer != nullptr);
-        trimmer->set_journal_head_sequence(seq);
-      }
-      background_callback->maybe_wake_background();
-      auto new_usage = calc_utilization(seg_id);
-      adjust_segment_util(old_usage, new_usage);
-      INFO("opened, {}", stat_printer_t{*this, false});
-      return seg_id;
+  auto seg_id = segments.get_empty_segment();
+  if (seg_id != NULL_SEG_ID) {
+    auto old_usage = calc_utilization(seg_id);
+    ceph_assert(is_rewrite_generation(generation, max_rewrite_generation));
+    segments.mark_open(seg_id, seq, type, category, generation);
+    if (type == segment_type_t::JOURNAL) {
+      assert(trimmer != nullptr);
+      trimmer->set_journal_head_sequence(seq);
     }
+    background_callback->maybe_wake_background();
+    auto new_usage = calc_utilization(seg_id);
+    adjust_segment_util(old_usage, new_usage);
+    INFO("opened, {}", stat_printer_t{*this, false});
+    return seg_id;
   }
   ERROR("out of space with {} {} {} {}",
         type, segment_seq_printer_t{seq}, category,

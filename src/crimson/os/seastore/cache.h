@@ -1384,6 +1384,7 @@ public:
       }
     }
     std::vector<TCachedExtentRef<T>> extents;
+    extents.reserve(results.size());
     for (auto &result : results) {
       auto ret = CachedExtent::make_cached_extent_ref<T>(std::move(result.bp));
       assert(is_rewrite_generation(

@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <boost/intrusive/list.hpp>
 #include <boost/intrusive/set.hpp>
 #include <seastar/core/condition-variable.hh>
 #include <seastar/core/metrics_types.hh>
@@ -31,6 +32,9 @@ namespace crimson::os::seastore {
  */
 struct segment_info_t {
   segment_id_t id = NULL_SEG_ID;
+
+  boost::intrusive::list_member_hook<
+    boost::intrusive::link_mode<boost::intrusive::auto_unlink>> empty_hook;
 
   // segment_info_t is initiated as set_empty()
   Segment::segment_state_t state = Segment::segment_state_t::EMPTY;
@@ -214,6 +218,13 @@ public:
     }
   }
 
+  segment_id_t get_empty_segment() const {
+    if (empty_segments.empty()) {
+      return NULL_SEG_ID;
+    }
+    return empty_segments.front().id;
+  }
+
   void reset();
 
   void add_segment_manager(SegmentManager &segment_manager);
@@ -257,8 +268,31 @@ public:
   }
 
 private:
+  using empty_hook_options = boost::intrusive::member_hook<
+    segment_info_t,
+    boost::intrusive::list_member_hook<
+      boost::intrusive::link_mode<boost::intrusive::auto_unlink>>,
+    &segment_info_t::empty_hook>;
+  using empty_list_t = boost::intrusive::list<
+    segment_info_t,
+    empty_hook_options,
+    boost::intrusive::constant_time_size<false>>;
+
+  void add_empty_segment(segment_id_t id) {
+    auto& info = segments[id];
+    ceph_assert(!info.empty_hook.is_linked());
+    empty_segments.push_back(info);
+  }
+
+  void remove_empty_segment(segment_id_t id) {
+    auto& info = segments[id];
+    ceph_assert(info.empty_hook.is_linked());
+    info.empty_hook.unlink();
+  }
+
   // See reset() for member initialization
   segment_map_t<segment_info_t> segments;
+  empty_list_t empty_segments;
 
   segment_off_t segment_size;
 
