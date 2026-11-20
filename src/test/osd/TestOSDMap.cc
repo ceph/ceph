@@ -516,6 +516,8 @@ TEST_F(OSDMapTest, PoolMigrationFeatures) {
     return (features & needed) == needed;
   };
   ASSERT_FALSE(requires_migration(CEPH_ENTITY_TYPE_CLIENT));
+  ASSERT_LT(osdmap.get_min_compat_client(),
+            OSDMap::POOL_MIGRATION_MIN_COMPAT_CLIENT);
   const uint64_t osd_features_before =
     osdmap.get_features(CEPH_ENTITY_TYPE_OSD, nullptr);
 
@@ -525,6 +527,9 @@ TEST_F(OSDMapTest, PoolMigrationFeatures) {
     osdmap.apply_incremental(inc);
   }
   ASSERT_TRUE(requires_migration(CEPH_ENTITY_TYPE_CLIENT));
+  // so the setting cannot be lowered below that release again
+  ASSERT_EQ(OSDMap::POOL_MIGRATION_MIN_COMPAT_CLIENT,
+            osdmap.get_min_compat_client());
   // the flag asks nothing more of OSDs: those of an earlier release still
   // join during a rolling upgrade
   ASSERT_EQ(osd_features_before,

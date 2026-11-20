@@ -474,6 +474,8 @@ with no options succeeds without changing anything; one with options succeeds
 without changing anything if it asks for the layout that the pool is being
 migrated to, and fails otherwise.
 
+.. _pool_migration_clients:
+
 Every client must be able to follow a pool migration. Clients of earlier
 releases can't, and Linux kernel clients can't until they gain the feature.
 
@@ -492,7 +494,8 @@ can't follow a migration is connected, and names them.
 
 Once the cluster requires clients of that release, the Monitors and OSDs refuse
 clients that can't follow a migration, after a migration too: a client that
-still holds a migrated pool's old id cannot follow the redirect to it.
+still holds a migrated pool's old id cannot follow the redirect to it. The
+requirement cannot be lowered below that release again.
 
 
 .. _associate-pool-to-application:
