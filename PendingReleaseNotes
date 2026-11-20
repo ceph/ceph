@@ -106,6 +106,14 @@
   replacing its metadata. An object written with ``aes-256-cbc`` counts as
   changed once ``rgw_crypt_sse_algorithm`` is ``aes-256-gcm``, and the new
   encryption can come from the bucket's default encryption.
+* RGW: When ``rgw_graceful_stop`` is enabled, a realm reload (for example after
+  ``radosgw-admin period update --commit``) now waits at most
+  ``rgw_realm_reload_pause_timeout`` (default 30 seconds) for outstanding
+  requests before it closes the remaining connections. Previously it waited
+  without a limit. The new ``rgw_realm_reload_max_delay`` option delays each
+  gateway's reload by a random amount so that gateways behind a load balancer
+  don't all pause together. It defaults to ``0``, which keeps the current
+  behavior.
 
 * RGW: Fixed a bug in same-account evaluation of bucket policy statements that
   allow the account principal. Users and roles in that account now require a
