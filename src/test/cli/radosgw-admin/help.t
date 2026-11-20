@@ -313,6 +313,8 @@
      --tags-add=<list>                 list of tags to add for zonegroup placement modify command
      --tags-rm=<list>                  list of tags to remove for zonegroup placement modify command
      --endpoints=<list>                zone endpoints
+     --admin-endpoints=<list>          zonegroup system endpoints (period push, admin and
+                                       inter-zonegroup requests); empty value clears them
      --index-pool=<pool>               placement target index pool
      --data-pool=<pool>                placement target data pool
      --data-extra-pool=<pool>          placement target data extra (non-ec) pool
