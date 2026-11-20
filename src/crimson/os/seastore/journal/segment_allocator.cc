@@ -160,12 +160,168 @@ SegmentAllocator::open(bool is_mkfs)
   return do_open(is_mkfs);
 }
 
+SegmentAllocator::pre_open_ertr::future<>
+SegmentAllocator::do_pre_open()
+{
+  LOG_PREFIX(SegmentAllocator::do_pre_open);
+  if (pre_opened_segment.has_value() || pre_open_in_flight || !can_write()) {
+    return pre_open_ertr::now();
+  }
+  pre_open_in_flight = true;
+  pre_open_promise = seastar::shared_promise<>();
+
+  segment_seq_t new_segment_seq =
+    segment_seq_allocator.get_and_inc_next_segment_seq();
+  auto meta = sm_group.get_meta();
+  segment_nonce_t next_nonce = calc_new_nonce(
+    type,
+    new_segment_seq,
+    reinterpret_cast<const unsigned char *>(meta.seastore_id.bytes()),
+    sizeof(meta.seastore_id.uuid));
+  auto new_segment_id = segment_provider.allocate_segment(
+      new_segment_seq, type, category, gen);
+  if (new_segment_id == NULL_SEG_ID) {
+    DEBUG("{} pre_open: out of space, skipping speculative allocation", print_name);
+    pre_open_in_flight = false;
+    if (pre_open_promise) {
+      pre_open_promise->set_value();
+    }
+    return pre_open_ertr::now();
+  }
+
+  return sm_group.open(new_segment_id
+  ).handle_error(
+    open_ertr::pass_further{},
+    crimson::ct_error::assert_all(
+      "Invalid error in SegmentAllocator::do_pre_open open"
+    )
+  ).safe_then([this, FNAME, new_segment_seq, next_nonce](auto sref) {
+    segment_id_t segment_id = sref->get_segment_id();
+    journal_seq_t dirty_tail = JOURNAL_SEQ_NULL;
+    journal_seq_t alloc_tail = JOURNAL_SEQ_NULL;
+    if (type == segment_type_t::JOURNAL) {
+      ceph_assert(trimmer != nullptr);
+      dirty_tail = trimmer->get_dirty_tail();
+      alloc_tail = trimmer->get_alloc_tail();
+    }
+    auto header = segment_header_t{
+      timepoint_to_mod(seastar::lowres_system_clock::now()),
+      new_segment_seq,
+      segment_id,
+      dirty_tail,
+      alloc_tail,
+      next_nonce,
+      type,
+      category,
+      gen};
+    DEBUG("{} pre-allocating writing header {}", print_name, header);
+
+    auto header_length = get_block_size();
+    bufferlist bl;
+    encode(header, bl);
+    bufferptr bp(sm_group.alloc_io_buffer(header_length));
+    bp.zero();
+    auto iter = bl.cbegin();
+    iter.copy(bl.length(), bp.c_str());
+    bl.clear();
+    bl.append(bp);
+
+    ceph_assert(sref->get_write_ptr() == 0);
+    assert((unsigned)header_length == bl.length());
+    auto new_journal_seq = journal_seq_t{
+      new_segment_seq,
+      paddr_t::make_seg_paddr(segment_id, header_length)};
+    segment_provider.update_segment_avail_bytes(
+        type, new_journal_seq.offset);
+    return sref->write(0, std::move(bl)
+    ).handle_error(
+      open_ertr::pass_further{},
+      crimson::ct_error::assert_all(
+        "Invalid error in SegmentAllocator::do_pre_open write"
+      )
+    ).safe_then([this,
+                 FNAME,
+                 new_segment_seq,
+                 next_nonce,
+                 header_length,
+                 new_journal_seq,
+                 sref=std::move(sref)]() mutable {
+      DEBUG("{} successfully pre-allocated segment id={}",
+            print_name, sref->get_segment_id());
+      pre_opened_segment = pre_opened_segment_t{
+        std::move(sref),
+        new_segment_seq,
+        next_nonce,
+        static_cast<segment_off_t>(header_length),
+        new_journal_seq
+      };
+      pre_open_in_flight = false;
+      if (pre_open_promise) {
+        pre_open_promise->set_value();
+      }
+    });
+  }).handle_error(
+    open_ertr::pass_further{},
+    [this](auto) {
+      pre_open_in_flight = false;
+      if (pre_open_promise) {
+        pre_open_promise->set_value();
+      }
+      return pre_open_ertr::now();
+    }
+  );
+}
+
+void SegmentAllocator::maybe_pre_open_next_segment()
+{
+  // Journal segments must be opened strictly after the previous journal
+  // segment is closed (see segments_info_t::mark_open(), the single
+  // journal_segment_id tracking and the journal tail/head sequences), so
+  // speculative pre-allocation is only valid for OOL segments.
+  if (type != segment_type_t::OOL ||
+      pre_opened_segment.has_value() || pre_open_in_flight || !can_write()) {
+    return;
+  }
+  auto write_capacity = current_segment->get_write_capacity() -
+                        sm_group.get_rounded_tail_length();
+  if (std::size_t(written_to) >= (std::size_t(write_capacity) * 9) / 10) {
+    std::ignore = do_pre_open();
+  }
+}
+
+SegmentAllocator::roll_ertr::future<>
+SegmentAllocator::roll_with_pre_opened()
+{
+  LOG_PREFIX(SegmentAllocator::roll_with_pre_opened);
+  if (pre_opened_segment.has_value()) {
+    auto pre = std::move(*pre_opened_segment);
+    pre_opened_segment.reset();
+    ceph_assert(!current_segment);
+    current_segment = std::move(pre.segment);
+    current_segment_nonce = pre.nonce;
+    written_to = pre.written_to;
+    DEBUG("{} adopted pre-allocated segment id={}",
+          print_name, current_segment->get_segment_id());
+    ceph_assert(pre.journal_seq.segment_seq ==
+      segment_provider.get_seg_info(current_segment->get_segment_id()).seq);
+    return roll_ertr::now();
+  }
+  return do_open(false).discard_result();
+}
+
 SegmentAllocator::roll_ertr::future<>
 SegmentAllocator::roll()
 {
   ceph_assert(can_write());
   return close_segment().safe_then([this] {
-    return do_open(false).discard_result();
+    if (pre_open_in_flight && pre_open_promise.has_value()) {
+      return pre_open_promise->get_shared_future(
+      ).then([this] {
+        return roll_with_pre_opened();
+      });
+    } else {
+      return roll_with_pre_opened();
+    }
   });
 }
 
@@ -201,6 +357,7 @@ SegmentAllocator::write(ceph::bufferlist&& to_write)
     paddr_t::make_seg_paddr(
       current_segment->get_segment_id(), written_to)
   );
+  maybe_pre_open_next_segment();
   return current_segment->write(
     write_start_offset, std::move(to_write)
   ).handle_error(
@@ -214,18 +371,48 @@ SegmentAllocator::write(ceph::bufferlist&& to_write)
 SegmentAllocator::close_ertr::future<>
 SegmentAllocator::close()
 {
-  return [this] {
-    LOG_PREFIX(SegmentAllocator::close);
-    if (current_segment) {
-      DEBUG("{} close current segment", print_name);
-      return close_segment();
-    } else {
-      INFO("{} no current segment", print_name);
+  LOG_PREFIX(SegmentAllocator::close);
+  auto do_close = [this, FNAME] {
+    return [this, FNAME] {
+      if (current_segment) {
+        DEBUG("{} close current segment", print_name);
+        return close_segment();
+      } else {
+        INFO("{} no current segment", print_name);
+        return close_segment_ertr::now();
+      }
+    }().safe_then([this, FNAME] {
+      if (pre_opened_segment.has_value()) {
+        auto pre = std::move(*pre_opened_segment);
+        pre_opened_segment.reset();
+        auto seg_id = pre.segment->get_segment_id();
+        DEBUG("{} close pre-opened segment id={}", print_name, seg_id);
+        return pre.segment->close(
+        ).safe_then([this, seg_id] {
+          segment_provider.close_segment(seg_id);
+        }).handle_error(
+          close_segment_ertr::pass_further{},
+          crimson::ct_error::assert_all(
+            "Invalid error in SegmentAllocator::close pre_opened_segment"
+          )
+        );
+      }
       return close_segment_ertr::now();
-    }
-  }().finally([this] {
-    reset();
-  });
+    });
+  };
+
+  if (pre_open_in_flight && pre_open_promise.has_value()) {
+    return pre_open_promise->get_shared_future(
+    ).then([do_close] {
+      return do_close();
+    }).finally([this] {
+      reset();
+    });
+  } else {
+    return do_close().finally([this] {
+      reset();
+    });
+  }
 }
 
 SegmentAllocator::close_segment_ertr::future<>
