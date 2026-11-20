@@ -123,8 +123,10 @@ command:
 
    ceph orch certmgr cert-key set <service-type> --service-name <service-name> -i <cert-key-pem-file>
 
-For a certificate with host scope, use ``--hostname <host-fqdn>`` in place of
-``--service-name <service-name>``. If the service type has more than one
+For a certificate with host scope, use ``--hostname <host>`` in place of
+``--service-name <service-name>``, where ``<host>`` is the host name shown by
+``ceph orch host ls``. Certificates registered under the host's fully qualified
+domain name (FQDN) are also used. If the service type has more than one
 certificate, name the certificate with ``--cert-name``.
 
 

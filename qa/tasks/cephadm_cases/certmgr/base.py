@@ -19,9 +19,11 @@ per suite facet:
                               CEPHADM_CERT_ERROR reporting
   test_service_scope.py       TestCertMgrServiceScope: RGW (service scope)
                               through all certificate sources
-  test_host_scope.py          TestCertMgrHostScope: grafana (host scope);
-                              TestCertMgrHostScopeReference: grafana with
-                              per-host user certs (own facet, known issue)
+  test_host_scope.py          TestCertMgrHostScope: grafana (host scope)
+                              through cephadm-signed and per-host user certs;
+                              TestCertMgrHostScopeMissingCert: grafana with
+                              no user cert (own facet, raises
+                              CEPHADM_DAEMON_PLACE_FAIL)
   test_global_scope.py        TestCertMgrGlobalScope: mgmt-gateway (global
                               scope)
   test_renewal.py             TestCertMgrRenewal: automated rotation of
@@ -73,6 +75,7 @@ class CommandResult:
 
 class CertMgrTestCase(MgrTestCase):
     """Shared helpers. Not collected on its own (no test_ methods)."""
+    ctx: Any  # injected by teuthology at runtime; base class declares it as None
 
     MGRS_REQUIRED = 1
 
