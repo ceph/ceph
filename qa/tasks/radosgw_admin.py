@@ -729,6 +729,14 @@ def task(ctx, config):
     rgwadmin(ctx, client, ['account', 'rm', '--account-id', account_id],
         check_status=True)
 
+    # TESTCASE 'account create', 'account', 'invalid tenant name', 'fails'
+    (err, out) = rgwadmin(ctx, client, [
+            'account', 'create',
+            '--account-name', 'badtenantacct',
+            '--tenant', 'bad-tenant',
+            ])
+    assert err == errno.EINVAL
+
     # TESTCASE 'object-rm', 'object', 'rm', 'remove object', 'succeeds, object is removed'
 
     # upload an object
