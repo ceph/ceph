@@ -126,7 +126,7 @@ def stored_cluster_ids(
     """
     ns = set(store.namespaces())
     for alt_store in alt:
-        ns.update(store.namespaces())
+        ns.update(alt_store.namespaces())
     return ns
 
 
