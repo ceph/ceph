@@ -433,6 +433,8 @@ TEST_P(TestBackendBasics, DirectReadRefusedForOtherShardsData) {
   hobject_t hoid = make_test_object(obj_name);
 
   for (auto& [shard_id, osd_fixture] : osd_fixtures) {
+    // Each zone holds a copy of shards 0..k+m-1.
+    const int rel_shard = shard_id % (k + m);
     for (auto& [spgid, test_pg] : osd_fixture->pgs) {
       if (!test_pg || !test_pg->has_backend()) {
         continue;
@@ -442,7 +444,7 @@ TEST_P(TestBackendBasics, DirectReadRefusedForOtherShardsData) {
       for (int c = 0; c < num_chunks; c++) {
         bufferlist bl;
         int r = direct_read(backend, hoid, c * stripe_unit, read_len, bl);
-        if (shard_id < k && c % k == shard_id) {
+        if (rel_shard < k && c % k == rel_shard) {
           EXPECT_EQ(int(read_len), r) << "shard " << shard_id << " chunk " << c;
           EXPECT_EQ(std::string(read_len, 'A' + c), bl.to_str())
             << "shard " << shard_id << " chunk " << c;
@@ -459,11 +461,11 @@ TEST_P(TestBackendBasics, DirectReadRefusedForOtherShardsData) {
 
       // The op of such a client: a read of this shard's chunk, then a read
       // of the next shard's chunk.
-      if (shard_id < k) {
+      if (rel_shard < k) {
         std::vector<OSDOp> ops(2);
         for (int i = 0; i < 2; i++) {
           ops[i].op.op = CEPH_OSD_OP_READ;
-          ops[i].op.extent.offset = (shard_id + i) * stripe_unit;
+          ops[i].op.extent.offset = (rel_shard + i) * stripe_unit;
           ops[i].op.extent.length = read_len;
         }
         EXPECT_EQ(-EINVAL, backend->check_direct_read(ops))
