@@ -6837,7 +6837,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       EC_DATA_SHARD_COUNT, EC_CODING_SHARD_COUNT
     };
     const choices_set_t ONLY_REPLICA_CHOICES = {
-      READ_RATIO
+      READ_RATIO, PCT_UPDATE_DELAY
     };
 
     choices_set_t selected_choices;
@@ -10919,7 +10919,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
   }
 
   if (!p.is_replicated() &&
-      (var == "read_ratio")) {
+      (var == "read_ratio" || var == "pct_update_delay")) {
     return -EACCES;
   }
 
