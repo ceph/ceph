@@ -3431,6 +3431,17 @@ int Objecter::_calc_target(op_target_t *t, snapid_t snap, bool any_change)
       }
     }
   }
+  // The OSD drops ops sent before the last_force_op_resend of the pool they
+  // arrive in, and pool migration can route them away from the base pool.
+  if (t->target_oloc.pool != t->base_oloc.pool &&
+      osdmap->get_epoch() == pi->last_force_op_resend) {
+    if (t->last_force_resend < pi->last_force_op_resend) {
+      t->last_force_resend = pi->last_force_op_resend;
+      force_resend = true;
+    } else if (t->last_force_resend == 0) {
+      force_resend = true;
+    }
+  }
   ldout(cct,20) << __func__ << " target " << t->target_oid << " "
 		<< t->target_oloc << " -> pgid " << pgid << dendl;
   ldout(cct,30) << __func__ << "  target pi " << pi
