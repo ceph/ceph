@@ -4363,6 +4363,15 @@ enum class TruncateMode {
   BlockParityRollbackPrimary,
 };
 
+const TruncateMode kTruncateModes[] = {
+  TruncateMode::Forward,
+  TruncateMode::RollbackParity,
+  TruncateMode::RollbackData,
+  TruncateMode::RollbackPrimary,
+  TruncateMode::BlockParityRollbackData,
+  TruncateMode::BlockParityRollbackPrimary,
+};
+
 struct TruncateCase {
   std::string name;
   /* The objects of the case for k and stripe unit su, or nullopt if the case
@@ -4705,9 +4714,8 @@ public:
 TEST_P(TestECTruncateMatrix, Run) {
   const auto& [config, truncate_case, mode] = GetParam();
   const auto objects = truncate_case.make(k, stripe_unit);
-  if (!objects) {
-    GTEST_SKIP() << truncate_case.name << " does not apply to this geometry";
-  }
+  ASSERT_TRUE(objects) << truncate_case.name
+                       << " generated for a geometry it does not apply to";
   const bool blocks_shard_1 = mode == TruncateMode::RollbackParity ||
                               mode == TruncateMode::RollbackData ||
                               mode == TruncateMode::RollbackPrimary;
@@ -4724,9 +4732,7 @@ TEST_P(TestECTruncateMatrix, Run) {
     run_rollback(truncate_case.name, *objects, 1, get_shard(k + m - 1));
     break;
   case TruncateMode::RollbackData:
-    if (k <= 2) {
-      GTEST_SKIP() << "needs a data shard other than the first two";
-    }
+    ASSERT_GT(k, 2) << "needs a data shard other than the first two";
     run_rollback(truncate_case.name, *objects, 1, get_shard(2));
     break;
   case TruncateMode::RollbackPrimary:
@@ -4758,18 +4764,29 @@ std::string truncate_matrix_name(
          "_" + mode_names.at(std::get<2>(info.param));
 }
 
+/* The cases that apply to each config: a test that skips itself still pays
+ * for the setup and teardown of its cluster. */
+std::vector<TestECTruncateMatrix::ParamType> truncate_matrix_params() {
+  std::vector<TestECTruncateMatrix::ParamType> params;
+  for (const auto& config : kECPeeringConfigs) {
+    for (const auto mode : kTruncateModes) {
+      if (mode == TruncateMode::RollbackData && config.k <= 2) {
+        continue;
+      }
+      for (const auto& truncate_case : kTruncateCases) {
+        if (truncate_case.make(config.k, config.stripe_unit)) {
+          params.emplace_back(config, truncate_case, mode);
+        }
+      }
+    }
+  }
+  return params;
+}
+
 INSTANTIATE_TEST_SUITE_P(
   ECConfigs,
   TestECTruncateMatrix,
-  ::testing::Combine(
-    ::testing::ValuesIn(kECPeeringConfigs),
-    ::testing::ValuesIn(kTruncateCases),
-    ::testing::Values(TruncateMode::Forward,
-                      TruncateMode::RollbackParity,
-                      TruncateMode::RollbackData,
-                      TruncateMode::RollbackPrimary,
-                      TruncateMode::BlockParityRollbackData,
-                      TruncateMode::BlockParityRollbackPrimary)),
+  ::testing::ValuesIn(truncate_matrix_params()),
   truncate_matrix_name
 );
 
