@@ -5897,7 +5897,18 @@ int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
   // bi expects empty instance for the entries created when bucket versioning
   // is not enabled or suspended.
   if (obj.key.instance == "null") {
+    const rgw_obj null_obj = obj;
     obj.key.instance.clear();
+    // "null" and "" name the same head object, but obj_ctx caches state per
+    // key. without the state that was read, the write would re-read the head
+    // and check its current tag. copy it (assign the whole RGWObjState, the
+    // copy constructor drops attrs), so an overwrite or removal of the null
+    // version since the read cancels the transition
+    RGWObjStateManifest* read_sm = obj_ctx.get_state(null_obj);
+    RGWObjStateManifest* write_sm = obj_ctx.get_state(obj);
+    write_sm->state = read_sm->state;
+    write_sm->state.obj = obj;
+    write_sm->manifest = read_sm->manifest;
   }
   attrs.erase(RGW_ATTR_ID_TAG);
   attrs.erase(RGW_ATTR_TAIL_TAG);
