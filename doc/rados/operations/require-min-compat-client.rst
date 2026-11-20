@@ -16,8 +16,8 @@ older clients can no longer parse the OSDMap; they lose the ability to
 locate objects and will error or disconnect.
 
 From ``vampire`` on, the flag also refuses clients at connect time: once it
-is set to that release, clients that cannot follow a pool migration are
-turned away by the monitors and OSDs (see :ref:`pool_migration_clients`),
+is set to that release, clients and MDSs that cannot follow a pool migration
+are turned away by the monitors and OSDs (see :ref:`pool_migration_clients`),
 and the flag cannot be lowered below it again.
 
 Setting the flag
