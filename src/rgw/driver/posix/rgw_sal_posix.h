@@ -18,6 +18,7 @@
 #include "rgw_sal_filter.h"
 #include "rgw_sal_store.h"
 #include "rgw_quota.h"
+#include "rgw_zone.h"
 #include <cstdint>
 #include <memory>
 #include "common/dout.h"
