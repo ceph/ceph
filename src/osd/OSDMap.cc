@@ -2112,6 +2112,9 @@ ceph_release_t OSDMap::get_min_compat_client() const
   if (HAVE_FEATURE(f, SERVER_VAMPIRE)) {
     return ceph_release_t::vampire;
   }
+  if (HAVE_FEATURE(f, POOL_MIGRATION)) {
+    return POOL_MIGRATION_MIN_COMPAT_CLIENT;
+  }
   if (HAVE_FEATURE(f, CRUSH_MSR)) {
     return ceph_release_t::squid;        // v19.2.0
   }
