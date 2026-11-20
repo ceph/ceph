@@ -624,6 +624,66 @@ options:
   min: 1
   services:
   - mds
+- name: mds_log_safe_batch
+  type: bool
+  level: dev
+  desc: complete journal-safe events in batches under one mds_lock acquisition
+  long_desc: When enabled, the MDS keeps the completions of journaled events
+    in a queue of its own and, when a journal flush commits, completes the
+    events it made safe in batches, each under a single acquisition of
+    mds_lock, bounded by mds_log_safe_batch_max and mds_log_safe_batch_max_us.
+    When disabled, each event's completion is registered with the journaler
+    and takes mds_lock on its own, as before batching was added.  This is a
+    fallback and is read only at startup, so that every completion of the
+    process takes the same path.
+  default: true
+  services:
+  - mds
+  flags:
+  - startup
+  see_also:
+  - mds_log_safe_batch_max
+  - mds_log_safe_batch_max_us
+- name: mds_log_safe_batch_max
+  type: uint
+  level: dev
+  desc: maximum number of journal-safe events completed under one mds_lock
+    acquisition
+  long_desc: When a journal flush commits, the MDS completes the events it
+    made safe in batches, each under a single acquisition of mds_lock rather
+    than one each.  A client request that arrives meanwhile waits for the
+    batch to finish, so this bounds that wait.  A value of 1 completes one
+    event per mds_lock acquisition but still goes through the batching
+    queue, run from the journaler's finisher; it is not the completion path
+    used before batching was added, which drops mds_lock before advancing
+    the log's safe position.  mds_log_safe_batch_max_us can only cut a batch
+    short.  To go back to the old path, set mds_log_safe_batch to false and
+    restart the MDS.
+  default: 8
+  min: 1
+  services:
+  - mds
+  flags:
+  - runtime
+  see_also:
+  - mds_log_safe_batch
+  - mds_log_safe_batch_max_us
+- name: mds_log_safe_batch_max_us
+  type: uint
+  level: dev
+  desc: maximum time in microseconds one batch of journal-safe event
+    completions may hold mds_lock, 0 for no limit
+  long_desc: A batch stops early, and lets other threads take mds_lock,
+    once it has held the lock this long, however few events it has
+    completed.
+  default: 0
+  services:
+  - mds
+  flags:
+  - runtime
+  see_also:
+  - mds_log_safe_batch
+  - mds_log_safe_batch_max
 # segment size for mds log, default to default file_layout_t
 - name: mds_log_segment_size
   type: size
