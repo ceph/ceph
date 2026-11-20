@@ -3,6 +3,7 @@ export interface Bucket {
   tenant: string;
   versioning: string;
   zonegroup: string;
+  zonegroup_name?: string;
   placement_rule: string;
   explicit_placement: {
     data_pool: string;
