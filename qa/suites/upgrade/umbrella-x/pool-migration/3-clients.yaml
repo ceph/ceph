@@ -38,13 +38,14 @@ tasks:
       - sleep 20
       - ceph osd pool migrate data 64
       - ceph osd pool ls --show-all | grep migrate-1
-      - rados -p data ls | wc -l
+      - if ! timeout 600 rados -p data ls | wc -l ; then echo listing-the-migrating-pool-hung ; ceph -s ; ceph osd pool ls detail ; ceph pg dump pgs_brief | grep -v active+clean ; exit 1 ; fi
 - exec:
     client.1:
       - "! timeout 120 rados -p data ls"
 - cephadm.shell:
     mon.a:
-      - while ceph osd pool ls detail -f json | jq -e 'map(select(.migration_src != null or .migration_target != null)) | length > 0' ; do sleep 15 ; done
+      - for i in $(seq 1 160) ; do ceph osd pool ls detail -f json | jq -e 'map(select(.migration_src != null or .migration_target != null)) | length > 0' || break ; ceph -s | grep -E 'pgs:|migrat' ; sleep 15 ; done
+      - if ceph osd pool ls detail -f json | jq -e 'map(select(.migration_src != null or .migration_target != null)) | length > 0' ; then echo migration-did-not-finish-in-40-min ; ceph -s ; ceph pg dump pgs_brief | grep -v active+clean ; exit 1 ; fi
       - ceph osd pool ls detail
       - rados -p data ls | wc -l
       - rados -p data stat obj-before-the-migration
