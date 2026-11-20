@@ -20,6 +20,7 @@
 #include <string>
 #include <gtest/gtest.h>
 #include "common/errno.h"
+#include "include/ceph_hash.h"
 #include "test/osd/MockErasureCode.h"
 #include "test/osd/MockPGBackendListener.h"
 #include "test/osd/EventLoop.h"
@@ -580,8 +581,8 @@ public:
     return test_pg->get_backend();
   }
   
-  // Default hash 0 (all objects map to PG seed 0).  Override to steer an
-  // object into a specific child PG after a split.
+  // Default: a hash from the name with the low 8 bits 0 (PG seed 0).
+  // Override to steer an object into a specific child PG after a split.
   std::map<std::string, uint32_t> object_hash_overrides;
 
   void set_object_hash(const std::string& name, uint32_t hash) {
@@ -589,7 +590,9 @@ public:
   }
 
   hobject_t make_test_object(const std::string& name) const {
-    uint32_t hash = 0;
+    // Low bits 0: PG 0, also once it has split. The rest from the name, as
+    // MemStore and the PG log look objects up by this hash.
+    uint32_t hash = ceph_str_hash_rjenkins(name.data(), name.size()) << 8;
     auto it = object_hash_overrides.find(name);
     if (it != object_hash_overrides.end()) {
       hash = it->second;

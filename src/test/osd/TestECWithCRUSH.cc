@@ -475,9 +475,9 @@ protected:
 
   // Swaps the zone blocks with a pg-upmap while a pg_temp keeps acting set
   // *a, then completes the backfill of every new up shard but the one of
-  // position y_pos.  That one is past every object the tests write (they
-  // have hash 0), so it gets their writes as a real backfill target would,
-  // but is not complete.
+  // position y_pos.  That one is past every object the tests write (none
+  // has hash 0xffffffff), so it gets their writes as a real backfill target
+  // would, but is not complete.
   void swap_zone_blocks_but(unsigned y_pos, vector<int> *a) {
     // The monitor's min_size for a 2+1 stretch pool.
     set_pool_min_size(k);
