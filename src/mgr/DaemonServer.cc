@@ -1294,7 +1294,7 @@ int DaemonServer::_populate_crush_bucket_osds(
       *ss << os.str();
     }
     dout(20) << os.str() << dendl;
-    return -EINVAL;
+    return -ENOTSUP;
   }
   dout(20) << "bucket type of parent " << item_name << " is "
              << bucket_type_str << dendl;
