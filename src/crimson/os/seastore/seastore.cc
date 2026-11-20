@@ -2866,9 +2866,17 @@ SeaStore::Shard::_remove(
   // Clean up any injected errors for this object
   _debug_obj_on_delete(oid);
 
+  auto root = select_log_omap_root(*onode);
+  if (root.get_type() == omap_type_t::LOG) {
+    spg_t pgid;
+    if (ctx.ch->get_cid().is_pg(&pgid)) {
+      root.associated_oid = pgid.make_pgmeta_oid();
+    }
+  }
+
   return omaptree_clear_no_onode(
     *ctx.transaction,
-    get_omap_root(omap_type_t::OMAP, *onode)
+    std::move(root)
   ).si_then([this, &ctx, &onode] {
     return omaptree_clear_no_onode(
       *ctx.transaction,
@@ -3125,9 +3133,16 @@ SeaStore::Shard::_omap_clear(
     onode,
     std::string(OMAP_HEADER_XATTR_KEY)
   ).si_then([this, &ctx, &onode] {
+    auto root = select_log_omap_root(onode);
+    if (root.get_type() == omap_type_t::LOG) {
+      spg_t pgid;
+      if (ctx.ch->get_cid().is_pg(&pgid)) {
+	root.associated_oid = pgid.make_pgmeta_oid();
+      }
+    }
     return omaptree_clear(
       *ctx.transaction,
-      get_omap_root(omap_type_t::OMAP, onode),
+      std::move(root),
       onode
     );
   });

@@ -2641,6 +2641,22 @@ Cache::replay_delta(
     lognode_delta_t d;
     auto iter = delta.bl.cbegin();
     decode(d, iter);
+    if (d.op == lognode_delta_t::op_t::CLEAR) {
+      pending_lognode_deltas_by_oid.erase(d.oid);
+      for (auto it = pending_lognode_deltas_by_seq.begin();
+	it != pending_lognode_deltas_by_seq.end();) {
+	  auto& oids = it->second;
+	  std::erase(oids, d.oid);
+	  if (oids.empty()) {
+	    it = pending_lognode_deltas_by_seq.erase(it);
+	  } else {
+	    ++it;
+	  }
+      }
+      return replay_delta_ertr::make_ready_future<
+	std::pair<bool, CachedExtentRef>>(
+	  std::make_pair(false, nullptr));
+    }
     // Flushing one OID does not necessarily advance the log tail,
     // as other OIDs may still have older pending deltas.
     // Therefore, FLUSH op is introduced to prevent re-replay.

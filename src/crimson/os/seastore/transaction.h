@@ -761,6 +761,14 @@ public:
     lognode_deltas.emplace_back(std::move(delta));
   }
 
+  template <typename Predicate>
+  bool any_lognode_delta(Predicate&& pred) const {
+    return std::any_of(
+      lognode_deltas.begin(),
+      lognode_deltas.end(),
+      std::forward<Predicate>(pred));
+  }
+
   std::unordered_set<laddr_t> &get_touched_laddr_prefix() {
     return touched_prefix;
   }

@@ -64,18 +64,38 @@ LogManager::merge_deltas(
   lognode_deltas_t &deltas)
 {
   LOG_PREFIX(LogManager::merge_deltas);
+
+  // Skip old pending deltas if the LOG list was
+  // cleared in this transaction.
+  if (t.any_lognode_delta([&](const auto& d) {
+    return d.op == lognode_delta_t::op_t::CLEAR &&
+	   d.oid == *log_root.associated_oid;
+  })) {
+    co_return;
+  }
+
   // Preserve the original operation order when INSERT and
   // DELETE operations are mixed, as merging them may change
   // the final values of overlapping keys.
   const auto first_op = deltas.front().op;
-  const bool mixed_ops = std::any_of(
+  const bool mixed_ops = 
+    first_op == lognode_delta_t::op_t::CLEAR ||
+    std::any_of(
     deltas.begin(), deltas.end(),
     [first_op](const auto& d) {
       return d.op != first_op;
     });
 
   if (mixed_ops) {
-    for (auto& delta : deltas) {
+    auto begin = deltas.begin();
+    for (auto it = deltas.begin(); it != deltas.end(); ++it) {
+      if (it->op == lognode_delta_t::op_t::CLEAR) {
+	begin = std::next(it);
+      }
+    }
+
+    for (auto it = begin; it != deltas.end(); ++it) {
+      auto& delta = *it;
       auto iter = delta.buffer.cbegin();
       if (delta.op == lognode_delta_t::op_t::INSERT) {
         std::map<std::string, ceph::bufferlist> kvs;
@@ -1178,6 +1198,14 @@ LogManager::omap_clear(omap_root_t &root, Transaction &t)
     0,
     laddr_hint_t::create_as_fixed(L_ADDR_MIN),
     root.get_type());
+  
+  lognode_delta_t delta;
+  ceph_assert(root.associated_oid);
+  delta.oid = *root.associated_oid;
+  delta.op = lognode_delta_t::op_t::CLEAR;
+  delta.trans_id = t.get_trans_id();
+  t.add_lognode_delta(std::move(delta));
+
   co_return;
 }
 

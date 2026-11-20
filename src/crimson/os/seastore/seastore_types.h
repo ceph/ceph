@@ -2642,6 +2642,7 @@ struct lognode_delta_t {
     INSERT,
     DELETE,
     FLUSH,
+    CLEAR,
   } op;
   bufferlist buffer;
   ghobject_t oid;
