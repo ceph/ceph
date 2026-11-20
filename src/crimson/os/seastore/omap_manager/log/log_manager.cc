@@ -74,6 +74,25 @@ LogManager::merge_deltas(
     co_return;
   }
 
+  auto remove_points = [this, &t](
+    const std::set<std::string>& keys,
+    laddr_t addr) -> omap_rm_key_ret {
+    if (keys.empty()) {
+      co_return;
+    }
+
+    pending_keys_t pending(
+      std::vector<std::string_view>(keys.begin(), keys.end()));
+    std::vector<std::string> multi_block_keys;
+
+    co_await remove_kv_set(
+      t, addr, pending, multi_block_keys, nullptr);
+
+    for (const auto& key : multi_block_keys) {
+      co_await remove_kv(t, addr, key, nullptr);
+    }
+  };
+
   // Preserve the original operation order when INSERT and
   // DELETE operations are mixed, as merging them may change
   // the final values of overlapping keys.
@@ -107,6 +126,8 @@ LogManager::merge_deltas(
           delta.op == lognode_delta_t::op_t::DELETE);
         std::vector<std::pair<std::string, std::string>> ranges;
         decode(ranges, iter);
+	// Preserve operation order for mixed INSERT/DELETE workloads.
+	// Process deletes individually to avoid reordering them across inserts.
         for (auto& [first, last] : ranges) {
           co_await _omap_rm_key_range(
             log_root, t, first, last);
@@ -141,8 +162,12 @@ LogManager::merge_deltas(
 	  last.second,
 	  p.first
 	};
-	if (is_continuous_fixed_width(can_merge)) {
-	  last.second = std::move(p.second);
+	// Only pg-log keys can be safely merged into continuous ranges.
+	if (is_log_key(last.second) &&
+	    is_log_key(p.first) &&
+	    is_continuous_fixed_width(can_merge)) {
+	  last.first = std::min(last.first, p.first);
+	  last.second = std::max(last.second, p.second);
 	} else {
 	  merged_ranges.emplace_back(std::move(p));
 	}
@@ -154,11 +179,27 @@ LogManager::merge_deltas(
     DEBUGT("oid:{} insert op kv size:{} ", t, *log_root.associated_oid, merged_kvs.size());
     co_await _omap_set_keys(log_root, t, std::move(merged_kvs));
   }
+  std::set<std::string> point_keys;
+  std::set<std::string> dup_point_keys;
   if (merged_ranges.size()) {
-    for (auto &p : merged_ranges) {
-      DEBUGT("oid:{} delete op:{} ~ {}", t, *log_root.associated_oid, p.first, p.second);
-      co_await _omap_rm_key_range(log_root, t, p.first, p.second);
+    for (auto& [first, last] : merged_ranges) {
+      DEBUGT("oid:{} delete op:{} ~ {}", t, *log_root.associated_oid, first, last);
+      if (first == last) {
+	if (is_dup_log_key(first)) {
+	  dup_point_keys.insert(first);
+	} else {
+	  point_keys.insert(first);
+	}
+      } else {
+	co_await _omap_rm_key_range(log_root, t, first, last);
+      }
     }
+  }
+  co_await remove_points(point_keys, log_root.addr);
+  if (!dup_point_keys.empty()) {
+    co_await remove_points(
+      dup_point_keys,
+      co_await get_dup_addr_from_root(t, log_root.addr));
   }
   co_return;
 }
