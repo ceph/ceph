@@ -658,6 +658,13 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
     pending_description = string("reset to ") + stringify(revert_to);
     goto update;
   } else if (prefix == "config assimilate-conf") {
+    if (format_version < 1) {
+      err = -EBUSY;
+      ss << "cannot assimilate a configuration file until the cluster "
+	 << "upgrade has completed";
+      goto reply;
+    }
+
     ConfFile cf;
     bufferlist bl = m->get_data();
     err = cf.parse_bufferlist(&bl, &ss);
