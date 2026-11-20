@@ -198,6 +198,13 @@ public:
   //void process_reconnect_cap(CInode *in, int from, ceph_mds_cap_reconnect& capinfo);
   void reconnect_gather_finish();
   void reconnect_tick();
+  /*
+   * A live client that missed reconnect re-opened this session. Drop the
+   * caps it no longer has and remove it from client_reclaim_gather so
+   * up:clientreplay can finish. Does not blocklist. Returns false if
+   * the session was not held for reclaim.
+   */
+  bool release_missed_reconnect_session(Session *session);
   void recover_filelocks(CInode *in, bufferlist locks, int64_t client);
 
   std::pair<bool, uint64_t> recall_client_state(MDSGatherBuilder* gather, RecallFlags=RecallFlags::NONE);

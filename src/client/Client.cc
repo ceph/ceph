@@ -2845,6 +2845,7 @@ void Client::handle_client_session(const MConstRef<MClientSession>& m)
   case CEPH_SESSION_OPEN:
     {
       if (session->state == MetaSession::STATE_OPEN) {
+        session->reconnect_attempted = false;
         ldout(cct, 10) << "mds." << from << " already opened, ignore it"
                        << dendl;
 	// The MDS could send a client_session(open) message even when
@@ -2868,6 +2869,7 @@ void Client::handle_client_session(const MConstRef<MClientSession>& m)
 
       renew_caps(session.get());
       session->state = MetaSession::STATE_OPEN;
+      session->reconnect_attempted = false;
       if (is_unmounting())
 	mount_cond.notify_all();
       else
@@ -2877,8 +2879,28 @@ void Client::handle_client_session(const MConstRef<MClientSession>& m)
     }
 
   case CEPH_SESSION_CLOSE:
+    {
+    /*
+     * A client frozen across failover still applies the historical
+     * up:reconnect map and sends MClientReconnect. By then the MDS is
+     * already in up:clientreplay, denies it, and replies CLOSE. The
+     * local map is often still STATE_RECONNECT: the deny comes back
+     * before later epochs are applied. Re-open anyway so
+     * release_missed_reconnect_session() can drop client_reclaim_gather.
+     * Do this only after our own reconnect attempt, and not once the
+     * rank is active (a real close) or while unmounting.
+     * See https://tracker.ceph.com/issues/83081.
+     */
+    bool reopen = session->reconnect_attempted &&
+		  !is_unmounting() &&
+		  metadata.find("timeout") != metadata.end() &&
+		  mdsmap->is_up(from) &&
+		  mdsmap->get_state(from) < MDSMap::STATE_ACTIVE;
     _closed_mds_session(session.get());
+    if (reopen)
+      reopen_session_after_missed_reconnect(from);
     break;
+    }
 
   case CEPH_SESSION_RENEWCAPS:
     if (session->cap_renew_seq == m->get_seq()) {
@@ -3548,6 +3570,66 @@ void Client::cancel_commands(const MDSMap& newmap)
   });
 }
 
+void Client::reopen_session_after_missed_reconnect(mds_rank_t mds)
+{
+  /*
+   * Called from handle_mds_map() with client_lock held, after
+   * _closed_mds_session() has dropped the local session. This only
+   * sends CEPH_SESSION_REQUEST_OPEN; it does not wait.
+   *
+   * Server::reconnect_tick() keeps a session whose metadata contains
+   * "timeout" in client_reclaim_gather when that client misses
+   * MDSMap::STATE_RECONNECT. MDSRank::maybe_clientreplay_done() will
+   * not leave up:clientreplay while the set is non-empty, and
+   * make_request() waits for up:active, so leaving the session closed
+   * stalls every client of the rank until session_autoclose (300s).
+   * That autoclose then evicts and blocklists this client.
+   *
+   * Re-open now. The client id is unchanged, so the MDS splices the
+   * new connection onto the session it kept
+   * (MDSDaemon::ms_handle_accept) and
+   * Server::release_missed_reconnect_session() clears the gather
+   * without blocklisting. Caps were dropped locally; the MDS drops
+   * the copy it restored from the journal. The result is a fresh
+   * session, not a replay of the missed reconnect.
+   *
+   * Only a client that set "timeout" (ceph_set_session_timeout(),
+   * nfs-ganesha) is held in that gather. Any other client is evicted
+   * at mds_reconnect_timeout, and an early OPEN would race that
+   * eviction.
+   *
+   * Do not call start_reclaim() / CEPH_RECLAIM_RESET here. Reclaim is
+   * a different client id destroying the session that owns a uuid, and
+   * start_reclaim() returns -EINVAL when metadata["uuid"] is already
+   * that uuid. Waiting for up:active is also wrong: this session is
+   * the reason the rank is not active. If the mon assigns a new
+   * global_id, the MDS sees a different client id and closes the
+   * held session itself (same auth, same uuid, no blocklist).
+   *
+   * Skip this while unmounting. Unmount would CLOSE the new session
+   * with push seq 0, and the MDS drops a CLOSE whose seq does not
+   * match. session_autoclose still retires the server session.
+   *
+   * If the rank is still in up:rejoin, the MDS queues this OPEN until
+   * up:clientreplay. That is the first state in which it is safe to
+   * drop caps imported during rejoin.
+   *
+   * See https://tracker.ceph.com/issues/83081.
+   */
+  if (is_unmounting())
+    return;
+  if (!mdsmap->is_up(mds))
+    return;
+  if (metadata.find("timeout") == metadata.end())
+    return;
+
+  ldout(cct, 1) << "re-opening session to mds." << mds
+		<< " after missed reconnect so the rank can leave clientreplay"
+		<< dendl;
+  MetaSessionRef session = _open_mds_session(mds);
+  session->mds_state = mdsmap->get_state(mds);
+}
+
 void Client::handle_mds_map(const MConstRef<MMDSMap>& m)
 {
   std::unique_lock cl(client_lock);
@@ -3599,9 +3681,31 @@ void Client::handle_mds_map(const MConstRef<MMDSMap>& m)
       session->con = messenger->connect_to_mds(session->addrs);
       send_reconnect(session.get());
     } else if (newstate > MDSMap::STATE_RECONNECT) {
-      if (oldstate < MDSMap::STATE_RECONNECT) {
+      bool missed_reconnect = (oldstate < MDSMap::STATE_RECONNECT);
+      /*
+       * A coalesced map can jump from up:active to up:clientreplay with
+       * no up:reconnect epoch (client was stopped and only the latest
+       * map is applied). The usual SIGSTOP case still sees up:reconnect,
+       * sends MClientReconnect, and recovers in the SESSION_CLOSE
+       * handler: the deny arrives before this client has applied a
+       * map newer than up:reconnect.
+       */
+      if (!missed_reconnect &&
+	  metadata.find("timeout") != metadata.end() &&
+	  oldstate >= MDSMap::STATE_ACTIVE &&
+	  newstate < MDSMap::STATE_ACTIVE) {
+	missed_reconnect = true;
+      }
+      if (missed_reconnect) {
 	ldout(cct, 1) << "we may miss the MDSMap::RECONNECT, close mds session ... " << dendl;
 	_closed_mds_session(session.get());
+	/*
+	 * The local session is gone. p already points at the next map
+	 * entry, and re-inserting this rank does not revisit it.
+	 * A timeout client must OPEN again now; otherwise the MDS
+	 * holds the rank in up:clientreplay until session_autoclose.
+	 */
+	reopen_session_after_missed_reconnect(mds);
 	continue;
       }
       if (newstate >= MDSMap::STATE_ACTIVE) {
@@ -3630,6 +3734,7 @@ void Client::send_reconnect(MetaSession *session)
 {
   mds_rank_t mds = session->mds_num;
   ldout(cct, 10) << __func__ << " to mds." << mds << dendl;
+  session->reconnect_attempted = true;
 
   // trim unused caps to reduce MDS's cache rejoin time
   trim_cache_for_reconnect(session);

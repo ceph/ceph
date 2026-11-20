@@ -770,6 +770,124 @@ class TestClientRecovery(CephFSTestCase):
             self.assertEqual(len(self.fs.mds_tell(["session", "ls"])), 0)
         self.mount_a.umount_wait(force=True)
 
+    def _signal_fuse(self, mount, sig):
+        """SIGSTOP/SIGCONT the ceph-fuse process. sig is 'STOP' or 'CONT'.
+
+        The pid is the number in the admin-socket filename. A stopped
+        ceph-fuse cannot answer `ceph --admin-daemon`, so get_client_pid()
+        cannot be used to resume it.
+        """
+        asok = mount.find_admin_socket().strip()
+        match = re.search(r'\.(\d+)\.asok$', asok)
+        if match is None:
+            raise RuntimeError(
+                "cannot parse ceph-fuse pid from {0}".format(asok))
+        pid = match.group(1)
+        log.info("kill -%s ceph-fuse pid %s", sig, pid)
+        mount.client_remote.run(
+            args=['sudo', 'kill', '-{0}'.format(sig), pid],
+            omit_sudo=False)
+
+    def test_timeout_client_missed_reconnect(self):
+        """
+        A ceph-fuse client that sets session metadata "timeout" and misses
+        the MDS reconnect window must not pin the rank in up:clientreplay
+        until session_autoclose. Tracker #83081 / IBMCEPH-21913.
+
+        The client is SIGSTOPped across ceph fs fail, the same way the
+        upstream reproducer stalls Ganesha. While it is stopped the rank
+        reaches up:clientreplay and stays there, because reconnect_tick
+        keeps the timeout session for reclaim. After SIGCONT the client
+        replays the missed up:reconnect epoch and the MDS denies that
+        late MClientReconnect. The client must OPEN again; the rank
+        must reach up:active well inside session_autoclose, and a write
+        must succeed (the client must not have been blocklisted).
+
+        This needs a live MDS and ceph-fuse, so run it with
+        vstart_runner.py. On a build without the fix,
+        wait_for_state('up:active') raises while the rank is still
+        up:clientreplay. On a build with the fix, the resumed client
+        re-opens its session and the rank becomes active within
+        active_wait.
+        """
+        if not isinstance(self.mount_a, FuseMount):
+            self.skipTest("Require ceph-fuse to SIGSTOP the client")
+
+        # One session, so session ls is only the client under test.
+        self.mount_b.umount_wait()
+
+        # "timeout" is the metadata key ceph_set_session_timeout() sets.
+        # nfs-ganesha sets it; ceph-fuse sets it with client_metadata.
+        # The value is longer than autoclose so the MDS keeps the session
+        # for reclaim instead of evicting it at mds_reconnect_timeout.
+        self.mount_a.umount_wait()
+        self.mount_a.mount_wait(mntargs=['--client_metadata=timeout=300'])
+        self.mount_a.run_shell(['mkdir', 'missed-reconnect'])
+
+        client_id = self.mount_a.get_global_id()
+        sess = self.get_session(client_id)
+        self.assertEqual(sess['client_metadata'].get('timeout'), '300')
+
+        # Reconnect finishes quickly. Autoclose stays far past the
+        # post-resume wait, so a build without the fix is still in
+        # up:clientreplay when that wait expires.
+        reconnect_timeout = 10
+        autoclose = 180
+        active_wait = 30
+        self.fs.set_session_autoclose(autoclose)
+
+        stopped = False
+        reconnect_set = False
+        try:
+            self.config_set('mds', 'mds_reconnect_timeout',
+                            str(reconnect_timeout))
+            reconnect_set = True
+
+            self._signal_fuse(self.mount_a, 'STOP')
+            stopped = True
+
+            self.fs.fail()
+            self.fs.set_joinable()
+            log.info("Waiting for up:clientreplay with the client stopped")
+            self.fs.wait_for_state(
+                'up:clientreplay',
+                # Startup plus the reconnect window. 120s covers the
+                # shortened timeout and the default 45s if the new MDS
+                # has not picked up the config yet.
+                timeout=120)
+
+            # The held session is why the rank cannot go active yet.
+            # Give a healthy client time to have reconnected, then confirm
+            # the rank is still waiting.
+            time.sleep(5)
+            state = self.fs.get_rank(0)['state']
+            self.assertEqual(
+                state, 'up:clientreplay',
+                "rank left clientreplay while the timeout client was stopped")
+            held = self.get_session(client_id)
+            self.assertEqual(held['state'], 'open')
+            self.assertTrue(held['reconnecting'])
+
+            log.info("Resuming client; rank must leave clientreplay "
+                     "without waiting for session_autoclose (%ss)", autoclose)
+            self._signal_fuse(self.mount_a, 'CONT')
+            stopped = False
+
+            # Without the fix this raises: the rank is still up:clientreplay
+            # because nothing releases client_reclaim_gather before autoclose.
+            self.fs.wait_for_state('up:active', timeout=active_wait)
+            self.mount_a.run_shell(
+                ['touch', 'missed-reconnect/ok'], timeout=60)
+        finally:
+            if stopped:
+                try:
+                    self._signal_fuse(self.mount_a, 'CONT')
+                except Exception:
+                    log.exception("failed to SIGCONT ceph-fuse; "
+                                  "the mount may be stuck")
+            if reconnect_set:
+                self.config_rm('mds', 'mds_reconnect_timeout')
+
 
 @unittest.skip("Feature is not maintained and requires a full overhaul (see: "
                 "https://tracker.ceph.com/issues/64563). Testing it further "

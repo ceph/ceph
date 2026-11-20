@@ -47,6 +47,8 @@ struct MetaSession {
 
   int mds_state = MDSMap::STATE_NULL;
   bool readonly = false;
+  /* Set by send_reconnect(). A later SESSION_CLOSE is a denied reconnect. */
+  bool reconnect_attempted = false;
 
   std::vector<Context*> waiting_for_open;
 
