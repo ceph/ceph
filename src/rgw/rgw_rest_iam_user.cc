@@ -205,7 +205,7 @@ void RGWCreateUser_IAM::execute(optional_yield y)
   }
 
   std::unique_ptr<rgw::sal::User> user = driver->get_user(info.user_id);
-  user->get_info() = info;
+  user->get_info_mut() = info;
 
   constexpr bool exclusive = true;
   op_ret = user->store_user(this, y, exclusive, nullptr);
@@ -432,8 +432,8 @@ void RGWUpdateUser_IAM::execute(optional_yield y)
 
   op_ret = retry_raced_user_write(this, y, user.get(),
       [this, y] {
-        RGWUserInfo& info = user->get_info();
-        RGWUserInfo old_info = info;
+        RGWUserInfo old_info = user->get_info();
+        RGWUserInfo& info = user->get_info_mut();
 
         if (!new_path.empty()) {
           info.path = new_path;
@@ -957,8 +957,8 @@ void RGWCreateAccessKey_IAM::execute(optional_yield y)
 
   op_ret = retry_raced_user_write(this, y, user.get(),
       [this, y, &max_keys] {
-        RGWUserInfo& info = user->get_info();
-        RGWUserInfo old_info = info;
+        RGWUserInfo old_info = user->get_info();
+        RGWUserInfo& info = user->get_info_mut();
 
         info.access_keys[key.id] = key;
 
@@ -1126,8 +1126,8 @@ void RGWUpdateAccessKey_IAM::execute(optional_yield y)
 
   op_ret = retry_raced_user_write(this, y, user.get(),
       [this, y] {
-        RGWUserInfo& info = user->get_info();
-        RGWUserInfo old_info = info;
+        RGWUserInfo old_info = user->get_info();
+        RGWUserInfo& info = user->get_info_mut();
 
         auto key = info.access_keys.find(access_key_id);
         if (key == info.access_keys.end()) {
@@ -1273,8 +1273,8 @@ void RGWDeleteAccessKey_IAM::execute(optional_yield y)
 
   op_ret = retry_raced_user_write(this, y, user.get(),
       [this, y, &site] {
-        RGWUserInfo& info = user->get_info();
-        RGWUserInfo old_info = info;
+        RGWUserInfo old_info = user->get_info();
+        RGWUserInfo& info = user->get_info_mut();
 
         auto key = info.access_keys.find(access_key_id);
         if (key == info.access_keys.end()) {

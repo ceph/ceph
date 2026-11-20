@@ -270,7 +270,7 @@ class DefaultStrategy : public rgw::auth::Strategy,
      * mechanism that requires  account name internally, so there is no
      * business with delegating the responsibility outside. */
     std::unique_ptr<rgw::sal::User> user = s->user->clone();
-    user->get_info() = user_info;
+    user->get_info_mut() = user_info;
     return aplptr_t(new rgw::auth::swift::TempURLApplier(cct, std::move(user)));
   }
 

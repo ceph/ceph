@@ -327,7 +327,7 @@ struct RGWUserAdminOpState {
     sync_stats = is_sync_stats;
   }
 
-  void set_user_info(RGWUserInfo& user_info);
+  void set_user_info(const RGWUserInfo& user_info);
 
   void set_user_version_tracker(RGWObjVersionTracker& objv_tracker);
 
@@ -454,7 +454,8 @@ struct RGWUserAdminOpState {
   bool get_overwrite_new_user() const { return overwrite_new_user; }
   std::map<int, std::string>& get_temp_url_keys() { return temp_url_keys; }
 
-  RGWUserInfo&  get_user_info();
+  const RGWUserInfo& get_user_info() const;
+  RGWUserInfo&  get_user_info_mut();
 
   std::map<std::string, RGWAccessKey>* get_swift_keys();
   std::map<std::string, RGWAccessKey>* get_access_keys();
@@ -828,17 +829,21 @@ public:
     }
   };
 
-  int get_info_by_uid(const DoutPrefixProvider *dpp, 
-                      const rgw_user& uid, RGWUserInfo *info,
+  int get_info_by_uid(const DoutPrefixProvider *dpp,
+                      const rgw_user& uid,
+                      std::shared_ptr<const RGWUserInfo>& info,
                       optional_yield y, const GetParams& params = {});
   int get_info_by_email(const DoutPrefixProvider *dpp, 
-                        const std::string& email, RGWUserInfo *info,
+                        const std::string& email,
+                        std::shared_ptr<const RGWUserInfo>& info,
                         optional_yield y, const GetParams& params = {});
   int get_info_by_swift(const DoutPrefixProvider *dpp, 
-                        const std::string& swift_name, RGWUserInfo *info,
+                        const std::string& swift_name,
+                        std::shared_ptr<const RGWUserInfo>& info,
                         optional_yield y, const GetParams& params = {});
   int get_info_by_access_key(const DoutPrefixProvider *dpp, 
-                             const std::string& access_key, RGWUserInfo *info,
+                             const std::string& access_key,
+                             std::shared_ptr<const RGWUserInfo>& info,
                              optional_yield y, const GetParams& params = {});
 
   int get_attrs_by_uid(const DoutPrefixProvider *dpp, 

@@ -905,8 +905,8 @@ void RGWAddUserToGroup_IAM::execute(optional_yield y)
 
   op_ret = retry_raced_user_write(this, y, user.get(),
       [this, y] {
-        RGWUserInfo& info = user->get_info();
-        RGWUserInfo old_info = info;
+        RGWUserInfo old_info = user->get_info();
+        RGWUserInfo& info = user->get_info_mut();
 
         if (!info.group_ids.insert(group.id).second) {
           return 0; // nothing to do, return success
@@ -1042,8 +1042,8 @@ void RGWRemoveUserFromGroup_IAM::execute(optional_yield y)
 
   op_ret = retry_raced_user_write(this, y, user.get(),
       [this, y] {
-        RGWUserInfo& info = user->get_info();
-        RGWUserInfo old_info = info;
+        RGWUserInfo old_info = user->get_info();
+        RGWUserInfo& info = user->get_info_mut();
 
         auto id = info.group_ids.find(group.id);
         if (id == info.group_ids.end()) {
