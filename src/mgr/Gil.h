@@ -23,6 +23,7 @@ typedef struct _ts PyThreadState;
 
 #include <pthread.h>
 
+void assert_gil();
 
 /**
  * Wrap PyThreadState to carry a record of which POSIX thread

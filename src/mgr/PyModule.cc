@@ -157,6 +157,20 @@ std::string peek_pyerror()
   return exc_msg;
 }
 
+void set_wrapped_remote_exception(const std::string &msg,
+				   bool do_crash_dump)
+{
+  PyErr_SetString(PyExc_RuntimeError, msg.c_str());
+  // NotImplementedError is the documented way for a module to signal
+  // that it doesn't implement an optional method; it isn't a fault, so
+  // don't log it as one.
+  if (do_crash_dump) {
+    derr << msg << dendl;
+  } else {
+    dout(10) << msg << dendl;
+  }
+}
+
 std::span<std::byte const> py_bytes_as_span(PyObject *bytes)
 {
   assert(bytes);
@@ -830,6 +844,10 @@ int PyModule::perf_counter_build(CephContext *cct) {
   pcb.add_u64(l_pym_mem_rss_change, "mem_rss_change", "Memory RSS change in bytes", "", 0);
   pcb.add_u64(l_pym_mem_rss_current, "mem_rss_current", "Memory RSS current in bytes", "", 0);
   pcb.add_u64(l_pym_serve_cpu_usage, "serve_cpu_usage", "Serve thread CPU usage in percent", "cpu", 0, uint64_t(100));
+  pcb.add_u64_counter(l_pym_remote_direct, "remote_direct",
+                      "remote() calls served without pickling (same interpreter)");
+  pcb.add_u64_counter(l_pym_remote_pickled, "remote_pickled",
+                      "remote() calls served via pickle (cross interpreter)");
   perfcounter = std::unique_ptr<PerfCounters>(pcb.create_perf_counters());
   cct->get_perfcounters_collection()->add(perfcounter.get());
 
