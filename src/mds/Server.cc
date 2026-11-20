@@ -338,7 +338,9 @@ void Server::dispatch(const cref_t<Message> &m)
   // handle_peer_request()/handle_client_session() will wait if necessary
   if (m->get_type() == CEPH_MSG_CLIENT_REQUEST && !mds->is_active()) {
     const auto &req = ref_cast<MClientRequest>(m);
-    if (mds->is_reconnect() || mds->get_want_state() == CEPH_MDS_STATE_RECONNECT) {
+    // requests from another mds have no session, they wait for active below
+    if (!req->get_source().is_mds() &&
+	(mds->is_reconnect() || mds->get_want_state() == CEPH_MDS_STATE_RECONNECT)) {
       Session *session = mds->get_session(req);
       if (!session || (!session->is_open() && !sessionclosed_isok)) {
 	dout(5) << "session is closed, dropping " << req->get_reqid() << dendl;
@@ -2734,7 +2736,8 @@ void Server::handle_client_reply(const cref_t<MClientReply> &reply)
   ceph_assert(reply->is_safe());
   ceph_tid_t tid = reply->get_tid();
 
-  if (mds->internal_client_requests.count(tid) == 0) {
+  auto it = mds->internal_client_requests.find(tid);
+  if (it == mds->internal_client_requests.end()) {
     dout(1) << " no pending request on tid " << tid << dendl;
     return;
   }
@@ -2746,7 +2749,28 @@ void Server::handle_client_reply(const cref_t<MClientReply> &reply)
     dout(5) << " unknown client op " << reply->get_op() << dendl;
   }
 
-  mds->internal_client_requests.erase(tid);
+  // a stopping mds waits for each stray it migrates, see
+  // MDCache::shutdown_export_strays(). -EAGAIN comes from
+  // MDCache::request_forward(): the rename was not done, so migrate
+  // the stray again.
+  inodeno_t again;
+  bool retry = false;
+  if (reply->get_result() == -EAGAIN && mds->is_stopping()) {
+    auto req = dynamic_cast<StrayManager::StrayEvalRequest*>(it->second.get());
+    if (req) {
+      auto dnl = req->dentry->get_projected_linkage();
+      if (dnl->is_primary()) {
+	again = dnl->get_inode()->ino();
+	retry = true;
+      }
+    }
+  }
+
+  // releases the dentry
+  mds->internal_client_requests.erase(it);
+
+  if (retry)
+    mdcache->shutdown_export_stray_finish(again);
 }
 
 void Server::handle_osd_map()
