@@ -2046,8 +2046,10 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
   }
   // once the operator requires clients that can follow a pool migration,
   // the others stay out, after a migration too: a client that holds a
-  // migrated pool's old id cannot follow the redirect
-  if (entity_type == CEPH_ENTITY_TYPE_CLIENT &&
+  // migrated pool's old id cannot follow the redirect. MDSs are clients of
+  // the OSDs, which require this of everything but mons and OSDs
+  if ((entity_type == CEPH_ENTITY_TYPE_CLIENT ||
+       entity_type == CEPH_ENTITY_TYPE_MDS) &&
       test_flag(CEPH_OSDMAP_REQUIRE_POOL_MIGRATION)) {
     features |= CEPH_FEATUREMASK_POOL_MIGRATION;
   }

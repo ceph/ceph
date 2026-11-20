@@ -516,6 +516,7 @@ TEST_F(OSDMapTest, PoolMigrationFeatures) {
     return (features & needed) == needed;
   };
   ASSERT_FALSE(requires_migration(CEPH_ENTITY_TYPE_CLIENT));
+  ASSERT_FALSE(requires_migration(CEPH_ENTITY_TYPE_MDS));
   ASSERT_LT(osdmap.get_min_compat_client(),
             OSDMap::POOL_MIGRATION_MIN_COMPAT_CLIENT);
   const uint64_t osd_features_before =
@@ -527,6 +528,8 @@ TEST_F(OSDMapTest, PoolMigrationFeatures) {
     osdmap.apply_incremental(inc);
   }
   ASSERT_TRUE(requires_migration(CEPH_ENTITY_TYPE_CLIENT));
+  // an MDS is a client of the OSDs, which would refuse it anyway
+  ASSERT_TRUE(requires_migration(CEPH_ENTITY_TYPE_MDS));
   // so the setting cannot be lowered below that release again
   ASSERT_EQ(OSDMap::POOL_MIGRATION_MIN_COMPAT_CLIENT,
             osdmap.get_min_compat_client());

@@ -493,7 +493,7 @@ feature of that release.
 can't follow a migration is connected, and names them.
 
 Once the cluster requires clients of that release, the Monitors and OSDs refuse
-clients that can't follow a migration, after a migration too: a client that
+clients and MDSs that can't follow a migration, after a migration too: a client that
 still holds a migrated pool's old id cannot follow the redirect to it. The
 requirement cannot be lowered below that release again.
 
