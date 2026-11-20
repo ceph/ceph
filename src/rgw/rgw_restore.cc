@@ -16,6 +16,7 @@
 
 #include "include/scope_guard.h"
 #include "include/function2.hpp"
+#include "include/ceph_hash.h"
 #include "common/Clock.h" // for ceph_clock_now()
 #include "common/Formatter.h"
 #include "common/containers.h"
@@ -36,9 +37,6 @@
 
 #include "fmt/format.h"
 
-#include "services/svc_sys_obj.h"
-#include "services/svc_zone.h"
-#include "services/svc_tier_rados.h"
 #include "common/ceph_time.h"
 
 #define dout_context g_ceph_context

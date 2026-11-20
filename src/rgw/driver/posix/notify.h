@@ -67,14 +67,29 @@ namespace file::listing {
       {}
 
     friend class Inotify;
+    friend class NullNotify;
   public:
-    static std::unique_ptr<Notify> factory(Notifiable* n, const std::string& bucket_root);
-    
+    static std::unique_ptr<Notify> factory(Notifiable* n,
+					   const std::string& bucket_root,
+					   bool use_inotify);
+
     virtual int add_watch(const std::string& dname, void* opaque) = 0;
     virtual int remove_watch(const std::string& dname) = 0;
     virtual ~Notify()
       {}
   }; /* Notify */
+
+  class NullNotify : public Notify
+  {
+    NullNotify(Notifiable* n, const std::string& bucket_root)
+      : Notify(n, bucket_root)
+      {}
+
+    friend class Notify;
+  public:
+    int add_watch(const std::string&, void*) override { return 0; }
+    int remove_watch(const std::string&) override { return 0; }
+  }; /* NullNotify */
 
 #ifdef __linux__
   class Inotify : public Notify
@@ -240,7 +255,11 @@ namespace file::listing {
       sf::path wp{rp / dname};
       int wd = inotify_add_watch(wfd, wp.c_str(), aw_mask);
       if (wd == -1) {
-	std::cerr << fmt::format("{} inotify_add_watch {} failed with {}", __func__, dname, wd) << std::endl;
+	int err = errno;
+	if (err != ENOENT) {
+	  std::cerr << fmt::format("{} inotify_add_watch {} failed: {} ({})",
+	    __func__, dname, strerror(err), err) << std::endl;
+	}
       } else {
 	std::lock_guard lock(map_mutex);
 	wd_callback_map.insert(wd_callback_map_t::value_type(wd, WatchRecord(wd, dname, opaque)));

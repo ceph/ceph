@@ -107,6 +107,7 @@ set(librgw_common_srcs
   rgw_period_puller.cc
   rgw_s3_filter.cc
   rgw_pubsub.cc
+  rgw_pubsub_push.cc
   rgw_cr_rest.cc
   rgw_op.cc
   rgw_policy_s3.cc
@@ -129,6 +130,8 @@ set(librgw_common_srcs
   rgw_rest_s3.cc
   rgw_rest_s3control.cc
   rgw_rest_pubsub.cc
+  rgw_rest_user_policy.cc
+  rgw_rest_user.cc
   rgw_rest_zero.cc
   rgw_s3select.cc
   rgw_role.cc
@@ -137,6 +140,7 @@ set(librgw_common_srcs
   rgw_string.cc
   rgw_tag.cc
   rgw_tag_s3.cc
+  rgw_mime.cc
   rgw_tools.cc
   rgw_user.cc
   rgw_website.cc
@@ -146,7 +150,6 @@ set(librgw_common_srcs
   rgw_crypt_sanitize.cc
   rgw_iam_policy.cc
   rgw_iam_managed_policy.cc
-  rgw_rest_user_policy.cc
   rgw_zone.cc
   rgw_sts.cc
   rgw_rest_sts.cc
@@ -248,14 +251,12 @@ list(APPEND librgw_rados_srcs
   driver/rados/rgw_obj_manifest.cc
   driver/rados/rgw_object_expirer_core.cc
   driver/rados/rgw_otp.cc
-  driver/rados/rgw_pubsub_push.cc
   driver/rados/rgw_putobj_processor.cc
   driver/rados/rgw_rados.cc
   driver/rados/rgw_reshard.cc
   driver/rados/rgw_rest_bucket.cc
   driver/rados/rgw_rest_log.cc
   driver/rados/rgw_rest_realm.cc
-  driver/rados/rgw_rest_user.cc
   driver/rados/rgw_sal_rados.cc
   driver/rados/rgw_service.cc
   driver/rados/rgw_sync.cc
@@ -271,7 +272,7 @@ list(APPEND librgw_rados_srcs
   driver/rados/rgw_trim_bilog.cc
   driver/rados/rgw_trim_datalog.cc
   driver/rados/rgw_trim_mdlog.cc
-  driver/rados/rgw_user.cc
+  driver/rados/rgw_user_ctl.cc
   driver/rados/oidc.cc
   driver/rados/oidcs.cc
   driver/rados/role.cc
@@ -317,10 +318,17 @@ list(APPEND librgw_daos_srcs
 )
 list(APPEND librgw_posix_srcs
   driver/posix/rgw_sal_posix.cc
+  driver/posix/fsent.cc
   driver/posix/lmdb-safe.cc
   driver/posix/posixDB.cc
   driver/posix/notify.cpp
 )
+list(APPEND librgw_nsfs_srcs
+  driver/nsfs/rgw_sal_nsfs.cc
+  driver/posix/posixDB.cc
+  driver/nsfs/fs_strategy.cc
+  driver/posix/lmdb-safe.cc
+  driver/posix/notify.cpp)
 list(APPEND librgw_d4n_srcs
   rgw_redis_driver.cc
   rgw_ssd_driver.cc
@@ -337,7 +345,7 @@ if(WITH_RADOSGW_DBSTORE OR WITH_RADOSGW_STANDALONE)
   list(APPEND librgw_driver_srcs ${librgw_dbstore_srcs})
   list(APPEND librgw_driver_standalone_srcs ${librgw_dbstore_srcs})
   list(APPEND rgw_common_libs sqlite3)
-set(SQLITE_COMPILE_FLAGS "-DSQLITE_THREADSAFE=1")
+  set(SQLITE_COMPILE_FLAGS "-DSQLITE_THREADSAFE=1")
 endif()
 if(WITH_RADOSGW_DAOS)
   list(APPEND librgw_driver_srcs ${librgw_daos_srcs})
@@ -347,6 +355,23 @@ if(WITH_RADOSGW_POSIX)
   add_compile_definitions(LMDB_SAFE_NO_CPP_UTILITIES)
   list(APPEND librgw_driver_srcs ${librgw_posix_srcs})
   list(APPEND librgw_driver_standalone_srcs ${librgw_posix_srcs})
+  list(APPEND librgw_driver_srcs ${librgw_dbstore_srcs})
+  list(APPEND librgw_driver_standalone_srcs ${librgw_dbstore_srcs})
+  set(SQLITE_COMPILE_FLAGS "-DSQLITE_THREADSAFE=1")
+endif()
+if(WITH_RADOSGW_NSFS)
+  find_package(LMDB REQUIRED)
+  add_compile_definitions(LMDB_SAFE_NO_CPP_UTILITIES)
+  list(APPEND librgw_driver_srcs ${librgw_nsfs_srcs})
+  list(APPEND librgw_driver_standalone_srcs ${librgw_nsfs_srcs})
+  list(APPEND librgw_driver_srcs ${librgw_dbstore_srcs})
+  list(APPEND librgw_driver_standalone_srcs ${librgw_dbstore_srcs})
+  set(SQLITE_COMPILE_FLAGS "-DSQLITE_THREADSAFE=1")
+endif()
+if(WITH_RADOSGW_POSIX OR WITH_RADOSGW_NSFS)
+  # Shared by posix and nsfs; compile once to avoid duplicate symbols.
+  list(APPEND librgw_driver_srcs driver/posix/posix_io_uring.cc)
+  list(APPEND librgw_driver_standalone_srcs driver/posix/posix_io_uring.cc)
 endif()
 if(WITH_RADOSGW_D4N)
   list(APPEND librgw_driver_srcs ${librgw_d4n_srcs})
@@ -421,7 +446,7 @@ if(WITH_RADOSGW_RADOS)
     PUBLIC "-DWITH_RADOSGW_RADOS")
 endif()
 
-if(WITH_RADOSGW_DBSTORE OR WITH_RADOSGW_STANDALONE)
+if(WITH_RADOSGW_DBSTORE OR WITH_RADOSGW_POSIX OR WITH_RADOSGW_NSFS)
   target_compile_OPTIONS(rgw_common PUBLIC "-DSQLITE_THREADSAFE=1")
 endif()
 
@@ -452,6 +477,10 @@ endif()
 if(WITH_JAEGER)
   add_dependencies(rgw_common jaeger_base)
   target_link_libraries(rgw_common PUBLIC jaeger_base)
+endif()
+
+if(WITH_LIBURING AND (WITH_RADOSGW_POSIX OR WITH_RADOSGW_NSFS))
+  target_link_libraries(rgw_common PRIVATE uring::uring)
 endif()
 
 if(WITH_RADOSGW_RADOS)
@@ -531,14 +560,19 @@ if(WITH_RADOSGW_STANDALONE)
     PUBLIC "-DWITH_RADOSGW_DBSTORE"
     PUBLIC "-UWITH_RADOSGW_D4N"
     PUBLIC "-UWITH_RADOSGW_RADOS"
-    PUBLIC "-UWITH_RADOSGW_DAOS"
-    PUBLIC "-UWITH_RADOSGW_AMQP_ENDPOINT")
+    PUBLIC "-UWITH_RADOSGW_DAOS")
 
   if(WITH_RADOSGW_KAFKA_ENDPOINT)
     # used by rgw_kafka.cc
     target_link_libraries(rgw_common_standalone
       PRIVATE
       RDKafka::RDKafka)
+  endif()
+  if(WITH_RADOSGW_AMQP_ENDPOINT)
+    # used by rgw_amqp.cc
+    target_link_libraries(rgw_common_standalone
+      PRIVATE
+      RabbitMQ::RabbitMQ)
   endif()
   if(WITH_OPENLDAP)
     target_link_libraries(rgw_common_standalone
@@ -549,6 +583,10 @@ if(WITH_RADOSGW_STANDALONE)
   if(WITH_JAEGER)
     add_dependencies(rgw_common_standalone jaeger_base)
     target_link_libraries(rgw_common_standalone PUBLIC jaeger_base)
+  endif()
+
+  if(WITH_LIBURING AND (WITH_RADOSGW_POSIX OR WITH_RADOSGW_NSFS))
+    target_link_libraries(rgw_common_standalone PRIVATE uring::uring)
   endif()
 endif()
 
@@ -959,7 +997,6 @@ endif()
 
 if(WITH_RADOSGW_STANDALONE)
   list(APPEND rgw_standalone_admin_srcs
-    driver/rados/rgw_user.cc
     driver/rados/rgw_bucket.cc
     driver/rados/rgw_obj_manifest.cc)
 

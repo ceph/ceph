@@ -243,7 +243,7 @@ TYPE(RGWZoneGroupPlacementTarget)
 TYPE(RGWUserCaps)
 
 
-#include "rgw_user.h"
+#include "rgw_user_ctl.h"
 TYPE(RGWUID)
 
 #include "rgw_user_types.h"

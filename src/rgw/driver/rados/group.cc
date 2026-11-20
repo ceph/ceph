@@ -25,7 +25,7 @@
 #include "rgw_obj_types.h"
 #include "rgw_string.h"
 #include "rgw_tools.h"
-#include "rgw_user.h"
+#include "rgw_user_ctl.h"
 #include "rgw_zone.h"
 #include "services/svc_sys_obj.h"
 

@@ -87,16 +87,21 @@ namespace cohort {
 
     public:
 
-      Object() : lru_refcnt(0) {}
+      Object() : lru_refcnt(0) {
+	active.clear();
+	evicting.clear();
+      }
 
       uint32_t get_refcnt() const { return lru_refcnt; }
 
       virtual bool reclaim(const ObjectFactory* newobj_fac) = 0;
 
+      virtual void lru_cleanup() {}
+
       virtual ~Object() {}
 
     private:
-      template <typename LK>
+      template <typename LK, typename YP>
       friend class LRU;
 
       template <typename T, typename TTree, typename CLT, typename CEQ,
@@ -113,7 +118,11 @@ namespace cohort {
       virtual ~ObjectFactory() {};
     };
 
-    template <typename LK>
+    struct NullYieldPolicy {
+      static void yield_at(const char*) {}
+    };
+
+    template <typename LK, typename YieldPolicy = NullYieldPolicy>
     class LRU
     {
     private:
@@ -130,6 +139,7 @@ namespace cohort {
       int n_lanes;
       std::atomic<uint32_t> evict_lane;
       const uint32_t lane_hiwat;
+      std::atomic<bool> last_evict_recycled{false};
 
       static constexpr uint32_t SENTINEL_REFCNT = 1;
 
@@ -150,37 +160,54 @@ namespace cohort {
 
       Object* evict_block(const ObjectFactory* newobj_fac) {
 	uint32_t lane_ix = next_evict_lane();
-	for (int ix = 0; ix < n_lanes; ++ix,
-	       lane_ix = next_evict_lane()) {
-	  Lane& lane = qlane[lane_ix];
+	for (int ix = 0; ix < n_lanes; ++ix, ++lane_ix) {
+	  Lane& lane = qlane[lane_ix % n_lanes];
           std::unique_lock lane_lock{lane.lock};
-          /* back() on empty intrusive list is undefined */
+	  // only evict when this lane exceeds capacity (otherwise may evict an entry that is still in use)
+	  if (lane.q.size() <= lane_hiwat) {
+	    continue;
+	  }
           if (lane.q.empty()) {
             continue;
           }
-          Object* o = &(lane.q.back());
-	  /* if object at LRU has refcnt==1, it may be reclaimable */
-	  if (can_reclaim(o)) {
+	  /* walk from LRU (back) toward MRU looking for a reclaimable
+	   * entry — the tail entry may be mid-eviction by another thread */
+	  auto it = lane.q.end();
+	  while (it != lane.q.begin()) {
+	    --it;
+	    Object* o = &(*it);
+	    if (! can_reclaim(o)) {
+	      continue;
+	    }
 	    ++(o->lru_refcnt);
 	    (void) o->evicting.test_and_set();
+	    /* unlink before releasing lane lock so a racing
+	     * ref(FLAG_INITIAL) sees is_linked()=false and
+	     * retries instead of moving the entry to active */
+	    lane.q.erase(it);
 	    lane_lock.unlock();
+	    YieldPolicy::yield_at("evict_block_post_unlock");
 	    if (o->reclaim(newobj_fac)) {
 	      lane_lock.lock();
 	      --(o->lru_refcnt);
-	      /* assertions that o state has not changed across
-	       * relock */
-	      ceph_assert(o->lru_refcnt == SENTINEL_REFCNT);
-	      Object::Queue::iterator it =
-		Object::Queue::s_iterator_to(*o);
-	      lane.q.erase(it);
+	      if (o->lru_refcnt != SENTINEL_REFCNT) {
+		/* a FLAG_NONE ref raced in — put back on q */
+		lane.q.push_front(*o);
+		o->evicting.clear();
+		break; /* try next lane */
+	      }
+	      last_evict_recycled.store(true, std::memory_order_relaxed);
 	      return o;
 	    } else {
               --(o->lru_refcnt);
               o->evicting.clear();
-	      /* unlock in next block */
+	      lane_lock.lock();
+	      /* reclaim failed — put back on q */
+	      lane.q.push_front(*o);
 	    }
-	  } /* can_reclaim(o) */
+	  } /* each entry in lane */
 	} /* each lane */
+	last_evict_recycled.store(false, std::memory_order_relaxed);
 	return nullptr;
       } /* evict_block */
 
@@ -195,12 +222,50 @@ namespace cohort {
 
       ~LRU() { delete[] qlane; }
 
+      bool get_last_evict_recycled() const {
+	return last_evict_recycled.load(std::memory_order_relaxed);
+      }
+
+      uint64_t get_size() const {
+	uint64_t total = 0;
+	for (int i = 0; i < n_lanes; ++i) {
+	  total += qlane[i].q.size() + qlane[i].active.size();
+	}
+	return total;
+      }
+
+      uint64_t get_q_size() const {
+	uint64_t total = 0;
+	for (int i = 0; i < n_lanes; ++i) {
+	  total += qlane[i].q.size();
+	}
+	return total;
+      }
+
+      uint64_t get_active_size() const {
+	uint64_t total = 0;
+	for (int i = 0; i < n_lanes; ++i) {
+	  total += qlane[i].active.size();
+	}
+	return total;
+      }
+
       bool ref(Object* o, uint32_t flags) {
+	if (o->evicting.test()) {
+	  return false;
+	}
+	YieldPolicy::yield_at("ref_pre_refcnt_bump");
 	++(o->lru_refcnt);
         if (flags & FLAG_INITIAL) {
+          YieldPolicy::yield_at("ref_pre_lane_lock");
           Lane& lane = lane_of(o);
           lane.lock.lock();
 	  if (! o->active.test()) {
+	    if (! o->lru_hook.is_linked()) {
+	      --(o->lru_refcnt);
+	      lane.lock.unlock();
+	      return false;
+	    }
 	    Object::Queue::iterator it =
 	      Object::Queue::s_iterator_to(*o);
 	    lane.q.erase(it);
@@ -212,18 +277,24 @@ namespace cohort {
 	return true;
       } /* ref */
 
-      void
-      unref(Object* o, uint32_t flags) {
+      void unref(Object *o, uint32_t flags) {
+        uint32_t check_refcnt = o->lru_refcnt;
+	ceph_assert(check_refcnt > 0);
 	uint32_t refcnt = --(o->lru_refcnt);
 	Object* tdo = nullptr;
 	if (unlikely(refcnt == 0 /* last ref */)) {
 	  Lane& lane = lane_of(o);
 	  lane.lock.lock();
 	  refcnt = o->lru_refcnt.load();
-	  if (unlikely(refcnt == 0)) {
-	    Object::Queue::iterator it =
-	      Object::Queue::s_iterator_to(*o);
-	    lane.q.erase(it);
+          if (unlikely(refcnt == 0)) {
+	    if (o->lru_hook.is_linked()) {
+              Object::Queue::iterator it = Object::Queue::s_iterator_to(*o);
+              if (o->active.test()) {
+                lane.active.erase(it);
+	      } else {
+                lane.q.erase(it);
+	      }
+            } /* is-linked */
 	    tdo = o;
 	  }
 	  lane.lock.unlock();
@@ -231,30 +302,44 @@ namespace cohort {
 	  Lane& lane = lane_of(o);
 	  lane.lock.lock();
 	  refcnt = o->lru_refcnt.load();
-	  if (likely(refcnt == SENTINEL_REFCNT)) {
-	    /* move to MRU */
-            Object::Queue::iterator it = Object::Queue::s_iterator_to(*o);
-            auto active = o->active.test();
-            if (active) {
-              lane.active.erase(it);
-            } else {
-              lane.q.erase(it);
-            }
-            lane.q.push_front(*o);
-	    /* hiwat check */
-            if (lane.q.size() > lane_hiwat) {
-              /* discard the actual lane LRU immediately */
-              Object* o2 = &(lane.q.back());
-	      Object::Queue::iterator it = Object::Queue::s_iterator_to(*o2);
-	      lane.q.erase(it);
-	      tdo = o2;
-	    }
-	  }
+          if (likely(refcnt == SENTINEL_REFCNT)) {
+            if (o->lru_hook.is_linked()) {
+              /* move to MRU */
+              Object::Queue::iterator it = Object::Queue::s_iterator_to(*o);
+              auto active = o->active.test();
+              if (active) {
+                lane.active.erase(it);
+                /* object is moving to the evictable q; the flag must follow the
+                 * list, otherwise a later ref()/unref() erases it from the wrong
+                 * lane list and corrupts the constant_time_size counters */
+                o->active.clear();
+              } else {
+                lane.q.erase(it);
+              }
+              lane.q.push_front(*o);
+              /* hiwat check -- evict LRU tail using the same protocol
+               * as evict_block(): set evicting and unlink under the
+               * lane lock, then cleanup+delete out of line */
+              if (lane.q.size() > lane_hiwat) {
+                Object *o2 = &(lane.q.back());
+                if (o2 != o && can_reclaim(o2)) {
+                  ++(o2->lru_refcnt);
+                  (void) o2->evicting.test_and_set();
+                  Object::Queue::iterator it2 =
+                    Object::Queue::s_iterator_to(*o2);
+                  lane.q.erase(it2);
+                  tdo = o2;
+                }
+              }
+            } /* is-linked */
+          } /* sentinel-refcnt */
 	  lane.lock.unlock();
 	}
-	/* unref out-of-line && !LOCKED */
-	if (tdo)
+	/* delete out-of-line && !LOCKED */
+	if (tdo) {
+	  tdo->lru_cleanup();
 	  delete tdo;
+	}
       } /* unref */
 
       Object* insert(ObjectFactory* fac, Edge edge, uint32_t& flags) {
@@ -445,6 +530,12 @@ namespace cohort {
       bool is_same_partition(uint64_t lhs, uint64_t rhs) {
         return ((lhs % n_part) == (rhs % n_part));
       }
+      void lock_for(uint64_t hk) {
+	partition_of_scalar(hk).lock.lock();
+      }
+      void unlock_for(uint64_t hk) {
+	partition_of_scalar(hk).lock.unlock();
+      }
       void insert_latched(T* v, Latch& lat, uint32_t flags) {
 	(void) lat.p->tr.insert_unique_commit(*v, lat.commit_data);
 	if (flags & FLAG_UNLOCK)
@@ -462,9 +553,9 @@ namespace cohort {
 
       void remove(uint64_t hk, T* v, uint32_t flags) {
 	Partition& p = partition_of_scalar(hk);
-	iterator it = TTree::s_iterator_to(*v);
 	if (flags & FLAG_LOCK)
 	  p.lock.lock();
+	iterator it = TTree::s_iterator_to(*v);
 	p.tr.erase(it);
 	if (csz) { /* template specialize? */
 	  uint32_t slot = hk % csz;

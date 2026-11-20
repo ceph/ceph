@@ -1026,6 +1026,7 @@ void RGWUpdateRole::execute(optional_yield y)
   if (op_ret == 0) {
     s->formatter->open_object_section("UpdateRoleResponse");
     s->formatter->open_object_section("UpdateRoleResult");
+    s->formatter->close_section();
     s->formatter->open_object_section("ResponseMetadata");
     s->formatter->dump_string("RequestId", s->trans_id);
     s->formatter->close_section();
