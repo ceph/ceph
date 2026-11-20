@@ -58,6 +58,8 @@ int translate_flags(int flags)
     op_flags |= CEPH_OSD_FLAG_ORDERSNAP;
   if (flags & librados::OPERATION_RETURNVEC)
     op_flags |= CEPH_OSD_FLAG_RETURNVEC;
+  if (flags & librados::OPERATION_PRESERVE_ALLOCATION)
+    op_flags |= CEPH_OSD_FLAG_PRESERVE_ALLOCATION;
 
   return op_flags;
 }
