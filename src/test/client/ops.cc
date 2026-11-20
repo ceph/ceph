@@ -104,7 +104,7 @@ TEST_F(TestClient, ReaddirCacheDropsFreedDentry) {
     std::scoped_lock lock(client->client_lock);
     ASSERT_TRUE(diri->is_complete_and_ordered());
     ASSERT_EQ(names.size(), diri->dir->readdir_cache.size());
-    Dentry *dn = diri->dir->dentries.at("f3");
+    Dentry *dn = diri->dir->dentries.at(client->dentry_cache_key(*diri, "f3"));
     const auto freed = reinterpret_cast<uintptr_t>(dn);
     InodeRef in = dn->inode;
     client->unlink(dn, true, true);  // keep dir, keep dentry
@@ -208,7 +208,7 @@ TEST_F(TestClient, RenameOverHardlinkPreservesOtherLinks) {
   {
     std::scoped_lock lock(client->client_lock);
     ASSERT_TRUE(dir1_in->dir != nullptr);
-    auto it = dir1_in->dir->dentries.find("link");
+    auto it = dir1_in->dir->dentries.find(client->dentry_cache_key(*dir1_in, "link"));
     ASSERT_NE(it, dir1_in->dir->dentries.end());
     EXPECT_TRUE(it->second->inode != nullptr);
   }
@@ -251,8 +251,8 @@ TEST_F(TestClient, RenameSameInodeHardlinksIsNoop) {
   {
     std::scoped_lock lock(client->client_lock);
     ASSERT_TRUE(diri->dir != nullptr);
-    auto ita = diri->dir->dentries.find("a");
-    auto itb = diri->dir->dentries.find("b");
+    auto ita = diri->dir->dentries.find(client->dentry_cache_key(*diri, "a"));
+    auto itb = diri->dir->dentries.find(client->dentry_cache_key(*diri, "b"));
     ASSERT_NE(ita, diri->dir->dentries.end());
     ASSERT_NE(itb, diri->dir->dentries.end());
     EXPECT_TRUE(ita->second->inode != nullptr);
