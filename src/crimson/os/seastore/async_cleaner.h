@@ -705,6 +705,9 @@ public:
   }
 
   bool try_reserve_inline_usage(std::size_t usage) final {
+    if (usage == 0) {
+      return true;
+    }
     reserved_usage += usage;
     if (should_block_io_on_trim()) {
       reserved_usage -= usage;
@@ -715,6 +718,9 @@ public:
   }
 
   void release_inline_usage(std::size_t usage) final {
+    if (usage == 0) {
+      return;
+    }
     ceph_assert(reserved_usage >= usage);
     reserved_usage -= usage;
   }

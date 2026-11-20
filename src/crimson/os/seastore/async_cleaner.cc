@@ -1915,7 +1915,21 @@ segment_id_t SegmentCleaner::get_next_reclaim_segment() const
 bool SegmentCleaner::try_reserve_projected_usage(std::size_t projected_usage)
 {
   assert(background_callback->is_ready());
+  if (projected_usage == 0) {
+    return true;
+  }
   stats.projected_used_bytes += projected_usage;
+  // Adaptive Green-Zone Fast-Path:
+  // When projected available ratio is comfortably above available_ratio_gc_max,
+  // space is abundant and GC is not under pressure, bypassing block condition checks.
+  if (likely(get_projected_available_ratio() >= config.available_ratio_gc_max)) {
+    peak_projected_used_decayed = std::max(
+        peak_projected_used_decayed,
+        static_cast<double>(stats.projected_used_bytes));
+    ++stats.projected_count;
+    stats.projected_used_bytes_sum += stats.projected_used_bytes;
+    return true;
+  }
   // Update decayed peak; the slow decay in maybe_adjust_thresholds() lets old
   // peaks fade so gc_max can eventually re-discover lower floors.
   peak_projected_used_decayed = std::max(
@@ -1934,6 +1948,9 @@ bool SegmentCleaner::try_reserve_projected_usage(std::size_t projected_usage)
 void SegmentCleaner::release_projected_usage(std::size_t projected_usage)
 {
   assert(background_callback->is_ready());
+  if (projected_usage == 0) {
+    return;
+  }
   ceph_assert(stats.projected_used_bytes >= projected_usage);
   stats.projected_used_bytes -= projected_usage;
   background_callback->maybe_wake_blocked_io();

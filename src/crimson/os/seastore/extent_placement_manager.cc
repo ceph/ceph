@@ -1004,17 +1004,19 @@ ExtentPlacementManager::BackgroundProcess::run()
  */
 bool ExtentPlacementManager::BackgroundProcess::try_reserve_cold(std::size_t usage)
 {
+  if (usage == 0) {
+    return true;
+  }
   if (has_cold_tier()) {
     return cold_cleaner->try_reserve_projected_usage(usage);
   } else {
-    assert(usage == 0);
     return true;
   }
 }
 void ExtentPlacementManager::BackgroundProcess::abort_cold_usage(
   std::size_t usage, bool success)
 {
-  if (has_cold_tier() && success) {
+  if (has_cold_tier() && success && usage > 0) {
     cold_cleaner->release_projected_usage(usage);
   }
 }
@@ -1022,6 +1024,9 @@ void ExtentPlacementManager::BackgroundProcess::abort_cold_usage(
 bool ExtentPlacementManager::BackgroundProcess::try_reserve_main(
   std::size_t usage)
 {
+  if (usage == 0) {
+    return true;
+  }
   return main_cleaner->try_reserve_projected_usage(usage);
 }
 
