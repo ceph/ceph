@@ -563,10 +563,24 @@ ExtentPlacementManager::dispatch_delayed_extents(Transaction &t)
         res.usage.cleaner_usage.cold_ool_usage += extent->get_length();
       }
       t.mark_delayed_extent_ool(extent);
-      auto writer_ptr = get_writer(
-          extent->get_user_hint(),
-          get_extent_category(extent->get_type()),
-          extent->get_rewrite_generation());
+      ExtentOolWriter* writer_ptr = nullptr;
+      auto cat = get_extent_category(extent->get_type());
+      auto gen = extent->get_rewrite_generation();
+      auto hint = extent->get_user_hint();
+      auto& pcache = t.get_placement_cache();
+      if (likely(cat == data_category_t::DATA &&
+                 pcache.has_data_placement &&
+                 gen == pcache.data_gen &&
+                 hint != placement_hint_t::COLD)) {
+        writer_ptr = pcache.data_writer;
+      } else if (cat == data_category_t::METADATA &&
+                 pcache.has_md_placement &&
+                 gen == pcache.md_gen &&
+                 hint != placement_hint_t::COLD) {
+        writer_ptr = pcache.md_writer;
+      } else {
+        writer_ptr = get_writer(hint, cat, gen);
+      }
       res.alloc_map[writer_ptr].emplace_back(extent);
     }
   }

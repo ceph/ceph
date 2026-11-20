@@ -493,21 +493,57 @@ public:
            opt.hint == placement_hint_t::COLD);
 
     data_category_t category = get_extent_category(type);
-    opt.gen = adjust_generation(
-      category, type, opt.hint, opt.gen, opt.write_policy, opt.is_tracked);
-
+    rewrite_gen_t gen;
     paddr_t addr;
+
 #ifdef UNIT_TESTS_BUILT
     if (unlikely(opt.external_paddr.has_value())) {
       assert(opt.external_paddr->is_fake());
+      gen = adjust_generation(
+        category, type, opt.hint, opt.gen, opt.write_policy, opt.is_tracked);
       addr = *opt.external_paddr;
     } else
 #endif
-      if (opt.gen == INLINE_GENERATION) {
-      addr = make_record_relative_paddr(0);
-    } else {
-      assert(category == data_category_t::METADATA);
-      addr = get_writer(opt.hint, category, opt.gen)->alloc_paddr(length);
+    {
+      auto& pcache = t.get_placement_cache();
+      if (likely(opt.gen == INIT_GENERATION &&
+                 opt.hint != placement_hint_t::COLD &&
+                 !opt.is_tracked &&
+                 (!has_cold_tier() || !background_process.is_ready()))) {
+        if (pcache.has_md_placement) {
+          gen = pcache.md_gen;
+          if (gen == INLINE_GENERATION) {
+            addr = make_record_relative_paddr(0);
+          } else {
+            assert(pcache.md_writer != nullptr);
+            addr = pcache.md_writer->alloc_paddr(length);
+          }
+        } else {
+          if (get_main_backend_type() == backend_type_t::SEGMENTED) {
+            gen = INLINE_GENERATION;
+            addr = make_record_relative_paddr(0);
+            pcache.md_gen = gen;
+            pcache.md_writer = nullptr;
+            pcache.has_md_placement = true;
+          } else {
+            gen = OOL_GENERATION;
+            auto writer = get_writer(data_category_t::METADATA, OOL_GENERATION);
+            addr = writer->alloc_paddr(length);
+            pcache.md_gen = gen;
+            pcache.md_writer = writer;
+            pcache.has_md_placement = true;
+          }
+        }
+      } else {
+        gen = adjust_generation(
+          category, type, opt.hint, opt.gen, opt.write_policy, opt.is_tracked);
+        if (gen == INLINE_GENERATION) {
+          addr = make_record_relative_paddr(0);
+        } else {
+          assert(category == data_category_t::METADATA);
+          addr = get_writer(opt.hint, category, gen)->alloc_paddr(length);
+        }
+      }
     }
     assert(!(category == data_category_t::DATA));
 
@@ -519,7 +555,7 @@ public:
     // according to the allocator.
     auto bp = create_extent_ptr_zero(length);
 
-    return alloc_result_t{addr, std::move(bp), opt.gen};
+    return alloc_result_t{addr, std::move(bp), gen};
   }
 
   std::vector<alloc_result_t> alloc_new_data_extents(
@@ -536,9 +572,31 @@ public:
            opt.hint == placement_hint_t::COLD);
 
     data_category_t category = get_extent_category(type);
-    opt.gen = adjust_generation(
-      category, type, opt.hint, opt.gen, opt.write_policy, opt.is_tracked);
-    assert(opt.gen != INLINE_GENERATION);
+    assert(category == data_category_t::DATA);
+    rewrite_gen_t gen;
+    ExtentOolWriter* writer = nullptr;
+
+    auto& pcache = t.get_placement_cache();
+    if (likely(opt.gen == INIT_GENERATION &&
+               opt.hint != placement_hint_t::COLD &&
+               !opt.is_tracked &&
+               (!has_cold_tier() || !background_process.is_ready()))) {
+      if (pcache.has_data_placement) {
+        gen = pcache.data_gen;
+        writer = pcache.data_writer;
+      } else {
+        gen = OOL_GENERATION;
+        writer = get_writer(data_category_t::DATA, OOL_GENERATION);
+        pcache.data_gen = gen;
+        pcache.data_writer = writer;
+        pcache.has_data_placement = true;
+      }
+    } else {
+      gen = adjust_generation(
+        category, type, opt.hint, opt.gen, opt.write_policy, opt.is_tracked);
+      assert(gen != INLINE_GENERATION);
+      writer = get_writer(opt.hint, category, gen);
+    }
 
     // XXX: bp might be extended to point to different memory (e.g. PMem)
     // according to the allocator.
@@ -547,13 +605,11 @@ public:
     if (unlikely(opt.external_paddr.has_value())) {
       assert(opt.external_paddr->is_fake());
       auto bp = create_extent_ptr_rand(length);
-      allocs.emplace_back(alloc_result_t{*opt.external_paddr, std::move(bp), opt.gen});
+      allocs.emplace_back(alloc_result_t{*opt.external_paddr, std::move(bp), gen});
     } else
 #endif
     {
-      assert(category == data_category_t::DATA);
-      auto addrs = get_writer(opt.hint, category, opt.gen)->alloc_paddrs(
-        length, opt.paddr_hint);
+      auto addrs = writer->alloc_paddrs(length, opt.paddr_hint);
       for (auto &ext : addrs) {
         auto left = ext.len;
         while (left > 0) {
@@ -565,10 +621,10 @@ public:
           auto start = ext.start.is_delayed()
                         ? ext.start
                         : ext.start + (ext.len - left);
-          allocs.emplace_back(alloc_result_t{start, std::move(bp), opt.gen});
+          allocs.emplace_back(alloc_result_t{start, std::move(bp), gen});
           SUBDEBUGT(seastore_epm,
                     "allocated {} 0x{:x}B extent at {}, opt.hint={}, opt.gen={}",
-                    t, type, len, start, opt.hint, opt.gen);
+                    t, type, len, start, opt.hint, gen);
           left -= len;
         }
       }
@@ -775,6 +831,23 @@ private:
       write_policy_t policy,
       bool is_tracked) {
     assert(is_real_type(type));
+
+    // Fast-path: INIT_GENERATION non-tracked data and metadata extents when cold tier is absent or idle
+    if (likely(gen == INIT_GENERATION &&
+               hint != placement_hint_t::COLD &&
+               !is_tracked &&
+               (!has_cold_tier() || !background_process.is_ready()))) {
+      if (category == data_category_t::DATA) {
+        return OOL_GENERATION;
+      } else {
+        if (get_main_backend_type() == backend_type_t::SEGMENTED) {
+          return INLINE_GENERATION;
+        } else {
+          return OOL_GENERATION;
+        }
+      }
+    }
+
     if (is_root_type(type)) {
       gen = INLINE_GENERATION;
     } else if (get_main_backend_type() == backend_type_t::SEGMENTED &&
