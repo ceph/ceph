@@ -38,6 +38,8 @@
 #include <boost/asio/experimental/concurrent_channel.hpp>
 #include <boost/compat/function_ref.hpp>
 
+#include <array>
+#include <charconv>
 #include <expected>
 #include <future>
 #include <cstdint>
@@ -45,8 +47,11 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <ranges>
 #include <source_location>
 #include <string>
+#include <string_view>
+#include <system_error>
 #include <type_traits>
 #include <vector>
 
@@ -75,6 +80,11 @@ inline std::string get_cache_block_prefix(rgw::sal::Object* object, const std::s
 inline std::string get_key_in_cache(const std::string& prefix, const std::string& offset, const std::string& len)
 {
   return fmt::format("{}{}{}{}{}", prefix, CACHE_DELIM, offset, CACHE_DELIM, len);
+}
+
+inline std::string get_latest_head_block_name(const std::string& obj_name)
+{
+  return obj_name.starts_with('_') ? "_" + obj_name : obj_name;
 }
 
 // Builds the objName for a version-specific head block directory entry used for non-versioned
@@ -128,26 +138,35 @@ inline std::string get_lease_resource_prefix(const std::string& bucket_id,
 
 inline std::optional<rgw::d4n::CacheBlock> parse_block_from_cache(const std::string& key)
 {
-  rgw::d4n::CacheBlock block;
-  auto parts = split(key, "#");
-  std::vector<std::string> block_info;
-  block_info.assign(parts.begin(), parts.end());
-
-  if (block_info.size() != 5) {
-	return std::nullopt;
+  std::array<std::string_view, 5> fields;
+  auto position = fields.begin();
+  for (auto part : std::string_view{key} | std::views::split('#')) {
+    if (fields.end() == position) {
+      return std::nullopt;
+    }
+    *position++ = std::string_view{part};
+  }
+  if (fields.end() != position) {
+    return std::nullopt;
   }
 
-  block.cacheObj.bucketName = block_info[0]; 
-  block.version = block_info[1];
-  block.cacheObj.objName = block_info[2]; 
-  try {
-	block.blockID = std::stoull(block_info[3]);
-	block.size = std::stoull(block_info[4]);
-  } catch (std::exception &e) {
-	return std::nullopt;
+  const auto read_number = [](const std::string_view field, std::uint64_t& value) {
+    const auto end = field.data() + field.size();
+    const auto parsed = std::from_chars(field.data(), end, value);
+
+    return std::errc{} == parsed.ec && end == parsed.ptr;
+  };
+
+  rgw::d4n::CacheBlock block{};
+  if (!read_number(fields[3], block.blockID) || !read_number(fields[4], block.size)) {
+    return std::nullopt;
   }
 
-  return block; 
+  block.cacheObj.bucketName = url_decode(fields[0]);
+  block.version = url_decode(fields[1]);
+  block.cacheObj.objName = url_decode(fields[2]);
+
+  return block;
 }
 
 namespace lfdb = ceph::libfdb;

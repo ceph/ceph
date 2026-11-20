@@ -472,10 +472,7 @@ int D4NFilterBucket::build_versioned_entries(const DoutPrefixProvider* dpp, cons
                               std::string& last_version, int& num_objs, bool& object_exhausted, int max,
                               std::optional<rgw::d4n::Transaction> txn, optional_yield y) {
   std::vector<rgw::d4n::CacheObjectVersion> versions;
-  std::string objName = obj.objName;
-  if (objName[0] == '_') {
-    objName = "_" + obj.objName;
-  }
+  const auto objName = get_latest_head_block_name(obj.objName);
   if (params.list_versions) {
     uint64_t count = (max > num_objs) ? static_cast<uint64_t>(max - num_objs) : 0;
     if (count == 0) {
@@ -857,12 +854,15 @@ int D4NFilterBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int
   }
 
   if (cache_request) {
+    params.marker = cache_results.next_marker;
     results = std::move(cache_results);
     return 0;
   }
 
   // 4. Call list method of backend store.
+  auto request_marker = params.marker;
   int ret = next->list(dpp, params, max, store_results, y);
+  params.marker = std::move(request_marker);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "D4NFilterBucket::" << __func__
                       << " store list failed: " << ret << dendl;
@@ -870,7 +870,10 @@ int D4NFilterBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int
   }
 
   // 5. Merge cache and store results.
-  merge_results(dpp, params, cache_results, store_results, max, results);
+  ListResults merged;
+  merge_results(dpp, params, cache_results, store_results, max, merged);
+  params.marker = merged.next_marker;
+  results = std::move(merged);
 
   ldpp_dout(dpp, 20) << "D4NFilterBucket::" << __func__ << " cache_results.is_truncated: " << results.is_truncated << dendl;
   ldpp_dout(dpp, 20) << "D4NFilterBucket::" << __func__ << " cache_results.next_marker.name: " << results.next_marker.name << dendl;
@@ -940,6 +943,7 @@ int D4NFilterBucket::remove(const DoutPrefixProvider* dpp,
         .blockID = 0,
         .size = 0,
       };
+      block.cacheObj.objName = get_latest_head_block_name(c_obj->get_name());
       
       blocks.push_back(block);
       objects.push_back(object);
@@ -952,7 +956,7 @@ int D4NFilterBucket::remove(const DoutPrefixProvider* dpp,
       }
       off_t lst = obj.meta.size;
       ldpp_dout(dpp, 20) << "D4NFilterBucket::" << __func__ << "(): Obj size=" << lst << dendl;
-      block.cacheObj.objName = get_versioned_head_block_name(oid_version, block.cacheObj.objName);
+      block.cacheObj.objName = get_versioned_head_block_name(oid_version, c_obj->get_name());
       auto it = dir_blocks.find(block.cacheObj.objName);
       if (it != dir_blocks.end() && it->second.cacheObj.dirty) {
 	    if (!this->filter->get_policy_driver()->get_cache_policy()->invalidate_dirty_object(dpp, get_cache_block_prefix(c_obj.get(), it->second.version))) {
@@ -1806,11 +1810,7 @@ int D4NFilterObject::set_head_block_dir_entry(const DoutPrefixProvider* dpp, opt
     }
   }
   if (is_latest_version) {
-    std::string objName = this->get_name();
-    // special handling for name starting with '_'
-    if (objName[0] == '_') {
-      objName = "_" + this->get_name();
-    }
+    const auto objName = get_latest_head_block_name(this->get_name());
     ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): objName after special Handling: " << objName << dendl;
     rgw::d4n::CacheObj object = rgw::d4n::CacheObj{
       .objName = objName,
@@ -1875,7 +1875,7 @@ int D4NFilterObject::set_head_block_dir_entry(const DoutPrefixProvider* dpp, opt
       std::optional<rgw::d4n::CacheObjectVersion> ver_params;
       if (driver->uses_fdb()) {
         ver_params = rgw::d4n::CacheObjectVersion{
-          .objName = objName,
+          .objName = this->get_name(),
           .bucketId = this->get_bucket()->get_bucket_id(),
           .version = object_version,
           .user_id = user_id,
@@ -1887,7 +1887,7 @@ int D4NFilterObject::set_head_block_dir_entry(const DoutPrefixProvider* dpp, opt
         };
       }
       rgw::d4n::ObjectDirectory* objDir = this->driver->get_obj_dir();
-      if (int r = objDir->add_version(dpp, y, this->get_bucket()->get_bucket_id(), objName, object_version, mtime, ver_params, std::ref(*txn)); r < 0) {
+      if (int r = objDir->add_version(dpp, y, this->get_bucket()->get_bucket_id(), this->get_name(), object_version, mtime, ver_params, std::ref(*txn)); r < 0) {
         ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): Failed to add version to ordered set with error: " << r << dendl;
         return r;
       }
@@ -3468,7 +3468,7 @@ int D4NFilterObject::D4NFilterDeleteOp::update_directory_entries(const DoutPrefi
 
       // Version-specific delete
       rgw::d4n::CacheObj dir_obj = {
-        .objName = objName,
+        .objName = source->get_name(),
         .bucketName = source->get_bucket()->get_bucket_id(),
       };
 
@@ -3476,7 +3476,7 @@ int D4NFilterObject::D4NFilterDeleteOp::update_directory_entries(const DoutPrefi
       if (latest_block.version == block.version) {
         std::vector<rgw::d4n::CacheObjectVersion> obj_versions;
         std::string continuation_token;
-        ret = objDir->list_versions(dpp, y, source->get_bucket()->get_bucket_id(), objName, "", 2, obj_versions, continuation_token, txn);
+        ret = objDir->list_versions(dpp, y, source->get_bucket()->get_bucket_id(), source->get_name(), "", 2, obj_versions, continuation_token, txn);
         if (ret < 0) {
           ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to list versions, ret=" << ret << dendl;
           return ret;
@@ -3786,12 +3786,8 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
             source->set_delete_marker_version(dm_version);
           }
 
-          objName = source->get_name();
-          if (!objName.empty() && objName[0] == '_') {
-            objName = "_" + objName;
-          }
-
-          int update_ret = update_directory_entries(dpp, y, txn, objDirty, version, objName, block, dm_version, delete_marker_created);
+          const auto head_name = get_latest_head_block_name(source->get_name());
+          int update_ret = update_directory_entries(dpp, y, txn, objDirty, version, head_name, block, dm_version, delete_marker_created);
           if (update_ret < 0) {
             ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): update_directory_entries failed, ret=" << update_ret << dendl;
             return update_ret;

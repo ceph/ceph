@@ -465,11 +465,11 @@ int LFUDAPolicy::get_victim_block(const DoutPrefixProvider* dpp, CacheBlock* vic
   auto entry = entries_heap.top();
   std::string key = entry->key;
 
-  if (rgw::sal::parse_block_from_cache(key).has_value()) {
-    *victim = rgw::sal::parse_block_from_cache(key).value(); 
-  } else {
+  auto parsed = rgw::sal::parse_block_from_cache(key);
+  if (!parsed) {
     return -ENOENT;
   }
+  *victim = std::move(*parsed);
 
   /* check dirty flag of entry to be evicted, if the flag is dirty, all entries on the local node are dirty
     check refcount also, if refcount > 0 then no entries are available for eviction */
@@ -636,7 +636,11 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
 
   // Outside both locks, do expensive I/O
   for (auto& entry : to_delete) {
-    rgw::d4n::CacheBlock block = rgw::sal::parse_block_from_cache(entry.key).value();
+    auto parsed = rgw::sal::parse_block_from_cache(entry.key);
+    if (!parsed) {
+      return -EINVAL;
+    }
+    auto& block = *parsed;
 
     int avgWeight;
     std::string remoteCacheAddress;
@@ -1463,9 +1467,16 @@ LFUDAPolicy::stage_writeback_directory(const DoutPrefixProvider *dpp, LFUDAObjEn
   };
 
   const auto remove_version = [this, dpp, y, &entry, &object, &txn, &fail](
-      const bool delete_after_commit) -> std::expected<bool, int> {
-    if (const int ret = objDir.remove_version_by_creation_time(dpp, y, entry.bucket_id,
-            object.get_name(), entry.creationTime, txn); 0 > ret && -ENOENT != ret) {
+      const bool delete_after_commit, const CacheBlock& indexed_head) -> std::expected<bool, int> {
+    // A null-version index may now belong to a replacement generation:
+    if (entry.version != indexed_head.version) {
+      return delete_after_commit;
+    }
+
+    const std::string null_version = "null";
+    const auto& indexed_version = object.have_instance() ? object.get_instance() : null_version;
+    if (const int ret = objDir.remove_version(dpp, y, entry.bucket_id,
+            object.get_name(), indexed_version, txn); 0 > ret && -ENOENT != ret) {
       return fail(ret, "remove object from ordered set");
     }
     return delete_after_commit;
@@ -1473,13 +1484,13 @@ LFUDAPolicy::stage_writeback_directory(const DoutPrefixProvider *dpp, LFUDAObjEn
 
   CacheBlock block {};
   block.cacheObj.bucketName = entry.bucket_id;
-  block.cacheObj.objName = object.get_name();
+  block.cacheObj.objName = rgw::sal::get_latest_head_block_name(object.get_name());
   if (!object.have_instance()) {
     if (const int ret = blockDir.get(dpp, y, &block, txn); 0 > ret) {
       return fail(ret, "get latest block directory entry");
     }
 
-    if (block.invalid) {
+    if (block.invalid && entry.version == block.version) {
       block.cacheObj.dirty = false;
       if (const int ret = blockDir.set(dpp, y, &block, txn); 0 > ret) {
         return fail(ret, "mark latest block clean");
@@ -1507,7 +1518,7 @@ LFUDAPolicy::stage_writeback_directory(const DoutPrefixProvider *dpp, LFUDAObjEn
       if (const int ret = mark_version_head_clean(); 0 > ret) {
         return fail(ret, "mark version-specific HEAD clean");
       }
-      return remove_version(true);
+      return remove_version(true, block);
     }
 
     if (entry.version == block.version) {
@@ -1538,17 +1549,22 @@ LFUDAPolicy::stage_writeback_directory(const DoutPrefixProvider *dpp, LFUDAObjEn
     if (const int ret = mark_version_head_clean(); 0 > ret) {
       return fail(ret, "mark version-specific HEAD clean");
     }
-    return remove_version(false);
+    return remove_version(false, block);
   }
 
   CacheBlock instance_block {};
   instance_block.cacheObj.bucketName = entry.bucket_id;
   instance_block.cacheObj.objName = "null" == object.get_instance()
     ? rgw::sal::get_versioned_head_block_name("null", object.get_name()) : object.get_oid();
-  std::string dirty = "false";
-  if (const int ret = blockDir.update_field(dpp, y, &instance_block, "dirty", dirty, txn);
+  if (const int ret = blockDir.get(dpp, y, &instance_block, txn);
       0 > ret) {
-    return fail(ret, "mark instance block clean");
+    return fail(ret, "get instance block directory entry");
+  }
+  if (entry.version == instance_block.version) {
+    instance_block.cacheObj.dirty = false;
+    if (const int ret = blockDir.set(dpp, y, &instance_block, txn); 0 > ret) {
+      return fail(ret, "mark instance block clean");
+    }
   }
   if ("null" == object.get_instance()) {
     if (const int ret = mark_version_head_clean(); 0 > ret) {
@@ -1561,7 +1577,7 @@ LFUDAPolicy::stage_writeback_directory(const DoutPrefixProvider *dpp, LFUDAObjEn
     return fail(ret, "get latest block directory entry");
   }
   if (entry.version != latest_block.version) {
-    return false;
+    return remove_version(false, instance_block);
   }
 
   if (const int ret = blockDir.del(dpp, y, &latest_block, txn); 0 > ret) {
@@ -1571,7 +1587,7 @@ LFUDAPolicy::stage_writeback_directory(const DoutPrefixProvider *dpp, LFUDAObjEn
       0 > ret) {
     return fail(ret, "remove bucket object entry");
   }
-  return remove_version(false);
+  return remove_version(false, instance_block);
 }
 
 /* As part of the cleaning process, this member function reads an object from the cache

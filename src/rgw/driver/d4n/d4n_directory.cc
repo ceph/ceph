@@ -90,7 +90,18 @@ int BlockDirectory::get(const DoutPrefixProvider *dpp, optional_yield y, CacheBl
 
 std::string ObjectDirectory::build_index(const std::string& bucket_id, const std::string& obj_name) 
 {
-  return url_encode(bucket_id, true) + "#" + url_encode(obj_name, true);
+  auto key = url_encode(bucket_id, true);
+
+  key.push_back('#');
+
+  // Accept logical names and preserve the existing get_oid() spelling of version roots:
+  if (obj_name.starts_with('_')) {
+    key.push_back('_');
+  }
+
+  url_encode(obj_name, key, true);
+
+  return key;
 }
 
 std::string BlockDirectory::build_index(const CacheBlock* block) 

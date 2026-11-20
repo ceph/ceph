@@ -313,6 +313,13 @@ auto read_fields(lfdb::transaction_handle& tr, const std::string_view key)
   return fields;
 }
 
+bool has_keys_with_prefix(const lfdb::transaction_handle& txn, const fdbc::compiled_key& prefix)
+{
+  const auto first = lfdb::get_key(txn, lfdb::ceiling(prefix));
+
+  return std::string_view{first}.starts_with(libfdb_key_view(prefix));
+}
+
 } // anonymous namespace
 
 static std::string encode_score(int64_t score)
@@ -889,7 +896,7 @@ int FDBDirectory::set_kv_if_not_exists(const DoutPrefixProvider* dpp, optional_y
 int FDBBucketDirectory::del(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, std::optional<Transaction> txn)
 {
   return fdb_invoke(FDBdb, dpp, txn, [&](auto& tr) {
-    lfdb::erase(tr, bucket_id);
+    lfdb::erase(tr, q::prefix(object_listing_subspace(bucket_id)));
   });
 }
 
@@ -1013,7 +1020,7 @@ int FDBBucketDirectory::exist_key(const DoutPrefixProvider* dpp, optional_yield 
                                   const std::string& bucket_id, std::optional<Transaction> txn)
 {
   return fdb_invoke(FDBdb, dpp, txn, [&](auto& tr) {
-    return lfdb::key_exists(tr, bucket_id);
+    return has_keys_with_prefix(tr, object_listing_subspace(bucket_id));
   });
 }
 
@@ -1078,8 +1085,7 @@ lfdb::query::interval FDBObjectDirectory::version_score_query(
 int FDBObjectDirectory::exist_key(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, const std::string& obj_name, std::optional<Transaction> txn)
 {
   return fdb_invoke(FDBdb, dpp, txn, [&](auto& tr) {
-    std::string key = build_index(bucket_id, obj_name);
-    return lfdb::key_exists(tr, key);
+    return has_keys_with_prefix(tr, get_versions_subspace(object_keyspace(bucket_id, obj_name)));
   });
 }
 
@@ -1087,8 +1093,7 @@ int FDBObjectDirectory::exist_key(const DoutPrefixProvider* dpp, optional_yield 
 int FDBObjectDirectory::del(const DoutPrefixProvider* dpp, optional_yield y, CacheObj* object, std::optional<Transaction> txn)
 {
   return fdb_invoke(FDBdb, dpp, txn, [&](auto& tr) {
-    std::string key = build_index(object->bucketName, object->objName);
-    lfdb::erase(tr, key);
+    lfdb::erase(tr, q::prefix(object_keyspace(object->bucketName, object->objName)));
   });
 }
 
@@ -1162,20 +1167,31 @@ int FDBObjectDirectory::remove_version_by_creation_time(const DoutPrefixProvider
 
   try
    {
-    const auto versions_subspace = get_versions_subspace(object_keyspace(bucket_id, obj_name));
+    const auto [versions_subspace, score_subspace] = version_subspaces(bucket_id, obj_name);
     const auto score_range = version_score_query(versions_subspace, score, score);
 
     if (q::is_empty(score_range)) {
       return -ENOENT;
     }
 
-    const auto operation = [&](auto& tr) {
+    const auto do_removal = [&](auto& tr) {
+      const auto encoded_score = encode_score(score);
+      for (const auto& version : lfdb::scan<CacheObjectVersion>(tr, score_range) | std::views::values) {
+        const auto reverse_key = build_version_score_index(score_subspace, version.version);
+        std::string indexed_score;
+
+        // A stale forward row must not remove a replacement version's reverse index:
+        if (lfdb::get(tr, reverse_key, indexed_score) && encoded_score == indexed_score) {
+          lfdb::erase(tr, reverse_key);
+        }
+      }
+
       lfdb::erase(tr, score_range);
     };
 
-    return fdb_invoke(FDBdb, dpp, txn, operation);
+    return fdb_invoke(FDBdb, dpp, txn, do_removal);
    }
-  catch (...)
+  catch(...)
    {
     return return_d4n_error(dpp, txn, std::current_exception());
    }
