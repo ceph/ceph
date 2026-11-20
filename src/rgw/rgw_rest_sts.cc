@@ -219,9 +219,10 @@ WebTokenEngine::recurse_and_insert(const string& key, const jwt::claim& c, T& t)
     }
     case jwt::json::type::object:
     {
-      const picojson::object& obj = c.to_json().get<picojson::object>();
+      const auto json_val = c.to_json();
+      const picojson::object& obj = json_val.get<picojson::object>();
       for (auto& m : obj) {
-        // Discard parent/wrapper keys and recurse using the object's internal key (m.first)
+        // Drop parent/wrapper keys and recurse using the object's internal key (m.first)
         recurse_and_insert(m.first, jwt::claim(m.second), t);
       }
       break;

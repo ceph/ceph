@@ -84,6 +84,8 @@ class WebTokenEngine : public rgw::auth::Engine {
       const std::vector<std::string>& thumbprints) const;
   void shutdown_ssl(const DoutPrefixProvider* dpp, SSL* ssl, SSL_CTX* ctx) const;
 
+  friend struct WebTokenEngineTestAccess;
+
 public:
   WebTokenEngine(CephContext* const cct,
                     rgw::sal::Driver* driver,

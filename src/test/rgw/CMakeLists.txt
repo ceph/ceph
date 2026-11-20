@@ -559,6 +559,10 @@ add_ceph_unittest(unittest_rgw_rest_conn)
 target_link_libraries(unittest_rgw_rest_conn
   rgw_common ${rgw_libs} ${UNITTEST_LIBS})
 
+add_executable(unittest_rgw_web_token test_rgw_web_token.cc)
+add_ceph_unittest(unittest_rgw_web_token)
+target_link_libraries(unittest_rgw_web_token ${rgw_libs} ${UNITTEST_LIBS})
+
 # unittest_yield_completion
 add_executable(unittest_yield_completion test_yield_completion.cc)
 add_ceph_unittest(unittest_yield_completion)
