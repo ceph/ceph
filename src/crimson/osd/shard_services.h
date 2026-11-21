@@ -425,6 +425,9 @@ class ShardServices : public OSDMapService,
     static_cast<size_t>(OperationTypeCode::last_op)> pg_op_shard_local{};
   std::array<uint64_t,
     static_cast<size_t>(OperationTypeCode::last_op)> pg_op_shard_remote{};
+  std::array<uint64_t,
+    static_cast<size_t>(OperationTypeCode::last_op)> pg_op_shard_executed{};
+  int64_t client_ops_in_flight = 0;
   seastar::metrics::metric_groups metrics;
   void register_metrics();
 
@@ -600,6 +603,13 @@ public:
   seastar::future<> shutdown_cluster_lane();
   seastar::future<> mark_down_cluster_lane(entity_addr_t addr);
 
+  void client_op_started() {
+    ++client_ops_in_flight;
+  }
+  void client_op_finished() {
+    --client_ops_in_flight;
+  }
+
   crimson::os::BackendStore get_store(store_index_t store_index) const {
     auto store = local_state.b_store;
     store.store_index = store_index;
@@ -622,12 +632,18 @@ public:
     return pg_to_shard_mapping.dump_store_shards(f);
   }
 
+  /// Whether this OSD is the up primary of pgid (and, for EC, holds the
+  /// primary shard), according to the current osdmap. Used to place the pg.
+  bool is_mapping_primary(spg_t pgid) const;
+
   auto create_split_pg_mapping(spg_t pgid, core_id_t core, store_index_t store_index) {
-    return pg_to_shard_mapping.get_or_create_pg_mapping(pgid, core, store_index);
+    return pg_to_shard_mapping.get_or_create_pg_mapping(
+      pgid, core, store_index, is_mapping_primary(pgid));
   }
 
   seastar::future<core_id_t> get_pg_mapping(spg_t pgid) {
-    return pg_to_shard_mapping.get_or_create_pg_mapping(pgid).then(
+    return pg_to_shard_mapping.get_or_create_pg_mapping(
+      pgid, NULL_CORE, NULL_STORE_INDEX, false).then(
       [](std::pair<core_id_t, store_index_t> mapping) {
         return mapping.first;
       });
@@ -638,7 +654,12 @@ public:
   /// on the correct reactor rather than dispatching cross-shard.
   seastar::future<std::pair<core_id_t, store_index_t>> get_pg_core_and_store(
     spg_t pgid) {
-    return pg_to_shard_mapping.get_or_create_pg_mapping(pgid);
+    return pg_to_shard_mapping.get_or_create_pg_mapping(
+      pgid, NULL_CORE, NULL_STORE_INDEX, false);
+  }
+
+  seastar::future<> set_pg_primary(spg_t pgid, bool is_primary) {
+    return pg_to_shard_mapping.set_pg_primary(pgid, is_primary);
   }
 
   auto remove_pg(spg_t pgid) {
