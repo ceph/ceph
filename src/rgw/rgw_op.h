@@ -37,7 +37,10 @@
 
 #include "rgw_cksum.h"
 #include "rgw_common.h"
+#include "rgw_permission.h"
+#include "rgw_req_state.h"
 #include "rgw_dmclock.h"
+#include "rgw_lua_types.h"
 
 struct rgw_crypt_src_identity;
 #include "rgw_sal.h"
@@ -68,7 +71,7 @@ class RGWMultiCompleteUpload;
 class RGWPutObj_Torrent;
 class RGWMultiDelObject;
 
-namespace rgw::auth::registry { class StrategyRegistry; }
+namespace rgw::auth { class StrategyRegistry; }
 
 int rgw_forward_request_to_master(const DoutPrefixProvider* dpp,
                                   const rgw::SiteConfig& site,

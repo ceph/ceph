@@ -10,6 +10,8 @@
 #include <string>
 #include <ostream>
 
+struct rgw_bucket_dir_entry;
+
 struct plain_stack_entry {
   int size;
   bool is_array;

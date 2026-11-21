@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ostream>
+#include "common/ceph_json.h"
 #include "rgw_zone_types.h"
 #include "rgw_common.h"
 #include "rgw_sal_fwd.h"

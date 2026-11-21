@@ -7,6 +7,7 @@
 
 #include "common/errno.h"
 #include "rgw_common.h"
+#include "rgw_req_state.h"
 #include "rgw_auth.h"
 #include "rgw_quota.h"
 #include "driver/rados/rgw_user.h"

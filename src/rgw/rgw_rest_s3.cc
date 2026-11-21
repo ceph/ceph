@@ -10,7 +10,7 @@
 #include <string_view>
 
 #include "common/ceph_crypto.h"
-#include "common/dout.h"
+#include "common/dout_fmt.h"
 #include "common/split.h"
 #include "common/Formatter.h"
 #include "common/utf8.h"

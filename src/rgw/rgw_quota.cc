@@ -21,6 +21,7 @@
 #include "common/RefCountedObj.h"
 #include "common/Thread.h"
 #include "common/ceph_mutex.h"
+#include "common/ceph_json.h"
 
 #include "rgw_common.h"
 #include "rgw_sal.h"

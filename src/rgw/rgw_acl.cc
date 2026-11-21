@@ -10,6 +10,7 @@
 #include "include/types.h"
 
 #include "common/Formatter.h"
+#include "common/ceph_json.h"
 
 #include "rgw_acl.h"
 #include "rgw_acl_s3.h"

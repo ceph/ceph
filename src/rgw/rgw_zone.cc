@@ -760,6 +760,22 @@ void RGWZoneStorageClass::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("compression_type", compression_type, obj);
 }
 
+void RGWTierACLMapping::init(const JSONFormattable& config)
+{
+  const std::string& t = config["type"];
+
+  if (t == "email") {
+    type = ACL_TYPE_EMAIL_USER;
+  } else if (t == "uri") {
+    type = ACL_TYPE_GROUP;
+  } else {
+    type = ACL_TYPE_CANON_USER;
+  }
+
+  source_id = config["source_id"];
+  dest_id = config["dest_id"];
+}
+
 void RGWTierACLMapping::decode_json(JSONObj *obj)
 {
   string s;

@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include "svc_zone_utils.h"
+#include "include/rados/librados.hpp"
 #include "svc_zone.h"
 
 #undef FMT_HEADER_ONLY

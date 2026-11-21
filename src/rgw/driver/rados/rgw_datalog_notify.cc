@@ -2,7 +2,8 @@
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include "rgw_datalog_notify.h"
-#include "rgw_datalog.h"
+#include "common/ceph_json.h"
+#include "common/Formatter.h"
 
 // custom encoding for v1 notify API
 struct EntryEncoderV1 {

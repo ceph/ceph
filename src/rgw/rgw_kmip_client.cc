@@ -6,6 +6,7 @@
 #include "common/errno.h"
 #include "rgw_asio_thread.h"
 #include "rgw_common.h"
+#include "common/dout.h"
 #include "rgw_kmip_client.h"
 
 #include <atomic>

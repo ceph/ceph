@@ -9,6 +9,7 @@
 #include "include/compat.h"
 #include "common/errno.h"
 #include "rgw_common.h"
+#include "common/dout.h"
 #include "rgw_kmip_client.h"
 #include "rgw_kmip_client_impl.h"
 

@@ -19,13 +19,16 @@
 
 #pragma once
 
+#include <list>
+#include <ostream>
+#include <string>
+#include <string_view>
 #include <fmt/format.h>
 
 #include "rgw_pool_types.h"
 #include "rgw_bucket_types.h"
 #include "rgw_user_types.h"
 
-#include "common/dout.h"
 #include "common/Formatter.h"
 
 struct rgw_obj_index_key { // cls_rgw_obj_key now aliases this type

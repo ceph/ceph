@@ -3,10 +3,12 @@
 
 #pragma once
 
+#include <cstdint>
+#include <ostream>
+#include <string>
+
 #include <boost/container/flat_map.hpp>
 #include <boost/container/flat_set.hpp>
-
-#include "rgw_datalog.h"
 
 namespace bc = boost::container;
 
@@ -17,7 +19,29 @@ class RGWCoroutine;
 class RGWHTTPManager;
 class RGWRESTConn;
 
-struct rgw_data_notify_entry;
+struct rgw_data_notify_entry {
+  std::string key;
+  uint64_t gen = 0;
+
+  void dump(ceph::Formatter* f) const;
+  void decode_json(JSONObj* obj);
+
+  rgw_data_notify_entry& operator=(const rgw_data_notify_entry&) = default;
+
+  bool operator <(const rgw_data_notify_entry& d) const {
+    if (key < d.key) {
+      return true;
+    }
+    if (d.key < key) {
+      return false;
+    }
+    return gen < d.gen;
+  }
+  friend std::ostream& operator <<(std::ostream& m,
+				   const rgw_data_notify_entry& e) {
+    return m << "[key: " << e.key << ", gen: " << e.gen << "]";
+  }
+};
 
 // json encoder and decoder for notify v1 API
 struct rgw_data_notify_v1_encoder {
