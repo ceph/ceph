@@ -12457,8 +12457,6 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
 
     update_read_io_size(bl->length());
     subvolume_tracker->add_metric(in->ino, SimpleIOMetric{false, mono_clock_now() - start_time, bl->length()});
-  } else {
-    put_cap_ref(in, CEPH_CAP_FILE_CACHE);
   }
 
   do_readahead(f, in, off, len);
