@@ -343,6 +343,10 @@ public:
 
   seastar::future<uint64_t> calc_snap_trim_queue_total() const;
 
+  /// see ShardServices::scrub_purged_snaps(). Runs on all shards.
+  seastar::future<std::size_t> scrub_purged_snaps(
+    const ceph::osd::purged_snaps::index_t& purged);
+
   /**
    * for_each_pgid
    *

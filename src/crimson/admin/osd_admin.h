@@ -26,6 +26,8 @@ class TruncObjHook;
 class WriteObjHook;
 class RemoveObjHook;
 class OsdStatusHook;
+class ResetPurgedSnapsLastHook;
+class ScrubPurgedSnapsHook;
 class SendBeaconHook;
 class RunOSDBenchHook;
 class DumpInFlightOpsHook;

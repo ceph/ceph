@@ -69,6 +69,13 @@ add_executable(unittest_ec_coroutines
 add_ceph_unittest(unittest_ec_coroutines)
 target_link_libraries(unittest_ec_coroutines Boost::context)
 
+# unittest_purged_snaps
+add_executable(unittest_purged_snaps
+  test_purged_snaps.cc
+  )
+add_ceph_unittest(unittest_purged_snaps)
+target_link_libraries(unittest_purged_snaps global)
+
 # unittest_ecbackend_l (legacy EC)
 add_executable(unittest_ecbackend_l
   TestECBackendL.cc
@@ -206,7 +213,10 @@ add_executable(unittest_ec_acting_stretch
   )
 add_ceph_unittest(unittest_ec_acting_stretch)
 target_link_libraries(unittest_ec_acting_stretch osd os global ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES})
-add_dependencies(unittest_ec_acting_stretch ec_isa ec_jerasure)
+add_dependencies(unittest_ec_acting_stretch ec_jerasure)
+if(WITH_EC_ISA_PLUGIN)
+  add_dependencies(unittest_ec_acting_stretch ec_isa)
+endif()
 
 # unittest_stretch_ec_min_size
 add_executable(unittest_stretch_ec_min_size
