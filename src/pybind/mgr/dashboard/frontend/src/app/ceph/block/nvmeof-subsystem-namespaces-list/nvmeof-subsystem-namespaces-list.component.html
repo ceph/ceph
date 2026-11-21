@@ -1,6 +1,7 @@
 <cd-table
   [data]="namespaces"
   columnMode="flex"
+  [autoReload]="false"
   (fetchData)="listNamespaces()"
   [columns]="namespacesColumns"
   selectionType="single"

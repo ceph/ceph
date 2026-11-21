@@ -1124,6 +1124,13 @@ else:
                 "gw_group": Param(str, "NVMeoF gateway group", True, None),
                 "server_address": Param(str, "NVMeoF gateway address", True, None),
                 "traddr": Param(str, "NVMeoF gateway address (deprecated)", True, None),
+                "include_hosts": Param(
+                    bool,
+                    "Include per-namespace host maskings. "
+                    "Set to false for scaled dashboard lists",
+                    True,
+                    True
+                ),
             },
         )
         @convert_to_model(model.NamespaceList)
@@ -1131,12 +1138,12 @@ else:
         def list(self, nqn: Optional[str] = None, nsid: Optional[str] = None,
                  uuid: Optional[str] = None,
                  gw_group: Optional[str] = None, server_address: Optional[str] = None,
-                 traddr: Optional[str] = None):
+                 traddr: Optional[str] = None, include_hosts: Optional[str] = "true"):
             server_address = resolve_nvmeof_server_address(
                 server_address=server_address,
                 traddr=traddr
             )
-            return NVMeoFClient(
+            namespaces = NVMeoFClient(
                 gw_group=gw_group,
                 server_address=server_address
             ).stub.list_namespaces(
@@ -1144,6 +1151,12 @@ else:
                                                      nsid=int(nsid) if nsid else None,
                                                      uuid=uuid)
             )
+            # Host maskings dominate the payload at scale and are not shown in
+            # the dashboard tables. Drop them before JSON encoding.
+            if not str_to_bool(include_hosts):
+                for namespace in namespaces.namespaces:
+                    namespace.ClearField('hosts')
+            return namespaces
 
         @pick("namespaces", first=True)
         @NvmeofCLICommand(

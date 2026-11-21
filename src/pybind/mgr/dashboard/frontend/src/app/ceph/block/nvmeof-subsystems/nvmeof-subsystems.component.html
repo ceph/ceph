@@ -1,42 +1,41 @@
 <div class="nvmeof-content-layout">
   <div class="nvmeof-content-main">
-    @if (subsystems$ | async; as subsystems) {
-      <cd-table
-        #table
-        [data]="subsystems"
-        [columns]="subsystemsColumns"
-        [compactSearchField]="true"
-        columnMode="flex"
-        selectionType="single"
-        (updateSelection)="updateSelection($event)"
-        (fetchData)="fetchData()"
-        emptyStateTitle="No subsystems created"
-        i18n-emptyStateTitle
-        emptyStateMessage="Subsystems group NVMe namespaces and manage host access. Create a subsystem to start mapping NVMe volumes to hosts."
-        i18n-emptyStateMessage
-      >
-        <div class="table-filter">
-          <cd-nvmeof-gateway-group-filter (groupChange)="groupHandler.onGroupChange($event)">
-          </cd-nvmeof-gateway-group-filter>
-        </div>
-        <div class="table-actions">
-          <cd-table-actions
-            [permission]="permissions.nvmeof"
-            [selection]="selection"
-            class="btn-group"
-            [tableActions]="tableActions"
-          >
-          </cd-table-actions>
-        </div>
-        <cd-nvmeof-subsystems-details
-          *cdTableDetail
-          [selection]="expandedRow"
-          [permissions]="permissions"
-          [group]="expandedRow?.gw_group"
+    <cd-table
+      #table
+      [data]="subsystems"
+      [columns]="subsystemsColumns"
+      [compactSearchField]="true"
+      columnMode="flex"
+      selectionType="single"
+      [autoReload]="false"
+      (updateSelection)="updateSelection($event)"
+      (fetchData)="fetchData()"
+      emptyStateTitle="No subsystems created"
+      i18n-emptyStateTitle
+      emptyStateMessage="Subsystems group NVMe namespaces and manage host access. Create a subsystem to start mapping NVMe volumes to hosts."
+      i18n-emptyStateMessage
+    >
+      <div class="table-filter">
+        <cd-nvmeof-gateway-group-filter (groupChange)="groupHandler.onGroupChange($event)">
+        </cd-nvmeof-gateway-group-filter>
+      </div>
+      <div class="table-actions">
+        <cd-table-actions
+          [permission]="permissions.nvmeof"
+          [selection]="selection"
+          class="btn-group"
+          [tableActions]="tableActions"
         >
-        </cd-nvmeof-subsystems-details>
-      </cd-table>
-    }
+        </cd-table-actions>
+      </div>
+      <cd-nvmeof-subsystems-details
+        *cdTableDetail
+        [selection]="expandedRow"
+        [permissions]="permissions"
+        [group]="expandedRow?.gw_group"
+      >
+      </cd-nvmeof-subsystems-details>
+    </cd-table>
   </div>
 </div>
 
@@ -65,10 +64,11 @@
   >
     @if (row.auth === authType.NO_AUTH) {
       <cd-icon type="warning"></cd-icon>
-    } @else {
+      <span class="cds-ml-3">{{ row.auth }}</span>
+    } @else if (row.auth) {
       <cd-icon type="success"></cd-icon>
+      <span class="cds-ml-3">{{ row.auth }}</span>
     }
-    <span class="cds-ml-3">{{ row.auth }}</span>
   </div>
 </ng-template>
 
