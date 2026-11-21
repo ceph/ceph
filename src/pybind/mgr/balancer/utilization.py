@@ -156,8 +156,8 @@ def plan_utilization_upmaps(
     Greedy global planner: move large shards off fullest OSDs when variance drops.
 
     max_deviation is absolute fill-ratio slack (e.g. 0.02 = 2%).
-    deviation_mode 'mean': stop while fullest <= mean + max_deviation.
-    deviation_mode 'minmax': stop while (max - min) <= max_deviation.
+    deviation_mode 'mean': stop when fullest <= mean + max_deviation.
+    deviation_mode 'minmax': stop when (max - min) <= max_deviation.
 
     Returns pgid -> full remapping-pair list to write into OSDMapIncremental.
     """
@@ -211,7 +211,7 @@ def plan_utilization_upmaps(
                 candidates.append((float(info['bytes']), pgid, info))
             candidates.sort(key=lambda t: t[0], reverse=True)
 
-            # Prefer emptier destinations; exclude OSDs already in the PG.
+            # Prefer emptier destinations; more_underfull is a secondary list (same idea as calc_pg_upmaps).
             if mode == DEVIATION_MINMAX:
                 under_pref = [
                     o for o in underfull_asc
@@ -223,6 +223,11 @@ def plan_utilization_upmaps(
                     if o != over_osd and utilization(
                         working_used.get(o, 0.0), capacity[o]) < mean
                 ]
+            under_pref_set = set(under_pref)
+            more_pref = [
+                o for o in underfull_asc
+                if o != over_osd and o not in under_pref_set
+            ]
 
             for bytes_, pgid, info in candidates:
                 if bytes_ <= 0:
@@ -231,10 +236,13 @@ def plan_utilization_upmaps(
                 ps = int(info['ps'])
                 pg_osds = {int(o) for o in info['osds']}
                 underfull = [o for o in under_pref if o not in pg_osds]
-                if not underfull:
+                more_underfull = [o for o in more_pref if o not in pg_osds]
+                if not underfull and not more_underfull:
                     continue
 
-                result = try_pg_upmap(pool_id, ps, [over_osd], underfull, None)
+                result = try_pg_upmap(
+                    pool_id, ps, [over_osd], underfull,
+                    more_underfull if more_underfull else None)
                 if not result:
                     continue
                 orig = list(result['orig'])

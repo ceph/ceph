@@ -225,14 +225,15 @@ There are five supported balancer modes:
    ``mgr/balancer/upmap_utilization_max_deviation`` (absolute fill-ratio slack;
    default ``0.02`` = 2%), and
    ``mgr/balancer/upmap_utilization_deviation_mode`` (``mean`` or ``minmax``;
-   default ``mean``). With ``mean``, planning stops while the fullest OSD is
-   within the slack of the mean fill. With ``minmax``, planning stops while
+   default ``mean``). With ``mean``, planning stops when the fullest OSD is
+   within the slack of the mean fill. With ``minmax``, planning stops when
    ``max(fill) - min(fill)`` is within the slack.
 
-   To cooperate with the PG autoscaler, ``upmap-utilization`` (and ``upmap``)
-   skip a pool while ``pg_num`` has not yet reached ``pg_num_target`` (pending
-   split or merge). Remaps resume for that pool after ``pg_num`` settles and
-   the usual active+clean / misplaced health gates allow planning.
+   To cooperate with the PG autoscaler, ``upmap``, ``upmap-utilization``,
+   ``read``, and ``upmap-read`` skip a pool while ``pg_num`` has not yet
+   reached ``pg_num_target`` (pending split or merge). Remaps resume for that
+   pool after ``pg_num`` settles and the usual active+clean / misplaced health
+   gates allow planning.
 
    Prefer ``upmap`` when shard-count uniformity is the goal; prefer
    ``upmap-utilization`` when heterogeneous PG sizes or OSD capacities leave

@@ -344,7 +344,7 @@ class Module(MgrModule):
                default='mean',
                enum_allowed=['mean', 'minmax'],
                desc='stop gate for utilization balancing: mean or minmax',
-               long_desc='mean: stop while fullest OSD fill is within upmap_utilization_max_deviation of the mean. minmax: stop while (max fill - min fill) is within that slack.',
+               long_desc='mean: stop when fullest OSD fill is within upmap_utilization_max_deviation of the mean. minmax: stop when (max fill - min fill) is within that slack.',
                runtime=True),
         Option(name='pool_ids',
                type='str',
@@ -1150,7 +1150,7 @@ class Module(MgrModule):
         adjusted_pools = []
         inc = plan.inc
         total_num_changes = 0
-        pools_with_pg_merge = []
+        pools_with_unsettled_pg_num = []
         crush_rule_by_pool_name = {}
         no_read_balance_info = []
         optimally_balanced_rep_pools = []
@@ -1163,8 +1163,9 @@ class Module(MgrModule):
                     if state['state_name'] != 'active+clean':
                         msg = "Not all PGs are active+clean; try again later."
                         return -errno.EALREADY, msg
-            if p['pg_num'] > p['pg_num_target']:
-                pools_with_pg_merge.append(p['pool_name'])
+            # Defer while pg_num is still catching up to pg_num_target (split or merge).
+            if util_plan.pool_pg_num_unsettled(p):
+                pools_with_unsettled_pg_num.append(p['pool_name'])
             crush_rule_by_pool_name[p['pool_name']] = p['crush_rule']
             if 'read_balance' not in p:
                 no_read_balance_info.append(p['pool_name'])
@@ -1180,8 +1181,9 @@ class Module(MgrModule):
             if pool not in crush_rule_by_pool_name:
                 self.log.debug('pool %s does not exist' % pool)
                 continue
-            if pool in pools_with_pg_merge:
-                self.log.debug('pool %s has pending PG(s) for merging, skipping for now' % pool)
+            if pool in pools_with_unsettled_pg_num:
+                self.log.debug(
+                    'pool %s has unsettled pg_num, skipping for now' % pool)
                 continue
             if pool in no_read_balance_info:
                 self.log.debug('pool %s has no read_balance information, skipping' % pool)
@@ -1300,6 +1302,14 @@ class Module(MgrModule):
                 if osd in used:
                     used[osd] += float(info['bytes'])
 
+        # Distinct from unsettled-pool ENOENT above: already within stop gate.
+        if util_plan.within_utilization_deviation(
+                used, capacity, max_deviation, deviation_mode):
+            self.no_optimization_needed = True
+            return -errno.EALREADY, (
+                'Utilization distribution is already within '
+                'configured deviation')
+
         existing = util_plan.existing_upmap_items_from_dump(osdmap_dump)
 
         def try_fn(pool_id: int, ps: int, overfull: List[int],
@@ -1319,11 +1329,10 @@ class Module(MgrModule):
             deviation_mode=deviation_mode,
         )
         if not pending:
+            # Outside the stop gate but no CRUSH-legal variance-improving move.
             self.no_optimization_needed = True
             return -errno.EALREADY, (
-                'Unable to find further utilization optimization, '
-                'or pool(s) pg_num is still settling, '
-                'or distribution is already balanced')
+                'Unable to find further utilization optimization')
 
         plan.inc.set_pg_upmap_items(pending)
         self.log.info('prepared %d/%d utilization upmap changes'
@@ -1781,6 +1790,12 @@ class Module(MgrModule):
         return {
             'active': self.active,
             'mode': self.mode,
+            'upmap_utilization_max_optimizations': self.get_module_option(
+                'upmap_utilization_max_optimizations'),
+            'upmap_utilization_max_deviation': self.get_module_option(
+                'upmap_utilization_max_deviation'),
+            'upmap_utilization_deviation_mode': self.get_module_option(
+                'upmap_utilization_deviation_mode'),
         }
 
     def update_pg_upmap_activity(self, plan: Plan) -> None:

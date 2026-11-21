@@ -57,17 +57,21 @@ def test_remap_pairs_and_apply_move():
 
 
 def test_plan_accepts_variance_improving_move():
-    used = {0: 90.0, 1: 10.0, 2: 50.0}
-    capacity = {0: 100.0, 1: 100.0, 2: 100.0}
+    # Four OSDs so a mid-tier device (osd.2) is neither under_pref nor in the PG.
+    used = {0: 90.0, 1: 10.0, 2: 55.0, 3: 50.0}
+    capacity = {0: 100.0, 1: 100.0, 2: 100.0, 3: 100.0}
     pg_shards = {
-        '1.0': {'osds': [0, 2], 'bytes': 40.0, 'pool_id': 1, 'ps': 0},
+        '1.0': {'osds': [0, 3], 'bytes': 40.0, 'pool_id': 1, 'ps': 0},
     }
+    seen_more = []
 
     def try_fn(pool_id, ps, overfull, underfull, more_underfull):
         assert pool_id == 1 and ps == 0
         assert 0 in overfull
         assert 1 in underfull
-        return {'orig': [0, 2], 'out': [1, 2]}
+        # osd.2 is at/above mean and not in the PG → secondary destination list.
+        seen_more.append(more_underfull)
+        return {'orig': [0, 3], 'out': [1, 3]}
 
     pending = plan_utilization_upmaps(
         used=used,
@@ -79,6 +83,8 @@ def test_plan_accepts_variance_improving_move():
     )
     assert '1.0' in pending
     assert pending['1.0'][-1] == [0, 1]
+    assert seen_more and seen_more[0] is not None
+    assert 2 in seen_more[0]
 
 
 def test_plan_rejects_when_already_balanced():
