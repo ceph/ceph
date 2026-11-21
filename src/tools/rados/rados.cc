@@ -460,6 +460,9 @@ void dump_name(Formatter *formatter, const librados::NObjectIterator& i, [[maybe
 unsigned default_op_size = 1 << 22;
 static const unsigned MAX_OMAP_BYTES_PER_REQUEST = 1 << 10;
 
+// Only for use before the Rados client is connected: exit() skips its
+// shutdown, so its worker threads can still be running while static
+// objects are destroyed and abort the process.
 [[noreturn]] static void usage_exit()
 {
   usage(cerr);
@@ -1244,8 +1247,10 @@ static int do_lock_cmd(std::vector<const char*> &nargs,
                        IoCtx *ioctx,
 		       Formatter *formatter)
 {
-  if (nargs.size() < 3)
-    usage_exit();
+  if (nargs.size() < 3) {
+    usage(cerr);
+    return -EINVAL;
+  }
 
   string cmd(nargs[1]);
   string oid(nargs[2]);
@@ -1311,8 +1316,10 @@ static int do_lock_cmd(std::vector<const char*> &nargs,
     return 0;
   }
 
-  if (nargs.size() < 4)
-    usage_exit();
+  if (nargs.size() < 4) {
+    usage(cerr);
+    return -EINVAL;
+  }
 
   string lock_name(nargs[3]);
 
@@ -1370,8 +1377,10 @@ static int do_lock_cmd(std::vector<const char*> &nargs,
     return ret;
   }
 
-  if (nargs.size() < 5)
-    usage_exit();
+  if (nargs.size() < 5) {
+    usage(cerr);
+    return -EINVAL;
+  }
 
   if (cmd.compare("break") == 0) {
     const char* locker = nargs[4];
@@ -1389,7 +1398,8 @@ static int do_lock_cmd(std::vector<const char*> &nargs,
       return ret;
     }
   } else {
-    usage_exit();
+    usage(cerr);
+    return -EINVAL;
   }
 
   return 0;
@@ -1529,7 +1539,8 @@ static int do_get_inconsistent_pg_cmd(const std::vector<const char*> &nargs,
 				      Formatter& formatter)
 {
   if (nargs.size() < 2) {
-    usage_exit();
+    usage(cerr);
+    return -EINVAL;
   }
   int64_t pool_id = rados.pool_lookup(nargs[1]);
   if (pool_id < 0) {
@@ -1847,7 +1858,8 @@ static int do_get_inconsistent_cmd(const std::vector<const char*> &nargs,
 				   Formatter& formatter)
 {
   if (nargs.size() < 2) {
-    usage_exit();
+    usage(cerr);
+    return -EINVAL;
   }
   PlacementGroup pg;
   int ret = 0;
