@@ -94,6 +94,10 @@ struct MonSession : public RefCountedObject {
     if (con->get_messenger()) {
       // only fill in features if this is a non-anonymous connection
       con_features = con->get_features();
+      if (con_type == CEPH_ENTITY_TYPE_CLIENT) {
+        con_features &= ~g_conf().get_val<uint64_t>(
+          "mon_debug_hide_client_features");
+      }
     }
   }
 

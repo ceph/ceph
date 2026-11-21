@@ -502,6 +502,47 @@ TEST_F(OSDMapTest, Features) {
   // FIXME: test tiering feature bits
 }
 
+TEST_F(OSDMapTest, PoolMigrationFeatures) {
+  // Clients must have the feature once the operator requires it
+  set_up_map();
+  const uint64_t needed = CEPH_FEATUREMASK_POOL_MIGRATION;
+  auto requires_migration = [&](int type) {
+    uint64_t mask;
+    uint64_t features = osdmap.get_features(type, &mask);
+    EXPECT_EQ(needed, mask & needed);
+    // a release marker would turn away a backport's clients
+    EXPECT_NE(CEPH_FEATUREMASK_SERVER_VAMPIRE,
+              features & CEPH_FEATUREMASK_SERVER_VAMPIRE);
+    return (features & needed) == needed;
+  };
+  ASSERT_FALSE(requires_migration(CEPH_ENTITY_TYPE_CLIENT));
+  ASSERT_FALSE(requires_migration(CEPH_ENTITY_TYPE_MDS));
+  ASSERT_LT(osdmap.get_min_compat_client(),
+            OSDMap::POOL_MIGRATION_MIN_COMPAT_CLIENT);
+  const uint64_t osd_features_before =
+    osdmap.get_features(CEPH_ENTITY_TYPE_OSD, nullptr);
+
+  {
+    OSDMap::Incremental inc(osdmap.get_epoch() + 1);
+    inc.new_flags = osdmap.get_flags() | CEPH_OSDMAP_REQUIRE_POOL_MIGRATION;
+    osdmap.apply_incremental(inc);
+  }
+  ASSERT_TRUE(requires_migration(CEPH_ENTITY_TYPE_CLIENT));
+  // an MDS is a client of the OSDs, which would refuse it anyway
+  ASSERT_TRUE(requires_migration(CEPH_ENTITY_TYPE_MDS));
+  // so the setting cannot be lowered below that release again
+  ASSERT_EQ(OSDMap::POOL_MIGRATION_MIN_COMPAT_CLIENT,
+            osdmap.get_min_compat_client());
+  // the flag asks nothing more of OSDs: those of an earlier release still
+  // join during a rolling upgrade
+  ASSERT_EQ(osd_features_before,
+            osdmap.get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
+
+  // Luminous to Nautilus send bit 54 for OSD_HITSET_GMT
+  uint64_t nautilus = CEPH_FEATUREMASK_SERVER_NAUTILUS | (1ull << 54);
+  ASSERT_NE(needed, nautilus & needed);
+}
+
 TEST_F(OSDMapTest, MapPG) {
   set_up_map();
 
@@ -4273,3 +4314,71 @@ INSTANTIATE_TEST_SUITE_P(
     std::make_pair<int, int>(3, 0)  // chooseleaf firstn 3 osd
   )
 );
+
+// A PG of a replicated pool over zones whose upmap puts more than its share
+// in one zone cannot peer, so clean_pg_upmaps cancels the upmap, as it does
+// one that splits an erasure coded pool's zone block.
+TEST_F(OSDMapTest, ReplicatedUpmapKeepsZoneShares) {
+  set_up_map(16);
+  // 2 datacenters of 4 hosts with 2 OSDs each
+  for (int i = 0; i < 16; i++) {
+    vector<string> move_to = {"root=default",
+                              "datacenter=dc-" + to_string(i / 8),
+                              "host=host-" + to_string(i / 2)};
+    ASSERT_EQ(0, crush_move(osdmap, "osd." + to_string(i), move_to));
+  }
+  CrushWrapper crush;
+  get_crush(osdmap, crush);
+  int rno = 0;
+  while (crush.rule_exists(rno)) {
+    ++rno;
+  }
+  crush_rule *rule = crush_make_rule(4, pg_pool_t::TYPE_REPLICATED);
+  crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, crush.get_item_id("default"), 0);
+  crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_FIRSTN, 2, 8 /* datacenter */);
+  crush_rule_set_step(rule, 2, CRUSH_RULE_CHOOSELEAF_FIRSTN, 2, 1 /* host */);
+  crush_rule_set_step(rule, 3, CRUSH_RULE_EMIT, 0, 0);
+  ASSERT_LE(0, crush_add_rule(crush.get_crush_map(), rule, rno));
+  crush.set_rule_name(rno, "zones");
+  int64_t pool;
+  {
+    OSDMap::Incremental inc(osdmap.get_epoch() + 1);
+    inc.crush.clear();
+    crush.encode(inc.crush, CEPH_FEATURES_SUPPORTED_DEFAULT);
+    inc.new_pool_max = osdmap.get_pool_max();
+    pool = ++inc.new_pool_max;
+    pg_pool_t empty;
+    pg_pool_t *p = inc.get_new_pool(pool, &empty);
+    p->type = pg_pool_t::TYPE_REPLICATED;
+    p->size = 4;
+    p->min_size = 2;
+    p->num_zones = 2;
+    p->replica = 2;
+    p->peering_crush_bucket_count = 2;
+    p->peering_crush_bucket_target = 2;
+    p->peering_crush_bucket_barrier = 8;
+    p->crush_rule = rno;
+    p->set_pg_num(8);
+    p->set_pgp_num(8);
+    p->set_flag(pg_pool_t::FLAG_HASHPSPOOL);
+    inc.new_pool_names[pool] = "zones";
+    osdmap.apply_incremental(inc);
+  }
+  const pg_t pgid = osdmap.raw_pg_to_pg(pg_t(0, pool));
+  auto kept = [&](const vector<int32_t>& upmap) {
+    OSDMap tmp;
+    tmp.deepish_copy_from(osdmap);
+    OSDMap::Incremental inc(tmp.get_epoch() + 1);
+    inc.new_pg_upmap[pgid] =
+      mempool::osdmap::vector<int32_t>(upmap.begin(), upmap.end());
+    tmp.apply_incremental(inc);
+    OSDMap::Incremental clean(tmp.get_epoch() + 1);
+    clean_pg_upmaps(g_ceph_context, tmp, clean);
+    tmp.apply_incremental(clean);
+    return tmp.have_pg_upmaps(pgid);
+  };
+  EXPECT_TRUE(kept({0, 2, 8, 10}));
+  EXPECT_TRUE(kept({8, 0, 10, 2}));
+  EXPECT_FALSE(kept({0, 2, 4, 6}));
+  EXPECT_FALSE(kept({0, 2, 4, 8}));
+}

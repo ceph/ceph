@@ -15,6 +15,11 @@ only newer clients understand. Once those features are in active use,
 older clients can no longer parse the OSDMap; they lose the ability to
 locate objects and will error or disconnect.
 
+From ``vampire`` on, the flag also refuses clients at connect time: once it
+is set to that release, clients and MDSs that cannot follow a pool migration
+are turned away by the monitors and OSDs (see :ref:`pool_migration_clients`),
+and the flag cannot be lowered below it again.
+
 Setting the flag
 ================
 
@@ -72,6 +77,8 @@ features in active use on the map:
 
    * - Feature in use
      - Minimum release
+   * - Pool migration requirement (set along with ``vampire``)
+     - ``vampire``
    * - CRUSH MSR rules
      - ``squid``
    * - ``pg-upmap-primary`` entries
@@ -147,6 +154,9 @@ kernel clients are present in the cluster, that column can be ignored.
        | balancer ``read`` mode
        | balancer ``upmap-read`` mode
      - ``reef``
+     - not yet implemented
+   * - ``ceph osd pool migrate``
+     - ``vampire``
      - not yet implemented
 
 .. warning::

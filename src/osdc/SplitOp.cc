@@ -202,8 +202,9 @@ void ECSplitOp::init_read(OSDOp &op, bool sparse, int ops_index, bool single_op)
 
   uint64_t count = std::min<uint64_t>(data_chunk_count, end_chunk - start_chunk + 1);
   // Primary is required if:
-  // 1. Reading from multiple chunks (count > 1)
-  // 2. Version information is needed (orig_op->objver)
+  // 1. Reading from multiple chunks (count > 1), for the legacy version check
+  // 2. Version information is needed (orig_op->objver), for the legacy version
+  //    check; otherwise init_version_sub_read() finds a shard that has it
   // 3. There are non-read operations that need the primary
   bool has_non_read_ops = false;
   for (const auto &op : orig_op->ops) {
@@ -213,9 +214,9 @@ void ECSplitOp::init_read(OSDOp &op, bool sparse, int ops_index, bool single_op)
     }
   }
 
-  bool primary_required = orig_op->objver || has_non_read_ops ||
-                          (!single_op &&
-                           strategy == InternalVersionStrategy::FromPrimaryShard);
+  bool primary_required = has_non_read_ops ||
+                          (strategy == InternalVersionStrategy::FromPrimaryShard &&
+                           (orig_op->objver || !single_op));
 
   int first_shard = start_chunk % data_chunk_count;
   // Check all shards are online.
@@ -259,6 +260,47 @@ void ECSplitOp::init_read(OSDOp &op, bool sparse, int ops_index, bool single_op)
     sub_reads.emplace(reference_sub_read_key, orig_op->ops.size() + 1,
                       reference_sub_read.shard);
   }
+}
+
+/**
+ * @brief Choose the sub-read whose reply gives the object's version.
+ *
+ * A partial write can skip the data shards that cannot become primary, whose
+ * object info then holds an older version.
+ */
+void ECSplitOp::init_version_sub_read() {
+  version_sub_read_key = reference_sub_read_key;
+  if (!orig_op->objver ||
+      strategy != InternalVersionStrategy::FromParticipatingShards ||
+      sub_reads.contains(reference_sub_read_key)) {
+    return;
+  }
+  auto &target = orig_op->target;
+  const pg_pool_t *pi = objecter.osdmap->get_pg_pool(target.base_oloc.pool);
+  ceph_assert(pi);
+
+  for (auto &&[index, sub_read] : sub_reads) {
+    if (!pi->is_nonprimary_shard(shard_id_t(index))) {
+      version_sub_read_key = index;
+      return;
+    }
+  }
+  std::optional<int> local_zone;
+  for (shard_id_t shard; shard < pi->get_zone_size(); ++shard) {
+    if (pi->is_nonprimary_shard(shard)) {
+      continue;
+    }
+    shard_id_t abs_shard = choose_read_shard(objecter, cct, target, localize,
+                                             shard, local_zone);
+    if (abs_shard != shard_id_t::NO_SHARD) {
+      version_sub_read_key = (int)abs_shard;
+      sub_reads.emplace(version_sub_read_key, orig_op->ops.size() + 1,
+                        abs_shard);
+      return;
+    }
+  }
+  sub_reads.emplace(reference_sub_read_key, orig_op->ops.size() + 1,
+                    reference_sub_read.shard);
 }
 
 int SplitOp::local_zone_for_acting_set(
@@ -860,6 +902,18 @@ void SplitOp::complete() {
  * version mismatches. If sub-operations read different versions of the object
  * (torn read), the operation will be retried.
  */
+SplitOp::InternalVersionStrategy SplitOp::internal_version_strategy(
+  const OSDMap& osdmap, const std::vector<int>& acting)
+{
+  for (int osd : acting) {
+    if (osd != CRUSH_ITEM_NONE &&
+        !HAVE_FEATURE(osdmap.get_xinfo(osd).features, INTERNAL_VERSIONS_V2)) {
+      return InternalVersionStrategy::FromPrimaryShard;
+    }
+  }
+  return InternalVersionStrategy::FromParticipatingShards;
+}
+
 void SplitOp::protect_torn_reads() {
   // If multiple reads are emitted from objecter, then it is essential that
   // each read reads the same version. It is not possible to efficiently
@@ -1290,10 +1344,8 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
     return false;
   }
 
-  split_read->strategy
-    = (objecter.osdmap->require_osd_release > ceph_release_t::umbrella) ?
-    InternalVersionStrategy::FromParticipatingShards :
-    InternalVersionStrategy::FromPrimaryShard;
+  split_read->strategy =
+    internal_version_strategy(*objecter.osdmap, target.acting);
 
   // STAGE 4: Initialize sub-operations (may set abort if problems detected)
   for (unsigned i = 0; i < op->ops.size(); ++i) {
@@ -1301,6 +1353,10 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
     if (split_read->abort) {
       break;
     }
+  }
+
+  if (!split_read->abort) {
+    split_read->init_version_sub_read();
   }
 
   // STAGE 5: Final abort check - discard split op if problems were detected
@@ -1336,7 +1392,7 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
     auto fin = new Finisher(split_read, sub_read); // Self-destructs when called.
 
     version_t *objver = nullptr;
-    if (index == split_read->reference_sub_read_key) {
+    if (index == split_read->version_sub_read_key) {
       objver = split_read->orig_op->objver;
     }
 

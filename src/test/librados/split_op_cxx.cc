@@ -689,9 +689,9 @@ public:
     return ec_cmds.get_primary_osd(pool_name, oid, nspace);
   }
 
-  // Localized reads of the whole object from the zone of shard `shard`: the data
-  // sub-reads stay in that zone; a multi-chunk read also checks the version with
-  // the primary, which can be in the other zone.
+  // Localized reads of the whole object from the zone of shard `shard`: every
+  // sub-read stays in that zone, as a plain read takes the object's version from
+  // the shards it reads, not from the primary.
   void localize_reads_stay_in_zone(int shard, const std::string &oid)
   {
     int zone_size = k_per_zone + m_per_zone;
@@ -707,7 +707,6 @@ public:
 
     const std::string local = shard_zone(oid, shard);
     const std::string other = other_zone(local);
-    const bool primary_remote = topo.osd_zone.at(primary_osd(oid)) != local;
     set_client_zone(local);
 
     int64_t before_local = zone_reads(local);
@@ -727,8 +726,7 @@ public:
     EXPECT_GE(delta_local, reads * k_per_zone)
         << "Expected at least " << (reads * k_per_zone)
         << " sub-reads in the client's zone";
-    EXPECT_LE(delta_other, primary_remote ? reads : 0)
-        << "Only the version checks with a primary in the other zone may go there";
+    EXPECT_EQ(0, delta_other) << "A sub-read went to the other zone";
 
     ioctx.remove(oid);
   }
@@ -809,8 +807,8 @@ TEST_P(LibRadosSplitOpZone, Zone1LocalReadSucceedsWhenZone0Poisoned)
   const std::vector<int> poisoned = poison_shards_outside(oid, local);
   ASSERT_EQ(zone_size, static_cast<int>(poisoned.size()));
   set_client_zone(local);
-  // The primary, shard 0, is in the PG's zone 0, so the read also checks the
-  // version with it there: two sub-reads.
+  // The primary, shard 0, is in the PG's zone 0; the version comes from
+  // shard 0's copy in the client's zone: two sub-reads.
   ASSERT_NE(local, topo.osd_zone.at(primary_osd(oid)));
 
   // Read exactly one chunk from the PG's zone 1.
@@ -961,20 +959,15 @@ TEST_P(LibRadosSplitOpZoneStats, LocalizeReadsFallsBackToPrimaryWhenZoneShardsUn
 }
 
 // ---------------------------------------------------------------------------
-// Client in the zone of the PG's zone 1, multi-chunk localized read: when
-// primary_required is true (count > 1), init_read() also creates a
-// version-check sub-read to the primary, which may be in the other zone.
-// Every data sub-read stays in the client's zone.
+// Client in the zone of the PG's zone 1, multi-chunk localized read: every
+// sub-read stays in the client's zone, with no version check at the primary.
 // ---------------------------------------------------------------------------
 TEST_P(LibRadosSplitOpZoneStats, Zone1MultiChunkDataSubReadsStayInZone1)
 {
   SKIP_IF_CRIMSON();
   if (!split_ops) GTEST_SKIP() << "Requires split_ops";
 
-  // A multi-chunk read forces primary_required=true and therefore adds the
-  // reference sub-read.
-  // We need at least 2 chunks → read k_per_zone * alignment bytes so that
-  // count = k_per_zone > 1.
+  // Read at least 2 chunks: k_per_zone * alignment bytes.
   if (k_per_zone < 2) GTEST_SKIP() << "Requires k_per_zone >= 2 to make count > 1";
 
   int zone_size = k_per_zone + m_per_zone;
@@ -997,8 +990,7 @@ TEST_P(LibRadosSplitOpZoneStats, Zone1MultiChunkDataSubReadsStayInZone1)
   int64_t before_local = zone_reads(local);
   int64_t before_other = zone_reads(other);
 
-  // Read exactly k_per_zone chunks (count = k_per_zone > 1 → primary_required).
-  // All chunks start at offset 0 and span k_per_zone * alignment bytes.
+  // k_per_zone chunks from offset 0.
   uint64_t read_len = static_cast<uint64_t>(k_per_zone) * alignment;
   bufferlist rbl;
   ObjectReadOperation read;
@@ -1010,12 +1002,71 @@ TEST_P(LibRadosSplitOpZoneStats, Zone1MultiChunkDataSubReadsStayInZone1)
   int64_t delta_local = zone_reads(local) - before_local;
   int64_t delta_other = zone_reads(other) - before_other;
 
-  // Only the version-check sub-read to the primary may go to the other zone.
-  EXPECT_LE(delta_other, 1)
-    << "a data sub-read was dispatched to the other zone (delta=" << delta_other
-    << ") even though the client is in " << local;
+  EXPECT_EQ(0, delta_other)
+    << "a sub-read was dispatched to the other zone even though the client is in "
+    << local;
   EXPECT_GE(delta_local, k_per_zone)
     << "Expected at least " << k_per_zone << " sub-reads in the client's zone";
+
+  ioctx.remove(oid);
+}
+
+// ---------------------------------------------------------------------------
+// After a partial write that skips a data shard, a localized read of that
+// shard returns the object's current version, and stays in the client's zone.
+// ---------------------------------------------------------------------------
+TEST_P(LibRadosSplitOpZoneStats, LocalizedReadVersionAfterPartialWrite)
+{
+  SKIP_IF_CRIMSON();
+  if (!split_ops) GTEST_SKIP() << "Requires split_ops";
+  if (k_per_zone < 2) GTEST_SKIP() << "Requires a second data shard";
+
+  // A partial write needs overwrites
+  ASSERT_EQ(0, s_cluster.mon_command(
+    fmt::format(R"({{"prefix": "osd pool set", "pool": "{}", )"
+                R"("var": "allow_ec_overwrites", "val": "true"}})", pool_name),
+    {}, nullptr, nullptr));
+  ASSERT_EQ(0, s_cluster.wait_for_latest_osdmap());
+
+  int zone_size = k_per_zone + m_per_zone;
+  const std::string oid = "localize-version";
+  uint64_t stripe_len = static_cast<uint64_t>(k_per_zone) * alignment;
+  bufferlist wbl;
+  wbl.append_zero(stripe_len);
+  {
+    ObjectWriteOperation write;
+    write.write(0, wbl);
+    ASSERT_TRUE(AssertOperateWithoutSplitOp(0, oid, &write));
+  }
+  // Writes chunk 0 only, so shard 1 keeps the first write's object info.
+  bufferlist pbl;
+  pbl.append(std::string(alignment, 'x'));
+  {
+    ObjectWriteOperation write;
+    write.write(0, pbl);
+    ASSERT_TRUE(AssertOperateWithoutSplitOp(0, oid, &write));
+  }
+  const uint64_t version = ioctx.get_last_version();
+  wait_for_stable_acting_set(oid);
+
+  const std::string local = shard_zone(oid, zone_size);
+  const std::string other = other_zone(local);
+  set_client_zone(local);
+  ASSERT_NE(local, topo.osd_zone.at(primary_osd(oid)));
+
+  int64_t before_other = zone_reads(other);
+  for (auto [off, len] : {std::pair{alignment, alignment},
+                          std::pair{uint64_t(0), stripe_len}}) {
+    bufferlist rbl;
+    ObjectReadOperation read;
+    read.read(off, len, &rbl, nullptr);
+    ASSERT_EQ(0, ioctx.operate(oid, &read, &rbl,
+                                librados::OPERATION_LOCALIZE_READS));
+    ASSERT_EQ(len, rbl.length());
+    EXPECT_EQ(version, ioctx.get_last_version()) << "read " << off << "~" << len;
+  }
+  EXPECT_EQ(0, zone_reads(other) - before_other)
+    << "a sub-read went to the other zone";
 
   ioctx.remove(oid);
 }
