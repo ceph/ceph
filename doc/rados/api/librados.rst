@@ -180,6 +180,35 @@ latencies::
 Note that all the :c:type:`rados_completion_t` must be freed with :c:func:`rados_aio_release` to avoid leaking memory.
 
 
+Thread safety
+=============
+
+Several threads can share one :c:type:`rados_ioctx_t`. They can call the
+synchronous and asynchronous read, write, and object operation functions on the
+same io context at the same time. The exceptions are:
+
+- The io context's settings: the snapshot to read from
+  (:c:func:`rados_ioctx_snap_set_read`), the snapshot context for writes
+  (:c:func:`rados_ioctx_selfmanaged_snap_set_write_ctx`), the object locator
+  key (:c:func:`rados_ioctx_locator_set_key`), the namespace
+  (:c:func:`rados_ioctx_set_namespace`), and the flag that
+  :c:func:`rados_set_pool_full_try` and :c:func:`rados_set_osdmap_full_try`
+  set. Every operation reads these settings without a lock, so an operation
+  that starts while another thread changes one can get a value that was never
+  set, such as a namespace made from parts of the old and new names. Change
+  them only while no other thread is using the io context, or give each thread
+  its own io context.
+- :c:func:`rados_get_last_version` returns the version from the most recent
+  synchronous operation on the io context, whichever thread ran it. When
+  threads share an io context, use asynchronous operations and get the version
+  of each one with :c:func:`rados_aio_get_version`.
+- A list context (:c:type:`rados_list_ctx_t`), a :c:type:`rados_read_op_t`,
+  and a :c:type:`rados_write_op_t` can each be used by only one thread at a
+  time.
+- Call :c:func:`rados_ioctx_destroy` only after every thread has finished with
+  the io context and every asynchronous operation on it has completed.
+
+
 API calls
 =========
 
