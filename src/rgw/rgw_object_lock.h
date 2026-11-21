@@ -199,6 +199,7 @@ public:
 
   void decode_xml(XMLObj *obj);
   void dump_xml(Formatter *f) const;
+  void dump(Formatter *f) const;
 };
 WRITE_CLASS_ENCODER(RGWObjectRetention)
 
@@ -231,6 +232,7 @@ public:
 
   void decode_xml(XMLObj *obj);
   void dump_xml(Formatter *f) const;
+  void dump(Formatter *f) const;
   bool is_enabled() const;
 };
 WRITE_CLASS_ENCODER(RGWObjectLegalHold)
