@@ -117,12 +117,15 @@ constexpr auto measure(const CoverageT& coverage, const MetricT& metric)
     return total;
 }
 
-// Transfer prepared output into an owning canonical view without renormalizing.
-// Constructing points and growing the output vector can still copy/allocate.
-// Holes consume no quota. Unsupported inclusion/infinity is rejected explicitly;
-// discrete stepping and other endpoint conventions require a different profile.
-template <canonical_sequence CoverageT, typename MetricT>
+namespace detail {
+
+// A monotone covered prefix follows accumulated nonnegative measurement. Hinze and Paterson,
+// Finger Trees (JFP 2006), sections 4.1 and 4.4: https://www.staff.city.ac.uk/~ross/papers/FingerTree.pdf
+// Use sequential checked subtraction, without the paper's tree or cached annotations.
+// Metrics preserve zero, positive ordered distances, and inverse-compatible advance/subtract:
+template <typename StorageT, expression CoverageT, typename MetricT>
 requires coverage_metric_for<MetricT, expression_domain_t<CoverageT>> and
+         (streamable_expression<CoverageT>()) and
          std::totally_ordered<typename MetricT::quantity_type> and
          requires (const MetricT& metric, const typename expression_domain_t<CoverageT>::value_type& point,
                    const typename MetricT::quantity_type& quantity) {
@@ -130,18 +133,26 @@ requires coverage_metric_for<MetricT, expression_domain_t<CoverageT>> and
                  -> std::same_as<typename expression_domain_t<CoverageT>::value_type>;
              { metric.subtract(quantity, quantity) } -> std::same_as<typename MetricT::quantity_type>;
          }
-constexpr auto take(const CoverageT& coverage, typename MetricT::quantity_type remaining, const MetricT& metric)
+constexpr auto take_to(const CoverageT& coverage, typename MetricT::quantity_type remaining,
+                       const MetricT& metric)
 {
     using domain_type = expression_domain_t<CoverageT>;
 
-    std::vector<query<domain_type>> selected;
-    if (remaining < metric.zero()) {
+    StorageT selected;
+    const auto zero = metric.zero();
+    if (remaining < zero) {
         throw std::domain_error {"negative coverage quota"};
     }
-    for (const auto& value : std::ranges::ref_view {coverage}) {
-        if (remaining == metric.zero()) {
-            break;
-        }
+
+    if (remaining == zero) {
+        return canonical_access::adopt(std::move(selected));
+    }
+
+    const auto source = detail::canonical_stream(coverage);
+    auto current = source.begin();
+    const auto finish = source.end();
+    while (current != finish) {
+        const auto& value = *current;
         const auto bounds = detail::finite_half_open_bounds(value);
         const auto& first = bounds.lower().key();
         const auto length = metric.distance(first, bounds.upper().key());
@@ -157,10 +168,49 @@ constexpr auto take(const CoverageT& coverage, typename MetricT::quantity_type r
         if constexpr (!canonical_interval<decltype(value)>) {
             selected.push_back(query<domain_type>::between(bounds.lower(), bounds.upper()));
         }
+
         remaining = metric.subtract(remaining, length);
+        if (remaining == zero) {
+            break;
+        }
+
+        ++current;
     }
 
-    return detail::canonical_access::adopt(std::move(selected));
+    return canonical_access::adopt(std::move(selected));
+}
+
+} // detail
+
+// Retain selected canonical geometry without sorting or materializing expression intermediates.
+// Holes consume no quota; selected output must be finite half-open. Point payloads can still
+// borrow, and point construction/vector growth can allocate. Cursor preparation can look ahead:
+template <expression CoverageT, typename MetricT>
+requires requires (const CoverageT& coverage, typename MetricT::quantity_type remaining,
+                   const MetricT& metric) {
+    detail::take_to<std::vector<query<expression_domain_t<CoverageT>>>>(
+        coverage, std::move(remaining), metric);
+}
+constexpr auto take(const CoverageT& coverage, typename MetricT::quantity_type remaining,
+                    const MetricT& metric)
+{
+    return detail::take_to<std::vector<query<expression_domain_t<CoverageT>>>>(
+        coverage, std::move(remaining), metric);
+}
+
+// Capacity bounds selected entries, not point allocation or input preparation. Overflow
+// destroys the local prefix and throws without returning a partially selected result:
+template <std::size_t Capacity, expression CoverageT, typename MetricT>
+requires requires (const CoverageT& coverage, typename MetricT::quantity_type remaining,
+                   const MetricT& metric) {
+    detail::take_to<static_interval_set<expression_domain_t<CoverageT>, Capacity>>(
+        coverage, std::move(remaining), metric);
+}
+constexpr auto take(const CoverageT& coverage, typename MetricT::quantity_type remaining,
+                    const MetricT& metric)
+{
+    return detail::take_to<static_interval_set<expression_domain_t<CoverageT>, Capacity>>(
+        coverage, std::move(remaining), metric);
 }
 
 } // ceph::salad::datum::interval

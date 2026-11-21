@@ -765,7 +765,8 @@ const auto selected = iv::take(coverage, quota, iv::bytes);
 the final interval when the remaining quota runs out. The result owns its selected
 intervals. It describes byte positions, without reading or retaining payload bytes;
 use those positions with clipping or copying when you need the data itself.
-These metric operations require finite half-open canonical coverage.
+Selected geometry must be finite half-open. `take` also accepts native/admitted algebra
+directly, using its existing cursors instead of collecting intermediate coverage.
 ([8](https://github.com/chardan/ceph/blob/jfw-datum/src/rgw/datum/include/datum/interval/metric.h))
 
 [![Input coverage contains three byte cells from 0 to 3 and five from 10 to 15. Taking five covered bytes selects the first three cells and the two from 10 to 12; the gap contributes zero.](figures/06_covered_quota.svg)](figures/06_covered_quota.svg)
@@ -816,6 +817,29 @@ order: 10 bytes
 [10, 15)
 served: 8 bytes
 ```
+
+### Bounded read batches
+
+Use `take<Capacity>` when a batch has a known maximum number of intervals. It returns the
+same canonical range contract using inline interval storage. The
+[read-planner program](examples/read_plan.cpp) prepares requests and cache coverage, then selects:
+
+```cpp
+const auto batch = iv::take<6>(iv::difference(requested, cached), 14 * MiB, iv::bytes);
+```
+
+Three request and three cache intervals can produce at most six missing pieces. The result
+therefore needs no missing-coverage vector or vector-backed batch. An insufficient capacity
+throws without returning partial output. Capacity counts interval entries; point values can
+still copy or allocate, and cursor preparation can inspect input bounds ahead of the output.
+
+Zero quota returns before source iteration. After exact or partial exhaustion, the quota walk
+does not increment or dereference another output. A custom metric must supply nonnegative
+ordered distances, positive distance between distinct positions, and compatible checked
+subtraction and advancement. The compiler checks the operations' types, not these laws.
+Use existing `difference(coverage, batch)` to describe remaining coverage when needed;
+native progress, effects, and retry ownership stay with the caller. The measured-prefix
+research is collected in the [bibliography](#bibliography).
 
 ## 7 Move it and keep reading
 
@@ -2464,3 +2488,7 @@ identify sources in the separate local RGW integration snapshot described in the
 - Guava contributors. [*Range*, release 33.4.7-jre](https://guava.dev/releases/33.4.7-jre/api/docs/com/google/common/collect/Range.html).
   `isEmpty`, `encloses`, `equals`, and `canonical` explain why order-only bound operations
   need not determine discrete membership or membership-equivalent representations.
+- Ralf Hinze and Ross Paterson. [*Finger Trees: A Simple General-purpose Data Structure*](https://www.staff.city.ac.uk/~ross/papers/FingerTree.pdf).
+  Journal of Functional Programming 16(2), 197–217, 2006; sections 4.1 and 4.4.
+  The measured-prefix split supplies the selection invariant. Datum uses sequential checked
+  state without introducing trees, cached annotations, or logarithmic-search guarantees.

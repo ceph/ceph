@@ -1,4 +1,4 @@
-// Fragment-to-fragment transfer, capacity admission, and physical write footprints.
+// Fragment-to-fragment transfer, capacity admission, and physical write footprints:
 #include "datum/bytes.h"
 
 #include <catch2/catch_test_macros.hpp>

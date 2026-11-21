@@ -25,8 +25,7 @@ int main()
 
     const auto requested = iv::compile_intervals(request_ranges);
     const auto cached = iv::compile_intervals(cache_ranges);
-    const auto missing = iv::compile_intervals(iv::difference(requested, cached));
-    const auto batch = iv::take(missing, 14 * MiB, iv::bytes);
+    const auto batch = iv::take<6>(iv::difference(requested, cached), 14 * MiB, iv::bytes);
 
     std::ranges::for_each(batch, [](const auto& part) {
         std::cout << '[' << part.lower().key() / MiB << ", "

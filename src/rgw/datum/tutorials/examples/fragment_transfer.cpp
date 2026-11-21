@@ -1,4 +1,4 @@
-// Copy a packed payload selection into independently segmented writable storage.
+// Copy a packed payload selection into independently segmented writable storage:
 #include <datum/bytes.h>
 
 #include <array>

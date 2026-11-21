@@ -54,6 +54,7 @@ def guide():
     links['transfer-between-fragmented-buffers'] = (
         '01-hello-fragments', 'transfer-between-fragmented-buffers')
     links['observe-algebra-as-a-range'] = ('03-normalize-ranges', 'observe-algebra-as-a-range')
+    links['bounded-read-batches'] = ('06-covered-quota', 'bounded-read-batches')
     for title in re.findall(r'^### (.+)$', FENCES.sub('', appendix), re.M):
         links[slug(title)] = ('build-and-run', nodes.make_id(title))
     return text, sections, chapters, links

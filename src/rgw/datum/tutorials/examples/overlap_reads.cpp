@@ -1,4 +1,4 @@
-// Plan mapped reads from value-producing layout descriptors and logical selections.
+// Plan mapped reads from value-producing layout descriptors and logical selections:
 #include <datum/interval/clip.h>
 
 #include <array>

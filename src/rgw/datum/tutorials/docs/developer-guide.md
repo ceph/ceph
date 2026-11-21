@@ -84,6 +84,13 @@ can require lookahead through input bounds. Compound output descriptors borrow l
 `copy_interval` retains point values. See [algebra observation](../tutorial.md#observe-algebra-as-a-range)
 and the [lazy-read program](../examples/lazy_reads.cpp).
 
+For a covered-byte batch, `interval::take<Capacity>(expression, quota, metric)` streams
+native/admitted algebra directly into inline canonical output. Zero quota avoids iteration;
+exact or partial exhaustion performs no next increment. Nested cursor preparation can still
+look ahead. Capacity limits entries and throws without returning a partial batch; it does not
+bound point allocations or input preparation. The [read planner](../examples/read_plan.cpp)
+uses this form to avoid collecting missing coverage and a vector-backed batch.
+
 ## Own what must survive
 
 Borrow for synchronous calls whose references do not escape. Retain an owner when a callback,

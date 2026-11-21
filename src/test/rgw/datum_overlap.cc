@@ -1,4 +1,4 @@
-// Source-preserving overlap traversal, input producers, and scoped lifetimes.
+// Source-preserving overlap traversal, input producers, and scoped lifetimes:
 #include "datum/interval/clip.h"
 
 #include <catch2/catch_test_macros.hpp>

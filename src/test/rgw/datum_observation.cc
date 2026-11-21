@@ -1,8 +1,9 @@
-// Public algebra observation: endpoint lifetimes, standard pipelines, and controlled effects.
+// Public algebra observation: endpoint lifetimes, standard pipelines, and controlled effects:
 #include "datum/interval/range.h"
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <expected>
@@ -10,6 +11,7 @@
 #include <ranges>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 

@@ -1,4 +1,4 @@
-// Select logical bytes from a fragmented packed payload while retaining sparse coordinates.
+// Select logical bytes from a fragmented packed payload while retaining sparse coordinates:
 #include <datum/bytes.h>
 #include <datum/interval/clip.h>
 

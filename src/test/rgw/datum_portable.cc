@@ -1171,8 +1171,10 @@ static_assert([] {
                                 Q::closed_open(address {10}, address {18})};
     const iv::canonical_range coverage {intervals};
     const auto selected = iv::take(coverage, byte_quantity {7}, address_metric {});
+    const auto bounded = iv::take<2>(coverage, byte_quantity {7}, address_metric {});
 
     return iv::measure(selected, address_metric {}).value == 7 and
+           iv::measure(bounded, address_metric {}).value == 7 and
            std::ranges::next(std::begin(selected))->upper().key().value == 13;
 }());
 
@@ -1255,7 +1257,9 @@ TEST_CASE("coverage consumers request only the arithmetic they use")
     const iv::canonical_range coverage {intervals};
     CHECK(12 == iv::measure(coverage, measurement {}).value);
     const auto selected = iv::take(coverage, 7, quota {});
+    const auto bounded = iv::take<2>(coverage, 7, quota {});
     CHECK(7 == iv::measure(selected, measurement {}).value);
+    CHECK(7 == iv::measure(bounded, measurement {}).value);
     CHECK(13 == std::ranges::next(std::begin(selected))->upper().key());
 }
 

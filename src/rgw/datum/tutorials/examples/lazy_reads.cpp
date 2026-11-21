@@ -1,4 +1,4 @@
-// Observe missing coverage as a standard range and stop after two planned reads.
+// Observe missing coverage as a standard range and stop after two planned reads:
 #include <datum/interval/metric.h>
 #include <datum/interval/range.h>
 

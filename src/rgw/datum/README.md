@@ -64,7 +64,8 @@ Other core operations already accept standard ranges under their established nam
 | Align independently segmented sources | `interval::visit_overlaps(left, right, consumer, left_lens, right_lens)` |
 | Map logical cuts into a packed payload | `interval::visit_packed_overlaps(source, selection, consumer)` |
 | Convert finite half-open byte bounds | `interval::bounds(byte_extent)`, `interval::extent_of(interval)` |
-| Count or take selected coverage | `interval::measure(range, metric)`, `interval::take(range, quota, metric)` |
+| Count or take selected coverage | `interval::measure(range, metric)`, `interval::take(expression, quota, metric)` |
+| Retain a bounded read batch | `interval::take<Capacity>(expression, quota, metric)` |
 | Visit data and preserve continuation | `traversal::scan_range`, `traversal::for_each_page` |
 
 Use the standard algorithms directly with Datum projections and comparisons.
@@ -709,13 +710,33 @@ checked subtraction, and point advancement. Strong point and quantity types can 
 point assignment nor built-in arithmetic is required. Use the supplied `interval::bytes`
 for byte positions and counts; `unsigned_metric<T>` provides checked arithmetic for
 other unsigned quantities.
-`measure(coverage, metric)` and `take(coverage, quota, metric)` support
-finite half-open canonical coverage. Holes consume no quota. Other inclusion
-conventions and infinities throw explicitly; discrete stepping and storage
-alignment remain external. Taking a quota returns a `canonical_range` owning its
-interval values, without sorting or revalidating the result. Point payloads retain
-their domain's ownership semantics. Constructing output points and growing the
-backing vector can still copy and allocate.
+`measure(coverage, metric)` supports finite half-open canonical coverage.
+`take(expression, quota, metric)` also accepts native/admitted algebra directly, streaming
+its existing cursors without retaining intermediate coverage. Holes consume no quota.
+Selected output must be finite half-open; other inclusion conventions and infinities throw.
+Discrete stepping and storage alignment remain external. Metric distances must be nonnegative
+and positive for distinct ordered positions; subtraction and advancement must preserve zero
+and agree with distance. Concepts check syntax, while profiles supply these semantic laws.
+
+Taking a quota returns a `canonical_range` owning its interval values, without sorting or
+revalidating the result. The default output uses a vector; `take<Capacity>` uses existing
+inline interval storage. Point payloads retain their domain's ownership semantics and can
+still copy or allocate. A bounded capacity failure throws without returning a partial result;
+capacity bounds output entries, not point allocation or cursor preparation.
+Zero quota returns before source iteration. Exact or partial exhaustion performs no further
+increment or dereference; preparing a canonical result can still look ahead through input bounds.
+Foreign geometry keeps explicit `compile_intervals`/`evaluate` preparation.
+
+The [read planner](tutorials/examples/read_plan.cpp) selects a bounded batch directly:
+
+```cpp
+const auto batch = iv::take<6>(iv::difference(requested, cached), 14 * MiB, iv::bytes);
+```
+
+Three request and three cache intervals bound the difference by six pieces. The planner needs
+neither a retained missing-coverage vector nor vector-backed batch output. For later work,
+existing `difference(coverage, batch)` describes the remainder; retaining or resuming native
+work remains a separate caller decision. Measured-prefix research is in the [bibliography](#bibliography).
 
 `static_interval_set::append_range(source)` adds interval entries in source order;
 its range constructor delegates to the same operation. `interval_batch` exposes
@@ -1317,3 +1338,7 @@ describe local machinery, not backend throughput.
 - Edsger W. Dijkstra. [*Why numbering should start at zero*](https://www.cs.utexas.edu/~EWD/transcriptions/EWD08xx/EWD831.html).
   EWD831, 11 August 1982. Shared half-open endpoints support length and adjacency reasoning
   for byte positions; Datum separately checks machine arithmetic and representability.
+- Ralf Hinze and Ross Paterson. [*Finger Trees: A Simple General-purpose Data Structure*](https://www.staff.city.ac.uk/~ross/papers/FingerTree.pdf).
+  Journal of Functional Programming 16(2), 197–217, 2006; sections 4.1 and 4.4.
+  Monotone cumulative measurement motivates covered-prefix selection. Datum uses sequential
+  checked state and existing storage; it adds no measured tree or logarithmic-search claim.

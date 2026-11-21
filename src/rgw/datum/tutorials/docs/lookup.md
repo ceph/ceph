@@ -295,7 +295,8 @@ create independent bytes or return a standard Ranges view.
 across fragments. [Lesson 1](../tutorial.md#1-hello-world--in-pieces).
 
 **`take()`, covered quota.** `interval::take()` selects up to the requested measure
-of covered intervals. [Lesson 6](../tutorial.md#6-five-bytes-please).
+of native/admitted algebra. `take<Capacity>` retains inline canonical output.
+[Lesson 6](../tutorial.md#6-five-bytes-please) and [bounded batches](../tutorial.md#bounded-read-batches).
 
 **View.** A way to observe data. C++ Ranges' views model `std::ranges::view` and can
 borrow or own storage. Datum also uses the name for projections: a record view
