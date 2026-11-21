@@ -140,3 +140,37 @@ int aio_queue_t::get_next_completed(int timeout_ms, aio_t **paio, int max)
   }
   return r;
 }
+
+int aio_queue_t::resubmit(aio_t *a, int *retries,
+                          int submit_retries, int initial_delay_us)
+{
+#if defined(HAVE_POSIXAIO)
+  int attempts = submit_retries;
+  uint64_t delay = initial_delay_us;
+  for (;;) {
+    a->aio.aio_sigevent.sigev_notify = SIGEV_KEVENT;
+    a->aio.aio_sigevent.sigev_notify_kqueue = ctx;
+    a->aio.aio_sigevent.sigev_notify_kevent_flags = EV_ONESHOT;
+    a->aio.aio_sigevent.sigev_value.sival_ptr = a;
+    int r;
+    if (a->aio.aio_lio_opcode == LIO_WRITE) {
+      r = aio_writev(&a->aio);
+    } else {
+      r = aio_readv(&a->aio);
+    }
+    if (r < 0) {
+      r = -errno;
+    }
+    if (r == -EAGAIN && attempts-- > 0) {
+      usleep(delay);
+      delay *= 2;
+      (*retries)++;
+      continue;
+    }
+    return r;
+  }
+#else
+  (void)a; (void)retries; (void)submit_retries; (void)initial_delay_us;
+  return -ENOTSUP;
+#endif
+}

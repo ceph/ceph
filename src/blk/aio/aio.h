@@ -75,6 +75,51 @@ struct aio_t {
   long get_return_value() {
     return rval;
   }
+
+#if defined(HAVE_POSIXAIO)
+  /**
+   * aio_writev()/aio_readv() on a raw device may complete with fewer bytes
+   * than requested.  Account for the first n bytes having been transferred
+   * and re-prepare this request for the rest.
+   *
+   * The rest is a direct-IO request again, so it must stay aligned: n and
+   * the new start of the first iovec must be a multiple of align.  Returns
+   * false, and leaves the request untouched, when that cannot be done.
+   */
+  bool advance(uint64_t n, uint64_t align) {
+    if (n == 0 || n >= length || align == 0 || (n % align) != 0) {
+      return false;
+    }
+    // find the iovec that holds byte n, without changing anything yet
+    uint64_t left = n;
+    size_t skip = 0;
+    while (skip < iov.size() && left >= iov[skip].iov_len) {
+      left -= iov[skip].iov_len;
+      ++skip;
+    }
+    if (skip == iov.size()) {
+      return false;
+    }
+    if (left != 0 &&
+        (left % align != 0 ||
+         ((uintptr_t)iov[skip].iov_base + left) % align != 0)) {
+      return false;
+    }
+    const bool is_write = (aio.aio_lio_opcode == LIO_WRITE);
+    iov.erase(iov.begin(), iov.begin() + skip);
+    if (left != 0) {
+      iov[0].iov_base = (char*)iov[0].iov_base + left;
+      iov[0].iov_len -= left;
+    }
+    if (is_write) {
+      pwritev(offset + n, length - n);
+    } else {
+      preadv(offset + n, length - n);
+    }
+    rval = -1000;
+    return true;
+  }
+#endif
 };
 
 std::ostream& operator<<(std::ostream& os, const aio_t& aio);
@@ -97,6 +142,13 @@ struct io_queue_t {
   virtual int submit_batch(aio_iter begin, aio_iter end,
 			   void *priv, int *retries, int submit_retries, int initial_delay_us) = 0;
   virtual int get_next_completed(int timeout_ms, aio_t **paio, int max) = 0;
+  /// Submit one aio_t again (the rest of a request that completed short).
+  /// Only the POSIX AIO queue implements this.
+  virtual int resubmit(aio_t *a, int *retries,
+                       int submit_retries, int initial_delay_us) {
+    (void)a; (void)retries; (void)submit_retries; (void)initial_delay_us;
+    return -ENOTSUP;
+  }
 };
 
 struct aio_queue_t final : public io_queue_t {
@@ -150,4 +202,6 @@ struct aio_queue_t final : public io_queue_t {
   int submit_batch(aio_iter begin, aio_iter end,
 		   void *priv, int *retries, int submit_retries, int initial_delay_us) final;
   int get_next_completed(int timeout_ms, aio_t **paio, int max) final;
+  int resubmit(aio_t *a, int *retries,
+               int submit_retries, int initial_delay_us) final;
 };
