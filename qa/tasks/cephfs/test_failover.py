@@ -340,6 +340,46 @@ class TestClusterResize(CephFSTestCase):
 
         self.fs.wait_for_daemons(timeout=90)
 
+class TestRecoveryWhileStopping(CephFSTestCase):
+    CLIENTS_REQUIRED = 0
+    MDSS_REQUIRED = 4
+
+    def _rank_state(self, rank):
+        for info in self.fs.status().get_ranks(self.fs.id):
+            if info['rank'] == rank:
+                return info['state']
+        return None
+
+    def test_rank_stops_during_recovery(self):
+        """
+        That recovering ranks do not wait forever for a resolve or rejoin
+        from a rank that finished stopping while they were recovering.
+
+        Tests: https://tracker.ceph.com/issues/47843
+        """
+
+        self.fs.grow(3)
+
+        # Stop rank 2 and, while it is stopping, fail rank 1. Once a standby
+        # has taken rank 1, fail rank 0 with the file system not joinable:
+        # rank 1 now recovers with rank 2 in its recovery set and cannot
+        # finish until rank 0 is back, which is after rank 2 has stopped.
+        self.fs.set_max_mds(2)
+        self.fs.rank_fail(rank=1)
+        self.wait_until_true(lambda: self._rank_state(1) is not None,
+                             timeout=30, period=0.5)
+        self.fs.set_joinable(False)
+        self.fs.rank_fail(rank=0)
+        self.wait_until_true(lambda: 2 in self.fs.get_var('stopped'),
+                             timeout=120, period=1)
+        state = self._rank_state(1)
+        self.assertNotEqual(state, 'up:active',
+                            "rank 1 recovered before rank 0 failed")
+        log.info("rank 2 stopped while rank 1 was %s", state)
+
+        self.fs.set_joinable(True)
+        self.fs.wait_for_daemons(timeout=120)
+
 class TestFailoverBeaconHealth(CephFSTestCase):
     CLIENTS_REQUIRED = 1
     MDSS_REQUIRED = 1
