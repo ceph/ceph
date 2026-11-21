@@ -2657,13 +2657,15 @@ void BlueStore::_init_logger()
       "Large aligned writes into fresh blobs skipped due to zero detection (blobs)");
   b.add_u64_counter(l_bluestore_write_big_skipped_bytes,
       "write_big_skipped_bytes",
-      "Large aligned writes into fresh blobs skipped due to zero detection (bytes)");
+      "Large aligned writes into fresh blobs skipped due to zero detection (bytes)",
+      nullptr, PerfCountersBuilder::PRIO_DEBUGONLY, unit_t(UNIT_BYTES));
   b.add_u64_counter(l_bluestore_write_small_skipped,
       "write_small_skipped",
       "Small writes into existing or sparse small blobs skipped due to zero detection");
   b.add_u64_counter(l_bluestore_write_small_skipped_bytes,
       "write_small_skipped_bytes",
-      "Small writes into existing or sparse small blobs skipped due to zero detection (bytes)");
+      "Small writes into existing or sparse small blobs skipped due to zero detection (bytes)",
+      nullptr, PerfCountersBuilder::PRIO_DEBUGONLY, unit_t(UNIT_BYTES));
 
   b.add_time_avg(l_bluestore_buffer_miss_lat, "buffer_miss_lat", "Avg data cache miss disk latency"); //bluestore data buffer
 
@@ -2766,13 +2768,15 @@ void BlueStore::_init_logger()
   b.add_u64_counter(l_bluestore_omap_setheader_count, "omap_setheader_count",
     "amount of omap setheader calls");
   b.add_u64_counter(l_bluestore_omap_setheader_bytes, "omap_setheader_bytes",
-    "amount of bytes set by omap setheader calls");
+    "amount of bytes set by omap setheader calls",
+    nullptr, PerfCountersBuilder::PRIO_DEBUGONLY, unit_t(UNIT_BYTES));
   b.add_u64_counter(l_bluestore_omap_setkeys_count, "omap_setkeys_count",
     "amount of omap setkeys calls");
   b.add_u64_counter(l_bluestore_omap_setkeys_records, "omap_setkeys_records",
     "amount of keys set by omap setkeys calls");
   b.add_u64_counter(l_bluestore_omap_setkeys_bytes, "omap_setkeys_bytes",
-    "amount of bytes set by omap setkeys calls");
+    "amount of bytes set by omap setkeys calls",
+    nullptr, PerfCountersBuilder::PRIO_DEBUGONLY, unit_t(UNIT_BYTES));
   b.add_u64_counter(l_bluestore_omap_rmkeys_count, "omap_rmkeys_count",
     "amount of omap keys removed via rmkeys");
   b.add_u64_counter(l_bluestore_omap_rmkey_ranges_count, "omap_rmkey_range_count",

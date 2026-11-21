@@ -301,7 +301,7 @@ void BlueFS::_init_logger()
   b.add_u64_counter(l_bluefs_bytes_written_wal, "bytes_written_wal",
 		    "Bytes written to WAL",
 		    "walb",
-		    PerfCountersBuilder::PRIO_CRITICAL);
+		    PerfCountersBuilder::PRIO_CRITICAL, unit_t(UNIT_BYTES));
   b.add_u64_counter(l_bluefs_bytes_written_sst, "bytes_written_sst",
 		    "Bytes written to SSTs",
 		    "sstb",

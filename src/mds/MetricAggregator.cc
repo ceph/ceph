@@ -431,11 +431,13 @@ void MetricAggregator::refresh_metrics_for_rank(const entity_inst_t &client,
     plb.add_u64(l_mds_per_client_metrics_total_read_ops,
 		"total_read_ops", "Total Read Operations", "rops", PerfCountersBuilder::PRIO_CRITICAL);
     plb.add_u64(l_mds_per_client_metrics_total_read_size,
-		"total_read_size", "Total Read Size", "rsiz", PerfCountersBuilder::PRIO_CRITICAL);
+		"total_read_size", "Total Read Size", "rsiz", PerfCountersBuilder::PRIO_CRITICAL,
+		unit_t(UNIT_BYTES));
     plb.add_u64(l_mds_per_client_metrics_total_write_ops,
 		"total_write_ops", "Total Write Operations", "wops", PerfCountersBuilder::PRIO_CRITICAL);
     plb.add_u64(l_mds_per_client_metrics_total_write_size,
-		"total_write_size", "Total Write Size", "wsiz", PerfCountersBuilder::PRIO_CRITICAL);
+		"total_write_size", "Total Write Size", "wsiz", PerfCountersBuilder::PRIO_CRITICAL,
+		unit_t(UNIT_BYTES));
     client_perf_counters[crpair] = plb.create_perf_counters();
     m_cct->get_perfcounters_collection()->add(client_perf_counters[crpair]);
   }

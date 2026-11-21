@@ -203,6 +203,17 @@ void DaemonMetricCollector::dump_asok_metric(json_object perf_info,
     std::string description =
         boost_string_to_std(perf_info["description"].as_string());
 
+    // Name the unit in HELP: time counters are always in seconds, and
+    // other counters may declare bytes.
+    std::string unit;
+    if (type & PERFCOUNTER_TIME) {
+      unit = " (seconds)";
+    } else if (perf_info.if_contains("units") &&
+               perf_info["units"].is_string() &&
+               perf_info["units"].as_string() == "bytes") {
+      unit = " (bytes)";
+    }
+
     if (type & PERFCOUNTER_LONGRUNAVG) {
       if (!perf_values.is_object()) {
         dout(1) << "perf_values is not an object for metric: " << name << dendl;
@@ -221,10 +232,11 @@ void DaemonMetricCollector::dump_asok_metric(json_object perf_info,
       add_metric(builder, count, name + "_count", description + " Count", "counter",
                  labels);
       json_value sum_value = perf_obj["sum"];
-      add_double_or_int_metric(builder, sum_value, name + "_sum", description + " Total",
+      add_double_or_int_metric(builder, sum_value, name + "_sum",
+                               description + " Total" + unit,
                                metric_type, labels);
     } else {
-      add_double_or_int_metric(builder, perf_values, name, description,
+      add_double_or_int_metric(builder, perf_values, name, description + unit,
                                metric_type, labels);
     }
   } catch (const std::exception& e) {
