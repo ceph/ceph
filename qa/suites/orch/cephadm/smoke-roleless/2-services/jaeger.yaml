@@ -5,8 +5,4 @@ tasks:
 - cephadm.wait_for_service:
     service: elasticsearch
 - cephadm.wait_for_service:
-    service: jaeger-collector
-- cephadm.wait_for_service:
-    service: jaeger-query
-- cephadm.wait_for_service:
-    service: jaeger-agent
+    service: jaeger

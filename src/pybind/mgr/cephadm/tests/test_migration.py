@@ -1,4 +1,7 @@
 import json
+from contextlib import contextmanager
+from types import SimpleNamespace
+
 import pytest
 
 from ceph.deployment.service_spec import (
@@ -11,14 +14,15 @@ from ceph.deployment.service_spec import (
     GrafanaSpec,
     CertificateSource,
     NFSServiceSpec,
+    TracingSpec,
 )
 from ceph.utils import datetime_to_str, datetime_now
 from cephadm import CephadmOrchestrator
-from cephadm.inventory import SPEC_STORE_PREFIX
+from cephadm.inventory import HOST_CACHE_PREFIX, SPEC_STORE_PREFIX
 from cephadm.migrations import LAST_MIGRATION
 from cephadm.tests.fixtures import _run_cephadm, wait, with_host, receive_agent_metadata_all_hosts
 from cephadm.serve import CephadmServe
-from orchestrator import DaemonDescription
+from orchestrator import DaemonDescription, OrchestratorError
 from tests import mock
 
 COMBINED_CERT_KEY = """
@@ -655,3 +659,402 @@ def test_migrate_host_pattern_regex_unchanged(cephadm_module: CephadmOrchestrato
         raw = json.loads(cephadm_module.get_store(SPEC_STORE_PREFIX + 'mon'))
         assert raw['spec']['placement']['host_pattern']['pattern'] == 'NODE[0-9]'
         assert raw['spec']['placement']['host_pattern']['pattern_type'] == 'regex'
+
+
+OLD_JAEGER_TYPES = ('jaeger-collector', 'jaeger-query', 'jaeger-agent')
+
+
+def _store_old_jaeger_specs(cephadm_module, types=OLD_JAEGER_TYPES, **kwargs):
+    """Store v1 jaeger specs as the old daemon types serialised them."""
+    for stype in types:
+        spec = TracingSpec(service_type='elasticsearch', **kwargs).to_json()
+        spec['service_type'] = spec['service_name'] = stype
+        cephadm_module.set_store(SPEC_STORE_PREFIX + stype, json.dumps({
+            'spec': spec,
+            'created': datetime_to_str(datetime_now()),
+        }, sort_keys=True))
+    cephadm_module.spec_store.load()
+
+
+def _migrate_jaeger(cephadm_module):
+    cephadm_module.migration_current = 11
+    cephadm_module.migration.migrate()
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+def test_migrate_jaeger_external_elasticsearch(cephadm_module: CephadmOrchestrator):
+    """Settings needed for an external Elasticsearch backend are preserved."""
+    with with_host(cephadm_module, 'host1'):
+        _store_old_jaeger_specs(
+            cephadm_module,
+            es_nodes='10.0.0.5:9200,10.0.0.6:9200',
+            placement=PlacementSpec(hosts=['host1']),
+            networks=['10.0.0.0/24'],
+            unmanaged=True,
+        )
+        _migrate_jaeger(cephadm_module)
+        assert cephadm_module.migration_current == LAST_MIGRATION
+
+        spec = cephadm_module.spec_store.all_specs['jaeger']
+        assert spec.es_nodes == '10.0.0.5:9200,10.0.0.6:9200'
+        assert spec.networks == ['10.0.0.0/24']
+        assert spec.unmanaged is True
+        assert spec.placement.hosts[0].hostname == 'host1'
+        assert cephadm_module.get_store(SPEC_STORE_PREFIX + 'jaeger-collector') is None
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+def test_migrate_jaeger_managed_elasticsearch(cephadm_module: CephadmOrchestrator):
+    """With a cephadm-managed elasticsearch service no es_nodes is needed."""
+    with with_host(cephadm_module, 'host1'):
+        cephadm_module.spec_store._specs['elasticsearch'] = TracingSpec(service_type='elasticsearch')
+        _store_old_jaeger_specs(cephadm_module)
+        _migrate_jaeger(cephadm_module)
+        assert cephadm_module.migration_current == LAST_MIGRATION
+        assert 'jaeger' in cephadm_module.spec_store.all_specs
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+def test_migrate_jaeger_drops_without_query(cephadm_module: CephadmOrchestrator):
+    """A v1 spec that stored without_query still migrates to the v2 spec."""
+    with with_host(cephadm_module, 'host1'):
+        _store_old_jaeger_specs(cephadm_module, es_nodes='10.0.0.5:9200')
+        for stype in ('jaeger-collector', 'jaeger-query', 'jaeger-agent'):
+            key = SPEC_STORE_PREFIX + stype
+            raw = json.loads(cephadm_module.get_store(key))
+            raw['spec']['spec']['without_query'] = True
+            cephadm_module.set_store(key, json.dumps(raw))
+        _migrate_jaeger(cephadm_module)
+        assert cephadm_module.migration_current == LAST_MIGRATION
+        spec = cephadm_module.spec_store.all_specs['jaeger']
+        assert spec.es_nodes == '10.0.0.5:9200'
+        assert not hasattr(spec, 'without_query')
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+def test_migrate_jaeger_no_backend_is_deferred(cephadm_module: CephadmOrchestrator):
+    """An invalid migrated spec defers the migration and keeps the old specs."""
+    with with_host(cephadm_module, 'host1'):
+        _store_old_jaeger_specs(cephadm_module)
+        _migrate_jaeger(cephadm_module)
+        assert cephadm_module.migration_current == 11
+        assert 'jaeger' not in cephadm_module.spec_store.all_specs
+        assert cephadm_module.get_store(SPEC_STORE_PREFIX + 'jaeger-collector') is not None
+
+
+def _store_old_jaeger_daemons(cephadm_module, host):
+    """Add v1 jaeger daemons (plus an unrelated crash daemon) to the raw host cache."""
+    key = HOST_CACHE_PREFIX + host
+    raw = json.loads(cephadm_module.get_store(key) or '{}')
+    daemons = raw.setdefault('daemons', {})
+    deps = raw.setdefault('daemon_config_deps', {})
+    for dtype in OLD_JAEGER_TYPES + ('crash',):
+        dd = DaemonDescription(daemon_type=dtype, daemon_id=host, hostname=host)
+        daemons[dd.name()] = dd.to_json()
+        deps[dd.name()] = {'deps': [], 'last_config': datetime_to_str(datetime_now())}
+    cephadm_module.set_store(key, json.dumps(raw))
+
+
+def _legacy_ls(host):
+    """`cephadm ls` output of a host running the v1 daemons and some bystanders."""
+    ls = [{'name': f'{t}.{host}', 'fsid': 'fsid', 'systemd_unit': f'ceph-fsid@{t}.{host}.service'}
+          for t in OLD_JAEGER_TYPES[:2]]
+    # no systemd_unit reported: the migration has to derive it
+    ls.append({'name': f'jaeger-agent.{host}', 'fsid': 'fsid'})
+    ls.append({'name': f'crash.{host}', 'fsid': 'fsid', 'systemd_unit': f'ceph-fsid@crash.{host}.service'})
+    # same daemon type but belonging to another cluster
+    ls.append({'name': f'jaeger-query.{host}', 'fsid': 'other',
+               'systemd_unit': f'ceph-other@jaeger-query.{host}.service'})
+    return ls
+
+
+def _legacy_units(host):
+    return {f'ceph-fsid@{t}.{host}.service' for t in OLD_JAEGER_TYPES}
+
+
+@contextmanager
+def _legacy_hosts(ls=None, unreachable=(), fail=None):
+    """
+    Mock `cephadm ls` and the ssh `systemctl` calls the migration makes.
+
+    fail maps (host, action) to a non-zero exit code or an exception to raise.
+    """
+    ls = ls or {}
+    fail = fail or {}
+    rec = SimpleNamespace(ls_calls=[], cmds=[])
+
+    async def fake_ls(self, host, entity, command, args, **kwargs):
+        rec.ls_calls.append(host)
+        if host in unreachable:
+            raise OrchestratorError(f'host {host} `cephadm ls` failed: unreachable')
+        return ls.get(host, [])
+
+    def fake_execute(self, host, cmd, *args, **kwargs):
+        action, unit = cmd.args
+        rec.cmds.append((host, action, unit))
+        f = fail.get((host, action), 0)
+        if isinstance(f, Exception):
+            raise f
+        return '', ('boom' if f else ''), f
+
+    with mock.patch('cephadm.serve.CephadmServe._run_cephadm_json', fake_ls), \
+            mock.patch('cephadm.ssh.SSHManager.execute_command', fake_execute):
+        yield rec
+
+
+def _legacy_kv_state(cephadm_module):
+    """Raw KV entries that hold the v1 jaeger configuration."""
+    state = {k: v for k, v in cephadm_module.get_store_prefix(SPEC_STORE_PREFIX).items()
+             if k[len(SPEC_STORE_PREFIX):] in OLD_JAEGER_TYPES}
+    state.update(cephadm_module.get_store_prefix(HOST_CACHE_PREFIX))
+    return state
+
+
+def _assert_migrated(cephadm_module):
+    # The v1 daemons are not purged from the host cache here: the regular
+    # host refresh drops them (unknown daemon type) once `cephadm ls` is run.
+    assert cephadm_module.migration_current == LAST_MIGRATION
+    assert 'CEPHADM_MIGRATION_FAILURE' not in cephadm_module.health_checks
+    for t in OLD_JAEGER_TYPES:
+        assert cephadm_module.get_store(SPEC_STORE_PREFIX + t) is None
+        assert t not in cephadm_module.spec_store.all_specs
+
+
+@pytest.mark.parametrize('with_legacy', [False, True])
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+def test_migrate_jaeger_nothing_to_migrate(with_legacy, cephadm_module: CephadmOrchestrator):
+    """No v1 jaeger anywhere (with or without an existing v2 jaeger): no-op."""
+    with with_host(cephadm_module, 'host1'):
+        if with_legacy:
+            cephadm_module.spec_store._specs['jaeger'] = TracingSpec(
+                service_type='jaeger', es_nodes='10.0.0.5:9200')
+        before = {**cephadm_module.get_store_prefix(SPEC_STORE_PREFIX),
+                  **cephadm_module.get_store_prefix(HOST_CACHE_PREFIX)}
+        with _legacy_hosts() as rec, \
+                mock.patch('cephadm.module.CephadmOrchestrator._apply') as apply:
+            _migrate_jaeger(cephadm_module)
+        assert cephadm_module.migration_current == LAST_MIGRATION
+        assert not apply.called
+        assert rec.ls_calls == [] and rec.cmds == []
+        assert before == {**cephadm_module.get_store_prefix(SPEC_STORE_PREFIX),
+                          **cephadm_module.get_store_prefix(HOST_CACHE_PREFIX)}
+        assert ('jaeger' in cephadm_module.spec_store.all_specs) == with_legacy
+        assert 'CEPHADM_MIGRATION_FAILURE' not in cephadm_module.health_checks
+
+
+@pytest.mark.parametrize('host', ['host1', 'host1.example.com'])
+@pytest.mark.parametrize('managed_es, spec_kwargs', [
+    # external Elasticsearch: every setting must survive
+    (False, lambda h: dict(es_nodes='10.0.0.5:9200,10.0.0.6:9200',
+                           placement=PlacementSpec(hosts=[h]),
+                           networks=['10.0.0.0/24'], unmanaged=True,
+                           config={'foo': 'bar'})),
+    (False, lambda h: dict(es_nodes='10.0.0.5:9200', placement=PlacementSpec(count=1))),
+    # cephadm-managed Elasticsearch: no es_nodes
+    (True, lambda h: dict(placement=PlacementSpec(host_pattern='host*'))),
+], ids=['external-es-hosts', 'external-es-count', 'managed-es-pattern'])
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+def test_migrate_jaeger_success(host, managed_es, spec_kwargs, cephadm_module: CephadmOrchestrator):
+    """
+    The three v1 services become one v2 'jaeger' service with the same placement
+    and settings; the v1 daemons are stopped/disabled via systemctl on their
+    host (short name or FQDN) and every trace of them is purged.
+    """
+    kwargs = spec_kwargs(host)
+    with with_host(cephadm_module, host):
+        if managed_es:
+            cephadm_module.spec_store._specs['elasticsearch'] = TracingSpec(service_type='elasticsearch')
+        _store_old_jaeger_specs(cephadm_module, **kwargs)
+        _store_old_jaeger_daemons(cephadm_module, host)
+
+        with _legacy_hosts(ls={host: _legacy_ls(host)}) as rec:
+            _migrate_jaeger(cephadm_module)
+
+        _assert_migrated(cephadm_module)
+        expected = TracingSpec(service_type='jaeger', **kwargs).to_json()
+        assert cephadm_module.spec_store.all_specs['jaeger'].to_json() == expected
+        assert json.loads(cephadm_module.get_store(SPEC_STORE_PREFIX + 'jaeger'))['spec'] == expected
+
+        # only the cluster's v1 jaeger units were touched, each stopped and disabled
+        assert rec.ls_calls == [host]
+        assert sorted(rec.cmds) == sorted(
+            (host, action, unit)
+            for unit in _legacy_units(host) for action in ('stop', 'disable'))
+
+
+@pytest.mark.parametrize('present', [('jaeger-query',), ('jaeger-agent',)])
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+def test_migrate_jaeger_partial_legacy_specs(present, cephadm_module: CephadmOrchestrator):
+    """Settings are taken from whichever v1 spec is left when the collector one is gone."""
+    with with_host(cephadm_module, 'host1'):
+        _store_old_jaeger_specs(cephadm_module, types=present, es_nodes='10.0.0.5:9200',
+                                placement=PlacementSpec(hosts=['host1']), networks=['10.0.0.0/24'])
+        with _legacy_hosts():
+            _migrate_jaeger(cephadm_module)
+        assert cephadm_module.migration_current == LAST_MIGRATION
+        spec = cephadm_module.spec_store.all_specs['jaeger']
+        assert spec.es_nodes == '10.0.0.5:9200'
+        assert spec.networks == ['10.0.0.0/24']
+        assert spec.placement.hosts[0].hostname == 'host1'
+        assert cephadm_module.get_store(SPEC_STORE_PREFIX + present[0]) is None
+
+
+@pytest.mark.parametrize('legacy_on_down_host', [False, True])
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+def test_migrate_jaeger_unavailable_host(legacy_on_down_host, cephadm_module: CephadmOrchestrator):
+    """
+    Every inventory host is checked with `cephadm ls`, since the host cache may
+    already have lost the v1 daemons.  A host that is down only blocks the
+    migration if the cache says it carries v1 daemons: those cannot be stopped,
+    so everything is kept and the migration retried.
+    """
+    with with_host(cephadm_module, 'host1'), with_host(cephadm_module, 'host2'):
+        _store_old_jaeger_specs(cephadm_module, es_nodes='10.0.0.5:9200')
+        _store_old_jaeger_daemons(cephadm_module, 'host1')
+        if legacy_on_down_host:
+            _store_old_jaeger_daemons(cephadm_module, 'host2')
+        legacy_before = _legacy_kv_state(cephadm_module)
+        ls = {'host1': _legacy_ls('host1'), 'host2': _legacy_ls('host2')}
+
+        with _legacy_hosts(ls=ls, unreachable=['host2']) as rec:
+            _migrate_jaeger(cephadm_module)
+
+        if not legacy_on_down_host:
+            # contacted (the cache is not trusted) but only logged
+            assert sorted(rec.ls_calls) == ['host1', 'host2']
+            _assert_migrated(cephadm_module)
+            return
+
+        assert sorted(rec.ls_calls) == ['host1', 'host2']
+        assert cephadm_module.migration_current == 11
+        health = cephadm_module.health_checks['CEPHADM_MIGRATION_FAILURE']
+        assert health['detail'] == ['host2']
+        assert 'host2' in health['summary']
+        # v1 state is untouched so that the migration can be retried
+        assert _legacy_kv_state(cephadm_module) == legacy_before
+
+        # host2 comes back: the retry completes and clears the warning
+        with _legacy_hosts(ls=ls):
+            _migrate_jaeger(cephadm_module)
+        _assert_migrated(cephadm_module)
+
+
+@pytest.mark.parametrize('fail', [
+    {('host2', 'stop'): 5},
+    {('host2', 'stop'): OrchestratorError('ssh connection lost')},
+], ids=['stop-exit-code', 'stop-raises'])
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+def test_migrate_jaeger_stop_failure_then_retry(fail, cephadm_module: CephadmOrchestrator):
+    """
+    If a daemon cannot be stopped nothing is purged and the migration stays at
+    11. A retry (stopping an already stopped daemon again) then completes.
+    """
+    with with_host(cephadm_module, 'host1'), with_host(cephadm_module, 'host2'):
+        _store_old_jaeger_specs(cephadm_module, es_nodes='10.0.0.5:9200')
+        for h in ('host1', 'host2'):
+            _store_old_jaeger_daemons(cephadm_module, h)
+        legacy_before = _legacy_kv_state(cephadm_module)
+        ls = {h: _legacy_ls(h) for h in ('host1', 'host2')}
+
+        with _legacy_hosts(ls=ls, fail=fail):
+            _migrate_jaeger(cephadm_module)
+
+        assert cephadm_module.migration_current == 11
+        health = cephadm_module.health_checks['CEPHADM_MIGRATION_FAILURE']
+        assert health['detail'] == ['host2']
+        assert _legacy_kv_state(cephadm_module) == legacy_before
+
+        with _legacy_hosts(ls=ls) as rec:
+            _migrate_jaeger(cephadm_module)
+        _assert_migrated(cephadm_module)
+        assert {h for h, _, _ in rec.cmds} == {'host1', 'host2'}
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+def test_migrate_jaeger_apply_failure_keeps_original_config(
+        monkeypatch, cephadm_module: CephadmOrchestrator):
+    """
+    Applying the migrated spec fails (no Elasticsearch backend, so the real
+    validation rejects it): the v1 specs and daemons must stay recoverable and
+    nothing may be stopped.
+
+    handle_orch_error re-raises under UNITTEST, which would hide a migration
+    that goes through the decorated orchestrator API.  Production returns an
+    OrchResult carrying the exception instead, so run without UNITTEST.
+    """
+    monkeypatch.delenv('UNITTEST')
+
+    with with_host(cephadm_module, 'host1'):
+        _store_old_jaeger_specs(cephadm_module)
+        _store_old_jaeger_daemons(cephadm_module, 'host1')
+        legacy_before = _legacy_kv_state(cephadm_module)
+        ls = {'host1': _legacy_ls('host1')}
+
+        with _legacy_hosts(ls=ls) as rec:
+            # the decorated API returns the error instead of raising it
+            res = cephadm_module.apply_mon(TracingSpec(service_type='jaeger'))
+            assert res.serialized_exception is not None
+            assert 'Elasticsearch' in res.exception_str
+
+            _migrate_jaeger(cephadm_module)
+
+        assert cephadm_module.migration_current == 11
+        assert 'jaeger' not in cephadm_module.spec_store.all_specs
+        assert cephadm_module.get_store(SPEC_STORE_PREFIX + 'jaeger') is None
+        assert rec.ls_calls == [] and rec.cmds == []
+        assert _legacy_kv_state(cephadm_module) == legacy_before
+        health = cephadm_module.health_checks['CEPHADM_MIGRATION_FAILURE']
+        assert 'unable to apply migrated jaeger spec' in health['summary']
+        assert health['count'] == 1
+
+        # fix the cause and retry: the original configuration is migrated
+        cephadm_module.spec_store._specs['elasticsearch'] = TracingSpec(
+            service_type='elasticsearch')
+        with _legacy_hosts(ls=ls):
+            _migrate_jaeger(cephadm_module)
+        _assert_migrated(cephadm_module)
+        assert 'jaeger' in cephadm_module.spec_store.all_specs
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+def test_migrate_jaeger_idempotent(cephadm_module: CephadmOrchestrator):
+    """Running the migration again after it succeeded changes and touches nothing."""
+    with with_host(cephadm_module, 'host1'):
+        _store_old_jaeger_specs(cephadm_module, es_nodes='10.0.0.5:9200',
+                                placement=PlacementSpec(hosts=['host1']))
+        _store_old_jaeger_daemons(cephadm_module, 'host1')
+        ls = {'host1': _legacy_ls('host1')}
+        with _legacy_hosts(ls=ls):
+            _migrate_jaeger(cephadm_module)
+        _assert_migrated(cephadm_module)
+
+        kv = {**cephadm_module.get_store_prefix(SPEC_STORE_PREFIX),
+              **cephadm_module.get_store_prefix(HOST_CACHE_PREFIX)}
+        with _legacy_hosts(ls=ls) as rec, \
+                mock.patch('cephadm.module.CephadmOrchestrator._apply') as apply:
+            assert cephadm_module.migration.migrate_11_12() is True
+            _migrate_jaeger(cephadm_module)
+        assert not apply.called
+        assert rec.ls_calls == [] and rec.cmds == []
+        assert kv == {**cephadm_module.get_store_prefix(SPEC_STORE_PREFIX),
+                      **cephadm_module.get_store_prefix(HOST_CACHE_PREFIX)}
+        _assert_migrated(cephadm_module)
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+def test_migrate_jaeger_stops_daemons_missing_from_host_cache(cephadm_module: CephadmOrchestrator):
+    """
+    A host refresh before the migration drops the v1 daemons from the host
+    cache, but they are still running and hold the ports the v2 daemon needs.
+    They must still be found with `cephadm ls` and stopped.
+    """
+    with with_host(cephadm_module, 'host1'):
+        _store_old_jaeger_specs(cephadm_module, es_nodes='10.0.0.5:9200')
+        # no _store_old_jaeger_daemons(): the cache has no v1 daemons
+        with _legacy_hosts(ls={'host1': _legacy_ls('host1')}) as rec:
+            _migrate_jaeger(cephadm_module)
+        _assert_migrated(cephadm_module)
+        assert rec.ls_calls == ['host1']
+        assert sorted(rec.cmds) == sorted(
+            ('host1', action, unit)
+            for unit in _legacy_units('host1') for action in ('stop', 'disable'))

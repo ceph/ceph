@@ -52,6 +52,7 @@ EXPECTED = [
     ('mv', True, ssh_py),
     ('rm', True, ssh_py),
     ('sysctl', True, ssh_py),
+    ('systemctl', True, 'migrations.py'),
     ('touch', True, ssh_py),
     ('true', True, ssh_py),
     # variable executables
