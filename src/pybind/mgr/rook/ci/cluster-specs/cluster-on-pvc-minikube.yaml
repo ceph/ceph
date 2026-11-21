@@ -184,6 +184,7 @@ spec:
   cephConfig:
     global:
       mon_warn_on_pool_no_redundancy: "false"
+      mon_warn_on_pool_min_size_too_low: "false"
 ---
 apiVersion: ceph.rook.io/v1
 kind: CephBlockPool
