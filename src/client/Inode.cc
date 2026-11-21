@@ -976,7 +976,10 @@ void Inode::mark_caps_dirty(int caps)
   if (caps && !caps_dirty())
     iget();
 
-  dirty_caps |= caps;
+  {
+    std::scoped_lock l(lock);   // the write fast path reads it
+    dirty_caps |= caps;
+  }
   auth_cap->session->get_dirty_list().push_back(&dirty_cap_item);
   client->cap_delay_requeue(this);
 }
@@ -987,7 +990,10 @@ void Inode::mark_caps_dirty(int caps)
 void Inode::mark_caps_clean()
 {
   lsubdout(client->cct, client, 10) << __func__ << " " << *this << dendl;
-  dirty_caps = 0;
+  {
+    std::scoped_lock l(lock);   // the write fast path reads it
+    dirty_caps = 0;
+  }
   dirty_cap_item.remove_myself();
 }
 

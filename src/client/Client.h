@@ -1384,6 +1384,9 @@ protected:
   }
 
   void fill_statx(Inode *in, unsigned int mask, struct ceph_statx *stx);
+  // with Inode::lock held, exclusive or shared
+  int _fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat=0, nest_info_t *rstat=0);
+  void _fill_statx(Inode *in, unsigned int mask, struct ceph_statx *stx);
   void fill_statx(const InodeRef& in, unsigned int mask, struct ceph_statx *stx) {
     return fill_statx(in.get(), mask, stx);
   }

@@ -139,11 +139,15 @@ struct Inode : RefCountedObject {
    *
    *   caps (and each Cap's issued/implemented), open_by_mode, flags,
    *   size, max_size, truncate_seq/truncate_size, layout, pool_perm_ok,
-   *   the attributes getattr returns (mode, uid, gid, nlink, rdev, the
-   *   times, time_warp_seq, change_attr, dirstat, rstat),
+   *   the attributes getattr returns (mode, uid, gid, nlink, rdev, atime,
+   *   btime, time_warp_seq, dirstat, rstat), dirty_caps,
    *   inline_version/inline_data, fscrypt_auth/fscrypt_file, and the
    *   waitfor_caps lists
    *     change them under client_lock and lock, read them under either;
+   *
+   *   mtime, ctime, change_attr
+   *     as above, but a buffered write (Client::_write_fast()) stamps
+   *     them under lock alone: read them under lock;
    *
    *   cap_refs, fhs
    *     the data path changes them under lock alone: read and change

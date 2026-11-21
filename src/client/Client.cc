@@ -1417,10 +1417,12 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
   }
 
   /* always take a newer change attr */
-  ldout(cct, 12) << __func__ << " client inode change_attr: " << in->change_attr << " , mds inodestat change_attr:  " << st->change_attr << dendl;
-  if (st->change_attr > in->change_attr) {
-    std::scoped_lock il(in->lock);  // getattr reads these without client_lock
-    in->change_attr = st->change_attr;
+  {
+    // a buffered write may bump it under Inode::lock alone
+    std::scoped_lock il(in->lock);
+    ldout(cct, 12) << __func__ << " client inode change_attr: " << in->change_attr << " , mds inodestat change_attr:  " << st->change_attr << dendl;
+    if (st->change_attr > in->change_attr)
+      in->change_attr = st->change_attr;
   }
 
   if (st->version > in->version)
@@ -4273,9 +4275,11 @@ int Client::put_cap_ref_fast(Inode *in, int cap)
   int last = in->put_cap_ref(cap);
   if (!last)
     return 0;
-  if (in->snapid != CEPH_NOSNAP ||
-      (last & ~(CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE)) ||
-      (last & ~in->caps_issued()))
+  // the last Fw ref needs client_lock only to finish a cap snap
+  int need = last & ~(CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_WR);
+  if ((last & CEPH_CAP_FILE_WR) && !in->cap_snaps.empty())
+    need |= CEPH_CAP_FILE_WR;
+  if (in->snapid != CEPH_NOSNAP || need || (last & ~in->caps_issued()))
     return last;   // flush snaps, wake writers, check_caps(): client_lock
   if (last & CEPH_CAP_FILE_CACHE) {
     // wake the cap waiters under client_lock, which they sleep on
@@ -4607,12 +4611,16 @@ void Client::send_cap(Inode *in, MetaSession *session, Cap *cap,
   m->max_size = in->max_size;
   m->truncate_seq = in->truncate_seq;
   m->truncate_size = in->truncate_size;
-  m->mtime = in->mtime;
+  {
+    // a buffered write may stamp these under Inode::lock alone
+    std::scoped_lock il(in->lock);
+    m->mtime = in->mtime;
+    m->ctime = in->ctime;
+    m->change_attr = in->change_attr;
+  }
   m->atime = in->atime;
-  m->ctime = in->ctime;
   m->btime = in->btime;
   m->time_warp_seq = in->time_warp_seq;
-  m->change_attr = in->change_attr;
   m->fscrypt_auth = in->fscrypt_auth;
   m->fscrypt_file = in->fscrypt_file;
 
@@ -4883,11 +4891,15 @@ void Client::finish_cap_snap(Inode *in, CapSnap &capsnap, int used)
   capsnap.size = in->size;
   capsnap.fscrypt_auth = in->fscrypt_auth;
   capsnap.fscrypt_file = in->fscrypt_file;
-  capsnap.mtime = in->mtime;
+  {
+    // a buffered write may stamp these under Inode::lock alone
+    std::scoped_lock il(in->lock);
+    capsnap.mtime = in->mtime;
+    capsnap.ctime = in->ctime;
+    capsnap.change_attr = in->change_attr;
+  }
   capsnap.atime = in->atime;
-  capsnap.ctime = in->ctime;
   capsnap.time_warp_seq = in->time_warp_seq;
-  capsnap.change_attr = in->change_attr;
   capsnap.dirty |= in->caps_dirty();
 
   if (capsnap.dirty & CEPH_CAP_FILE_WR) {
@@ -6804,9 +6816,11 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, const M
   }
 
   /* always take a newer change attr */
-  if (m->get_change_attr() > in->change_attr) {
-    std::scoped_lock il(in->lock);  // getattr reads these without client_lock
-    in->change_attr = m->get_change_attr();
+  {
+    // a buffered write may bump it under Inode::lock alone
+    std::scoped_lock il(in->lock);
+    if (m->get_change_attr() > in->change_attr)
+      in->change_attr = m->get_change_attr();
   }
 
   // max_size
@@ -9455,7 +9469,10 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
 
       header.ver = 1;
       header.compat = 1;
-      header.change_attr = in->change_attr;
+      {
+        std::scoped_lock il(in->lock);  // see Inode.h: mtime/ctime/change_attr
+        header.change_attr = in->change_attr;
+      }
       header.block_size = FSCRYPT_BLOCK_SIZE;
 
       if (bl.length() == 0) {
@@ -9557,6 +9574,8 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
   }
 
   if (mask & CEPH_SETATTR_MTIME) {
+    // a buffered write may stamp mtime under Inode::lock alone
+    std::scoped_lock il_mtime(in->lock);
     if (!do_sync && in->caps_issued_mask(CEPH_CAP_FILE_EXCL)) {
       std::scoped_lock il(in->lock);  // getattr reads these without client_lock
       in->mtime = utime_t(stx->stx_mtime);
@@ -9887,6 +9906,13 @@ int Client::lstat(const char *relpath, struct stat *stbuf,
 
 int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat, nest_info_t *rstat)
 {
+  // a buffered write may stamp the times under Inode::lock alone
+  std::shared_lock il(in->lock);
+  return _fill_stat(in, st, dirstat, rstat);
+}
+
+int Client::_fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat, nest_info_t *rstat)
+{
   // may run without client_lock (_getattr_fast()): no *in
   ldout(cct, 10) << __func__ << " on " << in->vino() << dendl;
   memset(st, 0, sizeof(struct stat));
@@ -9962,6 +9988,13 @@ int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat, nest_inf
 }
 
 void Client::fill_statx(Inode *in, unsigned int mask, struct ceph_statx *stx)
+{
+  // a buffered write may stamp the times under Inode::lock alone
+  std::shared_lock il(in->lock);
+  _fill_statx(in, mask, stx);
+}
+
+void Client::_fill_statx(Inode *in, unsigned int mask, struct ceph_statx *stx)
 {
   // may run without client_lock (_getattr_fast()): no *in
   ldout(cct, 10) << __func__ << " on " << in->vino() << dendl;
@@ -15947,7 +15980,7 @@ int Client::ll_getattr(Inode *in, struct stat *attr, const UserPerm& perms)
   if (!mref_reader.is_state_satisfied())
     return -ENOTCONN;
 
-  if (_getattr_fast(in, CEPH_STAT_CAP_INODE_ALL, [&] { fill_stat(in, attr); })) {
+  if (_getattr_fast(in, CEPH_STAT_CAP_INODE_ALL, [&] { _fill_stat(in, attr); })) {
     ldout(cct, 3) << __func__ << " " << _get_vino(in) << " = 0 (fast)" << dendl;
     return 0;
   }
@@ -15970,7 +16003,7 @@ int Client::ll_getattrx(Inode *in, struct ceph_statx *stx, unsigned int want,
     return -ENOTCONN;
 
   unsigned mask = statx_to_mask(flags, want);
-  if (_getattr_fast(in, mask, [&] { fill_statx(in, mask, stx); })) {
+  if (_getattr_fast(in, mask, [&] { _fill_statx(in, mask, stx); })) {
     ldout(cct, 3) << __func__ << " " << _get_vino(in) << " = 0 (fast)" << dendl;
     return 0;
   }
@@ -18680,8 +18713,9 @@ int Client::ll_commit_blocks(Inode *in,
  * A buffered write that the caps allow and that needs nothing from the MDS,
  * with the expensive part (mapping, the cache write) under Inode::lock and
  * oc_lock only: the steady state of a writer rewriting a file in place.
- * client_lock is taken just to time-stamp the inode, mark Fw dirty and
- * drop the cap refs, as _write_success() and _write() do.  Anything else
+ * It time-stamps the inode under Inode::lock too, and takes client_lock
+ * only to mark Fw dirty when it is not yet, or for what dropping the last
+ * Fb/Fw ref needs (see put_cap_ref_fast()).  Anything else
  * (extending the file, inline data, fscrypt, snapshots pending, suid/sgid,
  * O_DIRECT/O_SYNC/O_DSYNC/O_APPEND, missing or revoked caps, an unchecked
  * pool, a full pool, write-through caching) returns false, and the caller
@@ -18765,16 +18799,28 @@ bool Client::_write_fast(Fh *f, int64_t off, bufferlist& bl, int64_t *pr)
   }
   cap_hit();
   ldout(cct, 10) << __func__ << " " << in->vino() << " " << off << "~" << len << dendl;
+  // Stamp the inode, as _write_success() does, under Inode::lock alone
+  // (see Inode.h: mtime, ctime, change_attr): with Fw already dirty there
+  // is nothing to mark, and the Fb/Fw refs mostly drop without
+  // client_lock; so writers do not queue on it once per write.  A cap
+  // flush clears dirty_caps before it copies the times, so a stamp taken
+  // with Fw still dirty goes out with it.
+  in->mtime = in->ctime = ceph_clock_now();
+  in->change_attr++;
+  bool dirty = in->auth_cap && (in->dirty_caps & CEPH_CAP_FILE_WR);
   il.unlock();
 
-  {
+  if (dirty) {
+    int last = put_cap_ref_fast(in, CEPH_CAP_FILE_BUFFER);
+    last |= put_cap_ref_fast(in, CEPH_CAP_FILE_WR);
+    if (last) {
+      ceph_assert(!Inode::Lock::held_by_me());  // client_lock goes first
+      std::scoped_lock cl(client_lock);
+      _put_cap_ref_last(in, last);
+    }
+  } else {
     ceph_assert(!Inode::Lock::held_by_me());  // client_lock goes first
     std::scoped_lock cl(client_lock);
-    {
-      std::scoped_lock il2(in->lock);
-      in->mtime = in->ctime = ceph_clock_now();
-      in->change_attr++;
-    }
     in->mark_caps_dirty(CEPH_CAP_FILE_WR);
     put_cap_ref(in, CEPH_CAP_FILE_BUFFER);
     put_cap_ref(in, CEPH_CAP_FILE_WR);
