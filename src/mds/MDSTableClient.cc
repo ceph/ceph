@@ -164,7 +164,7 @@ void MDSTableClient::_prepare(bufferlist& mutation, version_t *ptid, bufferlist 
 {
   if (last_reqid == ~0ULL) {
     dout(10) << "tableserver is not ready yet, waiting for request id" << dendl;
-    waiting_for_reqid.push_back(_pending_prepare(onfinish, ptid, pbl, mutation));
+    waiting_for_reqid.emplace_back(onfinish, ptid, pbl, mutation);
     return;
   }
 
@@ -242,7 +242,7 @@ void MDSTableClient::resend_commits()
 void MDSTableClient::resend_prepares()
 {
   while (!waiting_for_reqid.empty()) {
-    pending_prepare[++last_reqid] = waiting_for_reqid.front();
+    pending_prepare[++last_reqid] = std::move(waiting_for_reqid.front());
     waiting_for_reqid.pop_front();
   }
 

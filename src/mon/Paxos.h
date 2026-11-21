@@ -118,6 +118,7 @@ e 12v
 #include "common/JSONFormatter.h"
 #include "common/perf_counters.h"
 #include <errno.h>
+#include <vector>
 
 #include "MonitorDBStore.h"
 #include "mon/MonOpRequest.h"
@@ -193,8 +194,6 @@ class Paxos {
 
   friend class Monitor;
   friend class PaxosService;
-
-  std::list<std::string> extra_state_dirs;
 
   // LEADER+PEON
 
@@ -408,7 +407,7 @@ private:
   /**
    * List of callbacks waiting for our state to change into STATE_ACTIVE.
    */
-  std::list<Context*> waiting_for_active;
+  std::vector<Context*> waiting_for_active;
   /**
    * List of callbacks waiting for the chance to read a version from us.
    *
@@ -424,7 +423,7 @@ private:
    * with the latest proposal, or if we don't really care about the remaining
    * uncommitted values --, or if we're on a quorum of one.
    */
-  std::list<Context*> waiting_for_readable;
+  std::vector<Context*> waiting_for_readable;
   /**
    * @}
    */
@@ -573,7 +572,7 @@ private:
    * @remarks It is not possible to write if we are not the Leader, or we are
    *	      not on the active state, or if the lease has expired.
    */
-  std::list<Context*> waiting_for_writeable;
+  std::vector<Context*> waiting_for_writeable;
 
   /**
    * Pending proposal transaction
@@ -590,7 +589,7 @@ private:
    * These are waiting for updates in the pending proposal/transaction
    * to be committed.
    */
-  std::list<Context*> pending_finishers;
+  std::vector<Context*> pending_finishers;
 
   /**
    * Finishers for committing transaction
@@ -598,7 +597,7 @@ private:
    * When the pending_proposal is submitted, pending_finishers move to
    * this list.  When it commits, these finishers are notified.
    */
-  std::list<Context*> committing_finishers;
+  std::vector<Context*> committing_finishers;
   /**
    * This function re-triggers pending_ and committing_finishers
    * safely, so as to maintain existing system invariants. In particular
@@ -1167,15 +1166,6 @@ public:
     auto it = bl.cbegin();
     vt->decode(it);
     t->append(vt);
-  }
-
-  /**
-   * @todo This appears to be used only by the OSDMonitor, and I would say
-   *	   its objective is to allow a third-party to have a "private"
-   *	   state dir. -JL
-   */
-  void add_extra_state_dir(std::string s) {
-    extra_state_dirs.push_back(s);
   }
 
   // -- service interface --

@@ -4,7 +4,7 @@
 #pragma once
 
 #include <cstdint>
-#include <list>
+#include <vector>
 #include <iosfwd>
 #include <string>
 #include "include/denc.h"
@@ -73,7 +73,7 @@ public:
     DENC_FINISH(p);
   }
   void dump(ceph::Formatter *f) const;
-  static std::list<DaemonHealthMetric> generate_test_instances();
+  static std::vector<DaemonHealthMetric> generate_test_instances();
   std::string get_type_name() const {
     return daemon_metric_name(get_type());
   }

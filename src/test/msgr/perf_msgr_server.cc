@@ -15,10 +15,12 @@
  *
  */
 
-#include <stdlib.h>
 #include <stdint.h>
-#include <string>
+#include <stdlib.h>
 #include <unistd.h>
+
+#include <deque>
+#include <string>
 #include <iostream>
 
 using namespace std;
@@ -36,7 +38,7 @@ class ServerDispatcher : public Dispatcher {
   uint64_t think_time;
   ThreadPool op_tp;
   class OpWQ : public ThreadPool::WorkQueue<Message> {
-    list<Message*> messages;
+    std::deque<Message*> messages;
 
    public:
     OpWQ(ceph::timespan timeout, ceph::timespan suicide_timeout, ThreadPool *tp)

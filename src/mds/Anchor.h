@@ -19,6 +19,7 @@
 #include <iosfwd>
 #include <set>
 #include <string>
+#include <vector>
 
 #include "include/buffer.h"
 #include "include/cephfs/types.h" // for mds_rank_t
@@ -40,7 +41,7 @@ public:
   void encode(bufferlist &bl) const;
   void decode(bufferlist::const_iterator &bl);
   void dump(Formatter *f) const;
-  static std::list<Anchor> generate_test_instances();
+  static std::vector<Anchor> generate_test_instances();
   bool operator==(const Anchor &r) const {
     return ino == r.ino && dirino == r.dirino &&
 	   d_name == r.d_name && d_type == r.d_type &&

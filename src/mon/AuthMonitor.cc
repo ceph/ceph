@@ -55,7 +55,6 @@ using namespace TOPNSPC::common;
 
 using namespace std::string_view_literals;
 
-using std::list;
 using std::map;
 using std::make_pair;
 using std::ostream;
@@ -244,11 +243,8 @@ void AuthMonitor::get_initial_keyring(KeyRing *keyring)
   decode(*keyring, p);
 }
 
-void _generate_bootstrap_keys(
-    list<pair<EntityName,EntityAuth> >* auth_lst)
+auto _generate_bootstrap_keys()
 {
-  ceph_assert(auth_lst != nullptr);
-
   map<string,map<string,bufferlist> > bootstrap = {
     { "admin", {
       { "mon", _encode_cap("allow *") },
@@ -276,6 +272,9 @@ void _generate_bootstrap_keys(
     } }
   };
 
+  vector<pair<EntityName, EntityAuth>> auths;
+  auths.reserve(std::size(bootstrap));
+
   for (auto &p : bootstrap) {
     EntityName name;
     name.from_str("client." + p.first);
@@ -283,8 +282,10 @@ void _generate_bootstrap_keys(
     auth.key.create(g_ceph_context, CEPH_CRYPTO_AES256KRB5);
     auth.caps = p.second;
 
-    auth_lst->push_back(make_pair(name, auth));
+    auths.emplace_back(std::move(name), std::move(auth));
   }
+
+  return auths;
 }
 
 void AuthMonitor::create_initial_keys(KeyRing *keyring)
@@ -292,10 +293,9 @@ void AuthMonitor::create_initial_keys(KeyRing *keyring)
   dout(10) << __func__ << " with keyring" << dendl;
   ceph_assert(keyring != nullptr);
 
-  list<pair<EntityName,EntityAuth> > auth_lst;
-  _generate_bootstrap_keys(&auth_lst);
+  auto auths = _generate_bootstrap_keys();
 
-  for (auto &p : auth_lst) {
+  for (auto &p : auths) {
     if (keyring->exists(p.first)) {
       continue;
     }
@@ -526,7 +526,7 @@ bool AuthMonitor::check_health()
     }
   }
 
-  std::map<std::string,std::list<std::string>> bad_caps_detail;  // entity -> details
+  std::map<std::string,std::vector<std::string>> bad_caps_detail;  // entity -> details
   std::map<EntityName, std::string> bad_key_client_detail;
   std::map<EntityName, std::string> bad_key_service_detail;
   for (auto const& [entity, auth] : mon.get_secrets()) {
@@ -2526,11 +2526,10 @@ bool AuthMonitor::_upgrade_format_to_mimic()
   dout(1) << __func__ << " upgrading from format 2 to 3" << dendl;
   ceph_assert(format_version == 2);
 
-  list<pair<EntityName,EntityAuth> > auth_lst;
-  _generate_bootstrap_keys(&auth_lst);
+  auto auths = _generate_bootstrap_keys();
 
   bool changed = false;
-  for (auto &p : auth_lst) {
+  for (auto &p : auths) {
     if (mon.contains(p.first)) {
       continue;
     }

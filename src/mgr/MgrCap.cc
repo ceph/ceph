@@ -380,8 +380,8 @@ void MgrCap::dump(ceph::Formatter *f) const {
   f->dump_string("text", text);
 }
 
-std::list<MgrCap> MgrCap::generate_test_instances() {
-  std::list<MgrCap> ls;
+std::vector<MgrCap> MgrCap::generate_test_instances() {
+  std::vector<MgrCap> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().parse("allow *");

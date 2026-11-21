@@ -18,6 +18,20 @@
 #include <string>
 #include <utility>
 
+TEST(AuthMethodList, preserves_order_and_removes_matches)
+{
+  AuthMethodList methods(g_ceph_context, "cephx none gss cephx");
+
+  EXPECT_EQ((std::vector<__u32> {
+    CEPH_AUTH_CEPHX, CEPH_AUTH_NONE, CEPH_AUTH_GSS, CEPH_AUTH_CEPHX
+  }), methods.get_supported_set());
+
+  methods.remove_supported_auth(CEPH_AUTH_CEPHX);
+
+  EXPECT_EQ((std::vector<__u32> {CEPH_AUTH_NONE, CEPH_AUTH_GSS}),
+            methods.get_supported_set());
+}
+
 TEST(AuthRegistry, con_modes)
 {
   auto cct = g_ceph_context;

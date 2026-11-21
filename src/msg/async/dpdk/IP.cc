@@ -34,6 +34,8 @@
  *
  */
 
+#include <iterator>
+
 #include "common/perf_counters.h"
 
 #include "capture.h"
@@ -232,7 +234,7 @@ int ipv4::handle_received_packet(Packet p, ethernet_address from)
 
       // Delete this frag from _frags and _frags_age
       frag_drop(frag_id, dropped_size);
-      _frags_age.remove(frag_id);
+      std::erase(_frags_age, frag_id);
       perf_logger->set(l_dpdk_total_linearize_operations,
                        ipv4_packet_merger::linearizations());
     } else {
@@ -385,19 +387,19 @@ void ipv4::frag_timeout() {
     return;
   }
   auto now = ceph_clock_now();
-  for (auto it = _frags_age.begin(); it != _frags_age.end();) {
-    auto frag_id = *it;
+  while (!std::empty(_frags_age)) {
+    const auto frag_id = _frags_age.front();
     auto& frag = _frags[frag_id];
-    if (now > frag.rx_time + _frag_timeout) {
-      auto dropped_size = frag.mem_size;
-      // Drop from _frags
-      frag_drop(frag_id, dropped_size);
-      // Drop from _frags_age
-      it = _frags_age.erase(it);
-    } else {
-      // The further items can only be younger
+
+    // The further items can only be younger.
+    if (now <= frag.rx_time + _frag_timeout) {
       break;
     }
+
+    const auto dropped_size = frag.mem_size;
+
+    frag_drop(frag_id, dropped_size);
+    _frags_age.pop_front();
   }
   if (_frags.size() != 0) {
     frag_arm(now);

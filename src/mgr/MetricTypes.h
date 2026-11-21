@@ -4,6 +4,7 @@
 #ifndef CEPH_MGR_METRIC_TYPES_H
 #define CEPH_MGR_METRIC_TYPES_H
 
+#include <vector>
 #include <boost/variant/static_visitor.hpp>
 #include <variant>
 #include "include/denc.h"
@@ -44,8 +45,8 @@ struct OSDMetricPayload {
     }
     f->close_section();
   }
-  static std::list<OSDMetricPayload> generate_test_instances() {
-    std::list<OSDMetricPayload> ls;
+  static std::vector<OSDMetricPayload> generate_test_instances() {
+    std::vector<OSDMetricPayload> ls;
     ls.push_back(OSDMetricPayload());
     return ls;
   }
@@ -69,8 +70,8 @@ struct MDSMetricPayload {
   void dump(ceph::Formatter *f) const {
     metric_report.dump(f);
   }
-  static std::list<MDSMetricPayload> generate_test_instances() {
-    std::list<MDSMetricPayload> ls;
+  static std::vector<MDSMetricPayload> generate_test_instances() {
+    std::vector<MDSMetricPayload> ls;
     ls.push_back(MDSMetricPayload());
     return ls;
   }
@@ -181,8 +182,8 @@ struct MetricReportMessage {
     }
     f->close_section();
   }
-  static std::list<MetricReportMessage> generate_test_instances() {
-    std::list<MetricReportMessage> ls;
+  static std::vector<MetricReportMessage> generate_test_instances() {
+    std::vector<MetricReportMessage> ls;
     ls.push_back(MetricReportMessage(OSDMetricPayload()));
     ls.push_back(MetricReportMessage(MDSMetricPayload()));
     return ls;
@@ -243,8 +244,8 @@ struct MDSConfigPayload {
     }
     f->close_section();
   }
-  static std::list<MDSConfigPayload> generate_test_instances() {
-    std::list<MDSConfigPayload> ls;
+  static std::vector<MDSConfigPayload> generate_test_instances() {
+    std::vector<MDSConfigPayload> ls;
     ls.emplace_back();
     return ls;
   }

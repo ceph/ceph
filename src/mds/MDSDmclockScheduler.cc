@@ -18,6 +18,10 @@
 #include "mds/MDSMap.h"
 #include "common/debug.h"
 
+#include <array>
+#include <ranges>
+#include <vector>
+
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
@@ -397,9 +401,9 @@ void MDSDmclockScheduler::add_or_remove_session_map(const bool is_add)
   }
   dout(0) << __func__ << dendl;
 
-  std::list<int> session_state_list = {Session::STATE_OPEN, Session::STATE_STALE};
+  constexpr std::array session_states {Session::STATE_OPEN, Session::STATE_STALE};
 
-  for (int session_state : session_state_list) {
+  for (int session_state : session_states) {
       dout(0) << " session state " << session_state << dendl;
     if (auto it = sessionmap->by_state.find(session_state); it != sessionmap->by_state.end()) {
       for (const auto &session : *(it->second)) {
@@ -582,11 +586,11 @@ void MDSDmclockScheduler::cancel_inflight_request()
 {
   dout(10) << __func__ << dendl;
   std::lock_guard lock(volume_info_lock);
-  std::list<Queue::RequestRef> req_list;
+  std::vector<Queue::RequestRef> requests;
 
-  auto accum_f = [&req_list] (Queue::RequestRef&& r)
+  auto accum_f = [&requests] (Queue::RequestRef&& r)
                   {
-                    req_list.push_front(std::move(r));
+                    requests.push_back(std::move(r));
                   };
 
   for (auto it : volume_info_map) {
@@ -595,11 +599,11 @@ void MDSDmclockScheduler::cancel_inflight_request()
     }
   }
 
-  dout(10) << __func__ << " canceled requests " << req_list.size() << dendl;
+  dout(10) << __func__ << " canceled requests " << std::size(requests) << dendl;
 
-  for (auto& it : req_list) {
-    dout(10) << " canceled request volume_id " << it->get_volume_id() << " " << *it->mds_req_ref << dendl;
-    handle_request_func(it->get_volume_id(), std::move(it), PhaseType::reservation, 1);
+  for (auto& request : requests | std::views::reverse) {
+    dout(10) << " canceled request volume_id " << request->get_volume_id() << " " << *request->mds_req_ref << dendl;
+    handle_request_func(request->get_volume_id(), std::move(request), PhaseType::reservation, 1);
   }
   ceph_assert(dmclock_queue->empty() == true);
 }

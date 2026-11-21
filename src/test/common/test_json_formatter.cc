@@ -14,6 +14,11 @@
  */
 
 #include <errno.h>
+#include <list>
+#include <vector>
+#include <sstream>
+#include <iterator>
+
 #include <gtest/gtest.h>
 
 #include "common/ceph_json.h"
@@ -21,9 +26,61 @@
 #include "common/JSONFormatter.h"
 #include "common/StackStringStream.h"
 
-#include <sstream>
-
 using namespace std;
+
+namespace {
+
+struct decoded_key {
+  std::string user;
+  std::string access_key;
+  std::string secret_key;
+
+  void decode_json(JSONObj *object)
+  {
+    JSONDecoder::decode_json("user", user, object);
+    JSONDecoder::decode_json("access_key", access_key, object);
+    JSONDecoder::decode_json("secret_key", secret_key, object);
+  }
+};
+
+template <typename SEQUENCE_T>
+void expect_sequence_decoding()
+{
+  constexpr char input[] = R"({"keys":[
+    {"user":"alice","access_key":"alice-key","secret_key":"alice-secret"},
+    {"user":"bob","access_key":"bob-key","secret_key":"bob-secret"}
+  ]})";
+
+  JSONParser parser;
+  ASSERT_TRUE(parser.parse(input, sizeof(input) - 1));
+
+  SEQUENCE_T keys(1);
+  keys.front().user = "stale";
+  ASSERT_TRUE(JSONDecoder::decode_json("keys", keys, &parser));
+  ASSERT_EQ(2u, std::size(keys));
+
+  auto key = std::cbegin(keys);
+  EXPECT_EQ("alice", key->user);
+  EXPECT_EQ("alice-key", key->access_key);
+  EXPECT_EQ("alice-secret", key->secret_key);
+
+  ++key;
+  EXPECT_EQ("bob", key->user);
+  EXPECT_EQ("bob-key", key->access_key);
+  EXPECT_EQ("bob-secret", key->secret_key);
+}
+
+} // namespace
+
+TEST(JSONDecoder, VectorSequence)
+{
+  expect_sequence_decoding<std::vector<decoded_key>>();
+}
+
+TEST(JSONDecoder, ListCompatibility)
+{
+  expect_sequence_decoding<std::list<decoded_key>>();
+}
 
 
 TEST(formatter, bug_37706) {

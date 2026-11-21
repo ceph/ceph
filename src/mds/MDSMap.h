@@ -153,7 +153,7 @@ public:
     // The long form name for use in cluster log messages`
     std::string human_name() const;
 
-    static std::list<mds_info_t> generate_test_instances();
+    static std::vector<mds_info_t> generate_test_instances();
 
     mds_gid_t global_id = MDS_GID_NONE;
     std::string name;
@@ -431,6 +431,7 @@ public:
   void get_mds_set_lower_bound(std::set<mds_rank_t>& s, DaemonState first) const;
   void get_mds_set(std::set<mds_rank_t>& s, DaemonState state) const;
 
+  [[deprecated("use get_health_checks()")]]
   void get_health(std::list<std::pair<health_status_t,std::string> >& summary,
 		  std::list<std::pair<health_status_t,std::string> > *detail) const;
 
@@ -580,7 +581,7 @@ public:
 
   void dump(ceph::Formatter *f) const;
   void dump_flags_state(Formatter *f) const;
-  static std::list<MDSMap> generate_test_instances();
+  static std::vector<MDSMap> generate_test_instances();
 
   static bool state_transition_valid(DaemonState prev, DaemonState next);
 
