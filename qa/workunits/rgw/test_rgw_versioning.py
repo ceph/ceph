@@ -324,6 +324,23 @@ def main():
         exec_cmd(f'rados -p {DATA_POOL} setxattr {olh_oid} user.rgw.olh.ver {olh_ver}')
     assert bucket.Object(key).delete().get('DeleteMarker'), 'expected a delete marker'
 
+    # TESTCASE 'verify that an append ignores a versionId param'
+    log.debug('TEST: verify that an append ignores a versionId param\n')
+    append_bucket = connection.create_bucket(Bucket=f'{BUCKET_NAME}-append')
+    key = 'append-version-id'
+    client = connection.meta.client
+    def add_append_params(**kwargs):
+        kwargs['params']['url'] += '?append&position=0&versionId=junk'
+    client.meta.events.register('before-call.s3.PutObject', add_append_params)
+    try:
+        append_bucket.Object(key).put(Body=b'a')
+    finally:
+        client.meta.events.unregister('before-call.s3.PutObject', add_append_params)
+    versions = [v.id for v in append_bucket.object_versions.all()]
+    assert versions == ['null'], f'expected only the null version, got {versions}'
+    append_bucket.Object(key).delete()
+    append_bucket.delete()
+
     # Clean up
     log.debug("Deleting bucket {}".format(BUCKET_NAME))
     bucket.object_versions.all().delete()
