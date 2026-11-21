@@ -146,6 +146,46 @@ class TestCephAdm(object):
                 _cephadm.command_remove_file(ctx)
         assert cephadm_fs.exists(link)
 
+    @pytest.mark.parametrize(
+        'meta',
+        [
+            # an adopted OSD: cephadm adopt writes no service_name
+            {'memory_request': None, 'memory_limit': None, 'ports': []},
+            # an OSD that cephadm deployed
+            {'service_name': 'osd', 'ports': [], 'memory_request': None},
+        ],
+    )
+    @mock.patch('cephadm.update_osd_bluestore_affinity')
+    def test_update_service_for_daemon(self, _affinity, cephadm_fs, meta):
+        fsid = '00000000-0000-0000-0000-0000deadbeef'
+        path = f'/var/lib/ceph/{fsid}/osd.10/unit.meta'
+        cephadm_fs.create_file(path, contents=json.dumps(meta))
+        with with_cephadm_ctx(
+            ['update-osd-service', '--fsid', fsid,
+             '--service-name', 'osd.moved', '--osd-ids', '10']
+        ) as ctx:
+            _cephadm.update_service_for_daemon(ctx, ['osd.10'], ['osd.10'])
+        with open(path) as fh:
+            new_meta = json.load(fh)
+        assert new_meta == {**meta, 'service_name': 'osd.moved'}
+        _affinity.assert_called_once_with(ctx, 'osd.10', 'moved')
+
+    @mock.patch('cephadm.update_osd_bluestore_affinity')
+    def test_update_service_for_daemon_label_fails(self, _affinity, cephadm_fs):
+        fsid = '00000000-0000-0000-0000-0000deadbeef'
+        path = f'/var/lib/ceph/{fsid}/osd.10/unit.meta'
+        meta = {'memory_request': None, 'memory_limit': None, 'ports': []}
+        cephadm_fs.create_file(path, contents=json.dumps(meta))
+        _affinity.side_effect = _cephadm.Error('label failed')
+        with with_cephadm_ctx(
+            ['update-osd-service', '--fsid', fsid,
+             '--service-name', 'osd.moved', '--osd-ids', '10']
+        ) as ctx:
+            with pytest.raises(_cephadm.Error):
+                _cephadm.update_service_for_daemon(ctx, ['osd.10'], ['osd.10'])
+        with open(path) as fh:
+            assert json.load(fh) == meta
+
     def test_command_deploy_file(self, cephadm_fs):
         import io
         fsid = '00000000-0000-0000-0000-0000deadbeef'
