@@ -46,6 +46,7 @@ sensible.
     RGW module <rgw>
     MDS Autoscaler module <mds_autoscaler>
     NFS module <nfs>
+    NVMe-oF module <nvmeof>
     SMB module <smb>
     Secrets module <ceph_secrets>
     Progress Module <progress>
