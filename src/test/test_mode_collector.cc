@@ -1,7 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include <list>
 #include <string>
 #include <string_view>
 
@@ -25,7 +24,7 @@ struct shard_id_t {
 
   const static shard_id_t NO_SHARD;
 
-  static void generate_test_instances(std::list<shard_id_t*>& ls)
+  static void generate_test_instances(std::vector<shard_id_t*>& ls)
   {
     ls.push_back(new shard_id_t(1));
     ls.push_back(new shard_id_t(2));
@@ -80,7 +79,7 @@ struct pg_shard_t {
   {
     return (osd == NO_OSD ? "NONE" : std::to_string(osd));
   }
-  static void generate_test_instances(std::list<pg_shard_t*>& o)
+  static void generate_test_instances(std::vector<pg_shard_t*>& o)
   {
     o.push_back(new pg_shard_t);
     o.push_back(new pg_shard_t(1));
@@ -129,9 +128,9 @@ class eversion_t {
     return c;
   }
 
-  static std::list<eversion_t> generate_test_instances()
+  static std::vector<eversion_t> generate_test_instances()
   {
-    std::list<eversion_t> o;
+    std::vector<eversion_t> o;
     o.emplace_back();
     o.push_back(eversion_t(1, 2));
     return o;

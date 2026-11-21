@@ -14,6 +14,8 @@
 #ifndef CEPH_ERRORCODE32_H
 #define CEPH_ERRORCODE32_H
 
+#include <vector>
+
 #include "encoding.h"
 #include "int_types.h"
 #include "platform_errno.h"
@@ -59,7 +61,7 @@ struct errorcode32_t {
     set_wire_to_host(newcode);
   }
   void dump(ceph::Formatter *f) const;
-  static std::list<errorcode32_t> generate_test_instances();
+  static std::vector<errorcode32_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(errorcode32_t)
 
