@@ -49,8 +49,18 @@ void RGWOp_Usage_Get::execute(optional_yield y) {
     }
   }
 
-  RESTArgs::get_epoch(s, "start", 0, &start);
-  RESTArgs::get_epoch(s, "end", (uint64_t)-1, &end);
+  // get_epoch() leaves the output unset when the date doesn't parse, so
+  // refuse the request instead of using an uninitialized range
+  op_ret = RESTArgs::get_epoch(s, "start", 0, &start);
+  if (op_ret < 0) {
+    ldpp_dout(this, 5) << "failed to parse start date" << dendl;
+    return;
+  }
+  op_ret = RESTArgs::get_epoch(s, "end", (uint64_t)-1, &end);
+  if (op_ret < 0) {
+    ldpp_dout(this, 5) << "failed to parse end date" << dendl;
+    return;
+  }
   RESTArgs::get_bool(s, "show-entries", true, &show_entries);
   RESTArgs::get_bool(s, "show-summary", true, &show_summary);
 
@@ -102,8 +112,18 @@ void RGWOp_Usage_Delete::execute(optional_yield y) {
     }
   }
 
-  RESTArgs::get_epoch(s, "start", 0, &start);
-  RESTArgs::get_epoch(s, "end", (uint64_t)-1, &end);
+  // get_epoch() leaves the output unset when the date doesn't parse, so
+  // refuse the request instead of using an uninitialized range
+  op_ret = RESTArgs::get_epoch(s, "start", 0, &start);
+  if (op_ret < 0) {
+    ldpp_dout(this, 5) << "failed to parse start date" << dendl;
+    return;
+  }
+  op_ret = RESTArgs::get_epoch(s, "end", (uint64_t)-1, &end);
+  if (op_ret < 0) {
+    ldpp_dout(this, 5) << "failed to parse end date" << dendl;
+    return;
+  }
 
   if (rgw::sal::User::empty(user.get()) &&
       bucket_name.empty() &&
