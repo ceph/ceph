@@ -71,6 +71,13 @@ class Cluster(multisite.Cluster):
             cmd += args
         return bash(cmd, **kwargs)
 
+    def rados(self, args = None, **kwargs):
+        """ rados command """
+        cmd = [test_path + 'test-rgw-call.sh', 'call_rgw_rados', self.cluster_id]
+        if args:
+            cmd += args
+        return bash(cmd, **kwargs)
+
     def start(self):
         cmd = [mstart_path + 'mstart.sh', self.cluster_id]
         env = None
