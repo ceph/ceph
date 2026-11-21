@@ -9,6 +9,7 @@ import time
 
 from gevent import sleep
 from teuthology import misc as teuthology
+from teuthology.orchestra.daemon.cephadmunit import CephadmUnit
 
 from tasks import ceph_manager
 from tasks.cephfs.filesystem import MDSCluster, Filesystem, FSMissing
@@ -174,7 +175,17 @@ class MDSThrasher(ThrasherGreenlet):
             remote.console.power_on()
             self.manager.make_admin_daemon_dir(self.ctx, remote)
         args = []
-        self.ctx.daemons.get_daemon('mds', mds).restart(*args)
+        daemon = self.ctx.daemons.get_daemon('mds', mds)
+        if isinstance(daemon, CephadmUnit):
+            # every start counts against the systemd unit's start rate
+            # limit (StartLimitBurst), which thrashing soon exhausts. This
+            # fails if systemd has unloaded the stopped unit, which also
+            # drops the count.
+            unit = f'ceph-{daemon.fsid}@mds.{mds}'
+            self.log(f'resetting systemd start limit for {unit}')
+            daemon.remote.run(args=['sudo', 'systemctl', 'reset-failed', unit],
+                              check_status=False)
+        daemon.restart(*args)
 
     def wait_for_stable(self, rank = None, gid = None):
         self.log('waiting for mds cluster to stabilize...')
