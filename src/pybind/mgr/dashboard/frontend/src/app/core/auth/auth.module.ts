@@ -30,6 +30,7 @@ import {
   NumberModule,
   RadioModule,
   SelectModule,
+  TabsModule,
   UIShellModule,
   TimePickerModule,
   ComboBoxModule
@@ -59,6 +60,7 @@ import EyeIcon from '@carbon/icons/es/view/16';
     ModalModule,
     DatePickerModule,
     TimePickerModule,
+    TabsModule,
     NgbNavModule,
     NgbPopoverModule,
     PipesModule,
