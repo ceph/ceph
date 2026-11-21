@@ -1011,6 +1011,7 @@ static inline void populate_event(reservation_t& res,
   event.eventTime = mtime;
   event.eventName = to_event_string(event_type);
   event.userIdentity = res.user_id;    // user that triggered the change
+  event.sourceIPAddress = res.source_ip;
   event.x_amz_request_id = res.req_id; // request ID of the original change
   event.x_amz_id_2 = res.store->getRados()->host_id; // RGW on which the change was made
   // configurationId is filled from notification configuration
@@ -1431,6 +1432,9 @@ reservation_t::reservation_t(const DoutPrefixProvider* _dpp,
   yield(y)
 {
   filter_amz_meta(x_meta_map, _s->info.x_meta_map);
+  if (auto i = _s->env.find("aws:SourceIp"); i != _s->env.end()) {
+    source_ip = i->second;
+  }
 }
 
 reservation_t::reservation_t(const DoutPrefixProvider* _dpp,

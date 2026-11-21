@@ -80,6 +80,7 @@ struct reservation_t {
   const std::string user_id;
   const std::string user_tenant;
   const std::string req_id;
+  std::string source_ip;
   optional_yield yield;
 
   /* ctor for rgw_op callers */
