@@ -1076,6 +1076,10 @@ public:
     default:
       ceph_abort_msg("bad cache_private");
     }
+    // This puts the buffer in our newest age bin, so its age is not carried
+    // over: the ageing calculation treats a moved buffer as a freshly added
+    // one.
+    b->cache_age_bin = age_bins.front();
     if (!b->is_empty()) {
       buffer_bytes += b->length;
       list_bytes[b->cache_private] += b->length;
