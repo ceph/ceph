@@ -71,5 +71,5 @@ the same cluster to operate the :ref:`Ceph RADOS Gateway <object-gateway>`, the
 .. _kernel modules: ./rbd-ko/
 .. _QEMU: ./qemu-rbd/
 .. _OpenStack: ./rbd-openstack
-.. _OpenNebula: https://docs.opennebula.io/stable/open_cluster_deployment/storage_setup/ceph_ds.html
+.. _OpenNebula: https://docs.opennebula.io/stable/product/cluster_configuration/storage_system/ceph_ds/
 .. _CloudStack: ./rbd-cloudstack

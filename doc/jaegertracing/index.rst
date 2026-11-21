@@ -19,7 +19,7 @@ BASIC ARCHITECTURE AND TERMINOLOGY
   Jaeger collector then stitches the spans together to form a trace. (A database
   can be enabled to persist these traces).
 * JAEGER QUERY AND CONSOLE FRONTEND: The UI-based frontend that presents
-  reports of the jaeger traces. Accessible at  http://<jaeger frontend host>:16686.
+  reports of the jaeger traces. Accessible at ``http://<jaeger frontend host>:16686``.
 
 Read more about jaeger tracing:.
 

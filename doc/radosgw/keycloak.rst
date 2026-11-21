@@ -29,7 +29,7 @@ Fetching a web token with Keycloak
 ==================================
 
 Several examples of apps authenticating with Keycloak can be found here:
-https://github.com/keycloak/keycloak-quickstarts/blob/latest/docs/getting-started.md.
+https://github.com/keycloak/keycloak-quickstarts/blob/release/21.1/docs/getting-started.md.
 
 Here you might consider the example of the app-profile-jee-jsp app (in the link
 above). To fetch the access token (web token) for such an application using the
@@ -119,7 +119,7 @@ steps:
       :align: center
 
 After these steps have been completed, the tag 'Department' will appear in the
-JWT (web token), under the 'https://aws.amazon.com/tags' namespace.
+JWT (web token), under the ``https://aws.amazon.com/tags`` namespace.
 
 Tags can be verified by performing token introspection on a JWT. To introspect
 a token, use ``client id`` and ``client secret`` as follows::

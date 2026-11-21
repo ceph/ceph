@@ -354,10 +354,10 @@ Running Unit Tests
 ~~~~~~~~~~~~~~~~~~
 
 Run ``npm run test`` to execute the unit tests via `Jest
-<https://facebook.github.io/jest/>`_.
+<https://jestjs.io/>`_.
 
 If you get errors on all tests, it could be because `Jest
-<https://facebook.github.io/jest/>`__ or something else was updated.
+<https://jestjs.io/>`__ or something else was updated.
 There are a few ways how you can try to resolve this:
 
 - Remove all modules with ``rm -rf dist node_modules`` and run ``npm install``
@@ -483,7 +483,7 @@ Instead you should use one of the following commands:
   You need to have a running frontend server.
 
 Calling Cypress directly has the advantage that you can use any of the available
-`flags <https://docs.cypress.io/guides/guides/command-line.html#cypress-run>`__
+`flags <https://docs.cypress.io/app/references/command-line#cypress-run>`__
 to customize your test run and you don't need to start a frontend server each time.
 
 Using one of the ``open`` commands, will open a cypress application where you
@@ -681,7 +681,7 @@ applitools eyes test runner, where you can see all your screenshots. And if ther
 Writing More Visual Regression Tests
 ....................................
 
-Please refer to `Applitools's official cypress sdk documentation <https://www.npmjs.com/package/@applitools/eyes-cypress#usage>`_ to write more tests.
+Please refer to `Applitools's official cypress sdk documentation <https://www.npmjs.com/package/@applitools/eyes-cypress>`_ to write more tests.
 
 Visual Regression Tests In Jenkins
 ..................................
@@ -855,7 +855,7 @@ the Ceph internals, some Ceph-specific names might remain visible.
 
 Regarding the wording for action labels and other textual elements (form titles,
 buttons, etc.), the chosen approach is to follow `these guidelines
-<https://www.patternfly.org/styles/terminology-and-wording/#terminology-and-wording-for-action-labels>`_.
+<https://www.patternfly.org/content-design/grammar/terminology#glossary>`_.
 As a rule of thumb, 'Create' and 'Delete' are the proper wording for most forms,
 instead of 'Add' and 'Remove', unless some already created item is either added
 or removed to/from a set of items (e.g.: 'Add permission' to a user vs. 'Create
@@ -1073,7 +1073,7 @@ To facilitate the translation process of the dashboard we are using a web tool
 called `transifex <https://www.transifex.com/>`_.
 
 If you wish to help translating to any language just go to our `transifex
-project page <https://www.transifex.com/ceph/ceph-dashboard/>`_, join the
+project page <https://app.transifex.com/ceph/ceph-dashboard/>`_, join the
 project and you can start translating immediately.
 
 All translations will then be reviewed and later pushed upstream.
@@ -1083,7 +1083,7 @@ Updating translated messages
 
 1. Download the `transifex CLI tool <https://github.com/transifex/cli>`_
 
-2. Create an `API token <https://www.transifex.com/user/settings/api/>`_.
+2. Create an `API token <https://app.transifex.com/user/settings/api/>`_.
 
 3. Pushing translation:
 
@@ -1103,7 +1103,7 @@ Add a new release resource to transifex
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 In order to organize the translations, we create a
-`transifex resource <https://www.transifex.com/ceph/ceph-dashboard/content/>`_
+`transifex resource <https://app.transifex.com/ceph/ceph-dashboard/content/>`_
 for every Ceph release. This means, once a new version has been released, the
 ``src/pybind/mgr/dashboard/frontend/.tx/config`` needs to be updated on
 the release branch.
@@ -1214,7 +1214,7 @@ A few things you should check before introducing a new code change include:
 
 1) Add `ARIA labels and descriptions <https://www.w3.org/TR/wai-aria/>`_ to actionable HTML elements.
 2) Don't forget to tag ARIA labels/descriptions or any user-readable text for translation (i18n-title, i18n-aria-label...).
-3) Add `ARIA roles <https://www.w3.org/TR/wai-aria/#usage_intro>`_ to tag HTML elements that behave different from their intended behaviour (<a> tags behaving as <buttons>) or that provide extended behaviours (roles).
+3) Add `ARIA roles <https://www.w3.org/TR/wai-aria/#introroles>`_ to tag HTML elements that behave different from their intended behavior (<a> tags behaving as <buttons>) or that provide extended behaviors (roles).
 4) Avoid poor `color contrast choices <https://www.w3.org/TR/WCAG21/#contrast-minimum>`_ (foreground-background) when styling a component. Here are some :ref:`tools <color-contrast-checkers>` you can use.
 5) When testing menus or dropdowns, be sure to scan them with an :ref:`accessibility checker <accessibility-checkers>` in both opened and closed states. Sometimes issues are hidden when menus are closed.
 
@@ -1254,7 +1254,7 @@ Our e2e testing suite, which is based on Cypress, supports the addition of acces
 and `cypress-axe <https://github.com/component-driven/cypress-axe>`_. A custom Cypress command, `cy.checkAccessibility`, can also be used directly. 
 This is a great way to prevent accessibility regressions on high impact components.
 
-Tests can be found under the `a11y folder <./src/pybind/mgr/dashboard/frontend/cypress/integration/a11y>`_ in the dashboard. Here is an example:
+Tests can be found under the `a11y folder <https://github.com/ceph/ceph/tree/main/src/pybind/mgr/dashboard/frontend/cypress/e2e/a11y>`_ in the dashboard. Here is an example:
 
 .. code:: TypeScript
 
@@ -1281,7 +1281,7 @@ Tests can be found under the `a11y folder <./src/pybind/mgr/dashboard/frontend/c
 Additional guidelines
 ~~~~~~~~~~~~~~~~~~~~~
 
-If you're unsure about which UI pattern to follow in order to implement an accessibility fix, `patternfly <https://www.patternfly.org/v4/accessibility/accessibility-fundamentals>`_ guidelines can be used.
+If you're unsure about which UI pattern to follow in order to implement an accessibility fix, `patternfly <https://www.patternfly.org/accessibility/overview/>`_ guidelines can be used.
 
 Backend Development
 -------------------
@@ -1460,12 +1460,12 @@ following code:
       return {'msg': "Hello"}
 
 The ``hello`` endpoint of the ``Ping`` controller can be reached by the
-following URL: https://mgr_hostname:8443/ping/hello using HTTP GET requests.
+following URL: ``https://mgr_hostname:8443/ping/hello`` using HTTP GET requests.
 As you can see the controller URL path ``/ping`` is concatenated to the
 method name ``hello`` to generate the endpoint's URL.
 
 In the case of the ``ApiPing`` controller, the ``hello`` endpoint can be
-reached by the following URL: https://mgr_hostname:8443/api/ping/hello using a
+reached by the following URL: ``https://mgr_hostname:8443/api/ping/hello`` using a
 HTTP GET request.
 The API controller URL path ``/ping`` is prefixed by the ``/api`` path and then
 concatenated to the method name ``hello`` to generate the endpoint's URL.
@@ -1475,7 +1475,7 @@ decorator by passing an additional decorator parameter called ``base_url``::
   @ApiController('/ping') <=> @Controller('/ping', base_url="/api")
 
 ``UiApiPing`` works in a similar way than the ``ApiPing``, but the URL will be
-prefixed by ``/ui-api``: https://mgr_hostname:8443/ui-api/ping/hello. ``UiApiPing`` is
+prefixed by ``/ui-api``: ``https://mgr_hostname:8443/ui-api/ping/hello``. ``UiApiPing`` is
 also a ``@Controller`` extension::
 
   @UiApiController('/ping') <=> @Controller('/ping', base_url="/ui-api")
@@ -1576,7 +1576,7 @@ Consider the following example:
 In this example we explicitly declare a path parameter ``{node}`` in the
 controller URL path, and a path parameter ``{date}`` in the ``latency``
 method. The endpoint for the ``latency`` method is then accessible through
-the URL: https://mgr_hostname:8443/ping/{node}/stats/{date}/latency .
+the URL: ``https://mgr_hostname:8443/ping/{node}/stats/{date}/latency``.
 
 For a full set of examples on how to use the ``@Endpoint``
 decorator please check the unit test file: ``tests/test_controllers.py``.

@@ -363,6 +363,6 @@ For example:
 
 .. _QEMU: ../qemu-rbd/
 .. _OpenStack: ../rbd-openstack/
-.. _OpenNebula: https://docs.opennebula.io/stable/management_and_operations/vm_management/vm_instances.html?highlight=ceph#managing-disk-snapshots
+.. _OpenNebula: https://docs.opennebula.io/stable/product/virtual_machines_operation/virtual_machines/vm_resources/#managing-disk-snapshots
 .. _CloudStack: ../rbd-cloudstack/
 .. _libvirt: ../libvirt/

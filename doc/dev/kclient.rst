@@ -472,7 +472,7 @@ The actual override is controlled using Lua merge scripts in the
 
 
 .. _VPN: https://wiki.sepia.ceph.com/doku.php?id=vpnaccess
-.. _systemd resolved update script: systemd-resolved: https://wiki.archlinux.org/title/Systemd-resolved
+.. _systemd resolved update script: https://wiki.archlinux.org/title/Systemd-resolved
 .. _Ceph Kernel QA Config: https://github.com/ceph/ceph-build/tree/899d0848a0f487f7e4cee773556aaf9529b8db26/kernel/build
 .. _developer playground: https://wiki.sepia.ceph.com/doku.php?id=devplayground#developer_playgrounds
 .. _ceph kernel git repository: https://github.com/ceph/ceph-client

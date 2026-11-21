@@ -137,7 +137,7 @@ Complete documentation in `kcli installation <https://kcli.readthedocs.io/en/lat
 but we suggest to use the container image approach.
 
 So things to do:
-  - 1. Review `requirements <https://kcli.readthedocs.io/en/latest/#libvirt-hypervisor-requisites>`_
+  - 1. Review `requirements <https://kcli.readthedocs.io/en/latest/#prerequisites>`_
     and install/configure whatever is needed to meet them.
   - 2. get the kcli image and create one alias for executing the kcli command
     ::
@@ -155,7 +155,7 @@ So things to do:
 
 Test your kcli installation:
 ----------------------------
-See the kcli `basic usage workflow <https://kcli.readthedocs.io/en/latest/#basic-workflow>`_
+See the kcli `basic usage workflow <https://kcli.readthedocs.io/en/latest/#usage>`_
 
 Create a Ceph lab cluster
 -------------------------

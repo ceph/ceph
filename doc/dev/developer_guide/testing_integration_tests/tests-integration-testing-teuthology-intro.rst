@@ -39,7 +39,7 @@ branch and the stable branches). Traditionally, these tests are called "the
 nightlies" because the Ceph core developers used to live and work in
 the same time zone and from their perspective the tests were run overnight.
 
-The results of nightly test runs are published at http://pulpito.ceph.com/
+The results of nightly test runs are published at https://pulpito.ceph.com/
 under the user ``teuthology``. The developer nick appears in URL of the
 test results and in the first column of the Pulpito dashboard.  The results are
 also reported on the `ceph-qa mailing list <https://ceph.com/irc/>`_.
@@ -593,7 +593,7 @@ Filtering tests by their description
 
 When a few jobs fail and need to be run again, the ``--filter`` option
 can be used to select tests with a matching description. For instance, if the
-``rados`` suite fails the `all/peer.yaml <https://github.com/ceph/ceph/blob/master/qa/suites/rados/singleton/all/peer.yaml>`_ test, the following will only
+``rados`` suite fails the `all/peer.yaml <https://github.com/ceph/ceph/blob/main/qa/suites/rados/singleton/all/peer.yaml>`_ test, the following will only
 run the tests that contain this file
 
 .. prompt:: bash $
@@ -609,12 +609,12 @@ the `ceph/qa sub-directory`_). For instance
 
 .. prompt:: bash $
 
-  teuthology-suite --machine-type smithi --suite rados --filter all/peer.yaml,all/rest-api.yaml
+  teuthology-suite --machine-type smithi --suite rados --filter all/peer.yaml,all/radostool.yaml
 
 will run tests that contain either
-`all/peer.yaml <https://github.com/ceph/ceph/blob/master/qa/suites/rados/singleton/all/peer.yaml>`_
+`all/peer.yaml <https://github.com/ceph/ceph/blob/main/qa/suites/rados/singleton/all/peer.yaml>`_
 or
-`all/rest-api.yaml <https://github.com/ceph/ceph/blob/master/qa/suites/rados/singleton/all/rest-api.yaml>`_
+`all/radostool.yaml <https://github.com/ceph/ceph/blob/main/qa/suites/rados/singleton/all/radostool.yaml>`_
 
 Each string is looked up anywhere in the test description and has to
 be an exact match: they are not regular expressions.

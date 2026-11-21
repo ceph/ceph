@@ -292,6 +292,6 @@ This example uses `awscli`_ to create an IAM user for S3 operations.
 
 .. _AWS Identity and Access Management: https://aws.amazon.com/iam/
 .. _Amazon Resource Names: https://docs.aws.amazon.com/IAM/latest/UserGuide/reference-arns.html
-.. _Evaluating policies within a single account: https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic.html#policy-eval-basics
+.. _Evaluating policies within a single account: https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic_policy-eval-basics.html
 .. _Cross-account policy evaluation logic: https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic-cross-account.html
 .. _awscli: https://docs.aws.amazon.com/cli/latest/

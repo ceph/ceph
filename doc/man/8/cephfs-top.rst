@@ -127,7 +127,7 @@ Availability
 ============
 
 **cephfs-top** is part of Ceph, a massively scalable, open-source, distributed storage system. Please refer to the Ceph documentation at
-https://ceph.com/ for more information.
+https://docs.ceph.com for more information.
 
 
 See also

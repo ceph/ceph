@@ -35,7 +35,7 @@ deployments. If required, debug mode can be enabled without need of restarting.
 Currently, disabled debug mode equals to CherryPy ``production`` environment,
 while when enabled, it uses ``test_suite`` defaults (please refer to
 `CherryPy Environments
-<https://docs.cherrypy.org/en/latest/config.html#environments>`_ for more
+<https://docs.cherrypy.dev/en/latest/config.html#environments>`_ for more
 details).
 
 It also adds request uuid (``unique_id``) to Cherrypy on versions that don't

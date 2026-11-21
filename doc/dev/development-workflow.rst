@@ -124,7 +124,7 @@ results are posted on `pulpito <https://pulpito.ceph.com/>`_ and the
 `ceph-qa mailing list <https://ceph.com/irc/>`_.
 
 * The job failures are `analyzed by quality engineers and developers
-  <https://tracker.ceph.com/projects/ceph-releases/wiki/HOWTO_monitor_the_automated_tests_AKA_nightlies#List-of-suites-and-watchers>`_
+  <https://tracker.ceph.com/projects/ceph-releases/wiki/HOWTO_monitor_the_automated_tests_AKA_nightlies#Analyze>`_
 * If the cause is environmental (e.g. network connectivity), an issue
   is created in the `sepia lab project
   <https://tracker.ceph.com/projects/lab/issues/new>`_

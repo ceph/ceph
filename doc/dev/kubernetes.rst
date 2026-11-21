@@ -179,7 +179,7 @@ build, and the Ceph build too.
 5. Run a Rook cluster
 =====================
 
-Please refer to `Rook's documentation <https://rook.io/docs/rook/master/ceph-quickstart.html>`_
+Please refer to `Rook's documentation <https://rook.io/docs/rook/latest/Getting-Started/quickstart/>`_
 for setting up a Rook operator, a Ceph cluster and the toolbox.
 
 The Rook source tree includes example .yaml files in

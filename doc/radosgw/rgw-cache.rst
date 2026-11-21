@@ -11,7 +11,7 @@ RGW Data Caching and CDN
 This feature adds to RGW the ability to securely cache objects and offload the workload from the cluster, using NGINX.
 After an object is accessed the first time it will be stored in the NGINX cache directory.
 When data is already cached, it need not be fetched from RGW. A permission check will be made against RGW to ensure the requesting user has access.
-This feature is based on the NGINX modules ``ngx_http_auth_request_module`` and `nginx-aws-auth-module <https://github.com/kaltura/nginx-aws-auth-module>`_, and OpenResty for Lua capabilities.
+This feature is based on the NGINX modules ``ngx_http_auth_request_module`` and ``nginx-aws-auth-module``, and OpenResty for Lua capabilities.
 
 Currently this feature will cache only AWSv4 requests (only S3 requests), caching-in the output of the first GET request
 and caching-out on subsequent GET requests, passing through transparently PUT, POST, HEAD, DELETE and COPY requests.
@@ -67,11 +67,9 @@ Download the source of OpenResty:
 
    wget https://openresty.org/download/openresty-1.15.8.3.tar.gz
 
-Use git to clone the NGINX AWS authentication module:
-
-.. prompt:: bash $
-
-   git clone https://github.com/kaltura/nginx-aws-auth-module
+.. note:: The ``nginx-aws-auth-module`` repository that these steps used to
+   clone is no longer published.  The example configuration files use its
+   ``aws_auth`` directive, so building them requires a copy of the module.
 
 Untar the OpenResty package:
 

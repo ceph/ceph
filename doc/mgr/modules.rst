@@ -868,7 +868,7 @@ one can just put
    ../src/pybind/ceph_mgr_repl.py --prefix "mgr my-module eval"
 
 
-.. _Mixin: _https://en.wikipedia.org/wiki/Mixin
+.. _Mixin: https://en.wikipedia.org/wiki/Mixin
 
 Is something missing?
 ---------------------
