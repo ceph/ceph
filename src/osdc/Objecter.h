@@ -1545,6 +1545,14 @@ struct ObjectOperation {
     osd_op.op.assert_ver.ver = ver;
   }
 
+  void assert_time_range(timespec after, timespec before) {
+    OSDOp& osd_op = add_op(CEPH_OSD_OP_ASSERT_TIME_RANGE);
+    const auto a = ceph::real_clock::from_timespec(after);
+    encode(a, osd_op.indata);
+    const auto b = ceph::real_clock::from_timespec(before);
+    encode(b, osd_op.indata);
+  }
+
   void get_internal_versions(boost::system::error_code* ec,
                              buffer::list *pbl) {
   	add_op(CEPH_OSD_OP_GET_INTERNAL_VERSIONS);

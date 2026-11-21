@@ -7025,6 +7025,25 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       }
       break;
 
+    case CEPH_OSD_OP_ASSERT_TIME_RANGE:
+      ++ctx->num_read;
+      {
+        ceph::real_time after;
+        ceph::real_time before;
+        try {
+          decode(after, bp);
+          decode(before, bp);
+        } catch (const ceph::buffer::error&) {
+          result = -EINVAL;
+          break;
+        }
+        const ceph::real_time now = ceph::real_clock::now();
+        if (now < after || now > before) {
+          result = -ETIME;
+        }
+      }
+      break;
+
     case CEPH_OSD_OP_GET_INTERNAL_VERSIONS: {
       ++ctx->num_read;
       std::map<shard_id_t, eversion_t> out;
