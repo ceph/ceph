@@ -174,6 +174,21 @@ describe('RgwBucketResourcePageComponent', () => {
     expect(component.lifecycleProgress.bucket).toBe('test-bucket');
   });
 
+  it('should reset lifecycle progress when bucket has no progress entry', () => {
+    component.lifecycleFormat = 'json';
+    component.selection = {
+      bucket: 'bucket-a',
+      lifecycle: {},
+      lifecycle_progress: [{ bucket: ':bucket-b:id1', status: 'PROCESSING', started: 'x' }]
+    } as unknown as Bucket;
+    component.extractLifecycleDetails();
+    expect(component.lifecycleProgress.status).toBe('UNINITIAL');
+
+    component.selection = { bucket: 'bucket-a', lifecycle: {} } as unknown as Bucket;
+    component.extractLifecycleDetails();
+    expect(component.lifecycleProgress.status).toBe('UNINITIAL');
+  });
+
   it('should update lifecycle format from switcher event', () => {
     jest.spyOn(component, 'updateLifecycleFormatTo');
 
