@@ -191,6 +191,13 @@
   and such an image simply runs without a cache. Note that ``ceph config set
   ... rwl`` now fails, which may break automation.
 
+* RADOS: The defaults of ``paxos_trim_min`` and ``paxos_service_trim_min`` are
+  now 500, up from 250, and those of ``paxos_trim_max`` and
+  ``paxos_service_trim_max`` are now 1000, up from 500. Monitors trim, and so
+  compact their stores, less often, which reduces Monitor store writes. Each
+  Monitor store keeps up to 250 more versions of the Paxos log and of each map
+  before trimming. Clusters that set these options keep their values.
+
 >=21.0.0
 * CephFS: The ``fs subvolumegroup create`` command now supports the
   ``--namespace-isolated`` option. When a subvolume group is created with this flag,
