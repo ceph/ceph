@@ -7,10 +7,11 @@ modify it under the terms of the GNU Lesser General Public
 License version 2.1, as published by the Free Software
 Foundation. See file COPYING.
 
-* Owning transaction attempts reuse borrowed invocation's result and exception
-  normalization. Staged preparation remains inside that exception boundary;
-  replay history, failed-attempt cleanup, commit, and publication stay with the
-  owner. Ordinary values no longer need dummy expected/monostate storage.
+* Owning and borrowed invocation share body-result and exception normalization.
+  Borrowed handles are validated at their caller boundary; owning attempts use
+  transactions already created by their source. Staged preparation remains inside
+  the shared exception boundary; replay history, failed-attempt cleanup, commit,
+  and publication stay with the owner. Ordinary values no longer need dummy expected/monostate storage.
   Implicit mutating leaf operations use the public owning Transactor instead of
   a separate transaction/retry wrapper.
   Functional transforms use ordinary range traversal without maintaining a row

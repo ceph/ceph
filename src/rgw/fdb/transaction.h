@@ -900,9 +900,10 @@ auto adopt_body_failure(transaction_failure<ErrorT> failure, transaction_status 
  return failure;
 }
 
+// Normalize one body on a validated transaction without imposing ownership work:
 template <typename FnT, typename ...ArgTs>
 requires borrowed_transaction_op<FnT, ArgTs...>
-auto invoke_borrowed(transaction_handle& txn, FnT&& fn, ArgTs&& ...args) noexcept
+auto invoke_body(transaction_handle& txn, FnT&& fn, ArgTs&& ...args) noexcept
 {
  using raw_result = std::invoke_result_t<FnT&, transaction_handle&, ArgTs...>;
  using traits = invocation_result_traits<std::remove_cv_t<raw_result>>;
@@ -912,15 +913,10 @@ auto invoke_borrowed(transaction_handle& txn, FnT&& fn, ArgTs&& ...args) noexcep
  static_assert(std::is_nothrow_move_constructible_v<result_type>);
 
  transaction_status status;
- auto phase = transaction_phase::setup;
+ status.attempts = 1;
+ constexpr auto phase = transaction_phase::body;
  try
   {
-   if (not txn or not *txn) {
-    return result_type {fail_transaction<error_type>(
-      fdb_error {std::make_error_code(std::errc::invalid_argument), {}}, phase, status)};
-   }
-   phase = transaction_phase::body;
-   status.attempts = 1;
    if constexpr (std::is_void_v<raw_result>) {
     std::invoke(fn, txn, std::forward<ArgTs>(args)...);
     return result_type {};
@@ -944,10 +940,24 @@ auto invoke_borrowed(transaction_handle& txn, FnT&& fn, ArgTs&& ...args) noexcep
   }
  catch (...)
   {
-   // Borrowing leaves replay, stamp completion and pending writes with the owner.
+   // The attempt owner retains replay, stamp completion and pending writes:
    return result_type {fail_transaction<error_type>(
      exception_failure(std::current_exception(), phase, status))};
   }
+}
+
+template <typename FnT, typename ...ArgTs>
+requires borrowed_transaction_op<FnT, ArgTs...>
+auto invoke_borrowed(transaction_handle& txn, FnT&& fn, ArgTs&& ...args) noexcept
+{
+ using result_type = decltype(detail::invoke_body(txn, std::forward<FnT>(fn),
+                                                std::forward<ArgTs>(args)...));
+ if (not txn or not *txn) {
+  return result_type {std::unexpect, typename result_type::error_type {
+   fdb_error {std::make_error_code(std::errc::invalid_argument), {}}, transaction_phase::setup, {}}};
+ }
+
+ return detail::invoke_body(txn, std::forward<FnT>(fn), std::forward<ArgTs>(args)...);
 }
 
 template <typename FnT, typename CommitFnT, typename PolicyT = void>
@@ -971,7 +981,8 @@ auto invoke_with_retry(transaction_handle& txn, FnT&& fn, CommitFnT&& commit_fn,
     next_attempt(status);
     phase = transaction_phase::body;
 
-    auto attempt = invoke_borrowed(txn, [&fn](transaction_handle& current) -> decltype(auto) {
+    // Owning attempts already obtained a valid transaction from their source:
+    auto attempt = detail::invoke_body(txn, [&fn](transaction_handle& current) -> decltype(auto) {
       prepare_invocation(fn);
 
       return std::invoke(fn, current);
