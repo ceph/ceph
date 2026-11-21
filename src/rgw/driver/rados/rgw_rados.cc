@@ -4124,6 +4124,8 @@ static void set_copy_attrs(map<string, bufferlist>& src_attrs,
   }
 }
 
+int fixup_manifest_to_parts_len(const DoutPrefixProvider *dpp, rgw::sal::Attrs &src_attrs);
+
 int RGWRados::rewrite_obj(RGWBucketInfo& dest_bucket_info, const rgw_obj& obj, const DoutPrefixProvider *dpp, optional_yield y)
 {
   RGWObjectCtx octx(this->driver);
@@ -4138,6 +4140,12 @@ int RGWRados::rewrite_obj(RGWBucketInfo& dest_bucket_info, const rgw_obj& obj, c
   read_op.params.lastmod = &mtime;
 
   int ret = read_op.prepare(y, dpp);
+  if (ret < 0)
+    return ret;
+
+  // the copy gets a new manifest, so keep the part lengths of an encrypted
+  // multipart object for decryption
+  ret = fixup_manifest_to_parts_len(dpp, attrset);
   if (ret < 0)
     return ret;
 
