@@ -59,6 +59,7 @@ Other core operations already accept standard ranges under their established nam
 | Compose a dynamic sequence of key segments | `key::compose_range(segments)` |
 | Append interval entries to bounded storage | `static_interval_set::append_range`, also through `interval_batch` |
 | Normalize, query, or clip intervals | `compile_intervals`, `canonical_range`, and `clip_view` |
+| Align independently segmented sources | `interval::visit_overlaps(left, right, consumer, left_lens, right_lens)` |
 | Count or take selected coverage | `interval::measure(range, metric)`, `interval::take(range, quota, metric)` |
 | Visit data and preserve continuation | `traversal::scan_range`, `traversal::for_each_page` |
 
@@ -598,6 +599,37 @@ when computing packed offsets: object holes occupy no packed bytes. For retained
 native buffers, a native owner-preserving cursor may be the appropriate sink;
 borrowed spans alone do not transfer its owner. Ownership and output coverage
 remain binding responsibilities.
+
+`interval::visit_overlaps(left, right, consumer, left_lens, right_lens)` visits the
+intersections of two ordered, internally disjoint input ranges. Both lenses default to
+`std::identity`; a lens may return a stable interval or a `byte_extent`. Each invocation
+receives two `cut_view` values with identical selected bounds and their respective `source()`
+records. Different source identities remain separate even when their coverage touches.
+The [mapped-read example](tutorials/examples/overlap_reads.cpp) translates logical selections
+to backing offsets while retaining the source object number.
+
+This synchronous traversal accepts single-pass iterators and value/proxy rows. It observes
+each current row and its geometry once, borrowing lvalues and retaining temporary descriptors
+until all their cuts are consumed. Source rows need no default constructor, copy constructor,
+or assignment when the iterator supplies movable values. Callbacks and const-invocable lenses
+are borrowed and need not be copyable or movable. Both inputs must have the same domain and
+independent traversal state. Source geometry and backing storage remain unchanged during the call.
+
+Cuts and their sources are scoped to the callback. Retaining a `cut` copies its endpoints but
+does not retain a temporary source descriptor. Copy needed data or retain the native owner
+explicitly before publishing asynchronous work. Source order and internal disjointness are
+preconditions; traversal skips empty rows without sorting or validating an unvisited tail.
+It uses the core's existing bound semantics, including open/closed endpoints and infinity.
+Its current-record state is bounded independently of input size; user projections, descriptor
+construction, iterator operations, and callbacks retain their own allocation/error behavior.
+
+The callback returns `acceptance` or `std::expected<acceptance, E>`, with the same result and
+failure types as `visit_range`. Counts describe offered/consumed/accepted cuts, not source rows.
+After a stop or handled error, neither input is advanced again. Initializing or advancing a
+native input iterator can itself fetch data. Exceptions propagate, and prior callback effects
+are not rolled back. This differs from `clip_view`'s prevalidated forward-source contract.
+The traversal adapts ordered co-iteration and identity-preserving interval refinement;
+the [bibliography](#bibliography) identifies the research and the relevant sections.
 
 `interval/metric.h` keeps distance separate from order. A metric supplies a quantity type, zero,
 and distance. Measurement also needs checked addition; quota selection needs quantity ordering,
@@ -1160,3 +1192,16 @@ input do not establish the performance of common Ceph requests. Application
 impact depends on actual range sizes, key storage and evaluation frequency;
 further tuning should follow an identified consumer hotspot. Historical timings
 describe local machinery, not backend throughput.
+
+## Bibliography
+
+- Anton Dignös, Boris Glavic, Xing Niu, Michael Böhlen, and Johann Gamper.
+  [*Snapshot Semantics for Temporal Multiset Relations*](https://arxiv.org/html/1902.04938).
+  PVLDB 12(6), 2019; extended version, section 5.2 and appendix E.2. Interval refinement
+  retains input identities; coalescing depends on the observable annotation. Datum's
+  `visit_overlaps` applies these principles to scoped cuts of disjoint ordered inputs.
+- Stephen Chou, Fredrik Kjolstad, and Saman Amarasinghe.
+  [*Format Abstraction for Sparse Tensor Algebra Compilers*](https://compilers.stanford.edu/publications/taco-formats.pdf).
+  PACMPL 2, OOPSLA, article 123, 2018; sections 3.3 and 4.4.
+  Capability-based ordered co-iteration informs the two-input traversal. Datum handles
+  interval endpoints and C++ lifetimes separately; no tensor compiler machinery is required.

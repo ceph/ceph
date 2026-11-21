@@ -578,6 +578,40 @@ Miso's record ends at its excluded endpoint, 8, so it contributes no cut:
 Mochi [8, 12): "purr"
 ```
 
+### Align two independently segmented sources
+
+Sometimes both inputs carry useful identities. A native layout can return an owning descriptor
+by value, while a selection has boundaries that cross object boundaries. Use
+`iv::visit_overlaps(left, right, consumer, left_lens, right_lens)` from `<datum/interval/clip.h>`
+to visit intersections while retaining both origins. Lenses default to `std::identity` and may
+also return `datum::byte_extent`. Inputs must be ordered, internally disjoint, and independently
+traversable. Empty rows are skipped; the operation makes no validation prepass.
+
+The [complete mapped-read program](examples/overlap_reads.cpp) obtains layout descriptors by
+value, intersects them with logical byte selections, and uses `datum::clip` to translate each
+cut into a backing offset. Its [expected output](expected/overlap_reads.txt) is:
+
+```text
+object 7: logical 12, backing 102, length 3
+object 7: logical 16, backing 106, length 2
+object 9: logical 24, backing 200, length 2
+pieces: 3
+```
+
+The gap between objects contributes no read. The callback receives two read-only cuts with the
+same selected bounds and separate `source()` records. Each current descriptor is read and
+projected once, then kept alive through all its cuts. Single-pass producers need no vector or
+second traversal. Callbacks and const-invocable lenses are borrowed. Consume the cuts inside
+the callback; copying endpoints does not retain a temporary source descriptor or its backing
+storage for asynchronous I/O.
+
+Return ordinary `datum::acceptance` or `std::expected<datum::acceptance, E>`. Progress uses
+`visit_range`'s result/failure types and counts cuts. Neither input advances after stop or handled
+failure; iterator initialization and advancement can themselves fetch native data. Exceptions
+propagate and completed effects remain. The research behind ordered co-iteration and source
+identity preservation is collected in the [bibliography](#bibliography).
+Build and check the complete example with the `overlap_reads` target.
+
 ## 6 Five bytes, please
 
 *Use a metric to take up to a quota of covered bytes without counting gaps.*
@@ -2281,3 +2315,15 @@ identify sources in the separate local RGW integration snapshot described in the
 - Ceph contributors. [*Rados Bucket Index: Listing*](https://docs.ceph.com/en/latest/dev/radosgw/bucket_index/#listing).
   Explains listing within and across index shards, providing context for chapters
   16–17. Their wire and marker contracts are documented by the pinned sources above.
+
+### Range alignment research
+
+- Anton Dignös, Boris Glavic, Xing Niu, Michael Böhlen, and Johann Gamper.
+  [*Snapshot Semantics for Temporal Multiset Relations*](https://arxiv.org/html/1902.04938).
+  PVLDB 12(6), 2019; extended version, section 5.2 and appendix E.2. Provides background
+  for retaining source identities while splitting intervals at relevant boundaries.
+- Stephen Chou, Fredrik Kjolstad, and Saman Amarasinghe.
+  [*Format Abstraction for Sparse Tensor Algebra Compilers*](https://compilers.stanford.edu/publications/taco-formats.pdf).
+  PACMPL 2, OOPSLA, article 123, 2018; sections 3.3 and 4.4. Describes ordered co-iteration
+  and the capabilities needed for merge traversal. Datum separately handles interval endpoint
+  inclusivity, infinity, and scoped C++ lifetimes.

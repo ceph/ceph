@@ -1,5 +1,5 @@
 // Datum: Source-preserving interval cuts, retention and streaming clipping.
-// A data-view layer above the pure order algebra; source records remain borrowed.
+// A data-view layer above the pure order algebra; cuts borrow their current source records.
 // Please keep native payload ownership, transaction authority and I/O in bindings.
 
 #ifndef CEPH_RGW_DATUM_INTERVAL_CLIP_H
@@ -127,6 +127,30 @@ using clip_source_t = std::conditional_t<std::ranges::forward_range<const Source
 template <typename SourceT, typename LensT>
 using clip_geometry_result = std::invoke_result_t<
     const clip_geometry<LensT>&, std::ranges::range_reference_t<clip_source_t<SourceT>>>;
+
+template <interval_view LeftT, interval_view RightT>
+requires same_expression_domain<LeftT, RightT>
+constexpr auto overlap_bounds(const LeftT& left, const RightT& right)
+{
+    using domain_type = expression_domain_t<LeftT>;
+
+    return borrowed_interval<domain_type> {
+        max_bound(left.lower(), right.lower(), inclusivity_merge::all),
+        min_bound(left.upper(), right.upper(), inclusivity_merge::all)
+    };
+}
+
+template <interval_view LeftT, interval_view RightT>
+requires same_expression_domain<LeftT, RightT>
+constexpr auto overlap_upper_order(const LeftT& left, const RightT& right)
+{
+    if (const auto order = compare_position(left.upper(), right.upper()); order != 0) {
+        return order;
+    }
+
+    return left.upper().inclusive() <=> right.upper().inclusive();
+}
+
 } // detail
 
 // Stable lvalue rows and a canonical selection are required. Bounds borrow the
@@ -288,20 +312,14 @@ public:
             const auto lhs = detail::bounds_of(current_geometry());
             const auto rhs = detail::bounds_of(*wanted);
 
-            return borrowed_interval<domain_type> {
-                        detail::max_bound(lhs.lower(), rhs.lower(), detail::inclusivity_merge::all),
-                        detail::min_bound(lhs.upper(), rhs.upper(), detail::inclusivity_merge::all)
-                    };
+            return detail::overlap_bounds(lhs, rhs);
         }
 
         DATUM_COMPAT_CXX23_FLATTEN constexpr void advance_earlier()
         {
             const auto lhs = detail::bounds_of(current_geometry());
             const auto rhs = detail::bounds_of(*wanted);
-            auto order = detail::compare_position(lhs.upper(), rhs.upper());
-            if (order == 0) {
-                order = lhs.upper().inclusive() <=> rhs.upper().inclusive();
-            }
+            const auto order = detail::overlap_upper_order(lhs, rhs);
             if (order <= 0) {
                 ++row;
                 reset_geometry();
@@ -406,6 +424,276 @@ public:
     constexpr std::default_sentinel_t end() const noexcept { return {}; }
 
 };
+
+namespace detail {
+
+// An input producer may return an owning descriptor. Retain that value before projecting it;
+// lvalue observations keep their original identity and require no record or endpoint copies:
+template <typename ReferenceT>
+class overlap_observation final
+{
+    using value_type = std::remove_cvref_t<ReferenceT>;
+    using storage_type = std::conditional_t<std::is_lvalue_reference_v<ReferenceT>,
+                                            const value_type*, std::optional<value_type>>;
+
+    storage_type storage {};
+
+public:
+    constexpr explicit operator bool() const noexcept { return static_cast<bool>(storage); }
+
+    constexpr const value_type& get() const noexcept { return *storage; }
+
+    template <typename ValueT>
+    constexpr void emplace(ValueT&& value)
+    {
+        if constexpr (std::is_lvalue_reference_v<ReferenceT>) {
+            storage = std::addressof(value);
+        }
+
+        if constexpr (!std::is_lvalue_reference_v<ReferenceT>) {
+            storage.emplace(std::forward<ValueT>(value));
+        }
+    }
+
+    constexpr void reset() noexcept
+    {
+        if constexpr (std::is_lvalue_reference_v<ReferenceT>) {
+            storage = nullptr;
+        }
+
+        if constexpr (!std::is_lvalue_reference_v<ReferenceT>) {
+            storage.reset();
+        }
+    }
+
+};
+
+template <typename RangeT>
+using overlap_row_t = std::remove_cvref_t<std::ranges::range_reference_t<RangeT>>;
+
+template <typename RangeT, typename LensT>
+using overlap_geometry_t = std::invoke_result_t<const clip_geometry<const LensT&>&,
+                                               const overlap_row_t<RangeT>&>;
+
+template <typename RangeT, typename LensT>
+concept overlap_source = std::ranges::input_range<RangeT> and
+    std::convertible_to<std::ranges::range_reference_t<RangeT>, const overlap_row_t<RangeT>&> and
+    std::regular_invocable<const LensT&, const overlap_row_t<RangeT>&> and
+    stable_interval<overlap_geometry_t<RangeT, LensT>> and
+    (std::is_lvalue_reference_v<std::ranges::range_reference_t<RangeT>> ||
+     std::constructible_from<overlap_row_t<RangeT>, std::ranges::range_reference_t<RangeT>>) and
+    (std::is_lvalue_reference_v<overlap_geometry_t<RangeT, LensT>> ||
+     std::move_constructible<std::remove_cvref_t<overlap_geometry_t<RangeT, LensT>>>);
+
+template <typename RangeT, typename LensT>
+using overlap_cut_t = cut_view<overlap_row_t<RangeT>,
+                               expression_domain_t<overlap_geometry_t<RangeT, LensT>>>;
+
+template <typename RangeT, typename LensT>
+requires overlap_source<RangeT, LensT>
+class overlap_cursor final
+{
+    std::ranges::iterator_t<RangeT> position;
+    std::ranges::sentinel_t<RangeT> finish;
+
+    clip_geometry<const LensT&> projection;
+
+    overlap_observation<std::ranges::range_reference_t<RangeT>> row;
+    overlap_observation<overlap_geometry_t<RangeT, LensT>> geometry;
+
+public:
+    constexpr overlap_cursor(RangeT& source, const LensT& lens)
+        : position(std::ranges::begin(source)),
+          finish(std::ranges::end(source)),
+          projection {lens}
+    {}
+
+public:
+    constexpr bool exhausted() const { return position == finish; }
+
+    constexpr void load()
+    {
+        if (!geometry) {
+            row.emplace(*position);
+            geometry.emplace(std::invoke(projection, row.get()));
+        }
+    }
+
+    constexpr void advance()
+    {
+        geometry.reset();
+        row.reset();
+        ++position;
+    }
+
+    constexpr bool empty() const { return is_empty(geometry.get()); }
+
+    constexpr auto bounds() const { return bounds_of(geometry.get()); }
+
+    constexpr auto cut(const borrowed_interval<
+                       expression_domain_t<overlap_geometry_t<RangeT, LensT>>> selected) const
+    {
+        return overlap_cut_t<RangeT, LensT> {row.get(), selected};
+    }
+
+};
+
+// Ordered co-iteration follows Chou et al., Format Abstraction for Sparse Tensor Algebra
+// Compilers (2018), section 4.4: https://compilers.stanford.edu/publications/taco-formats.pdf
+// Refinement retains input identities as in Dignös et al., Snapshot Semantics for Temporal
+// Multiset Relations (2019), appendix E.2: https://arxiv.org/html/1902.04938
+// Here each input is internally disjoint; endpoint inclusion and infinity use Datum's algebra:
+template <typename LeftT, typename RightT, typename LeftLensT, typename RightLensT>
+class overlap_stream final
+{
+    overlap_cursor<LeftT, LeftLensT> left;
+    overlap_cursor<RightT, RightLensT> right;
+
+public:
+    using value_type = std::pair<overlap_cut_t<LeftT, LeftLensT>,
+                                 overlap_cut_t<RightT, RightLensT>>;
+
+public:
+    constexpr overlap_stream(LeftT& left_source, RightT& right_source,
+                             const LeftLensT& left_lens, const RightLensT& right_lens)
+        : left(left_source, left_lens),
+          right(right_source, right_lens)
+    {}
+
+private:
+    constexpr bool exhausted() const { return left.exhausted() || right.exhausted(); }
+
+    constexpr void seek()
+    {
+        while (!exhausted()) {
+            left.load();
+            if (left.empty()) {
+                left.advance();
+                continue;
+            }
+
+            right.load();
+            if (right.empty()) {
+                right.advance();
+                continue;
+            }
+
+            const auto lhs = left.bounds();
+            const auto rhs = right.bounds();
+            if (empty_bounds(rhs.lower(), lhs.upper())) {
+                left.advance();
+                continue;
+            }
+            if (empty_bounds(lhs.lower(), rhs.upper())) {
+                right.advance();
+                continue;
+            }
+
+            return;
+        }
+    }
+
+    constexpr value_type selected() const
+    {
+        const auto lhs = left.bounds();
+        const auto rhs = right.bounds();
+        const auto shared = overlap_bounds(lhs, rhs);
+
+        return {left.cut(shared), right.cut(shared)};
+    }
+
+    constexpr void advance()
+    {
+        const auto lhs = left.bounds();
+        const auto rhs = right.bounds();
+        const auto order = overlap_upper_order(lhs, rhs);
+        if (order <= 0) {
+            left.advance();
+        }
+        if (order >= 0) {
+            right.advance();
+        }
+
+        seek();
+    }
+
+    class iterator final
+    {
+        overlap_stream *owner = nullptr;
+
+    public:
+        using value_type = overlap_stream::value_type;
+        using difference_type = std::ptrdiff_t;
+        using iterator_concept = std::input_iterator_tag;
+
+    public:
+        constexpr iterator() = default;
+        constexpr explicit iterator(overlap_stream& stream) noexcept : owner(std::addressof(stream))
+        {}
+
+    public:
+        constexpr value_type operator*() const { return owner->selected(); }
+
+        constexpr iterator& operator++()
+        {
+            owner->advance();
+
+            return *this;
+        }
+
+        constexpr void operator++(int) { ++*this; }
+
+        constexpr bool operator==(std::default_sentinel_t) const
+        {
+            return !owner || owner->exhausted();
+        }
+
+    };
+
+public:
+    constexpr iterator begin()
+    {
+        seek();
+
+        return iterator {*this};
+    }
+
+    constexpr std::default_sentinel_t end() const noexcept { return {}; }
+
+};
+
+} // detail
+
+// Visit intersecting pieces of ordered, internally disjoint sources without a prepass.
+// Each callback receives two cuts with identical bounds and their respective source records.
+// Rows, geometry, and cuts are read-only and scoped to the callback; copy needed data before
+// retaining it. Value descriptors survive all their cuts, then die before advancing that input.
+// Empty rows are skipped; inputs are neither sorted nor validated and need independent traversal
+// state. Progress counts cuts, not source rows. Input initialization may itself fetch a row.
+// Stop/expected failure does not advance again; exceptions propagate and effects are not undone:
+template <std::ranges::input_range LeftT, std::ranges::input_range RightT, typename ConsumerT,
+          typename LeftLensT = std::identity, typename RightLensT = std::identity>
+requires detail::overlap_source<LeftT, LeftLensT> and
+         detail::overlap_source<RightT, RightLensT> and
+         same_expression_domain<detail::overlap_geometry_t<LeftT, LeftLensT>,
+                                 detail::overlap_geometry_t<RightT, RightLensT>> and
+         std::invocable<ConsumerT&, const detail::overlap_cut_t<LeftT, LeftLensT>&,
+                                    const detail::overlap_cut_t<RightT, RightLensT>&> and
+         ceph::salad::datum::detail::acceptance_result<std::invoke_result_t<
+             ConsumerT&, const detail::overlap_cut_t<LeftT, LeftLensT>&,
+                         const detail::overlap_cut_t<RightT, RightLensT>&>>
+[[nodiscard]] constexpr auto visit_overlaps(LeftT&& left, RightT&& right, ConsumerT&& consumer,
+                                          const LeftLensT& left_lens = {},
+                                          const RightLensT& right_lens = {})
+{
+    detail::overlap_stream<LeftT, RightT, LeftLensT, RightLensT> overlaps {
+        left, right, left_lens, right_lens
+    };
+
+    return ceph::salad::datum::visit_range(overlaps, [&consumer](const auto& cuts) {
+        return std::invoke(consumer, cuts.first, cuts.second);
+    });
+}
 
 } // ceph::salad::datum::interval
 

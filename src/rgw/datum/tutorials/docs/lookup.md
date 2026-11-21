@@ -17,6 +17,7 @@ gives the setup commands.
 | Compose a path supplied as a range of segments | [Key composition variation](../tutorial.md#4-put-2-before-10) |
 | Read data split across buffers | [hello, world! — in pieces](../tutorial.md#1-hello-world--in-pieces) |
 | Combine or subtract ranges | [Seat selection](../tutorial.md#2-seat-3-is-reserved) and [interval algebra](../tutorial.md#2½-an-interval-interlude) |
+| Align independent layouts and selections | [Overlap traversal](../tutorial.md#align-two-independently-segmented-sources) and the [mapped-read program](../examples/overlap_reads.cpp) |
 | Put overlapping ranges in order | [Untangle the ranges](../tutorial.md#3-untangle-the-ranges) |
 | Make key order match numeric order | [Put 2 before 10](../tutorial.md#4-put-2-before-10) |
 | Sort records by several keys | [Comparison composition](design.md#native-vocabulary-and-comparison-composition) |
@@ -293,6 +294,11 @@ Those names alone establish neither iteration nor ownership. Check each interfac
 ownership and backing lifetime.
 [Lessons 7](../tutorial.md#7-move-it-and-keep-reading) and
 [8](../tutorial.md#8-a-window-into-misos-toy-basket).
+
+**`visit_overlaps`.** Visit two ordered, internally disjoint inputs while preserving both
+origins. Value/input producers need no prepass; cut and source observations are scoped to
+the callback. Progress and expected failures use `visit_range`'s contract.
+[Overlap traversal](../tutorial.md#align-two-independently-segmented-sources).
 
 **`visit_result`; `consumed()`; `stopped()`.** Scan progress stores `offered` and
 `accepted` counts and an optional `stop` decision. The two accessors derive

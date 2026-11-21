@@ -56,6 +56,12 @@ retain decoded records explicitly. Materializing a complete page uses storage an
 rows beyond the reply quota; choose that behavior deliberately. Keep fetching and transaction
 assumptions visible at the native boundary rather than hiding them in iterator operations.
 
+For two ordered, internally disjoint layout/selection streams, `interval::visit_overlaps`
+retains each current value descriptor and its projected geometry through all overlapping cuts.
+It accepts input iterators and borrows callbacks and lenses. The [mapped-read program](examples/overlap_reads.cpp)
+shows logical-to-backing translation without materializing layout records. Cut/source observations
+are scoped to the callback; retain needed native ownership explicitly when scheduling I/O.
+
 ## Own what must survive
 
 Borrow for synchronous calls whose references do not escape. Retain an owner when a callback,

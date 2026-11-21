@@ -47,6 +47,8 @@ def guide():
     appendix = text.split('## Appendix A Building and running\n', 1)[1].split('## Bibliography\n', 1)[0]
     links['appendix-a-building-and-running'] = ('build-and-run', '')
     links['bibliography'] = ('references', '')
+    links['align-two-independently-segmented-sources'] = (
+        '05-labeled-slices', 'align-two-independently-segmented-sources')
     for title in re.findall(r'^### (.+)$', FENCES.sub('', appendix), re.M):
         links[slug(title)] = ('build-and-run', nodes.make_id(title))
     return text, sections, chapters, links
@@ -141,6 +143,11 @@ def source_read(app, docname, source):
                     'The [fallible scan program](examples/fallible_scan.cpp) retains progress and '
                     'the failing row’s position. Its [expected output](expected/fallible_scan.txt) '
                     'is checked by the `fallible_scan` target.\n')
+        content += ('\n## Mapped overlap reads\n\n'
+                    'The [mapped-read program](examples/overlap_reads.cpp) preserves source objects '
+                    'while selecting logical ranges and translating backing offsets. Its '
+                    '[expected output](expected/overlap_reads.txt) is checked by the '
+                    '`overlap_reads` target.\n')
     elif key == 'tutorial':
         content = text[:sections[0].start()].replace('# Datum tutorials', '# Tutorial', 1)
     else:
