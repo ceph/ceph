@@ -160,10 +160,7 @@ class Osd(RESTController):
                 osds[node['id']]['tree'] = node
 
         # Extending by osd parent node information
-        for host in [n for n in nodes if n['type'] == 'host']:
-            for osd_id in host['children']:
-                if osd_id >= 0 and osd_id in osds:
-                    osds[osd_id]['host'] = host
+        self._set_osd_hosts(osds, nodes)
 
         removing_osd_ids = self.get_removing_osds()
 
@@ -177,6 +174,26 @@ class Osd(RESTController):
             self.gauge_stats(osd, osd_spec)
             osd['operational_status'] = self._get_operational_status(osd_id, removing_osd_ids)
         return list(osds.values())
+
+    @staticmethod
+    def _set_osd_hosts(osds, nodes):
+        nodes_by_id = {node['id']: node for node in nodes}
+        for host in [n for n in nodes if n['type'] == 'host']:
+            descendants = list(host.get('children', []))
+            visited_buckets = set()
+            while descendants:
+                child_id = descendants.pop()
+                if child_id >= 0:
+                    if child_id in osds:
+                        osds[child_id]['host'] = host
+                    continue
+
+                if child_id in visited_buckets:
+                    continue
+                visited_buckets.add(child_id)
+                child = nodes_by_id.get(child_id)
+                if child:
+                    descendants.extend(child.get('children', []))
 
     @staticmethod
     def gauge_stats(osd, osd_spec):
