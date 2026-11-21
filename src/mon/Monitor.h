@@ -120,6 +120,10 @@ enum {
   l_mon_backup_cleanup_duration,
   l_mon_backup_cleanup_freed,
   l_mon_backup_cleanup_deleted,
+  l_mon_data_disk_total_bytes,
+  l_mon_data_disk_avail_bytes,
+  l_mon_data_disk_avail_percent,
+  l_mon_db_total_bytes,
   l_mon_last,
 };
 
