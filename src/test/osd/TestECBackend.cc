@@ -89,6 +89,10 @@ public:
 
   }
 
+  void ec_repair_on_read(const hobject_t &hoid, const set<pg_shard_t> &shards) override {
+
+  }
+
   pg_shard_t primary_shard() const override {
     return pg_shard_t();
   }

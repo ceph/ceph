@@ -271,6 +271,49 @@ function rados_get_data_bad_size() {
 #
 # If 2 shards have read errors the client will get an error.
 #
+# A client read of an optimized EC pool that decodes around a shard whose
+# read failed with EIO repairs the shard (osd_ec_repair_on_read): the
+# primary counts it and logs it, and the PG recovers to clean. k=2 m=2,
+# since a repair needs k+1 shards that the read did not find damaged
+function TEST_ec_repair_on_read() {
+    local dir=$1
+    setup_osds 5 || return 1
+
+    local poolname=pool-repair-on-read
+    ceph osd erasure-code-profile set repairprofile plugin=jerasure \
+        k=2 m=2 crush-failure-domain=osd || return 1
+    create_pool $poolname 1 1 erasure repairprofile || return 1
+    ceph osd pool set $poolname allow_ec_optimizations true || return 1
+    wait_for_clean || return 1
+
+    local objname=obj-repair-on-read
+    # larger than a chunk, so that shard 1 holds data too
+    head -c 65536 /dev/urandom > $dir/ORIGINAL
+    rados --pool $poolname put $objname $dir/ORIGINAL || return 1
+    local -a osds=($(get_osds $poolname $objname))
+    local primary=${osds[0]}
+    local repairs=$(CEPH_ARGS='' ceph --admin-daemon \
+        $(get_asok_path osd.$primary) perf dump osd | jq '.osd.ec_read_repair')
+
+    # shard 1 holds data that a read of the whole object needs
+    inject_eio ec data $poolname $objname $dir 1 || return 1
+    rados_get $dir $poolname $objname || return 1
+
+    TIMEOUT=30 wait_for_string $dir/log \
+        "failed to read .*$objname.* with a media error" || return 1
+    local now=$(CEPH_ARGS='' ceph --admin-daemon \
+        $(get_asok_path osd.$primary) perf dump osd | jq '.osd.ec_read_repair')
+    test "$now" -gt "$repairs" || return 1
+    wait_for_clean || return 1
+
+    # the recovered shard agrees with the others
+    local pgid=$(get_pg $poolname $objname)
+    pg_deep_scrub $pgid || return 1
+    rados list-inconsistent-obj $pgid | jq -e '.inconsistents | length == 0' \
+        || return 1
+    delete_erasure_coded_pool $poolname
+}
+
 function TEST_rados_get_subread_eio_shard_0() {
     local dir=$1
     setup_osds 4 || return 1
