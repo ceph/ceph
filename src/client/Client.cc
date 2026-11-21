@@ -12652,11 +12652,51 @@ int Client::pwritev(int fd, const struct iovec *iov, int iovcnt, int64_t offset)
   return _preadv_pwritev(fd, iov, iovcnt, offset, true);
 }
 
+/*
+ * Copy the iovec payload of a write into a bufferlist, at most @limit bytes.
+ * This does not touch any client state, so the ll_* entry points do it before
+ * taking client_lock.
+ */
+size_t Client::iov_to_bufferlist(const struct iovec *iov, int iovcnt,
+                                 size_t limit, bufferlist *data)
+{
+  size_t total = 0;
+  for (int i = 0; i < iovcnt && total < limit; i++) {
+    size_t len = std::min(iov[i].iov_len, limit - total);
+    if (len > 0) {
+      data->append((const char *)iov[i].iov_base, len);
+      total += len;
+    }
+  }
+  return total;
+}
+
+/*
+ * Clamp a write payload built by iov_to_bufferlist() (or a caller's buffer)
+ * to the largest size a single write of @in may have. The trimmed list
+ * shares the original buffers, nothing is copied.
+ */
+void Client::clamp_write_bufferlist(Inode *in, bufferlist *data)
+{
+#if defined(__linux__)
+  size_t limit = in->is_fscrypt_enabled() ? (size_t)FSCRYPT_MAXIO_SIZE
+                                          : (size_t)INT_MAX;
+#else
+  size_t limit = INT_MAX;
+#endif
+  if (data->length() > limit) {
+    bufferlist t;
+    t.substr_of(*data, 0, limit);
+    data->swap(t);
+  }
+}
+
 int64_t Client::_preadv_pwritev_locked(Fh *fh, const struct iovec *iov,
                                        int iovcnt, int64_t offset,
                                        bool write, bool clamp_to_int,
                                        Context *onfinish, bufferlist *blp,
-                                       bool do_fsync, bool syncdataonly)
+                                       bool do_fsync, bool syncdataonly,
+                                       bufferlist *wdata)
 {
     ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
 
@@ -12666,6 +12706,16 @@ int64_t Client::_preadv_pwritev_locked(Fh *fh, const struct iovec *iov,
 #endif
     if(iovcnt < 0) {
       return -EINVAL;
+    }
+    if (write && wdata) {
+      // the caller copied the payload before taking client_lock
+      ceph_assert(clamp_to_int);
+      clamp_write_bufferlist(fh->inode.get(), wdata);
+      size_t len = wdata->length();
+      int64_t w = _write(fh, offset, len, std::move(*wdata), onfinish,
+                         do_fsync, syncdataonly);
+      ldout(cct, 3) << "pwritev(" << fh << ", \"...\", " << len << ", " << offset << ") = " << w << dendl;
+      return w;
     }
     size_t totallen = 0;
     for (int i = 0; i < iovcnt; i++) {
@@ -17946,18 +17996,14 @@ int Client::ll_write(Fh *fh, loff_t off, loff_t len, const char *data)
     inc_sync_in_flight();
   }
 
-#if defined(__linux__)
   /* We can't return bytes written larger than INT_MAX, clamp size to
-   * that or FSCRYPT_MAXIO_SIZE*/
-  Inode *in = fh->inode.get();
-  if (in->is_fscrypt_enabled()) {
-    len = std::min(len, (loff_t)FSCRYPT_MAXIO_SIZE);
-  } else {
-    len = std::min(len, (loff_t)INT_MAX);
-  }
-#else
+   * that, and to FSCRYPT_MAXIO_SIZE once the Fh is known to be valid. Copy
+   * the caller's data before taking client_lock. */
   len = std::min(len, (loff_t)INT_MAX);
-#endif
+  bufferlist bl;
+  if (len > 0)
+    bl.append(data, len);
+
   std::scoped_lock lock(client_lock);
   if (fh == NULL || !_ll_fh_exists(fh)) {
     ldout(cct, 3) << "(fh)" << fh << " is invalid" << dendl;
@@ -17966,6 +18012,8 @@ int Client::ll_write(Fh *fh, loff_t off, loff_t len, const char *data)
     }
     return -EBADF;
   }
+  clamp_write_bufferlist(fh->inode.get(), &bl);
+  len = bl.length();
 
   ldout(cct, 3) << "ll_write " << fh << " " << fh->inode->ino << " " << off <<
     "~" << len << dendl;
@@ -17974,8 +18022,6 @@ int Client::ll_write(Fh *fh, loff_t off, loff_t len, const char *data)
   tout(cct) << off << std::endl;
   tout(cct) << len << std::endl;
 
-  bufferlist bl;
-  bl.append(data, len);
   int r = _write(fh, off, len, std::move(bl));
   ldout(cct, 3) << "ll_write " << fh << " " << off << "~" << len << " = " << r
 		<< dendl;
@@ -17995,6 +18041,11 @@ int64_t Client::ll_writev(struct Fh *fh, const struct iovec *iov, int iovcnt, in
     inc_sync_in_flight();
   }
 
+  // copy the caller's data before taking client_lock
+  bufferlist data;
+  if (iovcnt > 0)
+    iov_to_bufferlist(iov, iovcnt, INT_MAX, &data);
+
   std::scoped_lock cl(client_lock);
   if (fh == NULL || !_ll_fh_exists(fh)) {
     ldout(cct, 3) << "(fh)" << fh << " is invalid" << dendl;
@@ -18003,7 +18054,9 @@ int64_t Client::ll_writev(struct Fh *fh, const struct iovec *iov, int iovcnt, in
     }
     return -EBADF;
   }
-  auto r = _preadv_pwritev_locked(fh, iov, iovcnt, off, true, true);
+  auto r = _preadv_pwritev_locked(fh, iov, iovcnt, off, true, true,
+                                  nullptr, nullptr, false, false,
+                                  iovcnt >= 0 ? &data : nullptr);
   if (logger) {
     dec_sync_in_flight();
   }
@@ -18061,6 +18114,11 @@ int64_t Client::ll_preadv_pwritev(struct Fh *fh, const struct iovec *iov,
     }
 
     retval = 0;
+    // copy the caller's data before taking client_lock
+    bufferlist wdata;
+    if (write && iovcnt > 0)
+      iov_to_bufferlist(iov, iovcnt, INT_MAX, &wdata);
+
     std::unique_lock cl(client_lock);
 
     if(fh == NULL || !_ll_fh_exists(fh)) {
@@ -18082,7 +18140,8 @@ int64_t Client::ll_preadv_pwritev(struct Fh *fh, const struct iovec *iov,
     }
 
     retval = _preadv_pwritev_locked(fh, iov, iovcnt, offset, write, true,
-                                    onfinish, bl, do_fsync, syncdataonly);
+                                    onfinish, bl, do_fsync, syncdataonly,
+                                    (write && iovcnt >= 0) ? &wdata : nullptr);
     /* There are two scenarios with each having two cases to handle here
     1) async io
       1.a) r == 0:

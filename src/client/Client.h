@@ -2303,7 +2303,11 @@ private:
                                  bool write, bool clamp_to_int,
                                  Context *onfinish = nullptr,
                                  bufferlist *blp = nullptr,
-                                 bool do_fsync = false, bool syncdataonly = false);
+                                 bool do_fsync = false, bool syncdataonly = false,
+                                 bufferlist *wdata = nullptr);
+  static size_t iov_to_bufferlist(const struct iovec *iov, int iovcnt,
+                                  size_t limit, bufferlist *data);
+  void clamp_write_bufferlist(Inode *in, bufferlist *data);
   int _preadv_pwritev(int fd, const struct iovec *iov, int iovcnt,
                       int64_t offset, bool write, Context *onfinish = nullptr,
                       bufferlist *blp = nullptr);
