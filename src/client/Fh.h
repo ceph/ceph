@@ -24,6 +24,7 @@ struct Fh {
   int       _ref = 1;
   loff_t    pos = 0;
   int       mode;       // the mode i opened the file with
+  bool      close_to_open = false;  // opened with close-to-open consistency
 
   bool pos_locked = false;           // pos is currently in use
   std::list<ceph::condition_variable*> pos_waiters;   // waiters for pos
