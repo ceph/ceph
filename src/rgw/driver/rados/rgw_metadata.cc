@@ -44,6 +44,19 @@ void rgw_shard_name(const string& prefix, unsigned shard_id, string& name)
   name = prefix + buf;
 }
 
+bool rgw_metadata_attrs_valid(const DoutPrefixProvider* dpp,
+                              const map<string, bufferlist>& attrs)
+{
+  for (const auto& attr : attrs) {
+    if (!attr.first.starts_with(RGW_ATTR_PREFIX)) {
+      ldpp_dout(dpp, 0) << "ERROR: metadata attr " << attr.first
+          << " is not under " << RGW_ATTR_PREFIX << dendl;
+      return false;
+    }
+  }
+  return true;
+}
+
 int RGWMetadataLog::add_entry(const DoutPrefixProvider *dpp, const string& hash_key, const string& section, const string& key, bufferlist& bl, optional_yield y) {
   if (!svc.zone->need_to_log_metadata())
     return 0;
