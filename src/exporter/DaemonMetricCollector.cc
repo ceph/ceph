@@ -107,6 +107,27 @@ void DaemonMetricCollector::parse_asok_metrics(
     json_object counter_schema =
         boost::json::parse(counter_schema_response).as_object();
 
+    // If the daemon was started with --service_unique_id, it exposes a
+    // "service_unique_id" perf group whose single counter name IS the unique ID.
+    // Prefer this over filename-based parsing so Rook and cephadm deployments
+    // that share entity names still get distinct instance labels.
+    std::string service_unique_id;
+    if (counter_dump.contains("service_unique_id")) {
+      try {
+        auto &sid_array = counter_dump["service_unique_id"].as_array();
+        if (!sid_array.empty()) {
+          auto &counters = sid_array[0].as_object().at("counters").as_object();
+          if (!counters.empty()) {
+            auto it = counters.begin();
+            service_unique_id = {it->key().begin(), it->key().end()};
+          }
+        }
+      } catch (const std::exception &e) {
+        dout(1) << "Failed to extract service_unique_id for " << daemon_name
+                << ": " << e.what() << dendl;
+      }
+    }
+
     for (auto &perf_group_item : counter_schema) {
       std::string perf_group = {perf_group_item.key().begin(),
                                 perf_group_item.key().end()};
@@ -137,7 +158,7 @@ void DaemonMetricCollector::parse_asok_metrics(
                                                counter.key().end()};
               std::string counter_name = perf_group + "_" + counter_name_init;
 
-              auto extra_labels = get_extra_labels(daemon_name);
+              auto extra_labels = get_extra_labels(daemon_name, service_unique_id);
               if (extra_labels.empty()) {
                 dout(1) << "Unable to parse instance_id from daemon_name: "
                         << daemon_name << dendl;
@@ -416,7 +437,8 @@ std::string DaemonMetricCollector::asok_request(AdminSocketClient &asok,
   return response;
 }
 
-labels_t DaemonMetricCollector::get_extra_labels(std::string daemon_name) {
+labels_t DaemonMetricCollector::get_extra_labels(std::string daemon_name,
+                                                  const std::string &service_unique_id) {
   labels_t labels;
   const std::string ceph_daemon_prefix = "ceph-";
   const std::string ceph_client_prefix = "client.";
@@ -428,23 +450,29 @@ labels_t DaemonMetricCollector::get_extra_labels(std::string daemon_name) {
   }
   // In vstart cluster socket files for rgw are stored as radosgw.<instance_id>.asok
   if (daemon_name.find("radosgw") != std::string::npos) {
-    std::size_t pos = daemon_name.find_last_of('.');
-    std::string tmp = daemon_name.substr(pos+1);
-    labels["instance_id"] = quote(tmp);
-  }
-  else if (daemon_name.find("rgw") != std::string::npos) {
-    // fetch intance_id for e.g. "hrgsea" from daemon_name=rgw.foo.ceph-node-00.hrgsea.2.94739968030880
-    std::vector<std::string> elems;
-    std::stringstream ss;
-    ss.str(daemon_name);
-    std::string item;
-    while (std::getline(ss, item, '.')) {
-        elems.push_back(item);
-    }
-    if (elems.size() >= 4) {
-      labels["instance_id"] = quote(elems[3]);
+    if (!service_unique_id.empty()) {
+      labels["instance_id"] = quote(service_unique_id);
     } else {
-      return labels_t();
+      std::size_t pos = daemon_name.find_last_of('.');
+      labels["instance_id"] = quote(daemon_name.substr(pos + 1));
+    }
+  } else if (daemon_name.find("rgw") != std::string::npos) {
+    if (!service_unique_id.empty()) {
+      labels["instance_id"] = quote(service_unique_id);
+    } else {
+      // fetch instance_id for e.g. "hrgsea" from daemon_name=rgw.foo.ceph-node-00.hrgsea.2.94739968030880
+      std::vector<std::string> elems;
+      std::stringstream ss;
+      ss.str(daemon_name);
+      std::string item;
+      while (std::getline(ss, item, '.')) {
+        elems.push_back(item);
+      }
+      if (elems.size() >= 4) {
+        labels["instance_id"] = quote(elems[3]);
+      } else {
+        return labels_t();
+      }
     }
   } else {
     labels.insert({"ceph_daemon", quote(daemon_name)});
