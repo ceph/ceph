@@ -5485,7 +5485,6 @@ void Server::handle_client_setattr(const MDRequestRef& mdr)
     respond_to_request(mdr, -EPERM);
     return;
   }
-
   __u32 mask = req->head.args.setattr.mask;
   __u32 access_mask = MAY_WRITE;
 
@@ -12073,16 +12072,33 @@ void Server::handle_client_file_blockdiff(const MDRequestRef& mdr)
 
   dout(10) << __func__ << dendl;
 
-  // no real need to rdlock_path_pin_ref() since the caller holds an
-  // open ref, but we need the snapped inode.
   const filepath& refpath1 = mdr->get_filepath();
+  const filepath& refpath2 = mdr->get_filepath2();
+  if (!refpath1.is_last_snap() || !refpath2.is_last_snap()) {
+    dout(10) << __func__ << ": not a snapshot path: " << refpath1
+	     << " vs " << refpath2 << " req=" << req << dendl;
+    respond_to_request(mdr, -EINVAL);
+    return;
+  }
+  // Only in2 decides where the request runs. The two snapshot versions can
+  // have different auth ranks (e.g. a snapped inode left in the file's old
+  // parent directory), so requiring auth for both could forward the request
+  // back and forth. MDCache::file_blockdiff() handles a non-auth in1.
   CInode* in1 = rdlock_path_pin_ref(mdr, refpath1, false, true);
   if (!in1) {
     return;
   }
-  const filepath& refpath2 = mdr->get_filepath2();
-  CInode* in2 = rdlock_path_pin_ref(mdr, refpath2, false, true);
+  snapid_t snapid1 = mdr->snapid;
+  CInode* in2 = rdlock_path_pin_ref(mdr, refpath2, true, false);
   if (!in2) {
+    return;
+  }
+  snapid_t snapid2 = mdr->snapid;
+
+  if (in1->is_ambiguous_auth()) {
+    dout(10) << __func__ << ": waiting for single auth on " << *in1 << dendl;
+    CF_MDS_RetryRequestFactory cf(mdcache, mdr, true);
+    in1->add_waiter(CInode::WAIT_SINGLEAUTH, cf.build());
     return;
   }
 
@@ -12092,24 +12108,33 @@ void Server::handle_client_file_blockdiff(const MDRequestRef& mdr)
     return;
   }
 
-  dout(20) << __func__ << ": in1=" << *in1 << dendl;
-  dout(20) << __func__ << ": in2=" << *in2 << dendl;
+  // Snapshots must be supplied oldest first. The paths come from the
+  // client, so reject the request rather than trip the assertion in
+  // MDCache::file_blockdiff().
+  if (snapid1 > snapid2) {
+    dout(10) << __func__ << ": snapshots out of order: snapid1=" << snapid1
+	     << " snapid2=" << snapid2 << " req=" << req << dendl;
+    respond_to_request(mdr, -EINVAL);
+    return;
+  }
+
+  dout(20) << __func__ << ": snapid1=" << snapid1 << " in1=" << *in1
+           << " snapid2=" << snapid2 << " in2=" << *in2 << dendl;
 
   auto scan_idx = (uint64_t)req->head.args.blockdiff.scan_idx;
   auto max_objects = (uint32_t)req->head.args.blockdiff.max_objects;
 
   C_MDS_file_blockdiff_finish *ctx = new C_MDS_file_blockdiff_finish(this, mdr, in2, scan_idx);
 
-  if (in1 == in2) {
-    // does not matter if the inodes are snapped or refer to the head
-    // version -- both snaps are same.
+  if (in1 == in2 && snapid1 == snapid2) {
     dout(10) << __func__ << ": no diffs between snaps" << dendl;
     handle_file_blockdiff_finish(mdr, in2, ctx->block_diff, 0);
     delete ctx;
     return;
   }
 
-  mdcache->file_blockdiff(in1, in2, &(ctx->block_diff), max_objects, ctx);
+  mdcache->file_blockdiff(in1, snapid1, in2, snapid2,
+                          &(ctx->block_diff), max_objects, ctx);
 }
 
 void Server::handle_file_blockdiff_finish(const MDRequestRef& mdr, CInode *in, const BlockDiff &block_diff,
@@ -12170,6 +12195,7 @@ void Server::handle_client_readdir_snapdiff(const MDRequestRef& mdr)
   // which frag?
   frag_t fg = (__u32)req->head.args.snapdiff.frag;
   unsigned req_flags = (__u32)req->head.args.snapdiff.flags;
+  unsigned diff_mask = (__u32)req->head.args.snapdiff.mask;
   string offset_str = req->get_path2();
 
   __u32 offset_hash = 0;
@@ -12232,6 +12258,7 @@ void Server::handle_client_readdir_snapdiff(const MDRequestRef& mdr)
   dout(10) << __func__
     << " snap " << mdr->snapid
     << " vs. snap " << mdr->snapid_diff_other
+    << " input mask 0x" << diff_mask
     << dendl;
 
   if (mdr->snapid_diff_other == mdr->snapid ||
@@ -12279,6 +12306,7 @@ void Server::handle_client_readdir_snapdiff(const MDRequestRef& mdr)
     offset_str,
     offset_hash,
     req_flags,
+    diff_mask,
     dirbl);
 }
 
@@ -12325,6 +12353,7 @@ void Server::_readdir_diff(
   const string& offset_str,
   uint32_t offset_hash,
   unsigned req_flags,
+  unsigned diff_mask,
   bufferlist& dirbl)
 {
   // build dir contents
@@ -12350,6 +12379,7 @@ void Server::_readdir_diff(
   size_t rollback_pos = 0;
   size_t rollback_num = 0;
 
+  bool waiting = false;
   bool end = build_snap_diff(
     mdr,
     dir,
@@ -12357,6 +12387,7 @@ void Server::_readdir_diff(
     from_the_beginning ? nullptr : & skip_key,
     snapid_prev,
     snapid,
+    diff_mask,
     dnbl,
     [&](CDentry* dn, CInode* in, bool exists) {
       string name;
@@ -12420,7 +12451,11 @@ void Server::_readdir_diff(
       mdcache->lru.lru_touch(dn);
       ++numfiles;
       return true;
-    });
+    },
+    &waiting);
+
+  if (waiting)
+    return;
 
   __u16 flags = 0;
   if (req_flags & CEPH_READDIR_REPLY_BITFLAGS) {
@@ -12440,20 +12475,90 @@ bool Server::build_snap_diff(
   dentry_key_t* skip_key,
   snapid_t snapid_prev,
   snapid_t snapid,
+  unsigned diff_mask,
   const bufferlist& dnbl,
-  std::function<bool (CDentry*, CInode*, bool)> add_result_cb)
+  std::function<bool (CDentry*, CInode*, bool)> add_result_cb,
+  bool *waiting)
 {
-  client_t client = mdr->client_request->get_source().num();
-
   struct EntryInfo {
     CDentry* dn = nullptr;
     CInode* in = nullptr;
-    utime_t mtime;
 
     void reset() {
       *this = EntryInfo();
     }
+    EntryInfo() {}
+    EntryInfo(CDentry* _dn, CInode* _in) : dn(_dn), in(_in) {}
+
+    bool valid() const {
+      return in != nullptr && dn != nullptr;
+    }
+
+    static bool meta_differs(const CInode::mempool_inode& my,
+                             const CInode::mempool_inode& oth,
+                             unsigned mask,
+                             unsigned& res_mask) {
+      res_mask = 0;
+      if ((mask & CEPH_SNAPDIFF_MODE) && (my.mode != oth.mode))
+	res_mask |= CEPH_SNAPDIFF_MODE;
+      if ((mask & CEPH_SNAPDIFF_UID) && (my.uid != oth.uid))
+	res_mask |= CEPH_SNAPDIFF_UID;
+      if ((mask & CEPH_SNAPDIFF_GID) && (my.gid != oth.gid))
+	res_mask |= CEPH_SNAPDIFF_GID;
+      if ((mask & CEPH_SNAPDIFF_SIZE) && (my.size != oth.size))
+	res_mask |= CEPH_SNAPDIFF_SIZE;
+      if ((mask & CEPH_SNAPDIFF_NLINK) && (my.nlink != oth.nlink))
+	res_mask |= CEPH_SNAPDIFF_NLINK;
+      if ((mask & CEPH_SNAPDIFF_MTIME) && (my.mtime != oth.mtime))
+	res_mask |= CEPH_SNAPDIFF_MTIME;
+      if ((mask & CEPH_SNAPDIFF_ATIME) && (my.atime != oth.atime))
+	res_mask |= CEPH_SNAPDIFF_ATIME;
+      if ((mask & CEPH_SNAPDIFF_CTIME) && (my.ctime != oth.ctime))
+	res_mask |= CEPH_SNAPDIFF_CTIME;
+      if ((mask & CEPH_SNAPDIFF_BTIME) && (my.btime != oth.btime))
+	res_mask |= CEPH_SNAPDIFF_BTIME;
+      return res_mask != 0;
+    }
+
+    bool meta_differs(const CInode* _in,
+                      unsigned mask,
+                      unsigned& res_mask) const {
+      ceph_assert(in);
+      ceph_assert(_in);
+      return meta_differs(*in->get_inode(), *_in->get_inode(),
+                          mask, res_mask);
+    }
   } before;
+
+  auto snapflush_pending = [&](CInode *in) -> bool {
+    if (!in->is_head() && !in->client_snap_caps.empty())
+      return true;
+    CInode *head = in->is_head() ? in : mdcache->get_inode(in->ino());
+    if (!head)
+      return true;
+    for (const auto& p : head->client_need_snapflush) {
+      if (p.first >= snapid_prev && p.first <= snapid && !p.second.empty())
+	return true;
+    }
+    return false;
+  };
+
+  // rdlock filelock so pending snapflush completes before metadata is read.
+  auto rdlock_file_start = [&](CInode *in) -> bool {
+    if (!mds->locker->rdlock_start(&in->filelock, mdr)) {
+      dout(10) << __func__ << " waiting for snapflush, deferring readdir_snapdiff on "
+           << *in << " snap " << snapid_prev << " vs. " << snapid << dendl;
+      if (waiting)
+        *waiting = true;
+      return false;
+    }
+    return true;
+  };
+  auto rdlock_file_finish = [&](CInode *in) {
+    auto lit = mdr->locks.find(&in->filelock);
+    ceph_assert(lit != mdr->locks.end());
+    mds->locker->rdlock_finish(lit, mdr.get(), nullptr);
+  };
 
   auto insert_deleted = [&](EntryInfo& ei) {
     dout(20) << "build_snap_diff deleted file " << ei.dn->get_name() << " "
@@ -12462,9 +12567,32 @@ bool Server::build_snap_diff(
     ei.reset();
     return r;
   };
+  client_t client = mdr->client_request->get_source().num();
+
+  // Return the inode metadata visible at @snapid. Multiversion inodes keep
+  // their historical versions in old_inodes, keyed by the version's last
+  // snapshot.
+  auto inode_at_snap = [](const CInode* head, snapid_t snapid)
+      -> const CInode::mempool_inode* {
+    ceph_assert(head->is_head());
+
+    if (snapid >= head->first)
+      return head->get_inode().get();
+
+    snapid_t old_last = head->pick_old_inode(snapid);
+    if (!old_last)
+      return nullptr;
+
+    const auto& old_inodes = head->get_old_inodes();
+    ceph_assert(old_inodes);
+    auto it = old_inodes->find(old_last);
+    ceph_assert(it != old_inodes->end());
+    return &it->second.inode;
+  };
 
   auto it = !skip_key ? dir->begin() : dir->upper_bound(*skip_key);
 
+  diff_mask = diff_mask != 0 ? diff_mask : CEPH_SNAPDIFF_MTIME; // to preserve backward compatibility with the original impl.
   while(it != dir->end()) {
     CDentry* dn = it->second;
     dout(20) << __func__ << " " << it->first << "->" << *dn << dendl;
@@ -12521,7 +12649,6 @@ bool Server::build_snap_diff(
     }
     ceph_assert(in);
 
-    utime_t mtime = in->get_inode()->mtime;
     if (in->is_dir()) {
 
       // we need to maintain the order of entries (determined by their name hashes)
@@ -12549,17 +12676,89 @@ bool Server::build_snap_diff(
       }
     } else {
       if (snapid_prev >= dn->first && snapid <= dn->last) {
-	dout(20) << __func__ << " skipping unchanged " << dn->get_name() << " "
-	  << dn->first << "/" << dn->last << dendl;
-	continue;
+        // A multiversion inode can be COWed without COWing its dentry.
+        // Do not infer that the inode is unchanged solely because this
+        // dentry spans both snapshots.
+        CInode* head = in->is_head() ? in : mdcache->get_inode(in->ino());
+
+        bool locked = false;
+        if (snapflush_pending(in)) {
+          if (before.valid() && !insert_deleted(before))
+            break;
+          if (!rdlock_file_start(in))
+            return false;
+          locked = true;
+        }
+
+        // A replica's first can lag the inode auth MDS, so only use the
+        // range as a fast path when it is authoritative.
+        const bool inode_state_authoritative = head && head->is_auth();
+        bool inode_spans_both =
+          inode_state_authoritative &&
+          snapid_prev >= in->first && snapid <= in->last;
+
+        unsigned res_mask = 0;
+        bool attrs_known = false;
+        bool attrs_changed = true;
+
+        // old_inodes is authoritative only on the inode auth MDS. If this
+        // rank has only a replica, report the entry conservatively rather
+        // than silently losing an update.
+        if (inode_state_authoritative) {
+          const auto* prev_inode = inode_at_snap(head, snapid_prev);
+          const auto* snap_inode = inode_at_snap(head, snapid);
+          if (prev_inode && snap_inode) {
+            attrs_known = true;
+            attrs_changed = EntryInfo::meta_differs(
+              *prev_inode, *snap_inode, diff_mask, res_mask);
+          }
+        }
+
+        if (locked)
+          rdlock_file_finish(in);
+
+        if (inode_spans_both) {
+          dout(20) << __func__ << " skipping unchanged " << dn->get_name() << " "
+            << dn->first << "/" << dn->last << dendl;
+          continue;
+        }
+
+        if (attrs_known && !attrs_changed) {
+          dout(20) << __func__
+            << " skipping unchanged hardlink inode attrs "
+            << dn->get_name() << " " << dn->first << "/" << dn->last
+            << dendl;
+          continue;
+        }
+
+        // Preserve hash/name ordering if a deleted entry is pending.
+        if (before.valid() && !insert_deleted(before))
+          break;
+
+        if (attrs_known) {
+          dout(20) << __func__
+            << " inode attrs changed behind unchanged hardlink dentry "
+            << dn->get_name() << " dn " << dn->first << "/" << dn->last
+            << " inode " << in->first << "/" << in->last
+            << " result mask: 0x" << std::hex << res_mask << std::dec
+            << dendl;
+        } else {
+          dout(10) << __func__
+            << " reporting unchanged-span hardlink conservatively "
+            << dn->get_name() << " dn " << dn->first << "/" << dn->last
+            << " inode " << in->first << "/" << in->last
+            << dendl;
+        }
+
+        if (!add_result_cb(dn, in, true))
+          break;
+        continue;
       } else if (snapid_prev < dn->first && snapid > dn->last) {
 	dout(20) << __func__ << " skipping inner modification " << dn->get_name() << " "
 	  << dn->first << "/" << dn->last << dendl;
 	continue;
       }
-      string_view name_before =
-        before.dn ? string_view(before.dn->get_name()) : string_view();
-      if (before.dn && dn->get_name() != name_before) {
+      if (before.valid() && before.dn->get_name() != dn->get_name()) {
         if (!insert_deleted(before)) {
           break;
         }
@@ -12568,33 +12767,55 @@ bool Server::build_snap_diff(
       if (snapid_prev >= dn->first && snapid_prev <= dn->last) {
 	dout(30) << __func__ << " dn_before " << dn->get_name() << " "
 	  << dn->first << "/" << dn->last << dendl;
-	before = EntryInfo {dn, in, mtime};
+	before = EntryInfo {dn, in};
 	continue;
       } else {
-	if (before.dn && dn->get_name() == name_before) {
+	if (before.valid() && before.dn->get_name() == dn->get_name()) {
 	  if (before.in->ino() != in->ino()) {
 	    dout(30) << __func__ << " inode changed " << dn->get_name() << " "
 		     << dn->first << "/" << dn->last
-		     << " " << before.mtime << " vs. " << mtime
 		     << dendl;
 	    if (!insert_deleted(before)) {
 	      break;
 	    }
 	    before.reset();
 	  } else {
-	    if (mtime == before.mtime) {
-	      dout(30) << __func__ << " timestamp not changed " << dn->get_name() << " "
-		       << dn->first << "/" << dn->last
-		       << " " << mtime
-		       << dendl;
+	    unsigned res_mask = 0;
+	    if (before.meta_differs(in, diff_mask, res_mask) ) {
+	      dout(30) << __func__ << " attrs changed " << dn->get_name() << " "
+		<< dn->first << "/" << dn->last
+		<< " result mask: 0x" << std::hex << res_mask << std::dec
+		<< dendl;
 	      before.reset();
-	      continue;
-	    } else {
-	      dout(30) << __func__ << " timestamp changed " << dn->get_name() << " "
-		       << dn->first << "/" << dn->last
-		       << " " << before.mtime << " vs. " << mtime
-		       << dendl;
-	      before.reset();
+        } else if (!snapflush_pending(in)) {
+          dout(30) << __func__ << " attrs not changed " << dn->get_name() << " "
+          << dn->first << "/" << dn->last
+          << dendl;
+          before.reset();
+          continue;
+        } else {
+          /* attrs match but snapflush is pending; rdlock so metadata is
+           * read after writeback completes.
+           */
+          if (!rdlock_file_start(in))
+            return false;
+          bool differs = before.meta_differs(in, diff_mask, res_mask);
+          rdlock_file_finish(in);
+          if (differs) {
+            dout(30) << __func__ << " attrs changed " << dn->get_name() << " "
+            << dn->first << "/" << dn->last
+            << " result mask: 0x" << std::hex << res_mask << std::dec
+            << " (after snapflush)"
+            << dendl;
+            before.reset();
+          } else {
+            dout(30) << __func__ << " attrs not changed " << dn->get_name() << " "
+            << dn->first << "/" << dn->last
+            << " (after snapflush)"
+            << dendl;
+            before.reset();
+            continue;
+          }
 	    }
 	  }
 	}
