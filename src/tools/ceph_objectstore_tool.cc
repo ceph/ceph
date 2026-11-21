@@ -3192,6 +3192,12 @@ map<snapid_t, uint64_t>::iterator find(map<snapid_t, uint64_t> &m,
   return m.find(clid);
 }
 
+map<snapid_t, vector<snapid_t> >::iterator
+find(map<snapid_t, vector<snapid_t> > &m, snapid_t clid)
+{
+  return m.find(clid);
+}
+
 template<class T>
 int remove_from(T &mv, string name, snapid_t cloneid, bool force)
 {
@@ -3254,6 +3260,8 @@ int remove_clone(
   ret = remove_from(snapset.clone_overlap, "clone_overlap", cloneid, force);
   if (ret) return ret;
   ret = remove_from(snapset.clone_size, "clone_size", cloneid, force);
+  if (ret) return ret;
+  ret = remove_from(snapset.clone_snaps, "clone_snaps", cloneid, force);
   if (ret) return ret;
 
   if (dry_run)
