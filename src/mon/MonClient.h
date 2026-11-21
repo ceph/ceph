@@ -349,6 +349,8 @@ private:
   // monitor session
   utime_t last_keepalive;
   utime_t last_send_log;
+  // when active_con was adopted, or zero once its session is ready
+  utime_t active_con_not_ready_since;
 
   void tick();
   void schedule_tick();
