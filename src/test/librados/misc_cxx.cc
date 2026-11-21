@@ -389,6 +389,132 @@ TEST_P(LibRadosMiscPP, BigAttrPP) {
   }
 }
 
+// SeaStore keeps one xattr or omap entry only if key + value is at most
+// 16,382 B, and one omap key only if it is at most 2,030 B. The crimson
+// OSD must return an error for a larger entry: if it passes the entry to
+// the store, the store transaction fails and the OSD aborts. Classic keeps
+// these entries. On both, entries at the limit must be kept, and the OSD
+// must keep running.
+TEST_P(LibRadosMiscPP, LargeEntryPP) {
+  // omap_manager::get_max_kv_length() and get_max_key_length()
+  constexpr size_t max_kv = 16382;
+  constexpr size_t max_key = 2030;
+  const std::string oid = "large_entry";
+  ASSERT_EQ(0, ioctx.create(oid, true));
+
+  // The OSD still serves requests after each large entry
+  auto check_osd_alive = [&] {
+    bufferlist bl, got;
+    bl.append("alive");
+    ASSERT_EQ(0, ioctx.setxattr(oid, "alive", bl));
+    ASSERT_EQ((int)bl.length(), ioctx.getxattr(oid, "alive", got));
+    ASSERT_TRUE(bl.contents_equal(got));
+  };
+  auto make_bl = [](size_t len, char c) {
+    bufferlist bl;
+    bl.append(std::string(len, c));
+    return bl;
+  };
+
+  // xattr: the OSD stores the name as "_" + name. The OSD applies its own
+  // osd_max_attr_size, which can differ from the client's, so ask the
+  // primary OSD of the object.
+  uint64_t max_attr_size = 0;
+  {
+    ceph::consistency::RadosCommands rados_commands(cluster);
+    const int primary = rados_commands.get_primary_osd(
+      ioctx.get_pool_name(), oid, ioctx.get_namespace());
+    bufferlist outbl;
+    ASSERT_EQ(0, cluster.osd_command(
+      primary,
+      R"({"prefix": "config get", "var": "osd_max_attr_size"})",
+      {}, &outbl, nullptr));
+    std::smatch m;
+    const std::string out = outbl.to_str();
+    ASSERT_TRUE(std::regex_search(
+      out, m, std::regex(R"("osd_max_attr_size"\s*:\s*"?(\d+))"))) << out;
+    max_attr_size = std::stoull(m[1].str());
+  }
+  {
+    const std::string name = "a";
+    bufferlist bl = make_bl(max_kv - 1 - name.size(), 'a');
+    if (max_attr_size == 0 || bl.length() <= max_attr_size) {
+      bufferlist got;
+      ASSERT_EQ(0, ioctx.setxattr(oid, name.c_str(), bl));
+      ASSERT_EQ((int)bl.length(), ioctx.getxattr(oid, name.c_str(), got));
+      ASSERT_TRUE(bl.contents_equal(got));
+    }
+  }
+  {
+    bufferlist bl = make_bl(20 << 10, 'b');
+    int r = ioctx.setxattr(oid, "b", bl);
+    ASSERT_TRUE(r == 0 || r == -EFBIG) << "r = " << r;
+    if (r == 0) {
+      bufferlist got;
+      ASSERT_EQ((int)bl.length(), ioctx.getxattr(oid, "b", got));
+      ASSERT_TRUE(bl.contents_equal(got));
+    }
+    check_osd_alive();
+  }
+
+  // omap: entries at the limit
+  {
+    std::map<std::string, bufferlist> to_set;
+    const std::string key(16, 'k');
+    to_set[key] = make_bl(max_kv - key.size(), 'v');
+    to_set[std::string(max_key, 'l')] = make_bl(1, 'v');
+    ASSERT_EQ(0, ioctx.omap_set(oid, to_set));
+    std::set<std::string> keys;
+    for (auto &[k, v] : to_set) {
+      keys.insert(k);
+    }
+    std::map<std::string, bufferlist> got;
+    ASSERT_EQ(0, ioctx.omap_get_vals_by_keys(oid, keys, &got));
+    ASSERT_EQ(to_set.size(), got.size());
+    for (auto &[k, v] : to_set) {
+      ASSERT_TRUE(v.contents_equal(got[k]));
+    }
+  }
+
+  // omap: one pair too large. If the OSD rejects the request, it must
+  // set none of its pairs.
+  auto check_omap_set = [&](const std::string &big_key, size_t big_len,
+                            int err) {
+    std::map<std::string, bufferlist> to_set;
+    to_set["small"] = make_bl(8, 's');
+    to_set[big_key] = make_bl(big_len, 'v');
+    int r = ioctx.omap_set(oid, to_set);
+    ASSERT_TRUE(r == 0 || r == err) << "r = " << r;
+    std::map<std::string, bufferlist> got;
+    ASSERT_EQ(0, ioctx.omap_get_vals_by_keys(
+      oid, {"small", big_key}, &got));
+    ASSERT_EQ(r == 0 ? 2u : 0u, got.size());
+    if (r == 0) {
+      ASSERT_EQ(0, ioctx.omap_rm_keys(oid, {"small", big_key}));
+    }
+    check_osd_alive();
+  };
+  check_omap_set("m", 20 << 10, -EFBIG);
+  check_omap_set(std::string(3 << 10, 'n'), 1, -ENAMETOOLONG);
+
+  // omap header: SeaStore keeps it as an xattr with the 11 B key
+  // "omap_header", so its limit is max_kv - 11
+  constexpr size_t max_header = max_kv - 11;
+  {
+    bufferlist bl = make_bl(max_header, 'h');
+    bufferlist got;
+    ASSERT_EQ(0, ioctx.omap_set_header(oid, bl));
+    ASSERT_EQ(0, ioctx.omap_get_header(oid, &got));
+    ASSERT_TRUE(bl.contents_equal(got));
+  }
+  for (size_t len : {max_header + 1, size_t(20 << 10)}) {
+    bufferlist bl = make_bl(len, 'i');
+    int r = ioctx.omap_set_header(oid, bl);
+    ASSERT_TRUE(r == 0 || r == -EFBIG) << "len = " << len << ", r = " << r;
+    check_osd_alive();
+  }
+}
+
 TEST_P(LibRadosMiscPP, CopyPP) {
   SKIP_IF_CRIMSON();
   bufferlist bl, x;
