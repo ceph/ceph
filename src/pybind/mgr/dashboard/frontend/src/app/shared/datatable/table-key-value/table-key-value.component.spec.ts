@@ -65,6 +65,21 @@ describe('TableKeyValueComponent', () => {
     expect(component.tableData).toEqual([{ key: 'b', value: 2 }]);
   });
 
+  it('should preserve the order of array data when requested', () => {
+    component.data = [
+      ['Plugin', 'isa'],
+      ['Data chunks (k)', 4],
+      ['Coding chunks (m)', 2]
+    ];
+    component.preserveOrder = true;
+    component.ngOnInit();
+    expect(component.tableData).toEqual([
+      { key: 'Plugin', value: 'isa' },
+      { key: 'Data chunks (k)', value: 4 },
+      { key: 'Coding chunks (m)', value: 2 }
+    ]);
+  });
+
   it('should remove items with objects as values', () => {
     component.data = [
       [3, 'something'],
