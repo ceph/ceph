@@ -154,7 +154,7 @@ private:
   };
 
   struct DirRegistry {
-    int fd;
+    int fd = -1;
     bool canceled = false;
     SnapshotReplayerThread *replayer;
   };
@@ -721,6 +721,7 @@ private:
   SnapshotDataReplayers m_data_replayers;
   std::unique_ptr<TickThread> m_tick_thread;
   std::atomic<int> m_active_datasync_threads{0};
+  ceph::mutex m_mirror_obj_write_l = ceph::make_mutex("PeerReplayer::m_mirror_obj_write_l");
 
   ceph::mutex smq_lock;
   ceph::condition_variable smq_cv;
@@ -783,6 +784,18 @@ private:
                      bool is_remote=false);
 
   void initialize_checkpoints(const std::string &dir_root);
+  // An already-COMPLETE checkpoint eligible for pruning. metadata_keys is the
+  // checkpoint key set read during initialize_checkpoints(), so prune does not
+  // re-fetch snapshot metadata.
+  struct CompleteCheckpoint {
+    uint64_t snap_id;
+    std::string snap_name;
+    std::set<std::string> metadata_keys;
+  };
+  void prune_old_synced_checkpoints(
+      const std::string &dir_root,
+      const std::vector<CompleteCheckpoint> &already_complete,
+      size_t newly_complete);
   void checkpoint_sync_complete(const std::string &dir_root, uint64_t synced_snap_id,
                                 const std::string &snap_name);
   void checkpoint_sync_failed(const std::string &dir_root, uint64_t snap_id,
