@@ -42,9 +42,10 @@ the ``rbd`` command and several higher-level interfaces, including `QEMU`_,
 CephX Notes
 ===========
 
-When :ref:`CephX <rados-cephx-config-ref>` authentication is enabled (it is by default), you must specify a
-user name or ID and a path to the keyring containing the corresponding key. See
-:ref:`User Management <user-management>` for details.
+When :ref:`CephX <rados-cephx-config-ref>` authentication is enabled (it is by
+default), ``rbd`` uses ``client.admin`` and the default keyring paths unless
+you specify a user name or ID and, if needed, a path to the keyring containing
+the corresponding key. See :ref:`User Management <user-management>` for details.
 
 .. prompt:: bash $
 

@@ -4,7 +4,7 @@
 
 .. index:: Ceph Block Device; encryption
 
-Starting with the Pacific release, image-level encryption can be handled
+Image-level encryption can be handled
 internally by RBD clients. This means you can set a secret key that will be
 used to encrypt a specific RBD image. This page describes the scope of the
 RBD encryption feature.

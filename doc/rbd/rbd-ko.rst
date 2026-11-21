@@ -16,9 +16,10 @@ To mount a block device image, first return a list of the images. ::
 Map a Block Device
 ==================
 
-Use ``rbd`` to map an image name to a kernel module. You must specify the 
-image name, the pool name, and the user name. ``rbd`` will load RBD kernel
-module on your behalf if it's not already loaded. ::
+Use ``rbd`` to map an image name to a kernel module. You must specify the
+image name. The pool name defaults to ``rbd`` and the user to ``client.admin``.
+``rbd`` will load RBD kernel module on your behalf if it's not already
+loaded. ::
 
   sudo rbd device map {pool-name}/{image-name} --id {user-name}
 
@@ -26,7 +27,8 @@ For example::
 
   sudo rbd device map rbd/myimage --id admin
  
-If you use :ref:`CephX <user-management>` authentication, you must also specify a secret.  It may come
+If you use :ref:`CephX <user-management>` authentication and the key is not in a
+keyring at a default path, you must also specify a secret.  It may come
 from a keyring or a file containing the secret. ::
 
   sudo rbd device map rbd/myimage --id admin --keyring /path/to/keyring

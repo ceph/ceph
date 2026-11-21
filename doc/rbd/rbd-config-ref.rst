@@ -107,7 +107,7 @@ creating images or the default features can be configured via
 :CLI value: striping
 :Added in: v0.55 (Bobtail)
 :KRBD support: since v3.10 (default striping only, "fancy" striping added in v4.17)
-:Default: yes
+:Default: no (set automatically by a non-default stripe unit or count)
 
 ``Exclusive locking``
 

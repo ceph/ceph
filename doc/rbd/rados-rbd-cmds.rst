@@ -16,7 +16,7 @@ details.
 Create a Block Device Pool
 ==========================
 
-#. Use the ``ceph`` tool to `create a pool`_.
+#. Use the ``ceph`` tool to :ref:`create a pool <createpool>`.
 
 #. Use the ``rbd`` tool to initialize the pool for use by RBD:
 
@@ -38,7 +38,8 @@ cluster with a Ceph user ID that has fewer permissions than the ``admin`` Ceph
 user ID does. We call this non-``admin`` Ceph user ID a "block device user" or
 "Ceph user".
 
-To `create a Ceph user`_, use the ``ceph auth get-or-create`` command to
+To :ref:`create a Ceph user <rados_ops_adding_a_user>`,
+use the ``ceph auth get-or-create`` command to
 specify the Ceph user ID name, monitor caps (capabilities), and OSD caps
 (capabilities):
 
@@ -52,13 +53,13 @@ following command:
 
 .. prompt:: bash $
 
-   ceph auth get-or-create client.qemu mon 'profile rbd' osd 'profile rbd pool=vms, profile rbd-read-only pool=images' mgr 'profile rbd pool=images'
+   ceph auth get-or-create client.qemu mon 'profile rbd' osd 'profile rbd pool=vms, profile rbd-read-only pool=images' mgr 'profile rbd pool=vms, profile rbd-read-only pool=images'
 
 The output from the ``ceph auth get-or-create`` command is the keyring for the
 specified Ceph user ID, which can be written to
 ``/etc/ceph/ceph.client.{ID}.keyring``.
 
-.. note:: Specify the Ceph user ID by providing the ``--id {id} argument when
+.. note:: Specify the Ceph user ID by providing the ``--id {id}`` argument when
    using the ``rbd`` command. This argument is optional. 
 
 Creating a Block Device Image
@@ -99,7 +100,7 @@ To list block devices in the ``rbd`` pool, run the following command:
 
    rbd ls
 
-.. note:: ``rbd`` is the default pool name, and ``rbd ls`` lists the commands
+.. note:: ``rbd`` is the default pool name, and ``rbd ls`` lists the images
    in the default pool.
 
 To list block devices in a particular pool, run the following command, but
@@ -189,9 +190,12 @@ Increasing the Size of a Block Device Image
 Decreasing the Size of a Block Device Image
 -------------------------------------------
 
+.. warning:: Shrinking an image discards all data beyond the new size. If the
+   image holds a file system, shrink the file system first.
+
 .. prompt:: bash $
 
-   rbd resize --size 2048 foo --allow-shrink
+   rbd resize --size 1024 foo --allow-shrink
 
 
 Removing a Block Device Image
@@ -320,7 +324,5 @@ For example:
    rbd trash restore swimmingpool/2bf4474b0dc51 --image new-name
 
 
-.. _create a pool: ../../rados/operations/pools/#create-a-pool
 .. _Storage Pools: ../../rados/operations/pools
 .. _RBD – Manage RADOS Block Device (RBD) Images: ../../man/8/rbd/
-.. _create a Ceph user: ../../rados/operations/user-management#add-a-user
