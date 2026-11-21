@@ -133,29 +133,14 @@ options:
 - name: rgw_put_obj_min_window_size
   type: size
   level: advanced
-  desc: The minimum RADOS write window size (in bytes).
+  desc: The RADOS write window size (in bytes).
   long_desc: The window size determines the total concurrent RADOS writes of a single
     RGW object. When writing an object RGW will send multiple chunks to RADOS. The
-    total size of the writes does not exceed the window size. The window size may
-    be adjusted dynamically in order to better utilize the pipe.
+    total size of the writes does not exceed the window size.
   default: 16_M
   services:
   - rgw
   see_also:
-  - rgw_put_obj_max_window_size
-  - rgw_max_chunk_size
-  with_legacy: true
-- name: rgw_put_obj_max_window_size
-  type: size
-  level: advanced
-  desc: The maximum RADOS write window size (in bytes).
-  long_desc: The window size may be dynamically adjusted, but will not surpass this
-    value.
-  default: 64_M
-  services:
-  - rgw
-  see_also:
-  - rgw_put_obj_min_window_size
   - rgw_max_chunk_size
   with_legacy: true
 - name: rgw_max_put_size

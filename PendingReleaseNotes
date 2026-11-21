@@ -38,6 +38,10 @@
   next realm reload. Now changes to ``rgw_dynamic_resharding`` require a
   restart. Running RGWs will ignore the change.
 
+* RGW: The unused ``rgw_put_obj_max_window_size`` option has been removed.
+  RGW writes objects with a fixed window of ``rgw_put_obj_min_window_size``
+  and has not read the maximum since Nautilus.
+
 * RGW: The Elasticsearch sync module is deprecated in Vampire and will
   be removed in the X release. People wanting to continue using
   Elasticsearch can populate it with bucket notifications. The
