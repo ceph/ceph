@@ -1616,6 +1616,7 @@ bool MonmapMonitor::preprocess_join(MonOpRequestRef op)
       !name_info_i->second.public_addrs.front().is_blank_ip() &&
       (!join->force_loc || join->crush_loc == name_info_i->second.crush_loc)) {
     dout(10) << " already have " << join->name << dendl;
+    mon.no_reply(op);
     return true;
   }
   string addr_name;
@@ -1627,6 +1628,7 @@ bool MonmapMonitor::preprocess_join(MonOpRequestRef op)
       (!join->force_loc || join->crush_loc.empty() ||
        pending_map.mon_info[addr_name].crush_loc == join->crush_loc)) {
     dout(10) << " already have " << join->addrs << dendl;
+    mon.no_reply(op);
     return true;
   }
   if (pending_map.stretch_mode_enabled &&
@@ -1637,6 +1639,7 @@ bool MonmapMonitor::preprocess_join(MonOpRequestRef op)
     mon.clog->info() << join->name << " attempted to join from " << join->name
 		      << ' ' << join->addrs
 		      << "; but lacks a crush_location for stretch mode";
+    mon.no_reply(op);
     return true;
   }
   return false;
