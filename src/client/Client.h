@@ -1341,6 +1341,13 @@ protected:
   }
   void signal_caps_inode(Inode *in);
   void wait_on_caps(Inode *in);
+  int put_cap_ref_fast(Inode *in, int cap);
+  void _put_cap_ref_last(Inode *in, int last);
+  bool _read_fast(Fh *f, int64_t offset, uint64_t size, bufferlist *bl,
+                  int *pr, bool nowait = false);
+  bool _ll_preadv_fast(Fh *fh, const struct iovec *iov, int iovcnt,
+                       int64_t off, Context *onfinish, bufferlist *bl,
+                       int64_t *pr);
 
   // -- metadata cache stuff
 
@@ -1506,6 +1513,18 @@ public:
     return ceph_mutex_is_locked_by_me(client_lock);
   }
 protected:
+  // set while this thread runs a data path call without client_lock: the
+  // callbacks of its OCScopes go to oc_finisher under client_lock
+  static thread_local bool oc_fast_path;
+  struct OCFastPath {
+    OCFastPath() {
+      ceph_assert(!oc_fast_path);
+      oc_fast_path = true;
+    }
+    ~OCFastPath() {
+      oc_fast_path = false;
+    }
+  };
 
   template <typename F>
   auto oc_call(F&& f) {

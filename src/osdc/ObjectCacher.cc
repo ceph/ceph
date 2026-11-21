@@ -1369,6 +1369,31 @@ void ObjectCacher::trim()
 
 /* public */
 
+bool ObjectCacher::is_readable(ObjectSet *oset, vector<ObjectExtent>& extents,
+                               snapid_t snapid)
+{
+  ceph_assert(ceph_mutex_is_locked(lock));
+  for (auto& ex : extents) {
+    Object *o = get_object_maybe(sobject_t(ex.oid, snapid), ex.oloc);
+    if (!o)
+      return false;
+    loff_t cur = ex.offset, left = ex.length;
+    auto p = o->data_lower_bound(cur);
+    while (left > 0) {
+      if (p == o->data.end() || p->first > cur)
+        return false;   // a gap
+      BufferHead *bh = p->second;
+      if (!bh->is_clean() && !bh->is_dirty() && !bh->is_tx() && !bh->is_zero())
+        return false;   // rx or error
+      loff_t len = std::min(bh->end() - cur, left);
+      cur += len;
+      left -= len;
+      ++p;
+    }
+  }
+  return true;
+}
+
 bool ObjectCacher::is_cached(ObjectSet *oset, vector<ObjectExtent>& extents,
 			     snapid_t snapid)
 {

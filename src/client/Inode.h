@@ -129,7 +129,7 @@ struct Inode : RefCountedObject {
    * friends) uses without Client::client_lock:
    *
    *   caps (and each Cap's issued/implemented), open_by_mode, flags,
-   *   size, max_size, truncate_seq/truncate_size, layout,
+   *   size, max_size, truncate_seq/truncate_size, layout, pool_perm_ok,
    *   inline_version/inline_data, fscrypt_auth/fscrypt_file, and the
    *   waitfor_caps lists
    *     change them under client_lock and lock, read them under either;
@@ -205,6 +205,9 @@ struct Inode : RefCountedObject {
   uint64_t   change_attr = 0;
 
   uint64_t max_size = 0;  // max size we can write to
+
+  // the Fr/Fw that check_pool_perm() allowed for the current layout
+  int pool_perm_ok = 0;
 
   // dirfrag, recursive accountin
   frag_info_t dirstat;

@@ -643,6 +643,13 @@ class ObjectCacher {
   bool is_cached(ObjectSet *oset, std::vector<ObjectExtent>& extents,
 		 snapid_t snapid);
   /**
+   * Whether readx() of @extents would complete right away: every byte is in
+   * a clean, dirty, writeback or zero BufferHead (is_cached() also counts
+   * buffers still being read or in error, which readx() waits for).
+   */
+  bool is_readable(ObjectSet *oset, std::vector<ObjectExtent>& extents,
+                   snapid_t snapid);
+  /**
    * Wait, like a writex() with block_writes_upfront, until there is room
    * for @len more dirty bytes: the wait a writex() with @defer_wait left to
    * its caller.

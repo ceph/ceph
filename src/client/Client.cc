@@ -1338,6 +1338,8 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
       (new_issued & (CEPH_CAP_ANY_FILE_RD | CEPH_CAP_ANY_FILE_WR))) {
     {
       std::scoped_lock il(in->lock);
+      if (in->layout != st->layout)
+        in->pool_perm_ok = 0;
       in->layout = st->layout;
     }
     uint64_t size = st->size;
@@ -4207,12 +4209,14 @@ void Client::get_cap_ref(Inode *in, int cap)
   std::scoped_lock il(in->lock);
   if ((cap & CEPH_CAP_FILE_BUFFER) &&
       in->cap_refs[CEPH_CAP_FILE_BUFFER] == 0) {
-    ldout(cct, 5) << __func__ << " got first FILE_BUFFER ref on " << *in << dendl;
+    // the data path calls this without client_lock: print no *in, whose
+    // printing reads state client_lock protects
+    ldout(cct, 5) << __func__ << " got first FILE_BUFFER ref on " << in->vino() << dendl;
     in->iget();
   }
   if ((cap & CEPH_CAP_FILE_CACHE) &&
       in->cap_refs[CEPH_CAP_FILE_CACHE] == 0) {
-    ldout(cct, 5) << __func__ << " got first FILE_CACHE ref on " << *in << dendl;
+    ldout(cct, 5) << __func__ << " got first FILE_CACHE ref on " << in->vino() << dendl;
     in->iget();
   }
   in->get_cap_ref(cap);
@@ -4221,7 +4225,44 @@ void Client::get_cap_ref(Inode *in, int cap)
 void Client::put_cap_ref(Inode *in, int cap)
 {
   int last = in->put_cap_ref(cap);
-  if (last) {
+  if (last)
+    _put_cap_ref_last(in, last);
+}
+
+/*
+ * Drop a cap ref on the data path, under Inode::lock without client_lock.
+ * The caller must hold another ref on the inode (an Fh).  Returns the caps
+ * whose last ref went away and that still need _put_cap_ref_last() under
+ * client_lock, or 0 if nothing is left to do.
+ */
+int Client::put_cap_ref_fast(Inode *in, int cap)
+{
+  std::scoped_lock il(in->lock);
+  int last = in->put_cap_ref(cap);
+  if (!last)
+    return 0;
+  if (in->snapid != CEPH_NOSNAP ||
+      (last & ~(CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE)) ||
+      (last & ~in->caps_issued()))
+    return last;   // flush snaps, wake writers, check_caps(): client_lock
+  if (last & CEPH_CAP_FILE_CACHE) {
+    // wake the cap waiters under client_lock, which they sleep on
+    if (!in->waitfor_caps.empty() || !in->waitfor_caps_pending.empty())
+      return last;
+    ldout(cct, 5) << __func__ << " dropped last FILE_CACHE ref on " << in->vino() << dendl;
+    // The caller holds the Fh, and the Fh holds the inode, so this cannot
+    // be the inode's last ref: drop it directly instead of queueing it on
+    // delay_i_release under the global delay_i_lock (see put_inode()).
+    ceph_assert(in->get_nref() > 1);
+    in->iput();
+  }
+  return 0;
+}
+
+void Client::_put_cap_ref_last(Inode *in, int last)
+{
+  ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
+  {
     int put_nref = 0;
     int drop = last & ~in->caps_issued();
     if (in->snapid == CEPH_NOSNAP) {
@@ -5113,6 +5154,7 @@ void Client::flush_set_callback(ObjectCacher::ObjectSet *oset)
 }
 
 thread_local Client::OCScope *Client::oc_scope = nullptr;
+thread_local bool Client::oc_fast_path = false;
 
 Client::OCScope::OCScope(Client *c) : client(c)
 {
@@ -5128,7 +5170,12 @@ Client::OCScope::~OCScope()
   oc_scope = nullptr;
   client->oc_lock.unlock();
   for (auto& [c, r] : pending) {
-    c->complete(r);
+    if (oc_fast_path) {
+      // no client_lock here, which the callbacks expect
+      client->oc_finisher.queue(new C_Lock(&client->client_lock, c), r);
+    } else {
+      c->complete(r);
+    }
   }
 }
 
@@ -6627,6 +6674,8 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, const M
   if (new_caps & (CEPH_CAP_ANY_FILE_RD | CEPH_CAP_ANY_FILE_WR)) {
     {
       std::scoped_lock il(in->lock);
+      if (in->layout != m->get_layout())
+        in->pool_perm_ok = 0;
       in->layout = m->get_layout();
     }
     update_inode_file_size(in, issued, m->effective_size(),
@@ -12539,6 +12588,127 @@ void Client::C_Read_Async_Finisher::finish(int r)
   onfinish->complete(r);
 }
 
+/*
+ * Serve a read from the object cache under Inode::lock, without
+ * client_lock, when the caps allow it: what _read() and _read_async() do
+ * for a cache read with Fr and Fc issued and not being revoked.  Anything
+ * else (EOF, inline data, fscrypt, snapshots, O_DIRECT/O_RSYNC, caps
+ * missing or being revoked, an unchecked pool) returns false, and the
+ * caller retries the read under client_lock.  The caller holds a ref on f.
+ */
+bool Client::_read_fast(Fh *f, int64_t off, uint64_t len, bufferlist *bl,
+                        int *pr, bool nowait)
+{
+  const auto& conf = cct->_conf;
+  if (!conf->client_oc || conf->client_debug_force_sync_read)
+    return false;
+  if (!(f->mode & CEPH_FILE_MODE_RD) || (f->flags & (O_DIRECT | O_RSYNC)))
+    return false;
+  Inode *in = f->inode.get();
+  if (in->snapid != CEPH_NOSNAP)
+    return false;
+
+  OCFastPath fast;
+  utime_t start = mono_clock_now();
+  std::unique_lock il(in->lock);
+  if (in->inline_version != CEPH_INLINE_NONE ||
+      in->is_fscrypt_enabled() ||
+      (in->flags & (I_ERROR_FILELOCK | I_CAP_DROPPED)) ||
+      (conf->client_check_pool_perm &&
+       !(in->pool_perm_ok & CEPH_CAP_FILE_RD)) ||
+      !(in->caps_file_wanted() & CEPH_CAP_FILE_RD))
+    return false;
+
+  int want = CEPH_CAP_FILE_CACHE;
+  if (f->mode & CEPH_FILE_MODE_LAZY)
+    want |= CEPH_CAP_FILE_LAZYIO;
+  int implemented;
+  int have = in->caps_issued(&implemented);
+  int revoking = implemented & ~have;
+  if (!(have & CEPH_CAP_FILE_RD) || (revoking & want) ||
+      !(have & (CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_LAZYIO)))
+    return false;
+
+  uint64_t size = in->effective_size();
+  if ((uint64_t)off >= size)
+    return false;   // EOF needs a size check with the MDS
+  if (off + len > size)
+    len = size - off;
+
+  // the refs get_caps() and _read_async() take; with them held the caps
+  // cannot be taken away while we wait for the OSDs below
+  in->get_cap_ref(CEPH_CAP_FILE_RD);
+  cap_hit();
+  get_cap_ref(in, CEPH_CAP_FILE_CACHE);
+
+  ldout(cct, 10) << __func__ << " " << in->vino() << " " << off << "~" << len << dendl;
+  // Read the cache without Inode::lock, so readers of one file do not queue
+  // on it: our refs keep the caps, and with them the cached data (_release()
+  // needs the Fc refs gone); the cache has oc_lock.
+  // Map the range to objects (formatting the object names) with neither
+  // Inode::lock, which the readers of one file share, nor oc_lock, which
+  // every reader shares: from a copy of the layout and of truncate_size,
+  // which oset.truncate_size follows.
+  file_layout_t layout = in->layout;
+  uint64_t truncate_size = in->truncate_size;
+  il.unlock();
+  auto rd = objectcacher->prepare_read(in->snapid, bl, 0);
+  Striper::file_to_extents(cct, in->ino, &layout, off, len, truncate_size,
+                           rd->extents);
+  // A C_SaferCond only wakes us up: the cache may complete it under oc_lock,
+  // it needs no oc_ctx() wrapper (and allocation).
+  C_SaferCond cond("Client::_read_fast");
+  bool would_wait = false;
+  int r = oc_call([&] {
+    if (nowait && !objectcacher->is_readable(&in->oset, rd->extents, in->snapid)) {
+      would_wait = true;   // a non-blocking caller must not wait here
+      return 0;
+    }
+    return objectcacher->readx(rd, &in->oset, &cond);
+  });
+  if (would_wait) {
+    delete rd;
+    il.lock();
+    int last = put_cap_ref_fast(in, CEPH_CAP_FILE_CACHE);
+    last |= put_cap_ref_fast(in, CEPH_CAP_FILE_RD);
+    il.unlock();
+    if (last) {
+      std::scoped_lock cl(client_lock);
+      _put_cap_ref_last(in, last);
+    }
+    return false;
+  }
+  if (r > 0) {
+    logger->inc(l_c_osdc_hit);
+  } else if (r == 0) {
+    logger->inc(l_c_osdc_miss);
+  }
+  if (r == 0)
+    r = cond.wait();   // a hit (or an error) leaves cond untouched
+  il.lock();
+  int last = put_cap_ref_fast(in, CEPH_CAP_FILE_CACHE);
+  if (r >= 0)
+    r = bl->length();
+  do_readahead(f, in, off, len);
+  last |= put_cap_ref_fast(in, CEPH_CAP_FILE_RD);
+  il.unlock();
+
+  if (last) {
+    ceph_assert(!Inode::Lock::held_by_me());  // client_lock goes first
+    std::scoped_lock cl(client_lock);
+    _put_cap_ref_last(in, last);
+  }
+  if (r >= 0) {
+    update_read_io_size(r);
+    utime_t lat = mono_clock_now();
+    lat -= start;
+    subvolume_tracker->add_metric(in->ino, SimpleIOMetric{false, lat, (uint32_t)r});
+    update_io_stat_read(lat);
+  }
+  *pr = r;
+  return true;
+}
+
 int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
 			Context *onfinish)
 {
@@ -18113,6 +18283,47 @@ loff_t Client::ll_lseek(Fh *fh, loff_t offset, int whence)
   return _lseek(fh, offset, whence);
 }
 
+/*
+ * The vectored ll_* reads: try _read_fast() for them.  Returns false if
+ * the read has to go through client_lock.  Otherwise *pr is what the call
+ * returns: the bytes read for a blocking call, which are copied to iov; or
+ * 0 for a non-blocking one, whose onfinish was completed with the result
+ * (with the data in *bl, or copied to iov if there is no bl).
+ */
+bool Client::_ll_preadv_fast(Fh *fh, const struct iovec *iov, int iovcnt,
+                             int64_t off, Context *onfinish, bufferlist *bl,
+                             int64_t *pr)
+{
+  if (!fh || off < 0 || iovcnt <= 0)
+    return false;
+  size_t len = 0;
+  for (int i = 0; i < iovcnt; i++)
+    len += iov[i].iov_len;
+  len = std::min(len, (size_t)INT_MAX);
+  if (len == 0 || !_ll_get_fh(fh))
+    return false;
+  bufferlist local;
+  bufferlist *rbl = (onfinish && bl) ? bl : &local;
+  int r;
+  // a non-blocking caller takes the fast path only for what the cache has
+  bool done = _read_fast(fh, off, len, rbl, &r, onfinish != nullptr);
+  _put_fh(fh);
+  if (!done)
+    return false;
+  ldout(cct, 3) << __func__ << " " << fh << " " << off << "~" << len << " = " << r
+                << dendl;
+  if (r > 0 && rbl == &local)
+    copy_bufferlist_to_iovec(iov, iovcnt, rbl, r);
+  if (onfinish) {
+    logger->inc(l_c_aio_ops);
+    onfinish->complete(r);
+    *pr = 0;
+  } else {
+    *pr = r;
+  }
+  return true;
+}
+
 int Client::ll_read(Fh *fh, loff_t off, loff_t len, bufferlist *bl)
 {
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
@@ -18123,19 +18334,29 @@ int Client::ll_read(Fh *fh, loff_t off, loff_t len, bufferlist *bl)
     inc_sync_in_flight();
   }
 
-#if defined(__linux__)
-  /* We can't return bytes written larger than INT_MAX, clamp size to
-   * that or FSCRYPT_MAXIO_SIZE*/
-  Inode *in = fh->inode.get();
-  if (in->is_fscrypt_enabled()) {
-    len = std::min(len, (loff_t)FSCRYPT_MAXIO_SIZE);
-  } else {
-  /* We can't return bytes written larger than INT_MAX, clamp len to that */
-    len = std::min(len, (loff_t)INT_MAX);
-  }
-#else
+  /* We can't return bytes read larger than INT_MAX, clamp len to that, and
+   * to FSCRYPT_MAXIO_SIZE once the Fh is known to be valid */
   len = std::min(len, (loff_t)INT_MAX);
-#endif
+
+  // try to serve it from the cache without client_lock first
+  if (fh && off >= 0 && len > 0 && _ll_get_fh(fh)) {
+    int r;
+    bool done = _read_fast(fh, off, len, bl, &r);
+    _put_fh(fh);
+    if (done) {
+      tout(cct) << "ll_read" << std::endl;
+      tout(cct) << (uintptr_t)fh << std::endl;
+      tout(cct) << off << std::endl;
+      tout(cct) << len << std::endl;
+      ldout(cct, 3) << "ll_read " << fh << " " << off << "~" << len << " = " << r
+                    << " (fast)" << dendl;
+      if (logger) {
+        dec_sync_in_flight();
+      }
+      return r;
+    }
+  }
+
   std::scoped_lock lock(client_lock);
   if (fh == NULL || !_ll_fh_exists(fh)) {
     ldout(cct, 3) << "(fh)" << fh << " is invalid" << dendl;
@@ -18144,6 +18365,11 @@ int Client::ll_read(Fh *fh, loff_t off, loff_t len, bufferlist *bl)
     }
     return -EBADF;
   }
+#if defined(__linux__)
+  if (fh->inode->is_fscrypt_enabled()) {
+    len = std::min(len, (loff_t)FSCRYPT_MAXIO_SIZE);
+  }
+#endif
 
   ldout(cct, 3) << "ll_read " << fh << " " << fh->inode->ino << " " << " " << off << "~" << len << dendl;
   tout(cct) << "ll_read" << std::endl;
@@ -18364,6 +18590,14 @@ int64_t Client::ll_readv(struct Fh *fh, const struct iovec *iov, int iovcnt, int
     inc_sync_in_flight();
   }
 
+  // try to serve it from the cache without client_lock first
+  if (int64_t r; _ll_preadv_fast(fh, iov, iovcnt, off, nullptr, nullptr, &r)) {
+    if (logger) {
+      dec_sync_in_flight();
+    }
+    return r;
+  }
+
   std::scoped_lock cl(client_lock);
   if (fh == NULL || !_ll_fh_exists(fh)) {
     ldout(cct, 3) << "(fh)" << fh << " is invalid" << dendl;
@@ -18405,6 +18639,17 @@ int64_t Client::ll_preadv_pwritev(struct Fh *fh, const struct iovec *iov,
     }
 
     retval = 0;
+    if (!write) {
+      // try to serve it from the cache without client_lock first
+      int64_t r;
+      if (_ll_preadv_fast(fh, iov, iovcnt, offset, onfinish, bl, &r)) {
+        if (onfinish == nullptr && logger) {
+          dec_sync_in_flight();
+        }
+        return r;
+      }
+    }
+
     // copy the caller's data before taking client_lock
     bufferlist wdata;
     if (write && iovcnt > 0)
@@ -19438,6 +19683,12 @@ int Client::check_pool_perm(Inode *in, int need)
     return -EPERM;
   }
 
+  {
+    // remember it for the data path, which checks it without client_lock
+    std::scoped_lock il(in->lock);
+    if (in->layout.pool_id == pool_id && in->layout.pool_ns == pool_ns)
+      in->pool_perm_ok |= need & (CEPH_CAP_FILE_RD | CEPH_CAP_FILE_WR);
+  }
   return 0;
 }
 
