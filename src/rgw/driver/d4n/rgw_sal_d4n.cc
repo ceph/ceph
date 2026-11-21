@@ -1953,8 +1953,12 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
     }
 
     params.parts_count = next->params.parts_count;
-    params.part_ofs = next->params.part_ofs;
-    params.full_obj_size = next->params.full_obj_size;
+    // the load_obj_state() reload replaces a part's size with the whole-object size,
+    // so keep a part's prepared offset/size only for non-multipart partNumber=1.
+    if (!params.parts_count) {
+      params.part_ofs = next->params.part_ofs;
+      params.full_obj_size = next->params.full_obj_size;
+    }
     this->source->load_obj_state(dpp, y);
     attrs = source->get_attrs();
     source->set_attrs_from_obj_state(dpp, y, attrs);
