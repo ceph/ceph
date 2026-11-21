@@ -5253,6 +5253,42 @@ TEST_CASE("borrowed transactor invocation leaves ownership with its caller", "[f
   CHECK_FALSE(*false_value);
  }
 
+ SECTION("owning and borrowed results need neither copying nor default construction") {
+  struct payload final
+  {
+   int number;
+
+   payload() = delete;
+   explicit payload(const int n) : number(n)
+   {}
+
+   payload(payload&&) noexcept = default;
+   payload(const payload&) = delete;
+  };
+
+  auto body = [calls = std::make_unique<int>(0)](auto&) mutable {
+   return payload {++*calls};
+  };
+  const auto borrowed = txr(txn, body);
+  REQUIRE(borrowed);
+  CHECK(1 == borrowed->number);
+
+  const auto owned = txr(body);
+  REQUIRE(owned);
+  CHECK(2 == owned->value.number);
+
+  auto reject = [calls = std::make_unique<int>(0)](auto&) mutable -> std::expected<void, payload> {
+   return std::unexpected(payload {++*calls});
+  };
+  const auto borrowed_error = txr(txn, reject);
+  REQUIRE_FALSE(borrowed_error);
+  CHECK(1 == std::get<lfdb::application_error<payload>>(borrowed_error.error().cause).error.number);
+
+  const auto owned_error = txr(reject);
+  REQUIRE_FALSE(owned_error);
+  CHECK(2 == std::get<lfdb::application_error<payload>>(owned_error.error().cause).error.number);
+ }
+
  SECTION("application rejection preserves pending stamps and earlier writes") {
   lfdb::versionstamp stamp;
   lfdb::set(txn, key, lfdb::versioned("", stamp));
@@ -5663,6 +5699,9 @@ struct failing_staged_value final
 
 static_assert(not lfdb::concepts::supported_invocation_result<throwing_transfer>);
 static_assert(not lfdb::concepts::supported_invocation_result<int&>);
+static_assert(not lfdb::concepts::supported_invocation_result<std::in_place_t>);
+static_assert(not lfdb::concepts::supported_invocation_result<std::unexpect_t>);
+static_assert(lfdb::concepts::supported_invocation_result<std::expected<int, std::in_place_t>>);
 static_assert(not lfdb::concepts::supported_invocation_result<std::unexpected<int>>);
 static_assert(not lfdb::concepts::supported_invocation_result<const std::unique_ptr<int>>);
 static_assert(not lfdb::concepts::supported_invocation_result<std::expected<int, throwing_transfer>>);

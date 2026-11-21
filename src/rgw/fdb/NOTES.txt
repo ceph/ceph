@@ -7,6 +7,15 @@ modify it under the terms of the GNU Lesser General Public
 License version 2.1, as published by the Free Software
 Foundation. See file COPYING.
 
+* Owning transaction attempts reuse borrowed invocation's result and exception
+  normalization. Staged preparation remains inside that exception boundary;
+  replay history, failed-attempt cleanup, commit, and publication stay with the
+  owner. Ordinary values no longer need dummy expected/monostate storage.
+  Implicit mutating leaf operations use the public owning Transactor instead of
+  a separate transaction/retry wrapper.
+  Functional transforms use ordinary range traversal without maintaining a row
+  count that their callers do not consume; mutable callables remain borrowed.
+
 * General set mutations reuse core interval assignment for strong publication.
   FDB construction/mutation share bounded geometry, and scalar/composite scans
   share selector compilation. Scalar emptiness/count checks borrow endpoint bytes;
@@ -35,7 +44,9 @@ Foundation. See file COPYING.
   maximum. Exact sizes use standard range sizing; bounded approximate sources use
   the C++26 reserve_hint CPO only when its library feature macro is available.
   Unlimited unsized streams grow from actual rows, and empty generic pages reserve
-  no vector storage. Native single-window pages reserve from returned row counts.
+  no vector storage. Native single-window pages use the same collector over a
+  capped decoded view, preserving returned-row reservation and avoiding decoding
+  the continuation row.
   Suitable generic collections and page-result accessors support constant evaluation.
 
 * Include fdb.h for the complete public interface. Lower-level ownership lives
