@@ -6255,6 +6255,15 @@ void Locker::handle_file_lock(ScatterLock *lock, const cref_t<MLock> &m)
 
     // requests....
   case LOCK_AC_REQSCATTER:
+    if (double delay = g_conf().get_val<double>("mds_inject_scatter_request_delay");
+	delay > 0 && delayed_scatter_requests.insert(m.get()).second) {
+      dout(0) << "handle_file_lock delaying scatter request " << delay
+	      << "s (mds_inject_scatter_request_delay) on " << *lock
+	      << " on " << *lock->get_parent() << dendl;
+      mds->timer.add_event_after(delay, new C_MDS_RetryMessage(mds, m));
+      break;
+    }
+    delayed_scatter_requests.erase(m.get());
     if (!in->is_auth() || in->is_frozen()) {
       /* Migrator::export_frozen() asks for this from a replica that no
        * longer holds an auth_pin on the inode, so by now the inode may be

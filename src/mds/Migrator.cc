@@ -130,6 +130,7 @@ struct Migrator::export_state_t {
   int lock_waits = 0; // thaws to get the dir inode's locks (export_frozen())
   utime_t lock_wait_start;
   bool lock_wait_pinned = false; // our auth pin holds the freeze back
+  bool frozen_delay_injected = false; // mds_inject_export_frozen_delay
   std::shared_ptr<export_base_t> parent;
 };
 
@@ -1598,6 +1599,15 @@ void Migrator::export_frozen(CDir *dir, uint64_t tid)
 
   ceph_assert(it->second.state == EXPORT_FREEZING);
   ceph_assert(dir->is_frozen_tree_root());
+
+  if (double delay = g_conf().get_val<double>("mds_inject_export_frozen_delay");
+      delay > 0 && !it->second.frozen_delay_injected) {
+    it->second.frozen_delay_injected = true;
+    dout(0) << "export_dir delaying " << delay << "s once frozen "
+	    << "(mds_inject_export_frozen_delay) " << *dir << dendl;
+    mds->timer.add_event_after(delay, new C_MDC_ExportFreeze(this, dir, tid));
+    return;
+  }
 
   it->second.mut = new MutationImpl();
 
