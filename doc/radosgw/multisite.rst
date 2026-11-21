@@ -372,7 +372,7 @@ For example:
 
     [client.rgw.rgw1]
     host = rgw1
-    rgw frontends = "civetweb port=80"
+    rgw frontends = "beast port=80"
     rgw_zone=us-east
 
 Start the Gateway
@@ -503,7 +503,7 @@ For example:
 
     [client.rgw.rgw2]
     host = rgw2
-    rgw frontends = "civetweb port=80"
+    rgw frontends = "beast port=80"
     rgw_zone=us-west
 
 Updating the Period
