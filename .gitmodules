@@ -55,8 +55,8 @@
 	url = https://github.com/ceph/s3select.git
 [submodule "src/libkmip"]
 	path = src/libkmip
-	url = https://github.com/ceph/libkmip
-	branch = ceph-master
+	url = https://github.com/supriti/libkmip.git
+	branch = wip-kmip-clean-for-review
 [submodule "src/arrow"]
 	path = src/arrow
 	url = https://github.com/apache/arrow.git
