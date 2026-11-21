@@ -652,3 +652,11 @@ if(WITH_RADOSGW_RADOS)
       rgw_common ${rgw_libs} global)
   endforeach()
 endif()
+
+# unittest_rgw_sts_jwks
+add_executable(unittest_rgw_sts_jwks test_rgw_sts_jwks.cc)
+add_ceph_unittest(unittest_rgw_sts_jwks)
+target_include_directories(unittest_rgw_sts_jwks
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
+target_link_libraries(unittest_rgw_sts_jwks
+  ceph-common ${UNITTEST_LIBS})
