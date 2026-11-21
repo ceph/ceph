@@ -549,6 +549,7 @@ public:
     constexpr const boundary_type& upper() const noexcept { return upper_boundary; }
 
 public:
+    // Equality compares stored bounds, including distinct empty representations:
     constexpr bool operator==(const query& rhs) const
     {
         return lower_boundary == rhs.lower_boundary and upper_boundary == rhs.upper_boundary;
@@ -760,6 +761,11 @@ constexpr std::strong_ordering compare_position(const LhsT& lhs, const RhsT& rhs
     return boundary_domain_t<LhsT>::compare(lhs.key(), rhs.key());
 }
 
+// Bound emptiness needs only ordering, not a discrete successor or a membership witness.
+// Open adjacent integer endpoints can describe nonempty bounds with no integer member.
+// Guava Range documents the same distinction for isEmpty, encloses, and representation equality:
+// https://guava.dev/releases/33.4.7-jre/api/docs/com/google/common/collect/Range.html
+// Normalization uses these bounds; finite half-open byte consumers use an explicit metric:
 template <boundary_view LowerT, boundary_view UpperT>
 requires std::same_as<boundary_domain_t<LowerT>, boundary_domain_t<UpperT>>
 constexpr bool empty_bounds(const LowerT& lower, const UpperT& upper)

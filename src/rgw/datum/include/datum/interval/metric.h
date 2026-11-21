@@ -9,7 +9,9 @@
 
 namespace ceph::salad::datum::interval {
 
-// Byte geometry uses ordinary unsigned positions; no application domain declaration is needed.
+// Finite half-open byte bounds give length by subtraction and compose at shared endpoints.
+// Dijkstra, EWD831 (1982): https://www.cs.utexas.edu/~EWD/transcriptions/EWD08xx/EWD831.html
+// Byte geometry uses ordinary unsigned positions; no application domain declaration is needed:
 using byte_domain = comparison_domain<std::uint64_t>;
 using byte_query = query<byte_domain>;
 

@@ -252,6 +252,15 @@ its boundaries. Square brackets include an endpoint; parentheses exclude it:
 An interval can also have an unbounded end. The domain supplies ordering, while
 the input range supplies the points we actually visit.
 
+`contains` tests an actual supplied point. Structural operations such as `is_empty`,
+`intersects`, and `encloses` use bounds without assuming discrete successors or domain limits.
+For integer points, `(1,2)` therefore has nonempty bound geometry but selects no integer.
+Normalization can retain that gap; it merges touching `[1,2)` and `[2,3)` but does not infer
+that closed singletons `[1,1]` and `[2,2]` are neighbors. Query equality compares stored bounds,
+so distinct empty representations can compare unequal; normalization discards all structural
+empties. Guava documents a similar bounds/membership distinction in the [bibliography](#bibliography).
+For exact covered-byte quantities, use finite half-open byte geometry as in section 6.
+
 The [complete program](examples/02_half_interval_interlude.cpp) uses the same
 `seat_numbers` domain as section 2. Make two closed selections:
 
@@ -2452,3 +2461,6 @@ identify sources in the separate local RGW integration snapshot described in the
   [view requirements](https://timsong-cpp.github.io/cppwp/n4950/range.view). These specify
   ref/owning adaptation and copying-cost contracts for standard pipelines. The expression
   observation remains a move-only range.
+- Guava contributors. [*Range*, release 33.4.7-jre](https://guava.dev/releases/33.4.7-jre/api/docs/com/google/common/collect/Range.html).
+  `isEmpty`, `encloses`, `equals`, and `canonical` explain why order-only bound operations
+  need not determine discrete membership or membership-equivalent representations.

@@ -422,6 +422,24 @@ The shared `is_finite`, `is_below_all`, and `is_above_all` predicates derive fro
 its key is available only when finite. Empty queries use reversed infinite bounds,
 so no separate empty flag or point construction is needed.
 
+Structural predicates use ordered bounds. `is_empty`, `intersects`, `encloses`, and canonical
+coalescing do not infer discrete successors, domain limits, or a witness point. For example,
+`query<comparison_domain<int>>::open(1, 2)` has nonempty bound geometry and intersects itself,
+although `contains` is false for every integer. Enclosure implies that every member of the
+inner interval belongs to the outer; the converse need not hold for a discrete domain.
+Normalization can retain such an uninhabited discrete gap and keeps `[1,1]` and `[2,2]`
+separate, while touching half-open `[1,2)` and `[2,3)` coalesce. This order-only contract is
+also documented by Guava's Range API; see the [bibliography](#bibliography).
+
+`query::operator==` compares stored boundary representations. Distinct empty representations
+can compare unequal, although `is_empty` recognizes each and every interval encloses them.
+Canonical compilation discards structurally empty intervals. Use membership when selecting
+actual input values; use finite half-open `byte_extent`/`byte_query` geometry and the `bytes`
+metric for exact covered-byte quantities. Exclusive byte endpoints must be representable:
+`byte_extent {UINT64_MAX, 0}` is valid, while `{UINT64_MAX, 1}` throws instead of wrapping.
+The general algebra supports a closed singleton at that maximum; the byte metric rejects
+its closed upper endpoint. Unbounded ends do not stand for machine minimum/maximum values.
+
 `comparison_domain<T, Compare>` supplies the value type and a compile-time comparison object.
 Its default, [`std::compare_three_way`](https://eel.is/c++draft/comparisons.three.way), retains
 that object's native constraints; `ordered_domain` checks the supplied comparison's result.
@@ -1293,3 +1311,9 @@ describe local machinery, not backend throughput.
   [view requirements](https://timsong-cpp.github.io/cppwp/n4950/range.view).
   These specify standard pipeline ownership and copying-cost contracts. An owned expression
   observation is a move-only range, leaving ref/owning adaptation to standard ranges.
+- Guava contributors. [*Range*, release 33.4.7-jre](https://guava.dev/releases/33.4.7-jre/api/docs/com/google/common/collect/Range.html).
+  `isEmpty`, `encloses`, `equals`, and `canonical` document the distinction between bounds,
+  representation equality, and discrete membership. Datum retains its own empty-bound rules.
+- Edsger W. Dijkstra. [*Why numbering should start at zero*](https://www.cs.utexas.edu/~EWD/transcriptions/EWD08xx/EWD831.html).
+  EWD831, 11 August 1982. Shared half-open endpoints support length and adjacency reasoning
+  for byte positions; Datum separately checks machine arithmetic and representability.

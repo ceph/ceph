@@ -3,6 +3,7 @@
 #include "common/container_concepts.h"
 #include <catch2/catch_test_macros.hpp>
 #include <datum/interval/clip.h>
+#include <datum/interval/metric.h>
 #include <datum/interval/query.h>
 #include <datum/traversal.h>
 
@@ -410,6 +411,90 @@ TEST_CASE("Datum boundary predicates match a dense finite set model", "[datum][a
             CHECK(mask(iv::set_union(a, b)) == (ma | mb));
         }
     }
+}
+
+TEST_CASE("adjacent integer membership does not redefine order-only bound geometry", "[datum][algebra]")
+{
+    constexpr auto gap = Q::open(1, 2);
+    static_assert(!iv::is_empty(gap));
+    static_assert(iv::intersects(gap, gap));
+    static_assert(!iv::contains(gap, 1) and !iv::contains(gap, 2));
+    static_assert(iv::is_empty(Q::open(1, 1)));
+    CHECK_FALSE(iv::is_empty(gap));
+    CHECK(iv::intersects(gap, gap));
+    CHECK(iv::encloses(gap, gap));
+    for (const int point : std::views::iota(-1, 5)) {
+        CHECK_FALSE(iv::contains(gap, point));
+    }
+    const auto retained = iv::compile_intervals(gap);
+    REQUIRE(1 == retained.size());
+    CHECK(retained[0] == gap);
+
+    const auto closed = Q::closed(1, 2);
+    const auto half_open = Q::closed_open(1, 3);
+    for (const int point : std::views::iota(-1, 5)) {
+        CHECK(iv::contains(closed, point) == iv::contains(half_open, point));
+    }
+    CHECK(closed != half_open);
+    CHECK(iv::encloses(half_open, closed));
+    CHECK_FALSE(iv::encloses(closed, half_open));
+    CHECK_FALSE(iv::is_empty_expression(iv::difference(half_open, closed)));
+
+    const auto discrete_neighbors = iv::compile_intervals(iv::set_union(Q::singleton(1), Q::singleton(2)));
+    CHECK(2 == discrete_neighbors.size());
+    const auto touching = iv::compile_intervals(iv::set_union(Q::closed_open(1, 2), Q::closed_open(2, 3)));
+    REQUIRE(1 == touching.size());
+    CHECK(touching[0] == half_open);
+}
+
+TEST_CASE("empty bound representations normalize together while equality retains geometry", "[datum][algebra]")
+{
+    const std::array empty {Q::empty(), Q::closed_open(1, 1), Q::open(1, 1), Q::closed(2, 1)};
+    CHECK(empty[0] != empty[1]);
+    CHECK(empty[1] != empty[2]);
+    for (const auto& value : empty) {
+        CHECK(iv::is_empty(value));
+        CHECK(iv::encloses(Q::empty(), value));
+        CHECK(iv::encloses(Q::singleton(8), value));
+        CHECK(iv::copy_interval(value) == Q::empty());
+        CHECK(iv::compile_intervals(value).empty());
+        CHECK_FALSE(iv::intersects(value, Q::universal()));
+        for (const int point : std::views::iota(0, 4)) {
+            CHECK_FALSE(iv::contains(value, point));
+        }
+    }
+    CHECK(iv::compile_intervals(empty).empty());
+}
+
+TEST_CASE("domain limits do not introduce implicit successor or infinity arithmetic", "[datum][algebra]")
+{
+    using tiny_domain = iv::comparison_domain<std::int8_t>;
+    using tiny = iv::query<tiny_domain>;
+    using bound = iv::boundary<tiny_domain>;
+    constexpr auto minimum = std::numeric_limits<std::int8_t>::min();
+    constexpr auto maximum = std::numeric_limits<std::int8_t>::max();
+    constexpr auto before = tiny::between(bound::negative_infinity(), bound::open(minimum));
+    constexpr auto after = tiny::between(bound::open(maximum), bound::positive_infinity());
+    static_assert(!iv::is_empty(before) and !iv::is_empty(after));
+    static_assert(iv::contains(tiny::singleton(minimum), minimum));
+    static_assert(iv::contains(tiny::singleton(maximum), maximum));
+    CHECK_FALSE(iv::is_empty(before));
+    CHECK_FALSE(iv::is_empty(after));
+    for (int point = minimum; point <= maximum; ++point) {
+        CHECK_FALSE(iv::contains(before, static_cast<std::int8_t>(point)));
+        CHECK_FALSE(iv::contains(after, static_cast<std::int8_t>(point)));
+    }
+
+    constexpr auto last = std::numeric_limits<std::uint64_t>::max();
+    constexpr auto edge = iv::byte_query::closed_open(last - 1, last);
+    static_assert(iv::extent_of(edge) == datum::byte_extent {last - 1, 1});
+    static_assert(iv::is_empty(iv::bounds(datum::byte_extent {last, 0})));
+    CHECK(iv::extent_of(iv::bounds(datum::byte_extent {0, 0})) == datum::byte_extent {0, 0});
+    CHECK(iv::extent_of(iv::bounds(datum::byte_extent {last, 0})) == datum::byte_extent {last, 0});
+    CHECK(iv::contains(edge, last - 1));
+    CHECK_FALSE(iv::contains(edge, last));
+    CHECK_THROWS_AS(iv::bounds(datum::byte_extent {last, 1}), std::overflow_error);
+    CHECK_THROWS_AS(iv::extent_of(iv::byte_query::singleton(last)), std::domain_error);
 }
 
 TEST_CASE("Datum structural predicates do not copy long point payloads", "[datum][cost]")

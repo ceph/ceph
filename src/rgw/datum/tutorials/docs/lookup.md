@@ -67,6 +67,9 @@ the bytes. [Ceph fragments](../tutorial.md#18-bytes-with-a-ceph-accent).
 
 **Boundary.** An interval's endpoint may be included or excluded; an unbounded
 end has no finite endpoint. [Chapter 2½](../tutorial.md#2½-an-interval-interlude).
+Structural emptiness and relations use bounds without discrete successor knowledge;
+integer `(1,2)` can have nonempty geometry and no integer members.
+Use finite half-open byte bounds for exact covered-byte quantities.
 
 **Boundary predicates; `is_finite`; `is_below_all`; `is_above_all`.** Shared checks
 derive from a boundary's `kind()`. Providers supply domain identity, `kind()`,
