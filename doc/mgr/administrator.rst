@@ -182,6 +182,20 @@ view detailed metadata about disabled modules. Enable or disable modules using
 the commands ``ceph mgr module enable <module>`` and ``ceph mgr module disable
 <module>`` respectively.
 
+Some modules, such as ``crash``, are *always on*. ``ceph mgr module ls`` lists
+them as ``on (always on)``, and ``ceph mgr module disable`` refuses to disable
+them. Turning off an always-on module disables operations and removes commands
+that other Ceph tools expect, so do it only when troubleshooting calls for it.
+To turn off an always-on module, run a command of the following form:
+
+.. prompt:: bash #
+
+   ceph mgr module force disable <module> --yes-i-really-mean-it
+
+``ceph mgr module ls`` then lists the module as ``off (always on but
+force-disabled)``. To turn the module back on, run ``ceph mgr module enable
+<module>``.
+
 If a module is *enabled* then the active ceph-mgr daemon will load and execute
 it.  In the case of modules that provide a service, such as an HTTP server, the
 module may publish its address when it is loaded.  To see the addresses of such
