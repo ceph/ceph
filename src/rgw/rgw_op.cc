@@ -5027,7 +5027,9 @@ void RGWPutObj::execute(optional_yield y)
 		      << dendl;
     return;
   }
-  if ((! copy_source.empty()) && !copy_source_range) {
+  fst = copy_source_range_fst;
+  lst = copy_source_range_lst;
+  if (!copy_source.empty()) {
     auto bucket = driver->get_bucket(copy_source_bucket_info);
     auto obj = bucket->get_object(rgw_obj_key(copy_source_object_name,
                                               copy_source_version_id));
@@ -5042,7 +5044,9 @@ void RGWPutObj::execute(optional_yield y)
       RGWObjManifest m;
       try{
         decode(m, bl);
-        if (m.is_tier_type_s3()) {
+        // a temporarily restored object keeps the cloud tier type, but only
+        // the stub left by a transition has no data
+        if (m.is_tier_type_s3() && obj->get_size() == 0) {
           op_ret = -ERR_INVALID_OBJECT_STATE;
           s->err.message = "This object was transitioned to cloud-s3";
           ldpp_dout(this, 4) << "Cannot copy cloud tiered object. Failing with "
@@ -5061,11 +5065,10 @@ void RGWPutObj::execute(optional_yield y)
       op_ret = -ENOENT;
       return;
     }
-    lst = obj->get_accounted_size() - 1;
-  } else {
-    lst = copy_source_range_lst;
+    if (!copy_source_range) {
+      lst = obj->get_accounted_size() - 1;
+    }
   }
-  fst = copy_source_range_fst;
 
   // no filters by default
   rgw::sal::DataProcessor *filter = processor.get();
