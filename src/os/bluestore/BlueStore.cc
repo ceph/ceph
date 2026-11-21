@@ -5784,6 +5784,7 @@ int BlueStore::mount_readonly()
     }
   });
 
+  // replay pending deferred, but do not prepare keys for removal
   r = _deferred_replay(nullptr);
   if (r < 0) {
     return r;
@@ -5838,8 +5839,6 @@ int BlueStore::_mount_readonly()
   if (r < 0) {
     goto out_db;
   }
-  // replay pending deferred, but do not prepare keys for removal
-  _deferred_replay(nullptr);
   return 0;
 
 out_db:
@@ -12401,6 +12400,9 @@ int BlueStore::_deferred_replay(std::vector<std::string>* keys_to_remove)
       ioctx.release_running_aios();
     }
   }
+  // the callers remove the keys of these writes next, and the DB may be
+  // on another device: make the data stable first
+  bdev->flush();
   dtr_deferred_replay_end();
   dout(10) << __func__ << " completed " << count << " events" << dendl;
   return r;
