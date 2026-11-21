@@ -6,6 +6,7 @@
 
 #include <list>
 #include <atomic>
+#include <vector>
 
 #include <boost/function.hpp>
 
@@ -110,6 +111,8 @@ public:
                    bufferlist& inbl, bufferlist* outbl,
                    uint64_t snap_id, const SnapContext &snapc);
   virtual int list_snaps(const std::string& o, snap_set_t *out_snaps) = 0;
+  virtual int list_watchers(const std::string& o,
+                            std::vector<obj_watch_t> *out_watchers);
   virtual int list_watchers(const std::string& o,
                             std::list<obj_watch_t> *out_watchers);
   virtual int notify(const std::string& o, bufferlist& bl,
