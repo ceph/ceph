@@ -2207,6 +2207,26 @@ def test_post_object_set_invalid_success_code():
     content = r.content.decode()
     assert content == ''
 
+def test_post_object_set_non_numeric_success_code():
+    bucket_name = get_new_bucket_name()
+    client = get_client()
+    client.create_bucket(ACL='public-read-write', Bucket=bucket_name)
+
+    url = _get_post_url(bucket_name)
+    payload = OrderedDict([("key" , "foo.txt"),("acl" , "public-read"),\
+    ("success_action_status" , "not-a-number"),\
+    ("Content-Type" , "text/plain"),('file', ('bar'))])
+
+    r = requests.post(url, files=payload, verify=get_config_ssl_verify())
+    assert r.status_code == 204
+    content = r.content.decode()
+    assert content == ''
+
+    # the upload succeeded, so the object must be present
+    response = client.get_object(Bucket=bucket_name, Key='foo.txt')
+    body = _get_body(response)
+    assert body == 'bar'
+
 def test_post_object_upload_larger_than_chunk():
     bucket_name = get_new_bucket()
     client = get_client()
