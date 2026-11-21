@@ -5,6 +5,7 @@
 #include "common/ceph_json.h"
 #include "common/Formatter.h"
 #include "common/dout.h"
+#include "common/errno.h"
 #include "common/ceph_context.h"
 #include <arrow/type_fwd.h>
 #include <fmt/format.h>
@@ -183,6 +184,65 @@ namespace rgw::s3vector {
       return ret;
     }
     return get_bucket_storage_mode(dpp, bucket.get(), mode);
+  }
+
+  // Reject a write-type operation up front when the target bucket is already over
+  // quota. See the declaration in rgw_s3vector.h for the enforcement convention
+  // (quota is checked here at the op layer, but not in the SAL wrapper).
+  int check_bucket_quota(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver,
+      const bucket_namespace_t& ns, const std::string& vector_bucket_name,
+      const BackendConfig& backend_config, optional_yield y) {
+    // Only the rgw backend stores data in ceph; other backends have no ceph quota.
+    if (!is_rgw_backend(backend_config.backend_type)) {
+      return 0;
+    }
+    if (!backend_config.storage_mode) {
+      return -EINVAL;
+    }
+
+    // Load the bucket that actually receives the writes: the native vector bucket
+    // for VECTOR_BUCKET storage, or the backing regular S3 bucket (same name,
+    // addressed under ns.tenant, matching create_rgw_session) for S3_BUCKET.
+    // VectorBucket is an alias of Bucket, so one unique_ptr serves both paths.
+    std::unique_ptr<rgw::sal::Bucket> bucket;
+    int ret = uses_vector_bucket_storage(*backend_config.storage_mode)
+        ? driver->load_vector_bucket(dpp,
+              rgw_bucket(ns.name(), vector_bucket_name), &bucket, y)
+        : driver->load_bucket(dpp,
+              rgw_bucket(ns.tenant, vector_bucket_name), &bucket, y);
+    if (ret < 0) {
+      ldpp_dout(dpp, 1) << "ERROR: s3vector: quota check could not load bucket '"
+                        << vector_bucket_name << "': " << cpp_strerror(ret) << dendl;
+      return ret;
+    }
+
+    RGWQuota owner_quotas;
+    ret = get_owner_quota_info(dpp, y, driver, bucket->get_info().owner, owner_quotas);
+    if (ret < 0) {
+      ldpp_dout(dpp, 1) << "ERROR: s3vector: could not read owner quota for bucket '"
+                        << vector_bucket_name << "': " << cpp_strerror(ret) << dendl;
+      return ret;
+    }
+
+    RGWQuota quota;
+    driver->get_quota(quota);
+    if (bucket->get_info().quota.enabled) {
+      quota.bucket_quota = bucket->get_info().quota;
+    } else if (owner_quotas.bucket_quota.enabled) {
+      quota.bucket_quota = owner_quotas.bucket_quota;
+    }
+    if (owner_quotas.user_quota.enabled) {
+      quota.user_quota = owner_quotas.user_quota;
+    }
+
+    // obj_size=0 + check_size_only: compare current usage against the quota
+    // without adding this request's payload (reject only if already over).
+    ret = bucket->check_quota(dpp, quota, /*obj_size=*/0, y, /*check_size_only=*/true);
+    if (ret < 0) {
+      ldpp_dout(dpp, 10) << "s3vector: bucket '" << vector_bucket_name
+                         << "' is already over quota: " << cpp_strerror(ret) << dendl;
+    }
+    return ret;
   }
 
   // the storage of a vector bucket is per namespace, since two accounts, or two
@@ -898,6 +958,36 @@ namespace rgw::s3vector {
       return;
     }
 
+    // Reject when the bucket is already over its index-count limit. Only the
+    // current count is compared (the new index is not pre-counted), matching the
+    // storage-quota semantics. 0 disables the limit.
+    const auto max_indexes =
+        dpp->get_cct()->_conf.get_val<uint64_t>("rgw_s3vector_max_indexes_per_bucket");
+    if (max_indexes > 0) {
+      char** index_names = nullptr;
+      size_t index_count = 0;
+      char* count_error = nullptr;
+      if (lancedb_connection_table_names(conn, &index_names, &index_count,
+                                         &count_error) != LANCEDB_SUCCESS) {
+        ldpp_dout(dpp, 1) << "ERROR: s3vector failed to count indexes of bucket: "
+          << configuration.vector_bucket_name << ". error: "
+          << (count_error ? count_error : "unknown") << dendl;
+        lancedb_free_string(count_error);
+        lancedb_connection_free(conn);
+        ctx->result = -EIO;
+        return;
+      }
+      lancedb_free_table_names(index_names, index_count);
+      if (index_count > max_indexes) {
+        ldpp_dout(dpp, 10) << "s3vector: bucket '" << configuration.vector_bucket_name
+          << "' is already over its index limit (" << index_count << " > "
+          << max_indexes << ")" << dendl;
+        lancedb_connection_free(conn);
+        ctx->result = -ERR_QUOTA_EXCEEDED;
+        return;
+      }
+    }
+
     // validate the number of non/filterable metadata keys
     if (configuration.filterable_metadata_keys.size() > max_filterable_metadata_keys) {
       errors.push_back({"metadataConfiguration.filterableMetadataKeys",
@@ -1032,6 +1122,11 @@ namespace rgw::s3vector {
       return -EINVAL;
     }
     const auto& configuration = operation.rest_config;
+    // Reject at the start of the operation if the target bucket is already over quota.
+    if (int ret = check_bucket_quota(dpp, driver, ns, configuration.vector_bucket_name,
+            operation.backend_config, y); ret < 0) {
+      return ret;
+    }
     log_configuration(dpp, "CreateIndex", configuration);
     CreateIndexCtx ctx{&operation, driver, &ns, dpp, &errors, 0};
     lancedb_run_on_stack(create_index_impl, &ctx, 256*1024, 1024*1024);
@@ -1797,6 +1892,24 @@ namespace rgw::s3vector {
       return;
     }
 
+    // Reject when the index is already over its vector-count limit. Only the
+    // current row count is compared (this request's vectors are not pre-counted),
+    // matching the storage-quota semantics. 0 disables the limit.
+    const auto max_vectors_per_index =
+        dpp->get_cct()->_conf.get_val<uint64_t>("rgw_s3vector_max_vectors_per_index");
+    if (max_vectors_per_index > 0) {
+      const auto row_count = lancedb_table_count_rows(table);
+      if (row_count > max_vectors_per_index) {
+        ldpp_dout(dpp, 10) << "s3vector: index '" << configuration.index_name
+          << "' is already over its vector limit (" << row_count << " > "
+          << max_vectors_per_index << ")" << dendl;
+        lancedb_table_free(table);
+        lancedb_connection_free(conn);
+        ctx->result = -ERR_QUOTA_EXCEEDED;
+        return;
+      }
+    }
+
     // get the schema, dimension, and filterable keys from the table
     std::shared_ptr<arrow::Schema> schema;
     if (int ret = import_table_schema(configuration.index_name, table, dpp, schema); ret < 0) {
@@ -2170,6 +2283,11 @@ namespace rgw::s3vector {
       return -EINVAL;
     }
     const auto& configuration = operation.rest_config;
+    // Reject at the start of the operation if the target bucket is already over quota.
+    if (int ret = check_bucket_quota(dpp, driver, ns, configuration.vector_bucket_name,
+            operation.backend_config, y); ret < 0) {
+      return ret;
+    }
     log_configuration(dpp, "PutVectors", configuration);
     const auto max_vectors = dpp->get_cct()->_conf->rgw_s3vector_max_put_vectors;
     if (configuration.vectors.size() > max_vectors) {

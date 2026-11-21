@@ -1903,7 +1903,7 @@ int RGWUser::execute_remove(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
   do {
     ret = driver->list_vector_buckets(dpp, user->get_id(), user->get_tenant(),
                                       vector_listing.next_marker, string(),
-                                      max_buckets, vector_listing, y);
+                                      max_buckets, false, vector_listing, y);
     if (ret == -ENOTSUP) {
       // backend has no vector-bucket support (ex: dbstore)
       break;

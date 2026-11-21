@@ -12620,10 +12620,6 @@ int RGWRados::check_bucket_shards(const RGWBucketInfo& bucket_info,
 				  uint64_t num_objs,
                                   const DoutPrefixProvider* dpp, optional_yield y)
 {
-  // The reshard queue resolves names through the S3 entrypoint namespace.
-  if (bucket_info.is_vector()) {
-    return 0;
-  }
   if (! cct->_conf.get_val<bool>("rgw_dynamic_resharding")) {
     return 0;
   }
@@ -12689,7 +12685,8 @@ int RGWRados::add_bucket_to_reshard(const DoutPrefixProvider *dpp,
   cls_rgw_reshard_entry entry;
   entry.time = real_clock::now();
   entry.tenant = bucket_info.bucket.tenant;
-  entry.bucket_name = bucket_info.bucket.name;
+  entry.bucket_name = bucket_info.is_vector() ?
+      fmt::format("bucket/{}", bucket_info.bucket.name) : bucket_info.bucket.name;
   entry.bucket_id = bucket_info.bucket.bucket_id;
   entry.old_num_shards = num_source_shards;
   entry.new_num_shards = new_num_shards;
