@@ -624,7 +624,7 @@ void AdminSocket::execute_command(
     });
 
   std::unique_lock l(lock);
-  in_hook = false;
+  running_hooks.erase(running_hooks.find(hook));
   in_hook_cond.notify_all();
 }
 
@@ -635,8 +635,8 @@ AdminSocket::find_matched_hook(std::string& prefix,
   std::unique_lock l(lock);
   // Drop lock after done with the lookup to avoid cycles in cases where the
   // hook takes the same lock that was held during calls to
-  // register/unregister, and set in_hook to allow unregister to wait for us
-  // before removing this hook.
+  // register/unregister, and record the hook in running_hooks to allow
+  // unregister to wait for us before removing it.
   auto [hooks_begin, hooks_end] = hooks.equal_range(prefix);
   if (hooks_begin == hooks_end) {
     return {ENOENT, nullptr};
@@ -645,7 +645,7 @@ AdminSocket::find_matched_hook(std::string& prefix,
   stringstream errss;
   for (auto hook = hooks_begin; hook != hooks_end; ++hook) {
     if (validate_cmd(hook->second.desc, cmdmap, errss)) {
-      in_hook = true;
+      running_hooks.insert(hook->second.hook);
       return {0, hook->second.hook};
     }
   }
@@ -704,7 +704,9 @@ void AdminSocket::unregister_commands(const AdminSocketHook *hook)
       // If we are currently processing a command, wait for it to
       // complete in case it referenced the hook that we are
       // unregistering.
-      in_hook_cond.wait(l, [this]() { return !in_hook; });
+      in_hook_cond.wait(l, [this, hook]() {
+        return !running_hooks.contains(hook);
+      });
       hooks.erase(i++);
     } else {
       i++;

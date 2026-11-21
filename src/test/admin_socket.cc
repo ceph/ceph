@@ -29,6 +29,7 @@
 #include <sys/un.h>
 #include <signal.h>
 
+#include <future>
 #include <iostream> // for std::cout
 
 using namespace std;
@@ -295,6 +296,85 @@ TEST(AdminSocketClient, Ping) {
     ASSERT_TRUE(asoct.shutdown());
     delete blocking;
   }
+}
+
+class GateHook : public AdminSocketHook {
+public:
+  ceph::mutex lock = ceph::make_mutex("GateHook::lock");
+  ceph::condition_variable cond;
+  bool entered = false;
+  bool released = false;
+
+  int call(std::string_view command, const cmdmap_t& cmdmap,
+           const bufferlist&,
+           Formatter *f,
+           std::ostream& ss,
+           bufferlist& result) override {
+    std::unique_lock l{lock};
+    entered = true;
+    cond.notify_all();
+    cond.wait(l, [this] { return released; });
+    return 0;
+  }
+
+  void wait_entered() {
+    std::unique_lock l{lock};
+    cond.wait(l, [this] { return entered; });
+  }
+
+  void release() {
+    std::lock_guard l{lock};
+    released = true;
+    cond.notify_all();
+  }
+};
+
+class AdminSocketRunningHook : public ::testing::Test {
+protected:
+  AdminSocket asok{g_ceph_context};
+  GateHook running;
+  MyTest other;
+  std::thread command;
+
+  void SetUp() override {
+    ASSERT_EQ(0, asok.register_command("running", &running, ""));
+    ASSERT_EQ(0, asok.register_command("other", &other, ""));
+    command = std::thread([this] {
+      bufferlist out;
+      std::ostringstream err;
+      asok.execute_command({"{\"prefix\":\"running\"}"}, {}, err, &out);
+    });
+    running.wait_entered();
+  }
+
+  void TearDown() override {
+    running.release();
+    if (command.joinable()) {
+      command.join();
+    }
+    asok.unregister_commands(&running);
+    asok.unregister_commands(&other);
+  }
+};
+
+TEST_F(AdminSocketRunningHook, UnregisterOtherHook) {
+  auto unregistered = std::async(std::launch::async, [this] {
+    asok.unregister_commands(&other);
+  });
+  auto status = unregistered.wait_for(std::chrono::seconds(30));
+  running.release();
+  ASSERT_EQ(std::future_status::ready, status);
+}
+
+TEST_F(AdminSocketRunningHook, UnregisterRunningHookWaits) {
+  auto unregistered = std::async(std::launch::async, [this] {
+    asok.unregister_commands(&running);
+  });
+  ASSERT_EQ(std::future_status::timeout,
+            unregistered.wait_for(std::chrono::milliseconds(200)));
+  running.release();
+  ASSERT_EQ(std::future_status::ready,
+            unregistered.wait_for(std::chrono::seconds(30)));
 }
 
 TEST(AdminSocket, bind_and_listen) {
