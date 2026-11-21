@@ -249,6 +249,31 @@ describe('NvmeofSubsystemOverviewComponent', () => {
     expect(f.nativeElement.textContent).toContain('Unidirectional');
   }));
 
+  it('should display Auto-fetched listeners status when use_conf_listener_network_masks is true', fakeAsync(async () => {
+    TestBed.resetTestingModule();
+    const f = await createTestBed([], {
+      ...mockSubsystem,
+      use_conf_listener_network_masks: true
+    });
+    expect(f.nativeElement.textContent).toContain('Auto-fetched');
+    const listenerDetail = f.componentInstance.details.find((d: any) => d.type === 'listeners');
+    expect(listenerDetail?.tooltip).toBe('Listeners are automatically fetched from the gateway');
+  }));
+
+  it('should display Manually selected listeners status when neither network_mask nor use_conf_listener_network_masks is set', fakeAsync(async () => {
+    TestBed.resetTestingModule();
+    const f = await createTestBed([], {
+      ...mockSubsystem,
+      network_mask: [],
+      use_conf_listener_network_masks: false
+    });
+    expect(f.nativeElement.textContent).toContain('Manually selected');
+    const listenerDetail = f.componentInstance.details.find((d: any) => d.type === 'listeners');
+    expect(listenerDetail?.tooltip).toBe(
+      'Listeners were manually selected from available gateway hosts'
+    );
+  }));
+
   it('should open host access edit modal route when edit is clicked', () => {
     const navigateSpy = jest.spyOn(router, 'navigate').mockResolvedValue(true);
     component.groupName = 'group1';

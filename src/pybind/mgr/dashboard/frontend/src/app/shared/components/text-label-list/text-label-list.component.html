@@ -1,27 +1,82 @@
-@for (value of values; track $index) {
-  <cds-text-label
-    [helperText]="helperText && $index === values.length - 1 ? helperText : null"
-    i18n-helperText
-    i18n
-  >
-    <div class="cds-input-group">
+@if (addButtonLabel) {
+  <!-- Explicit add/remove list (e.g. NVMe-oF network masks) -->
+  @if (label) {
+    <label
+      class="cds--label"
+      [attr.for]="inputId(0)"
+      >{{ label }}</label
+    >
+  }
+  @if (helperText) {
+    <div class="cds--form__helper-text">{{ helperText }}</div>
+  }
+  @for (value of values; track $index) {
+    <div class="cds-input-group cds-mt-3">
       <input
         cdsText
         type="text"
+        [id]="inputId($index)"
         [placeholder]="placeholder"
         [value]="value"
-        (input)="onInputChange($index, $event.target.value)"
+        [disabled]="disabled"
+        (input)="onInputChange($index, $any($event.target).value)"
       />
-      @if ($index > 0) {
+      @if (values.length > 1) {
         <cds-icon-button
           kind="ghost"
-          (click)="deleteInput($index)"
           size="md"
+          (click)="deleteInput($index)"
+          [disabled]="disabled"
         >
           <cd-icon type="trash"></cd-icon>
         </cds-icon-button>
       }
     </div>
-    {{ $index === 0 ? label : '' }}
-  </cds-text-label>
+  }
+  <div class="cds-mt-3">
+    <button
+      cdsButton="tertiary"
+      type="button"
+      (click)="addInput()"
+      [disabled]="disabled"
+    >
+      {{ addButtonLabel }}
+      <svg
+        cdsIcon="add"
+        size="16"
+        class="cds--btn__icon"
+        icon
+      ></svg>
+    </button>
+  </div>
+} @else {
+  @for (value of values; track $index) {
+    <cds-text-label
+      [helperText]="helperText && $index === values.length - 1 ? helperText : null"
+      i18n-helperText
+      i18n
+    >
+      <div class="cds-input-group">
+        <input
+          cdsText
+          type="text"
+          [placeholder]="placeholder"
+          [value]="value"
+          [disabled]="disabled"
+          (input)="onInputChange($index, $any($event.target).value)"
+        />
+        @if ($index > 0) {
+          <cds-icon-button
+            kind="ghost"
+            (click)="deleteInput($index)"
+            size="md"
+            [disabled]="disabled"
+          >
+            <cd-icon type="trash"></cd-icon>
+          </cds-icon-button>
+        }
+      </div>
+      {{ $index === 0 ? label : '' }}
+    </cds-text-label>
+  }
 }
